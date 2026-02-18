@@ -42,6 +42,25 @@ namespace {
   constexpr const char* kLuaTracebackFnName = "LuaTraceback";
   constexpr int kLuaNoRef = -1;
 
+  class ScopedActiveFrameContext final {
+  public:
+    explicit ScopedActiveFrameContext(
+      const observer_ptr<engine::FrameContext> frame_context) noexcept
+      : previous_(bindings::GetActiveFrameContext())
+    {
+      bindings::SetActiveFrameContext(frame_context);
+    }
+
+    ~ScopedActiveFrameContext() { bindings::SetActiveFrameContext(previous_); }
+
+    ScopedActiveFrameContext(const ScopedActiveFrameContext&) = delete;
+    auto operator=(const ScopedActiveFrameContext&)
+      -> ScopedActiveFrameContext& = delete;
+
+  private:
+    observer_ptr<engine::FrameContext> previous_ {};
+  };
+
   auto LuaTraceback(lua_State* state) -> int
   {
     constexpr int kMessageIndex = 1;
@@ -447,6 +466,7 @@ auto ScriptingModule::InvokePhaseHook(const std::string_view hook_name,
     && !TryGetHookFunction(lua_state_, hook_name)) {
     return OkResult();
   }
+  const ScopedActiveFrameContext active_context(context);
 
   int arg_count = 0;
   if (context != nullptr) {
@@ -552,7 +572,7 @@ auto ScriptingModule::RunSceneScripts(
         }
 
         const auto tick_result
-          = ExecuteSlotTick(key, runtime, *node, slot, dt_seconds);
+          = ExecuteSlotTick(key, runtime, *node, slot, context, dt_seconds);
         if (!tick_result.ok) {
           ReportError(context,
             std::string("script slot tick failed [")
@@ -571,9 +591,12 @@ auto ScriptingModule::RunSceneScripts(
 
 auto ScriptingModule::ExecuteSlotTick(const SlotRuntimeKey& key,
   SlotRuntimeState& runtime_state, const scene::SceneNode& node,
-  const scene::ScriptingComponent::Slot& slot, const float dt_seconds)
+  const scene::ScriptingComponent::Slot& slot,
+  const observer_ptr<engine::FrameContext> context, const float dt_seconds)
   -> ScriptExecutionResult
 {
+  const ScopedActiveFrameContext active_context(context);
+
   if (runtime_state.failed_initialization) {
     return ErrorResult("slot_binding", runtime_state.initialization_error);
   }

@@ -6,12 +6,16 @@
 
 #pragma once
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Scripting/ScriptingComponent.h>
 #include <Oxygen/Scripting/api_export.h>
 
 struct lua_State;
+namespace oxygen::engine {
+class FrameContext;
+}
 
 namespace oxygen::scripting::bindings {
 
@@ -27,6 +31,12 @@ struct LuaBindingContext {
 
 OXGN_SCRP_API auto PushScriptContext(lua_State* state,
   LuaSlotExecutionContext* slot_context, float dt_seconds) -> void;
+
+OXGN_SCRP_API auto SetActiveFrameContext(
+  observer_ptr<engine::FrameContext> frame_context) noexcept -> void;
+
+OXGN_SCRP_NDAPI auto GetActiveFrameContext() noexcept
+  -> observer_ptr<engine::FrameContext>;
 
 OXGN_SCRP_NDAPI auto GetBindingContextFromScriptArg(
   lua_State* state, int arg_index = 1) noexcept -> LuaBindingContext*;
