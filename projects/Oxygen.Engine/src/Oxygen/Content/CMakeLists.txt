@@ -109,6 +109,8 @@ set(
   "Loaders/BufferLoader.h"
   "Loaders/GeometryLoader.h"
   "Loaders/Helpers.h"
+  "Loaders/InputActionLoader.h"
+  "Loaders/InputMappingContextLoader.h"
   "Loaders/MaterialLoader.h"
   "Loaders/SceneLoader.h"
   "Loaders/ScriptLoader.h"

@@ -20,15 +20,19 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/EngineTag.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/OperationCancelledException.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Core/AnyCache.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/InputActionAsset.h>
+#include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -41,8 +45,6 @@
 #include <Oxygen/OxCo/Shared.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Renderer/api_export.h>
-#include <Oxygen/content/EngineTag.h>
-#include <Oxygen/content/ResourceKey.h>
 
 namespace oxygen::content {
 
@@ -204,6 +206,10 @@ public:
       co_return co_await LoadSceneAssetAsyncImpl(key);
     } else if constexpr (std::is_same_v<T, data::ScriptAsset>) {
       co_return co_await LoadScriptAssetAsyncImpl(key);
+    } else if constexpr (std::is_same_v<T, data::InputActionAsset>) {
+      co_return co_await LoadInputActionAssetAsyncImpl(key);
+    } else if constexpr (std::is_same_v<T, data::InputMappingContextAsset>) {
+      co_return co_await LoadInputMappingContextAssetAsyncImpl(key);
     } else {
       throw std::runtime_error(
         "LoadAssetAsync<T> is not implemented for this asset type yet");
@@ -776,6 +782,13 @@ private:
   OXGN_CNTT_API auto LoadScriptAssetAsyncImpl(const data::AssetKey& key,
     std::optional<uint16_t> preferred_source_id = std::nullopt)
     -> co::Co<std::shared_ptr<data::ScriptAsset>>;
+  OXGN_CNTT_API auto LoadInputActionAssetAsyncImpl(const data::AssetKey& key,
+    std::optional<uint16_t> preferred_source_id = std::nullopt)
+    -> co::Co<std::shared_ptr<data::InputActionAsset>>;
+  OXGN_CNTT_API auto LoadInputMappingContextAssetAsyncImpl(
+    const data::AssetKey& key,
+    std::optional<uint16_t> preferred_source_id = std::nullopt)
+    -> co::Co<std::shared_ptr<data::InputMappingContextAsset>>;
 
   OXGN_CNTT_API auto LoadResourceAsyncFromCookedErased(
     TypeId type_id, ResourceKey key, std::span<const uint8_t> bytes)
@@ -947,6 +960,12 @@ private:
   std::unordered_map<uint64_t,
     co::Shared<co::Co<std::shared_ptr<data::ScriptAsset>>>>
     in_flight_script_assets_;
+  std::unordered_map<uint64_t,
+    co::Shared<co::Co<std::shared_ptr<data::InputActionAsset>>>>
+    in_flight_input_action_assets_;
+  std::unordered_map<uint64_t,
+    co::Shared<co::Co<std::shared_ptr<data::InputMappingContextAsset>>>>
+    in_flight_input_mapping_context_assets_;
 
   std::unordered_map<uint64_t,
     co::Shared<co::Co<std::shared_ptr<data::TextureResource>>>>
@@ -1000,6 +1019,12 @@ template OXGN_CNTT_API auto AssetLoader::LoadAssetAsync<data::SceneAsset>(
 
 template OXGN_CNTT_API auto AssetLoader::LoadAssetAsync<data::ScriptAsset>(
   const data::AssetKey& key) -> co::Co<std::shared_ptr<data::ScriptAsset>>;
+template OXGN_CNTT_API auto AssetLoader::LoadAssetAsync<data::InputActionAsset>(
+  const data::AssetKey& key) -> co::Co<std::shared_ptr<data::InputActionAsset>>;
+template OXGN_CNTT_API auto
+AssetLoader::LoadAssetAsync<data::InputMappingContextAsset>(
+  const data::AssetKey& key)
+  -> co::Co<std::shared_ptr<data::InputMappingContextAsset>>;
 
 //-- Known Resource Types --
 

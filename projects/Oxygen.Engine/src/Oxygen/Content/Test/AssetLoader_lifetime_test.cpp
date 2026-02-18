@@ -23,7 +23,10 @@
 
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
+#include <Oxygen/Content/Loaders/InputActionLoader.h>
+#include <Oxygen/Content/Loaders/InputMappingContextLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
+#include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 
 #include "Utils/PakUtils.h"
@@ -42,6 +45,7 @@ using oxygen::content::testing::AssetLoaderLoadingTest;
 
 using oxygen::data::BufferResource;
 using oxygen::data::GeometryAsset;
+using oxygen::data::InputMappingContextAsset;
 using oxygen::data::MaterialAsset;
 using oxygen::data::TextureResource;
 
@@ -390,6 +394,92 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
       EXPECT_TRUE(loader.HasGeometryAsset(geometry_key));
       loader.TrimCache();
       EXPECT_FALSE(loader.HasGeometryAsset(geometry_key));
+
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
+}
+
+//! Test: Scene->InputMappingContext->InputAction chain lifetime.
+/*!
+ Scenario: Load a scene with input context bindings and verify dependency
+ * chain:
+ scene depends on input mapping context; context depends on actions.
+
+ * Releasing scene should not immediately evict context/actions until they are
+
+ * explicitly released and cache is trimmed.
+*/
+NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
+  LoadAssetAsync_SceneInputChain_ReleaseOrderAndTrim)
+{
+  const auto pak_path = GeneratePakFile("scene_with_input_context_binding");
+  const auto scene_key = CreateTestAssetKey("test_scene_with_input_context");
+  const auto context_key = CreateTestAssetKey("test_input_mapping_context");
+  const auto action_a = CreateTestAssetKey("test_input_action_accelerate");
+  const auto action_b = CreateTestAssetKey("test_input_action_decelerate");
+
+  TestEventLoop el;
+
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
+
+    loader.RegisterLoader(oxygen::content::loaders::LoadInputActionAsset);
+    loader.RegisterLoader(
+      oxygen::content::loaders::LoadInputMappingContextAsset);
+    loader.RegisterLoader(oxygen::content::loaders::LoadSceneAsset);
+
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+
+      loader.AddPakFile(pak_path);
+
+      auto scene
+        = co_await loader.LoadAssetAsync<oxygen::data::SceneAsset>(scene_key);
+      EXPECT_THAT(scene, NotNull());
+      if (!scene) {
+        loader.Stop();
+        co_return oxygen::co::kJoin;
+      }
+      auto context
+        = co_await loader.LoadAssetAsync<InputMappingContextAsset>(context_key);
+      EXPECT_THAT(context, NotNull());
+      if (!context) {
+        loader.Stop();
+        co_return oxygen::co::kJoin;
+      }
+
+      EXPECT_TRUE(loader.HasAsset<oxygen::data::SceneAsset>(scene_key));
+      EXPECT_TRUE(loader.HasAsset<InputMappingContextAsset>(context_key));
+      EXPECT_TRUE(loader.HasAsset<oxygen::data::InputActionAsset>(action_a));
+      EXPECT_TRUE(loader.HasAsset<oxygen::data::InputActionAsset>(action_b));
+
+      scene.reset();
+      (void)loader.ReleaseAsset(scene_key);
+      loader.TrimCache();
+
+      // context/actions remain because explicitly checked out and/or linked.
+      EXPECT_TRUE(loader.HasAsset<InputMappingContextAsset>(context_key));
+      EXPECT_TRUE(loader.HasAsset<oxygen::data::InputActionAsset>(action_a));
+      EXPECT_TRUE(loader.HasAsset<oxygen::data::InputActionAsset>(action_b));
+
+      context.reset();
+      (void)loader.ReleaseAsset(context_key);
+      (void)loader.ReleaseAsset(action_a);
+      (void)loader.ReleaseAsset(action_b);
+      loader.TrimCache();
+
+      EXPECT_FALSE(loader.HasAsset<oxygen::data::SceneAsset>(scene_key));
+      EXPECT_FALSE(loader.HasAsset<InputMappingContextAsset>(context_key));
+      EXPECT_FALSE(loader.HasAsset<oxygen::data::InputActionAsset>(action_a));
+      EXPECT_FALSE(loader.HasAsset<oxygen::data::InputActionAsset>(action_b));
 
       loader.Stop();
       co_return oxygen::co::kJoin;

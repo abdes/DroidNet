@@ -63,6 +63,10 @@ template <> struct ComponentTraits<pak::ScriptingComponentRecord> {
   static constexpr ComponentType kType = ComponentType::kScripting;
 };
 
+template <> struct ComponentTraits<pak::InputContextBindingRecord> {
+  static constexpr ComponentType kType = ComponentType::kInputContextBinding;
+};
+
 //! Represents a loaded Scene asset.
 /*!
   SceneAsset provides a high-level, read-only view over the raw binary data of a

@@ -1,0 +1,68 @@
+# Scene asset with input mapping context bindings (PAK v6)
+version: 6
+content_version: 1
+
+buffers:
+  - name: "default_empty_buffer"
+    data_hex: ""
+    size: 0
+    usage: 0
+
+textures:
+  - name: "default_texture"
+    width: 1
+    height: 1
+    format: 30
+    texture_type: 3
+    compression_type: 0
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"
+
+assets:
+  - name: "test_input_action_accelerate"
+    type: "input_action"
+    asset_key: "88888888-1111-2222-3333-444444444444"
+    value_type: 2
+    flags: 1
+
+  - name: "test_input_action_decelerate"
+    type: "input_action"
+    asset_key: "99999999-1111-2222-3333-444444444444"
+    value_type: 2
+    flags: 0
+
+  - name: "test_input_mapping_context"
+    type: "input_mapping_context"
+    asset_key: "aaaaaaaa-1111-2222-3333-444444444444"
+    mappings:
+      - action: "test_input_action_accelerate"
+        slot_name: "Keyboard.PageUp"
+        scale: [1.0, 1.0]
+        bias: [0.0, 0.0]
+        triggers:
+          - type: "pressed"
+            behavior: "implicit"
+            linked_action: "test_input_action_decelerate"
+            aux:
+              - action: "test_input_action_decelerate"
+                completion_states: 3
+                time_to_complete_ns: 1000000
+                flags: 1
+      - action: "test_input_action_decelerate"
+        slot_name: "Keyboard.PageDown"
+        scale: [1.0, 1.0]
+        bias: [0.0, 0.0]
+        triggers: []
+
+  - name: "test_scene_with_input_context"
+    type: "scene"
+    asset_key: "bbbbbbbb-1111-2222-3333-444444444444"
+    nodes:
+      - name: "root"
+        parent: 0
+      - name: "mesh_node"
+        parent: 0
+    input_context_bindings:
+      - node_index: 1
+        context: "test_input_mapping_context"
+        priority: 10
+        activate_on_load: true

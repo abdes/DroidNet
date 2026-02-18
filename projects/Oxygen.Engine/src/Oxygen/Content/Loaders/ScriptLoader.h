@@ -36,20 +36,10 @@ inline auto LoadScriptAsset(const LoaderContext& context)
   DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
   auto& reader = *context.desc_reader;
 
-  auto check_result = [](auto&& result, const char* field) {
-    if (!result) {
-      LOG_F(
-        ERROR, "-failed- on {}: {}", field, result.error().message().c_str());
-      throw std::runtime_error(
-        fmt::format("error reading script asset ({}): {}", field,
-          result.error().message()));
-    }
-  };
-
   auto pack = reader.ScopedAlignment(1);
 
   auto desc_blob = reader.ReadBlob(sizeof(data::pak::ScriptAssetDesc));
-  check_result(desc_blob, "ScriptAssetDesc");
+  CheckLoaderResult(desc_blob, "script asset", "ScriptAssetDesc");
   data::pak::ScriptAssetDesc desc {};
   std::memcpy(&desc, desc_blob->data(), sizeof(desc));
 
@@ -72,7 +62,7 @@ inline auto LoadScriptAsset(const LoaderContext& context)
     const auto script_indices
       = std::array { desc.bytecode_resource_index, desc.source_resource_index };
     for (size_t i = 0; i < script_indices.size(); ++i) {
-      const auto resource_index = script_indices[i];
+      const auto resource_index = script_indices.at(i);
       if (resource_index == data::pak::kNoResourceIndex) {
         continue;
       }
@@ -103,19 +93,9 @@ inline auto LoadScriptResource(LoaderContext context)
   DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
   auto& reader = *context.desc_reader;
 
-  auto check_result = [](auto&& result, const char* field) {
-    if (!result) {
-      LOG_F(
-        ERROR, "-failed- on {}: {}", field, result.error().message().c_str());
-      throw std::runtime_error(
-        fmt::format("error reading script resource ({}): {}", field,
-          result.error().message()));
-    }
-  };
-
   auto pack = reader.ScopedAlignment(1);
   auto desc_blob = reader.ReadBlob(sizeof(data::pak::ScriptResourceDesc));
-  check_result(desc_blob, "ScriptResourceDesc");
+  CheckLoaderResult(desc_blob, "script resource", "ScriptResourceDesc");
   data::pak::ScriptResourceDesc desc {};
   std::memcpy(&desc, desc_blob->data(), sizeof(desc));
 
@@ -127,17 +107,22 @@ inline auto LoadScriptResource(LoaderContext context)
       "expecting data reader for ScriptResource to be valid");
     auto& data_reader = *std::get<script_index>(context.data_readers);
 
-    check_result(data_reader.Seek(desc.data_offset), "ScriptResource data");
+    CheckLoaderResult(
+      data_reader.Seek(desc.data_offset), "script resource", "data seek");
     const auto byte_view = std::as_writable_bytes(std::span(data_buffer));
-    check_result(data_reader.ReadBlobInto(byte_view), "ScriptResource data");
+    CheckLoaderResult(
+      data_reader.ReadBlobInto(byte_view), "script resource", "data read");
   }
 
   if (desc.content_hash != 0) {
+    constexpr size_t kScriptContentHashBytes = 8;
+    constexpr size_t kByteShiftBits = 8;
     const auto byte_span = std::span(data_buffer);
     const auto digest = base::ComputeSha256(std::as_bytes(byte_span));
     uint64_t computed_hash = 0;
-    for (size_t i = 0; i < 8; ++i) {
-      computed_hash |= static_cast<uint64_t>(digest[i]) << (i * 8);
+    for (size_t i = 0; i < kScriptContentHashBytes; ++i) {
+      computed_hash |= static_cast<uint64_t>(digest.at(i))
+        << (i * kByteShiftBits);
     }
     if (computed_hash != desc.content_hash) {
       throw std::runtime_error(

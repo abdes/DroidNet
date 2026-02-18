@@ -293,3 +293,139 @@ auto oxygen::data::pak::v5::to_string(
 
   return result;
 }
+
+auto oxygen::data::pak::v6::to_string(
+  const oxygen::data::pak::v6::InputTriggerType value) noexcept
+  -> std::string_view
+{
+  switch (value) {
+  case InputTriggerType::kPressed:
+    return "Pressed";
+  case InputTriggerType::kReleased:
+    return "Released";
+  case InputTriggerType::kDown:
+    return "Down";
+  case InputTriggerType::kHold:
+    return "Hold";
+  case InputTriggerType::kHoldAndRelease:
+    return "HoldAndRelease";
+  case InputTriggerType::kPulse:
+    return "Pulse";
+  case InputTriggerType::kTap:
+    return "Tap";
+  case InputTriggerType::kChord:
+    return "Chord";
+  case InputTriggerType::kActionChain:
+    return "ActionChain";
+  case InputTriggerType::kCombo:
+    return "Combo";
+  }
+  return "__NotSupported__";
+}
+
+auto oxygen::data::pak::v6::to_string(
+  const oxygen::data::pak::v6::InputTriggerBehavior value) noexcept
+  -> std::string_view
+{
+  switch (value) {
+  case InputTriggerBehavior::kExplicit:
+    return "Explicit";
+  case InputTriggerBehavior::kImplicit:
+    return "Implicit";
+  case InputTriggerBehavior::kBlocker:
+    return "Blocker";
+  }
+  return "__NotSupported__";
+}
+
+auto oxygen::data::pak::v6::to_string(
+  const oxygen::data::pak::v6::InputActionAssetFlags value) -> std::string
+{
+  using Flags = oxygen::data::pak::v6::InputActionAssetFlags;
+
+  if (value == Flags::kNone) {
+    return "None";
+  }
+
+  std::string result;
+  bool first = true;
+  [[maybe_unused]] auto checked = Flags::kNone;
+
+  const auto check_and_append = [&](const Flags flag, const char* name) {
+    if ((value & flag) == flag) {
+      if (!first) {
+        result += " | ";
+      }
+      result += name;
+      first = false;
+      checked |= flag;
+    }
+  };
+
+  check_and_append(Flags::kConsumesInput, "ConsumesInput");
+  DCHECK_EQ_F(checked, value,
+    "to_string: Unchecked InputActionAssetFlags value detected");
+  return result;
+}
+
+auto oxygen::data::pak::v6::to_string(
+  const oxygen::data::pak::v6::InputMappingContextFlags value) -> std::string
+{
+  using Flags = oxygen::data::pak::v6::InputMappingContextFlags;
+
+  if (value == Flags::kNone) {
+    return "None";
+  }
+
+  std::string result;
+  [[maybe_unused]] auto checked = Flags::kNone;
+  DCHECK_EQ_F(checked, value,
+    "to_string: Unchecked InputMappingContextFlags value detected");
+  return result;
+}
+
+auto oxygen::data::pak::v6::to_string(
+  const oxygen::data::pak::v6::InputMappingFlags value) -> std::string
+{
+  using Flags = oxygen::data::pak::v6::InputMappingFlags;
+
+  if (value == Flags::kNone) {
+    return "None";
+  }
+
+  std::string result;
+  [[maybe_unused]] auto checked = Flags::kNone;
+  DCHECK_EQ_F(
+    checked, value, "to_string: Unchecked InputMappingFlags value detected");
+  return result;
+}
+
+auto oxygen::data::pak::v6::to_string(
+  const oxygen::data::pak::v6::InputContextBindingFlags value) -> std::string
+{
+  using Flags = oxygen::data::pak::v6::InputContextBindingFlags;
+
+  if (value == Flags::kNone) {
+    return "None";
+  }
+
+  std::string result;
+  bool first = true;
+  [[maybe_unused]] auto checked = Flags::kNone;
+
+  const auto check_and_append = [&](const Flags flag, const char* name) {
+    if ((value & flag) == flag) {
+      if (!first) {
+        result += " | ";
+      }
+      result += name;
+      first = false;
+      checked |= flag;
+    }
+  };
+
+  check_and_append(Flags::kActivateOnLoad, "ActivateOnLoad");
+  DCHECK_EQ_F(checked, value,
+    "to_string: Unchecked InputContextBindingFlags value detected");
+  return result;
+}
