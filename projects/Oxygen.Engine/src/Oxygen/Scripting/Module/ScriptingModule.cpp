@@ -24,6 +24,7 @@
 #include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/CoreBindingPack.h>
+#include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneBindingPack.h>
 #include <Oxygen/Scripting/Compilers/LuauScriptCompiler.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
@@ -288,18 +289,49 @@ auto ScriptingModule::RegisterDefaultBindingPacks() -> bool
 auto ScriptingModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   -> void
 {
+  if (lua_state_ != nullptr) {
+    bindings::SetActiveEventPhase(lua_state_, "frame_start");
+    bindings::QueueEngineEvent(lua_state_, "frame.start", "frame_start");
+  }
+
   const auto result = InvokePhaseHook("on_frame_start", context);
   if (!result.ok) {
     ReportHookError(context, "on_frame_start", result);
+  }
+
+  if (lua_state_ != nullptr) {
+    const ScopedActiveFrameContext active_context(lua_state_, context);
+    const auto dispatch_result
+      = bindings::DispatchEventsForPhase(lua_state_, "frame_start");
+    if (!dispatch_result.ok && context != nullptr) {
+      ReportError(context,
+        std::string("oxygen.events dispatch failed [frame_start]: ")
+          .append(dispatch_result.message));
+    }
   }
 }
 
 auto ScriptingModule::OnFixedSimulation(
   observer_ptr<engine::FrameContext> context) -> co::Co<>
 {
+  if (lua_state_ != nullptr) {
+    bindings::SetActiveEventPhase(lua_state_, "fixed_simulation");
+  }
+
   const auto result = InvokePhaseHook("on_fixed_simulation", context);
   if (!result.ok) {
     ReportHookError(context, "on_fixed_simulation", result);
+  }
+
+  if (lua_state_ != nullptr) {
+    const ScopedActiveFrameContext active_context(lua_state_, context);
+    const auto dispatch_result
+      = bindings::DispatchEventsForPhase(lua_state_, "fixed_simulation");
+    if (!dispatch_result.ok && context != nullptr) {
+      ReportError(context,
+        std::string("oxygen.events dispatch failed [fixed_simulation]: ")
+          .append(dispatch_result.message));
+    }
   }
   co_return;
 }
@@ -307,6 +339,10 @@ auto ScriptingModule::OnFixedSimulation(
 auto ScriptingModule::OnGameplay(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
+  if (lua_state_ != nullptr) {
+    bindings::SetActiveEventPhase(lua_state_, "gameplay");
+  }
+
   const auto result = InvokePhaseHook("on_gameplay", context);
   if (!result.ok) {
     ReportHookError(context, "on_gameplay", result);
@@ -317,15 +353,41 @@ auto ScriptingModule::OnGameplay(observer_ptr<engine::FrameContext> context)
     ReportHookError(context, "scene_tick", scene_result);
   }
 
+  if (lua_state_ != nullptr) {
+    const ScopedActiveFrameContext active_context(lua_state_, context);
+    const auto dispatch_result
+      = bindings::DispatchEventsForPhase(lua_state_, "gameplay");
+    if (!dispatch_result.ok && context != nullptr) {
+      ReportError(context,
+        std::string("oxygen.events dispatch failed [gameplay]: ")
+          .append(dispatch_result.message));
+    }
+  }
+
   co_return;
 }
 
 auto ScriptingModule::OnSceneMutation(
   observer_ptr<engine::FrameContext> context) -> co::Co<>
 {
+  if (lua_state_ != nullptr) {
+    bindings::SetActiveEventPhase(lua_state_, "scene_mutation");
+  }
+
   const auto result = InvokePhaseHook("on_scene_mutation", context);
   if (!result.ok) {
     ReportHookError(context, "on_scene_mutation", result);
+  }
+
+  if (lua_state_ != nullptr) {
+    const ScopedActiveFrameContext active_context(lua_state_, context);
+    const auto dispatch_result
+      = bindings::DispatchEventsForPhase(lua_state_, "scene_mutation");
+    if (!dispatch_result.ok && context != nullptr) {
+      ReportError(context,
+        std::string("oxygen.events dispatch failed [scene_mutation]: ")
+          .append(dispatch_result.message));
+    }
   }
   co_return;
 }
@@ -333,9 +395,25 @@ auto ScriptingModule::OnSceneMutation(
 auto ScriptingModule::OnFrameEnd(observer_ptr<engine::FrameContext> context)
   -> void
 {
+  if (lua_state_ != nullptr) {
+    bindings::SetActiveEventPhase(lua_state_, "frame_end");
+    bindings::QueueEngineEvent(lua_state_, "frame.end", "frame_end");
+  }
+
   const auto result = InvokePhaseHook("on_frame_end", context);
   if (!result.ok) {
     ReportHookError(context, "on_frame_end", result);
+  }
+
+  if (lua_state_ != nullptr) {
+    const ScopedActiveFrameContext active_context(lua_state_, context);
+    const auto dispatch_result
+      = bindings::DispatchEventsForPhase(lua_state_, "frame_end");
+    if (!dispatch_result.ok && context != nullptr) {
+      ReportError(context,
+        std::string("oxygen.events dispatch failed [frame_end]: ")
+          .append(dispatch_result.message));
+    }
   }
 }
 
