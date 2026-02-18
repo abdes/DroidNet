@@ -140,7 +140,8 @@ private:
     -> ScriptExecutionResult;
   auto ExecuteSlotTick(const SlotRuntimeKey& key,
     SlotRuntimeState& runtime_state, const scene::SceneNode& node,
-    const scene::ScriptingComponent::Slot& slot, float dt_seconds)
+    const scene::ScriptingComponent::Slot& slot,
+    observer_ptr<engine::FrameContext> context, float dt_seconds)
     -> ScriptExecutionResult;
   auto RebuildSlotRuntime(const SlotRuntimeKey& key, SlotRuntimeState& state,
     const scene::ScriptingComponent::Slot& slot) -> ScriptExecutionResult;

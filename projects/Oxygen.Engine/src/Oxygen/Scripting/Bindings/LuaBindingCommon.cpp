@@ -10,12 +10,14 @@
 #include <string>
 #include <type_traits>
 
+#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 
 namespace oxygen::scripting::bindings {
 
 namespace {
   constexpr const char* kBindingContextFieldName = "__oxgn_binding_context";
+  thread_local observer_ptr<engine::FrameContext> g_active_frame_context {};
 
   auto NormalizeStackIndex(lua_State* state, const int index) -> int
   {
@@ -92,6 +94,17 @@ auto PushScriptContext(lua_State* state, LuaSlotExecutionContext* slot_context,
 
   lua_pushcfunction(state, LuaScriptContextGetDeltaSeconds, "GetDeltaSeconds");
   lua_setfield(state, -2, "GetDeltaSeconds");
+}
+
+auto SetActiveFrameContext(
+  const observer_ptr<engine::FrameContext> frame_context) noexcept -> void
+{
+  g_active_frame_context = frame_context;
+}
+
+auto GetActiveFrameContext() noexcept -> observer_ptr<engine::FrameContext>
+{
+  return g_active_frame_context;
 }
 
 auto GetBindingContextFromScriptArg(
