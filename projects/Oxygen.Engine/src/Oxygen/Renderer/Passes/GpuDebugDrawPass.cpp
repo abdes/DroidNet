@@ -159,12 +159,6 @@ auto GpuDebugDrawPass::DoExecute(graphics::CommandRecorder& recorder)
       .bottom = static_cast<int32_t>(desc.height) });
   }
 
-  static bool logged_execute = false;
-  if (!logged_execute) {
-    LOG_F(WARNING, "GpuDebugDrawPass: executing indirect draw for debug lines");
-    logged_execute = true;
-  }
-
   // Issue the indirect draw call. The counter buffer contains the
   // D3D12_DRAW_ARGUMENTS at offset 0.
   recorder.ExecuteIndirect(*debug_manager->GetCounterBuffer(), 0);
@@ -191,16 +185,14 @@ auto GpuDebugDrawPass::EnsurePassConstantsBuffer() -> void
 
   pass_constants_buffer_ = graphics.CreateBuffer(desc);
   if (!pass_constants_buffer_) {
-    throw std::runtime_error(
-      "GpuDebugDrawPass: Failed to create pass constants buffer");
+    throw std::runtime_error("failed to create pass constants buffer");
   }
   pass_constants_buffer_->SetName(desc.debug_name);
 
   pass_constants_mapped_ptr_
     = static_cast<std::byte*>(pass_constants_buffer_->Map(0, desc.size_bytes));
   if (!pass_constants_mapped_ptr_) {
-    throw std::runtime_error(
-      "GpuDebugDrawPass: Failed to map pass constants buffer");
+    throw std::runtime_error("failed to map pass constants buffer");
   }
 
   pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
@@ -217,16 +209,14 @@ auto GpuDebugDrawPass::EnsurePassConstantsBuffer() -> void
       = allocator.Allocate(graphics::ResourceViewType::kConstantBuffer,
         graphics::DescriptorVisibility::kShaderVisible);
     if (!cbv_handle.IsValid()) {
-      throw std::runtime_error(
-        "GpuDebugDrawPass: Failed to allocate CBV descriptor handle");
+      throw std::runtime_error("failed to allocate CBV descriptor handle");
     }
     pass_constants_indices_[slot] = allocator.GetShaderVisibleIndex(cbv_handle);
 
     auto cbv_view = registry.RegisterView(
       *pass_constants_buffer_, std::move(cbv_handle), cbv_view_desc);
     if (!cbv_view->IsValid()) {
-      throw std::runtime_error(
-        "GpuDebugDrawPass: Failed to register pass constants CBV");
+      throw std::runtime_error("failed to register pass constants CBV");
     }
   }
 }
@@ -264,14 +254,6 @@ auto GpuDebugDrawPass::UpdatePassConstants() -> void
     .mouse_down_valid = has_mouse_down ? 1u : 0u,
     .pad0 = 0u,
   };
-
-  static bool logged_mouse_down = false;
-  if (has_mouse_down && !logged_mouse_down) {
-    LOG_F(WARNING, "GpuDebugDrawPass constants: mouse_down_valid={} x={} y={}",
-      constants.mouse_down_valid, constants.mouse_down_x,
-      constants.mouse_down_y);
-    logged_mouse_down = true;
-  }
 
   const auto slot = pass_constants_slot_ % kPassConstantsSlots;
   pass_constants_slot_++;
