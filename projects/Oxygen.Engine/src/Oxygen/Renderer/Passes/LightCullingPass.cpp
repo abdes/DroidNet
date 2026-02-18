@@ -122,6 +122,7 @@ struct LightCullingPass::Impl {
   // Current frame's depth texture SRV (single descriptor updated in-place)
   ShaderVisibleIndex depth_texture_srv { kInvalidShaderVisibleIndex };
   const graphics::Texture* depth_texture_owner { nullptr };
+  bool resources_prepared { false };
 
   // Cached light data from LightManager
   ShaderVisibleIndex positional_lights_srv { kInvalidShaderVisibleIndex };
@@ -129,7 +130,7 @@ struct LightCullingPass::Impl {
 
   // Pass constants CBV
   std::shared_ptr<Buffer> pass_constants_buffer;
-  graphics::NativeView pass_constants_cbv {};
+  graphics::NativeView pass_constants_cbv;
   ShaderVisibleIndex pass_constants_index { kInvalidShaderVisibleIndex };
   void* pass_constants_mapped_ptr { nullptr };
 
@@ -346,11 +347,11 @@ struct LightCullingPass::Impl {
       return depth_texture_srv;
     }
 
-    if (!depth_texture_srv.IsValid()) {
+    auto register_new_srv = [&]() -> ShaderVisibleIndex {
       auto srv_handle = allocator.Allocate(ResourceViewType::kTexture_SRV,
         graphics::DescriptorVisibility::kShaderVisible);
       if (!srv_handle.IsValid()) {
-        LOG_F(ERROR, "LightCullingPass: Failed to allocate depth SRV handle");
+        LOG_F(ERROR, "Failed to allocate depth SRV handle");
         return kInvalidShaderVisibleIndex;
       }
       depth_texture_srv = allocator.GetShaderVisibleIndex(srv_handle);
@@ -359,22 +360,27 @@ struct LightCullingPass::Impl {
         = registry.RegisterView(const_cast<graphics::Texture&>(depth_tex),
           std::move(srv_handle), srv_desc);
       if (!native_view->IsValid()) {
-        LOG_F(ERROR, "LightCullingPass: Failed to register depth SRV view");
+        LOG_F(ERROR, "Failed to register depth SRV view");
         depth_texture_srv = kInvalidShaderVisibleIndex;
         return kInvalidShaderVisibleIndex;
       }
       depth_texture_owner = &depth_tex;
       ++telemetry_.depth_srv_refresh_count;
       return depth_texture_srv;
+    };
+
+    if (!depth_texture_srv.IsValid()) {
+      return register_new_srv();
     }
 
     const auto updated
       = registry.UpdateView(const_cast<graphics::Texture&>(depth_tex),
         bindless::HeapIndex { depth_texture_srv.get() }, srv_desc);
     if (!updated) {
-      LOG_F(ERROR, "LightCullingPass: Failed to update depth SRV view");
+      LOG_F(INFO, "Failed to update depth SRV view, re-registering");
+      depth_texture_srv = kInvalidShaderVisibleIndex;
       depth_texture_owner = nullptr;
-      return kInvalidShaderVisibleIndex;
+      return register_new_srv();
     }
     depth_texture_owner = &depth_tex;
     ++telemetry_.depth_srv_refresh_count;
@@ -399,15 +405,13 @@ struct LightCullingPass::Impl {
 
     pass_constants_buffer = gfx->CreateBuffer(desc);
     if (!pass_constants_buffer) {
-      throw std::runtime_error(
-        "LightCullingPass: Failed to create pass constants buffer");
+      throw std::runtime_error("Failed to create pass constants buffer");
     }
     pass_constants_buffer->SetName(desc.debug_name);
 
     pass_constants_mapped_ptr = pass_constants_buffer->Map(0, desc.size_bytes);
     if (pass_constants_mapped_ptr == nullptr) {
-      throw std::runtime_error(
-        "LightCullingPass: Failed to map pass constants buffer");
+      throw std::runtime_error("Failed to map pass constants buffer");
     }
 
     graphics::BufferViewDescription cbv_view_desc;
@@ -418,8 +422,7 @@ struct LightCullingPass::Impl {
     auto cbv_handle = allocator.Allocate(ResourceViewType::kConstantBuffer,
       graphics::DescriptorVisibility::kShaderVisible);
     if (!cbv_handle.IsValid()) {
-      throw std::runtime_error(
-        "LightCullingPass: Failed to allocate CBV descriptor handle");
+      throw std::runtime_error("Failed to allocate CBV descriptor handle");
     }
     pass_constants_index = allocator.GetShaderVisibleIndex(cbv_handle);
 
@@ -459,8 +462,7 @@ struct LightCullingPass::Impl {
 
       cluster_grid_buffer = gfx->CreateBuffer(desc);
       if (!cluster_grid_buffer) {
-        throw std::runtime_error(
-          "LightCullingPass: Failed to create cluster grid buffer");
+        throw std::runtime_error("Failed to create cluster grid buffer");
       }
       cluster_grid_buffer->SetName(desc.debug_name);
       registry.Register(cluster_grid_buffer);
@@ -469,8 +471,7 @@ struct LightCullingPass::Impl {
         = allocator.Allocate(ResourceViewType::kStructuredBuffer_UAV,
           graphics::DescriptorVisibility::kShaderVisible);
       if (!uav_handle.IsValid()) {
-        throw std::runtime_error(
-          "LightCullingPass: Failed to allocate cluster grid UAV handle");
+        throw std::runtime_error("Failed to allocate cluster grid UAV handle");
       }
       cluster_grid_uav = allocator.GetShaderVisibleIndex(uav_handle);
 
@@ -486,8 +487,7 @@ struct LightCullingPass::Impl {
         = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
           graphics::DescriptorVisibility::kShaderVisible);
       if (!srv_handle.IsValid()) {
-        throw std::runtime_error(
-          "LightCullingPass: Failed to allocate cluster grid SRV handle");
+        throw std::runtime_error("Failed to allocate cluster grid SRV handle");
       }
       cluster_grid_srv = allocator.GetShaderVisibleIndex(srv_handle);
 
@@ -500,8 +500,7 @@ struct LightCullingPass::Impl {
         *cluster_grid_buffer, std::move(srv_handle), srv_desc);
 
       cluster_buffer_capacity = total_clusters;
-      LOG_F(1, "LightCullingPass: Created cluster grid buffer for {} clusters",
-        total_clusters);
+      LOG_F(1, "Created cluster grid buffer for {} clusters", total_clusters);
       ScheduleRetireBuffer(std::move(old_buffer));
     }
 
@@ -522,8 +521,7 @@ struct LightCullingPass::Impl {
 
       light_index_list_buffer = gfx->CreateBuffer(desc);
       if (!light_index_list_buffer) {
-        throw std::runtime_error(
-          "LightCullingPass: Failed to create light index list buffer");
+        throw std::runtime_error("Failed to create light index list buffer");
       }
       light_index_list_buffer->SetName(desc.debug_name);
       registry.Register(light_index_list_buffer);
@@ -533,7 +531,7 @@ struct LightCullingPass::Impl {
           graphics::DescriptorVisibility::kShaderVisible);
       if (!uav_handle.IsValid()) {
         throw std::runtime_error(
-          "LightCullingPass: Failed to allocate light index list UAV handle");
+          "Failed to allocate light index list UAV handle");
       }
       light_index_list_uav = allocator.GetShaderVisibleIndex(uav_handle);
 
@@ -550,7 +548,7 @@ struct LightCullingPass::Impl {
           graphics::DescriptorVisibility::kShaderVisible);
       if (!srv_handle.IsValid()) {
         throw std::runtime_error(
-          "LightCullingPass: Failed to allocate light index list SRV handle");
+          "Failed to allocate light index list SRV handle");
       }
       light_index_list_srv = allocator.GetShaderVisibleIndex(srv_handle);
 
@@ -563,8 +561,7 @@ struct LightCullingPass::Impl {
         *light_index_list_buffer, std::move(srv_handle), srv_desc);
 
       light_list_buffer_capacity = required_light_list_capacity;
-      LOG_F(1,
-        "LightCullingPass: Created light index list buffer for {} entries",
+      LOG_F(1, "Created light index list buffer for {} entries",
         required_light_list_capacity);
       ScheduleRetireBuffer(std::move(old_buffer));
     }
@@ -584,10 +581,11 @@ LightCullingPass::~LightCullingPass() = default;
 
 auto LightCullingPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 {
+  impl_->resources_prepared = false;
   ++impl_->telemetry_.frames_prepared;
   const auto* depth_pass = Context().GetPass<DepthPrePass>();
   if (depth_pass == nullptr) {
-    LOG_F(WARNING, "LightCullingPass: No DepthPrePass found, skipping");
+    LOG_F(WARNING, "No DepthPrePass found, skipping");
     co_return;
   }
 
@@ -599,7 +597,7 @@ auto LightCullingPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
     { .width = depth_desc.width, .height = depth_desc.height });
 
   if (impl_->grid_dims.z != impl_->last_logged_z) {
-    LOG_F(INFO, "LightCullingPass: config={} grid_dims={}x{}x{} ",
+    LOG_F(INFO, "config={} grid_dims={}x{}x{} ",
       static_cast<const void*>(impl_->config.get()), impl_->grid_dims.x,
       impl_->grid_dims.y, impl_->grid_dims.z);
     impl_->last_logged_z = impl_->grid_dims.z;
@@ -612,7 +610,7 @@ auto LightCullingPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 
   impl_->depth_texture_srv = impl_->EnsureDepthTextureSrv(depth_tex);
   if (impl_->depth_texture_srv == kInvalidShaderVisibleIndex) {
-    LOG_F(ERROR, "LightCullingPass: Failed to create depth texture SRV");
+    LOG_F(ERROR, "Failed to create depth texture SRV");
     co_return;
   }
 
@@ -644,12 +642,18 @@ auto LightCullingPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
     graphics::ResourceStates::kUnorderedAccess);
 
   recorder.FlushBarriers();
+  impl_->resources_prepared = true;
 
   co_return;
 }
 
 auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 {
+  if (!impl_->resources_prepared) {
+    DLOG_F(2, "resources were not prepared this frame, skipping");
+    co_return;
+  }
+
   ++impl_->telemetry_.frames_executed;
   const auto& cluster_cfg = impl_->config->cluster;
   float effective_z_near = cluster_cfg.z_near;
@@ -690,7 +694,7 @@ auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   if (impl_->cluster_grid_uav == kInvalidShaderVisibleIndex
     || impl_->light_index_list_uav == kInvalidShaderVisibleIndex) {
-    LOG_F(WARNING, "LightCullingPass: UAV resources not prepared, skipping");
+    LOG_F(WARNING, "UAV resources not prepared, skipping");
     co_return;
   }
 
@@ -781,14 +785,14 @@ auto LightCullingPass::ValidateConfig() -> void
 {
   const auto& cluster = impl_->config->cluster;
   if (cluster.tile_size_px == 0) {
-    throw std::runtime_error("LightCullingPass: tile_size_px must be > 0");
+    throw std::runtime_error("tile_size_px must be > 0");
   }
   if (cluster.cluster_dim_z == 0) {
-    throw std::runtime_error("LightCullingPass: cluster_dim_z must be > 0");
+    throw std::runtime_error("cluster_dim_z must be > 0");
   }
   if (cluster.z_near > 0.0F && cluster.z_far > 0.0F
     && cluster.z_near >= cluster.z_far) {
-    throw std::runtime_error("LightCullingPass: z_near must be < z_far");
+    throw std::runtime_error("z_near must be < z_far");
   }
 }
 
@@ -801,7 +805,7 @@ auto LightCullingPass::CreatePipelineStateDesc()
     .stage = oxygen::ShaderType::kCompute,
     .source_path = "Lighting/LightCulling.hlsl",
     .entry_point = "CS",
-    .defines = { { "CLUSTERED", "1" } },
+    .defines = { { .name = "CLUSTERED", .value = "1" } },
   };
 
   return ComputePipelineDesc::Builder()
