@@ -24,6 +24,8 @@ auto oxygen::data::to_string(oxygen::data::AssetType value) noexcept -> const
     case AssetType::kGeometry:     return "Geometry";
     case AssetType::kScene:        return "Scene";
     case AssetType::kScript:       return "Script";
+    case AssetType::kInputAction:  return "InputAction";
+    case AssetType::kInputMappingContext: return "InputMappingContext";
     // clang-format on
   }
 
@@ -64,6 +66,7 @@ auto oxygen::data::to_string(oxygen::data::ComponentType value) noexcept
     case ComponentType::kPointLight:         return "PLIT";
     case ComponentType::kSpotLight:          return "SLIT";
     case ComponentType::kScripting:          return "SCRP";
+    case ComponentType::kInputContextBinding:return "INPT";
     // clang-format on
   }
 
