@@ -9,7 +9,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <string>
+#include <string_view>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -17,6 +20,7 @@
 #include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/Unorm16.h>
+#include <Oxygen/Data/api_export.h>
 
 //! Oxygen PAK file binary format specification
 /**!
@@ -1664,21 +1668,40 @@ enum class ScriptParamType : uint32_t {
   kVec3 = 6,
   kVec4 = 7
 };
+OXGN_DATA_NDAPI auto to_string(ScriptParamType value) noexcept
+  -> std::string_view;
 
 enum class ScriptLanguage : uint8_t { kLuau = 0 };
+OXGN_DATA_NDAPI auto to_string(ScriptLanguage value) noexcept
+  -> std::string_view;
 
 enum class ScriptEncoding : uint8_t { kBytecode = 0, kSource = 1 };
+OXGN_DATA_NDAPI auto to_string(ScriptEncoding value) noexcept
+  -> std::string_view;
 
 enum class ScriptCompression : uint8_t { kNone = 0, kZstd = 1 };
+OXGN_DATA_NDAPI auto to_string(ScriptCompression value) noexcept
+  -> std::string_view;
 
-enum class ScriptAssetFlags : uint32_t {
+enum class ScriptAssetFlags : uint32_t { // NOLINT(*-enum-size)
   kNone = 0,
-  kAllowExternalSource = (1u << 0),
+  kAllowExternalSource = OXYGEN_FLAG(0),
 };
+OXYGEN_DEFINE_FLAGS_OPERATORS(ScriptAssetFlags)
+OXGN_DATA_NDAPI auto to_string(ScriptAssetFlags value) -> std::string;
 
-enum class ScriptingComponentFlags : uint32_t { kNone = 0 };
+enum class ScriptingComponentFlags : uint32_t { // NOLINT(*-enum-size)
+  kNone = 0
+};
+OXYGEN_DEFINE_FLAGS_OPERATORS(ScriptingComponentFlags)
+OXGN_DATA_NDAPI auto to_string(ScriptingComponentFlags value) noexcept
+  -> std::string;
 
-enum class ScriptSlotFlags : uint32_t { kNone = 0 };
+enum class ScriptSlotFlags : uint32_t { // NOLINT(*-enum-size)
+  kNone = 0
+};
+OXYGEN_DEFINE_FLAGS_OPERATORS(ScriptSlotFlags)
+OXGN_DATA_NDAPI auto to_string(ScriptSlotFlags value) noexcept -> std::string;
 
 //=== Scripting Structures (v5) ===-------------------------------------------//
 
@@ -1865,5 +1888,6 @@ using v5::TexturePackingPolicyId;
 using v5::TexturePayloadFlags;
 using v5::TexturePayloadHeader;
 using v5::TextureResourceDesc;
+using v5::to_string;
 using v5::VolumetricCloudsEnvironmentRecord;
 } // namespace oxygen::data::pak

@@ -13,6 +13,8 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/StringUtils.h>
+#include <Oxygen/Config/PathFinder.h>
+#include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -312,7 +314,14 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
       }
 
       scene_loader_
-        = std::make_shared<SceneLoaderService>(*asset_loader, last_viewport_);
+        = std::make_shared<SceneLoaderService>(*asset_loader, last_viewport_,
+          request.source_kind == ui::SceneSourceKind::kPak
+            ? request.source_path
+            : std::filesystem::path {},
+          observer_ptr { &app_.engine->GetScriptCompilationService() },
+          PathFinder(std::make_shared<const PathFinderConfig>(
+                       app_.engine->GetEngineConfig().path_finder_config),
+            std::filesystem::current_path()));
       active_scene_load_key_ = request.key;
       scene_loader_->StartLoad(request.key);
       LOG_F(INFO,

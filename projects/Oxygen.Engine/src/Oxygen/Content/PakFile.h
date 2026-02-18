@@ -222,6 +222,15 @@ public:
   OXGN_CNTT_NDAPI auto ReadScriptSlotRecords(uint32_t start_index,
     uint32_t count) const -> std::vector<data::pak::ScriptSlotRecord>;
 
+  //! Read ScriptParamRecord array from an absolute PAK offset.
+  OXGN_CNTT_NDAPI auto ReadScriptParamRecords(
+    data::pak::OffsetT absolute_offset, uint32_t count) const
+    -> std::vector<data::pak::ScriptParamRecord>;
+
+  //! Read one script resource entry and payload by table index.
+  OXGN_CNTT_NDAPI auto ReadScriptResource(uint32_t index) const
+    -> std::shared_ptr<const data::ScriptResource>;
+
   //! Number of entries in the global script slot table.
   OXGN_CNTT_NDAPI auto ScriptSlotCount() const noexcept -> uint32_t
   {

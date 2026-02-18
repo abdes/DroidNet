@@ -99,6 +99,7 @@ public:
   using IAssetLoader::GeometryCallback;
   using IAssetLoader::MaterialCallback;
   using IAssetLoader::SceneCallback;
+  using IAssetLoader::ScriptCallback;
   using IAssetLoader::TextureCallback;
 
   //! LiveObject contract
@@ -448,6 +449,12 @@ public:
     StartLoadAsset<data::SceneAsset>(key, std::move(on_complete));
   }
 
+  OXGN_CNTT_API void StartLoadScriptAsset(
+    const data::AssetKey& key, ScriptCallback on_complete) override
+  {
+    StartLoadAsset<data::ScriptAsset>(key, std::move(on_complete));
+  }
+
   //! Start an async resource load and invoke a callback on completion.
   /*!
    This is the callback bridge for non-coroutine callers.
@@ -550,6 +557,12 @@ public:
     return GetAsset<data::GeometryAsset>(key);
   }
 
+  [[nodiscard]] auto GetScriptAsset(const data::AssetKey& key) const noexcept
+    -> std::shared_ptr<data::ScriptAsset> override
+  {
+    return GetAsset<data::ScriptAsset>(key);
+  }
+
   [[nodiscard]] auto HasTexture(ResourceKey key) const noexcept -> bool override
   {
     return HasResource<data::TextureResource>(key);
@@ -570,6 +583,12 @@ public:
     -> bool override
   {
     return HasAsset<data::GeometryAsset>(key);
+  }
+
+  [[nodiscard]] auto HasScriptAsset(const data::AssetKey& key) const noexcept
+    -> bool override
+  {
+    return HasAsset<data::ScriptAsset>(key);
   }
 
   //! Get cached resource without loading

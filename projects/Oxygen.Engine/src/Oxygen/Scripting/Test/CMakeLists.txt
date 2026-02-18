@@ -36,8 +36,15 @@ add_test(NAME "Oxygen.Scripting Link Test" COMMAND "Oxygen.Scripting.LinkTest")
 include(GTestHelpers)
 
 m_gtest_program(
-  LuauModule
+  All
   SOURCES
-    "LuauModule_test.cpp"
-    "ExternalScriptLoader_test.cpp"
+    "ScriptingModule_test.cpp"
+    "ScriptSourceResolver_test.cpp"
+    "LuauScriptCompiler_test.cpp"
+    "ScriptCompilationService_test.cpp"
+)
+target_compile_definitions(
+  Oxygen.Scripting.All.Tests
+  PRIVATE
+    OXYGEN_ENGINE_TESTING
 )

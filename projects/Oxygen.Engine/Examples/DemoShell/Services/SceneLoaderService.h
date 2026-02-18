@@ -6,23 +6,35 @@
 
 #pragma once
 
+#include <filesystem>
 #include <memory>
+#include <span>
 #include <unordered_set>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Types/Geometry.h>
+#include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Scene/SceneNode.h>
 
 namespace oxygen::content {
 class IAssetLoader;
+class PakFile;
 } // namespace oxygen::content
 
 namespace oxygen::data {
 class SceneAsset;
 } // namespace oxygen::data
+
+namespace oxygen::scripting {
+class IScriptCompilationService;
+class IScriptSourceResolver;
+} // namespace oxygen::scripting
 
 namespace oxygen::scene {
 class Scene;
@@ -49,7 +61,10 @@ class SceneLoaderService
   : public std::enable_shared_from_this<SceneLoaderService> {
 public:
   //! Create the service with the asset loader and initial viewport size.
-  SceneLoaderService(content::IAssetLoader& loader, Extent<uint32_t> viewport);
+  SceneLoaderService(content::IAssetLoader& loader, Extent<uint32_t> viewport,
+    std::filesystem::path source_pak_path,
+    observer_ptr<scripting::IScriptCompilationService> compilation_service,
+    PathFinder path_finder);
   //! Destroy the loader service.
   ~SceneLoaderService();
 
@@ -98,6 +113,16 @@ private:
   void AttachRenderables(const data::SceneAsset& asset);
   //! Attach light components to nodes.
   void AttachLights(const data::SceneAsset& asset);
+  //! Attach scripting components to nodes.
+  void AttachScripting(const data::SceneAsset& asset);
+  //! Apply script parameter overrides for one slot.
+  void ApplySlotParameters(scene::SceneNode::Scripting& scripting,
+    const scene::SceneNode::Scripting::Slot& slot,
+    std::span<const data::pak::ScriptParamRecord> params);
+  //! Queue script compilation for a slot when source is available.
+  void QueueSlotCompilation(scene::SceneNode node,
+    const scene::SceneNode::Scripting::Slot& slot,
+    std::shared_ptr<const data::ScriptAsset> script_asset);
   //! Choose an active camera based on the asset content.
   void SelectActiveCamera(const data::SceneAsset& asset);
   //! Ensure active camera is valid and viewport is applied.
@@ -119,6 +144,10 @@ private:
 
   std::unordered_set<data::AssetKey> pending_geometry_keys_;
   std::vector<data::AssetKey> pinned_geometry_keys_;
+
+  std::unique_ptr<content::PakFile> source_pak_ {};
+  observer_ptr<scripting::IScriptCompilationService> compilation_service_;
+  std::unique_ptr<scripting::IScriptSourceResolver> source_resolver_;
 };
 
 } // namespace oxygen::examples

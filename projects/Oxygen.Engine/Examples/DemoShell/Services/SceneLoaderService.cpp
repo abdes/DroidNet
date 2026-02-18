@@ -18,11 +18,14 @@
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Engine/Scripting/IScriptCompilationService.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
@@ -30,6 +33,9 @@
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scripting/Execution/CompiledScriptExecutable.h>
+#include <Oxygen/Scripting/IScriptSourceResolver.h>
+#include <Oxygen/Scripting/Resolver/ScriptSourceResolver.h>
 
 #include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/SceneLoaderService.h"
@@ -88,13 +94,73 @@ namespace {
     return glm::quat_cast(look_matrix);
   }
 
+  auto ScriptParamFromRecord(const data::pak::ScriptParamRecord& record)
+    -> std::optional<data::ScriptParam>
+  {
+    using data::pak::ScriptParamType;
+    switch (record.type) {
+    case ScriptParamType::kBool:
+      return data::ScriptParam { record.value.as_bool };
+    case ScriptParamType::kInt32:
+      return data::ScriptParam { record.value.as_int32 };
+    case ScriptParamType::kFloat:
+      return data::ScriptParam { record.value.as_float };
+    case ScriptParamType::kString: {
+      const auto* const begin = std::begin(record.value.as_string);
+      const auto* const end = std::end(record.value.as_string);
+      const auto* const nul = std::ranges::find(record.value.as_string, '\0');
+      if (nul == end) {
+        return std::nullopt;
+      }
+      return data::ScriptParam { std::string(begin, nul) };
+    }
+    case ScriptParamType::kVec2:
+      return data::ScriptParam { Vec2(
+        record.value.as_vec[0], record.value.as_vec[1]) };
+    case ScriptParamType::kVec3:
+      return data::ScriptParam { Vec3(record.value.as_vec[0],
+        record.value.as_vec[1], record.value.as_vec[2]) };
+    case ScriptParamType::kVec4:
+      return data::ScriptParam { Vec4(record.value.as_vec[0],
+        record.value.as_vec[1], record.value.as_vec[2],
+        record.value.as_vec[3]) };
+    case ScriptParamType::kNone:
+    default:
+      return std::nullopt;
+    }
+  }
+
+  auto ComputeCompileKey(
+    const data::AssetKey asset_key, const scripting::ScriptSourceBlob& blob)
+    -> scripting::IScriptCompilationService::CompileKey
+  {
+    uint64_t seed = 0;
+    oxygen::HashCombine(seed, asset_key);
+    oxygen::HashCombine(seed, blob.language);
+    oxygen::HashCombine(seed, blob.encoding);
+    oxygen::HashCombine(seed, blob.compression);
+    oxygen::HashCombine(seed, blob.content_hash);
+    for (const auto byte : blob.bytes) {
+      oxygen::HashCombine(seed, byte);
+    }
+    return scripting::IScriptCompilationService::CompileKey { seed };
+  }
+
 } // namespace
 
-SceneLoaderService::SceneLoaderService(
-  content::IAssetLoader& loader, const Extent<uint32_t> viewport)
+SceneLoaderService::SceneLoaderService(content::IAssetLoader& loader,
+  const Extent<uint32_t> viewport, std::filesystem::path source_pak_path,
+  observer_ptr<scripting::IScriptCompilationService> compilation_service,
+  PathFinder path_finder)
   : loader_(loader)
   , extent_(viewport)
+  , compilation_service_(std::move(compilation_service))
+  , source_resolver_(
+      std::make_unique<scripting::ScriptSourceResolver>(std::move(path_finder)))
 {
+  if (!source_pak_path.empty()) {
+    source_pak_ = std::make_unique<content::PakFile>(source_pak_path);
+  }
 }
 
 SceneLoaderService::~SceneLoaderService()
@@ -246,6 +312,7 @@ auto SceneLoaderService::BuildSceneAsync(scene::Scene& scene,
   ApplyHierarchy(scene, asset);
   AttachRenderables(asset);
   AttachLights(asset);
+  AttachScripting(asset);
   SelectActiveCamera(asset);
   EnsureCameraAndViewport(scene);
   // Geometry pins are only needed until scene instantiation finishes.
@@ -486,6 +553,193 @@ void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
       attached_directional, attached_point, attached_spot,
       attached_directional + attached_point + attached_spot);
   }
+}
+
+void SceneLoaderService::AttachScripting(const data::SceneAsset& asset)
+{
+  using data::pak::ScriptingComponentRecord;
+
+  const auto scripting_components
+    = asset.GetComponents<ScriptingComponentRecord>();
+  if (scripting_components.empty()) {
+    return;
+  }
+  if (!source_pak_) {
+    LOG_F(
+      WARNING, "scripting components present, but no source pak is available");
+    return;
+  }
+
+  for (const ScriptingComponentRecord& component : scripting_components) {
+    const auto node_index = static_cast<size_t>(component.node_index);
+    if (node_index >= runtime_nodes_.size()) {
+      LOG_F(WARNING, "invalid scripting component node index {}", node_index);
+      continue;
+    }
+
+    auto scripting = runtime_nodes_[node_index].GetScripting();
+    std::vector<data::pak::ScriptSlotRecord> slot_records;
+    try {
+      slot_records = source_pak_->ReadScriptSlotRecords(
+        component.slot_start_index, component.slot_count);
+    } catch (const std::exception& ex) {
+      LOG_F(ERROR, "failed to read script slots: {}", ex.what());
+      continue;
+    }
+
+    for (const auto& slot_record : slot_records) {
+      if (slot_record.script_asset_key == data::AssetKey {}) {
+        continue;
+      }
+
+      auto script_asset = loader_.GetScriptAsset(slot_record.script_asset_key);
+      if (!script_asset) {
+        LOG_F(WARNING, "missing script asset {}",
+          data::to_string(slot_record.script_asset_key));
+        continue;
+      }
+
+      if (!scripting.AddSlot(script_asset)) {
+        LOG_F(WARNING, "failed to attach script slot to node {}", node_index);
+        continue;
+      }
+
+      const auto slots = scripting.Slots();
+      if (slots.empty()) {
+        continue;
+      }
+      const auto slot = slots.back();
+
+      if (slot_record.params_count > 0) {
+        try {
+          const auto params = source_pak_->ReadScriptParamRecords(
+            slot_record.params_array_offset, slot_record.params_count);
+          ApplySlotParameters(scripting, slot, params);
+        } catch (const std::exception& ex) {
+          LOG_F(
+            ERROR, "failed to hydrate script slot parameters: {}", ex.what());
+        }
+      }
+
+      QueueSlotCompilation(
+        runtime_nodes_[node_index], slot, std::move(script_asset));
+    }
+  }
+}
+
+void SceneLoaderService::ApplySlotParameters(
+  scene::SceneNode::Scripting& scripting,
+  const scene::SceneNode::Scripting::Slot& slot,
+  std::span<const data::pak::ScriptParamRecord> params)
+{
+  for (const auto& param : params) {
+    const auto* const key_begin = std::begin(param.key);
+    const auto key_end = std::ranges::find(param.key, '\0');
+    if (key_end == std::end(param.key)) {
+      LOG_F(WARNING, "script parameter key is not null-terminated");
+      continue;
+    }
+    const std::string_view key(
+      key_begin, static_cast<size_t>(key_end - key_begin));
+    const auto value = ScriptParamFromRecord(param);
+    if (!value.has_value()) {
+      continue;
+    }
+    if (!scripting.SetParameter(slot, key, *value)) {
+      LOG_F(WARNING, "failed to set script parameter '{}'", key);
+    }
+  }
+}
+
+void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
+  const scene::SceneNode::Scripting::Slot& slot,
+  std::shared_ptr<const data::ScriptAsset> script_asset)
+{
+  if (!script_asset) {
+    return;
+  }
+  if (!compilation_service_) {
+    return;
+  }
+
+  auto load_script_resource
+    = [pak = source_pak_.get()](
+        const uint32_t index) -> std::shared_ptr<const data::ScriptResource> {
+    if (pak == nullptr) {
+      return nullptr;
+    }
+    try {
+      return pak->ReadScriptResource(index);
+    } catch (...) {
+      return nullptr;
+    }
+  };
+
+  auto map_origin = [pak = source_pak_.get()](const uint32_t index)
+    -> std::optional<scripting::ScriptSourceBlob::Origin> {
+    if (pak == nullptr) {
+      return std::nullopt;
+    }
+    try {
+      const auto resource = pak->ReadScriptResource(index);
+      if (!resource) {
+        return std::nullopt;
+      }
+      return scripting::ScriptSourceBlob::Origin::kEmbeddedResource;
+    } catch (...) {
+      return std::nullopt;
+    }
+  };
+
+  const auto resolve_result = source_resolver_->Resolve(
+    scripting::IScriptSourceResolver::ResolveRequest {
+      .asset = *script_asset,
+      .load_script_resource = std::move(load_script_resource),
+      .map_resource_origin = std::move(map_origin),
+    });
+  if (!resolve_result.ok) {
+    LOG_F(WARNING, "failed to resolve script source: {}",
+      resolve_result.error_message);
+    return;
+  }
+
+  if (resolve_result.blob.IsBytecode()) {
+    auto scripting = node.GetScripting();
+    (void)scripting.MarkSlotReady(slot,
+      std::make_shared<const scripting::CompiledScriptExecutable>(
+        std::vector<uint8_t>(resolve_result.blob.bytes)));
+    return;
+  }
+
+  const auto compile_key
+    = ComputeCompileKey(script_asset->GetAssetKey(), resolve_result.blob);
+  auto acquire = compilation_service_->AcquireForSlot(
+    scripting::IScriptCompilationService::Request {
+      .compile_key = compile_key,
+      .language = resolve_result.blob.language,
+      .source = resolve_result.blob.bytes,
+      .compile_mode = scripting::CompileMode::kDebug,
+    },
+    scripting::IScriptCompilationService::SlotAcquireCallbacks {
+      .on_ready =
+        [node, slot](std::vector<uint8_t> bytecode) mutable {
+          if (node.IsAlive()) {
+            auto scripting = node.GetScripting();
+            (void)scripting.MarkSlotReady(slot,
+              std::make_shared<const scripting::CompiledScriptExecutable>(
+                std::move(bytecode)));
+          }
+        },
+      .on_failed =
+        [node, slot](std::string diagnostic) mutable {
+          if (node.IsAlive()) {
+            auto scripting = node.GetScripting();
+            (void)scripting.MarkSlotCompilationFailed(
+              slot, std::move(diagnostic));
+          }
+        },
+    });
+  (void)acquire;
 }
 
 void SceneLoaderService::SelectActiveCamera(const data::SceneAsset& asset)

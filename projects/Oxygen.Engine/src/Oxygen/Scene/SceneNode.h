@@ -797,19 +797,28 @@ public:
   //! Tries to get a parameter value, checking overrides first then falling
   //! back to defaults.
   //! The slot reference must come from this object's current Slots() view.
-  [[nodiscard]] OXGN_SCN_NDAPI auto TryGetParameter(
+  OXGN_SCN_NDAPI auto TryGetParameter(
     const Slot& slot, std::string_view name) const noexcept
     -> std::optional<std::reference_wrapper<const data::ScriptParam>>;
 
   //! Gets a parameter value, checking overrides first then falling back to
   //! defaults.
   //! Throws std::out_of_range when not found.
-  [[nodiscard]] OXGN_SCN_NDAPI auto GetParameter(
+  OXGN_SCN_NDAPI auto GetParameter(
     const Slot& slot, std::string_view name) const -> const data::ScriptParam&;
 
   //! Returns effective parameters for the given slot.
-  [[nodiscard]] OXGN_SCN_NDAPI auto Parameters(const Slot& slot) const noexcept
+  OXGN_SCN_NDAPI auto Parameters(const Slot& slot) const noexcept
     -> EffectiveParametersView;
+
+  //! Marks a slot as ready and installs the resolved executable.
+  OXGN_SCN_NDAPI auto MarkSlotReady(const Slot& slot,
+    std::shared_ptr<const scripting::ScriptExecutable> executable) noexcept
+    -> bool;
+
+  //! Marks a slot as compilation-failed and disables execution.
+  OXGN_SCN_NDAPI auto MarkSlotCompilationFailed(
+    const Slot& slot, std::string diagnostic_message) noexcept -> bool;
 
   struct SafeCallState {
     SceneNode* node = nullptr;

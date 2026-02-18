@@ -6,13 +6,14 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <string_view>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Core/EngineModule.h>
-#include <Oxygen/Scripting/Loader/IScriptLoader.h>
+#include <Oxygen/Scripting/ScriptSourceBlob.h>
 #include <Oxygen/Scripting/api_export.h>
 
 struct lua_State;
@@ -34,19 +35,27 @@ struct ScriptExecutionRequest {
   ScriptChunkName chunk_name { std::string_view { "runtime" } };
 };
 
-class LuauModule final : public engine::EngineModule {
-  OXYGEN_TYPED(LuauModule)
+/*!
+ Engine scripting module facade.
+
+ Consumers should discover this module via the engine `ModuleManager` typed
+ lookup/subscription pattern (through `AsyncEngine::GetModule<T>()` and module
+ attach/detach notifications). Runtime script compilation is owned by
+ `AsyncEngine`; this module only registers/unregisters language compilers.
+*/
+class ScriptingModule final : public engine::EngineModule {
+  OXYGEN_TYPED(ScriptingModule)
 
 public:
-  OXGN_SCRP_API explicit LuauModule(engine::ModulePriority priority);
-  OXGN_SCRP_API ~LuauModule() override;
+  OXGN_SCRP_API explicit ScriptingModule(engine::ModulePriority priority);
+  OXGN_SCRP_API ~ScriptingModule() override;
 
-  OXYGEN_MAKE_NON_COPYABLE(LuauModule)
-  OXYGEN_MAKE_NON_MOVABLE(LuauModule)
+  OXYGEN_MAKE_NON_COPYABLE(ScriptingModule)
+  OXYGEN_MAKE_NON_MOVABLE(ScriptingModule)
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
   {
-    return "LuauModule";
+    return "ScriptingModule";
   }
 
   [[nodiscard]] auto GetPriority() const noexcept
@@ -80,9 +89,8 @@ public:
 
   OXGN_SCRP_NDAPI auto ExecuteScript(const ScriptExecutionRequest& request)
     -> ScriptExecutionResult;
-  OXGN_SCRP_NDAPI auto ExecuteScript(
-    const ::oxygen::scripting::IScriptLoader& loader,
-    std::string_view script_id) -> ScriptExecutionResult;
+  OXGN_SCRP_NDAPI auto ExecuteScript(const ScriptSourceBlob& blob)
+    -> ScriptExecutionResult;
 
 private:
   auto InitializeSandbox() -> ScriptExecutionResult;
@@ -95,6 +103,7 @@ private:
   lua_State* lua_state_ { nullptr };
   int runtime_env_ref_;
   engine::ModulePriority priority_;
+  observer_ptr<AsyncEngine> engine_ {};
 };
 
 } // namespace oxygen::scripting

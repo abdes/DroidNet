@@ -53,12 +53,16 @@ set(
   "InputHandler.h"
   "ModuleEvent.h"
   "ModuleManager.h"
+  "Scripting/IScriptCompilationService.h"
+  "Scripting/IScriptCompiler.h"
+  "Scripting/ScriptCompilationService.h"
   "TimeManager.h"
 )
 set(
   OXYGEN_ENGINE_PRIVATE_SOURCES
   "AsyncEngine.cpp"
   "ModuleManager.cpp"
+  "Scripting/ScriptCompilationService.cpp"
   "TimeManager.cpp"
 )
 
@@ -89,6 +93,7 @@ target_link_libraries(
     oxygen::console
     oxygen::config
     oxygen::core
+    oxygen::data
     oxygen::platform
     oxygen::graphics-common
     oxygen::content

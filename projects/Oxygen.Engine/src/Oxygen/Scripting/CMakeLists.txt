@@ -10,7 +10,7 @@
 
 asap_module_declare(
   MODULE_NAME "Oxygen.Scripting"
-  DESCRIPTION "Oxygen Luau scripting module"
+  DESCRIPTION "Oxygen scripting module"
   WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
@@ -49,14 +49,23 @@ set_target_properties(
 set(
   OXYGEN_SCRIPTING_HEADERS
   "api_export.h"
-  "Loader/IScriptLoader.h"
-  "Loader/ExternalScriptLoader.h"
-  "Module/LuauModule.h"
+  "Compilers/LuauScriptCompiler.h"
+  "Execution/CompiledScriptExecutable.h"
+  "Execution/FailedScriptExecutable.h"
+  "IScriptSourceResolver.h"
+  "Module/ScriptingModule.h"
+  "Resolver/EmbeddedSourceResolver.h"
+  "Resolver/ExternalFileResolver.h"
+  "Resolver/ScriptSourceResolver.h"
+  "ScriptSourceBlob.h"
 )
 set(
   OXYGEN_SCRIPTING_PRIVATE_SOURCES
-  "Loader/ExternalScriptLoader.cpp"
-  "Module/LuauModule.cpp"
+  "Compilers/LuauScriptCompiler.cpp"
+  "Module/ScriptingModule.cpp"
+  "Resolver/EmbeddedSourceResolver.cpp"
+  "Resolver/ExternalFileResolver.cpp"
+  "Resolver/ScriptSourceResolver.cpp"
 )
 
 target_sources(
@@ -90,6 +99,8 @@ target_link_libraries(
     oxygen::base
     oxygen::config
     oxygen::core
+    oxygen::data
+    oxygen::engine
 )
 
 # ------------------------------------------------------------------------------

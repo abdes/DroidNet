@@ -112,7 +112,7 @@ private:
   // Scene and rendering.
   ActiveScene active_scene_;
   ViewId main_view_id_ { kInvalidViewId };
-  scene::SceneNode main_camera_ {};
+  scene::SceneNode main_camera_;
 
   std::shared_ptr<oxygen::examples::SceneLoaderService> scene_loader_;
   bool scene_load_cancel_requested_ { false };

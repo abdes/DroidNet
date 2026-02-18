@@ -984,6 +984,24 @@ auto SceneNode::Scripting::Parameters(const Slot& slot) const noexcept
     [&](SafeCallState& state) { return state.scripting->Parameters(slot); });
 }
 
+auto SceneNode::Scripting::MarkSlotReady(const Slot& slot,
+  std::shared_ptr<const scripting::ScriptExecutable> executable) noexcept
+  -> bool
+{
+  return SafeCall(RequiresScripting(), [&](SafeCallState& state) {
+    return state.scripting->MarkSlotReady(slot, std::move(executable));
+  });
+}
+
+auto SceneNode::Scripting::MarkSlotCompilationFailed(
+  const Slot& slot, std::string diagnostic_message) noexcept -> bool
+{
+  return SafeCall(RequiresScripting(), [&](SafeCallState& state) {
+    return state.scripting->MarkSlotCompilationFailed(
+      slot, std::move(diagnostic_message));
+  });
+}
+
 auto SceneNode::Scripting::LogSafeCallError(const char* reason) const noexcept
   -> void
 {

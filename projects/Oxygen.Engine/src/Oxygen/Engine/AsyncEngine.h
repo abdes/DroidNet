@@ -36,6 +36,10 @@ namespace oxygen::engine {
 class EngineModule;
 class TimeManager;
 } // namespace oxygen::engine
+namespace oxygen::scripting {
+class IScriptCompilationService;
+class ScriptCompilationService;
+} // namespace oxygen::scripting
 
 namespace oxygen {
 namespace time {
@@ -150,6 +154,10 @@ public:
   //! Access the optional AssetLoader service created during initialization.
   OXGN_NGIN_NDAPI auto GetAssetLoader() const noexcept
     -> observer_ptr<content::IAssetLoader>;
+  OXGN_NGIN_NDAPI auto GetScriptCompilationService() noexcept
+    -> scripting::IScriptCompilationService&;
+  OXGN_NGIN_NDAPI auto GetScriptCompilationService() const noexcept
+    -> const scripting::IScriptCompilationService&;
 
   //! Set the engine target frames-per-second at runtime. 0 = uncapped.
   //! Value will be clamped to range [0, 240]. Thread-safety is caller's
@@ -292,6 +300,8 @@ private:
   std::unique_ptr<engine::ModuleManager> module_manager_;
 
   std::unique_ptr<content::AssetLoader> asset_loader_;
+  std::shared_ptr<scripting::ScriptCompilationService>
+    script_compilation_service_ {};
 
   // Time system integration
   time::PhysicalTime frame_start_ts_ {};
