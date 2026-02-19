@@ -126,18 +126,18 @@ namespace {
     }
 
     lua_getfield(state, LUA_REGISTRYINDEX, kEventsRuntimeFieldName);
+    if (lua_userdatatag(state, -1) != kTagEventRuntime) {
+      lua_pop(state, 1);
+      return nullptr;
+    }
     auto* runtime = static_cast<EventRuntime*>(lua_touserdata(state, -1));
     lua_pop(state, 1);
     return runtime;
   }
 
-  auto LuaEventsRuntimeGc(lua_State* state) -> int
+  void LuaEventsRuntimeDtor(lua_State* /*state*/, void* p)
   {
-    auto* runtime = static_cast<EventRuntime*>(lua_touserdata(state, kLuaArg1));
-    if (runtime != nullptr) {
-      std::destroy_at(runtime);
-    }
-    return 0;
+    static_cast<EventRuntime*>(p)->~EventRuntime();
   }
 
   auto EnsureRuntime(lua_State* state) -> EventRuntime*
@@ -150,13 +150,12 @@ namespace {
     }
 
     auto* runtime = static_cast<EventRuntime*>(
-      lua_newuserdata(state, sizeof(EventRuntime)));
+      lua_newuserdatatagged(state, sizeof(EventRuntime), kTagEventRuntime));
+    lua_setuserdatadtor(state, kTagEventRuntime, LuaEventsRuntimeDtor);
+
     std::construct_at(runtime);
 
-    if (luaL_newmetatable(state, kEventsRuntimeMetatableName) != 0) {
-      lua_pushcfunction(state, LuaEventsRuntimeGc, "events.runtime.__gc");
-      lua_setfield(state, -2, "__gc");
-    }
+    (void)luaL_newmetatable(state, kEventsRuntimeMetatableName);
     lua_setmetatable(state, -2);
     lua_setfield(state, LUA_REGISTRYINDEX, kEventsRuntimeFieldName);
     return runtime;
@@ -701,7 +700,8 @@ auto ShutdownEventsRuntime(lua_State* state) -> void
   lua_pushnil(state);
   lua_setmetatable(state, -2);
 
-  std::destroy_at(runtime);
+  // Runtime userdata is tagged with a Luau destructor (LuaEventsRuntimeDtor).
+  // Do not manually destroy here; lua_close/GC will invoke the destructor.
   lua_pop(state, 1);
 }
 
