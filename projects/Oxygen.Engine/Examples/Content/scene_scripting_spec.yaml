@@ -1,0 +1,240 @@
+# PakGen spec: scene + content + input + core API example.
+# This scene keeps geometry/material procedural at runtime through scripting,
+# while input assets and script asset come from content.
+
+version: 6
+content_version: 1
+
+scripts:
+  - name: scene_core_lua_src
+    language: luau
+    encoding: source
+    compression: none
+    file: scene_core_script.lua
+  - name: scene_time_of_day_lua_src
+    language: luau
+    encoding: source
+    compression: none
+    file: scene_time_of_day_script.lua
+
+assets:
+  - type: material
+    name: ShowcaseExternalMat
+    asset_key: "aaaaaaaabbbbccccddddeeeeeeeeeeee"
+    alignment: 1
+    material_domain: 1
+    shader_stages: 0
+    base_color: [0.2, 0.45, 0.15, 1.0]
+    metalness: 0.0
+    roughness: 0.25
+    ambient_occlusion: 1.0
+
+  - type: material
+    name: ShowcaseOrbMat
+    asset_key: "bbbbbbbbccccddddeeeeffffffffffff"
+    alignment: 1
+    material_domain: 1
+    shader_stages: 0
+    base_color: [0.2, 0.35, 0.75, 0.6]
+    metalness: 0.0
+    roughness: 0.55
+    ambient_occlusion: 1.0
+
+  - type: input_action
+    name: RotateSpeedUpAction
+    asset_key: "91111111111111111111111111111111"
+    value_type: axis1d
+    consumes_input: true
+
+  - type: input_action
+    name: RotateSpeedDownAction
+    asset_key: "92222222222222222222222222222222"
+    value_type: axis1d
+    consumes_input: true
+
+  - type: input_action
+    name: RotateStopAction
+    asset_key: "93333333333333333333333333333333"
+    value_type: bool
+    consumes_input: true
+
+  - type: input_action
+    name: RotateInvertAction
+    asset_key: "93444444444444444444444444444444"
+    value_type: bool
+    consumes_input: true
+
+  - type: input_action
+    name: CycleShapeAction
+    asset_key: "93555555555555555555555555555555"
+    value_type: bool
+    consumes_input: true
+
+  - type: input_action
+    name: SpawnOrbAction
+    asset_key: "93666666666666666666666666666666"
+    value_type: bool
+    consumes_input: true
+
+  - type: input_action
+    name: PulseScaleAction
+    asset_key: "93777777777777777777777777777777"
+    value_type: bool
+    consumes_input: true
+
+  - type: input_mapping_context
+    name: RotateRuntimeInputContext
+    asset_key: "94444444444444444444444444444444"
+    mappings:
+      - action_asset: RotateSpeedUpAction
+        slot_name: "Keyboard.PgUp"
+        scale: [1.0, 0.0]
+        bias: [0.0, 0.0]
+        triggers:
+          - type: pulse
+            behavior: implicit
+            fparams: [0.08]
+            uparams: [1, 0]
+      - action_asset: RotateSpeedDownAction
+        slot_name: "Keyboard.PgDn"
+        scale: [1.0, 0.0]
+        bias: [0.0, 0.0]
+        triggers:
+          - type: pulse
+            behavior: implicit
+            fparams: [0.08]
+            uparams: [1, 0]
+      - action_asset: RotateStopAction
+        slot_name: "Keyboard.End"
+        scale: [1.0, 0.0]
+        bias: [0.0, 0.0]
+        triggers:
+          - type: pressed
+            behavior: implicit
+      - action_asset: RotateInvertAction
+        slot_name: "Keyboard.Home"
+        scale: [1.0, 0.0]
+        bias: [0.0, 0.0]
+        triggers:
+          - type: pressed
+            behavior: implicit
+      - action_asset: CycleShapeAction
+        slot_name: "Keyboard.Insert"
+        scale: [1.0, 0.0]
+        bias: [0.0, 0.0]
+        triggers:
+          - type: pressed
+            behavior: implicit
+      - action_asset: SpawnOrbAction
+        slot_name: "Keyboard.Delete"
+        scale: [1.0, 0.0]
+        bias: [0.0, 0.0]
+        triggers:
+          - type: pressed
+            behavior: implicit
+      - action_asset: PulseScaleAction
+        slot_name: "Keyboard.Space"
+        scale: [1.0, 0.0]
+        bias: [0.0, 0.0]
+        triggers:
+          - type: pressed
+            behavior: implicit
+
+  - type: script
+    name: SceneV1ContentSceneInputCoreScript
+    asset_key: "95555555555555555555555555555555"
+    source_resource: scene_core_lua_src
+
+  - type: script
+    name: SceneV1TimeOfDayScript
+    asset_key: "9bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    source_resource: scene_time_of_day_lua_src
+
+  - type: scene
+    name: SceneV1ContentSceneInputCore
+    asset_key: "96666666666666666666666666666666"
+    alignment: 1
+    nodes:
+      - name: Root
+        parent: 0
+        flags: 0
+
+      - name: ScriptedCube
+        parent: 0
+        flags: 0
+        translation: [0.0, 0.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: MainCamera
+        parent: 0
+        flags: 0
+        translation: [0.0, -10.0, 0.0]
+        rotation: [-0.70710678, 0.0, 0.0, 0.70710678]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Sun
+        parent: 0
+        flags: 0
+        translation: [0.0, 5.0, 8.0]
+        rotation: [0.5, 0.0, 0.0, 0.8660254]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: TimeOfDayController
+        parent: 0
+        flags: 0
+        translation: [0.0, 0.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+    scripting:
+      - node_index: 1
+        slots:
+          - script_asset: SceneV1ContentSceneInputCoreScript
+            execution_order: 0
+            params:
+              - key: speed
+                type: float
+                value: 1.6
+              - key: bounce_amplitude
+                type: float
+                value: 0.45
+              - key: host_material_guid
+                type: string
+                value: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+              - key: orb_material_guid
+                type: string
+                value: "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
+
+      - node_index: 4
+        slots:
+          - script_asset: SceneV1TimeOfDayScript
+            execution_order: 1
+            params:
+              - key: day_duration_seconds
+                type: float
+                value: 60.0
+
+    input_context_bindings:
+      - node_index: 0
+        context_asset: RotateRuntimeInputContext
+        priority: 100
+        activate_on_load: true
+
+    perspective_cameras:
+      - node_index: 2
+        fov_y: 0.785398
+        aspect_ratio: 1.777778
+        near_plane: 0.1
+        far_plane: 100.0
+
+    directional_lights:
+      - node_index: 3
+        affects_world: true
+        color_rgb: [1.0, 0.98, 0.92]
+        intensity_lux: 120000.0
+        mobility: 0
+        casts_shadows: 1
+        angular_size_radians: 0.004675
+        environment_contribution: true
+        is_sun_light: true
