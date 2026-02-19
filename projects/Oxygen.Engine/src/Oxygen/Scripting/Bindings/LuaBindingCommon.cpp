@@ -255,19 +255,9 @@ auto PushScriptParam(lua_State* state, const data::ScriptParam& param) -> int
       } else if constexpr (std::is_same_v<T, std::string>) {
         lua_pushlstring(state, value.c_str(), value.size());
       } else if constexpr (std::is_same_v<T, Vec2>) {
-        lua_newtable(state);
-        lua_pushnumber(state, value.x);
-        lua_rawseti(state, -2, 1);
-        lua_pushnumber(state, value.y);
-        lua_rawseti(state, -2, 2);
+        lua_pushvector(state, value.x, value.y, 0.0F);
       } else if constexpr (std::is_same_v<T, Vec3>) {
-        lua_newtable(state);
-        lua_pushnumber(state, value.x);
-        lua_rawseti(state, -2, 1);
-        lua_pushnumber(state, value.y);
-        lua_rawseti(state, -2, 2);
-        lua_pushnumber(state, value.z);
-        lua_rawseti(state, -2, 3);
+        lua_pushvector(state, value.x, value.y, value.z);
       } else if constexpr (std::is_same_v<T, Vec4>) {
         lua_newtable(state);
         lua_pushnumber(state, value.x);
