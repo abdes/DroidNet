@@ -21,6 +21,7 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
+#include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeComponentBindings.h>
 
@@ -164,7 +165,7 @@ namespace {
       it != registry.token_by_geometry_ptr.end()) {
       return it->second;
     }
-    return data::to_string(geometry->GetAssetKey());
+    return {};
   }
 
   auto MaterialTokenFromAsset(
@@ -176,7 +177,7 @@ namespace {
       it != registry.token_by_material_ptr.end()) {
       return it->second;
     }
-    return data::to_string(material->GetAssetKey());
+    return {};
   }
 
   auto ReadPositiveLuaIndex(lua_State* state, const int index)
@@ -187,6 +188,25 @@ namespace {
       return std::nullopt;
     }
     return static_cast<std::size_t>(value - 1);
+  }
+
+  auto TryGetAssetUserdataWithMetatable(lua_State* state, const int index,
+    const char* metatable_name) -> AssetUserdata*
+  {
+    void* const raw = lua_touserdata(state, index);
+    if (raw == nullptr) {
+      return nullptr;
+    }
+    if (lua_getmetatable(state, index) == 0) {
+      return nullptr;
+    }
+    luaL_getmetatable(state, metatable_name);
+    const bool is_match = lua_rawequal(state, -1, -2) != 0;
+    lua_pop(state, 2);
+    if (!is_match) {
+      return nullptr;
+    }
+    return static_cast<AssetUserdata*>(raw);
   }
 
   auto SceneNodeRenderable(lua_State* state) -> int
@@ -222,11 +242,27 @@ namespace {
   auto SceneNodeRenderableSetGeometry(lua_State* state) -> int
   {
     auto* node = CheckSceneNode(state, 1);
-    size_t len = 0;
-    const char* token_raw = luaL_checklstring(state, 2, &len);
-    const std::string token(token_raw, len);
-    auto geometry = GetOrCreateGeometryByToken(token);
-    node->GetRenderable().SetGeometry(std::move(geometry));
+    if (lua_type(state, 2) == LUA_TSTRING) {
+      size_t len = 0;
+      const char* token_raw = luaL_checklstring(state, 2, &len);
+      const std::string token(token_raw, len);
+      auto geometry = GetOrCreateGeometryByToken(token);
+      node->GetRenderable().SetGeometry(std::move(geometry));
+      lua_pushboolean(state, 1);
+      return 1;
+    }
+
+    auto* asset_user_data
+      = TryGetAssetUserdataWithMetatable(state, 2, kGeometryAssetMetatableName);
+    if (asset_user_data == nullptr
+      || asset_user_data->kind != AssetUserdataKind::kGeometry
+      || asset_user_data->geometry == nullptr) {
+      luaL_argerror(
+        state, 2, "geometry token string or GeometryAsset userdata expected");
+      return 0;
+    }
+
+    node->GetRenderable().SetGeometry(asset_user_data->geometry);
     lua_pushboolean(state, 1);
     return 1;
   }
@@ -240,8 +276,11 @@ namespace {
       return 1;
     }
     const auto token = GeometryTokenFromAsset(geometry);
-    lua_pushlstring(state, token.data(), token.size());
-    return 1;
+    if (!token.empty()) {
+      lua_pushlstring(state, token.data(), token.size());
+      return 1;
+    }
+    return PushGeometryAsset(state, std::move(geometry));
   }
 
   auto SceneNodeRenderableGetLodPolicy(lua_State* state) -> int
@@ -438,12 +477,29 @@ namespace {
       return 1;
     }
 
-    size_t len = 0;
-    const char* token_raw = luaL_checklstring(state, 4, &len);
-    const std::string token(token_raw, len);
-    auto material = GetOrCreateMaterialByToken(token);
+    if (lua_type(state, 4) == LUA_TSTRING) {
+      size_t len = 0;
+      const char* token_raw = luaL_checklstring(state, 4, &len);
+      const std::string token(token_raw, len);
+      auto material = GetOrCreateMaterialByToken(token);
+      node->GetRenderable().SetMaterialOverride(
+        *lod, *submesh, std::move(material));
+      lua_pushboolean(state, 1);
+      return 1;
+    }
+
+    auto* asset_user_data
+      = TryGetAssetUserdataWithMetatable(state, 4, kMaterialAssetMetatableName);
+    if (asset_user_data == nullptr
+      || asset_user_data->kind != AssetUserdataKind::kMaterial
+      || asset_user_data->material == nullptr) {
+      luaL_argerror(state, 4,
+        "material token string, MaterialAsset userdata, or nil expected");
+      return 0;
+    }
+
     node->GetRenderable().SetMaterialOverride(
-      *lod, *submesh, std::move(material));
+      *lod, *submesh, asset_user_data->material);
     lua_pushboolean(state, 1);
     return 1;
   }
@@ -478,8 +534,11 @@ namespace {
       return 1;
     }
     const auto token = MaterialTokenFromAsset(material);
-    lua_pushlstring(state, token.data(), token.size());
-    return 1;
+    if (!token.empty()) {
+      lua_pushlstring(state, token.data(), token.size());
+      return 1;
+    }
+    return PushMaterialAsset(state, std::move(material));
   }
 
   auto SceneNodeRenderableGetWorldBoundingSphere(lua_State* state) -> int
