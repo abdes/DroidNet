@@ -16,6 +16,7 @@
 #include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
@@ -70,13 +71,12 @@ namespace {
       }
     }
 
-    ScopedActiveFrameContext(const ScopedActiveFrameContext&) = delete;
-    auto operator=(const ScopedActiveFrameContext&)
-      -> ScopedActiveFrameContext& = delete;
+    OXYGEN_MAKE_NON_COPYABLE(ScopedActiveFrameContext)
+    OXYGEN_DEFAULT_MOVABLE(ScopedActiveFrameContext)
 
   private:
     lua_State* state_ { nullptr };
-    observer_ptr<engine::FrameContext> previous_ {};
+    observer_ptr<engine::FrameContext> previous_;
   };
 
   auto LuaTraceback(lua_State* state) -> int
@@ -293,6 +293,8 @@ auto ScriptingModule::RegisterConsoleBindings(
     .help = "Enable/disable ScriptingModule input->events bridge logs",
     .default_value = input_bridge_logs_enabled_,
     .flags = console::CVarFlags::kDevOnly,
+    .min_value = {},
+    .max_value = {},
   });
 
   (void)console->RegisterCVar(console::CVarDefinition {
@@ -361,9 +363,11 @@ auto ScriptingModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
     const auto dispatch_result
       = bindings::DispatchEventsForPhase(lua_state_, "frame_start");
     if (!dispatch_result.ok && context != nullptr) {
-      ReportError(context,
-        std::string("oxygen.events dispatch failed [frame_start]: ")
-          .append(dispatch_result.message));
+      const auto msg
+        = std::string("oxygen.events dispatch failed [frame_start]: ")
+            .append(dispatch_result.message);
+      DLOG_F(ERROR, "{}", msg);
+      ReportError(context, msg);
     }
   }
 }
@@ -385,9 +389,11 @@ auto ScriptingModule::OnFixedSimulation(
     const auto dispatch_result
       = bindings::DispatchEventsForPhase(lua_state_, "fixed_simulation");
     if (!dispatch_result.ok && context != nullptr) {
-      ReportError(context,
-        std::string("oxygen.events dispatch failed [fixed_simulation]: ")
-          .append(dispatch_result.message));
+      const auto msg
+        = std::string("oxygen.events dispatch failed [fixed_simulation]: ")
+            .append(dispatch_result.message);
+      DLOG_F(ERROR, "{}", msg);
+      ReportError(context, msg);
     }
   }
   co_return;
@@ -417,9 +423,10 @@ auto ScriptingModule::OnGameplay(observer_ptr<engine::FrameContext> context)
     const auto dispatch_result
       = bindings::DispatchEventsForPhase(lua_state_, "gameplay");
     if (!dispatch_result.ok && context != nullptr) {
-      ReportError(context,
-        std::string("oxygen.events dispatch failed [gameplay]: ")
-          .append(dispatch_result.message));
+      const auto msg = std::string("oxygen.events dispatch failed [gameplay]: ")
+                         .append(dispatch_result.message);
+      DLOG_F(ERROR, "{}", msg);
+      ReportError(context, msg);
     }
   }
 
@@ -443,9 +450,11 @@ auto ScriptingModule::OnSceneMutation(
     const auto dispatch_result
       = bindings::DispatchEventsForPhase(lua_state_, "scene_mutation");
     if (!dispatch_result.ok && context != nullptr) {
-      ReportError(context,
-        std::string("oxygen.events dispatch failed [scene_mutation]: ")
-          .append(dispatch_result.message));
+      const auto msg
+        = std::string("oxygen.events dispatch failed [scene_mutation]: ")
+            .append(dispatch_result.message);
+      DLOG_F(ERROR, "{}", msg);
+      ReportError(context, msg);
     }
   }
   co_return;
@@ -469,9 +478,11 @@ auto ScriptingModule::OnFrameEnd(observer_ptr<engine::FrameContext> context)
     const auto dispatch_result
       = bindings::DispatchEventsForPhase(lua_state_, "frame_end");
     if (!dispatch_result.ok && context != nullptr) {
-      ReportError(context,
-        std::string("oxygen.events dispatch failed [frame_end]: ")
-          .append(dispatch_result.message));
+      const auto msg
+        = std::string("oxygen.events dispatch failed [frame_end]: ")
+            .append(dispatch_result.message);
+      DLOG_F(ERROR, "{}", msg);
+      ReportError(context, msg);
     }
   }
 }
@@ -484,7 +495,10 @@ auto ScriptingModule::ExecuteScript(const ScriptExecutionRequest& request)
       "runtime", "cannot execute script: luau module is not attached");
   }
 
-  const Luau::CompileOptions options {};
+  const Luau::CompileOptions options {
+    .optimizationLevel = 1,
+    .debugLevel = 2,
+  };
   const std::string bytecode
     = Luau::compile(std::string(request.source_text.get()), options);
 
@@ -708,11 +722,14 @@ auto ScriptingModule::RunSceneScripts(
           const auto init_result = RebuildSlotRuntime(key, runtime, slot);
           if (!init_result.ok && !runtime.reported_initialization_error) {
             runtime.reported_initialization_error = true;
-            ReportError(context,
-              std::string("script slot initialization failed [")
-                .append(init_result.stage)
-                .append("]: ")
-                .append(init_result.message));
+            const auto msg = std::string("script slot initialization failed [")
+                               .append(init_result.stage)
+                               .append("]: ")
+                               .append(init_result.message);
+            LOG_SCOPE_F(ERROR, "Script Init Error");
+            LOG_F(ERROR, "    stage: {}", init_result.stage);
+            LOG_F(ERROR, "  message: {}", init_result.message);
+            ReportError(context, msg);
           }
           if (!init_result.ok) {
             continue;
@@ -722,11 +739,14 @@ auto ScriptingModule::RunSceneScripts(
         const auto tick_result
           = ExecuteSlotTick(key, runtime, *node, slot, context, dt_seconds);
         if (!tick_result.ok) {
-          ReportError(context,
-            std::string("script slot tick failed [")
-              .append(tick_result.stage)
-              .append("]: ")
-              .append(tick_result.message));
+          const auto msg = std::string("script slot tick failed [")
+                             .append(tick_result.stage)
+                             .append("]: ")
+                             .append(tick_result.message);
+          LOG_SCOPE_F(ERROR, "Script Tick Error");
+          LOG_F(ERROR, "    stage: {}", tick_result.stage);
+          LOG_F(ERROR, "  message: {}", tick_result.message);
+          ReportError(context, msg);
         }
       }
 
@@ -812,6 +832,7 @@ auto ScriptingModule::RebuildSlotRuntime(const SlotRuntimeKey& key,
   const auto env_index = lua_gettop(lua_state_);
   const std::string chunk_name = "scene_slot_" + std::to_string(key.slot_index);
   const auto load_status = luau_load(lua_state_, chunk_name.c_str(),
+    // NOLINTNEXTLINE(*-reinterpret-cast)
     reinterpret_cast<const char*>(bytecode.data()), bytecode.size(), env_index);
   if (load_status != LUA_OK) {
     const auto error_message = LuaToString(lua_state_, kLuaStackTop);
@@ -912,13 +933,19 @@ auto ScriptingModule::ReportHookError(
     return;
   }
 
-  ReportError(context,
-    std::string("script phase hook '")
-      .append(hook_name)
-      .append("' failed [")
-      .append(result.stage)
-      .append("]: ")
-      .append(result.message));
+  const auto msg = std::string("script phase hook '")
+                     .append(hook_name)
+                     .append("' failed [")
+                     .append(result.stage)
+                     .append("]: ")
+                     .append(result.message);
+
+  LOG_SCOPE_F(ERROR, "Script Hook Error");
+  LOG_F(ERROR, "hook_name: {}", hook_name);
+  LOG_F(ERROR, "    stage: {}", result.stage);
+  LOG_F(ERROR, "  message: {}", result.message);
+
+  ReportError(context, msg);
 }
 
 } // namespace oxygen::scripting
