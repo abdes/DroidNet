@@ -26,6 +26,7 @@
 #include <Oxygen/Scene/SceneTraversal.h>
 #include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
+#include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/CoreBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Input/InputBindingPack.h>
@@ -331,6 +332,7 @@ auto ScriptingModule::RegisterDefaultBindingPacks() -> bool
 {
   auto default_packs = std::array {
     bindings::CreateCoreBindingPack(),
+    bindings::CreateContentBindingPack(),
     bindings::CreateInputBindingPack(),
     bindings::CreateSceneBindingPack(),
   };
