@@ -132,7 +132,8 @@ private:
   struct SlotRuntimeState {
     std::shared_ptr<const ScriptExecutable> executable;
     int module_ref { -1 };
-    int tick_ref { -1 };
+    int on_gameplay_ref { -1 };
+    int on_scene_mutation_ref { -1 };
     bool failed_initialization { false };
     bool reported_initialization_error { false };
     std::string initialization_error;
@@ -143,7 +144,14 @@ private:
     observer_ptr<engine::FrameContext> context) -> ScriptExecutionResult;
   auto RunSceneScripts(observer_ptr<engine::FrameContext> context)
     -> ScriptExecutionResult;
-  auto ExecuteSlotTick(const SlotRuntimeKey& key,
+  auto RunSceneMutationScripts(observer_ptr<engine::FrameContext> context)
+    -> ScriptExecutionResult;
+  auto ExecuteSlotGameplay(const SlotRuntimeKey& key,
+    SlotRuntimeState& runtime_state, const scene::SceneNode& node,
+    const scene::ScriptingComponent::Slot& slot,
+    observer_ptr<engine::FrameContext> context, float dt_seconds)
+    -> ScriptExecutionResult;
+  auto ExecuteSlotSceneMutation(const SlotRuntimeKey& key,
     SlotRuntimeState& runtime_state, const scene::SceneNode& node,
     const scene::ScriptingComponent::Slot& slot,
     observer_ptr<engine::FrameContext> context, float dt_seconds)

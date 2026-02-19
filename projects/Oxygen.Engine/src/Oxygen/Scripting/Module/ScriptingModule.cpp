@@ -447,6 +447,11 @@ auto ScriptingModule::OnSceneMutation(
     ReportHookError(context, "on_scene_mutation", result);
   }
 
+  const auto scene_mutation_result = RunSceneMutationScripts(context);
+  if (!scene_mutation_result.ok) {
+    ReportHookError(context, "scene_mutation", scene_mutation_result);
+  }
+
   if (lua_state_ != nullptr) {
     const ScopedActiveFrameContext active_context(lua_state_, context);
     const auto dispatch_result
@@ -738,16 +743,16 @@ auto ScriptingModule::RunSceneScripts(
           }
         }
 
-        const auto tick_result
-          = ExecuteSlotTick(key, runtime, *node, slot, context, dt_seconds);
-        if (!tick_result.ok) {
-          const auto msg = std::string("script slot tick failed [")
-                             .append(tick_result.stage)
+        const auto gameplay_result
+          = ExecuteSlotGameplay(key, runtime, *node, slot, context, dt_seconds);
+        if (!gameplay_result.ok) {
+          const auto msg = std::string("script slot on_gameplay failed [")
+                             .append(gameplay_result.stage)
                              .append("]: ")
-                             .append(tick_result.message);
-          LOG_SCOPE_F(ERROR, "Script Tick Error");
-          LOG_F(ERROR, "    stage: {}", tick_result.stage);
-          LOG_F(ERROR, "  message: {}", tick_result.message);
+                             .append(gameplay_result.message);
+          LOG_SCOPE_F(ERROR, "Script Slot Error");
+          LOG_F(ERROR, "    stage: {}", gameplay_result.stage);
+          LOG_F(ERROR, "  message: {}", gameplay_result.message);
           ReportError(context, msg);
         }
       }
@@ -759,7 +764,102 @@ auto ScriptingModule::RunSceneScripts(
   return OkResult();
 }
 
-auto ScriptingModule::ExecuteSlotTick(const SlotRuntimeKey& key,
+auto ScriptingModule::RunSceneMutationScripts(
+  observer_ptr<engine::FrameContext> context) -> ScriptExecutionResult
+{
+  if (lua_state_ == nullptr) {
+    return ErrorResult("runtime", "lua state is null");
+  }
+  if (context == nullptr) {
+    return OkResult();
+  }
+
+  const auto scene = context->GetScene();
+  if (scene == nullptr) {
+    CleanupStaleSlotRuntimes({});
+    return OkResult();
+  }
+
+  using seconds_f = std::chrono::duration<float>;
+  const float dt_seconds
+    = std::chrono::duration_cast<seconds_f>(context->GetGameDeltaTime().get())
+        .count();
+
+  std::unordered_set<SlotRuntimeKey, SlotRuntimeKeyHash> active_keys;
+  auto traversal = scene->Traverse();
+  [[maybe_unused]] const auto traversal_result = traversal.Traverse(
+    [&](const auto& visited_node, const bool dry_run) -> scene::VisitResult {
+      if (dry_run || visited_node.node_impl == nullptr) {
+        return scene::VisitResult::kContinue;
+      }
+
+      auto node = scene->GetNode(visited_node.handle);
+      if (!node.has_value()) {
+        return scene::VisitResult::kContinue;
+      }
+      if (!node->HasScripting()) {
+        return scene::VisitResult::kContinue;
+      }
+
+      auto scripting = node->GetScripting();
+      const auto slots = scripting.Slots();
+      for (size_t i = 0; i < slots.size(); ++i) {
+        const auto& slot = slots[i];
+        if (slot.State()
+            != scene::ScriptingComponent::Slot::CompileState::kReady
+          || slot.IsDisabled() || slot.Executable() == nullptr) {
+          continue;
+        }
+
+        SlotRuntimeKey key {
+          .node_handle = node->GetHandle(),
+          .slot_index = static_cast<uint32_t>(i),
+        };
+        active_keys.insert(key);
+
+        auto& runtime = slot_runtimes_[key];
+        if (runtime.executable != slot.Executable()) {
+          DestroySlotRuntime(runtime);
+          runtime.executable = slot.Executable();
+          const auto init_result = RebuildSlotRuntime(key, runtime, slot);
+          if (!init_result.ok && !runtime.reported_initialization_error) {
+            runtime.reported_initialization_error = true;
+            const auto msg = std::string("script slot initialization failed [")
+                               .append(init_result.stage)
+                               .append("]: ")
+                               .append(init_result.message);
+            LOG_SCOPE_F(ERROR, "Script Init Error");
+            LOG_F(ERROR, "    stage: {}", init_result.stage);
+            LOG_F(ERROR, "  message: {}", init_result.message);
+            ReportError(context, msg);
+          }
+          if (!init_result.ok) {
+            continue;
+          }
+        }
+
+        const auto mutation_result = ExecuteSlotSceneMutation(
+          key, runtime, *node, slot, context, dt_seconds);
+        if (!mutation_result.ok) {
+          const auto msg = std::string("script slot on_scene_mutation failed [")
+                             .append(mutation_result.stage)
+                             .append("]: ")
+                             .append(mutation_result.message);
+          LOG_SCOPE_F(ERROR, "Script Slot Error");
+          LOG_F(ERROR, "    stage: {}", mutation_result.stage);
+          LOG_F(ERROR, "  message: {}", mutation_result.message);
+          ReportError(context, msg);
+        }
+      }
+
+      return scene::VisitResult::kContinue;
+    });
+
+  CleanupStaleSlotRuntimes(active_keys);
+  return OkResult();
+}
+
+auto ScriptingModule::ExecuteSlotGameplay(const SlotRuntimeKey& key,
   SlotRuntimeState& runtime_state, const scene::SceneNode& node,
   const scene::ScriptingComponent::Slot& slot,
   const observer_ptr<engine::FrameContext> context, const float dt_seconds)
@@ -771,21 +871,72 @@ auto ScriptingModule::ExecuteSlotTick(const SlotRuntimeKey& key,
     return ErrorResult("slot_binding", runtime_state.initialization_error);
   }
 
-  if (!IsValidLuaRef(runtime_state.tick_ref)) {
+  if (!IsValidLuaRef(runtime_state.on_gameplay_ref)
+    && !IsValidLuaRef(runtime_state.on_scene_mutation_ref)) {
     const auto rebuild_result = RebuildSlotRuntime(key, runtime_state, slot);
     if (!rebuild_result.ok) {
       return rebuild_result;
     }
   }
 
-  if (!IsValidLuaRef(runtime_state.tick_ref)) {
-    return ErrorResult("slot_binding", "missing tick(ctx, dt) entry point");
+  if (!IsValidLuaRef(runtime_state.on_gameplay_ref)) {
+    return OkResult();
   }
 
-  lua_getref(lua_state_, runtime_state.tick_ref);
+  lua_getref(lua_state_, runtime_state.on_gameplay_ref);
   if (!lua_isfunction(lua_state_, kLuaStackTop)) {
     lua_pop(lua_state_, kLuaSingleValueCount);
-    return ErrorResult("slot_binding", "tick entry point is not callable");
+    return ErrorResult(
+      "slot_binding", "on_gameplay entry point is not callable");
+  }
+
+  bindings::LuaSlotExecutionContext invocation_context { .node = node,
+    .slot = &slot };
+  bindings::PushScriptContext(lua_state_, &invocation_context, dt_seconds);
+  lua_pushnumber(lua_state_, dt_seconds);
+
+  lua_pushcfunction(lua_state_, LuaTraceback, kLuaTracebackFnName);
+  lua_insert(lua_state_, kLuaTracebackIndex); // [ traceback, fn, ctx, dt ]
+  const auto call_status = lua_pcall(lua_state_, 2, kLuaNoResults, 1);
+  if (call_status != LUA_OK) {
+    const auto error_message = LuaToString(lua_state_, kLuaStackTop);
+    lua_pop(lua_state_, kLuaErrorAndTracebackCount); // error + traceback
+    return ErrorResult("slot_runtime", error_message);
+  }
+
+  lua_pop(lua_state_, kLuaSingleValueCount); // traceback
+  return OkResult();
+}
+
+auto ScriptingModule::ExecuteSlotSceneMutation(const SlotRuntimeKey& key,
+  SlotRuntimeState& runtime_state, const scene::SceneNode& node,
+  const scene::ScriptingComponent::Slot& slot,
+  const observer_ptr<engine::FrameContext> context, const float dt_seconds)
+  -> ScriptExecutionResult
+{
+  const ScopedActiveFrameContext active_context(lua_state_, context);
+
+  if (runtime_state.failed_initialization) {
+    return ErrorResult("slot_binding", runtime_state.initialization_error);
+  }
+
+  if (!IsValidLuaRef(runtime_state.on_gameplay_ref)
+    && !IsValidLuaRef(runtime_state.on_scene_mutation_ref)) {
+    const auto rebuild_result = RebuildSlotRuntime(key, runtime_state, slot);
+    if (!rebuild_result.ok) {
+      return rebuild_result;
+    }
+  }
+
+  if (!IsValidLuaRef(runtime_state.on_scene_mutation_ref)) {
+    return OkResult();
+  }
+
+  lua_getref(lua_state_, runtime_state.on_scene_mutation_ref);
+  if (!lua_isfunction(lua_state_, kLuaStackTop)) {
+    lua_pop(lua_state_, kLuaSingleValueCount);
+    return ErrorResult(
+      "slot_binding", "on_scene_mutation entry point is not callable");
   }
 
   bindings::LuaSlotExecutionContext invocation_context { .node = node,
@@ -860,7 +1011,8 @@ auto ScriptingModule::RebuildSlotRuntime(const SlotRuntimeKey& key,
   lua_remove(lua_state_, -2); // remove traceback, keep return value
 
   if (lua_isfunction(lua_state_, kLuaStackTop)) {
-    state.tick_ref = lua_ref(lua_state_, kLuaStackTop); // pops function
+    state.on_gameplay_ref = lua_ref(lua_state_, kLuaStackTop); // pops function
+    state.on_scene_mutation_ref = kLuaNoRef;
     state.module_ref = kLuaNoRef;
     return OkResult();
   }
@@ -875,14 +1027,41 @@ auto ScriptingModule::RebuildSlotRuntime(const SlotRuntimeKey& key,
     }
 
     lua_getref(lua_state_, state.module_ref);
-    lua_getfield(lua_state_, kLuaStackTop, "tick");
-    if (!lua_isfunction(lua_state_, kLuaStackTop)) {
-      lua_pop(lua_state_, 2); // non-function + module table
+    if (!lua_istable(lua_state_, kLuaStackTop)) {
+      lua_pop(lua_state_, kLuaSingleValueCount);
       state.failed_initialization = true;
-      state.initialization_error = "script module must expose tick(ctx, dt)";
+      state.initialization_error = "script module reference is not a table";
       return ErrorResult("slot_binding", state.initialization_error);
     }
-    state.tick_ref = lua_ref(lua_state_, kLuaStackTop); // pops function
+    const int module_table_index = lua_gettop(lua_state_);
+
+    lua_getfield(lua_state_, module_table_index, "on_gameplay");
+    if (lua_isfunction(lua_state_, kLuaStackTop)) {
+      state.on_gameplay_ref
+        = lua_ref(lua_state_, kLuaStackTop); // pops function
+    } else {
+      lua_pop(lua_state_, kLuaSingleValueCount); // non-function
+      state.on_gameplay_ref = kLuaNoRef;
+    }
+
+    lua_getfield(lua_state_, module_table_index, "on_scene_mutation");
+    if (lua_isfunction(lua_state_, kLuaStackTop)) {
+      state.on_scene_mutation_ref
+        = lua_ref(lua_state_, kLuaStackTop); // pops function
+    } else {
+      lua_pop(lua_state_, kLuaSingleValueCount); // non-function
+      state.on_scene_mutation_ref = kLuaNoRef;
+    }
+
+    if (!IsValidLuaRef(state.on_gameplay_ref)
+      && !IsValidLuaRef(state.on_scene_mutation_ref)) {
+      lua_pop(lua_state_, kLuaSingleValueCount); // module table
+      state.failed_initialization = true;
+      state.initialization_error = "script module must expose on_gameplay(ctx, "
+                                   "dt) or on_scene_mutation(ctx, dt)";
+      return ErrorResult("slot_binding", state.initialization_error);
+    }
+
     lua_pop(lua_state_, kLuaSingleValueCount); // module table
     return OkResult();
   }
@@ -897,15 +1076,19 @@ auto ScriptingModule::RebuildSlotRuntime(const SlotRuntimeKey& key,
 auto ScriptingModule::DestroySlotRuntime(SlotRuntimeState& state) -> void
 {
   if (lua_state_ != nullptr) {
-    if (IsValidLuaRef(state.tick_ref)) {
-      lua_unref(lua_state_, state.tick_ref);
+    if (IsValidLuaRef(state.on_gameplay_ref)) {
+      lua_unref(lua_state_, state.on_gameplay_ref);
+    }
+    if (IsValidLuaRef(state.on_scene_mutation_ref)) {
+      lua_unref(lua_state_, state.on_scene_mutation_ref);
     }
     if (IsValidLuaRef(state.module_ref)) {
       lua_unref(lua_state_, state.module_ref);
     }
   }
 
-  state.tick_ref = kLuaNoRef;
+  state.on_gameplay_ref = kLuaNoRef;
+  state.on_scene_mutation_ref = kLuaNoRef;
   state.module_ref = kLuaNoRef;
   state.failed_initialization = false;
   state.reported_initialization_error = false;
