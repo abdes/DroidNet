@@ -120,6 +120,18 @@ public:
     std::string_view action_name) const
     -> std::span<const Action::FrameTransition>;
 
+  //! Get all action names available in this snapshot.
+  [[nodiscard]] auto GetActionNames() const -> std::vector<std::string_view>
+  {
+    std::vector<std::string_view> names;
+    names.reserve(actions_.size());
+    for (const auto& [name, action] : actions_) {
+      (void)action;
+      names.push_back(name);
+    }
+    return names;
+  }
+
   // -- Raw event access -------------------------------------------------------
   // Intentionally omitted: raw input events are not part of the snapshot.
 
