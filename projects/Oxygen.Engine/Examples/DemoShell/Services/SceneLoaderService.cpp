@@ -12,6 +12,7 @@
 #include <ranges>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <variant>
@@ -25,8 +26,16 @@
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Data/InputActionAsset.h>
+#include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Engine/Scripting/IScriptCompilationService.h>
+#include <Oxygen/Input/Action.h>
+#include <Oxygen/Input/ActionTriggers.h>
+#include <Oxygen/Input/InputActionMapping.h>
+#include <Oxygen/Input/InputMappingContext.h>
+#include <Oxygen/Input/InputSystem.h>
+#include <Oxygen/Platform/Input.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
@@ -131,6 +140,79 @@ namespace {
     }
   }
 
+  auto ToActionValueType(const uint8_t value_type_id)
+    -> std::optional<input::ActionValueType>
+  {
+    switch (value_type_id) {
+    case static_cast<uint8_t>(input::ActionValueType::kBool):
+      return input::ActionValueType::kBool;
+    case static_cast<uint8_t>(input::ActionValueType::kAxis1D):
+      return input::ActionValueType::kAxis1D;
+    case static_cast<uint8_t>(input::ActionValueType::kAxis2D):
+      return input::ActionValueType::kAxis2D;
+    default:
+      return std::nullopt;
+    }
+  }
+
+  auto ResolveInputSlot(const std::string_view slot_name)
+    -> const platform::InputSlot*
+  {
+    if (slot_name.empty()) {
+      return nullptr;
+    }
+
+    if (slot_name == "Keyboard.PgUp" || slot_name == "Keyboard.PageUp") {
+      return &platform::InputSlots::PageUp;
+    }
+    if (slot_name == "Keyboard.PgDn" || slot_name == "Keyboard.PageDown") {
+      return &platform::InputSlots::PageDown;
+    }
+    if (slot_name == "Keyboard.End") {
+      return &platform::InputSlots::End;
+    }
+
+    static const std::vector<platform::InputSlot> all_slots = [] {
+      std::vector<platform::InputSlot> slots;
+      platform::InputSlots::GetAllInputSlots(slots);
+      return slots;
+    }();
+    for (const auto& slot : all_slots) {
+      const auto name = slot.GetName();
+      if (slot_name == name) {
+        return &slot;
+      }
+
+      std::string keyboard_name("Keyboard.");
+      keyboard_name += name;
+      if (slot_name == keyboard_name) {
+        return &slot;
+      }
+    }
+
+    return nullptr;
+  }
+
+  void ApplyTriggerBehavior(const data::pak::InputTriggerBehavior behavior,
+    const std::shared_ptr<input::ActionTrigger>& trigger)
+  {
+    if (!trigger) {
+      return;
+    }
+    switch (behavior) {
+    case data::pak::InputTriggerBehavior::kExplicit:
+      trigger->MakeExplicit();
+      break;
+    case data::pak::InputTriggerBehavior::kBlocker:
+      trigger->MakeBlocker();
+      break;
+    case data::pak::InputTriggerBehavior::kImplicit:
+    default:
+      trigger->MakeImplicit();
+      break;
+    }
+  }
+
   constexpr uint64_t kLuauCompilerFingerprint = 0x6C7561755F7631ULL;
   constexpr uint64_t kLuauVmBytecodeVersion = 1ULL;
   constexpr uint64_t kUnknownCompilerFingerprint = 0x756E6B6E6F776E31ULL;
@@ -216,10 +298,12 @@ namespace {
 
 SceneLoaderService::SceneLoaderService(content::IAssetLoader& loader,
   const Extent<uint32_t> viewport, std::filesystem::path source_pak_path,
+  const observer_ptr<engine::InputSystem> input_system,
   observer_ptr<scripting::IScriptCompilationService> compilation_service,
   PathFinder path_finder)
   : loader_(loader)
   , extent_(viewport)
+  , input_system_(input_system)
   , compilation_service_(std::move(compilation_service))
   , source_resolver_(
       std::make_unique<scripting::ScriptSourceResolver>(std::move(path_finder)))
@@ -379,6 +463,7 @@ auto SceneLoaderService::BuildSceneAsync(scene::Scene& scene,
   AttachRenderables(asset);
   AttachLights(asset);
   AttachScripting(asset);
+  AttachInputMappings(asset);
   SelectActiveCamera(asset);
   EnsureCameraAndViewport(scene);
   // Geometry pins are only needed until scene instantiation finishes.
@@ -687,6 +772,250 @@ void SceneLoaderService::AttachScripting(const data::SceneAsset& asset)
       QueueSlotCompilation(
         runtime_nodes_[node_index], slot, std::move(script_asset));
     }
+  }
+}
+
+void SceneLoaderService::AttachInputMappings(const data::SceneAsset& asset)
+{
+  using data::pak::InputContextBindingFlags;
+  using data::pak::InputContextBindingRecord;
+  using data::pak::InputTriggerType;
+
+  if (!input_system_) {
+    return;
+  }
+
+  const auto bindings = asset.GetComponents<InputContextBindingRecord>();
+  if (bindings.empty()) {
+    return;
+  }
+
+  LOG_F(INFO, "SceneLoader: Hydrating input context bindings (count={})",
+    bindings.size());
+
+  for (const auto& binding : bindings) {
+    if (binding.context_asset_key == data::AssetKey {}) {
+      continue;
+    }
+
+    const auto context_asset
+      = loader_.GetInputMappingContextAsset(binding.context_asset_key);
+    if (!context_asset) {
+      LOG_F(WARNING,
+        "SceneLoader: Missing input mapping context asset {} in cache",
+        data::to_string(binding.context_asset_key));
+      continue;
+    }
+
+    const std::string context_name(context_asset->GetAssetName());
+    if (context_name.empty()) {
+      LOG_F(WARNING,
+        "SceneLoader: Skipping unnamed input mapping context asset {}",
+        data::to_string(binding.context_asset_key));
+      continue;
+    }
+
+    if (auto existing = input_system_->GetMappingContextByName(context_name);
+      existing) {
+      input_system_->DeactivateMappingContext(existing);
+      input_system_->RemoveMappingContext(existing);
+    }
+
+    auto runtime_context
+      = std::make_shared<input::InputMappingContext>(context_name);
+    int mapping_count = 0;
+    std::unordered_map<data::AssetKey, std::shared_ptr<input::Action>>
+      actions_by_asset_key;
+
+    auto get_or_create_action
+      = [&](const data::AssetKey action_key) -> std::shared_ptr<input::Action> {
+      if (action_key == data::AssetKey {}) {
+        return nullptr;
+      }
+
+      if (const auto found = actions_by_asset_key.find(action_key);
+        found != actions_by_asset_key.end()) {
+        return found->second;
+      }
+
+      auto action_asset = loader_.GetInputActionAsset(action_key);
+      if (!action_asset) {
+        LOG_F(WARNING, "SceneLoader: Missing input action asset {} in cache",
+          data::to_string(action_key));
+        return nullptr;
+      }
+
+      const std::string action_name(action_asset->GetAssetName());
+      if (action_name.empty()) {
+        LOG_F(WARNING, "SceneLoader: Skipping unnamed input action asset {}",
+          data::to_string(action_key));
+        return nullptr;
+      }
+
+      auto action = input_system_->GetActionByName(action_name);
+      if (!action) {
+        const auto value_type
+          = ToActionValueType(action_asset->GetValueTypeId());
+        if (!value_type.has_value()) {
+          LOG_F(WARNING,
+            "SceneLoader: Unsupported action value type {} for action '{}'",
+            action_asset->GetValueTypeId(), action_name);
+          return nullptr;
+        }
+        action = std::make_shared<input::Action>(action_name, *value_type);
+        input_system_->AddAction(action);
+      }
+
+      action->SetConsumesInput(action_asset->ConsumesInput());
+      LOG_F(INFO,
+        "SceneLoader: Input action ready "
+        "(name='{}' key={} value_type={} consumes_input={})",
+        action_name, data::to_string(action_key),
+        action_asset->GetValueTypeId(), action_asset->ConsumesInput());
+      actions_by_asset_key.insert_or_assign(action_key, action);
+      return action;
+    };
+
+    const auto trigger_records = context_asset->GetTriggers();
+    const auto mapping_records = context_asset->GetMappings();
+    for (const auto& mapping_record : mapping_records) {
+      auto action = get_or_create_action(mapping_record.action_asset_key);
+      if (!action) {
+        continue;
+      }
+
+      const auto slot_name
+        = context_asset->TryGetString(mapping_record.slot_name_offset);
+      if (!slot_name.has_value()) {
+        LOG_F(WARNING,
+          "SceneLoader: Input mapping has invalid slot string offset={} "
+          "(context={})",
+          mapping_record.slot_name_offset, context_name);
+        continue;
+      }
+
+      const auto slot = ResolveInputSlot(*slot_name);
+      if (slot == nullptr) {
+        LOG_F(WARNING,
+          "SceneLoader: Input mapping uses unknown slot '{}' (context={})",
+          *slot_name, context_name);
+        continue;
+      }
+      LOG_F(INFO,
+        "SceneLoader: Input mapping bind "
+        "(context='{}' action='{}' slot='{}' trigger_count={})",
+        context_name, action->GetName(), slot->GetName(),
+        mapping_record.trigger_count);
+
+      auto runtime_mapping
+        = std::make_shared<input::InputActionMapping>(action, *slot);
+      const size_t trigger_start = mapping_record.trigger_start_index;
+      const size_t trigger_end = std::min(trigger_records.size(),
+        trigger_start + static_cast<size_t>(mapping_record.trigger_count));
+
+      for (size_t trigger_index = trigger_start; trigger_index < trigger_end;
+        ++trigger_index) {
+        const auto& trigger_record = trigger_records[trigger_index];
+        std::shared_ptr<input::ActionTrigger> trigger;
+        switch (trigger_record.type) {
+        case InputTriggerType::kPressed:
+          trigger = std::make_shared<input::ActionTriggerPressed>();
+          break;
+        case InputTriggerType::kReleased:
+          trigger = std::make_shared<input::ActionTriggerReleased>();
+          break;
+        case InputTriggerType::kDown:
+          trigger = std::make_shared<input::ActionTriggerDown>();
+          break;
+        case InputTriggerType::kHold: {
+          auto hold = std::make_shared<input::ActionTriggerHold>();
+          if (trigger_record.fparams[0] > 0.0F) {
+            hold->SetHoldDurationThreshold(trigger_record.fparams[0]);
+          }
+          trigger = std::move(hold);
+          break;
+        }
+        case InputTriggerType::kTap: {
+          auto tap = std::make_shared<input::ActionTriggerTap>();
+          if (trigger_record.fparams[0] > 0.0F) {
+            tap->SetTapTimeThreshold(trigger_record.fparams[0]);
+          }
+          trigger = std::move(tap);
+          break;
+        }
+        case InputTriggerType::kHoldAndRelease: {
+          auto hold_and_release
+            = std::make_shared<input::ActionTriggerHoldAndRelease>();
+          if (trigger_record.fparams[0] > 0.0F) {
+            hold_and_release->SetHoldDurationThreshold(
+              trigger_record.fparams[0]);
+          }
+          trigger = std::move(hold_and_release);
+          break;
+        }
+        case InputTriggerType::kPulse: {
+          auto pulse = std::make_shared<input::ActionTriggerPulse>();
+          if (trigger_record.fparams[0] > 0.0F) {
+            pulse->SetInterval(trigger_record.fparams[0]);
+          }
+          pulse->TriggerOnStart(trigger_record.uparams[0] != 0U);
+          pulse->SetTriggerLimit(trigger_record.uparams[1]);
+          trigger = std::move(pulse);
+          break;
+        }
+        case InputTriggerType::kActionChain: {
+          auto chain = std::make_shared<input::ActionTriggerChain>();
+          if (auto linked_action
+            = get_or_create_action(trigger_record.linked_action_asset_key);
+            linked_action) {
+            chain->SetLinkedAction(std::move(linked_action));
+          }
+          if (trigger_record.fparams[0] > 0.0F) {
+            chain->SetMaxDelaySeconds(trigger_record.fparams[0]);
+          }
+          chain->RequirePrerequisiteHeld(trigger_record.uparams[0] != 0U);
+          trigger = std::move(chain);
+          break;
+        }
+        case InputTriggerType::kChord:
+        case InputTriggerType::kCombo:
+          LOG_F(WARNING,
+            "SceneLoader: Trigger type '{}' is not supported yet "
+            "(context={})",
+            data::pak::to_string(trigger_record.type), context_name);
+          break;
+        default:
+          LOG_F(WARNING,
+            "SceneLoader: Unknown trigger type '{}' in input context '{}'",
+            data::pak::to_string(trigger_record.type), context_name);
+          break;
+        }
+
+        if (!trigger) {
+          continue;
+        }
+        trigger->SetActuationThreshold(trigger_record.actuation_threshold);
+        ApplyTriggerBehavior(trigger_record.behavior, trigger);
+        runtime_mapping->AddTrigger(std::move(trigger));
+      }
+
+      runtime_context->AddMapping(std::move(runtime_mapping));
+      ++mapping_count;
+    }
+
+    input_system_->AddMappingContext(runtime_context, binding.priority);
+    if ((binding.flags & InputContextBindingFlags::kActivateOnLoad)
+      == InputContextBindingFlags::kActivateOnLoad) {
+      input_system_->ActivateMappingContext(runtime_context);
+    }
+    LOG_F(INFO,
+      "SceneLoader: Input context hydrated "
+      "(name='{}' key={} priority={} activate_on_load={} mappings={})",
+      context_name, data::to_string(binding.context_asset_key),
+      binding.priority,
+      ((binding.flags & InputContextBindingFlags::kActivateOnLoad)
+        == InputContextBindingFlags::kActivateOnLoad),
+      mapping_count);
   }
 }
 

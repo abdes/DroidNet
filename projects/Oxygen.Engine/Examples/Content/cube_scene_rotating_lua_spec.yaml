@@ -2,7 +2,7 @@
 # The cube's vertex/index data is embedded inline (data_hex) and matches
 # oxygen::data::MakeCubeMeshAsset() (see src/Oxygen/Data/Procedural/Cube.cpp).
 
-version: 5
+version: 6
 content_version: 1
 
 buffers:
@@ -118,18 +118,43 @@ scripts:
       -- - Preferred API surface: `oxygen.scene`, `oxygen.time`, `oxygen.transform`.
       local script = {}
       local angle_radians = 10.0
-      local speed_logged = false
+      local speed = 2.0
+      local events_wired = false
+
+      local function clamp_speed(value)
+        if value < 0.0 then
+          return 0.0
+        end
+        return value
+      end
 
       function script.tick(ctx, dt_seconds)
-        local speed = oxygen.scene.get_param(ctx, "speed") or 1.0
-        if not speed_logged then
-          oxygen.log.info(string.format("RotateCubeScript speed=%.3f", speed))
-          speed_logged = true
+        if not events_wired then
+          speed = oxygen.scene.get_param(ctx, "speed") or speed
+
+          oxygen.input.on_action("RotateSpeedUpAction", oxygen.input.edges.triggered, function()
+            speed = speed + 0.25
+            oxygen.log.debug(string.format("RotateCubeScript speed=%.3f", speed))
+          end)
+          oxygen.input.on_action("RotateSpeedDownAction", oxygen.input.edges.triggered, function()
+            speed = clamp_speed(speed - 0.25)
+            oxygen.log.debug(string.format("RotateCubeScript speed=%.3f", speed))
+          end)
+          oxygen.input.on_action("RotateStopAction", oxygen.input.edges.triggered, function()
+            speed = 0.0
+            oxygen.log.debug("RotateCubeScript speed=0.000")
+          end)
+
+          oxygen.log.debug(string.format("RotateCubeScript speed=%.3f", speed))
+          events_wired = true
         end
-        local dt = oxygen.time.delta_seconds()
 
-        angle_radians = angle_radians + (dt * speed)
+        local delta_angle = oxygen.time.delta_seconds() * speed
+        if delta_angle == 0.0 then
+          return
+        end
 
+        angle_radians = angle_radians + delta_angle
         oxygen.transform.set_local_rotation_euler(ctx, 0.0, angle_radians, 0.0)
       end
 
@@ -172,6 +197,59 @@ assets:
                 index_count: 36
                 first_vertex: 0
                 vertex_count: 24
+
+  - type: input_action
+    name: RotateSpeedUpAction
+    asset_key: "11c6fa5e65f342849e1fec8e8a4e50a1"
+    value_type: axis1d
+    consumes_input: true
+
+  - type: input_action
+    name: RotateSpeedDownAction
+    asset_key: "f49d89f1f3e547f9b6cb5e84ab8ac7cf"
+    value_type: axis1d
+    consumes_input: true
+
+  - type: input_action
+    name: RotateStopAction
+    asset_key: "67af658c1eb44516ac9560566f9fb216"
+    value_type: bool
+    consumes_input: true
+
+  - type: input_mapping_context
+    name: RotateCubeInputContext
+    asset_key: "4cbd046c2db34eb1bc756d998ea87f2c"
+    mappings:
+      - action_asset: RotateSpeedUpAction
+        slot_name: "Keyboard.PgUp"
+        scale: [1.0, 0.0]
+        bias: [0.0, 0.0]
+        triggers:
+          - type: pulse
+            behavior: implicit
+            # Pulse every 80ms while held; fire immediately on press.
+            fparams: [0.08]
+            uparams: [1, 0]
+      - action_asset: RotateSpeedDownAction
+        slot_name: "Keyboard.PgDn"
+        scale: [1.0, 0.0]
+        bias: [0.0, 0.0]
+        triggers:
+          - type: pulse
+            behavior: implicit
+            # Pulse every 80ms while held; fire immediately on press.
+            fparams: [0.08]
+            uparams: [1, 0]
+      - action_asset: RotateStopAction
+        slot_name: "Keyboard.End"
+        scale: [1.0, 0.0]
+        bias: [0.0, 0.0]
+        triggers:
+          - type: pulse
+            behavior: implicit
+            # Pulse every 80ms while held; fire immediately on press.
+            fparams: [0.08]
+            uparams: [1, 0]
 
   - type: script
     name: RotateCubeScript
@@ -232,6 +310,12 @@ assets:
               - key: speed
                 type: float
                 value: 2.0
+
+    input_context_bindings:
+      - node_index: 0
+        context_asset: RotateCubeInputContext
+        priority: 100
+        activate_on_load: true
 
     perspective_cameras:
       - node_index: 2

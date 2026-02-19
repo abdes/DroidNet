@@ -16,6 +16,8 @@
 #include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Console/CVar.h>
+#include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/Scripting/IScriptCompilationService.h>
@@ -25,8 +27,10 @@
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/CoreBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
+#include <Oxygen/Scripting/Bindings/Packs/Input/InputBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneBindingPack.h>
 #include <Oxygen/Scripting/Compilers/LuauScriptCompiler.h>
+#include <Oxygen/Scripting/Input/InputScriptEventBridge.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 
 namespace oxygen::scripting {
@@ -42,6 +46,12 @@ namespace {
   constexpr int kLuaTracebackIndex = 1;
   constexpr const char* kLuaTracebackFnName = "LuaTraceback";
   constexpr int kLuaNoRef = -1;
+  constexpr std::string_view kCVarScriptingInputBridgeLogs
+    = "scrp.input_bridge_logs";
+  constexpr std::string_view kCVarScriptingInputBridgeLogVerbosity
+    = "scrp.input_bridge_log_verbosity";
+  constexpr int64_t kMinInputBridgeLogVerbosity = 0;
+  constexpr int64_t kMaxInputBridgeLogVerbosity = 9;
 
   class ScopedActiveFrameContext final {
   public:
@@ -269,10 +279,55 @@ auto ScriptingModule::OnShutdown() noexcept -> void
   binding_packs_.clear();
 }
 
+auto ScriptingModule::RegisterConsoleBindings(
+  const observer_ptr<console::Console> console) noexcept -> void
+{
+  if (console == nullptr) {
+    return;
+  }
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarScriptingInputBridgeLogs),
+    .help = "Enable/disable ScriptingModule input->events bridge logs",
+    .default_value = input_bridge_logs_enabled_,
+    .flags = console::CVarFlags::kDevOnly,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarScriptingInputBridgeLogVerbosity),
+    .help = "ScriptingModule input->events bridge log verbosity [0..9]",
+    .default_value = static_cast<int64_t>(input_bridge_log_verbosity_),
+    .flags = console::CVarFlags::kDevOnly,
+    .min_value = static_cast<double>(kMinInputBridgeLogVerbosity),
+    .max_value = static_cast<double>(kMaxInputBridgeLogVerbosity),
+  });
+}
+
+auto ScriptingModule::ApplyConsoleCVars(
+  const observer_ptr<const console::Console> console) noexcept -> void
+{
+  if (console == nullptr) {
+    return;
+  }
+
+  bool logs_enabled = input_bridge_logs_enabled_;
+  if (console->TryGetCVarValue<bool>(
+        kCVarScriptingInputBridgeLogs, logs_enabled)) {
+    input_bridge_logs_enabled_ = logs_enabled;
+  }
+
+  int64_t log_verbosity = input_bridge_log_verbosity_;
+  if (console->TryGetCVarValue<int64_t>(
+        kCVarScriptingInputBridgeLogVerbosity, log_verbosity)) {
+    input_bridge_log_verbosity_ = static_cast<int>(log_verbosity);
+  }
+}
+
 auto ScriptingModule::RegisterDefaultBindingPacks() -> bool
 {
   auto default_packs = std::array {
     bindings::CreateCoreBindingPack(),
+    bindings::CreateInputBindingPack(),
     bindings::CreateSceneBindingPack(),
   };
 
@@ -341,6 +396,8 @@ auto ScriptingModule::OnGameplay(observer_ptr<engine::FrameContext> context)
 {
   if (lua_state_ != nullptr) {
     bindings::SetActiveEventPhase(lua_state_, "gameplay");
+    input_event_bridge_.QueueActionEdgeEvents(lua_state_, context,
+      input_bridge_logs_enabled_, input_bridge_log_verbosity_);
   }
 
   const auto result = InvokePhaseHook("on_gameplay", context);

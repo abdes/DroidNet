@@ -112,13 +112,13 @@ namespace {
   {
     switch (level) {
     case LuaLogLevel::kTrace:
-      DLOG_F(1, "[lua.{}] {}", level_name, message);
+      DLOG_F(3, "[lua.{}] {}", level_name, message);
       break;
     case LuaLogLevel::kDebug:
-      DLOG_F(1, "[lua.{}] {}", level_name, message);
+      DLOG_F(2, "[lua.{}] {}", level_name, message);
       break;
     case LuaLogLevel::kInfo:
-      LOG_F(INFO, "[lua.{}] {}", level_name, message);
+      DLOG_F(2, "[lua.{}] {}", level_name, message);
       break;
     case LuaLogLevel::kWarn:
       LOG_F(WARNING, "[lua.{}] {}", level_name, message);

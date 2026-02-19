@@ -75,6 +75,7 @@ m_gtest_program(
     "Bindings_math_test.cpp"
     "Bindings_uuid_hash_test.cpp"
     "Bindings_events_test.cpp"
+    "Bindings_input_test.cpp"
 )
 target_compile_definitions(
   Oxygen.Scripting.Bindings.Tests

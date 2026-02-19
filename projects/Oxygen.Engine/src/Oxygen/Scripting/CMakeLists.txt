@@ -54,6 +54,7 @@ set(
   "Compilers/LuauScriptCompiler.h"
   "Execution/CompiledScriptExecutable.h"
   "Execution/FailedScriptExecutable.h"
+  "Input/InputScriptEventBridge.h"
   "IScriptSourceResolver.h"
   "Module/ScriptingModule.h"
   "Resolver/EmbeddedSourceResolver.h"
@@ -72,10 +73,13 @@ set(
   "Bindings/Packs/Core/LogBindings.cpp"
   "Bindings/Packs/Core/MathBindings.cpp"
   "Bindings/Packs/Core/TimeBindings.cpp"
+  "Bindings/Packs/Input/InputBindingPack.cpp"
+  "Bindings/Packs/Input/InputBindings.cpp"
   "Bindings/Packs/Scene/SceneBindingPack.cpp"
   "Bindings/Packs/Scene/SceneBindings.cpp"
   "Bindings/Packs/Scene/TransformBindings.cpp"
   "Compilers/LuauScriptCompiler.cpp"
+  "Input/InputScriptEventBridge.cpp"
   "Module/ScriptingModule.cpp"
   "Resolver/EmbeddedSourceResolver.cpp"
   "Resolver/ExternalFileResolver.cpp"
@@ -119,6 +123,8 @@ target_link_libraries(
     oxygen::engine
     oxygen::scene
     oxygen::scripting-bindings-contracts
+  PRIVATE
+    oxygen::input
 )
 
 # ------------------------------------------------------------------------------
