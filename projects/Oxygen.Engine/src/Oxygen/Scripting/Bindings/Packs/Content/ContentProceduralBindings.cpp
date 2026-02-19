@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cmath>
 #include <optional>
 #include <string>
 #include <vector>
@@ -207,6 +208,35 @@ namespace {
     auto material = data::MaterialAsset::CreateDebug();
     return PushMaterialAsset(state, std::move(material));
   }
+
+  auto AssetsCreateMaterialWithBaseColor(lua_State* state) -> int
+  {
+    const float r = static_cast<float>(luaL_checknumber(state, 1));
+    const float g = static_cast<float>(luaL_checknumber(state, 2));
+    const float b = static_cast<float>(luaL_checknumber(state, 3));
+    const float a = static_cast<float>(luaL_optnumber(state, 4, 1.0));
+
+    auto sanitize_channel = [](const float value) {
+      if (!std::isfinite(value)) {
+        return 1.0F;
+      }
+      return std::clamp(value, 0.0F, 1.0F);
+    };
+
+    data::pak::MaterialAssetDesc desc {};
+    desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kMaterial);
+    desc.base_color[0] = sanitize_channel(r);
+    desc.base_color[1] = sanitize_channel(g);
+    desc.base_color[2] = sanitize_channel(b);
+    desc.base_color[3] = sanitize_channel(a);
+    desc.metalness = data::Unorm16 { 0.0F };
+    desc.roughness = data::Unorm16 { 0.5F }; // NOLINT(*-magic-numbers)
+    desc.ambient_occlusion = data::Unorm16 { 1.0F };
+
+    data::AssetKey key { .guid = data::GenerateAssetGuid() };
+    auto material = std::make_shared<const data::MaterialAsset>(key, desc);
+    return PushMaterialAsset(state, std::move(material));
+  }
 } // namespace
 
 auto RegisterContentModuleProcedural(lua_State* state, const int module_index)
@@ -221,6 +251,9 @@ auto RegisterContentModuleProcedural(lua_State* state, const int module_index)
   lua_pushcfunction(
     state, AssetsCreateDebugMaterial, "assets.create_debug_material");
   lua_setfield(state, module_index, "create_debug_material");
+  lua_pushcfunction(state, AssetsCreateMaterialWithBaseColor,
+    "assets.create_material_with_base_color");
+  lua_setfield(state, module_index, "create_material_with_base_color");
 }
 
 } // namespace oxygen::scripting::bindings

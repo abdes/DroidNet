@@ -12,6 +12,7 @@ local created = false
 local created_nodes = {}
 local cube_geo = nil
 local material_pool = {}
+local logged_material_mode = false
 
 local function valid(node)
   return node ~= nil and node:is_alive()
@@ -99,17 +100,35 @@ local function random_between(a, b)
   return a + math.random() * (b - a)
 end
 
+local function lerp(a, b, t)
+  return a + ((b - a) * t)
+end
+
 local function generate_pattern(host_node, ctx)
   ensure_cube_geo()
   load_materials_from_param(ctx)
 
-  local count = scene.param(ctx, "count") or 36
+  local has_gradient_material_binding = type(assets.create_material_with_base_color) == "function"
+  local use_material_guids = scene.param(ctx, "use_material_guids") == true
+  if not logged_material_mode then
+    if use_material_guids and #material_pool > 0 then
+      log.info(string.format("proc_cubes: using material_guids pool (%d entries) (use_material_guids=true)", #material_pool))
+    elseif use_material_guids and #material_pool == 0 then
+      log.warning("proc_cubes: use_material_guids=true but material_guids is empty; using gradient/default materials")
+    elseif has_gradient_material_binding then
+      log.info("proc_cubes: using per-cube gradient materials via assets.create_material_with_base_color")
+    else
+      log.warning("proc_cubes: assets.create_material_with_base_color not available; falling back to assets.create_default_material")
+    end
+    logged_material_mode = true
+  end
+
+  local count = scene.param(ctx, "count") or 64
   local cell_size = scene.param(ctx, "cell_size") or 1.0
   local min_scale = scene.param(ctx, "min_scale") or 0.6
   local max_scale = scene.param(ctx, "max_scale") or 1.0
   local origin_height_multiplier = scene.param(ctx, "origin_height_multiplier") or 5.0
   local height_falloff_power = scene.param(ctx, "height_falloff_power") or 2.2
-
   -- seed randomness for reproducible-ish results per host
   local seed = 1
   if otime and otime.delta_seconds then
@@ -190,6 +209,25 @@ local function generate_pattern(host_node, ctx)
     local py = c.y * cell_size
     local pz = height * 0.5
 
+    local height_norm = 0.0
+    if max_height_scale > min_scale then
+      height_norm = (randomized_height_scale - min_scale) / (max_height_scale - min_scale)
+    end
+
+    local gradient_t = (closeness * 0.65) + (height_norm * 0.35)
+    if gradient_t < 0.0 then
+      gradient_t = 0.0
+    end
+    if gradient_t > 1.0 then
+      gradient_t = 1.0
+    end
+
+    local far_color = { r = 0.12, g = 0.36, b = 0.95 }
+    local near_color = { r = 1.00, g = 0.28, b = 0.08 }
+    local grad_r = lerp(far_color.r, near_color.r, gradient_t)
+    local grad_g = lerp(far_color.g, near_color.g, gradient_t)
+    local grad_b = lerp(far_color.b, near_color.b, gradient_t)
+
     local node = scene.create_node("ProcCube", nil)
     if not valid(node) then
       log.warning("proc_cubes: failed to create cube node at " .. px .. "," .. py)
@@ -210,7 +248,7 @@ local function generate_pattern(host_node, ctx)
 
       -- pick and resolve a material GUID at assign time
       local mat = nil
-      if #material_pool > 0 then
+        if use_material_guids and #material_pool > 0 then
         local chosen = material_pool[math.random(1, #material_pool)]
         if type(chosen) == "string" then
           local resolved = assets.get_material(chosen)
@@ -230,7 +268,15 @@ local function generate_pattern(host_node, ctx)
       end
 
       if mat == nil then
-        mat = assets.create_default_material()
+        if has_gradient_material_binding then
+          mat = assets.create_material_with_base_color(grad_r, grad_g, grad_b, 1.0)
+          if mat == nil then
+            log.warning("proc_cubes: create_material_with_base_color returned nil; using default material")
+          end
+        end
+        if mat == nil then
+          mat = assets.create_default_material()
+        end
       end
 
       if mat ~= nil then

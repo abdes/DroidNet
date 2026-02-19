@@ -63,7 +63,7 @@ assets:
             params:
               - key: count
                 type: int
-                value: 48
+                value: 2000
               - key: cell_size
                 type: float
                 value: 1.0
