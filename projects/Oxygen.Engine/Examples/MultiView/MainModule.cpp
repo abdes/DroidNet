@@ -153,34 +153,28 @@ auto MainModule::OnFrameStart(
 {
   DCHECK_NOTNULL_F(context);
   auto& shell = GetShell();
+  CHECK_NOTNULL_F(&shell, "DemoShell must exist in MultiView");
+
+  if (shell.HasStagedScene()) {
+    CHECK_F(shell.PublishStagedScene(),
+      "expected staged scene before frame-start publish");
+    active_scene_ = shell.GetActiveScene();
+    auto published_camera = shell.TakePublishedMainCamera();
+    if (published_camera.IsAlive()) {
+      main_camera_node_ = std::move(published_camera);
+    }
+    scene_bootstrapper_.BindToScene(shell.TryGetScene());
+  }
+
   shell.OnFrameStart(*context);
   Base::OnFrameStart(context);
 
   CHECK_NOTNULL_F(app_window_, "AppWindow must exist in MultiView");
-  CHECK_NOTNULL_F(&shell, "DemoShell must exist in MultiView");
-
-  // CRITICAL: Ensure scene is created and set on context
-  if (!active_scene_.IsValid()) {
-    auto scene = std::make_unique<scene::Scene>("MultiViewScene");
-    active_scene_ = shell.SetScene(std::move(scene));
-    scene_bootstrapper_.BindToScene(shell.TryGetScene());
-
-    // Ensure cameras exist
-    if (auto s = shell.TryGetScene()) {
-      main_camera_node_ = s->CreateNode("MainCamera");
-      main_camera_node_.AttachCamera(
-        std::make_unique<scene::PerspectiveCamera>());
-
-      pip_camera_node_ = s->CreateNode("PipCamera");
-      pip_camera_node_.AttachCamera(
-        std::make_unique<scene::PerspectiveCamera>());
-
-      UpdateCameras(app_window_->GetWindow()->Size());
-    }
-  }
 
   const auto scene_ptr = shell.TryGetScene();
-  CHECK_F(static_cast<bool>(scene_ptr), "Scene must be available");
+  if (!scene_ptr) {
+    return;
+  }
   context->SetScene(oxygen::observer_ptr { scene_ptr.get() });
 
   // Ensure content exists
@@ -204,6 +198,9 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
   if (!app_window_ || !app_window_->GetWindow()) {
     co_return;
   }
+  if (!active_scene_.IsValid() || !main_camera_node_.IsAlive()) {
+    co_return;
+  }
 
   auto& shell = GetShell();
   CHECK_NOTNULL_F(&shell, "DemoShell required for GUI update");
@@ -223,8 +220,39 @@ auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> oxygen::co::Co<>
 {
+  auto& shell = GetShell();
   CHECK_NOTNULL_F(app_window_, "AppWindow required for scene mutation");
   if (!app_window_->GetWindow()) {
+    co_return;
+  }
+
+  if (!active_scene_.IsValid() && !shell.HasStagedScene()) {
+    shell.StageScene(std::make_unique<scene::Scene>("MultiViewScene"));
+    const auto staged_scene = shell.GetStagedScene();
+    CHECK_NOTNULL_F(staged_scene, "MultiView staged scene is null");
+
+    main_camera_node_ = staged_scene->CreateNode("MainCamera");
+    {
+      const bool attached = main_camera_node_.AttachCamera(
+        std::make_unique<scene::PerspectiveCamera>());
+      CHECK_F(attached, "Failed to attach MainCamera");
+    }
+
+    pip_camera_node_ = staged_scene->CreateNode("PipCamera");
+    {
+      const bool attached = pip_camera_node_.AttachCamera(
+        std::make_unique<scene::PerspectiveCamera>());
+      CHECK_F(attached, "Failed to attach PipCamera");
+    }
+
+    shell.SetStagedMainCamera(main_camera_node_);
+    scene_bootstrapper_.BindToScene(staged_scene);
+    (void)scene_bootstrapper_.EnsureSceneWithContent();
+    UpdateCameras(app_window_->GetWindow()->Size());
+  }
+
+  if (!active_scene_.IsValid()) {
+    co_await Base::OnSceneMutation(context);
     co_return;
   }
 

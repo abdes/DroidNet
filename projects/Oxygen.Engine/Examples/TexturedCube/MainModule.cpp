@@ -150,38 +150,56 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
 {
   DCHECK_NOTNULL_F(context);
   auto& shell = GetShell();
-  shell.OnFrameStart(*context);
-  Base::OnFrameStart(context);
   auto& frame_context = *context;
 
-  if (!active_scene_.IsValid()) {
-    // 1. Create Scene and transfer to Shell
-    auto scene_unique = std::make_unique<scene::Scene>("TexturedCube-Scene");
-    active_scene_ = shell.SetScene(std::move(scene_unique));
+  if (shell.HasStagedScene()) {
+    CHECK_F(shell.PublishStagedScene(),
+      "expected staged scene before frame-start publish");
+    active_scene_ = shell.GetActiveScene();
+    main_camera_ = shell.TakePublishedMainCamera();
+  }
 
-    if (!main_camera_.IsAlive()) {
-      if (const auto scene_ptr = shell.TryGetScene()) {
-        main_camera_ = scene_ptr->CreateNode("MainCamera");
-        auto camera = std::make_unique<scene::PerspectiveCamera>();
-        const bool attached = main_camera_.AttachCamera(std::move(camera));
-        CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
-        auto tf = main_camera_.GetTransform();
-        tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
-        tf.SetLocalRotation(
-          glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
-      }
-    }
+  shell.OnFrameStart(*context);
+  Base::OnFrameStart(context);
 
-    // 2. Initialize Services
+  if (!app_.headless && app_window_ && app_window_->GetWindow()) {
+    last_viewport_ = app_window_->GetWindow()->Size();
+  }
+
+  frame_context.SetScene(shell.TryGetScene());
+}
+
+auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
+{
+  DCHECK_NOTNULL_F(app_window_);
+  auto& shell = GetShell();
+  if (!app_window_->GetWindow()) {
+    co_return;
+  }
+
+  if (!active_scene_.IsValid() && !shell.HasStagedScene()) {
+    shell.StageScene(std::make_unique<scene::Scene>("TexturedCube-Scene"));
+    const auto staged_scene = shell.GetStagedScene();
+    CHECK_NOTNULL_F(staged_scene, "TexturedCube staged scene is null");
+
+    auto camera_node = staged_scene->CreateNode("MainCamera");
+    auto camera = std::make_unique<scene::PerspectiveCamera>();
+    const bool attached = camera_node.AttachCamera(std::move(camera));
+    CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
+    auto tf = camera_node.GetTransform();
+    tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
+    tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
+    shell.SetStagedMainCamera(std::move(camera_node));
+
     auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
     if (asset_loader) {
       texture_service_ = std::make_unique<TextureLoadingService>(
         observer_ptr<oxygen::content::IAssetLoader> { asset_loader.get() });
       skybox_service_ = std::make_unique<SkyboxService>(
         observer_ptr<oxygen::content::IAssetLoader> { asset_loader.get() },
-        observer_ptr { active_scene_.operator->() });
+        staged_scene);
 
-      // Init VM
       texture_vm_ = std::make_unique<ui::MaterialsSandboxVm>(
         observer_ptr { texture_service_.get() },
         observer_ptr { &shell.GetFileBrowserService() });
@@ -205,33 +223,14 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
           }
         });
 
-      // Init Panel
       texture_panel_ = std::make_shared<ui::MaterialsSandboxPanel>();
       texture_panel_->Initialize(observer_ptr { texture_vm_.get() });
-
       shell.RegisterPanel(texture_panel_);
 
-      // 3. Initialize Scene Setup
       scene_setup_ = std::make_unique<SceneSetup>(
-        observer_ptr { active_scene_.operator->() }, *texture_service_,
-        *skybox_service_, cooked_root_);
+        staged_scene, *texture_service_, *skybox_service_, cooked_root_);
       scene_setup_->Initialize();
     }
-  }
-
-  if (!app_.headless && app_window_ && app_window_->GetWindow()) {
-    last_viewport_ = app_window_->GetWindow()->Size();
-  }
-
-  frame_context.SetScene(shell.TryGetScene());
-}
-
-auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
-  -> co::Co<>
-{
-  DCHECK_NOTNULL_F(app_window_);
-  if (!app_window_->GetWindow()) {
-    co_return;
   }
 
   if (!active_scene_.IsValid()) {

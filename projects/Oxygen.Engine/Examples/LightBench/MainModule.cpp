@@ -102,11 +102,6 @@ auto MainModule::OnAttachedImpl(observer_ptr<AsyncEngine> engine) noexcept
     return nullptr;
   }
 
-  // Create and set the active scene
-  auto scene = light_scene_.CreateScene();
-  active_scene_ = shell->SetScene(std::move(scene));
-  light_scene_.SetScene(shell->TryGetScene());
-
   light_bench_panel_
     = std::make_shared<LightBenchPanel>(observer_ptr { &light_scene_ });
   if (!shell->RegisterPanel(light_bench_panel_)) {
@@ -140,33 +135,55 @@ auto MainModule::OnFrameStart(
 {
   DCHECK_NOTNULL_F(context);
   auto& shell = GetShell();
+
+  if (shell.HasStagedScene()) {
+    CHECK_F(shell.PublishStagedScene(),
+      "expected staged scene before frame-start publish");
+    active_scene_ = shell.GetActiveScene();
+    auto published_camera = shell.TakePublishedMainCamera();
+    if (published_camera.IsAlive()) {
+      main_camera_ = std::move(published_camera);
+    }
+    light_scene_.SetScene(shell.TryGetScene());
+  }
+
   shell.OnFrameStart(*context);
   Base::OnFrameStart(context);
 
-  if (!active_scene_.IsValid()) {
-    auto scene = light_scene_.CreateScene();
-    active_scene_ = shell.SetScene(std::move(scene));
-    light_scene_.SetScene(shell.TryGetScene());
+  const auto scene_ptr = shell.TryGetScene();
+  if (!scene_ptr) {
+    return;
   }
-  if (!main_camera_.IsAlive()) {
-    if (const auto scene_ptr = shell.TryGetScene()) {
-      main_camera_ = scene_ptr->CreateNode("MainCamera");
-      auto camera = std::make_unique<scene::PerspectiveCamera>();
-      const bool attached = main_camera_.AttachCamera(std::move(camera));
-      CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
-    }
-  }
-  context->SetScene(shell.TryGetScene());
+  context->SetScene(scene_ptr);
 }
 
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
   DCHECK_NOTNULL_F(app_window_);
-  DCHECK_F(active_scene_.IsValid());
 
   if (!app_window_->GetWindow()) {
     DLOG_F(1, "OnSceneMutation: no valid window - skipping");
+    co_return;
+  }
+
+  auto& shell = GetShell();
+  if (!active_scene_.IsValid() && !shell.HasStagedScene()) {
+    shell.StageScene(light_scene_.CreateScene());
+    const auto staged_scene = shell.GetStagedScene();
+    CHECK_NOTNULL_F(staged_scene, "LightBench staged scene is null");
+
+    main_camera_ = staged_scene->CreateNode("MainCamera");
+    auto camera = std::make_unique<scene::PerspectiveCamera>();
+    const bool attached = main_camera_.AttachCamera(std::move(camera));
+    CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
+    shell.SetStagedMainCamera(main_camera_);
+
+    light_scene_.SetScene(staged_scene);
+  }
+
+  if (!active_scene_.IsValid()) {
+    co_await Base::OnSceneMutation(context);
     co_return;
   }
 
@@ -222,6 +239,9 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
   DCHECK_NOTNULL_F(app_window_);
+  if (!active_scene_.IsValid() || !main_camera_.IsAlive()) {
+    co_return;
+  }
   auto& shell = GetShell();
 
   if (app_window_->IsShuttingDown()) {

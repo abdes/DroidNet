@@ -446,6 +446,17 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
 {
   DCHECK_NOTNULL_F(context);
   auto& shell = GetShell();
+
+  if (shell.HasStagedScene()) {
+    CHECK_F(shell.PublishStagedScene(),
+      "expected staged scene before frame-start publish");
+    active_scene_ = shell.GetActiveScene();
+    auto published_camera = shell.TakePublishedMainCamera();
+    if (published_camera.IsAlive()) {
+      main_camera_ = std::move(published_camera);
+    }
+  }
+
   shell.OnFrameStart(*context);
   StartFrameTracking();
   TrackFrameAction("Frame started");
@@ -462,8 +473,6 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   Base::OnFrameStart(context);
 
   LOG_SCOPE_F(3, "MainModule::OnExampleFrameStart");
-
-  EnsureExampleScene();
 
   // Register scene with frame context (required for rendering)
   const auto scene_ptr = shell.TryGetScene();
@@ -486,10 +495,6 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
-  DCHECK_F(active_scene_.IsValid());
-  auto& shell = GetShell();
-  const auto scene_ptr = shell.TryGetScene();
-  DCHECK_NOTNULL_F(scene_ptr);
   DCHECK_NOTNULL_F(app_window_);
 
   if (!app_window_->GetWindow()) {
@@ -504,6 +509,13 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   TrackPhaseStart("Scene Mutation");
   current_frame_tracker_.scene_mutation_occurred = true;
   TrackFrameAction("Scene mutation phase started");
+
+  EnsureExampleScene();
+  if (!active_scene_.IsValid()) {
+    co_await Base::OnSceneMutation(context);
+    TrackPhaseEnd();
+    co_return;
+  }
 
   const auto extent = app_window_->GetWindow()->Size();
   const int width = static_cast<int>(extent.width);
@@ -697,6 +709,11 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
     TrackPhaseEnd();
     co_return;
   }
+  if (!active_scene_.IsValid() || !main_camera_.IsAlive()) {
+    TrackFrameAction("GUI update skipped - scene/camera not ready");
+    TrackPhaseEnd();
+    co_return;
+  }
 
   LOG_SCOPE_F(3, "MainModule::OnGuiUpdate");
 
@@ -722,7 +739,8 @@ auto MainModule::OnFrameEnd(observer_ptr<engine::FrameContext> /*context*/)
 auto MainModule::EnsureExampleScene() -> void
 {
   // NOLINTBEGIN(*-magic-numbers)
-  if (active_scene_.IsValid()) {
+  auto& shell = GetShell();
+  if (active_scene_.IsValid() || shell.HasStagedScene()) {
     return;
   }
   LOG_SCOPE_FUNCTION(INFO);
@@ -730,13 +748,10 @@ auto MainModule::EnsureExampleScene() -> void
   using scene::Scene;
 
   auto scene = std::make_unique<Scene>("ExampleScene");
-
-  auto& shell = GetShell();
-  active_scene_ = shell.SetScene(std::move(scene));
-
-  const auto scene_ptr = shell.TryGetScene();
-  auto* scene_raw = scene_ptr.get();
-  CHECK_NOTNULL_F(scene_raw, "Async: active scene not available");
+  shell.StageScene(std::move(scene));
+  const auto staged_scene = shell.GetStagedScene();
+  CHECK_NOTNULL_F(staged_scene, "Async: staged scene not available");
+  auto* scene_raw = staged_scene.get();
 
   // Create a LOD sphere and a multi-submesh quad
   auto sphere_geo = BuildSphereLodAsset();
@@ -802,7 +817,8 @@ auto MainModule::EnsureExampleScene() -> void
     const auto mat = MakeSolidColorMaterial(mat_name.c_str(), color, domain);
     // Apply override for submesh index 0 across all LODs so switching LOD
     // retains the material override. Use EffectiveLodCount() to iterate.
-    const auto lod_count = r.EffectiveLodCount();
+    const std::size_t lod_count
+      = static_cast<std::size_t>(r.EffectiveLodCount());
     for (std::size_t lod = 0; lod < lod_count; ++lod) {
       r.SetMaterialOverride(lod, 0, mat);
     }
@@ -824,6 +840,19 @@ auto MainModule::EnsureExampleScene() -> void
   multisubmesh_.GetRenderable().SetGeometry(quad2sm_geo);
   multisubmesh_.GetTransform().SetLocalPosition(glm::vec3(0.0F));
   multisubmesh_.GetTransform().SetLocalRotation(glm::quat(1, 0, 0, 0));
+
+  // Create and register staged main camera so publish can hand it to DemoShell.
+  main_camera_ = scene_raw->CreateNode("MainCamera");
+  {
+    auto camera = std::make_unique<PerspectiveCamera>();
+    const bool attached = main_camera_.AttachCamera(std::move(camera));
+    CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
+    auto tf = main_camera_.GetTransform();
+    tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
+    tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
+  }
+
+  shell.SetStagedMainCamera(main_camera_);
 }
 
 auto MainModule::EnsureMainCamera(const int width, const int height) -> void
