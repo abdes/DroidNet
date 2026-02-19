@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <unordered_map>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -140,6 +141,8 @@ private:
   std::filesystem::path pending_path_;
   std::optional<SceneLoadRequest> pending_scene_load_;
   std::vector<std::filesystem::path> mounted_pak_paths_;
+  std::unordered_map<std::filesystem::path, std::filesystem::file_time_type>
+    mounted_pak_write_times_;
   std::vector<std::filesystem::path> mounted_loose_roots_;
 };
 
