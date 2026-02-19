@@ -28,4 +28,6 @@ auto SetActiveEventPhase(lua_State* state, std::string_view phase_name) -> void;
 auto DispatchEventsForPhase(lua_State* state, std::string_view phase_name)
   -> EventDispatchStatus;
 
+auto ShutdownEventsRuntime(lua_State* state) -> void;
+
 } // namespace oxygen::scripting::bindings

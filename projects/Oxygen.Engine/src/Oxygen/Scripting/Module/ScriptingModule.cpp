@@ -268,6 +268,8 @@ auto ScriptingModule::OnShutdown() noexcept -> void
     }
     slot_runtimes_.clear();
 
+    bindings::ShutdownEventsRuntime(lua_state_);
+
     if (runtime_env_ref_ != LUA_NOREF) {
       lua_unref(lua_state_, runtime_env_ref_);
       runtime_env_ref_ = LUA_NOREF;
