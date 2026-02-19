@@ -336,7 +336,8 @@ auto Registry::SaveArchiveCVars(const oxygen::PathFinder& path_finder) const
   std::filesystem::create_directories(archive_dir, ec);
   if (ec) {
     LOG_F(ERROR,
-      "Console CVar persistence save failed: unable to create directory '{}': {}",
+      "Console CVar persistence save failed: unable to create directory '{}': "
+      "{}",
       archive_dir.generic_string(), ec.message());
     return {
       .status = ExecutionStatus::kError,
@@ -424,8 +425,7 @@ auto Registry::LoadArchiveCVars(const oxygen::PathFinder& path_finder,
   if (!payload.is_object()
     || !payload.contains(std::string(kArchiveJsonEntriesKey))
     || !payload[std::string(kArchiveJsonEntriesKey)].is_array()) {
-    LOG_F(ERROR,
-      "Console CVar persistence load failed: invalid schema in '{}'",
+    LOG_F(ERROR, "Console CVar persistence load failed: invalid schema in '{}'",
       archive_path.generic_string());
     return {
       .status = ExecutionStatus::kInvalidArguments,
@@ -494,7 +494,8 @@ auto Registry::SaveHistory(const oxygen::PathFinder& path_finder) const
   std::filesystem::create_directories(history_dir, ec);
   if (ec) {
     LOG_F(ERROR,
-      "Console history persistence save failed: unable to create directory '{}': {}",
+      "Console history persistence save failed: unable to create directory "
+      "'{}': {}",
       history_dir.generic_string(), ec.message());
     return {
       .status = ExecutionStatus::kError,
@@ -571,7 +572,8 @@ auto Registry::LoadHistory(const oxygen::PathFinder& path_finder)
     };
   } catch (...) {
     LOG_F(ERROR,
-      "Console history persistence load failed: unknown json parse error in '{}'",
+      "Console history persistence load failed: unknown json parse error in "
+      "'{}'",
       history_path.generic_string());
     return {
       .status = ExecutionStatus::kError,
@@ -610,8 +612,8 @@ auto Registry::LoadHistory(const oxygen::PathFinder& path_finder)
   return {
     .status = ExecutionStatus::kOk,
     .exit_code = 0,
-    .output = "loaded " + std::to_string(loaded)
-      + " history entries from " + history_path.generic_string(),
+    .output = "loaded " + std::to_string(loaded) + " history entries from "
+      + history_path.generic_string(),
     .error = {},
   };
 }
@@ -718,7 +720,9 @@ auto Registry::Execute(
     };
   }
 
-  history_.Push(text);
+  if (context.record_history) {
+    history_.Push(text);
+  }
   ExecutionResult last {
     .status = ExecutionStatus::kOk,
     .exit_code = 0,
@@ -949,13 +953,13 @@ auto Registry::ListSymbols(const bool include_hidden) const
     });
   }
 
-  std::sort(out.begin(), out.end(), [](const ConsoleSymbol& lhs,
-                                 const ConsoleSymbol& rhs) {
-    if (lhs.token != rhs.token) {
-      return lhs.token < rhs.token;
-    }
-    return static_cast<uint8_t>(lhs.kind) < static_cast<uint8_t>(rhs.kind);
-  });
+  std::sort(out.begin(), out.end(),
+    [](const ConsoleSymbol& lhs, const ConsoleSymbol& rhs) {
+      if (lhs.token != rhs.token) {
+        return lhs.token < rhs.token;
+      }
+      return static_cast<uint8_t>(lhs.kind) < static_cast<uint8_t>(rhs.kind);
+    });
   return out;
 }
 
@@ -990,10 +994,7 @@ auto Registry::GetExecutionRecords() const
   return execution_records_;
 }
 
-auto Registry::ClearExecutionRecords() -> void
-{
-  execution_records_.clear();
-}
+auto Registry::ClearExecutionRecords() -> void { execution_records_.clear(); }
 
 void Registry::RegisterBuiltinCommands()
 {
@@ -1006,10 +1007,12 @@ void Registry::RegisterBuiltinCommands()
       if (args.empty()) {
         const std::string help_text
           = "usage:\n"
-            "  help [name]                     show help for a command or cvar\n"
+            "  help [name]                     show help for a command or "
+            "cvar\n"
             "  list [all|commands|cvars]      list registered symbols\n"
             "  find <pattern>                 search commands and cvars\n"
-            "  exec <path>                    execute script file line by line\n"
+            "  exec <path>                    execute script file line by "
+            "line\n"
             "tip: run `help <name>` for detailed flags/default/current value";
         return {
           .status = ExecutionStatus::kOk,
