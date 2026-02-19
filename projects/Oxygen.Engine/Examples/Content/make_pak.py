@@ -6,7 +6,7 @@
 
 """One-command PakGen YAML -> PAK build helper.
 
-Run from the RenderScene directory.
+Run from any directory.
 
 Example:
     F:/projects/.venv/Scripts/python.exe make_pak.py cube_scene_spec.yaml
@@ -77,19 +77,19 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     cwd = Path.cwd()
+    output_dir = Path(__file__).resolve().parent / "pak"
 
     def build_one(input_path: Path) -> None:
         input_path = input_path.resolve()
         if not input_path.exists():
             raise SystemExit(f"Input file not found: {input_path}")
 
-        out_dir = cwd / "pak"
-        out_dir.mkdir(parents=True, exist_ok=True)
+        output_dir.mkdir(parents=True, exist_ok=True)
 
         suffix = input_path.suffix.lower()
         stem = input_path.stem
-        pak_path = out_dir / f"{stem}.pak"
-        manifest_path = out_dir / f"{stem}.manifest.json"
+        pak_path = output_dir / f"{stem}.pak"
+        manifest_path = output_dir / f"{stem}.manifest.json"
 
         if suffix in (".yaml", ".yml"):
             spec_path = input_path
@@ -120,11 +120,11 @@ def main(argv: list[str] | None = None) -> int:
                 "--all/-a cannot be used together with an input file argument"
             )
 
-        yaml_specs = sorted(cwd.glob("*.yaml")) + sorted(cwd.glob("*.yml"))
+        yaml_specs = sorted(cwd.rglob("*.yaml")) + sorted(cwd.rglob("*.yml"))
 
         if not yaml_specs:
             raise SystemExit(
-                "No inputs found for --all: expected *.yaml/*.yml in the current directory"
+                "No inputs found for --all: expected *.yaml/*.yml recursively from the current directory"
             )
 
         for path in yaml_specs:
@@ -133,11 +133,11 @@ def main(argv: list[str] | None = None) -> int:
 
     input_path = args.input
     if input_path is None:
-        candidates = sorted(cwd.glob("*.yaml")) + sorted(cwd.glob("*.yml"))
+        candidates = sorted(cwd.rglob("*.yaml")) + sorted(cwd.rglob("*.yml"))
         if len(candidates) != 1:
             names = ", ".join(p.name for p in candidates)
             raise SystemExit(
-                "Please pass an input file, or keep exactly one *.yaml/*.yml in this directory. "
+                "Please pass an input file, or keep exactly one *.yaml/*.yml under this directory tree. "
                 f"Found {len(candidates)}: [{names}]"
             )
         input_path = candidates[0]
