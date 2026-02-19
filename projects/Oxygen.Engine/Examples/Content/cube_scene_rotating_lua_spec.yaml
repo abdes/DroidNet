@@ -115,8 +115,12 @@ scripts:
     data: |
       -- Engine slot contract:
       -- - Script returns a module table with `tick(ctx, dt_seconds)`.
-      -- - Preferred API surface: `oxygen.scene`, `oxygen.time`, `oxygen.transform`.
+      -- - Preferred API surface: `oxygen.scene`, `oxygen.time`, `oxygen.math`.
       local script = {}
+
+      local scene = oxygen.scene
+      local omath = oxygen.math
+
       local angle_radians = 10.0
       local speed = 2.0
       local events_wired = false
@@ -129,17 +133,24 @@ scripts:
       end
 
       function script.tick(ctx, dt_seconds)
+        local node = scene.current_node(ctx)
+        if node == nil or not node.is_alive then
+          return
+        end
+
         if not events_wired then
-          speed = oxygen.scene.get_param(ctx, "speed") or speed
+          speed = scene.param(ctx, "speed") or speed
 
           oxygen.input.on_action("RotateSpeedUpAction", oxygen.input.edges.triggered, function()
             speed = speed + 0.25
             oxygen.log.debug(string.format("RotateCubeScript speed=%.3f", speed))
           end)
+
           oxygen.input.on_action("RotateSpeedDownAction", oxygen.input.edges.triggered, function()
             speed = clamp_speed(speed - 0.25)
             oxygen.log.debug(string.format("RotateCubeScript speed=%.3f", speed))
           end)
+
           oxygen.input.on_action("RotateStopAction", oxygen.input.edges.triggered, function()
             speed = 0.0
             oxygen.log.debug("RotateCubeScript speed=0.000")
@@ -149,13 +160,13 @@ scripts:
           events_wired = true
         end
 
-        local delta_angle = oxygen.time.delta_seconds() * speed
+        local delta_angle = dt_seconds * speed
         if delta_angle == 0.0 then
           return
         end
 
         angle_radians = angle_radians + delta_angle
-        oxygen.transform.set_local_rotation_euler(ctx, 0.0, angle_radians, 0.0)
+        node:set_local_rotation(omath.quat_from_euler_xyz(0.0, angle_radians, 0.0))
       end
 
       return script

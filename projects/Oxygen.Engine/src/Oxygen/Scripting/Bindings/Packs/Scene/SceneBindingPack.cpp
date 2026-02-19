@@ -10,15 +10,12 @@
 #include <Oxygen/Scripting/Bindings/BindingRegistry.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneBindings.h>
-#include <Oxygen/Scripting/Bindings/Packs/Scene/TransformBindings.h>
 
 namespace oxygen::scripting::bindings {
 
 namespace {
-  constexpr std::array<BindingNamespace, 2> kSceneNamespaces = { {
-    { .name = "scene", .register_fn = RegisterSceneBindings },
-    { .name = "transform", .register_fn = RegisterTransformBindings },
-  } };
+  constexpr std::array<BindingNamespace, 1> kSceneNamespaces
+    = { { { .name = "scene", .register_fn = RegisterSceneBindings } } };
 
   class SceneBindingPack final : public contracts::IScriptBindingPack {
   public:

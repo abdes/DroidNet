@@ -13,6 +13,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Core/EngineModule.h>
@@ -111,7 +112,7 @@ public:
 
 private:
   struct SlotRuntimeKey {
-    scene::NodeHandle node_handle {};
+    scene::NodeHandle node_handle;
     uint32_t slot_index { 0 };
 
     [[nodiscard]] auto operator==(const SlotRuntimeKey&) const noexcept -> bool
@@ -123,8 +124,7 @@ private:
       -> std::size_t
     {
       std::size_t seed = std::hash<scene::NodeHandle> {}(key.node_handle);
-      seed ^= std::hash<uint32_t> {}(key.slot_index) + 0x9e3779b9 + (seed << 6U)
-        + (seed >> 2U);
+      HashCombine(seed, key.slot_index);
       return seed;
     }
   };
@@ -162,10 +162,10 @@ private:
   lua_State* lua_state_ { nullptr };
   int runtime_env_ref_;
   engine::ModulePriority priority_;
-  observer_ptr<AsyncEngine> engine_ {};
+  observer_ptr<AsyncEngine> engine_;
   bool input_bridge_logs_enabled_ { false };
   int input_bridge_log_verbosity_ { 2 };
-  std::vector<bindings::contracts::ScriptBindingPackPtr> binding_packs_ {};
+  std::vector<bindings::contracts::ScriptBindingPackPtr> binding_packs_;
   input::InputScriptEventBridge input_event_bridge_ {};
   std::unordered_map<SlotRuntimeKey, SlotRuntimeState, SlotRuntimeKeyHash>
     slot_runtimes_;
