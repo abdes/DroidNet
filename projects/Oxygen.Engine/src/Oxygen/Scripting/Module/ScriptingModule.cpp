@@ -179,6 +179,12 @@ namespace {
         continue;
       }
       lua_setfield(state, kLuaStackSecondTop, global_name);
+      // Freeze the library (math, table, etc.) if it is a table
+      lua_getfield(state, kLuaStackTop, global_name);
+      if (lua_istable(state, -1)) {
+        lua_setreadonly(state, -1, 1);
+      }
+      lua_pop(state, 1);
     }
 
     lua_pushvalue(state, kLuaStackTop);
@@ -606,6 +612,19 @@ auto ScriptingModule::InitializeSandbox() -> ScriptExecutionResult
           .append(pack ? pack->Name() : "<null>"));
     }
   }
+
+  // Freeze the 'oxygen' table in the environment
+  lua_getref(lua_state_, runtime_env_ref_);
+  lua_getfield(lua_state_, -1, "oxygen");
+  if (lua_istable(lua_state_, -1)) {
+    lua_setreadonly(lua_state_, -1, 1);
+  }
+  lua_pop(lua_state_, 1);
+
+  // Finally freeze the entire environment table
+  lua_setreadonly(lua_state_, -1, 1);
+  lua_pop(lua_state_, 1);
+
   return OkResult();
 }
 
