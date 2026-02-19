@@ -1558,18 +1558,6 @@ auto Renderer::UpdateViewExposure(ViewId view_id, const scene::Scene& scene,
 
   namespace env = scene::environment;
 
-  static std::unordered_map<std::uint32_t, float> last_logged_exposure_by_view;
-  static std::unordered_set<std::uint32_t> logged_suspicious_exposure_views;
-  struct ExposureInputs {
-    bool enabled { true };
-    engine::ExposureMode mode { engine::ExposureMode::kManual };
-    float manual_ev { 0.0F };
-    float compensation_ev { 0.0F };
-    float exposure_key_raw { 1.0F };
-  };
-  static std::unordered_map<std::uint32_t, ExposureInputs>
-    last_logged_inputs_by_view;
-
   float exposure = 1.0F;
   float exposure_key = 1.0F;
   float raw_exposure_key = 1.0F;
