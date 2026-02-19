@@ -296,11 +296,10 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
             normalized = request.source_path.lexically_normal();
           }
 
-          const auto already_mounted
-            = std::ranges::any_of(mounted_pak_paths_,
-              [&normalized](const std::filesystem::path& existing) {
-                return existing == normalized;
-              });
+          const auto already_mounted = std::ranges::any_of(mounted_pak_paths_,
+            [&normalized](const std::filesystem::path& existing) {
+              return existing == normalized;
+            });
 
           if (already_mounted) {
             LOG_F(INFO,
@@ -310,7 +309,8 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
           } else {
             mounted_pak_paths_.push_back(normalized);
             asset_loader->AddPakFile(normalized);
-            LOG_F(INFO, "RenderScene: Mounted PAK source '{}' for scene load '{}'",
+            LOG_F(INFO,
+              "RenderScene: Mounted PAK source '{}' for scene load '{}'",
               normalized.string(), request.scene_name);
           }
         } else if (request.source_kind == ui::SceneSourceKind::kLooseIndex) {
@@ -356,6 +356,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
           request.source_kind == ui::SceneSourceKind::kPak
             ? request.source_path
             : std::filesystem::path {},
+          app_.input_system,
           observer_ptr { &app_.engine->GetScriptCompilationService() },
           PathFinder(std::make_shared<const PathFinderConfig>(
                        app_.engine->GetEngineConfig().path_finder_config),

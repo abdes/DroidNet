@@ -22,6 +22,7 @@
 #include <Oxygen/Scene/Scripting/ScriptingComponent.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Scripting/Bindings/Contracts/IScriptBindingPack.h>
+#include <Oxygen/Scripting/Input/InputScriptEventBridge.h>
 #include <Oxygen/Scripting/api_export.h>
 
 struct lua_State;
@@ -83,6 +84,10 @@ public:
   OXGN_SCRP_NDAPI auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept
     -> bool override;
   OXGN_SCRP_API auto OnShutdown() noexcept -> void override;
+  OXGN_SCRP_API auto RegisterConsoleBindings(
+    observer_ptr<console::Console> console) noexcept -> void override;
+  OXGN_SCRP_API auto ApplyConsoleCVars(
+    observer_ptr<const console::Console> console) noexcept -> void override;
 
   OXGN_SCRP_API auto OnFrameStart(observer_ptr<engine::FrameContext> context)
     -> void override;
@@ -158,7 +163,10 @@ private:
   int runtime_env_ref_;
   engine::ModulePriority priority_;
   observer_ptr<AsyncEngine> engine_ {};
+  bool input_bridge_logs_enabled_ { false };
+  int input_bridge_log_verbosity_ { 2 };
   std::vector<bindings::contracts::ScriptBindingPackPtr> binding_packs_ {};
+  input::InputScriptEventBridge input_event_bridge_ {};
   std::unordered_map<SlotRuntimeKey, SlotRuntimeState, SlotRuntimeKeyHash>
     slot_runtimes_;
 };

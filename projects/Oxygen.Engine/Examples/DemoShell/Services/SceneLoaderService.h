@@ -29,7 +29,13 @@ class PakFile;
 
 namespace oxygen::data {
 class SceneAsset;
+class InputActionAsset;
+class InputMappingContextAsset;
 } // namespace oxygen::data
+
+namespace oxygen::engine {
+class InputSystem;
+} // namespace oxygen::engine
 
 namespace oxygen::scripting {
 class IScriptCompilationService;
@@ -63,6 +69,7 @@ public:
   //! Create the service with the asset loader and initial viewport size.
   SceneLoaderService(content::IAssetLoader& loader, Extent<uint32_t> viewport,
     std::filesystem::path source_pak_path,
+    observer_ptr<engine::InputSystem> input_system,
     observer_ptr<scripting::IScriptCompilationService> compilation_service,
     PathFinder path_finder);
   //! Destroy the loader service.
@@ -115,6 +122,8 @@ private:
   void AttachLights(const data::SceneAsset& asset);
   //! Attach scripting components to nodes.
   void AttachScripting(const data::SceneAsset& asset);
+  //! Attach input mapping contexts to the InputSystem.
+  void AttachInputMappings(const data::SceneAsset& asset);
   //! Apply script parameter overrides for one slot.
   void ApplySlotParameters(scene::SceneNode::Scripting& scripting,
     const scene::SceneNode::Scripting::Slot& slot,
@@ -146,6 +155,7 @@ private:
   std::vector<data::AssetKey> pinned_geometry_keys_;
 
   std::unique_ptr<content::PakFile> source_pak_ {};
+  observer_ptr<engine::InputSystem> input_system_ {};
   observer_ptr<scripting::IScriptCompilationService> compilation_service_;
   std::unique_ptr<scripting::IScriptSourceResolver> source_resolver_;
 };
