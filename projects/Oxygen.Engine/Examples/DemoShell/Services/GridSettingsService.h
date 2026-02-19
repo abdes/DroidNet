@@ -60,6 +60,12 @@ public:
   [[nodiscard]] auto GetAxisThickness() const -> float;
   auto SetAxisThickness(float thickness) -> void;
 
+  [[nodiscard]] auto GetSmoothMotion() const -> bool;
+  auto SetSmoothMotion(bool enabled) -> void;
+
+  [[nodiscard]] auto GetSmoothTime() const -> float;
+  auto SetSmoothTime(float time) -> void;
+
   [[nodiscard]] auto GetFadeStart() const -> float;
   auto SetFadeStart(float distance) -> void;
 

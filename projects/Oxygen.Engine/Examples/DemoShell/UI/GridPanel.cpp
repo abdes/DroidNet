@@ -51,6 +51,19 @@ void GridPanel::DrawGridSection()
     vm_->SetEnabled(enabled);
   }
 
+  bool smooth_motion = vm_->GetSmoothMotion();
+  if (ImGui::Checkbox("Smooth Motion", &smooth_motion)) {
+    vm_->SetSmoothMotion(smooth_motion);
+  }
+
+  if (smooth_motion) {
+    float smooth_time = vm_->GetSmoothTime();
+    if (ImGui::DragFloat(
+          "Smooth Time", &smooth_time, 0.05F, 0.001F, 10.0F, "%.3f")) {
+      vm_->SetSmoothTime(smooth_time);
+    }
+  }
+
   float spacing = vm_->GetGridSpacing();
   if (ImGui::DragFloat("Spacing", &spacing, 0.1F, 0.01F, 100.0F, "%.2f")) {
     vm_->SetGridSpacing(spacing);
@@ -93,8 +106,7 @@ void GridPanel::DrawFadeSection()
   }
 
   float fade_power = vm_->GetFadePower();
-  if (ImGui::DragFloat(
-        "Fade Power", &fade_power, 0.05F, 0.0F, 8.0F, "%.2f")) {
+  if (ImGui::DragFloat("Fade Power", &fade_power, 0.05F, 0.0F, 8.0F, "%.2f")) {
     vm_->SetFadePower(fade_power);
   }
 }
@@ -111,41 +123,36 @@ void GridPanel::DrawColorSection()
   auto minor = vm_->GetMinorColor();
   float minor_rgba[4] { minor.r, minor.g, minor.b, minor.a };
   if (ImGui::ColorEdit4("Minor Color", minor_rgba, color_flags)) {
-    vm_->SetMinorColor(
-      graphics::Color { minor_rgba[0], minor_rgba[1], minor_rgba[2],
-        minor_rgba[3] });
+    vm_->SetMinorColor(graphics::Color {
+      minor_rgba[0], minor_rgba[1], minor_rgba[2], minor_rgba[3] });
   }
 
   auto major = vm_->GetMajorColor();
   float major_rgba[4] { major.r, major.g, major.b, major.a };
   if (ImGui::ColorEdit4("Major Color", major_rgba, color_flags)) {
-    vm_->SetMajorColor(
-      graphics::Color { major_rgba[0], major_rgba[1], major_rgba[2],
-        major_rgba[3] });
+    vm_->SetMajorColor(graphics::Color {
+      major_rgba[0], major_rgba[1], major_rgba[2], major_rgba[3] });
   }
 
   auto axis_x = vm_->GetAxisColorX();
   float axis_x_rgba[4] { axis_x.r, axis_x.g, axis_x.b, axis_x.a };
   if (ImGui::ColorEdit4("Axis X Color", axis_x_rgba, color_flags)) {
-    vm_->SetAxisColorX(
-      graphics::Color { axis_x_rgba[0], axis_x_rgba[1], axis_x_rgba[2],
-        axis_x_rgba[3] });
+    vm_->SetAxisColorX(graphics::Color {
+      axis_x_rgba[0], axis_x_rgba[1], axis_x_rgba[2], axis_x_rgba[3] });
   }
 
   auto axis_y = vm_->GetAxisColorY();
   float axis_y_rgba[4] { axis_y.r, axis_y.g, axis_y.b, axis_y.a };
   if (ImGui::ColorEdit4("Axis Y Color", axis_y_rgba, color_flags)) {
-    vm_->SetAxisColorY(
-      graphics::Color { axis_y_rgba[0], axis_y_rgba[1], axis_y_rgba[2],
-        axis_y_rgba[3] });
+    vm_->SetAxisColorY(graphics::Color {
+      axis_y_rgba[0], axis_y_rgba[1], axis_y_rgba[2], axis_y_rgba[3] });
   }
 
   auto origin = vm_->GetOriginColor();
   float origin_rgba[4] { origin.r, origin.g, origin.b, origin.a };
   if (ImGui::ColorEdit4("Origin Color", origin_rgba, color_flags)) {
-    vm_->SetOriginColor(
-      graphics::Color { origin_rgba[0], origin_rgba[1], origin_rgba[2],
-        origin_rgba[3] });
+    vm_->SetOriginColor(graphics::Color {
+      origin_rgba[0], origin_rgba[1], origin_rgba[2], origin_rgba[3] });
   }
 }
 

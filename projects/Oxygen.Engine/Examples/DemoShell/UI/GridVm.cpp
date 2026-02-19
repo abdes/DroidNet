@@ -30,7 +30,6 @@ auto GridVm::SetEnabled(const bool enabled) -> void
   enabled_ = enabled;
 }
 
-
 auto GridVm::GetGridSpacing() -> float
 {
   Refresh();
@@ -91,6 +90,30 @@ auto GridVm::SetAxisThickness(const float thickness) -> void
   axis_thickness_ = thickness;
 }
 
+auto GridVm::GetSmoothMotion() -> bool
+{
+  Refresh();
+  return smooth_motion_;
+}
+
+auto GridVm::SetSmoothMotion(const bool enabled) -> void
+{
+  service_->SetSmoothMotion(enabled);
+  smooth_motion_ = enabled;
+}
+
+auto GridVm::GetSmoothTime() -> float
+{
+  Refresh();
+  return smooth_time_;
+}
+
+auto GridVm::SetSmoothTime(const float time) -> void
+{
+  service_->SetSmoothTime(time);
+  smooth_time_ = time;
+}
+
 auto GridVm::GetFadeStart() -> float
 {
   Refresh();
@@ -103,7 +126,6 @@ auto GridVm::SetFadeStart(const float distance) -> void
   fade_start_ = distance;
 }
 
-
 auto GridVm::GetFadePower() -> float
 {
   Refresh();
@@ -115,8 +137,6 @@ auto GridVm::SetFadePower(const float power) -> void
   service_->SetFadePower(power);
   fade_power_ = power;
 }
-
-
 
 auto GridVm::GetHorizonBoost() -> float
 {
@@ -204,6 +224,8 @@ auto GridVm::Refresh() -> void
   line_thickness_ = service_->GetLineThickness();
   major_thickness_ = service_->GetMajorThickness();
   axis_thickness_ = service_->GetAxisThickness();
+  smooth_motion_ = service_->GetSmoothMotion();
+  smooth_time_ = service_->GetSmoothTime();
   fade_start_ = service_->GetFadeStart();
   fade_power_ = service_->GetFadePower();
   horizon_boost_ = service_->GetHorizonBoost();
@@ -214,9 +236,6 @@ auto GridVm::Refresh() -> void
   origin_color_ = service_->GetOriginColor();
 }
 
-auto GridVm::IsStale() const -> bool
-{
-  return epoch_ != service_->GetEpoch();
-}
+auto GridVm::IsStale() const -> bool { return epoch_ != service_->GetEpoch(); }
 
 } // namespace oxygen::examples::ui
