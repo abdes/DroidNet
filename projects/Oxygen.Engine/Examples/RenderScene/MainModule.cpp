@@ -203,7 +203,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
     } else if (pending_source_action_ == PendingSourceAction::kMountIndex) {
       reason = "loose cooked root";
     } else if (pending_source_action_ == PendingSourceAction::kClear) {
-      reason = "force trim";
+      reason = "clear mounts";
     } else if (pending_source_action_ == PendingSourceAction::kTrimCache) {
       reason = "trim cache";
     }
@@ -215,8 +215,11 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
 
     auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
     if (asset_loader) {
-      if (pending_source_action_ == PendingSourceAction::kClear
-        || pending_source_action_ == PendingSourceAction::kTrimCache) {
+      if (pending_source_action_ == PendingSourceAction::kClear) {
+        asset_loader->ClearMounts();
+        mounted_pak_paths_.clear();
+        mounted_loose_roots_.clear();
+      } else if (pending_source_action_ == PendingSourceAction::kTrimCache) {
         asset_loader->TrimCache();
       } else if (pending_source_action_ == PendingSourceAction::kMountPak) {
         std::error_code ec;
