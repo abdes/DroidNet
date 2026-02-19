@@ -24,7 +24,7 @@ namespace {
   constexpr int kLuaArg3 = 3;
   constexpr int kLuaArg4 = 4;
   constexpr int kLuaArg5 = 5;
-  constexpr int kStackCheckSize = 8;
+  constexpr uint8_t kStackCheckSize = 8;
 
   constexpr const char* kBindingContextFieldName = "__oxgn_binding_context";
   constexpr const char* kBindingContextMetatableName
@@ -38,23 +38,14 @@ namespace {
     observer_ptr<AsyncEngine> engine;
   };
 
-  auto LuaRuntimeContextGc(lua_State* state) -> int
+  void LuaRuntimeContextDtor(lua_State* /*state*/, void* p)
   {
-    auto* const runtime_context
-      = static_cast<LuaRuntimeContext*>(lua_touserdata(state, 1));
-    if (runtime_context != nullptr) {
-      runtime_context->~LuaRuntimeContext();
-    }
-    return 0;
+    static_cast<LuaRuntimeContext*>(p)->~LuaRuntimeContext();
   }
 
   auto EnsureRuntimeContextMetatable(lua_State* state) -> void
   {
-    const int status = luaL_newmetatable(state, kRuntimeContextMetatableName);
-    if (status != 0) {
-      lua_pushcfunction(state, LuaRuntimeContextGc, "runtime_context.__gc");
-      lua_setfield(state, -2, "__gc");
-    }
+    (void)luaL_newmetatable(state, kRuntimeContextMetatableName);
     lua_pop(state, 1);
   }
 
@@ -65,6 +56,10 @@ namespace {
     }
 
     lua_getfield(state, LUA_REGISTRYINDEX, kRuntimeContextFieldName);
+    if (lua_userdatatag(state, -1) != kTagRuntimeContext) {
+      lua_pop(state, 1);
+      return nullptr;
+    }
     auto* runtime_context
       = static_cast<LuaRuntimeContext*>(lua_touserdata(state, -1));
     lua_pop(state, 1);
@@ -82,8 +77,10 @@ namespace {
     }
 
     EnsureRuntimeContextMetatable(state);
-    auto* const runtime_context_mem
-      = lua_newuserdata(state, sizeof(LuaRuntimeContext));
+    auto* const runtime_context_mem = lua_newuserdatatagged(
+      state, sizeof(LuaRuntimeContext), kTagRuntimeContext);
+    lua_setuserdatadtor(state, kTagRuntimeContext, LuaRuntimeContextDtor);
+
     auto* runtime_context = new (runtime_context_mem) LuaRuntimeContext {};
     luaL_getmetatable(state, kRuntimeContextMetatableName);
     lua_setmetatable(state, -2);
@@ -161,8 +158,8 @@ auto PushScriptContext(lua_State* state, LuaSlotExecutionContext* slot_context,
   EnsureBindingContextMetatable(state);
   lua_newtable(state);
 
-  auto* const binding_context_mem
-    = lua_newuserdata(state, sizeof(LuaBindingContext));
+  auto* const binding_context_mem = lua_newuserdatatagged(
+    state, sizeof(LuaBindingContext), kTagBindingContext);
   auto* const binding_context = new (binding_context_mem) LuaBindingContext {};
   if (slot_context != nullptr) {
     binding_context->slot_context = *slot_context;
@@ -235,6 +232,10 @@ auto GetBindingContextFromScriptArg(
     return nullptr;
   }
   lua_getfield(state, arg_index, kBindingContextFieldName);
+  if (lua_userdatatag(state, -1) != kTagBindingContext) {
+    lua_pop(state, 1);
+    return nullptr;
+  }
   auto* const binding_context
     = static_cast<LuaBindingContext*>(lua_touserdata(state, -1));
   lua_pop(state, 1);
@@ -292,7 +293,7 @@ auto GetParamValue(lua_State* state) -> int
     return 1;
   }
 
-  for (const auto entry : context->slot_context.slot->Parameters()) {
+  for (const auto& entry : context->slot_context.slot->Parameters()) {
     if (entry.key == key) {
       return PushScriptParam(state, entry.value.get());
     }

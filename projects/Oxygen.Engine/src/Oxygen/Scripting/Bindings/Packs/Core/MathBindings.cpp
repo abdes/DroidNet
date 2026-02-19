@@ -69,7 +69,7 @@ namespace {
   auto PushVec4(lua_State* state, const Vec4& value) -> int
   {
     auto* u = static_cast<Vec4Userdata*>(
-      lua_newuserdata(state, sizeof(Vec4Userdata)));
+      lua_newuserdatatagged(state, sizeof(Vec4Userdata), kTagVec4));
     u->x = value.x;
     u->y = value.y;
     u->z = value.z;
@@ -82,7 +82,7 @@ namespace {
   auto PushQuat(lua_State* state, const Quat& value) -> int
   {
     auto* u = static_cast<QuatUserdata*>(
-      lua_newuserdata(state, sizeof(QuatUserdata)));
+      lua_newuserdatatagged(state, sizeof(QuatUserdata), kTagQuat));
     u->x = value.x;
     u->y = value.y;
     u->z = value.z;
@@ -95,7 +95,7 @@ namespace {
   auto PushMat4(lua_State* state, const Mat4& value) -> int
   {
     auto* u = static_cast<Mat4Userdata*>(
-      lua_newuserdata(state, sizeof(Mat4Userdata)));
+      lua_newuserdatatagged(state, sizeof(Mat4Userdata), kTagMat4));
     std::memcpy(u->m.data(), glm::value_ptr(value), sizeof(float) * kMat4Size);
     luaL_getmetatable(state, kMat4MetatableName);
     lua_setmetatable(state, -2);
@@ -104,20 +104,26 @@ namespace {
 
   auto CheckVec4(lua_State* state, int index) -> Vec4Userdata*
   {
-    return static_cast<Vec4Userdata*>(
-      luaL_checkudata(state, index, kVec4MetatableName));
+    if (lua_userdatatag(state, index) != kTagVec4) {
+      luaL_typeerror(state, index, kVec4MetatableName);
+    }
+    return static_cast<Vec4Userdata*>(lua_touserdata(state, index));
   }
 
   auto CheckQuat(lua_State* state, int index) -> QuatUserdata*
   {
-    return static_cast<QuatUserdata*>(
-      luaL_checkudata(state, index, kQuatMetatableName));
+    if (lua_userdatatag(state, index) != kTagQuat) {
+      luaL_typeerror(state, index, kQuatMetatableName);
+    }
+    return static_cast<QuatUserdata*>(lua_touserdata(state, index));
   }
 
   auto CheckMat4(lua_State* state, int index) -> Mat4Userdata*
   {
-    return static_cast<Mat4Userdata*>(
-      luaL_checkudata(state, index, kMat4MetatableName));
+    if (lua_userdatatag(state, index) != kTagMat4) {
+      luaL_typeerror(state, index, kMat4MetatableName);
+    }
+    return static_cast<Mat4Userdata*>(lua_touserdata(state, index));
   }
 
   auto ToGlmQuat(const QuatUserdata* u) -> Quat
@@ -422,18 +428,10 @@ namespace {
     return PushMat4(state, glm::lookAtRH(eye, target, up));
   }
 
-  auto GetUserdata(lua_State* state, int index, const char* meta_name) -> void*
+  auto GetUserdata(lua_State* state, int index, int tag) -> void*
   {
-    void* data = lua_touserdata(state, index);
-    if (data != nullptr) {
-      if (lua_getmetatable(state, index) != 0) {
-        lua_getfield(state, LUA_REGISTRYINDEX, meta_name);
-        if (lua_rawequal(state, -1, -2) != 0) {
-          lua_pop(state, 2);
-          return data;
-        }
-        lua_pop(state, 2);
-      }
+    if (lua_userdatatag(state, index) == tag) {
+      return lua_touserdata(state, index);
     }
     return nullptr;
   }
@@ -453,22 +451,19 @@ namespace {
       return 1;
     }
 
-    if (auto* v
-      = static_cast<Vec4Userdata*>(GetUserdata(state, 1, kVec4MetatableName))) {
+    if (auto* v = static_cast<Vec4Userdata*>(GetUserdata(state, 1, kTagVec4))) {
       bool finite = std::isfinite(v->x) && std::isfinite(v->y)
         && std::isfinite(v->z) && std::isfinite(v->w);
       lua_pushboolean(state, finite ? 1 : 0);
       return 1;
     }
-    if (auto* q
-      = static_cast<QuatUserdata*>(GetUserdata(state, 1, kQuatMetatableName))) {
+    if (auto* q = static_cast<QuatUserdata*>(GetUserdata(state, 1, kTagQuat))) {
       bool finite = std::isfinite(q->x) && std::isfinite(q->y)
         && std::isfinite(q->z) && std::isfinite(q->w);
       lua_pushboolean(state, finite ? 1 : 0);
       return 1;
     }
-    if (auto* m
-      = static_cast<Mat4Userdata*>(GetUserdata(state, 1, kMat4MetatableName))) {
+    if (auto* m = static_cast<Mat4Userdata*>(GetUserdata(state, 1, kTagMat4))) {
       bool finite = true;
       for (const float f : m->m) {
         if (!std::isfinite(f)) {
@@ -512,9 +507,9 @@ namespace {
     }
 
     if (auto* v1
-      = static_cast<Vec4Userdata*>(GetUserdata(state, 1, kVec4MetatableName))) {
-      if (auto* v2 = static_cast<Vec4Userdata*>(
-            GetUserdata(state, 2, kVec4MetatableName))) {
+      = static_cast<Vec4Userdata*>(GetUserdata(state, 1, kTagVec4))) {
+      if (auto* v2
+        = static_cast<Vec4Userdata*>(GetUserdata(state, 2, kTagVec4))) {
         bool eq = std::fabs(v1->x - v2->x) <= eps
           && std::fabs(v1->y - v2->y) <= eps && std::fabs(v1->z - v2->z) <= eps
           && std::fabs(v1->w - v2->w) <= eps;
@@ -524,9 +519,9 @@ namespace {
     }
 
     if (auto* q1
-      = static_cast<QuatUserdata*>(GetUserdata(state, 1, kQuatMetatableName))) {
-      if (auto* q2 = static_cast<QuatUserdata*>(
-            GetUserdata(state, 2, kQuatMetatableName))) {
+      = static_cast<QuatUserdata*>(GetUserdata(state, 1, kTagQuat))) {
+      if (auto* q2
+        = static_cast<QuatUserdata*>(GetUserdata(state, 2, kTagQuat))) {
         bool eq = std::fabs(q1->x - q2->x) <= eps
           && std::fabs(q1->y - q2->y) <= eps && std::fabs(q1->z - q2->z) <= eps
           && std::fabs(q1->w - q2->w) <= eps;
@@ -536,9 +531,9 @@ namespace {
     }
 
     if (auto* m1
-      = static_cast<Mat4Userdata*>(GetUserdata(state, 1, kMat4MetatableName))) {
-      if (auto* m2 = static_cast<Mat4Userdata*>(
-            GetUserdata(state, 2, kMat4MetatableName))) {
+      = static_cast<Mat4Userdata*>(GetUserdata(state, 1, kTagMat4))) {
+      if (auto* m2
+        = static_cast<Mat4Userdata*>(GetUserdata(state, 2, kTagMat4))) {
         bool eq = true;
         for (size_t i = 0; i < kMat4Size; ++i) {
           if (std::fabs(m1->m.at(i) - m2->m.at(i)) > eps) {

@@ -21,6 +21,18 @@ class AsyncEngine;
 }
 
 namespace oxygen::scripting::bindings {
+/**
+ * @brief Luau userdatatags for Oxygen types.
+ * @note Luau supports up to 128 tags (0-127).
+ */
+enum LuauUserdataTag : uint8_t {
+  kTagBindingContext = 10,
+  kTagRuntimeContext = 11,
+  kTagEventRuntime = 12,
+  kTagVec4 = 20,
+  kTagQuat = 21,
+  kTagMat4 = 22,
+};
 
 struct LuaSlotExecutionContext {
   scene::NodeHandle node_handle;
