@@ -11,6 +11,7 @@
 
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentUserdataBindings.h>
 
@@ -369,110 +370,44 @@ namespace {
     lua_pop(state, 1);
   }
 
-  auto TextureGc(lua_State* state) -> int
+  auto TextureResourceDtor(lua_State* /*state*/, void* data) -> void
   {
-    auto* userdata = static_cast<TextureResourceUserdata*>(
-      luaL_checkudata(state, 1, kTextureResourceMetatableName));
-    userdata->~TextureResourceUserdata();
-    return 0;
+    static_cast<TextureResourceUserdata*>(data)->~TextureResourceUserdata();
   }
 
-  auto BufferGc(lua_State* state) -> int
+  auto BufferResourceDtor(lua_State* /*state*/, void* data) -> void
   {
-    auto* userdata = static_cast<BufferResourceUserdata*>(
-      luaL_checkudata(state, 1, kBufferResourceMetatableName));
-    userdata->~BufferResourceUserdata();
-    return 0;
+    static_cast<BufferResourceUserdata*>(data)->~BufferResourceUserdata();
   }
 
-  auto MaterialGc(lua_State* state) -> int
+  auto AssetDtor(lua_State* /*state*/, void* data) -> void
   {
-    auto* userdata = static_cast<AssetUserdata*>(
-      luaL_checkudata(state, 1, kMaterialAssetMetatableName));
-    userdata->~AssetUserdata();
-    return 0;
-  }
-
-  auto GeometryGc(lua_State* state) -> int
-  {
-    auto* userdata = static_cast<AssetUserdata*>(
-      luaL_checkudata(state, 1, kGeometryAssetMetatableName));
-    userdata->~AssetUserdata();
-    return 0;
-  }
-
-  auto ScriptGc(lua_State* state) -> int
-  {
-    auto* userdata = static_cast<AssetUserdata*>(
-      luaL_checkudata(state, 1, kScriptAssetMetatableName));
-    userdata->~AssetUserdata();
-    return 0;
-  }
-
-  auto InputActionGc(lua_State* state) -> int
-  {
-    auto* userdata = static_cast<AssetUserdata*>(
-      luaL_checkudata(state, 1, kInputActionAssetMetatableName));
-    userdata->~AssetUserdata();
-    return 0;
-  }
-
-  auto InputMappingContextGc(lua_State* state) -> int
-  {
-    auto* userdata = static_cast<AssetUserdata*>(
-      luaL_checkudata(state, 1, kInputMappingContextAssetMetatableName));
-    userdata->~AssetUserdata();
-    return 0;
+    static_cast<AssetUserdata*>(data)->~AssetUserdata();
   }
 } // namespace
 
 auto RegisterContentUserdataMetatables(lua_State* state) -> void
 {
+  lua_setuserdatadtor(state, kTagTextureResource, TextureResourceDtor);
+  lua_setuserdatadtor(state, kTagBufferResource, BufferResourceDtor);
+  lua_setuserdatadtor(state, kTagAsset, AssetDtor);
+
   RegisterResourceMetatable(state, kTextureResourceMetatableName,
     TextureIsValid, TextureKey, TextureTypeName, TextureToString);
-  luaL_getmetatable(state, kTextureResourceMetatableName);
-  lua_pushcfunction(state, TextureGc, "assets.texture_resource.__gc");
-  lua_setfield(state, -2, "__gc");
-  lua_pop(state, 1);
   RegisterResourceMetatable(state, kBufferResourceMetatableName, BufferIsValid,
     BufferKey, BufferTypeName, BufferToString);
-  luaL_getmetatable(state, kBufferResourceMetatableName);
-  lua_pushcfunction(state, BufferGc, "assets.buffer_resource.__gc");
-  lua_setfield(state, -2, "__gc");
-  lua_pop(state, 1);
 
   RegisterMetatable(state, kMaterialAssetMetatableName, MaterialIsValid,
     MaterialGuid, MaterialTypeName, MaterialToString);
-  luaL_getmetatable(state, kMaterialAssetMetatableName);
-  lua_pushcfunction(state, MaterialGc, "assets.material_asset.__gc");
-  lua_setfield(state, -2, "__gc");
-  lua_pop(state, 1);
   RegisterMetatable(state, kGeometryAssetMetatableName, GeometryIsValid,
     GeometryGuid, GeometryTypeName, GeometryToString);
-  luaL_getmetatable(state, kGeometryAssetMetatableName);
-  lua_pushcfunction(state, GeometryGc, "assets.geometry_asset.__gc");
-  lua_setfield(state, -2, "__gc");
-  lua_pop(state, 1);
   RegisterMetatable(state, kScriptAssetMetatableName, ScriptIsValid, ScriptGuid,
     ScriptTypeName, ScriptToString);
-  luaL_getmetatable(state, kScriptAssetMetatableName);
-  lua_pushcfunction(state, ScriptGc, "assets.script_asset.__gc");
-  lua_setfield(state, -2, "__gc");
-  lua_pop(state, 1);
   RegisterMetatable(state, kInputActionAssetMetatableName, InputActionIsValid,
     InputActionGuid, InputActionTypeName, InputActionToString);
-  luaL_getmetatable(state, kInputActionAssetMetatableName);
-  lua_pushcfunction(state, InputActionGc, "assets.input_action_asset.__gc");
-  lua_setfield(state, -2, "__gc");
-  lua_pop(state, 1);
   RegisterMetatable(state, kInputMappingContextAssetMetatableName,
     InputMappingContextIsValid, InputMappingContextGuid,
     InputMappingContextTypeName, InputMappingContextToString);
-  luaL_getmetatable(state, kInputMappingContextAssetMetatableName);
-  lua_pushcfunction(
-    state, InputMappingContextGc, "assets.input_mapping_context_asset.__gc");
-  lua_setfield(state, -2, "__gc");
-  lua_pop(state, 1);
 }
 
 } // namespace oxygen::scripting::bindings
