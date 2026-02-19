@@ -320,6 +320,123 @@ end
 }
 
 NOLINT_TEST_F(ScriptingModuleTest,
+  OnFrameStartSceneRenderableBindingsAcceptAssetsUserdataHandles)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+function on_frame_start()
+  local assets = oxygen.assets
+  local scene = oxygen.scene
+  local node = scene.create_node("RenderableUserdataHost", nil)
+  if node == nil then error("node create failed") end
+
+  local geometry = assets.create_procedural_geometry("cube")
+  if geometry == nil then error("procedural geometry missing") end
+  if geometry:type_name() ~= "GeometryAsset" then error("unexpected geometry type") end
+  if not node:renderable_set_geometry(geometry) then
+    error("set geometry userdata failed")
+  end
+
+  local got_geometry = node:renderable_get_geometry()
+  if got_geometry == nil then error("get geometry userdata missing") end
+  if got_geometry:type_name() ~= "GeometryAsset" then
+    error("get geometry userdata type mismatch")
+  end
+
+  local material = assets.create_default_material()
+  if material == nil then error("default material missing") end
+  if material:type_name() ~= "MaterialAsset" then error("unexpected material type") end
+  if not node:renderable_set_material_override(1, 1, material) then
+    error("set material userdata failed")
+  end
+
+  local resolved = node:renderable_resolve_submesh_material(1, 1)
+  if resolved == nil then error("resolved material userdata missing") end
+  if resolved:type_name() ~= "MaterialAsset" then
+    error("resolved material userdata type mismatch")
+  end
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "scene_renderable_userdata_handles" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+
+  auto scene = std::make_shared<scene::Scene>("scene_binding_test");
+  engine::FrameContext context;
+  const auto tag = engine::internal::EngineTagFactory::Get();
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
+  context.SetScene(observer_ptr<scene::Scene> { scene.get() });
+
+  module.OnFrameStart(observer_ptr<engine::FrameContext> { &context });
+  if (context.HasErrors()) {
+    const auto errors = context.GetErrors();
+    FAIL() << (errors.empty() ? std::string("unknown scripting error")
+                              : errors.front().message);
+  }
+}
+
+NOLINT_TEST_F(ScriptingModuleTest,
+  OnFrameStartSceneRenderableBindingsRejectWrongAssetsUserdataKinds)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+function on_frame_start()
+  local assets = oxygen.assets
+  local scene = oxygen.scene
+  local node = scene.create_node("RenderableWrongUserdataKinds", nil)
+  if node == nil then error("node create failed") end
+
+  local geometry = assets.create_procedural_geometry("cube")
+  local material = assets.create_default_material()
+  if geometry == nil or material == nil then
+    error("procedural assets missing")
+  end
+
+  local ok_set_geometry, _ = pcall(function()
+    node:renderable_set_geometry(material)
+  end)
+  if ok_set_geometry then
+    error("renderable_set_geometry should reject MaterialAsset userdata")
+  end
+
+  if not node:renderable_set_geometry(geometry) then
+    error("renderable_set_geometry with GeometryAsset failed")
+  end
+
+  local ok_set_material, _ = pcall(function()
+    node:renderable_set_material_override(1, 1, geometry)
+  end)
+  if ok_set_material then
+    error("renderable_set_material_override should reject GeometryAsset userdata")
+  end
+end
+)lua" },
+    .chunk_name
+    = ScriptChunkName { "scene_renderable_userdata_kind_rejection" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+
+  auto scene = std::make_shared<scene::Scene>("scene_binding_test");
+  engine::FrameContext context;
+  const auto tag = engine::internal::EngineTagFactory::Get();
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
+  context.SetScene(observer_ptr<scene::Scene> { scene.get() });
+
+  module.OnFrameStart(observer_ptr<engine::FrameContext> { &context });
+  if (context.HasErrors()) {
+    const auto errors = context.GetErrors();
+    FAIL() << (errors.empty() ? std::string("unknown scripting error")
+                              : errors.front().message);
+  }
+}
+
+NOLINT_TEST_F(ScriptingModuleTest,
   OnFrameStartSceneQueryUserdataReturnsDeterministicDefaultsAfterSceneExpiry)
 {
   auto module = MakeModule();

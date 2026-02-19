@@ -527,6 +527,9 @@ The following names are explicitly removed from v1 and must not be exported:
 5. Query correctness tests for exact and wildcard paths.
 6. Camera/light/environment roundtrip tests for stable authored parameters.
 7. Performance sanity tests for repeated `find_many` and scoped query use.
+8. Renderable handle interchange tests:
+`set_geometry` / `set_material_override` must accept both token strings and
+`oxygen.assets` userdata, and reject wrong userdata kinds deterministically.
 
 ## 14. Event Integration (Code-Fact Status)
 
@@ -621,8 +624,12 @@ Binding layer needs a strict variant/metatable strategy.
 `backed-now`
 Backed by `SceneNode::Renderable`.
 2. script-friendly asset handle interchange (`string|userdata` policy):
-`policy-needed`
-Requires finalized asset reference conventions in scripting/runtime.
+`backed-now`
+Finalized v1 policy:
+`set_geometry` and `set_material_override` accept either string token or
+`oxygen.assets` userdata (`GeometryAsset` / `MaterialAsset`).
+`get_geometry` / `resolve_submesh_material` return string token when the source
+is token-backed synthetic mapping, otherwise they return asset userdata.
 
 ## 15.8 Node Scripting Component
 
@@ -702,10 +709,7 @@ No current Scene mutation event stream exists at commit points.
 2. Stable scene event payload contract implementation (`scene_id`,
 `node_index`, optional `parent_index`, event kind) and bridge tests.
 3. Query batch Lua API (`q:batch`) with finalized callback/error contract.
-4. Finalized asset-handle policy for `string|userdata` interchange in
-renderable/material APIs (currently implemented with deterministic string-token
-marshalling for v1 ergonomics).
-5. Optional tools-authority scripting compile-state APIs
+4. Optional tools-authority scripting compile-state APIs
 (`mark_slot_ready`, `mark_slot_compile_failed`) once policy gates are approved.
 
 ### 17.2 Future Enhancements
