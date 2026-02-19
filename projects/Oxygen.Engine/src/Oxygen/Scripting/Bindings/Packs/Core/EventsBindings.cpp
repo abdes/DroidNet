@@ -29,9 +29,7 @@ namespace {
 
   [[maybe_unused]] constexpr int kLuaNoArgs = 0;
   constexpr int kLuaNoResults = 0;
-  constexpr int kLuaSingleValueCount = 1;
-  constexpr int kLuaErrorAndTracebackCount = 2;
-  constexpr int kLuaTracebackIndex = 1;
+
   constexpr int kLuaNoRef = -1;
 
   constexpr const char* kEventsRuntimeFieldName = "__oxgn_events_runtime";
@@ -508,22 +506,25 @@ namespace {
       return false;
     }
 
+    // Push traceback before payload
+    lua_pushcfunction(state, LuaTraceback, kLuaTracebackFnName);
+    lua_insert(state, -2); // [ traceback, fn ]
+    const int traceback_index = lua_gettop(state) - 1;
+
     if (IsValidLuaRef(payload_ref)) {
       lua_getref(state, payload_ref);
     } else {
       lua_pushnil(state);
     }
 
-    lua_pushcfunction(state, LuaTraceback, kLuaTracebackFnName);
-    lua_insert(state, kLuaTracebackIndex); // [ traceback, fn, payload ]
-    const auto status = lua_pcall(state, 1, kLuaNoResults, kLuaTracebackIndex);
+    const auto status = lua_pcall(state, 1, kLuaNoResults, traceback_index);
     if (status != LUA_OK) {
       out_error = LuaToString(state, -1);
-      lua_pop(state, kLuaErrorAndTracebackCount);
+      lua_pop(state, 2); // error + traceback
       return false;
     }
 
-    lua_pop(state, kLuaSingleValueCount); // traceback
+    lua_remove(state, traceback_index); // traceback
     return true;
   }
 } // namespace

@@ -23,12 +23,13 @@ class AsyncEngine;
 namespace oxygen::scripting::bindings {
 
 struct LuaSlotExecutionContext {
-  scene::SceneNode node;
+  scene::NodeHandle node_handle;
   const scene::ScriptingComponent::Slot* slot { nullptr };
 };
 
 struct LuaBindingContext {
-  LuaSlotExecutionContext* slot_context { nullptr };
+  LuaSlotExecutionContext slot_context {};
+  bool has_slot_context { false };
   float dt_seconds { 0.0F };
 };
 

@@ -26,6 +26,7 @@
 #include <Oxygen/Scene/SceneTraversal.h>
 #include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
+#include <Oxygen/Scripting/Bindings/Packs/Content/ContentAsyncBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/CoreBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
@@ -45,7 +46,7 @@ namespace {
   constexpr int kLuaSingleValueCount = 1;
   constexpr int kLuaErrorAndTracebackCount = 2;
   constexpr int kLuaEnvironmentAndErrorCount = 2;
-  constexpr int kLuaTracebackIndex = 1;
+
   constexpr const char* kLuaTracebackFnName = "LuaTraceback";
   constexpr int kLuaNoRef = -1;
   constexpr std::string_view kCVarScriptingInputBridgeLogs
@@ -210,6 +211,21 @@ namespace {
     return false;
   }
 
+  struct ScriptingNodeFilter {
+    auto operator()(const auto& visited,
+      scene::FilterResult /*parent_result*/) const -> scene::FilterResult
+    {
+      if (visited.node_impl == nullptr) {
+        return scene::FilterResult::kReject;
+      }
+      if (!visited.node_impl
+            ->template HasComponent<scene::ScriptingComponent>()) {
+        return scene::FilterResult::kReject;
+      }
+      return scene::FilterResult::kAccept;
+    }
+  };
+
 } // namespace
 
 ScriptingModule::ScriptingModule(const engine::ModulePriority priority)
@@ -279,6 +295,7 @@ auto ScriptingModule::OnShutdown() noexcept -> void
     lua_state_ = nullptr;
   }
 
+  task_queue_.EndSession();
   binding_packs_.clear();
 }
 
@@ -351,6 +368,8 @@ auto ScriptingModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   -> void
 {
   if (lua_state_ != nullptr) {
+    ProcessPendingTasks();
+    const ScopedActiveFrameContext active_context(lua_state_, context);
     bindings::SetActiveEventPhase(lua_state_, "frame_start");
     bindings::QueueEngineEvent(lua_state_, "frame.start", "frame_start");
   }
@@ -378,6 +397,7 @@ auto ScriptingModule::OnFixedSimulation(
   observer_ptr<engine::FrameContext> context) -> co::Co<>
 {
   if (lua_state_ != nullptr) {
+    const ScopedActiveFrameContext active_context(lua_state_, context);
     bindings::SetActiveEventPhase(lua_state_, "fixed_simulation");
   }
 
@@ -405,6 +425,7 @@ auto ScriptingModule::OnGameplay(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
   if (lua_state_ != nullptr) {
+    const ScopedActiveFrameContext active_context(lua_state_, context);
     bindings::SetActiveEventPhase(lua_state_, "gameplay");
     input_event_bridge_.QueueActionEdgeEvents(lua_state_, context,
       input_bridge_logs_enabled_, input_bridge_log_verbosity_);
@@ -414,6 +435,8 @@ auto ScriptingModule::OnGameplay(observer_ptr<engine::FrameContext> context)
   if (!result.ok) {
     ReportHookError(context, "on_gameplay", result);
   }
+
+  CollectActiveScripts(context);
 
   const auto scene_result = RunSceneScripts(context);
   if (!scene_result.ok) {
@@ -439,6 +462,7 @@ auto ScriptingModule::OnSceneMutation(
   observer_ptr<engine::FrameContext> context) -> co::Co<>
 {
   if (lua_state_ != nullptr) {
+    const ScopedActiveFrameContext active_context(lua_state_, context);
     bindings::SetActiveEventPhase(lua_state_, "scene_mutation");
   }
 
@@ -471,6 +495,7 @@ auto ScriptingModule::OnFrameEnd(observer_ptr<engine::FrameContext> context)
   -> void
 {
   if (lua_state_ != nullptr) {
+    const ScopedActiveFrameContext active_context(lua_state_, context);
     bindings::SetActiveEventPhase(lua_state_, "frame_end");
     bindings::QueueEngineEvent(lua_state_, "frame.end", "frame_end");
   }
@@ -564,6 +589,9 @@ auto ScriptingModule::InitializeSandbox() -> ScriptExecutionResult
   luaL_openlibs(lua_state_);
   luaL_sandbox(lua_state_);
   runtime_env_ref_ = CreateRuntimeEnvironment(lua_state_);
+
+  task_queue_.StartSession();
+
   for (const auto& pack : binding_packs_) {
     if (!pack
       || !pack->Register(bindings::contracts::ScriptBindingPackContext {
@@ -623,6 +651,28 @@ auto ScriptingModule::UnregisterBindingPack(std::string_view pack_name) -> bool
   return old_size != binding_packs_.size();
 }
 
+auto ScriptingModule::SubmitMainThreadTask(
+  Task task, ScriptingSessionId session_id) -> void
+{
+  task_queue_.Submit(std::move(task), session_id);
+}
+
+auto ScriptingModule::GetSessionId() const -> ScriptingSessionId
+{
+  return task_queue_.GetSessionId();
+}
+
+auto ScriptingModule::ProcessPendingTasks() -> void
+{
+  if (lua_state_ == nullptr) {
+    return;
+  }
+
+  // Set active engine context for tasks that might need it
+  const ScopedActiveFrameContext active_context(lua_state_, nullptr);
+  task_queue_.Process(lua_state_);
+}
+
 auto ScriptingModule::InvokePhaseHook(const std::string_view hook_name,
   observer_ptr<engine::FrameContext> context) -> ScriptExecutionResult
 {
@@ -636,6 +686,11 @@ auto ScriptingModule::InvokePhaseHook(const std::string_view hook_name,
     return OkResult();
   }
   const ScopedActiveFrameContext active_context(lua_state_, context);
+
+  // Push traceback before pushing arguments to ensure safe relative indexing
+  lua_pushcfunction(lua_state_, LuaTraceback, kLuaTracebackFnName);
+  lua_insert(lua_state_, -2); // [ traceback, fn ]
+  const int traceback_index = lua_gettop(lua_state_) - 1;
 
   int arg_count = 0;
   if (context != nullptr) {
@@ -655,40 +710,33 @@ auto ScriptingModule::InvokePhaseHook(const std::string_view hook_name,
     }
   }
 
-  lua_pushcfunction(lua_state_, LuaTraceback, kLuaTracebackFnName);
-  lua_insert(lua_state_, kLuaTracebackIndex); // [ traceback, fn, args... ]
   const auto call_status
-    = lua_pcall(lua_state_, arg_count, kLuaNoResults, kLuaTracebackIndex);
+    = lua_pcall(lua_state_, arg_count, kLuaNoResults, traceback_index);
   if (call_status != LUA_OK) {
     const auto error_message = LuaToString(lua_state_, kLuaStackTop);
-    lua_pop(lua_state_, kLuaErrorAndTracebackCount); // error + traceback
+    lua_pop(lua_state_, 2); // error + traceback
     return ErrorResult("phase_hook", error_message);
   }
-  lua_pop(lua_state_, kLuaSingleValueCount); // traceback
+  lua_remove(lua_state_, traceback_index); // traceback
 
   return OkResult();
 }
 
-auto ScriptingModule::RunSceneScripts(
-  observer_ptr<engine::FrameContext> context) -> ScriptExecutionResult
+auto ScriptingModule::CollectActiveScripts(
+  observer_ptr<engine::FrameContext> context) -> void
 {
-  if (lua_state_ == nullptr) {
-    return ErrorResult("runtime", "lua state is null");
-  }
-  if (context == nullptr) {
-    return OkResult();
+  active_frame_slots_.clear();
+
+  if (lua_state_ == nullptr || context == nullptr) {
+    CleanupStaleSlotRuntimes({});
+    return;
   }
 
   const auto scene = context->GetScene();
   if (scene == nullptr) {
     CleanupStaleSlotRuntimes({});
-    return OkResult();
+    return;
   }
-
-  using seconds_f = std::chrono::duration<float>;
-  const float dt_seconds
-    = std::chrono::duration_cast<seconds_f>(context->GetGameDeltaTime().get())
-        .count();
 
   std::unordered_set<SlotRuntimeKey, SlotRuntimeKeyHash> active_keys;
   auto traversal = scene->Traverse();
@@ -702,6 +750,7 @@ auto ScriptingModule::RunSceneScripts(
       if (!node.has_value()) {
         return scene::VisitResult::kContinue;
       }
+      // Redundant check due to filter, but safe
       if (!node->HasScripting()) {
         return scene::VisitResult::kContinue;
       }
@@ -720,7 +769,6 @@ auto ScriptingModule::RunSceneScripts(
           .node_handle = node->GetHandle(),
           .slot_index = static_cast<uint32_t>(i),
         };
-        active_keys.insert(key);
 
         auto& runtime = slot_runtimes_[key];
         if (runtime.executable != slot.Executable()) {
@@ -743,24 +791,75 @@ auto ScriptingModule::RunSceneScripts(
           }
         }
 
-        const auto gameplay_result
-          = ExecuteSlotGameplay(key, runtime, *node, slot, context, dt_seconds);
-        if (!gameplay_result.ok) {
-          const auto msg = std::string("script slot on_gameplay failed [")
-                             .append(gameplay_result.stage)
-                             .append("]: ")
-                             .append(gameplay_result.message);
-          LOG_SCOPE_F(ERROR, "Script Slot Error");
-          LOG_F(ERROR, "    stage: {}", gameplay_result.stage);
-          LOG_F(ERROR, "  message: {}", gameplay_result.message);
-          ReportError(context, msg);
-        }
+        active_keys.insert(key);
+        active_frame_slots_.push_back(ActiveScriptSlot { .key = key });
       }
 
       return scene::VisitResult::kContinue;
-    });
+    },
+    scene::TraversalOrder::kPreOrder, ScriptingNodeFilter {});
 
   CleanupStaleSlotRuntimes(active_keys);
+}
+
+auto ScriptingModule::RunSceneScripts(
+  observer_ptr<engine::FrameContext> context) -> ScriptExecutionResult
+{
+  if (lua_state_ == nullptr) {
+    return ErrorResult("runtime", "lua state is null");
+  }
+  if (context == nullptr) {
+    return OkResult();
+  }
+
+  const auto scene = context->GetScene();
+  if (scene == nullptr) {
+    return OkResult();
+  }
+
+  using seconds_f = std::chrono::duration<float>;
+  const float dt_seconds
+    = std::chrono::duration_cast<seconds_f>(context->GetGameDeltaTime().get())
+        .count();
+
+  for (const auto& slot_info : active_frame_slots_) {
+    // Re-validate node existence (handle safety)
+    auto node = scene->GetNode(slot_info.key.node_handle);
+    if (!node.has_value() || !node->HasScripting()) {
+      continue;
+    }
+
+    auto scripting = node->GetScripting();
+    const auto slots = scripting.Slots();
+    if (slot_info.key.slot_index >= slots.size()) {
+      continue;
+    }
+
+    const auto& slot = slots[slot_info.key.slot_index];
+    if (slot.IsDisabled()) {
+      continue;
+    }
+
+    // Runtime should exist because CollectActiveScripts ensured it
+    auto it = slot_runtimes_.find(slot_info.key);
+    if (it == slot_runtimes_.end()) {
+      continue;
+    }
+
+    const auto gameplay_result = ExecuteSlotGameplay(
+      slot_info.key, it->second, *node, slot, context, dt_seconds);
+    if (!gameplay_result.ok) {
+      const auto msg = std::string("script slot on_gameplay failed [")
+                         .append(gameplay_result.stage)
+                         .append("]: ")
+                         .append(gameplay_result.message);
+      LOG_SCOPE_F(ERROR, "Script Slot Error");
+      LOG_F(ERROR, "    stage: {}", gameplay_result.stage);
+      LOG_F(ERROR, "  message: {}", gameplay_result.message);
+      ReportError(context, msg);
+    }
+  }
+
   return OkResult();
 }
 
@@ -776,7 +875,6 @@ auto ScriptingModule::RunSceneMutationScripts(
 
   const auto scene = context->GetScene();
   if (scene == nullptr) {
-    CleanupStaleSlotRuntimes({});
     return OkResult();
   }
 
@@ -785,77 +883,43 @@ auto ScriptingModule::RunSceneMutationScripts(
     = std::chrono::duration_cast<seconds_f>(context->GetGameDeltaTime().get())
         .count();
 
-  std::unordered_set<SlotRuntimeKey, SlotRuntimeKeyHash> active_keys;
-  auto traversal = scene->Traverse();
-  [[maybe_unused]] const auto traversal_result = traversal.Traverse(
-    [&](const auto& visited_node, const bool dry_run) -> scene::VisitResult {
-      if (dry_run || visited_node.node_impl == nullptr) {
-        return scene::VisitResult::kContinue;
-      }
+  for (const auto& slot_info : active_frame_slots_) {
+    // Re-validate node existence (handle safety)
+    auto node = scene->GetNode(slot_info.key.node_handle);
+    if (!node.has_value() || !node->HasScripting()) {
+      continue;
+    }
 
-      auto node = scene->GetNode(visited_node.handle);
-      if (!node.has_value()) {
-        return scene::VisitResult::kContinue;
-      }
-      if (!node->HasScripting()) {
-        return scene::VisitResult::kContinue;
-      }
+    auto scripting = node->GetScripting();
+    const auto slots = scripting.Slots();
+    if (slot_info.key.slot_index >= slots.size()) {
+      continue;
+    }
 
-      auto scripting = node->GetScripting();
-      const auto slots = scripting.Slots();
-      for (size_t i = 0; i < slots.size(); ++i) {
-        const auto& slot = slots[i];
-        if (slot.State()
-            != scene::ScriptingComponent::Slot::CompileState::kReady
-          || slot.IsDisabled() || slot.Executable() == nullptr) {
-          continue;
-        }
+    const auto& slot = slots[slot_info.key.slot_index];
+    if (slot.IsDisabled()) {
+      continue;
+    }
 
-        SlotRuntimeKey key {
-          .node_handle = node->GetHandle(),
-          .slot_index = static_cast<uint32_t>(i),
-        };
-        active_keys.insert(key);
+    auto it = slot_runtimes_.find(slot_info.key);
+    if (it == slot_runtimes_.end()) {
+      continue;
+    }
 
-        auto& runtime = slot_runtimes_[key];
-        if (runtime.executable != slot.Executable()) {
-          DestroySlotRuntime(runtime);
-          runtime.executable = slot.Executable();
-          const auto init_result = RebuildSlotRuntime(key, runtime, slot);
-          if (!init_result.ok && !runtime.reported_initialization_error) {
-            runtime.reported_initialization_error = true;
-            const auto msg = std::string("script slot initialization failed [")
-                               .append(init_result.stage)
-                               .append("]: ")
-                               .append(init_result.message);
-            LOG_SCOPE_F(ERROR, "Script Init Error");
-            LOG_F(ERROR, "    stage: {}", init_result.stage);
-            LOG_F(ERROR, "  message: {}", init_result.message);
-            ReportError(context, msg);
-          }
-          if (!init_result.ok) {
-            continue;
-          }
-        }
+    const auto mutation_result = ExecuteSlotSceneMutation(
+      slot_info.key, it->second, *node, slot, context, dt_seconds);
+    if (!mutation_result.ok) {
+      const auto msg = std::string("script slot on_scene_mutation failed [")
+                         .append(mutation_result.stage)
+                         .append("]: ")
+                         .append(mutation_result.message);
+      LOG_SCOPE_F(ERROR, "Script Slot Error");
+      LOG_F(ERROR, "    stage: {}", mutation_result.stage);
+      LOG_F(ERROR, "  message: {}", mutation_result.message);
+      ReportError(context, msg);
+    }
+  }
 
-        const auto mutation_result = ExecuteSlotSceneMutation(
-          key, runtime, *node, slot, context, dt_seconds);
-        if (!mutation_result.ok) {
-          const auto msg = std::string("script slot on_scene_mutation failed [")
-                             .append(mutation_result.stage)
-                             .append("]: ")
-                             .append(mutation_result.message);
-          LOG_SCOPE_F(ERROR, "Script Slot Error");
-          LOG_F(ERROR, "    stage: {}", mutation_result.stage);
-          LOG_F(ERROR, "  message: {}", mutation_result.message);
-          ReportError(context, msg);
-        }
-      }
-
-      return scene::VisitResult::kContinue;
-    });
-
-  CleanupStaleSlotRuntimes(active_keys);
   return OkResult();
 }
 
@@ -890,21 +954,26 @@ auto ScriptingModule::ExecuteSlotGameplay(const SlotRuntimeKey& key,
       "slot_binding", "on_gameplay entry point is not callable");
   }
 
-  bindings::LuaSlotExecutionContext invocation_context { .node = node,
-    .slot = &slot };
+  // Push traceback before args
+  lua_pushcfunction(lua_state_, LuaTraceback, kLuaTracebackFnName);
+  lua_insert(lua_state_, -2); // [ traceback, fn ]
+  const int traceback_index = lua_gettop(lua_state_) - 1;
+
+  bindings::LuaSlotExecutionContext invocation_context {
+    .node_handle = node.GetHandle(), .slot = &slot
+  };
   bindings::PushScriptContext(lua_state_, &invocation_context, dt_seconds);
   lua_pushnumber(lua_state_, dt_seconds);
 
-  lua_pushcfunction(lua_state_, LuaTraceback, kLuaTracebackFnName);
-  lua_insert(lua_state_, kLuaTracebackIndex); // [ traceback, fn, ctx, dt ]
-  const auto call_status = lua_pcall(lua_state_, 2, kLuaNoResults, 1);
+  const auto call_status
+    = lua_pcall(lua_state_, 2, kLuaNoResults, traceback_index);
   if (call_status != LUA_OK) {
     const auto error_message = LuaToString(lua_state_, kLuaStackTop);
-    lua_pop(lua_state_, kLuaErrorAndTracebackCount); // error + traceback
+    lua_pop(lua_state_, 2); // error + traceback
     return ErrorResult("slot_runtime", error_message);
   }
 
-  lua_pop(lua_state_, kLuaSingleValueCount); // traceback
+  lua_remove(lua_state_, traceback_index); // traceback
   return OkResult();
 }
 
@@ -939,21 +1008,26 @@ auto ScriptingModule::ExecuteSlotSceneMutation(const SlotRuntimeKey& key,
       "slot_binding", "on_scene_mutation entry point is not callable");
   }
 
-  bindings::LuaSlotExecutionContext invocation_context { .node = node,
-    .slot = &slot };
+  // Push traceback before args
+  lua_pushcfunction(lua_state_, LuaTraceback, kLuaTracebackFnName);
+  lua_insert(lua_state_, -2); // [ traceback, fn ]
+  const int traceback_index = lua_gettop(lua_state_) - 1;
+
+  bindings::LuaSlotExecutionContext invocation_context {
+    .node_handle = node.GetHandle(), .slot = &slot
+  };
   bindings::PushScriptContext(lua_state_, &invocation_context, dt_seconds);
   lua_pushnumber(lua_state_, dt_seconds);
 
-  lua_pushcfunction(lua_state_, LuaTraceback, kLuaTracebackFnName);
-  lua_insert(lua_state_, kLuaTracebackIndex); // [ traceback, fn, ctx, dt ]
-  const auto call_status = lua_pcall(lua_state_, 2, kLuaNoResults, 1);
+  const auto call_status
+    = lua_pcall(lua_state_, 2, kLuaNoResults, traceback_index);
   if (call_status != LUA_OK) {
     const auto error_message = LuaToString(lua_state_, kLuaStackTop);
-    lua_pop(lua_state_, kLuaErrorAndTracebackCount); // error + traceback
+    lua_pop(lua_state_, 2); // error + traceback
     return ErrorResult("slot_runtime", error_message);
   }
 
-  lua_pop(lua_state_, kLuaSingleValueCount); // traceback
+  lua_remove(lua_state_, traceback_index); // traceback
   return OkResult();
 }
 
