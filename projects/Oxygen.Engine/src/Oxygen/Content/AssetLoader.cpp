@@ -305,6 +305,7 @@ void AssetLoader::Stop()
 
   resource_key_by_hash_.clear();
   asset_key_by_hash_.clear();
+  asset_source_id_by_hash_.clear();
   eviction_subscribers_.clear();
   eviction_alive_token_.reset();
 }
@@ -396,6 +397,7 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
     FlushResourceEvictionsForUncachedMappings(EvictionReason::kClear, true);
     resource_key_by_hash_.clear();
     asset_key_by_hash_.clear();
+    asset_source_id_by_hash_.clear();
   };
 
   for (size_t source_index = 0; source_index < impl_->sources.size();
@@ -485,6 +487,7 @@ auto AssetLoader::ClearMounts() -> void
 
   resource_key_by_hash_.clear();
   asset_key_by_hash_.clear();
+  asset_source_id_by_hash_.clear();
   // Dependency graphs are keyed by AssetKey/ResourceKey from mounted sources.
   // Clearing mounts invalidates those identities; drop all edges to avoid
   // stale dependencies leaking into subsequent loads.
@@ -750,12 +753,20 @@ auto AssetLoader::GetHydratedScriptSlots(const data::SceneAsset& scene_asset,
   }
 
   std::optional<uint16_t> source_id;
-  for (const auto candidate_source_id : impl_->source_ids) {
-    if (HashAssetKey(scene_key, candidate_source_id) == *scene_hash_key) {
-      source_id = candidate_source_id;
-      break;
+  if (const auto source_id_it = asset_source_id_by_hash_.find(*scene_hash_key);
+    source_id_it != asset_source_id_by_hash_.end()) {
+    source_id = source_id_it->second;
+  }
+
+  if (!source_id.has_value()) {
+    for (const auto candidate_source_id : impl_->source_ids) {
+      if (HashAssetKey(scene_key, candidate_source_id) == *scene_hash_key) {
+        source_id = candidate_source_id;
+        break;
+      }
     }
   }
+
   if (!source_id.has_value()) {
     LOG_F(ERROR, "script slot hydration skipped: source id not resolved");
     return hydrated_slots;
@@ -1736,6 +1747,7 @@ auto AssetLoader::LoadMaterialAssetAsyncImpl(
 
       if (content_cache_.Store(hash_key, decoded)) {
         asset_key_by_hash_.insert_or_assign(hash_key, key);
+        asset_source_id_by_hash_.insert_or_assign(hash_key, source_id);
         // Keep one loader-owned cache retain; load caller gets its own retain.
         content_cache_.Touch(hash_key);
       }
@@ -2158,6 +2170,7 @@ auto AssetLoader::LoadGeometryAssetAsyncImpl(
       // Store the fully published asset.
       if (content_cache_.Store(hash_key, decoded)) {
         asset_key_by_hash_.insert_or_assign(hash_key, key);
+        asset_source_id_by_hash_.insert_or_assign(hash_key, source_id);
         // Keep one loader-owned cache retain; load caller gets its own retain.
         content_cache_.Touch(hash_key);
       }
@@ -2345,6 +2358,7 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(
       // register dependency edges.
       if (content_cache_.Store(hash_key, decoded)) {
         asset_key_by_hash_.insert_or_assign(hash_key, key);
+        asset_source_id_by_hash_.insert_or_assign(hash_key, source_id);
         // Keep one loader-owned cache retain; load caller gets its own retain.
         content_cache_.Touch(hash_key);
       }
@@ -2484,6 +2498,7 @@ auto AssetLoader::LoadScriptAssetAsyncImpl(
 
       if (content_cache_.Store(hash_key, decoded)) {
         asset_key_by_hash_.insert_or_assign(hash_key, key);
+        asset_source_id_by_hash_.insert_or_assign(hash_key, source_id);
         // Baseline pinning: retain one loader-owned checkout.
         content_cache_.Touch(hash_key);
       }
@@ -2570,6 +2585,7 @@ auto AssetLoader::LoadInputActionAssetAsyncImpl(
 
       if (content_cache_.Store(hash_key, decoded)) {
         asset_key_by_hash_.insert_or_assign(hash_key, key);
+        asset_source_id_by_hash_.insert_or_assign(hash_key, source_id);
         // Baseline pinning: retain one loader-owned checkout.
         content_cache_.Touch(hash_key);
       }
@@ -2723,6 +2739,7 @@ auto AssetLoader::LoadInputMappingContextAssetAsyncImpl(
 
       if (content_cache_.Store(hash_key, decoded)) {
         asset_key_by_hash_.insert_or_assign(hash_key, key);
+        asset_source_id_by_hash_.insert_or_assign(hash_key, source_id);
         // Baseline pinning: retain one loader-owned checkout.
         content_cache_.Touch(hash_key);
       }
@@ -3192,6 +3209,7 @@ void oxygen::content::AssetLoader::UnloadObject(const uint64_t cache_key,
 
     event.asset_key = it->second;
     asset_key_by_hash_.erase(it);
+    asset_source_id_by_hash_.erase(cache_key);
     LOG_F(2, "Evicted asset {} type_id={} reason={}",
       data::to_string(*event.asset_key), type_id, reason);
   }
