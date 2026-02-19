@@ -713,15 +713,37 @@ auto PakFile::ReadScriptParamRecords(const data::pak::OffsetT absolute_offset,
   const uint32_t count) const -> std::vector<data::pak::ScriptParamRecord>
 {
   std::vector<data::pak::ScriptParamRecord> result;
-  result.reserve(count);
-
   if (count == 0) {
     return result;
   }
 
   std::scoped_lock lock(mutex_);
   constexpr auto kRecordSize = sizeof(data::pak::ScriptParamRecord);
+
+  if (count > (std::numeric_limits<uint64_t>::max)() / kRecordSize) {
+    throw std::runtime_error("Script parameter array byte size overflow");
+  }
+
   const auto total_bytes = static_cast<uint64_t>(count) * kRecordSize;
+
+  const auto stream_size_result = meta_stream_->Size();
+  if (!stream_size_result) {
+    throw std::runtime_error("Failed to query script parameter stream size");
+  }
+
+  const auto stream_size_u64
+    = static_cast<uint64_t>(stream_size_result.value());
+  if (absolute_offset > stream_size_u64
+    || total_bytes > stream_size_u64 - absolute_offset) {
+    throw std::runtime_error("Script parameter array range out of bounds");
+  }
+
+  if (total_bytes
+    > static_cast<uint64_t>((std::numeric_limits<size_t>::max)())) {
+    throw std::runtime_error("Script parameter array exceeds addressable size");
+  }
+
+  result.reserve(count);
 
   if (const auto seek_res
     = meta_stream_->Seek(static_cast<size_t>(absolute_offset));

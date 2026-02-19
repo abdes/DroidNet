@@ -326,8 +326,32 @@ auto AssetLoader::AddPakFile(const std::filesystem::path& path) -> void
     it != impl_->pak_paths.end()) {
     const auto existing_id
       = static_cast<uint16_t>(std::distance(impl_->pak_paths.begin(), it));
-    LOG_F(INFO, "PAK already mounted: id={} path={}", existing_id,
-      normalized.string());
+    const auto source_index = static_cast<size_t>(existing_id);
+
+    auto refreshed_source = std::make_unique<internal::PakFileSource>(
+      normalized, verify_content_hashes_);
+
+    LOG_F(INFO,
+      "Refreshing mounted PAK content source: id={} path={} (reloading pak)",
+      existing_id, normalized.string());
+    impl_->sources[source_index] = std::move(refreshed_source);
+
+    {
+      auto eviction_guard = content_cache_.OnEviction(
+        [&](const uint64_t cache_key, std::shared_ptr<void> value,
+          const TypeId type_id) {
+          static_cast<void>(value);
+          UnloadObject(cache_key, type_id, EvictionReason::kClear);
+        });
+      content_cache_.Clear();
+    }
+    FlushResourceEvictionsForUncachedMappings(EvictionReason::kClear, true);
+
+    resource_key_by_hash_.clear();
+    asset_key_by_hash_.clear();
+    asset_source_id_by_hash_.clear();
+    asset_dependencies_.clear();
+    resource_dependencies_.clear();
     return;
   }
 
