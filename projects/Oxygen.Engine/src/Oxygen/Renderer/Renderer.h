@@ -506,6 +506,7 @@ private:
   std::unordered_map<ViewId, std::uint64_t> last_atmo_generation_;
   std::unordered_map<ViewId, frame::SequenceNumber> last_seen_view_frame_seq_;
   bool sky_capture_requested_ { false };
+
 };
 
 } // namespace oxygen::engine
