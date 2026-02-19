@@ -652,4 +652,47 @@ auto DispatchEventsForPhase(lua_State* state, const std::string_view phase_name)
   return status;
 }
 
+auto ShutdownEventsRuntime(lua_State* state) -> void
+{
+  if (state == nullptr) {
+    return;
+  }
+
+  lua_getfield(state, LUA_REGISTRYINDEX, kEventsRuntimeFieldName);
+  auto* runtime = static_cast<EventRuntime*>(lua_touserdata(state, -1));
+  if (runtime == nullptr) {
+    lua_pop(state, 1);
+    return;
+  }
+
+  for (auto& [event_name_ignored, phase_map] : runtime->buckets) {
+    (void)event_name_ignored;
+    for (auto& [phase_name_ignored, bucket] : phase_map) {
+      (void)phase_name_ignored;
+      for (auto& listener : bucket.listeners) {
+        if (IsValidLuaRef(listener.callback_ref)) {
+          lua_unref(state, listener.callback_ref);
+          listener.callback_ref = kLuaNoRef;
+        }
+      }
+    }
+  }
+
+  for (auto& queued : runtime->queue) {
+    if (IsValidLuaRef(queued.payload_ref)) {
+      lua_unref(state, queued.payload_ref);
+      queued.payload_ref = kLuaNoRef;
+    }
+  }
+
+  lua_pushnil(state);
+  lua_setfield(state, LUA_REGISTRYINDEX, kEventsRuntimeFieldName);
+
+  lua_pushnil(state);
+  lua_setmetatable(state, -2);
+
+  std::destroy_at(runtime);
+  lua_pop(state, 1);
+}
+
 } // namespace oxygen::scripting::bindings
