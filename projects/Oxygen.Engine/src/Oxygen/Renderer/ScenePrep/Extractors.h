@@ -72,12 +72,19 @@ static_assert(RenderItemDataExtractor<decltype(ExtractionPreFilter)>);
 //! Resolve or allocate stable transform handle (after pre-filter flags).
 /*! Allocates a stable handle in TransformManager for the item's world
     transform and stores it on the prototype for downstream use. */
-inline auto TransformResolveStage(const ScenePrepContext& /*ctx*/,
+inline auto TransformResolveStage(const ScenePrepContext& ctx,
   const ScenePrepState& state, RenderItemProto& item) noexcept -> void
 {
   if (item.IsDropped()) {
     return;
   }
+  // Fix for double allocation: Only resolve transforms during View-Phase.
+  // This prevents allocating a "ghost" slot during Frame-Phase that is never
+  // used.
+  if (!ctx.HasView()) {
+    return;
+  }
+
   // Integrate TransformUploader: assign deduplicated handle for world
   // transform.
   auto uploader = state.GetTransformUploader();
