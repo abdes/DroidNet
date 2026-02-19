@@ -20,6 +20,8 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/InputActionAsset.h>
+#include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -229,6 +231,18 @@ public:
     -> std::shared_ptr<data::ScriptAsset>
     = 0;
 
+  //! Get cached input action asset without triggering a load.
+  [[nodiscard]] virtual auto GetInputActionAsset(
+    const data::AssetKey& key) const noexcept
+    -> std::shared_ptr<data::InputActionAsset>
+    = 0;
+
+  //! Get cached input mapping context asset without triggering a load.
+  [[nodiscard]] virtual auto GetInputMappingContextAsset(
+    const data::AssetKey& key) const noexcept
+    -> std::shared_ptr<data::InputMappingContextAsset>
+    = 0;
+
   //! Hydrate script slots for one scripting component from the scene source.
   [[nodiscard]] virtual auto GetHydratedScriptSlots(
     const data::SceneAsset& scene_asset,
@@ -256,6 +270,16 @@ public:
 
   //! Check whether a script asset is cached.
   [[nodiscard]] virtual auto HasScriptAsset(
+    const data::AssetKey& key) const noexcept -> bool
+    = 0;
+
+  //! Check whether an input action asset is cached.
+  [[nodiscard]] virtual auto HasInputActionAsset(
+    const data::AssetKey& key) const noexcept -> bool
+    = 0;
+
+  //! Check whether an input mapping context asset is cached.
+  [[nodiscard]] virtual auto HasInputMappingContextAsset(
     const data::AssetKey& key) const noexcept -> bool
     = 0;
 

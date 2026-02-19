@@ -569,6 +569,20 @@ public:
     return GetAsset<data::ScriptAsset>(key);
   }
 
+  [[nodiscard]] auto GetInputActionAsset(
+    const data::AssetKey& key) const noexcept
+    -> std::shared_ptr<data::InputActionAsset> override
+  {
+    return GetAsset<data::InputActionAsset>(key);
+  }
+
+  [[nodiscard]] auto GetInputMappingContextAsset(
+    const data::AssetKey& key) const noexcept
+    -> std::shared_ptr<data::InputMappingContextAsset> override
+  {
+    return GetAsset<data::InputMappingContextAsset>(key);
+  }
+
   [[nodiscard]] OXGN_CNTT_API auto GetHydratedScriptSlots(
     const data::SceneAsset& scene_asset,
     const data::pak::ScriptingComponentRecord& component) const
@@ -600,6 +614,18 @@ public:
     -> bool override
   {
     return HasAsset<data::ScriptAsset>(key);
+  }
+
+  [[nodiscard]] auto HasInputActionAsset(
+    const data::AssetKey& key) const noexcept -> bool override
+  {
+    return HasAsset<data::InputActionAsset>(key);
+  }
+
+  [[nodiscard]] auto HasInputMappingContextAsset(
+    const data::AssetKey& key) const noexcept -> bool override
+  {
+    return HasAsset<data::InputMappingContextAsset>(key);
   }
 
   //! Get cached resource without loading
