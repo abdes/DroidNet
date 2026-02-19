@@ -25,6 +25,7 @@ namespace {
   constexpr console::CommandContext kLuaConsoleContext {
     .source = console::CommandSource::kAutomation,
     .shipping_build = false,
+    .record_history = false,
   };
 
   enum class LuaLogLevel : uint8_t {

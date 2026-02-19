@@ -38,6 +38,25 @@ NOLINT_TEST(ConsoleHistory, DoesNotRecordDuplicateConsecutiveLines)
   EXPECT_EQ(entries[0], "help");
 }
 
+NOLINT_TEST(ConsoleHistory, CanSkipHistoryRecordingPerContext)
+{
+  Console console {};
+  EXPECT_EQ(console.Execute("help").status, ExecutionStatus::kOk);
+  EXPECT_EQ(console
+              .Execute("list commands",
+                oxygen::console::CommandContext {
+                  .source = oxygen::console::CommandSource::kAutomation,
+                  .shipping_build = false,
+                  .record_history = false,
+                })
+              .status,
+    ExecutionStatus::kOk);
+
+  const auto& entries = console.GetHistory().Entries();
+  ASSERT_EQ(entries.size(), 1);
+  EXPECT_EQ(entries[0], "help");
+}
+
 NOLINT_TEST(ConsoleHistory, RespectsCapacity)
 {
   // Minimum capacity is enforced as 32 in History.cpp

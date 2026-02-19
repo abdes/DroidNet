@@ -42,6 +42,7 @@ enum class ExecutionStatus : uint8_t {
 struct CommandContext {
   CommandSource source { CommandSource::kLocalConsole };
   bool shipping_build { false };
+  bool record_history { true };
 };
 
 struct ExecutionResult {
