@@ -507,21 +507,7 @@ auto GroundGridPass::UpdatePassConstants() -> void
   FillConstantBuffer(constants);
   ComputeGridOffset(constants);
 
-  // 4. Log Once (Diagnostic)
-  static std::atomic<bool> logged_once { false };
-  if (!logged_once.exchange(true)) {
-    LOG_F(INFO,
-      "GroundGridPass: UpdatePassConstants spacing={} major_every={} "
-      "line_thickness={} major_thickness={} minor_color=({}, {}, {}, {}) "
-      "major_color=({}, {}, {}, {})",
-      constants.spacing, static_cast<uint32_t>(constants.major_every),
-      constants.line_thickness, constants.major_thickness,
-      constants.minor_color.r, constants.minor_color.g, constants.minor_color.b,
-      constants.minor_color.a, constants.major_color.r, constants.major_color.g,
-      constants.major_color.b, constants.major_color.a);
-  }
-
-  // 5. Upload
+  // 4. Upload
   std::memcpy(pass_constants_mapped_ptr_, &constants, sizeof(constants));
 }
 
