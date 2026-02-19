@@ -44,8 +44,8 @@ namespace {
 auto PushTextureResource(lua_State* state, const content::ResourceKey key,
   std::shared_ptr<const data::TextureResource> resource) -> int
 {
-  void* const userdata_mem
-    = lua_newuserdata(state, sizeof(TextureResourceUserdata));
+  void* const userdata_mem = lua_newuserdatatagged(
+    state, sizeof(TextureResourceUserdata), kTagTextureResource);
   auto* userdata = new (userdata_mem) TextureResourceUserdata();
   userdata->key = key;
   userdata->resource = std::move(resource);
@@ -57,8 +57,8 @@ auto PushTextureResource(lua_State* state, const content::ResourceKey key,
 auto PushBufferResource(lua_State* state, const content::ResourceKey key,
   std::shared_ptr<const data::BufferResource> resource) -> int
 {
-  void* const userdata_mem
-    = lua_newuserdata(state, sizeof(BufferResourceUserdata));
+  void* const userdata_mem = lua_newuserdatatagged(
+    state, sizeof(BufferResourceUserdata), kTagBufferResource);
   auto* userdata = new (userdata_mem) BufferResourceUserdata();
   userdata->key = key;
   userdata->resource = std::move(resource);
@@ -70,7 +70,8 @@ auto PushBufferResource(lua_State* state, const content::ResourceKey key,
 auto PushMaterialAsset(
   lua_State* state, std::shared_ptr<const data::MaterialAsset> asset) -> int
 {
-  void* const userdata_mem = lua_newuserdata(state, sizeof(AssetUserdata));
+  void* const userdata_mem
+    = lua_newuserdatatagged(state, sizeof(AssetUserdata), kTagAsset);
   auto* userdata = new (userdata_mem) AssetUserdata();
   userdata->kind = AssetUserdataKind::kMaterial;
   userdata->material = std::move(asset);
@@ -82,7 +83,8 @@ auto PushMaterialAsset(
 auto PushGeometryAsset(
   lua_State* state, std::shared_ptr<const data::GeometryAsset> asset) -> int
 {
-  void* const userdata_mem = lua_newuserdata(state, sizeof(AssetUserdata));
+  void* const userdata_mem
+    = lua_newuserdatatagged(state, sizeof(AssetUserdata), kTagAsset);
   auto* userdata = new (userdata_mem) AssetUserdata();
   userdata->kind = AssetUserdataKind::kGeometry;
   userdata->geometry = std::move(asset);
@@ -94,7 +96,8 @@ auto PushGeometryAsset(
 auto PushScriptAsset(
   lua_State* state, std::shared_ptr<const data::ScriptAsset> asset) -> int
 {
-  void* const userdata_mem = lua_newuserdata(state, sizeof(AssetUserdata));
+  void* const userdata_mem
+    = lua_newuserdatatagged(state, sizeof(AssetUserdata), kTagAsset);
   auto* userdata = new (userdata_mem) AssetUserdata();
   userdata->kind = AssetUserdataKind::kScript;
   userdata->script = std::move(asset);
@@ -106,7 +109,8 @@ auto PushScriptAsset(
 auto PushInputActionAsset(
   lua_State* state, std::shared_ptr<const data::InputActionAsset> asset) -> int
 {
-  void* const userdata_mem = lua_newuserdata(state, sizeof(AssetUserdata));
+  void* const userdata_mem
+    = lua_newuserdatatagged(state, sizeof(AssetUserdata), kTagAsset);
   auto* userdata = new (userdata_mem) AssetUserdata();
   userdata->kind = AssetUserdataKind::kInputAction;
   userdata->input_action = std::move(asset);
@@ -118,7 +122,8 @@ auto PushInputActionAsset(
 auto PushInputMappingContextAsset(lua_State* state,
   std::shared_ptr<const data::InputMappingContextAsset> asset) -> int
 {
-  void* const userdata_mem = lua_newuserdata(state, sizeof(AssetUserdata));
+  void* const userdata_mem
+    = lua_newuserdatatagged(state, sizeof(AssetUserdata), kTagAsset);
   auto* userdata = new (userdata_mem) AssetUserdata();
   userdata->kind = AssetUserdataKind::kInputMappingContext;
   userdata->input_mapping_context = std::move(asset);

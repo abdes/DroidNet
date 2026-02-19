@@ -131,6 +131,9 @@ DemoShell::~DemoShell() noexcept
   }
 
   try {
+    impl_->scene_control.ClearScene();
+    impl_->skybox_service.reset();
+    impl_->skybox_service_scene = nullptr;
     impl_->panel_registry.ClearActivePanel();
   } catch (const std::exception& ex) {
     LOG_F(ERROR, "OnUnloaded threw: {}", ex.what());

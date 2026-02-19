@@ -44,11 +44,9 @@ namespace {
     return phase == "scene_mutation" || phase == "frame_start";
   }
 
-  auto SceneNodeGc(lua_State* state) -> int
+  auto SceneNodeDtor(lua_State* /*state*/, void* data) -> void
   {
-    auto* ud = static_cast<SceneNodeUserdata*>(lua_touserdata(state, 1));
-    ud->node.~SceneNode();
-    return 0;
+    static_cast<SceneNodeUserdata*>(data)->~SceneNodeUserdata();
   }
 
   auto SceneNodeToString(lua_State* state) -> int
@@ -575,8 +573,7 @@ namespace {
 auto RegisterSceneNodeMetatable(lua_State* state) -> void
 {
   luaL_newmetatable(state, kSceneNodeMetatable);
-  lua_pushcfunction(state, SceneNodeGc, "__gc");
-  lua_setfield(state, -2, "__gc");
+  lua_setuserdatadtor(state, kTagSceneNode, SceneNodeDtor);
 
   lua_pushcfunction(state, SceneNodeToString, "__tostring");
   lua_setfield(state, -2, "__tostring");
@@ -639,7 +636,8 @@ auto CheckSceneNode(lua_State* state, const int index) -> scene::SceneNode*
 
 auto PushSceneNode(lua_State* state, scene::SceneNode node) -> int
 {
-  void* data = lua_newuserdata(state, sizeof(SceneNodeUserdata));
+  void* data
+    = lua_newuserdatatagged(state, sizeof(SceneNodeUserdata), kTagSceneNode);
   new (data) SceneNodeUserdata { std::move(node) };
 
   if (luaL_getmetatable(state, kSceneNodeMetatable) != 0) {

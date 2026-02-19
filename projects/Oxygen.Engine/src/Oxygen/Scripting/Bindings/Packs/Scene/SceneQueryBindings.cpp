@@ -14,6 +14,7 @@
 #include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneQueryBindings.h>
 
@@ -43,11 +44,9 @@ namespace {
     }
   }
 
-  auto SceneQueryGc(lua_State* state) -> int
+  auto SceneQueryDtor(lua_State* /*state*/, void* data) -> void
   {
-    auto* ud = static_cast<SceneQueryUserdata*>(lua_touserdata(state, 1));
-    ud->~SceneQueryUserdata();
-    return 0;
+    static_cast<SceneQueryUserdata*>(data)->~SceneQueryUserdata();
   }
 
   auto SceneQueryToString(lua_State* state) -> int
@@ -189,8 +188,7 @@ namespace {
 auto RegisterSceneQueryMetatable(lua_State* state) -> void
 {
   luaL_newmetatable(state, kSceneQueryMetatable);
-  lua_pushcfunction(state, SceneQueryGc, "__gc");
-  lua_setfield(state, -2, "__gc");
+  lua_setuserdatadtor(state, kTagSceneQuery, SceneQueryDtor);
   lua_pushcfunction(state, SceneQueryToString, "__tostring");
   lua_setfield(state, -2, "__tostring");
 
@@ -216,7 +214,8 @@ auto RegisterSceneQueryMetatable(lua_State* state) -> void
 auto PushSceneQuery(
   lua_State* state, scene::SceneQuery query, std::string pattern) -> int
 {
-  void* data = lua_newuserdata(state, sizeof(SceneQueryUserdata));
+  void* data
+    = lua_newuserdatatagged(state, sizeof(SceneQueryUserdata), kTagSceneQuery);
   new (data) SceneQueryUserdata {
     .query = std::move(query),
     .pattern = std::move(pattern),

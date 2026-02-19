@@ -44,7 +44,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void;
 
 auto main(int argc, char** argv) noexcept -> int
 {
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && !defined(NDEBUG)
   // Enable memory leak detection in debug mode
   _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
