@@ -291,10 +291,13 @@ auto ScriptingModule::OnShutdown() noexcept -> void
       lua_unref(lua_state_, runtime_env_ref_);
       runtime_env_ref_ = LUA_NOREF;
     }
+
     lua_close(lua_state_);
     lua_state_ = nullptr;
   }
 
+  slot_runtimes_.clear();
+  active_frame_slots_.clear();
   task_queue_.EndSession();
   binding_packs_.clear();
 }

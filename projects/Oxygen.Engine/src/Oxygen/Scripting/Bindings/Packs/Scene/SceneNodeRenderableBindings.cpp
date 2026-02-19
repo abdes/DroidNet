@@ -276,12 +276,13 @@ namespace {
       return 0;
     }
 
-    node->GetRenderable().SetGeometry(asset_user_data->geometry);
+    auto geometry = std::move(asset_user_data->geometry);
+    node->GetRenderable().SetGeometry(geometry);
     const auto handle = node->GetHandle();
     LOG_F(INFO,
       "scene.node.renderable_set_geometry(asset): geom_ptr={} scene_id={} "
       "node_index={}",
-      static_cast<const void*>(asset_user_data->geometry.get()),
+      static_cast<const void*>(geometry.get()),
       static_cast<unsigned>(handle.GetSceneId()),
       static_cast<unsigned>(handle.Index()));
     lua_pushboolean(state, 1);
@@ -519,8 +520,9 @@ namespace {
       return 0;
     }
 
+    auto material = std::move(asset_user_data->material);
     node->GetRenderable().SetMaterialOverride(
-      *lod, *submesh, asset_user_data->material);
+      *lod, *submesh, material);
     lua_pushboolean(state, 1);
     return 1;
   }
