@@ -1333,6 +1333,27 @@ auto AssetLoader::ReleaseAssetTree(const data::AssetKey& key) -> void
   auto dep_it = asset_dependencies_.find(key);
   if (dep_it != asset_dependencies_.end()) {
     for (const auto& dep_key : dep_it->second) {
+      std::optional<uint64_t> dep_hash;
+      for (const auto& [candidate_hash, candidate_key] : asset_key_by_hash_) {
+        if (candidate_key == dep_key) {
+          dep_hash = candidate_hash;
+          break;
+        }
+      }
+
+      const auto resolved_hash
+        = dep_hash.has_value() ? *dep_hash : HashAssetKey(dep_key);
+      const auto dep_checkout_count
+        = content_cache_.GetCheckoutCount(resolved_hash);
+
+      // Only recurse when this dependency is retained solely by the current
+      // dependency edge (plus its loader baseline). If it has extra retains
+      // from other dependents or direct checkouts, drop just this edge retain.
+      if (dep_checkout_count > 1U) {
+        content_cache_.CheckIn(resolved_hash);
+        continue;
+      }
+
       ReleaseAssetTree(dep_key);
     }
     asset_dependencies_.erase(dep_it);
