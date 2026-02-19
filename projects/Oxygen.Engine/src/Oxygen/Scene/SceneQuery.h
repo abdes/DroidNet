@@ -29,12 +29,12 @@ namespace detail {
 class Scene;
 
 //! ADL-compatible GetNodeName for ConstVisitedNode integration with PathMatcher
-OXGN_SCN_API [[nodiscard]] auto GetNodeName(
-  const ConstVisitedNode& visited) noexcept -> std::string_view;
+OXGN_SCN_NDAPI auto GetNodeName(const ConstVisitedNode& visited) noexcept
+  -> std::string_view;
 
 //! ADL-compatible GetDepth for ConstVisitedNode integration with PathMatcher
-OXGN_SCN_API [[nodiscard]] auto GetDepth(
-  const ConstVisitedNode& visited) noexcept -> std::size_t;
+OXGN_SCN_NDAPI auto GetDepth(const ConstVisitedNode& visited) noexcept
+  -> std::size_t;
 
 //=== Query Result Types ===--------------------------------------------------//
 
@@ -52,7 +52,7 @@ struct QueryResult {
   //! Number of nodes that matched the query criteria
   std::size_t nodes_matched = 0;
   //! Error message if operation failed (empty if successful)
-  std::optional<std::string> error_message {};
+  std::optional<std::string> error_message;
 
   //! Conversion operator for testing query operation success
   /*!
@@ -78,7 +78,7 @@ struct BatchResult {
   bool success = true;
 
   //! Per-operation results
-  std::vector<QueryResult> operation_results {};
+  std::vector<QueryResult> operation_results;
 
   //! Conversion operator for testing batch operation success
   /*!
@@ -440,20 +440,20 @@ private:
   //=== Batch Implementation Helpers ===--------------------------------------//
 
   //! Implementation for BatchFindFirst (calls coordinator)
-  OXGN_SCN_NDAPI void BatchFindFirstImpl(std::optional<SceneNode>& result,
+  OXGN_SCN_API void BatchFindFirstImpl(std::optional<SceneNode>& result,
     const QueryPredicate& predicate) const noexcept;
 
   //! Implementation for BatchCollect (calls coordinator with inserter)
-  OXGN_SCN_NDAPI void BatchCollectImpl(
+  OXGN_SCN_API void BatchCollectImpl(
     std::function<void(const SceneNode&)> inserter,
     const QueryPredicate& predicate) const noexcept;
 
   //! Implementation for BatchCount (calls coordinator)
-  OXGN_SCN_NDAPI void BatchCountImpl(std::optional<size_t>& result,
+  OXGN_SCN_API void BatchCountImpl(std::optional<size_t>& result,
     const QueryPredicate& predicate) const noexcept;
 
   //! Implementation for BatchAny (calls coordinator)
-  OXGN_SCN_NDAPI void BatchAnyImpl(std::optional<bool>& result,
+  OXGN_SCN_API void BatchAnyImpl(std::optional<bool>& result,
     const QueryPredicate& predicate) const noexcept;
 };
 
