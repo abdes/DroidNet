@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <exception>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -17,6 +18,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
+#include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneEnvironmentBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
@@ -25,6 +27,24 @@
 namespace oxygen::scripting::bindings {
 
 namespace {
+  auto IsMutationAllowedPhase(lua_State* state) -> bool
+  {
+    const auto phase = GetActiveEventPhase(state);
+    return phase == "scene_mutation" || phase == "frame_start";
+  }
+
+  auto RejectMutationOutsideScenePhase(
+    lua_State* state, const char* operation_name) -> bool
+  {
+    if (IsMutationAllowedPhase(state)) {
+      return false;
+    }
+    LOG_F(WARNING,
+      "scene.{} rejected outside scene_mutation/frame_start phase "
+      "(active_phase='{}')",
+      operation_name, GetActiveEventPhase(state));
+    return true;
+  }
 
   auto PushSceneNodeArray(
     lua_State* state, const std::vector<scene::SceneNode>& nodes) -> int
@@ -58,7 +78,20 @@ namespace {
   {
     auto* ctx = GetBindingContextFromScriptArg(state, 1);
     if ((ctx != nullptr) && (ctx->slot_context != nullptr)) {
-      return PushSceneNode(state, ctx->slot_context->node);
+      const auto& node = ctx->slot_context->node;
+      const auto handle = node.GetHandle();
+      static uint32_t s_last_scene_id = std::numeric_limits<uint32_t>::max();
+      static uint32_t s_last_node_index = std::numeric_limits<uint32_t>::max();
+      const auto scene_id = static_cast<uint32_t>(handle.GetSceneId());
+      const auto node_index = static_cast<uint32_t>(handle.Index());
+      if (scene_id != s_last_scene_id || node_index != s_last_node_index) {
+        LOG_F(INFO,
+          "scene.current_node switched: name='{}' scene_id={} node_index={}",
+          node.GetName(), scene_id, node_index);
+        s_last_scene_id = scene_id;
+        s_last_node_index = node_index;
+      }
+      return PushSceneNode(state, node);
     }
     lua_pushnil(state);
     return 1;
@@ -68,6 +101,11 @@ namespace {
 
   auto LuaSceneCreateNode(lua_State* state) -> int
   {
+    if (RejectMutationOutsideScenePhase(state, "create_node")) {
+      lua_pushnil(state);
+      return 1;
+    }
+
     size_t len = 0;
     const char* name = luaL_checklstring(state, 1, &len);
     auto scene_ref = GetScene(state);
@@ -96,23 +134,65 @@ namespace {
       lua_pushnil(state);
       return 1;
     }
+    if ((lua_gettop(state) >= 2) && !lua_isnil(state, 2)) {
+      auto* parent = CheckSceneNode(state, 2);
+      const auto p = parent->GetHandle();
+      const auto n = new_node.GetHandle();
+      LOG_F(INFO,
+        "scene.create_node child: name='{}' parent_sid={} parent_idx={} "
+        "child_sid={} child_idx={}",
+        std::string(name, len), static_cast<unsigned>(p.GetSceneId()),
+        static_cast<unsigned>(p.Index()), static_cast<unsigned>(n.GetSceneId()),
+        static_cast<unsigned>(n.Index()));
+    } else {
+      const auto n = new_node.GetHandle();
+      LOG_F(INFO, "scene.create_node root: name='{}' sid={} idx={}",
+        std::string(name, len), static_cast<unsigned>(n.GetSceneId()),
+        static_cast<unsigned>(n.Index()));
+    }
     return PushSceneNode(state, std::move(new_node));
   }
 
   auto LuaSceneDestroyNode(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
-    auto scene_ref = GetScene(state);
-    if ((scene_ref == nullptr) || !node->IsAlive()) {
+    if (RejectMutationOutsideScenePhase(state, "destroy_node")) {
       lua_pushboolean(state, 0);
       return 1;
     }
-    lua_pushboolean(state, scene_ref->DestroyNode(*node) ? 1 : 0);
+
+    auto* node = CheckSceneNode(state, 1);
+    auto scene_ref = GetScene(state);
+    if ((scene_ref == nullptr) || !node->IsAlive()) {
+      LOG_F(INFO, "scene.destroy_node rejected: scene_ref={} alive={}",
+        scene_ref != nullptr, node->IsAlive());
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    const auto handle = node->GetHandle();
+    const auto node_name = node->GetName();
+    const auto geometry_ptr
+      = static_cast<const void*>(node->GetRenderable().GetGeometry().get());
+    LOG_F(INFO,
+      "scene.destroy_node request: name='{}' scene_id={} node_index={} "
+      "geom_ptr={}",
+      node_name, static_cast<unsigned>(handle.GetSceneId()),
+      static_cast<unsigned>(handle.Index()), geometry_ptr);
+    const bool destroyed = scene_ref->DestroyNode(*node);
+    LOG_F(INFO,
+      "scene.destroy_node result: name='{}' scene_id={} node_index={} ok={}",
+      node_name, static_cast<unsigned>(handle.GetSceneId()),
+      static_cast<unsigned>(handle.Index()), destroyed);
+    lua_pushboolean(state, destroyed ? 1 : 0);
     return 1;
   }
 
   auto LuaSceneDestroyHierarchy(lua_State* state) -> int
   {
+    if (RejectMutationOutsideScenePhase(state, "destroy_hierarchy")) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+
     auto* node = CheckSceneNode(state, 1);
     auto scene_ref = GetScene(state);
     if ((scene_ref == nullptr) || !node->IsAlive()) {
@@ -125,6 +205,11 @@ namespace {
 
   auto LuaSceneReparent(lua_State* state) -> int
   {
+    if (RejectMutationOutsideScenePhase(state, "reparent")) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+
     auto* node = CheckSceneNode(state, 1);
     auto scene_ref = GetScene(state);
     if ((scene_ref == nullptr) || !node->IsAlive() || lua_isnil(state, 2)) {

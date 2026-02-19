@@ -24,6 +24,7 @@ auto QueueEngineEvent(lua_State* state, std::string_view event_name,
   std::string_view phase_name) -> void;
 
 auto SetActiveEventPhase(lua_State* state, std::string_view phase_name) -> void;
+auto GetActiveEventPhase(lua_State* state) -> std::string_view;
 
 auto DispatchEventsForPhase(lua_State* state, std::string_view phase_name)
   -> EventDispatchStatus;

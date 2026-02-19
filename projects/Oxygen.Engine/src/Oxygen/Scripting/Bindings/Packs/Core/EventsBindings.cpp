@@ -576,6 +576,15 @@ auto SetActiveEventPhase(lua_State* state, const std::string_view phase_name)
   runtime->current_phase = std::string(phase_name);
 }
 
+auto GetActiveEventPhase(lua_State* state) -> std::string_view
+{
+  auto* runtime = EnsureRuntime(state);
+  if (runtime == nullptr) {
+    return {};
+  }
+  return runtime->current_phase;
+}
+
 auto DispatchEventsForPhase(lua_State* state, const std::string_view phase_name)
   -> EventDispatchStatus
 {

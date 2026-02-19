@@ -16,6 +16,7 @@
 #include <lua.h>
 #include <lualib.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -235,7 +236,14 @@ namespace {
   auto SceneNodeRenderableDetach(lua_State* state) -> int
   {
     auto* node = CheckSceneNode(state, 1);
-    lua_pushboolean(state, node->GetRenderable().Detach() ? 1 : 0);
+    const auto handle = node->GetHandle();
+    const auto node_name = node->GetName();
+    const bool ok = node->GetRenderable().Detach();
+    LOG_F(INFO,
+      "scene.node.renderable_detach: name='{}' scene_id={} node_index={} ok={}",
+      node_name, static_cast<unsigned>(handle.GetSceneId()),
+      static_cast<unsigned>(handle.Index()), ok);
+    lua_pushboolean(state, ok ? 1 : 0);
     return 1;
   }
 
@@ -248,6 +256,12 @@ namespace {
       const std::string token(token_raw, len);
       auto geometry = GetOrCreateGeometryByToken(token);
       node->GetRenderable().SetGeometry(std::move(geometry));
+      const auto handle = node->GetHandle();
+      LOG_F(INFO,
+        "scene.node.renderable_set_geometry(token): token='{}' scene_id={} "
+        "node_index={}",
+        token, static_cast<unsigned>(handle.GetSceneId()),
+        static_cast<unsigned>(handle.Index()));
       lua_pushboolean(state, 1);
       return 1;
     }
@@ -263,6 +277,13 @@ namespace {
     }
 
     node->GetRenderable().SetGeometry(asset_user_data->geometry);
+    const auto handle = node->GetHandle();
+    LOG_F(INFO,
+      "scene.node.renderable_set_geometry(asset): geom_ptr={} scene_id={} "
+      "node_index={}",
+      static_cast<const void*>(asset_user_data->geometry.get()),
+      static_cast<unsigned>(handle.GetSceneId()),
+      static_cast<unsigned>(handle.Index()));
     lua_pushboolean(state, 1);
     return 1;
   }

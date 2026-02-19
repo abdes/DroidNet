@@ -12,8 +12,10 @@
 #include <lua.h>
 #include <lualib.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
+#include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeComponentBindings.h>
 
@@ -34,6 +36,12 @@ namespace {
       return false;
     }
     return node.GetHandle().GetSceneId() == scene_ref->GetId();
+  }
+
+  auto IsMutationAllowedPhase(lua_State* state) -> bool
+  {
+    const auto phase = GetActiveEventPhase(state);
+    return phase == "scene_mutation" || phase == "frame_start";
   }
 
   auto SceneNodeGc(lua_State* state) -> int
@@ -125,6 +133,15 @@ namespace {
 
   auto SceneNodeSetParent(lua_State* state) -> int
   {
+    if (!IsMutationAllowedPhase(state)) {
+      LOG_F(WARNING,
+        "scene.node.set_parent rejected outside scene_mutation/frame_start "
+        "phase (active_phase='{}')",
+        GetActiveEventPhase(state));
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+
     auto* node = CheckSceneNode(state, 1);
     if (!node->IsAlive()) {
       lua_pushboolean(state, 0);
@@ -250,6 +267,15 @@ namespace {
 
   auto SceneNodeDestroy(lua_State* state) -> int
   {
+    if (!IsMutationAllowedPhase(state)) {
+      LOG_F(WARNING,
+        "scene.node.destroy rejected outside scene_mutation/frame_start phase "
+        "(active_phase='{}')",
+        GetActiveEventPhase(state));
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+
     auto* node = CheckSceneNode(state, 1);
     auto scene_ref = GetScene(state);
     if (!IsNodeInActiveScene(*node, scene_ref)) {
