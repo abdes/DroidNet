@@ -42,6 +42,12 @@ public:
   [[nodiscard]] auto GetAxisThickness() -> float;
   auto SetAxisThickness(float thickness) -> void;
 
+  [[nodiscard]] auto GetSmoothMotion() -> bool;
+  auto SetSmoothMotion(bool enabled) -> void;
+
+  [[nodiscard]] auto GetSmoothTime() -> float;
+  auto SetSmoothTime(float time) -> void;
+
   [[nodiscard]] auto GetFadeStart() -> float;
   auto SetFadeStart(float distance) -> void;
 
@@ -66,7 +72,6 @@ public:
   [[nodiscard]] auto GetOriginColor() -> graphics::Color;
   auto SetOriginColor(const graphics::Color& color) -> void;
 
-
 private:
   auto Refresh() -> void;
   [[nodiscard]] auto IsStale() const -> bool;
@@ -76,6 +81,8 @@ private:
   std::uint64_t epoch_ { std::numeric_limits<std::uint64_t>::max() };
 
   bool enabled_ { true };
+  bool smooth_motion_ { true };
+  float smooth_time_ { 1.0F };
   float spacing_ { 1.0F };
   int major_every_ { 10 };
   float line_thickness_ { 0.02F };

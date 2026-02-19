@@ -23,8 +23,11 @@ namespace {
   constexpr float kMinSpacing = 1e-4F;
   constexpr float kMinThickness = 0.0F;
   constexpr float kMinFadeDistance = 0.0F;
+  constexpr float kMinSmoothTime = 0.001F;
 
   constexpr std::string_view kEnabledKey = "ground_grid.enabled";
+  constexpr std::string_view kSmoothMotionKey = "ground_grid.smooth_motion";
+  constexpr std::string_view kSmoothTimeKey = "ground_grid.smooth_time";
   constexpr std::string_view kSpacingKey = "ground_grid.spacing";
   constexpr std::string_view kMajorEveryKey = "ground_grid.major_every";
   constexpr std::string_view kLineThicknessKey = "ground_grid.line_thickness";
@@ -72,6 +75,8 @@ struct GridSettingsService::GridConfig {
   float line_thickness {};
   float major_thickness {};
   float axis_thickness {};
+  bool smooth_motion {};
+  float smooth_time {};
   float fade_start {};
   float fade_power {};
   float horizon_boost {};
@@ -194,6 +199,39 @@ auto GridSettingsService::SetAxisThickness(const float thickness) -> void
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   settings->SetFloat(kAxisThicknessKey, ClampFloat(thickness, kMinThickness));
+  epoch_++;
+}
+
+auto GridSettingsService::GetSmoothMotion() const -> bool
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  return settings->GetBool(kSmoothMotionKey)
+    .value_or(kDefaultConfig.smooth_motion);
+}
+
+auto GridSettingsService::SetSmoothMotion(const bool enabled) -> void
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  settings->SetBool(kSmoothMotionKey, enabled);
+  epoch_++;
+}
+
+auto GridSettingsService::GetSmoothTime() const -> float
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  const float value
+    = settings->GetFloat(kSmoothTimeKey).value_or(kDefaultConfig.smooth_time);
+  return ClampFloat(value, kMinSmoothTime);
+}
+
+auto GridSettingsService::SetSmoothTime(const float time) -> void
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  settings->SetFloat(kSmoothTimeKey, ClampFloat(time, kMinSmoothTime));
   epoch_++;
 }
 
@@ -422,6 +460,8 @@ auto GridSettingsService::ReadConfig() const -> GridConfig
   config.line_thickness = GetLineThickness();
   config.major_thickness = GetMajorThickness();
   config.axis_thickness = GetAxisThickness();
+  config.smooth_motion = GetSmoothMotion();
+  config.smooth_time = GetSmoothTime();
   config.fade_power = GetFadePower();
   config.horizon_boost = GetHorizonBoost();
 
@@ -459,6 +499,8 @@ auto GridSettingsService::ApplyGridConfig(const GridConfig& config) -> void
   pass_config.line_thickness = config.line_thickness;
   pass_config.major_thickness = config.major_thickness;
   pass_config.axis_thickness = config.axis_thickness;
+  pass_config.smooth_motion = config.smooth_motion;
+  pass_config.smooth_time = config.smooth_time;
   pass_config.fade_start = config.fade_start;
   pass_config.fade_power = config.fade_power;
   pass_config.horizon_boost = config.horizon_boost;
