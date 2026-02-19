@@ -194,31 +194,19 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
 {
   DCHECK_NOTNULL_F(context);
   auto& shell = GetShell();
-  shell.OnFrameStart(*context);
-
-  Base::OnFrameStart(context);
-
   auto& frame_context = *context;
 
   LOG_SCOPE_F(3, "MainModule::OnFrameStart");
 
-  // Set or create the scene now that the base has handled window/lifecycle
-  if (!active_scene_.IsValid()) {
-    auto scene = std::make_unique<scene::Scene>("InputSystem-Scene");
-    active_scene_ = shell.SetScene(std::move(scene));
+  if (shell.HasStagedScene()) {
+    CHECK_F(shell.PublishStagedScene(),
+      "expected staged scene before frame-start publish");
+    active_scene_ = shell.GetActiveScene();
+    main_camera_ = shell.TakePublishedMainCamera();
   }
 
-  if (!main_camera_.IsAlive()) {
-    if (const auto scene_ptr = shell.TryGetScene()) {
-      main_camera_ = scene_ptr->CreateNode("MainCamera");
-      auto camera = std::make_unique<scene::PerspectiveCamera>();
-      const bool attached = main_camera_.AttachCamera(std::move(camera));
-      CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
-      auto tf = main_camera_.GetTransform();
-      tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
-      tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
-    }
-  }
+  shell.OnFrameStart(*context);
+  Base::OnFrameStart(context);
 
   frame_context.SetScene(shell.TryGetScene());
 
@@ -337,6 +325,21 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   if (!app_window_->GetWindow()) {
     DLOG_F(1, "OnSceneMutation: no valid window - skipping");
     co_return;
+  }
+
+  if (!active_scene_.IsValid() && !shell.HasStagedScene()) {
+    shell.StageScene(std::make_unique<scene::Scene>("InputSystem-Scene"));
+    const auto staged_scene = shell.GetStagedScene();
+    CHECK_NOTNULL_F(staged_scene, "InputSystem staged scene is null");
+
+    auto camera_node = staged_scene->CreateNode("MainCamera");
+    auto camera = std::make_unique<scene::PerspectiveCamera>();
+    const bool attached = camera_node.AttachCamera(std::move(camera));
+    CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
+    auto tf = camera_node.GetTransform();
+    tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
+    tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
+    shell.SetStagedMainCamera(std::move(camera_node));
   }
 
   if (!active_scene_.IsValid()) {
