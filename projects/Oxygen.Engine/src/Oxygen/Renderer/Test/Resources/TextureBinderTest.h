@@ -161,6 +161,20 @@ public:
     return nullptr;
   }
 
+  [[nodiscard]] auto GetInputActionAsset(
+    const data::AssetKey& /*key*/) const noexcept
+    -> std::shared_ptr<data::InputActionAsset> override
+  {
+    return nullptr;
+  }
+
+  [[nodiscard]] auto GetInputMappingContextAsset(
+    const data::AssetKey& /*key*/) const noexcept
+    -> std::shared_ptr<data::InputMappingContextAsset> override
+  {
+    return nullptr;
+  }
+
   [[nodiscard]] auto GetHydratedScriptSlots(
     const data::SceneAsset& /*scene_asset*/,
     const data::pak::ScriptingComponentRecord& /*component*/) const
@@ -194,6 +208,18 @@ public:
   }
 
   [[nodiscard]] auto HasScriptAsset(
+    const data::AssetKey& /*key*/) const noexcept -> bool override
+  {
+    return false;
+  }
+
+  [[nodiscard]] auto HasInputActionAsset(
+    const data::AssetKey& /*key*/) const noexcept -> bool override
+  {
+    return false;
+  }
+
+  [[nodiscard]] auto HasInputMappingContextAsset(
     const data::AssetKey& /*key*/) const noexcept -> bool override
   {
     return false;
