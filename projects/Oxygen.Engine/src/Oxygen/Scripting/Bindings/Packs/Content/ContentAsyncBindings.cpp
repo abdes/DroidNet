@@ -9,12 +9,29 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentAsyncBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>
+#include <Oxygen/Scripting/Module/ScriptingModule.h>
 
 namespace oxygen::scripting::bindings {
 
 namespace {
+
+  auto GetScriptingModule(lua_State* state) -> ScriptingModule*
+  {
+    auto engine = bindings::GetActiveEngine(state);
+    if (engine == nullptr) {
+      return nullptr;
+    }
+    auto module_ref = engine->GetModule<ScriptingModule>();
+    if (module_ref.has_value()) {
+      return &module_ref->get();
+    }
+    return nullptr;
+  }
+
   auto CallLuaResourceCallback(lua_State* state, const int callback_ref,
     const content::ResourceKey key,
     std::shared_ptr<const data::TextureResource> texture,
@@ -92,6 +109,15 @@ namespace {
   {
     const auto key = RequireResourceKey(state, 1);
     const int callback_ref = RequireCallbackRef(state, 2);
+
+    auto* scripting = GetScriptingModule(state);
+    if (scripting == nullptr) {
+      lua_unref(state, callback_ref);
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    const auto session_id = scripting->GetSessionId();
+
     const auto loader = GetAssetLoader(state);
     if (loader == nullptr) {
       lua_unref(state, callback_ref);
@@ -99,11 +125,17 @@ namespace {
       return 1;
     }
 
-    loader->StartLoadTexture(key, [state, callback_ref, key](auto resource) {
-      CallLuaResourceCallback(
-        state, callback_ref, key, std::move(resource), {});
-      lua_unref(state, callback_ref);
-    });
+    loader->StartLoadTexture(
+      key, [scripting, session_id, callback_ref, key](auto resource) {
+        scripting->SubmitMainThreadTask(
+          [callback_ref, key, resource = std::move(resource)](
+            lua_State* state) {
+            CallLuaResourceCallback(
+              state, callback_ref, key, std::move(resource), {});
+            lua_unref(state, callback_ref);
+          },
+          session_id);
+      });
     lua_pushboolean(state, 1);
     return 1;
   }
@@ -112,6 +144,15 @@ namespace {
   {
     const auto key = RequireResourceKey(state, 1);
     const int callback_ref = RequireCallbackRef(state, 2);
+
+    auto* scripting = GetScriptingModule(state);
+    if (scripting == nullptr) {
+      lua_unref(state, callback_ref);
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    const auto session_id = scripting->GetSessionId();
+
     const auto loader = GetAssetLoader(state);
     if (loader == nullptr) {
       lua_unref(state, callback_ref);
@@ -119,11 +160,17 @@ namespace {
       return 1;
     }
 
-    loader->StartLoadBuffer(key, [state, callback_ref, key](auto resource) {
-      CallLuaResourceCallback(
-        state, callback_ref, key, {}, std::move(resource));
-      lua_unref(state, callback_ref);
-    });
+    loader->StartLoadBuffer(
+      key, [scripting, session_id, callback_ref, key](auto resource) {
+        scripting->SubmitMainThreadTask(
+          [callback_ref, key, resource = std::move(resource)](
+            lua_State* state) {
+            CallLuaResourceCallback(
+              state, callback_ref, key, {}, std::move(resource));
+            lua_unref(state, callback_ref);
+          },
+          session_id);
+      });
     lua_pushboolean(state, 1);
     return 1;
   }
@@ -132,6 +179,15 @@ namespace {
   {
     const auto key = RequireAssetGuid(state, 1);
     const int callback_ref = RequireCallbackRef(state, 2);
+
+    auto* scripting = GetScriptingModule(state);
+    if (scripting == nullptr) {
+      lua_unref(state, callback_ref);
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    const auto session_id = scripting->GetSessionId();
+
     const auto loader = GetAssetLoader(state);
     if (loader == nullptr) {
       lua_unref(state, callback_ref);
@@ -139,11 +195,16 @@ namespace {
       return 1;
     }
 
-    loader->StartLoadMaterialAsset(key, [state, callback_ref](auto asset) {
-      CallLuaAssetCallback(
-        state, callback_ref, std::move(asset), {}, {}, {}, {});
-      lua_unref(state, callback_ref);
-    });
+    loader->StartLoadMaterialAsset(
+      key, [scripting, session_id, callback_ref](auto asset) {
+        scripting->SubmitMainThreadTask(
+          [callback_ref, asset = std::move(asset)](lua_State* state) {
+            CallLuaAssetCallback(
+              state, callback_ref, std::move(asset), {}, {}, {}, {});
+            lua_unref(state, callback_ref);
+          },
+          session_id);
+      });
     lua_pushboolean(state, 1);
     return 1;
   }
@@ -152,6 +213,15 @@ namespace {
   {
     const auto key = RequireAssetGuid(state, 1);
     const int callback_ref = RequireCallbackRef(state, 2);
+
+    auto* scripting = GetScriptingModule(state);
+    if (scripting == nullptr) {
+      lua_unref(state, callback_ref);
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    const auto session_id = scripting->GetSessionId();
+
     const auto loader = GetAssetLoader(state);
     if (loader == nullptr) {
       lua_unref(state, callback_ref);
@@ -159,11 +229,16 @@ namespace {
       return 1;
     }
 
-    loader->StartLoadGeometryAsset(key, [state, callback_ref](auto asset) {
-      CallLuaAssetCallback(
-        state, callback_ref, {}, std::move(asset), {}, {}, {});
-      lua_unref(state, callback_ref);
-    });
+    loader->StartLoadGeometryAsset(
+      key, [scripting, session_id, callback_ref](auto asset) {
+        scripting->SubmitMainThreadTask(
+          [callback_ref, asset = std::move(asset)](lua_State* state) {
+            CallLuaAssetCallback(
+              state, callback_ref, {}, std::move(asset), {}, {}, {});
+            lua_unref(state, callback_ref);
+          },
+          session_id);
+      });
     lua_pushboolean(state, 1);
     return 1;
   }
@@ -172,6 +247,15 @@ namespace {
   {
     const auto key = RequireAssetGuid(state, 1);
     const int callback_ref = RequireCallbackRef(state, 2);
+
+    auto* scripting = GetScriptingModule(state);
+    if (scripting == nullptr) {
+      lua_unref(state, callback_ref);
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    const auto session_id = scripting->GetSessionId();
+
     const auto loader = GetAssetLoader(state);
     if (loader == nullptr) {
       lua_unref(state, callback_ref);
@@ -179,11 +263,16 @@ namespace {
       return 1;
     }
 
-    loader->StartLoadScriptAsset(key, [state, callback_ref](auto asset) {
-      CallLuaAssetCallback(
-        state, callback_ref, {}, {}, std::move(asset), {}, {});
-      lua_unref(state, callback_ref);
-    });
+    loader->StartLoadScriptAsset(
+      key, [scripting, session_id, callback_ref](auto asset) {
+        scripting->SubmitMainThreadTask(
+          [callback_ref, asset = std::move(asset)](lua_State* state) {
+            CallLuaAssetCallback(
+              state, callback_ref, {}, {}, std::move(asset), {}, {});
+            lua_unref(state, callback_ref);
+          },
+          session_id);
+      });
     lua_pushboolean(state, 1);
     return 1;
   }

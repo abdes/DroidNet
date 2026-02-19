@@ -16,7 +16,9 @@
 #include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneBindings.h>
@@ -77,8 +79,19 @@ namespace {
   auto LuaSceneCurrentNode(lua_State* state) -> int
   {
     auto* ctx = GetBindingContextFromScriptArg(state, 1);
-    if ((ctx != nullptr) && (ctx->slot_context != nullptr)) {
-      const auto& node = ctx->slot_context->node;
+    if ((ctx != nullptr) && ctx->has_slot_context) {
+      const auto frame_context = GetActiveFrameContext(state);
+      if (frame_context == nullptr) {
+        lua_pushnil(state);
+        return 1;
+      }
+      const auto& scene = frame_context->GetScene();
+      const auto node_opt = scene->GetNode(ctx->slot_context.node_handle);
+      if (!node_opt || !node_opt->IsAlive()) {
+        lua_pushnil(state);
+        return 1;
+      }
+      const auto& node = *node_opt;
       const auto handle = node.GetHandle();
       static uint32_t s_last_scene_id = std::numeric_limits<uint32_t>::max();
       static uint32_t s_last_node_index = std::numeric_limits<uint32_t>::max();
@@ -170,7 +183,7 @@ namespace {
     }
     const auto handle = node->GetHandle();
     const auto node_name = node->GetName();
-    const auto geometry_ptr
+    const auto* const geometry_ptr
       = static_cast<const void*>(node->GetRenderable().GetGeometry().get());
     LOG_F(INFO,
       "scene.destroy_node request: name='{}' scene_id={} node_index={} "

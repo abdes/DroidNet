@@ -6,11 +6,14 @@
 
 #include <glm/gtc/quaternion.hpp>
 #include <lua.h>
+#include <lualib.h>
 
 #include <string>
 #include <type_traits>
 
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 
 namespace oxygen::scripting::bindings {
@@ -21,14 +24,39 @@ namespace {
   constexpr int kLuaArg3 = 3;
   constexpr int kLuaArg4 = 4;
   constexpr int kLuaArg5 = 5;
+  constexpr int kStackCheckSize = 8;
 
   constexpr const char* kBindingContextFieldName = "__oxgn_binding_context";
+  constexpr const char* kBindingContextMetatableName
+    = "oxygen.scripting.binding_context";
   constexpr const char* kRuntimeContextFieldName = "__oxgn_runtime_context";
+  constexpr const char* kRuntimeContextMetatableName
+    = "oxygen.scripting.runtime_context";
 
   struct LuaRuntimeContext {
     observer_ptr<engine::FrameContext> frame_context;
     observer_ptr<AsyncEngine> engine;
   };
+
+  auto LuaRuntimeContextGc(lua_State* state) -> int
+  {
+    auto* const runtime_context
+      = static_cast<LuaRuntimeContext*>(lua_touserdata(state, 1));
+    if (runtime_context != nullptr) {
+      runtime_context->~LuaRuntimeContext();
+    }
+    return 0;
+  }
+
+  auto EnsureRuntimeContextMetatable(lua_State* state) -> void
+  {
+    const int status = luaL_newmetatable(state, kRuntimeContextMetatableName);
+    if (status != 0) {
+      lua_pushcfunction(state, LuaRuntimeContextGc, "runtime_context.__gc");
+      lua_setfield(state, -2, "__gc");
+    }
+    lua_pop(state, 1);
+  }
 
   auto FindRuntimeContext(lua_State* state) noexcept -> LuaRuntimeContext*
   {
@@ -53,10 +81,12 @@ namespace {
       return existing;
     }
 
-    auto* runtime_context = static_cast<LuaRuntimeContext*>(
-      lua_newuserdata(state, sizeof(LuaRuntimeContext)));
-    runtime_context->frame_context = {};
-    runtime_context->engine = {};
+    EnsureRuntimeContextMetatable(state);
+    auto* const runtime_context_mem
+      = lua_newuserdata(state, sizeof(LuaRuntimeContext));
+    auto* runtime_context = new (runtime_context_mem) LuaRuntimeContext {};
+    luaL_getmetatable(state, kRuntimeContextMetatableName);
+    lua_setmetatable(state, -2);
     lua_setfield(state, LUA_REGISTRYINDEX, kRuntimeContextFieldName);
     return runtime_context;
   }
@@ -113,17 +143,37 @@ namespace {
     lua_pushnumber(state, context->dt_seconds);
     return 1;
   }
+
+  auto EnsureBindingContextMetatable(lua_State* state) -> void
+  {
+    const int status = luaL_newmetatable(state, kBindingContextMetatableName);
+    if (status != 0) {
+      // No __gc needed as LuaBindingContext is trivially destructible
+    }
+    lua_pop(state, 1);
+  }
 } // namespace
 
 auto PushScriptContext(lua_State* state, LuaSlotExecutionContext* slot_context,
   const float dt_seconds) -> void
 {
+  luaL_checkstack(state, kStackCheckSize, "script context creation");
+  EnsureBindingContextMetatable(state);
   lua_newtable(state);
 
-  auto* const binding_context = static_cast<LuaBindingContext*>(
-    lua_newuserdata(state, sizeof(LuaBindingContext)));
-  binding_context->slot_context = slot_context;
+  auto* const binding_context_mem
+    = lua_newuserdata(state, sizeof(LuaBindingContext));
+  auto* const binding_context = new (binding_context_mem) LuaBindingContext {};
+  if (slot_context != nullptr) {
+    binding_context->slot_context = *slot_context;
+    binding_context->has_slot_context = true;
+  } else {
+    binding_context->slot_context = {};
+    binding_context->has_slot_context = false;
+  }
   binding_context->dt_seconds = dt_seconds;
+  luaL_getmetatable(state, kBindingContextMetatableName);
+  lua_setmetatable(state, -2);
   lua_setfield(state, -2, kBindingContextFieldName);
 
   lua_pushcfunction(state, LuaScriptContextGetParam, "GetParam");
@@ -240,8 +290,8 @@ auto PushScriptParam(lua_State* state, const data::ScriptParam& param) -> int
 auto GetParamValue(lua_State* state) -> int
 {
   const auto* const context = GetBindingContextFromScriptArg(state, kLuaArg1);
-  if (context == nullptr || context->slot_context == nullptr
-    || context->slot_context->slot == nullptr) {
+  if (context == nullptr || !context->has_slot_context
+    || context->slot_context.slot == nullptr) {
     lua_pushnil(state);
     return 1;
   }
@@ -252,7 +302,7 @@ auto GetParamValue(lua_State* state) -> int
     return 1;
   }
 
-  for (const auto entry : context->slot_context->slot->Parameters()) {
+  for (const auto entry : context->slot_context.slot->Parameters()) {
     if (entry.key == key) {
       return PushScriptParam(state, entry.value.get());
     }
@@ -266,12 +316,22 @@ auto SetLocalRotationEuler(
   lua_State* state, const float x, const float y, const float z) -> int
 {
   const auto* const context = GetBindingContextFromScriptArg(state);
-  if (context == nullptr || context->slot_context == nullptr
-    || !context->slot_context->node.IsAlive()) {
+  if (context == nullptr || !context->has_slot_context) {
     return 0;
   }
 
-  auto transform = context->slot_context->node.GetTransform();
+  // Reconstruct SceneNode from handle
+  const auto frame_context = GetActiveFrameContext(state);
+  if (frame_context == nullptr) {
+    return 0;
+  }
+  const auto& scene = frame_context->GetScene();
+  auto node = scene->GetNode(context->slot_context.node_handle);
+  if (!node || !node->IsAlive()) {
+    return 0;
+  }
+
+  auto transform = node->GetTransform();
   const Quat rotation = glm::quat(Vec3 { x, y, z });
   (void)transform.SetLocalRotation(rotation);
   return 0;
@@ -281,12 +341,22 @@ auto SetLocalRotationQuat(lua_State* state, const float x, const float y,
   const float z, const float w) -> int
 {
   const auto* const context = GetBindingContextFromScriptArg(state);
-  if (context == nullptr || context->slot_context == nullptr
-    || !context->slot_context->node.IsAlive()) {
+  if (context == nullptr || !context->has_slot_context) {
     return 0;
   }
 
-  auto transform = context->slot_context->node.GetTransform();
+  // Reconstruct SceneNode from handle
+  const auto frame_context = GetActiveFrameContext(state);
+  if (frame_context == nullptr) {
+    return 0;
+  }
+  const auto& scene = frame_context->GetScene();
+  auto node = scene->GetNode(context->slot_context.node_handle);
+  if (!node || !node->IsAlive()) {
+    return 0;
+  }
+
+  auto transform = node->GetTransform();
   (void)transform.SetLocalRotation(Quat { w, x, y, z });
   return 0;
 }

@@ -6,13 +6,17 @@
 
 #pragma once
 
+#include <deque>
+#include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#include <Oxygen/Base/Detail/NamedType_skills.h>
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
@@ -43,6 +47,66 @@ using ScriptChunkName = NamedType<std::string_view, struct ScriptChunkNameTag>;
 struct ScriptExecutionRequest {
   ScriptSourceText source_text;
   ScriptChunkName chunk_name { std::string_view { "runtime" } };
+};
+
+using ScriptingSessionId
+  = NamedType<uint64_t, struct ScriptingSessionIdTag, Comparable>;
+constexpr ScriptingSessionId kInvalidScriptingSessionId { 0 };
+
+using Task = std::function<void(lua_State*)>;
+
+class ScriptTaskQueue {
+public:
+  auto StartSession() -> void
+  {
+    std::lock_guard lock(mutex_);
+    current_session_id_ = ScriptingSessionId { current_session_id_.get() + 1 };
+    pending_tasks_.clear();
+  }
+
+  auto EndSession() -> void
+  {
+    std::lock_guard lock(mutex_);
+    // We don't necessarily need to invalidate the session ID here,
+    // just clearing the tasks is sufficient to prevent stale execution.
+    // The next StartSession will increment the ID.
+    pending_tasks_.clear();
+  }
+
+  auto Submit(Task task, ScriptingSessionId session_id) -> void
+  {
+    std::lock_guard lock(mutex_);
+    if (session_id != current_session_id_) {
+      return;
+    }
+    pending_tasks_.push_back(std::move(task));
+  }
+
+  auto Process(lua_State* state) -> void
+  {
+    std::deque<Task> tasks;
+    {
+      std::lock_guard lock(mutex_);
+      tasks.swap(pending_tasks_);
+    }
+
+    for (const auto& task : tasks) {
+      if (task) {
+        task(state);
+      }
+    }
+  }
+
+  [[nodiscard]] auto GetSessionId() const -> ScriptingSessionId
+  {
+    std::lock_guard lock(mutex_);
+    return current_session_id_;
+  }
+
+private:
+  mutable std::mutex mutex_;
+  ScriptingSessionId current_session_id_ { kInvalidScriptingSessionId };
+  std::deque<Task> pending_tasks_;
 };
 
 /*!
@@ -110,6 +174,15 @@ public:
   OXGN_SCRP_NDAPI auto UnregisterBindingPack(std::string_view pack_name)
     -> bool;
 
+  //! Submits a task to be executed on the main thread during the next frame
+  //! start. This method is thread-safe and can be called from any thread.
+  //! The task will only be executed if the session_id matches the current
+  //! session.
+  OXGN_SCRP_API auto SubmitMainThreadTask(
+    Task task, ScriptingSessionId session_id) -> void;
+
+  [[nodiscard]] OXGN_SCRP_API auto GetSessionId() const -> ScriptingSessionId;
+
 private:
   struct SlotRuntimeKey {
     scene::NodeHandle node_handle;
@@ -127,6 +200,10 @@ private:
       HashCombine(seed, key.slot_index);
       return seed;
     }
+  };
+
+  struct ActiveScriptSlot {
+    SlotRuntimeKey key;
   };
 
   struct SlotRuntimeState {
@@ -162,10 +239,12 @@ private:
   auto CleanupStaleSlotRuntimes(
     const std::unordered_set<SlotRuntimeKey, SlotRuntimeKeyHash>& active_keys)
     -> void;
+  auto ProcessPendingTasks() -> void;
   auto RegisterDefaultBindingPacks() -> bool;
   auto ReportHookError(observer_ptr<engine::FrameContext> context,
     std::string_view hook_name, const ScriptExecutionResult& result) const
     -> void;
+  auto CollectActiveScripts(observer_ptr<engine::FrameContext> context) -> void;
 
   lua_State* lua_state_ { nullptr };
   int runtime_env_ref_;
@@ -177,6 +256,13 @@ private:
   input::InputScriptEventBridge input_event_bridge_ {};
   std::unordered_map<SlotRuntimeKey, SlotRuntimeState, SlotRuntimeKeyHash>
     slot_runtimes_;
+  std::vector<ActiveScriptSlot> active_frame_slots_;
+
+  std::mutex pending_tasks_mutex_;
+  std::deque<Task>
+    pending_tasks_; // Deprecated by ScriptTaskQueue but kept for transition if
+                    // needed, though we will replace usage.
+  ScriptTaskQueue task_queue_;
 };
 
 } // namespace oxygen::scripting
