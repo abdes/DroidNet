@@ -6,19 +6,20 @@
 
 #include <algorithm>
 #include <bitset>
-#include <functional>
 #include <ranges>
-#include <unordered_map>
 
 #include <fmt/format.h>
 
-#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ResourceTable.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Scene/Detail/Scene_safecall_impl.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Internal/IMutationCollector.h>
+#include <Oxygen/Scene/Internal/MutationCollector.h>
+#include <Oxygen/Scene/Internal/MutationDispatcher.h>
+#include <Oxygen/Scene/Internal/ScriptSlotMutationProcessor.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneQuery.h>
 #include <Oxygen/Scene/SceneTraversal.h>
@@ -27,14 +28,6 @@ using oxygen::scene::NodeHandle;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeImpl;
-
-auto Scene::ScriptSlotKeyHash::operator()(
-  const ScriptSlotKey& key) const noexcept -> size_t
-{
-  size_t seed = std::hash<NodeHandle> {}(key.node_handle);
-  oxygen::HashCombine(seed, key.slot_index);
-  return seed;
-}
 
 // =============================================================================
 // SceneIdManager Implementations
@@ -99,6 +92,11 @@ auto SceneIdManager::Instance() -> SceneIdManager&
 Scene::Scene(const std::string& name, size_t initial_capacity)
   : nodes_(std::make_shared<NodeTable>(
       SceneNode::GetResourceType(), initial_capacity))
+  , mutation_collector_(internal::CreateMutationCollector())
+  , script_slot_processor_(internal::CreateScriptSlotMutationProcessor())
+  , mutation_dispatcher_(internal::CreateMutationDispatcher(
+      observer_ptr<internal::IScriptSlotMutationProcessor>(
+        script_slot_processor_.get())))
 {
   LOG_SCOPE_F(INFO, "Scene creation");
   LOG_F(2, "name: '{}'", name);
@@ -117,6 +115,9 @@ Scene::Scene(const std::string& name, size_t initial_capacity)
   scene_id_ = *id;
 
   SetName(name);
+  UpdateMutationCollectionState(false);
+  LOG_F(INFO, "mutation collection default state: enabled={}",
+    mutation_collector_ != nullptr && mutation_collector_->IsEnabled());
 }
 
 Scene::~Scene()
@@ -208,10 +209,12 @@ void Scene::DefragmentStorage()
 
 void Scene::Clear() noexcept
 {
+  if (mutation_collector_ && script_slot_processor_) {
+    script_slot_processor_->QueueTrackedSlotDeactivations(*mutation_collector_);
+  }
   nodes_->Clear();
   root_nodes_.clear();
   environment_.reset();
-  synced_script_slots_.clear();
 }
 
 auto Scene::SetEnvironment(
@@ -745,113 +748,193 @@ auto Scene::Query() const -> SceneQuery
   return SceneQuery(shared_from_this());
 }
 
-auto Scene::RegisterObserver(
-  const observer_ptr<ISceneObserver> observer) noexcept -> bool
+auto Scene::RegisterObserver(const observer_ptr<ISceneObserver> observer,
+  const SceneMutationMask mutation_mask) noexcept -> bool
 {
   if (observer == nullptr) {
     return false;
   }
-  if (std::ranges::find(observers_, observer) != observers_.end()) {
+  for (auto& subscription : observers_) {
+    if (subscription.observer != observer) {
+      continue;
+    }
     return false;
   }
-  observers_.push_back(observer);
+  observers_.push_back(ObserverSubscription {
+    .observer = observer,
+    .mutation_mask = mutation_mask,
+  });
+  UpdateMutationCollectionState();
   return true;
+}
+
+auto Scene::RegisterObserver(
+  const observer_ptr<ISceneObserver> observer) noexcept -> bool
+{
+  return RegisterObserver(observer, SceneMutationMask::kAllMutations);
 }
 
 auto Scene::UnregisterObserver(
   const observer_ptr<ISceneObserver> observer) noexcept -> bool
 {
   const auto previous_size = observers_.size();
-  std::erase(observers_, observer);
-  return observers_.size() != previous_size;
+  std::erase_if(
+    observers_, [observer](const ObserverSubscription& subscription) {
+      return subscription.observer == observer;
+    });
+  const auto changed = observers_.size() != previous_size;
+  if (changed && observers_.empty() && mutation_collector_
+    && !hydration_mutation_collection_enabled_) {
+    // Contract: new observers receive only future mutations unless hydration
+    // collection was explicitly enabled.
+    mutation_collector_->ClearMutations();
+  }
+  UpdateMutationCollectionState();
+  return changed;
+}
+
+auto Scene::AsMutationCollector() const noexcept
+  -> observer_ptr<internal::IMutationCollector>
+{
+  return observer_ptr<internal::IMutationCollector>(mutation_collector_.get());
+}
+
+auto Scene::ResolveScriptSlot(const NodeHandle& node_handle,
+  const ScriptSlotIndex slot_index) const noexcept
+  -> const ScriptingComponent::Slot*
+{
+  if (!node_handle.IsValid() || !nodes_->Contains(node_handle)) {
+    return nullptr;
+  }
+  const auto& node_impl = GetNodeImplRef(node_handle);
+  if (!node_impl.HasComponent<ScriptingComponent>()) {
+    return nullptr;
+  }
+  const auto slots = node_impl.GetComponent<ScriptingComponent>().Slots();
+  if (slot_index.get() >= slots.size()) {
+    return nullptr;
+  }
+  return &slots[slot_index.get()];
+}
+
+auto Scene::NotifyObservers(const SceneMutationMask mutation_type,
+  const NodeHandle& node_handle, const ScriptSlotIndex slot_index,
+  const ScriptingComponent::Slot* slot) const -> void
+{
+  for (const auto& subscription : observers_) {
+    if (subscription.observer == nullptr) {
+      continue;
+    }
+    const auto mask
+      = static_cast<uint32_t>(subscription.mutation_mask & mutation_type);
+    if (mask == 0) {
+      continue;
+    }
+
+    switch (mutation_type) {
+    case SceneMutationMask::kScriptSlotActivated:
+      DCHECK_NOTNULL_F(slot);
+      subscription.observer->OnScriptSlotActivated(
+        node_handle, slot_index, *slot);
+      break;
+    case SceneMutationMask::kScriptSlotChanged:
+      DCHECK_NOTNULL_F(slot);
+      subscription.observer->OnScriptSlotChanged(
+        node_handle, slot_index, *slot);
+      break;
+    case SceneMutationMask::kScriptSlotDeactivated:
+      subscription.observer->OnScriptSlotDeactivated(node_handle, slot_index);
+      break;
+    case SceneMutationMask::kLightChanged:
+      subscription.observer->OnLightChanged(node_handle);
+      break;
+    case SceneMutationMask::kCameraChanged:
+      subscription.observer->OnCameraChanged(node_handle);
+      break;
+    case SceneMutationMask::kNone:
+    case SceneMutationMask::kAllScriptSlotMutations:
+    case SceneMutationMask::kAllMutations:
+      break;
+    }
+  }
 }
 
 auto Scene::SyncObservers() -> void
 {
-  if (observers_.empty()) {
+  if (observers_.empty() || !mutation_collector_ || !mutation_dispatcher_
+    || !script_slot_processor_) {
     return;
   }
 
-  std::unordered_map<ScriptSlotKey, ScriptSlotSignature, ScriptSlotKeyHash>
-    active_slots;
+  mutation_dispatcher_->Dispatch(*mutation_collector_,
+    internal::IMutationDispatcher::DispatchContext {
+      .resolve_script_slot =
+        [this](
+          const NodeHandle& node_handle, const ScriptSlotIndex slot_index) {
+          return ResolveScriptSlot(node_handle, slot_index);
+        },
+      .notify_script_observers =
+        [this](const SceneMutationMask mutation_type,
+          const NodeHandle& node_handle, const ScriptSlotIndex slot_index,
+          const ScriptingComponent::Slot* slot) {
+          NotifyObservers(mutation_type, node_handle, slot_index, slot);
+        },
+      .notify_light_mutation =
+        [this](const internal::LightMutation& mutation) {
+          NotifyObservers(SceneMutationMask::kLightChanged,
+            mutation.node_handle, ScriptSlotIndex {}, nullptr);
+        },
+      .notify_camera_mutation =
+        [this](const internal::CameraMutation& mutation) {
+          NotifyObservers(SceneMutationMask::kCameraChanged,
+            mutation.node_handle, ScriptSlotIndex {}, nullptr);
+        },
+    });
+}
 
-  auto traversal = Traverse();
-  [[maybe_unused]] const auto traversal_result = traversal.Traverse(
-    [&](const auto& visited_node, const bool dry_run) -> VisitResult {
-      if (dry_run || visited_node.node_impl == nullptr) {
-        return VisitResult::kContinue;
-      }
-
-      if (!visited_node.node_impl
-            ->template HasComponent<ScriptingComponent>()) {
-        return VisitResult::kContinue;
-      }
-
-      auto node = GetNode(visited_node.handle);
-      if (!node.has_value()) {
-        return VisitResult::kContinue;
-      }
-
-      const auto scripting = node->GetScripting();
-      const auto slots = scripting.Slots();
-      for (size_t slot_idx = 0; slot_idx < slots.size(); ++slot_idx) {
-        const auto& slot = slots[slot_idx];
-        if (slot.State() != ScriptingComponent::Slot::CompileState::kReady
-          || slot.IsDisabled() || slot.Executable() == nullptr) {
-          continue;
-        }
-
-        const auto slot_index = static_cast<uint32_t>(slot_idx);
-        const ScriptSlotKey key {
-          .node_handle = visited_node.handle,
-          .slot_index = slot_index,
-        };
-        const ScriptSlotSignature signature {
-          .content_hash = slot.Executable()->ContentHash(),
-        };
-
-        const auto [it, inserted] = active_slots.emplace(key, signature);
-        if (!inserted) {
-          it->second = signature;
-        }
-
-        const auto synced_it = synced_script_slots_.find(key);
-        if (synced_it == synced_script_slots_.end()) {
-          for (const auto observer : observers_) {
-            if (observer != nullptr) {
-              observer->OnScriptSlotActivated(
-                visited_node.handle, slot_index, slot);
-            }
-          }
-          continue;
-        }
-
-        if (!(synced_it->second == signature)) {
-          for (const auto observer : observers_) {
-            if (observer != nullptr) {
-              observer->OnScriptSlotChanged(
-                visited_node.handle, slot_index, slot);
-            }
-          }
-        }
-      }
-
-      return VisitResult::kContinue;
-    },
-    TraversalOrder::kPreOrder);
-
-  for (const auto& [key, _signature] : synced_script_slots_) {
-    if (active_slots.contains(key)) {
-      continue;
-    }
-    for (const auto observer : observers_) {
-      if (observer != nullptr) {
-        observer->OnScriptSlotDeactivated(key.node_handle, key.slot_index);
-      }
-    }
+auto Scene::GetMutationDispatchCounters() const noexcept
+  -> MutationDispatchCounters
+{
+  if (!mutation_dispatcher_) {
+    return {};
   }
+  const auto counters = mutation_dispatcher_->GetCounters();
+  return MutationDispatchCounters {
+    .sync_calls = counters.sync_calls,
+    .frames_with_mutations = counters.frames_with_mutations,
+    .drained_records = counters.drained_records,
+    .script_records_dispatched = counters.script_records_dispatched,
+    .light_records_coalesced_in = counters.light_records_coalesced_in,
+    .light_records_dispatched = counters.light_records_dispatched,
+    .camera_records_coalesced_in = counters.camera_records_coalesced_in,
+    .camera_records_dispatched = counters.camera_records_dispatched,
+  };
+}
 
-  synced_script_slots_ = std::move(active_slots);
+auto Scene::CollectMutationsStart() noexcept -> void
+{
+  hydration_mutation_collection_enabled_ = true;
+  UpdateMutationCollectionState();
+}
+
+auto Scene::CollectMutationsEnd() noexcept -> void
+{
+  hydration_mutation_collection_enabled_ = false;
+  UpdateMutationCollectionState();
+}
+
+auto Scene::UpdateMutationCollectionState(const bool log_transition) -> void
+{
+  if (!mutation_collector_) {
+    return;
+  }
+  const bool enabled
+    = hydration_mutation_collection_enabled_ || !observers_.empty();
+  const bool was_enabled = mutation_collector_->IsEnabled();
+  mutation_collector_->SetEnabled(enabled);
+  if (log_transition && was_enabled != enabled) {
+    LOG_F(INFO, "mutation collection {}", enabled ? "enabled" : "disabled");
+  }
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst

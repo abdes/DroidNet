@@ -339,7 +339,7 @@ NOLINT_TEST_F(
 
   auto engine = std::make_shared<AsyncEngine>(platform, gfx, EngineConfig {});
 
-  ScriptingModule module(engine::ModulePriority { 450 });
+  ScriptingModule module(engine::kScriptingModulePriority);
   ASSERT_TRUE(module.OnAttached(observer_ptr { engine.get() }));
 
   const auto execute_result = module.ExecuteScript(blob);

@@ -179,10 +179,20 @@ private:
     bindings exposed to Lua.
 
   ### Design Contracts
-  - **Thread-Safety**: All Lua execution occurs on the main engine thread.
-    Cross-thread tasks must be submitted via `SubmitMainThreadTask`.
-  - **Instance Isolation**: Each script instance (Slot) has its own private
-    global table, preventing side-effects between different game objects.
+  - **Thread-Safety**: All Lua execution occurs on the
+  main engine thread.
+    Cross-thread tasks must be submitted via
+  `SubmitMainThreadTask`.
+  - **Instance Isolation**: Each script instance
+  (Slot) has its own private
+    global table, preventing side-effects between
+  different game objects.
+  - **Priority Contract**: Must run before
+  `SceneObserverSyncModule` so
+    gameplay registration is complete before
+  deferred scene mutations are
+    dispatched. Use
+  `engine::kScriptingModulePriority` (near highest).
 */
 class ScriptingModule final : public engine::EngineModule,
                               public scene::ISceneObserver {
@@ -234,14 +244,14 @@ public:
     -> void override;
 
   OXGN_SCRP_API auto OnScriptSlotActivated(const scene::NodeHandle& node_handle,
-    uint32_t slot_index, const scene::ScriptingComponent::Slot& slot) noexcept
-    -> void override;
+    scene::ScriptSlotIndex slot_index,
+    const scene::ScriptingComponent::Slot& slot) noexcept -> void override;
   OXGN_SCRP_API auto OnScriptSlotChanged(const scene::NodeHandle& node_handle,
-    uint32_t slot_index, const scene::ScriptingComponent::Slot& slot) noexcept
-    -> void override;
+    scene::ScriptSlotIndex slot_index,
+    const scene::ScriptingComponent::Slot& slot) noexcept -> void override;
   OXGN_SCRP_API auto OnScriptSlotDeactivated(
-    const scene::NodeHandle& node_handle, uint32_t slot_index) noexcept
-    -> void override;
+    const scene::NodeHandle& node_handle,
+    scene::ScriptSlotIndex slot_index) noexcept -> void override;
 
   OXGN_SCRP_NDAPI auto ExecuteScript(const ScriptExecutionRequest& request)
     -> ScriptExecutionResult;
@@ -264,7 +274,7 @@ public:
 private:
   struct SlotRuntimeKey {
     scene::NodeHandle node_handle;
-    uint32_t slot_index { 0 };
+    scene::ScriptSlotIndex slot_index {};
 
     [[nodiscard]] auto operator==(const SlotRuntimeKey&) const noexcept -> bool
       = default;

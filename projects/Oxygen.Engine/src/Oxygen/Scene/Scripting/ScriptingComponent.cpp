@@ -8,6 +8,7 @@
 #include <stdexcept>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Scene/Internal/IMutationCollector.h>
 #include <Oxygen/Scene/Scripting/ScriptingComponent.h>
 
 namespace oxygen::scene {
@@ -26,12 +27,32 @@ auto ScriptingComponent::AddSlot(std::shared_ptr<const data::ScriptAsset> asset)
 
 auto ScriptingComponent::RemoveSlot(const Slot& slot) -> bool
 {
+  const auto slot_index = TryGetSlotIndex(slot);
+  const bool was_active = slot_index.has_value()
+    && slots_[slot_index->get()].compile_state_ == Slot::CompileState::kReady
+    && !slots_[slot_index->get()].IsDisabled()
+    && slots_[slot_index->get()].Executable() != nullptr;
+
   auto it = FindSlotById(slot.slot_id_);
   if (it == slots_.end()) {
     return false;
   }
   slots_.erase(it);
+  if (was_active && mutation_collector_) {
+    mutation_collector_->CollectScriptSlotDeactivated(owner_node_, *slot_index);
+  }
   return true;
+}
+
+auto ScriptingComponent::TryGetSlotIndex(const Slot& slot) const noexcept
+  -> std::optional<ScriptSlotIndex>
+{
+  const auto it = FindSlotById(slot.slot_id_);
+  if (it == slots_.end()) {
+    return std::nullopt;
+  }
+  return ScriptSlotIndex(
+    static_cast<uint32_t>(std::distance(slots_.begin(), it)));
 }
 
 auto ScriptingComponent::SetParameter(
@@ -123,9 +144,24 @@ auto ScriptingComponent::MarkSlotReady(const Slot& slot,
     return false;
   }
 
+  const auto slot_index = ScriptSlotIndex(
+    static_cast<uint32_t>(std::distance(slots_.begin(), slot_it)));
+  const bool was_active = slot_it->compile_state_ == Slot::CompileState::kReady
+    && !slot_it->IsDisabled() && slot_it->Executable() != nullptr;
+  const uint64_t prev_hash
+    = was_active ? slot_it->Executable()->ContentHash() : 0;
+
   slot_it->compile_state_ = Slot::CompileState::kReady;
   slot_it->executable_ = std::move(executable);
   DLOG_F(2, "slot state set to ready");
+
+  if (mutation_collector_) {
+    if (!was_active) {
+      mutation_collector_->CollectScriptSlotActivated(owner_node_, slot_index);
+    } else if (slot_it->Executable()->ContentHash() != prev_hash) {
+      mutation_collector_->CollectScriptSlotChanged(owner_node_, slot_index);
+    }
+  }
   return true;
 }
 
@@ -137,6 +173,11 @@ auto ScriptingComponent::MarkSlotCompilationFailed(
     return false;
   }
 
+  const auto slot_index = ScriptSlotIndex(
+    static_cast<uint32_t>(std::distance(slots_.begin(), slot_it)));
+  const bool was_active = slot_it->compile_state_ == Slot::CompileState::kReady
+    && !slot_it->IsDisabled() && slot_it->Executable() != nullptr;
+
   if (slot_it->compile_state_ == Slot::CompileState::kCompilationFailed) {
     return true;
   }
@@ -147,7 +188,26 @@ auto ScriptingComponent::MarkSlotCompilationFailed(
     Slot::Diagnostic { .message = std::move(diagnostic_message) });
   LOG_F(WARNING, "slot state set to compilation failed: {}",
     slot_it->diagnostics_.back().message);
+  if (was_active && mutation_collector_) {
+    mutation_collector_->CollectScriptSlotDeactivated(owner_node_, slot_index);
+  }
   return true;
+}
+
+auto ScriptingComponent::EmitActiveSlotDeactivations() const -> void
+{
+  if (!mutation_collector_) {
+    return;
+  }
+  for (size_t i = 0; i < slots_.size(); ++i) {
+    const auto& slot = slots_[i];
+    if (slot.compile_state_ != Slot::CompileState::kReady || slot.IsDisabled()
+      || slot.Executable() == nullptr) {
+      continue;
+    }
+    mutation_collector_->CollectScriptSlotDeactivated(
+      owner_node_, ScriptSlotIndex(static_cast<uint32_t>(i)));
+  }
 }
 
 auto ScriptingComponent::Clone() const -> std::unique_ptr<Component>

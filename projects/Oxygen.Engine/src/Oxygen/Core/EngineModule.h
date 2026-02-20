@@ -40,6 +40,18 @@ constexpr ModulePriority kModulePriorityHighest { // Executes first
   0U
 };
 
+// Reserved priorities for core engine modules. These values are publicly
+// visible and enforced at registration time.
+constexpr ModulePriority kRendererModulePriority { kModulePriorityLowest };
+constexpr ModulePriority kImGuiModulePriority { 1000U };
+// Scripting should run early so gameplay modules observe script state.
+constexpr ModulePriority kScriptingModulePriority { 1U };
+// Scene observer sync should run near the end, after mutators, but before
+// renderer.
+constexpr ModulePriority kSceneObserverSyncModulePriority {
+  (std::numeric_limits<std::uint32_t>::max)() - 1U
+};
+
 // Alias the canonical PhaseMask from the phase registry for semantic clarity.
 using ModulePhaseMask = core::PhaseMask;
 

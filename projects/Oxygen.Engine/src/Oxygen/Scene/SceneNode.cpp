@@ -9,6 +9,7 @@
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Detail/GraphData.h>
+#include <Oxygen/Scene/Internal/IMutationCollector.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
@@ -482,6 +483,10 @@ auto SceneNode::AttachCamera(std::unique_ptr<Component> camera) noexcept -> bool
       } else if (type_id == OrthographicCamera::ClassTypeId()) {
         state.node_impl->AddComponent<OrthographicCamera>(std::move(camera));
       }
+      if (const auto collector = state.scene->AsMutationCollector();
+        collector != nullptr) {
+        collector->CollectCameraChanged(state.node->GetHandle());
+      }
       return true;
     });
 }
@@ -518,6 +523,12 @@ auto SceneNode::DetachCamera() noexcept -> bool
       if (state.node_impl->HasComponent<OrthographicCamera>()) {
         state.node_impl->RemoveComponent<OrthographicCamera>();
         removed = true;
+      }
+      if (removed) {
+        if (const auto collector = state.scene->AsMutationCollector();
+          collector != nullptr) {
+          collector->CollectCameraChanged(state.node->GetHandle());
+        }
       }
       return removed;
     });
@@ -562,11 +573,19 @@ auto SceneNode::ReplaceCamera(std::unique_ptr<Component> camera) noexcept
       // Remove any existing camera
       if (state.node_impl->HasComponent<PerspectiveCamera>()) {
         state.node_impl->ReplaceComponent<PerspectiveCamera>(std::move(camera));
+        if (const auto collector = state.scene->AsMutationCollector();
+          collector != nullptr) {
+          collector->CollectCameraChanged(state.node->GetHandle());
+        }
         return true;
       }
       if (state.node_impl->HasComponent<OrthographicCamera>()) {
         state.node_impl->ReplaceComponent<OrthographicCamera>(
           std::move(camera));
+        if (const auto collector = state.scene->AsMutationCollector();
+          collector != nullptr) {
+          collector->CollectCameraChanged(state.node->GetHandle());
+        }
         return true;
       }
       // If no camera exists, act as AttachCamera
@@ -575,6 +594,10 @@ auto SceneNode::ReplaceCamera(std::unique_ptr<Component> camera) noexcept
         state.node_impl->AddComponent<PerspectiveCamera>(std::move(camera));
       } else if (type_id == OrthographicCamera::ClassTypeId()) {
         state.node_impl->AddComponent<OrthographicCamera>(std::move(camera));
+      }
+      if (const auto collector = state.scene->AsMutationCollector();
+        collector != nullptr) {
+        collector->CollectCameraChanged(state.node->GetHandle());
       }
       return true;
     });
@@ -692,14 +715,26 @@ auto SceneNode::AttachLight(std::unique_ptr<Component> light) noexcept -> bool
       const auto type_id = light->GetTypeId();
       if (type_id == DirectionalLight::ClassTypeId()) {
         state.node_impl->AddComponent<DirectionalLight>(std::move(light));
+        if (const auto collector = state.scene->AsMutationCollector();
+          collector != nullptr) {
+          collector->CollectLightChanged(state.node->GetHandle());
+        }
         return true;
       }
       if (type_id == PointLight::ClassTypeId()) {
         state.node_impl->AddComponent<PointLight>(std::move(light));
+        if (const auto collector = state.scene->AsMutationCollector();
+          collector != nullptr) {
+          collector->CollectLightChanged(state.node->GetHandle());
+        }
         return true;
       }
       if (type_id == SpotLight::ClassTypeId()) {
         state.node_impl->AddComponent<SpotLight>(std::move(light));
+        if (const auto collector = state.scene->AsMutationCollector();
+          collector != nullptr) {
+          collector->CollectLightChanged(state.node->GetHandle());
+        }
         return true;
       }
 
@@ -738,6 +773,12 @@ auto SceneNode::DetachLight() noexcept -> bool
       if (state.node_impl->HasComponent<SpotLight>()) {
         state.node_impl->RemoveComponent<SpotLight>();
         removed = true;
+      }
+      if (removed) {
+        if (const auto collector = state.scene->AsMutationCollector();
+          collector != nullptr) {
+          collector->CollectLightChanged(state.node->GetHandle());
+        }
       }
       return removed;
     });
@@ -791,13 +832,25 @@ auto SceneNode::ReplaceLight(std::unique_ptr<Component> light) noexcept -> bool
 
       if (type_id == DirectionalLight::ClassTypeId()) {
         state.node_impl->AddComponent<DirectionalLight>(std::move(light));
+        if (const auto collector = state.scene->AsMutationCollector();
+          collector != nullptr) {
+          collector->CollectLightChanged(state.node->GetHandle());
+        }
         return true;
       }
       if (type_id == PointLight::ClassTypeId()) {
         state.node_impl->AddComponent<PointLight>(std::move(light));
+        if (const auto collector = state.scene->AsMutationCollector();
+          collector != nullptr) {
+          collector->CollectLightChanged(state.node->GetHandle());
+        }
         return true;
       }
       state.node_impl->AddComponent<SpotLight>(std::move(light));
+      if (const auto collector = state.scene->AsMutationCollector();
+        collector != nullptr) {
+        collector->CollectLightChanged(state.node->GetHandle());
+      }
       return true;
     });
 }
@@ -878,7 +931,10 @@ auto SceneNode::AttachScripting() noexcept -> bool
     if (state.node_impl->HasComponent<ScriptingComponent>()) {
       return false;
     }
-    state.node_impl->AddComponent<ScriptingComponent>();
+    auto* mutable_scene = const_cast<Scene*>(state.scene);
+    DCHECK_NOTNULL_F(mutable_scene);
+    state.node_impl->AddComponent<ScriptingComponent>(
+      state.node->GetHandle(), mutable_scene->AsMutationCollector());
     return true;
   });
 }
@@ -889,6 +945,8 @@ auto SceneNode::DetachScripting() noexcept -> bool
     if (!state.node_impl->HasComponent<ScriptingComponent>()) {
       return false;
     }
+    state.node_impl->GetComponent<ScriptingComponent>()
+      .EmitActiveSlotDeactivations();
     state.node_impl->RemoveComponent<ScriptingComponent>();
     return true;
   });

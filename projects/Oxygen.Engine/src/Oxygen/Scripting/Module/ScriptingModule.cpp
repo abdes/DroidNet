@@ -573,8 +573,6 @@ auto ScriptingModule::OnGameplay(observer_ptr<engine::FrameContext> context)
 auto ScriptingModule::OnSceneMutation(
   observer_ptr<engine::FrameContext> context) -> co::Co<>
 {
-  EnsureSceneObservation(context);
-
   if (lua_state_ != nullptr) {
     const ScopedActiveFrameContext active_context(lua_state_, context);
     bindings::SetActiveEventPhase(lua_state_, "scene_mutation");
@@ -866,7 +864,7 @@ auto ScriptingModule::InvokePhaseHook(const std::string_view hook_name,
 }
 
 auto ScriptingModule::OnScriptSlotActivated(
-  const scene::NodeHandle& node_handle, const uint32_t slot_index,
+  const scene::NodeHandle& node_handle, const scene::ScriptSlotIndex slot_index,
   const scene::ScriptingComponent::Slot& slot) noexcept -> void
 {
   ActivateSlot(
@@ -875,7 +873,7 @@ auto ScriptingModule::OnScriptSlotActivated(
 }
 
 auto ScriptingModule::OnScriptSlotChanged(const scene::NodeHandle& node_handle,
-  const uint32_t slot_index,
+  const scene::ScriptSlotIndex slot_index,
   const scene::ScriptingComponent::Slot& slot) noexcept -> void
 {
   UpdateSlot(
@@ -884,8 +882,8 @@ auto ScriptingModule::OnScriptSlotChanged(const scene::NodeHandle& node_handle,
 }
 
 auto ScriptingModule::OnScriptSlotDeactivated(
-  const scene::NodeHandle& node_handle, const uint32_t slot_index) noexcept
-  -> void
+  const scene::NodeHandle& node_handle,
+  const scene::ScriptSlotIndex slot_index) noexcept -> void
 {
   DeactivateSlot(
     SlotRuntimeKey { .node_handle = node_handle, .slot_index = slot_index });
@@ -918,8 +916,10 @@ auto ScriptingModule::EnsureSceneObservation(
   slot_runtimes_.clear();
 
   if (scene != nullptr) {
-    (void)scene->RegisterObserver(observer_ptr<scene::ISceneObserver> { this });
-    scene->SyncObservers();
+    const bool subscribed
+      = scene->RegisterObserver(observer_ptr<scene::ISceneObserver> { this });
+    LOG_F(INFO, "scene mutation observer {}",
+      subscribed ? "subscribed" : "already subscribed");
   }
 }
 

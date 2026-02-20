@@ -117,9 +117,9 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
     app.renderer = observer_ptr { renderer_unique.get() };
     register_module(
       std::make_unique<oxygen::scenesync::SceneObserverSyncModule>(
-        engine::ModulePriority { 440 }));
+        engine::kSceneObserverSyncModulePriority));
     register_module(std::make_unique<oxygen::scripting::ScriptingModule>(
-      engine::ModulePriority { 450 }));
+      engine::kScriptingModulePriority));
     register_module(
       std::make_unique<oxygen::examples::render_scene::MainModule>(app));
 

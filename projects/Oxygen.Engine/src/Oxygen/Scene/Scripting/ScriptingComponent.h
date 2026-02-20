@@ -19,12 +19,18 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Core/Scripting/ScriptExecutable.h>
 #include <Oxygen/Data/ScriptAsset.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
+#include <Oxygen/Scene/Types/ScriptSlotIndex.h>
 #include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::scene {
+namespace internal {
+  class IMutationCollector;
+}
 
 //! Scene component managing script slots and their runtime state.
 /*!
@@ -279,6 +285,12 @@ public:
 
   //! Default constructor.
   OXGN_SCN_API ScriptingComponent() = default;
+  OXGN_SCN_API explicit ScriptingComponent(const NodeHandle& owner_node,
+    observer_ptr<internal::IMutationCollector> collector) noexcept
+    : owner_node_(owner_node)
+    , mutation_collector_(collector)
+  {
+  }
 
   //! Virtual destructor.
   OXGN_SCN_API ~ScriptingComponent() override = default;
@@ -294,6 +306,12 @@ public:
   //! Removes a script slot by reference.
   //! Invalidates previously obtained slot references and spans.
   OXGN_SCN_API auto RemoveSlot(const Slot& slot) -> bool;
+
+  //! Returns the stable slot index for a slot reference, if present.
+  OXGN_SCN_API auto TryGetSlotIndex(const Slot& slot) const noexcept
+    -> std::optional<ScriptSlotIndex>;
+
+  OXGN_SCN_API auto EmitActiveSlotDeactivations() const -> void;
 
   //! Returns a read-only view of active script slots.
   [[nodiscard]] auto Slots() const noexcept -> std::span<const Slot>
@@ -349,6 +367,8 @@ private:
 
   std::vector<Slot> slots_;
   uint64_t next_slot_id_ { 1 };
+  NodeHandle owner_node_ {};
+  observer_ptr<internal::IMutationCollector> mutation_collector_ {};
 };
 
 } // namespace oxygen::scene
