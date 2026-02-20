@@ -109,7 +109,7 @@ namespace {
     if (token == "proc/quad" || token == "quad") {
       return "proc/quad";
     }
-    return "proc/cube";
+    return std::string(token);
   }
 
   struct RenderableAssetRegistry {
