@@ -111,6 +111,8 @@ public:
   auto MountPak(const std::filesystem::path& path) -> void;
   auto LoadIndex(const std::filesystem::path& path) -> void;
   auto UnloadAllLibrary() -> void;
+  auto RestorePersistedLibraryState() -> void;
+  auto PersistLibraryState() -> void;
 
   [[nodiscard]] auto GetDiscoveredPaks() const
     -> const std::vector<std::filesystem::path>&;
@@ -232,6 +234,8 @@ private:
   auto RebuildSceneList(const std::unordered_map<SceneEntryKey, SceneEntry,
                           SceneEntryKeyHash, SceneEntryKeyEq>& entries,
     std::vector<SceneEntry>& out) -> void;
+  auto PersistMountedSources() -> void;
+  auto PersistActiveSceneSelection(const SceneEntry& entry) -> void;
 
   enum class BrowseMode {
     kNone,

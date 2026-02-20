@@ -8,6 +8,7 @@
 #include <unordered_map>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/LooseCookedInspection.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Data/AssetType.h>
@@ -591,6 +592,7 @@ auto ContentVm::MountPak(const std::filesystem::path& path) -> void
     }
     if (on_pak_mounted_)
       on_pak_mounted_(path);
+    PersistMountedSources();
   } catch (const std::exception& ex) {
     LOG_F(ERROR, "ContentVm: Failed to mount PAK '{}': {}", path.string(),
       ex.what());
@@ -641,6 +643,7 @@ auto ContentVm::LoadIndex(const std::filesystem::path& path) -> void
     RebuildSceneList(scenes_map_, available_scenes_);
     if (on_index_loaded_)
       on_index_loaded_(index_path);
+    PersistMountedSources();
   } catch (const std::exception& ex) {
     LOG_F(ERROR, "ContentVm: Failed to load index '{}': {}", path.string(),
       ex.what());
@@ -654,7 +657,77 @@ auto ContentVm::UnloadAllLibrary() -> void
   loaded_indices_.clear();
   scenes_map_.clear();
   available_scenes_.clear();
+  if (settings_) {
+    settings_->SetMountedPakPaths({});
+    settings_->SetMountedIndexPaths({});
+    settings_->SetActiveSceneSelection(std::nullopt);
+  }
 }
+
+auto ContentVm::RestorePersistedLibraryState() -> void
+{
+  if (!settings_) {
+    return;
+  }
+
+  for (const auto& pak_path : settings_->GetMountedPakPaths()) {
+    if (!pak_path.empty()) {
+      MountPak(pak_path);
+    }
+  }
+  for (const auto& index_path : settings_->GetMountedIndexPaths()) {
+    if (!index_path.empty()) {
+      LoadIndex(index_path);
+    }
+  }
+
+  RefreshLibrary();
+
+  const auto selection = settings_->GetActiveSceneSelection();
+  if (!selection.has_value()) {
+    return;
+  }
+
+  const auto desired_kind = selection->source_is_pak
+    ? SceneSourceKind::kPak
+    : SceneSourceKind::kLooseIndex;
+  const auto desired_path = NormalizePathForKey(selection->source_path);
+
+  std::optional<SceneEntry> match;
+  {
+    std::lock_guard lock(data_mutex_);
+    for (const auto& scene : available_scenes_) {
+      if (scene.source.kind != desired_kind) {
+        continue;
+      }
+      if (NormalizePathForKey(scene.source.path) != desired_path) {
+        continue;
+      }
+      if (!selection->scene_key.empty()
+        && nostd::to_string(scene.key) != selection->scene_key) {
+        continue;
+      }
+      if (!selection->scene_name.empty() && scene.name != selection->scene_name
+        && !selection->scene_key.empty()) {
+        continue;
+      }
+      match = scene;
+      break;
+    }
+  }
+
+  if (!match.has_value()) {
+    LOG_F(WARNING,
+      "ContentVm: persisted active scene could not be resolved "
+      "(name='{}' source='{}')",
+      selection->scene_name, selection->source_path.string());
+    return;
+  }
+
+  RequestSceneLoad(*match);
+}
+
+auto ContentVm::PersistLibraryState() -> void { PersistMountedSources(); }
 
 auto ContentVm::GetDiscoveredPaks() const
   -> const std::vector<std::filesystem::path>&
@@ -704,6 +777,7 @@ auto ContentVm::RequestSceneLoad(const SceneEntry& entry) -> void
     return;
   }
   if (on_scene_load_requested_) {
+    PersistActiveSceneSelection(entry);
     const auto scene_name = entry.name;
     {
       std::lock_guard lock(import_state_.progress_mutex);
@@ -718,6 +792,37 @@ auto ContentVm::RequestSceneLoad(const SceneEntry& entry) -> void
     AddDiagnosticMarker("Load Scene: " + scene_name + " (Started)", true);
     on_scene_load_requested_(entry);
   }
+}
+
+auto ContentVm::PersistMountedSources() -> void
+{
+  if (!settings_) {
+    return;
+  }
+
+  std::vector<std::filesystem::path> paks;
+  std::vector<std::filesystem::path> indices;
+  {
+    std::lock_guard lock(data_mutex_);
+    paks = loaded_paks_;
+    indices = loaded_indices_;
+  }
+  settings_->SetMountedPakPaths(paks);
+  settings_->SetMountedIndexPaths(indices);
+}
+
+auto ContentVm::PersistActiveSceneSelection(const SceneEntry& entry) -> void
+{
+  if (!settings_) {
+    return;
+  }
+
+  settings_->SetActiveSceneSelection(ContentActiveSceneSelection {
+    .scene_name = entry.name,
+    .scene_key = nostd::to_string(entry.key),
+    .source_path = entry.source.path,
+    .source_is_pak = entry.source.kind == SceneSourceKind::kPak,
+  });
 }
 
 auto ContentVm::IsSceneLoading() const -> bool

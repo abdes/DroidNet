@@ -790,10 +790,15 @@ auto ContentLoaderPanel::OnLoaded() -> void
 {
   if (vm_) {
     vm_->RefreshSources();
-    vm_->RefreshLibrary();
+    vm_->RestorePersistedLibraryState();
   }
 }
 
-auto ContentLoaderPanel::OnUnloaded() -> void { }
+auto ContentLoaderPanel::OnUnloaded() -> void
+{
+  if (vm_) {
+    vm_->PersistLibraryState();
+  }
+}
 
 } // namespace oxygen::examples::ui

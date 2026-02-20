@@ -12,6 +12,43 @@
 namespace oxygen::examples {
 
 namespace {
+  auto JoinPaths(const std::vector<std::filesystem::path>& paths) -> std::string
+  {
+    std::string value;
+    bool first = true;
+    for (const auto& path : paths) {
+      if (path.empty()) {
+        continue;
+      }
+      if (!first) {
+        value.push_back('\n');
+      }
+      first = false;
+      value += path.string();
+    }
+    return value;
+  }
+
+  auto SplitPaths(const std::string& serialized)
+    -> std::vector<std::filesystem::path>
+  {
+    std::vector<std::filesystem::path> paths;
+    std::size_t begin = 0;
+    while (begin <= serialized.size()) {
+      const auto end = serialized.find('\n', begin);
+      const auto token = serialized.substr(
+        begin, end == std::string::npos ? std::string::npos : end - begin);
+      if (!token.empty()) {
+        paths.emplace_back(token);
+      }
+      if (end == std::string::npos) {
+        break;
+      }
+      begin = end + 1;
+    }
+    return paths;
+  }
+
   // Explorer Keys
   constexpr auto kModelRootKey = "content.explorer.model_root";
   constexpr auto kIncludeFbxKey = "content.explorer.include_fbx";
@@ -32,6 +69,15 @@ namespace {
 
   // Paths
   constexpr auto kLastCookedOutputKey = "content.paths.last_cooked_output";
+  constexpr auto kMountedPaksKey = "content.library.mounted_paks";
+  constexpr auto kMountedIndicesKey = "content.library.mounted_indices";
+
+  // Active scene selection
+  constexpr auto kActiveSceneNameKey = "content.active_scene.name";
+  constexpr auto kActiveSceneKeyKey = "content.active_scene.key";
+  constexpr auto kActiveSceneSourcePathKey = "content.active_scene.source_path";
+  constexpr auto kActiveSceneSourceIsPakKey
+    = "content.active_scene.source_is_pak";
 
   // Texture Tuning Keys
   constexpr auto kTexTuningEnabledKey = "content.import.tuning.enabled";
@@ -299,6 +345,86 @@ auto ContentSettingsService::SetLastCookedOutputDirectory(
   DCHECK_NOTNULL_F(settings);
 
   settings->SetString(kLastCookedOutputKey, path);
+  ++epoch_;
+}
+
+auto ContentSettingsService::GetMountedPakPaths() const
+  -> std::vector<std::filesystem::path>
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  const auto serialized = settings->GetString(kMountedPaksKey).value_or("");
+  return SplitPaths(serialized);
+}
+
+auto ContentSettingsService::SetMountedPakPaths(
+  const std::vector<std::filesystem::path>& paths) -> void
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  settings->SetString(kMountedPaksKey, JoinPaths(paths));
+  ++epoch_;
+}
+
+auto ContentSettingsService::GetMountedIndexPaths() const
+  -> std::vector<std::filesystem::path>
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  const auto serialized = settings->GetString(kMountedIndicesKey).value_or("");
+  return SplitPaths(serialized);
+}
+
+auto ContentSettingsService::SetMountedIndexPaths(
+  const std::vector<std::filesystem::path>& paths) -> void
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  settings->SetString(kMountedIndicesKey, JoinPaths(paths));
+  ++epoch_;
+}
+
+auto ContentSettingsService::GetActiveSceneSelection() const
+  -> std::optional<ContentActiveSceneSelection>
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+
+  const auto source_path
+    = settings->GetString(kActiveSceneSourcePathKey).value_or("");
+  if (source_path.empty()) {
+    return std::nullopt;
+  }
+
+  ContentActiveSceneSelection selection;
+  selection.scene_name = settings->GetString(kActiveSceneNameKey).value_or("");
+  selection.scene_key = settings->GetString(kActiveSceneKeyKey).value_or("");
+  selection.source_path = source_path;
+  selection.source_is_pak
+    = settings->GetBool(kActiveSceneSourceIsPakKey).value_or(true);
+  return selection;
+}
+
+auto ContentSettingsService::SetActiveSceneSelection(
+  const std::optional<ContentActiveSceneSelection>& selection) -> void
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+
+  if (!selection.has_value()) {
+    settings->SetString(kActiveSceneNameKey, "");
+    settings->SetString(kActiveSceneKeyKey, "");
+    settings->SetString(kActiveSceneSourcePathKey, "");
+    settings->SetBool(kActiveSceneSourceIsPakKey, true);
+    ++epoch_;
+    return;
+  }
+
+  settings->SetString(kActiveSceneNameKey, selection->scene_name);
+  settings->SetString(kActiveSceneKeyKey, selection->scene_key);
+  settings->SetString(
+    kActiveSceneSourcePathKey, selection->source_path.string());
+  settings->SetBool(kActiveSceneSourceIsPakKey, selection->source_is_pak);
   ++epoch_;
 }
 
