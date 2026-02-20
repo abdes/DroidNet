@@ -318,7 +318,8 @@ private:
   auto CollectActiveScripts(observer_ptr<engine::FrameContext> context) -> void;
 
   lua_State* lua_state_ { nullptr };
-  int runtime_env_ref_;
+  int runtime_env_ref_ { -1 };
+  int global_env_ref_ { -1 };
   engine::ModulePriority priority_;
   observer_ptr<AsyncEngine> engine_;
   bool input_bridge_logs_enabled_ { false };

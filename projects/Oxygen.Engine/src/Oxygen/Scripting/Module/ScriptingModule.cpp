@@ -332,6 +332,11 @@ auto ScriptingModule::OnShutdown() noexcept -> void
 
     bindings::ShutdownEventsRuntime(lua_state_);
 
+    if (global_env_ref_ != LUA_NOREF) {
+      lua_unref(lua_state_, global_env_ref_);
+      global_env_ref_ = LUA_NOREF;
+    }
+
     if (runtime_env_ref_ != LUA_NOREF) {
       lua_unref(lua_state_, runtime_env_ref_);
       runtime_env_ref_ = LUA_NOREF;
@@ -644,27 +649,18 @@ auto ScriptingModule::ExecuteScript(const ScriptExecutionRequest& request)
   const std::string bytecode
     = Luau::compile(std::string(request.source_text.get()), options);
 
-  lua_getref(lua_state_, runtime_env_ref_);
+  lua_getref(lua_state_, global_env_ref_);
   const auto env_index = lua_gettop(lua_state_);
-
-  // Create an isolated instance environment
-  lua_newtable(lua_state_); // instance_env
-  lua_newtable(lua_state_); // metatable
-  lua_pushvalue(lua_state_, env_index);
-  lua_setfield(lua_state_, -2, "__index");
-  lua_setmetatable(lua_state_, -2);
-  const auto instance_env_index = lua_gettop(lua_state_);
 
   const std::string chunk_name_string { request.chunk_name.get() };
   const auto load_status = luau_load(lua_state_, chunk_name_string.c_str(),
-    bytecode.data(), bytecode.size(), instance_env_index);
+    bytecode.data(), bytecode.size(), env_index);
   if (load_status != LUA_OK) {
     const auto error_message = LuaToString(lua_state_, kLuaStackTop);
-    lua_pop(lua_state_, 3); // error + instance_env + env
+    lua_pop(lua_state_, 2); // error + global_env
     return ErrorResult("compile_or_load", error_message);
   }
-  lua_remove(lua_state_, instance_env_index); // remove instance_env
-  lua_remove(lua_state_, env_index); // remove shared_env
+  lua_remove(lua_state_, env_index); // remove global_env
   // stack now contains only the loaded chunk
 
   lua_pushcfunction(lua_state_, LuaTraceback, kLuaTracebackFnName);
@@ -737,6 +733,20 @@ auto ScriptingModule::InitializeSandbox() -> ScriptExecutionResult
   // Finally freeze the entire environment table
   lua_setreadonly(lua_state_, -1, 1);
   lua_pop(lua_state_, 1);
+
+  // Create the shared Global Environment for ExecuteScript and as base for
+  // slots
+  lua_newtable(lua_state_); // global_env
+  lua_newtable(lua_state_); // mt
+  lua_getref(lua_state_, runtime_env_ref_);
+  lua_setfield(lua_state_, -2, "__index");
+  lua_setmetatable(lua_state_, -2);
+
+  lua_pushvalue(lua_state_, -1);
+  lua_setfield(lua_state_, -2, "_G"); // global_env._G = global_env
+
+  global_env_ref_ = lua_ref(lua_state_, -1);
+  lua_settop(lua_state_, 0);
 
   return OkResult();
 }
@@ -815,8 +825,7 @@ auto ScriptingModule::InvokePhaseHook(const std::string_view hook_name,
     return ErrorResult("runtime", "lua state is null");
   }
 
-  if (!TryGetHookFunctionFromEnvironment(
-        lua_state_, runtime_env_ref_, hook_name)
+  if (!TryGetHookFunctionFromEnvironment(lua_state_, global_env_ref_, hook_name)
     && !TryGetHookFunction(lua_state_, hook_name)) {
     return OkResult();
   }
@@ -1298,7 +1307,7 @@ auto ScriptingModule::RebuildSlotRuntime(const SlotRuntimeKey& key,
 auto ScriptingModule::InitializeInstanceEnvironment(SlotRuntimeState& state)
   -> void
 {
-  if (lua_state_ == nullptr || runtime_env_ref_ == LUA_NOREF) {
+  if (lua_state_ == nullptr || global_env_ref_ == LUA_NOREF) {
     return;
   }
 
@@ -1306,7 +1315,7 @@ auto ScriptingModule::InitializeInstanceEnvironment(SlotRuntimeState& state)
 
   // Create metatable for inheritance from sandbox globals
   lua_newtable(lua_state_); // mt
-  lua_getref(lua_state_, runtime_env_ref_);
+  lua_getref(lua_state_, global_env_ref_);
   lua_setfield(lua_state_, -2, "__index");
 
   lua_setmetatable(lua_state_, -2);
