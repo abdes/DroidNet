@@ -4,9 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Testing/GTest.h>
+
+#include <Oxygen/Composition/Object.h>
 #include <Oxygen/Core/AnyCache.h>
 #include <Oxygen/Engine/Scripting/Detail/LruEviction.h>
-#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen;
 
