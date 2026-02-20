@@ -32,6 +32,7 @@
 //
 
 #include <algorithm>
+#include <array>
 #include <concepts>
 #include <type_traits>
 #include <utility>
@@ -55,6 +56,47 @@ using oxygen::engine::EngineModule;
 using oxygen::engine::FrameContext;
 using oxygen::engine::ModuleManager;
 using oxygen::engine::UnifiedSnapshot;
+
+namespace {
+struct ReservedPriorityBinding {
+  oxygen::engine::ModulePriority priority;
+  std::string_view module_name;
+};
+
+constexpr std::array kReservedPriorityBindings {
+  ReservedPriorityBinding {
+    oxygen::engine::kRendererModulePriority, "RendererModule" },
+  ReservedPriorityBinding {
+    oxygen::engine::kImGuiModulePriority, "ImGuiModule" },
+  ReservedPriorityBinding {
+    oxygen::engine::kScriptingModulePriority, "ScriptingModule" },
+  ReservedPriorityBinding { oxygen::engine::kSceneObserverSyncModulePriority,
+    "SceneObserverSyncModule" },
+};
+
+auto FindReservedOwnerByPriority(const std::uint32_t priority)
+  -> std::string_view
+{
+  for (const auto& binding : kReservedPriorityBindings) {
+    if (binding.priority.get() == priority) {
+      return binding.module_name;
+    }
+  }
+  return {};
+}
+
+auto FindReservedPriorityByModuleName(
+  const std::string_view module_name, std::uint32_t& out_priority) -> bool
+{
+  for (const auto& binding : kReservedPriorityBindings) {
+    if (binding.module_name == module_name) {
+      out_priority = binding.priority.get();
+      return true;
+    }
+  }
+  return false;
+}
+} // namespace
 
 ModuleManager::ModuleManager(const observer_ptr<AsyncEngine> engine)
   : engine_(engine)
@@ -223,8 +265,23 @@ auto ModuleManager::RegisterModule(
   }
 
   const auto name = module->GetName();
-  LOG_F(INFO, "Registering module '{}' with priority {}", name,
-    module->GetPriority().get());
+  const auto priority = module->GetPriority().get();
+
+  if (const auto reserved_owner = FindReservedOwnerByPriority(priority);
+    !reserved_owner.empty() && reserved_owner != name) {
+    ABORT_F("Module '{}' attempted to register with reserved priority {} "
+            "owned by '{}'",
+      name, priority, reserved_owner);
+  }
+
+  std::uint32_t required_priority = 0;
+  if (FindReservedPriorityByModuleName(name, required_priority)
+    && required_priority != priority) {
+    ABORT_F("Module '{}' must use reserved priority {}, but got {}", name,
+      required_priority, priority);
+  }
+
+  LOG_F(INFO, "Registering module '{}' with priority {}", name, priority);
 
   auto result = module->OnAttached(engine_);
   if (!result) {
@@ -392,11 +449,13 @@ auto ModuleManager::RebuildPhaseCache() noexcept -> void
 
   // Sort each phase bucket by ascending priority for execution ordering,
   // leaving 'modules_' untouched to preserve attach order for shutdown.
+  // Stable sort preserves registration order for equal priorities.
   for (auto p = PhaseIndex::begin(); p < PhaseIndex::end(); ++p) {
     auto& bucket = phase_cache_[p];
-    std::ranges::sort(bucket, [](const EngineModule* a, const EngineModule* b) {
-      return a->GetPriority().get() < b->GetPriority().get();
-    });
+    std::ranges::stable_sort(
+      bucket, [](const EngineModule* a, const EngineModule* b) {
+        return a->GetPriority().get() < b->GetPriority().get();
+      });
   }
 }
 

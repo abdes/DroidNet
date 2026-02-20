@@ -483,6 +483,7 @@ auto SceneLoaderService::BuildSceneAsync(scene::Scene& scene,
   const data::SceneAsset& asset) -> co::Co<scene::SceneNode>
 {
   LOG_F(INFO, "SceneLoader: Instantiating runtime scene '{}'", kSceneName);
+  scene.CollectMutationsStart();
 
   runtime_nodes_.clear();
   active_camera_ = {};

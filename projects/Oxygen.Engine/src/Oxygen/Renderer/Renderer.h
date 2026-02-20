@@ -142,7 +142,7 @@ public:
   {
     // This module must run last, after all modules that may contribute to the
     // frame context.
-    return ModulePriority { kModulePriorityLowest };
+    return kRendererModulePriority;
   }
 
   [[nodiscard]] auto GetSupportedPhases() const noexcept

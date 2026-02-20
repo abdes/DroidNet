@@ -19,6 +19,8 @@ class SceneObserverSyncModule final : public engine::EngineModule {
   OXYGEN_TYPED(SceneObserverSyncModule)
 
 public:
+  //! Priority contract: must run after gameplay mutators (including
+  //! ScriptingModule) and before RendererModule.
   OXGN_SCNSYNC_API explicit SceneObserverSyncModule(
     engine::ModulePriority priority);
   OXGN_SCNSYNC_API ~SceneObserverSyncModule() override = default;

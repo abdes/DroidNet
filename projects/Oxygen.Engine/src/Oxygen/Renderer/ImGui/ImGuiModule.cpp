@@ -105,10 +105,11 @@ auto ImGuiModule::OnAttached(const observer_ptr<AsyncEngine> engine) noexcept
       oxygen_config.Name);
     *out = '\0';
 
-    ImFont* oxygen_icon_font = io.Fonts->AddFontFromMemoryCompressedTTF(
-      icons::OxygenIcons_compressed_data,
-      static_cast<int>(icons::OxygenIcons_compressed_size),
-      kToolbarIconFontSize, &oxygen_config, oxygen_icon_ranges);
+    [[maybe_unused]] ImFont* oxygen_icon_font
+      = io.Fonts->AddFontFromMemoryCompressedTTF(
+        icons::OxygenIcons_compressed_data,
+        static_cast<int>(icons::OxygenIcons_compressed_size),
+        kToolbarIconFontSize, &oxygen_config, oxygen_icon_ranges);
     IM_ASSERT(oxygen_icon_font != nullptr);
 
     // NOLINTEND(*-avoid-c-arrays,*-array-to-pointer-decay,*-magic-numbers)

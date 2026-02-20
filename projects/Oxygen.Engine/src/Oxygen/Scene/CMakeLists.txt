@@ -95,6 +95,7 @@ set(
   "Types/ActiveMesh.h"
   "Types/Flags.h"
   "Types/NodeHandle.h"
+  "Types/ScriptSlotIndex.h"
   "Types/RenderablePolicies.h"
   "Types/SceneFlagEnum.h"
   "Types/Strong.h"
@@ -126,6 +127,9 @@ set(
   "Detail/Scene_safecall_impl.cpp"
   "Detail/StringConverters.cpp"
   "Detail/TransformComponent.cpp"
+  "Internal/MutationDispatcher.cpp"
+  "Internal/MutationCollector.cpp"
+  "Internal/ScriptSlotMutationProcessor.cpp"
   "Environment/Sun.cpp"
 )
 

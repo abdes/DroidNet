@@ -4,23 +4,42 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <ranges>
+#include <algorithm>
+#include <cstdint>
+#include <exception>
+#include <memory>
+#include <optional>
 #include <span>
+#include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
-
-#include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ResourceTable.h>
-// ReSharper disable once CppUnusedIncludeDirective
-#include <Oxygen/Scene/Detail/Scene_safecall_impl.h> // needed for validators
+#include <Oxygen/Scene/Camera/Orthographic.h>
+#include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Detail/Scene_safecall_impl.h>
+#include <Oxygen/Scene/Internal/IMutationCollector.h>
+#include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/PointLight.h>
+#include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/SceneTraversal.h>
+#include <Oxygen/Scene/Scripting/ScriptingComponent.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
+#include <Oxygen/Scene/Types/Traversal.h>
 
+using oxygen::scene::DirectionalLight;
+using oxygen::scene::OrthographicCamera;
+using oxygen::scene::PerspectiveCamera;
+using oxygen::scene::PointLight;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;
+using oxygen::scene::SpotLight;
 
 //------------------------------------------------------------------------------
 // Scene Node Creation Implementation
@@ -248,6 +267,24 @@ auto Scene::DestroyNode(SceneNode& node) noexcept -> bool
       UnlinkNode(node.GetHandle(), state.node_impl);
 
       const auto handle = node.GetHandle();
+      const bool had_camera = state.node_impl->HasComponent<PerspectiveCamera>()
+        || state.node_impl->HasComponent<OrthographicCamera>();
+      const bool had_light = state.node_impl->HasComponent<DirectionalLight>()
+        || state.node_impl->HasComponent<PointLight>()
+        || state.node_impl->HasComponent<SpotLight>();
+      if (state.node_impl->HasComponent<ScriptingComponent>()) {
+        state.node_impl->GetComponent<ScriptingComponent>()
+          .EmitActiveSlotDeactivations();
+      }
+      if (const auto collector = AsMutationCollector(); collector != nullptr) {
+        if (had_camera) {
+          collector->CollectCameraChanged(handle);
+        }
+        if (had_light) {
+          collector->CollectLightChanged(handle);
+        }
+      }
+
       // Remove from root nodes set only if it's actually a root node
       // (optimization)
       if (node.IsRoot()) {
@@ -385,6 +422,26 @@ auto Scene::DestroyNodeHierarchy(SceneNode& starting_node) noexcept -> bool
           // Real visit: destroy the node after its children have been destroyed
           // Capture node name before destruction for logging
           const std::string node_name = std::string(node.node_impl->GetName());
+          if (node.node_impl->template HasComponent<ScriptingComponent>()) {
+            node.node_impl->template GetComponent<ScriptingComponent>()
+              .EmitActiveSlotDeactivations();
+          }
+          const bool had_camera
+            = node.node_impl->template HasComponent<PerspectiveCamera>()
+            || node.node_impl->template HasComponent<OrthographicCamera>();
+          const bool had_light
+            = node.node_impl->template HasComponent<DirectionalLight>()
+            || node.node_impl->template HasComponent<PointLight>()
+            || node.node_impl->template HasComponent<SpotLight>();
+          if (const auto collector = AsMutationCollector();
+            collector != nullptr) {
+            if (had_camera) {
+              collector->CollectCameraChanged(node.handle);
+            }
+            if (had_light) {
+              collector->CollectLightChanged(node.handle);
+            }
+          }
 
           const auto removed = nodes_->Erase(node.handle);
           if (removed > 0) {

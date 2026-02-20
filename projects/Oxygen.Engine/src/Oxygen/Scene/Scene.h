@@ -6,7 +6,9 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -14,6 +16,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
+#include <Oxygen/Scene/Types/ScriptSlotIndex.h>
 #include <Oxygen/Scene/api_export.h>
 
 namespace oxygen {
@@ -22,9 +25,39 @@ template <typename T> class ResourceTable;
 
 namespace oxygen::scene {
 
+enum class SceneMutationMask : uint32_t {
+  kNone = 0,
+  kScriptSlotActivated = 1u << 0u,
+  kScriptSlotChanged = 1u << 1u,
+  kScriptSlotDeactivated = 1u << 2u,
+  kLightChanged = 1u << 3u,
+  kCameraChanged = 1u << 4u,
+  kAllScriptSlotMutations = (1u << 0u) | (1u << 1u) | (1u << 2u),
+  kAllMutations = kAllScriptSlotMutations | (1u << 3u) | (1u << 4u),
+};
+
+constexpr auto operator|(const SceneMutationMask lhs,
+  const SceneMutationMask rhs) noexcept -> SceneMutationMask
+{
+  return static_cast<SceneMutationMask>(
+    static_cast<uint32_t>(lhs) | static_cast<uint32_t>(rhs));
+}
+
+constexpr auto operator&(const SceneMutationMask lhs,
+  const SceneMutationMask rhs) noexcept -> SceneMutationMask
+{
+  return static_cast<SceneMutationMask>(
+    static_cast<uint32_t>(lhs) & static_cast<uint32_t>(rhs));
+}
+
 class SceneQuery;
 class SceneEnvironment;
 template <typename SceneT> class SceneTraversal;
+namespace internal {
+  class IMutationCollector;
+  class IScriptSlotMutationProcessor;
+  class IMutationDispatcher;
+}
 
 class ISceneObserver {
 public:
@@ -35,19 +68,29 @@ public:
   OXYGEN_DEFAULT_MOVABLE(ISceneObserver)
 
   virtual auto OnScriptSlotActivated(const NodeHandle& /*node_handle*/,
-    uint32_t /*slot_index*/, const ScriptingComponent::Slot& /*slot*/) noexcept
-    -> void
+    ScriptSlotIndex /*slot_index*/,
+    const ScriptingComponent::Slot& /*slot*/) noexcept -> void
   {
   }
 
   virtual auto OnScriptSlotChanged(const NodeHandle& /*node_handle*/,
-    uint32_t /*slot_index*/, const ScriptingComponent::Slot& /*slot*/) noexcept
+    ScriptSlotIndex /*slot_index*/,
+    const ScriptingComponent::Slot& /*slot*/) noexcept -> void
+  {
+  }
+
+  virtual auto OnScriptSlotDeactivated(const NodeHandle& /*node_handle*/,
+    ScriptSlotIndex /*slot_index*/) noexcept -> void
+  {
+  }
+
+  virtual auto OnLightChanged(const NodeHandle& /*node_handle*/) noexcept
     -> void
   {
   }
 
-  virtual auto OnScriptSlotDeactivated(
-    const NodeHandle& /*node_handle*/, uint32_t /*slot_index*/) noexcept -> void
+  virtual auto OnCameraChanged(const NodeHandle& /*node_handle*/) noexcept
+    -> void
   {
   }
 };
@@ -98,8 +141,6 @@ class Scene : public Composition, public std::enable_shared_from_this<Scene> {
   //! Implementation of a scene node, stored in a resource table.
   using SceneNodeImpl = SceneNodeImpl;
 
-  constexpr static size_t kInitialCapacity = 1024;
-
 public:
   using NodeTable = ResourceTable<SceneNodeImpl>;
   using SceneId = NodeHandle::SceneId;
@@ -115,8 +156,7 @@ public:
   //=== Basic API ===---------------------------------------------------------//
 
   //! Constructs a Scene with the given name and initial capacity hint.
-  OXGN_SCN_API explicit Scene(
-    const std::string& name, size_t initial_capacity = kInitialCapacity);
+  OXGN_SCN_API explicit Scene(const std::string& name, size_t initial_capacity);
 
   OXGN_SCN_API ~Scene() override;
 
@@ -289,11 +329,58 @@ public:
 
   //=== Observer Sync ===-----------------------------------------------------//
 
+  struct MutationDispatchCounters final {
+    uint64_t sync_calls { 0 };
+    uint64_t frames_with_mutations { 0 };
+    uint64_t drained_records { 0 };
+    uint64_t script_records_dispatched { 0 };
+    uint64_t light_records_coalesced_in { 0 };
+    uint64_t light_records_dispatched { 0 };
+    uint64_t camera_records_coalesced_in { 0 };
+    uint64_t camera_records_dispatched { 0 };
+  };
+
+  //! Registers an observer with an explicit mutation mask.
+  /*!
+   Delivery contract:
+   - Notifications are deferred until SyncObservers().
+   - Observers receive only future mutations that were collected after
+     registration.
+   - No historical backfill/snapshot is sent on registration.
+   - Systems that require initial state (for example scripting) must register
+     before state mutations they depend on are produced.
+  */
+  OXGN_SCN_API auto RegisterObserver(observer_ptr<ISceneObserver> observer,
+    SceneMutationMask mutation_mask) noexcept -> bool;
+  //! Registers an observer for all currently defined mutation types.
   OXGN_SCN_API auto RegisterObserver(
     observer_ptr<ISceneObserver> observer) noexcept -> bool;
   OXGN_SCN_API auto UnregisterObserver(
     observer_ptr<ISceneObserver> observer) noexcept -> bool;
+  //! Dispatches deferred mutations to registered observers.
+  /*!
+   Performance contract:
+   - If there are no observers, mutation collection can be disabled and this
+     call fast-returns.
+   - While collection is disabled, mutations are intentionally dropped.
+  */
   OXGN_SCN_API auto SyncObservers() -> void;
+  OXGN_SCN_NDAPI auto GetMutationDispatchCounters() const noexcept
+    -> MutationDispatchCounters;
+  //! Start collecting deferred mutations even when no observers are registered.
+  /*!
+   Intended for staged/offscreen scene hydration. This collects future
+
+   * mutations until CollectMutationsEnd() is called.
+  */
+  OXGN_SCN_API auto CollectMutationsStart() noexcept -> void;
+  //! End forced mutation collection started by CollectMutationsStart().
+  /*!
+   Stops collecting new mutations when no observers are registered, while
+
+   * preserving already queued mutations for the next observer sync.
+  */
+  OXGN_SCN_API auto CollectMutationsEnd() noexcept -> void;
 
   //=== Node Re-parenting API (Same-Scene Only) ===-------------------------//
 
@@ -620,30 +707,29 @@ private:
   //! Unique ID for this scene (0-255)
   SceneId scene_id_;
 
-  struct ScriptSlotKey final {
-    NodeHandle node_handle;
-    uint32_t slot_index { 0 };
-
-    [[nodiscard]] auto operator==(const ScriptSlotKey&) const noexcept -> bool
-      = default;
+  struct ObserverSubscription final {
+    observer_ptr<ISceneObserver> observer;
+    SceneMutationMask mutation_mask { SceneMutationMask::kAllMutations };
   };
 
-  struct ScriptSlotKeyHash final {
-    [[nodiscard]] auto operator()(const ScriptSlotKey& key) const noexcept
-      -> size_t;
-  };
+  [[nodiscard]] auto AsMutationCollector() const noexcept
+    -> observer_ptr<internal::IMutationCollector>;
+  auto NotifyObservers(SceneMutationMask mutation_type,
+    const NodeHandle& node_handle, ScriptSlotIndex slot_index,
+    const ScriptingComponent::Slot* slot) const -> void;
+  [[nodiscard]] auto ResolveScriptSlot(
+    const NodeHandle& node_handle, ScriptSlotIndex slot_index) const noexcept
+    -> const ScriptingComponent::Slot*;
+  auto UpdateMutationCollectionState(bool log_transition = true) -> void;
 
-  struct ScriptSlotSignature final {
-    uint64_t content_hash { 0 };
+  std::vector<ObserverSubscription> observers_;
+  bool hydration_mutation_collection_enabled_ { false };
+  std::unique_ptr<internal::IMutationCollector> mutation_collector_;
+  std::unique_ptr<internal::IScriptSlotMutationProcessor>
+    script_slot_processor_;
+  std::unique_ptr<internal::IMutationDispatcher> mutation_dispatcher_;
 
-    [[nodiscard]] auto operator==(const ScriptSlotSignature&) const noexcept
-      -> bool
-      = default;
-  };
-
-  std::vector<observer_ptr<ISceneObserver>> observers_;
-  std::unordered_map<ScriptSlotKey, ScriptSlotSignature, ScriptSlotKeyHash>
-    synced_script_slots_;
+  friend class SceneNode;
 
   //=== Validation Helpers ===------------------------------------------------//
 

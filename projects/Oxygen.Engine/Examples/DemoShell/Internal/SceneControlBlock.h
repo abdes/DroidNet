@@ -83,6 +83,9 @@ public:
     scene_ = std::move(staged_scene_);
     scene_ptr_.store(scene_.get(), std::memory_order_release);
     published_main_camera_ = std::move(staged_main_camera_);
+    if (scene_) {
+      scene_->CollectMutationsEnd();
+    }
     staged_scene_ptr_.store(nullptr, std::memory_order_release);
     has_staged_scene_.store(false, std::memory_order_release);
     generation_.fetch_add(1U, std::memory_order_acq_rel);

@@ -59,8 +59,7 @@ public:
 
   [[nodiscard]] auto GetPriority() const noexcept -> ModulePriority override
   {
-    // TODO(abdes) consolidate predefined module priorities
-    return engine::ModulePriority { 1000 };
+    return engine::kImGuiModulePriority;
   }
 
   [[nodiscard]] auto GetSupportedPhases() const noexcept
