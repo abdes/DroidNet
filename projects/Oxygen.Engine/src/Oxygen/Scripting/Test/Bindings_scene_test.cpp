@@ -134,7 +134,8 @@ end
   });
   ASSERT_TRUE(hook_result.ok) << hook_result.message;
 
-  auto scene = std::make_shared<scene::Scene>("scene_binding_test");
+  auto scene = std::make_shared<scene::Scene>(
+    "scene_binding_test", kDefaultSceneCapacity);
   engine::FrameContext context;
   const auto tag = engine::internal::EngineTagFactory::Get();
   context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
@@ -193,7 +194,8 @@ end
   });
   ASSERT_TRUE(hook_result.ok) << hook_result.message;
 
-  auto scene = std::make_shared<scene::Scene>("scene_binding_test");
+  auto scene = std::make_shared<scene::Scene>(
+    "scene_binding_test", kDefaultSceneCapacity);
   engine::FrameContext context;
   const auto tag = engine::internal::EngineTagFactory::Get();
   context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
@@ -244,7 +246,8 @@ end
   });
   ASSERT_TRUE(hook_result.ok) << hook_result.message;
 
-  auto scene = std::make_shared<scene::Scene>("scene_binding_test");
+  auto scene = std::make_shared<scene::Scene>(
+    "scene_binding_test", kDefaultSceneCapacity);
   engine::FrameContext context;
   const auto tag = engine::internal::EngineTagFactory::Get();
   context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
@@ -305,7 +308,8 @@ end
   });
   ASSERT_TRUE(hook_result.ok) << hook_result.message;
 
-  auto scene = std::make_shared<scene::Scene>("scene_binding_test");
+  auto scene = std::make_shared<scene::Scene>(
+    "scene_binding_test", kDefaultSceneCapacity);
   engine::FrameContext context;
   const auto tag = engine::internal::EngineTagFactory::Get();
   context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
@@ -364,7 +368,8 @@ end
   });
   ASSERT_TRUE(hook_result.ok) << hook_result.message;
 
-  auto scene = std::make_shared<scene::Scene>("scene_binding_test");
+  auto scene = std::make_shared<scene::Scene>(
+    "scene_binding_test", kDefaultSceneCapacity);
   engine::FrameContext context;
   const auto tag = engine::internal::EngineTagFactory::Get();
   context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
@@ -422,7 +427,8 @@ end
   });
   ASSERT_TRUE(hook_result.ok) << hook_result.message;
 
-  auto scene = std::make_shared<scene::Scene>("scene_binding_test");
+  auto scene = std::make_shared<scene::Scene>(
+    "scene_binding_test", kDefaultSceneCapacity);
   engine::FrameContext context;
   const auto tag = engine::internal::EngineTagFactory::Get();
   context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
@@ -472,7 +478,8 @@ end
   });
   ASSERT_TRUE(hook_result.ok) << hook_result.message;
 
-  auto scene_a = std::make_shared<scene::Scene>("scene_a");
+  auto scene_a
+    = std::make_shared<scene::Scene>("scene_a", kDefaultSceneCapacity);
   engine::FrameContext frame_a;
   const auto tag = engine::internal::EngineTagFactory::Get();
   frame_a.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
@@ -486,7 +493,8 @@ end
 
   scene_a.reset();
 
-  auto scene_b = std::make_shared<scene::Scene>("scene_b");
+  auto scene_b
+    = std::make_shared<scene::Scene>("scene_b", kDefaultSceneCapacity);
   engine::FrameContext frame_b;
   frame_b.SetFrameSequenceNumber(frame::SequenceNumber { 2 }, tag);
   frame_b.SetScene(observer_ptr<scene::Scene> { scene_b.get() });
@@ -546,7 +554,8 @@ end
   });
   ASSERT_TRUE(hook_result.ok) << hook_result.message;
 
-  auto scene = std::make_shared<scene::Scene>("scene_binding_test");
+  auto scene = std::make_shared<scene::Scene>(
+    "scene_binding_test", kDefaultSceneCapacity);
   engine::FrameContext context;
   const auto tag = engine::internal::EngineTagFactory::Get();
   context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
@@ -629,7 +638,8 @@ end
   });
   ASSERT_TRUE(hook_result.ok) << hook_result.message;
 
-  auto scene = std::make_shared<scene::Scene>("scene_binding_test");
+  auto scene = std::make_shared<scene::Scene>(
+    "scene_binding_test", kDefaultSceneCapacity);
   engine::FrameContext context;
   const auto tag = engine::internal::EngineTagFactory::Get();
   context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
@@ -677,7 +687,8 @@ end
   });
   ASSERT_TRUE(hook_result.ok) << hook_result.message;
 
-  auto scene = std::make_shared<scene::Scene>("scene_binding_test");
+  auto scene = std::make_shared<scene::Scene>(
+    "scene_binding_test", kDefaultSceneCapacity);
   engine::FrameContext context;
   const auto tag = engine::internal::EngineTagFactory::Get();
   context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
@@ -731,7 +742,8 @@ end
   });
   ASSERT_TRUE(hook_result.ok) << hook_result.message;
 
-  auto scene = std::make_shared<scene::Scene>("scene_binding_test");
+  auto scene = std::make_shared<scene::Scene>(
+    "scene_binding_test", kDefaultSceneCapacity);
   engine::FrameContext context;
   const auto tag = engine::internal::EngineTagFactory::Get();
   context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
@@ -779,7 +791,8 @@ end
   });
   ASSERT_TRUE(hook_result.ok) << hook_result.message;
 
-  auto scene_a = std::make_shared<scene::Scene>("scene_a");
+  auto scene_a
+    = std::make_shared<scene::Scene>("scene_a", kDefaultSceneCapacity);
   engine::FrameContext frame_a;
   const auto tag = engine::internal::EngineTagFactory::Get();
   frame_a.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
@@ -793,7 +806,8 @@ end
 
   scene_a.reset();
 
-  auto scene_b = std::make_shared<scene::Scene>("scene_b");
+  auto scene_b
+    = std::make_shared<scene::Scene>("scene_b", kDefaultSceneCapacity);
   engine::FrameContext frame_b;
   frame_b.SetFrameSequenceNumber(frame::SequenceNumber { 2 }, tag);
   frame_b.SetScene(observer_ptr<scene::Scene> { scene_b.get() });

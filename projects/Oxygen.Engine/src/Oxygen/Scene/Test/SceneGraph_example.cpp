@@ -88,9 +88,13 @@ struct DemoState {
     } pulsing;
   } anim_config;
 
+  static constexpr std::size_t kDefaultSceneCapacity = 100;
+
   explicit DemoState()
-    : main_scene(std::make_shared<Scene>("TransformExampleScene"))
-    , animation_scene(std::make_shared<Scene>("AnimationScene"))
+    : main_scene(
+        std::make_shared<Scene>("TransformExampleScene", kDefaultSceneCapacity))
+    , animation_scene(
+        std::make_shared<Scene>("AnimationScene", kDefaultSceneCapacity))
   // SceneNodes will be initialized in setup functions
   {
   }

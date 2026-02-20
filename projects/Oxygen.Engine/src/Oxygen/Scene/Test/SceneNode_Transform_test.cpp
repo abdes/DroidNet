@@ -27,7 +27,11 @@ namespace {
 
 class SceneNodeTransformTest : public testing::Test {
 protected:
-  void SetUp() override { scene_ = std::make_shared<Scene>("TestScene", 1024); }
+  void SetUp() override
+  {
+    static constexpr size_t kTestSceneCapacity = 1024;
+    scene_ = std::make_shared<Scene>("TestScene", kTestSceneCapacity);
+  }
   void TearDown() override { scene_.reset(); }
 
   // Helper: Set transform values for testing

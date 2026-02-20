@@ -98,7 +98,9 @@ NOLINT_TEST(ScenePrepLightManagerIntegration,
     std::unique_ptr<oxygen::renderer::resources::DrawMetadataEmitter> {},
     std::move(light_manager));
 
-  const auto scene = std::make_shared<Scene>("ScenePrepLightManagerScene", 64);
+  static constexpr size_t kTestSceneCapacity = 64;
+  const auto scene
+    = std::make_shared<Scene>("ScenePrepLightManagerScene", kTestSceneCapacity);
 
   // Light-only node: intentionally has no renderable component.
   const auto light_flags = SceneNode::Flags {}

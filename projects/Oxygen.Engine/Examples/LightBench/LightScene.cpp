@@ -77,7 +77,8 @@ LightScene::LightScene(std::string_view name)
 
 auto LightScene::CreateScene() -> std::unique_ptr<scene::Scene>
 {
-  return std::make_unique<scene::Scene>(name_);
+  constexpr size_t kDefaultSceneCapacity = 128;
+  return std::make_unique<scene::Scene>(name_, kDefaultSceneCapacity);
 }
 
 void LightScene::SetScene(observer_ptr<scene::Scene> scene)

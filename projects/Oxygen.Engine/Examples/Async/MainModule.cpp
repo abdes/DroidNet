@@ -738,6 +738,8 @@ auto MainModule::OnFrameEnd(observer_ptr<engine::FrameContext> /*context*/)
 
 auto MainModule::EnsureExampleScene() -> void
 {
+  constexpr size_t kDefaultSceneCapacity = 128;
+
   // NOLINTBEGIN(*-magic-numbers)
   auto& shell = GetShell();
   if (active_scene_.IsValid() || shell.HasStagedScene()) {
@@ -747,7 +749,7 @@ auto MainModule::EnsureExampleScene() -> void
 
   using scene::Scene;
 
-  auto scene = std::make_unique<Scene>("ExampleScene");
+  auto scene = std::make_unique<Scene>("ExampleScene", kDefaultSceneCapacity);
   shell.StageScene(std::move(scene));
   const auto staged_scene = shell.GetStagedScene();
   CHECK_NOTNULL_F(staged_scene, "Async: staged scene not available");

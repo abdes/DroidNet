@@ -18,7 +18,9 @@ class SceneNodeTestBase : public ::testing::Test {
 protected:
   auto SetUp() -> void override
   {
-    scene_ = std::make_shared<oxygen::scene::Scene>("TestScene", 1024);
+    static constexpr size_t kTestSceneCapacity = 1024;
+    scene_
+      = std::make_shared<oxygen::scene::Scene>("TestScene", kTestSceneCapacity);
   }
   auto TearDown() -> void override { scene_.reset(); }
 

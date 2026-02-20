@@ -372,7 +372,8 @@ auto TestSceneFactory::CreateScene(std::string_view scene_name) const
   if (default_capacity_.has_value()) {
     return std::make_shared<Scene>(std::string(scene_name), *default_capacity_);
   }
-  return std::make_shared<Scene>(std::string(scene_name));
+  constexpr std::size_t kFallbackCapacity = 1024;
+  return std::make_shared<Scene>(std::string(scene_name), kFallbackCapacity);
 }
 
 auto TestSceneFactory::GenerateNodeName(int index) const -> std::string

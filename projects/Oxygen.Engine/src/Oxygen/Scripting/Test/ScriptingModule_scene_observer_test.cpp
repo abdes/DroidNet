@@ -54,9 +54,11 @@ namespace {
   };
 
   auto MakeSceneWithReadySlot(const char* scene_name,
-    const uint64_t script_hash) -> std::shared_ptr<Scene>
+    const uint64_t script_hash,
+    const size_t capacity = ScriptingModuleTest::kDefaultSceneCapacity)
+    -> std::shared_ptr<Scene>
   {
-    auto scene = std::make_shared<Scene>(scene_name);
+    auto scene = std::make_shared<Scene>(scene_name, capacity);
     auto node = scene->CreateNode("script-node");
     if (!node.IsValid()) {
       return {};

@@ -28,6 +28,9 @@
 
 namespace oxygen::engine::sceneprep::testing {
 
+namespace scene = oxygen::scene;
+namespace frame = oxygen::frame;
+
 //! Shared test fixture for ScenePrep unit tests.
 /*!
  A compact fixture that centralizes common scene/node/proto setup and
@@ -35,9 +38,11 @@ namespace oxygen::engine::sceneprep::testing {
 */
 class ScenePrepTestFixture : public ::testing::Test {
 protected:
+  static constexpr size_t kDefaultSceneCapacity = 1024;
+
   auto SetUp() -> void override
   {
-    scene_ = std::make_shared<scene::Scene>("TestScene");
+    scene_ = std::make_shared<scene::Scene>("TestScene", kDefaultSceneCapacity);
     node_ = scene_->CreateNode("TestNode");
 
     // non-trivial transform to ensure world-sphere is meaningful

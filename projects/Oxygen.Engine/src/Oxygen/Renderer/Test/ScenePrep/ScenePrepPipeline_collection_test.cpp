@@ -42,7 +42,8 @@ class ScenePrepPipelineTest : public ::testing::Test {
 protected:
   auto SetUp() -> void override
   {
-    scene_ = std::make_shared<Scene>("TestScene");
+    constexpr std::size_t kTestSceneCapacity = 100;
+    scene_ = std::make_shared<Scene>("TestScene", kTestSceneCapacity);
     root_a_ = scene_->CreateNode("RootA");
     root_b_ = scene_->CreateNode("RootB");
     const auto child_opt = scene_->CreateChildNode(root_a_, "ChildOfA");

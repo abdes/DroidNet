@@ -41,6 +41,7 @@ namespace {
   class SunResolverTest : public ::testing::Test { };
 
   constexpr float kEpsilon = 0.001F;
+  constexpr size_t kTestSceneCapacity = 100;
 
 } // namespace
 
@@ -48,7 +49,8 @@ namespace {
 NOLINT_TEST_F(SunResolverTest, NoSunComponentFallsBackToTaggedDirectional)
 {
   // Arrange
-  auto scene = std::make_shared<scene::Scene>("SunResolver.NoSun");
+  auto scene
+    = std::make_shared<scene::Scene>("SunResolver.NoSun", kTestSceneCapacity);
   const auto lights = std::array {
     MakeDirectionalLight(
       { 0.0F, -1.0F, 0.0F }, { 0.8F, 0.7F, 0.6F }, 2.0F, false),
@@ -75,7 +77,8 @@ NOLINT_TEST_F(SunResolverTest, NoSunComponentFallsBackToTaggedDirectional)
 NOLINT_TEST_F(SunResolverTest, SyntheticSunOverridesDirectionalLights)
 {
   // Arrange
-  auto scene = std::make_shared<scene::Scene>("SunResolver.Synthetic");
+  auto scene = std::make_shared<scene::Scene>(
+    "SunResolver.Synthetic", kTestSceneCapacity);
   auto environment = std::make_unique<scene::SceneEnvironment>();
   auto& sun = environment->AddSystem<scene::environment::Sun>();
   sun.SetSunSource(scene::environment::SunSource::kSynthetic);
@@ -108,7 +111,8 @@ NOLINT_TEST_F(SunResolverTest, SyntheticSunOverridesDirectionalLights)
 NOLINT_TEST_F(SunResolverTest, FromSceneUsesReferencedDirectionalLight)
 {
   // Arrange
-  auto scene = std::make_shared<scene::Scene>("SunResolver.Reference");
+  auto scene = std::make_shared<scene::Scene>(
+    "SunResolver.Reference", kTestSceneCapacity);
   auto environment = std::make_unique<scene::SceneEnvironment>();
   auto& sun = environment->AddSystem<scene::environment::Sun>();
   sun.SetSunSource(scene::environment::SunSource::kFromScene);
@@ -148,7 +152,8 @@ NOLINT_TEST_F(SunResolverTest, FromSceneUsesReferencedDirectionalLight)
 NOLINT_TEST_F(SunResolverTest, InvalidReferenceResolvesToNoSun)
 {
   // Arrange
-  auto scene = std::make_shared<scene::Scene>("SunResolver.InvalidReference");
+  auto scene = std::make_shared<scene::Scene>(
+    "SunResolver.InvalidReference", kTestSceneCapacity);
   auto environment = std::make_unique<scene::SceneEnvironment>();
   auto& sun = environment->AddSystem<scene::environment::Sun>();
   sun.SetSunSource(scene::environment::SunSource::kFromScene);
@@ -176,7 +181,8 @@ NOLINT_TEST_F(SunResolverTest, InvalidReferenceResolvesToNoSun)
 NOLINT_TEST_F(SunResolverTest, FromSceneWithoutReferenceResolvesToNoSun)
 {
   // Arrange
-  auto scene = std::make_shared<scene::Scene>("SunResolver.NoReference");
+  auto scene = std::make_shared<scene::Scene>(
+    "SunResolver.NoReference", kTestSceneCapacity);
   auto environment = std::make_unique<scene::SceneEnvironment>();
   auto& sun = environment->AddSystem<scene::environment::Sun>();
   sun.SetSunSource(scene::environment::SunSource::kFromScene);
@@ -199,7 +205,8 @@ NOLINT_TEST_F(SunResolverTest, FromSceneWithoutReferenceResolvesToNoSun)
 NOLINT_TEST_F(SunResolverTest, DeadReferenceResolvesToNoSun)
 {
   // Arrange
-  auto scene = std::make_shared<scene::Scene>("SunResolver.DeadReference");
+  auto scene = std::make_shared<scene::Scene>(
+    "SunResolver.DeadReference", kTestSceneCapacity);
   auto environment = std::make_unique<scene::SceneEnvironment>();
   auto& sun = environment->AddSystem<scene::environment::Sun>();
   sun.SetSunSource(scene::environment::SunSource::kFromScene);

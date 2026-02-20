@@ -39,7 +39,8 @@ protected:
   auto SetUp() -> void override
   {
     // Arrange: Create scene for functional testing scenarios
-    scene_ = std::make_shared<Scene>("FunctionalTestScene", 2048);
+    static constexpr size_t kTestSceneCapacity = 2048;
+    scene_ = std::make_shared<Scene>("FunctionalTestScene", kTestSceneCapacity);
   }
 
   auto TearDown() -> void override

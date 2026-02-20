@@ -34,7 +34,8 @@ class SceneTraversalTestBase : public ::testing::Test {
 protected:
   auto SetUp() -> void override
   {
-    scene_ = std::make_shared<Scene>("TraversalTestScene", 1024);
+    static constexpr size_t kTestSceneCapacity = 1024;
+    scene_ = std::make_shared<Scene>("TraversalTestScene", kTestSceneCapacity);
   }
 
   auto TearDown() -> void override

@@ -52,13 +52,13 @@ private:
 
 struct ScriptSlotEvent final {
   NodeHandle node_handle;
-  uint32_t slot_index { 0 };
+  oxygen::scene::ScriptSlotIndex slot_index {};
 };
 
 class TestSceneObserver final : public ISceneObserver {
 public:
   auto OnScriptSlotActivated(const NodeHandle& node_handle,
-    const uint32_t slot_index,
+    const oxygen::scene::ScriptSlotIndex slot_index,
     const ScriptingComponent::Slot& /*slot*/) noexcept -> void override
   {
     activated.push_back(ScriptSlotEvent {
@@ -68,7 +68,7 @@ public:
   }
 
   auto OnScriptSlotChanged(const NodeHandle& node_handle,
-    const uint32_t slot_index,
+    const oxygen::scene::ScriptSlotIndex slot_index,
     const ScriptingComponent::Slot& /*slot*/) noexcept -> void override
   {
     changed.push_back(ScriptSlotEvent {
@@ -78,7 +78,7 @@ public:
   }
 
   auto OnScriptSlotDeactivated(const NodeHandle& node_handle,
-    const uint32_t slot_index) noexcept -> void override
+    const oxygen::scene::ScriptSlotIndex slot_index) noexcept -> void override
   {
     deactivated.push_back(ScriptSlotEvent {
       .node_handle = node_handle,
@@ -94,7 +94,9 @@ public:
 auto BuildSceneWithReadyScript(const uint64_t script_hash)
   -> std::pair<std::shared_ptr<Scene>, oxygen::scene::SceneNode>
 {
-  auto scene = std::make_shared<Scene>("observer-sync-test");
+  constexpr std::size_t kTestSceneCapacity = 100;
+  auto scene
+    = std::make_shared<Scene>("observer-sync-test", kTestSceneCapacity);
   auto node = scene->CreateNode("script-node");
   if (!node.IsValid()) {
     return { {}, {} };
@@ -158,7 +160,7 @@ NOLINT_TEST(Scene_observer_sync_test, ChangedExecutableEmitsChangedEvent)
   scene->SyncObservers();
   ASSERT_EQ(observer.changed.size(), 1U);
   EXPECT_EQ(observer.changed.front().node_handle, node.GetHandle());
-  EXPECT_EQ(observer.changed.front().slot_index, 0U);
+  EXPECT_EQ(observer.changed.front().slot_index.get(), 0U);
 }
 
 NOLINT_TEST(Scene_observer_sync_test, RemovedSlotEmitsDeactivatedEvent)
@@ -179,7 +181,7 @@ NOLINT_TEST(Scene_observer_sync_test, RemovedSlotEmitsDeactivatedEvent)
   scene->SyncObservers();
   ASSERT_EQ(observer.deactivated.size(), 1U);
   EXPECT_EQ(observer.deactivated.front().node_handle, node.GetHandle());
-  EXPECT_EQ(observer.deactivated.front().slot_index, 0U);
+  EXPECT_EQ(observer.deactivated.front().slot_index.get(), 0U);
 }
 
 } // namespace
