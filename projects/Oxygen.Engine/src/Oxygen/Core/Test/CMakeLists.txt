@@ -50,6 +50,16 @@ m_gtest_program(
     "AnyCache_test.cpp"
     "AnyCache_concurrency_test.cpp"
 )
+m_gtest_program(
+  AnyCacheBudget
+  SOURCES
+    "AnyCache_Budget_test.cpp"
+)
+target_link_libraries(
+  "Oxygen.Core.AnyCacheBudget.Tests"
+  PRIVATE
+    oxygen::scripting
+)
 m_gtest_program(BindlessHandle SOURCES "BindlessHandle_test.cpp")
 m_gtest_program(PhaseRegistry SOURCES "PhaseRegistry_test.cpp")
 m_gtest_program(
