@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include <fmt/format.h>
 #include <imgui.h>
 
 #include <Oxygen/ImGui/Console/CommandPalette.h>
@@ -80,6 +81,24 @@ namespace {
     return "unknown";
   }
 
+  auto ValueToString(const oxygen::console::CVarValue& value) -> std::string
+  {
+    return std::visit(
+      [](const auto& v) -> std::string {
+        using T = std::decay_t<decltype(v)>;
+        if constexpr (std::is_same_v<T, double>) {
+          return fmt::format("{:.2f}", v);
+        } else if constexpr (std::is_same_v<T, bool>) {
+          return v ? "true" : "false";
+        } else if constexpr (std::is_same_v<T, int64_t>) {
+          return fmt::format("{}", v);
+        } else {
+          return std::string(v);
+        }
+      },
+      value);
+  }
+
 } // namespace
 
 auto CommandPalette::Draw(oxygen::console::Console& console,
@@ -134,36 +153,44 @@ auto CommandPalette::Draw(oxygen::console::Console& console,
   std::copy_n(query_text.data(), query_length, query_buffer.data());
   query_buffer.at(query_length) = '\0';
 
-  std::string query(query_buffer.data());
   if (state.ConsumePaletteFocusRequest()) {
     ImGui::SetKeyboardFocusHere();
   }
   ImGui::SetNextItemWidth(-1.0F);
   if (ImGui::InputTextWithHint("##PaletteQuery", "Type a command or cvar...",
         query_buffer.data(), query_buffer.size())) {
-    query = query_buffer.data();
-    state.SetPaletteQuery(query);
+    state.SetPaletteQuery(query_buffer.data());
     state.SetPaletteCursor(0);
   }
 
-  const auto lowered_query = ToLower(query);
+  // Logic: Split query into search_term and arguments
+  const std::string full_query = query_buffer.data();
+  std::string search_term = full_query;
+  std::string arguments;
+  if (const auto space_pos = full_query.find(' ');
+    space_pos != std::string::npos) {
+    search_term = full_query.substr(0, space_pos);
+    arguments = full_query.substr(space_pos + 1);
+  }
+
+  const auto lowered_search = ToLower(search_term);
   auto symbols = console.ListSymbols(false);
   std::vector<ScoredSymbol> results;
   results.reserve(symbols.size());
   for (auto& symbol : symbols) {
     const auto lowered_token = ToLower(symbol.token);
-    if (lowered_query.empty()) {
+    if (lowered_search.empty()) {
       results.push_back(ScoredSymbol {
         .symbol = std::move(symbol), .match_rank = kPrefixRank });
       continue;
     }
-    if (lowered_token.starts_with(lowered_query)) {
+    if (lowered_token.starts_with(lowered_search)) {
       results.push_back(ScoredSymbol {
         .symbol = std::move(symbol), .match_rank = kPrefixRank });
       continue;
     }
     if (IsSubsequenceMatch(
-          { .query = lowered_query, .target = lowered_token })) {
+          { .query = lowered_search, .target = lowered_token })) {
       results.push_back(
         ScoredSymbol { .symbol = std::move(symbol), .match_rank = kFuzzyRank });
     }
@@ -208,9 +235,17 @@ auto CommandPalette::Draw(oxygen::console::Console& console,
   }
   state.SetPaletteCursor(cursor);
 
+  const auto& current_symbol = results[static_cast<size_t>(cursor)].symbol;
+
   bool execute_selected = false;
   if (ImGui::IsKeyPressed(ImGuiKey_Enter, false)) {
     execute_selected = true;
+  }
+
+  // Tab completion: Fill query with selected token and stay open
+  if (ImGui::IsKeyPressed(ImGuiKey_Tab, false)) {
+    state.SetPaletteQuery(current_symbol.token + " ");
+    state.RequestPaletteFocus();
   }
 
   ImGui::Dummy(ImVec2(0.0F, kResultsTopSpacing));
@@ -221,19 +256,67 @@ auto CommandPalette::Draw(oxygen::console::Console& console,
     for (size_t i = 0; i < results.size(); ++i) {
       const bool selected = static_cast<int>(i) == cursor;
       const auto& symbol = results[i].symbol;
-      std::string line
-        = std::string(KindLabel(symbol.kind)) + "  " + symbol.token;
-      if (ImGui::Selectable(line.c_str(), selected)) {
+
+      const auto kind_str = std::string(KindLabel(symbol.kind));
+      ImVec4 kind_color = symbol.kind == oxygen::console::CompletionKind::kCVar
+        ? ImVec4(0.4F, 0.7F, 1.0F, 1.0F) // Light Blue for CVars
+        : ImVec4(0.4F, 1.0F, 0.4F, 1.0F); // Light Green for Commands
+
+      ImGui::PushID(static_cast<int>(i));
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextColored(kind_color, "[%s]", kind_str.c_str());
+      ImGui::SameLine();
+
+      if (ImGui::Selectable(symbol.token.c_str(), selected)) {
         cursor = static_cast<int>(i);
         state.SetPaletteCursor(cursor);
         execute_selected = true;
       }
+
+      if (symbol.kind == oxygen::console::CompletionKind::kCVar) {
+        if (const auto snapshot = console.FindCVar(symbol.token)) {
+          ImGui::SameLine();
+          ImGui::TextDisabled(
+            "= %s", ValueToString(snapshot->current_value).c_str());
+
+          // State Badges
+          std::string badges;
+          if (HasFlag(snapshot->definition.flags,
+                oxygen::console::CVarFlags::kArchive))
+            badges += " [A]";
+          if (HasFlag(snapshot->definition.flags,
+                oxygen::console::CVarFlags::kReadOnly))
+            badges += " [R]";
+          if (HasFlag(snapshot->definition.flags,
+                oxygen::console::CVarFlags::kRequiresRestart))
+            badges += " [!]";
+
+          if (!badges.empty()) {
+            ImGui::SameLine();
+            ImGui::TextColored(
+              ImVec4(1.0F, 0.8F, 0.2F, 1.0F), "%s", badges.c_str());
+          }
+
+          if (ImGui::IsItemHovered()) {
+            ImGui::BeginTooltip();
+            ImGui::Text("Default: %s",
+              ValueToString(snapshot->definition.default_value).c_str());
+            if (snapshot->definition.min_value)
+              ImGui::Text("Min: %.2f", *snapshot->definition.min_value);
+            if (snapshot->definition.max_value)
+              ImGui::Text("Max: %.2f", *snapshot->definition.max_value);
+            ImGui::EndTooltip();
+          }
+        }
+      }
+
       if (selected && cursor_moved_by_keyboard && !ImGui::IsItemVisible()) {
         ImGui::SetScrollHereY(moved_up ? 0.0F : 1.0F);
       }
       if (!symbol.help.empty()) {
         ImGui::TextDisabled("    %s", symbol.help.c_str());
       }
+      ImGui::PopID();
     }
   }
   ImGui::EndChild();
@@ -241,8 +324,11 @@ auto CommandPalette::Draw(oxygen::console::Console& console,
   if (execute_selected) {
     const auto& current
       = results[static_cast<size_t>(state.PaletteCursor())].symbol;
-    const auto result = console.Execute(current.token);
-    state.AppendLogEntry(current.token, result);
+    std::string command_line = current.token;
+    if (!arguments.empty()) {
+      command_line += " " + arguments;
+    }
+    (void)console.Execute(command_line);
     state.SetConsoleVisible(true);
     state.SetPaletteVisible(false);
   }

@@ -159,6 +159,16 @@ auto ConsolePanel::Draw(oxygen::console::Console& console,
         if (ImGui::MenuItem("Copy Command")) {
           ImGui::SetClipboardText(entry.command.c_str());
         }
+        if (ImGui::MenuItem("Copy Output")) {
+          const std::string out = !entry.result.error.empty()
+            ? entry.result.error
+            : entry.result.output;
+          ImGui::SetClipboardText(out.c_str());
+        }
+        if (ImGui::MenuItem("Edit Command")) {
+          state.SetConsoleInput(entry.command);
+          state.RequestConsoleFocus();
+        }
         ImGui::EndPopup();
       }
 
