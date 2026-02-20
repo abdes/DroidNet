@@ -206,7 +206,8 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
-  constexpr size_t kSceneInitialCapacity = 1024 * 10;
+  constexpr size_t kSceneInitialCapacity = 10000; // FIXME hack
+  // this size needs to be made consistent with the pooled components capacity
 
   DCHECK_NOTNULL_F(context);
   auto& shell = GetShell();
