@@ -172,6 +172,8 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
+  constexpr size_t kDefaultSceneCapacity = 128;
+
   DCHECK_NOTNULL_F(app_window_);
   auto& shell = GetShell();
   if (!app_window_->GetWindow()) {
@@ -179,7 +181,8 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   }
 
   if (!active_scene_.IsValid() && !shell.HasStagedScene()) {
-    shell.StageScene(std::make_unique<scene::Scene>("TexturedCube-Scene"));
+    shell.StageScene(std::make_unique<scene::Scene>(
+      "TexturedCube-Scene", kDefaultSceneCapacity));
     const auto staged_scene = shell.GetStagedScene();
     CHECK_NOTNULL_F(staged_scene, "TexturedCube staged scene is null");
 

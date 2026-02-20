@@ -34,7 +34,8 @@ protected:
 NOLINT_TEST_F(SceneTraversalAsyncTest, BasicTraversal)
 {
   ::Run(*el_, []() -> Co<> {
-    auto scene = std::make_shared<Scene>("TestScene");
+    constexpr std::size_t kTestSceneCapacity = 10;
+    auto scene = std::make_shared<Scene>("TestScene", kTestSceneCapacity);
     AsyncSceneTraversal traversal(scene);
 
     // Create a root node

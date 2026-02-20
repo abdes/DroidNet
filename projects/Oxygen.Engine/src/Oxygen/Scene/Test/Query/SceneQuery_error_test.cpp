@@ -232,7 +232,8 @@ NOLINT_TEST_F(
   SceneQueryErrorTest, Query_AfterSceneInvalidated_ThrowsOrFailsGracefully)
 {
   // Arrange: Create and destroy scene
-  auto temp_scene = std::make_shared<Scene>("TempScene");
+  constexpr std::size_t kTestSceneCapacity = 10;
+  auto temp_scene = std::make_shared<Scene>("TempScene", kTestSceneCapacity);
   auto query = temp_scene->Query();
   temp_scene.reset(); // Invalidate scene
 

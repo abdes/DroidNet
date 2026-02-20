@@ -21,6 +21,9 @@ using oxygen::engine::ModuleTimingData;
 using namespace std::chrono_literals;
 
 class ScriptingModuleTest : public ::testing::Test {
+public:
+  static constexpr size_t kDefaultSceneCapacity = 1024;
+
 protected:
   static constexpr auto kDefaultTestPriority = engine::ModulePriority { 100U };
 

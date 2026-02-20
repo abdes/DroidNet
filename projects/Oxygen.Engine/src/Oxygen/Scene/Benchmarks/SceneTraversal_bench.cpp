@@ -30,7 +30,8 @@ public:
     // parameters
     const int depth = static_cast<int>(state.range(0));
     const int width = static_cast<int>(state.range(1));
-    scene_ = std::make_shared<Scene>("BenchmarkScene", 4096);
+    static constexpr size_t kBenchmarkSceneCapacity = 4096;
+    scene_ = std::make_shared<Scene>("BenchmarkScene", kBenchmarkSceneCapacity);
     CreateTestHierarchy(depth, width);
 
     // Note: Nodes are created clean (dirty flags cleared during creation)

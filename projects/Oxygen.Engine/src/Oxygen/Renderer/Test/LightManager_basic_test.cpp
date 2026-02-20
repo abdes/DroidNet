@@ -82,7 +82,9 @@ protected:
       observer_ptr { staging_provider_.get() },
       observer_ptr { inline_transfers_.get() });
 
-    scene_ = std::make_shared<Scene>("LightManagerTestScene", 64);
+    static constexpr size_t kTestSceneCapacity = 64;
+    scene_
+      = std::make_shared<Scene>("LightManagerTestScene", kTestSceneCapacity);
   }
 
   [[nodiscard]] auto Manager() const -> LightManager& { return *manager_; }

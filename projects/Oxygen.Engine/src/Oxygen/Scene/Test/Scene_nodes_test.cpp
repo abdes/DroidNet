@@ -225,7 +225,11 @@ NOLINT_TEST_F(
 // Error/Assertion fixture
 class SceneAsNodeFactoryErrorTest : public testing::Test {
 protected:
-  void SetUp() override { scene_ = std::make_shared<Scene>("TestScene"); }
+  void SetUp() override
+  {
+    constexpr std::size_t kTestSceneCapacity = 100;
+    scene_ = std::make_shared<Scene>("TestScene", kTestSceneCapacity);
+  }
   void TearDown() override { scene_.reset(); }
 
   [[nodiscard]] auto CreateNode(const std::string& name) const -> SceneNode
@@ -416,7 +420,11 @@ class SceneAsNodeFactoryDeathTest : public testing::Test {
 protected:
   std::shared_ptr<Scene> scene_; // NOLINT(*-non-private-member-*)
 
-  void SetUp() override { scene_ = std::make_shared<Scene>("TestDeathScene"); }
+  void SetUp() override
+  {
+    constexpr std::size_t kTestSceneCapacity = 10;
+    scene_ = std::make_shared<Scene>("TestDeathScene", kTestSceneCapacity);
+  }
 
   void TearDown() override { scene_.reset(); }
 };

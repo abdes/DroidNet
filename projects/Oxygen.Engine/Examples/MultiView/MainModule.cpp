@@ -220,6 +220,8 @@ auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> oxygen::co::Co<>
 {
+  constexpr size_t kDefaultSceneCapacity = 128;
+
   auto& shell = GetShell();
   CHECK_NOTNULL_F(app_window_, "AppWindow required for scene mutation");
   if (!app_window_->GetWindow()) {
@@ -227,7 +229,8 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   }
 
   if (!active_scene_.IsValid() && !shell.HasStagedScene()) {
-    shell.StageScene(std::make_unique<scene::Scene>("MultiViewScene"));
+    shell.StageScene(
+      std::make_unique<scene::Scene>("MultiViewScene", kDefaultSceneCapacity));
     const auto staged_scene = shell.GetStagedScene();
     CHECK_NOTNULL_F(staged_scene, "MultiView staged scene is null");
 
