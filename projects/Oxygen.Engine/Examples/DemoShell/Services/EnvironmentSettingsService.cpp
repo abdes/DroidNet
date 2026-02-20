@@ -1746,19 +1746,6 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     MaybeAutoLoadSkybox();
   }
 
-  if (apply_atmosphere) {
-    const auto cache_atmo_after = CaptureAtmosphereCanonicalState();
-    const auto scene_atmo_after = CaptureSceneAtmosphereCanonicalState();
-    DLOG_F(2, "atmosphere hash after apply: cache=0x{:X}, scene=0x{:X}",
-      HashAtmosphereState(cache_atmo_after),
-      scene_atmo_after.has_value() ? HashAtmosphereState(*scene_atmo_after)
-                                   : 0ULL);
-    if (scene_atmo_before.has_value() && scene_atmo_after.has_value()) {
-      LogAtmosphereStateDiff(
-        "scene atmosphere diff", *scene_atmo_before, *scene_atmo_after);
-    }
-  }
-
   settings_persist_dirty_ = true;
   applied_changes_this_frame_ = true;
   pending_changes_ = false;
@@ -1886,13 +1873,6 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
   if (apply_saved_sun_on_next_sync_) {
     ApplySavedSunSourcePreference();
     apply_saved_sun_on_next_sync_ = false;
-  }
-
-  const auto cache_atmo_after = CaptureAtmosphereCanonicalState();
-  if (HashAtmosphereState(cache_atmo_before)
-    != HashAtmosphereState(cache_atmo_after)) {
-    LogAtmosphereStateDiff(
-      "scene sync overwrote UI cache", cache_atmo_before, cache_atmo_after);
   }
 
   ValidateAndClampState();
@@ -2039,47 +2019,16 @@ auto EnvironmentSettingsService::HashAtmosphereState(
   return seed;
 }
 
-auto EnvironmentSettingsService::LogAtmosphereStateDiff(std::string_view prefix,
-  const AtmosphereCanonicalState& before, const AtmosphereCanonicalState& after)
-  -> void
-{
-  if (before.enabled != after.enabled) {
-    DLOG_F(1, "{} atmosphere.enabled: {} -> {}", prefix, before.enabled,
-      after.enabled);
-  }
-  if (before.planet_radius_km != after.planet_radius_km) {
-    DLOG_F(1, "{} atmosphere.planet_radius_km: {} -> {}", prefix,
-      before.planet_radius_km, after.planet_radius_km);
-  }
-  if (before.atmosphere_height_km != after.atmosphere_height_km) {
-    DLOG_F(1, "{} atmosphere.atmosphere_height_km: {} -> {}", prefix,
-      before.atmosphere_height_km, after.atmosphere_height_km);
-  }
-  if (before.mie_absorption_scale != after.mie_absorption_scale) {
-    DLOG_F(1, "{} atmosphere.mie_absorption_scale: {} -> {}", prefix,
-      before.mie_absorption_scale, after.mie_absorption_scale);
-  }
-  if (before.multi_scattering != after.multi_scattering) {
-    DLOG_F(1, "{} atmosphere.multi_scattering: {} -> {}", prefix,
-      before.multi_scattering, after.multi_scattering);
-  }
-  if (before.sun_disk_enabled != after.sun_disk_enabled) {
-    DLOG_F(1, "{} atmosphere.sun_disk_enabled: {} -> {}", prefix,
-      before.sun_disk_enabled, after.sun_disk_enabled);
-  }
-}
-
 auto EnvironmentSettingsService::ValidateAndClampState() -> void
 {
-  auto clamp_float = [](std::string_view key, float& value, float min_v,
-                       float max_v) {
+  auto clamp_float = [](float& value, float min_v, float max_v) {
     const float before = value;
     value = std::clamp(value, min_v, max_v);
     if (before != value) {
       DLOG_F(2, "clamped (key={}, before={}, after={})", key, before, value);
     }
   };
-  auto clamp_int = [](std::string_view key, int& value, int min_v, int max_v) {
+  auto clamp_int = [](int& value, int min_v, int max_v) {
     const int before = value;
     value = std::clamp(value, min_v, max_v);
     if (before != value) {
@@ -2087,110 +2036,86 @@ auto EnvironmentSettingsService::ValidateAndClampState() -> void
         WARNING, "clamped (key={}, before={}, after={})", key, before, value);
     }
   };
-  auto clamp_vec3
-    = [](std::string_view key, glm::vec3& value, float min_v, float max_v) {
-        const glm::vec3 before = value;
-        value = ClampVec3(value, min_v, max_v);
-        if (before != value) {
-          DLOG_F(WARNING,
-            "clamped (key={}, before=({:.2f}, {:.2f}, {:.2f}), after=({:.2f}, "
-            "{:.2f}, {:.2f}))",
-            key, before.x, before.y, before.z, value.x, value.y, value.z);
-        }
-      };
-  auto clamp_vec3_min
-    = [](std::string_view key, glm::vec3& value, float min_v) {
-        const glm::vec3 before = value;
-        value = glm::max(value, glm::vec3(min_v));
-        if (before != value) {
-          DLOG_F(WARNING,
-            "clamped (key={}, before=({:.2f}, {:.2f}, {:.2f}), after=({:.2f}, "
-            "{:.2f}, {:.2f}))",
-            key, before.x, before.y, before.z, value.x, value.y, value.z);
-        }
-      };
+  auto clamp_vec3 = [](glm::vec3& value, float min_v, float max_v) {
+    const glm::vec3 before = value;
+    value = ClampVec3(value, min_v, max_v);
+    if (before != value) {
+      DLOG_F(WARNING,
+        "clamped (key={}, before=({:.2f}, {:.2f}, {:.2f}), after=({:.2f}, "
+        "{:.2f}, {:.2f}))",
+        key, before.x, before.y, before.z, value.x, value.y, value.z);
+    }
+  };
+  auto clamp_vec3_min = [](glm::vec3& value, float min_v) {
+    const glm::vec3 before = value;
+    value = glm::max(value, glm::vec3(min_v));
+    if (before != value) {
+      DLOG_F(WARNING,
+        "clamped (key={}, before=({:.2f}, {:.2f}, {:.2f}), after=({:.2f}, "
+        "{:.2f}, {:.2f}))",
+        key, before.x, before.y, before.z, value.x, value.y, value.z);
+    }
+  };
 
-  clamp_float("env.atmo.planet_radius_km", planet_radius_km_, 1.0F, 100000.0F);
-  clamp_float(
-    "env.atmo.atmosphere_height_km", atmosphere_height_km_, 0.1F, 1000.0F);
-  clamp_vec3("env.atmo.ground_albedo", ground_albedo_, 0.0F, 1.0F);
-  clamp_float("env.atmo.rayleigh_scale_height_km", rayleigh_scale_height_km_,
-    0.01F, 100.0F);
-  clamp_float(
-    "env.atmo.mie_scale_height_km", mie_scale_height_km_, 0.01F, 50.0F);
-  clamp_float("env.atmo.mie_anisotropy", mie_anisotropy_, 0.0F, 0.999F);
-  clamp_float(
-    "env.atmo.mie_absorption_scale", mie_absorption_scale_, 0.0F, 5.0F);
-  clamp_float("env.atmo.multi_scattering", multi_scattering_, 0.0F, 5.0F);
-  clamp_vec3_min("env.atmo.ozone_rgb", ozone_rgb_, 0.0F);
-  clamp_float("env.atmo.aerial_perspective_scale", aerial_perspective_scale_,
-    0.0F, 16.0F);
-  clamp_float("env.atmo.aerial_scattering_strength",
-    aerial_scattering_strength_, 0.0F, 16.0F);
+  clamp_float(planet_radius_km_, 1.0F, 100000.0F);
+  clamp_float(atmosphere_height_km_, 0.1F, 1000.0F);
+  clamp_vec3(ground_albedo_, 0.0F, 1.0F);
+  clamp_float(rayleigh_scale_height_km_, 0.01F, 100.0F);
+  clamp_float(mie_scale_height_km_, 0.01F, 50.0F);
+  clamp_float(mie_anisotropy_, 0.0F, 0.999F);
+  clamp_float(mie_absorption_scale_, 0.0F, 5.0F);
+  clamp_float(multi_scattering_, 0.0F, 5.0F);
+  clamp_vec3_min(ozone_rgb_, 0.0F);
+  clamp_float(aerial_perspective_scale_, 0.0F, 16.0F);
+  clamp_float(aerial_scattering_strength_, 0.0F, 16.0F);
 
-  clamp_float("env.atmo.ozone_profile.layer0.width_m",
-    ozone_profile_.layers[0].width_m, 0.0F, 200000.0F);
-  clamp_float("env.atmo.ozone_profile.layer0.linear_term",
-    ozone_profile_.layers[0].linear_term, -1.0F, 1.0F);
-  clamp_float("env.atmo.ozone_profile.layer0.constant_term",
-    ozone_profile_.layers[0].constant_term, -1.0F, 1.0F);
+  clamp_float(ozone_profile_.layers[0].width_m, 0.0F, 200000.0F);
+  clamp_float(ozone_profile_.layers[0].linear_term, -1.0F, 1.0F);
+  clamp_float(ozone_profile_.layers[0].constant_term, -1.0F, 1.0F);
   ozone_profile_.layers[0].exp_term = 0.0F;
   ozone_profile_.layers[1].width_m = 0.0F;
   ozone_profile_.layers[1].exp_term = 0.0F;
-  clamp_float("env.atmo.ozone_profile.layer1.linear_term",
-    ozone_profile_.layers[1].linear_term, -1.0F, 1.0F);
+  clamp_float(ozone_profile_.layers[1].linear_term, -1.0F, 1.0F);
   // For the canonical two-layer ozone profile, this term is commonly > 1
   // (Earth defaults to ~2.6667), so [-1, 1] causes false clamping.
-  clamp_float("env.atmo.ozone_profile.layer1.constant_term",
-    ozone_profile_.layers[1].constant_term, -1.0F, 8.0F);
+  clamp_float(ozone_profile_.layers[1].constant_term, -1.0F, 8.0F);
 
-  clamp_int("env.atmo.sky_view_lut_slices", sky_view_lut_slices_, 1, 128);
-  clamp_int(
-    "env.atmo.sky_view_alt_mapping_mode", sky_view_alt_mapping_mode_, 0, 1);
+  clamp_int(sky_view_lut_slices_, 1, 128);
+  clamp_int(sky_view_alt_mapping_mode_, 0, 1);
 
-  clamp_int("env.sky_sphere.source", sky_sphere_source_, 0, 1);
-  clamp_vec3_min("env.sky_sphere.solid_color", sky_sphere_solid_color_, 0.0F);
-  clamp_float("env.sky_sphere.intensity", sky_intensity_, 0.0F, 1000.0F);
-  clamp_float(
-    "env.sky_sphere.rotation_deg", sky_sphere_rotation_deg_, -3600.0F, 3600.0F);
+  clamp_int(sky_sphere_source_, 0, 1);
+  clamp_vec3_min(sky_sphere_solid_color_, 0.0F);
+  clamp_float(sky_intensity_, 0.0F, 1000.0F);
+  clamp_float(sky_sphere_rotation_deg_, -3600.0F, 3600.0F);
 
-  clamp_int("env.skybox.layout", skybox_layout_idx_, 0, 4);
-  clamp_int("env.skybox.output", skybox_output_format_idx_, 0, 3);
-  clamp_int("env.skybox.face_size", skybox_face_size_, 16, 4096);
-  clamp_float(
-    "env.skybox.hdr_exposure_ev", skybox_hdr_exposure_ev_, 0.0F, 24.0F);
+  clamp_int(skybox_layout_idx_, 0, 4);
+  clamp_int(skybox_output_format_idx_, 0, 3);
+  clamp_int(skybox_face_size_, 16, 4096);
+  clamp_float(skybox_hdr_exposure_ev_, 0.0F, 24.0F);
 
-  clamp_int("env.sky_light.source", sky_light_source_, 0, 1);
-  clamp_vec3_min("env.sky_light.tint", sky_light_tint_, 0.0F);
-  clamp_float(
-    "env.sky_light.intensity_mul", sky_light_intensity_mul_, 0.0F, 100.0F);
-  clamp_float("env.sky_light.diffuse", sky_light_diffuse_, 0.0F, 100.0F);
-  clamp_float("env.sky_light.specular", sky_light_specular_, 0.0F, 100.0F);
+  clamp_int(sky_light_source_, 0, 1);
+  clamp_vec3_min(sky_light_tint_, 0.0F);
+  clamp_float(sky_light_intensity_mul_, 0.0F, 100.0F);
+  clamp_float(sky_light_diffuse_, 0.0F, 100.0F);
+  clamp_float(sky_light_specular_, 0.0F, 100.0F);
 
-  clamp_int("env.fog.model", fog_model_, 0, 1);
-  clamp_float("env.fog.extinction_sigma_t_per_m", fog_extinction_sigma_t_per_m_,
-    0.0F, 10.0F);
-  clamp_float(
-    "env.fog.height_falloff_per_m", fog_height_falloff_per_m_, 0.0F, 10.0F);
-  clamp_float(
-    "env.fog.height_offset_m", fog_height_offset_m_, -100000.0F, 100000.0F);
-  clamp_float(
-    "env.fog.start_distance_m", fog_start_distance_m_, 0.0F, 1000000.0F);
-  clamp_float("env.fog.max_opacity", fog_max_opacity_, 0.0F, 1.0F);
-  clamp_vec3("env.fog.single_scattering_albedo_rgb",
-    fog_single_scattering_albedo_rgb_, 0.0F, 1.0F);
+  clamp_int(fog_model_, 0, 1);
+  clamp_float(fog_extinction_sigma_t_per_m_, 0.0F, 10.0F);
+  clamp_float(fog_height_falloff_per_m_, 0.0F, 10.0F);
+  clamp_float(fog_height_offset_m_, -100000.0F, 100000.0F);
+  clamp_float(fog_start_distance_m_, 0.0F, 1000000.0F);
+  clamp_float(fog_max_opacity_, 0.0F, 1.0F);
+  clamp_vec3(fog_single_scattering_albedo_rgb_, 0.0F, 1.0F);
 
-  clamp_int("env.sun.source", sun_source_, 0, 1);
-  clamp_float("env.sun.azimuth_deg", sun_azimuth_deg_, -720.0F, 720.0F);
-  clamp_float("env.sun.elevation_deg", sun_elevation_deg_, -90.0F, 90.0F);
-  clamp_vec3_min("env.sun.color", sun_color_rgb_, 0.0F);
-  clamp_float("env.sun.illuminance_lx", sun_illuminance_lx_, 0.0F, 250000.0F);
-  clamp_float(
-    "env.sun.temperature_kelvin", sun_temperature_kelvin_, 1000.0F, 40000.0F);
-  clamp_float(
-    "env.sun.disk_radius_deg", sun_component_disk_radius_deg_, 0.01F, 2.0F);
+  clamp_int(sun_source_, 0, 1);
+  clamp_float(sun_azimuth_deg_, -720.0F, 720.0F);
+  clamp_float(sun_elevation_deg_, -90.0F, 90.0F);
+  clamp_vec3_min(sun_color_rgb_, 0.0F);
+  clamp_float(sun_illuminance_lx_, 0.0F, 250000.0F);
+  clamp_float(sun_temperature_kelvin_, 1000.0F, 40000.0F);
+  clamp_float(sun_component_disk_radius_deg_, 0.01F, 2.0F);
 
-  clamp_int("environment_preset_index", preset_index_, -2, 64);
+  clamp_int(preset_index_, -2, 64);
 }
 
 auto EnvironmentSettingsService::PersistSettingsIfDirty() -> void
