@@ -47,6 +47,9 @@ class TransformComponent final : public Component {
   OXYGEN_COMPONENT_REQUIRES(ObjectMetadata)
 
 public:
+  constexpr static auto kExpectedPoolSize
+    = 10000; // FIXME: hack, should be consistent with scene graph node count
+
   using Vec3 = glm::vec3;
   using Quat = glm::quat;
   using Mat4 = glm::mat4;
