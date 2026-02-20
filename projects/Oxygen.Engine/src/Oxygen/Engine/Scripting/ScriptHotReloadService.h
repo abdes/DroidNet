@@ -65,13 +65,21 @@ public:
   OXGN_NGIN_API void Stop() override;
   OXGN_NGIN_NDAPI auto IsRunning() const -> bool override;
 
+  //! Enables or disables the file watcher.
+  OXGN_NGIN_API auto SetEnabled(bool enabled) noexcept -> void;
+
+  //! Updates the polling interval.
+  OXGN_NGIN_API auto SetPollInterval(
+    std::chrono::milliseconds interval) noexcept -> void;
+
 private:
   auto WatchLoop() -> co::Co<>;
 
   observer_ptr<AsyncEngine> engine_;
   PathFinder path_finder_;
   ReloadCallback on_reload_;
-  std::chrono::milliseconds poll_interval_;
+  std::atomic<std::chrono::milliseconds> poll_interval_;
+  std::atomic<bool> enabled_ { true };
   co::Nursery* nursery_ { nullptr };
 };
 

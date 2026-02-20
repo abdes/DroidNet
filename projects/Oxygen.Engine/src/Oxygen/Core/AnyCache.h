@@ -624,6 +624,17 @@ public:
     return eviction_.budget;
   }
 
+  //! Sets a new budget for the cache and performs eviction if necessary.
+  auto SetBudget(typename EvictionPolicyType::CostType budget) -> void
+  {
+    std::unique_lock lock(mutex_);
+    eviction_.budget = budget;
+    // We pass a lambda that erases from our internal map.
+    // Note: Items evicted here currently don't trigger on_eviction
+    // to maintain compatibility with the Fit() contract.
+    eviction_.Fit([this](const KeyType& k) { this->map_.erase(k); });
+  }
+
   [[nodiscard]] auto GetPolicy() noexcept -> Evict& { return eviction_; }
   [[nodiscard]] auto GetPolicy() const noexcept -> const Evict&
   {

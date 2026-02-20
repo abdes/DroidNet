@@ -300,6 +300,12 @@ auto AsyncEngine::GetScriptCompilationService() const noexcept
   return *script_compilation_service_;
 }
 
+auto AsyncEngine::GetHotReloadService() noexcept
+  -> observer_ptr<scripting::ScriptHotReloadService>
+{
+  return observer_ptr { hot_reload_service_.get() };
+}
+
 auto AsyncEngine::SetTargetFps(uint32_t fps) noexcept -> void
 {
   if (fps > EngineConfig::kMaxTargetFps) {
@@ -705,6 +711,10 @@ auto AsyncEngine::RegisterServiceConsoleBindings() -> void
   if (asset_loader_) {
     asset_loader_->RegisterConsoleBindings(observer_ptr { &console_ });
   }
+  if (script_compilation_service_) {
+    script_compilation_service_->RegisterConsoleBindings(
+      observer_ptr { &console_ });
+  }
 }
 
 auto AsyncEngine::LoadPersistedConsoleCVars() -> void
@@ -769,6 +779,9 @@ auto AsyncEngine::ApplyAllConsoleCVars() -> void
   }
   if (asset_loader_) {
     asset_loader_->ApplyConsoleCVars(console_);
+  }
+  if (script_compilation_service_) {
+    script_compilation_service_->ApplyConsoleCVars(console_);
   }
   if (module_manager_) {
     module_manager_->ApplyConsoleCVars(observer_ptr { &console_ });

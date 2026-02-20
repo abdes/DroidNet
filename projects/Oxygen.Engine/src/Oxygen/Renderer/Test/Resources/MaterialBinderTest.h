@@ -113,6 +113,7 @@ private:
     auto ClearMounts() -> void override { }
     auto ReloadScript(const std::filesystem::path& /*path*/) -> void override {
     }
+    auto ReloadAllScripts() -> void override { }
     auto SubscribeScriptReload(ScriptReloadCallback /*callback*/)
       -> EvictionSubscription override
     {

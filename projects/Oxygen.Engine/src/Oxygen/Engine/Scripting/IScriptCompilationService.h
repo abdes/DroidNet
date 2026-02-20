@@ -95,6 +95,15 @@ public:
     = 0;
 
   virtual auto OnFrameStart(engine::EngineTag) -> void = 0;
+
+  //! Updates the L1 memory cache budget.
+  virtual auto SetCacheBudget(size_t budget_bytes) -> void = 0;
+
+  //! Toggles between deferred (batched) and immediate persistence.
+  virtual auto SetDeferredPersistence(bool enabled) -> void = 0;
+
+  //! Manually triggers a flush of the persistent cache.
+  virtual auto FlushPersistentCache() -> void = 0;
 };
 
 } // namespace oxygen::scripting

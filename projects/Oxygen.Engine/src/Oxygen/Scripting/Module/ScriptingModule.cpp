@@ -23,6 +23,7 @@
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/Scripting/IScriptCompilationService.h>
+#include <Oxygen/Engine/Scripting/ScriptHotReloadService.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneTraversal.h>
 #include <Oxygen/Scene/Types/Traversal.h>
@@ -370,6 +371,52 @@ auto ScriptingModule::RegisterConsoleBindings(
     .min_value = static_cast<double>(kMinInputBridgeLogVerbosity),
     .max_value = static_cast<double>(kMaxInputBridgeLogVerbosity),
   });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = "scripting.hot_reload",
+    .help = "Enable/disable scripting hot-reload file watcher",
+    .default_value = true,
+    .flags = console::CVarFlags::kArchive,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = "scripting.poll_interval_ms",
+    .help = "Script hot-reload polling interval in milliseconds",
+    .default_value = static_cast<int64_t>(100),
+    .flags = console::CVarFlags::kArchive,
+  });
+
+  (void)console->RegisterCommand(
+    console::CommandDefinition { .name = "scripting.reload_all",
+      .help = "Manually trigger a full reload of all script assets",
+      .handler = [this](const auto&, const auto&) -> console::ExecutionResult {
+        if (engine_) {
+          if (auto loader = engine_->GetAssetLoader()) {
+            loader->ReloadAllScripts();
+            return { .status = console::ExecutionStatus::kOk,
+              .output = "Reloading all scripts..." };
+          }
+        }
+        return { .status = console::ExecutionStatus::kError,
+          .error = "AssetLoader not available" };
+      } });
+
+  (void)console->RegisterCommand(
+    console::CommandDefinition { .name = "scripting.list_roots",
+      .help = "List all registered script source roots",
+      .handler = [this](const auto&, const auto&) -> console::ExecutionResult {
+        if (!engine_) {
+          return { .status = console::ExecutionStatus::kError,
+            .error = "Engine not available" };
+        }
+        const auto roots = engine_->GetPathFinder().ScriptSourceRoots();
+        std::string output = "Registered Script Source Roots:\n";
+        for (const auto& root : roots) {
+          output += fmt::format("  - {} ({})\n", root.generic_string(),
+            std::filesystem::exists(root) ? "active" : "missing");
+        }
+        return { .status = console::ExecutionStatus::kOk, .output = output };
+      } });
 }
 
 auto ScriptingModule::ApplyConsoleCVars(
@@ -389,6 +436,22 @@ auto ScriptingModule::ApplyConsoleCVars(
   if (console->TryGetCVarValue<int64_t>(
         kCVarScriptingInputBridgeLogVerbosity, log_verbosity)) {
     input_bridge_log_verbosity_ = static_cast<int>(log_verbosity);
+  }
+
+  if (engine_) {
+    if (auto hrs = engine_->GetHotReloadService()) {
+      bool hot_reload_enabled = true;
+      if (console->TryGetCVarValue<bool>(
+            "scripting.hot_reload", hot_reload_enabled)) {
+        hrs->SetEnabled(hot_reload_enabled);
+      }
+
+      int64_t poll_interval = 100;
+      if (console->TryGetCVarValue<int64_t>(
+            "scripting.poll_interval_ms", poll_interval)) {
+        hrs->SetPollInterval(std::chrono::milliseconds(poll_interval));
+      }
+    }
   }
 }
 

@@ -15,6 +15,8 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Console/CVar.h>
+#include <Oxygen/Console/Console.h>
 #include <Oxygen/Engine/Scripting/ScriptCompilationService.h>
 
 namespace oxygen::scripting {
@@ -460,6 +462,89 @@ auto ScriptCompilationService::OnFrameStart(engine::EngineTag /*tag*/) -> void
   DrainCompletions();
 }
 
+auto ScriptCompilationService::SetCacheBudget(const size_t budget_bytes) -> void
+{
+  std::lock_guard lock(l1_cache_mutex_);
+  l1_cache_.SetBudget(budget_bytes);
+}
+
+auto ScriptCompilationService::SetDeferredPersistence(const bool enabled)
+  -> void
+{
+  const bool was_enabled = deferred_persistence_enabled_.exchange(
+    enabled, std::memory_order_acq_rel);
+  if (was_enabled && !enabled) {
+    FlushPersistentCache();
+  }
+}
+
+auto ScriptCompilationService::RegisterConsoleBindings(
+  const observer_ptr<console::Console> console) -> void
+{
+  if (!console) {
+    return;
+  }
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = "scripting.cache_budget_mb",
+    .help = "Script bytecode L1 memory cache budget in MB",
+    .default_value = static_cast<int64_t>(kL1ByteBudget / (1024 * 1024)),
+    .flags = console::CVarFlags::kArchive,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = "scripting.deferred_persistence",
+    .help = "If true, bytecode cache writes are batched and deferred",
+    .default_value = true,
+    .flags = console::CVarFlags::kArchive,
+  });
+
+  (void)console->RegisterCommand(
+    console::CommandDefinition { .name = "scripting.stats",
+      .help = "Print scripting compilation and cache statistics",
+      .handler = [this](const auto&, const auto&) -> console::ExecutionResult {
+        const auto counters = GetCounters();
+        LOG_F(INFO, "Scripting Statistics:");
+        LOG_F(INFO, "  L1 Hits: {}", counters.l1_hits);
+        LOG_F(INFO, "  L2 Hits: {}", counters.l2_hits);
+        LOG_F(INFO, "  Compile Started: {}", counters.compile_started);
+        LOG_F(INFO, "  Compile Succeeded: {}", counters.compile_succeeded);
+        LOG_F(INFO, "  Compile Failed: {}", counters.compile_failed);
+        LOG_F(INFO, "  Avg Latency: {} us",
+          counters.compile_latency_samples == 0
+            ? 0
+            : counters.compile_latency_total_us
+              / counters.compile_latency_samples);
+        LOG_F(INFO, "  Max Latency: {} us", counters.compile_latency_max_us);
+        return { .status = console::ExecutionStatus::kOk };
+      } });
+
+  (void)console->RegisterCommand(
+    console::CommandDefinition { .name = "scripting.flush_cache",
+      .help = "Manually trigger a flush of the persistent bytecode cache",
+      .handler = [this](const auto&, const auto&) -> console::ExecutionResult {
+        FlushPersistentCache();
+        return { .status = console::ExecutionStatus::kOk,
+          .output = "Script cache flushed" };
+      } });
+}
+
+auto ScriptCompilationService::ApplyConsoleCVars(
+  const console::Console& console) -> void
+{
+  int64_t budget_mb = kL1ByteBudget / (1024 * 1024);
+  if (console.TryGetCVarValue<int64_t>(
+        "scripting.cache_budget_mb", budget_mb)) {
+    SetCacheBudget(static_cast<size_t>(budget_mb) * 1024 * 1024);
+  }
+
+  bool deferred = true;
+  if (console.TryGetCVarValue<bool>(
+        "scripting.deferred_persistence", deferred)) {
+    SetDeferredPersistence(deferred);
+  }
+}
+
 auto ScriptCompilationService::ExecuteCompileRequest(
   const CompileKey compile_key, ScriptSourceBlob source,
   const CompileMode compile_mode) -> co::Co<Result>
@@ -617,10 +702,39 @@ auto ScriptCompilationService::StorePersistentBytecode(
     return;
   }
 
-  std::lock_guard lock(persistent_cache_mutex_);
-  pending_persistence_.insert_or_assign(compile_key, std::move(bytecode));
-  cache_dirty_.store(true, std::memory_order_relaxed);
-  DLOG_F(2, "bytecode queued for persistence (key={})", compile_key);
+  if (deferred_persistence_enabled_.load(std::memory_order_acquire)) {
+    std::lock_guard lock(persistent_cache_mutex_);
+    pending_persistence_.insert_or_assign(compile_key, std::move(bytecode));
+    cache_dirty_.store(true, std::memory_order_relaxed);
+    DLOG_F(2, "bytecode queued for persistence (key={})", compile_key);
+  } else {
+    // Immediate persistence
+    std::vector<
+      std::pair<CompileKey, std::shared_ptr<const ScriptBytecodeBlob>>>
+      snapshot {};
+    {
+      std::lock_guard lock(persistent_cache_mutex_);
+      snapshot.reserve(persistent_index_.size() + 1);
+      std::ifstream input(persistent_cache_path_, std::ios::binary);
+      for (const auto& [key, entry] : persistent_index_) {
+        if (key == compile_key) {
+          continue;
+        }
+        if (!input) {
+          break;
+        }
+        auto payload = ReadPayload(input, entry.data_offset, entry.data_size);
+        if (!payload.has_value()) {
+          continue;
+        }
+        snapshot.emplace_back(key,
+          MakePersistentBytecodeBlob(std::move(*payload), entry.language,
+            entry.compression, entry.content_hash, entry.origin));
+      }
+    }
+    snapshot.emplace_back(compile_key, std::move(bytecode));
+    PersistCacheSnapshot(snapshot);
+  }
 }
 
 auto ScriptCompilationService::FlushPersistentCache() -> void

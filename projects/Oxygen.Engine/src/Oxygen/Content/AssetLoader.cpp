@@ -1489,6 +1489,48 @@ auto AssetLoader::ReloadScript(const std::filesystem::path& path) -> void
     });
 }
 
+auto AssetLoader::ReloadAllScripts() -> void
+{
+  AssertOwningThread();
+  LOG_F(INFO, "triggering reload of all script assets");
+
+  std::vector<data::AssetKey> script_keys;
+  for (const auto& [hash, key] : asset_key_by_hash_) {
+    if (HasScriptAsset(key)) {
+      script_keys.push_back(key);
+    }
+  }
+
+  for (const auto& key : script_keys) {
+    InvalidateAssetTree(key);
+    StartLoadAsset<data::ScriptAsset>(
+      key, [this, key](std::shared_ptr<data::ScriptAsset> asset) {
+        if (!asset) {
+          return;
+        }
+        const auto bytecode_index = asset->GetBytecodeResourceIndex();
+        if (bytecode_index != data::pak::kNoResourceIndex) {
+          uint16_t source_id = 0;
+          if (auto it = asset_source_id_by_hash_.find(HashAssetKey(key));
+            it != asset_source_id_by_hash_.end()) {
+            source_id = it->second;
+          }
+          const auto resource_type_index = static_cast<uint16_t>(
+            IndexOf<data::ScriptResource, ResourceTypeList>::value);
+          const auto rkey
+            = PackResourceKey(source_id, resource_type_index, bytecode_index);
+          if (auto resource = GetResource<data::ScriptResource>(rkey)) {
+            for (const auto& sub : script_reload_subscribers_) {
+              if (sub.handler) {
+                sub.handler(key, resource);
+              }
+            }
+          }
+        }
+      });
+  }
+}
+
 auto AssetLoader::SubscribeScriptReload(ScriptReloadCallback callback)
   -> EvictionSubscription
 {
