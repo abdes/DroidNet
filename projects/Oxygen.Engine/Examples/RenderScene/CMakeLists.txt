@@ -63,6 +63,7 @@ target_link_libraries(
     oxygen::input
     oxygen::data
     oxygen::scene
+    oxygen::scenesync
     oxygen::core
     oxygen::clap
     oxygen::engine

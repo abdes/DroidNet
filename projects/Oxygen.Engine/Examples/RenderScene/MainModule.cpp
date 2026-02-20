@@ -21,8 +21,6 @@
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Renderer/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
-#include <Oxygen/Renderer/Passes/LightCullingPass.h>
-#include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Pipeline/CompositionView.h>
 #include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
 #include <Oxygen/Renderer/Renderer.h>
@@ -208,6 +206,8 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
+  constexpr size_t kSceneInitialCapacity = 1024 * 10;
+
   DCHECK_NOTNULL_F(context);
   auto& shell = GetShell();
 
@@ -462,7 +462,8 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
       }
 
       if (swap.asset && loader) {
-        shell.StageScene(std::make_unique<scene::Scene>("RenderScene"));
+        shell.StageScene(
+          std::make_unique<scene::Scene>("RenderScene", kSceneInitialCapacity));
         auto staged_scene = shell.GetStagedScene();
         shell.SetStagedMainCamera(
           co_await loader->BuildSceneAsync(*staged_scene, *swap.asset));
@@ -497,7 +498,8 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   }
 
   if (!active_scene_.IsValid() && !shell.HasStagedScene()) {
-    shell.StageScene(std::make_unique<scene::Scene>("RenderScene"));
+    shell.StageScene(
+      std::make_unique<scene::Scene>("RenderScene", kSceneInitialCapacity));
     auto staged_scene = shell.GetStagedScene();
     auto camera_node = staged_scene->CreateNode("MainCamera");
     auto camera = std::make_unique<scene::PerspectiveCamera>();

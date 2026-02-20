@@ -25,8 +25,6 @@
 #include <Oxygen/Engine/Scripting/IScriptCompilationService.h>
 #include <Oxygen/Engine/Scripting/ScriptHotReloadService.h>
 #include <Oxygen/Scene/Scene.h>
-#include <Oxygen/Scene/SceneTraversal.h>
-#include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentAsyncBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingPack.h>
@@ -220,26 +218,10 @@ namespace {
     return false;
   }
 
-  struct ScriptingNodeFilter {
-    auto operator()(const auto& visited,
-      scene::FilterResult /*parent_result*/) const -> scene::FilterResult
-    {
-      if (visited.node_impl == nullptr) {
-        return scene::FilterResult::kReject;
-      }
-      if (!visited.node_impl
-            ->template HasComponent<scene::ScriptingComponent>()) {
-        return scene::FilterResult::kReject;
-      }
-      return scene::FilterResult::kAccept;
-    }
-  };
-
 } // namespace
 
 ScriptingModule::ScriptingModule(const engine::ModulePriority priority)
-  : runtime_env_ref_(LUA_NOREF)
-  , priority_(priority)
+  : priority_(priority)
 {
 }
 
@@ -256,7 +238,7 @@ auto ScriptingModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept
     if (auto loader = engine_->GetAssetLoader()) {
       script_reload_subscription_ = loader->SubscribeScriptReload(
         [this](const data::AssetKey& key,
-          std::shared_ptr<const data::ScriptResource> resource) {
+          const std::shared_ptr<const data::ScriptResource>& resource) {
           if (!resource) {
             return;
           }
@@ -274,12 +256,13 @@ auto ScriptingModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept
             data::to_string(key), bytecode->ContentHash());
 
           // Find all instances using this asset and update their executable
-          // bytecode. The next frame's CollectActiveScripts will detect the
-          // hash change and rebuild runtimes.
+          // bytecode. The next observer sync/update will detect executable
+          // change and rebuild runtimes.
           for (auto& [slot_key, state] : slot_runtimes_) {
             if (state.asset_key == key && state.executable
               && slot_key.node_handle.IsValid()) {
               // Downcast to CompiledScriptExecutable to update bytecode
+              // NOLINTNEXTLINE(*-static-cast-downcast)
               auto* compiled = static_cast<CompiledScriptExecutable*>(
                 // NOLINTNEXTLINE(*-const-cast)
                 const_cast<ScriptExecutable*>(state.executable.get()));
@@ -315,6 +298,12 @@ auto ScriptingModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept
 
 auto ScriptingModule::OnShutdown() noexcept -> void
 {
+  if (auto observed_scene = observed_scene_.lock(); observed_scene != nullptr) {
+    (void)observed_scene->UnregisterObserver(
+      observer_ptr<scene::ISceneObserver> { this });
+  }
+  observed_scene_.reset();
+
   if (engine_ != nullptr) {
     (void)engine_->GetScriptCompilationService().UnregisterCompiler(
       data::pak::ScriptLanguage::kLuau);
@@ -348,6 +337,7 @@ auto ScriptingModule::OnShutdown() noexcept -> void
 
   slot_runtimes_.clear();
   active_frame_slots_.clear();
+  active_slot_indices_.clear();
   task_queue_.EndSession();
   binding_packs_.clear();
 }
@@ -391,37 +381,44 @@ auto ScriptingModule::RegisterConsoleBindings(
     .flags = console::CVarFlags::kArchive,
   });
 
-  (void)console->RegisterCommand(
-    console::CommandDefinition { .name = "scripting.reload_all",
-      .help = "Manually trigger a full reload of all script assets",
-      .handler = [this](const auto&, const auto&) -> console::ExecutionResult {
-        if (engine_) {
-          if (auto loader = engine_->GetAssetLoader()) {
-            loader->ReloadAllScripts();
-            return { .status = console::ExecutionStatus::kOk,
-              .output = "Reloading all scripts..." };
-          }
+  (void)console->RegisterCommand(console::CommandDefinition {
+    .name = "scripting.reload_all",
+    .help = "Manually trigger a full reload of all script assets",
+    .handler = [this](const auto&, const auto&) -> console::ExecutionResult {
+      if (engine_) {
+        if (auto loader = engine_->GetAssetLoader()) {
+          loader->ReloadAllScripts();
+          return { .status = console::ExecutionStatus::kOk,
+            .output = "Reloading all scripts..." };
         }
-        return { .status = console::ExecutionStatus::kError,
-          .error = "AssetLoader not available" };
-      } });
+      }
+      return {
+        .status = console::ExecutionStatus::kError,
+        .error = "AssetLoader not available",
+      };
+    },
+  });
 
-  (void)console->RegisterCommand(
-    console::CommandDefinition { .name = "scripting.list_roots",
-      .help = "List all registered script source roots",
-      .handler = [this](const auto&, const auto&) -> console::ExecutionResult {
-        if (!engine_) {
-          return { .status = console::ExecutionStatus::kError,
-            .error = "Engine not available" };
-        }
-        const auto roots = engine_->GetPathFinder().ScriptSourceRoots();
-        std::string output = "Registered Script Source Roots:\n";
-        for (const auto& root : roots) {
-          output += fmt::format("  - {} ({})\n", root.generic_string(),
-            std::filesystem::exists(root) ? "active" : "missing");
-        }
-        return { .status = console::ExecutionStatus::kOk, .output = output };
-      } });
+  (void)console->RegisterCommand(console::CommandDefinition {
+    .name = "scripting.list_roots",
+    .help = "List all registered script source roots",
+    .handler = [this](const auto&, const auto&) -> console::ExecutionResult {
+      if (!engine_) {
+        return { .status = console::ExecutionStatus::kError,
+          .error = "Engine not available" };
+      }
+      const auto roots = engine_->GetPathFinder().ScriptSourceRoots();
+      std::string output = "Registered Script Source Roots:\n";
+      for (const auto& root : roots) {
+        output += fmt::format("  - {} ({})\n", root.generic_string(),
+          std::filesystem::exists(root) ? "active" : "missing");
+      }
+      return {
+        .status = console::ExecutionStatus::kOk,
+        .output = output,
+      };
+    },
+  });
 }
 
 auto ScriptingModule::ApplyConsoleCVars(
@@ -539,6 +536,8 @@ auto ScriptingModule::OnFixedSimulation(
 auto ScriptingModule::OnGameplay(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
+  EnsureSceneObservation(context);
+
   if (lua_state_ != nullptr) {
     const ScopedActiveFrameContext active_context(lua_state_, context);
     bindings::SetActiveEventPhase(lua_state_, "gameplay");
@@ -550,8 +549,6 @@ auto ScriptingModule::OnGameplay(observer_ptr<engine::FrameContext> context)
   if (!result.ok) {
     ReportHookError(context, "on_gameplay", result);
   }
-
-  CollectActiveScripts(context);
 
   const auto scene_result = RunSceneScripts(context);
   if (!scene_result.ok) {
@@ -576,6 +573,8 @@ auto ScriptingModule::OnGameplay(observer_ptr<engine::FrameContext> context)
 auto ScriptingModule::OnSceneMutation(
   observer_ptr<engine::FrameContext> context) -> co::Co<>
 {
+  EnsureSceneObservation(context);
+
   if (lua_state_ != nullptr) {
     const ScopedActiveFrameContext active_context(lua_state_, context);
     bindings::SetActiveEventPhase(lua_state_, "scene_mutation");
@@ -866,90 +865,129 @@ auto ScriptingModule::InvokePhaseHook(const std::string_view hook_name,
   return OkResult();
 }
 
-auto ScriptingModule::CollectActiveScripts(
-  observer_ptr<engine::FrameContext> context) -> void
+auto ScriptingModule::OnScriptSlotActivated(
+  const scene::NodeHandle& node_handle, const uint32_t slot_index,
+  const scene::ScriptingComponent::Slot& slot) noexcept -> void
 {
+  ActivateSlot(
+    SlotRuntimeKey { .node_handle = node_handle, .slot_index = slot_index },
+    slot);
+}
+
+auto ScriptingModule::OnScriptSlotChanged(const scene::NodeHandle& node_handle,
+  const uint32_t slot_index,
+  const scene::ScriptingComponent::Slot& slot) noexcept -> void
+{
+  UpdateSlot(
+    SlotRuntimeKey { .node_handle = node_handle, .slot_index = slot_index },
+    slot);
+}
+
+auto ScriptingModule::OnScriptSlotDeactivated(
+  const scene::NodeHandle& node_handle, const uint32_t slot_index) noexcept
+  -> void
+{
+  DeactivateSlot(
+    SlotRuntimeKey { .node_handle = node_handle, .slot_index = slot_index });
+}
+
+auto ScriptingModule::EnsureSceneObservation(
+  const observer_ptr<engine::FrameContext> context) -> void
+{
+  const auto scene = (context != nullptr) ? context->GetScene() : nullptr;
+  const auto observed_scene = observed_scene_.lock();
+  if (scene.get() == observed_scene.get()) {
+    return;
+  }
+
+  if (observed_scene != nullptr) {
+    (void)observed_scene->UnregisterObserver(
+      observer_ptr<scene::ISceneObserver> { this });
+  }
+
+  observed_scene_.reset();
+  if (scene != nullptr) {
+    observed_scene_ = scene->weak_from_this();
+  }
   active_frame_slots_.clear();
+  active_slot_indices_.clear();
 
-  if (lua_state_ == nullptr || context == nullptr) {
-    CleanupStaleSlotRuntimes({});
+  for (auto& [_, runtime] : slot_runtimes_) {
+    DestroySlotRuntime(runtime);
+  }
+  slot_runtimes_.clear();
+
+  if (scene != nullptr) {
+    (void)scene->RegisterObserver(observer_ptr<scene::ISceneObserver> { this });
+    scene->SyncObservers();
+  }
+}
+
+auto ScriptingModule::ActivateSlot(const SlotRuntimeKey& key,
+  const scene::ScriptingComponent::Slot& slot) -> void
+{
+  if (slot.Executable() == nullptr) {
     return;
   }
 
-  const auto scene = context->GetScene();
-  if (scene == nullptr) {
-    CleanupStaleSlotRuntimes({});
+  if (const auto it = active_slot_indices_.find(key);
+    it != active_slot_indices_.end()) {
+    auto& active_slot = active_frame_slots_[it->second];
+    active_slot.executable = slot.Executable();
+    active_slot.executable_hash = slot.Executable()->ContentHash();
     return;
   }
 
-  std::unordered_set<SlotRuntimeKey, SlotRuntimeKeyHash> active_keys;
-  auto traversal = scene->Traverse();
-  [[maybe_unused]] const auto traversal_result = traversal.Traverse(
-    [&](const auto& visited_node, const bool dry_run) -> scene::VisitResult {
-      if (dry_run || visited_node.node_impl == nullptr) {
-        return scene::VisitResult::kContinue;
-      }
+  const auto index = active_frame_slots_.size();
+  active_slot_indices_.insert_or_assign(key, index);
+  active_frame_slots_.push_back(ActiveScriptSlot {
+    .key = key,
+    .executable = slot.Executable(),
+    .executable_hash = slot.Executable()->ContentHash(),
+  });
+}
 
-      auto node = scene->GetNode(visited_node.handle);
-      if (!node.has_value()) {
-        return scene::VisitResult::kContinue;
-      }
-      // Redundant check due to filter, but safe
-      if (!node->HasScripting()) {
-        return scene::VisitResult::kContinue;
-      }
+auto ScriptingModule::UpdateSlot(const SlotRuntimeKey& key,
+  const scene::ScriptingComponent::Slot& slot) -> void
+{
+  if (slot.Executable() == nullptr) {
+    DeactivateSlot(key);
+    return;
+  }
 
-      auto scripting = node->GetScripting();
-      const auto slots = scripting.Slots();
-      for (size_t i = 0; i < slots.size(); ++i) {
-        const auto& slot = slots[i];
-        if (slot.State()
-            != scene::ScriptingComponent::Slot::CompileState::kReady
-          || slot.IsDisabled() || slot.Executable() == nullptr) {
-          continue;
-        }
+  ActivateSlot(key, slot);
 
-        SlotRuntimeKey key {
-          .node_handle = node->GetHandle(),
-          .slot_index = static_cast<uint32_t>(i),
-        };
+  if (const auto runtime_it = slot_runtimes_.find(key);
+    runtime_it != slot_runtimes_.end()) {
+    auto& runtime = runtime_it->second;
+    if (runtime.executable != slot.Executable()
+      || runtime.last_known_hash != slot.Executable()->ContentHash()) {
+      DestroySlotRuntime(runtime);
+      runtime.executable = slot.Executable();
+      runtime.last_known_hash = slot.Executable()->ContentHash();
+    }
+  }
+}
 
-        auto& runtime = slot_runtimes_[key];
-        const bool hash_changed = runtime.executable
-          && (runtime.last_known_hash != runtime.executable->ContentHash());
+auto ScriptingModule::DeactivateSlot(const SlotRuntimeKey& key) -> void
+{
+  const auto idx_it = active_slot_indices_.find(key);
+  if (idx_it != active_slot_indices_.end()) {
+    const size_t index = idx_it->second;
+    const size_t last_index = active_frame_slots_.size() - 1;
+    if (index != last_index) {
+      active_frame_slots_[index] = std::move(active_frame_slots_[last_index]);
+      active_slot_indices_[active_frame_slots_[index].key] = index;
+    }
+    active_frame_slots_.pop_back();
+    active_slot_indices_.erase(idx_it);
+  }
 
-        if (runtime.executable != slot.Executable() || hash_changed) {
-          DestroySlotRuntime(runtime);
-          runtime.executable = slot.Executable();
-          if (runtime.executable) {
-            runtime.last_known_hash = runtime.executable->ContentHash();
-          }
-          const auto init_result = RebuildSlotRuntime(key, runtime, slot);
-          if (!init_result.ok && !runtime.reported_initialization_error) {
-            runtime.reported_initialization_error = true;
-            const auto msg = std::string("script slot initialization failed [")
-                               .append(init_result.stage)
-                               .append("]: ")
-                               .append(init_result.message);
-            LOG_SCOPE_F(ERROR, "Script Init Error");
-            LOG_F(ERROR, "    stage: {}", init_result.stage);
-            LOG_F(ERROR, "  message: {}", init_result.message);
-            ReportError(context, msg);
-          }
-          if (!init_result.ok) {
-            continue;
-          }
-        }
-
-        active_keys.insert(key);
-        active_frame_slots_.push_back(ActiveScriptSlot { .key = key });
-      }
-
-      return scene::VisitResult::kContinue;
-    },
-    scene::TraversalOrder::kPreOrder, ScriptingNodeFilter {});
-
-  CleanupStaleSlotRuntimes(active_keys);
+  const auto runtime_it = slot_runtimes_.find(key);
+  if (runtime_it != slot_runtimes_.end()) {
+    DestroySlotRuntime(runtime_it->second);
+    slot_runtimes_.erase(runtime_it);
+  }
 }
 
 auto ScriptingModule::RunSceneScripts(
@@ -986,18 +1024,38 @@ auto ScriptingModule::RunSceneScripts(
     }
 
     const auto& slot = slots[slot_info.key.slot_index];
-    if (slot.IsDisabled()) {
+    if (slot.IsDisabled() || slot.Executable() == nullptr) {
       continue;
     }
 
-    // Runtime should exist because CollectActiveScripts ensured it
-    auto it = slot_runtimes_.find(slot_info.key);
-    if (it == slot_runtimes_.end()) {
-      continue;
+    auto& runtime = slot_runtimes_[slot_info.key];
+    const bool runtime_needs_rebuild
+      = runtime.executable != slot_info.executable
+      || runtime.last_known_hash != slot_info.executable_hash;
+
+    if (runtime_needs_rebuild) {
+      DestroySlotRuntime(runtime);
+      runtime.executable = slot_info.executable;
+      runtime.last_known_hash = slot_info.executable_hash;
+      const auto init_result = RebuildSlotRuntime(slot_info.key, runtime, slot);
+      if (!init_result.ok && !runtime.reported_initialization_error) {
+        runtime.reported_initialization_error = true;
+        const auto msg = std::string("script slot initialization failed [")
+                           .append(init_result.stage)
+                           .append("]: ")
+                           .append(init_result.message);
+        LOG_SCOPE_F(ERROR, "Script Init Error");
+        LOG_F(ERROR, "    stage: {}", init_result.stage);
+        LOG_F(ERROR, "  message: {}", init_result.message);
+        ReportError(context, msg);
+      }
+      if (!init_result.ok) {
+        continue;
+      }
     }
 
     const auto gameplay_result = ExecuteSlotGameplay(
-      slot_info.key, it->second, *node, slot, context, dt_seconds);
+      slot_info.key, runtime, *node, slot, context, dt_seconds);
     if (!gameplay_result.ok) {
       const auto msg = std::string("script slot on_gameplay failed [")
                          .append(gameplay_result.stage)
@@ -1047,17 +1105,38 @@ auto ScriptingModule::RunSceneMutationScripts(
     }
 
     const auto& slot = slots[slot_info.key.slot_index];
-    if (slot.IsDisabled()) {
+    if (slot.IsDisabled() || slot.Executable() == nullptr) {
       continue;
     }
 
-    auto it = slot_runtimes_.find(slot_info.key);
-    if (it == slot_runtimes_.end()) {
-      continue;
+    auto& runtime = slot_runtimes_[slot_info.key];
+    const bool runtime_needs_rebuild
+      = runtime.executable != slot_info.executable
+      || runtime.last_known_hash != slot_info.executable_hash;
+
+    if (runtime_needs_rebuild) {
+      DestroySlotRuntime(runtime);
+      runtime.executable = slot_info.executable;
+      runtime.last_known_hash = slot_info.executable_hash;
+      const auto init_result = RebuildSlotRuntime(slot_info.key, runtime, slot);
+      if (!init_result.ok && !runtime.reported_initialization_error) {
+        runtime.reported_initialization_error = true;
+        const auto msg = std::string("script slot initialization failed [")
+                           .append(init_result.stage)
+                           .append("]: ")
+                           .append(init_result.message);
+        LOG_SCOPE_F(ERROR, "Script Init Error");
+        LOG_F(ERROR, "    stage: {}", init_result.stage);
+        LOG_F(ERROR, "  message: {}", init_result.message);
+        ReportError(context, msg);
+      }
+      if (!init_result.ok) {
+        continue;
+      }
     }
 
     const auto mutation_result = ExecuteSlotSceneMutation(
-      slot_info.key, it->second, *node, slot, context, dt_seconds);
+      slot_info.key, runtime, *node, slot, context, dt_seconds);
     if (!mutation_result.ok) {
       const auto msg = std::string("script slot on_scene_mutation failed [")
                          .append(mutation_result.stage)
@@ -1349,21 +1428,6 @@ auto ScriptingModule::DestroySlotRuntime(SlotRuntimeState& state) -> void
   state.failed_initialization = false;
   state.reported_initialization_error = false;
   state.initialization_error.clear();
-}
-
-auto ScriptingModule::CleanupStaleSlotRuntimes(
-  const std::unordered_set<SlotRuntimeKey, SlotRuntimeKeyHash>& active_keys)
-  -> void
-{
-  for (auto it = slot_runtimes_.begin(); it != slot_runtimes_.end();) {
-    if (active_keys.contains(it->first)) {
-      ++it;
-      continue;
-    }
-
-    DestroySlotRuntime(it->second);
-    it = slot_runtimes_.erase(it);
-  }
 }
 
 auto ScriptingModule::ReportHookError(

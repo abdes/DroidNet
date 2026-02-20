@@ -6,15 +6,11 @@
 
 #pragma once
 
-#include <bitset>
-#include <functional>
 #include <memory>
-#include <optional>
-#include <span>
 #include <string>
-#include <type_traits>
 #include <vector>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
@@ -29,6 +25,32 @@ namespace oxygen::scene {
 class SceneQuery;
 class SceneEnvironment;
 template <typename SceneT> class SceneTraversal;
+
+class ISceneObserver {
+public:
+  ISceneObserver() = default;
+  virtual ~ISceneObserver() = default;
+
+  OXYGEN_DEFAULT_COPYABLE(ISceneObserver)
+  OXYGEN_DEFAULT_MOVABLE(ISceneObserver)
+
+  virtual auto OnScriptSlotActivated(const NodeHandle& /*node_handle*/,
+    uint32_t /*slot_index*/, const ScriptingComponent::Slot& /*slot*/) noexcept
+    -> void
+  {
+  }
+
+  virtual auto OnScriptSlotChanged(const NodeHandle& /*node_handle*/,
+    uint32_t /*slot_index*/, const ScriptingComponent::Slot& /*slot*/) noexcept
+    -> void
+  {
+  }
+
+  virtual auto OnScriptSlotDeactivated(
+    const NodeHandle& /*node_handle*/, uint32_t /*slot_index*/) noexcept -> void
+  {
+  }
+};
 
 //! Root of the Oxygen scene graph.
 /*!
@@ -265,6 +287,14 @@ public:
   //! Creates a high-performance query interface for this scene.
   OXGN_SCN_API auto Query() const -> SceneQuery;
 
+  //=== Observer Sync ===-----------------------------------------------------//
+
+  OXGN_SCN_API auto RegisterObserver(
+    observer_ptr<ISceneObserver> observer) noexcept -> bool;
+  OXGN_SCN_API auto UnregisterObserver(
+    observer_ptr<ISceneObserver> observer) noexcept -> bool;
+  OXGN_SCN_API auto SyncObservers() -> void;
+
   //=== Node Re-parenting API (Same-Scene Only) ===-------------------------//
 
   //! Re-parents a node hierarchy to a new parent within this scene, preserving
@@ -481,7 +511,6 @@ public:
   // High-performance traversal access.
   OXGN_SCN_NDAPI auto Traverse() -> MutatingTraversal;
 
-  // TODO: Implement a proper update system for the scene graph.
   OXGN_SCN_API void Update(bool skip_dirty_flags = false) noexcept;
 
   //=== Low-level Access ===--------------------------------------------------//
@@ -590,6 +619,31 @@ private:
 
   //! Unique ID for this scene (0-255)
   SceneId scene_id_;
+
+  struct ScriptSlotKey final {
+    NodeHandle node_handle;
+    uint32_t slot_index { 0 };
+
+    [[nodiscard]] auto operator==(const ScriptSlotKey&) const noexcept -> bool
+      = default;
+  };
+
+  struct ScriptSlotKeyHash final {
+    [[nodiscard]] auto operator()(const ScriptSlotKey& key) const noexcept
+      -> size_t;
+  };
+
+  struct ScriptSlotSignature final {
+    uint64_t content_hash { 0 };
+
+    [[nodiscard]] auto operator==(const ScriptSlotSignature&) const noexcept
+      -> bool
+      = default;
+  };
+
+  std::vector<observer_ptr<ISceneObserver>> observers_;
+  std::unordered_map<ScriptSlotKey, ScriptSlotSignature, ScriptSlotKeyHash>
+    synced_script_slots_;
 
   //=== Validation Helpers ===------------------------------------------------//
 

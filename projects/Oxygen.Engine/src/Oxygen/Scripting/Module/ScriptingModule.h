@@ -14,7 +14,6 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include <Oxygen/Base/Detail/NamedType_skills.h>
@@ -25,6 +24,7 @@
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/Scripting/ScriptExecutable.h>
 #include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
+#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Scripting/ScriptingComponent.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
@@ -184,7 +184,8 @@ private:
   - **Instance Isolation**: Each script instance (Slot) has its own private
     global table, preventing side-effects between different game objects.
 */
-class ScriptingModule final : public engine::EngineModule {
+class ScriptingModule final : public engine::EngineModule,
+                              public scene::ISceneObserver {
   OXYGEN_TYPED(ScriptingModule)
 
 public:
@@ -192,7 +193,7 @@ public:
   OXGN_SCRP_API ~ScriptingModule() override;
 
   OXYGEN_MAKE_NON_COPYABLE(ScriptingModule)
-  OXYGEN_MAKE_NON_MOVABLE(ScriptingModule)
+  OXYGEN_DEFAULT_MOVABLE(ScriptingModule)
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
   {
@@ -230,6 +231,16 @@ public:
   OXGN_SCRP_API auto OnSceneMutation(observer_ptr<engine::FrameContext> context)
     -> co::Co<> override;
   OXGN_SCRP_API auto OnFrameEnd(observer_ptr<engine::FrameContext> context)
+    -> void override;
+
+  OXGN_SCRP_API auto OnScriptSlotActivated(const scene::NodeHandle& node_handle,
+    uint32_t slot_index, const scene::ScriptingComponent::Slot& slot) noexcept
+    -> void override;
+  OXGN_SCRP_API auto OnScriptSlotChanged(const scene::NodeHandle& node_handle,
+    uint32_t slot_index, const scene::ScriptingComponent::Slot& slot) noexcept
+    -> void override;
+  OXGN_SCRP_API auto OnScriptSlotDeactivated(
+    const scene::NodeHandle& node_handle, uint32_t slot_index) noexcept
     -> void override;
 
   OXGN_SCRP_NDAPI auto ExecuteScript(const ScriptExecutionRequest& request)
@@ -271,6 +282,8 @@ private:
 
   struct ActiveScriptSlot {
     SlotRuntimeKey key;
+    std::shared_ptr<const ScriptExecutable> executable;
+    uint64_t executable_hash { 0 };
   };
 
   struct SlotRuntimeState {
@@ -307,15 +320,18 @@ private:
   auto RebuildSlotRuntime(const SlotRuntimeKey& key, SlotRuntimeState& state,
     const scene::ScriptingComponent::Slot& slot) -> ScriptExecutionResult;
   auto DestroySlotRuntime(SlotRuntimeState& state) -> void;
-  auto CleanupStaleSlotRuntimes(
-    const std::unordered_set<SlotRuntimeKey, SlotRuntimeKeyHash>& active_keys)
+  auto EnsureSceneObservation(observer_ptr<engine::FrameContext> context)
     -> void;
+  auto ActivateSlot(const SlotRuntimeKey& key,
+    const scene::ScriptingComponent::Slot& slot) -> void;
+  auto DeactivateSlot(const SlotRuntimeKey& key) -> void;
+  auto UpdateSlot(const SlotRuntimeKey& key,
+    const scene::ScriptingComponent::Slot& slot) -> void;
   auto ProcessPendingTasks() -> void;
   auto RegisterDefaultBindingPacks() -> bool;
   auto ReportHookError(observer_ptr<engine::FrameContext> context,
     std::string_view hook_name, const ScriptExecutionResult& result) const
     -> void;
-  auto CollectActiveScripts(observer_ptr<engine::FrameContext> context) -> void;
 
   lua_State* lua_state_ { nullptr };
   int runtime_env_ref_ { -1 };
@@ -330,6 +346,9 @@ private:
   std::unordered_map<SlotRuntimeKey, SlotRuntimeState, SlotRuntimeKeyHash>
     slot_runtimes_;
   std::vector<ActiveScriptSlot> active_frame_slots_;
+  std::unordered_map<SlotRuntimeKey, size_t, SlotRuntimeKeyHash>
+    active_slot_indices_;
+  std::weak_ptr<scene::Scene> observed_scene_;
 
   std::mutex pending_tasks_mutex_;
   std::deque<Task>

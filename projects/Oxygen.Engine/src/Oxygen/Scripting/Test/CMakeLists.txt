@@ -38,10 +38,12 @@ include(GTestHelpers)
 m_gtest_program(
   Module
   SOURCES
+    "ScriptingModule_test_fixture.h"
     "ScriptingModule_metadata_test.cpp"
     "ScriptingModule_phases_test.cpp"
     "ScriptingModule_lifecycle_test.cpp"
     "ScriptingModule_execution_test.cpp"
+    "ScriptingModule_scene_observer_test.cpp"
 )
 
 m_gtest_program(

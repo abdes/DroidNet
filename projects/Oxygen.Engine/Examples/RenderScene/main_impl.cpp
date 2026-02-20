@@ -37,6 +37,7 @@
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Renderer/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/SceneSync/SceneObserverSyncModule.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 
 #include "DemoShell/Runtime/DemoAppContext.h"
@@ -114,6 +115,9 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
       = std::make_unique<engine::Renderer>(app.gfx_weak, renderer_config);
 
     app.renderer = observer_ptr { renderer_unique.get() };
+    register_module(
+      std::make_unique<oxygen::scenesync::SceneObserverSyncModule>(
+        engine::ModulePriority { 440 }));
     register_module(std::make_unique<oxygen::scripting::ScriptingModule>(
       engine::ModulePriority { 450 }));
     register_module(
