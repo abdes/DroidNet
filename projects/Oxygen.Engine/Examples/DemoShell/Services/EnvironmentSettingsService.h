@@ -391,9 +391,6 @@ private:
     -> std::optional<AtmosphereCanonicalState>;
   [[nodiscard]] static auto HashAtmosphereState(
     const AtmosphereCanonicalState& state) -> std::uint64_t;
-  static auto LogAtmosphereStateDiff(std::string_view prefix,
-    const AtmosphereCanonicalState& before,
-    const AtmosphereCanonicalState& after) -> void;
 
   static constexpr float kDefaultPlanetRadiusKm
     = engine::atmos::kDefaultPlanetRadiusM * 0.001F;
