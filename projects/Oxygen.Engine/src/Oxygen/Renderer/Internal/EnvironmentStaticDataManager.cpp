@@ -1151,7 +1151,7 @@ auto EnvironmentStaticDataManager::EnsureResourcesCreated() -> void
 
   srv_index_ = srv_index;
 
-  LOG_F(INFO,
+  DLOG_F(1,
     "created upload buffer (srv={}, stride_bytes={}, total_bytes={}, "
     "frames_in_flight={})",
     srv_index_.get(), kStrideBytes, total_bytes, frame::kFramesInFlight.get());
@@ -1161,10 +1161,9 @@ auto EnvironmentStaticDataManager::EnsureResourcesCreated() -> void
 
 auto EnvironmentStaticDataManager::MarkAllSlotsDirty() -> void
 {
-  const auto old = snapshot_id_;
   ++snapshot_id_;
   DLOG_F(2, "marked all slots dirty (snapshot_id={} -> {}, current_slot={})",
-    old, snapshot_id_, CurrentSlotIndex());
+    snapshot_id_ - 1U, snapshot_id_, CurrentSlotIndex());
 }
 
 } // namespace oxygen::engine::internal
