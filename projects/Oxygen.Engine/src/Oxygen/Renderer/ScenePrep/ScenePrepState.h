@@ -9,7 +9,10 @@
 #include <algorithm>
 #include <cassert>
 #include <ranges>
+#include <unordered_map>
 #include <vector>
+
+#include <glm/mat4x4.hpp>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -22,6 +25,10 @@
 #include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 
+namespace oxygen::data {
+class GeometryAsset;
+} // namespace oxygen::data
+
 namespace oxygen::engine::sceneprep {
 
 //! Persistent and per-frame state for ScenePrep operations. Manages both
@@ -29,6 +36,14 @@ namespace oxygen::engine::sceneprep {
 //! frames).
 class ScenePrepState {
 public:
+  struct CachedNodeBasics {
+    bool cast_shadows { true };
+    bool receive_shadows { true };
+    glm::mat4 world_transform { 1.0F };
+    std::shared_ptr<const oxygen::data::GeometryAsset> geometry;
+    TransformHandle transform_handle { kInvalidTransformHandle };
+  };
+
   ScenePrepState() = default;
 
   /*!
@@ -155,6 +170,7 @@ public:
     pass_masks.clear();
     // Clear cached per-frame filtered node list populated during Frame-phase
     filtered_scene_nodes_.clear();
+    cached_node_basics_.clear();
   }
 
   //! Reset per-view data while keeping global lists/caches intact.
@@ -189,6 +205,25 @@ public:
     return filtered_scene_nodes_;
   }
 
+  auto CacheNodeBasics(
+    const scene::SceneNodeImpl* node, const CachedNodeBasics& basics) -> void
+  {
+    if (node == nullptr) {
+      return;
+    }
+    cached_node_basics_[node] = basics;
+  }
+
+  auto TryGetNodeBasics(
+    const scene::SceneNodeImpl* node) const -> const CachedNodeBasics*
+  {
+    if (node == nullptr) {
+      return nullptr;
+    }
+    const auto it = cached_node_basics_.find(node);
+    return it != cached_node_basics_.end() ? &it->second : nullptr;
+  }
+
 private:
   //! Raw items collected during scene traversal.
   std::vector<RenderItemData> collected_items_;
@@ -217,6 +252,11 @@ private:
   //! frames. This list is deduplicated for consecutive entries to avoid
   //! repeating the same node when a producer emits multiple per-node items.
   std::vector<const scene::SceneNodeImpl*> filtered_scene_nodes_;
+
+  //! Cached view-invariant extraction outputs for nodes processed in
+  //! frame-phase. Reused in view-phase to avoid redundant pre-filter work.
+  std::unordered_map<const scene::SceneNodeImpl*, CachedNodeBasics>
+    cached_node_basics_;
   // (no upload ticket storage here — upload coordination is external)
 };
 
