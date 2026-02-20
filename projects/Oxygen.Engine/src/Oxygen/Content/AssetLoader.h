@@ -341,6 +341,9 @@ public:
   OXGN_CNTT_API auto ReloadScript(const std::filesystem::path& path)
     -> void override;
 
+  //! Trigger a full reload of all currently loaded script assets.
+  OXGN_CNTT_API auto ReloadAllScripts() -> void override;
+
   using ScriptReloadCallback = IAssetLoader::ScriptReloadCallback;
 
   //! Subscribe to script reload events.

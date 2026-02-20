@@ -52,6 +52,17 @@ auto ScriptHotReloadService::IsRunning() const -> bool
   return nursery_ != nullptr;
 }
 
+auto ScriptHotReloadService::SetEnabled(const bool enabled) noexcept -> void
+{
+  enabled_.store(enabled, std::memory_order_release);
+}
+
+auto ScriptHotReloadService::SetPollInterval(
+  const std::chrono::milliseconds interval) noexcept -> void
+{
+  poll_interval_.store(interval, std::memory_order_release);
+}
+
 auto ScriptHotReloadService::WatchLoop() -> co::Co<>
 {
   const auto roots = path_finder_.ScriptSourceRoots();
@@ -87,7 +98,12 @@ auto ScriptHotReloadService::WatchLoop() -> co::Co<>
   }
 
   while (true) {
-    co_await engine_->GetPlatform().Async().SleepFor(poll_interval_);
+    co_await engine_->GetPlatform().Async().SleepFor(
+      poll_interval_.load(std::memory_order_acquire));
+
+    if (!enabled_.load(std::memory_order_acquire)) {
+      continue;
+    }
 
     for (const auto& root : roots) {
       if (!std::filesystem::exists(root)) {

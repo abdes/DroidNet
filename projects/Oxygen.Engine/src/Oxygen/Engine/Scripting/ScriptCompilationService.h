@@ -21,6 +21,10 @@
 #include <Oxygen/OxCo/Shared.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 
+namespace oxygen::console {
+class Console;
+}
+
 namespace oxygen::scripting {
 
 //! Core engine service for script compilation and bytecode management.
@@ -89,6 +93,14 @@ public:
 
   OXGN_NGIN_API auto OnFrameStart(engine::EngineTag) -> void override;
 
+  OXGN_NGIN_API auto SetCacheBudget(size_t budget_bytes) -> void override;
+  OXGN_NGIN_API auto SetDeferredPersistence(bool enabled) -> void override;
+  OXGN_NGIN_API auto FlushPersistentCache() -> void override;
+
+  OXGN_NGIN_API auto RegisterConsoleBindings(
+    observer_ptr<console::Console> console) -> void;
+  OXGN_NGIN_API auto ApplyConsoleCVars(const console::Console& console) -> void;
+
 private:
   static constexpr size_t kL1ByteBudget = 8 * 1024 * 1024;
 
@@ -114,7 +126,6 @@ private:
     -> std::shared_ptr<const ScriptBytecodeBlob>;
   OXGN_NGIN_API auto StorePersistentBytecode(CompileKey compile_key,
     std::shared_ptr<const ScriptBytecodeBlob> bytecode) -> void;
-  OXGN_NGIN_API auto FlushPersistentCache() -> void;
   OXGN_NGIN_API auto PersistCacheSnapshot(const std::vector<
     std::pair<CompileKey, std::shared_ptr<const ScriptBytecodeBlob>>>& snapshot)
     -> void;
@@ -142,6 +153,7 @@ private:
   std::unordered_map<CompileKey, std::shared_ptr<const ScriptBytecodeBlob>>
     pending_persistence_;
   std::atomic<bool> cache_dirty_ { false };
+  std::atomic<bool> deferred_persistence_enabled_ { true };
 
   mutable std::mutex subscribers_mutex_;
   std::unordered_map<CompileKey,

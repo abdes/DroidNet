@@ -162,6 +162,8 @@ public:
     -> scripting::IScriptCompilationService&;
   OXGN_NGIN_NDAPI auto GetScriptCompilationService() const noexcept
     -> const scripting::IScriptCompilationService&;
+  OXGN_NGIN_NDAPI auto GetHotReloadService() noexcept
+    -> observer_ptr<scripting::ScriptHotReloadService>;
 
   //! Set the engine target frames-per-second at runtime. 0 = uncapped.
   //! Value will be clamped to range [0, 240]. Thread-safety is caller's
