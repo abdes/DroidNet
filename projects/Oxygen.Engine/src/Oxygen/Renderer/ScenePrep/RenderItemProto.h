@@ -221,6 +221,11 @@ public:
     return node_->GetName();
   }
 
+  [[nodiscard]] auto GetNodePtr() const noexcept -> const scn::SceneNodeImpl*
+  {
+    return node_;
+  }
+
   auto& Flags() const noexcept { return node_->GetFlags(); }
 
   void SetVisibleSubmeshes(std::vector<uint32_t> indices) noexcept

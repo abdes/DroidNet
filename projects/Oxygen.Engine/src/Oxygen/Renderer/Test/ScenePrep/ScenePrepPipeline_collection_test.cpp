@@ -226,9 +226,8 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtPreFilter_SkipsDownstream)
     StateRef(), true);
 
   EXPECT_EQ(StateRef().CollectedCount(), 0);
-  // pre_filter runs in both frame-phase and per-view phase, so expect 2x
-  EXPECT_EQ(
-    pre_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount * 2));
+  // pre_filter runs in frame-phase and view-phase reuses cached basics.
+  EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
   EXPECT_EQ(res_called, 0);
   EXPECT_EQ(vis_called, 0);
   EXPECT_EQ(prod_called, 0);
@@ -275,9 +274,8 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtResolver_SkipsDownstream)
     StateRef(), true);
 
   EXPECT_TRUE(StateRef().CollectedItems().empty());
-  // pre_filter runs twice (frame + view)
-  EXPECT_EQ(
-    pre_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount * 2));
+  // pre_filter runs in frame-phase and view-phase reuses cached basics.
+  EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
   EXPECT_EQ(res_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
   EXPECT_EQ(vis_called, 0);
   EXPECT_EQ(prod_called, 0);
@@ -327,9 +325,8 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtVisibility_SkipsProducer)
     StateRef(), true);
 
   EXPECT_TRUE(StateRef().CollectedItems().empty());
-  // pre_filter runs twice (frame + view)
-  EXPECT_EQ(
-    pre_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount * 2));
+  // pre_filter runs in frame-phase and view-phase reuses cached basics.
+  EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
   EXPECT_EQ(res_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
   EXPECT_EQ(vis_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
   EXPECT_EQ(prod_called, 0);

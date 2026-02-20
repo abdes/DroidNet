@@ -67,16 +67,33 @@ public:
   auto CollectImpl(std::optional<ScenePrepContext> ctx, ScenePrepState& state,
     RenderItemProto& item) -> void override
   {
+    bool seeded_from_frame_cache = false;
+    if (ctx && ctx->HasView()) {
+      if (const auto* cached = state.TryGetNodeBasics(item.GetNodePtr())) {
+        item.SetVisible();
+        item.SetCastShadows(cached->cast_shadows);
+        item.SetReceiveShadows(cached->receive_shadows);
+        item.SetWorldTransform(cached->world_transform);
+        item.SetGeometry(cached->geometry);
+        item.SetTransformHandle(cached->transform_handle);
+        seeded_from_frame_cache = true;
+      }
+    }
+
     if constexpr (CollectionCfg::has_pre_filter) {
-      collection_.pre_filter(*ctx, state, item);
-      if (item.IsDropped()) {
-        return;
+      if (!seeded_from_frame_cache) {
+        collection_.pre_filter(*ctx, state, item);
+        if (item.IsDropped()) {
+          return;
+        }
       }
     }
     if constexpr (CollectionCfg::has_transform_resolve) {
-      collection_.transform_resolve(*ctx, state, item);
-      if (item.IsDropped()) {
-        return;
+      if (!item.GetTransformHandle().IsValid()) {
+        collection_.transform_resolve(*ctx, state, item);
+        if (item.IsDropped()) {
+          return;
+        }
       }
     }
     if constexpr (CollectionCfg::has_mesh_resolver) {

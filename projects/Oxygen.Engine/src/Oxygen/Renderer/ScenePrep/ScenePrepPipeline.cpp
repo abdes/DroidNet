@@ -74,10 +74,19 @@ auto ScenePrepPipeline::Collect(const scene::Scene& scene,
         CollectImpl(ctx_, *prep_state_, item);
 
         // If we are in Frame-phase (no view), cache a reference to the node
-        // for faster per-view iteration later. Producers may emit multiple
-        // items per node; `AddFilteredSceneNode` deduplicates consecutive
-        // inserts to avoid repeating the same node multiple times.
-        if (!ctx_->HasView()) {
+        // and view-invariant extraction outputs for faster per-view iteration
+        // later. Producers may emit multiple items per node;
+        // `AddFilteredSceneNode` deduplicates consecutive inserts to avoid
+        // repeating the same node multiple times.
+        if (!ctx_->HasView() && !item.IsDropped()) {
+          prep_state_->CacheNodeBasics(&node_impl,
+            ScenePrepState::CachedNodeBasics {
+              .cast_shadows = item.CastsShadows(),
+              .receive_shadows = item.ReceivesShadows(),
+              .world_transform = item.GetWorldTransform(),
+              .geometry = item.Geometry(),
+              .transform_handle = item.GetTransformHandle(),
+            });
           prep_state_->AddFilteredSceneNode(&node_impl);
         }
 
