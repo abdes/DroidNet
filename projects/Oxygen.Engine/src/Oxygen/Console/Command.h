@@ -48,8 +48,8 @@ struct CommandContext {
 struct ExecutionResult {
   ExecutionStatus status { ExecutionStatus::kOk };
   int exit_code { 0 };
-  std::string output;
-  std::string error;
+  std::string output {}; // NOLINT(*-member-init)
+  std::string error {}; // NOLINT(*-member-init)
 };
 
 using CommandHandler = std::function<auto(

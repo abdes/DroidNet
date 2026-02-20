@@ -5,18 +5,21 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <bitset>
 #include <functional>
 #include <ranges>
+#include <unordered_map>
 
 #include <fmt/format.h>
 
-#include "Scene.h"
+#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ResourceTable.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Scene/Detail/Scene_safecall_impl.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneQuery.h>
 #include <Oxygen/Scene/SceneTraversal.h>
 
@@ -24,6 +27,14 @@ using oxygen::scene::NodeHandle;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeImpl;
+
+auto Scene::ScriptSlotKeyHash::operator()(
+  const ScriptSlotKey& key) const noexcept -> size_t
+{
+  size_t seed = std::hash<NodeHandle> {}(key.node_handle);
+  oxygen::HashCombine(seed, key.slot_index);
+  return seed;
+}
 
 // =============================================================================
 // SceneIdManager Implementations
@@ -200,6 +211,7 @@ void Scene::Clear() noexcept
   nodes_->Clear();
   root_nodes_.clear();
   environment_.reset();
+  synced_script_slots_.clear();
 }
 
 auto Scene::SetEnvironment(
@@ -731,6 +743,115 @@ auto Scene::Traverse() -> MutatingTraversal
 auto Scene::Query() const -> SceneQuery
 {
   return SceneQuery(shared_from_this());
+}
+
+auto Scene::RegisterObserver(
+  const observer_ptr<ISceneObserver> observer) noexcept -> bool
+{
+  if (observer == nullptr) {
+    return false;
+  }
+  if (std::ranges::find(observers_, observer) != observers_.end()) {
+    return false;
+  }
+  observers_.push_back(observer);
+  return true;
+}
+
+auto Scene::UnregisterObserver(
+  const observer_ptr<ISceneObserver> observer) noexcept -> bool
+{
+  const auto previous_size = observers_.size();
+  std::erase(observers_, observer);
+  return observers_.size() != previous_size;
+}
+
+auto Scene::SyncObservers() -> void
+{
+  if (observers_.empty()) {
+    return;
+  }
+
+  std::unordered_map<ScriptSlotKey, ScriptSlotSignature, ScriptSlotKeyHash>
+    active_slots;
+
+  auto traversal = Traverse();
+  [[maybe_unused]] const auto traversal_result = traversal.Traverse(
+    [&](const auto& visited_node, const bool dry_run) -> VisitResult {
+      if (dry_run || visited_node.node_impl == nullptr) {
+        return VisitResult::kContinue;
+      }
+
+      if (!visited_node.node_impl
+            ->template HasComponent<ScriptingComponent>()) {
+        return VisitResult::kContinue;
+      }
+
+      auto node = GetNode(visited_node.handle);
+      if (!node.has_value()) {
+        return VisitResult::kContinue;
+      }
+
+      const auto scripting = node->GetScripting();
+      const auto slots = scripting.Slots();
+      for (size_t slot_idx = 0; slot_idx < slots.size(); ++slot_idx) {
+        const auto& slot = slots[slot_idx];
+        if (slot.State() != ScriptingComponent::Slot::CompileState::kReady
+          || slot.IsDisabled() || slot.Executable() == nullptr) {
+          continue;
+        }
+
+        const auto slot_index = static_cast<uint32_t>(slot_idx);
+        const ScriptSlotKey key {
+          .node_handle = visited_node.handle,
+          .slot_index = slot_index,
+        };
+        const ScriptSlotSignature signature {
+          .content_hash = slot.Executable()->ContentHash(),
+        };
+
+        const auto [it, inserted] = active_slots.emplace(key, signature);
+        if (!inserted) {
+          it->second = signature;
+        }
+
+        const auto synced_it = synced_script_slots_.find(key);
+        if (synced_it == synced_script_slots_.end()) {
+          for (const auto observer : observers_) {
+            if (observer != nullptr) {
+              observer->OnScriptSlotActivated(
+                visited_node.handle, slot_index, slot);
+            }
+          }
+          continue;
+        }
+
+        if (!(synced_it->second == signature)) {
+          for (const auto observer : observers_) {
+            if (observer != nullptr) {
+              observer->OnScriptSlotChanged(
+                visited_node.handle, slot_index, slot);
+            }
+          }
+        }
+      }
+
+      return VisitResult::kContinue;
+    },
+    TraversalOrder::kPreOrder);
+
+  for (const auto& [key, _signature] : synced_script_slots_) {
+    if (active_slots.contains(key)) {
+      continue;
+    }
+    for (const auto observer : observers_) {
+      if (observer != nullptr) {
+        observer->OnScriptSlotDeactivated(key.node_handle, key.slot_index);
+      }
+    }
+  }
+
+  synced_script_slots_ = std::move(active_slots);
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst

@@ -44,8 +44,8 @@ struct CVarDefinition {
   std::string help;
   CVarValue default_value;
   CVarFlags flags { CVarFlags::kNone };
-  std::optional<double> min_value;
-  std::optional<double> max_value;
+  std::optional<double> min_value {}; // NOLINT(*-member-init)
+  std::optional<double> max_value {}; // NOLINT(*-member-init)
 };
 
 struct CVarSnapshot {
