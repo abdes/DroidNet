@@ -9,7 +9,9 @@
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -30,6 +32,14 @@ struct ContentExplorerSettings {
   bool auto_dump_texture_memory { true };
   int auto_dump_delay_frames { 180 };
   int dump_top_n { 20 };
+};
+
+//! Persisted active scene selection for content loader restoration.
+struct ContentActiveSceneSelection {
+  std::string scene_name;
+  std::string scene_key;
+  std::filesystem::path source_path;
+  bool source_is_pak { true };
 };
 
 //! Service responsible for persisting content loader related UI settings.
@@ -68,6 +78,23 @@ public:
   [[nodiscard]] virtual auto GetLastCookedOutputDirectory() const
     -> std::string;
   virtual auto SetLastCookedOutputDirectory(const std::string& path) -> void;
+
+  // --- Mounted Sources ---
+  [[nodiscard]] virtual auto GetMountedPakPaths() const
+    -> std::vector<std::filesystem::path>;
+  virtual auto SetMountedPakPaths(
+    const std::vector<std::filesystem::path>& paths) -> void;
+
+  [[nodiscard]] virtual auto GetMountedIndexPaths() const
+    -> std::vector<std::filesystem::path>;
+  virtual auto SetMountedIndexPaths(
+    const std::vector<std::filesystem::path>& paths) -> void;
+
+  // --- Active Scene ---
+  [[nodiscard]] virtual auto GetActiveSceneSelection() const
+    -> std::optional<ContentActiveSceneSelection>;
+  virtual auto SetActiveSceneSelection(
+    const std::optional<ContentActiveSceneSelection>& selection) -> void;
 
   //! Returns the current settings epoch for cache invalidation.
   [[nodiscard]] auto GetEpoch() const noexcept -> std::uint64_t;
