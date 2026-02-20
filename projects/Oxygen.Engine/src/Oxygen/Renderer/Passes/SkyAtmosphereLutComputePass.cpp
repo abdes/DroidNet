@@ -142,38 +142,44 @@ namespace {
 
     if (!pso_ready) {
       LOG_F(WARNING,
-        "SkyAtmosphereLutComputePass: sanity check failed (view={}) missing PSO(s)",
+        "SkyAtmosphereLutComputePass: sanity check failed (view={}) missing "
+        "PSO(s)",
         view_id.get());
       ok = false;
     }
     if (!constants_ready) {
       LOG_F(WARNING,
-        "SkyAtmosphereLutComputePass: sanity check failed (view={}) constants buffer/CBV not ready",
+        "SkyAtmosphereLutComputePass: sanity check failed (view={}) constants "
+        "buffer/CBV not ready",
         view_id.get());
       ok = false;
     }
 
     if (!ctx.current_view.resolved_view) {
       LOG_F(WARNING,
-        "SkyAtmosphereLutComputePass: sanity check failed (view={}) missing resolved view",
+        "SkyAtmosphereLutComputePass: sanity check failed (view={}) missing "
+        "resolved view",
         view_id.get());
       ok = false;
     }
     if (!ctx.scene_constants) {
       LOG_F(WARNING,
-        "SkyAtmosphereLutComputePass: sanity check failed (view={}) missing scene constants",
+        "SkyAtmosphereLutComputePass: sanity check failed (view={}) missing "
+        "scene constants",
         view_id.get());
       ok = false;
     }
     if (!ctx.env_dynamic_manager) {
       LOG_F(WARNING,
-        "SkyAtmosphereLutComputePass: sanity check failed (view={}) missing env dynamic manager",
+        "SkyAtmosphereLutComputePass: sanity check failed (view={}) missing "
+        "env dynamic manager",
         view_id.get());
       ok = false;
     }
     if (!ctx.GetRenderer().GetEnvironmentStaticDataManager()) {
       LOG_F(WARNING,
-        "SkyAtmosphereLutComputePass: sanity check failed (view={}) missing env static manager",
+        "SkyAtmosphereLutComputePass: sanity check failed (view={}) missing "
+        "env static manager",
         view_id.get());
       ok = false;
     }
@@ -186,7 +192,8 @@ namespace {
     if (!transmittance_tex || !sky_view_tex || !multi_scat_tex
       || !sky_irradiance_tex || !camera_volume_tex) {
       LOG_F(WARNING,
-        "SkyAtmosphereLutComputePass: sanity check failed (view={}) missing one or more LUT textures",
+        "SkyAtmosphereLutComputePass: sanity check failed (view={}) missing "
+        "one or more LUT textures",
         view_id.get());
       ok = false;
     }
@@ -204,7 +211,8 @@ namespace {
       || !camera_volume_uav.IsValid() || !transmittance_srv.IsValid()
       || !multi_scat_srv.IsValid() || !sky_irradiance_srv.IsValid()) {
       LOG_F(WARNING,
-        "SkyAtmosphereLutComputePass: sanity check failed (view={}) invalid LUT UAV/SRV slots",
+        "SkyAtmosphereLutComputePass: sanity check failed (view={}) invalid "
+        "LUT UAV/SRV slots",
         view_id.get());
       ok = false;
     }
@@ -218,7 +226,8 @@ namespace {
       || irr_h == 0 || sky_w == 0 || sky_h == 0 || cv_w == 0 || cv_h == 0
       || cv_d == 0) {
       LOG_F(WARNING,
-        "SkyAtmosphereLutComputePass: sanity check failed (view={}) zero-sized LUT extent(s)",
+        "SkyAtmosphereLutComputePass: sanity check failed (view={}) zero-sized "
+        "LUT extent(s)",
         view_id.get());
       ok = false;
     }
@@ -230,32 +239,37 @@ namespace {
     const auto alt_mapping_mode = manager.GetAltMappingMode();
     if (!std::isfinite(planet_radius_m) || planet_radius_m <= 0.0F) {
       LOG_F(WARNING,
-        "SkyAtmosphereLutComputePass: sanity check failed (view={}) invalid planet radius {}",
+        "SkyAtmosphereLutComputePass: sanity check failed (view={}) invalid "
+        "planet radius {}",
         view_id.get(), planet_radius_m);
       ok = false;
     }
     if (!std::isfinite(atmosphere_height_m) || atmosphere_height_m <= 0.0F) {
       LOG_F(WARNING,
-        "SkyAtmosphereLutComputePass: sanity check failed (view={}) invalid atmosphere height {}",
+        "SkyAtmosphereLutComputePass: sanity check failed (view={}) invalid "
+        "atmosphere height {}",
         view_id.get(), atmosphere_height_m);
       ok = false;
     }
     if (!std::isfinite(sun_cos_zenith) || sun_cos_zenith < -1.0F
       || sun_cos_zenith > 1.0F) {
       LOG_F(WARNING,
-        "SkyAtmosphereLutComputePass: sanity check failed (view={}) invalid sun cos zenith {}",
+        "SkyAtmosphereLutComputePass: sanity check failed (view={}) invalid "
+        "sun cos zenith {}",
         view_id.get(), sun_cos_zenith);
       ok = false;
     }
     if (sky_view_slices == 0) {
       LOG_F(WARNING,
-        "SkyAtmosphereLutComputePass: sanity check failed (view={}) sky view slices is zero",
+        "SkyAtmosphereLutComputePass: sanity check failed (view={}) sky view "
+        "slices is zero",
         view_id.get());
       ok = false;
     }
     if (alt_mapping_mode > 1U) {
       LOG_F(WARNING,
-        "SkyAtmosphereLutComputePass: sanity check failed (view={}) invalid alt mapping mode {}",
+        "SkyAtmosphereLutComputePass: sanity check failed (view={}) invalid "
+        "alt mapping mode {}",
         view_id.get(), alt_mapping_mode);
       ok = false;
     }
@@ -539,8 +553,7 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
     && impl_->sky_irradiance_pso_desc.has_value()
     && impl_->sky_view_pso_desc.has_value()
     && impl_->camera_volume_pso_desc.has_value();
-  const bool constants_ready
-    = impl_->mapped_constants.size()
+  const bool constants_ready = impl_->mapped_constants.size()
       >= (packing::kConstantBufferAlignment * kNumAtmospherePasses)
     && std::ranges::all_of(
       impl_->cbv_indices, [](const auto idx) { return idx.IsValid(); });
@@ -548,7 +561,8 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
   if (!RunSkyAtmosphereComputeSanityChecks(
         Context(), *manager, view_id, pso_ready, constants_ready)) {
     LOG_F(WARNING,
-      "SkyAtmosphereLutComputePass: skipping LUT generation due to failed sanity checks (view={}, gen={})",
+      "SkyAtmosphereLutComputePass: skipping LUT generation due to failed "
+      "sanity checks (view={}, gen={})",
       view_id.get(), generation);
     co_return;
   }
@@ -587,7 +601,7 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
 
   const auto env_static_manager
     = Context().GetRenderer().GetEnvironmentStaticDataManager();
-  const auto env_static_srv
+  [[maybe_unused]] const auto env_static_srv
     = env_static_manager ? env_static_manager->GetSrvIndex(view_id).get() : 0U;
 
   DLOG_SCOPE_F(INFO, "Atmosphere LUT generation");

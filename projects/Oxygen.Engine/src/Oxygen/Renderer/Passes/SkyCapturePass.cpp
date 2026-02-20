@@ -135,7 +135,7 @@ auto SkyCapturePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     // execution will be a no-op; log once per generation/view to validate.
     static std::unordered_map<std::uint32_t, std::uint64_t>
       last_logged_skip_gen_by_view;
-    const auto u_view_id = view_id.get();
+    const auto u_view_id = static_cast<std::uint32_t>(view_id.get());
     const auto gen = state.capture_generation;
     const auto it = last_logged_skip_gen_by_view.find(u_view_id);
     if (it == last_logged_skip_gen_by_view.end() || it->second != gen) {
@@ -178,9 +178,9 @@ auto SkyCapturePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   // Bind EnvironmentDynamicData for exposure and other dynamic data.
   if (const auto manager = Context().env_dynamic_manager) {
-    const auto view_id = Context().current_view.view_id;
-    manager->UpdateIfNeeded(view_id);
-    if (const auto env_addr = manager->GetGpuVirtualAddress(view_id);
+    const auto env_view_id = Context().current_view.view_id;
+    manager->UpdateIfNeeded(env_view_id);
+    if (const auto env_addr = manager->GetGpuVirtualAddress(env_view_id);
       env_addr != 0) {
       recorder.SetGraphicsRootConstantBufferView(
         static_cast<uint32_t>(binding::RootParam::kEnvironmentDynamicData),
