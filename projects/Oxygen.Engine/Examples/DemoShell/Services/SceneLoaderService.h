@@ -16,9 +16,11 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Config/PathFinder.h>
+#include <Oxygen/Content/ResourceTable.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ScriptAsset.h>
+#include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Scene/SceneNode.h>
 
@@ -27,10 +29,16 @@ class IAssetLoader;
 class PakFile;
 } // namespace oxygen::content
 
+// Remove redundant forward declaration for FileStream as its header is included
+// namespace oxygen::serio {
+// template <typename StreamT> class FileStream;
+// } // namespace oxygen::serio
+
 namespace oxygen::data {
 class SceneAsset;
 class InputActionAsset;
 class InputMappingContextAsset;
+class ScriptResource; // Add forward declaration for ScriptResource
 } // namespace oxygen::data
 
 namespace oxygen::engine {
@@ -143,6 +151,11 @@ private:
 
   content::IAssetLoader& loader_; // FIXME
   Extent<uint32_t> extent_ {};
+
+  // Stored execution context for reloading
+  std::filesystem::path source_pak_path_;
+  PathFinder path_finder_;
+
   PendingSceneSwap swap_ {};
   std::vector<scene::SceneNode> runtime_nodes_;
   scene::SceneNode active_camera_;
@@ -154,10 +167,13 @@ private:
   std::unordered_set<data::AssetKey> pending_geometry_keys_;
   std::vector<data::AssetKey> pinned_geometry_keys_;
 
-  std::unique_ptr<content::PakFile> source_pak_ {};
-  observer_ptr<engine::InputSystem> input_system_ {};
+  std::unique_ptr<content::PakFile> source_pak_;
+  observer_ptr<engine::InputSystem> input_system_;
   observer_ptr<scripting::IScriptCompilationService> compilation_service_;
   std::unique_ptr<scripting::IScriptSourceResolver> source_resolver_;
+
+  auto ReadScriptResource(uint32_t index) const
+    -> std::shared_ptr<const data::ScriptResource>;
 };
 
 } // namespace oxygen::examples

@@ -60,11 +60,27 @@ m_gtest_program(
   SOURCES
     "ScriptSourceResolver_test.cpp"
 )
+target_link_libraries(
+  "Oxygen.Scripting.Resolver.Tests"
+  PRIVATE
+    oxygen::loader
+)
 
 m_gtest_program(
   LuauScriptCompiler
   SOURCES
     "LuauScriptCompiler_test.cpp"
+)
+
+m_gtest_program(
+  Advanced
+  SOURCES
+    "ScriptingModule_HotReload_test.cpp"
+)
+target_link_libraries(
+  "Oxygen.Scripting.Advanced.Tests"
+  PRIVATE
+    oxygen::loader
 )
 
 m_gtest_program(

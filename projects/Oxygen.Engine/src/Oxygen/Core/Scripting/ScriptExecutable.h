@@ -28,6 +28,11 @@ public:
   {
     return {};
   }
+
+  [[nodiscard]] virtual auto ContentHash() const noexcept -> uint64_t
+  {
+    return 0;
+  }
 };
 
 } // namespace oxygen::scripting

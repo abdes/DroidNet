@@ -24,6 +24,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Content/ResourceTable.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/InputActionAsset.h>
@@ -303,13 +304,23 @@ SceneLoaderService::SceneLoaderService(content::IAssetLoader& loader,
   PathFinder path_finder)
   : loader_(loader)
   , extent_(viewport)
+  , source_pak_path_(std::move(source_pak_path))
+  , path_finder_(std::move(path_finder))
   , input_system_(input_system)
   , compilation_service_(std::move(compilation_service))
   , source_resolver_(
-      std::make_unique<scripting::ScriptSourceResolver>(std::move(path_finder)))
+      std::make_unique<scripting::ScriptSourceResolver>(path_finder_))
 {
-  if (!source_pak_path.empty()) {
-    source_pak_ = std::make_unique<content::PakFile>(source_pak_path);
+  if (source_pak_path_.empty()) {
+    return;
+  }
+
+  // Reload the PAK file (even if it's a directory, assume PakFile handles it or
+  // we'll add support there)
+  try {
+    source_pak_ = std::make_unique<content::PakFile>(source_pak_path_);
+  } catch (const std::exception& e) {
+    LOG_F(ERROR, "SceneLoader: Failed to load source PAK: {}", e.what());
   }
 }
 
@@ -324,6 +335,26 @@ void SceneLoaderService::StartLoad(const data::AssetKey& key)
 {
   LOG_F(INFO, "SceneLoader: Starting load for scene key: {}",
     oxygen::data::to_string(key));
+
+  if (!source_pak_path_.empty()) {
+    // Refresh the source resolver and PAK/loose index to ensure we pick up
+    // any changes on disk since the last load.
+    LOG_F(INFO, "SceneLoader: Refreshing script sources from: {}",
+      source_pak_path_.string());
+
+    // 1. Recreate the resolver to clear any internal caches
+    source_resolver_
+      = std::make_unique<scripting::ScriptSourceResolver>(path_finder_);
+
+    // 2. Re-open the source PAK
+    source_pak_.reset();
+
+    try {
+      source_pak_ = std::make_unique<content::PakFile>(source_pak_path_);
+    } catch (const std::exception& e) {
+      LOG_F(ERROR, "SceneLoader: Failed to reload source PAK: {}", e.what());
+    }
+  }
 
   swap_.scene_key = key;
   // Start loading the scene asset
@@ -1059,50 +1090,17 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
   }
 
   auto load_script_resource
-    = [pak = source_pak_.get()](
+    = [this](
         const uint32_t index) -> std::shared_ptr<const data::ScriptResource> {
-    if (pak == nullptr) {
-      LOG_F(WARNING,
-        "script resource load requested without source pak (index={})", index);
-      return nullptr;
-    }
-    try {
-      return pak->ReadScriptResource(index);
-    } catch (const std::exception& ex) {
-      LOG_F(WARNING, "failed to read script resource (index={}): {}", index,
-        ex.what());
-      return nullptr;
-    } catch (...) {
-      LOG_F(WARNING, "failed to read script resource (index={})", index);
-      return nullptr;
-    }
+    return ReadScriptResource(index);
   };
 
-  auto map_origin
-    = [pak = source_pak_.get()](
-        const uint32_t index) -> std::optional<scripting::ScriptBlobOrigin> {
-    if (pak == nullptr) {
-      LOG_F(WARNING,
-        "script origin mapping requested without source pak (index={})", index);
-      return std::nullopt;
-    }
-    try {
-      const auto resource = pak->ReadScriptResource(index);
-      if (!resource) {
-        LOG_F(WARNING,
-          "script resource missing while mapping origin (index={})", index);
-        return std::nullopt;
-      }
+  auto map_origin =
+    [this](const uint32_t index) -> std::optional<scripting::ScriptBlobOrigin> {
+    if (auto res = ReadScriptResource(index)) {
       return scripting::ScriptBlobOrigin::kEmbeddedResource;
-    } catch (const std::exception& ex) {
-      LOG_F(WARNING, "failed to map script origin from resource (index={}): {}",
-        index, ex.what());
-      return std::nullopt;
-    } catch (...) {
-      LOG_F(
-        WARNING, "failed to map script origin from resource (index={})", index);
-      return std::nullopt;
     }
+    return std::nullopt;
   };
 
   auto resolve_result = source_resolver_->Resolve(
@@ -1167,9 +1165,12 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
   const auto compile_key
     = ComputeCompileKey(script_asset->GetAssetKey(), source_blob, kCompileMode);
   const auto source_size = source_blob.Size();
+  const auto source_hash = source_blob.ContentHash();
   LOG_F(INFO,
-    "submitting compile request (asset_key={}, compile_key={}, source_size={})",
-    data::to_string(script_asset->GetAssetKey()), compile_key, source_size);
+    "submitting compile request (asset_key={}, compile_key={}, source_size={}, "
+    "source_hash={})",
+    data::to_string(script_asset->GetAssetKey()), compile_key, source_size,
+    source_hash);
   auto acquire = compilation_service_->AcquireForSlot(
     scripting::IScriptCompilationService::Request {
       .compile_key = compile_key,
@@ -1199,8 +1200,9 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
         },
     });
   (void)acquire;
-  LOG_F(INFO, "queued script compilation (asset_key={}, compile_key={})",
-    data::to_string(script_asset->GetAssetKey()), compile_key);
+  LOG_F(INFO,
+    "queued script compilation (asset_key={}, compile_key={}, source_hash={})",
+    data::to_string(script_asset->GetAssetKey()), compile_key, source_hash);
 }
 
 void SceneLoaderService::SelectActiveCamera(const data::SceneAsset& asset)
@@ -1408,6 +1410,24 @@ void SceneLoaderService::LogSceneHierarchy(const scene::Scene& scene)
     LOG_F(INFO, "SceneLoader: Hierarchy traversal covered all {} nodes.",
       runtime_nodes_.size());
   }
+}
+
+auto SceneLoaderService::ReadScriptResource(uint32_t index) const
+  -> std::shared_ptr<const data::ScriptResource>
+{
+  if (source_pak_) {
+    try {
+      return source_pak_->ReadScriptResource(index);
+    } catch (const std::exception& ex) {
+      LOG_F(WARNING, "failed to read script resource from PAK (index={}): {}",
+        index, ex.what());
+      return nullptr;
+    }
+  }
+
+  LOG_F(WARNING, "script resource requested but no source available (index={})",
+    index);
+  return nullptr;
 }
 
 } // namespace oxygen::examples

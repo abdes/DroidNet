@@ -57,9 +57,9 @@ struct TimingConfig {
 };
 
 struct EngineConfig {
-  // Maximum allowed target FPS for runtime configuration.
-  // Use 0 for uncapped frame rate. Values above this will be clamped by
-  // AsyncEngine::SetTargetFps.
+  //! Maximum allowed target FPS for runtime configuration.
+  //! Use 0 for uncapped frame rate. Values above this will be clamped by
+  //! AsyncEngine::SetTargetFps.
   static constexpr uint32_t kMaxTargetFps = 240U;
 
   struct {
@@ -78,6 +78,28 @@ struct EngineConfig {
     //! Enable hash-based content integrity verification during mounts.
     bool verify_content_hashes { false };
   } asset_loader;
+
+  //! Configuration for the Scripting module.
+  struct ScriptingConfig {
+    //! Enables asynchronous polling of script source directories for changes.
+    //! If true, changes to .lua/.luau files in any registered ScriptSourceRoot
+    //! (in PathFinderConfig) will trigger an automatic reload and recompile.
+    bool enable_hot_reload { false };
+
+    //! Frequency at which source directories are scanned for changes.
+    std::chrono::milliseconds hot_reload_poll_interval { 500 }; // NOLINT
+
+    //! Rules for Script Source Management:
+    //! 1. Bytecode Cache: Compiled scripts are stored in a single binary file
+    //!    defined by 'ScriptBytecodeCachePath'. This is independent of source.
+    //! 2. Source Roots: A list of directories (Engine, Game, Addons) searched
+    //!    to resolve script files.
+    //! 3. Resolution: When an asset points to 'scripts/my_script.lua', the
+    //!    engine searches all roots in order. The first match wins.
+    //! 4. Hot Reload: The watcher maps absolute file changes back to assets
+    //!     by finding which root contains the file and matching the relative
+    //!     path against asset metadata.
+  } scripting;
 
   //! Global engine path resolution config (workspace-root aware).
   PathFinderConfig path_finder_config;

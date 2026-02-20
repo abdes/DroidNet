@@ -63,7 +63,7 @@ assets:
             params:
               - key: count
                 type: int
-                value: 2000
+                value: 200
               - key: cell_size
                 type: float
                 value: 1.0
@@ -76,6 +76,12 @@ assets:
               - key: material_guids
                 type: string
                 value: "b0f1a2c3-d4e5-f678-90ab-cd123456ef01"
+              - key: max_prepare_steps_per_frame
+                type: int
+                value: 250
+              - key: max_spawns_per_frame
+                type: int
+                value: 30
 
     perspective_cameras:
       - node_index: 0

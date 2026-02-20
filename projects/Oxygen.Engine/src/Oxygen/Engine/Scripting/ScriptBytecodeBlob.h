@@ -18,6 +18,19 @@
 
 namespace oxygen::scripting {
 
+//! Container for compiled script bytecode.
+/*!
+  ScriptBytecodeBlob stores the result of script compilation (Luau bytecode).
+  Like ScriptSourceBlob, it supports both owned and referenced storage and
+  optimizes access via a cached data span.
+
+  ### Design Contracts
+  - **Budget-Aware**: Its Size() is used by the engine's L1 cache to manage
+    the scripting memory budget.
+  - **Zero-Cost Access**: Optimized BytesView() avoids variant visitation.
+  - **Typed Object**: Integrates with the engine's type system for cache
+  management.
+*/
 class ScriptBytecodeBlob final : public oxygen::Object {
   OXYGEN_TYPED(ScriptBytecodeBlob)
 public:
@@ -61,22 +74,12 @@ public:
 
   [[nodiscard]] auto BytesView() const noexcept -> std::span<const uint8_t>
   {
-    return std::visit(
-      [](const auto& storage) -> std::span<const uint8_t> {
-        return storage.bytes;
-      },
-      storage_);
+    return bytes_;
   }
 
-  [[nodiscard]] auto IsEmpty() const noexcept -> bool
-  {
-    return BytesView().empty();
-  }
+  [[nodiscard]] auto IsEmpty() const noexcept -> bool { return bytes_.empty(); }
 
-  [[nodiscard]] auto Size() const noexcept -> size_t
-  {
-    return BytesView().size();
-  }
+  [[nodiscard]] auto Size() const noexcept -> size_t { return bytes_.size(); }
 
   [[nodiscard]] auto IsOwned() const noexcept -> bool
   {
@@ -125,6 +128,9 @@ private:
     data::pak::ScriptCompression compression, uint64_t content_hash,
     ScriptBlobOrigin origin, ScriptBlobCanonicalName canonical_name)
     : storage_(std::move(storage))
+    , bytes_(std::visit(
+        [](const auto& s) { return std::span<const uint8_t>(s.bytes); },
+        storage_))
     , language_(language)
     , compression_(compression)
     , content_hash_(content_hash)
@@ -134,6 +140,7 @@ private:
   }
 
   Storage storage_;
+  std::span<const uint8_t> bytes_;
   data::pak::ScriptLanguage language_;
   data::pak::ScriptCompression compression_;
   uint64_t content_hash_;

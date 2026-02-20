@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <span>
@@ -16,6 +17,19 @@
 
 namespace oxygen::scripting {
 
+//! Implementation of ScriptExecutable that holds Luau bytecode.
+/*!
+  CompiledScriptExecutable acts as the bridge between the compilation service
+  and the execution module. It stores the compiled bytecode and provides
+  atomic, thread-safe access to it.
+
+  ### Design Contracts
+  - **Hot-Reloadable**: Supports atomic replacement of its bytecode via
+    UpdateBytecode(). This is the primary mechanism for script hot-reloading.
+  - **Thread-Safe**: Uses std::atomic<shared_ptr> to ensure that script
+    execution on the main thread is never interrupted or corrupted by
+    background bytecode updates.
+*/
 class CompiledScriptExecutable final : public ScriptExecutable {
 public:
   explicit CompiledScriptExecutable(
@@ -29,17 +43,28 @@ public:
   [[nodiscard]] auto BytecodeView() const noexcept
     -> std::span<const uint8_t> override
   {
-    return Bytecode();
+    if (auto blob = bytecode_.load(std::memory_order_acquire)) {
+      return blob->BytesView();
+    }
+    return {};
   }
 
-  [[nodiscard]] auto Bytecode() const noexcept -> std::span<const uint8_t>
+  [[nodiscard]] auto ContentHash() const noexcept -> uint64_t override
   {
-    return bytecode_ != nullptr ? bytecode_->BytesView()
-                                : std::span<const uint8_t> {};
+    if (auto blob = bytecode_.load(std::memory_order_acquire)) {
+      return blob->ContentHash();
+    }
+    return 0;
+  }
+
+  auto UpdateBytecode(std::shared_ptr<const ScriptBytecodeBlob> new_bytecode)
+    -> void
+  {
+    bytecode_.store(std::move(new_bytecode), std::memory_order_release);
   }
 
 private:
-  std::shared_ptr<const ScriptBytecodeBlob> bytecode_;
+  std::atomic<std::shared_ptr<const ScriptBytecodeBlob>> bytecode_;
 };
 
 } // namespace oxygen::scripting

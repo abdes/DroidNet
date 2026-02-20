@@ -28,6 +28,19 @@ enum class ScriptBlobOrigin : uint8_t {
 using ScriptBlobCanonicalName = NamedType<std::string,
   struct ScriptBlobCanonicalNameTag, DefaultInitialized>;
 
+//! Container for script source code data.
+/*!
+  ScriptSourceBlob acts as a unified container for script source data,
+  supporting both 'owned' storage (std::vector) and 'referenced' storage
+  (std::span).
+
+  ### Design Contracts
+  - **Zero-Cost Access**: The data span is cached during construction, making
+    BytesView() a simple pointer return (no variant visitation).
+  - **Immutable**: Once created, the blob's content cannot be modified.
+  - **Origin Tracking**: Maintains metadata about whether the script came from
+    a PAK, a loose file, or an external source.
+*/
 class ScriptSourceBlob final {
 public:
   struct OwnedStorage final {
@@ -69,23 +82,12 @@ public:
 
   [[nodiscard]] auto BytesView() const noexcept -> std::span<const uint8_t>
   {
-    // Future decompression belongs in this centralized access path.
-    return std::visit(
-      [](const auto& storage) -> std::span<const uint8_t> {
-        return storage.bytes;
-      },
-      storage_);
+    return bytes_;
   }
 
-  [[nodiscard]] auto IsEmpty() const noexcept -> bool
-  {
-    return BytesView().empty();
-  }
+  [[nodiscard]] auto IsEmpty() const noexcept -> bool { return bytes_.empty(); }
 
-  [[nodiscard]] auto Size() const noexcept -> size_t
-  {
-    return BytesView().size();
-  }
+  [[nodiscard]] auto Size() const noexcept -> size_t { return bytes_.size(); }
 
   [[nodiscard]] auto IsOwned() const noexcept -> bool
   {
@@ -134,6 +136,9 @@ private:
     data::pak::ScriptCompression compression, uint64_t content_hash,
     ScriptBlobOrigin origin, ScriptBlobCanonicalName canonical_name)
     : storage_(std::move(storage))
+    , bytes_(std::visit(
+        [](const auto& s) { return std::span<const uint8_t>(s.bytes); },
+        storage_))
     , language_(language)
     , compression_(compression)
     , content_hash_(content_hash)
@@ -143,6 +148,7 @@ private:
   }
 
   Storage storage_;
+  std::span<const uint8_t> bytes_;
   data::pak::ScriptLanguage language_;
   data::pak::ScriptCompression compression_;
   uint64_t content_hash_;

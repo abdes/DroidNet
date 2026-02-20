@@ -21,6 +21,7 @@
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/Scripting/ScriptExecutable.h>
 #include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
@@ -161,12 +162,27 @@ private:
 };
 
 /*!
- Engine scripting module facade.
+  Primary engine module for Lua/Luau script execution and lifetime management.
 
- Consumers should discover this module via the engine `ModuleManager` typed
- lookup/subscription pattern (through `AsyncEngine::GetModule<T>()` and module
- attach/detach notifications). Runtime script compilation is owned by
- `AsyncEngine`; this module only registers/unregisters language compilers.
+  The ScriptingModule manages the global Lua state, initializes the sandboxed
+  environment, and executes scripts attached to SceneNodes via the
+  ScriptingComponent.
+
+  ### Key Responsibilities
+  - **Environment Sandboxing**: Ensures scripts run in isolated environments
+    with restricted access to dangerous Lua globals.
+  - **Hot-Reload Integration**: Subscribes to AssetLoader events to
+    automatically update running script instances when disk files change.
+  - **Lifecycle Management**: Invokes Lua hooks (on_gameplay, on_scene_mutation)
+    during specific engine phases.
+  - **Binding Pack Registration**: Serves as the registry for C++ engine
+    bindings exposed to Lua.
+
+  ### Design Contracts
+  - **Thread-Safety**: All Lua execution occurs on the main engine thread.
+    Cross-thread tasks must be submitted via `SubmitMainThreadTask`.
+  - **Instance Isolation**: Each script instance (Slot) has its own private
+    global table, preventing side-effects between different game objects.
 */
 class ScriptingModule final : public engine::EngineModule {
   OXYGEN_TYPED(ScriptingModule)
@@ -259,15 +275,19 @@ private:
 
   struct SlotRuntimeState {
     std::shared_ptr<const ScriptExecutable> executable;
+    data::AssetKey asset_key;
+    uint64_t last_known_hash { 0 };
     int module_ref { -1 };
     int on_gameplay_ref { -1 };
     int on_scene_mutation_ref { -1 };
+    int instance_env_ref { -1 };
     bool failed_initialization { false };
     bool reported_initialization_error { false };
     std::string initialization_error;
   };
 
   auto InitializeSandbox() -> ScriptExecutionResult;
+  auto InitializeInstanceEnvironment(SlotRuntimeState& state) -> void;
   auto InvokePhaseHook(std::string_view hook_name,
     observer_ptr<engine::FrameContext> context) -> ScriptExecutionResult;
   auto RunSceneScripts(observer_ptr<engine::FrameContext> context)
@@ -305,6 +325,7 @@ private:
   int input_bridge_log_verbosity_ { 2 };
   std::vector<bindings::contracts::ScriptBindingPackPtr> binding_packs_;
   input::InputScriptEventBridge input_event_bridge_ {};
+  content::IAssetLoader::EvictionSubscription script_reload_subscription_;
   std::unordered_map<SlotRuntimeKey, SlotRuntimeState, SlotRuntimeKeyHash>
     slot_runtimes_;
   std::vector<ActiveScriptSlot> active_frame_slots_;

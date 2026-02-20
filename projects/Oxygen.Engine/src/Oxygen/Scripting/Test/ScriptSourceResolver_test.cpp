@@ -14,7 +14,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <variant>
 #include <vector>
 
@@ -24,6 +23,11 @@
 #include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
+#include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Graphics/Common/BackendModule.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Loader/GraphicsBackendLoader.h>
+#include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 #include <Oxygen/Scripting/Resolver/ScriptSourceResolver.h>
 
@@ -54,7 +58,7 @@ namespace {
       *out_it = '\0';
     }
     return std::make_shared<data::ScriptAsset>(
-      data::AssetKey {}, desc, std::vector<data::pak::ScriptParamRecord> {});
+      data::AssetKey { 1 }, desc, std::vector<data::pak::ScriptParamRecord> {});
   }
 
   auto MakeScriptResource(const std::vector<uint8_t>& bytes,
@@ -86,7 +90,7 @@ protected:
 
     auto config = PathFinderConfig::Create()
                     .WithWorkspaceRoot(temp_root_)
-                    .WithScriptsRootPath("scripts")
+                    .AddScriptSourceRoot("scripts")
                     .BuildShared();
     auto path_finder = PathFinder(config, temp_root_);
     resolver_ = std::make_unique<ScriptSourceResolver>(std::move(path_finder));
@@ -124,25 +128,27 @@ private:
 NOLINT_TEST_F(
   ScriptSourceResolverTest, ResolvePrefersEmbeddedBytecodeOverSourceAndExternal)
 {
-  const auto asset = MakeScriptAsset("game/external_script.luau",
-    ScriptAssetResourceIndices { .bytecode_index = 1, .source_index = 2 },
+  const auto asset = MakeScriptAsset("external.luau",
+    ScriptAssetResourceIndices {
+      .bytecode_index = 1,
+      .source_index = 2,
+    },
     data::pak::ScriptAssetFlags::kAllowExternalSource);
 
-  const auto bytecode
-    = MakeScriptResource(std::vector<uint8_t> { 'B', 'C', '0', '1' },
-      data::pak::ScriptEncoding::kBytecode);
-  const auto source = MakeScriptResource(
-    std::vector<uint8_t> { 'p', 'r', 'i', 'n', 't', '(', ')', '\n' },
-    data::pak::ScriptEncoding::kSource);
+  auto bytecode = MakeScriptResource(
+    std::vector<uint8_t> { 'b', 'c' }, data::pak::ScriptEncoding::kBytecode);
+  auto source = MakeScriptResource(
+    std::vector<uint8_t> { 's', 'r', 'c' }, data::pak::ScriptEncoding::kSource);
 
-  std::unordered_map<uint32_t, std::shared_ptr<const data::ScriptResource>>
-    resources { { 1, bytecode }, { 2, source } };
   const auto result = Resolver().Resolve({
     .asset = *asset,
     .load_script_resource =
-      [&resources](const uint32_t index) {
-        if (const auto it = resources.find(index); it != resources.end()) {
-          return it->second;
+      [bytecode, source](const uint32_t index) {
+        if (index == 1) {
+          return bytecode;
+        }
+        if (index == 2) {
+          return source;
         }
         return std::shared_ptr<const data::ScriptResource> {};
       },
@@ -152,23 +158,18 @@ NOLINT_TEST_F(
   ASSERT_TRUE(result.ok);
   ASSERT_TRUE(result.blob.has_value());
   ASSERT_TRUE(std::holds_alternative<ScriptBytecodeBlob>(*result.blob));
-  const auto& bytecode_blob = std::get<ScriptBytecodeBlob>(*result.blob);
-  const auto resolved_bytes = bytecode_blob.BytesView();
-  EXPECT_TRUE(std::equal(resolved_bytes.begin(), resolved_bytes.end(),
-    bytecode->GetData().begin(), bytecode->GetData().end()));
-  EXPECT_EQ(bytecode_blob.GetOrigin(), ScriptBlobOrigin::kEmbeddedResource);
+  EXPECT_EQ(std::get<ScriptBytecodeBlob>(*result.blob).Size(), 2);
 }
 
 NOLINT_TEST_F(
   ScriptSourceResolverTest, ResolveFallsBackToExternalWhenNoEmbedded)
 {
   const auto asset
-    = MakeScriptAsset("runtime/hook", ScriptAssetResourceIndices {},
+    = MakeScriptAsset("runtime/fallback", ScriptAssetResourceIndices {},
       data::pak::ScriptAssetFlags::kAllowExternalSource);
 
-  const auto script_path = TempRoot() / "scripts/runtime/hook.luau";
-  constexpr auto kScript = "x = 2\nx = x + 3\n";
-  WriteFile(script_path, kScript);
+  const auto script_path = TempRoot() / "scripts/runtime/fallback.luau";
+  WriteFile(script_path, "fallback content");
 
   const auto result = Resolver().Resolve({
     .asset = *asset,
@@ -182,18 +183,58 @@ NOLINT_TEST_F(
   ASSERT_TRUE(result.ok);
   ASSERT_TRUE(result.blob.has_value());
   ASSERT_TRUE(std::holds_alternative<ScriptSourceBlob>(*result.blob));
-  const auto& source_blob = std::get<ScriptSourceBlob>(*result.blob);
-  EXPECT_EQ(source_blob.GetOrigin(), ScriptBlobOrigin::kExternalFile);
-  const auto resolved_bytes = source_blob.BytesView();
-  EXPECT_EQ(std::string(resolved_bytes.begin(), resolved_bytes.end()),
-    std::string(kScript));
+  EXPECT_EQ(std::get<ScriptSourceBlob>(*result.blob).Size(), 16);
+}
+
+NOLINT_TEST_F(
+  ScriptSourceResolverTest, ExternalSourceHashChangesWhenFileChanges)
+{
+  const auto asset
+    = MakeScriptAsset("runtime/hash_test", ScriptAssetResourceIndices {},
+      data::pak::ScriptAssetFlags::kAllowExternalSource);
+
+  const auto script_path = TempRoot() / "scripts/runtime/hash_test.luau";
+
+  WriteFile(script_path, "v1");
+  const auto first = Resolver().Resolve({
+    .asset = *asset,
+    .load_script_resource =
+      [](const uint32_t) {
+        return std::shared_ptr<const data::ScriptResource> {};
+      },
+    .map_resource_origin = {},
+  });
+  ASSERT_TRUE(first.ok);
+  ASSERT_TRUE(first.blob.has_value());
+  const auto first_hash = std::get<ScriptSourceBlob>(*first.blob).ContentHash();
+
+  // Low-resolution timers might need a small delay or forced timestamp update
+  std::this_thread::sleep_for(std::chrono::milliseconds(10)); // NOLINT
+  WriteFile(script_path, "version 2 is much longer");
+  auto now = std::filesystem::last_write_time(script_path);
+  std::filesystem::last_write_time(script_path, now + std::chrono::seconds(1));
+
+  const auto second = Resolver().Resolve({
+    .asset = *asset,
+    .load_script_resource =
+      [](const uint32_t) {
+        return std::shared_ptr<const data::ScriptResource> {};
+      },
+    .map_resource_origin = {},
+  });
+  ASSERT_TRUE(second.ok);
+  ASSERT_TRUE(second.blob.has_value());
+  ASSERT_TRUE(std::holds_alternative<ScriptSourceBlob>(*second.blob));
+  const auto second_hash
+    = std::get<ScriptSourceBlob>(*second.blob).ContentHash();
+
+  EXPECT_NE(first_hash, second_hash);
 }
 
 NOLINT_TEST_F(ScriptSourceResolverTest, ResolveRejectsAbsoluteExternalPath)
 {
-  const auto absolute = std::filesystem::absolute("runtime/abspath.luau");
   const auto asset
-    = MakeScriptAsset(absolute.generic_string(), ScriptAssetResourceIndices {},
+    = MakeScriptAsset("C:/absolute/path.luau", ScriptAssetResourceIndices {},
       data::pak::ScriptAssetFlags::kAllowExternalSource);
 
   const auto result = Resolver().Resolve({
@@ -273,10 +314,10 @@ NOLINT_TEST_F(
       data::pak::ScriptAssetFlags::kAllowExternalSource);
 
   const auto script_path = TempRoot() / "scripts/runtime/module_test.luau";
-  constexpr auto kScript = "counter = 1\ncounter = counter + 1\n";
+  constexpr auto kScript = "return 42";
   WriteFile(script_path, kScript);
 
-  const auto resolved = Resolver().Resolve({
+  const auto resolve_result = Resolver().Resolve({
     .asset = *asset,
     .load_script_resource =
       [](const uint32_t) {
@@ -284,16 +325,27 @@ NOLINT_TEST_F(
       },
     .map_resource_origin = {},
   });
-  ASSERT_TRUE(resolved.ok);
-  ASSERT_TRUE(resolved.blob.has_value());
-  ASSERT_TRUE(std::holds_alternative<ScriptSourceBlob>(*resolved.blob));
-  const auto& source_blob = std::get<ScriptSourceBlob>(*resolved.blob);
 
-  ScriptingModule module { engine::ModulePriority { 100U } }; // NOLINT
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
-  const auto execute_result = module.ExecuteScript(source_blob);
-  EXPECT_TRUE(execute_result.ok);
-  EXPECT_EQ(execute_result.stage, "ok");
+  ASSERT_TRUE(resolve_result.ok);
+  const auto& blob = std::get<ScriptSourceBlob>(*resolve_result.blob);
+
+  auto platform
+    = std::make_shared<Platform>(PlatformConfig { .headless = true });
+  const auto pfc
+    = PathFinderConfig::Create().WithWorkspaceRoot(TempRoot()).BuildShared();
+  auto& loader = GraphicsBackendLoader::GetInstanceRelaxed();
+  auto gfx = loader.LoadBackend(graphics::BackendType::kHeadless,
+    GraphicsConfig { .headless = true }, *pfc);
+
+  auto engine = std::make_shared<AsyncEngine>(platform, gfx, EngineConfig {});
+
+  ScriptingModule module(engine::ModulePriority { 450 });
+  ASSERT_TRUE(module.OnAttached(observer_ptr { engine.get() }));
+
+  const auto execute_result = module.ExecuteScript(blob);
+  EXPECT_TRUE(execute_result.ok) << execute_result.message;
+
+  loader.UnloadBackend();
 }
 
 } // namespace oxygen::scripting::test

@@ -12,6 +12,7 @@
 #include <span>
 #include <vector>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/ResourceKey.h>
@@ -49,7 +50,7 @@ template <PakResource T> struct CookedResourceData final {
   ResourceKey key {};
 
   //! Cooked bytes required to decode `T`.
-  std::span<const uint8_t> bytes {};
+  std::span<const uint8_t> bytes;
 };
 
 //! Minimal texture loading interface for renderer subsystems.
@@ -66,10 +67,14 @@ public:
   struct HydratedScriptSlot final {
     data::AssetKey script_asset_key {};
     data::pak::ScriptSlotFlags flags { data::pak::ScriptSlotFlags::kNone };
-    std::vector<data::pak::ScriptParamRecord> params {};
+    std::vector<data::pak::ScriptParamRecord> params;
   };
 
+  IAssetLoader() = default;
   virtual ~IAssetLoader() = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(IAssetLoader)
+  OXYGEN_DEFAULT_MOVABLE(IAssetLoader)
 
   using TextureCallback
     = std::function<void(std::shared_ptr<data::TextureResource>)>;
@@ -88,6 +93,11 @@ public:
   class EvictionSubscription {
   public:
     EvictionSubscription() noexcept = default;
+
+    ~EvictionSubscription() noexcept { Cancel(); }
+
+    OXYGEN_MAKE_NON_COPYABLE(EvictionSubscription)
+
     EvictionSubscription(EvictionSubscription&& other) noexcept
       : id_(other.id_)
       , resource_type_(other.resource_type_)
@@ -100,7 +110,8 @@ public:
       other.alive_token_.reset();
     }
 
-    EvictionSubscription& operator=(EvictionSubscription&& other) noexcept
+    auto operator=(EvictionSubscription&& other) noexcept
+      -> EvictionSubscription&
     {
       if (this != &other) {
         Cancel();
@@ -115,8 +126,6 @@ public:
       }
       return *this;
     }
-
-    ~EvictionSubscription() noexcept { Cancel(); }
 
     //! Cancel this subscription early.
     void Cancel() noexcept
@@ -141,7 +150,7 @@ public:
     uint64_t id_ { 0 };
     TypeId resource_type_ { kInvalidTypeId };
     observer_ptr<IAssetLoader> owner_ { nullptr };
-    std::weak_ptr<int> alive_token_ {};
+    std::weak_ptr<int> alive_token_;
   };
 
   //! Begin loading a texture resource and invoke `on_complete` on completion.
@@ -294,6 +303,19 @@ public:
     TypeId resource_type, EvictionHandler handler) -> EvictionSubscription
     = 0;
 
+  //=== Hot Reloading ===-----------------------------------------------------//
+
+  //! Trigger a hot-reload of a script asset from a file path.
+  virtual auto ReloadScript(const std::filesystem::path& path) -> void = 0;
+
+  using ScriptReloadCallback = std::function<void(
+    const data::AssetKey&, std::shared_ptr<const data::ScriptResource>)>;
+
+  //! Subscribe to script reload events.
+  virtual auto SubscribeScriptReload(ScriptReloadCallback callback)
+    -> EvictionSubscription
+    = 0;
+
   //! Mint a synthetic texture key suitable for buffer-driven workflows.
   [[nodiscard]] virtual auto MintSyntheticTextureKey() -> ResourceKey = 0;
 
@@ -306,14 +328,14 @@ protected:
     = 0;
 
   [[nodiscard]] auto MakeEvictionSubscription(TypeId resource_type, uint64_t id,
-    observer_ptr<IAssetLoader> owner, std::shared_ptr<int> alive_token)
+    observer_ptr<IAssetLoader> owner, const std::shared_ptr<int>& alive_token)
     -> EvictionSubscription
   {
     EvictionSubscription subscription;
     subscription.id_ = id;
     subscription.resource_type_ = resource_type;
     subscription.owner_ = owner;
-    subscription.alive_token_ = std::move(alive_token);
+    subscription.alive_token_ = alive_token;
     return subscription;
   }
 };
