@@ -76,6 +76,23 @@ namespace {
     return true;
   }
 
+  auto IsNodeInActiveScene(const scene::SceneNode& node,
+    const observer_ptr<scene::Scene> scene_ref) -> bool
+  {
+    if ((scene_ref == nullptr) || !node.IsValid()) {
+      return false;
+    }
+    const auto handle = node.GetHandle();
+    if (handle.GetSceneId() != scene_ref->GetId()) {
+      return false;
+    }
+    const auto node_opt = scene_ref->GetNode(handle);
+    if (!node_opt.has_value()) {
+      return false;
+    }
+    return node_opt->IsAlive();
+  }
+
   auto LuaSceneCurrentNode(lua_State* state) -> int
   {
     auto* ctx = GetBindingContextFromScriptArg(state, 1);
@@ -130,7 +147,7 @@ namespace {
     scene::SceneNode new_node;
     if ((lua_gettop(state) >= 2) && !lua_isnil(state, 2)) {
       auto* parent = CheckSceneNode(state, 2);
-      if (!parent->IsAlive()) {
+      if (!parent->IsAlive() || !IsNodeInActiveScene(*parent, scene_ref)) {
         lua_pushnil(state);
         return 1;
       }

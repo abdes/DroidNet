@@ -7,6 +7,7 @@
 #include <array>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -20,6 +21,7 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>
@@ -29,6 +31,87 @@
 namespace oxygen::scripting::bindings {
 
 namespace {
+  using MeshData = std::pair<std::vector<data::Vertex>, std::vector<uint32_t>>;
+
+  auto BuildGeometryAssetFromMeshData(const std::string& token, MeshData data)
+    -> std::shared_ptr<const data::GeometryAsset>
+  {
+    auto [vertices, indices] = std::move(data);
+    auto default_material = data::MaterialAsset::CreateDefault();
+    auto mesh = data::MeshBuilder(0, token)
+                  .WithVertices(vertices)
+                  .WithIndices(indices)
+                  .BeginSubMesh("main", std::move(default_material))
+                  .WithMeshView({
+                    .first_index = 0,
+                    .index_count = static_cast<uint32_t>(indices.size()),
+                    .first_vertex = 0,
+                    .vertex_count = static_cast<uint32_t>(vertices.size()),
+                  })
+                  .EndSubMesh()
+                  .Build();
+
+    Vec3 bbox_min { 0.0F, 0.0F, 0.0F };
+    Vec3 bbox_max { 0.0F, 0.0F, 0.0F };
+    if (!vertices.empty()) {
+      bbox_min = vertices.front().position;
+      bbox_max = vertices.front().position;
+      for (const auto& vertex : vertices) {
+        bbox_min.x = (std::min)(bbox_min.x, vertex.position.x);
+        bbox_min.y = (std::min)(bbox_min.y, vertex.position.y);
+        bbox_min.z = (std::min)(bbox_min.z, vertex.position.z);
+        bbox_max.x = (std::max)(bbox_max.x, vertex.position.x);
+        bbox_max.y = (std::max)(bbox_max.y, vertex.position.y);
+        bbox_max.z = (std::max)(bbox_max.z, vertex.position.z);
+      }
+    }
+
+    data::pak::GeometryAssetDesc desc {};
+    desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kGeometry);
+    desc.lod_count = 1;
+    desc.bounding_box_min[0] = bbox_min.x;
+    desc.bounding_box_min[1] = bbox_min.y;
+    desc.bounding_box_min[2] = bbox_min.z;
+    desc.bounding_box_max[0] = bbox_max.x;
+    desc.bounding_box_max[1] = bbox_max.y;
+    desc.bounding_box_max[2] = bbox_max.z;
+
+    data::AssetKey key { .guid = data::GenerateAssetGuid() };
+    std::vector<std::shared_ptr<data::Mesh>> lods;
+    lods.emplace_back(std::shared_ptr<data::Mesh>(std::move(mesh)));
+    return std::make_shared<const data::GeometryAsset>(
+      key, desc, std::move(lods));
+  }
+
+  auto CanonicalizeGeometryToken(std::string_view token) -> std::string
+  {
+    if (token == "proc/cube" || token == "cube") {
+      return "proc/cube";
+    }
+    if (token == "proc/arrow_gizmo" || token == "arrow_gizmo") {
+      return "proc/arrow_gizmo";
+    }
+    if (token == "proc/sphere" || token == "sphere") {
+      return "proc/sphere";
+    }
+    if (token == "proc/plane" || token == "plane") {
+      return "proc/plane";
+    }
+    if (token == "proc/cylinder" || token == "cylinder") {
+      return "proc/cylinder";
+    }
+    if (token == "proc/cone" || token == "cone") {
+      return "proc/cone";
+    }
+    if (token == "proc/torus" || token == "torus") {
+      return "proc/torus";
+    }
+    if (token == "proc/quad" || token == "quad") {
+      return "proc/quad";
+    }
+    return "proc/cube";
+  }
+
   struct RenderableAssetRegistry {
     std::mutex mutex;
     std::unordered_map<std::string, std::shared_ptr<const data::GeometryAsset>>
@@ -50,62 +133,40 @@ namespace {
   auto MakeGeometryForToken(const std::string& token)
     -> std::shared_ptr<const data::GeometryAsset>
   {
-    std::vector<data::Vertex> vertices = {
-      {
-        .position = Vec3(0.0F, 0.0F, 0.0F),
-        .normal = Vec3(0.0F, 1.0F, 0.0F),
-        .texcoord = Vec2(0.0F, 0.0F),
-        .tangent = Vec3(1.0F, 0.0F, 0.0F),
-        .bitangent = Vec3(0.0F, 0.0F, 1.0F),
-        .color = Vec4(1.0F, 1.0F, 1.0F, 1.0F),
-      },
-      {
-        .position = Vec3(1.0F, 0.0F, 0.0F),
-        .normal = Vec3(0.0F, 1.0F, 0.0F),
-        .texcoord = Vec2(1.0F, 0.0F),
-        .tangent = Vec3(1.0F, 0.0F, 0.0F),
-        .bitangent = Vec3(0.0F, 0.0F, 1.0F),
-        .color = Vec4(1.0F, 1.0F, 1.0F, 1.0F),
-      },
-      {
-        .position = Vec3(0.0F, 1.0F, 0.0F),
-        .normal = Vec3(0.0F, 1.0F, 0.0F),
-        .texcoord = Vec2(0.0F, 1.0F),
-        .tangent = Vec3(1.0F, 0.0F, 0.0F),
-        .bitangent = Vec3(0.0F, 0.0F, 1.0F),
-        .color = Vec4(1.0F, 1.0F, 1.0F, 1.0F),
-      },
-    };
-    std::vector<std::uint32_t> indices = { 0, 1, 2 };
-    auto default_material = data::MaterialAsset::CreateDefault();
-    auto mesh = data::MeshBuilder(0, token)
-                  .WithVertices(vertices)
-                  .WithIndices(indices)
-                  .BeginSubMesh("main", default_material)
-                  .WithMeshView({
-                    .first_index = 0,
-                    .index_count = static_cast<uint32_t>(indices.size()),
-                    .first_vertex = 0,
-                    .vertex_count = static_cast<uint32_t>(vertices.size()),
-                  })
-                  .EndSubMesh()
-                  .Build();
+    const auto canonical = CanonicalizeGeometryToken(token);
+    std::optional<MeshData> mesh_data;
 
-    data::pak::GeometryAssetDesc desc {};
-    desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kGeometry);
-    desc.lod_count = 1;
-    desc.bounding_box_min[0] = 0.0F;
-    desc.bounding_box_min[1] = 0.0F;
-    desc.bounding_box_min[2] = 0.0F;
-    desc.bounding_box_max[0] = 1.0F;
-    desc.bounding_box_max[1] = 1.0F;
-    desc.bounding_box_max[2] = 0.0F;
+    if (canonical == "proc/cube") {
+      mesh_data = data::MakeCubeMeshAsset();
+    } else if (canonical == "proc/arrow_gizmo") {
+      mesh_data = data::MakeArrowGizmoMeshAsset();
+    } else if (canonical == "proc/sphere") {
+      mesh_data = data::MakeSphereMeshAsset();
+    } else if (canonical == "proc/plane") {
+      mesh_data = data::MakePlaneMeshAsset();
+    } else if (canonical == "proc/cylinder") {
+      mesh_data = data::MakeCylinderMeshAsset();
+    } else if (canonical == "proc/cone") {
+      mesh_data = data::MakeConeMeshAsset();
+    } else if (canonical == "proc/torus") {
+      mesh_data = data::MakeTorusMeshAsset();
+    } else if (canonical == "proc/quad") {
+      mesh_data = data::MakeQuadMeshAsset();
+    }
 
-    data::AssetKey key { .guid = data::GenerateAssetGuid() };
-    std::vector<std::shared_ptr<data::Mesh>> lods;
-    lods.emplace_back(std::shared_ptr<data::Mesh>(std::move(mesh)));
-    return std::make_shared<const data::GeometryAsset>(
-      key, desc, std::move(lods));
+    if (!mesh_data.has_value()) {
+      LOG_F(WARNING,
+        "SceneNodeRenderableBindings: failed to generate mesh for token '{}'; "
+        "falling back to proc/cube",
+        canonical);
+      mesh_data = data::MakeCubeMeshAsset();
+    }
+
+    if (!mesh_data.has_value()) {
+      throw std::runtime_error("failed to generate fallback cube mesh");
+    }
+
+    return BuildGeometryAssetFromMeshData(canonical, std::move(*mesh_data));
   }
 
   auto MakeMaterialForToken(const std::string& token)
@@ -128,16 +189,17 @@ namespace {
   auto GetOrCreateGeometryByToken(const std::string& token)
     -> std::shared_ptr<const data::GeometryAsset>
   {
+    const auto canonical = CanonicalizeGeometryToken(token);
     auto& registry = GetRenderableAssetRegistry();
     std::lock_guard lock(registry.mutex);
-    if (const auto it = registry.geometry_by_token.find(token);
+    if (const auto it = registry.geometry_by_token.find(canonical);
       it != registry.geometry_by_token.end()) {
       return it->second;
     }
 
-    auto geometry = MakeGeometryForToken(token);
-    registry.token_by_geometry_ptr.emplace(geometry.get(), token);
-    registry.geometry_by_token.emplace(token, geometry);
+    auto geometry = MakeGeometryForToken(canonical);
+    registry.token_by_geometry_ptr.emplace(geometry.get(), canonical);
+    registry.geometry_by_token.emplace(canonical, geometry);
     return geometry;
   }
 
@@ -276,7 +338,7 @@ namespace {
       return 0;
     }
 
-    auto geometry = std::move(asset_user_data->geometry);
+    auto geometry = asset_user_data->geometry;
     node->GetRenderable().SetGeometry(geometry);
     const auto handle = node->GetHandle();
     LOG_F(INFO,
@@ -520,9 +582,8 @@ namespace {
       return 0;
     }
 
-    auto material = std::move(asset_user_data->material);
-    node->GetRenderable().SetMaterialOverride(
-      *lod, *submesh, material);
+    auto material = asset_user_data->material;
+    node->GetRenderable().SetMaterialOverride(*lod, *submesh, material);
     lua_pushboolean(state, 1);
     return 1;
   }

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <deque>
 #include <functional>
 #include <memory>
@@ -57,56 +58,106 @@ using Task = std::function<void(lua_State*)>;
 
 class ScriptTaskQueue {
 public:
+  ScriptTaskQueue() = default;
+
+  ~ScriptTaskQueue() { DrainAndDestroyPendingTasks(); }
+
+  OXYGEN_MAKE_NON_COPYABLE(ScriptTaskQueue)
+  OXYGEN_MAKE_NON_MOVABLE(ScriptTaskQueue)
+
   auto StartSession() -> void
   {
-    std::lock_guard lock(mutex_);
-    current_session_id_ = ScriptingSessionId { current_session_id_.get() + 1 };
-    pending_tasks_.clear();
+    current_session_id_.fetch_add(1, std::memory_order_acq_rel);
+    DrainAndDestroyPendingTasks();
   }
 
-  auto EndSession() -> void
-  {
-    std::lock_guard lock(mutex_);
-    // We don't necessarily need to invalidate the session ID here,
-    // just clearing the tasks is sufficient to prevent stale execution.
-    // The next StartSession will increment the ID.
-    pending_tasks_.clear();
-  }
+  auto EndSession() -> void { DrainAndDestroyPendingTasks(); }
 
   auto Submit(Task task, ScriptingSessionId session_id) -> void
   {
-    std::lock_guard lock(mutex_);
-    if (session_id != current_session_id_) {
+    if (!task) {
       return;
     }
-    pending_tasks_.push_back(std::move(task));
+
+    const auto active_session_id
+      = current_session_id_.load(std::memory_order_acquire);
+    if (session_id.get() != active_session_id) {
+      return;
+    }
+
+    auto* node = new PendingTaskNode {
+      .task = std::move(task),
+      .session_id = session_id.get(),
+      .next = nullptr,
+    };
+
+    auto* head = pending_head_.load(std::memory_order_relaxed);
+    do {
+      node->next = head;
+    } while (!pending_head_.compare_exchange_weak(
+      head, node, std::memory_order_release, std::memory_order_relaxed));
   }
 
   auto Process(lua_State* state) -> void
   {
-    std::deque<Task> tasks;
-    {
-      std::lock_guard lock(mutex_);
-      tasks.swap(pending_tasks_);
-    }
+    auto* pending = pending_head_.exchange(nullptr, std::memory_order_acq_rel);
+    pending = ReverseList(pending);
 
-    for (const auto& task : tasks) {
-      if (task) {
-        task(state);
+    const auto active_session_id
+      = current_session_id_.load(std::memory_order_acquire);
+
+    while (pending != nullptr) {
+      auto* node = pending;
+      pending = pending->next;
+
+      if (node->task != nullptr && node->session_id == active_session_id) {
+        node->task(state);
       }
+
+      delete node;
     }
   }
 
   [[nodiscard]] auto GetSessionId() const -> ScriptingSessionId
   {
-    std::lock_guard lock(mutex_);
-    return current_session_id_;
+    return ScriptingSessionId { current_session_id_.load(
+      std::memory_order_acquire) };
   }
 
 private:
-  mutable std::mutex mutex_;
-  ScriptingSessionId current_session_id_ { kInvalidScriptingSessionId };
-  std::deque<Task> pending_tasks_;
+  struct PendingTaskNode final {
+    Task task;
+    uint64_t session_id { 0 };
+    PendingTaskNode* next { nullptr };
+  };
+
+  static auto ReverseList(PendingTaskNode* head) -> PendingTaskNode*
+  {
+    PendingTaskNode* prev = nullptr;
+    auto* current = head;
+    while (current != nullptr) {
+      auto* next = current->next;
+      current->next = prev;
+      prev = current;
+      current = next;
+    }
+    return prev;
+  }
+
+  auto DrainAndDestroyPendingTasks() -> void
+  {
+    auto* pending = pending_head_.exchange(nullptr, std::memory_order_acq_rel);
+    while (pending != nullptr) {
+      auto* node = pending;
+      pending = pending->next;
+      delete node;
+    }
+  }
+
+  std::atomic<uint64_t> current_session_id_ {
+    kInvalidScriptingSessionId.get()
+  };
+  std::atomic<PendingTaskNode*> pending_head_ { nullptr };
 };
 
 /*!
