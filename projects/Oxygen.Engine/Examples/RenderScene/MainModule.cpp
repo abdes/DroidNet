@@ -41,16 +41,16 @@ namespace oxygen::examples::render_scene {
 
 namespace {
 
-auto TryGetLastWriteTime(const std::filesystem::path& path)
-  -> std::optional<std::filesystem::file_time_type>
-{
-  std::error_code ec;
-  const auto write_time = std::filesystem::last_write_time(path, ec);
-  if (ec) {
-    return std::nullopt;
+  auto TryGetLastWriteTime(const std::filesystem::path& path)
+    -> std::optional<std::filesystem::file_time_type>
+  {
+    std::error_code ec;
+    const auto write_time = std::filesystem::last_write_time(path, ec);
+    if (ec) {
+      return std::nullopt;
+    }
+    return write_time;
   }
-  return write_time;
-}
 
 } // namespace
 
@@ -252,12 +252,10 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
         const auto write_time = TryGetLastWriteTime(normalized);
 
         if (already_mounted) {
-          const auto known_time_it
-            = mounted_pak_write_times_.find(normalized);
+          const auto known_time_it = mounted_pak_write_times_.find(normalized);
           const bool has_known_time
             = known_time_it != mounted_pak_write_times_.end();
-          const bool file_changed
-            = has_known_time && write_time.has_value()
+          const bool file_changed = has_known_time && write_time.has_value()
             && known_time_it->second != *write_time;
 
           if (file_changed) {
@@ -273,7 +271,8 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
               "preserving cache",
               normalized.string());
             if (write_time.has_value() && !has_known_time) {
-              mounted_pak_write_times_.insert_or_assign(normalized, *write_time);
+              mounted_pak_write_times_.insert_or_assign(
+                normalized, *write_time);
             }
           }
         } else {
@@ -352,8 +351,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
               = mounted_pak_write_times_.find(normalized);
             const bool has_known_time
               = known_time_it != mounted_pak_write_times_.end();
-            const bool file_changed
-              = has_known_time && write_time.has_value()
+            const bool file_changed = has_known_time && write_time.has_value()
               && known_time_it->second != *write_time;
 
             if (file_changed) {
@@ -362,22 +360,24 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
                 "load; refreshing source",
                 normalized.string());
               asset_loader->AddPakFile(normalized);
-              mounted_pak_write_times_.insert_or_assign(normalized, *write_time);
+              mounted_pak_write_times_.insert_or_assign(
+                normalized, *write_time);
             } else {
               LOG_F(INFO,
                 "RenderScene: PAK source '{}' already mounted for scene "
                 "load and unchanged; preserving cache",
                 normalized.string());
               if (write_time.has_value() && !has_known_time) {
-                mounted_pak_write_times_.insert_or_assign(normalized,
-                  *write_time);
+                mounted_pak_write_times_.insert_or_assign(
+                  normalized, *write_time);
               }
             }
           } else {
             mounted_pak_paths_.push_back(normalized);
             asset_loader->AddPakFile(normalized);
             if (write_time.has_value()) {
-              mounted_pak_write_times_.insert_or_assign(normalized, *write_time);
+              mounted_pak_write_times_.insert_or_assign(
+                normalized, *write_time);
             }
             LOG_F(INFO,
               "RenderScene: Mounted PAK source '{}' for scene load '{}'",

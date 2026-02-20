@@ -4,10 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "Oxygen/Content/IAssetLoader.h"
 #include <algorithm>
 #include <array>
 #include <cstring>
 #include <mutex>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -40,9 +42,9 @@
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
-#include <thread>
 
 using oxygen::content::AssetLoader;
 using oxygen::content::LoaderContext;
@@ -151,12 +153,8 @@ inline auto GetResourceTypeIndexByTypeId(const oxygen::TypeId type_id)
 inline auto IsResourceTypeId(const oxygen::TypeId type_id) -> bool
 {
   static const auto ids = MakeTypeIdArray(oxygen::content::ResourceTypeList {});
-  for (const auto id : ids) {
-    if (id == type_id) {
-      return true;
-    }
-  }
-  return false;
+  return std::ranges::any_of(
+    ids, [type_id](const auto id) { return id == type_id; });
 }
 } // namespace
 
@@ -206,18 +204,18 @@ auto SanityCheckResourceEviction(const uint64_t expected_key_hash,
 //=== Basic methods ==========================================================//
 
 AssetLoader::AssetLoader(
-  [[maybe_unused]] EngineTag tag, const AssetLoaderConfig config)
+  [[maybe_unused]] EngineTag tag, const AssetLoaderConfig& config)
   : impl_(std::make_unique<Impl>())
+  , thread_pool_(config.thread_pool)
+  , work_offline_(config.work_offline)
+  , verify_content_hashes_(config.verify_content_hashes)
+  , path_finder_(config.path_finder)
 {
   using serio::FileStream;
 
   LOG_SCOPE_FUNCTION(INFO);
 
   owning_thread_id_ = std::this_thread::get_id();
-
-  thread_pool_ = config.thread_pool;
-  work_offline_ = config.work_offline;
-  verify_content_hashes_ = config.verify_content_hashes;
   eviction_alive_token_ = std::make_shared<int>(0);
 
   // Register asset loaders
@@ -1315,6 +1313,17 @@ auto AssetLoader::SubscribeResourceEvictions(
 void AssetLoader::UnsubscribeResourceEvictions(
   const TypeId resource_type, const uint64_t id) noexcept
 {
+  if (resource_type == data::ScriptAsset::ClassTypeId()) {
+    const auto erase_from = std::remove_if(script_reload_subscribers_.begin(),
+      script_reload_subscribers_.end(),
+      [id](const ScriptReloadSubscriber& subscriber) {
+        return subscriber.id == id;
+      });
+    script_reload_subscribers_.erase(
+      erase_from, script_reload_subscribers_.end());
+    return;
+  }
+
   auto it = eviction_subscribers_.find(resource_type);
   if (it == eviction_subscribers_.end()) {
     return;
@@ -1328,6 +1337,170 @@ void AssetLoader::UnsubscribeResourceEvictions(
   if (subscribers.empty()) {
     eviction_subscribers_.erase(it);
   }
+}
+
+auto AssetLoader::InvalidateAssetTree(const data::AssetKey& key) -> void
+{
+  AssertOwningThread();
+
+  const auto hash = HashAssetKey(key);
+  auto asset = GetAsset<data::ScriptAsset>(key);
+
+  if (asset) {
+    uint16_t source_id = 0;
+    if (auto it = asset_source_id_by_hash_.find(hash);
+      it != asset_source_id_by_hash_.end()) {
+      source_id = it->second;
+    }
+
+    // Invalidate script-specific resources if applicable
+    const auto resource_type_index = static_cast<uint16_t>(
+      IndexOf<data::ScriptResource, ResourceTypeList>::value);
+
+    auto invalidate_resource = [&](const uint32_t index) {
+      if (index != data::pak::kNoResourceIndex) {
+        const auto rkey
+          = PackResourceKey(source_id, resource_type_index, index);
+        content_cache_.Remove(HashResourceKey(rkey));
+      }
+    };
+
+    invalidate_resource(asset->GetBytecodeResourceIndex());
+    invalidate_resource(asset->GetSourceResourceIndex());
+  }
+
+  // Finally remove the asset itself
+  content_cache_.Remove(hash);
+}
+
+auto AssetLoader::ReloadScript(const std::filesystem::path& path) -> void
+{
+  AssertOwningThread();
+  if ((nursery_ == nullptr) || !thread_pool_) {
+    return;
+  }
+
+  const std::filesystem::path absolute_changed_path
+    = std::filesystem::absolute(path).lexically_normal();
+  LOG_F(INFO, "change detected at {}", absolute_changed_path.generic_string());
+
+  auto normalize_path_string = [](std::string_view p) -> std::string {
+    std::string s(p);
+    while (!s.empty() && s[0] == '@') {
+      s = s.substr(1);
+    }
+    std::ranges::replace(s, '\\', '/');
+    while (!s.empty() && s[0] == '/') {
+      s = s.substr(1);
+    }
+    return std::filesystem::path(s).lexically_normal().generic_string();
+  };
+
+  // 1. Map OS absolute path to relative path within our search roots
+  std::optional<std::string> relative_changed_path;
+  if (path_finder_) {
+    for (const auto& root : path_finder_->ScriptSourceRoots()) {
+      const auto abs_root = std::filesystem::absolute(root).lexically_normal();
+      auto [root_end, changed_end]
+        = std::ranges::mismatch(abs_root, absolute_changed_path);
+
+      if (root_end == abs_root.end()) {
+        std::filesystem::path rel;
+        while (changed_end != absolute_changed_path.end()) {
+          rel /= *changed_end++;
+        }
+        relative_changed_path = rel.generic_string();
+        LOG_F(INFO, "mapped to relative path '{}' (root={})",
+          *relative_changed_path, abs_root.generic_string());
+        break;
+      }
+    }
+  }
+
+  if (!relative_changed_path) {
+    LOG_F(WARNING,
+      "changed file is not within any registered ScriptSourceRoot: {}",
+      absolute_changed_path.string());
+    return;
+  }
+
+  const std::string normalized_target
+    = normalize_path_string(*relative_changed_path);
+
+  // 2. Perform O(1) lookup in the Path Index
+  auto key_it = script_path_to_asset_key_.find(normalized_target);
+  if (key_it == script_path_to_asset_key_.end()) {
+    // If not in index, do a one-time exhaustive sync of the index for
+    // currently loaded assets. This handles assets loaded before indexing
+    // was implemented or during complex re-mounts.
+    for (const auto& [hash, key] : asset_key_by_hash_) {
+      if (auto asset = GetAsset<data::ScriptAsset>(key)) {
+        if (auto path_opt = asset->TryGetExternalSourcePath()) {
+          script_path_to_asset_key_.insert_or_assign(
+            normalize_path_string(path_opt.value()), key);
+        }
+      }
+    }
+    key_it = script_path_to_asset_key_.find(normalized_target);
+  }
+
+  if (key_it == script_path_to_asset_key_.end()) {
+    LOG_F(WARNING, "no matching asset found for relative path '{}'",
+      normalized_target);
+    return;
+  }
+
+  const auto target_key = key_it->second;
+  LOG_F(INFO, "reloading script asset key={}", data::to_string(target_key));
+
+  // 3. Clean recursive invalidation
+  InvalidateAssetTree(target_key);
+
+  // 4. Trigger fresh load
+  StartLoadAsset<data::ScriptAsset>(
+    target_key, [this, target_key](std::shared_ptr<data::ScriptAsset> asset) {
+      if (!asset) {
+        LOG_F(ERROR, "failed to reload script asset");
+        return;
+      }
+
+      const auto bytecode_index = asset->GetBytecodeResourceIndex();
+      if (bytecode_index != data::pak::kNoResourceIndex) {
+        // Need source_id for resource lookup
+        uint16_t source_id = 0;
+        if (auto it = asset_source_id_by_hash_.find(HashAssetKey(target_key));
+          it != asset_source_id_by_hash_.end()) {
+          source_id = it->second;
+        }
+
+        const auto resource_type_index = static_cast<uint16_t>(
+          IndexOf<data::ScriptResource, ResourceTypeList>::value);
+        const auto rkey
+          = PackResourceKey(source_id, resource_type_index, bytecode_index);
+
+        if (auto resource = GetResource<data::ScriptResource>(rkey)) {
+          for (const auto& sub : script_reload_subscribers_) {
+            if (sub.handler) {
+              sub.handler(target_key, resource);
+            }
+          }
+        }
+      }
+    });
+}
+
+auto AssetLoader::SubscribeScriptReload(ScriptReloadCallback callback)
+  -> EvictionSubscription
+{
+  AssertOwningThread();
+  const auto id = next_eviction_subscriber_id_++;
+  script_reload_subscribers_.push_back(ScriptReloadSubscriber {
+    .id = id,
+    .handler = std::move(callback),
+  });
+
+  return MakeEvictionSubscription(data::ScriptAsset::ClassTypeId(), id,
+    observer_ptr<IAssetLoader> { this }, eviction_alive_token_);
 }
 
 auto AssetLoader::ReleaseAssetTree(const data::AssetKey& key) -> void

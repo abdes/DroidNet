@@ -20,6 +20,19 @@
 
 namespace oxygen::scripting::detail {
 
+//! Generic Least-Recently-Used (LRU) eviction policy for use with AnyCache.
+/*!
+  LruEviction maintains a list of cached items ordered by their last access
+  time. It supports budget-aware eviction based on a pluggable cost function.
+
+  ### Design Contracts
+  - **Budget-Aware**: Decision to evict is driven by 'budget' vs 'consumed'
+  cost.
+  - **Pluggable Cost**: Accepts a lambda to calculate the weight of an item
+    (e.g., its memory size in bytes).
+  - **Reference Counted**: Only items with a reference count of 1 (held only by
+    the cache) are eligible for background eviction.
+*/
 template <typename K> struct LruEviction {
   using KeyType = K;
   using ValueType = std::shared_ptr<void>;
@@ -28,13 +41,18 @@ template <typename K> struct LruEviction {
   using ContainerType = std::list<EntryType>;
   using IteratorType = typename ContainerType::iterator;
   using CostType = std::size_t;
+  using CostFunc = std::function<CostType(const ValueType&, const TypeId)>;
 
   CostType budget;
   CostType consumed { 0 };
   ContainerType eviction_list;
+  CostFunc cost_func;
 
-  explicit LruEviction(const CostType _budget)
+  LruEviction() = default;
+
+  explicit LruEviction(const CostType _budget, CostFunc _cost_func = nullptr)
     : budget(_budget)
+    , cost_func(std::move(_cost_func))
   {
   }
 
@@ -47,13 +65,8 @@ template <typename K> struct LruEviction {
   [[nodiscard]] auto Cost(
     const std::shared_ptr<void>& value, const TypeId type_id) const -> size_t
   {
-    if (!value) {
-      return 1;
-    }
-    if (type_id == ScriptBytecodeBlob::ClassTypeId()) {
-      const auto blob
-        = std::static_pointer_cast<const ScriptBytecodeBlob>(value);
-      return std::max<size_t>(1, blob->Size());
+    if (cost_func) {
+      return cost_func(value, type_id);
     }
     return 1;
   }

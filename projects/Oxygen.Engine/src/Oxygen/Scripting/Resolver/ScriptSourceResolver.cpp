@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Scripting/Resolver/EmbeddedSourceResolver.h>
 #include <Oxygen/Scripting/Resolver/ScriptSourceResolver.h>
 
@@ -19,21 +20,24 @@ ScriptSourceResolver::ScriptSourceResolver(PathFinder path_finder)
 auto ScriptSourceResolver::Resolve(const ResolveRequest& request) const
   -> ResolveResult
 {
-  auto embedded_result = EmbeddedSourceResolver::Resolve(request);
-  if (embedded_result.ok) {
-    return std::move(embedded_result);
-  }
-
   const auto& asset = request.asset.get();
-  if (!asset.AllowsExternalSource()) {
-    return std::move(embedded_result);
+  const auto ext_path = asset.TryGetExternalSourcePath();
+
+  if (asset.AllowsExternalSource() && ext_path) {
+    auto external_result = external_resolver_.Resolve(request);
+    if (external_result.ok || !external_result.error_message.empty()) {
+      return external_result;
+    }
   }
 
-  auto external_result = external_resolver_.Resolve(request);
-  if (external_result.ok) {
-    return std::move(external_result);
+  auto result = EmbeddedSourceResolver::Resolve(request);
+  if (asset.AllowsExternalSource() && !result.ok) {
+    DLOG_F(1,
+      "ScriptSourceResolver: External resolution skipped or failed, "
+      "falling back to embedded. Error: {}",
+      result.error_message);
   }
-  return std::move(external_result);
+  return result;
 }
 
 } // namespace oxygen::scripting

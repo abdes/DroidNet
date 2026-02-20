@@ -111,6 +111,13 @@ private:
     {
     }
     auto ClearMounts() -> void override { }
+    auto ReloadScript(const std::filesystem::path& /*path*/) -> void override {
+    }
+    auto SubscribeScriptReload(ScriptReloadCallback /*callback*/)
+      -> EvictionSubscription override
+    {
+      return {};
+    }
     auto TrimCache() -> void override { }
     auto RegisterConsoleBindings(
       observer_ptr<console::Console> /*console*/) noexcept -> void override

@@ -2,3 +2,4 @@ pak/
 .cooked/
 !glb/*.glb
 glb/
+scripts.bin

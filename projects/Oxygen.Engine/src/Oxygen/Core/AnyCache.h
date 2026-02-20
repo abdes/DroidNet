@@ -624,6 +624,12 @@ public:
     return eviction_.budget;
   }
 
+  [[nodiscard]] auto GetPolicy() noexcept -> Evict& { return eviction_; }
+  [[nodiscard]] auto GetPolicy() const noexcept -> const Evict&
+  {
+    return eviction_;
+  }
+
   //=== Eviction Notification ===---------------------------------------------//
 
   using EvictionCallbackFunction

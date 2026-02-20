@@ -23,6 +23,25 @@
 
 namespace oxygen::scripting {
 
+//! Core engine service for script compilation and bytecode management.
+/*!
+  The ScriptCompilationService provides a robust pipeline for transforming
+  script source code into Luau bytecode. It features a high-performance two-tier
+  caching system:
+
+  ### Caching Tiers
+  1. **L1 Memory Cache**: An LRU-based cache for rapid access to recently used
+     bytecode. Budget-aware based on bytecode size.
+  2. **L2 Persistent Cache**: A binary file (`scripts.bin`) that stores compiled
+     scripts across engine restarts, enabling near-instant startup.
+
+  ### Design Contracts
+  - **Deduplication**: Simultaneous requests for the same script are joined
+    to avoid redundant compilation work.
+  - **Asynchronous**: Compilation is dispatched to a background thread pool.
+  - **Deferred Persistence**: Disk writes are batched and deferred until engine
+    shutdown or idle time to optimize hot-reload iteration speed.
+*/
 class ScriptCompilationService final : public co::LiveObject,
                                        public IScriptCompilationService {
 public:
@@ -95,6 +114,7 @@ private:
     -> std::shared_ptr<const ScriptBytecodeBlob>;
   OXGN_NGIN_API auto StorePersistentBytecode(CompileKey compile_key,
     std::shared_ptr<const ScriptBytecodeBlob> bytecode) -> void;
+  OXGN_NGIN_API auto FlushPersistentCache() -> void;
   OXGN_NGIN_API auto PersistCacheSnapshot(const std::vector<
     std::pair<CompileKey, std::shared_ptr<const ScriptBytecodeBlob>>>& snapshot)
     -> void;
@@ -103,7 +123,7 @@ private:
   OXGN_NGIN_API auto DrainCompletions() -> void;
 
   co::Nursery* nursery_ {};
-  observer_ptr<co::ThreadPool> thread_pool_ {};
+  observer_ptr<co::ThreadPool> thread_pool_;
   std::atomic<bool> active_ { true };
 
   mutable std::mutex compilers_mutex_;
@@ -119,6 +139,9 @@ private:
   std::filesystem::path persistent_cache_path_;
   mutable std::mutex persistent_cache_mutex_;
   std::unordered_map<CompileKey, PersistentIndexEntry> persistent_index_;
+  std::unordered_map<CompileKey, std::shared_ptr<const ScriptBytecodeBlob>>
+    pending_persistence_;
+  std::atomic<bool> cache_dirty_ { false };
 
   mutable std::mutex subscribers_mutex_;
   std::unordered_map<CompileKey,

@@ -59,10 +59,19 @@ public:
     return cvars_archive_path_;
   }
 
-  [[nodiscard]] auto ScriptsRootPath() const noexcept
+  //! The list of directories where script source files (.lua, .luau) are
+  //! located. Used for resolution during compilation and for hot-reloading.
+  [[nodiscard]] auto ScriptSourceRoots() const noexcept
+    -> const std::vector<std::filesystem::path>&
+  {
+    return script_source_roots_;
+  }
+
+  //! The path to the persistent bytecode cache file (e.g., scripts.bin).
+  [[nodiscard]] auto ScriptBytecodeCachePath() const noexcept
     -> const std::filesystem::path&
   {
-    return scripts_root_path_;
+    return script_bytecode_cache_path_;
   }
 
 private:
@@ -78,6 +87,10 @@ private:
   static constexpr std::string_view kDefaultScriptsRootPath
     = "bin/Oxygen/scripts";
 
+  //! Default bytecode cache path.
+  static constexpr std::string_view kDefaultBytecodeCachePath
+    = "bin/Oxygen/scripts.bin";
+
   std::filesystem::path workspace_root_path_;
   std::filesystem::path shader_library_path_ {
     std::string(kDefaultShaderLibraryPath),
@@ -85,8 +98,11 @@ private:
   std::filesystem::path cvars_archive_path_ {
     std::string(kDefaultCVarsArchivePath),
   };
-  std::filesystem::path scripts_root_path_ {
-    std::string(kDefaultScriptsRootPath),
+  std::vector<std::filesystem::path> script_source_roots_ {
+    std::filesystem::path(std::string(kDefaultScriptsRootPath)),
+  };
+  std::filesystem::path script_bytecode_cache_path_ {
+    std::string(kDefaultBytecodeCachePath),
   };
 };
 
@@ -117,10 +133,24 @@ public:
     return std::move(config_);
   }
 
-  [[nodiscard]] auto WithScriptsRootPath(
+  [[nodiscard]] auto AddScriptSourceRoot(
     std::filesystem::path scripts_root_path) && -> Builder&&
   {
-    config_.scripts_root_path_ = std::move(scripts_root_path);
+    config_.script_source_roots_.push_back(std::move(scripts_root_path));
+    return std::move(*this);
+  }
+
+  [[nodiscard]] auto WithScriptSourceRoots(
+    std::vector<std::filesystem::path> roots) && -> Builder&&
+  {
+    config_.script_source_roots_ = std::move(roots);
+    return std::move(*this);
+  }
+
+  [[nodiscard]] auto WithScriptBytecodeCachePath(
+    std::filesystem::path path) && -> Builder&&
+  {
+    config_.script_bytecode_cache_path_ = std::move(path);
     return std::move(*this);
   }
 

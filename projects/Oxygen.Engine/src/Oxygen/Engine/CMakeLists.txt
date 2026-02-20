@@ -59,6 +59,7 @@ set(
   "Scripting/Detail/LruEviction.h"
   "Scripting/ScriptSourceBlob.h"
   "Scripting/ScriptCompilationService.h"
+  "Scripting/ScriptHotReloadService.h"
   "TimeManager.h"
 )
 set(
@@ -66,6 +67,7 @@ set(
   "AsyncEngine.cpp"
   "ModuleManager.cpp"
   "Scripting/ScriptCompilationService.cpp"
+  "Scripting/ScriptHotReloadService.cpp"
   "TimeManager.cpp"
 )
 

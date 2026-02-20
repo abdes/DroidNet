@@ -91,6 +91,19 @@ ScriptCompilationService::ScriptCompilationService(
   , l1_cache_(kL1ByteBudget)
   , persistent_cache_path_(std::move(persistent_cache_path))
 {
+  l1_cache_.GetPolicy().cost_func
+    = [](const std::shared_ptr<void>& value, const TypeId type_id) -> size_t {
+    if (!value) {
+      return 1;
+    }
+    if (type_id == ScriptBytecodeBlob::ClassTypeId()) {
+      const auto blob
+        = std::static_pointer_cast<const ScriptBytecodeBlob>(value);
+      return std::max<size_t>(1, blob->Size());
+    }
+    return 1;
+  };
+
   if (!persistent_cache_path_.empty()) {
     auto load_failed = false;
     {
@@ -177,6 +190,9 @@ auto ScriptCompilationService::Stop() -> void
 {
   active_.store(false, std::memory_order_release);
   LOG_F(INFO, "shutdown requested");
+
+  // Ensure all pending compilations are persisted before stopping
+  FlushPersistentCache();
 
   size_t subscribers_cleared = 0;
   size_t completions_cleared = 0;
@@ -322,7 +338,7 @@ auto ScriptCompilationService::CompileAsync(Request request) -> co::Co<Result>
       auto source = std::move(request.source);
       compile_started_.fetch_add(1, std::memory_order_relaxed);
       LOG_F(INFO,
-        "starting compile request (key={}, language={}, mode={}, "
+        "Script change detected, recompiling (key={}, language={}, mode={}, "
         "source_size={})",
         compile_key, source.Language(), compile_mode, source.Size());
       auto op
@@ -601,14 +617,31 @@ auto ScriptCompilationService::StorePersistentBytecode(
     return;
   }
 
+  std::lock_guard lock(persistent_cache_mutex_);
+  pending_persistence_.insert_or_assign(compile_key, std::move(bytecode));
+  cache_dirty_.store(true, std::memory_order_relaxed);
+  DLOG_F(2, "bytecode queued for persistence (key={})", compile_key);
+}
+
+auto ScriptCompilationService::FlushPersistentCache() -> void
+{
+  if (!cache_dirty_.load(std::memory_order_relaxed)
+    || persistent_cache_path_.empty()) {
+    return;
+  }
+
+  LOG_F(INFO, "flushing persistent script cache to disk");
+
   std::vector<std::pair<CompileKey, std::shared_ptr<const ScriptBytecodeBlob>>>
     snapshot {};
   {
     std::lock_guard lock(persistent_cache_mutex_);
-    snapshot.reserve(persistent_index_.size() + 1);
+    snapshot.reserve(persistent_index_.size() + pending_persistence_.size());
+
     std::ifstream input(persistent_cache_path_, std::ios::binary);
+    // Load all current entries that aren't being overridden by pending ones
     for (const auto& [key, entry] : persistent_index_) {
-      if (key == compile_key) {
+      if (pending_persistence_.contains(key)) {
         continue;
       }
       if (!input) {
@@ -622,11 +655,16 @@ auto ScriptCompilationService::StorePersistentBytecode(
         MakePersistentBytecodeBlob(std::move(*payload), entry.language,
           entry.compression, entry.content_hash, entry.origin));
     }
+
+    // Add all newly compiled bytecodes
+    for (auto& [key, bytecode] : pending_persistence_) {
+      snapshot.emplace_back(key, std::move(bytecode));
+    }
+    pending_persistence_.clear();
+    cache_dirty_.store(false, std::memory_order_relaxed);
   }
-  snapshot.emplace_back(compile_key, std::move(bytecode));
+
   PersistCacheSnapshot(snapshot);
-  DLOG_F(2, "persistent cache store (key={}, entries={})", compile_key,
-    snapshot.size());
 }
 
 auto ScriptCompilationService::PersistCacheSnapshot(const std::vector<

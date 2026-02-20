@@ -124,6 +124,14 @@ public:
 
   auto ClearMounts() -> void override { }
 
+  auto ReloadScript(const std::filesystem::path& /*path*/) -> void override { }
+
+  auto SubscribeScriptReload(ScriptReloadCallback /*callback*/)
+    -> EvictionSubscription override
+  {
+    return {};
+  }
+
   [[nodiscard]] auto GetTexture(content::ResourceKey key) const noexcept
     -> std::shared_ptr<data::TextureResource> override
   {

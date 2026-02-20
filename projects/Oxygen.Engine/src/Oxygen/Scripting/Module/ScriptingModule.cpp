@@ -20,6 +20,7 @@
 #include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/Scripting/IScriptCompilationService.h>
 #include <Oxygen/Scene/Scene.h>
@@ -33,6 +34,7 @@
 #include <Oxygen/Scripting/Bindings/Packs/Input/InputBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneBindingPack.h>
 #include <Oxygen/Scripting/Compilers/LuauScriptCompiler.h>
+#include <Oxygen/Scripting/Execution/CompiledScriptExecutable.h>
 #include <Oxygen/Scripting/Input/InputScriptEventBridge.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 
@@ -249,6 +251,42 @@ auto ScriptingModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept
   if (engine_ != nullptr) {
     (void)engine_->GetScriptCompilationService().RegisterCompiler(
       std::make_shared<LuauScriptCompiler>());
+
+    if (auto loader = engine_->GetAssetLoader()) {
+      script_reload_subscription_ = loader->SubscribeScriptReload(
+        [this](const data::AssetKey& key,
+          std::shared_ptr<const data::ScriptResource> resource) {
+          if (!resource) {
+            return;
+          }
+
+          // Wrap data::ScriptResource into scripting::ScriptBytecodeBlob
+          const auto& data = resource->GetData();
+          std::vector<uint8_t> bytes(data.begin(), data.end());
+          auto bytecode = std::make_shared<const ScriptBytecodeBlob>(
+            ScriptBytecodeBlob::FromOwned(std::move(bytes),
+              resource->GetLanguage(), resource->GetCompression(),
+              resource->GetContentHash(), ScriptBlobOrigin::kExternalFile,
+              ScriptBlobCanonicalName { "hot-reload" }));
+
+          LOG_F(INFO, "applying hot-reload for asset {} (new_hash={})",
+            data::to_string(key), bytecode->ContentHash());
+
+          // Find all instances using this asset and update their executable
+          // bytecode. The next frame's CollectActiveScripts will detect the
+          // hash change and rebuild runtimes.
+          for (auto& [slot_key, state] : slot_runtimes_) {
+            if (state.asset_key == key && state.executable
+              && slot_key.node_handle.IsValid()) {
+              // Downcast to CompiledScriptExecutable to update bytecode
+              auto* compiled = static_cast<CompiledScriptExecutable*>(
+                // NOLINTNEXTLINE(*-const-cast)
+                const_cast<ScriptExecutable*>(state.executable.get()));
+              compiled->UpdateBytecode(bytecode);
+            }
+          }
+        });
+    }
   }
 
   lua_state_ = luaL_newstate();
@@ -545,15 +583,26 @@ auto ScriptingModule::ExecuteScript(const ScriptExecutionRequest& request)
 
   lua_getref(lua_state_, runtime_env_ref_);
   const auto env_index = lua_gettop(lua_state_);
+
+  // Create an isolated instance environment
+  lua_newtable(lua_state_); // instance_env
+  lua_newtable(lua_state_); // metatable
+  lua_pushvalue(lua_state_, env_index);
+  lua_setfield(lua_state_, -2, "__index");
+  lua_setmetatable(lua_state_, -2);
+  const auto instance_env_index = lua_gettop(lua_state_);
+
   const std::string chunk_name_string { request.chunk_name.get() };
   const auto load_status = luau_load(lua_state_, chunk_name_string.c_str(),
-    bytecode.data(), bytecode.size(), env_index);
+    bytecode.data(), bytecode.size(), instance_env_index);
   if (load_status != LUA_OK) {
     const auto error_message = LuaToString(lua_state_, kLuaStackTop);
-    lua_pop(lua_state_, kLuaEnvironmentAndErrorCount); // error + env
+    lua_pop(lua_state_, 3); // error + instance_env + env
     return ErrorResult("compile_or_load", error_message);
   }
-  lua_remove(lua_state_, env_index); // keep chunk only
+  lua_remove(lua_state_, instance_env_index); // remove instance_env
+  lua_remove(lua_state_, env_index); // remove shared_env
+  // stack now contains only the loaded chunk
 
   lua_pushcfunction(lua_state_, LuaTraceback, kLuaTracebackFnName);
   const auto chunk_index = lua_gettop(lua_state_) - 1;
@@ -562,6 +611,7 @@ auto ScriptingModule::ExecuteScript(const ScriptExecutionRequest& request)
     = lua_pcall(lua_state_, kLuaNoArgs, kLuaNoResults, chunk_index);
   if (call_status != LUA_OK) {
     const auto error_message = LuaToString(lua_state_, kLuaStackTop);
+    LOG_F(ERROR, "ExecuteScript failed at runtime: {}", error_message);
     lua_pop(lua_state_, kLuaErrorAndTracebackCount); // error + traceback
     return ErrorResult("runtime", error_message);
   }
@@ -793,9 +843,15 @@ auto ScriptingModule::CollectActiveScripts(
         };
 
         auto& runtime = slot_runtimes_[key];
-        if (runtime.executable != slot.Executable()) {
+        const bool hash_changed = runtime.executable
+          && (runtime.last_known_hash != runtime.executable->ContentHash());
+
+        if (runtime.executable != slot.Executable() || hash_changed) {
           DestroySlotRuntime(runtime);
           runtime.executable = slot.Executable();
+          if (runtime.executable) {
+            runtime.last_known_hash = runtime.executable->ContentHash();
+          }
           const auto init_result = RebuildSlotRuntime(key, runtime, slot);
           if (!init_result.ok && !runtime.reported_initialization_error) {
             runtime.reported_initialization_error = true;
@@ -1063,6 +1119,8 @@ auto ScriptingModule::RebuildSlotRuntime(const SlotRuntimeKey& key,
 
   DestroySlotRuntime(state);
   state.executable = slot.Executable();
+  state.asset_key
+    = slot.Asset() ? slot.Asset()->GetAssetKey() : data::AssetKey {};
   state.failed_initialization = false;
   state.reported_initialization_error = false;
   state.initialization_error.clear();
@@ -1071,13 +1129,18 @@ auto ScriptingModule::RebuildSlotRuntime(const SlotRuntimeKey& key,
     return ErrorResult("slot_binding", "slot has no executable");
   }
 
+  InitializeInstanceEnvironment(state);
+  if (state.instance_env_ref == LUA_NOREF) {
+    return ErrorResult("slot_binding", "failed to create instance environment");
+  }
+
   const auto bytecode = state.executable->BytecodeView();
   if (bytecode.empty()) {
     return ErrorResult(
       "slot_binding", "slot executable has no bytecode payload");
   }
 
-  lua_getref(lua_state_, runtime_env_ref_);
+  lua_getref(lua_state_, state.instance_env_ref);
   const auto env_index = lua_gettop(lua_state_);
   const std::string chunk_name = "scene_slot_" + std::to_string(key.slot_index);
   const auto load_status = luau_load(lua_state_, chunk_name.c_str(),
@@ -1169,6 +1232,26 @@ auto ScriptingModule::RebuildSlotRuntime(const SlotRuntimeKey& key,
   return ErrorResult("slot_binding", state.initialization_error);
 }
 
+auto ScriptingModule::InitializeInstanceEnvironment(SlotRuntimeState& state)
+  -> void
+{
+  if (lua_state_ == nullptr || runtime_env_ref_ == LUA_NOREF) {
+    return;
+  }
+
+  lua_newtable(lua_state_); // instance_env
+
+  // Create metatable for inheritance from sandbox globals
+  lua_newtable(lua_state_); // mt
+  lua_getref(lua_state_, runtime_env_ref_);
+  lua_setfield(lua_state_, -2, "__index");
+
+  lua_setmetatable(lua_state_, -2);
+
+  state.instance_env_ref = lua_ref(lua_state_, -1);
+  lua_pop(lua_state_, 1);
+}
+
 auto ScriptingModule::DestroySlotRuntime(SlotRuntimeState& state) -> void
 {
   if (lua_state_ != nullptr) {
@@ -1181,11 +1264,16 @@ auto ScriptingModule::DestroySlotRuntime(SlotRuntimeState& state) -> void
     if (IsValidLuaRef(state.module_ref)) {
       lua_unref(lua_state_, state.module_ref);
     }
+    if (IsValidLuaRef(state.instance_env_ref)) {
+      lua_unref(lua_state_, state.instance_env_ref);
+    }
   }
 
   state.on_gameplay_ref = kLuaNoRef;
   state.on_scene_mutation_ref = kLuaNoRef;
   state.module_ref = kLuaNoRef;
+  state.instance_env_ref = kLuaNoRef;
+  state.last_known_hash = 0;
   state.failed_initialization = false;
   state.reported_initialization_error = false;
   state.initialization_error.clear();

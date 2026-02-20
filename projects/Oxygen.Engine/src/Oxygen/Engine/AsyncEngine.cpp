@@ -21,6 +21,7 @@
 #include <Oxygen/Core/Time/PhysicalClock.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/Scripting/ScriptCompilationService.h>
+#include <Oxygen/Engine/Scripting/ScriptHotReloadService.h>
 #include <Oxygen/Engine/TimeManager.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Input/InputSystem.h>
@@ -136,6 +137,11 @@ AsyncEngine::AsyncEngine(std::shared_ptr<Platform> platform,
 
 AsyncEngine::~AsyncEngine() = default;
 
+auto AsyncEngine::ActivateAsync(co::TaskStarted<> started) -> co::Co<>
+{
+  return OpenNursery(nursery_, std::move(started));
+}
+
 auto AsyncEngine::Run() -> void
 {
   if (!module_manager_) {
@@ -159,6 +165,13 @@ auto AsyncEngine::Run() -> void
       script_compilation_service_.get());
     script_compilation_service_->Run();
 
+    if (hot_reload_service_) {
+      co_await nursery_->Start(
+        &scripting::ScriptHotReloadService::ActivateAsync,
+        hot_reload_service_.get());
+      hot_reload_service_->Run();
+    }
+
     co_await FrameLoop();
     co_await Shutdown();
 
@@ -178,17 +191,14 @@ auto AsyncEngine::Shutdown() -> co::Co<>
     if (auto gfx = gfx_weak_.lock()) {
       try {
         LOG_F(INFO,
-          "AsyncEngine::Shutdown - pre-shutdown flush: draining GPU and "
+          "pre-shutdown flush: draining GPU and "
           "processing pending deferred releases");
         gfx->Flush();
       } catch (const std::exception& e) {
-        LOG_F(WARNING,
-          "AsyncEngine::Shutdown - pre-shutdown Graphics::Flush() threw: {}",
-          e.what());
+        LOG_F(WARNING, "pre-shutdown Graphics::Flush() threw: {}", e.what());
       } catch (...) {
-        LOG_F(WARNING,
-          "AsyncEngine::Shutdown - pre-shutdown Graphics::Flush() threw "
-          "unknown exception");
+        LOG_F(
+          WARNING, "pre-shutdown Graphics::Flush() threw unknown exception");
       }
     }
   }
@@ -212,17 +222,14 @@ auto AsyncEngine::Shutdown() -> co::Co<>
     if (auto gfx = gfx_weak_.lock()) {
       try {
         LOG_F(INFO,
-          "AsyncEngine::Shutdown - post-shutdown flush: processing deferred "
+          "post-shutdown flush: processing deferred "
           "releases registered during module shutdown");
         gfx->Flush();
       } catch (const std::exception& e) {
-        LOG_F(WARNING,
-          "AsyncEngine::Shutdown - post-shutdown Graphics::Flush() threw: {}",
-          e.what());
+        LOG_F(WARNING, "post-shutdown Graphics::Flush() threw: {}", e.what());
       } catch (...) {
-        LOG_F(WARNING,
-          "AsyncEngine::Shutdown - post-shutdown Graphics::Flush() threw "
-          "unknown exception");
+        LOG_F(
+          WARNING, "post-shutdown Graphics::Flush() threw unknown exception");
       }
     }
   }
@@ -1283,24 +1290,37 @@ auto AsyncEngine::InitializeDetachedServices() -> void
     content::AssetLoaderConfig asset_loader_cfg {
       .thread_pool = observer_ptr<co::ThreadPool> { &platform_->Threads() },
       .verify_content_hashes = config_.asset_loader.verify_content_hashes,
+      .path_finder = path_finder_,
     };
     asset_loader_
       = std::make_unique<content::AssetLoader>(tag, asset_loader_cfg);
-    LOG_F(INFO, "[D] AssetLoader initialized");
+    LOG_F(INFO, "AssetLoader initialized");
+
+    if (config_.scripting.enable_hot_reload) {
+      hot_reload_service_ = std::make_unique<scripting::ScriptHotReloadService>(
+        *this, path_finder_,
+        [this](const std::filesystem::path& path) {
+          if (asset_loader_) {
+            asset_loader_->ReloadScript(path);
+          }
+        },
+        config_.scripting.hot_reload_poll_interval);
+      LOG_F(INFO, "ScriptHotReloadService initialized");
+    }
   } else {
-    LOG_F(INFO, "[D] AssetLoader disabled by config");
+    LOG_F(INFO, "AssetLoader disabled by config");
   }
 
   script_compilation_service_
     = std::make_shared<scripting::ScriptCompilationService>(
       observer_ptr<co::ThreadPool> { &platform_->Threads() },
-      path_finder_.ScriptsRootPath() / "scripts.bin");
-  LOG_F(INFO, "[D] ScriptCompilationService initialized");
+      path_finder_.ScriptBytecodeCachePath());
+  LOG_F(INFO, "ScriptCompilationService initialized");
 
   // TODO: Initialize crash dump detection service
   // Set up crash dump monitoring and symbolication service
   // This service runs detached from frame loop and handles crash reporting
-  LOG_F(1, "[D] Crash dump detection service initialized");
+  LOG_F(1, "crash dump detection service initialized");
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst

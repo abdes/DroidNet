@@ -181,6 +181,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
   uint32_t target_fps = 100U; // desired frame pacing
   bool enable_vsync = true;
   bool verify_hashes = false;
+  bool hot_reload = true;
   oxygen::examples::DemoAppContext app {};
   app.headless = false;
 
@@ -230,6 +231,14 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
         .UserFriendlyName("verify-hashes")
         .StoreTo(&verify_hashes)
         .Build());
+    default_command.WithOption(Option::WithKey("hot-reload")
+        .About("Enable hot-reloading of script files from disk")
+        .Long("hot-reload")
+        .WithValue<bool>()
+        .DefaultValue(true)
+        .UserFriendlyName("hot-reload")
+        .StoreTo(&hot_reload)
+        .Build());
 
     auto cli = CliBuilder()
                  .ProgramName("render-scene")
@@ -269,9 +278,16 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
           .parent_path()
           .parent_path();
 
+    const auto demo_root
+      = std::filesystem::path(std::source_location::current().file_name())
+          .parent_path();
+
     // Load the graphics backend
     const auto path_finder_config
-      = PathFinderConfig::Create().WithWorkspaceRoot(workspace_root).Build();
+      = PathFinderConfig::Create()
+          .WithWorkspaceRoot(workspace_root)
+          .WithScriptSourceRoots({ demo_root.parent_path() / "Content" })
+          .Build();
     const GraphicsConfig gfx_config {
       .enable_debug = true,
       .enable_validation = false,
@@ -297,7 +313,11 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
         .frame_count = frames,
         .enable_asset_loader = true,
         .asset_loader = { .verify_content_hashes = verify_hashes, },
+        .scripting = {
+          .enable_hot_reload = hot_reload,
+        },
         .path_finder_config = path_finder_config,
+        .graphics = { .enable_vsync = enable_vsync, },
         .timing = {
           .pacing_safety_margin = 250us,
         }

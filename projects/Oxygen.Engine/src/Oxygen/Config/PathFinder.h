@@ -63,9 +63,20 @@ public:
     return ResolvePath(config_->CVarsArchivePath());
   }
 
-  [[nodiscard]] auto ScriptsRootPath() const -> std::filesystem::path
+  [[nodiscard]] auto ScriptSourceRoots() const
+    -> std::vector<std::filesystem::path>
   {
-    return ResolvePath(config_->ScriptsRootPath());
+    std::vector<std::filesystem::path> resolved;
+    resolved.reserve(config_->ScriptSourceRoots().size());
+    for (const auto& root : config_->ScriptSourceRoots()) {
+      resolved.push_back(ResolvePath(root));
+    }
+    return resolved;
+  }
+
+  [[nodiscard]] auto ScriptBytecodeCachePath() const -> std::filesystem::path
+  {
+    return ResolvePath(config_->ScriptBytecodeCachePath());
   }
 
   [[nodiscard]] auto ShaderIncludeRoots() const

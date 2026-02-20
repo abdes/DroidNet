@@ -39,6 +39,7 @@ class TimeManager;
 namespace oxygen::scripting {
 class IScriptCompilationService;
 class ScriptCompilationService;
+class ScriptHotReloadService;
 } // namespace oxygen::scripting
 
 namespace oxygen {
@@ -65,10 +66,8 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(AsyncEngine)
   OXYGEN_MAKE_NON_MOVABLE(AsyncEngine)
 
-  auto ActivateAsync(co::TaskStarted<> started = {}) -> co::Co<> override
-  {
-    return OpenNursery(nursery_, std::move(started));
-  }
+  OXGN_NGIN_NDAPI auto ActivateAsync(co::TaskStarted<> started = {})
+    -> co::Co<> override;
 
   //! Starts internal coroutine frame loop (returns immediately).
   OXGN_NGIN_API auto Run() -> void override;
@@ -150,6 +149,11 @@ public:
 
   //! Get current engine configuration
   OXGN_NGIN_NDAPI auto GetEngineConfig() const noexcept -> const EngineConfig&;
+
+  [[nodiscard]] auto GetPathFinder() const noexcept -> const PathFinder&
+  {
+    return path_finder_;
+  }
 
   //! Access the optional AssetLoader service created during initialization.
   OXGN_NGIN_NDAPI auto GetAssetLoader() const noexcept
@@ -289,8 +293,8 @@ private:
 
   std::shared_ptr<Platform> platform_;
   std::weak_ptr<Graphics> gfx_weak_;
-  console::Console console_ {};
-  std::shared_ptr<const PathFinderConfig> path_finder_config_ {};
+  console::Console console_;
+  std::shared_ptr<const PathFinderConfig> path_finder_config_;
   PathFinder path_finder_ {
     std::make_shared<const PathFinderConfig>(),
     std::filesystem::current_path(),
@@ -300,16 +304,17 @@ private:
   std::unique_ptr<engine::ModuleManager> module_manager_;
 
   std::unique_ptr<content::AssetLoader> asset_loader_;
+  std::unique_ptr<scripting::ScriptHotReloadService> hot_reload_service_;
   std::shared_ptr<scripting::ScriptCompilationService>
-    script_compilation_service_ {};
+    script_compilation_service_;
 
   // Time system integration
-  time::PhysicalTime frame_start_ts_ {};
-  time::PhysicalTime next_frame_deadline_ {};
+  time::PhysicalTime frame_start_ts_;
+  time::PhysicalTime next_frame_deadline_;
   engine::TimeManager* time_manager_ { nullptr }; // Owned by Composition
 
   // Signals completion when FrameLoop exits.
-  co::Event completed_ {};
+  co::Event completed_;
 };
 
 } // namespace oxygen

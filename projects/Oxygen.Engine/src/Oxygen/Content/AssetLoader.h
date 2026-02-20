@@ -20,6 +20,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Content/EngineTag.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/LoaderFunctions.h>
@@ -39,6 +40,7 @@
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/LiveObject.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -91,6 +93,9 @@ struct AssetLoaderConfig final {
      of large resource blobs during development.
   */
   bool verify_content_hashes { false };
+
+  //! Path resolution service used for mapping disk changes to script assets.
+  std::optional<PathFinder> path_finder;
 };
 
 class AssetLoader : public oxygen::co::LiveObject, public IAssetLoader {
@@ -116,16 +121,17 @@ public:
 
   //! Engine-only capability token is required for construction.
   OXGN_CNTT_API explicit AssetLoader(
-    EngineTag tag, AssetLoaderConfig config = {});
+    EngineTag tag, const AssetLoaderConfig& config = {});
   OXGN_CNTT_API virtual ~AssetLoader();
 
   OXYGEN_MAKE_NON_COPYABLE(AssetLoader)
   OXYGEN_DEFAULT_MOVABLE(AssetLoader)
 
-  OXGN_CNTT_API auto AddPakFile(const std::filesystem::path& path) -> void;
+  OXGN_CNTT_API auto AddPakFile(const std::filesystem::path& path)
+    -> void override;
 
   OXGN_CNTT_API auto AddLooseCookedRoot(const std::filesystem::path& path)
-    -> void;
+    -> void override;
 
   //! Enable/disable hash verification for future mounts.
   /*!
@@ -140,7 +146,7 @@ public:
   OXGN_CNTT_NDAPI auto VerifyContentHashesEnabled() const noexcept -> bool;
 
   //! Clear all mounted roots and pak files.
-  OXGN_CNTT_API auto ClearMounts() -> void;
+  OXGN_CNTT_API auto ClearMounts() -> void override;
   //! Clear cached assets/resources without unmounting sources.
   OXGN_CNTT_API auto TrimCache() -> void override;
   OXGN_CNTT_API auto RegisterConsoleBindings(
@@ -328,6 +334,18 @@ public:
   //! Subscribe to resource eviction notifications for a resource type.
   OXGN_CNTT_API auto SubscribeResourceEvictions(TypeId resource_type,
     EvictionHandler handler) -> EvictionSubscription override;
+
+  //=== Hot Reloading ===-----------------------------------------------------//
+
+  //! Trigger a hot-reload of a script asset from a file path.
+  OXGN_CNTT_API auto ReloadScript(const std::filesystem::path& path)
+    -> void override;
+
+  using ScriptReloadCallback = IAssetLoader::ScriptReloadCallback;
+
+  //! Subscribe to script reload events.
+  OXGN_CNTT_API auto SubscribeScriptReload(ScriptReloadCallback callback)
+    -> EvictionSubscription override;
 
   //=== Resource Loading =====================================================//
 
@@ -860,6 +878,9 @@ private:
   //! lookup)
   OXGN_CNTT_API auto HashResourceKey(const ResourceKey& key) const -> uint64_t;
 
+  //! Recursively invalidates an asset and all its cached resource dependencies.
+  OXGN_CNTT_API auto InvalidateAssetTree(const data::AssetKey& key) -> void;
+
   //=== Type-erased Loading/Unloading ===-------------------------------------//
 
   using LoadFnErased = std::function<std::shared_ptr<void>(LoaderContext)>;
@@ -883,8 +904,8 @@ private:
     TypeId type_id, std::string_view type_name, LoadFnErased&& loader) -> void;
 
   // Thread ownership for single-thread phase 1 policy.
-  std::thread::id owning_thread_id_ {};
-  inline void AssertOwningThread() const
+  std::thread::id owning_thread_id_;
+  void AssertOwningThread() const
   {
     if (owning_thread_id_ != std::this_thread::get_id()) {
       throw std::runtime_error(
@@ -944,26 +965,34 @@ private:
   OXGN_CNTT_NDAPI auto BindResourceRefToKey(const internal::ResourceRef& ref)
     -> ResourceKey;
 
-  observer_ptr<co::ThreadPool> thread_pool_ {};
+  observer_ptr<co::ThreadPool> thread_pool_;
 
   bool work_offline_ { false };
 
   bool verify_content_hashes_ { false };
 
+  std::optional<PathFinder> path_finder_;
+
   //=== Eviction Notifications ===-----------------------------------------//
 
   struct EvictionSubscriber final {
     uint64_t id { 0 };
-    EvictionHandler handler {};
+    EvictionHandler handler;
   };
 
   std::unordered_map<TypeId, std::vector<EvictionSubscriber>>
     eviction_subscribers_;
+  struct ScriptReloadSubscriber final {
+    uint64_t id { 0 };
+    ScriptReloadCallback handler;
+  };
+  std::vector<ScriptReloadSubscriber> script_reload_subscribers_;
   std::unordered_map<uint64_t, ResourceKey> resource_key_by_hash_;
   std::unordered_map<uint64_t, data::AssetKey> asset_key_by_hash_;
   std::unordered_map<uint64_t, uint16_t> asset_source_id_by_hash_;
+  std::unordered_map<std::string, data::AssetKey> script_path_to_asset_key_;
   uint64_t next_eviction_subscriber_id_ { 1 };
-  std::shared_ptr<int> eviction_alive_token_ {};
+  std::shared_ptr<int> eviction_alive_token_;
 
   // Eviction in-progress guard to prevent re-entrant notifications for the
   // same cache key (safely handles subscribers calling back into the loader).
