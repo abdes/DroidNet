@@ -50,9 +50,25 @@ auto MakeEntry(const uint64_t key, std::shared_ptr<void> value,
   return std::make_tuple(key, type_id, std::move(value), 0U);
 }
 
+auto CreateEviction(const size_t budget) -> LruEviction<uint64_t>
+{
+  return LruEviction<uint64_t>(budget,
+    [](const std::shared_ptr<void>& value, const TypeId type_id) -> size_t {
+      if (!value) {
+        return 1;
+      }
+      if (type_id == ScriptBytecodeBlob::ClassTypeId()) {
+        const auto blob
+          = std::static_pointer_cast<const ScriptBytecodeBlob>(value);
+        return (std::max)(size_t(1), blob->Size());
+      }
+      return 1;
+    });
+}
+
 TEST(ScriptingLruEviction, CostIsBlobSizeForScriptType)
 {
-  LruEviction<uint64_t> eviction(kDefaultBudget);
+  auto eviction = CreateEviction(kDefaultBudget);
   const auto blob = MakeBlob(64);
   const auto value = std::static_pointer_cast<void>(blob);
   EXPECT_EQ(eviction.Cost(value, ScriptBytecodeBlob::ClassTypeId()), 64U);
@@ -60,7 +76,7 @@ TEST(ScriptingLruEviction, CostIsBlobSizeForScriptType)
 
 TEST(ScriptingLruEviction, CostIsOneForNullOrNonScriptType)
 {
-  LruEviction<uint64_t> eviction(kDefaultBudget);
+  auto eviction = CreateEviction(kDefaultBudget);
   EXPECT_EQ(eviction.Cost(nullptr, ScriptBytecodeBlob::ClassTypeId()), 1U);
   const auto blob = MakeBlob(64);
   const auto value = std::static_pointer_cast<void>(blob);
@@ -69,7 +85,7 @@ TEST(ScriptingLruEviction, CostIsOneForNullOrNonScriptType)
 
 TEST(ScriptingLruEviction, StoreSetsRefcountAndTracksBudget)
 {
-  LruEviction<uint64_t> eviction(kSmallBudget);
+  auto eviction = CreateEviction(kSmallBudget);
   auto entry = MakeEntry(7, std::static_pointer_cast<void>(MakeBlob(32)),
     ScriptBytecodeBlob::ClassTypeId());
   const auto it = eviction.Store(std::move(entry));
@@ -81,7 +97,7 @@ TEST(ScriptingLruEviction, StoreSetsRefcountAndTracksBudget)
 
 TEST(ScriptingLruEviction, StoreRejectsItemWhenBudgetExceeded)
 {
-  LruEviction<uint64_t> eviction(kMicroBudget);
+  auto eviction = CreateEviction(kMicroBudget);
   auto entry = MakeEntry(1, std::static_pointer_cast<void>(MakeBlob(16)),
     ScriptBytecodeBlob::ClassTypeId());
   const auto it = eviction.Store(std::move(entry));
@@ -92,7 +108,7 @@ TEST(ScriptingLruEviction, StoreRejectsItemWhenBudgetExceeded)
 
 TEST(ScriptingLruEviction, TryReplaceUpdatesConsumedAndMovesToFront)
 {
-  LruEviction<uint64_t> eviction(kSmallBudget);
+  auto eviction = CreateEviction(kSmallBudget);
   auto first
     = eviction.Store(MakeEntry(1, std::static_pointer_cast<void>(MakeBlob(10)),
       ScriptBytecodeBlob::ClassTypeId()));
@@ -112,7 +128,7 @@ TEST(ScriptingLruEviction, TryReplaceUpdatesConsumedAndMovesToFront)
 
 TEST(ScriptingLruEviction, TryReplaceFailsWhenCheckedOutByOthers)
 {
-  LruEviction<uint64_t> eviction(kSmallBudget);
+  auto eviction = CreateEviction(kSmallBudget);
   auto it
     = eviction.Store(MakeEntry(1, std::static_pointer_cast<void>(MakeBlob(10)),
       ScriptBytecodeBlob::ClassTypeId()));
@@ -127,7 +143,7 @@ TEST(ScriptingLruEviction, TryReplaceFailsWhenCheckedOutByOthers)
 
 TEST(ScriptingLruEviction, TryReplaceFailsWhenReplacementWouldExceedBudget)
 {
-  LruEviction<uint64_t> eviction(kTinyBudget);
+  auto eviction = CreateEviction(kTinyBudget);
   auto it
     = eviction.Store(MakeEntry(1, std::static_pointer_cast<void>(MakeBlob(20)),
       ScriptBytecodeBlob::ClassTypeId()));
@@ -141,7 +157,7 @@ TEST(ScriptingLruEviction, TryReplaceFailsWhenReplacementWouldExceedBudget)
 
 TEST(ScriptingLruEviction, CheckOutAndCheckInWithoutEvictionPreservesEntry)
 {
-  LruEviction<uint64_t> eviction(kSmallBudget);
+  auto eviction = CreateEviction(kSmallBudget);
   auto it
     = eviction.Store(MakeEntry(1, std::static_pointer_cast<void>(MakeBlob(10)),
       ScriptBytecodeBlob::ClassTypeId()));
@@ -157,7 +173,7 @@ TEST(ScriptingLruEviction, CheckOutAndCheckInWithoutEvictionPreservesEntry)
 
 TEST(ScriptingLruEviction, CheckInEvictsWhenRefcountReachesZero)
 {
-  LruEviction<uint64_t> eviction(kSmallBudget);
+  auto eviction = CreateEviction(kSmallBudget);
   auto it
     = eviction.Store(MakeEntry(9, std::static_pointer_cast<void>(MakeBlob(10)),
       ScriptBytecodeBlob::ClassTypeId()));
@@ -172,7 +188,7 @@ TEST(ScriptingLruEviction, CheckInEvictsWhenRefcountReachesZero)
 
 TEST(ScriptingLruEviction, EvictRespectsRefcountGate)
 {
-  LruEviction<uint64_t> eviction(kSmallBudget);
+  auto eviction = CreateEviction(kSmallBudget);
   auto it
     = eviction.Store(MakeEntry(3, std::static_pointer_cast<void>(MakeBlob(10)),
       ScriptBytecodeBlob::ClassTypeId()));
@@ -191,7 +207,7 @@ TEST(ScriptingLruEviction, EvictRespectsRefcountGate)
 
 TEST(ScriptingLruEviction, FitEvictsFromBackUntilWithinBudget)
 {
-  LruEviction<uint64_t> eviction(kTinyBudget);
+  auto eviction = CreateEviction(kTinyBudget);
   auto it1
     = eviction.Store(MakeEntry(1, std::static_pointer_cast<void>(MakeBlob(10)),
       ScriptBytecodeBlob::ClassTypeId()));
@@ -219,7 +235,7 @@ TEST(ScriptingLruEviction, FitEvictsFromBackUntilWithinBudget)
 
 TEST(ScriptingLruEviction, FitSkipsCheckedOutEntries)
 {
-  LruEviction<uint64_t> eviction(kTinyBudget);
+  auto eviction = CreateEviction(kTinyBudget);
   auto it1
     = eviction.Store(MakeEntry(1, std::static_pointer_cast<void>(MakeBlob(10)),
       ScriptBytecodeBlob::ClassTypeId()));
@@ -243,7 +259,7 @@ TEST(ScriptingLruEviction, FitSkipsCheckedOutEntries)
 
 TEST(ScriptingLruEviction, ClearResetsState)
 {
-  LruEviction<uint64_t> eviction(kDefaultBudget);
+  auto eviction = CreateEviction(kDefaultBudget);
   auto it
     = eviction.Store(MakeEntry(99, std::static_pointer_cast<void>(MakeBlob(32)),
       ScriptBytecodeBlob::ClassTypeId()));
@@ -258,7 +274,7 @@ TEST(ScriptingLruEviction, ClearResetsState)
 
 TEST(ScriptingLruEviction, AccessPromotesToMru)
 {
-  LruEviction<uint64_t> eviction(kTinyBudget);
+  auto eviction = CreateEviction(kTinyBudget);
   auto it_a
     = eviction.Store(MakeEntry(1, std::static_pointer_cast<void>(MakeBlob(10)),
       ScriptBytecodeBlob::ClassTypeId()));
@@ -292,7 +308,7 @@ TEST(ScriptingLruEviction, AccessPromotesToMru)
 
 TEST(ScriptingLruEviction, FitEvictsNextAvailableLru)
 {
-  LruEviction<uint64_t> eviction(kTinyBudget);
+  auto eviction = CreateEviction(kTinyBudget);
   auto it_a
     = eviction.Store(MakeEntry(1, std::static_pointer_cast<void>(MakeBlob(10)),
       ScriptBytecodeBlob::ClassTypeId()));
