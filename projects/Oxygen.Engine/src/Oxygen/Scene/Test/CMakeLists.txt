@@ -105,11 +105,18 @@ m_gtest_program(
 add_test_scene_factory_dependencies(${META_MODULE_NAME}.TestSceneFactoryExample.Tests)
 
 m_gtest_program(
+  SceneMutation
+  SOURCES
+    "Scene_mutation_dispatcher_test.cpp"
+    "Scene_node_sync_test.cpp"
+    "Scene_observer_sync_test.cpp"
+    "Scene_transform_sync_test.cpp"
+)
+
+m_gtest_program(
   SceneBasic
   SOURCES
     ${TEST_FACTORY_SOURCES}
-    "Scene_mutation_dispatcher_test.cpp"
-    "Scene_observer_sync_test.cpp"
     "Scene_basic_test.cpp"
     "Scene_cloning_test.cpp"
     "Scene_environment_test.cpp"

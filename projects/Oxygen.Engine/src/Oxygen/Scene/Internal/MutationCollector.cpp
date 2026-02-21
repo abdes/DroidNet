@@ -94,6 +94,31 @@ namespace {
       });
     }
 
+    auto CollectTransformChanged(const NodeHandle& node_handle) -> void override
+    {
+      if (!enabled_) {
+        return;
+      }
+      mutations_.push_back(MutationRecord {
+        .sequence = next_sequence_++,
+        .payload = TransformMutation { .type = TransformMutationType::kChanged,
+          .node_handle = node_handle },
+      });
+    }
+
+    auto CollectNodeDestroyed(const NodeHandle& node_handle) -> void override
+    {
+      if (!enabled_) {
+        return;
+      }
+      mutations_.push_back(MutationRecord {
+        .sequence = next_sequence_++,
+        .payload
+        = NodeDestroyedMutation { .type = NodeDestroyedMutationType::kDestroyed,
+          .node_handle = node_handle },
+      });
+    }
+
     auto DrainMutations() -> std::vector<MutationRecord> override
     {
       auto out = std::move(mutations_);

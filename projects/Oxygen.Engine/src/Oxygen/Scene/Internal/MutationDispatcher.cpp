@@ -17,7 +17,7 @@ namespace oxygen::scene::internal {
 namespace {
   template <typename> inline constexpr bool kAlwaysFalse = false;
 
-  static_assert(std::variant_size_v<MutationPayload> == 3,
+  static_assert(std::variant_size_v<MutationPayload> == 5,
     "MutationPayload changed: update MutationDispatcher visitor and tests.");
 
   template <SceneMutation MutationT> struct CoalescedState final {
@@ -58,6 +58,11 @@ namespace {
               HandleLightMutation(mutation);
             } else if constexpr (std::same_as<MutationT, CameraMutation>) {
               HandleCameraMutation(mutation);
+            } else if constexpr (std::same_as<MutationT, TransformMutation>) {
+              HandleTransformMutation(mutation);
+            } else if constexpr (std::same_as<MutationT,
+                                   NodeDestroyedMutation>) {
+              HandleNodeDestroyedMutation(mutation, context);
             } else {
               static_assert(kAlwaysFalse<MutationT>,
                 "Unhandled MutationPayload alternative in dispatcher.");
@@ -78,6 +83,7 @@ namespace {
     auto HandleScriptMutation(const ScriptSlotMutation& mutation,
       const DispatchContext& context) -> void
     {
+      DCHECK_NOTNULL_F(script_slot_processor_.get());
       ++counters_.script_records_dispatched;
       script_slot_processor_->Process(
         mutation, context.resolve_script_slot, context.notify_script_observers);
@@ -93,6 +99,21 @@ namespace {
     {
       ++counters_.camera_records_coalesced_in;
       CoalesceMutation(mutation);
+    }
+
+    auto HandleTransformMutation(const TransformMutation& mutation) -> void
+    {
+      ++counters_.transform_records_coalesced_in;
+      CoalesceMutation(mutation);
+    }
+
+    auto HandleNodeDestroyedMutation(const NodeDestroyedMutation& mutation,
+      const DispatchContext& context) -> void
+    {
+      ++counters_.node_destroyed_records_dispatched;
+      if (context.notify_node_destroyed_mutation) {
+        context.notify_node_destroyed_mutation(mutation);
+      }
     }
 
     template <SceneMutation MutationT>
@@ -115,13 +136,29 @@ namespace {
     {
       if constexpr (std::same_as<MutationT, LightMutation>) {
         return coalesced_light_;
-      } else {
-        static_assert(std::same_as<MutationT, CameraMutation>);
+      } else if constexpr (std::same_as<MutationT, CameraMutation>) {
         return coalesced_camera_;
+      } else {
+        static_assert(std::same_as<MutationT, TransformMutation>);
+        return coalesced_transform_;
       }
     }
 
-    auto FlushCoalesced(const DispatchContext& context) -> void
+    auto FlushTransformMutations(const DispatchContext& context) -> void
+    {
+      for (const auto& key : coalesced_transform_.first_seen_order) {
+        const auto it = coalesced_transform_.by_key.find(key);
+        DCHECK_F(it != coalesced_transform_.by_key.end());
+        ++counters_.transform_records_dispatched;
+        if (context.notify_transform_mutation) {
+          context.notify_transform_mutation(it->second);
+        }
+      }
+      coalesced_transform_.by_key.clear();
+      coalesced_transform_.first_seen_order.clear();
+    }
+
+    auto FlushLightMutations(const DispatchContext& context) -> void
     {
       for (const auto& key : coalesced_light_.first_seen_order) {
         const auto it = coalesced_light_.by_key.find(key);
@@ -131,7 +168,12 @@ namespace {
           context.notify_light_mutation(it->second);
         }
       }
+      coalesced_light_.by_key.clear();
+      coalesced_light_.first_seen_order.clear();
+    }
 
+    auto FlushCameraMutations(const DispatchContext& context) -> void
+    {
       for (const auto& key : coalesced_camera_.first_seen_order) {
         const auto it = coalesced_camera_.by_key.find(key);
         DCHECK_F(it != coalesced_camera_.by_key.end());
@@ -140,16 +182,21 @@ namespace {
           context.notify_camera_mutation(it->second);
         }
       }
-
-      coalesced_light_.by_key.clear();
-      coalesced_light_.first_seen_order.clear();
       coalesced_camera_.by_key.clear();
       coalesced_camera_.first_seen_order.clear();
+    }
+
+    auto FlushCoalesced(const DispatchContext& context) -> void
+    {
+      FlushTransformMutations(context);
+      FlushLightMutations(context);
+      FlushCameraMutations(context);
     }
 
     observer_ptr<IScriptSlotMutationProcessor> script_slot_processor_;
     CoalescedState<LightMutation> coalesced_light_ {};
     CoalescedState<CameraMutation> coalesced_camera_ {};
+    CoalescedState<TransformMutation> coalesced_transform_ {};
     Counters counters_ {};
   };
 

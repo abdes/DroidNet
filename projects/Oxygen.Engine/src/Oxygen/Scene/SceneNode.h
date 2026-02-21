@@ -310,6 +310,8 @@ private:
   OXGN_SCN_NDAPI auto GetLight() noexcept
     -> std::optional<std::reference_wrapper<Component>>;
 
+  OXGN_SCN_API auto CollectTransformChangedMutation() const noexcept -> void;
+
   // Logging for SafeCall errors
   auto LogSafeCallError(const char* reason) const noexcept -> void;
 

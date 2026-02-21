@@ -414,6 +414,19 @@ auto SceneNode::SetName(const std::string& name) noexcept -> bool
     });
 }
 
+auto SceneNode::CollectTransformChangedMutation() const noexcept -> void
+{
+  const auto scene = scene_weak_.lock();
+  if (!scene) {
+    return;
+  }
+  if (const auto collector
+    = const_cast<Scene*>(scene.get())->AsMutationCollector();
+    collector != nullptr) {
+    collector->CollectTransformChanged(GetHandle());
+  }
+}
+
 //=== Camera Attachment ===---------------------------------------------------//
 
 /*!

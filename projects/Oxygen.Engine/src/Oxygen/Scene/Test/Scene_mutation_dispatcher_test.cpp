@@ -104,6 +104,9 @@ NOLINT_TEST(SceneMutationDispatcherTest,
   EXPECT_EQ(counters.light_records_dispatched, 1U);
   EXPECT_EQ(counters.camera_records_coalesced_in, 2U);
   EXPECT_EQ(counters.camera_records_dispatched, 1U);
+  EXPECT_EQ(counters.transform_records_coalesced_in, 0U);
+  EXPECT_EQ(counters.transform_records_dispatched, 0U);
+  EXPECT_EQ(counters.node_destroyed_records_dispatched, 0U);
 }
 
 } // namespace

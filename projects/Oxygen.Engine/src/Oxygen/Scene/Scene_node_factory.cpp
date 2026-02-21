@@ -291,6 +291,10 @@ auto Scene::DestroyNode(SceneNode& node) noexcept -> bool
         RemoveRootNode(handle);
       }
 
+      if (const auto collector = AsMutationCollector(); collector != nullptr) {
+        collector->CollectNodeDestroyed(handle);
+      }
+
       [[maybe_unused]] const auto removed = nodes_->Erase(handle);
       DCHECK_EQ_F(removed, 1);
       node.Invalidate();
@@ -441,6 +445,11 @@ auto Scene::DestroyNodeHierarchy(SceneNode& starting_node) noexcept -> bool
             if (had_light) {
               collector->CollectLightChanged(node.handle);
             }
+          }
+
+          if (const auto collector = AsMutationCollector();
+            collector != nullptr) {
+            collector->CollectNodeDestroyed(node.handle);
           }
 
           const auto removed = nodes_->Erase(node.handle);

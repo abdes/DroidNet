@@ -154,7 +154,6 @@ BENCHMARK_DEFINE_F(SceneTraversalBenchmark, TraversalVisitorUpdateTransforms)(
   const float dirty_ratio = static_cast<float>(state.range(2)) / 100.0F;
   int64_t total_visited_nodes = 0;
 
-  std::uint64_t visited_nodes_accum = 0;
   for (auto _ : state) {
     state.PauseTiming();
     MarkRandomNodesDirty(dirty_ratio); // Set specified percentage dirty

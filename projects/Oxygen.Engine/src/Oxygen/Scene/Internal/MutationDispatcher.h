@@ -29,6 +29,9 @@ public:
     uint64_t light_records_dispatched { 0 };
     uint64_t camera_records_coalesced_in { 0 };
     uint64_t camera_records_dispatched { 0 };
+    uint64_t transform_records_coalesced_in { 0 };
+    uint64_t transform_records_dispatched { 0 };
+    uint64_t node_destroyed_records_dispatched { 0 };
   };
 
   virtual ~IMutationDispatcher() = default;
@@ -38,14 +41,26 @@ public:
     = IScriptSlotMutationProcessor::NotifyObserversFn;
   using NotifyLightMutationFn = std::function<void(const LightMutation&)>;
   using NotifyCameraMutationFn = std::function<void(const CameraMutation&)>;
+  using NotifyTransformMutationFn
+    = std::function<void(const TransformMutation&)>;
+  using NotifyNodeDestroyedMutationFn
+    = std::function<void(const NodeDestroyedMutation&)>;
 
   struct DispatchContext final {
     ResolveScriptSlotFn resolve_script_slot;
     NotifyScriptObserversFn notify_script_observers;
     NotifyLightMutationFn notify_light_mutation;
     NotifyCameraMutationFn notify_camera_mutation;
+    NotifyTransformMutationFn notify_transform_mutation;
+    NotifyNodeDestroyedMutationFn notify_node_destroyed_mutation;
   };
 
+  /*!
+   Dispatch ordering contract:
+   - Script slot mutations preserve collected order.
+   - Non-coalesced mutations preserve collected order.
+   - Coalesced mutations dispatch after drain, in first-seen-key order.
+  */
   virtual auto Dispatch(IMutationCollector& mutation_collector,
     const DispatchContext& context) -> void
     = 0;

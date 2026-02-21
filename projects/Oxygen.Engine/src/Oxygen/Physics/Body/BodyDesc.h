@@ -46,7 +46,6 @@ struct BodyDesc final {
   float mass_kg { 1.0F };
   CollisionLayer collision_layer { kCollisionLayerDefault };
   CollisionMask collision_mask { kCollisionMaskAll };
-  uint64_t user_data { 0 };
 };
 
 } // namespace oxygen::physics::body
