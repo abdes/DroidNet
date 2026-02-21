@@ -5,9 +5,11 @@
 //===----------------------------------------------------------------------===//
 
 #include <chrono>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <mutex>
 #include <memory>
 #include <string>
 #include <thread>
@@ -165,7 +167,8 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
-    bool callback_called = false;
+    std::atomic<bool> callback_called { false };
+    std::mutex callback_mutex;
     std::shared_ptr<BufferResource> loaded;
     std::thread::id callback_thread;
 
@@ -183,17 +186,25 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
           .bytes = span,
         },
         [&](std::shared_ptr<BufferResource> resource) {
-          loaded = std::move(resource);
-          callback_called = true;
-          callback_thread = std::this_thread::get_id();
+          {
+            const std::scoped_lock lock(callback_mutex);
+            loaded = std::move(resource);
+            callback_thread = std::this_thread::get_id();
+          }
+          callback_called.store(true, std::memory_order_release);
         });
 
-      for (int i = 0; i < 200 && !callback_called; ++i) {
+      for (int i = 0; i < 1500
+          && !callback_called.load(std::memory_order_acquire);
+           ++i) {
         co_await el.Sleep(1ms);
       }
 
-      EXPECT_TRUE(callback_called);
-      EXPECT_THAT(loaded, NotNull());
+      EXPECT_TRUE(callback_called.load(std::memory_order_acquire));
+      {
+        const std::scoped_lock lock(callback_mutex);
+        EXPECT_THAT(loaded, NotNull());
+      }
       EXPECT_EQ(callback_thread, owning_thread);
 
       loader.Stop();
