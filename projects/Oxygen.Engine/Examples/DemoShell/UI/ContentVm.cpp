@@ -666,9 +666,15 @@ auto ContentVm::UnloadAllLibrary() -> void
 
 auto ContentVm::RestorePersistedLibraryState() -> void
 {
+  if (persisted_library_state_restored_) {
+    return;
+  }
+
   if (!settings_) {
     return;
   }
+
+  persisted_library_state_restored_ = true;
 
   for (const auto& pak_path : settings_->GetMountedPakPaths()) {
     if (!pak_path.empty()) {

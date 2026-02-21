@@ -790,7 +790,6 @@ auto ContentLoaderPanel::OnLoaded() -> void
 {
   if (vm_) {
     vm_->RefreshSources();
-    vm_->RestorePersistedLibraryState();
   }
 }
 
