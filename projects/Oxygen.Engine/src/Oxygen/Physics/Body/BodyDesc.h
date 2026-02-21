@@ -40,6 +40,12 @@ OXGN_PHYS_NDAPI auto to_string(BodyFlags value) -> std::string;
 struct BodyDesc final {
   BodyType type { BodyType::kStatic };
   BodyFlags flags { BodyFlags::kEnableGravity };
+  /*! Convenience initial shape.
+   This creates one initial shape instance on
+   * body creation. Additional shapes
+   can be attached via
+   * `IBodyApi::AddBodyShape`.
+  */
   CollisionShape shape { SphereShape { 0.5F } };
   Vec3 initial_position { 0.0F, 0.0F, 0.0F };
   Quat initial_rotation { 1.0F, 0.0F, 0.0F, 0.0F };

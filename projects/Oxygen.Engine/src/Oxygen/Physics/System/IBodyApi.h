@@ -19,11 +19,19 @@ namespace oxygen::physics::system {
  Responsibilities now:
  - Create and destroy bodies in a world.
  - Read and write body pose state.
+ - Attach and detach reusable shape instances per body.
+
+ Shape composition contract:
+ - `CreateBody(world_id, desc)` always creates one initial collision shape from
+   `desc.shape` as a convenience path.
+ - `AddBodyShape(...)` appends additional shapes to the same body.
+ - Backends must preserve behavior equivalence between one-shape bodies created
+   via `desc.shape` and bodies composed through `CreateShape + AddBodyShape`.
 
  ### Near Future
 
- - Extend with velocity, force/impulse, damping, sleep/awake, materials,
-   collision filtering, and mass property controls.
+ - Extend with damping, sleep/awake, materials, collision filtering, and mass
+   property controls.
 */
 class IBodyApi {
 public:
@@ -82,6 +90,14 @@ public:
   virtual auto MoveKinematic(WorldId world_id, BodyId body_id,
     const Vec3& target_position, const Quat& target_rotation, float delta_time)
     -> PhysicsResult<void>
+    = 0;
+
+  virtual auto AddBodyShape(WorldId world_id, BodyId body_id, ShapeId shape_id,
+    const Vec3& local_position, const Quat& local_rotation)
+    -> PhysicsResult<ShapeInstanceId>
+    = 0;
+  virtual auto RemoveBodyShape(WorldId world_id, BodyId body_id,
+    ShapeInstanceId shape_instance_id) -> PhysicsResult<void>
     = 0;
 };
 

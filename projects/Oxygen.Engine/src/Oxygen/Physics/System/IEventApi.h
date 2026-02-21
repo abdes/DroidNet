@@ -20,6 +20,13 @@ namespace oxygen::physics::system {
  Responsibilities now:
  - Report pending event counts.
  - Drain buffered events into caller-owned storage.
+ - Preserve deterministic FIFO order per world.
+
+ Delivery contract:
+ - Events are ordered by production time within a world.
+ - `DrainEvents` pops events from the queue in order.
+ - When `out_events` is smaller than pending events, only a prefix is drained;
+   the remainder stays queued for subsequent drains.
 
  ### Near Future
 
@@ -35,9 +42,11 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(IEventApi)
 
   virtual auto GetPendingEventCount(WorldId world_id) const
-    -> PhysicsResult<size_t> = 0;
+    -> PhysicsResult<size_t>
+    = 0;
   virtual auto DrainEvents(WorldId world_id,
-    std::span<events::PhysicsEvent> out_events) -> PhysicsResult<size_t> = 0;
+    std::span<events::PhysicsEvent> out_events) -> PhysicsResult<size_t>
+    = 0;
 };
 
 } // namespace oxygen::physics::system

@@ -20,6 +20,7 @@ enum class PhysicsEventType : uint8_t {
   kContactEnd,
   kTriggerBegin,
   kTriggerEnd,
+  // Near future: area enter/exit and joint break/limit events.
 };
 
 OXGN_PHYS_NDAPI auto to_string(PhysicsEventType value) noexcept

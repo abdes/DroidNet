@@ -54,6 +54,11 @@ public:
   auto MoveKinematic(WorldId world_id, BodyId body_id,
     const Vec3& target_position, const Quat& target_rotation, float delta_time)
     -> PhysicsResult<void> override;
+  auto AddBodyShape(WorldId world_id, BodyId body_id, ShapeId shape_id,
+    const Vec3& local_position, const Quat& local_rotation)
+    -> PhysicsResult<ShapeInstanceId> override;
+  auto RemoveBodyShape(WorldId world_id, BodyId body_id,
+    ShapeInstanceId shape_instance_id) -> PhysicsResult<void> override;
 };
 
 } // namespace oxygen::physics::jolt

@@ -36,6 +36,24 @@ auto oxygen::physics::jolt::JoltPhysicsSystem::Characters() noexcept
   return characters_;
 }
 
+auto oxygen::physics::jolt::JoltPhysicsSystem::Shapes() noexcept
+  -> system::IShapeApi&
+{
+  return shapes_;
+}
+
+auto oxygen::physics::jolt::JoltPhysicsSystem::Areas() noexcept
+  -> system::IAreaApi&
+{
+  return areas_;
+}
+
+auto oxygen::physics::jolt::JoltPhysicsSystem::Joints() noexcept
+  -> system::IJointApi&
+{
+  return joints_;
+}
+
 auto oxygen::physics::jolt::JoltPhysicsSystem::Worlds() const noexcept
   -> const system::IWorldApi&
 {
@@ -64,4 +82,22 @@ auto oxygen::physics::jolt::JoltPhysicsSystem::Characters() const noexcept
   -> const system::ICharacterApi&
 {
   return characters_;
+}
+
+auto oxygen::physics::jolt::JoltPhysicsSystem::Shapes() const noexcept
+  -> const system::IShapeApi&
+{
+  return shapes_;
+}
+
+auto oxygen::physics::jolt::JoltPhysicsSystem::Areas() const noexcept
+  -> const system::IAreaApi&
+{
+  return areas_;
+}
+
+auto oxygen::physics::jolt::JoltPhysicsSystem::Joints() const noexcept
+  -> const system::IJointApi&
+{
+  return joints_;
 }
