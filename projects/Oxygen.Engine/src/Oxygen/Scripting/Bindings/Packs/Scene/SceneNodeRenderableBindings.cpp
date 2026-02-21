@@ -319,7 +319,7 @@ namespace {
       auto geometry = GetOrCreateGeometryByToken(token);
       node->GetRenderable().SetGeometry(std::move(geometry));
       const auto handle = node->GetHandle();
-      LOG_F(INFO,
+      DLOG_F(3,
         "scene.node.renderable_set_geometry(token): token='{}' scene_id={} "
         "node_index={}",
         token, static_cast<unsigned>(handle.GetSceneId()),

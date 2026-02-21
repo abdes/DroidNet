@@ -39,6 +39,12 @@ public:
     frame::SequenceNumber frame_id, ScenePrepState& state, bool reset_state)
     -> void;
 
+  //! Single-view fused collection path.
+  //! Traverses the full scene node table once with an active view.
+  OXGN_RNDR_API auto CollectSingleView(const scene::Scene& scene,
+    ::oxygen::observer_ptr<const ResolvedView> view, frame::SequenceNumber fseq,
+    ScenePrepState& state, bool reset_state) -> void;
+
   OXGN_RNDR_API auto Finalize() -> void;
 
 protected:

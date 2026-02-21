@@ -637,8 +637,11 @@ auto ForwardPipeline::Impl::ExecuteRegisteredView(ViewId id,
 {
   const auto* frame_packet = frame_plan_builder->FindFrameViewPacket(id);
   if (frame_packet == nullptr) {
-    LOG_F(ERROR,
-      "ForwardPipeline: missing frame packet in render callback for view {}",
+    // Benign during teardown/view churn: a previously registered callback can
+    // race one frame with packet publication/unpublication.
+    DLOG_F(2,
+      "ForwardPipeline: skipping render callback without frame packet for view "
+      "{}",
       id.get());
     co_return;
   }

@@ -36,6 +36,8 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(Console)
 
   OXGN_CONS_NDAPI auto RegisterCVar(CVarDefinition definition) -> CVarHandle;
+  OXGN_CONS_NDAPI auto SetCVarFromText(const Registry::SetCVarRequest& request,
+    const CommandContext& context = {}) -> ExecutionResult;
   OXGN_CONS_NDAPI auto RegisterCommand(CommandDefinition definition)
     -> CommandHandle;
   OXGN_CONS_NDAPI auto Execute(std::string_view line,
@@ -64,8 +66,8 @@ public:
       .source = CommandSource::kAutomation,
       .shipping_build = false,
     }) -> ExecutionResult;
-  OXGN_CONS_NDAPI auto SaveHistory(
-    const oxygen::PathFinder& path_finder) const -> ExecutionResult;
+  OXGN_CONS_NDAPI auto SaveHistory(const oxygen::PathFinder& path_finder) const
+    -> ExecutionResult;
   OXGN_CONS_NDAPI auto LoadHistory(const oxygen::PathFinder& path_finder)
     -> ExecutionResult;
   OXGN_CONS_NDAPI auto ListSymbols(bool include_hidden = false) const
