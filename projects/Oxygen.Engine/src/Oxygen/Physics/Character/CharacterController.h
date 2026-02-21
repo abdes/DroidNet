@@ -17,6 +17,10 @@
 namespace oxygen::physics::character {
 
 struct CharacterDesc final {
+  /*! Convenience initial collision shape.
+   Implementations should treat this consistently with the reusable shape
+   domain, even though character shape attachment APIs may evolve separately.
+  */
   CollisionShape shape { CapsuleShape { 0.5F, 1.0F } };
   Vec3 initial_position { 0.0F, 0.0F, 0.0F };
   Quat initial_rotation { 1.0F, 0.0F, 0.0F, 0.0F };

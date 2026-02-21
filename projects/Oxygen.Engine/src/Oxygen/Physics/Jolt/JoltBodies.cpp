@@ -97,3 +97,17 @@ auto oxygen::physics::jolt::JoltBodies::MoveKinematic(WorldId /*world_id*/,
 {
   return Err(PhysicsError::kBodyNotFound);
 }
+
+auto oxygen::physics::jolt::JoltBodies::AddBodyShape(WorldId /*world_id*/,
+  BodyId /*body_id*/, ShapeId /*shape_id*/, const Vec3& /*local_position*/,
+  const Quat& /*local_rotation*/) -> PhysicsResult<ShapeInstanceId>
+{
+  return Err(PhysicsError::kNotImplemented);
+}
+
+auto oxygen::physics::jolt::JoltBodies::RemoveBodyShape(WorldId /*world_id*/,
+  BodyId /*body_id*/, ShapeInstanceId /*shape_instance_id*/)
+  -> PhysicsResult<void>
+{
+  return Err(PhysicsError::kNotImplemented);
+}

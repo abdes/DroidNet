@@ -8,13 +8,16 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Physics/Area/AreaDesc.h>
 #include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/Character/CharacterController.h>
 #include <Oxygen/Physics/Events/PhysicsEvents.h>
+#include <Oxygen/Physics/Joint/JointDesc.h>
 #include <Oxygen/Physics/Physics.h>
 #include <Oxygen/Physics/Query/Overlap.h>
 #include <Oxygen/Physics/Query/Raycast.h>
 #include <Oxygen/Physics/Query/Sweep.h>
+#include <Oxygen/Physics/Shape/ShapeDesc.h>
 #include <Oxygen/Physics/World/WorldDesc.h>
 
 namespace oxygen::physics::test {
@@ -91,28 +94,35 @@ NOLINT_TEST_F(PhysicsApiContractTest, DomainFacadeReferencesAreStable)
   auto& queries = system.Queries();
   auto& events = system.Events();
   auto& characters = system.Characters();
+  auto& shapes = system.Shapes();
+  auto& areas = system.Areas();
+  auto& joints = system.Joints();
   EXPECT_EQ(&worlds, &system.Worlds());
   EXPECT_EQ(&bodies, &system.Bodies());
   EXPECT_EQ(&queries, &system.Queries());
   EXPECT_EQ(&events, &system.Events());
   EXPECT_EQ(&characters, &system.Characters());
+  EXPECT_EQ(&shapes, &system.Shapes());
+  EXPECT_EQ(&areas, &system.Areas());
+  EXPECT_EQ(&joints, &system.Joints());
 
   const auto& const_system = system;
-  EXPECT_EQ(
-    static_cast<const void*>(&worlds),
+  EXPECT_EQ(static_cast<const void*>(&worlds),
     static_cast<const void*>(&const_system.Worlds()));
-  EXPECT_EQ(
-    static_cast<const void*>(&bodies),
+  EXPECT_EQ(static_cast<const void*>(&bodies),
     static_cast<const void*>(&const_system.Bodies()));
-  EXPECT_EQ(
-    static_cast<const void*>(&queries),
+  EXPECT_EQ(static_cast<const void*>(&queries),
     static_cast<const void*>(&const_system.Queries()));
-  EXPECT_EQ(
-    static_cast<const void*>(&events),
+  EXPECT_EQ(static_cast<const void*>(&events),
     static_cast<const void*>(&const_system.Events()));
-  EXPECT_EQ(
-    static_cast<const void*>(&characters),
+  EXPECT_EQ(static_cast<const void*>(&characters),
     static_cast<const void*>(&const_system.Characters()));
+  EXPECT_EQ(static_cast<const void*>(&shapes),
+    static_cast<const void*>(&const_system.Shapes()));
+  EXPECT_EQ(static_cast<const void*>(&areas),
+    static_cast<const void*>(&const_system.Areas()));
+  EXPECT_EQ(static_cast<const void*>(&joints),
+    static_cast<const void*>(&const_system.Joints()));
 }
 
 NOLINT_TEST_F(PhysicsApiContractTest, WorldLifecycleContract)
@@ -151,7 +161,8 @@ NOLINT_TEST_F(PhysicsApiContractTest, WorldGravityRoundTripContract)
   ASSERT_TRUE(create_result.has_value());
   const auto world_id = create_result.value();
 
-  const auto set_gravity = worlds.SetGravity(world_id, Vec3 { 0.0F, -4.0F, 0.0F });
+  const auto set_gravity
+    = worlds.SetGravity(world_id, Vec3 { 0.0F, -4.0F, 0.0F });
   EXPECT_TRUE(set_gravity.has_value());
 
   const auto gravity = worlds.GetGravity(world_id);
@@ -196,7 +207,8 @@ NOLINT_TEST_F(PhysicsApiContractTest, InvalidBodyCallsReturnError)
     bodies.SetBodyPosition(world_id, kInvalidBodyId, Vec3 { 1.0F, 0.0F, 0.0F })
       .has_error());
   EXPECT_TRUE(bodies
-      .SetBodyRotation(world_id, kInvalidBodyId, Quat { 1.0F, 0.0F, 0.0F, 0.0F })
+      .SetBodyRotation(
+        world_id, kInvalidBodyId, Quat { 1.0F, 0.0F, 0.0F, 0.0F })
       .has_error());
   EXPECT_TRUE(bodies
       .SetBodyPose(world_id, kInvalidBodyId, Vec3 { 0.0F, 1.0F, 0.0F },
@@ -204,11 +216,11 @@ NOLINT_TEST_F(PhysicsApiContractTest, InvalidBodyCallsReturnError)
       .has_error());
   EXPECT_TRUE(bodies.GetLinearVelocity(world_id, kInvalidBodyId).has_error());
   EXPECT_TRUE(bodies.GetAngularVelocity(world_id, kInvalidBodyId).has_error());
-  EXPECT_TRUE(
-    bodies.SetLinearVelocity(world_id, kInvalidBodyId, Vec3 { 1.0F, 0.0F, 0.0F })
+  EXPECT_TRUE(bodies
+      .SetLinearVelocity(world_id, kInvalidBodyId, Vec3 { 1.0F, 0.0F, 0.0F })
       .has_error());
-  EXPECT_TRUE(
-    bodies.SetAngularVelocity(world_id, kInvalidBodyId, Vec3 { 0.0F, 1.0F, 0.0F })
+  EXPECT_TRUE(bodies
+      .SetAngularVelocity(world_id, kInvalidBodyId, Vec3 { 0.0F, 1.0F, 0.0F })
       .has_error());
   EXPECT_TRUE(
     bodies.AddForce(world_id, kInvalidBodyId, Vec3 { 0.0F, 0.0F, 1.0F })
@@ -224,6 +236,13 @@ NOLINT_TEST_F(PhysicsApiContractTest, InvalidBodyCallsReturnError)
         Quat { 1.0F, 0.0F, 0.0F, 0.0F }, 1.0F / 60.0F)
       .has_error());
   EXPECT_TRUE(bodies.DestroyBody(world_id, kInvalidBodyId).has_error());
+  EXPECT_TRUE(bodies
+      .AddBodyShape(world_id, kInvalidBodyId, kInvalidShapeId,
+        Vec3 { 0.0F, 0.0F, 0.0F }, Quat { 1.0F, 0.0F, 0.0F, 0.0F })
+      .has_error());
+  EXPECT_TRUE(
+    bodies.RemoveBodyShape(world_id, kInvalidBodyId, kInvalidShapeInstanceId)
+      .has_error());
 
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
 }
@@ -300,9 +319,9 @@ NOLINT_TEST_F(PhysicsApiContractTest, CharacterLifecycleContract)
   EXPECT_TRUE(move.has_value());
 
   EXPECT_TRUE(characters.DestroyCharacter(world_id, character_id).has_value());
-  EXPECT_TRUE(
-    characters.MoveCharacter(
-      world_id, character_id, character::CharacterMoveInput {}, 1.0F / 60.0F)
+  EXPECT_TRUE(characters
+      .MoveCharacter(
+        world_id, character_id, character::CharacterMoveInput {}, 1.0F / 60.0F)
       .has_error());
   EXPECT_TRUE(characters.DestroyCharacter(world_id, character_id).has_error());
 
@@ -322,16 +341,142 @@ NOLINT_TEST_F(PhysicsApiContractTest, InvalidCharacterCallsReturnError)
   ASSERT_TRUE(create_result.has_value());
   const auto world_id = create_result.value();
 
-  EXPECT_TRUE(characters.DestroyCharacter(world_id, kInvalidCharacterId).has_error());
+  EXPECT_TRUE(
+    characters.DestroyCharacter(world_id, kInvalidCharacterId).has_error());
   EXPECT_TRUE(characters
-      .MoveCharacter(
-        world_id, kInvalidCharacterId, character::CharacterMoveInput {}, 1.0F / 60.0F)
+      .MoveCharacter(world_id, kInvalidCharacterId,
+        character::CharacterMoveInput {}, 1.0F / 60.0F)
       .has_error());
 
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
 }
 
-NOLINT_TEST_F(PhysicsApiContractTest, QueryAndEventContractsOnEmptyWorld)
+NOLINT_TEST_F(PhysicsApiContractTest, ShapeLifecycleContract)
+{
+  AssertBackendAvailabilityContract();
+  if (!HasBackend()) {
+    return;
+  }
+
+  auto& shapes = System().Shapes();
+  const auto create_shape = shapes.CreateShape(shape::ShapeDesc {});
+  if (create_shape.has_error()) {
+    EXPECT_EQ(create_shape.error(), PhysicsError::kNotImplemented);
+    return;
+  }
+  ASSERT_TRUE(create_shape.has_value());
+  const auto shape_id = create_shape.value();
+  EXPECT_NE(shape_id, kInvalidShapeId);
+  EXPECT_TRUE(shapes.DestroyShape(shape_id).has_value());
+  EXPECT_TRUE(shapes.DestroyShape(shape_id).has_error());
+}
+
+NOLINT_TEST_F(PhysicsApiContractTest, DestroyShapeWhileAttachedReturnsError)
+{
+  AssertBackendAvailabilityContract();
+  if (!HasBackend()) {
+    return;
+  }
+
+  auto& worlds = System().Worlds();
+  auto& shapes = System().Shapes();
+  auto& bodies = System().Bodies();
+
+  const auto world_result = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(world_result.has_value());
+  const auto world_id = world_result.value();
+
+  const auto shape_result = shapes.CreateShape(shape::ShapeDesc {});
+  if (shape_result.has_error()) {
+    EXPECT_EQ(shape_result.error(), PhysicsError::kNotImplemented);
+    EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+    return;
+  }
+  ASSERT_TRUE(shape_result.has_value());
+  const auto shape_id = shape_result.value();
+
+  body::BodyDesc desc {};
+  const auto body_result = bodies.CreateBody(world_id, desc);
+  ASSERT_TRUE(body_result.has_value());
+  const auto body_id = body_result.value();
+
+  const auto attach_result = bodies.AddBodyShape(world_id, body_id, shape_id,
+    Vec3 { 0.0F, 0.0F, 0.0F }, Quat { 1.0F, 0.0F, 0.0F, 0.0F });
+  if (attach_result.has_error()) {
+    EXPECT_EQ(attach_result.error(), PhysicsError::kNotImplemented);
+    EXPECT_TRUE(bodies.DestroyBody(world_id, body_id).has_value());
+    EXPECT_TRUE(shapes.DestroyShape(shape_id).has_value());
+    EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+    return;
+  }
+  ASSERT_TRUE(attach_result.has_value());
+  const auto instance_id = attach_result.value();
+
+  const auto destroy_attached = shapes.DestroyShape(shape_id);
+  EXPECT_TRUE(destroy_attached.has_error());
+  if (destroy_attached.has_error()) {
+    EXPECT_EQ(destroy_attached.error(), PhysicsError::kAlreadyExists);
+  }
+
+  EXPECT_TRUE(
+    bodies.RemoveBodyShape(world_id, body_id, instance_id).has_value());
+  EXPECT_TRUE(shapes.DestroyShape(shape_id).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, body_id).has_value());
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
+NOLINT_TEST_F(PhysicsApiContractTest, InvalidAreaCallsReturnError)
+{
+  AssertBackendAvailabilityContract();
+  if (!HasBackend()) {
+    return;
+  }
+
+  auto& worlds = System().Worlds();
+  auto& areas = System().Areas();
+  const auto create_result = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(create_result.has_value());
+  const auto world_id = create_result.value();
+
+  EXPECT_TRUE(areas.GetAreaPosition(world_id, kInvalidAreaId).has_error());
+  EXPECT_TRUE(areas.GetAreaRotation(world_id, kInvalidAreaId).has_error());
+  EXPECT_TRUE(areas
+      .SetAreaPose(world_id, kInvalidAreaId, Vec3 { 0.0F, 0.0F, 0.0F },
+        Quat { 1.0F, 0.0F, 0.0F, 0.0F })
+      .has_error());
+  EXPECT_TRUE(areas
+      .AddAreaShape(world_id, kInvalidAreaId, kInvalidShapeId,
+        Vec3 { 0.0F, 0.0F, 0.0F }, Quat { 1.0F, 0.0F, 0.0F, 0.0F })
+      .has_error());
+  EXPECT_TRUE(
+    areas.RemoveAreaShape(world_id, kInvalidAreaId, kInvalidShapeInstanceId)
+      .has_error());
+  EXPECT_TRUE(areas.DestroyArea(world_id, kInvalidAreaId).has_error());
+
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
+NOLINT_TEST_F(PhysicsApiContractTest, InvalidJointCallsReturnError)
+{
+  AssertBackendAvailabilityContract();
+  if (!HasBackend()) {
+    return;
+  }
+
+  auto& worlds = System().Worlds();
+  auto& joints = System().Joints();
+  const auto create_result = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(create_result.has_value());
+  const auto world_id = create_result.value();
+
+  EXPECT_TRUE(joints.DestroyJoint(world_id, kInvalidJointId).has_error());
+  EXPECT_TRUE(
+    joints.SetJointEnabled(world_id, kInvalidJointId, true).has_error());
+
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
+NOLINT_TEST_F(PhysicsApiContractTest, QueryContractsOnEmptyWorld)
 {
   AssertBackendAvailabilityContract();
   if (!HasBackend()) {
@@ -340,7 +485,6 @@ NOLINT_TEST_F(PhysicsApiContractTest, QueryAndEventContractsOnEmptyWorld)
 
   auto& worlds = System().Worlds();
   auto& queries = System().Queries();
-  auto& events = System().Events();
 
   const auto world_result = worlds.CreateWorld(world::WorldDesc {});
   ASSERT_TRUE(world_result.has_value());
@@ -360,6 +504,23 @@ NOLINT_TEST_F(PhysicsApiContractTest, QueryAndEventContractsOnEmptyWorld)
     = queries.Overlap(world_id, query::OverlapDesc {}, overlap_hits);
   ASSERT_TRUE(overlap.has_value());
   EXPECT_EQ(overlap.value(), 0U);
+
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
+NOLINT_TEST_F(PhysicsApiContractTest, EventContractsOnEmptyWorld)
+{
+  AssertBackendAvailabilityContract();
+  if (!HasBackend()) {
+    return;
+  }
+
+  auto& worlds = System().Worlds();
+  auto& events = System().Events();
+
+  const auto world_result = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(world_result.has_value());
+  const auto world_id = world_result.value();
 
   const auto pending = events.GetPendingEventCount(world_id);
   ASSERT_TRUE(pending.has_value());
@@ -386,6 +547,11 @@ NOLINT_TEST(Physics, ToStringConvertersFollowContract)
   EXPECT_EQ(to_string(WorldId { 7U }), "WorldId{7}");
   EXPECT_EQ(to_string(BodyId { 9U }), "BodyId{9}");
   EXPECT_EQ(to_string(CharacterId { 11U }), "CharacterId{11}");
+  EXPECT_EQ(to_string(ShapeId { 13U }), "ShapeId{13}");
+  EXPECT_EQ(to_string(ShapeInstanceId { 15U }), "ShapeInstanceId{15}");
+  EXPECT_EQ(to_string(AreaId { 17U }), "AreaId{17}");
+  EXPECT_EQ(to_string(JointId { 19U }), "JointId{19}");
+  EXPECT_EQ(to_string(joint::JointType::kHinge), "Hinge");
 }
 
 } // namespace oxygen::physics::test

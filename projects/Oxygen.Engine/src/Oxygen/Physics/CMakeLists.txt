@@ -29,15 +29,26 @@ set(
   OXYGEN_PHYSICS_BACKEND
   "none"
   CACHE STRING
-    "Physics backend compiled into Oxygen.Physics (none|jolt)"
+  "Physics backend compiled into Oxygen.Physics (none|jolt)"
 )
-set_property(CACHE OXYGEN_PHYSICS_BACKEND PROPERTY STRINGS "none" "jolt")
+set_property(
+  CACHE
+    OXYGEN_PHYSICS_BACKEND
+  PROPERTY
+    STRINGS
+      "none"
+      "jolt"
+)
 
-set(OXYGEN_PHYSICS_SUPPORTED_BACKENDS "none" "jolt")
+set(
+  OXYGEN_PHYSICS_SUPPORTED_BACKENDS
+  "none"
+  "jolt"
+)
 if(NOT OXYGEN_PHYSICS_BACKEND IN_LIST OXYGEN_PHYSICS_SUPPORTED_BACKENDS)
   message(
     FATAL_ERROR
-      "Unsupported OXYGEN_PHYSICS_BACKEND='${OXYGEN_PHYSICS_BACKEND}'. Supported values: ${OXYGEN_PHYSICS_SUPPORTED_BACKENDS}"
+    "Unsupported OXYGEN_PHYSICS_BACKEND='${OXYGEN_PHYSICS_BACKEND}'. Supported values: ${OXYGEN_PHYSICS_SUPPORTED_BACKENDS}"
   )
 endif()
 message(STATUS "Oxygen.Physics backend: ${OXYGEN_PHYSICS_BACKEND}")
@@ -79,24 +90,30 @@ set_target_properties(
 set(
   OXYGEN_PHYSICS_HEADERS
   "api_export.h"
+  "Area/AreaDesc.h"
   "Backend.h"
   "Character/CharacterController.h"
   "CollisionFilter.h"
   "CollisionLayers.h"
   "Events/PhysicsEvents.h"
   "Handles.h"
+  "Joint/JointDesc.h"
   "Body/BodyDesc.h"
   "PhysicsError.h"
   "Physics.h"
   "Shape.h"
+  "Shape/ShapeDesc.h"
   "Query/Overlap.h"
   "Query/Raycast.h"
   "Query/Sweep.h"
+  "System/IAreaApi.h"
   "System/IBodyApi.h"
   "System/ICharacterApi.h"
   "System/IEventApi.h"
+  "System/IJointApi.h"
   "System/IPhysicsSystem.h"
   "System/IQueryApi.h"
+  "System/IShapeApi.h"
   "System/IWorldApi.h"
   "World/WorldDesc.h"
 )
@@ -114,10 +131,13 @@ if(OXYGEN_PHYSICS_BACKEND STREQUAL "jolt")
     APPEND
     OXYGEN_PHYSICS_PRIVATE_SOURCES
     "Jolt/JoltBackend.cpp"
+    "Jolt/JoltAreas.cpp"
     "Jolt/JoltBodies.cpp"
     "Jolt/JoltCharacters.cpp"
     "Jolt/JoltEvents.cpp"
+    "Jolt/JoltJoints.cpp"
     "Jolt/JoltQueries.cpp"
+    "Jolt/JoltShapes.cpp"
     "Jolt/JoltPhysicsSystem.cpp"
     "Jolt/JoltWorld.cpp"
   )
@@ -126,10 +146,13 @@ if(OXYGEN_PHYSICS_BACKEND STREQUAL "jolt")
     OXYGEN_PHYSICS_PRIVATE_HEADERS
     "Jolt/JoltBodies.h"
     "Jolt/JoltBackend.h"
+    "Jolt/JoltAreas.h"
     "Jolt/JoltCharacters.h"
     "Jolt/JoltEvents.h"
+    "Jolt/JoltJoints.h"
     "Jolt/JoltPhysicsSystem.h"
     "Jolt/JoltQueries.h"
+    "Jolt/JoltShapes.h"
     "Jolt/JoltWorld.h"
   )
 endif()

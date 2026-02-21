@@ -12,6 +12,7 @@
 #include <Oxygen/Physics/CollisionLayers.h>
 #include <Oxygen/Physics/Events/PhysicsEvents.h>
 #include <Oxygen/Physics/Handles.h>
+#include <Oxygen/Physics/Joint/JointDesc.h>
 #include <Oxygen/Physics/PhysicsError.h>
 #include <Oxygen/Physics/Query/Overlap.h>
 #include <Oxygen/Physics/Query/Sweep.h>
@@ -29,6 +30,26 @@ auto oxygen::physics::to_string(BodyId value) -> std::string
 auto oxygen::physics::to_string(CharacterId value) -> std::string
 {
   return "CharacterId{" + std::to_string(value.get()) + "}";
+}
+
+auto oxygen::physics::to_string(ShapeId value) -> std::string
+{
+  return "ShapeId{" + std::to_string(value.get()) + "}";
+}
+
+auto oxygen::physics::to_string(ShapeInstanceId value) -> std::string
+{
+  return "ShapeInstanceId{" + std::to_string(value.get()) + "}";
+}
+
+auto oxygen::physics::to_string(AreaId value) -> std::string
+{
+  return "AreaId{" + std::to_string(value.get()) + "}";
+}
+
+auto oxygen::physics::to_string(JointId value) -> std::string
+{
+  return "JointId{" + std::to_string(value.get()) + "}";
 }
 
 auto oxygen::physics::to_string(const CollisionLayer value) -> std::string
@@ -134,6 +155,24 @@ auto oxygen::physics::events::to_string(PhysicsEventType value) noexcept
     return "TriggerBegin";
   case PhysicsEventType::kTriggerEnd:
     return "TriggerEnd";
+  }
+  return "__NotSupported__";
+}
+
+auto oxygen::physics::joint::to_string(JointType value) noexcept
+  -> std::string_view
+{
+  switch (value) {
+  case JointType::kFixed:
+    return "Fixed";
+  case JointType::kDistance:
+    return "Distance";
+  case JointType::kHinge:
+    return "Hinge";
+  case JointType::kSlider:
+    return "Slider";
+  case JointType::kSpherical:
+    return "Spherical";
   }
   return "__NotSupported__";
 }

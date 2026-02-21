@@ -49,6 +49,10 @@ namespace detail {
     std::unordered_map<BodyId, BodyState> bodies {};
     std::vector<system::ActiveBodyTransform> active_transforms {};
     BodyId next_body_id { BodyId { 1U } };
+    ShapeId next_shape_id { ShapeId { 1U } };
+    ShapeInstanceId next_shape_instance_id { ShapeInstanceId { 1U } };
+    AreaId next_area_id { AreaId { 1U } };
+    JointId next_joint_id { JointId { 1U } };
     std::size_t move_kinematic_calls { 0 };
     std::size_t set_body_pose_calls { 0 };
     BodyId last_moved_body { kInvalidBodyId };
@@ -293,6 +297,27 @@ namespace detail {
       return PhysicsResult<void>::Ok();
     }
 
+    auto AddBodyShape(WorldId world_id, BodyId body_id, ShapeId, const Vec3&,
+      const Quat&) -> PhysicsResult<ShapeInstanceId> override
+    {
+      if (TryBody(world_id, body_id) == nullptr) {
+        return Err(PhysicsError::kBodyNotFound);
+      }
+      const auto shape_instance_id = state_->next_shape_instance_id;
+      state_->next_shape_instance_id
+        = ShapeInstanceId { state_->next_shape_instance_id.get() + 1U };
+      return PhysicsResult<ShapeInstanceId>::Ok(shape_instance_id);
+    }
+
+    auto RemoveBodyShape(WorldId world_id, BodyId body_id, ShapeInstanceId)
+      -> PhysicsResult<void> override
+    {
+      if (TryBody(world_id, body_id) == nullptr) {
+        return Err(PhysicsError::kBodyNotFound);
+      }
+      return PhysicsResult<void>::Ok();
+    }
+
   private:
     [[nodiscard]] auto TryBody(WorldId world_id, BodyId body_id) const
       -> const BodyState*
@@ -370,11 +395,148 @@ namespace detail {
     }
   };
 
+  class FakeShapeApi final : public system::IShapeApi {
+  public:
+    explicit FakeShapeApi(BackendState& state)
+      : state_(&state)
+    {
+    }
+
+    auto CreateShape(const shape::ShapeDesc&) -> PhysicsResult<ShapeId> override
+    {
+      const auto shape_id = state_->next_shape_id;
+      state_->next_shape_id = ShapeId { state_->next_shape_id.get() + 1U };
+      return PhysicsResult<ShapeId>::Ok(shape_id);
+    }
+
+    auto DestroyShape(ShapeId) -> PhysicsResult<void> override
+    {
+      return PhysicsResult<void>::Ok();
+    }
+
+  private:
+    observer_ptr<BackendState> state_;
+  };
+
+  class FakeAreaApi final : public system::IAreaApi {
+  public:
+    explicit FakeAreaApi(BackendState& state)
+      : state_(&state)
+    {
+    }
+
+    auto CreateArea(WorldId world_id, const area::AreaDesc&)
+      -> PhysicsResult<AreaId> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      const auto area_id = state_->next_area_id;
+      state_->next_area_id = AreaId { state_->next_area_id.get() + 1U };
+      return PhysicsResult<AreaId>::Ok(area_id);
+    }
+    auto DestroyArea(WorldId world_id, AreaId) -> PhysicsResult<void> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      return PhysicsResult<void>::Ok();
+    }
+
+    auto GetAreaPosition(WorldId world_id, AreaId) const
+      -> PhysicsResult<Vec3> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      return PhysicsResult<Vec3>::Ok(Vec3 { 0.0F, 0.0F, 0.0F });
+    }
+    auto GetAreaRotation(WorldId world_id, AreaId) const
+      -> PhysicsResult<Quat> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      return PhysicsResult<Quat>::Ok(Quat { 1.0F, 0.0F, 0.0F, 0.0F });
+    }
+    auto SetAreaPose(WorldId world_id, AreaId, const Vec3&, const Quat&)
+      -> PhysicsResult<void> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      return PhysicsResult<void>::Ok();
+    }
+
+    auto AddAreaShape(WorldId world_id, AreaId, ShapeId, const Vec3&,
+      const Quat&) -> PhysicsResult<ShapeInstanceId> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      const auto shape_instance_id = state_->next_shape_instance_id;
+      state_->next_shape_instance_id
+        = ShapeInstanceId { state_->next_shape_instance_id.get() + 1U };
+      return PhysicsResult<ShapeInstanceId>::Ok(shape_instance_id);
+    }
+    auto RemoveAreaShape(WorldId world_id, AreaId, ShapeInstanceId)
+      -> PhysicsResult<void> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      return PhysicsResult<void>::Ok();
+    }
+
+  private:
+    observer_ptr<BackendState> state_;
+  };
+
+  class FakeJointApi final : public system::IJointApi {
+  public:
+    explicit FakeJointApi(BackendState& state)
+      : state_(&state)
+    {
+    }
+
+    auto CreateJoint(WorldId world_id, const joint::JointDesc&)
+      -> PhysicsResult<JointId> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      const auto joint_id = state_->next_joint_id;
+      state_->next_joint_id = JointId { state_->next_joint_id.get() + 1U };
+      return PhysicsResult<JointId>::Ok(joint_id);
+    }
+    auto DestroyJoint(WorldId world_id, JointId) -> PhysicsResult<void> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      return PhysicsResult<void>::Ok();
+    }
+    auto SetJointEnabled(WorldId world_id, JointId, bool)
+      -> PhysicsResult<void> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      return PhysicsResult<void>::Ok();
+    }
+
+  private:
+    observer_ptr<BackendState> state_;
+  };
+
   class FakePhysicsSystem final : public system::IPhysicsSystem {
   public:
     FakePhysicsSystem()
       : worlds_(state_)
       , bodies_(state_)
+      , shapes_(state_)
+      , areas_(state_)
+      , joints_(state_)
     {
     }
 
@@ -392,6 +554,9 @@ namespace detail {
     {
       return characters_;
     }
+    auto Shapes() noexcept -> system::IShapeApi& override { return shapes_; }
+    auto Areas() noexcept -> system::IAreaApi& override { return areas_; }
+    auto Joints() noexcept -> system::IJointApi& override { return joints_; }
 
     auto Worlds() const noexcept -> const system::IWorldApi& override
     {
@@ -413,6 +578,18 @@ namespace detail {
     {
       return characters_;
     }
+    auto Shapes() const noexcept -> const system::IShapeApi& override
+    {
+      return shapes_;
+    }
+    auto Areas() const noexcept -> const system::IAreaApi& override
+    {
+      return areas_;
+    }
+    auto Joints() const noexcept -> const system::IJointApi& override
+    {
+      return joints_;
+    }
 
   private:
     BackendState state_ {};
@@ -421,6 +598,9 @@ namespace detail {
     FakeQueryApi queries_ {};
     FakeEventApi events_ {};
     FakeCharacterApi characters_ {};
+    FakeShapeApi shapes_;
+    FakeAreaApi areas_;
+    FakeJointApi joints_;
   };
 
 } // namespace detail
