@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <chrono>
 #include <cmath>
@@ -14,6 +15,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <ranges>
 #include <shared_mutex>
 #include <span>
 #include <stdexcept>
@@ -98,8 +100,11 @@
 namespace {
 constexpr std::string_view kCVarRendererTextureDumpTopN
   = "rndr.texture_dump_top_n";
+constexpr std::string_view kCVarRendererLastFrameStats
+  = "rndr.last_frame_stats";
 constexpr std::string_view kCommandRendererDumpTextureMemory
   = "rndr.dump_texture_memory";
+constexpr std::string_view kCommandRendererDumpStats = "rndr.dump_stats";
 constexpr int64_t kDefaultTextureDumpTopN = 20;
 constexpr int64_t kMinTextureDumpTopN = 1;
 constexpr int64_t kMaxTextureDumpTopN = 500;
@@ -114,6 +119,56 @@ auto ParseTextureDumpTopN(std::string_view value) -> std::optional<int64_t>
     return std::nullopt;
   }
   return parsed;
+}
+
+auto ParseVerbosity(std::string_view value) -> std::optional<int>
+{
+  int parsed = 0;
+  const auto* begin = value.data();
+  const auto* end = begin + value.size();
+  const auto [ptr, ec] = std::from_chars(begin, end, parsed);
+  if (ec != std::errc() || ptr != end) {
+    return std::nullopt;
+  }
+  if (parsed < loguru::Verbosity_ERROR || parsed > loguru::Verbosity_MAX) {
+    return std::nullopt;
+  }
+  return parsed;
+}
+
+auto FormatRendererLastFrameStats(
+  const oxygen::engine::Renderer::LastFrameStats& last_frame) -> std::string
+{
+  return fmt::format(
+    "sceneprep_ms={:.3f},view_render_ms={:.3f},render_graph_ms={:.3f},"
+    "env_update_ms={:.3f},compositing_ms={:.3f},views={},scene_views={}",
+    last_frame.sceneprep_ms, last_frame.view_render_ms,
+    last_frame.render_graph_ms, last_frame.env_update_ms,
+    last_frame.compositing_ms, last_frame.views, last_frame.scene_views);
+}
+
+auto LogRendererPerformanceStats(
+  const oxygen::engine::Renderer::Stats& stats, const int level) -> void
+{
+  VLOG_SCOPE_F(level, "Renderer Performance Statistics");
+  {
+    VLOG_SCOPE_F(level, "Averages");
+    VLOG_F(level, "sceneprep ms   : {:.3f}", stats.sceneprep_avg_ms);
+    VLOG_F(level, "view render ms : {:.3f}", stats.avg_view_render_ms);
+    VLOG_F(level, "render graph ms: {:.3f}", stats.avg_render_graph_ms);
+    VLOG_F(level, "env update ms  : {:.3f}", stats.avg_env_update_ms);
+    VLOG_F(level, "compositing ms : {:.3f}", stats.avg_compositing_ms);
+  }
+  {
+    VLOG_SCOPE_F(level, "Last Frame");
+    VLOG_F(level, "sceneprep ms   : {:.3f}", stats.last_frame.sceneprep_ms);
+    VLOG_F(level, "view render ms : {:.3f}", stats.last_frame.view_render_ms);
+    VLOG_F(level, "render graph ms: {:.3f}", stats.last_frame.render_graph_ms);
+    VLOG_F(level, "env update ms  : {:.3f}", stats.last_frame.env_update_ms);
+    VLOG_F(level, "compositing ms : {:.3f}", stats.last_frame.compositing_ms);
+    VLOG_F(level, "views          : {}", stats.last_frame.views);
+    VLOG_F(level, "scene views    : {}", stats.last_frame.scene_views);
+  }
 }
 
 auto ResolveViewOutputTexture(const oxygen::engine::FrameContext& context,
@@ -340,6 +395,9 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
 
 Renderer::~Renderer()
 {
+  const auto stats = GetStats();
+  LogRendererPerformanceStats(stats, loguru::Verbosity_INFO);
+
   sky_capture_pass_.reset();
   sky_atmo_lut_compute_pass_.reset();
   ibl_compute_pass_.reset();
@@ -352,6 +410,71 @@ Renderer::~Renderer()
   upload_staging_provider_.reset();
   inline_transfers_.reset();
   inline_staging_provider_.reset();
+}
+
+auto Renderer::GetStats() const noexcept -> Stats
+{
+  const double sceneprep_avg_ms = sceneprep_profile_frames_ > 0
+    ? static_cast<double>(sceneprep_profile_total_ns_) / 1'000'000.0
+      / static_cast<double>(sceneprep_profile_frames_)
+    : 0.0;
+  const double avg_view_render_ms = render_profile_frames_ > 0
+    ? static_cast<double>(render_profile_view_render_total_ns_) / 1'000'000.0
+      / static_cast<double>(render_profile_frames_)
+    : 0.0;
+  const double avg_render_graph_ms = render_profile_frames_ > 0
+    ? static_cast<double>(render_profile_render_graph_total_ns_) / 1'000'000.0
+      / static_cast<double>(render_profile_frames_)
+    : 0.0;
+  const double avg_env_update_ms = render_profile_frames_ > 0
+    ? static_cast<double>(render_profile_env_update_total_ns_) / 1'000'000.0
+      / static_cast<double>(render_profile_frames_)
+    : 0.0;
+  const double avg_compositing_ms = compositing_profile_frames_ > 0
+    ? static_cast<double>(compositing_profile_total_ns_) / 1'000'000.0
+      / static_cast<double>(compositing_profile_frames_)
+    : 0.0;
+
+  return Stats {
+    .sceneprep_avg_ms = sceneprep_avg_ms,
+    .avg_view_render_ms = avg_view_render_ms,
+    .avg_render_graph_ms = avg_render_graph_ms,
+    .avg_env_update_ms = avg_env_update_ms,
+    .avg_compositing_ms = avg_compositing_ms,
+    .last_frame = LastFrameStats {
+      .sceneprep_ms = static_cast<double>(sceneprep_last_frame_ns_)
+        / 1'000'000.0,
+      .view_render_ms = static_cast<double>(render_last_frame_view_render_ns_)
+        / 1'000'000.0,
+      .render_graph_ms
+      = static_cast<double>(render_last_frame_render_graph_ns_) / 1'000'000.0,
+      .env_update_ms
+      = static_cast<double>(render_last_frame_env_update_ns_) / 1'000'000.0,
+      .compositing_ms
+      = static_cast<double>(compositing_last_frame_ns_) / 1'000'000.0,
+      .views = sceneprep_last_frame_view_count_,
+      .scene_views = sceneprep_last_frame_scene_view_count_,
+    },
+  };
+}
+
+auto Renderer::ResetStats() noexcept -> void
+{
+  sceneprep_profile_frames_ = 0;
+  sceneprep_profile_total_ns_ = 0;
+  sceneprep_last_frame_ns_ = 0;
+  sceneprep_last_frame_view_count_ = 0;
+  sceneprep_last_frame_scene_view_count_ = 0;
+  render_profile_frames_ = 0;
+  render_profile_view_render_total_ns_ = 0;
+  render_profile_render_graph_total_ns_ = 0;
+  render_profile_env_update_total_ns_ = 0;
+  render_last_frame_view_render_ns_ = 0;
+  render_last_frame_render_graph_ns_ = 0;
+  render_last_frame_env_update_ns_ = 0;
+  compositing_profile_frames_ = 0;
+  compositing_profile_total_ns_ = 0;
+  compositing_last_frame_ns_ = 0;
 }
 
 auto Renderer::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
@@ -468,6 +591,7 @@ auto Renderer::RegisterConsoleBindings(
   if (console == nullptr) {
     return;
   }
+  console_ = console;
 
   (void)console->RegisterCVar(console::CVarDefinition {
     .name = std::string(kCVarRendererTextureDumpTopN),
@@ -476,6 +600,15 @@ auto Renderer::RegisterConsoleBindings(
     .flags = console::CVarFlags::kDevOnly,
     .min_value = static_cast<double>(kMinTextureDumpTopN),
     .max_value = static_cast<double>(kMaxTextureDumpTopN),
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarRendererLastFrameStats),
+    .help = "Renderer last-frame timing summary",
+    .default_value = FormatRendererLastFrameStats(GetStats().last_frame),
+    .flags = console::CVarFlags::kDevOnly,
+    .min_value = std::nullopt,
+    .max_value = std::nullopt,
   });
 
   (void)console->RegisterCommand(console::CommandDefinition {
@@ -508,6 +641,48 @@ auto Renderer::RegisterConsoleBindings(
       };
     },
   });
+
+  (void)console->RegisterCommand(console::CommandDefinition {
+    .name = std::string(kCommandRendererDumpStats),
+    .help = "Dump renderer performance statistics [verbosity]",
+    .flags = console::CommandFlags::kDevOnly,
+    .handler = [this](const std::vector<std::string>& args,
+                 const console::CommandContext&) -> console::ExecutionResult {
+      if (args.size() > 1) {
+        return console::ExecutionResult {
+          .status = console::ExecutionStatus::kInvalidArguments,
+          .exit_code = 2,
+          .output = {},
+          .error = "usage: rndr.dump_stats [verbosity]",
+        };
+      }
+
+      int verbosity = loguru::Verbosity_INFO;
+      if (!args.empty()) {
+        const auto parsed = ParseVerbosity(args.front());
+        if (!parsed.has_value()) {
+          return console::ExecutionResult {
+            .status = console::ExecutionStatus::kInvalidArguments,
+            .exit_code = 2,
+            .output = {},
+            .error = fmt::format("verbosity must be integer in [{}, {}]",
+              static_cast<int>(loguru::Verbosity_ERROR),
+              static_cast<int>(loguru::Verbosity_MAX)),
+          };
+        }
+        verbosity = *parsed;
+      }
+
+      const auto stats = GetStats();
+      LogRendererPerformanceStats(stats, verbosity);
+      return console::ExecutionResult {
+        .status = console::ExecutionStatus::kOk,
+        .exit_code = 0,
+        .output = FormatRendererLastFrameStats(stats.last_frame),
+        .error = {},
+      };
+    },
+  });
 }
 
 auto Renderer::ApplyConsoleCVars(
@@ -518,6 +693,8 @@ auto Renderer::ApplyConsoleCVars(
 
 auto Renderer::OnShutdown() noexcept -> void
 {
+  console_ = nullptr;
+
   {
     std::lock_guard lock(composition_mutex_);
     composition_submission_.reset();
@@ -776,10 +953,28 @@ auto Renderer::OnPreRender(observer_ptr<FrameContext> context) -> co::Co<>
 
   // Iterate all views registered in FrameContext and prepare each one
   auto views_range = context->GetViews();
-  bool first = true;
-
+  const auto frame_view_count
+    = static_cast<std::size_t>(std::ranges::distance(views_range));
+  std::size_t resolved_scene_view_count = 0;
   for (const auto& view_ref : views_range) {
     const auto& view_ctx = view_ref.get();
+    const bool is_scene_view = view_ctx.metadata.is_scene_view;
+    if (is_scene_view && resolved_views_.contains(view_ctx.id)) {
+      ++resolved_scene_view_count;
+    }
+  }
+
+  const bool single_view_mode = (resolved_scene_view_count == 1);
+  std::uint64_t sceneprep_frame_ns = 0;
+  bool first = true;
+
+  auto prep_views_range = context->GetViews();
+  for (const auto& view_ref : prep_views_range) {
+    const auto& view_ctx = view_ref.get();
+    if (!view_ctx.metadata.is_scene_view) {
+      DLOG_F(2, "Skipping ScenePrep for non-scene view {}", view_ctx.id.get());
+      continue;
+    }
     DLOG_SCOPE_F(2,
       fmt::format(
         "View {} ({})", nostd::to_string(view_ctx.id), view_ctx.metadata.name)
@@ -793,8 +988,14 @@ auto Renderer::OnPreRender(observer_ptr<FrameContext> context) -> co::Co<>
       const auto& resolved = resolved_it->second;
 
       // Build frame data for this view (scene prep, culling, draw list)
-      [[maybe_unused]] const auto draw_count
-        = RunScenePrep(view_ctx.id, resolved, *context, first);
+      const auto prep_begin = std::chrono::steady_clock::now();
+      [[maybe_unused]] const auto draw_count = RunScenePrep(
+        view_ctx.id, resolved, *context, first, single_view_mode);
+      const auto prep_end = std::chrono::steady_clock::now();
+      sceneprep_frame_ns += static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+          prep_end - prep_begin)
+          .count());
       first = false;
 
       DLOG_F(2, "view prepared with {} draws", draw_count);
@@ -806,6 +1007,22 @@ auto Renderer::OnPreRender(observer_ptr<FrameContext> context) -> co::Co<>
     } catch (const std::exception& ex) {
       LOG_F(WARNING, "-failed- : {}", ex.what());
     }
+  }
+
+  if (resolved_scene_view_count > 0) {
+    ++sceneprep_profile_frames_;
+    sceneprep_profile_total_ns_ += sceneprep_frame_ns;
+
+    sceneprep_last_frame_ns_ = sceneprep_frame_ns;
+    sceneprep_last_frame_view_count_
+      = static_cast<std::uint32_t>(frame_view_count);
+    sceneprep_last_frame_scene_view_count_
+      = static_cast<std::uint32_t>(resolved_scene_view_count);
+  } else {
+    sceneprep_last_frame_ns_ = 0;
+    sceneprep_last_frame_view_count_
+      = static_cast<std::uint32_t>(frame_view_count);
+    sceneprep_last_frame_scene_view_count_ = 0;
   }
 
   LOG_SCOPE_F(2, "Populating renderer-level scene constants");
@@ -894,8 +1111,29 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
 
   std::unordered_set<ViewId> active_views;
   active_views.reserve(graphs_snapshot.size());
+  std::uint64_t frame_view_render_ns = 0;
+  std::uint64_t frame_render_graph_ns = 0;
+  std::uint64_t frame_env_update_ns = 0;
 
   for (const auto& [view_id, factory] : graphs_snapshot) {
+    const auto view_begin = std::chrono::steady_clock::now();
+    std::uint64_t view_render_graph_ns = 0;
+    std::uint64_t view_env_update_ns = 0;
+    bool view_timing_recorded = false;
+    auto record_view_timing = [&]() -> void {
+      if (view_timing_recorded) {
+        return;
+      }
+      view_timing_recorded = true;
+      const auto view_end = std::chrono::steady_clock::now();
+      frame_view_render_ns += static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+          view_end - view_begin)
+          .count());
+      frame_render_graph_ns += view_render_graph_ns;
+      frame_env_update_ns += view_env_update_ns;
+    };
+
     active_views.insert(view_id);
     last_seen_view_frame_seq_[view_id] = context->GetFrameSequenceNumber();
     DLOG_SCOPE_F(2, fmt::format("View {}", nostd::to_string(view_id)).c_str());
@@ -919,6 +1157,7 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
       if (!recorder_ptr) {
         LOG_F(ERROR, "Could not acquire recorder for view {}; skipping",
           view_id.get());
+        record_view_timing();
         continue;
       }
       auto recorder = recorder_ptr.get();
@@ -931,20 +1170,33 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
         view_ready_states_[view_id] = success;
       };
       const bool allow_atmosphere = view_ctx.metadata.with_atmosphere;
+      const bool is_scene_view = view_ctx.metadata.is_scene_view;
 
       // --- STEP 1: Wire all constants and context data ---
-      // This MUST happen before any pass (SkyCapture, IBL, or Graph) runs.
-      if (!PrepareAndWireSceneConstantsForView(
-            view_id, *context, *render_context_)) {
-        // Failure already logged inside helper; mark the view failed and
-        // skip this view's render graph.
-        update_view_state(view_id, false);
-        continue;
+      // Scene views require prepared scene data and per-view scene constants.
+      // Overlay views (e.g. ImGui) do not depend on ScenePrep output.
+      if (is_scene_view) {
+        // This MUST happen before any scene pass (SkyCapture, IBL, or Graph)
+        // runs.
+        if (!PrepareAndWireSceneConstantsForView(
+              view_id, *context, *render_context_)) {
+          // Failure already logged inside helper; mark the view failed and
+          // skip this view's render graph.
+          update_view_state(view_id, false);
+          record_view_timing();
+          continue;
+        }
+      } else {
+        // Keep per-view context explicit for overlays while bypassing
+        // scene-dependent constants wiring.
+        render_context_->current_view = {};
+        render_context_->current_view.view_id = view_id;
       }
 
       namespace env = scene::environment;
 
       // --- STEP 2: Run environment update passes ---
+      const auto env_update_begin = std::chrono::steady_clock::now();
       auto atmo_lut_manager = render_context_->current_view.atmo_lut_manager;
       if (!allow_atmosphere) {
         per_view_atmo_luts_.erase(view_id);
@@ -1053,6 +1305,11 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
           LOG_F(ERROR, "IblComputePass failed: {}", ex.what());
         }
       }
+      const auto env_update_end = std::chrono::steady_clock::now();
+      view_env_update_ns = static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+          env_update_end - env_update_begin)
+          .count());
 
       // --- STEP 3: Setup main scene framebuffer ---
       // This starts tracking the depth and color buffers for the actual view.
@@ -1060,21 +1317,44 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
             *context, view_id, *recorder, *render_context_)) {
         LOG_F(ERROR, "Failed to setup framebuffer for view {}; skipping",
           view_id.get());
+        record_view_timing();
         continue;
       }
 
       // --- STEP 4: Execute RenderGraph ---
+      const auto render_graph_begin = std::chrono::steady_clock::now();
       graphics::GpuEventScope graph_scope(*recorder, "RenderGraph");
       const bool rv = co_await ExecuteRenderGraphForView(
         view_id, factory, *render_context_, *recorder);
+      const auto render_graph_end = std::chrono::steady_clock::now();
+      view_render_graph_ns = static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+          render_graph_end - render_graph_begin)
+          .count());
 
       // Finalize state and instrumentation
       update_view_state(view_id, rv);
+      record_view_timing();
     } catch (const std::exception& ex) {
       LOG_F(ERROR, "Failed to render view {}: {}", view_id.get(), ex.what());
       std::unique_lock state_lock(view_state_mutex_);
       view_ready_states_[view_id] = false;
+      record_view_timing();
     }
+  }
+
+  if (!graphs_snapshot.empty()) {
+    ++render_profile_frames_;
+    render_profile_view_render_total_ns_ += frame_view_render_ns;
+    render_profile_render_graph_total_ns_ += frame_render_graph_ns;
+    render_profile_env_update_total_ns_ += frame_env_update_ns;
+    render_last_frame_view_render_ns_ = frame_view_render_ns;
+    render_last_frame_render_graph_ns_ = frame_render_graph_ns;
+    render_last_frame_env_update_ns_ = frame_env_update_ns;
+  } else {
+    render_last_frame_view_render_ns_ = 0;
+    render_last_frame_render_graph_ns_ = 0;
+    render_last_frame_env_update_ns_ = 0;
   }
 
   sky_capture_requested_ = false;
@@ -1090,11 +1370,13 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
 
 auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
 {
+  const auto compositing_begin = std::chrono::steady_clock::now();
   std::optional<CompositionSubmission> submission;
   std::shared_ptr<graphics::Surface> target_surface;
   {
     std::lock_guard lock(composition_mutex_);
     if (!composition_submission_) {
+      compositing_last_frame_ns_ = 0;
       co_return;
     }
     submission = std::move(composition_submission_);
@@ -1106,6 +1388,7 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
   CHECK_F(submission.has_value(), "Compositing submission required");
   auto& payload = *submission;
   if (payload.tasks.empty()) {
+    compositing_last_frame_ns_ = 0;
     co_return;
   }
 
@@ -1270,6 +1553,15 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
     }
   }
 
+  const auto compositing_end = std::chrono::steady_clock::now();
+  const auto compositing_ns = static_cast<std::uint64_t>(
+    std::chrono::duration_cast<std::chrono::nanoseconds>(
+      compositing_end - compositing_begin)
+      .count());
+  ++compositing_profile_frames_;
+  compositing_profile_total_ns_ += compositing_ns;
+  compositing_last_frame_ns_ = compositing_ns;
+
   co_return;
 }
 
@@ -1278,6 +1570,16 @@ auto Renderer::OnFrameEnd(observer_ptr<FrameContext> /*context*/) -> void
   LOG_SCOPE_FUNCTION(2);
 
   texture_binder_->OnFrameEnd();
+  if (console_ != nullptr) {
+    const auto last_frame_text
+      = FormatRendererLastFrameStats(GetStats().last_frame);
+    (void)console_->SetCVarFromText(
+      { .name = std::string(kCVarRendererLastFrameStats),
+        .text = last_frame_text },
+      { .source = console::CommandSource::kAutomation,
+        .shipping_build = false,
+        .record_history = false });
+  }
   DrainPendingViewCleanup("OnFrameEnd");
 }
 
@@ -1696,7 +1998,8 @@ auto Renderer::EvictInactivePerViewState(
 }
 
 auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
-  const FrameContext& frame_context, bool run_frame_phase) -> std::size_t
+  const FrameContext& frame_context, bool run_frame_phase,
+  bool single_view_mode) -> std::size_t
 {
   DLOG_SCOPE_FUNCTION(3);
 
@@ -1708,155 +2011,202 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
   auto& prepared_frame = prepared_frames_[view_id];
 
   auto frame_seq = frame_context.GetFrameSequenceNumber();
+  ::oxygen::observer_ptr<const ::oxygen::ResolvedView> view_ptr(&view);
 
-  if (run_frame_phase) {
-    DLOG_SCOPE_F(3,
-      fmt::format("frame-phase for frame seq {}", nostd::to_string(frame_seq))
-        .c_str());
-    scene_prep_->Collect(
-      scene, std::nullopt, frame_seq, *scene_prep_state_, true);
-    scene_prep_->Finalize();
+  enum class PrepStep {
+    kFrameCollect,
+    kFrameFinalize,
+    kViewCollectCached,
+    kViewCollectSingle,
+    kViewFinalizeAndCapture,
+  };
+
+  std::array<PrepStep, 5> plan {};
+  std::size_t plan_size = 0;
+
+  if (single_view_mode) {
+    plan[0] = PrepStep::kViewCollectSingle;
+    plan[1] = PrepStep::kViewFinalizeAndCapture;
+    plan_size = 2;
+  } else if (run_frame_phase) {
+    plan[0] = PrepStep::kFrameCollect;
+    plan[1] = PrepStep::kFrameFinalize;
+    plan[2] = PrepStep::kViewCollectCached;
+    plan[3] = PrepStep::kViewFinalizeAndCapture;
+    plan_size = 4;
+  } else {
+    plan[0] = PrepStep::kViewCollectCached;
+    plan[1] = PrepStep::kViewFinalizeAndCapture;
+    plan_size = 2;
   }
 
-  ::oxygen::observer_ptr<const ::oxygen::ResolvedView> view_ptr(&view);
-  DLOG_SCOPE_F(3,
-    fmt::format("view-phase for view {}", nostd::to_string(view_id)).c_str());
-  {
-    scene_prep_->Collect(scene,
-      std::optional<::oxygen::observer_ptr<const ::oxygen::ResolvedView>>(
-        view_ptr),
-      frame_seq, *scene_prep_state_,
-      run_frame_phase); // Only reset on first view
-    scene_prep_->Finalize();
-
-    // CRITICAL: Capture bindless SRV indices IMMEDIATELY after Finalize
-    // These indices are valid only for THIS view's finalization and will be
-    // overwritten when the next view calls Finalize. Store them in THIS view's
-    // prepared_frame so OnRender can use the correct indices.
-    if (const auto transforms = scene_prep_state_->GetTransformUploader()) {
-      prepared_frame.bindless_worlds_slot = transforms->GetWorldsSrvIndex();
-      DLOG_F(3, " captured worlds: {}", prepared_frame.bindless_worlds_slot);
-      prepared_frame.bindless_normals_slot = transforms->GetNormalsSrvIndex();
-      DLOG_F(3, "captured normals: {}", prepared_frame.bindless_normals_slot);
+  for (std::size_t i = 0; i < plan_size; ++i) {
+    switch (plan[i]) {
+    case PrepStep::kFrameCollect: {
+      DLOG_SCOPE_F(3,
+        fmt::format("frame-phase for frame seq {}", nostd::to_string(frame_seq))
+          .c_str());
+      scene_prep_->Collect(
+        scene, std::nullopt, frame_seq, *scene_prep_state_, true);
+      break;
     }
-    if (const auto materials = scene_prep_state_->GetMaterialBinder()) {
-      prepared_frame.bindless_materials_slot
-        = materials->GetMaterialsSrvIndex();
+    case PrepStep::kFrameFinalize:
+      scene_prep_->Finalize();
+      break;
+    case PrepStep::kViewCollectCached: {
+      DLOG_SCOPE_F(3,
+        fmt::format("view-phase for view {}", nostd::to_string(view_id))
+          .c_str());
+      scene_prep_->Collect(scene,
+        std::optional<::oxygen::observer_ptr<const ::oxygen::ResolvedView>>(
+          view_ptr),
+        frame_seq, *scene_prep_state_,
+        run_frame_phase); // Only reset on first view
+      break;
     }
-    if (auto emitter = scene_prep_state_->GetDrawMetadataEmitter()) {
-      prepared_frame.bindless_draw_metadata_slot
-        = emitter->GetDrawMetadataSrvIndex();
-      prepared_frame.bindless_instance_data_slot
-        = emitter->GetInstanceDataSrvIndex();
+    case PrepStep::kViewCollectSingle: {
+      DLOG_SCOPE_F(3,
+        fmt::format("single-view phase for view {}", nostd::to_string(view_id))
+          .c_str());
+      scene_prep_->CollectSingleView(
+        scene, view_ptr, frame_seq, *scene_prep_state_, run_frame_phase);
+      break;
     }
+    case PrepStep::kViewFinalizeAndCapture: {
+      scene_prep_->Finalize();
 
-    if (env_dynamic_manager_) {
-      const oxygen::observer_ptr<renderer::LightManager> light_mgr
-        = scene_prep_state_->GetLightManager();
-      if (light_mgr) {
-        const auto dir_lights = light_mgr->GetDirectionalLights();
-        const SyntheticSunData scene_sun
-          = internal::ResolveSunForView(scene, dir_lights);
+      // CRITICAL: Capture bindless SRV indices IMMEDIATELY after Finalize
+      // These indices are valid only for THIS view's finalization and will be
+      // overwritten when the next view calls Finalize. Store them in THIS
+      // view's prepared_frame so OnRender can use the correct indices.
+      if (const auto transforms = scene_prep_state_->GetTransformUploader()) {
+        prepared_frame.bindless_worlds_slot = transforms->GetWorldsSrvIndex();
+        DLOG_F(3, " captured worlds: {}", prepared_frame.bindless_worlds_slot);
+        prepared_frame.bindless_normals_slot = transforms->GetNormalsSrvIndex();
+        DLOG_F(3, "captured normals: {}", prepared_frame.bindless_normals_slot);
+      }
+      if (const auto materials = scene_prep_state_->GetMaterialBinder()) {
+        prepared_frame.bindless_materials_slot
+          = materials->GetMaterialsSrvIndex();
+      }
+      if (auto emitter = scene_prep_state_->GetDrawMetadataEmitter()) {
+        prepared_frame.bindless_draw_metadata_slot
+          = emitter->GetDrawMetadataSrvIndex();
+        prepared_frame.bindless_instance_data_slot
+          = emitter->GetInstanceDataSrvIndex();
+      }
 
-        std::size_t sun_tagged_count = 0;
-        std::size_t env_contrib_count = 0;
-        for (const auto& dl : dir_lights) {
-          const auto flags = static_cast<DirectionalLightFlags>(dl.flags);
-          if ((flags & DirectionalLightFlags::kSunLight)
-            != DirectionalLightFlags::kNone) {
-            ++sun_tagged_count;
-          }
-          if ((flags & DirectionalLightFlags::kEnvironmentContribution)
-            != DirectionalLightFlags::kNone) {
-            ++env_contrib_count;
-          }
-        }
+      if (env_dynamic_manager_) {
+        const oxygen::observer_ptr<renderer::LightManager> light_mgr
+          = scene_prep_state_->GetLightManager();
+        if (light_mgr) {
+          const auto dir_lights = light_mgr->GetDirectionalLights();
+          const SyntheticSunData scene_sun
+            = internal::ResolveSunForView(scene, dir_lights);
 
-        if (scene_sun.enabled == 0U
-          && (sun_tagged_count > 0 || env_contrib_count > 0)) {
-          LOG_F(WARNING,
-            "Renderer: resolved sun is disabled but directional light set "
-            "contains sun/environment contributors "
-            "(view={} total={} sun_tagged={} env_contrib={})",
-            nostd::to_string(view_id), dir_lights.size(), sun_tagged_count,
-            env_contrib_count);
-        }
-
-        env_dynamic_manager_->SetSunState(view_id, scene_sun);
-        prepared_frame.exposure = UpdateViewExposure(view_id, scene, scene_sun);
-
-        // Populate SkyAtmosphere per-view context. Defaults stay conservative
-        // until LUT precompute is wired; analytic fallback stays enabled.
-        float aerial_distance_scale = 1.0F;
-        float aerial_scattering_strength = 1.0F;
-        // Planet center positioned below Z=0 ground plane so camera at Z>=0
-        // is on/above surface. Default radius places center at Z=-6360km.
-        float planet_radius_m = 6'360'000.0F;
-        glm::vec3 planet_center_ws { 0.0F, 0.0F, -planet_radius_m };
-        glm::vec3 planet_up_ws { 0.0F, 0.0F, 1.0F };
-        float camera_altitude_m = 0.0F;
-        float sky_view_lut_slice = 0.0F;
-        float planet_to_sun_cos_zenith = 0.0F;
-
-        namespace env = scene::environment;
-
-        if (auto env = scene.GetEnvironment()) {
-          if (const auto atmo = env->TryGetSystem<env::SkyAtmosphere>();
-            atmo && atmo->IsEnabled()) {
-            aerial_distance_scale = atmo->GetAerialPerspectiveDistanceScale();
-            aerial_scattering_strength = atmo->GetAerialScatteringStrength();
-            planet_radius_m = atmo->GetPlanetRadiusMeters();
-
-            // Update planet center to keep Z=0 as ground level.
-            planet_center_ws = glm::vec3(0.0F, 0.0F, -planet_radius_m);
-
-            // LUT availability is checked later when merging with debug flags.
-            // The debug UI controls whether aerial perspective is enabled.
-
-            const auto camera_pos = view.CameraPosition();
-            camera_altitude_m = glm::max(
-              glm::length(camera_pos - planet_center_ws) - planet_radius_m,
-              0.0F);
-            // Use scene sun's cos_zenith for atmosphere.
-            planet_to_sun_cos_zenith
-              = (scene_sun.enabled != 0U) ? scene_sun.cos_zenith : 0.0F;
-          }
-        }
-
-        env_dynamic_manager_->SetAtmosphereScattering(
-          view_id, aerial_distance_scale, aerial_scattering_strength);
-        // Note: planet_radius_m is in EnvironmentStaticData, not passed here.
-        env_dynamic_manager_->SetAtmosphereFrameContext(view_id,
-          planet_center_ws, planet_up_ws, camera_altitude_m, sky_view_lut_slice,
-          planet_to_sun_cos_zenith);
-
-        const bool allow_atmosphere
-          = frame_context.GetViewContext(view_id).metadata.with_atmosphere;
-        bool atmo_enabled = false;
-        if (const auto scene_env = scene.GetEnvironment();
-          allow_atmosphere && scene_env) {
-          if (const auto atmo = scene_env->TryGetSystem<env::SkyAtmosphere>();
-            atmo && atmo->IsEnabled()) {
-            atmo_enabled = true;
-          }
-        }
-        if (atmo_enabled) {
-          if (const auto lut_mgr
-            = GetOrCreateSkyAtmosphereLutManagerForView(view_id)) {
-            lut_mgr->UpdateSunState(scene_sun);
-            if (const auto scene_env = scene.GetEnvironment()) {
-              if (const auto params
-                = BuildSkyAtmosphereParamsFromEnvironment(*scene_env, *lut_mgr);
-                params.has_value()) {
-                lut_mgr->UpdateParameters(*params);
-              }
+          std::size_t sun_tagged_count = 0;
+          std::size_t env_contrib_count = 0;
+          for (const auto& dl : dir_lights) {
+            const auto flags = static_cast<DirectionalLightFlags>(dl.flags);
+            if ((flags & DirectionalLightFlags::kSunLight)
+              != DirectionalLightFlags::kNone) {
+              ++sun_tagged_count;
+            }
+            if ((flags & DirectionalLightFlags::kEnvironmentContribution)
+              != DirectionalLightFlags::kNone) {
+              ++env_contrib_count;
             }
           }
-        } else {
-          per_view_atmo_luts_.erase(view_id);
-          last_atmo_generation_.erase(view_id);
+
+          if (scene_sun.enabled == 0U
+            && (sun_tagged_count > 0 || env_contrib_count > 0)) {
+            LOG_F(WARNING,
+              "Renderer: resolved sun is disabled but directional light set "
+              "contains sun/environment contributors "
+              "(view={} total={} sun_tagged={} env_contrib={})",
+              nostd::to_string(view_id), dir_lights.size(), sun_tagged_count,
+              env_contrib_count);
+          }
+
+          env_dynamic_manager_->SetSunState(view_id, scene_sun);
+          prepared_frame.exposure
+            = UpdateViewExposure(view_id, scene, scene_sun);
+
+          // Populate SkyAtmosphere per-view context. Defaults stay conservative
+          // until LUT precompute is wired; analytic fallback stays enabled.
+          float aerial_distance_scale = 1.0F;
+          float aerial_scattering_strength = 1.0F;
+          // Planet center positioned below Z=0 ground plane so camera at Z>=0
+          // is on/above surface. Default radius places center at Z=-6360km.
+          float planet_radius_m = 6'360'000.0F;
+          glm::vec3 planet_center_ws { 0.0F, 0.0F, -planet_radius_m };
+          glm::vec3 planet_up_ws { 0.0F, 0.0F, 1.0F };
+          float camera_altitude_m = 0.0F;
+          float sky_view_lut_slice = 0.0F;
+          float planet_to_sun_cos_zenith = 0.0F;
+
+          namespace env = scene::environment;
+
+          if (auto env = scene.GetEnvironment()) {
+            if (const auto atmo = env->TryGetSystem<env::SkyAtmosphere>();
+              atmo && atmo->IsEnabled()) {
+              aerial_distance_scale = atmo->GetAerialPerspectiveDistanceScale();
+              aerial_scattering_strength = atmo->GetAerialScatteringStrength();
+              planet_radius_m = atmo->GetPlanetRadiusMeters();
+
+              // Update planet center to keep Z=0 as ground level.
+              planet_center_ws = glm::vec3(0.0F, 0.0F, -planet_radius_m);
+
+              // LUT availability is checked later when merging with debug
+              // flags. The debug UI controls whether aerial perspective is
+              // enabled.
+              const auto camera_pos = view.CameraPosition();
+              camera_altitude_m = glm::max(
+                glm::length(camera_pos - planet_center_ws) - planet_radius_m,
+                0.0F);
+              // Use scene sun's cos_zenith for atmosphere.
+              planet_to_sun_cos_zenith
+                = (scene_sun.enabled != 0U) ? scene_sun.cos_zenith : 0.0F;
+            }
+          }
+
+          env_dynamic_manager_->SetAtmosphereScattering(
+            view_id, aerial_distance_scale, aerial_scattering_strength);
+          // Note: planet_radius_m is in EnvironmentStaticData, not passed here.
+          env_dynamic_manager_->SetAtmosphereFrameContext(view_id,
+            planet_center_ws, planet_up_ws, camera_altitude_m,
+            sky_view_lut_slice, planet_to_sun_cos_zenith);
+
+          const bool allow_atmosphere
+            = frame_context.GetViewContext(view_id).metadata.with_atmosphere;
+          bool atmo_enabled = false;
+          if (const auto scene_env = scene.GetEnvironment();
+            allow_atmosphere && scene_env) {
+            if (const auto atmo = scene_env->TryGetSystem<env::SkyAtmosphere>();
+              atmo && atmo->IsEnabled()) {
+              atmo_enabled = true;
+            }
+          }
+          if (atmo_enabled) {
+            if (const auto lut_mgr
+              = GetOrCreateSkyAtmosphereLutManagerForView(view_id)) {
+              lut_mgr->UpdateSunState(scene_sun);
+              if (const auto scene_env = scene.GetEnvironment()) {
+                if (const auto params = BuildSkyAtmosphereParamsFromEnvironment(
+                      *scene_env, *lut_mgr);
+                  params.has_value()) {
+                  lut_mgr->UpdateParameters(*params);
+                }
+              }
+            }
+          } else {
+            per_view_atmo_luts_.erase(view_id);
+            last_atmo_generation_.erase(view_id);
+          }
         }
       }
+      break;
+    }
     }
   }
 

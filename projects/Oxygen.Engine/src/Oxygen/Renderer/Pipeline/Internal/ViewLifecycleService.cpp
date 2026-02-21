@@ -111,6 +111,7 @@ void ViewLifecycleService::PublishViews(engine::FrameContext& context)
     const bool has_scene = view->GetDescriptor().camera.has_value();
     view_ctx.metadata = { .name = std::string(view->GetDescriptor().name),
       .purpose = has_scene ? "scene" : "overlay",
+      .is_scene_view = has_scene,
       .with_atmosphere = view->GetDescriptor().with_atmosphere };
     view_ctx.render_target = view->GetHdrFramebuffer()
       ? observer_ptr { view->GetHdrFramebuffer().get() }

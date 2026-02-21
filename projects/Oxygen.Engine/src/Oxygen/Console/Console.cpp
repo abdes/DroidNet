@@ -20,6 +20,12 @@ auto Console::RegisterCVar(CVarDefinition definition) -> CVarHandle
   return registry_.RegisterCVar(std::move(definition));
 }
 
+auto Console::SetCVarFromText(const Registry::SetCVarRequest& request,
+  const CommandContext& context) -> ExecutionResult
+{
+  return registry_.SetCVarFromText(request, context);
+}
+
 auto Console::RegisterCommand(CommandDefinition definition) -> CommandHandle
 {
   return registry_.RegisterCommand(std::move(definition));

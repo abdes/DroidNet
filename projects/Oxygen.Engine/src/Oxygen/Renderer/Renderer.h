@@ -115,6 +115,25 @@ class Renderer : public EngineModule {
   OXYGEN_TYPED(Renderer)
 
 public:
+  struct LastFrameStats {
+    double sceneprep_ms { 0.0 };
+    double view_render_ms { 0.0 };
+    double render_graph_ms { 0.0 };
+    double env_update_ms { 0.0 };
+    double compositing_ms { 0.0 };
+    std::uint32_t views { 0 };
+    std::uint32_t scene_views { 0 };
+  };
+
+  struct Stats {
+    double sceneprep_avg_ms { 0.0 };
+    double avg_view_render_ms { 0.0 };
+    double avg_render_graph_ms { 0.0 };
+    double avg_env_update_ms { 0.0 };
+    double avg_compositing_ms { 0.0 };
+    LastFrameStats last_frame {};
+  };
+
   //! Type-safe render graph factory for per-view rendering.
   /*!
     A render graph factory is a callable that receives the ViewId,
@@ -212,6 +231,11 @@ public:
   //! Submit compositing tasks for the current frame.
   OXGN_RNDR_API auto RegisterComposition(CompositionSubmission submission,
     std::shared_ptr<graphics::Surface> target_surface) -> void;
+
+  //! Returns a point-in-time renderer stats snapshot.
+  OXGN_RNDR_NDAPI auto GetStats() const noexcept -> Stats;
+  //! Resets renderer stats accumulators.
+  OXGN_RNDR_API auto ResetStats() noexcept -> void;
 
   //! Query if a view completed rendering successfully this frame.
   /*!
@@ -342,11 +366,13 @@ private:
     @param view The resolved view containing camera and projection data
     @param frame_context The current frame context
     @param run_frame_phase Whether to run the frame-phase collection
+    @param single_view_mode Whether this frame is operating with exactly one
+           active view and can use the fused single-view collect path.
     @return Number of draws prepared for this view
   */
   OXGN_RNDR_API auto RunScenePrep(ViewId view_id, const ResolvedView& view,
-    const FrameContext& frame_context, bool run_frame_phase = true)
-    -> std::size_t;
+    const FrameContext& frame_context, bool run_frame_phase = true,
+    bool single_view_mode = false) -> std::size_t;
 
   //! Update scene constants from resolved view matrices & camera state.
   auto UpdateSceneConstantsFromView(const ResolvedView& view) -> void;
@@ -482,6 +508,7 @@ private:
   // enqueue view ids for deferred cleanup while OnFrameEnd drains the set.
   std::mutex pending_cleanup_mutex_;
   std::unordered_set<ViewId> pending_cleanup_;
+  observer_ptr<console::Console> console_ { nullptr };
 
   auto DrainPendingViewCleanup(std::string_view reason) -> void;
 
@@ -507,6 +534,24 @@ private:
   std::unordered_map<ViewId, frame::SequenceNumber> last_seen_view_frame_seq_;
   bool sky_capture_requested_ { false };
 
+  // ScenePrep instrumentation.
+  std::uint64_t sceneprep_profile_frames_ { 0 };
+  std::uint64_t sceneprep_profile_total_ns_ { 0 };
+  std::uint64_t sceneprep_last_frame_ns_ { 0 };
+  std::uint32_t sceneprep_last_frame_view_count_ { 0 };
+  std::uint32_t sceneprep_last_frame_scene_view_count_ { 0 };
+
+  std::uint64_t render_profile_frames_ { 0 };
+  std::uint64_t render_profile_view_render_total_ns_ { 0 };
+  std::uint64_t render_profile_render_graph_total_ns_ { 0 };
+  std::uint64_t render_profile_env_update_total_ns_ { 0 };
+  std::uint64_t render_last_frame_view_render_ns_ { 0 };
+  std::uint64_t render_last_frame_render_graph_ns_ { 0 };
+  std::uint64_t render_last_frame_env_update_ns_ { 0 };
+
+  std::uint64_t compositing_profile_frames_ { 0 };
+  std::uint64_t compositing_profile_total_ns_ { 0 };
+  std::uint64_t compositing_last_frame_ns_ { 0 };
 };
 
 } // namespace oxygen::engine

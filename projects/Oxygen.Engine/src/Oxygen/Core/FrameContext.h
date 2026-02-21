@@ -192,6 +192,7 @@ using SurfaceId = oxygen::NamedType<uint64_t, SurfaceIdTag, oxygen::Comparable,
 struct ViewMetadata {
   std::string name;
   std::string purpose; // e.g. "primary", "shadow", "reflection"
+  bool is_scene_view { false };
   bool with_atmosphere { false };
 };
 
@@ -695,9 +696,8 @@ public:
   OXGN_CORE_API auto RemoveView(ViewId id) noexcept -> void;
 
   // Set the render target framebuffer for a view (Renderer/pipeline only)
-  OXGN_CORE_API auto SetViewRenderTarget(
-    ViewId id, observer_ptr<graphics::Framebuffer> render_target) noexcept
-    -> void;
+  OXGN_CORE_API auto SetViewRenderTarget(ViewId id,
+    observer_ptr<graphics::Framebuffer> render_target) noexcept -> void;
 
   // Get the full context for a view
   OXGN_CORE_API auto GetViewContext(ViewId id) const -> const ViewContext&;

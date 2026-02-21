@@ -176,7 +176,7 @@ namespace {
         static_cast<unsigned>(n.Index()));
     } else {
       const auto n = new_node.GetHandle();
-      LOG_F(INFO, "scene.create_node root: name='{}' sid={} idx={}",
+      DLOG_F(3, "scene.create_node root: name='{}' sid={} idx={}",
         std::string(name, len), static_cast<unsigned>(n.GetSceneId()),
         static_cast<unsigned>(n.Index()));
     }

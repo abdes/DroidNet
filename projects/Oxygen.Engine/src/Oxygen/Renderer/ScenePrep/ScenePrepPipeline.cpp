@@ -97,6 +97,44 @@ auto ScenePrepPipeline::Collect(const scene::Scene& scene,
   }
 }
 
+auto ScenePrepPipeline::CollectSingleView(const scene::Scene& scene,
+  ::oxygen::observer_ptr<const ResolvedView> view, frame::SequenceNumber fseq,
+  ScenePrepState& state, bool reset_state) -> void
+{
+  DLOG_SCOPE_F(
+    1, fmt::format("ScenePrep CollectSingleView f:{}", fseq.get()).c_str());
+
+  CHECK_F(static_cast<bool>(view),
+    "CollectSingleView requires a non-null resolved view");
+
+  prep_state_.reset(&state);
+  ctx_.emplace(fseq, view, scene);
+
+  if (reset_state) {
+    prep_state_->ResetFrameData();
+  }
+
+  const auto& node_table = scene.GetNodes();
+  const auto items = node_table.Items();
+  state.ReserveCapacityForItems(items.size());
+
+  for (const auto& node_impl : items) {
+    if (const auto light_manager = state.GetLightManager()) {
+      light_manager->CollectFromNode(node_impl);
+    }
+    if (!node_impl.HasComponent<scene::detail::RenderableComponent>()) {
+      continue;
+    }
+    DLOG_F(3, "Node: {}", node_impl.GetName());
+    try {
+      RenderItemProto item { node_impl };
+      CollectImpl(ctx_, *prep_state_, item);
+    } catch (const std::exception& ex) {
+      LOG_F(ERROR, "-skipped- due to exception: {}", ex.what());
+    }
+  }
+}
+
 auto ScenePrepPipeline::Finalize() -> void
 {
   DCHECK_F(ctx_.has_value());
