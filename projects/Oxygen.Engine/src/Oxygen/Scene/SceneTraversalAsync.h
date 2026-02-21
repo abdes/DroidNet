@@ -199,6 +199,10 @@ TraversalResult AsyncSceneTraversal<SceneT>::TraverseHierarchyAsync(
   const Node& starting_node, VisitorFunc&& visitor, TraversalOrder order,
   FilterFunc&& filter) const
 {
+  if (IsSceneExpired()) [[unlikely]] {
+    DLOG_F(ERROR, "SceneTraversal called on an expired scene");
+    return TraversalResult {};
+  }
 
   if (!starting_node.IsValid()) {
     DLOG_F(WARNING, "TraverseHierarchy starting from an invalid node.");
@@ -228,6 +232,10 @@ co::Co<TraversalResult> AsyncSceneTraversal<SceneT>::TraverseHierarchiesAsync(
   std::span<const Node> starting_nodes, VisitorFunc&& visitor,
   TraversalOrder order, FilterFunc&& filter) const
 {
+  if (IsSceneExpired()) [[unlikely]] {
+    DLOG_F(ERROR, "SceneTraversal called on an expired scene");
+    co_return TraversalResult {};
+  }
   if (starting_nodes.empty()) [[unlikely]] {
     co_return TraversalResult {};
   }

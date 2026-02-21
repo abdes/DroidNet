@@ -358,9 +358,6 @@ private:
   //! Weak reference to scene for lifetime safety
   std::weak_ptr<const Scene> scene_weak_;
 
-  //! Const-correct traversal interface
-  SceneTraversal<const Scene> traversal_;
-  AsyncSceneTraversal<const Scene> async_traversal_;
   //! BroadcastChannel-based batch coordinator. Valid only during a batch query
   //! execution.
   mutable detail::BatchQueryExecutor* batch_coordinator_ { nullptr };
@@ -395,12 +392,18 @@ private:
   auto ExecuteTraversal(VisitorFunc&& visitor, FilterFunc&& filter) const
     -> TraversalResult
   {
+    const auto scene = scene_weak_.lock();
+    if (!scene) [[unlikely]] {
+      throw std::runtime_error(
+        "scene is no longer valid -> cannot execute query");
+    }
+    SceneTraversal<const Scene> traversal(scene);
     if (IsScopedTraversal()) {
-      return traversal_.TraverseHierarchies(traversal_scope_,
+      return traversal.TraverseHierarchies(traversal_scope_,
         std::forward<VisitorFunc>(visitor), TraversalOrder::kPreOrder,
         std::forward<FilterFunc>(filter));
     }
-    return traversal_.Traverse(std::forward<VisitorFunc>(visitor),
+    return traversal.Traverse(std::forward<VisitorFunc>(visitor),
       TraversalOrder::kPreOrder, std::forward<FilterFunc>(filter));
   }
 

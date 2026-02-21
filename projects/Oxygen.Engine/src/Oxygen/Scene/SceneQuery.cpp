@@ -74,8 +74,6 @@ auto CheckScene(std::shared_ptr<const Scene> scene)
 */
 SceneQuery::SceneQuery(const std::shared_ptr<const Scene>& scene)
   : scene_weak_(CheckScene(scene))
-  , traversal_(scene)
-  , async_traversal_(scene)
 {
 }
 

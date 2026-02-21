@@ -767,6 +767,16 @@ auto SceneQuery::ExecuteBatchImpl(
 {
   // Initialize batch state
   try {
+    const auto scene = scene_weak_.lock();
+    if (!scene) {
+      return BatchResult {
+        .nodes_examined = 0,
+        .total_matches = 0,
+        .success = false,
+      };
+    }
+    AsyncSceneTraversal<const Scene> async_traversal(scene);
+
     // Create BroadcastChannel coordinator with current traversal scope
     BatchQueryExecutor coordinator(scene_weak_, traversal_scope_);
 
@@ -774,7 +784,7 @@ auto SceneQuery::ExecuteBatchImpl(
     batch_coordinator_ = &coordinator;
 
     // Execute coordinated batch traversal with registered operations
-    auto batch_result = coordinator.ExecuteBatch(async_traversal_,
+    auto batch_result = coordinator.ExecuteBatch(async_traversal,
       [&batch_func, this](BatchQueryExecutor& /*coordinator*/) {
         // Call the user's batch function - they will use the new
         // reference-based methods

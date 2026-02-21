@@ -405,6 +405,18 @@ auto Scene::GetNodeImplRefUnsafe(const ResourceHandle& handle) -> SceneNodeImpl&
   return nodes_->ItemAt(handle);
 }
 
+auto Scene::TryGetNodeImpl(const ResourceHandle& handle) noexcept
+  -> SceneNodeImpl*
+{
+  return nodes_->TryGet(handle);
+}
+
+auto Scene::TryGetNodeImpl(const ResourceHandle& handle) const noexcept
+  -> const SceneNodeImpl*
+{
+  return nodes_->TryGet(handle);
+}
+
 auto Scene::GetNode(const NodeHandle& handle) const noexcept
   -> std::optional<SceneNode>
 {
