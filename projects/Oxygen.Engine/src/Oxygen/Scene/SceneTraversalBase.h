@@ -23,63 +23,71 @@ public:
   using NodeImpl = add_const_if_t<SceneNodeImpl, std::is_const_v<SceneT>>;
   using VisitedNode = VisitedNodeT<std::is_const_v<SceneT>>;
 
+  virtual ~SceneTraversalBase() = default;
+
 protected:
+  constexpr static size_t kChildrenBufferCapacity = 8;
+
+  /*
+   Traversal contract:
+
+   - The scene must remain alive for the entire lifetime of the traversal
+     instance.
+   - Traversal code may revisit node handles and refresh `SceneNodeImpl*` from
+     the scene, as node implementations can become invalidated by mutations.
+  */
   explicit SceneTraversalBase(const std::shared_ptr<SceneT>& scene)
   {
     CHECK_F(scene != nullptr, "scene cannot be null");
     scene_weak_ = scene;
 
     // Pre-allocate children buffer to avoid repeated small reservations
-    children_buffer_.reserve(8);
+    children_buffer_.reserve(kChildrenBufferCapacity);
   }
 
   SceneTraversalBase(const SceneTraversalBase& other)
     : scene_weak_(other.scene_weak_)
   {
     // Children buffer is a temporary storage that should not be copied
-    children_buffer_.reserve(8);
+    children_buffer_.reserve(kChildrenBufferCapacity);
   }
 
   SceneTraversalBase(SceneTraversalBase&& other) noexcept
     : scene_weak_(std::move(other.scene_weak_))
   {
     // Children buffer is a temporary storage that should not be copied
-    children_buffer_.reserve(8);
+    children_buffer_.reserve(kChildrenBufferCapacity);
     other.children_buffer_.clear(); // Clear the moved-from buffer
   }
 
-  SceneTraversalBase& operator=(const SceneTraversalBase& other)
+  auto operator=(const SceneTraversalBase& other) -> SceneTraversalBase&
   {
     if (this != &other) {
       scene_weak_ = other.scene_weak_;
       // Children buffer is a temporary storage that should not be copied
-      children_buffer_.reserve(8); // Pre-allocate buffer
+      children_buffer_.reserve(kChildrenBufferCapacity); // Pre-allocate buffer
     }
     return *this;
   }
 
-  SceneTraversalBase& operator=(SceneTraversalBase&& other) noexcept
+  auto operator=(SceneTraversalBase&& other) noexcept -> SceneTraversalBase&
   {
     if (this != &other) {
       scene_weak_ = std::move(other.scene_weak_);
       // Children buffer is a temporary storage that should not be copied
-      children_buffer_.reserve(8);
+      children_buffer_.reserve(kChildrenBufferCapacity);
       other.children_buffer_.clear(); // Clear the moved-from buffer
     }
     return *this;
   }
 
-public:
-  virtual ~SceneTraversalBase() = default;
-
-protected:
-  SceneT& GetScene() const
+  auto GetScene() const -> SceneT&
   {
     CHECK_F(!scene_weak_.expired());
     return *scene_weak_.lock();
   }
 
-  SceneT& GetScene()
+  auto GetScene() -> SceneT&
   {
     CHECK_F(!scene_weak_.expired());
     return *scene_weak_.lock();
@@ -107,19 +115,14 @@ protected:
 
     // Define an alias for the return type to improve readability
     using ReturnType = add_const_if_t<SceneNodeImpl, std::is_const_v<SceneT>>*;
-
-    try {
-      auto scene = scene_weak_.lock();
-      auto& impl_ref = scene->GetNodeImplRefUnsafe(handle);
-      return &impl_ref;
-    } catch (const std::exception&) {
-      DLOG_F(ERROR, "node no longer in scene: {}",
-        to_string_compact(handle).c_str());
+    const auto scene = scene_weak_.lock();
+    if (!scene) {
       return ReturnType { nullptr };
     }
+    return static_cast<ReturnType>(scene->TryGetNodeImpl(handle));
   }
 
-  std::size_t GetOptimalStackCapacity() const
+  auto GetOptimalStackCapacity() const -> std::size_t
   {
     DCHECK_F(!scene_weak_.expired());
     // NOLINTBEGIN(*-magic-numbers)
@@ -159,7 +162,7 @@ protected:
       // Sanity checks
       DCHECK_NOTNULL_F(child_node,
         "corrupted scene graph, child `{}` of `{}` is no longer in the scene",
-        to_string_compact(child_handle).c_str(), node->GetName());
+        to_string_compact(child_handle), node->GetName());
       DLOG_F(2, " + {}", child_node->GetName());
 
       children_buffer_.push_back(VisitedNode {
@@ -226,7 +229,7 @@ protected:
    visited (or revisited in post-order traversal) to make the traversal
    algorithm resilient to visitors that mutate the scene graph during traversal.
   */
-  bool UpdateNodeImpl(TraversalEntry& entry) const
+  auto UpdateNodeImpl(TraversalEntry& entry) const -> bool
   {
     // Refresh the node impl from handle ALWAYS even if it is not null.
     // Mutations during child visits will invalidate the pointers
@@ -235,8 +238,8 @@ protected:
   }
 
   template <typename FilterFunc>
-  FilterResult ApplyNodeFilter(FilterFunc& filter, const TraversalEntry& entry,
-    TraversalResult& result) const
+  auto ApplyNodeFilter(FilterFunc& filter, const TraversalEntry& entry,
+    TraversalResult& result) const -> FilterResult
   {
     DLOG_SCOPE_FUNCTION(2);
 
@@ -252,6 +255,7 @@ protected:
     return filter_result;
   }
 
+private:
   std::weak_ptr<SceneT> scene_weak_;
   mutable std::vector<VisitedNode> children_buffer_;
 };

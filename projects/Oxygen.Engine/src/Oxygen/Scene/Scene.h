@@ -631,6 +631,10 @@ public:
     -> const SceneNodeImpl&;
   OXGN_SCN_NDAPI auto GetNodeImplRefUnsafe(const ResourceHandle& handle)
     -> SceneNodeImpl&;
+  OXGN_SCN_NDAPI auto TryGetNodeImpl(const ResourceHandle& handle) noexcept
+    -> SceneNodeImpl*;
+  OXGN_SCN_NDAPI auto TryGetNodeImpl(
+    const ResourceHandle& handle) const noexcept -> const SceneNodeImpl*;
   //! @}
 
   //! Provides a SceneNode for a NodeHandle, or std::nullopt if the \p

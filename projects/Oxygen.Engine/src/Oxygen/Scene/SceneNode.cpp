@@ -101,20 +101,20 @@ protected:
   {
     // Then check if the node is still in the scene node table, and retrieve
     // its implementation object.
-    try {
-      state.scene = GetScene();
-      auto* impl_ref = &state.scene->GetNodeImplRefUnsafe(node_->GetHandle());
+    const auto* scene = (state.scene != nullptr) ? state.scene : GetScene();
+    state.scene = scene;
+    if (const auto* impl_ref = scene->TryGetNodeImpl(node_->GetHandle());
+      impl_ref != nullptr) {
       // Cast away const to allow modifying the SceneNodeImpl. All validators
       // for SceneNode are non-cost anyway due to lazy invalidation.
       state.node_impl = const_cast<SceneNodeImpl*>(impl_ref);
       result_.reset();
       return true;
-    } catch (const std::exception&) {
-      result_ = fmt::format("node({}) is no longer in scene",
-        nostd::to_string(GetNode().GetHandle()));
-      node_->Invalidate();
-      return false;
     }
+    result_ = fmt::format("node({}) is no longer in scene",
+      nostd::to_string(GetNode().GetHandle()));
+    node_->Invalidate();
+    return false;
   }
 
 private:
@@ -246,13 +246,7 @@ auto SceneNode::GetImpl() noexcept -> OptionalRefToImpl
       DCHECK_EQ_F(state.node, this);
       DCHECK_NOTNULL_F(state.scene);
       DCHECK_NOTNULL_F(state.node_impl);
-
-      const auto& impl_ref = state.scene->GetNodeImplRefUnsafe(GetHandle());
-      return {
-        // Cast away const to handle lazy invalidation (an internal detail).
-        // NOLINTNEXTLINE(*-const-cast)
-        std::reference_wrapper(const_cast<SceneNodeImpl&>(impl_ref))
-      };
+      return { std::reference_wrapper(*state.node_impl) };
     });
 }
 
@@ -395,16 +389,15 @@ auto SceneNode::GetName() const noexcept -> std::string
 {
   // We do not use validators and SafeCall here, because that may trigger lazy
   // invalidation, would require a mutable SceneNode.
-  try {
-    const auto scene = scene_weak_.lock();
-    if (!scene) [[unlikely]] {
-      return "__not_in_scene__";
-    }
-    const auto& impl_ref = scene->GetNodeImplRefUnsafe(GetHandle());
-    return std::string { impl_ref.GetName() };
-  } catch (const std::exception&) {
+  const auto scene = scene_weak_.lock();
+  if (!scene) [[unlikely]] {
     return "__not_in_scene__";
   }
+  const auto* impl_ref = scene->TryGetNodeImpl(GetHandle());
+  if (impl_ref == nullptr) [[unlikely]] {
+    return "__not_in_scene__";
+  }
+  return std::string { impl_ref->GetName() };
 }
 
 /*! Sets the name of this SceneNode. Returns true if successful. */
