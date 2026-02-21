@@ -70,32 +70,25 @@ public:
   };
 
   /*!
-   Attach a rigid body to a scene node and register ownership in
-   * PhysicsModule.
+   Attach a rigid body to a scene node and register ownership in PhysicsModule.
 
    Contract:
-   - Caller must invoke this from allowed
-   * scene-mutation phases
+   - Caller must invoke this from allowed scene-mutation phases
      (`kGameplay` or `kSceneMutation`).
-   - Scene
-   * node must be valid and owned by the currently observed scene.
-   - On
-   * success, PhysicsModule side tables are updated (`NodeHandle <-> BodyId`)
-
-   * and subsequent sync phases manage this node as part of the physics
-   * subset.
+   - Scene node must be valid and owned by the currently observed scene.
+   - On success, PhysicsModule side tables are updated
+     (`NodeHandle <-> BodyId`) and subsequent sync phases manage this node as
+     part of the physics subset.
 
    Timing:
-   - Attachment is visible to scene/physics
-   * reconciliation in the same frame.
-   - Simulation effects are allowed to
-   * appear on the next fixed-simulation step
-     (one-frame latency by
-   * design).
+   - Attachment is visible to scene/physics reconciliation in the same frame.
+   - Simulation effects are allowed to appear on the next fixed-simulation step
+     (one-frame latency by design).
+   - Motion authority is selected by `body::BodyDesc::type` and enforced by
+     `PhysicsModule` (`kKinematic` push, `kDynamic` pull).
 
    Failure:
-   - Returns `std::nullopt` if module/world/node
-   * preconditions are not met or
+   - Returns `std::nullopt` if module/world/node preconditions are not met or
      body creation fails.
   */
   OXGN_PHSYNC_API static auto AttachRigidBody(

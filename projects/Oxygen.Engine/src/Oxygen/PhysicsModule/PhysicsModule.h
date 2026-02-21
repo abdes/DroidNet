@@ -37,7 +37,7 @@ namespace oxygen::physics {
    binding table (`ResourceTable`) indexed by `ResourceHandle`, with O(1)
    lookup indices by node and body.
  - Reconcile scene lifecycle changes (transform changed / node destroyed)
- through the deferred scene mutation stream.
+   through the deferred scene mutation stream.
 
  Phase contract:
  - `kFixedSimulation`: step the physics world only.
@@ -52,15 +52,45 @@ namespace oxygen::physics {
    remains exclusively `Scene::Update()`.
  - Newly attached/changed bodies are allowed to become simulation-visible on the
    next fixed-simulation step (one-frame latency by design).
+
+ Motion authority contract:
+ - `body::BodyType::kStatic`: scene transform writes are ignored by the sync
+   bridge after attach; no automatic pull from active-body stream.
+ - `body::BodyType::kKinematic`: scene owns motion. Deferred transform
+   mutations are pushed to physics in `kGameplay`.
+ - `body::BodyType::kDynamic`: physics owns motion. Active body transforms are
+   pulled from physics in `kSceneMutation`.
+
+ Same-frame precedence:
+ - If a dynamic body also receives scene-authored transform writes in the same
+   frame, physics remains authoritative and the pulled dynamic pose wins.
 */
 class PhysicsModule final : public engine::EngineModule,
                             public scene::ISceneObserver {
   OXYGEN_TYPED(PhysicsModule)
 
 public:
+  struct SyncDiagnostics final {
+    uint64_t gameplay_push_attempts { 0 };
+    uint64_t gameplay_push_success { 0 };
+    uint64_t gameplay_push_skipped_untracked { 0 };
+    uint64_t gameplay_push_skipped_non_kinematic { 0 };
+    uint64_t gameplay_push_skipped_missing_node { 0 };
+    uint64_t scene_pull_attempts { 0 };
+    uint64_t scene_pull_success { 0 };
+    uint64_t scene_pull_skipped_non_dynamic { 0 };
+    uint64_t scene_pull_skipped_unmapped { 0 };
+    uint64_t scene_pull_skipped_missing_node { 0 };
+  };
+
   //! Priority contract: must run after gameplay mutators (including
   //! ScriptingModule) and before RendererModule.
   OXGN_PHSYNC_API explicit PhysicsModule(engine::ModulePriority priority);
+  /*! Testing/integration constructor that injects a prebuilt physics system.
+
+   * Creates and owns one simulation world immediately. */
+  OXGN_PHSYNC_API PhysicsModule(engine::ModulePriority priority,
+    std::unique_ptr<system::IPhysicsSystem> physics_system);
   OXGN_PHSYNC_API ~PhysicsModule() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(PhysicsModule)
@@ -96,7 +126,7 @@ public:
 
   /*! Gameplay staging:
       - Consume deferred scene transform mutations and push scene-authored
-        body poses into physics (kinematic/static authority path). */
+        body poses into physics (kinematic authority path). */
   OXGN_PHSYNC_API auto OnGameplay(observer_ptr<engine::FrameContext> context)
     -> co::Co<> override;
 
@@ -116,9 +146,15 @@ public:
   [[nodiscard]] auto GetBodyApi() noexcept -> system::IBodyApi&;
   [[nodiscard]] auto GetQueryApi() noexcept -> system::IQueryApi&;
   [[nodiscard]] auto GetWorldId() const noexcept -> WorldId;
+  [[nodiscard]] auto IsNodeInObservedScene(
+    const scene::NodeHandle& node_handle) const noexcept -> bool;
+  [[nodiscard]] auto GetSyncDiagnostics() const noexcept -> SyncDiagnostics
+  {
+    return diagnostics_;
+  }
 
-  auto RegisterNodeBodyMapping(
-    const scene::NodeHandle& node_handle, BodyId body_id) -> void
+  auto RegisterNodeBodyMapping(const scene::NodeHandle& node_handle,
+    BodyId body_id, body::BodyType body_type) -> void
   {
     if (!node_handle.IsValid() || body_id == kInvalidBodyId) {
       return;
@@ -137,6 +173,7 @@ public:
     const auto binding_handle = bindings_->Insert(PhysicsBinding {
       .world_id = world_id_,
       .body_id = body_id,
+      .body_type = body_type,
       .node_handle = node_handle,
     });
     node_to_binding_.insert_or_assign(node_handle, binding_handle);
@@ -158,6 +195,9 @@ public:
     return binding->body_id;
   }
 
+  [[nodiscard]] auto GetBodyTypeForBodyId(BodyId body_id) const
+    -> std::optional<body::BodyType>;
+
   [[nodiscard]] auto GetNodeForBodyId(BodyId body_id) const
     -> std::optional<scene::NodeHandle>
   {
@@ -177,6 +217,7 @@ private:
   struct PhysicsBinding final {
     WorldId world_id { kInvalidWorldId };
     BodyId body_id { kInvalidBodyId };
+    body::BodyType body_type { body::BodyType::kStatic };
     scene::NodeHandle node_handle {};
   };
   using PhysicsBindingTable = ResourceTable<PhysicsBinding>;
@@ -199,6 +240,7 @@ private:
   std::unordered_map<scene::NodeHandle, ResourceHandle> node_to_binding_;
   std::unordered_map<BodyId, ResourceHandle> body_to_binding_;
   std::unordered_set<scene::NodeHandle> pending_transform_updates_;
+  SyncDiagnostics diagnostics_ {};
 };
 
 } // namespace oxygen::physics
