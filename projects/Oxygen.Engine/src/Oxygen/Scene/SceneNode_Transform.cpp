@@ -180,8 +180,11 @@ auto SceneNode::Transform::SetLocalTransform(const Vec3& position,
     DCHECK_NOTNULL_F(state.node_impl);
     DCHECK_NOTNULL_F(state.transform_component);
 
+    const auto was_dirty = state.transform_component->IsDirty();
     state.transform_component->SetLocalTransform(position, rotation, scale);
-    state.node_impl->MarkTransformDirty();
+    if (!was_dirty && state.transform_component->IsDirty()) {
+      state.node_impl->MarkTransformDirty();
+    }
     return true;
   });
 }
@@ -198,8 +201,11 @@ auto SceneNode::Transform::SetLocalPosition(const Vec3& position) noexcept
     DCHECK_NOTNULL_F(state.node_impl);
     DCHECK_NOTNULL_F(state.transform_component);
 
+    const auto was_dirty = state.transform_component->IsDirty();
     state.transform_component->SetLocalPosition(position);
-    state.node_impl->MarkTransformDirty();
+    if (!was_dirty && state.transform_component->IsDirty()) {
+      state.node_impl->MarkTransformDirty();
+    }
     return true;
   });
 }
@@ -216,8 +222,11 @@ auto SceneNode::Transform::SetLocalRotation(const Quat& rotation) noexcept
     DCHECK_NOTNULL_F(state.node_impl);
     DCHECK_NOTNULL_F(state.transform_component);
 
+    const auto was_dirty = state.transform_component->IsDirty();
     state.transform_component->SetLocalRotation(rotation);
-    state.node_impl->MarkTransformDirty();
+    if (!was_dirty && state.transform_component->IsDirty()) {
+      state.node_impl->MarkTransformDirty();
+    }
     return true;
   });
 }
@@ -233,8 +242,11 @@ auto SceneNode::Transform::SetLocalScale(const Vec3& scale) noexcept -> bool
     DCHECK_NOTNULL_F(state.node_impl);
     DCHECK_NOTNULL_F(state.transform_component);
 
+    const auto was_dirty = state.transform_component->IsDirty();
     state.transform_component->SetLocalScale(scale);
-    state.node_impl->MarkTransformDirty();
+    if (!was_dirty && state.transform_component->IsDirty()) {
+      state.node_impl->MarkTransformDirty();
+    }
     return true;
   });
 }
@@ -304,8 +316,11 @@ auto SceneNode::Transform::Translate(
       DCHECK_NOTNULL_F(state.node_impl);
       DCHECK_NOTNULL_F(state.transform_component);
 
+      const auto was_dirty = state.transform_component->IsDirty();
       state.transform_component->Translate(offset, local);
-      state.node_impl->MarkTransformDirty();
+      if (!was_dirty && state.transform_component->IsDirty()) {
+        state.node_impl->MarkTransformDirty();
+      }
       return true;
     });
 }
@@ -325,8 +340,11 @@ auto SceneNode::Transform::Rotate(
       DCHECK_NOTNULL_F(state.node_impl);
       DCHECK_NOTNULL_F(state.transform_component);
 
+      const auto was_dirty = state.transform_component->IsDirty();
       state.transform_component->Rotate(rotation, local);
-      state.node_impl->MarkTransformDirty();
+      if (!was_dirty && state.transform_component->IsDirty()) {
+        state.node_impl->MarkTransformDirty();
+      }
       return true;
     });
 }
@@ -343,8 +361,11 @@ auto SceneNode::Transform::Scale(const Vec3& scale_factor) noexcept -> bool
       DCHECK_NOTNULL_F(state.node_impl);
       DCHECK_NOTNULL_F(state.transform_component);
 
+      const auto was_dirty = state.transform_component->IsDirty();
       state.transform_component->Scale(scale_factor);
-      state.node_impl->MarkTransformDirty();
+      if (!was_dirty && state.transform_component->IsDirty()) {
+        state.node_impl->MarkTransformDirty();
+      }
       return true;
     });
 }
@@ -459,8 +480,11 @@ auto SceneNode::Transform::LookAt(
     // Convert to quaternion and set as local rotation
     const auto look_rotation = glm::quat_cast(look_matrix);
 
+    const auto was_dirty = state.transform_component->IsDirty();
     state.transform_component->SetLocalRotation(look_rotation);
-    state.node_impl->MarkTransformDirty();
+    if (!was_dirty && state.transform_component->IsDirty()) {
+      state.node_impl->MarkTransformDirty();
+    }
     return true;
   });
 }

@@ -201,6 +201,9 @@ NOLINT_TEST_F(SceneTraversalTransformTest, DirtyTransformFilter)
   // Arrange: Mark specific nodes as dirty
   MarkNodeTransformDirty(nodeA_);
   MarkNodeTransformDirty(nodeC_);
+  // New contract: DirtyTransformFilter relies on precomputed subtree counts.
+  [[maybe_unused]] const auto _
+    = GetTraversal().PrepareDirtyFlagsAndSubtreeCounts(false);
 
   // Act: Traverse with dirty transform filter
   const auto result = GetTraversal().Traverse(CreateTrackingVisitor(),
@@ -218,6 +221,8 @@ NOLINT_TEST_F(SceneTraversalTransformTest, UpdateTransformsMethod)
   // Arrange: Mark specific nodes as dirty
   MarkNodeTransformDirty(nodeA_);
   MarkNodeTransformDirty(nodeB_);
+  [[maybe_unused]] const auto prepared
+    = GetTraversal().PrepareDirtyFlagsAndSubtreeCounts(false);
   // C will ignore its parent transform
   nodeC_.GetImpl()->get().GetFlags().SetFlag(
     SceneNodeFlags::kIgnoreParentTransform,
@@ -246,6 +251,8 @@ NOLINT_TEST_F(SceneTraversalTransformTest, UpdateTransformsFromSpecificRoot)
   MarkNodeTransformDirty(nodeA_);
   MarkNodeTransformDirty(nodeB_);
   MarkNodeTransformDirty(nodeC_);
+  [[maybe_unused]] const auto prepared
+    = GetTraversal().PrepareDirtyFlagsAndSubtreeCounts(false);
 
   // Act: Update transforms only from nodeA's subtree
   std::vector<SceneNode> roots = { nodeA_ };
@@ -326,6 +333,43 @@ NOLINT_TEST_F(SceneTraversalTransformTest,
   EXPECT_FLOAT_EQ(gp2->x, 13.0F); // 10 + 1 + 2
 }
 
+/*!
+ Contract test: DirtyTransformFilter requires prepared dirty-subtree counts.
+
+ Intent:
+ - This test enforces the explicit model that DirtyTransformFilter is valid
+   only after `PrepareDirtyFlagsAndSubtreeCounts(...)` is executed.
+ - If someone reintroduces fallback/legacy behavior that allows traversal to
+   infer dirty state without preparation, this test must fail.
+*/
+NOLINT_TEST_F(SceneTraversalTransformTest,
+  DirtyTransformFilter_RequiresPreparedSubtreeCounts)
+{
+  // Arrange: mark a non-root node dirty so pruning at the root is observable.
+  MarkNodeTransformDirty(nodeA_);
+
+  // Act 1: Use DirtyTransformFilter without preparation (contract violation).
+  const auto without_prepare = GetTraversal().Traverse(CreateTrackingVisitor(),
+    TraversalOrder::kPreOrder, DirtyTransformFilter {});
+
+  // Assert 1: No nodes are visited because dirty-subtree counts were not
+  // prepared.
+  ExpectTraversalResult(without_prepare, 0, 1, true);
+  EXPECT_TRUE(visit_order_.empty());
+
+  // Act 2: Prepare counts, then traverse again using the same filter.
+  visit_order_.clear();
+  visited_nodes_.clear();
+  [[maybe_unused]] const auto prepared
+    = GetTraversal().PrepareDirtyFlagsAndSubtreeCounts(false);
+  const auto with_prepare = GetTraversal().Traverse(CreateTrackingVisitor(),
+    TraversalOrder::kPreOrder, DirtyTransformFilter {});
+
+  // Assert 2: Proper contract usage visits the expected dirty path.
+  ExpectTraversalResult(with_prepare, 2, 2, true);
+  ExpectContainsExactlyNodes({ "A", "C" });
+}
+
 //=============================================================================
 // High-Performance Filter Tests
 //=============================================================================
@@ -372,6 +416,8 @@ NOLINT_TEST_F(SceneTraversalBuiltinFilterTest, DirtyTransformFilter)
   // Setup: Mark some nodes as dirty
   MarkNodeTransformDirty(visible_root_);
   MarkNodeTransformDirty(visible_child_);
+  [[maybe_unused]] const auto prepared
+    = GetTraversal().PrepareDirtyFlagsAndSubtreeCounts(false);
 
   // Act: Traverse with DirtyTransformFilter
   const auto result = GetTraversal().Traverse(CreateTrackingVisitor(),
@@ -573,6 +619,8 @@ NOLINT_TEST_F(SceneTraversalComplexTest, DirtyTransformUpdateInComplexHierarchy)
   MarkNodeTransformDirty(nodeA_);
   MarkNodeTransformDirty(nodeF_);
   MarkNodeTransformDirty(nodeK_);
+  [[maybe_unused]] const auto prepared
+    = GetTraversal().PrepareDirtyFlagsAndSubtreeCounts(false);
 
   // Act: Update only dirty transforms
   const auto updated_count = GetTraversal().UpdateTransforms();
