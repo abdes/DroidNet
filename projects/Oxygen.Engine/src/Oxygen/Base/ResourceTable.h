@@ -127,6 +127,9 @@ public:
     -> bool;
   [[nodiscard]] auto ItemAt(const ResourceHandle& handle) -> T&;
   [[nodiscard]] auto ItemAt(const ResourceHandle& handle) const -> const T&;
+  [[nodiscard]] auto TryGet(const ResourceHandle& handle) noexcept -> T*;
+  [[nodiscard]] auto TryGet(const ResourceHandle& handle) const noexcept
+    -> const T*;
 
   /*
   Direct access to items set for iterating over them with no modification of the
@@ -274,6 +277,43 @@ template <typename T>
 auto ResourceTable<T>::ItemAt(const ResourceHandle& handle) const -> const T&
 {
   return items_[GetInnerIndex(handle)];
+}
+
+template <typename T>
+auto ResourceTable<T>::TryGet(const ResourceHandle& handle) noexcept -> T*
+{
+  if (handle.Index() >= sparse_table_.size()
+    || handle.ResourceType() != item_type_) {
+    return nullptr;
+  }
+  const ResourceHandle inner_id = sparse_table_[handle.Index()];
+  if (inner_id.IsFree()) {
+    return nullptr;
+  }
+  if (handle.Generation() != inner_id.Generation()) {
+    return nullptr;
+  }
+  assert(inner_id.Index() < items_.size());
+  return &items_[inner_id.Index()];
+}
+
+template <typename T>
+auto ResourceTable<T>::TryGet(const ResourceHandle& handle) const noexcept
+  -> const T*
+{
+  if (handle.Index() >= sparse_table_.size()
+    || handle.ResourceType() != item_type_) {
+    return nullptr;
+  }
+  const ResourceHandle inner_id = sparse_table_[handle.Index()];
+  if (inner_id.IsFree()) {
+    return nullptr;
+  }
+  if (handle.Generation() != inner_id.Generation()) {
+    return nullptr;
+  }
+  assert(inner_id.Index() < items_.size());
+  return &items_[inner_id.Index()];
 }
 
 template <typename T>
