@@ -88,7 +88,6 @@ set(
   "Types/ClearFlags.h"
   "Types/Color.h"
   "Types/DescriptorVisibility.h"
-  "Types/EngineResources.h"
   "Types/FenceValue.h"
   "Types/IndexRange.h"
   "Types/QueueRole.h"
