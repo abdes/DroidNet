@@ -339,7 +339,7 @@ local function advance_preparation(state)
   end
 end
 
-local function spawn_batch(state)
+local function spawn_batch(state, host_node)
   local spawned_this_frame = 0
   local far_color = { r = 0.12, g = 0.36, b = 0.95 }
   local near_color = { r = 1.00, g = 0.28, b = 0.08 }
@@ -356,7 +356,7 @@ local function spawn_batch(state)
     local pz = height * 0.5
     local chosen_guid = item.chosen_guid
 
-    local node = scene.create_node("ProcCube", nil)
+    local node = scene.create_node("ProcCube", host_node)
     if not valid(node) then
       log.warning("proc_cubes: failed to create cube node at " .. px .. "," .. py)
     else
@@ -467,7 +467,7 @@ function script.on_scene_mutation(ctx, dt_seconds)
     return
   end
 
-  created = spawn_batch(spawn_state)
+  created = spawn_batch(spawn_state, host_node)
 end
 
 function script.on_gameplay(ctx, dt_seconds)

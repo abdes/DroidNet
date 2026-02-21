@@ -55,6 +55,13 @@ assets:
         rotation: [0.0, 0.0, 0.0, 1.0]
         scale: [1.0, 1.0, 1.0]
 
+      - name: CameraRig
+        parent: 0
+        flags: 0
+        translation: [0.0, 0.0, 0.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
     scripting:
       - node_index: 1
         slots:
@@ -84,7 +91,7 @@ assets:
                 value: 30
 
     perspective_cameras:
-      - node_index: 0
+      - node_index: 2
         fov_y: 0.785398
         aspect_ratio: 1.777778
         near_plane: 0.1
