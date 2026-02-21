@@ -45,8 +45,26 @@ struct CameraMutation {
   NodeHandle node_handle {};
 };
 
-using MutationPayload
-  = std::variant<ScriptSlotMutation, LightMutation, CameraMutation>;
+enum class TransformMutationType : uint8_t {
+  kChanged,
+};
+
+struct TransformMutation {
+  TransformMutationType type { TransformMutationType::kChanged };
+  NodeHandle node_handle {};
+};
+
+enum class NodeDestroyedMutationType : uint8_t {
+  kDestroyed,
+};
+
+struct NodeDestroyedMutation {
+  NodeDestroyedMutationType type { NodeDestroyedMutationType::kDestroyed };
+  NodeHandle node_handle {};
+};
+
+using MutationPayload = std::variant<ScriptSlotMutation, LightMutation,
+  CameraMutation, TransformMutation, NodeDestroyedMutation>;
 
 struct MutationRecord {
   uint64_t sequence { 0 };
@@ -54,7 +72,9 @@ struct MutationRecord {
 };
 
 template <typename T>
-concept SceneMutation = std::same_as<T, ScriptSlotMutation>
-  || std::same_as<T, LightMutation> || std::same_as<T, CameraMutation>;
+concept SceneMutation
+  = std::same_as<T, ScriptSlotMutation> || std::same_as<T, LightMutation>
+  || std::same_as<T, CameraMutation> || std::same_as<T, TransformMutation>
+  || std::same_as<T, NodeDestroyedMutation>;
 
 } // namespace oxygen::scene::internal

@@ -133,7 +133,8 @@ auto BuildSceneWithScriptSlot()
   return { std::move(scene), node };
 }
 
-NOLINT_TEST(SceneObserverSyncTest, FirstSyncActivatesAndSecondSyncIsStable)
+NOLINT_TEST(
+  SceneMutationObserverSyncTest, FirstSyncActivatesAndSecondSyncIsStable)
 {
   auto [scene, node] = BuildSceneWithScriptSlot();
   ASSERT_NE(scene, nullptr);
@@ -175,7 +176,7 @@ NOLINT_TEST(SceneObserverSyncTest, FirstSyncActivatesAndSecondSyncIsStable)
   EXPECT_TRUE(observer.camera_changed.empty());
 }
 
-NOLINT_TEST(SceneObserverSyncTest, ChangedExecutableEmitsChangedEvent)
+NOLINT_TEST(SceneMutationObserverSyncTest, ChangedExecutableEmitsChangedEvent)
 {
   auto [scene, node] = BuildSceneWithScriptSlot();
   ASSERT_NE(scene, nullptr);
@@ -200,7 +201,7 @@ NOLINT_TEST(SceneObserverSyncTest, ChangedExecutableEmitsChangedEvent)
   EXPECT_EQ(observer.changed.front().slot_index.get(), 0U);
 }
 
-NOLINT_TEST(SceneObserverSyncTest, RemovedSlotEmitsDeactivatedEvent)
+NOLINT_TEST(SceneMutationObserverSyncTest, RemovedSlotEmitsDeactivatedEvent)
 {
   auto [scene, node] = BuildSceneWithScriptSlot();
   ASSERT_NE(scene, nullptr);
@@ -224,7 +225,8 @@ NOLINT_TEST(SceneObserverSyncTest, RemovedSlotEmitsDeactivatedEvent)
   EXPECT_EQ(observer.deactivated.front().slot_index.get(), 0U);
 }
 
-NOLINT_TEST(Scene_observer_sync_test, LightObserverReceivesFutureMutationsOnly)
+NOLINT_TEST(
+  SceneMutationObserverSyncTest, LightObserverReceivesFutureMutationsOnly)
 {
   constexpr std::size_t kTestSceneCapacity = 100;
   auto scene
@@ -254,7 +256,8 @@ NOLINT_TEST(Scene_observer_sync_test, LightObserverReceivesFutureMutationsOnly)
   EXPECT_TRUE(observer.camera_changed.empty());
 }
 
-NOLINT_TEST(Scene_observer_sync_test, CameraObserverReceivesFutureMutationsOnly)
+NOLINT_TEST(
+  SceneMutationObserverSyncTest, CameraObserverReceivesFutureMutationsOnly)
 {
   constexpr std::size_t kTestSceneCapacity = 100;
   auto scene

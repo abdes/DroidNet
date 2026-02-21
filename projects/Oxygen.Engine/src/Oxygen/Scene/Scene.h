@@ -32,10 +32,13 @@ enum class SceneMutationMask : uint32_t {
   kScriptSlotDeactivated = 1u << 2u,
   kLightChanged = 1u << 3u,
   kCameraChanged = 1u << 4u,
+  // Coalesced by node during dispatch.
   kTransformChanged = 1u << 5u,
+  // Not coalesced; each destroy record is delivered.
+  kNodeDestroyed = 1u << 6u,
   kAllScriptSlotMutations = (1u << 0u) | (1u << 1u) | (1u << 2u),
   kAllMutations
-  = kAllScriptSlotMutations | (1u << 3u) | (1u << 4u) | (1u << 5u),
+  = kAllScriptSlotMutations | (1u << 3u) | (1u << 4u) | (1u << 5u) | (1u << 6u),
 };
 
 constexpr auto operator|(const SceneMutationMask lhs,
@@ -97,6 +100,11 @@ public:
   }
 
   virtual auto OnTransformChanged(const NodeHandle& /*node_handle*/) noexcept
+    -> void
+  {
+  }
+
+  virtual auto OnNodeDestroyed(const NodeHandle& /*node_handle*/) noexcept
     -> void
   {
   }
@@ -345,6 +353,9 @@ public:
     uint64_t light_records_dispatched { 0 };
     uint64_t camera_records_coalesced_in { 0 };
     uint64_t camera_records_dispatched { 0 };
+    uint64_t transform_records_coalesced_in { 0 };
+    uint64_t transform_records_dispatched { 0 };
+    uint64_t node_destroyed_records_dispatched { 0 };
   };
 
   //! Registers an observer with an explicit mutation mask.
@@ -370,6 +381,15 @@ public:
    - If there are no observers, mutation collection can be disabled and this
      call fast-returns.
    - While collection is disabled, mutations are intentionally dropped.
+
+   Ordering contract:
+   - Script slot mutations are dispatched in collected order.
+   - Non-coalesced domain mutations (for example node destroyed) are dispatched
+     during drain in collected order.
+   - Coalesced domain mutations (light/camera/transform) are dispatched during
+     flush after drain and are ordered by first-seen node key within domain.
+   - Therefore, in a mixed frame, non-coalesced domains may be observed before
+     coalesced domains.
   */
   OXGN_SCN_API auto SyncObservers() -> void;
   OXGN_SCN_NDAPI auto GetMutationDispatchCounters() const noexcept

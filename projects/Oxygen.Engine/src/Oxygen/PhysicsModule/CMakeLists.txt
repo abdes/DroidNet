@@ -9,10 +9,10 @@
 # ------------------------------------------------------------------------------
 
 asap_module_declare(
-  MODULE_NAME "Oxygen.PhysicsSync"
+  MODULE_NAME "Oxygen.PhysicsModule"
   DESCRIPTION
     [=[
-The Oxygen PhysicsSync module acts as a bridge between the Scene and Physics
+The Oxygen PhysicsModule acts as a bridge between the Scene and Physics
 modules. It synchronizes SceneNode transforms with their corresponding physical
 bodies and handles the propagation of collision events and state changes between
 the two systems.
@@ -48,25 +48,27 @@ set_target_properties(
 
 # TODO: do not export internal headers
 set(
-  OXYGEN_PHYSICS_SYNC_HEADERS
+  OXYGEN_PHYSICS_MODULE_HEADERS
   "api_export.h"
   "PhysicsModule.h"
+  "ScenePhysics.h"
 )
 
 set(
-  OXYGEN_PHYSICS_SYNC_PRIVATE_SOURCES
+  OXYGEN_PHYSICS_MODULE_PRIVATE_SOURCES
   "PhysicsModule.cpp"
+  "ScenePhysics.cpp"
 )
 
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
-    ${OXYGEN_PHYSICS_SYNC_PRIVATE_SOURCES}
-    ${OXYGEN_PHYSICS_SYNC_HEADERS}
+    ${OXYGEN_PHYSICS_MODULE_PRIVATE_SOURCES}
+    ${OXYGEN_PHYSICS_MODULE_HEADERS}
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES ${OXYGEN_PHYSICS_SYNC_HEADERS}
+    FILES ${OXYGEN_PHYSICS_MODULE_HEADERS}
 )
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})

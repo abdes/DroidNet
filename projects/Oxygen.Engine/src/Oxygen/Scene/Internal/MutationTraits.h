@@ -47,4 +47,26 @@ template <> struct MutationTraits<CameraMutation> {
   }
 };
 
+template <> struct MutationTraits<TransformMutation> {
+  // Transform notifications are coalesced by node per sync.
+  static constexpr bool kCoalescible = true;
+  using KeyType = NodeHandle;
+
+  [[nodiscard]] static auto Key(const TransformMutation& mutation) -> KeyType
+  {
+    return mutation.node_handle;
+  }
+
+  static auto Merge(TransformMutation& existing, const TransformMutation& next)
+    -> void
+  {
+    existing = next;
+  }
+};
+
+template <> struct MutationTraits<NodeDestroyedMutation> {
+  // Destruction notifications are not coalesced; each record is significant.
+  static constexpr bool kCoalescible = false;
+};
+
 } // namespace oxygen::scene::internal

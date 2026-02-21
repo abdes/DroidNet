@@ -830,6 +830,12 @@ auto Scene::NotifyObservers(const SceneMutationMask mutation_type,
     case SceneMutationMask::kCameraChanged:
       subscription.observer->OnCameraChanged(node_handle);
       break;
+    case SceneMutationMask::kTransformChanged:
+      subscription.observer->OnTransformChanged(node_handle);
+      break;
+    case SceneMutationMask::kNodeDestroyed:
+      subscription.observer->OnNodeDestroyed(node_handle);
+      break;
     case SceneMutationMask::kNone:
     case SceneMutationMask::kAllScriptSlotMutations:
     case SceneMutationMask::kAllMutations:
@@ -868,6 +874,16 @@ auto Scene::SyncObservers() -> void
           NotifyObservers(SceneMutationMask::kCameraChanged,
             mutation.node_handle, ScriptSlotIndex {}, nullptr);
         },
+      .notify_transform_mutation =
+        [this](const internal::TransformMutation& mutation) {
+          NotifyObservers(SceneMutationMask::kTransformChanged,
+            mutation.node_handle, ScriptSlotIndex {}, nullptr);
+        },
+      .notify_node_destroyed_mutation =
+        [this](const internal::NodeDestroyedMutation& mutation) {
+          NotifyObservers(SceneMutationMask::kNodeDestroyed,
+            mutation.node_handle, ScriptSlotIndex {}, nullptr);
+        },
     });
 }
 
@@ -887,6 +903,10 @@ auto Scene::GetMutationDispatchCounters() const noexcept
     .light_records_dispatched = counters.light_records_dispatched,
     .camera_records_coalesced_in = counters.camera_records_coalesced_in,
     .camera_records_dispatched = counters.camera_records_dispatched,
+    .transform_records_coalesced_in = counters.transform_records_coalesced_in,
+    .transform_records_dispatched = counters.transform_records_dispatched,
+    .node_destroyed_records_dispatched
+    = counters.node_destroyed_records_dispatched,
   };
 }
 

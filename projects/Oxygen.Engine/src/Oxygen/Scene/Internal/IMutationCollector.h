@@ -31,6 +31,9 @@ public:
 
   virtual auto CollectLightChanged(const NodeHandle& node_handle) -> void = 0;
   virtual auto CollectCameraChanged(const NodeHandle& node_handle) -> void = 0;
+  virtual auto CollectTransformChanged(const NodeHandle& node_handle) -> void
+    = 0;
+  virtual auto CollectNodeDestroyed(const NodeHandle& node_handle) -> void = 0;
 
   virtual auto DrainMutations() -> std::vector<MutationRecord> = 0;
 };

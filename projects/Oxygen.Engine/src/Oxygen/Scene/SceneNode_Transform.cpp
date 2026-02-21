@@ -185,6 +185,7 @@ auto SceneNode::Transform::SetLocalTransform(const Vec3& position,
     if (!was_dirty && state.transform_component->IsDirty()) {
       state.node_impl->MarkTransformDirty();
     }
+    state.node->CollectTransformChangedMutation();
     return true;
   });
 }
@@ -206,6 +207,7 @@ auto SceneNode::Transform::SetLocalPosition(const Vec3& position) noexcept
     if (!was_dirty && state.transform_component->IsDirty()) {
       state.node_impl->MarkTransformDirty();
     }
+    state.node->CollectTransformChangedMutation();
     return true;
   });
 }
@@ -227,6 +229,7 @@ auto SceneNode::Transform::SetLocalRotation(const Quat& rotation) noexcept
     if (!was_dirty && state.transform_component->IsDirty()) {
       state.node_impl->MarkTransformDirty();
     }
+    state.node->CollectTransformChangedMutation();
     return true;
   });
 }
@@ -247,6 +250,7 @@ auto SceneNode::Transform::SetLocalScale(const Vec3& scale) noexcept -> bool
     if (!was_dirty && state.transform_component->IsDirty()) {
       state.node_impl->MarkTransformDirty();
     }
+    state.node->CollectTransformChangedMutation();
     return true;
   });
 }
@@ -321,6 +325,7 @@ auto SceneNode::Transform::Translate(
       if (!was_dirty && state.transform_component->IsDirty()) {
         state.node_impl->MarkTransformDirty();
       }
+      state.node->CollectTransformChangedMutation();
       return true;
     });
 }
@@ -345,6 +350,7 @@ auto SceneNode::Transform::Rotate(
       if (!was_dirty && state.transform_component->IsDirty()) {
         state.node_impl->MarkTransformDirty();
       }
+      state.node->CollectTransformChangedMutation();
       return true;
     });
 }
@@ -366,6 +372,7 @@ auto SceneNode::Transform::Scale(const Vec3& scale_factor) noexcept -> bool
       if (!was_dirty && state.transform_component->IsDirty()) {
         state.node_impl->MarkTransformDirty();
       }
+      state.node->CollectTransformChangedMutation();
       return true;
     });
 }
@@ -485,6 +492,7 @@ auto SceneNode::Transform::LookAt(
     if (!was_dirty && state.transform_component->IsDirty()) {
       state.node_impl->MarkTransformDirty();
     }
+    state.node->CollectTransformChangedMutation();
     return true;
   });
 }
