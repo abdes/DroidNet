@@ -21,6 +21,9 @@ Output folder for deployment artifacts (default: "out/install").
 .PARAMETER DeployerPackage
 Deployer package name (default: "Oxygen/0.1.0").
 
+.PARAMETER NoClean
+Do not clean existing build directories.
+
 .PARAMETER Help
 Show this help message and exit.
 
@@ -33,23 +36,25 @@ Show this help message and exit.
 #>
 
 param(
-    [Alias('h','?')][switch]$Help,
+    [Alias('h', '?')][switch]$Help,
     [Alias('u')][switch]$Usage,
-    [Parameter(Position=0)][string]$BuildProfile,
+    [Parameter(Position = 0)][string]$BuildProfile,
     [string]$Build = "missing",
     [string]$DeployerFolder = "out/install",
-    [string]$DeployerPackage = "Oxygen/0.1.0"
+    [string]$DeployerPackage = "Oxygen/0.1.0",
+    [switch]$NoClean
 )
 
 function Show-Usage {
     Write-Host ""
-    Write-Host "Usage: .\tools\generate-builds.ps1 <profile> [-Build <mode>] [-DeployerFolder <path>] [-DeployerPackage <pkg>] [-Help]" -ForegroundColor Cyan
+    Write-Host "Usage: .\tools\generate-builds.ps1 <profile> [-Build <mode>] [-DeployerFolder <path>] [-DeployerPackage <pkg>] [-NoClean] [-Help]" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Parameters:" -ForegroundColor Gray
     Write-Host "  profile             Path to Conan profile used for both host and build (required, positional)"
     Write-Host "  -Build              Conan build mode (default: missing)"
     Write-Host "  -DeployerFolder     Deployer output folder (default: out/install)"
     Write-Host "  -DeployerPackage    Deployer package (default: Oxygen/0.1.0)"
+    Write-Host "  -NoClean            Do not clean existing build directories"
     Write-Host "  -Help, -h, -?       Show this help message and exit"
     Write-Host ""
     Write-Host "Note: Relative paths for profiles and output (e.g. 'out') are resolved relative to the repository root." -ForegroundColor Gray
@@ -71,27 +76,7 @@ if (-not $Help -and -not $BuildProfile) {
     exit 1
 }
 
-if ($Help -or $Usage) {
-    function Show-Usage {
-        Write-Host ""
-        Write-Host "Usage: .\tools\generate-builds.ps1 [-ProfileHost <path>] [-ProfileBuild <path>] [-Build <mode>] [-DeployerFolder <path>] [-DeployerPackage <pkg>] [-Help]" -ForegroundColor Cyan
-        Write-Host ""
-        Write-Host "Parameters:" -ForegroundColor Gray
-        Write-Host "  profile             Path to Conan profile used for both host and build (required, positional)"        Write-Host "  -Build              Conan build mode (default: missing)"
-        Write-Host "  -DeployerFolder     Deployer output folder (default: out/install)"
-        Write-Host "  -DeployerPackage    Deployer package (default: Oxygen/0.1.0)"
-        Write-Host "  -Help, -h, -?       Show this help message and exit"
-        Write-Host ""
-        Write-Host "Note: Relative paths for profiles and output (e.g. 'out') are resolved relative to the repository root." -ForegroundColor Gray
-        Write-Host ""
-        Write-Host "Examples:" -ForegroundColor Gray
-        Write-Host "  .\tools\generate-builds.ps1 -Profile profiles/windows-msvc-asan.ini"
-        Write-Host "  .\tools\generate-builds.ps1 -Help"
-        Write-Host ""
-    }
-    Show-Usage
-    exit 0
-}
+
 
 # Use single profile for both host and build (keeps compatibility with older flags via aliases)
 $BuildProfileHost = $BuildProfile
@@ -140,26 +125,30 @@ if ($hostProfilePath) {
 $suffix = if ($isAsan) { "asan-" } else { "" }
 $vsBuildDir = "out/build-${suffix}vs"
 $ninjaBuildDir = "out/build-${suffix}ninja"
-$configurations = if ($isAsan) { @("Debug") } else { @("Debug", "Release") }
+$configurations = if ($isAsan) { @("Debug") } else { @("Debug", "Release", "RelWithDebInfo") }
 
 $sanitizer = if ($isAsan) { 'asan' } else { 'none' }
 
 # Clean up specific directories
-Write-Host "Cleaning build environment..." -ForegroundColor Gray
-$targetsToClean = @(
-    (Join-Path $repoRoot $vsBuildDir),
-    (Join-Path $repoRoot $ninjaBuildDir)
-)
+if (-not $NoClean) {
+    Write-Host "Cleaning build environment..." -ForegroundColor Gray
+    $targetsToClean = @(
+        (Join-Path $repoRoot $vsBuildDir),
+        (Join-Path $repoRoot $ninjaBuildDir)
+    )
 
-foreach ($config in $configurations) {
-    $sub = if ($isAsan) { "Asan" } else { $config }
-    $targetsToClean += (Join-Path $DeployerFolder $sub)
-}
-
-foreach ($target in $targetsToClean) {
-    if (Test-Path $target) {
-        Remove-Item -Path $target -Recurse -Force -ErrorAction SilentlyContinue
+    foreach ($config in $configurations) {
+        $sub = if ($isAsan) { "Asan" } else { $config }
+        $targetsToClean += (Join-Path $DeployerFolder $sub)
     }
+
+    foreach ($target in $targetsToClean) {
+        if (Test-Path $target) {
+            Remove-Item -Path $target -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+} else {
+    Write-Host "Skipping clean step (--no-clean)..." -ForegroundColor Gray
 }
 
 $ninjaPreset = "windows-ninja"
