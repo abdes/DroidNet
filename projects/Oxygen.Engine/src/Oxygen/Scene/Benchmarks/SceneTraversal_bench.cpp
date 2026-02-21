@@ -1,5 +1,6 @@
 #include <benchmark/benchmark.h>
 #include <cassert>
+#include <cstdint>
 #include <memory>
 #include <random>
 #include <vector>
@@ -32,6 +33,9 @@ public:
     const int width = static_cast<int>(state.range(1));
     static constexpr size_t kBenchmarkSceneCapacity = 4096;
     scene_ = std::make_shared<Scene>("BenchmarkScene", kBenchmarkSceneCapacity);
+    rng_ = std::mt19937 {
+      static_cast<std::mt19937::result_type>((depth * 73856093) ^ (width * 19349663))
+    };
     CreateTestHierarchy(depth, width);
 
     // Note: Nodes are created clean (dirty flags cleared during creation)
@@ -65,21 +69,20 @@ protected:
     }
 
     // Update the root node world matrix to get some meaningful values.
-    const auto impl = node.GetObject();
+    const auto impl = node.GetImpl();
     assert(impl.has_value());
     impl->get().UpdateTransforms(*scene_);
 
     return node;
   }
-  void CreateChildNodes(const SceneNode& parent, const int remaining_depth,
+  void CreateChildNodes(SceneNode& parent, const int remaining_depth,
     const int children_per_node)
   {
     if (remaining_depth <= 0)
       return;
 
     for (int i = 0; i < children_per_node; ++i) {
-      auto child_node
-        = scene_->CreateChildNode(parent, "child_" + std::to_string(i));
+      auto child_node = scene_->CreateChildNode(parent, "child_" + std::to_string(i));
       assert(child_node.has_value());
 
       auto transform = child_node->GetTransform();
@@ -87,9 +90,6 @@ protected:
         { static_cast<float>(i), static_cast<float>(remaining_depth), 0.0f });
 
       // Clear the dirty flag that was set when we modified the transform
-      auto impl = child_node->GetObject();
-      assert(impl.has_value());
-
       all_nodes_.push_back(*child_node);
 
       CreateChildNodes(*child_node, remaining_depth - 1, children_per_node);
@@ -115,14 +115,10 @@ protected:
 
   void MarkRandomNodesDirty(const float percentage)
   {
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution dis(0.0f, 1.0f);
+    std::uniform_real_distribution<float> dis(0.0f, 1.0f);
 
     for (auto& node : all_nodes_) {
-      if (dis(gen) < percentage) {
-        auto impl = node.GetObject();
-        assert(impl.has_value());
+      if (dis(rng_) < percentage) {
         // Modify transform to mark it dirty
         if (auto pos = node.GetTransform().GetLocalPosition()) {
           glm::vec3 new_pos = *pos;
@@ -135,6 +131,7 @@ protected:
 
   std::shared_ptr<Scene> scene_;
   std::vector<SceneNode> all_nodes_;
+  std::mt19937 rng_ {};
 };
 
 // Benchmark SceneTraversal visitor pattern processing ONLY DIRTY transform
@@ -146,27 +143,31 @@ BENCHMARK_DEFINE_F(SceneTraversalBenchmark, TraversalVisitorUpdateTransforms)(
   // to 1.0)
   const float dirty_ratio = static_cast<float>(state.range(2)) / 100.0f;
 
+  std::uint64_t visited_nodes_accum = 0;
   for (auto _ : state) {
     state.PauseTiming();
     MarkRandomNodesDirty(dirty_ratio); // Set specified percentage dirty
     state.ResumeTiming(); // Use optimized batch processing with dirty
                           // transform filter
-    SceneTraversal traversal(*scene_);
+    SceneTraversal traversal(scene_);
     auto result = traversal.Traverse(
-      [](const VisitedNode& node, const Scene& scene_param,
-        bool dry_run) -> VisitResult {
+      [this](const MutableVisitedNode& node, bool dry_run) -> VisitResult {
         DCHECK_F(!dry_run,
           "Benchmark uses kPreOrder and should never receive dry_run=true");
-        node.node_impl->UpdateTransforms(scene_param);
+        node.node_impl->UpdateTransforms(*scene_);
         return VisitResult::kContinue; // Continue traversal
       },
       TraversalOrder::kPreOrder, DirtyTransformFilter {});
 
+    visited_nodes_accum += static_cast<std::uint64_t>(result.nodes_visited);
     benchmark::DoNotOptimize(result);
   }
 
-  state.SetItemsProcessed(
-    state.iterations() * static_cast<int64_t>(all_nodes_.size()));
+  state.SetItemsProcessed(static_cast<int64_t>(visited_nodes_accum));
+  state.counters["visited_nodes"]
+    = benchmark::Counter(static_cast<double>(visited_nodes_accum)
+        / static_cast<double>(state.iterations()),
+      benchmark::Counter::kAvgIterations);
 }
 
 // Register benchmarks grouped by scene configuration for easy comparison
@@ -174,51 +175,13 @@ BENCHMARK_DEFINE_F(SceneTraversalBenchmark, TraversalVisitorUpdateTransforms)(
 // dirty_percentage: 30 = 30% dirty (realistic scenario)
 
 BENCHMARK_REGISTER_F(SceneTraversalBenchmark, TraversalVisitorUpdateTransforms)
-  ->Args({ 3, 4, 30 }) // 30% dirty
-  ->Unit(benchmark::kMicrosecond);
-
-BENCHMARK_REGISTER_F(SceneTraversalBenchmark, TraversalVisitorUpdateTransforms)
-  ->Args({ 5, 3, 30 }) // 30% dirty
-  ->Unit(benchmark::kMicrosecond);
-
-BENCHMARK_REGISTER_F(SceneTraversalBenchmark, TraversalVisitorUpdateTransforms)
-  ->Args({ 4, 6, 30 }) // 30% dirty
-  ->Unit(benchmark::kMicrosecond);
-
-BENCHMARK_REGISTER_F(SceneTraversalBenchmark, TraversalVisitorUpdateTransforms)
-  ->Args({ 8, 2, 30 }) // 30% dirty
-  ->Unit(benchmark::kMicrosecond);
-
-// Medium tree: depth=5, width=3 (364 nodes total) - 100% dirty (worst case)
-
-BENCHMARK_REGISTER_F(SceneTraversalBenchmark, TraversalVisitorUpdateTransforms)
-  ->Args({ 5, 3, 100 }) // 100% dirty
-  ->Unit(benchmark::kMicrosecond);
-
-// Small tree: depth=3, width=4 (85 nodes total)
-
-BENCHMARK_REGISTER_F(SceneTraversalBenchmark, TraversalVisitorUpdateTransforms)
   ->Args({ 3, 4, 10 }) // 10% dirty
   ->Args({ 3, 4, 30 }) // 30% dirty
   ->Args({ 3, 4, 100 }) // 100% dirty
-  ->Unit(benchmark::kMicrosecond);
-
-// Medium tree: depth=5, width=3 (364 nodes total)
-
-BENCHMARK_REGISTER_F(SceneTraversalBenchmark, TraversalVisitorUpdateTransforms)
   ->Args({ 5, 3, 30 }) // 30% dirty
-  ->Unit(benchmark::kMicrosecond);
-
-// Large wide tree: depth=4, width=6 (1555 nodes total)
-
-BENCHMARK_REGISTER_F(SceneTraversalBenchmark, TraversalVisitorUpdateTransforms)
+  ->Args({ 5, 3, 100 }) // 100% dirty
   ->Args({ 4, 6, 30 }) // 30% dirty
   ->Args({ 4, 6, 100 }) // 100% dirty
-  ->Unit(benchmark::kMicrosecond);
-
-// Deep narrow tree: depth=8, width=2 (511 nodes total)
-
-BENCHMARK_REGISTER_F(SceneTraversalBenchmark, TraversalVisitorUpdateTransforms)
   ->Args({ 8, 2, 30 }) // 30% dirty
   ->Unit(benchmark::kMicrosecond);
 
