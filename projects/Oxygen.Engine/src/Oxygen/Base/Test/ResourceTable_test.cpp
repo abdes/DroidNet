@@ -72,6 +72,45 @@ NOLINT_TEST(ResourceTableBasicTest, EmptyTable)
   EXPECT_EQ(table.Capacity(), kCapacity);
 }
 
+NOLINT_TEST(ResourceTableBasicTest, ReserveGrowsAndDoesNotShrink)
+{
+  static constexpr size_t kCapacity { 4 };
+  static constexpr ResourceHandle::ResourceTypeT kItemType { 1 };
+
+  ResourceTable<Item> table(kItemType, kCapacity);
+  EXPECT_EQ(table.Capacity(), kCapacity);
+
+  table.Reserve(64);
+  EXPECT_GE(table.Capacity(), 64U);
+
+  const auto grown_capacity = table.Capacity();
+  table.Reserve(8);
+  EXPECT_EQ(table.Capacity(), grown_capacity);
+}
+
+NOLINT_TEST(ResourceTableBasicTest, HandlesRemainValidAcrossGrowth)
+{
+  static constexpr size_t kCapacity { 2 };
+  static constexpr ResourceHandle::ResourceTypeT kItemType { 1 };
+
+  ResourceTable<Item> table(kItemType, kCapacity);
+  const auto first = table.Emplace("first");
+  const auto second = table.Emplace("second");
+  ASSERT_TRUE(table.Contains(first));
+  ASSERT_TRUE(table.Contains(second));
+
+  // Force backing vectors to grow beyond initial reserve.
+  table.Reserve(64);
+  for (size_t i = 0; i < 32; ++i) {
+    table.Emplace("extra-" + std::to_string(i));
+  }
+
+  EXPECT_TRUE(table.Contains(first));
+  EXPECT_TRUE(table.Contains(second));
+  EXPECT_EQ(table.ItemAt(first).value, "first");
+  EXPECT_EQ(table.ItemAt(second).value, "second");
+}
+
 NOLINT_TEST(ResourceTableBasicTest, InsertItem)
 {
   static constexpr size_t kCapacity { 10 };
