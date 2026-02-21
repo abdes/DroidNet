@@ -2022,39 +2022,16 @@ auto EnvironmentSettingsService::HashAtmosphereState(
 auto EnvironmentSettingsService::ValidateAndClampState() -> void
 {
   auto clamp_float = [](float& value, float min_v, float max_v) {
-    const float before = value;
     value = std::clamp(value, min_v, max_v);
-    if (before != value) {
-      DLOG_F(2, "clamped (key={}, before={}, after={})", key, before, value);
-    }
   };
   auto clamp_int = [](int& value, int min_v, int max_v) {
-    const int before = value;
     value = std::clamp(value, min_v, max_v);
-    if (before != value) {
-      DLOG_F(
-        WARNING, "clamped (key={}, before={}, after={})", key, before, value);
-    }
   };
   auto clamp_vec3 = [](glm::vec3& value, float min_v, float max_v) {
-    const glm::vec3 before = value;
     value = ClampVec3(value, min_v, max_v);
-    if (before != value) {
-      DLOG_F(WARNING,
-        "clamped (key={}, before=({:.2f}, {:.2f}, {:.2f}), after=({:.2f}, "
-        "{:.2f}, {:.2f}))",
-        key, before.x, before.y, before.z, value.x, value.y, value.z);
-    }
   };
   auto clamp_vec3_min = [](glm::vec3& value, float min_v) {
-    const glm::vec3 before = value;
     value = glm::max(value, glm::vec3(min_v));
-    if (before != value) {
-      DLOG_F(WARNING,
-        "clamped (key={}, before=({:.2f}, {:.2f}, {:.2f}), after=({:.2f}, "
-        "{:.2f}, {:.2f}))",
-        key, before.x, before.y, before.z, value.x, value.y, value.z);
-    }
   };
 
   clamp_float(planet_radius_km_, 1.0F, 100000.0F);
