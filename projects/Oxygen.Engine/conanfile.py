@@ -115,6 +115,7 @@ class OxygenConan(ConanFile):
         self.requires("ftxui/6.1.9")
         self.requires("libspng/0.7.4")
         self.requires("luau/0.708")
+        self.requires("joltphysics/5.5.0")
 
         # Record test-only dependencies so we can skip them during deploy.
         # The test_requires call accepts a reference like 'gtest/master'.
