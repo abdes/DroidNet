@@ -14,22 +14,20 @@ find_package(GTest REQUIRED CONFIG)
 # Build instructions
 # ==============================================================================
 
-# -- Library Link Test ---------------------------------------------------------
-
-set(link_test_target "Oxygen.Physics.LinkTest")
-add_executable(${link_test_target} "Link_test.cpp")
-set_target_properties(
-  ${link_test_target}
-  PROPERTIES
-    FOLDER
-      "Testing"
-)
-target_compile_options(${link_test_target} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
-target_link_libraries(${link_test_target} PRIVATE oxygen::physics)
-add_test(NAME ${link_test_target} COMMAND ${link_test_target})
-
 # -- GTest Test Programs -------------------------------------------------------
 
 include(GTestHelpers)
 
-m_gtest_program(Basic SOURCES "Physics_test.cpp")
+m_gtest_program(
+  Sync
+  SOURCES
+    "EngineTag_test_impl.cpp"
+    "PhysicsModule_backend_smoke_test.cpp"
+    "PhysicsModule_test_fixture.h"
+    "PhysicsModule_sync_test.cpp"
+)
+target_compile_definitions(
+  Oxygen.PhysicsModule.Sync.Tests
+  PRIVATE
+    OXYGEN_ENGINE_TESTING
+)

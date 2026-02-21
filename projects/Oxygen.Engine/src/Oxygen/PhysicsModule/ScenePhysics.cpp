@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
 #include <Oxygen/PhysicsModule/ScenePhysics.h>
 
@@ -16,9 +17,19 @@ auto ScenePhysics::AttachRigidBody(observer_ptr<PhysicsModule> physics_module,
   if (!physics_module || !node.IsValid()) {
     return std::nullopt;
   }
+  DCHECK_F(node.IsAlive(),
+    "AttachRigidBody contract violated: node handle must be alive.");
+  DCHECK_F(physics_module->IsNodeInObservedScene(node.GetHandle()),
+    "AttachRigidBody contract violated: node must belong to currently "
+    "observed scene.");
+  if (!physics_module->IsNodeInObservedScene(node.GetHandle())) {
+    return std::nullopt;
+  }
 
   auto& body_api = physics_module->GetBodyApi();
   const auto world_id = physics_module->GetWorldId();
+  DCHECK_F(world_id != kInvalidWorldId,
+    "AttachRigidBody contract violated: physics world must be valid.");
   if (world_id == kInvalidWorldId) {
     return std::nullopt;
   }
@@ -39,7 +50,7 @@ auto ScenePhysics::AttachRigidBody(observer_ptr<PhysicsModule> physics_module,
 
   const BodyId body_id = result.value();
 
-  physics_module->RegisterNodeBodyMapping(node.GetHandle(), body_id);
+  physics_module->RegisterNodeBodyMapping(node.GetHandle(), body_id, desc.type);
 
   return RigidBodyFacade(node.GetHandle(), world_id, body_id,
     observer_ptr<system::IBodyApi> { &body_api });

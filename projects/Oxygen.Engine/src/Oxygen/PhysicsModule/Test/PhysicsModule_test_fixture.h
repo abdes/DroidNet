@@ -1,0 +1,513 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#pragma once
+
+#include <algorithm>
+#include <chrono>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+#include <Oxygen/Testing/GTest.h>
+
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Core/EngineTag.h>
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Physics/Body/BodyDesc.h>
+#include <Oxygen/Physics/PhysicsError.h>
+#include <Oxygen/Physics/System/IPhysicsSystem.h>
+#include <Oxygen/PhysicsModule/PhysicsModule.h>
+#include <Oxygen/PhysicsModule/ScenePhysics.h>
+#include <Oxygen/Scene/Scene.h>
+
+namespace oxygen::physics::test {
+
+namespace detail {
+
+  struct BodyState final {
+    body::BodyType type { body::BodyType::kStatic };
+    Vec3 position { 0.0F };
+    Quat rotation { 1.0F, 0.0F, 0.0F, 0.0F };
+    Vec3 linear_velocity { 0.0F };
+    Vec3 angular_velocity { 0.0F };
+  };
+
+  struct BackendState final {
+    WorldId world_id { WorldId { 1U } };
+    bool world_created { false };
+    bool world_destroyed { false };
+    std::size_t step_count { 0 };
+    float last_step_dt { 0.0F };
+    float last_step_fixed_dt { 0.0F };
+    Vec3 gravity { 0.0F, -9.81F, 0.0F };
+    std::unordered_map<BodyId, BodyState> bodies {};
+    std::vector<system::ActiveBodyTransform> active_transforms {};
+    BodyId next_body_id { BodyId { 1U } };
+    std::size_t move_kinematic_calls { 0 };
+    std::size_t set_body_pose_calls { 0 };
+    BodyId last_moved_body { kInvalidBodyId };
+    Vec3 last_moved_position { 0.0F };
+    Quat last_moved_rotation { 1.0F, 0.0F, 0.0F, 0.0F };
+  };
+
+  class FakeWorldApi final : public system::IWorldApi {
+  public:
+    explicit FakeWorldApi(BackendState& state)
+      : state_(&state)
+    {
+    }
+
+    auto CreateWorld(const world::WorldDesc&) -> PhysicsResult<WorldId> override
+    {
+      state_->world_created = true;
+      return PhysicsResult<WorldId>::Ok(state_->world_id);
+    }
+    auto DestroyWorld(const WorldId world_id) -> PhysicsResult<void> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      state_->world_destroyed = true;
+      return PhysicsResult<void>::Ok();
+    }
+    auto Step(const WorldId world_id, const float delta_time, int,
+      const float fixed_dt_seconds) -> PhysicsResult<void> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      state_->step_count += 1;
+      state_->last_step_dt = delta_time;
+      state_->last_step_fixed_dt = fixed_dt_seconds;
+      return PhysicsResult<void>::Ok();
+    }
+
+    auto GetActiveBodyTransforms(WorldId world_id,
+      std::span<system::ActiveBodyTransform> out_transforms) const
+      -> PhysicsResult<size_t> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      const auto count
+        = std::min(out_transforms.size(), state_->active_transforms.size());
+      for (size_t i = 0; i < count; ++i) {
+        out_transforms[i] = state_->active_transforms[i];
+      }
+      return PhysicsResult<size_t>::Ok(count);
+    }
+
+    auto GetGravity(WorldId world_id) const -> PhysicsResult<Vec3> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      return PhysicsResult<Vec3>::Ok(state_->gravity);
+    }
+    auto SetGravity(WorldId world_id, const Vec3& gravity)
+      -> PhysicsResult<void> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      state_->gravity = gravity;
+      return PhysicsResult<void>::Ok();
+    }
+
+  private:
+    observer_ptr<BackendState> state_;
+  };
+
+  class FakeBodyApi final : public system::IBodyApi {
+  public:
+    explicit FakeBodyApi(BackendState& state)
+      : state_(&state)
+    {
+    }
+
+    auto CreateBody(WorldId world_id, const body::BodyDesc& desc)
+      -> PhysicsResult<BodyId> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      const auto body_id = state_->next_body_id;
+      state_->next_body_id = BodyId { state_->next_body_id.get() + 1U };
+      state_->bodies.insert_or_assign(body_id,
+        BodyState {
+          .type = desc.type,
+          .position = desc.initial_position,
+          .rotation = desc.initial_rotation,
+        });
+      return PhysicsResult<BodyId>::Ok(body_id);
+    }
+
+    auto DestroyBody(WorldId world_id, BodyId body_id)
+      -> PhysicsResult<void> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      if (!state_->bodies.contains(body_id)) {
+        return Err(PhysicsError::kBodyNotFound);
+      }
+      state_->bodies.erase(body_id);
+      return PhysicsResult<void>::Ok();
+    }
+
+    auto GetBodyPosition(WorldId world_id, BodyId body_id) const
+      -> PhysicsResult<Vec3> override
+    {
+      const auto* body = TryBody(world_id, body_id);
+      if (body == nullptr) {
+        return Err(PhysicsError::kBodyNotFound);
+      }
+      return PhysicsResult<Vec3>::Ok(body->position);
+    }
+    auto GetBodyRotation(WorldId world_id, BodyId body_id) const
+      -> PhysicsResult<Quat> override
+    {
+      const auto* body = TryBody(world_id, body_id);
+      if (body == nullptr) {
+        return Err(PhysicsError::kBodyNotFound);
+      }
+      return PhysicsResult<Quat>::Ok(body->rotation);
+    }
+    auto SetBodyPosition(WorldId world_id, BodyId body_id, const Vec3& position)
+      -> PhysicsResult<void> override
+    {
+      auto* body = TryBodyMutable(world_id, body_id);
+      if (body == nullptr) {
+        return Err(PhysicsError::kBodyNotFound);
+      }
+      body->position = position;
+      return PhysicsResult<void>::Ok();
+    }
+    auto SetBodyRotation(WorldId world_id, BodyId body_id, const Quat& rotation)
+      -> PhysicsResult<void> override
+    {
+      auto* body = TryBodyMutable(world_id, body_id);
+      if (body == nullptr) {
+        return Err(PhysicsError::kBodyNotFound);
+      }
+      body->rotation = rotation;
+      return PhysicsResult<void>::Ok();
+    }
+    auto SetBodyPose(WorldId world_id, BodyId body_id, const Vec3& position,
+      const Quat& rotation) -> PhysicsResult<void> override
+    {
+      auto* body = TryBodyMutable(world_id, body_id);
+      if (body == nullptr) {
+        return Err(PhysicsError::kBodyNotFound);
+      }
+      body->position = position;
+      body->rotation = rotation;
+      state_->set_body_pose_calls += 1;
+      return PhysicsResult<void>::Ok();
+    }
+
+    auto GetLinearVelocity(WorldId world_id, BodyId body_id) const
+      -> PhysicsResult<Vec3> override
+    {
+      const auto* body = TryBody(world_id, body_id);
+      if (body == nullptr) {
+        return Err(PhysicsError::kBodyNotFound);
+      }
+      return PhysicsResult<Vec3>::Ok(body->linear_velocity);
+    }
+    auto GetAngularVelocity(WorldId world_id, BodyId body_id) const
+      -> PhysicsResult<Vec3> override
+    {
+      const auto* body = TryBody(world_id, body_id);
+      if (body == nullptr) {
+        return Err(PhysicsError::kBodyNotFound);
+      }
+      return PhysicsResult<Vec3>::Ok(body->angular_velocity);
+    }
+    auto SetLinearVelocity(WorldId world_id, BodyId body_id,
+      const Vec3& velocity) -> PhysicsResult<void> override
+    {
+      auto* body = TryBodyMutable(world_id, body_id);
+      if (body == nullptr) {
+        return Err(PhysicsError::kBodyNotFound);
+      }
+      body->linear_velocity = velocity;
+      return PhysicsResult<void>::Ok();
+    }
+    auto SetAngularVelocity(WorldId world_id, BodyId body_id,
+      const Vec3& velocity) -> PhysicsResult<void> override
+    {
+      auto* body = TryBodyMutable(world_id, body_id);
+      if (body == nullptr) {
+        return Err(PhysicsError::kBodyNotFound);
+      }
+      body->angular_velocity = velocity;
+      return PhysicsResult<void>::Ok();
+    }
+
+    auto AddForce(WorldId world_id, BodyId body_id, const Vec3&)
+      -> PhysicsResult<void> override
+    {
+      if (TryBody(world_id, body_id) == nullptr) {
+        return Err(PhysicsError::kBodyNotFound);
+      }
+      return PhysicsResult<void>::Ok();
+    }
+    auto AddImpulse(WorldId world_id, BodyId body_id, const Vec3&)
+      -> PhysicsResult<void> override
+    {
+      if (TryBody(world_id, body_id) == nullptr) {
+        return Err(PhysicsError::kBodyNotFound);
+      }
+      return PhysicsResult<void>::Ok();
+    }
+    auto AddTorque(WorldId world_id, BodyId body_id, const Vec3&)
+      -> PhysicsResult<void> override
+    {
+      if (TryBody(world_id, body_id) == nullptr) {
+        return Err(PhysicsError::kBodyNotFound);
+      }
+      return PhysicsResult<void>::Ok();
+    }
+
+    auto MoveKinematic(WorldId world_id, BodyId body_id,
+      const Vec3& target_position, const Quat& target_rotation, float)
+      -> PhysicsResult<void> override
+    {
+      auto* body = TryBodyMutable(world_id, body_id);
+      if (body == nullptr) {
+        return Err(PhysicsError::kBodyNotFound);
+      }
+      body->position = target_position;
+      body->rotation = target_rotation;
+      state_->move_kinematic_calls += 1;
+      state_->last_moved_body = body_id;
+      state_->last_moved_position = target_position;
+      state_->last_moved_rotation = target_rotation;
+      return PhysicsResult<void>::Ok();
+    }
+
+  private:
+    [[nodiscard]] auto TryBody(WorldId world_id, BodyId body_id) const
+      -> const BodyState*
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return nullptr;
+      }
+      const auto it = state_->bodies.find(body_id);
+      return it != state_->bodies.end() ? &it->second : nullptr;
+    }
+
+    [[nodiscard]] auto TryBodyMutable(WorldId world_id, BodyId body_id)
+      -> BodyState*
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return nullptr;
+      }
+      const auto it = state_->bodies.find(body_id);
+      return it != state_->bodies.end() ? &it->second : nullptr;
+    }
+
+    observer_ptr<BackendState> state_;
+  };
+
+  class FakeQueryApi final : public system::IQueryApi {
+  public:
+    auto Raycast(WorldId, const query::RaycastDesc&) const
+      -> PhysicsResult<query::OptionalRaycastHit> override
+    {
+      return PhysicsResult<query::OptionalRaycastHit>::Ok(
+        query::OptionalRaycastHit {});
+    }
+    auto Sweep(WorldId, const query::SweepDesc&,
+      std::span<query::SweepHit>) const -> PhysicsResult<size_t> override
+    {
+      return PhysicsResult<size_t>::Ok(size_t { 0 });
+    }
+    auto Overlap(WorldId, const query::OverlapDesc&, std::span<uint64_t>) const
+      -> PhysicsResult<size_t> override
+    {
+      return PhysicsResult<size_t>::Ok(size_t { 0 });
+    }
+  };
+
+  class FakeEventApi final : public system::IEventApi {
+  public:
+    auto GetPendingEventCount(WorldId) const -> PhysicsResult<size_t> override
+    {
+      return PhysicsResult<size_t>::Ok(size_t { 0 });
+    }
+    auto DrainEvents(WorldId, std::span<events::PhysicsEvent>)
+      -> PhysicsResult<size_t> override
+    {
+      return PhysicsResult<size_t>::Ok(size_t { 0 });
+    }
+  };
+
+  class FakeCharacterApi final : public system::ICharacterApi {
+  public:
+    auto CreateCharacter(WorldId, const character::CharacterDesc&)
+      -> PhysicsResult<CharacterId> override
+    {
+      return Err(PhysicsError::kNotImplemented);
+    }
+    auto DestroyCharacter(WorldId, CharacterId) -> PhysicsResult<void> override
+    {
+      return Err(PhysicsError::kNotImplemented);
+    }
+
+    auto MoveCharacter(
+      WorldId, CharacterId, const character::CharacterMoveInput&, float)
+      -> PhysicsResult<character::CharacterMoveResult> override
+    {
+      return Err(PhysicsError::kNotImplemented);
+    }
+  };
+
+  class FakePhysicsSystem final : public system::IPhysicsSystem {
+  public:
+    FakePhysicsSystem()
+      : worlds_(state_)
+      , bodies_(state_)
+    {
+    }
+
+    [[nodiscard]] auto State() noexcept -> BackendState& { return state_; }
+    [[nodiscard]] auto State() const noexcept -> const BackendState&
+    {
+      return state_;
+    }
+
+    auto Worlds() noexcept -> system::IWorldApi& override { return worlds_; }
+    auto Bodies() noexcept -> system::IBodyApi& override { return bodies_; }
+    auto Queries() noexcept -> system::IQueryApi& override { return queries_; }
+    auto Events() noexcept -> system::IEventApi& override { return events_; }
+    auto Characters() noexcept -> system::ICharacterApi& override
+    {
+      return characters_;
+    }
+
+    auto Worlds() const noexcept -> const system::IWorldApi& override
+    {
+      return worlds_;
+    }
+    auto Bodies() const noexcept -> const system::IBodyApi& override
+    {
+      return bodies_;
+    }
+    auto Queries() const noexcept -> const system::IQueryApi& override
+    {
+      return queries_;
+    }
+    auto Events() const noexcept -> const system::IEventApi& override
+    {
+      return events_;
+    }
+    auto Characters() const noexcept -> const system::ICharacterApi& override
+    {
+      return characters_;
+    }
+
+  private:
+    BackendState state_ {};
+    FakeWorldApi worlds_;
+    FakeBodyApi bodies_;
+    FakeQueryApi queries_ {};
+    FakeEventApi events_ {};
+    FakeCharacterApi characters_ {};
+  };
+
+} // namespace detail
+
+class PhysicsModuleSyncTest : public testing::Test {
+protected:
+  void SetUp() override
+  {
+    scene_ = std::make_shared<scene::Scene>("PhysicsModuleSyncTest", 128);
+    frame_.SetScene(observer_ptr<scene::Scene> { scene_.get() });
+
+    engine::ModuleTimingData timing {};
+    timing.fixed_delta_time
+      = time::CanonicalDuration { std::chrono::milliseconds(16) };
+    frame_.SetModuleTimingData(
+      timing, engine::internal::EngineTagFactory::Get());
+
+    auto fake_physics = std::make_unique<detail::FakePhysicsSystem>();
+    fake_physics_
+      = observer_ptr<detail::FakePhysicsSystem> { fake_physics.get() };
+    module_ = std::make_unique<PhysicsModule>(
+      engine::ModulePriority { 100U }, std::move(fake_physics));
+  }
+
+  void TearDown() override
+  {
+    if (module_) {
+      module_->OnShutdown();
+    }
+  }
+
+  auto RunPhase(core::PhaseId phase,
+    co::Co<> (PhysicsModule::*phase_fn)(observer_ptr<engine::FrameContext>))
+    -> void
+  {
+    frame_.SetCurrentPhase(phase, engine::internal::EngineTagFactory::Get());
+    co::Run(loop_, [&]() -> co::Co<> {
+      co_await (module_.get()->*phase_fn)(
+        observer_ptr<engine::FrameContext> { &frame_ });
+      co_return;
+    });
+  }
+
+  auto RunGameplay() -> void
+  {
+    RunPhase(core::PhaseId::kGameplay, &PhysicsModule::OnGameplay);
+  }
+
+  auto RunSceneMutation() -> void
+  {
+    RunPhase(core::PhaseId::kSceneMutation, &PhysicsModule::OnSceneMutation);
+  }
+
+  auto RunFixedSimulation() -> void
+  {
+    RunPhase(
+      core::PhaseId::kFixedSimulation, &PhysicsModule::OnFixedSimulation);
+  }
+
+  [[nodiscard]] auto AttachBody(scene::SceneNode& node,
+    const body::BodyType type) -> std::optional<RigidBodyFacade>
+  {
+    RunGameplay();
+    scene_->Update();
+
+    body::BodyDesc desc {};
+    desc.type = type;
+    return ScenePhysics::AttachRigidBody(
+      observer_ptr<PhysicsModule> { module_.get() }, node, desc);
+  }
+
+  auto SetActiveScene(std::shared_ptr<scene::Scene> scene) -> void
+  {
+    scene_ = std::move(scene);
+    frame_.SetScene(observer_ptr<scene::Scene> { scene_.get() });
+  }
+
+  [[nodiscard]] auto FakeState() noexcept -> detail::BackendState&
+  {
+    return fake_physics_->State();
+  }
+
+  std::shared_ptr<scene::Scene> scene_;
+  engine::FrameContext frame_;
+  co::testing::TestEventLoop loop_ {};
+  std::unique_ptr<PhysicsModule> module_;
+  observer_ptr<detail::FakePhysicsSystem> fake_physics_ {};
+};
+
+} // namespace oxygen::physics::test
