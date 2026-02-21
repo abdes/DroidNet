@@ -142,6 +142,7 @@ public:
   [[nodiscard]] auto Size() const noexcept { return items_.size(); }
   [[nodiscard]] auto IsEmpty() const noexcept { return items_.empty(); }
   [[nodiscard]] auto Capacity() const noexcept { return items_.capacity(); }
+  auto Reserve(size_t reserve_count) -> void;
 
   //=== Modifiers ===---------------------------------------------------------//
 
@@ -532,6 +533,21 @@ template <typename T> auto ResourceTable<T>::Reset() noexcept -> void
   items_.clear();
   meta_.clear();
   sparse_table_.clear();
+}
+
+template <typename T>
+auto ResourceTable<T>::Reserve(const size_t reserve_count) -> void
+{
+  assert(reserve_count < ResourceHandle::kIndexMax);
+  if (reserve_count <= Capacity()) {
+    return;
+  }
+
+  // Grow all backing sets together so sparse, dense, and metadata stay aligned
+  // in capacity planning.
+  sparse_table_.reserve(reserve_count);
+  items_.reserve(reserve_count);
+  meta_.reserve(reserve_count);
 }
 
 template <typename T>
