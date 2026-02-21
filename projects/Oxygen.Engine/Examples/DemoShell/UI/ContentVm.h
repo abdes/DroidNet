@@ -249,6 +249,7 @@ private:
 
   observer_ptr<ContentSettingsService> settings_;
   observer_ptr<FileBrowserService> file_browser_;
+  bool persisted_library_state_restored_ { false };
 
   std::unique_ptr<content::import::AsyncImportService> import_service_;
   content::import::AsyncImportService::Config service_config_ {};

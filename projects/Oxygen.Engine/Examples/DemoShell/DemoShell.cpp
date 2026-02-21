@@ -233,6 +233,7 @@ auto DemoShell::CompleteInitialization() -> bool
     if (impl_->config.on_loose_index_loaded) {
       impl_->content_vm->SetOnIndexLoaded(impl_->config.on_loose_index_loaded);
     }
+    impl_->content_vm->RestorePersistedLibraryState();
   }
 
   if (impl_->demo_shell_ui && !impl_->pending_panels.empty()) {
