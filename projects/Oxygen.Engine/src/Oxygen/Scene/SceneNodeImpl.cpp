@@ -135,6 +135,18 @@ auto SceneNodeImpl::IsTransformDirty() const noexcept -> bool
   return GetComponent<TransformComponent>().IsDirty();
 }
 
+auto SceneNodeImpl::GetDirtyTransformSubtreeCount() const noexcept
+  -> std::uint32_t
+{
+  return GetComponent<GraphData>().GetDirtyTransformSubtreeCount();
+}
+
+auto SceneNodeImpl::SetDirtyTransformSubtreeCount(
+  const std::uint32_t count) noexcept -> void
+{
+  GetComponent<GraphData>().SetDirtyTransformSubtreeCount(count);
+}
+
 /*!
  Recalculates the cached world transformation matrix for this node by composing
  its local transform with its parent's world transform (if any). This method is

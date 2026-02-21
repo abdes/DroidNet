@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// ReSharper disable CppClangTidyBugproneChainedComparison
 #pragma once
 
 #include <array>
@@ -137,6 +136,18 @@ public:
   */
   std::size_t UpdateTransforms(std::span<SceneNode> starting_nodes);
 
+  //! Single-pass DFS prep: inherited flag propagation and subtree dirty counts.
+  /*!
+   Executes one post-order traversal using the dry-run hook as the pre-visit
+   phase. On pre-visit, inherited flags are updated and dirty flags optionally
+   processed. On post-visit, dirty subtree counts are accumulated from children
+   and written to each node.
+
+   \return Number of nodes that had dirty flags processed in this pass.
+  */
+  std::size_t PrepareDirtyFlagsAndSubtreeCounts(bool process_dirty_flags = true)
+    requires(!std::is_const_v<SceneT>);
+
 private:
   using Base::ApplyNodeFilter;
   using Base::CollectChildrenToBuffer;
@@ -212,6 +223,10 @@ TraversalResult SceneTraversal<SceneT>::TraverseHierarchy(
   const Node& starting_node, VisitorFunc&& visitor, TraversalOrder order,
   FilterFunc&& filter) const
 {
+  if (IsSceneExpired()) [[unlikely]] {
+    DLOG_F(ERROR, "SceneTraversal called on an expired scene");
+    return TraversalResult {};
+  }
 
   if (!starting_node.IsValid()) {
     DLOG_F(WARNING, "TraverseHierarchy starting from an invalid node.");
@@ -240,6 +255,10 @@ TraversalResult SceneTraversal<SceneT>::TraverseHierarchies(
   std::span<const Node> starting_nodes, VisitorFunc&& visitor,
   TraversalOrder order, FilterFunc&& filter) const
 {
+  if (IsSceneExpired()) [[unlikely]] {
+    DLOG_F(ERROR, "SceneTraversal called on an expired scene");
+    return TraversalResult {};
+  }
   if (starting_nodes.empty()) [[unlikely]] {
     return TraversalResult {};
   }
@@ -276,7 +295,7 @@ VisitResult SceneTraversal<SceneT>::PerformNodeVisit(VisitorFunc& visitor,
   DLOG_SCOPE_FUNCTION(2);
   DLOG_F(3, "node : {}", entry_ref.visited_node.node_impl->GetName());
 
-  VisitResult visit_result;
+  VisitResult visit_result { VisitResult::kStop };
   if (dry_run) {
     DLOG_SCOPE_F(2, "Dry-Run");
 
@@ -327,7 +346,7 @@ TraversalResult SceneTraversal<SceneT>::TraverseImpl(
   using Traits = ContainerTraits<Order>;
   typename Traits::template container_type<TraversalEntry> container;
 
-  InitializeTraversal<Order>(roots, container);
+  InitializeTraversal<Order>(roots, container); // NOLINT
 
   while (!Traits::empty(container)) {
     // Peek at the entry without removing it
@@ -362,7 +381,7 @@ TraversalResult SceneTraversal<SceneT>::TraverseImpl(
       Traits::pop(container);
       // Still traverse children for rejected nodes
       CollectChildrenToBuffer(node, current_depth);
-      QueueChildrenForTraversal<Order>(filter_result, container);
+      QueueChildrenForTraversal<Order>(filter_result, container); // NOLINT
       continue;
     }
 
@@ -384,7 +403,7 @@ TraversalResult SceneTraversal<SceneT>::TraverseImpl(
         // Continue with children - mark as processed and add children
         entry_ref.state = TraversalEntry::ProcessingState::kChildrenProcessed;
         CollectChildrenToBuffer(node, current_depth);
-        QueueChildrenForTraversal<Order>(filter_result, container);
+        QueueChildrenForTraversal<Order>(filter_result, container); // NOLINT
         continue;
       }
     }
@@ -410,7 +429,7 @@ TraversalResult SceneTraversal<SceneT>::TraverseImpl(
       if (visit_result != VisitResult::kSkipSubtree) {
         // Use the saved node pointer and current depth
         CollectChildrenToBuffer(node, current_depth);
-        QueueChildrenForTraversal<Order>(filter_result, container);
+        QueueChildrenForTraversal<Order>(filter_result, container); // NOLINT
       }
     }
   }
@@ -419,9 +438,9 @@ TraversalResult SceneTraversal<SceneT>::TraverseImpl(
 
 template <typename SceneT>
 template <typename VisitorFunc, typename FilterFunc>
-TraversalResult SceneTraversal<SceneT>::TraverseDispatch(
+auto SceneTraversal<SceneT>::TraverseDispatch(
   std::span<VisitedNode> root_impl_nodes, VisitorFunc&& visitor,
-  const TraversalOrder order, FilterFunc&& filter) const
+  const TraversalOrder order, FilterFunc&& filter) const -> TraversalResult
 {
   if (root_impl_nodes.empty()) [[unlikely]] {
     return TraversalResult {};
@@ -477,13 +496,67 @@ std::size_t SceneTraversal<SceneT>::UpdateTransforms()
   return updated_count;
 }
 
+template <typename SceneT>
+auto SceneTraversal<SceneT>::PrepareDirtyFlagsAndSubtreeCounts(
+  const bool process_dirty_flags) -> std::size_t
+  requires(!std::is_const_v<SceneT>)
+{
+  std::size_t processed_nodes_with_dirty_flags = 0;
+  [[maybe_unused]] auto result = Traverse(
+    [&](const auto& node, const bool dry_run) -> VisitResult {
+      DCHECK_NOTNULL_F(node.node_impl);
+      auto& node_impl = *node.node_impl;
+
+      if (dry_run) {
+        if (!process_dirty_flags) {
+          return VisitResult::kContinue;
+        }
+
+        auto& flags = node_impl.GetFlags();
+        if (!node_impl.AsGraphNode().IsRoot()) {
+          const auto& parent_flags
+            = GetScene()
+                .GetNodeImplRef(node_impl.AsGraphNode().GetParent())
+                .GetFlags();
+          for (const auto inherited_flag : flags.inherited_flags()) {
+            flags.UpdateValueFromParent(inherited_flag, parent_flags);
+          }
+        }
+
+        bool has_dirty_flags = false;
+        for (const auto dirty_flag : flags.dirty_flags()) {
+          flags.ProcessDirtyFlag(dirty_flag);
+          has_dirty_flags = true;
+        }
+        if (has_dirty_flags) {
+          ++processed_nodes_with_dirty_flags;
+        }
+        return VisitResult::kContinue;
+      }
+
+      std::uint32_t dirty_subtree_count
+        = node_impl.IsTransformDirty() ? 1U : 0U;
+      auto child_handle = node_impl.AsGraphNode().GetFirstChild();
+      while (child_handle.IsValid()) {
+        const auto& child_impl = GetScene().GetNodeImplRef(child_handle);
+        dirty_subtree_count += child_impl.GetDirtyTransformSubtreeCount();
+        child_handle = child_impl.AsGraphNode().GetNextSibling();
+      }
+      node_impl.SetDirtyTransformSubtreeCount(dirty_subtree_count);
+      return VisitResult::kContinue;
+    },
+    TraversalOrder::kPostOrder);
+
+  return processed_nodes_with_dirty_flags;
+}
+
 /*!
  @param starting_nodes Starting nodes for transform update traversal
  @return Number of nodes that had their transforms updated
 */
 template <typename SceneT>
-std::size_t SceneTraversal<SceneT>::UpdateTransforms(
-  const std::span<SceneNode> starting_nodes)
+auto SceneTraversal<SceneT>::UpdateTransforms(
+  const std::span<SceneNode> starting_nodes) -> std::size_t
 {
   std::size_t updated_count
     = 0; // Batch process from specific roots with dirty transform filter

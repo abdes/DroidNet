@@ -655,39 +655,6 @@ void Scene::UnlinkNode(
 
 namespace {
 
-//! Processes dirty flags for all nodes in the scene.
-/*!
- Processes all dirty flags for each node in the resource table. This pass
- maximizes cache locality and ensures all dirty flags are handled.
-*/
-void ProcessDirtyFlags(const Scene& scene) noexcept
-{
-  LOG_SCOPE_F(2, "PASS 1 - Dirty flags");
-  auto& node_table = scene.GetNodes();
-  size_t processed_count = 0;
-  for (size_t i = 0; i < node_table.Size(); ++i) {
-    auto& node_impl = const_cast<SceneNodeImpl&>(node_table.Items()[i]);
-    LOG_SCOPE_F(2, "For Node");
-    LOG_F(2, "name = {}", node_impl.GetName());
-    LOG_F(2, "is root: {}", node_impl.AsGraphNode().IsRoot());
-    auto& flags = node_impl.GetFlags();
-    bool has_dirty_flags { false };
-    for (auto flag : flags.dirty_flags()) {
-      LOG_F(2, "flag: ", nostd::to_string(flag));
-      flags.ProcessDirtyFlag(flag);
-      if (!has_dirty_flags) {
-        LOG_F(2, "Flags");
-      }
-      has_dirty_flags = true;
-    }
-    if (has_dirty_flags) {
-      ++processed_count;
-    }
-    // Do not update transforms here.
-  }
-  DLOG_F(2, "{}/{} nodes had dirty flags", processed_count, node_table.Size());
-}
-
 //! Marks the transform as dirty for a node and all its descendants
 //! (non-recursive).
 void MarkSubtreeTransformDirty(
@@ -941,12 +908,15 @@ auto Scene::UpdateMutationCollectionState(const bool log_transition) -> void
 void Scene::Update(const bool skip_dirty_flags) noexcept
 {
   LOG_SCOPE_F(2, "Scene update");
+  LOG_SCOPE_F(2, "PASS 1 - Flags + dirty subtree counts");
+  [[maybe_unused]] const auto processed_nodes_with_dirty_flags
+    = Traverse().PrepareDirtyFlagsAndSubtreeCounts(!skip_dirty_flags);
   if (!skip_dirty_flags) {
-    // Pass 1: Process dirty flags for all nodes (linear scan,
-    // cache-friendly)
-    ProcessDirtyFlags(*this);
+    DLOG_F(2, "{}/{} nodes had dirty flags", processed_nodes_with_dirty_flags,
+      GetNodes().Size());
   }
-  // Pass 2: Update transforms
+
+  // Pass 2: Update transforms with subtree rejection.
   LOG_SCOPE_F(2, "PASS 2 - Update transforms");
   [[maybe_unused]] const auto updated_count = Traverse().UpdateTransforms();
   DLOG_F(2, "Updated transforms for {} nodes", updated_count);

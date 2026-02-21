@@ -133,19 +133,31 @@ struct DirtyTransformFilter {
 
     const auto& node = *visited_node.node_impl;
 
-    // If parent was accepted and this node does not ignore parent transform,
-    // accept
+    // Ignore-parent nodes are independent roots for transform propagation, so
+    // we reject their incoming parent path and prune their subtree here.
     if (node.GetFlags().GetEffectiveValue(
           SceneNodeFlags::kIgnoreParentTransform)) {
       DLOG_F(2, "Rejecting subtree for node {} due to IgnoreParentTransform",
         node.GetName());
       return kRejectSubTree;
     }
-    // Otherwise, accept if this node is dirty, or its parent accepted, but for
-    // root nodes, we only use our own verdict.
+    // If parent was accepted, this node must also be accepted so world
+    // transforms propagate down the hierarchy.
     const auto parent_accepted
       = node.AsGraphNode().IsRoot() ? false : parent_filter_result == kAccept;
-    const auto should_accept = parent_accepted || node.IsTransformDirty();
+    if (parent_accepted) {
+      DLOG_F(2, "Node {} accepted due to accepted parent", node.GetName());
+      return kAccept;
+    }
+    // Otherwise, use subtree dirtiness to prune clean branches early.
+    if (node.GetDirtyTransformSubtreeCount() == 0) {
+      DLOG_F(2, "Rejecting subtree for node {} due to clean subtree",
+        node.GetName());
+      return kRejectSubTree;
+    }
+    // Node/subtree is dirty, but parent was not accepted. Accept only if this
+    // node itself is dirty; otherwise reject node but keep traversing.
+    const auto should_accept = node.IsTransformDirty();
     const auto verdict = should_accept ? kAccept : kReject;
     DLOG_F(2, "Node {} is {}", node.GetName(),
       verdict == kAccept ? "accepted" : "rejected");

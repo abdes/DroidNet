@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
@@ -61,6 +63,20 @@ public:
     prev_sibling_ = sibling;
   }
 
+  [[nodiscard]] auto GetDirtyTransformSubtreeCount() const noexcept
+    -> std::uint32_t
+  {
+    return dirty_transform_subtree_count_;
+  }
+  auto SetDirtyTransformSubtreeCount(const std::uint32_t count) noexcept -> void
+  {
+    dirty_transform_subtree_count_ = count;
+  }
+  auto IncrementDirtyTransformSubtreeCount() noexcept -> void
+  {
+    ++dirty_transform_subtree_count_;
+  }
+
   [[nodiscard]] auto IsCloneable() const noexcept -> bool override
   {
     return true;
@@ -78,6 +94,7 @@ private:
   NodeHandle first_child_;
   NodeHandle next_sibling_;
   NodeHandle prev_sibling_;
+  std::uint32_t dirty_transform_subtree_count_ { 0 };
 };
 
 } // namespace oxygen::scene::detail

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <string>
 
@@ -165,6 +166,14 @@ public:
 
   //! Checks whether the node's transform requires recalculation.
   OXGN_SCN_NDAPI auto IsTransformDirty() const noexcept -> bool;
+  //! Returns number of dirty-transform nodes in this node subtree (including
+  //! this node).
+  OXGN_SCN_NDAPI auto GetDirtyTransformSubtreeCount() const noexcept
+    -> std::uint32_t;
+  //! Sets number of dirty-transform nodes in this node subtree (including this
+  //! node).
+  OXGN_SCN_API auto SetDirtyTransformSubtreeCount(std::uint32_t count) noexcept
+    -> void;
 
   //! Updates the node's world transformation matrices.
   OXGN_SCN_API auto UpdateTransforms(const Scene& scene) -> void;
