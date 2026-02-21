@@ -77,9 +77,12 @@ namespace {
   }
 
   struct PhaseTimer {
-    PhaseTimer(FrameContext& context, core::PhaseId phase,
+    using StageTimings
+      = EnumIndexedArray<core::PhaseId, std::chrono::microseconds>;
+
+    PhaseTimer(StageTimings& stage_timings, core::PhaseId phase,
       const time::PhysicalClock& clock)
-      : context_(context)
+      : stage_timings_(stage_timings)
       , phase_(phase)
       , clock_(clock)
       , start_(clock.Now())
@@ -90,11 +93,10 @@ namespace {
     {
       const auto duration
         = duration_cast<microseconds>(clock_.Since(start_).get());
-      context_.SetPhaseDuration(
-        phase_, duration, engine::internal::EngineTagFactory::Get());
+      stage_timings_[phase_] = duration;
     }
 
-    FrameContext& context_;
+    StageTimings& stage_timings_;
     core::PhaseId phase_;
     const time::PhysicalClock& clock_;
     time::PhysicalTime start_;
@@ -379,69 +381,67 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
     // IDs)
     auto context = observer_ptr { &frame_context_ };
     const auto tag = internal::EngineTagFactory::Get();
-
-    // Reset stage timings for the new frame to ensure zero-duration phases are
-    // correctly reported.
-    auto timing = frame_context_.GetFrameTiming();
+    // Collect per-phase timings for the current frame in a working buffer.
+    // Publish to FrameContext only once the frame is fully complete.
+    PhaseTimer::StageTimings working_stage_timings {};
     for (const auto phase : enum_as_index<core::PhaseId>) {
-      timing.stage_timings[phase] = std::chrono::microseconds(0);
+      working_stage_timings[phase] = std::chrono::microseconds(0);
     }
-    context->SetFrameTiming(timing, tag);
 
     // Fence polling, epoch advance, deferred destruction retirement
     {
       PhaseTimer timer(
-        frame_context_, core::PhaseId::kFrameStart, GetPhysicalClock());
+        working_stage_timings, core::PhaseId::kFrameStart, GetPhysicalClock());
       co_await PhaseFrameStart(context);
     }
 
     // B0: Input snapshot
     {
       PhaseTimer timer(
-        frame_context_, core::PhaseId::kInput, GetPhysicalClock());
+        working_stage_timings, core::PhaseId::kInput, GetPhysicalClock());
       co_await PhaseInput(context);
     }
     // Network packet application & reconciliation
     {
-      PhaseTimer timer(frame_context_, core::PhaseId::kNetworkReconciliation,
-        GetPhysicalClock());
+      PhaseTimer timer(working_stage_timings,
+        core::PhaseId::kNetworkReconciliation, GetPhysicalClock());
       co_await PhaseNetworkReconciliation(context);
     }
     // Random seed management for determinism (BEFORE any systems use
     // randomness)
     {
-      PhaseTimer timer(frame_context_, core::PhaseId::kRandomSeedManagement,
-        GetPhysicalClock());
+      PhaseTimer timer(working_stage_timings,
+        core::PhaseId::kRandomSeedManagement, GetPhysicalClock());
       PhaseRandomSeedManagement(context);
     }
     // B1: Fixed simulation deterministic state
     {
-      PhaseTimer timer(
-        frame_context_, core::PhaseId::kFixedSimulation, GetPhysicalClock());
+      PhaseTimer timer(working_stage_timings, core::PhaseId::kFixedSimulation,
+        GetPhysicalClock());
       co_await PhaseFixedSim(context);
     }
     // Variable gameplay logic
     {
       PhaseTimer timer(
-        frame_context_, core::PhaseId::kGameplay, GetPhysicalClock());
+        working_stage_timings, core::PhaseId::kGameplay, GetPhysicalClock());
       co_await PhaseGameplay(context);
     }
     // B2: Structural mutations
     {
-      PhaseTimer timer(
-        frame_context_, core::PhaseId::kSceneMutation, GetPhysicalClock());
+      PhaseTimer timer(working_stage_timings, core::PhaseId::kSceneMutation,
+        GetPhysicalClock());
       co_await PhaseSceneMutation(context);
     }
     // Transform propagation
     {
-      PhaseTimer timer(frame_context_, core::PhaseId::kTransformPropagation,
-        GetPhysicalClock());
+      PhaseTimer timer(working_stage_timings,
+        core::PhaseId::kTransformPropagation, GetPhysicalClock());
       co_await PhaseTransforms(context);
     }
     // Publish view registrations after transforms and before snapshot.
     {
       PhaseTimer timer(
-        frame_context_, core::PhaseId::kPublishViews, GetPhysicalClock());
+        working_stage_timings, core::PhaseId::kPublishViews, GetPhysicalClock());
       co_await PhasePublishViews(context);
     }
 
@@ -449,7 +449,7 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
     const UnifiedSnapshot* snapshot_ptr = nullptr;
     {
       PhaseTimer timer(
-        frame_context_, core::PhaseId::kSnapshot, GetPhysicalClock());
+        working_stage_timings, core::PhaseId::kSnapshot, GetPhysicalClock());
       snapshot_ptr = &co_await PhaseSnapshot(context);
     }
     const auto& snapshot = *snapshot_ptr;
@@ -457,61 +457,61 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
     // Launch and join Category B barriered parallel tasks (B4 upon completion).
     {
       PhaseTimer timer(
-        frame_context_, core::PhaseId::kParallelTasks, GetPhysicalClock());
+        working_stage_timings, core::PhaseId::kParallelTasks, GetPhysicalClock());
       co_await ParallelTasks(context, snapshot);
     }
     // Serial post-parallel integration (Category A resumes after B4)
     {
       PhaseTimer timer(
-        frame_context_, core::PhaseId::kPostParallel, GetPhysicalClock());
+        working_stage_timings, core::PhaseId::kPostParallel, GetPhysicalClock());
       co_await PhasePostParallel(context);
     }
 
     // UI update phase: process UI systems, generate rendering artifacts
     {
       PhaseTimer timer(
-        frame_context_, core::PhaseId::kGuiUpdate, GetPhysicalClock());
+        working_stage_timings, core::PhaseId::kGuiUpdate, GetPhysicalClock());
       co_await PhaseGuiUpdate(context);
     }
 
     // Frame multi-view rendering
     {
       PhaseTimer timer_pre(
-        frame_context_, core::PhaseId::kPreRender, GetPhysicalClock());
+        working_stage_timings, core::PhaseId::kPreRender, GetPhysicalClock());
       co_await PhasePreRender(context);
       PhaseTimer timer_render(
-        frame_context_, core::PhaseId::kRender, GetPhysicalClock());
+        working_stage_timings, core::PhaseId::kRender, GetPhysicalClock());
       co_await PhaseRender(context);
       PhaseTimer timer_comp(
-        frame_context_, core::PhaseId::kCompositing, GetPhysicalClock());
+        working_stage_timings, core::PhaseId::kCompositing, GetPhysicalClock());
       co_await PhaseCompositing(context);
     }
 
     // Synchronous sequential presentation
     {
       PhaseTimer timer(
-        frame_context_, core::PhaseId::kPresent, GetPhysicalClock());
+        working_stage_timings, core::PhaseId::kPresent, GetPhysicalClock());
       PhasePresent(context);
     }
 
     // Poll async pipeline readiness and integrate ready resources
     {
       PhaseTimer timer(
-        frame_context_, core::PhaseId::kAsyncPoll, GetPhysicalClock());
+        working_stage_timings, core::PhaseId::kAsyncPoll, GetPhysicalClock());
       PhaseAsyncPoll(context);
     }
 
     // Adaptive budget management for next frame
     {
       PhaseTimer timer(
-        frame_context_, core::PhaseId::kBudgetAdapt, GetPhysicalClock());
+        working_stage_timings, core::PhaseId::kBudgetAdapt, GetPhysicalClock());
       PhaseBudgetAdapt(context);
     }
 
     // Frame end timing and metrics
     {
       PhaseTimer timer(
-        frame_context_, core::PhaseId::kFrameEnd, GetPhysicalClock());
+        working_stage_timings, core::PhaseId::kFrameEnd, GetPhysicalClock());
       co_await PhaseFrameEnd(context);
     }
 
@@ -578,6 +578,7 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
     // frame's UI)
     {
       auto final_timing = context->GetFrameTiming();
+      final_timing.stage_timings = working_stage_timings;
       final_timing.pacing_duration = pacing_duration;
       context->SetFrameTiming(final_timing, tag);
     }
