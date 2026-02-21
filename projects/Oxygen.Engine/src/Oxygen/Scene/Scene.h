@@ -32,8 +32,10 @@ enum class SceneMutationMask : uint32_t {
   kScriptSlotDeactivated = 1u << 2u,
   kLightChanged = 1u << 3u,
   kCameraChanged = 1u << 4u,
+  kTransformChanged = 1u << 5u,
   kAllScriptSlotMutations = (1u << 0u) | (1u << 1u) | (1u << 2u),
-  kAllMutations = kAllScriptSlotMutations | (1u << 3u) | (1u << 4u),
+  kAllMutations
+  = kAllScriptSlotMutations | (1u << 3u) | (1u << 4u) | (1u << 5u),
 };
 
 constexpr auto operator|(const SceneMutationMask lhs,
@@ -90,6 +92,11 @@ public:
   }
 
   virtual auto OnCameraChanged(const NodeHandle& /*node_handle*/) noexcept
+    -> void
+  {
+  }
+
+  virtual auto OnTransformChanged(const NodeHandle& /*node_handle*/) noexcept
     -> void
   {
   }

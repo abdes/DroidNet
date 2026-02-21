@@ -46,6 +46,12 @@ constexpr ModulePriority kRendererModulePriority { kModulePriorityLowest };
 constexpr ModulePriority kImGuiModulePriority { 1000U };
 // Scripting should run early so gameplay modules observe script state.
 constexpr ModulePriority kScriptingModulePriority { 1U };
+// Physics sync should run late in the frame (after gameplay/scripts) to push
+// kinematic updates, and before scene observer sync so dynamic physics
+// transforms are propagated to the renderer.
+constexpr ModulePriority kPhysicsModulePriority {
+  (std::numeric_limits<std::uint32_t>::max)() - 2U
+};
 // Scene observer sync should run near the end, after mutators, but before
 // renderer.
 constexpr ModulePriority kSceneObserverSyncModulePriority {
