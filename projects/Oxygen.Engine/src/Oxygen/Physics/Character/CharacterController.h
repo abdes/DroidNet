@@ -42,6 +42,8 @@ struct CharacterMoveInput final {
 
 struct CharacterState final {
   bool is_grounded { false };
+  Vec3 position { 0.0F, 0.0F, 0.0F };
+  Quat rotation { 1.0F, 0.0F, 0.0F, 0.0F };
   Vec3 velocity { 0.0F, 0.0F, 0.0F };
 };
 

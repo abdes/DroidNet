@@ -451,22 +451,28 @@ namespace detail {
     }
 
     auto MoveCharacter(WorldId world_id, CharacterId character_id,
-      const character::CharacterMoveInput& input, float)
+      const character::CharacterMoveInput& input, float delta_time)
       -> PhysicsResult<character::CharacterMoveResult> override
     {
       if (world_id != state_->world_id || !state_->world_created) {
         return Err(PhysicsError::kWorldNotFound);
       }
+      if (delta_time <= 0.0F) {
+        return Err(PhysicsError::kInvalidArgument);
+      }
       auto it = state_->characters.find(character_id);
       if (it == state_->characters.end()) {
         return Err(PhysicsError::kCharacterNotFound);
       }
+      it->second.position += input.desired_velocity * delta_time;
       it->second.velocity = input.desired_velocity;
       state_->character_move_calls += 1;
       return PhysicsResult<character::CharacterMoveResult>::Ok(
         character::CharacterMoveResult {
           .state = character::CharacterState {
             .is_grounded = false,
+            .position = it->second.position,
+            .rotation = it->second.rotation,
             .velocity = input.desired_velocity,
           },
         });

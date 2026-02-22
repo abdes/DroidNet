@@ -50,6 +50,13 @@ NOLINT_TEST_F(JoltCharacterDomainTest, MoveReturnsDesiredVelocity)
   EXPECT_FLOAT_EQ(move_result.value().state.velocity.x, 2.0F);
   EXPECT_FLOAT_EQ(move_result.value().state.velocity.y, 0.0F);
   EXPECT_FLOAT_EQ(move_result.value().state.velocity.z, -1.0F);
+  EXPECT_GT(move_result.value().state.position.x, 1.0F);
+  EXPECT_FLOAT_EQ(move_result.value().state.position.y, 2.0F);
+  EXPECT_LT(move_result.value().state.position.z, 3.0F);
+  EXPECT_FLOAT_EQ(move_result.value().state.rotation.w, 1.0F);
+  EXPECT_FLOAT_EQ(move_result.value().state.rotation.x, 0.0F);
+  EXPECT_FLOAT_EQ(move_result.value().state.rotation.y, 0.0F);
+  EXPECT_FLOAT_EQ(move_result.value().state.rotation.z, 0.0F);
   EXPECT_FALSE(move_result.value().state.is_grounded);
   EXPECT_FALSE(move_result.value().hit_body.has_value());
 

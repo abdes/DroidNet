@@ -134,6 +134,37 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, CharacterNodeTransformWrite_Death)
   scene_->Update();
   NOLINT_EXPECT_DEATH((void)scene_->SyncObservers(), ".*");
 }
+
+NOLINT_TEST_F(PhysicsModuleSyncTest, CharacterNodeTransformWriteAfterMove_Death)
+{
+  auto node = scene_->CreateNode("character-authority-post-move-death");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  ASSERT_TRUE(
+    ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> { module_.get() },
+      node, character::CharacterDesc {})
+      .has_value());
+  const auto character = ScenePhysics::GetCharacter(
+    observer_ptr<PhysicsModule> { module_.get() }, node.GetHandle());
+  ASSERT_TRUE(character.has_value());
+
+  ASSERT_TRUE(character
+      ->Move(
+        character::CharacterMoveInput {
+          .desired_velocity = Vec3 { 1.0F, 0.0F, 0.0F },
+        },
+        1.0F)
+      .has_value());
+  scene_->Update();
+  scene_->SyncObservers();
+  RunSceneMutation();
+
+  ASSERT_TRUE(node.GetTransform().SetLocalPosition({ 9.0F, 8.0F, 7.0F }));
+  scene_->Update();
+  NOLINT_EXPECT_DEATH((void)scene_->SyncObservers(), ".*");
+}
 #endif
 
 NOLINT_TEST_F(PhysicsModuleSyncTest, GetCharacterReturnsFacadeForAttachedNode)
@@ -160,6 +191,129 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, GetCharacterReturnsFacadeForAttachedNode)
       1.0F / 60.0F);
   ASSERT_TRUE(move.has_value());
   EXPECT_EQ(FakeState().character_move_calls, 1U);
+}
+
+NOLINT_TEST_F(PhysicsModuleSyncTest, CharacterMoveUpdatesRootNodeTransform)
+{
+  auto node = scene_->CreateNode("character-root-pose");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  ASSERT_TRUE(
+    ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> { module_.get() },
+      node, character::CharacterDesc {})
+      .has_value());
+  const auto character = ScenePhysics::GetCharacter(
+    observer_ptr<PhysicsModule> { module_.get() }, node.GetHandle());
+  ASSERT_TRUE(character.has_value());
+
+  const auto move = character->Move(
+    character::CharacterMoveInput {
+      .desired_velocity = Vec3 { 2.0F, 0.0F, -1.0F },
+    },
+    2.0F);
+  ASSERT_TRUE(move.has_value());
+
+  const auto local = node.GetTransform().GetLocalPosition();
+  ASSERT_TRUE(local.has_value());
+  ExpectVec3Eq(*local, Vec3 { 4.0F, 0.0F, -2.0F });
+}
+
+NOLINT_TEST_F(PhysicsModuleSyncTest, CharacterMoveWithParentUsesWorldToLocal)
+{
+  auto parent = scene_->CreateNode("character-parent");
+  ASSERT_TRUE(parent.IsValid());
+  ASSERT_TRUE(parent.GetTransform().SetLocalPosition({ 10.0F, 0.0F, 0.0F }));
+  auto child_opt = scene_->CreateChildNode(parent, "character-child");
+  ASSERT_TRUE(child_opt.has_value());
+  auto child = *child_opt;
+  ASSERT_TRUE(child.IsValid());
+  scene_->Update();
+  RunGameplay();
+
+  ASSERT_TRUE(
+    ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> { module_.get() },
+      child, character::CharacterDesc {})
+      .has_value());
+  const auto character = ScenePhysics::GetCharacter(
+    observer_ptr<PhysicsModule> { module_.get() }, child.GetHandle());
+  ASSERT_TRUE(character.has_value());
+
+  const auto move = character->Move(
+    character::CharacterMoveInput {
+      .desired_velocity = Vec3 { 6.0F, 0.0F, 0.0F },
+    },
+    1.0F);
+  ASSERT_TRUE(move.has_value());
+
+  const auto local = child.GetTransform().GetLocalPosition();
+  ASSERT_TRUE(local.has_value());
+  ExpectVec3Eq(*local, Vec3 { 6.0F, 0.0F, 0.0F });
+}
+
+NOLINT_TEST_F(PhysicsModuleSyncTest, CharacterMoveWithDirtyParentUsesLocalChain)
+{
+  auto parent = scene_->CreateNode("character-dirty-parent");
+  ASSERT_TRUE(parent.IsValid());
+  ASSERT_TRUE(parent.GetTransform().SetLocalPosition({ 2.0F, 0.0F, 0.0F }));
+  auto child_opt = scene_->CreateChildNode(parent, "character-dirty-child");
+  ASSERT_TRUE(child_opt.has_value());
+  auto child = *child_opt;
+  ASSERT_TRUE(child.IsValid());
+  scene_->Update();
+  RunGameplay();
+
+  ASSERT_TRUE(
+    ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> { module_.get() },
+      child, character::CharacterDesc {})
+      .has_value());
+  const auto character = ScenePhysics::GetCharacter(
+    observer_ptr<PhysicsModule> { module_.get() }, child.GetHandle());
+  ASSERT_TRUE(character.has_value());
+
+  ASSERT_TRUE(parent.GetTransform().SetLocalPosition({ 5.0F, 0.0F, 0.0F }));
+
+  const auto move = character->Move(
+    character::CharacterMoveInput {
+      .desired_velocity = Vec3 { 4.0F, 0.0F, 0.0F },
+    },
+    1.0F);
+  ASSERT_TRUE(move.has_value());
+
+  const auto local = child.GetTransform().GetLocalPosition();
+  ASSERT_TRUE(local.has_value());
+  ExpectVec3Eq(*local, Vec3 { 1.0F, 0.0F, 0.0F });
+}
+
+NOLINT_TEST_F(PhysicsModuleSyncTest, CharacterMoveThenSyncObserversIsStable)
+{
+  auto node = scene_->CreateNode("character-sync-observers");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  ASSERT_TRUE(
+    ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> { module_.get() },
+      node, character::CharacterDesc {})
+      .has_value());
+  const auto character = ScenePhysics::GetCharacter(
+    observer_ptr<PhysicsModule> { module_.get() }, node.GetHandle());
+  ASSERT_TRUE(character.has_value());
+
+  ASSERT_TRUE(character
+      ->Move(
+        character::CharacterMoveInput {
+          .desired_velocity = Vec3 { 1.0F, 0.0F, 0.0F },
+        },
+        1.0F)
+      .has_value());
+  scene_->Update();
+  scene_->SyncObservers();
+  RunGameplay();
+
+  EXPECT_EQ(FakeState().character_move_calls, 1U);
+  EXPECT_EQ(FakeState().move_kinematic_calls, 0U);
 }
 
 #if defined(NDEBUG)

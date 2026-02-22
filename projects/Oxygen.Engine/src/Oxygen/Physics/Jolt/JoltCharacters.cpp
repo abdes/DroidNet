@@ -154,6 +154,13 @@ auto oxygen::physics::jolt::JoltCharacters::MoveCharacter(
   return Ok(character::CharacterMoveResult {
     .state = character::CharacterState {
       .is_grounded = false,
+      .position = target_position,
+      .rotation = Quat {
+        current_rotation.GetW(),
+        current_rotation.GetX(),
+        current_rotation.GetY(),
+        current_rotation.GetZ(),
+      },
       .velocity = input.desired_velocity,
     },
     .hit_body = std::nullopt,

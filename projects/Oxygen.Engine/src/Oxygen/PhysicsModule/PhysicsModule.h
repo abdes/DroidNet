@@ -57,25 +57,35 @@ namespace oxygen::physics {
    next fixed-simulation step (one-frame latency by design).
 
  Motion authority contract:
- - `body::BodyType::kStatic`: scene transform writes are ignored by the sync
-   bridge after attach; no automatic pull from active-body stream.
- - `body::BodyType::kKinematic`: scene owns motion. Deferred transform
+ - `body::BodyType::kStatic`: scene transform writes
+ are ignored by the sync
+   bridge after attach; no automatic pull from
+ active-body stream.
+ - `body::BodyType::kKinematic`: scene owns motion.
+ Deferred transform
    mutations are pushed to physics in `kGameplay`.
- - `body::BodyType::kDynamic`: physics owns motion. Active body transforms are
-   pulled from physics in `kSceneMutation`.
- - Character controllers are command-authoritative:
+ -
+ `body::BodyType::kDynamic`: physics owns motion. Active body transforms are
 
- `ScenePhysics::CharacterFacade::Move` drives character motion intent.
-   After
- character attachment, scene-authored transform writes on that node are
-   a
- contract violation (debug-asserted) and are never enqueued into the
- rigid-body
- push path.
- - A scene node can be managed by exactly one motion authority
- source: either rigid-body mapping or character mapping, never both.
-
- Same-frame precedence:
+ pulled from physics in `kSceneMutation`.
+ - Character controllers are
+ command-authoritative:
+   `ScenePhysics::CharacterFacade::Move` drives
+ character motion intent.
+   Successful move results are converted from world to
+ local and applied to the
+   scene node through this module.
+   After character
+ attachment, scene-authored transform writes on that node are
+   contract
+ violations (debug-asserted) and are never enqueued into the
+   rigid-body push
+ path.
+ - A scene node can be managed by exactly one motion authority source:
+ either
+   rigid-body mapping or character mapping, never both.
+ Same-frame
+ precedence:
  - If a dynamic body also receives scene-authored transform writes in the same
    frame, physics remains authoritative and the pulled dynamic pose wins.
 */
@@ -191,6 +201,15 @@ public:
   OXGN_PHSYNC_NDAPI auto GetNodeForCharacterId(CharacterId character_id) const
     -> std::optional<scene::NodeHandle>;
 
+  /*! Convert a world-space pose into node-local space using the current parent
+
+   * chain and apply it to the scene node transform.
+      Returns false when
+   * scene/node preconditions are not met. */
+  OXGN_PHSYNC_API auto ApplyWorldPoseToNode(
+    const scene::NodeHandle& node_handle, const Vec3& world_position,
+    const Quat& world_rotation) -> bool;
+
   OXGN_PHSYNC_NDAPI auto ConsumeSceneEvents() -> std::vector<ScenePhysicsEvent>;
 
 private:
@@ -235,6 +254,7 @@ private:
   std::unordered_map<scene::NodeHandle, ResourceHandle>
     node_to_character_binding_;
   std::unordered_map<CharacterId, ResourceHandle> character_to_binding_;
+  std::unordered_set<scene::NodeHandle> expected_character_transform_updates_;
   std::unordered_set<scene::NodeHandle> pending_transform_updates_;
   std::vector<ScenePhysicsEvent> scene_events_ {};
   SyncDiagnostics diagnostics_ {};

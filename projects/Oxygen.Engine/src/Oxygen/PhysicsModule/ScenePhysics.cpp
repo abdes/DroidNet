@@ -10,6 +10,29 @@
 
 namespace oxygen::physics {
 
+auto ScenePhysics::CharacterFacade::Move(
+  const character::CharacterMoveInput& input, float delta_time) const
+  -> PhysicsResult<character::CharacterMoveResult>
+{
+  if (character_api_ == nullptr) {
+    return Err(PhysicsError::kNotInitialized);
+  }
+  auto result = character_api_->MoveCharacter(
+    world_id_, character_id_, input, delta_time);
+  if (!result.has_value()) {
+    return result;
+  }
+  if (physics_module_ != nullptr) {
+    const auto& state = result.value().state;
+    [[maybe_unused]] const auto synced = physics_module_->ApplyWorldPoseToNode(
+      node_, state.position, state.rotation);
+    DCHECK_F(synced,
+      "Character authority contract violated: character move result "
+      "must map back to a valid observed scene node.");
+  }
+  return result;
+}
+
 auto ScenePhysics::AttachRigidBody(observer_ptr<PhysicsModule> physics_module,
   scene::SceneNode& node, const body::BodyDesc& desc)
   -> std::optional<RigidBodyFacade>
@@ -121,7 +144,7 @@ auto ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> physics_module,
   const CharacterId character_id = result.value();
   physics_module->RegisterNodeCharacterMapping(node.GetHandle(), character_id);
   return CharacterFacade(node.GetHandle(), world_id, character_id,
-    observer_ptr<system::ICharacterApi> { &character_api });
+    observer_ptr<system::ICharacterApi> { &character_api }, physics_module);
 }
 
 auto ScenePhysics::GetCharacter(observer_ptr<PhysicsModule> physics_module,
@@ -137,7 +160,8 @@ auto ScenePhysics::GetCharacter(observer_ptr<PhysicsModule> physics_module,
   }
 
   return CharacterFacade(node, physics_module->GetWorldId(), character_id,
-    observer_ptr<system::ICharacterApi> { &physics_module->GetCharacterApi() });
+    observer_ptr<system::ICharacterApi> { &physics_module->GetCharacterApi() },
+    physics_module);
 }
 
 auto ScenePhysics::CastRay(observer_ptr<PhysicsModule> physics_module,
