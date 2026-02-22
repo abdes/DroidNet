@@ -170,6 +170,18 @@ auto AssetLoaderLoadingTest::CreateTestAssetKey(const std::string& name)
     const auto bytes = { 0x66, 0x66, 0x66, 0x66, 0x77, 0x77, 0x88, 0x88, 0x99,
       0x99, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa };
     std::ranges::copy(bytes, key.guid.begin());
+  } else if (name == "test_scene_with_physics") {
+    // Matches scene_with_physics_sidecar.yaml:
+    // "cccccccc-1111-2222-3333-444444444444"
+    const auto bytes = { 0xcc, 0xcc, 0xcc, 0xcc, 0x11, 0x11, 0x22, 0x22, 0x33,
+      0x33, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44 };
+    std::ranges::copy(bytes, key.guid.begin());
+  } else if (name == "test_scene_with_physics_sidecar") {
+    // Matches scene_with_physics_sidecar.yaml:
+    // "ffffffff-1111-2222-3333-444444444444"
+    const auto bytes = { 0xff, 0xff, 0xff, 0xff, 0x11, 0x11, 0x22, 0x22, 0x33,
+      0x33, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44 };
+    std::ranges::copy(bytes, key.guid.begin());
   } else {
     // Fallback: create a deterministic key from hash for unknown names
     constexpr std::hash<std::string> hasher;

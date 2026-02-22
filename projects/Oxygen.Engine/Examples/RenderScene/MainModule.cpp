@@ -427,7 +427,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
           request.source_kind == ui::SceneSourceKind::kPak
             ? request.source_path
             : std::filesystem::path {},
-          app_.input_system,
+          observer_ptr { app_.engine.get() }, app_.input_system,
           observer_ptr { &app_.engine->GetScriptCompilationService() },
           PathFinder(std::make_shared<const PathFinderConfig>(
                        app_.engine->GetEngineConfig().path_finder_config),

@@ -127,9 +127,15 @@ set(
   "Detail/Scene_safecall_impl.cpp"
   "Detail/StringConverters.cpp"
   "Detail/TransformComponent.cpp"
+  "Internal/IMutationCollector.h"
   "Internal/MutationDispatcher.cpp"
+  "Internal/MutationDispatcher.h"
   "Internal/MutationCollector.cpp"
+  "Internal/MutationCollector.h"
+  "Internal/MutationTraits.h"
+  "Internal/MutationTypes.h"
   "Internal/ScriptSlotMutationProcessor.cpp"
+  "Internal/ScriptSlotMutationProcessor.h"
   "Environment/Sun.cpp"
 )
 

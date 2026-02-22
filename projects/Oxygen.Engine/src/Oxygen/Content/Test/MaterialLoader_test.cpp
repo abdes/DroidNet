@@ -15,10 +15,9 @@
 #include <Oxygen/Content/SourceToken.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
 
-#include "Mocks/MockStream.h"
+#include "Fixtures/LoaderTestFixtures.h"
 #include "Utils/PakUtils.h"
 
 using ::testing::AllOf;
@@ -29,7 +28,6 @@ using ::testing::NotNull;
 using ::testing::SizeIs;
 
 using oxygen::content::loaders::LoadMaterialAsset;
-using oxygen::serio::Reader;
 
 namespace {
 
@@ -49,20 +47,11 @@ auto LoadTestTextureResource(const oxygen::content::LoaderContext& /*context*/)
 //=== MaterialLoader Basic Functionality Tests ===----------------------------//
 
 //! Fixture for MaterialLoader basic serialization tests.
-class MaterialLoaderBasicTest : public testing::Test {
+class MaterialLoaderBasicTest
+  : public oxygen::content::testing::BinaryAssetLoaderFixtureBase {
 protected:
-  using MockStream = oxygen::content::testing::MockStream;
-  using Writer = oxygen::serio::Writer<MockStream>;
   using MaterialAssetDesc = oxygen::data::pak::MaterialAssetDesc;
   using ShaderReferenceDesc = oxygen::data::pak::ShaderReferenceDesc;
-
-  MaterialLoaderBasicTest()
-    : desc_writer_(desc_stream_)
-    , data_writer_(data_stream_)
-    , desc_reader_(desc_stream_)
-    , data_reader_(data_stream_)
-  {
-  }
 
   auto WriteMaterialDescriptor(const MaterialAssetDesc& desc,
     std::span<const ShaderReferenceDesc> shader_refs = {}) -> void
@@ -145,56 +134,14 @@ protected:
   */
   auto CreateLoaderContext() -> oxygen::content::LoaderContext
   {
-    if (!desc_stream_.Seek(0)) {
-      throw std::runtime_error("Failed to seek desc_stream");
-    }
-    if (!data_stream_.Seek(0)) {
-      throw std::runtime_error("Failed to seek data_stream");
-    }
-
-    return oxygen::content::LoaderContext {
-      .current_asset_key = oxygen::data::AssetKey {}, // Test asset key
-      .desc_reader = &desc_reader_,
-      .data_readers
-      = std::make_tuple(&data_reader_, &data_reader_, &data_reader_),
-      .work_offline = true,
-      .parse_only = true,
-    };
+    return MakeLoaderContext(true, true);
   }
 
   auto CreateDecodeLoaderContext() -> std::pair<oxygen::content::LoaderContext,
     std::shared_ptr<oxygen::content::internal::DependencyCollector>>
   {
-    if (!desc_stream_.Seek(0)) {
-      throw std::runtime_error("Failed to seek desc_stream");
-    }
-    if (!data_stream_.Seek(0)) {
-      throw std::runtime_error("Failed to seek data_stream");
-    }
-
-    auto collector
-      = std::make_shared<oxygen::content::internal::DependencyCollector>();
-
-    oxygen::content::LoaderContext context {
-      .current_asset_key = oxygen::data::AssetKey {}, // Test asset key
-      .source_token = oxygen::content::internal::SourceToken(7U),
-      .desc_reader = &desc_reader_,
-      .data_readers
-      = std::make_tuple(&data_reader_, &data_reader_, &data_reader_),
-      .work_offline = true,
-      .dependency_collector = collector,
-      .source_pak = nullptr,
-      .parse_only = false,
-    };
-    return { std::move(context), std::move(collector) };
+    return MakeDecodeLoaderContext();
   }
-
-  MockStream desc_stream_;
-  MockStream data_stream_;
-  Writer desc_writer_;
-  Writer data_writer_;
-  Reader<MockStream> desc_reader_;
-  Reader<MockStream> data_reader_;
 };
 
 //! Test: LoadMaterialAsset returns valid MaterialAsset for correct input.

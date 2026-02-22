@@ -159,6 +159,17 @@ auto PakFile::InitScriptsTable() const -> void
   }
 }
 
+auto PakFile::InitPhysicsTable() const -> void
+{
+  DCHECK_F(!physics_table_);
+
+  if (footer_.physics_resource_table.count > 0) {
+    DCHECK_GT_F(footer_.physics_resource_table.entry_size, 0U,
+      "resource table entry size must be greater than 0");
+    physics_table_.emplace(footer_.physics_resource_table);
+  }
+}
+
 auto PakFile::ReadHeader(serio::FileStream<>* stream) -> void
 {
   LOG_SCOPE_FUNCTION(INFO);
@@ -187,9 +198,10 @@ auto PakFile::ReadHeader(serio::FileStream<>* stream) -> void
     throw std::runtime_error("Invalid pak file header magic");
   }
 
-  if (header_.version != 4 && header_.version != 5 && header_.version != 6) {
+  if (header_.version != 4 && header_.version != 5 && header_.version != 6
+    && header_.version != 7) {
     const auto msg = std::string("Unsupported PAK format version: ")
-      + std::to_string(header_.version) + " (this build loads v4/v5/v6 only).";
+      + std::to_string(header_.version) + " (this build loads v4-v7 only).";
     LOG_F(ERROR, "{}", msg);
     throw std::runtime_error(msg);
   }
@@ -224,6 +236,7 @@ auto PakFile::ReadFooter(serio::FileStream<>* stream) -> void
   InitBuffersTable();
   InitTexturesTable();
   InitScriptsTable();
+  InitPhysicsTable();
 
   LOG_F(INFO, "pak crc32        : {}", footer_.pak_crc32);
   LOG_F(INFO, "directory offset : {}", footer_.directory_offset);
@@ -436,6 +449,7 @@ PakFile::PakFile(const std::filesystem::path& path)
   , buffer_data_stream_(OpenFileStream(path))
   , texture_data_stream_(OpenFileStream(path))
   , script_data_stream_(OpenFileStream(path))
+  , physics_data_stream_(OpenFileStream(path))
 {
   LOG_SCOPE_FUNCTION(INFO);
   LOG_F(INFO, "file : {}", path.string());
@@ -617,6 +631,22 @@ auto PakFile::CreateScriptDataReader() const -> Reader
   return Reader(*script_data_stream_);
 }
 
+auto PakFile::CreatePhysicsDataReader() const -> Reader
+{
+  std::scoped_lock lock(mutex_);
+  if (!physics_data_stream_) {
+    throw std::runtime_error("PakFile physics data stream is not open");
+  }
+  if (const auto res
+    = physics_data_stream_->Seek(footer_.physics_region.offset);
+    !res) {
+    LOG_F(ERROR, "Failed to seek to physics data region offset {}: {}",
+      footer_.physics_region.offset, res.error().message());
+    throw std::runtime_error("Failed to seek to physics data region offset");
+  }
+  return Reader(*physics_data_stream_);
+}
+
 /*!
   Returns a reference to the ResourceTable for buffer resources.
 
@@ -655,6 +685,14 @@ auto PakFile::ScriptsTable() const -> ScriptsTableT&
     throw std::runtime_error("No script resource table present in this file");
   }
   return *scripts_table_;
+}
+
+auto PakFile::PhysicsTable() const -> PhysicsTableT&
+{
+  if (!physics_table_) {
+    throw std::runtime_error("No physics resource table present in this file");
+  }
+  return *physics_table_;
 }
 
 auto PakFile::ReadScriptSlotRecord(const uint32_t index) const

@@ -22,6 +22,7 @@
 #include <Oxygen/Content/Loaders/InputActionLoader.h>
 #include <Oxygen/Content/Loaders/InputMappingContextLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
+#include <Oxygen/Content/Loaders/PhysicsSceneLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 
@@ -29,6 +30,7 @@
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
 
 #include <Oxygen/Content/Import/LooseCookedLayout.h>
@@ -49,6 +51,7 @@ using oxygen::content::testing::AssetLoaderLoadingTest;
 
 using oxygen::data::GeometryAsset;
 using oxygen::data::InputMappingContextAsset;
+using oxygen::data::PhysicsSceneAsset;
 using oxygen::data::SceneAsset;
 
 namespace {
@@ -771,6 +774,94 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
         });
       EXPECT_EQ(dependents, 1U);
 #endif
+
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
+}
+
+//! Test: Scene and physics sidecar authored in v7 load together.
+/*!
+ Scenario: Build a v7 PAK containing a Scene asset and its physics
+ * sidecar.
+
+ Verify that:
+ - Scene and PhysicsScene sidecar assets both load.
+
+ * - Sidecar target scene identity fields match authored values.
+*/
+NOLINT_TEST_F(AssetLoaderSceneTest, LoadAsset_SceneWithPhysicsSidecar_LoadsV7)
+{
+  const auto pak_path = GeneratePakFile("scene_with_physics_sidecar");
+  const auto scene_key = CreateTestAssetKey("test_scene_with_physics");
+  const auto sidecar_key
+    = CreateTestAssetKey("test_scene_with_physics_sidecar");
+
+  TestEventLoop el;
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
+
+    loader.RegisterLoader(oxygen::content::loaders::LoadSceneAsset);
+    loader.RegisterLoader(oxygen::content::loaders::LoadPhysicsSceneAsset);
+
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+
+      loader.AddPakFile(pak_path);
+
+      const auto scene = co_await loader.LoadAssetAsync<SceneAsset>(scene_key);
+      EXPECT_THAT(scene, NotNull());
+      if (!scene) {
+        loader.Stop();
+        co_return oxygen::co::kJoin;
+      }
+
+      const auto sidecar
+        = co_await loader.LoadAssetAsync<PhysicsSceneAsset>(sidecar_key);
+      EXPECT_THAT(sidecar, NotNull());
+      if (!sidecar) {
+        loader.Stop();
+        co_return oxygen::co::kJoin;
+      }
+
+      EXPECT_EQ(sidecar->GetTargetSceneKey(), scene_key);
+      EXPECT_EQ(sidecar->GetTargetNodeCount(), 2U);
+
+      const auto rigid
+        = sidecar->GetBindings<oxygen::data::pak::RigidBodyBindingRecord>();
+      const auto colliders
+        = sidecar->GetBindings<oxygen::data::pak::ColliderBindingRecord>();
+      const auto characters
+        = sidecar->GetBindings<oxygen::data::pak::CharacterBindingRecord>();
+      const auto soft_bodies
+        = sidecar->GetBindings<oxygen::data::pak::SoftBodyBindingRecord>();
+      const auto joints
+        = sidecar->GetBindings<oxygen::data::pak::JointBindingRecord>();
+      const auto vehicles
+        = sidecar->GetBindings<oxygen::data::pak::VehicleBindingRecord>();
+      const auto aggregates
+        = sidecar->GetBindings<oxygen::data::pak::AggregateBindingRecord>();
+
+      EXPECT_EQ(rigid.size(), 1U);
+      EXPECT_EQ(colliders.size(), 1U);
+      EXPECT_EQ(characters.size(), 1U);
+      EXPECT_EQ(soft_bodies.size(), 1U);
+      EXPECT_EQ(joints.size(), 1U);
+      EXPECT_EQ(vehicles.size(), 1U);
+      EXPECT_EQ(aggregates.size(), 1U);
+
+      if (!rigid.empty()) {
+        EXPECT_EQ(rigid[0].node_index, 1U);
+        EXPECT_EQ(rigid[0].shape_asset_index, 2U);
+        EXPECT_EQ(rigid[0].material_asset_index, 1U);
+      }
 
       loader.Stop();
       co_return oxygen::co::kJoin;

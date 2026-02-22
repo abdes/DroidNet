@@ -167,7 +167,7 @@ All validation errors raise `ValueError` with codes/messages aggregated.
 
 ## Spec Format (Conceptual Overview)
 
-A spec groups resources (buffers, textures, audio) and higher‑level assets
+A spec groups resources (buffers, textures, audio, script, physics) and higher‑level assets
 (materials, geometries, etc.). Normalization & validation ensure:
 
 - Required fields present & typed.
@@ -179,9 +179,20 @@ A spec groups resources (buffers, textures, audio) and higher‑level assets
 
 ### Schema Version
 
-The current schema version is **4**. Use `version: 4` in your spec files to
-access all features. Older versions (1–3) remain supported for backward
-compatibility.
+The current schema version is **7**. Use `version: 7` in your spec files for
+full v7 output, including physics-region/footer fields and physics asset types.
+Legacy specs are still accepted, but output is normalized to current v7 layout.
+
+### v7 Physics Authoring Notes
+
+- Physics binary resources are authored under top-level `physics:`.
+- Physics assets are authored in `assets:` with `type` set to:
+  - `physics_material`
+  - `collision_shape`
+  - `physics_scene`
+- `collision_shape.resource_name` must reference an existing `physics` resource.
+- `physics_scene` is a sidecar descriptor domain and must not be emitted as a `scene`.
+- Runtime policy is strict for paired scene/physics sidecars: identity/reference issues are treated as load errors (hard-fail semantics).
 
 ---
 

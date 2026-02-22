@@ -33,6 +33,7 @@
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Co.h>
@@ -451,6 +452,70 @@ public:
   }
 };
 
+class PhysicsResourceTableDumper : public ResourceTableDumper {
+public:
+  auto DumpAsync(const PakFile& pak, DumpContext& ctx,
+    AssetLoader& asset_loader) const -> oxygen::co::Co<> override
+  {
+    if (!ctx.show_resources) {
+      co_return;
+    }
+    if (!pak.HasTableOf<PhysicsResource>()) {
+      std::cout << "    No physics resource table present\n\n";
+      co_return;
+    }
+
+    using namespace PrintUtils;
+    SubSeparator("PHYSICS RESOURCES");
+    auto& physics_table = pak.PhysicsTable();
+    const size_t physics_count = physics_table.Size();
+    if (physics_count > 0) {
+      Field("Physics Resource Count", physics_count - 1);
+      Field("Total Table Entries (inc. sentinel)", physics_count);
+    } else {
+      Field("Physics Resource Count", 0);
+    }
+
+    if ((ctx.verbose || ctx.show_resource_data) && physics_count > 0) {
+      std::cout << "    Physics resource entries:\n";
+      for (size_t i = 0; i < (std::min)(physics_count, static_cast<size_t>(20));
+        ++i) {
+        try {
+          const auto key = asset_loader.MakeResourceKey<PhysicsResource>(
+            pak, static_cast<uint32_t>(i));
+          auto physics_resource
+            = co_await asset_loader.LoadResourceAsync<PhysicsResource>(key);
+          if (physics_resource) {
+            std::cout << "      [" << i << "] Physics Resource"
+                      << (i == 0 ? " (sentinel/reserved)" : "") << ":\n";
+            Field(
+              "Data Offset", ToHexString(physics_resource->GetDataOffset()), 8);
+            Field("Data Size",
+              std::to_string(physics_resource->GetDataSize()) + " bytes", 8);
+            if (ctx.show_resource_data) {
+              PrintResourceData(
+                physics_resource->GetData(), "Physics", ctx.max_data_bytes);
+            }
+          } else {
+            std::cout << "      [" << i
+                      << "] Failed to load physics resource\n";
+          }
+        } catch (const std::exception& ex) {
+          std::cout << "      [" << i
+                    << "] Error loading physics resource: " << ex.what()
+                    << "\n";
+        }
+      }
+      if (physics_count > 20) {
+        std::cout << "      ... (" << (physics_count - 20)
+                  << " more physics resources)\n";
+      }
+    }
+    std::cout << "\n";
+    co_return;
+  }
+};
+
 class ResourceTableDumperRegistry {
 public:
   ResourceTableDumperRegistry()
@@ -458,6 +523,7 @@ public:
     Register("buffer", std::make_unique<BufferResourceTableDumper>());
     Register("texture", std::make_unique<TextureResourceTableDumper>());
     Register("script", std::make_unique<ScriptResourceTableDumper>());
+    Register("physics", std::make_unique<PhysicsResourceTableDumper>());
   }
 
   const ResourceTableDumper& Get(const std::string& type) const
@@ -506,6 +572,7 @@ public:
     co_await registry_.Get("buffer").DumpAsync(pak, ctx, asset_loader);
     co_await registry_.Get("texture").DumpAsync(pak, ctx, asset_loader);
     co_await registry_.Get("script").DumpAsync(pak, ctx, asset_loader);
+    co_await registry_.Get("physics").DumpAsync(pak, ctx, asset_loader);
     co_return;
   }
 
@@ -519,7 +586,7 @@ auto PakFileDumper::DumpAsync(const PakFile& pak, AssetLoader& asset_loader)
   -> oxygen::co::Co<>
 {
   try {
-    constexpr auto kSupportedPakVersion = PakHeader {}.version;
+    constexpr auto kSupportedPakVersion = 7;
     if (pak.FormatVersion() != kSupportedPakVersion) {
       throw std::runtime_error(
         fmt::format("PakDump supports PAK v{} only; found version {}",
@@ -597,6 +664,8 @@ void PakFileDumper::PrintPakFooter(const PakFile& pak)
     "Audio Region", f.audio_region.offset, f.audio_region.size);
   PrintResourceRegion(
     "Script Region", f.script_region.offset, f.script_region.size);
+  PrintResourceRegion(
+    "Physics Region", f.physics_region.offset, f.physics_region.size);
   std::cout << "\n";
   SubSeparator("RESOURCE TABLES");
   PrintResourceTable("Texture Table", f.texture_table.offset,
@@ -609,6 +678,8 @@ void PakFileDumper::PrintPakFooter(const PakFile& pak)
     f.script_resource_table.count, f.script_resource_table.entry_size);
   PrintResourceTable("Script Slot Table", f.script_slot_table.offset,
     f.script_slot_table.count, f.script_slot_table.entry_size);
+  PrintResourceTable("Physics Resource Table", f.physics_resource_table.offset,
+    f.physics_resource_table.count, f.physics_resource_table.entry_size);
   Field("Index-0 Sentinel",
     "buffer/scripts tables reserve index 0 as sentinel when present");
 

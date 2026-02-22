@@ -1956,100 +1956,480 @@ static_assert(sizeof(PakHeader) == 256);
 
 } // namespace oxygen::data::pak::v6
 
+namespace oxygen::data::pak::v7 {
+
+using namespace v6; // NOLINT(google-build-using-namespace)
+
+// ============================================================================
+// Format Version
+// ============================================================================
+
+constexpr uint16_t kPakVersion = 7;
+
+constexpr uint8_t kPhysicsMaterialAssetVersion = 1;
+constexpr uint8_t kCollisionShapeAssetVersion = 1;
+constexpr uint8_t kPhysicsSceneAssetVersion = 1;
+
+// ============================================================================
+// Physics Enums (sourced from src/Oxygen/Core/Meta/Physics/PakPhysics.inc)
+// ============================================================================
+
+#define OXPHYS_RESOURCE_FORMAT(name, value) name = (value),
+enum class PhysicsResourceFormat : uint8_t {
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
+};
+#undef OXPHYS_RESOURCE_FORMAT
+
+#define OXPHYS_COMBINE_MODE(name, value) name = (value),
+enum class PhysicsCombineMode : uint8_t {
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
+};
+#undef OXPHYS_COMBINE_MODE
+
+#define OXPHYS_SHAPE_CATEGORY(name, value) name = (value),
+enum class CollisionShapeCategory : uint8_t {
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
+};
+#undef OXPHYS_SHAPE_CATEGORY
+
+#define OXPHYS_BODY_TYPE(name, value) name = (value),
+enum class PhysicsBodyType : uint8_t {
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
+};
+#undef OXPHYS_BODY_TYPE
+
+#define OXPHYS_MOTION_QUALITY(name, value) name = (value),
+enum class PhysicsMotionQuality : uint8_t {
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
+};
+#undef OXPHYS_MOTION_QUALITY
+
+#define OXPHYS_SOFT_BODY_TETHER_MODE(name, value) name = (value),
+enum class SoftBodyTetherMode : uint8_t {
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
+};
+#undef OXPHYS_SOFT_BODY_TETHER_MODE
+
+#define OXPHYS_AGGREGATE_AUTHORITY(name, value) name = (value),
+enum class AggregateAuthority : uint8_t {
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
+};
+#undef OXPHYS_AGGREGATE_AUTHORITY
+
+#define OXPHYS_BINDING_TYPE(name, value) name = (value),
+enum class PhysicsBindingType : uint32_t {
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
+};
+#undef OXPHYS_BINDING_TYPE
+
+// ============================================================================
+// PakHeader / PakFooter v7 overrides
+// ============================================================================
+
+//! PAK file header for format version 7.
+#pragma pack(push, 1)
+struct PakHeader {
+  char magic[8] = { 'O', 'X', 'P', 'A', 'K', 0, 0, 0 };
+  uint16_t version = kPakVersion; //!< Must be 7
+  uint16_t content_version = 0;
+  uint8_t guid[16] = {};
+  uint8_t reserved[228] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(PakHeader) == 256);
+
+//! PAK footer for format version 7.
+/*! Extends v6 with physics_region and physics_resource_table.
+ *  All v6 fields (script_region, script_resource_table, script_slot_table)
+ *  are preserved at the same byte offsets. The physics fields follow
+ *  immediately after the script fields.
+ *
+ *  Field layout (byte offsets):
+ *    0  : directory_offset (8)
+ *    8  : directory_size (8)
+ *    16 : asset_count (8)
+ *    24 : texture_region (16)
+ *    40 : buffer_region (16)
+ *    56 : audio_region (16)
+ *    72 : script_region (16)        -- v6, preserved
+ *    88 : physics_region (16)       -- v7 new
+ *   104 : texture_table (16)
+ *   120 : buffer_table (16)
+ *   136 : audio_table (16)
+ *   152 : script_resource_table (16) -- v6, preserved
+ *   168 : script_slot_table (16)     -- v6, preserved
+ *   184 : physics_resource_table (16) -- v7 new
+ *   200 : browse_index_offset (8)
+ *   208 : browse_index_size (8)
+ *   216 : reserved[28] (28)
+ *   244 : pak_crc32 (4)
+ *   248 : footer_magic[8] (8)
+ *   256 : end
+ */
+#pragma pack(push, 1)
+struct PakFooter {
+  uint64_t directory_offset = 0;
+  uint64_t directory_size = 0;
+  uint64_t asset_count = 0;
+
+  // -- Resource data regions --
+  ResourceRegion texture_region = {};
+  ResourceRegion buffer_region = {};
+  ResourceRegion audio_region = {};
+  ResourceRegion script_region = {}; //!< v6: script blob region
+  ResourceRegion physics_region = {}; //!< v7: cooked Jolt binary blobs
+
+  // -- Resource tables --
+  ResourceTable texture_table = {};
+  ResourceTable buffer_table = {};
+  ResourceTable audio_table = {};
+  ResourceTable script_resource_table = {}; //!< v6: ScriptResourceDesc entries
+  ResourceTable script_slot_table = {}; //!< v6: ScriptSlotRecord entries
+  ResourceTable physics_resource_table
+    = {}; //!< v7: PhysicsResourceDesc entries
+
+  // -- Embedded Browse Index (Optional) --
+  OffsetT browse_index_offset = 0;
+  uint64_t browse_index_size = 0;
+
+  // Reserved for future use (must be zero)
+  uint8_t reserved[28] = {};
+
+  uint32_t pak_crc32 = 0;
+  char footer_magic[8] = { 'O', 'X', 'P', 'A', 'K', 'E', 'N', 'D' };
+};
+#pragma pack(pop)
+static_assert(sizeof(PakFooter) == 256);
+
+// ============================================================================
+// Physics Resource Descriptor (24 bytes)
+// ============================================================================
+
+//! Describes a cooked Jolt physics binary blob stored in the physics_region.
+#pragma pack(push, 1)
+struct PhysicsResourceDesc {
+  OffsetT data_offset = 0; //!< Absolute offset to cooked Jolt data
+  DataBlobSizeT size_bytes = 0; //!< Size in bytes
+  PhysicsResourceFormat format = PhysicsResourceFormat::kJoltShapeBinary;
+  uint8_t reserved[3] = {};
+  uint64_t content_hash = 0; //!< First 8 bytes of SHA256
+};
+#pragma pack(pop)
+static_assert(sizeof(PhysicsResourceDesc) == 24);
+
+// ============================================================================
+// Physics Material Asset (128 bytes)
+// ============================================================================
+
+//! Physics surface properties asset.
+#pragma pack(push, 1)
+struct PhysicsMaterialAssetDesc {
+  AssetHeader header;
+  float friction = 0.5F;
+  float restitution = 0.0F;
+  float density = 1000.0F; //!< kg/m^3
+  PhysicsCombineMode combine_mode_friction = PhysicsCombineMode::kAverage;
+  PhysicsCombineMode combine_mode_restitution = PhysicsCombineMode::kAverage;
+  uint8_t reserved[19] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(PhysicsMaterialAssetDesc) == 128);
+
+// ============================================================================
+// Collision Shape Asset (256 bytes)
+// ============================================================================
+
+//! Maps a collision shape asset key to a cooked Jolt binary in the physics
+//! resource table.
+#pragma pack(push, 1)
+struct CollisionShapeAssetDesc {
+  AssetHeader header;
+  ResourceIndexT physics_resource_index
+    = kNoResourceIndex; //!< Index into physics_resource_table
+  CollisionShapeCategory shape_category = CollisionShapeCategory::kConvex;
+  uint8_t reserved0[3] = {};
+  float bounding_box_min[3] = { 0.F, 0.F, 0.F };
+  float bounding_box_max[3] = { 0.F, 0.F, 0.F };
+  uint8_t reserved1[129] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(CollisionShapeAssetDesc) == 256);
+
+// ============================================================================
+// Physics Scene Sidecar Asset
+// ============================================================================
+
+//! Per-component binding table directory entry (16 bytes).
+//! Mirrors SceneComponentTableDesc layout for consistency.
+#pragma pack(push, 1)
+struct PhysicsComponentTableDesc {
+  PhysicsBindingType binding_type
+    = PhysicsBindingType::kUnknown; //!< Physics sidecar binding type (NOT a
+                                    //!< SceneNode component)
+  ResourceTable table = {}; //!< Offset/count/entry_size
+};
+#pragma pack(pop)
+static_assert(sizeof(PhysicsComponentTableDesc) == 20);
+
+//! Physics scene sidecar asset descriptor.
+/*! Contains the binding tables mapping SceneNodeIndexT to physics domain
+ *  components. Loading is strictly separated from the base SceneAssetDesc.
+ *
+ *  The sidecar is identified by the same base name as its paired Scene asset
+ *  with a ".physics" suffix in the asset directory.
+ *
+ *  @par Hydration contract
+ *  `target_scene_key` must identify a Scene asset already loaded in the same
+ *  mount. Loader hard-fails on identity mismatch, missing scene key, or
+ *  node-count violations (see PakFormatVersion7_Physics.md §7.2). */
+#pragma pack(push, 1)
+struct PhysicsSceneAssetDesc {
+  AssetHeader header;
+  AssetKey target_scene_key = {}; //!< Must match the paired SceneAsset key
+  uint32_t target_node_count = 0; //!< Expected node count for identity check
+  uint32_t component_table_count = 0;
+  OffsetT component_table_directory_offset
+    = 0; //!< Offset to PhysicsComponentTableDesc[]
+  uint8_t reserved[129] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(PhysicsSceneAssetDesc) == 256);
+
+// ============================================================================
+// Binding Records (sorted by node_index, validated by loader)
+// ============================================================================
+
+//! Rigid body binding record (64 bytes).
+#pragma pack(push, 1)
+struct RigidBodyBindingRecord {
+  SceneNodeIndexT node_index = 0;
+  PhysicsBodyType body_type = PhysicsBodyType::kStatic;
+  PhysicsMotionQuality motion_quality = PhysicsMotionQuality::kDiscrete;
+  uint16_t collision_layer = 0; //!< Maps to CollisionLayers.h
+  uint32_t collision_mask = 0xFFFFFFFF;
+
+  float mass = 0.0F; //!< 0 = inferred from shape density
+  float linear_damping = 0.05F;
+  float angular_damping = 0.05F;
+  float gravity_factor = 1.0F;
+
+  uint32_t initial_activation = 1; //!< Boolean
+  uint32_t is_sensor = 0; //!< Boolean
+
+  ResourceIndexT shape_asset_index
+    = kNoResourceIndex; //!< CollisionShapeAssetDesc
+  ResourceIndexT material_asset_index
+    = kNoResourceIndex; //!< PhysicsMaterialAssetDesc
+
+  uint8_t reserved[20] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(RigidBodyBindingRecord) == 64);
+
+//! Collider-only binding record (32 bytes) — static trigger/sensor shape.
+#pragma pack(push, 1)
+struct ColliderBindingRecord {
+  SceneNodeIndexT node_index = 0;
+  ResourceIndexT shape_asset_index = kNoResourceIndex;
+  ResourceIndexT material_asset_index = kNoResourceIndex;
+  uint16_t collision_layer = 0;
+  uint32_t collision_mask = 0xFFFFFFFF;
+  uint8_t reserved[14] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(ColliderBindingRecord) == 32);
+
+//! Character controller binding record (48 bytes).
+#pragma pack(push, 1)
+struct CharacterBindingRecord {
+  SceneNodeIndexT node_index = 0;
+  ResourceIndexT shape_asset_index = kNoResourceIndex;
+  float mass = 80.0F;
+  float max_slope_angle = 0.7854F; //!< ~45 deg in radians
+  float step_height = 0.3F;
+  float max_strength = 100.0F;
+  uint16_t collision_layer = 0;
+  uint32_t collision_mask = 0xFFFFFFFF;
+  uint8_t reserved[18] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(CharacterBindingRecord) == 48);
+
+//! Soft body binding record (48 bytes).
+#pragma pack(push, 1)
+struct SoftBodyBindingRecord {
+  SceneNodeIndexT node_index = 0;
+  uint32_t cluster_count = 0;
+  float stiffness = 0.0F;
+  float damping = 0.0F;
+  float edge_compliance = 0.0F;
+  float shear_compliance = 0.0F;
+  float bend_compliance = 1.0F;
+  SoftBodyTetherMode tether_mode = SoftBodyTetherMode::kNone;
+  uint8_t reserved0[3] = {};
+  float tether_max_distance_multiplier = 1.0F;
+  uint8_t reserved1[12] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(SoftBodyBindingRecord) == 48);
+
+//! Joint binding record (32 bytes). The joint blob is stored as a
+//! kJoltConstraintBinary entry in the physics_resource_table.
+#pragma pack(push, 1)
+struct JointBindingRecord {
+  SceneNodeIndexT node_index_a = 0; //!< Body A
+  SceneNodeIndexT node_index_b = 0; //!< Body B (kNoResourceIndex = world)
+  ResourceIndexT constraint_resource_index = kNoResourceIndex;
+  uint8_t reserved[20] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(JointBindingRecord) == 32);
+
+//! Vehicle binding record (32 bytes). Full config is in the constraint blob.
+#pragma pack(push, 1)
+struct VehicleBindingRecord {
+  SceneNodeIndexT node_index = 0; //!< Root chassis node
+  ResourceIndexT constraint_resource_index = kNoResourceIndex;
+  uint8_t reserved[24] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(VehicleBindingRecord) == 32);
+
+//! Aggregate (group) binding record (28 bytes).
+#pragma pack(push, 1)
+struct AggregateBindingRecord {
+  SceneNodeIndexT node_index = 0; //!< Root node of the aggregate group
+  uint32_t max_bodies = 0; //!< Pre-allocation size
+  uint32_t filter_overlap = 1; //!< Boolean: disable self-collision?
+  AggregateAuthority authority = AggregateAuthority::kSimulation;
+  uint8_t reserved[15] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(AggregateBindingRecord) == 28);
+
+} // namespace oxygen::data::pak::v7
+
 namespace oxygen::data::pak {
-//! Default namespace alias for latest version of the PAK format
-using v6::AssetDirectoryEntry;
-using v6::AssetHeader;
-using v6::BufferResourceDesc;
-using v6::DataBlobSizeT;
-using v6::DirectionalLightRecord;
-using v6::EnvironmentComponentType;
-using v6::FogEnvironmentRecord;
-using v6::GeometryAssetDesc;
-using v6::InputActionAssetDesc;
-using v6::InputActionAssetFlags;
-using v6::InputActionMappingRecord;
-using v6::InputContextBindingFlags;
-using v6::InputContextBindingRecord;
-using v6::InputDataTable;
-using v6::InputMappingContextAssetDesc;
-using v6::InputMappingContextFlags;
-using v6::InputMappingFlags;
-using v6::InputTriggerAuxRecord;
-using v6::InputTriggerBehavior;
-using v6::InputTriggerRecord;
-using v6::InputTriggerType;
-using v6::kDataBlobMaxSize;
-using v6::kFallbackResourceIndex;
-using v6::kGeometryAssetVersion;
-using v6::kInputActionAssetVersion;
-using v6::kInputMappingContextAssetVersion;
-using v6::kMaterialAssetVersion;
-using v6::kMaterialFlag_AlphaTest;
-using v6::kMaterialFlag_DoubleSided;
-using v6::kMaterialFlag_GltfOrmPacked;
-using v6::kMaterialFlag_NoTextureSampling;
-using v6::kMaterialFlag_ProceduralGrid;
-using v6::kMaterialFlag_Unlit;
-using v6::kMaxNameSize;
-using v6::kNoResourceIndex;
-using v6::kSceneAssetVersion;
-using v6::kSceneNodeFlag_Visible;
-using v6::kTexturePayloadMagic;
-using v6::LightCommonRecord;
-using v6::LightShadowSettingsRecord;
-using v6::MaterialAssetDesc;
-using v6::MeshDesc;
-using v6::MeshViewDesc;
-using v6::NodeRecord;
-using v6::OffsetT;
-using v6::OrthographicCameraRecord;
-using v6::PakBrowseIndexEntry;
-using v6::PakBrowseIndexHeader;
-using v6::PakFooter;
-using v6::PakHeader;
-using v6::PerspectiveCameraRecord;
-using v6::PointLightRecord;
-using v6::PostProcessVolumeEnvironmentRecord;
-using v6::ProceduralMeshInfo;
-using v6::RenderableRecord;
-using v6::ResourceIndexT;
-using v6::ResourceRegion;
-using v6::ResourceTable;
-using v6::SceneAssetDesc;
-using v6::SceneComponentTableDesc;
-using v6::SceneEnvironmentBlockHeader;
-using v6::SceneEnvironmentSystemRecordHeader;
-using v6::SceneNodeIndexT;
-using v6::ScriptAssetDesc;
-using v6::ScriptAssetFlags;
-using v6::ScriptCompression;
-using v6::ScriptEncoding;
-using v6::ScriptingComponentFlags;
-using v6::ScriptingComponentRecord;
-using v6::ScriptLanguage;
-using v6::ScriptParamRecord;
-using v6::ScriptParamType;
-using v6::ScriptResourceDesc;
-using v6::ScriptSlotFlags;
-using v6::ScriptSlotRecord;
-using v6::ShaderReferenceDesc;
-using v6::SkinnedMeshInfo;
-using v6::SkyAtmosphereEnvironmentRecord;
-using v6::SkyLightEnvironmentRecord;
-using v6::SkySphereEnvironmentRecord;
-using v6::SpotLightRecord;
-using v6::StandardMeshInfo;
-using v6::StringTableOffsetT;
-using v6::StringTableSizeT;
-using v6::SubMeshDesc;
-using v6::SubresourceLayout;
-using v6::TexturePackingPolicyId;
-using v6::TexturePayloadFlags;
-using v6::TexturePayloadHeader;
-using v6::TextureResourceDesc;
-using v6::to_string;
-using v6::VolumetricCloudsEnvironmentRecord;
+//! Default namespace — all types resolved through v7 (which inherits v6).
+//! Using v7:: for every declaration avoids ambiguity between v6 and v7
+//! overloads/types (e.g. PakHeader, PakFooter).
+using v7::AggregateAuthority;
+using v7::AggregateBindingRecord;
+using v7::AssetDirectoryEntry;
+using v7::AssetHeader;
+using v7::AudioResourceDesc;
+using v7::BufferResourceDesc;
+using v7::CharacterBindingRecord;
+using v7::ColliderBindingRecord;
+using v7::CollisionShapeAssetDesc;
+using v7::CollisionShapeCategory;
+using v7::DataBlobSizeT;
+using v7::DirectionalLightRecord;
+using v7::EnvironmentComponentType;
+using v7::FogEnvironmentRecord;
+using v7::GeometryAssetDesc;
+using v7::InputActionAssetDesc;
+using v7::InputActionAssetFlags;
+using v7::InputActionMappingRecord;
+using v7::InputContextBindingFlags;
+using v7::InputContextBindingRecord;
+using v7::InputDataTable;
+using v7::InputMappingContextAssetDesc;
+using v7::InputMappingContextFlags;
+using v7::InputMappingFlags;
+using v7::InputTriggerAuxRecord;
+using v7::InputTriggerBehavior;
+using v7::InputTriggerRecord;
+using v7::InputTriggerType;
+using v7::JointBindingRecord;
+using v7::kCollisionShapeAssetVersion;
+using v7::kDataBlobMaxSize;
+using v7::kFallbackResourceIndex;
+using v7::kGeometryAssetVersion;
+using v7::kInputActionAssetVersion;
+using v7::kInputMappingContextAssetVersion;
+using v7::kMaterialAssetVersion;
+using v7::kMaterialFlag_AlphaTest;
+using v7::kMaterialFlag_DoubleSided;
+using v7::kMaterialFlag_GltfOrmPacked;
+using v7::kMaterialFlag_NoTextureSampling;
+using v7::kMaterialFlag_ProceduralGrid;
+using v7::kMaterialFlag_Unlit;
+using v7::kMaxNameSize;
+using v7::kNoResourceIndex;
+using v7::kPakVersion;
+using v7::kPhysicsMaterialAssetVersion;
+using v7::kPhysicsSceneAssetVersion;
+using v7::kSceneAssetVersion;
+using v7::kSceneNodeFlag_Visible;
+using v7::kTexturePayloadMagic;
+using v7::LightCommonRecord;
+using v7::LightShadowSettingsRecord;
+using v7::MaterialAssetDesc;
+using v7::MeshDesc;
+using v7::MeshViewDesc;
+using v7::NodeRecord;
+using v7::OffsetT;
+using v7::OrthographicCameraRecord;
+using v7::PakBrowseIndexEntry;
+using v7::PakBrowseIndexHeader;
+using v7::PakFooter;
+using v7::PakHeader;
+using v7::PerspectiveCameraRecord;
+using v7::PhysicsBindingType;
+using v7::PhysicsBodyType;
+using v7::PhysicsCombineMode;
+using v7::PhysicsComponentTableDesc;
+using v7::PhysicsMaterialAssetDesc;
+using v7::PhysicsMotionQuality;
+using v7::PhysicsResourceDesc;
+using v7::PhysicsResourceFormat;
+using v7::PhysicsSceneAssetDesc;
+using v7::PointLightRecord;
+using v7::PostProcessVolumeEnvironmentRecord;
+using v7::ProceduralMeshInfo;
+using v7::RenderableRecord;
+using v7::ResourceIndexT;
+using v7::ResourceRegion;
+using v7::ResourceTable;
+using v7::RigidBodyBindingRecord;
+using v7::SceneAssetDesc;
+using v7::SceneComponentTableDesc;
+using v7::SceneEnvironmentBlockHeader;
+using v7::SceneEnvironmentSystemRecordHeader;
+using v7::SceneNodeIndexT;
+using v7::ScriptAssetDesc;
+using v7::ScriptAssetFlags;
+using v7::ScriptCompression;
+using v7::ScriptEncoding;
+using v7::ScriptingComponentFlags;
+using v7::ScriptingComponentRecord;
+using v7::ScriptLanguage;
+using v7::ScriptParamRecord;
+using v7::ScriptParamType;
+using v7::ScriptResourceDesc;
+using v7::ScriptSlotFlags;
+using v7::ScriptSlotRecord;
+using v7::ShaderReferenceDesc;
+using v7::SkinnedMeshInfo;
+using v7::SkyAtmosphereEnvironmentRecord;
+using v7::SkyLightEnvironmentRecord;
+using v7::SkySphereEnvironmentRecord;
+using v7::SoftBodyBindingRecord;
+using v7::SoftBodyTetherMode;
+using v7::SpotLightRecord;
+using v7::StandardMeshInfo;
+using v7::StringTableOffsetT;
+using v7::StringTableSizeT;
+using v7::SubMeshDesc;
+using v7::SubresourceLayout;
+using v7::TexturePackingPolicyId;
+using v7::TexturePayloadFlags;
+using v7::TexturePayloadHeader;
+using v7::TextureResourceDesc;
+using v7::to_string;
+using v7::VehicleBindingRecord;
+using v7::VolumetricCloudsEnvironmentRecord;
 } // namespace oxygen::data::pak
 
 // NOLINTEND(*-avoid-c-arrays,*-magic-numbers)

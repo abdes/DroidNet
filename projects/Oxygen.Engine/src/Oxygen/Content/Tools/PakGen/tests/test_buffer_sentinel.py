@@ -6,7 +6,7 @@ from pakgen.api import build_pak, BuildOptions
 def test_buffer_sentinel_descriptor_is_zeroed(tmp_path: Path):
     """Verify that buffer index 0 is reserved as an all-zero sentinel in the PAK."""
     spec = {
-        "version": 6,
+        "version": 7,
         "content_version": 1,
         "buffers": [
             {"name": "user_buf", "stride": 4, "data_hex": "BBBBBBBB"}
@@ -24,13 +24,13 @@ def test_buffer_sentinel_descriptor_is_zeroed(tmp_path: Path):
     data = out_pak.read_bytes()
     footer = data[-256:]
 
-    # Extract buffer table info from footer (v5 layout):
+    # Extract buffer table info from footer (v7 layout):
     # directory header (24)
-    # + 4 resource regions (texture, buffer, audio, script) => 4 * 16 = 64
+    # + 5 resource regions (texture, buffer, audio, script, physics) => 5 * 16 = 80
     # + texture table (16)
-    # => buffer table starts at 24 + 64 + 16 = 104
+    # => buffer table starts at 24 + 80 + 16 = 120
     # Each table record is (offset: Q, count: I, entry_size: I) = 16 bytes.
-    footer_buffer_table_offset = 24 + (4 * 16) + 16
+    footer_buffer_table_offset = 24 + (5 * 16) + 16
     (buffer_table_offset, buffer_table_count, buffer_entry_size) = struct.unpack_from(
         "<QII", footer, footer_buffer_table_offset
     )

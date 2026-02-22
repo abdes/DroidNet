@@ -31,6 +31,8 @@
 #include <Oxygen/Content/Loaders/InputActionLoader.h>
 #include <Oxygen/Content/Loaders/InputMappingContextLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
+#include <Oxygen/Content/Loaders/PhysicsResourceLoader.h>
+#include <Oxygen/Content/Loaders/PhysicsSceneLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/ScriptLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
@@ -38,8 +40,8 @@
 #include <Oxygen/Content/SourceToken.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/ScriptAsset.h>
-#include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
@@ -222,6 +224,7 @@ AssetLoader::AssetLoader(
   RegisterLoader(loaders::LoadGeometryAsset);
   RegisterLoader(loaders::LoadMaterialAsset);
   RegisterLoader(loaders::LoadSceneAsset);
+  RegisterLoader(loaders::LoadPhysicsSceneAsset);
   RegisterLoader(loaders::LoadScriptAsset);
   RegisterLoader(loaders::LoadInputActionAsset);
   RegisterLoader(loaders::LoadInputMappingContextAsset);
@@ -230,6 +233,7 @@ AssetLoader::AssetLoader(
   RegisterLoader(loaders::LoadBufferResource);
   RegisterLoader(loaders::LoadScriptResource);
   RegisterLoader(loaders::LoadTextureResource);
+  RegisterLoader(loaders::LoadPhysicsResource);
 }
 
 auto AssetLoader::SetVerifyContentHashes(const bool enable) -> void
@@ -283,12 +287,14 @@ void AssetLoader::Stop()
   in_flight_material_assets_.clear();
   in_flight_geometry_assets_.clear();
   in_flight_scene_assets_.clear();
+  in_flight_physics_scene_assets_.clear();
   in_flight_script_assets_.clear();
   in_flight_input_action_assets_.clear();
   in_flight_input_mapping_context_assets_.clear();
   in_flight_textures_.clear();
   in_flight_buffers_.clear();
   in_flight_script_resources_.clear();
+  in_flight_physics_resources_.clear();
 
   {
     auto eviction_guard = content_cache_.OnEviction(
@@ -1026,7 +1032,8 @@ auto AssetLoader::LoadResourceAsyncFromCookedErased(
     LoaderContext context {
       .current_asset_key = {},
       .desc_reader = reader.get(),
-      .data_readers = std::make_tuple(reader.get(), reader.get(), reader.get()),
+      .data_readers
+      = std::make_tuple(reader.get(), reader.get(), reader.get(), reader.get()),
       .work_offline = work_offline_,
       .source_pak = nullptr,
     };
@@ -1723,6 +1730,7 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
   std::unique_ptr<serio::AnyReader> buf_reader;
   std::unique_ptr<serio::AnyReader> tex_reader;
   std::unique_ptr<serio::AnyReader> script_reader;
+  std::unique_ptr<serio::AnyReader> phys_reader;
   const PakFile* source_pak = nullptr;
 
   auto try_prepare_from_source_index = [&](const size_t source_index) -> bool {
@@ -1742,6 +1750,7 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
     buf_reader = source.CreateBufferDataReader();
     tex_reader = source.CreateTextureDataReader();
     script_reader = source.CreateScriptDataReader();
+    phys_reader = source.CreatePhysicsDataReader();
 
     if (source.GetTypeId() == internal::PakFileSource::ClassTypeId()) {
       const auto* pak_source
@@ -1784,6 +1793,7 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
       desc_reader = std::move(desc_reader), buf_reader = std::move(buf_reader),
       tex_reader = std::move(tex_reader),
       script_reader = std::move(script_reader),
+      phys_reader = std::move(phys_reader),
       source_token]() mutable -> std::shared_ptr<void> {
       ScopedCurrentSourceId source_guard(source_id);
 
@@ -1791,8 +1801,8 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
         .current_asset_key = key,
         .source_token = source_token,
         .desc_reader = desc_reader.get(),
-        .data_readers = std::make_tuple(
-          buf_reader.get(), tex_reader.get(), script_reader.get()),
+        .data_readers = std::make_tuple(buf_reader.get(), tex_reader.get(),
+          script_reader.get(), phys_reader.get()),
         .work_offline = work_offline_,
         .dependency_collector = collector,
         .source_pak = source_pak,
@@ -2631,6 +2641,92 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(
   co_return co_await shared;
 }
 
+auto AssetLoader::LoadPhysicsSceneAssetAsyncImpl(
+  const data::AssetKey& key, std::optional<uint16_t> preferred_source_id)
+  -> co::Co<std::shared_ptr<data::PhysicsSceneAsset>>
+{
+  DLOG_SCOPE_F(2, "AssetLoader LoadPhysicsSceneAssetAsync");
+  DLOG_F(2, "key     : {}", nostd::to_string(key).c_str());
+  DLOG_F(2, "offline : {}", work_offline_);
+
+  AssertOwningThread();
+
+  auto resolve_source_id = [&]() -> std::optional<uint16_t> {
+    if (preferred_source_id.has_value()) {
+      const auto source_it
+        = impl_->source_id_to_index.find(*preferred_source_id);
+      if (source_it != impl_->source_id_to_index.end()
+        && impl_->sources.at(source_it->second)->FindAsset(key).has_value()) {
+        return *preferred_source_id;
+      }
+    }
+    for (size_t source_index = impl_->sources.size(); source_index-- > 0;) {
+      if (impl_->sources[source_index]->FindAsset(key).has_value()) {
+        return impl_->source_ids[source_index];
+      }
+    }
+    return std::nullopt;
+  };
+
+  const auto source_id_opt = resolve_source_id();
+  if (!source_id_opt.has_value()) {
+    co_return nullptr;
+  }
+  const auto source_id = *source_id_opt;
+  const auto hash_key = HashAssetKey(key, source_id);
+
+  if (auto cached
+    = content_cache_.CheckOut<data::PhysicsSceneAsset>(hash_key)) {
+    // Physics sidecar has no sub-asset dependencies to republish.
+    co_return cached;
+  }
+
+  if (auto it = in_flight_physics_scene_assets_.find(hash_key);
+    it != in_flight_physics_scene_assets_.end()) {
+    co_return co_await it->second;
+  }
+
+  auto op = [this, key, source_id,
+              hash_key]() -> co::Co<std::shared_ptr<data::PhysicsSceneAsset>> {
+    ScopeGuard erase_guard([this, hash_key]() noexcept {
+      in_flight_physics_scene_assets_.erase(hash_key);
+    });
+
+    try {
+      if (auto cached
+        = content_cache_.CheckOut<data::PhysicsSceneAsset>(hash_key)) {
+        co_return cached;
+      }
+
+      auto decoded_result = co_await DecodeAssetAsyncErasedImpl(
+        data::PhysicsSceneAsset::ClassTypeId(), key, source_id);
+      auto typed = std::static_pointer_cast<data::PhysicsSceneAsset>(
+        decoded_result.asset);
+      if (!typed
+        || typed->GetTypeId() != data::PhysicsSceneAsset::ClassTypeId()) {
+        LOG_F(ERROR, "Loaded asset type mismatch (async): expected {}, got {}",
+          data::PhysicsSceneAsset::ClassTypeNamePretty(),
+          typed ? typed->GetTypeName() : "nullptr");
+        co_return nullptr;
+      }
+
+      // Publish: store the asset in cache and keep one loader-owned retain.
+      if (content_cache_.Store(hash_key, typed)) {
+        asset_key_by_hash_.insert_or_assign(hash_key, key);
+        asset_source_id_by_hash_.insert_or_assign(hash_key, source_id);
+        content_cache_.Touch(hash_key);
+      }
+      co_return typed;
+    } catch (const co::TaskCancelledException& e) {
+      throw OperationCancelledException(e.what());
+    }
+  }();
+
+  co::Shared shared(std::move(op));
+  in_flight_physics_scene_assets_.insert_or_assign(hash_key, shared);
+  co_return co_await shared;
+}
+
 auto AssetLoader::LoadScriptAssetAsyncImpl(
   const data::AssetKey& key, std::optional<uint16_t> preferred_source_id)
   -> co::Co<std::shared_ptr<data::ScriptAsset>>
@@ -3064,6 +3160,7 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
           std::unique_ptr<serio::AnyReader> buf_reader;
           std::unique_ptr<serio::AnyReader> tex_reader;
           std::unique_ptr<serio::AnyReader> script_reader;
+          std::unique_ptr<serio::AnyReader> phys_reader;
           const PakFile* source_pak = nullptr;
         } prepared;
 
@@ -3099,6 +3196,7 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
           prepared.buf_reader = source.CreateBufferDataReader();
           prepared.tex_reader = source.CreateTextureDataReader();
           prepared.script_reader = source.CreateScriptDataReader();
+          prepared.phys_reader = source.CreatePhysicsDataReader();
 
           auto loader_it
             = resource_loaders_.find(data::TextureResource::ClassTypeId());
@@ -3121,7 +3219,8 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
               .current_asset_key = {},
               .desc_reader = prepared.desc_reader.get(),
               .data_readers = std::make_tuple(prepared.buf_reader.get(),
-                prepared.tex_reader.get(), prepared.script_reader.get()),
+                prepared.tex_reader.get(), prepared.script_reader.get(),
+                prepared.phys_reader.get()),
               .work_offline = work_offline_,
               .source_pak = prepared.source_pak,
             };
@@ -3192,6 +3291,7 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
           std::unique_ptr<serio::AnyReader> buf_reader;
           std::unique_ptr<serio::AnyReader> tex_reader;
           std::unique_ptr<serio::AnyReader> script_reader;
+          std::unique_ptr<serio::AnyReader> phys_reader;
           const PakFile* source_pak = nullptr;
         } prepared;
 
@@ -3227,6 +3327,7 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
           prepared.buf_reader = source.CreateBufferDataReader();
           prepared.tex_reader = source.CreateTextureDataReader();
           prepared.script_reader = source.CreateScriptDataReader();
+          prepared.phys_reader = source.CreatePhysicsDataReader();
 
           auto loader_it
             = resource_loaders_.find(data::BufferResource::ClassTypeId());
@@ -3247,7 +3348,8 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
               .current_asset_key = {},
               .desc_reader = prepared.desc_reader.get(),
               .data_readers = std::make_tuple(prepared.buf_reader.get(),
-                prepared.tex_reader.get(), prepared.script_reader.get()),
+                prepared.tex_reader.get(), prepared.script_reader.get(),
+                prepared.phys_reader.get()),
               .work_offline = work_offline_,
               .source_pak = prepared.source_pak,
             };
@@ -3311,6 +3413,7 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
           std::unique_ptr<serio::AnyReader> buf_reader;
           std::unique_ptr<serio::AnyReader> tex_reader;
           std::unique_ptr<serio::AnyReader> script_reader;
+          std::unique_ptr<serio::AnyReader> phys_reader;
           const PakFile* source_pak = nullptr;
         } prepared;
 
@@ -3346,6 +3449,7 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
           prepared.buf_reader = source.CreateBufferDataReader();
           prepared.tex_reader = source.CreateTextureDataReader();
           prepared.script_reader = source.CreateScriptDataReader();
+          prepared.phys_reader = source.CreatePhysicsDataReader();
 
           auto loader_it
             = resource_loaders_.find(data::ScriptResource::ClassTypeId());
@@ -3366,7 +3470,8 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
               .current_asset_key = {},
               .desc_reader = prepared.desc_reader.get(),
               .data_readers = std::make_tuple(prepared.buf_reader.get(),
-                prepared.tex_reader.get(), prepared.script_reader.get()),
+                prepared.tex_reader.get(), prepared.script_reader.get(),
+                prepared.phys_reader.get()),
               .work_offline = work_offline_,
               .source_pak = prepared.source_pak,
             };
@@ -3401,10 +3506,133 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
     co::Shared shared(std::move(op));
     in_flight_script_resources_.insert_or_assign(key_hash, shared);
     co_return co_await shared;
+  } else if constexpr (std::same_as<T, data::PhysicsResource>) {
+    if (auto it = in_flight_physics_resources_.find(key_hash);
+      it != in_flight_physics_resources_.end()) {
+      co_return co_await it->second;
+    }
+
+    auto op = [this, key,
+                key_hash]() -> co::Co<std::shared_ptr<data::PhysicsResource>> {
+      ScopeGuard erase_guard([this, key_hash]() noexcept {
+        in_flight_physics_resources_.erase(key_hash);
+      });
+
+      try {
+        if (auto cached
+          = content_cache_.CheckOut<data::PhysicsResource>(key_hash)) {
+          resource_key_by_hash_.insert_or_assign(key_hash, key);
+          co_return cached;
+        }
+
+        const internal::InternalResourceKey internal_key(key);
+        const uint16_t source_id = internal_key.GetPakIndex();
+        const auto resource_index = internal_key.GetResourceIndex();
+
+        struct PreparedDecode final {
+          LoadFnErased loader;
+          std::unique_ptr<serio::AnyReader> desc_reader;
+          std::unique_ptr<serio::AnyReader> buf_reader;
+          std::unique_ptr<serio::AnyReader> tex_reader;
+          std::unique_ptr<serio::AnyReader> script_reader;
+          std::unique_ptr<serio::AnyReader> phys_reader;
+          const PakFile* source_pak = nullptr;
+        } prepared;
+
+        {
+          const auto source_it = impl_->source_id_to_index.find(source_id);
+          if (source_it == impl_->source_id_to_index.end()) {
+            co_return nullptr;
+          }
+          const auto& source = *impl_->sources.at(source_it->second);
+
+          if (source.GetTypeId() == internal::PakFileSource::ClassTypeId()) {
+            const auto* pak_source
+              = static_cast<const internal::PakFileSource*>(&source);
+            prepared.source_pak = &pak_source->Pak();
+          }
+
+          const auto* resource_table = source.GetPhysicsTable();
+          prepared.desc_reader = source.CreatePhysicsTableReader();
+          if (!resource_table || !prepared.desc_reader) {
+            co_return nullptr;
+          }
+
+          const auto offset = resource_table->GetResourceOffset(resource_index);
+          if (!offset) {
+            co_return nullptr;
+          }
+          if (auto seek_res
+            = prepared.desc_reader->Seek(static_cast<size_t>(*offset));
+            !seek_res) {
+            co_return nullptr;
+          }
+
+          prepared.buf_reader = source.CreateBufferDataReader();
+          prepared.tex_reader = source.CreateTextureDataReader();
+          prepared.script_reader = source.CreateScriptDataReader();
+          prepared.phys_reader = source.CreatePhysicsDataReader();
+
+          auto loader_it
+            = resource_loaders_.find(data::PhysicsResource::ClassTypeId());
+          if (loader_it == resource_loaders_.end()) {
+            LOG_F(ERROR, "No loader registered for resource type id: {}",
+              data::PhysicsResource::ClassTypeId());
+            co_return nullptr;
+          }
+          prepared.loader = loader_it->second;
+        }
+
+        LOG_F(2, "scheduling physics resource decode on thread pool");
+        auto decoded = co_await thread_pool_->Run(
+          [this, source_id, prepared = std::move(prepared)]() mutable {
+            ScopedCurrentSourceId source_guard(source_id);
+
+            LoaderContext context {
+              .current_asset_key = {},
+              .desc_reader = prepared.desc_reader.get(),
+              .data_readers = std::make_tuple(prepared.buf_reader.get(),
+                prepared.tex_reader.get(), prepared.script_reader.get(),
+                prepared.phys_reader.get()),
+              .work_offline = work_offline_,
+              .source_pak = prepared.source_pak,
+            };
+
+            auto void_ptr = prepared.loader(context);
+            auto typed
+              = std::static_pointer_cast<data::PhysicsResource>(void_ptr);
+            if (!typed
+              || typed->GetTypeId() != data::PhysicsResource::ClassTypeId()) {
+              return std::shared_ptr<data::PhysicsResource> {};
+            }
+            return typed;
+          });
+
+        AssertOwningThread();
+        if (!decoded) {
+          co_return nullptr;
+        }
+
+        if (content_cache_.Store(key_hash, decoded)) {
+          resource_key_by_hash_.insert_or_assign(key_hash, key);
+          // Keep one loader-owned cache retain; load caller gets its own
+          // retain.
+          content_cache_.Touch(key_hash);
+        }
+        co_return decoded;
+      } catch (const co::TaskCancelledException& e) {
+        throw OperationCancelledException(e.what());
+      }
+    }();
+
+    co::Shared shared(std::move(op));
+    in_flight_physics_resources_.insert_or_assign(key_hash, shared);
+    co_return co_await shared;
   } else {
     static_assert(std::same_as<T, data::TextureResource>
         || std::same_as<T, data::BufferResource>
-        || std::same_as<T, data::ScriptResource>,
+        || std::same_as<T, data::ScriptResource>
+        || std::same_as<T, data::PhysicsResource>,
       "Unsupported resource type for LoadResourceAsync");
     co_return nullptr;
   }
@@ -3648,6 +3876,11 @@ template OXGN_CNTT_API auto
   AssetLoader::LoadResourceAsync<oxygen::data::ScriptResource>(
     oxygen::content::ResourceKey)
     -> oxygen::co::Co<std::shared_ptr<oxygen::data::ScriptResource>>;
+
+template OXGN_CNTT_API auto
+  AssetLoader::LoadResourceAsync<oxygen::data::PhysicsResource>(
+    oxygen::content::ResourceKey)
+    -> oxygen::co::Co<std::shared_ptr<oxygen::data::PhysicsResource>>;
 
 //=== Hash Key Generation ====================================================//
 

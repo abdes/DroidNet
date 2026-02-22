@@ -9,10 +9,198 @@
 #include <span>
 #include <type_traits>
 
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/Reader.h>
 
 namespace oxygen::serio {
+
+inline auto Load(AnyReader& reader, data::AssetKey& key) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { key.guid })));
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::AssetHeader& header)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(header.asset_type));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { header.name })));
+  CHECK_RESULT(reader.ReadInto(header.version));
+  CHECK_RESULT(reader.ReadInto(header.streaming_priority));
+  CHECK_RESULT(reader.ReadInto(header.content_hash));
+  CHECK_RESULT(reader.ReadInto(header.variant_flags));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { header.reserved })));
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::ResourceRegion& region)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(region.offset));
+  CHECK_RESULT(reader.ReadInto(region.size));
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::ResourceTable& table)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(table.offset));
+  CHECK_RESULT(reader.ReadInto(table.count));
+  CHECK_RESULT(reader.ReadInto(table.entry_size));
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::PakHeader& header)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { header.magic })));
+  CHECK_RESULT(reader.ReadInto(header.version));
+  CHECK_RESULT(reader.ReadInto(header.content_version));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { header.guid })));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { header.reserved })));
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::PakFooter& footer)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(footer.directory_offset));
+  CHECK_RESULT(reader.ReadInto(footer.directory_size));
+  CHECK_RESULT(reader.ReadInto(footer.asset_count));
+  CHECK_RESULT(reader.ReadInto(footer.texture_region));
+  CHECK_RESULT(reader.ReadInto(footer.buffer_region));
+  CHECK_RESULT(reader.ReadInto(footer.audio_region));
+  CHECK_RESULT(reader.ReadInto(footer.script_region));
+  CHECK_RESULT(reader.ReadInto(footer.physics_region));
+  CHECK_RESULT(reader.ReadInto(footer.texture_table));
+  CHECK_RESULT(reader.ReadInto(footer.buffer_table));
+  CHECK_RESULT(reader.ReadInto(footer.audio_table));
+  CHECK_RESULT(reader.ReadInto(footer.script_resource_table));
+  CHECK_RESULT(reader.ReadInto(footer.script_slot_table));
+  CHECK_RESULT(reader.ReadInto(footer.physics_resource_table));
+  CHECK_RESULT(reader.ReadInto(footer.browse_index_offset));
+  CHECK_RESULT(reader.ReadInto(footer.browse_index_size));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { footer.reserved })));
+  CHECK_RESULT(reader.ReadInto(footer.pak_crc32));
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::as_writable_bytes(std::span { footer.footer_magic })));
+  return {};
+}
+// Note: v7 versions are explicit because of the footer field changes
+// All other versions and common types are handled below.
+
+inline auto Load(AnyReader& reader, data::pak::AssetDirectoryEntry& entry)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(entry.asset_key));
+  CHECK_RESULT(reader.ReadInto(entry.asset_type));
+  CHECK_RESULT(reader.ReadInto(entry.entry_offset));
+  CHECK_RESULT(reader.ReadInto(entry.desc_offset));
+  CHECK_RESULT(reader.ReadInto(entry.desc_size));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { entry.reserved })));
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::PakBrowseIndexHeader& header)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { header.magic })));
+  CHECK_RESULT(reader.ReadInto(header.version));
+  CHECK_RESULT(reader.ReadInto(header.entry_count));
+  CHECK_RESULT(reader.ReadInto(header.string_table_size));
+  CHECK_RESULT(reader.ReadInto(header.reserved));
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::PakBrowseIndexEntry& entry)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(entry.asset_key));
+  CHECK_RESULT(reader.ReadInto(entry.virtual_path_offset));
+  CHECK_RESULT(reader.ReadInto(entry.virtual_path_length));
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::BufferResourceDesc& desc)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(desc.data_offset));
+  CHECK_RESULT(reader.ReadInto(desc.size_bytes));
+  CHECK_RESULT(reader.ReadInto(desc.usage_flags));
+  CHECK_RESULT(reader.ReadInto(desc.element_stride));
+  CHECK_RESULT(reader.ReadInto(desc.element_format));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { desc.reserved })));
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::TextureResourceDesc& desc)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(desc.data_offset));
+  CHECK_RESULT(reader.ReadInto(desc.size_bytes));
+  CHECK_RESULT(reader.ReadInto(desc.texture_type));
+  CHECK_RESULT(reader.ReadInto(desc.compression_type));
+  CHECK_RESULT(reader.ReadInto(desc.width));
+  CHECK_RESULT(reader.ReadInto(desc.height));
+  CHECK_RESULT(reader.ReadInto(desc.depth));
+  CHECK_RESULT(reader.ReadInto(desc.array_layers));
+  CHECK_RESULT(reader.ReadInto(desc.mip_levels));
+  CHECK_RESULT(reader.ReadInto(desc.format));
+  CHECK_RESULT(reader.ReadInto(desc.alignment));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { desc.reserved })));
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::MeshViewDesc& desc)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(desc.first_index));
+  CHECK_RESULT(reader.ReadInto(desc.index_count));
+  CHECK_RESULT(reader.ReadInto(desc.first_vertex));
+  CHECK_RESULT(reader.ReadInto(desc.vertex_count));
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::ShaderReferenceDesc& desc)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(desc.shader_type));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { desc.reserved0 })));
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::as_writable_bytes(std::span { desc.source_path })));
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::as_writable_bytes(std::span { desc.entry_point })));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { desc.defines })));
+  CHECK_RESULT(reader.ReadInto(desc.shader_hash));
+  return {};
+}
 
 inline auto Load(AnyReader& reader, engine::ToneMapper& value) -> Result<void>
 {
@@ -502,6 +690,260 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.flags));
   CHECK_RESULT(reader.ReadInto(record.reserved));
 
+  return {};
+}
+
+//=== Physics (v7) ===-------------------------------------------------------//
+
+inline auto Load(AnyReader& reader, data::pak::v7::PhysicsResourceFormat& value)
+  -> Result<void>
+{
+  std::underlying_type_t<data::pak::v7::PhysicsResourceFormat> raw_value = 0;
+  CHECK_RESULT(reader.ReadInto(raw_value));
+  value = static_cast<data::pak::v7::PhysicsResourceFormat>(raw_value);
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::v7::PhysicsCombineMode& value)
+  -> Result<void>
+{
+  std::underlying_type_t<data::pak::v7::PhysicsCombineMode> raw_value = 0;
+  CHECK_RESULT(reader.ReadInto(raw_value));
+  value = static_cast<data::pak::v7::PhysicsCombineMode>(raw_value);
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::v7::CollisionShapeCategory& value) -> Result<void>
+{
+  std::underlying_type_t<data::pak::v7::CollisionShapeCategory> raw_value = 0;
+  CHECK_RESULT(reader.ReadInto(raw_value));
+  value = static_cast<data::pak::v7::CollisionShapeCategory>(raw_value);
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::v7::PhysicsBodyType& value)
+  -> Result<void>
+{
+  std::underlying_type_t<data::pak::v7::PhysicsBodyType> raw_value = 0;
+  CHECK_RESULT(reader.ReadInto(raw_value));
+  value = static_cast<data::pak::v7::PhysicsBodyType>(raw_value);
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::v7::PhysicsMotionQuality& value)
+  -> Result<void>
+{
+  std::underlying_type_t<data::pak::v7::PhysicsMotionQuality> raw_value = 0;
+  CHECK_RESULT(reader.ReadInto(raw_value));
+  value = static_cast<data::pak::v7::PhysicsMotionQuality>(raw_value);
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::v7::SoftBodyTetherMode& value)
+  -> Result<void>
+{
+  std::underlying_type_t<data::pak::v7::SoftBodyTetherMode> raw_value = 0;
+  CHECK_RESULT(reader.ReadInto(raw_value));
+  value = static_cast<data::pak::v7::SoftBodyTetherMode>(raw_value);
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::v7::AggregateAuthority& value)
+  -> Result<void>
+{
+  std::underlying_type_t<data::pak::v7::AggregateAuthority> raw_value = 0;
+  CHECK_RESULT(reader.ReadInto(raw_value));
+  value = static_cast<data::pak::v7::AggregateAuthority>(raw_value);
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::v7::PhysicsBindingType& value)
+  -> Result<void>
+{
+  std::underlying_type_t<data::pak::v7::PhysicsBindingType> raw_value = 0;
+  CHECK_RESULT(reader.ReadInto(raw_value));
+  value = static_cast<data::pak::v7::PhysicsBindingType>(raw_value);
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::v7::PhysicsResourceDesc& record)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(record.data_offset));
+  CHECK_RESULT(reader.ReadInto(record.size_bytes));
+  CHECK_RESULT(reader.ReadInto(record.format));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { record.reserved })));
+  CHECK_RESULT(reader.ReadInto(record.content_hash));
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::v7::PhysicsMaterialAssetDesc& record) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(record.header));
+  CHECK_RESULT(reader.ReadInto(record.friction));
+  CHECK_RESULT(reader.ReadInto(record.restitution));
+  CHECK_RESULT(reader.ReadInto(record.density));
+  CHECK_RESULT(reader.ReadInto(record.combine_mode_friction));
+  CHECK_RESULT(reader.ReadInto(record.combine_mode_restitution));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { record.reserved })));
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::v7::CollisionShapeAssetDesc& record) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(record.header));
+  CHECK_RESULT(reader.ReadInto(record.physics_resource_index));
+  CHECK_RESULT(reader.ReadInto(record.shape_category));
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::as_writable_bytes(std::span { record.reserved0 })));
+  for (auto& v : record.bounding_box_min) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
+  for (auto& v : record.bounding_box_max) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::as_writable_bytes(std::span { record.reserved1 })));
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::v7::PhysicsComponentTableDesc& record) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(record.binding_type));
+  CHECK_RESULT(reader.ReadInto(record.table));
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::v7::PhysicsSceneAssetDesc& record) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(record.header));
+  CHECK_RESULT(reader.ReadInto(record.target_scene_key));
+  CHECK_RESULT(reader.ReadInto(record.target_node_count));
+  CHECK_RESULT(reader.ReadInto(record.component_table_count));
+  CHECK_RESULT(reader.ReadInto(record.component_table_directory_offset));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { record.reserved })));
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::v7::RigidBodyBindingRecord& record) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(record.node_index));
+  CHECK_RESULT(reader.ReadInto(record.body_type));
+  CHECK_RESULT(reader.ReadInto(record.motion_quality));
+  CHECK_RESULT(reader.ReadInto(record.collision_layer));
+  CHECK_RESULT(reader.ReadInto(record.collision_mask));
+  CHECK_RESULT(reader.ReadInto(record.mass));
+  CHECK_RESULT(reader.ReadInto(record.linear_damping));
+  CHECK_RESULT(reader.ReadInto(record.angular_damping));
+  CHECK_RESULT(reader.ReadInto(record.gravity_factor));
+  CHECK_RESULT(reader.ReadInto(record.initial_activation));
+  CHECK_RESULT(reader.ReadInto(record.is_sensor));
+  CHECK_RESULT(reader.ReadInto(record.shape_asset_index));
+  CHECK_RESULT(reader.ReadInto(record.material_asset_index));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { record.reserved })));
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::v7::ColliderBindingRecord& record) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(record.node_index));
+  CHECK_RESULT(reader.ReadInto(record.shape_asset_index));
+  CHECK_RESULT(reader.ReadInto(record.material_asset_index));
+  CHECK_RESULT(reader.ReadInto(record.collision_layer));
+  CHECK_RESULT(reader.ReadInto(record.collision_mask));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { record.reserved })));
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::v7::CharacterBindingRecord& record) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(record.node_index));
+  CHECK_RESULT(reader.ReadInto(record.shape_asset_index));
+  CHECK_RESULT(reader.ReadInto(record.mass));
+  CHECK_RESULT(reader.ReadInto(record.max_slope_angle));
+  CHECK_RESULT(reader.ReadInto(record.step_height));
+  CHECK_RESULT(reader.ReadInto(record.max_strength));
+  CHECK_RESULT(reader.ReadInto(record.collision_layer));
+  CHECK_RESULT(reader.ReadInto(record.collision_mask));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { record.reserved })));
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::v7::SoftBodyBindingRecord& record) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(record.node_index));
+  CHECK_RESULT(reader.ReadInto(record.cluster_count));
+  CHECK_RESULT(reader.ReadInto(record.stiffness));
+  CHECK_RESULT(reader.ReadInto(record.damping));
+  CHECK_RESULT(reader.ReadInto(record.edge_compliance));
+  CHECK_RESULT(reader.ReadInto(record.shear_compliance));
+  CHECK_RESULT(reader.ReadInto(record.bend_compliance));
+  CHECK_RESULT(reader.ReadInto(record.tether_mode));
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::as_writable_bytes(std::span { record.reserved0 })));
+  CHECK_RESULT(reader.ReadInto(record.tether_max_distance_multiplier));
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::as_writable_bytes(std::span { record.reserved1 })));
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::v7::JointBindingRecord& record)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(record.node_index_a));
+  CHECK_RESULT(reader.ReadInto(record.node_index_b));
+  CHECK_RESULT(reader.ReadInto(record.constraint_resource_index));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { record.reserved })));
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::v7::VehicleBindingRecord& record)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(record.node_index));
+  CHECK_RESULT(reader.ReadInto(record.constraint_resource_index));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { record.reserved })));
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::v7::AggregateBindingRecord& record) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(record.node_index));
+  CHECK_RESULT(reader.ReadInto(record.max_bodies));
+  CHECK_RESULT(reader.ReadInto(record.filter_overlap));
+  CHECK_RESULT(reader.ReadInto(record.authority));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { record.reserved })));
   return {};
 }
 

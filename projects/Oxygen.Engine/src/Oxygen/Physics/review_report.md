@@ -307,32 +307,41 @@ The introduction of the `IJointApi` and `JoltJoints` correctly implements the ne
 
 ## 9. Feature: Bounds/Collision Source-of-Truth
 
-**Goal:** Prevent drift between render bounds and collision authoring.
+**Goal:** Enforce strict domain separation by sourcing collision topologies entirely from offline-cooked assets, preventing drift and eliminating runtime inference from render bounds.
 
 **API/Data:**
 
-- Render bounds remain owned by Geometry/Renderable.
-- Collision remains owned by Physics descriptors.
-- Future cooked payload extension for physics collision authoring is required.
+- Render bounds remain exclusively owned by `Geometry`/`Renderable`.
+- Collision data is decoupled into a dedicated `PhysicsSceneAssetDesc` sidecar asset (per PakFormat v7 spec).
+- Pre-cooked `JPH::Shape` streams and configuration blobs are explicitly managed by `PhysicsResourceDesc`.
+- Hydration contract is strict: physics sidecar contract violations are hard-fail scene-load errors (no runtime fallback derivation).
 
 **Backend:**
 
-- Jolt consumes collision descriptors; must not infer from render bounds implicitly.
+- Jolt consumes collision descriptors directly from packed binary structures (zero-overhead).
+- Backend strictly enforces the authored source-of-truth; fallback to render-bounds inference is prohibited.
 
 **Tests:**
 
-- Pending integration tests for authored vs derived vs strict-failure collision policy paths.
+- Schema and container validation tests for new v7 structs.
+- Contract tests covering strict hard-fail behavior for missing/mismatched/invalid physics sidecar data.
+- Negative tests asserting hard-fails on identity mismatch, missing references, or hydration contract violations.
 
 **Integration:**
 
-- Scene hydration must attach physics from cooked physics payload, not ad hoc defaults.
+- Separation of concerns must be strictly enforced across three architectural layers:
+  1. **Data Module:** Defines the in-memory types (e.g., `PhysicsSceneAsset`) that map to the v7 `PakFormat`.
+  2. **Content Module:** Provides the isolated deserializer (e.g., `PhysicsSceneLoader`) to read loose/PAK binaries into memory objects.
+  3. **Hydration (Service/Module):** The base hydrator (e.g., `SceneLoaderService`) reads the primary `SceneAsset` first. Once complete, it loads the `PhysicsSceneAsset` and orchestrates physics attachment via `PhysicsModule` facade APIs (`ScenePhysics::AttachRigidBody`).
+- `SceneNodeImpl` remains completely free of physics state, and the Jolt backend never accesses raw PAK or generic file streams.
 
 **Status:**
 
-- Ownership analysis: done
-- Contract doc linkage: pending
-- Pak/hydration implementation: pending
-- Validation tests: pending
+- Ownership analysis & Architecture: done
+- PakFormat v7 specification: done
+- Hydration hard-fail contract decision: done
+- Pak/hydration implementation: done (strict sidecar identity checks + runtime hard-fail contract + module-lifecycle-aware hydration for rigid-body/character bindings)
+- Validation tests: pending (section-10 E2E coverage for authored shape/material and extended binding domains)
 
 ## 10. Feature: Product Integration (Demo + Scripting + Pak)
 
@@ -340,8 +349,9 @@ The introduction of the `IJointApi` and `JoltJoints` correctly implements the ne
 
 **API:**
 
-- C++ demo usage through `ScenePhysics`.
-- Luau bindings mirroring contract-safe surface.
+- Integration of `PhysicsSceneLoader` hook for Base Scene Hydration.
+- C++ demo usage via `ScenePhysics` facade (Game Module command-authority path).
+- Luau bindings mirroring contract-safe surface (Scripts pushing deferred intents via `oxygen.physics`).
 
 **Backend:**
 
@@ -400,10 +410,10 @@ The introduction of the `IJointApi` and `JoltJoints` correctly implements the ne
 
 ### 11.6 Bounds/Collision Source-of-Truth
 
-- [ ] Contract doc linkage finalized
-- [ ] Pak physics payload extension
-- [ ] Scene hydration from cooked physics payload
-- [ ] Derivation policy utility + diagnostics
+- [x] Contract doc linkage finalized
+- [x] Pak physics payload extension
+- [x] Scene hydration from cooked physics payload (section-9 scope: rigid-body/character sidecar bindings with strict contract enforcement)
+- [x] Hard-fail enforcement + diagnostics
 - [ ] Integration tests
 
 ### 11.7 Product Integration

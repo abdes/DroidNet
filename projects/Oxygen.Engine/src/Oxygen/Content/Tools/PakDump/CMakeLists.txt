@@ -40,6 +40,9 @@ add_executable(
   "InputActionAssetDumper.h"
   "InputMappingContextAssetDumper.h"
   "MaterialAssetDumper.h"
+  "PhysicsMaterialAssetDumper.h"
+  "CollisionShapeAssetDumper.h"
+  "PhysicsSceneAssetDumper.h"
   "SceneAssetDumper.h"
   "ScriptAssetDumper.h"
   "DumpContext.h"
@@ -51,11 +54,7 @@ add_executable(
 
 # Convenience build target: allow building by module name (matches OUTPUT_NAME)
 # in addition to the generated target name (e.g. oxygen-content-pakdump).
-add_custom_target(
-  ${META_MODULE_NAME}
-  DEPENDS
-    ${META_MODULE_TARGET}
-)
+add_custom_target(${META_MODULE_NAME} DEPENDS ${META_MODULE_TARGET})
 arrange_target_files_for_ide(${META_MODULE_TARGET})
 set_target_properties(
   ${META_MODULE_TARGET}

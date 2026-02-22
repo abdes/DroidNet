@@ -112,6 +112,8 @@ set(
   "Loaders/InputActionLoader.h"
   "Loaders/InputMappingContextLoader.h"
   "Loaders/MaterialLoader.h"
+  "Loaders/PhysicsResourceLoader.h"
+  "Loaders/PhysicsSceneLoader.h"
   "Loaders/SceneLoader.h"
   "Loaders/ScriptLoader.h"
   "Loaders/TextureLoader.h"

@@ -42,6 +42,7 @@ def _parse_spec_dict(data: dict[str, Any]) -> PakSpec:
     spec.textures = data.get("textures", [])  # type: ignore[assignment]
     spec.audios = data.get("audios", [])  # type: ignore[assignment]
     spec.scripts = data.get("scripts", [])  # type: ignore[assignment]
+    spec.physics = data.get("physics", [])  # type: ignore[assignment]
     # Authoritative assets list
     assets = data.get("assets", [])
     if isinstance(assets, list):

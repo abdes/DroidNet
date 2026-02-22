@@ -1,7 +1,7 @@
 # PakGen spec: procedural cubes scene using the procedural cube script
 # Similar layout to scene_v1_content_scene_input_core_spec.yaml
 
-version: 6
+version: 7
 content_version: 2
 
 scripts:

@@ -8,7 +8,7 @@ from typing import Final
 
 MAGIC: Final = b"OXPAK\x00\x00\x00"
 FOOTER_MAGIC: Final = b"OXPAKEND"
-PAK_FORMAT_VERSION_CURRENT: Final = 6
+PAK_FORMAT_VERSION_CURRENT: Final = 7
 
 HEADER_SIZE: Final = 256
 FOOTER_SIZE: Final = 256
@@ -24,6 +24,38 @@ MESH_DESC_SIZE: Final = 145
 SUBMESH_DESC_SIZE: Final = 108
 MESH_VIEW_DESC_SIZE: Final = 16
 SHADER_REF_DESC_SIZE: Final = 424  # ShaderReferenceDesc (see PakFormat.h)
+PHYSICS_SCENE_DESC_SIZE: Final = 256
+PHYSICS_RESOURCE_DESC_SIZE: Final = 24
+PHYSICS_MATERIAL_ASSET_DESC_SIZE: Final = 128
+COLLISION_SHAPE_ASSET_DESC_SIZE: Final = 256
+
+RIGID_BODY_BINDING_RECORD_SIZE: Final = 64
+COLLIDER_BINDING_RECORD_SIZE: Final = 32
+CHARACTER_BINDING_RECORD_SIZE: Final = 48
+SOFT_BODY_BINDING_RECORD_SIZE: Final = 48
+JOINT_BINDING_RECORD_SIZE: Final = 32
+VEHICLE_BINDING_RECORD_SIZE: Final = 32
+AGGREGATE_BINDING_RECORD_SIZE: Final = 28
+PHYSICS_COMPONENT_TABLE_DESC_SIZE: Final = 20
+PHYSICS_BINDING_TYPE_MAP: Final = {
+    "unknown": 0x00000000,
+    "rigid_body": 0x59485052,  # 'RPHY'
+    "collider": 0x4C4F4350,  # 'PCOL'
+    "character": 0x52484350,  # 'PCHR'
+    "soft_body": 0x42534650,  # 'PFSB'
+    "joint": 0x544E4A50,  # 'PJNT'
+    "vehicle": 0x4C485650,  # 'PVHL'
+    "aggregate": 0x47474150,  # 'PAGG'
+}
+PHYSICS_BINDING_ENTRY_SIZES: Final = {
+    PHYSICS_BINDING_TYPE_MAP["rigid_body"]: RIGID_BODY_BINDING_RECORD_SIZE,
+    PHYSICS_BINDING_TYPE_MAP["collider"]: COLLIDER_BINDING_RECORD_SIZE,
+    PHYSICS_BINDING_TYPE_MAP["character"]: CHARACTER_BINDING_RECORD_SIZE,
+    PHYSICS_BINDING_TYPE_MAP["soft_body"]: SOFT_BODY_BINDING_RECORD_SIZE,
+    PHYSICS_BINDING_TYPE_MAP["joint"]: JOINT_BINDING_RECORD_SIZE,
+    PHYSICS_BINDING_TYPE_MAP["vehicle"]: VEHICLE_BINDING_RECORD_SIZE,
+    PHYSICS_BINDING_TYPE_MAP["aggregate"]: AGGREGATE_BINDING_RECORD_SIZE,
+}
 
 # Per-asset descriptor versions (mirrors Oxygen/Data/PakFormat.h).
 MATERIAL_ASSET_VERSION_V2: Final = 1
@@ -44,8 +76,9 @@ SCENE_ASSET_VERSION_CURRENT: Final = SCENE_ASSET_VERSION_V4
 # YAML Schema version constants (for PakGen tool compatibility).
 # These govern the YAML specification format, not the binary PAK format.
 YAML_SCHEMA_VERSION_V6: Final = 6
-YAML_SCHEMA_VERSION_CURRENT: Final = YAML_SCHEMA_VERSION_V6
-YAML_SCHEMA_VERSION_MIN: Final = YAML_SCHEMA_VERSION_CURRENT
+YAML_SCHEMA_VERSION_V7: Final = 7
+YAML_SCHEMA_VERSION_CURRENT: Final = YAML_SCHEMA_VERSION_V7
+YAML_SCHEMA_VERSION_MIN: Final = YAML_SCHEMA_VERSION_V6
 
 # Limits for procedural node generation
 MAX_GENERATED_NODES: Final = 100_000  # Safety limit per scene
@@ -58,7 +91,11 @@ RESOURCE_ENTRY_SIZES: Final = {
     "buffer": 32,
     "audio": 32,
     "script": 32,
+    "physics": 24,  # PhysicsResourceDesc
 }
+
+PHYSICS_RESOURCE_ENTRY_SIZE: Final = 24
+PHYSICS_COMPONENT_TABLE_ENTRY_SIZE: Final = 20
 
 ASSET_NAME_MAX_LENGTH: Final = 63
 ASSET_KEY_SIZE: Final = 16
@@ -72,6 +109,9 @@ ASSET_TYPE_MAP: Final = {
     "script": 4,
     "input_action": 5,
     "input_mapping_context": 6,
+    "physics_material": 7,
+    "collision_shape": 8,
+    "physics_scene": 9,
 }
 
 MAX_RESOURCE_SIZES: Final = {
@@ -156,4 +196,6 @@ __all__ = [
     "VALID_MESH_TYPES",
     "VALID_TEXTURE_FORMATS",
     "VALID_BUFFER_FORMATS",
+    "PHYSICS_BINDING_TYPE_MAP",
+    "PHYSICS_BINDING_ENTRY_SIZES",
 ]

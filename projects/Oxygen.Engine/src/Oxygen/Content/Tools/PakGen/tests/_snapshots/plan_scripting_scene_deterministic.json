@@ -90,6 +90,14 @@
       "padding_after": 0,
       "padding_before": 0,
       "size": 320
+    },
+    {
+      "alignment": 256,
+      "name": "physics",
+      "offset": 0,
+      "padding_after": 0,
+      "padding_before": 0,
+      "size": 0
     }
   ],
   "statistics": {
@@ -137,7 +145,14 @@
       "name": "script_slot",
       "offset": 672,
       "padding_before": 0
+    },
+    {
+      "count": 0,
+      "entry_size": 0,
+      "name": "physics",
+      "offset": 0,
+      "padding_before": 0
     }
   ],
-  "version": 6
+  "version": 7
 }

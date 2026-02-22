@@ -23,6 +23,7 @@
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/EngineTag.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
+#include <Oxygen/Content/Loaders/PhysicsResourceLoader.h>
 #include <Oxygen/Content/Loaders/ScriptLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Content/PakFile.h>
@@ -204,6 +205,8 @@ auto main(int argc, char** argv) -> int
       asset_loader.RegisterLoader(oxygen::content::loaders::LoadScriptResource);
       asset_loader.RegisterLoader(
         oxygen::content::loaders::LoadTextureResource);
+      asset_loader.RegisterLoader(
+        oxygen::content::loaders::LoadPhysicsResource);
 
       OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
       {

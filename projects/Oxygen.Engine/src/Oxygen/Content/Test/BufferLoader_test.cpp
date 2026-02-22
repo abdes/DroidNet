@@ -9,59 +9,27 @@
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Data/BufferResource.h>
-#include <Oxygen/Serio/Writer.h>
 
-#include "Mocks/MockStream.h"
+#include "Fixtures/LoaderTestFixtures.h"
 #include "Utils/PakUtils.h"
 
 using testing::NotNull;
 
 using oxygen::content::loaders::LoadBufferResource;
-using oxygen::serio::Reader;
 
 namespace {
 
 //=== BufferLoader Basic Functionality Tests ===------------------------------//
 
 //! Fixture for BufferLoader basic serialization tests.
-class BufferLoaderBasicTest : public testing::Test {
+class BufferLoaderBasicTest
+  : public oxygen::content::testing::BinaryAssetLoaderFixtureBase {
 protected:
-  using MockStream = oxygen::content::testing::MockStream;
-  using Writer = oxygen::serio::Writer<MockStream>;
-
-  BufferLoaderBasicTest()
-    : desc_writer_(desc_stream_)
-    , data_writer_(data_stream_)
-    , desc_reader_(desc_stream_)
-    , data_reader_(data_stream_)
-  {
-  }
-
-  //! Helper method to create LoaderContext for testing.
+  using Writer = oxygen::content::testing::BinaryAssetLoaderFixtureBase::Writer;
   auto CreateLoaderContext() -> oxygen::content::LoaderContext
   {
-    if (!desc_stream_.Seek(0)) {
-      throw std::runtime_error("Failed to seek desc_stream");
-    }
-    if (!data_stream_.Seek(0)) {
-      throw std::runtime_error("Failed to seek data_stream");
-    }
-
-    return oxygen::content::LoaderContext {
-      .current_asset_key = oxygen::data::AssetKey {}, // Test asset key
-      .desc_reader = &desc_reader_,
-      .data_readers
-      = std::make_tuple(&data_reader_, &data_reader_, &data_reader_),
-      .work_offline = false,
-    };
+    return MakeLoaderContext(false, false);
   }
-
-  MockStream desc_stream_;
-  MockStream data_stream_;
-  Writer desc_writer_;
-  Writer data_writer_;
-  Reader<MockStream> desc_reader_;
-  Reader<MockStream> data_reader_;
 };
 
 //! Test: LoadBufferResource returns valid BufferResource for vertex buffer

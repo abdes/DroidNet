@@ -48,6 +48,9 @@ struct LooseCookedLayout final : Layout {
   static constexpr std::string_view kMaterialDescriptorExtension = ".omat";
   static constexpr std::string_view kGeometryDescriptorExtension = ".ogeo";
   static constexpr std::string_view kSceneDescriptorExtension = ".oscene";
+  //! Physics sidecar descriptor extension. Must be colocated with `.oscene`.
+  static constexpr std::string_view kPhysicsSceneDescriptorExtension
+    = ".physics";
   static constexpr std::string_view kTextureDescriptorExtension = ".otex";
 
   [[nodiscard]] static auto MaterialDescriptorFileName(
@@ -68,6 +71,13 @@ struct LooseCookedLayout final : Layout {
     -> std::string
   {
     return std::string(scene_name) + std::string(kSceneDescriptorExtension);
+  }
+
+  [[nodiscard]] static auto PhysicsSceneDescriptorFileName(
+    std::string_view scene_name) -> std::string
+  {
+    return std::string(scene_name)
+      + std::string(kPhysicsSceneDescriptorExtension);
   }
 
   [[nodiscard]] auto MaterialVirtualLeaf(std::string_view material_name) const
@@ -91,6 +101,22 @@ struct LooseCookedLayout final : Layout {
       SceneDescriptorFileName(scene_name));
   }
 
+  //! Physics sidecar leaf path for a scene.
+  /*!
+   Rules:
+   - Same descriptor directory as the paired scene descriptor.
+
+   * - Same base scene name as the paired scene descriptor.
+   - `.physics`
+   * extension.
+  */
+  [[nodiscard]] auto PhysicsSceneVirtualLeaf(std::string_view scene_name) const
+    -> std::string
+  {
+    return JoinRelPath(DescriptorDirFor(data::AssetType::kPhysicsScene),
+      PhysicsSceneDescriptorFileName(scene_name));
+  }
+
   [[nodiscard]] auto MaterialDescriptorRelPath(
     std::string_view material_name) const -> std::string
   {
@@ -107,6 +133,12 @@ struct LooseCookedLayout final : Layout {
     -> std::string
   {
     return SceneVirtualLeaf(scene_name);
+  }
+
+  [[nodiscard]] auto PhysicsSceneDescriptorRelPath(
+    std::string_view scene_name) const -> std::string
+  {
+    return PhysicsSceneVirtualLeaf(scene_name);
   }
 
   [[nodiscard]] auto MaterialVirtualPath(std::string_view material_name) const
@@ -127,6 +159,13 @@ struct LooseCookedLayout final : Layout {
     -> std::string
   {
     return JoinVirtualPath(virtual_mount_root, SceneVirtualLeaf(scene_name));
+  }
+
+  [[nodiscard]] auto PhysicsSceneVirtualPath(std::string_view scene_name) const
+    -> std::string
+  {
+    return JoinVirtualPath(
+      virtual_mount_root, PhysicsSceneVirtualLeaf(scene_name));
   }
 
   //! Index filename at the cooked-root directory.
@@ -216,6 +255,10 @@ struct LooseCookedLayout final : Layout {
   {
     switch (asset_type) {
     case data::AssetType::kScene:
+      return JoinRelPath(descriptors_dir, scenes_subdir);
+    case data::AssetType::kPhysicsScene:
+      // Physics sidecars are scene companions and must be colocated with
+      // `.oscene` descriptors.
       return JoinRelPath(descriptors_dir, scenes_subdir);
     case data::AssetType::kGeometry:
       return JoinRelPath(descriptors_dir, geometry_subdir);

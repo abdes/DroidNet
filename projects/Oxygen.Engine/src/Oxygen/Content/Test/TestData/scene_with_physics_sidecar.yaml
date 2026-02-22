@@ -1,0 +1,94 @@
+# Scene + physics sidecar assets (PAK v7)
+version: 7
+content_version: 1
+
+buffers:
+  - name: "default_empty_buffer"
+    data_hex: ""
+    size: 0
+    usage: 0
+
+textures:
+  - name: "default_texture"
+    width: 1
+    height: 1
+    format: 30
+    texture_type: 3
+    compression_type: 0
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"
+
+physics:
+  - name: "shape_blob"
+    format: 1
+    data_hex: "01020304"
+  - name: "constraint_blob"
+    format: 1
+    data_hex: "05060708"
+
+assets:
+  - name: "test_scene_with_physics"
+    type: "scene"
+    asset_key: "cccccccc-1111-2222-3333-444444444444"
+    nodes:
+      - name: "root"
+        parent: 0
+      - name: "mesh_node"
+        parent: 0
+
+  - name: "test_physics_material"
+    type: "physics_material"
+    asset_key: "dddddddd-1111-2222-3333-444444444444"
+
+  - name: "test_collision_shape"
+    type: "collision_shape"
+    asset_key: "eeeeeeee-1111-2222-3333-444444444444"
+    resource_name: "shape_blob"
+    shape_category: 0
+
+  - name: "test_scene_with_physics.physics"
+    type: "physics_scene"
+    asset_key: "ffffffff-1111-2222-3333-444444444444"
+    target_scene_key: "cccccccc-1111-2222-3333-444444444444"
+    target_node_count: 2
+    rigid_body_bindings:
+      - node_index: 1
+        shape_asset: "test_collision_shape"
+        material_asset: "test_physics_material"
+        body_type: 1
+        motion_quality: 1
+        collision_layer: 3
+        collision_mask: 255
+        mass: 10.0
+    collider_bindings:
+      - node_index: 0
+        shape_asset: "test_collision_shape"
+        material_asset: "test_physics_material"
+        collision_layer: 2
+        collision_mask: 127
+    character_bindings:
+      - node_index: 1
+        shape_asset: "test_collision_shape"
+        mass: 85.0
+        max_slope_angle: 0.7854
+        step_height: 0.5
+        max_strength: 120.0
+    soft_body_bindings:
+      - node_index: 1
+        cluster_count: 4
+        stiffness: 0.5
+        damping: 0.2
+        edge_compliance: 0.1
+        shear_compliance: 0.1
+        bend_compliance: 0.8
+    joint_bindings:
+      - node_index_a: 0
+        node_index_b: 1
+        constraint_resource: "constraint_blob"
+    vehicle_bindings:
+      - node_index: 1
+        constraint_resource: "constraint_blob"
+    aggregate_bindings:
+      - node_index: 0
+        max_bodies: 32
+        filter_overlap: true
+        authority: 0

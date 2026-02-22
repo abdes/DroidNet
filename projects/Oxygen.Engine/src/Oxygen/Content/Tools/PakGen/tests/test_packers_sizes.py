@@ -4,6 +4,16 @@ from pakgen.packing.packers import (
     pack_mesh_descriptor,
     pack_submesh_descriptor,
     pack_mesh_view_descriptor,
+    pack_physics_material_asset_descriptor,
+    pack_collision_shape_asset_descriptor,
+    pack_physics_scene_asset_descriptor_and_payload,
+    pack_rigid_body_binding_record,
+    pack_collider_binding_record,
+    pack_character_binding_record,
+    pack_soft_body_binding_record,
+    pack_joint_binding_record,
+    pack_vehicle_binding_record,
+    pack_aggregate_binding_record,
 )
 from pakgen.packing.constants import (
     MATERIAL_DESC_SIZE,
@@ -12,6 +22,16 @@ from pakgen.packing.constants import (
     SUBMESH_DESC_SIZE,
     MESH_VIEW_DESC_SIZE,
     ASSET_HEADER_SIZE,
+    PHYSICS_MATERIAL_ASSET_DESC_SIZE,
+    COLLISION_SHAPE_ASSET_DESC_SIZE,
+    PHYSICS_SCENE_DESC_SIZE,
+    RIGID_BODY_BINDING_RECORD_SIZE,
+    COLLIDER_BINDING_RECORD_SIZE,
+    CHARACTER_BINDING_RECORD_SIZE,
+    SOFT_BODY_BINDING_RECORD_SIZE,
+    JOINT_BINDING_RECORD_SIZE,
+    VEHICLE_BINDING_RECORD_SIZE,
+    AGGREGATE_BINDING_RECORD_SIZE,
 )
 
 
@@ -76,3 +96,57 @@ def test_mesh_view_descriptor_size():
         }
     )
     assert len(desc) == MESH_VIEW_DESC_SIZE
+
+
+def test_physics_material_descriptor_size():
+    desc = pack_physics_material_asset_descriptor(
+        {},
+        header_builder=_header_builder,
+    )
+    assert len(desc) == PHYSICS_MATERIAL_ASSET_DESC_SIZE
+
+
+def test_collision_shape_descriptor_size():
+    desc = pack_collision_shape_asset_descriptor(
+        {},
+        resource_index=0,
+        header_builder=_header_builder,
+    )
+    assert len(desc) == COLLISION_SHAPE_ASSET_DESC_SIZE
+
+
+def test_physics_scene_descriptor_size():
+    desc, payload = pack_physics_scene_asset_descriptor_and_payload(
+        {
+            "target_scene_key": "00000000-0000-0000-0000-000000000000",
+            "target_node_count": 0,
+        },
+        header_builder=_header_builder,
+    )
+    assert len(desc) == PHYSICS_SCENE_DESC_SIZE
+    assert payload == b""
+
+
+def test_physics_binding_record_sizes():
+    rigid = pack_rigid_body_binding_record(
+        {}, shape_index=0, material_index=0, node_count=1
+    )
+    collider = pack_collider_binding_record(
+        {}, shape_index=0, material_index=0, node_count=1
+    )
+    character = pack_character_binding_record(
+        {}, shape_index=0, node_count=1
+    )
+    soft = pack_soft_body_binding_record({}, node_count=1)
+    joint = pack_joint_binding_record({}, constraint_index=0, node_count=1)
+    vehicle = pack_vehicle_binding_record(
+        {}, constraint_index=0, node_count=1
+    )
+    aggregate = pack_aggregate_binding_record({}, node_count=1)
+    assert len(rigid) == RIGID_BODY_BINDING_RECORD_SIZE
+    assert len(collider) == COLLIDER_BINDING_RECORD_SIZE
+    assert len(character) == CHARACTER_BINDING_RECORD_SIZE
+    assert len(soft) == SOFT_BODY_BINDING_RECORD_SIZE
+    assert len(joint) == JOINT_BINDING_RECORD_SIZE
+    assert len(vehicle) == VEHICLE_BINDING_RECORD_SIZE
+    assert len(aggregate) == AGGREGATE_BINDING_RECORD_SIZE

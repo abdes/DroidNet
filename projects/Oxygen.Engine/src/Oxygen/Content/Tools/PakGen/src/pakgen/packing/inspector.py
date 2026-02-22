@@ -83,6 +83,8 @@ def parse_footer(data: bytes) -> Dict[str, Any]:
     off += 16
     script_region = unpack_region(off)
     off += 16
+    physics_region = unpack_region(off)
+    off += 16
 
     def unpack_table(o: int) -> Tuple[int, int, int]:
         return struct.unpack_from("<QII", raw, o)
@@ -97,11 +99,13 @@ def parse_footer(data: bytes) -> Dict[str, Any]:
     off += 16
     script_slot_table = unpack_table(off)
     off += 16
+    physics_resource_table = unpack_table(off)
+    off += 16
 
     browse_index_offset, browse_index_size = struct.unpack_from("<QQ", raw, off)
     off += 16
-    reserved = raw[off : off + 60]
-    off += 60
+    reserved = raw[off : off + 28]
+    off += 28
     pak_crc32 = struct.unpack_from("<I", raw, off)[0]
     off += 4
     magic = raw[off : off + len(FOOTER_MAGIC)]
@@ -117,6 +121,7 @@ def parse_footer(data: bytes) -> Dict[str, Any]:
             "buffer": Region(*buffer_region),
             "audio": Region(*audio_region),
             "script": Region(*script_region),
+            "physics": Region(*physics_region),
         },
         "tables": {
             "texture": Table(*texture_table),
@@ -124,6 +129,7 @@ def parse_footer(data: bytes) -> Dict[str, Any]:
             "audio": Table(*audio_table),
             "script": Table(*script_resource_table),
             "script_slot": Table(*script_slot_table),
+            "physics": Table(*physics_resource_table),
         },
         "browse_index": {
             "offset": browse_index_offset,
