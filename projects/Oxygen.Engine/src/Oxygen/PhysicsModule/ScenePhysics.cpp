@@ -82,8 +82,19 @@ auto ScenePhysics::AttachRigidBody(observer_ptr<PhysicsModule> physics_module,
     return std::nullopt;
   }
 
+  // Inject the node's current world transform into the desc so the body spawns
+  // at the node's actual world position and rotation. The caller does not need
+  // to populate initial_position/initial_rotation manually.
+  body::BodyDesc effective_desc = desc;
+  effective_desc.initial_position
+    = node.GetTransform().GetWorldPosition().value_or(
+      Vec3 { 0.0F, 0.0F, 0.0F });
+  effective_desc.initial_rotation
+    = node.GetTransform().GetWorldRotation().value_or(
+      Quat { 1.0F, 0.0F, 0.0F, 0.0F });
+
   // Create the body
-  const auto result = body_api.CreateBody(world_id, desc);
+  const auto result = body_api.CreateBody(world_id, effective_desc);
   if (!result.has_value()) {
     return std::nullopt;
   }
@@ -153,7 +164,17 @@ auto ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> physics_module,
     return std::nullopt;
   }
 
-  const auto result = character_api.CreateCharacter(world_id, desc);
+  // Inject the node's current world transform into the desc so the character
+  // spawns at the node's actual world position and rotation.
+  character::CharacterDesc effective_desc = desc;
+  effective_desc.initial_position
+    = node.GetTransform().GetWorldPosition().value_or(
+      Vec3 { 0.0F, 0.0F, 0.0F });
+  effective_desc.initial_rotation
+    = node.GetTransform().GetWorldRotation().value_or(
+      Quat { 1.0F, 0.0F, 0.0F, 0.0F });
+
+  const auto result = character_api.CreateCharacter(world_id, effective_desc);
   if (!result.has_value()) {
     return std::nullopt;
   }
