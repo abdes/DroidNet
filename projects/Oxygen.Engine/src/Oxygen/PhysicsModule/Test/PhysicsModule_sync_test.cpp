@@ -72,6 +72,32 @@ NOLINT_TEST_F(
   EXPECT_EQ(FakeState().character_create_calls, 1U);
 }
 
+NOLINT_TEST_F(PhysicsModuleSyncTest, GetCharacterReturnsFacadeForAttachedNode)
+{
+  auto node = scene_->CreateNode("character-get");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  const auto attached = ScenePhysics::AttachCharacter(
+    observer_ptr<PhysicsModule> { module_.get() }, node,
+    character::CharacterDesc {});
+  ASSERT_TRUE(attached.has_value());
+
+  const auto queried = ScenePhysics::GetCharacter(
+    observer_ptr<PhysicsModule> { module_.get() }, node.GetHandle());
+  ASSERT_TRUE(queried.has_value());
+  EXPECT_EQ(queried->GetNode(), node.GetHandle());
+  EXPECT_EQ(queried->GetCharacterId(), attached->GetCharacterId());
+
+  const auto move
+    = queried->Move(character::CharacterMoveInput { .desired_velocity
+                      = Vec3 { 1.0F, 2.0F, 3.0F } },
+      1.0F / 60.0F);
+  ASSERT_TRUE(move.has_value());
+  EXPECT_EQ(FakeState().character_move_calls, 1U);
+}
+
 // In release builds, contract violations return nullopt.
 #if defined(NDEBUG)
 NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyFailsForUnobservedSceneNode)
@@ -242,6 +268,38 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, SceneSwitchDestroysPreviousSceneBodies)
   EXPECT_EQ(FakeState().bodies.size(), 0U);
   ASSERT_TRUE(AttachBody(node_a, body::BodyType::kDynamic).has_value());
   EXPECT_EQ(FakeState().bodies.size(), 1U);
+}
+
+NOLINT_TEST_F(PhysicsModuleSyncTest, SceneSwitchDestroysPreviousSceneCharacters)
+{
+  auto scene_a = scene_;
+  auto node_a = scene_a->CreateNode("scene-a-character");
+  ASSERT_TRUE(node_a.IsValid());
+  RunGameplay();
+  scene_a->Update();
+  ASSERT_TRUE(
+    ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> { module_.get() },
+      node_a, character::CharacterDesc {})
+      .has_value());
+  EXPECT_EQ(FakeState().characters.size(), 1U);
+
+  auto scene_b = std::make_shared<scene::Scene>("SceneBCharacter", 64);
+  auto node_b = scene_b->CreateNode("scene-b-character");
+  ASSERT_TRUE(node_b.IsValid());
+  SetActiveScene(scene_b);
+  RunGameplay();
+  EXPECT_EQ(FakeState().characters.size(), 0U);
+
+  scene_b->Update();
+  ASSERT_TRUE(
+    ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> { module_.get() },
+      node_b, character::CharacterDesc {})
+      .has_value());
+  EXPECT_EQ(FakeState().characters.size(), 1U);
+
+  SetActiveScene(scene_a);
+  RunGameplay();
+  EXPECT_EQ(FakeState().characters.size(), 0U);
 }
 
 NOLINT_TEST_F(PhysicsModuleSyncTest, DestroyAndReattachSameFrameKeepsStateValid)
@@ -516,6 +574,44 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, SceneMutationDrainsAndMapsPhysicsEvents)
   const auto stats = module_->GetSyncDiagnostics();
   EXPECT_EQ(stats.event_drain_calls, 1U);
   EXPECT_EQ(stats.event_drain_count, 1U);
+}
+
+NOLINT_TEST_F(PhysicsModuleSyncTest, ConsumeSceneEventsDrainsBuffer)
+{
+  auto node_a = scene_->CreateNode("event-drain-a");
+  auto node_b = scene_->CreateNode("event-drain-b");
+  ASSERT_TRUE(node_a.IsValid());
+  ASSERT_TRUE(node_b.IsValid());
+  const auto body_a = AttachBody(node_a, body::BodyType::kDynamic);
+  const auto body_b = AttachBody(node_b, body::BodyType::kDynamic);
+  ASSERT_TRUE(body_a.has_value());
+  ASSERT_TRUE(body_b.has_value());
+
+  FakeState().pending_events = {
+    events::PhysicsEvent {
+      .type = events::PhysicsEventType::kContactBegin,
+      .body_a = body_a->GetBodyId(),
+      .body_b = body_b->GetBodyId(),
+    },
+  };
+
+  RunSceneMutation();
+  const auto first = module_->ConsumeSceneEvents();
+  ASSERT_EQ(first.size(), 1U);
+  const auto second = module_->ConsumeSceneEvents();
+  EXPECT_TRUE(second.empty());
+
+  FakeState().pending_events = {
+    events::PhysicsEvent {
+      .type = events::PhysicsEventType::kContactEnd,
+      .body_a = body_a->GetBodyId(),
+      .body_b = body_b->GetBodyId(),
+    },
+  };
+  RunSceneMutation();
+  const auto third = module_->ConsumeSceneEvents();
+  ASSERT_EQ(third.size(), 1U);
+  EXPECT_EQ(third[0].type, events::PhysicsEventType::kContactEnd);
 }
 
 #if !defined(NDEBUG)
