@@ -72,7 +72,7 @@ auto oxygen::physics::jolt::JoltBodies::CreateBody(
   }
 
   {
-    std::scoped_lock lock(shape_instance_mutex_);
+    std::scoped_lock lock(body_state_mutex_);
     body_states_.insert_or_assign(
       BodyKey {
         .world_id = world_id,
@@ -103,7 +103,7 @@ auto oxygen::physics::jolt::JoltBodies::DestroyBody(
   std::unordered_map<ShapeInstanceId, ShapeInstanceState>
     shape_instances_to_remove {};
   {
-    std::scoped_lock lock(shape_instance_mutex_);
+    std::scoped_lock lock(body_state_mutex_);
     const auto body_it
       = body_states_.find(BodyKey { .world_id = world_id, .body_id = body_id });
     if (body_it != body_states_.end()) {
@@ -496,9 +496,9 @@ auto oxygen::physics::jolt::JoltBodies::AddBodyShape(const WorldId world_id,
   }
 
   ShapeInstanceId shape_instance_id { kInvalidShapeInstanceId };
-  PhysicsResult<void> rebuild_result = PhysicsResult<void>::Ok();
+  BodyState body_state_snapshot {};
   {
-    std::scoped_lock lock(shape_instance_mutex_);
+    std::scoped_lock lock(body_state_mutex_);
     auto body_it
       = body_states_.find(BodyKey { .world_id = world_id, .body_id = body_id });
     if (body_it == body_states_.end()) {
@@ -518,13 +518,18 @@ auto oxygen::physics::jolt::JoltBodies::AddBodyShape(const WorldId world_id,
         .local_position = local_position,
         .local_rotation = local_rotation,
       });
-    rebuild_result = RebuildBodyShape(world_id, body_id, body_it->second);
-    if (rebuild_result.has_error()) {
-      body_it->second.shape_instances.erase(shape_instance_id);
-    }
+    body_state_snapshot = body_it->second;
   }
 
+  const auto rebuild_result
+    = RebuildBodyShape(world_id, body_id, body_state_snapshot);
   if (rebuild_result.has_error()) {
+    std::scoped_lock lock(body_state_mutex_);
+    auto body_it
+      = body_states_.find(BodyKey { .world_id = world_id, .body_id = body_id });
+    if (body_it != body_states_.end()) {
+      body_it->second.shape_instances.erase(shape_instance_id);
+    }
     static_cast<void>(shapes->RemoveAttachment(shape_id));
     return Err(rebuild_result.error());
   }
@@ -548,9 +553,10 @@ auto oxygen::physics::jolt::JoltBodies::RemoveBodyShape(const WorldId world_id,
   }
 
   ShapeId removed_shape_id { kInvalidShapeId };
-  PhysicsResult<void> rebuild_result = PhysicsResult<void>::Ok();
+  ShapeInstanceState removed_instance {};
+  BodyState body_state_snapshot {};
   {
-    std::scoped_lock lock(shape_instance_mutex_);
+    std::scoped_lock lock(body_state_mutex_);
     auto body_it
       = body_states_.find(BodyKey { .world_id = world_id, .body_id = body_id });
     if (body_it == body_states_.end()) {
@@ -562,17 +568,34 @@ auto oxygen::physics::jolt::JoltBodies::RemoveBodyShape(const WorldId world_id,
       return Err(PhysicsError::kInvalidArgument);
     }
 
-    const auto removed_instance = instance_it->second;
+    removed_instance = instance_it->second;
     removed_shape_id = removed_instance.shape_id;
     body_it->second.shape_instances.erase(instance_it);
-    rebuild_result = RebuildBodyShape(world_id, body_id, body_it->second);
-    if (rebuild_result.has_error()) {
-      body_it->second.shape_instances.emplace(
-        shape_instance_id, removed_instance);
-    }
+    body_state_snapshot = body_it->second;
   }
 
+  const auto rebuild_result
+    = RebuildBodyShape(world_id, body_id, body_state_snapshot);
   if (rebuild_result.has_error()) {
+    bool rolled_back = false;
+    {
+      std::scoped_lock lock(body_state_mutex_);
+      auto body_it = body_states_.find(
+        BodyKey { .world_id = world_id, .body_id = body_id });
+      if (body_it != body_states_.end()) {
+        body_it->second.shape_instances.emplace(shape_instance_id,
+          ShapeInstanceState {
+            .shape_id = removed_instance.shape_id,
+            .shape = removed_instance.shape,
+            .local_position = removed_instance.local_position,
+            .local_rotation = removed_instance.local_rotation,
+          });
+        rolled_back = true;
+      }
+    }
+    if (!rolled_back) {
+      static_cast<void>(shapes->RemoveAttachment(removed_shape_id));
+    }
     return Err(rebuild_result.error());
   }
   return shapes->RemoveAttachment(removed_shape_id);
