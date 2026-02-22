@@ -228,6 +228,37 @@ auto oxygen::physics::jolt::JoltBodies::SetBodyPose(const WorldId world_id,
   return PhysicsResult<void>::Ok();
 }
 
+auto oxygen::physics::jolt::JoltBodies::GetBodyPoses(const WorldId world_id,
+  const std::span<const BodyId> body_ids, const std::span<Vec3> out_positions,
+  const std::span<Quat> out_rotations) const -> PhysicsResult<size_t>
+{
+  if (out_positions.size() < body_ids.size()
+    || out_rotations.size() < body_ids.size()) {
+    return Err(PhysicsError::kBufferTooSmall);
+  }
+
+  const auto* world = world_.get();
+  if (world == nullptr) {
+    return Err(PhysicsError::kNotInitialized);
+  }
+  const auto body_interface = world->TryGetBodyInterface(world_id);
+  if (body_interface == nullptr) {
+    return Err(PhysicsError::kWorldNotFound);
+  }
+
+  for (size_t i = 0; i < body_ids.size(); ++i) {
+    const auto body_id = body_ids[i];
+    if (!world->HasBody(world_id, body_id)) {
+      return Err(PhysicsError::kBodyNotFound);
+    }
+    const auto jolt_body_id = ToJoltBodyId(body_id);
+    out_positions[i] = ToOxygenVec3(body_interface->GetPosition(jolt_body_id));
+    out_rotations[i] = ToOxygenQuat(body_interface->GetRotation(jolt_body_id));
+  }
+
+  return Ok(body_ids.size());
+}
+
 auto oxygen::physics::jolt::JoltBodies::GetLinearVelocity(
   const WorldId world_id, const BodyId body_id) const -> PhysicsResult<Vec3>
 {
@@ -394,6 +425,48 @@ auto oxygen::physics::jolt::JoltBodies::MoveKinematic(const WorldId world_id,
   body_interface->MoveKinematic(jolt_body_id, ToJoltRVec3(target_position),
     ToJoltQuat(target_rotation), delta_time);
   return PhysicsResult<void>::Ok();
+}
+
+auto oxygen::physics::jolt::JoltBodies::MoveKinematicBatch(
+  const WorldId world_id, const std::span<const BodyId> body_ids,
+  const std::span<const Vec3> target_positions,
+  const std::span<const Quat> target_rotations, const float delta_time)
+  -> PhysicsResult<size_t>
+{
+  if (delta_time <= 0.0F) {
+    return Err(PhysicsError::kInvalidArgument);
+  }
+  if (target_positions.size() < body_ids.size()
+    || target_rotations.size() < body_ids.size()) {
+    return Err(PhysicsError::kBufferTooSmall);
+  }
+
+  auto* world = world_.get();
+  if (world == nullptr) {
+    return Err(PhysicsError::kNotInitialized);
+  }
+  auto body_interface = world->TryGetBodyInterface(world_id);
+  if (body_interface == nullptr) {
+    return Err(PhysicsError::kWorldNotFound);
+  }
+
+  for (size_t i = 0; i < body_ids.size(); ++i) {
+    const auto body_id = body_ids[i];
+    if (!world->HasBody(world_id, body_id)) {
+      return Err(PhysicsError::kBodyNotFound);
+    }
+    const auto jolt_body_id = ToJoltBodyId(body_id);
+    if (body_interface->GetMotionType(jolt_body_id)
+      != JPH::EMotionType::Kinematic) {
+      return Err(PhysicsError::kInvalidArgument);
+    }
+
+    body_interface->MoveKinematic(jolt_body_id,
+      ToJoltRVec3(target_positions[i]), ToJoltQuat(target_rotations[i]),
+      delta_time);
+  }
+
+  return Ok(body_ids.size());
 }
 
 auto oxygen::physics::jolt::JoltBodies::AddBodyShape(const WorldId world_id,

@@ -43,6 +43,9 @@ public:
     -> PhysicsResult<void> override;
   auto SetBodyPose(WorldId world_id, BodyId body_id, const Vec3& position,
     const Quat& rotation) -> PhysicsResult<void> override;
+  auto GetBodyPoses(WorldId world_id, std::span<const BodyId> body_ids,
+    std::span<Vec3> out_positions, std::span<Quat> out_rotations) const
+    -> PhysicsResult<size_t> override;
 
   auto GetLinearVelocity(WorldId world_id, BodyId body_id) const
     -> PhysicsResult<Vec3> override;
@@ -63,6 +66,10 @@ public:
   auto MoveKinematic(WorldId world_id, BodyId body_id,
     const Vec3& target_position, const Quat& target_rotation, float delta_time)
     -> PhysicsResult<void> override;
+  auto MoveKinematicBatch(WorldId world_id, std::span<const BodyId> body_ids,
+    std::span<const Vec3> target_positions,
+    std::span<const Quat> target_rotations, float delta_time)
+    -> PhysicsResult<size_t> override;
   auto AddBodyShape(WorldId world_id, BodyId body_id, ShapeId shape_id,
     const Vec3& local_position, const Quat& local_rotation)
     -> PhysicsResult<ShapeInstanceId> override;

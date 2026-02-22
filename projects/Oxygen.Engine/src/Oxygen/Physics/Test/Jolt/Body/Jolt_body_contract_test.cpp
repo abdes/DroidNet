@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <vector>
+
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Physics/Body/BodyDesc.h>
@@ -111,6 +113,57 @@ NOLINT_TEST_F(JoltBodyContractTest, MoveKinematicRejectsNonKinematicBody)
   EXPECT_EQ(move_result.error(), PhysicsError::kInvalidArgument);
 
   EXPECT_TRUE(bodies.DestroyBody(world_id, body_id).has_value());
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
+NOLINT_TEST_F(JoltBodyContractTest, BulkPoseRejectsSmallOutputBuffers)
+{
+  RequireBackend();
+
+  auto& worlds = System().Worlds();
+  auto& bodies = System().Bodies();
+  const auto world_result = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(world_result.has_value());
+  const auto world_id = world_result.value();
+
+  const auto body_result = bodies.CreateBody(world_id, body::BodyDesc {});
+  ASSERT_TRUE(body_result.has_value());
+
+  std::vector<BodyId> ids { body_result.value() };
+  std::vector<Vec3> positions {};
+  std::vector<Quat> rotations {};
+  const auto result = bodies.GetBodyPoses(world_id, ids, positions, rotations);
+  ASSERT_TRUE(result.has_error());
+  EXPECT_EQ(result.error(), PhysicsError::kBufferTooSmall);
+
+  EXPECT_TRUE(bodies.DestroyBody(world_id, body_result.value()).has_value());
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
+NOLINT_TEST_F(JoltBodyContractTest, MoveKinematicBatchRejectsNonKinematicBody)
+{
+  RequireBackend();
+
+  auto& worlds = System().Worlds();
+  auto& bodies = System().Bodies();
+  const auto world_result = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(world_result.has_value());
+  const auto world_id = world_result.value();
+
+  body::BodyDesc dynamic_desc {};
+  dynamic_desc.type = body::BodyType::kDynamic;
+  const auto body_result = bodies.CreateBody(world_id, dynamic_desc);
+  ASSERT_TRUE(body_result.has_value());
+
+  std::vector<BodyId> ids { body_result.value() };
+  std::vector<Vec3> target_positions { Vec3 { 1.0F, 2.0F, 3.0F } };
+  std::vector<Quat> target_rotations { Quat { 1.0F, 0.0F, 0.0F, 0.0F } };
+  const auto result = bodies.MoveKinematicBatch(
+    world_id, ids, target_positions, target_rotations, 1.0F / 60.0F);
+  ASSERT_TRUE(result.has_error());
+  EXPECT_EQ(result.error(), PhysicsError::kInvalidArgument);
+
+  EXPECT_TRUE(bodies.DestroyBody(world_id, body_result.value()).has_value());
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
 }
 
