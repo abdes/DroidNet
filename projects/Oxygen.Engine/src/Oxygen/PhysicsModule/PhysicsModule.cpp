@@ -351,6 +351,27 @@ auto PhysicsModule::GetNodeForCharacterId(const CharacterId character_id) const
   return binding->node_handle;
 }
 
+auto PhysicsModule::ApplyWorldPoseToNode(const scene::NodeHandle& node_handle,
+  const Vec3& world_position, const Quat& world_rotation) -> bool
+{
+  if (observed_scene_ == nullptr || !node_handle.IsValid()) {
+    return false;
+  }
+  auto node = observed_scene_->GetNode(node_handle);
+  if (!node.has_value() || !node->IsValid()) {
+    return false;
+  }
+  if (node_to_character_binding_.contains(node_handle)) {
+    expected_character_transform_updates_.insert(node_handle);
+  }
+
+  const auto [local_position, local_rotation]
+    = ToLocalPose(*node, world_position, world_rotation);
+  const auto pos_ok = node->GetTransform().SetLocalPosition(local_position);
+  const auto rot_ok = node->GetTransform().SetLocalRotation(local_rotation);
+  return pos_ok && rot_ok;
+}
+
 auto PhysicsModule::ConsumeSceneEvents() -> std::vector<ScenePhysicsEvent>
 {
   std::vector<ScenePhysicsEvent> drained {};
@@ -411,6 +432,7 @@ auto PhysicsModule::OnShutdown() noexcept -> void
   physics_system_.reset();
   engine_ = nullptr;
   pending_transform_updates_.clear();
+  expected_character_transform_updates_.clear();
   scene_events_.clear();
   bindings_->Clear();
   character_bindings_->Clear();
@@ -515,8 +537,13 @@ auto PhysicsModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
 
   SyncSceneObserver(context);
 
-  const auto scene = context->GetScene();
-  if (scene == nullptr || body_to_binding_.empty()) {
+  if (context->GetScene() == nullptr) {
+    expected_character_transform_updates_.clear();
+    co_return;
+  }
+  if (body_to_binding_.empty()) {
+    DrainPhysicsEvents();
+    expected_character_transform_updates_.clear();
     co_return;
   }
 
@@ -528,6 +555,7 @@ auto PhysicsModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
     = world_api.GetActiveBodyTransforms(world_id_, active_transforms);
   if (!result.has_value()) {
     DrainPhysicsEvents();
+    expected_character_transform_updates_.clear();
     co_return;
   }
 
@@ -548,22 +576,16 @@ auto PhysicsModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
       continue;
     }
 
-    auto node = scene->GetNode(*node_handle);
-    if (!node.has_value() || !node->IsValid()) {
+    if (!ApplyWorldPoseToNode(
+          *node_handle, transform.position, transform.rotation)) {
       diagnostics_.scene_pull_skipped_missing_node += 1;
       continue;
     }
-
-    const auto [local_position, local_rotation]
-      = ToLocalPose(*node, transform.position, transform.rotation);
-    [[maybe_unused]] const auto pos_ok
-      = node->GetTransform().SetLocalPosition(local_position);
-    [[maybe_unused]] const auto rot_ok
-      = node->GetTransform().SetLocalRotation(local_rotation);
     diagnostics_.scene_pull_success += 1;
   }
 
   DrainPhysicsEvents();
+  expected_character_transform_updates_.clear();
 
   co_return;
 }
@@ -571,6 +593,9 @@ auto PhysicsModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
 auto PhysicsModule::OnTransformChanged(
   const scene::NodeHandle& node_handle) noexcept -> void
 {
+  if (expected_character_transform_updates_.contains(node_handle)) {
+    return;
+  }
   DCHECK_F(!node_to_character_binding_.contains(node_handle),
     "Character authority contract violated: scene transform writes on "
     "character-managed nodes are not allowed. Use CharacterFacade::Move.");
@@ -590,6 +615,7 @@ auto PhysicsModule::OnNodeDestroyed(
     world_id_ != kInvalidWorldId, "PhysicsModule world id must be valid.");
 
   pending_transform_updates_.erase(node_handle);
+  expected_character_transform_updates_.erase(node_handle);
 
   const auto it = node_to_binding_.find(node_handle);
   if (it == node_to_binding_.end()) {
@@ -655,6 +681,7 @@ auto PhysicsModule::SyncSceneObserver(
   EnsureBindingCapacity(EstimateBindingReserve(scene));
   // DestroyAllTrackedBodies() already clears bindings and indices.
   pending_transform_updates_.clear();
+  expected_character_transform_updates_.clear();
   observed_scene_ = scene;
 
   if (observed_scene_ != nullptr) {

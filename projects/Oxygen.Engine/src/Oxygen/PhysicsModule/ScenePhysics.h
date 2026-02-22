@@ -69,11 +69,13 @@ public:
   public:
     CharacterFacade(scene::NodeHandle node, WorldId world_id,
       CharacterId character_id,
-      observer_ptr<system::ICharacterApi> character_api)
+      observer_ptr<system::ICharacterApi> character_api,
+      observer_ptr<PhysicsModule> physics_module)
       : node_(node)
       , world_id_(world_id)
       , character_id_(character_id)
       , character_api_(character_api)
+      , physics_module_(physics_module)
     {
     }
 
@@ -86,21 +88,15 @@ public:
       return character_id_;
     }
 
-    auto Move(const character::CharacterMoveInput& input,
-      float delta_time) const -> PhysicsResult<character::CharacterMoveResult>
-    {
-      if (character_api_ == nullptr) {
-        return Err(PhysicsError::kNotInitialized);
-      }
-      return character_api_->MoveCharacter(
-        world_id_, character_id_, input, delta_time);
-    }
+    OXGN_PHSYNC_API auto Move(const character::CharacterMoveInput& input,
+      float delta_time) const -> PhysicsResult<character::CharacterMoveResult>;
 
   private:
     scene::NodeHandle node_;
     WorldId world_id_;
     CharacterId character_id_;
     observer_ptr<system::ICharacterApi> character_api_;
+    observer_ptr<PhysicsModule> physics_module_;
   };
 
   struct SceneRayCastHit {
@@ -153,13 +149,18 @@ public:
    - Character motion is command-authoritative: use
    * CharacterFacade::Move for
      movement intent.
-   - Scene-authored
-   * transform writes to a character-owned node are contract
-     violations
-   * (debug-asserted by PhysicsModule observer path).
-   - Character attachment
-   * does not participate in rigid-body transform
-     push/pull sync.
+   - Successful
+   * CharacterFacade::Move calls apply returned world pose back to
+     the
+   * scene node as local transform using parent-aware conversion.
+   -
+   * Scene-authored transform writes to a character-owned node are contract
+
+   * violations (debug-asserted by PhysicsModule observer path).
+   - Character
+   * attachment does not participate in rigid-body transform
+     push/pull
+   * sync.
   */
   OXGN_PHSYNC_API static auto AttachCharacter(
     observer_ptr<PhysicsModule> physics_module, scene::SceneNode& node,

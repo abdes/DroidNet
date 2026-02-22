@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cmath>
 #include <vector>
 
 #include <Oxygen/Testing/GTest.h>
@@ -317,6 +318,12 @@ NOLINT_TEST_F(PhysicsApiContractTest, CharacterLifecycleContract)
   const auto move = characters.MoveCharacter(
     world_id, character_id, character::CharacterMoveInput {}, 1.0F / 60.0F);
   EXPECT_TRUE(move.has_value());
+  if (move.has_value()) {
+    EXPECT_TRUE(std::isfinite(move.value().state.position.x));
+    EXPECT_TRUE(std::isfinite(move.value().state.position.y));
+    EXPECT_TRUE(std::isfinite(move.value().state.position.z));
+    EXPECT_TRUE(std::isfinite(move.value().state.rotation.w));
+  }
 
   EXPECT_TRUE(characters.DestroyCharacter(world_id, character_id).has_value());
   EXPECT_TRUE(characters
