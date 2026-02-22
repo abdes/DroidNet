@@ -17,6 +17,7 @@
 #include <Oxygen/Physics/PhysicsError.h>
 #include <Oxygen/Physics/Query/Overlap.h>
 #include <Oxygen/Physics/Query/Sweep.h>
+#include <Oxygen/Physics/SoftBody/SoftBodyDesc.h>
 
 auto oxygen::physics::to_string(WorldId value) -> std::string
 {
@@ -194,3 +195,20 @@ auto oxygen::physics::joint::to_string(JointType value) noexcept
   }
   return "__NotSupported__";
 }
+
+namespace oxygen::physics::softbody {
+
+auto to_string(SoftBodyTetherMode value) noexcept -> std::string_view
+{
+  switch (value) {
+  case SoftBodyTetherMode::kNone:
+    return "None";
+  case SoftBodyTetherMode::kEuclidean:
+    return "Euclidean";
+  case SoftBodyTetherMode::kGeodesic:
+    return "Geodesic";
+  }
+  return "__NotSupported__";
+}
+
+} // namespace oxygen::physics::softbody
