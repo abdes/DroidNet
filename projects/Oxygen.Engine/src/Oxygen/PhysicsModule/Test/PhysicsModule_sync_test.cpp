@@ -650,6 +650,36 @@ NOLINT_TEST_F(
   ExpectVec3Eq(*local, Vec3 { 4.0F, 0.0F, 0.0F });
 }
 
+NOLINT_TEST_F(
+  PhysicsModuleSyncTest, DynamicPullUsesParentLocalChainWhenParentIsDirty)
+{
+  auto parent = scene_->CreateNode("dirty-parent");
+  ASSERT_TRUE(parent.IsValid());
+  auto child_opt = scene_->CreateChildNode(parent, "dirty-child");
+  ASSERT_TRUE(child_opt.has_value());
+  auto child = *child_opt;
+  ASSERT_TRUE(child.IsValid());
+  scene_->Update();
+
+  const auto body = AttachBody(child, body::BodyType::kDynamic);
+  ASSERT_TRUE(body.has_value());
+
+  ASSERT_TRUE(parent.GetTransform().SetLocalPosition({ 5.0F, 0.0F, 0.0F }));
+
+  FakeState().active_transforms = {
+    system::ActiveBodyTransform {
+      .body_id = body->GetBodyId(),
+      .position = Vec3 { 8.0F, 0.0F, 0.0F },
+      .rotation = Quat { 1.0F, 0.0F, 0.0F, 0.0F },
+    },
+  };
+
+  RunSceneMutation();
+  const auto local = child.GetTransform().GetLocalPosition();
+  ASSERT_TRUE(local.has_value());
+  ExpectVec3Eq(*local, Vec3 { 3.0F, 0.0F, 0.0F });
+}
+
 NOLINT_TEST_F(PhysicsModuleSyncTest, SceneMutationDrainsAndMapsPhysicsEvents)
 {
   auto node_a = scene_->CreateNode("event-a");

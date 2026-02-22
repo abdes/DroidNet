@@ -23,6 +23,12 @@
 namespace oxygen::physics {
 namespace {
 
+  struct Trs final {
+    Vec3 position { 0.0F, 0.0F, 0.0F };
+    Quat rotation { 1.0F, 0.0F, 0.0F, 0.0F };
+    Vec3 scale { 1.0F, 1.0F, 1.0F };
+  };
+
   auto InverseScaleSafe(const Vec3& scale) -> Vec3
   {
     constexpr float kScaleEpsilon = 1.0e-6F;
@@ -31,6 +37,44 @@ namespace {
     inv.y = std::abs(scale.y) > kScaleEpsilon ? 1.0F / scale.y : 1.0F;
     inv.z = std::abs(scale.z) > kScaleEpsilon ? 1.0F / scale.z : 1.0F;
     return inv;
+  }
+
+  auto ComposeTrs(const Trs& parent, const Trs& local) -> Trs
+  {
+    return Trs {
+      .position
+      = parent.position + parent.rotation * (local.position * parent.scale),
+      .rotation = glm::normalize(parent.rotation * local.rotation),
+      .scale = parent.scale * local.scale,
+    };
+  }
+
+  auto BuildWorldTrsFromLocalChain(scene::SceneNode node) -> std::optional<Trs>
+  {
+    std::vector<scene::SceneNode> ancestry {};
+    auto current = std::optional<scene::SceneNode> { node };
+    while (current.has_value() && current->IsValid()) {
+      ancestry.push_back(*current);
+      current = current->GetParent();
+    }
+
+    Trs world {};
+    for (auto it = ancestry.rbegin(); it != ancestry.rend(); ++it) {
+      const auto local_position
+        = it->GetTransform().GetLocalPosition().value_or(Vec3 { 0.0F });
+      const auto local_rotation
+        = it->GetTransform().GetLocalRotation().value_or(
+          Quat { 1.0F, 0.0F, 0.0F, 0.0F });
+      const auto local_scale
+        = it->GetTransform().GetLocalScale().value_or(Vec3 { 1.0F });
+      world = ComposeTrs(world,
+        Trs {
+          .position = local_position,
+          .rotation = local_rotation,
+          .scale = local_scale,
+        });
+    }
+    return world;
   }
 
   auto ToLocalPose(scene::SceneNode& node, const Vec3& world_position,
@@ -44,16 +88,14 @@ namespace {
       return { local_position, local_rotation };
     }
 
-    const auto parent_world_position
-      = parent->GetTransform().GetWorldPosition().value_or(Vec3 { 0.0F });
-    const auto parent_world_rotation
-      = parent->GetTransform().GetWorldRotation().value_or(
-        Quat { 1.0F, 0.0F, 0.0F, 0.0F });
-    const auto parent_world_scale
-      = parent->GetTransform().GetWorldScale().value_or(Vec3 { 1.0F });
-    const auto inverse_parent_rotation = glm::inverse(parent_world_rotation);
-    const auto inverse_parent_scale = InverseScaleSafe(parent_world_scale);
-    const auto relative_position = world_position - parent_world_position;
+    const auto parent_world = BuildWorldTrsFromLocalChain(*parent);
+    if (!parent_world.has_value()) {
+      return { local_position, local_rotation };
+    }
+
+    const auto inverse_parent_rotation = glm::inverse(parent_world->rotation);
+    const auto inverse_parent_scale = InverseScaleSafe(parent_world->scale);
+    const auto relative_position = world_position - parent_world->position;
 
     local_position
       = inverse_parent_rotation * (relative_position * inverse_parent_scale);
