@@ -38,6 +38,12 @@ namespace detail {
     Vec3 angular_velocity { 0.0F };
   };
 
+  struct CharacterState final {
+    Vec3 position { 0.0F };
+    Quat rotation { 1.0F, 0.0F, 0.0F, 0.0F };
+    Vec3 velocity { 0.0F };
+  };
+
   struct BackendState final {
     WorldId world_id { WorldId { 1U } };
     bool world_created { false };
@@ -47,14 +53,20 @@ namespace detail {
     float last_step_fixed_dt { 0.0F };
     Vec3 gravity { 0.0F, -9.81F, 0.0F };
     std::unordered_map<BodyId, BodyState> bodies {};
+    std::unordered_map<CharacterId, CharacterState> characters {};
     std::vector<system::ActiveBodyTransform> active_transforms {};
+    std::vector<events::PhysicsEvent> pending_events {};
     BodyId next_body_id { BodyId { 1U } };
+    CharacterId next_character_id { CharacterId { 1U } };
     ShapeId next_shape_id { ShapeId { 1U } };
     ShapeInstanceId next_shape_instance_id { ShapeInstanceId { 1U } };
     AreaId next_area_id { AreaId { 1U } };
     JointId next_joint_id { JointId { 1U } };
     std::size_t move_kinematic_calls { 0 };
     std::size_t set_body_pose_calls { 0 };
+    std::size_t character_create_calls { 0 };
+    std::size_t character_destroy_calls { 0 };
+    std::size_t character_move_calls { 0 };
     BodyId last_moved_body { kInvalidBodyId };
     Vec3 last_moved_position { 0.0F };
     Quat last_moved_rotation { 1.0F, 0.0F, 0.0F, 0.0F };
@@ -364,35 +376,104 @@ namespace detail {
 
   class FakeEventApi final : public system::IEventApi {
   public:
-    auto GetPendingEventCount(WorldId) const -> PhysicsResult<size_t> override
+    explicit FakeEventApi(BackendState& state)
+      : state_(&state)
     {
-      return PhysicsResult<size_t>::Ok(size_t { 0 });
     }
-    auto DrainEvents(WorldId, std::span<events::PhysicsEvent>)
+
+    auto GetPendingEventCount(WorldId world_id) const
       -> PhysicsResult<size_t> override
     {
-      return PhysicsResult<size_t>::Ok(size_t { 0 });
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      return PhysicsResult<size_t>::Ok(state_->pending_events.size());
     }
+
+    auto DrainEvents(
+      WorldId world_id, std::span<events::PhysicsEvent> out_events)
+      -> PhysicsResult<size_t> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      const auto count
+        = std::min(out_events.size(), state_->pending_events.size());
+      for (size_t i = 0; i < count; ++i) {
+        out_events[i] = state_->pending_events[i];
+      }
+      state_->pending_events.erase(
+        state_->pending_events.begin(), state_->pending_events.begin() + count);
+      return PhysicsResult<size_t>::Ok(count);
+    }
+
+  private:
+    observer_ptr<BackendState> state_;
   };
 
   class FakeCharacterApi final : public system::ICharacterApi {
   public:
-    auto CreateCharacter(WorldId, const character::CharacterDesc&)
-      -> PhysicsResult<CharacterId> override
+    explicit FakeCharacterApi(BackendState& state)
+      : state_(&state)
     {
-      return Err(PhysicsError::kNotImplemented);
-    }
-    auto DestroyCharacter(WorldId, CharacterId) -> PhysicsResult<void> override
-    {
-      return Err(PhysicsError::kNotImplemented);
     }
 
-    auto MoveCharacter(
-      WorldId, CharacterId, const character::CharacterMoveInput&, float)
+    auto CreateCharacter(WorldId world_id, const character::CharacterDesc& desc)
+      -> PhysicsResult<CharacterId> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      const auto character_id = state_->next_character_id;
+      state_->next_character_id
+        = CharacterId { state_->next_character_id.get() + 1U };
+      state_->characters.insert_or_assign(character_id,
+        CharacterState {
+          .position = desc.initial_position,
+          .rotation = desc.initial_rotation,
+          .velocity = Vec3 { 0.0F, 0.0F, 0.0F },
+        });
+      state_->character_create_calls += 1;
+      return PhysicsResult<CharacterId>::Ok(character_id);
+    }
+    auto DestroyCharacter(WorldId world_id, CharacterId character_id)
+      -> PhysicsResult<void> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      if (!state_->characters.contains(character_id)) {
+        return Err(PhysicsError::kCharacterNotFound);
+      }
+      state_->characters.erase(character_id);
+      state_->character_destroy_calls += 1;
+      return PhysicsResult<void>::Ok();
+    }
+
+    auto MoveCharacter(WorldId world_id, CharacterId character_id,
+      const character::CharacterMoveInput& input, float)
       -> PhysicsResult<character::CharacterMoveResult> override
     {
-      return Err(PhysicsError::kNotImplemented);
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      auto it = state_->characters.find(character_id);
+      if (it == state_->characters.end()) {
+        return Err(PhysicsError::kCharacterNotFound);
+      }
+      it->second.velocity = input.desired_velocity;
+      state_->character_move_calls += 1;
+      return PhysicsResult<character::CharacterMoveResult>::Ok(
+        character::CharacterMoveResult {
+          .state = character::CharacterState {
+            .is_grounded = false,
+            .velocity = input.desired_velocity,
+          },
+        });
     }
+
+  private:
+    observer_ptr<BackendState> state_;
   };
 
   class FakeShapeApi final : public system::IShapeApi {
@@ -534,6 +615,8 @@ namespace detail {
     FakePhysicsSystem()
       : worlds_(state_)
       , bodies_(state_)
+      , events_(state_)
+      , characters_(state_)
       , shapes_(state_)
       , areas_(state_)
       , joints_(state_)
@@ -596,8 +679,8 @@ namespace detail {
     FakeWorldApi worlds_;
     FakeBodyApi bodies_;
     FakeQueryApi queries_ {};
-    FakeEventApi events_ {};
-    FakeCharacterApi characters_ {};
+    FakeEventApi events_;
+    FakeCharacterApi characters_;
     FakeShapeApi shapes_;
     FakeAreaApi areas_;
     FakeJointApi joints_;

@@ -422,6 +422,27 @@ auto oxygen::physics::jolt::JoltWorld::TryGetNarrowPhaseQuery(
   };
 }
 
+auto oxygen::physics::jolt::JoltWorld::TryGetPhysicsSystem(
+  const WorldId world_id) noexcept -> observer_ptr<JPH::PhysicsSystem>
+{
+  auto world = TryGetWorld(world_id);
+  if (world == nullptr) {
+    return observer_ptr<JPH::PhysicsSystem> {};
+  }
+  return observer_ptr<JPH::PhysicsSystem> { &world->physics_system };
+}
+
+auto oxygen::physics::jolt::JoltWorld::TryGetPhysicsSystem(
+  const WorldId world_id) const noexcept
+  -> observer_ptr<const JPH::PhysicsSystem>
+{
+  const auto world = TryGetWorld(world_id);
+  if (world == nullptr) {
+    return observer_ptr<const JPH::PhysicsSystem> {};
+  }
+  return observer_ptr<const JPH::PhysicsSystem> { &world->physics_system };
+}
+
 auto oxygen::physics::jolt::JoltWorld::HasBody(
   const WorldId world_id, const BodyId body_id) const noexcept -> bool
 {

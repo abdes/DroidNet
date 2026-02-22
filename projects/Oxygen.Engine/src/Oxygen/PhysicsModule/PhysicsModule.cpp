@@ -75,6 +75,8 @@ PhysicsModule::PhysicsModule(engine::ModulePriority priority)
   : priority_(priority)
   , bindings_(std::make_unique<PhysicsBindingTable>(
       kBindingResourceType, kMinBindingReserve))
+  , character_bindings_(std::make_unique<CharacterBindingTable>(
+      kCharacterBindingResourceType, kMinBindingReserve))
 {
 }
 
@@ -84,6 +86,8 @@ PhysicsModule::PhysicsModule(engine::ModulePriority priority,
   , physics_system_(std::move(physics_system))
   , bindings_(std::make_unique<PhysicsBindingTable>(
       kBindingResourceType, kMinBindingReserve))
+  , character_bindings_(std::make_unique<CharacterBindingTable>(
+      kCharacterBindingResourceType, kMinBindingReserve))
 {
   CHECK_NOTNULL_F(physics_system_.get());
   const auto world_result
@@ -99,6 +103,18 @@ auto PhysicsModule::GetBodyApi() noexcept -> system::IBodyApi&
 {
   CHECK_NOTNULL_F(physics_system_.get());
   return physics_system_->Bodies();
+}
+
+auto PhysicsModule::GetCharacterApi() noexcept -> system::ICharacterApi&
+{
+  CHECK_NOTNULL_F(physics_system_.get());
+  return physics_system_->Characters();
+}
+
+auto PhysicsModule::GetEventApi() noexcept -> system::IEventApi&
+{
+  CHECK_NOTNULL_F(physics_system_.get());
+  return physics_system_->Events();
 }
 
 auto PhysicsModule::GetQueryApi() noexcept -> system::IQueryApi&
@@ -166,6 +182,7 @@ auto PhysicsModule::OnShutdown() noexcept -> void
 {
   CHECK_NOTNULL_F(physics_system_.get());
   CHECK_NOTNULL_F(bindings_.get());
+  CHECK_NOTNULL_F(character_bindings_.get());
   CHECK_F(
     world_id_ != kInvalidWorldId, "PhysicsModule world id must be valid.");
 
@@ -176,6 +193,7 @@ auto PhysicsModule::OnShutdown() noexcept -> void
   }
 
   DestroyAllTrackedBodies();
+  DestroyAllTrackedCharacters();
 
   [[maybe_unused]] const auto result
     = physics_system_->Worlds().DestroyWorld(world_id_);
@@ -184,7 +202,9 @@ auto PhysicsModule::OnShutdown() noexcept -> void
   physics_system_.reset();
   engine_ = nullptr;
   pending_transform_updates_.clear();
+  scene_events_.clear();
   bindings_->Clear();
+  character_bindings_->Clear();
 }
 
 auto PhysicsModule::OnGameplay(observer_ptr<engine::FrameContext> context)
@@ -298,6 +318,7 @@ auto PhysicsModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   const auto result
     = world_api.GetActiveBodyTransforms(world_id_, active_transforms);
   if (!result.has_value()) {
+    DrainPhysicsEvents();
     co_return;
   }
 
@@ -333,6 +354,8 @@ auto PhysicsModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
     diagnostics_.scene_pull_success += 1;
   }
 
+  DrainPhysicsEvents();
+
   co_return;
 }
 
@@ -355,24 +378,42 @@ auto PhysicsModule::OnNodeDestroyed(
 
   const auto it = node_to_binding_.find(node_handle);
   if (it == node_to_binding_.end()) {
+  } else {
+    CHECK_NOTNULL_F(bindings_.get());
+    const auto* binding = bindings_->TryGet(it->second);
+    if (binding != nullptr) {
+      const auto body_id = binding->body_id;
+      const auto result
+        = physics_system_->Bodies().DestroyBody(world_id_, body_id);
+      CHECK_F(result.has_value(),
+        "PhysicsModule failed to destroy tracked body on node destruction.");
+      (void)RemoveBinding(it->second);
+    }
+  }
+
+  const auto character_it = node_to_character_binding_.find(node_handle);
+  if (character_it == node_to_character_binding_.end()) {
     return;
   }
-  CHECK_NOTNULL_F(bindings_.get());
-  const auto* binding = bindings_->TryGet(it->second);
-  if (binding == nullptr) {
+  CHECK_NOTNULL_F(character_bindings_.get());
+  const auto* character_binding
+    = character_bindings_->TryGet(character_it->second);
+  if (character_binding == nullptr) {
     return;
   }
-  const auto body_id = binding->body_id;
-  const auto result = physics_system_->Bodies().DestroyBody(world_id_, body_id);
-  CHECK_F(result.has_value(),
-    "PhysicsModule failed to destroy tracked body on node destruction.");
-  (void)RemoveBinding(it->second);
+  const auto character_id = character_binding->character_id;
+  const auto character_result
+    = physics_system_->Characters().DestroyCharacter(world_id_, character_id);
+  CHECK_F(character_result.has_value(),
+    "PhysicsModule failed to destroy tracked character on node destruction.");
+  (void)RemoveCharacterBinding(character_it->second);
 }
 
 auto PhysicsModule::SyncSceneObserver(
   observer_ptr<engine::FrameContext> context) -> void
 {
   CHECK_NOTNULL_F(bindings_.get());
+  CHECK_NOTNULL_F(character_bindings_.get());
   if (context == nullptr) {
     return;
   }
@@ -391,6 +432,9 @@ auto PhysicsModule::SyncSceneObserver(
 
   if (had_previous_scene && !body_to_binding_.empty()) {
     DestroyAllTrackedBodies();
+  }
+  if (had_previous_scene && !character_to_binding_.empty()) {
+    DestroyAllTrackedCharacters();
   }
 
   EnsureBindingCapacity(EstimateBindingReserve(scene));
@@ -421,6 +465,20 @@ auto PhysicsModule::RemoveBinding(const ResourceHandle& binding_handle) -> bool
   return bindings_->Erase(binding_handle) > 0;
 }
 
+auto PhysicsModule::RemoveCharacterBinding(const ResourceHandle& binding_handle)
+  -> bool
+{
+  CHECK_NOTNULL_F(character_bindings_.get());
+  const auto* binding = character_bindings_->TryGet(binding_handle);
+  if (binding == nullptr) {
+    return false;
+  }
+
+  character_to_binding_.erase(binding->character_id);
+  node_to_character_binding_.erase(binding->node_handle);
+  return character_bindings_->Erase(binding_handle) > 0;
+}
+
 auto PhysicsModule::EstimateBindingReserve(observer_ptr<scene::Scene> scene)
   -> std::size_t
 {
@@ -433,7 +491,9 @@ auto PhysicsModule::EstimateBindingReserve(observer_ptr<scene::Scene> scene)
 auto PhysicsModule::EnsureBindingCapacity(const std::size_t min_reserve) -> void
 {
   CHECK_NOTNULL_F(bindings_.get());
+  CHECK_NOTNULL_F(character_bindings_.get());
   bindings_->Reserve(std::max(min_reserve, kMinBindingReserve));
+  character_bindings_->Reserve(std::max(min_reserve, kMinBindingReserve));
 }
 
 auto PhysicsModule::DestroyAllTrackedBodies() -> void
@@ -454,6 +514,60 @@ auto PhysicsModule::DestroyAllTrackedBodies() -> void
   body_to_binding_.clear();
   node_to_binding_.clear();
   bindings_->Clear();
+}
+
+auto PhysicsModule::DestroyAllTrackedCharacters() -> void
+{
+  CHECK_NOTNULL_F(physics_system_.get());
+  CHECK_NOTNULL_F(character_bindings_.get());
+  CHECK_F(world_id_ != kInvalidWorldId,
+    "PhysicsModule world id must be valid while destroying tracked "
+    "characters.");
+
+  auto& character_api = physics_system_->Characters();
+  for (const auto& [character_id, binding_handle] : character_to_binding_) {
+    (void)binding_handle;
+    const auto result = character_api.DestroyCharacter(world_id_, character_id);
+    CHECK_F(result.has_value(),
+      "PhysicsModule failed to destroy tracked character during shutdown.");
+  }
+
+  character_to_binding_.clear();
+  node_to_character_binding_.clear();
+  character_bindings_->Clear();
+}
+
+auto PhysicsModule::DrainPhysicsEvents() -> void
+{
+  CHECK_NOTNULL_F(physics_system_.get());
+  CHECK_F(
+    world_id_ != kInvalidWorldId, "PhysicsModule world id must be valid.");
+
+  auto& event_api = physics_system_->Events();
+  const auto pending_result = event_api.GetPendingEventCount(world_id_);
+  if (!pending_result.has_value() || pending_result.value() == 0U) {
+    return;
+  }
+
+  std::vector<events::PhysicsEvent> raw_events(pending_result.value());
+  diagnostics_.event_drain_calls += 1;
+  const auto drain_result = event_api.DrainEvents(world_id_, raw_events);
+  if (!drain_result.has_value()) {
+    return;
+  }
+
+  const auto drained_count = std::min(drain_result.value(), raw_events.size());
+  diagnostics_.event_drain_count += drained_count;
+  scene_events_.reserve(scene_events_.size() + drained_count);
+  for (size_t i = 0; i < drained_count; ++i) {
+    const auto& raw_event = raw_events[i];
+    scene_events_.push_back(ScenePhysicsEvent {
+      .type = raw_event.type,
+      .node_a = GetNodeForBodyId(raw_event.body_a),
+      .node_b = GetNodeForBodyId(raw_event.body_b),
+      .raw_event = raw_event,
+    });
+  }
 }
 
 } // namespace oxygen::physics

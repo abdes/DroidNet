@@ -453,9 +453,13 @@ NOLINT_TEST_F(PhysicsApiContractTest, InvalidJointCallsReturnError)
   ASSERT_TRUE(create_result.has_value());
   const auto world_id = create_result.value();
 
-  EXPECT_TRUE(joints.DestroyJoint(world_id, kInvalidJointId).has_error());
-  EXPECT_TRUE(
-    joints.SetJointEnabled(world_id, kInvalidJointId, true).has_error());
+  const auto destroy_invalid = joints.DestroyJoint(world_id, kInvalidJointId);
+  ASSERT_TRUE(destroy_invalid.has_error());
+  EXPECT_EQ(destroy_invalid.error(), PhysicsError::kInvalidArgument);
+  const auto enable_invalid
+    = joints.SetJointEnabled(world_id, kInvalidJointId, true);
+  ASSERT_TRUE(enable_invalid.has_error());
+  EXPECT_EQ(enable_invalid.error(), PhysicsError::kInvalidArgument);
 
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
 }
