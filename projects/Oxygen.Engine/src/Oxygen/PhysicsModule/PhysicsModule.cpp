@@ -463,6 +463,12 @@ auto PhysicsModule::OnGameplay(observer_ptr<engine::FrameContext> context)
 
   const auto fixed_delta_seconds = FixedDeltaSeconds(context);
   auto& body_api = physics_system_->Bodies();
+  std::vector<BodyId> batched_body_ids {};
+  std::vector<Vec3> batched_positions {};
+  std::vector<Quat> batched_rotations {};
+  batched_body_ids.reserve(pending_transform_updates_.size());
+  batched_positions.reserve(pending_transform_updates_.size());
+  batched_rotations.reserve(pending_transform_updates_.size());
   for (const auto& node_handle : pending_transform_updates_) {
     diagnostics_.gameplay_push_attempts += 1;
 
@@ -493,14 +499,33 @@ auto PhysicsModule::OnGameplay(observer_ptr<engine::FrameContext> context)
       = node->GetTransform().GetWorldPosition().value_or(Vec3(0.0F));
     const auto rotation = node->GetTransform().GetWorldRotation().value_or(
       Quat(1.0F, 0.0F, 0.0F, 0.0F));
+    batched_body_ids.push_back(binding->body_id);
+    batched_positions.push_back(position);
+    batched_rotations.push_back(rotation);
+  }
 
-    const auto result = fixed_delta_seconds > 0.0F
-      ? body_api.MoveKinematic(
-          world_id_, binding->body_id, position, rotation, fixed_delta_seconds)
-      : body_api.SetBodyPose(world_id_, binding->body_id, position, rotation);
-    CHECK_F(result.has_value(),
-      "PhysicsModule failed to push kinematic body pose to physics.");
-    diagnostics_.gameplay_push_success += 1;
+  if (batched_body_ids.empty()) {
+    pending_transform_updates_.clear();
+    co_return;
+  }
+
+  if (fixed_delta_seconds > 0.0F) {
+    const auto batch_result
+      = body_api.MoveKinematicBatch(world_id_, batched_body_ids,
+        batched_positions, batched_rotations, fixed_delta_seconds);
+    CHECK_F(batch_result.has_value(),
+      "PhysicsModule failed to batch-push kinematic body poses to physics.");
+    CHECK_EQ_F(batch_result.value(), batched_body_ids.size(),
+      "PhysicsModule batch kinematic push count mismatch.");
+    diagnostics_.gameplay_push_success += batch_result.value();
+  } else {
+    for (size_t i = 0; i < batched_body_ids.size(); ++i) {
+      const auto result = body_api.SetBodyPose(world_id_, batched_body_ids[i],
+        batched_positions[i], batched_rotations[i]);
+      CHECK_F(result.has_value(),
+        "PhysicsModule failed to push kinematic body pose to physics.");
+      diagnostics_.gameplay_push_success += 1;
+    }
   }
   pending_transform_updates_.clear();
 
