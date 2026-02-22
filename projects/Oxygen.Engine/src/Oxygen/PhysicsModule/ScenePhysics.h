@@ -153,8 +153,13 @@ public:
    - Character motion is command-authoritative: use
    * CharacterFacade::Move for
      movement intent.
+   - Scene-authored
+   * transform writes to a character-owned node are contract
+     violations
+   * (debug-asserted by PhysicsModule observer path).
    - Character attachment
-   * does not participate in transform push/pull sync.
+   * does not participate in rigid-body transform
+     push/pull sync.
   */
   OXGN_PHSYNC_API static auto AttachCharacter(
     observer_ptr<PhysicsModule> physics_module, scene::SceneNode& node,
