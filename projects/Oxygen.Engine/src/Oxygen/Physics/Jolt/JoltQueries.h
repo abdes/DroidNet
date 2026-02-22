@@ -7,14 +7,17 @@
 #pragma once
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Physics/System/IQueryApi.h>
 
 namespace oxygen::physics::jolt {
 
+class JoltWorld;
+
 //! Jolt implementation of the query domain.
 class JoltQueries final : public system::IQueryApi {
 public:
-  JoltQueries() = default;
+  explicit JoltQueries(JoltWorld& world);
   ~JoltQueries() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(JoltQueries)
@@ -27,6 +30,9 @@ public:
     -> PhysicsResult<size_t> override;
   auto Overlap(WorldId world_id, const query::OverlapDesc& desc,
     std::span<uint64_t> out_user_data) const -> PhysicsResult<size_t> override;
+
+private:
+  observer_ptr<JoltWorld> world_ {};
 };
 
 } // namespace oxygen::physics::jolt

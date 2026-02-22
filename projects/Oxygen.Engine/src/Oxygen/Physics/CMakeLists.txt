@@ -148,6 +148,7 @@ if(OXYGEN_PHYSICS_BACKEND STREQUAL "jolt")
     "Jolt/JoltBackend.h"
     "Jolt/JoltAreas.h"
     "Jolt/JoltCharacters.h"
+    "Jolt/Converters.h"
     "Jolt/JoltEvents.h"
     "Jolt/JoltJoints.h"
     "Jolt/JoltPhysicsSystem.h"

@@ -8,6 +8,7 @@
 
 oxygen::physics::jolt::JoltPhysicsSystem::JoltPhysicsSystem()
   : bodies_(world_)
+  , queries_(world_)
 {
 }
 

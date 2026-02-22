@@ -4,128 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <type_traits>
-#include <variant>
-
 #include <Jolt/Jolt.h> // Must always be first (keep separate)
 
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
-#include <Jolt/Physics/Body/BodyID.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
-#include <Jolt/Physics/Body/MotionType.h>
-#include <Jolt/Physics/Collision/Shape/BoxShape.h>
-#include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
-#include <Jolt/Physics/Collision/Shape/Shape.h>
-#include <Jolt/Physics/Collision/Shape/SphereShape.h>
 
+#include <Oxygen/Physics/Jolt/Converters.h>
 #include <Oxygen/Physics/Jolt/JoltBodies.h>
 #include <Oxygen/Physics/Jolt/JoltWorld.h>
-
-namespace {
-
-auto ToJoltBodyId(const oxygen::physics::BodyId body_id) -> JPH::BodyID
-{
-  return JPH::BodyID { body_id.get() };
-}
-
-auto ToJoltVec3(const oxygen::Vec3& value) -> JPH::Vec3
-{
-  return JPH::Vec3 { value.x, value.y, value.z };
-}
-
-auto ToJoltRVec3(const oxygen::Vec3& value) -> JPH::RVec3
-{
-  return JPH::RVec3 { value.x, value.y, value.z };
-}
-
-auto ToJoltQuat(const oxygen::Quat& value) -> JPH::Quat
-{
-  return JPH::Quat { value.x, value.y, value.z, value.w };
-}
-
-auto ToOxygenVec3(const JPH::Vec3& value) -> oxygen::Vec3
-{
-  return oxygen::Vec3 { value.GetX(), value.GetY(), value.GetZ() };
-}
-
-auto ToOxygenQuat(const JPH::Quat& value) -> oxygen::Quat
-{
-  return oxygen::Quat {
-    value.GetW(),
-    value.GetX(),
-    value.GetY(),
-    value.GetZ(),
-  };
-}
-
-auto ToMotionType(const oxygen::physics::body::BodyType type)
-  -> JPH::EMotionType
-{
-  using oxygen::physics::body::BodyType;
-  switch (type) {
-  case BodyType::kStatic:
-    return JPH::EMotionType::Static;
-  case BodyType::kDynamic:
-    return JPH::EMotionType::Dynamic;
-  case BodyType::kKinematic:
-    return JPH::EMotionType::Kinematic;
-  }
-  return JPH::EMotionType::Static;
-}
-
-auto ToObjectLayer(const oxygen::physics::body::BodyType type)
-  -> JPH::ObjectLayer
-{
-  return type == oxygen::physics::body::BodyType::kStatic ? 0 : 1;
-}
-
-auto ToActivation(const oxygen::physics::body::BodyType type)
-  -> JPH::EActivation
-{
-  return type == oxygen::physics::body::BodyType::kDynamic
-    ? JPH::EActivation::Activate
-    : JPH::EActivation::DontActivate;
-}
-
-auto MakeShape(const oxygen::physics::CollisionShape& shape)
-  -> oxygen::physics::PhysicsResult<JPH::RefConst<JPH::Shape>>
-{
-  return std::visit(
-    [](const auto& value)
-      -> oxygen::physics::PhysicsResult<JPH::RefConst<JPH::Shape>> {
-      using T = std::decay_t<decltype(value)>;
-      if constexpr (std::is_same_v<T, oxygen::physics::SphereShape>) {
-        if (value.radius <= 0.0F) {
-          return oxygen::Err(oxygen::physics::PhysicsError::kInvalidArgument);
-        }
-        return oxygen::Ok(JPH::RefConst<JPH::Shape> {
-          new JPH::SphereShape(value.radius),
-        });
-      } else if constexpr (std::is_same_v<T, oxygen::physics::BoxShape>) {
-        if (value.extents.x <= 0.0F || value.extents.y <= 0.0F
-          || value.extents.z <= 0.0F) {
-          return oxygen::Err(oxygen::physics::PhysicsError::kInvalidArgument);
-        }
-        return oxygen::Ok(JPH::RefConst<JPH::Shape> {
-          new JPH::BoxShape(ToJoltVec3(value.extents)),
-        });
-      } else if constexpr (std::is_same_v<T, oxygen::physics::CapsuleShape>) {
-        if (value.radius <= 0.0F || value.half_height <= 0.0F) {
-          return oxygen::Err(oxygen::physics::PhysicsError::kInvalidArgument);
-        }
-        return oxygen::Ok(JPH::RefConst<JPH::Shape> {
-          new JPH::CapsuleShape(value.half_height, value.radius),
-        });
-      } else if constexpr (std::is_same_v<T, oxygen::physics::MeshShape>) {
-        return oxygen::Err(oxygen::physics::PhysicsError::kNotImplemented);
-      } else {
-        return oxygen::Err(oxygen::physics::PhysicsError::kNotImplemented);
-      }
-    },
-    shape);
-}
-
-} // namespace
 
 oxygen::physics::jolt::JoltBodies::JoltBodies(JoltWorld& world)
   : world_(&world)

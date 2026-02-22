@@ -49,7 +49,7 @@ public:
 private:
   JoltWorld world_ {};
   JoltBodies bodies_;
-  JoltQueries queries_ {};
+  JoltQueries queries_;
   JoltEvents events_ {};
   JoltCharacters characters_ {};
   JoltShapes shapes_ {};
