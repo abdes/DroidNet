@@ -69,6 +69,11 @@ auto oxygen::physics::jolt::JoltBodies::CreateBody(
   }
 
   const auto body_id = BodyId { jolt_body_id.GetIndexAndSequenceNumber() };
+  // Store the Oxygen BodyId in the Jolt body's user-data slot so that
+  // IQueryApi::Overlap results and PhysicsEvent::user_data_a/b can be
+  // reconstructed as BodyId values. Without this, user_data is always 0.
+  body_interface->SetUserData(
+    jolt_body_id, static_cast<uint64_t>(body_id.get()));
   const auto register_result = world->RegisterBody(world_id, body_id);
   if (register_result.has_error()) {
     body_interface->RemoveBody(jolt_body_id);
