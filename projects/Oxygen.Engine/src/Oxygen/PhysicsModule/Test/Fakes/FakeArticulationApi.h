@@ -148,7 +148,7 @@ public:
     if (world_id != state_->world_id || !state_->world_created) {
       return Err(PhysicsError::kWorldNotFound);
     }
-    state_->aggregate_flush_structural_calls += 1;
+    state_->articulation_flush_structural_calls += 1;
     return PhysicsResult<size_t>::Ok(size_t { 0 });
   }
 

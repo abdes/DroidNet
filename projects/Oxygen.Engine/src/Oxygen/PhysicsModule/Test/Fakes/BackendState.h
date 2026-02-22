@@ -76,6 +76,7 @@ struct BackendState final {
   std::size_t aggregate_create_calls { 0 };
   std::size_t aggregate_destroy_calls { 0 };
   std::size_t aggregate_flush_structural_calls { 0 };
+  std::size_t articulation_flush_structural_calls { 0 };
   std::size_t vehicle_create_calls { 0 };
   std::size_t vehicle_destroy_calls { 0 };
   std::size_t vehicle_set_control_calls { 0 };

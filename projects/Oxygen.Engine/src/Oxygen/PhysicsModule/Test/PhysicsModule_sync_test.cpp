@@ -58,12 +58,15 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, GameplayFlushesDeferredStructuralChanges)
 {
   EXPECT_EQ(FakeState().flush_structural_calls, 0U);
   EXPECT_EQ(FakeState().aggregate_flush_structural_calls, 0U);
+  EXPECT_EQ(FakeState().articulation_flush_structural_calls, 0U);
   RunGameplay();
   EXPECT_EQ(FakeState().flush_structural_calls, 1U);
   EXPECT_EQ(FakeState().aggregate_flush_structural_calls, 1U);
+  EXPECT_EQ(FakeState().articulation_flush_structural_calls, 1U);
   RunGameplay();
   EXPECT_EQ(FakeState().flush_structural_calls, 2U);
   EXPECT_EQ(FakeState().aggregate_flush_structural_calls, 2U);
+  EXPECT_EQ(FakeState().articulation_flush_structural_calls, 2U);
 }
 
 NOLINT_TEST_F(
