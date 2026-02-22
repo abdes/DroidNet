@@ -582,6 +582,12 @@ auto PhysicsModule::OnGameplay(observer_ptr<engine::FrameContext> context)
     CHECK_F(aggregate_flush_result.has_value(),
       "PhysicsModule failed to flush deferred aggregate structural changes.");
   }
+  if (auto* vehicle_api = physics_system_->Vehicles(); vehicle_api != nullptr) {
+    const auto vehicle_flush_result
+      = vehicle_api->FlushStructuralChanges(world_id_);
+    CHECK_F(vehicle_flush_result.has_value(),
+      "PhysicsModule failed to flush deferred vehicle structural changes.");
+  }
 
   const auto scene = context->GetScene();
   if (scene == nullptr) {
@@ -820,13 +826,10 @@ auto PhysicsModule::OnNodeDestroyed(
   if (aggregate_binding == nullptr) {
     return;
   }
-  if (auto* aggregate_api = physics_system_->Aggregates();
-    aggregate_api != nullptr) {
-    const auto aggregate_result = aggregate_api->DestroyAggregate(
-      world_id_, aggregate_binding->aggregate_id);
-    CHECK_F(aggregate_result.has_value(),
-      "PhysicsModule failed to destroy tracked aggregate on node destruction.");
-  }
+  const auto aggregate_result = DestroyAggregateByDomain(
+    aggregate_binding->aggregate_id, aggregate_binding->authority);
+  CHECK_F(aggregate_result.has_value(),
+    "PhysicsModule failed to destroy tracked aggregate on node destruction.");
   (void)RemoveAggregateBinding(aggregate_it->second);
 }
 
@@ -978,22 +981,77 @@ auto PhysicsModule::DestroyAllTrackedCharacters() -> void
   character_bindings_->Clear();
 }
 
+auto PhysicsModule::DestroyAggregateByDomain(const AggregateId aggregate_id,
+  const aggregate::AggregateAuthority authority) -> PhysicsResult<void>
+{
+  CHECK_NOTNULL_F(physics_system_.get());
+  CHECK_F(world_id_ != kInvalidWorldId,
+    "PhysicsModule world id must be valid while destroying tracked "
+    "aggregates.");
+
+  const auto is_unknown = [](const PhysicsError error) {
+    return error == PhysicsError::kInvalidArgument;
+  };
+
+  if (authority == aggregate::AggregateAuthority::kCommand) {
+    if (auto* vehicle_api = physics_system_->Vehicles();
+      vehicle_api != nullptr) {
+      const auto vehicle_result
+        = vehicle_api->DestroyVehicle(world_id_, aggregate_id);
+      if (vehicle_result.has_value()) {
+        return PhysicsResult<void>::Ok();
+      }
+      if (!is_unknown(vehicle_result.error())) {
+        return Err(vehicle_result.error());
+      }
+    }
+  }
+
+  if (auto* articulation_api = physics_system_->Articulations();
+    articulation_api != nullptr) {
+    const auto articulation_result
+      = articulation_api->DestroyArticulation(world_id_, aggregate_id);
+    if (articulation_result.has_value()) {
+      return PhysicsResult<void>::Ok();
+    }
+    if (!is_unknown(articulation_result.error())) {
+      return Err(articulation_result.error());
+    }
+  }
+
+  if (auto* soft_body_api = physics_system_->SoftBodies();
+    soft_body_api != nullptr) {
+    const auto soft_body_result
+      = soft_body_api->DestroySoftBody(world_id_, aggregate_id);
+    if (soft_body_result.has_value()) {
+      return PhysicsResult<void>::Ok();
+    }
+    if (!is_unknown(soft_body_result.error())) {
+      return Err(soft_body_result.error());
+    }
+  }
+
+  if (auto* aggregate_api = physics_system_->Aggregates();
+    aggregate_api != nullptr) {
+    return aggregate_api->DestroyAggregate(world_id_, aggregate_id);
+  }
+
+  return Err(PhysicsError::kNotImplemented);
+}
+
 auto PhysicsModule::DestroyAllTrackedAggregates() -> void
 {
   CHECK_NOTNULL_F(aggregate_bindings_.get());
-
-  auto* aggregate_api = physics_system_->Aggregates();
-  if (aggregate_api != nullptr) {
-    CHECK_F(world_id_ != kInvalidWorldId,
-      "PhysicsModule world id must be valid while destroying tracked "
-      "aggregates.");
-    for (const auto& [aggregate_id, binding_handle] : aggregate_to_binding_) {
-      (void)binding_handle;
-      const auto result
-        = aggregate_api->DestroyAggregate(world_id_, aggregate_id);
-      CHECK_F(result.has_value(),
-        "PhysicsModule failed to destroy tracked aggregate during shutdown.");
+  for (const auto& [aggregate_id, binding_handle] : aggregate_to_binding_) {
+    (void)aggregate_id;
+    const auto* binding = aggregate_bindings_->TryGet(binding_handle);
+    if (binding == nullptr) {
+      continue;
     }
+    const auto result
+      = DestroyAggregateByDomain(binding->aggregate_id, binding->authority);
+    CHECK_F(result.has_value(),
+      "PhysicsModule failed to destroy tracked aggregate during shutdown.");
   }
 
   aggregate_to_binding_.clear();

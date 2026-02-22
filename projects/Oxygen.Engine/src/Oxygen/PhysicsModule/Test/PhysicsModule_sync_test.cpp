@@ -6,6 +6,7 @@
 
 #include "PhysicsModule_test_fixture.h"
 
+#include <array>
 #include <cmath>
 
 #include <glm/gtc/constants.hpp>
@@ -37,6 +38,13 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, FixedSimulationStepsWorldOnce)
   EXPECT_EQ(FakeState().step_count, 1U);
   EXPECT_GT(FakeState().last_step_dt, 0.0F);
   EXPECT_GT(FakeState().last_step_fixed_dt, 0.0F);
+}
+
+NOLINT_TEST_F(PhysicsModuleSyncTest, GameplayFlushesVehicleStructuralChanges)
+{
+  EXPECT_EQ(FakeState().vehicle_flush_structural_calls, 0U);
+  RunGameplay();
+  EXPECT_EQ(FakeState().vehicle_flush_structural_calls, 1U);
 }
 
 NOLINT_TEST_F(PhysicsModuleSyncTest, GameplayFlushesDeferredStructuralChanges)
@@ -835,6 +843,43 @@ NOLINT_TEST_F(
   EXPECT_EQ(authority.value(), aggregate::AggregateAuthority::kSimulation);
 }
 
+NOLINT_TEST_F(PhysicsModuleSyncTest, VehicleBaselineMappingUsesCommandAuthority)
+{
+  auto node = scene_->CreateNode("vehicle-node");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  body::BodyDesc body_desc {};
+  body_desc.type = body::BodyType::kDynamic;
+  const auto chassis
+    = fake_physics_->Bodies().CreateBody(module_->GetWorldId(), body_desc);
+  const auto wheel
+    = fake_physics_->Bodies().CreateBody(module_->GetWorldId(), body_desc);
+  ASSERT_TRUE(chassis.has_value());
+  ASSERT_TRUE(wheel.has_value());
+
+  auto* vehicles = fake_physics_->Vehicles();
+  ASSERT_NE(vehicles, nullptr);
+  const std::array<BodyId, 1> wheel_ids {
+    wheel.value(),
+  };
+  const auto created_vehicle = vehicles->CreateVehicle(module_->GetWorldId(),
+    vehicle::VehicleDesc {
+      .chassis_body_id = chassis.value(),
+      .wheel_body_ids = wheel_ids,
+    });
+  ASSERT_TRUE(created_vehicle.has_value());
+
+  module_->RegisterNodeAggregateMapping(node.GetHandle(),
+    created_vehicle.value(), aggregate::AggregateAuthority::kCommand);
+
+  const auto authority
+    = module_->GetAggregateAuthorityForAggregateId(created_vehicle.value());
+  ASSERT_TRUE(authority.has_value());
+  EXPECT_EQ(authority.value(), aggregate::AggregateAuthority::kCommand);
+}
+
 NOLINT_TEST_F(PhysicsModuleSyncTest, DestroyNodeDestroysTrackedAggregate)
 {
   auto node = scene_->CreateNode("aggregate-destroy-node");
@@ -858,6 +903,45 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, DestroyNodeDestroysTrackedAggregate)
   EXPECT_FALSE(module_->HasAggregateForNode(node.GetHandle()));
   EXPECT_EQ(FakeState().aggregate_destroy_calls, 1U);
   EXPECT_TRUE(FakeState().aggregates.empty());
+}
+
+NOLINT_TEST_F(PhysicsModuleSyncTest, DestroyNodeDestroysTrackedVehicleAggregate)
+{
+  auto node = scene_->CreateNode("vehicle-destroy-node");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  body::BodyDesc body_desc {};
+  body_desc.type = body::BodyType::kDynamic;
+  const auto chassis
+    = fake_physics_->Bodies().CreateBody(module_->GetWorldId(), body_desc);
+  const auto wheel
+    = fake_physics_->Bodies().CreateBody(module_->GetWorldId(), body_desc);
+  ASSERT_TRUE(chassis.has_value());
+  ASSERT_TRUE(wheel.has_value());
+
+  auto* vehicles = fake_physics_->Vehicles();
+  ASSERT_NE(vehicles, nullptr);
+  const std::array<BodyId, 1> wheel_ids {
+    wheel.value(),
+  };
+  const auto created_vehicle = vehicles->CreateVehicle(module_->GetWorldId(),
+    vehicle::VehicleDesc {
+      .chassis_body_id = chassis.value(),
+      .wheel_body_ids = wheel_ids,
+    });
+  ASSERT_TRUE(created_vehicle.has_value());
+  module_->RegisterNodeAggregateMapping(node.GetHandle(),
+    created_vehicle.value(), aggregate::AggregateAuthority::kCommand);
+
+  ASSERT_TRUE(scene_->DestroyNode(node));
+  scene_->SyncObservers();
+
+  EXPECT_FALSE(module_->HasAggregateForNode(node.GetHandle()));
+  EXPECT_EQ(FakeState().vehicle_destroy_calls, 1U);
+  EXPECT_EQ(FakeState().aggregate_destroy_calls, 0U);
+  EXPECT_TRUE(FakeState().vehicles.empty());
 }
 
 NOLINT_TEST_F(PhysicsModuleSyncTest, SceneSwitchDestroysPreviousSceneAggregates)
@@ -884,6 +968,50 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, SceneSwitchDestroysPreviousSceneAggregates)
 
   EXPECT_TRUE(FakeState().aggregates.empty());
   EXPECT_EQ(FakeState().aggregate_destroy_calls, 1U);
+}
+
+NOLINT_TEST_F(
+  PhysicsModuleSyncTest, SceneSwitchDestroysPreviousSceneVehicleAggregates)
+{
+  auto scene_a = scene_;
+  auto node_a = scene_a->CreateNode("scene-a-vehicle");
+  ASSERT_TRUE(node_a.IsValid());
+  RunGameplay();
+  scene_a->Update();
+
+  body::BodyDesc body_desc {};
+  body_desc.type = body::BodyType::kDynamic;
+  const auto chassis
+    = fake_physics_->Bodies().CreateBody(module_->GetWorldId(), body_desc);
+  const auto wheel
+    = fake_physics_->Bodies().CreateBody(module_->GetWorldId(), body_desc);
+  ASSERT_TRUE(chassis.has_value());
+  ASSERT_TRUE(wheel.has_value());
+
+  auto* vehicles = fake_physics_->Vehicles();
+  ASSERT_NE(vehicles, nullptr);
+  const std::array<BodyId, 1> wheel_ids {
+    wheel.value(),
+  };
+  const auto vehicle = vehicles->CreateVehicle(module_->GetWorldId(),
+    vehicle::VehicleDesc {
+      .chassis_body_id = chassis.value(),
+      .wheel_body_ids = wheel_ids,
+    });
+  ASSERT_TRUE(vehicle.has_value());
+  module_->RegisterNodeAggregateMapping(node_a.GetHandle(), vehicle.value(),
+    aggregate::AggregateAuthority::kCommand);
+  ASSERT_EQ(FakeState().vehicles.size(), 1U);
+
+  auto scene_b = std::make_shared<scene::Scene>("SceneBVehicle", 64);
+  auto node_b = scene_b->CreateNode("scene-b-vehicle");
+  ASSERT_TRUE(node_b.IsValid());
+  SetActiveScene(scene_b);
+  RunGameplay();
+
+  EXPECT_TRUE(FakeState().vehicles.empty());
+  EXPECT_EQ(FakeState().vehicle_destroy_calls, 1U);
+  EXPECT_EQ(FakeState().aggregate_destroy_calls, 0U);
 }
 
 NOLINT_TEST_F(PhysicsModuleSyncTest, DestroyAndReattachSameFrameKeepsStateValid)
