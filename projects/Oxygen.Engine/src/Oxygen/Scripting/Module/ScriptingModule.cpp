@@ -31,6 +31,7 @@
 #include <Oxygen/Scripting/Bindings/Packs/Core/CoreBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Input/InputBindingPack.h>
+#include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneBindingPack.h>
 #include <Oxygen/Scripting/Compilers/LuauScriptCompiler.h>
 #include <Oxygen/Scripting/Execution/CompiledScriptExecutable.h>
@@ -463,6 +464,7 @@ auto ScriptingModule::RegisterDefaultBindingPacks() -> bool
     bindings::CreateCoreBindingPack(),
     bindings::CreateContentBindingPack(),
     bindings::CreateInputBindingPack(),
+    bindings::CreatePhysicsBindingPack(),
     bindings::CreateSceneBindingPack(),
   };
 

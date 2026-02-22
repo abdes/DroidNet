@@ -75,7 +75,7 @@ auto ScenePhysics::AttachRigidBody(observer_ptr<PhysicsModule> physics_module,
   }
 
   auto& body_api = physics_module->Bodies();
-  const auto world_id = physics_module->GetWorldId(scene_tag);
+  const auto world_id = physics_module->GetWorldId();
   DCHECK_F(world_id != kInvalidWorldId,
     "AttachRigidBody contract violated: physics world must be valid.");
   if (world_id == kInvalidWorldId) {
@@ -121,7 +121,7 @@ auto ScenePhysics::GetRigidBody(observer_ptr<PhysicsModule> physics_module,
     return std::nullopt;
   }
 
-  return RigidBodyFacade(node, physics_module->GetWorldId(scene_tag), body_id,
+  return RigidBodyFacade(node, physics_module->GetWorldId(), body_id,
     observer_ptr<system::IBodyApi> { &physics_module->Bodies() });
 }
 
@@ -157,7 +157,7 @@ auto ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> physics_module,
   }
 
   auto& character_api = physics_module->Characters();
-  const auto world_id = physics_module->GetWorldId(scene_tag);
+  const auto world_id = physics_module->GetWorldId();
   DCHECK_F(world_id != kInvalidWorldId,
     "AttachCharacter contract violated: physics world must be valid.");
   if (world_id == kInvalidWorldId) {
@@ -200,8 +200,7 @@ auto ScenePhysics::GetCharacter(observer_ptr<PhysicsModule> physics_module,
     return std::nullopt;
   }
 
-  return CharacterFacade(node, physics_module->GetWorldId(scene_tag),
-    character_id,
+  return CharacterFacade(node, physics_module->GetWorldId(), character_id,
     observer_ptr<system::ICharacterApi> { &physics_module->Characters() },
     physics_module);
 }
@@ -215,7 +214,7 @@ auto ScenePhysics::CastRay(observer_ptr<PhysicsModule> physics_module,
   const auto scene_tag = internal::ScenePhysicsTagFactory::Get();
 
   auto& query_api = physics_module->Queries();
-  const auto world_id = physics_module->GetWorldId(scene_tag);
+  const auto world_id = physics_module->GetWorldId();
   if (world_id == kInvalidWorldId) {
     return std::nullopt;
   }
