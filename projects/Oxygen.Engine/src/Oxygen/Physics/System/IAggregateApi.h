@@ -20,6 +20,7 @@ namespace oxygen::physics::system {
  - Provide aggregate-level identity and lifecycle (`AggregateId`).
  - Manage aggregate membership over rigid bodies.
  - Expose aggregate membership queries for scene-bridge and event routing.
+ - Define structural mutation flush boundaries for aggregate topology.
 
  Aggregate model:
  - Supports 1:N mapping (`AggregateId` -> many `BodyId` members).
@@ -52,6 +53,8 @@ public:
 
   virtual auto GetMemberBodies(WorldId world_id, AggregateId aggregate_id,
     std::span<BodyId> out_body_ids) const -> PhysicsResult<size_t>
+    = 0;
+  virtual auto FlushStructuralChanges(WorldId world_id) -> PhysicsResult<size_t>
     = 0;
 };
 

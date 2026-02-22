@@ -7,6 +7,7 @@
 #include <string>
 #include <string_view>
 
+#include <Oxygen/Physics/Aggregate/AggregateAuthority.h>
 #include <Oxygen/Physics/Backend.h>
 #include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/CollisionLayers.h>
@@ -160,6 +161,18 @@ auto oxygen::physics::events::to_string(PhysicsEventType value) noexcept
     return "TriggerBegin";
   case PhysicsEventType::kTriggerEnd:
     return "TriggerEnd";
+  }
+  return "__NotSupported__";
+}
+
+auto oxygen::physics::aggregate::to_string(AggregateAuthority value) noexcept
+  -> std::string_view
+{
+  switch (value) {
+  case AggregateAuthority::kSimulation:
+    return "Simulation";
+  case AggregateAuthority::kCommand:
+    return "Command";
   }
   return "__NotSupported__";
 }

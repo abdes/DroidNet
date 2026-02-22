@@ -4,12 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cmath>
 #include <vector>
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Physics/Aggregate/AggregateAuthority.h>
 #include <Oxygen/Physics/Area/AreaDesc.h>
+#include <Oxygen/Physics/Articulation/ArticulationDesc.h>
 #include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/Character/CharacterController.h>
 #include <Oxygen/Physics/Events/PhysicsEvents.h>
@@ -19,6 +22,8 @@
 #include <Oxygen/Physics/Query/Raycast.h>
 #include <Oxygen/Physics/Query/Sweep.h>
 #include <Oxygen/Physics/Shape/ShapeDesc.h>
+#include <Oxygen/Physics/SoftBody/SoftBodyDesc.h>
+#include <Oxygen/Physics/Vehicle/VehicleDesc.h>
 #include <Oxygen/Physics/World/WorldDesc.h>
 
 namespace oxygen::physics::test {
@@ -445,6 +450,22 @@ NOLINT_TEST_F(PhysicsApiContractTest, AggregateLifecycleContractIfSupported)
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
 }
 
+NOLINT_TEST_F(
+  PhysicsApiContractTest, AggregateStructuralFlushInvalidWorldIfSupported)
+{
+  AssertBackendAvailabilityContract();
+  if (!HasBackend()) {
+    return;
+  }
+
+  auto* aggregates = System().Aggregates();
+  if (aggregates == nullptr) {
+    return;
+  }
+
+  EXPECT_TRUE(aggregates->FlushStructuralChanges(kInvalidWorldId).has_error());
+}
+
 NOLINT_TEST_F(PhysicsApiContractTest, AggregateRebindContractIfSupported)
 {
   AssertBackendAvailabilityContract();
@@ -560,6 +581,355 @@ NOLINT_TEST_F(PhysicsApiContractTest, InvalidCharacterCallsReturnError)
         character::CharacterMoveInput {}, 1.0F / 60.0F)
       .has_error());
 
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
+NOLINT_TEST_F(
+  PhysicsApiContractTest, ArticulationAuthorityAndFlushContractIfSupported)
+{
+  AssertBackendAvailabilityContract();
+  if (!HasBackend()) {
+    return;
+  }
+
+  auto* articulations = System().Articulations();
+  if (articulations == nullptr) {
+    return;
+  }
+
+  auto& worlds = System().Worlds();
+  auto& bodies = System().Bodies();
+  const auto world_result = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(world_result.has_value());
+  const auto world_id = world_result.value();
+
+  body::BodyDesc body_desc {};
+  body_desc.type = body::BodyType::kDynamic;
+  const auto body_result = bodies.CreateBody(world_id, body_desc);
+  ASSERT_TRUE(body_result.has_value());
+  const auto root_body = body_result.value();
+
+  const auto articulation_result = articulations->CreateArticulation(world_id,
+    articulation::ArticulationDesc {
+      .root_body_id = root_body,
+    });
+  ASSERT_TRUE(articulation_result.has_value());
+  const auto articulation_id = articulation_result.value();
+
+  const auto authority = articulations->GetAuthority(world_id, articulation_id);
+  ASSERT_TRUE(authority.has_value());
+  EXPECT_TRUE(authority.value() == aggregate::AggregateAuthority::kSimulation
+    || authority.value() == aggregate::AggregateAuthority::kCommand);
+
+  EXPECT_TRUE(articulations->FlushStructuralChanges(world_id).has_value());
+  EXPECT_TRUE(
+    articulations->FlushStructuralChanges(kInvalidWorldId).has_error());
+
+  EXPECT_TRUE(
+    articulations->DestroyArticulation(world_id, articulation_id).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, root_body).has_value());
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
+NOLINT_TEST_F(PhysicsApiContractTest, ArticulationLifecycleContractIfSupported)
+{
+  AssertBackendAvailabilityContract();
+  if (!HasBackend()) {
+    return;
+  }
+
+  auto* articulations = System().Articulations();
+  if (articulations == nullptr) {
+    return;
+  }
+
+  auto& worlds = System().Worlds();
+  auto& bodies = System().Bodies();
+
+  const auto world_result = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(world_result.has_value());
+  const auto world_id = world_result.value();
+
+  body::BodyDesc root_desc {};
+  root_desc.type = body::BodyType::kDynamic;
+  const auto root_result = bodies.CreateBody(world_id, root_desc);
+  ASSERT_TRUE(root_result.has_value());
+  const auto root_id = root_result.value();
+
+  const auto articulation_result = articulations->CreateArticulation(world_id,
+    articulation::ArticulationDesc {
+      .root_body_id = root_id,
+    });
+  ASSERT_TRUE(articulation_result.has_value());
+  const auto articulation_id = articulation_result.value();
+  EXPECT_TRUE(IsValid(articulation_id));
+
+  const auto root_query = articulations->GetRootBody(world_id, articulation_id);
+  ASSERT_TRUE(root_query.has_value());
+  EXPECT_EQ(root_query.value(), root_id);
+
+  std::vector<BodyId> links(4, kInvalidBodyId);
+  const auto links_query
+    = articulations->GetLinkBodies(world_id, articulation_id, links);
+  ASSERT_TRUE(links_query.has_value());
+  EXPECT_EQ(links_query.value(), 0U);
+
+  EXPECT_TRUE(
+    articulations->DestroyArticulation(world_id, articulation_id).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, root_id).has_value());
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
+NOLINT_TEST_F(PhysicsApiContractTest, ArticulationLinkContractIfSupported)
+{
+  AssertBackendAvailabilityContract();
+  if (!HasBackend()) {
+    return;
+  }
+
+  auto* articulations = System().Articulations();
+  if (articulations == nullptr) {
+    return;
+  }
+
+  auto& worlds = System().Worlds();
+  auto& bodies = System().Bodies();
+
+  const auto world_result = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(world_result.has_value());
+  const auto world_id = world_result.value();
+
+  body::BodyDesc body_desc {};
+  body_desc.type = body::BodyType::kDynamic;
+  const auto parent_result = bodies.CreateBody(world_id, body_desc);
+  ASSERT_TRUE(parent_result.has_value());
+  const auto parent_body = parent_result.value();
+
+  const auto child_result = bodies.CreateBody(world_id, body_desc);
+  ASSERT_TRUE(child_result.has_value());
+  const auto child_body = child_result.value();
+
+  const auto articulation_result = articulations->CreateArticulation(world_id,
+    articulation::ArticulationDesc {
+      .root_body_id = parent_body,
+    });
+  ASSERT_TRUE(articulation_result.has_value());
+  const auto articulation_id = articulation_result.value();
+
+  EXPECT_TRUE(articulations
+      ->AddLink(world_id, articulation_id,
+        articulation::ArticulationLinkDesc {
+          .parent_body_id = parent_body,
+          .child_body_id = child_body,
+        })
+      .has_value());
+
+  std::vector<BodyId> links(8, kInvalidBodyId);
+  const auto links_query
+    = articulations->GetLinkBodies(world_id, articulation_id, links);
+  ASSERT_TRUE(links_query.has_value());
+  EXPECT_GE(links_query.value(), 1U);
+
+  EXPECT_TRUE(articulations->RemoveLink(world_id, articulation_id, child_body)
+      .has_value());
+  EXPECT_TRUE(
+    articulations->DestroyArticulation(world_id, articulation_id).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, child_body).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, parent_body).has_value());
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
+NOLINT_TEST_F(
+  PhysicsApiContractTest, VehicleAuthorityAndFlushContractIfSupported)
+{
+  AssertBackendAvailabilityContract();
+  if (!HasBackend()) {
+    return;
+  }
+
+  auto* vehicles = System().Vehicles();
+  if (vehicles == nullptr) {
+    return;
+  }
+
+  auto& worlds = System().Worlds();
+  auto& bodies = System().Bodies();
+  const auto world_result = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(world_result.has_value());
+  const auto world_id = world_result.value();
+
+  body::BodyDesc body_desc {};
+  body_desc.type = body::BodyType::kDynamic;
+  const auto chassis_result = bodies.CreateBody(world_id, body_desc);
+  ASSERT_TRUE(chassis_result.has_value());
+  const auto chassis_body = chassis_result.value();
+
+  const auto wheel_result = bodies.CreateBody(world_id, body_desc);
+  ASSERT_TRUE(wheel_result.has_value());
+  const auto wheel_body = wheel_result.value();
+
+  const std::array<BodyId, 1> wheel_ids {
+    wheel_body,
+  };
+  const auto vehicle_result = vehicles->CreateVehicle(world_id,
+    vehicle::VehicleDesc {
+      .chassis_body_id = chassis_body,
+      .wheel_body_ids = wheel_ids,
+    });
+  ASSERT_TRUE(vehicle_result.has_value());
+  const auto vehicle_id = vehicle_result.value();
+
+  const auto authority = vehicles->GetAuthority(world_id, vehicle_id);
+  ASSERT_TRUE(authority.has_value());
+  EXPECT_TRUE(authority.value() == aggregate::AggregateAuthority::kSimulation
+    || authority.value() == aggregate::AggregateAuthority::kCommand);
+
+  EXPECT_TRUE(vehicles->FlushStructuralChanges(world_id).has_value());
+  EXPECT_TRUE(vehicles->FlushStructuralChanges(kInvalidWorldId).has_error());
+
+  EXPECT_TRUE(vehicles->DestroyVehicle(world_id, vehicle_id).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, wheel_body).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, chassis_body).has_value());
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
+NOLINT_TEST_F(PhysicsApiContractTest, VehicleLifecycleContractIfSupported)
+{
+  AssertBackendAvailabilityContract();
+  if (!HasBackend()) {
+    return;
+  }
+
+  auto* vehicles = System().Vehicles();
+  if (vehicles == nullptr) {
+    return;
+  }
+
+  auto& worlds = System().Worlds();
+  auto& bodies = System().Bodies();
+
+  const auto world_result = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(world_result.has_value());
+  const auto world_id = world_result.value();
+
+  body::BodyDesc body_desc {};
+  body_desc.type = body::BodyType::kDynamic;
+
+  const auto chassis_result = bodies.CreateBody(world_id, body_desc);
+  ASSERT_TRUE(chassis_result.has_value());
+  const auto chassis_body = chassis_result.value();
+
+  const auto wheel_result = bodies.CreateBody(world_id, body_desc);
+  ASSERT_TRUE(wheel_result.has_value());
+  const auto wheel_body = wheel_result.value();
+
+  const std::array<BodyId, 1> wheel_ids {
+    wheel_body,
+  };
+  const auto vehicle_result = vehicles->CreateVehicle(world_id,
+    vehicle::VehicleDesc {
+      .chassis_body_id = chassis_body,
+      .wheel_body_ids = wheel_ids,
+    });
+  ASSERT_TRUE(vehicle_result.has_value());
+  const auto vehicle_id = vehicle_result.value();
+  EXPECT_TRUE(IsValid(vehicle_id));
+
+  EXPECT_TRUE(vehicles
+      ->SetControlInput(world_id, vehicle_id,
+        vehicle::VehicleControlInput {
+          .throttle = 0.5F,
+          .brake = 0.0F,
+          .steering = 0.25F,
+          .handbrake = 0.0F,
+        })
+      .has_value());
+  const auto state = vehicles->GetState(world_id, vehicle_id);
+  ASSERT_TRUE(state.has_value());
+
+  EXPECT_TRUE(vehicles->DestroyVehicle(world_id, vehicle_id).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, wheel_body).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, chassis_body).has_value());
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
+NOLINT_TEST_F(
+  PhysicsApiContractTest, SoftBodyAuthorityAndFlushContractIfSupported)
+{
+  AssertBackendAvailabilityContract();
+  if (!HasBackend()) {
+    return;
+  }
+
+  auto* soft_bodies = System().SoftBodies();
+  if (soft_bodies == nullptr) {
+    return;
+  }
+
+  auto& worlds = System().Worlds();
+  const auto world_result = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(world_result.has_value());
+  const auto world_id = world_result.value();
+
+  const auto create_result = soft_bodies->CreateSoftBody(world_id,
+    softbody::SoftBodyDesc {
+      .anchor_body_id = kInvalidBodyId,
+      .cluster_count = 1U,
+    });
+  ASSERT_TRUE(create_result.has_value());
+  const auto soft_body_id = create_result.value();
+
+  const auto authority = soft_bodies->GetAuthority(world_id, soft_body_id);
+  ASSERT_TRUE(authority.has_value());
+  EXPECT_TRUE(authority.value() == aggregate::AggregateAuthority::kSimulation
+    || authority.value() == aggregate::AggregateAuthority::kCommand);
+
+  EXPECT_TRUE(soft_bodies->FlushStructuralChanges(world_id).has_value());
+  EXPECT_TRUE(soft_bodies->FlushStructuralChanges(kInvalidWorldId).has_error());
+
+  EXPECT_TRUE(soft_bodies->DestroySoftBody(world_id, soft_body_id).has_value());
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
+NOLINT_TEST_F(PhysicsApiContractTest, SoftBodyLifecycleContractIfSupported)
+{
+  AssertBackendAvailabilityContract();
+  if (!HasBackend()) {
+    return;
+  }
+
+  auto* soft_bodies = System().SoftBodies();
+  if (soft_bodies == nullptr) {
+    return;
+  }
+
+  auto& worlds = System().Worlds();
+
+  const auto world_result = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(world_result.has_value());
+  const auto world_id = world_result.value();
+
+  const auto create_result = soft_bodies->CreateSoftBody(world_id,
+    softbody::SoftBodyDesc {
+      .anchor_body_id = kInvalidBodyId,
+      .cluster_count = 8U,
+    });
+  ASSERT_TRUE(create_result.has_value());
+  const auto soft_body_id = create_result.value();
+  EXPECT_TRUE(IsValid(soft_body_id));
+
+  EXPECT_TRUE(soft_bodies
+      ->SetMaterialParams(world_id, soft_body_id,
+        softbody::SoftBodyMaterialParams {
+          .stiffness = 0.7F,
+          .damping = 0.2F,
+        })
+      .has_value());
+
+  const auto state = soft_bodies->GetState(world_id, soft_body_id);
+  ASSERT_TRUE(state.has_value());
+
+  EXPECT_TRUE(soft_bodies->DestroySoftBody(world_id, soft_body_id).has_value());
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
 }
 
@@ -752,6 +1122,10 @@ NOLINT_TEST(Physics, ToStringConvertersFollowContract)
   EXPECT_EQ(to_string(AreaId { 17U }), "AreaId{17}");
   EXPECT_EQ(to_string(JointId { 19U }), "JointId{19}");
   EXPECT_EQ(to_string(AggregateId { 21U }), "AggregateId{21}");
+  EXPECT_EQ(aggregate::to_string(aggregate::AggregateAuthority::kSimulation),
+    "Simulation");
+  EXPECT_EQ(
+    aggregate::to_string(aggregate::AggregateAuthority::kCommand), "Command");
   EXPECT_EQ(to_string(joint::JointType::kHinge), "Hinge");
 }
 

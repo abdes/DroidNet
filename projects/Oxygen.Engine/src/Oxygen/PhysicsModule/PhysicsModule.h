@@ -35,12 +35,20 @@ namespace oxygen::physics {
  Scene/physics bridge module with strict phase ownership.
 
  Responsibilities:
- - Own physics backend lifetime (`IPhysicsSystem`) and one simulation world.
- - Maintain a physics-managed subset of scene nodes via a generation-safe
-   binding table (`ResourceTable`) indexed by `ResourceHandle`, with O(1)
+ - Own physics backend lifetime (`IPhysicsSystem`) and one
+ simulation world.
+ - Maintain a physics-managed subset of scene nodes via a
+ generation-safe
+   binding table (`ResourceTable`) indexed by `ResourceHandle`,
+ with O(1)
    lookup indices by node and body.
- - Reconcile scene lifecycle changes (transform changed / node destroyed)
-   through the deferred scene mutation stream.
+ - Reconcile scene lifecycle
+ changes (transform changed / node destroyed)
+   through the deferred scene
+ mutation stream.
+ - Preserve domain separation: scene mapping remains local to
+ this module while
+   backend domains remain handle-only and backend-agnostic.
 
  Phase contract:
  - `kFixedSimulation`: step the physics world only.
@@ -49,16 +57,22 @@ namespace oxygen::physics {
    reconcile deferred lifecycle events.
 
  Integration contract:
- - Producers (hydration, scripts, game modules) mutate scene only in
-   `kGameplay` or `kSceneMutation`.
+ - Producers (hydration, scripts, game modules) mutate
+ scene only in `kGameplay` or `kSceneMutation`.
  - Physics does not replace `kTransformPropagation`; scene transform propagation
    remains exclusively `Scene::Update()`.
- - Newly attached/changed bodies are allowed to become simulation-visible on the
+ - Newly attached/changed bodies are allowed to become simulation-visible on
+ the
    next fixed-simulation step (one-frame latency by design).
-
+ - Aggregate
+ extension domains (articulation/vehicle/soft-body) are integrated
+   through
+ `IPhysicsSystem` optional accessors without leaking scene types into
+   backend
+ APIs.
  Motion authority contract:
- - `body::BodyType::kStatic`: scene transform writes
- are ignored by the sync
+ - `body::BodyType::kStatic`: scene transform
+ writes are ignored by the sync
    bridge after attach; no automatic pull from
  active-body stream.
  - `body::BodyType::kKinematic`: scene owns motion.
@@ -82,12 +96,23 @@ namespace oxygen::physics {
    rigid-body push
  path.
  - A scene node can be managed by exactly one motion authority source:
+
  either
    rigid-body mapping or character mapping, never both.
+ - Aggregate
+ authority baseline:
+   - articulations and soft-bodies default to simulation
+ authority,
+   - vehicles default to command authority (control intent in
+ gameplay, solver
+     ownership in fixed simulation),
+   - aggregate-to-scene
+ mapping stays handle-based and domain-specific.
  Same-frame
  precedence:
- - If a dynamic body also receives scene-authored transform writes in the same
-   frame, physics remains authoritative and the pulled dynamic pose wins.
+ - If
+ a dynamic body also receives scene-authored transform writes in the same frame,
+ physics remains authoritative and the pulled dynamic pose wins.
 */
 class PhysicsModule final : public engine::EngineModule,
                             public scene::ISceneObserver {
