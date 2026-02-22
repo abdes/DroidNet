@@ -59,6 +59,13 @@ set(
   "Bindings/Packs/Content/ContentProceduralBindings.h"
   "Bindings/Packs/Content/ContentQueryBindings.h"
   "Bindings/Packs/Content/ContentUserdataBindings.h"
+  "Bindings/Packs/Physics/PhysicsBindingPack.h"
+  "Bindings/Packs/Physics/PhysicsBindingsCommon.h"
+  "Bindings/Packs/Physics/PhysicsBodyBindings.h"
+  "Bindings/Packs/Physics/PhysicsCharacterBindings.h"
+  "Bindings/Packs/Physics/PhysicsQueryBindings.h"
+  "Bindings/Packs/Physics/PhysicsEventsBindings.h"
+  "Bindings/Packs/Physics/PhysicsConstantsBindings.h"
   "Bindings/Packs/Scene/SceneBindingPack.h"
   "Bindings/Packs/Scene/SceneBindings.h"
   "Bindings/Packs/Scene/SceneEnvironmentBindings.h"
@@ -97,6 +104,13 @@ set(
   "Bindings/Packs/Core/TimeBindings.cpp"
   "Bindings/Packs/Input/InputBindingPack.cpp"
   "Bindings/Packs/Input/InputBindings.cpp"
+  "Bindings/Packs/Physics/PhysicsBindingPack.cpp"
+  "Bindings/Packs/Physics/PhysicsBindingsCommon.cpp"
+  "Bindings/Packs/Physics/PhysicsBodyBindings.cpp"
+  "Bindings/Packs/Physics/PhysicsCharacterBindings.cpp"
+  "Bindings/Packs/Physics/PhysicsQueryBindings.cpp"
+  "Bindings/Packs/Physics/PhysicsEventsBindings.cpp"
+  "Bindings/Packs/Physics/PhysicsConstantsBindings.cpp"
   "Bindings/Packs/Scene/SceneBindingPack.cpp"
   "Bindings/Packs/Scene/SceneBindings.cpp"
   "Bindings/Packs/Scene/SceneEnvironmentBindings.cpp"
@@ -154,6 +168,7 @@ target_link_libraries(
     oxygen::scripting-bindings-contracts
   PRIVATE
     oxygen::input
+    oxygen::physicsmodule
 )
 
 # ------------------------------------------------------------------------------

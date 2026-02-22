@@ -217,11 +217,6 @@ public:
   OXGN_PHSYNC_API auto SoftBodies() noexcept -> system::ISoftBodyApi&;
 
   // ScenePhysics integration surface (tag-gated).
-  OXGN_PHSYNC_NDAPI auto GetWorldId(ScenePhysicsTag /*tag*/) const noexcept
-    -> WorldId
-  {
-    return GetWorldId();
-  }
   [[nodiscard]] auto IsNodeInObservedScene(ScenePhysicsTag /*tag*/,
     const scene::NodeHandle& node_handle) const noexcept -> bool
   {
@@ -268,6 +263,12 @@ public:
   // Testing surface (prefer facade APIs for runtime/public clients).
   OXGN_PHSYNC_NDAPI auto GetWorldId() const noexcept -> WorldId;
   OXGN_PHSYNC_NDAPI auto GetSyncDiagnostics() const noexcept -> SyncDiagnostics;
+  OXGN_PHSYNC_NDAPI auto GetBodyTypeForBodyId(BodyId body_id) const
+    -> std::optional<body::BodyType>;
+  OXGN_PHSYNC_NDAPI auto GetNodeForBodyId(BodyId body_id) const
+    -> std::optional<scene::NodeHandle>;
+  OXGN_PHSYNC_NDAPI auto GetNodeForCharacterId(CharacterId character_id) const
+    -> std::optional<scene::NodeHandle>;
   OXGN_PHSYNC_API auto RegisterNodeAggregateMapping(
     const scene::NodeHandle& node_handle, AggregateId aggregate_id,
     aggregate::AggregateAuthority authority) -> void;
@@ -322,20 +323,14 @@ private:
     BodyId body_id, body::BodyType body_type) -> void;
   auto RegisterNodeCharacterMapping(
     const scene::NodeHandle& node_handle, CharacterId character_id) -> void;
-  [[nodiscard]] auto GetBodyTypeForBodyId(BodyId body_id) const
-    -> std::optional<body::BodyType>;
   [[nodiscard]] auto GetBodyIdForNode(
     const scene::NodeHandle& node_handle) const -> BodyId;
   [[nodiscard]] auto HasBodyForNode(const scene::NodeHandle& node_handle) const
     -> bool;
-  [[nodiscard]] auto GetNodeForBodyId(BodyId body_id) const
-    -> std::optional<scene::NodeHandle>;
   [[nodiscard]] auto GetCharacterIdForNode(
     const scene::NodeHandle& node_handle) const -> CharacterId;
   [[nodiscard]] auto HasCharacterForNode(
     const scene::NodeHandle& node_handle) const -> bool;
-  [[nodiscard]] auto GetNodeForCharacterId(CharacterId character_id) const
-    -> std::optional<scene::NodeHandle>;
   auto ApplyWorldPoseToNode(const scene::NodeHandle& node_handle,
     const Vec3& world_position, const Quat& world_rotation) -> bool;
   auto RemoveBinding(const ResourceHandle& binding_handle) -> bool;

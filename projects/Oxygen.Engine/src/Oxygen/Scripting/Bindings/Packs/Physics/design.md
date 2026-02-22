@@ -271,12 +271,14 @@ All query functions are read-only and allowed in any phase where physics is avai
 > `BodyId { static_cast<uint32_t>(user_data) }`. This contract holds for
 > all bodies registered through `ScenePhysics`/`PhysicsModule`.
 >
-> `ScenePhysics::CastRay` is preferred for `raycast` because it returns a
-> `SceneRayCastHit` containing a resolved `NodeHandle`. When the node
-> handle resolves to a live scene node, the result includes a `node` field.
-> This is Tier A behavior. For cases where the hit body has no scene mapping
-> (e.g., aggregate-owned body), it falls back to `IQueryApi::Raycast` and
-> returns only the `BodyId`.
+> **Implementation note:** The binding calls `IQueryApi::Raycast` directly.
+> `ScenePhysics::CastRay` cannot be used here: `SceneRayCastHit` carries no
+> `body_id`, and `GetBodyIdForNode(NodeHandle)` is tag-gated (private to the
+> `ScenePhysics` boundary). Instead, the `body_id` comes from the raw
+> `RaycastHit`, and the `node` field is resolved via the public
+> `GetNodeForBodyId(BodyId)` — yielding the same Tier A result: `node` is a
+> live `SceneNode` userdata for scene-mapped bodies, `nil` for aggregate-owned
+> or non-mapped bodies.
 
 **`raycast` descriptor fields (`RaycastDesc`):**
 
