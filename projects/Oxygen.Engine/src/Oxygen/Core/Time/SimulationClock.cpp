@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cmath>
 
 #include <Oxygen/Core/Time/SimulationClock.h>
 
@@ -50,6 +51,21 @@ auto SimulationClock::GetFixedTimestep() const noexcept -> CanonicalDuration
   return fixed_timestep_;
 }
 
+auto SimulationClock::GetMaxAccumulator() const noexcept -> CanonicalDuration
+{
+  return max_accumulator_;
+}
+
+auto SimulationClock::SetMaxAccumulator(
+  CanonicalDuration max_accumulator) noexcept -> void
+{
+  max_accumulator_ = max_accumulator;
+  // Apply immediately if already exceeding
+  if (accumulated_time_.get() > max_accumulator_.get()) {
+    accumulated_time_ = max_accumulator_;
+  }
+}
+
 auto SimulationClock::Advance(CanonicalDuration physical_elapsed) noexcept
   -> void
 {
@@ -60,12 +76,13 @@ auto SimulationClock::Advance(CanonicalDuration physical_elapsed) noexcept
 
   // scale the incoming physical elapsed time (work with underlying ns)
   const auto physical_ns = physical_elapsed.get();
-  const auto scaled_count
-    = static_cast<long long>(physical_ns.count() * time_scale_);
+  const auto scaled_count = static_cast<int64_t>(
+    std::llround(static_cast<double>(physical_ns.count()) * time_scale_));
   const auto sd
     = CanonicalDuration { CanonicalDuration::UnderlyingType(scaled_count) };
   accumulated_time_ = CanonicalDuration { CanonicalDuration::UnderlyingType(
-    accumulated_time_.get().count() + sd.get().count()) };
+    (std::min)(max_accumulator_.get().count(),
+      accumulated_time_.get().count() + sd.get().count())) };
   last_delta_ = sd;
 }
 
@@ -79,7 +96,7 @@ auto SimulationClock::ExecuteFixedSteps(uint32_t max_steps) noexcept
     return result;
   }
 
-  uint32_t steps = 0u;
+  uint32_t steps = 0U;
   while (
     steps < max_steps && accumulated_time_.get() >= fixed_timestep_.get()) {
     // advance simulation time by fixed_timestep using strong types

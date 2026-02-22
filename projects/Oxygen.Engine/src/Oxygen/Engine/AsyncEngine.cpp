@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
-#include <ranges>
 #include <thread>
 #include <utility>
 
@@ -121,7 +120,7 @@ AsyncEngine::AsyncEngine(std::shared_ptr<Platform> platform,
   // Initialize time manager as a component of this Composition
   {
     TimeManager::Config tm_cfg {
-      .fixed_timestep = config_.timing.fixed_delta,
+      .timing = config_.timing,
       .default_time_scale = 1.0,
       .start_paused = false,
       .animation_scale = 1.0,
@@ -440,8 +439,8 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
     }
     // Publish view registrations after transforms and before snapshot.
     {
-      PhaseTimer timer(
-        working_stage_timings, core::PhaseId::kPublishViews, GetPhysicalClock());
+      PhaseTimer timer(working_stage_timings, core::PhaseId::kPublishViews,
+        GetPhysicalClock());
       co_await PhasePublishViews(context);
     }
 
@@ -456,14 +455,14 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
 
     // Launch and join Category B barriered parallel tasks (B4 upon completion).
     {
-      PhaseTimer timer(
-        working_stage_timings, core::PhaseId::kParallelTasks, GetPhysicalClock());
+      PhaseTimer timer(working_stage_timings, core::PhaseId::kParallelTasks,
+        GetPhysicalClock());
       co_await ParallelTasks(context, snapshot);
     }
     // Serial post-parallel integration (Category A resumes after B4)
     {
-      PhaseTimer timer(
-        working_stage_timings, core::PhaseId::kPostParallel, GetPhysicalClock());
+      PhaseTimer timer(working_stage_timings, core::PhaseId::kPostParallel,
+        GetPhysicalClock());
       co_await PhasePostParallel(context);
     }
 
@@ -605,7 +604,7 @@ auto AsyncEngine::PhaseFrameStart(observer_ptr<FrameContext> context)
   context->SetGraphicsBackend(gfx_weak_, tag);
 
   // Update timing data for this frame via TimeManager
-  if (time_manager_) {
+  if (time_manager_ != nullptr) {
     time_manager_->BeginFrame(frame_start_ts_);
     // Populate ModuleTimingData for modules
     const auto& td = time_manager_->GetFrameTimingData();
@@ -840,11 +839,10 @@ auto AsyncEngine::PhaseFixedSim(observer_ptr<FrameContext> context) -> co::Co<>
   // modular efficiency.
 
   // Fixed timestep migration: use SimulationClock from TimeManager
-  if (time_manager_) {
+  if (time_manager_ != nullptr) {
     auto& sim = time_manager_->GetSimulationClock();
-    const auto max_substeps = config_.timing.max_substeps;
-    const auto result = sim.ExecuteFixedSteps(max_substeps);
-    const uint32_t steps = result.steps_executed;
+    const auto timing = time_manager_->GetFrameTimingData();
+    const uint32_t steps = timing.fixed_steps_executed;
 
     for (uint32_t s = 0; s < steps; ++s) {
       ModuleTimingData module_timing = context->GetModuleTimingData();
@@ -860,7 +858,7 @@ auto AsyncEngine::PhaseFixedSim(observer_ptr<FrameContext> context) -> co::Co<>
     ModuleTimingData module_timing = context->GetModuleTimingData();
     module_timing.fixed_steps_this_frame = steps;
     module_timing.interpolation_alpha
-      = static_cast<float>(result.interpolation_alpha);
+      = static_cast<float>(timing.interpolation_alpha);
     context->SetModuleTimingData(module_timing, tag);
 
     LOG_F(2, "[F{}][A] PhaseFixedSim completed {} substeps, alpha={:.3f}",
@@ -1170,7 +1168,7 @@ auto AsyncEngine::PhaseFrameEnd(observer_ptr<FrameContext> context) -> co::Co<>
     throw std::logic_error("Graphics backend no longer valid.");
   }
   gfx->EndFrame(frame_number_, frame_slot_);
-  if (time_manager_) {
+  if (time_manager_ != nullptr) {
     time_manager_->EndFrame();
   }
 
@@ -1337,24 +1335,7 @@ auto AsyncEngine::InitializeDetachedServices() -> void
   LOG_F(1, "crash dump detection service initialized");
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
-auto AsyncEngine::UpdateFrameTiming(observer_ptr<FrameContext> context) -> void
-{
-  // Now delegated to TimeManager at PhaseFrameStart
-  if (!time_manager_) {
-    return;
-  }
-  const auto& td = time_manager_->GetFrameTimingData();
-  ModuleTimingData module_timing = context->GetModuleTimingData();
-  module_timing.game_delta_time = td.simulation_delta;
-  module_timing.fixed_delta_time
-    = time_manager_->GetSimulationClock().GetFixedTimestep();
-  module_timing.interpolation_alpha
-    = static_cast<float>(td.interpolation_alpha);
-  module_timing.current_fps = static_cast<float>(td.current_fps);
-  const auto tag = internal::EngineTagFactory::Get();
-  context->SetModuleTimingData(module_timing, tag);
-}
+// UpdateFrameTiming is now fully handled in BeginFrame and PhaseFrameStart
 
 // Clock accessors
 auto AsyncEngine::GetPhysicalClock() const noexcept

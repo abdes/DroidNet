@@ -73,8 +73,12 @@ namespace oxygen::time {
 */
 class SimulationClock {
 public:
-  OXGN_CORE_API explicit SimulationClock(CanonicalDuration fixed_timestep
-    = CanonicalDuration { std::chrono::microseconds(16667) }) noexcept;
+  static constexpr uint64_t kDefaultFixedTimestepUs = 16667;
+  static constexpr uint64_t kDefaultMaxAccumulatorNs = 50'000'000;
+
+  OXGN_CORE_API explicit SimulationClock(
+    CanonicalDuration fixed_timestep = CanonicalDuration {
+      std::chrono::microseconds(kDefaultFixedTimestepUs) }) noexcept;
 
   OXYGEN_MAKE_NON_COPYABLE(SimulationClock)
   OXYGEN_MAKE_NON_MOVABLE(SimulationClock)
@@ -95,6 +99,12 @@ public:
   OXGN_CORE_NDAPI auto GetTimeScale() const noexcept -> double;
 
   OXGN_CORE_NDAPI auto GetFixedTimestep() const noexcept -> CanonicalDuration;
+  OXGN_CORE_NDAPI auto GetMaxAccumulator() const noexcept -> CanonicalDuration;
+
+  //! Set the maximum accumulated time before clamping to prevent spiral of
+  //! death.
+  OXGN_CORE_API auto SetMaxAccumulator(
+    CanonicalDuration max_accumulator) noexcept -> void;
 
   //! Feed physical elapsed time into the accumulator (applies pause/scale).
   OXGN_CORE_API auto Advance(CanonicalDuration physical_elapsed) noexcept
@@ -106,20 +116,24 @@ public:
     //! Interpolation alpha ∈ [0, 1] (remaining/ fixed) for presentation.
     double interpolation_alpha { 0.0 };
     //! Remaining accumulated time after consuming fixed steps.
-    CanonicalDuration remaining_time {};
+    CanonicalDuration remaining_time;
   };
 
+  static constexpr uint32_t kDefaultMaxStepsPerFrame = 10;
+
   //! Consume accumulator in fixed quanta up to max_steps; return step info.
-  OXGN_CORE_NDAPI auto ExecuteFixedSteps(uint32_t max_steps = 10) noexcept
-    -> FixedStepResult;
+  OXGN_CORE_NDAPI auto ExecuteFixedSteps(
+    uint32_t max_steps = kDefaultMaxStepsPerFrame) noexcept -> FixedStepResult;
 
 private:
-  SimulationTime current_time_ {};
-  CanonicalDuration accumulated_time_ {};
+  SimulationTime current_time_;
+  CanonicalDuration accumulated_time_;
+  CanonicalDuration max_accumulator_ { CanonicalDuration::UnderlyingType(
+    kDefaultMaxAccumulatorNs) }; // Default to 50ms
   const CanonicalDuration fixed_timestep_;
   bool is_paused_ { false };
   double time_scale_ { 1.0 };
-  CanonicalDuration last_delta_ {};
+  CanonicalDuration last_delta_;
 };
 
 } // namespace oxygen::time

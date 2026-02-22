@@ -35,7 +35,7 @@ struct TimingConfig {
    the problem worse. Typically 2-3x the fixed_delta.
   */
   time::CanonicalDuration max_accumulator { // NOLINTNEXTLINE(*-magic-numbers)
-    time::CanonicalDuration::UnderlyingType(50'000)
+    time::CanonicalDuration::UnderlyingType(50'000'000)
   };
 
   //! Maximum fixed timestep iterations per frame

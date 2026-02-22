@@ -11,6 +11,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Component.h>
+#include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Core/Time/AuditClock.h>
 #include <Oxygen/Core/Time/NetworkClock.h>
 #include <Oxygen/Core/Time/PhysicalClock.h>
@@ -56,22 +57,21 @@ public:
   //! Construction configuration.
   struct Config {
     // Simulation timing
-    time::CanonicalDuration fixed_timestep {
-      std::chrono::microseconds(16667),
-    }; // ~60Hz
+    TimingConfig timing;
+
     double default_time_scale { 1.0 };
     bool start_paused { false };
 
     // Presentation
     double animation_scale { 1.0 };
 
-    // Network
-    double network_smoothing_factor { 0.1 };
+    static constexpr double kDefaultNetworkSmoothing = 0.1;
+    double network_smoothing_factor { kDefaultNetworkSmoothing };
   };
 
   //! Construct with a physical clock and configuration.
-  OXGN_NGIN_API explicit TimeManager(const time::PhysicalClock& physical_clock,
-    const Config& config = {}) noexcept;
+  OXGN_NGIN_API explicit TimeManager(
+    const time::PhysicalClock& physical_clock, const Config& config) noexcept;
   OXGN_NGIN_API ~TimeManager() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(TimeManager)
@@ -120,8 +120,8 @@ public:
 
   //! Snapshot of per-frame timing values (updated in BeginFrame).
   struct FrameTimingData {
-    time::CanonicalDuration physical_delta {};
-    time::CanonicalDuration simulation_delta {};
+    time::CanonicalDuration physical_delta;
+    time::CanonicalDuration simulation_delta;
     uint32_t fixed_steps_executed { 0 };
     double interpolation_alpha { 0.0 };
     double current_fps { 0.0 };
@@ -135,15 +135,20 @@ public:
 
   //! Aggregated performance metrics computed in EndFrame and on demand.
   struct PerformanceMetrics {
-    time::CanonicalDuration average_frame_time {};
-    time::CanonicalDuration max_frame_time {};
+    time::CanonicalDuration average_frame_time;
+    time::CanonicalDuration max_frame_time;
     double average_fps { 0.0 };
     uint64_t total_frames { 0 };
-    time::CanonicalDuration simulation_time_debt {}; // Not tracked yet
+    time::CanonicalDuration simulation_time_debt; // Not tracked yet
   };
 
   [[nodiscard]] OXGN_NGIN_API auto GetPerformanceMetrics() const noexcept
     -> PerformanceMetrics;
+
+  [[nodiscard]] auto GetConfig() const noexcept -> const Config&
+  {
+    return config_;
+  }
 
 private:
   // Dependencies
@@ -156,8 +161,9 @@ private:
   time::AuditClock audit_clock_;
 
   // Frame state
-  FrameTimingData frame_data_ {};
-  time::PhysicalTime last_frame_time_ {};
+  Config config_;
+  FrameTimingData frame_data_;
+  time::PhysicalTime last_frame_time_;
   uint64_t frame_counter_ { 0 };
 
   // Stable FPS measurement (Sample-and-Hold)
@@ -169,9 +175,6 @@ private:
   static constexpr size_t kPerfHistory = 120; // ~2s @60fps
   std::array<time::CanonicalDuration, kPerfHistory> frame_times_ {};
   size_t perf_index_ { 0 };
-
-  // Tuning
-  static constexpr uint32_t kMaxFixedStepsPerFrame = 8;
 };
 
 } // namespace oxygen::engine

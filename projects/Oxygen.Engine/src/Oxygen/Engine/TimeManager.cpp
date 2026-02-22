@@ -8,18 +8,29 @@
 
 #include <Oxygen/Engine/TimeManager.h>
 
-using namespace std::chrono;
 using namespace std::chrono_literals;
-using namespace oxygen::time;
+
+using std::chrono::duration_cast;
+using std::chrono::nanoseconds;
+using std::chrono::steady_clock;
+
+using oxygen::time::CanonicalDuration;
+using oxygen::time::PhysicalClock;
+
+namespace {
+constexpr double kNsToSec = 1.0e9;
+}
 
 namespace oxygen::engine {
 
 TimeManager::TimeManager(
   const PhysicalClock& physical_clock, const Config& config) noexcept
   : physical_clock_ { &physical_clock }
-  , simulation_clock_ { config.fixed_timestep }
+  , simulation_clock_ { config.timing.fixed_delta }
   , presentation_clock_ { simulation_clock_, config.animation_scale }
+  , config_ { config }
 {
+  simulation_clock_.SetMaxAccumulator(config.timing.max_accumulator);
   simulation_clock_.SetTimeScale(config.default_time_scale);
   simulation_clock_.SetPaused(config.start_paused);
   network_clock_.SetSmoothingFactor(config.network_smoothing_factor);
@@ -40,8 +51,9 @@ auto TimeManager::BeginFrame(time::PhysicalTime now) noexcept -> void
   // Advance simulation with physical delta
   simulation_clock_.Advance(phys_dt);
 
-  // Execute fixed steps and get alpha
-  const auto step = simulation_clock_.ExecuteFixedSteps(kMaxFixedStepsPerFrame);
+  // Execute fixed steps and get alpha (enforce max substeps from config)
+  const auto step
+    = simulation_clock_.ExecuteFixedSteps(config_.timing.max_substeps);
   presentation_clock_.SetInterpolationAlpha(step.interpolation_alpha);
 
   // Update snapshot
@@ -52,23 +64,26 @@ auto TimeManager::BeginFrame(time::PhysicalTime now) noexcept -> void
 
   // 1) Update the instantaneous and averaged metrics for internal history
   const auto ns = static_cast<nanoseconds>(phys_dt).count();
-  const double instantaneous_fps = ns > 0 ? 1e9 / static_cast<double>(ns) : 0.0;
+  const double instantaneous_fps
+    = ns > 0 ? kNsToSec / static_cast<double>(ns) : 0.0;
 
   // 2) Update the Stable FPS Display (Sample-and-Hold)
   // This updates every 500ms to provide a rock-solid display value that
   // doesn't flicker, matching the behavior of NVIDIA/Steam overlays.
+  static constexpr auto kFpsUpdateInterval = 500ms;
   fps_accumulator_ += static_cast<nanoseconds>(phys_dt);
   fps_frame_count_++;
 
-  if (fps_accumulator_ >= 500ms) {
-    stable_fps_ = (1e9 * fps_frame_count_)
+  if (fps_accumulator_ >= kFpsUpdateInterval) {
+    stable_fps_ = (kNsToSec * fps_frame_count_)
       / static_cast<double>(fps_accumulator_.count());
     fps_accumulator_ = 0ns;
     fps_frame_count_ = 0;
   }
 
   // On the very first frames, use instantaneous so we don't show 0.0
-  if (frame_counter_ < 10 && stable_fps_ == 0.0) {
+  static constexpr uint32_t kInitialFramesForInstantFps = 10;
+  if (frame_counter_ < kInitialFramesForInstantFps && stable_fps_ == 0.0) {
     frame_data_.current_fps = instantaneous_fps;
   } else {
     frame_data_.current_fps = stable_fps_;
@@ -78,7 +93,7 @@ auto TimeManager::BeginFrame(time::PhysicalTime now) noexcept -> void
 auto TimeManager::EndFrame() noexcept -> void
 {
   // Record frame time
-  frame_times_[perf_index_] = frame_data_.physical_delta;
+  frame_times_.at(perf_index_) = frame_data_.physical_delta;
   perf_index_ = (perf_index_ + 1) % kPerfHistory;
   ++frame_counter_;
 }
@@ -96,19 +111,19 @@ auto TimeManager::GetPerformanceMetrics() const noexcept -> PerformanceMetrics
   nanoseconds sum { 0 };
   nanoseconds max_v { 0 };
   for (size_t i = 0; i < count; ++i) {
-    const auto ns = static_cast<nanoseconds>(frame_times_[i]);
+    const auto ns = static_cast<nanoseconds>(frame_times_.at(i));
     sum += ns;
-    max_v = std::max(max_v, ns);
+    max_v = (std::max)(max_v, ns);
   }
 
   const auto avg = sum / static_cast<int64_t>(count);
   m.average_frame_time = CanonicalDuration { avg };
   m.max_frame_time = CanonicalDuration { max_v };
   m.average_fps
-    = avg.count() > 0 ? 1e9 / static_cast<double>(avg.count()) : 0.0;
+    = avg.count() > 0 ? kNsToSec / static_cast<double>(avg.count()) : 0.0;
   m.total_frames = frame_counter_;
   m.simulation_time_debt = CanonicalDuration {};
   return m;
 }
 
-} // namespace oxygen::time
+} // namespace oxygen::engine
