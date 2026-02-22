@@ -227,6 +227,25 @@ namespace detail {
       state_->set_body_pose_calls += 1;
       return PhysicsResult<void>::Ok();
     }
+    auto GetBodyPoses(WorldId world_id, std::span<const BodyId> body_ids,
+      std::span<Vec3> out_positions, std::span<Quat> out_rotations) const
+      -> PhysicsResult<size_t> override
+    {
+      if (out_positions.size() < body_ids.size()
+        || out_rotations.size() < body_ids.size()) {
+        return Err(PhysicsError::kBufferTooSmall);
+      }
+
+      for (size_t i = 0; i < body_ids.size(); ++i) {
+        const auto* body = TryBody(world_id, body_ids[i]);
+        if (body == nullptr) {
+          return Err(PhysicsError::kBodyNotFound);
+        }
+        out_positions[i] = body->position;
+        out_rotations[i] = body->rotation;
+      }
+      return PhysicsResult<size_t>::Ok(body_ids.size());
+    }
 
     auto GetLinearVelocity(WorldId world_id, BodyId body_id) const
       -> PhysicsResult<Vec3> override
@@ -307,6 +326,34 @@ namespace detail {
       state_->last_moved_position = target_position;
       state_->last_moved_rotation = target_rotation;
       return PhysicsResult<void>::Ok();
+    }
+    auto MoveKinematicBatch(WorldId world_id, std::span<const BodyId> body_ids,
+      std::span<const Vec3> target_positions,
+      std::span<const Quat> target_rotations, float delta_time)
+      -> PhysicsResult<size_t> override
+    {
+      if (delta_time <= 0.0F) {
+        return Err(PhysicsError::kInvalidArgument);
+      }
+      if (target_positions.size() < body_ids.size()
+        || target_rotations.size() < body_ids.size()) {
+        return Err(PhysicsError::kBufferTooSmall);
+      }
+
+      for (size_t i = 0; i < body_ids.size(); ++i) {
+        auto* body = TryBodyMutable(world_id, body_ids[i]);
+        if (body == nullptr) {
+          return Err(PhysicsError::kBodyNotFound);
+        }
+        body->position = target_positions[i];
+        body->rotation = target_rotations[i];
+        state_->move_kinematic_calls += 1;
+        state_->last_moved_body = body_ids[i];
+        state_->last_moved_position = target_positions[i];
+        state_->last_moved_rotation = target_rotations[i];
+      }
+
+      return PhysicsResult<size_t>::Ok(body_ids.size());
     }
 
     auto AddBodyShape(WorldId world_id, BodyId body_id, ShapeId, const Vec3&,

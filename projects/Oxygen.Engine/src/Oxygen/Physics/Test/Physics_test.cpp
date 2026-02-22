@@ -296,6 +296,65 @@ NOLINT_TEST_F(PhysicsApiContractTest, BodyLifecycleAndPoseContract)
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
 }
 
+NOLINT_TEST_F(PhysicsApiContractTest, BodyBulkPoseAndKinematicBatchContract)
+{
+  AssertBackendAvailabilityContract();
+  if (!HasBackend()) {
+    return;
+  }
+
+  auto& worlds = System().Worlds();
+  auto& bodies = System().Bodies();
+  const auto world_result = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(world_result.has_value());
+  const auto world_id = world_result.value();
+
+  body::BodyDesc dynamic_desc {};
+  dynamic_desc.type = body::BodyType::kDynamic;
+  dynamic_desc.initial_position = Vec3 { 1.0F, 2.0F, 3.0F };
+  const auto dynamic_body = bodies.CreateBody(world_id, dynamic_desc);
+  ASSERT_TRUE(dynamic_body.has_value());
+
+  body::BodyDesc kinematic_desc {};
+  kinematic_desc.type = body::BodyType::kKinematic;
+  const auto kinematic_body = bodies.CreateBody(world_id, kinematic_desc);
+  ASSERT_TRUE(kinematic_body.has_value());
+
+  std::vector<BodyId> ids {
+    dynamic_body.value(),
+    kinematic_body.value(),
+  };
+  std::vector<Vec3> positions(ids.size(), Vec3 { 0.0F });
+  std::vector<Quat> rotations(ids.size(), Quat { 1.0F, 0.0F, 0.0F, 0.0F });
+  const auto bulk_get
+    = bodies.GetBodyPoses(world_id, ids, positions, rotations);
+  ASSERT_TRUE(bulk_get.has_value());
+  EXPECT_EQ(bulk_get.value(), ids.size());
+  EXPECT_FLOAT_EQ(positions[0].x, 1.0F);
+  EXPECT_FLOAT_EQ(positions[0].y, 2.0F);
+  EXPECT_FLOAT_EQ(positions[0].z, 3.0F);
+
+  std::vector<BodyId> kinematic_ids { kinematic_body.value() };
+  std::vector<Vec3> target_positions { Vec3 { 4.0F, 5.0F, 6.0F } };
+  std::vector<Quat> target_rotations { Quat { 1.0F, 0.0F, 0.0F, 0.0F } };
+  const auto bulk_move = bodies.MoveKinematicBatch(
+    world_id, kinematic_ids, target_positions, target_rotations, 1.0F / 60.0F);
+  ASSERT_TRUE(bulk_move.has_value());
+  EXPECT_EQ(bulk_move.value(), kinematic_ids.size());
+
+  EXPECT_TRUE(worlds.Step(world_id, 1.0F / 60.0F, 1, 1.0F / 60.0F).has_value());
+  const auto kinematic_pos
+    = bodies.GetBodyPosition(world_id, kinematic_body.value());
+  ASSERT_TRUE(kinematic_pos.has_value());
+  EXPECT_NEAR(kinematic_pos.value().x, 4.0F, 0.05F);
+  EXPECT_NEAR(kinematic_pos.value().y, 5.0F, 0.05F);
+  EXPECT_NEAR(kinematic_pos.value().z, 6.0F, 0.05F);
+
+  EXPECT_TRUE(bodies.DestroyBody(world_id, dynamic_body.value()).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, kinematic_body.value()).has_value());
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
 NOLINT_TEST_F(PhysicsApiContractTest, CharacterLifecycleContract)
 {
   AssertBackendAvailabilityContract();

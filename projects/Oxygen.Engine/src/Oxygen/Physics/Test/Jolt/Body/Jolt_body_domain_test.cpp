@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <vector>
+
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Physics/Body/BodyDesc.h>
@@ -136,6 +138,63 @@ NOLINT_TEST_F(JoltBodyDomainTest, KinematicMoveReachesTargetAfterStep)
   EXPECT_NEAR(position.value().z, 4.0F, 0.05F);
 
   EXPECT_TRUE(bodies.DestroyBody(world_id, body_id).has_value());
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
+NOLINT_TEST_F(JoltBodyDomainTest, BulkPoseAndKinematicMoveRoundTrip)
+{
+  RequireBackend();
+
+  auto& worlds = System().Worlds();
+  auto& bodies = System().Bodies();
+  const auto world_result = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(world_result.has_value());
+  const auto world_id = world_result.value();
+
+  body::BodyDesc dynamic_desc {};
+  dynamic_desc.type = body::BodyType::kDynamic;
+  dynamic_desc.initial_position = Vec3 { 1.0F, 2.0F, 3.0F };
+  const auto dynamic_result = bodies.CreateBody(world_id, dynamic_desc);
+  ASSERT_TRUE(dynamic_result.has_value());
+  const auto dynamic_body = dynamic_result.value();
+
+  body::BodyDesc kinematic_desc {};
+  kinematic_desc.type = body::BodyType::kKinematic;
+  const auto kinematic_result = bodies.CreateBody(world_id, kinematic_desc);
+  ASSERT_TRUE(kinematic_result.has_value());
+  const auto kinematic_body = kinematic_result.value();
+
+  std::vector<BodyId> body_ids { dynamic_body, kinematic_body };
+  std::vector<Vec3> positions(body_ids.size(), Vec3 { 0.0F });
+  std::vector<Quat> rotations(body_ids.size(), Quat { 1.0F, 0.0F, 0.0F, 0.0F });
+  const auto bulk_get
+    = bodies.GetBodyPoses(world_id, body_ids, positions, rotations);
+  ASSERT_TRUE(bulk_get.has_value());
+  EXPECT_EQ(bulk_get.value(), body_ids.size());
+  EXPECT_FLOAT_EQ(positions[0].x, 1.0F);
+  EXPECT_FLOAT_EQ(positions[0].y, 2.0F);
+  EXPECT_FLOAT_EQ(positions[0].z, 3.0F);
+
+  std::vector<BodyId> kinematic_ids { kinematic_body };
+  std::vector<Vec3> target_positions { Vec3 { 3.0F, 4.0F, 5.0F } };
+  std::vector<Quat> target_rotations {
+    Quat { 1.0F, 0.0F, 0.0F, 0.0F },
+  };
+  const auto bulk_move = bodies.MoveKinematicBatch(
+    world_id, kinematic_ids, target_positions, target_rotations, 1.0F / 60.0F);
+  ASSERT_TRUE(bulk_move.has_value());
+  EXPECT_EQ(bulk_move.value(), kinematic_ids.size());
+
+  ASSERT_TRUE(worlds.Step(world_id, 1.0F / 60.0F, 1, 1.0F / 60.0F).has_value());
+  const auto kinematic_position
+    = bodies.GetBodyPosition(world_id, kinematic_body);
+  ASSERT_TRUE(kinematic_position.has_value());
+  EXPECT_NEAR(kinematic_position.value().x, 3.0F, 0.05F);
+  EXPECT_NEAR(kinematic_position.value().y, 4.0F, 0.05F);
+  EXPECT_NEAR(kinematic_position.value().z, 5.0F, 0.05F);
+
+  EXPECT_TRUE(bodies.DestroyBody(world_id, dynamic_body).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, kinematic_body).has_value());
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
 }
 
