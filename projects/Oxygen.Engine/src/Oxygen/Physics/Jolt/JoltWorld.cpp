@@ -23,6 +23,7 @@
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/RegisterTypes.h>
 
+#include <Oxygen/Physics/Jolt/Converters.h>
 #include <Oxygen/Physics/Jolt/JoltWorld.h>
 
 namespace {
@@ -92,27 +93,6 @@ public:
     return true;
   }
 };
-
-auto ToJoltVec3(const oxygen::Vec3& value) -> JPH::Vec3
-{
-  return JPH::Vec3 { value.x, value.y, value.z };
-}
-
-auto ToOxygenVec3(const JPH::RVec3& value) -> oxygen::Vec3
-{
-  return oxygen::Vec3 { static_cast<float>(value.GetX()),
-    static_cast<float>(value.GetY()), static_cast<float>(value.GetZ()) };
-}
-
-auto ToOxygenQuat(const JPH::Quat& value) -> oxygen::Quat
-{
-  return oxygen::Quat {
-    value.GetW(),
-    value.GetX(),
-    value.GetY(),
-    value.GetZ(),
-  };
-}
 
 std::mutex g_jolt_runtime_mutex;
 uint32_t g_jolt_runtime_ref_count = 0U;
@@ -307,6 +287,32 @@ auto oxygen::physics::jolt::JoltWorld::TryGetBodyInterface(
   }
   return observer_ptr<const JPH::BodyInterface> {
     &world->physics_system.GetBodyInterface(),
+  };
+}
+
+auto oxygen::physics::jolt::JoltWorld::TryGetBodyLockInterface(
+  const WorldId world_id) const noexcept
+  -> observer_ptr<const JPH::BodyLockInterface>
+{
+  const auto world = TryGetWorld(world_id);
+  if (world == nullptr) {
+    return observer_ptr<const JPH::BodyLockInterface> {};
+  }
+  return observer_ptr<const JPH::BodyLockInterface> {
+    &world->physics_system.GetBodyLockInterface(),
+  };
+}
+
+auto oxygen::physics::jolt::JoltWorld::TryGetNarrowPhaseQuery(
+  const WorldId world_id) const noexcept
+  -> observer_ptr<const JPH::NarrowPhaseQuery>
+{
+  const auto world = TryGetWorld(world_id);
+  if (world == nullptr) {
+    return observer_ptr<const JPH::NarrowPhaseQuery> {};
+  }
+  return observer_ptr<const JPH::NarrowPhaseQuery> {
+    &world->physics_system.GetNarrowPhaseQuery(),
   };
 }
 
