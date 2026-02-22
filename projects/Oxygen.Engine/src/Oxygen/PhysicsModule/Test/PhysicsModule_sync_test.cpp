@@ -72,6 +72,28 @@ NOLINT_TEST_F(
   EXPECT_EQ(FakeState().character_create_calls, 1U);
 }
 
+NOLINT_TEST_F(
+  PhysicsModuleSyncTest, CharacterAttachmentDoesNotUseTransformPushPath)
+{
+  auto node = scene_->CreateNode("character-authority");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  const auto character = ScenePhysics::AttachCharacter(
+    observer_ptr<PhysicsModule> { module_.get() }, node,
+    character::CharacterDesc {});
+  ASSERT_TRUE(character.has_value());
+
+  ASSERT_TRUE(node.GetTransform().SetLocalPosition({ 9.0F, 8.0F, 7.0F }));
+  scene_->Update();
+  scene_->SyncObservers();
+  RunGameplay();
+
+  EXPECT_EQ(FakeState().character_move_calls, 0U);
+  EXPECT_EQ(FakeState().move_kinematic_calls, 0U);
+}
+
 NOLINT_TEST_F(PhysicsModuleSyncTest, GetCharacterReturnsFacadeForAttachedNode)
 {
   auto node = scene_->CreateNode("character-get");
@@ -97,6 +119,91 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, GetCharacterReturnsFacadeForAttachedNode)
   ASSERT_TRUE(move.has_value());
   EXPECT_EQ(FakeState().character_move_calls, 1U);
 }
+
+#if defined(NDEBUG)
+NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyFailsWhenCharacterExists)
+{
+  auto node = scene_->CreateNode("authority-conflict");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  ASSERT_TRUE(
+    ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> { module_.get() },
+      node, character::CharacterDesc {})
+      .has_value());
+
+  body::BodyDesc body_desc {};
+  body_desc.type = body::BodyType::kDynamic;
+  EXPECT_FALSE(ScenePhysics::AttachRigidBody(
+    observer_ptr<PhysicsModule> { module_.get() }, node, body_desc)
+      .has_value());
+}
+#endif
+
+#if !defined(NDEBUG)
+NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyWhenCharacterExists_Death)
+{
+  auto node = scene_->CreateNode("authority-conflict-death");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  ASSERT_TRUE(
+    ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> { module_.get() },
+      node, character::CharacterDesc {})
+      .has_value());
+
+  body::BodyDesc body_desc {};
+  body_desc.type = body::BodyType::kDynamic;
+  NOLINT_EXPECT_DEATH(
+    (void)ScenePhysics::AttachRigidBody(
+      observer_ptr<PhysicsModule> { module_.get() }, node, body_desc),
+    ".*");
+}
+#endif
+
+#if defined(NDEBUG)
+NOLINT_TEST_F(PhysicsModuleSyncTest, AttachCharacterFailsWhenRigidBodyExists)
+{
+  auto node = scene_->CreateNode("authority-conflict-reverse");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  body::BodyDesc body_desc {};
+  body_desc.type = body::BodyType::kDynamic;
+  ASSERT_TRUE(ScenePhysics::AttachRigidBody(
+    observer_ptr<PhysicsModule> { module_.get() }, node, body_desc)
+      .has_value());
+
+  EXPECT_FALSE(
+    ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> { module_.get() },
+      node, character::CharacterDesc {})
+      .has_value());
+}
+#endif
+
+#if !defined(NDEBUG)
+NOLINT_TEST_F(PhysicsModuleSyncTest, AttachCharacterWhenRigidBodyExists_Death)
+{
+  auto node = scene_->CreateNode("authority-conflict-reverse-death");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  body::BodyDesc body_desc {};
+  body_desc.type = body::BodyType::kDynamic;
+  ASSERT_TRUE(ScenePhysics::AttachRigidBody(
+    observer_ptr<PhysicsModule> { module_.get() }, node, body_desc)
+      .has_value());
+
+  NOLINT_EXPECT_DEATH((void)ScenePhysics::AttachCharacter(
+                        observer_ptr<PhysicsModule> { module_.get() }, node,
+                        character::CharacterDesc {}),
+    ".*");
+}
+#endif
 
 // In release builds, contract violations return nullopt.
 #if defined(NDEBUG)

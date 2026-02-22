@@ -140,6 +140,22 @@ public:
     observer_ptr<PhysicsModule> physics_module, const scene::NodeHandle& node)
     -> std::optional<RigidBodyFacade>;
 
+  /*!
+   Attach a character controller to a scene node and register ownership
+   * in
+   PhysicsModule.
+
+   Contract:
+   - Scene node must be valid and owned
+   * by the currently observed scene.
+   - Node must not already be mapped as a
+   * rigid body.
+   - Character motion is command-authoritative: use
+   * CharacterFacade::Move for
+     movement intent.
+   - Character attachment
+   * does not participate in transform push/pull sync.
+  */
   OXGN_PHSYNC_API static auto AttachCharacter(
     observer_ptr<PhysicsModule> physics_module, scene::SceneNode& node,
     const character::CharacterDesc& desc) -> std::optional<CharacterFacade>;

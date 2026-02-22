@@ -25,6 +25,11 @@ auto ScenePhysics::AttachRigidBody(observer_ptr<PhysicsModule> physics_module,
   if (!physics_module->IsNodeInObservedScene(node.GetHandle())) {
     return std::nullopt;
   }
+  DCHECK_F(!physics_module->HasCharacterForNode(node.GetHandle()),
+    "AttachRigidBody contract violated: node already has a character.");
+  if (physics_module->HasCharacterForNode(node.GetHandle())) {
+    return std::nullopt;
+  }
 
   auto& body_api = physics_module->GetBodyApi();
   const auto world_id = physics_module->GetWorldId();
@@ -85,6 +90,11 @@ auto ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> physics_module,
     "AttachCharacter contract violated: node must belong to currently "
     "observed scene.");
   if (!physics_module->IsNodeInObservedScene(node.GetHandle())) {
+    return std::nullopt;
+  }
+  DCHECK_F(!physics_module->HasBodyForNode(node.GetHandle()),
+    "AttachCharacter contract violated: node already has a rigid body.");
+  if (physics_module->HasBodyForNode(node.GetHandle())) {
     return std::nullopt;
   }
 
