@@ -23,6 +23,7 @@ m_gtest_program(
   SOURCES
     "EngineTag_test_impl.cpp"
     "PhysicsModule_backend_smoke_test.cpp"
+    "PhysicsModule_stress_test.cpp"
     "PhysicsModule_test_fixture.h"
     "PhysicsModule_sync_test.cpp"
 )
