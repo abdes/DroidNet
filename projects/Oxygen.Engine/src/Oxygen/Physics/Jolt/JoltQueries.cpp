@@ -20,6 +20,7 @@
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/ShapeCast.h>
 
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Physics/Jolt/Converters.h>
 #include <Oxygen/Physics/Jolt/JoltQueries.h>
 #include <Oxygen/Physics/Jolt/JoltWorld.h>
@@ -97,7 +98,7 @@ auto oxygen::physics::jolt::JoltQueries::Raycast(
     = desc.origin + desc.direction * (desc.max_distance * hit.mFraction);
   const auto normal = NormalizeOrFallback(
     oxygen::Vec3 { -desc.direction.x, -desc.direction.y, -desc.direction.z },
-    oxygen::Vec3 { 0.0F, 1.0F, 0.0F });
+    oxygen::space::move::Up);
 
   query::RaycastHit result {};
   result.body_id = BodyId { hit.mBodyID.GetIndexAndSequenceNumber() };
