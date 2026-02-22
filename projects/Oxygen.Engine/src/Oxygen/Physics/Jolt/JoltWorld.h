@@ -14,6 +14,10 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Physics/System/IWorldApi.h>
 
+namespace JPH {
+class BodyInterface;
+}
+
 namespace oxygen::physics::jolt {
 
 //! Jolt implementation of the world domain.
@@ -38,6 +42,16 @@ public:
   auto GetGravity(WorldId world_id) const -> PhysicsResult<Vec3> override;
   auto SetGravity(WorldId world_id, const Vec3& gravity)
     -> PhysicsResult<void> override;
+
+  [[nodiscard]] auto TryGetBodyInterface(WorldId world_id) noexcept
+    -> observer_ptr<JPH::BodyInterface>;
+  [[nodiscard]] auto TryGetBodyInterface(WorldId world_id) const noexcept
+    -> observer_ptr<const JPH::BodyInterface>;
+
+  [[nodiscard]] auto HasBody(WorldId world_id, BodyId body_id) const noexcept
+    -> bool;
+  auto RegisterBody(WorldId world_id, BodyId body_id) -> PhysicsResult<void>;
+  auto UnregisterBody(WorldId world_id, BodyId body_id) -> PhysicsResult<void>;
 
 private:
   struct WorldState;

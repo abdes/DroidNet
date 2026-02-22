@@ -8,6 +8,7 @@
 #include <cmath>
 #include <limits>
 #include <mutex>
+#include <unordered_set>
 #include <utility>
 
 #include <Jolt/Jolt.h> // must be first (keep separate)
@@ -163,6 +164,7 @@ struct oxygen::physics::jolt::JoltWorld::WorldState final {
   ObjectLayerPairFilterImpl object_layer_pair_filter {};
   ObjectVsBroadPhaseLayerFilterImpl object_vs_broad_phase_layer_filter {};
   std::shared_ptr<ICollisionFilter> collision_filter {};
+  std::unordered_set<BodyId> body_ids {};
 };
 
 oxygen::physics::jolt::JoltWorld::JoltWorld()
@@ -280,6 +282,67 @@ auto oxygen::physics::jolt::JoltWorld::SetGravity(
     return Err(PhysicsError::kWorldNotFound);
   }
   world->physics_system.SetGravity(ToJoltVec3(gravity));
+  return PhysicsResult<void>::Ok();
+}
+
+auto oxygen::physics::jolt::JoltWorld::TryGetBodyInterface(
+  const WorldId world_id) noexcept -> observer_ptr<JPH::BodyInterface>
+{
+  auto world = TryGetWorld(world_id);
+  if (world == nullptr) {
+    return observer_ptr<JPH::BodyInterface> {};
+  }
+  return observer_ptr<JPH::BodyInterface> {
+    &world->physics_system.GetBodyInterface(),
+  };
+}
+
+auto oxygen::physics::jolt::JoltWorld::TryGetBodyInterface(
+  const WorldId world_id) const noexcept
+  -> observer_ptr<const JPH::BodyInterface>
+{
+  const auto world = TryGetWorld(world_id);
+  if (world == nullptr) {
+    return observer_ptr<const JPH::BodyInterface> {};
+  }
+  return observer_ptr<const JPH::BodyInterface> {
+    &world->physics_system.GetBodyInterface(),
+  };
+}
+
+auto oxygen::physics::jolt::JoltWorld::HasBody(
+  const WorldId world_id, const BodyId body_id) const noexcept -> bool
+{
+  const auto world = TryGetWorld(world_id);
+  if (world == nullptr) {
+    return false;
+  }
+  return world->body_ids.contains(body_id);
+}
+
+auto oxygen::physics::jolt::JoltWorld::RegisterBody(
+  const WorldId world_id, const BodyId body_id) -> PhysicsResult<void>
+{
+  auto world = TryGetWorld(world_id);
+  if (world == nullptr) {
+    return Err(PhysicsError::kWorldNotFound);
+  }
+  if (!world->body_ids.insert(body_id).second) {
+    return Err(PhysicsError::kAlreadyExists);
+  }
+  return PhysicsResult<void>::Ok();
+}
+
+auto oxygen::physics::jolt::JoltWorld::UnregisterBody(
+  const WorldId world_id, const BodyId body_id) -> PhysicsResult<void>
+{
+  auto world = TryGetWorld(world_id);
+  if (world == nullptr) {
+    return Err(PhysicsError::kWorldNotFound);
+  }
+  if (world->body_ids.erase(body_id) == 0U) {
+    return Err(PhysicsError::kBodyNotFound);
+  }
   return PhysicsResult<void>::Ok();
 }
 

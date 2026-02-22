@@ -39,6 +39,9 @@ if(OXYGEN_PHYSICS_BACKEND STREQUAL "jolt")
     Jolt
     SOURCES
       "Jolt/Jolt_test_fixture.h"
+      "Jolt/Body/Jolt_body_basic_test.cpp"
+      "Jolt/Body/Jolt_body_contract_test.cpp"
+      "Jolt/Body/Jolt_body_domain_test.cpp"
       "Jolt/World/Jolt_world_basic_test.cpp"
       "Jolt/World/Jolt_world_contract_test.cpp"
       "Jolt/World/Jolt_world_domain_test.cpp"
