@@ -5,16 +5,29 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Physics/Jolt/JoltEvents.h>
+#include <Oxygen/Physics/Jolt/JoltWorld.h>
 
-auto oxygen::physics::jolt::JoltEvents::GetPendingEventCount(
-  WorldId /*world_id*/) const -> PhysicsResult<size_t>
+oxygen::physics::jolt::JoltEvents::JoltEvents(JoltWorld& world)
+  : world_(&world)
 {
-  return Err(PhysicsError::kWorldNotFound);
 }
 
-auto oxygen::physics::jolt::JoltEvents::DrainEvents(
-  WorldId /*world_id*/, std::span<events::PhysicsEvent> /*out_events*/)
-  -> PhysicsResult<size_t>
+auto oxygen::physics::jolt::JoltEvents::GetPendingEventCount(
+  const WorldId world_id) const -> PhysicsResult<size_t>
 {
-  return Err(PhysicsError::kWorldNotFound);
+  const auto* world = world_.get();
+  if (world == nullptr) {
+    return Err(PhysicsError::kNotInitialized);
+  }
+  return world->GetPendingEventCount(world_id);
+}
+
+auto oxygen::physics::jolt::JoltEvents::DrainEvents(const WorldId world_id,
+  const std::span<events::PhysicsEvent> out_events) -> PhysicsResult<size_t>
+{
+  auto* world = world_.get();
+  if (world == nullptr) {
+    return Err(PhysicsError::kNotInitialized);
+  }
+  return world->DrainEvents(world_id, out_events);
 }

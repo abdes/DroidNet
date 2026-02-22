@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <deque>
 #include <limits>
 #include <mutex>
 #include <unordered_set>
@@ -19,6 +20,7 @@
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Physics/Body/BodyManager.h>
 #include <Jolt/Physics/Body/BodyType.h>
+#include <Jolt/Physics/Collision/ContactListener.h>
 #include <Jolt/Physics/EPhysicsUpdateError.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/RegisterTypes.h>
@@ -126,15 +128,86 @@ auto ReleaseJoltRuntime() -> void
 } // namespace
 
 struct oxygen::physics::jolt::JoltWorld::WorldState final {
+  class ContactListenerImpl final : public JPH::ContactListener {
+  public:
+    explicit ContactListenerImpl(WorldState& world_state)
+      : world_state_(world_state)
+    {
+    }
+
+    auto OnContactAdded(const JPH::Body& in_body1, const JPH::Body& in_body2,
+      const JPH::ContactManifold& in_manifold,
+      JPH::ContactSettings& io_settings) -> void override
+    {
+      const auto event_type = io_settings.mIsSensor
+        ? events::PhysicsEventType::kTriggerBegin
+        : events::PhysicsEventType::kContactBegin;
+      PushEvent(event_type, in_body1, in_body2, in_manifold);
+    }
+
+    auto OnContactRemoved(const JPH::SubShapeIDPair& in_sub_shape_pair)
+      -> void override
+    {
+      std::scoped_lock lock(world_state_.event_mutex);
+      const auto it
+        = world_state_.active_contact_events.find(in_sub_shape_pair);
+      if (it == world_state_.active_contact_events.end()) {
+        return;
+      }
+      events::PhysicsEvent removed = it->second;
+      removed.type = removed.type == events::PhysicsEventType::kTriggerBegin
+        ? events::PhysicsEventType::kTriggerEnd
+        : events::PhysicsEventType::kContactEnd;
+      removed.contact_normal = Vec3 { 0.0F, 0.0F, 0.0F };
+      removed.contact_position = Vec3 { 0.0F, 0.0F, 0.0F };
+      removed.penetration_depth = 0.0F;
+      removed.applied_impulse = Vec3 { 0.0F, 0.0F, 0.0F };
+      world_state_.pending_events.push_back(removed);
+      world_state_.active_contact_events.erase(it);
+    }
+
+  private:
+    auto PushEvent(const events::PhysicsEventType type, const JPH::Body& body1,
+      const JPH::Body& body2, const JPH::ContactManifold& manifold) -> void
+    {
+      events::PhysicsEvent event {};
+      event.type = type;
+      event.body_a = BodyId { body1.GetID().GetIndexAndSequenceNumber() };
+      event.body_b = BodyId { body2.GetID().GetIndexAndSequenceNumber() };
+      event.user_data_a = body1.GetUserData();
+      event.user_data_b = body2.GetUserData();
+      event.contact_normal = ToOxygenVec3(manifold.mWorldSpaceNormal);
+      if (!manifold.mRelativeContactPointsOn1.empty()) {
+        event.contact_position
+          = ToOxygenVec3(manifold.GetWorldSpaceContactPointOn1(0));
+      } else {
+        event.contact_position = Vec3 { 0.0F, 0.0F, 0.0F };
+      }
+      event.penetration_depth = manifold.mPenetrationDepth;
+      event.applied_impulse = Vec3 { 0.0F, 0.0F, 0.0F };
+
+      const auto key = JPH::SubShapeIDPair { body1.GetID(),
+        manifold.mSubShapeID1, body2.GetID(), manifold.mSubShapeID2 };
+
+      std::scoped_lock lock(world_state_.event_mutex);
+      world_state_.pending_events.push_back(event);
+      world_state_.active_contact_events.insert_or_assign(key, event);
+    }
+
+    WorldState& world_state_;
+  };
+
   WorldState(const world::WorldDesc& desc)
     : temp_allocator(kTempAllocatorBytes)
     , job_system(kMaxPhysicsJobs, kMaxPhysicsBarriers)
+    , contact_listener(*this)
   {
     physics_system.Init(kMaxBodies, 0U, kMaxBodyPairs, kMaxContactConstraints,
       broad_phase_layer_interface, object_vs_broad_phase_layer_filter,
       object_layer_pair_filter);
     physics_system.SetGravity(ToJoltVec3(desc.gravity));
     collision_filter = desc.collision_filter;
+    physics_system.SetContactListener(&contact_listener);
   }
 
   JPH::PhysicsSystem physics_system {};
@@ -145,6 +218,11 @@ struct oxygen::physics::jolt::JoltWorld::WorldState final {
   ObjectVsBroadPhaseLayerFilterImpl object_vs_broad_phase_layer_filter {};
   std::shared_ptr<ICollisionFilter> collision_filter {};
   std::unordered_set<BodyId> body_ids {};
+  mutable std::mutex event_mutex {};
+  std::deque<events::PhysicsEvent> pending_events {};
+  std::unordered_map<JPH::SubShapeIDPair, events::PhysicsEvent>
+    active_contact_events {};
+  ContactListenerImpl contact_listener;
 };
 
 oxygen::physics::jolt::JoltWorld::JoltWorld()
@@ -263,6 +341,34 @@ auto oxygen::physics::jolt::JoltWorld::SetGravity(
   }
   world->physics_system.SetGravity(ToJoltVec3(gravity));
   return PhysicsResult<void>::Ok();
+}
+
+auto oxygen::physics::jolt::JoltWorld::GetPendingEventCount(
+  const WorldId world_id) const -> PhysicsResult<size_t>
+{
+  const auto world = TryGetWorld(world_id);
+  if (world == nullptr) {
+    return Err(PhysicsError::kWorldNotFound);
+  }
+  std::scoped_lock lock(world->event_mutex);
+  return Ok(world->pending_events.size());
+}
+
+auto oxygen::physics::jolt::JoltWorld::DrainEvents(const WorldId world_id,
+  std::span<events::PhysicsEvent> out_events) -> PhysicsResult<size_t>
+{
+  auto world = TryGetWorld(world_id);
+  if (world == nullptr) {
+    return Err(PhysicsError::kWorldNotFound);
+  }
+  std::scoped_lock lock(world->event_mutex);
+  const auto drain_count
+    = std::min(out_events.size(), world->pending_events.size());
+  for (size_t i = 0; i < drain_count; ++i) {
+    out_events[i] = world->pending_events.front();
+    world->pending_events.pop_front();
+  }
+  return Ok(drain_count);
 }
 
 auto oxygen::physics::jolt::JoltWorld::TryGetBodyInterface(
