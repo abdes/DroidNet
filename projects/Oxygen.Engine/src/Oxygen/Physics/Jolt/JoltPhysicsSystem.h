@@ -22,7 +22,7 @@ namespace oxygen::physics::jolt {
 //! Jolt-backed root physics service composed from domain implementations.
 class JoltPhysicsSystem final : public system::IPhysicsSystem {
 public:
-  JoltPhysicsSystem() = default;
+  JoltPhysicsSystem();
   ~JoltPhysicsSystem() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(JoltPhysicsSystem)
@@ -48,7 +48,7 @@ public:
 
 private:
   JoltWorld world_ {};
-  JoltBodies bodies_ {};
+  JoltBodies bodies_;
   JoltQueries queries_ {};
   JoltEvents events_ {};
   JoltCharacters characters_ {};

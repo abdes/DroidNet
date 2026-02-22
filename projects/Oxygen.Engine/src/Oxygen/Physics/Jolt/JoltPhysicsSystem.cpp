@@ -6,6 +6,11 @@
 
 #include <Oxygen/Physics/Jolt/JoltPhysicsSystem.h>
 
+oxygen::physics::jolt::JoltPhysicsSystem::JoltPhysicsSystem()
+  : bodies_(world_)
+{
+}
+
 auto oxygen::physics::jolt::JoltPhysicsSystem::Worlds() noexcept
   -> system::IWorldApi&
 {

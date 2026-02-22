@@ -7,14 +7,17 @@
 #pragma once
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Physics/System/IBodyApi.h>
 
 namespace oxygen::physics::jolt {
 
+class JoltWorld;
+
 //! Jolt implementation of the body domain.
 class JoltBodies final : public system::IBodyApi {
 public:
-  JoltBodies() = default;
+  explicit JoltBodies(JoltWorld& world);
   ~JoltBodies() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(JoltBodies)
@@ -59,6 +62,9 @@ public:
     -> PhysicsResult<ShapeInstanceId> override;
   auto RemoveBodyShape(WorldId world_id, BodyId body_id,
     ShapeInstanceId shape_instance_id) -> PhysicsResult<void> override;
+
+private:
+  observer_ptr<JoltWorld> world_ {};
 };
 
 } // namespace oxygen::physics::jolt
