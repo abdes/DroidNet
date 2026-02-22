@@ -223,7 +223,11 @@ auto PhysicsModule::IsNodeInObservedScene(
   if (observed_scene_ == nullptr || !node_handle.IsValid()) {
     return false;
   }
-  return node_handle.GetSceneId() == observed_scene_->GetId();
+  const auto observed_owner = observed_scene_owner_.lock();
+  if (!observed_owner || observed_owner.get() != observed_scene_.get()) {
+    return false;
+  }
+  return node_handle.GetSceneId() == observed_owner->GetId();
 }
 
 auto PhysicsModule::GetBodyTypeForBodyId(BodyId body_id) const
@@ -493,7 +497,11 @@ auto PhysicsModule::ApplyWorldPoseToNode(const scene::NodeHandle& node_handle,
   if (observed_scene_ == nullptr || !node_handle.IsValid()) {
     return false;
   }
-  auto node = observed_scene_->GetNode(node_handle);
+  const auto observed_owner = observed_scene_owner_.lock();
+  if (!observed_owner || observed_owner.get() != observed_scene_.get()) {
+    return false;
+  }
+  auto node = observed_owner->GetNode(node_handle);
   if (!node.has_value() || !node->IsValid()) {
     return false;
   }
@@ -553,11 +561,7 @@ auto PhysicsModule::OnShutdown() noexcept -> void
   CHECK_F(
     world_id_ != kInvalidWorldId, "PhysicsModule world id must be valid.");
 
-  if (observed_scene_ != nullptr) {
-    observed_scene_->UnregisterObserver(
-      observer_ptr<scene::ISceneObserver> { this });
-    observed_scene_ = nullptr;
-  }
+  UnregisterObservedSceneObserver();
 
   DestroyAllTrackedBodies();
   DestroyAllTrackedCharacters();
@@ -723,7 +727,8 @@ auto PhysicsModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
 
   SyncSceneObserver(context);
 
-  if (context->GetScene() == nullptr) {
+  const auto scene = context->GetScene();
+  if (scene == nullptr) {
     expected_character_transform_updates_.clear();
     co_return;
   }
@@ -762,8 +767,20 @@ auto PhysicsModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
       continue;
     }
 
-    if (!ApplyWorldPoseToNode(
-          *node_handle, transform.position, transform.rotation)) {
+    auto node = scene->GetNode(*node_handle);
+    if (!node.has_value() || !node->IsValid()) {
+      diagnostics_.scene_pull_skipped_missing_node += 1;
+      continue;
+    }
+    if (node_to_character_binding_.contains(*node_handle)) {
+      expected_character_transform_updates_.insert(*node_handle);
+    }
+
+    const auto [local_position, local_rotation]
+      = ToLocalPose(*node, transform.position, transform.rotation);
+    const auto pos_ok = node->GetTransform().SetLocalPosition(local_position);
+    const auto rot_ok = node->GetTransform().SetLocalRotation(local_rotation);
+    if (!(pos_ok && rot_ok)) {
       diagnostics_.scene_pull_skipped_missing_node += 1;
       continue;
     }
@@ -869,12 +886,9 @@ auto PhysicsModule::SyncSceneObserver(
     return;
   }
 
-  const auto had_previous_scene = observed_scene_ != nullptr;
-
-  if (observed_scene_ != nullptr) {
-    observed_scene_->UnregisterObserver(
-      observer_ptr<scene::ISceneObserver> { this });
-  }
+  const auto had_previous_scene
+    = observed_scene_ != nullptr || !observed_scene_owner_.expired();
+  UnregisterObservedSceneObserver();
 
   if (had_previous_scene && !body_to_binding_.empty()) {
     DestroyAllTrackedBodies();
@@ -891,6 +905,8 @@ auto PhysicsModule::SyncSceneObserver(
   pending_transform_updates_.clear();
   expected_character_transform_updates_.clear();
   observed_scene_ = scene;
+  observed_scene_owner_ = (scene != nullptr) ? scene->weak_from_this()
+                                             : std::weak_ptr<scene::Scene> {};
 
   if (observed_scene_ != nullptr) {
     [[maybe_unused]] const auto registered = observed_scene_->RegisterObserver(
@@ -900,6 +916,17 @@ auto PhysicsModule::SyncSceneObserver(
     DCHECK_F(registered,
       "PhysicsModule failed to register scene observer for mutations.");
   }
+}
+
+auto PhysicsModule::UnregisterObservedSceneObserver() -> void
+{
+  if (const auto observed_owner = observed_scene_owner_.lock();
+    observed_owner) {
+    observed_owner->UnregisterObserver(
+      observer_ptr<scene::ISceneObserver> { this });
+  }
+  observed_scene_ = nullptr;
+  observed_scene_owner_.reset();
 }
 
 auto PhysicsModule::RemoveBinding(const ResourceHandle& binding_handle) -> bool

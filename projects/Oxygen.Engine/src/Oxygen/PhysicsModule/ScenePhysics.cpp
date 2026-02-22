@@ -82,16 +82,8 @@ auto ScenePhysics::AttachRigidBody(observer_ptr<PhysicsModule> physics_module,
     return std::nullopt;
   }
 
-  const auto pos = node.GetTransform().GetWorldPosition().value_or(Vec3(0.0F));
-  const auto rot = node.GetTransform().GetWorldRotation().value_or(
-    Quat(1.0F, 0.0F, 0.0F, 0.0F));
-
-  body::BodyDesc modified_desc = desc;
-  modified_desc.initial_position = pos;
-  modified_desc.initial_rotation = rot;
-
   // Create the body
-  const auto result = body_api.CreateBody(world_id, modified_desc);
+  const auto result = body_api.CreateBody(world_id, desc);
   if (!result.has_value()) {
     return std::nullopt;
   }
@@ -161,14 +153,7 @@ auto ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> physics_module,
     return std::nullopt;
   }
 
-  character::CharacterDesc modified_desc = desc;
-  modified_desc.initial_position
-    = node.GetTransform().GetWorldPosition().value_or(Vec3(0.0F));
-  modified_desc.initial_rotation
-    = node.GetTransform().GetWorldRotation().value_or(
-      Quat(1.0F, 0.0F, 0.0F, 0.0F));
-
-  const auto result = character_api.CreateCharacter(world_id, modified_desc);
+  const auto result = character_api.CreateCharacter(world_id, desc);
   if (!result.has_value()) {
     return std::nullopt;
   }
