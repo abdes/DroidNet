@@ -15,6 +15,7 @@ add_subdirectory("TexturedCube")
 add_subdirectory("DemoShell")
 add_subdirectory("RenderScene")
 add_subdirectory("MultiView")
+add_subdirectory("Physics")
 
 # add_subdirectory("Graphics")
 
