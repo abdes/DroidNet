@@ -85,6 +85,26 @@ NOLINT_TEST_F(
     character::CharacterDesc {});
   ASSERT_TRUE(character.has_value());
 
+  RunGameplay();
+
+  EXPECT_EQ(FakeState().character_move_calls, 0U);
+  EXPECT_EQ(FakeState().move_kinematic_calls, 0U);
+}
+
+#if defined(NDEBUG)
+NOLINT_TEST_F(
+  PhysicsModuleSyncTest, CharacterNodeTransformWriteIsIgnoredInRelease)
+{
+  auto node = scene_->CreateNode("character-authority-release");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  const auto character = ScenePhysics::AttachCharacter(
+    observer_ptr<PhysicsModule> { module_.get() }, node,
+    character::CharacterDesc {});
+  ASSERT_TRUE(character.has_value());
+
   ASSERT_TRUE(node.GetTransform().SetLocalPosition({ 9.0F, 8.0F, 7.0F }));
   scene_->Update();
   scene_->SyncObservers();
@@ -92,7 +112,29 @@ NOLINT_TEST_F(
 
   EXPECT_EQ(FakeState().character_move_calls, 0U);
   EXPECT_EQ(FakeState().move_kinematic_calls, 0U);
+  const auto stats = module_->GetSyncDiagnostics();
+  EXPECT_EQ(stats.gameplay_push_attempts, 0U);
 }
+#endif
+
+#if !defined(NDEBUG)
+NOLINT_TEST_F(PhysicsModuleSyncTest, CharacterNodeTransformWrite_Death)
+{
+  auto node = scene_->CreateNode("character-authority-death");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  const auto character = ScenePhysics::AttachCharacter(
+    observer_ptr<PhysicsModule> { module_.get() }, node,
+    character::CharacterDesc {});
+  ASSERT_TRUE(character.has_value());
+
+  ASSERT_TRUE(node.GetTransform().SetLocalPosition({ 9.0F, 8.0F, 7.0F }));
+  scene_->Update();
+  NOLINT_EXPECT_DEATH((void)scene_->SyncObservers(), ".*");
+}
+#endif
 
 NOLINT_TEST_F(PhysicsModuleSyncTest, GetCharacterReturnsFacadeForAttachedNode)
 {

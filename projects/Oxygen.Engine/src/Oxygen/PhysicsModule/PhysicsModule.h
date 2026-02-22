@@ -64,11 +64,16 @@ namespace oxygen::physics {
  - `body::BodyType::kDynamic`: physics owns motion. Active body transforms are
    pulled from physics in `kSceneMutation`.
  - Character controllers are command-authoritative:
-   `ScenePhysics::CharacterFacade::Move` drives character motion intent.
-   Character attachment does not register transform push/pull participation
-   in this module.
- - A scene node can be managed by exactly one motion authority source:
-   either rigid-body mapping or character mapping, never both.
+
+ `ScenePhysics::CharacterFacade::Move` drives character motion intent.
+   After
+ character attachment, scene-authored transform writes on that node are
+   a
+ contract violation (debug-asserted) and are never enqueued into the
+ rigid-body
+ push path.
+ - A scene node can be managed by exactly one motion authority
+ source: either rigid-body mapping or character mapping, never both.
 
  Same-frame precedence:
  - If a dynamic body also receives scene-authored transform writes in the same

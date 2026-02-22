@@ -571,6 +571,12 @@ auto PhysicsModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
 auto PhysicsModule::OnTransformChanged(
   const scene::NodeHandle& node_handle) noexcept -> void
 {
+  DCHECK_F(!node_to_character_binding_.contains(node_handle),
+    "Character authority contract violated: scene transform writes on "
+    "character-managed nodes are not allowed. Use CharacterFacade::Move.");
+  if (node_to_character_binding_.contains(node_handle)) {
+    return;
+  }
   if (node_to_binding_.contains(node_handle)) {
     pending_transform_updates_.insert(node_handle);
   }
