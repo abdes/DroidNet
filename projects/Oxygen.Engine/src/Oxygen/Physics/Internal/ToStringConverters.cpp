@@ -52,6 +52,11 @@ auto oxygen::physics::to_string(JointId value) -> std::string
   return "JointId{" + std::to_string(value.get()) + "}";
 }
 
+auto oxygen::physics::to_string(AggregateId value) -> std::string
+{
+  return "AggregateId{" + std::to_string(value.get()) + "}";
+}
+
 auto oxygen::physics::to_string(const CollisionLayer value) -> std::string
 {
   return "CollisionLayer{" + std::to_string(value.get()) + "}";

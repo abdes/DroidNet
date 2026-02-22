@@ -128,6 +128,7 @@ The next high-value milestone is simulation mapping generalization for aggregate
 
 1. **Aggregate Mapping Model**
    Introduce a simulation-aggregate handle layer above raw `BodyId` to support 1:N and N:1 mappings (articulation roots, links, vehicle chassis/wheels, soft-body clusters).
+   - Status: baseline model defined in `src/Oxygen/Physics/AggregateMappingModel.md` with first-class `AggregateId` handle contract.
 
 2. **Domain-Local Expansion**
    Keep API separation strict while extending domains:
@@ -245,9 +246,9 @@ This section captures the concrete gaps discovered while scanning usage of `AABB
 
 #### Ready-to-Resume Checklist (Section 5 Full Scope)
 
-- [ ] **5.0.1 Aggregate Mapping Model:** simulation-aggregate handle model defined (supports 1:N and N:1 mappings).
-- [ ] **5.0.2 Aggregate API Surface:** articulation/vehicle/soft-body integration points documented in backend-agnostic interfaces.
-- [ ] **5.0.3 Aggregate Lifecycle Tests:** creation/destruction/rebind scenarios covered by tests.
+- [x] **5.0.1 Aggregate Mapping Model:** simulation-aggregate handle model defined (supports 1:N and N:1 mappings).
+- [x] **5.0.2 Aggregate API Surface:** articulation/vehicle/soft-body integration points documented in backend-agnostic interfaces.
+- [x] **5.0.3 Aggregate Lifecycle Tests:** creation/destruction/rebind scenarios covered by tests.
 
 - [ ] **5.0.4 Domain-Local Expansion:** articulation domain scaffolded with clear ownership and contracts.
 - [ ] **5.0.5 Domain-Local Expansion:** vehicle domain scaffolded with clear ownership and contracts.
