@@ -293,6 +293,8 @@ private:
     observer_ptr<scene::Scene> scene) -> std::size_t;
   auto DestroyAllTrackedBodies() -> void;
   auto DestroyAllTrackedCharacters() -> void;
+  auto DestroyAggregateByDomain(AggregateId aggregate_id,
+    aggregate::AggregateAuthority authority) -> PhysicsResult<void>;
   auto DestroyAllTrackedAggregates() -> void;
   auto DrainPhysicsEvents() -> void;
 

@@ -171,25 +171,6 @@ The introduction of the `IJointApi` and `JoltJoints` correctly implements the ne
 - Jolt domain tests: done
 - Module integration tests: done
 
-### 5.1 Implementation Review: Backend API & Topology
-
-The implementation of `IArticulationApi` correctly codifies a logical articulation topology before committing it to a solver phase. `JoltArticulations` maintains an `unordered_map` representing `child_to_parent` relationships alongside a dedicated `root_body`, all shielded by `std::scoped_lock`.
-
-- **Strengths:**
-  - **Topological Safety:** The implementation of `IsAncestor()` in `AddLink` acts as a robust cycle-detection pre-check. By validating that a proposed parent is not already topologically descended from the child, it natively blocks cyclical DAGs which traditionally crash rigid body solvers.
-  - **Lifetime Decoupling:** The API correctly limits its responsibility to structural mapping rather than entity lifetime. Ensuring bodies are validated against `world->HasBody()` independently prevents dangling relationships.
-  - **Memory Safety:** Usage of explicit locking protocols identically mirrors the safety baseline set during the Aggregate Core integration.
-
-- **Points for Improvement:**
-  - Similar to the limits of the `JoltAggregates` structure, the articulation layout is currently a "logical shadow graph" stored in C++ maps. The backend translation bounds, specifically `FlushStructuralChanges`, currently return size `0` as a stub. When Jolt extensions or `JPH::TwoBodyConstraint` clusters correspond precisely to this articulation structure, `FlushStructuralChanges` must aggressively translate the internal map tree into the specific Jolt rigid hierarchy/constraint structure, or explicitly flag dirty sub-trees.
-
-### 5.2 Implementation Review: Module Integration
-
-The module correctly establishes the `Simulation` authority baseline per the phase-ownership rules for articulations in `PhysicsModule_sync_test.cpp`.
-
-- **Strengths:**
-  - Appropriately categorizing articulations under the `AggregateAuthority::kSimulation` baseline secures the "physics-owns-motion" contract. This means the engine will explicitly block ad-hoc scene graph coordinate updates from interrupting the articulated joint constraints during gameplay, a common source of explosive solver instability.
-
 ## 6. Feature: Vehicle Domain
 
 **Goal:** Support command-driven constrained multi-body vehicle simulation.
@@ -222,9 +203,9 @@ The module correctly establishes the `Simulation` authority baseline per the pha
 **Status:**
 
 - API/contracts: done
-- Jolt backend: pending
-- Jolt domain tests: pending
-- Module integration tests: pending
+- Jolt backend: done
+- Jolt domain tests: done
+- Module integration tests: done
 
 ## 7. Feature: Soft-Body Domain
 
@@ -370,9 +351,9 @@ The module correctly establishes the `Simulation` authority baseline per the pha
 ### 11.3 Vehicle
 
 - [x] API/contracts
-- [ ] Jolt implementation
-- [ ] Jolt tests
-- [ ] PhysicsModule integration tests
+- [x] Jolt implementation
+- [x] Jolt tests
+- [x] PhysicsModule integration tests
 
 ### 11.4 Soft-Body
 

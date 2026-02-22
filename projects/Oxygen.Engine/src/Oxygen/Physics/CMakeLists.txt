@@ -148,6 +148,7 @@ if(OXYGEN_PHYSICS_BACKEND STREQUAL "jolt")
     "Jolt/JoltJoints.cpp"
     "Jolt/JoltQueries.cpp"
     "Jolt/JoltShapes.cpp"
+    "Jolt/JoltVehicles.cpp"
     "Jolt/JoltPhysicsSystem.cpp"
     "Jolt/JoltWorld.cpp"
   )
@@ -166,6 +167,7 @@ if(OXYGEN_PHYSICS_BACKEND STREQUAL "jolt")
     "Jolt/JoltPhysicsSystem.h"
     "Jolt/JoltQueries.h"
     "Jolt/JoltShapes.h"
+    "Jolt/JoltVehicles.h"
     "Jolt/JoltWorld.h"
   )
 endif()

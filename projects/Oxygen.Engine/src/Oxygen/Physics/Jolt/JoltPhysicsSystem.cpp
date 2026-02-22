@@ -9,6 +9,7 @@
 oxygen::physics::jolt::JoltPhysicsSystem::JoltPhysicsSystem()
   : aggregates_(world_)
   , articulations_(world_)
+  , vehicles_(world_)
   , bodies_(world_, shapes_)
   , queries_(world_)
   , events_(world_)
@@ -78,6 +79,12 @@ auto oxygen::physics::jolt::JoltPhysicsSystem::Articulations() noexcept
   return &articulations_;
 }
 
+auto oxygen::physics::jolt::JoltPhysicsSystem::Vehicles() noexcept
+  -> system::IVehicleApi*
+{
+  return &vehicles_;
+}
+
 auto oxygen::physics::jolt::JoltPhysicsSystem::Worlds() const noexcept
   -> const system::IWorldApi&
 {
@@ -136,4 +143,10 @@ auto oxygen::physics::jolt::JoltPhysicsSystem::Articulations() const noexcept
   -> const system::IArticulationApi*
 {
   return &articulations_;
+}
+
+auto oxygen::physics::jolt::JoltPhysicsSystem::Vehicles() const noexcept
+  -> const system::IVehicleApi*
+{
+  return &vehicles_;
 }

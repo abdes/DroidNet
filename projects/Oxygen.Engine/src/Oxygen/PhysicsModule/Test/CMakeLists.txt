@@ -25,6 +25,18 @@ m_gtest_program(
     "PhysicsModule_backend_smoke_test.cpp"
     "PhysicsModule_stress_test.cpp"
     "PhysicsModule_test_fixture.h"
+    "Fakes/BackendState.h"
+    "Fakes/FakeAggregateApi.h"
+    "Fakes/FakeAreaApi.h"
+    "Fakes/FakeBodyApi.h"
+    "Fakes/FakeCharacterApi.h"
+    "Fakes/FakeEventApi.h"
+    "Fakes/FakeJointApi.h"
+    "Fakes/FakePhysicsSystem.h"
+    "Fakes/FakeQueryApi.h"
+    "Fakes/FakeShapeApi.h"
+    "Fakes/FakeVehicleApi.h"
+    "Fakes/FakeWorldApi.h"
     "PhysicsModule_sync_test.cpp"
 )
 target_compile_definitions(
