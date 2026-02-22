@@ -27,7 +27,7 @@ asap_push_module("${META_MODULE_NAME}")
 
 set(
   OXYGEN_PHYSICS_BACKEND
-  "none"
+  "jolt"
   CACHE STRING
   "Physics backend compiled into Oxygen.Physics (none|jolt)"
 )
