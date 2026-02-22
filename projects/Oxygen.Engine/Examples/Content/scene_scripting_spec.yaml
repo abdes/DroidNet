@@ -2,7 +2,7 @@
 # This scene keeps geometry/material procedural at runtime through scripting,
 # while input assets and script asset come from content.
 
-version: 6
+version: 7
 content_version: 1
 
 scripts:

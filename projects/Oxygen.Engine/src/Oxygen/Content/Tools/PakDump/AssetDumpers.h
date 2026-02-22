@@ -22,11 +22,14 @@
 #include "DumpContext.h"
 #include "PrintUtils.h"
 
+#include "CollisionShapeAssetDumper.h"
 #include "DefaultAssetDumper.h"
 #include "GeometryAssetDumper.h"
 #include "InputActionAssetDumper.h"
 #include "InputMappingContextAssetDumper.h"
 #include "MaterialAssetDumper.h"
+#include "PhysicsMaterialAssetDumper.h"
+#include "PhysicsSceneAssetDumper.h"
 #include "SceneAssetDumper.h"
 #include "ScriptAssetDumper.h"
 
@@ -55,6 +58,12 @@ public:
     Register(
       static_cast<uint8_t>(oxygen::data::AssetType::kInputMappingContext),
       std::make_unique<InputMappingContextAssetDumper>());
+    Register(static_cast<uint8_t>(oxygen::data::AssetType::kPhysicsMaterial),
+      std::make_unique<PhysicsMaterialAssetDumper>());
+    Register(static_cast<uint8_t>(oxygen::data::AssetType::kCollisionShape),
+      std::make_unique<CollisionShapeAssetDumper>());
+    Register(static_cast<uint8_t>(oxygen::data::AssetType::kPhysicsScene),
+      std::make_unique<PhysicsSceneAssetDumper>());
   }
 
   [[nodiscard]] auto Get(const uint8_t asset_type) const -> const AssetDumper&

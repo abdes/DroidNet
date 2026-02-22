@@ -205,6 +205,7 @@ target_link_libraries(
     oxygen::imgui
     oxygen::input
     oxygen::platform
+    oxygen::physicsmodule
     oxygen::renderer
     oxygen::scene
     oxygen::scripting

@@ -50,11 +50,22 @@ from .packers import (
     pack_submesh_descriptor,
     pack_mesh_view_descriptor,
     pack_name_string,
+    pack_physics_resource_descriptor,
+    pack_physics_material_asset_descriptor,
+    pack_collision_shape_asset_descriptor,
+    pack_physics_scene_asset_descriptor_and_payload,
+    pack_rigid_body_binding_record,
+    pack_collider_binding_record,
+    pack_character_binding_record,
+    pack_soft_body_binding_record,
+    pack_joint_binding_record,
+    pack_vehicle_binding_record,
+    pack_aggregate_binding_record,
 )
 
 __all__ = ["write_pak"]
 
-RESOURCE_TYPES = ["texture", "buffer", "audio", "script"]
+RESOURCE_TYPES = ["texture", "buffer", "audio", "script", "physics"]
 
 
 def _pad_to(f, target_offset: int):
@@ -162,6 +173,8 @@ def _write_resource_tables_from_plan(
                 desc = pack_audio_resource_descriptor(spec, data_off, size)
             elif rtype == "script":
                 desc = pack_script_resource_descriptor(spec, data_off, size)
+            elif rtype == "physics":
+                desc = pack_physics_resource_descriptor(spec, data_off, size)
             else:  # pragma: no cover
                 raise RuntimeError(f"Unknown resource type {rtype}")
             f.write(desc)
@@ -369,6 +382,10 @@ def _write_assets_and_directory_from_plan(
     script_count = len(scripts)
     input_action_count = len(input_actions)
     input_mapping_context_count = len(input_mapping_contexts)
+    scene_count = len(scenes)
+    physics_material_count = len(build.assets.physics_material_assets)
+    collision_shape_count = len(build.assets.collision_shape_assets)
+    physics_scene_count = len(build.assets.physics_scene_assets)
 
     geometry_name_to_key: dict[str, bytes] = {}
     for geom_spec, asset_key, _atype, _align in geometries:
@@ -385,6 +402,48 @@ def _write_assets_and_directory_from_plan(
             nm = input_action_spec.get("name")
             if isinstance(nm, str) and isinstance(asset_key, (bytes, bytearray)):
                 input_action_name_to_key[nm] = bytes(asset_key)
+
+    physics_material_name_to_asset_index: dict[str, int] = {}
+    collision_shape_name_to_asset_index: dict[str, int] = {}
+    physics_resource_name_to_index: dict[str, int] = {}
+
+    physics_descs = build.resources.desc_fields.get("physics", [])
+    for resource_index, resource_spec in enumerate(physics_descs):
+        if not isinstance(resource_spec, dict):
+            continue
+        resource_name = resource_spec.get("name")
+        if isinstance(resource_name, str):
+            physics_resource_name_to_index[resource_name] = resource_index
+
+    physics_asset_base_index = (
+        material_count
+        + geometry_count
+        + script_count
+        + input_action_count
+        + input_mapping_context_count
+        + scene_count
+    )
+    for pm_idx, pm_spec in enumerate(build.assets.physics_material_assets):
+        if not isinstance(pm_spec, dict):
+            continue
+        raw_spec = pm_spec.get("spec")
+        if not isinstance(raw_spec, dict):
+            continue
+        pm_name = raw_spec.get("name")
+        if isinstance(pm_name, str):
+            physics_material_name_to_asset_index[pm_name] = (
+                physics_asset_base_index + pm_idx
+            )
+    collision_asset_base_index = physics_asset_base_index + physics_material_count
+    for cs_idx, cs_entry in enumerate(build.assets.collision_shape_assets):
+        cs_spec = cs_entry[0]
+        if not isinstance(cs_spec, dict):
+            continue
+        cs_name = cs_spec.get("name")
+        if isinstance(cs_name, str):
+            collision_shape_name_to_asset_index[cs_name] = (
+                collision_asset_base_index + cs_idx
+            )
 
     # Emit descriptors following plan order
     rep = get_reporter()
@@ -513,10 +572,23 @@ def _write_assets_and_directory_from_plan(
                     f"InputMappingContext size mismatch plan_total={expected_total} actual={written}"
                 )
         elif asset_plan.asset_type == "scene":
+            s_idx = (
+                idx
+                - material_count
+                - geometry_count
+                - script_count
+                - input_action_count
+                - input_mapping_context_count
+            )
+            scene_spec, _scene_key, _atype, _align = scenes[s_idx]
+            if isinstance(scene_spec, dict) and scene_spec.get("type") == "physics_scene":
+                raise RuntimeError(
+                    "Physics sidecar asset cannot be emitted with scene packer"
+                )
             cached = scene_cache.get(idx)
-            if cached is None:
-                raise RuntimeError(f"Missing scene cache for asset index {idx}")
-            base_desc, payload, _slots = cached
+            if not cached:
+                raise RuntimeError(f"Missing cached scene packing payload for asset index {idx}")
+            base_desc, payload, _slot_infos = cached
             f.write(base_desc)
             if payload:
                 f.write(payload)
@@ -528,6 +600,52 @@ def _write_assets_and_directory_from_plan(
                 raise RuntimeError(
                     f"Scene size mismatch plan_total={expected_total} actual={written}"
                 )
+        elif asset_plan.asset_type == "physics_material":
+            pm_idx = idx - material_count - geometry_count - script_count - input_action_count - input_mapping_context_count - scene_count
+            spec = build.assets.physics_material_assets[pm_idx]
+            raw_spec = spec.get("spec") if isinstance(spec, dict) else None
+            if not isinstance(raw_spec, dict):
+                raw_spec = spec if isinstance(spec, dict) else {}
+            desc = pack_physics_material_asset_descriptor(raw_spec, header_builder=header_builder)
+            f.write(desc)
+            if len(desc) != asset_plan.descriptor_size:
+                raise RuntimeError(f"PhysicsMaterial size mismatch: plan={asset_plan.descriptor_size} actual={len(desc)}")
+        elif asset_plan.asset_type == "collision_shape":
+            cs_idx = idx - material_count - geometry_count - script_count - input_action_count - input_mapping_context_count - scene_count - physics_material_count
+            cs_spec, key, _atype, _align = build.assets.collision_shape_assets[cs_idx]
+            # collision shapes may need a physics resource index if they are mesh-based
+            res_idx = build.resources.index_map.get("physics", {}).get(cs_spec.get("resource_name", ""), 0)
+            desc = pack_collision_shape_asset_descriptor(cs_spec, resource_index=res_idx, header_builder=header_builder)
+            f.write(desc)
+            if len(desc) != asset_plan.descriptor_size:
+                raise RuntimeError(f"CollisionShape size mismatch: plan={asset_plan.descriptor_size} actual={len(desc)}")
+        elif asset_plan.asset_type == "physics_scene":
+            ps_idx = idx - material_count - geometry_count - script_count - input_action_count - input_mapping_context_count - scene_count - physics_material_count - collision_shape_count
+            ps_spec, key, _atype, _align = build.assets.physics_scene_assets[ps_idx]
+            if not isinstance(ps_spec, dict):
+                ps_spec = {}
+            ps_spec = dict(ps_spec)
+            ps_spec.setdefault("type", "physics_scene")
+            desc, payload = pack_physics_scene_asset_descriptor_and_payload(
+                ps_spec,
+                header_builder=header_builder,
+                shape_name_to_asset_index=collision_shape_name_to_asset_index,
+                physics_material_name_to_asset_index=physics_material_name_to_asset_index,
+                physics_resource_name_to_index=physics_resource_name_to_index,
+            )
+            f.write(desc)
+            if payload:
+                f.write(payload)
+            expected_total = (
+                asset_plan.descriptor_size + asset_plan.variable_extra_size
+            )
+            written = len(desc) + len(payload)
+            if written != expected_total:
+                raise RuntimeError(
+                    f"PhysicsScene size mismatch: plan_total={expected_total} actual={written}"
+                )
+            if len(desc) != asset_plan.descriptor_size:
+                raise RuntimeError(f"PhysicsScene size mismatch: plan={asset_plan.descriptor_size} actual={len(desc)}")
         else:  # pragma: no cover
             raise RuntimeError(f"Unknown asset type {asset_plan.asset_type}")
         rep.advance("write.assets")
@@ -577,6 +695,16 @@ def _write_assets_and_directory_from_plan(
                 - input_mapping_context_count
             )
             _scene_spec, key, _atype, _align = scenes[s_idx]
+        elif asset_plan.asset_type == "physics_material":
+            pm_idx = idx - material_count - geometry_count - script_count - input_action_count - input_mapping_context_count - scene_count
+            spec = build.assets.physics_material_assets[pm_idx]
+            key = spec.get("asset_key", b"\x00" * 16)
+        elif asset_plan.asset_type == "collision_shape":
+            cs_idx = idx - material_count - geometry_count - script_count - input_action_count - input_mapping_context_count - scene_count - physics_material_count
+            _cs_spec, key, _atype, _align = build.assets.collision_shape_assets[cs_idx]
+        elif asset_plan.asset_type == "physics_scene":
+            ps_idx = idx - material_count - geometry_count - script_count - input_action_count - input_mapping_context_count - scene_count - physics_material_count - collision_shape_count
+            _ps_spec, key, _atype, _align = build.assets.physics_scene_assets[ps_idx]
         else:  # pragma: no cover
             raise RuntimeError(f"Unknown asset type {asset_plan.asset_type}")
         asset_type_code = ASSET_TYPE_MAP.get(asset_plan.asset_type, 0)
@@ -771,12 +899,14 @@ def write_pak(
                     texture_region=region_lookup.get("texture", (0, 0)),
                     buffer_region=region_lookup.get("buffer", (0, 0)),
                     audio_region=region_lookup.get("audio", (0, 0)),
+                    script_region=region_lookup.get("script", (0, 0)),
+                    physics_region=region_lookup.get("physics", (0, 0)),
                     texture_table=table_lookup.get("texture", (0, 0, 0)),
                     buffer_table=table_lookup.get("buffer", (0, 0, 0)),
                     audio_table=table_lookup.get("audio", (0, 0, 0)),
-                    script_region=region_lookup.get("script", (0, 0)),
                     script_resource_table=table_lookup.get("script", (0, 0, 0)),
                     script_slot_table=table_lookup.get("script_slot", (0, 0, 0)),
+                    physics_resource_table=table_lookup.get("physics", (0, 0, 0)),
                     browse_index_offset=browse_index_offset,
                     browse_index_size=browse_index_size,
                     pak_crc32=0,

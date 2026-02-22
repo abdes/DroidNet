@@ -43,9 +43,18 @@ __all__ = [
     "pack_script_slot_record",
     "pack_geometry_asset_descriptor",
     "pack_scene_asset_descriptor_and_payload",
-    "pack_mesh_descriptor",
-    "pack_submesh_descriptor",
     "pack_mesh_view_descriptor",
+    "pack_physics_resource_descriptor",
+    "pack_physics_material_asset_descriptor",
+    "pack_collision_shape_asset_descriptor",
+    "pack_physics_scene_asset_descriptor_and_payload",
+    "pack_rigid_body_binding_record",
+    "pack_collider_binding_record",
+    "pack_character_binding_record",
+    "pack_soft_body_binding_record",
+    "pack_joint_binding_record",
+    "pack_vehicle_binding_record",
+    "pack_aggregate_binding_record",
 ]
 
 
@@ -72,6 +81,14 @@ _SCRIPT_PARAM_STRING = 4
 _SCRIPT_PARAM_VEC2 = 5
 _SCRIPT_PARAM_VEC3 = 6
 _SCRIPT_PARAM_VEC4 = 7
+
+_PHYSICS_BINDING_RIGID_BODY = 0x59485052  # 'RPHY'
+_PHYSICS_BINDING_COLLIDER = 0x4C4F4350  # 'PCOL'
+_PHYSICS_BINDING_CHARACTER = 0x52484350  # 'PCHR'
+_PHYSICS_BINDING_SOFT_BODY = 0x42534650  # 'PFSB'
+_PHYSICS_BINDING_JOINT = 0x544E4A50  # 'PJNT'
+_PHYSICS_BINDING_VEHICLE = 0x4C485650  # 'PVHL'
+_PHYSICS_BINDING_AGGREGATE = 0x47474150  # 'PAGG'
 
 
 def _c_string_bytes(value: str, max_bytes_without_nul: int, field: str) -> bytes:
@@ -1204,12 +1221,14 @@ def pack_footer(
     texture_region: Sequence[int],
     buffer_region: Sequence[int],
     audio_region: Sequence[int],
+    script_region: Sequence[int],
+    physics_region: Sequence[int],
     texture_table: Sequence[int],
     buffer_table: Sequence[int],
     audio_table: Sequence[int],
-    script_region: Sequence[int] = (0, 0),
-    script_resource_table: Sequence[int] = (0, 0, 0),
-    script_slot_table: Sequence[int] = (0, 0, 0),
+    script_resource_table: Sequence[int],
+    script_slot_table: Sequence[int],
+    physics_resource_table: Sequence[int],
     browse_index_offset: int = 0,
     browse_index_size: int = 0,
     pak_crc32: int = 0,
@@ -1222,18 +1241,20 @@ def pack_footer(
         off, count, entry_size = table
         return struct.pack("<QII", off, count, entry_size)
 
-    reserved = b"\x00" * 60
+    reserved = b"\x00" * 28
     footer = (
         struct.pack("<QQQ", directory_offset, directory_size, asset_count)
         + pack_region(texture_region)
         + pack_region(buffer_region)
         + pack_region(audio_region)
         + pack_region(script_region)
+        + pack_region(physics_region)
         + pack_table(texture_table)
         + pack_table(buffer_table)
         + pack_table(audio_table)
         + pack_table(script_resource_table)
         + pack_table(script_slot_table)
+        + pack_table(physics_resource_table)
         + struct.pack("<QQ", browse_index_offset, browse_index_size)
         + reserved
         + struct.pack("<I", pak_crc32)
@@ -1599,12 +1620,8 @@ def pack_texture_resource_descriptor(
         + struct.pack("<I", data_size)
         + struct.pack("<B", texture_type)
         + struct.pack("<B", compression_type)
-        + struct.pack("<I", width)
-        + struct.pack("<I", height)
-        + struct.pack("<H", depth)
-        + struct.pack("<H", array_layers)
-        + struct.pack("<H", mip_levels)
-        + struct.pack("<B", format_val)
+        + struct.pack("<IIH", width, height, depth)
+        + struct.pack("<HHB", array_layers, mip_levels, format_val)
         + struct.pack("<H", alignment)
         + struct.pack("<Q", content_hash)
         + b"\x00"
@@ -1613,6 +1630,535 @@ def pack_texture_resource_descriptor(
         raise PakError(
             "E_SIZE", f"Texture descriptor size mismatch: {len(desc)} != 40"
         )
+    return desc
+
+
+def pack_physics_resource_descriptor(
+    resource_spec: Dict[str, Any], data_offset: int, data_size: int
+) -> bytes:
+    """Pack PhysicsResourceDesc (24 bytes)."""
+    fmt = int(resource_spec.get("format", 0))
+    content_hash = int(resource_spec.get("content_hash", 0)) & 0xFFFFFFFFFFFFFFFF
+    desc = (
+        struct.pack("<Q", data_offset)
+        + struct.pack("<I", data_size)
+        + struct.pack("<B", fmt)
+        + b"\x00" * 3
+        + struct.pack("<Q", content_hash)
+    )
+    if len(desc) != 24:
+        raise PakError("E_SIZE", f"PhysicsResourceDesc size mismatch: {len(desc)}")
+    return desc
+
+
+def pack_physics_material_asset_descriptor(
+    asset: Dict[str, Any],
+    *,
+    header_builder,
+) -> bytes:
+    """Pack PhysicsMaterialAssetDesc (128 bytes)."""
+    header = header_builder(asset)
+    friction = float(asset.get("friction", 0.5))
+    restitution = float(asset.get("restitution", 0.0))
+    density = float(asset.get("density", 1000.0))
+    combine_friction = int(asset.get("combine_mode_friction", 0))
+    combine_restitution = int(asset.get("combine_mode_restitution", 0))
+    reserved = b"\x00" * 19
+    desc = (
+        header
+        + struct.pack("<fffBB", friction, restitution, density, combine_friction, combine_restitution)
+        + reserved
+    )
+    if len(desc) != 128:
+        raise PakError("E_SIZE", f"PhysicsMaterialAssetDesc size mismatch: {len(desc)}")
+    return desc
+
+
+def pack_collision_shape_asset_descriptor(
+    asset: Dict[str, Any],
+    resource_index: int,
+    *,
+    header_builder,
+) -> bytes:
+    """Pack CollisionShapeAssetDesc (256 bytes)."""
+    header = header_builder(asset)
+    category = int(asset.get("shape_category", 0))
+    bb_min = _vec3(asset.get("bounding_box_min"), [0.0, 0.0, 0.0])
+    bb_max = _vec3(asset.get("bounding_box_max"), [0.0, 0.0, 0.0])
+    reserved0 = b"\x00" * 3
+    reserved1 = b"\x00" * 129
+    desc = (
+        header
+        + struct.pack("<IB", resource_index, category)
+        + reserved0
+        + struct.pack("<3f", *bb_min)
+        + struct.pack("<3f", *bb_max)
+        + reserved1
+    )
+    if len(desc) != 256:
+        raise PakError("E_SIZE", f"CollisionShapeAssetDesc size mismatch: {len(desc)}")
+    return desc
+
+
+def pack_physics_scene_asset_descriptor_and_payload(
+    asset: Dict[str, Any],
+    *,
+    header_builder,
+    shape_name_to_asset_index: Dict[str, int] | None = None,
+    physics_material_name_to_asset_index: Dict[str, int] | None = None,
+    physics_resource_name_to_index: Dict[str, int] | None = None,
+) -> tuple[bytes, bytes]:
+    """Pack PhysicsSceneAssetDesc (256 bytes) and physics binding payload."""
+
+    shape_name_to_asset_index = shape_name_to_asset_index or {}
+    physics_material_name_to_asset_index = (
+        physics_material_name_to_asset_index or {}
+    )
+    physics_resource_name_to_index = physics_resource_name_to_index or {}
+
+    def _resolve_index(
+        binding: Dict[str, Any],
+        *,
+        index_fields: Sequence[str],
+        name_fields: Sequence[str],
+        name_to_index: Dict[str, int],
+        field_name: str,
+    ) -> int:
+        for field in index_fields:
+            if field in binding:
+                return int(binding.get(field, 0))
+        for field in name_fields:
+            value = binding.get(field)
+            if value is None:
+                continue
+            if not isinstance(value, str):
+                raise PakError("E_TYPE", f"{field_name} name must be a string")
+            if value not in name_to_index:
+                raise PakError(
+                    "E_REF", f"{field_name} '{value}' not found in authored assets"
+                )
+            return int(name_to_index[value])
+        return 0
+
+    target_node_count = int(asset.get("target_node_count", 0))
+    if target_node_count < 0:
+        raise PakError("E_RANGE", "target_node_count must be non-negative")
+
+    tables: list[tuple[int, int, int, bytes]] = []
+
+    rigid_body_bindings = asset.get("rigid_body_bindings", []) or []
+    if not isinstance(rigid_body_bindings, list):
+        raise PakError("E_TYPE", "physics_scene.rigid_body_bindings must be a list")
+    rigid_body_records: list[bytes] = []
+    for binding in rigid_body_bindings:
+        if not isinstance(binding, dict):
+            continue
+        shape_index = _resolve_index(
+            binding,
+            index_fields=("shape_asset_index", "shape_index"),
+            name_fields=("shape_asset", "shape_asset_name", "shape"),
+            name_to_index=shape_name_to_asset_index,
+            field_name="rigid_body.shape_asset",
+        )
+        material_index = _resolve_index(
+            binding,
+            index_fields=("material_asset_index", "material_index"),
+            name_fields=(
+                "material_asset",
+                "material_asset_name",
+                "material",
+            ),
+            name_to_index=physics_material_name_to_asset_index,
+            field_name="rigid_body.material_asset",
+        )
+        rigid_body_records.append(
+            pack_rigid_body_binding_record(
+                binding,
+                shape_index,
+                material_index,
+                node_count=target_node_count,
+            )
+        )
+    if rigid_body_records:
+        blob = b"".join(rigid_body_records)
+        tables.append(
+            (_PHYSICS_BINDING_RIGID_BODY, len(rigid_body_records), 64, blob)
+        )
+
+    collider_bindings = asset.get("collider_bindings", []) or []
+    if not isinstance(collider_bindings, list):
+        raise PakError("E_TYPE", "physics_scene.collider_bindings must be a list")
+    collider_records: list[bytes] = []
+    for binding in collider_bindings:
+        if not isinstance(binding, dict):
+            continue
+        shape_index = _resolve_index(
+            binding,
+            index_fields=("shape_asset_index", "shape_index"),
+            name_fields=("shape_asset", "shape_asset_name", "shape"),
+            name_to_index=shape_name_to_asset_index,
+            field_name="collider.shape_asset",
+        )
+        material_index = _resolve_index(
+            binding,
+            index_fields=("material_asset_index", "material_index"),
+            name_fields=(
+                "material_asset",
+                "material_asset_name",
+                "material",
+            ),
+            name_to_index=physics_material_name_to_asset_index,
+            field_name="collider.material_asset",
+        )
+        collider_records.append(
+            pack_collider_binding_record(
+                binding,
+                shape_index,
+                material_index,
+                node_count=target_node_count,
+            )
+        )
+    if collider_records:
+        blob = b"".join(collider_records)
+        tables.append((_PHYSICS_BINDING_COLLIDER, len(collider_records), 32, blob))
+
+    character_bindings = asset.get("character_bindings", []) or []
+    if not isinstance(character_bindings, list):
+        raise PakError("E_TYPE", "physics_scene.character_bindings must be a list")
+    character_records: list[bytes] = []
+    for binding in character_bindings:
+        if not isinstance(binding, dict):
+            continue
+        shape_index = _resolve_index(
+            binding,
+            index_fields=("shape_asset_index", "shape_index"),
+            name_fields=("shape_asset", "shape_asset_name", "shape"),
+            name_to_index=shape_name_to_asset_index,
+            field_name="character.shape_asset",
+        )
+        character_records.append(
+            pack_character_binding_record(
+                binding,
+                shape_index,
+                node_count=target_node_count,
+            )
+        )
+    if character_records:
+        blob = b"".join(character_records)
+        tables.append(
+            (_PHYSICS_BINDING_CHARACTER, len(character_records), 48, blob)
+        )
+
+    soft_body_bindings = asset.get("soft_body_bindings", []) or []
+    if not isinstance(soft_body_bindings, list):
+        raise PakError("E_TYPE", "physics_scene.soft_body_bindings must be a list")
+    soft_body_records = [
+        pack_soft_body_binding_record(binding, node_count=target_node_count)
+        for binding in soft_body_bindings
+        if isinstance(binding, dict)
+    ]
+    if soft_body_records:
+        blob = b"".join(soft_body_records)
+        tables.append((_PHYSICS_BINDING_SOFT_BODY, len(soft_body_records), 48, blob))
+
+    joint_bindings = asset.get("joint_bindings", []) or []
+    if not isinstance(joint_bindings, list):
+        raise PakError("E_TYPE", "physics_scene.joint_bindings must be a list")
+    joint_records: list[bytes] = []
+    for binding in joint_bindings:
+        if not isinstance(binding, dict):
+            continue
+        constraint_index = _resolve_index(
+            binding,
+            index_fields=("constraint_resource_index", "constraint_index"),
+            name_fields=(
+                "constraint_resource",
+                "constraint_resource_name",
+            ),
+            name_to_index=physics_resource_name_to_index,
+            field_name="joint.constraint_resource",
+        )
+        joint_records.append(
+            pack_joint_binding_record(
+                binding,
+                constraint_index,
+                node_count=target_node_count,
+            )
+        )
+    if joint_records:
+        blob = b"".join(joint_records)
+        tables.append((_PHYSICS_BINDING_JOINT, len(joint_records), 32, blob))
+
+    vehicle_bindings = asset.get("vehicle_bindings", []) or []
+    if not isinstance(vehicle_bindings, list):
+        raise PakError("E_TYPE", "physics_scene.vehicle_bindings must be a list")
+    vehicle_records: list[bytes] = []
+    for binding in vehicle_bindings:
+        if not isinstance(binding, dict):
+            continue
+        constraint_index = _resolve_index(
+            binding,
+            index_fields=("constraint_resource_index", "constraint_index"),
+            name_fields=(
+                "constraint_resource",
+                "constraint_resource_name",
+            ),
+            name_to_index=physics_resource_name_to_index,
+            field_name="vehicle.constraint_resource",
+        )
+        vehicle_records.append(
+            pack_vehicle_binding_record(
+                binding,
+                constraint_index,
+                node_count=target_node_count,
+            )
+        )
+    if vehicle_records:
+        blob = b"".join(vehicle_records)
+        tables.append((_PHYSICS_BINDING_VEHICLE, len(vehicle_records), 32, blob))
+
+    aggregate_bindings = asset.get("aggregate_bindings", []) or []
+    if not isinstance(aggregate_bindings, list):
+        raise PakError("E_TYPE", "physics_scene.aggregate_bindings must be a list")
+    aggregate_records = [
+        pack_aggregate_binding_record(binding, node_count=target_node_count)
+        for binding in aggregate_bindings
+        if isinstance(binding, dict)
+    ]
+    if aggregate_records:
+        blob = b"".join(aggregate_records)
+        tables.append((_PHYSICS_BINDING_AGGREGATE, len(aggregate_records), 28, blob))
+
+    tables.sort(key=lambda item: item[0])
+    table_count = len(tables)
+
+    payload = b""
+    directory_offset = 0
+    if tables:
+        directory_offset = 256
+        table_cursor = directory_offset + (20 * table_count)
+        directory_entries: list[bytes] = []
+        table_blobs: list[bytes] = []
+        for binding_type, count, entry_size, blob in tables:
+            directory_entries.append(
+                struct.pack("<I", int(binding_type))
+                + struct.pack("<QII", int(table_cursor), int(count), int(entry_size))
+            )
+            table_blobs.append(blob)
+            table_cursor += len(blob)
+        payload = b"".join(directory_entries) + b"".join(table_blobs)
+
+    header = header_builder(asset)
+    target_scene_key = _pack_asset_key_bytes(
+        asset.get("target_scene_key"), "target_scene_key"
+    )
+    desc = (
+        header
+        + target_scene_key
+        + struct.pack(
+            "<IIQ",
+            target_node_count,
+            table_count,
+            directory_offset,
+        )
+        + b"\x00" * 129
+    )
+    if len(desc) != 256:
+        raise PakError("E_SIZE", f"PhysicsSceneAssetDesc size mismatch: {len(desc)}")
+    return desc, payload
+
+
+def pack_rigid_body_binding_record(
+    binding: Dict[str, Any],
+    shape_index: int,
+    material_index: int,
+    *,
+    node_count: int,
+) -> bytes:
+    """Pack RigidBodyBindingRecord (64 bytes)."""
+    node_index = int(binding.get("node_index", 0))
+    if node_index < 0 or node_index >= node_count:
+        raise PakError("E_REF", f"RigidBody node_index out of range: {node_index}")
+    body_type = int(binding.get("body_type", 0))
+    motion_quality = int(binding.get("motion_quality", 0))
+    layer = int(binding.get("collision_layer", 0))
+    mask = int(binding.get("collision_mask", 0xFFFFFFFF))
+    mass = float(binding.get("mass", 0.0))
+    linear_damping = float(binding.get("linear_damping", 0.05))
+    angular_damping = float(binding.get("angular_damping", 0.05))
+    gravity_factor = float(binding.get("gravity_factor", 1.0))
+    activation = 1 if bool(binding.get("initial_activation", True)) else 0
+    is_sensor = 1 if bool(binding.get("is_sensor", False)) else 0
+    reserved = b"\x00" * 20
+    desc = (
+        struct.pack(
+            "<IBBHIffffIIII",
+            node_index,
+            body_type,
+            motion_quality,
+            layer,
+            mask,
+            mass,
+            linear_damping,
+            angular_damping,
+            gravity_factor,
+            activation,
+            is_sensor,
+            shape_index,
+            material_index,
+        )
+        + reserved
+    )
+    if len(desc) != 64:
+        raise PakError("E_SIZE", f"RigidBodyBindingRecord size mismatch: {len(desc)}")
+    return desc
+
+
+def pack_collider_binding_record(
+    binding: Dict[str, Any],
+    shape_index: int,
+    material_index: int,
+    *,
+    node_count: int,
+) -> bytes:
+    """Pack ColliderBindingRecord (32 bytes)."""
+    node_index = int(binding.get("node_index", 0))
+    if node_index < 0 or node_index >= node_count:
+        raise PakError("E_REF", f"Collider node_index out of range: {node_index}")
+    layer = int(binding.get("collision_layer", 0))
+    mask = int(binding.get("collision_mask", 0xFFFFFFFF))
+    reserved = b"\x00" * 14
+    desc = (
+        struct.pack("<IIIIHI", node_index, shape_index, material_index, 0, layer, mask)
+        + reserved
+    )
+    # Re-checking PakFormat.h: node_index(u32), shape_index(u32), material_index(u32), layer(u16), mask(u32)
+    # PakFormat.h: node_index(4), shape_asset_index(4), material_asset_index(4), collision_layer(2), collision_mask(4) = 18 bytes.
+    # + reserved(14) = 32 bytes.
+    desc = struct.pack("<IIIHI", node_index, shape_index, material_index, layer, mask) + reserved
+    if len(desc) != 32:
+        raise PakError("E_SIZE", f"ColliderBindingRecord size mismatch: {len(desc)}")
+    return desc
+
+
+def pack_character_binding_record(
+    binding: Dict[str, Any],
+    shape_index: int,
+    *,
+    node_count: int,
+) -> bytes:
+    """Pack CharacterBindingRecord (48 bytes)."""
+    node_index = int(binding.get("node_index", 0))
+    if node_index < 0 or node_index >= node_count:
+        raise PakError("E_REF", f"Character node_index out of range: {node_index}")
+    mass = float(binding.get("mass", 80.0))
+    max_slope = float(binding.get("max_slope_angle", 0.7854))
+    step_height = float(binding.get("step_height", 0.3))
+    max_strength = float(binding.get("max_strength", 100.0))
+    layer = int(binding.get("collision_layer", 0))
+    mask = int(binding.get("collision_mask", 0xFFFFFFFF))
+    reserved = b"\x00" * 18
+    desc = (
+        struct.pack("<IIffffHI", node_index, shape_index, mass, max_slope, step_height, max_strength, layer, mask)
+        + reserved
+    )
+    if len(desc) != 48:
+        raise PakError("E_SIZE", f"CharacterBindingRecord size mismatch: {len(desc)}")
+    return desc
+
+
+def pack_soft_body_binding_record(
+    binding: Dict[str, Any],
+    *,
+    node_count: int,
+) -> bytes:
+    """Pack SoftBodyBindingRecord (48 bytes)."""
+    node_index = int(binding.get("node_index", 0))
+    if node_index < 0 or node_index >= node_count:
+        raise PakError("E_REF", f"SoftBody node_index out of range: {node_index}")
+    clusters = int(binding.get("cluster_count", 0))
+    stiffness = float(binding.get("stiffness", 0.0))
+    damping = float(binding.get("damping", 0.0))
+    edge_comp = float(binding.get("edge_compliance", 0.0))
+    shear_comp = float(binding.get("shear_compliance", 0.0))
+    bend_comp = float(binding.get("bend_compliance", 1.0))
+    tether_mode = int(binding.get("tether_mode", 0))
+    tether_max = float(binding.get("tether_max_distance_multiplier", 1.0))
+    reserved0 = b"\x00" * 3
+    reserved1 = b"\x00" * 12
+    desc = (
+        struct.pack("<IIfffffB", node_index, clusters, stiffness, damping, edge_comp, shear_comp, bend_comp, tether_mode)
+        + reserved0
+        + struct.pack("<f", tether_max)
+        + reserved1
+    )
+    if len(desc) != 48:
+        raise PakError("E_SIZE", f"SoftBodyBindingRecord size mismatch: {len(desc)}")
+    return desc
+
+
+def pack_joint_binding_record(
+    binding: Dict[str, Any],
+    constraint_index: int,
+    *,
+    node_count: int,
+) -> bytes:
+    """Pack JointBindingRecord (32 bytes)."""
+    node_a = int(binding.get("node_index_a", 0))
+    node_b = int(binding.get("node_index_b", 0xFFFFFFFF))
+    if node_a < 0 or node_a >= node_count:
+        raise PakError("E_REF", f"Joint node_index_a out of range: {node_a}")
+    if node_b != 0xFFFFFFFF and (node_b < 0 or node_b >= node_count):
+        raise PakError("E_REF", f"Joint node_index_b out of range: {node_b}")
+    reserved = b"\x00" * 20
+    desc = (
+        struct.pack("<III", node_a, node_b, constraint_index)
+        + reserved
+    )
+    if len(desc) != 32:
+        raise PakError("E_SIZE", f"JointBindingRecord size mismatch: {len(desc)}")
+    return desc
+
+
+def pack_vehicle_binding_record(
+    binding: Dict[str, Any],
+    constraint_index: int,
+    *,
+    node_count: int,
+) -> bytes:
+    """Pack VehicleBindingRecord (32 bytes)."""
+    node_index = int(binding.get("node_index", 0))
+    if node_index < 0 or node_index >= node_count:
+        raise PakError("E_REF", f"Vehicle node_index out of range: {node_index}")
+    reserved = b"\x00" * 24
+    desc = (
+        struct.pack("<II", node_index, constraint_index)
+        + reserved
+    )
+    if len(desc) != 32:
+        raise PakError("E_SIZE", f"VehicleBindingRecord size mismatch: {len(desc)}")
+    return desc
+
+
+def pack_aggregate_binding_record(
+    binding: Dict[str, Any],
+    *,
+    node_count: int,
+) -> bytes:
+    """Pack AggregateBindingRecord (28 bytes)."""
+    node_index = int(binding.get("node_index", 0))
+    if node_index < 0 or node_index >= node_count:
+        raise PakError("E_REF", f"Aggregate node_index out of range: {node_index}")
+    max_bodies = int(binding.get("max_bodies", 0))
+    filter_overlap = 1 if bool(binding.get("filter_overlap", True)) else 0
+    authority = int(binding.get("authority", 0))
+    reserved = b"\x00" * 15
+    desc = (
+        struct.pack("<IIIB", node_index, max_bodies, filter_overlap, authority)
+        + reserved
+    )
+    if len(desc) != 28:
+        raise PakError("E_SIZE", f"AggregateBindingRecord size mismatch: {len(desc)}")
     return desc
 
 

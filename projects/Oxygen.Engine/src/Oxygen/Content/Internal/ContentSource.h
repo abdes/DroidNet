@@ -95,6 +95,10 @@ public:
     -> std::unique_ptr<serio::AnyReader>
     = 0;
 
+  [[nodiscard]] virtual auto CreatePhysicsTableReader() const
+    -> std::unique_ptr<serio::AnyReader>
+    = 0;
+
   [[nodiscard]] virtual auto GetBufferTable() const noexcept
     -> const ResourceTable<data::BufferResource>* = 0;
 
@@ -103,6 +107,9 @@ public:
 
   [[nodiscard]] virtual auto GetScriptTable() const noexcept
     -> const ResourceTable<data::ScriptResource>* = 0;
+
+  [[nodiscard]] virtual auto GetPhysicsTable() const noexcept
+    -> const ResourceTable<data::PhysicsResource>* = 0;
 
   [[nodiscard]] virtual auto CreateBufferDataReader() const
     -> std::unique_ptr<serio::AnyReader>
@@ -113,6 +120,10 @@ public:
     = 0;
 
   [[nodiscard]] virtual auto CreateScriptDataReader() const
+    -> std::unique_ptr<serio::AnyReader>
+    = 0;
+
+  [[nodiscard]] virtual auto CreatePhysicsDataReader() const
     -> std::unique_ptr<serio::AnyReader>
     = 0;
 };
@@ -188,6 +199,12 @@ public:
     return std::make_unique<OwningPakSectionReader>(pak_.FilePath(), 0);
   }
 
+  [[nodiscard]] auto CreatePhysicsTableReader() const
+    -> std::unique_ptr<serio::AnyReader> override
+  {
+    return std::make_unique<OwningPakSectionReader>(pak_.FilePath(), 0);
+  }
+
   [[nodiscard]] auto GetBufferTable() const noexcept
     -> const ResourceTable<data::BufferResource>* override
   {
@@ -204,6 +221,12 @@ public:
     -> const ResourceTable<data::ScriptResource>* override
   {
     return pak_.GetResourceTable<data::ScriptResource>();
+  }
+
+  [[nodiscard]] auto GetPhysicsTable() const noexcept
+    -> const ResourceTable<data::PhysicsResource>* override
+  {
+    return pak_.GetResourceTable<data::PhysicsResource>();
   }
 
   [[nodiscard]] auto CreateBufferDataReader() const
@@ -234,6 +257,16 @@ public:
     }
     return std::make_unique<OwningPakSectionReader>(
       pak_.FilePath(), static_cast<size_t>(footer_->script_region.offset));
+  }
+
+  [[nodiscard]] auto CreatePhysicsDataReader() const
+    -> std::unique_ptr<serio::AnyReader> override
+  {
+    if (!footer_) {
+      return nullptr;
+    }
+    return std::make_unique<OwningPakSectionReader>(
+      pak_.FilePath(), static_cast<size_t>(footer_->physics_region.offset));
   }
 
   [[nodiscard]] auto Pak() const noexcept -> const PakFile& { return pak_; }
@@ -456,6 +489,12 @@ public:
     return nullptr;
   }
 
+  [[nodiscard]] auto CreatePhysicsTableReader() const
+    -> std::unique_ptr<serio::AnyReader> override
+  {
+    return nullptr;
+  }
+
   [[nodiscard]] auto GetBufferTable() const noexcept
     -> const ResourceTable<data::BufferResource>* override
   {
@@ -470,6 +509,12 @@ public:
 
   [[nodiscard]] auto GetScriptTable() const noexcept
     -> const ResourceTable<data::ScriptResource>* override
+  {
+    return nullptr;
+  }
+
+  [[nodiscard]] auto GetPhysicsTable() const noexcept
+    -> const ResourceTable<data::PhysicsResource>* override
   {
     return nullptr;
   }
@@ -493,6 +538,12 @@ public:
   }
 
   [[nodiscard]] auto CreateScriptDataReader() const
+    -> std::unique_ptr<serio::AnyReader> override
+  {
+    return nullptr;
+  }
+
+  [[nodiscard]] auto CreatePhysicsDataReader() const
     -> std::unique_ptr<serio::AnyReader> override
   {
     return nullptr;

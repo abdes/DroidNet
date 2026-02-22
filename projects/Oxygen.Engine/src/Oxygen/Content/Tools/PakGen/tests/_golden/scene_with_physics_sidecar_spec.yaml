@@ -1,0 +1,82 @@
+version: 7
+content_version: 1
+
+buffers: []
+textures: []
+audios: []
+
+physics:
+  - name: "shape_blob"
+    format: 1
+    data_hex: "01020304"
+  - name: "constraint_blob"
+    format: 1
+    data_hex: "05060708"
+
+assets:
+  - name: "scene_root"
+    type: "scene"
+    asset_key: "cccccccc-1111-2222-3333-444444444444"
+    nodes:
+      - name: "root"
+        parent: 0
+      - name: "dynamic_node"
+        parent: 0
+
+  - name: "physics_mat"
+    type: "physics_material"
+    asset_key: "dddddddd-1111-2222-3333-444444444444"
+
+  - name: "collision_shape_main"
+    type: "collision_shape"
+    asset_key: "eeeeeeee-1111-2222-3333-444444444444"
+    resource_name: "shape_blob"
+    shape_category: 0
+
+  - name: "scene_root.physics"
+    type: "physics_scene"
+    asset_key: "ffffffff-1111-2222-3333-444444444444"
+    target_scene_key: "cccccccc-1111-2222-3333-444444444444"
+    target_node_count: 2
+    rigid_body_bindings:
+      - node_index: 1
+        shape_asset: "collision_shape_main"
+        material_asset: "physics_mat"
+        body_type: 1
+        motion_quality: 1
+        collision_layer: 3
+        collision_mask: 255
+        mass: 10.0
+    collider_bindings:
+      - node_index: 0
+        shape_asset: "collision_shape_main"
+        material_asset: "physics_mat"
+        collision_layer: 2
+        collision_mask: 127
+    character_bindings:
+      - node_index: 1
+        shape_asset: "collision_shape_main"
+        mass: 85.0
+        max_slope_angle: 0.7854
+        step_height: 0.5
+        max_strength: 120.0
+    soft_body_bindings:
+      - node_index: 1
+        cluster_count: 4
+        stiffness: 0.5
+        damping: 0.2
+        edge_compliance: 0.1
+        shear_compliance: 0.1
+        bend_compliance: 0.8
+    joint_bindings:
+      - node_index_a: 0
+        node_index_b: 1
+        constraint_resource: "constraint_blob"
+    vehicle_bindings:
+      - node_index: 1
+        constraint_resource: "constraint_blob"
+    aggregate_bindings:
+      - node_index: 0
+        max_bodies: 32
+        filter_overlap: true
+        authority: 0

@@ -34,7 +34,8 @@ namespace oxygen::content::pakdump::asset_dump_helpers {
 [[nodiscard]] inline auto GetAssetTypeName(const uint8_t asset_type) -> const
   char*
 {
-  return nostd::to_string(static_cast<oxygen::data::AssetType>(asset_type));
+  return oxygen::data::to_string(
+    static_cast<oxygen::data::AssetType>(asset_type));
 }
 
 inline auto PrintAssetKey(const oxygen::data::AssetKey& key, DumpContext& ctx)

@@ -22,6 +22,7 @@
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResource.h>
@@ -70,6 +71,7 @@ class PakFile {
   auto InitBuffersTable() const -> void;
   auto InitTexturesTable() const -> void;
   auto InitScriptsTable() const -> void;
+  auto InitPhysicsTable() const -> void;
 
 public:
   using Reader = serio::Reader<serio::FileStream<>>;
@@ -81,6 +83,8 @@ public:
   using TexturesTableT = ResourceTable<data::TextureResource>;
   //! Type alias for the script resource table.
   using ScriptsTableT = ResourceTable<data::ScriptResource>;
+  //! Type alias for the physics resource table.
+  using PhysicsTableT = ResourceTable<data::PhysicsResource>;
 
   //! 8-byte header magic: {'O','X','P','A','K',0,0,0}
   static constexpr std::array<uint8_t, 8> kHeaderMagic
@@ -166,6 +170,8 @@ public:
   OXGN_CNTT_NDAPI auto TexturesTable() const -> TexturesTableT&;
   //! Get the resource table for script resources.
   OXGN_CNTT_NDAPI auto ScriptsTable() const -> ScriptsTableT&;
+  //! Get the resource table for physics resources.
+  OXGN_CNTT_NDAPI auto PhysicsTable() const -> PhysicsTableT&;
 
   //! Check if a resource table of the given type exists in the PAK file.
   template <PakResource T> auto HasTableOf() const -> bool
@@ -176,6 +182,8 @@ public:
       return static_cast<bool>(textures_table_);
     } else if constexpr (std::is_same_v<T, data::ScriptResource>) {
       return static_cast<bool>(scripts_table_);
+    } else if constexpr (std::is_same_v<T, data::PhysicsResource>) {
+      return static_cast<bool>(physics_table_);
     } else {
       return false;
     }
@@ -199,6 +207,8 @@ public:
       return textures_table_ ? &(*textures_table_) : nullptr;
     } else if constexpr (std::is_same_v<T, data::ScriptResource>) {
       return scripts_table_ ? &(*scripts_table_) : nullptr;
+    } else if constexpr (std::is_same_v<T, data::PhysicsResource>) {
+      return physics_table_ ? &(*physics_table_) : nullptr;
     } else {
       return nullptr;
     }
@@ -213,6 +223,8 @@ public:
   auto CreateTextureDataReader() const -> Reader;
   //! Create a Reader for the script data region.
   auto CreateScriptDataReader() const -> Reader;
+  //! Create a Reader for the physics data region.
+  auto CreatePhysicsDataReader() const -> Reader;
 
   //! Read one ScriptSlotRecord from the global slot table.
   OXGN_CNTT_NDAPI auto ReadScriptSlotRecord(uint32_t index) const
@@ -256,6 +268,8 @@ public:
       return CreateTextureDataReader();
     } else if constexpr (std::is_same_v<T, data::ScriptResource>) {
       return CreateScriptDataReader();
+    } else if constexpr (std::is_same_v<T, data::PhysicsResource>) {
+      return CreatePhysicsDataReader();
     } else {
       throw std::invalid_argument(
         "Unsupported resource type for CreateBufferDataReader");
@@ -282,6 +296,7 @@ private:
   std::unique_ptr<serio::FileStream<>> buffer_data_stream_;
   std::unique_ptr<serio::FileStream<>> texture_data_stream_;
   std::unique_ptr<serio::FileStream<>> script_data_stream_;
+  std::unique_ptr<serio::FileStream<>> physics_data_stream_;
 
   std::vector<data::pak::AssetDirectoryEntry> directory_;
   mutable std::mutex mutex_;
@@ -294,6 +309,7 @@ private:
   mutable std::optional<BuffersTableT> buffers_table_;
   mutable std::optional<TexturesTableT> textures_table_;
   mutable std::optional<ScriptsTableT> scripts_table_;
+  mutable std::optional<PhysicsTableT> physics_table_;
 };
 
 } // namespace oxygen::content

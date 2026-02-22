@@ -206,6 +206,9 @@ class AssetCollectionResult:
     input_action_assets: List[Tuple[Dict[str, Any], bytes, int, int]]
     input_mapping_context_assets: List[Tuple[Dict[str, Any], bytes, int, int]]
     scene_assets: List[Tuple[Dict[str, Any], bytes, int, int]]
+    physics_material_assets: List[Dict[str, Any]]
+    collision_shape_assets: List[Tuple[Dict[str, Any], bytes, int, int]]
+    physics_scene_assets: List[Tuple[Dict[str, Any], bytes, int, int]]
     total_assets: int = 0
     total_materials: int = 0
     total_geometries: int = 0
@@ -213,6 +216,9 @@ class AssetCollectionResult:
     total_input_actions: int = 0
     total_input_mapping_contexts: int = 0
     total_scenes: int = 0
+    total_physics_materials: int = 0
+    total_collision_shapes: int = 0
+    total_physics_scenes: int = 0
 
 
 @dataclass(slots=True)
@@ -420,15 +426,25 @@ def collect_resources(
     simulate_delay: float | None = None,
 ) -> ResourceCollectionResult:
     logger = get_logger()
-    data_blobs = {r: [] for r in resource_types}
-    desc_fields = {r: [] for r in resource_types}
-    index_map = {r: {} for r in resource_types}
+    resource_spec_keys: Dict[str, str] = {
+        "texture": "textures",
+        "buffer": "buffers",
+        "audio": "audios",
+        "script": "scripts",
+        "physics": "physics",
+    }
+    data_blobs: Dict[str, List[bytes]] = {r: [] for r in resource_types}
+    desc_fields: Dict[str, List[Dict[str, Any]]] = {
+        r: [] for r in resource_types
+    }
+    index_map: Dict[str, Dict[str, int]] = {r: {} for r in resource_types}
     total_bytes = 0
 
     rep = get_reporter()
     with section("Collect resources"):
         for rtype in resource_types:
-            items = spec.get(rtype + "s", [])
+            plural_key = resource_spec_keys.get(rtype, rtype + "s")
+            items = spec.get(plural_key, [])
             if not items:
                 continue
             # Determinism policy:
@@ -591,7 +607,7 @@ def collect_resources(
                             f"Too many {rtype} resources (needs room for sentinel): {len(desc_fields[rtype])}"
                         )
 
-                    sentinel_spec: Dict[str, Any] = {
+                    script_sentinel_spec: Dict[str, Any] = {
                         "name": sentinel_name,
                         "language": 0,
                         "encoding": 0,
@@ -599,13 +615,40 @@ def collect_resources(
                         "content_hash": 0,
                     }
                     data_blobs[rtype].insert(0, b"")
-                    desc_fields[rtype].insert(0, sentinel_spec)
+                    desc_fields[rtype].insert(0, script_sentinel_spec)
 
                     old_map = index_map[rtype]
                     new_map_script: Dict[str, int] = {sentinel_name: 0}
                     for k, v in old_map.items():
                         new_map_script[k] = int(v) + 1
                     index_map[rtype] = new_map_script
+
+            # Physics resource indices: reserve index 0 as sentinel (absent).
+            if rtype == "physics":
+                sentinel_name = "__sentinel_physics"
+                if sentinel_name not in index_map[rtype]:
+                    if len(desc_fields[rtype]) >= MAX_RESOURCES_PER_TYPE:
+                        rep.error(
+                            f"Too many {rtype} resources (needs room for sentinel): "
+                            f"{len(desc_fields[rtype])}/{MAX_RESOURCES_PER_TYPE}"
+                        )
+                        raise ValueError(
+                            f"Too many {rtype} resources (needs room for sentinel): {len(desc_fields[rtype])}"
+                        )
+
+                    physics_sentinel_spec: Dict[str, Any] = {
+                        "name": sentinel_name,
+                        "format": 0,
+                        "content_hash": 0,
+                    }
+                    data_blobs[rtype].insert(0, b"")
+                    desc_fields[rtype].insert(0, physics_sentinel_spec)
+
+                    old_map = index_map[rtype]
+                    new_map_phys: Dict[str, int] = {sentinel_name: 0}
+                    for k, v in old_map.items():
+                        new_map_phys[k] = int(v) + 1
+                    index_map[rtype] = new_map_phys
 
         # Summary after all resource types processed
         counts = {rt: len(desc_fields[rt]) for rt in resource_types}
@@ -646,6 +689,20 @@ def collect_assets(
     input_actions: List[Tuple[Dict[str, Any], bytes, int, int]] = []
     input_mapping_contexts: List[Tuple[Dict[str, Any], bytes, int, int]] = []
     scenes: List[Tuple[Dict[str, Any], bytes, int, int]] = []
+    physics_materials: List[Dict[str, Any]] = []
+    collision_shapes: List[Tuple[Dict[str, Any], bytes, int, int]] = []
+    physics_scenes: List[Tuple[Dict[str, Any], bytes, int, int]] = []
+    supported_asset_types = {
+        "material",
+        "geometry",
+        "script",
+        "input_action",
+        "input_mapping_context",
+        "scene",
+        "physics_material",
+        "collision_shape",
+        "physics_scene",
+    }
     if not isinstance(assets_list, list):
         rep.error("Spec 'assets' must be a list")
         raise ValueError("Spec 'assets' must be a list")
@@ -666,6 +723,15 @@ def collect_assets(
         a for a in assets_list if a.get("type") == "input_mapping_context"
     ]
     scene_entries = [a for a in assets_list if a.get("type") == "scene"]
+    physics_material_entries = [
+        a for a in assets_list if a.get("type") == "physics_material"
+    ]
+    collision_shape_entries = [
+        a for a in assets_list if a.get("type") == "collision_shape"
+    ]
+    physics_scene_entries = [
+        a for a in assets_list if a.get("type") == "physics_scene"
+    ]
     if material_entries:
         rep.start_task(
             "assets.material", "Material assets", total=len(material_entries)
@@ -690,17 +756,32 @@ def collect_assets(
         )
     if scene_entries:
         rep.start_task("assets.scene", "Scene assets", total=len(scene_entries))
+    if physics_material_entries:
+        rep.start_task(
+            "assets.physics_material",
+            "Physics material assets",
+            total=len(physics_material_entries),
+        )
+    if collision_shape_entries:
+        rep.start_task(
+            "assets.collision_shape",
+            "Collision shape assets",
+            total=len(collision_shape_entries),
+        )
+    if physics_scene_entries:
+        rep.start_task(
+            "assets.physics_scene",
+            "Physics scene assets",
+            total=len(physics_scene_entries),
+        )
     for entry in assets_list:
-        if not isinstance(entry, dict) or entry.get("type") not in (
-            "material",
-            "geometry",
-            "script",
-            "input_action",
-            "input_mapping_context",
-            "scene",
-        ):
-            # Skip unsupported types silently for now (future: error)
-            continue
+        if not isinstance(entry, dict):
+            rep.error("Asset entry must be object")
+            raise ValueError("Asset entry must be object")
+        asset_type = entry.get("type")
+        if not isinstance(asset_type, str) or asset_type not in supported_asset_types:
+            rep.error(f"Unsupported asset type: {asset_type!r}")
+            raise ValueError(f"Unsupported asset type: {asset_type!r}")
         if "name" not in entry:
             rep.error("Asset missing name field")
             raise ValueError("Asset missing name")
@@ -714,7 +795,7 @@ def collect_assets(
                     key_bytes = bytes.fromhex(cleaned)
                 except ValueError:
                     key_bytes = b"\x00" * 16
-        if entry.get("type") == "material":
+        if asset_type == "material":
             materials.append(
                 {
                     "name": entry["name"],
@@ -730,7 +811,7 @@ def collect_assets(
                 delay = simulate_material_delay
             if delay and delay > 0:
                 time.sleep(delay)
-        elif entry.get("type") == "geometry":
+        elif asset_type == "geometry":
             geometries.append((entry, key_bytes, 0, entry.get("alignment", 1)))
             rep.advance("assets.geometry", current_item=entry["name"])
             delay = simulate_delay
@@ -738,7 +819,7 @@ def collect_assets(
                 delay = simulate_material_delay
             if delay and delay > 0:
                 time.sleep(delay)
-        elif entry.get("type") == "script":
+        elif asset_type == "script":
             scripts.append((entry, key_bytes, 0, entry.get("alignment", 1)))
             rep.advance("assets.script", current_item=entry["name"])
             delay = simulate_delay
@@ -746,7 +827,7 @@ def collect_assets(
                 delay = simulate_material_delay
             if delay and delay > 0:
                 time.sleep(delay)
-        elif entry.get("type") == "input_action":
+        elif asset_type == "input_action":
             input_actions.append((entry, key_bytes, 0, entry.get("alignment", 1)))
             rep.advance("assets.input_action", current_item=entry["name"])
             delay = simulate_delay
@@ -754,7 +835,7 @@ def collect_assets(
                 delay = simulate_material_delay
             if delay and delay > 0:
                 time.sleep(delay)
-        elif entry.get("type") == "input_mapping_context":
+        elif asset_type == "input_mapping_context":
             input_mapping_contexts.append(
                 (entry, key_bytes, 0, entry.get("alignment", 1))
             )
@@ -764,9 +845,42 @@ def collect_assets(
                 delay = simulate_material_delay
             if delay and delay > 0:
                 time.sleep(delay)
-        elif entry.get("type") == "scene":
+        elif asset_type == "scene":
             scenes.append((entry, key_bytes, 0, entry.get("alignment", 1)))
             rep.advance("assets.scene", current_item=entry["name"])
+            delay = simulate_delay
+            if delay is None:
+                delay = simulate_material_delay
+            if delay and delay > 0:
+                time.sleep(delay)
+        elif asset_type == "physics_material":
+            physics_materials.append(
+                {
+                    "name": entry["name"],
+                    "asset_key": key_bytes,
+                    "alignment": entry.get("alignment", 1),
+                    "spec": entry,
+                }
+            )
+            rep.advance("assets.physics_material", current_item=entry["name"])
+            delay = simulate_delay
+            if delay is None:
+                delay = simulate_material_delay
+            if delay and delay > 0:
+                time.sleep(delay)
+        elif asset_type == "collision_shape":
+            collision_shapes.append(
+                (entry, key_bytes, 0, entry.get("alignment", 1))
+            )
+            rep.advance("assets.collision_shape", current_item=entry["name"])
+            delay = simulate_delay
+            if delay is None:
+                delay = simulate_material_delay
+            if delay and delay > 0:
+                time.sleep(delay)
+        elif asset_type == "physics_scene":
+            physics_scenes.append((entry, key_bytes, 0, entry.get("alignment", 1)))
+            rep.advance("assets.physics_scene", current_item=entry["name"])
             delay = simulate_delay
             if delay is None:
                 delay = simulate_material_delay
@@ -784,6 +898,12 @@ def collect_assets(
         rep.end_task("assets.input_mapping_context")
     if scene_entries:
         rep.end_task("assets.scene")
+    if physics_material_entries:
+        rep.end_task("assets.physics_material")
+    if collision_shape_entries:
+        rep.end_task("assets.collision_shape")
+    if physics_scene_entries:
+        rep.end_task("assets.physics_scene")
     # Assets summary
     total_assets = (
         len(material_entries)
@@ -792,6 +912,9 @@ def collect_assets(
         + len(input_action_entries)
         + len(input_mapping_context_entries)
         + len(scene_entries)
+        + len(physics_material_entries)
+        + len(collision_shape_entries)
+        + len(physics_scene_entries)
     )
     if total_assets:
         rep.status(
@@ -799,7 +922,9 @@ def collect_assets(
             + f"{len(material_entries)} geometries={len(geometry_entries)} "
             + f"scripts={len(script_entries)} input_actions={len(input_action_entries)} "
             + f"input_mapping_contexts={len(input_mapping_context_entries)} "
-            + f"scenes={len(scene_entries)} total={total_assets}"
+            + f"scenes={len(scene_entries)} physics_materials={len(physics_material_entries)} "
+            + f"collision_shapes={len(collision_shape_entries)} physics_scenes={len(physics_scene_entries)} "
+            + f"total={total_assets}"
         )
     max_assets_total = (
         MAX_RESOURCES_PER_TYPE * 2
@@ -809,12 +934,15 @@ def collect_assets(
             f"Assets near heuristic limit: {total_assets}/{max_assets_total}"
         )
     return AssetCollectionResult(
-        materials,
-        geometries,
-        scripts,
-        input_actions,
-        input_mapping_contexts,
-        scenes,
+        material_assets=materials,
+        geometry_assets=geometries,
+        script_assets=scripts,
+        input_action_assets=input_actions,
+        input_mapping_context_assets=input_mapping_contexts,
+        scene_assets=scenes,
+        physics_material_assets=physics_materials,
+        collision_shape_assets=collision_shapes,
+        physics_scene_assets=physics_scenes,
         total_assets=total_assets,
         total_materials=len(material_entries),
         total_geometries=len(geometry_entries),
@@ -822,6 +950,9 @@ def collect_assets(
         total_input_actions=len(input_action_entries),
         total_input_mapping_contexts=len(input_mapping_context_entries),
         total_scenes=len(scene_entries),
+        total_physics_materials=len(physics_material_entries),
+        total_collision_shapes=len(collision_shape_entries),
+        total_physics_scenes=len(physics_scene_entries),
     )
 
 
@@ -832,7 +963,7 @@ def build_plan(
     simulate_material_delay: float | None = None,
     simulate_delay: float | None = None,
 ) -> BuildPlan:
-    resource_types = ["texture", "buffer", "audio", "script"]
+    resource_types = ["texture", "buffer", "audio", "script", "physics"]
     res = collect_resources(
         spec,
         base_dir,
@@ -889,6 +1020,9 @@ def compute_pak_plan(
         MESH_VIEW_DESC_SIZE,
         SHADER_REF_DESC_SIZE,
         SCENE_ASSET_VERSION_CURRENT,
+        PHYSICS_MATERIAL_ASSET_DESC_SIZE,
+        COLLISION_SHAPE_ASSET_DESC_SIZE,
+        PHYSICS_SCENE_DESC_SIZE,
     )
 
     # Start after header.
@@ -1016,6 +1150,44 @@ def compute_pak_plan(
             key_bytes = bytes(key)
             if not _is_zero_guid(key_bytes):
                 seen_keys.setdefault(key_bytes, []).append(f"scene:{name}")
+    for p in build_plan.assets.physics_material_assets:
+        if not isinstance(p, dict):
+            continue
+        spec = p.get("spec")
+        spec = spec if isinstance(spec, dict) else {}
+        name = spec.get("name", "")
+        name = name if isinstance(name, str) else ""
+        key = p.get("asset_key", b"\x00" * 16)
+        if isinstance(key, (bytes, bytearray)):
+            key_bytes = bytes(key)
+            if not _is_zero_guid(key_bytes):
+                seen_keys.setdefault(key_bytes, []).append(
+                    f"physics_material:{name}"
+                )
+    for shape_spec, key, _atype, _align in build_plan.assets.collision_shape_assets:
+        name = (
+            shape_spec.get("name")
+            if isinstance(shape_spec.get("name"), str)
+            else ""
+        )
+        if isinstance(key, (bytes, bytearray)):
+            key_bytes = bytes(key)
+            if not _is_zero_guid(key_bytes):
+                seen_keys.setdefault(key_bytes, []).append(
+                    f"collision_shape:{name}"
+                )
+    for scene_spec, key, _atype, _align in build_plan.assets.physics_scene_assets:
+        name = (
+            scene_spec.get("name")
+            if isinstance(scene_spec.get("name"), str)
+            else ""
+        )
+        if isinstance(key, (bytes, bytearray)):
+            key_bytes = bytes(key)
+            if not _is_zero_guid(key_bytes):
+                seen_keys.setdefault(key_bytes, []).append(
+                    f"physics_scene:{name}"
+                )
 
     duplicates = {k: v for k, v in seen_keys.items() if len(v) > 1}
     if duplicates:
@@ -1026,7 +1198,7 @@ def compute_pak_plan(
         raise ValueError(f"Duplicate asset_key values in spec: {details}")
 
     # Resource regions
-    for rtype in ["texture", "buffer", "audio", "script"]:
+    for rtype in ["texture", "buffer", "audio", "script", "physics"]:
         blobs = build_plan.resources.data_blobs.get(rtype, [])
         descs = build_plan.resources.desc_fields.get(rtype, [])
         # IMPORTANT: Do not reorder resource lists, even in deterministic mode.
@@ -1133,10 +1305,30 @@ def compute_pak_plan(
                 padding_before=pad_before,
             )
         )
+    # Physics resource table (alias of Table 2 if present in v7 footer)
+    physics_descs = build_plan.resources.desc_fields.get("physics", [])
+    if physics_descs:
+        from .constants import PHYSICS_RESOURCE_ENTRY_SIZE
+        aligned_cursor, pad_before = align(
+            cursor, TABLE_ALIGNMENT, "table_physics"
+        )
+        cursor = aligned_cursor
+        table_offset = cursor
+        table_size = len(physics_descs) * PHYSICS_RESOURCE_ENTRY_SIZE
+        cursor += table_size
+        tables.append(
+            TablePlan(
+                name="physics",
+                offset=table_offset,
+                count=len(physics_descs),
+                entry_size=PHYSICS_RESOURCE_ENTRY_SIZE,
+                padding_before=pad_before,
+            )
+        )
     else:
         tables.append(
             TablePlan(
-                name="script_slot",
+                name="physics",
                 offset=0,
                 count=0,
                 entry_size=0,
@@ -1152,7 +1344,20 @@ def compute_pak_plan(
     input_actions = build_plan.assets.input_action_assets
     input_mapping_contexts = build_plan.assets.input_mapping_context_assets
     scenes = build_plan.assets.scene_assets
-    if materials or geometries or scripts or scenes:
+    physics_materials = build_plan.assets.physics_material_assets
+    collision_shapes = build_plan.assets.collision_shape_assets
+    physics_scenes = build_plan.assets.physics_scene_assets
+    if (
+        materials
+        or geometries
+        or scripts
+        or input_actions
+        or input_mapping_contexts
+        or scenes
+        or physics_materials
+        or collision_shapes
+        or physics_scenes
+    ):
         cursor_aligned, pad_before_assets = align(
             cursor, DATA_ALIGNMENT, "assets_region"
         )
@@ -1197,11 +1402,28 @@ def compute_pak_plan(
             name = spec.get("name")
             return name if isinstance(name, str) else ""
 
+        def _physics_material_name(entry: Dict[str, Any]) -> str:
+            spec = entry.get("spec")
+            if not isinstance(spec, dict):
+                return ""
+            name = spec.get("name")
+            return name if isinstance(name, str) else ""
+
+        def _shape_name(entry: Tuple[Dict[str, Any], bytes, int, int]) -> str:
+            spec = entry[0]
+            if not isinstance(spec, dict):
+                return ""
+            name = spec.get("name")
+            return name if isinstance(name, str) else ""
+
         input_actions = sorted(input_actions, key=_input_action_name)
         input_mapping_contexts = sorted(
             input_mapping_contexts, key=_input_mapping_context_name
         )
         scenes = sorted(scenes, key=_scene_name)
+        physics_materials = sorted(physics_materials, key=_physics_material_name)
+        collision_shapes = sorted(collision_shapes, key=_shape_name)
+        physics_scenes = sorted(physics_scenes, key=_shape_name)
 
         # Keep build_plan asset lists in the same order the plan assumes.
         build_plan.assets.material_assets = materials
@@ -1210,6 +1432,9 @@ def compute_pak_plan(
         build_plan.assets.input_action_assets = input_actions
         build_plan.assets.input_mapping_context_assets = input_mapping_contexts
         build_plan.assets.scene_assets = scenes
+        build_plan.assets.physics_material_assets = physics_materials
+        build_plan.assets.collision_shape_assets = collision_shapes
+        build_plan.assets.physics_scene_assets = physics_scenes
 
     # Material descriptors
     for m in materials:
@@ -1451,6 +1676,120 @@ def compute_pak_plan(
             )
         )
         cursor += SCENE_DESC_SIZE + len(payload)
+
+    physics_material_name_to_asset_index: Dict[str, int] = {}
+    collision_shape_name_to_asset_index: Dict[str, int] = {}
+    physics_resource_name_to_index: Dict[str, int] = {}
+    physics_descs = build_plan.resources.desc_fields.get("physics", [])
+    for index, resource_spec in enumerate(physics_descs):
+        if not isinstance(resource_spec, dict):
+            continue
+        name = resource_spec.get("name")
+        if isinstance(name, str):
+            physics_resource_name_to_index[name] = index
+
+    for pm in physics_materials:
+        cursor_aligned, _pad_pm = align(cursor, 1, "asset_physics_material")
+        cursor = cursor_aligned
+        key_hex = (
+            pm.get("asset_key", b"\x00" * 16).hex()
+            if isinstance(pm, dict)
+            else ""
+        )
+        name = ""
+        if isinstance(pm, dict):
+            spec = pm.get("spec")
+            if isinstance(spec, dict):
+                nm = spec.get("name")
+                if isinstance(nm, str):
+                    name = nm
+        assets.append(
+            AssetPlan(
+                asset_type="physics_material",
+                key_hex=key_hex,
+                descriptor_offset=cursor,
+                descriptor_size=PHYSICS_MATERIAL_ASSET_DESC_SIZE,
+                alignment=1,
+                variable_extra_size=0,
+                name=name,
+            )
+        )
+        if isinstance(pm, dict):
+            spec = pm.get("spec")
+            if isinstance(spec, dict):
+                pm_name = spec.get("name")
+                if isinstance(pm_name, str):
+                    physics_material_name_to_asset_index[pm_name] = len(assets) - 1
+        cursor += PHYSICS_MATERIAL_ASSET_DESC_SIZE
+
+    for shape_spec, asset_key, _asset_type, alignment in collision_shapes:
+        cursor_aligned, _pad_cs = align(
+            cursor, alignment or 1, "asset_collision_shape"
+        )
+        cursor = cursor_aligned
+        key_hex = (
+            asset_key.hex() if isinstance(asset_key, (bytes, bytearray)) else ""
+        )
+        name = ""
+        if isinstance(shape_spec, dict):
+            nm = shape_spec.get("name")
+            if isinstance(nm, str):
+                name = nm
+        assets.append(
+            AssetPlan(
+                asset_type="collision_shape",
+                key_hex=key_hex,
+                descriptor_offset=cursor,
+                descriptor_size=COLLISION_SHAPE_ASSET_DESC_SIZE,
+                alignment=alignment or 1,
+                variable_extra_size=0,
+                name=name,
+            )
+        )
+        if isinstance(shape_spec, dict):
+            shape_name = shape_spec.get("name")
+            if isinstance(shape_name, str):
+                collision_shape_name_to_asset_index[shape_name] = len(assets) - 1
+        cursor += COLLISION_SHAPE_ASSET_DESC_SIZE
+
+    from .packers import pack_physics_scene_asset_descriptor_and_payload
+
+    for sidecar_spec, asset_key, _asset_type, alignment in physics_scenes:
+        cursor_aligned, _pad_ps = align(
+            cursor, alignment or 1, "asset_physics_scene"
+        )
+        cursor = cursor_aligned
+        key_hex = (
+            asset_key.hex() if isinstance(asset_key, (bytes, bytearray)) else ""
+        )
+        name = ""
+        if isinstance(sidecar_spec, dict):
+            nm = sidecar_spec.get("name")
+            if isinstance(nm, str):
+                name = nm
+        if not isinstance(sidecar_spec, dict):
+            sidecar_spec = {}
+        sidecar_for_pack = dict(sidecar_spec)
+        sidecar_for_pack.setdefault("type", "physics_scene")
+        _, payload = pack_physics_scene_asset_descriptor_and_payload(
+            sidecar_for_pack,
+            header_builder=lambda _a: b"\x00" * 95,
+            shape_name_to_asset_index=collision_shape_name_to_asset_index,
+            physics_material_name_to_asset_index=physics_material_name_to_asset_index,
+            physics_resource_name_to_index=physics_resource_name_to_index,
+        )
+        assets.append(
+            AssetPlan(
+                asset_type="physics_scene",
+                key_hex=key_hex,
+                descriptor_offset=cursor,
+                descriptor_size=PHYSICS_SCENE_DESC_SIZE,
+                alignment=alignment or 1,
+                variable_extra_size=len(payload),
+                name=name,
+            )
+        )
+        cursor += PHYSICS_SCENE_DESC_SIZE + len(payload)
 
     # Directory (only if assets present)
     if assets:

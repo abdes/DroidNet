@@ -83,6 +83,7 @@ def build_pak(options: BuildOptions) -> BuildResult:  # implemented stub
         "textures": spec_model.textures,
         "audios": spec_model.audios,
         "scripts": spec_model.scripts,
+        "physics": spec_model.physics,
         "assets": assets_list,
     }
     val_errors = run_validation_pipeline(spec_dict)
@@ -93,7 +94,7 @@ def build_pak(options: BuildOptions) -> BuildResult:  # implemented stub
         )
     rep.status(
         "Spec summary: buffers="
-        + f"{len(spec_model.buffers)} textures={len(spec_model.textures)} audios={len(spec_model.audios)} scripts={len(spec_model.scripts)} assets={len(assets_list)} validation=ok"
+        + f"{len(spec_model.buffers)} textures={len(spec_model.textures)} audios={len(spec_model.audios)} scripts={len(spec_model.scripts)} physics={len(spec_model.physics)} assets={len(assets_list)} validation=ok"
     )
     build = build_plan(
         spec_dict,
@@ -125,7 +126,7 @@ def build_pak(options: BuildOptions) -> BuildResult:  # implemented stub
             # Derive zero-length resource info & warnings (non-first zero length)
             zero_length: list[dict[str, Any]] = []
             warnings: list[str] = []
-            for rtype in ["texture", "buffer", "audio", "script"]:
+            for rtype in ["texture", "buffer", "audio", "script", "physics"]:
                 descs = build.resources.desc_fields.get(rtype, [])
                 blobs = build.resources.data_blobs.get(rtype, [])
                 # blobs length matches non-empty data blobs only; need to infer zero-length entries by descriptor fields
@@ -162,7 +163,7 @@ def build_pak(options: BuildOptions) -> BuildResult:  # implemented stub
                             )
             # Build resource_index_map capturing final post-plan ordering
             resource_index_map: dict[str, list[dict[str, Any]]] = {}
-            for rtype in ["texture", "buffer", "audio", "script"]:
+            for rtype in ["texture", "buffer", "audio", "script", "physics"]:
                 descs = build.resources.desc_fields.get(rtype, [])
                 if descs:
                     resource_index_map[rtype] = [
@@ -228,6 +229,7 @@ def plan_dry_run(
         "textures": spec_model.textures,
         "audios": spec_model.audios,
         "scripts": spec_model.scripts,
+        "physics": spec_model.physics,
         "assets": assets_list,
     }
     val_errors = run_validation_pipeline(spec_dict)

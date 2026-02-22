@@ -105,6 +105,11 @@ private:
     {
       on_complete(nullptr);
     }
+    void StartLoadPhysicsSceneAsset(
+      const data::AssetKey& /*key*/, PhysicsSceneCallback on_complete) override
+    {
+      on_complete(nullptr);
+    }
     auto AddPakFile(const std::filesystem::path& /*path*/) -> void override { }
     auto AddLooseCookedRoot(const std::filesystem::path& /*path*/)
       -> void override
@@ -155,6 +160,12 @@ private:
     {
       return nullptr;
     }
+    [[nodiscard]] auto GetPhysicsSceneAsset(
+      const data::AssetKey& /*key*/) const noexcept
+      -> std::shared_ptr<data::PhysicsSceneAsset> override
+    {
+      return nullptr;
+    }
     [[nodiscard]] auto GetInputActionAsset(
       const data::AssetKey& /*key*/) const noexcept
       -> std::shared_ptr<data::InputActionAsset> override
@@ -195,6 +206,11 @@ private:
       return false;
     }
     [[nodiscard]] auto HasScriptAsset(
+      const data::AssetKey& /*key*/) const noexcept -> bool override
+    {
+      return false;
+    }
+    [[nodiscard]] auto HasPhysicsSceneAsset(
       const data::AssetKey& /*key*/) const noexcept -> bool override
     {
       return false;

@@ -87,6 +87,10 @@ struct DumpInputOptions {
   std::string cooked_root;
 };
 
+struct DumpPhysicsAssetsOptions {
+  std::string cooked_root;
+};
+
 auto AssetTypeToString(const uint8_t asset_type) -> std::string_view
 {
   using oxygen::data::AssetType;
@@ -110,6 +114,10 @@ auto FileKindToString(const FileKind kind) -> std::string_view
     return "textures.table";
   case FileKind::kTexturesData:
     return "textures.data";
+  case FileKind::kScriptsTable:
+    return "scripts.table";
+  case FileKind::kScriptsData:
+    return "scripts.data";
   case FileKind::kUnknown:
   default:
     return "unknown";
@@ -343,6 +351,15 @@ auto ValidateRootOrThrow(const std::filesystem::path& cooked_root) -> void
     case AssetType::kInputMappingContext:
       min_size = sizeof(InputMappingContextAssetDesc);
       break;
+    case AssetType::kPhysicsMaterial:
+      min_size = sizeof(oxygen::data::pak::PhysicsMaterialAssetDesc);
+      break;
+    case AssetType::kCollisionShape:
+      min_size = sizeof(oxygen::data::pak::CollisionShapeAssetDesc);
+      break;
+    case AssetType::kPhysicsScene:
+      min_size = sizeof(oxygen::data::pak::PhysicsSceneAssetDesc);
+      break;
     default:
       break;
     }
@@ -514,6 +531,74 @@ auto RunDumpTextures(const DumpResourceOptions& opts) -> int
                 << "\n";
     }
 
+    return 0;
+  } catch (const std::exception& ex) {
+    std::cerr << "ERROR: " << ex.what() << "\n";
+    return 2;
+  }
+}
+
+auto RunDumpPhysics(const DumpResourceOptions& opts) -> int
+{
+  const std::filesystem::path cooked_root(opts.cooked_root);
+
+  try {
+    oxygen::content::LooseCookedInspection inspection;
+    inspection.LoadFromRoot(cooked_root);
+
+    const auto relpath = FindFileRelPathBySuffix(inspection, "physics.table");
+    if (!relpath) {
+      std::cerr << "ERROR: physics.table not found in index\n";
+      return 2;
+    }
+
+    const auto table_path = cooked_root / *relpath;
+    auto entries
+      = LoadPackedTable<oxygen::data::pak::PhysicsResourceDesc>(table_path);
+
+    if (entries.empty()) {
+      std::cout << "No physics resources found in: '" << table_path.string()
+                << "'\n";
+      return 0;
+    }
+
+    std::cout << "Dumping " << entries.size() - 1 << " user physics resources ("
+              << entries.size() << " total entries including sentinel) in: '"
+              << table_path.string() << "'\n\n";
+
+    std::cout
+      << "Idx  Offset              Size       Format                    Hash\n";
+    std::cout << "---- ------------------- ---------- "
+                 "------------------------- ----------------\n";
+
+    for (size_t i = 0; i < entries.size(); ++i) {
+      const auto& e = entries[i];
+      std::string_view format_name = "Unknown";
+      switch (static_cast<oxygen::data::pak::PhysicsResourceFormat>(e.format)) {
+      case oxygen::data::pak::PhysicsResourceFormat::kJoltShapeBinary:
+        format_name = "JoltShapeBinary";
+        break;
+      case oxygen::data::pak::PhysicsResourceFormat::kJoltConstraintBinary:
+        format_name = "JoltConstraintBinary";
+        break;
+      case oxygen::data::pak::PhysicsResourceFormat::
+        kJoltSoftBodySharedSettingsBinary:
+        format_name = "JoltSoftBodySharedSettingsBinary";
+        break;
+      default:
+        break;
+      }
+
+      std::cout << std::right << std::setw(3) << i << (i == 0 ? "*" : " ")
+                << " ";
+      std::cout << std::left << std::setw(19) << ToHex64(e.data_offset) << " ";
+      std::cout << std::right << std::setw(10) << e.size_bytes << " ";
+      std::cout << std::left << std::setw(25) << format_name << " ";
+      std::cout << std::left << std::setw(16) << ToHex64(e.content_hash)
+                << "\n";
+    }
+
+    std::cout << "\n  (* = sentinel/reserved index)\n";
     return 0;
   } catch (const std::exception& ex) {
     std::cerr << "ERROR: " << ex.what() << "\n";
@@ -788,6 +873,142 @@ auto RunDumpInputMappings(const DumpInputOptions& opts) -> int
   }
 }
 
+auto RunDumpPhysicsAssets(const DumpPhysicsAssetsOptions& opts) -> int
+{
+  using oxygen::data::AssetType;
+  using oxygen::data::pak::CollisionShapeAssetDesc;
+  using oxygen::data::pak::PhysicsComponentTableDesc;
+  using oxygen::data::pak::PhysicsMaterialAssetDesc;
+  using oxygen::data::pak::PhysicsSceneAssetDesc;
+
+  const std::filesystem::path cooked_root(opts.cooked_root);
+  try {
+    oxygen::content::LooseCookedInspection inspection;
+    inspection.LoadFromRoot(cooked_root);
+
+    size_t count = 0;
+    for (const auto& asset : inspection.Assets()) {
+      const auto type = static_cast<AssetType>(asset.asset_type);
+      if (type != AssetType::kPhysicsMaterial
+        && type != AssetType::kCollisionShape
+        && type != AssetType::kPhysicsScene) {
+        continue;
+      }
+      ++count;
+
+      const auto descriptor = ReadDescriptorBytes(
+        cooked_root / std::filesystem::path(asset.descriptor_relpath));
+
+      if (type == AssetType::kPhysicsMaterial) {
+        std::cout << "PhysicsMaterial key='"
+                  << oxygen::data::to_string(asset.key) << "' desc='"
+                  << asset.descriptor_relpath << "'\n";
+        if (descriptor.size() < sizeof(PhysicsMaterialAssetDesc)) {
+          std::cout << "  ! descriptor too small\n";
+          continue;
+        }
+        const auto desc = ReadStructAt<PhysicsMaterialAssetDesc>(descriptor, 0);
+        if (!desc) {
+          std::cout << "  ! failed to decode descriptor\n";
+          continue;
+        }
+        std::cout << "  name='"
+                  << ReadFixedString(
+                       desc->header.name, sizeof(desc->header.name))
+                  << "' friction=" << desc->friction
+                  << " restitution=" << desc->restitution
+                  << " density=" << desc->density << "\n";
+        continue;
+      }
+
+      if (type == AssetType::kCollisionShape) {
+        std::cout << "CollisionShape key='"
+                  << oxygen::data::to_string(asset.key) << "' desc='"
+                  << asset.descriptor_relpath << "'\n";
+        if (descriptor.size() < sizeof(CollisionShapeAssetDesc)) {
+          std::cout << "  ! descriptor too small\n";
+          continue;
+        }
+        const auto desc = ReadStructAt<CollisionShapeAssetDesc>(descriptor, 0);
+        if (!desc) {
+          std::cout << "  ! failed to decode descriptor\n";
+          continue;
+        }
+        std::cout << "  name='"
+                  << ReadFixedString(
+                       desc->header.name, sizeof(desc->header.name))
+                  << "' resource_index=" << desc->physics_resource_index
+                  << " category=" << static_cast<uint32_t>(desc->shape_category)
+                  << " bb_min=(" << desc->bounding_box_min[0] << ","
+                  << desc->bounding_box_min[1] << ","
+                  << desc->bounding_box_min[2] << ") bb_max=("
+                  << desc->bounding_box_max[0] << ","
+                  << desc->bounding_box_max[1] << ","
+                  << desc->bounding_box_max[2] << ")\n";
+        continue;
+      }
+
+      std::cout << "PhysicsScene key='" << oxygen::data::to_string(asset.key)
+                << "' desc='" << asset.descriptor_relpath << "'\n";
+      if (descriptor.size() < sizeof(PhysicsSceneAssetDesc)) {
+        std::cout << "  ! descriptor too small\n";
+        continue;
+      }
+      const auto desc = ReadStructAt<PhysicsSceneAssetDesc>(descriptor, 0);
+      if (!desc) {
+        std::cout << "  ! failed to decode descriptor\n";
+        continue;
+      }
+      std::cout << "  name='"
+                << ReadFixedString(desc->header.name, sizeof(desc->header.name))
+                << "' target_scene_key="
+                << oxygen::data::to_string(desc->target_scene_key)
+                << " target_node_count=" << desc->target_node_count
+                << " table_count=" << desc->component_table_count
+                << " table_dir_offset="
+                << ToHex64(desc->component_table_directory_offset) << "\n";
+
+      const size_t dir_offset
+        = static_cast<size_t>(desc->component_table_directory_offset);
+      const size_t dir_count = static_cast<size_t>(desc->component_table_count);
+      const size_t dir_bytes = dir_count * sizeof(PhysicsComponentTableDesc);
+      if (dir_count == 0) {
+        continue;
+      }
+      if (dir_offset > descriptor.size()
+        || dir_bytes > (descriptor.size() - dir_offset)) {
+        std::cout << "  ! component table directory out of bounds\n";
+        continue;
+      }
+
+      uint64_t total_bindings = 0;
+      for (size_t i = 0; i < dir_count; ++i) {
+        const auto entry = ReadStructAt<PhysicsComponentTableDesc>(
+          descriptor, dir_offset + i * sizeof(PhysicsComponentTableDesc));
+        if (!entry) {
+          std::cout << "    ! table[" << i << "] decode failed\n";
+          continue;
+        }
+        total_bindings += entry->table.count;
+        std::cout << "    table[" << i << "] type=0x" << std::hex
+                  << static_cast<uint32_t>(entry->binding_type) << std::dec
+                  << " count=" << entry->table.count
+                  << " entry_size=" << entry->table.entry_size
+                  << " offset=" << ToHex64(entry->table.offset) << "\n";
+      }
+      std::cout << "    total_bindings=" << total_bindings << "\n";
+    }
+
+    if (count == 0) {
+      std::cout << "(no physics assets)\n";
+    }
+    return 0;
+  } catch (const std::exception& ex) {
+    std::cerr << "ERROR: " << ex.what() << "\n";
+    return 2;
+  }
+}
+
 auto RunDumpScriptSlots(const DumpScriptOptions& opts) -> int
 {
   const std::filesystem::path cooked_root(opts.cooked_root);
@@ -914,9 +1135,10 @@ auto RunDumpScriptParams(const DumpScriptOptions& opts) -> int
 
 auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
   DumpResourceOptions& buffers_opts, DumpResourceOptions& textures_opts,
-  DumpScriptOptions& script_slots_opts, DumpScriptOptions& script_params_opts,
-  DumpInputOptions& input_actions_opts, DumpInputOptions& input_mappings_opts)
-  -> std::unique_ptr<Cli>
+  DumpResourceOptions& physics_opts, DumpScriptOptions& script_slots_opts,
+  DumpScriptOptions& script_params_opts, DumpInputOptions& input_actions_opts,
+  DumpInputOptions& input_mappings_opts,
+  DumpPhysicsAssetsOptions& physics_assets_opts) -> std::unique_ptr<Cli>
 {
   auto validate_root = Option::Positional("cooked_root")
                          .About("Loose cooked root directory")
@@ -999,6 +1221,18 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
         .About("Dump textures.table entries.")
         .WithPositionalArguments(textures_root);
 
+  auto physics_root = Option::Positional("cooked_root")
+                        .About("Loose cooked root directory")
+                        .Required()
+                        .WithValue<std::string>()
+                        .StoreTo(&physics_opts.cooked_root)
+                        .Build();
+
+  const std::shared_ptr<Command> physics_table_cmd
+    = CommandBuilder("physics-table")
+        .About("Dump physics.table entries.")
+        .WithPositionalArguments(physics_root);
+
   auto script_slots_root = Option::Positional("cooked_root")
                              .About("Loose cooked root directory")
                              .Required()
@@ -1047,6 +1281,18 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
         .About("Dump input mapping context descriptors.")
         .WithPositionalArguments(input_mappings_root);
 
+  auto physics_assets_root = Option::Positional("cooked_root")
+                               .About("Loose cooked root directory")
+                               .Required()
+                               .WithValue<std::string>()
+                               .StoreTo(&physics_assets_opts.cooked_root)
+                               .Build();
+
+  const std::shared_ptr<Command> physics_assets_cmd
+    = CommandBuilder("physics")
+        .About("Dump physics asset descriptors.")
+        .WithPositionalArguments(physics_assets_root);
+
   return CliBuilder()
     .ProgramName(std::string(kProgramName))
     .Version(std::string(kVersion))
@@ -1058,10 +1304,12 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
     .WithCommand(dump_cmd)
     .WithCommand(buffers_cmd)
     .WithCommand(textures_cmd)
+    .WithCommand(physics_table_cmd)
     .WithCommand(script_slots_cmd)
     .WithCommand(script_params_cmd)
     .WithCommand(input_actions_cmd)
     .WithCommand(input_mappings_cmd)
+    .WithCommand(physics_assets_cmd)
     .Build();
 }
 
@@ -1087,14 +1335,16 @@ auto main(int argc, char** argv) -> int
     DumpOptions dump_opts;
     DumpResourceOptions buffers_opts;
     DumpResourceOptions textures_opts;
+    DumpResourceOptions physics_opts;
     DumpScriptOptions script_slots_opts;
     DumpScriptOptions script_params_opts;
     DumpInputOptions input_actions_opts;
     DumpInputOptions input_mappings_opts;
+    DumpPhysicsAssetsOptions physics_assets_opts;
 
     const auto cli = BuildCli(validate_opts, dump_opts, buffers_opts,
-      textures_opts, script_slots_opts, script_params_opts, input_actions_opts,
-      input_mappings_opts);
+      textures_opts, physics_opts, script_slots_opts, script_params_opts,
+      input_actions_opts, input_mappings_opts, physics_assets_opts);
     const auto context = cli->Parse(argc, const_cast<const char**>(argv));
 
     const auto command_path = context.active_command->PathAsString();
@@ -1111,6 +1361,8 @@ auto main(int argc, char** argv) -> int
       exit_code = RunDumpBuffers(buffers_opts);
     } else if (command_path == "textures") {
       exit_code = RunDumpTextures(textures_opts);
+    } else if (command_path == "physics-table") {
+      exit_code = RunDumpPhysics(physics_opts);
     } else if (command_path == "script-slots") {
       exit_code = RunDumpScriptSlots(script_slots_opts);
     } else if (command_path == "script-params") {
@@ -1119,6 +1371,8 @@ auto main(int argc, char** argv) -> int
       exit_code = RunDumpInputActions(input_actions_opts);
     } else if (command_path == "input-mappings") {
       exit_code = RunDumpInputMappings(input_mappings_opts);
+    } else if (command_path == "physics") {
+      exit_code = RunDumpPhysicsAssets(physics_assets_opts);
     } else {
       std::cerr << "ERROR: Unknown command\n";
       exit_code = 1;

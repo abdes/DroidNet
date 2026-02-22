@@ -201,6 +201,7 @@ class PakSpec:
     textures: List[TextureResource] = field(default_factory=list)
     audios: List[AudioResource] = field(default_factory=list)
     scripts: List[ScriptResource] = field(default_factory=list)
+    physics: List[Dict[str, Any]] = field(default_factory=list)
     # Single authoritative list of asset dict objects (each containing a 'type').
     assets: List[Any] = field(default_factory=list)
 

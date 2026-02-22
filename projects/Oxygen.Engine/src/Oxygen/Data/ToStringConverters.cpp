@@ -26,6 +26,9 @@ auto oxygen::data::to_string(oxygen::data::AssetType value) noexcept -> const
     case AssetType::kScript:       return "Script";
     case AssetType::kInputAction:  return "InputAction";
     case AssetType::kInputMappingContext: return "InputMappingContext";
+    case AssetType::kPhysicsMaterial: return "PhysicsMaterial";
+    case AssetType::kCollisionShape: return "CollisionShape";
+    case AssetType::kPhysicsScene: return "PhysicsScene";
     // clang-format on
   }
 

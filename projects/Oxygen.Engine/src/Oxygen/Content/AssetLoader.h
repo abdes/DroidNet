@@ -36,6 +36,7 @@
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
@@ -105,6 +106,7 @@ public:
   using IAssetLoader::EvictionSubscription;
   using IAssetLoader::GeometryCallback;
   using IAssetLoader::MaterialCallback;
+  using IAssetLoader::PhysicsSceneCallback;
   using IAssetLoader::SceneCallback;
   using IAssetLoader::ScriptCallback;
   using IAssetLoader::TextureCallback;
@@ -210,6 +212,8 @@ public:
       co_return co_await LoadGeometryAssetAsyncImpl(key);
     } else if constexpr (std::is_same_v<T, data::SceneAsset>) {
       co_return co_await LoadSceneAssetAsyncImpl(key);
+    } else if constexpr (std::is_same_v<T, data::PhysicsSceneAsset>) {
+      co_return co_await LoadPhysicsSceneAssetAsyncImpl(key);
     } else if constexpr (std::is_same_v<T, data::ScriptAsset>) {
       co_return co_await LoadScriptAssetAsyncImpl(key);
     } else if constexpr (std::is_same_v<T, data::InputActionAsset>) {
@@ -476,6 +480,12 @@ public:
     StartLoadAsset<data::SceneAsset>(key, std::move(on_complete));
   }
 
+  OXGN_CNTT_API void StartLoadPhysicsSceneAsset(
+    const data::AssetKey& key, PhysicsSceneCallback on_complete) override
+  {
+    StartLoadAsset<data::PhysicsSceneAsset>(key, std::move(on_complete));
+  }
+
   OXGN_CNTT_API void StartLoadScriptAsset(
     const data::AssetKey& key, ScriptCallback on_complete) override
   {
@@ -590,6 +600,13 @@ public:
     return GetAsset<data::ScriptAsset>(key);
   }
 
+  [[nodiscard]] auto GetPhysicsSceneAsset(
+    const data::AssetKey& key) const noexcept
+    -> std::shared_ptr<data::PhysicsSceneAsset> override
+  {
+    return GetAsset<data::PhysicsSceneAsset>(key);
+  }
+
   [[nodiscard]] auto GetInputActionAsset(
     const data::AssetKey& key) const noexcept
     -> std::shared_ptr<data::InputActionAsset> override
@@ -635,6 +652,12 @@ public:
     -> bool override
   {
     return HasAsset<data::ScriptAsset>(key);
+  }
+
+  [[nodiscard]] auto HasPhysicsSceneAsset(
+    const data::AssetKey& key) const noexcept -> bool override
+  {
+    return HasAsset<data::PhysicsSceneAsset>(key);
   }
 
   [[nodiscard]] auto HasInputActionAsset(
@@ -825,6 +848,10 @@ private:
   OXGN_CNTT_API auto LoadSceneAssetAsyncImpl(const data::AssetKey& key,
     std::optional<uint16_t> preferred_source_id = std::nullopt)
     -> co::Co<std::shared_ptr<data::SceneAsset>>;
+
+  OXGN_CNTT_API auto LoadPhysicsSceneAssetAsyncImpl(const data::AssetKey& key,
+    std::optional<uint16_t> preferred_source_id = std::nullopt)
+    -> co::Co<std::shared_ptr<data::PhysicsSceneAsset>>;
 
   OXGN_CNTT_API auto LoadScriptAssetAsyncImpl(const data::AssetKey& key,
     std::optional<uint16_t> preferred_source_id = std::nullopt)
@@ -1017,6 +1044,10 @@ private:
     in_flight_scene_assets_;
 
   std::unordered_map<uint64_t,
+    co::Shared<co::Co<std::shared_ptr<data::PhysicsSceneAsset>>>>
+    in_flight_physics_scene_assets_;
+
+  std::unordered_map<uint64_t,
     co::Shared<co::Co<std::shared_ptr<data::ScriptAsset>>>>
     in_flight_script_assets_;
   std::unordered_map<uint64_t,
@@ -1037,6 +1068,10 @@ private:
   std::unordered_map<uint64_t,
     co::Shared<co::Co<std::shared_ptr<data::ScriptResource>>>>
     in_flight_script_resources_;
+
+  std::unordered_map<uint64_t,
+    co::Shared<co::Co<std::shared_ptr<data::PhysicsResource>>>>
+    in_flight_physics_resources_;
 
   std::atomic<uint32_t> next_synthetic_texture_index_ { 1 };
   std::atomic<uint32_t> next_synthetic_buffer_index_ { 1 };
@@ -1098,5 +1133,9 @@ extern template OXGN_CNTT_API auto
 extern template OXGN_CNTT_API auto
   AssetLoader::LoadResourceAsync<data::ScriptResource>(ResourceKey)
     -> co::Co<std::shared_ptr<data::ScriptResource>>;
+
+extern template OXGN_CNTT_API auto
+  AssetLoader::LoadResourceAsync<data::PhysicsResource>(ResourceKey)
+    -> co::Co<std::shared_ptr<data::PhysicsResource>>;
 
 } // namespace oxygen::content

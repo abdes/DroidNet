@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <numbers>
 #include <optional>
 #include <ranges>
@@ -29,13 +30,19 @@
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/InputActionAsset.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
+#include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/Scripting/IScriptCompilationService.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSystem.h>
+#include <Oxygen/Physics/Body/BodyDesc.h>
+#include <Oxygen/Physics/Character/CharacterController.h>
+#include <Oxygen/PhysicsModule/PhysicsModule.h>
+#include <Oxygen/PhysicsModule/ScenePhysics.h>
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
@@ -299,6 +306,7 @@ namespace {
 
 SceneLoaderService::SceneLoaderService(content::IAssetLoader& loader,
   const Extent<uint32_t> viewport, std::filesystem::path source_pak_path,
+  const observer_ptr<AsyncEngine> engine,
   const observer_ptr<engine::InputSystem> input_system,
   observer_ptr<scripting::IScriptCompilationService> compilation_service,
   PathFinder path_finder)
@@ -306,11 +314,18 @@ SceneLoaderService::SceneLoaderService(content::IAssetLoader& loader,
   , extent_(viewport)
   , source_pak_path_(std::move(source_pak_path))
   , path_finder_(std::move(path_finder))
+  , engine_(engine)
   , input_system_(input_system)
   , compilation_service_(std::move(compilation_service))
   , source_resolver_(
       std::make_unique<scripting::ScriptSourceResolver>(path_finder_))
 {
+  if (engine_) {
+    physics_module_subscription_ = engine_->SubscribeModuleAttached(
+      [this](const engine::ModuleEvent& event) { OnModuleAttached(event); },
+      /*replay_existing=*/true);
+  }
+
   if (source_pak_path_.empty()) {
     return;
   }
@@ -326,6 +341,7 @@ SceneLoaderService::SceneLoaderService(content::IAssetLoader& loader,
 
 SceneLoaderService::~SceneLoaderService()
 {
+  physics_module_subscription_.Cancel();
   // Ensure any geometry pins are released if the loader is torn down early.
   ReleasePinnedGeometryAssets();
   LOG_F(INFO, "SceneLoader: Destroying loader.");
@@ -357,6 +373,11 @@ void SceneLoaderService::StartLoad(const data::AssetKey& key)
   }
 
   swap_.scene_key = key;
+  swap_.asset.reset();
+  swap_.physics_asset.reset();
+  ready_ = false;
+  failed_ = false;
+  consumed_ = false;
   // Start loading the scene asset
   loader_.StartLoadScene(key,
     [weak_self = weak_from_this()](std::shared_ptr<data::SceneAsset> asset) {
@@ -370,6 +391,7 @@ void SceneLoaderService::MarkConsumed()
 {
   consumed_ = true;
   swap_.asset.reset();
+  swap_.physics_asset.reset();
   runtime_nodes_.clear();
   active_camera_ = {};
   // Drop any pins that were never released due to early consumption.
@@ -398,19 +420,38 @@ void SceneLoaderService::OnSceneLoaded(std::shared_ptr<data::SceneAsset> asset)
       return;
     }
 
-    LOG_F(INFO, "SceneLoader: Scene asset loaded. Ready to instantiate.");
+    LOG_F(INFO, "SceneLoader: Scene asset loaded. Validating physics sidecar.");
 
     runtime_nodes_.clear();
     active_camera_ = {};
-    swap_.asset = std::move(asset);
-    // Scene dependencies are published by AssetLoader during scene decode.
-    // Do not acquire/release additional geometry "pins" here, because using
-    // ReleaseAsset() for temporary pins would recursively release dependency
-    // edges and can unpin live texture resources.
-    ready_ = true;
-    failed_ = false;
     pending_geometry_keys_.clear();
     pinned_geometry_keys_.clear();
+
+    const auto scene_asset = std::move(asset);
+    const auto sidecar_key_opt
+      = ResolvePhysicsSidecarKey(scene_asset->GetAssetKey());
+
+    if (!sidecar_key_opt.has_value()) {
+      LOG_F(INFO,
+        "SceneLoader: No physics sidecar found for scene key={} (scene-only "
+        "load).",
+        data::to_string(scene_asset->GetAssetKey()));
+      swap_.asset = scene_asset;
+      swap_.physics_asset.reset();
+      ready_ = true;
+      failed_ = false;
+      return;
+    }
+
+    const auto sidecar_key = *sidecar_key_opt;
+    loader_.StartLoadPhysicsSceneAsset(sidecar_key,
+      [weak_self = weak_from_this(), scene_asset, sidecar_key](
+        std::shared_ptr<data::PhysicsSceneAsset> physics_asset) {
+        if (const auto self = weak_self.lock()) {
+          self->OnPhysicsSceneLoaded(
+            scene_asset, sidecar_key, std::move(physics_asset));
+        }
+      });
   } catch (const std::exception& ex) {
     LOG_F(ERROR, "SceneLoader: Exception while building scene: {}", ex.what());
     swap_ = {};
@@ -428,11 +469,318 @@ void SceneLoaderService::OnSceneLoaded(std::shared_ptr<data::SceneAsset> asset)
   }
 }
 
-/*!
- Prime geometry dependencies while the scene asset is pending instantiation.
+void SceneLoaderService::OnPhysicsSceneLoaded(
+  std::shared_ptr<data::SceneAsset> scene_asset, data::AssetKey sidecar_key,
+  std::shared_ptr<data::PhysicsSceneAsset> physics_asset)
+{
+  try {
+    if (!scene_asset) {
+      throw std::runtime_error(
+        "physics-sidecar callback received null scene asset");
+    }
+    if (!physics_asset) {
+      throw std::runtime_error(
+        std::string("missing physics sidecar asset for scene key=")
+        + data::to_string(scene_asset->GetAssetKey())
+        + " sidecar_key=" + data::to_string(sidecar_key));
+    }
 
- This pins geometry assets by issuing load requests and keeping the
- loader references alive until `BuildSceneAsync()` completes. It prevents
+    ValidatePhysicsSidecarIdentity(*scene_asset, *physics_asset, sidecar_key);
+
+    swap_.asset = std::move(scene_asset);
+    swap_.physics_asset = std::move(physics_asset);
+    ready_ = true;
+    failed_ = false;
+    LOG_F(INFO,
+      "SceneLoader: Physics sidecar validated for scene key={} sidecar_key={}",
+      data::to_string(swap_.scene_key), data::to_string(sidecar_key));
+  } catch (const std::exception& ex) {
+    LOG_F(
+      ERROR, "SceneLoader: Physics sidecar validation failed: {}", ex.what());
+    swap_ = {};
+    runtime_nodes_.clear();
+    active_camera_ = {};
+    ready_ = false;
+    failed_ = true;
+  } catch (...) {
+    LOG_F(ERROR, "SceneLoader: Unknown physics sidecar validation failure");
+    swap_ = {};
+    runtime_nodes_.clear();
+    active_camera_ = {};
+    ready_ = false;
+    failed_ = true;
+  }
+}
+
+auto SceneLoaderService::ResolvePhysicsSidecarKey(
+  const data::AssetKey& scene_key) const -> std::optional<data::AssetKey>
+{
+  if (!source_pak_) {
+    return std::nullopt;
+  }
+
+  std::optional<data::AssetKey> matched_key {};
+  for (const auto& entry : source_pak_->Directory()) {
+    if (entry.asset_type
+      != static_cast<uint8_t>(data::AssetType::kPhysicsScene)) {
+      continue;
+    }
+    if (entry.desc_size < sizeof(data::pak::v7::PhysicsSceneAssetDesc)) {
+      throw std::runtime_error(
+        std::string("physics sidecar descriptor too small for asset key=")
+        + data::to_string(entry.asset_key));
+    }
+
+    auto reader = source_pak_->CreateReader(entry);
+    auto blob_result = reader.ReadBlob(entry.desc_size);
+    if (!blob_result) {
+      throw std::runtime_error(
+        std::string("failed reading physics sidecar descriptor for asset key=")
+        + data::to_string(entry.asset_key)
+        + " reason=" + blob_result.error().message());
+    }
+
+    data::PhysicsSceneAsset candidate(entry.asset_key, blob_result.value());
+    if (candidate.GetTargetSceneKey() != scene_key) {
+      continue;
+    }
+
+    if (matched_key.has_value()) {
+      throw std::runtime_error(
+        std::string("multiple physics sidecars reference scene key=")
+        + data::to_string(scene_key) + " first=" + data::to_string(*matched_key)
+        + " second=" + data::to_string(entry.asset_key));
+    }
+    matched_key = entry.asset_key;
+  }
+
+  if (!matched_key.has_value()) {
+    return std::nullopt;
+  }
+  return matched_key;
+}
+
+void SceneLoaderService::ValidatePhysicsSidecarIdentity(
+  const data::SceneAsset& scene_asset,
+  const data::PhysicsSceneAsset& physics_asset,
+  const data::AssetKey& sidecar_key) const
+{
+  const auto& target_scene_key = physics_asset.GetTargetSceneKey();
+  if (target_scene_key != scene_asset.GetAssetKey()) {
+    throw std::runtime_error(
+      std::string("physics sidecar target_scene_key mismatch sidecar_key=")
+      + data::to_string(sidecar_key)
+      + " scene_key=" + data::to_string(scene_asset.GetAssetKey())
+      + " target_scene_key=" + data::to_string(target_scene_key));
+  }
+
+  const auto scene_node_count = scene_asset.GetNodes().size();
+  if (scene_node_count
+    > static_cast<size_t>((std::numeric_limits<uint32_t>::max)())) {
+    throw std::runtime_error("scene node count exceeds uint32 range");
+  }
+  const auto scene_node_count_u32 = static_cast<uint32_t>(scene_node_count);
+  const auto target_node_count = physics_asset.GetTargetNodeCount();
+  if (target_node_count != scene_node_count_u32) {
+    throw std::runtime_error(
+      std::string("physics sidecar target_node_count mismatch sidecar_key=")
+      + data::to_string(sidecar_key)
+      + " expected=" + std::to_string(scene_node_count_u32)
+      + " actual=" + std::to_string(target_node_count));
+  }
+}
+
+void SceneLoaderService::OnModuleAttached(const engine::ModuleEvent& event)
+{
+  if (event.type_id != physics::PhysicsModule::ClassTypeId()) {
+    return;
+  }
+  physics_module_ = observer_ptr<physics::PhysicsModule> {
+    // NOLINTNEXTLINE(*-static-cast-downcast)
+    static_cast<physics::PhysicsModule*>(event.module.get()),
+  };
+}
+
+auto SceneLoaderService::ResolvePhysicsModule()
+  -> observer_ptr<physics::PhysicsModule>
+{
+  if (!engine_) {
+    return nullptr;
+  }
+  if (auto module_ref = engine_->GetModule<physics::PhysicsModule>()) {
+    physics_module_
+      = observer_ptr<physics::PhysicsModule> { &module_ref->get() };
+    return physics_module_;
+  }
+  physics_module_ = nullptr;
+  return nullptr;
+}
+
+void SceneLoaderService::ValidateUnsupportedPhysicsBindings(
+  const data::PhysicsSceneAsset& physics_asset) const
+{
+  const auto collider_bindings
+    = physics_asset.GetBindings<data::pak::ColliderBindingRecord>();
+  const auto soft_body_bindings
+    = physics_asset.GetBindings<data::pak::SoftBodyBindingRecord>();
+  const auto joint_bindings
+    = physics_asset.GetBindings<data::pak::JointBindingRecord>();
+  const auto vehicle_bindings
+    = physics_asset.GetBindings<data::pak::VehicleBindingRecord>();
+  const auto aggregate_bindings
+    = physics_asset.GetBindings<data::pak::AggregateBindingRecord>();
+
+  if (!collider_bindings.empty() || !soft_body_bindings.empty()
+    || !joint_bindings.empty() || !vehicle_bindings.empty()
+    || !aggregate_bindings.empty()) {
+    throw std::runtime_error(
+      std::string("unsupported physics binding tables in sidecar key=")
+      + data::to_string(physics_asset.GetAssetKey())
+      + " collider=" + std::to_string(collider_bindings.size())
+      + " soft_body=" + std::to_string(soft_body_bindings.size())
+      + " joint=" + std::to_string(joint_bindings.size())
+      + " vehicle=" + std::to_string(vehicle_bindings.size())
+      + " aggregate=" + std::to_string(aggregate_bindings.size()));
+  }
+}
+
+void SceneLoaderService::HydrateRigidBodyBindings(
+  physics::PhysicsModule& physics_module,
+  const std::span<const data::pak::RigidBodyBindingRecord> bindings)
+{
+  for (const auto& record : bindings) {
+    const auto node_index = static_cast<size_t>(record.node_index);
+    if (node_index >= runtime_nodes_.size()) {
+      throw std::runtime_error(
+        std::string("rigid-body node_index out of range: ")
+        + std::to_string(record.node_index));
+    }
+
+    if (record.shape_asset_index != data::pak::kNoResourceIndex
+      || record.material_asset_index != data::pak::kNoResourceIndex) {
+      throw std::runtime_error(
+        std::string("rigid-body external shape/material references are "
+                    "unsupported in section-9 hydrator (node_index=")
+        + std::to_string(record.node_index) + " shape_asset_index="
+        + std::to_string(record.shape_asset_index) + " material_asset_index="
+        + std::to_string(record.material_asset_index) + ")");
+    }
+
+    physics::body::BodyDesc desc {};
+    switch (record.body_type) {
+    case data::pak::PhysicsBodyType::kStatic:
+      desc.type = physics::body::BodyType::kStatic;
+      break;
+    case data::pak::PhysicsBodyType::kDynamic:
+      desc.type = physics::body::BodyType::kDynamic;
+      break;
+    case data::pak::PhysicsBodyType::kKinematic:
+      desc.type = physics::body::BodyType::kKinematic;
+      break;
+    default:
+      throw std::runtime_error(
+        std::string("unsupported rigid-body type value: ")
+        + std::to_string(static_cast<uint32_t>(record.body_type)));
+    }
+
+    desc.flags = physics::body::BodyFlags::kNone;
+    if (record.gravity_factor > 0.0F) {
+      desc.flags = desc.flags | physics::body::BodyFlags::kEnableGravity;
+    }
+    if (record.is_sensor != 0U) {
+      desc.flags = desc.flags | physics::body::BodyFlags::kIsTrigger;
+    }
+    if (record.motion_quality == data::pak::PhysicsMotionQuality::kLinearCast) {
+      desc.flags = desc.flags
+        | physics::body::BodyFlags::kEnableContinuousCollisionDetection;
+    }
+    desc.mass_kg = record.mass > 0.0F ? record.mass : 1.0F;
+    desc.collision_layer = physics::CollisionLayer { static_cast<uint32_t>(
+      record.collision_layer) };
+    desc.collision_mask
+      = physics::CollisionMask { static_cast<uint32_t>(record.collision_mask) };
+
+    auto& node = runtime_nodes_[node_index];
+    const auto attached = physics::ScenePhysics::AttachRigidBody(
+      observer_ptr<physics::PhysicsModule> { &physics_module }, node, desc);
+    if (!attached.has_value()) {
+      throw std::runtime_error(
+        std::string("failed to attach rigid-body binding for node_index=")
+        + std::to_string(record.node_index));
+    }
+  }
+}
+
+void SceneLoaderService::HydrateCharacterBindings(
+  physics::PhysicsModule& physics_module,
+  const std::span<const data::pak::CharacterBindingRecord> bindings)
+{
+  for (const auto& record : bindings) {
+    const auto node_index = static_cast<size_t>(record.node_index);
+    if (node_index >= runtime_nodes_.size()) {
+      throw std::runtime_error(
+        std::string("character node_index out of range: ")
+        + std::to_string(record.node_index));
+    }
+
+    if (record.shape_asset_index != data::pak::kNoResourceIndex) {
+      throw std::runtime_error(
+        std::string("character external shape references are unsupported in "
+                    "section-9 hydrator (node_index=")
+        + std::to_string(record.node_index) + " shape_asset_index="
+        + std::to_string(record.shape_asset_index) + ")");
+    }
+
+    physics::character::CharacterDesc desc {};
+    desc.mass_kg = record.mass;
+    desc.max_slope_angle_radians = record.max_slope_angle;
+    desc.max_strength = record.max_strength;
+    desc.predictive_contact_distance = record.step_height;
+    desc.collision_layer = physics::CollisionLayer { static_cast<uint32_t>(
+      record.collision_layer) };
+    desc.collision_mask
+      = physics::CollisionMask { static_cast<uint32_t>(record.collision_mask) };
+
+    auto& node = runtime_nodes_[node_index];
+    const auto attached = physics::ScenePhysics::AttachCharacter(
+      observer_ptr<physics::PhysicsModule> { &physics_module }, node, desc);
+    if (!attached.has_value()) {
+      throw std::runtime_error(
+        std::string("failed to attach character binding for node_index=")
+        + std::to_string(record.node_index));
+    }
+  }
+}
+
+void SceneLoaderService::HydratePhysicsBindings(
+  const data::PhysicsSceneAsset& physics_asset)
+{
+  auto* physics_module = ResolvePhysicsModule().get();
+  if (physics_module == nullptr) {
+    throw std::runtime_error(
+      "physics sidecar present but PhysicsModule is unavailable");
+  }
+
+  ValidateUnsupportedPhysicsBindings(physics_asset);
+
+  const auto rigid_body_bindings
+    = physics_asset.GetBindings<data::pak::RigidBodyBindingRecord>();
+  const auto character_bindings
+    = physics_asset.GetBindings<data::pak::CharacterBindingRecord>();
+
+  HydrateRigidBodyBindings(*physics_module, rigid_body_bindings);
+  HydrateCharacterBindings(*physics_module, character_bindings);
+
+  LOG_F(INFO,
+    "SceneLoader: Physics hydration complete (rigid_bodies={} characters={})",
+    rigid_body_bindings.size(), character_bindings.size());
+}
+
+/*!
+ Prime geometry dependencies while the scene asset is pending
+ instantiation.
+ This pins geometry assets by issuing load requests and keeping
+ the loader references alive until `BuildSceneAsync()` completes. It prevents
  rapid
  swaps from evicting geometry between dependency resolution and attachment.
 
@@ -496,6 +844,9 @@ auto SceneLoaderService::BuildSceneAsync(scene::Scene& scene,
   AttachLights(asset);
   AttachScripting(asset);
   AttachInputMappings(asset);
+  if (swap_.physics_asset) {
+    HydratePhysicsBindings(*swap_.physics_asset);
+  }
   SelectActiveCamera(asset);
   EnsureCameraAndViewport(scene);
   // Geometry pins are only needed until scene instantiation finishes.

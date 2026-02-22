@@ -1,5 +1,5 @@
 # Scene asset with no renderables (no geometry dependencies)
-version: 6
+version: 7
 content_version: 1
 
 buffers:

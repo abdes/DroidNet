@@ -17,6 +17,7 @@ namespace oxygen::data {
 class BufferResource;
 class TextureResource;
 class ScriptResource;
+class PhysicsResource;
 } // namespace oxygen::data
 
 namespace oxygen::content {
@@ -26,17 +27,18 @@ using ResourceTypeList = oxygen::TypeList<
   // clang-format off
   data::BufferResource,
   data::TextureResource,
-  data::ScriptResource
+  data::ScriptResource,
+  data::PhysicsResource
   // clang-format on
   >;
 
-static_assert(TypeListSize<ResourceTypeList>::value
-    <= (std::numeric_limits<std::uint16_t>::max)(),
+static_assert(TypeListSize<ResourceTypeList>::value <= 65535,
   "ResourceTypeList size must fit in uint16_t for type index encoding");
 
 // Concept: T must be a known resource type and have DescT
 template <typename T>
-concept PakResource = requires { typename T::DescT; }
-  && IsTyped<T> && (oxygen::IndexOf<T, ResourceTypeList>::value >= 0);
+concept PakResource = requires { typename T::DescT; } && IsTyped<T>
+  && (IndexOf<T, ResourceTypeList>::value
+    < TypeListSize<ResourceTypeList>::value);
 
 } // namespace oxygen::content

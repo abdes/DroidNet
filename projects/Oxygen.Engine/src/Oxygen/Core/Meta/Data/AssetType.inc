@@ -22,6 +22,12 @@ OXDAT_ASSET_TYPE(kScene, 3)
 OXDAT_ASSET_TYPE(kScript, 4)
 OXDAT_ASSET_TYPE(kInputAction, 5)
 OXDAT_ASSET_TYPE(kInputMappingContext, 6)
-OXDAT_ASSET_TYPE(kMaxAssetType, kInputMappingContext)
+
+// v7: Physics domain asset types
+OXDAT_ASSET_TYPE(kPhysicsMaterial, 7)
+OXDAT_ASSET_TYPE(kCollisionShape, 8)
+OXDAT_ASSET_TYPE(kPhysicsScene, 9)
+
+OXDAT_ASSET_TYPE(kMaxAssetType, kPhysicsScene)
 
 #undef OXDAT_ASSET_TYPE

@@ -21,6 +21,8 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
+#include <Oxygen/Engine/ModuleEvent.h>
+#include <Oxygen/Engine/ModuleManager.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Scene/SceneNode.h>
 
@@ -36,6 +38,7 @@ class PakFile;
 
 namespace oxygen::data {
 class SceneAsset;
+class PhysicsSceneAsset;
 class InputActionAsset;
 class InputMappingContextAsset;
 class ScriptResource; // Add forward declaration for ScriptResource
@@ -44,6 +47,9 @@ class ScriptResource; // Add forward declaration for ScriptResource
 namespace oxygen::engine {
 class InputSystem;
 } // namespace oxygen::engine
+namespace oxygen {
+class AsyncEngine;
+}
 
 namespace oxygen::scripting {
 class IScriptCompilationService;
@@ -54,12 +60,16 @@ namespace oxygen::scene {
 class Scene;
 class SceneEnvironment;
 } // namespace oxygen::scene
+namespace oxygen::physics {
+class PhysicsModule;
+}
 
 namespace oxygen::examples {
 
 //! Result payload for a completed scene load.
 struct PendingSceneSwap {
   std::shared_ptr<data::SceneAsset> asset;
+  std::shared_ptr<data::PhysicsSceneAsset> physics_asset;
   data::AssetKey scene_key {};
 };
 
@@ -76,7 +86,7 @@ class SceneLoaderService
 public:
   //! Create the service with the asset loader and initial viewport size.
   SceneLoaderService(content::IAssetLoader& loader, Extent<uint32_t> viewport,
-    std::filesystem::path source_pak_path,
+    std::filesystem::path source_pak_path, observer_ptr<AsyncEngine> engine,
     observer_ptr<engine::InputSystem> input_system,
     observer_ptr<scripting::IScriptCompilationService> compilation_service,
     PathFinder path_finder);
@@ -111,6 +121,32 @@ public:
 private:
   //! Handle completion of the async scene load.
   void OnSceneLoaded(std::shared_ptr<data::SceneAsset> asset);
+  //! Handle completion of the async physics sidecar load.
+  void OnPhysicsSceneLoaded(std::shared_ptr<data::SceneAsset> scene_asset,
+    data::AssetKey sidecar_key,
+    std::shared_ptr<data::PhysicsSceneAsset> physics_asset);
+  //! Resolve the mandatory physics sidecar key for the scene.
+  auto ResolvePhysicsSidecarKey(const data::AssetKey& scene_key) const
+    -> std::optional<data::AssetKey>;
+  //! Validate strict scene/physics identity invariants.
+  void ValidatePhysicsSidecarIdentity(const data::SceneAsset& scene_asset,
+    const data::PhysicsSceneAsset& physics_asset,
+    const data::AssetKey& sidecar_key) const;
+  //! Track module lifecycle and cache PhysicsModule when available.
+  void OnModuleAttached(const engine::ModuleEvent& event);
+  //! Resolve a live PhysicsModule instance, refreshing cached pointer.
+  auto ResolvePhysicsModule() -> observer_ptr<physics::PhysicsModule>;
+  //! Hydrate supported physics bindings from sidecar into runtime scene.
+  void HydratePhysicsBindings(const data::PhysicsSceneAsset& physics_asset);
+  //! Attach rigid-body bindings; hard-fail on invalid/unsupported data.
+  void HydrateRigidBodyBindings(physics::PhysicsModule& physics_module,
+    std::span<const data::pak::RigidBodyBindingRecord> bindings);
+  //! Attach character bindings; hard-fail on invalid/unsupported data.
+  void HydrateCharacterBindings(physics::PhysicsModule& physics_module,
+    std::span<const data::pak::CharacterBindingRecord> bindings);
+  //! Enforce that unsupported physics binding domains are not present.
+  void ValidateUnsupportedPhysicsBindings(
+    const data::PhysicsSceneAsset& physics_asset) const;
 
   //! Legacy hook for geometry dependency readiness (currently no-op).
   void QueueGeometryDependencies(const data::SceneAsset& asset);
@@ -168,6 +204,9 @@ private:
   std::vector<data::AssetKey> pinned_geometry_keys_;
 
   std::unique_ptr<content::PakFile> source_pak_;
+  observer_ptr<AsyncEngine> engine_;
+  engine::ModuleManager::Subscription physics_module_subscription_ {};
+  observer_ptr<physics::PhysicsModule> physics_module_;
   observer_ptr<engine::InputSystem> input_system_;
   observer_ptr<scripting::IScriptCompilationService> compilation_service_;
   std::unique_ptr<scripting::IScriptSourceResolver> source_resolver_;

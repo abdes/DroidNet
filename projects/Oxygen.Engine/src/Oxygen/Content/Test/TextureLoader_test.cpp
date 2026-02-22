@@ -10,53 +10,28 @@
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/TextureResource.h>
-#include <Oxygen/Serio/Writer.h>
 
 #include <cstddef>
 #include <stdexcept>
 #include <vector>
 
-#include "Mocks/MockStream.h"
+#include "Fixtures/LoaderTestFixtures.h"
 #include "Utils/PakUtils.h"
 
 using testing::NotNull;
 
 using oxygen::content::loaders::LoadTextureResource;
-using oxygen::serio::Reader;
 
 namespace {
 
 //=== TextureLoader v4 Tests ===--------------------------------------------//
 
-class TextureLoaderBasicTestTest : public testing::Test {
+class TextureLoaderBasicTestTest
+  : public oxygen::content::testing::BinaryAssetLoaderFixtureBase {
 protected:
-  using MockStream = oxygen::content::testing::MockStream;
-  using Writer = oxygen::serio::Writer<MockStream>;
-
-  TextureLoaderBasicTestTest()
-    : desc_writer_(desc_stream_)
-    , data_writer_(data_stream_)
-    , desc_reader_(desc_stream_)
-    , data_reader_(data_stream_)
-  {
-  }
-
   auto CreateLoaderContext() -> oxygen::content::LoaderContext
   {
-    if (!desc_stream_.Seek(0)) {
-      throw std::runtime_error("Failed to seek desc_stream");
-    }
-    if (!data_stream_.Seek(0)) {
-      throw std::runtime_error("Failed to seek data_stream");
-    }
-
-    return oxygen::content::LoaderContext {
-      .current_asset_key = oxygen::data::AssetKey {},
-      .desc_reader = &desc_reader_,
-      .data_readers
-      = std::make_tuple(&data_reader_, &data_reader_, &data_reader_),
-      .work_offline = false,
-    };
+    return MakeLoaderContext(false, false);
   }
 
   auto WriteDescriptorAndPayload(
@@ -99,13 +74,6 @@ protected:
         "failed to write payload: " + payload_result.error().message());
     }
   }
-
-  MockStream desc_stream_;
-  MockStream data_stream_;
-  Writer desc_writer_;
-  Writer data_writer_;
-  Reader<MockStream> desc_reader_;
-  Reader<MockStream> data_reader_;
 };
 
 //! Test: valid v4 payload loads and preserves dimensions/format.
