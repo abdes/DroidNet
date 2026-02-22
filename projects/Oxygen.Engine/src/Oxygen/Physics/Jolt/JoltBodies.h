@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -75,6 +76,8 @@ public:
     -> PhysicsResult<ShapeInstanceId> override;
   auto RemoveBodyShape(WorldId world_id, BodyId body_id,
     ShapeInstanceId shape_instance_id) -> PhysicsResult<void> override;
+  auto FlushStructuralChanges(WorldId world_id)
+    -> PhysicsResult<size_t> override;
 
 private:
   // Protects body_states_ and shape-instance metadata only.
@@ -105,6 +108,7 @@ private:
     }
   };
 
+  auto EnqueueBodyRebuild(WorldId world_id, BodyId body_id) -> void;
   auto RebuildBodyShape(WorldId world_id, BodyId body_id,
     const BodyState& state) -> PhysicsResult<void>;
 
@@ -113,6 +117,7 @@ private:
   std::mutex body_state_mutex_ {};
   uint32_t next_shape_instance_id_ { 1U };
   std::unordered_map<BodyKey, BodyState, BodyKeyHasher> body_states_ {};
+  std::unordered_set<BodyKey, BodyKeyHasher> pending_rebuilds_ {};
 };
 
 } // namespace oxygen::physics::jolt

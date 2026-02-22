@@ -244,6 +244,7 @@ NOLINT_TEST_F(PhysicsApiContractTest, InvalidBodyCallsReturnError)
   EXPECT_TRUE(
     bodies.RemoveBodyShape(world_id, kInvalidBodyId, kInvalidShapeInstanceId)
       .has_error());
+  EXPECT_TRUE(bodies.FlushStructuralChanges(world_id).has_value());
 
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
 }
@@ -353,6 +354,19 @@ NOLINT_TEST_F(PhysicsApiContractTest, BodyBulkPoseAndKinematicBatchContract)
   EXPECT_TRUE(bodies.DestroyBody(world_id, dynamic_body.value()).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, kinematic_body.value()).has_value());
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
+NOLINT_TEST_F(
+  PhysicsApiContractTest, BodyStructuralFlushInvalidWorldReturnsError)
+{
+  AssertBackendAvailabilityContract();
+  if (!HasBackend()) {
+    return;
+  }
+
+  auto& bodies = System().Bodies();
+  const auto flush = bodies.FlushStructuralChanges(kInvalidWorldId);
+  EXPECT_TRUE(flush.has_error());
 }
 
 NOLINT_TEST_F(PhysicsApiContractTest, CharacterLifecycleContract)

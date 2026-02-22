@@ -9,6 +9,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Physics/Body/BodyDesc.h>
+#include <Oxygen/Physics/Shape/ShapeDesc.h>
 #include <Oxygen/Physics/Test/Jolt/Jolt_test_fixture.h>
 #include <Oxygen/Physics/World/WorldDesc.h>
 
@@ -195,6 +196,43 @@ NOLINT_TEST_F(JoltBodyDomainTest, BulkPoseAndKinematicMoveRoundTrip)
 
   EXPECT_TRUE(bodies.DestroyBody(world_id, dynamic_body).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, kinematic_body).has_value());
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
+NOLINT_TEST_F(JoltBodyDomainTest, DeferredStructuralFlushAppliesQueuedRebuilds)
+{
+  RequireBackend();
+
+  auto& worlds = System().Worlds();
+  auto& bodies = System().Bodies();
+  auto& shapes = System().Shapes();
+  const auto world_result = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(world_result.has_value());
+  const auto world_id = world_result.value();
+
+  const auto body_result = bodies.CreateBody(world_id, body::BodyDesc {});
+  ASSERT_TRUE(body_result.has_value());
+  const auto body_id = body_result.value();
+  const auto shape_result = shapes.CreateShape(shape::ShapeDesc {});
+  ASSERT_TRUE(shape_result.has_value());
+  const auto shape_id = shape_result.value();
+
+  const auto add_result = bodies.AddBodyShape(world_id, body_id, shape_id,
+    Vec3 { 0.0F, 0.0F, 0.0F }, Quat { 1.0F, 0.0F, 0.0F, 0.0F });
+  ASSERT_TRUE(add_result.has_value());
+
+  const auto flush_add = bodies.FlushStructuralChanges(world_id);
+  ASSERT_TRUE(flush_add.has_value());
+  EXPECT_GE(flush_add.value(), 1U);
+
+  EXPECT_TRUE(
+    bodies.RemoveBodyShape(world_id, body_id, add_result.value()).has_value());
+  const auto flush_remove = bodies.FlushStructuralChanges(world_id);
+  ASSERT_TRUE(flush_remove.has_value());
+  EXPECT_GE(flush_remove.value(), 1U);
+
+  EXPECT_TRUE(shapes.DestroyShape(shape_id).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, body_id).has_value());
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
 }
 

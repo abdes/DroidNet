@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <limits>
+#include <vector>
 
 #include <Jolt/Jolt.h> // Must always be first (keep separate)
 
@@ -104,6 +105,8 @@ auto oxygen::physics::jolt::JoltBodies::DestroyBody(
     shape_instances_to_remove {};
   {
     std::scoped_lock lock(body_state_mutex_);
+    pending_rebuilds_.erase(
+      BodyKey { .world_id = world_id, .body_id = body_id });
     const auto body_it
       = body_states_.find(BodyKey { .world_id = world_id, .body_id = body_id });
     if (body_it != body_states_.end()) {
@@ -496,7 +499,6 @@ auto oxygen::physics::jolt::JoltBodies::AddBodyShape(const WorldId world_id,
   }
 
   ShapeInstanceId shape_instance_id { kInvalidShapeInstanceId };
-  BodyState body_state_snapshot {};
   {
     std::scoped_lock lock(body_state_mutex_);
     auto body_it
@@ -518,21 +520,9 @@ auto oxygen::physics::jolt::JoltBodies::AddBodyShape(const WorldId world_id,
         .local_position = local_position,
         .local_rotation = local_rotation,
       });
-    body_state_snapshot = body_it->second;
+    EnqueueBodyRebuild(world_id, body_id);
   }
 
-  const auto rebuild_result
-    = RebuildBodyShape(world_id, body_id, body_state_snapshot);
-  if (rebuild_result.has_error()) {
-    std::scoped_lock lock(body_state_mutex_);
-    auto body_it
-      = body_states_.find(BodyKey { .world_id = world_id, .body_id = body_id });
-    if (body_it != body_states_.end()) {
-      body_it->second.shape_instances.erase(shape_instance_id);
-    }
-    static_cast<void>(shapes->RemoveAttachment(shape_id));
-    return Err(rebuild_result.error());
-  }
   return Ok(shape_instance_id);
 }
 
@@ -553,8 +543,6 @@ auto oxygen::physics::jolt::JoltBodies::RemoveBodyShape(const WorldId world_id,
   }
 
   ShapeId removed_shape_id { kInvalidShapeId };
-  ShapeInstanceState removed_instance {};
-  BodyState body_state_snapshot {};
   {
     std::scoped_lock lock(body_state_mutex_);
     auto body_it
@@ -568,37 +556,68 @@ auto oxygen::physics::jolt::JoltBodies::RemoveBodyShape(const WorldId world_id,
       return Err(PhysicsError::kInvalidArgument);
     }
 
-    removed_instance = instance_it->second;
+    const auto removed_instance = instance_it->second;
     removed_shape_id = removed_instance.shape_id;
     body_it->second.shape_instances.erase(instance_it);
-    body_state_snapshot = body_it->second;
+    EnqueueBodyRebuild(world_id, body_id);
   }
 
-  const auto rebuild_result
-    = RebuildBodyShape(world_id, body_id, body_state_snapshot);
-  if (rebuild_result.has_error()) {
-    bool rolled_back = false;
-    {
-      std::scoped_lock lock(body_state_mutex_);
-      auto body_it = body_states_.find(
-        BodyKey { .world_id = world_id, .body_id = body_id });
-      if (body_it != body_states_.end()) {
-        body_it->second.shape_instances.emplace(shape_instance_id,
-          ShapeInstanceState {
-            .shape_id = removed_instance.shape_id,
-            .shape = removed_instance.shape,
-            .local_position = removed_instance.local_position,
-            .local_rotation = removed_instance.local_rotation,
-          });
-        rolled_back = true;
+  return shapes->RemoveAttachment(removed_shape_id);
+}
+
+auto oxygen::physics::jolt::JoltBodies::FlushStructuralChanges(
+  const WorldId world_id) -> PhysicsResult<size_t>
+{
+  auto* world = world_.get();
+  if (world == nullptr) {
+    return Err(PhysicsError::kNotInitialized);
+  }
+  if (world->TryGetBodyInterface(world_id) == nullptr) {
+    return Err(PhysicsError::kWorldNotFound);
+  }
+
+  std::vector<BodyKey> body_keys {};
+  {
+    std::scoped_lock lock(body_state_mutex_);
+    for (const auto& key : pending_rebuilds_) {
+      if (key.world_id == world_id) {
+        body_keys.push_back(key);
       }
     }
-    if (!rolled_back) {
-      static_cast<void>(shapes->RemoveAttachment(removed_shape_id));
-    }
-    return Err(rebuild_result.error());
   }
-  return shapes->RemoveAttachment(removed_shape_id);
+
+  size_t flushed = 0;
+  for (const auto& key : body_keys) {
+    BodyState snapshot {};
+    {
+      std::scoped_lock lock(body_state_mutex_);
+      const auto it = body_states_.find(key);
+      if (it == body_states_.end()) {
+        pending_rebuilds_.erase(key);
+        continue;
+      }
+      snapshot = it->second;
+    }
+
+    const auto rebuild_result
+      = RebuildBodyShape(key.world_id, key.body_id, snapshot);
+    if (rebuild_result.has_error()) {
+      return Err(rebuild_result.error());
+    }
+    {
+      std::scoped_lock lock(body_state_mutex_);
+      pending_rebuilds_.erase(key);
+    }
+    flushed += 1;
+  }
+  return Ok(flushed);
+}
+
+auto oxygen::physics::jolt::JoltBodies::EnqueueBodyRebuild(
+  const WorldId world_id, const BodyId body_id) -> void
+{
+  pending_rebuilds_.insert(
+    BodyKey { .world_id = world_id, .body_id = body_id });
 }
 
 auto oxygen::physics::jolt::JoltBodies::RebuildBodyShape(const WorldId world_id,

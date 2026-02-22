@@ -167,4 +167,15 @@ NOLINT_TEST_F(JoltBodyContractTest, MoveKinematicBatchRejectsNonKinematicBody)
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
 }
 
+NOLINT_TEST_F(
+  JoltBodyContractTest, FlushStructuralChangesInvalidWorldReturnsError)
+{
+  RequireBackend();
+
+  auto& bodies = System().Bodies();
+  const auto result = bodies.FlushStructuralChanges(kInvalidWorldId);
+  ASSERT_TRUE(result.has_error());
+  EXPECT_EQ(result.error(), PhysicsError::kWorldNotFound);
+}
+
 } // namespace oxygen::physics::test::jolt

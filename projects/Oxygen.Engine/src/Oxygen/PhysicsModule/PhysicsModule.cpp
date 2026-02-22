@@ -450,6 +450,11 @@ auto PhysicsModule::OnGameplay(observer_ptr<engine::FrameContext> context)
 
   SyncSceneObserver(context);
 
+  const auto flush_result
+    = physics_system_->Bodies().FlushStructuralChanges(world_id_);
+  CHECK_F(flush_result.has_value(),
+    "PhysicsModule failed to flush deferred body structural changes.");
+
   const auto scene = context->GetScene();
   if (scene == nullptr) {
     pending_transform_updates_.clear();
