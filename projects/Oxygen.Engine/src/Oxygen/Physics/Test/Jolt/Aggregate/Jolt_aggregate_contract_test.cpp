@@ -24,23 +24,22 @@ NOLINT_TEST_F(JoltAggregateContractTest, InvalidWorldCallsReturnWorldNotFound)
     return;
   }
 
-  auto* aggregates = System().Aggregates();
-  ASSERT_NE(aggregates, nullptr);
+  auto& aggregates = System().Aggregates();
 
-  EXPECT_TRUE(aggregates->CreateAggregate(kInvalidWorldId).has_error());
-  EXPECT_TRUE(aggregates->DestroyAggregate(kInvalidWorldId, kInvalidAggregateId)
+  EXPECT_TRUE(aggregates.CreateAggregate(kInvalidWorldId).has_error());
+  EXPECT_TRUE(aggregates.DestroyAggregate(kInvalidWorldId, kInvalidAggregateId)
       .has_error());
   EXPECT_TRUE(aggregates
-      ->AddMemberBody(kInvalidWorldId, kInvalidAggregateId, kInvalidBodyId)
+      .AddMemberBody(kInvalidWorldId, kInvalidAggregateId, kInvalidBodyId)
       .has_error());
   EXPECT_TRUE(aggregates
-      ->RemoveMemberBody(kInvalidWorldId, kInvalidAggregateId, kInvalidBodyId)
+      .RemoveMemberBody(kInvalidWorldId, kInvalidAggregateId, kInvalidBodyId)
       .has_error());
   std::vector<BodyId> out(4, kInvalidBodyId);
   EXPECT_TRUE(
-    aggregates->GetMemberBodies(kInvalidWorldId, kInvalidAggregateId, out)
+    aggregates.GetMemberBodies(kInvalidWorldId, kInvalidAggregateId, out)
       .has_error());
-  EXPECT_TRUE(aggregates->FlushStructuralChanges(kInvalidWorldId).has_error());
+  EXPECT_TRUE(aggregates.FlushStructuralChanges(kInvalidWorldId).has_error());
 }
 
 NOLINT_TEST_F(JoltAggregateContractTest, GetMemberBodiesReportsBufferTooSmall)
@@ -50,8 +49,7 @@ NOLINT_TEST_F(JoltAggregateContractTest, GetMemberBodiesReportsBufferTooSmall)
     return;
   }
 
-  auto* aggregates = System().Aggregates();
-  ASSERT_NE(aggregates, nullptr);
+  auto& aggregates = System().Aggregates();
   auto& worlds = System().Worlds();
   auto& bodies = System().Bodies();
 
@@ -66,23 +64,23 @@ NOLINT_TEST_F(JoltAggregateContractTest, GetMemberBodiesReportsBufferTooSmall)
   ASSERT_TRUE(body_a.has_value());
   ASSERT_TRUE(body_b.has_value());
 
-  const auto aggregate = aggregates->CreateAggregate(world_id);
+  const auto aggregate = aggregates.CreateAggregate(world_id);
   ASSERT_TRUE(aggregate.has_value());
   ASSERT_TRUE(
-    aggregates->AddMemberBody(world_id, aggregate.value(), body_a.value())
+    aggregates.AddMemberBody(world_id, aggregate.value(), body_a.value())
       .has_value());
   ASSERT_TRUE(
-    aggregates->AddMemberBody(world_id, aggregate.value(), body_b.value())
+    aggregates.AddMemberBody(world_id, aggregate.value(), body_b.value())
       .has_value());
 
   std::vector<BodyId> out(1, kInvalidBodyId);
   const auto members
-    = aggregates->GetMemberBodies(world_id, aggregate.value(), out);
+    = aggregates.GetMemberBodies(world_id, aggregate.value(), out);
   EXPECT_TRUE(members.has_error());
   EXPECT_EQ(members.error(), PhysicsError::kBufferTooSmall);
 
   EXPECT_TRUE(
-    aggregates->DestroyAggregate(world_id, aggregate.value()).has_value());
+    aggregates.DestroyAggregate(world_id, aggregate.value()).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, body_a.value()).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, body_b.value()).has_value());
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
@@ -96,8 +94,7 @@ NOLINT_TEST_F(
     return;
   }
 
-  auto* aggregates = System().Aggregates();
-  ASSERT_NE(aggregates, nullptr);
+  auto& aggregates = System().Aggregates();
   auto& worlds = System().Worlds();
 
   const auto world = worlds.CreateWorld(world::WorldDesc {});
@@ -105,13 +102,13 @@ NOLINT_TEST_F(
   const auto world_id = world.value();
 
   const auto destroy
-    = aggregates->DestroyAggregate(world_id, AggregateId { 123456U });
+    = aggregates.DestroyAggregate(world_id, AggregateId { 123456U });
   ASSERT_TRUE(destroy.has_error());
   EXPECT_EQ(destroy.error(), PhysicsError::kInvalidArgument);
 
   std::vector<BodyId> out(2, kInvalidBodyId);
   const auto members
-    = aggregates->GetMemberBodies(world_id, AggregateId { 123456U }, out);
+    = aggregates.GetMemberBodies(world_id, AggregateId { 123456U }, out);
   ASSERT_TRUE(members.has_error());
   EXPECT_EQ(members.error(), PhysicsError::kInvalidArgument);
 

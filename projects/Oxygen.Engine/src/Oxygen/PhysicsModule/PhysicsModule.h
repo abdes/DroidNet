@@ -32,6 +32,20 @@
 #include <Oxygen/Scene/Scene.h>
 
 namespace oxygen::physics {
+namespace internal {
+  struct ScenePhysicsTagFactory;
+} // namespace internal
+
+class ScenePhysicsTag {
+  friend struct internal::ScenePhysicsTagFactory;
+  ScenePhysicsTag() noexcept = default;
+};
+
+namespace internal {
+  struct ScenePhysicsTagFactory {
+    static auto Get() noexcept -> ScenePhysicsTag;
+  };
+} // namespace internal
 
 /*!
  Scene/physics bridge module with strict phase ownership.
@@ -193,44 +207,70 @@ public:
   auto OnNodeDestroyed(const scene::NodeHandle& node_handle) noexcept
     -> void override;
 
-  [[nodiscard]] auto GetBodyApi() noexcept -> system::IBodyApi&;
-  OXGN_PHSYNC_NDAPI auto GetAggregateApi() noexcept -> system::IAggregateApi*;
-  [[nodiscard]] auto GetCharacterApi() noexcept -> system::ICharacterApi&;
-  [[nodiscard]] auto GetEventApi() noexcept -> system::IEventApi&;
-  [[nodiscard]] auto GetQueryApi() noexcept -> system::IQueryApi&;
-  OXGN_PHSYNC_NDAPI auto GetWorldId() const noexcept -> WorldId;
-  [[nodiscard]] auto IsNodeInObservedScene(
-    const scene::NodeHandle& node_handle) const noexcept -> bool;
-  OXGN_PHSYNC_NDAPI auto GetSyncDiagnostics() const noexcept -> SyncDiagnostics;
+  OXGN_PHSYNC_API auto Bodies() noexcept -> system::IBodyApi&;
+  OXGN_PHSYNC_API auto Characters() noexcept -> system::ICharacterApi&;
+  OXGN_PHSYNC_API auto Queries() noexcept -> system::IQueryApi&;
+  OXGN_PHSYNC_API auto Events() noexcept -> system::IEventApi&;
+  OXGN_PHSYNC_API auto Aggregates() noexcept -> system::IAggregateApi&;
+  OXGN_PHSYNC_API auto Articulations() noexcept -> system::IArticulationApi&;
+  OXGN_PHSYNC_API auto Vehicles() noexcept -> system::IVehicleApi&;
+  OXGN_PHSYNC_API auto SoftBodies() noexcept -> system::ISoftBodyApi&;
 
-  OXGN_PHSYNC_API auto RegisterNodeBodyMapping(
+  // ScenePhysics integration surface (tag-gated).
+  OXGN_PHSYNC_NDAPI auto GetWorldId(ScenePhysicsTag /*tag*/) const noexcept
+    -> WorldId
+  {
+    return GetWorldId();
+  }
+  [[nodiscard]] auto IsNodeInObservedScene(ScenePhysicsTag /*tag*/,
+    const scene::NodeHandle& node_handle) const noexcept -> bool
+  {
+    return IsNodeInObservedScene(node_handle);
+  }
+  OXGN_PHSYNC_API auto RegisterNodeBodyMapping(ScenePhysicsTag /*tag*/,
     const scene::NodeHandle& node_handle, BodyId body_id,
-    body::BodyType body_type) -> void;
+    body::BodyType body_type) -> void
+  {
+    RegisterNodeBodyMapping(node_handle, body_id, body_type);
+  }
+  OXGN_PHSYNC_NDAPI auto GetBodyIdForNode(ScenePhysicsTag /*tag*/,
+    const scene::NodeHandle& node_handle) const -> BodyId
+  {
+    return GetBodyIdForNode(node_handle);
+  }
+  OXGN_PHSYNC_NDAPI auto GetNodeForBodyId(ScenePhysicsTag /*tag*/,
+    BodyId body_id) const -> std::optional<scene::NodeHandle>
+  {
+    return GetNodeForBodyId(body_id);
+  }
+  OXGN_PHSYNC_API auto RegisterNodeCharacterMapping(ScenePhysicsTag /*tag*/,
+    const scene::NodeHandle& node_handle, CharacterId character_id) -> void
+  {
+    RegisterNodeCharacterMapping(node_handle, character_id);
+  }
+  OXGN_PHSYNC_NDAPI auto GetCharacterIdForNode(ScenePhysicsTag /*tag*/,
+    const scene::NodeHandle& node_handle) const -> CharacterId
+  {
+    return GetCharacterIdForNode(node_handle);
+  }
+  OXGN_PHSYNC_NDAPI auto GetAggregateIdForNode(ScenePhysicsTag /*tag*/,
+    const scene::NodeHandle& node_handle) const -> AggregateId
+  {
+    return GetAggregateIdForNode(node_handle);
+  }
+  OXGN_PHSYNC_API auto ApplyWorldPoseToNode(ScenePhysicsTag /*tag*/,
+    const scene::NodeHandle& node_handle, const Vec3& world_position,
+    const Quat& world_rotation) -> bool
+  {
+    return ApplyWorldPoseToNode(node_handle, world_position, world_rotation);
+  }
 
-  OXGN_PHSYNC_NDAPI auto GetBodyIdForNode(
-    const scene::NodeHandle& node_handle) const -> BodyId;
-  OXGN_PHSYNC_NDAPI auto HasBodyForNode(
-    const scene::NodeHandle& node_handle) const -> bool;
-
-  [[nodiscard]] auto GetBodyTypeForBodyId(BodyId body_id) const
-    -> std::optional<body::BodyType>;
-
-  OXGN_PHSYNC_NDAPI auto GetNodeForBodyId(BodyId body_id) const
-    -> std::optional<scene::NodeHandle>;
-
-  OXGN_PHSYNC_API auto RegisterNodeCharacterMapping(
-    const scene::NodeHandle& node_handle, CharacterId character_id) -> void;
+  // Testing surface (prefer facade APIs for runtime/public clients).
+  OXGN_PHSYNC_NDAPI auto GetWorldId() const noexcept -> WorldId;
+  OXGN_PHSYNC_NDAPI auto GetSyncDiagnostics() const noexcept -> SyncDiagnostics;
   OXGN_PHSYNC_API auto RegisterNodeAggregateMapping(
     const scene::NodeHandle& node_handle, AggregateId aggregate_id,
     aggregate::AggregateAuthority authority) -> void;
-
-  OXGN_PHSYNC_NDAPI auto GetCharacterIdForNode(
-    const scene::NodeHandle& node_handle) const -> CharacterId;
-  OXGN_PHSYNC_NDAPI auto HasCharacterForNode(
-    const scene::NodeHandle& node_handle) const -> bool;
-
-  OXGN_PHSYNC_NDAPI auto GetNodeForCharacterId(CharacterId character_id) const
-    -> std::optional<scene::NodeHandle>;
   OXGN_PHSYNC_NDAPI auto GetAggregateIdForNode(
     const scene::NodeHandle& node_handle) const -> AggregateId;
   OXGN_PHSYNC_NDAPI auto HasAggregateForNode(
@@ -240,16 +280,6 @@ public:
   OXGN_PHSYNC_NDAPI auto GetAggregateAuthorityForAggregateId(
     AggregateId aggregate_id) const
     -> std::optional<aggregate::AggregateAuthority>;
-
-  /*! Convert a world-space pose into node-local space using the current parent
-
-   * chain and apply it to the scene node transform.
-      Returns false when
-   * scene/node preconditions are not met. */
-  OXGN_PHSYNC_API auto ApplyWorldPoseToNode(
-    const scene::NodeHandle& node_handle, const Vec3& world_position,
-    const Quat& world_rotation) -> bool;
-
   OXGN_PHSYNC_NDAPI auto ConsumeSceneEvents() -> std::vector<ScenePhysicsEvent>;
 
 private:
@@ -285,6 +315,28 @@ private:
   static constexpr std::size_t kMinBindingReserve { 64 };
 
   auto SyncSceneObserver(observer_ptr<engine::FrameContext> context) -> void;
+  [[nodiscard]] auto IsNodeInObservedScene(
+    const scene::NodeHandle& node_handle) const noexcept -> bool;
+  auto RegisterNodeBodyMapping(const scene::NodeHandle& node_handle,
+    BodyId body_id, body::BodyType body_type) -> void;
+  auto RegisterNodeCharacterMapping(
+    const scene::NodeHandle& node_handle, CharacterId character_id) -> void;
+  [[nodiscard]] auto GetBodyTypeForBodyId(BodyId body_id) const
+    -> std::optional<body::BodyType>;
+  [[nodiscard]] auto GetBodyIdForNode(
+    const scene::NodeHandle& node_handle) const -> BodyId;
+  [[nodiscard]] auto HasBodyForNode(const scene::NodeHandle& node_handle) const
+    -> bool;
+  [[nodiscard]] auto GetNodeForBodyId(BodyId body_id) const
+    -> std::optional<scene::NodeHandle>;
+  [[nodiscard]] auto GetCharacterIdForNode(
+    const scene::NodeHandle& node_handle) const -> CharacterId;
+  [[nodiscard]] auto HasCharacterForNode(
+    const scene::NodeHandle& node_handle) const -> bool;
+  [[nodiscard]] auto GetNodeForCharacterId(CharacterId character_id) const
+    -> std::optional<scene::NodeHandle>;
+  auto ApplyWorldPoseToNode(const scene::NodeHandle& node_handle,
+    const Vec3& world_position, const Quat& world_rotation) -> bool;
   auto RemoveBinding(const ResourceHandle& binding_handle) -> bool;
   auto RemoveCharacterBinding(const ResourceHandle& binding_handle) -> bool;
   auto RemoveAggregateBinding(const ResourceHandle& binding_handle) -> bool;

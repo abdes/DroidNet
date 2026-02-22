@@ -26,22 +26,21 @@ NOLINT_TEST_F(JoltVehicleContractTest, InvalidWorldCallsReturnWorldNotFound)
     return;
   }
 
-  auto* vehicles = System().Vehicles();
-  ASSERT_NE(vehicles, nullptr);
+  auto& vehicles = System().Vehicles();
 
-  EXPECT_TRUE(vehicles->CreateVehicle(kInvalidWorldId, vehicle::VehicleDesc {})
+  EXPECT_TRUE(vehicles.CreateVehicle(kInvalidWorldId, vehicle::VehicleDesc {})
       .has_error());
   EXPECT_TRUE(
-    vehicles->DestroyVehicle(kInvalidWorldId, kInvalidAggregateId).has_error());
+    vehicles.DestroyVehicle(kInvalidWorldId, kInvalidAggregateId).has_error());
   EXPECT_TRUE(vehicles
-      ->SetControlInput(
+      .SetControlInput(
         kInvalidWorldId, kInvalidAggregateId, vehicle::VehicleControlInput {})
       .has_error());
   EXPECT_TRUE(
-    vehicles->GetState(kInvalidWorldId, kInvalidAggregateId).has_error());
+    vehicles.GetState(kInvalidWorldId, kInvalidAggregateId).has_error());
   EXPECT_TRUE(
-    vehicles->GetAuthority(kInvalidWorldId, kInvalidAggregateId).has_error());
-  EXPECT_TRUE(vehicles->FlushStructuralChanges(kInvalidWorldId).has_error());
+    vehicles.GetAuthority(kInvalidWorldId, kInvalidAggregateId).has_error());
+  EXPECT_TRUE(vehicles.FlushStructuralChanges(kInvalidWorldId).has_error());
 }
 
 NOLINT_TEST_F(JoltVehicleContractTest, UnknownVehicleReturnsInvalidArgument)
@@ -51,20 +50,18 @@ NOLINT_TEST_F(JoltVehicleContractTest, UnknownVehicleReturnsInvalidArgument)
     return;
   }
 
-  auto* vehicles = System().Vehicles();
-  ASSERT_NE(vehicles, nullptr);
+  auto& vehicles = System().Vehicles();
   auto& worlds = System().Worlds();
 
   const auto world = worlds.CreateWorld(world::WorldDesc {});
   ASSERT_TRUE(world.has_value());
   const auto world_id = world.value();
 
-  const auto get_state = vehicles->GetState(world_id, AggregateId { 9999U });
+  const auto get_state = vehicles.GetState(world_id, AggregateId { 9999U });
   ASSERT_TRUE(get_state.has_error());
   EXPECT_EQ(get_state.error(), PhysicsError::kInvalidArgument);
 
-  const auto destroy
-    = vehicles->DestroyVehicle(world_id, AggregateId { 9999U });
+  const auto destroy = vehicles.DestroyVehicle(world_id, AggregateId { 9999U });
   ASSERT_TRUE(destroy.has_error());
   EXPECT_EQ(destroy.error(), PhysicsError::kInvalidArgument);
 
@@ -78,8 +75,7 @@ NOLINT_TEST_F(JoltVehicleContractTest, SetControlInputValidatesNormalizedRanges)
     return;
   }
 
-  auto* vehicles = System().Vehicles();
-  ASSERT_NE(vehicles, nullptr);
+  auto& vehicles = System().Vehicles();
   auto& worlds = System().Worlds();
   auto& bodies = System().Bodies();
 
@@ -100,14 +96,14 @@ NOLINT_TEST_F(JoltVehicleContractTest, SetControlInputValidatesNormalizedRanges)
     wheel.value(),
     wheel2.value(),
   };
-  const auto vehicle = vehicles->CreateVehicle(world_id,
+  const auto vehicle = vehicles.CreateVehicle(world_id,
     vehicle::VehicleDesc {
       .chassis_body_id = chassis.value(),
       .wheel_body_ids = wheel_ids,
     });
   ASSERT_TRUE(vehicle.has_value());
 
-  const auto invalid = vehicles->SetControlInput(world_id, vehicle.value(),
+  const auto invalid = vehicles.SetControlInput(world_id, vehicle.value(),
     vehicle::VehicleControlInput {
       .throttle = 2.0F,
       .brake = 0.0F,
@@ -117,7 +113,7 @@ NOLINT_TEST_F(JoltVehicleContractTest, SetControlInputValidatesNormalizedRanges)
   ASSERT_TRUE(invalid.has_error());
   EXPECT_EQ(invalid.error(), PhysicsError::kInvalidArgument);
 
-  EXPECT_TRUE(vehicles->DestroyVehicle(world_id, vehicle.value()).has_value());
+  EXPECT_TRUE(vehicles.DestroyVehicle(world_id, vehicle.value()).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, wheel2.value()).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, wheel.value()).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, chassis.value()).has_value());
@@ -131,8 +127,7 @@ NOLINT_TEST_F(JoltVehicleContractTest, CreateVehicleRejectsSingleWheelTopology)
     return;
   }
 
-  auto* vehicles = System().Vehicles();
-  ASSERT_NE(vehicles, nullptr);
+  auto& vehicles = System().Vehicles();
   auto& worlds = System().Worlds();
   auto& bodies = System().Bodies();
 
@@ -150,7 +145,7 @@ NOLINT_TEST_F(JoltVehicleContractTest, CreateVehicleRejectsSingleWheelTopology)
   const std::array<BodyId, 1> wheel_ids {
     wheel.value(),
   };
-  const auto vehicle = vehicles->CreateVehicle(world_id,
+  const auto vehicle = vehicles.CreateVehicle(world_id,
     vehicle::VehicleDesc {
       .chassis_body_id = chassis.value(),
       .wheel_body_ids = wheel_ids,
@@ -171,8 +166,7 @@ NOLINT_TEST_F(
     return;
   }
 
-  auto* vehicles = System().Vehicles();
-  ASSERT_NE(vehicles, nullptr);
+  auto& vehicles = System().Vehicles();
   auto& worlds = System().Worlds();
   auto& bodies = System().Bodies();
 
@@ -193,7 +187,7 @@ NOLINT_TEST_F(
     wheel_a.value(),
     wheel_b.value(),
   };
-  const auto vehicle = vehicles->CreateVehicle(world_id,
+  const auto vehicle = vehicles.CreateVehicle(world_id,
     vehicle::VehicleDesc {
       .chassis_body_id = chassis.value(),
       .wheel_body_ids = wheel_ids,
@@ -203,12 +197,11 @@ NOLINT_TEST_F(
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
 
   const auto destroy_after_world
-    = vehicles->DestroyVehicle(world_id, vehicle.value());
+    = vehicles.DestroyVehicle(world_id, vehicle.value());
   ASSERT_TRUE(destroy_after_world.has_error());
   EXPECT_EQ(destroy_after_world.error(), PhysicsError::kWorldNotFound);
 
-  const auto destroy_again
-    = vehicles->DestroyVehicle(world_id, vehicle.value());
+  const auto destroy_again = vehicles.DestroyVehicle(world_id, vehicle.value());
   ASSERT_TRUE(destroy_again.has_error());
   EXPECT_EQ(destroy_again.error(), PhysicsError::kInvalidArgument);
 }

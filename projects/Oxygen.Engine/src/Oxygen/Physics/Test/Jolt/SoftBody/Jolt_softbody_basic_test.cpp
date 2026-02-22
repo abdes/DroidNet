@@ -16,16 +16,6 @@ namespace {
 
 } // namespace
 
-NOLINT_TEST_F(JoltSoftBodyBasicTest, SoftBodyApiIsAvailable)
-{
-  AssertBackendAvailabilityContract();
-  if (!HasBackend()) {
-    return;
-  }
-
-  EXPECT_NE(System().SoftBodies(), nullptr);
-}
-
 NOLINT_TEST_F(JoltSoftBodyBasicTest, CreateAndDestroySoftBodySucceeds)
 {
   AssertBackendAvailabilityContract();
@@ -33,15 +23,14 @@ NOLINT_TEST_F(JoltSoftBodyBasicTest, CreateAndDestroySoftBodySucceeds)
     return;
   }
 
-  auto* soft_bodies = System().SoftBodies();
-  ASSERT_NE(soft_bodies, nullptr);
+  auto& soft_bodies = System().SoftBodies();
   auto& worlds = System().Worlds();
 
   const auto world = worlds.CreateWorld(world::WorldDesc {});
   ASSERT_TRUE(world.has_value());
   const auto world_id = world.value();
 
-  const auto soft_body = soft_bodies->CreateSoftBody(world_id,
+  const auto soft_body = soft_bodies.CreateSoftBody(world_id,
     softbody::SoftBodyDesc {
       .anchor_body_id = kInvalidBodyId,
       .cluster_count = 4U,
@@ -50,7 +39,7 @@ NOLINT_TEST_F(JoltSoftBodyBasicTest, CreateAndDestroySoftBodySucceeds)
   EXPECT_TRUE(IsValid(soft_body.value()));
 
   EXPECT_TRUE(
-    soft_bodies->DestroySoftBody(world_id, soft_body.value()).has_value());
+    soft_bodies.DestroySoftBody(world_id, soft_body.value()).has_value());
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
 }
 

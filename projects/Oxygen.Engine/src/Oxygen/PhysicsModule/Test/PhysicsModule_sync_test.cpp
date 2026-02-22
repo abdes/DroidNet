@@ -436,9 +436,8 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyFailsWhenAggregateExists)
   RunGameplay();
   scene_->Update();
 
-  auto* aggregates = module_->GetAggregateApi();
-  ASSERT_NE(aggregates, nullptr);
-  const auto aggregate = aggregates->CreateAggregate(module_->GetWorldId());
+  auto& aggregates = module_->Aggregates();
+  const auto aggregate = aggregates.CreateAggregate(module_->GetWorldId());
   ASSERT_TRUE(aggregate.has_value());
   module_->RegisterNodeAggregateMapping(node.GetHandle(), aggregate.value(),
     aggregate::AggregateAuthority::kSimulation);
@@ -459,9 +458,8 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyWhenAggregateExists_Death)
   RunGameplay();
   scene_->Update();
 
-  auto* aggregates = module_->GetAggregateApi();
-  ASSERT_NE(aggregates, nullptr);
-  const auto aggregate = aggregates->CreateAggregate(module_->GetWorldId());
+  auto& aggregates = module_->Aggregates();
+  const auto aggregate = aggregates.CreateAggregate(module_->GetWorldId());
   ASSERT_TRUE(aggregate.has_value());
   module_->RegisterNodeAggregateMapping(node.GetHandle(), aggregate.value(),
     aggregate::AggregateAuthority::kSimulation);
@@ -483,9 +481,8 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, AttachCharacterFailsWhenAggregateExists)
   RunGameplay();
   scene_->Update();
 
-  auto* aggregates = module_->GetAggregateApi();
-  ASSERT_NE(aggregates, nullptr);
-  const auto aggregate = aggregates->CreateAggregate(module_->GetWorldId());
+  auto& aggregates = module_->Aggregates();
+  const auto aggregate = aggregates.CreateAggregate(module_->GetWorldId());
   ASSERT_TRUE(aggregate.has_value());
   module_->RegisterNodeAggregateMapping(node.GetHandle(), aggregate.value(),
     aggregate::AggregateAuthority::kSimulation);
@@ -505,9 +502,8 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, AttachCharacterWhenAggregateExists_Death)
   RunGameplay();
   scene_->Update();
 
-  auto* aggregates = module_->GetAggregateApi();
-  ASSERT_NE(aggregates, nullptr);
-  const auto aggregate = aggregates->CreateAggregate(module_->GetWorldId());
+  auto& aggregates = module_->Aggregates();
+  const auto aggregate = aggregates.CreateAggregate(module_->GetWorldId());
   ASSERT_TRUE(aggregate.has_value());
   module_->RegisterNodeAggregateMapping(node.GetHandle(), aggregate.value(),
     aggregate::AggregateAuthority::kSimulation);
@@ -579,9 +575,8 @@ NOLINT_TEST_F(
   ASSERT_TRUE(other_node.IsValid());
   other_scene->Update();
 
-  auto* aggregates = module_->GetAggregateApi();
-  ASSERT_NE(aggregates, nullptr);
-  const auto aggregate = aggregates->CreateAggregate(module_->GetWorldId());
+  auto& aggregates = module_->Aggregates();
+  const auto aggregate = aggregates.CreateAggregate(module_->GetWorldId());
   ASSERT_TRUE(aggregate.has_value());
 
   module_->RegisterNodeAggregateMapping(other_node.GetHandle(),
@@ -603,9 +598,8 @@ NOLINT_TEST_F(
   ASSERT_TRUE(other_node.IsValid());
   other_scene->Update();
 
-  auto* aggregates = module_->GetAggregateApi();
-  ASSERT_NE(aggregates, nullptr);
-  const auto aggregate = aggregates->CreateAggregate(module_->GetWorldId());
+  auto& aggregates = module_->Aggregates();
+  const auto aggregate = aggregates.CreateAggregate(module_->GetWorldId());
   ASSERT_TRUE(aggregate.has_value());
 
   NOLINT_EXPECT_DEATH(
@@ -805,10 +799,9 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, RegisterAggregateMappingRoundTrip)
   RunGameplay();
   scene_->Update();
 
-  auto* aggregates = module_->GetAggregateApi();
-  ASSERT_NE(aggregates, nullptr);
+  auto& aggregates = module_->Aggregates();
   const auto created_aggregate
-    = aggregates->CreateAggregate(module_->GetWorldId());
+    = aggregates.CreateAggregate(module_->GetWorldId());
   ASSERT_TRUE(created_aggregate.has_value());
   const auto aggregate_id = created_aggregate.value();
 
@@ -834,10 +827,9 @@ NOLINT_TEST_F(
   RunGameplay();
   scene_->Update();
 
-  auto* aggregates = module_->GetAggregateApi();
-  ASSERT_NE(aggregates, nullptr);
+  auto& aggregates = module_->Aggregates();
   const auto created_aggregate
-    = aggregates->CreateAggregate(module_->GetWorldId());
+    = aggregates.CreateAggregate(module_->GetWorldId());
   ASSERT_TRUE(created_aggregate.has_value());
   const auto articulation_id = created_aggregate.value();
 
@@ -866,12 +858,11 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, VehicleBaselineMappingUsesCommandAuthority)
   ASSERT_TRUE(chassis.has_value());
   ASSERT_TRUE(wheel.has_value());
 
-  auto* vehicles = fake_physics_->Vehicles();
-  ASSERT_NE(vehicles, nullptr);
+  auto& vehicles = fake_physics_->Vehicles();
   const std::array<BodyId, 1> wheel_ids {
     wheel.value(),
   };
-  const auto created_vehicle = vehicles->CreateVehicle(module_->GetWorldId(),
+  const auto created_vehicle = vehicles.CreateVehicle(module_->GetWorldId(),
     vehicle::VehicleDesc {
       .chassis_body_id = chassis.value(),
       .wheel_body_ids = wheel_ids,
@@ -895,10 +886,9 @@ NOLINT_TEST_F(
   RunGameplay();
   scene_->Update();
 
-  auto* soft_bodies = fake_physics_->SoftBodies();
-  ASSERT_NE(soft_bodies, nullptr);
+  auto& soft_bodies = fake_physics_->SoftBodies();
   const auto created_soft_body
-    = soft_bodies->CreateSoftBody(module_->GetWorldId(),
+    = soft_bodies.CreateSoftBody(module_->GetWorldId(),
       softbody::SoftBodyDesc {
         .cluster_count = 4U,
       });
@@ -920,10 +910,9 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, DestroyNodeDestroysTrackedAggregate)
   RunGameplay();
   scene_->Update();
 
-  auto* aggregates = module_->GetAggregateApi();
-  ASSERT_NE(aggregates, nullptr);
+  auto& aggregates = module_->Aggregates();
   const auto created_aggregate
-    = aggregates->CreateAggregate(module_->GetWorldId());
+    = aggregates.CreateAggregate(module_->GetWorldId());
   ASSERT_TRUE(created_aggregate.has_value());
   module_->RegisterNodeAggregateMapping(node.GetHandle(),
     created_aggregate.value(), aggregate::AggregateAuthority::kSimulation);
@@ -954,12 +943,11 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, DestroyNodeDestroysTrackedVehicleAggregate)
   ASSERT_TRUE(chassis.has_value());
   ASSERT_TRUE(wheel.has_value());
 
-  auto* vehicles = fake_physics_->Vehicles();
-  ASSERT_NE(vehicles, nullptr);
+  auto& vehicles = fake_physics_->Vehicles();
   const std::array<BodyId, 1> wheel_ids {
     wheel.value(),
   };
-  const auto created_vehicle = vehicles->CreateVehicle(module_->GetWorldId(),
+  const auto created_vehicle = vehicles.CreateVehicle(module_->GetWorldId(),
     vehicle::VehicleDesc {
       .chassis_body_id = chassis.value(),
       .wheel_body_ids = wheel_ids,
@@ -985,10 +973,9 @@ NOLINT_TEST_F(
   RunGameplay();
   scene_->Update();
 
-  auto* soft_bodies = fake_physics_->SoftBodies();
-  ASSERT_NE(soft_bodies, nullptr);
+  auto& soft_bodies = fake_physics_->SoftBodies();
   const auto created_soft_body
-    = soft_bodies->CreateSoftBody(module_->GetWorldId(),
+    = soft_bodies.CreateSoftBody(module_->GetWorldId(),
       softbody::SoftBodyDesc {
         .cluster_count = 4U,
       });
@@ -1013,9 +1000,8 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, SceneSwitchDestroysPreviousSceneAggregates)
   RunGameplay();
   scene_a->Update();
 
-  auto* aggregates = module_->GetAggregateApi();
-  ASSERT_NE(aggregates, nullptr);
-  const auto aggregate_a = aggregates->CreateAggregate(module_->GetWorldId());
+  auto& aggregates = module_->Aggregates();
+  const auto aggregate_a = aggregates.CreateAggregate(module_->GetWorldId());
   ASSERT_TRUE(aggregate_a.has_value());
   module_->RegisterNodeAggregateMapping(node_a.GetHandle(), aggregate_a.value(),
     aggregate::AggregateAuthority::kSimulation);
@@ -1049,12 +1035,11 @@ NOLINT_TEST_F(
   ASSERT_TRUE(chassis.has_value());
   ASSERT_TRUE(wheel.has_value());
 
-  auto* vehicles = fake_physics_->Vehicles();
-  ASSERT_NE(vehicles, nullptr);
+  auto& vehicles = fake_physics_->Vehicles();
   const std::array<BodyId, 1> wheel_ids {
     wheel.value(),
   };
-  const auto vehicle = vehicles->CreateVehicle(module_->GetWorldId(),
+  const auto vehicle = vehicles.CreateVehicle(module_->GetWorldId(),
     vehicle::VehicleDesc {
       .chassis_body_id = chassis.value(),
       .wheel_body_ids = wheel_ids,
@@ -1084,9 +1069,8 @@ NOLINT_TEST_F(
   RunGameplay();
   scene_a->Update();
 
-  auto* soft_bodies = fake_physics_->SoftBodies();
-  ASSERT_NE(soft_bodies, nullptr);
-  const auto soft_body = soft_bodies->CreateSoftBody(module_->GetWorldId(),
+  auto& soft_bodies = fake_physics_->SoftBodies();
+  const auto soft_body = soft_bodies.CreateSoftBody(module_->GetWorldId(),
     softbody::SoftBodyDesc {
       .cluster_count = 4U,
     });

@@ -19,15 +19,6 @@ namespace {
 
 } // namespace
 
-NOLINT_TEST_F(JoltVehicleBasicTest, VehicleApiIsAvailable)
-{
-  AssertBackendAvailabilityContract();
-  if (!HasBackend()) {
-    return;
-  }
-  EXPECT_NE(System().Vehicles(), nullptr);
-}
-
 NOLINT_TEST_F(JoltVehicleBasicTest, CreateAndDestroyVehicleSucceeds)
 {
   AssertBackendAvailabilityContract();
@@ -35,8 +26,7 @@ NOLINT_TEST_F(JoltVehicleBasicTest, CreateAndDestroyVehicleSucceeds)
     return;
   }
 
-  auto* vehicles = System().Vehicles();
-  ASSERT_NE(vehicles, nullptr);
+  auto& vehicles = System().Vehicles();
   auto& worlds = System().Worlds();
   auto& bodies = System().Bodies();
 
@@ -57,7 +47,7 @@ NOLINT_TEST_F(JoltVehicleBasicTest, CreateAndDestroyVehicleSucceeds)
     wheel.value(),
     wheel2.value(),
   };
-  const auto vehicle = vehicles->CreateVehicle(world_id,
+  const auto vehicle = vehicles.CreateVehicle(world_id,
     vehicle::VehicleDesc {
       .chassis_body_id = chassis.value(),
       .wheel_body_ids = wheel_ids,
@@ -65,7 +55,7 @@ NOLINT_TEST_F(JoltVehicleBasicTest, CreateAndDestroyVehicleSucceeds)
   ASSERT_TRUE(vehicle.has_value());
   EXPECT_TRUE(IsValid(vehicle.value()));
 
-  EXPECT_TRUE(vehicles->DestroyVehicle(world_id, vehicle.value()).has_value());
+  EXPECT_TRUE(vehicles.DestroyVehicle(world_id, vehicle.value()).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, wheel2.value()).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, wheel.value()).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, chassis.value()).has_value());

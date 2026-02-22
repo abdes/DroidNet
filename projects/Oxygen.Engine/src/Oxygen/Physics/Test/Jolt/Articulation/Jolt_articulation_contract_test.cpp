@@ -27,32 +27,31 @@ NOLINT_TEST_F(
     return;
   }
 
-  auto* articulations = System().Articulations();
-  ASSERT_NE(articulations, nullptr);
+  auto& articulations = System().Articulations();
 
   EXPECT_TRUE(articulations
-      ->CreateArticulation(kInvalidWorldId, articulation::ArticulationDesc {})
+      .CreateArticulation(kInvalidWorldId, articulation::ArticulationDesc {})
       .has_error());
   EXPECT_TRUE(
-    articulations->DestroyArticulation(kInvalidWorldId, kInvalidAggregateId)
+    articulations.DestroyArticulation(kInvalidWorldId, kInvalidAggregateId)
       .has_error());
   EXPECT_TRUE(articulations
-      ->AddLink(kInvalidWorldId, kInvalidAggregateId,
+      .AddLink(kInvalidWorldId, kInvalidAggregateId,
         articulation::ArticulationLinkDesc {})
       .has_error());
   EXPECT_TRUE(articulations
-      ->RemoveLink(kInvalidWorldId, kInvalidAggregateId, kInvalidBodyId)
+      .RemoveLink(kInvalidWorldId, kInvalidAggregateId, kInvalidBodyId)
       .has_error());
-  EXPECT_TRUE(articulations->GetRootBody(kInvalidWorldId, kInvalidAggregateId)
+  EXPECT_TRUE(articulations.GetRootBody(kInvalidWorldId, kInvalidAggregateId)
       .has_error());
   std::vector<BodyId> out(2, kInvalidBodyId);
   EXPECT_TRUE(
-    articulations->GetLinkBodies(kInvalidWorldId, kInvalidAggregateId, out)
+    articulations.GetLinkBodies(kInvalidWorldId, kInvalidAggregateId, out)
       .has_error());
-  EXPECT_TRUE(articulations->GetAuthority(kInvalidWorldId, kInvalidAggregateId)
+  EXPECT_TRUE(articulations.GetAuthority(kInvalidWorldId, kInvalidAggregateId)
       .has_error());
   EXPECT_TRUE(
-    articulations->FlushStructuralChanges(kInvalidWorldId).has_error());
+    articulations.FlushStructuralChanges(kInvalidWorldId).has_error());
 }
 
 NOLINT_TEST_F(
@@ -63,8 +62,7 @@ NOLINT_TEST_F(
     return;
   }
 
-  auto* articulations = System().Articulations();
-  ASSERT_NE(articulations, nullptr);
+  auto& articulations = System().Articulations();
   auto& worlds = System().Worlds();
 
   const auto world = worlds.CreateWorld(world::WorldDesc {});
@@ -72,11 +70,11 @@ NOLINT_TEST_F(
   const auto world_id = world.value();
 
   const auto destroy
-    = articulations->DestroyArticulation(world_id, AggregateId { 9999U });
+    = articulations.DestroyArticulation(world_id, AggregateId { 9999U });
   ASSERT_TRUE(destroy.has_error());
   EXPECT_EQ(destroy.error(), PhysicsError::kInvalidArgument);
   const auto root_query
-    = articulations->GetRootBody(world_id, AggregateId { 9999U });
+    = articulations.GetRootBody(world_id, AggregateId { 9999U });
   ASSERT_TRUE(root_query.has_error());
   EXPECT_EQ(root_query.error(), PhysicsError::kInvalidArgument);
 
@@ -90,8 +88,7 @@ NOLINT_TEST_F(JoltArticulationContractTest, GetLinkBodiesReportsBufferTooSmall)
     return;
   }
 
-  auto* articulations = System().Articulations();
-  ASSERT_NE(articulations, nullptr);
+  auto& articulations = System().Articulations();
   auto& worlds = System().Worlds();
   auto& bodies = System().Bodies();
 
@@ -106,13 +103,13 @@ NOLINT_TEST_F(JoltArticulationContractTest, GetLinkBodiesReportsBufferTooSmall)
   ASSERT_TRUE(root.has_value());
   ASSERT_TRUE(child.has_value());
 
-  const auto articulation = articulations->CreateArticulation(world_id,
+  const auto articulation = articulations.CreateArticulation(world_id,
     articulation::ArticulationDesc {
       .root_body_id = root.value(),
     });
   ASSERT_TRUE(articulation.has_value());
   ASSERT_TRUE(articulations
-      ->AddLink(world_id, articulation.value(),
+      .AddLink(world_id, articulation.value(),
         articulation::ArticulationLinkDesc {
           .parent_body_id = root.value(),
           .child_body_id = child.value(),
@@ -121,11 +118,11 @@ NOLINT_TEST_F(JoltArticulationContractTest, GetLinkBodiesReportsBufferTooSmall)
 
   std::vector<BodyId> out(0);
   const auto get_links
-    = articulations->GetLinkBodies(world_id, articulation.value(), out);
+    = articulations.GetLinkBodies(world_id, articulation.value(), out);
   ASSERT_TRUE(get_links.has_error());
   EXPECT_EQ(get_links.error(), PhysicsError::kBufferTooSmall);
 
-  EXPECT_TRUE(articulations->DestroyArticulation(world_id, articulation.value())
+  EXPECT_TRUE(articulations.DestroyArticulation(world_id, articulation.value())
       .has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, child.value()).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, root.value()).has_value());

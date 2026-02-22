@@ -40,10 +40,10 @@ public:
   auto Shapes() noexcept -> system::IShapeApi& override;
   auto Areas() noexcept -> system::IAreaApi& override;
   auto Joints() noexcept -> system::IJointApi& override;
-  auto Aggregates() noexcept -> system::IAggregateApi* override;
-  auto Articulations() noexcept -> system::IArticulationApi* override;
-  auto Vehicles() noexcept -> system::IVehicleApi* override;
-  auto SoftBodies() noexcept -> system::ISoftBodyApi* override;
+  auto Aggregates() noexcept -> system::IAggregateApi& override;
+  auto Articulations() noexcept -> system::IArticulationApi& override;
+  auto Vehicles() noexcept -> system::IVehicleApi& override;
+  auto SoftBodies() noexcept -> system::ISoftBodyApi& override;
 
   auto Worlds() const noexcept -> const system::IWorldApi& override;
   auto Bodies() const noexcept -> const system::IBodyApi& override;
@@ -53,11 +53,11 @@ public:
   auto Shapes() const noexcept -> const system::IShapeApi& override;
   auto Areas() const noexcept -> const system::IAreaApi& override;
   auto Joints() const noexcept -> const system::IJointApi& override;
-  auto Aggregates() const noexcept -> const system::IAggregateApi* override;
+  auto Aggregates() const noexcept -> const system::IAggregateApi& override;
   auto Articulations() const noexcept
-    -> const system::IArticulationApi* override;
-  auto Vehicles() const noexcept -> const system::IVehicleApi* override;
-  auto SoftBodies() const noexcept -> const system::ISoftBodyApi* override;
+    -> const system::IArticulationApi& override;
+  auto Vehicles() const noexcept -> const system::IVehicleApi& override;
+  auto SoftBodies() const noexcept -> const system::ISoftBodyApi& override;
 
 private:
   JoltWorld world_ {};

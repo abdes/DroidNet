@@ -17,15 +17,6 @@ namespace {
 
 } // namespace
 
-NOLINT_TEST_F(JoltArticulationBasicTest, ArticulationApiIsAvailable)
-{
-  AssertBackendAvailabilityContract();
-  if (!HasBackend()) {
-    return;
-  }
-  EXPECT_NE(System().Articulations(), nullptr);
-}
-
 NOLINT_TEST_F(JoltArticulationBasicTest, CreateAndDestroyArticulationSucceeds)
 {
   AssertBackendAvailabilityContract();
@@ -33,8 +24,7 @@ NOLINT_TEST_F(JoltArticulationBasicTest, CreateAndDestroyArticulationSucceeds)
     return;
   }
 
-  auto* articulations = System().Articulations();
-  ASSERT_NE(articulations, nullptr);
+  auto& articulations = System().Articulations();
   auto& worlds = System().Worlds();
   auto& bodies = System().Bodies();
 
@@ -47,13 +37,13 @@ NOLINT_TEST_F(JoltArticulationBasicTest, CreateAndDestroyArticulationSucceeds)
   const auto root_result = bodies.CreateBody(world_id, body_desc);
   ASSERT_TRUE(root_result.has_value());
 
-  const auto articulation = articulations->CreateArticulation(world_id,
+  const auto articulation = articulations.CreateArticulation(world_id,
     articulation::ArticulationDesc {
       .root_body_id = root_result.value(),
     });
   ASSERT_TRUE(articulation.has_value());
   EXPECT_TRUE(IsValid(articulation.value()));
-  EXPECT_TRUE(articulations->DestroyArticulation(world_id, articulation.value())
+  EXPECT_TRUE(articulations.DestroyArticulation(world_id, articulation.value())
       .has_value());
 
   EXPECT_TRUE(bodies.DestroyBody(world_id, root_result.value()).has_value());

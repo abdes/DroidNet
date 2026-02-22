@@ -27,8 +27,7 @@ NOLINT_TEST_F(JoltAggregateDomainTest, MembershipRoundTripAndRebind)
     return;
   }
 
-  auto* aggregates = System().Aggregates();
-  ASSERT_NE(aggregates, nullptr);
+  auto& aggregates = System().Aggregates();
   auto& worlds = System().Worlds();
   auto& bodies = System().Bodies();
 
@@ -43,47 +42,47 @@ NOLINT_TEST_F(JoltAggregateDomainTest, MembershipRoundTripAndRebind)
   ASSERT_TRUE(body_a.has_value());
   ASSERT_TRUE(body_b.has_value());
 
-  const auto aggregate_a = aggregates->CreateAggregate(world_id);
-  const auto aggregate_b = aggregates->CreateAggregate(world_id);
+  const auto aggregate_a = aggregates.CreateAggregate(world_id);
+  const auto aggregate_b = aggregates.CreateAggregate(world_id);
   ASSERT_TRUE(aggregate_a.has_value());
   ASSERT_TRUE(aggregate_b.has_value());
 
   ASSERT_TRUE(
-    aggregates->AddMemberBody(world_id, aggregate_a.value(), body_a.value())
+    aggregates.AddMemberBody(world_id, aggregate_a.value(), body_a.value())
       .has_value());
   ASSERT_TRUE(
-    aggregates->AddMemberBody(world_id, aggregate_a.value(), body_b.value())
+    aggregates.AddMemberBody(world_id, aggregate_a.value(), body_b.value())
       .has_value());
 
   std::vector<BodyId> members(8, kInvalidBodyId);
   auto count
-    = aggregates->GetMemberBodies(world_id, aggregate_a.value(), members);
+    = aggregates.GetMemberBodies(world_id, aggregate_a.value(), members);
   ASSERT_TRUE(count.has_value());
   EXPECT_EQ(count.value(), 2U);
 
   ASSERT_TRUE(
-    aggregates->RemoveMemberBody(world_id, aggregate_a.value(), body_b.value())
+    aggregates.RemoveMemberBody(world_id, aggregate_a.value(), body_b.value())
       .has_value());
   ASSERT_TRUE(
-    aggregates->AddMemberBody(world_id, aggregate_b.value(), body_b.value())
+    aggregates.AddMemberBody(world_id, aggregate_b.value(), body_b.value())
       .has_value());
 
   std::fill(members.begin(), members.end(), kInvalidBodyId);
-  count = aggregates->GetMemberBodies(world_id, aggregate_b.value(), members);
+  count = aggregates.GetMemberBodies(world_id, aggregate_b.value(), members);
   ASSERT_TRUE(count.has_value());
   EXPECT_EQ(count.value(), 1U);
   EXPECT_EQ(members[0], body_b.value());
 
-  const auto flush = aggregates->FlushStructuralChanges(world_id);
+  const auto flush = aggregates.FlushStructuralChanges(world_id);
   ASSERT_TRUE(flush.has_value());
   EXPECT_EQ(flush.value(), 6U);
-  const auto flush_again = aggregates->FlushStructuralChanges(world_id);
+  const auto flush_again = aggregates.FlushStructuralChanges(world_id);
   ASSERT_TRUE(flush_again.has_value());
   EXPECT_EQ(flush_again.value(), 0U);
   EXPECT_TRUE(
-    aggregates->DestroyAggregate(world_id, aggregate_a.value()).has_value());
+    aggregates.DestroyAggregate(world_id, aggregate_a.value()).has_value());
   EXPECT_TRUE(
-    aggregates->DestroyAggregate(world_id, aggregate_b.value()).has_value());
+    aggregates.DestroyAggregate(world_id, aggregate_b.value()).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, body_a.value()).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, body_b.value()).has_value());
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
