@@ -27,8 +27,7 @@ NOLINT_TEST_F(
     return;
   }
 
-  auto* vehicles = System().Vehicles();
-  ASSERT_NE(vehicles, nullptr);
+  auto& vehicles = System().Vehicles();
   auto& worlds = System().Worlds();
   auto& bodies = System().Bodies();
 
@@ -53,7 +52,7 @@ NOLINT_TEST_F(
     wheel_a.value(),
     wheel_b.value(),
   };
-  const auto vehicle = vehicles->CreateVehicle(world_id,
+  const auto vehicle = vehicles.CreateVehicle(world_id,
     vehicle::VehicleDesc {
       .chassis_body_id = chassis.value(),
       .wheel_body_ids = wheel_ids,
@@ -61,12 +60,12 @@ NOLINT_TEST_F(
   ASSERT_TRUE(vehicle.has_value());
   const auto vehicle_id = vehicle.value();
 
-  const auto authority = vehicles->GetAuthority(world_id, vehicle_id);
+  const auto authority = vehicles.GetAuthority(world_id, vehicle_id);
   ASSERT_TRUE(authority.has_value());
   EXPECT_EQ(authority.value(), aggregate::AggregateAuthority::kCommand);
 
   EXPECT_TRUE(vehicles
-      ->SetControlInput(world_id, vehicle_id,
+      .SetControlInput(world_id, vehicle_id,
         vehicle::VehicleControlInput {
           .throttle = 0.65F,
           .brake = 0.0F,
@@ -78,20 +77,20 @@ NOLINT_TEST_F(
   EXPECT_TRUE(bodies
       .SetLinearVelocity(world_id, chassis.value(), Vec3 { 0.0F, -2.0F, 0.0F })
       .has_value());
-  const auto state = vehicles->GetState(world_id, vehicle_id);
+  const auto state = vehicles.GetState(world_id, vehicle_id);
   ASSERT_TRUE(state.has_value());
   EXPECT_GT(state.value().forward_speed_mps, 1.0F);
   EXPECT_FALSE(state.value().grounded);
 
-  const auto flush_create = vehicles->FlushStructuralChanges(world_id);
+  const auto flush_create = vehicles.FlushStructuralChanges(world_id);
   ASSERT_TRUE(flush_create.has_value());
   EXPECT_EQ(flush_create.value(), 1U);
-  const auto flush_none = vehicles->FlushStructuralChanges(world_id);
+  const auto flush_none = vehicles.FlushStructuralChanges(world_id);
   ASSERT_TRUE(flush_none.has_value());
   EXPECT_EQ(flush_none.value(), 0U);
 
-  EXPECT_TRUE(vehicles->DestroyVehicle(world_id, vehicle_id).has_value());
-  const auto flush_destroy = vehicles->FlushStructuralChanges(world_id);
+  EXPECT_TRUE(vehicles.DestroyVehicle(world_id, vehicle_id).has_value());
+  const auto flush_destroy = vehicles.FlushStructuralChanges(world_id);
   ASSERT_TRUE(flush_destroy.has_value());
   EXPECT_EQ(flush_destroy.value(), 1U);
 

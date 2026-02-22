@@ -10,6 +10,7 @@
 #include <Oxygen/PhysicsModule/Test/Fakes/BackendState.h>
 #include <Oxygen/PhysicsModule/Test/Fakes/FakeAggregateApi.h>
 #include <Oxygen/PhysicsModule/Test/Fakes/FakeAreaApi.h>
+#include <Oxygen/PhysicsModule/Test/Fakes/FakeArticulationApi.h>
 #include <Oxygen/PhysicsModule/Test/Fakes/FakeBodyApi.h>
 #include <Oxygen/PhysicsModule/Test/Fakes/FakeCharacterApi.h>
 #include <Oxygen/PhysicsModule/Test/Fakes/FakeEventApi.h>
@@ -33,6 +34,7 @@ public:
     , areas_(state_)
     , joints_(state_)
     , aggregates_(state_)
+    , articulations_(state_)
     , vehicles_(state_)
     , soft_bodies_(state_)
   {
@@ -55,17 +57,21 @@ public:
   auto Shapes() noexcept -> system::IShapeApi& override { return shapes_; }
   auto Areas() noexcept -> system::IAreaApi& override { return areas_; }
   auto Joints() noexcept -> system::IJointApi& override { return joints_; }
-  auto Aggregates() noexcept -> system::IAggregateApi* override
+  auto Aggregates() noexcept -> system::IAggregateApi& override
   {
-    return &aggregates_;
+    return aggregates_;
   }
-  auto Vehicles() noexcept -> system::IVehicleApi* override
+  auto Articulations() noexcept -> system::IArticulationApi& override
   {
-    return &vehicles_;
+    return articulations_;
   }
-  auto SoftBodies() noexcept -> system::ISoftBodyApi* override
+  auto Vehicles() noexcept -> system::IVehicleApi& override
   {
-    return &soft_bodies_;
+    return vehicles_;
+  }
+  auto SoftBodies() noexcept -> system::ISoftBodyApi& override
+  {
+    return soft_bodies_;
   }
 
   auto Worlds() const noexcept -> const system::IWorldApi& override
@@ -100,17 +106,22 @@ public:
   {
     return joints_;
   }
-  auto Aggregates() const noexcept -> const system::IAggregateApi* override
+  auto Aggregates() const noexcept -> const system::IAggregateApi& override
   {
-    return &aggregates_;
+    return aggregates_;
   }
-  auto Vehicles() const noexcept -> const system::IVehicleApi* override
+  auto Articulations() const noexcept
+    -> const system::IArticulationApi& override
   {
-    return &vehicles_;
+    return articulations_;
   }
-  auto SoftBodies() const noexcept -> const system::ISoftBodyApi* override
+  auto Vehicles() const noexcept -> const system::IVehicleApi& override
   {
-    return &soft_bodies_;
+    return vehicles_;
+  }
+  auto SoftBodies() const noexcept -> const system::ISoftBodyApi& override
+  {
+    return soft_bodies_;
   }
 
 private:
@@ -124,6 +135,7 @@ private:
   FakeAreaApi areas_;
   FakeJointApi joints_;
   FakeAggregateApi aggregates_;
+  FakeArticulationApi articulations_;
   FakeVehicleApi vehicles_;
   FakeSoftBodyApi soft_bodies_;
 };

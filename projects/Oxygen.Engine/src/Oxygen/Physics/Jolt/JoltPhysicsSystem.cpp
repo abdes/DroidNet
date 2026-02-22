@@ -69,27 +69,27 @@ auto oxygen::physics::jolt::JoltPhysicsSystem::Joints() noexcept
 }
 
 auto oxygen::physics::jolt::JoltPhysicsSystem::Aggregates() noexcept
-  -> system::IAggregateApi*
+  -> system::IAggregateApi&
 {
-  return &aggregates_;
+  return aggregates_;
 }
 
 auto oxygen::physics::jolt::JoltPhysicsSystem::Articulations() noexcept
-  -> system::IArticulationApi*
+  -> system::IArticulationApi&
 {
-  return &articulations_;
+  return articulations_;
 }
 
 auto oxygen::physics::jolt::JoltPhysicsSystem::Vehicles() noexcept
-  -> system::IVehicleApi*
+  -> system::IVehicleApi&
 {
-  return &vehicles_;
+  return vehicles_;
 }
 
 auto oxygen::physics::jolt::JoltPhysicsSystem::SoftBodies() noexcept
-  -> system::ISoftBodyApi*
+  -> system::ISoftBodyApi&
 {
-  return &soft_bodies_;
+  return soft_bodies_;
 }
 
 auto oxygen::physics::jolt::JoltPhysicsSystem::Worlds() const noexcept
@@ -141,25 +141,25 @@ auto oxygen::physics::jolt::JoltPhysicsSystem::Joints() const noexcept
 }
 
 auto oxygen::physics::jolt::JoltPhysicsSystem::Aggregates() const noexcept
-  -> const system::IAggregateApi*
+  -> const system::IAggregateApi&
 {
-  return &aggregates_;
+  return aggregates_;
 }
 
 auto oxygen::physics::jolt::JoltPhysicsSystem::Articulations() const noexcept
-  -> const system::IArticulationApi*
+  -> const system::IArticulationApi&
 {
-  return &articulations_;
+  return articulations_;
 }
 
 auto oxygen::physics::jolt::JoltPhysicsSystem::Vehicles() const noexcept
-  -> const system::IVehicleApi*
+  -> const system::IVehicleApi&
 {
-  return &vehicles_;
+  return vehicles_;
 }
 
 auto oxygen::physics::jolt::JoltPhysicsSystem::SoftBodies() const noexcept
-  -> const system::ISoftBodyApi*
+  -> const system::ISoftBodyApi&
 {
-  return &soft_bodies_;
+  return soft_bodies_;
 }

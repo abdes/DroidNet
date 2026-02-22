@@ -19,15 +19,6 @@ namespace {
 
 } // namespace
 
-NOLINT_TEST_F(JoltAggregateBasicTest, AggregateApiIsAvailable)
-{
-  AssertBackendAvailabilityContract();
-  if (!HasBackend()) {
-    return;
-  }
-  EXPECT_NE(System().Aggregates(), nullptr);
-}
-
 NOLINT_TEST_F(JoltAggregateBasicTest, CreateAndDestroyAggregateSucceeds)
 {
   AssertBackendAvailabilityContract();
@@ -35,19 +26,18 @@ NOLINT_TEST_F(JoltAggregateBasicTest, CreateAndDestroyAggregateSucceeds)
     return;
   }
 
-  auto* aggregates = System().Aggregates();
-  ASSERT_NE(aggregates, nullptr);
+  auto& aggregates = System().Aggregates();
   auto& worlds = System().Worlds();
 
   const auto world = worlds.CreateWorld(world::WorldDesc {});
   ASSERT_TRUE(world.has_value());
   const auto world_id = world.value();
 
-  const auto aggregate = aggregates->CreateAggregate(world_id);
+  const auto aggregate = aggregates.CreateAggregate(world_id);
   ASSERT_TRUE(aggregate.has_value());
   EXPECT_NE(aggregate.value(), kInvalidAggregateId);
   EXPECT_TRUE(
-    aggregates->DestroyAggregate(world_id, aggregate.value()).has_value());
+    aggregates.DestroyAggregate(world_id, aggregate.value()).has_value());
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
 }
 

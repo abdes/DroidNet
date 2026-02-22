@@ -37,15 +37,6 @@ namespace oxygen::physics::system {
  - Callers must serialize mutations against a world through the engine physics
    phases; concurrent reads/writes to the same world are unsupported.
 
- ### Near Future
-
- - Aggregate-capable domain integration points are exposed as optional extension
-   APIs:
-   - `Aggregates()` for multi-body identity and membership,
-   - `Articulations()` for linked-body graphs,
-   - `Vehicles()` for constrained driveable aggregates,
-   - `SoftBodies()` for deformable simulation.
- - Extension accessors are nullable until a backend provides implementation.
 */
 class IPhysicsSystem {
 public:
@@ -74,42 +65,20 @@ public:
   OXGN_PHYS_NDAPI virtual auto Areas() const noexcept -> const IAreaApi& = 0;
   OXGN_PHYS_NDAPI virtual auto Joints() const noexcept -> const IJointApi& = 0;
 
-  OXGN_PHYS_NDAPI virtual auto Aggregates() noexcept -> IAggregateApi*
-  {
-    return nullptr;
-  }
-  OXGN_PHYS_NDAPI virtual auto Articulations() noexcept -> IArticulationApi*
-  {
-    return nullptr;
-  }
-  OXGN_PHYS_NDAPI virtual auto Vehicles() noexcept -> IVehicleApi*
-  {
-    return nullptr;
-  }
-  OXGN_PHYS_NDAPI virtual auto SoftBodies() noexcept -> ISoftBodyApi*
-  {
-    return nullptr;
-  }
+  OXGN_PHYS_NDAPI virtual auto Aggregates() noexcept -> IAggregateApi& = 0;
+  OXGN_PHYS_NDAPI virtual auto Articulations() noexcept
+    -> IArticulationApi& = 0;
+  OXGN_PHYS_NDAPI virtual auto Vehicles() noexcept -> IVehicleApi& = 0;
+  OXGN_PHYS_NDAPI virtual auto SoftBodies() noexcept -> ISoftBodyApi& = 0;
 
   OXGN_PHYS_NDAPI virtual auto Aggregates() const noexcept
-    -> const IAggregateApi*
-  {
-    return nullptr;
-  }
+    -> const IAggregateApi& = 0;
   OXGN_PHYS_NDAPI virtual auto Articulations() const noexcept
-    -> const IArticulationApi*
-  {
-    return nullptr;
-  }
-  OXGN_PHYS_NDAPI virtual auto Vehicles() const noexcept -> const IVehicleApi*
-  {
-    return nullptr;
-  }
+    -> const IArticulationApi& = 0;
+  OXGN_PHYS_NDAPI virtual auto Vehicles() const noexcept
+    -> const IVehicleApi& = 0;
   OXGN_PHYS_NDAPI virtual auto SoftBodies() const noexcept
-    -> const ISoftBodyApi*
-  {
-    return nullptr;
-  }
+    -> const ISoftBodyApi& = 0;
 };
 
 } // namespace oxygen::physics::system

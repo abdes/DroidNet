@@ -167,34 +167,52 @@ PhysicsModule::PhysicsModule(engine::ModulePriority priority,
     "PhysicsModule created an invalid world handle.");
 }
 
-auto PhysicsModule::GetBodyApi() noexcept -> system::IBodyApi&
+auto PhysicsModule::Bodies() noexcept -> system::IBodyApi&
 {
   CHECK_NOTNULL_F(physics_system_.get());
   return physics_system_->Bodies();
 }
 
-auto PhysicsModule::GetCharacterApi() noexcept -> system::ICharacterApi&
+auto PhysicsModule::Characters() noexcept -> system::ICharacterApi&
 {
   CHECK_NOTNULL_F(physics_system_.get());
   return physics_system_->Characters();
 }
 
-auto PhysicsModule::GetAggregateApi() noexcept -> system::IAggregateApi*
+auto PhysicsModule::Aggregates() noexcept -> system::IAggregateApi&
 {
   CHECK_NOTNULL_F(physics_system_.get());
   return physics_system_->Aggregates();
 }
 
-auto PhysicsModule::GetEventApi() noexcept -> system::IEventApi&
+auto PhysicsModule::Events() noexcept -> system::IEventApi&
 {
   CHECK_NOTNULL_F(physics_system_.get());
   return physics_system_->Events();
 }
 
-auto PhysicsModule::GetQueryApi() noexcept -> system::IQueryApi&
+auto PhysicsModule::Queries() noexcept -> system::IQueryApi&
 {
   CHECK_NOTNULL_F(physics_system_.get());
   return physics_system_->Queries();
+}
+
+auto PhysicsModule::Articulations() noexcept -> system::IArticulationApi&
+{
+  CHECK_NOTNULL_F(physics_system_.get());
+  return physics_system_->Articulations();
+}
+
+auto PhysicsModule::Vehicles() noexcept -> system::IVehicleApi&
+{
+  CHECK_NOTNULL_F(physics_system_.get());
+  return physics_system_->Vehicles();
+}
+
+auto PhysicsModule::SoftBodies() noexcept -> system::ISoftBodyApi&
+{
+  CHECK_NOTNULL_F(physics_system_.get());
+  return physics_system_->SoftBodies();
 }
 
 auto PhysicsModule::GetWorldId() const noexcept -> WorldId { return world_id_; }
@@ -575,34 +593,23 @@ auto PhysicsModule::OnGameplay(observer_ptr<engine::FrameContext> context)
     = physics_system_->Bodies().FlushStructuralChanges(world_id_);
   CHECK_F(flush_result.has_value(),
     "PhysicsModule failed to flush deferred body structural changes.");
-  if (auto* aggregate_api = physics_system_->Aggregates();
-    aggregate_api != nullptr) {
-    const auto aggregate_flush_result
-      = aggregate_api->FlushStructuralChanges(world_id_);
-    CHECK_F(aggregate_flush_result.has_value(),
-      "PhysicsModule failed to flush deferred aggregate structural changes.");
-  }
-  if (auto* vehicle_api = physics_system_->Vehicles(); vehicle_api != nullptr) {
-    const auto vehicle_flush_result
-      = vehicle_api->FlushStructuralChanges(world_id_);
-    CHECK_F(vehicle_flush_result.has_value(),
-      "PhysicsModule failed to flush deferred vehicle structural changes.");
-  }
-  if (auto* articulation_api = physics_system_->Articulations();
-    articulation_api != nullptr) {
-    const auto articulation_flush_result
-      = articulation_api->FlushStructuralChanges(world_id_);
-    CHECK_F(articulation_flush_result.has_value(),
-      "PhysicsModule failed to flush deferred articulation structural "
-      "changes.");
-  }
-  if (auto* soft_body_api = physics_system_->SoftBodies();
-    soft_body_api != nullptr) {
-    const auto soft_body_flush_result
-      = soft_body_api->FlushStructuralChanges(world_id_);
-    CHECK_F(soft_body_flush_result.has_value(),
-      "PhysicsModule failed to flush deferred soft-body structural changes.");
-  }
+  const auto aggregate_flush_result
+    = physics_system_->Aggregates().FlushStructuralChanges(world_id_);
+  CHECK_F(aggregate_flush_result.has_value(),
+    "PhysicsModule failed to flush deferred aggregate structural changes.");
+  const auto vehicle_flush_result
+    = physics_system_->Vehicles().FlushStructuralChanges(world_id_);
+  CHECK_F(vehicle_flush_result.has_value(),
+    "PhysicsModule failed to flush deferred vehicle structural changes.");
+  const auto articulation_flush_result
+    = physics_system_->Articulations().FlushStructuralChanges(world_id_);
+  CHECK_F(articulation_flush_result.has_value(),
+    "PhysicsModule failed to flush deferred articulation structural "
+    "changes.");
+  const auto soft_body_flush_result
+    = physics_system_->SoftBodies().FlushStructuralChanges(world_id_);
+  CHECK_F(soft_body_flush_result.has_value(),
+    "PhysicsModule failed to flush deferred soft-body structural changes.");
 
   const auto scene = context->GetScene();
   if (scene == nullptr) {
@@ -1009,49 +1016,37 @@ auto PhysicsModule::DestroyAggregateByDomain(const AggregateId aggregate_id,
   };
 
   if (authority == aggregate::AggregateAuthority::kCommand) {
-    if (auto* vehicle_api = physics_system_->Vehicles();
-      vehicle_api != nullptr) {
-      const auto vehicle_result
-        = vehicle_api->DestroyVehicle(world_id_, aggregate_id);
-      if (vehicle_result.has_value()) {
-        return PhysicsResult<void>::Ok();
-      }
-      if (!is_unknown(vehicle_result.error())) {
-        return Err(vehicle_result.error());
-      }
-    }
-  }
-
-  if (auto* articulation_api = physics_system_->Articulations();
-    articulation_api != nullptr) {
-    const auto articulation_result
-      = articulation_api->DestroyArticulation(world_id_, aggregate_id);
-    if (articulation_result.has_value()) {
+    const auto vehicle_result
+      = physics_system_->Vehicles().DestroyVehicle(world_id_, aggregate_id);
+    if (vehicle_result.has_value()) {
       return PhysicsResult<void>::Ok();
     }
-    if (!is_unknown(articulation_result.error())) {
-      return Err(articulation_result.error());
+    if (!is_unknown(vehicle_result.error())) {
+      return Err(vehicle_result.error());
     }
   }
 
-  if (auto* soft_body_api = physics_system_->SoftBodies();
-    soft_body_api != nullptr) {
-    const auto soft_body_result
-      = soft_body_api->DestroySoftBody(world_id_, aggregate_id);
-    if (soft_body_result.has_value()) {
-      return PhysicsResult<void>::Ok();
-    }
-    if (!is_unknown(soft_body_result.error())) {
-      return Err(soft_body_result.error());
-    }
+  const auto articulation_result
+    = physics_system_->Articulations().DestroyArticulation(
+      world_id_, aggregate_id);
+  if (articulation_result.has_value()) {
+    return PhysicsResult<void>::Ok();
+  }
+  if (!is_unknown(articulation_result.error())) {
+    return Err(articulation_result.error());
   }
 
-  if (auto* aggregate_api = physics_system_->Aggregates();
-    aggregate_api != nullptr) {
-    return aggregate_api->DestroyAggregate(world_id_, aggregate_id);
+  const auto soft_body_result
+    = physics_system_->SoftBodies().DestroySoftBody(world_id_, aggregate_id);
+  if (soft_body_result.has_value()) {
+    return PhysicsResult<void>::Ok();
+  }
+  if (!is_unknown(soft_body_result.error())) {
+    return Err(soft_body_result.error());
   }
 
-  return Err(PhysicsError::kNotImplemented);
+  return physics_system_->Aggregates().DestroyAggregate(
+    world_id_, aggregate_id);
 }
 
 auto PhysicsModule::DestroyAllTrackedAggregates() -> void

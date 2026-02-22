@@ -347,10 +347,83 @@ The introduction of the `IJointApi` and `JoltJoints` correctly implements the ne
 
 **Goal:** Deliver end-to-end developer-facing usage of the physics stack.
 
+**Demo Tracks:**
+
+- `RenderScene` YAML suite: multiple authored demo scenes switched at runtime, minimal C++ orchestration.
+- C++ physics demo: one moderate-complexity procedural scenario using only simple generated meshes.
+
+**RenderScene YAML Demo Scenes (`Physics Validation Playground`):**
+
+- **Zone A - Contract Gate (Hydration Truth Test):**
+  - Load a scene with a valid physics sidecar and verify all rigid-body and character bindings hydrate.
+  - Provide negative launch variants (developer toggle/CLI flag) that intentionally use:
+    - missing sidecar,
+    - scene-key mismatch,
+    - node-count mismatch.
+  - Expected result: scene-load hard-fails immediately with explicit diagnostics (no fallback, no partial scene activation).
+
+- **Zone B - Rigid Body Stack + Restitution Lane:**
+  - Procedural tower of mixed primitive rigid bodies dropped onto static floor and angled walls.
+  - Parallel “restitution lane” with spheres of increasing bounce to visually validate material behavior.
+  - Validates broadphase/narrowphase contact generation, sleep/wake transitions, and stable stacking.
+
+- **Zone C - Friction + Slope Conveyor:**
+  - Three ramp tracks with low/medium/high friction material assignment.
+  - Identical cubes released simultaneously to compare slide distance and settle time.
+  - Validates physics material mapping (content/data -> runtime behavior) and deterministic relative ordering.
+
+- **Zone D - Character Traversal Course:**
+  - Kinematic character controller path over steps, shallow slopes, steep slopes, and ledges.
+  - Includes a moving rigid platform intersection to verify interaction constraints.
+  - Validates character binding hydration, slope limits, step handling, and collision filtering.
+
+- **Zone E - Collision Filtering Matrix:**
+  - Spawn groups on distinct collision layers/masks:
+    - `WorldStatic`, `WorldDynamic`, `Character`, `TriggerLike`.
+  - Explicit expected pairs (collide / ignore) documented and checked at runtime counters.
+  - Validates that cooked filter bits are honored exactly after hydration.
+
+- **Zone F - Stress Ring (Stability + Throughput):**
+  - Circular arena continuously spawning and retiring primitive rigid bodies under cap.
+  - Measures step time, active body count, and contact pair count over several minutes.
+  - Validates no crashes, no runaway allocations, and stable simulation under sustained churn.
+
+- Delivery model:
+  - Each zone is a separate YAML scene/spec packaged through PakGen v7.
+  - RenderScene switches between them (menu/CLI) with near-zero scene-specific C++ logic.
+  - Primary validation target: end-to-end cooked path and hydration contract enforcement.
+
+**C++ Physics Demo Scenario (single scene): `Ramp Gauntlet to Bowl`**
+
+- Moderate-complexity procedural setup in one executable scene, no authored render assets.
+- Core layout:
+  - long inclined plane ramp,
+  - one player sphere spawned/released at the top,
+  - staggered cube obstacle rows along the ramp,
+  - mixed obstacle authority: static cubes and dynamic cubes,
+  - mid-ramp hinged cube flippers that swing on impact,
+  - end-zone shallow bowl assembled from ring-arranged spheres.
+- Flow:
+  1. Sphere release from top of ramp.
+  2. Sphere collides with staggered cube rows, pushing dynamic cubes while static cubes enforce fixed route constraints.
+  3. Midway impacts activate hinged flippers, introducing path deflection variability.
+  4. Sphere exits ramp and drops into the bowl, then settles to rest.
+- Validation value:
+  - Demonstrates static/dynamic/hinged interaction in one readable scenario.
+  - Validates collision response, contact stability, and energy dissipation toward a deterministic rest state.
+  - Keeps implementation procedural and compact while still producing meaningful gameplay-like physics behavior.
+
+**Why this plan is strong:**
+
+- RenderScene scenes validate the real production data path (YAML -> PakGen -> loader -> hydration -> runtime).
+- C++ demo remains lightweight, procedural, and fast to iterate while still demonstrating integrated behavior.
+- Combined coverage spans strict load-time contracts and runtime simulation correctness.
+- Produces clear pass/fail signals observable both visually and via counters/log assertions.
+
 **API:**
 
 - Integration of `PhysicsSceneLoader` hook for Base Scene Hydration.
-- C++ demo usage via `ScenePhysics` facade (Game Module command-authority path).
+- C++ demo usage via `ScenePhysics` facade (Game Module command-authority path), with procedural primitive setup only.
 - Luau bindings mirroring contract-safe surface (Scripts pushing deferred intents via `oxygen.physics`).
 
 **Backend:**
@@ -360,9 +433,20 @@ The introduction of the `IJointApi` and `JoltJoints` correctly implements the ne
 **Tests:**
 
 - Demo smoke tests + scripting binding tests + cooked asset migration tests.
+- Add E2E assertions tied to RenderScene YAML suite:
+  - contract-gate hard-fail matrix,
+  - rigid-body/character hydration counts,
+  - collision-filter pair outcomes,
+  - long-run stability counters.
+- Add C++ demo smoke assertions:
+  - stable step loop under timed event sequence,
+  - expected active-body/contact ranges,
+  - no runtime errors during spawn/cleanup phase.
 
 **Integration:**
 
+- RenderScene orchestration for scene switching across YAML validation suite.
+- C++ physics demo with procedural geometry only.
 - RenderScene + Lua end-to-end orchestration.
 - Pak format upgrade and migration.
 

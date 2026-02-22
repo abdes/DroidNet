@@ -27,15 +27,14 @@ NOLINT_TEST_F(
     return;
   }
 
-  auto* soft_bodies = System().SoftBodies();
-  ASSERT_NE(soft_bodies, nullptr);
+  auto& soft_bodies = System().SoftBodies();
   auto& worlds = System().Worlds();
 
   const auto world = worlds.CreateWorld(world::WorldDesc {});
   ASSERT_TRUE(world.has_value());
   const auto world_id = world.value();
 
-  const auto soft_body = soft_bodies->CreateSoftBody(world_id,
+  const auto soft_body = soft_bodies.CreateSoftBody(world_id,
     softbody::SoftBodyDesc {
       .anchor_body_id = kInvalidBodyId,
       .cluster_count = 6U,
@@ -52,11 +51,11 @@ NOLINT_TEST_F(
   ASSERT_TRUE(soft_body.has_value());
   const auto soft_body_id = soft_body.value();
 
-  const auto authority = soft_bodies->GetAuthority(world_id, soft_body_id);
+  const auto authority = soft_bodies.GetAuthority(world_id, soft_body_id);
   ASSERT_TRUE(authority.has_value());
   EXPECT_EQ(authority.value(), aggregate::AggregateAuthority::kSimulation);
 
-  const auto state_before = soft_bodies->GetState(world_id, soft_body_id);
+  const auto state_before = soft_bodies.GetState(world_id, soft_body_id);
   ASSERT_TRUE(state_before.has_value());
   EXPECT_TRUE(std::isfinite(state_before.value().center_of_mass.x));
   EXPECT_TRUE(std::isfinite(state_before.value().center_of_mass.y));
@@ -66,7 +65,7 @@ NOLINT_TEST_F(
   EXPECT_NEAR(state_before.value().center_of_mass.z, 0.0F, 0.75F);
 
   EXPECT_TRUE(soft_bodies
-      ->SetMaterialParams(world_id, soft_body_id,
+      .SetMaterialParams(world_id, soft_body_id,
         softbody::SoftBodyMaterialParams {
           .stiffness = 0.6F,
           .damping = 0.3F,
@@ -78,22 +77,22 @@ NOLINT_TEST_F(
         })
       .has_value());
 
-  const auto flush_create = soft_bodies->FlushStructuralChanges(world_id);
+  const auto flush_create = soft_bodies.FlushStructuralChanges(world_id);
   ASSERT_TRUE(flush_create.has_value());
   EXPECT_EQ(flush_create.value(), 1U);
-  const auto flush_none = soft_bodies->FlushStructuralChanges(world_id);
+  const auto flush_none = soft_bodies.FlushStructuralChanges(world_id);
   ASSERT_TRUE(flush_none.has_value());
   EXPECT_EQ(flush_none.value(), 0U);
 
   EXPECT_TRUE(worlds.Step(world_id, 1.0F / 60.0F, 1, 1.0F / 60.0F).has_value());
-  const auto state_after = soft_bodies->GetState(world_id, soft_body_id);
+  const auto state_after = soft_bodies.GetState(world_id, soft_body_id);
   ASSERT_TRUE(state_after.has_value());
   EXPECT_TRUE(std::isfinite(state_after.value().center_of_mass.x));
   EXPECT_TRUE(std::isfinite(state_after.value().center_of_mass.y));
   EXPECT_TRUE(std::isfinite(state_after.value().center_of_mass.z));
 
-  EXPECT_TRUE(soft_bodies->DestroySoftBody(world_id, soft_body_id).has_value());
-  const auto flush_destroy = soft_bodies->FlushStructuralChanges(world_id);
+  EXPECT_TRUE(soft_bodies.DestroySoftBody(world_id, soft_body_id).has_value());
+  const auto flush_destroy = soft_bodies.FlushStructuralChanges(world_id);
   ASSERT_TRUE(flush_destroy.has_value());
   EXPECT_EQ(flush_destroy.value(), 1U);
 
@@ -107,8 +106,7 @@ NOLINT_TEST_F(JoltSoftBodyDomainTest, AnchorBodyCreateReturnsNotImplemented)
     return;
   }
 
-  auto* soft_bodies = System().SoftBodies();
-  ASSERT_NE(soft_bodies, nullptr);
+  auto& soft_bodies = System().SoftBodies();
   auto& worlds = System().Worlds();
   auto& bodies = System().Bodies();
 
@@ -122,7 +120,7 @@ NOLINT_TEST_F(JoltSoftBodyDomainTest, AnchorBodyCreateReturnsNotImplemented)
   const auto anchor = bodies.CreateBody(world_id, anchor_desc);
   ASSERT_TRUE(anchor.has_value());
 
-  const auto soft_body = soft_bodies->CreateSoftBody(world_id,
+  const auto soft_body = soft_bodies.CreateSoftBody(world_id,
     softbody::SoftBodyDesc {
       .anchor_body_id = anchor.value(),
       .cluster_count = 4U,
@@ -141,15 +139,14 @@ NOLINT_TEST_F(
     return;
   }
 
-  auto* soft_bodies = System().SoftBodies();
-  ASSERT_NE(soft_bodies, nullptr);
+  auto& soft_bodies = System().SoftBodies();
   auto& worlds = System().Worlds();
 
   const auto world = worlds.CreateWorld(world::WorldDesc {});
   ASSERT_TRUE(world.has_value());
   const auto world_id = world.value();
 
-  const auto soft_body = soft_bodies->CreateSoftBody(world_id,
+  const auto soft_body = soft_bodies.CreateSoftBody(world_id,
     softbody::SoftBodyDesc {
       .anchor_body_id = kInvalidBodyId,
       .cluster_count = 5U,
@@ -166,10 +163,10 @@ NOLINT_TEST_F(
   ASSERT_TRUE(soft_body.has_value());
   const auto soft_body_id = soft_body.value();
 
-  EXPECT_TRUE(soft_bodies->FlushStructuralChanges(world_id).has_value());
+  EXPECT_TRUE(soft_bodies.FlushStructuralChanges(world_id).has_value());
 
   EXPECT_TRUE(soft_bodies
-      ->SetMaterialParams(world_id, soft_body_id,
+      .SetMaterialParams(world_id, soft_body_id,
         softbody::SoftBodyMaterialParams {
           .stiffness = 0.2F,
           .damping = 0.05F,
@@ -181,7 +178,7 @@ NOLINT_TEST_F(
         })
       .has_value());
   EXPECT_TRUE(soft_bodies
-      ->SetMaterialParams(world_id, soft_body_id,
+      .SetMaterialParams(world_id, soft_body_id,
         softbody::SoftBodyMaterialParams {
           .stiffness = 0.35F,
           .damping = 0.1F,
@@ -193,18 +190,18 @@ NOLINT_TEST_F(
         })
       .has_value());
 
-  const auto flush = soft_bodies->FlushStructuralChanges(world_id);
+  const auto flush = soft_bodies.FlushStructuralChanges(world_id);
   ASSERT_TRUE(flush.has_value());
   EXPECT_EQ(flush.value(), 1U);
 
   EXPECT_TRUE(worlds.Step(world_id, 1.0F / 60.0F, 1, 1.0F / 60.0F).has_value());
-  const auto state = soft_bodies->GetState(world_id, soft_body_id);
+  const auto state = soft_bodies.GetState(world_id, soft_body_id);
   ASSERT_TRUE(state.has_value());
   EXPECT_TRUE(std::isfinite(state.value().center_of_mass.x));
   EXPECT_TRUE(std::isfinite(state.value().center_of_mass.y));
   EXPECT_TRUE(std::isfinite(state.value().center_of_mass.z));
 
-  EXPECT_TRUE(soft_bodies->DestroySoftBody(world_id, soft_body_id).has_value());
+  EXPECT_TRUE(soft_bodies.DestroySoftBody(world_id, soft_body_id).has_value());
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
 }
 
@@ -216,15 +213,14 @@ NOLINT_TEST_F(
     return;
   }
 
-  auto* soft_bodies = System().SoftBodies();
-  ASSERT_NE(soft_bodies, nullptr);
+  auto& soft_bodies = System().SoftBodies();
   auto& worlds = System().Worlds();
 
   const auto world = worlds.CreateWorld(world::WorldDesc {});
   ASSERT_TRUE(world.has_value());
   const auto world_id = world.value();
 
-  const auto soft_body = soft_bodies->CreateSoftBody(world_id,
+  const auto soft_body = soft_bodies.CreateSoftBody(world_id,
     softbody::SoftBodyDesc {
       .anchor_body_id = kInvalidBodyId,
       .cluster_count = 5U,
@@ -245,7 +241,7 @@ NOLINT_TEST_F(
     const auto stiffness = 0.1F + static_cast<float>(i) * 0.02F;
     const auto damping = 0.01F + static_cast<float>(i % 5) * 0.03F;
     EXPECT_TRUE(soft_bodies
-        ->SetMaterialParams(world_id, soft_body_id,
+        .SetMaterialParams(world_id, soft_body_id,
           softbody::SoftBodyMaterialParams {
             .stiffness = stiffness,
             .damping = damping,
@@ -260,14 +256,14 @@ NOLINT_TEST_F(
     EXPECT_TRUE(
       worlds.Step(world_id, 1.0F / 120.0F, 1, 1.0F / 120.0F).has_value());
 
-    const auto state = soft_bodies->GetState(world_id, soft_body_id);
+    const auto state = soft_bodies.GetState(world_id, soft_body_id);
     ASSERT_TRUE(state.has_value());
     EXPECT_TRUE(std::isfinite(state.value().center_of_mass.x));
     EXPECT_TRUE(std::isfinite(state.value().center_of_mass.y));
     EXPECT_TRUE(std::isfinite(state.value().center_of_mass.z));
   }
 
-  EXPECT_TRUE(soft_bodies->DestroySoftBody(world_id, soft_body_id).has_value());
+  EXPECT_TRUE(soft_bodies.DestroySoftBody(world_id, soft_body_id).has_value());
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
 }
 
