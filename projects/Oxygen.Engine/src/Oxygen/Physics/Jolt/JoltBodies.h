@@ -77,6 +77,8 @@ public:
     ShapeInstanceId shape_instance_id) -> PhysicsResult<void> override;
 
 private:
+  // Protects body_states_ and shape-instance metadata only.
+  // Expensive backend shape rebuilds are performed outside this lock.
   struct ShapeInstanceState final {
     ShapeId shape_id { kInvalidShapeId };
     JPH::RefConst<JPH::Shape> shape {};
@@ -108,7 +110,7 @@ private:
 
   observer_ptr<JoltWorld> world_ {};
   observer_ptr<JoltShapes> shapes_ {};
-  std::mutex shape_instance_mutex_ {};
+  std::mutex body_state_mutex_ {};
   uint32_t next_shape_instance_id_ { 1U };
   std::unordered_map<BodyKey, BodyState, BodyKeyHasher> body_states_ {};
 };
