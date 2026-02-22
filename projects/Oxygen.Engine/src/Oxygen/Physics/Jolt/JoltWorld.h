@@ -12,6 +12,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Physics/Events/PhysicsEvents.h>
 #include <Oxygen/Physics/System/IWorldApi.h>
 
 namespace JPH {
@@ -44,6 +45,9 @@ public:
   auto GetGravity(WorldId world_id) const -> PhysicsResult<Vec3> override;
   auto SetGravity(WorldId world_id, const Vec3& gravity)
     -> PhysicsResult<void> override;
+  auto GetPendingEventCount(WorldId world_id) const -> PhysicsResult<size_t>;
+  auto DrainEvents(WorldId world_id, std::span<events::PhysicsEvent> out_events)
+    -> PhysicsResult<size_t>;
 
   [[nodiscard]] auto TryGetBodyInterface(WorldId world_id) noexcept
     -> observer_ptr<JPH::BodyInterface>;
