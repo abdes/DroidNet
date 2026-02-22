@@ -12,6 +12,7 @@ oxygen::physics::jolt::JoltPhysicsSystem::JoltPhysicsSystem()
   , events_(world_)
   , characters_(world_)
   , areas_(world_, shapes_)
+  , joints_(world_)
 {
 }
 

@@ -55,6 +55,23 @@ NOLINT_TEST_F(
   ASSERT_TRUE(body.has_value());
 }
 
+NOLINT_TEST_F(
+  PhysicsModuleSyncTest, AttachCharacterSucceedsForObservedSceneNode)
+{
+  auto node = scene_->CreateNode("observed-character");
+  ASSERT_TRUE(node.IsValid());
+
+  RunGameplay();
+  scene_->Update();
+
+  const auto character = ScenePhysics::AttachCharacter(
+    observer_ptr<PhysicsModule> { module_.get() }, node,
+    character::CharacterDesc {});
+  ASSERT_TRUE(character.has_value());
+  EXPECT_NE(character->GetCharacterId(), kInvalidCharacterId);
+  EXPECT_EQ(FakeState().character_create_calls, 1U);
+}
+
 // In release builds, contract violations return nullopt.
 #if defined(NDEBUG)
 NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyFailsForUnobservedSceneNode)
@@ -242,6 +259,25 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, DestroyAndReattachSameFrameKeepsStateValid)
   ASSERT_TRUE(replacement.IsValid());
   ASSERT_TRUE(AttachBody(replacement, body::BodyType::kDynamic).has_value());
   EXPECT_EQ(FakeState().bodies.size(), 1U);
+}
+
+NOLINT_TEST_F(PhysicsModuleSyncTest, DestroyNodeDestroysTrackedCharacter)
+{
+  auto node = scene_->CreateNode("character-node");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+  const auto character = ScenePhysics::AttachCharacter(
+    observer_ptr<PhysicsModule> { module_.get() }, node,
+    character::CharacterDesc {});
+  ASSERT_TRUE(character.has_value());
+  ASSERT_EQ(FakeState().characters.size(), 1U);
+
+  ASSERT_TRUE(scene_->DestroyNode(node));
+  scene_->SyncObservers();
+
+  EXPECT_TRUE(FakeState().characters.empty());
+  EXPECT_EQ(FakeState().character_destroy_calls, 1U);
 }
 
 NOLINT_TEST_F(PhysicsModuleSyncTest, BatchAttachDestroyLeavesNoBodies)
@@ -447,6 +483,39 @@ NOLINT_TEST_F(
   const auto local = p2.GetTransform().GetLocalPosition();
   ASSERT_TRUE(local.has_value());
   ExpectVec3Eq(*local, Vec3 { 4.0F, 0.0F, 0.0F });
+}
+
+NOLINT_TEST_F(PhysicsModuleSyncTest, SceneMutationDrainsAndMapsPhysicsEvents)
+{
+  auto node_a = scene_->CreateNode("event-a");
+  auto node_b = scene_->CreateNode("event-b");
+  ASSERT_TRUE(node_a.IsValid());
+  ASSERT_TRUE(node_b.IsValid());
+  const auto body_a = AttachBody(node_a, body::BodyType::kDynamic);
+  const auto body_b = AttachBody(node_b, body::BodyType::kDynamic);
+  ASSERT_TRUE(body_a.has_value());
+  ASSERT_TRUE(body_b.has_value());
+
+  FakeState().pending_events = {
+    events::PhysicsEvent {
+      .type = events::PhysicsEventType::kContactBegin,
+      .body_a = body_a->GetBodyId(),
+      .body_b = body_b->GetBodyId(),
+    },
+  };
+
+  RunSceneMutation();
+  const auto scene_events = module_->ConsumeSceneEvents();
+  ASSERT_EQ(scene_events.size(), 1U);
+  EXPECT_EQ(scene_events[0].type, events::PhysicsEventType::kContactBegin);
+  ASSERT_TRUE(scene_events[0].node_a.has_value());
+  ASSERT_TRUE(scene_events[0].node_b.has_value());
+  EXPECT_EQ(scene_events[0].node_a.value(), node_a.GetHandle());
+  EXPECT_EQ(scene_events[0].node_b.value(), node_b.GetHandle());
+
+  const auto stats = module_->GetSyncDiagnostics();
+  EXPECT_EQ(stats.event_drain_calls, 1U);
+  EXPECT_EQ(stats.event_drain_count, 1U);
 }
 
 #if !defined(NDEBUG)

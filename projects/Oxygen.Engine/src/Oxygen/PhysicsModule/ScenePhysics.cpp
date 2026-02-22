@@ -72,6 +72,64 @@ auto ScenePhysics::GetRigidBody(observer_ptr<PhysicsModule> physics_module,
     observer_ptr<system::IBodyApi> { &physics_module->GetBodyApi() });
 }
 
+auto ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> physics_module,
+  scene::SceneNode& node, const character::CharacterDesc& desc)
+  -> std::optional<CharacterFacade>
+{
+  if (!physics_module || !node.IsValid()) {
+    return std::nullopt;
+  }
+  DCHECK_F(node.IsAlive(),
+    "AttachCharacter contract violated: node handle must be alive.");
+  DCHECK_F(physics_module->IsNodeInObservedScene(node.GetHandle()),
+    "AttachCharacter contract violated: node must belong to currently "
+    "observed scene.");
+  if (!physics_module->IsNodeInObservedScene(node.GetHandle())) {
+    return std::nullopt;
+  }
+
+  auto& character_api = physics_module->GetCharacterApi();
+  const auto world_id = physics_module->GetWorldId();
+  DCHECK_F(world_id != kInvalidWorldId,
+    "AttachCharacter contract violated: physics world must be valid.");
+  if (world_id == kInvalidWorldId) {
+    return std::nullopt;
+  }
+
+  character::CharacterDesc modified_desc = desc;
+  modified_desc.initial_position
+    = node.GetTransform().GetWorldPosition().value_or(Vec3(0.0F));
+  modified_desc.initial_rotation
+    = node.GetTransform().GetWorldRotation().value_or(
+      Quat(1.0F, 0.0F, 0.0F, 0.0F));
+
+  const auto result = character_api.CreateCharacter(world_id, modified_desc);
+  if (!result.has_value()) {
+    return std::nullopt;
+  }
+
+  const CharacterId character_id = result.value();
+  physics_module->RegisterNodeCharacterMapping(node.GetHandle(), character_id);
+  return CharacterFacade(node.GetHandle(), world_id, character_id,
+    observer_ptr<system::ICharacterApi> { &character_api });
+}
+
+auto ScenePhysics::GetCharacter(observer_ptr<PhysicsModule> physics_module,
+  const scene::NodeHandle& node) -> std::optional<CharacterFacade>
+{
+  if (!physics_module || !node.IsValid()) {
+    return std::nullopt;
+  }
+
+  const auto character_id = physics_module->GetCharacterIdForNode(node);
+  if (character_id == kInvalidCharacterId) {
+    return std::nullopt;
+  }
+
+  return CharacterFacade(node, physics_module->GetWorldId(), character_id,
+    observer_ptr<system::ICharacterApi> { &physics_module->GetCharacterApi() });
+}
+
 auto ScenePhysics::CastRay(observer_ptr<PhysicsModule> physics_module,
   const query::RaycastDesc& ray) -> std::optional<SceneRayCastHit>
 {

@@ -9,9 +9,12 @@
 #include <optional>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Physics/Body/BodyDesc.h>
+#include <Oxygen/Physics/Character/CharacterController.h>
 #include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/System/IBodyApi.h>
+#include <Oxygen/Physics/System/ICharacterApi.h>
 #include <Oxygen/Physics/System/IQueryApi.h>
 #include <Oxygen/PhysicsModule/api_export.h>
 #include <Oxygen/Scene/Scene.h>
@@ -62,6 +65,44 @@ private:
 
 class ScenePhysics {
 public:
+  class CharacterFacade {
+  public:
+    CharacterFacade(scene::NodeHandle node, WorldId world_id,
+      CharacterId character_id,
+      observer_ptr<system::ICharacterApi> character_api)
+      : node_(node)
+      , world_id_(world_id)
+      , character_id_(character_id)
+      , character_api_(character_api)
+    {
+    }
+
+    [[nodiscard]] auto GetNode() const noexcept -> scene::NodeHandle
+    {
+      return node_;
+    }
+    [[nodiscard]] auto GetCharacterId() const noexcept -> CharacterId
+    {
+      return character_id_;
+    }
+
+    auto Move(const character::CharacterMoveInput& input,
+      float delta_time) const -> PhysicsResult<character::CharacterMoveResult>
+    {
+      if (character_api_ == nullptr) {
+        return Err(PhysicsError::kNotInitialized);
+      }
+      return character_api_->MoveCharacter(
+        world_id_, character_id_, input, delta_time);
+    }
+
+  private:
+    scene::NodeHandle node_;
+    WorldId world_id_;
+    CharacterId character_id_;
+    observer_ptr<system::ICharacterApi> character_api_;
+  };
+
   struct SceneRayCastHit {
     scene::NodeHandle node;
     Vec3 position;
@@ -98,6 +139,14 @@ public:
   OXGN_PHSYNC_API static auto GetRigidBody(
     observer_ptr<PhysicsModule> physics_module, const scene::NodeHandle& node)
     -> std::optional<RigidBodyFacade>;
+
+  OXGN_PHSYNC_API static auto AttachCharacter(
+    observer_ptr<PhysicsModule> physics_module, scene::SceneNode& node,
+    const character::CharacterDesc& desc) -> std::optional<CharacterFacade>;
+
+  OXGN_PHSYNC_API static auto GetCharacter(
+    observer_ptr<PhysicsModule> physics_module, const scene::NodeHandle& node)
+    -> std::optional<CharacterFacade>;
 
   OXGN_PHSYNC_API static auto CastRay(
     observer_ptr<PhysicsModule> physics_module, const query::RaycastDesc& ray)

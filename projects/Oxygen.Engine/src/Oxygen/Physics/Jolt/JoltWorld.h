@@ -19,6 +19,7 @@ namespace JPH {
 class BodyInterface;
 class BodyLockInterface;
 class NarrowPhaseQuery;
+class PhysicsSystem;
 }
 
 namespace oxygen::physics::jolt {
@@ -57,6 +58,10 @@ public:
     -> observer_ptr<const JPH::BodyLockInterface>;
   [[nodiscard]] auto TryGetNarrowPhaseQuery(WorldId world_id) const noexcept
     -> observer_ptr<const JPH::NarrowPhaseQuery>;
+  [[nodiscard]] auto TryGetPhysicsSystem(WorldId world_id) noexcept
+    -> observer_ptr<JPH::PhysicsSystem>;
+  [[nodiscard]] auto TryGetPhysicsSystem(WorldId world_id) const noexcept
+    -> observer_ptr<const JPH::PhysicsSystem>;
 
   [[nodiscard]] auto HasBody(WorldId world_id, BodyId body_id) const noexcept
     -> bool;

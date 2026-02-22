@@ -54,7 +54,7 @@ private:
   JoltEvents events_;
   JoltCharacters characters_;
   JoltAreas areas_;
-  JoltJoints joints_ {};
+  JoltJoints joints_;
 };
 
 } // namespace oxygen::physics::jolt
