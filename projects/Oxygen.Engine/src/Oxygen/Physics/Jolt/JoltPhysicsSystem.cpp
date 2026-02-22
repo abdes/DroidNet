@@ -10,6 +10,7 @@ oxygen::physics::jolt::JoltPhysicsSystem::JoltPhysicsSystem()
   : bodies_(world_, shapes_)
   , queries_(world_)
   , events_(world_)
+  , characters_(world_)
   , areas_(world_, shapes_)
 {
 }

@@ -52,7 +52,7 @@ private:
   JoltBodies bodies_;
   JoltQueries queries_;
   JoltEvents events_;
-  JoltCharacters characters_ {};
+  JoltCharacters characters_;
   JoltAreas areas_;
   JoltJoints joints_ {};
 };
