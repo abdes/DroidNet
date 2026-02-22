@@ -6,7 +6,12 @@
 
 #pragma once
 
+#include <cstdint>
+#include <memory>
+#include <unordered_map>
+
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Physics/System/IWorldApi.h>
 
 namespace oxygen::physics::jolt {
@@ -14,8 +19,8 @@ namespace oxygen::physics::jolt {
 //! Jolt implementation of the world domain.
 class JoltWorld final : public system::IWorldApi {
 public:
-  JoltWorld() = default;
-  ~JoltWorld() override = default;
+  JoltWorld();
+  ~JoltWorld() override;
 
   OXYGEN_MAKE_NON_COPYABLE(JoltWorld)
   OXYGEN_MAKE_NON_MOVABLE(JoltWorld)
@@ -33,6 +38,18 @@ public:
   auto GetGravity(WorldId world_id) const -> PhysicsResult<Vec3> override;
   auto SetGravity(WorldId world_id, const Vec3& gravity)
     -> PhysicsResult<void> override;
+
+private:
+  struct WorldState;
+
+  [[nodiscard]] auto TryGetWorld(WorldId world_id) noexcept
+    -> observer_ptr<WorldState>;
+  [[nodiscard]] auto TryGetWorld(WorldId world_id) const noexcept
+    -> observer_ptr<const WorldState>;
+
+  bool runtime_ready_ { false };
+  uint32_t next_world_id_ { 1U };
+  std::unordered_map<WorldId, std::unique_ptr<WorldState>> worlds_ {};
 };
 
 } // namespace oxygen::physics::jolt

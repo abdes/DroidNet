@@ -7,12 +7,18 @@
     {
       "name": "windows-default",
       "displayName": "Windows Default (Ninja)",
-      "inherits": "default"
+      "inherits": "default",
+      "cacheVariables": {
+        "OXYGEN_PHYSICS_BACKEND": "jolt"
+      }
     },
     {
       "name": "windows-asan",
       "displayName": "Windows ASAN (Ninja)",
-      "inherits": "default-asan"
+      "inherits": "default-asan",
+      "cacheVariables": {
+        "OXYGEN_PHYSICS_BACKEND": "jolt"
+      }
     }
   ],
   "buildPresets": [

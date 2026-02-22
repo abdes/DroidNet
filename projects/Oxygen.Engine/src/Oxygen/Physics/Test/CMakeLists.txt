@@ -33,3 +33,14 @@ add_test(NAME ${link_test_target} COMMAND ${link_test_target})
 include(GTestHelpers)
 
 m_gtest_program(Basic SOURCES "Physics_test.cpp")
+
+if(OXYGEN_PHYSICS_BACKEND STREQUAL "jolt")
+  m_gtest_program(
+    Jolt
+    SOURCES
+      "Jolt/Jolt_test_fixture.h"
+      "Jolt/World/Jolt_world_basic_test.cpp"
+      "Jolt/World/Jolt_world_contract_test.cpp"
+      "Jolt/World/Jolt_world_domain_test.cpp"
+  )
+endif()
