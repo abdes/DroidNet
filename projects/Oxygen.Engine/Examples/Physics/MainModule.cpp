@@ -762,6 +762,7 @@ auto MainModule::InitializePhysicsScenario() -> bool
       = node.GetTransform().GetLocalScale().value_or(Vec3 { 1.0F, 1.0F, 1.0F });
     const bool is_sphere
       = node.GetName().find("Bowl") != std::string_view::npos;
+    const bool is_ramp_surface = node.GetName() == "Ramp";
 
     physics::body::BodyDesc desc {};
     desc.type = physics::body::BodyType::kStatic;
@@ -775,7 +776,8 @@ auto MainModule::InitializePhysicsScenario() -> bool
       Vec3 { 0.0F, 0.0F, 0.0F });
     desc.initial_rotation = node.GetTransform().GetLocalRotation().value_or(
       Quat { 1.0F, 0.0F, 0.0F, 0.0F });
-    desc.friction = is_sphere ? 0.80F : 0.88F;
+    desc.friction
+      = is_ramp_surface ? 0.14F : (is_sphere ? 0.80F : 0.88F);
     desc.restitution = is_sphere ? 0.03F : 0.02F;
 
     if (!AttachRigidBody(node, desc)) {
