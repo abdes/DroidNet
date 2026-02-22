@@ -14,6 +14,7 @@
 #include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/Events/PhysicsEvents.h>
 #include <Oxygen/Physics/Handles.h>
+#include <Oxygen/Physics/SoftBody/SoftBodyDesc.h>
 #include <Oxygen/Physics/System/IWorldApi.h>
 #include <Oxygen/Physics/Vehicle/VehicleDesc.h>
 
@@ -39,6 +40,11 @@ struct VehicleState final {
   vehicle::VehicleControlInput control_input {};
 };
 
+struct SoftBodyState final {
+  softbody::SoftBodyMaterialParams material_params {};
+  softbody::SoftBodyState state {};
+};
+
 struct BackendState final {
   WorldId world_id { WorldId { 1U } };
   bool world_created { false };
@@ -51,6 +57,7 @@ struct BackendState final {
   std::unordered_map<CharacterId, CharacterState> characters {};
   std::unordered_map<AggregateId, std::unordered_set<BodyId>> aggregates {};
   std::unordered_map<AggregateId, VehicleState> vehicles {};
+  std::unordered_map<AggregateId, SoftBodyState> soft_bodies {};
   std::vector<system::ActiveBodyTransform> active_transforms {};
   std::vector<events::PhysicsEvent> pending_events {};
   BodyId next_body_id { BodyId { 1U } };
@@ -73,6 +80,10 @@ struct BackendState final {
   std::size_t vehicle_destroy_calls { 0 };
   std::size_t vehicle_set_control_calls { 0 };
   std::size_t vehicle_flush_structural_calls { 0 };
+  std::size_t soft_body_create_calls { 0 };
+  std::size_t soft_body_destroy_calls { 0 };
+  std::size_t soft_body_set_material_calls { 0 };
+  std::size_t soft_body_flush_structural_calls { 0 };
   BodyId last_moved_body { kInvalidBodyId };
   Vec3 last_moved_position { 0.0F };
   Quat last_moved_rotation { 1.0F, 0.0F, 0.0F, 0.0F };

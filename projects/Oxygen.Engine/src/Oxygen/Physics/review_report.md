@@ -288,7 +288,9 @@ The introduction of the `IJointApi` and `JoltJoints` correctly implements the ne
 **Tests:**
 
 - Existing PhysicsModule phase/authority tests remain baseline.
-- New domain-specific bridge tests pending once Jolt extension domains are live.
+- Added domain-specific module bridge tests for aggregate extension routing:
+  - vehicle command-authority baseline + lifecycle destroy paths,
+  - soft-body simulation-authority baseline + lifecycle destroy paths.
 
 **Integration:**
 
@@ -300,8 +302,8 @@ The introduction of the `IJointApi` and `JoltJoints` correctly implements the ne
 **Status:**
 
 - Contract codification: done
-- New-domain bridge implementation: pending
-- New-domain bridge tests: pending
+- New-domain bridge implementation: done (vehicle/soft-body routing + flush)
+- New-domain bridge tests: done (module sync tests)
 
 ## 9. Feature: Bounds/Collision Source-of-Truth
 
@@ -388,13 +390,13 @@ The introduction of the `IJointApi` and `JoltJoints` correctly implements the ne
 - [x] API/contracts
 - [x] Jolt implementation (baseline active, but `anchor_body_id` tethering needs work)
 - [x] Jolt tests
-- [ ] PhysicsModule integration tests
+- [x] PhysicsModule integration tests
 
 ### 11.5 Scene Bridge
 
 - [x] Phase/authority/domain-separation contracts documented
-- [ ] New-domain bridge behavior implemented
-- [ ] New-domain bridge tests
+- [x] New-domain bridge behavior implemented
+- [x] New-domain bridge tests
 
 ### 11.6 Bounds/Collision Source-of-Truth
 

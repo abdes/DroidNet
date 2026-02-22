@@ -35,6 +35,7 @@ m_gtest_program(
     "Fakes/FakePhysicsSystem.h"
     "Fakes/FakeQueryApi.h"
     "Fakes/FakeShapeApi.h"
+    "Fakes/FakeSoftBodyApi.h"
     "Fakes/FakeVehicleApi.h"
     "Fakes/FakeWorldApi.h"
     "PhysicsModule_sync_test.cpp"

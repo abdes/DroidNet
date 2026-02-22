@@ -47,6 +47,13 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, GameplayFlushesVehicleStructuralChanges)
   EXPECT_EQ(FakeState().vehicle_flush_structural_calls, 1U);
 }
 
+NOLINT_TEST_F(PhysicsModuleSyncTest, GameplayFlushesSoftBodyStructuralChanges)
+{
+  EXPECT_EQ(FakeState().soft_body_flush_structural_calls, 0U);
+  RunGameplay();
+  EXPECT_EQ(FakeState().soft_body_flush_structural_calls, 1U);
+}
+
 NOLINT_TEST_F(PhysicsModuleSyncTest, GameplayFlushesDeferredStructuralChanges)
 {
   EXPECT_EQ(FakeState().flush_structural_calls, 0U);
@@ -880,6 +887,32 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, VehicleBaselineMappingUsesCommandAuthority)
   EXPECT_EQ(authority.value(), aggregate::AggregateAuthority::kCommand);
 }
 
+NOLINT_TEST_F(
+  PhysicsModuleSyncTest, SoftBodyBaselineMappingUsesSimulationAuthority)
+{
+  auto node = scene_->CreateNode("soft-body-node");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  auto* soft_bodies = fake_physics_->SoftBodies();
+  ASSERT_NE(soft_bodies, nullptr);
+  const auto created_soft_body
+    = soft_bodies->CreateSoftBody(module_->GetWorldId(),
+      softbody::SoftBodyDesc {
+        .cluster_count = 4U,
+      });
+  ASSERT_TRUE(created_soft_body.has_value());
+
+  module_->RegisterNodeAggregateMapping(node.GetHandle(),
+    created_soft_body.value(), aggregate::AggregateAuthority::kSimulation);
+
+  const auto authority
+    = module_->GetAggregateAuthorityForAggregateId(created_soft_body.value());
+  ASSERT_TRUE(authority.has_value());
+  EXPECT_EQ(authority.value(), aggregate::AggregateAuthority::kSimulation);
+}
+
 NOLINT_TEST_F(PhysicsModuleSyncTest, DestroyNodeDestroysTrackedAggregate)
 {
   auto node = scene_->CreateNode("aggregate-destroy-node");
@@ -942,6 +975,34 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, DestroyNodeDestroysTrackedVehicleAggregate)
   EXPECT_EQ(FakeState().vehicle_destroy_calls, 1U);
   EXPECT_EQ(FakeState().aggregate_destroy_calls, 0U);
   EXPECT_TRUE(FakeState().vehicles.empty());
+}
+
+NOLINT_TEST_F(
+  PhysicsModuleSyncTest, DestroyNodeDestroysTrackedSoftBodyAggregate)
+{
+  auto node = scene_->CreateNode("soft-body-destroy-node");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  auto* soft_bodies = fake_physics_->SoftBodies();
+  ASSERT_NE(soft_bodies, nullptr);
+  const auto created_soft_body
+    = soft_bodies->CreateSoftBody(module_->GetWorldId(),
+      softbody::SoftBodyDesc {
+        .cluster_count = 4U,
+      });
+  ASSERT_TRUE(created_soft_body.has_value());
+  module_->RegisterNodeAggregateMapping(node.GetHandle(),
+    created_soft_body.value(), aggregate::AggregateAuthority::kSimulation);
+
+  ASSERT_TRUE(scene_->DestroyNode(node));
+  scene_->SyncObservers();
+
+  EXPECT_FALSE(module_->HasAggregateForNode(node.GetHandle()));
+  EXPECT_EQ(FakeState().soft_body_destroy_calls, 1U);
+  EXPECT_EQ(FakeState().aggregate_destroy_calls, 0U);
+  EXPECT_TRUE(FakeState().soft_bodies.empty());
 }
 
 NOLINT_TEST_F(PhysicsModuleSyncTest, SceneSwitchDestroysPreviousSceneAggregates)
@@ -1011,6 +1072,37 @@ NOLINT_TEST_F(
 
   EXPECT_TRUE(FakeState().vehicles.empty());
   EXPECT_EQ(FakeState().vehicle_destroy_calls, 1U);
+  EXPECT_EQ(FakeState().aggregate_destroy_calls, 0U);
+}
+
+NOLINT_TEST_F(
+  PhysicsModuleSyncTest, SceneSwitchDestroysPreviousSceneSoftBodyAggregates)
+{
+  auto scene_a = scene_;
+  auto node_a = scene_a->CreateNode("scene-a-soft-body");
+  ASSERT_TRUE(node_a.IsValid());
+  RunGameplay();
+  scene_a->Update();
+
+  auto* soft_bodies = fake_physics_->SoftBodies();
+  ASSERT_NE(soft_bodies, nullptr);
+  const auto soft_body = soft_bodies->CreateSoftBody(module_->GetWorldId(),
+    softbody::SoftBodyDesc {
+      .cluster_count = 4U,
+    });
+  ASSERT_TRUE(soft_body.has_value());
+  module_->RegisterNodeAggregateMapping(node_a.GetHandle(), soft_body.value(),
+    aggregate::AggregateAuthority::kSimulation);
+  ASSERT_EQ(FakeState().soft_bodies.size(), 1U);
+
+  auto scene_b = std::make_shared<scene::Scene>("SceneBSoftBody", 64);
+  auto node_b = scene_b->CreateNode("scene-b-soft-body");
+  ASSERT_TRUE(node_b.IsValid());
+  SetActiveScene(scene_b);
+  RunGameplay();
+
+  EXPECT_TRUE(FakeState().soft_bodies.empty());
+  EXPECT_EQ(FakeState().soft_body_destroy_calls, 1U);
   EXPECT_EQ(FakeState().aggregate_destroy_calls, 0U);
 }
 

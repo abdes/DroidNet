@@ -588,6 +588,21 @@ auto PhysicsModule::OnGameplay(observer_ptr<engine::FrameContext> context)
     CHECK_F(vehicle_flush_result.has_value(),
       "PhysicsModule failed to flush deferred vehicle structural changes.");
   }
+  if (auto* articulation_api = physics_system_->Articulations();
+    articulation_api != nullptr) {
+    const auto articulation_flush_result
+      = articulation_api->FlushStructuralChanges(world_id_);
+    CHECK_F(articulation_flush_result.has_value(),
+      "PhysicsModule failed to flush deferred articulation structural "
+      "changes.");
+  }
+  if (auto* soft_body_api = physics_system_->SoftBodies();
+    soft_body_api != nullptr) {
+    const auto soft_body_flush_result
+      = soft_body_api->FlushStructuralChanges(world_id_);
+    CHECK_F(soft_body_flush_result.has_value(),
+      "PhysicsModule failed to flush deferred soft-body structural changes.");
+  }
 
   const auto scene = context->GetScene();
   if (scene == nullptr) {

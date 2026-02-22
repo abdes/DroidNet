@@ -16,6 +16,7 @@
 #include <Oxygen/PhysicsModule/Test/Fakes/FakeJointApi.h>
 #include <Oxygen/PhysicsModule/Test/Fakes/FakeQueryApi.h>
 #include <Oxygen/PhysicsModule/Test/Fakes/FakeShapeApi.h>
+#include <Oxygen/PhysicsModule/Test/Fakes/FakeSoftBodyApi.h>
 #include <Oxygen/PhysicsModule/Test/Fakes/FakeVehicleApi.h>
 #include <Oxygen/PhysicsModule/Test/Fakes/FakeWorldApi.h>
 
@@ -33,6 +34,7 @@ public:
     , joints_(state_)
     , aggregates_(state_)
     , vehicles_(state_)
+    , soft_bodies_(state_)
   {
   }
 
@@ -60,6 +62,10 @@ public:
   auto Vehicles() noexcept -> system::IVehicleApi* override
   {
     return &vehicles_;
+  }
+  auto SoftBodies() noexcept -> system::ISoftBodyApi* override
+  {
+    return &soft_bodies_;
   }
 
   auto Worlds() const noexcept -> const system::IWorldApi& override
@@ -102,6 +108,10 @@ public:
   {
     return &vehicles_;
   }
+  auto SoftBodies() const noexcept -> const system::ISoftBodyApi* override
+  {
+    return &soft_bodies_;
+  }
 
 private:
   BackendState state_ {};
@@ -115,6 +125,7 @@ private:
   FakeJointApi joints_;
   FakeAggregateApi aggregates_;
   FakeVehicleApi vehicles_;
+  FakeSoftBodyApi soft_bodies_;
 };
 
 } // namespace oxygen::physics::test::detail
