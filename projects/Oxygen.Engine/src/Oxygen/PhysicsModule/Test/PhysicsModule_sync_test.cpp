@@ -42,10 +42,13 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, FixedSimulationStepsWorldOnce)
 NOLINT_TEST_F(PhysicsModuleSyncTest, GameplayFlushesDeferredStructuralChanges)
 {
   EXPECT_EQ(FakeState().flush_structural_calls, 0U);
+  EXPECT_EQ(FakeState().aggregate_flush_structural_calls, 0U);
   RunGameplay();
   EXPECT_EQ(FakeState().flush_structural_calls, 1U);
+  EXPECT_EQ(FakeState().aggregate_flush_structural_calls, 1U);
   RunGameplay();
   EXPECT_EQ(FakeState().flush_structural_calls, 2U);
+  EXPECT_EQ(FakeState().aggregate_flush_structural_calls, 2U);
 }
 
 NOLINT_TEST_F(
@@ -410,6 +413,97 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, AttachCharacterWhenRigidBodyExists_Death)
 }
 #endif
 
+#if defined(NDEBUG)
+NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyFailsWhenAggregateExists)
+{
+  auto node = scene_->CreateNode("aggregate-conflict-body");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  auto* aggregates = module_->GetAggregateApi();
+  ASSERT_NE(aggregates, nullptr);
+  const auto aggregate = aggregates->CreateAggregate(module_->GetWorldId());
+  ASSERT_TRUE(aggregate.has_value());
+  module_->RegisterNodeAggregateMapping(node.GetHandle(), aggregate.value(),
+    aggregate::AggregateAuthority::kSimulation);
+
+  body::BodyDesc body_desc {};
+  body_desc.type = body::BodyType::kDynamic;
+  EXPECT_FALSE(ScenePhysics::AttachRigidBody(
+    observer_ptr<PhysicsModule> { module_.get() }, node, body_desc)
+      .has_value());
+}
+#endif
+
+#if !defined(NDEBUG)
+NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyWhenAggregateExists_Death)
+{
+  auto node = scene_->CreateNode("aggregate-conflict-body-death");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  auto* aggregates = module_->GetAggregateApi();
+  ASSERT_NE(aggregates, nullptr);
+  const auto aggregate = aggregates->CreateAggregate(module_->GetWorldId());
+  ASSERT_TRUE(aggregate.has_value());
+  module_->RegisterNodeAggregateMapping(node.GetHandle(), aggregate.value(),
+    aggregate::AggregateAuthority::kSimulation);
+
+  body::BodyDesc body_desc {};
+  body_desc.type = body::BodyType::kDynamic;
+  NOLINT_EXPECT_DEATH(
+    (void)ScenePhysics::AttachRigidBody(
+      observer_ptr<PhysicsModule> { module_.get() }, node, body_desc),
+    ".*");
+}
+#endif
+
+#if defined(NDEBUG)
+NOLINT_TEST_F(PhysicsModuleSyncTest, AttachCharacterFailsWhenAggregateExists)
+{
+  auto node = scene_->CreateNode("aggregate-conflict-character");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  auto* aggregates = module_->GetAggregateApi();
+  ASSERT_NE(aggregates, nullptr);
+  const auto aggregate = aggregates->CreateAggregate(module_->GetWorldId());
+  ASSERT_TRUE(aggregate.has_value());
+  module_->RegisterNodeAggregateMapping(node.GetHandle(), aggregate.value(),
+    aggregate::AggregateAuthority::kSimulation);
+
+  EXPECT_FALSE(
+    ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> { module_.get() },
+      node, character::CharacterDesc {})
+      .has_value());
+}
+#endif
+
+#if !defined(NDEBUG)
+NOLINT_TEST_F(PhysicsModuleSyncTest, AttachCharacterWhenAggregateExists_Death)
+{
+  auto node = scene_->CreateNode("aggregate-conflict-character-death");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  auto* aggregates = module_->GetAggregateApi();
+  ASSERT_NE(aggregates, nullptr);
+  const auto aggregate = aggregates->CreateAggregate(module_->GetWorldId());
+  ASSERT_TRUE(aggregate.has_value());
+  module_->RegisterNodeAggregateMapping(node.GetHandle(), aggregate.value(),
+    aggregate::AggregateAuthority::kSimulation);
+
+  NOLINT_EXPECT_DEATH((void)ScenePhysics::AttachCharacter(
+                        observer_ptr<PhysicsModule> { module_.get() }, node,
+                        character::CharacterDesc {}),
+    ".*");
+}
+#endif
+
 // In release builds, contract violations return nullopt.
 #if defined(NDEBUG)
 NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyFailsForUnobservedSceneNode)
@@ -454,6 +548,54 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyUnobservedSceneNode_Death)
   NOLINT_EXPECT_DEATH(
     (void)ScenePhysics::AttachRigidBody(
       observer_ptr<PhysicsModule> { module_.get() }, other_node, desc),
+    ".*");
+}
+#endif
+
+#if defined(NDEBUG)
+NOLINT_TEST_F(
+  PhysicsModuleSyncTest, RegisterAggregateMappingIgnoresUnobservedSceneNode)
+{
+  RunGameplay();
+  scene_->Update();
+
+  auto other_scene = std::make_shared<scene::Scene>("OtherSceneAggregate", 32);
+  auto other_node = other_scene->CreateNode("other-aggregate");
+  ASSERT_TRUE(other_node.IsValid());
+  other_scene->Update();
+
+  auto* aggregates = module_->GetAggregateApi();
+  ASSERT_NE(aggregates, nullptr);
+  const auto aggregate = aggregates->CreateAggregate(module_->GetWorldId());
+  ASSERT_TRUE(aggregate.has_value());
+
+  module_->RegisterNodeAggregateMapping(other_node.GetHandle(),
+    aggregate.value(), aggregate::AggregateAuthority::kSimulation);
+  EXPECT_FALSE(module_->HasAggregateForNode(other_node.GetHandle()));
+}
+#endif
+
+#if !defined(NDEBUG)
+NOLINT_TEST_F(
+  PhysicsModuleSyncTest, RegisterAggregateMappingUnobservedSceneNode_Death)
+{
+  RunGameplay();
+  scene_->Update();
+
+  auto other_scene
+    = std::make_shared<scene::Scene>("OtherSceneAggregateDeath", 32);
+  auto other_node = other_scene->CreateNode("other-aggregate");
+  ASSERT_TRUE(other_node.IsValid());
+  other_scene->Update();
+
+  auto* aggregates = module_->GetAggregateApi();
+  ASSERT_NE(aggregates, nullptr);
+  const auto aggregate = aggregates->CreateAggregate(module_->GetWorldId());
+  ASSERT_TRUE(aggregate.has_value());
+
+  NOLINT_EXPECT_DEATH(
+    module_->RegisterNodeAggregateMapping(other_node.GetHandle(),
+      aggregate.value(), aggregate::AggregateAuthority::kSimulation),
     ".*");
 }
 #endif
@@ -639,6 +781,85 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, SceneSwitchDestroysPreviousSceneCharacters)
   SetActiveScene(scene_a);
   RunGameplay();
   EXPECT_EQ(FakeState().characters.size(), 0U);
+}
+
+NOLINT_TEST_F(PhysicsModuleSyncTest, RegisterAggregateMappingRoundTrip)
+{
+  auto node = scene_->CreateNode("aggregate-node");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  auto* aggregates = module_->GetAggregateApi();
+  ASSERT_NE(aggregates, nullptr);
+  const auto created_aggregate
+    = aggregates->CreateAggregate(module_->GetWorldId());
+  ASSERT_TRUE(created_aggregate.has_value());
+  const auto aggregate_id = created_aggregate.value();
+
+  module_->RegisterNodeAggregateMapping(
+    node.GetHandle(), aggregate_id, aggregate::AggregateAuthority::kCommand);
+
+  EXPECT_TRUE(module_->HasAggregateForNode(node.GetHandle()));
+  EXPECT_EQ(module_->GetAggregateIdForNode(node.GetHandle()), aggregate_id);
+  const auto mapped_node = module_->GetNodeForAggregateId(aggregate_id);
+  ASSERT_TRUE(mapped_node.has_value());
+  EXPECT_EQ(mapped_node.value(), node.GetHandle());
+  const auto authority
+    = module_->GetAggregateAuthorityForAggregateId(aggregate_id);
+  ASSERT_TRUE(authority.has_value());
+  EXPECT_EQ(authority.value(), aggregate::AggregateAuthority::kCommand);
+}
+
+NOLINT_TEST_F(PhysicsModuleSyncTest, DestroyNodeDestroysTrackedAggregate)
+{
+  auto node = scene_->CreateNode("aggregate-destroy-node");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  auto* aggregates = module_->GetAggregateApi();
+  ASSERT_NE(aggregates, nullptr);
+  const auto created_aggregate
+    = aggregates->CreateAggregate(module_->GetWorldId());
+  ASSERT_TRUE(created_aggregate.has_value());
+  module_->RegisterNodeAggregateMapping(node.GetHandle(),
+    created_aggregate.value(), aggregate::AggregateAuthority::kSimulation);
+  ASSERT_TRUE(module_->HasAggregateForNode(node.GetHandle()));
+  ASSERT_EQ(FakeState().aggregates.size(), 1U);
+
+  ASSERT_TRUE(scene_->DestroyNode(node));
+  scene_->SyncObservers();
+
+  EXPECT_FALSE(module_->HasAggregateForNode(node.GetHandle()));
+  EXPECT_EQ(FakeState().aggregate_destroy_calls, 1U);
+  EXPECT_TRUE(FakeState().aggregates.empty());
+}
+
+NOLINT_TEST_F(PhysicsModuleSyncTest, SceneSwitchDestroysPreviousSceneAggregates)
+{
+  auto scene_a = scene_;
+  auto node_a = scene_a->CreateNode("scene-a-aggregate");
+  ASSERT_TRUE(node_a.IsValid());
+  RunGameplay();
+  scene_a->Update();
+
+  auto* aggregates = module_->GetAggregateApi();
+  ASSERT_NE(aggregates, nullptr);
+  const auto aggregate_a = aggregates->CreateAggregate(module_->GetWorldId());
+  ASSERT_TRUE(aggregate_a.has_value());
+  module_->RegisterNodeAggregateMapping(node_a.GetHandle(), aggregate_a.value(),
+    aggregate::AggregateAuthority::kSimulation);
+  ASSERT_EQ(FakeState().aggregates.size(), 1U);
+
+  auto scene_b = std::make_shared<scene::Scene>("SceneBAggregate", 64);
+  auto node_b = scene_b->CreateNode("scene-b-aggregate");
+  ASSERT_TRUE(node_b.IsValid());
+  SetActiveScene(scene_b);
+  RunGameplay();
+
+  EXPECT_TRUE(FakeState().aggregates.empty());
+  EXPECT_EQ(FakeState().aggregate_destroy_calls, 1U);
 }
 
 NOLINT_TEST_F(PhysicsModuleSyncTest, DestroyAndReattachSameFrameKeepsStateValid)

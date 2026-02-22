@@ -104,177 +104,243 @@ The introduction of the `IJointApi` and `JoltJoints` correctly implements the ne
   - **Memory Management:** Anchoring the constraint instance `JPH::Ref<JPH::TwoBodyConstraint>` safely within a thread-safe `std::unordered_map` inside `JoltJoints` directly shields the client logic from `JPH` lifecycle and memory counting caveats.
   - **Extensible Factory:** The exhaustive `MakeConstraint` switch guarantees that `JointDesc` can effortlessly scale up with drives, limits, and motors as the engine matures.
 
-## 4. Recommendations & Potential Improvements (Status)
+## 4. Feature: Aggregate Core (Identity + Membership)
 
-While the baseline V1 architecture is exceptional, as traffic and complexity grow, consider the following structural changes grounded in AAA engine optimization:
+**Goal:** Support `1:N` and `N:1` simulation mappings with stable handle identity.
 
-1. **Deferred Structural Mutations (JoltBodies):**
-   The implementation of `FlushStructuralChanges` correctly eradicates lock contention. Instead of executing heavy Jolt compound shape rebuilds immediately under a mutex whenever `AddBodyShape` or `RemoveBodyShape` is called, it queues them via `pending_rebuilds_`.
-   - **Strengths**: The `body_state_mutex_` now exclusively protects lightweight hash-map modifications, meaning gameplay scripts/threads can attach/detach shapes concurrently without stalling. The expensive `JPH::BodyInterface` updates are predictably drained during the dedicated `kGameplay` push phase where concurrency is centrally orchestrated.
+**API**
+- `AggregateId` and converters in `Handles.h` / `ToStringConverters.cpp`.
+- `IAggregateApi` lifecycle/membership/flush contract.
+- Contract doc: `src/Oxygen/Physics/AggregateMappingModel.md`.
 
-2. **Further Optimization for Bulk API Queries:**
-   This optimization pass is now implemented:
-   - `IBodyApi` now exposes bulk APIs (`GetBodyPoses`, `MoveKinematicBatch`) with Jolt and test-backend support.
-   - `JoltWorld::GetActiveBodyTransforms` now reuses persistent `BodyIDVector` scratch storage (`temp_active_body_ids`) instead of allocating per call.
-   - `JoltWorld::GetActiveBodyTransforms` now uses `GetPositionAndRotation(...)` for combined pose reads.
-   - `PhysicsModule::OnGameplay` now batches kinematic pushes into contiguous buffers and calls `MoveKinematicBatch(...)`.
+**Backend (Jolt)**
+- Implement `CreateAggregate/DestroyAggregate/AddMemberBody/RemoveMemberBody/GetMemberBodies/FlushStructuralChanges`.
+- Expose non-null `IPhysicsSystem::Aggregates()`.
 
-3. **Soft Body, Articulations, and Vehicles:**
-   Now that the foundational `IJointApi` is established, the roadmap naturally extends into Articulations and Vehicles. When integrating these, maintaining the rigid separation between Scene mapping and internal domains will be critical, as Articulated bodies completely break the simple 1:1 `NodeHandle` to `BodyId` relationship.
+**Tests**
+- API contract tests for lifecycle/rebind/flush in `Physics_test.cpp`.
+- Jolt domain tests for aggregate semantics.
 
-## 5. Future Enhancements
+**Integration**
+- PhysicsModule side tables support aggregate mappings without scene-type leakage into backend APIs.
 
-The next high-value milestone is simulation mapping generalization for aggregate entities:
+**Status**
+- API/contracts: done
+- Jolt backend: done
+- Jolt domain tests: done
+- Module integration tests: done
 
-1. **Aggregate Mapping Model**
-   Introduce a simulation-aggregate handle layer above raw `BodyId` to support 1:N and N:1 mappings (articulation roots, links, vehicle chassis/wheels, soft-body clusters).
-   - Status: baseline model defined in `src/Oxygen/Physics/AggregateMappingModel.md` with first-class `AggregateId` handle contract.
+## 5. Feature: Articulation Domain
 
-2. **Domain-Local Expansion**
-   Keep API separation strict while extending domains:
-   - articulations / ragdolls as dedicated domain APIs,
-   - vehicles as dedicated constrained multi-body APIs,
-   - soft-body support with clear ownership and update contracts.
+**Goal:** Support linked-body articulated structures with explicit topology ownership.
 
-3. **Scene Bridge Contracts**
-   Maintain deterministic phase contracts:
-   - structural mutations remain deferred and flushed in controlled phases,
-   - pose pull/push remains authority-driven and explicit,
-   - scene mapping remains handle-based and backend-agnostic.
+**API**
+- `ArticulationDesc`, `ArticulationLinkDesc`.
+- `IArticulationApi`:
+  - create/destroy
+  - add/remove link
+  - root/link queries
+  - authority query
+  - structural flush
 
-4. **Scale Validation**
-   Add long-run stress suites for aggregate entities (attachment churn, scene switches, high-contact event throughput) before enabling gameplay-facing adoption.
+**Backend (Jolt)**
+- Implement articulation graph lifecycle and topology edits.
+- Implement `GetAuthority` and `FlushStructuralChanges`.
+- Expose non-null `IPhysicsSystem::Articulations()`.
 
-5. **Integration Tracks (Near-Term)**
-   - **New Physics C++ Demo Module**
-     Add a dedicated demo showcasing `PhysicsModule` integration through the native C++ API (`AttachRigidBody`, `AttachCharacter`, queries/events), with explicit phase-safe mutation flow.
-   - **Luau Physics Bindings**
-     Expose a focused scripting surface mirroring `ScenePhysics` contracts (attach/get/move/query) with clear authority rules and phase constraints documented for script authors.
-   - **RenderScene + Lua Physics Scene**
-     Integrate physics into `RenderScene` with Lua-enabled scene authoring, validating end-to-end orchestration: script mutations -> scene mutation stream -> physics sync -> transform propagation -> render.
-   - **PakFormat Upgrade for Cooked Physics Assets**
-     Extend cooked asset schema to carry physics authoring/runtime data (collision shapes, material/filter metadata, character setup, optional compound/aggregate descriptors) with versioned migration support.
+**Tests**
+- API contract tests in `Physics_test.cpp`.
+- Jolt articulation tests for lifecycle/link/authority/flush/error handling.
 
-### 5.1 Bounds/Collision Source-of-Truth Hardening (Near-Term Priority)
+**Integration**
+- PhysicsModule bridge policy for articulation-owned nodes (simulation-authoritative baseline).
 
-This section captures the concrete gaps discovered while scanning usage of `AABB`, `BoundingBox`, `BoundingSphere`, and `bounding_` across Oxygen.
+**Status**
+- API/contracts: done
+- Jolt backend: pending
+- Jolt domain tests: pending
+- Module integration tests: pending
 
-#### Current Ownership (As Implemented)
+## 6. Feature: Vehicle Domain
 
-1. **Render visibility bounds source-of-truth:** `Data::GeometryAsset` + `Scene::RenderableComponent` world-space cache.
-   - Geometry bounds authored/cooked in content/data:
-     - `src/Oxygen/Data/GeometryAsset.cpp`
-     - `src/Oxygen/Data/PakFormat.h`
-     - `src/Oxygen/Content/Import/Internal/Pipelines/MeshBuildPipeline.cpp`
-   - World bounds updated from scene transforms:
-     - `src/Oxygen/Scene/SceneNodeImpl.cpp`
-     - `src/Oxygen/Scene/Detail/RenderableComponent.cpp`
-   - Renderer consumes scene renderable world bounds:
-     - `src/Oxygen/Renderer/ScenePrep/Extractors.h`
+**Goal:** Support command-driven constrained multi-body vehicle simulation.
 
-2. **Physics collision source-of-truth:** explicit physics shape/body descriptors.
-   - `src/Oxygen/Physics/Body/BodyDesc.h`
-   - `src/Oxygen/Physics/Shape.h`
-   - `src/Oxygen/Physics/Shape/ShapeDesc.h`
-   - PhysicsModule sync is transform-authority only, not render-bounds-authority:
-     - `src/Oxygen/PhysicsModule/PhysicsModule.h`
+**API**
+- `VehicleDesc`, `VehicleControlInput`, `VehicleState`.
+- `IVehicleApi`:
+  - create/destroy
+  - control input
+  - state query
+  - authority query
+  - structural flush
 
-3. **Conclusion:** render bounds and collision shapes are intentionally different domains today; no automatic unification path exists yet.
+**Backend (Jolt)**
+- Implement vehicle lifecycle/control/state.
+- Implement `GetAuthority` and `FlushStructuralChanges`.
+- Expose non-null `IPhysicsSystem::Vehicles()`.
 
-#### Gaps / Risks
+**Tests**
+- API contract tests in `Physics_test.cpp`.
+- Jolt vehicle tests for lifecycle/control/state/authority/flush/error handling.
 
-1. **No cooked-scene first-class collision authoring path yet**
-   - Scene/content payloads are rich for render AABB data but do not yet provide a first-class, versioned physics-collision schema consumed during scene hydration.
+**Integration**
+- PhysicsModule command-authoritative gameplay staging + simulation execution contract.
 
-2. **No single attach policy for deriving collision from geometry when data is missing**
-   - Current fallback behavior can silently accept generic defaults (for example default sphere in `BodyDesc`) and hide authoring mistakes.
+**Status**
+- API/contracts: done
+- Jolt backend: pending
+- Jolt domain tests: pending
+- Module integration tests: pending
 
-3. **Hydration/demo duplication risk**
-   - Multiple example paths manually propagate geometry bounds and shape/runtime setup independently, increasing drift probability between visual and collision behavior.
+## 7. Feature: Soft-Body Domain
 
-4. **No explicit cross-domain consistency contract document**
-   - Source-of-truth ownership is implicit in code, but not yet formalized as an enforceable contract for content, scene hydration, scripting, and gameplay modules.
+**Goal:** Support deformable simulation objects with explicit material/state API.
 
-#### Decisions (Locked)
+**API**
+- `SoftBodyDesc`, `SoftBodyMaterialParams`, `SoftBodyState`.
+- `ISoftBodyApi`:
+  - create/destroy
+  - material params
+  - state query
+  - authority query
+  - structural flush
 
-1. Render and physics remain separate authoritative domains:
-   - Render culling bounds are owned by Geometry/Scene Renderable.
-   - Collision shapes are owned by Physics descriptors/assets.
+**Backend (Jolt)**
+- Implement soft-body lifecycle/material/state.
+- Implement `GetAuthority` and `FlushStructuralChanges`.
+- Expose non-null `IPhysicsSystem::SoftBodies()`.
 
-2. Physics must not implicitly reinterpret render bounds at runtime unless explicitly requested by policy/tooling.
+**Tests**
+- API contract tests in `Physics_test.cpp`.
+- Jolt soft-body tests for lifecycle/material/state/authority/flush/error handling.
 
-3. Missing collision authoring should be surfaced explicitly (warning/assert/contract), not silently masked by generic defaults in production paths.
+**Integration**
+- PhysicsModule simulation-authoritative bridge policy for soft-body-owned nodes.
 
-#### Resumable Execution Backlog
+**Status**
+- API/contracts: done
+- Jolt backend: pending
+- Jolt domain tests: pending
+- Module integration tests: pending
 
-1. **Define Source-of-Truth Contract Doc (P0)**
-   - Add a short contract section under Physics docs clarifying:
-     - who owns render bounds,
-     - who owns collision bounds,
-     - when derivation is allowed,
-     - authority across phases.
-   - Deliverable: one authoritative markdown contract with references from PhysicsModule and Scene docs.
+## 8. Feature: Scene Bridge Contracts (PhysicsModule)
 
-2. **PakFormat Physics Payload Extension (P0)**
-   - Add versioned records for physics collision authoring in cooked assets:
-     - shape geometry, local offsets/rotation, layer/filter, body type/material.
-   - Deliverable: schema update + migration notes + loader integration points.
+**Goal:** Keep deterministic phase behavior and clear authority boundaries across all domains.
 
-3. **Scene Hydration Physics Binding (P0)**
-   - During scene loading, instantiate physics bodies/characters from cooked physics descriptors through `ScenePhysics` APIs.
-   - Deliverable: deterministic attach path with clear failure semantics.
+**API/Docs**
+- `PhysicsModule.h` class contract updated.
+- `src/Oxygen/PhysicsModule/PhaseContracts.md`.
+- `src/Oxygen/Physics/System/DomainSeparationContract.md`.
 
-4. **Controlled Derivation Utility (P1)**
-   - Add explicit opt-in utility to derive primitive collision from geometry bounds when authored collision is absent.
-   - Must be tool/import-time or hydration-time policy driven, never hidden frame-time behavior.
-   - Deliverable: utility + policy flag + diagnostics.
+**Backend**
+- Backend domains remain scene-agnostic; bridge logic remains in module.
 
-5. **Contract Enforcement & Diagnostics (P1)**
-   - Add checks to flag nodes that are physics-enabled without explicit collision policy.
-   - Add stats/log counters for:
-     - explicit authored collision,
-     - derived collision,
-     - fallback/default rejection.
-   - Deliverable: diagnostics in module and debug telemetry.
+**Tests**
+- Existing PhysicsModule phase/authority tests remain baseline.
+- New domain-specific bridge tests pending once Jolt extension domains are live.
 
-6. **Integration Tests (P0/P1)**
-   - Add tests for:
-     - cooked scene with authored collision -> stable attach behavior,
-     - missing collision + derivation policy -> expected result,
-     - missing collision + strict policy -> expected failure.
-   - Include end-to-end path with transform sync and render visibility unchanged.
+**Integration**
+- Enforce:
+  - `kGameplay`: stage/push command intents
+  - `kFixedSimulation`: solver only
+  - `kSceneMutation`: pull/apply simulation state
 
-#### Ready-to-Resume Checklist (Section 5 Full Scope)
+**Status**
+- Contract codification: done
+- New-domain bridge implementation: pending
+- New-domain bridge tests: pending
 
-- [x] **5.0.1 Aggregate Mapping Model:** simulation-aggregate handle model defined (supports 1:N and N:1 mappings).
-- [x] **5.0.2 Aggregate API Surface:** articulation/vehicle/soft-body integration points documented in backend-agnostic interfaces.
-- [x] **5.0.3 Aggregate Lifecycle Tests:** creation/destruction/rebind scenarios covered by tests.
+## 9. Feature: Bounds/Collision Source-of-Truth
 
-- [ ] **5.0.4 Domain-Local Expansion:** articulation domain scaffolded with clear ownership and contracts.
-- [ ] **5.0.5 Domain-Local Expansion:** vehicle domain scaffolded with clear ownership and contracts.
-- [ ] **5.0.6 Domain-Local Expansion:** soft-body domain scaffolded with clear ownership and contracts.
-- [ ] **5.0.7 Domain Separation:** Scene/Physics mapping remains backend-agnostic and handle-based for all new domains.
+**Goal:** Prevent drift between render bounds and collision authoring.
 
-- [ ] **5.0.8 Scene Bridge Contracts:** phase contract doc updated (`kGameplay`, `kSceneMutation`, `kFixedSimulation`) with new domains.
-- [ ] **5.0.9 Structural Mutation Contract:** deferred structural changes and flush points explicitly documented and tested.
-- [ ] **5.0.10 Authority Contract:** transform authority rules codified for rigid, character, and aggregate entities.
+**API/Data**
+- Render bounds remain owned by Geometry/Renderable.
+- Collision remains owned by Physics descriptors.
+- Future cooked payload extension for physics collision authoring is required.
 
-- [ ] **5.0.11 Scale Validation:** long-run churn tests added (attach/detach/switch scene/event drain across many frames).
-- [ ] **5.0.12 Scale Validation:** high-contact/high-event-throughput stress tests added.
-- [ ] **5.0.13 Scale Validation:** regression suite integrated into regular test targets.
+**Backend**
+- Jolt consumes collision descriptors; must not infer from render bounds implicitly.
 
-- [ ] **5.0.14 Integration Track:** dedicated Physics C++ demo module implemented and documented.
-- [ ] **5.0.15 Integration Track:** Luau physics bindings implemented with contract-safe API surface.
-- [ ] **5.0.16 Integration Track:** RenderScene + Lua physics scene integration completed end-to-end.
-- [ ] **5.0.17 Integration Track:** PakFormat physics authoring/runtime payload upgrade completed with migration notes.
+**Tests**
+- Pending integration tests for authored vs derived vs strict-failure collision policy paths.
 
-- [ ] **5.1.1 Bounds/Collision Contract:** source-of-truth document added and linked from Physics/PhysicsModule docs.
-- [ ] **5.1.2 Bounds/Collision Data Path:** scene/cooked payload schema for physics collision finalized and versioned.
-- [ ] **5.1.3 Bounds/Collision Hydration:** scene loader hydrates physics from cooked scene payload.
-- [ ] **5.1.4 Bounds/Collision Derivation Policy:** explicit opt-in derivation utility implemented (no hidden runtime inference).
-- [ ] **5.1.5 Bounds/Collision Enforcement:** strict contract checks and diagnostics enabled for missing collision authoring.
-- [ ] **5.1.6 Bounds/Collision Validation:** tests cover authored, derived, and strict-failure paths.
+**Integration**
+- Scene hydration must attach physics from cooked physics payload, not ad hoc defaults.
 
-## 6. Conclusion
+**Status**
+- Ownership analysis: done
+- Contract doc linkage: pending
+- Pak/hydration implementation: pending
+- Validation tests: pending
 
-The implementation achieves exactly what a state-of-the-art C++23 engine necessitates: it is cache-conscious, strictly typed, zero-allocation compliant where it matters, safely concurrent, and decoupled. The Oxygen Physics architecture flawlessly interfaces with your phase-based scheduling schema and conforms to the overarching philosophy of stable, handle-driven interactions.
+## 10. Feature: Product Integration (Demo + Scripting + Pak)
+
+**Goal:** Deliver end-to-end developer-facing usage of the physics stack.
+
+**API**
+- C++ demo usage through `ScenePhysics`.
+- Luau bindings mirroring contract-safe surface.
+
+**Backend**
+- Requires live Jolt extension domains for meaningful feature coverage.
+
+**Tests**
+- Demo smoke tests + scripting binding tests + cooked asset migration tests.
+
+**Integration**
+- RenderScene + Lua end-to-end orchestration.
+- Pak format upgrade and migration.
+
+**Status**
+- Planning: done
+- Implementation: pending
+- Validation: pending
+
+## 11. Unified Verifiable Task List
+
+### 11.1 Aggregate Core
+- [x] API/contracts
+- [x] Jolt implementation
+- [x] Jolt tests
+- [x] PhysicsModule integration tests
+
+### 11.2 Articulation
+- [x] API/contracts
+- [ ] Jolt implementation
+- [ ] Jolt tests
+- [ ] PhysicsModule integration tests
+
+### 11.3 Vehicle
+- [x] API/contracts
+- [ ] Jolt implementation
+- [ ] Jolt tests
+- [ ] PhysicsModule integration tests
+
+### 11.4 Soft-Body
+- [x] API/contracts
+- [ ] Jolt implementation
+- [ ] Jolt tests
+- [ ] PhysicsModule integration tests
+
+### 11.5 Scene Bridge
+- [x] Phase/authority/domain-separation contracts documented
+- [ ] New-domain bridge behavior implemented
+- [ ] New-domain bridge tests
+
+### 11.6 Bounds/Collision Source-of-Truth
+- [ ] Contract doc linkage finalized
+- [ ] Pak physics payload extension
+- [ ] Scene hydration from cooked physics payload
+- [ ] Derivation policy utility + diagnostics
+- [ ] Integration tests
+
+### 11.7 Product Integration
+- [ ] Physics C++ demo
+- [ ] Luau bindings
+- [ ] RenderScene + Lua physics scene
+- [ ] Pak migration and validation
+
+## 12. Conclusion
+
+The architecture baseline is strong and now organized by feature-delivery tracks. The next execution phase is backend realization (Jolt aggregate/articulation/vehicle/soft-body), followed by module integration and end-to-end product tracks.

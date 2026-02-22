@@ -7,7 +7,8 @@
 #include <Oxygen/Physics/Jolt/JoltPhysicsSystem.h>
 
 oxygen::physics::jolt::JoltPhysicsSystem::JoltPhysicsSystem()
-  : bodies_(world_, shapes_)
+  : aggregates_(world_)
+  , bodies_(world_, shapes_)
   , queries_(world_)
   , events_(world_)
   , characters_(world_)
@@ -64,6 +65,12 @@ auto oxygen::physics::jolt::JoltPhysicsSystem::Joints() noexcept
   return joints_;
 }
 
+auto oxygen::physics::jolt::JoltPhysicsSystem::Aggregates() noexcept
+  -> system::IAggregateApi*
+{
+  return &aggregates_;
+}
+
 auto oxygen::physics::jolt::JoltPhysicsSystem::Worlds() const noexcept
   -> const system::IWorldApi&
 {
@@ -110,4 +117,10 @@ auto oxygen::physics::jolt::JoltPhysicsSystem::Joints() const noexcept
   -> const system::IJointApi&
 {
   return joints_;
+}
+
+auto oxygen::physics::jolt::JoltPhysicsSystem::Aggregates() const noexcept
+  -> const system::IAggregateApi*
+{
+  return &aggregates_;
 }

@@ -19,8 +19,10 @@
 #include <Oxygen/Base/ResourceHandle.h>
 #include <Oxygen/Base/ResourceTable.h>
 #include <Oxygen/Core/EngineModule.h>
+#include <Oxygen/Physics/Aggregate/AggregateAuthority.h>
 #include <Oxygen/Physics/Events/PhysicsEvents.h>
 #include <Oxygen/Physics/Handles.h>
+#include <Oxygen/Physics/System/IAggregateApi.h>
 #include <Oxygen/Physics/System/IBodyApi.h>
 #include <Oxygen/Physics/System/ICharacterApi.h>
 #include <Oxygen/Physics/System/IEventApi.h>
@@ -192,10 +194,11 @@ public:
     -> void override;
 
   [[nodiscard]] auto GetBodyApi() noexcept -> system::IBodyApi&;
+  OXGN_PHSYNC_NDAPI auto GetAggregateApi() noexcept -> system::IAggregateApi*;
   [[nodiscard]] auto GetCharacterApi() noexcept -> system::ICharacterApi&;
   [[nodiscard]] auto GetEventApi() noexcept -> system::IEventApi&;
   [[nodiscard]] auto GetQueryApi() noexcept -> system::IQueryApi&;
-  [[nodiscard]] auto GetWorldId() const noexcept -> WorldId;
+  OXGN_PHSYNC_NDAPI auto GetWorldId() const noexcept -> WorldId;
   [[nodiscard]] auto IsNodeInObservedScene(
     const scene::NodeHandle& node_handle) const noexcept -> bool;
   OXGN_PHSYNC_NDAPI auto GetSyncDiagnostics() const noexcept -> SyncDiagnostics;
@@ -217,6 +220,9 @@ public:
 
   OXGN_PHSYNC_API auto RegisterNodeCharacterMapping(
     const scene::NodeHandle& node_handle, CharacterId character_id) -> void;
+  OXGN_PHSYNC_API auto RegisterNodeAggregateMapping(
+    const scene::NodeHandle& node_handle, AggregateId aggregate_id,
+    aggregate::AggregateAuthority authority) -> void;
 
   OXGN_PHSYNC_NDAPI auto GetCharacterIdForNode(
     const scene::NodeHandle& node_handle) const -> CharacterId;
@@ -225,6 +231,15 @@ public:
 
   OXGN_PHSYNC_NDAPI auto GetNodeForCharacterId(CharacterId character_id) const
     -> std::optional<scene::NodeHandle>;
+  OXGN_PHSYNC_NDAPI auto GetAggregateIdForNode(
+    const scene::NodeHandle& node_handle) const -> AggregateId;
+  OXGN_PHSYNC_NDAPI auto HasAggregateForNode(
+    const scene::NodeHandle& node_handle) const -> bool;
+  OXGN_PHSYNC_NDAPI auto GetNodeForAggregateId(AggregateId aggregate_id) const
+    -> std::optional<scene::NodeHandle>;
+  OXGN_PHSYNC_NDAPI auto GetAggregateAuthorityForAggregateId(
+    AggregateId aggregate_id) const
+    -> std::optional<aggregate::AggregateAuthority>;
 
   /*! Convert a world-space pose into node-local space using the current parent
 
@@ -251,20 +266,34 @@ private:
     scene::NodeHandle node_handle {};
   };
   using CharacterBindingTable = ResourceTable<CharacterBinding>;
+  struct AggregateBinding final {
+    WorldId world_id { kInvalidWorldId };
+    AggregateId aggregate_id { kInvalidAggregateId };
+    aggregate::AggregateAuthority authority {
+      aggregate::AggregateAuthority::kSimulation,
+    };
+    scene::NodeHandle node_handle {};
+  };
+  using AggregateBindingTable = ResourceTable<AggregateBinding>;
   static constexpr ResourceHandle::ResourceTypeT kBindingResourceType { 0xB1 };
   static constexpr ResourceHandle::ResourceTypeT kCharacterBindingResourceType {
     0xB2,
+  };
+  static constexpr ResourceHandle::ResourceTypeT kAggregateBindingResourceType {
+    0xB3,
   };
   static constexpr std::size_t kMinBindingReserve { 64 };
 
   auto SyncSceneObserver(observer_ptr<engine::FrameContext> context) -> void;
   auto RemoveBinding(const ResourceHandle& binding_handle) -> bool;
   auto RemoveCharacterBinding(const ResourceHandle& binding_handle) -> bool;
+  auto RemoveAggregateBinding(const ResourceHandle& binding_handle) -> bool;
   auto EnsureBindingCapacity(std::size_t min_reserve) -> void;
   [[nodiscard]] static auto EstimateBindingReserve(
     observer_ptr<scene::Scene> scene) -> std::size_t;
   auto DestroyAllTrackedBodies() -> void;
   auto DestroyAllTrackedCharacters() -> void;
+  auto DestroyAllTrackedAggregates() -> void;
   auto DrainPhysicsEvents() -> void;
 
   engine::ModulePriority priority_;
@@ -274,11 +303,15 @@ private:
   WorldId world_id_ { kInvalidWorldId };
   std::unique_ptr<PhysicsBindingTable> bindings_;
   std::unique_ptr<CharacterBindingTable> character_bindings_;
+  std::unique_ptr<AggregateBindingTable> aggregate_bindings_;
   std::unordered_map<scene::NodeHandle, ResourceHandle> node_to_binding_;
   std::unordered_map<BodyId, ResourceHandle> body_to_binding_;
   std::unordered_map<scene::NodeHandle, ResourceHandle>
     node_to_character_binding_;
   std::unordered_map<CharacterId, ResourceHandle> character_to_binding_;
+  std::unordered_map<scene::NodeHandle, ResourceHandle>
+    node_to_aggregate_binding_;
+  std::unordered_map<AggregateId, ResourceHandle> aggregate_to_binding_;
   std::unordered_set<scene::NodeHandle> expected_character_transform_updates_;
   std::unordered_set<scene::NodeHandle> pending_transform_updates_;
   std::vector<ScenePhysicsEvent> scene_events_ {};

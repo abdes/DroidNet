@@ -119,6 +119,8 @@ PhysicsModule::PhysicsModule(engine::ModulePriority priority)
       kBindingResourceType, kMinBindingReserve))
   , character_bindings_(std::make_unique<CharacterBindingTable>(
       kCharacterBindingResourceType, kMinBindingReserve))
+  , aggregate_bindings_(std::make_unique<AggregateBindingTable>(
+      kAggregateBindingResourceType, kMinBindingReserve))
 {
 }
 
@@ -152,6 +154,8 @@ PhysicsModule::PhysicsModule(engine::ModulePriority priority,
       kBindingResourceType, kMinBindingReserve))
   , character_bindings_(std::make_unique<CharacterBindingTable>(
       kCharacterBindingResourceType, kMinBindingReserve))
+  , aggregate_bindings_(std::make_unique<AggregateBindingTable>(
+      kAggregateBindingResourceType, kMinBindingReserve))
 {
   CHECK_NOTNULL_F(physics_system_.get());
   const auto world_result
@@ -173,6 +177,12 @@ auto PhysicsModule::GetCharacterApi() noexcept -> system::ICharacterApi&
 {
   CHECK_NOTNULL_F(physics_system_.get());
   return physics_system_->Characters();
+}
+
+auto PhysicsModule::GetAggregateApi() noexcept -> system::IAggregateApi*
+{
+  CHECK_NOTNULL_F(physics_system_.get());
+  return physics_system_->Aggregates();
 }
 
 auto PhysicsModule::GetEventApi() noexcept -> system::IEventApi&
@@ -232,6 +242,11 @@ auto PhysicsModule::RegisterNodeBodyMapping(
   DCHECK_F(!node_to_character_binding_.contains(node_handle),
     "Physics authority conflict: node already has a character mapping.");
   if (node_to_character_binding_.contains(node_handle)) {
+    return;
+  }
+  DCHECK_F(!node_to_aggregate_binding_.contains(node_handle),
+    "Physics authority conflict: node already has an aggregate mapping.");
+  if (node_to_aggregate_binding_.contains(node_handle)) {
     return;
   }
 
@@ -304,6 +319,11 @@ auto PhysicsModule::RegisterNodeCharacterMapping(
   if (node_to_binding_.contains(node_handle)) {
     return;
   }
+  DCHECK_F(!node_to_aggregate_binding_.contains(node_handle),
+    "Physics authority conflict: node already has an aggregate mapping.");
+  if (node_to_aggregate_binding_.contains(node_handle)) {
+    return;
+  }
 
   CHECK_NOTNULL_F(character_bindings_.get());
   const auto binding_handle = character_bindings_->Insert(CharacterBinding {
@@ -349,6 +369,104 @@ auto PhysicsModule::GetNodeForCharacterId(const CharacterId character_id) const
     return std::nullopt;
   }
   return binding->node_handle;
+}
+
+auto PhysicsModule::RegisterNodeAggregateMapping(
+  const scene::NodeHandle& node_handle, const AggregateId aggregate_id,
+  const aggregate::AggregateAuthority authority) -> void
+{
+  if (!node_handle.IsValid() || aggregate_id == kInvalidAggregateId) {
+    return;
+  }
+  DCHECK_F(IsNodeInObservedScene(node_handle),
+    "Aggregate mapping contract violated: node must belong to currently "
+    "observed scene.");
+  if (!IsNodeInObservedScene(node_handle)) {
+    return;
+  }
+
+  if (const auto existing_node_it
+    = node_to_aggregate_binding_.find(node_handle);
+    existing_node_it != node_to_aggregate_binding_.end()) {
+    (void)RemoveAggregateBinding(existing_node_it->second);
+  }
+  if (const auto existing_aggregate_it
+    = aggregate_to_binding_.find(aggregate_id);
+    existing_aggregate_it != aggregate_to_binding_.end()) {
+    (void)RemoveAggregateBinding(existing_aggregate_it->second);
+  }
+  DCHECK_F(!node_to_binding_.contains(node_handle),
+    "Physics authority conflict: node already has a rigid body mapping.");
+  if (node_to_binding_.contains(node_handle)) {
+    return;
+  }
+  DCHECK_F(!node_to_character_binding_.contains(node_handle),
+    "Physics authority conflict: node already has a character mapping.");
+  if (node_to_character_binding_.contains(node_handle)) {
+    return;
+  }
+
+  CHECK_NOTNULL_F(aggregate_bindings_.get());
+  const auto binding_handle = aggregate_bindings_->Insert(AggregateBinding {
+    .world_id = world_id_,
+    .aggregate_id = aggregate_id,
+    .authority = authority,
+    .node_handle = node_handle,
+  });
+  node_to_aggregate_binding_.insert_or_assign(node_handle, binding_handle);
+  aggregate_to_binding_.insert_or_assign(aggregate_id, binding_handle);
+}
+
+auto PhysicsModule::GetAggregateIdForNode(
+  const scene::NodeHandle& node_handle) const -> AggregateId
+{
+  const auto it = node_to_aggregate_binding_.find(node_handle);
+  if (it == node_to_aggregate_binding_.end()) {
+    return kInvalidAggregateId;
+  }
+  CHECK_NOTNULL_F(aggregate_bindings_.get());
+  const auto* binding = aggregate_bindings_->TryGet(it->second);
+  if (binding == nullptr) {
+    return kInvalidAggregateId;
+  }
+  return binding->aggregate_id;
+}
+
+auto PhysicsModule::HasAggregateForNode(
+  const scene::NodeHandle& node_handle) const -> bool
+{
+  return GetAggregateIdForNode(node_handle) != kInvalidAggregateId;
+}
+
+auto PhysicsModule::GetNodeForAggregateId(const AggregateId aggregate_id) const
+  -> std::optional<scene::NodeHandle>
+{
+  const auto it = aggregate_to_binding_.find(aggregate_id);
+  if (it == aggregate_to_binding_.end()) {
+    return std::nullopt;
+  }
+  CHECK_NOTNULL_F(aggregate_bindings_.get());
+  const auto* binding = aggregate_bindings_->TryGet(it->second);
+  if (binding == nullptr || !binding->node_handle.IsValid()) {
+    return std::nullopt;
+  }
+  return binding->node_handle;
+}
+
+auto PhysicsModule::GetAggregateAuthorityForAggregateId(
+  const AggregateId aggregate_id) const
+  -> std::optional<aggregate::AggregateAuthority>
+{
+  const auto it = aggregate_to_binding_.find(aggregate_id);
+  if (it == aggregate_to_binding_.end()) {
+    return std::nullopt;
+  }
+  CHECK_NOTNULL_F(aggregate_bindings_.get());
+  const auto* binding = aggregate_bindings_->TryGet(it->second);
+  if (binding == nullptr) {
+    return std::nullopt;
+  }
+  return binding->authority;
 }
 
 auto PhysicsModule::ApplyWorldPoseToNode(const scene::NodeHandle& node_handle,
@@ -413,6 +531,7 @@ auto PhysicsModule::OnShutdown() noexcept -> void
   CHECK_NOTNULL_F(physics_system_.get());
   CHECK_NOTNULL_F(bindings_.get());
   CHECK_NOTNULL_F(character_bindings_.get());
+  CHECK_NOTNULL_F(aggregate_bindings_.get());
   CHECK_F(
     world_id_ != kInvalidWorldId, "PhysicsModule world id must be valid.");
 
@@ -424,6 +543,7 @@ auto PhysicsModule::OnShutdown() noexcept -> void
 
   DestroyAllTrackedBodies();
   DestroyAllTrackedCharacters();
+  DestroyAllTrackedAggregates();
 
   [[maybe_unused]] const auto result
     = physics_system_->Worlds().DestroyWorld(world_id_);
@@ -436,6 +556,7 @@ auto PhysicsModule::OnShutdown() noexcept -> void
   scene_events_.clear();
   bindings_->Clear();
   character_bindings_->Clear();
+  aggregate_bindings_->Clear();
 }
 
 auto PhysicsModule::OnGameplay(observer_ptr<engine::FrameContext> context)
@@ -454,6 +575,13 @@ auto PhysicsModule::OnGameplay(observer_ptr<engine::FrameContext> context)
     = physics_system_->Bodies().FlushStructuralChanges(world_id_);
   CHECK_F(flush_result.has_value(),
     "PhysicsModule failed to flush deferred body structural changes.");
+  if (auto* aggregate_api = physics_system_->Aggregates();
+    aggregate_api != nullptr) {
+    const auto aggregate_flush_result
+      = aggregate_api->FlushStructuralChanges(world_id_);
+    CHECK_F(aggregate_flush_result.has_value(),
+      "PhysicsModule failed to flush deferred aggregate structural changes.");
+  }
 
   const auto scene = context->GetScene();
   if (scene == nullptr) {
@@ -632,6 +760,9 @@ auto PhysicsModule::OnTransformChanged(
   if (node_to_character_binding_.contains(node_handle)) {
     return;
   }
+  if (node_to_aggregate_binding_.contains(node_handle)) {
+    return;
+  }
   if (node_to_binding_.contains(node_handle)) {
     pending_transform_updates_.insert(node_handle);
   }
@@ -663,21 +794,40 @@ auto PhysicsModule::OnNodeDestroyed(
   }
 
   const auto character_it = node_to_character_binding_.find(node_handle);
-  if (character_it == node_to_character_binding_.end()) {
+  if (character_it != node_to_character_binding_.end()) {
+    CHECK_NOTNULL_F(character_bindings_.get());
+    const auto* character_binding
+      = character_bindings_->TryGet(character_it->second);
+    if (character_binding != nullptr) {
+      const auto character_id = character_binding->character_id;
+      const auto character_result
+        = physics_system_->Characters().DestroyCharacter(
+          world_id_, character_id);
+      CHECK_F(character_result.has_value(),
+        "PhysicsModule failed to destroy tracked character on node "
+        "destruction.");
+      (void)RemoveCharacterBinding(character_it->second);
+    }
+  }
+
+  const auto aggregate_it = node_to_aggregate_binding_.find(node_handle);
+  if (aggregate_it == node_to_aggregate_binding_.end()) {
     return;
   }
-  CHECK_NOTNULL_F(character_bindings_.get());
-  const auto* character_binding
-    = character_bindings_->TryGet(character_it->second);
-  if (character_binding == nullptr) {
+  CHECK_NOTNULL_F(aggregate_bindings_.get());
+  const auto* aggregate_binding
+    = aggregate_bindings_->TryGet(aggregate_it->second);
+  if (aggregate_binding == nullptr) {
     return;
   }
-  const auto character_id = character_binding->character_id;
-  const auto character_result
-    = physics_system_->Characters().DestroyCharacter(world_id_, character_id);
-  CHECK_F(character_result.has_value(),
-    "PhysicsModule failed to destroy tracked character on node destruction.");
-  (void)RemoveCharacterBinding(character_it->second);
+  if (auto* aggregate_api = physics_system_->Aggregates();
+    aggregate_api != nullptr) {
+    const auto aggregate_result = aggregate_api->DestroyAggregate(
+      world_id_, aggregate_binding->aggregate_id);
+    CHECK_F(aggregate_result.has_value(),
+      "PhysicsModule failed to destroy tracked aggregate on node destruction.");
+  }
+  (void)RemoveAggregateBinding(aggregate_it->second);
 }
 
 auto PhysicsModule::SyncSceneObserver(
@@ -706,6 +856,9 @@ auto PhysicsModule::SyncSceneObserver(
   }
   if (had_previous_scene && !character_to_binding_.empty()) {
     DestroyAllTrackedCharacters();
+  }
+  if (had_previous_scene && !aggregate_to_binding_.empty()) {
+    DestroyAllTrackedAggregates();
   }
 
   EnsureBindingCapacity(EstimateBindingReserve(scene));
@@ -751,6 +904,20 @@ auto PhysicsModule::RemoveCharacterBinding(const ResourceHandle& binding_handle)
   return character_bindings_->Erase(binding_handle) > 0;
 }
 
+auto PhysicsModule::RemoveAggregateBinding(const ResourceHandle& binding_handle)
+  -> bool
+{
+  CHECK_NOTNULL_F(aggregate_bindings_.get());
+  const auto* binding = aggregate_bindings_->TryGet(binding_handle);
+  if (binding == nullptr) {
+    return false;
+  }
+
+  aggregate_to_binding_.erase(binding->aggregate_id);
+  node_to_aggregate_binding_.erase(binding->node_handle);
+  return aggregate_bindings_->Erase(binding_handle) > 0;
+}
+
 auto PhysicsModule::EstimateBindingReserve(observer_ptr<scene::Scene> scene)
   -> std::size_t
 {
@@ -764,8 +931,10 @@ auto PhysicsModule::EnsureBindingCapacity(const std::size_t min_reserve) -> void
 {
   CHECK_NOTNULL_F(bindings_.get());
   CHECK_NOTNULL_F(character_bindings_.get());
+  CHECK_NOTNULL_F(aggregate_bindings_.get());
   bindings_->Reserve(std::max(min_reserve, kMinBindingReserve));
   character_bindings_->Reserve(std::max(min_reserve, kMinBindingReserve));
+  aggregate_bindings_->Reserve(std::max(min_reserve, kMinBindingReserve));
 }
 
 auto PhysicsModule::DestroyAllTrackedBodies() -> void
@@ -807,6 +976,29 @@ auto PhysicsModule::DestroyAllTrackedCharacters() -> void
   character_to_binding_.clear();
   node_to_character_binding_.clear();
   character_bindings_->Clear();
+}
+
+auto PhysicsModule::DestroyAllTrackedAggregates() -> void
+{
+  CHECK_NOTNULL_F(aggregate_bindings_.get());
+
+  auto* aggregate_api = physics_system_->Aggregates();
+  if (aggregate_api != nullptr) {
+    CHECK_F(world_id_ != kInvalidWorldId,
+      "PhysicsModule world id must be valid while destroying tracked "
+      "aggregates.");
+    for (const auto& [aggregate_id, binding_handle] : aggregate_to_binding_) {
+      (void)binding_handle;
+      const auto result
+        = aggregate_api->DestroyAggregate(world_id_, aggregate_id);
+      CHECK_F(result.has_value(),
+        "PhysicsModule failed to destroy tracked aggregate during shutdown.");
+    }
+  }
+
+  aggregate_to_binding_.clear();
+  node_to_aggregate_binding_.clear();
+  aggregate_bindings_->Clear();
 }
 
 auto PhysicsModule::DrainPhysicsEvents() -> void

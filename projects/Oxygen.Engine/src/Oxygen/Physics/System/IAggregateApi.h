@@ -26,6 +26,13 @@ namespace oxygen::physics::system {
  - Supports 1:N mapping (`AggregateId` -> many `BodyId` members).
  - Enables N:1 scene mapping through `PhysicsModule` side tables.
 
+ Error contract:
+ - `kWorldNotFound`: `world_id` is invalid or world is not alive.
+ - `kInvalidArgument`: `aggregate_id` is invalid/unknown for the world.
+ - `kBodyNotFound`: member `body_id` is invalid/unknown in the world.
+ - `kAlreadyExists`: membership add attempted for an existing member.
+ - `kBufferTooSmall`: output span cannot hold requested members.
+
  ### Near Future
 
  - Add aggregate-local metadata, role/tag channels, and hierarchy helpers.
