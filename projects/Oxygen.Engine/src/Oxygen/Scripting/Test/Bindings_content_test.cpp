@@ -8,8 +8,10 @@
 
 namespace oxygen::scripting::test {
 
+class ContentBindingsTest : public ScriptingModuleTest { };
+
 NOLINT_TEST_F(
-  ScriptingModuleTest, ExecuteScriptContentBindingsExposeV1AssetsModuleSurface)
+  ContentBindingsTest, ExecuteScriptContentBindingsExposeV1AssetsModuleSurface)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
@@ -44,7 +46,7 @@ end
   EXPECT_TRUE(result.ok) << result.message;
 }
 
-NOLINT_TEST_F(ScriptingModuleTest,
+NOLINT_TEST_F(ContentBindingsTest,
   ExecuteScriptContentBindingsNoLoaderDeterministicDefaults)
 {
   auto module = MakeModule();
@@ -84,7 +86,7 @@ if cb_called ~= false then error("callback should not be called without loader")
   EXPECT_TRUE(result.ok) << result.message;
 }
 
-NOLINT_TEST_F(ScriptingModuleTest,
+NOLINT_TEST_F(ContentBindingsTest,
   ExecuteScriptContentBindingsProceduralCreationAndUserdataSurfaceWorks)
 {
   auto module = MakeModule();
@@ -113,7 +115,7 @@ if mat:type_name() ~= "MaterialAsset" then error("material type_name") end
 }
 
 NOLINT_TEST_F(
-  ScriptingModuleTest, ExecuteScriptContentBindingsRejectLegacyAndBadGuidShape)
+  ContentBindingsTest, ExecuteScriptContentBindingsRejectLegacyAndBadGuidShape)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));

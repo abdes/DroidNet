@@ -12,7 +12,9 @@ auto EngineTagFactory::Get() noexcept -> EngineTag { return EngineTag {}; }
 
 namespace oxygen::scripting::test {
 
-NOLINT_TEST_F(ScriptingModuleTest, ExecuteScriptTimeBindingRequiresFrameContext)
+class TimeBindingsTest : public ScriptingModuleTest { };
+
+NOLINT_TEST_F(TimeBindingsTest, ExecuteScriptTimeBindingRequiresFrameContext)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
@@ -29,8 +31,7 @@ local _ = oxygen.time.delta_seconds()
     result.message.find("requires active FrameContext"), std::string::npos);
 }
 
-NOLINT_TEST_F(
-  ScriptingModuleTest, OnFrameStartTimeBindingUsesFrameContextValues)
+NOLINT_TEST_F(TimeBindingsTest, OnFrameStartTimeBindingUsesFrameContextValues)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));

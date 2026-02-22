@@ -94,6 +94,7 @@ m_gtest_program(
     "Bindings_uuid_hash_test.cpp"
     "Bindings_events_test.cpp"
     "Bindings_input_test.cpp"
+    "Bindings_physics_test.cpp"
     "Bindings_scene_test.cpp"
     "Bindings_content_test.cpp"
 )

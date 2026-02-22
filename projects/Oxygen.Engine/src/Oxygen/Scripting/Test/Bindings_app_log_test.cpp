@@ -8,7 +8,9 @@
 
 namespace oxygen::scripting::test {
 
-NOLINT_TEST_F(ScriptingModuleTest, ExecuteScriptAppBindingRequiresAsyncEngine)
+class AppLogBindingsTest : public ScriptingModuleTest { };
+
+NOLINT_TEST_F(AppLogBindingsTest, ExecuteScriptAppBindingRequiresAsyncEngine)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
@@ -26,7 +28,7 @@ local _ = oxygen.app.name()
 }
 
 NOLINT_TEST_F(
-  ScriptingModuleTest, ExecuteScriptLogBindingWorksWithoutAsyncEngine)
+  AppLogBindingsTest, ExecuteScriptLogBindingWorksWithoutAsyncEngine)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
