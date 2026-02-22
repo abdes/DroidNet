@@ -656,14 +656,19 @@ void SceneLoaderService::HydrateRigidBodyBindings(
         + std::to_string(record.node_index));
     }
 
-    if (record.shape_asset_index != data::pak::kNoResourceIndex
-      || record.material_asset_index != data::pak::kNoResourceIndex) {
+    if (record.shape_asset_index != data::pak::kNoResourceIndex) {
       throw std::runtime_error(
-        std::string("rigid-body external shape/material references are "
+        std::string("rigid-body external shape references are "
                     "unsupported in section-9 hydrator (node_index=")
         + std::to_string(record.node_index) + " shape_asset_index="
-        + std::to_string(record.shape_asset_index) + " material_asset_index="
-        + std::to_string(record.material_asset_index) + ")");
+        + std::to_string(record.shape_asset_index) + ")");
+    }
+
+    if (record.material_asset_index != data::pak::kNoResourceIndex) {
+      LOG_F(WARNING,
+        "SceneLoader: rigid-body material_asset_index={} for node_index={} is "
+        "not yet resolved by section-9 hydrator; using BodyDesc defaults.",
+        record.material_asset_index, record.node_index);
     }
 
     physics::body::BodyDesc desc {};
@@ -684,7 +689,8 @@ void SceneLoaderService::HydrateRigidBodyBindings(
     }
 
     desc.flags = physics::body::BodyFlags::kNone;
-    if (record.gravity_factor > 0.0F) {
+    desc.gravity_factor = (std::max)(0.0F, record.gravity_factor);
+    if (desc.gravity_factor > 0.0F) {
       desc.flags = desc.flags | physics::body::BodyFlags::kEnableGravity;
     }
     if (record.is_sensor != 0U) {
@@ -695,6 +701,8 @@ void SceneLoaderService::HydrateRigidBodyBindings(
         | physics::body::BodyFlags::kEnableContinuousCollisionDetection;
     }
     desc.mass_kg = record.mass > 0.0F ? record.mass : 1.0F;
+    desc.linear_damping = (std::max)(0.0F, record.linear_damping);
+    desc.angular_damping = (std::max)(0.0F, record.angular_damping);
     desc.collision_layer = physics::CollisionLayer { static_cast<uint32_t>(
       record.collision_layer) };
     desc.collision_mask

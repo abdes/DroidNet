@@ -50,6 +50,11 @@ struct BodyDesc final {
   Vec3 initial_position { 0.0F, 0.0F, 0.0F };
   Quat initial_rotation { 1.0F, 0.0F, 0.0F, 0.0F };
   float mass_kg { 1.0F };
+  float linear_damping { 0.05F };
+  float angular_damping { 0.05F };
+  float gravity_factor { 1.0F };
+  float friction { 0.5F };
+  float restitution { 0.0F };
   CollisionLayer collision_layer { kCollisionLayerDefault };
   CollisionMask collision_mask { kCollisionMaskAll };
 };

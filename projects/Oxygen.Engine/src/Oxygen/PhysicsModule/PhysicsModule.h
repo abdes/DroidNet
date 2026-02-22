@@ -315,6 +315,7 @@ private:
   static constexpr std::size_t kMinBindingReserve { 64 };
 
   auto SyncSceneObserver(observer_ptr<engine::FrameContext> context) -> void;
+  auto UnregisterObservedSceneObserver() -> void;
   [[nodiscard]] auto IsNodeInObservedScene(
     const scene::NodeHandle& node_handle) const noexcept -> bool;
   auto RegisterNodeBodyMapping(const scene::NodeHandle& node_handle,
@@ -353,6 +354,7 @@ private:
   engine::ModulePriority priority_;
   observer_ptr<AsyncEngine> engine_;
   observer_ptr<scene::Scene> observed_scene_;
+  std::weak_ptr<scene::Scene> observed_scene_owner_ {};
   std::unique_ptr<system::IPhysicsSystem> physics_system_;
   WorldId world_id_ { kInvalidWorldId };
   std::unique_ptr<PhysicsBindingTable> bindings_;

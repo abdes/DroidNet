@@ -50,8 +50,12 @@ auto oxygen::physics::jolt::JoltBodies::CreateBody(
     = (desc.flags & body::BodyFlags::kIsTrigger) != body::BodyFlags::kNone;
   settings.mGravityFactor
     = (desc.flags & body::BodyFlags::kEnableGravity) != body::BodyFlags::kNone
-    ? 1.0F
+    ? desc.gravity_factor
     : 0.0F;
+  settings.mLinearDamping = desc.linear_damping;
+  settings.mAngularDamping = desc.angular_damping;
+  settings.mFriction = desc.friction;
+  settings.mRestitution = desc.restitution;
   settings.mMotionQuality
     = (desc.flags & body::BodyFlags::kEnableContinuousCollisionDetection)
       != body::BodyFlags::kNone
@@ -316,8 +320,9 @@ auto oxygen::physics::jolt::JoltBodies::SetLinearVelocity(
     return Err(PhysicsError::kBodyNotFound);
   }
 
-  body_interface->SetLinearVelocity(
-    ToJoltBodyId(body_id), ToJoltVec3(velocity));
+  const auto jolt_body_id = ToJoltBodyId(body_id);
+  body_interface->ActivateBody(jolt_body_id);
+  body_interface->SetLinearVelocity(jolt_body_id, ToJoltVec3(velocity));
   return PhysicsResult<void>::Ok();
 }
 
@@ -337,8 +342,9 @@ auto oxygen::physics::jolt::JoltBodies::SetAngularVelocity(
     return Err(PhysicsError::kBodyNotFound);
   }
 
-  body_interface->SetAngularVelocity(
-    ToJoltBodyId(body_id), ToJoltVec3(velocity));
+  const auto jolt_body_id = ToJoltBodyId(body_id);
+  body_interface->ActivateBody(jolt_body_id);
+  body_interface->SetAngularVelocity(jolt_body_id, ToJoltVec3(velocity));
   return PhysicsResult<void>::Ok();
 }
 
@@ -357,7 +363,9 @@ auto oxygen::physics::jolt::JoltBodies::AddForce(const WorldId world_id,
     return Err(PhysicsError::kBodyNotFound);
   }
 
-  body_interface->AddForce(ToJoltBodyId(body_id), ToJoltVec3(force));
+  const auto jolt_body_id = ToJoltBodyId(body_id);
+  body_interface->ActivateBody(jolt_body_id);
+  body_interface->AddForce(jolt_body_id, ToJoltVec3(force));
   return PhysicsResult<void>::Ok();
 }
 
@@ -376,7 +384,9 @@ auto oxygen::physics::jolt::JoltBodies::AddImpulse(const WorldId world_id,
     return Err(PhysicsError::kBodyNotFound);
   }
 
-  body_interface->AddImpulse(ToJoltBodyId(body_id), ToJoltVec3(impulse));
+  const auto jolt_body_id = ToJoltBodyId(body_id);
+  body_interface->ActivateBody(jolt_body_id);
+  body_interface->AddImpulse(jolt_body_id, ToJoltVec3(impulse));
   return PhysicsResult<void>::Ok();
 }
 
@@ -395,7 +405,9 @@ auto oxygen::physics::jolt::JoltBodies::AddTorque(const WorldId world_id,
     return Err(PhysicsError::kBodyNotFound);
   }
 
-  body_interface->AddTorque(ToJoltBodyId(body_id), ToJoltVec3(torque));
+  const auto jolt_body_id = ToJoltBodyId(body_id);
+  body_interface->ActivateBody(jolt_body_id);
+  body_interface->AddTorque(jolt_body_id, ToJoltVec3(torque));
   return PhysicsResult<void>::Ok();
 }
 
