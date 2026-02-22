@@ -6,18 +6,24 @@
 
 #pragma once
 
+#include <cstdint>
+#include <mutex>
+#include <unordered_map>
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Physics/Jolt/Converters.h>
 #include <Oxygen/Physics/System/IBodyApi.h>
 
 namespace oxygen::physics::jolt {
 
 class JoltWorld;
+class JoltShapes;
 
 //! Jolt implementation of the body domain.
 class JoltBodies final : public system::IBodyApi {
 public:
-  explicit JoltBodies(JoltWorld& world);
+  JoltBodies(JoltWorld& world, JoltShapes& shapes);
   ~JoltBodies() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(JoltBodies)
@@ -64,7 +70,40 @@ public:
     ShapeInstanceId shape_instance_id) -> PhysicsResult<void> override;
 
 private:
+  struct ShapeInstanceState final {
+    ShapeId shape_id { kInvalidShapeId };
+    JPH::RefConst<JPH::Shape> shape {};
+    Vec3 local_position { 0.0F, 0.0F, 0.0F };
+    Quat local_rotation { 1.0F, 0.0F, 0.0F, 0.0F };
+  };
+
+  struct BodyState final {
+    JPH::RefConst<JPH::Shape> base_shape {};
+    std::unordered_map<ShapeInstanceId, ShapeInstanceState> shape_instances {};
+  };
+
+  struct BodyKey final {
+    WorldId world_id { kInvalidWorldId };
+    BodyId body_id { kInvalidBodyId };
+    auto operator==(const BodyKey&) const noexcept -> bool = default;
+  };
+
+  struct BodyKeyHasher final {
+    auto operator()(const BodyKey& key) const noexcept -> size_t
+    {
+      return std::hash<WorldId> {}(key.world_id)
+        ^ (std::hash<BodyId> {}(key.body_id) << 1U);
+    }
+  };
+
+  auto RebuildBodyShape(WorldId world_id, BodyId body_id,
+    const BodyState& state) -> PhysicsResult<void>;
+
   observer_ptr<JoltWorld> world_ {};
+  observer_ptr<JoltShapes> shapes_ {};
+  std::mutex shape_instance_mutex_ {};
+  uint32_t next_shape_instance_id_ { 1U };
+  std::unordered_map<BodyKey, BodyState, BodyKeyHasher> body_states_ {};
 };
 
 } // namespace oxygen::physics::jolt

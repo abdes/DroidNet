@@ -4,17 +4,24 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Jolt/Jolt.h> // Used - Must always be first (keep separate)
+#include <limits>
 
+#include <Jolt/Jolt.h> // Must always be first (keep separate)
+
+#include <Jolt/Physics/Body/Body.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
+#include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 
 #include <Oxygen/Physics/Jolt/Converters.h>
 #include <Oxygen/Physics/Jolt/JoltBodies.h>
+#include <Oxygen/Physics/Jolt/JoltShapes.h>
 #include <Oxygen/Physics/Jolt/JoltWorld.h>
 
-oxygen::physics::jolt::JoltBodies::JoltBodies(JoltWorld& world)
+oxygen::physics::jolt::JoltBodies::JoltBodies(
+  JoltWorld& world, JoltShapes& shapes)
   : world_(&world)
+  , shapes_(&shapes)
 {
 }
 
@@ -63,6 +70,18 @@ auto oxygen::physics::jolt::JoltBodies::CreateBody(
     body_interface->DestroyBody(jolt_body_id);
     return Err(register_result.error());
   }
+
+  {
+    std::scoped_lock lock(shape_instance_mutex_);
+    body_states_.insert_or_assign(
+      BodyKey {
+        .world_id = world_id,
+        .body_id = body_id,
+      },
+      BodyState {
+        .base_shape = shape_result.value(),
+      });
+  }
   return Ok(body_id);
 }
 
@@ -79,6 +98,30 @@ auto oxygen::physics::jolt::JoltBodies::DestroyBody(
   }
   if (!world->HasBody(world_id, body_id)) {
     return Err(PhysicsError::kBodyNotFound);
+  }
+
+  std::unordered_map<ShapeInstanceId, ShapeInstanceState>
+    shape_instances_to_remove {};
+  {
+    std::scoped_lock lock(shape_instance_mutex_);
+    const auto body_it
+      = body_states_.find(BodyKey { .world_id = world_id, .body_id = body_id });
+    if (body_it != body_states_.end()) {
+      shape_instances_to_remove = std::move(body_it->second.shape_instances);
+      body_states_.erase(body_it);
+    }
+  }
+
+  auto* shapes = shapes_.get();
+  if (shapes == nullptr) {
+    return Err(PhysicsError::kNotInitialized);
+  }
+  for (const auto& [instance_id, instance] : shape_instances_to_remove) {
+    static_cast<void>(instance_id);
+    const auto detach_result = shapes->RemoveAttachment(instance.shape_id);
+    if (detach_result.has_error()) {
+      return Err(detach_result.error());
+    }
   }
 
   const auto jolt_body_id = ToJoltBodyId(body_id);
@@ -353,16 +396,149 @@ auto oxygen::physics::jolt::JoltBodies::MoveKinematic(const WorldId world_id,
   return PhysicsResult<void>::Ok();
 }
 
-auto oxygen::physics::jolt::JoltBodies::AddBodyShape(WorldId /*world_id*/,
-  BodyId /*body_id*/, ShapeId /*shape_id*/, const Vec3& /*local_position*/,
-  const Quat& /*local_rotation*/) -> PhysicsResult<ShapeInstanceId>
+auto oxygen::physics::jolt::JoltBodies::AddBodyShape(const WorldId world_id,
+  const BodyId body_id, const ShapeId shape_id, const Vec3& local_position,
+  const Quat& local_rotation) -> PhysicsResult<ShapeInstanceId>
 {
-  return Err(PhysicsError::kNotImplemented);
+  auto* world = world_.get();
+  if (world == nullptr) {
+    return Err(PhysicsError::kNotInitialized);
+  }
+  auto* shapes = shapes_.get();
+  if (shapes == nullptr) {
+    return Err(PhysicsError::kNotInitialized);
+  }
+  if (!world->HasBody(world_id, body_id)) {
+    return Err(PhysicsError::kBodyNotFound);
+  }
+
+  const auto shape_result = shapes->TryGetShape(shape_id);
+  if (shape_result.has_error()) {
+    return Err(shape_result.error());
+  }
+
+  const auto attach_result = shapes->AddAttachment(shape_id);
+  if (attach_result.has_error()) {
+    return Err(attach_result.error());
+  }
+
+  ShapeInstanceId shape_instance_id { kInvalidShapeInstanceId };
+  PhysicsResult<void> rebuild_result = PhysicsResult<void>::Ok();
+  {
+    std::scoped_lock lock(shape_instance_mutex_);
+    auto body_it
+      = body_states_.find(BodyKey { .world_id = world_id, .body_id = body_id });
+    if (body_it == body_states_.end()) {
+      static_cast<void>(shapes->RemoveAttachment(shape_id));
+      return Err(PhysicsError::kBodyNotFound);
+    }
+
+    if (next_shape_instance_id_ == std::numeric_limits<uint32_t>::max()) {
+      static_cast<void>(shapes->RemoveAttachment(shape_id));
+      return Err(PhysicsError::kBackendInitFailed);
+    }
+    shape_instance_id = ShapeInstanceId { next_shape_instance_id_++ };
+    body_it->second.shape_instances.emplace(shape_instance_id,
+      ShapeInstanceState {
+        .shape_id = shape_id,
+        .shape = shape_result.value(),
+        .local_position = local_position,
+        .local_rotation = local_rotation,
+      });
+    rebuild_result = RebuildBodyShape(world_id, body_id, body_it->second);
+    if (rebuild_result.has_error()) {
+      body_it->second.shape_instances.erase(shape_instance_id);
+    }
+  }
+
+  if (rebuild_result.has_error()) {
+    static_cast<void>(shapes->RemoveAttachment(shape_id));
+    return Err(rebuild_result.error());
+  }
+  return Ok(shape_instance_id);
 }
 
-auto oxygen::physics::jolt::JoltBodies::RemoveBodyShape(WorldId /*world_id*/,
-  BodyId /*body_id*/, ShapeInstanceId /*shape_instance_id*/)
+auto oxygen::physics::jolt::JoltBodies::RemoveBodyShape(const WorldId world_id,
+  const BodyId body_id, const ShapeInstanceId shape_instance_id)
   -> PhysicsResult<void>
 {
-  return Err(PhysicsError::kNotImplemented);
+  auto* world = world_.get();
+  if (world == nullptr) {
+    return Err(PhysicsError::kNotInitialized);
+  }
+  auto* shapes = shapes_.get();
+  if (shapes == nullptr) {
+    return Err(PhysicsError::kNotInitialized);
+  }
+  if (!world->HasBody(world_id, body_id)) {
+    return Err(PhysicsError::kBodyNotFound);
+  }
+
+  ShapeId removed_shape_id { kInvalidShapeId };
+  PhysicsResult<void> rebuild_result = PhysicsResult<void>::Ok();
+  {
+    std::scoped_lock lock(shape_instance_mutex_);
+    auto body_it
+      = body_states_.find(BodyKey { .world_id = world_id, .body_id = body_id });
+    if (body_it == body_states_.end()) {
+      return Err(PhysicsError::kBodyNotFound);
+    }
+
+    auto instance_it = body_it->second.shape_instances.find(shape_instance_id);
+    if (instance_it == body_it->second.shape_instances.end()) {
+      return Err(PhysicsError::kInvalidArgument);
+    }
+
+    const auto removed_instance = instance_it->second;
+    removed_shape_id = removed_instance.shape_id;
+    body_it->second.shape_instances.erase(instance_it);
+    rebuild_result = RebuildBodyShape(world_id, body_id, body_it->second);
+    if (rebuild_result.has_error()) {
+      body_it->second.shape_instances.emplace(
+        shape_instance_id, removed_instance);
+    }
+  }
+
+  if (rebuild_result.has_error()) {
+    return Err(rebuild_result.error());
+  }
+  return shapes->RemoveAttachment(removed_shape_id);
+}
+
+auto oxygen::physics::jolt::JoltBodies::RebuildBodyShape(const WorldId world_id,
+  const BodyId body_id, const BodyState& state) -> PhysicsResult<void>
+{
+  auto* world = world_.get();
+  if (world == nullptr) {
+    return Err(PhysicsError::kNotInitialized);
+  }
+  auto body_interface = world->TryGetBodyInterface(world_id);
+  if (body_interface == nullptr) {
+    return Err(PhysicsError::kWorldNotFound);
+  }
+
+  const auto jolt_body_id = ToJoltBodyId(body_id);
+  const auto motion_type = body_interface->GetMotionType(jolt_body_id);
+  if (state.shape_instances.empty()) {
+    body_interface->SetShape(jolt_body_id, state.base_shape.GetPtr(),
+      motion_type == JPH::EMotionType::Dynamic, JPH::EActivation::DontActivate);
+    return PhysicsResult<void>::Ok();
+  }
+
+  JPH::StaticCompoundShapeSettings settings {};
+  settings.AddShape(
+    JPH::Vec3::sZero(), JPH::Quat::sIdentity(), state.base_shape.GetPtr());
+  for (const auto& [id, instance] : state.shape_instances) {
+    static_cast<void>(id);
+    settings.AddShape(ToJoltVec3(instance.local_position),
+      ToJoltQuat(instance.local_rotation), instance.shape.GetPtr());
+  }
+  const auto compound_result = settings.Create();
+  if (!compound_result.IsValid()) {
+    return Err(PhysicsError::kBackendInitFailed);
+  }
+
+  body_interface->SetShape(jolt_body_id, compound_result.Get().GetPtr(),
+    motion_type == JPH::EMotionType::Dynamic, JPH::EActivation::DontActivate);
+  return PhysicsResult<void>::Ok();
 }
