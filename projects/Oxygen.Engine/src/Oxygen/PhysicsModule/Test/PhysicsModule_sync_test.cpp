@@ -811,6 +811,30 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, RegisterAggregateMappingRoundTrip)
   EXPECT_EQ(authority.value(), aggregate::AggregateAuthority::kCommand);
 }
 
+NOLINT_TEST_F(
+  PhysicsModuleSyncTest, ArticulationBaselineMappingUsesSimulationAuthority)
+{
+  auto node = scene_->CreateNode("articulation-node");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  auto* aggregates = module_->GetAggregateApi();
+  ASSERT_NE(aggregates, nullptr);
+  const auto created_aggregate
+    = aggregates->CreateAggregate(module_->GetWorldId());
+  ASSERT_TRUE(created_aggregate.has_value());
+  const auto articulation_id = created_aggregate.value();
+
+  module_->RegisterNodeAggregateMapping(node.GetHandle(), articulation_id,
+    aggregate::AggregateAuthority::kSimulation);
+
+  const auto authority
+    = module_->GetAggregateAuthorityForAggregateId(articulation_id);
+  ASSERT_TRUE(authority.has_value());
+  EXPECT_EQ(authority.value(), aggregate::AggregateAuthority::kSimulation);
+}
+
 NOLINT_TEST_F(PhysicsModuleSyncTest, DestroyNodeDestroysTrackedAggregate)
 {
   auto node = scene_->CreateNode("aggregate-destroy-node");

@@ -9,6 +9,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Physics/Jolt/JoltAggregates.h>
 #include <Oxygen/Physics/Jolt/JoltAreas.h>
+#include <Oxygen/Physics/Jolt/JoltArticulations.h>
 #include <Oxygen/Physics/Jolt/JoltBodies.h>
 #include <Oxygen/Physics/Jolt/JoltCharacters.h>
 #include <Oxygen/Physics/Jolt/JoltEvents.h>
@@ -38,6 +39,7 @@ public:
   auto Areas() noexcept -> system::IAreaApi& override;
   auto Joints() noexcept -> system::IJointApi& override;
   auto Aggregates() noexcept -> system::IAggregateApi* override;
+  auto Articulations() noexcept -> system::IArticulationApi* override;
 
   auto Worlds() const noexcept -> const system::IWorldApi& override;
   auto Bodies() const noexcept -> const system::IBodyApi& override;
@@ -48,11 +50,14 @@ public:
   auto Areas() const noexcept -> const system::IAreaApi& override;
   auto Joints() const noexcept -> const system::IJointApi& override;
   auto Aggregates() const noexcept -> const system::IAggregateApi* override;
+  auto Articulations() const noexcept
+    -> const system::IArticulationApi* override;
 
 private:
   JoltWorld world_ {};
   JoltShapes shapes_ {};
   JoltAggregates aggregates_;
+  JoltArticulations articulations_;
   JoltBodies bodies_;
   JoltQueries queries_;
   JoltEvents events_;
