@@ -24,6 +24,7 @@
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
+#include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeComponentBindings.h>
@@ -253,23 +254,15 @@ namespace {
     return static_cast<std::size_t>(value - 1);
   }
 
-  auto TryGetAssetUserdataWithMetatable(lua_State* state, const int index,
-    const char* metatable_name) -> AssetUserdata*
+  auto TryGetAssetUserdata(lua_State* state, const int index) -> AssetUserdata*
   {
-    void* const raw = lua_touserdata(state, index);
-    if (raw == nullptr) {
+    if (lua_type(state, index) != LUA_TUSERDATA) {
       return nullptr;
     }
-    if (lua_getmetatable(state, index) == 0) {
+    if (lua_userdatatag(state, index) != kTagAsset) {
       return nullptr;
     }
-    luaL_getmetatable(state, metatable_name);
-    const bool is_match = lua_rawequal(state, -1, -2) != 0;
-    lua_pop(state, 2);
-    if (!is_match) {
-      return nullptr;
-    }
-    return static_cast<AssetUserdata*>(raw);
+    return static_cast<AssetUserdata*>(lua_touserdata(state, index));
   }
 
   auto SceneNodeRenderable(lua_State* state) -> int
@@ -328,14 +321,15 @@ namespace {
       return 1;
     }
 
-    auto* asset_user_data
-      = TryGetAssetUserdataWithMetatable(state, 2, kGeometryAssetMetatableName);
+    auto* asset_user_data = TryGetAssetUserdata(state, 2);
     if (asset_user_data == nullptr
       || asset_user_data->kind != AssetUserdataKind::kGeometry
       || asset_user_data->geometry == nullptr) {
-      luaL_argerror(
-        state, 2, "geometry token string or GeometryAsset userdata expected");
-      return 0;
+      LOG_F(WARNING,
+        "scene.node.renderable_set_geometry rejected invalid geometry "
+        "userdata/type");
+      lua_pushboolean(state, 0);
+      return 1;
     }
 
     auto geometry = asset_user_data->geometry;
@@ -572,14 +566,15 @@ namespace {
       return 1;
     }
 
-    auto* asset_user_data
-      = TryGetAssetUserdataWithMetatable(state, 4, kMaterialAssetMetatableName);
+    auto* asset_user_data = TryGetAssetUserdata(state, 4);
     if (asset_user_data == nullptr
       || asset_user_data->kind != AssetUserdataKind::kMaterial
       || asset_user_data->material == nullptr) {
-      luaL_argerror(state, 4,
-        "material token string, MaterialAsset userdata, or nil expected");
-      return 0;
+      LOG_F(WARNING,
+        "scene.node.renderable_set_material_override rejected invalid material "
+        "userdata/type");
+      lua_pushboolean(state, 0);
+      return 1;
     }
 
     auto material = asset_user_data->material;

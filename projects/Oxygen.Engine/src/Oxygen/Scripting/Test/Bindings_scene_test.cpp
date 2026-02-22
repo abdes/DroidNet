@@ -9,12 +9,29 @@
 #include <memory>
 #include <string>
 
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Scene/Scene.h>
 
 namespace oxygen::scripting::test {
+class SceneBindingsTest : public ScriptingModuleTest { };
+
+namespace {
+
+  using oxygen::co::testing::TestEventLoop;
+
+  auto RunSceneMutationPhase(
+    ScriptingModule& module, observer_ptr<engine::FrameContext> context) -> void
+  {
+    TestEventLoop loop;
+    oxygen::co::Run(
+      loop, [&]() -> co::Co<> { co_await module.OnSceneMutation(context); });
+  }
+
+} // namespace
 
 NOLINT_TEST_F(
-  ScriptingModuleTest, ExecuteScriptSceneBindingsExposeV1SceneModuleSurface)
+  SceneBindingsTest, ExecuteScriptSceneBindingsExposeV1SceneModuleSurface)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
@@ -46,7 +63,7 @@ end
 }
 
 NOLINT_TEST_F(
-  ScriptingModuleTest, ExecuteScriptSceneBindingsDoNotExportLegacySceneNames)
+  SceneBindingsTest, ExecuteScriptSceneBindingsDoNotExportLegacySceneNames)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
@@ -82,15 +99,15 @@ assert_legacy_removed("get_param")
   EXPECT_TRUE(result.ok) << result.message;
 }
 
-NOLINT_TEST_F(ScriptingModuleTest,
-  OnFrameStartSceneEnvironmentBindingsSupportSystemRoundtrip)
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneEnvironmentBindingsSupportSystemRoundtrip)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
-function on_frame_start()
+function on_scene_mutation()
   local scene = oxygen.scene
   local env = scene.ensure_environment()
   if env == nil then error("missing env") end
@@ -141,7 +158,8 @@ end
   context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
   context.SetScene(observer_ptr<scene::Scene> { scene.get() });
 
-  module.OnFrameStart(observer_ptr<engine::FrameContext> { &context });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
   if (context.HasErrors()) {
     const auto errors = context.GetErrors();
     FAIL() << (errors.empty() ? std::string("unknown scripting error")
@@ -149,14 +167,14 @@ end
   }
 }
 
-NOLINT_TEST_F(ScriptingModuleTest, OnFrameStartSceneNodeScriptingBindingsWork)
+NOLINT_TEST_F(SceneBindingsTest, OnSceneMutationSceneNodeScriptingBindingsWork)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
-function on_frame_start()
+function on_scene_mutation()
   local scene = oxygen.scene
   local node = scene.create_node("ScriptHost", nil)
   if node == nil then error("node create failed") end
@@ -201,22 +219,23 @@ end
   context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
   context.SetScene(observer_ptr<scene::Scene> { scene.get() });
 
-  module.OnFrameStart(observer_ptr<engine::FrameContext> { &context });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
   const auto errors = context.GetErrors();
   EXPECT_FALSE(context.HasErrors())
     << (errors.empty() ? std::string("unknown scripting error")
                        : errors.front().message);
 }
 
-NOLINT_TEST_F(ScriptingModuleTest,
-  OnFrameStartSceneNodeScriptingRejectsTamperedSlotReference)
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneNodeScriptingRejectsTamperedSlotReference)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
-function on_frame_start()
+function on_scene_mutation()
   local scene = oxygen.scene
   local node = scene.create_node("ScriptHostStale", nil)
   if node == nil then error("node create failed") end
@@ -253,7 +272,8 @@ end
   context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
   context.SetScene(observer_ptr<scene::Scene> { scene.get() });
 
-  module.OnFrameStart(observer_ptr<engine::FrameContext> { &context });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
   if (context.HasErrors()) {
     const auto errors = context.GetErrors();
     FAIL() << (errors.empty() ? std::string("unknown scripting error")
@@ -261,15 +281,15 @@ end
   }
 }
 
-NOLINT_TEST_F(ScriptingModuleTest,
-  OnFrameStartSceneRenderableBindingsGeometryMaterialMarshallingWorks)
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneRenderableBindingsGeometryMaterialMarshallingWorks)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
-function on_frame_start()
+function on_scene_mutation()
   local scene = oxygen.scene
   local node = scene.create_node("RenderableHost", nil)
   if node == nil then error("node create failed") end
@@ -315,7 +335,8 @@ end
   context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
   context.SetScene(observer_ptr<scene::Scene> { scene.get() });
 
-  module.OnFrameStart(observer_ptr<engine::FrameContext> { &context });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
   if (context.HasErrors()) {
     const auto errors = context.GetErrors();
     FAIL() << (errors.empty() ? std::string("unknown scripting error")
@@ -323,15 +344,15 @@ end
   }
 }
 
-NOLINT_TEST_F(ScriptingModuleTest,
-  OnFrameStartSceneRenderableBindingsAcceptAssetsUserdataHandles)
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneRenderableBindingsAcceptAssetsUserdataHandles)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
-function on_frame_start()
+function on_scene_mutation()
   local assets = oxygen.assets
   local scene = oxygen.scene
   local node = scene.create_node("RenderableUserdataHost", nil)
@@ -375,7 +396,8 @@ end
   context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
   context.SetScene(observer_ptr<scene::Scene> { scene.get() });
 
-  module.OnFrameStart(observer_ptr<engine::FrameContext> { &context });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
   if (context.HasErrors()) {
     const auto errors = context.GetErrors();
     FAIL() << (errors.empty() ? std::string("unknown scripting error")
@@ -383,15 +405,15 @@ end
   }
 }
 
-NOLINT_TEST_F(ScriptingModuleTest,
-  OnFrameStartSceneRenderableBindingsRejectWrongAssetsUserdataKinds)
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneRenderableBindingsRejectWrongAssetsUserdataKinds)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
-function on_frame_start()
+function on_scene_mutation()
   local assets = oxygen.assets
   local scene = oxygen.scene
   local node = scene.create_node("RenderableWrongUserdataKinds", nil)
@@ -403,22 +425,22 @@ function on_frame_start()
     error("procedural assets missing")
   end
 
-  local ok_set_geometry, _ = pcall(function()
-    node:renderable_set_geometry(material)
+  local ok_set_geometry, result_set_geometry = pcall(function()
+    return node:renderable_set_geometry(material)
   end)
-  if ok_set_geometry then
-    error("renderable_set_geometry should reject MaterialAsset userdata")
+  if ok_set_geometry and result_set_geometry ~= false and result_set_geometry ~= nil then
+    error("renderable_set_geometry should reject MaterialAsset userdata deterministically")
   end
 
   if not node:renderable_set_geometry(geometry) then
     error("renderable_set_geometry with GeometryAsset failed")
   end
 
-  local ok_set_material, _ = pcall(function()
-    node:renderable_set_material_override(1, 1, geometry)
+  local ok_set_material, result_set_material = pcall(function()
+    return node:renderable_set_material_override(1, 1, geometry)
   end)
-  if ok_set_material then
-    error("renderable_set_material_override should reject GeometryAsset userdata")
+  if ok_set_material and result_set_material ~= false and result_set_material ~= nil then
+    error("renderable_set_material_override should reject GeometryAsset userdata deterministically")
   end
 end
 )lua" },
@@ -434,7 +456,8 @@ end
   context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
   context.SetScene(observer_ptr<scene::Scene> { scene.get() });
 
-  module.OnFrameStart(observer_ptr<engine::FrameContext> { &context });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
   if (context.HasErrors()) {
     const auto errors = context.GetErrors();
     FAIL() << (errors.empty() ? std::string("unknown scripting error")
@@ -442,8 +465,8 @@ end
   }
 }
 
-NOLINT_TEST_F(ScriptingModuleTest,
-  OnFrameStartSceneQueryUserdataReturnsDeterministicDefaultsAfterSceneExpiry)
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneQueryUserdataReturnsDeterministicDefaultsAfterSceneExpiry)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
@@ -453,7 +476,7 @@ NOLINT_TEST_F(ScriptingModuleTest,
 phase = 0
 q = nil
 
-function on_frame_start()
+function on_scene_mutation()
   local scene = oxygen.scene
   phase = phase + 1
   if phase == 1 then
@@ -506,15 +529,15 @@ end
   }
 }
 
-NOLINT_TEST_F(ScriptingModuleTest,
-  OnFrameStartSceneComponentBindingsRejectInvalidArgumentShapes)
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneComponentBindingsRejectInvalidArgumentShapes)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
-function on_frame_start()
+function on_scene_mutation()
   local scene = oxygen.scene
 
   local light_node = scene.create_node("LightHostInvalidArgs", nil)
@@ -561,7 +584,8 @@ end
   context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
   context.SetScene(observer_ptr<scene::Scene> { scene.get() });
 
-  module.OnFrameStart(observer_ptr<engine::FrameContext> { &context });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
   if (context.HasErrors()) {
     const auto errors = context.GetErrors();
     FAIL() << (errors.empty() ? std::string("unknown scripting error")
@@ -569,15 +593,15 @@ end
   }
 }
 
-NOLINT_TEST_F(ScriptingModuleTest,
-  OnFrameStartSceneScenarioHierarchyQueryComponentsEnvironment)
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneScenarioHierarchyQueryComponentsEnvironment)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
-function on_frame_start()
+function on_scene_mutation()
   local scene = oxygen.scene
 
   local env = scene.ensure_environment()
@@ -645,7 +669,8 @@ end
   context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
   context.SetScene(observer_ptr<scene::Scene> { scene.get() });
 
-  module.OnFrameStart(observer_ptr<engine::FrameContext> { &context });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
   if (context.HasErrors()) {
     const auto errors = context.GetErrors();
     FAIL() << (errors.empty() ? std::string("unknown scripting error")
@@ -653,15 +678,15 @@ end
   }
 }
 
-NOLINT_TEST_F(ScriptingModuleTest,
-  OnFrameStartSceneNodeMetatableExposesRequiredComponentMethods)
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneNodeMetatableExposesRequiredComponentMethods)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
-function on_frame_start()
+function on_scene_mutation()
   local scene = oxygen.scene
   local node = scene.create_node("MethodSurfaceNode", nil)
   if node == nil then error("node create failed") end
@@ -694,7 +719,8 @@ end
   context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
   context.SetScene(observer_ptr<scene::Scene> { scene.get() });
 
-  module.OnFrameStart(observer_ptr<engine::FrameContext> { &context });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
   if (context.HasErrors()) {
     const auto errors = context.GetErrors();
     FAIL() << (errors.empty() ? std::string("unknown scripting error")
@@ -702,15 +728,15 @@ end
   }
 }
 
-NOLINT_TEST_F(ScriptingModuleTest,
-  OnFrameStartSceneQueryScopeAndClearScopeEdgeBehaviorWorks)
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneQueryScopeAndClearScopeEdgeBehaviorWorks)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
-function on_frame_start()
+function on_scene_mutation()
   local scene = oxygen.scene
   local root = scene.create_node("ScopeRoot", nil)
   local in_scope = scene.create_node("InScopeEnemy", root)
@@ -757,8 +783,8 @@ end
   }
 }
 
-NOLINT_TEST_F(ScriptingModuleTest,
-  OnFrameStartSceneNodeHandlesFromExpiredSceneFailDeterministically)
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneNodeHandlesFromExpiredSceneFailDeterministically)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
@@ -768,7 +794,7 @@ NOLINT_TEST_F(ScriptingModuleTest,
 phase = 0
 stale = nil
 
-function on_frame_start()
+function on_scene_mutation()
   local scene = oxygen.scene
   phase = phase + 1
   if phase == 1 then
@@ -797,7 +823,8 @@ end
   const auto tag = engine::internal::EngineTagFactory::Get();
   frame_a.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
   frame_a.SetScene(observer_ptr<scene::Scene> { scene_a.get() });
-  module.OnFrameStart(observer_ptr<engine::FrameContext> { &frame_a });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &frame_a });
   if (frame_a.HasErrors()) {
     const auto errors = frame_a.GetErrors();
     FAIL() << (errors.empty() ? std::string("unknown scripting error")
@@ -811,7 +838,8 @@ end
   engine::FrameContext frame_b;
   frame_b.SetFrameSequenceNumber(frame::SequenceNumber { 2 }, tag);
   frame_b.SetScene(observer_ptr<scene::Scene> { scene_b.get() });
-  module.OnFrameStart(observer_ptr<engine::FrameContext> { &frame_b });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &frame_b });
   if (frame_b.HasErrors()) {
     const auto errors = frame_b.GetErrors();
     FAIL() << (errors.empty() ? std::string("unknown scripting error")

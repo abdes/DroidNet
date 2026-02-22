@@ -8,7 +8,9 @@
 
 namespace oxygen::scripting::test {
 
-NOLINT_TEST_F(ScriptingModuleTest, EventsBindingOnOnceEmitAndStatsWork)
+class EventsBindingsTest : public ScriptingModuleTest { };
+
+NOLINT_TEST_F(EventsBindingsTest, EventsBindingOnOnceEmitAndStatsWork)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));

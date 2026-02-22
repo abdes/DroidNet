@@ -8,7 +8,9 @@
 
 namespace oxygen::scripting::test {
 
-NOLINT_TEST_F(ScriptingModuleTest, ExecuteScriptMathBindingsSupportEngineTypes)
+class MathBindingsTest : public ScriptingModuleTest { };
+
+NOLINT_TEST_F(MathBindingsTest, ExecuteScriptMathBindingsSupportEngineTypes)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));

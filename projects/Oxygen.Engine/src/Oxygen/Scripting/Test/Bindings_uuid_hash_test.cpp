@@ -8,7 +8,9 @@
 
 namespace oxygen::scripting::test {
 
-NOLINT_TEST_F(ScriptingModuleTest, ExecuteScriptUuidAndHashBindingsWork)
+class UuidHashBindingsTest : public ScriptingModuleTest { };
+
+NOLINT_TEST_F(UuidHashBindingsTest, ExecuteScriptUuidAndHashBindingsWork)
 {
   auto module = MakeModule();
   ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
