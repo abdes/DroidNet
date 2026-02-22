@@ -462,7 +462,8 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, GameplayPushesOnlyKinematicBodies)
 {
   auto node = scene_->CreateNode("kinematic");
   ASSERT_TRUE(node.IsValid());
-  ASSERT_TRUE(AttachBody(node, body::BodyType::kKinematic).has_value());
+  const auto body = AttachBody(node, body::BodyType::kKinematic);
+  ASSERT_TRUE(body.has_value());
 
   RunGameplay();
 
@@ -473,9 +474,35 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, GameplayPushesOnlyKinematicBodies)
   RunGameplay();
 
   EXPECT_EQ(FakeState().move_kinematic_calls, 1U);
+  EXPECT_EQ(FakeState().last_moved_body, body->GetBodyId());
   ExpectVec3Eq(FakeState().last_moved_position, Vec3(7.0F, 2.0F, -3.0F));
   const auto stats = module_->GetSyncDiagnostics();
   EXPECT_EQ(stats.gameplay_push_success, 1U);
+  EXPECT_EQ(stats.gameplay_push_skipped_non_kinematic, 0U);
+}
+
+NOLINT_TEST_F(PhysicsModuleSyncTest, GameplayBatchPushesMultipleKinematicBodies)
+{
+  auto node_a = scene_->CreateNode("kinematic-a");
+  auto node_b = scene_->CreateNode("kinematic-b");
+  ASSERT_TRUE(node_a.IsValid());
+  ASSERT_TRUE(node_b.IsValid());
+  const auto body_a = AttachBody(node_a, body::BodyType::kKinematic);
+  const auto body_b = AttachBody(node_b, body::BodyType::kKinematic);
+  ASSERT_TRUE(body_a.has_value());
+  ASSERT_TRUE(body_b.has_value());
+
+  ASSERT_TRUE(node_a.GetTransform().SetLocalPosition({ 1.0F, 2.0F, 3.0F }));
+  ASSERT_TRUE(node_b.GetTransform().SetLocalPosition({ 4.0F, 5.0F, 6.0F }));
+  scene_->Update();
+  scene_->SyncObservers();
+
+  RunGameplay();
+
+  EXPECT_EQ(FakeState().move_kinematic_calls, 2U);
+  const auto stats = module_->GetSyncDiagnostics();
+  EXPECT_EQ(stats.gameplay_push_attempts, 2U);
+  EXPECT_EQ(stats.gameplay_push_success, 2U);
   EXPECT_EQ(stats.gameplay_push_skipped_non_kinematic, 0U);
 }
 
