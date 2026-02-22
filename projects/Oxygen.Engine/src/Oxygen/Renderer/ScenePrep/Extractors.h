@@ -203,6 +203,19 @@ inline auto SubMeshVisibilityFilter(const ScenePrepContext& ctx,
   std::vector<uint32_t> visible_submeshes;
   visible_submeshes.reserve(submeshes.size());
 
+  // Culling strategy note (current and intended direction):
+  // - Current implementation is CPU frustum culling per submesh using
+  //   world-space AABB intersection (sphere fallback).
+  // - This is simple and cheap but can be unstable for large near-camera
+  //   surfaces at grazing angles (edge popping).
+  // - Target middle-ground for good GPUs:
+  //   1) Conservative CPU frustum cull (guard bands + hysteresis),
+  //   2) GPU Hi-Z occlusion as the primary fine visibility stage,
+  //   3) Two-level bounds (clusters/tiles), plus content overrides for
+  //      pathological assets.
+  // TODO(abdes): Redesign culling around conservative CPU + GPU Hi-Z
+  // visibility with temporal stability, and move away from strict per-submesh
+  // AABB-only rejection as the final visibility gate.
   // Diagnostics: allow disabling culling and/or inflating bounds slightly
   static constexpr bool kDisableSubmeshFrustumCulling = false;
   // Absolute inflation in world units (meters) and relative inflation factor
