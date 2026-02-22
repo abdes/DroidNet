@@ -139,6 +139,7 @@ if(OXYGEN_PHYSICS_BACKEND STREQUAL "jolt")
     APPEND
     OXYGEN_PHYSICS_PRIVATE_SOURCES
     "Jolt/JoltBackend.cpp"
+    "Jolt/JoltAggregates.cpp"
     "Jolt/JoltAreas.cpp"
     "Jolt/JoltBodies.cpp"
     "Jolt/JoltCharacters.cpp"
@@ -154,6 +155,7 @@ if(OXYGEN_PHYSICS_BACKEND STREQUAL "jolt")
     OXYGEN_PHYSICS_PRIVATE_HEADERS
     "Jolt/JoltBodies.h"
     "Jolt/JoltBackend.h"
+    "Jolt/JoltAggregates.h"
     "Jolt/JoltAreas.h"
     "Jolt/JoltCharacters.h"
     "Jolt/Converters.h"

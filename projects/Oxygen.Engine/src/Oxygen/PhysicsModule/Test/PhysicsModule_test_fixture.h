@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <chrono>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -54,6 +55,7 @@ namespace detail {
     Vec3 gravity { 0.0F, -9.81F, 0.0F };
     std::unordered_map<BodyId, BodyState> bodies {};
     std::unordered_map<CharacterId, CharacterState> characters {};
+    std::unordered_map<AggregateId, std::unordered_set<BodyId>> aggregates {};
     std::vector<system::ActiveBodyTransform> active_transforms {};
     std::vector<events::PhysicsEvent> pending_events {};
     BodyId next_body_id { BodyId { 1U } };
@@ -62,12 +64,16 @@ namespace detail {
     ShapeInstanceId next_shape_instance_id { ShapeInstanceId { 1U } };
     AreaId next_area_id { AreaId { 1U } };
     JointId next_joint_id { JointId { 1U } };
+    AggregateId next_aggregate_id { AggregateId { 1U } };
     std::size_t move_kinematic_calls { 0 };
     std::size_t set_body_pose_calls { 0 };
     std::size_t flush_structural_calls { 0 };
     std::size_t character_create_calls { 0 };
     std::size_t character_destroy_calls { 0 };
     std::size_t character_move_calls { 0 };
+    std::size_t aggregate_create_calls { 0 };
+    std::size_t aggregate_destroy_calls { 0 };
+    std::size_t aggregate_flush_structural_calls { 0 };
     BodyId last_moved_body { kInvalidBodyId };
     Vec3 last_moved_position { 0.0F };
     Quat last_moved_rotation { 1.0F, 0.0F, 0.0F, 0.0F };
@@ -673,6 +679,111 @@ namespace detail {
     observer_ptr<BackendState> state_;
   };
 
+  class FakeAggregateApi final : public system::IAggregateApi {
+  public:
+    explicit FakeAggregateApi(BackendState& state)
+      : state_(&state)
+    {
+    }
+
+    auto CreateAggregate(WorldId world_id)
+      -> PhysicsResult<AggregateId> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      const auto aggregate_id = state_->next_aggregate_id;
+      state_->next_aggregate_id
+        = AggregateId { state_->next_aggregate_id.get() + 1U };
+      state_->aggregates.emplace(aggregate_id, std::unordered_set<BodyId> {});
+      state_->aggregate_create_calls += 1;
+      return PhysicsResult<AggregateId>::Ok(aggregate_id);
+    }
+
+    auto DestroyAggregate(WorldId world_id, AggregateId aggregate_id)
+      -> PhysicsResult<void> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      if (!state_->aggregates.contains(aggregate_id)) {
+        return Err(PhysicsError::kInvalidArgument);
+      }
+      state_->aggregates.erase(aggregate_id);
+      state_->aggregate_destroy_calls += 1;
+      return PhysicsResult<void>::Ok();
+    }
+
+    auto AddMemberBody(WorldId world_id, AggregateId aggregate_id,
+      BodyId body_id) -> PhysicsResult<void> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      if (!state_->bodies.contains(body_id)) {
+        return Err(PhysicsError::kBodyNotFound);
+      }
+      const auto it = state_->aggregates.find(aggregate_id);
+      if (it == state_->aggregates.end()) {
+        return Err(PhysicsError::kInvalidArgument);
+      }
+      const auto [_, inserted] = it->second.insert(body_id);
+      if (!inserted) {
+        return Err(PhysicsError::kAlreadyExists);
+      }
+      return PhysicsResult<void>::Ok();
+    }
+
+    auto RemoveMemberBody(WorldId world_id, AggregateId aggregate_id,
+      BodyId body_id) -> PhysicsResult<void> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      const auto it = state_->aggregates.find(aggregate_id);
+      if (it == state_->aggregates.end()) {
+        return Err(PhysicsError::kInvalidArgument);
+      }
+      if (it->second.erase(body_id) == 0U) {
+        return Err(PhysicsError::kBodyNotFound);
+      }
+      return PhysicsResult<void>::Ok();
+    }
+
+    auto GetMemberBodies(WorldId world_id, AggregateId aggregate_id,
+      std::span<BodyId> out_body_ids) const -> PhysicsResult<size_t> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      const auto it = state_->aggregates.find(aggregate_id);
+      if (it == state_->aggregates.end()) {
+        return Err(PhysicsError::kInvalidArgument);
+      }
+      if (out_body_ids.size() < it->second.size()) {
+        return Err(PhysicsError::kBufferTooSmall);
+      }
+      size_t i = 0;
+      for (const auto member : it->second) {
+        out_body_ids[i++] = member;
+      }
+      return PhysicsResult<size_t>::Ok(i);
+    }
+
+    auto FlushStructuralChanges(WorldId world_id)
+      -> PhysicsResult<size_t> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      state_->aggregate_flush_structural_calls += 1;
+      return PhysicsResult<size_t>::Ok(size_t { 0 });
+    }
+
+  private:
+    observer_ptr<BackendState> state_;
+  };
+
   class FakePhysicsSystem final : public system::IPhysicsSystem {
   public:
     FakePhysicsSystem()
@@ -683,6 +794,7 @@ namespace detail {
       , shapes_(state_)
       , areas_(state_)
       , joints_(state_)
+      , aggregates_(state_)
     {
     }
 
@@ -703,6 +815,10 @@ namespace detail {
     auto Shapes() noexcept -> system::IShapeApi& override { return shapes_; }
     auto Areas() noexcept -> system::IAreaApi& override { return areas_; }
     auto Joints() noexcept -> system::IJointApi& override { return joints_; }
+    auto Aggregates() noexcept -> system::IAggregateApi* override
+    {
+      return &aggregates_;
+    }
 
     auto Worlds() const noexcept -> const system::IWorldApi& override
     {
@@ -736,6 +852,10 @@ namespace detail {
     {
       return joints_;
     }
+    auto Aggregates() const noexcept -> const system::IAggregateApi* override
+    {
+      return &aggregates_;
+    }
 
   private:
     BackendState state_ {};
@@ -747,6 +867,7 @@ namespace detail {
     FakeShapeApi shapes_;
     FakeAreaApi areas_;
     FakeJointApi joints_;
+    FakeAggregateApi aggregates_;
   };
 
 } // namespace detail

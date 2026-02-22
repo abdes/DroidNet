@@ -125,7 +125,10 @@ public:
      `PhysicsModule` (`kKinematic` push, `kDynamic` pull).
 
    Failure:
-   - Returns `std::nullopt` if module/world/node preconditions are not met or
+   - Returns `std::nullopt` if module/world/node preconditions are
+   not met or
+     ownership contracts are violated (character/aggregate already
+   mapped), or
      body creation fails.
   */
   OXGN_PHSYNC_API static auto AttachRigidBody(
@@ -146,22 +149,32 @@ public:
    * by the currently observed scene.
    - Node must not already be mapped as a
    * rigid body.
-   - Character motion is command-authoritative: use
-   * CharacterFacade::Move for
-     movement intent.
-   - Successful
-   * CharacterFacade::Move calls apply returned world pose back to
-     the
-   * scene node as local transform using parent-aware conversion.
+   - Node must not already be mapped as an aggregate.
    -
-   * Scene-authored transform writes to a character-owned node are contract
+   * Character motion is command-authoritative: use
+     `CharacterFacade::Move`
+   * for movement intent.
+   - Successful `CharacterFacade::Move` calls apply
+   * returned world pose back
+     to the scene node as local transform using
+   * parent-aware conversion.
+   - Scene-authored transform writes to a
+   * character-owned node are contract
+     violations (debug-asserted by
+   * PhysicsModule observer path).
+   - Character attachment does not
+   * participate in rigid-body transform
+     push/pull sync.
 
-   * violations (debug-asserted by PhysicsModule observer path).
-   - Character
-   * attachment does not participate in rigid-body transform
-     push/pull
-   * sync.
-  */
+   Near Future:
+
+   * - Aggregate attachment/query facades are intentionally not exposed here
+   * yet.
+     Aggregate ownership is currently integrated via `PhysicsModule`
+   * mapping
+     APIs while higher-level scene-facing APIs are being designed.
+
+   */
   OXGN_PHSYNC_API static auto AttachCharacter(
     observer_ptr<PhysicsModule> physics_module, scene::SceneNode& node,
     const character::CharacterDesc& desc) -> std::optional<CharacterFacade>;
