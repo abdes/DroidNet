@@ -220,6 +220,8 @@ struct oxygen::physics::jolt::JoltWorld::WorldState final {
   std::unordered_set<BodyId> body_ids {};
   mutable std::mutex event_mutex {};
   std::deque<events::PhysicsEvent> pending_events {};
+  mutable std::mutex active_body_ids_mutex {};
+  mutable JPH::BodyIDVector temp_active_body_ids {};
   std::unordered_map<JPH::SubShapeIDPair, events::PhysicsEvent>
     active_contact_events {};
   ContactListenerImpl contact_listener;
@@ -299,17 +301,19 @@ auto oxygen::physics::jolt::JoltWorld::GetActiveBodyTransforms(
     return Err(PhysicsError::kWorldNotFound);
   }
 
-  JPH::BodyIDVector active_body_ids {};
+  std::scoped_lock lock(world->active_body_ids_mutex);
+  world->temp_active_body_ids.clear();
   world->physics_system.GetActiveBodies(
-    JPH::EBodyType::RigidBody, active_body_ids);
+    JPH::EBodyType::RigidBody, world->temp_active_body_ids);
 
   const auto copy_count
-    = std::min(out_transforms.size(), active_body_ids.size());
+    = std::min(out_transforms.size(), world->temp_active_body_ids.size());
   const auto& body_interface = world->physics_system.GetBodyInterface();
   for (size_t i = 0; i < copy_count; ++i) {
-    const auto jolt_body_id = active_body_ids[i];
-    const auto position = body_interface.GetPosition(jolt_body_id);
-    const auto rotation = body_interface.GetRotation(jolt_body_id);
+    const auto jolt_body_id = world->temp_active_body_ids[i];
+    JPH::RVec3 position {};
+    JPH::Quat rotation {};
+    body_interface.GetPositionAndRotation(jolt_body_id, position, rotation);
     out_transforms[i] = system::ActiveBodyTransform {
       .body_id = BodyId { jolt_body_id.GetIndexAndSequenceNumber() },
       .user_data = body_interface.GetUserData(jolt_body_id),
