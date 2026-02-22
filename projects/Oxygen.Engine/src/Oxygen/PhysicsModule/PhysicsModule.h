@@ -8,7 +8,6 @@
 
 #include <string_view>
 
-#include <cstddef>
 #include <memory>
 #include <optional>
 #include <unordered_map>
@@ -64,6 +63,12 @@ namespace oxygen::physics {
    mutations are pushed to physics in `kGameplay`.
  - `body::BodyType::kDynamic`: physics owns motion. Active body transforms are
    pulled from physics in `kSceneMutation`.
+ - Character controllers are command-authoritative:
+   `ScenePhysics::CharacterFacade::Move` drives character motion intent.
+   Character attachment does not register transform push/pull participation
+   in this module.
+ - A scene node can be managed by exactly one motion authority source:
+   either rigid-body mapping or character mapping, never both.
 
  Same-frame precedence:
  - If a dynamic body also receives scene-authored transform writes in the same
@@ -109,23 +114,13 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(PhysicsModule)
   OXYGEN_MAKE_NON_MOVABLE(PhysicsModule)
 
-  [[nodiscard]] auto GetName() const noexcept -> std::string_view override
-  {
-    return "PhysicsModule";
-  }
+  [[nodiscard]] auto GetName() const noexcept -> std::string_view override;
 
   [[nodiscard]] auto GetPriority() const noexcept
-    -> engine::ModulePriority override
-  {
-    return priority_;
-  }
+    -> engine::ModulePriority override;
 
   [[nodiscard]] auto GetSupportedPhases() const noexcept
-    -> engine::ModulePhaseMask override
-  {
-    return engine::MakeModuleMask<core::PhaseId::kFixedSimulation,
-      core::PhaseId::kGameplay, core::PhaseId::kSceneMutation>();
-  }
+    -> engine::ModulePhaseMask override;
 
   OXGN_PHSYNC_API auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept
     -> bool override;
@@ -163,135 +158,35 @@ public:
   [[nodiscard]] auto GetWorldId() const noexcept -> WorldId;
   [[nodiscard]] auto IsNodeInObservedScene(
     const scene::NodeHandle& node_handle) const noexcept -> bool;
-  [[nodiscard]] auto GetSyncDiagnostics() const noexcept -> SyncDiagnostics
-  {
-    return diagnostics_;
-  }
+  OXGN_PHSYNC_NDAPI auto GetSyncDiagnostics() const noexcept -> SyncDiagnostics;
 
-  auto RegisterNodeBodyMapping(const scene::NodeHandle& node_handle,
-    BodyId body_id, body::BodyType body_type) -> void
-  {
-    if (!node_handle.IsValid() || body_id == kInvalidBodyId) {
-      return;
-    }
+  OXGN_PHSYNC_API auto RegisterNodeBodyMapping(
+    const scene::NodeHandle& node_handle, BodyId body_id,
+    body::BodyType body_type) -> void;
 
-    if (const auto existing_node_it = node_to_binding_.find(node_handle);
-      existing_node_it != node_to_binding_.end()) {
-      (void)RemoveBinding(existing_node_it->second);
-    }
-    if (const auto existing_body_it = body_to_binding_.find(body_id);
-      existing_body_it != body_to_binding_.end()) {
-      (void)RemoveBinding(existing_body_it->second);
-    }
-
-    CHECK_NOTNULL_F(bindings_.get());
-    const auto binding_handle = bindings_->Insert(PhysicsBinding {
-      .world_id = world_id_,
-      .body_id = body_id,
-      .body_type = body_type,
-      .node_handle = node_handle,
-    });
-    node_to_binding_.insert_or_assign(node_handle, binding_handle);
-    body_to_binding_.insert_or_assign(body_id, binding_handle);
-  }
-
-  [[nodiscard]] auto GetBodyIdForNode(
-    const scene::NodeHandle& node_handle) const -> BodyId
-  {
-    const auto it = node_to_binding_.find(node_handle);
-    if (it == node_to_binding_.end()) {
-      return kInvalidBodyId;
-    }
-    CHECK_NOTNULL_F(bindings_.get());
-    const auto* binding = bindings_->TryGet(it->second);
-    if (binding == nullptr) {
-      return kInvalidBodyId;
-    }
-    return binding->body_id;
-  }
+  OXGN_PHSYNC_NDAPI auto GetBodyIdForNode(
+    const scene::NodeHandle& node_handle) const -> BodyId;
+  OXGN_PHSYNC_NDAPI auto HasBodyForNode(
+    const scene::NodeHandle& node_handle) const -> bool;
 
   [[nodiscard]] auto GetBodyTypeForBodyId(BodyId body_id) const
     -> std::optional<body::BodyType>;
 
-  [[nodiscard]] auto GetNodeForBodyId(BodyId body_id) const
-    -> std::optional<scene::NodeHandle>
-  {
-    const auto it = body_to_binding_.find(body_id);
-    if (it == body_to_binding_.end()) {
-      return std::nullopt;
-    }
-    CHECK_NOTNULL_F(bindings_.get());
-    const auto* binding = bindings_->TryGet(it->second);
-    if (binding == nullptr || !binding->node_handle.IsValid()) {
-      return std::nullopt;
-    }
-    return binding->node_handle;
-  }
+  OXGN_PHSYNC_NDAPI auto GetNodeForBodyId(BodyId body_id) const
+    -> std::optional<scene::NodeHandle>;
 
-  auto RegisterNodeCharacterMapping(
-    const scene::NodeHandle& node_handle, CharacterId character_id) -> void
-  {
-    if (!node_handle.IsValid() || character_id == kInvalidCharacterId) {
-      return;
-    }
+  OXGN_PHSYNC_API auto RegisterNodeCharacterMapping(
+    const scene::NodeHandle& node_handle, CharacterId character_id) -> void;
 
-    if (const auto existing_node_it
-      = node_to_character_binding_.find(node_handle);
-      existing_node_it != node_to_character_binding_.end()) {
-      (void)RemoveCharacterBinding(existing_node_it->second);
-    }
-    if (const auto existing_character_it
-      = character_to_binding_.find(character_id);
-      existing_character_it != character_to_binding_.end()) {
-      (void)RemoveCharacterBinding(existing_character_it->second);
-    }
+  OXGN_PHSYNC_NDAPI auto GetCharacterIdForNode(
+    const scene::NodeHandle& node_handle) const -> CharacterId;
+  OXGN_PHSYNC_NDAPI auto HasCharacterForNode(
+    const scene::NodeHandle& node_handle) const -> bool;
 
-    CHECK_NOTNULL_F(character_bindings_.get());
-    const auto binding_handle = character_bindings_->Insert(CharacterBinding {
-      .world_id = world_id_,
-      .character_id = character_id,
-      .node_handle = node_handle,
-    });
-    node_to_character_binding_.insert_or_assign(node_handle, binding_handle);
-    character_to_binding_.insert_or_assign(character_id, binding_handle);
-  }
+  OXGN_PHSYNC_NDAPI auto GetNodeForCharacterId(CharacterId character_id) const
+    -> std::optional<scene::NodeHandle>;
 
-  [[nodiscard]] auto GetCharacterIdForNode(
-    const scene::NodeHandle& node_handle) const -> CharacterId
-  {
-    const auto it = node_to_character_binding_.find(node_handle);
-    if (it == node_to_character_binding_.end()) {
-      return kInvalidCharacterId;
-    }
-    CHECK_NOTNULL_F(character_bindings_.get());
-    const auto* binding = character_bindings_->TryGet(it->second);
-    if (binding == nullptr) {
-      return kInvalidCharacterId;
-    }
-    return binding->character_id;
-  }
-
-  [[nodiscard]] auto GetNodeForCharacterId(CharacterId character_id) const
-    -> std::optional<scene::NodeHandle>
-  {
-    const auto it = character_to_binding_.find(character_id);
-    if (it == character_to_binding_.end()) {
-      return std::nullopt;
-    }
-    CHECK_NOTNULL_F(character_bindings_.get());
-    const auto* binding = character_bindings_->TryGet(it->second);
-    if (binding == nullptr || !binding->node_handle.IsValid()) {
-      return std::nullopt;
-    }
-    return binding->node_handle;
-  }
-
-  [[nodiscard]] auto ConsumeSceneEvents() -> std::vector<ScenePhysicsEvent>
-  {
-    std::vector<ScenePhysicsEvent> drained {};
-    drained.swap(scene_events_);
-    return drained;
-  }
+  OXGN_PHSYNC_NDAPI auto ConsumeSceneEvents() -> std::vector<ScenePhysicsEvent>;
 
 private:
   struct PhysicsBinding final {

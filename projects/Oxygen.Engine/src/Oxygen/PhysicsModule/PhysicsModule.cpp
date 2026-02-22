@@ -80,6 +80,28 @@ PhysicsModule::PhysicsModule(engine::ModulePriority priority)
 {
 }
 
+auto PhysicsModule::GetName() const noexcept -> std::string_view
+{
+  return "PhysicsModule";
+}
+
+auto PhysicsModule::GetPriority() const noexcept -> engine::ModulePriority
+{
+  return priority_;
+}
+
+auto PhysicsModule::GetSupportedPhases() const noexcept
+  -> engine::ModulePhaseMask
+{
+  return engine::MakeModuleMask<core::PhaseId::kFixedSimulation,
+    core::PhaseId::kGameplay, core::PhaseId::kSceneMutation>();
+}
+
+auto PhysicsModule::GetSyncDiagnostics() const noexcept -> SyncDiagnostics
+{
+  return diagnostics_;
+}
+
 PhysicsModule::PhysicsModule(engine::ModulePriority priority,
   std::unique_ptr<system::IPhysicsSystem> physics_system)
   : priority_(priority)
@@ -147,6 +169,151 @@ auto PhysicsModule::GetBodyTypeForBodyId(BodyId body_id) const
     return std::nullopt;
   }
   return binding->body_type;
+}
+
+auto PhysicsModule::RegisterNodeBodyMapping(
+  const scene::NodeHandle& node_handle, const BodyId body_id,
+  const body::BodyType body_type) -> void
+{
+  if (!node_handle.IsValid() || body_id == kInvalidBodyId) {
+    return;
+  }
+
+  if (const auto existing_node_it = node_to_binding_.find(node_handle);
+    existing_node_it != node_to_binding_.end()) {
+    (void)RemoveBinding(existing_node_it->second);
+  }
+  if (const auto existing_body_it = body_to_binding_.find(body_id);
+    existing_body_it != body_to_binding_.end()) {
+    (void)RemoveBinding(existing_body_it->second);
+  }
+  DCHECK_F(!node_to_character_binding_.contains(node_handle),
+    "Physics authority conflict: node already has a character mapping.");
+  if (node_to_character_binding_.contains(node_handle)) {
+    return;
+  }
+
+  CHECK_NOTNULL_F(bindings_.get());
+  const auto binding_handle = bindings_->Insert(PhysicsBinding {
+    .world_id = world_id_,
+    .body_id = body_id,
+    .body_type = body_type,
+    .node_handle = node_handle,
+  });
+  node_to_binding_.insert_or_assign(node_handle, binding_handle);
+  body_to_binding_.insert_or_assign(body_id, binding_handle);
+}
+
+auto PhysicsModule::GetBodyIdForNode(const scene::NodeHandle& node_handle) const
+  -> BodyId
+{
+  const auto it = node_to_binding_.find(node_handle);
+  if (it == node_to_binding_.end()) {
+    return kInvalidBodyId;
+  }
+  CHECK_NOTNULL_F(bindings_.get());
+  const auto* binding = bindings_->TryGet(it->second);
+  if (binding == nullptr) {
+    return kInvalidBodyId;
+  }
+  return binding->body_id;
+}
+
+auto PhysicsModule::HasBodyForNode(const scene::NodeHandle& node_handle) const
+  -> bool
+{
+  return GetBodyIdForNode(node_handle) != kInvalidBodyId;
+}
+
+auto PhysicsModule::GetNodeForBodyId(const BodyId body_id) const
+  -> std::optional<scene::NodeHandle>
+{
+  const auto it = body_to_binding_.find(body_id);
+  if (it == body_to_binding_.end()) {
+    return std::nullopt;
+  }
+  CHECK_NOTNULL_F(bindings_.get());
+  const auto* binding = bindings_->TryGet(it->second);
+  if (binding == nullptr || !binding->node_handle.IsValid()) {
+    return std::nullopt;
+  }
+  return binding->node_handle;
+}
+
+auto PhysicsModule::RegisterNodeCharacterMapping(
+  const scene::NodeHandle& node_handle, const CharacterId character_id) -> void
+{
+  if (!node_handle.IsValid() || character_id == kInvalidCharacterId) {
+    return;
+  }
+
+  if (const auto existing_node_it
+    = node_to_character_binding_.find(node_handle);
+    existing_node_it != node_to_character_binding_.end()) {
+    (void)RemoveCharacterBinding(existing_node_it->second);
+  }
+  if (const auto existing_character_it
+    = character_to_binding_.find(character_id);
+    existing_character_it != character_to_binding_.end()) {
+    (void)RemoveCharacterBinding(existing_character_it->second);
+  }
+  DCHECK_F(!node_to_binding_.contains(node_handle),
+    "Physics authority conflict: node already has a rigid body mapping.");
+  if (node_to_binding_.contains(node_handle)) {
+    return;
+  }
+
+  CHECK_NOTNULL_F(character_bindings_.get());
+  const auto binding_handle = character_bindings_->Insert(CharacterBinding {
+    .world_id = world_id_,
+    .character_id = character_id,
+    .node_handle = node_handle,
+  });
+  node_to_character_binding_.insert_or_assign(node_handle, binding_handle);
+  character_to_binding_.insert_or_assign(character_id, binding_handle);
+}
+
+auto PhysicsModule::GetCharacterIdForNode(
+  const scene::NodeHandle& node_handle) const -> CharacterId
+{
+  const auto it = node_to_character_binding_.find(node_handle);
+  if (it == node_to_character_binding_.end()) {
+    return kInvalidCharacterId;
+  }
+  CHECK_NOTNULL_F(character_bindings_.get());
+  const auto* binding = character_bindings_->TryGet(it->second);
+  if (binding == nullptr) {
+    return kInvalidCharacterId;
+  }
+  return binding->character_id;
+}
+
+auto PhysicsModule::HasCharacterForNode(
+  const scene::NodeHandle& node_handle) const -> bool
+{
+  return GetCharacterIdForNode(node_handle) != kInvalidCharacterId;
+}
+
+auto PhysicsModule::GetNodeForCharacterId(const CharacterId character_id) const
+  -> std::optional<scene::NodeHandle>
+{
+  const auto it = character_to_binding_.find(character_id);
+  if (it == character_to_binding_.end()) {
+    return std::nullopt;
+  }
+  CHECK_NOTNULL_F(character_bindings_.get());
+  const auto* binding = character_bindings_->TryGet(it->second);
+  if (binding == nullptr || !binding->node_handle.IsValid()) {
+    return std::nullopt;
+  }
+  return binding->node_handle;
+}
+
+auto PhysicsModule::ConsumeSceneEvents() -> std::vector<ScenePhysicsEvent>
+{
+  std::vector<ScenePhysicsEvent> drained {};
+  drained.swap(scene_events_);
+  return drained;
 }
 
 auto PhysicsModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept
