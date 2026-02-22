@@ -41,7 +41,7 @@ namespace {
   auto IsMutationAllowedPhase(lua_State* state) -> bool
   {
     const auto phase = GetActiveEventPhase(state);
-    return phase == "scene_mutation" || phase == "frame_start";
+    return phase == "scene_mutation";
   }
 
   auto SceneNodeDtor(lua_State* /*state*/, void* data) -> void

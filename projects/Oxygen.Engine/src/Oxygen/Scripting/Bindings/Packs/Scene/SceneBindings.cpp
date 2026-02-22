@@ -32,7 +32,7 @@ namespace {
   auto IsMutationAllowedPhase(lua_State* state) -> bool
   {
     const auto phase = GetActiveEventPhase(state);
-    return phase == "scene_mutation" || phase == "frame_start";
+    return phase == "scene_mutation";
   }
 
   auto RejectMutationOutsideScenePhase(
@@ -42,7 +42,7 @@ namespace {
       return false;
     }
     LOG_F(WARNING,
-      "scene.{} rejected outside scene_mutation/frame_start phase "
+      "scene.{} rejected outside scene_mutation phase "
       "(active_phase='{}')",
       operation_name, GetActiveEventPhase(state));
     return true;
