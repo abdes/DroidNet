@@ -360,10 +360,6 @@ NOLINT_TEST_F(PhysicsApiContractTest, ShapeLifecycleContract)
 
   auto& shapes = System().Shapes();
   const auto create_shape = shapes.CreateShape(shape::ShapeDesc {});
-  if (create_shape.has_error()) {
-    EXPECT_EQ(create_shape.error(), PhysicsError::kNotImplemented);
-    return;
-  }
   ASSERT_TRUE(create_shape.has_value());
   const auto shape_id = create_shape.value();
   EXPECT_NE(shape_id, kInvalidShapeId);
@@ -387,11 +383,6 @@ NOLINT_TEST_F(PhysicsApiContractTest, DestroyShapeWhileAttachedReturnsError)
   const auto world_id = world_result.value();
 
   const auto shape_result = shapes.CreateShape(shape::ShapeDesc {});
-  if (shape_result.has_error()) {
-    EXPECT_EQ(shape_result.error(), PhysicsError::kNotImplemented);
-    EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
-    return;
-  }
   ASSERT_TRUE(shape_result.has_value());
   const auto shape_id = shape_result.value();
 
@@ -402,13 +393,6 @@ NOLINT_TEST_F(PhysicsApiContractTest, DestroyShapeWhileAttachedReturnsError)
 
   const auto attach_result = bodies.AddBodyShape(world_id, body_id, shape_id,
     Vec3 { 0.0F, 0.0F, 0.0F }, Quat { 1.0F, 0.0F, 0.0F, 0.0F });
-  if (attach_result.has_error()) {
-    EXPECT_EQ(attach_result.error(), PhysicsError::kNotImplemented);
-    EXPECT_TRUE(bodies.DestroyBody(world_id, body_id).has_value());
-    EXPECT_TRUE(shapes.DestroyShape(shape_id).has_value());
-    EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
-    return;
-  }
   ASSERT_TRUE(attach_result.has_value());
   const auto instance_id = attach_result.value();
 

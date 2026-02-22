@@ -48,11 +48,11 @@ public:
 
 private:
   JoltWorld world_ {};
+  JoltShapes shapes_ {};
   JoltBodies bodies_;
   JoltQueries queries_;
   JoltEvents events_;
   JoltCharacters characters_ {};
-  JoltShapes shapes_ {};
   JoltAreas areas_ {};
   JoltJoints joints_ {};
 };

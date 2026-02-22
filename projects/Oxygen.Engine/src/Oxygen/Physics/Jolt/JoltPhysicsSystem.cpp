@@ -7,7 +7,7 @@
 #include <Oxygen/Physics/Jolt/JoltPhysicsSystem.h>
 
 oxygen::physics::jolt::JoltPhysicsSystem::JoltPhysicsSystem()
-  : bodies_(world_)
+  : bodies_(world_, shapes_)
   , queries_(world_)
   , events_(world_)
 {
