@@ -90,7 +90,9 @@ set_target_properties(
 set(
   OXYGEN_PHYSICS_HEADERS
   "api_export.h"
+  "Aggregate/AggregateAuthority.h"
   "Area/AreaDesc.h"
+  "Articulation/ArticulationDesc.h"
   "Backend.h"
   "Character/CharacterController.h"
   "CollisionFilter.h"
@@ -103,6 +105,8 @@ set(
   "Physics.h"
   "Shape.h"
   "Shape/ShapeDesc.h"
+  "SoftBody/SoftBodyDesc.h"
+  "Vehicle/VehicleDesc.h"
   "Query/Overlap.h"
   "Query/Raycast.h"
   "Query/Sweep.h"
