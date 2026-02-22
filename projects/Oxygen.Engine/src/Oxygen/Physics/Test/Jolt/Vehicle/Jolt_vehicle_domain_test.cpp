@@ -38,8 +38,12 @@ NOLINT_TEST_F(
 
   body::BodyDesc body_desc {};
   body_desc.type = body::BodyType::kDynamic;
+  body_desc.initial_position = Vec3 { 0.0F, 1.0F, 0.0F };
   const auto chassis = bodies.CreateBody(world_id, body_desc);
+  body_desc.type = body::BodyType::kKinematic;
+  body_desc.initial_position = Vec3 { -0.8F, 0.5F, 1.0F };
   const auto wheel_a = bodies.CreateBody(world_id, body_desc);
+  body_desc.initial_position = Vec3 { 0.8F, 0.5F, 1.0F };
   const auto wheel_b = bodies.CreateBody(world_id, body_desc);
   ASSERT_TRUE(chassis.has_value());
   ASSERT_TRUE(wheel_a.has_value());
@@ -72,12 +76,12 @@ NOLINT_TEST_F(
       .has_value());
 
   EXPECT_TRUE(bodies
-      .SetLinearVelocity(world_id, chassis.value(), Vec3 { 2.0F, 0.0F, 0.0F })
+      .SetLinearVelocity(world_id, chassis.value(), Vec3 { 0.0F, -2.0F, 0.0F })
       .has_value());
   const auto state = vehicles->GetState(world_id, vehicle_id);
   ASSERT_TRUE(state.has_value());
   EXPECT_GT(state.value().forward_speed_mps, 1.0F);
-  EXPECT_TRUE(state.value().grounded);
+  EXPECT_FALSE(state.value().grounded);
 
   const auto flush_create = vehicles->FlushStructuralChanges(world_id);
   ASSERT_TRUE(flush_create.has_value());

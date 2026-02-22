@@ -48,11 +48,14 @@ NOLINT_TEST_F(JoltVehicleBasicTest, CreateAndDestroyVehicleSucceeds)
   body_desc.type = body::BodyType::kDynamic;
   const auto chassis = bodies.CreateBody(world_id, body_desc);
   const auto wheel = bodies.CreateBody(world_id, body_desc);
+  const auto wheel2 = bodies.CreateBody(world_id, body_desc);
   ASSERT_TRUE(chassis.has_value());
   ASSERT_TRUE(wheel.has_value());
+  ASSERT_TRUE(wheel2.has_value());
 
-  const std::array<BodyId, 1> wheel_ids {
+  const std::array<BodyId, 2> wheel_ids {
     wheel.value(),
+    wheel2.value(),
   };
   const auto vehicle = vehicles->CreateVehicle(world_id,
     vehicle::VehicleDesc {
@@ -63,6 +66,7 @@ NOLINT_TEST_F(JoltVehicleBasicTest, CreateAndDestroyVehicleSucceeds)
   EXPECT_TRUE(IsValid(vehicle.value()));
 
   EXPECT_TRUE(vehicles->DestroyVehicle(world_id, vehicle.value()).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, wheel2.value()).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, wheel.value()).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, chassis.value()).has_value());
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());

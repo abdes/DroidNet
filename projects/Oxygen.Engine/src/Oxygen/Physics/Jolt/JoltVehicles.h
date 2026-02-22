@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
@@ -22,7 +23,7 @@ namespace oxygen::physics::jolt {
 class JoltVehicles final : public system::IVehicleApi {
 public:
   explicit JoltVehicles(JoltWorld& world);
-  ~JoltVehicles() override = default;
+  ~JoltVehicles() override;
 
   OXYGEN_MAKE_NON_COPYABLE(JoltVehicles)
   OXYGEN_MAKE_NON_MOVABLE(JoltVehicles)
@@ -42,6 +43,7 @@ public:
     -> PhysicsResult<size_t> override;
 
 private:
+  struct Impl;
   struct VehicleState final {
     WorldId world_id { kInvalidWorldId };
     BodyId chassis_body_id { kInvalidBodyId };
@@ -62,6 +64,7 @@ private:
   uint32_t next_vehicle_id_ { 1U };
   std::unordered_map<AggregateId, VehicleState> vehicles_ {};
   std::unordered_map<WorldId, size_t> pending_structural_changes_ {};
+  std::unique_ptr<Impl> impl_ {};
 };
 
 } // namespace oxygen::physics::jolt

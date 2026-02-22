@@ -91,11 +91,14 @@ NOLINT_TEST_F(JoltVehicleContractTest, SetControlInputValidatesNormalizedRanges)
   body_desc.type = body::BodyType::kDynamic;
   const auto chassis = bodies.CreateBody(world_id, body_desc);
   const auto wheel = bodies.CreateBody(world_id, body_desc);
+  const auto wheel2 = bodies.CreateBody(world_id, body_desc);
   ASSERT_TRUE(chassis.has_value());
   ASSERT_TRUE(wheel.has_value());
+  ASSERT_TRUE(wheel2.has_value());
 
-  const std::array<BodyId, 1> wheel_ids {
+  const std::array<BodyId, 2> wheel_ids {
     wheel.value(),
+    wheel2.value(),
   };
   const auto vehicle = vehicles->CreateVehicle(world_id,
     vehicle::VehicleDesc {
@@ -115,9 +118,99 @@ NOLINT_TEST_F(JoltVehicleContractTest, SetControlInputValidatesNormalizedRanges)
   EXPECT_EQ(invalid.error(), PhysicsError::kInvalidArgument);
 
   EXPECT_TRUE(vehicles->DestroyVehicle(world_id, vehicle.value()).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, wheel2.value()).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, wheel.value()).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, chassis.value()).has_value());
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
+NOLINT_TEST_F(JoltVehicleContractTest, CreateVehicleRejectsSingleWheelTopology)
+{
+  AssertBackendAvailabilityContract();
+  if (!HasBackend()) {
+    return;
+  }
+
+  auto* vehicles = System().Vehicles();
+  ASSERT_NE(vehicles, nullptr);
+  auto& worlds = System().Worlds();
+  auto& bodies = System().Bodies();
+
+  const auto world = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(world.has_value());
+  const auto world_id = world.value();
+
+  body::BodyDesc body_desc {};
+  body_desc.type = body::BodyType::kDynamic;
+  const auto chassis = bodies.CreateBody(world_id, body_desc);
+  const auto wheel = bodies.CreateBody(world_id, body_desc);
+  ASSERT_TRUE(chassis.has_value());
+  ASSERT_TRUE(wheel.has_value());
+
+  const std::array<BodyId, 1> wheel_ids {
+    wheel.value(),
+  };
+  const auto vehicle = vehicles->CreateVehicle(world_id,
+    vehicle::VehicleDesc {
+      .chassis_body_id = chassis.value(),
+      .wheel_body_ids = wheel_ids,
+    });
+  ASSERT_TRUE(vehicle.has_error());
+  EXPECT_EQ(vehicle.error(), PhysicsError::kInvalidArgument);
+
+  EXPECT_TRUE(bodies.DestroyBody(world_id, wheel.value()).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, chassis.value()).has_value());
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
+NOLINT_TEST_F(
+  JoltVehicleContractTest, DestroyAfterWorldDestroyedPurgesLocalVehicleState)
+{
+  AssertBackendAvailabilityContract();
+  if (!HasBackend()) {
+    return;
+  }
+
+  auto* vehicles = System().Vehicles();
+  ASSERT_NE(vehicles, nullptr);
+  auto& worlds = System().Worlds();
+  auto& bodies = System().Bodies();
+
+  const auto world = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(world.has_value());
+  const auto world_id = world.value();
+
+  body::BodyDesc body_desc {};
+  body_desc.type = body::BodyType::kDynamic;
+  const auto chassis = bodies.CreateBody(world_id, body_desc);
+  const auto wheel_a = bodies.CreateBody(world_id, body_desc);
+  const auto wheel_b = bodies.CreateBody(world_id, body_desc);
+  ASSERT_TRUE(chassis.has_value());
+  ASSERT_TRUE(wheel_a.has_value());
+  ASSERT_TRUE(wheel_b.has_value());
+
+  const std::array<BodyId, 2> wheel_ids {
+    wheel_a.value(),
+    wheel_b.value(),
+  };
+  const auto vehicle = vehicles->CreateVehicle(world_id,
+    vehicle::VehicleDesc {
+      .chassis_body_id = chassis.value(),
+      .wheel_body_ids = wheel_ids,
+    });
+  ASSERT_TRUE(vehicle.has_value());
+
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+
+  const auto destroy_after_world
+    = vehicles->DestroyVehicle(world_id, vehicle.value());
+  ASSERT_TRUE(destroy_after_world.has_error());
+  EXPECT_EQ(destroy_after_world.error(), PhysicsError::kWorldNotFound);
+
+  const auto destroy_again
+    = vehicles->DestroyVehicle(world_id, vehicle.value());
+  ASSERT_TRUE(destroy_again.has_error());
+  EXPECT_EQ(destroy_again.error(), PhysicsError::kInvalidArgument);
 }
 
 } // namespace oxygen::physics::test::jolt

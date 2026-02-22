@@ -32,7 +32,12 @@ add_test(NAME ${link_test_target} COMMAND ${link_test_target})
 
 include(GTestHelpers)
 
-m_gtest_program(Basic SOURCES "Physics_test.cpp")
+m_gtest_program(
+  Basic
+  SOURCES
+    "Physics_test.cpp"
+    "Physics_source_contract_test.cpp"
+)
 
 if(OXYGEN_PHYSICS_BACKEND STREQUAL "jolt")
   m_gtest_program(

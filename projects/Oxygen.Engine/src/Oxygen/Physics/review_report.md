@@ -187,9 +187,13 @@ The introduction of the `IJointApi` and `JoltJoints` correctly implements the ne
 
 **Backend (Jolt):**
 
-- Implement vehicle lifecycle/control/state.
-- Implement `GetAuthority` and `FlushStructuralChanges`.
-- Expose non-null `IPhysicsSystem::Vehicles()`.
+- Implemented with real `JPH::VehicleConstraint` + `JPH::WheeledVehicleController` ownership per vehicle.
+- Chassis/wheel topology from `VehicleDesc` is materialized into Jolt wheel settings at creation.
+- `SetControlInput` drives controller input via `SetDriverInput(...)` and activates the chassis body.
+- `GetState` is derived from runtime constraint state (`wheel->HasContact()`) and forward speed projection.
+- `FlushStructuralChanges` now returns tracked create/destroy structural deltas without backend TODO.
+- Not yet exposed by Oxygen API surface: drivetrain tuning, suspension parameter editing, wheel telemetry streams, and per-wheel contact query API.
+- Exposes non-null `IPhysicsSystem::Vehicles()`.
 
 **Tests:**
 
@@ -203,8 +207,8 @@ The introduction of the `IJointApi` and `JoltJoints` correctly implements the ne
 **Status:**
 
 - API/contracts: done
-- Jolt backend: done
-- Jolt domain tests: done
+- Jolt backend: baseline real implementation (`VehicleConstraint`/controller-backed)
+- Jolt domain tests: API + runtime-state verified
 - Module integration tests: done
 
 ## 7. Feature: Soft-Body Domain
@@ -351,8 +355,8 @@ The introduction of the `IJointApi` and `JoltJoints` correctly implements the ne
 ### 11.3 Vehicle
 
 - [x] API/contracts
-- [x] Jolt implementation
-- [x] Jolt tests
+- [x] Jolt implementation (Constraint/controller baseline)
+- [x] Jolt simulation tests (Runtime-state baseline)
 - [x] PhysicsModule integration tests
 
 ### 11.4 Soft-Body
@@ -385,4 +389,4 @@ The introduction of the `IJointApi` and `JoltJoints` correctly implements the ne
 
 ## 12. Conclusion
 
-The architecture baseline is strong and now organized by feature-delivery tracks. The next execution phase is backend realization (Jolt aggregate/articulation/vehicle/soft-body), followed by module integration and end-to-end product tracks.
+The architecture baseline is strong and now organized by feature-delivery tracks. The next execution phase is advanced backend realization (articulation solver materialization + soft-body backend + expanded vehicle tuning/telemetry surface), followed by scene-bridge hardening and end-to-end product integration tracks.
