@@ -107,6 +107,8 @@ set(
   "Query/Raycast.h"
   "Query/Sweep.h"
   "System/IAreaApi.h"
+  "System/IAggregateApi.h"
+  "System/IArticulationApi.h"
   "System/IBodyApi.h"
   "System/ICharacterApi.h"
   "System/IEventApi.h"
@@ -114,6 +116,8 @@ set(
   "System/IPhysicsSystem.h"
   "System/IQueryApi.h"
   "System/IShapeApi.h"
+  "System/ISoftBodyApi.h"
+  "System/IVehicleApi.h"
   "System/IWorldApi.h"
   "World/WorldDesc.h"
 )

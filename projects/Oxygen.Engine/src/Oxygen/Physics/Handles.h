@@ -68,6 +68,15 @@ using JointId = NamedType<uint32_t, struct JointIdTag,
   Hashable>; // clang-format on
 constexpr JointId kInvalidJointId { std::numeric_limits<uint32_t>::max() };
 
+using AggregateId = NamedType<uint32_t, struct AggregateIdTag,
+  // clang-format off
+  Comparable,
+  Printable,
+  Hashable>; // clang-format on
+constexpr AggregateId kInvalidAggregateId {
+  std::numeric_limits<uint32_t>::max()
+};
+
 OXGN_PHYS_NDAPI auto to_string(WorldId value) -> std::string;
 OXGN_PHYS_NDAPI auto to_string(BodyId value) -> std::string;
 OXGN_PHYS_NDAPI auto to_string(CharacterId value) -> std::string;
@@ -75,6 +84,7 @@ OXGN_PHYS_NDAPI auto to_string(ShapeId value) -> std::string;
 OXGN_PHYS_NDAPI auto to_string(ShapeInstanceId value) -> std::string;
 OXGN_PHYS_NDAPI auto to_string(AreaId value) -> std::string;
 OXGN_PHYS_NDAPI auto to_string(JointId value) -> std::string;
+OXGN_PHYS_NDAPI auto to_string(AggregateId value) -> std::string;
 
 [[nodiscard]] inline auto IsValid(WorldId value) noexcept -> bool
 {
@@ -109,6 +119,11 @@ OXGN_PHYS_NDAPI auto to_string(JointId value) -> std::string;
 [[nodiscard]] inline auto IsValid(JointId value) noexcept -> bool
 {
   return value != kInvalidJointId;
+}
+
+[[nodiscard]] inline auto IsValid(AggregateId value) noexcept -> bool
+{
+  return value != kInvalidAggregateId;
 }
 
 } // namespace oxygen::physics
