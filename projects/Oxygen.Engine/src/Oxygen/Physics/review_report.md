@@ -227,14 +227,25 @@ The introduction of the `IJointApi` and `JoltJoints` correctly implements the ne
 
 **Backend (Jolt):**
 
-- Implement soft-body lifecycle/material/state.
-- Implement `GetAuthority` and `FlushStructuralChanges`.
+- Implemented actual `JPH::Body` generation using `JPH::SoftBodySharedSettings::sCreateCube` based on the requested cluster count.
+- Soft body is safely registered to Oxygen's world identity bindings (`world->RegisterBody`).
+- `SetMaterialParams` currently maps:
+  - `damping -> MotionProperties::SetLinearDamping`
+  - `stiffness -> SoftBodyMotionProperties::SetPressure`
+- Runtime topology material updates (compliance/tether) are now deferred and applied in `FlushStructuralChanges(...)` through an internal soft-body rebuild pipeline.
+- Creation-time topology authoring now maps:
+  - edge/shear/bend compliance
+  - tether mode and tether distance multiplier
+  into `SoftBodySharedSettings::CreateConstraints(...)`.
+- `SoftBodyDesc::anchor_body_id` is currently reported as `kNotImplemented` on Jolt pending skin/tether-based anchor integration (two-body rigid constraints are not valid for soft-body solver path).
 - Expose non-null `IPhysicsSystem::SoftBodies()`.
 
 **Tests:**
 
 - API contract tests in `Physics_test.cpp`.
 - Jolt soft-body tests for lifecycle/material/state/authority/flush/error handling.
+- Step-boundary regression test for repeated `SetMaterialParams` calls.
+- Deferred topology material-update tests for coalescing + flush-apply behavior.
 
 **Integration:**
 
@@ -243,9 +254,22 @@ The introduction of the `IJointApi` and `JoltJoints` correctly implements the ne
 **Status:**
 
 - API/contracts: done
-- Jolt backend: pending
-- Jolt domain tests: pending
+- Jolt backend: real implementation (`CreateAndAddSoftBody` + creation-time compliance/tether mapping + runtime damping/stiffness updates + deferred topology rebuild on flush + safe `anchor_body_id` fallback to `kNotImplemented`)
+- Jolt domain tests: done
 - Module integration tests: pending
+
+**Near-Term Follow-Ups (engine-grade completion):**
+
+- [x] `physics-softbody-001` API expansion:
+  - Added explicit compliance/tether authoring fields to `SoftBodyMaterialParams` / `SoftBodyDesc`.
+  - Defined initial backend semantics in code contracts/comments.
+- [x] `physics-softbody-002` Backend mapping:
+  - Runtime topology compliance/tether updates are accepted in `SetMaterialParams(...)`, coalesced, and applied during `FlushStructuralChanges(...)` by rebuilding the soft-body with new shared settings.
+  - Creation-time mapping remains implemented.
+- [x] `physics-softbody-003` Verification:
+  - Added Jolt contract/domain tests covering deferred topology updates, coalescing, and flush application behavior.
+  - Added repeated-step regression coverage for non-topology runtime updates.
+  - Module-level tests remain tracked under Section 8 when the soft-body scene bridge lands.
 
 ## 8. Feature: Scene Bridge Contracts (PhysicsModule)
 
@@ -362,8 +386,8 @@ The introduction of the `IJointApi` and `JoltJoints` correctly implements the ne
 ### 11.4 Soft-Body
 
 - [x] API/contracts
-- [ ] Jolt implementation
-- [ ] Jolt tests
+- [x] Jolt implementation (baseline active, but `anchor_body_id` tethering needs work)
+- [x] Jolt tests
 - [ ] PhysicsModule integration tests
 
 ### 11.5 Scene Bridge

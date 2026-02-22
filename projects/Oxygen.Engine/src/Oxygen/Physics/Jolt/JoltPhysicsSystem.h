@@ -16,6 +16,7 @@
 #include <Oxygen/Physics/Jolt/JoltJoints.h>
 #include <Oxygen/Physics/Jolt/JoltQueries.h>
 #include <Oxygen/Physics/Jolt/JoltShapes.h>
+#include <Oxygen/Physics/Jolt/JoltSoftBodies.h>
 #include <Oxygen/Physics/Jolt/JoltVehicles.h>
 #include <Oxygen/Physics/Jolt/JoltWorld.h>
 #include <Oxygen/Physics/System/IPhysicsSystem.h>
@@ -42,6 +43,7 @@ public:
   auto Aggregates() noexcept -> system::IAggregateApi* override;
   auto Articulations() noexcept -> system::IArticulationApi* override;
   auto Vehicles() noexcept -> system::IVehicleApi* override;
+  auto SoftBodies() noexcept -> system::ISoftBodyApi* override;
 
   auto Worlds() const noexcept -> const system::IWorldApi& override;
   auto Bodies() const noexcept -> const system::IBodyApi& override;
@@ -55,6 +57,7 @@ public:
   auto Articulations() const noexcept
     -> const system::IArticulationApi* override;
   auto Vehicles() const noexcept -> const system::IVehicleApi* override;
+  auto SoftBodies() const noexcept -> const system::ISoftBodyApi* override;
 
 private:
   JoltWorld world_ {};
@@ -62,6 +65,7 @@ private:
   JoltAggregates aggregates_;
   JoltArticulations articulations_;
   JoltVehicles vehicles_;
+  JoltSoftBodies soft_bodies_;
   JoltBodies bodies_;
   JoltQueries queries_;
   JoltEvents events_;

@@ -1189,6 +1189,8 @@ NOLINT_TEST(Physics, ToStringConvertersFollowContract)
   EXPECT_EQ(
     aggregate::to_string(aggregate::AggregateAuthority::kCommand), "Command");
   EXPECT_EQ(to_string(joint::JointType::kHinge), "Hinge");
+  EXPECT_EQ(
+    softbody::to_string(softbody::SoftBodyTetherMode::kGeodesic), "Geodesic");
 }
 
 } // namespace oxygen::physics::test
