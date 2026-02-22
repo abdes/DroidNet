@@ -39,6 +39,15 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, FixedSimulationStepsWorldOnce)
   EXPECT_GT(FakeState().last_step_fixed_dt, 0.0F);
 }
 
+NOLINT_TEST_F(PhysicsModuleSyncTest, GameplayFlushesDeferredStructuralChanges)
+{
+  EXPECT_EQ(FakeState().flush_structural_calls, 0U);
+  RunGameplay();
+  EXPECT_EQ(FakeState().flush_structural_calls, 1U);
+  RunGameplay();
+  EXPECT_EQ(FakeState().flush_structural_calls, 2U);
+}
+
 NOLINT_TEST_F(
   PhysicsModuleSyncTest, AttachRigidBodySucceedsForObservedSceneNode)
 {

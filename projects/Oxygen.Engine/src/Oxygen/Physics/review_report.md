@@ -99,10 +99,14 @@ The query interface leverages `std::span` (e.g., `Sweep(WorldId, ..., std::span<
 
 While the baseline V1 architecture is exceptional, as traffic and complexity grow, consider the following structural changes grounded in AAA engine optimization:
 
-1. **Lock Contention in JoltShapes/JoltBodies:**
-   The `std::mutex shape_instance_mutex_` inside `JoltBodies` indicates dynamic structural changes are synchronized. If structural changes (adding/removing shapes) become frequent at runtime, this mutex might bottleneck the gameplay phase. Consider deferring shape mutations via a lock-free multi-producer queue to be consumed exclusively during the `kGameplay` push phase.
-2. **Vectorized / Bulk API Queries (Transforms):**
-   State queries and updates currently operate scalarly (`GetBodyPosition(WorldId, BodyId)` -> `Vec3`). Best practice for large entity counts is to query and update via Bulk arrays (AoA/SoA data models). Introduce a `PullDynamicTransforms(WorldId, span<BodyId>, span<Vec3>, span<Quat>)` API to `IBodyApi` to minimize virtual interface overhead when synchronizing 10,000+ objects out of `kSceneMutation`.
+1. **Deferred Structural Mutations (JoltBodies):**
+   The implementation of `FlushStructuralChanges` correctly eradicates lock contention. Instead of executing heavy Jolt compound shape rebuilds immediately under a mutex whenever `AddBodyShape` or `RemoveBodyShape` is called, it queues them via `pending_rebuilds_`.
+   - **Strengths**: The `body_state_mutex_` now exclusively protects lightweight hash-map modifications, meaning gameplay scripts/threads can attach/detach shapes concurrently without stalling. The expensive `JPH::BodyInterface` updates are predictably drained during the dedicated `kGameplay` push phase where concurrency is centrally orchestrated.
+2. **Further Optimization for Bulk API Queries:**
+   The recently implemented bulk query architectures (`IBodyApi::GetBodyPoses`, `IWorldApi::GetActiveBodyTransforms`) are structurally excellent and heavily reduce virtual/interface overhead. To squeeze maximum performance out of them:
+   - **Eliminate Allocation inside `JoltWorld::GetActiveBodyTransforms`:** A local `JPH::BodyIDVector` is currently created per-frame, causing heap fragmentation. Move this to a persistent context block (`JoltWorld::temp_active_body_ids_`) that is cleared and reused.
+   - **Optimize Jolt Interface Reads:** Within `JoltWorld::GetActiveBodyTransforms`, combine the calls to `GetPosition()` and `GetRotation()` into the singular call `GetPositionAndRotation(...)` to halve Jolt's internal lock-state validation queries.
+   - **Batch Kinematic Pushes:** The pullback from scene to physics (`OnSceneMutation`) correctly fetches the array data, however, pushing gameplay mutations `OnGameplay` still loops over `pending_transform_updates_` scalarly. Collect these into a contiguous buffer before executing a single `BodyApi::MoveKinematicBatch` query.
 3. **Soft Body, Articulations, and Vehicles:**
    The `IPhysicsSystem` describes an explicit roadmap for new domain accessors (Joints, Articulation). When integrating these, maintaining the rigid separation between Scene mapping and internal domains will be critical, as Articulated bodies break the simple 1:1 `NodeHandle` to `BodyId` relationship.
 

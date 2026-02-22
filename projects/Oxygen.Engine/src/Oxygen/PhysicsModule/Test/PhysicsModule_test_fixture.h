@@ -64,6 +64,7 @@ namespace detail {
     JointId next_joint_id { JointId { 1U } };
     std::size_t move_kinematic_calls { 0 };
     std::size_t set_body_pose_calls { 0 };
+    std::size_t flush_structural_calls { 0 };
     std::size_t character_create_calls { 0 };
     std::size_t character_destroy_calls { 0 };
     std::size_t character_move_calls { 0 };
@@ -375,6 +376,15 @@ namespace detail {
         return Err(PhysicsError::kBodyNotFound);
       }
       return PhysicsResult<void>::Ok();
+    }
+    auto FlushStructuralChanges(WorldId world_id)
+      -> PhysicsResult<size_t> override
+    {
+      if (world_id != state_->world_id || !state_->world_created) {
+        return Err(PhysicsError::kWorldNotFound);
+      }
+      state_->flush_structural_calls += 1;
+      return PhysicsResult<size_t>::Ok(0U);
     }
 
   private:

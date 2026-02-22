@@ -20,10 +20,13 @@ namespace oxygen::physics::system {
 /*!
  Responsibilities now:
  - Create and destroy bodies in a world.
- - Read and write body pose state.
- - Provide bulk pose query/update paths for high-volume sync workloads.
+ - Read and
+ write body pose state.
+ - Provide bulk pose query/update paths for high-volume
+ sync workloads.
  - Attach and detach reusable shape instances per body.
-
+ -
+ Queue and flush deferred structural shape changes.
  Shape composition contract:
  - `CreateBody(world_id, desc)` always creates one initial collision shape from
    `desc.shape` as a convenience path.
@@ -110,6 +113,8 @@ public:
     = 0;
   virtual auto RemoveBodyShape(WorldId world_id, BodyId body_id,
     ShapeInstanceId shape_instance_id) -> PhysicsResult<void>
+    = 0;
+  virtual auto FlushStructuralChanges(WorldId world_id) -> PhysicsResult<size_t>
     = 0;
 };
 
