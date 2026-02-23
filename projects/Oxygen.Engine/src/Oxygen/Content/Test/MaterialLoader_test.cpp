@@ -175,11 +175,11 @@ NOLINT_TEST_F(
   desc.metalness = oxygen::data::Unorm16(0.7f);
   desc.roughness = oxygen::data::Unorm16(0.2f);
   desc.ambient_occlusion = oxygen::data::Unorm16(0.9f);
-  desc.base_color_texture = 42u;
-  desc.normal_texture = 43u;
-  desc.metallic_texture = 44u;
-  desc.roughness_texture = 45u;
-  desc.ambient_occlusion_texture = 46u;
+  desc.base_color_texture = oxygen::data::pak::ResourceIndexT { 42u };
+  desc.normal_texture = oxygen::data::pak::ResourceIndexT { 43u };
+  desc.metallic_texture = oxygen::data::pak::ResourceIndexT { 44u };
+  desc.roughness_texture = oxygen::data::pak::ResourceIndexT { 45u };
+  desc.ambient_occlusion_texture = oxygen::data::pak::ResourceIndexT { 46u };
   desc.uv_scale[0] = 2.0f;
   desc.uv_scale[1] = 3.0f;
   desc.uv_offset[0] = 0.25f;
@@ -309,11 +309,11 @@ NOLINT_TEST_F(
   desc.metalness = oxygen::data::Unorm16(1.0f);
   desc.roughness = oxygen::data::Unorm16(1.0f);
   desc.ambient_occlusion = oxygen::data::Unorm16(1.0f);
-  desc.base_color_texture = 0;
-  desc.normal_texture = 0;
-  desc.metallic_texture = 0;
-  desc.roughness_texture = 0;
-  desc.ambient_occlusion_texture = 0;
+  desc.base_color_texture = oxygen::data::pak::ResourceIndexT { 0u };
+  desc.normal_texture = oxygen::data::pak::ResourceIndexT { 0u };
+  desc.metallic_texture = oxygen::data::pak::ResourceIndexT { 0u };
+  desc.roughness_texture = oxygen::data::pak::ResourceIndexT { 0u };
+  desc.ambient_occlusion_texture = oxygen::data::pak::ResourceIndexT { 0u };
   WriteMaterialDescriptor(desc);
 
   // Act
@@ -431,7 +431,7 @@ NOLINT_TEST_F(
 
   // Arrange
   auto desc = MakeMaterialDescriptor("Test Material");
-  desc.base_color_texture = 42u;
+  desc.base_color_texture = oxygen::data::pak::ResourceIndexT { 42u };
   WriteMaterialDescriptor(desc);
 
   auto [context, collector] = CreateDecodeLoaderContext();
@@ -440,7 +440,7 @@ NOLINT_TEST_F(
   const ResourceRef expected {
     .source = oxygen::content::internal::SourceToken { 7 },
     .resource_type_id = TextureResource::ClassTypeId(),
-    .resource_index = 42,
+    .resource_index = oxygen::data::pak::ResourceIndexT { 42u },
   };
 
   EXPECT_THAT(collector->ResourceRefDependencies(), IsSupersetOf({ expected }));

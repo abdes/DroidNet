@@ -105,7 +105,7 @@ public:
   //! Returns the number of resources described in the table
   [[nodiscard]] auto Size() const noexcept -> data::pak::ResourceIndexT
   {
-    return table_meta_.count;
+    return data::pak::ResourceIndexT { table_meta_.count };
   }
 
 private:

@@ -36,8 +36,8 @@ namespace oxygen::scripting::test {
 namespace {
 
   struct ScriptAssetResourceIndices {
-    uint32_t bytecode_index { data::pak::kNoResourceIndex };
-    uint32_t source_index { data::pak::kNoResourceIndex };
+    data::pak::ResourceIndexT bytecode_index { data::pak::kNoResourceIndex };
+    data::pak::ResourceIndexT source_index { data::pak::kNoResourceIndex };
   };
 
   auto MakeScriptAsset(std::string_view external_source,
@@ -130,8 +130,8 @@ NOLINT_TEST_F(
 {
   const auto asset = MakeScriptAsset("external.luau",
     ScriptAssetResourceIndices {
-      .bytecode_index = 1,
-      .source_index = 2,
+      .bytecode_index = data::pak::ResourceIndexT { 1u },
+      .source_index = data::pak::ResourceIndexT { 2u },
     },
     data::pak::ScriptAssetFlags::kAllowExternalSource);
 
@@ -274,7 +274,7 @@ NOLINT_TEST_F(ScriptSourceResolverTest, ResolveUsesMappedLooseCookedOrigin)
 {
   const auto asset = MakeScriptAsset({},
     ScriptAssetResourceIndices {
-      .bytecode_index = 3,
+      .bytecode_index = data::pak::ResourceIndexT { 3u },
       .source_index = data::pak::kNoResourceIndex,
     },
     data::pak::ScriptAssetFlags::kNone);

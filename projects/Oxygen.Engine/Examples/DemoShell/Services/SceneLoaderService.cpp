@@ -2067,7 +2067,8 @@ auto SceneLoaderService::ReadScriptResource(uint32_t index) const
 {
   if (source_pak_) {
     try {
-      return source_pak_->ReadScriptResource(index);
+      return source_pak_->ReadScriptResource(
+        data::pak::ResourceIndexT { index });
     } catch (const std::exception& ex) {
       LOG_F(WARNING, "failed to read script resource from PAK (index={}): {}",
         index, ex.what());

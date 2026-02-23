@@ -327,12 +327,14 @@ namespace {
       mesh_desc.mesh_view_count = static_cast<uint32_t>(lod.views.size());
 
       if (lod.mesh_type == data::MeshType::kSkinned) {
-        mesh_desc.info.skinned.vertex_buffer = 0;
-        mesh_desc.info.skinned.index_buffer = 0;
-        mesh_desc.info.skinned.joint_index_buffer = 0;
-        mesh_desc.info.skinned.joint_weight_buffer = 0;
-        mesh_desc.info.skinned.inverse_bind_buffer = 0;
-        mesh_desc.info.skinned.joint_remap_buffer = 0;
+        mesh_desc.info.skinned.vertex_buffer = data::pak::kNoResourceIndex;
+        mesh_desc.info.skinned.index_buffer = data::pak::kNoResourceIndex;
+        mesh_desc.info.skinned.joint_index_buffer = data::pak::kNoResourceIndex;
+        mesh_desc.info.skinned.joint_weight_buffer
+          = data::pak::kNoResourceIndex;
+        mesh_desc.info.skinned.inverse_bind_buffer
+          = data::pak::kNoResourceIndex;
+        mesh_desc.info.skinned.joint_remap_buffer = data::pak::kNoResourceIndex;
         mesh_desc.info.skinned.joint_count = lod.joint_count;
         mesh_desc.info.skinned.influences_per_vertex
           = lod.influences_per_vertex;
@@ -342,8 +344,8 @@ namespace {
         std::copy_n(
           lod.bounds.max.data(), 3, mesh_desc.info.skinned.bounding_box_max);
       } else {
-        mesh_desc.info.standard.vertex_buffer = 0;
-        mesh_desc.info.standard.index_buffer = 0;
+        mesh_desc.info.standard.vertex_buffer = data::pak::kNoResourceIndex;
+        mesh_desc.info.standard.index_buffer = data::pak::kNoResourceIndex;
         std::copy_n(
           lod.bounds.min.data(), 3, mesh_desc.info.standard.bounding_box_min);
         std::copy_n(

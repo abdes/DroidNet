@@ -15,6 +15,16 @@
 
 namespace oxygen::serio {
 
+// ResourceIndexT is a NamedType; deserialize from its packed uint32 payload.
+inline auto Load(AnyReader& reader, data::pak::ResourceIndexT& value)
+  -> Result<void>
+{
+  uint32_t raw_value = 0;
+  CHECK_RESULT(reader.ReadInto(raw_value));
+  value = data::pak::ResourceIndexT { raw_value };
+  return {};
+}
+
 inline auto Load(AnyReader& reader, data::AssetKey& key) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);

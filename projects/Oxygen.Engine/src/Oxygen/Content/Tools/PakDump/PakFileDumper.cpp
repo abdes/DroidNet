@@ -122,8 +122,7 @@ auto ReadPakFooter(const std::filesystem::path& pak_path)
 
 auto FooterMagicOk(const PakFooter& footer) -> bool
 {
-  return std::ranges::equal(
-    std::span { footer.footer_magic }, oxygen::data::pak::kPakFooterMagic);
+  return std::ranges::equal(std::span { footer.footer_magic }, kPakFooterMagic);
 }
 
 auto TexturePackingPolicyName(uint8_t policy) -> std::string_view
@@ -258,7 +257,7 @@ public:
         ++i) {
         try {
           const auto key = asset_loader.MakeResourceKey<BufferResource>(
-            pak, static_cast<uint32_t>(i));
+            pak, ResourceIndexT { static_cast<uint32_t>(i) });
           auto buffer_resource
             = co_await asset_loader.LoadResourceAsync<BufferResource>(key);
           if (buffer_resource) {
@@ -271,9 +270,13 @@ public:
             Field("Element Stride",
               std::to_string(buffer_resource->GetElementStride()), 8);
             Field("Element Format",
-              nostd::to_string(buffer_resource->GetElementFormat()), 8);
+              std::to_string(
+                static_cast<uint32_t>(buffer_resource->GetElementFormat())),
+              8);
             Field("Usage Flags",
-              nostd::to_string(buffer_resource->GetUsageFlags()), 8);
+              std::to_string(
+                static_cast<uint32_t>(buffer_resource->GetUsageFlags())),
+              8);
             Field("Content Hash",
               ToHexString(buffer_resource->GetContentHash()), 8);
             std::string buffer_type;
@@ -331,7 +334,7 @@ public:
         ++i) {
         try {
           const auto key = asset_loader.MakeResourceKey<TextureResource>(
-            pak, static_cast<uint32_t>(i));
+            pak, ResourceIndexT { static_cast<uint32_t>(i) });
           auto texture_resource
             = co_await asset_loader.LoadResourceAsync<TextureResource>(key);
           if (texture_resource) {
@@ -347,9 +350,14 @@ public:
               std::to_string(texture_resource->GetArrayLayers()), 8);
             Field(
               "Mip Levels", std::to_string(texture_resource->GetMipCount()), 8);
-            Field("Format", nostd::to_string(texture_resource->GetFormat()), 8);
+            Field("Format",
+              std::to_string(
+                static_cast<uint32_t>(texture_resource->GetFormat())),
+              8);
             Field("Texture Type",
-              nostd::to_string(texture_resource->GetTextureType()), 8);
+              std::to_string(
+                static_cast<uint32_t>(texture_resource->GetTextureType())),
+              8);
             Field("Content Hash",
               ToHexString(texture_resource->GetContentHash()), 8);
             if (ctx.verbose) {
@@ -408,7 +416,7 @@ public:
         ++i) {
         try {
           const auto key = asset_loader.MakeResourceKey<ScriptResource>(
-            pak, static_cast<uint32_t>(i));
+            pak, ResourceIndexT { static_cast<uint32_t>(i) });
           auto script_resource
             = co_await asset_loader.LoadResourceAsync<ScriptResource>(key);
           if (script_resource) {
@@ -481,7 +489,7 @@ public:
         ++i) {
         try {
           const auto key = asset_loader.MakeResourceKey<PhysicsResource>(
-            pak, static_cast<uint32_t>(i));
+            pak, ResourceIndexT { static_cast<uint32_t>(i) });
           auto physics_resource
             = co_await asset_loader.LoadResourceAsync<PhysicsResource>(key);
           if (physics_resource) {
@@ -626,7 +634,7 @@ void PakFileDumper::PrintPakHeader(const PakFile& pak)
   Field("Magic", "OXPAK (verified by successful load)");
   Field("Format Version", pak.FormatVersion());
   Field("Content Version", pak.ContentVersion());
-  Field("GUID", oxygen::data::to_string(pak.Guid()));
+  Field("GUID", to_string(pak.Guid()));
   Field("Header Size", std::to_string(sizeof(PakHeader)) + " bytes");
   std::cout << "\n";
 }

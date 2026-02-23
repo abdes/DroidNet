@@ -84,12 +84,12 @@ struct MeshLod {
 
 //! Buffer bindings used to finalize geometry descriptors.
 struct MeshBufferBindings {
-  data::pak::ResourceIndexT vertex_buffer = 0;
-  data::pak::ResourceIndexT index_buffer = 0;
-  data::pak::ResourceIndexT joint_index_buffer = 0;
-  data::pak::ResourceIndexT joint_weight_buffer = 0;
-  data::pak::ResourceIndexT inverse_bind_buffer = 0;
-  data::pak::ResourceIndexT joint_remap_buffer = 0;
+  data::pak::ResourceIndexT vertex_buffer = data::pak::kNoResourceIndex;
+  data::pak::ResourceIndexT index_buffer = data::pak::kNoResourceIndex;
+  data::pak::ResourceIndexT joint_index_buffer = data::pak::kNoResourceIndex;
+  data::pak::ResourceIndexT joint_weight_buffer = data::pak::kNoResourceIndex;
+  data::pak::ResourceIndexT inverse_bind_buffer = data::pak::kNoResourceIndex;
+  data::pak::ResourceIndexT joint_remap_buffer = data::pak::kNoResourceIndex;
 };
 
 //! Pipeline for CPU-bound mesh build (VB/IB + auxiliary buffers).

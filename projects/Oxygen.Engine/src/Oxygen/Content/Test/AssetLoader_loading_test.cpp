@@ -166,7 +166,7 @@ auto WriteLooseCookedMaterialWithTexture(
   material_desc.material_domain = 0;
   material_desc.flags = 0;
   material_desc.shader_stages = 0;
-  material_desc.base_color_texture = 1;
+  material_desc.base_color_texture = oxygen::data::pak::ResourceIndexT { 1u };
 
   {
     const auto material_file
@@ -768,8 +768,8 @@ NOLINT_TEST_F(AssetLoaderLoadingTest, MakeResourceKey_PakIndexIgnoresLooseRoots)
   const auto pak_file = oxygen::content::PakFile(pak_path);
 
   // Act
-  const auto resource_key
-    = asset_loader_->MakeResourceKey<BufferResource>(pak_file, 0u);
+  const auto resource_key = asset_loader_->MakeResourceKey<BufferResource>(
+    pak_file, oxygen::data::pak::ResourceIndexT { 0u });
   const auto decoded = InternalResourceKey(resource_key);
 
   // Assert

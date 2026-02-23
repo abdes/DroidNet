@@ -72,7 +72,7 @@ std::unordered_map<uint64_t, oxygen::data::AssetKey> g_asset_hash_to_key;
 struct ResourceCompositeKey final {
   oxygen::data::SourceKey source_key;
   uint16_t resource_type_index = 0;
-  uint32_t resource_index = 0;
+  pak::ResourceIndexT resource_index = pak::kNoResourceIndex;
 
   auto operator==(const ResourceCompositeKey&) const -> bool = default;
 };
@@ -96,7 +96,8 @@ using oxygen::content::constants::kSyntheticSourceId;
 // Implement the private helper declared in the header to avoid exposing the
 // internal header in the public API.
 auto AssetLoader::PackResourceKey(uint16_t pak_index,
-  uint16_t resource_type_index, uint32_t resource_index) -> ResourceKey
+  uint16_t resource_type_index, pak::ResourceIndexT resource_index)
+  -> ResourceKey
 {
   internal::InternalResourceKey key(
     pak_index, resource_type_index, resource_index);
@@ -1366,7 +1367,7 @@ auto AssetLoader::InvalidateAssetTree(const data::AssetKey& key) -> void
     const auto resource_type_index = static_cast<uint16_t>(
       IndexOf<data::ScriptResource, ResourceTypeList>::value);
 
-    auto invalidate_resource = [&](const uint32_t index) {
+    auto invalidate_resource = [&](const pak::ResourceIndexT index) {
       if (index != data::pak::kNoResourceIndex) {
         const auto rkey
           = PackResourceKey(source_id, resource_type_index, index);
@@ -3816,8 +3817,8 @@ auto AssetLoader::MintSyntheticTextureKey() -> ResourceKey
     = next_synthetic_texture_index_.fetch_add(1, std::memory_order_relaxed);
   const auto resource_type_index = static_cast<uint16_t>(
     IndexOf<data::TextureResource, ResourceTypeList>::value);
-  return PackResourceKey(
-    kSyntheticSourceId, resource_type_index, synthetic_index);
+  return PackResourceKey(kSyntheticSourceId, resource_type_index,
+    pak::ResourceIndexT { synthetic_index });
 }
 
 auto AssetLoader::MintSyntheticBufferKey() -> ResourceKey
@@ -3826,8 +3827,8 @@ auto AssetLoader::MintSyntheticBufferKey() -> ResourceKey
     = next_synthetic_buffer_index_.fetch_add(1, std::memory_order_relaxed);
   const auto resource_type_index = static_cast<uint16_t>(
     IndexOf<data::BufferResource, ResourceTypeList>::value);
-  return PackResourceKey(
-    kSyntheticSourceId, resource_type_index, synthetic_index);
+  return PackResourceKey(kSyntheticSourceId, resource_type_index,
+    pak::ResourceIndexT { synthetic_index });
 }
 
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)

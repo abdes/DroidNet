@@ -386,8 +386,8 @@ public:
    @see LoadResourceAsync, AddResourceDependency, ResourceKey
   */
   template <typename T>
-  inline auto MakeResourceKey(const PakFile& pak_file, uint32_t resource_index)
-    -> ResourceKey
+  inline auto MakeResourceKey(const PakFile& pak_file,
+    data::pak::ResourceIndexT resource_index) -> ResourceKey
   {
     auto pak_index = GetPakIndex(pak_file);
     auto resource_type_index
@@ -407,7 +407,8 @@ public:
    @warning Calling this outside of a load operation is invalid.
   */
   template <typename T>
-  inline auto MakeResourceKey(uint32_t resource_index) -> ResourceKey
+  inline auto MakeResourceKey(data::pak::ResourceIndexT resource_index)
+    -> ResourceKey
   {
     const auto source_index = GetCurrentSourceId();
     auto resource_type_index
@@ -988,7 +989,8 @@ private:
   // Private helper to pack resource key without exposing internal type in the
   // public header. Implemented in the .cpp which includes InternalResourceKey.
   OXGN_CNTT_API static auto PackResourceKey(uint16_t pak_index,
-    uint16_t resource_type_index, uint32_t resource_index) -> ResourceKey;
+    uint16_t resource_type_index, data::pak::ResourceIndexT resource_index)
+    -> ResourceKey;
 
   // Bind an internal container-relative resource reference into an opaque
   // ResourceKey. Owning-thread only.

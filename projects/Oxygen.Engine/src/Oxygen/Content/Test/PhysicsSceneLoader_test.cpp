@@ -356,8 +356,8 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest,
   rec.linear_damping = 0.1F;
   rec.angular_damping = 0.2F;
   rec.gravity_factor = 0.5F;
-  rec.shape_asset_index = 3;
-  rec.material_asset_index = 1;
+  rec.shape_asset_index = oxygen::data::pak::ResourceIndexT { 3u };
+  rec.material_asset_index = oxygen::data::pak::ResourceIndexT { 1u };
 
   WriteOneRigidBodyTable(rec);
 
