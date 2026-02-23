@@ -1773,6 +1773,7 @@ def pack_physics_scene_asset_descriptor_and_payload(
         physics_material_name_to_asset_index or {}
     )
     physics_resource_name_to_index = physics_resource_name_to_index or {}
+    no_resource_index = 0
 
     def _resolve_index(
         binding: Dict[str, Any],
@@ -1781,6 +1782,7 @@ def pack_physics_scene_asset_descriptor_and_payload(
         name_fields: Sequence[str],
         name_to_index: Dict[str, int],
         field_name: str,
+        default_index: int,
     ) -> int:
         for field in index_fields:
             if field in binding:
@@ -1796,7 +1798,7 @@ def pack_physics_scene_asset_descriptor_and_payload(
                     "E_REF", f"{field_name} '{value}' not found in authored assets"
                 )
             return int(name_to_index[value])
-        return 0
+        return int(default_index)
 
     target_node_count = int(asset.get("target_node_count", 0))
     if target_node_count < 0:
@@ -1817,6 +1819,7 @@ def pack_physics_scene_asset_descriptor_and_payload(
             name_fields=("shape_asset", "shape_asset_name", "shape"),
             name_to_index=shape_name_to_asset_index,
             field_name="rigid_body.shape_asset",
+            default_index=no_resource_index,
         )
         material_index = _resolve_index(
             binding,
@@ -1828,6 +1831,7 @@ def pack_physics_scene_asset_descriptor_and_payload(
             ),
             name_to_index=physics_material_name_to_asset_index,
             field_name="rigid_body.material_asset",
+            default_index=no_resource_index,
         )
         rigid_body_records.append(
             pack_rigid_body_binding_record(
@@ -1856,6 +1860,7 @@ def pack_physics_scene_asset_descriptor_and_payload(
             name_fields=("shape_asset", "shape_asset_name", "shape"),
             name_to_index=shape_name_to_asset_index,
             field_name="collider.shape_asset",
+            default_index=no_resource_index,
         )
         material_index = _resolve_index(
             binding,
@@ -1867,6 +1872,7 @@ def pack_physics_scene_asset_descriptor_and_payload(
             ),
             name_to_index=physics_material_name_to_asset_index,
             field_name="collider.material_asset",
+            default_index=no_resource_index,
         )
         collider_records.append(
             pack_collider_binding_record(
@@ -1893,6 +1899,7 @@ def pack_physics_scene_asset_descriptor_and_payload(
             name_fields=("shape_asset", "shape_asset_name", "shape"),
             name_to_index=shape_name_to_asset_index,
             field_name="character.shape_asset",
+            default_index=no_resource_index,
         )
         character_records.append(
             pack_character_binding_record(
@@ -1935,6 +1942,7 @@ def pack_physics_scene_asset_descriptor_and_payload(
             ),
             name_to_index=physics_resource_name_to_index,
             field_name="joint.constraint_resource",
+            default_index=no_resource_index,
         )
         joint_records.append(
             pack_joint_binding_record(
@@ -1963,6 +1971,7 @@ def pack_physics_scene_asset_descriptor_and_payload(
             ),
             name_to_index=physics_resource_name_to_index,
             field_name="vehicle.constraint_resource",
+            default_index=no_resource_index,
         )
         vehicle_records.append(
             pack_vehicle_binding_record(
@@ -2163,10 +2172,10 @@ def pack_joint_binding_record(
 ) -> bytes:
     """Pack JointBindingRecord (32 bytes)."""
     node_a = int(binding.get("node_index_a", 0))
-    node_b = int(binding.get("node_index_b", 0xFFFFFFFF))
+    node_b = int(binding.get("node_index_b", 0))
     if node_a < 0 or node_a >= node_count:
         raise PakError("E_REF", f"Joint node_index_a out of range: {node_a}")
-    if node_b != 0xFFFFFFFF and (node_b < 0 or node_b >= node_count):
+    if node_b != 0 and (node_b < 0 or node_b >= node_count):
         raise PakError("E_REF", f"Joint node_index_b out of range: {node_b}")
     reserved = b"\x00" * 20
     desc = (
