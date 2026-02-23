@@ -184,6 +184,16 @@ auto AsyncEngine::Run() -> void
 
 auto AsyncEngine::Shutdown() -> co::Co<>
 {
+  // Shutdown lifetime contract:
+  // FrameContext only stores a non-owning scene pointer. Clear it before
+  // module teardown to prevent any late phase/module code from observing a
+  // dangling scene after DemoShell clears ownership.
+  {
+    const auto tag = internal::EngineTagFactory::Get();
+    frame_context_.SetCurrentPhase(PhaseId::kFrameStart, tag);
+    frame_context_.SetScene(observer_ptr<scene::Scene> {});
+  }
+
   // Drain outstanding GPU work and process any pending deferred releases
   // registered during normal frame processing before we start shutting down
   // modules. This ensures modules' destructors won't final-release resources
