@@ -224,6 +224,60 @@ namespace {
     return 1;
   }
 
+  auto JointIdIsValid(lua_State* state) -> int
+  {
+    const auto* id = CheckJointId(state, 1);
+    lua_pushboolean(state, physics::IsValid(id->joint_id) ? 1 : 0);
+    return 1;
+  }
+
+  auto JointIdToString(lua_State* state) -> int
+  {
+    const auto* id = CheckJointId(state, 1);
+    const auto text = std::string("JointId{")
+                        .append(physics::to_string(id->joint_id))
+                        .append("}");
+    lua_pushstring(state, text.c_str());
+    return 1;
+  }
+
+  auto JointIdEq(lua_State* state) -> int
+  {
+    const auto* lhs = CheckJointId(state, 1);
+    const auto* rhs = CheckJointId(state, 2);
+    lua_pushboolean(state, lhs->joint_id == rhs->joint_id ? 1 : 0);
+    return 1;
+  }
+
+  auto JointHandleIsValid(lua_State* state) -> int
+  {
+    const auto* handle = CheckJointHandle(state, 1);
+    lua_pushboolean(state, physics::IsValid(handle->joint_id) ? 1 : 0);
+    return 1;
+  }
+
+  auto JointHandleToString(lua_State* state) -> int
+  {
+    const auto* handle = CheckJointHandle(state, 1);
+    const auto text = std::string("JointHandle{world=")
+                        .append(physics::to_string(handle->world_id))
+                        .append(", joint=")
+                        .append(physics::to_string(handle->joint_id))
+                        .append("}");
+    lua_pushstring(state, text.c_str());
+    return 1;
+  }
+
+  auto JointHandleEq(lua_State* state) -> int
+  {
+    const auto* lhs = CheckJointHandle(state, 1);
+    const auto* rhs = CheckJointHandle(state, 2);
+    const auto equal
+      = lhs->world_id == rhs->world_id && lhs->joint_id == rhs->joint_id;
+    lua_pushboolean(state, equal ? 1 : 0);
+    return 1;
+  }
+
   auto RegisterMetatableWithCommonMethods(lua_State* state,
     const char* metatable_name, lua_CFunction is_valid_fn, lua_CFunction eq_fn,
     lua_CFunction tostring_fn) -> void
@@ -281,6 +335,18 @@ auto RegisterPhysicsAggregateIdMetatable(lua_State* state) -> void
 {
   RegisterMetatableWithCommonMethods(state, kPhysicsAggregateIdMetatable,
     AggregateIdIsValid, AggregateIdEq, AggregateIdToString);
+}
+
+auto RegisterPhysicsJointHandleMetatable(lua_State* state) -> void
+{
+  RegisterMetatableWithCommonMethods(state, kPhysicsJointHandleMetatable,
+    JointHandleIsValid, JointHandleEq, JointHandleToString);
+}
+
+auto RegisterPhysicsJointIdMetatable(lua_State* state) -> void
+{
+  RegisterMetatableWithCommonMethods(state, kPhysicsJointIdMetatable,
+    JointIdIsValid, JointIdEq, JointIdToString);
 }
 
 auto PushBodyHandle(lua_State* state, const physics::WorldId world_id,
@@ -391,6 +457,41 @@ auto CheckAggregateId(lua_State* state, const int index)
 {
   return static_cast<PhysicsAggregateIdUserdata*>(
     luaL_checkudata(state, index, kPhysicsAggregateIdMetatable));
+}
+
+auto PushJointHandle(lua_State* state, const physics::WorldId world_id,
+  const physics::JointId joint_id) -> int
+{
+  auto* userdata = static_cast<PhysicsJointHandleUserdata*>(
+    lua_newuserdata(state, sizeof(PhysicsJointHandleUserdata)));
+  *userdata = PhysicsJointHandleUserdata {
+    .world_id = world_id,
+    .joint_id = joint_id,
+  };
+  SetMetatable(state, kPhysicsJointHandleMetatable);
+  return 1;
+}
+
+auto CheckJointHandle(lua_State* state, const int index)
+  -> PhysicsJointHandleUserdata*
+{
+  return static_cast<PhysicsJointHandleUserdata*>(
+    luaL_checkudata(state, index, kPhysicsJointHandleMetatable));
+}
+
+auto PushJointId(lua_State* state, const physics::JointId joint_id) -> int
+{
+  auto* userdata = static_cast<PhysicsJointIdUserdata*>(
+    lua_newuserdata(state, sizeof(PhysicsJointIdUserdata)));
+  userdata->joint_id = joint_id;
+  SetMetatable(state, kPhysicsJointIdMetatable);
+  return 1;
+}
+
+auto CheckJointId(lua_State* state, const int index) -> PhysicsJointIdUserdata*
+{
+  return static_cast<PhysicsJointIdUserdata*>(
+    luaL_checkudata(state, index, kPhysicsJointIdMetatable));
 }
 
 auto GetPhysicsModule(lua_State* state) -> physics::PhysicsModule*

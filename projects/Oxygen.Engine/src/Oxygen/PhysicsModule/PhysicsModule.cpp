@@ -179,6 +179,12 @@ auto PhysicsModule::Characters() noexcept -> system::ICharacterApi&
   return physics_system_->Characters();
 }
 
+auto PhysicsModule::Joints() noexcept -> system::IJointApi&
+{
+  CHECK_NOTNULL_F(physics_system_.get());
+  return physics_system_->Joints();
+}
+
 auto PhysicsModule::Aggregates() noexcept -> system::IAggregateApi&
 {
   CHECK_NOTNULL_F(physics_system_.get());

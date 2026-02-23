@@ -161,6 +161,7 @@ oxygen.physics
 ├── oxygen.physics.constants
 ├── oxygen.physics.aggregate     — generic aggregate lifecycle/membership
 ├── oxygen.physics.articulation  — articulation aggregate topology
+├── oxygen.physics.joint         — generalized constraint/joint topology
 ├── oxygen.physics.vehicle       — command-authoritative vehicle aggregates
 └── oxygen.physics.soft_body     — simulation-authoritative soft-body aggregates
 ```
@@ -422,6 +423,14 @@ oxygen.physics.constants.aggregate_authority = {
     command    = "command",
 }
 
+oxygen.physics.constants.joint_type = {
+    fixed     = "fixed",
+    distance  = "distance",
+    hinge     = "hinge",
+    slider    = "slider",
+    spherical = "spherical",
+}
+
 oxygen.physics.constants.soft_body_tether_mode = {
     none      = "none",
     euclidean = "euclidean",
@@ -570,7 +579,44 @@ Soft-body aggregate API over `PhysicsModule::SoftBodies()` /
 | `center_of_mass` | `vec3` |
 | `sleeping` | `bool` |
 
-### 6.10 `oxygen.physics.events` → `oxygen.events` bridge (V2)
+### 6.10 `oxygen.physics.joint` (V2)
+
+Generic constraint/joint lifecycle API over `PhysicsModule::Joints()` / `system::IJointApi`.
+
+| Function | Phase required | Returns | C++ call |
+| --- | --- | --- | --- |
+| `create(desc)` | `gameplay` | `JointHandle \| nil` | `IJointApi::CreateJoint` |
+| `destroy(joint)` | `gameplay` | `bool` | `IJointApi::DestroyJoint` |
+| `set_enabled(joint, enabled)` | `gameplay` | `bool` | `IJointApi::SetJointEnabled` |
+
+`joint` accepts either `JointHandle userdata` or `JointId userdata`.
+When a `JointId` is provided, the binding resolves `world_id` from the active
+`PhysicsModule::GetWorldId()` context at call time.
+
+Failure semantics follow the standard physics binding contract:
+
+- `create` returns `nil` when the call is rejected or backend creation fails.
+- `destroy` and `set_enabled` return `false` when rejected or on backend error.
+- Descriptor/type mismatches (missing required fields, wrong Lua value types,
+  malformed vectors, non-finite numerics) raise Lua argument errors.
+
+**`create` descriptor fields (`joint::JointDesc`):**
+
+| Field | Type | Required? | Notes |
+| --- | --- | --- | --- |
+| `type` | `string` | **yes** | `"fixed"`, `"distance"`, `"hinge"`, `"slider"`, or `"spherical"` |
+| `body_a_id` | `BodyId \| BodyHandle` | **yes** | must reference an existing world body |
+| `body_b_id` | `BodyId \| BodyHandle` | **yes** | must reference an existing world body; cannot be `body_a_id` |
+| `anchor_a` | `vec3` | no | default `{0,0,0}` |
+| `anchor_b` | `vec3` | no | default `{0,0,0}` |
+| `collide_connected` | `boolean` | no | default `false` |
+| `stiffness` | `number` | no | default `0.0` |
+| `damping` | `number` | no | default `0.0` |
+
+`set_enabled(joint, enabled)` requires `enabled` to be a Lua boolean (`true`/`false`);
+non-boolean values are rejected with a Lua argument error.
+
+### 6.11 `oxygen.physics.events` → `oxygen.events` bridge (V2)
 
 `physics.events.drain()` keeps its V1 return contract and additionally
 forwards every drained event to the core event runtime via
@@ -618,7 +664,7 @@ Do not extend `LuauUserdataTag` in `LuaBindingCommon.h` for these types.
 
 ### 7.2 Userdata Layouts
 
-All six types are **trivially destructible** (they store only `uint32_t`
+All eight types are **trivially destructible** (they store only `uint32_t`
 `NamedType` values). They use `lua_newuserdata` (untagged), not
 `lua_newuserdatatagged`, and do **not** require `lua_setuserdatadtor`.
 
@@ -655,6 +701,15 @@ struct PhysicsAggregateHandleUserdata {
 struct PhysicsAggregateIdUserdata {
     physics::AggregateId aggregate_id;
 };
+
+struct PhysicsJointHandleUserdata {
+    physics::WorldId world_id;
+    physics::JointId joint_id;
+};
+
+struct PhysicsJointIdUserdata {
+    physics::JointId joint_id;
+};
 ```
 
 ### 7.3 Metatable Names
@@ -667,6 +722,8 @@ struct PhysicsAggregateIdUserdata {
 | `kPhysicsCharacterIdMetatable` | `"oxygen.physics.character_id"` |
 | `kPhysicsAggregateHandleMetatable` | `"oxygen.physics.aggregate_handle"` |
 | `kPhysicsAggregateIdMetatable` | `"oxygen.physics.aggregate_id"` |
+| `kPhysicsJointHandleMetatable` | `"oxygen.physics.joint_handle"` |
+| `kPhysicsJointIdMetatable` | `"oxygen.physics.joint_id"` |
 
 ### 7.4 Standard Helpers Per Type
 
@@ -691,9 +748,15 @@ auto CheckAggregateHandle(lua_State*, int index) -> PhysicsAggregateHandleUserda
 
 auto PushAggregateId(lua_State*, AggregateId) -> int;
 auto CheckAggregateId(lua_State*, int index) -> PhysicsAggregateIdUserdata*;
+
+auto PushJointHandle(lua_State*, WorldId, JointId) -> int;
+auto CheckJointHandle(lua_State*, int index) -> PhysicsJointHandleUserdata*;
+
+auto PushJointId(lua_State*, JointId) -> int;
+auto CheckJointId(lua_State*, int index) -> PhysicsJointIdUserdata*;
 ```
 
-All six types share `is_valid()` and `__tostring` metamethods.
+All eight types share `is_valid()` and `__tostring` metamethods.
 
 **`__eq` semantics differ by type:**
 
@@ -708,6 +771,10 @@ All six types share `is_valid()` and `__tostring` metamethods.
 - **`PhysicsAggregateHandleUserdata`**: `__eq` compares
   `(world_id, aggregate_id)` as a pair.
 - **`PhysicsAggregateIdUserdata`**: `__eq` compares the single raw
+  `uint32_t` value.
+- **`PhysicsJointHandleUserdata`**: `__eq` compares
+  `(world_id, joint_id)` as a pair.
+- **`PhysicsJointIdUserdata`**: `__eq` compares the single raw
   `uint32_t` value.
 
 ---
@@ -759,10 +826,11 @@ Policy table:
 | `events.drain` | `IsEventDrainAllowed` | Return `{}`, no warning (empty is expected in non-mutation phases) |
 | `aggregate.*` mutators (`create`, `destroy`, `add/remove_member_body`, `flush_structural_changes`) | `IsAggregateMutationAllowed` | Return `nil`/`false`, log `WARNING` |
 | `articulation.*` mutators (`create`, `destroy`, `add_link`, `remove_link`, `flush_structural_changes`) | `IsAggregateMutationAllowed` | Return `nil`/`false`, log `WARNING` |
+| `joint.*` mutators (`create`, `destroy`, `set_enabled`) | `IsAggregateMutationAllowed` | Return `nil`/`false`, log `WARNING` |
 | `vehicle.*` mutators (`create`, `destroy`, `set_control_input`, `flush_structural_changes`) | `IsAggregateMutationAllowed` | Return `nil`/`false`, log `WARNING` |
 | `soft_body.*` mutators (`create`, `destroy`, `set_material_params`, `flush_structural_changes`) | `IsAggregateMutationAllowed` | Return `nil`/`false`, log `WARNING` |
 | `query.*` | none (read-only) | Return `nil` if engine unavailable |
-| `aggregate/articulation/vehicle/soft_body` read methods | none (read-only) | Return `nil` if engine unavailable |
+| `aggregate/articulation/joint/vehicle/soft_body` read methods | none (read-only) | Return `nil` if engine unavailable |
 
 ---
 
@@ -785,6 +853,11 @@ Policy table:
 | `PhysicsEventType::kTriggerEnd` | `"trigger_end"` |
 | `AggregateAuthority::kSimulation` | `"simulation"` |
 | `AggregateAuthority::kCommand` | `"command"` |
+| `JointType::kFixed` | `"fixed"` |
+| `JointType::kDistance` | `"distance"` |
+| `JointType::kHinge` | `"hinge"` |
+| `JointType::kSlider` | `"slider"` |
+| `JointType::kSpherical` | `"spherical"` |
 | `SoftBodyTetherMode::kNone` | `"none"` |
 | `SoftBodyTetherMode::kEuclidean` | `"euclidean"` |
 | `SoftBodyTetherMode::kGeodesic` | `"geodesic"` |
@@ -873,6 +946,8 @@ Packs/Physics/
   PhysicsAggregateBindings.cpp
   PhysicsArticulationBindings.h   — RegisterPhysicsArticulationBindings()
   PhysicsArticulationBindings.cpp
+  PhysicsJointBindings.h          — RegisterPhysicsJointBindings()
+  PhysicsJointBindings.cpp
   PhysicsVehicleBindings.h        — RegisterPhysicsVehicleBindings()
   PhysicsVehicleBindings.cpp
   PhysicsSoftBodyBindings.h       — RegisterPhysicsSoftBodyBindings()
@@ -900,6 +975,7 @@ auto RegisterPhysicsBindings(lua_State* state, int oxygen_idx) -> void {
     RegisterPhysicsConstantsBindings(state, oxygen_idx);
     RegisterPhysicsAggregateBindings(state, oxygen_idx);
     RegisterPhysicsArticulationBindings(state, oxygen_idx);
+    RegisterPhysicsJointBindings(state, oxygen_idx);
     RegisterPhysicsVehicleBindings(state, oxygen_idx);
     RegisterPhysicsSoftBodyBindings(state, oxygen_idx);
 }
@@ -952,11 +1028,12 @@ Add/extend `src/Oxygen/Scripting/Test/Bindings_physics_test.cpp` covering:
 | Happy path — character | Attach returns valid `CharacterHandle`; `move` returns a result table |
 | Happy path — raycast | Returns `nil` on no hit; returns table with `body_id`, `position`, `normal`, `distance` on hit |
 | Happy path — drain | Returns empty table when no events queued; returns correct event shape |
-| V2 surface exposure | `physics.aggregate`, `.articulation`, `.vehicle`, `.soft_body` exist and are tables |
-| V2 function presence | All functions listed in Sections 6.6–6.9 are callable |
-| V2 phase gate — mutators | Aggregate/articulation/vehicle/soft_body mutators reject outside `gameplay` |
+| V2 surface exposure | `physics.aggregate`, `.articulation`, `.joint`, `.vehicle`, `.soft_body` exist and are tables |
+| V2 function presence | All functions listed in Sections 6.6–6.10 are callable |
+| V2 phase gate — mutators | Aggregate/articulation/joint/vehicle/soft_body mutators reject outside `gameplay` |
 | V2 aggregate happy path | `create`, add/remove members, member query, flush all succeed on fake backend |
 | V2 articulation happy path | `create`, add/remove links, root/link queries, authority, flush succeed |
+| V2 joint happy path | `create`, `destroy`, `set_enabled` succeed on fake backend |
 | V2 vehicle happy path | `create`, `set_control_input`, `get_state`, `get_authority`, flush succeed |
 | V2 soft-body happy path | `create`, `set_material_params`, `get_state`, `get_authority`, flush succeed |
 | V2 body-id unions | APIs accepting `BodyId/BodyHandle` work for both forms |

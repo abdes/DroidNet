@@ -15,6 +15,7 @@
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsCharacterBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsConstantsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsEventsBindings.h>
+#include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsJointBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsQueryBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsSoftBodyBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsVehicleBindings.h>
@@ -33,6 +34,7 @@ namespace {
     RegisterPhysicsConstantsBindings(state, oxygen_table_index);
     RegisterPhysicsAggregateBindings(state, oxygen_table_index);
     RegisterPhysicsArticulationBindings(state, oxygen_table_index);
+    RegisterPhysicsJointBindings(state, oxygen_table_index);
     RegisterPhysicsVehicleBindings(state, oxygen_table_index);
     RegisterPhysicsSoftBodyBindings(state, oxygen_table_index);
   }

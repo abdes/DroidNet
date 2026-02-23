@@ -64,6 +64,16 @@ auto RegisterPhysicsConstantsBindings(
 
   static_cast<void>(PushReadOnlyStringEnumTable(state,
     {
+      { "fixed", "fixed" },
+      { "distance", "distance" },
+      { "hinge", "hinge" },
+      { "slider", "slider" },
+      { "spherical", "spherical" },
+    }));
+  lua_setfield(state, constants_index, "joint_type");
+
+  static_cast<void>(PushReadOnlyStringEnumTable(state,
+    {
       { "simulation", "simulation" },
       { "command", "command" },
     }));
