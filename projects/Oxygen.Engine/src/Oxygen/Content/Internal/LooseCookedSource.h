@@ -6,380 +6,23 @@
 
 #pragma once
 
-#include <chrono>
-#include <cstring>
-#include <filesystem>
-#include <memory>
-#include <optional>
-#include <string>
-#include <string_view>
-#include <variant>
-#include <vector>
+#include <utility>
 
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Composition/TypedObject.h>
-#include <Oxygen/Content/Detail/LooseCookedIndex.h>
-#include <Oxygen/Content/PakFile.h>
-#include <Oxygen/Content/ResourceTable.h>
-#include <Oxygen/Data/AssetKey.h>
-#include <Oxygen/Data/BufferResource.h>
-#include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Data/PhysicsResource.h>
-#include <Oxygen/Data/ScriptResource.h>
-#include <Oxygen/Data/SourceKey.h>
-#include <Oxygen/Data/TextureResource.h>
-#include <Oxygen/Serio/FileStream.h>
-#include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Content/Internal/IContentSource.h>
 
 namespace oxygen::content::internal {
 
-using oxygen::base::ComputeFileSha256;
-using oxygen::base::IsAllZero;
-using oxygen::base::Sha256Digest;
-
-//! Asset location within a PAK file.
-struct PakAssetLocator {
-  data::pak::AssetDirectoryEntry entry {};
-};
-
-//! Asset location within a loose cooked root.
-struct LooseCookedAssetLocator {
-  std::filesystem::path descriptor_path;
-};
-
-//! Type-erased locator for an asset descriptor.
-using AssetLocator = std::variant<PakAssetLocator, LooseCookedAssetLocator>;
-
-//! Minimal runtime-facing abstraction over a source of cooked bytes.
-/*!
- A ContentSource provides cooked descriptor bytes and cooked resource bytes.
-
- This is an internal runtime abstraction used by the loader pipeline to treat
- different storage forms uniformly (e.g. `.pak` vs loose cooked directories).
-
- It is not an editor mount-point abstraction.
-*/
-class IContentSource : public oxygen::Object {
-public:
-  ~IContentSource() override = default;
-
-  IContentSource() = default;
-
-  IContentSource(const IContentSource&) = delete;
-  IContentSource(IContentSource&&) = delete;
-  auto operator=(const IContentSource&) -> IContentSource& = delete;
-  auto operator=(IContentSource&&) -> IContentSource& = delete;
-
-  [[nodiscard]] virtual auto DebugName() const noexcept -> std::string_view = 0;
-
-  [[nodiscard]] virtual auto GetSourceKey() const noexcept -> data::SourceKey
-    = 0;
-
-  [[nodiscard]] virtual auto FindAsset(const data::AssetKey& key) const noexcept
-    -> std::optional<AssetLocator>
-    = 0;
-
-  [[nodiscard]] virtual auto CreateAssetDescriptorReader(
-    const AssetLocator& locator) const -> std::unique_ptr<serio::AnyReader>
-    = 0;
-
-  [[nodiscard]] virtual auto CreateBufferTableReader() const
-    -> std::unique_ptr<serio::AnyReader>
-    = 0;
-
-  [[nodiscard]] virtual auto CreateTextureTableReader() const
-    -> std::unique_ptr<serio::AnyReader>
-    = 0;
-
-  [[nodiscard]] virtual auto CreateScriptTableReader() const
-    -> std::unique_ptr<serio::AnyReader>
-    = 0;
-
-  [[nodiscard]] virtual auto CreatePhysicsTableReader() const
-    -> std::unique_ptr<serio::AnyReader>
-    = 0;
-
-  [[nodiscard]] virtual auto GetBufferTable() const noexcept
-    -> const ResourceTable<data::BufferResource>* = 0;
-
-  [[nodiscard]] virtual auto GetTextureTable() const noexcept
-    -> const ResourceTable<data::TextureResource>* = 0;
-
-  [[nodiscard]] virtual auto GetScriptTable() const noexcept
-    -> const ResourceTable<data::ScriptResource>* = 0;
-
-  [[nodiscard]] virtual auto GetPhysicsTable() const noexcept
-    -> const ResourceTable<data::PhysicsResource>* = 0;
-
-  [[nodiscard]] virtual auto CreateBufferDataReader() const
-    -> std::unique_ptr<serio::AnyReader>
-    = 0;
-
-  [[nodiscard]] virtual auto CreateTextureDataReader() const
-    -> std::unique_ptr<serio::AnyReader>
-    = 0;
-
-  [[nodiscard]] virtual auto CreateScriptDataReader() const
-    -> std::unique_ptr<serio::AnyReader>
-    = 0;
-
-  [[nodiscard]] virtual auto CreatePhysicsDataReader() const
-    -> std::unique_ptr<serio::AnyReader>
-    = 0;
-};
-
-//! ContentSource backed by an existing `PakFile`.
-class PakFileSource final : public IContentSource {
-public:
-  OXYGEN_TYPED(PakFileSource)
-
-public:
-  explicit PakFileSource(
-    const std::filesystem::path& pak_path, const bool verify_content_hashes)
-    : pak_(pak_path)
-    , debug_name_(pak_.FilePath().string())
-    , footer_(ReadFooter(pak_path))
-  {
-    if (verify_content_hashes) {
-      pak_.ValidateCrc32Integrity();
-    }
-  }
-
-  ~PakFileSource() override = default;
-
-  [[nodiscard]] auto DebugName() const noexcept -> std::string_view override
-  {
-    return debug_name_;
-  }
-
-  [[nodiscard]] auto GetSourceKey() const noexcept -> data::SourceKey override
-  {
-    return pak_.Guid();
-  }
-
-  [[nodiscard]] auto FindAsset(const data::AssetKey& key) const noexcept
-    -> std::optional<AssetLocator> override
-  {
-    const auto entry = pak_.FindEntry(key);
-    if (!entry) {
-      return std::nullopt;
-    }
-
-    return AssetLocator { PakAssetLocator { .entry = *entry } };
-  }
-
-  [[nodiscard]] auto CreateAssetDescriptorReader(
-    const AssetLocator& locator) const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    const auto* pak_loc = std::get_if<PakAssetLocator>(&locator);
-    if (pak_loc == nullptr) {
-      return nullptr;
-    }
-
-    return std::make_unique<OwningPakSectionReader>(
-      pak_.FilePath(), static_cast<size_t>(pak_loc->entry.desc_offset));
-  }
-
-  [[nodiscard]] auto CreateBufferTableReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    return std::make_unique<OwningPakSectionReader>(pak_.FilePath(), 0);
-  }
-
-  [[nodiscard]] auto CreateTextureTableReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    return std::make_unique<OwningPakSectionReader>(pak_.FilePath(), 0);
-  }
-
-  [[nodiscard]] auto CreateScriptTableReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    return std::make_unique<OwningPakSectionReader>(pak_.FilePath(), 0);
-  }
-
-  [[nodiscard]] auto CreatePhysicsTableReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    return std::make_unique<OwningPakSectionReader>(pak_.FilePath(), 0);
-  }
-
-  [[nodiscard]] auto GetBufferTable() const noexcept
-    -> const ResourceTable<data::BufferResource>* override
-  {
-    return pak_.GetResourceTable<data::BufferResource>();
-  }
-
-  [[nodiscard]] auto GetTextureTable() const noexcept
-    -> const ResourceTable<data::TextureResource>* override
-  {
-    return pak_.GetResourceTable<data::TextureResource>();
-  }
-
-  [[nodiscard]] auto GetScriptTable() const noexcept
-    -> const ResourceTable<data::ScriptResource>* override
-  {
-    return pak_.GetResourceTable<data::ScriptResource>();
-  }
-
-  [[nodiscard]] auto GetPhysicsTable() const noexcept
-    -> const ResourceTable<data::PhysicsResource>* override
-  {
-    return pak_.GetResourceTable<data::PhysicsResource>();
-  }
-
-  [[nodiscard]] auto CreateBufferDataReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    if (!footer_) {
-      return nullptr;
-    }
-    return std::make_unique<OwningPakSectionReader>(
-      pak_.FilePath(), static_cast<size_t>(footer_->buffer_region.offset));
-  }
-
-  [[nodiscard]] auto CreateTextureDataReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    if (!footer_) {
-      return nullptr;
-    }
-    return std::make_unique<OwningPakSectionReader>(
-      pak_.FilePath(), static_cast<size_t>(footer_->texture_region.offset));
-  }
-
-  [[nodiscard]] auto CreateScriptDataReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    if (!footer_) {
-      return nullptr;
-    }
-    return std::make_unique<OwningPakSectionReader>(
-      pak_.FilePath(), static_cast<size_t>(footer_->script_region.offset));
-  }
-
-  [[nodiscard]] auto CreatePhysicsDataReader() const
-    -> std::unique_ptr<serio::AnyReader> override
-  {
-    if (!footer_) {
-      return nullptr;
-    }
-    return std::make_unique<OwningPakSectionReader>(
-      pak_.FilePath(), static_cast<size_t>(footer_->physics_region.offset));
-  }
-
-  [[nodiscard]] auto Pak() const noexcept -> const PakFile& { return pak_; }
-
-private:
-  class OwningPakSectionReader final : public serio::AnyReader {
-  public:
-    OwningPakSectionReader(const std::filesystem::path& path, size_t offset)
-      : stream_(path, std::ios::in)
-      , reader_(stream_)
-    {
-      (void)reader_.Seek(offset);
-    }
-
-    ~OwningPakSectionReader() override = default;
-
-    OXYGEN_MAKE_NON_COPYABLE(OwningPakSectionReader)
-    OXYGEN_MAKE_NON_MOVABLE(OwningPakSectionReader)
-
-    [[nodiscard]] auto ReadBlob(size_t size) noexcept
-      -> oxygen::Result<std::vector<std::byte>> override
-    {
-      return reader_.ReadBlob(size);
-    }
-
-    [[nodiscard]] auto ReadBlobInto(std::span<std::byte> buffer) noexcept
-      -> oxygen::Result<void> override
-    {
-      return reader_.ReadBlobInto(buffer);
-    }
-
-    [[nodiscard]] auto Position() noexcept -> oxygen::Result<size_t> override
-    {
-      return reader_.Position();
-    }
-
-    [[nodiscard]] auto AlignTo(size_t alignment) noexcept
-      -> oxygen::Result<void> override
-    {
-      return reader_.AlignTo(alignment);
-    }
-
-    [[nodiscard]] auto ScopedAlignment(uint16_t alignment) noexcept(false)
-      -> serio::AlignmentGuard override
-    {
-      return reader_.ScopedAlignment(alignment);
-    }
-
-    [[nodiscard]] auto Forward(size_t num_bytes) noexcept
-      -> oxygen::Result<void> override
-    {
-      return reader_.Forward(num_bytes);
-    }
-
-    [[nodiscard]] auto Seek(size_t pos) noexcept
-      -> oxygen::Result<void> override
-    {
-      return reader_.Seek(pos);
-    }
-
-  private:
-    serio::FileStream<> stream_;
-    PakFile::Reader reader_;
-  };
-
-  [[nodiscard]] static auto ReadFooter(const std::filesystem::path& pak_path)
-    -> std::optional<data::pak::PakFooter>
-  {
-    std::error_code ec;
-    const auto file_size = std::filesystem::file_size(pak_path, ec);
-    if (ec || file_size < sizeof(data::pak::PakFooter)) {
-      return std::nullopt;
-    }
-
-    serio::FileStream<> stream(pak_path, std::ios::in);
-    if (!stream.Seek(
-          static_cast<size_t>(file_size - sizeof(data::pak::PakFooter)))) {
-      return std::nullopt;
-    }
-
-    data::pak::PakFooter footer {};
-    auto read_result
-      = stream.Read(reinterpret_cast<std::byte*>(&footer), sizeof(footer));
-    if (!read_result) {
-      return std::nullopt;
-    }
-
-    // Basic magic check.
-    if (std::string_view(footer.footer_magic, sizeof(footer.footer_magic))
-      != std::string_view("OXPAKEND", 8)) {
-      return std::nullopt;
-    }
-
-    return footer;
-  }
-
-  PakFile pak_;
-  std::string debug_name_;
-  std::optional<data::pak::PakFooter> footer_;
-};
-
-//! ContentSource backed by a loose cooked root directory.
 class LooseCookedSource final : public IContentSource {
 public:
   OXYGEN_TYPED(LooseCookedSource)
 
 public:
   explicit LooseCookedSource(
-    const std::filesystem::path& cooked_root, const bool verify_content_hashes)
-    : cooked_root_(cooked_root)
+    std::filesystem::path cooked_root, const bool verify_content_hashes)
+    : cooked_root_(std::move(cooked_root))
     , debug_name_(cooked_root_.string())
-    , index_(detail::LooseCookedIndex::LoadFromFile(
+    , index_(LooseCookedIndexImpl::LoadFromFile(
         cooked_root_ / "container.index.bin"))
     , verify_content_hashes_(verify_content_hashes)
   {
@@ -443,6 +86,9 @@ public:
   }
 
   ~LooseCookedSource() override = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(LooseCookedSource)
+  OXYGEN_DEFAULT_MOVABLE(LooseCookedSource)
 
   [[nodiscard]] auto DebugName() const noexcept -> std::string_view override
   {
@@ -960,7 +606,7 @@ private:
 
   std::filesystem::path cooked_root_;
   std::string debug_name_;
-  detail::LooseCookedIndex index_;
+  LooseCookedIndexImpl index_;
 
   bool verify_content_hashes_ { false };
 

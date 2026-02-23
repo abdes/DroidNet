@@ -14,16 +14,16 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Content/Import/LooseCookedLayout.h>
-#include <Oxygen/Content/LooseCookedInspection.h>
+#include <Oxygen/Content/LooseCooked/Inspection.h>
 #include <Oxygen/Data/AssetType.h>
 
 namespace oxygen::content::testing {
 
 namespace {
 
-  using oxygen::content::LooseCookedInspection;
   using oxygen::content::import::LooseCookedLayout;
   using oxygen::content::import::LooseCookedWriter;
+  using oxygen::content::lc::Inspection;
   using oxygen::data::AssetKey;
   using oxygen::data::AssetType;
   using oxygen::data::SourceKey;
@@ -85,7 +85,7 @@ namespace {
 
     // Act
     const auto result = writer.Finish();
-    LooseCookedInspection inspection;
+    Inspection inspection;
     inspection.LoadFromFile(cooked_root / "container.index.bin");
 
     // Assert
@@ -140,12 +140,12 @@ namespace {
       (void)writer.Finish();
     }
 
-    LooseCookedInspection inspection;
+    Inspection inspection;
     inspection.LoadFromFile(cooked_root / "container.index.bin");
 
     const auto assets = inspection.Assets();
     const auto it = std::find_if(assets.begin(), assets.end(),
-      [&](const LooseCookedInspection::AssetEntry& e) { return e.key == key; });
+      [&](const Inspection::AssetEntry& e) { return e.key == key; });
 
     // Assert
     EXPECT_EQ(assets.size(), 1u);
@@ -280,7 +280,7 @@ namespace {
     LooseCookedWriter writer(cooked_root);
     const auto result = writer.Finish();
 
-    LooseCookedInspection inspection;
+    Inspection inspection;
     inspection.LoadFromFile(cooked_root / "container.index.bin");
 
     // Assert
@@ -352,12 +352,12 @@ namespace {
       (void)writer.Finish();
     }
 
-    LooseCookedInspection inspection;
+    Inspection inspection;
     inspection.LoadFromFile(cooked_root / "container.index.bin");
 
     const auto files = inspection.Files();
-    const auto it = std::find_if(files.begin(), files.end(),
-      [](const LooseCookedInspection::FileEntry& e) {
+    const auto it = std::find_if(
+      files.begin(), files.end(), [](const Inspection::FileEntry& e) {
         return e.kind == FileKind::kBuffersData;
       });
 
@@ -410,7 +410,7 @@ namespace {
       (void)writer.Finish();
     }
 
-    LooseCookedInspection inspection;
+    Inspection inspection;
     inspection.LoadFromFile(cooked_root / "container.index.bin");
 
     // Assert
@@ -448,7 +448,7 @@ namespace {
     // Act
     (void)writer.Finish();
 
-    LooseCookedInspection inspection;
+    Inspection inspection;
     inspection.LoadFromFile(cooked_root / "container.index.bin");
 
     // Assert

@@ -4,44 +4,39 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/LooseCookedInspection.h>
-
-#include <array>
+#include <algorithm>
 #include <utility>
 
-#include <Oxygen/Content/Detail/LooseCookedIndex.h>
+#include <Oxygen/Content/LooseCooked/Inspection.h>
+#include <Oxygen/Content/LooseCooked/Reader.h>
 
-namespace oxygen::content {
+namespace oxygen::content::lc {
 
-struct LooseCookedInspection::Impl {
+struct Inspection::Impl {
   std::vector<AssetEntry> assets;
   std::vector<FileEntry> files;
   data::SourceKey guid = {};
 };
 
-LooseCookedInspection::LooseCookedInspection()
+Inspection::Inspection()
   : impl_(std::make_unique<Impl>())
 {
 }
 
-LooseCookedInspection::~LooseCookedInspection() = default;
+Inspection::~Inspection() = default;
 
-LooseCookedInspection::LooseCookedInspection(LooseCookedInspection&&) noexcept
-  = default;
+Inspection::Inspection(Inspection&&) noexcept = default;
 
-auto LooseCookedInspection::operator=(LooseCookedInspection&&) noexcept
-  -> LooseCookedInspection& = default;
+auto Inspection::operator=(Inspection&&) noexcept -> Inspection& = default;
 
-auto LooseCookedInspection::LoadFromRoot(
-  const std::filesystem::path& cooked_root) -> void
+auto Inspection::LoadFromRoot(const std::filesystem::path& cooked_root) -> void
 {
   LoadFromFile(cooked_root / "container.index.bin");
 }
 
-auto LooseCookedInspection::LoadFromFile(
-  const std::filesystem::path& index_path) -> void
+auto Inspection::LoadFromFile(const std::filesystem::path& index_path) -> void
 {
-  const auto index = detail::LooseCookedIndex::LoadFromFile(index_path);
+  const auto index = Reader::LoadFromFile(index_path);
 
   impl_->assets.clear();
   impl_->files.clear();
@@ -94,20 +89,19 @@ auto LooseCookedInspection::LoadFromFile(
   }
 }
 
-auto LooseCookedInspection::Assets() const noexcept
-  -> std::span<const AssetEntry>
+auto Inspection::Assets() const noexcept -> std::span<const AssetEntry>
 {
   return impl_->assets;
 }
 
-auto LooseCookedInspection::Files() const noexcept -> std::span<const FileEntry>
+auto Inspection::Files() const noexcept -> std::span<const FileEntry>
 {
   return impl_->files;
 }
 
-auto LooseCookedInspection::Guid() const noexcept -> data::SourceKey
+auto Inspection::Guid() const noexcept -> data::SourceKey
 {
   return impl_->guid;
 }
 
-} // namespace oxygen::content
+} // namespace oxygen::content::lc

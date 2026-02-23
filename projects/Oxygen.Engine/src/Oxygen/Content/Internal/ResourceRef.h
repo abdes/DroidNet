@@ -6,9 +6,9 @@
 
 #pragma once
 
-#include <cstdint>
 #include <string>
 
+#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Content/SourceToken.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -70,12 +70,9 @@ template <> struct std::hash<oxygen::content::internal::ResourceRef> {
     const oxygen::content::internal::ResourceRef& ref) const noexcept -> size_t
   {
     size_t seed = 0;
-    seed ^= std::hash<oxygen::content::internal::SourceToken> {}(ref.source)
-      + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
-    seed ^= std::hash<oxygen::TypeId> {}(ref.resource_type_id)
-      + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
-    seed ^= std::hash<oxygen::data::pak::ResourceIndexT> {}(ref.resource_index)
-      + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+    oxygen::HashCombine(seed, ref.source);
+    oxygen::HashCombine(seed, ref.resource_type_id);
+    oxygen::HashCombine(seed, ref.resource_index);
     return seed;
   }
 };

@@ -9,7 +9,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Content/LooseCookedInspection.h>
+#include <Oxygen/Content/LooseCooked/Inspection.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -260,7 +260,7 @@ auto ContentVm::Update() -> void
       try {
         LOG_F(INFO, "ContentVm: Inspecting imported index: '{}'",
           index_path.string());
-        content::LooseCookedInspection inspection;
+        content::lc::Inspection inspection;
         inspection.LoadFromFile(index_path);
 
         int scene_count = 0;
@@ -602,7 +602,7 @@ auto ContentVm::MountPak(const std::filesystem::path& path) -> void
 auto ContentVm::LoadIndex(const std::filesystem::path& path) -> void
 {
   try {
-    content::LooseCookedInspection inspection;
+    content::lc::Inspection inspection;
     std::error_code ec;
     const bool is_dir = std::filesystem::is_directory(path, ec);
     if (ec) {

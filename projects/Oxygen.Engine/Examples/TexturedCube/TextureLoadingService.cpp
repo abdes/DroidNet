@@ -23,7 +23,7 @@
 #include <Oxygen/Content/Import/ImportOptions.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
 #include <Oxygen/Content/Import/TextureImportTypes.h>
-#include <Oxygen/Content/LooseCookedInspection.h>
+#include <Oxygen/Content/LooseCooked/Inspection.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -36,7 +36,6 @@ namespace {
 using oxygen::ColorSpace;
 using oxygen::Format;
 using oxygen::TextureType;
-using oxygen::content::LooseCookedInspection;
 using oxygen::content::import::Bc7Quality;
 using oxygen::content::import::CubeMapImageLayout;
 using oxygen::content::import::ImportContentFlags;
@@ -46,6 +45,7 @@ using oxygen::content::import::MipFilter;
 using oxygen::content::import::MipPolicy;
 using oxygen::content::import::ProgressEvent;
 using oxygen::content::import::TextureIntent;
+using oxygen::content::lc::Inspection;
 using oxygen::data::loose_cooked::v1::FileKind;
 using oxygen::data::pak::TextureResourceDesc;
 
@@ -117,8 +117,8 @@ auto MipFilterFromIndex(const int idx) -> MipFilter
   }
 }
 
-auto FindFileRelPath(const LooseCookedInspection& inspection,
-  const FileKind kind) -> std::optional<std::string>
+auto FindFileRelPath(const Inspection& inspection, const FileKind kind)
+  -> std::optional<std::string>
 {
   for (const auto& entry : inspection.Files()) {
     if (entry.kind == kind) {
@@ -390,7 +390,7 @@ auto TextureLoadingService::RefreshCookedTextureEntries(
     }
     normalized_root = normalized_root.lexically_normal();
 
-    LooseCookedInspection inspection;
+    Inspection inspection;
     inspection.LoadFromRoot(normalized_root);
 
     const auto table_rel

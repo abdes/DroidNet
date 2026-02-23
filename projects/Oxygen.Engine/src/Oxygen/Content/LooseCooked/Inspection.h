@@ -6,23 +6,16 @@
 
 #pragma once
 
-#include <cstdint>
 #include <filesystem>
 #include <memory>
-#include <optional>
 #include <span>
-#include <string>
-#include <vector>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Content/LooseCooked/Types.h>
 #include <Oxygen/Content/api_export.h>
-#include <Oxygen/Data/AssetKey.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
-#include <Oxygen/Renderer/api_export.h>
 
-namespace oxygen::content {
+namespace oxygen::content::lc {
 
 //! Read-only inspection view over a loose cooked `container.index.bin`.
 /*!
@@ -30,30 +23,17 @@ namespace oxygen::content {
 
  It intentionally does not expose internal Content implementation types.
 */
-class LooseCookedInspection final {
+class Inspection final {
 public:
-  struct AssetEntry {
-    data::AssetKey key {};
-    std::string virtual_path;
-    std::string descriptor_relpath;
-    uint64_t descriptor_size = 0;
-    uint8_t asset_type = 0;
-    std::optional<base::Sha256Digest> descriptor_sha256;
-  };
+  using AssetEntry = lc::AssetEntry;
+  using FileEntry = lc::FileEntry;
 
-  struct FileEntry {
-    data::loose_cooked::FileKind kind = data::loose_cooked::FileKind::kUnknown;
-    std::string relpath;
-    uint64_t size = 0;
-  };
+  OXGN_CNTT_API Inspection();
+  OXGN_CNTT_API ~Inspection();
 
-  OXGN_CNTT_API LooseCookedInspection();
-  OXGN_CNTT_API ~LooseCookedInspection();
-
-  OXYGEN_MAKE_NON_COPYABLE(LooseCookedInspection)
-  OXGN_CNTT_API LooseCookedInspection(LooseCookedInspection&&) noexcept;
-  OXGN_CNTT_API auto operator=(LooseCookedInspection&&) noexcept
-    -> LooseCookedInspection&;
+  OXYGEN_MAKE_NON_COPYABLE(Inspection)
+  OXGN_CNTT_API Inspection(Inspection&&) noexcept;
+  OXGN_CNTT_API auto operator=(Inspection&&) noexcept -> Inspection&;
 
   //! Load and validate `container.index.bin` from a cooked root.
   /*!
@@ -72,10 +52,7 @@ public:
     -> void;
 
   OXGN_CNTT_NDAPI auto Assets() const noexcept -> std::span<const AssetEntry>;
-
   OXGN_CNTT_NDAPI auto Files() const noexcept -> std::span<const FileEntry>;
-
-  //! Get the GUID from the index header.
   OXGN_CNTT_NDAPI auto Guid() const noexcept -> data::SourceKey;
 
 private:
@@ -83,4 +60,4 @@ private:
   std::unique_ptr<Impl> impl_;
 };
 
-} // namespace oxygen::content
+} // namespace oxygen::content::lc

@@ -17,9 +17,11 @@
 #include <string_view>
 #include <unordered_set>
 
+#include <Oxygen/Base/Compilers.h>
+#include <Oxygen/Base/Concepts.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
-#include <Oxygen/Content/Detail/LooseCookedIndex.h>
+#include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -40,6 +42,9 @@ namespace data = oxygen::data;
 namespace content = oxygen::content;
 
 namespace oxygen::serio {
+
+OXYGEN_DIAGNOSTIC_PUSH
+OXYGEN_DIAGNOSTIC_DISABLE_CLANG("-Wunused-function")
 
 //! Deserializes an IndexHeader from the stream.
 static auto Load(AnyReader& reader, IndexHeader& value) -> Result<void>
@@ -67,6 +72,8 @@ static auto Load(AnyReader& reader, FileRecord& value) -> Result<void>
     reader.ReadBlobInto(std::as_writable_bytes(std::span(&value, 1))));
   return {};
 }
+
+OXYGEN_DIAGNOSTIC_POP
 
 } // namespace oxygen::serio
 
@@ -296,19 +303,19 @@ auto ValidateGuid(const IndexHeader& header) -> void
 
 } // namespace
 
-namespace oxygen::content::detail {
+namespace oxygen::content::internal {
 
-struct LooseCookedIndex::IndexLoadContext {
+struct LooseCookedIndexImpl::IndexLoadContext {
   oxygen::observer_ptr<serio::Reader<serio::FileStream<>>> reader;
   uint64_t file_size;
   IndexHeader header;
-  oxygen::observer_ptr<LooseCookedIndex> index;
-  std::string_view stored_table;
-  std::unordered_set<std::string_view> unique_virtual_paths;
+  oxygen::observer_ptr<LooseCookedIndexImpl> index;
+  std::string_view stored_table {}; // NOLINT
+  std::unordered_set<std::string_view> unique_virtual_paths {}; // NOLINT
 };
 
-auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
-  -> LooseCookedIndex
+auto LooseCookedIndexImpl::LoadFromFile(const std::filesystem::path& index_path)
+  -> LooseCookedIndexImpl
 {
   serio::FileStream<> stream(index_path, std::ios::in);
   auto size_result = stream.Size();
@@ -328,7 +335,7 @@ auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
   }
 
   serio::Reader<serio::FileStream<>> reader(stream);
-  LooseCookedIndex out;
+  LooseCookedIndexImpl out;
   IndexLoadContext context {
     .reader = oxygen::make_observer(&reader),
     .file_size = file_size,
@@ -345,7 +352,8 @@ auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
   return out;
 }
 
-auto LooseCookedIndex::LoadAndValidateHeader(IndexLoadContext& context) -> void
+auto LooseCookedIndexImpl::LoadAndValidateHeader(IndexLoadContext& context)
+  -> void
 {
   auto header_result = context.reader->Read<IndexHeader>();
   if (!header_result.has_value()) {
@@ -397,7 +405,7 @@ auto LooseCookedIndex::LoadAndValidateHeader(IndexLoadContext& context) -> void
   context.header = header;
 }
 
-auto LooseCookedIndex::ReadStringTable(IndexLoadContext& context) -> void
+auto LooseCookedIndexImpl::ReadStringTable(IndexLoadContext& context) -> void
 {
   context.index->guid_ = data::SourceKey::FromBytes(context.header.guid);
   context.index->string_storage_.resize(context.header.string_table_size);
@@ -423,7 +431,7 @@ auto LooseCookedIndex::ReadStringTable(IndexLoadContext& context) -> void
     context.index->string_storage_.size());
 }
 
-auto LooseCookedIndex::ReadAssetEntries(IndexLoadContext& context) -> void
+auto LooseCookedIndexImpl::ReadAssetEntries(IndexLoadContext& context) -> void
 {
   if (auto res = context.reader->Seek(context.header.asset_entries_offset);
     !res) {
@@ -482,7 +490,7 @@ auto LooseCookedIndex::ReadAssetEntries(IndexLoadContext& context) -> void
   }
 }
 
-auto LooseCookedIndex::ReadFileRecords(IndexLoadContext& context) -> void
+auto LooseCookedIndexImpl::ReadFileRecords(IndexLoadContext& context) -> void
 {
   if (context.header.file_record_count == 0) {
     return;
@@ -524,7 +532,8 @@ auto LooseCookedIndex::ReadFileRecords(IndexLoadContext& context) -> void
   }
 }
 
-auto LooseCookedIndex::ValidateFilePairs(const LooseCookedIndex& index) -> void
+auto LooseCookedIndexImpl::ValidateFilePairs(const LooseCookedIndexImpl& index)
+  -> void
 {
   const auto has_buffers_table
     = index.kind_to_file_.contains(FileKind::kBuffersTable);
@@ -563,12 +572,12 @@ auto LooseCookedIndex::ValidateFilePairs(const LooseCookedIndex& index) -> void
   }
 }
 
-auto LooseCookedIndex::Guid() const noexcept -> data::SourceKey
+auto LooseCookedIndexImpl::Guid() const noexcept -> data::SourceKey
 {
   return guid_;
 }
 
-auto LooseCookedIndex::FindDescriptorRelPath(
+auto LooseCookedIndexImpl::FindDescriptorRelPath(
   const data::AssetKey& key) const noexcept -> std::optional<std::string_view>
 {
   const auto it = key_to_asset_info_.find(key);
@@ -586,7 +595,7 @@ auto LooseCookedIndex::FindDescriptorRelPath(
   }
 }
 
-auto LooseCookedIndex::FindDescriptorSize(
+auto LooseCookedIndexImpl::FindDescriptorSize(
   const data::AssetKey& key) const noexcept -> std::optional<uint64_t>
 {
   const auto it = key_to_asset_info_.find(key);
@@ -596,7 +605,7 @@ auto LooseCookedIndex::FindDescriptorSize(
   return it->second.descriptor_size;
 }
 
-auto LooseCookedIndex::FindDescriptorSha256(
+auto LooseCookedIndexImpl::FindDescriptorSha256(
   const data::AssetKey& key) const noexcept
   -> std::optional<std::span<const uint8_t, data::loose_cooked::kSha256Size>>
 {
@@ -609,8 +618,8 @@ auto LooseCookedIndex::FindDescriptorSha256(
     it->second.descriptor_sha256);
 }
 
-auto LooseCookedIndex::FindVirtualPath(const data::AssetKey& key) const noexcept
-  -> std::optional<std::string_view>
+auto LooseCookedIndexImpl::FindVirtualPath(
+  const data::AssetKey& key) const noexcept -> std::optional<std::string_view>
 {
   const auto it = key_to_asset_info_.find(key);
   if (it == key_to_asset_info_.end()) {
@@ -626,8 +635,8 @@ auto LooseCookedIndex::FindVirtualPath(const data::AssetKey& key) const noexcept
   }
 }
 
-auto LooseCookedIndex::FindAssetType(const data::AssetKey& key) const noexcept
-  -> std::optional<uint8_t>
+auto LooseCookedIndexImpl::FindAssetType(
+  const data::AssetKey& key) const noexcept -> std::optional<uint8_t>
 {
   const auto it = key_to_asset_info_.find(key);
   if (it == key_to_asset_info_.end()) {
@@ -636,13 +645,13 @@ auto LooseCookedIndex::FindAssetType(const data::AssetKey& key) const noexcept
   return it->second.asset_type;
 }
 
-auto LooseCookedIndex::GetAllFileKinds() const noexcept
+auto LooseCookedIndexImpl::GetAllFileKinds() const noexcept
   -> std::span<const FileKind>
 {
   return file_kinds_;
 }
 
-auto LooseCookedIndex::FindAssetKeyByVirtualPath(
+auto LooseCookedIndexImpl::FindAssetKeyByVirtualPath(
   std::string_view virtual_path) const noexcept -> std::optional<data::AssetKey>
 {
   try {
@@ -661,7 +670,7 @@ auto LooseCookedIndex::FindAssetKeyByVirtualPath(
   }
 }
 
-auto LooseCookedIndex::FindFileRelPath(FileKind kind) const noexcept
+auto LooseCookedIndexImpl::FindFileRelPath(FileKind kind) const noexcept
   -> std::optional<std::string_view>
 {
   const auto it = kind_to_file_.find(kind);
@@ -678,7 +687,7 @@ auto LooseCookedIndex::FindFileRelPath(FileKind kind) const noexcept
   }
 }
 
-auto LooseCookedIndex::FindFileSize(FileKind kind) const noexcept
+auto LooseCookedIndexImpl::FindFileSize(FileKind kind) const noexcept
   -> std::optional<uint64_t>
 {
   const auto it = kind_to_file_.find(kind);
@@ -688,4 +697,4 @@ auto LooseCookedIndex::FindFileSize(FileKind kind) const noexcept
   return it->second.size;
 }
 
-} // namespace oxygen::content::detail
+} // namespace oxygen::content::internal

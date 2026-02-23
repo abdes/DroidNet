@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -2430,6 +2431,14 @@ using v7::TextureResourceDesc;
 using v7::to_string;
 using v7::VehicleBindingRecord;
 using v7::VolumetricCloudsEnvironmentRecord;
+
+//! Canonical 8-byte PAK header magic bytes for all current format versions.
+inline constexpr std::array<char, 8> kPakHeaderMagic
+  = { 'O', 'X', 'P', 'A', 'K', 0, 0, 0 };
+
+//! Canonical 8-byte PAK footer magic bytes for all current format versions.
+inline constexpr std::array<char, 8> kPakFooterMagic
+  = { 'O', 'X', 'P', 'A', 'K', 'E', 'N', 'D' };
 } // namespace oxygen::data::pak
 
 // NOLINTEND(*-avoid-c-arrays,*-magic-numbers)
