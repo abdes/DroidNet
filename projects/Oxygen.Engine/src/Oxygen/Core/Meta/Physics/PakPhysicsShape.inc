@@ -74,9 +74,9 @@ OXPHYS_WORLD_BOUNDARY_MODE(kPlaneSet, 2)
 #  define OXPHYS_SHAPE_CONSTANT(name, value)
 #endif
 
-OXPHYS_SHAPE_CONSTANT(kInvalidShapePayloadRefIndex, 0)
+OXPHYS_SHAPE_CONSTANT(kInvalidShapePayloadRefIndex, kNoResourceIndex)
 OXPHYS_SHAPE_CONSTANT(kInvalidShapePayloadType, 0)
-OXPHYS_SHAPE_CONSTANT(kInvalidPhysicsMaterialRef, 0u)
+OXPHYS_SHAPE_CONSTANT(kInvalidPhysicsMaterialRef, kNoResourceIndex)
 OXPHYS_SHAPE_CONSTANT(kShapeIsSensorFalse, 0u)
 OXPHYS_SHAPE_CONSTANT(kShapeIsSensorTrue, 1u)
 
