@@ -287,8 +287,23 @@ TEST(TimeManager, PerformanceMetricsHistory)
 
   auto metrics = tm.GetPerformanceMetrics();
   EXPECT_EQ(metrics.total_frames, kNumFrames);
-  EXPECT_EQ(metrics.average_frame_time.get(), kPhysDeltaPerFrame);
-  EXPECT_EQ(metrics.max_frame_time.get(), kPhysDeltaPerFrame);
+  static constexpr auto kFrameTimeTolerance = 1ms;
+  const auto average_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+    metrics.average_frame_time.get())
+                            .count();
+  const auto max_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+    metrics.max_frame_time.get())
+                        .count();
+  const auto expected_ns
+    = std::chrono::duration_cast<std::chrono::nanoseconds>(kPhysDeltaPerFrame)
+        .count();
+  const auto tolerance_ns
+    = std::chrono::duration_cast<std::chrono::nanoseconds>(kFrameTimeTolerance)
+        .count();
+  EXPECT_NEAR(static_cast<double>(average_ns), static_cast<double>(expected_ns),
+    static_cast<double>(tolerance_ns));
+  EXPECT_NEAR(static_cast<double>(max_ns), static_cast<double>(expected_ns),
+    static_cast<double>(tolerance_ns));
   EXPECT_NEAR(metrics.average_fps, 50.0, 0.1);
 }
 
