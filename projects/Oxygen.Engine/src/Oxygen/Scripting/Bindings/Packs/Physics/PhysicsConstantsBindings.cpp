@@ -62,6 +62,21 @@ auto RegisterPhysicsConstantsBindings(
     }));
   lua_setfield(state, constants_index, "event_type");
 
+  static_cast<void>(PushReadOnlyStringEnumTable(state,
+    {
+      { "simulation", "simulation" },
+      { "command", "command" },
+    }));
+  lua_setfield(state, constants_index, "aggregate_authority");
+
+  static_cast<void>(PushReadOnlyStringEnumTable(state,
+    {
+      { "none", "none" },
+      { "euclidean", "euclidean" },
+      { "geodesic", "geodesic" },
+    }));
+  lua_setfield(state, constants_index, "soft_body_tether_mode");
+
   lua_setreadonly(state, constants_index, 1);
   lua_pop(state, 2);
 }

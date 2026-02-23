@@ -128,8 +128,23 @@ namespace {
     return true;
   }
 
+  auto RejectFixedSimulationWithNil(lua_State* state, const char* op_name)
+    -> bool
+  {
+    if (IsPhysicsScriptablePhase(state)) {
+      return false;
+    }
+    LOG_F(WARNING, "physics.character.{} rejected during fixed_simulation",
+      op_name);
+    lua_pushnil(state);
+    return true;
+  }
+
   auto LuaCharacterAttach(lua_State* state) -> int
   {
+    if (RejectFixedSimulationWithNil(state, "attach")) {
+      return 1;
+    }
     if (!IsAttachAllowed(state)) {
       LOG_F(WARNING,
         "physics.character.attach rejected outside gameplay/scene_mutation "
@@ -139,15 +154,15 @@ namespace {
       return 1;
     }
 
-    auto* node = CheckSceneNode(state, 1);
-    const auto desc = ParseCharacterDesc(state, 2);
-
     auto* physics_module = GetPhysicsModule(state);
     const auto world_id_opt = GetPhysicsWorldId(state);
     if (physics_module == nullptr || !world_id_opt.has_value()) {
       lua_pushnil(state);
       return 1;
     }
+
+    auto* node = CheckSceneNode(state, 1);
+    const auto desc = ParseCharacterDesc(state, 2);
 
     const auto character = physics::ScenePhysics::AttachCharacter(
       observer_ptr<physics::PhysicsModule> { physics_module }, *node, desc);
@@ -162,6 +177,9 @@ namespace {
 
   auto LuaCharacterGet(lua_State* state) -> int
   {
+    if (RejectFixedSimulationWithNil(state, "get")) {
+      return 1;
+    }
     auto* node = CheckSceneNode(state, 1);
     auto* physics_module = GetPhysicsModule(state);
     const auto world_id_opt = GetPhysicsWorldId(state);
@@ -184,12 +202,18 @@ namespace {
 
   auto LuaCharacterHandleGetId(lua_State* state) -> int
   {
+    if (RejectFixedSimulationWithNil(state, "get_id")) {
+      return 1;
+    }
     const auto* handle = CheckCharacterHandle(state, 1);
     return PushCharacterId(state, handle->character_id);
   }
 
   auto LuaCharacterHandleMove(lua_State* state) -> int
   {
+    if (RejectFixedSimulationWithNil(state, "move")) {
+      return 1;
+    }
     if (RejectCommandOutsideGameplay(state, "move")) {
       lua_pushnil(state);
       return 1;

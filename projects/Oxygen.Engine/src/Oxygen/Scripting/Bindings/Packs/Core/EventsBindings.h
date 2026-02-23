@@ -22,6 +22,8 @@ auto RegisterEventsBindings(lua_State* state, int oxygen_table_index) -> void;
 
 auto QueueEngineEvent(lua_State* state, std::string_view event_name,
   std::string_view phase_name) -> void;
+auto QueueEngineEventWithPayload(lua_State* state, std::string_view event_name,
+  std::string_view phase_name, int payload_index) -> void;
 
 auto SetActiveEventPhase(lua_State* state, std::string_view phase_name) -> void;
 auto GetActiveEventPhase(lua_State* state) -> std::string_view;

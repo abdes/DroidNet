@@ -228,6 +228,28 @@ namespace {
     return true;
   }
 
+  auto RejectFixedSimulationWithNil(lua_State* state, const char* op_name)
+    -> bool
+  {
+    if (IsPhysicsScriptablePhase(state)) {
+      return false;
+    }
+    LOG_F(WARNING, "physics.body.{} rejected during fixed_simulation", op_name);
+    lua_pushnil(state);
+    return true;
+  }
+
+  auto RejectFixedSimulationWithBool(lua_State* state, const char* op_name)
+    -> bool
+  {
+    if (IsPhysicsScriptablePhase(state)) {
+      return false;
+    }
+    LOG_F(WARNING, "physics.body.{} rejected during fixed_simulation", op_name);
+    lua_pushboolean(state, 0);
+    return true;
+  }
+
   auto PushBodyResultOrNil(
     lua_State* state, const physics::PhysicsResult<Vec3>& result) -> int
   {
@@ -240,6 +262,9 @@ namespace {
 
   auto LuaBodyAttach(lua_State* state) -> int
   {
+    if (RejectFixedSimulationWithNil(state, "attach")) {
+      return 1;
+    }
     if (!IsAttachAllowed(state)) {
       LOG_F(WARNING,
         "physics.body.attach rejected outside gameplay/scene_mutation "
@@ -249,15 +274,15 @@ namespace {
       return 1;
     }
 
-    auto* node = CheckSceneNode(state, 1);
-    const auto desc = ParseBodyDesc(state, 2);
-
     auto* physics_module = GetPhysicsModule(state);
     const auto world_id_opt = GetPhysicsWorldId(state);
     if (physics_module == nullptr || !world_id_opt.has_value()) {
       lua_pushnil(state);
       return 1;
     }
+
+    auto* node = CheckSceneNode(state, 1);
+    const auto desc = ParseBodyDesc(state, 2);
 
     const auto body = physics::ScenePhysics::AttachRigidBody(
       observer_ptr<physics::PhysicsModule> { physics_module }, *node, desc);
@@ -273,6 +298,9 @@ namespace {
 
   auto LuaBodyGet(lua_State* state) -> int
   {
+    if (RejectFixedSimulationWithNil(state, "get")) {
+      return 1;
+    }
     auto* node = CheckSceneNode(state, 1);
 
     auto* physics_module = GetPhysicsModule(state);
@@ -297,12 +325,18 @@ namespace {
 
   auto LuaBodyHandleGetId(lua_State* state) -> int
   {
+    if (RejectFixedSimulationWithNil(state, "get_id")) {
+      return 1;
+    }
     const auto* handle = CheckBodyHandle(state, 1);
     return PushBodyId(state, handle->body_id);
   }
 
   auto LuaBodyHandleGetBodyType(lua_State* state) -> int
   {
+    if (RejectFixedSimulationWithNil(state, "get_body_type")) {
+      return 1;
+    }
     const auto* handle = CheckBodyHandle(state, 1);
     lua_pushstring(state, physics::body::to_string(handle->body_type));
     return 1;
@@ -310,6 +344,9 @@ namespace {
 
   auto LuaBodyHandleGetPosition(lua_State* state) -> int
   {
+    if (RejectFixedSimulationWithNil(state, "get_position")) {
+      return 1;
+    }
     const auto* handle = CheckBodyHandle(state, 1);
     auto* physics_module = GetPhysicsModule(state);
     if (physics_module == nullptr) {
@@ -323,6 +360,9 @@ namespace {
 
   auto LuaBodyHandleGetRotation(lua_State* state) -> int
   {
+    if (RejectFixedSimulationWithNil(state, "get_rotation")) {
+      return 1;
+    }
     const auto* handle = CheckBodyHandle(state, 1);
     auto* physics_module = GetPhysicsModule(state);
     if (physics_module == nullptr) {
@@ -341,6 +381,9 @@ namespace {
 
   auto LuaBodyHandleGetLinearVelocity(lua_State* state) -> int
   {
+    if (RejectFixedSimulationWithNil(state, "get_linear_velocity")) {
+      return 1;
+    }
     const auto* handle = CheckBodyHandle(state, 1);
     auto* physics_module = GetPhysicsModule(state);
     if (physics_module == nullptr) {
@@ -354,6 +397,9 @@ namespace {
 
   auto LuaBodyHandleGetAngularVelocity(lua_State* state) -> int
   {
+    if (RejectFixedSimulationWithNil(state, "get_angular_velocity")) {
+      return 1;
+    }
     const auto* handle = CheckBodyHandle(state, 1);
     auto* physics_module = GetPhysicsModule(state);
     if (physics_module == nullptr) {
@@ -386,6 +432,9 @@ namespace {
 
   auto LuaBodyHandleSetLinearVelocity(lua_State* state) -> int
   {
+    if (RejectFixedSimulationWithBool(state, "set_linear_velocity")) {
+      return 1;
+    }
     if (RejectCommandOutsideGameplay(state, "set_linear_velocity")) {
       lua_pushboolean(state, 0);
       return 1;
@@ -408,6 +457,9 @@ namespace {
 
   auto LuaBodyHandleSetAngularVelocity(lua_State* state) -> int
   {
+    if (RejectFixedSimulationWithBool(state, "set_angular_velocity")) {
+      return 1;
+    }
     if (RejectCommandOutsideGameplay(state, "set_angular_velocity")) {
       lua_pushboolean(state, 0);
       return 1;
@@ -430,6 +482,9 @@ namespace {
 
   auto LuaBodyHandleAddForce(lua_State* state) -> int
   {
+    if (RejectFixedSimulationWithBool(state, "add_force")) {
+      return 1;
+    }
     if (RejectCommandOutsideGameplay(state, "add_force")) {
       lua_pushboolean(state, 0);
       return 1;
@@ -451,6 +506,9 @@ namespace {
 
   auto LuaBodyHandleAddImpulse(lua_State* state) -> int
   {
+    if (RejectFixedSimulationWithBool(state, "add_impulse")) {
+      return 1;
+    }
     if (RejectCommandOutsideGameplay(state, "add_impulse")) {
       lua_pushboolean(state, 0);
       return 1;
@@ -472,6 +530,9 @@ namespace {
 
   auto LuaBodyHandleAddTorque(lua_State* state) -> int
   {
+    if (RejectFixedSimulationWithBool(state, "add_torque")) {
+      return 1;
+    }
     if (RejectCommandOutsideGameplay(state, "add_torque")) {
       lua_pushboolean(state, 0);
       return 1;
@@ -493,6 +554,9 @@ namespace {
 
   auto LuaBodyHandleMoveKinematic(lua_State* state) -> int
   {
+    if (RejectFixedSimulationWithBool(state, "move_kinematic")) {
+      return 1;
+    }
     if (RejectCommandOutsideGameplay(state, "move_kinematic")) {
       lua_pushboolean(state, 0);
       return 1;

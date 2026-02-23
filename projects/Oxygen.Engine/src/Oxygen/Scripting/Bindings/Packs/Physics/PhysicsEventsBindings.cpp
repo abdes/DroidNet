@@ -12,6 +12,7 @@
 #include <Oxygen/Physics/Events/PhysicsEvents.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
+#include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsBindingsCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsEventsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
@@ -19,6 +20,22 @@
 namespace oxygen::scripting::bindings {
 
 namespace {
+
+  auto EventQueueName(const physics::events::PhysicsEventType type) -> const
+    char*
+  {
+    switch (type) {
+    case physics::events::PhysicsEventType::kContactBegin:
+      return "physics.contact_begin";
+    case physics::events::PhysicsEventType::kContactEnd:
+      return "physics.contact_end";
+    case physics::events::PhysicsEventType::kTriggerBegin:
+      return "physics.trigger_begin";
+    case physics::events::PhysicsEventType::kTriggerEnd:
+      return "physics.trigger_end";
+    }
+    return "physics.contact_begin";
+  }
 
   auto PushOptionalLiveNode(lua_State* state,
     const std::optional<scene::NodeHandle>& node_handle) -> int
@@ -94,6 +111,8 @@ namespace {
     int lua_index = 1;
     for (const auto& event : events) {
       static_cast<void>(PushPhysicsEventTable(state, event));
+      QueueEngineEventWithPayload(
+        state, EventQueueName(event.type), "scene_mutation", -1);
       lua_rawseti(state, -2, lua_index);
       ++lua_index;
     }

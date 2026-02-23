@@ -170,6 +170,60 @@ namespace {
     return 1;
   }
 
+  auto AggregateHandleIsValid(lua_State* state) -> int
+  {
+    const auto* handle = CheckAggregateHandle(state, 1);
+    lua_pushboolean(state, physics::IsValid(handle->aggregate_id) ? 1 : 0);
+    return 1;
+  }
+
+  auto AggregateHandleToString(lua_State* state) -> int
+  {
+    const auto* handle = CheckAggregateHandle(state, 1);
+    const auto text = std::string("AggregateHandle{world=")
+                        .append(physics::to_string(handle->world_id))
+                        .append(", aggregate=")
+                        .append(physics::to_string(handle->aggregate_id))
+                        .append("}");
+    lua_pushstring(state, text.c_str());
+    return 1;
+  }
+
+  auto AggregateHandleEq(lua_State* state) -> int
+  {
+    const auto* lhs = CheckAggregateHandle(state, 1);
+    const auto* rhs = CheckAggregateHandle(state, 2);
+    const auto equal = lhs->world_id == rhs->world_id
+      && lhs->aggregate_id == rhs->aggregate_id;
+    lua_pushboolean(state, equal ? 1 : 0);
+    return 1;
+  }
+
+  auto AggregateIdIsValid(lua_State* state) -> int
+  {
+    const auto* id = CheckAggregateId(state, 1);
+    lua_pushboolean(state, physics::IsValid(id->aggregate_id) ? 1 : 0);
+    return 1;
+  }
+
+  auto AggregateIdToString(lua_State* state) -> int
+  {
+    const auto* id = CheckAggregateId(state, 1);
+    const auto text = std::string("AggregateId{")
+                        .append(physics::to_string(id->aggregate_id))
+                        .append("}");
+    lua_pushstring(state, text.c_str());
+    return 1;
+  }
+
+  auto AggregateIdEq(lua_State* state) -> int
+  {
+    const auto* lhs = CheckAggregateId(state, 1);
+    const auto* rhs = CheckAggregateId(state, 2);
+    lua_pushboolean(state, lhs->aggregate_id == rhs->aggregate_id ? 1 : 0);
+    return 1;
+  }
+
   auto RegisterMetatableWithCommonMethods(lua_State* state,
     const char* metatable_name, lua_CFunction is_valid_fn, lua_CFunction eq_fn,
     lua_CFunction tostring_fn) -> void
@@ -215,6 +269,18 @@ auto RegisterPhysicsCharacterIdMetatable(lua_State* state) -> void
 {
   RegisterMetatableWithCommonMethods(state, kPhysicsCharacterIdMetatable,
     CharacterIdIsValid, CharacterIdEq, CharacterIdToString);
+}
+
+auto RegisterPhysicsAggregateHandleMetatable(lua_State* state) -> void
+{
+  RegisterMetatableWithCommonMethods(state, kPhysicsAggregateHandleMetatable,
+    AggregateHandleIsValid, AggregateHandleEq, AggregateHandleToString);
+}
+
+auto RegisterPhysicsAggregateIdMetatable(lua_State* state) -> void
+{
+  RegisterMetatableWithCommonMethods(state, kPhysicsAggregateIdMetatable,
+    AggregateIdIsValid, AggregateIdEq, AggregateIdToString);
 }
 
 auto PushBodyHandle(lua_State* state, const physics::WorldId world_id,
@@ -290,6 +356,43 @@ auto CheckCharacterId(lua_State* state, const int index)
     luaL_checkudata(state, index, kPhysicsCharacterIdMetatable));
 }
 
+auto PushAggregateHandle(lua_State* state, const physics::WorldId world_id,
+  const physics::AggregateId aggregate_id) -> int
+{
+  auto* userdata = static_cast<PhysicsAggregateHandleUserdata*>(
+    lua_newuserdata(state, sizeof(PhysicsAggregateHandleUserdata)));
+  *userdata = PhysicsAggregateHandleUserdata {
+    .world_id = world_id,
+    .aggregate_id = aggregate_id,
+  };
+  SetMetatable(state, kPhysicsAggregateHandleMetatable);
+  return 1;
+}
+
+auto CheckAggregateHandle(lua_State* state, const int index)
+  -> PhysicsAggregateHandleUserdata*
+{
+  return static_cast<PhysicsAggregateHandleUserdata*>(
+    luaL_checkudata(state, index, kPhysicsAggregateHandleMetatable));
+}
+
+auto PushAggregateId(lua_State* state, const physics::AggregateId aggregate_id)
+  -> int
+{
+  auto* userdata = static_cast<PhysicsAggregateIdUserdata*>(
+    lua_newuserdata(state, sizeof(PhysicsAggregateIdUserdata)));
+  userdata->aggregate_id = aggregate_id;
+  SetMetatable(state, kPhysicsAggregateIdMetatable);
+  return 1;
+}
+
+auto CheckAggregateId(lua_State* state, const int index)
+  -> PhysicsAggregateIdUserdata*
+{
+  return static_cast<PhysicsAggregateIdUserdata*>(
+    luaL_checkudata(state, index, kPhysicsAggregateIdMetatable));
+}
+
 auto GetPhysicsModule(lua_State* state) -> physics::PhysicsModule*
 {
   const auto engine = GetActiveEngine(state);
@@ -316,19 +419,41 @@ auto GetPhysicsWorldId(lua_State* state) -> std::optional<physics::WorldId>
   return world_id;
 }
 
+auto IsPhysicsScriptablePhase(lua_State* state) -> bool
+{
+  return GetActiveEventPhase(state) != "fixed_simulation";
+}
+
 auto IsAttachAllowed(lua_State* state) -> bool
 {
+  if (!IsPhysicsScriptablePhase(state)) {
+    return false;
+  }
   const auto phase = GetActiveEventPhase(state);
   return phase == "gameplay" || phase == "scene_mutation";
 }
 
 auto IsCommandAllowed(lua_State* state) -> bool
 {
+  if (!IsPhysicsScriptablePhase(state)) {
+    return false;
+  }
+  return GetActiveEventPhase(state) == "gameplay";
+}
+
+auto IsAggregateMutationAllowed(lua_State* state) -> bool
+{
+  if (!IsPhysicsScriptablePhase(state)) {
+    return false;
+  }
   return GetActiveEventPhase(state) == "gameplay";
 }
 
 auto IsEventDrainAllowed(lua_State* state) -> bool
 {
+  if (!IsPhysicsScriptablePhase(state)) {
+    return false;
+  }
   return GetActiveEventPhase(state) == "scene_mutation";
 }
 
@@ -411,6 +536,59 @@ auto ParseBodyIdArray(lua_State* state, const int table_index)
     lua_rawgeti(state, abs_index, i);
     const auto* body_id_userdata = CheckBodyId(state, -1);
     body_ids.push_back(body_id_userdata->body_id);
+    lua_pop(state, 1);
+  }
+  return body_ids;
+}
+
+auto ParseBodyIdOrHandle(lua_State* state, const int index) -> physics::BodyId
+{
+  if (lua_isuserdata(state, index) == 0) {
+    luaL_argerror(state, index, "expected BodyId or BodyHandle userdata");
+    return physics::kInvalidBodyId;
+  }
+
+  if (lua_getmetatable(state, index) == 0) {
+    luaL_argerror(state, index, "expected BodyId or BodyHandle userdata");
+    return physics::kInvalidBodyId;
+  }
+  const int mt_index = lua_gettop(state);
+
+  luaL_getmetatable(state, kPhysicsBodyIdMetatable);
+  const bool is_body_id = lua_rawequal(state, mt_index, -1) != 0;
+  lua_pop(state, 1);
+  if (is_body_id) {
+    const auto* id = CheckBodyId(state, index);
+    lua_pop(state, 1);
+    return id->body_id;
+  }
+
+  luaL_getmetatable(state, kPhysicsBodyHandleMetatable);
+  const bool is_body_handle = lua_rawequal(state, mt_index, -1) != 0;
+  lua_pop(state, 1);
+  if (is_body_handle) {
+    const auto* handle = CheckBodyHandle(state, index);
+    lua_pop(state, 1);
+    return handle->body_id;
+  }
+
+  lua_pop(state, 1);
+  luaL_argerror(state, index, "expected BodyId or BodyHandle userdata");
+  return physics::kInvalidBodyId;
+}
+
+auto ParseBodyIdOrHandleArray(lua_State* state, const int table_index)
+  -> std::vector<physics::BodyId>
+{
+  const auto abs_index = lua_absindex(state, table_index);
+  luaL_checktype(state, abs_index, LUA_TTABLE);
+
+  const auto len = lua_objlen(state, abs_index);
+  std::vector<physics::BodyId> body_ids {};
+  body_ids.reserve(len);
+  for (int i = 1; i <= len; ++i) {
+    lua_rawgeti(state, abs_index, i);
+    body_ids.push_back(ParseBodyIdOrHandle(state, -1));
     lua_pop(state, 1);
   }
   return body_ids;

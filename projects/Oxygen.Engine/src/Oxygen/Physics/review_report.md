@@ -502,8 +502,8 @@ The introduction of the `IJointApi` and `JoltJoints` correctly implements the ne
 
 ### 11.7 Product Integration
 
-- [ ] Physics C++ demo
-- [ ] Luau bindings
+- [x] Physics C++ demo
+- [X] Luau bindings
 - [ ] RenderScene + Lua physics scene
 - [ ] Pak migration and validation
 
