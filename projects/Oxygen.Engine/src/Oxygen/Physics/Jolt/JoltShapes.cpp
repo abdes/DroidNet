@@ -15,6 +15,12 @@ auto oxygen::physics::jolt::JoltShapes::CreateShape(
   if (shape_result.has_error()) {
     return Err(shape_result.error());
   }
+  const auto transformed_shape_result
+    = ApplyShapeLocalTransform(desc.geometry, shape_result.value(),
+      desc.local_position, desc.local_rotation, desc.local_scale);
+  if (transformed_shape_result.has_error()) {
+    return Err(transformed_shape_result.error());
+  }
 
   std::scoped_lock lock(mutex_);
   if (next_shape_id_ == std::numeric_limits<uint32_t>::max()) {
@@ -24,10 +30,22 @@ auto oxygen::physics::jolt::JoltShapes::CreateShape(
   const auto shape_id = ShapeId { next_shape_id_++ };
   shapes_.emplace(shape_id,
     ShapeState {
-      .shape = shape_result.value(),
+      .desc = desc,
+      .shape = transformed_shape_result.value(),
       .attachment_count = 0U,
     });
   return Ok(shape_id);
+}
+
+auto oxygen::physics::jolt::JoltShapes::GetShapeDesc(
+  const ShapeId shape_id) const -> PhysicsResult<shape::ShapeDesc>
+{
+  std::scoped_lock lock(mutex_);
+  const auto it = shapes_.find(shape_id);
+  if (it == shapes_.end()) {
+    return Err(PhysicsError::kInvalidArgument);
+  }
+  return Ok(it->second.desc);
 }
 
 auto oxygen::physics::jolt::JoltShapes::DestroyShape(const ShapeId shape_id)

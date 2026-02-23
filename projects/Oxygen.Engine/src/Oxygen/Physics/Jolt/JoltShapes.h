@@ -28,6 +28,8 @@ public:
 
   auto CreateShape(const shape::ShapeDesc& desc)
     -> PhysicsResult<ShapeId> override;
+  auto GetShapeDesc(ShapeId shape_id) const
+    -> PhysicsResult<shape::ShapeDesc> override;
   auto DestroyShape(ShapeId shape_id) -> PhysicsResult<void> override;
 
   [[nodiscard]] auto TryGetShape(ShapeId shape_id) const
@@ -37,6 +39,7 @@ public:
 
 private:
   struct ShapeState final {
+    shape::ShapeDesc desc {};
     JPH::RefConst<JPH::Shape> shape {};
     size_t attachment_count { 0U };
   };

@@ -35,6 +35,9 @@ constexpr const char* kPhysicsAggregateIdMetatable
 constexpr const char* kPhysicsJointHandleMetatable
   = "oxygen.physics.joint_handle";
 constexpr const char* kPhysicsJointIdMetatable = "oxygen.physics.joint_id";
+constexpr const char* kPhysicsShapeIdMetatable = "oxygen.physics.shape_id";
+constexpr const char* kPhysicsShapeInstanceIdMetatable
+  = "oxygen.physics.shape_instance_id";
 
 struct PhysicsBodyHandleUserdata final {
   physics::WorldId world_id { physics::kInvalidWorldId };
@@ -73,6 +76,16 @@ struct PhysicsJointHandleUserdata final {
   physics::JointId joint_id { physics::kInvalidJointId };
 };
 
+struct PhysicsShapeIdUserdata final {
+  physics::ShapeId shape_id { physics::kInvalidShapeId };
+};
+
+struct PhysicsShapeInstanceIdUserdata final {
+  physics::ShapeInstanceId shape_instance_id {
+    physics::kInvalidShapeInstanceId
+  };
+};
+
 auto RegisterPhysicsBodyHandleMetatable(lua_State* state) -> void;
 auto RegisterPhysicsCharacterHandleMetatable(lua_State* state) -> void;
 auto RegisterPhysicsBodyIdMetatable(lua_State* state) -> void;
@@ -81,6 +94,8 @@ auto RegisterPhysicsAggregateHandleMetatable(lua_State* state) -> void;
 auto RegisterPhysicsAggregateIdMetatable(lua_State* state) -> void;
 auto RegisterPhysicsJointHandleMetatable(lua_State* state) -> void;
 auto RegisterPhysicsJointIdMetatable(lua_State* state) -> void;
+auto RegisterPhysicsShapeIdMetatable(lua_State* state) -> void;
+auto RegisterPhysicsShapeInstanceIdMetatable(lua_State* state) -> void;
 
 auto PushBodyHandle(lua_State* state, physics::WorldId world_id,
   physics::BodyId body_id, physics::body::BodyType body_type) -> int;
@@ -117,6 +132,14 @@ auto CheckJointHandle(lua_State* state, int index)
 auto PushJointId(lua_State* state, physics::JointId joint_id) -> int;
 auto CheckJointId(lua_State* state, int index) -> PhysicsJointIdUserdata*;
 
+auto PushShapeId(lua_State* state, physics::ShapeId shape_id) -> int;
+auto CheckShapeId(lua_State* state, int index) -> PhysicsShapeIdUserdata*;
+
+auto PushShapeInstanceId(
+  lua_State* state, physics::ShapeInstanceId shape_instance_id) -> int;
+auto CheckShapeInstanceId(lua_State* state, int index)
+  -> PhysicsShapeInstanceIdUserdata*;
+
 auto GetPhysicsModule(lua_State* state) -> physics::PhysicsModule*;
 auto GetPhysicsWorldId(lua_State* state) -> std::optional<physics::WorldId>;
 
@@ -126,7 +149,7 @@ auto IsCommandAllowed(lua_State* state) -> bool;
 auto IsAggregateMutationAllowed(lua_State* state) -> bool;
 auto IsEventDrainAllowed(lua_State* state) -> bool;
 
-auto ParseCollisionShape(lua_State* state, int table_index)
+OXGN_SCRP_API auto ParseCollisionShape(lua_State* state, int table_index)
   -> physics::CollisionShape;
 auto ParseBodyIdArray(lua_State* state, int table_index)
   -> std::vector<physics::BodyId>;

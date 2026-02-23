@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Physics/PhysicsError.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
 #include <Oxygen/PhysicsModule/ScenePhysics.h>
 
@@ -47,8 +48,21 @@ auto ScenePhysics::AttachRigidBody(observer_ptr<PhysicsModule> physics_module,
   scene::SceneNode& node, const body::BodyDesc& desc)
   -> std::optional<RigidBodyFacade>
 {
-  if (!physics_module || !node.IsValid()) {
+  const auto result = AttachRigidBodyDetailed(physics_module, node, desc);
+  if (!result.has_value()) {
+    LOG_F(ERROR, "ScenePhysics::AttachRigidBody CreateBody failed: {}",
+      to_string(result.error()));
     return std::nullopt;
+  }
+  return result.value();
+}
+
+auto ScenePhysics::AttachRigidBodyDetailed(
+  observer_ptr<PhysicsModule> physics_module, scene::SceneNode& node,
+  const body::BodyDesc& desc) -> PhysicsResult<RigidBodyFacade>
+{
+  if (!physics_module || !node.IsValid()) {
+    return Err(PhysicsError::kInvalidArgument);
   }
   const auto scene_tag = internal::ScenePhysicsTagFactory::Get();
   DCHECK_F(node.IsAlive(),
@@ -57,21 +71,21 @@ auto ScenePhysics::AttachRigidBody(observer_ptr<PhysicsModule> physics_module,
     "AttachRigidBody contract violated: node must belong to currently "
     "observed scene.");
   if (!physics_module->IsNodeInObservedScene(scene_tag, node.GetHandle())) {
-    return std::nullopt;
+    return Err(PhysicsError::kInvalidArgument);
   }
   DCHECK_F(physics_module->GetCharacterIdForNode(scene_tag, node.GetHandle())
       == kInvalidCharacterId,
     "AttachRigidBody contract violated: node already has a character.");
   if (physics_module->GetCharacterIdForNode(scene_tag, node.GetHandle())
     != kInvalidCharacterId) {
-    return std::nullopt;
+    return Err(PhysicsError::kAlreadyExists);
   }
   DCHECK_F(physics_module->GetAggregateIdForNode(scene_tag, node.GetHandle())
       == kInvalidAggregateId,
     "AttachRigidBody contract violated: node already has an aggregate.");
   if (physics_module->GetAggregateIdForNode(scene_tag, node.GetHandle())
     != kInvalidAggregateId) {
-    return std::nullopt;
+    return Err(PhysicsError::kAlreadyExists);
   }
 
   auto& body_api = physics_module->Bodies();
@@ -79,24 +93,13 @@ auto ScenePhysics::AttachRigidBody(observer_ptr<PhysicsModule> physics_module,
   DCHECK_F(world_id != kInvalidWorldId,
     "AttachRigidBody contract violated: physics world must be valid.");
   if (world_id == kInvalidWorldId) {
-    return std::nullopt;
+    return Err(PhysicsError::kNotInitialized);
   }
 
-  // Inject the node's current world transform into the desc so the body spawns
-  // at the node's actual world position and rotation. The caller does not need
-  // to populate initial_position/initial_rotation manually.
-  body::BodyDesc effective_desc = desc;
-  effective_desc.initial_position
-    = node.GetTransform().GetWorldPosition().value_or(
-      Vec3 { 0.0F, 0.0F, 0.0F });
-  effective_desc.initial_rotation
-    = node.GetTransform().GetWorldRotation().value_or(
-      Quat { 1.0F, 0.0F, 0.0F, 0.0F });
-
   // Create the body
-  const auto result = body_api.CreateBody(world_id, effective_desc);
+  const auto result = body_api.CreateBody(world_id, desc);
   if (!result.has_value()) {
-    return std::nullopt;
+    return Err(result.error());
   }
 
   const BodyId body_id = result.value();
@@ -104,8 +107,8 @@ auto ScenePhysics::AttachRigidBody(observer_ptr<PhysicsModule> physics_module,
   physics_module->RegisterNodeBodyMapping(
     scene_tag, node.GetHandle(), body_id, desc.type);
 
-  return RigidBodyFacade(node.GetHandle(), world_id, body_id,
-    observer_ptr<system::IBodyApi> { &body_api });
+  return PhysicsResult<RigidBodyFacade>::Ok(RigidBodyFacade(node.GetHandle(),
+    world_id, body_id, observer_ptr<system::IBodyApi> { &body_api }));
 }
 
 auto ScenePhysics::GetRigidBody(observer_ptr<PhysicsModule> physics_module,
@@ -129,8 +132,21 @@ auto ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> physics_module,
   scene::SceneNode& node, const character::CharacterDesc& desc)
   -> std::optional<CharacterFacade>
 {
-  if (!physics_module || !node.IsValid()) {
+  const auto result = AttachCharacterDetailed(physics_module, node, desc);
+  if (!result.has_value()) {
+    LOG_F(ERROR, "ScenePhysics::AttachCharacter CreateCharacter failed: {}",
+      to_string(result.error()));
     return std::nullopt;
+  }
+  return result.value();
+}
+
+auto ScenePhysics::AttachCharacterDetailed(
+  observer_ptr<PhysicsModule> physics_module, scene::SceneNode& node,
+  const character::CharacterDesc& desc) -> PhysicsResult<CharacterFacade>
+{
+  if (!physics_module || !node.IsValid()) {
+    return Err(PhysicsError::kInvalidArgument);
   }
   const auto scene_tag = internal::ScenePhysicsTagFactory::Get();
   DCHECK_F(node.IsAlive(),
@@ -139,21 +155,21 @@ auto ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> physics_module,
     "AttachCharacter contract violated: node must belong to currently "
     "observed scene.");
   if (!physics_module->IsNodeInObservedScene(scene_tag, node.GetHandle())) {
-    return std::nullopt;
+    return Err(PhysicsError::kInvalidArgument);
   }
   DCHECK_F(physics_module->GetBodyIdForNode(scene_tag, node.GetHandle())
       == kInvalidBodyId,
     "AttachCharacter contract violated: node already has a rigid body.");
   if (physics_module->GetBodyIdForNode(scene_tag, node.GetHandle())
     != kInvalidBodyId) {
-    return std::nullopt;
+    return Err(PhysicsError::kAlreadyExists);
   }
   DCHECK_F(physics_module->GetAggregateIdForNode(scene_tag, node.GetHandle())
       == kInvalidAggregateId,
     "AttachCharacter contract violated: node already has an aggregate.");
   if (physics_module->GetAggregateIdForNode(scene_tag, node.GetHandle())
     != kInvalidAggregateId) {
-    return std::nullopt;
+    return Err(PhysicsError::kAlreadyExists);
   }
 
   auto& character_api = physics_module->Characters();
@@ -161,29 +177,20 @@ auto ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> physics_module,
   DCHECK_F(world_id != kInvalidWorldId,
     "AttachCharacter contract violated: physics world must be valid.");
   if (world_id == kInvalidWorldId) {
-    return std::nullopt;
+    return Err(PhysicsError::kNotInitialized);
   }
 
-  // Inject the node's current world transform into the desc so the character
-  // spawns at the node's actual world position and rotation.
-  character::CharacterDesc effective_desc = desc;
-  effective_desc.initial_position
-    = node.GetTransform().GetWorldPosition().value_or(
-      Vec3 { 0.0F, 0.0F, 0.0F });
-  effective_desc.initial_rotation
-    = node.GetTransform().GetWorldRotation().value_or(
-      Quat { 1.0F, 0.0F, 0.0F, 0.0F });
-
-  const auto result = character_api.CreateCharacter(world_id, effective_desc);
+  const auto result = character_api.CreateCharacter(world_id, desc);
   if (!result.has_value()) {
-    return std::nullopt;
+    return Err(result.error());
   }
 
   const CharacterId character_id = result.value();
   physics_module->RegisterNodeCharacterMapping(
     scene_tag, node.GetHandle(), character_id);
-  return CharacterFacade(node.GetHandle(), world_id, character_id,
-    observer_ptr<system::ICharacterApi> { &character_api }, physics_module);
+  return PhysicsResult<CharacterFacade>::Ok(
+    CharacterFacade(node.GetHandle(), world_id, character_id,
+      observer_ptr<system::ICharacterApi> { &character_api }, physics_module));
 }
 
 auto ScenePhysics::GetCharacter(observer_ptr<PhysicsModule> physics_module,

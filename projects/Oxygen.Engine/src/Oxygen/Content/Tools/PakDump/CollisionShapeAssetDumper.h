@@ -51,17 +51,28 @@ public:
     asset_dump_helpers::PrintAssetHeaderFields(shape.header, 4);
 
     std::cout << "    --- Collision Shape Fields ---\n";
-    PrintUtils::Field("Category", static_cast<int>(shape.shape_category), 8);
+    PrintUtils::Field("Shape Type", static_cast<uint32_t>(shape.shape_type), 8);
+    PrintUtils::Field("Local Position",
+      fmt::format("[{:.3f}, {:.3f}, {:.3f}]", shape.local_position[0],
+        shape.local_position[1], shape.local_position[2]),
+      8);
+    PrintUtils::Field("Local Rotation",
+      fmt::format("[{:.3f}, {:.3f}, {:.3f}, {:.3f}]", shape.local_rotation[0],
+        shape.local_rotation[1], shape.local_rotation[2],
+        shape.local_rotation[3]),
+      8);
+    PrintUtils::Field("Local Scale",
+      fmt::format("[{:.3f}, {:.3f}, {:.3f}]", shape.local_scale[0],
+        shape.local_scale[1], shape.local_scale[2]),
+      8);
+    PrintUtils::Field("Is Sensor", shape.is_sensor, 8);
+    PrintUtils::Field("Own Layer", shape.collision_own_layer, 8);
+    PrintUtils::Field("Target Layers", shape.collision_target_layers, 8);
+    PrintUtils::Field("Material Ref", shape.material_ref, 8);
     PrintUtils::Field(
-      "Physics Resource Index", shape.physics_resource_index, 8);
-    PrintUtils::Field("BBox Min",
-      fmt::format("[{:.3f}, {:.3f}, {:.3f}]", shape.bounding_box_min[0],
-        shape.bounding_box_min[1], shape.bounding_box_min[2]),
-      8);
-    PrintUtils::Field("BBox Max",
-      fmt::format("[{:.3f}, {:.3f}, {:.3f}]", shape.bounding_box_max[0],
-        shape.bounding_box_max[1], shape.bounding_box_max[2]),
-      8);
+      "Cooked Ref Index", shape.cooked_shape_ref.resource_index, 8);
+    PrintUtils::Field("Cooked Ref Type",
+      static_cast<uint32_t>(shape.cooked_shape_ref.payload_type), 8);
     std::cout << "\n";
 
     co_return;

@@ -47,6 +47,9 @@ struct BodyDesc final {
    * `IBodyApi::AddBodyShape`.
   */
   CollisionShape shape { SphereShape { 0.5F } };
+  Vec3 shape_local_position { 0.0F, 0.0F, 0.0F };
+  Quat shape_local_rotation { 1.0F, 0.0F, 0.0F, 0.0F };
+  Vec3 shape_local_scale { 1.0F, 1.0F, 1.0F };
   Vec3 initial_position { 0.0F, 0.0F, 0.0F };
   Quat initial_rotation { 1.0F, 0.0F, 0.0F, 0.0F };
   float mass_kg { 1.0F };

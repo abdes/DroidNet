@@ -927,14 +927,18 @@ auto RunDumpPhysicsAssets(const DumpPhysicsAssetsOptions& opts) -> int
         std::cout << "  name='"
                   << ReadFixedString(
                        desc->header.name, sizeof(desc->header.name))
-                  << "' resource_index=" << desc->physics_resource_index
-                  << " category=" << static_cast<uint32_t>(desc->shape_category)
-                  << " bb_min=(" << desc->bounding_box_min[0] << ","
-                  << desc->bounding_box_min[1] << ","
-                  << desc->bounding_box_min[2] << ") bb_max=("
-                  << desc->bounding_box_max[0] << ","
-                  << desc->bounding_box_max[1] << ","
-                  << desc->bounding_box_max[2] << ")\n";
+                  << "' shape_type=" << static_cast<uint32_t>(desc->shape_type)
+                  << " local_pos=(" << desc->local_position[0] << ","
+                  << desc->local_position[1] << "," << desc->local_position[2]
+                  << ") local_scale=(" << desc->local_scale[0] << ","
+                  << desc->local_scale[1] << "," << desc->local_scale[2]
+                  << ") is_sensor=" << desc->is_sensor
+                  << " material_ref=" << desc->material_ref
+                  << " cooked_ref.index="
+                  << desc->cooked_shape_ref.resource_index
+                  << " cooked_ref.type="
+                  << static_cast<uint32_t>(desc->cooked_shape_ref.payload_type)
+                  << "\n";
         continue;
       }
 

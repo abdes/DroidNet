@@ -24,8 +24,8 @@ namespace oxygen::scripting::bindings {
 
 namespace {
 
-  auto ParseCharacterDesc(lua_State* state, const int arg_index)
-    -> physics::character::CharacterDesc
+  auto ParseCharacterDesc(lua_State* state, const int arg_index,
+    physics::PhysicsModule& physics_module) -> physics::character::CharacterDesc
   {
     physics::character::CharacterDesc desc {};
     if (lua_isnoneornil(state, arg_index) != 0) {
@@ -33,6 +33,19 @@ namespace {
     }
     const auto desc_index = lua_absindex(state, arg_index);
     luaL_checktype(state, desc_index, LUA_TTABLE);
+
+    lua_getfield(state, desc_index, "shape_id");
+    if (lua_isnil(state, -1) == 0) {
+      const auto* shape_id = CheckShapeId(state, -1);
+      const auto shape_result
+        = physics_module.Shapes().GetShapeDesc(shape_id->shape_id);
+      if (!shape_result.has_value()) {
+        lua_pop(state, 1);
+        luaL_error(state, "invalid shape_id in character descriptor");
+      }
+      desc.shape = shape_result.value().geometry;
+    }
+    lua_pop(state, 1);
 
     lua_getfield(state, desc_index, "shape");
     if (lua_isnil(state, -1) == 0) {
@@ -162,7 +175,7 @@ namespace {
     }
 
     auto* node = CheckSceneNode(state, 1);
-    const auto desc = ParseCharacterDesc(state, 2);
+    const auto desc = ParseCharacterDesc(state, 2, *physics_module);
 
     const auto character = physics::ScenePhysics::AttachCharacter(
       observer_ptr<physics::PhysicsModule> { physics_module }, *node, desc);

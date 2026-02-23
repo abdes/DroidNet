@@ -13,6 +13,7 @@
 #include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/Character/CharacterController.h>
 #include <Oxygen/Physics/Handles.h>
+#include <Oxygen/Physics/PhysicsError.h>
 #include <Oxygen/Physics/System/IBodyApi.h>
 #include <Oxygen/Physics/System/ICharacterApi.h>
 #include <Oxygen/Physics/System/IQueryApi.h>
@@ -134,6 +135,9 @@ public:
   OXGN_PHSYNC_API static auto AttachRigidBody(
     observer_ptr<PhysicsModule> physics_module, scene::SceneNode& node,
     const body::BodyDesc& desc) -> std::optional<RigidBodyFacade>;
+  OXGN_PHSYNC_API static auto AttachRigidBodyDetailed(
+    observer_ptr<PhysicsModule> physics_module, scene::SceneNode& node,
+    const body::BodyDesc& desc) -> PhysicsResult<RigidBodyFacade>;
 
   OXGN_PHSYNC_API static auto GetRigidBody(
     observer_ptr<PhysicsModule> physics_module, const scene::NodeHandle& node)
@@ -178,6 +182,9 @@ public:
   OXGN_PHSYNC_API static auto AttachCharacter(
     observer_ptr<PhysicsModule> physics_module, scene::SceneNode& node,
     const character::CharacterDesc& desc) -> std::optional<CharacterFacade>;
+  OXGN_PHSYNC_API static auto AttachCharacterDetailed(
+    observer_ptr<PhysicsModule> physics_module, scene::SceneNode& node,
+    const character::CharacterDesc& desc) -> PhysicsResult<CharacterFacade>;
 
   OXGN_PHSYNC_API static auto GetCharacter(
     observer_ptr<PhysicsModule> physics_module, const scene::NodeHandle& node)

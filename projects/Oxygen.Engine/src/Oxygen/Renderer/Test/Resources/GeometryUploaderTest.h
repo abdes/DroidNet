@@ -93,6 +93,11 @@ public:
   {
     on_complete(nullptr);
   }
+  void StartLoadPhysicsResource(
+    content::ResourceKey /*key*/, PhysicsResourceCallback on_complete) override
+  {
+    on_complete(nullptr);
+  }
 
   auto AddPakFile(const std::filesystem::path& /*path*/) -> void override { }
 
@@ -155,12 +160,75 @@ public:
   {
     return nullptr;
   }
+  [[nodiscard]] auto GetScriptResource(
+    content::ResourceKey /*key*/) const noexcept
+    -> std::shared_ptr<data::ScriptResource> override
+  {
+    return nullptr;
+  }
+  auto LoadScriptResourceAsync(content::ResourceKey /*key*/)
+    -> co::Co<std::shared_ptr<data::ScriptResource>> override
+  {
+    co_return nullptr;
+  }
+  [[nodiscard]] auto MakeScriptResourceKeyForAsset(
+    const data::AssetKey& /*context_asset_key*/,
+    data::pak::ResourceIndexT /*resource_index*/) const noexcept
+    -> std::optional<content::ResourceKey> override
+  {
+    return std::nullopt;
+  }
+  [[nodiscard]] auto ReadScriptResourceForAsset(
+    const data::AssetKey& /*context_asset_key*/,
+    data::pak::ResourceIndexT /*resource_index*/) const
+    -> std::shared_ptr<const data::ScriptResource> override
+  {
+    return nullptr;
+  }
 
   [[nodiscard]] auto GetPhysicsSceneAsset(
     const data::AssetKey& /*key*/) const noexcept
     -> std::shared_ptr<data::PhysicsSceneAsset> override
   {
     return nullptr;
+  }
+  [[nodiscard]] auto GetPhysicsResource(
+    content::ResourceKey /*key*/) const noexcept
+    -> std::shared_ptr<data::PhysicsResource> override
+  {
+    return nullptr;
+  }
+  auto LoadPhysicsResourceAsync(content::ResourceKey /*key*/)
+    -> co::Co<std::shared_ptr<data::PhysicsResource>> override
+  {
+    co_return nullptr;
+  }
+  [[nodiscard]] auto MakePhysicsResourceKey(data::SourceKey /*source_key*/,
+    data::pak::ResourceIndexT /*resource_index*/) const noexcept
+    -> std::optional<content::ResourceKey> override
+  {
+    return std::nullopt;
+  }
+  [[nodiscard]] auto MakePhysicsResourceKeyForAsset(
+    const data::AssetKey& /*context_asset_key*/,
+    data::pak::ResourceIndexT /*resource_index*/) const noexcept
+    -> std::optional<content::ResourceKey> override
+  {
+    return std::nullopt;
+  }
+  [[nodiscard]] auto ReadCollisionShapeAssetDescForAsset(
+    const data::AssetKey& /*context_asset_key*/,
+    data::pak::ResourceIndexT /*shape_asset_index*/) const
+    -> std::optional<data::pak::CollisionShapeAssetDesc> override
+  {
+    return std::nullopt;
+  }
+  [[nodiscard]] auto ReadPhysicsMaterialAssetDescForAsset(
+    const data::AssetKey& /*context_asset_key*/,
+    data::pak::ResourceIndexT /*material_asset_index*/) const
+    -> std::optional<data::pak::PhysicsMaterialAssetDesc> override
+  {
+    return std::nullopt;
   }
 
   [[nodiscard]] auto GetInputActionAsset(
@@ -183,6 +251,13 @@ public:
     -> std::vector<HydratedScriptSlot> override
   {
     return {};
+  }
+
+  [[nodiscard]] auto FindPhysicsSidecarAssetKeyForScene(
+    const data::AssetKey& /*scene_key*/) const
+    -> std::optional<data::AssetKey> override
+  {
+    return std::nullopt;
   }
 
   [[nodiscard]] auto HasTexture(content::ResourceKey /*key*/) const noexcept

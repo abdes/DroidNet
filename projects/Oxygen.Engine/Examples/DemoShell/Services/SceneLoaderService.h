@@ -30,7 +30,6 @@
 
 namespace oxygen::content {
 class IAssetLoader;
-class PakFile;
 } // namespace oxygen::content
 
 // Remove redundant forward declaration for FileStream as its header is included
@@ -115,7 +114,8 @@ public:
   auto BuildSceneAsync(scene::Scene& scene, const data::SceneAsset& asset)
     -> co::Co<scene::SceneNode>;
   //! Hydrate physics sidecar after scene graph/runtime components are built.
-  void HydratePhysicsSidecar(const data::PhysicsSceneAsset& physics_asset);
+  auto HydratePhysicsSidecar(const data::PhysicsSceneAsset& physics_asset)
+    -> co::Co<>;
 
   //! Mark the result as consumed and begin cleanup.
   void MarkConsumed();
@@ -142,6 +142,9 @@ private:
   auto ResolvePhysicsModule() -> observer_ptr<physics::PhysicsModule>;
   //! Hydrate supported physics bindings from sidecar into runtime scene.
   void HydratePhysicsBindings(const data::PhysicsSceneAsset& physics_asset);
+  //! Preload all physics shape cooked payload resources required by sidecar.
+  auto PreloadPhysicsShapeResources(
+    const data::PhysicsSceneAsset& physics_asset) -> co::Co<>;
   //! Attach rigid-body bindings; hard-fail on invalid/unsupported data.
   void HydrateRigidBodyBindings(physics::PhysicsModule& physics_module,
     std::span<const data::pak::RigidBodyBindingRecord> bindings);
@@ -167,8 +170,14 @@ private:
   //! Convert cooked collision-shape descriptor to runtime physics shape.
   auto BuildCollisionShapeFromDescriptor(
     const data::pak::CollisionShapeAssetDesc& shape_desc,
-    std::string_view binding_kind, uint32_t node_index) const
+    std::string_view binding_kind, uint32_t node_index)
     -> physics::CollisionShape;
+  //! Resolve cooked shape payload bytes from physics resource table/region.
+  auto ResolveCookedShapePayload(
+    const data::pak::CollisionShapeAssetDesc& shape_desc,
+    data::pak::ShapePayloadType expected_payload_type,
+    std::string_view binding_kind, uint32_t node_index) const
+    -> physics::CookedShapePayload;
   //! Enforce explicit failure for sidecar domains not yet hydrated.
   void ValidateUnsupportedPhysicsDomains(
     const data::PhysicsSceneAsset& physics_asset) const;
@@ -228,7 +237,7 @@ private:
   std::unordered_set<data::AssetKey> pending_geometry_keys_;
   std::vector<data::AssetKey> pinned_geometry_keys_;
 
-  std::unique_ptr<content::PakFile> source_pak_;
+  std::optional<data::AssetKey> current_physics_context_asset_key_ {};
   observer_ptr<AsyncEngine> engine_;
   engine::ModuleManager::Subscription physics_module_subscription_ {};
   observer_ptr<physics::PhysicsModule> physics_module_;
@@ -236,7 +245,8 @@ private:
   observer_ptr<scripting::IScriptCompilationService> compilation_service_;
   std::unique_ptr<scripting::IScriptSourceResolver> source_resolver_;
 
-  auto ReadScriptResource(uint32_t index) const
+  auto ReadScriptResource(
+    uint32_t index, const data::AssetKey& context_asset_key) const
     -> std::shared_ptr<const data::ScriptResource>;
 };
 

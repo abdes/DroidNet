@@ -577,7 +577,8 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
       && scene_loader_ && !scene_loader_->IsFailed();
     if (can_hydrate_now) {
       try {
-        scene_loader_->HydratePhysicsSidecar(*pending_physics_sidecar_);
+        co_await scene_loader_->HydratePhysicsSidecar(
+          *pending_physics_sidecar_);
         LOG_F(
           INFO, "RenderScene: Deferred physics sidecar hydration completed");
         pending_physics_sidecar_.reset();

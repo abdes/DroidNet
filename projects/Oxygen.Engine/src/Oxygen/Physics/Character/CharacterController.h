@@ -22,6 +22,9 @@ struct CharacterDesc final {
    domain, even though character shape attachment APIs may evolve separately.
   */
   CollisionShape shape { CapsuleShape { 0.5F, 1.0F } };
+  Vec3 shape_local_position { 0.0F, 0.0F, 0.0F };
+  Quat shape_local_rotation { 1.0F, 0.0F, 0.0F, 0.0F };
+  Vec3 shape_local_scale { 1.0F, 1.0F, 1.0F };
   Vec3 initial_position { 0.0F, 0.0F, 0.0F };
   Quat initial_rotation { 1.0F, 0.0F, 0.0F, 0.0F };
   float mass_kg { 80.0F };

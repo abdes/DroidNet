@@ -113,6 +113,21 @@ public:
     } };
   }
 
+  [[nodiscard]] auto GetAssetCount() const noexcept -> size_t override
+  {
+    return index_.GetAllAssetKeys().size();
+  }
+
+  [[nodiscard]] auto GetAssetKeyByIndex(const uint32_t index) const noexcept
+    -> std::optional<data::AssetKey> override
+  {
+    const auto keys = index_.GetAllAssetKeys();
+    if (index >= keys.size()) {
+      return std::nullopt;
+    }
+    return keys[index];
+  }
+
   [[nodiscard]] auto CreateAssetDescriptorReader(
     const AssetLocator& locator) const
     -> std::unique_ptr<serio::AnyReader> override

@@ -1740,18 +1740,111 @@ def pack_collision_shape_asset_descriptor(
 ) -> bytes:
     """Pack CollisionShapeAssetDesc (256 bytes)."""
     header = header_builder(asset)
-    category = int(asset.get("shape_category", 0))
-    bb_min = _vec3(asset.get("bounding_box_min"), [0.0, 0.0, 0.0])
-    bb_max = _vec3(asset.get("bounding_box_max"), [0.0, 0.0, 0.0])
-    reserved0 = b"\x00" * 3
-    reserved1 = b"\x00" * 129
+    shape_type_raw = asset.get("shape_type", 0)
+    if isinstance(shape_type_raw, str):
+        shape_type = {
+            "invalid": 0,
+            "sphere": 1,
+            "capsule": 2,
+            "box": 3,
+            "cylinder": 4,
+            "cone": 5,
+            "convex_hull": 6,
+            "triangle_mesh": 7,
+            "height_field": 8,
+            "plane": 9,
+            "world_boundary": 10,
+            "compound": 11,
+        }.get(shape_type_raw.strip().lower(), 0)
+    else:
+        shape_type = int(shape_type_raw)
+
+    local_position = _vec3(asset.get("local_position"), [0.0, 0.0, 0.0])
+    local_rotation_raw = asset.get("local_rotation", [0.0, 0.0, 0.0, 1.0])
+    if not isinstance(local_rotation_raw, (list, tuple)) or len(local_rotation_raw) != 4:
+        raise PakError("E_TYPE", "local_rotation must be a list of 4 floats")
+    local_rotation = [float(local_rotation_raw[0]), float(local_rotation_raw[1]), float(local_rotation_raw[2]), float(local_rotation_raw[3])]
+    local_scale = _vec3(asset.get("local_scale"), [1.0, 1.0, 1.0])
+    is_sensor = 1 if bool(asset.get("is_sensor", False)) else 0
+    collision_own_layer = int(asset.get("collision_own_layer", 1)) & 0xFFFFFFFFFFFFFFFF
+    collision_target_layers = int(asset.get("collision_target_layers", 0xFFFFFFFFFFFFFFFF)) & 0xFFFFFFFFFFFFFFFF
+    material_ref = int(asset.get("material_ref", asset.get("material_asset_index", 0))) & 0xFFFFFFFF
+
+    params = asset.get("shape_params")
+    params = params if isinstance(params, dict) else {}
+    shape_params_blob = bytearray(80)
+
+    if shape_type == 1:  # sphere
+        radius = float(params.get("radius", asset.get("radius", 0.0)))
+        struct.pack_into("<f", shape_params_blob, 0, radius)
+    elif shape_type in (2, 4, 5):  # capsule/cylinder/cone
+        radius = float(params.get("radius", asset.get("radius", 0.0)))
+        half_height = float(params.get("half_height", asset.get("half_height", 0.0)))
+        struct.pack_into("<ff", shape_params_blob, 0, radius, half_height)
+    elif shape_type == 3:  # box
+        half_extents = params.get("half_extents", asset.get("half_extents"))
+        half_extents = _vec3(half_extents, [0.0, 0.0, 0.0])
+        struct.pack_into("<3f", shape_params_blob, 0, *half_extents)
+    elif shape_type == 9:  # plane
+        normal = _vec3(params.get("normal", asset.get("normal")), [0.0, 0.0, 0.0])
+        distance = float(params.get("distance", asset.get("distance", 0.0)))
+        struct.pack_into("<3ff", shape_params_blob, 0, normal[0], normal[1], normal[2], distance)
+    elif shape_type == 10:  # world boundary
+        boundary_mode_raw = params.get("boundary_mode", asset.get("boundary_mode", 0))
+        if isinstance(boundary_mode_raw, str):
+            boundary_mode = {
+                "invalid": 0,
+                "aabb_clamp": 1,
+                "plane_set": 2,
+            }.get(boundary_mode_raw.strip().lower(), 0)
+        else:
+            boundary_mode = int(boundary_mode_raw)
+        limits_min = _vec3(params.get("limits_min", asset.get("limits_min")), [0.0, 0.0, 0.0])
+        limits_max = _vec3(params.get("limits_max", asset.get("limits_max")), [0.0, 0.0, 0.0])
+        struct.pack_into("<I3f3f", shape_params_blob, 0, boundary_mode, *limits_min, *limits_max)
+
+    payload_backed_shape_types = {5, 6, 7, 8, 11}
+    cooked_ref = asset.get("cooked_shape_ref")
+    cooked_ref = cooked_ref if isinstance(cooked_ref, dict) else {}
+    default_cooked_index = (
+        int(asset.get("physics_resource_index", resource_index))
+        if shape_type in payload_backed_shape_types
+        else 0
+    )
+    cooked_index = int(cooked_ref.get("resource_index", default_cooked_index)) & 0xFFFFFFFF
+    payload_type_raw = cooked_ref.get("payload_type")
+    if payload_type_raw is None:
+        payload_type = {
+            5: 1,   # cone -> convex
+            6: 1,   # convex hull -> convex
+            7: 2,   # triangle mesh -> mesh
+            8: 3,   # height field
+            11: 4,  # compound
+        }.get(shape_type, 0)
+    elif isinstance(payload_type_raw, str):
+        payload_type = {
+            "invalid": 0,
+            "convex": 1,
+            "mesh": 2,
+            "height_field": 3,
+            "compound": 4,
+        }.get(payload_type_raw.strip().lower(), 0)
+    else:
+        payload_type = int(payload_type_raw)
+
     desc = (
         header
-        + struct.pack("<IB", resource_index, category)
-        + reserved0
-        + struct.pack("<3f", *bb_min)
-        + struct.pack("<3f", *bb_max)
-        + reserved1
+        + struct.pack("<B", shape_type & 0xFF)
+        + struct.pack("<3f", *local_position)
+        + struct.pack("<4f", *local_rotation)
+        + struct.pack("<3f", *local_scale)
+        + struct.pack("<I", is_sensor)
+        + struct.pack("<Q", collision_own_layer)
+        + struct.pack("<Q", collision_target_layers)
+        + struct.pack("<I", material_ref)
+        + bytes(shape_params_blob)
+        + struct.pack("<IB3x", cooked_index, payload_type & 0xFF)
+        + b"\x00" * 8
     )
     if len(desc) != 256:
         raise PakError("E_SIZE", f"CollisionShapeAssetDesc size mismatch: {len(desc)}")

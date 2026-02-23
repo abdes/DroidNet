@@ -75,6 +75,10 @@ public:
   [[nodiscard]] virtual auto FindAsset(const data::AssetKey& key) const noexcept
     -> std::optional<AssetLocator>
     = 0;
+  [[nodiscard]] virtual auto GetAssetCount() const noexcept -> size_t = 0;
+  [[nodiscard]] virtual auto GetAssetKeyByIndex(uint32_t index) const noexcept
+    -> std::optional<data::AssetKey>
+    = 0;
 
   [[nodiscard]] virtual auto CreateAssetDescriptorReader(
     const AssetLocator& locator) const -> std::unique_ptr<serio::AnyReader>

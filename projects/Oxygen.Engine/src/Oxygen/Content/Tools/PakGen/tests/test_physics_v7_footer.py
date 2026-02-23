@@ -25,7 +25,8 @@ def test_v7_footer_reports_physics_region_and_table(tmp_path: Path):
                 "name": "cshape0",
                 "asset_key": "22222222-2222-2222-2222-222222222222",
                 "resource_name": "shape_blob",
-                "shape_category": 0,
+                "shape_type": "box",
+                "shape_params": {"half_extents": [0.5, 0.5, 0.5]},
             },
             {
                 "type": "physics_scene",

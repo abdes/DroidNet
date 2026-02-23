@@ -37,8 +37,14 @@ auto oxygen::physics::jolt::JoltCharacters::CreateCharacter(
   if (shape_result.has_error()) {
     return Err(shape_result.error());
   }
+  const auto transformed_shape_result = ApplyShapeLocalTransform(desc.shape,
+    shape_result.value(), desc.shape_local_position, desc.shape_local_rotation,
+    desc.shape_local_scale);
+  if (transformed_shape_result.has_error()) {
+    return Err(transformed_shape_result.error());
+  }
 
-  JPH::BodyCreationSettings settings(shape_result.value(),
+  JPH::BodyCreationSettings settings(transformed_shape_result.value(),
     ToJoltRVec3(desc.initial_position), ToJoltQuat(desc.initial_rotation),
     JPH::EMotionType::Kinematic, ToObjectLayer(body::BodyType::kKinematic));
   settings.mIsSensor = false;

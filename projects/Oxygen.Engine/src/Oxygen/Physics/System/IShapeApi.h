@@ -37,6 +37,10 @@ public:
     -> PhysicsResult<ShapeId>
     = 0;
 
+  virtual auto GetShapeDesc(ShapeId shape_id) const
+    -> PhysicsResult<shape::ShapeDesc>
+    = 0;
+
   /*!
    Destroy contract:
    - Returns `kNotFound` equivalent (`kInvalidArgument` or backend-specific

@@ -53,6 +53,21 @@ public:
     return AssetLocator { PakAssetLocator { .entry = *entry } };
   }
 
+  [[nodiscard]] auto GetAssetCount() const noexcept -> size_t override
+  {
+    return pak_.Directory().size();
+  }
+
+  [[nodiscard]] auto GetAssetKeyByIndex(const uint32_t index) const noexcept
+    -> std::optional<data::AssetKey> override
+  {
+    const auto directory = pak_.Directory();
+    if (index >= directory.size()) {
+      return std::nullopt;
+    }
+    return directory[index].asset_key;
+  }
+
   [[nodiscard]] auto CreateAssetDescriptorReader(
     const AssetLocator& locator) const
     -> std::unique_ptr<serio::AnyReader> override
