@@ -400,20 +400,20 @@ namespace {
     data::pak::MaterialAssetDesc& desc) -> void
   {
     desc.base_color_texture = textures.base_color.assigned
-      ? static_cast<data::pak::ResourceIndexT>(textures.base_color.index)
+      ? data::pak::ResourceIndexT { textures.base_color.index }
       : data::pak::kNoResourceIndex;
     desc.normal_texture = textures.normal.assigned
-      ? static_cast<data::pak::ResourceIndexT>(textures.normal.index)
+      ? data::pak::ResourceIndexT { textures.normal.index }
       : data::pak::kNoResourceIndex;
 
     const auto metallic_index = textures.metallic.assigned
-      ? static_cast<data::pak::ResourceIndexT>(textures.metallic.index)
+      ? data::pak::ResourceIndexT { textures.metallic.index }
       : data::pak::kNoResourceIndex;
     const auto roughness_index = textures.roughness.assigned
-      ? static_cast<data::pak::ResourceIndexT>(textures.roughness.index)
+      ? data::pak::ResourceIndexT { textures.roughness.index }
       : data::pak::kNoResourceIndex;
     const auto ao_index = textures.ambient_occlusion.assigned
-      ? static_cast<data::pak::ResourceIndexT>(textures.ambient_occlusion.index)
+      ? data::pak::ResourceIndexT { textures.ambient_occlusion.index }
       : data::pak::kNoResourceIndex;
 
     if (orm_packed) {
@@ -436,25 +436,25 @@ namespace {
     }
 
     desc.emissive_texture = textures.emissive.assigned
-      ? static_cast<data::pak::ResourceIndexT>(textures.emissive.index)
+      ? data::pak::ResourceIndexT { textures.emissive.index }
       : data::pak::kNoResourceIndex;
     desc.specular_texture = textures.specular.assigned
-      ? static_cast<data::pak::ResourceIndexT>(textures.specular.index)
+      ? data::pak::ResourceIndexT { textures.specular.index }
       : data::pak::kNoResourceIndex;
     desc.sheen_color_texture = textures.sheen_color.assigned
-      ? static_cast<data::pak::ResourceIndexT>(textures.sheen_color.index)
+      ? data::pak::ResourceIndexT { textures.sheen_color.index }
       : data::pak::kNoResourceIndex;
     desc.clearcoat_texture = textures.clearcoat.assigned
-      ? static_cast<data::pak::ResourceIndexT>(textures.clearcoat.index)
+      ? data::pak::ResourceIndexT { textures.clearcoat.index }
       : data::pak::kNoResourceIndex;
     desc.clearcoat_normal_texture = textures.clearcoat_normal.assigned
-      ? static_cast<data::pak::ResourceIndexT>(textures.clearcoat_normal.index)
+      ? data::pak::ResourceIndexT { textures.clearcoat_normal.index }
       : data::pak::kNoResourceIndex;
     desc.transmission_texture = textures.transmission.assigned
-      ? static_cast<data::pak::ResourceIndexT>(textures.transmission.index)
+      ? data::pak::ResourceIndexT { textures.transmission.index }
       : data::pak::kNoResourceIndex;
     desc.thickness_texture = textures.thickness.assigned
-      ? static_cast<data::pak::ResourceIndexT>(textures.thickness.index)
+      ? data::pak::ResourceIndexT { textures.thickness.index }
       : data::pak::kNoResourceIndex;
   }
 
@@ -493,11 +493,11 @@ namespace {
           source_id, object_path));
         return std::nullopt;
       }
-      return metallic.index;
+      return data::pak::ResourceIndexT { metallic.index };
     }
 
     if (policy == OrmPolicy::kAuto && can_pack) {
-      return metallic.index;
+      return data::pak::ResourceIndexT { metallic.index };
     }
 
     return std::nullopt;
@@ -617,8 +617,8 @@ namespace {
         item.source_id);
     }
 
-    AssignTextureIndices(
-      item.textures, orm_packed, orm_packed ? *orm_index : 0, desc);
+    AssignTextureIndices(item.textures, orm_packed,
+      orm_packed ? *orm_index : data::pak::kNoResourceIndex, desc);
 
     const std::vector bindings {
       &item.textures.base_color,

@@ -140,6 +140,7 @@ set(
   OXYGEN_CORE_META_DEFS
   "Meta/Data/AssetType.inc"
   "Meta/Data/ComponentType.inc"
+  "Meta/Data/ResourceIndex.inc"
   "Meta/Input/ActionState.inc"
   "Meta/Input/ActionTriggers.inc"
   "Meta/Input/ActionValue.inc"

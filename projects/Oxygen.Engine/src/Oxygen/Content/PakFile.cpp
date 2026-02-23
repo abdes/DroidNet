@@ -805,7 +805,7 @@ auto PakFile::ReadScriptParamRecords(const data::pak::OffsetT absolute_offset,
   return result;
 }
 
-auto PakFile::ReadScriptResource(const uint32_t index) const
+auto PakFile::ReadScriptResource(const data::pak::ResourceIndexT index) const
   -> std::shared_ptr<const data::ScriptResource>
 {
   if (index == data::pak::kNoResourceIndex) {

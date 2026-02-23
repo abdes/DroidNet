@@ -10,6 +10,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <deque>
 #include <filesystem>
 #include <functional>
@@ -264,8 +265,8 @@ auto WorkDispatcher::EmitTexturePayload(TexturePipeline::WorkResult& result)
       return std::nullopt;
     }
     using data::pak::ResourceIndexT;
-    constexpr ResourceIndexT kErrorTextureIndex
-      = std::numeric_limits<ResourceIndexT>::max();
+    constexpr ResourceIndexT kErrorTextureIndex { (
+      std::numeric_limits<uint32_t>::max)() };
     return kErrorTextureIndex;
   }
 
@@ -357,8 +358,8 @@ auto WorkDispatcher::UpdateMaterialBindings(
       DLOG_F(WARNING, "Material '{}' missing texture '{}' ({})", item.source_id,
         binding.source_id, label);
       using data::pak::ResourceIndexT;
-      constexpr ResourceIndexT kErrorTextureIndex
-        = std::numeric_limits<ResourceIndexT>::max();
+      constexpr ResourceIndexT kErrorTextureIndex { (
+        std::numeric_limits<uint32_t>::max)() };
       binding.index = kErrorTextureIndex;
       binding.assigned = true;
       return;
@@ -1054,22 +1055,22 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       auto& lod_binding = bindings[lod_index];
       switch (kind) {
       case GeometryBufferKind::kVertex:
-        lod_binding.vertex_buffer = emitted;
+        lod_binding.vertex_buffer = data::pak::ResourceIndexT { emitted };
         break;
       case GeometryBufferKind::kIndex:
-        lod_binding.index_buffer = emitted;
+        lod_binding.index_buffer = data::pak::ResourceIndexT { emitted };
         break;
       case GeometryBufferKind::kJointIndex:
-        lod_binding.joint_index_buffer = emitted;
+        lod_binding.joint_index_buffer = data::pak::ResourceIndexT { emitted };
         break;
       case GeometryBufferKind::kJointWeight:
-        lod_binding.joint_weight_buffer = emitted;
+        lod_binding.joint_weight_buffer = data::pak::ResourceIndexT { emitted };
         break;
       case GeometryBufferKind::kInverseBind:
-        lod_binding.inverse_bind_buffer = emitted;
+        lod_binding.inverse_bind_buffer = data::pak::ResourceIndexT { emitted };
         break;
       case GeometryBufferKind::kJointRemap:
-        lod_binding.joint_remap_buffer = emitted;
+        lod_binding.joint_remap_buffer = data::pak::ResourceIndexT { emitted };
         break;
       }
 

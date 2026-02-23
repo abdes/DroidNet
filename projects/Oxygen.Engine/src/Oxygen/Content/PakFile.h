@@ -232,7 +232,7 @@ public:
     -> std::vector<data::pak::ScriptParamRecord>;
 
   //! Read one script resource entry and payload by table index.
-  OXGN_CNTT_NDAPI auto ReadScriptResource(uint32_t index) const
+  OXGN_CNTT_NDAPI auto ReadScriptResource(data::pak::ResourceIndexT index) const
     -> std::shared_ptr<const data::ScriptResource>;
 
   //! Number of entries in the global script slot table.

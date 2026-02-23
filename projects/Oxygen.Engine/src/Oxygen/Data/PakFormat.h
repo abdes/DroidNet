@@ -13,6 +13,7 @@
 #include <string>
 #include <string_view>
 
+#include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Core/Types/PostProcess.h>
@@ -58,6 +59,10 @@
 // TODO: Define constants for hash algorithm enumeration
 
 // NOLINTBEGIN(*-avoid-c-arrays,*-magic-numbers)
+OXYGEN_DIAGNOSTIC_PUSH
+OXYGEN_DIAGNOSTIC_DISABLE_MSVC(
+  4315) // packed structs intentionally embed unaligned NamedType ResourceIndexT
+        // fields
 
 namespace oxygen::data::pak::v2 {
 
@@ -66,8 +71,8 @@ namespace oxygen::data::pak::v2 {
 //! Offset type for file positions (8 bytes)
 using OffsetT = uint64_t;
 
-//! Resource index type (4 bytes)
-using ResourceIndexT = uint32_t;
+// Resource index type/constants are sourced from Core metadata catalog.
+#include <Oxygen/Core/Meta/Data/ResourceIndex.inc>
 
 //! Data blob size type (4 bytes)
 using DataBlobSizeT = uint32_t;
@@ -85,20 +90,8 @@ using StringTableSizeT = uint32_t;
 //! Maximum asset name length including null terminator
 constexpr size_t kMaxNameSize = 64;
 
-//! Resource index indicating explicit fallback to default resource.
-//! When a resource *type* defines an engine/tool-provided fallback asset,
-//! references using this value (0) resolve to that fallback.
-//!
-//! Contract: When a fallback exists, packers MUST store the fallback asset at
-//! index 0 of the corresponding resource table. For textures, index 0 must be
-//! populated with the fallback texture.
-constexpr ResourceIndexT kFallbackResourceIndex = 0;
-
-//! Resource index indicating "no resource assigned" for types that have no
-//! concept of fallback. For such types *both* constants compare equal; the
-//! semantic difference depends on the resource category's rules. Tooling
-//! should still emit 0 but may label it appropriately in diagnostics.
-constexpr ResourceIndexT kNoResourceIndex = 0;
+//! Resource index constants (`kFallbackResourceIndex`, `kNoResourceIndex`) are
+//! sourced from `Oxygen/Core/Meta/Data/ResourceIndex.inc`.
 
 //! Material flag indicating that textures must not be sampled.
 //!
@@ -1760,8 +1753,8 @@ static_assert(sizeof(ScriptResourceDesc) == 32);
 //! Script Asset Descriptor (256 bytes).
 struct ScriptAssetDesc {
   AssetHeader header;
-  uint32_t bytecode_resource_index = 0;
-  uint32_t source_resource_index = 0;
+  ResourceIndexT bytecode_resource_index = kNoResourceIndex;
+  ResourceIndexT source_resource_index = kNoResourceIndex;
   ScriptAssetFlags flags = ScriptAssetFlags::kNone;
   char external_source_path[120] = {}; // Null-terminated, null-padded
   uint8_t reserved[29] = {}; // Padded to 256 bytes
@@ -2440,5 +2433,7 @@ inline constexpr std::array<char, 8> kPakHeaderMagic
 inline constexpr std::array<char, 8> kPakFooterMagic
   = { 'O', 'X', 'P', 'A', 'K', 'E', 'N', 'D' };
 } // namespace oxygen::data::pak
+
+OXYGEN_DIAGNOSTIC_POP
 
 // NOLINTEND(*-avoid-c-arrays,*-magic-numbers)

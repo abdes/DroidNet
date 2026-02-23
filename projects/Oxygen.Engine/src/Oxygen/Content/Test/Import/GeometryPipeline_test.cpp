@@ -597,8 +597,8 @@ NOLINT_TEST_F(
       }
 
       const MeshBufferBindings bindings {
-        .vertex_buffer = 11,
-        .index_buffer = 22,
+        .vertex_buffer = data::pak::ResourceIndexT { 11u },
+        .index_buffer = data::pak::ResourceIndexT { 22u },
       };
 
       finalized = co_await finalizer.FinalizeDescriptorBytes(

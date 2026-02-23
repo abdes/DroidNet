@@ -89,7 +89,9 @@ public:
     }
 
     auto& scripts_table = pak.ScriptsTable();
-    if (!scripts_table.IsValidKey(selected_index)) {
+    const auto selected_resource_index
+      = data::pak::ResourceIndexT { selected_index };
+    if (!scripts_table.IsValidKey(selected_resource_index)) {
       PrintUtils::Field(
         "Resource Entry", "Index out of script table bounds", 8);
       std::cout << "\n";
@@ -97,8 +99,8 @@ public:
     }
 
     try {
-      const auto key
-        = asset_loader.MakeResourceKey<ScriptResource>(pak, selected_index);
+      const auto key = asset_loader.MakeResourceKey<ScriptResource>(
+        pak, selected_resource_index);
       auto script_resource
         = co_await asset_loader.LoadResourceAsync<ScriptResource>(key);
       if (!script_resource) {
