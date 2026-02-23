@@ -103,6 +103,7 @@ auto AssetTypeToString(const uint8_t asset_type) -> std::string_view
   return nostd::to_string(static_cast<AssetType>(asset_type));
 }
 
+// TODO: replace with nostd::to_string defined with the enum itself
 auto FileKindToString(const FileKind kind) -> std::string_view
 {
   switch (kind) {
@@ -118,22 +119,14 @@ auto FileKindToString(const FileKind kind) -> std::string_view
     return "scripts.table";
   case FileKind::kScriptsData:
     return "scripts.data";
+  case FileKind::kPhysicsTable:
+    return "physics.table";
+  case FileKind::kPhysicsData:
+    return "physics.data";
   case FileKind::kUnknown:
   default:
     return "unknown";
   }
-}
-
-auto IsAllZero(
-  const std::array<uint8_t, oxygen::data::loose_cooked::kSha256Size>& digest)
-  -> bool
-{
-  for (const auto b : digest) {
-    if (b != 0) {
-      return false;
-    }
-  }
-  return true;
 }
 
 auto DumpHexSha256(std::ostream& os,

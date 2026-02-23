@@ -581,6 +581,13 @@ private:
       throw std::runtime_error(
         "Loose cooked index must provide both scripts.table and scripts.data");
     }
+
+    const auto has_physics_table = files_.contains(FileKind::kPhysicsTable);
+    const auto has_physics_data = files_.contains(FileKind::kPhysicsData);
+    if (has_physics_table != has_physics_data) {
+      throw std::runtime_error(
+        "Loose cooked index must provide both physics.table and physics.data");
+    }
   }
 
   [[nodiscard]] auto ResolveSourceKey_() const -> data::SourceKey

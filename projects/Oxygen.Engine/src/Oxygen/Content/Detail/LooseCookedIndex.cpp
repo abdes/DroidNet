@@ -236,6 +236,8 @@ auto ValidateFileKind(const FileKind kind) -> void
   case FileKind::kTexturesData:
   case FileKind::kScriptsTable:
   case FileKind::kScriptsData:
+  case FileKind::kPhysicsTable:
+  case FileKind::kPhysicsData:
     return;
   case FileKind::kUnknown:
   default:
@@ -549,6 +551,15 @@ auto LooseCookedIndex::ValidateFilePairs(const LooseCookedIndex& index) -> void
   if (has_scripts_table != has_scripts_data) {
     throw std::runtime_error(
       "Loose cooked index must provide both scripts.table and scripts.data");
+  }
+
+  const auto has_physics_table
+    = index.kind_to_file_.contains(FileKind::kPhysicsTable);
+  const auto has_physics_data
+    = index.kind_to_file_.contains(FileKind::kPhysicsData);
+  if (has_physics_table != has_physics_data) {
+    throw std::runtime_error(
+      "Loose cooked index must provide both physics.table and physics.data");
   }
 }
 
