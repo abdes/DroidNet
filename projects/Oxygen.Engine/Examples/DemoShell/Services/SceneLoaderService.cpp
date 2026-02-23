@@ -616,11 +616,9 @@ auto SceneLoaderService::ResolvePhysicsModule()
   return nullptr;
 }
 
-void SceneLoaderService::ValidateUnsupportedPhysicsBindings(
+void SceneLoaderService::ValidateUnsupportedPhysicsDomains(
   const data::PhysicsSceneAsset& physics_asset) const
 {
-  const auto collider_bindings
-    = physics_asset.GetBindings<data::pak::ColliderBindingRecord>();
   const auto soft_body_bindings
     = physics_asset.GetBindings<data::pak::SoftBodyBindingRecord>();
   const auto joint_bindings
@@ -630,17 +628,91 @@ void SceneLoaderService::ValidateUnsupportedPhysicsBindings(
   const auto aggregate_bindings
     = physics_asset.GetBindings<data::pak::AggregateBindingRecord>();
 
-  if (!collider_bindings.empty() || !soft_body_bindings.empty()
-    || !joint_bindings.empty() || !vehicle_bindings.empty()
-    || !aggregate_bindings.empty()) {
+  if (!soft_body_bindings.empty()) {
     throw std::runtime_error(
-      std::string("unsupported physics binding tables in sidecar key=")
+      std::string("soft-body sidecar hydration is not implemented in "
+                  "SceneLoader (requires shape/material resource resolution). "
+                  "sidecar key=")
       + data::to_string(physics_asset.GetAssetKey())
-      + " collider=" + std::to_string(collider_bindings.size())
-      + " soft_body=" + std::to_string(soft_body_bindings.size())
-      + " joint=" + std::to_string(joint_bindings.size())
-      + " vehicle=" + std::to_string(vehicle_bindings.size())
-      + " aggregate=" + std::to_string(aggregate_bindings.size()));
+      + " soft_body=" + std::to_string(soft_body_bindings.size()) + ")");
+  }
+
+  if (!joint_bindings.empty()) {
+    throw std::runtime_error(
+      std::string(
+        "joint sidecar hydration is not implemented in SceneLoader "
+        "(requires decoding joint constraint resources and world/body "
+        "mapping policy). sidecar key=")
+      + data::to_string(physics_asset.GetAssetKey())
+      + " joint=" + std::to_string(joint_bindings.size()) + ")");
+  }
+
+  if (!vehicle_bindings.empty()) {
+    throw std::runtime_error(
+      std::string(
+        "vehicle sidecar hydration is not implemented in SceneLoader "
+        "(requires decoding vehicle topology/resources). sidecar key=")
+      + data::to_string(physics_asset.GetAssetKey())
+      + " vehicle=" + std::to_string(vehicle_bindings.size()) + ")");
+  }
+
+  if (!aggregate_bindings.empty()) {
+    throw std::runtime_error(
+      std::string(
+        "aggregate sidecar hydration is not implemented in "
+        "SceneLoader (aggregate membership encoding is not defined in "
+        "PhysicsSceneAsset binding records). sidecar key=")
+      + data::to_string(physics_asset.GetAssetKey())
+      + " aggregate=" + std::to_string(aggregate_bindings.size()) + ")");
+  }
+}
+
+void SceneLoaderService::HydrateColliderBindings(
+  physics::PhysicsModule& physics_module,
+  const std::span<const data::pak::ColliderBindingRecord> bindings)
+{
+  for (const auto& record : bindings) {
+    const auto node_index = static_cast<size_t>(record.node_index);
+    if (node_index >= runtime_nodes_.size()) {
+      throw std::runtime_error(std::string("collider node_index out of range: ")
+        + std::to_string(record.node_index));
+    }
+
+    if (record.shape_asset_index != data::pak::kNoResourceIndex) {
+      throw std::runtime_error(
+        std::string("collider external shape references are unsupported in "
+                    "SceneLoader hydrator (node_index=")
+        + std::to_string(record.node_index) + " shape_asset_index="
+        + std::to_string(record.shape_asset_index) + ")");
+    }
+
+    if (record.material_asset_index != data::pak::kNoResourceIndex) {
+      LOG_F(WARNING,
+        "SceneLoader: collider material_asset_index={} for node_index={} is "
+        "not resolved yet; using BodyDesc defaults.",
+        record.material_asset_index, record.node_index);
+    }
+
+    physics::body::BodyDesc desc {};
+    desc.type = physics::body::BodyType::kStatic;
+    desc.flags = physics::body::BodyFlags::kIsTrigger;
+    desc.gravity_factor = 0.0F;
+    desc.mass_kg = 1.0F;
+    desc.linear_damping = 0.0F;
+    desc.angular_damping = 0.0F;
+    desc.collision_layer = physics::CollisionLayer { static_cast<uint32_t>(
+      record.collision_layer) };
+    desc.collision_mask
+      = physics::CollisionMask { static_cast<uint32_t>(record.collision_mask) };
+
+    auto& node = runtime_nodes_[node_index];
+    const auto attached = physics::ScenePhysics::AttachRigidBody(
+      observer_ptr<physics::PhysicsModule> { &physics_module }, node, desc);
+    if (!attached.has_value()) {
+      throw std::runtime_error(
+        std::string("failed to attach collider binding for node_index=")
+        + std::to_string(record.node_index));
+    }
   }
 }
 
@@ -769,19 +841,24 @@ void SceneLoaderService::HydratePhysicsBindings(
       "physics sidecar present but PhysicsModule is unavailable");
   }
 
-  ValidateUnsupportedPhysicsBindings(physics_asset);
+  ValidateUnsupportedPhysicsDomains(physics_asset);
 
   const auto rigid_body_bindings
     = physics_asset.GetBindings<data::pak::RigidBodyBindingRecord>();
+  const auto collider_bindings
+    = physics_asset.GetBindings<data::pak::ColliderBindingRecord>();
   const auto character_bindings
     = physics_asset.GetBindings<data::pak::CharacterBindingRecord>();
 
   HydrateRigidBodyBindings(*physics_module, rigid_body_bindings);
+  HydrateColliderBindings(*physics_module, collider_bindings);
   HydrateCharacterBindings(*physics_module, character_bindings);
 
   LOG_F(INFO,
-    "SceneLoader: Physics hydration complete (rigid_bodies={} characters={})",
-    rigid_body_bindings.size(), character_bindings.size());
+    "SceneLoader: Physics hydration complete (rigid_bodies={} colliders={} "
+    "characters={})",
+    rigid_body_bindings.size(), collider_bindings.size(),
+    character_bindings.size());
 }
 
 /*!

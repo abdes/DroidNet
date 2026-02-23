@@ -144,8 +144,11 @@ private:
   //! Attach character bindings; hard-fail on invalid/unsupported data.
   void HydrateCharacterBindings(physics::PhysicsModule& physics_module,
     std::span<const data::pak::CharacterBindingRecord> bindings);
-  //! Enforce that unsupported physics binding domains are not present.
-  void ValidateUnsupportedPhysicsBindings(
+  //! Attach collider-only bindings as static trigger bodies.
+  void HydrateColliderBindings(physics::PhysicsModule& physics_module,
+    std::span<const data::pak::ColliderBindingRecord> bindings);
+  //! Enforce explicit failure for sidecar domains not yet hydrated.
+  void ValidateUnsupportedPhysicsDomains(
     const data::PhysicsSceneAsset& physics_asset) const;
 
   //! Legacy hook for geometry dependency readiness (currently no-op).
