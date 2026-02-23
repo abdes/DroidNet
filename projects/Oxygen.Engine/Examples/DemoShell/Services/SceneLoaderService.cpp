@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <numbers>
 #include <optional>
@@ -28,6 +29,7 @@
 #include <Oxygen/Content/ResourceTable.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/InputActionAsset.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
@@ -41,6 +43,7 @@
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/Character/CharacterController.h>
+#include <Oxygen/Physics/Joint/JointDesc.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
 #include <Oxygen/PhysicsModule/ScenePhysics.h>
 #include <Oxygen/Platform/Input.h>
@@ -621,8 +624,6 @@ void SceneLoaderService::ValidateUnsupportedPhysicsDomains(
 {
   const auto soft_body_bindings
     = physics_asset.GetBindings<data::pak::SoftBodyBindingRecord>();
-  const auto joint_bindings
-    = physics_asset.GetBindings<data::pak::JointBindingRecord>();
   const auto vehicle_bindings
     = physics_asset.GetBindings<data::pak::VehicleBindingRecord>();
   const auto aggregate_bindings
@@ -635,16 +636,6 @@ void SceneLoaderService::ValidateUnsupportedPhysicsDomains(
                   "sidecar key=")
       + data::to_string(physics_asset.GetAssetKey())
       + " soft_body=" + std::to_string(soft_body_bindings.size()) + ")");
-  }
-
-  if (!joint_bindings.empty()) {
-    throw std::runtime_error(
-      std::string(
-        "joint sidecar hydration is not implemented in SceneLoader "
-        "(requires decoding joint constraint resources and world/body "
-        "mapping policy). sidecar key=")
-      + data::to_string(physics_asset.GetAssetKey())
-      + " joint=" + std::to_string(joint_bindings.size()) + ")");
   }
 
   if (!vehicle_bindings.empty()) {
@@ -667,6 +658,226 @@ void SceneLoaderService::ValidateUnsupportedPhysicsDomains(
   }
 }
 
+auto SceneLoaderService::ResolveCollisionShapeAsset(
+  const uint32_t shape_asset_index, const std::string_view binding_kind,
+  const uint32_t node_index) -> data::pak::CollisionShapeAssetDesc
+{
+  if (shape_asset_index == data::pak::kNoResourceIndex) {
+    throw std::runtime_error(std::string(binding_kind)
+      + " shape_asset_index is kNoResourceIndex for node_index="
+      + std::to_string(node_index));
+  }
+  if (!source_pak_) {
+    throw std::runtime_error(std::string(binding_kind)
+      + " shape_asset_index requires source pak access (node_index="
+      + std::to_string(node_index)
+      + " shape_asset_index=" + std::to_string(shape_asset_index) + ")");
+  }
+
+  const auto directory = source_pak_->Directory();
+  const auto asset_index = static_cast<size_t>(shape_asset_index);
+  if (asset_index >= directory.size()) {
+    throw std::runtime_error(std::string(binding_kind)
+      + " shape_asset_index out of range: "
+      + std::to_string(shape_asset_index));
+  }
+
+  const auto& entry = directory[asset_index];
+  if (entry.asset_type
+    != static_cast<uint8_t>(data::AssetType::kCollisionShape)) {
+    throw std::runtime_error(std::string(binding_kind)
+      + " shape_asset_index does not reference CollisionShape asset "
+        "(node_index="
+      + std::to_string(node_index)
+      + " shape_asset_index=" + std::to_string(shape_asset_index)
+      + " asset_type=" + std::to_string(entry.asset_type) + ")");
+  }
+  if (entry.desc_size < sizeof(data::pak::CollisionShapeAssetDesc)) {
+    throw std::runtime_error(std::string(binding_kind)
+      + " CollisionShape descriptor too small (node_index="
+      + std::to_string(node_index)
+      + " shape_asset_index=" + std::to_string(shape_asset_index)
+      + " desc_size=" + std::to_string(entry.desc_size) + ")");
+  }
+
+  auto reader = source_pak_->CreateReader(entry);
+  auto blob = reader.ReadBlob(sizeof(data::pak::CollisionShapeAssetDesc));
+  if (!blob) {
+    throw std::runtime_error(std::string(binding_kind)
+      + " failed to read CollisionShape descriptor (node_index="
+      + std::to_string(node_index)
+      + " shape_asset_index=" + std::to_string(shape_asset_index)
+      + " reason=" + blob.error().message() + ")");
+  }
+
+  data::pak::CollisionShapeAssetDesc shape_desc {};
+  std::memcpy(&shape_desc, blob.value().data(), sizeof(shape_desc));
+  return shape_desc;
+}
+
+auto SceneLoaderService::ResolvePhysicsMaterialAsset(
+  const uint32_t material_asset_index, const std::string_view binding_kind,
+  const uint32_t node_index) -> data::pak::PhysicsMaterialAssetDesc
+{
+  if (material_asset_index == data::pak::kNoResourceIndex) {
+    throw std::runtime_error(std::string(binding_kind)
+      + " material_asset_index is kNoResourceIndex for node_index="
+      + std::to_string(node_index));
+  }
+  if (!source_pak_) {
+    throw std::runtime_error(std::string(binding_kind)
+      + " material_asset_index requires source pak access (node_index="
+      + std::to_string(node_index)
+      + " material_asset_index=" + std::to_string(material_asset_index) + ")");
+  }
+
+  const auto directory = source_pak_->Directory();
+  const auto asset_index = static_cast<size_t>(material_asset_index);
+  if (asset_index >= directory.size()) {
+    throw std::runtime_error(std::string(binding_kind)
+      + " material_asset_index out of range: "
+      + std::to_string(material_asset_index));
+  }
+
+  const auto& entry = directory[asset_index];
+  if (entry.asset_type
+    != static_cast<uint8_t>(data::AssetType::kPhysicsMaterial)) {
+    throw std::runtime_error(std::string(binding_kind)
+      + " material_asset_index does not reference PhysicsMaterial asset "
+        "(node_index="
+      + std::to_string(node_index)
+      + " material_asset_index=" + std::to_string(material_asset_index)
+      + " asset_type=" + std::to_string(entry.asset_type) + ")");
+  }
+  if (entry.desc_size < sizeof(data::pak::PhysicsMaterialAssetDesc)) {
+    throw std::runtime_error(std::string(binding_kind)
+      + " PhysicsMaterial descriptor too small (node_index="
+      + std::to_string(node_index)
+      + " material_asset_index=" + std::to_string(material_asset_index)
+      + " desc_size=" + std::to_string(entry.desc_size) + ")");
+  }
+
+  auto reader = source_pak_->CreateReader(entry);
+  auto blob = reader.ReadBlob(sizeof(data::pak::PhysicsMaterialAssetDesc));
+  if (!blob) {
+    throw std::runtime_error(std::string(binding_kind)
+      + " failed to read PhysicsMaterial descriptor (node_index="
+      + std::to_string(node_index)
+      + " material_asset_index=" + std::to_string(material_asset_index)
+      + " reason=" + blob.error().message() + ")");
+  }
+
+  data::pak::PhysicsMaterialAssetDesc material_desc {};
+  std::memcpy(&material_desc, blob.value().data(), sizeof(material_desc));
+  return material_desc;
+}
+
+auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
+  const data::pak::CollisionShapeAssetDesc& shape_desc,
+  const std::string_view binding_kind, const uint32_t node_index) const
+  -> physics::CollisionShape
+{
+  const Vec3 bb_min(shape_desc.bounding_box_min[0],
+    shape_desc.bounding_box_min[1], shape_desc.bounding_box_min[2]);
+  const Vec3 bb_max(shape_desc.bounding_box_max[0],
+    shape_desc.bounding_box_max[1], shape_desc.bounding_box_max[2]);
+  const Vec3 extents = (bb_max - bb_min) * 0.5F;
+  const Vec3 safe_extents((std::max)(extents.x, 0.01F),
+    (std::max)(extents.y, 0.01F), (std::max)(extents.z, 0.01F));
+
+  if (shape_desc.shape_category == data::pak::CollisionShapeCategory::kConvex) {
+    return physics::BoxShape { .extents = safe_extents };
+  }
+  if (shape_desc.shape_category == data::pak::CollisionShapeCategory::kMesh) {
+    LOG_F(WARNING,
+      "SceneLoader: {} node_index={} references mesh collision shape; "
+      "hydrator currently uses descriptor AABB extents fallback.",
+      binding_kind, node_index);
+    return physics::BoxShape { .extents = safe_extents };
+  }
+  if (shape_desc.shape_category
+    == data::pak::CollisionShapeCategory::kCompound) {
+    LOG_F(WARNING,
+      "SceneLoader: {} node_index={} references compound collision shape; "
+      "hydrator currently uses descriptor AABB extents fallback.",
+      binding_kind, node_index);
+    return physics::BoxShape { .extents = safe_extents };
+  }
+
+  LOG_F(WARNING,
+    "SceneLoader: {} node_index={} has unknown shape category {}; "
+    "using AABB extents fallback.",
+    binding_kind, node_index, static_cast<uint32_t>(shape_desc.shape_category));
+  return physics::BoxShape { .extents = safe_extents };
+}
+
+void SceneLoaderService::HydrateJointBindings(
+  physics::PhysicsModule& physics_module,
+  const std::span<const data::pak::JointBindingRecord> bindings)
+{
+  const auto world_id = physics_module.GetWorldId();
+  if (!physics::IsValid(world_id)) {
+    throw std::runtime_error("joint hydration requires a valid physics world");
+  }
+
+  for (const auto& record : bindings) {
+    const auto node_index_a = static_cast<size_t>(record.node_index_a);
+    const auto node_index_b = static_cast<size_t>(record.node_index_b);
+    if (node_index_a >= runtime_nodes_.size()) {
+      throw std::runtime_error(std::string("joint node_index_a out of range: ")
+        + std::to_string(record.node_index_a));
+    }
+    if (record.node_index_b == data::pak::kNoResourceIndex) {
+      throw std::runtime_error(
+        std::string("joint world-anchor mode is not supported by SceneLoader "
+                    "hydrator (node_index_a=")
+        + std::to_string(record.node_index_a) + ")");
+    }
+    if (node_index_b >= runtime_nodes_.size()) {
+      throw std::runtime_error(std::string("joint node_index_b out of range: ")
+        + std::to_string(record.node_index_b));
+    }
+    if (record.constraint_resource_index != data::pak::kNoResourceIndex) {
+      throw std::runtime_error(
+        std::string("joint constraint_resource_index is not supported by "
+                    "SceneLoader hydrator (node_index_a=")
+        + std::to_string(record.node_index_a)
+        + " node_index_b=" + std::to_string(record.node_index_b)
+        + " index=" + std::to_string(record.constraint_resource_index) + ")");
+    }
+
+    auto body_a = physics::ScenePhysics::GetRigidBody(
+      observer_ptr<physics::PhysicsModule> { &physics_module },
+      runtime_nodes_[node_index_a].GetHandle());
+    if (!body_a.has_value()) {
+      throw std::runtime_error(
+        std::string("joint node_index_a does not have a rigid body: ")
+        + std::to_string(record.node_index_a));
+    }
+    auto body_b = physics::ScenePhysics::GetRigidBody(
+      observer_ptr<physics::PhysicsModule> { &physics_module },
+      runtime_nodes_[node_index_b].GetHandle());
+    if (!body_b.has_value()) {
+      throw std::runtime_error(
+        std::string("joint node_index_b does not have a rigid body: ")
+        + std::to_string(record.node_index_b));
+    }
+
+    physics::joint::JointDesc desc {};
+    desc.type = physics::joint::JointType::kFixed;
+    desc.body_a = body_a->GetBodyId();
+    desc.body_b = body_b->GetBodyId();
+
+    const auto created = physics_module.Joints().CreateJoint(world_id, desc);
+    if (!created.has_value()) {
+      throw std::runtime_error(
+        std::string("failed to create joint binding (node_index_a=")
+        + std::to_string(record.node_index_a)
+        + " node_index_b=" + std::to_string(record.node_index_b) + ")");
+    }
+  }
+}
+
 void SceneLoaderService::HydrateColliderBindings(
   physics::PhysicsModule& physics_module,
   const std::span<const data::pak::ColliderBindingRecord> bindings)
@@ -676,21 +887,6 @@ void SceneLoaderService::HydrateColliderBindings(
     if (node_index >= runtime_nodes_.size()) {
       throw std::runtime_error(std::string("collider node_index out of range: ")
         + std::to_string(record.node_index));
-    }
-
-    if (record.shape_asset_index != data::pak::kNoResourceIndex) {
-      throw std::runtime_error(
-        std::string("collider external shape references are unsupported in "
-                    "SceneLoader hydrator (node_index=")
-        + std::to_string(record.node_index) + " shape_asset_index="
-        + std::to_string(record.shape_asset_index) + ")");
-    }
-
-    if (record.material_asset_index != data::pak::kNoResourceIndex) {
-      LOG_F(WARNING,
-        "SceneLoader: collider material_asset_index={} for node_index={} is "
-        "not resolved yet; using BodyDesc defaults.",
-        record.material_asset_index, record.node_index);
     }
 
     physics::body::BodyDesc desc {};
@@ -704,6 +900,18 @@ void SceneLoaderService::HydrateColliderBindings(
       record.collision_layer) };
     desc.collision_mask
       = physics::CollisionMask { static_cast<uint32_t>(record.collision_mask) };
+    if (record.shape_asset_index != data::pak::kNoResourceIndex) {
+      const auto shape_desc = ResolveCollisionShapeAsset(
+        record.shape_asset_index, "collider", record.node_index);
+      desc.shape = BuildCollisionShapeFromDescriptor(
+        shape_desc, "collider", record.node_index);
+    }
+    if (record.material_asset_index != data::pak::kNoResourceIndex) {
+      const auto material_desc = ResolvePhysicsMaterialAsset(
+        record.material_asset_index, "collider", record.node_index);
+      desc.friction = (std::max)(0.0F, material_desc.friction);
+      desc.restitution = (std::max)(0.0F, material_desc.restitution);
+    }
 
     auto& node = runtime_nodes_[node_index];
     const auto attached = physics::ScenePhysics::AttachRigidBody(
@@ -726,21 +934,6 @@ void SceneLoaderService::HydrateRigidBodyBindings(
       throw std::runtime_error(
         std::string("rigid-body node_index out of range: ")
         + std::to_string(record.node_index));
-    }
-
-    if (record.shape_asset_index != data::pak::kNoResourceIndex) {
-      throw std::runtime_error(
-        std::string("rigid-body external shape references are "
-                    "unsupported in section-9 hydrator (node_index=")
-        + std::to_string(record.node_index) + " shape_asset_index="
-        + std::to_string(record.shape_asset_index) + ")");
-    }
-
-    if (record.material_asset_index != data::pak::kNoResourceIndex) {
-      LOG_F(WARNING,
-        "SceneLoader: rigid-body material_asset_index={} for node_index={} is "
-        "not yet resolved by section-9 hydrator; using BodyDesc defaults.",
-        record.material_asset_index, record.node_index);
     }
 
     physics::body::BodyDesc desc {};
@@ -779,6 +972,22 @@ void SceneLoaderService::HydrateRigidBodyBindings(
       record.collision_layer) };
     desc.collision_mask
       = physics::CollisionMask { static_cast<uint32_t>(record.collision_mask) };
+    if (record.shape_asset_index != data::pak::kNoResourceIndex) {
+      const auto shape_desc = ResolveCollisionShapeAsset(
+        record.shape_asset_index, "rigid-body", record.node_index);
+      desc.shape = BuildCollisionShapeFromDescriptor(
+        shape_desc, "rigid-body", record.node_index);
+    }
+    if (record.material_asset_index != data::pak::kNoResourceIndex) {
+      const auto material_desc = ResolvePhysicsMaterialAsset(
+        record.material_asset_index, "rigid-body", record.node_index);
+      desc.friction = (std::max)(0.0F, material_desc.friction);
+      desc.restitution = (std::max)(0.0F, material_desc.restitution);
+      if (record.mass <= 0.0F
+        && desc.type != physics::body::BodyType::kStatic) {
+        desc.mass_kg = (std::max)(0.001F, material_desc.density);
+      }
+    }
 
     auto& node = runtime_nodes_[node_index];
     const auto attached = physics::ScenePhysics::AttachRigidBody(
@@ -803,14 +1012,6 @@ void SceneLoaderService::HydrateCharacterBindings(
         + std::to_string(record.node_index));
     }
 
-    if (record.shape_asset_index != data::pak::kNoResourceIndex) {
-      throw std::runtime_error(
-        std::string("character external shape references are unsupported in "
-                    "section-9 hydrator (node_index=")
-        + std::to_string(record.node_index) + " shape_asset_index="
-        + std::to_string(record.shape_asset_index) + ")");
-    }
-
     physics::character::CharacterDesc desc {};
     desc.mass_kg = record.mass;
     desc.max_slope_angle_radians = record.max_slope_angle;
@@ -820,6 +1021,12 @@ void SceneLoaderService::HydrateCharacterBindings(
       record.collision_layer) };
     desc.collision_mask
       = physics::CollisionMask { static_cast<uint32_t>(record.collision_mask) };
+    if (record.shape_asset_index != data::pak::kNoResourceIndex) {
+      const auto shape_desc = ResolveCollisionShapeAsset(
+        record.shape_asset_index, "character", record.node_index);
+      desc.shape = BuildCollisionShapeFromDescriptor(
+        shape_desc, "character", record.node_index);
+    }
 
     auto& node = runtime_nodes_[node_index];
     const auto attached = physics::ScenePhysics::AttachCharacter(
@@ -849,16 +1056,19 @@ void SceneLoaderService::HydratePhysicsBindings(
     = physics_asset.GetBindings<data::pak::ColliderBindingRecord>();
   const auto character_bindings
     = physics_asset.GetBindings<data::pak::CharacterBindingRecord>();
+  const auto joint_bindings
+    = physics_asset.GetBindings<data::pak::JointBindingRecord>();
 
   HydrateRigidBodyBindings(*physics_module, rigid_body_bindings);
   HydrateColliderBindings(*physics_module, collider_bindings);
   HydrateCharacterBindings(*physics_module, character_bindings);
+  HydrateJointBindings(*physics_module, joint_bindings);
 
   LOG_F(INFO,
     "SceneLoader: Physics hydration complete (rigid_bodies={} colliders={} "
-    "characters={})",
+    "characters={} joints={})",
     rigid_body_bindings.size(), collider_bindings.size(),
-    character_bindings.size());
+    character_bindings.size(), joint_bindings.size());
 }
 
 /*!
@@ -929,9 +1139,6 @@ auto SceneLoaderService::BuildSceneAsync(scene::Scene& scene,
   AttachLights(asset);
   AttachScripting(asset);
   AttachInputMappings(asset);
-  if (swap_.physics_asset) {
-    HydratePhysicsBindings(*swap_.physics_asset);
-  }
   SelectActiveCamera(asset);
   EnsureCameraAndViewport(scene);
   // Geometry pins are only needed until scene instantiation finishes.
@@ -940,6 +1147,12 @@ auto SceneLoaderService::BuildSceneAsync(scene::Scene& scene,
 
   LOG_F(INFO, "SceneLoader: Runtime scene instantiation complete.");
   co_return std::move(active_camera_);
+}
+
+void SceneLoaderService::HydratePhysicsSidecar(
+  const data::PhysicsSceneAsset& physics_asset)
+{
+  HydratePhysicsBindings(physics_asset);
 }
 
 auto SceneLoaderService::BuildEnvironment(const data::SceneAsset& asset)

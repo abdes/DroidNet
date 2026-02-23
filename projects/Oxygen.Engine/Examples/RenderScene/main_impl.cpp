@@ -34,6 +34,7 @@
 #include <Oxygen/OxCo/EventLoop.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/PhysicsModule/PhysicsModule.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Renderer/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Renderer.h>
@@ -115,6 +116,8 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
       = std::make_unique<engine::Renderer>(app.gfx_weak, renderer_config);
 
     app.renderer = observer_ptr { renderer_unique.get() };
+    register_module(std::make_unique<oxygen::physics::PhysicsModule>(
+      oxygen::engine::kPhysicsModulePriority));
     register_module(
       std::make_unique<oxygen::scenesync::SceneObserverSyncModule>(
         engine::kSceneObserverSyncModulePriority));

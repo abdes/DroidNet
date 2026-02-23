@@ -176,6 +176,9 @@ public:
   //! Return true if a scene is currently staged for publish.
   [[nodiscard]] auto HasStagedScene() const noexcept -> bool;
 
+  //! Drop any staged scene without publishing it.
+  auto DiscardStagedScene() -> void;
+
   //! Get the staged scene for mutation-time build/hydration.
   [[nodiscard]] auto GetStagedScene() const -> observer_ptr<scene::Scene>;
 

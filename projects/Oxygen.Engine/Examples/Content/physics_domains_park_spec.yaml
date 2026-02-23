@@ -1,0 +1,586 @@
+version: 7
+content_version: 1
+
+buffers: []
+textures: []
+audios: []
+scripts: []
+
+assets:
+  - type: material
+    name: MatGround
+    asset_key: "10000000000000000000000000000001"
+    alignment: 1
+    material_domain: 1
+    shader_stages: 0
+    base_color: [0.2, 0.22, 0.24, 1.0]
+    metalness: 0.0
+    roughness: 0.85
+    ambient_occlusion: 1.0
+
+  - type: material
+    name: MatDynamic
+    asset_key: "10000000000000000000000000000002"
+    alignment: 1
+    material_domain: 1
+    shader_stages: 0
+    base_color: [0.18, 0.52, 0.92, 1.0]
+    metalness: 0.05
+    roughness: 0.45
+    ambient_occlusion: 1.0
+
+  - type: material
+    name: MatKinematic
+    asset_key: "10000000000000000000000000000003"
+    alignment: 1
+    material_domain: 1
+    shader_stages: 0
+    base_color: [0.95, 0.7, 0.18, 1.0]
+    metalness: 0.0
+    roughness: 0.5
+    ambient_occlusion: 1.0
+
+  - type: material
+    name: MatTrigger
+    asset_key: "10000000000000000000000000000004"
+    alignment: 1
+    material_domain: 2
+    shader_stages: 0
+    base_color: [0.9, 0.2, 0.2, 0.35]
+    metalness: 0.0
+    roughness: 0.6
+    ambient_occlusion: 1.0
+
+  - type: material
+    name: MatCharacter
+    asset_key: "10000000000000000000000000000005"
+    alignment: 1
+    material_domain: 1
+    shader_stages: 0
+    base_color: [0.35, 0.9, 0.45, 1.0]
+    metalness: 0.0
+    roughness: 0.35
+    ambient_occlusion: 1.0
+
+  - type: geometry
+    name: GeoGround
+    asset_key: "20000000000000000000000000000001"
+    alignment: 1
+    bounding_box_min: [-0.5, -0.5, -0.5]
+    bounding_box_max: [0.5, 0.5, 0.5]
+    lods:
+      - name: "Cube/GroundProc"
+        mesh_type: 2
+        procedural_params:
+          data_hex: "01000000"
+        bounding_box_min: [-0.5, -0.5, -0.5]
+        bounding_box_max: [0.5, 0.5, 0.5]
+        submeshes:
+          - name: full
+            material: MatGround
+            bounding_box_min: [-0.5, -0.5, -0.5]
+            bounding_box_max: [0.5, 0.5, 0.5]
+            mesh_views:
+              - first_index: 0
+                index_count: 36
+                first_vertex: 0
+                vertex_count: 24
+
+  - type: geometry
+    name: GeoDynamic
+    asset_key: "20000000000000000000000000000002"
+    alignment: 1
+    bounding_box_min: [-0.5, -0.5, -0.5]
+    bounding_box_max: [0.5, 0.5, 0.5]
+    lods:
+      - name: "Cube/DynamicProc"
+        mesh_type: 2
+        procedural_params:
+          data_hex: "02000000"
+        bounding_box_min: [-0.5, -0.5, -0.5]
+        bounding_box_max: [0.5, 0.5, 0.5]
+        submeshes:
+          - name: full
+            material: MatDynamic
+            bounding_box_min: [-0.5, -0.5, -0.5]
+            bounding_box_max: [0.5, 0.5, 0.5]
+            mesh_views:
+              - first_index: 0
+                index_count: 36
+                first_vertex: 0
+                vertex_count: 24
+
+  - type: geometry
+    name: GeoKinematic
+    asset_key: "20000000000000000000000000000003"
+    alignment: 1
+    bounding_box_min: [-0.5, -0.5, -0.5]
+    bounding_box_max: [0.5, 0.5, 0.5]
+    lods:
+      - name: "Cube/KinematicProc"
+        mesh_type: 2
+        procedural_params:
+          data_hex: "03000000"
+        bounding_box_min: [-0.5, -0.5, -0.5]
+        bounding_box_max: [0.5, 0.5, 0.5]
+        submeshes:
+          - name: full
+            material: MatKinematic
+            bounding_box_min: [-0.5, -0.5, -0.5]
+            bounding_box_max: [0.5, 0.5, 0.5]
+            mesh_views:
+              - first_index: 0
+                index_count: 36
+                first_vertex: 0
+                vertex_count: 24
+
+  - type: geometry
+    name: GeoTrigger
+    asset_key: "20000000000000000000000000000004"
+    alignment: 1
+    bounding_box_min: [-0.5, -0.5, -0.5]
+    bounding_box_max: [0.5, 0.5, 0.5]
+    lods:
+      - name: "Cube/TriggerProc"
+        mesh_type: 2
+        procedural_params:
+          data_hex: "04000000"
+        bounding_box_min: [-0.5, -0.5, -0.5]
+        bounding_box_max: [0.5, 0.5, 0.5]
+        submeshes:
+          - name: full
+            material: MatTrigger
+            bounding_box_min: [-0.5, -0.5, -0.5]
+            bounding_box_max: [0.5, 0.5, 0.5]
+            mesh_views:
+              - first_index: 0
+                index_count: 36
+                first_vertex: 0
+                vertex_count: 24
+
+  - type: geometry
+    name: GeoCharacter
+    asset_key: "20000000000000000000000000000005"
+    alignment: 1
+    bounding_box_min: [-0.5, -0.5, -0.5]
+    bounding_box_max: [0.5, 0.5, 0.5]
+    lods:
+      - name: "Cube/CharacterProc"
+        mesh_type: 2
+        procedural_params:
+          data_hex: "05000000"
+        bounding_box_min: [-0.5, -0.5, -0.5]
+        bounding_box_max: [0.5, 0.5, 0.5]
+        submeshes:
+          - name: full
+            material: MatCharacter
+            bounding_box_min: [-0.5, -0.5, -0.5]
+            bounding_box_max: [0.5, 0.5, 0.5]
+            mesh_views:
+              - first_index: 0
+                index_count: 36
+                first_vertex: 0
+                vertex_count: 24
+
+  - type: physics_material
+    name: PhysMatGround
+    asset_key: "40000000000000000000000000000001"
+    friction: 0.65
+    restitution: 0.7
+    density: 2000.0
+
+  - type: physics_material
+    name: PhysMatDynamic
+    asset_key: "40000000000000000000000000000002"
+    friction: 0.4
+    restitution: 0.75
+    density: 850.0
+
+  - type: physics_material
+    name: PhysMatKinematic
+    asset_key: "40000000000000000000000000000003"
+    friction: 0.7
+    restitution: 0.0
+    density: 1200.0
+
+  - type: physics_material
+    name: PhysMatTrigger
+    asset_key: "40000000000000000000000000000004"
+    friction: 0.1
+    restitution: 0.0
+    density: 1000.0
+
+  - type: physics_material
+    name: PhysMatCharacter
+    asset_key: "40000000000000000000000000000005"
+    friction: 0.6
+    restitution: 0.0
+    density: 1000.0
+
+  - type: collision_shape
+    name: ShapeGroundPad
+    asset_key: "50000000000000000000000000000001"
+    shape_category: 0
+    bounding_box_min: [-10.0, -10.0, -0.5]
+    bounding_box_max: [10.0, 10.0, 0.5]
+
+  - type: collision_shape
+    name: ShapeDynamicA
+    asset_key: "50000000000000000000000000000002"
+    shape_category: 0
+    bounding_box_min: [-0.5, -0.5, -0.5]
+    bounding_box_max: [0.5, 0.5, 0.5]
+
+  - type: collision_shape
+    name: ShapeDynamicB
+    asset_key: "50000000000000000000000000000003"
+    shape_category: 0
+    bounding_box_min: [-0.55, -0.55, -0.55]
+    bounding_box_max: [0.55, 0.55, 0.55]
+
+  - type: collision_shape
+    name: ShapeKinematicGate
+    asset_key: "50000000000000000000000000000004"
+    shape_category: 0
+    bounding_box_min: [-1.2, -0.175, -0.55]
+    bounding_box_max: [1.2, 0.175, 0.55]
+
+  - type: collision_shape
+    name: ShapeTriggerZone
+    asset_key: "50000000000000000000000000000005"
+    shape_category: 0
+    bounding_box_min: [-0.8, -0.8, -0.8]
+    bounding_box_max: [0.8, 0.8, 0.8]
+
+  - type: collision_shape
+    name: ShapeCharacter
+    asset_key: "50000000000000000000000000000006"
+    shape_category: 0
+    bounding_box_min: [-0.4, -0.4, -0.8]
+    bounding_box_max: [0.4, 0.4, 0.8]
+
+  - type: collision_shape
+    name: ShapeRamp
+    asset_key: "50000000000000000000000000000007"
+    shape_category: 0
+    bounding_box_min: [-2.5, -2.0, -0.25]
+    bounding_box_max: [2.5, 2.0, 0.25]
+
+  - type: collision_shape
+    name: ShapeBackStop
+    asset_key: "50000000000000000000000000000008"
+    shape_category: 0
+    bounding_box_min: [-0.25, -10.0, -0.5]
+    bounding_box_max: [0.25, 10.0, 2.0]
+
+  - type: scene
+    name: PhysicsDomainsPark
+    asset_key: "30000000000000000000000000000001"
+    alignment: 1
+    nodes:
+      - name: Root
+        parent: 0
+        flags: 0
+
+      - name: GroundPad
+        parent: 0
+        flags: 0
+        translation: [0.0, 0.0, -0.55]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [20.0, 20.0, 1.0]
+
+      - name: RampLeft
+        parent: 0
+        flags: 0
+        translation: [-4.5, -1.0, 0.8]
+        rotation: [0.173648, 0.0, 0.0, 0.984808]
+        scale: [5.0, 4.0, 0.5]
+
+      - name: RampRight
+        parent: 0
+        flags: 0
+        translation: [4.5, 1.0, 0.8]
+        rotation: [-0.173648, 0.0, 0.0, 0.984808]
+        scale: [5.0, 4.0, 0.5]
+
+      - name: DynamicA
+        parent: 0
+        flags: 0
+        translation: [-4.2, -3.2, 3.8]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: DynamicB
+        parent: 0
+        flags: 0
+        translation: [-3.4, -2.2, 5.2]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.05, 1.05, 1.05]
+
+      - name: DynamicC
+        parent: 0
+        flags: 0
+        translation: [4.2, 3.2, 3.9]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: DynamicD
+        parent: 0
+        flags: 0
+        translation: [3.4, 2.2, 5.4]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.1, 1.1, 1.1]
+
+      - name: DynamicE
+        parent: 0
+        flags: 0
+        translation: [0.0, 0.0, 7.5]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.15, 1.15, 1.15]
+
+      - name: KinematicGate
+        parent: 0
+        flags: 0
+        translation: [0.0, 0.0, 1.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [4.5, 0.7, 1.0]
+
+      - name: TriggerZone
+        parent: 0
+        flags: 0
+        translation: [0.0, 4.8, 1.2]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [2.2, 2.2, 2.2]
+
+      - name: CharacterSpawn
+        parent: 0
+        flags: 0
+        translation: [0.0, -6.5, 1.1]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [0.8, 0.8, 1.6]
+
+      - name: MainCamera
+        parent: 0
+        flags: 0
+        translation: [0.0, -24.0, 12.0]
+        rotation: [-0.38, 0.0, 0.0, 0.924987]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: Sun
+        parent: 0
+        flags: 0
+        translation: [0.0, 5.0, 9.0]
+        rotation: [0.45, 0.0, 0.0, 0.8930286]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: BackStop
+        parent: 0
+        flags: 0
+        translation: [0.0, 9.5, 1.5]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [0.5, 20.0, 4.0]
+
+    renderables:
+      - node_index: 1
+        geometry: GeoGround
+        visible: true
+      - node_index: 2
+        geometry: GeoGround
+        visible: true
+      - node_index: 3
+        geometry: GeoGround
+        visible: true
+      - node_index: 4
+        geometry: GeoDynamic
+        visible: true
+      - node_index: 5
+        geometry: GeoDynamic
+        visible: true
+      - node_index: 6
+        geometry: GeoDynamic
+        visible: true
+      - node_index: 7
+        geometry: GeoDynamic
+        visible: true
+      - node_index: 8
+        geometry: GeoDynamic
+        visible: true
+      - node_index: 9
+        geometry: GeoKinematic
+        visible: true
+      - node_index: 10
+        geometry: GeoTrigger
+        visible: true
+      - node_index: 11
+        geometry: GeoCharacter
+        visible: true
+      - node_index: 14
+        geometry: GeoGround
+        visible: true
+
+    perspective_cameras:
+      - node_index: 12
+        fov_y: 0.785398
+        aspect_ratio: 1.777778
+        near_plane: 0.1
+        far_plane: 200.0
+
+    directional_lights:
+      - node_index: 13
+        affects_world: true
+        color_rgb: [1.0, 0.98, 0.92]
+        intensity_lux: 130000.0
+        mobility: 0
+        casts_shadows: 1
+        angular_size_radians: 0.004675
+        environment_contribution: true
+        is_sun_light: true
+
+  - type: physics_scene
+    name: PhysicsDomainsPark.physics
+    asset_key: "30000000000000000000000000000002"
+    target_scene_key: "30000000000000000000000000000001"
+    target_node_count: 15
+    rigid_body_bindings:
+      - node_index: 1
+        shape_asset: ShapeGroundPad
+        material_asset: PhysMatGround
+        body_type: 0
+        motion_quality: 0
+        collision_layer: 1
+        collision_mask: 65535
+        mass: 0.0
+        linear_damping: 0.0
+        angular_damping: 0.0
+        gravity_factor: 0.0
+        initial_activation: false
+      - node_index: 2
+        shape_asset: ShapeRamp
+        material_asset: PhysMatGround
+        body_type: 0
+        motion_quality: 0
+        collision_layer: 1
+        collision_mask: 65535
+        mass: 0.0
+        linear_damping: 0.0
+        angular_damping: 0.0
+        gravity_factor: 0.0
+        initial_activation: false
+      - node_index: 3
+        shape_asset: ShapeRamp
+        material_asset: PhysMatGround
+        body_type: 0
+        motion_quality: 0
+        collision_layer: 1
+        collision_mask: 65535
+        mass: 0.0
+        linear_damping: 0.0
+        angular_damping: 0.0
+        gravity_factor: 0.0
+        initial_activation: false
+      - node_index: 4
+        shape_asset: ShapeDynamicA
+        material_asset: PhysMatDynamic
+        body_type: 1
+        motion_quality: 1
+        collision_layer: 2
+        collision_mask: 65535
+        mass: 8.0
+        linear_damping: 0.005
+        angular_damping: 0.005
+        gravity_factor: 1.0
+        initial_activation: true
+      - node_index: 5
+        shape_asset: ShapeDynamicB
+        material_asset: PhysMatDynamic
+        body_type: 1
+        motion_quality: 0
+        collision_layer: 2
+        collision_mask: 65535
+        mass: 8.0
+        linear_damping: 0.004
+        angular_damping: 0.004
+        gravity_factor: 1.0
+        initial_activation: true
+      - node_index: 6
+        shape_asset: ShapeDynamicA
+        material_asset: PhysMatDynamic
+        body_type: 1
+        motion_quality: 1
+        collision_layer: 2
+        collision_mask: 65535
+        mass: 7.5
+        linear_damping: 0.004
+        angular_damping: 0.004
+        gravity_factor: 1.0
+        initial_activation: true
+      - node_index: 7
+        shape_asset: ShapeDynamicB
+        material_asset: PhysMatDynamic
+        body_type: 1
+        motion_quality: 0
+        collision_layer: 2
+        collision_mask: 65535
+        mass: 6.5
+        linear_damping: 0.003
+        angular_damping: 0.003
+        gravity_factor: 1.0
+        initial_activation: true
+      - node_index: 8
+        shape_asset: ShapeDynamicB
+        material_asset: PhysMatDynamic
+        body_type: 1
+        motion_quality: 0
+        collision_layer: 2
+        collision_mask: 65535
+        mass: 9.0
+        linear_damping: 0.003
+        angular_damping: 0.003
+        gravity_factor: 1.0
+        initial_activation: true
+      - node_index: 9
+        shape_asset: ShapeKinematicGate
+        material_asset: PhysMatKinematic
+        body_type: 2
+        motion_quality: 0
+        collision_layer: 3
+        collision_mask: 65535
+        mass: 20.0
+        linear_damping: 0.0
+        angular_damping: 0.0
+        gravity_factor: 0.0
+        initial_activation: true
+      - node_index: 14
+        shape_asset: ShapeBackStop
+        material_asset: PhysMatGround
+        body_type: 0
+        motion_quality: 0
+        collision_layer: 1
+        collision_mask: 65535
+        mass: 0.0
+        linear_damping: 0.0
+        angular_damping: 0.0
+        gravity_factor: 0.0
+        initial_activation: false
+
+    collider_bindings:
+      - node_index: 10
+        shape_asset: ShapeTriggerZone
+        material_asset: PhysMatTrigger
+        collision_layer: 4
+        collision_mask: 65535
+
+    character_bindings:
+      - node_index: 11
+        shape_asset: ShapeCharacter
+        mass: 90.0
+        max_slope_angle: 0.785398
+        step_height: 0.35
+        max_strength: 140.0
+        collision_layer: 5
+        collision_mask: 65535
+
+    joint_bindings:
+      - node_index_a: 7
+        node_index_b: 8
+        constraint_resource_index: 0

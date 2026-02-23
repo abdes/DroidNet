@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <exception>
 #include <filesystem>
 #include <source_location>
 
@@ -176,12 +177,33 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   DCHECK_NOTNULL_F(context);
   auto& shell = GetShell();
   auto& frame_context = *context;
+  scene_published_this_frame_ = false;
+
+  // Scene lifetime contract:
+  // - Scene swaps/clears are applied ONLY in OnFrameStart.
+  // - FrameContext stores a non-owning scene pointer for this frame.
+  // - Replacing/clearing the scene in later phases (e.g. OnSceneMutation)
+  //   can dangle that pointer before transform propagation.
+  // Keep all ownership changes here, before frame_context.SetScene(...).
+  if (pending_scene_clear_) {
+    LOG_F(INFO,
+      "RenderScene: Applying deferred scene clear at frame-start before "
+      "FrameContext publication");
+    active_scene_ = {};
+    main_camera_ = {};
+    scene_loader_.reset();
+    active_scene_load_key_.reset();
+    shell.SetScene(nullptr);
+    pending_scene_clear_ = false;
+  }
 
   if (shell.HasStagedScene()) {
     CHECK_F(shell.PublishStagedScene(),
       "expected a staged scene before frame-start publish");
+    scene_published_this_frame_ = true;
     active_scene_ = shell.GetActiveScene();
     main_camera_ = shell.TakePublishedMainCamera();
+    LOG_F(INFO, "RenderScene: Published staged scene at frame-start");
 
     if (active_scene_load_key_) {
       if (const auto vm = shell.GetContentVm()) {
@@ -227,7 +249,10 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
 
     if (pending_source_action_ == PendingSourceAction::kClear) {
       ReleaseCurrentSceneAsset(reason);
-      ClearSceneRuntime(reason);
+      // IMPORTANT: Never clear/swap scene ownership in OnSceneMutation.
+      // Defer to OnFrameStart so FrameContext scene publication remains valid
+      // for the whole frame.
+      pending_scene_clear_ = true;
     }
 
     auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
@@ -323,6 +348,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
     scene_load_cancel_requested_ = false;
     pending_scene_load_.reset();
     scene_loader_.reset();
+    pending_physics_sidecar_.reset();
     active_scene_load_key_.reset();
   }
 
@@ -449,7 +475,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
     }
   }
 
-  if (scene_loader_ && !shell.HasStagedScene()) {
+  if (scene_loader_ && !shell.HasStagedScene() && !pending_physics_sidecar_) {
     if (scene_loader_->IsReady()) {
       auto loader = scene_loader_;
       auto swap = loader->GetResult();
@@ -463,13 +489,60 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
       }
 
       if (swap.asset && loader) {
+        DCHECK_F(!shell.HasStagedScene(),
+          "scene build path expects no pre-existing staged scene");
         shell.StageScene(
           std::make_unique<scene::Scene>("RenderScene", kSceneInitialCapacity));
         auto staged_scene = shell.GetStagedScene();
-        shell.SetStagedMainCamera(
-          co_await loader->BuildSceneAsync(*staged_scene, *swap.asset));
+        CHECK_NOTNULL_F(staged_scene.get(),
+          "staged scene must be available immediately after StageScene");
+        scene::SceneNode staged_main_camera;
+        try {
+          staged_main_camera
+            = co_await loader->BuildSceneAsync(*staged_scene, *swap.asset);
+          pending_physics_sidecar_ = swap.physics_asset;
+        } catch (const std::exception& ex) {
+          shell.DiscardStagedScene();
+          pending_physics_sidecar_.reset();
+          LOG_F(ERROR,
+            "RenderScene: Scene build/hydration failed (scene_key={} "
+            "error='{}')",
+            data::to_string(swap.scene_key), ex.what());
+          if (const auto vm = shell.GetContentVm()) {
+            vm->NotifySceneLoadCompleted(swap.scene_key, false);
+          }
+          active_scene_load_key_.reset();
+          scene_loader_ = std::move(loader);
+          if (scene_loader_) {
+            scene_loader_->MarkConsumed();
+          }
+          co_return;
+        } catch (...) {
+          shell.DiscardStagedScene();
+          pending_physics_sidecar_.reset();
+          LOG_F(ERROR,
+            "RenderScene: Scene build/hydration failed (scene_key={} "
+            "error='unknown')",
+            data::to_string(swap.scene_key));
+          if (const auto vm = shell.GetContentVm()) {
+            vm->NotifySceneLoadCompleted(swap.scene_key, false);
+          }
+          active_scene_load_key_.reset();
+          scene_loader_ = std::move(loader);
+          if (scene_loader_) {
+            scene_loader_->MarkConsumed();
+          }
+          co_return;
+        }
+
+        shell.SetStagedMainCamera(std::move(staged_main_camera));
         active_scene_asset_pin_ = swap.asset;
         current_scene_key_ = swap.scene_key;
+        LOG_F(INFO,
+          "RenderScene: Scene build staged successfully "
+          "(scene_key={} physics_sidecar={})",
+          data::to_string(swap.scene_key),
+          pending_physics_sidecar_ ? "pending" : "none");
       } else {
         LOG_F(ERROR, "RenderScene: Scene build missing asset or loader");
         if (const auto vm = shell.GetContentVm()) {
@@ -479,7 +552,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
       }
 
       scene_loader_ = std::move(loader);
-      if (scene_loader_) {
+      if (scene_loader_ && !pending_physics_sidecar_) {
         scene_loader_->MarkConsumed();
       }
     } else if (scene_loader_->IsFailed()) {
@@ -498,10 +571,39 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
     }
   }
 
+  if (pending_physics_sidecar_) {
+    const bool can_hydrate_now = active_scene_.IsValid()
+      && !shell.HasStagedScene() && !scene_published_this_frame_
+      && scene_loader_ && !scene_loader_->IsFailed();
+    if (can_hydrate_now) {
+      try {
+        scene_loader_->HydratePhysicsSidecar(*pending_physics_sidecar_);
+        LOG_F(
+          INFO, "RenderScene: Deferred physics sidecar hydration completed");
+        pending_physics_sidecar_.reset();
+        scene_loader_->MarkConsumed();
+      } catch (const std::exception& ex) {
+        LOG_F(ERROR, "RenderScene: Deferred physics hydration failed: {}",
+          ex.what());
+        pending_physics_sidecar_.reset();
+        if (active_scene_load_key_.has_value()) {
+          if (const auto vm = shell.GetContentVm()) {
+            vm->NotifySceneLoadCompleted(*active_scene_load_key_, false);
+          }
+          active_scene_load_key_.reset();
+        }
+        scene_loader_->MarkConsumed();
+      }
+    }
+  }
+
   if (!active_scene_.IsValid() && !shell.HasStagedScene()) {
+    LOG_F(INFO, "RenderScene: Staging fallback default scene");
     shell.StageScene(
       std::make_unique<scene::Scene>("RenderScene", kSceneInitialCapacity));
     auto staged_scene = shell.GetStagedScene();
+    CHECK_NOTNULL_F(staged_scene.get(),
+      "fallback staged scene must be available after StageScene");
     auto camera_node = staged_scene->CreateNode("MainCamera");
     auto camera = std::make_unique<scene::PerspectiveCamera>();
     const bool attached = camera_node.AttachCamera(std::move(camera));
@@ -579,6 +681,7 @@ auto MainModule::ClearSceneRuntime(const char* /*reason*/) -> void
   active_scene_ = {};
   main_camera_ = {};
   scene_loader_.reset();
+  pending_physics_sidecar_.reset();
   active_scene_load_key_.reset();
   shell.SetScene(nullptr);
 }

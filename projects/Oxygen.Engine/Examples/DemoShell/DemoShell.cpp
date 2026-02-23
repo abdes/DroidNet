@@ -366,6 +366,11 @@ auto DemoShell::HasStagedScene() const noexcept -> bool
   return impl_->scene_control.HasStagedScene();
 }
 
+auto DemoShell::DiscardStagedScene() -> void
+{
+  impl_->scene_control.DiscardStagedScene();
+}
+
 auto DemoShell::GetStagedScene() const -> observer_ptr<scene::Scene>
 {
   return impl_->scene_control.GetStagedScene();
