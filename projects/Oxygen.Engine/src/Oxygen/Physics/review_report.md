@@ -354,36 +354,22 @@ The introduction of the `IJointApi` and `JoltJoints` correctly implements the ne
 
 **RenderScene YAML Demo Scenes (`Physics Validation Playground`):**
 
-- **Zone A - Contract Gate (Hydration Truth Test):**
-  - Load a scene with a valid physics sidecar and verify all rigid-body and character bindings hydrate.
-  - Provide negative launch variants (developer toggle/CLI flag) that intentionally use:
-    - missing sidecar,
-    - scene-key mismatch,
-    - node-count mismatch.
-  - Expected result: scene-load hard-fails immediately with explicit diagnostics (no fallback, no partial scene activation).
-
-- **Zone B - Rigid Body Stack + Restitution Lane:**
+- **Zone A - Rigid Body Stack + Restitution Lane:**
   - Procedural tower of mixed primitive rigid bodies dropped onto static floor and angled walls.
   - Parallel “restitution lane” with spheres of increasing bounce to visually validate material behavior.
   - Validates broadphase/narrowphase contact generation, sleep/wake transitions, and stable stacking.
 
-- **Zone C - Friction + Slope Conveyor:**
+- **Zone B - Friction + Slope Conveyor:**
   - Three ramp tracks with low/medium/high friction material assignment.
   - Identical cubes released simultaneously to compare slide distance and settle time.
   - Validates physics material mapping (content/data -> runtime behavior) and deterministic relative ordering.
 
-- **Zone D - Character Traversal Course:**
+- **Zone C - Character Traversal Course:**
   - Kinematic character controller path over steps, shallow slopes, steep slopes, and ledges.
   - Includes a moving rigid platform intersection to verify interaction constraints.
   - Validates character binding hydration, slope limits, step handling, and collision filtering.
 
-- **Zone E - Collision Filtering Matrix:**
-  - Spawn groups on distinct collision layers/masks:
-    - `WorldStatic`, `WorldDynamic`, `Character`, `TriggerLike`.
-  - Explicit expected pairs (collide / ignore) documented and checked at runtime counters.
-  - Validates that cooked filter bits are honored exactly after hydration.
-
-- **Zone F - Stress Ring (Stability + Throughput):**
+- **Zone D - Stress Ring (Stability + Throughput):**
   - Circular arena continuously spawning and retiring primitive rigid bodies under cap.
   - Measures step time, active body count, and contact pair count over several minutes.
   - Validates no crashes, no runaway allocations, and stable simulation under sustained churn.

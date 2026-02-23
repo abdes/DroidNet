@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <limits>
+#include <unordered_set>
 
 #include <Jolt/Jolt.h> // Must always be first (keep separate)
 
@@ -110,6 +111,33 @@ auto oxygen::physics::jolt::JoltJoints::CreateJoint(const WorldId world_id,
   if (physics_system == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
   }
+
+  // Purge stale joint table entries for constraints that are no longer
+  // registered in the physics system (e.g. removed during body teardown).
+  {
+    const auto live_constraints = physics_system->GetConstraints();
+    std::unordered_set<const JPH::Constraint*> live_constraint_ptrs {};
+    live_constraint_ptrs.reserve(live_constraints.size());
+    for (const auto& constraint_ref : live_constraints) {
+      if (constraint_ref != nullptr) {
+        live_constraint_ptrs.insert(constraint_ref.GetPtr());
+      }
+    }
+
+    std::scoped_lock lock(mutex_);
+    for (auto it = joints_.begin(); it != joints_.end();) {
+      const auto* constraint_ptr = (it->second.constraint != nullptr)
+        ? it->second.constraint.GetPtr()
+        : nullptr;
+      if (constraint_ptr == nullptr
+        || !live_constraint_ptrs.contains(constraint_ptr)) {
+        it = joints_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
   const auto body_lock_interface = world->TryGetBodyLockInterface(world_id);
   if (body_lock_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);

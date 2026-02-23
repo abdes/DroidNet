@@ -13,6 +13,8 @@
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
+#include <Jolt/Physics/Constraints/TwoBodyConstraint.h>
+#include <Jolt/Physics/PhysicsSystem.h>
 
 #include <Oxygen/Physics/Jolt/Converters.h>
 #include <Oxygen/Physics/Jolt/JoltBodies.h>
@@ -110,6 +112,11 @@ auto oxygen::physics::jolt::JoltBodies::DestroyBody(
     return Err(PhysicsError::kBodyNotFound);
   }
 
+  auto physics_system = world->TryGetPhysicsSystem(world_id);
+  if (physics_system == nullptr) {
+    return Err(PhysicsError::kWorldNotFound);
+  }
+
   std::unordered_map<ShapeInstanceId, ShapeInstanceState>
     shape_instances_to_remove {};
   {
@@ -122,6 +129,37 @@ auto oxygen::physics::jolt::JoltBodies::DestroyBody(
       shape_instances_to_remove = std::move(body_it->second.shape_instances);
       body_states_.erase(body_it);
     }
+  }
+
+  // Remove all constraints referencing this body before destroying it.
+  // This prevents stale two-body constraints from surviving scene reload
+  // teardown and being evaluated against an invalid body pointer.
+  const auto target_jolt_body_id = ToJoltBodyId(body_id);
+  const auto constraints = physics_system->GetConstraints();
+  std::vector<JPH::Constraint*> constraints_to_remove {};
+  constraints_to_remove.reserve(constraints.size());
+  for (const auto& constraint_ref : constraints) {
+    if (constraint_ref == nullptr) {
+      continue;
+    }
+    auto* constraint = constraint_ref.GetPtr();
+    if (constraint->GetType() != JPH::EConstraintType::TwoBodyConstraint) {
+      continue;
+    }
+    auto* two_body = static_cast<JPH::TwoBodyConstraint*>(constraint);
+    const auto body1 = two_body->GetBody1();
+    const auto body2 = two_body->GetBody2();
+    const bool matches_body_1
+      = body1 != nullptr && body1->GetID() == target_jolt_body_id;
+    const bool matches_body_2
+      = body2 != nullptr && body2->GetID() == target_jolt_body_id;
+    if (matches_body_1 || matches_body_2) {
+      constraints_to_remove.push_back(constraint);
+    }
+  }
+  if (!constraints_to_remove.empty()) {
+    physics_system->RemoveConstraints(constraints_to_remove.data(),
+      static_cast<int>(constraints_to_remove.size()));
   }
 
   auto* shapes = shapes_.get();
