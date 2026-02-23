@@ -87,6 +87,38 @@ auto RegisterPhysicsConstantsBindings(
     }));
   lua_setfield(state, constants_index, "soft_body_tether_mode");
 
+  static_cast<void>(PushReadOnlyStringEnumTable(state,
+    {
+      { "sphere", "sphere" },
+      { "capsule", "capsule" },
+      { "box", "box" },
+      { "cylinder", "cylinder" },
+      { "cone", "cone" },
+      { "convex_hull", "convex_hull" },
+      { "triangle_mesh", "triangle_mesh" },
+      { "height_field", "height_field" },
+      { "plane", "plane" },
+      { "world_boundary", "world_boundary" },
+      { "compound", "compound" },
+    }));
+  lua_setfield(state, constants_index, "shape_type");
+
+  static_cast<void>(PushReadOnlyStringEnumTable(state,
+    {
+      { "convex", "convex" },
+      { "mesh", "mesh" },
+      { "height_field", "height_field" },
+      { "compound", "compound" },
+    }));
+  lua_setfield(state, constants_index, "shape_payload_type");
+
+  static_cast<void>(PushReadOnlyStringEnumTable(state,
+    {
+      { "aabb_clamp", "aabb_clamp" },
+      { "plane_set", "plane_set" },
+    }));
+  lua_setfield(state, constants_index, "world_boundary_mode");
+
   lua_setreadonly(state, constants_index, 1);
   lua_pop(state, 2);
 }

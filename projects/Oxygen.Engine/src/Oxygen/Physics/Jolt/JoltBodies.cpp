@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <limits>
+#include <type_traits>
 #include <vector>
 
 #include <Jolt/Jolt.h> // Must always be first (keep separate)
@@ -39,13 +40,31 @@ auto oxygen::physics::jolt::JoltBodies::CreateBody(
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
   }
+  if (desc.type == body::BodyType::kDynamic
+    && std::visit(
+      [](const auto& value) -> bool {
+        using T = std::decay_t<decltype(value)>;
+        return std::is_same_v<T, TriangleMeshShape>
+          || std::is_same_v<T, HeightFieldShape>
+          || std::is_same_v<T, PlaneShape>
+          || std::is_same_v<T, WorldBoundaryShape>;
+      },
+      desc.shape)) {
+    return Err(PhysicsError::kInvalidArgument);
+  }
 
   const auto shape_result = MakeShape(desc.shape);
   if (shape_result.has_error()) {
     return Err(shape_result.error());
   }
+  const auto transformed_shape_result = ApplyShapeLocalTransform(desc.shape,
+    shape_result.value(), desc.shape_local_position, desc.shape_local_rotation,
+    desc.shape_local_scale);
+  if (transformed_shape_result.has_error()) {
+    return Err(transformed_shape_result.error());
+  }
   const auto motion_type = ToMotionType(desc.type);
-  JPH::BodyCreationSettings settings(shape_result.value(),
+  JPH::BodyCreationSettings settings(transformed_shape_result.value(),
     ToJoltRVec3(desc.initial_position), ToJoltQuat(desc.initial_rotation),
     motion_type, ToObjectLayer(desc.type));
   settings.mIsSensor
@@ -91,7 +110,7 @@ auto oxygen::physics::jolt::JoltBodies::CreateBody(
         .body_id = body_id,
       },
       BodyState {
-        .base_shape = shape_result.value(),
+        .base_shape = transformed_shape_result.value(),
       });
   }
   return Ok(body_id);

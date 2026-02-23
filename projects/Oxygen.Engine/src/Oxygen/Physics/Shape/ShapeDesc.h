@@ -12,6 +12,12 @@ namespace oxygen::physics::shape {
 
 struct ShapeDesc final {
   CollisionShape geometry { SphereShape { 0.5F } };
+  Vec3 local_position { 0.0F, 0.0F, 0.0F };
+  Quat local_rotation { 1.0F, 0.0F, 0.0F, 0.0F };
+  Vec3 local_scale { 1.0F, 1.0F, 1.0F };
+  bool is_sensor { false };
+  uint64_t collision_own_layer { 1ULL };
+  uint64_t collision_target_layers { 0xFFFFFFFFFFFFFFFFULL };
 };
 
 } // namespace oxygen::physics::shape

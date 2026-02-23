@@ -104,6 +104,11 @@ auto oxygen::physics::to_string(PhysicsError value) noexcept -> std::string_view
     return "BackendInitFailed";
   case PhysicsError::kNotImplemented:
     return "NotImplemented";
+  case PhysicsError::kShapeCompoundZeroChildren:
+    return "OXY-SHAPE-009: compound payload has zero children";
+  case PhysicsError::kShapeCompoundChildScaleContractViolation:
+    return "OXY-SHAPE-010: compound child scale violates child shape scale "
+           "contract";
   case PhysicsError::kBackendUnavailable:
     return "BackendUnavailable";
   }

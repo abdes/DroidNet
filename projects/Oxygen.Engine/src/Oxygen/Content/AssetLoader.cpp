@@ -41,6 +41,7 @@
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/SourceToken.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/ScriptAsset.h>
@@ -1130,6 +1131,12 @@ void AssetLoader::StartLoadBuffer(
 {
   StartLoadResource<data::BufferResource>(
     std::move(cooked), std::move(on_complete));
+}
+
+void AssetLoader::StartLoadPhysicsResource(
+  const ResourceKey key, PhysicsResourceCallback on_complete)
+{
+  StartLoadResource<data::PhysicsResource>(key, std::move(on_complete));
 }
 
 void AssetLoader::StartLoadTexture(ResourceKey key, TextureCallback on_complete)
@@ -3809,6 +3816,292 @@ auto AssetLoader::GetPakIndex(const PakFile& pak) const -> uint16_t
 
   LOG_F(ERROR, "PAK file not found in AssetLoader collection (by path)");
   throw std::runtime_error("PAK file not found in AssetLoader collection");
+}
+
+auto AssetLoader::MakePhysicsResourceKey(const data::SourceKey source_key,
+  const data::pak::ResourceIndexT resource_index) const noexcept
+  -> std::optional<ResourceKey>
+{
+  for (size_t i = 0; i < impl_->sources.size(); ++i) {
+    const auto& source = impl_->sources[i];
+    if (!source || source->GetSourceKey() != source_key) {
+      continue;
+    }
+    const auto source_id = impl_->source_ids[i];
+    const auto resource_type_index = static_cast<uint16_t>(
+      IndexOf<data::PhysicsResource, ResourceTypeList>::value);
+    return PackResourceKey(source_id, resource_type_index, resource_index);
+  }
+  return std::nullopt;
+}
+
+auto AssetLoader::MakeScriptResourceKeyForAsset(
+  const data::AssetKey& context_asset_key,
+  const data::pak::ResourceIndexT resource_index) const noexcept
+  -> std::optional<ResourceKey>
+{
+  const auto source_id = ResolveSourceIdForAsset(context_asset_key);
+
+  if (!source_id.has_value()) {
+    return std::nullopt;
+  }
+  const auto resource_type_index = static_cast<uint16_t>(
+    IndexOf<data::ScriptResource, ResourceTypeList>::value);
+  return PackResourceKey(
+    source_id.value(), resource_type_index, resource_index);
+}
+
+auto AssetLoader::ReadScriptResourceForAsset(
+  const data::AssetKey& context_asset_key,
+  const data::pak::ResourceIndexT resource_index) const
+  -> std::shared_ptr<const data::ScriptResource>
+{
+  const auto source_id = ResolveSourceIdForAsset(context_asset_key);
+  if (!source_id.has_value()) {
+    return nullptr;
+  }
+
+  const auto* source = ResolveSourceForId(source_id.value());
+  if (source == nullptr) {
+    return nullptr;
+  }
+  const auto* script_table = source->GetScriptTable();
+  if (script_table == nullptr || !script_table->IsValidKey(resource_index)) {
+    return nullptr;
+  }
+
+  auto table_reader = source->CreateScriptTableReader();
+  auto data_reader = source->CreateScriptDataReader();
+  if (!table_reader || !data_reader) {
+    return nullptr;
+  }
+
+  const auto offset_opt = script_table->GetResourceOffset(resource_index);
+  if (!offset_opt.has_value()) {
+    return nullptr;
+  }
+  auto seek_result = table_reader->Seek(*offset_opt);
+  if (!seek_result) {
+    return nullptr;
+  }
+
+  auto desc_blob
+    = table_reader->ReadBlob(sizeof(data::pak::ScriptResourceDesc));
+  if (!desc_blob) {
+    return nullptr;
+  }
+  data::pak::ScriptResourceDesc desc {};
+  std::memcpy(&desc, desc_blob->data(), sizeof(desc));
+
+  std::vector<uint8_t> data_buffer(desc.size_bytes);
+  if (desc.size_bytes > 0) {
+    auto data_seek_result = data_reader->Seek(desc.data_offset);
+    if (!data_seek_result) {
+      return nullptr;
+    }
+    const auto byte_view = std::as_writable_bytes(std::span(data_buffer));
+    auto read_result = data_reader->ReadBlobInto(byte_view);
+    if (!read_result) {
+      return nullptr;
+    }
+  }
+
+  return std::make_shared<data::ScriptResource>(desc, std::move(data_buffer));
+}
+
+auto AssetLoader::MakePhysicsResourceKeyForAsset(
+  const data::AssetKey& context_asset_key,
+  const data::pak::ResourceIndexT resource_index) const noexcept
+  -> std::optional<ResourceKey>
+{
+  const auto source_id = ResolveSourceIdForAsset(context_asset_key);
+
+  if (!source_id.has_value()) {
+    return std::nullopt;
+  }
+  const auto resource_type_index = static_cast<uint16_t>(
+    IndexOf<data::PhysicsResource, ResourceTypeList>::value);
+  return PackResourceKey(
+    source_id.value(), resource_type_index, resource_index);
+}
+
+auto AssetLoader::ReadCollisionShapeAssetDescForAsset(
+  const data::AssetKey& context_asset_key,
+  const data::pak::ResourceIndexT shape_asset_index) const
+  -> std::optional<data::pak::CollisionShapeAssetDesc>
+{
+  const auto source_id = ResolveSourceIdForAsset(context_asset_key);
+  if (!source_id.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto* source = ResolveSourceForId(source_id.value());
+  if (source == nullptr) {
+    return std::nullopt;
+  }
+  const auto key_opt = source->GetAssetKeyByIndex(shape_asset_index.get());
+  if (!key_opt.has_value()) {
+    return std::nullopt;
+  }
+  const auto locator_opt = source->FindAsset(*key_opt);
+  if (!locator_opt.has_value()) {
+    return std::nullopt;
+  }
+  auto desc_reader = source->CreateAssetDescriptorReader(*locator_opt);
+  if (!desc_reader) {
+    return std::nullopt;
+  }
+  auto blob = desc_reader->ReadBlob(sizeof(data::pak::CollisionShapeAssetDesc));
+  if (!blob) {
+    return std::nullopt;
+  }
+  data::pak::CollisionShapeAssetDesc desc {};
+  std::memcpy(&desc, blob->data(), sizeof(desc));
+  if (static_cast<data::AssetType>(desc.header.asset_type)
+    != data::AssetType::kCollisionShape) {
+    return std::nullopt;
+  }
+  return desc;
+}
+
+auto AssetLoader::ReadPhysicsMaterialAssetDescForAsset(
+  const data::AssetKey& context_asset_key,
+  const data::pak::ResourceIndexT material_asset_index) const
+  -> std::optional<data::pak::PhysicsMaterialAssetDesc>
+{
+  const auto source_id = ResolveSourceIdForAsset(context_asset_key);
+  if (!source_id.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto* source = ResolveSourceForId(source_id.value());
+  if (source == nullptr) {
+    return std::nullopt;
+  }
+  const auto key_opt = source->GetAssetKeyByIndex(material_asset_index.get());
+  if (!key_opt.has_value()) {
+    return std::nullopt;
+  }
+  const auto locator_opt = source->FindAsset(*key_opt);
+  if (!locator_opt.has_value()) {
+    return std::nullopt;
+  }
+  auto desc_reader = source->CreateAssetDescriptorReader(*locator_opt);
+  if (!desc_reader) {
+    return std::nullopt;
+  }
+  auto blob
+    = desc_reader->ReadBlob(sizeof(data::pak::PhysicsMaterialAssetDesc));
+  if (!blob) {
+    return std::nullopt;
+  }
+  data::pak::PhysicsMaterialAssetDesc desc {};
+  std::memcpy(&desc, blob->data(), sizeof(desc));
+  if (static_cast<data::AssetType>(desc.header.asset_type)
+    != data::AssetType::kPhysicsMaterial) {
+    return std::nullopt;
+  }
+  return desc;
+}
+
+auto AssetLoader::FindPhysicsSidecarAssetKeyForScene(
+  const data::AssetKey& scene_key) const -> std::optional<data::AssetKey>
+{
+  const auto source_id = ResolveSourceIdForAsset(scene_key);
+  if (!source_id.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto* source = ResolveSourceForId(source_id.value());
+  if (source == nullptr) {
+    return std::nullopt;
+  }
+  std::optional<data::AssetKey> matched_key {};
+
+  const auto asset_count = source->GetAssetCount();
+  for (size_t i = 0; i < asset_count; ++i) {
+    const auto key_opt = source->GetAssetKeyByIndex(static_cast<uint32_t>(i));
+    if (!key_opt.has_value()) {
+      continue;
+    }
+    const auto locator_opt = source->FindAsset(*key_opt);
+    if (!locator_opt.has_value()) {
+      continue;
+    }
+
+    auto desc_reader = source->CreateAssetDescriptorReader(*locator_opt);
+    if (!desc_reader) {
+      continue;
+    }
+    auto header_blob = desc_reader->ReadBlob(sizeof(data::pak::AssetHeader));
+    if (!header_blob) {
+      continue;
+    }
+    data::pak::AssetHeader header {};
+    std::memcpy(&header, header_blob->data(), sizeof(header));
+    if (static_cast<data::AssetType>(header.asset_type)
+      != data::AssetType::kPhysicsScene) {
+      continue;
+    }
+
+    desc_reader = source->CreateAssetDescriptorReader(*locator_opt);
+    if (!desc_reader) {
+      continue;
+    }
+    auto blob = desc_reader->ReadBlob(sizeof(data::pak::PhysicsSceneAssetDesc));
+    if (!blob) {
+      continue;
+    }
+    data::pak::PhysicsSceneAssetDesc desc {};
+    std::memcpy(&desc, blob->data(), sizeof(desc));
+    if (desc.target_scene_key != scene_key) {
+      continue;
+    }
+
+    if (matched_key.has_value()) {
+      throw std::runtime_error(
+        std::string("multiple physics sidecars reference scene key=")
+        + data::to_string(scene_key) + " first=" + data::to_string(*matched_key)
+        + " second=" + data::to_string(*key_opt));
+    }
+    matched_key = *key_opt;
+  }
+
+  return matched_key;
+}
+
+auto AssetLoader::ResolveSourceIdForAsset(
+  const data::AssetKey& context_asset_key) const -> std::optional<uint16_t>
+{
+  for (const auto& [hash_key, asset_key] : asset_key_by_hash_) {
+    if (asset_key != context_asset_key) {
+      continue;
+    }
+    if (const auto it = asset_source_id_by_hash_.find(hash_key);
+      it != asset_source_id_by_hash_.end()) {
+      return it->second;
+    }
+  }
+
+  for (size_t i = 0; i < impl_->sources.size(); ++i) {
+    const auto& source = impl_->sources[i];
+    if (source && source->FindAsset(context_asset_key).has_value()) {
+      return impl_->source_ids[i];
+    }
+  }
+
+  return std::nullopt;
+}
+
+auto AssetLoader::ResolveSourceForId(const uint16_t source_id) const
+  -> const internal::IContentSource*
+{
+  const auto source_it = impl_->source_id_to_index.find(source_id);
+  if (source_it == impl_->source_id_to_index.end()) {
+    return nullptr;
+  }
+  const auto& source = impl_->sources.at(source_it->second);
+  return source.get();
 }
 
 auto AssetLoader::MintSyntheticTextureKey() -> ResourceKey

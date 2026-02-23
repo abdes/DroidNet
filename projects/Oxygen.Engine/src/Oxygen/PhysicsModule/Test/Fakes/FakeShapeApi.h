@@ -20,6 +20,11 @@ public:
   {
   }
 
+  auto GetShapeDesc(ShapeId) const -> PhysicsResult<shape::ShapeDesc> override
+  {
+    return PhysicsResult<shape::ShapeDesc>::Ok(shape::ShapeDesc {});
+  }
+
   auto CreateShape(const shape::ShapeDesc&) -> PhysicsResult<ShapeId> override
   {
     const auto shape_id = state_->next_shape_id;

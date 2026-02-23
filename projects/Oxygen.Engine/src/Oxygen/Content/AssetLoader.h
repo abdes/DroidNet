@@ -52,6 +52,7 @@
 namespace oxygen::content {
 
 namespace internal {
+  class IContentSource;
   struct ResourceRef;
   struct DependencyCollector;
 } // namespace internal
@@ -463,6 +464,9 @@ public:
     CookedResourceData<data::BufferResource> cooked,
     BufferCallback on_complete) override;
 
+  OXGN_CNTT_API void StartLoadPhysicsResource(
+    ResourceKey key, PhysicsResourceCallback on_complete) override;
+
   OXGN_CNTT_API void StartLoadMaterialAsset(
     const data::AssetKey& key, MaterialCallback on_complete) override
   {
@@ -600,6 +604,24 @@ public:
   {
     return GetAsset<data::ScriptAsset>(key);
   }
+  [[nodiscard]] auto GetScriptResource(ResourceKey key) const noexcept
+    -> std::shared_ptr<data::ScriptResource> override
+  {
+    return GetResource<data::ScriptResource>(key);
+  }
+  auto LoadScriptResourceAsync(ResourceKey key)
+    -> co::Co<std::shared_ptr<data::ScriptResource>> override
+  {
+    co_return co_await LoadResourceAsync<data::ScriptResource>(key);
+  }
+  [[nodiscard]] OXGN_CNTT_API auto MakeScriptResourceKeyForAsset(
+    const data::AssetKey& context_asset_key,
+    data::pak::ResourceIndexT resource_index) const noexcept
+    -> std::optional<ResourceKey> override;
+  [[nodiscard]] OXGN_CNTT_API auto ReadScriptResourceForAsset(
+    const data::AssetKey& context_asset_key,
+    data::pak::ResourceIndexT resource_index) const
+    -> std::shared_ptr<const data::ScriptResource> override;
 
   [[nodiscard]] auto GetPhysicsSceneAsset(
     const data::AssetKey& key) const noexcept
@@ -607,6 +629,38 @@ public:
   {
     return GetAsset<data::PhysicsSceneAsset>(key);
   }
+
+  [[nodiscard]] auto GetPhysicsResource(ResourceKey key) const noexcept
+    -> std::shared_ptr<data::PhysicsResource> override
+  {
+    return GetResource<data::PhysicsResource>(key);
+  }
+
+  auto LoadPhysicsResourceAsync(ResourceKey key)
+    -> co::Co<std::shared_ptr<data::PhysicsResource>> override
+  {
+    co_return co_await LoadResourceAsync<data::PhysicsResource>(key);
+  }
+
+  [[nodiscard]] OXGN_CNTT_API auto MakePhysicsResourceKey(
+    data::SourceKey source_key,
+    data::pak::ResourceIndexT resource_index) const noexcept
+    -> std::optional<ResourceKey> override;
+  [[nodiscard]] OXGN_CNTT_API auto MakePhysicsResourceKeyForAsset(
+    const data::AssetKey& context_asset_key,
+    data::pak::ResourceIndexT resource_index) const noexcept
+    -> std::optional<ResourceKey> override;
+  [[nodiscard]] OXGN_CNTT_API auto ReadCollisionShapeAssetDescForAsset(
+    const data::AssetKey& context_asset_key,
+    data::pak::ResourceIndexT shape_asset_index) const
+    -> std::optional<data::pak::CollisionShapeAssetDesc> override;
+  [[nodiscard]] OXGN_CNTT_API auto ReadPhysicsMaterialAssetDescForAsset(
+    const data::AssetKey& context_asset_key,
+    data::pak::ResourceIndexT material_asset_index) const
+    -> std::optional<data::pak::PhysicsMaterialAssetDesc> override;
+  [[nodiscard]] OXGN_CNTT_API auto FindPhysicsSidecarAssetKeyForScene(
+    const data::AssetKey& scene_key) const
+    -> std::optional<data::AssetKey> override;
 
   [[nodiscard]] auto GetInputActionAsset(
     const data::AssetKey& key) const noexcept
@@ -904,6 +958,10 @@ private:
   OXGN_CNTT_API static auto HashAssetKey(const data::AssetKey& key) -> uint64_t;
   OXGN_CNTT_API auto HashAssetKey(
     const data::AssetKey& key, uint16_t source_id) const -> uint64_t;
+  OXGN_CNTT_API auto ResolveSourceIdForAsset(
+    const data::AssetKey& context_asset_key) const -> std::optional<uint16_t>;
+  OXGN_CNTT_API auto ResolveSourceForId(uint16_t source_id) const
+    -> const internal::IContentSource*;
 
   //! Hash a ResourceKey for cache storage (requires instance for SourceKey
   //! lookup)

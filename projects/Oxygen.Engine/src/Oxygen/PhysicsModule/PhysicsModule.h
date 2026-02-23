@@ -209,6 +209,7 @@ public:
     -> void override;
 
   OXGN_PHSYNC_API auto Bodies() noexcept -> system::IBodyApi&;
+  OXGN_PHSYNC_API auto Shapes() noexcept -> system::IShapeApi&;
   OXGN_PHSYNC_API auto Characters() noexcept -> system::ICharacterApi&;
   OXGN_PHSYNC_API auto Joints() noexcept -> system::IJointApi&;
   OXGN_PHSYNC_API auto Queries() noexcept -> system::IQueryApi&;

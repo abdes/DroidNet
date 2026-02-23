@@ -140,13 +140,14 @@ set(
   OXYGEN_CORE_META_DEFS
   "Meta/Data/AssetType.inc"
   "Meta/Data/ComponentType.inc"
+  "Meta/Data/ResourceIndex.h"
   "Meta/Data/ResourceIndex.inc"
-  "Meta/Physics/PakPhysics.inc"
-  "Meta/Physics/PakPhysicsShape.inc"
   "Meta/Input/ActionState.inc"
   "Meta/Input/ActionTriggers.inc"
   "Meta/Input/ActionValue.inc"
   "Meta/Input/PakFormat.inc"
+  "Meta/Physics/PakPhysics.inc"
+  "Meta/Physics/PakPhysicsShape.inc"
 )
 # Keep .def catalogs visible to IDE/target dependency graph without letting
 # MSVC treat them as linker module-definition files.

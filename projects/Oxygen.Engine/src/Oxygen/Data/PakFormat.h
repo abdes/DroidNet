@@ -16,6 +16,7 @@
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/ComponentType.h>
@@ -59,14 +60,16 @@
 // TODO: Define constants for hash algorithm enumeration
 
 // NOLINTBEGIN(*-avoid-c-arrays,*-magic-numbers)
+
+// packed structs intentionally embed unaligned NamedType ResourceIndexT fields
 OXYGEN_DIAGNOSTIC_PUSH
-OXYGEN_DIAGNOSTIC_DISABLE_MSVC(
-  4315) // packed structs intentionally embed unaligned NamedType ResourceIndexT
-        // fields
+OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4315)
 
 namespace oxygen::data::pak::v2 {
 
 //=== Type Aliases ===--------------------------------------------------------//
+
+using ResourceIndexT = oxygen::ResourceIndexT;
 
 //! Offset type for file positions (8 bytes)
 using OffsetT = uint64_t;
@@ -1967,7 +1970,7 @@ constexpr uint8_t kPhysicsSceneAssetVersion = 1;
 // ============================================================================
 // Physics Enums (sourced from src/Oxygen/Core/Meta/Physics/PakPhysics.inc)
 // ============================================================================
-
+// NOLINTBEGIN(*-macro-usage,*-enum-size)
 #define OXPHYS_RESOURCE_FORMAT(name, value) name = (value),
 enum class PhysicsResourceFormat : uint8_t {
 #include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
@@ -1980,11 +1983,29 @@ enum class PhysicsCombineMode : uint8_t {
 };
 #undef OXPHYS_COMBINE_MODE
 
-#define OXPHYS_SHAPE_CATEGORY(name, value) name = (value),
-enum class CollisionShapeCategory : uint8_t {
-#include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
+#define OXPHYS_SHAPE_TYPE(name, value) name = (value),
+enum class ShapeType : uint8_t {
+#include <Oxygen/Core/Meta/Physics/PakPhysicsShape.inc>
 };
-#undef OXPHYS_SHAPE_CATEGORY
+#undef OXPHYS_SHAPE_TYPE
+
+#define OXPHYS_SHAPE_PAYLOAD_TYPE(name, value) name = (value),
+enum class ShapePayloadType : uint8_t {
+#include <Oxygen/Core/Meta/Physics/PakPhysicsShape.inc>
+};
+#undef OXPHYS_SHAPE_PAYLOAD_TYPE
+
+#define OXPHYS_WORLD_BOUNDARY_MODE(name, value) name = (value),
+enum class WorldBoundaryMode : uint32_t {
+#include <Oxygen/Core/Meta/Physics/PakPhysicsShape.inc>
+};
+#undef OXPHYS_WORLD_BOUNDARY_MODE
+
+#define OXPHYS_SHAPE_CONSTANT(name, value) constexpr auto name##_raw = value;
+#define OXPHYS_SHAPE_RESOURCE_INDEX_ASSERT(expr) static_assert(expr);
+#include <Oxygen/Core/Meta/Physics/PakPhysicsShape.inc>
+#undef OXPHYS_SHAPE_RESOURCE_INDEX_ASSERT
+#undef OXPHYS_SHAPE_CONSTANT
 
 #define OXPHYS_BODY_TYPE(name, value) name = (value),
 enum class PhysicsBodyType : uint8_t {
@@ -2015,6 +2036,18 @@ enum class PhysicsBindingType : uint32_t {
 #include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
 };
 #undef OXPHYS_BINDING_TYPE
+// NOLINTEND(*-macro-usage,*-enum-size)
+
+using PhysicsMaterialRef = ResourceIndexT;
+
+constexpr ResourceIndexT kInvalidShapePayloadRefIndex
+  = kInvalidShapePayloadRefIndex_raw;
+constexpr ShapePayloadType kInvalidShapePayloadType
+  = static_cast<ShapePayloadType>(kInvalidShapePayloadType_raw);
+constexpr PhysicsMaterialRef kInvalidPhysicsMaterialRef
+  = kInvalidPhysicsMaterialRef_raw;
+constexpr uint32_t kShapeIsSensorFalse = kShapeIsSensorFalse_raw;
+constexpr uint32_t kShapeIsSensorTrue = kShapeIsSensorTrue_raw;
 
 // ============================================================================
 // PakHeader / PakFooter v7 overrides
@@ -2133,21 +2166,106 @@ static_assert(sizeof(PhysicsMaterialAssetDesc) == 128);
 // Collision Shape Asset (256 bytes)
 // ============================================================================
 
-//! Maps a collision shape asset key to a cooked Jolt binary in the physics
-//! resource table.
+// Cooked payload ref (8 bytes).
 #pragma pack(push, 1)
-struct CollisionShapeAssetDesc {
-  AssetHeader header;
-  ResourceIndexT physics_resource_index
-    = kNoResourceIndex; //!< Index into physics_resource_table
-  CollisionShapeCategory shape_category = CollisionShapeCategory::kConvex;
-  uint8_t reserved0[3] = {};
-  float bounding_box_min[3] = { 0.F, 0.F, 0.F };
-  float bounding_box_max[3] = { 0.F, 0.F, 0.F };
-  uint8_t reserved1[129] = {};
+struct CookedShapePayloadRef {
+  ResourceIndexT resource_index = kInvalidShapePayloadRefIndex;
+  ShapePayloadType payload_type = kInvalidShapePayloadType;
+  uint8_t reserved[3] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(CollisionShapeAssetDesc) == 256);
+static_assert(sizeof(CookedShapePayloadRef) == 8);
+static_assert(offsetof(CookedShapePayloadRef, resource_index) == 0);
+static_assert(offsetof(CookedShapePayloadRef, payload_type) == 4);
+static_assert(offsetof(CookedShapePayloadRef, reserved) == 5);
+
+// Fixed tagged-union payload for per-shape params (80 bytes).
+#pragma pack(push, 1)
+union ShapeParams {
+  struct SphereParams {
+    float radius = 0.0F;
+    float reserved[19] = {};
+  } sphere;
+  struct CapsuleParams {
+    float radius = 0.0F;
+    float half_height = 0.0F;
+    float reserved[18] = {};
+  } capsule;
+  struct BoxParams {
+    float half_extents[3] = { 0.0F, 0.0F, 0.0F };
+    float reserved[17] = {};
+  } box;
+  struct CylinderParams {
+    float radius = 0.0F;
+    float half_height = 0.0F;
+    float reserved[18] = {};
+  } cylinder;
+  struct ConeParams {
+    float radius = 0.0F;
+    float half_height = 0.0F;
+    float reserved[18] = {};
+  } cone;
+  struct ConvexHullParams {
+    float reserved[20] = {};
+  } convex_hull;
+  struct TriangleMeshParams {
+    float reserved[20] = {};
+  } triangle_mesh;
+  struct HeightFieldParams {
+    float reserved[20] = {};
+  } height_field;
+  struct PlaneParams {
+    float normal[3] = { 0.0F, 0.0F, 0.0F };
+    float distance = 0.0F;
+    float reserved[16] = {};
+  } plane;
+  struct WorldBoundaryParams {
+    WorldBoundaryMode boundary_mode = WorldBoundaryMode::kInvalid;
+    float limits_min[3] = { 0.0F, 0.0F, 0.0F };
+    float limits_max[3] = { 0.0F, 0.0F, 0.0F };
+    float reserved[13] = {};
+  } world_boundary;
+  struct CompoundParams {
+    uint32_t reserved_u32 = 0;
+    float reserved[19] = {};
+  } compound;
+  float raw[20] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(ShapeParams) == 80);
+
+//! Canonical serialized collision shape descriptor.
+#pragma pack(push, 1)
+struct ShapeDescriptor {
+  AssetHeader header;
+  ShapeType shape_type = ShapeType::kInvalid;
+  float local_position[3] = { 0.0F, 0.0F, 0.0F };
+  float local_rotation[4] = { 0.0F, 0.0F, 0.0F, 1.0F };
+  float local_scale[3] = { 1.0F, 1.0F, 1.0F };
+  uint32_t is_sensor = kShapeIsSensorFalse;
+  uint64_t collision_own_layer = 1ULL;
+  uint64_t collision_target_layers = 0xFFFFFFFFFFFFFFFFULL;
+  PhysicsMaterialRef material_ref = kInvalidPhysicsMaterialRef;
+  ShapeParams shape_params {};
+  CookedShapePayloadRef cooked_shape_ref {};
+  uint8_t reserved[8] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(ShapeDescriptor) == 256);
+static_assert(offsetof(ShapeDescriptor, header) == 0);
+static_assert(offsetof(ShapeDescriptor, shape_type) == 95);
+static_assert(offsetof(ShapeDescriptor, local_position) == 96);
+static_assert(offsetof(ShapeDescriptor, local_rotation) == 108);
+static_assert(offsetof(ShapeDescriptor, local_scale) == 124);
+static_assert(offsetof(ShapeDescriptor, is_sensor) == 136);
+static_assert(offsetof(ShapeDescriptor, collision_own_layer) == 140);
+static_assert(offsetof(ShapeDescriptor, collision_target_layers) == 148);
+static_assert(offsetof(ShapeDescriptor, material_ref) == 156);
+static_assert(offsetof(ShapeDescriptor, shape_params) == 160);
+static_assert(offsetof(ShapeDescriptor, cooked_shape_ref) == 240);
+static_assert(offsetof(ShapeDescriptor, reserved) == 248);
+
+using CollisionShapeAssetDesc = ShapeDescriptor;
 
 // ============================================================================
 // Physics Scene Sidecar Asset
@@ -2316,7 +2434,7 @@ using v7::BufferResourceDesc;
 using v7::CharacterBindingRecord;
 using v7::ColliderBindingRecord;
 using v7::CollisionShapeAssetDesc;
-using v7::CollisionShapeCategory;
+using v7::CookedShapePayloadRef;
 using v7::DataBlobSizeT;
 using v7::DirectionalLightRecord;
 using v7::EnvironmentComponentType;
@@ -2342,6 +2460,9 @@ using v7::kFallbackResourceIndex;
 using v7::kGeometryAssetVersion;
 using v7::kInputActionAssetVersion;
 using v7::kInputMappingContextAssetVersion;
+using v7::kInvalidPhysicsMaterialRef;
+using v7::kInvalidShapePayloadRefIndex;
+using v7::kInvalidShapePayloadType;
 using v7::kMaterialAssetVersion;
 using v7::kMaterialFlag_AlphaTest;
 using v7::kMaterialFlag_DoubleSided;
@@ -2356,6 +2477,8 @@ using v7::kPhysicsMaterialAssetVersion;
 using v7::kPhysicsSceneAssetVersion;
 using v7::kSceneAssetVersion;
 using v7::kSceneNodeFlag_Visible;
+using v7::kShapeIsSensorFalse;
+using v7::kShapeIsSensorTrue;
 using v7::kTexturePayloadMagic;
 using v7::LightCommonRecord;
 using v7::LightShadowSettingsRecord;
@@ -2375,6 +2498,7 @@ using v7::PhysicsBodyType;
 using v7::PhysicsCombineMode;
 using v7::PhysicsComponentTableDesc;
 using v7::PhysicsMaterialAssetDesc;
+using v7::PhysicsMaterialRef;
 using v7::PhysicsMotionQuality;
 using v7::PhysicsResourceDesc;
 using v7::PhysicsResourceFormat;
@@ -2405,6 +2529,10 @@ using v7::ScriptResourceDesc;
 using v7::ScriptSlotFlags;
 using v7::ScriptSlotRecord;
 using v7::ShaderReferenceDesc;
+using v7::ShapeDescriptor;
+using v7::ShapeParams;
+using v7::ShapePayloadType;
+using v7::ShapeType;
 using v7::SkinnedMeshInfo;
 using v7::SkyAtmosphereEnvironmentRecord;
 using v7::SkyLightEnvironmentRecord;
@@ -2424,6 +2552,7 @@ using v7::TextureResourceDesc;
 using v7::to_string;
 using v7::VehicleBindingRecord;
 using v7::VolumetricCloudsEnvironmentRecord;
+using v7::WorldBoundaryMode;
 
 //! Canonical 8-byte PAK header magic bytes for all current format versions.
 inline constexpr std::array<char, 8> kPakHeaderMagic

@@ -173,6 +173,12 @@ auto PhysicsModule::Bodies() noexcept -> system::IBodyApi&
   return physics_system_->Bodies();
 }
 
+auto PhysicsModule::Shapes() noexcept -> system::IShapeApi&
+{
+  CHECK_NOTNULL_F(physics_system_.get());
+  return physics_system_->Shapes();
+}
+
 auto PhysicsModule::Characters() noexcept -> system::ICharacterApi&
 {
   CHECK_NOTNULL_F(physics_system_.get());

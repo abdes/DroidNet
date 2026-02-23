@@ -723,12 +723,30 @@ inline auto Load(AnyReader& reader, data::pak::v7::PhysicsCombineMode& value)
   return {};
 }
 
-inline auto Load(AnyReader& reader,
-  data::pak::v7::CollisionShapeCategory& value) -> Result<void>
+inline auto Load(AnyReader& reader, data::pak::v7::ShapeType& value)
+  -> Result<void>
 {
-  std::underlying_type_t<data::pak::v7::CollisionShapeCategory> raw_value = 0;
+  std::underlying_type_t<data::pak::v7::ShapeType> raw_value = 0;
   CHECK_RESULT(reader.ReadInto(raw_value));
-  value = static_cast<data::pak::v7::CollisionShapeCategory>(raw_value);
+  value = static_cast<data::pak::v7::ShapeType>(raw_value);
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::v7::ShapePayloadType& value)
+  -> Result<void>
+{
+  std::underlying_type_t<data::pak::v7::ShapePayloadType> raw_value = 0;
+  CHECK_RESULT(reader.ReadInto(raw_value));
+  value = static_cast<data::pak::v7::ShapePayloadType>(raw_value);
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::v7::WorldBoundaryMode& value)
+  -> Result<void>
+{
+  std::underlying_type_t<data::pak::v7::WorldBoundaryMode> raw_value = 0;
+  CHECK_RESULT(reader.ReadInto(raw_value));
+  value = static_cast<data::pak::v7::WorldBoundaryMode>(raw_value);
   return {};
 }
 
@@ -806,22 +824,48 @@ inline auto Load(AnyReader& reader,
 }
 
 inline auto Load(AnyReader& reader,
-  data::pak::v7::CollisionShapeAssetDesc& record) -> Result<void>
+  data::pak::v7::CookedShapePayloadRef& record) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(record.resource_index));
+  CHECK_RESULT(reader.ReadInto(record.payload_type));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { record.reserved })));
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::v7::ShapeParams& record)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { record.raw })));
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::v7::ShapeDescriptor& record)
+  -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.header));
-  CHECK_RESULT(reader.ReadInto(record.physics_resource_index));
-  CHECK_RESULT(reader.ReadInto(record.shape_category));
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record.reserved0 })));
-  for (auto& v : record.bounding_box_min) {
+  CHECK_RESULT(reader.ReadInto(record.shape_type));
+  for (auto& v : record.local_position) {
     CHECK_RESULT(reader.ReadInto(v));
   }
-  for (auto& v : record.bounding_box_max) {
+  for (auto& v : record.local_rotation) {
     CHECK_RESULT(reader.ReadInto(v));
   }
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record.reserved1 })));
+  for (auto& v : record.local_scale) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
+  CHECK_RESULT(reader.ReadInto(record.is_sensor));
+  CHECK_RESULT(reader.ReadInto(record.collision_own_layer));
+  CHECK_RESULT(reader.ReadInto(record.collision_target_layers));
+  CHECK_RESULT(reader.ReadInto(record.material_ref));
+  CHECK_RESULT(reader.ReadInto(record.shape_params));
+  CHECK_RESULT(reader.ReadInto(record.cooked_shape_ref));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { record.reserved })));
   return {};
 }
 

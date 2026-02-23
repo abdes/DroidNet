@@ -12,11 +12,6 @@
 //   OXPHYS_WORLD_BOUNDARY_MODE(name, value)
 //   OXPHYS_SHAPE_CONSTANT(name, value)
 
-#include <Oxygen/Core/Meta/Data/ResourceIndex.inc>
-
-static_assert(kNoResourceIndex == ResourceIndexT { 0u },
-  "ResourceIndex contract violated: kNoResourceIndex must be 0");
-
 // ============================================================================
 // ShapeType
 // ============================================================================
@@ -81,3 +76,14 @@ OXPHYS_SHAPE_CONSTANT(kShapeIsSensorFalse, 0u)
 OXPHYS_SHAPE_CONSTANT(kShapeIsSensorTrue, 1u)
 
 #undef OXPHYS_SHAPE_CONSTANT
+
+// ============================================================================
+// Cross-module ResourceIndex sentinel invariant
+// ============================================================================
+#ifndef OXPHYS_SHAPE_RESOURCE_INDEX_ASSERT
+#  define OXPHYS_SHAPE_RESOURCE_INDEX_ASSERT(expr)
+#endif
+
+OXPHYS_SHAPE_RESOURCE_INDEX_ASSERT(kNoResourceIndex == 0)
+
+#undef OXPHYS_SHAPE_RESOURCE_INDEX_ASSERT

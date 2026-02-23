@@ -25,10 +25,13 @@
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/ScriptAsset.h>
+#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::console {
 class Console;
@@ -90,6 +93,8 @@ public:
     = std::function<void(std::shared_ptr<data::ScriptAsset>)>;
   using PhysicsSceneCallback
     = std::function<void(std::shared_ptr<data::PhysicsSceneAsset>)>;
+  using PhysicsResourceCallback
+    = std::function<void(std::shared_ptr<data::PhysicsResource>)>;
   using EvictionHandler = std::function<void(const EvictionEvent&)>;
 
   //! RAII handle for resource eviction subscriptions.
@@ -194,6 +199,10 @@ public:
   virtual void StartLoadPhysicsSceneAsset(
     const data::AssetKey& key, PhysicsSceneCallback on_complete)
     = 0;
+  //! Begin loading a physics resource and invoke `on_complete` on completion.
+  virtual void StartLoadPhysicsResource(
+    ResourceKey key, PhysicsResourceCallback on_complete)
+    = 0;
 
   //! Begin loading a script asset and invoke `on_complete` on completion.
   virtual void StartLoadScriptAsset(
@@ -248,11 +257,68 @@ public:
     const data::AssetKey& key) const noexcept
     -> std::shared_ptr<data::ScriptAsset>
     = 0;
+  //! Get cached script resource without triggering a load.
+  [[nodiscard]] virtual auto GetScriptResource(ResourceKey key) const noexcept
+    -> std::shared_ptr<data::ScriptResource>
+    = 0;
+  //! Async script resource load.
+  virtual auto LoadScriptResourceAsync(ResourceKey key)
+    -> co::Co<std::shared_ptr<data::ScriptResource>>
+    = 0;
+  //! Build script resource key from a loaded asset's source and table index.
+  [[nodiscard]] virtual auto MakeScriptResourceKeyForAsset(
+    const data::AssetKey& context_asset_key,
+    data::pak::ResourceIndexT resource_index) const noexcept
+    -> std::optional<ResourceKey>
+    = 0;
+  //! Read a script resource by table index from the context asset's source.
+  [[nodiscard]] virtual auto ReadScriptResourceForAsset(
+    const data::AssetKey& context_asset_key,
+    data::pak::ResourceIndexT resource_index) const
+    -> std::shared_ptr<const data::ScriptResource>
+    = 0;
 
   //! Get cached physics scene sidecar asset without triggering a load.
   [[nodiscard]] virtual auto GetPhysicsSceneAsset(
     const data::AssetKey& key) const noexcept
     -> std::shared_ptr<data::PhysicsSceneAsset>
+    = 0;
+  //! Get cached physics resource without triggering a load.
+  [[nodiscard]] virtual auto GetPhysicsResource(ResourceKey key) const noexcept
+    -> std::shared_ptr<data::PhysicsResource>
+    = 0;
+  //! Async physics resource load.
+  virtual auto LoadPhysicsResourceAsync(ResourceKey key)
+    -> co::Co<std::shared_ptr<data::PhysicsResource>>
+    = 0;
+  //! Build physics resource key from source identity and table index.
+  [[nodiscard]] virtual auto MakePhysicsResourceKey(data::SourceKey source_key,
+    data::pak::ResourceIndexT resource_index) const noexcept
+    -> std::optional<ResourceKey>
+    = 0;
+  //! Build physics resource key from a loaded asset's source and table index.
+  [[nodiscard]] virtual auto MakePhysicsResourceKeyForAsset(
+    const data::AssetKey& context_asset_key,
+    data::pak::ResourceIndexT resource_index) const noexcept
+    -> std::optional<ResourceKey>
+    = 0;
+  //! Read a collision shape descriptor by global asset index in the context
+  //! asset's source.
+  [[nodiscard]] virtual auto ReadCollisionShapeAssetDescForAsset(
+    const data::AssetKey& context_asset_key,
+    data::pak::ResourceIndexT shape_asset_index) const
+    -> std::optional<data::pak::CollisionShapeAssetDesc>
+    = 0;
+  //! Read a physics material descriptor by global asset index in the context
+  //! asset's source.
+  [[nodiscard]] virtual auto ReadPhysicsMaterialAssetDescForAsset(
+    const data::AssetKey& context_asset_key,
+    data::pak::ResourceIndexT material_asset_index) const
+    -> std::optional<data::pak::PhysicsMaterialAssetDesc>
+    = 0;
+  //! Find a physics scene sidecar in the same source that targets `scene_key`.
+  [[nodiscard]] virtual auto FindPhysicsSidecarAssetKeyForScene(
+    const data::AssetKey& scene_key) const -> std::optional<data::AssetKey>
     = 0;
 
   //! Get cached input action asset without triggering a load.

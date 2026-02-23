@@ -25,6 +25,8 @@ enum class PhysicsError : uint8_t {
   kNotInitialized,
   kBackendInitFailed,
   kNotImplemented,
+  kShapeCompoundZeroChildren,
+  kShapeCompoundChildScaleContractViolation,
   kBackendUnavailable,
 };
 

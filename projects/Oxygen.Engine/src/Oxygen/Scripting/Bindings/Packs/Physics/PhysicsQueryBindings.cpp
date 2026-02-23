@@ -138,12 +138,26 @@ namespace {
   }
 
   auto ParseSweepDesc(lua_State* state, const int arg_index,
+    physics::PhysicsModule& physics_module,
     std::vector<physics::BodyId>& ignore_bodies) -> physics::query::SweepDesc
   {
     physics::query::SweepDesc desc {};
     if (lua_isnoneornil(state, arg_index) == 0) {
       const auto desc_index = lua_absindex(state, arg_index);
       luaL_checktype(state, desc_index, LUA_TTABLE);
+
+      lua_getfield(state, desc_index, "shape_id");
+      if (lua_isnil(state, -1) == 0) {
+        const auto* shape_id = CheckShapeId(state, -1);
+        const auto shape_result
+          = physics_module.Shapes().GetShapeDesc(shape_id->shape_id);
+        if (!shape_result.has_value()) {
+          lua_pop(state, 1);
+          luaL_error(state, "invalid shape_id in sweep descriptor");
+        }
+        desc.shape = shape_result.value().geometry;
+      }
+      lua_pop(state, 1);
 
       lua_getfield(state, desc_index, "shape");
       if (lua_isnil(state, -1) == 0) {
@@ -177,12 +191,26 @@ namespace {
   }
 
   auto ParseOverlapDesc(lua_State* state, const int arg_index,
+    physics::PhysicsModule& physics_module,
     std::vector<physics::BodyId>& ignore_bodies) -> physics::query::OverlapDesc
   {
     physics::query::OverlapDesc desc {};
     if (lua_isnoneornil(state, arg_index) == 0) {
       const auto desc_index = lua_absindex(state, arg_index);
       luaL_checktype(state, desc_index, LUA_TTABLE);
+
+      lua_getfield(state, desc_index, "shape_id");
+      if (lua_isnil(state, -1) == 0) {
+        const auto* shape_id = CheckShapeId(state, -1);
+        const auto shape_result
+          = physics_module.Shapes().GetShapeDesc(shape_id->shape_id);
+        if (!shape_result.has_value()) {
+          lua_pop(state, 1);
+          luaL_error(state, "invalid shape_id in overlap descriptor");
+        }
+        desc.shape = shape_result.value().geometry;
+      }
+      lua_pop(state, 1);
 
       lua_getfield(state, desc_index, "shape");
       if (lua_isnil(state, -1) == 0) {
@@ -297,7 +325,7 @@ namespace {
     }
 
     std::vector<physics::BodyId> ignore_bodies {};
-    const auto desc = ParseSweepDesc(state, 1, ignore_bodies);
+    const auto desc = ParseSweepDesc(state, 1, *physics_module, ignore_bodies);
     const auto max_hits = ParseMaxHits(state, 2);
     std::vector<physics::query::SweepHit> hits(static_cast<size_t>(max_hits));
 
@@ -341,7 +369,8 @@ namespace {
     }
 
     std::vector<physics::BodyId> ignore_bodies {};
-    const auto desc = ParseOverlapDesc(state, 1, ignore_bodies);
+    const auto desc
+      = ParseOverlapDesc(state, 1, *physics_module, ignore_bodies);
     const auto max_hits = ParseMaxHits(state, 2);
     std::vector<uint64_t> user_data(static_cast<size_t>(max_hits), 0);
 

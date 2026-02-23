@@ -9,17 +9,6 @@
 // This catalog is normative for the resource-index sentinel contract.
 // `kNoResourceIndex` is assumed to be zero across Pak/runtime integration.
 
-using ResourceIndexT = NamedType<uint32_t, struct ResourceIndexTag,
-  // clang-format off
-  DefaultInitialized,
-  ImplicitlyConvertibleTo<uint32_t>::templ,
-  Comparable,
-  Hashable,
-  Printable>; // clang-format on
-
-static_assert(sizeof(ResourceIndexT) == sizeof(uint32_t),
-  "ResourceIndex contract violated: ResourceIndexT size must be 4 bytes");
-
 #ifndef OXDAT_RESOURCE_INDEX_CONSTANT
 #  define OXDAT_RESOURCE_INDEX_CONSTANT(name, value) \
     constexpr ResourceIndexT name { value };

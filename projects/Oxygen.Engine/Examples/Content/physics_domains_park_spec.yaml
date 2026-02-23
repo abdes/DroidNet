@@ -5,6 +5,22 @@ buffers: []
 textures: []
 audios: []
 scripts: []
+physics:
+  - name: ShapeConeBlob
+    format: 0
+    data_hex: "01020304"
+  - name: ShapeConvexHullBlob
+    format: 0
+    data_hex: "05060708"
+  - name: ShapeTriangleMeshBlob
+    format: 0
+    data_hex: "0A0B0C0D"
+  - name: ShapeHeightFieldBlob
+    format: 0
+    data_hex: "0E0F1011"
+  - name: ShapeCompoundBlob
+    format: 0
+    data_hex: "12131415"
 
 assets:
   - type: material
@@ -182,18 +198,90 @@ assets:
                 first_vertex: 0
                 vertex_count: 24
 
+  - type: geometry
+    name: GeoSphereDemo
+    asset_key: "20000000000000000000000000000006"
+    alignment: 1
+    bounding_box_min: [-0.75, -0.75, -0.75]
+    bounding_box_max: [0.75, 0.75, 0.75]
+    lods:
+      - name: "Sphere/ShapeSphereDemo"
+        mesh_type: 2
+        procedural_params:
+          data_hex: "1800000018000000"
+        bounding_box_min: [-0.75, -0.75, -0.75]
+        bounding_box_max: [0.75, 0.75, 0.75]
+        submeshes:
+          - name: full
+            material: MatDynamic
+            bounding_box_min: [-0.75, -0.75, -0.75]
+            bounding_box_max: [0.75, 0.75, 0.75]
+            mesh_views:
+              - first_index: 0
+                index_count: 3456
+                first_vertex: 0
+                vertex_count: 625
+
+  - type: geometry
+    name: GeoCapsuleDemo
+    asset_key: "20000000000000000000000000000007"
+    alignment: 1
+    bounding_box_min: [-0.5, -0.5, -1.25]
+    bounding_box_max: [0.5, 0.5, 1.25]
+    lods:
+      - name: "Cylinder/ShapeCapsuleDemo"
+        mesh_type: 2
+        procedural_params:
+          data_hex: "180000000000803f0000003f"
+        bounding_box_min: [-0.5, -0.5, -1.25]
+        bounding_box_max: [0.5, 0.5, 1.25]
+        submeshes:
+          - name: full
+            material: MatDynamic
+            bounding_box_min: [-0.5, -0.5, -1.25]
+            bounding_box_max: [0.5, 0.5, 1.25]
+            mesh_views:
+              - first_index: 0
+                index_count: 288
+                first_vertex: 0
+                vertex_count: 100
+
+  - type: geometry
+    name: GeoCylinderDemo
+    asset_key: "20000000000000000000000000000008"
+    alignment: 1
+    bounding_box_min: [-0.55, -0.55, -1.1]
+    bounding_box_max: [0.55, 0.55, 1.1]
+    lods:
+      - name: "Cylinder/ShapeCylinderDemo"
+        mesh_type: 2
+        procedural_params:
+          data_hex: "180000000000803f0000003f"
+        bounding_box_min: [-0.55, -0.55, -1.1]
+        bounding_box_max: [0.55, 0.55, 1.1]
+        submeshes:
+          - name: full
+            material: MatDynamic
+            bounding_box_min: [-0.55, -0.55, -1.1]
+            bounding_box_max: [0.55, 0.55, 1.1]
+            mesh_views:
+              - first_index: 0
+                index_count: 288
+                first_vertex: 0
+                vertex_count: 100
+
   - type: physics_material
     name: PhysMatGround
     asset_key: "40000000000000000000000000000001"
-    friction: 0.65
-    restitution: 0.7
+    friction: 0.28
+    restitution: 0.18
     density: 2000.0
 
   - type: physics_material
     name: PhysMatDynamic
     asset_key: "40000000000000000000000000000002"
-    friction: 0.4
-    restitution: 0.75
+    friction: 0.12
+    restitution: 0.12
     density: 850.0
 
   - type: physics_material
@@ -220,58 +308,141 @@ assets:
   - type: collision_shape
     name: ShapeGroundPad
     asset_key: "50000000000000000000000000000001"
-    shape_category: 0
-    bounding_box_min: [-10.0, -10.0, -0.5]
-    bounding_box_max: [10.0, 10.0, 0.5]
+    shape_type: box
+    shape_params:
+      half_extents: [20.0, 20.0, 0.5]
 
   - type: collision_shape
     name: ShapeDynamicA
     asset_key: "50000000000000000000000000000002"
-    shape_category: 0
-    bounding_box_min: [-0.5, -0.5, -0.5]
-    bounding_box_max: [0.5, 0.5, 0.5]
+    shape_type: box
+    shape_params:
+      half_extents: [0.5, 0.5, 0.5]
 
   - type: collision_shape
     name: ShapeDynamicB
     asset_key: "50000000000000000000000000000003"
-    shape_category: 0
-    bounding_box_min: [-0.55, -0.55, -0.55]
-    bounding_box_max: [0.55, 0.55, 0.55]
+    shape_type: box
+    shape_params:
+      half_extents: [0.55, 0.55, 0.55]
 
   - type: collision_shape
     name: ShapeKinematicGate
     asset_key: "50000000000000000000000000000004"
-    shape_category: 0
-    bounding_box_min: [-1.2, -0.175, -0.55]
-    bounding_box_max: [1.2, 0.175, 0.55]
+    shape_type: box
+    shape_params:
+      half_extents: [1.2, 0.175, 0.55]
 
   - type: collision_shape
     name: ShapeTriggerZone
     asset_key: "50000000000000000000000000000005"
-    shape_category: 0
-    bounding_box_min: [-0.8, -0.8, -0.8]
-    bounding_box_max: [0.8, 0.8, 0.8]
+    shape_type: box
+    shape_params:
+      half_extents: [0.8, 0.8, 0.8]
 
   - type: collision_shape
     name: ShapeCharacter
     asset_key: "50000000000000000000000000000006"
-    shape_category: 0
-    bounding_box_min: [-0.4, -0.4, -0.8]
-    bounding_box_max: [0.4, 0.4, 0.8]
+    shape_type: box
+    shape_params:
+      half_extents: [0.4, 0.4, 0.8]
 
   - type: collision_shape
     name: ShapeRamp
     asset_key: "50000000000000000000000000000007"
-    shape_category: 0
-    bounding_box_min: [-2.5, -2.0, -0.25]
-    bounding_box_max: [2.5, 2.0, 0.25]
+    shape_type: box
+    shape_params:
+      half_extents: [2.5, 2.0, 0.25]
 
   - type: collision_shape
     name: ShapeBackStop
     asset_key: "50000000000000000000000000000008"
-    shape_category: 0
-    bounding_box_min: [-0.25, -10.0, -0.5]
-    bounding_box_max: [0.25, 10.0, 2.0]
+    shape_type: box
+    shape_params:
+      half_extents: [0.25, 10.0, 2.0]
+
+  - type: collision_shape
+    name: ShapeSphereDemo
+    asset_key: "50000000000000000000000000000009"
+    shape_type: sphere
+    shape_params:
+      radius: 0.75
+
+  - type: collision_shape
+    name: ShapeCapsuleDemo
+    asset_key: "5000000000000000000000000000000A"
+    shape_type: capsule
+    shape_params:
+      radius: 0.35
+      half_height: 1.6
+
+  - type: collision_shape
+    name: ShapeCylinderDemo
+    asset_key: "5000000000000000000000000000000B"
+    shape_type: cylinder
+    shape_params:
+      radius: 0.45
+      half_height: 1.1
+
+  - type: collision_shape
+    name: ShapeConeDemo
+    asset_key: "5000000000000000000000000000000C"
+    shape_type: cone
+    resource_name: ShapeConeBlob
+    shape_params:
+      radius: 0.5
+      half_height: 1.2
+    cooked_shape_ref:
+      payload_type: convex
+
+  - type: collision_shape
+    name: ShapeConvexHullDemo
+    asset_key: "5000000000000000000000000000000D"
+    shape_type: convex_hull
+    resource_name: ShapeConvexHullBlob
+    cooked_shape_ref:
+      payload_type: convex
+
+  - type: collision_shape
+    name: ShapeTriangleMeshDemo
+    asset_key: "5000000000000000000000000000000E"
+    shape_type: triangle_mesh
+    resource_name: ShapeTriangleMeshBlob
+    cooked_shape_ref:
+      payload_type: mesh
+
+  - type: collision_shape
+    name: ShapeHeightFieldDemo
+    asset_key: "5000000000000000000000000000000F"
+    shape_type: height_field
+    resource_name: ShapeHeightFieldBlob
+    cooked_shape_ref:
+      payload_type: height_field
+
+  - type: collision_shape
+    name: ShapePlaneDemo
+    asset_key: "50000000000000000000000000000010"
+    shape_type: plane
+    shape_params:
+      normal: [0.0, 0.0, 1.0]
+      distance: 0.0
+
+  - type: collision_shape
+    name: ShapeWorldBoundaryDemo
+    asset_key: "50000000000000000000000000000011"
+    shape_type: world_boundary
+    shape_params:
+      boundary_mode: aabb_clamp
+      limits_min: [-50.0, -50.0, -0.1]
+      limits_max: [50.0, 50.0, 50.0]
+
+  - type: collision_shape
+    name: ShapeCompoundDemo
+    asset_key: "50000000000000000000000000000012"
+    shape_type: compound
+    resource_name: ShapeCompoundBlob
+    cooked_shape_ref:
+      payload_type: compound
 
   - type: scene
     name: PhysicsDomainsPark
@@ -287,7 +458,7 @@ assets:
         flags: 0
         translation: [0.0, 0.0, -0.55]
         rotation: [0.0, 0.0, 0.0, 1.0]
-        scale: [20.0, 20.0, 1.0]
+        scale: [40.0, 40.0, 1.0]
 
       - name: RampLeft
         parent: 0
@@ -380,6 +551,76 @@ assets:
         rotation: [0.0, 0.0, 0.0, 1.0]
         scale: [0.5, 20.0, 4.0]
 
+      - name: ShapeSphereDemoNode
+        parent: 0
+        flags: 0
+        translation: [-4.8, -1.3, 2.9]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: ShapeCapsuleDemoNode
+        parent: 0
+        flags: 0
+        translation: [-4.2, -0.9, 3.8]
+        rotation: [0.707107, 0.0, 0.0, 0.707107]
+        scale: [1.0, 1.0, 1.8]
+
+      - name: ShapeCylinderDemoNode
+        parent: 0
+        flags: 0
+        translation: [4.4, 1.2, 2.8]
+        rotation: [0.707107, 0.0, 0.0, 0.707107]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: ShapeConeDemoNode
+        parent: 0
+        flags: 0
+        translation: [-6.0, -8.0, 1.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: ShapeConvexHullDemoNode
+        parent: 0
+        flags: 0
+        translation: [-4.0, -8.0, 1.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: ShapeTriangleMeshDemoNode
+        parent: 0
+        flags: 0
+        translation: [-2.0, -8.0, 1.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: ShapeHeightFieldDemoNode
+        parent: 0
+        flags: 0
+        translation: [0.0, -8.0, 1.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: ShapePlaneDemoNode
+        parent: 0
+        flags: 0
+        translation: [2.0, -8.0, 1.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: ShapeWorldBoundaryDemoNode
+        parent: 0
+        flags: 0
+        translation: [4.0, -8.0, 1.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
+      - name: ShapeCompoundDemoNode
+        parent: 0
+        flags: 0
+        translation: [6.0, -8.0, 1.0]
+        rotation: [0.0, 0.0, 0.0, 1.0]
+        scale: [1.0, 1.0, 1.0]
+
     renderables:
       - node_index: 1
         geometry: GeoGround
@@ -417,6 +658,15 @@ assets:
       - node_index: 14
         geometry: GeoGround
         visible: true
+      - node_index: 15
+        geometry: GeoSphereDemo
+        visible: true
+      - node_index: 16
+        geometry: GeoCapsuleDemo
+        visible: true
+      - node_index: 17
+        geometry: GeoCylinderDemo
+        visible: true
 
     perspective_cameras:
       - node_index: 12
@@ -440,7 +690,7 @@ assets:
     name: PhysicsDomainsPark.physics
     asset_key: "30000000000000000000000000000002"
     target_scene_key: "30000000000000000000000000000001"
-    target_node_count: 15
+    target_node_count: 25
     rigid_body_bindings:
       - node_index: 1
         shape_asset: ShapeGroundPad
@@ -494,7 +744,7 @@ assets:
         shape_asset: ShapeDynamicB
         material_asset: PhysMatDynamic
         body_type: 1
-        motion_quality: 0
+        motion_quality: 1
         collision_layer: 2
         collision_mask: 65535
         mass: 8.0
@@ -518,7 +768,7 @@ assets:
         shape_asset: ShapeDynamicB
         material_asset: PhysMatDynamic
         body_type: 1
-        motion_quality: 0
+        motion_quality: 1
         collision_layer: 2
         collision_mask: 65535
         mass: 6.5
@@ -530,7 +780,7 @@ assets:
         shape_asset: ShapeDynamicB
         material_asset: PhysMatDynamic
         body_type: 1
-        motion_quality: 0
+        motion_quality: 1
         collision_layer: 2
         collision_mask: 65535
         mass: 9.0
@@ -562,6 +812,129 @@ assets:
         angular_damping: 0.0
         gravity_factor: 0.0
         initial_activation: false
+      - node_index: 15
+        shape_asset: ShapeSphereDemo
+        material_asset: PhysMatDynamic
+        body_type: 1
+        motion_quality: 1
+        collision_layer: 2
+        collision_mask: 65535
+        mass: 7.0
+        linear_damping: 0.18
+        angular_damping: 0.35
+        gravity_factor: 1.0
+        initial_activation: true
+      - node_index: 16
+        shape_asset: ShapeCapsuleDemo
+        material_asset: PhysMatDynamic
+        body_type: 1
+        motion_quality: 1
+        collision_layer: 2
+        collision_mask: 65535
+        mass: 8.0
+        linear_damping: 0.28
+        angular_damping: 0.65
+        gravity_factor: 1.0
+        initial_activation: true
+      - node_index: 17
+        shape_asset: ShapeCylinderDemo
+        material_asset: PhysMatDynamic
+        body_type: 1
+        motion_quality: 1
+        collision_layer: 2
+        collision_mask: 65535
+        mass: 8.0
+        linear_damping: 0.22
+        angular_damping: 0.45
+        gravity_factor: 1.0
+        initial_activation: true
+      # TODO(physics): re-enable once cooked payload blobs are valid.
+      # - node_index: 18
+      #   shape_asset: ShapeConeDemo
+      #   material_asset: PhysMatDynamic
+      #   body_type: 0
+      #   motion_quality: 0
+      #   collision_layer: 1
+      #   collision_mask: 65535
+      #   mass: 0.0
+      #   linear_damping: 0.0
+      #   angular_damping: 0.0
+      #   gravity_factor: 0.0
+      #   initial_activation: false
+      # - node_index: 19
+      #   shape_asset: ShapeConvexHullDemo
+      #   material_asset: PhysMatGround
+      #   body_type: 0
+      #   motion_quality: 0
+      #   collision_layer: 1
+      #   collision_mask: 65535
+      #   mass: 0.0
+      #   linear_damping: 0.0
+      #   angular_damping: 0.0
+      #   gravity_factor: 0.0
+      #   initial_activation: false
+      # - node_index: 20
+      #   shape_asset: ShapeTriangleMeshDemo
+      #   material_asset: PhysMatGround
+      #   body_type: 0
+      #   motion_quality: 0
+      #   collision_layer: 1
+      #   collision_mask: 65535
+      #   mass: 0.0
+      #   linear_damping: 0.0
+      #   angular_damping: 0.0
+      #   gravity_factor: 0.0
+      #   initial_activation: false
+      # - node_index: 21
+      #   shape_asset: ShapeHeightFieldDemo
+      #   material_asset: PhysMatGround
+      #   body_type: 0
+      #   motion_quality: 0
+      #   collision_layer: 1
+      #   collision_mask: 65535
+      #   mass: 0.0
+      #   linear_damping: 0.0
+      #   angular_damping: 0.0
+      #   gravity_factor: 0.0
+      #   initial_activation: false
+      # TODO(physics): re-enable plane/world-boundary once broad scene behavior
+      # is validated against final backend semantics.
+      # - node_index: 22
+      #   shape_asset: ShapePlaneDemo
+      #   material_asset: PhysMatGround
+      #   body_type: 0
+      #   motion_quality: 0
+      #   collision_layer: 1
+      #   collision_mask: 65535
+      #   mass: 0.0
+      #   linear_damping: 0.0
+      #   angular_damping: 0.0
+      #   gravity_factor: 0.0
+      #   initial_activation: false
+      # - node_index: 23
+      #   shape_asset: ShapeWorldBoundaryDemo
+      #   material_asset: PhysMatGround
+      #   body_type: 0
+      #   motion_quality: 0
+      #   collision_layer: 1
+      #   collision_mask: 65535
+      #   mass: 0.0
+      #   linear_damping: 0.0
+      #   angular_damping: 0.0
+      #   gravity_factor: 0.0
+      #   initial_activation: false
+      # - node_index: 24
+      #   shape_asset: ShapeCompoundDemo
+      #   material_asset: PhysMatGround
+      #   body_type: 0
+      #   motion_quality: 0
+      #   collision_layer: 1
+      #   collision_mask: 65535
+      #   mass: 0.0
+      #   linear_damping: 0.0
+      #   angular_damping: 0.0
+      #   gravity_factor: 0.0
+      #   initial_activation: false
 
     collider_bindings:
       - node_index: 10
@@ -580,7 +953,4 @@ assets:
         collision_layer: 5
         collision_mask: 65535
 
-    joint_bindings:
-      - node_index_a: 7
-        node_index_b: 8
-        constraint_resource_index: 0
+    joint_bindings: []

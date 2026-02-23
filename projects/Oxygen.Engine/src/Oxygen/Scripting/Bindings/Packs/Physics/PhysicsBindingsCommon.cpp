@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cctype>
 #include <cmath>
 #include <string>
 #include <string_view>
@@ -12,14 +13,12 @@
 #include <lua.h>
 #include <lualib.h>
 
-#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/Shape.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
-#include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsBindingsCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
@@ -48,6 +47,188 @@ namespace {
       : default_value;
     lua_pop(state, 1);
     return CheckFinite(state, value, field_name);
+  }
+
+  auto ParseWorldBoundaryMode(lua_State* state, const int table_index)
+    -> physics::WorldBoundaryMode
+  {
+    lua_getfield(state, table_index, "boundary_mode");
+    if (lua_isnil(state, -1) != 0) {
+      lua_pop(state, 1);
+      lua_getfield(state, table_index, "mode");
+    }
+    if (lua_isnil(state, -1) != 0) {
+      lua_pop(state, 1);
+      luaL_error(
+        state, "world_boundary shape requires 'boundary_mode' (or 'mode')");
+      return physics::WorldBoundaryMode::kInvalid;
+    }
+
+    physics::WorldBoundaryMode mode = physics::WorldBoundaryMode::kInvalid;
+    if (lua_isnumber(state, -1) != 0) {
+      const auto raw = luaL_checkinteger(state, -1);
+      if (raw
+        == static_cast<lua_Integer>(physics::WorldBoundaryMode::kAabbClamp)) {
+        mode = physics::WorldBoundaryMode::kAabbClamp;
+      } else if (raw
+        == static_cast<lua_Integer>(physics::WorldBoundaryMode::kPlaneSet)) {
+        mode = physics::WorldBoundaryMode::kPlaneSet;
+      }
+    } else {
+      const auto* mode_text = luaL_checkstring(state, -1);
+      const auto mode_view
+        = std::string_view(mode_text == nullptr ? "" : mode_text);
+      if (mode_view == "aabb_clamp") {
+        mode = physics::WorldBoundaryMode::kAabbClamp;
+      } else if (mode_view == "plane_set") {
+        mode = physics::WorldBoundaryMode::kPlaneSet;
+      }
+    }
+    lua_pop(state, 1);
+    if (mode == physics::WorldBoundaryMode::kInvalid) {
+      luaL_error(state,
+        "world_boundary boundary_mode must be 'aabb_clamp' or 'plane_set'");
+      return physics::WorldBoundaryMode::kInvalid;
+    }
+    return mode;
+  }
+
+  auto ParseShapePayloadType(lua_State* state, const int payload_table_index)
+    -> physics::ShapePayloadType
+  {
+    lua_getfield(state, payload_table_index, "payload_type");
+    if (lua_isnil(state, -1) != 0) {
+      lua_pop(state, 1);
+      lua_getfield(state, payload_table_index, "type");
+    }
+    if (lua_isnil(state, -1) != 0) {
+      lua_pop(state, 1);
+      luaL_error(
+        state, "shape.cooked_payload requires 'payload_type' (or 'type')");
+      return physics::ShapePayloadType::kInvalid;
+    }
+
+    physics::ShapePayloadType payload_type
+      = physics::ShapePayloadType::kInvalid;
+    if (lua_isnumber(state, -1) != 0) {
+      const auto raw = luaL_checkinteger(state, -1);
+      if (raw == static_cast<lua_Integer>(physics::ShapePayloadType::kConvex)) {
+        payload_type = physics::ShapePayloadType::kConvex;
+      } else if (raw
+        == static_cast<lua_Integer>(physics::ShapePayloadType::kMesh)) {
+        payload_type = physics::ShapePayloadType::kMesh;
+      } else if (raw
+        == static_cast<lua_Integer>(physics::ShapePayloadType::kHeightField)) {
+        payload_type = physics::ShapePayloadType::kHeightField;
+      } else if (raw
+        == static_cast<lua_Integer>(physics::ShapePayloadType::kCompound)) {
+        payload_type = physics::ShapePayloadType::kCompound;
+      }
+    } else {
+      const auto* payload_type_text = luaL_checkstring(state, -1);
+      const auto payload_type_view = std::string_view(
+        payload_type_text == nullptr ? "" : payload_type_text);
+      if (payload_type_view == "convex") {
+        payload_type = physics::ShapePayloadType::kConvex;
+      } else if (payload_type_view == "mesh") {
+        payload_type = physics::ShapePayloadType::kMesh;
+      } else if (payload_type_view == "height_field") {
+        payload_type = physics::ShapePayloadType::kHeightField;
+      } else if (payload_type_view == "compound") {
+        payload_type = physics::ShapePayloadType::kCompound;
+      }
+    }
+    lua_pop(state, 1);
+    if (payload_type == physics::ShapePayloadType::kInvalid) {
+      luaL_error(state,
+        "shape.cooked_payload.payload_type must be one of 'convex', 'mesh', "
+        "'height_field', or 'compound'");
+      return physics::ShapePayloadType::kInvalid;
+    }
+    return payload_type;
+  }
+
+  auto ParseHexNybble(lua_State* state, const char c, const char* field_name)
+    -> uint8_t
+  {
+    if (c >= '0' && c <= '9') {
+      return static_cast<uint8_t>(c - '0');
+    }
+    if (c >= 'a' && c <= 'f') {
+      return static_cast<uint8_t>(10 + (c - 'a'));
+    }
+    if (c >= 'A' && c <= 'F') {
+      return static_cast<uint8_t>(10 + (c - 'A'));
+    }
+    luaL_error(state, "%s contains non-hex character", field_name);
+    return 0;
+  }
+
+  auto ParseHexPayloadData(lua_State* state, const std::string_view hex_text,
+    const char* field_name) -> std::vector<uint8_t>
+  {
+    if ((hex_text.size() % 2U) != 0U) {
+      luaL_error(state, "%s must contain an even number of hex characters",
+        field_name == nullptr ? "shape.cooked_payload.data_hex" : field_name);
+      return {};
+    }
+
+    std::vector<uint8_t> bytes {};
+    bytes.reserve(hex_text.size() / 2U);
+    for (size_t i = 0; i < hex_text.size(); i += 2U) {
+      const auto hi = ParseHexNybble(state, hex_text[i], field_name);
+      const auto lo = ParseHexNybble(state, hex_text[i + 1U], field_name);
+      bytes.push_back(static_cast<uint8_t>((hi << 4U) | lo));
+    }
+    return bytes;
+  }
+
+  auto ParseCookedPayload(lua_State* state, const int shape_table_index,
+    const physics::ShapePayloadType expected_payload_type)
+    -> physics::CookedShapePayload
+  {
+    lua_getfield(state, shape_table_index, "cooked_payload");
+    const auto payload_table_index = lua_absindex(state, -1);
+    luaL_checktype(state, payload_table_index, LUA_TTABLE);
+
+    const auto payload_type = ParseShapePayloadType(state, payload_table_index);
+    if (payload_type != expected_payload_type) {
+      lua_pop(state, 1);
+      luaL_error(state,
+        "shape.cooked_payload.payload_type does not match this shape type");
+      return {};
+    }
+
+    std::vector<uint8_t> payload_data {};
+
+    lua_getfield(state, payload_table_index, "data");
+    if (lua_isnil(state, -1) == 0) {
+      size_t payload_len = 0;
+      const auto* payload_ptr = luaL_checklstring(state, -1, &payload_len);
+      payload_data.assign(payload_ptr, payload_ptr + payload_len);
+      lua_pop(state, 1);
+    } else {
+      lua_pop(state, 1);
+      lua_getfield(state, payload_table_index, "data_hex");
+      const auto* hex_text = luaL_checkstring(state, -1);
+      const auto hex_view
+        = std::string_view(hex_text == nullptr ? "" : hex_text);
+      payload_data
+        = ParseHexPayloadData(state, hex_view, "shape.cooked_payload.data_hex");
+      lua_pop(state, 1);
+    }
+
+    lua_pop(state, 1);
+
+    if (payload_data.empty()) {
+      luaL_error(state, "shape.cooked_payload data must be non-empty");
+      return {};
+    }
+
+    return physics::CookedShapePayload {
+      .payload_type = payload_type,
+      .data = std::move(payload_data),
+    };
   }
 
   auto SetMetatable(lua_State* state, const char* metatable_name) -> void
@@ -278,6 +459,57 @@ namespace {
     return 1;
   }
 
+  auto ShapeIdIsValid(lua_State* state) -> int
+  {
+    const auto* id = CheckShapeId(state, 1);
+    lua_pushboolean(state, physics::IsValid(id->shape_id) ? 1 : 0);
+    return 1;
+  }
+
+  auto ShapeIdToString(lua_State* state) -> int
+  {
+    const auto* id = CheckShapeId(state, 1);
+    const auto text = std::string("ShapeId{")
+                        .append(physics::to_string(id->shape_id))
+                        .append("}");
+    lua_pushstring(state, text.c_str());
+    return 1;
+  }
+
+  auto ShapeIdEq(lua_State* state) -> int
+  {
+    const auto* lhs = CheckShapeId(state, 1);
+    const auto* rhs = CheckShapeId(state, 2);
+    lua_pushboolean(state, lhs->shape_id == rhs->shape_id ? 1 : 0);
+    return 1;
+  }
+
+  auto ShapeInstanceIdIsValid(lua_State* state) -> int
+  {
+    const auto* id = CheckShapeInstanceId(state, 1);
+    lua_pushboolean(state, physics::IsValid(id->shape_instance_id) ? 1 : 0);
+    return 1;
+  }
+
+  auto ShapeInstanceIdToString(lua_State* state) -> int
+  {
+    const auto* id = CheckShapeInstanceId(state, 1);
+    const auto text = std::string("ShapeInstanceId{")
+                        .append(physics::to_string(id->shape_instance_id))
+                        .append("}");
+    lua_pushstring(state, text.c_str());
+    return 1;
+  }
+
+  auto ShapeInstanceIdEq(lua_State* state) -> int
+  {
+    const auto* lhs = CheckShapeInstanceId(state, 1);
+    const auto* rhs = CheckShapeInstanceId(state, 2);
+    lua_pushboolean(
+      state, lhs->shape_instance_id == rhs->shape_instance_id ? 1 : 0);
+    return 1;
+  }
+
   auto RegisterMetatableWithCommonMethods(lua_State* state,
     const char* metatable_name, lua_CFunction is_valid_fn, lua_CFunction eq_fn,
     lua_CFunction tostring_fn) -> void
@@ -347,6 +579,18 @@ auto RegisterPhysicsJointIdMetatable(lua_State* state) -> void
 {
   RegisterMetatableWithCommonMethods(state, kPhysicsJointIdMetatable,
     JointIdIsValid, JointIdEq, JointIdToString);
+}
+
+auto RegisterPhysicsShapeIdMetatable(lua_State* state) -> void
+{
+  RegisterMetatableWithCommonMethods(state, kPhysicsShapeIdMetatable,
+    ShapeIdIsValid, ShapeIdEq, ShapeIdToString);
+}
+
+auto RegisterPhysicsShapeInstanceIdMetatable(lua_State* state) -> void
+{
+  RegisterMetatableWithCommonMethods(state, kPhysicsShapeInstanceIdMetatable,
+    ShapeInstanceIdIsValid, ShapeInstanceIdEq, ShapeInstanceIdToString);
 }
 
 auto PushBodyHandle(lua_State* state, const physics::WorldId world_id,
@@ -494,6 +738,38 @@ auto CheckJointId(lua_State* state, const int index) -> PhysicsJointIdUserdata*
     luaL_checkudata(state, index, kPhysicsJointIdMetatable));
 }
 
+auto PushShapeId(lua_State* state, const physics::ShapeId shape_id) -> int
+{
+  auto* userdata = static_cast<PhysicsShapeIdUserdata*>(
+    lua_newuserdata(state, sizeof(PhysicsShapeIdUserdata)));
+  userdata->shape_id = shape_id;
+  SetMetatable(state, kPhysicsShapeIdMetatable);
+  return 1;
+}
+
+auto CheckShapeId(lua_State* state, const int index) -> PhysicsShapeIdUserdata*
+{
+  return static_cast<PhysicsShapeIdUserdata*>(
+    luaL_checkudata(state, index, kPhysicsShapeIdMetatable));
+}
+
+auto PushShapeInstanceId(
+  lua_State* state, const physics::ShapeInstanceId shape_instance_id) -> int
+{
+  auto* userdata = static_cast<PhysicsShapeInstanceIdUserdata*>(
+    lua_newuserdata(state, sizeof(PhysicsShapeInstanceIdUserdata)));
+  userdata->shape_instance_id = shape_instance_id;
+  SetMetatable(state, kPhysicsShapeInstanceIdMetatable);
+  return 1;
+}
+
+auto CheckShapeInstanceId(lua_State* state, const int index)
+  -> PhysicsShapeInstanceIdUserdata*
+{
+  return static_cast<PhysicsShapeInstanceIdUserdata*>(
+    luaL_checkudata(state, index, kPhysicsShapeInstanceIdMetatable));
+}
+
 auto GetPhysicsModule(lua_State* state) -> physics::PhysicsModule*
 {
   const auto engine = GetActiveEngine(state);
@@ -577,10 +853,18 @@ auto ParseCollisionShape(lua_State* state, const int table_index)
   }
   if (shape_type_view == "box") {
     lua_getfield(state, abs_index, "extents");
-    const auto extents = lua_isnil(state, -1) == 0
-      ? CheckVec3(state, -1, "shape.extents must be a vector")
-      : Vec3 { 0.5F, 0.5F, 0.5F };
-    lua_pop(state, 1);
+    Vec3 extents { 0.5F, 0.5F, 0.5F };
+    if (lua_isnil(state, -1) == 0) {
+      extents = CheckVec3(state, -1, "shape.extents must be a vector");
+      lua_pop(state, 1);
+    } else {
+      lua_pop(state, 1);
+      lua_getfield(state, abs_index, "half_extents");
+      if (lua_isnil(state, -1) == 0) {
+        extents = CheckVec3(state, -1, "shape.half_extents must be a vector");
+      }
+      lua_pop(state, 1);
+    }
     return physics::BoxShape { .extents = extents };
   }
   if (shape_type_view == "capsule") {
@@ -593,31 +877,81 @@ auto ParseCollisionShape(lua_State* state, const int table_index)
       .half_height = half_height,
     };
   }
-  if (shape_type_view == "mesh") {
-    lua_getfield(state, abs_index, "geometry_guid");
-    const auto* guid_text = luaL_checkstring(state, -1);
-    const auto guid_opt
-      = TryParseAssetGuid(guid_text == nullptr ? "" : guid_text);
+  if (shape_type_view == "cylinder") {
+    const auto radius
+      = ReadOptionalFloatField(state, abs_index, "radius", 0.5F);
+    const auto half_height
+      = ReadOptionalFloatField(state, abs_index, "half_height", 1.0F);
+    return physics::CylinderShape {
+      .radius = radius,
+      .half_height = half_height,
+    };
+  }
+  if (shape_type_view == "cone") {
+    const auto radius
+      = ReadOptionalFloatField(state, abs_index, "radius", 0.5F);
+    const auto half_height
+      = ReadOptionalFloatField(state, abs_index, "half_height", 1.0F);
+    return physics::ConeShape {
+      .radius = radius,
+      .half_height = half_height,
+      .cooked_payload = ParseCookedPayload(
+        state, abs_index, physics::ShapePayloadType::kConvex),
+    };
+  }
+  if (shape_type_view == "convex_hull") {
+    return physics::ConvexHullShape {
+      .cooked_payload = ParseCookedPayload(
+        state, abs_index, physics::ShapePayloadType::kConvex),
+    };
+  }
+  if (shape_type_view == "triangle_mesh") {
+    return physics::TriangleMeshShape {
+      .cooked_payload
+      = ParseCookedPayload(state, abs_index, physics::ShapePayloadType::kMesh),
+    };
+  }
+  if (shape_type_view == "height_field") {
+    return physics::HeightFieldShape {
+      .cooked_payload = ParseCookedPayload(
+        state, abs_index, physics::ShapePayloadType::kHeightField),
+    };
+  }
+  if (shape_type_view == "plane") {
+    lua_getfield(state, abs_index, "normal");
+    const auto normal = lua_isnil(state, -1) == 0
+      ? CheckVec3(state, -1, "shape.normal must be a vector")
+      : Vec3 { 0.0F, 0.0F, 1.0F };
     lua_pop(state, 1);
-    if (!guid_opt.has_value()) {
-      luaL_error(
-        state, "shape.geometry_guid must be a valid asset GUID string");
-      return physics::SphereShape {};
-    }
+    const auto distance
+      = ReadOptionalFloatField(state, abs_index, "distance", 0.0F);
+    return physics::PlaneShape {
+      .normal = normal,
+      .distance = distance,
+    };
+  }
+  if (shape_type_view == "world_boundary") {
+    lua_getfield(state, abs_index, "limits_min");
+    const auto limits_min
+      = CheckVec3(state, -1, "shape.limits_min must be a vector");
+    lua_pop(state, 1);
 
-    const auto loader = GetAssetLoader(state);
-    if (loader == nullptr) {
-      luaL_error(state,
-        "shape.mesh requires an active asset loader to resolve geometry_guid");
-      return physics::SphereShape {};
-    }
+    lua_getfield(state, abs_index, "limits_max");
+    const auto limits_max
+      = CheckVec3(state, -1, "shape.limits_max must be a vector");
+    lua_pop(state, 1);
 
-    auto geometry = loader->GetGeometryAsset(*guid_opt);
-    if (geometry == nullptr) {
-      luaL_error(state, "shape.mesh geometry asset not found for GUID");
-      return physics::SphereShape {};
-    }
-    return physics::MeshShape { .geometry = std::move(geometry) };
+    return physics::WorldBoundaryShape {
+      .mode = ParseWorldBoundaryMode(state, abs_index),
+      .limits_min = limits_min,
+      .limits_max = limits_max,
+    };
+  }
+  if (shape_type_view == "compound") {
+    return physics::CompoundShape {
+      .cooked_payload = ParseCookedPayload(
+        state, abs_index, physics::ShapePayloadType::kCompound),
+    };
   }
 
   luaL_error(state, "unsupported shape.type '%s'", shape_type);

@@ -103,8 +103,8 @@ namespace {
     return flags;
   }
 
-  auto ParseBodyDesc(lua_State* state, const int arg_index)
-    -> physics::body::BodyDesc
+  auto ParseBodyDesc(lua_State* state, const int arg_index,
+    physics::PhysicsModule& physics_module) -> physics::body::BodyDesc
   {
     physics::body::BodyDesc desc {};
     if (lua_isnoneornil(state, arg_index) != 0) {
@@ -116,6 +116,19 @@ namespace {
 
     desc.type = ParseBodyType(state, desc_index);
     desc.flags = ParseBodyFlags(state, desc_index);
+
+    lua_getfield(state, desc_index, "shape_id");
+    if (lua_isnil(state, -1) == 0) {
+      const auto* shape_id = CheckShapeId(state, -1);
+      const auto shape_result
+        = physics_module.Shapes().GetShapeDesc(shape_id->shape_id);
+      if (!shape_result.has_value()) {
+        lua_pop(state, 1);
+        luaL_error(state, "invalid shape_id in body descriptor");
+      }
+      desc.shape = shape_result.value().geometry;
+    }
+    lua_pop(state, 1);
 
     lua_getfield(state, desc_index, "shape");
     if (lua_isnil(state, -1) == 0) {
@@ -282,7 +295,7 @@ namespace {
     }
 
     auto* node = CheckSceneNode(state, 1);
-    const auto desc = ParseBodyDesc(state, 2);
+    const auto desc = ParseBodyDesc(state, 2, *physics_module);
 
     const auto body = physics::ScenePhysics::AttachRigidBody(
       observer_ptr<physics::PhysicsModule> { physics_module }, *node, desc);
@@ -592,6 +605,76 @@ namespace {
         dt));
   }
 
+  auto LuaBodyHandleAddShape(lua_State* state) -> int
+  {
+    if (RejectFixedSimulationWithNil(state, "add_shape")) {
+      return 1;
+    }
+    if (!IsAttachAllowed(state)) {
+      LOG_F(WARNING,
+        "physics.body.add_shape rejected outside gameplay/scene_mutation "
+        "(active_phase='{}')",
+        GetActiveEventPhase(state));
+      lua_pushnil(state);
+      return 1;
+    }
+
+    const auto* handle = CheckBodyHandle(state, 1);
+    const auto* shape_id = CheckShapeId(state, 2);
+    Vec3 local_position { 0.0F, 0.0F, 0.0F };
+    Quat local_rotation { 1.0F, 0.0F, 0.0F, 0.0F };
+    if (lua_isnoneornil(state, 3) == 0) {
+      local_position
+        = CheckVec3(state, 3, "add_shape local_position must be a vector");
+    }
+    if (lua_isnoneornil(state, 4) == 0) {
+      const auto* q = CheckQuat(state, 4);
+      local_rotation = Quat { q->w, q->x, q->y, q->z };
+    }
+
+    auto* physics_module = GetPhysicsModule(state);
+    if (physics_module == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
+
+    const auto result = physics_module->Bodies().AddBodyShape(handle->world_id,
+      handle->body_id, shape_id->shape_id, local_position, local_rotation);
+    if (!result.has_value()) {
+      lua_pushnil(state);
+      return 1;
+    }
+    return PushShapeInstanceId(state, result.value());
+  }
+
+  auto LuaBodyHandleRemoveShape(lua_State* state) -> int
+  {
+    if (RejectFixedSimulationWithBool(state, "remove_shape")) {
+      return 1;
+    }
+    if (!IsAttachAllowed(state)) {
+      LOG_F(WARNING,
+        "physics.body.remove_shape rejected outside gameplay/scene_mutation "
+        "(active_phase='{}')",
+        GetActiveEventPhase(state));
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+
+    const auto* handle = CheckBodyHandle(state, 1);
+    const auto* shape_instance = CheckShapeInstanceId(state, 2);
+    auto* physics_module = GetPhysicsModule(state);
+    if (physics_module == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+
+    const auto result = physics_module->Bodies().RemoveBodyShape(
+      handle->world_id, handle->body_id, shape_instance->shape_instance_id);
+    lua_pushboolean(state, result.has_value() ? 1 : 0);
+    return 1;
+  }
+
 } // namespace
 
 auto RegisterBodyBindings(lua_State* state, const int oxygen_table_index)
@@ -599,6 +682,7 @@ auto RegisterBodyBindings(lua_State* state, const int oxygen_table_index)
 {
   RegisterPhysicsBodyHandleMetatable(state);
   RegisterPhysicsBodyIdMetatable(state);
+  RegisterPhysicsShapeInstanceIdMetatable(state);
 
   luaL_getmetatable(state, kPhysicsBodyHandleMetatable);
   lua_pushcfunction(state, LuaBodyHandleGetId, "physics.body_handle.get_id");
@@ -636,6 +720,12 @@ auto RegisterBodyBindings(lua_State* state, const int oxygen_table_index)
   lua_pushcfunction(
     state, LuaBodyHandleMoveKinematic, "physics.body_handle.move_kinematic");
   lua_setfield(state, -2, "move_kinematic");
+  lua_pushcfunction(
+    state, LuaBodyHandleAddShape, "physics.body_handle.add_shape");
+  lua_setfield(state, -2, "add_shape");
+  lua_pushcfunction(
+    state, LuaBodyHandleRemoveShape, "physics.body_handle.remove_shape");
+  lua_setfield(state, -2, "remove_shape");
   lua_pop(state, 1);
 
   const auto physics_index
