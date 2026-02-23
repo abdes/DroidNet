@@ -6,6 +6,7 @@ All functions are side-effect free and validate sizes.
 from __future__ import annotations
 
 import struct
+from pathlib import Path
 from typing import Any, Dict, Sequence, List, Callable, Tuple
 
 from .constants import (
@@ -25,6 +26,7 @@ from .constants import (
     SCENE_ASSET_VERSION_CURRENT,
 )
 from .errors import PakError
+from ..utils.io import DataError, read_data_from_spec
 
 __all__ = [
     "pack_header",
@@ -55,6 +57,7 @@ __all__ = [
     "pack_joint_binding_record",
     "pack_vehicle_binding_record",
     "pack_aggregate_binding_record",
+    "resolve_procedural_params_blob",
 ]
 
 
@@ -689,6 +692,61 @@ def _asset_key_bytes(value: Any) -> bytes:
             except ValueError:
                 return b"\x00" * ASSET_KEY_SIZE
     return b"\x00" * ASSET_KEY_SIZE
+
+
+def resolve_procedural_params_blob(
+    lod: Dict[str, Any], base_dir: Path
+) -> bytes:
+    """Resolve procedural mesh parameter blob bytes for one geometry LOD.
+
+    Supported authoring forms:
+    - `procedural_params: {data_hex|file|path|data|size}`
+    - flat aliases on the LOD object:
+      `procedural_params_data_hex`, `procedural_params_file`,
+      `procedural_params_path`, `procedural_params_data`
+    """
+    params_spec = lod.get("procedural_params")
+
+    if params_spec is None:
+        flat_map = {
+            "data_hex": "procedural_params_data_hex",
+            "file": "procedural_params_file",
+            "path": "procedural_params_path",
+            "data": "procedural_params_data",
+            "size": "procedural_params_size",
+        }
+        flat_spec: Dict[str, Any] = {}
+        for target_key, source_key in flat_map.items():
+            if source_key in lod:
+                flat_spec[target_key] = lod.get(source_key)
+        if flat_spec:
+            params_spec = flat_spec
+
+    if params_spec is None:
+        return b""
+    if not isinstance(params_spec, dict):
+        raise PakError("E_TYPE", "lod.procedural_params must be an object")
+
+    try:
+        blob = read_data_from_spec(params_spec, base_dir)
+    except DataError as exc:
+        raise PakError(
+            "E_SPEC", f"invalid procedural_params payload: {exc}"
+        ) from exc
+
+    declared_size_raw = lod.get("procedural_params_size")
+    if declared_size_raw is not None:
+        declared_size = int(declared_size_raw)
+        if declared_size < 0:
+            raise PakError("E_RANGE", "procedural_params_size must be >= 0")
+        if declared_size != len(blob):
+            raise PakError(
+                "E_SIZE",
+                "procedural_params_size does not match authored "
+                f"blob length ({declared_size} != {len(blob)})",
+            )
+
+    return blob
 
 
 def _pack_scene_string_table(nodes: List[Dict[str, Any]]):
@@ -2673,6 +2731,8 @@ def pack_mesh_descriptor(
     lod: Dict[str, Any],
     resource_index_map: Dict[str, Dict[str, int]],
     pack_name_fn: Callable[[str, int], bytes],
+    *,
+    procedural_params_size_override: int | None = None,
 ) -> bytes:
     # Mirror legacy mesh packing (PackGen/packers.py)
     mesh_name = pack_name_fn(lod.get("name", ""), 64)
@@ -2694,7 +2754,10 @@ def pack_mesh_descriptor(
         for submesh in submeshes:
             submesh_bounds.append(_collect_submesh_bounds(submesh))
         mesh_bb_min, mesh_bb_max = _merge_bounds(submesh_bounds)
-    procedural_params_size = lod.get("procedural_params_size", 0)
+    if procedural_params_size_override is None:
+        procedural_params_size = int(lod.get("procedural_params_size", 0) or 0)
+    else:
+        procedural_params_size = int(procedural_params_size_override)
     joint_index_buffer_idx = resource_index_map.get("buffer", {}).get(
         lod.get("joint_index_buffer", ""), 0
     )

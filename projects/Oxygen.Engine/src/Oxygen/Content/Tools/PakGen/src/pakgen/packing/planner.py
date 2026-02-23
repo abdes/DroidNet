@@ -1472,7 +1472,9 @@ def compute_pak_plan(
             )
         )
         cursor += MATERIAL_DESC_SIZE + shader_refs_extra
-    # Geometry base descriptors (variable LOD data ignored for size now)
+    from .packers import resolve_procedural_params_blob
+
+    # Geometry base descriptors + variable LOD data
     for geom_spec, asset_key, _asset_type, alignment in geometries:
         cursor_aligned, pad_geo = align(
             cursor, alignment or 1, "asset_geometry"
@@ -1488,6 +1490,10 @@ def compute_pak_plan(
             if not isinstance(lod, dict):
                 continue
             variable_size += MESH_DESC_SIZE
+            if int(lod.get("mesh_type", 0) or 0) == 2:
+                variable_size += len(
+                    resolve_procedural_params_blob(lod, build_plan.base_dir)
+                )
             submeshes = lod.get("submeshes", []) or []
             for sub in submeshes:
                 if not isinstance(sub, dict):

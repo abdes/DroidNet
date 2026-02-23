@@ -61,6 +61,7 @@ from .packers import (
     pack_joint_binding_record,
     pack_vehicle_binding_record,
     pack_aggregate_binding_record,
+    resolve_procedural_params_blob,
 )
 
 __all__ = ["write_pak"]
@@ -354,9 +355,22 @@ def _write_assets_and_directory_from_plan(
         for lod in lods:
             if not isinstance(lod, dict):
                 continue
+            mesh_type = int(lod.get("mesh_type", 0) or 0)
+            procedural_blob = b""
+            if mesh_type == 2:
+                procedural_blob = resolve_procedural_params_blob(
+                    lod, build.base_dir
+                )
             out += pack_mesh_descriptor(
-                lod, build.resources.index_map, pack_name_string
+                lod,
+                build.resources.index_map,
+                pack_name_string,
+                procedural_params_size_override=(
+                    len(procedural_blob) if mesh_type == 2 else None
+                ),
             )
+            if procedural_blob:
+                out += procedural_blob
             submeshes = lod.get("submeshes", []) or []
             for sub in submeshes:
                 if not isinstance(sub, dict):
