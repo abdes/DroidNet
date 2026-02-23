@@ -28,6 +28,10 @@ constexpr const char* kPhysicsCharacterHandleMetatable
 constexpr const char* kPhysicsBodyIdMetatable = "oxygen.physics.body_id";
 constexpr const char* kPhysicsCharacterIdMetatable
   = "oxygen.physics.character_id";
+constexpr const char* kPhysicsAggregateHandleMetatable
+  = "oxygen.physics.aggregate_handle";
+constexpr const char* kPhysicsAggregateIdMetatable
+  = "oxygen.physics.aggregate_id";
 
 struct PhysicsBodyHandleUserdata final {
   physics::WorldId world_id { physics::kInvalidWorldId };
@@ -48,10 +52,21 @@ struct PhysicsCharacterIdUserdata final {
   physics::CharacterId character_id { physics::kInvalidCharacterId };
 };
 
+struct PhysicsAggregateHandleUserdata final {
+  physics::WorldId world_id { physics::kInvalidWorldId };
+  physics::AggregateId aggregate_id { physics::kInvalidAggregateId };
+};
+
+struct PhysicsAggregateIdUserdata final {
+  physics::AggregateId aggregate_id { physics::kInvalidAggregateId };
+};
+
 auto RegisterPhysicsBodyHandleMetatable(lua_State* state) -> void;
 auto RegisterPhysicsCharacterHandleMetatable(lua_State* state) -> void;
 auto RegisterPhysicsBodyIdMetatable(lua_State* state) -> void;
 auto RegisterPhysicsCharacterIdMetatable(lua_State* state) -> void;
+auto RegisterPhysicsAggregateHandleMetatable(lua_State* state) -> void;
+auto RegisterPhysicsAggregateIdMetatable(lua_State* state) -> void;
 
 auto PushBodyHandle(lua_State* state, physics::WorldId world_id,
   physics::BodyId body_id, physics::body::BodyType body_type) -> int;
@@ -70,16 +85,31 @@ auto PushCharacterId(lua_State* state, physics::CharacterId character_id)
 auto CheckCharacterId(lua_State* state, int index)
   -> PhysicsCharacterIdUserdata*;
 
+auto PushAggregateHandle(lua_State* state, physics::WorldId world_id,
+  physics::AggregateId aggregate_id) -> int;
+auto CheckAggregateHandle(lua_State* state, int index)
+  -> PhysicsAggregateHandleUserdata*;
+
+auto PushAggregateId(lua_State* state, physics::AggregateId aggregate_id)
+  -> int;
+auto CheckAggregateId(lua_State* state, int index)
+  -> PhysicsAggregateIdUserdata*;
+
 auto GetPhysicsModule(lua_State* state) -> physics::PhysicsModule*;
 auto GetPhysicsWorldId(lua_State* state) -> std::optional<physics::WorldId>;
 
+auto IsPhysicsScriptablePhase(lua_State* state) -> bool;
 auto IsAttachAllowed(lua_State* state) -> bool;
 auto IsCommandAllowed(lua_State* state) -> bool;
+auto IsAggregateMutationAllowed(lua_State* state) -> bool;
 auto IsEventDrainAllowed(lua_State* state) -> bool;
 
 auto ParseCollisionShape(lua_State* state, int table_index)
   -> physics::CollisionShape;
 auto ParseBodyIdArray(lua_State* state, int table_index)
+  -> std::vector<physics::BodyId>;
+auto ParseBodyIdOrHandle(lua_State* state, int index) -> physics::BodyId;
+auto ParseBodyIdOrHandleArray(lua_State* state, int table_index)
   -> std::vector<physics::BodyId>;
 
 } // namespace oxygen::scripting::bindings

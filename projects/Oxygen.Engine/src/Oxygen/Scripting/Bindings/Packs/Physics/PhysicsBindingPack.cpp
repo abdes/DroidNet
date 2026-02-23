@@ -8,12 +8,16 @@
 #include <memory>
 
 #include <Oxygen/Scripting/Bindings/BindingRegistry.h>
+#include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsAggregateBindings.h>
+#include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsArticulationBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsBodyBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsCharacterBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsConstantsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsEventsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsQueryBindings.h>
+#include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsSoftBodyBindings.h>
+#include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsVehicleBindings.h>
 
 namespace oxygen::scripting::bindings {
 
@@ -27,6 +31,10 @@ namespace {
     RegisterQueryBindings(state, oxygen_table_index);
     RegisterPhysicsEventsBindings(state, oxygen_table_index);
     RegisterPhysicsConstantsBindings(state, oxygen_table_index);
+    RegisterPhysicsAggregateBindings(state, oxygen_table_index);
+    RegisterPhysicsArticulationBindings(state, oxygen_table_index);
+    RegisterPhysicsVehicleBindings(state, oxygen_table_index);
+    RegisterPhysicsSoftBodyBindings(state, oxygen_table_index);
   }
 
   constexpr std::array<BindingNamespace, 1> kPhysicsNamespaces = { {

@@ -96,6 +96,7 @@ namespace {
       "input.",
       "scene.",
       "render.",
+      "physics.",
     });
     return std::ranges::any_of(
       kReservedPrefixes, [event_name](const std::string_view prefix) {
@@ -563,6 +564,29 @@ auto QueueEngineEvent(lua_State* state, const std::string_view event_name,
     .event_name = std::string(event_name),
     .phase_name = std::string(phase_name),
     .payload_ref = kLuaNoRef,
+  });
+}
+
+auto QueueEngineEventWithPayload(lua_State* state,
+  const std::string_view event_name, const std::string_view phase_name,
+  const int payload_index) -> void
+{
+  auto* runtime = EnsureRuntime(state);
+  if (runtime == nullptr) {
+    return;
+  }
+
+  int payload_ref = kLuaNoRef;
+  if (payload_index != 0) {
+    const int abs_payload_index = lua_absindex(state, payload_index);
+    lua_pushvalue(state, abs_payload_index);
+    payload_ref = lua_ref(state, -1);
+  }
+
+  runtime->queue.push_back(QueuedEvent {
+    .event_name = std::string(event_name),
+    .phase_name = std::string(phase_name),
+    .payload_ref = payload_ref,
   });
 }
 

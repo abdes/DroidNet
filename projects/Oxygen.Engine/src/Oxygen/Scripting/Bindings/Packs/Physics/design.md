@@ -29,9 +29,9 @@ PhysicsModule enforces three phases (see `PhaseContracts.md`):
 
 | Phase | Allowed operations for scripts |
 | --- | --- |
-| `gameplay` | Attach/get bodies and characters; stage kinematic commands; queue force/impulse/velocity writes; character move |
+| `gameplay` | Attach/get bodies and characters; stage kinematic commands; queue force/impulse/velocity writes; character move; aggregate/articulation/vehicle/soft-body structural and command mutations |
 | `fixed_simulation` | Script hooks (`on_fixed_simulation`) may execute, but no physics API calls are permitted; the physics solver owns exclusive world access |
-| `scene_mutation` | Attach/get bodies and characters; read physics-authored state; drain events |
+| `scene_mutation` | Attach/get bodies and characters; read physics-authored state; read aggregate-domain state; drain events |
 | `frame_start`, `frame_end` | Event listener dispatch only; no physics mutation |
 
 Mutation bindings must gate on the active event phase (already provided by
@@ -131,7 +131,9 @@ All rules from `src/Oxygen/Scripting/Bindings/README.md` apply in full:
 
 ## 5. Namespace Layout
 
-One root with four submodules registered as `BindingNamespace` entries:
+One root with submodules registered as `BindingNamespace` entries.
+
+### 5.1 V1 Layout
 
 ```text
 oxygen.physics
@@ -145,6 +147,23 @@ oxygen.physics
 The root `oxygen.physics` table itself holds no public functions in V1; it acts
 as a namespace container only. A debug `__index` guard should be added in
 non-release builds following the same pattern as `oxygen.scene`.
+
+### 5.2 V2 Layout Extension
+
+V2 adds four aggregate-domain submodules and keeps V1 namespaces unchanged:
+
+```text
+oxygen.physics
+├── oxygen.physics.body
+├── oxygen.physics.character
+├── oxygen.physics.query
+├── oxygen.physics.events
+├── oxygen.physics.constants
+├── oxygen.physics.aggregate     — generic aggregate lifecycle/membership
+├── oxygen.physics.articulation  — articulation aggregate topology
+├── oxygen.physics.vehicle       — command-authoritative vehicle aggregates
+└── oxygen.physics.soft_body     — simulation-authoritative soft-body aggregates
+```
 
 ---
 
@@ -396,7 +415,192 @@ oxygen.physics.constants.event_type = {
     trigger_begin  = "trigger_begin",
     trigger_end    = "trigger_end",
 }
+
+-- V2 additions:
+oxygen.physics.constants.aggregate_authority = {
+    simulation = "simulation",
+    command    = "command",
+}
+
+oxygen.physics.constants.soft_body_tether_mode = {
+    none      = "none",
+    euclidean = "euclidean",
+    geodesic  = "geodesic",
+}
 ```
+
+### 6.6 `oxygen.physics.aggregate` (V2)
+
+Generic aggregate lifecycle and body-membership API over
+`PhysicsModule::Aggregates()` / `system::IAggregateApi`.
+
+| Function | Phase required | Returns | C++ call |
+| --- | --- | --- | --- |
+| `create()` | `gameplay` | `AggregateHandle \| nil` | `IAggregateApi::CreateAggregate(world_id)` |
+| `destroy(aggregate)` | `gameplay` | `bool` | `IAggregateApi::DestroyAggregate(world_id, ...)` |
+| `add_member_body(aggregate, body)` | `gameplay` | `bool` | `IAggregateApi::AddMemberBody(world_id, ...)` |
+| `remove_member_body(aggregate, body)` | `gameplay` | `bool` | `IAggregateApi::RemoveMemberBody(world_id, ...)` |
+| `get_member_bodies(aggregate)` | any | `BodyId[] \| nil` | `IAggregateApi::GetMemberBodies(world_id, ..., span)` |
+| `flush_structural_changes()` | `gameplay` | `integer \| nil` | `IAggregateApi::FlushStructuralChanges(world_id)` |
+
+`body` accepts either `BodyId userdata` or `BodyHandle userdata`; when
+`BodyHandle` is provided, `body_id` is extracted from the handle.
+
+`max?` is an optional integer cap (default `64`, clamped to `1024`) on the
+number of member body IDs returned. `IAggregateApi::GetMemberBodies` uses an
+output `std::span<BodyId>` — the binding pre-allocates a `vector<BodyId>` of
+that size and passes the span.
+
+### 6.7 `oxygen.physics.articulation` (V2)
+
+Articulation aggregate API over `PhysicsModule::Articulations()` /
+`system::IArticulationApi`.
+
+| Function | Phase required | Returns | C++ call |
+| --- | --- | --- | --- |
+| `create(desc)` | `gameplay` | `AggregateHandle \| nil` | `IArticulationApi::CreateArticulation(world_id, desc)` |
+| `destroy(aggregate)` | `gameplay` | `bool` | `IArticulationApi::DestroyArticulation(world_id, ...)` |
+| `add_link(aggregate, desc)` | `gameplay` | `bool` | `IArticulationApi::AddLink(world_id, ...)` |
+| `remove_link(aggregate, child_body)` | `gameplay` | `bool` | `IArticulationApi::RemoveLink(world_id, ...)` |
+| `get_root_body(aggregate)` | any | `BodyId \| nil` | `IArticulationApi::GetRootBody(world_id, ...)` |
+| `get_link_bodies(aggregate)` | any | `BodyId[] \| nil` | `IArticulationApi::GetLinkBodies(world_id, ..., span)` |
+| `get_authority(aggregate)` | any | `string \| nil` | `IArticulationApi::GetAuthority(world_id, ...)` |
+| `flush_structural_changes()` | `gameplay` | `integer \| nil` | `IArticulationApi::FlushStructuralChanges(world_id)` |
+
+**`create` descriptor fields (`articulation::ArticulationDesc`):**
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `root_body_id` | `BodyId \| BodyHandle` | yes | must reference an existing world body |
+
+**`add_link` descriptor fields (`articulation::ArticulationLinkDesc`):**
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `parent_body_id` | `BodyId \| BodyHandle` | yes | existing world body |
+| `child_body_id` | `BodyId \| BodyHandle` | yes | existing world body |
+
+`IArticulationApi::GetLinkBodies` uses `std::span<BodyId> out_child_body_ids`.
+The binding uses a self-sizing retry strategy: starts with a 16-element buffer
+and doubles on `kBufferTooSmall` up to a hard cap of 4096, then returns `nil`.
+This avoids any count-query round-trip and correctly handles dynamic membership
+changes between the query and the fill.
+
+`remove_link` accepts `BodyId userdata` or `BodyHandle userdata`.
+
+### 6.8 `oxygen.physics.vehicle` (V2)
+
+Vehicle aggregate API over `PhysicsModule::Vehicles()` / `system::IVehicleApi`.
+
+| Function | Phase required | Returns | C++ call |
+| --- | --- | --- | --- |
+| `create(desc)` | `gameplay` | `AggregateHandle \| nil` | `IVehicleApi::CreateVehicle(world_id, desc)` |
+| `destroy(aggregate)` | `gameplay` | `bool` | `IVehicleApi::DestroyVehicle(world_id, ...)` |
+| `set_control_input(aggregate, input)` | `gameplay` | `bool` | `IVehicleApi::SetControlInput(world_id, ...)` |
+| `get_state(aggregate)` | any | `VehicleState \| nil` | `IVehicleApi::GetState(world_id, ...)` |
+| `get_authority(aggregate)` | any | `string \| nil` | `IVehicleApi::GetAuthority(world_id, ...)` |
+| `flush_structural_changes()` | `gameplay` | `integer \| nil` | `IVehicleApi::FlushStructuralChanges(world_id)` |
+
+> `set_control_input` is a per-frame **command**, not a structural mutation. Its
+> phase gate is `IsCommandAllowed` (gameplay-only), same as `body:set_linear_velocity`.
+> The other mutating vehicle functions (`create`, `destroy`, `flush_structural_changes`)
+> use `IsAggregateMutationAllowed`.
+
+**`create` descriptor fields (`vehicle::VehicleDesc`):**
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `chassis_body_id` | `BodyId \| BodyHandle` | yes | existing world body |
+| `wheel_body_ids` | `BodyId[] \| BodyHandle[]` | yes | non-empty, cannot include chassis |
+
+**`set_control_input` fields (`vehicle::VehicleControlInput`):**
+
+| Field | Type | Default | Domain |
+| --- | --- | --- | --- |
+| `throttle` | `number` | `0.0` | `[0, 1]` (validated/clamped) |
+| `brake` | `number` | `0.0` | `[0, 1]` (validated/clamped) |
+| `steering` | `number` | `0.0` | `[-1, 1]` (validated/clamped) |
+| `handbrake` | `number` | `0.0` | `[0, 1]` (validated/clamped) |
+
+**`VehicleState` table fields (`vehicle::VehicleState`):**
+
+| Field | Type |
+| --- | --- |
+| `forward_speed_mps` | `number` |
+| `grounded` | `bool` |
+
+### 6.9 `oxygen.physics.soft_body` (V2)
+
+Soft-body aggregate API over `PhysicsModule::SoftBodies()` /
+`system::ISoftBodyApi`.
+
+| Function | Phase required | Returns | C++ call |
+| --- | --- | --- | --- |
+| `create(desc)` | `gameplay` | `AggregateHandle \| nil` | `ISoftBodyApi::CreateSoftBody` |
+| `destroy(aggregate)` | `gameplay` | `bool` | `ISoftBodyApi::DestroySoftBody` |
+| `set_material_params(aggregate, params)` | `gameplay` | `bool` | `ISoftBodyApi::SetMaterialParams` |
+| `get_state(aggregate)` | any | `SoftBodyState \| nil` | `ISoftBodyApi::GetState` |
+| `get_authority(aggregate)` | any | `string \| nil` | `ISoftBodyApi::GetAuthority` |
+| `flush_structural_changes()` | `gameplay` | `integer \| nil` | `ISoftBodyApi::FlushStructuralChanges` |
+
+**`create` descriptor fields (`softbody::SoftBodyDesc`):**
+
+| Field | Type | Required? | Notes |
+| --- | --- | --- | --- |
+| `anchor_body_id` | `BodyId \| BodyHandle \| nil` | no | Lua `nil` maps to `kInvalidBodyId`; backend may return `kNotImplemented` if anchor is unsupported |
+| `cluster_count` | `integer` | **yes** | must be `> 0`; no default |
+| `material_params` | table | no | all sub-fields are optional; C++ struct defaults apply |
+
+**`material_params` fields (`softbody::SoftBodyMaterialParams`):**
+
+| Field | Type | Default |
+| --- | --- | --- |
+| `stiffness` | `number` | `0.0` |
+| `damping` | `number` | `0.0` |
+| `edge_compliance` | `number` | `0.0` |
+| `shear_compliance` | `number` | `0.0` |
+| `bend_compliance` | `number` | `max_float` |
+| `tether_mode` | `string` | `"none"` |
+| `tether_max_distance_multiplier` | `number` | `1.0` |
+
+**`SoftBodyState` table fields (`softbody::SoftBodyState`):**
+
+| Field | Type |
+| --- | --- |
+| `center_of_mass` | `vec3` |
+| `sleeping` | `bool` |
+
+### 6.10 `oxygen.physics.events` → `oxygen.events` bridge (V2)
+
+`physics.events.drain()` keeps its V1 return contract and additionally
+forwards every drained event to the core event runtime via
+`QueueEngineEvent(...)` under reserved engine names:
+
+| Physics event type | Queued engine event name | Phase |
+| --- | --- | --- |
+| `contact_begin` | `physics.contact_begin` | `scene_mutation` |
+| `contact_end` | `physics.contact_end` | `scene_mutation` |
+| `trigger_begin` | `physics.trigger_begin` | `scene_mutation` |
+| `trigger_end` | `physics.trigger_end` | `scene_mutation` |
+
+Payload shape in `oxygen.events` listeners is exactly the same table produced
+by `physics.events.drain()` (`type`, `node_a`, `node_b`, `body_a`, `body_b`,
+`contact_normal`, `contact_position`, `penetration_depth`, `applied_impulse`).
+
+Bridge behavior is deterministic:
+
+1. If `drain()` returns `N` events, exactly `N` `physics.*` events are queued.
+2. If called outside `scene_mutation`, `drain()` returns `{}` and queues nothing.
+3. No duplicate queueing inside a single `drain()` invocation.
+
+> **Cross-subsystem coupling note:** The bridge requires a C++-side call into
+> the core `EventRuntime` from `PhysicsEventsBindings.cpp`. This is not currently
+> exposed as a standalone function in `EventsBindings.h`. V2 implementation step 7
+> must either: (a) expose `QueueEngineEvent(lua_State*, std::string_view name, int payload_ref)`
+> via `EventsBindings.h`, or (b) implement the queue write directly against the
+> `EventRuntime` tagged userdata by calling `EnsureRuntime` and appending to its
+> `queue`. Option (a) is preferred — it keeps `PhysicsEventsBindings` from
+> depending on `EventRuntime` internals.
 
 ---
 
@@ -404,7 +608,7 @@ oxygen.physics.constants.event_type = {
 
 ### 7.1 Userdata Tags — Not Allocated
 
-All four physics userdata types are **trivially destructible** POD structs
+All physics userdata types in V1+V2 are **trivially destructible** POD structs
 (they hold only `NamedType<uint32_t>` fields). Per the No-Leak Policy in
 `README.md`, trivially destructible payloads may use **untagged
 `lua_newuserdata`** — no tag integer is reserved or required. Tags are only
@@ -414,7 +618,7 @@ Do not extend `LuauUserdataTag` in `LuaBindingCommon.h` for these types.
 
 ### 7.2 Userdata Layouts
 
-All four types are **trivially destructible** (they store only `uint32_t`
+All six types are **trivially destructible** (they store only `uint32_t`
 `NamedType` values). They use `lua_newuserdata` (untagged), not
 `lua_newuserdatatagged`, and do **not** require `lua_setuserdatadtor`.
 
@@ -442,6 +646,15 @@ struct PhysicsBodyIdUserdata {
 struct PhysicsCharacterIdUserdata {
     physics::CharacterId character_id;
 };
+
+struct PhysicsAggregateHandleUserdata {
+    physics::WorldId world_id;
+    physics::AggregateId aggregate_id;
+};
+
+struct PhysicsAggregateIdUserdata {
+    physics::AggregateId aggregate_id;
+};
 ```
 
 ### 7.3 Metatable Names
@@ -452,6 +665,8 @@ struct PhysicsCharacterIdUserdata {
 | `kPhysicsCharacterHandleMetatable` | `"oxygen.physics.character_handle"` |
 | `kPhysicsBodyIdMetatable` | `"oxygen.physics.body_id"` |
 | `kPhysicsCharacterIdMetatable` | `"oxygen.physics.character_id"` |
+| `kPhysicsAggregateHandleMetatable` | `"oxygen.physics.aggregate_handle"` |
+| `kPhysicsAggregateIdMetatable` | `"oxygen.physics.aggregate_id"` |
 
 ### 7.4 Standard Helpers Per Type
 
@@ -470,20 +685,30 @@ auto CheckBodyId(lua_State*, int index) -> PhysicsBodyIdUserdata*;
 
 auto PushCharacterId(lua_State*, CharacterId) -> int;
 auto CheckCharacterId(lua_State*, int index) -> PhysicsCharacterIdUserdata*;
+
+auto PushAggregateHandle(lua_State*, WorldId, AggregateId) -> int;
+auto CheckAggregateHandle(lua_State*, int index) -> PhysicsAggregateHandleUserdata*;
+
+auto PushAggregateId(lua_State*, AggregateId) -> int;
+auto CheckAggregateId(lua_State*, int index) -> PhysicsAggregateIdUserdata*;
 ```
 
-All four types share `is_valid()` and `__tostring` metamethods.
+All six types share `is_valid()` and `__tostring` metamethods.
 
 **`__eq` semantics differ by type:**
 
 - **`PhysicsBodyHandleUserdata`**: `__eq` compares `(world_id, body_id)` as
   a pair. Comparing only `body_id` would produce false positives in a
-  multi-world scenario (a future V2 feature) where the same integer can be
+  multi-world scenario where the same integer can be
   reused in different worlds.
 - **`PhysicsCharacterHandleUserdata`**: `__eq` compares `(world_id, character_id)` as a pair, for the same reason.
 - **`PhysicsBodyIdUserdata`**, **`PhysicsCharacterIdUserdata`**: `__eq`
   compares the single raw `uint32_t` value. These bare ID types have no
   world context, so raw value equality is the only meaningful comparison.
+- **`PhysicsAggregateHandleUserdata`**: `__eq` compares
+  `(world_id, aggregate_id)` as a pair.
+- **`PhysicsAggregateIdUserdata`**: `__eq` compares the single raw
+  `uint32_t` value.
 
 ---
 
@@ -510,6 +735,11 @@ auto IsCommandAllowed(lua_State* state) -> bool {
     return phase == "gameplay";
 }
 
+auto IsAggregateMutationAllowed(lua_State* state) -> bool {
+    const auto phase = GetActiveEventPhase(state);
+    return phase == "gameplay";
+}
+
 auto IsEventDrainAllowed(lua_State* state) -> bool {
     const auto phase = GetActiveEventPhase(state);
     return phase == "scene_mutation";
@@ -527,7 +757,12 @@ Policy table:
 | `body:move_kinematic` | `IsCommandAllowed` | Return `false`, log `WARNING` |
 | `character:move` | `IsCommandAllowed` | Return `nil`, log `WARNING` |
 | `events.drain` | `IsEventDrainAllowed` | Return `{}`, no warning (empty is expected in non-mutation phases) |
+| `aggregate.*` mutators (`create`, `destroy`, `add/remove_member_body`, `flush_structural_changes`) | `IsAggregateMutationAllowed` | Return `nil`/`false`, log `WARNING` |
+| `articulation.*` mutators (`create`, `destroy`, `add_link`, `remove_link`, `flush_structural_changes`) | `IsAggregateMutationAllowed` | Return `nil`/`false`, log `WARNING` |
+| `vehicle.*` mutators (`create`, `destroy`, `set_control_input`, `flush_structural_changes`) | `IsAggregateMutationAllowed` | Return `nil`/`false`, log `WARNING` |
+| `soft_body.*` mutators (`create`, `destroy`, `set_material_params`, `flush_structural_changes`) | `IsAggregateMutationAllowed` | Return `nil`/`false`, log `WARNING` |
 | `query.*` | none (read-only) | Return `nil` if engine unavailable |
+| `aggregate/articulation/vehicle/soft_body` read methods | none (read-only) | Return `nil` if engine unavailable |
 
 ---
 
@@ -548,6 +783,11 @@ Policy table:
 | `PhysicsEventType::kContactEnd` | `"contact_end"` |
 | `PhysicsEventType::kTriggerBegin` | `"trigger_begin"` |
 | `PhysicsEventType::kTriggerEnd` | `"trigger_end"` |
+| `AggregateAuthority::kSimulation` | `"simulation"` |
+| `AggregateAuthority::kCommand` | `"command"` |
+| `SoftBodyTetherMode::kNone` | `"none"` |
+| `SoftBodyTetherMode::kEuclidean` | `"euclidean"` |
+| `SoftBodyTetherMode::kGeodesic` | `"geodesic"` |
 
 `body_flags` in the `desc` table is accepted as an **array of strings**. The
 implementation OR-combines all flag bits. Unknown strings produce `luaL_error`.
@@ -581,6 +821,8 @@ is raised.
 - All float fields are validated as finite (`std::isfinite`). Non-finite
   values produce `luaL_argerror`.
 - Angular values (`max_slope_angle`) are in radians, matching the C++ struct.
+- `vehicle.set_control_input` values are finite and clamped to documented domains.
+- `soft_body` numeric fields are finite; non-finite values produce `luaL_argerror`.
 
 ### 9.4 Vector and Quaternion Mapping
 
@@ -601,7 +843,7 @@ is raised.
 | Wrong Lua argument type | `luaL_check*` / `luaL_argerror` (hard error) |
 | Wrong phase for mutation | Return `nil` / `false`; log `WARNING` with phase name |
 | Backend `PhysicsResult` failure | Return `nil` / `false`; optionally log `WARNING` with `to_string(error)` |
-| Invalid ID (body/character not found) | Return `nil`; log `WARNING` |
+| Invalid ID (body/character/aggregate not found) | Return `nil`/`false`; log `WARNING` |
 
 All soft-fallback error paths must behave deterministically: the same input
 in the wrong context always produces the same output value, with no side
@@ -627,6 +869,14 @@ Packs/Physics/
   PhysicsEventsBindings.cpp
   PhysicsConstantsBindings.h      — RegisterPhysicsConstantsBindings()
   PhysicsConstantsBindings.cpp
+  PhysicsAggregateBindings.h      — RegisterPhysicsAggregateBindings()
+  PhysicsAggregateBindings.cpp
+  PhysicsArticulationBindings.h   — RegisterPhysicsArticulationBindings()
+  PhysicsArticulationBindings.cpp
+  PhysicsVehicleBindings.h        — RegisterPhysicsVehicleBindings()
+  PhysicsVehicleBindings.cpp
+  PhysicsSoftBodyBindings.h       — RegisterPhysicsSoftBodyBindings()
+  PhysicsSoftBodyBindings.cpp
 ```
 
 `PhysicsBindingPack.cpp` declares a **single top-level namespace entry**,
@@ -648,6 +898,10 @@ auto RegisterPhysicsBindings(lua_State* state, int oxygen_idx) -> void {
     RegisterQueryBindings(state, oxygen_idx);
     RegisterPhysicsEventsBindings(state, oxygen_idx);
     RegisterPhysicsConstantsBindings(state, oxygen_idx);
+    RegisterPhysicsAggregateBindings(state, oxygen_idx);
+    RegisterPhysicsArticulationBindings(state, oxygen_idx);
+    RegisterPhysicsVehicleBindings(state, oxygen_idx);
+    RegisterPhysicsSoftBodyBindings(state, oxygen_idx);
 }
 ```
 
@@ -680,59 +934,9 @@ lua_pop(state, 1)  ← physics
 
 ---
 
-## 13. Implementation Plan
+## 13. Testing Strategy
 
-### V1 — Complete Implementation
-
-All functionality listed in Section 6 is implemented in V1. This includes
-sweep and overlap queries, the full `BodyHandle` and `CharacterHandle` method
-sets, the events `drain`, and the constants table.
-
-1. Add `Packs/Physics/` directory and CMake target.
-2. Implement `PhysicsBindingsCommon`:
-   - All four userdata structs and metatables.
-   - `PushBodyHandle`, `CheckBodyHandle`, `PushCharacterHandle`, `CheckCharacterHandle`.
-   - `PushBodyId`, `CheckBodyId`, `PushCharacterId`, `CheckCharacterId`.
-   - Helper `GetPhysicsModule(state) -> observer_ptr<PhysicsModule>`.
-   - `IsAttachAllowed`, `IsCommandAllowed`, `IsEventDrainAllowed` phase helpers.
-3. Implement `PhysicsBodyBindings`:
-   - `body.attach`, `body.get`.
-   - Full `BodyHandle` method set: `is_valid`, `get_id`, `get_body_type`,
-     `get_position`, `get_rotation`, `get_linear_velocity`, `get_angular_velocity`,
-     `set_linear_velocity`, `set_angular_velocity`, `add_force`, `add_impulse`,
-     `add_torque`, `move_kinematic`.
-4. Implement `PhysicsCharacterBindings`:
-   - `character.attach`, `character.get`.
-   - `CharacterHandle` methods: `is_valid`, `get_id`, `move`.
-5. Implement `PhysicsQueryBindings`:
-   - `query.raycast` (via `ScenePhysics::CastRay` → fallback to `IQueryApi::Raycast`).
-   - `query.sweep` (via `IQueryApi::Sweep` with `span<SweepHit>` output).
-   - `query.overlap` (via `IQueryApi::Overlap` with `span<uint64_t>` output, returns `count, BodyId[]`).
-6. Implement `PhysicsEventsBindings`:
-   - `events.drain` via `PhysicsModule::ConsumeSceneEvents()`.
-7. Implement `PhysicsConstantsBindings`:
-   - Frozen constants table.
-8. Wire `PhysicsBindingPack` and register with engine.
-9. Add tests (see Section 14).
-
-### V2 — Extension Round
-
-Features deferred to V2 because they involve cross-subsystem coupling
-or genuinely new domain design work, not implementation complexity:
-
-- **`oxygen.events` physics bridge**: forward drained events into the
-  `oxygen.events` queue under reserved event names (`physics.contact_begin`,
-  `physics.contact_end`, etc.). Requires coordinating with `EventsBindings`
-  dispatch machinery; not risky but adds a coupling not needed for V1 utility.
-- **Aggregate/articulation/vehicle/soft-body scripting surface**: these are
-  separate domains with distinct APIs requiring dedicated design sections
-  before implementation.
-
----
-
-## 14. Testing Strategy
-
-Add `src/Oxygen/Scripting/Test/Bindings_physics_test.cpp` covering:
+Add/extend `src/Oxygen/Scripting/Test/Bindings_physics_test.cpp` covering:
 
 | Category | What to verify |
 | --- | --- |
@@ -748,19 +952,17 @@ Add `src/Oxygen/Scripting/Test/Bindings_physics_test.cpp` covering:
 | Happy path — character | Attach returns valid `CharacterHandle`; `move` returns a result table |
 | Happy path — raycast | Returns `nil` on no hit; returns table with `body_id`, `position`, `normal`, `distance` on hit |
 | Happy path — drain | Returns empty table when no events queued; returns correct event shape |
+| V2 surface exposure | `physics.aggregate`, `.articulation`, `.vehicle`, `.soft_body` exist and are tables |
+| V2 function presence | All functions listed in Sections 6.6–6.9 are callable |
+| V2 phase gate — mutators | Aggregate/articulation/vehicle/soft_body mutators reject outside `gameplay` |
+| V2 aggregate happy path | `create`, add/remove members, member query, flush all succeed on fake backend |
+| V2 articulation happy path | `create`, add/remove links, root/link queries, authority, flush succeed |
+| V2 vehicle happy path | `create`, `set_control_input`, `get_state`, `get_authority`, flush succeed |
+| V2 soft-body happy path | `create`, `set_material_params`, `get_state`, `get_authority`, flush succeed |
+| V2 body-id unions | APIs accepting `BodyId/BodyHandle` work for both forms |
+| V2 array unions | APIs accepting `BodyId[]/BodyHandle[]` work for both forms |
+| V2 events bridge | `physics.events.drain()` queues matching `physics.*` events into `oxygen.events` |
+| V2 reserved events | `oxygen.events.emit(\"physics.*\")` is rejected as reserved |
+| V2 constants table | `aggregate_authority` and `soft_body_tether_mode` values match C++ enums and are read-only |
 | Userdata lifecycle | Constructing and collecting `BodyHandle` userdata produces no leaks |
 | Constants table | Values match C++ enum strings; write attempt raises error |
-
----
-
-## 15. Acceptance Criteria For Starting Implementation
-
-- [ ] `PhysicsBindingPack` compiles and registers with no linker errors.
-- [ ] `oxygen.physics.body`, `oxygen.physics.character`, `oxygen.physics.query`,
-  `oxygen.physics.events`, `oxygen.physics.constants` are present in the
-  runtime environment.
-- [ ] Full V1 API surface implemented and all tests in Section 14 pass.
-- [ ] No lifecycle leaks: all userdata confirmed trivially destructible (no
-  `__gc`, confirmed no non-trivial members).
-- [ ] No phase-contract violations: mutating APIs gated, read APIs always safe.
-- [ ] Code passes clang-tidy and follows all conventions in `README.md`.

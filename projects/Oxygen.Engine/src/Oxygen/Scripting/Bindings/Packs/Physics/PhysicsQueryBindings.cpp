@@ -12,6 +12,7 @@
 #include <lua.h>
 #include <lualib.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Physics/Query/Overlap.h>
 #include <Oxygen/Physics/Query/Raycast.h>
@@ -26,6 +27,30 @@
 namespace oxygen::scripting::bindings {
 
 namespace {
+  auto RejectFixedSimulationWithNil(lua_State* state, const char* op_name)
+    -> bool
+  {
+    if (IsPhysicsScriptablePhase(state)) {
+      return false;
+    }
+    LOG_F(
+      WARNING, "physics.query.{} rejected during fixed_simulation", op_name);
+    lua_pushnil(state);
+    return true;
+  }
+
+  auto RejectFixedSimulationWithNilPair(lua_State* state, const char* op_name)
+    -> bool
+  {
+    if (IsPhysicsScriptablePhase(state)) {
+      return false;
+    }
+    LOG_F(
+      WARNING, "physics.query.{} rejected during fixed_simulation", op_name);
+    lua_pushnil(state);
+    lua_pushnil(state);
+    return true;
+  }
 
   auto ParseCollisionMaskField(lua_State* state, const int table_index,
     const char* field_name) -> physics::CollisionMask
@@ -234,6 +259,9 @@ namespace {
 
   auto LuaPhysicsQueryRaycast(lua_State* state) -> int
   {
+    if (RejectFixedSimulationWithNil(state, "raycast")) {
+      return 1;
+    }
     auto* physics_module = GetPhysicsModule(state);
     const auto world_id_opt = GetPhysicsWorldId(state);
     if (physics_module == nullptr || !world_id_opt.has_value()) {
@@ -258,6 +286,9 @@ namespace {
 
   auto LuaPhysicsQuerySweep(lua_State* state) -> int
   {
+    if (RejectFixedSimulationWithNil(state, "sweep")) {
+      return 1;
+    }
     auto* physics_module = GetPhysicsModule(state);
     const auto world_id_opt = GetPhysicsWorldId(state);
     if (physics_module == nullptr || !world_id_opt.has_value()) {
@@ -298,6 +329,9 @@ namespace {
 
   auto LuaPhysicsQueryOverlap(lua_State* state) -> int
   {
+    if (RejectFixedSimulationWithNilPair(state, "overlap")) {
+      return 2;
+    }
     auto* physics_module = GetPhysicsModule(state);
     const auto world_id_opt = GetPhysicsWorldId(state);
     if (physics_module == nullptr || !world_id_opt.has_value()) {
