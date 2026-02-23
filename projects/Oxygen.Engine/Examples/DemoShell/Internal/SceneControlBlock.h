@@ -36,6 +36,7 @@ public:
   //! Stage a scene for publication on frame start.
   auto StageScene(std::unique_ptr<scene::Scene> scene) -> void
   {
+    CHECK_NOTNULL_F(scene.get(), "StageScene requires a non-null scene");
     std::scoped_lock lock(scene_mutex_);
     staged_scene_ = std::shared_ptr(std::move(scene));
     staged_main_camera_ = {};
@@ -47,6 +48,16 @@ public:
   [[nodiscard]] auto HasStagedScene() const noexcept -> bool
   {
     return has_staged_scene_.load(std::memory_order_acquire);
+  }
+
+  //! Drop any staged scene without publishing it.
+  auto DiscardStagedScene() -> void
+  {
+    std::scoped_lock lock(scene_mutex_);
+    staged_scene_.reset();
+    staged_scene_ptr_.store(nullptr, std::memory_order_release);
+    has_staged_scene_.store(false, std::memory_order_release);
+    staged_main_camera_ = {};
   }
 
   //! Attach the staged scene's selected main camera.
@@ -80,6 +91,8 @@ public:
     if (!has_staged_scene_.load(std::memory_order_acquire)) {
       return false;
     }
+    CHECK_NOTNULL_F(staged_scene_.get(),
+      "staged scene flag is set but staged scene object is null");
     scene_ = std::move(staged_scene_);
     scene_ptr_.store(scene_.get(), std::memory_order_release);
     published_main_camera_ = std::move(staged_main_camera_);

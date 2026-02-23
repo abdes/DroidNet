@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <memory>
 #include <span>
+#include <string_view>
 #include <unordered_set>
 #include <vector>
 
@@ -24,6 +25,7 @@
 #include <Oxygen/Engine/ModuleEvent.h>
 #include <Oxygen/Engine/ModuleManager.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Physics/Shape.h>
 #include <Oxygen/Scene/SceneNode.h>
 
 namespace oxygen::content {
@@ -112,6 +114,8 @@ public:
   //! Build the runtime scene from a loaded asset.
   auto BuildSceneAsync(scene::Scene& scene, const data::SceneAsset& asset)
     -> co::Co<scene::SceneNode>;
+  //! Hydrate physics sidecar after scene graph/runtime components are built.
+  void HydratePhysicsSidecar(const data::PhysicsSceneAsset& physics_asset);
 
   //! Mark the result as consumed and begin cleanup.
   void MarkConsumed();
@@ -147,6 +151,24 @@ private:
   //! Attach collider-only bindings as static trigger bodies.
   void HydrateColliderBindings(physics::PhysicsModule& physics_module,
     std::span<const data::pak::ColliderBindingRecord> bindings);
+  //! Attach joint bindings between already-hydrated rigid bodies.
+  void HydrateJointBindings(physics::PhysicsModule& physics_module,
+    std::span<const data::pak::JointBindingRecord> bindings);
+  //! Resolve and decode cooked collision shape descriptor by global asset
+  //! index.
+  auto ResolveCollisionShapeAsset(uint32_t shape_asset_index,
+    std::string_view binding_kind, uint32_t node_index)
+    -> data::pak::CollisionShapeAssetDesc;
+  //! Resolve and decode cooked physics material descriptor by global asset
+  //! index.
+  auto ResolvePhysicsMaterialAsset(uint32_t material_asset_index,
+    std::string_view binding_kind, uint32_t node_index)
+    -> data::pak::PhysicsMaterialAssetDesc;
+  //! Convert cooked collision-shape descriptor to runtime physics shape.
+  auto BuildCollisionShapeFromDescriptor(
+    const data::pak::CollisionShapeAssetDesc& shape_desc,
+    std::string_view binding_kind, uint32_t node_index) const
+    -> physics::CollisionShape;
   //! Enforce explicit failure for sidecar domains not yet hydrated.
   void ValidateUnsupportedPhysicsDomains(
     const data::PhysicsSceneAsset& physics_asset) const;

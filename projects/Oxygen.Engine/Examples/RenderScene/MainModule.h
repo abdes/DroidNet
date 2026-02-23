@@ -32,6 +32,7 @@ namespace engine {
 }
 namespace data {
   class SceneAsset;
+  class PhysicsSceneAsset;
 }
 namespace renderer {
   struct CompositionView;
@@ -117,6 +118,8 @@ private:
 
   std::shared_ptr<oxygen::examples::SceneLoaderService> scene_loader_;
   bool scene_load_cancel_requested_ { false };
+  std::shared_ptr<data::PhysicsSceneAsset> pending_physics_sidecar_;
+  bool scene_published_this_frame_ { false };
 
   // Content and scene state
   std::optional<data::AssetKey> current_scene_key_;
@@ -144,6 +147,7 @@ private:
   std::unordered_map<std::filesystem::path, std::filesystem::file_time_type>
     mounted_pak_write_times_;
   std::vector<std::filesystem::path> mounted_loose_roots_;
+  bool pending_scene_clear_ { false };
 };
 
 } // namespace oxygen::examples::render_scene
