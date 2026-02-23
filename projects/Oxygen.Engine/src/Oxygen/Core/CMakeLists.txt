@@ -141,6 +141,8 @@ set(
   "Meta/Data/AssetType.inc"
   "Meta/Data/ComponentType.inc"
   "Meta/Data/ResourceIndex.inc"
+  "Meta/Physics/PakPhysics.inc"
+  "Meta/Physics/PakPhysicsShape.inc"
   "Meta/Input/ActionState.inc"
   "Meta/Input/ActionTriggers.inc"
   "Meta/Input/ActionValue.inc"
