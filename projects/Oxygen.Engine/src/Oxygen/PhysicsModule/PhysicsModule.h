@@ -26,6 +26,7 @@
 #include <Oxygen/Physics/System/IBodyApi.h>
 #include <Oxygen/Physics/System/ICharacterApi.h>
 #include <Oxygen/Physics/System/IEventApi.h>
+#include <Oxygen/Physics/System/IJointApi.h>
 #include <Oxygen/Physics/System/IPhysicsSystem.h>
 #include <Oxygen/Physics/System/IQueryApi.h>
 #include <Oxygen/PhysicsModule/api_export.h>
@@ -209,6 +210,7 @@ public:
 
   OXGN_PHSYNC_API auto Bodies() noexcept -> system::IBodyApi&;
   OXGN_PHSYNC_API auto Characters() noexcept -> system::ICharacterApi&;
+  OXGN_PHSYNC_API auto Joints() noexcept -> system::IJointApi&;
   OXGN_PHSYNC_API auto Queries() noexcept -> system::IQueryApi&;
   OXGN_PHSYNC_API auto Events() noexcept -> system::IEventApi&;
   OXGN_PHSYNC_API auto Aggregates() noexcept -> system::IAggregateApi&;

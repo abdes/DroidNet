@@ -44,6 +44,7 @@ if type(physics.events) ~= "table" then error("missing physics.events") end
 if type(physics.constants) ~= "table" then error("missing physics.constants") end
 if type(physics.aggregate) ~= "table" then error("missing physics.aggregate") end
 if type(physics.articulation) ~= "table" then error("missing physics.articulation") end
+if type(physics.joint) ~= "table" then error("missing physics.joint") end
 if type(physics.vehicle) ~= "table" then error("missing physics.vehicle") end
 if type(physics.soft_body) ~= "table" then error("missing physics.soft_body") end
 
@@ -69,6 +70,9 @@ if type(physics.articulation.get_root_body) ~= "function" then error("missing ph
 if type(physics.articulation.get_link_bodies) ~= "function" then error("missing physics.articulation.get_link_bodies") end
 if type(physics.articulation.get_authority) ~= "function" then error("missing physics.articulation.get_authority") end
 if type(physics.articulation.flush_structural_changes) ~= "function" then error("missing physics.articulation.flush_structural_changes") end
+if type(physics.joint.create) ~= "function" then error("missing physics.joint.create") end
+if type(physics.joint.destroy) ~= "function" then error("missing physics.joint.destroy") end
+if type(physics.joint.set_enabled) ~= "function" then error("missing physics.joint.set_enabled") end
 if type(physics.vehicle.create) ~= "function" then error("missing physics.vehicle.create") end
 if type(physics.vehicle.destroy) ~= "function" then error("missing physics.vehicle.destroy") end
 if type(physics.vehicle.set_control_input) ~= "function" then error("missing physics.vehicle.set_control_input") end
@@ -122,6 +126,14 @@ end
 if physics.aggregate.create() ~= nil then
   error("aggregate.create should return nil without physics module")
 end
+
+if physics.joint.create({
+  type = "fixed",
+  body_a_id = 1,
+  body_b_id = 2,
+}) ~= nil then
+  error("joint.create should return nil without physics module")
+end
 )lua" },
     .chunk_name = ScriptChunkName { "physics_bindings_no_engine_defaults" },
   });
@@ -140,6 +152,11 @@ local c = oxygen.physics.constants
 if c.body_type.dynamic ~= "dynamic" then error("body_type enum mismatch") end
 if c.body_flags.enable_ccd ~= "enable_ccd" then error("body_flags enum mismatch") end
 if c.event_type.contact_begin ~= "contact_begin" then error("event_type enum mismatch") end
+if c.joint_type.fixed ~= "fixed" then error("joint_type.fixed enum mismatch") end
+if c.joint_type.distance ~= "distance" then error("joint_type.distance enum mismatch") end
+if c.joint_type.hinge ~= "hinge" then error("joint_type.hinge enum mismatch") end
+if c.joint_type.slider ~= "slider" then error("joint_type.slider enum mismatch") end
+if c.joint_type.spherical ~= "spherical" then error("joint_type.spherical enum mismatch") end
 if c.aggregate_authority.command ~= "command" then error("aggregate_authority enum mismatch") end
 if c.soft_body_tether_mode.euclidean ~= "euclidean" then error("soft_body_tether_mode enum mismatch") end
 
@@ -147,6 +164,11 @@ local ok = pcall(function()
   c.body_type.dynamic = "x"
 end)
 if ok then error("constants table should be read-only") end
+
+local ok_joint = pcall(function()
+  c.joint_type.hinge = "x"
+end)
+if ok_joint then error("joint_type table should be read-only") end
 )lua" },
     .chunk_name = ScriptChunkName { "physics_constants_read_only" },
   });
@@ -232,6 +254,15 @@ function on_fixed_simulation()
   end
   if physics.articulation.create({ root_body_id = 1 }) ~= nil then
     error("articulation.create must be blocked in fixed_simulation")
+  end
+  if physics.joint.create({ body_a_id = 1, body_b_id = 2 }) ~= nil then
+    error("joint.create must be blocked in fixed_simulation")
+  end
+  if physics.joint.destroy(nil) ~= false then
+    error("joint.destroy must be blocked in fixed_simulation")
+  end
+  if physics.joint.set_enabled(nil, true) ~= false then
+    error("joint.set_enabled must be blocked in fixed_simulation")
   end
   if physics.vehicle.create({ chassis_body_id = 1, wheel_body_ids = { 2 } }) ~= nil then
     error("vehicle.create must be blocked in fixed_simulation")

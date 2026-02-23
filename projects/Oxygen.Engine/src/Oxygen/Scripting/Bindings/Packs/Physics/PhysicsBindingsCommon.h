@@ -32,6 +32,9 @@ constexpr const char* kPhysicsAggregateHandleMetatable
   = "oxygen.physics.aggregate_handle";
 constexpr const char* kPhysicsAggregateIdMetatable
   = "oxygen.physics.aggregate_id";
+constexpr const char* kPhysicsJointHandleMetatable
+  = "oxygen.physics.joint_handle";
+constexpr const char* kPhysicsJointIdMetatable = "oxygen.physics.joint_id";
 
 struct PhysicsBodyHandleUserdata final {
   physics::WorldId world_id { physics::kInvalidWorldId };
@@ -61,12 +64,23 @@ struct PhysicsAggregateIdUserdata final {
   physics::AggregateId aggregate_id { physics::kInvalidAggregateId };
 };
 
+struct PhysicsJointIdUserdata final {
+  physics::JointId joint_id { physics::kInvalidJointId };
+};
+
+struct PhysicsJointHandleUserdata final {
+  physics::WorldId world_id { physics::kInvalidWorldId };
+  physics::JointId joint_id { physics::kInvalidJointId };
+};
+
 auto RegisterPhysicsBodyHandleMetatable(lua_State* state) -> void;
 auto RegisterPhysicsCharacterHandleMetatable(lua_State* state) -> void;
 auto RegisterPhysicsBodyIdMetatable(lua_State* state) -> void;
 auto RegisterPhysicsCharacterIdMetatable(lua_State* state) -> void;
 auto RegisterPhysicsAggregateHandleMetatable(lua_State* state) -> void;
 auto RegisterPhysicsAggregateIdMetatable(lua_State* state) -> void;
+auto RegisterPhysicsJointHandleMetatable(lua_State* state) -> void;
+auto RegisterPhysicsJointIdMetatable(lua_State* state) -> void;
 
 auto PushBodyHandle(lua_State* state, physics::WorldId world_id,
   physics::BodyId body_id, physics::body::BodyType body_type) -> int;
@@ -94,6 +108,14 @@ auto PushAggregateId(lua_State* state, physics::AggregateId aggregate_id)
   -> int;
 auto CheckAggregateId(lua_State* state, int index)
   -> PhysicsAggregateIdUserdata*;
+
+auto PushJointHandle(lua_State* state, physics::WorldId world_id,
+  physics::JointId joint_id) -> int;
+auto CheckJointHandle(lua_State* state, int index)
+  -> PhysicsJointHandleUserdata*;
+
+auto PushJointId(lua_State* state, physics::JointId joint_id) -> int;
+auto CheckJointId(lua_State* state, int index) -> PhysicsJointIdUserdata*;
 
 auto GetPhysicsModule(lua_State* state) -> physics::PhysicsModule*;
 auto GetPhysicsWorldId(lua_State* state) -> std::optional<physics::WorldId>;
