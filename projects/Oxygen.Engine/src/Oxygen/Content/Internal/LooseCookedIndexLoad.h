@@ -80,6 +80,8 @@ inline auto Load(AnyReader& reader, data::loose_cooked::FileRecord& record)
   case FileKind::kTexturesData:
   case FileKind::kScriptsTable:
   case FileKind::kScriptsData:
+  case FileKind::kPhysicsTable:
+  case FileKind::kPhysicsData:
     record.kind = static_cast<FileKind>(kind_u);
     break;
   default:

@@ -239,6 +239,24 @@ namespace {
       std::runtime_error);
   }
 
+  //! Test: Missing required physics pair throws.
+  NOLINT_TEST(LooseCookedWriterTest, Finish_MissingPhysicsPair_Throws)
+  {
+    const auto cooked_root
+      = MakeTempCookedRoot("loose_cooked_writer_physics_pairs");
+
+    const std::vector<std::byte> bytes = {
+      std::byte { 0x10 },
+    };
+
+    LooseCookedWriter writer(cooked_root);
+    writer.WriteFile(FileKind::kPhysicsTable, "Resources/physics.table", bytes);
+
+    EXPECT_THROW(
+      { [[maybe_unused]] const auto ignored = writer.Finish(); },
+      std::runtime_error);
+  }
+
   //! Test: Existing GUID is preserved when not overridden
   /*!
    Scenario: Writes an index with an explicit source key.

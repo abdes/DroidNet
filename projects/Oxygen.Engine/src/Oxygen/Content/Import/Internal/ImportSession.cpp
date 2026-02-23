@@ -440,6 +440,28 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
           layout.BuffersTableRelPath(), request_.source_path.string());
     }
 
+    const auto physics_table_rel = layout.PhysicsTableRelPath();
+    const auto physics_data_rel = layout.PhysicsDataRelPath();
+    const auto physics_table_path
+      = cooked_root_ / std::filesystem::path(physics_table_rel);
+    const auto physics_data_path
+      = cooked_root_ / std::filesystem::path(physics_data_rel);
+    const auto physics_table_exists
+      = std::filesystem::exists(physics_table_path);
+    const auto physics_data_exists = std::filesystem::exists(physics_data_path);
+
+    if (physics_table_exists || physics_data_exists) {
+      RegisterExternalTable(*index_registry_, FileKind::kPhysicsData,
+        cooked_root_, physics_data_rel);
+      RegisterExternalTable(*index_registry_, FileKind::kPhysicsTable,
+        cooked_root_, physics_table_rel);
+
+      output_missing |= !AppendOutputRecord(report.outputs, report.diagnostics,
+        cooked_root_, physics_data_rel, request_.source_path.string());
+      output_missing |= !AppendOutputRecord(report.outputs, report.diagnostics,
+        cooked_root_, physics_table_rel, request_.source_path.string());
+    }
+
     if (asset_emitter_.has_value()) {
       const auto& records = (*asset_emitter_)->Records();
       report.outputs.reserve(report.outputs.size() + records.size());

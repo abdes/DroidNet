@@ -25,6 +25,7 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResource.h>
@@ -425,6 +426,19 @@ public:
         FileKind::kScriptsData, *scripts_data_path_);
     }
 
+    if (const auto rel = index_.FindFileRelPath(FileKind::kPhysicsTable); rel) {
+      physics_table_path_ = cooked_root_ / std::filesystem::path(*rel);
+      ValidateFileRecordExistsAndMatchesSize(
+        FileKind::kPhysicsTable, *physics_table_path_);
+      InitializePhysicsTable();
+    }
+
+    if (const auto rel = index_.FindFileRelPath(FileKind::kPhysicsData); rel) {
+      physics_data_path_ = cooked_root_ / std::filesystem::path(*rel);
+      ValidateFileRecordExistsAndMatchesSize(
+        FileKind::kPhysicsData, *physics_data_path_);
+    }
+
     ValidateTableDataPairs();
   }
 
@@ -492,7 +506,10 @@ public:
   [[nodiscard]] auto CreatePhysicsTableReader() const
     -> std::unique_ptr<serio::AnyReader> override
   {
-    return nullptr;
+    if (!physics_table_path_) {
+      return nullptr;
+    }
+    return std::make_unique<OwningFileReader>(*physics_table_path_);
   }
 
   [[nodiscard]] auto GetBufferTable() const noexcept
@@ -516,7 +533,7 @@ public:
   [[nodiscard]] auto GetPhysicsTable() const noexcept
     -> const ResourceTable<data::PhysicsResource>* override
   {
-    return nullptr;
+    return physics_table_ ? &(*physics_table_) : nullptr;
   }
 
   [[nodiscard]] auto CreateBufferDataReader() const
@@ -546,7 +563,10 @@ public:
   [[nodiscard]] auto CreatePhysicsDataReader() const
     -> std::unique_ptr<serio::AnyReader> override
   {
-    return nullptr;
+    if (!physics_data_path_) {
+      return nullptr;
+    }
+    return std::make_unique<OwningFileReader>(*physics_data_path_);
   }
 
   [[nodiscard]] auto ReadScriptSlotRecords(const uint32_t start_index,
@@ -649,6 +669,13 @@ private:
     if (scripts_table != scripts_data) {
       throw std::runtime_error(
         "Loose cooked root must provide both scripts.table and scripts.data");
+    }
+
+    const auto physics_table = physics_table_path_.has_value();
+    const auto physics_data = physics_data_path_.has_value();
+    if (physics_table != physics_data) {
+      throw std::runtime_error(
+        "Loose cooked root must provide both physics.table and physics.data");
     }
   }
 
@@ -840,6 +867,38 @@ private:
     textures_table_.emplace(meta);
   }
 
+  auto InitializePhysicsTable() -> void
+  {
+    if (!physics_table_path_) {
+      return;
+    }
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(*physics_table_path_, ec);
+    if (ec) {
+      throw std::runtime_error(
+        "Failed to stat physics.table: " + physics_table_path_->string());
+    }
+
+    constexpr uint64_t kEntrySize = sizeof(data::pak::PhysicsResourceDesc);
+    if (kEntrySize == 0 || (size % kEntrySize) != 0) {
+      throw std::runtime_error(
+        "Invalid physics.table size: " + physics_table_path_->string());
+    }
+
+    const auto count = size / kEntrySize;
+    if (count > (std::numeric_limits<uint32_t>::max)()) {
+      throw std::runtime_error(
+        "physics.table too large: " + physics_table_path_->string());
+    }
+
+    data::pak::ResourceTable meta {
+      .offset = 0,
+      .count = static_cast<uint32_t>(count),
+      .entry_size = static_cast<uint32_t>(kEntrySize),
+    };
+    physics_table_.emplace(meta);
+  }
+
   class OwningFileReader final : public serio::AnyReader {
   public:
     explicit OwningFileReader(const std::filesystem::path& path)
@@ -911,9 +970,12 @@ private:
   std::optional<std::filesystem::path> textures_data_path_;
   std::optional<std::filesystem::path> scripts_table_path_;
   std::optional<std::filesystem::path> scripts_data_path_;
+  std::optional<std::filesystem::path> physics_table_path_;
+  std::optional<std::filesystem::path> physics_data_path_;
 
   std::optional<ResourceTable<data::BufferResource>> buffers_table_;
   std::optional<ResourceTable<data::TextureResource>> textures_table_;
+  std::optional<ResourceTable<data::PhysicsResource>> physics_table_;
 };
 
 } // namespace oxygen::content::internal

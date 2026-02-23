@@ -199,6 +199,12 @@ struct LooseCookedLayout final : Layout {
   //! File name for the textures data.
   std::string textures_data_file_name = "textures.data";
 
+  //! File name for the physics resource table.
+  std::string physics_table_file_name = "physics.table";
+
+  //! File name for the physics resource data.
+  std::string physics_data_file_name = "physics.data";
+
   //! Optional base folder (relative to cooked root) for descriptors.
   /*!
    If empty, descriptors are written directly under the cooked root.
@@ -247,6 +253,18 @@ struct LooseCookedLayout final : Layout {
   [[nodiscard]] auto TexturesDataRelPath() const -> std::string
   {
     return JoinRelPath(resources_dir, textures_data_file_name);
+  }
+
+  //! Resolve the container-relative path for the physics table.
+  [[nodiscard]] auto PhysicsTableRelPath() const -> std::string
+  {
+    return JoinRelPath(resources_dir, physics_table_file_name);
+  }
+
+  //! Resolve the container-relative path for the physics data.
+  [[nodiscard]] auto PhysicsDataRelPath() const -> std::string
+  {
+    return JoinRelPath(resources_dir, physics_data_file_name);
   }
 
   //! Resolve the descriptor folder for an asset type.
