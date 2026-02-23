@@ -25,9 +25,9 @@
 #include <Oxygen/Base/Endian.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Content/Detail/LooseCookedIndex.h>
 #include <Oxygen/Content/Import/Internal/LooseCookedWriter.h>
-#include <Oxygen/Content/Internal/LooseCookedIndexLoad.h>
+#include <Oxygen/Content/Internal/LooseCookedIndexCodec.h>
+#include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Serio/FileStream.h>
@@ -504,7 +504,9 @@ private:
       existing_guid_ = data::SourceKey::FromBytes(header.guid);
       existing_content_version_ = header.content_version;
 
-      const auto index = detail::LooseCookedIndex::LoadFromFile(index_path);
+      const auto index
+        = oxygen::content::internal::LooseCookedIndexImpl::LoadFromFile(
+          index_path);
 
       for (const auto key : index.GetAllAssetKeys()) {
         const auto rel = index.FindDescriptorRelPath(key);

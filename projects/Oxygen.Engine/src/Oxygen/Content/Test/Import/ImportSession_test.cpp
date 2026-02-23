@@ -20,7 +20,6 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/Detail/LooseCookedIndex.h>
 #include <Oxygen/Content/Import/BufferImportTypes.h>
 #include <Oxygen/Content/Import/IAsyncFileReader.h>
 #include <Oxygen/Content/Import/IAsyncFileWriter.h>
@@ -36,6 +35,7 @@
 #include <Oxygen/Content/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Content/Import/Internal/WindowsFileWriter.h>
 #include <Oxygen/Content/Import/TextureImportTypes.h>
+#include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -620,7 +620,8 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_WithEmitters_RegistersInIndex)
     }
 
     const auto index
-      = oxygen::content::detail::LooseCookedIndex::LoadFromFile(index_path);
+      = oxygen::content::internal::LooseCookedIndexImpl::LoadFromFile(
+        index_path);
 
     const auto textures_data = index.FindFileRelPath(FileKind::kTexturesData);
     const auto textures_table = index.FindFileRelPath(FileKind::kTexturesTable);

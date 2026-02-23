@@ -86,14 +86,6 @@ public:
   //! Type alias for the physics resource table.
   using PhysicsTableT = ResourceTable<data::PhysicsResource>;
 
-  //! 8-byte header magic: {'O','X','P','A','K',0,0,0}
-  static constexpr std::array<uint8_t, 8> kHeaderMagic
-    = { 'O', 'X', 'P', 'A', 'K', 0, 0, 0 };
-
-  //! 8-byte footer magic: {'O','X','P','A','K','E','N','D'}
-  static constexpr std::array<uint8_t, 8> kFooterMagic
-    = { 'O', 'X', 'P', 'A', 'K', 'E', 'N', 'D' };
-
   //! Open a .pak file for reading.
   OXGN_CNTT_API explicit PakFile(const std::filesystem::path& path);
 

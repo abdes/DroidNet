@@ -21,10 +21,10 @@
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
 
-namespace oxygen::content::detail {
+namespace oxygen::content::internal {
 
 //! Parsed representation of a loose cooked `container.index.bin`.
-class LooseCookedIndex final {
+class LooseCookedIndexImpl final {
 public:
   struct AssetInfo {
     uint32_t descriptor_relpath_offset = 0;
@@ -42,7 +42,7 @@ public:
    @throw std::runtime_error if the file cannot be read or fails validation.
   */
   OXGN_CNTT_NDAPI static auto LoadFromFile(
-    const std::filesystem::path& index_path) -> LooseCookedIndex;
+    const std::filesystem::path& index_path) -> LooseCookedIndexImpl;
 
   OXGN_CNTT_NDAPI auto Guid() const noexcept -> data::SourceKey;
 
@@ -112,7 +112,7 @@ private:
   static auto ReadStringTable(IndexLoadContext& context) -> void;
   static auto ReadAssetEntries(IndexLoadContext& context) -> void;
   static auto ReadFileRecords(IndexLoadContext& context) -> void;
-  static auto ValidateFilePairs(const LooseCookedIndex& index) -> void;
+  static auto ValidateFilePairs(const LooseCookedIndexImpl& index) -> void;
 };
 
-} // namespace oxygen::content::detail
+} // namespace oxygen::content::internal

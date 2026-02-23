@@ -122,9 +122,8 @@ auto ReadPakFooter(const std::filesystem::path& pak_path)
 
 auto FooterMagicOk(const PakFooter& footer) -> bool
 {
-  constexpr std::string_view kFooterMagic = "OXPAKEND";
-  return std::string_view(footer.footer_magic, sizeof(footer.footer_magic))
-    == kFooterMagic;
+  return std::ranges::equal(
+    std::span { footer.footer_magic }, oxygen::data::pak::kPakFooterMagic);
 }
 
 auto TexturePackingPolicyName(uint8_t policy) -> std::string_view

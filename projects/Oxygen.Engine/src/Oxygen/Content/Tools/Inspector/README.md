@@ -91,7 +91,7 @@ Oxygen.Content.Inspector.exe dump-index F:/path/to/loose_cooked_root --assets --
 This tool intentionally depends only on exported module APIs:
 
 - `oxygen::content::AssetLoader` for validation
-- `oxygen::content::LooseCookedInspection` for inspection output
+- `oxygen::content::lc::Inspection` for inspection output
 
 ## License
 

@@ -15,6 +15,8 @@
 
 namespace oxygen::content::internal {
 
+// NOLINTBEGIN(*-magic-numbers)
+
 //! Resource key that combines PAK file index, resource type index, and resource
 //! index
 /*!
@@ -119,7 +121,7 @@ inline auto to_string(const InternalResourceKey& key) -> std::string
     + ", idx:" + std::to_string(key.GetResourceIndex()) + "}";
 }
 
-} // namespace oxygen::content::detail
+} // namespace oxygen::content::internal
 
 //! Specialization of std::hash for ResourceKey
 template <> struct std::hash<oxygen::content::internal::InternalResourceKey> {
@@ -130,3 +132,5 @@ template <> struct std::hash<oxygen::content::internal::InternalResourceKey> {
     return std::hash<uint64_t> {}(key.GetRawKey().get());
   }
 };
+
+// NOLINTEND(*-magic-numbers)

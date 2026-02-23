@@ -9,20 +9,19 @@
 namespace oxygen::content::import::test {
 
 auto AsyncImporterFullTestBase::LoadInspection(
-  const std::filesystem::path& root) -> LooseCookedInspection
+  const std::filesystem::path& root) -> Inspection
 {
-  LooseCookedInspection inspection;
+  Inspection inspection;
   inspection.LoadFromRoot(root);
   return inspection;
 }
 
-auto AsyncImporterFullTestBase::FindAssetOfType(
-  const LooseCookedInspection& inspection, const AssetType type)
-  -> std::optional<LooseCookedInspection::AssetEntry>
+auto AsyncImporterFullTestBase::FindAssetOfType(const Inspection& inspection,
+  const AssetType type) -> std::optional<Inspection::AssetEntry>
 {
   const auto assets = inspection.Assets();
-  const auto it = std::find_if(assets.begin(), assets.end(),
-    [type](const LooseCookedInspection::AssetEntry& entry) {
+  const auto it = std::find_if(
+    assets.begin(), assets.end(), [type](const Inspection::AssetEntry& entry) {
       return entry.asset_type == static_cast<uint8_t>(type);
     });
   if (it == assets.end()) {
@@ -32,11 +31,11 @@ auto AsyncImporterFullTestBase::FindAssetOfType(
 }
 
 auto AsyncImporterFullTestBase::CountAssetsOfType(
-  const LooseCookedInspection& inspection, const AssetType type) -> size_t
+  const Inspection& inspection, const AssetType type) -> size_t
 {
   const auto assets = inspection.Assets();
-  return static_cast<size_t>(std::count_if(assets.begin(), assets.end(),
-    [type](const LooseCookedInspection::AssetEntry& entry) {
+  return static_cast<size_t>(std::count_if(
+    assets.begin(), assets.end(), [type](const Inspection::AssetEntry& entry) {
       return entry.asset_type == static_cast<uint8_t>(type);
     }));
 }
@@ -46,7 +45,7 @@ auto AsyncImporterFullTestBase::ValidateSceneOutputs(
 {
   EXPECT_TRUE(report.success);
 
-  LooseCookedInspection inspection;
+  Inspection inspection;
   inspection.LoadFromRoot(report.cooked_root);
 
   if (expected.materials.has_value()) {
@@ -168,12 +167,12 @@ auto AsyncImporterFullTestBase::ValidateSceneOutputs(
   }
 
   const auto files = inspection.Files();
-  const auto has_textures_table = std::any_of(files.begin(), files.end(),
-    [](const LooseCookedInspection::FileEntry& entry) {
+  const auto has_textures_table = std::any_of(
+    files.begin(), files.end(), [](const Inspection::FileEntry& entry) {
       return entry.kind == FileKind::kTexturesTable;
     });
-  const auto has_textures_data = std::any_of(files.begin(), files.end(),
-    [](const LooseCookedInspection::FileEntry& entry) {
+  const auto has_textures_data = std::any_of(
+    files.begin(), files.end(), [](const Inspection::FileEntry& entry) {
       return entry.kind == FileKind::kTexturesData;
     });
 

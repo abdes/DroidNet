@@ -19,7 +19,7 @@
 
 #include <Oxygen/Content/Import/AsyncImportService.h>
 #include <Oxygen/Content/Import/ImportRequest.h>
-#include <Oxygen/Content/LooseCookedInspection.h>
+#include <Oxygen/Content/LooseCooked/Inspection.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -29,7 +29,7 @@
 
 namespace oxygen::content::import::test {
 
-using content::LooseCookedInspection;
+using content::lc::Inspection;
 using data::AssetType;
 using data::ComponentType;
 using data::loose_cooked::FileKind;
@@ -153,14 +153,13 @@ protected:
   }
 
   [[nodiscard]] static auto LoadInspection(const std::filesystem::path& root)
-    -> LooseCookedInspection;
+    -> Inspection;
 
-  [[nodiscard]] static auto FindAssetOfType(
-    const LooseCookedInspection& inspection, const AssetType type)
-    -> std::optional<LooseCookedInspection::AssetEntry>;
+  [[nodiscard]] static auto FindAssetOfType(const Inspection& inspection,
+    const AssetType type) -> std::optional<Inspection::AssetEntry>;
 
   [[nodiscard]] static auto CountAssetsOfType(
-    const LooseCookedInspection& inspection, const AssetType type) -> size_t;
+    const Inspection& inspection, const AssetType type) -> size_t;
 
   static auto ValidateSceneOutputs(
     const ImportReport& report, const ExpectedSceneOutputs& expected) -> void;

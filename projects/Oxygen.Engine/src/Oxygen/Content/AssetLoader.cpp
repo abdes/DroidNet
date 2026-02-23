@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Content/IAssetLoader.h"
 #include <algorithm>
 #include <array>
 #include <cstring>
@@ -22,9 +21,12 @@
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Constants.h>
-#include <Oxygen/Content/Internal/ContentSource.h>
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
+#include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Content/Internal/InternalResourceKey.h>
+#include <Oxygen/Content/Internal/LooseCookedSource.h>
+#include <Oxygen/Content/Internal/PakFileSource.h>
 #include <Oxygen/Content/Internal/ResourceRef.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>

@@ -32,7 +32,7 @@
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/EngineTag.h>
-#include <Oxygen/Content/LooseCookedInspection.h>
+#include <Oxygen/Content/LooseCooked/Inspection.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -146,7 +146,7 @@ auto ToHex64(const uint64_t value) -> std::string
   return ss.str();
 }
 
-auto FindFileRelPath(const oxygen::content::LooseCookedInspection& inspection,
+auto FindFileRelPath(const oxygen::content::lc::Inspection& inspection,
   const FileKind kind) -> std::optional<std::string>
 {
   for (const auto& entry : inspection.Files()) {
@@ -157,8 +157,7 @@ auto FindFileRelPath(const oxygen::content::LooseCookedInspection& inspection,
   return std::nullopt;
 }
 
-auto FindFileRelPathBySuffix(
-  const oxygen::content::LooseCookedInspection& inspection,
+auto FindFileRelPathBySuffix(const oxygen::content::lc::Inspection& inspection,
   const std::string_view suffix) -> std::optional<std::string>
 {
   for (const auto& entry : inspection.Files()) {
@@ -208,8 +207,7 @@ auto LoadPackedTable(const std::filesystem::path& table_path) -> std::vector<T>
 }
 
 auto DumpFileRecords(
-  const std::span<const oxygen::content::LooseCookedInspection::FileEntry>
-    entries,
+  const std::span<const oxygen::content::lc::Inspection::FileEntry> entries,
   std::ostream& os) -> void
 {
   if (entries.empty()) {
@@ -229,8 +227,7 @@ auto DumpFileRecords(
 }
 
 auto DumpAssets(
-  const std::span<const oxygen::content::LooseCookedInspection::AssetEntry>
-    entries,
+  const std::span<const oxygen::content::lc::Inspection::AssetEntry> entries,
   std::ostream& os, const bool show_digests) -> void
 {
   if (entries.empty()) {
@@ -278,7 +275,7 @@ auto ValidateRootOrThrow(const std::filesystem::path& cooked_root) -> void
   using oxygen::serio::FileStream;
   using oxygen::serio::Reader;
 
-  oxygen::content::LooseCookedInspection inspection;
+  oxygen::content::lc::Inspection inspection;
   inspection.LoadFromRoot(cooked_root);
 
   for (const auto& asset : inspection.Assets()) {
@@ -386,7 +383,7 @@ auto RunDumpIndex(const DumpOptions& opts) -> int
   const std::filesystem::path cooked_root(opts.cooked_root);
 
   try {
-    oxygen::content::LooseCookedInspection inspection;
+    oxygen::content::lc::Inspection inspection;
     inspection.LoadFromRoot(cooked_root);
 
     const bool dump_assets = opts.assets || (!opts.assets && !opts.files);
@@ -418,7 +415,7 @@ auto RunDumpBuffers(const DumpResourceOptions& opts) -> int
   const std::filesystem::path cooked_root(opts.cooked_root);
 
   try {
-    oxygen::content::LooseCookedInspection inspection;
+    oxygen::content::lc::Inspection inspection;
     inspection.LoadFromRoot(cooked_root);
 
     const auto relpath = FindFileRelPath(inspection, FileKind::kBuffersTable);
@@ -477,7 +474,7 @@ auto RunDumpTextures(const DumpResourceOptions& opts) -> int
   const std::filesystem::path cooked_root(opts.cooked_root);
 
   try {
-    oxygen::content::LooseCookedInspection inspection;
+    oxygen::content::lc::Inspection inspection;
     inspection.LoadFromRoot(cooked_root);
 
     const auto relpath = FindFileRelPath(inspection, FileKind::kTexturesTable);
@@ -536,7 +533,7 @@ auto RunDumpPhysics(const DumpResourceOptions& opts) -> int
   const std::filesystem::path cooked_root(opts.cooked_root);
 
   try {
-    oxygen::content::LooseCookedInspection inspection;
+    oxygen::content::lc::Inspection inspection;
     inspection.LoadFromRoot(cooked_root);
 
     const auto relpath = FindFileRelPathBySuffix(inspection, "physics.table");
@@ -700,7 +697,7 @@ auto RunDumpInputActions(const DumpInputOptions& opts) -> int
 
   const std::filesystem::path cooked_root(opts.cooked_root);
   try {
-    oxygen::content::LooseCookedInspection inspection;
+    oxygen::content::lc::Inspection inspection;
     inspection.LoadFromRoot(cooked_root);
 
     size_t count = 0;
@@ -753,7 +750,7 @@ auto RunDumpInputMappings(const DumpInputOptions& opts) -> int
 
   const std::filesystem::path cooked_root(opts.cooked_root);
   try {
-    oxygen::content::LooseCookedInspection inspection;
+    oxygen::content::lc::Inspection inspection;
     inspection.LoadFromRoot(cooked_root);
 
     size_t count = 0;
@@ -876,7 +873,7 @@ auto RunDumpPhysicsAssets(const DumpPhysicsAssetsOptions& opts) -> int
 
   const std::filesystem::path cooked_root(opts.cooked_root);
   try {
-    oxygen::content::LooseCookedInspection inspection;
+    oxygen::content::lc::Inspection inspection;
     inspection.LoadFromRoot(cooked_root);
 
     size_t count = 0;
@@ -1006,7 +1003,7 @@ auto RunDumpScriptSlots(const DumpScriptOptions& opts) -> int
 {
   const std::filesystem::path cooked_root(opts.cooked_root);
   try {
-    oxygen::content::LooseCookedInspection inspection;
+    oxygen::content::lc::Inspection inspection;
     inspection.LoadFromRoot(cooked_root);
 
     auto relpath = FindFileRelPathBySuffix(inspection, "scripts.table");
@@ -1054,7 +1051,7 @@ auto RunDumpScriptParams(const DumpScriptOptions& opts) -> int
 
   const std::filesystem::path cooked_root(opts.cooked_root);
   try {
-    oxygen::content::LooseCookedInspection inspection;
+    oxygen::content::lc::Inspection inspection;
     inspection.LoadFromRoot(cooked_root);
 
     auto slots_relpath = FindFileRelPathBySuffix(inspection, "scripts.table");

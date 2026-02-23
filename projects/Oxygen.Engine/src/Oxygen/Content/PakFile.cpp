@@ -192,7 +192,8 @@ auto PakFile::ReadHeader(serio::FileStream<>* stream) -> void
   LOG_F(INFO, "pak guid        : {}",
     oxygen::data::to_string(data::SourceKey::FromBytes(header_.guid)));
 
-  if (std::memcmp(header_.magic, kHeaderMagic.data(), kHeaderMagic.size())
+  if (std::memcmp(header_.magic, data::pak::kPakHeaderMagic.data(),
+        data::pak::kPakHeaderMagic.size())
     != 0) {
     LOG_F(ERROR, "Invalid pak file header magic");
     throw std::runtime_error("Invalid pak file header magic");
@@ -243,8 +244,8 @@ auto PakFile::ReadFooter(serio::FileStream<>* stream) -> void
   LOG_F(INFO, "directory size   : {}", footer_.directory_size);
   LOG_F(INFO, "asset count      : {}", footer_.asset_count);
 
-  if (std::memcmp(
-        footer_.footer_magic, kFooterMagic.data(), kFooterMagic.size())
+  if (std::memcmp(footer_.footer_magic, data::pak::kPakFooterMagic.data(),
+        data::pak::kPakFooterMagic.size())
     != 0) {
     LOG_F(ERROR, "Invalid pak file footer magic");
     throw std::runtime_error("Invalid pak file footer magic");
