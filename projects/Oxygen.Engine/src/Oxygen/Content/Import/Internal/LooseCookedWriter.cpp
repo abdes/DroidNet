@@ -296,17 +296,21 @@ struct LooseCookedWriter::Impl final {
     if (IsEquivalent(existing, incoming)) {
       return true;
     }
+    ++collision_summary_.asset_collisions;
     if (collision_policy_ == LooseCookedWriter::CollisionPolicy::kError) {
+      ++collision_summary_.rejected;
       throw std::runtime_error(std::string(context)
         + ": asset collision for key " + data::to_string(key));
     }
     if (collision_policy_
       == LooseCookedWriter::CollisionPolicy::kWarnKeepExisting) {
+      ++collision_summary_.kept_existing;
       LOG_F(WARNING,
         "{}: asset collision for key {} policy=warn_keep_existing action=keep",
         context, data::to_string(key));
       return false;
     }
+    ++collision_summary_.replaced_existing;
     LOG_F(WARNING,
       "{}: asset collision for key {} policy=warn_replace action=replace",
       context, data::to_string(key));
@@ -319,18 +323,22 @@ struct LooseCookedWriter::Impl final {
     if (IsEquivalent(existing, incoming)) {
       return true;
     }
+    ++collision_summary_.file_collisions;
     if (collision_policy_ == LooseCookedWriter::CollisionPolicy::kError) {
+      ++collision_summary_.rejected;
       throw std::runtime_error(std::string(context)
         + ": file collision for kind "
         + std::to_string(static_cast<uint16_t>(kind)));
     }
     if (collision_policy_
       == LooseCookedWriter::CollisionPolicy::kWarnKeepExisting) {
+      ++collision_summary_.kept_existing;
       LOG_F(WARNING,
         "{}: file collision for kind={} policy=warn_keep_existing action=keep",
         context, static_cast<uint16_t>(kind));
       return false;
     }
+    ++collision_summary_.replaced_existing;
     LOG_F(WARNING,
       "{}: file collision for kind={} policy=warn_replace action=replace",
       context, static_cast<uint16_t>(kind));
@@ -554,6 +562,7 @@ struct LooseCookedWriter::Impl final {
       .cooked_root = cooked_root_,
       .source_key = source_key,
       .content_version = content_version,
+      .collision_summary = collision_summary_,
     };
 
     out.assets.reserve(assets_.size());
@@ -859,6 +868,7 @@ private:
   std::unordered_map<data::AssetKey, StoredAsset> assets_;
   std::unordered_map<FileKind, StoredFile> files_;
   std::unordered_map<std::string, data::AssetKey> key_by_virtual_path_;
+  LooseCookedCollisionSummary collision_summary_ {};
 };
 
 LooseCookedWriter::LooseCookedWriter(std::filesystem::path cooked_root)

@@ -75,6 +75,51 @@ namespace {
     return true;
   }
 
+  auto BuildPackagingSummary(const ImportReport& report,
+    const std::optional<LooseCookedWriteResult>& write_result,
+    const bool index_write_deferred) -> ImportPackagingSummary
+  {
+    ImportPackagingSummary summary {};
+    summary.outputs_written = static_cast<uint32_t>(report.outputs.size());
+    summary.index_written = write_result.has_value();
+    summary.index_write_deferred = index_write_deferred;
+
+    for (const auto& diagnostic : report.diagnostics) {
+      switch (diagnostic.severity) {
+      case ImportSeverity::kInfo:
+        ++summary.diagnostics_info;
+        break;
+      case ImportSeverity::kWarning:
+        ++summary.diagnostics_warning;
+        break;
+      case ImportSeverity::kError:
+        ++summary.diagnostics_error;
+        break;
+      }
+
+      if (diagnostic.code == "import.dedup_collision.texture") {
+        ++summary.texture_dedup_collisions;
+      } else if (diagnostic.code == "import.dedup_collision.buffer") {
+        ++summary.buffer_dedup_collisions;
+      }
+    }
+
+    if (write_result.has_value()) {
+      summary.index_asset_collisions
+        = write_result->collision_summary.asset_collisions;
+      summary.index_file_collisions
+        = write_result->collision_summary.file_collisions;
+      summary.index_collisions_kept
+        = write_result->collision_summary.kept_existing;
+      summary.index_collisions_replaced
+        = write_result->collision_summary.replaced_existing;
+      summary.index_collisions_rejected
+        = write_result->collision_summary.rejected;
+    }
+
+    return summary;
+  }
+
 } // namespace
 
 ImportSession::ImportSession(const ImportRequest& request,
@@ -406,6 +451,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
     .materials_written = 0,
     .geometry_written = 0,
     .scenes_written = 0,
+    .packaging = {},
     .success = false,
   };
 
@@ -492,6 +538,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
     }
 
     const auto write_result = index_registry_->EndSession(cooked_root_);
+    const bool index_write_deferred = !write_result.has_value();
     if (write_result.has_value()) {
       LOG_F(INFO, "Index write completed: assets={} files={} cooked_root='{}'",
         write_result->assets.size(), write_result->files.size(),
@@ -545,6 +592,25 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
     }
 
     report.success = !had_errors;
+    report.packaging
+      = BuildPackagingSummary(report, write_result, index_write_deferred);
+
+    LOG_F(INFO,
+      "Packaging summary: success={} outputs={} index_written={} "
+      "index_deferred={} diagnostics(info/warn/error)={}/{}/{} "
+      "dedup(texture/buffer)={}/{} index_collisions(assets/files/keep/replace/"
+      "reject)={}/{}/{}/{}/{}",
+      report.success, report.packaging.outputs_written,
+      report.packaging.index_written, report.packaging.index_write_deferred,
+      report.packaging.diagnostics_info, report.packaging.diagnostics_warning,
+      report.packaging.diagnostics_error,
+      report.packaging.texture_dedup_collisions,
+      report.packaging.buffer_dedup_collisions,
+      report.packaging.index_asset_collisions,
+      report.packaging.index_file_collisions,
+      report.packaging.index_collisions_kept,
+      report.packaging.index_collisions_replaced,
+      report.packaging.index_collisions_rejected);
 
     DLOG_F(INFO, "Finalize complete: {} materials, {} geometry, {} scenes",
       report.materials_written, report.geometry_written, report.scenes_written);

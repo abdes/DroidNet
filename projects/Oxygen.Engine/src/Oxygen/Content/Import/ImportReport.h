@@ -82,6 +82,34 @@ struct ImportOutputRecord final {
   uint64_t size_bytes = 0;
 };
 
+//! CI-grade packaging diagnostics summary for import outcomes.
+struct ImportPackagingSummary final {
+  //! Number of produced output records in the report.
+  uint32_t outputs_written = 0;
+
+  //! True when `container.index.bin` was written by this finalize call.
+  bool index_written = false;
+
+  //! True when index write was deferred because another session is active.
+  bool index_write_deferred = false;
+
+  //! Diagnostics counts by severity.
+  uint32_t diagnostics_info = 0;
+  uint32_t diagnostics_warning = 0;
+  uint32_t diagnostics_error = 0;
+
+  //! Dedup collision diagnostics emitted by resource emitters.
+  uint32_t texture_dedup_collisions = 0;
+  uint32_t buffer_dedup_collisions = 0;
+
+  //! Loose cooked index collision decisions at packaging time.
+  uint32_t index_asset_collisions = 0;
+  uint32_t index_file_collisions = 0;
+  uint32_t index_collisions_kept = 0;
+  uint32_t index_collisions_replaced = 0;
+  uint32_t index_collisions_rejected = 0;
+};
+
 //! Summary of an import to a cooked container.
 struct ImportReport final {
   std::filesystem::path cooked_root;
@@ -100,6 +128,9 @@ struct ImportReport final {
 
   //! Timing and performance telemetry for the job.
   ImportTelemetry telemetry;
+
+  //! Machine-readable packaging and diagnostics summary.
+  ImportPackagingSummary packaging;
 
   //! True if the cook completed and emitted an index.
   bool success = false;

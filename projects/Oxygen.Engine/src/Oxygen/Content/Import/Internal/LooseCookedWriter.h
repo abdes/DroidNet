@@ -46,6 +46,20 @@ struct LooseCookedFileRecord final {
   uint64_t size = 0;
 };
 
+//! Collision decisions recorded while building/updating index records.
+struct LooseCookedCollisionSummary final {
+  //! Number of asset-key collisions encountered.
+  uint32_t asset_collisions = 0;
+  //! Number of file-kind collisions encountered.
+  uint32_t file_collisions = 0;
+  //! Number of collisions resolved by keeping existing entries.
+  uint32_t kept_existing = 0;
+  //! Number of collisions resolved by replacing existing entries.
+  uint32_t replaced_existing = 0;
+  //! Number of collisions rejected by policy.
+  uint32_t rejected = 0;
+};
+
 //! Result of writing a loose cooked container.
 struct LooseCookedWriteResult final {
   std::filesystem::path cooked_root;
@@ -54,6 +68,7 @@ struct LooseCookedWriteResult final {
   uint16_t content_version = 0;
   std::vector<LooseCookedAssetRecord> assets;
   std::vector<LooseCookedFileRecord> files;
+  LooseCookedCollisionSummary collision_summary {};
 };
 
 //! Write a loose cooked container root.
