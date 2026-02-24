@@ -71,6 +71,16 @@ struct LooseCookedWriteResult final {
 */
 class LooseCookedWriter final {
 public:
+  //! Policy controlling how key/kind collisions are handled.
+  enum class CollisionPolicy : uint8_t {
+    //! Fail on conflicting overwrite attempts.
+    kError = 0,
+    //! Keep existing entry and warn.
+    kWarnKeepExisting,
+    //! Replace existing entry and warn.
+    kWarnReplace,
+  };
+
   //! Create a writer targeting `cooked_root`.
   OXGN_CNTT_API explicit LooseCookedWriter(std::filesystem::path cooked_root);
   OXGN_CNTT_API ~LooseCookedWriter();
@@ -95,6 +105,9 @@ public:
   */
   OXGN_CNTT_API auto SetComputeSha256(bool enabled) -> void;
 
+  //! Configure collision handling for duplicate asset/file entries.
+  OXGN_CNTT_API auto SetCollisionPolicy(CollisionPolicy policy) -> void;
+
   //! Write an asset descriptor and update its index entry.
   /*!
    @param key Stable identity of the asset.
@@ -109,9 +122,10 @@ public:
    operation as an update:
 
    - Existing index entries MUST be preserved unless explicitly replaced.
-   - An asset is identified by its `key`. If an entry for `key` already exists,
-     the writer MUST update that entry (descriptor relpath, virtual path,
-     size/hash) rather than adding a duplicate.
+   -
+   An asset is identified by its `key`. If an entry for `key` already exists,
+
+   collision handling is controlled by `SetCollisionPolicy()`.
 
    @warning If updating an entry would create a conflicting virtual path
     mapping, the writer MUST fail with a diagnostic (or throw).
@@ -138,9 +152,10 @@ public:
    operation as an update:
 
    - Existing file records MUST be preserved unless explicitly replaced.
-   - A file record is identified by its `kind`. If a record for `kind` already
-     exists, the writer MUST update that record (relpath, size/hash) rather
-     than adding a duplicate.
+   - A
+   file record is identified by its `kind`. If a record for `kind` already
+
+   exists, collision handling is controlled by `SetCollisionPolicy()`.
 
    @throw std::runtime_error on IO errors or invalid paths.
   */
