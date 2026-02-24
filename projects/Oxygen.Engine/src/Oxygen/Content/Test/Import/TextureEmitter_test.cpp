@@ -29,8 +29,8 @@
 #include <Oxygen/Content/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Content/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Content/Import/Internal/WindowsFileWriter.h>
-#include <Oxygen/Content/Import/LooseCookedLayout.h>
 #include <Oxygen/Content/Import/TextureImportTypes.h>
+#include <Oxygen/Content/LooseCooked/LooseCookedLayout.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/PakFormat.h>

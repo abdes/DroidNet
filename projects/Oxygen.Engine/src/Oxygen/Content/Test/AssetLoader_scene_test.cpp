@@ -16,7 +16,6 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
-#include <Oxygen/Content/Import/LooseCookedLayout.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/InputActionLoader.h>
@@ -25,6 +24,7 @@
 #include <Oxygen/Content/Loaders/PhysicsSceneLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
+#include <Oxygen/Content/LooseCooked/LooseCookedLayout.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>

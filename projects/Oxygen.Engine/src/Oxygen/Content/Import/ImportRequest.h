@@ -12,8 +12,8 @@
 #include <vector>
 
 #include <Oxygen/Content/Import/ImportOptions.h>
-#include <Oxygen/Content/Import/LooseCookedLayout.h>
 #include <Oxygen/Content/Import/TextureSourceAssembly.h>
+#include <Oxygen/Content/LooseCooked/LooseCookedLayout.h>
 #include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::import {

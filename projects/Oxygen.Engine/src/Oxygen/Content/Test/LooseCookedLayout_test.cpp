@@ -6,7 +6,7 @@
 
 #include <gtest/gtest.h>
 
-#include <Oxygen/Content/Import/LooseCookedLayout.h>
+#include <Oxygen/Content/LooseCooked/LooseCookedLayout.h>
 #include <Oxygen/Data/AssetType.h>
 
 using oxygen::content::import::LooseCookedLayout;

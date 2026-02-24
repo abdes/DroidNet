@@ -13,8 +13,8 @@
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/Import/Internal/LooseCookedWriter.h>
-#include <Oxygen/Content/Import/LooseCookedLayout.h>
 #include <Oxygen/Content/LooseCooked/Inspection.h>
+#include <Oxygen/Content/LooseCooked/LooseCookedLayout.h>
 #include <Oxygen/Data/AssetType.h>
 
 namespace oxygen::content::testing {

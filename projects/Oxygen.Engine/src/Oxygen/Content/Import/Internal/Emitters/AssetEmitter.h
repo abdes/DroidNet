@@ -20,7 +20,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/Import/FileError.h>
-#include <Oxygen/Content/Import/LooseCookedLayout.h>
+#include <Oxygen/Content/LooseCooked/LooseCookedLayout.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>

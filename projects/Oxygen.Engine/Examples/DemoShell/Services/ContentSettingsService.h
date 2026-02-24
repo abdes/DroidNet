@@ -16,7 +16,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/Import/ImportOptions.h>
-#include <Oxygen/Content/Import/LooseCookedLayout.h>
+#include <Oxygen/Content/LooseCooked/LooseCookedLayout.h>
 
 namespace oxygen::examples {
 
