@@ -17,7 +17,6 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
-#include <Oxygen/Content/Import/LooseCookedLayout.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Content/Internal/InternalResourceKey.h>
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
@@ -26,8 +25,9 @@
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
-#include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Content/LooseCooked/LooseCookedLayout.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -330,15 +330,18 @@ auto WriteLooseCookedIndexWithInvalidTexturesTable(
 }
 
 auto ReadAssetHeader(oxygen::content::internal::IContentSource& source,
-  const oxygen::data::AssetKey& key) -> std::optional<oxygen::data::pak::AssetHeader>
+  const oxygen::data::AssetKey& key)
+  -> std::optional<oxygen::data::pak::AssetHeader>
 {
   auto desc_reader = source.CreateAssetDescriptorReader(key);
   if (!desc_reader) {
     return std::nullopt;
   }
 
-  auto header_blob = desc_reader->ReadBlob(sizeof(oxygen::data::pak::AssetHeader));
-  if (!header_blob || header_blob->size() < sizeof(oxygen::data::pak::AssetHeader)) {
+  auto header_blob
+    = desc_reader->ReadBlob(sizeof(oxygen::data::pak::AssetHeader));
+  if (!header_blob
+    || header_blob->size() < sizeof(oxygen::data::pak::AssetHeader)) {
     return std::nullopt;
   }
 
@@ -347,9 +350,8 @@ auto ReadAssetHeader(oxygen::content::internal::IContentSource& source,
   return header;
 }
 
-auto WriteLooseCookedSceneForCatalog(
-  const std::filesystem::path& cooked_root, const oxygen::data::AssetKey& key)
-  -> void
+auto WriteLooseCookedSceneForCatalog(const std::filesystem::path& cooked_root,
+  const oxygen::data::AssetKey& key) -> void
 {
   using oxygen::data::AssetType;
   using oxygen::data::loose_cooked::AssetEntry;

@@ -9,7 +9,7 @@
 #include <string>
 #include <string_view>
 
-#include <Oxygen/Content/Import/Layout.h>
+#include <Oxygen/Content/Layout.h>
 #include <Oxygen/Data/AssetType.h>
 
 namespace oxygen::content::import {

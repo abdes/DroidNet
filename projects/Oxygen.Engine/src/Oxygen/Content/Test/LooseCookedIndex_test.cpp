@@ -9,7 +9,7 @@
 
 #include "./AssetLoader_test.h"
 
-#include <Oxygen/Content/Import/LooseCookedLayout.h>
+#include <Oxygen/Content/LooseCooked/LooseCookedLayout.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 
 using oxygen::content::testing::AssetLoaderBasicTest;

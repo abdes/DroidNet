@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <Oxygen/Content/Import/LooseCookedLayout.h>
+#include <Oxygen/Content/LooseCooked/LooseCookedLayout.h>
 
 namespace oxygen::content::lc {
 

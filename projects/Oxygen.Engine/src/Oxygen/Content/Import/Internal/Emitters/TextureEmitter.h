@@ -17,8 +17,8 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Content/Import/Internal/ResourceTableAggregator.h>
-#include <Oxygen/Content/Import/LooseCookedLayout.h>
 #include <Oxygen/Content/Import/TextureImportTypes.h>
+#include <Oxygen/Content/LooseCooked/LooseCookedLayout.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
