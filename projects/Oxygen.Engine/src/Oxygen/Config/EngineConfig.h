@@ -84,10 +84,10 @@ struct EngineConfig {
     //! Enables asynchronous polling of script source directories for changes.
     //! If true, changes to .lua/.luau files in any registered ScriptSourceRoot
     //! (in PathFinderConfig) will trigger an automatic reload and recompile.
-    bool enable_hot_reload { false };
+    bool enable_hot_reload { true };
 
     //! Frequency at which source directories are scanned for changes.
-    std::chrono::milliseconds hot_reload_poll_interval { 500 }; // NOLINT
+    std::chrono::milliseconds hot_reload_poll_interval { 100 }; // NOLINT
 
     //! Rules for Script Source Management:
     //! 1. Bytecode Cache: Compiled scripts are stored in a single binary file

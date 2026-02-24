@@ -410,20 +410,6 @@ auto ScriptingModule::RegisterConsoleBindings(
     .max_value = static_cast<double>(kMaxInputBridgeLogVerbosity),
   });
 
-  (void)console->RegisterCVar(console::CVarDefinition {
-    .name = "scripting.hot_reload",
-    .help = "Enable/disable scripting hot-reload file watcher",
-    .default_value = true,
-    .flags = console::CVarFlags::kArchive,
-  });
-
-  (void)console->RegisterCVar(console::CVarDefinition {
-    .name = "scripting.poll_interval_ms",
-    .help = "Script hot-reload polling interval in milliseconds",
-    .default_value = static_cast<int64_t>(100),
-    .flags = console::CVarFlags::kArchive,
-  });
-
   (void)console->RegisterCommand(console::CommandDefinition {
     .name = "scripting.reload_all",
     .help = "Manually trigger a full reload of all script assets",
@@ -481,22 +467,6 @@ auto ScriptingModule::ApplyConsoleCVars(
   if (console->TryGetCVarValue<int64_t>(
         kCVarScriptingInputBridgeLogVerbosity, log_verbosity)) {
     input_bridge_log_verbosity_ = static_cast<int>(log_verbosity);
-  }
-
-  if (engine_) {
-    if (auto hrs = engine_->GetHotReloadService()) {
-      bool hot_reload_enabled = true;
-      if (console->TryGetCVarValue<bool>(
-            "scripting.hot_reload", hot_reload_enabled)) {
-        hrs->SetEnabled(hot_reload_enabled);
-      }
-
-      int64_t poll_interval = 100;
-      if (console->TryGetCVarValue<int64_t>(
-            "scripting.poll_interval_ms", poll_interval)) {
-        hrs->SetPollInterval(std::chrono::milliseconds(poll_interval));
-      }
-    }
   }
 }
 
