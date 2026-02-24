@@ -459,6 +459,13 @@ namespace {
     EXPECT_THROW(writer.WriteFile(
                    FileKind::kBuffersData, "Resources/buffers_b.data", file_b),
       std::runtime_error);
+    writer.WriteFile(
+      FileKind::kBuffersTable, "Resources/buffers.table", file_a);
+    const auto result = writer.Finish();
+    EXPECT_EQ(result.collision_summary.file_collisions, 1U);
+    EXPECT_EQ(result.collision_summary.kept_existing, 0U);
+    EXPECT_EQ(result.collision_summary.replaced_existing, 0U);
+    EXPECT_EQ(result.collision_summary.rejected, 1U);
   }
 
   NOLINT_TEST(LooseCookedWriterTest, CollisionPolicyKeepExistingPreservesFirst)
@@ -478,7 +485,11 @@ namespace {
       FileKind::kBuffersData, "Resources/buffers_b.data", bytes_b);
     writer.WriteFile(
       FileKind::kBuffersTable, "Resources/buffers.table", bytes_a);
-    (void)writer.Finish();
+    const auto result = writer.Finish();
+    EXPECT_EQ(result.collision_summary.file_collisions, 1U);
+    EXPECT_EQ(result.collision_summary.kept_existing, 1U);
+    EXPECT_EQ(result.collision_summary.replaced_existing, 0U);
+    EXPECT_EQ(result.collision_summary.rejected, 0U);
 
     Inspection inspection;
     inspection.LoadFromFile(cooked_root / "container.index.bin");
@@ -509,7 +520,11 @@ namespace {
       FileKind::kBuffersData, "Resources/buffers_b.data", bytes_b);
     writer.WriteFile(
       FileKind::kBuffersTable, "Resources/buffers.table", bytes_a);
-    (void)writer.Finish();
+    const auto result = writer.Finish();
+    EXPECT_EQ(result.collision_summary.file_collisions, 1U);
+    EXPECT_EQ(result.collision_summary.kept_existing, 0U);
+    EXPECT_EQ(result.collision_summary.replaced_existing, 1U);
+    EXPECT_EQ(result.collision_summary.rejected, 0U);
 
     Inspection inspection;
     inspection.LoadFromFile(cooked_root / "container.index.bin");

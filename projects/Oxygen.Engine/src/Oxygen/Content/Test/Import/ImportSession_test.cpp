@@ -380,6 +380,57 @@ NOLINT_TEST_F(
   EXPECT_TRUE(has_collision);
 }
 
+//! Verify packaging summary reports severity and dedup collision counts.
+NOLINT_TEST_F(
+  ImportSessionTest, FinalizePackagingSummaryReportsDiagnosticsAndCollisions)
+{
+  auto request = MakeRequest();
+  request.options.with_content_hashing = false;
+  request.options.dedup_collision_policy
+    = import::DedupCollisionPolicy::kWarnKeepFirst;
+  std::filesystem::create_directories(request.cooked_root.value());
+  ImportSession session(request, observer_ptr(reader_.get()),
+    oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
+    observer_ptr(thread_pool_.get()), observer_ptr(table_registry_.get()),
+    observer_ptr(index_registry_.get()));
+
+  session.AddDiagnostic({
+    .severity = ImportSeverity::kInfo,
+    .code = "test.info",
+    .message = "info",
+  });
+  session.AddDiagnostic({
+    .severity = ImportSeverity::kWarning,
+    .code = "test.warn",
+    .message = "warn",
+  });
+
+  co::Run(*loop_, [&]() -> co::Co<> {
+    auto first = MakeTestBufferPayload();
+    auto second = MakeTestBufferPayload();
+    first.content_hash = 0;
+    second.content_hash = 0;
+    if (!second.data.empty()) {
+      second.data[0] ^= std::byte { 0xAA };
+    }
+    (void)session.BufferEmitter().Emit(std::move(first), "same_salt");
+    (void)session.BufferEmitter().Emit(std::move(second), "same_salt");
+
+    const auto report = co_await session.Finalize();
+
+    EXPECT_EQ(report.packaging.diagnostics_info, 1U);
+    EXPECT_GE(report.packaging.diagnostics_warning, 1U);
+    EXPECT_EQ(report.packaging.diagnostics_error, 0U);
+    EXPECT_EQ(report.packaging.buffer_dedup_collisions, 1U);
+    EXPECT_EQ(report.packaging.texture_dedup_collisions, 0U);
+    EXPECT_TRUE(report.packaging.index_written);
+    EXPECT_FALSE(report.packaging.index_write_deferred);
+    EXPECT_EQ(report.packaging.outputs_written,
+      static_cast<uint32_t>(report.outputs.size()));
+    co_return;
+  });
+}
+
 //! Verify diagnostics can be added from multiple threads.
 NOLINT_TEST_F(ImportSessionTest, AddDiagnosticMultipleThreadsThreadSafe)
 {
