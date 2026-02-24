@@ -149,6 +149,8 @@ private:
   std::optional<SceneLoadRequest> pending_scene_load_;
   std::unordered_map<std::filesystem::path, std::filesystem::file_time_type>
     mounted_pak_write_times_;
+  std::unordered_map<std::filesystem::path, std::filesystem::file_time_type>
+    mounted_loose_index_write_times_;
   bool pending_scene_clear_ { false };
 };
 
