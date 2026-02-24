@@ -30,6 +30,7 @@
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Core/AnyCache.h>
+#include <Oxygen/Core/RefCountedEviction.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/GeometryAsset.h>

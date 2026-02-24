@@ -55,11 +55,6 @@ m_gtest_program(
   SOURCES
     "AnyCache_Budget_test.cpp"
 )
-target_link_libraries(
-  "Oxygen.Core.AnyCacheBudget.Tests"
-  PRIVATE
-    oxygen::scripting
-)
 m_gtest_program(BindlessHandle SOURCES "BindlessHandle_test.cpp")
 m_gtest_program(PhaseRegistry SOURCES "PhaseRegistry_test.cpp")
 m_gtest_program(

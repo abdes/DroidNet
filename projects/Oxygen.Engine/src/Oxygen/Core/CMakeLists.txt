@@ -62,6 +62,9 @@ set(
   OXYGEN_CORE_HEADERS
   "api_export.h"
   "AnyCache.h"
+  "CachePolicyContract.h"
+  "LruEviction.h"
+  "RefCountedEviction.h"
   "Bindless/Types.h"
   "Constants.h"
   "Detail/FormatUtils.h"

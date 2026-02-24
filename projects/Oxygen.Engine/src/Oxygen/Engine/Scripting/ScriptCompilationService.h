@@ -14,7 +14,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/AnyCache.h>
-#include <Oxygen/Engine/Scripting/Detail/LruEviction.h>
+#include <Oxygen/Core/LruEviction.h>
 #include <Oxygen/Engine/Scripting/IScriptCompilationService.h>
 #include <Oxygen/OxCo/LiveObject.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -146,7 +146,7 @@ private:
   std::unordered_map<CompileKey, co::Shared<co::Co<Result>>> in_flight_;
 
   mutable std::mutex l1_cache_mutex_;
-  AnyCache<uint64_t, detail::LruEviction<uint64_t>> l1_cache_;
+  AnyCache<uint64_t, oxygen::LruEviction<uint64_t>> l1_cache_;
   std::filesystem::path persistent_cache_path_;
   mutable std::mutex persistent_cache_mutex_;
   std::unordered_map<CompileKey, PersistentIndexEntry> persistent_index_;

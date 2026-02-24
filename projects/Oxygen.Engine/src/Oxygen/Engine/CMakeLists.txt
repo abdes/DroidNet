@@ -56,7 +56,6 @@ set(
   "Scripting/IScriptCompilationService.h"
   "Scripting/IScriptCompiler.h"
   "Scripting/ScriptBytecodeBlob.h"
-  "Scripting/Detail/LruEviction.h"
   "Scripting/ScriptSourceBlob.h"
   "Scripting/ScriptCompilationService.h"
   "Scripting/ScriptHotReloadService.h"

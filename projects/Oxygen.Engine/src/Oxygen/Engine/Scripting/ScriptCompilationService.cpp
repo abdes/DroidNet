@@ -93,18 +93,18 @@ ScriptCompilationService::ScriptCompilationService(
   , l1_cache_(kL1ByteBudget)
   , persistent_cache_path_(std::move(persistent_cache_path))
 {
-  l1_cache_.GetPolicy().cost_func
-    = [](const std::shared_ptr<void>& value, const TypeId type_id) -> size_t {
-    if (!value) {
+  l1_cache_.GetPolicy().SetCostFunction(
+    [](const std::shared_ptr<void>& value, const TypeId type_id) -> size_t {
+      if (!value) {
+        return 1;
+      }
+      if (type_id == ScriptBytecodeBlob::ClassTypeId()) {
+        const auto blob
+          = std::static_pointer_cast<const ScriptBytecodeBlob>(value);
+        return std::max<size_t>(1, blob->Size());
+      }
       return 1;
-    }
-    if (type_id == ScriptBytecodeBlob::ClassTypeId()) {
-      const auto blob
-        = std::static_pointer_cast<const ScriptBytecodeBlob>(value);
-      return std::max<size_t>(1, blob->Size());
-    }
-    return 1;
-  };
+    });
 
   if (!persistent_cache_path_.empty()) {
     auto load_failed = false;
