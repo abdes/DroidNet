@@ -85,7 +85,7 @@ protected:
 };
 
 //! Validate stable topological order follows registration order.
-NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_StableOrder)
+NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlannerMakePlanStableOrder)
 {
   // Arrange
   RegisterAllPipelines();
@@ -117,7 +117,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_StableOrder)
 }
 
 //! Verify tie-breaking uses registration order for independent items.
-NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_TieBreaksByOrder)
+NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlannerMakePlanTieBreaksByOrder)
 {
   // Arrange
   RegisterAllPipelines();
@@ -141,7 +141,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_TieBreaksByOrder)
 }
 
 //! Ensure dependencies are deduplicated by producer per consumer.
-NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_AddDependency_Deduplicates)
+NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlannerAddDependencyDeduplicates)
 {
   // Arrange
   RegisterAllPipelines();
@@ -163,7 +163,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_AddDependency_Deduplicates)
 }
 
 //! Validate pipeline resolution returns registered type IDs.
-NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_PipelineTypeFor_Resolves)
+NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlannerPipelineTypeForResolves)
 {
   // Arrange
   RegisterAllPipelines();
@@ -182,7 +182,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_PipelineTypeFor_Resolves)
 }
 
 //! Validate readiness transitions once all producers are marked ready.
-NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_ReadinessTracker_Transitions)
+NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlannerReadinessTrackerTransitions)
 {
   // Arrange
   RegisterAllPipelines();
@@ -214,7 +214,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_ReadinessTracker_Transitions)
 }
 
 //! Ensure items with no dependencies are immediately ready.
-NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_ReadinessTracker_EmptyReady)
+NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlannerReadinessTrackerEmptyReady)
 {
   // Arrange
   RegisterAllPipelines();
@@ -232,7 +232,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_ReadinessTracker_EmptyReady)
 }
 
 //! Validate empty planner builds an empty plan.
-NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_EmptyPlan)
+NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlannerMakePlanEmptyPlan)
 {
   // Arrange
   RegisterAllPipelines();
@@ -245,8 +245,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_EmptyPlan)
 }
 
 //! Ensure MarkReady ignores unknown producer tokens.
-NOLINT_TEST_F(
-  ImportPlannerPlanTest, ImportPlanner_ReadinessTracker_UnknownToken)
+NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlannerReadinessTrackerUnknownToken)
 {
   // Arrange
   RegisterAllPipelines();
@@ -272,7 +271,7 @@ NOLINT_TEST_F(
 }
 
 //! Validate self-dependency is detected as a cycle.
-NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_SelfCycleDies)
+NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlannerMakePlanSelfCycleDies)
 {
   // Arrange
   RegisterAllPipelines();
@@ -285,7 +284,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_SelfCycleDies)
 }
 
 //! Validate disjoint subgraphs preserve registration order.
-NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_DisjointOrder)
+NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlannerMakePlanDisjointOrder)
 {
   // Arrange
   RegisterAllPipelines();
@@ -314,7 +313,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_DisjointOrder)
 }
 
 //! Validate plan order can differ from registration IDs.
-NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_OrderDiffersFromId)
+NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlannerMakePlanOrderDiffersFromId)
 {
   // Arrange
   RegisterAllPipelines();
@@ -341,7 +340,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_OrderDiffersFromId)
 }
 
 //! Validate complex scene dependencies with LODs and buffers.
-NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_ComplexScene)
+NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlannerMakePlanComplexScene)
 {
   // Arrange
   RegisterAllPipelines();
@@ -402,7 +401,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_ComplexScene)
 }
 
 //! Validate pipeline resolution works before MakePlan sealing.
-NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_PipelineTypeFor_PreSeal)
+NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlannerPipelineTypeForPreSeal)
 {
   // Arrange
   RegisterAllPipelines();
@@ -417,7 +416,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_PipelineTypeFor_PreSeal)
 }
 
 //! Validate missing pipeline registration is a blocking error.
-NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_MissingPipelineDies)
+NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlannerMakePlanMissingPipelineDies)
 {
   // Arrange
   (void)planner_.AddTextureResource("texture", {});
@@ -427,7 +426,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_MissingPipelineDies)
 }
 
 //! Validate cycle detection triggers a blocking error.
-NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_CycleDies)
+NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlannerMakePlanCycleDies)
 {
   // Arrange
   RegisterAllPipelines();
@@ -443,7 +442,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_CycleDies)
 }
 
 //! Validate upstream planning rejects cyclic asset authoring before runtime.
-NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_CrossAssetCycleDies)
+NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlannerMakePlanCrossAssetCycleDies)
 {
   // Arrange
   RegisterAllPipelines();
@@ -461,7 +460,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_CrossAssetCycleDies)
 }
 
 //! Verify mutations are blocked after the planner is sealed.
-NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_AddAfterSeal_Dies)
+NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlannerAddAfterSealDies)
 {
   // Arrange
   RegisterAllPipelines();
@@ -475,7 +474,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_AddAfterSeal_Dies)
 }
 
 //! Validate MakePlan cannot be called twice.
-NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_TwiceDies)
+NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlannerMakePlanTwiceDies)
 {
   // Arrange
   RegisterAllPipelines();
@@ -488,7 +487,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_TwiceDies)
 }
 
 //! Validate invalid PlanItemId access is rejected.
-NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_InvalidItemIdDies)
+NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlannerInvalidItemIdDies)
 {
   // Arrange
   RegisterAllPipelines();
@@ -501,7 +500,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_InvalidItemIdDies)
 }
 
 //! Validate invalid dependency references are rejected.
-NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_AddDependency_InvalidDies)
+NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlannerAddDependencyInvalidDies)
 {
   // Arrange
   RegisterAllPipelines();

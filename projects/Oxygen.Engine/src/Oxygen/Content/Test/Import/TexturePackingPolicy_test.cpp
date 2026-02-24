@@ -40,14 +40,14 @@ protected:
 };
 
 //! Test: D3D12 policy has correct ID.
-NOLINT_TEST_F(D3D12PackingPolicyTest, Id_ReturnsD3D12)
+NOLINT_TEST_F(D3D12PackingPolicyTest, IdReturnsD3D12)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(policy_.Id(), "d3d12");
 }
 
 //! Test: D3D12 row pitch alignment handles exact multiples.
-NOLINT_TEST_F(D3D12PackingPolicyTest, AlignRowPitchBytes_ExactMultiple)
+NOLINT_TEST_F(D3D12PackingPolicyTest, AlignRowPitchBytesExactMultiple)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(policy_.AlignRowPitchBytes(256), 256u);
@@ -56,7 +56,7 @@ NOLINT_TEST_F(D3D12PackingPolicyTest, AlignRowPitchBytes_ExactMultiple)
 }
 
 //! Test: D3D12 row pitch alignment rounds up.
-NOLINT_TEST_F(D3D12PackingPolicyTest, AlignRowPitchBytes_RoundsUp)
+NOLINT_TEST_F(D3D12PackingPolicyTest, AlignRowPitchBytesRoundsUp)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(policy_.AlignRowPitchBytes(1), 256u);
@@ -67,7 +67,7 @@ NOLINT_TEST_F(D3D12PackingPolicyTest, AlignRowPitchBytes_RoundsUp)
 }
 
 //! Test: D3D12 subresource offset alignment handles exact multiples.
-NOLINT_TEST_F(D3D12PackingPolicyTest, AlignSubresourceOffset_ExactMultiple)
+NOLINT_TEST_F(D3D12PackingPolicyTest, AlignSubresourceOffsetExactMultiple)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(policy_.AlignSubresourceOffset(512), 512u);
@@ -75,7 +75,7 @@ NOLINT_TEST_F(D3D12PackingPolicyTest, AlignSubresourceOffset_ExactMultiple)
 }
 
 //! Test: D3D12 subresource offset alignment rounds up.
-NOLINT_TEST_F(D3D12PackingPolicyTest, AlignSubresourceOffset_RoundsUp)
+NOLINT_TEST_F(D3D12PackingPolicyTest, AlignSubresourceOffsetRoundsUp)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(policy_.AlignSubresourceOffset(1), 512u);
@@ -93,14 +93,14 @@ protected:
 };
 
 //! Test: Tight policy has correct ID.
-NOLINT_TEST_F(TightPackedPolicyTest, Id_ReturnsTight)
+NOLINT_TEST_F(TightPackedPolicyTest, IdReturnsTight)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(policy_.Id(), "tight");
 }
 
 //! Test: Tight policy does not pad row pitch.
-NOLINT_TEST_F(TightPackedPolicyTest, AlignRowPitchBytes_NoPadding)
+NOLINT_TEST_F(TightPackedPolicyTest, AlignRowPitchBytesNoPadding)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(policy_.AlignRowPitchBytes(1), 1u);
@@ -110,7 +110,7 @@ NOLINT_TEST_F(TightPackedPolicyTest, AlignRowPitchBytes_NoPadding)
 }
 
 //! Test: Tight policy aligns subresource offset to 4 bytes.
-NOLINT_TEST_F(TightPackedPolicyTest, AlignSubresourceOffset_Aligns4Bytes)
+NOLINT_TEST_F(TightPackedPolicyTest, AlignSubresourceOffsetAligns4Bytes)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(policy_.AlignSubresourceOffset(0), 0u);
@@ -127,7 +127,7 @@ NOLINT_TEST_F(TightPackedPolicyTest, AlignSubresourceOffset_Aligns4Bytes)
 class FormatUtilitiesTest : public ::testing::Test { };
 
 //! Test: ComputeBytesPerPixelOrBlock returns correct values for common formats.
-NOLINT_TEST_F(FormatUtilitiesTest, BytesPerPixelOrBlock_CommonFormats)
+NOLINT_TEST_F(FormatUtilitiesTest, BytesPerPixelOrBlockCommonFormats)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(ComputeBytesPerPixelOrBlock(Format::kRGBA8UNorm), 4u);
@@ -137,7 +137,7 @@ NOLINT_TEST_F(FormatUtilitiesTest, BytesPerPixelOrBlock_CommonFormats)
 }
 
 //! Test: ComputeBlockDimension returns 1 for uncompressed formats.
-NOLINT_TEST_F(FormatUtilitiesTest, BlockDimension_Uncompressed)
+NOLINT_TEST_F(FormatUtilitiesTest, BlockDimensionUncompressed)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(ComputeBlockDimension(Format::kRGBA8UNorm), 1u);
@@ -145,14 +145,14 @@ NOLINT_TEST_F(FormatUtilitiesTest, BlockDimension_Uncompressed)
 }
 
 //! Test: ComputeBlockDimension returns 4 for BC formats.
-NOLINT_TEST_F(FormatUtilitiesTest, BlockDimension_BC7)
+NOLINT_TEST_F(FormatUtilitiesTest, BlockDimensionBC7)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(ComputeBlockDimension(Format::kBC7UNorm), 4u);
 }
 
 //! Test: ComputeRowBytes for uncompressed format.
-NOLINT_TEST_F(FormatUtilitiesTest, RowBytes_UncompressedRGBA8)
+NOLINT_TEST_F(FormatUtilitiesTest, RowBytesUncompressedRGBA8)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(ComputeRowBytes(64, Format::kRGBA8UNorm), 256u); // 64 * 4
@@ -160,7 +160,7 @@ NOLINT_TEST_F(FormatUtilitiesTest, RowBytes_UncompressedRGBA8)
 }
 
 //! Test: ComputeRowBytes for BC7 format.
-NOLINT_TEST_F(FormatUtilitiesTest, RowBytes_BC7)
+NOLINT_TEST_F(FormatUtilitiesTest, RowBytesBC7)
 {
   // Arrange & Act & Assert
   // BC7: 16 bytes per 4x4 block
@@ -171,7 +171,7 @@ NOLINT_TEST_F(FormatUtilitiesTest, RowBytes_BC7)
 }
 
 //! Test: ComputeSurfaceBytes for uncompressed format.
-NOLINT_TEST_F(FormatUtilitiesTest, SurfaceBytes_UncompressedRGBA8)
+NOLINT_TEST_F(FormatUtilitiesTest, SurfaceBytesUncompressedRGBA8)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(
@@ -180,7 +180,7 @@ NOLINT_TEST_F(FormatUtilitiesTest, SurfaceBytes_UncompressedRGBA8)
 }
 
 //! Test: ComputeSurfaceBytes for BC7 format.
-NOLINT_TEST_F(FormatUtilitiesTest, SurfaceBytes_BC7)
+NOLINT_TEST_F(FormatUtilitiesTest, SurfaceBytesBC7)
 {
   // Arrange & Act & Assert
   // BC7: 16 bytes per 4x4 block
@@ -197,7 +197,7 @@ NOLINT_TEST_F(FormatUtilitiesTest, SurfaceBytes_BC7)
 class MipDimensionTest : public ::testing::Test { };
 
 //! Test: ComputeMipDimension computes correct values.
-NOLINT_TEST_F(MipDimensionTest, ComputeMipDimension_StandardCases)
+NOLINT_TEST_F(MipDimensionTest, ComputeMipDimensionStandardCases)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(ComputeMipDimension(256, 0), 256u);
@@ -208,7 +208,7 @@ NOLINT_TEST_F(MipDimensionTest, ComputeMipDimension_StandardCases)
 }
 
 //! Test: ComputeMipDimension returns minimum of 1.
-NOLINT_TEST_F(MipDimensionTest, ComputeMipDimension_MinimumIsOne)
+NOLINT_TEST_F(MipDimensionTest, ComputeMipDimensionMinimumIsOne)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(ComputeMipDimension(256, 9), 1u);
@@ -224,7 +224,7 @@ NOLINT_TEST_F(MipDimensionTest, ComputeMipDimension_MinimumIsOne)
 class SubresourceLayoutTest : public ::testing::Test { };
 
 //! Test: Single mip RGBA8 texture layout with D3D12 policy.
-NOLINT_TEST_F(SubresourceLayoutTest, SingleMip_RGBA8_D3D12)
+NOLINT_TEST_F(SubresourceLayoutTest, SingleMipRGBA8D3D12)
 {
   // Arrange
   ScratchImageMeta meta {
@@ -251,7 +251,7 @@ NOLINT_TEST_F(SubresourceLayoutTest, SingleMip_RGBA8_D3D12)
 }
 
 //! Test: Multiple mips layout with D3D12 policy.
-NOLINT_TEST_F(SubresourceLayoutTest, MultipleMips_D3D12)
+NOLINT_TEST_F(SubresourceLayoutTest, MultipleMipsD3D12)
 {
   // Arrange
   ScratchImageMeta meta {
@@ -291,7 +291,7 @@ NOLINT_TEST_F(SubresourceLayoutTest, MultipleMips_D3D12)
 }
 
 //! Test: BC7 texture layout with D3D12 policy.
-NOLINT_TEST_F(SubresourceLayoutTest, BC7_D3D12)
+NOLINT_TEST_F(SubresourceLayoutTest, BC7D3D12)
 {
   // Arrange
   ScratchImageMeta meta {
@@ -317,7 +317,7 @@ NOLINT_TEST_F(SubresourceLayoutTest, BC7_D3D12)
 }
 
 //! Test: Tight packing produces smaller layout.
-NOLINT_TEST_F(SubresourceLayoutTest, TightPacked_NoPadding)
+NOLINT_TEST_F(SubresourceLayoutTest, TightPackedNoPadding)
 {
   // Arrange - 65 width requires padding in D3D12
   ScratchImageMeta meta {
@@ -351,7 +351,7 @@ NOLINT_TEST_F(SubresourceLayoutTest, TightPacked_NoPadding)
 }
 
 //! Test: ComputeTotalPayloadSize sums correctly.
-NOLINT_TEST_F(SubresourceLayoutTest, TotalPayloadSize_MultiMip)
+NOLINT_TEST_F(SubresourceLayoutTest, TotalPayloadSizeMultiMip)
 {
   // Arrange
   ScratchImageMeta meta {
@@ -374,7 +374,7 @@ NOLINT_TEST_F(SubresourceLayoutTest, TotalPayloadSize_MultiMip)
 }
 
 //! Test: Array texture layout.
-NOLINT_TEST_F(SubresourceLayoutTest, ArrayTexture_LayoutOrder)
+NOLINT_TEST_F(SubresourceLayoutTest, ArrayTextureLayoutOrder)
 {
   // Arrange
   ScratchImageMeta meta {

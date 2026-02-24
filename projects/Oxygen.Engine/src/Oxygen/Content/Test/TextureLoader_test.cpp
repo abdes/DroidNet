@@ -77,7 +77,7 @@ protected:
 };
 
 //! Test: valid v4 payload loads and preserves dimensions/format.
-NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTexture_V4Payload_Succeeds)
+NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTextureV4PayloadSucceeds)
 {
   using oxygen::content::testing::MakeV4TexturePayload;
   using oxygen::data::pak::TextureResourceDesc;
@@ -120,7 +120,7 @@ NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTexture_V4Payload_Succeeds)
 }
 
 //! Test: invalid format enumerant maps to kUnknown but still loads.
-NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTexture_InvalidFormat_IsUnknown)
+NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTextureInvalidFormatIsUnknown)
 {
   using oxygen::content::testing::MakeV4TexturePayload;
   using oxygen::data::pak::TextureResourceDesc;
@@ -153,7 +153,7 @@ NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTexture_InvalidFormat_IsUnknown)
 }
 
 //! Test: missing payload magic triggers runtime error.
-NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTexture_InvalidMagic_Throws)
+NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTextureInvalidMagicThrows)
 {
   using oxygen::content::testing::MakeV4TexturePayload;
   using oxygen::data::pak::TextureResourceDesc;
@@ -184,7 +184,7 @@ NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTexture_InvalidMagic_Throws)
 }
 
 //! Test: invalid descriptor dimensions still throw with a valid v4 payload.
-NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTexture_InvalidDimensions_Throw)
+NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTextureInvalidDimensionsThrow)
 {
   using oxygen::content::testing::MakeV4TexturePayload;
   using oxygen::data::pak::TextureResourceDesc;
@@ -214,7 +214,7 @@ NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTexture_InvalidDimensions_Throw)
 }
 
 //! Test: truncated payload (smaller than header) throws.
-NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTexture_TruncatedPayload_Throws)
+NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTextureTruncatedPayloadThrows)
 {
   using oxygen::data::pak::TextureResourceDesc;
 

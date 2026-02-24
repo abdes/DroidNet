@@ -26,7 +26,7 @@ namespace {
 class CubeFaceTest : public ::testing::Test { };
 
 //! to_string returns the expected string for all cube face values.
-NOLINT_TEST_F(CubeFaceTest, ToString_ReturnsExpectedStrings)
+NOLINT_TEST_F(CubeFaceTest, ToStringReturnsExpectedStrings)
 {
   // Act & Assert
   EXPECT_STREQ(to_string(CubeFace::kPositiveX), "PositiveX");
@@ -38,7 +38,7 @@ NOLINT_TEST_F(CubeFaceTest, ToString_ReturnsExpectedStrings)
 }
 
 //! CubeFace enum values match D3D12/Vulkan face ordering (0-5).
-NOLINT_TEST_F(CubeFaceTest, EnumValues_MatchExpectedOrdering)
+NOLINT_TEST_F(CubeFaceTest, EnumValuesMatchExpectedOrdering)
 {
   // Assert
   EXPECT_EQ(static_cast<uint8_t>(CubeFace::kPositiveX), 0);
@@ -50,7 +50,7 @@ NOLINT_TEST_F(CubeFaceTest, EnumValues_MatchExpectedOrdering)
 }
 
 //! kCubeFaceCount constant equals 6.
-NOLINT_TEST_F(CubeFaceTest, CubeFaceCount_IsSix)
+NOLINT_TEST_F(CubeFaceTest, CubeFaceCountIsSix)
 {
   // Assert
   EXPECT_EQ(kCubeFaceCount, 6);
@@ -62,7 +62,7 @@ NOLINT_TEST_F(CubeFaceTest, CubeFaceCount_IsSix)
 class SubresourceIdTest : public ::testing::Test { };
 
 //! Default-constructed SubresourceId has all fields zero.
-NOLINT_TEST_F(SubresourceIdTest, DefaultConstruction_AllFieldsZero)
+NOLINT_TEST_F(SubresourceIdTest, DefaultConstructionAllFieldsZero)
 {
   // Arrange & Act
   const SubresourceId id {};
@@ -74,7 +74,7 @@ NOLINT_TEST_F(SubresourceIdTest, DefaultConstruction_AllFieldsZero)
 }
 
 //! SubresourceId equality comparison works correctly.
-NOLINT_TEST_F(SubresourceIdTest, Equality_ComparesAllFields)
+NOLINT_TEST_F(SubresourceIdTest, EqualityComparesAllFields)
 {
   // Arrange
   const SubresourceId id1 {
@@ -98,7 +98,7 @@ NOLINT_TEST_F(SubresourceIdTest, Equality_ComparesAllFields)
 class TextureSourceSetBasicTest : public ::testing::Test { };
 
 //! Default-constructed TextureSourceSet is empty.
-NOLINT_TEST_F(TextureSourceSetBasicTest, DefaultConstruction_IsEmpty)
+NOLINT_TEST_F(TextureSourceSetBasicTest, DefaultConstructionIsEmpty)
 {
   // Arrange & Act
   const TextureSourceSet set;
@@ -110,7 +110,7 @@ NOLINT_TEST_F(TextureSourceSetBasicTest, DefaultConstruction_IsEmpty)
 }
 
 //! Add() adds a source to the set.
-NOLINT_TEST_F(TextureSourceSetBasicTest, Add_AddsSource)
+NOLINT_TEST_F(TextureSourceSetBasicTest, AddAddsSource)
 {
   // Arrange
   TextureSourceSet set;
@@ -129,7 +129,7 @@ NOLINT_TEST_F(TextureSourceSetBasicTest, Add_AddsSource)
 }
 
 //! Clear() removes all sources.
-NOLINT_TEST_F(TextureSourceSetBasicTest, Clear_RemovesAllSources)
+NOLINT_TEST_F(TextureSourceSetBasicTest, ClearRemovesAllSources)
 {
   // Arrange
   TextureSourceSet set;
@@ -149,7 +149,7 @@ NOLINT_TEST_F(TextureSourceSetBasicTest, Clear_RemovesAllSources)
 }
 
 //! GetSource() returns the source at the given index.
-NOLINT_TEST_F(TextureSourceSetBasicTest, GetSource_ReturnsCorrectSource)
+NOLINT_TEST_F(TextureSourceSetBasicTest, GetSourceReturnsCorrectSource)
 {
   // Arrange
   TextureSourceSet set;
@@ -176,7 +176,7 @@ NOLINT_TEST_F(TextureSourceSetBasicTest, GetSource_ReturnsCorrectSource)
 }
 
 //! GetSource() throws when index is out of range.
-NOLINT_TEST_F(TextureSourceSetBasicTest, GetSource_ThrowsOnOutOfRange)
+NOLINT_TEST_F(TextureSourceSetBasicTest, GetSourceThrowsOnOutOfRange)
 {
   // Arrange
   const TextureSourceSet set;
@@ -191,7 +191,7 @@ NOLINT_TEST_F(TextureSourceSetBasicTest, GetSource_ThrowsOnOutOfRange)
 class TextureSourceSetArrayLayerTest : public ::testing::Test { };
 
 //! AddArrayLayer() sets correct subresource fields.
-NOLINT_TEST_F(TextureSourceSetArrayLayerTest, AddArrayLayer_SetsCorrectFields)
+NOLINT_TEST_F(TextureSourceSetArrayLayerTest, AddArrayLayerSetsCorrectFields)
 {
   // Arrange
   TextureSourceSet set;
@@ -208,7 +208,7 @@ NOLINT_TEST_F(TextureSourceSetArrayLayerTest, AddArrayLayer_SetsCorrectFields)
 }
 
 //! Multiple AddArrayLayer() calls create separate sources.
-NOLINT_TEST_F(TextureSourceSetArrayLayerTest, AddArrayLayer_MultipleLayers)
+NOLINT_TEST_F(TextureSourceSetArrayLayerTest, AddArrayLayerMultipleLayers)
 {
   // Arrange
   TextureSourceSet set;
@@ -231,7 +231,7 @@ NOLINT_TEST_F(TextureSourceSetArrayLayerTest, AddArrayLayer_MultipleLayers)
 class TextureSourceSetCubeFaceTest : public ::testing::Test { };
 
 //! AddCubeFace() maps face to correct array layer index.
-NOLINT_TEST_F(TextureSourceSetCubeFaceTest, AddCubeFace_MapsToArrayLayer)
+NOLINT_TEST_F(TextureSourceSetCubeFaceTest, AddCubeFaceMapsToArrayLayer)
 {
   // Arrange
   TextureSourceSet set;
@@ -246,7 +246,7 @@ NOLINT_TEST_F(TextureSourceSetCubeFaceTest, AddCubeFace_MapsToArrayLayer)
 }
 
 //! AddCubeFace() for all 6 faces creates correct mapping.
-NOLINT_TEST_F(TextureSourceSetCubeFaceTest, AddAllFaces_CreatesCompleteCube)
+NOLINT_TEST_F(TextureSourceSetCubeFaceTest, AddAllFacesCreatesCompleteCube)
 {
   // Arrange
   TextureSourceSet set;
@@ -272,7 +272,7 @@ NOLINT_TEST_F(TextureSourceSetCubeFaceTest, AddAllFaces_CreatesCompleteCube)
 class TextureSourceSetDepthSliceTest : public ::testing::Test { };
 
 //! AddDepthSlice() sets correct subresource fields.
-NOLINT_TEST_F(TextureSourceSetDepthSliceTest, AddDepthSlice_SetsCorrectFields)
+NOLINT_TEST_F(TextureSourceSetDepthSliceTest, AddDepthSliceSetsCorrectFields)
 {
   // Arrange
   TextureSourceSet set;
@@ -289,7 +289,7 @@ NOLINT_TEST_F(TextureSourceSetDepthSliceTest, AddDepthSlice_SetsCorrectFields)
 }
 
 //! Multiple AddDepthSlice() calls create separate sources.
-NOLINT_TEST_F(TextureSourceSetDepthSliceTest, AddDepthSlice_MultipleSlices)
+NOLINT_TEST_F(TextureSourceSetDepthSliceTest, AddDepthSliceMultipleSlices)
 {
   // Arrange
   TextureSourceSet set;
@@ -313,7 +313,7 @@ NOLINT_TEST_F(TextureSourceSetDepthSliceTest, AddDepthSlice_MultipleSlices)
 class TextureSourceSetMipLevelTest : public ::testing::Test { };
 
 //! AddMipLevel() sets correct subresource fields.
-NOLINT_TEST_F(TextureSourceSetMipLevelTest, AddMipLevel_SetsCorrectFields)
+NOLINT_TEST_F(TextureSourceSetMipLevelTest, AddMipLevelSetsCorrectFields)
 {
   // Arrange
   TextureSourceSet set;
@@ -330,7 +330,7 @@ NOLINT_TEST_F(TextureSourceSetMipLevelTest, AddMipLevel_SetsCorrectFields)
 }
 
 //! AddMipLevel() supports pre-authored mip chains.
-NOLINT_TEST_F(TextureSourceSetMipLevelTest, AddMipLevel_FullMipChain)
+NOLINT_TEST_F(TextureSourceSetMipLevelTest, AddMipLevelFullMipChain)
 {
   // Arrange
   TextureSourceSet set;
@@ -355,7 +355,7 @@ NOLINT_TEST_F(TextureSourceSetMipLevelTest, AddMipLevel_FullMipChain)
 class TextureSourceSetSourcesTest : public ::testing::Test { };
 
 //! Sources() returns a span over all added sources.
-NOLINT_TEST_F(TextureSourceSetSourcesTest, Sources_ReturnsAllSources)
+NOLINT_TEST_F(TextureSourceSetSourcesTest, SourcesReturnsAllSources)
 {
   // Arrange
   TextureSourceSet set;
@@ -379,7 +379,7 @@ NOLINT_TEST_F(TextureSourceSetSourcesTest, Sources_ReturnsAllSources)
 class EquirectToCubeOptionsTest : public ::testing::Test { };
 
 //! Default EquirectToCubeOptions has expected values.
-NOLINT_TEST_F(EquirectToCubeOptionsTest, DefaultValues_AreCorrect)
+NOLINT_TEST_F(EquirectToCubeOptionsTest, DefaultValuesAreCorrect)
 {
   // Arrange & Act
   const EquirectToCubeOptions options {};
@@ -402,7 +402,7 @@ NOLINT_TEST_F(CubeFaceBasisTest, ArrayHasSixEntries)
 }
 
 //! +X face has correct basis vectors.
-NOLINT_TEST_F(CubeFaceBasisTest, PositiveX_HasCorrectBasis)
+NOLINT_TEST_F(CubeFaceBasisTest, PositiveXHasCorrectBasis)
 {
   // Arrange
   const auto& basis = GetCubeFaceBasis(CubeFace::kPositiveX);
@@ -420,7 +420,7 @@ NOLINT_TEST_F(CubeFaceBasisTest, PositiveX_HasCorrectBasis)
 }
 
 //! +Z face has correct basis vectors (up face in Z-up coordinate system).
-NOLINT_TEST_F(CubeFaceBasisTest, PositiveZ_HasCorrectBasis)
+NOLINT_TEST_F(CubeFaceBasisTest, PositiveZHasCorrectBasis)
 {
   // Arrange
   const auto& basis = GetCubeFaceBasis(CubeFace::kPositiveZ);
@@ -443,7 +443,7 @@ NOLINT_TEST_F(CubeFaceBasisTest, PositiveZ_HasCorrectBasis)
 class ComputeCubeDirectionTest : public ::testing::Test { };
 
 //! ComputeCubeDirection at face center (0.5, 0.5) returns the face normal.
-NOLINT_TEST_F(ComputeCubeDirectionTest, AtCenter_ReturnsFaceNormal)
+NOLINT_TEST_F(ComputeCubeDirectionTest, AtCenterReturnsFaceNormal)
 {
   // Arrange & Act
   const auto dir_px = ComputeCubeDirection(CubeFace::kPositiveX, 0.5F, 0.5F);
@@ -479,7 +479,7 @@ NOLINT_TEST_F(ComputeCubeDirectionTest, ReturnsNormalizedVectors)
 }
 
 //! ComputeCubeDirection at corner points toward cube corner.
-NOLINT_TEST_F(ComputeCubeDirectionTest, AtCorner_PointsTowardCubeCorner)
+NOLINT_TEST_F(ComputeCubeDirectionTest, AtCornerPointsTowardCubeCorner)
 {
   // Arrange & Act - bottom-left corner of +X face
   // UV (0, 0) -> s=-1, t=-1 -> direction = center + (-1)*right + (-1)*up
@@ -513,7 +513,7 @@ protected:
 };
 
 //! AssembleCubeFromFaces with valid faces creates a cube map.
-NOLINT_TEST_F(AssembleCubeFromFacesTest, ValidFaces_CreatesCubeMap)
+NOLINT_TEST_F(AssembleCubeFromFacesTest, ValidFacesCreatesCubeMap)
 {
   // Arrange
   std::array<ScratchImage, 6> faces = {
@@ -564,7 +564,7 @@ NOLINT_TEST_F(AssembleCubeFromFacesTest, CopiesFaceDataCorrectly)
 }
 
 //! AssembleCubeFromFaces fails with invalid face.
-NOLINT_TEST_F(AssembleCubeFromFacesTest, InvalidFace_Fails)
+NOLINT_TEST_F(AssembleCubeFromFacesTest, InvalidFaceFails)
 {
   // Arrange - one invalid face
   std::array<ScratchImage, 6> faces = {
@@ -585,7 +585,7 @@ NOLINT_TEST_F(AssembleCubeFromFacesTest, InvalidFace_Fails)
 }
 
 //! AssembleCubeFromFaces fails with non-square face.
-NOLINT_TEST_F(AssembleCubeFromFacesTest, NonSquareFace_Fails)
+NOLINT_TEST_F(AssembleCubeFromFacesTest, NonSquareFaceFails)
 {
   // Arrange - create a non-square face (4x2)
   constexpr uint32_t kWidth = 4;
@@ -614,7 +614,7 @@ NOLINT_TEST_F(AssembleCubeFromFacesTest, NonSquareFace_Fails)
 }
 
 //! AssembleCubeFromFaces fails with mismatched dimensions.
-NOLINT_TEST_F(AssembleCubeFromFacesTest, MismatchedDimensions_Fails)
+NOLINT_TEST_F(AssembleCubeFromFacesTest, MismatchedDimensionsFails)
 {
   // Arrange - create a larger face (4x4 vs 2x2)
   constexpr uint32_t kWidth = 4;
@@ -689,7 +689,7 @@ protected:
 };
 
 //! ConvertEquirectangularToCube creates valid cube map from valid input.
-NOLINT_TEST_F(ConvertEquirectangularToCubeTest, ValidInput_CreatesCubeMap)
+NOLINT_TEST_F(ConvertEquirectangularToCubeTest, ValidInputCreatesCubeMap)
 {
   // Arrange
   auto equirect = MakeEquirect(64, 32);
@@ -710,7 +710,7 @@ NOLINT_TEST_F(ConvertEquirectangularToCubeTest, ValidInput_CreatesCubeMap)
 }
 
 //! ConvertEquirectangularToCube rejects invalid input image.
-NOLINT_TEST_F(ConvertEquirectangularToCubeTest, InvalidInput_Fails)
+NOLINT_TEST_F(ConvertEquirectangularToCubeTest, InvalidInputFails)
 {
   // Arrange
   const ScratchImage invalid {};
@@ -725,7 +725,7 @@ NOLINT_TEST_F(ConvertEquirectangularToCubeTest, InvalidInput_Fails)
 }
 
 //! ConvertEquirectangularToCube rejects non-2:1 aspect ratio.
-NOLINT_TEST_F(ConvertEquirectangularToCubeTest, WrongAspectRatio_Fails)
+NOLINT_TEST_F(ConvertEquirectangularToCubeTest, WrongAspectRatioFails)
 {
   // Arrange - 1:1 aspect ratio (square)
   auto square = MakeEquirect(32, 32);
@@ -740,7 +740,7 @@ NOLINT_TEST_F(ConvertEquirectangularToCubeTest, WrongAspectRatio_Fails)
 }
 
 //! ConvertEquirectangularToCube rejects non-float formats.
-NOLINT_TEST_F(ConvertEquirectangularToCubeTest, NonFloatFormat_Fails)
+NOLINT_TEST_F(ConvertEquirectangularToCubeTest, NonFloatFormatFails)
 {
   // Arrange - RGBA8 format
   std::vector<std::byte> data(64 * 32 * 4);
@@ -757,7 +757,7 @@ NOLINT_TEST_F(ConvertEquirectangularToCubeTest, NonFloatFormat_Fails)
 }
 
 //! ConvertEquirectangularToCube rejects zero face size.
-NOLINT_TEST_F(ConvertEquirectangularToCubeTest, ZeroFaceSize_Fails)
+NOLINT_TEST_F(ConvertEquirectangularToCubeTest, ZeroFaceSizeFails)
 {
   // Arrange
   auto equirect = MakeEquirect(64, 32);
@@ -772,7 +772,7 @@ NOLINT_TEST_F(ConvertEquirectangularToCubeTest, ZeroFaceSize_Fails)
 }
 
 //! ConvertEquirectangularToCube samples correct colors from solid equirect.
-NOLINT_TEST_F(ConvertEquirectangularToCubeTest, SolidColor_PreservesColor)
+NOLINT_TEST_F(ConvertEquirectangularToCubeTest, SolidColorPreservesColor)
 {
   // Arrange - solid orange equirect
   auto equirect = MakeEquirect(64, 32, 1.0F, 0.5F, 0.0F, 1.0F);
@@ -797,7 +797,7 @@ NOLINT_TEST_F(ConvertEquirectangularToCubeTest, SolidColor_PreservesColor)
 }
 
 //! ConvertEquirectangularToCube works with bilinear (box) filter.
-NOLINT_TEST_F(ConvertEquirectangularToCubeTest, BoxFilter_Works)
+NOLINT_TEST_F(ConvertEquirectangularToCubeTest, BoxFilterWorks)
 {
   // Arrange
   auto equirect = MakeEquirect(64, 32);
@@ -815,7 +815,7 @@ NOLINT_TEST_F(ConvertEquirectangularToCubeTest, BoxFilter_Works)
 }
 
 //! ConvertEquirectangularToCube works with Kaiser filter.
-NOLINT_TEST_F(ConvertEquirectangularToCubeTest, KaiserFilter_Works)
+NOLINT_TEST_F(ConvertEquirectangularToCubeTest, KaiserFilterWorks)
 {
   // Arrange
   auto equirect = MakeEquirect(64, 32);
@@ -833,7 +833,7 @@ NOLINT_TEST_F(ConvertEquirectangularToCubeTest, KaiserFilter_Works)
 }
 
 //! ConvertEquirectangularToCube works with Lanczos filter.
-NOLINT_TEST_F(ConvertEquirectangularToCubeTest, LanczosFilter_Works)
+NOLINT_TEST_F(ConvertEquirectangularToCubeTest, LanczosFilterWorks)
 {
   // Arrange
   auto equirect = MakeEquirect(64, 32);

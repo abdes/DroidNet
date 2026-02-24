@@ -37,7 +37,7 @@ class ColorSpaceConversionTest : public ::testing::Test { };
 /*!\
  Verifies the sRGB to linear conversion at key points.
 */
-NOLINT_TEST_F(ColorSpaceConversionTest, SrgbToLinear_ConvertsKnownValues)
+NOLINT_TEST_F(ColorSpaceConversionTest, SrgbToLinearConvertsKnownValues)
 {
   // Arrange & Act & Assert
   // Black stays black
@@ -57,7 +57,7 @@ NOLINT_TEST_F(ColorSpaceConversionTest, SrgbToLinear_ConvertsKnownValues)
 /*!\
  Verifies the linear to sRGB conversion at key points.
 */
-NOLINT_TEST_F(ColorSpaceConversionTest, LinearToSrgb_ConvertsKnownValues)
+NOLINT_TEST_F(ColorSpaceConversionTest, LinearToSrgbConvertsKnownValues)
 {
   // Arrange & Act & Assert
   // Black stays black
@@ -77,7 +77,7 @@ NOLINT_TEST_F(ColorSpaceConversionTest, LinearToSrgb_ConvertsKnownValues)
 /*!\
  Verifies that sRGB->linear->sRGB returns original value.
 */
-NOLINT_TEST_F(ColorSpaceConversionTest, RoundTrip_PreservesValues)
+NOLINT_TEST_F(ColorSpaceConversionTest, RoundTripPreservesValues)
 {
   // Arrange
   constexpr float kTestValues[] = { 0.0F, 0.1F, 0.25F, 0.5F, 0.75F, 1.0F };
@@ -94,7 +94,7 @@ NOLINT_TEST_F(ColorSpaceConversionTest, RoundTrip_PreservesValues)
 /*!\
  Verifies that alpha channel is unchanged during conversion.
 */
-NOLINT_TEST_F(ColorSpaceConversionTest, RgbaConversion_PreservesAlpha)
+NOLINT_TEST_F(ColorSpaceConversionTest, RgbaConversionPreservesAlpha)
 {
   // Arrange
   const std::array<float, 4> srgb_rgba = { 0.5F, 0.5F, 0.5F, 0.75F };
@@ -118,7 +118,7 @@ class HdrProcessingTest : public ::testing::Test { };
 /*!\
  Verifies exposure adjustment using 2^exposure multiplier.
 */
-NOLINT_TEST_F(HdrProcessingTest, ApplyExposure_ScalesRgbCorrectly)
+NOLINT_TEST_F(HdrProcessingTest, ApplyExposureScalesRgbCorrectly)
 {
   // Arrange
   const std::array<float, 4> pixel = { 1.0F, 0.5F, 0.25F, 0.8F };
@@ -137,7 +137,7 @@ NOLINT_TEST_F(HdrProcessingTest, ApplyExposure_ScalesRgbCorrectly)
 /*!\
  Verifies that exposure=0 means no change (2^0 = 1).
 */
-NOLINT_TEST_F(HdrProcessingTest, ApplyExposure_ZeroExposure_NoChange)
+NOLINT_TEST_F(HdrProcessingTest, ApplyExposureZeroExposureNoChange)
 {
   // Arrange
   const std::array<float, 4> pixel = { 0.5F, 0.5F, 0.5F, 1.0F };
@@ -155,7 +155,7 @@ NOLINT_TEST_F(HdrProcessingTest, ApplyExposure_ZeroExposure_NoChange)
 /*!\
  Verifies that high values are compressed into LDR range.
 */
-NOLINT_TEST_F(HdrProcessingTest, AcesTonemap_CompressesHdrToLdr)
+NOLINT_TEST_F(HdrProcessingTest, AcesTonemapCompressesHdrToLdr)
 {
   // Arrange
   const std::array<float, 4> hdr_pixel = { 10.0F, 5.0F, 1.0F, 1.0F };
@@ -180,7 +180,7 @@ NOLINT_TEST_F(HdrProcessingTest, AcesTonemap_CompressesHdrToLdr)
 /*!\
  Verifies that zero input produces zero output.
 */
-NOLINT_TEST_F(HdrProcessingTest, AcesTonemap_PreservesBlack)
+NOLINT_TEST_F(HdrProcessingTest, AcesTonemapPreservesBlack)
 {
   // Arrange
   const std::array<float, 4> black = { 0.0F, 0.0F, 0.0F, 1.0F };
@@ -204,7 +204,7 @@ class MipFilterKernelTest : public ::testing::Test { };
 /*!\
  Verifies the modified Bessel function at known points.
 */
-NOLINT_TEST_F(MipFilterKernelTest, BesselI0_ReturnsCorrectValues)
+NOLINT_TEST_F(MipFilterKernelTest, BesselI0ReturnsCorrectValues)
 {
   // Arrange & Act & Assert
   // I0(0) = 1
@@ -222,7 +222,7 @@ NOLINT_TEST_F(MipFilterKernelTest, BesselI0_ReturnsCorrectValues)
 /*!\
  Verifies Kaiser window is 1 at x=0.
 */
-NOLINT_TEST_F(MipFilterKernelTest, KaiserWindow_ReturnsOneAtCenter)
+NOLINT_TEST_F(MipFilterKernelTest, KaiserWindowReturnsOneAtCenter)
 {
   // Arrange & Act & Assert
   EXPECT_NEAR(mip::KaiserWindow(0.0F, 4.0F), 1.0F, 1e-5F);
@@ -232,7 +232,7 @@ NOLINT_TEST_F(MipFilterKernelTest, KaiserWindow_ReturnsOneAtCenter)
 /*!\
  Verifies Kaiser window is 0 for |x| > 1.
 */
-NOLINT_TEST_F(MipFilterKernelTest, KaiserWindow_ReturnsZeroOutsideRange)
+NOLINT_TEST_F(MipFilterKernelTest, KaiserWindowReturnsZeroOutsideRange)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(mip::KaiserWindow(1.5F, 4.0F), 0.0F);
@@ -243,7 +243,7 @@ NOLINT_TEST_F(MipFilterKernelTest, KaiserWindow_ReturnsZeroOutsideRange)
 /*!\
  Verifies Lanczos kernel is 1 at x=0.
 */
-NOLINT_TEST_F(MipFilterKernelTest, LanczosKernel_ReturnsOneAtCenter)
+NOLINT_TEST_F(MipFilterKernelTest, LanczosKernelReturnsOneAtCenter)
 {
   // Arrange & Act & Assert
   EXPECT_NEAR(mip::LanczosKernel(0.0F, 3), 1.0F, 1e-5F);
@@ -253,7 +253,7 @@ NOLINT_TEST_F(MipFilterKernelTest, LanczosKernel_ReturnsOneAtCenter)
 /*!\
  Verifies Lanczos kernel zeros at non-zero integers.
 */
-NOLINT_TEST_F(MipFilterKernelTest, LanczosKernel_ReturnsZeroAtIntegers)
+NOLINT_TEST_F(MipFilterKernelTest, LanczosKernelReturnsZeroAtIntegers)
 {
   // Arrange & Act & Assert
   EXPECT_NEAR(mip::LanczosKernel(1.0F, 3), 0.0F, 1e-5F);
@@ -265,7 +265,7 @@ NOLINT_TEST_F(MipFilterKernelTest, LanczosKernel_ReturnsZeroAtIntegers)
 /*!\
  Verifies Lanczos kernel is 0 for |x| >= a.
 */
-NOLINT_TEST_F(MipFilterKernelTest, LanczosKernel_ReturnsZeroOutsideSupport)
+NOLINT_TEST_F(MipFilterKernelTest, LanczosKernelReturnsZeroOutsideSupport)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(mip::LanczosKernel(3.0F, 3), 0.0F);
@@ -283,7 +283,7 @@ class MipGenerationTest : public ::testing::Test { };
 /*!\
  Verifies mip count calculation for power-of-two dimensions.
 */
-NOLINT_TEST_F(MipGenerationTest, ComputeMipCount_ReturnsCorrectValues)
+NOLINT_TEST_F(MipGenerationTest, ComputeMipCountReturnsCorrectValues)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(mip::ComputeMipCount(1, 1), 1u);
@@ -297,7 +297,7 @@ NOLINT_TEST_F(MipGenerationTest, ComputeMipCount_ReturnsCorrectValues)
 /*!\
  Verifies mip count for NPOT textures.
 */
-NOLINT_TEST_F(MipGenerationTest, ComputeMipCount_HandlesNpot)
+NOLINT_TEST_F(MipGenerationTest, ComputeMipCountHandlesNpot)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(mip::ComputeMipCount(100, 100), 7u); // floor(log2(100))+1 = 7
@@ -309,7 +309,7 @@ NOLINT_TEST_F(MipGenerationTest, ComputeMipCount_HandlesNpot)
 /*!\
  Verifies mip chain generation with box filter.
 */
-NOLINT_TEST_F(MipGenerationTest, GenerateChain2D_CreatesFullChain)
+NOLINT_TEST_F(MipGenerationTest, GenerateChain2DCreatesFullChain)
 {
   // Arrange - create a 4x4 RGBA8 image
   std::vector<std::byte> pixels(4 * 4 * 4);
@@ -352,7 +352,7 @@ class ContentProcessingTest : public ::testing::Test { };
 /*!\
  Verifies that already-normalized normals are unchanged.
 */
-NOLINT_TEST_F(ContentProcessingTest, RenormalizeNormal_PreservesUnitNormals)
+NOLINT_TEST_F(ContentProcessingTest, RenormalizeNormalPreservesUnitNormals)
 {
   // Arrange - up-facing normal (0,0,1) encoded as (0.5, 0.5, 1.0)
   const std::array<float, 4> up_normal = { 0.5F, 0.5F, 1.0F, 1.0F };
@@ -370,7 +370,7 @@ NOLINT_TEST_F(ContentProcessingTest, RenormalizeNormal_PreservesUnitNormals)
 /*!\
  Verifies that non-unit normals are normalized.
 */
-NOLINT_TEST_F(ContentProcessingTest, RenormalizeNormal_NormalizesNonUnit)
+NOLINT_TEST_F(ContentProcessingTest, RenormalizeNormalNormalizesNonUnit)
 {
   // Arrange - scaled normal that needs renormalization
   // Encoded value (0.75, 0.5, 0.5) -> unpacked (0.5, 0, 0) -> should become (1,
@@ -391,7 +391,7 @@ NOLINT_TEST_F(ContentProcessingTest, RenormalizeNormal_NormalizesNonUnit)
 /*!\
  Verifies that green channel is flipped (1 - g).
 */
-NOLINT_TEST_F(ContentProcessingTest, FlipNormalGreen_InvertsGreenChannel)
+NOLINT_TEST_F(ContentProcessingTest, FlipNormalGreenInvertsGreenChannel)
 {
   // Arrange - create a 2x2 RGBA8 image
   std::vector<std::byte> pixels(2 * 2 * 4);

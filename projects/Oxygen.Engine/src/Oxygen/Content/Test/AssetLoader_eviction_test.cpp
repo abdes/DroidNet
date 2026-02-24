@@ -78,7 +78,7 @@ protected:
  evicted deterministically. Expect a single eviction event.
 */
 NOLINT_TEST_F(
-  AssetLoaderEvictionAsyncTest, ResourceEviction_NotifiesSubscriberOnRelease)
+  AssetLoaderEvictionAsyncTest, ResourceEvictionNotifiesSubscriberOnRelease)
 {
   using namespace std::chrono_literals;
 
@@ -150,7 +150,7 @@ NOLINT_TEST_F(
  Scenario: Subscribe to texture evictions, then evict a buffer resource and
  verify no events are delivered to the texture subscriber.
 */
-NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEviction_FiltersByType)
+NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionFiltersByType)
 {
   using namespace std::chrono_literals;
 
@@ -216,7 +216,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEviction_FiltersByType)
  Scenario: Cache a buffer resource, then clear mounts to drop the cache.
  Verify an eviction event is delivered with kClear reason.
 */
-NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEviction_ClearMounts)
+NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionClearMounts)
 {
   using namespace std::chrono_literals;
 
@@ -285,7 +285,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEviction_ClearMounts)
  Scenario: Cache a buffer resource, then stop the loader. Expect a shutdown
  eviction event to be delivered.
 */
-NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEviction_Stop)
+NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionStop)
 {
   using namespace std::chrono_literals;
 
@@ -354,7 +354,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEviction_Stop)
  and verify each texture dependency emits a refcount eviction event.
 */
 NOLINT_TEST_F(
-  AssetLoaderEvictionAsyncTest, AssetRelease_CascadesTextureEvictions)
+  AssetLoaderEvictionAsyncTest, AssetReleaseCascadesTextureEvictions)
 {
   using namespace std::chrono_literals;
 
@@ -427,7 +427,7 @@ NOLINT_TEST_F(
  The test verifies each cycle evicts exactly the expected texture set and that
  additional no-op trims do not emit extra events.
 */
-NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, TrimCache_RepeatedCyclesStable)
+NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, TrimCacheRepeatedCyclesStable)
 {
   using namespace std::chrono_literals;
 
@@ -514,7 +514,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, TrimCache_RepeatedCyclesStable)
  Refresh performs a destructive cache clear and eviction flush. Repeated
  TrimCache calls after each refresh must not emit duplicate texture evictions.
 */
-NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, RefreshPak_NoDuplicateTrimEvictions)
+NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, RefreshPakNoDuplicateTrimEvictions)
 {
   constexpr std::size_t kRefreshCycles = 4U;
   constexpr std::size_t kTexturesPerCycle = 3U;

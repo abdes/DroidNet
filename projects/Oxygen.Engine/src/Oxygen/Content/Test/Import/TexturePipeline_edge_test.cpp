@@ -181,7 +181,7 @@ protected:
 };
 
 //! Empty byte payloads should fail with a cook diagnostic.
-NOLINT_TEST_F(TexturePipelineEdgeTest, Collect_EmptySourceBytes_Fails)
+NOLINT_TEST_F(TexturePipelineEdgeTest, CollectEmptySourceBytesFails)
 {
   // Arrange
   TextureImportDesc desc;
@@ -205,7 +205,7 @@ NOLINT_TEST_F(TexturePipelineEdgeTest, Collect_EmptySourceBytes_Fails)
 }
 
 //! Empty source sets should fail with a cook diagnostic.
-NOLINT_TEST_F(TexturePipelineEdgeTest, Collect_EmptySourceSet_Fails)
+NOLINT_TEST_F(TexturePipelineEdgeTest, CollectEmptySourceSetFails)
 {
   // Arrange
   TextureImportDesc desc;
@@ -229,7 +229,7 @@ NOLINT_TEST_F(TexturePipelineEdgeTest, Collect_EmptySourceSet_Fails)
 }
 
 //! Nonzero depth slices with a non-3D target should fail.
-NOLINT_TEST_F(TexturePipelineEdgeTest, Collect_DepthSliceNon3D_Fails)
+NOLINT_TEST_F(TexturePipelineEdgeTest, CollectDepthSliceNon3DFails)
 {
   // Arrange
   TextureImportDesc desc;
@@ -258,7 +258,7 @@ NOLINT_TEST_F(TexturePipelineEdgeTest, Collect_DepthSliceNon3D_Fails)
 }
 
 //! Duplicate array layers should fail assembly.
-NOLINT_TEST_F(TexturePipelineEdgeTest, Collect_DuplicateArrayLayer_Fails)
+NOLINT_TEST_F(TexturePipelineEdgeTest, CollectDuplicateArrayLayerFails)
 {
   // Arrange
   TextureImportDesc desc;
@@ -289,7 +289,7 @@ NOLINT_TEST_F(TexturePipelineEdgeTest, Collect_DuplicateArrayLayer_Fails)
 }
 
 //! Unknown packing policy should emit a warning but still succeed.
-NOLINT_TEST_F(TexturePipelineEdgeTest, Collect_UnknownPackingPolicy_Warns)
+NOLINT_TEST_F(TexturePipelineEdgeTest, CollectUnknownPackingPolicyWarns)
 {
   // Arrange
   TextureImportDesc desc;

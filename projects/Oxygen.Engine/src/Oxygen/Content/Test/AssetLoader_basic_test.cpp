@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
-#include <chrono>
 #include <string>
 #include <string_view>
 
@@ -26,8 +26,7 @@ auto AssetLoaderBasicTest::SetUp() -> void
     std::string sanitized;
     sanitized.reserve(name.size());
     for (const char c : name) {
-      const bool alpha_num
-        = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+      const bool alpha_num = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
         || (c >= '0' && c <= '9');
       sanitized.push_back(alpha_num ? c : '_');
     }
@@ -36,7 +35,8 @@ auto AssetLoaderBasicTest::SetUp() -> void
   const auto unique_suffix
     = std::chrono::steady_clock::now().time_since_epoch().count();
 
-  temp_dir_ = std::filesystem::temp_directory_path() / "oxygen_asset_loader_tests"
+  temp_dir_ = std::filesystem::temp_directory_path()
+    / "oxygen_asset_loader_tests"
     / (sanitize(test_info->test_suite_name()) + "_"
       + sanitize(test_info->name()) + "_" + std::to_string(unique_suffix));
   std::filesystem::create_directories(temp_dir_);
@@ -66,7 +66,7 @@ namespace {
  Scenario: Attempts to load assets from a corrupted PAK file and verifies
  graceful error handling by catching the expected exception.
 */
-NOLINT_TEST_F(AssetLoaderBasicTest, LoadAsset_CorruptedPak_HandlesGracefully)
+NOLINT_TEST_F(AssetLoaderBasicTest, LoadAssetCorruptedPakHandlesGracefully)
 {
   // Arrange - Create a corrupted PAK file
   auto corrupted_pak = temp_dir_ / "corrupted.pak";
@@ -76,7 +76,8 @@ NOLINT_TEST_F(AssetLoaderBasicTest, LoadAsset_CorruptedPak_HandlesGracefully)
   }
 
   // Act & Assert - Should throw exception for corrupted file
-  EXPECT_THROW({ asset_loader_->AddPakFile(corrupted_pak); }, std::exception);
+  NOLINT_EXPECT_THROW(
+    { asset_loader_->AddPakFile(corrupted_pak); }, std::exception);
 }
 
 //! Test: AssetLoader handles missing PAK file gracefully
@@ -84,14 +85,14 @@ NOLINT_TEST_F(AssetLoaderBasicTest, LoadAsset_CorruptedPak_HandlesGracefully)
  Scenario: Attempts to add a non-existent PAK file and verifies
  graceful error handling.
 */
-NOLINT_TEST_F(AssetLoaderBasicTest, AddPakFile_NonExistent_HandlesGracefully)
+NOLINT_TEST_F(AssetLoaderBasicTest, AddPakFileNonExistentHandlesGracefully)
 {
   // Arrange
   const auto non_existent_pak = temp_dir_ / "non_existent.pak";
 
   // Act & Assert - Should handle gracefully (may throw or return gracefully)
   // Implementation-dependent behavior
-  EXPECT_NO_THROW({
+  NOLINT_EXPECT_NO_THROW({
     try {
       asset_loader_->AddPakFile(non_existent_pak);
     } catch (const std::exception&) {

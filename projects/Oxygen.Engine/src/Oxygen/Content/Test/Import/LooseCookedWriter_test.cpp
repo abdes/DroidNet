@@ -74,7 +74,7 @@ namespace {
    Scenario: Creates a writer with an explicit source key and no assets/files.
    Verifies that the index is loadable and contains the expected GUID.
   */
-  NOLINT_TEST(LooseCookedWriterTest, Finish_EmptyContainer_WritesLoadableIndex)
+  NOLINT_TEST(LooseCookedWriterTest, FinishEmptyContainerWritesLoadableIndex)
   {
     // Arrange
     const auto cooked_root = MakeTempCookedRoot("loose_cooked_writer_empty");
@@ -101,7 +101,7 @@ namespace {
    writes the same AssetKey again with a new relpath and bytes.
    Verifies the index contains only one entry for that key.
   */
-  NOLINT_TEST(LooseCookedWriterTest, WriteAssetDescriptor_SameKey_UpdatesEntry)
+  NOLINT_TEST(LooseCookedWriterTest, WriteAssetDescriptorSameKeyUpdatesEntry)
   {
     // Arrange
     const auto cooked_root = MakeTempCookedRoot("loose_cooked_writer_update");
@@ -161,7 +161,7 @@ namespace {
    Verifies the writer rejects the conflict.
   */
   NOLINT_TEST(
-    LooseCookedWriterTest, WriteAssetDescriptor_DuplicateVirtualPath_Throws)
+    LooseCookedWriterTest, WriteAssetDescriptorDuplicateVirtualPathThrows)
   {
     // Arrange
     const auto cooked_root = MakeTempCookedRoot("loose_cooked_writer_conflict");
@@ -196,7 +196,7 @@ namespace {
    Scenario: Writes only buffers.table without buffers.data.
    Verifies Finish rejects the invalid index state.
   */
-  NOLINT_TEST(LooseCookedWriterTest, Finish_MissingBuffersPair_Throws)
+  NOLINT_TEST(LooseCookedWriterTest, FinishMissingBuffersPairThrows)
   {
     // Arrange
     const auto cooked_root = MakeTempCookedRoot("loose_cooked_writer_pairs");
@@ -219,7 +219,7 @@ namespace {
    Scenario: Writes only textures.table without textures.data.
    Verifies Finish rejects the invalid index state.
   */
-  NOLINT_TEST(LooseCookedWriterTest, Finish_MissingTexturesPair_Throws)
+  NOLINT_TEST(LooseCookedWriterTest, FinishMissingTexturesPairThrows)
   {
     // Arrange
     const auto cooked_root
@@ -240,7 +240,7 @@ namespace {
   }
 
   //! Test: Missing required physics pair throws.
-  NOLINT_TEST(LooseCookedWriterTest, Finish_MissingPhysicsPair_Throws)
+  NOLINT_TEST(LooseCookedWriterTest, FinishMissingPhysicsPairThrows)
   {
     const auto cooked_root
       = MakeTempCookedRoot("loose_cooked_writer_physics_pairs");
@@ -263,7 +263,7 @@ namespace {
    Reopens the same cooked root without calling SetSourceKey.
    Verifies the GUID remains unchanged (update semantics).
   */
-  NOLINT_TEST(LooseCookedWriterTest, Finish_PreservesExistingSourceKey)
+  NOLINT_TEST(LooseCookedWriterTest, FinishPreservesExistingSourceKey)
   {
     // Arrange
     const auto cooked_root
@@ -294,7 +294,7 @@ namespace {
    Reopens the same cooked root without calling SetContentVersion.
    Verifies the version remains unchanged.
   */
-  NOLINT_TEST(LooseCookedWriterTest, Finish_PreservesExistingContentVersion)
+  NOLINT_TEST(LooseCookedWriterTest, FinishPreservesExistingContentVersion)
   {
     // Arrange
     const auto cooked_root
@@ -321,7 +321,7 @@ namespace {
    relpath. Verifies there is still exactly one buffers.data record and it was
    updated.
   */
-  NOLINT_TEST(LooseCookedWriterTest, WriteFile_SameKind_UpdatesEntry)
+  NOLINT_TEST(LooseCookedWriterTest, WriteFileSameKindUpdatesEntry)
   {
     // Arrange
     const auto cooked_root
@@ -374,7 +374,7 @@ namespace {
    and writes a second asset with a different key.
    Verifies both assets are present in the merged index.
   */
-  NOLINT_TEST(LooseCookedWriterTest, Finish_MergesNewAsset_WithExistingAssets)
+  NOLINT_TEST(LooseCookedWriterTest, FinishMergesNewAssetWithExistingAssets)
   {
     // Arrange
     const auto cooked_root
@@ -422,8 +422,7 @@ namespace {
    Scenario: Disables hashing, writes an asset descriptor, finishes.
    Verifies the emitted descriptor SHA-256 (if present) is all-zero.
   */
-  NOLINT_TEST(
-    LooseCookedWriterTest, Finish_ComputeSha256Disabled_EmitsZeroHashes)
+  NOLINT_TEST(LooseCookedWriterTest, FinishComputeSha256DisabledEmitsZeroHashes)
   {
     // Arrange
     const auto cooked_root = MakeTempCookedRoot("loose_cooked_writer_no_sha");
@@ -465,7 +464,7 @@ namespace {
    path strings.
    Verifies validation rejects each case.
   */
-  NOLINT_TEST_P(BadVirtualPathTest, WriteAssetDescriptor_Throws)
+  NOLINT_TEST_P(BadVirtualPathTest, WriteAssetDescriptorThrows)
   {
     // Arrange
     const auto suffix
@@ -526,8 +525,7 @@ namespace {
    Scenario: Attempts to write an asset with an absolute descriptor path.
    Verifies validation rejects it.
   */
-  NOLINT_TEST(
-    LooseCookedWriterTest, WriteAssetDescriptor_AbsoluteRelPath_Throws)
+  NOLINT_TEST(LooseCookedWriterTest, WriteAssetDescriptorAbsoluteRelPathThrows)
   {
     // Arrange
     const auto cooked_root
@@ -557,7 +555,7 @@ namespace {
    Scenario: Attempts to write a file with Windows-style separators.
    Verifies validation rejects it.
   */
-  NOLINT_TEST(LooseCookedWriterTest, WriteFile_BackslashesInRelPath_Throws)
+  NOLINT_TEST(LooseCookedWriterTest, WriteFileBackslashesInRelPathThrows)
   {
     // Arrange
     const auto cooked_root
@@ -583,7 +581,7 @@ namespace {
    Verifies the second write throws to prevent ambiguous virtual path mapping.
   */
   NOLINT_TEST(LooseCookedWriterTest,
-    WriteAssetDescriptor_DuplicateVirtualPathAcrossRuns_Throws)
+    WriteAssetDescriptorDuplicateVirtualPathAcrossRunsThrows)
   {
     // Arrange
     const auto cooked_root
@@ -624,7 +622,7 @@ namespace {
    Scenario: Attempts to write an asset with directory traversal in relpath.
    Verifies validation rejects it.
   */
-  NOLINT_TEST(LooseCookedWriterTest, WriteAssetDescriptor_RelPathDotDot_Throws)
+  NOLINT_TEST(LooseCookedWriterTest, WriteAssetDescriptorRelPathDotDotThrows)
   {
     // Arrange
     const auto cooked_root
@@ -655,7 +653,7 @@ namespace {
    Verifies validation rejects it.
   */
   NOLINT_TEST(
-    LooseCookedWriterTest, WriteAssetDescriptor_RelPathContainsColon_Throws)
+    LooseCookedWriterTest, WriteAssetDescriptorRelPathContainsColonThrows)
   {
     // Arrange
     const auto cooked_root

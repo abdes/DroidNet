@@ -257,7 +257,7 @@ protected:
 };
 
 //! Verify progress counters update for BufferPipeline.
-NOLINT_TEST_F(PipelineConformanceTest, BufferPipeline_ProgressCounters_Update)
+NOLINT_TEST_F(PipelineConformanceTest, BufferPipelineProgressCountersUpdate)
 {
   // Arrange
   BufferPipeline::WorkResult result;
@@ -291,7 +291,7 @@ NOLINT_TEST_F(PipelineConformanceTest, BufferPipeline_ProgressCounters_Update)
 }
 
 //! Verify progress counters update for TexturePipeline.
-NOLINT_TEST_F(PipelineConformanceTest, TexturePipeline_ProgressCounters_Update)
+NOLINT_TEST_F(PipelineConformanceTest, TexturePipelineProgressCountersUpdate)
 {
   // Arrange
   TexturePipeline::WorkResult result;
@@ -316,7 +316,7 @@ NOLINT_TEST_F(PipelineConformanceTest, TexturePipeline_ProgressCounters_Update)
 }
 
 //! Verify progress counters update for MaterialPipeline.
-NOLINT_TEST_F(PipelineConformanceTest, MaterialPipeline_ProgressCounters_Update)
+NOLINT_TEST_F(PipelineConformanceTest, MaterialPipelineProgressCountersUpdate)
 {
   // Arrange
   MaterialPipeline::WorkResult result;
@@ -341,7 +341,7 @@ NOLINT_TEST_F(PipelineConformanceTest, MaterialPipeline_ProgressCounters_Update)
 }
 
 //! Verify progress counters update for GeometryPipeline.
-NOLINT_TEST_F(PipelineConformanceTest, GeometryPipeline_ProgressCounters_Update)
+NOLINT_TEST_F(PipelineConformanceTest, GeometryPipelineProgressCountersUpdate)
 {
   // Arrange
   MeshBuildPipeline::WorkResult result;
@@ -366,7 +366,7 @@ NOLINT_TEST_F(PipelineConformanceTest, GeometryPipeline_ProgressCounters_Update)
 }
 
 //! Verify progress counters update for ScenePipeline.
-NOLINT_TEST_F(PipelineConformanceTest, ScenePipeline_ProgressCounters_Update)
+NOLINT_TEST_F(PipelineConformanceTest, ScenePipelineProgressCountersUpdate)
 {
   // Arrange
   auto adapter = std::make_shared<FakeSceneAdapter>();
@@ -394,7 +394,7 @@ NOLINT_TEST_F(PipelineConformanceTest, ScenePipeline_ProgressCounters_Update)
 }
 
 //! Verify stop tokens cancel BufferPipeline work.
-NOLINT_TEST_F(PipelineConformanceTest, BufferPipeline_StopToken_Cancels)
+NOLINT_TEST_F(PipelineConformanceTest, BufferPipelineStopTokenCancels)
 {
   // Arrange
   BufferPipeline::WorkResult result;
@@ -425,7 +425,7 @@ NOLINT_TEST_F(PipelineConformanceTest, BufferPipeline_StopToken_Cancels)
 }
 
 //! Verify stop tokens cancel TexturePipeline work.
-NOLINT_TEST_F(PipelineConformanceTest, TexturePipeline_StopToken_Cancels)
+NOLINT_TEST_F(PipelineConformanceTest, TexturePipelineStopTokenCancels)
 {
   // Arrange
   TexturePipeline::WorkResult result;
@@ -454,7 +454,7 @@ NOLINT_TEST_F(PipelineConformanceTest, TexturePipeline_StopToken_Cancels)
 }
 
 //! Verify stop tokens cancel ScenePipeline work.
-NOLINT_TEST_F(PipelineConformanceTest, ScenePipeline_StopToken_Cancels)
+NOLINT_TEST_F(PipelineConformanceTest, ScenePipelineStopTokenCancels)
 {
   // Arrange
   auto adapter = std::make_shared<FakeSceneAdapter>();

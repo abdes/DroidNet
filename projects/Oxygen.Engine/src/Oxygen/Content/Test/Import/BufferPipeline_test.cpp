@@ -61,7 +61,7 @@ protected:
 };
 
 //! Verify hashing stage fills content_hash when enabled.
-NOLINT_TEST_F(BufferPipelineTest, Collect_WithHashingEnabled_ComputesHash)
+NOLINT_TEST_F(BufferPipelineTest, CollectWithHashingEnabledComputesHash)
 {
   // Arrange
   std::vector<std::byte> bytes { std::byte { 0x10 }, std::byte { 0x20 },
@@ -103,7 +103,7 @@ NOLINT_TEST_F(BufferPipelineTest, Collect_WithHashingEnabled_ComputesHash)
 }
 
 //! Verify hashing stage does nothing when disabled.
-NOLINT_TEST_F(BufferPipelineTest, Collect_WithHashingDisabled_LeavesHashZero)
+NOLINT_TEST_F(BufferPipelineTest, CollectWithHashingDisabledLeavesHashZero)
 {
   // Arrange
   std::vector<std::byte> bytes(64, std::byte { 0xAB });
@@ -141,7 +141,7 @@ NOLINT_TEST_F(BufferPipelineTest, Collect_WithHashingDisabled_LeavesHashZero)
 }
 
 //! Verify hashing stage does not overwrite an existing content_hash.
-NOLINT_TEST_F(BufferPipelineTest, Collect_WithExistingHash_DoesNotOverwrite)
+NOLINT_TEST_F(BufferPipelineTest, CollectWithExistingHashDoesNotOverwrite)
 {
   // Arrange
   constexpr uint64_t kExistingHash = 0x12345678ABCDEF00ULL;
@@ -180,7 +180,7 @@ NOLINT_TEST_F(BufferPipelineTest, Collect_WithExistingHash_DoesNotOverwrite)
 }
 
 //! Verify canceled work returns a failed result.
-NOLINT_TEST_F(BufferPipelineTest, Collect_WhenCancelled_ReturnsFailedResult)
+NOLINT_TEST_F(BufferPipelineTest, CollectWhenCancelledReturnsFailedResult)
 {
   // Arrange
   std::stop_source stop_source;
@@ -221,7 +221,7 @@ NOLINT_TEST_F(BufferPipelineTest, Collect_WhenCancelled_ReturnsFailedResult)
 }
 
 //! Verify cancellation after submission returns a failed result.
-NOLINT_TEST_F(BufferPipelineTest, Collect_WhenCancelledAfterSubmit_Fails)
+NOLINT_TEST_F(BufferPipelineTest, CollectWhenCancelledAfterSubmitFails)
 {
   // Arrange
   std::stop_source stop_source;
@@ -264,7 +264,7 @@ NOLINT_TEST_F(BufferPipelineTest, Collect_WhenCancelledAfterSubmit_Fails)
 }
 
 //! Verify mixed cancellation yields mixed success states.
-NOLINT_TEST_F(BufferPipelineTest, Collect_MixedCancellation_ReturnsMixedResults)
+NOLINT_TEST_F(BufferPipelineTest, CollectMixedCancellationReturnsMixedResults)
 {
   // Arrange
   std::stop_source stop_source;
@@ -326,7 +326,7 @@ NOLINT_TEST_F(BufferPipelineTest, Collect_MixedCancellation_ReturnsMixedResults)
 }
 
 //! Verify multiple submissions can be collected successfully.
-NOLINT_TEST_F(BufferPipelineTest, Collect_MultipleSubmissions_CollectsAll)
+NOLINT_TEST_F(BufferPipelineTest, CollectMultipleSubmissionsCollectsAll)
 {
   // Arrange
   constexpr int kCount = 8;
@@ -387,7 +387,7 @@ NOLINT_TEST_F(BufferPipelineTest, Collect_MultipleSubmissions_CollectsAll)
 /*! This is a proxy check that hashing is dispatched off-thread via ThreadPool.
  */
 NOLINT_TEST_F(
-  BufferPipelineTest, Submit_WithHashingEnabled_EventLoopStaysResponsive)
+  BufferPipelineTest, SubmitWithHashingEnabledEventLoopStaysResponsive)
 {
   // Arrange
   std::atomic<bool> posted_ran { false };

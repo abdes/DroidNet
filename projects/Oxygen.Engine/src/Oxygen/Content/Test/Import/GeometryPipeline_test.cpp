@@ -313,7 +313,7 @@ protected:
 
 //! Verify a simple mesh emits geometry descriptor and buffers.
 NOLINT_TEST_F(
-  GeometryPipelineBasicTest, Collect_WithSingleTriangle_EmitsCookedPayload)
+  GeometryPipelineBasicTest, CollectWithSingleTriangleEmitsCookedPayload)
 {
   // Arrange
   const auto buffers = MakeTriangleMeshBuffers();
@@ -389,7 +389,7 @@ NOLINT_TEST_F(
 
 //! Verify long mesh/LOD names emit truncation warnings.
 NOLINT_TEST_F(
-  GeometryPipelineBasicTest, Collect_WithLongNames_EmitsTruncationWarnings)
+  GeometryPipelineBasicTest, CollectWithLongNamesEmitsTruncationWarnings)
 {
   // Arrange
   const auto buffers = MakeTriangleMeshBuffers();
@@ -428,8 +428,7 @@ NOLINT_TEST_F(
 }
 
 //! Verify skinned mesh descriptors include the skinned mesh blob.
-NOLINT_TEST_F(
-  GeometryPipelineBasicTest, Collect_WithSkinnedMesh_EmitsSkinnedBlob)
+NOLINT_TEST_F(GeometryPipelineBasicTest, CollectWithSkinnedMeshEmitsSkinnedBlob)
 {
   // Arrange
   const auto buffers = MakeSkinnedTriangleMeshBuffers();
@@ -493,7 +492,7 @@ NOLINT_TEST_F(
 
 //! Verify skinned meshes without inverse bind matrices fail.
 NOLINT_TEST_F(
-  GeometryPipelineBasicTest, Collect_SkinnedMissingInverseBind_ReturnsFailure)
+  GeometryPipelineBasicTest, CollectSkinnedMissingInverseBindReturnsFailure)
 {
   // Arrange
   auto buffers = MakeSkinnedTriangleMeshBuffers();
@@ -530,7 +529,7 @@ NOLINT_TEST_F(
 
 //! Verify procedural meshes are rejected with explicit diagnostics.
 NOLINT_TEST_F(
-  GeometryPipelineBasicTest, Collect_WithProceduralMesh_ReturnsFailure)
+  GeometryPipelineBasicTest, CollectWithProceduralMeshReturnsFailure)
 {
   // Arrange
   const auto buffers = MakeTriangleMeshBuffers();
@@ -565,7 +564,7 @@ NOLINT_TEST_F(
 
 //! Verify descriptor finalization patches buffer indices and content hash.
 NOLINT_TEST_F(
-  GeometryPipelineBasicTest, FinalizeDescriptor_PatchesIndicesAndHash)
+  GeometryPipelineBasicTest, FinalizeDescriptorPatchesIndicesAndHash)
 {
   // Arrange
   const auto buffers = MakeTriangleMeshBuffers();
@@ -625,7 +624,7 @@ NOLINT_TEST_F(
 
 //! Verify missing positions produce a diagnostic and failure.
 NOLINT_TEST_F(
-  GeometryPipelineBasicTest, Collect_WithMissingPositions_ReturnsFailure)
+  GeometryPipelineBasicTest, CollectWithMissingPositionsReturnsFailure)
 {
   // Arrange
   auto buffers = std::make_shared<MeshBuffers>();
@@ -668,7 +667,7 @@ NOLINT_TEST_F(
 
 //! Verify oversized vertex buffers return a diagnostic.
 NOLINT_TEST_F(
-  GeometryPipelineBasicTest, Collect_WithVertexBufferTooLarge_ReturnsFailure)
+  GeometryPipelineBasicTest, CollectWithVertexBufferTooLargeReturnsFailure)
 {
   // Arrange
   const auto buffers = MakeTriangleMeshBuffers();
@@ -703,7 +702,7 @@ NOLINT_TEST_F(
 
 //! Verify oversized skinned buffers return a diagnostic.
 NOLINT_TEST_F(
-  GeometryPipelineBasicTest, Collect_WithSkinnedBufferTooLarge_ReturnsFailure)
+  GeometryPipelineBasicTest, CollectWithSkinnedBufferTooLargeReturnsFailure)
 {
   // Arrange
   const auto buffers = MakeSkinnedTriangleMeshBuffers();
@@ -737,7 +736,7 @@ NOLINT_TEST_F(
 }
 
 //! Verify LOD count above the maximum returns a diagnostic.
-NOLINT_TEST_F(GeometryPipelineBasicTest, Collect_WithTooManyLods_ReturnsFailure)
+NOLINT_TEST_F(GeometryPipelineBasicTest, CollectWithTooManyLodsReturnsFailure)
 {
   // Arrange
   const auto buffers = MakeTriangleMeshBuffers();

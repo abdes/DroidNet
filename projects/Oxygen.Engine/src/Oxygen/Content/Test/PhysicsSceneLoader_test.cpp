@@ -41,8 +41,7 @@ class PhysicsSceneLoaderTypeTest
 // Tests — happy path
 // ============================================================================
 
-NOLINT_TEST_F(
-  PhysicsSceneLoaderHappyPathTest, Load_Minimal_ZeroBindings_Succeeds)
+NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadMinimalZeroBindingsSucceeds)
 {
   WriteAs(writer_, MakeMinimalDesc());
   ASSERT_TRUE(writer_.Flush());
@@ -59,7 +58,7 @@ NOLINT_TEST_F(
   EXPECT_EQ(asset->GetBindings<pak7::AggregateBindingRecord>().size(), 0U);
 }
 
-NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, Load_OneRigidBodyRecord_Succeeds)
+NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadOneRigidBodyRecordSucceeds)
 {
   pak7::RigidBodyBindingRecord rec {};
   rec.node_index = 3;
@@ -78,8 +77,7 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, Load_OneRigidBodyRecord_Succeeds)
   EXPECT_FLOAT_EQ(rigid[0].mass, 42.0F);
 }
 
-NOLINT_TEST_F(
-  PhysicsSceneLoaderHappyPathTest, Load_MultipleBindingTypes_Succeeds)
+NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadMultipleBindingTypesSucceeds)
 {
   // Layout:
   //   [PhysicsSceneAssetDesc 256B]
@@ -134,7 +132,7 @@ NOLINT_TEST_F(
     asset->GetBindings<pak7::ColliderBindingRecord>()[0].node_index, 2U);
 }
 
-NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, Load_AllBindingTypes_Succeeds)
+NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadAllBindingTypesSucceeds)
 {
   constexpr uint32_t kDescSize = sizeof(pak7::PhysicsSceneAssetDesc);
   constexpr uint32_t kEntrySize = sizeof(pak7::PhysicsComponentTableDesc);
@@ -249,7 +247,7 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, Load_AllBindingTypes_Succeeds)
 // Tests — validation / error paths
 // ============================================================================
 
-NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, Load_WrongAssetType_Throws)
+NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, LoadWrongAssetTypeThrows)
 {
   auto desc = MakeMinimalDesc();
   desc.header.asset_type
@@ -261,7 +259,7 @@ NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, Load_WrongAssetType_Throws)
     { (void)LoadPhysicsSceneAsset(MakeContext()); }, std::runtime_error);
 }
 
-NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, Load_WrongVersion_Throws)
+NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, LoadWrongVersionThrows)
 {
   auto desc = MakeMinimalDesc();
   desc.header.version = 0xFF; // unsupported
@@ -272,7 +270,7 @@ NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, Load_WrongVersion_Throws)
     { (void)LoadPhysicsSceneAsset(MakeContext()); }, std::runtime_error);
 }
 
-NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, Load_TruncatedDescriptor_Throws)
+NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, LoadTruncatedDescriptorThrows)
 {
   // Write only half of a PhysicsSceneAssetDesc (stream too short).
   std::vector<std::byte> half(
@@ -284,7 +282,7 @@ NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, Load_TruncatedDescriptor_Throws)
     { (void)LoadPhysicsSceneAsset(MakeContext()); }, std::runtime_error);
 }
 
-NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, Load_EntrySizeMismatch_Throws)
+NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, LoadEntrySizeMismatchThrows)
 {
   struct Case {
     pak7::PhysicsBindingType type;
@@ -344,7 +342,7 @@ NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, Load_EntrySizeMismatch_Throws)
 }
 
 NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest,
-  Load_RigidBodyTable_DataReadable_EntryFieldsCorrect)
+  LoadRigidBodyTableDataReadableEntryFieldsCorrect)
 {
   // Verify that the data blob captured by the loader faithfully encodes the
   // serialized record; GetBindings() must return the same field values.
@@ -378,7 +376,7 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest,
   EXPECT_EQ(r.material_asset_index, 1U);
 }
 
-NOLINT_TEST_F(PhysicsSceneLoaderTypeTest, Load_AssetTypeIsPhysicsScene)
+NOLINT_TEST_F(PhysicsSceneLoaderTypeTest, LoadAssetTypeIsPhysicsScene)
 {
   WriteAs(writer_, MakeMinimalDesc());
   ASSERT_TRUE(writer_.Flush());

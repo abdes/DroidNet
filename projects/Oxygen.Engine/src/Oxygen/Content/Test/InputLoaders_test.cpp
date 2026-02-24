@@ -82,7 +82,7 @@ protected:
   Reader<MockStream> reader_;
 };
 
-NOLINT_TEST_F(InputLoadersTest, LoadInputActionAsset_ValidDescriptor_Parses)
+NOLINT_TEST_F(InputLoadersTest, LoadInputActionAssetValidDescriptorParses)
 {
   using oxygen::content::loaders::LoadInputActionAsset;
   using oxygen::data::AssetType;
@@ -107,7 +107,7 @@ NOLINT_TEST_F(InputLoadersTest, LoadInputActionAsset_ValidDescriptor_Parses)
 }
 
 NOLINT_TEST_F(InputLoadersTest,
-  LoadInputMappingContextAsset_Decode_CollectsActionDependencies)
+  LoadInputMappingContextAssetDecodeCollectsActionDependencies)
 {
   using oxygen::content::loaders::LoadInputMappingContextAsset;
   using oxygen::data::AssetKey;
@@ -197,7 +197,7 @@ NOLINT_TEST_F(InputLoadersTest,
   EXPECT_THAT(deps, ::testing::Contains(action_c));
 }
 
-NOLINT_TEST_F(InputLoadersTest, LoadInputActionAsset_InvalidValueType_Throws)
+NOLINT_TEST_F(InputLoadersTest, LoadInputActionAssetInvalidValueTypeThrows)
 {
   using oxygen::content::loaders::LoadInputActionAsset;
   using oxygen::data::AssetType;
@@ -216,7 +216,7 @@ NOLINT_TEST_F(InputLoadersTest, LoadInputActionAsset_InvalidValueType_Throws)
 }
 
 NOLINT_TEST_F(
-  InputLoadersTest, LoadInputMappingContextAsset_InvalidTriggerType_Throws)
+  InputLoadersTest, LoadInputMappingContextAssetInvalidTriggerTypeThrows)
 {
   using oxygen::content::loaders::LoadInputMappingContextAsset;
   using oxygen::data::AssetType;
@@ -271,7 +271,7 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(
-  InputLoadersTest, LoadInputMappingContextAsset_InvalidSlotOffset_Throws)
+  InputLoadersTest, LoadInputMappingContextAssetInvalidSlotOffsetThrows)
 {
   using oxygen::content::loaders::LoadInputMappingContextAsset;
   using oxygen::data::AssetType;
@@ -317,7 +317,7 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(
-  InputLoadersTest, LoadInputMappingContextAsset_TriggerRangeOutOfBounds_Throws)
+  InputLoadersTest, LoadInputMappingContextAssetTriggerRangeOutOfBoundsThrows)
 {
   using oxygen::content::loaders::LoadInputMappingContextAsset;
   using oxygen::data::AssetType;
@@ -363,7 +363,7 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(
-  InputLoadersTest, LoadInputMappingContextAsset_ComboAuxOutOfBounds_Throws)
+  InputLoadersTest, LoadInputMappingContextAssetComboAuxOutOfBoundsThrows)
 {
   using oxygen::content::loaders::LoadInputMappingContextAsset;
   using oxygen::data::AssetType;
@@ -420,7 +420,7 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(
-  InputLoadersTest, LoadInputMappingContextAsset_DecodeWithoutCollector_Throws)
+  InputLoadersTest, LoadInputMappingContextAssetDecodeWithoutCollectorThrows)
 {
   using oxygen::content::loaders::LoadInputMappingContextAsset;
   using oxygen::data::AssetType;

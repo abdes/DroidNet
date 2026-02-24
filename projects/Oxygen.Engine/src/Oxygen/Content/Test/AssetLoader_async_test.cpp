@@ -60,7 +60,7 @@ protected:
  dependent resources before the asset.
 */
 NOLINT_TEST_F(AssetLoaderAsyncTest,
-  LoadAssetAsync_MaterialWithTextures_PublishesDependenciesAndKeys)
+  LoadAssetAsyncMaterialWithTexturesPublishesDependenciesAndKeys)
 {
   using namespace std::chrono_literals;
 
@@ -111,7 +111,7 @@ NOLINT_TEST_F(AssetLoaderAsyncTest,
  Scenario: Start a material load via `StartLoadAsset<MaterialAsset>` and verify
  the callback is invoked with a valid result.
 */
-NOLINT_TEST_F(AssetLoaderAsyncTest, StartLoadAsset_Material_InvokesCallback)
+NOLINT_TEST_F(AssetLoaderAsyncTest, StartLoadAssetMaterialInvokesCallback)
 {
   using namespace std::chrono_literals;
 

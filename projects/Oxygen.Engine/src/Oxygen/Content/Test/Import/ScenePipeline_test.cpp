@@ -155,7 +155,7 @@ protected:
 };
 
 //! Verify a minimal scene produces a single node and empty environment.
-NOLINT_TEST_F(ScenePipelineTest, Collect_MinimalScene_BuildsDescriptor)
+NOLINT_TEST_F(ScenePipelineTest, CollectMinimalSceneBuildsDescriptor)
 {
   // Arrange
   auto adapter = std::make_shared<FakeSceneAdapter>();
@@ -212,7 +212,7 @@ NOLINT_TEST_F(ScenePipelineTest, Collect_MinimalScene_BuildsDescriptor)
 }
 
 //! Verify renderable component tables are sorted by node index.
-NOLINT_TEST_F(ScenePipelineTest, Collect_SortsRenderables_ByNodeIndex)
+NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
 {
   // Arrange
   SceneStringTableBuilder strings;
@@ -307,7 +307,7 @@ NOLINT_TEST_F(ScenePipelineTest, Collect_SortsRenderables_ByNodeIndex)
 }
 
 //! Verify environment block records are appended to the descriptor.
-NOLINT_TEST_F(ScenePipelineTest, Collect_WithEnvironmentBlock_AppendsBlock)
+NOLINT_TEST_F(ScenePipelineTest, CollectWithEnvironmentBlockAppendsBlock)
 {
   // Arrange
   data::pak::FogEnvironmentRecord fog {};

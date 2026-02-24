@@ -30,7 +30,7 @@ using Reader = oxygen::serio::Reader<MemoryStream>;
 //=== LoadAssetHeader Basic Tests ===--------------------------------------//
 
 //! Scenario: LoadAssetHeader returns correct AssetHeader for valid input
-TEST(LoadAssetHeader_basic, ReturnsCorrectHeader)
+NOLINT_TEST(LoadAssetHeaderBasic, ReturnsCorrectHeader)
 {
   // Arrange
   std::array<std::byte, sizeof(AssetHeader)> buffer {};
@@ -64,7 +64,7 @@ TEST(LoadAssetHeader_basic, ReturnsCorrectHeader)
 }
 
 //! Scenario: LoadAssetHeader throws on invalid asset type
-TEST(LoadAssetHeader_error, ThrowsOnInvalidAssetType)
+NOLINT_TEST(LoadAssetHeaderError, ThrowsOnInvalidAssetType)
 {
   // Arrange
   std::array<std::byte, sizeof(AssetHeader)> buffer {};
@@ -82,12 +82,12 @@ TEST(LoadAssetHeader_error, ThrowsOnInvalidAssetType)
 
   // Act & Assert
   AssetHeader result;
-  EXPECT_THROW(oxygen::content::loaders::LoadAssetHeader(reader, result),
+  NOLINT_EXPECT_THROW(oxygen::content::loaders::LoadAssetHeader(reader, result),
     std::runtime_error);
 }
 
 //! Scenario: LoadAssetHeader logs warning if name is not null-terminated
-TEST(LoadAssetHeader_edge, WarnsIfNameNotNullTerminated)
+NOLINT_TEST(LoadAssetHeaderEdge, WarnsIfNameNotNullTerminated)
 {
   // Arrange
   std::array<std::byte, sizeof(AssetHeader)> buffer {};

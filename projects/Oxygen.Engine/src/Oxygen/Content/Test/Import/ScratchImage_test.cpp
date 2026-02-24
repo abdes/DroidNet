@@ -25,7 +25,7 @@ using oxygen::content::import::ScratchImageMeta;
 class ScratchImageBasicTest : public ::testing::Test { };
 
 //! Default-constructed ScratchImage should be invalid.
-NOLINT_TEST_F(ScratchImageBasicTest, DefaultConstruction_CreatesInvalidImage)
+NOLINT_TEST_F(ScratchImageBasicTest, DefaultConstructionCreatesInvalidImage)
 {
   // Arrange & Act
   const ScratchImage image;
@@ -37,7 +37,7 @@ NOLINT_TEST_F(ScratchImageBasicTest, DefaultConstruction_CreatesInvalidImage)
 }
 
 //! ComputeMipCount returns correct values for various dimensions.
-NOLINT_TEST_F(ScratchImageBasicTest, ComputeMipCount_ReturnsCorrectValues)
+NOLINT_TEST_F(ScratchImageBasicTest, ComputeMipCountReturnsCorrectValues)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(ScratchImage::ComputeMipCount(1, 1), 1u);
@@ -51,7 +51,7 @@ NOLINT_TEST_F(ScratchImageBasicTest, ComputeMipCount_ReturnsCorrectValues)
 }
 
 //! ComputeMipCount handles non-square textures correctly.
-NOLINT_TEST_F(ScratchImageBasicTest, ComputeMipCount_NonSquareTextures)
+NOLINT_TEST_F(ScratchImageBasicTest, ComputeMipCountNonSquareTextures)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(ScratchImage::ComputeMipCount(1024, 512), 11u);
@@ -61,7 +61,7 @@ NOLINT_TEST_F(ScratchImageBasicTest, ComputeMipCount_NonSquareTextures)
 }
 
 //! ComputeMipCount returns 0 for zero dimensions.
-NOLINT_TEST_F(ScratchImageBasicTest, ComputeMipCount_ZeroDimensions)
+NOLINT_TEST_F(ScratchImageBasicTest, ComputeMipCountZeroDimensions)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(ScratchImage::ComputeMipCount(0, 0), 0u);
@@ -70,7 +70,7 @@ NOLINT_TEST_F(ScratchImageBasicTest, ComputeMipCount_ZeroDimensions)
 }
 
 //! ComputeSubresourceIndex follows layer-major ordering.
-NOLINT_TEST_F(ScratchImageBasicTest, ComputeSubresourceIndex_LayerMajorOrdering)
+NOLINT_TEST_F(ScratchImageBasicTest, ComputeSubresourceIndexLayerMajorOrdering)
 {
   // Arrange
   constexpr uint16_t kMipLevels = 4;
@@ -90,7 +90,7 @@ NOLINT_TEST_F(ScratchImageBasicTest, ComputeSubresourceIndex_LayerMajorOrdering)
 }
 
 //! ComputeMipDimension halves correctly with minimum of 1.
-NOLINT_TEST_F(ScratchImageBasicTest, ComputeMipDimension_HalvesCorrectly)
+NOLINT_TEST_F(ScratchImageBasicTest, ComputeMipDimensionHalvesCorrectly)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(ScratchImage::ComputeMipDimension(1024, 0), 1024u);
@@ -106,7 +106,7 @@ NOLINT_TEST_F(ScratchImageBasicTest, ComputeMipDimension_HalvesCorrectly)
 class ScratchImageCreateTest : public ::testing::Test { };
 
 //! Create with valid metadata produces a valid image.
-NOLINT_TEST_F(ScratchImageCreateTest, ValidMetadata_CreatesValidImage)
+NOLINT_TEST_F(ScratchImageCreateTest, ValidMetadataCreatesValidImage)
 {
   // Arrange
   const ScratchImageMeta meta {
@@ -134,7 +134,7 @@ NOLINT_TEST_F(ScratchImageCreateTest, ValidMetadata_CreatesValidImage)
 }
 
 //! Create with multiple mip levels allocates correct storage.
-NOLINT_TEST_F(ScratchImageCreateTest, MultipleMips_AllocatesCorrectStorage)
+NOLINT_TEST_F(ScratchImageCreateTest, MultipleMipsAllocatesCorrectStorage)
 {
   // Arrange
   const ScratchImageMeta meta {
@@ -160,7 +160,7 @@ NOLINT_TEST_F(ScratchImageCreateTest, MultipleMips_AllocatesCorrectStorage)
 }
 
 //! Create with array layers allocates correct storage.
-NOLINT_TEST_F(ScratchImageCreateTest, ArrayTexture_AllocatesCorrectStorage)
+NOLINT_TEST_F(ScratchImageCreateTest, ArrayTextureAllocatesCorrectStorage)
 {
   // Arrange
   const ScratchImageMeta meta {
@@ -183,7 +183,7 @@ NOLINT_TEST_F(ScratchImageCreateTest, ArrayTexture_AllocatesCorrectStorage)
 }
 
 //! Create with zero dimensions returns invalid image.
-NOLINT_TEST_F(ScratchImageCreateTest, ZeroDimensions_ReturnsInvalidImage)
+NOLINT_TEST_F(ScratchImageCreateTest, ZeroDimensionsReturnsInvalidImage)
 {
   // Arrange
   const ScratchImageMeta meta {
@@ -209,7 +209,7 @@ NOLINT_TEST_F(ScratchImageCreateTest, ZeroDimensions_ReturnsInvalidImage)
 class ScratchImageCreateFromDataTest : public ::testing::Test { };
 
 //! CreateFromData wraps existing pixel data correctly.
-NOLINT_TEST_F(ScratchImageCreateFromDataTest, ValidData_CreatesImageWithData)
+NOLINT_TEST_F(ScratchImageCreateFromDataTest, ValidDataCreatesImageWithData)
 {
   // Arrange
   constexpr uint32_t kWidth = 4;
@@ -242,7 +242,7 @@ NOLINT_TEST_F(ScratchImageCreateFromDataTest, ValidData_CreatesImageWithData)
 class ScratchImageGetImageTest : public ::testing::Test { };
 
 //! GetImage returns correct view for mip 0.
-NOLINT_TEST_F(ScratchImageGetImageTest, Mip0_ReturnsCorrectView)
+NOLINT_TEST_F(ScratchImageGetImageTest, Mip0ReturnsCorrectView)
 {
   // Arrange
   const ScratchImageMeta meta {
@@ -268,7 +268,7 @@ NOLINT_TEST_F(ScratchImageGetImageTest, Mip0_ReturnsCorrectView)
 }
 
 //! GetImage returns correct dimensions for different mip levels.
-NOLINT_TEST_F(ScratchImageGetImageTest, DifferentMips_ReturnsCorrectDimensions)
+NOLINT_TEST_F(ScratchImageGetImageTest, DifferentMipsReturnsCorrectDimensions)
 {
   // Arrange
   const ScratchImageMeta meta {
@@ -301,7 +301,7 @@ NOLINT_TEST_F(ScratchImageGetImageTest, DifferentMips_ReturnsCorrectDimensions)
 }
 
 //! GetImage returns correct views for array layers.
-NOLINT_TEST_F(ScratchImageGetImageTest, ArrayLayers_ReturnsDistinctViews)
+NOLINT_TEST_F(ScratchImageGetImageTest, ArrayLayersReturnsDistinctViews)
 {
   // Arrange
   const ScratchImageMeta meta {
@@ -337,7 +337,7 @@ NOLINT_TEST_F(ScratchImageGetImageTest, ArrayLayers_ReturnsDistinctViews)
 class ScratchImageGetMutablePixelsTest : public ::testing::Test { };
 
 //! GetMutablePixels allows writing to pixel data.
-NOLINT_TEST_F(ScratchImageGetMutablePixelsTest, WritePixels_DataIsPersisted)
+NOLINT_TEST_F(ScratchImageGetMutablePixelsTest, WritePixelsDataIsPersisted)
 {
   // Arrange
   const ScratchImageMeta meta {
@@ -371,7 +371,7 @@ NOLINT_TEST_F(ScratchImageGetMutablePixelsTest, WritePixels_DataIsPersisted)
 class ScratchImageFormatTest : public ::testing::Test { };
 
 //! Single-channel R8 format allocates correct size.
-NOLINT_TEST_F(ScratchImageFormatTest, R8Format_AllocatesCorrectSize)
+NOLINT_TEST_F(ScratchImageFormatTest, R8FormatAllocatesCorrectSize)
 {
   // Arrange
   const ScratchImageMeta meta {
@@ -392,7 +392,7 @@ NOLINT_TEST_F(ScratchImageFormatTest, R8Format_AllocatesCorrectSize)
 }
 
 //! RGBA16F format allocates correct size (8 bytes per pixel).
-NOLINT_TEST_F(ScratchImageFormatTest, RGBA16FFormat_AllocatesCorrectSize)
+NOLINT_TEST_F(ScratchImageFormatTest, RGBA16FFormatAllocatesCorrectSize)
 {
   // Arrange
   const ScratchImageMeta meta {
@@ -413,7 +413,7 @@ NOLINT_TEST_F(ScratchImageFormatTest, RGBA16FFormat_AllocatesCorrectSize)
 }
 
 //! RGBA32F format allocates correct size (16 bytes per pixel).
-NOLINT_TEST_F(ScratchImageFormatTest, RGBA32FFormat_AllocatesCorrectSize)
+NOLINT_TEST_F(ScratchImageFormatTest, RGBA32FFormatAllocatesCorrectSize)
 {
   // Arrange
   const ScratchImageMeta meta {

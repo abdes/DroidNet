@@ -69,7 +69,7 @@ protected:
 };
 
 //! Verify placeholder policy reports failure without built-in placeholder.
-NOLINT_TEST_F(TexturePipelineTest, Collect_WithPlaceholderPolicy_ReportsFailure)
+NOLINT_TEST_F(TexturePipelineTest, CollectWithPlaceholderPolicyReportsFailure)
 {
   // Arrange
   TexturePipeline::WorkResult result;
@@ -106,7 +106,7 @@ NOLINT_TEST_F(TexturePipelineTest, Collect_WithPlaceholderPolicy_ReportsFailure)
 }
 
 //! Verify strict policy returns a failure diagnostic.
-NOLINT_TEST_F(TexturePipelineTest, Collect_WithStrictPolicy_EmitsDiagnostic)
+NOLINT_TEST_F(TexturePipelineTest, CollectWithStrictPolicyEmitsDiagnostic)
 {
   // Arrange
   TexturePipeline::WorkResult result;
@@ -143,7 +143,7 @@ NOLINT_TEST_F(TexturePipelineTest, Collect_WithStrictPolicy_EmitsDiagnostic)
 }
 
 //! Verify canceled work returns a failed result without diagnostics.
-NOLINT_TEST_F(TexturePipelineTest, Collect_WhenCancelled_ReturnsFailedResult)
+NOLINT_TEST_F(TexturePipelineTest, CollectWhenCancelledReturnsFailedResult)
 {
   // Arrange
   std::stop_source stop_source;

@@ -144,7 +144,7 @@ auto WriteSingleAssetPakWithBrowseIndex(const std::filesystem::path& pak_path,
 /*!
  Scenario: Mounts a single cooked root and resolves a known virtual path.
 */
-NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKey_Found_ReturnsKey)
+NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyFoundReturnsKey)
 {
   // Arrange
   const auto root
@@ -172,7 +172,7 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKey_Found_ReturnsKey)
  Scenario: Two roots contain the same virtual path, mapping to different keys.
  Verifies that the first added root wins.
 */
-NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKey_DuplicatePath_FirstWins)
+NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyDuplicatePathFirstWins)
 {
   // Arrange
   const auto root
@@ -204,7 +204,7 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKey_DuplicatePath_FirstWins)
 /*!
  Scenario: Mounts a cooked root and queries an unknown virtual path.
 */
-NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKey_NotFound_ReturnsNullopt)
+NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyNotFoundReturnsNullopt)
 {
   // Arrange
   const auto root
@@ -231,7 +231,7 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKey_NotFound_ReturnsNullopt)
  Scenario: Attempts to resolve a virtual path missing the leading '/'.
  Verifies the resolver throws.
 */
-NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKey_InvalidVirtualPath_Throws)
+NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyInvalidVirtualPathThrows)
 {
   // Arrange
   oxygen::content::VirtualPathResolver resolver;
@@ -248,7 +248,7 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKey_InvalidVirtualPath_Throws)
  virtual path.
 */
 NOLINT_TEST(
-  VirtualPathResolverTest, ResolveAssetKey_PakBrowseIndex_Found_ReturnsKey)
+  VirtualPathResolverTest, ResolveAssetKeyPakBrowseIndexFoundReturnsKey)
 {
   // Arrange
   const auto root

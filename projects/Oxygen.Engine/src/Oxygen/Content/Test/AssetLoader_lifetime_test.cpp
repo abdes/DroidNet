@@ -84,7 +84,7 @@ auto MakeBytesFromHexdump(const std::string& hexdump, const std::size_t size,
  ReleaseResource and TrimCache should the cache entry be evicted.
 */
 NOLINT_TEST_F(
-  AssetLoaderLifetimeAsyncTest, ResourceUnload_RequiresExplicitRelease)
+  AssetLoaderLifetimeAsyncTest, ResourceUnloadRequiresExplicitRelease)
 {
   using namespace std::chrono_literals;
 
@@ -151,7 +151,7 @@ NOLINT_TEST_F(
  and verify that a single ReleaseResource does not evict the entry. A second
  ReleaseResource still leaves the cache baseline; TrimCache evicts it.
 */
-NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourceUnload_RefcountedCheckouts)
+NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourceUnloadRefcountedCheckouts)
 {
   using namespace std::chrono_literals;
 
@@ -218,7 +218,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourceUnload_RefcountedCheckouts)
  ReleaseAsset, then load again and expect the same cached instance. After
  ReleaseAsset, the entry remains as cache baseline; TrimCache removes it.
 */
-NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, AssetUnload_RequiresExplicitRelease)
+NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, AssetUnloadRequiresExplicitRelease)
 {
   using namespace std::chrono_literals;
 
@@ -275,7 +275,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, AssetUnload_RequiresExplicitRelease)
  Scenario: A depends on B. Releasing A cascades and causes B to be checked in
  before A.
 */
-NOLINT_TEST_F(AssetLoaderLifetimeTest, ReleaseOrder_DependencyBeforeDependent)
+NOLINT_TEST_F(AssetLoaderLifetimeTest, ReleaseOrderDependencyBeforeDependent)
 {
   // Arrange
   const auto key_a = CreateTestAssetKey("release_a");
@@ -298,7 +298,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeTest, ReleaseOrder_DependencyBeforeDependent)
  may be released.
 */
 NOLINT_TEST_F(
-  AssetLoaderLifetimeTest, CascadeRelease_SiblingSharedDependencyNotEvicted)
+  AssetLoaderLifetimeTest, CascadeReleaseSiblingSharedDependencyNotEvicted)
 {
   const auto key_a = CreateTestAssetKey("cascade_a");
   const auto key_b = CreateTestAssetKey("cascade_b");
@@ -337,7 +337,7 @@ NOLINT_TEST_F(
  performs deterministic eviction.
 */
 NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
-  LoadAssetAsync_GeometryWithBuffers_BindsDependenciesAndUnloadsInOrder)
+  LoadAssetAsyncGeometryWithBuffersBindsDependenciesAndUnloadsInOrder)
 {
   using namespace std::chrono_literals;
 
@@ -410,7 +410,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
  * explicitly released and cache is trimmed.
 */
 NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
-  LoadAssetAsync_SceneInputChain_ReleaseOrderAndTrim)
+  LoadAssetAsyncSceneInputChainReleaseOrderAndTrim)
 {
   const auto pak_path = GeneratePakFile("scene_with_input_context_binding");
   const auto scene_key = CreateTestAssetKey("test_scene_with_input_context");

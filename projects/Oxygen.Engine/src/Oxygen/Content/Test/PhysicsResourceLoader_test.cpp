@@ -25,7 +25,7 @@ class PhysicsResourceLoaderValidationTest
   : public oxygen::content::testing::PhysicsResourceFixtureBase { };
 
 NOLINT_TEST_F(
-  PhysicsResourceLoaderHappyPathTest, LoadPhysicsResource_ValidInput_Succeeds)
+  PhysicsResourceLoaderHappyPathTest, LoadPhysicsResourceValidInputSucceeds)
 {
   oxygen::data::pak::PhysicsResourceDesc desc {};
   desc.data_offset = 256;
@@ -46,7 +46,7 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(
-  PhysicsResourceLoaderValidationTest, LoadPhysicsResource_TruncatedDesc_Throws)
+  PhysicsResourceLoaderValidationTest, LoadPhysicsResourceTruncatedDescThrows)
 {
   std::vector<std::byte> short_bytes(
     sizeof(oxygen::data::pak::PhysicsResourceDesc) / 2, std::byte { 0 });
@@ -59,8 +59,8 @@ NOLINT_TEST_F(
     { (void)LoadPhysicsResource(MakeContext()); }, std::runtime_error);
 }
 
-NOLINT_TEST_F(PhysicsResourceLoaderValidationTest,
-  LoadPhysicsResource_DataReadFailure_Throws)
+NOLINT_TEST_F(
+  PhysicsResourceLoaderValidationTest, LoadPhysicsResourceDataReadFailureThrows)
 {
   oxygen::data::pak::PhysicsResourceDesc desc {};
   desc.data_offset = 64;

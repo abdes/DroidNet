@@ -40,7 +40,7 @@ class AsyncFbxImporterFullTest : public AsyncImporterFullTestBase { };
  - 89 scene nodes (Model entries)
  - 2 unique texture files referenced
 */
-NOLINT_TEST_F(AsyncFbxImporterFullTest, AsyncBackend_ImportsFullDinoScene)
+NOLINT_TEST_F(AsyncFbxImporterFullTest, AsyncBackendImportsFullDinoScene)
 {
   // Arrange
   const auto models_dir = TestModelsDirFromFile();
@@ -88,7 +88,7 @@ NOLINT_TEST_F(AsyncFbxImporterFullTest, AsyncBackend_ImportsFullDinoScene)
  Validates the async FBX importer can handle the external-texture Sponza
  dataset when the source file is present on disk.
 */
-NOLINT_TEST_F(AsyncFbxImporterFullTest, DISABLED_AsyncBackend_ImportsSponza)
+NOLINT_TEST_F(AsyncFbxImporterFullTest, DISABLEDAsyncBackendImportsSponza)
 {
   // Arrange
   const auto source_path = std::filesystem::path(

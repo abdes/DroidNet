@@ -4,20 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
+#include "./AssetLoader_test.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/Loaders/BufferLoader.h>
-#include <Oxygen/Content/Loaders/GeometryLoader.h>
-#include <Oxygen/Content/Loaders/MaterialLoader.h>
-#include <Oxygen/Content/Loaders/TextureLoader.h>
+
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 
-#include "./AssetLoader_test.h"
+#include <Oxygen/Content/Loaders/BufferLoader.h>
+#include <Oxygen/Content/Loaders/GeometryLoader.h>
+#include <Oxygen/Content/Loaders/MaterialLoader.h>
+#include <Oxygen/Content/Loaders/TextureLoader.h>
 
 using testing::NotNull;
 
@@ -45,7 +46,7 @@ class AssetLoaderDependencyTest : public AssetLoaderLoadingTest { };
  verifies that dependencies are properly resolved.
 */
 NOLINT_TEST_F(
-  AssetLoaderDependencyTest, LoadAsset_MaterialWithTextures_LoadsDependencies)
+  AssetLoaderDependencyTest, LoadAssetMaterialWithTexturesLoadsDependencies)
 {
   // Arrange
   const auto pak_path = GeneratePakFile("material_with_textures");
@@ -105,7 +106,7 @@ NOLINT_TEST_F(
  verifies that dependencies are properly resolved.
 */
 NOLINT_TEST_F(
-  AssetLoaderDependencyTest, LoadAsset_GeometryWithBuffers_LoadsDependencies)
+  AssetLoaderDependencyTest, LoadAssetGeometryWithBuffersLoadsDependencies)
 {
   // Arrange
   const auto pak_path = GeneratePakFile("geometry_with_buffers");
@@ -176,7 +177,7 @@ NOLINT_TEST_F(
  Scenario: Create two fake dependencies A->B then attempt to add B->A and
  ensure second insertion rejected (no reverse edge recorded).
 */
-NOLINT_TEST_F(AssetLoaderDependencyTest, CycleDetection_PreventsInsertion)
+NOLINT_TEST_F(AssetLoaderDependencyTest, CycleDetectionPreventsInsertion)
 {
   // Arrange
   auto key_a = CreateTestAssetKey("cycle_a");
@@ -215,7 +216,7 @@ NOLINT_TEST_F(AssetLoaderDependencyTest, CycleDetection_PreventsInsertion)
  Scenario: Build a small graph A->B, C->B, C->D. In release, we just ensure
  operations succeed. In debug, we enumerate dependents to validate counts.
 */
-NOLINT_TEST_F(AssetLoaderDependencyTest, DebugDependentEnumeration_Works)
+NOLINT_TEST_F(AssetLoaderDependencyTest, DebugDependentEnumerationWorks)
 {
   const auto key_a = CreateTestAssetKey("enum_a");
   const auto key_b = CreateTestAssetKey("enum_b");

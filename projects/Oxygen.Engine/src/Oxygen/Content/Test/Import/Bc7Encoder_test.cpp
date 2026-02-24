@@ -33,7 +33,7 @@ class Bc7EncoderParamsTest : public ::testing::Test { };
 /*!\
  Verifies fast encoding parameters are configured for speed.
 */
-NOLINT_TEST_F(Bc7EncoderParamsTest, Fast_HasExpectedValues)
+NOLINT_TEST_F(Bc7EncoderParamsTest, FastHasExpectedValues)
 {
   // Arrange & Act
   const auto params = bc7::Bc7EncoderParams::Fast();
@@ -48,7 +48,7 @@ NOLINT_TEST_F(Bc7EncoderParamsTest, Fast_HasExpectedValues)
 /*!\
  Verifies default encoding parameters balance quality and speed.
 */
-NOLINT_TEST_F(Bc7EncoderParamsTest, Default_HasBalancedValues)
+NOLINT_TEST_F(Bc7EncoderParamsTest, DefaultHasBalancedValues)
 {
   // Arrange & Act
   const auto params = bc7::Bc7EncoderParams::Default();
@@ -63,7 +63,7 @@ NOLINT_TEST_F(Bc7EncoderParamsTest, Default_HasBalancedValues)
 /*!\
  Verifies high quality parameters maximize quality.
 */
-NOLINT_TEST_F(Bc7EncoderParamsTest, High_HasQualityValues)
+NOLINT_TEST_F(Bc7EncoderParamsTest, HighHasQualityValues)
 {
   // Arrange & Act
   const auto params = bc7::Bc7EncoderParams::High();
@@ -79,7 +79,7 @@ NOLINT_TEST_F(Bc7EncoderParamsTest, High_HasQualityValues)
 /*!\
  Verifies Bc7Quality enum maps to correct parameters.
 */
-NOLINT_TEST_F(Bc7EncoderParamsTest, FromQuality_MapsCorrectly)
+NOLINT_TEST_F(Bc7EncoderParamsTest, FromQualityMapsCorrectly)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(
@@ -101,7 +101,7 @@ class Bc7BlockCountTest : public ::testing::Test { };
 /*!\
  Verifies block count for dimensions divisible by 4.
 */
-NOLINT_TEST_F(Bc7BlockCountTest, ComputeBlockCount_ExactMultiples)
+NOLINT_TEST_F(Bc7BlockCountTest, ComputeBlockCountExactMultiples)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(bc7::ComputeBlockCount(4), 1u);
@@ -114,7 +114,7 @@ NOLINT_TEST_F(Bc7BlockCountTest, ComputeBlockCount_ExactMultiples)
 /*!\
  Verifies block count rounds up for dimensions not divisible by 4.
 */
-NOLINT_TEST_F(Bc7BlockCountTest, ComputeBlockCount_RoundsUp)
+NOLINT_TEST_F(Bc7BlockCountTest, ComputeBlockCountRoundsUp)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(bc7::ComputeBlockCount(1), 1u);
@@ -129,7 +129,7 @@ NOLINT_TEST_F(Bc7BlockCountTest, ComputeBlockCount_RoundsUp)
 /*!\
  Verifies row pitch is blocks_x * 16 bytes.
 */
-NOLINT_TEST_F(Bc7BlockCountTest, ComputeBc7RowPitch_ReturnsCorrectPitch)
+NOLINT_TEST_F(Bc7BlockCountTest, ComputeBc7RowPitchReturnsCorrectPitch)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(bc7::ComputeBc7RowPitch(4), 16u); // 1 block
@@ -142,7 +142,7 @@ NOLINT_TEST_F(Bc7BlockCountTest, ComputeBc7RowPitch_ReturnsCorrectPitch)
 /*!\
  Verifies surface size is blocks_x * blocks_y * 16 bytes.
 */
-NOLINT_TEST_F(Bc7BlockCountTest, ComputeBc7SurfaceSize_ReturnsCorrectSize)
+NOLINT_TEST_F(Bc7BlockCountTest, ComputeBc7SurfaceSizeReturnsCorrectSize)
 {
   // Arrange & Act & Assert
   EXPECT_EQ(bc7::ComputeBc7SurfaceSize(4, 4), 16u); // 1x1 blocks
@@ -164,7 +164,7 @@ protected:
 /*!\
  Verifies encoding a solid color block produces non-zero output.
 */
-NOLINT_TEST_F(Bc7EncodeBlockTest, EncodeBlock_ProducesOutput)
+NOLINT_TEST_F(Bc7EncodeBlockTest, EncodeBlockProducesOutput)
 {
   // Arrange - solid red 4x4 block
   std::array<std::byte, 64> pixels {};
@@ -200,7 +200,7 @@ NOLINT_TEST_F(Bc7EncodeBlockTest, EncodeBlock_ProducesOutput)
 /*!\
  Verifies encoding a block with alpha returns true.
 */
-NOLINT_TEST_F(Bc7EncodeBlockTest, EncodeBlock_DetectsAlpha)
+NOLINT_TEST_F(Bc7EncodeBlockTest, EncodeBlockDetectsAlpha)
 {
   // Arrange - block with partial transparency
   std::array<std::byte, 64> pixels {};
@@ -235,7 +235,7 @@ protected:
 /*!\
  Verifies encoding a 4x4 surface produces correctly sized output.
 */
-NOLINT_TEST_F(Bc7EncodeSurfaceTest, EncodeSurface_4x4_ProducesValidOutput)
+NOLINT_TEST_F(Bc7EncodeSurfaceTest, EncodeSurface4x4ProducesValidOutput)
 {
   // Arrange - create a 4x4 RGBA8 image
   std::vector<std::byte> pixels(4 * 4 * 4);
@@ -268,7 +268,7 @@ NOLINT_TEST_F(Bc7EncodeSurfaceTest, EncodeSurface_4x4_ProducesValidOutput)
 /*!\
  Verifies edge handling with border replication.
 */
-NOLINT_TEST_F(Bc7EncodeSurfaceTest, EncodeSurface_NonMultiple4_HandlesEdges)
+NOLINT_TEST_F(Bc7EncodeSurfaceTest, EncodeSurfaceNonMultiple4HandlesEdges)
 {
   // Arrange - create a 5x5 RGBA8 image
   std::vector<std::byte> pixels(5 * 5 * 4);
@@ -303,7 +303,7 @@ NOLINT_TEST_F(Bc7EncodeSurfaceTest, EncodeSurface_NonMultiple4_HandlesEdges)
 /*!\
  Verifies non-RGBA8 input returns invalid result.
 */
-NOLINT_TEST_F(Bc7EncodeSurfaceTest, EncodeSurface_InvalidFormat_ReturnsEmpty)
+NOLINT_TEST_F(Bc7EncodeSurfaceTest, EncodeSurfaceInvalidFormatReturnsEmpty)
 {
   // Arrange - create a float image (wrong format)
   std::vector<std::byte> pixels(4 * 4 * 16); // RGBA32Float
@@ -334,7 +334,7 @@ protected:
 /*!\
  Verifies full texture encoding with one mip level.
 */
-NOLINT_TEST_F(Bc7EncodeTextureTest, EncodeTexture_SingleMip_Succeeds)
+NOLINT_TEST_F(Bc7EncodeTextureTest, EncodeTextureSingleMipSucceeds)
 {
   // Arrange
   std::vector<std::byte> pixels(8 * 8 * 4);
@@ -361,7 +361,7 @@ NOLINT_TEST_F(Bc7EncodeTextureTest, EncodeTexture_SingleMip_Succeeds)
 /*!\
  Verifies convenience overload with Bc7Quality enum.
 */
-NOLINT_TEST_F(Bc7EncodeTextureTest, EncodeTexture_QualityPreset_Works)
+NOLINT_TEST_F(Bc7EncodeTextureTest, EncodeTextureQualityPresetWorks)
 {
   // Arrange
   std::vector<std::byte> pixels(4 * 4 * 4);
@@ -385,7 +385,7 @@ NOLINT_TEST_F(Bc7EncodeTextureTest, EncodeTexture_QualityPreset_Works)
 /*!\
  Verifies no encoding when quality is kNone.
 */
-NOLINT_TEST_F(Bc7EncodeTextureTest, EncodeTexture_QualityNone_ReturnsEmpty)
+NOLINT_TEST_F(Bc7EncodeTextureTest, EncodeTextureQualityNoneReturnsEmpty)
 {
   // Arrange
   std::vector<std::byte> pixels(4 * 4 * 4, std::byte { 128 });
