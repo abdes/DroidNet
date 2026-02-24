@@ -130,6 +130,16 @@ private:
       return {};
     }
     auto TrimCache() -> void override { }
+    [[nodiscard]] auto EnumerateMountedScenes() const
+      -> std::vector<MountedSceneEntry> override
+    {
+      return {};
+    }
+    [[nodiscard]] auto EnumerateMountedSources() const
+      -> std::vector<MountedSourceEntry> override
+    {
+      return {};
+    }
     auto RegisterConsoleBindings(
       observer_ptr<console::Console> /*console*/) noexcept -> void override
     {

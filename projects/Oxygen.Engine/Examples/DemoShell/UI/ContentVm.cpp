@@ -9,11 +9,11 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/LooseCooked/Inspection.h>
-#include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/PakFormat.h>
 
+#include "DemoShell/Runtime/PathNormalization.h"
 #include "DemoShell/Services/ContentSettingsService.h"
 #include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/UI/ContentVm.h"
@@ -26,12 +26,7 @@ namespace {
 
   auto NormalizePathForKey(const std::filesystem::path& path) -> std::string
   {
-    std::error_code ec;
-    auto normalized = std::filesystem::weakly_canonical(path, ec);
-    if (ec) {
-      normalized = path.lexically_normal();
-    }
-    return normalized.string();
+    return runtime::NormalizePath(path).string();
   }
 
   auto IsPathUnderRoot(const std::filesystem::path& path,
@@ -41,16 +36,8 @@ namespace {
       return false;
     }
 
-    std::error_code ec;
-    auto normalized_path = std::filesystem::weakly_canonical(path, ec);
-    if (ec) {
-      normalized_path = path.lexically_normal();
-    }
-
-    auto normalized_root = std::filesystem::weakly_canonical(root, ec);
-    if (ec) {
-      normalized_root = root.lexically_normal();
-    }
+    const auto normalized_path = runtime::NormalizePath(path);
+    const auto normalized_root = runtime::NormalizePath(root);
 
     auto path_it = normalized_path.begin();
     auto root_it = normalized_root.begin();
@@ -112,9 +99,11 @@ auto ContentVm::RebuildSceneList(
 }
 
 ContentVm::ContentVm(observer_ptr<ContentSettingsService> settings_service,
-  observer_ptr<FileBrowserService> file_browser_service)
+  observer_ptr<FileBrowserService> file_browser_service,
+  observer_ptr<content::IAssetLoader> asset_loader)
   : settings_(settings_service)
   , file_browser_(file_browser_service)
+  , asset_loader_(asset_loader)
 {
   // Default config for import service
   service_config_.thread_pool_size = 35;
@@ -216,6 +205,7 @@ auto ContentVm::Update() -> void
   }
 
   if (!import_state_.completion_ready.load(std::memory_order_relaxed)) {
+    TryResolvePendingSceneSelection();
     return;
   }
 
@@ -508,11 +498,61 @@ auto ContentVm::RefreshLibrary() -> void
     }
   }
 
+  std::unordered_map<SceneEntryKey, SceneEntry, SceneEntryKeyHash,
+    SceneEntryKeyEq>
+    runtime_scenes {};
+  std::vector<std::filesystem::path> runtime_loaded_paks;
+  std::vector<std::filesystem::path> runtime_loaded_indices;
+  if (asset_loader_) {
+    for (const auto& mounted_source :
+      asset_loader_->EnumerateMountedSources()) {
+      if (mounted_source.source_kind
+        == content::IAssetLoader::ContentSourceKind::kPak) {
+        runtime_loaded_paks.push_back(mounted_source.source_path);
+      } else {
+        runtime_loaded_indices.push_back(
+          mounted_source.source_path / "container.index.bin");
+      }
+    }
+    for (const auto& mounted_scene : asset_loader_->EnumerateMountedScenes()) {
+      std::filesystem::path scene_source_path = mounted_scene.source_path;
+      if (mounted_scene.source_kind
+        == content::IAssetLoader::ContentSourceKind::kLooseCooked) {
+        scene_source_path /= "container.index.bin";
+      }
+      const SceneSource source {
+        .kind = mounted_scene.source_kind
+            == content::IAssetLoader::ContentSourceKind::kPak
+          ? SceneSourceKind::kPak
+          : SceneSourceKind::kLooseIndex,
+        .path = std::move(scene_source_path),
+      };
+      std::string scene_name;
+      if (!mounted_scene.virtual_path.empty()) {
+        scene_name = mounted_scene.virtual_path;
+      } else if (!mounted_scene.display_name.empty()) {
+        scene_name = mounted_scene.display_name;
+      } else {
+        scene_name = "Scene (No Name)";
+      }
+      const SceneEntry scene_entry {
+        .name = std::move(scene_name),
+        .key = mounted_scene.scene_key,
+        .source = source,
+      };
+      runtime_scenes[MakeSceneEntryKey(scene_entry)] = scene_entry;
+    }
+  }
+
   {
     std::lock_guard lock(data_mutex_);
     discovered_paks_ = std::move(paks);
+    loaded_paks_ = std::move(runtime_loaded_paks);
+    loaded_indices_ = std::move(runtime_loaded_indices);
+    scenes_map_ = std::move(runtime_scenes);
     RebuildSceneList(scenes_map_, available_scenes_);
   }
+  TryResolvePendingSceneSelection();
 }
 
 auto ContentVm::SetOnPakMounted(
@@ -528,81 +568,19 @@ auto ContentVm::SetOnIndexLoaded(
 
 auto ContentVm::MountPak(const std::filesystem::path& path) -> void
 {
-  try {
-    content::PakFile pak(path);
-    const SceneSource source { .kind = SceneSourceKind::kPak, .path = path };
-    {
-      std::lock_guard lock(data_mutex_);
-
-      // 1. Collect from Browse Index (has canonical paths)
-      if (pak.HasBrowseIndex()) {
-        for (const auto& entry : pak.BrowseIndex()) {
-          auto dir_entry = pak.FindEntry(entry.asset_key);
-          if (dir_entry
-            && dir_entry->asset_type
-              == static_cast<uint8_t>(data::AssetType::kScene)) {
-            const SceneEntry scene_entry {
-              .name = entry.virtual_path,
-              .key = entry.asset_key,
-              .source = source,
-            };
-            scenes_map_[MakeSceneEntryKey(scene_entry)] = scene_entry;
-          }
-        }
-      }
-
-      // 2. Fallback to Directory for scenes without browse entries
-      for (const auto& dir_entry : pak.Directory()) {
-        if (dir_entry.asset_type
-          == static_cast<uint8_t>(data::AssetType::kScene)) {
-          const SceneEntryKey key {
-            .key = dir_entry.asset_key,
-            .source_kind = source.kind,
-            .source_key = NormalizePathForKey(source.path),
-          };
-          if (!scenes_map_.contains(key)) {
-            std::string name = "Scene (No Name)";
-            try {
-              auto reader = pak.CreateReader(dir_entry);
-              data::pak::AssetHeader header;
-              if (reader.ReadBlobInto({ reinterpret_cast<std::byte*>(&header),
-                    sizeof(header) })) {
-                if (header.name[0] != '\0') {
-                  name = header.name;
-                }
-              }
-            } catch (...) {
-            }
-            const SceneEntry scene_entry {
-              .name = name,
-              .key = dir_entry.asset_key,
-              .source = source,
-            };
-            scenes_map_[MakeSceneEntryKey(scene_entry)] = scene_entry;
-          }
-        }
-      }
-
-      if (std::find(loaded_paks_.begin(), loaded_paks_.end(), path)
-        == loaded_paks_.end()) {
-        loaded_paks_.push_back(path);
-      }
-
-      RebuildSceneList(scenes_map_, available_scenes_);
-    }
-    if (on_pak_mounted_)
-      on_pak_mounted_(path);
+  const auto normalized = runtime::NormalizePath(path);
+  if (on_pak_mounted_) {
+    on_pak_mounted_(normalized);
+  } else if (asset_loader_) {
+    asset_loader_->AddPakFile(normalized);
+    RefreshLibrary();
     PersistMountedSources();
-  } catch (const std::exception& ex) {
-    LOG_F(ERROR, "ContentVm: Failed to mount PAK '{}': {}", path.string(),
-      ex.what());
   }
 }
 
 auto ContentVm::LoadIndex(const std::filesystem::path& path) -> void
 {
   try {
-    content::lc::Inspection inspection;
     std::error_code ec;
     const bool is_dir = std::filesystem::is_directory(path, ec);
     if (ec) {
@@ -614,36 +592,18 @@ auto ContentVm::LoadIndex(const std::filesystem::path& path) -> void
     std::filesystem::path index_path = path;
     if (!ec && is_dir) {
       LOG_F(INFO, "ContentVm: Loading loose cooked root '{}'", path.string());
-      inspection.LoadFromRoot(path);
       index_path = path / "container.index.bin";
     } else {
       LOG_F(INFO, "ContentVm: Loading loose cooked index '{}'", path.string());
-      inspection.LoadFromFile(path);
     }
-
-    const SceneSource source { .kind = SceneSourceKind::kLooseIndex,
-      .path = index_path };
-
-    std::lock_guard lock(data_mutex_);
-    for (const auto& asset : inspection.Assets()) {
-      if (asset.asset_type == static_cast<uint8_t>(data::AssetType::kScene)) {
-        const SceneEntry scene_entry {
-          .name = asset.virtual_path,
-          .key = asset.key,
-          .source = source,
-        };
-        scenes_map_[MakeSceneEntryKey(scene_entry)] = scene_entry;
-      }
-    }
-    if (std::find(loaded_indices_.begin(), loaded_indices_.end(), index_path)
-      == loaded_indices_.end()) {
-      loaded_indices_.push_back(index_path);
-    }
-
-    RebuildSceneList(scenes_map_, available_scenes_);
-    if (on_index_loaded_)
+    if (on_index_loaded_) {
       on_index_loaded_(index_path);
-    PersistMountedSources();
+    } else if (asset_loader_) {
+      const auto loose_root = (!ec && is_dir) ? path : path.parent_path();
+      asset_loader_->AddLooseCookedRoot(loose_root);
+      RefreshLibrary();
+      PersistMountedSources();
+    }
   } catch (const std::exception& ex) {
     LOG_F(ERROR, "ContentVm: Failed to load index '{}': {}", path.string(),
       ex.what());
@@ -693,44 +653,8 @@ auto ContentVm::RestorePersistedLibraryState() -> void
   if (!selection.has_value()) {
     return;
   }
-
-  const auto desired_kind = selection->source_is_pak
-    ? SceneSourceKind::kPak
-    : SceneSourceKind::kLooseIndex;
-  const auto desired_path = NormalizePathForKey(selection->source_path);
-
-  std::optional<SceneEntry> match;
-  {
-    std::lock_guard lock(data_mutex_);
-    for (const auto& scene : available_scenes_) {
-      if (scene.source.kind != desired_kind) {
-        continue;
-      }
-      if (NormalizePathForKey(scene.source.path) != desired_path) {
-        continue;
-      }
-      if (!selection->scene_key.empty()
-        && nostd::to_string(scene.key) != selection->scene_key) {
-        continue;
-      }
-      if (!selection->scene_name.empty() && scene.name != selection->scene_name
-        && !selection->scene_key.empty()) {
-        continue;
-      }
-      match = scene;
-      break;
-    }
-  }
-
-  if (!match.has_value()) {
-    LOG_F(WARNING,
-      "ContentVm: persisted active scene could not be resolved "
-      "(name='{}' source='{}')",
-      selection->scene_name, selection->source_path.string());
-    return;
-  }
-
-  RequestSceneLoad(*match);
+  pending_scene_selection_restore_ = selection;
+  TryResolvePendingSceneSelection();
 }
 
 auto ContentVm::PersistLibraryState() -> void { PersistMountedSources(); }
@@ -808,7 +732,22 @@ auto ContentVm::PersistMountedSources() -> void
 
   std::vector<std::filesystem::path> paks;
   std::vector<std::filesystem::path> indices;
-  {
+  if (asset_loader_) {
+    for (const auto& mounted_source :
+      asset_loader_->EnumerateMountedSources()) {
+      if (mounted_source.source_kind
+        == content::IAssetLoader::ContentSourceKind::kPak) {
+        paks.push_back(mounted_source.source_path);
+      } else {
+        indices.push_back(mounted_source.source_path / "container.index.bin");
+      }
+    }
+    {
+      std::lock_guard lock(data_mutex_);
+      loaded_paks_ = paks;
+      loaded_indices_ = indices;
+    }
+  } else {
     std::lock_guard lock(data_mutex_);
     paks = loaded_paks_;
     indices = loaded_indices_;
@@ -829,6 +768,48 @@ auto ContentVm::PersistActiveSceneSelection(const SceneEntry& entry) -> void
     .source_path = entry.source.path,
     .source_is_pak = entry.source.kind == SceneSourceKind::kPak,
   });
+}
+
+auto ContentVm::TryResolvePendingSceneSelection() -> void
+{
+  if (!pending_scene_selection_restore_.has_value()) {
+    return;
+  }
+
+  const auto& selection = *pending_scene_selection_restore_;
+  const auto desired_kind = selection.source_is_pak
+    ? SceneSourceKind::kPak
+    : SceneSourceKind::kLooseIndex;
+  const auto desired_path = NormalizePathForKey(selection.source_path);
+
+  std::optional<SceneEntry> match;
+  {
+    std::lock_guard lock(data_mutex_);
+    for (const auto& scene : available_scenes_) {
+      if (scene.source.kind != desired_kind) {
+        continue;
+      }
+      if (NormalizePathForKey(scene.source.path) != desired_path) {
+        continue;
+      }
+      if (!selection.scene_key.empty()
+        && nostd::to_string(scene.key) != selection.scene_key) {
+        continue;
+      }
+      if (!selection.scene_name.empty() && scene.name != selection.scene_name
+        && !selection.scene_key.empty()) {
+        continue;
+      }
+      match = scene;
+      break;
+    }
+  }
+
+  if (!match.has_value()) {
+    return;
+  }
+  pending_scene_selection_restore_.reset();
+  RequestSceneLoad(*match);
 }
 
 auto ContentVm::IsSceneLoading() const -> bool

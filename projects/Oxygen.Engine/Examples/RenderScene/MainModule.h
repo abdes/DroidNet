@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <deque>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -140,13 +141,14 @@ private:
     kMountPak,
     kMountIndex,
   };
-  PendingSourceAction pending_source_action_ { PendingSourceAction::kNone };
-  std::filesystem::path pending_path_;
+  struct PendingSourceRequest final {
+    PendingSourceAction action { PendingSourceAction::kNone };
+    std::filesystem::path path;
+  };
+  std::deque<PendingSourceRequest> pending_source_requests_;
   std::optional<SceneLoadRequest> pending_scene_load_;
-  std::vector<std::filesystem::path> mounted_pak_paths_;
   std::unordered_map<std::filesystem::path, std::filesystem::file_time_type>
     mounted_pak_write_times_;
-  std::vector<std::filesystem::path> mounted_loose_roots_;
   bool pending_scene_clear_ { false };
 };
 

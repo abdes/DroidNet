@@ -58,13 +58,50 @@ This section is normative. "MUST" and "MUST NOT" are strict requirements.
     Release runtime assumes acyclicity is guaranteed by import/authoring validation and CI checks.
     References: `AssetLoader.cpp:4131-4156`, `AssetLoader.cpp:1569-1589`.
 
+## AssetLoader Decomposed Architecture
+
+`AssetLoader` is a facade and orchestration boundary. It MUST keep API, lifecycle, and delegation responsibilities only.
+
+### Responsibility Map
+
+| Component | Owned state | Primary responsibility |
+| ----- | ----- | ----- |
+| `AssetLoader` | lifecycle glue, API wiring, facade-level coordination | public API, activation/deactivation, cross-service orchestration |
+| `internal::ContentSourceRegistry` | mounted source vectors/maps/tokens | mount/unmount/clear and source-id/token resolution |
+| `internal::AssetIdentityIndex` | asset hash/key/source reverse indexes | deterministic asset identity resolution and preferred-source overrides |
+| `internal::DependencyGraphStore` | asset/resource dependency edges | dependency edge insert/remove/enumeration and symmetry assertions |
+| `internal::DependencyReleaseEngine` | release traversal working state | resources-first dependency release and trim traversal |
+| `internal::InFlightOperationTable` | unified typed/erased in-flight operations | dedup of concurrent loads and lifecycle cleanup |
+| `internal::ResourceLoadPipeline` | resource decode/publish pipeline state | cache-hit/in-flight/decode/store/publish for resources |
+| `internal::ScriptHotReloadService` | script path index + reload subscribers | script reload orchestration and notifications |
+| `internal::ScriptQueryService` | script query helpers | script sidecar/resource query operations |
+| `internal::PhysicsQueryService` | physics query helpers | physics scene/material/collision query operations |
+| `internal::EvictionRegistry` | eviction subscriber registry + reentrancy guard | eviction callback subscription and safe dispatch |
+| `internal::ResourceKeyRegistry` | resource-hash to key mapping | canonical resource-key registration/lookup/invariant checks |
+
+### Boundary Rules
+
+- Asset/resource loading internals MUST pass explicit source context; hidden thread-local source context is forbidden.
+- Script and physics query concerns MUST remain split in separate services.
+- Subsystem debug invariants MUST live with subsystem-owned state (not centralized in facade-only state).
+- `AssetLoader` private fields MUST not duplicate state already owned by extracted subsystems.
+
+### End-to-End Load Flow (Current)
+
+1. `AssetLoader` receives API call and enforces owning-thread and async preconditions.
+2. `ContentSourceRegistry` and `AssetIdentityIndex` resolve the effective source and identity.
+3. `InFlightOperationTable` deduplicates concurrent work.
+4. Decode executes with `LoaderContext` and identity-only dependency handoff.
+5. Publish/store updates caches, dependency graph, and baseline retains on owning thread.
+6. Release/trim routes through `DependencyReleaseEngine` and graph/store registries.
+
 ## Documentation Index
 
 | Topic | File | Focus |
 | ----- | ---- | ----- |
 | Entity relationships & intra-PAK rule | `Docs/overview.md` | Conceptual model & dependency boundaries |
 | PAK format, alignment, classification | `Docs/chunking.md` | File layout, alignment, resource tiers |
-| Loader & planned async pipeline | `Docs/asset_loader.md` | Sync loader + future coroutine design |
+| Loader architecture & async pipeline | `Docs/asset_loader.md` | Facade + extracted subsystems and pipeline behavior |
 | Dependency tracking & caching | `Docs/deps_and_cache.md` | Reference counting, unload design |
 
 ---

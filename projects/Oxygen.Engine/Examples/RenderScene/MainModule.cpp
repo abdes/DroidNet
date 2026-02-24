@@ -30,6 +30,7 @@
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/PathNormalization.h"
 #include "DemoShell/Services/SceneLoaderService.h"
 #include "DemoShell/UI/ContentVm.h"
 #include "RenderScene/MainModule.h"
@@ -49,6 +50,32 @@ namespace {
       return std::nullopt;
     }
     return write_time;
+  }
+
+  auto IsMountedPak(content::IAssetLoader& asset_loader,
+    const std::filesystem::path& pak_path) -> bool
+  {
+    const auto normalized = runtime::NormalizePath(pak_path);
+    const auto mounted = asset_loader.EnumerateMountedSources();
+    return std::ranges::any_of(mounted,
+      [&normalized](const content::IAssetLoader::MountedSourceEntry& source) {
+        return source.source_kind
+          == content::IAssetLoader::ContentSourceKind::kPak
+          && runtime::NormalizePath(source.source_path) == normalized;
+      });
+  }
+
+  auto IsMountedLooseRoot(content::IAssetLoader& asset_loader,
+    const std::filesystem::path& root_path) -> bool
+  {
+    const auto normalized = runtime::NormalizePath(root_path);
+    const auto mounted = asset_loader.EnumerateMountedSources();
+    return std::ranges::any_of(mounted,
+      [&normalized](const content::IAssetLoader::MountedSourceEntry& source) {
+        return source.source_kind
+          == content::IAssetLoader::ContentSourceKind::kLooseCooked
+          && runtime::NormalizePath(source.source_path) == normalized;
+      });
   }
 
 } // namespace
@@ -132,16 +159,23 @@ auto MainModule::OnAttachedImpl(observer_ptr<AsyncEngine> engine) noexcept
   };
   shell_config.get_last_released_scene_key
     = [this]() { return last_released_scene_key_; };
-  shell_config.on_force_trim
-    = [this]() { pending_source_action_ = PendingSourceAction::kTrimCache; };
+  shell_config.on_force_trim = [this]() {
+    pending_source_requests_.push_back(PendingSourceRequest {
+      .action = PendingSourceAction::kTrimCache,
+    });
+  };
   shell_config.on_pak_mounted = [this](const std::filesystem::path& path) {
-    pending_source_action_ = PendingSourceAction::kMountPak;
-    pending_path_ = path;
+    pending_source_requests_.push_back(PendingSourceRequest {
+      .action = PendingSourceAction::kMountPak,
+      .path = path,
+    });
   };
   shell_config.on_loose_index_loaded
     = [this](const std::filesystem::path& path) {
-        pending_source_action_ = PendingSourceAction::kMountIndex;
-        pending_path_ = path;
+        pending_source_requests_.push_back(PendingSourceRequest {
+          .action = PendingSourceAction::kMountIndex,
+          .path = path,
+        });
       };
 
   if (!shell->Initialize(shell_config)) {
@@ -235,111 +269,106 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   auto& shell = GetShell();
 
   // 1. Process deferred lifecycle actions.
-  if (pending_source_action_ != PendingSourceAction::kNone) {
-    const char* reason = "source change";
-    if (pending_source_action_ == PendingSourceAction::kMountPak) {
-      reason = "pak mounted";
-    } else if (pending_source_action_ == PendingSourceAction::kMountIndex) {
-      reason = "loose cooked root";
-    } else if (pending_source_action_ == PendingSourceAction::kClear) {
-      reason = "clear mounts";
-    } else if (pending_source_action_ == PendingSourceAction::kTrimCache) {
-      reason = "trim cache";
-    }
+  if (!pending_source_requests_.empty()) {
+    bool refresh_library = false;
+    while (!pending_source_requests_.empty()) {
+      const auto request = std::move(pending_source_requests_.front());
+      pending_source_requests_.pop_front();
 
-    if (pending_source_action_ == PendingSourceAction::kClear) {
-      ReleaseCurrentSceneAsset(reason);
-      // IMPORTANT: Never clear/swap scene ownership in OnSceneMutation.
-      // Defer to OnFrameStart so FrameContext scene publication remains valid
-      // for the whole frame.
-      pending_scene_clear_ = true;
-    }
+      const auto action = request.action;
+      const auto& path = request.path;
+      const char* reason = "source change";
+      if (action == PendingSourceAction::kMountPak) {
+        reason = "pak mounted";
+      } else if (action == PendingSourceAction::kMountIndex) {
+        reason = "loose cooked root";
+      } else if (action == PendingSourceAction::kClear) {
+        reason = "clear mounts";
+      } else if (action == PendingSourceAction::kTrimCache) {
+        reason = "trim cache";
+      }
 
-    auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
-    if (asset_loader) {
-      if (pending_source_action_ == PendingSourceAction::kClear) {
-        asset_loader->ClearMounts();
-        mounted_pak_paths_.clear();
-        mounted_pak_write_times_.clear();
-        mounted_loose_roots_.clear();
-      } else if (pending_source_action_ == PendingSourceAction::kTrimCache) {
-        asset_loader->TrimCache();
-      } else if (pending_source_action_ == PendingSourceAction::kMountPak) {
-        std::error_code ec;
-        auto normalized = std::filesystem::weakly_canonical(pending_path_, ec);
-        if (ec) {
-          normalized = pending_path_.lexically_normal();
-        }
+      if (action == PendingSourceAction::kClear) {
+        ReleaseCurrentSceneAsset(reason);
+        // IMPORTANT: Never clear/swap scene ownership in OnSceneMutation.
+        // Defer to OnFrameStart so FrameContext scene publication remains valid
+        // for the whole frame.
+        pending_scene_clear_ = true;
+      }
 
-        const auto already_mounted = std::ranges::any_of(mounted_pak_paths_,
-          [&normalized](const std::filesystem::path& existing) {
-            return existing == normalized;
-          });
-        const auto write_time = TryGetLastWriteTime(normalized);
+      auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+      if (asset_loader) {
+        if (action == PendingSourceAction::kClear) {
+          asset_loader->ClearMounts();
+          mounted_pak_write_times_.clear();
+          refresh_library = true;
+        } else if (action == PendingSourceAction::kTrimCache) {
+          asset_loader->TrimCache();
+          refresh_library = true;
+        } else if (action == PendingSourceAction::kMountPak) {
+          auto normalized = runtime::NormalizePath(path);
+          const auto already_mounted = IsMountedPak(*asset_loader, normalized);
+          const auto write_time = TryGetLastWriteTime(normalized);
 
-        if (already_mounted) {
-          const auto known_time_it = mounted_pak_write_times_.find(normalized);
-          const bool has_known_time
-            = known_time_it != mounted_pak_write_times_.end();
-          const bool file_changed = has_known_time && write_time.has_value()
-            && known_time_it->second != *write_time;
+          if (already_mounted) {
+            const auto known_time_it
+              = mounted_pak_write_times_.find(normalized);
+            const bool has_known_time
+              = known_time_it != mounted_pak_write_times_.end();
+            const bool file_changed = has_known_time && write_time.has_value()
+              && known_time_it->second != *write_time;
 
-          if (file_changed) {
-            LOG_F(INFO,
-              "RenderScene: PAK source '{}' changed on disk; refreshing "
-              "mounted source",
-              normalized.string());
-            asset_loader->AddPakFile(normalized);
-            mounted_pak_write_times_.insert_or_assign(normalized, *write_time);
+            if (file_changed) {
+              LOG_F(INFO,
+                "RenderScene: PAK source '{}' changed on disk; refreshing "
+                "mounted source",
+                normalized.string());
+              asset_loader->AddPakFile(normalized);
+              mounted_pak_write_times_.insert_or_assign(
+                normalized, *write_time);
+              refresh_library = true;
+            } else {
+              LOG_F(INFO,
+                "RenderScene: PAK source '{}' already mounted and unchanged; "
+                "preserving cache",
+                normalized.string());
+              if (write_time.has_value() && !has_known_time) {
+                mounted_pak_write_times_.insert_or_assign(
+                  normalized, *write_time);
+              }
+            }
           } else {
-            LOG_F(INFO,
-              "RenderScene: PAK source '{}' already mounted and unchanged; "
-              "preserving cache",
-              normalized.string());
-            if (write_time.has_value() && !has_known_time) {
+            asset_loader->AddPakFile(normalized);
+            if (write_time.has_value()) {
               mounted_pak_write_times_.insert_or_assign(
                 normalized, *write_time);
             }
+            refresh_library = true;
           }
-        } else {
-          mounted_pak_paths_.push_back(normalized);
-          asset_loader->AddPakFile(normalized);
-          if (write_time.has_value()) {
-            mounted_pak_write_times_.insert_or_assign(normalized, *write_time);
+        } else if (action == PendingSourceAction::kMountIndex) {
+          const auto root = path.parent_path();
+          const auto normalized = runtime::NormalizePath(root);
+          const auto already_mounted = IsMountedLooseRoot(*asset_loader, root);
+
+          if (already_mounted) {
+            LOG_F(INFO,
+              "RenderScene: Loose cooked root '{}' already mounted; skipping "
+              "remount to preserve cache",
+              normalized.string());
+          } else {
+            asset_loader->AddLooseCookedRoot(root);
+            refresh_library = true;
           }
-        }
-      } else if (pending_source_action_ == PendingSourceAction::kMountIndex) {
-        std::error_code ec;
-        auto root = pending_path_.parent_path();
-        auto normalized = std::filesystem::weakly_canonical(root, ec);
-        if (ec) {
-          normalized = root.lexically_normal();
-        }
-
-        const auto already_mounted = std::any_of(mounted_loose_roots_.begin(),
-          mounted_loose_roots_.end(),
-          [&normalized](const std::filesystem::path& existing) {
-            return existing == normalized;
-          });
-
-        if (already_mounted) {
-          LOG_F(INFO,
-            "RenderScene: Loose cooked root '{}' already mounted; skipping "
-            "remount to preserve cache",
-            normalized.string());
-        } else {
-          mounted_loose_roots_.push_back(std::move(normalized));
-          asset_loader->AddLooseCookedRoot(root);
         }
       }
     }
 
-    if (const auto vm = shell.GetContentVm()) {
-      vm->RefreshLibrary();
+    if (refresh_library) {
+      if (const auto vm = shell.GetContentVm()) {
+        vm->RefreshLibrary();
+        vm->PersistLibraryState();
+      }
     }
-
-    pending_source_action_ = PendingSourceAction::kNone;
-    pending_path_.clear();
   }
 
   // 2. Process pending scene loads.
@@ -360,17 +389,8 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
     if (asset_loader) {
       try {
         if (request.source_kind == ui::SceneSourceKind::kPak) {
-          std::error_code ec;
-          auto normalized
-            = std::filesystem::weakly_canonical(request.source_path, ec);
-          if (ec) {
-            normalized = request.source_path.lexically_normal();
-          }
-
-          const auto already_mounted = std::ranges::any_of(mounted_pak_paths_,
-            [&normalized](const std::filesystem::path& existing) {
-              return existing == normalized;
-            });
+          const auto normalized = runtime::NormalizePath(request.source_path);
+          const auto already_mounted = IsMountedPak(*asset_loader, normalized);
           const auto write_time = TryGetLastWriteTime(normalized);
 
           if (already_mounted) {
@@ -400,7 +420,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
               }
             }
           } else {
-            mounted_pak_paths_.push_back(normalized);
             asset_loader->AddPakFile(normalized);
             if (write_time.has_value()) {
               mounted_pak_write_times_.insert_or_assign(
@@ -412,17 +431,8 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
           }
         } else if (request.source_kind == ui::SceneSourceKind::kLooseIndex) {
           const auto root = request.source_path.parent_path();
-          std::error_code ec;
-          auto normalized = std::filesystem::weakly_canonical(root, ec);
-          if (ec) {
-            normalized = root.lexically_normal();
-          }
-
-          const auto already_mounted = std::any_of(mounted_loose_roots_.begin(),
-            mounted_loose_roots_.end(),
-            [&normalized](const std::filesystem::path& existing) {
-              return existing == normalized;
-            });
+          const auto normalized = runtime::NormalizePath(root);
+          const auto already_mounted = IsMountedLooseRoot(*asset_loader, root);
 
           if (already_mounted) {
             LOG_F(INFO,
@@ -430,7 +440,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
               "load; preserving cache",
               normalized.string());
           } else {
-            mounted_loose_roots_.push_back(std::move(normalized));
             asset_loader->AddLooseCookedRoot(root);
             LOG_F(INFO,
               "RenderScene: Mounted loose cooked root '{}' for scene load '{}'",

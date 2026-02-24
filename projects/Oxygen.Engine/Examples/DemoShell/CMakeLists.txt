@@ -66,6 +66,7 @@ set(
   "Runtime/AppWindow.h"
   "Runtime/DemoAppContext.h"
   "Runtime/DemoModuleBase.h"
+  "Runtime/PathNormalization.h"
   "Services/CameraSettingsService.h"
   "Services/ContentSettingsService.h"
   "Services/DomainService.h"
