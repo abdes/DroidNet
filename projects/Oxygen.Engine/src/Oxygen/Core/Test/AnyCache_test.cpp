@@ -5,8 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <iostream>
-#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -15,10 +13,13 @@
 
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Core/AnyCache.h>
+#include <Oxygen/Core/RefCountedEviction.h>
 
 using oxygen::AnyCache;
 
 namespace {
+
+// NOLINTBEGIN(*-magic-numbers)
 
 // -----------------------------------------------------------------------------
 // Basic test cases
@@ -43,7 +44,7 @@ protected:
       : value(v)
     {
     }
-    std::string value {};
+    std::string value;
   };
 
   // Create a cache with a small budget
@@ -656,62 +657,73 @@ protected:
     int value { 0 };
   };
 
-  AnyCache<int, oxygen::RefCountedEviction<int>> cache_;
-  std::vector<std::tuple<int, std::shared_ptr<void>, oxygen::TypeId>>
-    evicted_items_;
+  using CacheType = AnyCache<int, oxygen::RefCountedEviction<int>>;
+  using EvictedItem = std::tuple<int, std::shared_ptr<void>, oxygen::TypeId>;
+  using EvictedItems = std::vector<EvictedItem>;
+
+  [[nodiscard]] auto cache() -> CacheType& { return cache_; }
+  [[nodiscard]] auto evicted_items() -> EvictedItems& { return evicted_items_; }
+  [[nodiscard]] auto evicted_items() const -> const EvictedItems&
+  {
+    return evicted_items_;
+  }
 
   auto SetupEvictionCallback() -> void
   {
     eviction_scope_
       = std::make_unique<decltype(cache_)::EvictionNotificationScope>(
-        cache_.OnEviction([this](const int key, std::shared_ptr<void> value,
-                            oxygen::TypeId type_id) {
-          evicted_items_.emplace_back(key, value, type_id);
-        }));
+        cache_.OnEviction(
+          [this](const int key, const std::shared_ptr<void>& value,
+            oxygen::TypeId type_id) {
+            evicted_items_.emplace_back(key, value, type_id);
+          }));
   }
 
 private:
-  std::unique_ptr<decltype(cache_)::EvictionNotificationScope> eviction_scope_;
+  CacheType cache_;
+  EvictedItems evicted_items_;
+  std::unique_ptr<CacheType::EvictionNotificationScope> eviction_scope_;
 };
 
 //! Test clear on empty cache
 NOLINT_TEST_F(AnyCacheClearTest, Clear_EmptyCache_Safe)
 {
   // Arrange, Act
-  cache_.Clear();
+  cache().Clear();
 
   // Assert
-  EXPECT_EQ(cache_.Size(), 0);
-  EXPECT_EQ(cache_.Consumed(), 0);
+  EXPECT_EQ(cache().Size(), 0);
+  EXPECT_EQ(cache().Consumed(), 0);
 }
 
 //! Test clear removes all items and calls eviction callback
 NOLINT_TEST_F(AnyCacheClearTest, Clear_WithItems_RemovesAllAndCallsCallback)
 {
   // Arrange
-  cache_.Store(1, std::make_shared<TestObject>(10));
-  cache_.Store(2, std::make_shared<TestObject>(20));
-  cache_.Store(3, std::make_shared<TestObject>(30));
-  EXPECT_EQ(cache_.Size(), 3);
+  cache().Store(1, std::make_shared<TestObject>(10));
+  cache().Store(2, std::make_shared<TestObject>(20));
+  cache().Store(3, std::make_shared<TestObject>(30));
+  EXPECT_EQ(cache().Size(), 3);
 
   {
-    auto scope
-      = cache_.OnEviction([this](const int key, std::shared_ptr<void> value,
-                            oxygen::TypeId type_id) {
-          evicted_items_.emplace_back(key, value, type_id);
-        });
+    auto scope = cache().OnEviction(
+      [this](const int key, const std::shared_ptr<void>& value,
+        oxygen::TypeId type_id) {
+        evicted_items().emplace_back(key, value, type_id);
+      });
 
     // Act
-    cache_.Clear();
+    cache().Clear();
 
     // Assert
-    EXPECT_EQ(cache_.Size(), 0);
-    EXPECT_EQ(cache_.Consumed(), 0);
-    EXPECT_EQ(evicted_items_.size(), 3);
+    EXPECT_EQ(cache().Size(), 0);
+    EXPECT_EQ(cache().Consumed(), 0);
+    EXPECT_EQ(evicted_items().size(), 3);
 
     // Verify all keys were evicted
     std::vector<int> evicted_keys;
-    for (const auto& [key, value, type_id] : evicted_items_) {
+    evicted_keys.reserve(evicted_items().size());
+    for (const auto& [key, value, type_id] : evicted_items()) {
       evicted_keys.push_back(key);
     }
     EXPECT_EQ(evicted_keys.size(), 3);
@@ -945,11 +957,11 @@ NOLINT_TEST_F(AnyCacheEvictionTest, EvictionCallback_CalledOnRemove)
   EXPECT_TRUE(cache_.Contains(1));
 
   {
-    auto scope
-      = cache_.OnEviction([this](const int key, std::shared_ptr<void> value,
-                            oxygen::TypeId type_id) {
-          evicted_items_.emplace_back(key, value, type_id);
-        });
+    auto scope = cache_.OnEviction(
+      [this](const int key, const std::shared_ptr<void>& value,
+        oxygen::TypeId type_id) {
+        evicted_items_.emplace_back(key, value, type_id);
+      });
 
     // Act
     bool removed = cache_.Remove(1);
@@ -973,11 +985,11 @@ NOLINT_TEST_F(AnyCacheEvictionTest, EvictionCallback_CalledOnCheckInEviction)
   cache_.Store(1, std::make_shared<TestObject>(42));
 
   {
-    auto scope
-      = cache_.OnEviction([this](const int key, std::shared_ptr<void> value,
-                            oxygen::TypeId type_id) {
-          evicted_items_.emplace_back(key, value, type_id);
-        });
+    auto scope = cache_.OnEviction(
+      [this](const int key, const std::shared_ptr<void>& value,
+        oxygen::TypeId type_id) {
+        evicted_items_.emplace_back(key, value, type_id);
+      });
 
     // Act - check in should evict
     cache_.CheckIn(1);
@@ -997,11 +1009,11 @@ NOLINT_TEST_F(AnyCacheEvictionTest, EvictionScope_ProperlyScoped)
 
   // Act & Assert - callback active within scope
   {
-    auto scope
-      = cache_.OnEviction([this](const int key, std::shared_ptr<void> value,
-                            oxygen::TypeId type_id) {
-          evicted_items_.emplace_back(key, value, type_id);
-        });
+    auto scope = cache_.OnEviction(
+      [this](const int key, const std::shared_ptr<void>& value,
+        oxygen::TypeId type_id) {
+        evicted_items_.emplace_back(key, value, type_id);
+      });
 
     cache_.Remove(1);
     EXPECT_EQ(evicted_items_.size(), 1);
@@ -1086,8 +1098,8 @@ NOLINT_TEST_F(AnyCacheEdgeTest, Replace_CallsEvictionCallbackForOldValue)
 
   {
     auto scope = cache_.OnEviction(
-      [&evicted_items](
-        const int key, std::shared_ptr<void> value, oxygen::TypeId type_id) {
+      [&evicted_items](const int key, const std::shared_ptr<void>& value,
+        oxygen::TypeId type_id) {
         evicted_items.emplace_back(key, value, type_id);
       });
 
@@ -1097,6 +1109,10 @@ NOLINT_TEST_F(AnyCacheEdgeTest, Replace_CallsEvictionCallbackForOldValue)
     // Assert - old value should trigger eviction callback
     EXPECT_EQ(evicted_items.size(), 1);
     EXPECT_EQ(std::get<0>(evicted_items[0]), 1);
+    const auto old_value
+      = std::static_pointer_cast<TestObject>(std::get<1>(evicted_items[0]));
+    ASSERT_TRUE(old_value);
+    EXPECT_EQ(old_value->value, 42);
     EXPECT_EQ(
       cache_.Peek<TestObject>(1)->value, 99); // New value should be stored
   }
@@ -1127,5 +1143,91 @@ NOLINT_TEST_F(AnyCacheEdgeTest, Store_DifferentTypesAfterEviction)
   EXPECT_EQ(cache_.GetTypeId(1), StringObject::ClassTypeId());
   EXPECT_EQ(cache_.Peek<StringObject>(1)->value, "hello");
 }
+
+// -----------------------------------------------------------------------------
+// Residency contract test cases
+// -----------------------------------------------------------------------------
+
+class AnyCacheResidencyContractTest : public testing::Test {
+protected:
+  struct TestObject final : oxygen::Object {
+    OXYGEN_TYPED(TestObject)
+  public:
+    explicit TestObject(const int v)
+      : value(v)
+    {
+    }
+    int value { 0 };
+  };
+
+  AnyCache<int, oxygen::RefCountedEviction<int>> cache_ { 8 };
+};
+
+NOLINT_TEST_F(AnyCacheResidencyContractTest, PinAndUnpinExposeExplicitContract)
+{
+  cache_.Store(1, std::make_shared<TestObject>(10));
+  EXPECT_TRUE(cache_.Pin(1));
+  EXPECT_EQ(cache_.GetCheckoutCount(1), 2U);
+
+  EXPECT_TRUE(cache_.Unpin(1));
+  EXPECT_EQ(cache_.GetCheckoutCount(1), 1U);
+
+  EXPECT_TRUE(cache_.Unpin(1));
+  EXPECT_FALSE(cache_.Contains(1));
+
+  EXPECT_FALSE(cache_.Unpin(1));
+  EXPECT_FALSE(cache_.Pin(99));
+}
+
+NOLINT_TEST_F(AnyCacheResidencyContractTest, SnapshotStatsReportsResidencyState)
+{
+  cache_.Store(1, std::make_shared<TestObject>(1)); // checkout count: 1
+  cache_.Store(2, std::make_shared<TestObject>(2)); // checkout count: 1
+  cache_.Pin(1); // checkout count for key 1: 2
+
+  const auto stats = cache_.SnapshotStats();
+  EXPECT_EQ(stats.size, 2U);
+  EXPECT_EQ(stats.budget, 8U);
+  EXPECT_EQ(stats.consumed, 2U);
+  EXPECT_EQ(stats.checked_out_items, 2U);
+  EXPECT_EQ(stats.total_checkouts, 3U);
+  EXPECT_FALSE(stats.over_budget);
+}
+
+NOLINT_TEST_F(AnyCacheResidencyContractTest, OverBudgetStateIsObservable)
+{
+  cache_.Store(1, std::make_shared<TestObject>(1));
+  cache_.Store(2, std::make_shared<TestObject>(2));
+  cache_.Store(3, std::make_shared<TestObject>(3));
+
+  cache_.SetBudget(2);
+  EXPECT_TRUE(cache_.IsOverBudget());
+}
+
+NOLINT_TEST_F(AnyCacheResidencyContractTest, EvictionCallbackCanSafelyReenter)
+{
+  cache_.Store(1, std::make_shared<TestObject>(10));
+  cache_.Store(2, std::make_shared<TestObject>(20));
+
+  std::vector<int> callbacks;
+  {
+    auto scope = cache_.OnEviction(
+      [this, &callbacks](
+        const int key, const std::shared_ptr<void>&, const oxygen::TypeId) {
+        callbacks.push_back(key);
+        // Re-enter AnyCache API from callback; should be safe since callbacks
+        // are dispatched outside lock.
+        static_cast<void>(cache_.Contains(key));
+        static_cast<void>(cache_.Size());
+      });
+
+    cache_.CheckIn(1);
+    cache_.CheckIn(2);
+  }
+
+  EXPECT_EQ(callbacks.size(), 2U);
+}
+
+// NOLINTEND(*-magic-numbers)
 
 } // namespace

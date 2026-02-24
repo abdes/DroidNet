@@ -15,6 +15,7 @@
 #include <Oxygen/Content/Internal/DependencyGraphStore.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/AnyCache.h>
+#include <Oxygen/Core/RefCountedEviction.h>
 #include <Oxygen/Data/AssetKey.h>
 
 namespace oxygen::content::internal {

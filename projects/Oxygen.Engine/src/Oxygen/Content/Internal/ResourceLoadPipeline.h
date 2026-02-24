@@ -20,6 +20,7 @@
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/AnyCache.h>
+#include <Oxygen/Core/RefCountedEviction.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 
