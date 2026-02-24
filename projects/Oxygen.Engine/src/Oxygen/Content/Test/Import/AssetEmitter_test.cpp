@@ -261,6 +261,52 @@ NOLINT_TEST_F(AssetEmitterTest, EmitVirtualPathConflictBetweenKeysThrows)
   EXPECT_TRUE(success);
 }
 
+//! Verify conflicting descriptor path mappings are rejected.
+NOLINT_TEST_F(AssetEmitterTest, EmitDescriptorPathConflictBetweenKeysThrows)
+{
+  AssetEmitter emitter(*writer_, Layout(), test_dir_);
+  const auto bytes_a = MakeDescriptorBytes("a");
+  const auto bytes_b = MakeDescriptorBytes("b");
+
+  emitter.Emit(MakeAssetKey(1), AssetType::kMaterial, "/.cooked/Materials/A",
+    "Materials/Shared.omat", bytes_a);
+
+  EXPECT_THROW(emitter.Emit(MakeAssetKey(2), AssetType::kMaterial,
+                 "/.cooked/Materials/B", "Materials/Shared.omat", bytes_b),
+    std::runtime_error);
+
+  bool success = false;
+  co::Run(*loop_, [&]() -> Co<> { success = co_await emitter.Finalize(); });
+  EXPECT_TRUE(success);
+  EXPECT_EQ(ReadFileAsString(test_dir_ / "Materials" / "Shared.omat"), "a");
+}
+
+//! Verify same key retargeting descriptor path releases prior path ownership.
+NOLINT_TEST_F(
+  AssetEmitterTest, EmitSameKeyRetargetDescriptorPathAllowsPathReuse)
+{
+  AssetEmitter emitter(*writer_, Layout(), test_dir_);
+  const auto shared_key = MakeAssetKey(7);
+
+  co::Run(*loop_, [&]() -> Co<> {
+    emitter.Emit(shared_key, AssetType::kMaterial, "/.cooked/Materials/A",
+      "Materials/A.omat", MakeDescriptorBytes("a-v1"));
+    emitter.Emit(shared_key, AssetType::kMaterial, "/.cooked/Materials/B",
+      "Materials/B.omat", MakeDescriptorBytes("b-v2"));
+    emitter.Emit(MakeAssetKey(8), AssetType::kMaterial, "/.cooked/Materials/C",
+      "Materials/A.omat", MakeDescriptorBytes("a-v3"));
+    const auto success = co_await emitter.Finalize();
+    EXPECT_TRUE(success);
+  });
+
+  EXPECT_EQ(emitter.Count(), 2);
+  ASSERT_EQ(emitter.Records().size(), 2);
+  EXPECT_EQ(emitter.Records()[0].descriptor_relpath, "Materials/B.omat");
+  EXPECT_EQ(emitter.Records()[1].descriptor_relpath, "Materials/A.omat");
+  EXPECT_EQ(ReadFileAsString(test_dir_ / "Materials" / "B.omat"), "b-v2");
+  EXPECT_EQ(ReadFileAsString(test_dir_ / "Materials" / "A.omat"), "a-v3");
+}
+
 //! Verify Records() preserves order of emission.
 NOLINT_TEST_F(AssetEmitterTest, RecordsPreservesEmissionOrder)
 {

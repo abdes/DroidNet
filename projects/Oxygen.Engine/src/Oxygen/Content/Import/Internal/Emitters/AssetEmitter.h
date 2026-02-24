@@ -210,6 +210,7 @@ private:
 
   std::unordered_map<data::AssetKey, size_t> record_index_by_key_;
   std::unordered_map<std::string, data::AssetKey> key_by_virtual_path_;
+  std::unordered_map<std::string, data::AssetKey> key_by_descriptor_relpath_;
   std::unordered_map<std::string, DescriptorWriteState> write_state_by_relpath_;
 
   std::vector<EmittedAssetRecord> records_;
