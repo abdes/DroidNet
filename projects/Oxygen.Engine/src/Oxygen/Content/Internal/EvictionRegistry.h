@@ -26,7 +26,8 @@ public:
   auto AddSubscriber(
     TypeId type_id, uint64_t id, IAssetLoader::EvictionHandler handler) -> void;
   auto RemoveSubscriber(TypeId type_id, uint64_t id) -> void;
-  auto FindSubscribers(TypeId type_id) const -> const std::vector<Subscriber>*;
+  [[nodiscard]] auto SnapshotSubscribers(TypeId type_id) const
+    -> std::vector<Subscriber>;
 
   auto TryEnterEviction(uint64_t cache_key) -> bool;
   auto ExitEviction(uint64_t cache_key) -> void;

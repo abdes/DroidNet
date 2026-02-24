@@ -29,6 +29,7 @@ auto AssetLoaderLoadingTest::GeneratePakFile(const std::string& spec_name)
   const auto test_data_dir = GetTestDataDir();
   const auto spec_path = test_data_dir / (spec_name + ".yaml");
   auto output_path = temp_dir_ / (spec_name + ".pak");
+  std::filesystem::create_directories(output_path.parent_path());
 
   // Check if YAML spec exists
   if (!std::filesystem::exists(spec_path)) {

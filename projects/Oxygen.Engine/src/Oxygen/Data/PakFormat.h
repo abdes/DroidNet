@@ -1962,6 +1962,7 @@ using namespace v6; // NOLINT(google-build-using-namespace)
 // ============================================================================
 
 constexpr uint16_t kPakVersion = 7;
+constexpr uint16_t kCurrantPakFormatVersion = kPakVersion;
 
 constexpr uint8_t kPhysicsMaterialAssetVersion = 1;
 constexpr uint8_t kCollisionShapeAssetVersion = 1;
@@ -2455,6 +2456,7 @@ using v7::InputTriggerRecord;
 using v7::InputTriggerType;
 using v7::JointBindingRecord;
 using v7::kCollisionShapeAssetVersion;
+using v7::kCurrantPakFormatVersion;
 using v7::kDataBlobMaxSize;
 using v7::kFallbackResourceIndex;
 using v7::kGeometryAssetVersion;

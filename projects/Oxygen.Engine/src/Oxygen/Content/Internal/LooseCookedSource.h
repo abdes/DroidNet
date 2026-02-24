@@ -117,17 +117,10 @@ public:
     return index_.FindVirtualPath(key);
   }
 
-  [[nodiscard]] auto FindAsset(const data::AssetKey& key) const noexcept
-    -> std::optional<AssetLocator> override
+  [[nodiscard]] auto HasAsset(const data::AssetKey& key) const noexcept
+    -> bool override
   {
-    const auto rel = index_.FindDescriptorRelPath(key);
-    if (!rel) {
-      return std::nullopt;
-    }
-
-    return AssetLocator { LooseCookedAssetLocator {
-      .descriptor_path = cooked_root_ / std::filesystem::path(*rel),
-    } };
+    return index_.FindDescriptorRelPath(key).has_value();
   }
 
   [[nodiscard]] auto GetAssetCount() const noexcept -> size_t override
@@ -146,15 +139,16 @@ public:
   }
 
   [[nodiscard]] auto CreateAssetDescriptorReader(
-    const AssetLocator& locator) const
+    const data::AssetKey& key) const
     -> std::unique_ptr<serio::AnyReader> override
   {
-    const auto* loose_loc = std::get_if<LooseCookedAssetLocator>(&locator);
-    if (loose_loc == nullptr) {
+    const auto rel = index_.FindDescriptorRelPath(key);
+    if (!rel.has_value()) {
       return nullptr;
     }
 
-    return std::make_unique<OwningFileReader>(loose_loc->descriptor_path);
+    return std::make_unique<OwningFileReader>(
+      cooked_root_ / std::filesystem::path(*rel));
   }
 
   [[nodiscard]] auto CreateBufferTableReader() const
@@ -261,8 +255,10 @@ public:
     if (count == 0) {
       return records;
     }
-    CHECK_F(scripts_table_path_.has_value(),
-      "scripts.table is required to read script slot records");
+    if (!scripts_table_path_.has_value()) {
+      throw std::runtime_error(
+        "scripts.table is required to read script slot records");
+    }
 
     constexpr size_t kRecordSize = sizeof(data::pak::ScriptSlotRecord);
     const size_t start_offset = static_cast<size_t>(start_index) * kRecordSize;
@@ -301,8 +297,10 @@ public:
     if (count == 0) {
       return records;
     }
-    CHECK_F(scripts_data_path_.has_value(),
-      "scripts.data is required to read script parameter records");
+    if (!scripts_data_path_.has_value()) {
+      throw std::runtime_error(
+        "scripts.data is required to read script parameter records");
+    }
 
     constexpr size_t kRecordSize = sizeof(data::pak::ScriptParamRecord);
     const size_t bytes_to_read = static_cast<size_t>(count) * kRecordSize;

@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <functional>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -98,9 +97,6 @@ auto DependencyReleaseEngine::TrimCache(
   std::vector<data::AssetKey> trim_roots;
   trim_roots.reserve(hash_by_asset_key.size());
   for (const auto& [asset_key, hash_key] : hash_by_asset_key) {
-    if (!content_cache.Contains(hash_key)) {
-      continue;
-    }
     if (content_cache.GetCheckoutCount(hash_key) == 1U) {
       trim_roots.push_back(asset_key);
     }
@@ -108,10 +104,12 @@ auto DependencyReleaseEngine::TrimCache(
 
   std::unordered_set<data::AssetKey> visited_assets;
   std::unordered_set<data::AssetKey> visiting_assets;
+  visited_assets.reserve(hash_by_asset_key.size());
+  visiting_assets.reserve(hash_by_asset_key.size());
   size_t pruned_live_branches = 0U;
 
-  std::function<void(const data::AssetKey&)> trim_asset_dfs;
-  trim_asset_dfs = [&](const data::AssetKey& asset_key) {
+  auto trim_asset_dfs = [&](auto&& self, const data::AssetKey& asset_key)
+                          -> void {
     if (visited_assets.contains(asset_key)) {
       return;
     }
@@ -147,7 +145,7 @@ auto DependencyReleaseEngine::TrimCache(
     if (const auto* asset_deps = graph.FindAssetDependencies(asset_key);
       asset_deps != nullptr) {
       for (const auto& dep_asset_key : *asset_deps) {
-        trim_asset_dfs(dep_asset_key);
+        self(self, dep_asset_key);
       }
     }
 
@@ -181,7 +179,7 @@ auto DependencyReleaseEngine::TrimCache(
         content_cache.CheckIn(dep_hash);
         if (content_cache.Contains(dep_hash)
           && content_cache.GetCheckoutCount(dep_hash) == 1U) {
-          trim_asset_dfs(dep_asset_key);
+          self(self, dep_asset_key);
           if (content_cache.Contains(dep_hash)
             && content_cache.GetCheckoutCount(dep_hash) == 1U) {
             (void)content_cache.Remove(dep_hash);
@@ -199,7 +197,7 @@ auto DependencyReleaseEngine::TrimCache(
   };
 
   for (const auto& root_asset_key : trim_roots) {
-    trim_asset_dfs(root_asset_key);
+    trim_asset_dfs(trim_asset_dfs, root_asset_key);
   }
 
   std::vector<uint64_t> resource_hash_snapshot;

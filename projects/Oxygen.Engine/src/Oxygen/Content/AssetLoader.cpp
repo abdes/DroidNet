@@ -1307,14 +1307,13 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
 
   auto try_prepare_from_source_index = [&](const size_t source_index) -> bool {
     const auto& source = *impl_->source_registry.Sources()[source_index];
-    const auto locator_opt = source.FindAsset(key);
-    if (!locator_opt) {
+    if (!source.HasAsset(key)) {
       return false;
     }
 
     source_id = impl_->source_registry.SourceIds().at(source_index);
     source_token = impl_->source_registry.SourceTokens().at(source_index);
-    desc_reader = source.CreateAssetDescriptorReader(*locator_opt);
+    desc_reader = source.CreateAssetDescriptorReader(key);
     if (!desc_reader) {
       return false;
     }
@@ -2577,8 +2576,8 @@ void oxygen::content::AssetLoader::UnloadObject(const uint64_t cache_key,
       data::to_string(*event.asset_key), type_id, reason);
   }
 
-  const auto* subscribers = eviction_registry_->FindSubscribers(type_id);
-  if (subscribers == nullptr) {
+  const auto subscribers = eviction_registry_->SnapshotSubscribers(type_id);
+  if (subscribers.empty()) {
     return;
   }
 
@@ -2593,7 +2592,7 @@ void oxygen::content::AssetLoader::UnloadObject(const uint64_t cache_key,
     eviction_registry_->ExitEviction(cache_key);
   });
 
-  for (const auto& subscriber : *subscribers) {
+  for (const auto& subscriber : subscribers) {
     if (!subscriber.handler) {
       continue;
     }
@@ -2944,7 +2943,7 @@ auto AssetLoader::ResolveAssetIdentityForKey(
     if (source_it != impl_->source_registry.SourceIdToIndex().end()) {
       const auto& source
         = impl_->source_registry.Sources().at(source_it->second);
-      if (source && source->FindAsset(key).has_value()) {
+      if (source && source->HasAsset(key)) {
         return ResolvedAssetIdentity {
           .hash_key = HashAssetKey(key, *preferred_source_id),
           .source_id = *preferred_source_id,
@@ -2956,7 +2955,7 @@ auto AssetLoader::ResolveAssetIdentityForKey(
 
   for (size_t i = impl_->source_registry.Sources().size(); i-- > 0;) {
     const auto& source = impl_->source_registry.Sources()[i];
-    if (source && source->FindAsset(key).has_value()) {
+    if (source && source->HasAsset(key)) {
       const auto source_id = impl_->source_registry.SourceIds()[i];
       return ResolvedAssetIdentity {
         .hash_key = HashAssetKey(key, source_id),
@@ -2998,17 +2997,14 @@ auto AssetLoader::ResolveLoadSourceId(const data::AssetKey& key,
     if (source_it != impl_->source_registry.SourceIdToIndex().end()
       && impl_->source_registry.Sources()
         .at(source_it->second)
-        ->FindAsset(key)
-        .has_value()) {
+        ->HasAsset(key)) {
       return *preferred_source_id;
     }
   }
 
   for (size_t source_index = impl_->source_registry.Sources().size();
     source_index-- > 0;) {
-    if (impl_->source_registry.Sources()[source_index]
-          ->FindAsset(key)
-          .has_value()) {
+    if (impl_->source_registry.Sources()[source_index]->HasAsset(key)) {
       return impl_->source_registry.SourceIds()[source_index];
     }
   }

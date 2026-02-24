@@ -18,14 +18,19 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Import/LooseCookedLayout.h>
+#include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Content/Internal/InternalResourceKey.h>
+#include <Oxygen/Content/Internal/LooseCookedSource.h>
+#include <Oxygen/Content/Internal/PakFileSource.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
@@ -322,6 +327,90 @@ auto WriteLooseCookedIndexWithInvalidTexturesTable(
     static_cast<std::streamsize>(sizeof(tex_table_record)));
   out.write(reinterpret_cast<const char*>(&tex_data_record),
     static_cast<std::streamsize>(sizeof(tex_data_record)));
+}
+
+auto ReadAssetHeader(oxygen::content::internal::IContentSource& source,
+  const oxygen::data::AssetKey& key) -> std::optional<oxygen::data::pak::AssetHeader>
+{
+  auto desc_reader = source.CreateAssetDescriptorReader(key);
+  if (!desc_reader) {
+    return std::nullopt;
+  }
+
+  auto header_blob = desc_reader->ReadBlob(sizeof(oxygen::data::pak::AssetHeader));
+  if (!header_blob || header_blob->size() < sizeof(oxygen::data::pak::AssetHeader)) {
+    return std::nullopt;
+  }
+
+  oxygen::data::pak::AssetHeader header {};
+  std::memcpy(&header, header_blob->data(), sizeof(header));
+  return header;
+}
+
+auto WriteLooseCookedSceneForCatalog(
+  const std::filesystem::path& cooked_root, const oxygen::data::AssetKey& key)
+  -> void
+{
+  using oxygen::data::AssetType;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
+  using oxygen::data::pak::SceneAssetDesc;
+
+  const LooseCookedLayout layout {};
+  std::filesystem::create_directories(cooked_root / layout.scenes_subdir);
+
+  SceneAssetDesc desc {};
+  desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
+  std::snprintf(desc.header.name, sizeof(desc.header.name), "%s", "LooseScene");
+  desc.header.version = oxygen::data::pak::kSceneAssetVersion;
+
+  const auto rel_desc
+    = std::filesystem::path(layout.scenes_subdir) / "LooseScene.scene";
+  {
+    std::ofstream out(cooked_root / rel_desc, std::ios::binary);
+    out.write(reinterpret_cast<const char*>(&desc), sizeof(desc));
+  }
+
+  std::string strings;
+  strings.push_back('\0');
+  const auto off_desc = static_cast<uint32_t>(strings.size());
+  strings += rel_desc.generic_string();
+  strings.push_back('\0');
+  const auto off_vpath = static_cast<uint32_t>(strings.size());
+  strings
+    += std::string(layout.virtual_mount_root) + "/" + rel_desc.generic_string();
+  strings.push_back('\0');
+
+  IndexHeader header {};
+  FillTestGuid(header);
+  header.version = 1;
+  header.content_version = 0;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
+  header.string_table_offset = sizeof(IndexHeader);
+  header.string_table_size = static_cast<uint64_t>(strings.size());
+  header.asset_entries_offset
+    = header.string_table_offset + header.string_table_size;
+  header.asset_count = 1;
+  header.asset_entry_size = sizeof(AssetEntry);
+  header.file_records_offset = header.asset_entries_offset + sizeof(AssetEntry);
+  header.file_record_count = 0;
+  header.file_record_size = sizeof(FileRecord);
+
+  AssetEntry asset_entry {};
+  asset_entry.asset_key = key;
+  asset_entry.descriptor_relpath_offset = off_desc;
+  asset_entry.virtual_path_offset = off_vpath;
+  asset_entry.asset_type = static_cast<uint8_t>(AssetType::kScene);
+  asset_entry.descriptor_size = sizeof(SceneAssetDesc);
+
+  std::ofstream out(cooked_root / "container.index.bin", std::ios::binary);
+  out.write(reinterpret_cast<const char*>(&header),
+    static_cast<std::streamsize>(sizeof(header)));
+  out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
+  out.write(reinterpret_cast<const char*>(&asset_entry),
+    static_cast<std::streamsize>(sizeof(asset_entry)));
 }
 
 //=== AssetLoader Basic Functionality Tests ===-----------------------------//
@@ -942,6 +1031,113 @@ NOLINT_TEST_F(AssetLoaderLoadingTest,
   EXPECT_EQ(second_mount_snapshot.front().source_kind,
     oxygen::content::IAssetLoader::ContentSourceKind::kPak);
   EXPECT_EQ(second_mount_snapshot.front().source_path, NormalizePath(pak_path));
+}
+
+NOLINT_TEST_F(AssetLoaderLoadingTest,
+  EnumerateMountedScenes_MixedSourcesExpectedToExposeSceneEntries)
+{
+  const auto pak_path = GeneratePakFile("scene_with_renderable");
+  const auto pak_scene_key = CreateTestAssetKey("test_scene");
+
+  const auto loose_scene_key = CreateTestAssetKey("loose_scene_catalog");
+  const auto cooked_root = temp_dir_ / "mounted_scenes_loose";
+  WriteLooseCookedSceneForCatalog(cooked_root, loose_scene_key);
+
+  asset_loader_->AddPakFile(pak_path);
+  asset_loader_->AddLooseCookedRoot(cooked_root);
+
+  const auto mounted_scenes = asset_loader_->EnumerateMountedScenes();
+  ASSERT_GE(mounted_scenes.size(), 2U);
+
+  bool saw_pak_scene = false;
+  bool saw_loose_scene = false;
+  for (const auto& scene : mounted_scenes) {
+    if (scene.scene_key == pak_scene_key
+      && scene.source_kind
+        == oxygen::content::IAssetLoader::ContentSourceKind::kPak
+      && scene.source_path == NormalizePath(pak_path)) {
+      saw_pak_scene = true;
+    }
+    if (scene.scene_key == loose_scene_key
+      && scene.source_kind
+        == oxygen::content::IAssetLoader::ContentSourceKind::kLooseCooked
+      && scene.source_path == NormalizePath(cooked_root)
+      && !scene.virtual_path.empty()) {
+      saw_loose_scene = true;
+    }
+  }
+
+  EXPECT_TRUE(saw_pak_scene);
+  EXPECT_TRUE(saw_loose_scene);
+}
+
+NOLINT_TEST_F(AssetLoaderLoadingTest,
+  TrimCacheExpectedToPreserveMountedCatalog_ClearMountsExpectedToClearCatalog)
+{
+  const auto loose_scene_key = CreateTestAssetKey("loose_scene_catalog_2");
+  const auto cooked_root = temp_dir_ / "mounted_scenes_loose_2";
+  WriteLooseCookedSceneForCatalog(cooked_root, loose_scene_key);
+
+  asset_loader_->AddLooseCookedRoot(cooked_root);
+
+  const auto sources_before = asset_loader_->EnumerateMountedSources();
+  const auto scenes_before = asset_loader_->EnumerateMountedScenes();
+  ASSERT_FALSE(sources_before.empty());
+  ASSERT_FALSE(scenes_before.empty());
+
+  asset_loader_->TrimCache();
+
+  const auto sources_after_trim = asset_loader_->EnumerateMountedSources();
+  const auto scenes_after_trim = asset_loader_->EnumerateMountedScenes();
+  EXPECT_EQ(sources_after_trim.size(), sources_before.size());
+  EXPECT_EQ(scenes_after_trim.size(), scenes_before.size());
+
+  asset_loader_->ClearMounts();
+  EXPECT_TRUE(asset_loader_->EnumerateMountedSources().empty());
+  EXPECT_TRUE(asset_loader_->EnumerateMountedScenes().empty());
+}
+
+NOLINT_TEST_F(AssetLoaderLoadingTest,
+  ContentSourceConformance_BufferTextureCapabilitiesExpectedToMatch)
+{
+  const auto material_key = CreateTestAssetKey("test_material");
+  const auto pak_path = GeneratePakFile("simple_material");
+
+  const auto cooked_root = temp_dir_ / "conformance_loose_material";
+  WriteLooseCookedMaterialWithTexture(cooked_root, material_key);
+
+  oxygen::content::internal::PakFileSource pak_source(pak_path, false);
+  oxygen::content::internal::LooseCookedSource loose_source(cooked_root, false);
+
+  auto assert_common = [&](oxygen::content::internal::IContentSource& source) {
+    EXPECT_TRUE(source.HasAsset(material_key));
+
+    const auto header_opt = ReadAssetHeader(source, material_key);
+    ASSERT_TRUE(header_opt.has_value());
+    EXPECT_EQ(static_cast<oxygen::data::AssetType>(header_opt->asset_type),
+      oxygen::data::AssetType::kMaterial);
+
+    EXPECT_THAT(source.CreateTextureTableReader(), NotNull());
+    EXPECT_THAT(source.CreateTextureDataReader(), NotNull());
+    EXPECT_THAT(source.GetTextureTable(), NotNull());
+    EXPECT_EQ(source.GetScriptTable(), nullptr);
+    EXPECT_EQ(source.GetPhysicsTable(), nullptr);
+    EXPECT_EQ(source.CreateScriptTableReader(), nullptr);
+    EXPECT_EQ(source.CreateScriptDataReader(), nullptr);
+    EXPECT_EQ(source.CreatePhysicsTableReader(), nullptr);
+    EXPECT_EQ(source.CreatePhysicsDataReader(), nullptr);
+
+    const auto has_buffer_table_reader
+      = static_cast<bool>(source.CreateBufferTableReader());
+    const auto has_buffer_data_reader
+      = static_cast<bool>(source.CreateBufferDataReader());
+    const auto has_buffer_table = source.GetBufferTable() != nullptr;
+    EXPECT_EQ(has_buffer_table_reader, has_buffer_data_reader);
+    EXPECT_EQ(has_buffer_table_reader, has_buffer_table);
+  };
+
+  assert_common(pak_source);
+  assert_common(loose_source);
 }
 
 } // namespace

@@ -178,6 +178,7 @@ namespace {
 
   struct PreparedResourceDecode final {
     ResourceLoadPipeline::ResourceLoadFn loader;
+    SourceToken source_token {};
     std::unique_ptr<serio::AnyReader> desc_reader;
     std::unique_ptr<serio::AnyReader> buf_reader;
     std::unique_ptr<serio::AnyReader> tex_reader;
@@ -186,6 +187,168 @@ namespace {
     const PakFile* source_pak = nullptr;
     const IContentSource* source_content = nullptr;
   };
+
+  struct ResolvedSourceForDecode final {
+    const IContentSource* source = nullptr;
+    SourceToken source_token {};
+  };
+
+  auto ResolveSourceById(
+    const ContentSourceRegistry& source_registry, const uint16_t source_id)
+    -> std::optional<ResolvedSourceForDecode>
+  {
+    const auto source_it = source_registry.SourceIdToIndex().find(source_id);
+    if (source_it == source_registry.SourceIdToIndex().end()) {
+      return std::nullopt;
+    }
+    const auto source_index = source_it->second;
+    return ResolvedSourceForDecode {
+      .source = source_registry.Sources().at(source_index).get(),
+      .source_token = source_registry.SourceTokens().at(source_index),
+    };
+  }
+
+  auto ResolveLoaderForType(
+    const ResourceLoadPipeline::ResourceLoaderMap& resource_loaders,
+    const TypeId resource_type)
+    -> std::optional<ResourceLoadPipeline::ResourceLoadFn>
+  {
+    const auto loader_it = resource_loaders.find(resource_type);
+    if (loader_it == resource_loaders.end()) {
+      LOG_F(ERROR, "No loader registered for resource type id: {}",
+        resource_type);
+      return std::nullopt;
+    }
+    return loader_it->second;
+  }
+
+  auto TryResolvePakSource(const IContentSource& source) -> const PakFile*
+  {
+    if (source.GetTypeId() != PakFileSource::ClassTypeId()) {
+      return nullptr;
+    }
+    const auto* pak_source = static_cast<const PakFileSource*>(&source);
+    return &pak_source->Pak();
+  }
+
+  auto ResolveDescriptorOffsetAndReader(const IContentSource& source,
+    const TypeId resource_type, const data::pak::ResourceIndexT resource_index)
+    -> std::optional<std::pair<std::unique_ptr<serio::AnyReader>, data::pak::OffsetT>>
+  {
+    std::unique_ptr<serio::AnyReader> desc_reader;
+    std::optional<data::pak::OffsetT> offset;
+
+    if (resource_type == data::TextureResource::ClassTypeId()) {
+      const auto* table = source.GetTextureTable();
+      desc_reader = source.CreateTextureTableReader();
+      if (!table || !desc_reader) {
+        return std::nullopt;
+      }
+      offset = table->GetResourceOffset(resource_index);
+    } else if (resource_type == data::BufferResource::ClassTypeId()) {
+      const auto* table = source.GetBufferTable();
+      desc_reader = source.CreateBufferTableReader();
+      if (!table || !desc_reader) {
+        return std::nullopt;
+      }
+      offset = table->GetResourceOffset(resource_index);
+    } else if (resource_type == data::ScriptResource::ClassTypeId()) {
+      const auto* table = source.GetScriptTable();
+      desc_reader = source.CreateScriptTableReader();
+      if (!table || !desc_reader) {
+        return std::nullopt;
+      }
+      offset = table->GetResourceOffset(resource_index);
+    } else if (resource_type == data::PhysicsResource::ClassTypeId()) {
+      const auto* table = source.GetPhysicsTable();
+      desc_reader = source.CreatePhysicsTableReader();
+      if (!table || !desc_reader) {
+        return std::nullopt;
+      }
+      offset = table->GetResourceOffset(resource_index);
+    } else {
+      return std::nullopt;
+    }
+
+    if (!offset.has_value()) {
+      return std::nullopt;
+    }
+
+    if (auto seek_res = desc_reader->Seek(static_cast<size_t>(*offset));
+      !seek_res) {
+      return std::nullopt;
+    }
+
+    return std::make_pair(std::move(desc_reader), *offset);
+  }
+
+  auto PrepareResourceDecode(const ContentSourceRegistry& source_registry,
+    const ResourceLoadPipeline::ResourceLoaderMap& resource_loaders,
+    const TypeId resource_type, const uint16_t source_id,
+    const data::pak::ResourceIndexT resource_index)
+    -> std::optional<PreparedResourceDecode>
+  {
+    const auto resolved_source = ResolveSourceById(source_registry, source_id);
+    if (!resolved_source.has_value()) {
+      return std::nullopt;
+    }
+    const auto* source = resolved_source->source;
+
+    auto loader_opt = ResolveLoaderForType(resource_loaders, resource_type);
+    if (!loader_opt.has_value()) {
+      return std::nullopt;
+    }
+
+    auto descriptor_opt = ResolveDescriptorOffsetAndReader(
+      *source, resource_type, resource_index);
+    if (!descriptor_opt.has_value()) {
+      return std::nullopt;
+    }
+
+    PreparedResourceDecode prepared {};
+    prepared.loader = std::move(*loader_opt);
+    prepared.source_token = resolved_source->source_token;
+    prepared.desc_reader = std::move(descriptor_opt->first);
+    prepared.source_pak = TryResolvePakSource(*source);
+    prepared.source_content = source;
+    prepared.buf_reader = source->CreateBufferDataReader();
+    prepared.tex_reader = source->CreateTextureDataReader();
+    prepared.script_reader = source->CreateScriptDataReader();
+    prepared.phys_reader = source->CreatePhysicsDataReader();
+
+    return prepared;
+  }
+
+  auto BuildLoaderContextFromPrepared(
+    PreparedResourceDecode& prepared, const bool work_offline) -> LoaderContext
+  {
+    return LoaderContext {
+      .current_asset_key = {},
+      .source_token = prepared.source_token,
+      .desc_reader = prepared.desc_reader.get(),
+      .data_readers = std::make_tuple(prepared.buf_reader.get(),
+        prepared.tex_reader.get(), prepared.script_reader.get(),
+        prepared.phys_reader.get()),
+      .work_offline = work_offline,
+      .source_pak = prepared.source_pak,
+      .source_content = prepared.source_content,
+    };
+  }
+
+  auto BuildCookedLoaderContext(
+    serio::AnyReader* cooked_reader, const bool work_offline) -> LoaderContext
+  {
+    return LoaderContext {
+      .current_asset_key = {},
+      .source_token = {},
+      .desc_reader = cooked_reader,
+      .data_readers = std::make_tuple(
+        cooked_reader, cooked_reader, cooked_reader, cooked_reader),
+      .work_offline = work_offline,
+      .source_pak = nullptr,
+      .source_content = nullptr,
+    };
+  }
 
   template <typename DecodeFn>
   auto RunResourceLoadSharedStages(const TypeId resource_type,
@@ -283,100 +446,19 @@ auto ResourceLoadPipeline::LoadErased(const TypeId resource_type,
 
   auto decode_fn
     = [this, resource_type, key]() -> co::Co<std::shared_ptr<void>> {
-    auto prepare_decode = [&](const uint16_t source_id,
-                            const data::pak::ResourceIndexT resource_index)
-      -> std::optional<PreparedResourceDecode> {
-      const auto source_it = source_registry_.SourceIdToIndex().find(source_id);
-      if (source_it == source_registry_.SourceIdToIndex().end()) {
-        return std::nullopt;
-      }
-      const auto& source = *source_registry_.Sources().at(source_it->second);
-
-      PreparedResourceDecode prepared {};
-      if (source.GetTypeId() == PakFileSource::ClassTypeId()) {
-        const auto* pak_source = static_cast<const PakFileSource*>(&source);
-        prepared.source_pak = &pak_source->Pak();
-      }
-      prepared.source_content = &source;
-
-      std::optional<data::pak::OffsetT> offset;
-      if (resource_type == data::TextureResource::ClassTypeId()) {
-        const auto* table = source.GetTextureTable();
-        prepared.desc_reader = source.CreateTextureTableReader();
-        if (!table || !prepared.desc_reader) {
-          return std::nullopt;
-        }
-        offset = table->GetResourceOffset(resource_index);
-      } else if (resource_type == data::BufferResource::ClassTypeId()) {
-        const auto* table = source.GetBufferTable();
-        prepared.desc_reader = source.CreateBufferTableReader();
-        if (!table || !prepared.desc_reader) {
-          return std::nullopt;
-        }
-        offset = table->GetResourceOffset(resource_index);
-      } else if (resource_type == data::ScriptResource::ClassTypeId()) {
-        const auto* table = source.GetScriptTable();
-        prepared.desc_reader = source.CreateScriptTableReader();
-        if (!table || !prepared.desc_reader) {
-          return std::nullopt;
-        }
-        offset = table->GetResourceOffset(resource_index);
-      } else if (resource_type == data::PhysicsResource::ClassTypeId()) {
-        const auto* table = source.GetPhysicsTable();
-        prepared.desc_reader = source.CreatePhysicsTableReader();
-        if (!table || !prepared.desc_reader) {
-          return std::nullopt;
-        }
-        offset = table->GetResourceOffset(resource_index);
-      } else {
-        return std::nullopt;
-      }
-
-      if (!offset.has_value()) {
-        return std::nullopt;
-      }
-      if (auto seek_res
-        = prepared.desc_reader->Seek(static_cast<size_t>(*offset));
-        !seek_res) {
-        return std::nullopt;
-      }
-
-      prepared.buf_reader = source.CreateBufferDataReader();
-      prepared.tex_reader = source.CreateTextureDataReader();
-      prepared.script_reader = source.CreateScriptDataReader();
-      prepared.phys_reader = source.CreatePhysicsDataReader();
-
-      auto loader_it = resource_loaders_.find(resource_type);
-      if (loader_it == resource_loaders_.end()) {
-        LOG_F(ERROR, "No loader registered for resource type id: {}",
-          resource_type);
-        return std::nullopt;
-      }
-      prepared.loader = loader_it->second;
-      return prepared;
-    };
-
     const InternalResourceKey internal_key(key);
     const uint16_t source_id = internal_key.GetPakIndex();
     const auto resource_index = internal_key.GetResourceIndex();
 
-    auto prepared_opt = prepare_decode(source_id, resource_index);
+    auto prepared_opt = PrepareResourceDecode(source_registry_,
+      resource_loaders_, resource_type, source_id, resource_index);
     if (!prepared_opt.has_value()) {
       co_return nullptr;
     }
 
     co_return co_await thread_pool_->Run(
       [this, prepared = std::move(*prepared_opt)]() mutable {
-        LoaderContext context {
-          .current_asset_key = {},
-          .desc_reader = prepared.desc_reader.get(),
-          .data_readers = std::make_tuple(prepared.buf_reader.get(),
-            prepared.tex_reader.get(), prepared.script_reader.get(),
-            prepared.phys_reader.get()),
-          .work_offline = work_offline_,
-          .source_pak = prepared.source_pak,
-          .source_content = prepared.source_content,
-        };
+        auto context = BuildLoaderContextFromPrepared(prepared, work_offline_);
         return prepared.loader(context);
       });
   };
@@ -407,28 +489,17 @@ auto ResourceLoadPipeline::LoadErasedFromCooked(const TypeId resource_type,
 
   auto decode_fn
     = [this, resource_type, owned_bytes]() -> co::Co<std::shared_ptr<void>> {
-    auto loader_it = resource_loaders_.find(resource_type);
-    if (loader_it == resource_loaders_.end()) {
-      LOG_F(
-        ERROR, "No resource loader registered for type_id={}", resource_type);
+    auto loader_opt = ResolveLoaderForType(resource_loaders_, resource_type);
+    if (!loader_opt.has_value()) {
       co_return nullptr;
     }
 
     co_return co_await thread_pool_->Run(
       [this, owned_bytes,
-        loader = loader_it->second]() mutable -> std::shared_ptr<void> {
+        loader = std::move(*loader_opt)]() mutable -> std::shared_ptr<void> {
         std::span<const uint8_t> span(owned_bytes->data(), owned_bytes->size());
         auto reader = std::make_unique<MemoryAnyReader>(span);
-
-        LoaderContext context {
-          .current_asset_key = {},
-          .desc_reader = reader.get(),
-          .data_readers = std::make_tuple(
-            reader.get(), reader.get(), reader.get(), reader.get()),
-          .work_offline = work_offline_,
-          .source_pak = nullptr,
-          .source_content = nullptr,
-        };
+        auto context = BuildCookedLoaderContext(reader.get(), work_offline_);
 
         return loader(context);
       });
