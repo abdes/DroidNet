@@ -66,6 +66,10 @@ namespace {
   using oxygen::console::ExecutionStatus;
 
   constexpr std::string_view kCVarEngineTargetFps = "ngin.target_fps";
+  constexpr std::string_view kCVarEngineScriptingHotReloadEnabled
+    = "ngin.scripting.hot_reload";
+  constexpr std::string_view kCVarEngineScriptingHotReloadPollIntervalMs
+    = "ngin.scripting.poll_interval_ms";
 
   auto MakeConfigFileContext() -> CommandContext
   {
@@ -665,6 +669,26 @@ auto AsyncEngine::InitializeConsoleRuntime() -> void
 auto AsyncEngine::RegisterEngineConsoleBindings() -> void
 {
   (void)console_.RegisterCVar(CVarDefinition {
+    .name = std::string(kCVarEngineScriptingHotReloadEnabled),
+    .help = "Enable/disable engine-owned scripting hot-reload file watcher",
+    .default_value = config_.scripting.enable_hot_reload,
+    .flags = CVarFlags::kArchive,
+    .min_value = {},
+    .max_value = {},
+  });
+
+  (void)console_.RegisterCVar(CVarDefinition {
+    .name = std::string(kCVarEngineScriptingHotReloadPollIntervalMs),
+    .help
+    = "Engine-owned scripting hot-reload polling interval in milliseconds",
+    .default_value
+    = static_cast<int64_t>(config_.scripting.hot_reload_poll_interval.count()),
+    .flags = CVarFlags::kArchive,
+    .min_value = 1.0,
+    .max_value = {},
+  });
+
+  (void)console_.RegisterCVar(CVarDefinition {
     .name = std::string(kCVarEngineTargetFps),
     .help = "Target frames per second (0 = uncapped)",
     .default_value = int64_t { static_cast<int64_t>(config_.target_fps) },
@@ -770,6 +794,30 @@ auto AsyncEngine::SavePersistedConsoleHistory() const -> void
 
 auto AsyncEngine::ApplyEngineOwnedConsoleCVars() -> void
 {
+  bool hot_reload_enabled = config_.scripting.enable_hot_reload;
+  if (console_.TryGetCVarValue<bool>(
+        kCVarEngineScriptingHotReloadEnabled, hot_reload_enabled)) {
+    config_.scripting.enable_hot_reload = hot_reload_enabled;
+    if (hot_reload_service_) {
+      hot_reload_service_->SetEnabled(hot_reload_enabled);
+    }
+  }
+
+  int64_t hot_reload_poll_interval_ms
+    = config_.scripting.hot_reload_poll_interval.count();
+  if (console_.TryGetCVarValue<int64_t>(
+        kCVarEngineScriptingHotReloadPollIntervalMs,
+        hot_reload_poll_interval_ms)) {
+    hot_reload_poll_interval_ms
+      = std::max<int64_t>(1, hot_reload_poll_interval_ms);
+    config_.scripting.hot_reload_poll_interval
+      = std::chrono::milliseconds(hot_reload_poll_interval_ms);
+    if (hot_reload_service_) {
+      hot_reload_service_->SetPollInterval(
+        config_.scripting.hot_reload_poll_interval);
+    }
+  }
+
   int64_t target_fps = 0;
   if (console_.TryGetCVarValue<int64_t>(kCVarEngineTargetFps, target_fps)) {
     const auto clamped = std::clamp<int64_t>(
