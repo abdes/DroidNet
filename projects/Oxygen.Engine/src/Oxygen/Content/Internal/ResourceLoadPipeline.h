@@ -18,6 +18,7 @@
 #include <Oxygen/Content/Internal/InFlightOperationTable.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/AnyCache.h>
 #include <Oxygen/Core/RefCountedEviction.h>
@@ -36,6 +37,8 @@ public:
     std::function<void()> assert_owning_thread;
     std::function<uint64_t(const ResourceKey&)> hash_resource_key;
     std::function<void(uint64_t, ResourceKey)> map_resource_key;
+    std::function<LoadPriorityClass()> default_priority_class;
+    std::function<uint64_t()> next_request_sequence;
   };
 
   ResourceLoadPipeline(const ContentSourceRegistry& source_registry,
@@ -46,9 +49,14 @@ public:
 
   auto LoadErased(TypeId resource_type, ResourceKey key)
     -> co::Co<std::shared_ptr<void>>;
+  auto LoadErased(TypeId resource_type, ResourceKey key,
+    const LoadRequest& request) -> co::Co<std::shared_ptr<void>>;
 
   auto LoadErasedFromCooked(TypeId resource_type, ResourceKey key,
     std::span<const uint8_t> bytes) -> co::Co<std::shared_ptr<void>>;
+  auto LoadErasedFromCooked(TypeId resource_type, ResourceKey key,
+    std::span<const uint8_t> bytes, const LoadRequest& request)
+    -> co::Co<std::shared_ptr<void>>;
 
 private:
   const ContentSourceRegistry& source_registry_;

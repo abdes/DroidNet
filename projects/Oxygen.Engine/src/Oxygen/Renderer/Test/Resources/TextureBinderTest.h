@@ -69,7 +69,7 @@ public:
     content::CookedResourceData<data::TextureResource> cooked,
     TextureCallback on_complete) override
   {
-    const auto decoded = DecodeCookedTexturePayload(cooked.bytes);
+    auto decoded = DecodeCookedTexturePayload(cooked.bytes);
     // Record both the cooked payload and the decoded resource so the fake can
     // simulate reloads after eviction.
     cooked_payloads_.insert_or_assign(cooked.key,
@@ -332,13 +332,44 @@ public:
   {
     return textures_.erase(key) > 0U;
   }
+  auto PinResource(content::ResourceKey /*key*/) -> bool override
+  {
+    return false;
+  }
+  auto UnpinResource(content::ResourceKey /*key*/) -> bool override
+  {
+    return false;
+  }
 
   auto ReleaseAsset(const data::AssetKey& /*key*/) -> bool override
   {
     return false;
   }
+  auto PinAsset(const data::AssetKey& /*key*/) -> bool override
+  {
+    return false;
+  }
+  auto UnpinAsset(const data::AssetKey& /*key*/) -> bool override
+  {
+    return false;
+  }
 
   auto TrimCache() -> void override { textures_.clear(); }
+  auto SetResidencyPolicy(const content::ResidencyPolicy& policy)
+    -> void override
+  {
+    residency_policy_ = policy;
+  }
+  [[nodiscard]] auto GetResidencyPolicy() const noexcept
+    -> content::ResidencyPolicy override
+  {
+    return residency_policy_;
+  }
+  [[nodiscard]] auto QueryResidencyPolicyState() const
+    -> content::ResidencyPolicyState override
+  {
+    return content::ResidencyPolicyState { .policy = residency_policy_ };
+  }
   [[nodiscard]] auto EnumerateMountedScenes() const
     -> std::vector<MountedSceneEntry> override
   {
@@ -466,6 +497,7 @@ private:
   std::shared_ptr<int> eviction_alive_token_ { std::make_shared<int>(0) };
 
   std::uint64_t next_key_ { 1U };
+  content::ResidencyPolicy residency_policy_ {};
 };
 
 //! Test harness for TextureBinder unit tests.

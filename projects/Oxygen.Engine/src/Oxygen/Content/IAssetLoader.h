@@ -12,11 +12,13 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/EvictionEvents.h>
+#include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/ResourceTypeList.h>
 #include <Oxygen/Content/api_export.h>
@@ -188,50 +190,111 @@ public:
   //! Begin loading a texture resource and invoke `on_complete` on completion.
   virtual void StartLoadTexture(ResourceKey key, TextureCallback on_complete)
     = 0;
+  virtual void StartLoadTexture(
+    ResourceKey key, LoadRequest request, TextureCallback on_complete)
+  {
+    static_cast<void>(request);
+    StartLoadTexture(key, std::move(on_complete));
+  }
 
   //! Decode a texture resource from caller-provided cooked bytes.
   virtual void StartLoadTexture(
     CookedResourceData<data::TextureResource> cooked,
     TextureCallback on_complete)
     = 0;
+  virtual void StartLoadTexture(
+    CookedResourceData<data::TextureResource> cooked, LoadRequest request,
+    TextureCallback on_complete)
+  {
+    static_cast<void>(request);
+    StartLoadTexture(cooked, std::move(on_complete));
+  }
 
   //! Begin loading a buffer resource and invoke `on_complete` on completion.
   virtual void StartLoadBuffer(ResourceKey key, BufferCallback on_complete) = 0;
+  virtual void StartLoadBuffer(
+    ResourceKey key, LoadRequest request, BufferCallback on_complete)
+  {
+    static_cast<void>(request);
+    StartLoadBuffer(key, std::move(on_complete));
+  }
 
   //! Decode a buffer resource from caller-provided cooked bytes.
   virtual void StartLoadBuffer(
     CookedResourceData<data::BufferResource> cooked, BufferCallback on_complete)
     = 0;
+  virtual void StartLoadBuffer(CookedResourceData<data::BufferResource> cooked,
+    LoadRequest request, BufferCallback on_complete)
+  {
+    static_cast<void>(request);
+    StartLoadBuffer(cooked, std::move(on_complete));
+  }
 
   //! Begin loading a material asset and invoke `on_complete` on completion.
   virtual void StartLoadMaterialAsset(
     const data::AssetKey& key, MaterialCallback on_complete)
     = 0;
+  virtual void StartLoadMaterialAsset(const data::AssetKey& key,
+    LoadRequest request, MaterialCallback on_complete)
+  {
+    static_cast<void>(request);
+    StartLoadMaterialAsset(key, std::move(on_complete));
+  }
 
   //! Begin loading a geometry asset and invoke `on_complete` on completion.
   virtual void StartLoadGeometryAsset(
     const data::AssetKey& key, GeometryCallback on_complete)
     = 0;
+  virtual void StartLoadGeometryAsset(const data::AssetKey& key,
+    LoadRequest request, GeometryCallback on_complete)
+  {
+    static_cast<void>(request);
+    StartLoadGeometryAsset(key, std::move(on_complete));
+  }
 
   //! Begin loading a scene asset and invoke `on_complete` on completion.
   virtual void StartLoadScene(
     const data::AssetKey& key, SceneCallback on_complete)
     = 0;
+  virtual void StartLoadScene(
+    const data::AssetKey& key, LoadRequest request, SceneCallback on_complete)
+  {
+    static_cast<void>(request);
+    StartLoadScene(key, std::move(on_complete));
+  }
 
   //! Begin loading a physics scene sidecar and invoke `on_complete` on
   //! completion.
   virtual void StartLoadPhysicsSceneAsset(
     const data::AssetKey& key, PhysicsSceneCallback on_complete)
     = 0;
+  virtual void StartLoadPhysicsSceneAsset(const data::AssetKey& key,
+    LoadRequest request, PhysicsSceneCallback on_complete)
+  {
+    static_cast<void>(request);
+    StartLoadPhysicsSceneAsset(key, std::move(on_complete));
+  }
   //! Begin loading a physics resource and invoke `on_complete` on completion.
   virtual void StartLoadPhysicsResource(
     ResourceKey key, PhysicsResourceCallback on_complete)
     = 0;
+  virtual void StartLoadPhysicsResource(
+    ResourceKey key, LoadRequest request, PhysicsResourceCallback on_complete)
+  {
+    static_cast<void>(request);
+    StartLoadPhysicsResource(key, std::move(on_complete));
+  }
 
   //! Begin loading a script asset and invoke `on_complete` on completion.
   virtual void StartLoadScriptAsset(
     const data::AssetKey& key, ScriptCallback on_complete)
     = 0;
+  virtual void StartLoadScriptAsset(
+    const data::AssetKey& key, LoadRequest request, ScriptCallback on_complete)
+  {
+    static_cast<void>(request);
+    StartLoadScriptAsset(key, std::move(on_complete));
+  }
 
   //! Mount a pak file for asset loading.
   virtual auto AddPakFile(const std::filesystem::path& path) -> void = 0;
@@ -245,6 +308,19 @@ public:
 
   //! Clear cached assets/resources without unmounting sources.
   virtual auto TrimCache() -> void = 0;
+
+  //! Set runtime residency policy (budget/trim/priority defaults).
+  virtual auto SetResidencyPolicy(const ResidencyPolicy& policy) -> void = 0;
+
+  //! Read back active runtime residency policy.
+  [[nodiscard]] virtual auto GetResidencyPolicy() const noexcept
+    -> ResidencyPolicy
+    = 0;
+
+  //! Query runtime residency state from the active cache.
+  [[nodiscard]] virtual auto QueryResidencyPolicyState() const
+    -> ResidencyPolicyState
+    = 0;
 
   //! Enumerate scene entries available from currently mounted sources.
   [[nodiscard]] virtual auto EnumerateMountedScenes() const
@@ -417,6 +493,18 @@ public:
 
   //! Release (check in) an asset usage.
   virtual auto ReleaseAsset(const data::AssetKey& key) -> bool = 0;
+
+  //! Explicitly pin a resource in residency cache.
+  virtual auto PinResource(ResourceKey key) -> bool = 0;
+
+  //! Release one explicit resource pin.
+  virtual auto UnpinResource(ResourceKey key) -> bool = 0;
+
+  //! Explicitly pin an asset in residency cache.
+  virtual auto PinAsset(const data::AssetKey& key) -> bool = 0;
+
+  //! Release one explicit asset pin.
+  virtual auto UnpinAsset(const data::AssetKey& key) -> bool = 0;
 
   //! Subscribe to eviction notifications for a resource or asset type.
   virtual auto SubscribeResourceEvictions(

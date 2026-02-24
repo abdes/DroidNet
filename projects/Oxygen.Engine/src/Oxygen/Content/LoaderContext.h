@@ -8,6 +8,7 @@
 
 #include <memory>
 
+#include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/ResourceTypeList.h>
 #include <Oxygen/Content/SourceToken.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -68,6 +69,15 @@ struct LoaderContext {
     contract: do not create, upload, or otherwise touch GPU resources.
   */
   bool work_offline { false };
+
+  //! Default load priority class assigned by runtime residency policy.
+  LoadPriorityClass default_priority_class { LoadPriorityClass::kDefault };
+
+  //! Request-level load priority propagated by runtime APIs.
+  LoadPriority request_priority { LoadPriority::kDefault };
+
+  //! Request-level load intent propagated by runtime APIs.
+  LoadIntent request_intent { LoadIntent::kRuntime };
 
   //! Optional dependency collector for async decode pipelines.
   /*!

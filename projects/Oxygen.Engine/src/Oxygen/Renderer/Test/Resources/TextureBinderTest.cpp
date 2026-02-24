@@ -6,8 +6,6 @@
 
 #include <Oxygen/Renderer/Test/Resources/TextureBinderTest.h>
 
-#include "Oxygen/Platform/Input.h"
-
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Upload/UploaderTag.h>

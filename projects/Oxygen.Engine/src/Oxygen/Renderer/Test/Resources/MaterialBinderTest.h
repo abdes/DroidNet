@@ -130,6 +130,21 @@ private:
       return {};
     }
     auto TrimCache() -> void override { }
+    auto SetResidencyPolicy(const content::ResidencyPolicy& policy)
+      -> void override
+    {
+      residency_policy_ = policy;
+    }
+    [[nodiscard]] auto GetResidencyPolicy() const noexcept
+      -> content::ResidencyPolicy override
+    {
+      return residency_policy_;
+    }
+    [[nodiscard]] auto QueryResidencyPolicyState() const
+      -> content::ResidencyPolicyState override
+    {
+      return content::ResidencyPolicyState { .policy = residency_policy_ };
+    }
     [[nodiscard]] auto EnumerateMountedScenes() const
       -> std::vector<MountedSceneEntry> override
     {
@@ -313,7 +328,23 @@ private:
     {
       return false;
     }
+    auto PinResource(content::ResourceKey /*key*/) -> bool override
+    {
+      return false;
+    }
+    auto UnpinResource(content::ResourceKey /*key*/) -> bool override
+    {
+      return false;
+    }
     auto ReleaseAsset(const data::AssetKey& /*key*/) -> bool override
+    {
+      return false;
+    }
+    auto PinAsset(const data::AssetKey& /*key*/) -> bool override
+    {
+      return false;
+    }
+    auto UnpinAsset(const data::AssetKey& /*key*/) -> bool override
     {
       return false;
     }
@@ -375,6 +406,7 @@ private:
     std::uint64_t next_subscription_id_ { 1U };
     std::shared_ptr<int> eviction_alive_token_ { std::make_shared<int>(0) };
     std::uint64_t next_key_ { 1U };
+    content::ResidencyPolicy residency_policy_ {};
   };
 
   class FakeTextureBinder final : public resources::IResourceBinder {

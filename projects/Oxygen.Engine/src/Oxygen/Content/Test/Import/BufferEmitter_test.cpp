@@ -21,6 +21,8 @@ using namespace oxygen::co;
 using PakBufferResourceDesc = oxygen::data::pak::BufferResourceDesc;
 namespace co = oxygen::co;
 
+// NOLINTBEGIN(*-magic-numbers)
+
 namespace {
 
 //! Aligns a value up to the alignment boundary.
@@ -32,8 +34,7 @@ constexpr auto AlignUp(uint64_t value, uint64_t alignment) -> uint64_t
   return (remainder == 0) ? value : (value + (alignment - remainder));
 }
 
-//=== Test Helpers
-//===---------------------------------------------------------//
+//=== Test Helpers ===--------------------------------------------------------//
 
 //! Create a test cooked buffer payload with specified size and usage.
 /*!
@@ -70,21 +71,6 @@ auto MakeTestBuffer(size_t size_bytes, uint32_t usage_flags = 0x01,
   }
 
   return payload;
-}
-
-//! Create a vertex buffer payload (usage=0x01, alignment=16).
-auto MakeVertexBuffer(size_t size_bytes, uint32_t stride = 32)
-  -> CookedBufferPayload
-{
-  auto payload
-    = MakeTestBuffer(size_bytes, 0x01, 16, stride, std::byte { 0xAA });
-  return payload;
-}
-
-//! Create an index buffer payload (usage=0x02, alignment=4).
-auto MakeIndexBuffer(size_t size_bytes) -> CookedBufferPayload
-{
-  return MakeTestBuffer(size_bytes, 0x02, 4, 0, std::byte { 0x1B });
 }
 
 //! Read binary file content.
@@ -268,6 +254,98 @@ NOLINT_TEST_F(BufferEmitterTest, EmitDuplicateBufferReturnsSameIndex)
   ASSERT_EQ(table.size(), 2);
 }
 
+//! Characterization: with no content hash, different salts do not collide.
+NOLINT_TEST_F(BufferEmitterTest, Characterization_DedupNoHashDifferentSalts)
+{
+  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
+
+  uint32_t idx0 = 0;
+  uint32_t idx1 = 0;
+  bool tables_ok = false;
+  co::Run(*loop_, [&]() -> Co<> {
+    auto buf0 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0xCD });
+    auto buf1 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0xCD });
+    buf0.content_hash = 0;
+    buf1.content_hash = 0;
+
+    idx0 = emitter.Emit(std::move(buf0), "salt_a");
+    idx1 = emitter.Emit(std::move(buf1), "salt_b");
+
+    co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
+  });
+
+  EXPECT_TRUE(tables_ok);
+  EXPECT_EQ(idx0, 1U);
+  EXPECT_EQ(idx1, 2U);
+  EXPECT_EQ(emitter.Count(), 2U);
+
+  const auto table_path = test_dir_ / Layout().BuffersTableRelPath();
+  const auto table = ParseBufferTable(ReadBinaryFile(table_path));
+  EXPECT_EQ(table.size(), 3U); // includes sentinel
+}
+
+//! Characterization: with no content hash, same salt collides.
+NOLINT_TEST_F(BufferEmitterTest, Characterization_DedupNoHashSameSaltCollides)
+{
+  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
+
+  uint32_t idx0 = 0;
+  uint32_t idx1 = 0;
+  bool tables_ok = false;
+  co::Run(*loop_, [&]() -> Co<> {
+    auto buf0 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0xEF });
+    auto buf1 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0xEF });
+    buf0.content_hash = 0;
+    buf1.content_hash = 0;
+
+    idx0 = emitter.Emit(std::move(buf0), "same_salt");
+    idx1 = emitter.Emit(std::move(buf1), "same_salt");
+
+    co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
+  });
+
+  EXPECT_TRUE(tables_ok);
+  EXPECT_EQ(idx0, 1U);
+  EXPECT_EQ(idx1, 1U);
+  EXPECT_EQ(emitter.Count(), 1U);
+
+  const auto table_path = test_dir_ / Layout().BuffersTableRelPath();
+  const auto table = ParseBufferTable(ReadBinaryFile(table_path));
+  EXPECT_EQ(table.size(), 2U); // sentinel + one emitted entry
+}
+
+//! Characterization: emitter count exposes unique entries, not request total.
+NOLINT_TEST_F(
+  BufferEmitterTest, Characterization_CountTracksUniqueEntriesNotEmitCalls)
+{
+  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
+  constexpr int kEmitRequests = 5;
+
+  bool tables_ok = false;
+  co::Run(*loop_, [&]() -> Co<> {
+    for (int i = 0; i < kEmitRequests; ++i) {
+      auto buf = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0xA5 });
+      buf.content_hash = 0;
+      (void)emitter.Emit(std::move(buf), "same_salt");
+    }
+
+    co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
+  });
+
+  EXPECT_TRUE(tables_ok);
+  EXPECT_EQ(emitter.Count(), 1U);
+
+  const auto table_path = test_dir_ / Layout().BuffersTableRelPath();
+  const auto table = ParseBufferTable(ReadBinaryFile(table_path));
+  EXPECT_EQ(table.size(), 2U);
+}
+
 //! Verify index is returned immediately before I/O completes.
 NOLINT_TEST_F(BufferEmitterTest, EmitReturnsImmediatelyBeforeIOCompletes)
 {
@@ -308,8 +386,7 @@ NOLINT_TEST_F(BufferEmitterTest, EmitAfterFinalizeThrows)
   });
 }
 
-//=== PAK Format Compliance Tests
-//===------------------------------------------//
+//=== PAK Format Compliance Tests ===-----------------------------------------//
 
 //! Verify table file has correct packed size (32 bytes per entry).
 NOLINT_TEST_F(BufferEmitterTest, FinalizeTableFileHasCorrectPackedSize)
@@ -749,3 +826,5 @@ NOLINT_TEST_F(BufferEmitterTest, EmitManySmallBuffersAllAlignedCorrectly)
 }
 
 } // namespace
+
+// NOLINTEND(*-magic-numbers)
