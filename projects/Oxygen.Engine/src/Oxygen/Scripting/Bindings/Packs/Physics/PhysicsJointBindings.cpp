@@ -141,13 +141,19 @@ namespace {
 
     lua_getfield(state, desc_index, "anchor_a");
     if (lua_isnil(state, -1) == 0) {
-      desc.anchor_a = CheckVec3(state, -1, "joint.anchor_a must be a vec3");
+      if (!TryCheckVec3(state, -1, desc.anchor_a)) {
+        luaL_error(state, "joint.anchor_a must be a vec3");
+        return {};
+      }
     }
     lua_pop(state, 1);
 
     lua_getfield(state, desc_index, "anchor_b");
     if (lua_isnil(state, -1) == 0) {
-      desc.anchor_b = CheckVec3(state, -1, "joint.anchor_b must be a vec3");
+      if (!TryCheckVec3(state, -1, desc.anchor_b)) {
+        luaL_error(state, "joint.anchor_b must be a vec3");
+        return {};
+      }
     }
     lua_pop(state, 1);
 

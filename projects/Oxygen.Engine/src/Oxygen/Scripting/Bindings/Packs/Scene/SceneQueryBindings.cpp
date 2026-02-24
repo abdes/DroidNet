@@ -29,10 +29,16 @@ namespace {
     std::vector<scene::SceneNode> scope;
   };
 
-  auto CheckSceneQuery(lua_State* state, const int index) -> SceneQueryUserdata*
+  auto TryCheckSceneQuery(lua_State* state, const int index)
+    -> SceneQueryUserdata*
   {
-    return static_cast<SceneQueryUserdata*>(
-      luaL_checkudata(state, index, kSceneQueryMetatable));
+    if (lua_type(state, index) != LUA_TUSERDATA) {
+      return nullptr;
+    }
+    if (lua_userdatatag(state, index) != kTagSceneQuery) {
+      return nullptr;
+    }
+    return static_cast<SceneQueryUserdata*>(lua_touserdata(state, index));
   }
 
   auto ApplyScope(SceneQueryUserdata& q) -> void
@@ -51,7 +57,11 @@ namespace {
 
   auto SceneQueryToString(lua_State* state) -> int
   {
-    auto* q = CheckSceneQuery(state, 1);
+    auto* q = TryCheckSceneQuery(state, 1);
+    if (q == nullptr) {
+      lua_pushliteral(state, "SceneQuery(invalid)");
+      return 1;
+    }
     const auto str = std::string("SceneQuery(") + q->pattern + ")";
     lua_pushlstring(state, str.c_str(), str.size());
     return 1;
@@ -59,9 +69,13 @@ namespace {
 
   auto SceneQueryScope(lua_State* state) -> int
   {
-    auto* q = CheckSceneQuery(state, 1);
-    auto* node = CheckSceneNode(state, 2);
-    if (node->IsAlive()) {
+    auto* q = TryCheckSceneQuery(state, 1);
+    if (q == nullptr) {
+      lua_settop(state, 1);
+      return 1;
+    }
+    auto* node = TryCheckSceneNode(state, 2);
+    if ((node != nullptr) && node->IsAlive()) {
       q->scope.push_back(*node);
     }
     lua_settop(state, 1);
@@ -70,15 +84,22 @@ namespace {
 
   auto SceneQueryScopeMany(lua_State* state) -> int
   {
-    auto* q = CheckSceneQuery(state, 1);
-    luaL_checktype(state, 2, LUA_TTABLE);
+    auto* q = TryCheckSceneQuery(state, 1);
+    if (q == nullptr) {
+      lua_settop(state, 1);
+      return 1;
+    }
+    if (lua_type(state, 2) != LUA_TTABLE) {
+      lua_settop(state, 1);
+      return 1;
+    }
 
     const auto count = lua_objlen(state, 2);
     for (int i = 1; i <= count; ++i) {
       lua_rawgeti(state, 2, i);
       if (!lua_isnil(state, -1)) {
-        auto* node = CheckSceneNode(state, -1);
-        if (node->IsAlive()) {
+        auto* node = TryCheckSceneNode(state, -1);
+        if ((node != nullptr) && node->IsAlive()) {
           q->scope.push_back(*node);
         }
       }
@@ -90,7 +111,11 @@ namespace {
 
   auto SceneQueryClearScope(lua_State* state) -> int
   {
-    auto* q = CheckSceneQuery(state, 1);
+    auto* q = TryCheckSceneQuery(state, 1);
+    if (q == nullptr) {
+      lua_settop(state, 1);
+      return 1;
+    }
     q->scope.clear();
     lua_settop(state, 1);
     return 1;
@@ -98,7 +123,11 @@ namespace {
 
   auto SceneQueryFirst(lua_State* state) -> int
   {
-    auto* q = CheckSceneQuery(state, 1);
+    auto* q = TryCheckSceneQuery(state, 1);
+    if (q == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     try {
       ApplyScope(*q);
       std::vector<scene::SceneNode> nodes;
@@ -119,7 +148,11 @@ namespace {
 
   auto SceneQueryAll(lua_State* state) -> int
   {
-    auto* q = CheckSceneQuery(state, 1);
+    auto* q = TryCheckSceneQuery(state, 1);
+    if (q == nullptr) {
+      lua_newtable(state);
+      return 1;
+    }
     lua_newtable(state);
     try {
       ApplyScope(*q);
@@ -146,7 +179,11 @@ namespace {
 
   auto SceneQueryCount(lua_State* state) -> int
   {
-    auto* q = CheckSceneQuery(state, 1);
+    auto* q = TryCheckSceneQuery(state, 1);
+    if (q == nullptr) {
+      lua_pushinteger(state, 0);
+      return 1;
+    }
     try {
       ApplyScope(*q);
       std::vector<scene::SceneNode> nodes;
@@ -166,7 +203,11 @@ namespace {
 
   auto SceneQueryAny(lua_State* state) -> int
   {
-    auto* q = CheckSceneQuery(state, 1);
+    auto* q = TryCheckSceneQuery(state, 1);
+    if (q == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     try {
       ApplyScope(*q);
       std::vector<scene::SceneNode> nodes;
@@ -226,8 +267,8 @@ auto PushSceneQuery(
     lua_setmetatable(state, -2);
   } else {
     lua_pop(state, 1);
-    luaL_error(state, "SceneQuery metatable not found");
-    return 0;
+    lua_pushnil(state);
+    return 1;
   }
   return 1;
 }

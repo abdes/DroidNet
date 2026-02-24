@@ -68,8 +68,8 @@ namespace {
     if ((lua_gettop(state) < arg) || lua_isnil(state, arg)) {
       return true;
     }
-    auto* scope_node = CheckSceneNode(state, arg);
-    if (!scope_node->IsAlive()) {
+    auto* scope_node = TryCheckSceneNode(state, arg);
+    if ((scope_node == nullptr) || !scope_node->IsAlive()) {
       return false;
     }
     query.AddToTraversalScope(*scope_node);
@@ -137,7 +137,11 @@ namespace {
     }
 
     size_t len = 0;
-    const char* name = luaL_checklstring(state, 1, &len);
+    const char* name = lua_tolstring(state, 1, &len);
+    if (name == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     auto scene_ref = GetScene(state);
     if (scene_ref == nullptr) {
       lua_pushnil(state);
@@ -146,8 +150,9 @@ namespace {
 
     scene::SceneNode new_node;
     if ((lua_gettop(state) >= 2) && !lua_isnil(state, 2)) {
-      auto* parent = CheckSceneNode(state, 2);
-      if (!parent->IsAlive() || !IsNodeInActiveScene(*parent, scene_ref)) {
+      auto* parent = TryCheckSceneNode(state, 2);
+      if ((parent == nullptr) || !parent->IsAlive()
+        || !IsNodeInActiveScene(*parent, scene_ref)) {
         lua_pushnil(state);
         return 1;
       }
@@ -165,7 +170,11 @@ namespace {
       return 1;
     }
     if ((lua_gettop(state) >= 2) && !lua_isnil(state, 2)) {
-      auto* parent = CheckSceneNode(state, 2);
+      auto* parent = TryCheckSceneNode(state, 2);
+      if (parent == nullptr) {
+        lua_pushnil(state);
+        return 1;
+      }
       const auto p = parent->GetHandle();
       const auto n = new_node.GetHandle();
       LOG_F(INFO,
@@ -190,11 +199,11 @@ namespace {
       return 1;
     }
 
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
     auto scene_ref = GetScene(state);
-    if ((scene_ref == nullptr) || !node->IsAlive()) {
+    if ((scene_ref == nullptr) || (node == nullptr) || !node->IsAlive()) {
       LOG_F(INFO, "scene.destroy_node rejected: scene_ref={} alive={}",
-        scene_ref != nullptr, node->IsAlive());
+        scene_ref != nullptr, (node != nullptr) && node->IsAlive());
       lua_pushboolean(state, 0);
       return 1;
     }
@@ -223,9 +232,9 @@ namespace {
       return 1;
     }
 
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
     auto scene_ref = GetScene(state);
-    if ((scene_ref == nullptr) || !node->IsAlive()) {
+    if ((scene_ref == nullptr) || (node == nullptr) || !node->IsAlive()) {
       lua_pushboolean(state, 0);
       return 1;
     }
@@ -240,14 +249,15 @@ namespace {
       return 1;
     }
 
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
     auto scene_ref = GetScene(state);
-    if ((scene_ref == nullptr) || !node->IsAlive() || lua_isnil(state, 2)) {
+    if ((scene_ref == nullptr) || (node == nullptr) || !node->IsAlive()
+      || lua_isnil(state, 2)) {
       lua_pushboolean(state, 0);
       return 1;
     }
-    auto* new_parent = CheckSceneNode(state, 2);
-    if (!new_parent->IsAlive()) {
+    auto* new_parent = TryCheckSceneNode(state, 2);
+    if ((new_parent == nullptr) || !new_parent->IsAlive()) {
       lua_pushboolean(state, 0);
       return 1;
     }
@@ -274,7 +284,11 @@ namespace {
   auto LuaSceneFindOne(lua_State* state) -> int
   {
     size_t len = 0;
-    const char* path_ptr = luaL_checklstring(state, 1, &len);
+    const char* path_ptr = lua_tolstring(state, 1, &len);
+    if (path_ptr == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     const std::string_view path(path_ptr, len);
 
     auto scene_ref = GetScene(state);
@@ -306,7 +320,11 @@ namespace {
   auto LuaSceneFindMany(lua_State* state) -> int
   {
     size_t len = 0;
-    const char* pattern_ptr = luaL_checklstring(state, 1, &len);
+    const char* pattern_ptr = lua_tolstring(state, 1, &len);
+    if (pattern_ptr == nullptr) {
+      lua_newtable(state);
+      return 1;
+    }
     const std::string_view pattern(pattern_ptr, len);
     auto scene_ref = GetScene(state);
     if (scene_ref == nullptr) {
@@ -335,7 +353,11 @@ namespace {
   auto LuaSceneCount(lua_State* state) -> int
   {
     size_t len = 0;
-    const char* pattern_ptr = luaL_checklstring(state, 1, &len);
+    const char* pattern_ptr = lua_tolstring(state, 1, &len);
+    if (pattern_ptr == nullptr) {
+      lua_pushinteger(state, 0);
+      return 1;
+    }
     const std::string_view pattern(pattern_ptr, len);
     auto scene_ref = GetScene(state);
     if (scene_ref == nullptr) {
@@ -365,7 +387,11 @@ namespace {
   auto LuaSceneExists(lua_State* state) -> int
   {
     size_t len = 0;
-    const char* pattern_ptr = luaL_checklstring(state, 1, &len);
+    const char* pattern_ptr = lua_tolstring(state, 1, &len);
+    if (pattern_ptr == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     const std::string_view pattern(pattern_ptr, len);
     auto scene_ref = GetScene(state);
     if (scene_ref == nullptr) {
@@ -395,7 +421,11 @@ namespace {
   auto LuaSceneQuery(lua_State* state) -> int
   {
     size_t len = 0;
-    const char* pattern_ptr = luaL_checklstring(state, 1, &len);
+    const char* pattern_ptr = lua_tolstring(state, 1, &len);
+    if (pattern_ptr == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     auto scene_ref = GetScene(state);
     if (scene_ref == nullptr) {
       lua_pushnil(state);
@@ -481,10 +511,10 @@ namespace {
     const std::string_view key(key_ptr, len);
     const char* replacement = LegacySceneMigrationTarget(key);
     if (replacement != nullptr) {
-      luaL_error(state,
-        "oxygen.scene.%.*s was removed in v1; use oxygen.scene.%s",
-        static_cast<int>(key.size()), key.data(), replacement);
-      return 0;
+      LOG_F(WARNING, "oxygen.scene.{} was removed in v1; use oxygen.scene.{}",
+        key, replacement);
+      lua_pushnil(state);
+      return 1;
     }
 
     lua_pushnil(state);

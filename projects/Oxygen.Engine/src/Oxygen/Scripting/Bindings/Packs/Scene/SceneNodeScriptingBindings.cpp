@@ -19,6 +19,7 @@
 #include <lua.h>
 #include <lualib.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
@@ -27,6 +28,32 @@
 namespace oxygen::scripting::bindings {
 
 namespace {
+  class ScopedLuaStackTop final {
+  public:
+    explicit ScopedLuaStackTop(
+      lua_State* state, const char* scope_name) noexcept
+      : state_(state)
+      , top_(state != nullptr ? lua_gettop(state) : 0)
+      , scope_name_(scope_name)
+    {
+    }
+
+    ~ScopedLuaStackTop()
+    {
+      if (state_ != nullptr) {
+        const int current_top = lua_gettop(state_);
+        CHECK_F(current_top == top_,
+          "lua stack imbalance in {}: entry_top={} exit_top={}", scope_name_,
+          top_, current_top);
+      }
+    }
+
+  private:
+    lua_State* state_ { nullptr };
+    int top_ { 0 };
+    const char* scope_name_ { "unknown_scope" };
+  };
+
   constexpr const char* kSlotRefIndexKey = "index";
   constexpr const char* kSlotRefPtrKey = "__slot_ptr";
 
@@ -48,7 +75,10 @@ namespace {
     lua_State* state, const int index, scene::SceneNode::Scripting& scripting)
     -> const scene::ScriptingComponent::Slot*
   {
-    luaL_checktype(state, index, LUA_TTABLE);
+    const ScopedLuaStackTop stack_guard(state, "ParseSlotRef");
+    if (lua_type(state, index) != LUA_TTABLE) {
+      return nullptr;
+    }
 
     lua_getfield(state, index, kSlotRefIndexKey);
     if (lua_isnumber(state, -1) == 0) {
@@ -81,6 +111,7 @@ namespace {
   auto ParseScriptParam(
     lua_State* state, const int index, data::ScriptParam& out) -> bool
   {
+    const ScopedLuaStackTop stack_guard(state, "ParseScriptParam");
     const int value_type = lua_type(state, index);
     if (value_type == LUA_TBOOLEAN) {
       out = lua_toboolean(state, index) != 0;
@@ -166,7 +197,11 @@ namespace {
 
   auto SceneNodeScripting(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     if (!node->HasScripting()) {
       lua_pushnil(state);
       return 1;
@@ -177,28 +212,44 @@ namespace {
 
   auto SceneNodeAttachScripting(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     lua_pushboolean(state, node->AttachScripting() ? 1 : 0);
     return 1;
   }
 
   auto SceneNodeDetachScripting(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     lua_pushboolean(state, node->DetachScripting() ? 1 : 0);
     return 1;
   }
 
   auto SceneNodeHasScripting(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     lua_pushboolean(state, node->HasScripting() ? 1 : 0);
     return 1;
   }
 
   auto SceneNodeScriptingSlotsCount(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushinteger(state, 0);
+      return 1;
+    }
     if (!node->HasScripting()) {
       lua_pushinteger(state, 0);
       return 1;
@@ -210,9 +261,16 @@ namespace {
 
   auto SceneNodeScriptingSlots(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    const int entry_top = lua_gettop(state);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_newtable(state);
+      CHECK_F(lua_gettop(state) == entry_top + 1, "stack imbalance");
+      return 1;
+    }
     if (!node->HasScripting()) {
       lua_newtable(state);
+      CHECK_F(lua_gettop(state) == entry_top + 1, "stack imbalance");
       return 1;
     }
     const auto slots = node->GetScripting().Slots();
@@ -221,19 +279,37 @@ namespace {
       PushSlotRef(state, slots[i], i);
       lua_rawseti(state, -2, static_cast<int>(i + 1));
     }
+    CHECK_F(lua_gettop(state) == entry_top + 1, "stack imbalance");
     return 1;
   }
 
   auto SceneNodeScriptingAddSlot(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    const int entry_top = lua_gettop(state);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      CHECK_F(lua_gettop(state) == entry_top + 1, "stack imbalance");
+      return 1;
+    }
     if (!node->HasScripting()) {
       lua_pushboolean(state, 0);
+      CHECK_F(lua_gettop(state) == entry_top + 1, "stack imbalance");
       return 1;
     }
 
     size_t len = 0;
-    const char* source = luaL_checklstring(state, 2, &len);
+    if (lua_type(state, 2) != LUA_TSTRING) {
+      lua_pushboolean(state, 0);
+      CHECK_F(lua_gettop(state) == entry_top + 1, "stack imbalance");
+      return 1;
+    }
+    const char* source = lua_tolstring(state, 2, &len);
+    if (source == nullptr) {
+      lua_pushboolean(state, 0);
+      CHECK_F(lua_gettop(state) == entry_top + 1, "stack imbalance");
+      return 1;
+    }
     data::pak::ScriptAssetDesc desc {};
     desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kScript);
     desc.bytecode_resource_index = data::pak::kNoResourceIndex;
@@ -252,12 +328,17 @@ namespace {
       data::AssetKey {}, desc, std::vector<data::pak::ScriptParamRecord> {});
     lua_pushboolean(
       state, node->GetScripting().AddSlot(std::move(asset)) ? 1 : 0);
+    CHECK_F(lua_gettop(state) == entry_top + 1, "stack imbalance");
     return 1;
   }
 
   auto SceneNodeScriptingRemoveSlot(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     if (!node->HasScripting()) {
       lua_pushboolean(state, 0);
       return 1;
@@ -274,36 +355,54 @@ namespace {
 
   auto SceneNodeScriptingSetParam(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
-    if (!node->HasScripting()) {
+    const int entry_top = lua_gettop(state);
+    if (entry_top < 4) {
       lua_pushboolean(state, 0);
+      CHECK_F(lua_gettop(state) == entry_top + 1, "stack imbalance");
       return 1;
+    }
+    const auto push_and_check_bool = [state, entry_top](const bool value) {
+      lua_pushboolean(state, value ? 1 : 0);
+      CHECK_F(lua_gettop(state) == entry_top + 1, "stack imbalance");
+      return 1;
+    };
+
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      return push_and_check_bool(false);
+    }
+    if (!node->HasScripting()) {
+      return push_and_check_bool(false);
     }
     auto scripting = node->GetScripting();
     const auto* slot = ParseSlotRef(state, 2, scripting);
     if (slot == nullptr) {
-      lua_pushboolean(state, 0);
-      return 1;
+      return push_and_check_bool(false);
     }
 
     size_t key_len = 0;
-    const char* key = luaL_checklstring(state, 3, &key_len);
+    if (lua_type(state, 3) != LUA_TSTRING) {
+      return push_and_check_bool(false);
+    }
+    const char* key = lua_tolstring(state, 3, &key_len);
+    if (key == nullptr) {
+      return push_and_check_bool(false);
+    }
     data::ScriptParam value {};
     if (!ParseScriptParam(state, 4, value)) {
-      lua_pushboolean(state, 0);
-      return 1;
+      return push_and_check_bool(false);
     }
-    lua_pushboolean(state,
-      scripting.SetParameter(
-        *slot, std::string_view(key, key_len), std::move(value))
-        ? 1
-        : 0);
-    return 1;
+    return push_and_check_bool(scripting.SetParameter(
+      *slot, std::string_view(key, key_len), std::move(value)));
   }
 
   auto SceneNodeScriptingGetParam(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     if (!node->HasScripting()) {
       lua_pushnil(state);
       return 1;
@@ -315,7 +414,11 @@ namespace {
       return 1;
     }
     size_t key_len = 0;
-    const char* key = luaL_checklstring(state, 3, &key_len);
+    const char* key = lua_tolstring(state, 3, &key_len);
+    if (key == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     const auto value
       = scripting.TryGetParameter(*slot, std::string_view(key, key_len));
     if (!value.has_value()) {
@@ -327,7 +430,11 @@ namespace {
 
   auto SceneNodeScriptingParams(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_newtable(state);
+      return 1;
+    }
     if (!node->HasScripting()) {
       lua_newtable(state);
       return 1;

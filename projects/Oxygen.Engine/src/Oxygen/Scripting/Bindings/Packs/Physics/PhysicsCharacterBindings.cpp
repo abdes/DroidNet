@@ -174,7 +174,11 @@ namespace {
       return 1;
     }
 
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     const auto desc = ParseCharacterDesc(state, 2, *physics_module);
 
     const auto character = physics::ScenePhysics::AttachCharacter(
@@ -193,7 +197,11 @@ namespace {
     if (RejectFixedSimulationWithNil(state, "get")) {
       return 1;
     }
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     auto* physics_module = GetPhysicsModule(state);
     const auto world_id_opt = GetPhysicsWorldId(state);
     if (physics_module == nullptr || !world_id_opt.has_value()) {
@@ -233,8 +241,11 @@ namespace {
     }
 
     const auto* handle = CheckCharacterHandle(state, 1);
-    const auto velocity
-      = CheckVec3(state, 2, "character:move expects velocity vector");
+    Vec3 velocity {};
+    if (!TryCheckVec3(state, 2, velocity)) {
+      luaL_error(state, "character:move expects velocity vector");
+      return 0;
+    }
 
     // Signature: handle:move(velocity, jump_pressed?, dt)
     // jump_pressed is optional; detect by checking if arg 3 is boolean.

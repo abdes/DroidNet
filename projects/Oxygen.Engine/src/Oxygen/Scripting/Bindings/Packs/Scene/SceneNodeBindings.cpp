@@ -51,8 +51,8 @@ namespace {
 
   auto SceneNodeToString(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
-    if (!node->IsAlive()) {
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr || !node->IsAlive()) {
       lua_pushliteral(state, "SceneNode(Invalid)");
       return 1;
     }
@@ -63,22 +63,29 @@ namespace {
 
   auto SceneNodeEq(lua_State* state) -> int
   {
-    auto* n1 = CheckSceneNode(state, 1);
-    auto* n2 = CheckSceneNode(state, 2);
-    lua_pushboolean(state, n1->GetHandle() == n2->GetHandle() ? 1 : 0);
+    auto* n1 = TryCheckSceneNode(state, 1);
+    auto* n2 = TryCheckSceneNode(state, 2);
+    lua_pushboolean(state,
+      (n1 != nullptr && n2 != nullptr && n1->GetHandle() == n2->GetHandle())
+        ? 1
+        : 0);
     return 1;
   }
 
   auto SceneNodeIsAlive(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
-    lua_pushboolean(state, node->IsAlive() ? 1 : 0);
+    auto* node = TryCheckSceneNode(state, 1);
+    lua_pushboolean(state, (node != nullptr && node->IsAlive()) ? 1 : 0);
     return 1;
   }
 
   auto SceneNodeRuntimeId(lua_State* state) -> int
   {
-    const auto* node = CheckSceneNode(state, 1);
+    const auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     const auto& handle = node->GetHandle();
 
     lua_createtable(state, 0, 2);
@@ -91,8 +98,8 @@ namespace {
 
   auto SceneNodeGetName(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
-    if (!node->IsAlive()) {
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr || !node->IsAlive()) {
       lua_pushnil(state);
       return 1;
     }
@@ -103,9 +110,17 @@ namespace {
 
   auto SceneNodeSetName(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     size_t len = 0;
-    const char* name = luaL_checklstring(state, 2, &len);
+    const char* name = lua_tolstring(state, 2, &len);
+    if (name == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     if (!node->IsAlive()) {
       lua_pushboolean(state, 0);
       return 1;
@@ -116,8 +131,8 @@ namespace {
 
   auto SceneNodeGetParent(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
-    if (!node->IsAlive()) {
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr || !node->IsAlive()) {
       lua_pushnil(state);
       return 1;
     }
@@ -140,8 +155,8 @@ namespace {
       return 1;
     }
 
-    auto* node = CheckSceneNode(state, 1);
-    if (!node->IsAlive()) {
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr || !node->IsAlive()) {
       lua_pushboolean(state, 0);
       return 1;
     }
@@ -151,8 +166,8 @@ namespace {
       return 1;
     }
 
-    auto* new_parent = CheckSceneNode(state, 2);
-    if (!new_parent->IsAlive()) {
+    auto* new_parent = TryCheckSceneNode(state, 2);
+    if (new_parent == nullptr || !new_parent->IsAlive()) {
       lua_pushboolean(state, 0);
       return 1;
     }
@@ -176,7 +191,11 @@ namespace {
 
   auto SceneNodeIsRoot(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     // NOLINTNEXTLINE(*-nested-conditional-operator)
     lua_pushboolean(state, node->IsAlive() ? (node->IsRoot() ? 1 : 0) : 0);
     return 1;
@@ -184,7 +203,11 @@ namespace {
 
   auto SceneNodeHasParent(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     // NOLINTNEXTLINE(*-nested-conditional-operator)
     lua_pushboolean(state, node->IsAlive() ? (node->HasParent() ? 1 : 0) : 0);
     return 1;
@@ -192,7 +215,11 @@ namespace {
 
   auto SceneNodeHasChildren(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     // NOLINTNEXTLINE(*-nested-conditional-operator)
     lua_pushboolean(state, node->IsAlive() ? (node->HasChildren() ? 1 : 0) : 0);
     return 1;
@@ -200,7 +227,11 @@ namespace {
 
   auto SceneNodeGetFirstChild(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     if (!node->IsAlive()) {
       lua_pushnil(state);
       return 1;
@@ -215,7 +246,11 @@ namespace {
 
   auto SceneNodeGetNextSibling(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     if (!node->IsAlive()) {
       lua_pushnil(state);
       return 1;
@@ -230,7 +265,11 @@ namespace {
 
   auto SceneNodeGetPrevSibling(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     if (!node->IsAlive()) {
       lua_pushnil(state);
       return 1;
@@ -245,7 +284,11 @@ namespace {
 
   auto SceneNodeGetChildren(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     if (!node->IsAlive()) {
       lua_pushnil(state);
       return 1;
@@ -274,7 +317,11 @@ namespace {
       return 1;
     }
 
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     auto scene_ref = GetScene(state);
     if (!IsNodeInActiveScene(*node, scene_ref)) {
       lua_pushboolean(state, 0);
@@ -286,7 +333,11 @@ namespace {
 
   auto SceneNodeGetLocalPosition(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     const auto v = node->GetTransform().GetLocalPosition();
     if (!v.has_value()) {
       lua_pushnil(state);
@@ -297,15 +348,23 @@ namespace {
 
   auto SceneNodeSetLocalPosition(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
-    const auto v = CheckVec3(state, 2, "set_local_position expects vector");
+    auto* node = TryCheckSceneNode(state, 1);
+    Vec3 v {};
+    if (node == nullptr || !TryCheckVec3(state, 2, v)) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     lua_pushboolean(state, node->GetTransform().SetLocalPosition(v) ? 1 : 0);
     return 1;
   }
 
   auto SceneNodeGetLocalRotation(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     const auto v = node->GetTransform().GetLocalRotation();
     if (!v.has_value()) {
       lua_pushnil(state);
@@ -316,8 +375,12 @@ namespace {
 
   auto SceneNodeSetLocalRotation(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
-    const auto* q = CheckQuat(state, 2);
+    auto* node = TryCheckSceneNode(state, 1);
+    const auto* q = TryCheckQuat(state, 2);
+    if (node == nullptr || q == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     lua_pushboolean(state,
       node->GetTransform().SetLocalRotation(Quat(q->w, q->x, q->y, q->z)) ? 1
                                                                           : 0);
@@ -326,7 +389,11 @@ namespace {
 
   auto SceneNodeGetLocalScale(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     const auto v = node->GetTransform().GetLocalScale();
     if (!v.has_value()) {
       lua_pushnil(state);
@@ -337,20 +404,27 @@ namespace {
 
   auto SceneNodeSetLocalScale(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
-    const auto v = CheckVec3(state, 2, "set_local_scale expects vector");
+    auto* node = TryCheckSceneNode(state, 1);
+    Vec3 v {};
+    if (node == nullptr || !TryCheckVec3(state, 2, v)) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     lua_pushboolean(state, node->GetTransform().SetLocalScale(v) ? 1 : 0);
     return 1;
   }
 
   auto SceneNodeSetLocalTransform(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
-    const auto pos
-      = CheckVec3(state, 2, "set_local_transform expects vec3 pos");
-    const auto* rot = CheckQuat(state, 3);
-    const auto scale
-      = CheckVec3(state, 4, "set_local_transform expects vec3 scale");
+    auto* node = TryCheckSceneNode(state, 1);
+    Vec3 pos {};
+    const auto* rot = TryCheckQuat(state, 3);
+    Vec3 scale {};
+    if (node == nullptr || !TryCheckVec3(state, 2, pos) || rot == nullptr
+      || !TryCheckVec3(state, 4, scale)) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     lua_pushboolean(state,
       node->GetTransform().SetLocalTransform(
         pos, Quat(rot->w, rot->x, rot->y, rot->z), scale)
@@ -361,8 +435,12 @@ namespace {
 
   auto SceneNodeTranslate(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
-    const auto offset = CheckVec3(state, 2, "translate expects offset vector");
+    auto* node = TryCheckSceneNode(state, 1);
+    Vec3 offset {};
+    if (node == nullptr || !TryCheckVec3(state, 2, offset)) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     bool local_space = true;
     if ((lua_gettop(state) >= 3) && lua_isboolean(state, 3)) {
       local_space = lua_toboolean(state, 3) != 0;
@@ -374,8 +452,12 @@ namespace {
 
   auto SceneNodeRotate(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
-    const auto* delta = CheckQuat(state, 2);
+    auto* node = TryCheckSceneNode(state, 1);
+    const auto* delta = TryCheckQuat(state, 2);
+    if (node == nullptr || delta == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     bool local_space = true;
     if ((lua_gettop(state) >= 3) && lua_isboolean(state, 3)) {
       local_space = lua_toboolean(state, 3) != 0;
@@ -390,15 +472,23 @@ namespace {
 
   auto SceneNodeScaleBy(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
-    const auto factor = CheckVec3(state, 2, "scale_by expects vector");
+    auto* node = TryCheckSceneNode(state, 1);
+    Vec3 factor {};
+    if (node == nullptr || !TryCheckVec3(state, 2, factor)) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     lua_pushboolean(state, node->GetTransform().Scale(factor) ? 1 : 0);
     return 1;
   }
 
   auto SceneNodeGetWorldPosition(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     const auto v = node->GetTransform().GetWorldPosition();
     if (!v.has_value()) {
       lua_pushnil(state);
@@ -409,7 +499,11 @@ namespace {
 
   auto SceneNodeGetWorldRotation(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     const auto v = node->GetTransform().GetWorldRotation();
     if (!v.has_value()) {
       lua_pushnil(state);
@@ -420,7 +514,11 @@ namespace {
 
   auto SceneNodeGetWorldScale(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     const auto v = node->GetTransform().GetWorldScale();
     if (!v.has_value()) {
       lua_pushnil(state);
@@ -431,11 +529,18 @@ namespace {
 
   auto SceneNodeLookAt(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
-    const auto target = CheckVec3(state, 2, "look_at expects target vector");
+    auto* node = TryCheckSceneNode(state, 1);
+    Vec3 target {};
+    if (node == nullptr || !TryCheckVec3(state, 2, target)) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     Vec3 up = oxygen::space::look::Up;
     if (lua_gettop(state) >= 3) {
-      up = CheckVec3(state, 3, "look_at expects up vector");
+      if (!TryCheckVec3(state, 3, up)) {
+        lua_pushboolean(state, 0);
+        return 1;
+      }
     }
     lua_pushboolean(state, node->GetTransform().LookAt(target, up) ? 1 : 0);
     return 1;
@@ -509,7 +614,8 @@ namespace {
   {
     const auto* key = lua_tostring(state, 2);
     if (key == nullptr) {
-      luaL_error(state, "SceneNode property key must be a string");
+      LOG_F(
+        WARNING, "SceneNode property assignment rejected: key is not string");
       return 0;
     }
 
@@ -561,11 +667,11 @@ namespace {
       || (key_sv == "camera_component") || (key_sv == "light_component")
       || (key_sv == "renderable_component")
       || (key_sv == "scripting_component")) {
-      luaL_error(state, "SceneNode property '%s' is read-only", key);
+      LOG_F(WARNING, "SceneNode property '{}' is read-only", key);
       return 0;
     }
 
-    luaL_error(state, "Unknown SceneNode property '%s'", key);
+    LOG_F(WARNING, "Unknown SceneNode property '{}'", key);
     return 0;
   }
 } // namespace
@@ -627,10 +733,18 @@ auto RegisterSceneNodeMetatable(lua_State* state) -> void
   lua_pop(state, 1);
 }
 
-auto CheckSceneNode(lua_State* state, const int index) -> scene::SceneNode*
+auto TryCheckSceneNode(lua_State* state, const int index) -> scene::SceneNode*
 {
-  auto* ud = static_cast<SceneNodeUserdata*>(
-    luaL_checkudata(state, index, kSceneNodeMetatable));
+  if (lua_type(state, index) != LUA_TUSERDATA) {
+    return nullptr;
+  }
+  if (lua_userdatatag(state, index) != kTagSceneNode) {
+    return nullptr;
+  }
+  auto* ud = static_cast<SceneNodeUserdata*>(lua_touserdata(state, index));
+  if (ud == nullptr) {
+    return nullptr;
+  }
   return &ud->node;
 }
 
@@ -644,8 +758,8 @@ auto PushSceneNode(lua_State* state, scene::SceneNode node) -> int
     lua_setmetatable(state, -2);
   } else {
     lua_pop(state, 1);
-    luaL_error(state, "SceneNode metatable not found");
-    return 0;
+    lua_pushnil(state);
+    return 1;
   }
   return 1;
 }
@@ -659,14 +773,14 @@ auto GetScene(lua_State* state) -> observer_ptr<scene::Scene>
   return context->GetScene();
 }
 
-auto CheckVec3(lua_State* state, const int index, const char* msg) -> Vec3
+auto TryCheckVec3(lua_State* state, const int index, Vec3& out) -> bool
 {
   if (!lua_isvector(state, index)) {
-    luaL_error(state, "%s", msg);
-    return {};
+    return false;
   }
   const float* v = lua_tovector(state, index);
-  return { v[0], v[1], v[2] }; // NOLINT
+  out = { v[0], v[1], v[2] }; // NOLINT
+  return true;
 }
 
 auto PushVec3(lua_State* state, const Vec3& v) -> int
@@ -675,10 +789,15 @@ auto PushVec3(lua_State* state, const Vec3& v) -> int
   return 1;
 }
 
-auto CheckQuat(lua_State* state, const int index) -> QuatUserdata*
+auto TryCheckQuat(lua_State* state, const int index) -> QuatUserdata*
 {
-  return static_cast<QuatUserdata*>(
-    luaL_checkudata(state, index, kQuatMetatable));
+  if (lua_type(state, index) != LUA_TUSERDATA) {
+    return nullptr;
+  }
+  if (lua_userdatatag(state, index) != kTagQuat) {
+    return nullptr;
+  }
+  return static_cast<QuatUserdata*>(lua_touserdata(state, index));
 }
 
 // NOLINTNEXTLINE(*-easily-swappable-parameters)
@@ -694,8 +813,8 @@ auto PushQuat(lua_State* state, const float x, const float y, const float z,
   luaL_getmetatable(state, kQuatMetatable);
   if (lua_isnil(state, -1) != 0) {
     lua_pop(state, 1);
-    luaL_error(state, "Quat metatable not found");
-    return 0;
+    lua_pushnil(state);
+    return 1;
   }
   lua_setmetatable(state, -2);
   return 1;

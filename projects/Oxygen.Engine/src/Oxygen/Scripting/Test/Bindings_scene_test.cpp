@@ -318,10 +318,15 @@ function on_scene_mutation()
   local resolved_default = node:renderable_resolve_submesh_material(1, 1)
   if resolved_default == nil then error("resolved default material missing") end
 
-  local ok_bool, _ = pcall(function()
-    node:renderable_set_all_submeshes_visible(1)
+  local call_ok_bool, ok_bool = pcall(function()
+    return node:renderable_set_all_submeshes_visible(1)
   end)
-  if ok_bool then error("expected boolean type check for set_all_submeshes_visible") end
+  if not call_ok_bool then
+    error("set_all_submeshes_visible must not throw on invalid type")
+  end
+  if ok_bool then
+    error("expected boolean type check for set_all_submeshes_visible")
+  end
 end
 )lua" },
     .chunk_name = ScriptChunkName { "scene_renderable_marshalling_roundtrip" },
@@ -545,20 +550,18 @@ function on_scene_mutation()
   if not light_node:attach_directional_light({}) then
     error("attach directional light failed")
   end
-  local ok_light, _ = pcall(function()
-    light_node:light_set_affects_world(1)
-  end)
-  if ok_light then error("light_set_affects_world should reject non-boolean") end
+  if light_node:light_set_affects_world(1) ~= false then
+    error("light_set_affects_world should reject non-boolean")
+  end
 
   local camera_node = scene.create_node("CameraHostInvalidArgs", nil)
   if camera_node == nil then error("camera node create failed") end
   if not camera_node:attach_perspective_camera({}) then
     error("attach camera failed")
   end
-  local ok_camera, _ = pcall(function()
-    camera_node:camera_set_perspective(1)
-  end)
-  if ok_camera then error("camera_set_perspective should require table") end
+  if camera_node:camera_set_perspective(1) ~= false then
+    error("camera_set_perspective should require table")
+  end
 
   local script_node = scene.create_node("ScriptHostInvalidArgs", nil)
   if script_node == nil then error("script node create failed") end
@@ -569,8 +572,9 @@ function on_scene_mutation()
   local slot = script_node:scripting_slots()[1]
   if slot == nil then error("slot ref missing") end
 
-  local ok_param = script_node:scripting_set_param(slot, "unsupported", { 1, 2, 3, 4, 5 })
-  if ok_param then error("scripting_set_param should reject unsupported table shape") end
+  if script_node:scripting_set_param(slot, "unsupported", { 1, 2, 3, 4, 5 }) ~= false then
+    error("scripting_set_param should reject unsupported table shape")
+  end
 end
 )lua" },
     .chunk_name = ScriptChunkName { "scene_component_invalid_args" },

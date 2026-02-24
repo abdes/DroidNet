@@ -14,6 +14,7 @@
 #include <lua.h>
 #include <lualib.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
@@ -126,7 +127,10 @@ namespace {
 
   template <typename Fn> auto WithDirectional(lua_State* state, Fn&& fn) -> bool
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      return false;
+    }
     auto light = node->GetLightAs<scene::DirectionalLight>();
     if (!light.has_value()) {
       return false;
@@ -137,7 +141,10 @@ namespace {
 
   template <typename Fn> auto WithPoint(lua_State* state, Fn&& fn) -> bool
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      return false;
+    }
     auto light = node->GetLightAs<scene::PointLight>();
     if (!light.has_value()) {
       return false;
@@ -148,7 +155,10 @@ namespace {
 
   template <typename Fn> auto WithSpot(lua_State* state, Fn&& fn) -> bool
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      return false;
+    }
     auto light = node->GetLightAs<scene::SpotLight>();
     if (!light.has_value()) {
       return false;
@@ -159,7 +169,10 @@ namespace {
 
   template <typename Fn> auto WithAny(lua_State* state, Fn&& fn) -> bool
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      return false;
+    }
 
     if (auto light = node->GetLightAs<scene::DirectionalLight>();
       light.has_value()) {
@@ -246,7 +259,11 @@ namespace {
 
   auto SceneNodeLight(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     if (!node->HasLight()) {
       lua_pushnil(state);
       return 1;
@@ -257,7 +274,11 @@ namespace {
 
   auto SceneNodeAttachDirectionalLight(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     auto light = std::make_unique<scene::DirectionalLight>();
     if (lua_istable(state, 2) != 0) {
       ApplyCommon(state, 2, light->Common());
@@ -282,7 +303,11 @@ namespace {
 
   auto SceneNodeAttachPointLight(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     auto light = std::make_unique<scene::PointLight>();
     if (lua_istable(state, 2) != 0) {
       ApplyCommon(state, 2, light->Common());
@@ -306,7 +331,11 @@ namespace {
 
   auto SceneNodeAttachSpotLight(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     auto light = std::make_unique<scene::SpotLight>();
     if (lua_istable(state, 2) != 0) {
       ApplyCommon(state, 2, light->Common());
@@ -336,21 +365,33 @@ namespace {
 
   auto SceneNodeDetachLight(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     lua_pushboolean(state, node->DetachLight() ? 1 : 0);
     return 1;
   }
 
   auto SceneNodeHasLight(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     lua_pushboolean(state, node->HasLight() ? 1 : 0);
     return 1;
   }
 
   auto SceneNodeLightType(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     if (node->GetLightAs<scene::DirectionalLight>().has_value()) {
       lua_pushliteral(state, "directional");
       return 1;
@@ -380,10 +421,19 @@ namespace {
 
   auto SceneNodeLightSetAffectsWorld(lua_State* state) -> int
   {
-    luaL_checktype(state, 2, LUA_TBOOLEAN);
+    const int entry_top = lua_gettop(state);
+    if (entry_top < 2) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    if (lua_type(state, 2) != LUA_TBOOLEAN) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     const bool v = lua_toboolean(state, 2) != 0;
     lua_pushboolean(state,
       WithAny(state, [v](auto& l) { l.Common().affects_world = v; }) ? 1 : 0);
+    CHECK_F(lua_gettop(state) == entry_top + 1, "stack imbalance");
     return 1;
   }
 
@@ -399,7 +449,11 @@ namespace {
 
   auto SceneNodeLightSetColorRgb(lua_State* state) -> int
   {
-    const auto v = CheckVec3(state, 2, "light_set_color_rgb expects vector");
+    Vec3 v {};
+    if (!TryCheckVec3(state, 2, v)) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     lua_pushboolean(state,
       WithAny(state, [v](auto& l) { l.Common().color_rgb = v; }) ? 1 : 0);
     return 1;
@@ -420,7 +474,11 @@ namespace {
   auto SceneNodeLightSetMobility(lua_State* state) -> int
   {
     size_t len = 0;
-    const char* text = luaL_checklstring(state, 2, &len);
+    const char* text = lua_tolstring(state, 2, &len);
+    if (text == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     scene::LightMobility value {};
     if (!TryParseMobility(std::string_view(text, len), value)) {
       lua_pushboolean(state, 0);
@@ -445,7 +503,10 @@ namespace {
 
   auto SceneNodeLightSetCastsShadows(lua_State* state) -> int
   {
-    luaL_checktype(state, 2, LUA_TBOOLEAN);
+    if (lua_type(state, 2) != LUA_TBOOLEAN) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     const bool v = lua_toboolean(state, 2) != 0;
     lua_pushboolean(state,
       WithAny(state, [v](auto& l) { l.Common().casts_shadows = v; }) ? 1 : 0);
@@ -466,7 +527,11 @@ namespace {
 
   auto SceneNodeLightSetExposureCompensationEv(lua_State* state) -> int
   {
-    const float v = static_cast<float>(luaL_checknumber(state, 2));
+    if (lua_isnumber(state, 2) == 0) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    const float v = static_cast<float>(lua_tonumber(state, 2));
     lua_pushboolean(state,
       WithAny(state, [v](auto& l) { l.Common().exposure_compensation_ev = v; })
         ? 1
@@ -498,7 +563,10 @@ namespace {
 
   auto SceneNodeLightSetShadowSettings(lua_State* state) -> int
   {
-    luaL_checktype(state, 2, LUA_TTABLE);
+    if (lua_type(state, 2) != LUA_TTABLE) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     bool ok = false;
     if (!WithAny(state, [state, &ok](auto& light) {
           auto settings = light.Common().shadow;
@@ -573,7 +641,10 @@ namespace {
 
   auto SceneNodeLightSetCascadedShadows(lua_State* state) -> int
   {
-    luaL_checktype(state, 2, LUA_TTABLE);
+    if (lua_type(state, 2) != LUA_TTABLE) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     bool ok = false;
     if (!WithDirectional(state, [state, &ok](auto& light) {
           auto csm = light.CascadedShadows();
@@ -638,7 +709,11 @@ namespace {
   template <typename Fn>
   auto SetDirectionalFloat(lua_State* state, Fn&& fn) -> int
   {
-    const auto v = static_cast<float>(luaL_checknumber(state, 2));
+    if (lua_isnumber(state, 2) == 0) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    const auto v = static_cast<float>(lua_tonumber(state, 2));
     lua_pushboolean(state,
       WithDirectional(
         state, [v, &fn](auto& l) -> auto { std::forward<Fn>(fn)(l, v); })
@@ -685,7 +760,10 @@ namespace {
 
   auto SceneNodeLightSetEnvironmentContribution(lua_State* state) -> int
   {
-    luaL_checktype(state, 2, LUA_TBOOLEAN);
+    if (lua_type(state, 2) != LUA_TBOOLEAN) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     const bool v = lua_toboolean(state, 2) != 0;
     lua_pushboolean(state,
       WithDirectional(state, [v](auto& l) { l.SetEnvironmentContribution(v); })
@@ -707,7 +785,10 @@ namespace {
 
   auto SceneNodeLightSetIsSunLight(lua_State* state) -> int
   {
-    luaL_checktype(state, 2, LUA_TBOOLEAN);
+    if (lua_type(state, 2) != LUA_TBOOLEAN) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     const bool v = lua_toboolean(state, 2) != 0;
     lua_pushboolean(state,
       WithDirectional(state, [v](auto& l) { l.SetIsSunLight(v); }) ? 1 : 0);
@@ -730,7 +811,11 @@ namespace {
   template <typename Fn>
   auto SetPointOrSpotFloat(lua_State* state, Fn&& fn) -> int
   {
-    const float v = static_cast<float>(luaL_checknumber(state, 2));
+    if (lua_isnumber(state, 2) == 0) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    const float v = static_cast<float>(lua_tonumber(state, 2));
     const bool ok
       = WithPoint(state, [v, &fn](auto& l) { std::forward<Fn>(fn)(l, v); })
       || WithSpot(state, [v, &fn](auto& l) { std::forward<Fn>(fn)(l, v); });
@@ -800,7 +885,11 @@ namespace {
   auto SceneNodeLightSetAttenuationModel(lua_State* state) -> int
   {
     size_t len = 0;
-    const char* text = luaL_checklstring(state, 2, &len);
+    const char* text = lua_tolstring(state, 2, &len);
+    if (text == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     scene::AttenuationModel value {};
     if (!TryParseAttenuationModel(std::string_view(text, len), value)) {
       lua_pushboolean(state, 0);
@@ -826,7 +915,11 @@ namespace {
 
   auto SceneNodeLightSetInnerConeAngleRadians(lua_State* state) -> int
   {
-    const float v = static_cast<float>(luaL_checknumber(state, 2));
+    if (lua_isnumber(state, 2) == 0) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    const float v = static_cast<float>(lua_tonumber(state, 2));
     lua_pushboolean(state,
       WithSpot(state, [v](auto& l) { l.SetInnerConeAngleRadians(v); }) ? 1 : 0);
     return 1;
@@ -845,7 +938,11 @@ namespace {
 
   auto SceneNodeLightSetOuterConeAngleRadians(lua_State* state) -> int
   {
-    const float v = static_cast<float>(luaL_checknumber(state, 2));
+    if (lua_isnumber(state, 2) == 0) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    const float v = static_cast<float>(lua_tonumber(state, 2));
     lua_pushboolean(state,
       WithSpot(state, [v](auto& l) { l.SetOuterConeAngleRadians(v); }) ? 1 : 0);
     return 1;
