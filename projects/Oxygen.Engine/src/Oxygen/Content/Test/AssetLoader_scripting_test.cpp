@@ -577,6 +577,7 @@ NOLINT_TEST_F(AssetLoaderScriptingTest,
 }
 
 // P0.1.4: Refresh graph coherence characterization on loose refresh.
+#if !defined(NDEBUG)
 NOLINT_TEST_F(
   AssetLoaderScriptingTest, LoadAssetLooseRefreshExpectedToClearDependencyGraph)
 {
@@ -594,7 +595,6 @@ NOLINT_TEST_F(
   // not clear dependency graphs in this code path.
   asset_loader_->AddLooseCookedRoot(cooked_root);
 
-#if !defined(NDEBUG)
   size_t dependent_count = 0;
   asset_loader_->ForEachDependent(
     dependency, [&](const oxygen::data::AssetKey&) { ++dependent_count; });
@@ -602,11 +602,15 @@ NOLINT_TEST_F(
   // Desired behavior contract (currently failing): loose refresh should clear
   // dependency edges for replaced mount state.
   EXPECT_EQ(dependent_count, 0U);
-#else
-  GTEST_SKIP() << "Debug-only dependent graph introspection not available in "
-                  "release builds";
-#endif
 }
+#else
+NOLINT_TEST_F(AssetLoaderScriptingTest,
+  DISABLED_LoadAssetLooseRefreshExpectedToClearDependencyGraph)
+{
+  // Debug-only test: requires dependency graph introspection API that is not
+  // part of release builds.
+}
+#endif
 
 NOLINT_TEST_F(AssetLoaderScriptingTest,
   ContentSourceConformanceScriptCapabilitiesExpectedToMatch)
