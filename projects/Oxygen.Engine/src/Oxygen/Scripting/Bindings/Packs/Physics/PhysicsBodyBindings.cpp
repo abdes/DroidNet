@@ -294,7 +294,11 @@ namespace {
       return 1;
     }
 
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     const auto desc = ParseBodyDesc(state, 2, *physics_module);
 
     const auto body = physics::ScenePhysics::AttachRigidBody(
@@ -314,7 +318,11 @@ namespace {
     if (RejectFixedSimulationWithNil(state, "get")) {
       return 1;
     }
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
 
     auto* physics_module = GetPhysicsModule(state);
     const auto world_id_opt = GetPhysicsWorldId(state);
@@ -456,8 +464,11 @@ namespace {
     if (RejectStaticMutation(state, "set_linear_velocity", handle)) {
       return 1;
     }
-    const auto velocity
-      = CheckVec3(state, 2, "set_linear_velocity expects vector");
+    Vec3 velocity {};
+    if (!TryCheckVec3(state, 2, velocity)) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     auto* physics_module = GetPhysicsModule(state);
     if (physics_module == nullptr) {
       lua_pushboolean(state, 0);
@@ -481,8 +492,11 @@ namespace {
     if (RejectStaticMutation(state, "set_angular_velocity", handle)) {
       return 1;
     }
-    const auto velocity
-      = CheckVec3(state, 2, "set_angular_velocity expects vector");
+    Vec3 velocity {};
+    if (!TryCheckVec3(state, 2, velocity)) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     auto* physics_module = GetPhysicsModule(state);
     if (physics_module == nullptr) {
       lua_pushboolean(state, 0);
@@ -506,7 +520,11 @@ namespace {
     if (RejectStaticMutation(state, "add_force", handle)) {
       return 1;
     }
-    const auto force = CheckVec3(state, 2, "add_force expects vector");
+    Vec3 force {};
+    if (!TryCheckVec3(state, 2, force)) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     auto* physics_module = GetPhysicsModule(state);
     if (physics_module == nullptr) {
       lua_pushboolean(state, 0);
@@ -530,7 +548,11 @@ namespace {
     if (RejectStaticMutation(state, "add_impulse", handle)) {
       return 1;
     }
-    const auto impulse = CheckVec3(state, 2, "add_impulse expects vector");
+    Vec3 impulse {};
+    if (!TryCheckVec3(state, 2, impulse)) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     auto* physics_module = GetPhysicsModule(state);
     if (physics_module == nullptr) {
       lua_pushboolean(state, 0);
@@ -554,7 +576,11 @@ namespace {
     if (RejectStaticMutation(state, "add_torque", handle)) {
       return 1;
     }
-    const auto torque = CheckVec3(state, 2, "add_torque expects vector");
+    Vec3 torque {};
+    if (!TryCheckVec3(state, 2, torque)) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     auto* physics_module = GetPhysicsModule(state);
     if (physics_module == nullptr) {
       lua_pushboolean(state, 0);
@@ -584,9 +610,16 @@ namespace {
       return 1;
     }
 
-    const auto target_pos
-      = CheckVec3(state, 2, "move_kinematic expects target position vector");
-    const auto* target_rot = CheckQuat(state, 3);
+    Vec3 target_pos {};
+    if (!TryCheckVec3(state, 2, target_pos)) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    const auto* target_rot = TryCheckQuat(state, 3);
+    if (target_rot == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     const auto dt = static_cast<float>(luaL_checknumber(state, 4));
     if (!std::isfinite(dt) || dt <= 0.0F) {
       luaL_error(state, "move_kinematic dt must be a positive finite number");
@@ -624,11 +657,17 @@ namespace {
     Vec3 local_position { 0.0F, 0.0F, 0.0F };
     Quat local_rotation { 1.0F, 0.0F, 0.0F, 0.0F };
     if (lua_isnoneornil(state, 3) == 0) {
-      local_position
-        = CheckVec3(state, 3, "add_shape local_position must be a vector");
+      if (!TryCheckVec3(state, 3, local_position)) {
+        lua_pushnil(state);
+        return 1;
+      }
     }
     if (lua_isnoneornil(state, 4) == 0) {
-      const auto* q = CheckQuat(state, 4);
+      const auto* q = TryCheckQuat(state, 4);
+      if (q == nullptr) {
+        lua_pushnil(state);
+        return 1;
+      }
       local_rotation = Quat { q->w, q->x, q->y, q->z };
     }
 

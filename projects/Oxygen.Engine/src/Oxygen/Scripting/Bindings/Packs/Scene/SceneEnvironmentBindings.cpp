@@ -27,6 +27,21 @@
 namespace oxygen::scripting::bindings {
 
 namespace {
+  auto HasMetatable(
+    lua_State* state, const int index, const char* metatable_name) -> bool
+  {
+    if (lua_type(state, index) != LUA_TUSERDATA) {
+      return false;
+    }
+    if (lua_getmetatable(state, index) == 0) {
+      return false;
+    }
+    luaL_getmetatable(state, metatable_name);
+    const bool matches = lua_rawequal(state, -1, -2) != 0;
+    lua_pop(state, 2);
+    return matches;
+  }
+
   constexpr const char* kEnvironmentMetatable = "oxygen.scene.environment";
   constexpr const char* kFogSystemMetatable = "oxygen.scene.environment.fog";
   constexpr const char* kSkyAtmosphereMetatable
@@ -69,14 +84,22 @@ namespace {
   auto CheckEnvironment(lua_State* state, const int index)
     -> EnvironmentUserdata*
   {
-    return static_cast<EnvironmentUserdata*>(
-      luaL_checkudata(state, index, kEnvironmentMetatable));
+    static EnvironmentUserdata invalid { .scene_ref = nullptr };
+    if (!HasMetatable(state, index, kEnvironmentMetatable)) {
+      return &invalid;
+    }
+    auto* ud = static_cast<EnvironmentUserdata*>(lua_touserdata(state, index));
+    return ud != nullptr ? ud : &invalid;
   }
 
   auto CheckFogSystem(lua_State* state, const int index) -> FogSystemUserdata*
   {
-    return static_cast<FogSystemUserdata*>(
-      luaL_checkudata(state, index, kFogSystemMetatable));
+    static FogSystemUserdata invalid { .scene_ref = nullptr };
+    if (!HasMetatable(state, index, kFogSystemMetatable)) {
+      return &invalid;
+    }
+    auto* ud = static_cast<FogSystemUserdata*>(lua_touserdata(state, index));
+    return ud != nullptr ? ud : &invalid;
   }
 
   auto ResolveEnvironment(const observer_ptr<scene::Scene> scene_ref)
@@ -149,34 +172,59 @@ namespace {
   auto CheckSkyAtmosphere(lua_State* state, const int index)
     -> SkyAtmosphereUserdata*
   {
-    return static_cast<SkyAtmosphereUserdata*>(
-      luaL_checkudata(state, index, kSkyAtmosphereMetatable));
+    static SkyAtmosphereUserdata invalid { .scene_ref = nullptr };
+    if (!HasMetatable(state, index, kSkyAtmosphereMetatable)) {
+      return &invalid;
+    }
+    auto* ud
+      = static_cast<SkyAtmosphereUserdata*>(lua_touserdata(state, index));
+    return ud != nullptr ? ud : &invalid;
   }
   auto CheckSkyLight(lua_State* state, const int index) -> SkyLightUserdata*
   {
-    return static_cast<SkyLightUserdata*>(
-      luaL_checkudata(state, index, kSkyLightMetatable));
+    static SkyLightUserdata invalid { .scene_ref = nullptr };
+    if (!HasMetatable(state, index, kSkyLightMetatable)) {
+      return &invalid;
+    }
+    auto* ud = static_cast<SkyLightUserdata*>(lua_touserdata(state, index));
+    return ud != nullptr ? ud : &invalid;
   }
   auto CheckSkySphere(lua_State* state, const int index) -> SkySphereUserdata*
   {
-    return static_cast<SkySphereUserdata*>(
-      luaL_checkudata(state, index, kSkySphereMetatable));
+    static SkySphereUserdata invalid { .scene_ref = nullptr };
+    if (!HasMetatable(state, index, kSkySphereMetatable)) {
+      return &invalid;
+    }
+    auto* ud = static_cast<SkySphereUserdata*>(lua_touserdata(state, index));
+    return ud != nullptr ? ud : &invalid;
   }
   auto CheckSun(lua_State* state, const int index) -> SunUserdata*
   {
-    return static_cast<SunUserdata*>(
-      luaL_checkudata(state, index, kSunMetatable));
+    static SunUserdata invalid { .scene_ref = nullptr };
+    if (!HasMetatable(state, index, kSunMetatable)) {
+      return &invalid;
+    }
+    auto* ud = static_cast<SunUserdata*>(lua_touserdata(state, index));
+    return ud != nullptr ? ud : &invalid;
   }
   auto CheckClouds(lua_State* state, const int index) -> CloudsUserdata*
   {
-    return static_cast<CloudsUserdata*>(
-      luaL_checkudata(state, index, kCloudsMetatable));
+    static CloudsUserdata invalid { .scene_ref = nullptr };
+    if (!HasMetatable(state, index, kCloudsMetatable)) {
+      return &invalid;
+    }
+    auto* ud = static_cast<CloudsUserdata*>(lua_touserdata(state, index));
+    return ud != nullptr ? ud : &invalid;
   }
   auto CheckPostProcess(lua_State* state, const int index)
     -> PostProcessUserdata*
   {
-    return static_cast<PostProcessUserdata*>(
-      luaL_checkudata(state, index, kPostProcessMetatable));
+    static PostProcessUserdata invalid { .scene_ref = nullptr };
+    if (!HasMetatable(state, index, kPostProcessMetatable)) {
+      return &invalid;
+    }
+    auto* ud = static_cast<PostProcessUserdata*>(lua_touserdata(state, index));
+    return ud != nullptr ? ud : &invalid;
   }
 
   template <typename UserdataT>
@@ -235,7 +283,11 @@ namespace {
   {
     auto* env_ud = CheckEnvironment(state, 1);
     size_t len = 0;
-    const char* name_ptr = luaL_checklstring(state, 2, &len);
+    const char* name_ptr = lua_tolstring(state, 2, &len);
+    if (name_ptr == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     const std::string_view name(name_ptr, len);
     const auto env = ResolveEnvironment(env_ud->scene_ref);
     if (env == nullptr) {
@@ -284,7 +336,11 @@ namespace {
   {
     auto* env_ud = CheckEnvironment(state, 1);
     size_t len = 0;
-    const char* name_ptr = luaL_checklstring(state, 2, &len);
+    const char* name_ptr = lua_tolstring(state, 2, &len);
+    if (name_ptr == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     const std::string_view name(name_ptr, len);
     const auto env = ResolveEnvironment(env_ud->scene_ref);
     if (env == nullptr) {
@@ -493,7 +549,11 @@ namespace {
   {
     auto* fog_ud = CheckFogSystem(state, 1);
     size_t len = 0;
-    const char* v_ptr = luaL_checklstring(state, 2, &len);
+    const char* v_ptr = lua_tolstring(state, 2, &len);
+    if (v_ptr == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     const std::string_view v(v_ptr, len);
     const auto fog = ResolveFog(fog_ud->scene_ref);
     if (fog == nullptr) {
@@ -534,7 +594,11 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-    const float v = static_cast<float>(luaL_checknumber(state, 2));
+    if (lua_isnumber(state, 2) == 0) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    const float v = static_cast<float>(lua_tonumber(state, 2));
     (fog.get()->*Setter)(v);
     lua_pushboolean(state, 1);
     return 1;
@@ -559,8 +623,11 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-    const auto value
-      = CheckVec3(state, 2, "set_single_scattering_albedo_rgb expects vector");
+    Vec3 value {};
+    if (!TryCheckVec3(state, 2, value)) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     fog->SetSingleScatteringAlbedoRgb(value);
     lua_pushboolean(state, 1);
     return 1;
@@ -614,7 +681,10 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-    luaL_checktype(state, 2, LUA_TTABLE);
+    if (lua_type(state, 2) != LUA_TTABLE) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     float fv = 0.0F;
     bool bv = false;
     Vec3 vv {};
@@ -626,14 +696,16 @@ namespace {
     }
     lua_getfield(state, 2, "ground_albedo_rgb");
     if (lua_isvector(state, -1) != 0) {
-      vv = CheckVec3(state, -1, "ground_albedo_rgb");
-      system->SetGroundAlbedoRgb(vv);
+      if (TryCheckVec3(state, -1, vv)) {
+        system->SetGroundAlbedoRgb(vv);
+      }
     }
     lua_pop(state, 1);
     lua_getfield(state, 2, "rayleigh_scattering_rgb");
     if (lua_isvector(state, -1) != 0) {
-      vv = CheckVec3(state, -1, "rayleigh_scattering_rgb");
-      system->SetRayleighScatteringRgb(vv);
+      if (TryCheckVec3(state, -1, vv)) {
+        system->SetRayleighScatteringRgb(vv);
+      }
     }
     lua_pop(state, 1);
     if (TryGetNumberField(state, 2, "rayleigh_scale_height_meters", fv)) {
@@ -641,8 +713,9 @@ namespace {
     }
     lua_getfield(state, 2, "mie_scattering_rgb");
     if (lua_isvector(state, -1) != 0) {
-      vv = CheckVec3(state, -1, "mie_scattering_rgb");
-      system->SetMieScatteringRgb(vv);
+      if (TryCheckVec3(state, -1, vv)) {
+        system->SetMieScatteringRgb(vv);
+      }
     }
     lua_pop(state, 1);
     if (TryGetNumberField(state, 2, "mie_scale_height_meters", fv)) {
@@ -650,8 +723,9 @@ namespace {
     }
     lua_getfield(state, 2, "mie_absorption_rgb");
     if (lua_isvector(state, -1) != 0) {
-      vv = CheckVec3(state, -1, "mie_absorption_rgb");
-      system->SetMieAbsorptionRgb(vv);
+      if (TryCheckVec3(state, -1, vv)) {
+        system->SetMieAbsorptionRgb(vv);
+      }
     }
     lua_pop(state, 1);
     if (TryGetNumberField(state, 2, "mie_anisotropy", fv)) {
@@ -659,8 +733,9 @@ namespace {
     }
     lua_getfield(state, 2, "ozone_absorption_rgb");
     if (lua_isvector(state, -1) != 0) {
-      vv = CheckVec3(state, -1, "ozone_absorption_rgb");
-      system->SetOzoneAbsorptionRgb(vv);
+      if (TryCheckVec3(state, -1, vv)) {
+        system->SetOzoneAbsorptionRgb(vv);
+      }
     }
     lua_pop(state, 1);
     if (TryGetNumberField(state, 2, "multi_scattering_factor", fv)) {
@@ -716,7 +791,10 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-    luaL_checktype(state, 2, LUA_TTABLE);
+    if (lua_type(state, 2) != LUA_TTABLE) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     lua_getfield(state, 2, "source");
     if (lua_isstring(state, -1) != 0) {
       size_t len = 0;
@@ -740,7 +818,10 @@ namespace {
     }
     lua_getfield(state, 2, "tint_rgb");
     if (lua_isvector(state, -1) != 0) {
-      system->SetTintRgb(CheckVec3(state, -1, "tint_rgb"));
+      Vec3 tint {};
+      if (TryCheckVec3(state, -1, tint)) {
+        system->SetTintRgb(tint);
+      }
     }
     lua_pop(state, 1);
     if (TryGetNumberField(state, 2, "diffuse_intensity", fv)) {
@@ -790,7 +871,10 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-    luaL_checktype(state, 2, LUA_TTABLE);
+    if (lua_type(state, 2) != LUA_TTABLE) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     lua_getfield(state, 2, "source");
     if (lua_isstring(state, -1) != 0) {
       size_t len = 0;
@@ -809,7 +893,10 @@ namespace {
     }
     lua_getfield(state, 2, "solid_color_rgb");
     if (lua_isvector(state, -1) != 0) {
-      system->SetSolidColorRgb(CheckVec3(state, -1, "solid_color_rgb"));
+      Vec3 color {};
+      if (TryCheckVec3(state, -1, color)) {
+        system->SetSolidColorRgb(color);
+      }
     }
     lua_pop(state, 1);
     float fv = 0.0F;
@@ -821,7 +908,10 @@ namespace {
     }
     lua_getfield(state, 2, "tint_rgb");
     if (lua_isvector(state, -1) != 0) {
-      system->SetTintRgb(CheckVec3(state, -1, "tint_rgb"));
+      Vec3 tint {};
+      if (TryCheckVec3(state, -1, tint)) {
+        system->SetTintRgb(tint);
+      }
     }
     lua_pop(state, 1);
     lua_pushboolean(state, 1);
@@ -872,7 +962,10 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-    luaL_checktype(state, 2, LUA_TTABLE);
+    if (lua_type(state, 2) != LUA_TTABLE) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     lua_getfield(state, 2, "source");
     if (lua_isstring(state, -1) != 0) {
       size_t len = 0;
@@ -887,7 +980,10 @@ namespace {
     lua_pop(state, 1);
     lua_getfield(state, 2, "direction_ws");
     if (lua_isvector(state, -1) != 0) {
-      system->SetDirectionWs(CheckVec3(state, -1, "direction_ws"));
+      Vec3 direction {};
+      if (TryCheckVec3(state, -1, direction)) {
+        system->SetDirectionWs(direction);
+      }
     }
     lua_pop(state, 1);
     float azimuth = 0.0F;
@@ -901,7 +997,10 @@ namespace {
     }
     lua_getfield(state, 2, "color_rgb");
     if (lua_isvector(state, -1) != 0) {
-      system->SetColorRgb(CheckVec3(state, -1, "color_rgb"));
+      Vec3 color {};
+      if (TryCheckVec3(state, -1, color)) {
+        system->SetColorRgb(color);
+      }
     }
     lua_pop(state, 1);
     float fv = 0.0F;
@@ -965,7 +1064,10 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-    luaL_checktype(state, 2, LUA_TTABLE);
+    if (lua_type(state, 2) != LUA_TTABLE) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     float fv = 0.0F;
     if (TryGetNumberField(state, 2, "base_altitude_meters", fv)) {
       system->SetBaseAltitudeMeters(fv);
@@ -981,8 +1083,10 @@ namespace {
     }
     lua_getfield(state, 2, "single_scattering_albedo_rgb");
     if (lua_isvector(state, -1) != 0) {
-      system->SetSingleScatteringAlbedoRgb(
-        CheckVec3(state, -1, "single_scattering_albedo_rgb"));
+      Vec3 albedo {};
+      if (TryCheckVec3(state, -1, albedo)) {
+        system->SetSingleScatteringAlbedoRgb(albedo);
+      }
     }
     lua_pop(state, 1);
     if (TryGetNumberField(state, 2, "phase_anisotropy", fv)) {
@@ -990,7 +1094,10 @@ namespace {
     }
     lua_getfield(state, 2, "wind_direction_ws");
     if (lua_isvector(state, -1) != 0) {
-      system->SetWindDirectionWs(CheckVec3(state, -1, "wind_direction_ws"));
+      Vec3 wind {};
+      if (TryCheckVec3(state, -1, wind)) {
+        system->SetWindDirectionWs(wind);
+      }
     }
     lua_pop(state, 1);
     if (TryGetNumberField(state, 2, "wind_speed_mps", fv)) {
@@ -1095,7 +1202,10 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-    luaL_checktype(state, 2, LUA_TTABLE);
+    if (lua_type(state, 2) != LUA_TTABLE) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     lua_getfield(state, 2, "tone_mapper");
     if (lua_isstring(state, -1) != 0) {
       size_t len = 0;

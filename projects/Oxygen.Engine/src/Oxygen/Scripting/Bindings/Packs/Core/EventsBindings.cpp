@@ -17,6 +17,7 @@
 #include <lua.h>
 #include <lualib.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
 
@@ -84,6 +85,30 @@ namespace {
 
     std::vector<QueuedEvent> queue;
     std::unordered_map<std::string, EventStats> stats_by_event;
+  };
+
+  class ScopedLuaStackTop final {
+  public:
+    explicit ScopedLuaStackTop(lua_State* state) noexcept
+      : state_(state)
+      , top_(state != nullptr ? lua_gettop(state) : 0)
+    {
+    }
+
+    ~ScopedLuaStackTop()
+    {
+      if (state_ != nullptr) {
+        const int current_top = lua_gettop(state_);
+        CHECK_F(current_top == top_,
+          "lua stack imbalance in Events.InvokeListener: entry_top={} "
+          "exit_top={}",
+          top_, current_top);
+      }
+    }
+
+  private:
+    lua_State* state_ { nullptr };
+    int top_ { 0 };
   };
 
   auto IsValidLuaRef(const int ref) noexcept -> bool { return ref >= 0; }
@@ -499,9 +524,9 @@ namespace {
   auto InvokeListener(lua_State* state, const EventListener& listener,
     const int payload_ref, std::string& out_error) -> bool
   {
+    const ScopedLuaStackTop stack_guard(state);
     lua_getref(state, listener.callback_ref);
     if (!lua_isfunction(state, -1)) {
-      lua_pop(state, 1);
       out_error = "event callback is not callable";
       return false;
     }
@@ -518,13 +543,15 @@ namespace {
     }
 
     const auto status = lua_pcall(state, 1, kLuaNoResults, traceback_index);
+    CHECK_F(status != LUA_ERRERR,
+      "lua_pcall returned LUA_ERRERR in Events.InvokeListener");
     if (status != LUA_OK) {
       out_error = LuaToString(state, -1);
-      lua_pop(state, 2); // error + traceback
+      lua_pop(state, 1); // error object
+      lua_remove(state, traceback_index);
       return false;
     }
-
-    lua_remove(state, traceback_index); // traceback
+    lua_remove(state, traceback_index);
     return true;
   }
 } // namespace

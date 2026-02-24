@@ -247,7 +247,10 @@ namespace {
   auto ReadPositiveLuaIndex(lua_State* state, const int index)
     -> std::optional<std::size_t>
   {
-    const auto value = luaL_checkinteger(state, index);
+    if (lua_isnumber(state, index) == 0) {
+      return std::nullopt;
+    }
+    const auto value = lua_tointeger(state, index);
     if (value < 1) {
       return std::nullopt;
     }
@@ -267,7 +270,11 @@ namespace {
 
   auto SceneNodeRenderable(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     if (!node->GetRenderable().HasGeometry()) {
       lua_pushnil(state);
       return 1;
@@ -278,7 +285,11 @@ namespace {
 
   auto SceneNodeHasRenderable(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     lua_pushboolean(state, node->GetRenderable().HasGeometry() ? 1 : 0);
     return 1;
   }
@@ -290,7 +301,11 @@ namespace {
 
   auto SceneNodeRenderableDetach(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     const auto handle = node->GetHandle();
     const auto node_name = node->GetName();
     const bool ok = node->GetRenderable().Detach();
@@ -304,10 +319,18 @@ namespace {
 
   auto SceneNodeRenderableSetGeometry(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     if (lua_type(state, 2) == LUA_TSTRING) {
       size_t len = 0;
-      const char* token_raw = luaL_checklstring(state, 2, &len);
+      const char* token_raw = lua_tolstring(state, 2, &len);
+      if (token_raw == nullptr) {
+        lua_pushboolean(state, 0);
+        return 1;
+      }
       const std::string token(token_raw, len);
       auto geometry = GetOrCreateGeometryByToken(token);
       node->GetRenderable().SetGeometry(std::move(geometry));
@@ -347,7 +370,11 @@ namespace {
 
   auto SceneNodeRenderableGetGeometry(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     const auto geometry = node->GetRenderable().GetGeometry();
     if (!geometry) {
       lua_pushnil(state);
@@ -363,7 +390,11 @@ namespace {
 
   auto SceneNodeRenderableGetLodPolicy(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     const auto renderable = node->GetRenderable();
     if (!renderable.HasGeometry()) {
       lua_pushnil(state);
@@ -386,17 +417,29 @@ namespace {
 
   auto SceneNodeRenderableSetLodPolicy(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     auto renderable = node->GetRenderable();
     if (!renderable.HasGeometry()) {
       lua_pushboolean(state, 0);
       return 1;
     }
 
-    luaL_checktype(state, 2, LUA_TTABLE);
+    if (lua_type(state, 2) != LUA_TTABLE) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     lua_getfield(state, 2, "kind");
     size_t len = 0;
-    const char* kind = luaL_checklstring(state, -1, &len);
+    const char* kind = lua_tolstring(state, -1, &len);
+    if (kind == nullptr) {
+      lua_pop(state, 1);
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     const auto kind_sv = std::string_view(kind, len);
     lua_pop(state, 1);
 
@@ -481,7 +524,11 @@ namespace {
 
   auto SceneNodeRenderableGetActiveLodIndex(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     if (const auto index = node->GetRenderable().GetActiveLodIndex();
       index.has_value()) {
       lua_pushinteger(state, static_cast<lua_Integer>(*index + 1));
@@ -493,7 +540,11 @@ namespace {
 
   auto SceneNodeRenderableGetEffectiveLodCount(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushinteger(state, 0);
+      return 1;
+    }
     lua_pushinteger(state,
       static_cast<lua_Integer>(node->GetRenderable().EffectiveLodCount()));
     return 1;
@@ -501,7 +552,11 @@ namespace {
 
   auto SceneNodeRenderableIsSubmeshVisible(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     const auto lod = ReadPositiveLuaIndex(state, 2);
     const auto submesh = ReadPositiveLuaIndex(state, 3);
     if (!lod.has_value() || !submesh.has_value()) {
@@ -515,10 +570,17 @@ namespace {
 
   auto SceneNodeRenderableSetSubmeshVisible(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     const auto lod = ReadPositiveLuaIndex(state, 2);
     const auto submesh = ReadPositiveLuaIndex(state, 3);
-    luaL_checktype(state, 4, LUA_TBOOLEAN);
+    if (lua_type(state, 4) != LUA_TBOOLEAN) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     const bool visible = lua_toboolean(state, 4) != 0;
     if (!lod.has_value() || !submesh.has_value()) {
       lua_pushboolean(state, 0);
@@ -531,8 +593,15 @@ namespace {
 
   auto SceneNodeRenderableSetAllSubmeshesVisible(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
-    luaL_checktype(state, 2, LUA_TBOOLEAN);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    if (lua_type(state, 2) != LUA_TBOOLEAN) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     const bool visible = lua_toboolean(state, 2) != 0;
     node->GetRenderable().SetAllSubmeshesVisible(visible);
     lua_pushboolean(state, 1);
@@ -541,7 +610,11 @@ namespace {
 
   auto SceneNodeRenderableSetMaterialOverride(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     const auto lod = ReadPositiveLuaIndex(state, 2);
     const auto submesh = ReadPositiveLuaIndex(state, 3);
     if (!lod.has_value() || !submesh.has_value()) {
@@ -557,7 +630,11 @@ namespace {
 
     if (lua_type(state, 4) == LUA_TSTRING) {
       size_t len = 0;
-      const char* token_raw = luaL_checklstring(state, 4, &len);
+      const char* token_raw = lua_tolstring(state, 4, &len);
+      if (token_raw == nullptr) {
+        lua_pushboolean(state, 0);
+        return 1;
+      }
       const std::string token(token_raw, len);
       auto material = GetOrCreateMaterialByToken(token);
       node->GetRenderable().SetMaterialOverride(
@@ -585,7 +662,11 @@ namespace {
 
   auto SceneNodeRenderableClearMaterialOverride(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     const auto lod = ReadPositiveLuaIndex(state, 2);
     const auto submesh = ReadPositiveLuaIndex(state, 3);
     if (!lod.has_value() || !submesh.has_value()) {
@@ -599,7 +680,11 @@ namespace {
 
   auto SceneNodeRenderableResolveSubmeshMaterial(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     const auto lod = ReadPositiveLuaIndex(state, 2);
     const auto submesh = ReadPositiveLuaIndex(state, 3);
     if (!lod.has_value() || !submesh.has_value()) {
@@ -622,7 +707,11 @@ namespace {
 
   auto SceneNodeRenderableGetWorldBoundingSphere(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     const auto sphere = node->GetRenderable().GetWorldBoundingSphere();
     lua_createtable(state, 0, 4);
     lua_pushnumber(state, sphere.x);
@@ -638,7 +727,11 @@ namespace {
 
   auto SceneNodeRenderableGetWorldSubmeshAabb(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     const auto submesh = ReadPositiveLuaIndex(state, 2);
     if (!submesh.has_value()) {
       lua_pushnil(state);

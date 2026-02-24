@@ -46,10 +46,7 @@ namespace {
   constexpr int kLuaStackTop = -1;
   constexpr int kLuaStackSecondTop = -2;
   constexpr int kLuaSingleValueCount = 1;
-  constexpr int kLuaErrorAndTracebackCount = 2;
-  constexpr int kLuaEnvironmentAndErrorCount = 2;
 
-  constexpr const char* kLuaTracebackFnName = "LuaTraceback";
   constexpr int kLuaNoRef = -1;
   constexpr std::string_view kCVarScriptingInputBridgeLogs
     = "scrp.input_bridge_logs";
@@ -83,13 +80,34 @@ namespace {
     observer_ptr<engine::FrameContext> previous_;
   };
 
-  auto LuaTraceback(lua_State* state) -> int
-  {
-    constexpr int kMessageIndex = 1;
-    const auto* message = lua_tostring(state, kMessageIndex);
-    luaL_traceback(state, state, message, kMessageIndex);
-    return kMessageIndex;
-  }
+  class ScopedLuaStackTop final {
+  public:
+    explicit ScopedLuaStackTop(
+      lua_State* state, const char* scope_name) noexcept
+      : state_(state)
+      , top_(state != nullptr ? lua_gettop(state) : 0)
+      , scope_name_(scope_name)
+    {
+    }
+
+    ~ScopedLuaStackTop()
+    {
+      if (state_ != nullptr) {
+        const int current_top = lua_gettop(state_);
+        CHECK_F(current_top == top_,
+          "lua stack imbalance in {}: entry_top={} exit_top={}", scope_name_,
+          top_, current_top);
+      }
+    }
+
+    OXYGEN_MAKE_NON_COPYABLE(ScopedLuaStackTop)
+    OXYGEN_DEFAULT_MOVABLE(ScopedLuaStackTop)
+
+  private:
+    lua_State* state_ { nullptr };
+    int top_ { 0 };
+    const char* scope_name_ { "unknown_scope" };
+  };
 
   auto LuaToString(lua_State* state, int index) -> std::string
   {
@@ -97,6 +115,17 @@ namespace {
       return text;
     }
     return "unknown lua error";
+  }
+
+  auto BuildLuaErrorWithTraceback(lua_State* state) -> std::string
+  {
+    // Preserve original error text when available, then append traceback
+    // without relying on lua_pcall message handlers.
+    std::string message = LuaToString(state, kLuaStackTop);
+    luaL_traceback(state, state, message.c_str(), 1);
+    auto with_traceback = LuaToString(state, kLuaStackTop);
+    lua_pop(state, 1); // traceback string
+    return with_traceback;
   }
 
   auto OkResult() -> ScriptExecutionResult
@@ -119,6 +148,16 @@ namespace {
   }
 
   auto IsValidLuaRef(const int ref) noexcept -> bool { return ref >= 0; }
+
+  auto CreateRefPreserveStack(lua_State* state, const int index) -> int
+  {
+    const int top = lua_gettop(state);
+    const int abs_index = lua_absindex(state, index);
+    lua_pushvalue(state, abs_index);
+    const int ref = lua_ref(state, kLuaStackTop);
+    lua_settop(state, top);
+    return ref;
+  }
 
   auto TryGetHookFunction(lua_State* state, std::string_view hook_name) -> bool
   {
@@ -231,6 +270,9 @@ ScriptingModule::~ScriptingModule() { OnShutdown(); }
 auto ScriptingModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept
   -> bool
 {
+  // TODO(engine-tests): Uncomment CHECK_NOTNULL_F(engine) after the test engine
+  // dummy is ready and scripting tests no longer attach with null engine.
+  // CHECK_NOTNULL_F(engine);
   engine_ = engine;
   if (engine_ != nullptr) {
     (void)engine_->GetScriptCompilationService().RegisterCompiler(
@@ -640,6 +682,7 @@ auto ScriptingModule::ExecuteScript(const ScriptExecutionRequest& request)
     return ErrorResult(
       "runtime", "cannot execute script: luau module is not attached");
   }
+  const ScopedLuaStackTop stack_guard(lua_state_, "ExecuteScript(request)");
 
   const Luau::CompileOptions options {
     .optimizationLevel = 1,
@@ -662,18 +705,15 @@ auto ScriptingModule::ExecuteScript(const ScriptExecutionRequest& request)
   lua_remove(lua_state_, env_index); // remove global_env
   // stack now contains only the loaded chunk
 
-  lua_pushcfunction(lua_state_, LuaTraceback, kLuaTracebackFnName);
-  const auto chunk_index = lua_gettop(lua_state_) - 1;
-  lua_insert(lua_state_, chunk_index); // [ ... traceback, chunk ]
-  const auto call_status
-    = lua_pcall(lua_state_, kLuaNoArgs, kLuaNoResults, chunk_index);
+  const auto call_status = lua_pcall(lua_state_, kLuaNoArgs, kLuaNoResults, 0);
+  CHECK_F(call_status != LUA_ERRERR,
+    "lua_pcall returned LUA_ERRERR in ExecuteScript(request)");
   if (call_status != LUA_OK) {
-    const auto error_message = LuaToString(lua_state_, kLuaStackTop);
+    const auto error_message = BuildLuaErrorWithTraceback(lua_state_);
     LOG_F(ERROR, "ExecuteScript failed at runtime: {}", error_message);
-    lua_pop(lua_state_, kLuaErrorAndTracebackCount); // error + traceback
+    lua_pop(lua_state_, 1); // original error object
     return ErrorResult("runtime", error_message);
   }
-  lua_pop(lua_state_, kLuaSingleValueCount); // traceback
 
   return OkResult();
 }
@@ -823,17 +863,36 @@ auto ScriptingModule::InvokePhaseHook(const std::string_view hook_name,
   if (lua_state_ == nullptr) {
     return ErrorResult("runtime", "lua state is null");
   }
+  const ScopedLuaStackTop stack_guard(lua_state_, "InvokePhaseHook");
+  const int hook_entry_top = lua_gettop(lua_state_);
 
-  if (!TryGetHookFunctionFromEnvironment(lua_state_, global_env_ref_, hook_name)
-    && !TryGetHookFunction(lua_state_, hook_name)) {
-    return OkResult();
+  const bool found_env_hook
+    = TryGetHookFunctionFromEnvironment(lua_state_, global_env_ref_, hook_name);
+  if (found_env_hook) {
+    CHECK_F(lua_gettop(lua_state_) == hook_entry_top + 1,
+      "InvokePhaseHook stack contract violated after env hook lookup "
+      "(hook={}, entry_top={}, current_top={})",
+      hook_name, hook_entry_top, lua_gettop(lua_state_));
+  } else {
+    CHECK_F(lua_gettop(lua_state_) == hook_entry_top,
+      "InvokePhaseHook stack contract violated after env miss "
+      "(hook={}, entry_top={}, current_top={})",
+      hook_name, hook_entry_top, lua_gettop(lua_state_));
+
+    const bool found_global_hook = TryGetHookFunction(lua_state_, hook_name);
+    if (!found_global_hook) {
+      CHECK_F(lua_gettop(lua_state_) == hook_entry_top,
+        "InvokePhaseHook stack contract violated after global miss "
+        "(hook={}, entry_top={}, current_top={})",
+        hook_name, hook_entry_top, lua_gettop(lua_state_));
+      return OkResult();
+    }
+    CHECK_F(lua_gettop(lua_state_) == hook_entry_top + 1,
+      "InvokePhaseHook stack contract violated after global hook lookup "
+      "(hook={}, entry_top={}, current_top={})",
+      hook_name, hook_entry_top, lua_gettop(lua_state_));
   }
   const ScopedActiveFrameContext active_context(lua_state_, context);
-
-  // Push traceback before pushing arguments to ensure safe relative indexing
-  lua_pushcfunction(lua_state_, LuaTraceback, kLuaTracebackFnName);
-  lua_insert(lua_state_, -2); // [ traceback, fn ]
-  const int traceback_index = lua_gettop(lua_state_) - 1;
 
   int arg_count = 0;
   if (context != nullptr) {
@@ -853,14 +912,29 @@ auto ScriptingModule::InvokePhaseHook(const std::string_view hook_name,
     }
   }
 
-  const auto call_status
-    = lua_pcall(lua_state_, arg_count, kLuaNoResults, traceback_index);
+  CHECK_F(lua_gettop(lua_state_) == hook_entry_top + 1 + arg_count,
+    "InvokePhaseHook pre-pcall stack mismatch (hook={}, entry_top={}, "
+    "arg_count={}, current_top={})",
+    hook_name, hook_entry_top, arg_count, lua_gettop(lua_state_));
+
+  const auto call_status = lua_pcall(lua_state_, arg_count, kLuaNoResults, 0);
+  CHECK_F(call_status != LUA_ERRERR,
+    "lua_pcall returned LUA_ERRERR in InvokePhaseHook(hook={})", hook_name);
   if (call_status != LUA_OK) {
-    const auto error_message = LuaToString(lua_state_, kLuaStackTop);
-    lua_pop(lua_state_, 2); // error + traceback
+    CHECK_F(lua_gettop(lua_state_) >= hook_entry_top + 1,
+      "InvokePhaseHook error stack missing error object (hook={}, "
+      "entry_top={}, "
+      "current_top={})",
+      hook_name, hook_entry_top, lua_gettop(lua_state_));
+    const auto error_message = BuildLuaErrorWithTraceback(lua_state_);
+    lua_pop(lua_state_, 1); // original error object
     return ErrorResult("phase_hook", error_message);
   }
-  lua_remove(lua_state_, traceback_index); // traceback
+
+  CHECK_F(lua_gettop(lua_state_) == hook_entry_top,
+    "InvokePhaseHook post-pcall stack mismatch (hook={}, entry_top={}, "
+    "current_top={})",
+    hook_name, hook_entry_top, lua_gettop(lua_state_));
 
   return OkResult();
 }
@@ -1160,6 +1234,7 @@ auto ScriptingModule::ExecuteSlotGameplay(const SlotRuntimeKey& key,
   const observer_ptr<engine::FrameContext> context, const float dt_seconds)
   -> ScriptExecutionResult
 {
+  const ScopedLuaStackTop stack_guard(lua_state_, "ExecuteSlotGameplay");
   const ScopedActiveFrameContext active_context(lua_state_, context);
 
   if (runtime_state.failed_initialization) {
@@ -1185,26 +1260,20 @@ auto ScriptingModule::ExecuteSlotGameplay(const SlotRuntimeKey& key,
       "slot_binding", "on_gameplay entry point is not callable");
   }
 
-  // Push traceback before args
-  lua_pushcfunction(lua_state_, LuaTraceback, kLuaTracebackFnName);
-  lua_insert(lua_state_, -2); // [ traceback, fn ]
-  const int traceback_index = lua_gettop(lua_state_) - 1;
-
   bindings::LuaSlotExecutionContext invocation_context {
     .node_handle = node.GetHandle(), .slot = &slot
   };
   bindings::PushScriptContext(lua_state_, &invocation_context, dt_seconds);
   lua_pushnumber(lua_state_, dt_seconds);
 
-  const auto call_status
-    = lua_pcall(lua_state_, 2, kLuaNoResults, traceback_index);
+  const auto call_status = lua_pcall(lua_state_, 2, kLuaNoResults, 0);
+  CHECK_F(call_status != LUA_ERRERR,
+    "lua_pcall returned LUA_ERRERR in ExecuteSlotGameplay");
   if (call_status != LUA_OK) {
-    const auto error_message = LuaToString(lua_state_, kLuaStackTop);
-    lua_pop(lua_state_, 2); // error + traceback
+    const auto error_message = BuildLuaErrorWithTraceback(lua_state_);
+    lua_pop(lua_state_, 1); // original error object
     return ErrorResult("slot_runtime", error_message);
   }
-
-  lua_remove(lua_state_, traceback_index); // traceback
   return OkResult();
 }
 
@@ -1214,6 +1283,7 @@ auto ScriptingModule::ExecuteSlotSceneMutation(const SlotRuntimeKey& key,
   const observer_ptr<engine::FrameContext> context, const float dt_seconds)
   -> ScriptExecutionResult
 {
+  const ScopedLuaStackTop stack_guard(lua_state_, "ExecuteSlotSceneMutation");
   const ScopedActiveFrameContext active_context(lua_state_, context);
 
   if (runtime_state.failed_initialization) {
@@ -1239,26 +1309,20 @@ auto ScriptingModule::ExecuteSlotSceneMutation(const SlotRuntimeKey& key,
       "slot_binding", "on_scene_mutation entry point is not callable");
   }
 
-  // Push traceback before args
-  lua_pushcfunction(lua_state_, LuaTraceback, kLuaTracebackFnName);
-  lua_insert(lua_state_, -2); // [ traceback, fn ]
-  const int traceback_index = lua_gettop(lua_state_) - 1;
-
   bindings::LuaSlotExecutionContext invocation_context {
     .node_handle = node.GetHandle(), .slot = &slot
   };
   bindings::PushScriptContext(lua_state_, &invocation_context, dt_seconds);
   lua_pushnumber(lua_state_, dt_seconds);
 
-  const auto call_status
-    = lua_pcall(lua_state_, 2, kLuaNoResults, traceback_index);
+  const auto call_status = lua_pcall(lua_state_, 2, kLuaNoResults, 0);
+  CHECK_F(call_status != LUA_ERRERR,
+    "lua_pcall returned LUA_ERRERR in ExecuteSlotSceneMutation");
   if (call_status != LUA_OK) {
-    const auto error_message = LuaToString(lua_state_, kLuaStackTop);
-    lua_pop(lua_state_, 2); // error + traceback
+    const auto error_message = BuildLuaErrorWithTraceback(lua_state_);
+    lua_pop(lua_state_, 1); // original error object
     return ErrorResult("slot_runtime", error_message);
   }
-
-  lua_remove(lua_state_, traceback_index); // traceback
   return OkResult();
 }
 
@@ -1269,6 +1333,7 @@ auto ScriptingModule::RebuildSlotRuntime(const SlotRuntimeKey& key,
   if (lua_state_ == nullptr) {
     return ErrorResult("runtime", "lua state is null");
   }
+  const ScopedLuaStackTop stack_guard(lua_state_, "RebuildSlotRuntime");
 
   DestroySlotRuntime(state);
   state.executable = slot.Executable();
@@ -1301,29 +1366,27 @@ auto ScriptingModule::RebuildSlotRuntime(const SlotRuntimeKey& key,
     reinterpret_cast<const char*>(bytecode.data()), bytecode.size(), env_index);
   if (load_status != LUA_OK) {
     const auto error_message = LuaToString(lua_state_, kLuaStackTop);
-    lua_pop(lua_state_, kLuaEnvironmentAndErrorCount); // error + env
+    lua_settop(lua_state_, env_index - 1); // drop env and load error
     state.failed_initialization = true;
     state.initialization_error = error_message;
     return ErrorResult("slot_load", error_message);
   }
   lua_remove(lua_state_, env_index); // keep chunk only
 
-  lua_pushcfunction(lua_state_, LuaTraceback, kLuaTracebackFnName);
-  const auto chunk_index = lua_gettop(lua_state_) - 1;
-  lua_insert(lua_state_, chunk_index); // [ traceback, chunk ]
-  const auto call_status = lua_pcall(lua_state_, kLuaNoArgs, 1, chunk_index);
+  const auto call_status = lua_pcall(lua_state_, kLuaNoArgs, 1, 0);
+  CHECK_F(call_status != LUA_ERRERR,
+    "lua_pcall returned LUA_ERRERR in RebuildSlotRuntime");
   if (call_status != LUA_OK) {
-    const auto error_message = LuaToString(lua_state_, kLuaStackTop);
-    lua_pop(lua_state_, kLuaErrorAndTracebackCount); // error + traceback
+    const auto error_message = BuildLuaErrorWithTraceback(lua_state_);
+    lua_pop(lua_state_, 1); // original error object
     state.failed_initialization = true;
     state.initialization_error = error_message;
     return ErrorResult("slot_runtime", error_message);
   }
 
-  lua_remove(lua_state_, -2); // remove traceback, keep return value
-
   if (lua_isfunction(lua_state_, kLuaStackTop)) {
-    state.on_gameplay_ref = lua_ref(lua_state_, kLuaStackTop); // pops function
+    state.on_gameplay_ref = CreateRefPreserveStack(lua_state_, kLuaStackTop);
+    lua_pop(lua_state_, kLuaSingleValueCount); // function
     state.on_scene_mutation_ref = kLuaNoRef;
     state.module_ref = kLuaNoRef;
     return OkResult();
@@ -1331,7 +1394,8 @@ auto ScriptingModule::RebuildSlotRuntime(const SlotRuntimeKey& key,
 
   if (lua_istable(lua_state_, kLuaStackTop)) {
     const auto value_index = lua_gettop(lua_state_);
-    state.module_ref = lua_ref(lua_state_, value_index); // pops table
+    state.module_ref = CreateRefPreserveStack(lua_state_, value_index);
+    lua_pop(lua_state_, kLuaSingleValueCount); // returned module table
     if (!IsValidLuaRef(state.module_ref)) {
       state.failed_initialization = true;
       state.initialization_error = "script returned nil module table";
@@ -1349,8 +1413,8 @@ auto ScriptingModule::RebuildSlotRuntime(const SlotRuntimeKey& key,
 
     lua_getfield(lua_state_, module_table_index, "on_gameplay");
     if (lua_isfunction(lua_state_, kLuaStackTop)) {
-      state.on_gameplay_ref
-        = lua_ref(lua_state_, kLuaStackTop); // pops function
+      state.on_gameplay_ref = CreateRefPreserveStack(lua_state_, kLuaStackTop);
+      lua_pop(lua_state_, kLuaSingleValueCount); // function
     } else {
       lua_pop(lua_state_, kLuaSingleValueCount); // non-function
       state.on_gameplay_ref = kLuaNoRef;
@@ -1359,7 +1423,8 @@ auto ScriptingModule::RebuildSlotRuntime(const SlotRuntimeKey& key,
     lua_getfield(lua_state_, module_table_index, "on_scene_mutation");
     if (lua_isfunction(lua_state_, kLuaStackTop)) {
       state.on_scene_mutation_ref
-        = lua_ref(lua_state_, kLuaStackTop); // pops function
+        = CreateRefPreserveStack(lua_state_, kLuaStackTop);
+      lua_pop(lua_state_, kLuaSingleValueCount); // function
     } else {
       lua_pop(lua_state_, kLuaSingleValueCount); // non-function
       state.on_scene_mutation_ref = kLuaNoRef;
@@ -1401,7 +1466,7 @@ auto ScriptingModule::InitializeInstanceEnvironment(SlotRuntimeState& state)
 
   lua_setmetatable(lua_state_, -2);
 
-  state.instance_env_ref = lua_ref(lua_state_, -1);
+  state.instance_env_ref = CreateRefPreserveStack(lua_state_, -1);
   lua_pop(lua_state_, 1);
 }
 

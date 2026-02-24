@@ -42,21 +42,30 @@ namespace {
 
     lua_getfield(state, desc_index, "local_position");
     if (lua_isnil(state, -1) == 0) {
-      desc.local_position
-        = CheckVec3(state, -1, "local_position must be a vector");
+      if (!TryCheckVec3(state, -1, desc.local_position)) {
+        luaL_error(state, "local_position must be a vector");
+        return {};
+      }
     }
     lua_pop(state, 1);
 
     lua_getfield(state, desc_index, "local_rotation");
     if (lua_isnil(state, -1) == 0) {
-      const auto* q = CheckQuat(state, -1);
+      const auto* q = TryCheckQuat(state, -1);
+      if (q == nullptr) {
+        luaL_error(state, "local_rotation must be a quaternion");
+        return {};
+      }
       desc.local_rotation = Quat { q->w, q->x, q->y, q->z };
     }
     lua_pop(state, 1);
 
     lua_getfield(state, desc_index, "local_scale");
     if (lua_isnil(state, -1) == 0) {
-      desc.local_scale = CheckVec3(state, -1, "local_scale must be a vector");
+      if (!TryCheckVec3(state, -1, desc.local_scale)) {
+        luaL_error(state, "local_scale must be a vector");
+        return {};
+      }
     }
     lua_pop(state, 1);
 

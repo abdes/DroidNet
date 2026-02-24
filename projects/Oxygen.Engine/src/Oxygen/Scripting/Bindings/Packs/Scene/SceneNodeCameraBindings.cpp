@@ -10,6 +10,7 @@
 #include <lua.h>
 #include <lualib.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
@@ -112,7 +113,11 @@ namespace {
 
   auto SceneNodeCamera(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     if (!node->HasCamera()) {
       lua_pushnil(state);
       return 1;
@@ -123,7 +128,11 @@ namespace {
 
   auto SceneNodeAttachPerspectiveCamera(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     auto camera = std::make_unique<scene::PerspectiveCamera>();
     if (lua_istable(state, 2) != 0) {
       float value = 0.0F;
@@ -146,7 +155,11 @@ namespace {
 
   auto SceneNodeAttachOrthographicCamera(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     auto camera = std::make_unique<scene::OrthographicCamera>();
     if (lua_istable(state, 2) != 0) {
       float left = 0.0F;
@@ -171,21 +184,33 @@ namespace {
 
   auto SceneNodeDetachCamera(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     lua_pushboolean(state, node->DetachCamera() ? 1 : 0);
     return 1;
   }
 
   auto SceneNodeHasCamera(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     lua_pushboolean(state, node->HasCamera() ? 1 : 0);
     return 1;
   }
 
   auto SceneNodeCameraType(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     if (node->GetCameraAs<scene::PerspectiveCamera>().has_value()) {
       lua_pushliteral(state, "perspective");
       return 1;
@@ -200,7 +225,11 @@ namespace {
 
   auto SceneNodeCameraGetPerspective(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     const auto cam = node->GetCameraAs<scene::PerspectiveCamera>();
     if (!cam.has_value()) {
       lua_pushnil(state);
@@ -220,11 +249,24 @@ namespace {
 
   auto SceneNodeCameraSetPerspective(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
-    luaL_checktype(state, 2, LUA_TTABLE);
+    const int entry_top = lua_gettop(state);
+    if (entry_top < 2) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    if (lua_type(state, 2) != LUA_TTABLE) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     const auto cam = node->GetCameraAs<scene::PerspectiveCamera>();
     if (!cam.has_value()) {
       lua_pushboolean(state, 0);
+      CHECK_F(lua_gettop(state) == entry_top + 1, "stack imbalance");
       return 1;
     }
     float value = 0.0F;
@@ -241,12 +283,17 @@ namespace {
       cam->get().SetFarPlane(value);
     }
     lua_pushboolean(state, 1);
+    CHECK_F(lua_gettop(state) == entry_top + 1, "stack imbalance");
     return 1;
   }
 
   auto SceneNodeCameraGetOrthographic(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     const auto cam = node->GetCameraAs<scene::OrthographicCamera>();
     if (!cam.has_value()) {
       lua_pushnil(state);
@@ -271,8 +318,15 @@ namespace {
 
   auto SceneNodeCameraSetOrthographic(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
-    luaL_checktype(state, 2, LUA_TTABLE);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    if (lua_type(state, 2) != LUA_TTABLE) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     const auto cam = node->GetCameraAs<scene::OrthographicCamera>();
     if (!cam.has_value()) {
       lua_pushboolean(state, 0);
@@ -300,7 +354,11 @@ namespace {
 
   auto SceneNodeCameraGetViewport(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     if (const auto cam = node->GetCameraAs<scene::PerspectiveCamera>();
       cam.has_value()) {
       const auto vp = cam->get().GetViewport();
@@ -325,7 +383,11 @@ namespace {
 
   auto SceneNodeCameraSetViewport(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     if (lua_isnil(state, 2) != 0) {
       if (auto cam = node->GetCameraAs<scene::PerspectiveCamera>();
         cam.has_value()) {
@@ -342,7 +404,10 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-    luaL_checktype(state, 2, LUA_TTABLE);
+    if (lua_type(state, 2) != LUA_TTABLE) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     ViewPort vp {};
     if (!TryReadViewport(state, 2, vp)) {
       lua_pushboolean(state, 0);
@@ -366,7 +431,11 @@ namespace {
 
   auto SceneNodeCameraGetExposure(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     if (const auto cam = node->GetCameraAs<scene::PerspectiveCamera>();
       cam.has_value()) {
       return PushExposure(state, cam->get().Exposure());
@@ -381,8 +450,15 @@ namespace {
 
   auto SceneNodeCameraSetExposure(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
-    luaL_checktype(state, 2, LUA_TTABLE);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    if (lua_type(state, 2) != LUA_TTABLE) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     if (auto cam = node->GetCameraAs<scene::PerspectiveCamera>();
       cam.has_value()) {
       auto exposure = cam->get().Exposure();
@@ -411,7 +487,11 @@ namespace {
 
   template <auto Getter> auto CameraGetPerspectiveFloat(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
     const auto cam = node->GetCameraAs<scene::PerspectiveCamera>();
     if (!cam.has_value()) {
       lua_pushnil(state);
@@ -423,13 +503,21 @@ namespace {
 
   template <auto Setter> auto CameraSetPerspectiveFloat(lua_State* state) -> int
   {
-    auto* node = CheckSceneNode(state, 1);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
     auto cam = node->GetCameraAs<scene::PerspectiveCamera>();
     if (!cam.has_value()) {
       lua_pushboolean(state, 0);
       return 1;
     }
-    const float v = static_cast<float>(luaL_checknumber(state, 2));
+    if (lua_isnumber(state, 2) == 0) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    const float v = static_cast<float>(lua_tonumber(state, 2));
     (cam->get().*Setter)(v);
     lua_pushboolean(state, 1);
     return 1;

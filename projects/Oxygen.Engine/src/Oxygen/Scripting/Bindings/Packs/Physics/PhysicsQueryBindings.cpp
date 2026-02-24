@@ -72,9 +72,14 @@ namespace {
   auto ParseDirectionField(lua_State* state, const int table_index) -> Vec3
   {
     lua_getfield(state, table_index, "direction");
-    const auto direction = lua_isnil(state, -1) == 0
-      ? CheckVec3(state, -1, "query direction must be a vector")
-      : oxygen::space::move::Forward;
+    Vec3 direction = oxygen::space::move::Forward;
+    if (lua_isnil(state, -1) == 0) {
+      if (!TryCheckVec3(state, -1, direction)) {
+        luaL_error(state, "query direction must be a vector");
+        lua_pop(state, 1);
+        return oxygen::space::move::Forward;
+      }
+    }
     lua_pop(state, 1);
 
     const auto len_sq = (direction.x * direction.x)
@@ -114,7 +119,11 @@ namespace {
 
       lua_getfield(state, desc_index, "origin");
       if (lua_isnil(state, -1) == 0) {
-        desc.origin = CheckVec3(state, -1, "raycast origin must be a vector");
+        if (!TryCheckVec3(state, -1, desc.origin)) {
+          lua_pop(state, 1);
+          luaL_error(state, "raycast origin must be a vector");
+          return {};
+        }
       }
       lua_pop(state, 1);
 
@@ -167,7 +176,11 @@ namespace {
 
       lua_getfield(state, desc_index, "origin");
       if (lua_isnil(state, -1) == 0) {
-        desc.origin = CheckVec3(state, -1, "sweep origin must be a vector");
+        if (!TryCheckVec3(state, -1, desc.origin)) {
+          lua_pop(state, 1);
+          luaL_error(state, "sweep origin must be a vector");
+          return {};
+        }
       }
       lua_pop(state, 1);
 
@@ -220,7 +233,11 @@ namespace {
 
       lua_getfield(state, desc_index, "center");
       if (lua_isnil(state, -1) == 0) {
-        desc.center = CheckVec3(state, -1, "overlap center must be a vector");
+        if (!TryCheckVec3(state, -1, desc.center)) {
+          lua_pop(state, 1);
+          luaL_error(state, "overlap center must be a vector");
+          return {};
+        }
       }
       lua_pop(state, 1);
 

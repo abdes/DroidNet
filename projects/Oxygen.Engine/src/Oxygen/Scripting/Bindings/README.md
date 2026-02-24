@@ -348,23 +348,23 @@ node.world_position = vec   -- luaL_error: "SceneNode property 'world_position' 
 
 ### 7.1 Error Strategy
 
-Choose one strategy per namespace and stay consistent within it.
+Engine pattern:
 
 | Situation | Approach |
 | --- | --- |
-| Wrong argument type / arity | `luaL_check*`, `luaL_argerror`, `luaL_error` (hard error) |
-| Missing engine context | Return `nil` / `false` with optional log (soft fallback) |
-| Unavailable engine context where contract demands it | `luaL_error` (e.g. `oxygen.time` requires active frame context) |
-| Reserved event name emission | `luaL_error` |
+| Programmer contract violation (wrong type, wrong arity, malformed argument shape) | **Hard Lua error** via `luaL_error` / `luaL_argerror` |
+| Runtime absence / domain state (missing entity, missing asset, unavailable optional context) | **Soft return** (`nil`/`false`/empty result), with logging where operationally useful |
+| Forbidden operation by rule (phase restriction, reserved names) | **Hard Lua error** |
+| Engine invariant breach / impossible state | **`CHECK_F` (fail-fast)** |
 
-Namespaces currently using **hard errors** for missing context:
-`oxygen.time`, `oxygen.events`.
+Hard errors are intentional and script authors may use `pcall(...)` to assert
+negative paths in tests and validation scripts.
 
-Namespaces currently using **soft fallback**:
-`oxygen.scene.*` (returns `nil`/`false` and logs `WARNING`),
-`oxygen.assets.*` (returns `nil`),
-`oxygen.physics.*` (returns `nil`/`false`/`{}` and logs `WARNING` for
-phase violations; silently returns empty/nil for missing engine context).
+Notes:
+- In this codebase/toolchain, `luaL_error(...)` may be seen as returning `void`.
+  In Lua C callbacks that return `int`, use:
+  `luaL_error(state, "..."); return 0;`
+- Do not mix contradictory contracts for the same API in different call paths.
 
 ### 7.2 Stack Balance
 
@@ -378,6 +378,33 @@ Every C function must leave the stack exactly as Lua expects:
 When using `lua_pcall` inside a binding (e.g. event dispatch), the traceback
 function must be pushed below the callable so that its stack index remains stable
 after the call frame is created.
+
+For internal call paths that invoke Lua from C++ (phase hooks, listeners, slot
+runtime rebuild), stack invariants are mandatory. Use explicit stack-top guards
+(`CHECK_F` on entry/exit top equality) to fail fast on imbalance.
+
+### 7.3 Protected Boundary Rules
+
+Lua hard errors are non-local exits. Engine code must enforce these boundary
+rules:
+
+- All engine->Lua execution must run through protected calls (`lua_pcall` path).
+- Never allow a Lua hard error to escape into unmanaged C++ call chains.
+- In code paths that may raise `luaL_error`, avoid relying on post-call RAII
+  cleanup of local objects.
+- If a binding invokes Lua internally, traceback handler placement and cleanup
+  must be deterministic on both success and failure.
+
+### 7.4 Binding Author Checklist
+
+Before merging a binding change, verify all items:
+
+- Contract is explicit: hard error vs soft return is documented and tested.
+- Wrong argument shapes/types are covered by negative-path tests (`pcall`).
+- Missing-runtime-state behavior (entity missing/context absent) is tested.
+- Stack top is balanced across all returns and all error paths.
+- No temporary Lua stack objects are leaked (including traceback handlers).
+- `CHECK_F` is used only for engine invariants, not user/script misuse.
 
 ---
 
@@ -481,8 +508,9 @@ Add or extend a `Bindings_x_test.cpp` in `src/Oxygen/Scripting/Test` covering:
 | --- | --- |
 | Surface exposure | Namespace exists; expected functions are callable |
 | Happy path | Correct return values under valid conditions |
-| Type errors | `luaL_error` is raised for wrong argument types |
+| Type/shape contract errors | `luaL_error` is raised for programmer misuse (validate via `pcall`) |
 | Missing context | Returns nil/false or raises error per documented contract |
+| Protected-boundary safety | Internal engine->Lua calls remain protected and stack-balanced |
 | Lifecycle | Disconnect / unref / cleanup is safe to call multiple times |
 
 ---
@@ -536,6 +564,9 @@ group covering all test categories listed in Section 9.
 | Orphaned `lua_ref` | Lua values kept alive indefinitely, potential dangling callbacks | Unref on all exit paths; unref during shutdown |
 | Mixed error semantics in one namespace | Inconsistent API surface for script authors | Pick one strategy (hard error or soft fallback) per namespace |
 | Unbalanced stack | Subsequent API calls read wrong values; hard to diagnose | Count every push/pop; use `lua_gettop` assertions in debug builds |
+| Reusing unstable relative stack indices after pushes/pops | Reads/writes wrong stack slot, latent corruption | Normalize/refresh indices before stack mutations; avoid stale cached indices |
+| Unprotected engine->Lua call | Lua non-local exit crosses C++ frames; undefined behavior risk | Always execute engine->Lua via protected call wrappers |
+| Relying on RAII after `luaL_error` path | Cleanup code may be skipped due to non-local exit | Do not place required cleanup after potential hard-error calls |
 | Namespace registered but not in pack list (or vice versa) | Functions silently absent from `oxygen.*` | Always update both the pack array and the header |
 | Scene mutator without phase gate | Mutations during rendering or read phases; non-deterministic crashes | Copy the `IsMutationAllowedPhase` guard pattern |
 | Calling `RegisterXMetatable` after first `PushX` | `luaL_getmetatable` returns nil; userdata left without metatable | Register metatables at pack registration time, before any push |

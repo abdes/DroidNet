@@ -855,13 +855,21 @@ auto ParseCollisionShape(lua_State* state, const int table_index)
     lua_getfield(state, abs_index, "extents");
     Vec3 extents { 0.5F, 0.5F, 0.5F };
     if (lua_isnil(state, -1) == 0) {
-      extents = CheckVec3(state, -1, "shape.extents must be a vector");
+      if (!TryCheckVec3(state, -1, extents)) {
+        lua_pop(state, 1);
+        luaL_error(state, "shape.extents must be a vector");
+        return physics::SphereShape {};
+      }
       lua_pop(state, 1);
     } else {
       lua_pop(state, 1);
       lua_getfield(state, abs_index, "half_extents");
       if (lua_isnil(state, -1) == 0) {
-        extents = CheckVec3(state, -1, "shape.half_extents must be a vector");
+        if (!TryCheckVec3(state, -1, extents)) {
+          lua_pop(state, 1);
+          luaL_error(state, "shape.half_extents must be a vector");
+          return physics::SphereShape {};
+        }
       }
       lua_pop(state, 1);
     }
@@ -919,9 +927,14 @@ auto ParseCollisionShape(lua_State* state, const int table_index)
   }
   if (shape_type_view == "plane") {
     lua_getfield(state, abs_index, "normal");
-    const auto normal = lua_isnil(state, -1) == 0
-      ? CheckVec3(state, -1, "shape.normal must be a vector")
-      : Vec3 { 0.0F, 0.0F, 1.0F };
+    auto normal = Vec3 { 0.0F, 0.0F, 1.0F };
+    if (lua_isnil(state, -1) == 0) {
+      if (!TryCheckVec3(state, -1, normal)) {
+        lua_pop(state, 1);
+        luaL_error(state, "shape.normal must be a vector");
+        return physics::SphereShape {};
+      }
+    }
     lua_pop(state, 1);
     const auto distance
       = ReadOptionalFloatField(state, abs_index, "distance", 0.0F);
@@ -932,13 +945,21 @@ auto ParseCollisionShape(lua_State* state, const int table_index)
   }
   if (shape_type_view == "world_boundary") {
     lua_getfield(state, abs_index, "limits_min");
-    const auto limits_min
-      = CheckVec3(state, -1, "shape.limits_min must be a vector");
+    Vec3 limits_min {};
+    if (!TryCheckVec3(state, -1, limits_min)) {
+      lua_pop(state, 1);
+      luaL_error(state, "shape.limits_min must be a vector");
+      return physics::SphereShape {};
+    }
     lua_pop(state, 1);
 
     lua_getfield(state, abs_index, "limits_max");
-    const auto limits_max
-      = CheckVec3(state, -1, "shape.limits_max must be a vector");
+    Vec3 limits_max {};
+    if (!TryCheckVec3(state, -1, limits_max)) {
+      lua_pop(state, 1);
+      luaL_error(state, "shape.limits_max must be a vector");
+      return physics::SphereShape {};
+    }
     lua_pop(state, 1);
 
     return physics::WorldBoundaryShape {
