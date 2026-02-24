@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -96,11 +97,18 @@ auto DependencyReleaseEngine::TrimCache(
 
   std::vector<data::AssetKey> trim_roots;
   trim_roots.reserve(hash_by_asset_key.size());
+  std::vector<data::AssetKey> blocked_roots;
+  blocked_roots.reserve(hash_by_asset_key.size());
   for (const auto& [asset_key, hash_key] : hash_by_asset_key) {
-    if (content_cache.GetCheckoutCount(hash_key) == 1U) {
+    const auto checkout_count = content_cache.GetCheckoutCount(hash_key);
+    if (checkout_count == 1U) {
       trim_roots.push_back(asset_key);
+    } else if (checkout_count > 1U) {
+      blocked_roots.push_back(asset_key);
     }
   }
+  std::ranges::sort(trim_roots);
+  std::ranges::sort(blocked_roots);
 
   std::unordered_set<data::AssetKey> visited_assets;
   std::unordered_set<data::AssetKey> visiting_assets;
@@ -108,8 +116,8 @@ auto DependencyReleaseEngine::TrimCache(
   visiting_assets.reserve(hash_by_asset_key.size());
   size_t pruned_live_branches = 0U;
 
-  auto trim_asset_dfs = [&](auto&& self, const data::AssetKey& asset_key)
-                          -> void {
+  auto trim_asset_dfs
+    = [&](auto&& self, const data::AssetKey& asset_key) -> void {
     if (visited_assets.contains(asset_key)) {
       return;
     }
@@ -206,6 +214,7 @@ auto DependencyReleaseEngine::TrimCache(
     static_cast<void>(resource_key);
     resource_hash_snapshot.push_back(hash_key);
   }
+  std::ranges::sort(resource_hash_snapshot);
 
   size_t standalone_resource_candidates = 0U;
   for (const auto resource_hash : resource_hash_snapshot) {
@@ -221,6 +230,7 @@ auto DependencyReleaseEngine::TrimCache(
   return TrimResult {
     .trim_roots = trim_roots.size(),
     .pruned_live_branches = pruned_live_branches,
+    .blocked_priority_roots = blocked_roots.size(),
     .standalone_resource_candidates = standalone_resource_candidates,
   };
 }

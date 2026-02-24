@@ -662,14 +662,15 @@ auto AssetLoader::ExecuteTrimPass(
     : 0ULL;
   trim_telemetry_.reclaimed_items += reclaimed_items;
   trim_telemetry_.reclaimed_bytes += reclaimed_bytes;
-  trim_telemetry_.blocked_roots
-    += static_cast<uint64_t>(trim_result.pruned_live_branches);
+  trim_telemetry_.blocked_roots += static_cast<uint64_t>(
+    trim_result.pruned_live_branches + trim_result.blocked_priority_roots);
 
   LOG_F(INFO,
     "trim summary trigger={} automatic={} roots={} blocked_roots={} "
-    "standalone_resource_candidates={} reclaimed_items={} reclaimed_bytes={}",
+    "priority_blocked_roots={} standalone_resource_candidates={} "
+    "reclaimed_items={} reclaimed_bytes={}",
     trigger, automatic, trim_result.trim_roots,
-    trim_result.pruned_live_branches,
+    trim_result.pruned_live_branches, trim_result.blocked_priority_roots,
     trim_result.standalone_resource_candidates, reclaimed_items,
     reclaimed_bytes);
   if (trim_result.trim_roots == 0U
