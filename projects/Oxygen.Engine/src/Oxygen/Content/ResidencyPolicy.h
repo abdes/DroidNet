@@ -106,6 +106,10 @@ struct ResidencyPolicyState final {
   uint64_t consumed_bytes { 0 };
   std::size_t checked_out_items { 0 };
   bool over_budget { false };
+  uint64_t trim_attempts { 0 };
+  uint64_t reclaimed_items { 0 };
+  uint64_t reclaimed_bytes { 0 };
+  uint64_t blocked_roots { 0 };
 };
 
 } // namespace oxygen::content

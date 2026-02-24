@@ -10,6 +10,7 @@
 #include <functional>
 #include <memory>
 #include <span>
+#include <string_view>
 #include <unordered_map>
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -39,6 +40,7 @@ public:
     std::function<void(uint64_t, ResourceKey)> map_resource_key;
     std::function<LoadPriorityClass()> default_priority_class;
     std::function<uint64_t()> next_request_sequence;
+    std::function<void(std::string_view, bool)> on_store_pressure;
   };
 
   ResourceLoadPipeline(const ContentSourceRegistry& source_registry,

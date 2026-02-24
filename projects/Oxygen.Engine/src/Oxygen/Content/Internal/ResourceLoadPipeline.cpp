@@ -409,9 +409,20 @@ namespace {
         co_return nullptr;
       }
 
-      if (StoreDecodedByType(resource_type, content_cache, key_hash, decoded)) {
+      auto stored
+        = StoreDecodedByType(resource_type, content_cache, key_hash, decoded);
+      if (!stored && callbacks.on_store_pressure) {
+        callbacks.on_store_pressure("resource_store_failed", true);
+        stored
+          = StoreDecodedByType(resource_type, content_cache, key_hash, decoded);
+      }
+      if (stored) {
         callbacks.map_resource_key(key_hash, key);
         content_cache.Touch(key_hash);
+        if (callbacks.on_store_pressure && content_cache.IsOverBudget()) {
+          callbacks.on_store_pressure(
+            "resource_store_succeeded_over_budget", false);
+        }
       }
 
       if (resource_type == data::TextureResource::ClassTypeId()) {
