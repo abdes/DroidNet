@@ -11,7 +11,6 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <variant>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
@@ -35,19 +34,6 @@ namespace oxygen::content::internal {
 using oxygen::base::ComputeFileSha256;
 using oxygen::base::IsAllZero;
 using oxygen::base::Sha256Digest;
-
-//! Asset location within a PAK file.
-struct PakAssetLocator {
-  data::pak::AssetDirectoryEntry entry {};
-};
-
-//! Asset location within a loose cooked root.
-struct LooseCookedAssetLocator {
-  std::filesystem::path descriptor_path;
-};
-
-//! Type-erased locator for an asset descriptor.
-using AssetLocator = std::variant<PakAssetLocator, LooseCookedAssetLocator>;
 
 //! Minimal runtime-facing abstraction over a source of cooked bytes.
 /*!
@@ -77,8 +63,8 @@ public:
   [[nodiscard]] virtual auto GetSourceKey() const noexcept -> data::SourceKey
     = 0;
 
-  [[nodiscard]] virtual auto FindAsset(const data::AssetKey& key) const noexcept
-    -> std::optional<AssetLocator>
+  [[nodiscard]] virtual auto HasAsset(const data::AssetKey& key) const noexcept
+    -> bool
     = 0;
   [[nodiscard]] virtual auto GetAssetCount() const noexcept -> size_t = 0;
   [[nodiscard]] virtual auto GetAssetKeyByIndex(uint32_t index) const noexcept
@@ -86,7 +72,7 @@ public:
     = 0;
 
   [[nodiscard]] virtual auto CreateAssetDescriptorReader(
-    const AssetLocator& locator) const -> std::unique_ptr<serio::AnyReader>
+    const data::AssetKey& key) const -> std::unique_ptr<serio::AnyReader>
     = 0;
 
   [[nodiscard]] virtual auto CreateBufferTableReader() const

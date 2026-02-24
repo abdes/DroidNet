@@ -38,14 +38,14 @@ auto EvictionRegistry::RemoveSubscriber(const TypeId type_id, const uint64_t id)
   }
 }
 
-auto EvictionRegistry::FindSubscribers(const TypeId type_id) const
-  -> const std::vector<Subscriber>*
+auto EvictionRegistry::SnapshotSubscribers(const TypeId type_id) const
+  -> std::vector<Subscriber>
 {
   const auto it = subscribers_.find(type_id);
   if (it == subscribers_.end()) {
-    return nullptr;
+    return {};
   }
-  return &it->second;
+  return it->second;
 }
 
 auto EvictionRegistry::TryEnterEviction(const uint64_t cache_key) -> bool

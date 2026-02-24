@@ -78,6 +78,12 @@ target_compile_definitions(
 )
 
 m_gtest_program(
+  PakFile
+  SOURCES
+    "PakFile_test.cpp"
+)
+
+m_gtest_program(
   LoadersPhysics
   SOURCES
     "PhysicsResourceLoader_test.cpp"

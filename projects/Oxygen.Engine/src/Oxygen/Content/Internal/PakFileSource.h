@@ -47,15 +47,10 @@ public:
     return pak_.Guid();
   }
 
-  [[nodiscard]] auto FindAsset(const data::AssetKey& key) const noexcept
-    -> std::optional<AssetLocator> override
+  [[nodiscard]] auto HasAsset(const data::AssetKey& key) const noexcept
+    -> bool override
   {
-    const auto entry = pak_.FindEntry(key);
-    if (!entry) {
-      return std::nullopt;
-    }
-
-    return AssetLocator { PakAssetLocator { .entry = *entry } };
+    return pak_.FindEntry(key).has_value();
   }
 
   [[nodiscard]] auto GetAssetCount() const noexcept -> size_t override
@@ -74,39 +69,51 @@ public:
   }
 
   [[nodiscard]] auto CreateAssetDescriptorReader(
-    const AssetLocator& locator) const
+    const data::AssetKey& key) const
     -> std::unique_ptr<serio::AnyReader> override
   {
-    const auto* pak_loc = std::get_if<PakAssetLocator>(&locator);
-    if (pak_loc == nullptr) {
+    const auto entry = pak_.FindEntry(key);
+    if (!entry.has_value()) {
       return nullptr;
     }
 
     return std::make_unique<OwningPakSectionReader>(
-      pak_.FilePath(), static_cast<size_t>(pak_loc->entry.desc_offset));
+      pak_.FilePath(), static_cast<size_t>(entry->desc_offset));
   }
 
   [[nodiscard]] auto CreateBufferTableReader() const
     -> std::unique_ptr<serio::AnyReader> override
   {
+    if (pak_.GetResourceTable<data::BufferResource>() == nullptr) {
+      return nullptr;
+    }
     return std::make_unique<OwningPakSectionReader>(pak_.FilePath(), 0);
   }
 
   [[nodiscard]] auto CreateTextureTableReader() const
     -> std::unique_ptr<serio::AnyReader> override
   {
+    if (pak_.GetResourceTable<data::TextureResource>() == nullptr) {
+      return nullptr;
+    }
     return std::make_unique<OwningPakSectionReader>(pak_.FilePath(), 0);
   }
 
   [[nodiscard]] auto CreateScriptTableReader() const
     -> std::unique_ptr<serio::AnyReader> override
   {
+    if (pak_.GetResourceTable<data::ScriptResource>() == nullptr) {
+      return nullptr;
+    }
     return std::make_unique<OwningPakSectionReader>(pak_.FilePath(), 0);
   }
 
   [[nodiscard]] auto CreatePhysicsTableReader() const
     -> std::unique_ptr<serio::AnyReader> override
   {
+    if (pak_.GetResourceTable<data::PhysicsResource>() == nullptr) {
+      return nullptr;
+    }
     return std::make_unique<OwningPakSectionReader>(pak_.FilePath(), 0);
   }
 
@@ -137,7 +144,7 @@ public:
   [[nodiscard]] auto CreateBufferDataReader() const
     -> std::unique_ptr<serio::AnyReader> override
   {
-    if (!footer_) {
+    if (!footer_ || pak_.GetResourceTable<data::BufferResource>() == nullptr) {
       return nullptr;
     }
     return std::make_unique<OwningPakSectionReader>(
@@ -147,7 +154,7 @@ public:
   [[nodiscard]] auto CreateTextureDataReader() const
     -> std::unique_ptr<serio::AnyReader> override
   {
-    if (!footer_) {
+    if (!footer_ || pak_.GetResourceTable<data::TextureResource>() == nullptr) {
       return nullptr;
     }
     return std::make_unique<OwningPakSectionReader>(
@@ -157,7 +164,7 @@ public:
   [[nodiscard]] auto CreateScriptDataReader() const
     -> std::unique_ptr<serio::AnyReader> override
   {
-    if (!footer_) {
+    if (!footer_ || pak_.GetResourceTable<data::ScriptResource>() == nullptr) {
       return nullptr;
     }
     return std::make_unique<OwningPakSectionReader>(
@@ -167,7 +174,7 @@ public:
   [[nodiscard]] auto CreatePhysicsDataReader() const
     -> std::unique_ptr<serio::AnyReader> override
   {
-    if (!footer_) {
+    if (!footer_ || pak_.GetResourceTable<data::PhysicsResource>() == nullptr) {
       return nullptr;
     }
     return std::make_unique<OwningPakSectionReader>(
@@ -188,7 +195,9 @@ public:
   [[nodiscard]] auto ReadScriptParamRecords(data::pak::OffsetT absolute_offset,
     uint32_t count) const -> std::vector<data::pak::ScriptParamRecord> override
   {
-    return pak_.ReadScriptParamRecords(absolute_offset, count);
+    return pak_.ReadScriptParamRecords(
+      PakFile::ScriptParamReadRequest { .absolute_offset = absolute_offset,
+        .count = count });
   }
 
   [[nodiscard]] auto ResolveVirtualPath(

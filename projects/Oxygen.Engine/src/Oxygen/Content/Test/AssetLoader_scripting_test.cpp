@@ -23,8 +23,12 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Import/LooseCookedLayout.h>
+#include <Oxygen/Content/Internal/IContentSource.h>
+#include <Oxygen/Content/Internal/LooseCookedSource.h>
+#include <Oxygen/Content/Internal/PakFileSource.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/ScriptLoader.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -388,6 +392,23 @@ auto WriteLooseCookedSceneWithScripting(
     sizeof(scripts_data_record));
 }
 
+auto ReadAssetHeader(oxygen::content::internal::IContentSource& source,
+  const oxygen::data::AssetKey& key) -> std::optional<oxygen::data::pak::AssetHeader>
+{
+  auto desc_reader = source.CreateAssetDescriptorReader(key);
+  if (!desc_reader) {
+    return std::nullopt;
+  }
+  auto header_blob = desc_reader->ReadBlob(sizeof(oxygen::data::pak::AssetHeader));
+  if (!header_blob || header_blob->size() < sizeof(oxygen::data::pak::AssetHeader)) {
+    return std::nullopt;
+  }
+
+  oxygen::data::pak::AssetHeader header {};
+  std::memcpy(&header, header_blob->data(), sizeof(header));
+  return header;
+}
+
 class AssetLoaderScriptingTest : public AssetLoaderLoadingTest { };
 
 // P0.1.1: Source capability parity characterization.
@@ -582,6 +603,45 @@ NOLINT_TEST_F(AssetLoaderScriptingTest,
   GTEST_SKIP() << "Debug-only dependent graph introspection not available in "
                   "release builds";
 #endif
+}
+
+NOLINT_TEST_F(AssetLoaderScriptingTest,
+  ContentSourceConformance_ScriptCapabilitiesExpectedToMatch)
+{
+  const auto scene_key
+    = AssetKeyFromHex("22222222-2222-2222-2222-222222222222");
+  const auto pak_path = GeneratePakFile("scene_with_scripting");
+  const auto cooked_root = temp_dir_ / "conformance_loose_scripting";
+  WriteLooseCookedSceneWithScripting(cooked_root, scene_key);
+
+  oxygen::content::internal::PakFileSource pak_source(pak_path, false);
+  oxygen::content::internal::LooseCookedSource loose_source(cooked_root, false);
+
+  auto assert_common = [&](oxygen::content::internal::IContentSource& source) {
+    EXPECT_TRUE(source.HasAsset(scene_key));
+
+    const auto header_opt = ReadAssetHeader(source, scene_key);
+    ASSERT_TRUE(header_opt.has_value());
+    EXPECT_EQ(static_cast<oxygen::data::AssetType>(header_opt->asset_type),
+      oxygen::data::AssetType::kScene);
+
+    EXPECT_THAT(source.CreateScriptTableReader(), NotNull());
+    EXPECT_THAT(source.CreateScriptDataReader(), NotNull());
+    EXPECT_THAT(source.GetScriptTable(), NotNull());
+    EXPECT_GE(source.ScriptSlotCount(), 1U);
+
+    const auto slots = source.ReadScriptSlotRecords(0, 1);
+    ASSERT_EQ(slots.size(), 1U);
+    const auto params = source.ReadScriptParamRecords(
+      slots[0].params_array_offset, slots[0].params_count);
+    EXPECT_EQ(params.size(), slots[0].params_count);
+
+    const auto vpath = source.ResolveVirtualPath(scene_key);
+    EXPECT_TRUE(vpath.has_value());
+  };
+
+  assert_common(pak_source);
+  assert_common(loose_source);
 }
 
 // YAML integration baseline for scripting scene load path.

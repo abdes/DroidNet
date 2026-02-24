@@ -86,6 +86,34 @@ This section is normative. "MUST" and "MUST NOT" are strict requirements.
 - Subsystem debug invariants MUST live with subsystem-owned state (not centralized in facade-only state).
 - `AssetLoader` private fields MUST not duplicate state already owned by extracted subsystems.
 
+## Runtime Refactor Guard Checklist
+
+This checklist is mandatory for Content runtime refactors and is intended to be objectively verifiable.
+
+### Dependency Boundary Gates
+
+- `AssetLoader.cpp` MUST NOT directly include or call `PakFile`/`LooseCooked` format internals for read operations; reads must go through `IContentSource` and internal services.
+- `ResourceLoadPipeline`/query services MUST consume source resolution via callbacks or `ContentSourceRegistry`; no hidden globals or thread-local source context.
+- Script and physics query APIs MUST remain separate (`ScriptQueryService` and `PhysicsQueryService`); no merged multi-domain query surface.
+- New runtime services under `Internal/` MUST be `final`, non-copyable where ownership-sensitive, and have explicit callback contracts instead of reaching back into `AssetLoader` state.
+
+### Complexity and Ownership Gates
+
+- `AssetLoader` changes MUST reduce or keep stable facade-owned mutable state; new persistent maps/sets/vectors belong in dedicated internal stores/services.
+- Dependency-graph mutations MUST be mediated by `DependencyGraphStore` and releases by `DependencyReleaseEngine`; direct graph container mutation in `AssetLoader` is forbidden.
+- In-flight load dedup MUST be mediated by `InFlightOperationTable`; no additional ad-hoc in-flight maps in `AssetLoader`.
+- Eviction subscription and dispatch MUST remain centralized in `EvictionRegistry`.
+
+### Verification Gates
+
+- Every completed task in `Content_Runtime_RemediationPlan.md` MUST document:
+  - exact files touched,
+  - targeted tests executed (`ctest -R ...`), and
+  - observed pass/fail outcome.
+- Any API surface change in `Internal/*.h` MUST include or update tests in `src/Oxygen/Content/Test` covering both nominal and failure-path behavior.
+- No RTTI-based branching (`dynamic_cast`, `typeid`) is allowed in runtime content code; use Oxygen typed interfaces/contracts.
+- Regressions in mount/source persistence, scene catalog enumeration, cache trim semantics, or dependency release order block task closure.
+
 ### End-to-End Load Flow (Current)
 
 1. `AssetLoader` receives API call and enforces owning-thread and async preconditions.

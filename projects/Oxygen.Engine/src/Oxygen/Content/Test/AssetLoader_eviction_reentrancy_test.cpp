@@ -5,6 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include <atomic>
+#include <memory>
+#include <string>
 
 #include <Oxygen/Testing/GTest.h>
 
@@ -119,6 +121,168 @@ NOLINT_TEST_F(AssetLoaderLoadingTest, ResourceEviction_ReentrantHandler)
 
       loader.Stop();
       (void)subscription;
+      co_return oxygen::co::kJoin;
+    };
+  });
+}
+
+// Regression test: unsubscribing from inside an eviction callback must not
+// invalidate iteration or skip other subscribers in the same dispatch.
+NOLINT_TEST_F(
+  AssetLoaderLoadingTest, ResourceEviction_CallbackSelfUnsubscribeExpectedSafe)
+{
+  using namespace std::chrono_literals;
+
+  TestEventLoop el;
+
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    AssetLoaderConfig config {};
+    oxygen::co::ThreadPool pool(el, 2);
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
+    loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
+
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+
+      auto make_payload = [] {
+        const std::string hexdump = R"(
+           0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
+          16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
+        )";
+        constexpr std::size_t kDataOffset = 256;
+        constexpr std::size_t kSizeBytes = 192;
+        constexpr uint8_t kFill = 0x6A;
+        return MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
+      };
+
+      std::atomic<int> self_count { 0 };
+      std::atomic<int> other_count { 0 };
+
+      auto self_subscription
+        = std::make_unique<oxygen::content::IAssetLoader::EvictionSubscription>();
+      *self_subscription
+        = loader.SubscribeResourceEvictions(BufferResource::ClassTypeId(),
+          [&](const EvictionEvent&) {
+            self_count.fetch_add(1, std::memory_order_relaxed);
+            self_subscription->Cancel();
+          });
+
+      auto other_subscription
+        = loader.SubscribeResourceEvictions(BufferResource::ClassTypeId(),
+          [&](const EvictionEvent&) {
+            other_count.fetch_add(1, std::memory_order_relaxed);
+          });
+
+      const auto evict_once
+        = [&](const ResourceKey key) -> Co<> {
+            auto bytes = make_payload();
+            std::span<const uint8_t> span(bytes.data(), bytes.size());
+            auto resource = co_await loader.LoadResourceAsync<BufferResource>(
+              CookedResourceData<BufferResource> {
+                .key = key,
+                .bytes = span,
+              });
+            EXPECT_NE(resource, nullptr);
+            resource.reset();
+            (void)loader.ReleaseResource(key);
+            loader.TrimCache();
+            co_return;
+          };
+
+      co_await evict_once(loader.MintSyntheticBufferKey());
+      co_await evict_once(loader.MintSyntheticBufferKey());
+
+      EXPECT_EQ(self_count.load(std::memory_order_relaxed), 1);
+      EXPECT_EQ(other_count.load(std::memory_order_relaxed), 2);
+
+      loader.Stop();
+      (void)other_subscription;
+      co_return oxygen::co::kJoin;
+    };
+  });
+}
+
+// Regression test: subscribing during callback must not join current dispatch,
+// and should participate in subsequent evictions.
+NOLINT_TEST_F(AssetLoaderLoadingTest,
+  ResourceEviction_CallbackSubscribeDuringDispatchExpectedNextDispatchOnly)
+{
+  using namespace std::chrono_literals;
+
+  TestEventLoop el;
+
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    AssetLoaderConfig config {};
+    oxygen::co::ThreadPool pool(el, 2);
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
+    loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
+
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+
+      auto make_payload = [] {
+        const std::string hexdump = R"(
+           0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
+          16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
+        )";
+        constexpr std::size_t kDataOffset = 256;
+        constexpr std::size_t kSizeBytes = 192;
+        constexpr uint8_t kFill = 0x3C;
+        return MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
+      };
+
+      std::atomic<int> first_count { 0 };
+      std::atomic<int> late_count { 0 };
+      auto late_subscription
+        = std::make_unique<oxygen::content::IAssetLoader::EvictionSubscription>();
+
+      auto first_subscription
+        = loader.SubscribeResourceEvictions(BufferResource::ClassTypeId(),
+          [&](const EvictionEvent&) {
+            const auto prior = first_count.fetch_add(1, std::memory_order_relaxed);
+            if (prior == 0) {
+              *late_subscription
+                = loader.SubscribeResourceEvictions(BufferResource::ClassTypeId(),
+                  [&](const EvictionEvent&) {
+                    late_count.fetch_add(1, std::memory_order_relaxed);
+                  });
+            }
+          });
+
+      const auto evict_once
+        = [&](const ResourceKey key) -> Co<> {
+            auto bytes = make_payload();
+            std::span<const uint8_t> span(bytes.data(), bytes.size());
+            auto resource = co_await loader.LoadResourceAsync<BufferResource>(
+              CookedResourceData<BufferResource> {
+                .key = key,
+                .bytes = span,
+              });
+            EXPECT_NE(resource, nullptr);
+            resource.reset();
+            (void)loader.ReleaseResource(key);
+            loader.TrimCache();
+            co_return;
+          };
+
+      co_await evict_once(loader.MintSyntheticBufferKey());
+      co_await evict_once(loader.MintSyntheticBufferKey());
+
+      EXPECT_EQ(first_count.load(std::memory_order_relaxed), 2);
+      EXPECT_EQ(late_count.load(std::memory_order_relaxed), 1);
+
+      loader.Stop();
+      (void)first_subscription;
       co_return oxygen::co::kJoin;
     };
   });

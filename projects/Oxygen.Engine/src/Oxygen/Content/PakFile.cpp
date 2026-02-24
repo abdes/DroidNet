@@ -4,17 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstring>
+#include <string>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
+#include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Content/PakFile.h>
-// ReSharper disable once CppUnusedIncludeDirective
-#include <Oxygen/Content/Loaders/Helpers.h>
-
-#include <cstring>
-
-#include <array>
-#include <string>
+#include <Oxygen/Data/PakFormat.h>
 
 using oxygen::content::PakFile;
 using oxygen::data::AssetKey;
@@ -41,7 +42,7 @@ auto ComputeCrc32Ieee(std::span<const std::byte> bytes, uint32_t state) noexcept
       for (int j = 0; j < 8; ++j) {
         c = (c & 1U) ? (kPoly ^ (c >> 1U)) : (c >> 1U);
       }
-      t[i] = c;
+      t.at(static_cast<size_t>(i)) = c;
     }
     return t;
   }();
@@ -49,26 +50,33 @@ auto ComputeCrc32Ieee(std::span<const std::byte> bytes, uint32_t state) noexcept
   uint32_t crc = state;
   for (const auto b : bytes) {
     const auto u_b = static_cast<uint8_t>(b);
-    crc = table[(crc ^ u_b) & 0xFF] ^ (crc >> 8U);
+    const auto table_index = static_cast<size_t>((crc ^ u_b) & 0xFFU);
+    crc = table.at(table_index) ^ (crc >> 8U);
   }
   // NOLINTEND(*-magic-numbers)
   return crc;
 }
 
+struct Crc32ComputationConfig final {
+  size_t file_size { 0 };
+  size_t crc_field_absolute_offset { 0 };
+};
+
 auto ComputePakCrc32(const std::filesystem::path& pak_path,
-  const size_t file_size, const size_t crc_field_absolute_offset) -> uint32_t
+  const Crc32ComputationConfig& cfg) -> uint32_t
 {
   oxygen::serio::FileStream<> stream(pak_path, std::ios::in);
   oxygen::serio::Reader<oxygen::serio::FileStream<>> reader(stream);
 
-  constexpr size_t kChunkSize = 256 * 1024;
+  constexpr size_t kChunkSize
+    = static_cast<size_t>(256) * static_cast<size_t>(1024);
   std::array<std::byte, kChunkSize> buffer {};
 
   uint32_t crc = 0xFFFFFFFF; // NOLINT(*-magic-numbers)
   size_t offset = 0;
 
-  while (offset < file_size) {
-    const auto remaining = file_size - offset;
+  while (offset < cfg.file_size) {
+    const auto remaining = cfg.file_size - offset;
     const auto to_read = (std::min)(remaining, buffer.size());
 
     auto blob_result
@@ -85,9 +93,9 @@ auto ComputePakCrc32(const std::filesystem::path& pak_path,
     const auto chunk_start = offset;
     const auto chunk_end = offset + to_read;
     const auto crc_skip_start
-      = (std::max)(chunk_start, crc_field_absolute_offset);
+      = (std::max)(chunk_start, cfg.crc_field_absolute_offset);
     const auto crc_skip_end
-      = (std::min)(chunk_end, crc_field_absolute_offset + sizeof(uint32_t));
+      = (std::min)(chunk_end, cfg.crc_field_absolute_offset + sizeof(uint32_t));
 
     if (crc_skip_start < crc_skip_end) {
       const auto rel_start = crc_skip_start - chunk_start;
@@ -98,8 +106,8 @@ auto ComputePakCrc32(const std::filesystem::path& pak_path,
           std::span<const std::byte>(buffer.data(), rel_start), crc);
       }
       if (rel_end < to_read) {
-        crc = ComputeCrc32Ieee(std::span<const std::byte>(
-                                 buffer.data() + rel_end, to_read - rel_end),
+        crc = ComputeCrc32Ieee(std::span<const std::byte>(buffer).subspan(
+                                 rel_end, to_read - rel_end),
           crc);
       }
     } else {
@@ -124,45 +132,289 @@ auto OpenFileStream(const std::filesystem::path& path)
   }
 }
 
+struct ParsedPakMetadata final {
+  PakHeader header {};
+  PakFooter footer {};
+  std::vector<AssetDirectoryEntry> directory {}; // NOLINT
+  std::unordered_map<AssetKey, size_t> key_to_index {}; // NOLINT
+};
+
+struct ParsedBrowseIndex final {
+  std::vector<PakFile::BrowseEntry> entries {}; // NOLINT
+  std::unordered_map<std::string_view, AssetKey> vpath_to_key {}; // NOLINT
+};
+
+auto ReadPakHeader(oxygen::serio::FileStream<>& stream) -> PakHeader
+{
+  LOG_SCOPE_FUNCTION(INFO);
+
+  if (auto res = stream.Seek(0); !res) {
+    LOG_F(ERROR, "Failed to seek to pak header: {}", res.error().message());
+    throw std::runtime_error("Failed to seek to pak header");
+  }
+
+  PakFile::Reader reader(stream);
+  auto header_result = reader.Read<PakHeader>();
+  if (!header_result) {
+    LOG_F(
+      ERROR, "Failed to read pak header: {}", header_result.error().message());
+    throw std::runtime_error("Failed to read pak header");
+  }
+
+  const auto header = header_result.value();
+  LOG_F(INFO, "format version  : {}", header.version);
+  LOG_F(INFO, "content version : {}", header.content_version);
+  LOG_F(INFO, "pak guid        : {}",
+    oxygen::data::to_string(oxygen::data::SourceKey::FromBytes(header.guid)));
+
+  if (!std::ranges::equal(
+        std::span { header.magic }, oxygen::data::pak::kPakHeaderMagic)) {
+    LOG_F(ERROR, "Invalid pak file header magic");
+    throw std::runtime_error("Invalid pak file header magic");
+  }
+
+  if (header.version != oxygen::data::pak::kCurrantPakFormatVersion) {
+    const auto msg = std::string("Unsupported PAK format version: ")
+      + std::to_string(header.version) + " (this build loads v"
+      + std::to_string(oxygen::data::pak::kCurrantPakFormatVersion) + " only).";
+    LOG_F(ERROR, "{}", msg);
+    throw std::runtime_error(msg);
+  }
+
+  return header;
+}
+
+auto ReadPakFooter(oxygen::serio::FileStream<>& stream) -> PakFooter
+{
+  LOG_SCOPE_FUNCTION(INFO);
+
+  constexpr size_t kPakFooterSize = sizeof(PakFooter);
+  auto size_result = stream.Size();
+  if (!size_result) {
+    LOG_F(
+      ERROR, "Failed to get pak file size: {}", size_result.error().message());
+    throw std::runtime_error("Failed to get pak file size");
+  }
+
+  const size_t file_size = size_result.value();
+  if (auto res = stream.Seek(file_size - kPakFooterSize); !res) {
+    LOG_F(ERROR, "Failed to seek to pak footer: {}", res.error().message());
+    throw std::runtime_error("Failed to seek to pak footer");
+  }
+
+  PakFile::Reader reader(stream);
+  auto footer_result = reader.Read<PakFooter>();
+  if (!footer_result) {
+    LOG_F(
+      ERROR, "Failed to read pak footer: {}", footer_result.error().message());
+    throw std::runtime_error("Failed to read pak footer");
+  }
+
+  const auto footer = footer_result.value();
+  LOG_F(INFO, "pak crc32        : {}", footer.pak_crc32);
+  LOG_F(INFO, "directory offset : {}", footer.directory_offset);
+  LOG_F(INFO, "directory size   : {}", footer.directory_size);
+  LOG_F(INFO, "asset count      : {}", footer.asset_count);
+
+  const auto footer_magic = std::as_bytes(std::span { footer.footer_magic });
+  const auto expected_footer_magic
+    = std::as_bytes(std::span { oxygen::data::pak::kPakFooterMagic });
+  if (!std::ranges::equal(footer_magic, expected_footer_magic)) {
+    LOG_F(ERROR, "Invalid pak file footer magic");
+    throw std::runtime_error("Invalid pak file footer magic");
+  }
+
+  return footer;
+}
+
+auto ReadPakDirectory(oxygen::serio::FileStream<>& stream,
+  const PakFooter& footer, std::vector<AssetDirectoryEntry>& directory,
+  std::unordered_map<AssetKey, size_t>& key_to_index) -> void
+{
+  LOG_SCOPE_FUNCTION(INFO);
+
+  if (auto res = stream.Seek(footer.directory_offset); !res) {
+    LOG_F(
+      ERROR, "Failed to seek to directory offset: {}", res.error().message());
+    throw std::runtime_error("Failed to seek to directory offset");
+  }
+
+  PakFile::Reader reader(stream);
+  directory.clear();
+  key_to_index.clear();
+  directory.reserve(footer.asset_count);
+
+  for (uint32_t i = 0; i < footer.asset_count; ++i) {
+    auto entry_result = reader.Read<AssetDirectoryEntry>();
+    if (!entry_result) {
+      LOG_F(ERROR, "Failed to read asset directory entry: {}",
+        entry_result.error().message());
+      throw std::runtime_error("Failed to read asset directory entries");
+    }
+    directory.push_back(*entry_result);
+    key_to_index.emplace(directory.back().asset_key, directory.size() - 1);
+  }
+}
+
+auto LoadPakMetadata(oxygen::serio::FileStream<>& stream) -> ParsedPakMetadata
+{
+  ParsedPakMetadata metadata {};
+  metadata.header = ReadPakHeader(stream);
+  metadata.footer = ReadPakFooter(stream);
+  ReadPakDirectory(
+    stream, metadata.footer, metadata.directory, metadata.key_to_index);
+  return metadata;
+}
+
+auto LoadBrowseIndex(oxygen::serio::FileStream<>& stream,
+  const size_t file_size, const PakFooter& footer) -> ParsedBrowseIndex
+{
+  LOG_SCOPE_FUNCTION(INFO);
+
+  ParsedBrowseIndex parsed {};
+  const oxygen::data::pak::OffsetT browse_offset = footer.browse_index_offset;
+  const uint64_t browse_size = footer.browse_index_size;
+
+  if (browse_offset == 0 || browse_size == 0) {
+    return parsed;
+  }
+
+  const auto end_offset = browse_offset + browse_size;
+  if (browse_offset >= file_size || end_offset > file_size
+    || end_offset < browse_offset) {
+    LOG_F(ERROR,
+      "Browse index out of bounds: offset={} size={} file_size={} (ignoring)",
+      browse_offset, browse_size, file_size);
+    return parsed;
+  }
+
+  if (auto res = stream.Seek(static_cast<size_t>(browse_offset)); !res) {
+    LOG_F(ERROR, "Failed to seek to browse index offset {}: {}", browse_offset,
+      res.error().message());
+    return parsed;
+  }
+
+  PakFile::Reader reader(stream);
+  auto header_result = reader.Read<PakBrowseIndexHeader>();
+  if (!header_result) {
+    LOG_F(ERROR, "Failed to read browse index header: {}",
+      header_result.error().message());
+    return parsed;
+  }
+
+  const auto header = header_result.value();
+  constexpr std::array<uint8_t, 8> kBrowseMagic
+    = { 'O', 'X', 'P', 'A', 'K', 'B', 'I', 'X' };
+  if (!std::ranges::equal(std::span { header.magic }, kBrowseMagic)) {
+    LOG_F(ERROR, "Browse index magic mismatch (ignoring)");
+    return parsed;
+  }
+
+  if (header.version != 1) {
+    LOG_F(
+      ERROR, "Unsupported browse index version {} (ignoring)", header.version);
+    return parsed;
+  }
+
+  const uint64_t entries_size
+    = static_cast<uint64_t>(header.entry_count) * sizeof(PakBrowseIndexEntry);
+  const uint64_t expected_min_size
+    = sizeof(PakBrowseIndexHeader) + entries_size + header.string_table_size;
+  if (expected_min_size > browse_size) {
+    LOG_F(ERROR,
+      "Browse index payload is truncated: expected_at_least={} actual={}",
+      expected_min_size, browse_size);
+    return parsed;
+  }
+
+  std::vector<PakBrowseIndexEntry> entries;
+  entries.reserve(header.entry_count);
+  for (uint32_t i = 0; i < header.entry_count; ++i) {
+    auto entry_result = reader.Read<PakBrowseIndexEntry>();
+    if (!entry_result) {
+      LOG_F(ERROR, "Failed to read browse index entry {}: {}", i,
+        entry_result.error().message());
+      return ParsedBrowseIndex {};
+    }
+    entries.push_back(entry_result.value());
+  }
+
+  auto strings_blob_result
+    = reader.ReadBlob(static_cast<size_t>(header.string_table_size));
+  if (!strings_blob_result) {
+    LOG_F(ERROR, "Failed to read browse index string table: {}",
+      strings_blob_result.error().message());
+    return ParsedBrowseIndex {};
+  }
+  const auto& strings_blob = strings_blob_result.value();
+
+  parsed.entries.reserve(header.entry_count);
+  for (const auto& e : entries) {
+    const uint64_t off = e.virtual_path_offset;
+    const uint64_t len = e.virtual_path_length;
+    const uint64_t end = off + len;
+    if (off > header.string_table_size || len > header.string_table_size
+      || end > header.string_table_size || end < off) {
+      LOG_F(ERROR, "Browse index string reference out of bounds (ignoring)");
+      return ParsedBrowseIndex {};
+    }
+
+    const auto path_bytes
+      = std::span<const std::byte>(strings_blob)
+          .subspan(static_cast<size_t>(off), static_cast<size_t>(len));
+    std::string vpath;
+    vpath.resize(static_cast<size_t>(len));
+    std::ranges::transform(path_bytes, vpath.begin(),
+      [](const std::byte byte) { return std::to_integer<char>(byte); });
+    if (vpath.empty() || vpath.front() != '/') {
+      LOG_F(ERROR, "Browse index virtual path is not canonical (ignoring)");
+      return ParsedBrowseIndex {};
+    }
+
+    parsed.entries.push_back(PakFile::BrowseEntry {
+      .virtual_path = std::move(vpath),
+      .asset_key = e.asset_key,
+    });
+  }
+
+  parsed.vpath_to_key.reserve(parsed.entries.size());
+  for (const auto& entry : parsed.entries) {
+    const std::string_view key_view(entry.virtual_path);
+    if (parsed.vpath_to_key.contains(key_view)) {
+      LOG_F(ERROR, "Browse index contains duplicate virtual path '{}'",
+        entry.virtual_path);
+      return ParsedBrowseIndex {};
+    }
+    parsed.vpath_to_key.emplace(key_view, entry.asset_key);
+  }
+
+  return parsed;
+}
+
 } // namespace
 
-auto PakFile::InitBuffersTable() const -> void
+auto PakFile::InitializeResourceTablesFromFooter() const -> void
 {
   DCHECK_F(!buffers_table_);
+  DCHECK_F(!textures_table_);
+  DCHECK_F(!scripts_table_);
+  DCHECK_F(!physics_table_);
 
   if (footer_.buffer_table.count > 0) {
     DCHECK_GT_F(footer_.buffer_table.entry_size, 0U,
       "resource table entry size must be greater than 0");
     buffers_table_.emplace(footer_.buffer_table);
   }
-}
-
-auto PakFile::InitTexturesTable() const -> void
-{
-  DCHECK_F(!textures_table_);
-
   if (footer_.texture_table.count > 0) {
     DCHECK_GT_F(footer_.texture_table.entry_size, 0U,
       "resource table entry size must be greater than 0");
     textures_table_.emplace(footer_.texture_table);
   }
-}
-
-auto PakFile::InitScriptsTable() const -> void
-{
-  DCHECK_F(!scripts_table_);
-
   if (footer_.script_resource_table.count > 0) {
     DCHECK_GT_F(footer_.script_resource_table.entry_size, 0U,
       "resource table entry size must be greater than 0");
     scripts_table_.emplace(footer_.script_resource_table);
   }
-}
-
-auto PakFile::InitPhysicsTable() const -> void
-{
-  DCHECK_F(!physics_table_);
-
   if (footer_.physics_resource_table.count > 0) {
     DCHECK_GT_F(footer_.physics_resource_table.entry_size, 0U,
       "resource table entry size must be greater than 0");
@@ -170,86 +422,35 @@ auto PakFile::InitPhysicsTable() const -> void
   }
 }
 
-auto PakFile::ReadHeader(serio::FileStream<>* stream) -> void
+PakFile::PakFile(const std::filesystem::path& path)
+  : file_path_(path)
+  , meta_stream_(OpenFileStream(path))
+  , buffer_data_stream_(OpenFileStream(path))
+  , texture_data_stream_(OpenFileStream(path))
+  , script_data_stream_(OpenFileStream(path))
+  , physics_data_stream_(OpenFileStream(path))
 {
   LOG_SCOPE_FUNCTION(INFO);
+  LOG_F(INFO, "file : {}", path.string());
 
-  if (auto res = stream->Seek(0); !res) {
-    LOG_F(ERROR, "Failed to seek to pak header: {}", res.error().message());
-    throw std::runtime_error("Failed to seek to pak header");
-  }
-  Reader reader(*stream);
-  auto header_result = reader.Read<PakHeader>();
-  if (!header_result) {
-    LOG_F(
-      ERROR, "Failed to read pak header: {}", header_result.error().message());
-    throw std::runtime_error("Failed to read pak header");
-  }
-  header_ = header_result.value();
+  const auto metadata = LoadPakMetadata(*meta_stream_);
+  header_ = metadata.header;
+  footer_ = metadata.footer;
+  directory_ = metadata.directory;
+  key_to_index_ = metadata.key_to_index;
+  InitializeResourceTablesFromFooter();
 
-  LOG_F(INFO, "format version  : {}", header_.version);
-  LOG_F(INFO, "content version : {}", header_.content_version);
-  LOG_F(INFO, "pak guid        : {}",
-    oxygen::data::to_string(data::SourceKey::FromBytes(header_.guid)));
-
-  if (std::memcmp(header_.magic, data::pak::kPakHeaderMagic.data(),
-        data::pak::kPakHeaderMagic.size())
-    != 0) {
-    LOG_F(ERROR, "Invalid pak file header magic");
-    throw std::runtime_error("Invalid pak file header magic");
-  }
-
-  if (header_.version != 4 && header_.version != 5 && header_.version != 6
-    && header_.version != 7) {
-    const auto msg = std::string("Unsupported PAK format version: ")
-      + std::to_string(header_.version) + " (this build loads v4-v7 only).";
-    LOG_F(ERROR, "{}", msg);
-    throw std::runtime_error(msg);
-  }
-}
-
-auto PakFile::ReadFooter(serio::FileStream<>* stream) -> void
-{
-  LOG_SCOPE_FUNCTION(INFO);
-
-  constexpr size_t kPakFooterSize = sizeof(PakFooter);
-  auto size_result = stream->Size();
+  const auto size_result = meta_stream_->Size();
   if (!size_result) {
     LOG_F(
       ERROR, "Failed to get pak file size: {}", size_result.error().message());
     throw std::runtime_error("Failed to get pak file size");
   }
-  size_t file_size = size_result.value();
-  if (auto res = stream->Seek(file_size - kPakFooterSize); !res) {
-    LOG_F(ERROR, "Failed to seek to pak footer: {}", res.error().message());
-    throw std::runtime_error("Failed to seek to pak footer");
-  }
-  Reader reader(*stream);
-  auto footer_result = reader.Read<PakFooter>();
-  if (!footer_result) {
-    LOG_F(
-      ERROR, "Failed to read pak footer: {}", footer_result.error().message());
-    throw std::runtime_error("Failed to read pak footer");
-  }
-  footer_ = footer_result.value();
 
-  // Initialize resource tables if present
-  InitBuffersTable();
-  InitTexturesTable();
-  InitScriptsTable();
-  InitPhysicsTable();
-
-  LOG_F(INFO, "pak crc32        : {}", footer_.pak_crc32);
-  LOG_F(INFO, "directory offset : {}", footer_.directory_offset);
-  LOG_F(INFO, "directory size   : {}", footer_.directory_size);
-  LOG_F(INFO, "asset count      : {}", footer_.asset_count);
-
-  if (std::memcmp(footer_.footer_magic, data::pak::kPakFooterMagic.data(),
-        data::pak::kPakFooterMagic.size())
-    != 0) {
-    LOG_F(ERROR, "Invalid pak file footer magic");
-    throw std::runtime_error("Invalid pak file footer magic");
-  }
+  auto parsed_browse
+    = LoadBrowseIndex(*meta_stream_, size_result.value(), footer_);
+  browse_index_ = std::move(parsed_browse.entries);
+  browse_vpath_to_key_ = std::move(parsed_browse.vpath_to_key);
 }
 
 auto PakFile::ValidateCrc32Integrity() const -> void
@@ -275,8 +476,11 @@ auto PakFile::ValidateCrc32Integrity() const -> void
   const size_t crc_field_absolute_offset
     = (file_size - sizeof(PakFooter)) + offsetof(PakFooter, pak_crc32);
 
-  const auto computed
-    = ComputePakCrc32(file_path_, file_size, crc_field_absolute_offset);
+  const auto computed = ComputePakCrc32(file_path_,
+    Crc32ComputationConfig {
+      .file_size = file_size,
+      .crc_field_absolute_offset = crc_field_absolute_offset,
+    });
 
   if (computed != footer_.pak_crc32) {
     LOG_F(ERROR, "CRC32 mismatch path={} expected=0x{:08x} actual=0x{:08x}",
@@ -285,187 +489,6 @@ auto PakFile::ValidateCrc32Integrity() const -> void
   }
 
   LOG_F(INFO, "CRC32 OK path={} crc32=0x{:08x}", file_path_.string(), computed);
-}
-
-auto PakFile::ReadBrowseIndex(
-  serio::FileStream<>* stream, const size_t file_size) -> void
-{
-  LOG_SCOPE_FUNCTION(INFO);
-
-  browse_index_.clear();
-  browse_vpath_to_key_.clear();
-
-  const data::pak::OffsetT browse_offset = footer_.browse_index_offset;
-  const uint64_t browse_size = footer_.browse_index_size;
-
-  if (browse_offset == 0 || browse_size == 0) {
-    return;
-  }
-
-  const auto end_offset = browse_offset + browse_size;
-  if (browse_offset >= file_size || end_offset > file_size
-    || end_offset < browse_offset) {
-    LOG_F(ERROR,
-      "Browse index out of bounds: offset={} size={} file_size={} (ignoring)",
-      browse_offset, browse_size, file_size);
-    return;
-  }
-
-  if (auto res = stream->Seek(static_cast<size_t>(browse_offset)); !res) {
-    LOG_F(ERROR, "Failed to seek to browse index offset {}: {}", browse_offset,
-      res.error().message());
-    return;
-  }
-
-  Reader reader(*stream);
-  auto header_result = reader.Read<PakBrowseIndexHeader>();
-  if (!header_result) {
-    LOG_F(ERROR, "Failed to read browse index header: {}",
-      header_result.error().message());
-    return;
-  }
-
-  const auto header = header_result.value();
-  constexpr std::array<uint8_t, 8> kBrowseMagic
-    = { 'O', 'X', 'P', 'A', 'K', 'B', 'I', 'X' };
-  if (std::memcmp(header.magic, kBrowseMagic.data(), kBrowseMagic.size())
-    != 0) {
-    LOG_F(ERROR, "Browse index magic mismatch (ignoring)");
-    return;
-  }
-
-  if (header.version != 1) {
-    LOG_F(
-      ERROR, "Unsupported browse index version {} (ignoring)", header.version);
-    return;
-  }
-
-  const uint64_t entries_size
-    = static_cast<uint64_t>(header.entry_count) * sizeof(PakBrowseIndexEntry);
-  const uint64_t expected_min_size
-    = sizeof(PakBrowseIndexHeader) + entries_size + header.string_table_size;
-  if (expected_min_size > browse_size) {
-    LOG_F(ERROR,
-      "Browse index payload is truncated: expected_at_least={} actual={}",
-      expected_min_size, browse_size);
-    return;
-  }
-
-  std::vector<PakBrowseIndexEntry> entries;
-  entries.reserve(header.entry_count);
-  for (uint32_t i = 0; i < header.entry_count; ++i) {
-    auto entry_result = reader.Read<PakBrowseIndexEntry>();
-    if (!entry_result) {
-      LOG_F(ERROR, "Failed to read browse index entry {}: {}", i,
-        entry_result.error().message());
-      return;
-    }
-    entries.push_back(entry_result.value());
-  }
-
-  auto strings_blob_result
-    = reader.ReadBlob(static_cast<size_t>(header.string_table_size));
-  if (!strings_blob_result) {
-    LOG_F(ERROR, "Failed to read browse index string table: {}",
-      strings_blob_result.error().message());
-    return;
-  }
-  const auto& strings_blob = strings_blob_result.value();
-
-  browse_index_.reserve(header.entry_count);
-  for (const auto& e : entries) {
-    const uint64_t off = e.virtual_path_offset;
-    const uint64_t len = e.virtual_path_length;
-    const uint64_t end = off + len;
-    if (off > header.string_table_size || len > header.string_table_size
-      || end > header.string_table_size || end < off) {
-      LOG_F(ERROR, "Browse index string reference out of bounds (ignoring)");
-      return;
-    }
-
-    const auto* base = reinterpret_cast<const char*>(strings_blob.data());
-    std::string vpath(base + off, base + end);
-    if (vpath.empty() || vpath.front() != '/') {
-      LOG_F(ERROR, "Browse index virtual path is not canonical (ignoring)");
-      return;
-    }
-
-    browse_index_.push_back(BrowseEntry {
-      .virtual_path = std::move(vpath),
-      .asset_key = e.asset_key,
-    });
-  }
-
-  browse_vpath_to_key_.reserve(browse_index_.size());
-  for (const auto& entry : browse_index_) {
-    const std::string_view key_view(entry.virtual_path);
-    if (browse_vpath_to_key_.contains(key_view)) {
-      LOG_F(ERROR, "Browse index contains duplicate virtual path '{}'",
-        entry.virtual_path);
-      browse_index_.clear();
-      browse_vpath_to_key_.clear();
-      return;
-    }
-    browse_vpath_to_key_.emplace(key_view, entry.asset_key);
-  }
-}
-
-auto PakFile::ReadDirectoryEntry(Reader& reader) -> void
-{
-  LOG_SCOPE_FUNCTION(INFO);
-
-  auto entry_result = reader.Read<AssetDirectoryEntry>();
-  if (!entry_result) {
-    LOG_F(ERROR, "Failed to read asset directory entry: {}",
-      entry_result.error().message());
-    throw std::runtime_error("Failed to read asset directory entries");
-  }
-
-  const auto& entry = *entry_result;
-  directory_.emplace_back(entry);
-  key_to_index_.emplace(entry.asset_key, directory_.size() - 1);
-}
-
-auto PakFile::ReadDirectory(
-  serio::FileStream<>* stream, std::uint32_t asset_count) -> void
-{
-  LOG_SCOPE_FUNCTION(INFO);
-
-  if (auto res = stream->Seek(footer_.directory_offset); !res) {
-    LOG_F(
-      ERROR, "Failed to seek to directory offset: {}", res.error().message());
-    throw std::runtime_error("Failed to seek to directory offset");
-  }
-  Reader reader(*stream);
-  directory_.clear();
-  key_to_index_.clear();
-  for (std::uint32_t i = 0; i < asset_count; ++i) {
-    ReadDirectoryEntry(reader); // places the entry at the end of directory_
-  }
-}
-
-PakFile::PakFile(const std::filesystem::path& path)
-  : file_path_(path)
-  , meta_stream_(OpenFileStream(path))
-  , buffer_data_stream_(OpenFileStream(path))
-  , texture_data_stream_(OpenFileStream(path))
-  , script_data_stream_(OpenFileStream(path))
-  , physics_data_stream_(OpenFileStream(path))
-{
-  LOG_SCOPE_FUNCTION(INFO);
-  LOG_F(INFO, "file : {}", path.string());
-  ReadHeader(meta_stream_.get());
-  ReadFooter(meta_stream_.get());
-
-  const auto size_result = meta_stream_->Size();
-  if (!size_result) {
-    LOG_F(
-      ERROR, "Failed to get pak file size: {}", size_result.error().message());
-    throw std::runtime_error("Failed to get pak file size");
-  }
-  ReadBrowseIndex(meta_stream_.get(), size_result.value());
-
-  ReadDirectory(meta_stream_.get(), static_cast<uint32_t>(footer_.asset_count));
 }
 
 auto PakFile::HasBrowseIndex() const noexcept -> bool
@@ -487,6 +510,21 @@ auto PakFile::ResolveAssetKeyByVirtualPath(
     return std::nullopt;
   }
   return it->second;
+}
+
+auto PakFile::CreateReaderAtOffset(serio::FileStream<>* stream,
+  const uint64_t offset, const std::string_view operation) const -> Reader
+{
+  if (stream == nullptr) {
+    throw std::runtime_error("PakFile stream is not open");
+  }
+  if (const auto res = stream->Seek(static_cast<size_t>(offset)); !res) {
+    LOG_F(ERROR, "Failed to seek to {} offset {}: {}", operation, offset,
+      res.error().message());
+    throw std::runtime_error(
+      std::string("Failed to seek to ") + std::string(operation));
+  }
+  return Reader(*stream);
 }
 
 /*!
@@ -529,16 +567,8 @@ auto PakFile::Directory() const noexcept -> std::span<const AssetDirectoryEntry>
 auto PakFile::CreateReader(const AssetDirectoryEntry& entry) const -> Reader
 {
   std::scoped_lock lock(mutex_);
-  if (!meta_stream_) {
-    throw std::runtime_error("PakFile stream is not open");
-  }
-  // Seek to asset descriptor offset (desc_offset in new format)
-  if (const auto res = meta_stream_->Seek(entry.desc_offset); !res) {
-    LOG_F(ERROR, "Failed to seek to asset desc offset {}: {}",
-      entry.desc_offset, res.error().message());
-    throw std::runtime_error("Failed to seek to asset desc offset");
-  }
-  return Reader(*meta_stream_);
+  return CreateReaderAtOffset(
+    meta_stream_.get(), entry.desc_offset, "asset descriptor");
 }
 
 /*!
@@ -580,17 +610,8 @@ auto PakFile::Guid() const noexcept -> data::SourceKey
 auto PakFile::CreateBufferDataReader() const -> Reader
 {
   std::scoped_lock lock(mutex_);
-  if (!buffer_data_stream_) {
-    throw std::runtime_error("PakFile buffer data stream is not open");
-  }
-  // Seek to asset descriptor offset (desc_offset in new format)
-  if (const auto res = buffer_data_stream_->Seek(footer_.buffer_region.offset);
-    !res) {
-    LOG_F(ERROR, "Failed to seek to buffer data region offset {}: {}",
-      footer_.buffer_region.offset, res.error().message());
-    throw std::runtime_error("Failed to seek to buffer data region offset");
-  }
-  return Reader(*buffer_data_stream_);
+  return CreateReaderAtOffset(buffer_data_stream_.get(),
+    footer_.buffer_region.offset, "buffer data region");
 }
 
 /*!
@@ -603,49 +624,22 @@ auto PakFile::CreateBufferDataReader() const -> Reader
 auto PakFile::CreateTextureDataReader() const -> Reader
 {
   std::scoped_lock lock(mutex_);
-  if (!texture_data_stream_) {
-    throw std::runtime_error("PakFile texture data stream is not open");
-  }
-  // Seek to asset descriptor offset (desc_offset in new format)
-  if (const auto res
-    = texture_data_stream_->Seek(footer_.texture_region.offset);
-    !res) {
-    LOG_F(ERROR, "Failed to seek to texture data region offset {}: {}",
-      footer_.texture_region.offset, res.error().message());
-    throw std::runtime_error("Failed to seek to texture data region offset");
-  }
-  return Reader(*texture_data_stream_);
+  return CreateReaderAtOffset(texture_data_stream_.get(),
+    footer_.texture_region.offset, "texture data region");
 }
 
 auto PakFile::CreateScriptDataReader() const -> Reader
 {
   std::scoped_lock lock(mutex_);
-  if (!script_data_stream_) {
-    throw std::runtime_error("PakFile script data stream is not open");
-  }
-  if (const auto res = script_data_stream_->Seek(footer_.script_region.offset);
-    !res) {
-    LOG_F(ERROR, "Failed to seek to script data region offset {}: {}",
-      footer_.script_region.offset, res.error().message());
-    throw std::runtime_error("Failed to seek to script data region offset");
-  }
-  return Reader(*script_data_stream_);
+  return CreateReaderAtOffset(script_data_stream_.get(),
+    footer_.script_region.offset, "script data region");
 }
 
 auto PakFile::CreatePhysicsDataReader() const -> Reader
 {
   std::scoped_lock lock(mutex_);
-  if (!physics_data_stream_) {
-    throw std::runtime_error("PakFile physics data stream is not open");
-  }
-  if (const auto res
-    = physics_data_stream_->Seek(footer_.physics_region.offset);
-    !res) {
-    LOG_F(ERROR, "Failed to seek to physics data region offset {}: {}",
-      footer_.physics_region.offset, res.error().message());
-    throw std::runtime_error("Failed to seek to physics data region offset");
-  }
-  return Reader(*physics_data_stream_);
+  return CreateReaderAtOffset(physics_data_stream_.get(),
+    footer_.physics_region.offset, "physics data region");
 }
 
 /*!
@@ -748,22 +742,18 @@ auto PakFile::ReadScriptSlotRecords(const uint32_t start_index,
   return result;
 }
 
-auto PakFile::ReadScriptParamRecords(const data::pak::OffsetT absolute_offset,
-  const uint32_t count) const -> std::vector<data::pak::ScriptParamRecord>
+auto PakFile::ReadScriptParamRecords(const ScriptParamReadRequest request) const
+  -> std::vector<data::pak::ScriptParamRecord>
 {
   std::vector<data::pak::ScriptParamRecord> result;
-  if (count == 0) {
+  if (request.count == 0) {
     return result;
   }
 
   std::scoped_lock lock(mutex_);
-  constexpr auto kRecordSize = sizeof(data::pak::ScriptParamRecord);
-
-  if (count > (std::numeric_limits<uint64_t>::max)() / kRecordSize) {
-    throw std::runtime_error("Script parameter array byte size overflow");
-  }
-
-  const auto total_bytes = static_cast<uint64_t>(count) * kRecordSize;
+  constexpr auto kRecordSize
+    = static_cast<uint64_t>(sizeof(data::pak::ScriptParamRecord));
+  const auto total_bytes = static_cast<uint64_t>(request.count) * kRecordSize;
 
   const auto stream_size_result = meta_stream_->Size();
   if (!stream_size_result) {
@@ -772,8 +762,8 @@ auto PakFile::ReadScriptParamRecords(const data::pak::OffsetT absolute_offset,
 
   const auto stream_size_u64
     = static_cast<uint64_t>(stream_size_result.value());
-  if (absolute_offset > stream_size_u64
-    || total_bytes > stream_size_u64 - absolute_offset) {
+  if (request.absolute_offset > stream_size_u64
+    || total_bytes > stream_size_u64 - request.absolute_offset) {
     throw std::runtime_error("Script parameter array range out of bounds");
   }
 
@@ -782,10 +772,10 @@ auto PakFile::ReadScriptParamRecords(const data::pak::OffsetT absolute_offset,
     throw std::runtime_error("Script parameter array exceeds addressable size");
   }
 
-  result.reserve(count);
+  result.reserve(request.count);
 
   if (const auto seek_res
-    = meta_stream_->Seek(static_cast<size_t>(absolute_offset));
+    = meta_stream_->Seek(static_cast<size_t>(request.absolute_offset));
     !seek_res) {
     throw std::runtime_error("Failed to seek script parameter array");
   }
@@ -799,7 +789,7 @@ auto PakFile::ReadScriptParamRecords(const data::pak::OffsetT absolute_offset,
     throw std::runtime_error("Script parameter array size mismatch");
   }
 
-  result.resize(count);
+  result.resize(request.count);
   std::memcpy(
     result.data(), blob_res->data(), static_cast<size_t>(total_bytes));
   return result;

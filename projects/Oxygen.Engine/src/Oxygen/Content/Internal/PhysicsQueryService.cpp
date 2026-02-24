@@ -58,11 +58,10 @@ auto PhysicsQueryService::ReadCollisionShapeAssetDescForAsset(
   if (!key_opt.has_value()) {
     return std::nullopt;
   }
-  const auto locator_opt = source->FindAsset(*key_opt);
-  if (!locator_opt.has_value()) {
+  if (!source->HasAsset(*key_opt)) {
     return std::nullopt;
   }
-  auto desc_reader = source->CreateAssetDescriptorReader(*locator_opt);
+  auto desc_reader = source->CreateAssetDescriptorReader(*key_opt);
   if (!desc_reader) {
     return std::nullopt;
   }
@@ -99,11 +98,10 @@ auto PhysicsQueryService::ReadPhysicsMaterialAssetDescForAsset(
   if (!key_opt.has_value()) {
     return std::nullopt;
   }
-  const auto locator_opt = source->FindAsset(*key_opt);
-  if (!locator_opt.has_value()) {
+  if (!source->HasAsset(*key_opt)) {
     return std::nullopt;
   }
-  auto desc_reader = source->CreateAssetDescriptorReader(*locator_opt);
+  auto desc_reader = source->CreateAssetDescriptorReader(*key_opt);
   if (!desc_reader) {
     return std::nullopt;
   }
@@ -142,12 +140,11 @@ auto PhysicsQueryService::FindPhysicsSidecarAssetKeyForScene(
     if (!key_opt.has_value()) {
       continue;
     }
-    const auto locator_opt = source->FindAsset(*key_opt);
-    if (!locator_opt.has_value()) {
+    if (!source->HasAsset(*key_opt)) {
       continue;
     }
 
-    auto desc_reader = source->CreateAssetDescriptorReader(*locator_opt);
+    auto desc_reader = source->CreateAssetDescriptorReader(*key_opt);
     if (!desc_reader) {
       continue;
     }
@@ -162,7 +159,7 @@ auto PhysicsQueryService::FindPhysicsSidecarAssetKeyForScene(
       continue;
     }
 
-    desc_reader = source->CreateAssetDescriptorReader(*locator_opt);
+    desc_reader = source->CreateAssetDescriptorReader(*key_opt);
     if (!desc_reader) {
       continue;
     }

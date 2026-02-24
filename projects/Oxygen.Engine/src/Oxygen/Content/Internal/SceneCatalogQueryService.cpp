@@ -19,10 +19,11 @@ namespace oxygen::content::internal {
 
 namespace {
 
-  auto ReadAssetHeader(const IContentSource& source,
-    const AssetLocator& locator) -> std::optional<data::pak::AssetHeader>
+  auto ReadAssetHeader(
+    const IContentSource& source, const data::AssetKey& key)
+    -> std::optional<data::pak::AssetHeader>
   {
-    auto desc_reader = source.CreateAssetDescriptorReader(locator);
+    auto desc_reader = source.CreateAssetDescriptorReader(key);
     if (!desc_reader) {
       return std::nullopt;
     }
@@ -68,12 +69,11 @@ auto SceneCatalogQueryService::EnumerateMountedScenes(
         continue;
       }
 
-      const auto locator_opt = source->FindAsset(*scene_key_opt);
-      if (!locator_opt.has_value()) {
+      if (!source->HasAsset(*scene_key_opt)) {
         continue;
       }
 
-      const auto header_opt = ReadAssetHeader(*source, *locator_opt);
+      const auto header_opt = ReadAssetHeader(*source, *scene_key_opt);
       if (!header_opt.has_value()) {
         continue;
       }

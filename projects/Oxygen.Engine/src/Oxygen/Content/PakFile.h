@@ -67,12 +67,6 @@ namespace oxygen::content {
       data::pak::PakHeader, data::pak::PakFooter
 */
 class PakFile {
-  // Internal: initialize resource tables if present in the footer
-  auto InitBuffersTable() const -> void;
-  auto InitTexturesTable() const -> void;
-  auto InitScriptsTable() const -> void;
-  auto InitPhysicsTable() const -> void;
-
 public:
   using Reader = serio::Reader<serio::FileStream<>>;
 
@@ -227,8 +221,13 @@ public:
     uint32_t count) const -> std::vector<data::pak::ScriptSlotRecord>;
 
   //! Read ScriptParamRecord array from an absolute PAK offset.
+  struct ScriptParamReadRequest final {
+    data::pak::OffsetT absolute_offset { 0 };
+    uint32_t count { 0 };
+  };
+
   OXGN_CNTT_NDAPI auto ReadScriptParamRecords(
-    data::pak::OffsetT absolute_offset, uint32_t count) const
+    ScriptParamReadRequest request) const
     -> std::vector<data::pak::ScriptParamRecord>;
 
   //! Read one script resource entry and payload by table index.
@@ -269,11 +268,9 @@ public:
   }
 
 private:
-  auto ReadHeader(serio::FileStream<>* stream) -> void;
-  auto ReadFooter(serio::FileStream<>* stream) -> void;
-  auto ReadDirectory(serio::FileStream<>* stream, uint32_t asset_count) -> void;
-  auto ReadDirectoryEntry(Reader& reader) -> void;
-  auto ReadBrowseIndex(serio::FileStream<>* stream, size_t file_size) -> void;
+  auto InitializeResourceTablesFromFooter() const -> void;
+  auto CreateReaderAtOffset(serio::FileStream<>* stream, uint64_t offset,
+    std::string_view operation) const -> Reader;
 
   std::filesystem::path file_path_; // Path to the PAK file
 
