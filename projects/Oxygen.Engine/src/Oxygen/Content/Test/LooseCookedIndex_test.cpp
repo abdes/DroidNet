@@ -41,7 +41,7 @@ auto FillTestGuid(oxygen::data::loose_cooked::IndexHeader& header) -> void
  SHA-256 digest in the index. Verifies that mounting succeeds.
 */
 NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRoot_DescriptorShaMatches_Abc_Succeeds)
+  LooseCookedIndexTest, AddLooseCookedRootDescriptorShaMatchesAbcSucceeds)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileRecord;
@@ -145,7 +145,7 @@ NOLINT_TEST_F(
  Scenario: Writes the smallest valid `container.index.bin` (empty asset list)
  and verifies that `AssetLoader::AddLooseCookedRoot(...)` accepts it.
 */
-NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_MinimalIndex_Succeeds)
+NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootMinimalIndexSucceeds)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileRecord;
@@ -188,8 +188,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_MinimalIndex_Succeeds)
  Scenario: Writes a well-formed file with an unsupported schema version and
  verifies that mounting fails.
 */
-NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRoot_UnsupportedVersion_Throws)
+NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootUnsupportedVersionThrows)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileRecord;
@@ -234,7 +233,7 @@ NOLINT_TEST_F(
  Verifies that mounting fails.
 */
 NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRoot_StringTableBeforeHeader_Throws)
+  LooseCookedIndexTest, AddLooseCookedRootStringTableBeforeHeaderThrows)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileRecord;
@@ -277,8 +276,8 @@ NOLINT_TEST_F(
  Scenario: Writes an index where asset entries begin before the end of the
  string table. Verifies that mounting fails.
 */
-NOLINT_TEST_F(LooseCookedIndexTest,
-  AddLooseCookedRoot_AssetEntriesOverlapStringTable_Throws)
+NOLINT_TEST_F(
+  LooseCookedIndexTest, AddLooseCookedRootAssetEntriesOverlapStringTableThrows)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileRecord;
@@ -325,8 +324,8 @@ NOLINT_TEST_F(LooseCookedIndexTest,
  Scenario: Writes an index with a virtual path that does not start with '/'.
  Verifies that mounting fails.
 */
-NOLINT_TEST_F(LooseCookedIndexTest,
-  AddLooseCookedRoot_VirtualPathMissingLeadingSlash_Throws)
+NOLINT_TEST_F(
+  LooseCookedIndexTest, AddLooseCookedRootVirtualPathMissingLeadingSlashThrows)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileRecord;
@@ -389,7 +388,7 @@ NOLINT_TEST_F(LooseCookedIndexTest,
  Verifies that mounting fails.
 */
 NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRoot_VirtualPathContainsDotDot_Throws)
+  LooseCookedIndexTest, AddLooseCookedRootVirtualPathContainsDotDotThrows)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileRecord;
@@ -452,7 +451,7 @@ NOLINT_TEST_F(
  separators. Verifies that mounting fails.
 */
 NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRoot_RelPathContainsBackslash_Throws)
+  LooseCookedIndexTest, AddLooseCookedRootRelPathContainsBackslashThrows)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileRecord;
@@ -514,7 +513,7 @@ NOLINT_TEST_F(
  Scenario: Writes a valid index with a single file record whose kind is
  `FileKind::kUnknown`. Verifies that mounting fails.
 */
-NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_UnknownFileKind_Throws)
+NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootUnknownFileKindThrows)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileKind;
@@ -570,7 +569,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_UnknownFileKind_Throws)
  Scenario: Writes a valid index with two file records of the same kind and
  verifies that mounting fails.
 */
-NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DuplicateFileKind_Throws)
+NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootDuplicateFileKindThrows)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileKind;
@@ -632,7 +631,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DuplicateFileKind_Throws)
  Scenario: Writes an index with two asset entries that share the same AssetKey.
  Verifies that mounting fails.
 */
-NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DuplicateAssetKey_Throws)
+NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootDuplicateAssetKeyThrows)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileRecord;
@@ -710,7 +709,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DuplicateAssetKey_Throws)
  that contain the same virtual path text. Verifies that mounting fails.
 */
 NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRoot_DuplicateVirtualPathString_Throws)
+  LooseCookedIndexTest, AddLooseCookedRootDuplicateVirtualPathStringThrows)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileRecord;
@@ -791,7 +790,7 @@ NOLINT_TEST_F(
  Scenario: Writes a loose cooked root where textures.table is indexed, but
  textures.data is missing. Verifies that mounting fails.
 */
-NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_TableWithoutData_Throws)
+NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootTableWithoutDataThrows)
 {
   using oxygen::data::AssetType;
   using oxygen::data::loose_cooked::AssetEntry;
@@ -898,7 +897,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_TableWithoutData_Throws)
  Scenario: Writes a loose cooked root where textures.data is indexed, but
  textures.table is missing. Verifies that mounting fails.
 */
-NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DataWithoutTable_Throws)
+NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootDataWithoutTableThrows)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileKind;
@@ -952,7 +951,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DataWithoutTable_Throws)
 
 //! Test: Script table/data file kinds are accepted when provided as a pair
 NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRoot_ScriptTableAndDataPair_Succeeds)
+  LooseCookedIndexTest, AddLooseCookedRootScriptTableAndDataPairSucceeds)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileKind;
@@ -1022,7 +1021,7 @@ NOLINT_TEST_F(
 
 //! Test: Script table/data must be provided as a complete pair
 NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRoot_ScriptDataWithoutTable_Throws)
+  LooseCookedIndexTest, AddLooseCookedRootScriptDataWithoutTableThrows)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileKind;
@@ -1074,7 +1073,7 @@ NOLINT_TEST_F(
 
 //! Test: Physics table/data file kinds are accepted when provided as a pair.
 NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRoot_PhysicsTableAndDataPair_Succeeds)
+  LooseCookedIndexTest, AddLooseCookedRootPhysicsTableAndDataPairSucceeds)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileKind;
@@ -1144,7 +1143,7 @@ NOLINT_TEST_F(
 
 //! Test: Physics table/data must be provided as a complete pair.
 NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRoot_PhysicsDataWithoutTable_Throws)
+  LooseCookedIndexTest, AddLooseCookedRootPhysicsDataWithoutTableThrows)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileKind;
@@ -1206,7 +1205,7 @@ NOLINT_TEST_F(
  Verifies that mounting succeeds.
 */
 NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRoot_FileRecordLegacyShaBytes_Ignored)
+  LooseCookedIndexTest, AddLooseCookedRootFileRecordLegacyShaBytesIgnored)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileKind;
@@ -1294,7 +1293,7 @@ NOLINT_TEST_F(
  non-zero, incorrect descriptor SHA-256 in the index. Verifies mounting fails.
 */
 NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRoot_DescriptorShaMismatch_Throws)
+  LooseCookedIndexTest, AddLooseCookedRootDescriptorShaMismatchThrows)
 {
   using oxygen::data::AssetType;
   using oxygen::data::loose_cooked::AssetEntry;
@@ -1374,7 +1373,7 @@ NOLINT_TEST_F(
  Scenario: Writes a minimal index with an unknown flags bit set. Verifies that
  mounting fails.
 */
-NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_UnknownFlags_Throws)
+NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootUnknownFlagsThrows)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileRecord;
@@ -1418,7 +1417,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_UnknownFlags_Throws)
  `kHasVirtualPaths`. Verifies that mounting fails.
 */
 NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRoot_FlagsMissingVirtualPaths_Throws)
+  LooseCookedIndexTest, AddLooseCookedRootFlagsMissingVirtualPathsThrows)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileRecord;
@@ -1462,7 +1461,7 @@ NOLINT_TEST_F(
  Verifies that mounting fails.
 */
 NOLINT_TEST_F(
-  LooseCookedIndexTest, AddLooseCookedRoot_FileRecordsWithoutFlag_Throws)
+  LooseCookedIndexTest, AddLooseCookedRootFileRecordsWithoutFlagThrows)
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileKind;
@@ -1513,7 +1512,7 @@ NOLINT_TEST_F(
 }
 
 //! Test: Verify that an index without a GUID (all zeros) is rejected.
-NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_NoGuid_Throws)
+NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootNoGuidThrows)
 {
   using oxygen::data::loose_cooked::FileRecord;
   using oxygen::data::loose_cooked::IndexHeader;

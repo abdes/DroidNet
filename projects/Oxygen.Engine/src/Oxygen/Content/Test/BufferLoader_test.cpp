@@ -35,7 +35,7 @@ protected:
 //! Test: LoadBufferResource returns valid BufferResource for vertex buffer
 //! input.
 NOLINT_TEST_F(
-  BufferLoaderBasicTest, LoadBuffer_VertexBufferInput_ReturnsBufferAsset)
+  BufferLoaderBasicTest, LoadBufferVertexBufferInputReturnsBufferAsset)
 {
   using oxygen::content::testing::WriteDescriptorWithData;
   using oxygen::data::BufferResource;
@@ -86,7 +86,7 @@ NOLINT_TEST_F(
 //! Test: LoadBufferResource returns valid BufferResource for index buffer
 //! input.
 NOLINT_TEST_F(
-  BufferLoaderBasicTest, LoadBuffer_IndexBufferInput_ReturnsBufferAsset)
+  BufferLoaderBasicTest, LoadBufferIndexBufferInputReturnsBufferAsset)
 {
   using oxygen::content::testing::WriteDescriptorWithData;
   using oxygen::data::BufferResource;
@@ -136,7 +136,7 @@ NOLINT_TEST_F(
 
 //! Test: LoadBufferResource returns valid BufferResource for structured buffer.
 NOLINT_TEST_F(
-  BufferLoaderBasicTest, LoadBuffer_StructuredBuffer_ReturnsBufferAsset)
+  BufferLoaderBasicTest, LoadBufferStructuredBufferReturnsBufferAsset)
 {
   using oxygen::content::testing::WriteDescriptorWithData;
   using oxygen::data::BufferResource;
@@ -184,7 +184,7 @@ NOLINT_TEST_F(
 }
 
 //! Test: LoadBufferResource returns valid BufferResource for raw buffer.
-NOLINT_TEST_F(BufferLoaderBasicTest, LoadBuffer_RawBuffer_ReturnsBufferAsset)
+NOLINT_TEST_F(BufferLoaderBasicTest, LoadBufferRawBufferReturnsBufferAsset)
 {
   using oxygen::content::testing::WriteDescriptorWithData;
   using oxygen::data::BufferResource;
@@ -233,7 +233,7 @@ NOLINT_TEST_F(BufferLoaderBasicTest, LoadBuffer_RawBuffer_ReturnsBufferAsset)
 
 //! Test: LoadBufferResource returns kUnknown for invalid element format.
 NOLINT_TEST_F(
-  BufferLoaderBasicTest, LoadBuffer_InvalidElementFormat_ReturnsUnknown)
+  BufferLoaderBasicTest, LoadBufferInvalidElementFormatReturnsUnknown)
 {
   using oxygen::Format;
   using oxygen::content::testing::WriteDescriptorWithData;
@@ -272,7 +272,7 @@ NOLINT_TEST_F(
 
 //! Test: LoadBufferResource correctly handles multiple usage flags.
 NOLINT_TEST_F(
-  BufferLoaderBasicTest, LoadBuffer_MultipleUsageFlags_ReturnsBufferAsset)
+  BufferLoaderBasicTest, LoadBufferMultipleUsageFlagsReturnsBufferAsset)
 {
   using oxygen::content::testing::WriteDescriptorWithData;
   using oxygen::data::BufferResource;
@@ -317,7 +317,7 @@ NOLINT_TEST_F(
 }
 
 //! Test: LoadBufferResource correctly handles a non-zero data_offset.
-NOLINT_TEST_F(BufferLoaderBasicTest, LoadBuffer_AlignedDataOffset_Works)
+NOLINT_TEST_F(BufferLoaderBasicTest, LoadBufferAlignedDataOffsetWorks)
 {
   using oxygen::content::testing::WriteDescriptorWithData;
   using oxygen::data::BufferResource;
@@ -363,7 +363,7 @@ NOLINT_TEST_F(BufferLoaderBasicTest, LoadBuffer_AlignedDataOffset_Works)
 
 //! Test: LoadBufferResource handles zero size_bytes (no buffer data)
 //! gracefully.
-NOLINT_TEST_F(BufferLoaderBasicTest, LoadBuffer_ZeroDataSize_Works)
+NOLINT_TEST_F(BufferLoaderBasicTest, LoadBufferZeroDataSizeWorks)
 {
   using oxygen::content::testing::WriteDescriptorWithData;
   using oxygen::data::BufferResource;
@@ -406,7 +406,7 @@ NOLINT_TEST_F(BufferLoaderBasicTest, LoadBuffer_ZeroDataSize_Works)
 }
 
 //! Test: LoadBufferResource handles CPU access flags correctly.
-NOLINT_TEST_F(BufferLoaderBasicTest, LoadBuffer_CPUAccessFlags_Works)
+NOLINT_TEST_F(BufferLoaderBasicTest, LoadBufferCPUAccessFlagsWorks)
 {
   using oxygen::content::testing::WriteDescriptorWithData;
   using oxygen::data::BufferResource;
@@ -457,7 +457,7 @@ class BufferLoaderErrorTest : public BufferLoaderBasicTest {
 
 //! Test: LoadBufferResource throws if the header is truncated (less than 32
 //! bytes).
-NOLINT_TEST_F(BufferLoaderErrorTest, LoadBuffer_TruncatedHeader_Throws)
+NOLINT_TEST_F(BufferLoaderErrorTest, LoadBufferTruncatedHeaderThrows)
 {
   using oxygen::content::testing::WriteDescriptorWithData;
 
@@ -476,7 +476,7 @@ NOLINT_TEST_F(BufferLoaderErrorTest, LoadBuffer_TruncatedHeader_Throws)
 }
 
 //! Test: LoadBufferResource throws if data reading fails.
-NOLINT_TEST_F(BufferLoaderErrorTest, LoadBuffer_DataReadFailure_Throws)
+NOLINT_TEST_F(BufferLoaderErrorTest, LoadBufferDataReadFailureThrows)
 {
   using oxygen::content::testing::WriteDescriptorWithData;
 

@@ -33,7 +33,7 @@ auto PackScriptingRecords(
 
 } // namespace
 
-NOLINT_TEST(SceneScriptingLoaderTest, ValidateScriptingSlotRanges_Valid)
+NOLINT_TEST(SceneScriptingLoaderTest, ValidateScriptingSlotRangesValid)
 {
   const auto bytes = PackScriptingRecords({
     { .node_index = 0, .slot_start_index = 0, .slot_count = 2 },
@@ -45,7 +45,7 @@ NOLINT_TEST(SceneScriptingLoaderTest, ValidateScriptingSlotRanges_Valid)
   });
 }
 
-NOLINT_TEST(SceneScriptingLoaderTest, ValidateScriptingSlotRanges_OutOfBounds)
+NOLINT_TEST(SceneScriptingLoaderTest, ValidateScriptingSlotRangesOutOfBounds)
 {
   const auto bytes = PackScriptingRecords(
     { { .node_index = 0, .slot_start_index = 3, .slot_count = 1 } });
@@ -59,7 +59,7 @@ NOLINT_TEST(SceneScriptingLoaderTest, ValidateScriptingSlotRanges_OutOfBounds)
 }
 
 NOLINT_TEST(
-  SceneScriptingLoaderTest, ValidateScriptingSlotRanges_OverlapWarnsNoThrow)
+  SceneScriptingLoaderTest, ValidateScriptingSlotRangesOverlapWarnsNoThrow)
 {
   const auto bytes = PackScriptingRecords({
     { .node_index = 0, .slot_start_index = 1, .slot_count = 2 },
@@ -71,7 +71,7 @@ NOLINT_TEST(
   });
 }
 
-NOLINT_TEST(SceneScriptingLoaderTest, ValidateComponentTable_RejectsBadSort)
+NOLINT_TEST(SceneScriptingLoaderTest, ValidateComponentTableRejectsBadSort)
 {
   const auto bytes = PackScriptingRecords({
     { .node_index = 2, .slot_start_index = 0, .slot_count = 1 },

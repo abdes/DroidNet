@@ -18,13 +18,13 @@ namespace {
 class FileErrorTest : public ::testing::Test { };
 
 //! Verify kOk is zero for boolean-like checks.
-NOLINT_TEST_F(FileErrorTest, kOk_IsZero)
+NOLINT_TEST_F(FileErrorTest, kOkIsZero)
 {
   EXPECT_EQ(static_cast<uint32_t>(FileError::kOk), 0u);
 }
 
 //! Verify all error codes have distinct values.
-NOLINT_TEST_F(FileErrorTest, AllCodes_AreDistinct)
+NOLINT_TEST_F(FileErrorTest, AllCodesAreDistinct)
 {
   std::set<uint32_t> values;
 
@@ -57,28 +57,28 @@ NOLINT_TEST_F(FileErrorTest, AllCodes_AreDistinct)
 class FileErrorInfoTest : public testing::Test { };
 
 //! Verify IsError returns false for kOk.
-NOLINT_TEST_F(FileErrorInfoTest, IsError_WithOk_ReturnsFalse)
+NOLINT_TEST_F(FileErrorInfoTest, IsErrorWithOkReturnsFalse)
 {
   const FileErrorInfo info { .code = FileError::kOk };
   EXPECT_FALSE(info.IsError());
 }
 
 //! Verify IsError returns true for error codes.
-NOLINT_TEST_F(FileErrorInfoTest, IsError_WithError_ReturnsTrue)
+NOLINT_TEST_F(FileErrorInfoTest, IsErrorWithErrorReturnsTrue)
 {
   const FileErrorInfo info { .code = FileError::kNotFound };
   EXPECT_TRUE(info.IsError());
 }
 
 //! Verify ToString with kOk returns "OK".
-NOLINT_TEST_F(FileErrorInfoTest, ToString_WithOk_ReturnsOk)
+NOLINT_TEST_F(FileErrorInfoTest, ToStringWithOkReturnsOk)
 {
   const FileErrorInfo info { .code = FileError::kOk };
   EXPECT_EQ(info.ToString(), "OK");
 }
 
 //! Verify ToString includes error name.
-NOLINT_TEST_F(FileErrorInfoTest, ToString_WithError_IncludesName)
+NOLINT_TEST_F(FileErrorInfoTest, ToStringWithErrorIncludesName)
 {
   const FileErrorInfo info { .code = FileError::kNotFound };
   const auto str = info.ToString();
@@ -86,7 +86,7 @@ NOLINT_TEST_F(FileErrorInfoTest, ToString_WithError_IncludesName)
 }
 
 //! Verify ToString includes path when present.
-NOLINT_TEST_F(FileErrorInfoTest, ToString_WithPath_IncludesPath)
+NOLINT_TEST_F(FileErrorInfoTest, ToStringWithPathIncludesPath)
 {
   const FileErrorInfo info {
     .code = FileError::kNotFound,
@@ -97,7 +97,7 @@ NOLINT_TEST_F(FileErrorInfoTest, ToString_WithPath_IncludesPath)
 }
 
 //! Verify ToString includes message when present.
-NOLINT_TEST_F(FileErrorInfoTest, ToString_WithMessage_IncludesMessage)
+NOLINT_TEST_F(FileErrorInfoTest, ToStringWithMessageIncludesMessage)
 {
   const FileErrorInfo info {
     .code = FileError::kAccessDenied,
@@ -108,7 +108,7 @@ NOLINT_TEST_F(FileErrorInfoTest, ToString_WithMessage_IncludesMessage)
 }
 
 //! Verify ToString includes system error when present.
-NOLINT_TEST_F(FileErrorInfoTest, ToString_WithSystemError_IncludesSystemError)
+NOLINT_TEST_F(FileErrorInfoTest, ToStringWithSystemErrorIncludesSystemError)
 {
   const FileErrorInfo info {
     .code = FileError::kNotFound,
@@ -124,70 +124,70 @@ NOLINT_TEST_F(FileErrorInfoTest, ToString_WithSystemError_IncludesSystemError)
 class MapSystemErrorTest : public testing::Test { };
 
 //! Verify no error maps to kOk.
-NOLINT_TEST_F(MapSystemErrorTest, NoError_MapsToOk)
+NOLINT_TEST_F(MapSystemErrorTest, NoErrorMapsToOk)
 {
   const std::error_code ec {};
   EXPECT_EQ(MapSystemError(ec), FileError::kOk);
 }
 
 //! Verify no_such_file_or_directory maps to kNotFound.
-NOLINT_TEST_F(MapSystemErrorTest, NoSuchFile_MapsToNotFound)
+NOLINT_TEST_F(MapSystemErrorTest, NoSuchFileMapsToNotFound)
 {
   const auto ec = std::make_error_code(std::errc::no_such_file_or_directory);
   EXPECT_EQ(MapSystemError(ec), FileError::kNotFound);
 }
 
 //! Verify permission_denied maps to kAccessDenied.
-NOLINT_TEST_F(MapSystemErrorTest, PermissionDenied_MapsToAccessDenied)
+NOLINT_TEST_F(MapSystemErrorTest, PermissionDeniedMapsToAccessDenied)
 {
   const auto ec = std::make_error_code(std::errc::permission_denied);
   EXPECT_EQ(MapSystemError(ec), FileError::kAccessDenied);
 }
 
 //! Verify file_exists maps to kAlreadyExists.
-NOLINT_TEST_F(MapSystemErrorTest, FileExists_MapsToAlreadyExists)
+NOLINT_TEST_F(MapSystemErrorTest, FileExistsMapsToAlreadyExists)
 {
   const auto ec = std::make_error_code(std::errc::file_exists);
   EXPECT_EQ(MapSystemError(ec), FileError::kAlreadyExists);
 }
 
 //! Verify is_a_directory maps to kIsDirectory.
-NOLINT_TEST_F(MapSystemErrorTest, IsDirectory_MapsToIsDirectory)
+NOLINT_TEST_F(MapSystemErrorTest, IsDirectoryMapsToIsDirectory)
 {
   const auto ec = std::make_error_code(std::errc::is_a_directory);
   EXPECT_EQ(MapSystemError(ec), FileError::kIsDirectory);
 }
 
 //! Verify not_a_directory maps to kNotDirectory.
-NOLINT_TEST_F(MapSystemErrorTest, NotDirectory_MapsToNotDirectory)
+NOLINT_TEST_F(MapSystemErrorTest, NotDirectoryMapsToNotDirectory)
 {
   const auto ec = std::make_error_code(std::errc::not_a_directory);
   EXPECT_EQ(MapSystemError(ec), FileError::kNotDirectory);
 }
 
 //! Verify too_many_files_open maps to kTooManyOpenFiles.
-NOLINT_TEST_F(MapSystemErrorTest, TooManyFiles_MapsToTooManyOpenFiles)
+NOLINT_TEST_F(MapSystemErrorTest, TooManyFilesMapsToTooManyOpenFiles)
 {
   const auto ec = std::make_error_code(std::errc::too_many_files_open);
   EXPECT_EQ(MapSystemError(ec), FileError::kTooManyOpenFiles);
 }
 
 //! Verify no_space_on_device maps to kNoSpace.
-NOLINT_TEST_F(MapSystemErrorTest, NoSpace_MapsToNoSpace)
+NOLINT_TEST_F(MapSystemErrorTest, NoSpaceMapsToNoSpace)
 {
   const auto ec = std::make_error_code(std::errc::no_space_on_device);
   EXPECT_EQ(MapSystemError(ec), FileError::kNoSpace);
 }
 
 //! Verify operation_canceled maps to kCancelled.
-NOLINT_TEST_F(MapSystemErrorTest, Cancelled_MapsToCancelled)
+NOLINT_TEST_F(MapSystemErrorTest, CancelledMapsToCancelled)
 {
   const auto ec = std::make_error_code(std::errc::operation_canceled);
   EXPECT_EQ(MapSystemError(ec), FileError::kCancelled);
 }
 
 //! Verify unknown errors map to kUnknown.
-NOLINT_TEST_F(MapSystemErrorTest, UnknownError_MapsToUnknown)
+NOLINT_TEST_F(MapSystemErrorTest, UnknownErrorMapsToUnknown)
 {
   // Use an uncommon error that doesn't have explicit mapping
   const auto ec = std::make_error_code(std::errc::address_in_use);
@@ -200,7 +200,7 @@ NOLINT_TEST_F(MapSystemErrorTest, UnknownError_MapsToUnknown)
 class MakeFileErrorTest : public testing::Test { };
 
 //! Verify MakeFileError from system error creates correct info.
-NOLINT_TEST_F(MakeFileErrorTest, FromSystemError_CreatesCorrectInfo)
+NOLINT_TEST_F(MakeFileErrorTest, FromSystemErrorCreatesCorrectInfo)
 {
   const std::filesystem::path path = "/test/file.txt";
   const auto ec = std::make_error_code(std::errc::no_such_file_or_directory);
@@ -214,7 +214,7 @@ NOLINT_TEST_F(MakeFileErrorTest, FromSystemError_CreatesCorrectInfo)
 }
 
 //! Verify MakeFileError with custom message creates correct info.
-NOLINT_TEST_F(MakeFileErrorTest, WithCustomMessage_CreatesCorrectInfo)
+NOLINT_TEST_F(MakeFileErrorTest, WithCustomMessageCreatesCorrectInfo)
 {
   const std::filesystem::path path = "/test/file.txt";
   constexpr auto code = FileError::kInvalidPath;

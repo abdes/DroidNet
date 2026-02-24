@@ -158,7 +158,7 @@ protected:
   Reader reader_;
 };
 
-NOLINT_TEST_F(SceneLoaderTest, LoadScene_ParseOnly_Succeeds)
+NOLINT_TEST_F(SceneLoaderTest, LoadSceneParseOnlySucceeds)
 {
   WriteMinimalSceneWithRenderable(oxygen::data::AssetKey {});
 
@@ -168,7 +168,7 @@ NOLINT_TEST_F(SceneLoaderTest, LoadScene_ParseOnly_Succeeds)
   EXPECT_EQ(asset->GetNodeName(asset->GetRootNode()), "root");
 }
 
-NOLINT_TEST_F(SceneLoaderTest, LoadScene_Decode_CollectsGeometryDependencies)
+NOLINT_TEST_F(SceneLoaderTest, LoadSceneDecodeCollectsGeometryDependencies)
 {
   oxygen::data::AssetKey geom {};
   geom.guid[0] = 0xAB;
@@ -184,8 +184,7 @@ NOLINT_TEST_F(SceneLoaderTest, LoadScene_Decode_CollectsGeometryDependencies)
   EXPECT_EQ(collector->AssetDependencies().front(), geom);
 }
 
-NOLINT_TEST_F(
-  SceneLoaderTest, LoadScene_InputContextBinding_NodeOutOfRange_Throws)
+NOLINT_TEST_F(SceneLoaderTest, LoadSceneInputContextBindingNodeOutOfRangeThrows)
 {
   using oxygen::data::AssetKey;
   using oxygen::data::AssetType;
@@ -250,8 +249,7 @@ NOLINT_TEST_F(
     { (void)LoadSceneAsset(MakeContextParseOnly()); }, std::runtime_error);
 }
 
-NOLINT_TEST_F(
-  SceneLoaderTest, LoadScene_InputContextBinding_BadEntrySize_Throws)
+NOLINT_TEST_F(SceneLoaderTest, LoadSceneInputContextBindingBadEntrySizeThrows)
 {
   using oxygen::data::AssetType;
   using oxygen::data::pak::NodeRecord;
@@ -307,8 +305,7 @@ NOLINT_TEST_F(
     { (void)LoadSceneAsset(MakeContextParseOnly()); }, std::runtime_error);
 }
 
-NOLINT_TEST_F(
-  SceneLoaderTest, LoadScene_InputContextBinding_UnsortedByNode_Throws)
+NOLINT_TEST_F(SceneLoaderTest, LoadSceneInputContextBindingUnsortedByNodeThrows)
 {
   using oxygen::data::AssetKey;
   using oxygen::data::AssetType;

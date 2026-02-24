@@ -110,7 +110,7 @@ protected:
 /*!\
  Verifies image dimensions and RGBA8 output size.
 */
-NOLINT_TEST_F(ImageDecodeTest, DecodeFromMemory_DecodesBmp)
+NOLINT_TEST_F(ImageDecodeTest, DecodeFromMemoryDecodesBmp)
 {
   // Arrange
   const auto bmp = MakeBmp2x2();
@@ -131,7 +131,7 @@ NOLINT_TEST_F(ImageDecodeTest, DecodeFromMemory_DecodesBmp)
 /*!\
  Verifies decode succeeds and the result is RGBA8.
 */
-NOLINT_TEST_F(ImageDecodeTest, DecodeFromFile_DecodesBmp)
+NOLINT_TEST_F(ImageDecodeTest, DecodeFromFileDecodesBmp)
 {
   // Arrange
   const auto temp_dir = MakeTempDir("image_decode_from_file");
@@ -154,7 +154,7 @@ NOLINT_TEST_F(ImageDecodeTest, DecodeFromFile_DecodesBmp)
 /*!\
  Verifies errors are reported for invalid image blobs.
 */
-NOLINT_TEST_F(ImageDecodeTest, DecodeFromMemory_InvalidBytesFails)
+NOLINT_TEST_F(ImageDecodeTest, DecodeFromMemoryInvalidBytesFails)
 {
   // Arrange
   const std::array<std::byte, 8> bytes
@@ -186,7 +186,7 @@ using oxygen::content::import::IsHdrSignature;
 /*!\
  Verifies detection of OpenEXR magic number: 0x76 0x2F 0x31 0x01.
 */
-NOLINT_TEST_F(ImageDecodeTest, IsExrSignature_DetectsValidMagic)
+NOLINT_TEST_F(ImageDecodeTest, IsExrSignatureDetectsValidMagic)
 {
   // Arrange
   const std::array<std::byte, 8> exr_magic
@@ -202,7 +202,7 @@ NOLINT_TEST_F(ImageDecodeTest, IsExrSignature_DetectsValidMagic)
 /*!\
  Verifies that arbitrary bytes are not detected as EXR.
 */
-NOLINT_TEST_F(ImageDecodeTest, IsExrSignature_RejectsNonExr)
+NOLINT_TEST_F(ImageDecodeTest, IsExrSignatureRejectsNonExr)
 {
   // Arrange
   const std::array<std::byte, 8> non_exr = { std::byte { 0x89 },
@@ -217,7 +217,7 @@ NOLINT_TEST_F(ImageDecodeTest, IsExrSignature_RejectsNonExr)
 /*!\
  Verifies graceful handling of empty byte spans.
 */
-NOLINT_TEST_F(ImageDecodeTest, IsExrSignature_HandlesEmpty)
+NOLINT_TEST_F(ImageDecodeTest, IsExrSignatureHandlesEmpty)
 {
   // Arrange
   const std::span<const std::byte> empty;
@@ -230,7 +230,7 @@ NOLINT_TEST_F(ImageDecodeTest, IsExrSignature_HandlesEmpty)
 /*!\
  Verifies detection of "#?RADIANCE" signature.
 */
-NOLINT_TEST_F(ImageDecodeTest, IsHdrSignature_DetectsRadiance)
+NOLINT_TEST_F(ImageDecodeTest, IsHdrSignatureDetectsRadiance)
 {
   // Arrange
   const std::string_view radiance_header = "#?RADIANCE\n";
@@ -245,7 +245,7 @@ NOLINT_TEST_F(ImageDecodeTest, IsHdrSignature_DetectsRadiance)
 /*!\
  Verifies detection of "#?RGBE" signature.
 */
-NOLINT_TEST_F(ImageDecodeTest, IsHdrSignature_DetectsRgbe)
+NOLINT_TEST_F(ImageDecodeTest, IsHdrSignatureDetectsRgbe)
 {
   // Arrange
   const std::string_view rgbe_header = "#?RGBE\n";
@@ -260,7 +260,7 @@ NOLINT_TEST_F(ImageDecodeTest, IsHdrSignature_DetectsRgbe)
 /*!\
  Verifies that arbitrary text is not detected as HDR.
 */
-NOLINT_TEST_F(ImageDecodeTest, IsHdrSignature_RejectsNonHdr)
+NOLINT_TEST_F(ImageDecodeTest, IsHdrSignatureRejectsNonHdr)
 {
   // Arrange
   const std::string_view non_hdr = "Hello, World!";
@@ -275,7 +275,7 @@ NOLINT_TEST_F(ImageDecodeTest, IsHdrSignature_RejectsNonHdr)
 /*!\
  Verifies .exr extension is recognized as HDR format.
 */
-NOLINT_TEST_F(ImageDecodeTest, IsHdrFormat_RecognizesExrExtension)
+NOLINT_TEST_F(ImageDecodeTest, IsHdrFormatRecognizesExrExtension)
 {
   // Arrange
   const std::array<std::byte, 4> random_data = { std::byte { 0x00 },
@@ -290,7 +290,7 @@ NOLINT_TEST_F(ImageDecodeTest, IsHdrFormat_RecognizesExrExtension)
 /*!\
  Verifies .hdr extension is recognized as HDR format.
 */
-NOLINT_TEST_F(ImageDecodeTest, IsHdrFormat_RecognizesHdrExtension)
+NOLINT_TEST_F(ImageDecodeTest, IsHdrFormatRecognizesHdrExtension)
 {
   // Arrange
   const std::array<std::byte, 4> random_data = { std::byte { 0x00 },
@@ -309,7 +309,7 @@ NOLINT_TEST_F(ImageDecodeTest, IsHdrFormat_RecognizesHdrExtension)
 /*!\
  Verifies unified decode produces ScratchImage with RGBA8UNorm for LDR.
 */
-NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImage_LdrBmpProducesRgba8)
+NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImageLdrBmpProducesRgba8)
 {
   // Arrange
   const auto bmp = MakeBmp2x2();
@@ -331,7 +331,7 @@ NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImage_LdrBmpProducesRgba8)
 /*!\
  Verifies flip_y option inverts the image vertically.
 */
-NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImage_FlipsY)
+NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImageFlipsY)
 {
   // Arrange
   const auto bmp = MakeBmp2x2();
@@ -365,7 +365,7 @@ NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImage_FlipsY)
 /*!\
  Verifies error handling for empty byte spans.
 */
-NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImage_EmptyInputFails)
+NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImageEmptyInputFails)
 {
   // Arrange
   const std::span<const std::byte> empty;
@@ -382,7 +382,7 @@ NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImage_EmptyInputFails)
 /*!\
  Verifies error handling for invalid image data.
 */
-NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImage_CorruptDataFails)
+NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImageCorruptDataFails)
 {
   // Arrange
   const std::array<std::byte, 8> garbage
@@ -402,7 +402,7 @@ NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImage_CorruptDataFails)
 /*!\
  Verifies file-based decode produces valid ScratchImage.
 */
-NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImage_FromFile_LdrBmp)
+NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImageFromFileLdrBmp)
 {
   // Arrange
   const auto temp_dir = MakeTempDir("decode_to_scratch_file");
@@ -425,7 +425,7 @@ NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImage_FromFile_LdrBmp)
 /*!\
  Verifies file not found error is returned.
 */
-NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImage_FromFile_NotFoundFails)
+NOLINT_TEST_F(ImageDecodeTest, DecodeToScratchImageFromFileNotFoundFails)
 {
   // Arrange
   const std::filesystem::path non_existent = "/non/existent/file.bmp";

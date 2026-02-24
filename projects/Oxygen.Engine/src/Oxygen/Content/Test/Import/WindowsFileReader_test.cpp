@@ -68,7 +68,7 @@ protected:
 //=== ReadFile Tests ===------------------------------------------------------//
 
 //! Verify reading an entire small file.
-NOLINT_TEST_F(WindowsFileReaderTest, ReadFile_SmallFile_ReadsAllContent)
+NOLINT_TEST_F(WindowsFileReaderTest, ReadFileSmallFileReadsAllContent)
 {
   // Arrange
   const std::string content = "Hello, World!";
@@ -90,7 +90,7 @@ NOLINT_TEST_F(WindowsFileReaderTest, ReadFile_SmallFile_ReadsAllContent)
 }
 
 //! Verify reading a larger file (multiple KB).
-NOLINT_TEST_F(WindowsFileReaderTest, ReadFile_LargerFile_ReadsAllContent)
+NOLINT_TEST_F(WindowsFileReaderTest, ReadFileLargerFileReadsAllContent)
 {
   // Arrange
   std::string content(64 * 1024, 'X'); // 64KB
@@ -115,7 +115,7 @@ NOLINT_TEST_F(WindowsFileReaderTest, ReadFile_LargerFile_ReadsAllContent)
 }
 
 //! Verify reading with an offset.
-NOLINT_TEST_F(WindowsFileReaderTest, ReadFile_WithOffset_ReadsFromOffset)
+NOLINT_TEST_F(WindowsFileReaderTest, ReadFileWithOffsetReadsFromOffset)
 {
   // Arrange
   const std::string content = "Hello, World!";
@@ -139,7 +139,7 @@ NOLINT_TEST_F(WindowsFileReaderTest, ReadFile_WithOffset_ReadsFromOffset)
 }
 
 //! Verify reading with max_bytes limit.
-NOLINT_TEST_F(WindowsFileReaderTest, ReadFile_WithMaxBytes_LimitsRead)
+NOLINT_TEST_F(WindowsFileReaderTest, ReadFileWithMaxBytesLimitsRead)
 {
   // Arrange
   const std::string content = "Hello, World!";
@@ -163,7 +163,7 @@ NOLINT_TEST_F(WindowsFileReaderTest, ReadFile_WithMaxBytes_LimitsRead)
 }
 
 //! Verify reading with offset and max_bytes.
-NOLINT_TEST_F(WindowsFileReaderTest, ReadFile_WithOffsetAndMaxBytes_Works)
+NOLINT_TEST_F(WindowsFileReaderTest, ReadFileWithOffsetAndMaxBytesWorks)
 {
   // Arrange
   const std::string content = "Hello, World!";
@@ -188,7 +188,7 @@ NOLINT_TEST_F(WindowsFileReaderTest, ReadFile_WithOffsetAndMaxBytes_Works)
 }
 
 //! Verify reading non-existent file returns error.
-NOLINT_TEST_F(WindowsFileReaderTest, ReadFile_NonExistent_ReturnsError)
+NOLINT_TEST_F(WindowsFileReaderTest, ReadFileNonExistentReturnsError)
 {
   // Arrange
   auto path = test_dir_ / "nonexistent.txt";
@@ -206,7 +206,7 @@ NOLINT_TEST_F(WindowsFileReaderTest, ReadFile_NonExistent_ReturnsError)
 }
 
 //! Verify reading with offset past EOF returns empty buffer.
-NOLINT_TEST_F(WindowsFileReaderTest, ReadFile_OffsetPastEOF_ReturnsEmpty)
+NOLINT_TEST_F(WindowsFileReaderTest, ReadFileOffsetPastEOFReturnsEmpty)
 {
   // Arrange
   const std::string content = "Hello";
@@ -229,7 +229,7 @@ NOLINT_TEST_F(WindowsFileReaderTest, ReadFile_OffsetPastEOF_ReturnsEmpty)
 //=== GetFileInfo Tests ===---------------------------------------------------//
 
 //! Verify getting file info for existing file.
-NOLINT_TEST_F(WindowsFileReaderTest, GetFileInfo_ExistingFile_ReturnsInfo)
+NOLINT_TEST_F(WindowsFileReaderTest, GetFileInfoExistingFileReturnsInfo)
 {
   // Arrange
   const std::string content = "Test content";
@@ -250,7 +250,7 @@ NOLINT_TEST_F(WindowsFileReaderTest, GetFileInfo_ExistingFile_ReturnsInfo)
 }
 
 //! Verify getting file info for directory.
-NOLINT_TEST_F(WindowsFileReaderTest, GetFileInfo_Directory_ReturnsInfo)
+NOLINT_TEST_F(WindowsFileReaderTest, GetFileInfoDirectoryReturnsInfo)
 {
   // Arrange - use test_dir_ which already exists
 
@@ -267,7 +267,7 @@ NOLINT_TEST_F(WindowsFileReaderTest, GetFileInfo_Directory_ReturnsInfo)
 }
 
 //! Verify getting file info for non-existent returns error.
-NOLINT_TEST_F(WindowsFileReaderTest, GetFileInfo_NonExistent_ReturnsError)
+NOLINT_TEST_F(WindowsFileReaderTest, GetFileInfoNonExistentReturnsError)
 {
   // Arrange
   auto path = test_dir_ / "nonexistent.txt";
@@ -287,7 +287,7 @@ NOLINT_TEST_F(WindowsFileReaderTest, GetFileInfo_NonExistent_ReturnsError)
 //=== Exists Tests ===--------------------------------------------------------//
 
 //! Verify Exists returns true for existing file.
-NOLINT_TEST_F(WindowsFileReaderTest, Exists_ExistingFile_ReturnsTrue)
+NOLINT_TEST_F(WindowsFileReaderTest, ExistsExistingFileReturnsTrue)
 {
   // Arrange
   auto path = CreateTestFile("exists.txt", "content");
@@ -305,7 +305,7 @@ NOLINT_TEST_F(WindowsFileReaderTest, Exists_ExistingFile_ReturnsTrue)
 }
 
 //! Verify Exists returns false for non-existent file.
-NOLINT_TEST_F(WindowsFileReaderTest, Exists_NonExistent_ReturnsFalse)
+NOLINT_TEST_F(WindowsFileReaderTest, ExistsNonExistentReturnsFalse)
 {
   // Arrange
   auto path = test_dir_ / "nonexistent.txt";
@@ -323,7 +323,7 @@ NOLINT_TEST_F(WindowsFileReaderTest, Exists_NonExistent_ReturnsFalse)
 }
 
 //! Verify Exists returns true for directory.
-NOLINT_TEST_F(WindowsFileReaderTest, Exists_Directory_ReturnsTrue)
+NOLINT_TEST_F(WindowsFileReaderTest, ExistsDirectoryReturnsTrue)
 {
   // Arrange - use test_dir_
 
@@ -342,7 +342,7 @@ NOLINT_TEST_F(WindowsFileReaderTest, Exists_Directory_ReturnsTrue)
 //=== CreateAsyncFileReader Tests ===----------------------------------------//
 
 //! Verify factory function creates reader.
-NOLINT_TEST_F(WindowsFileReaderTest, CreateAsyncFileReader_ReturnsReader)
+NOLINT_TEST_F(WindowsFileReaderTest, CreateAsyncFileReaderReturnsReader)
 {
   // Arrange & Act
   auto reader = CreateAsyncFileReader(*loop_);

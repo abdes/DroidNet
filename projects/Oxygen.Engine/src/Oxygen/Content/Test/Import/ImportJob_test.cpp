@@ -159,7 +159,7 @@ private:
 };
 
 //! Verify a job runs and invokes on_complete exactly once.
-NOLINT_TEST_F(ImportJobTest, ImportJob_Run_CompletesAndCallsOnCompleteOnce)
+NOLINT_TEST_F(ImportJobTest, ImportJobRunCompletesAndCallsOnCompleteOnce)
 {
   // Arrange
   std::atomic<int> complete_calls { 0 };
@@ -210,7 +210,7 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_Run_CompletesAndCallsOnCompleteOnce)
 }
 
 //! Verify Stop cancels a running job and completion is reported exactly once.
-NOLINT_TEST_F(ImportJobTest, ImportJob_Stop_CompletesWithCancelledDiagnostic)
+NOLINT_TEST_F(ImportJobTest, ImportJobStopCompletesWithCancelledDiagnostic)
 {
   // Arrange
   std::atomic<int> complete_calls { 0 };
@@ -270,7 +270,7 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_Stop_CompletesWithCancelledDiagnostic)
 }
 
 //! Verify pre-triggered cancel_event completes as canceled and avoids work.
-NOLINT_TEST_F(ImportJobTest, ImportJob_CancelEvent_PreTriggered_AvoidsExecution)
+NOLINT_TEST_F(ImportJobTest, ImportJobCancelEventPreTriggeredAvoidsExecution)
 {
   // Arrange
   std::atomic<int> complete_calls { 0 };
@@ -330,7 +330,7 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_CancelEvent_PreTriggered_AvoidsExecution)
 }
 
 //! Verify StartTask schedules work within the job scope.
-NOLINT_TEST_F(ImportJobTest, ImportJob_StartTask_ExecutesTask)
+NOLINT_TEST_F(ImportJobTest, ImportJobStartTaskExecutesTask)
 {
   // Arrange
   std::atomic<int> complete_calls { 0 };
@@ -378,7 +378,7 @@ NOLINT_TEST_F(ImportJobTest, ImportJob_StartTask_ExecutesTask)
 }
 
 //! Verify StartPipeline invokes the pipeline Start() within the job scope.
-NOLINT_TEST_F(ImportJobTest, ImportJob_StartPipeline_StartsWorkers)
+NOLINT_TEST_F(ImportJobTest, ImportJobStartPipelineStartsWorkers)
 {
   // Arrange
   std::atomic<int> complete_calls { 0 };

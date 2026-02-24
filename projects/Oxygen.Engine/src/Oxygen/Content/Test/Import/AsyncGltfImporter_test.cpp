@@ -34,7 +34,7 @@ class AsyncGltfImporterFullTest : public AsyncImporterFullTestBase { };
  Uses the async glTF import job to process Tabuleiro.glb and validates the
  cooked outputs contain the expected content types.
 */
-NOLINT_TEST_F(AsyncGltfImporterFullTest, AsyncBackend_ImportsFullTabuleiroScene)
+NOLINT_TEST_F(AsyncGltfImporterFullTest, AsyncBackendImportsFullTabuleiroScene)
 {
   // Arrange
   const auto models_dir = TestModelsDirFromFile();
@@ -77,7 +77,7 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, AsyncBackend_ImportsFullTabuleiroScene)
  Validates the async glTF importer can handle the external-texture Sponza
  dataset when the source file is present on disk.
 */
-NOLINT_TEST_F(AsyncGltfImporterFullTest, DISABLED_AsyncBackend_ImportsSponza)
+NOLINT_TEST_F(AsyncGltfImporterFullTest, DISABLEDAsyncBackendImportsSponza)
 {
   // Arrange
   const auto source_path = std::filesystem::path(

@@ -178,7 +178,7 @@ class AssetLoaderSceneTest : public AssetLoaderLoadingTest { };
  - The geometry asset is not registered as a dependency of the scene.
 */
 NOLINT_TEST_F(AssetLoaderSceneTest,
-  LoadAsset_SceneWithoutRenderables_RegistersNoGeometryDependencies)
+  LoadAssetSceneWithoutRenderablesRegistersNoGeometryDependencies)
 {
   // Arrange
   const auto pak_path = GeneratePakFile("scene_no_renderables");
@@ -253,7 +253,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
  - Only geometry A becomes a dependent edge of the scene.
 */
 NOLINT_TEST_F(AssetLoaderSceneTest,
-  LoadAsset_SceneWithRenderable_RegistersOnlyRenderableGeometryDependency)
+  LoadAssetSceneWithRenderableRegistersOnlyRenderableGeometryDependency)
 {
   // Arrange
   const auto pak_path = GeneratePakFile("scene_with_renderable");
@@ -352,7 +352,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
  - The referenced geometry is registered as a dependency of the scene.
 */
 NOLINT_TEST_F(AssetLoaderSceneTest,
-  LoadAsset_SceneWithDuplicateRenderables_RegistersSingleDependency)
+  LoadAssetSceneWithDuplicateRenderablesRegistersSingleDependency)
 {
   // Arrange
   const auto pak_path = GeneratePakFile("scene_duplicate_renderables");
@@ -425,7 +425,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
  Verify that both referenced geometries are registered as dependencies.
 */
 NOLINT_TEST_F(AssetLoaderSceneTest,
-  LoadAsset_SceneWithTwoGeometries_RegistersBothDependencies)
+  LoadAssetSceneWithTwoGeometriesRegistersBothDependencies)
 {
   // Arrange
   const auto pak_path = GeneratePakFile("scene_two_geometries");
@@ -511,7 +511,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
  - The environment block header and records are exposed.
 */
 NOLINT_TEST_F(AssetLoaderSceneTest,
-  LoadAsset_SceneWithLightsAndEnvironment_ParsesComponentsAndEnvironment)
+  LoadAssetSceneWithLightsAndEnvironmentParsesComponentsAndEnvironment)
 {
   const auto pak_path = GeneratePakFile("scene_with_lights_and_environment");
   const auto scene_key = CreateTestAssetKey("test_scene_lights_env");
@@ -615,7 +615,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
  - InputMappingContext publishes dependency edges to referenced input actions.
 */
 NOLINT_TEST_F(AssetLoaderSceneTest,
-  LoadAsset_SceneWithInputContextBinding_ParsesAndRegistersDependencies)
+  LoadAssetSceneWithInputContextBindingParsesAndRegistersDependencies)
 {
   const auto pak_path = GeneratePakFile("scene_with_input_context_binding");
   const auto scene_key = CreateTestAssetKey("test_scene_with_input_context");
@@ -721,7 +721,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
 
 //! Test: scene input-context dependency edges are republished on cache hit.
 NOLINT_TEST_F(AssetLoaderSceneTest,
-  LoadAsset_SceneWithInputContextBinding_CacheHitRepublishesDependencies)
+  LoadAssetSceneWithInputContextBindingCacheHitRepublishesDependencies)
 {
   const auto pak_path = GeneratePakFile("scene_with_input_context_binding");
   const auto scene_key = CreateTestAssetKey("test_scene_with_input_context");
@@ -789,7 +789,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
 
  * - Sidecar target scene identity fields match authored values.
 */
-NOLINT_TEST_F(AssetLoaderSceneTest, LoadAsset_SceneWithPhysicsSidecar_LoadsV7)
+NOLINT_TEST_F(AssetLoaderSceneTest, LoadAssetSceneWithPhysicsSidecarLoadsV7)
 {
   const auto pak_path = GeneratePakFile("scene_with_physics_sidecar");
   const auto scene_key = CreateTestAssetKey("test_scene_with_physics");
@@ -873,7 +873,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest, LoadAsset_SceneWithPhysicsSidecar_LoadsV7)
  descriptor, mounts it, and verifies that the scene loads and exposes the root
  node name.
 */
-NOLINT_TEST_F(AssetLoaderSceneTest, LoadAsset_LooseCookedScene_Loads)
+NOLINT_TEST_F(AssetLoaderSceneTest, LoadAssetLooseCookedSceneLoads)
 {
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_scene";

@@ -33,7 +33,7 @@ protected:
 
 //! Malformed mesh type is a structural decode error and must throw.
 NOLINT_TEST_F(
-  GeometryLoaderContractTest, LoadGeometryAsset_UnsupportedMeshType_Throws)
+  GeometryLoaderContractTest, LoadGeometryAssetUnsupportedMeshTypeThrows)
 {
   oxygen::data::pak::GeometryAssetDesc desc {};
   desc.header.asset_type

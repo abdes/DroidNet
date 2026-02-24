@@ -102,7 +102,7 @@ protected:
 //===-------------------------------------------------//
 
 //! Verify emitting a single material descriptor creates file.
-NOLINT_TEST_F(AssetEmitterTest, Emit_SingleMaterial_CreatesFile)
+NOLINT_TEST_F(AssetEmitterTest, EmitSingleMaterialCreatesFile)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -123,7 +123,7 @@ NOLINT_TEST_F(AssetEmitterTest, Emit_SingleMaterial_CreatesFile)
 }
 
 //! Verify emitting multiple assets creates all files.
-NOLINT_TEST_F(AssetEmitterTest, Emit_MultipleAssets_CreatesAllFiles)
+NOLINT_TEST_F(AssetEmitterTest, EmitMultipleAssetsCreatesAllFiles)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -154,7 +154,7 @@ NOLINT_TEST_F(AssetEmitterTest, Emit_MultipleAssets_CreatesAllFiles)
 }
 
 //! Verify Count tracks emitted assets.
-NOLINT_TEST_F(AssetEmitterTest, Count_TracksEmittedAssets)
+NOLINT_TEST_F(AssetEmitterTest, CountTracksEmittedAssets)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -183,7 +183,7 @@ NOLINT_TEST_F(AssetEmitterTest, Count_TracksEmittedAssets)
 //===------------------------------------------------//
 
 //! Verify Records() returns correct metadata.
-NOLINT_TEST_F(AssetEmitterTest, Records_ContainsCorrectMetadata)
+NOLINT_TEST_F(AssetEmitterTest, RecordsContainsCorrectMetadata)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -209,7 +209,7 @@ NOLINT_TEST_F(AssetEmitterTest, Records_ContainsCorrectMetadata)
 }
 
 //! Verify emitting the same key twice updates the record and overwrites file.
-NOLINT_TEST_F(AssetEmitterTest, Emit_SameKeyTwice_UpdatesRecordAndOverwrites)
+NOLINT_TEST_F(AssetEmitterTest, EmitSameKeyTwiceUpdatesRecordAndOverwrites)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -241,7 +241,7 @@ NOLINT_TEST_F(AssetEmitterTest, Emit_SameKeyTwice_UpdatesRecordAndOverwrites)
 }
 
 //! Verify conflicting virtual path mappings are rejected.
-NOLINT_TEST_F(AssetEmitterTest, Emit_VirtualPathConflictBetweenKeys_Throws)
+NOLINT_TEST_F(AssetEmitterTest, EmitVirtualPathConflictBetweenKeysThrows)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -262,7 +262,7 @@ NOLINT_TEST_F(AssetEmitterTest, Emit_VirtualPathConflictBetweenKeys_Throws)
 }
 
 //! Verify Records() preserves order of emission.
-NOLINT_TEST_F(AssetEmitterTest, Records_PreservesEmissionOrder)
+NOLINT_TEST_F(AssetEmitterTest, RecordsPreservesEmissionOrder)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -290,7 +290,7 @@ NOLINT_TEST_F(AssetEmitterTest, Records_PreservesEmissionOrder)
 //===---------------------------------------------------//
 
 //! Verify finalization waits for pending I/O.
-NOLINT_TEST_F(AssetEmitterTest, Finalize_WaitsForPendingIO)
+NOLINT_TEST_F(AssetEmitterTest, FinalizeWaitsForPendingIO)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -314,7 +314,7 @@ NOLINT_TEST_F(AssetEmitterTest, Finalize_WaitsForPendingIO)
 }
 
 //! Verify finalization with no assets succeeds.
-NOLINT_TEST_F(AssetEmitterTest, Finalize_NoAssets_Succeeds)
+NOLINT_TEST_F(AssetEmitterTest, FinalizeNoAssetsSucceeds)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -329,7 +329,7 @@ NOLINT_TEST_F(AssetEmitterTest, Finalize_NoAssets_Succeeds)
 }
 
 //! Verify emitting after Finalize() is rejected.
-NOLINT_TEST_F(AssetEmitterTest, Emit_AfterFinalize_Throws)
+NOLINT_TEST_F(AssetEmitterTest, EmitAfterFinalizeThrows)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -350,7 +350,7 @@ NOLINT_TEST_F(AssetEmitterTest, Emit_AfterFinalize_Throws)
 //===--------------------------------------------//
 
 //! Verify file content matches emitted bytes exactly.
-NOLINT_TEST_F(AssetEmitterTest, Finalize_FileContentMatchesEmittedBytes)
+NOLINT_TEST_F(AssetEmitterTest, FinalizeFileContentMatchesEmittedBytes)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -379,7 +379,7 @@ NOLINT_TEST_F(AssetEmitterTest, Finalize_FileContentMatchesEmittedBytes)
 }
 
 //! Verify directory structure is created as needed.
-NOLINT_TEST_F(AssetEmitterTest, Emit_CreatesNestedDirectories)
+NOLINT_TEST_F(AssetEmitterTest, EmitCreatesNestedDirectories)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -402,7 +402,7 @@ NOLINT_TEST_F(AssetEmitterTest, Emit_CreatesNestedDirectories)
 //===----------------------------------------------------//
 
 //! Verify PendingCount reflects queued writes.
-NOLINT_TEST_F(AssetEmitterTest, PendingCount_ReflectsQueuedWrites)
+NOLINT_TEST_F(AssetEmitterTest, PendingCountReflectsQueuedWrites)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -425,7 +425,7 @@ NOLINT_TEST_F(AssetEmitterTest, PendingCount_ReflectsQueuedWrites)
 }
 
 //! Verify ErrorCount is zero after successful writes.
-NOLINT_TEST_F(AssetEmitterTest, ErrorCount_ZeroAfterSuccessfulWrites)
+NOLINT_TEST_F(AssetEmitterTest, ErrorCountZeroAfterSuccessfulWrites)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -448,7 +448,7 @@ NOLINT_TEST_F(AssetEmitterTest, ErrorCount_ZeroAfterSuccessfulWrites)
 //=== Edge Cases ===----------------------------------------------------------//
 
 //! Verify empty descriptor bytes are handled correctly.
-NOLINT_TEST_F(AssetEmitterTest, Emit_EmptyBytes_CreatesEmptyFile)
+NOLINT_TEST_F(AssetEmitterTest, EmitEmptyBytesCreatesEmptyFile)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -468,7 +468,7 @@ NOLINT_TEST_F(AssetEmitterTest, Emit_EmptyBytes_CreatesEmptyFile)
 }
 
 //! Verify large descriptor is written correctly.
-NOLINT_TEST_F(AssetEmitterTest, Emit_LargeDescriptor_WrittenCorrectly)
+NOLINT_TEST_F(AssetEmitterTest, EmitLargeDescriptorWrittenCorrectly)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -500,7 +500,7 @@ NOLINT_TEST_F(AssetEmitterTest, Emit_LargeDescriptor_WrittenCorrectly)
 //===------------------------------------------------//
 
 //! Verify relative path with backslash is rejected.
-NOLINT_TEST_F(AssetEmitterTest, Emit_RelativePathWithBackslash_Throws)
+NOLINT_TEST_F(AssetEmitterTest, EmitRelativePathWithBackslashThrows)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -513,7 +513,7 @@ NOLINT_TEST_F(AssetEmitterTest, Emit_RelativePathWithBackslash_Throws)
 }
 
 //! Verify relative path with leading slash is rejected.
-NOLINT_TEST_F(AssetEmitterTest, Emit_RelativePathWithLeadingSlash_Throws)
+NOLINT_TEST_F(AssetEmitterTest, EmitRelativePathWithLeadingSlashThrows)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -526,7 +526,7 @@ NOLINT_TEST_F(AssetEmitterTest, Emit_RelativePathWithLeadingSlash_Throws)
 }
 
 //! Verify relative path with colon is rejected.
-NOLINT_TEST_F(AssetEmitterTest, Emit_RelativePathWithColon_Throws)
+NOLINT_TEST_F(AssetEmitterTest, EmitRelativePathWithColonThrows)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -539,7 +539,7 @@ NOLINT_TEST_F(AssetEmitterTest, Emit_RelativePathWithColon_Throws)
 }
 
 //! Verify relative path with double slash is rejected.
-NOLINT_TEST_F(AssetEmitterTest, Emit_RelativePathWithDoubleSlash_Throws)
+NOLINT_TEST_F(AssetEmitterTest, EmitRelativePathWithDoubleSlashThrows)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -552,7 +552,7 @@ NOLINT_TEST_F(AssetEmitterTest, Emit_RelativePathWithDoubleSlash_Throws)
 }
 
 //! Verify relative path with dot segment is rejected.
-NOLINT_TEST_F(AssetEmitterTest, Emit_RelativePathWithDotSegment_Throws)
+NOLINT_TEST_F(AssetEmitterTest, EmitRelativePathWithDotSegmentThrows)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -565,7 +565,7 @@ NOLINT_TEST_F(AssetEmitterTest, Emit_RelativePathWithDotSegment_Throws)
 }
 
 //! Verify relative path with dotdot segment is rejected.
-NOLINT_TEST_F(AssetEmitterTest, Emit_RelativePathWithDotDotSegment_Throws)
+NOLINT_TEST_F(AssetEmitterTest, EmitRelativePathWithDotDotSegmentThrows)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -578,7 +578,7 @@ NOLINT_TEST_F(AssetEmitterTest, Emit_RelativePathWithDotDotSegment_Throws)
 }
 
 //! Verify virtual path without leading slash is rejected.
-NOLINT_TEST_F(AssetEmitterTest, Emit_VirtualPathWithoutLeadingSlash_Throws)
+NOLINT_TEST_F(AssetEmitterTest, EmitVirtualPathWithoutLeadingSlashThrows)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -591,7 +591,7 @@ NOLINT_TEST_F(AssetEmitterTest, Emit_VirtualPathWithoutLeadingSlash_Throws)
 }
 
 //! Verify virtual path with backslash is rejected.
-NOLINT_TEST_F(AssetEmitterTest, Emit_VirtualPathWithBackslash_Throws)
+NOLINT_TEST_F(AssetEmitterTest, EmitVirtualPathWithBackslashThrows)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -604,7 +604,7 @@ NOLINT_TEST_F(AssetEmitterTest, Emit_VirtualPathWithBackslash_Throws)
 }
 
 //! Verify virtual path with double slash is rejected.
-NOLINT_TEST_F(AssetEmitterTest, Emit_VirtualPathWithDoubleSlash_Throws)
+NOLINT_TEST_F(AssetEmitterTest, EmitVirtualPathWithDoubleSlashThrows)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -617,7 +617,7 @@ NOLINT_TEST_F(AssetEmitterTest, Emit_VirtualPathWithDoubleSlash_Throws)
 }
 
 //! Verify empty relative path is rejected.
-NOLINT_TEST_F(AssetEmitterTest, Emit_EmptyRelativePath_Throws)
+NOLINT_TEST_F(AssetEmitterTest, EmitEmptyRelativePathThrows)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -630,7 +630,7 @@ NOLINT_TEST_F(AssetEmitterTest, Emit_EmptyRelativePath_Throws)
 }
 
 //! Verify empty virtual path is rejected.
-NOLINT_TEST_F(AssetEmitterTest, Emit_EmptyVirtualPath_Throws)
+NOLINT_TEST_F(AssetEmitterTest, EmitEmptyVirtualPathThrows)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -646,7 +646,7 @@ NOLINT_TEST_F(AssetEmitterTest, Emit_EmptyVirtualPath_Throws)
 //===--------------------------------------------------------//
 
 //! Verify Records contain SHA-256 hash.
-NOLINT_TEST_F(AssetEmitterTest, Records_ContainsSha256Hash)
+NOLINT_TEST_F(AssetEmitterTest, RecordsContainsSha256Hash)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
@@ -669,7 +669,7 @@ NOLINT_TEST_F(AssetEmitterTest, Records_ContainsSha256Hash)
 }
 
 //! Verify SHA-256 is omitted when disabled.
-NOLINT_TEST_F(AssetEmitterTest, Records_Sha256Disabled_LeavesHashEmpty)
+NOLINT_TEST_F(AssetEmitterTest, RecordsSha256DisabledLeavesHashEmpty)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_, false);
@@ -689,7 +689,7 @@ NOLINT_TEST_F(AssetEmitterTest, Records_Sha256Disabled_LeavesHashEmpty)
 }
 
 //! Verify each record has unique SHA-256 for different content.
-NOLINT_TEST_F(AssetEmitterTest, Records_DifferentContentHasDifferentHash)
+NOLINT_TEST_F(AssetEmitterTest, RecordsDifferentContentHasDifferentHash)
 {
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);

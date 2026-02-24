@@ -32,7 +32,7 @@ protected:
 };
 
 //! Verify event loop runs and stops correctly via Post.
-NOLINT_TEST_F(ImportEventLoopBasicTest, RunAndStop_ViaPost_Succeeds)
+NOLINT_TEST_F(ImportEventLoopBasicTest, RunAndStopViaPostSucceeds)
 {
   // Arrange
   std::atomic<bool> callback_ran { false };
@@ -49,7 +49,7 @@ NOLINT_TEST_F(ImportEventLoopBasicTest, RunAndStop_ViaPost_Succeeds)
 }
 
 //! Verify multiple callbacks execute in order.
-NOLINT_TEST_F(ImportEventLoopBasicTest, Post_MultipleCallbacks_ExecuteInOrder)
+NOLINT_TEST_F(ImportEventLoopBasicTest, PostMultipleCallbacksExecuteInOrder)
 {
   // Arrange
   std::vector<int> order;
@@ -69,7 +69,7 @@ NOLINT_TEST_F(ImportEventLoopBasicTest, Post_MultipleCallbacks_ExecuteInOrder)
 }
 
 //! Verify Stop() can be called from a different thread.
-NOLINT_TEST_F(ImportEventLoopBasicTest, Stop_FromOtherThread_Succeeds)
+NOLINT_TEST_F(ImportEventLoopBasicTest, StopFromOtherThreadSucceeds)
 {
   // Arrange
   std::thread stopper([&]() {
@@ -83,7 +83,7 @@ NOLINT_TEST_F(ImportEventLoopBasicTest, Stop_FromOtherThread_Succeeds)
 }
 
 //! Verify IsRunning() returns correct state.
-NOLINT_TEST_F(ImportEventLoopBasicTest, IsRunning_ReturnsCorrectState)
+NOLINT_TEST_F(ImportEventLoopBasicTest, IsRunningReturnsCorrectState)
 {
   // Arrange
   std::atomic<bool> was_running_inside { false };
@@ -111,7 +111,7 @@ protected:
 };
 
 //! Verify EventLoopTraits::EventLoopId returns a valid ID.
-NOLINT_TEST_F(ImportEventLoopTraitsTest, EventLoopId_ReturnsValidId)
+NOLINT_TEST_F(ImportEventLoopTraitsTest, EventLoopIdReturnsValidId)
 {
   // Arrange & Act
   auto id = EventLoopTraits<ImportEventLoop>::EventLoopId(loop_);
@@ -121,7 +121,7 @@ NOLINT_TEST_F(ImportEventLoopTraitsTest, EventLoopId_ReturnsValidId)
 }
 
 //! Verify EventLoopTraits can be used with Run.
-NOLINT_TEST_F(ImportEventLoopTraitsTest, Run_WithCoRun_Works)
+NOLINT_TEST_F(ImportEventLoopTraitsTest, RunWithCoRunWorks)
 {
   // Arrange
   std::atomic<bool> coroutine_ran { false };
@@ -146,7 +146,7 @@ protected:
 
 //! Verify ThreadNotification posts callback to event loop from worker thread.
 NOLINT_TEST_F(ImportEventLoopThreadNotificationTest,
-  Post_FromWorkerThread_ExecutesOnEventLoop)
+  PostFromWorkerThreadExecutesOnEventLoop)
 {
   // Arrange
   std::atomic<bool> callback_ran { false };
@@ -209,7 +209,7 @@ protected:
 };
 
 //! Verify ThreadPool works with ImportEventLoop.
-NOLINT_TEST_F(ImportEventLoopThreadPoolTest, Run_CpuBoundTask_ReturnsResult)
+NOLINT_TEST_F(ImportEventLoopThreadPoolTest, RunCpuBoundTaskReturnsResult)
 {
   // Arrange & Act
   int result = 0;
@@ -223,7 +223,7 @@ NOLINT_TEST_F(ImportEventLoopThreadPoolTest, Run_CpuBoundTask_ReturnsResult)
 
 //! Verify ThreadPool executes on worker thread, not event loop thread.
 NOLINT_TEST_F(
-  ImportEventLoopThreadPoolTest, Run_CpuBoundTask_ExecutesOnWorkerThread)
+  ImportEventLoopThreadPoolTest, RunCpuBoundTaskExecutesOnWorkerThread)
 {
   // Arrange
   std::thread::id event_loop_thread_id {};
@@ -245,7 +245,7 @@ NOLINT_TEST_F(
 
 //! Verify ThreadPool result returns to event loop thread.
 NOLINT_TEST_F(
-  ImportEventLoopThreadPoolTest, Run_CpuBoundTask_ResumesOnEventLoopThread)
+  ImportEventLoopThreadPoolTest, RunCpuBoundTaskResumesOnEventLoopThread)
 {
   // Arrange
   std::thread::id before_thread_id {};
@@ -263,7 +263,7 @@ NOLINT_TEST_F(
 }
 
 //! Verify ThreadPool with CancelToken receives valid token.
-NOLINT_TEST_F(ImportEventLoopThreadPoolTest, Run_WithCancelToken_Completes)
+NOLINT_TEST_F(ImportEventLoopThreadPoolTest, RunWithCancelTokenCompletes)
 {
   // Arrange
   std::atomic<bool> task_started { false };
@@ -287,7 +287,7 @@ NOLINT_TEST_F(ImportEventLoopThreadPoolTest, Run_WithCancelToken_Completes)
 }
 
 //! Verify multiple ThreadPool tasks complete correctly.
-NOLINT_TEST_F(ImportEventLoopThreadPoolTest, Run_MultipleTasks_AllComplete)
+NOLINT_TEST_F(ImportEventLoopThreadPoolTest, RunMultipleTasksAllComplete)
 {
   // Arrange
   constexpr int kTaskCount = 10;

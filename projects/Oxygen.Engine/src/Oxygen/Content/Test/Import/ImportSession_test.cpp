@@ -164,7 +164,7 @@ protected:
 //=== Construction Tests ===--------------------------------------------------//
 
 //! Verify session constructs with valid request.
-NOLINT_TEST_F(ImportSessionTest, Constructor_ValidRequest_Succeeds)
+NOLINT_TEST_F(ImportSessionTest, ConstructorValidRequestSucceeds)
 {
   // Arrange
   const auto request = MakeRequest();
@@ -181,7 +181,7 @@ NOLINT_TEST_F(ImportSessionTest, Constructor_ValidRequest_Succeeds)
 }
 
 //! Verify session uses source directory when cooked_root is not set.
-NOLINT_TEST_F(ImportSessionTest, Constructor_NoExplicitCookedRoot_UsesSourceDir)
+NOLINT_TEST_F(ImportSessionTest, ConstructorNoExplicitCookedRootUsesSourceDir)
 {
   // Arrange
   const ImportRequest request {
@@ -199,7 +199,7 @@ NOLINT_TEST_F(ImportSessionTest, Constructor_NoExplicitCookedRoot_UsesSourceDir)
 }
 
 //! Verify CookedWriter is accessible.
-NOLINT_TEST_F(ImportSessionTest, CookedWriter_IsAccessible)
+NOLINT_TEST_F(ImportSessionTest, CookedWriterIsAccessible)
 {
   // Arrange
   const auto request = MakeRequest();
@@ -218,7 +218,7 @@ NOLINT_TEST_F(ImportSessionTest, CookedWriter_IsAccessible)
 //=== Emitter Access Tests ===------------------------------------------------//
 
 //! Verify emitter accessors create lazily and return stable instances.
-NOLINT_TEST_F(ImportSessionTest, Emitters_LazyAccess_ReturnsStableInstances)
+NOLINT_TEST_F(ImportSessionTest, EmittersLazyAccessReturnsStableInstances)
 {
   // Arrange
   const auto request = MakeRequest();
@@ -244,7 +244,7 @@ NOLINT_TEST_F(ImportSessionTest, Emitters_LazyAccess_ReturnsStableInstances)
 //=== Diagnostics Tests ===---------------------------------------------------//
 
 //! Verify adding a single diagnostic.
-NOLINT_TEST_F(ImportSessionTest, AddDiagnostic_Single_AddsToList)
+NOLINT_TEST_F(ImportSessionTest, AddDiagnosticSingleAddsToList)
 {
   // Arrange
   const auto request = MakeRequest();
@@ -272,7 +272,7 @@ NOLINT_TEST_F(ImportSessionTest, AddDiagnostic_Single_AddsToList)
 }
 
 //! Verify adding multiple diagnostics.
-NOLINT_TEST_F(ImportSessionTest, AddDiagnostic_Multiple_AllAdded)
+NOLINT_TEST_F(ImportSessionTest, AddDiagnosticMultipleAllAdded)
 {
   // Arrange
   const auto request = MakeRequest();
@@ -304,7 +304,7 @@ NOLINT_TEST_F(ImportSessionTest, AddDiagnostic_Multiple_AllAdded)
 }
 
 //! Verify HasErrors returns false when no errors.
-NOLINT_TEST_F(ImportSessionTest, HasErrors_NoErrors_ReturnsFalse)
+NOLINT_TEST_F(ImportSessionTest, HasErrorsNoErrorsReturnsFalse)
 {
   // Arrange
   const auto request = MakeRequest();
@@ -323,7 +323,7 @@ NOLINT_TEST_F(ImportSessionTest, HasErrors_NoErrors_ReturnsFalse)
 }
 
 //! Verify HasErrors returns true when error added.
-NOLINT_TEST_F(ImportSessionTest, HasErrors_ErrorAdded_ReturnsTrue)
+NOLINT_TEST_F(ImportSessionTest, HasErrorsErrorAddedReturnsTrue)
 {
   // Arrange
   const auto request = MakeRequest();
@@ -344,7 +344,7 @@ NOLINT_TEST_F(ImportSessionTest, HasErrors_ErrorAdded_ReturnsTrue)
 }
 
 //! Verify diagnostics can be added from multiple threads.
-NOLINT_TEST_F(ImportSessionTest, AddDiagnostic_MultipleThreads_ThreadSafe)
+NOLINT_TEST_F(ImportSessionTest, AddDiagnosticMultipleThreadsThreadSafe)
 {
   // Arrange
   const auto request = MakeRequest();
@@ -385,7 +385,7 @@ NOLINT_TEST_F(ImportSessionTest, AddDiagnostic_MultipleThreads_ThreadSafe)
 //=== Finalization Tests ===--------------------------------------------------//
 
 //! Verify Finalize returns success when no errors.
-NOLINT_TEST_F(ImportSessionTest, Finalize_NoErrors_ReturnsSuccess)
+NOLINT_TEST_F(ImportSessionTest, FinalizeNoErrorsReturnsSuccess)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -415,7 +415,7 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_NoErrors_ReturnsSuccess)
 }
 
 //! Verify Finalize returns failure when errors exist.
-NOLINT_TEST_F(ImportSessionTest, Finalize_HasErrors_ReturnsFailure)
+NOLINT_TEST_F(ImportSessionTest, FinalizeHasErrorsReturnsFailure)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -444,7 +444,7 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_HasErrors_ReturnsFailure)
 }
 
 //! Verify Finalize writes container index on success.
-NOLINT_TEST_F(ImportSessionTest, Finalize_Success_WritesIndex)
+NOLINT_TEST_F(ImportSessionTest, FinalizeSuccessWritesIndex)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -468,7 +468,7 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_Success_WritesIndex)
 }
 
 //! Verify Finalize writes index and reports warning when errors exist.
-NOLINT_TEST_F(ImportSessionTest, Finalize_HasErrors_WritesIndexWithWarning)
+NOLINT_TEST_F(ImportSessionTest, FinalizeHasErrorsWritesIndexWithWarning)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -503,7 +503,7 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_HasErrors_WritesIndexWithWarning)
 }
 
 //! Verify Finalize waits for pending writes.
-NOLINT_TEST_F(ImportSessionTest, Finalize_PendingWrites_WaitsForCompletion)
+NOLINT_TEST_F(ImportSessionTest, FinalizePendingWritesWaitsForCompletion)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -536,7 +536,7 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_PendingWrites_WaitsForCompletion)
 }
 
 //! Verify Finalize includes diagnostics in report.
-NOLINT_TEST_F(ImportSessionTest, Finalize_WithDiagnostics_IncludesInReport)
+NOLINT_TEST_F(ImportSessionTest, FinalizeWithDiagnosticsIncludesInReport)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -573,7 +573,7 @@ NOLINT_TEST_F(ImportSessionTest, Finalize_WithDiagnostics_IncludesInReport)
 }
 
 //! Verify Finalize orchestrates emitters and writes a valid index.
-NOLINT_TEST_F(ImportSessionTest, Finalize_WithEmitters_RegistersInIndex)
+NOLINT_TEST_F(ImportSessionTest, FinalizeWithEmittersRegistersInIndex)
 {
   using oxygen::data::loose_cooked::FileKind;
 

@@ -220,7 +220,7 @@ protected:
 //=== Basic Emission Tests ===------------------------------------------------//
 
 //! Verify the first emitted user texture gets index 1.
-NOLINT_TEST_F(TextureEmitterTest, Emit_SingleTexture_AssignsFirstIndex)
+NOLINT_TEST_F(TextureEmitterTest, EmitSingleTextureAssignsFirstIndex)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -239,7 +239,7 @@ NOLINT_TEST_F(TextureEmitterTest, Emit_SingleTexture_AssignsFirstIndex)
 }
 
 //! Verify multiple unique textures receive sequential indices.
-NOLINT_TEST_F(TextureEmitterTest, Emit_UniqueTextures_AssignsSequentialIndices)
+NOLINT_TEST_F(TextureEmitterTest, EmitUniqueTexturesAssignsSequentialIndices)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -273,7 +273,7 @@ NOLINT_TEST_F(TextureEmitterTest, Emit_UniqueTextures_AssignsSequentialIndices)
 }
 
 //! Verify index is returned immediately before I/O completes.
-NOLINT_TEST_F(TextureEmitterTest, Emit_QueuesWrite_ReturnsBeforeFinalize)
+NOLINT_TEST_F(TextureEmitterTest, EmitQueuesWriteReturnsBeforeFinalize)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -294,7 +294,7 @@ NOLINT_TEST_F(TextureEmitterTest, Emit_QueuesWrite_ReturnsBeforeFinalize)
 }
 
 //! Verify emitting after Finalize() is rejected.
-NOLINT_TEST_F(TextureEmitterTest, Emit_AfterFinalize_Throws)
+NOLINT_TEST_F(TextureEmitterTest, EmitAfterFinalizeThrows)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -313,7 +313,7 @@ NOLINT_TEST_F(TextureEmitterTest, Emit_AfterFinalize_Throws)
 //=== Finalization Tests ===--------------------------------------------------//
 
 //! Verify finalization drains all pending writes.
-NOLINT_TEST_F(TextureEmitterTest, Finalize_DrainsPendingWrites)
+NOLINT_TEST_F(TextureEmitterTest, FinalizeDrainsPendingWrites)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -335,7 +335,7 @@ NOLINT_TEST_F(TextureEmitterTest, Finalize_DrainsPendingWrites)
 }
 
 //! Verify finalization writes table file with correct entries.
-NOLINT_TEST_F(TextureEmitterTest, Finalize_WritesTextureTableFile)
+NOLINT_TEST_F(TextureEmitterTest, FinalizeWritesTextureTableFile)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -362,7 +362,7 @@ NOLINT_TEST_F(TextureEmitterTest, Finalize_WritesTextureTableFile)
 }
 
 //! Verify finalization writes data file with aligned content.
-NOLINT_TEST_F(TextureEmitterTest, Finalize_WritesTextureDataFile_WithAlignment)
+NOLINT_TEST_F(TextureEmitterTest, FinalizeWritesTextureDataFileWithAlignment)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -421,7 +421,7 @@ NOLINT_TEST_F(TextureEmitterTest, Finalize_WritesTextureDataFile_WithAlignment)
 }
 
 //! Verify table entries preserve texture metadata.
-NOLINT_TEST_F(TextureEmitterTest, Finalize_SerializesTextureMetadataToTable)
+NOLINT_TEST_F(TextureEmitterTest, FinalizeSerializesTextureMetadataToTable)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -463,7 +463,7 @@ NOLINT_TEST_F(TextureEmitterTest, Finalize_SerializesTextureMetadataToTable)
 }
 
 //! Verify finalization with no textures still writes the fallback entry.
-NOLINT_TEST_F(TextureEmitterTest, Finalize_WithoutUserTextures_WritesFallback)
+NOLINT_TEST_F(TextureEmitterTest, FinalizeWithoutUserTexturesWritesFallback)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -497,7 +497,7 @@ NOLINT_TEST_F(TextureEmitterTest, Finalize_WithoutUserTextures_WritesFallback)
 //=== State Query Tests ===---------------------------------------------------//
 
 //! Verify DataFileSize tracks accumulated data with alignment.
-NOLINT_TEST_F(TextureEmitterTest, Stats_DataFileSize_TracksAccumulatedSize)
+NOLINT_TEST_F(TextureEmitterTest, StatsDataFileSizeTracksAccumulatedSize)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -556,7 +556,7 @@ NOLINT_TEST_F(TextureEmitterTest, Stats_DataFileSize_TracksAccumulatedSize)
 }
 
 //! Verify Count returns number of emitted textures.
-NOLINT_TEST_F(TextureEmitterTest, Stats_EmittedTextures_CountsFallbackAndUsers)
+NOLINT_TEST_F(TextureEmitterTest, StatsEmittedTexturesCountsFallbackAndUsers)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -586,7 +586,7 @@ NOLINT_TEST_F(TextureEmitterTest, Stats_EmittedTextures_CountsFallbackAndUsers)
 }
 
 //! Verify ErrorCount starts at zero.
-NOLINT_TEST_F(TextureEmitterTest, Stats_ErrorCount_StartsAtZero)
+NOLINT_TEST_F(TextureEmitterTest, StatsErrorCountStartsAtZero)
 {
   // Arrange
   const TextureEmitter emitter(
@@ -599,7 +599,7 @@ NOLINT_TEST_F(TextureEmitterTest, Stats_ErrorCount_StartsAtZero)
 //=== Content Verification Tests ===------------------------------------------//
 
 //! Verify data file content matches emitted payload.
-NOLINT_TEST_F(TextureEmitterTest, DataFile_WritesPayloadBytes)
+NOLINT_TEST_F(TextureEmitterTest, DataFileWritesPayloadBytes)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -634,7 +634,7 @@ NOLINT_TEST_F(TextureEmitterTest, DataFile_WritesPayloadBytes)
 }
 
 //! Verify multiple payloads are written with correct alignment padding.
-NOLINT_TEST_F(TextureEmitterTest, DataFile_WritesMultiplePayloads_InOrder)
+NOLINT_TEST_F(TextureEmitterTest, DataFileWritesMultiplePayloadsInOrder)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -712,7 +712,7 @@ NOLINT_TEST_F(TextureEmitterTest, DataFile_WritesMultiplePayloads_InOrder)
 //=== Deduplication Tests ===-------------------------------------------------//
 
 //! Verify with no content hashing, different salts do not collide.
-NOLINT_TEST_F(TextureEmitterTest, Dedup_NoHash_DifferentSalts_NoCollision)
+NOLINT_TEST_F(TextureEmitterTest, DedupNoHashDifferentSaltsNoCollision)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -739,7 +739,7 @@ NOLINT_TEST_F(TextureEmitterTest, Dedup_NoHash_DifferentSalts_NoCollision)
 }
 
 //! Verify with no content hashing, same salt causes collision.
-NOLINT_TEST_F(TextureEmitterTest, Dedup_NoHash_SameSalt_Collision)
+NOLINT_TEST_F(TextureEmitterTest, DedupNoHashSameSaltCollision)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -767,7 +767,7 @@ NOLINT_TEST_F(TextureEmitterTest, Dedup_NoHash_SameSalt_Collision)
 
 //! Verify with content hashing enabled, salt is ignored and identical content
 //! collides.
-NOLINT_TEST_F(TextureEmitterTest, Emit_WithHash_SaltIgnored_IdenticalContent)
+NOLINT_TEST_F(TextureEmitterTest, EmitWithHashSaltIgnoredIdenticalContent)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -809,7 +809,7 @@ NOLINT_TEST_F(TextureEmitterTest, Emit_WithHash_SaltIgnored_IdenticalContent)
 
 //! Verify with content hashing enabled, different content does not collide even
 //! with the same salt.
-NOLINT_TEST_F(TextureEmitterTest, Emit_WithHash_SameSalt_DifferentContent)
+NOLINT_TEST_F(TextureEmitterTest, EmitWithHashSameSaltDifferentContent)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {

@@ -16,7 +16,7 @@ namespace {
 
 //! Verify strict policy when placeholder-on-failure is disabled.
 NOLINT_TEST(TextureImportJobPolicyTest,
-  FailurePolicy_DefaultsToStrict_WhenPlaceholderDisabled)
+  FailurePolicyDefaultsToStrictWhenPlaceholderDisabled)
 {
   // Arrange
   ImportOptions::TextureTuning tuning {};
@@ -31,7 +31,7 @@ NOLINT_TEST(TextureImportJobPolicyTest,
 
 //! Verify placeholder policy when placeholder-on-failure is enabled.
 NOLINT_TEST(TextureImportJobPolicyTest,
-  FailurePolicy_UsesPlaceholder_WhenPlaceholderEnabled)
+  FailurePolicyUsesPlaceholderWhenPlaceholderEnabled)
 {
   // Arrange
   ImportOptions::TextureTuning tuning {};

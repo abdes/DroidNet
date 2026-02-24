@@ -70,7 +70,7 @@ class AssetLoaderBufferFromBufferAsyncTest : public AssetLoaderLoadingTest { };
  and becomes available via `GetResource` under the provided key.
 */
 NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
-  LoadResourceFromBufferAsync_BufferResource_CachesDecodedResource)
+  LoadResourceFromBufferAsyncBufferResourceCachesDecodedResource)
 {
   using namespace std::chrono_literals;
 
@@ -137,7 +137,7 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
  invoked with a valid result on the owning thread.
 */
 NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
-  StartLoadResourceFromBuffer_BufferResource_InvokesCallback)
+  StartLoadResourceFromBufferBufferResourceInvokesCallback)
 {
   using namespace std::chrono_literals;
 
@@ -220,7 +220,7 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
  and becomes available via `GetResource` under the provided key.
 */
 NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
-  LoadResourceFromBufferAsync_TextureResource_CachesDecodedResource)
+  LoadResourceFromBufferAsyncTextureResourceCachesDecodedResource)
 {
   using namespace std::chrono_literals;
 

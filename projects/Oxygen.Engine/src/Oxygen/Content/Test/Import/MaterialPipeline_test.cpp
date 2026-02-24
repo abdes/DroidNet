@@ -177,7 +177,7 @@ protected:
 
 //! Verify content hash covers descriptor bytes and shader refs.
 NOLINT_TEST_F(
-  MaterialPipelineBasicTest, Collect_ComputesContentHashFromDescriptorBytes)
+  MaterialPipelineBasicTest, CollectComputesContentHashFromDescriptorBytes)
 {
   // Arrange
   MaterialPipeline::WorkResult result;
@@ -218,7 +218,7 @@ NOLINT_TEST_F(
 //===----------------------------------------------------------//
 
 //! Verify auto ORM packing sets the packed flag and indices.
-NOLINT_TEST_F(MaterialPipelineOrmTest, Collect_AutoOrmPacked_SetsFlags)
+NOLINT_TEST_F(MaterialPipelineOrmTest, CollectAutoOrmPackedSetsFlags)
 {
   // Arrange
   auto item = MakeBaseItem();
@@ -268,7 +268,7 @@ NOLINT_TEST_F(MaterialPipelineOrmTest, Collect_AutoOrmPacked_SetsFlags)
 }
 
 //! Verify force-packed ORM emits an error when inputs are incompatible.
-NOLINT_TEST_F(MaterialPipelineOrmTest, Collect_ForcePacked_Invalid_EmitsError)
+NOLINT_TEST_F(MaterialPipelineOrmTest, CollectForcePackedInvalidEmitsError)
 {
   // Arrange
   auto item = MakeBaseItem();
@@ -320,7 +320,7 @@ NOLINT_TEST_F(MaterialPipelineOrmTest, Collect_ForcePacked_Invalid_EmitsError)
 //===---------------------------------------------------------//
 
 //! Verify UV extension is populated when all assigned slots share a transform.
-NOLINT_TEST_F(MaterialPipelineUvTest, Collect_SharedTransform_WritesExtension)
+NOLINT_TEST_F(MaterialPipelineUvTest, CollectSharedTransformWritesExtension)
 {
   // Arrange
   auto item = MakeBaseItem();
@@ -369,7 +369,7 @@ NOLINT_TEST_F(MaterialPipelineUvTest, Collect_SharedTransform_WritesExtension)
 }
 
 //! Verify mismatched UV transforms use the first assigned transform.
-NOLINT_TEST_F(MaterialPipelineUvTest, Collect_MismatchedTransforms_UsesFirst)
+NOLINT_TEST_F(MaterialPipelineUvTest, CollectMismatchedTransformsUsesFirst)
 {
   // Arrange
   auto item = MakeBaseItem();
@@ -428,7 +428,7 @@ NOLINT_TEST_F(MaterialPipelineUvTest, Collect_MismatchedTransforms_UsesFirst)
 //===----------------------------------------------------//
 
 //! Verify shader stages are encoded and ordered by stage bit index.
-NOLINT_TEST_F(MaterialPipelineShaderTest, Collect_ShaderStagesOrderedByBitIndex)
+NOLINT_TEST_F(MaterialPipelineShaderTest, CollectShaderStagesOrderedByBitIndex)
 {
   // Arrange
   auto item = MakeBaseItem();
@@ -476,7 +476,7 @@ NOLINT_TEST_F(MaterialPipelineShaderTest, Collect_ShaderStagesOrderedByBitIndex)
 
 //! Verify overlong shader strings emit truncation warnings.
 NOLINT_TEST_F(
-  MaterialPipelineShaderTest, Collect_OverlongShaderStrings_EmitWarnings)
+  MaterialPipelineShaderTest, CollectOverlongShaderStringsEmitWarnings)
 {
   // Arrange
   auto item = MakeBaseItem();

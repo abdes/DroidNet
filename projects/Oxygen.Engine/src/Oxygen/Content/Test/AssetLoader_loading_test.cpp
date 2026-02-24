@@ -422,8 +422,7 @@ auto WriteLooseCookedSceneForCatalog(const std::filesystem::path& cooked_root,
  Scenario: Creates a PAK file with a basic material asset and verifies that the
  AssetLoader can successfully load it.
 */
-NOLINT_TEST_F(
-  AssetLoaderLoadingTest, LoadAsset_SimpleMaterial_LoadsSuccessfully)
+NOLINT_TEST_F(AssetLoaderLoadingTest, LoadAssetSimpleMaterialLoadsSuccessfully)
 {
   // Arrange
   const auto pak_path = GeneratePakFile("simple_material");
@@ -467,8 +466,7 @@ NOLINT_TEST_F(
  Scenario: Creates a PAK file with a basic geometry asset and verifies that the
  AssetLoader can successfully load it.
 */
-NOLINT_TEST_F(
-  AssetLoaderLoadingTest, LoadAsset_SimpleGeometry_LoadsSuccessfully)
+NOLINT_TEST_F(AssetLoaderLoadingTest, LoadAssetSimpleGeometryLoadsSuccessfully)
 {
   // Arrange
   const auto pak_path = GeneratePakFile("simple_geometry");
@@ -516,7 +514,7 @@ NOLINT_TEST_F(
  material loads and the referenced texture resource is cached.
 */
 NOLINT_TEST_F(
-  AssetLoaderLoadingTest, LoadAsset_LooseCookedMaterial_LoadsWithTexture)
+  AssetLoaderLoadingTest, LoadAssetLooseCookedMaterialLoadsWithTexture)
 {
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked";
@@ -570,7 +568,7 @@ NOLINT_TEST_F(
  resulting runtime ResourceKeys differ across distinct sources.
 */
 NOLINT_TEST_F(
-  AssetLoaderLoadingTest, LoadAsset_LooseCookedMultipleRoots_AssignsStableIds)
+  AssetLoaderLoadingTest, LoadAssetLooseCookedMultipleRootsAssignsStableIds)
 {
   // Arrange
   const auto cooked_root_a = temp_dir_ / "loose_cooked_a";
@@ -637,14 +635,14 @@ NOLINT_TEST_F(
  Scenario: Writes a loose cooked root with a `textures.table` whose size is not
  a multiple of `sizeof(TextureResourceDesc)`. Verifies mount rejects it.
 */
-NOLINT_TEST_F(AssetLoaderLoadingTest, AddLooseCookedRoot_InvalidTexturesTable)
+NOLINT_TEST_F(AssetLoaderLoadingTest, AddLooseCookedRootInvalidTexturesTable)
 {
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_invalid_tex_table";
   WriteLooseCookedIndexWithInvalidTexturesTable(cooked_root);
 
   // Act & Assert
-  EXPECT_THROW(
+  NOLINT_EXPECT_THROW(
     { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::runtime_error);
 }
 
@@ -654,8 +652,7 @@ NOLINT_TEST_F(AssetLoaderLoadingTest, AddLooseCookedRoot_InvalidTexturesTable)
  buffer dependencies and verifies successful loading with proper mesh properties
  and buffer references.
 */
-NOLINT_TEST_F(
-  AssetLoaderLoadingTest, LoadAsset_ComplexGeometry_LoadsSuccessfully)
+NOLINT_TEST_F(AssetLoaderLoadingTest, LoadAssetComplexGeometryLoadsSuccessfully)
 {
   // Arrange
   const auto pak_path = GeneratePakFile("complex_geometry");
@@ -717,7 +714,7 @@ NOLINT_TEST_F(
  Scenario: Attempts to load an asset that doesn't exist in any PAK file and
  verifies that nullptr is returned.
 */
-NOLINT_TEST_F(AssetLoaderLoadingTest, LoadAsset_NonExistent_ReturnsNull)
+NOLINT_TEST_F(AssetLoaderLoadingTest, LoadAssetNonExistentReturnsNull)
 {
   // Arrange
   const auto non_existent_key = CreateTestAssetKey("non_existent_asset");
@@ -759,7 +756,7 @@ NOLINT_TEST_F(AssetLoaderLoadingTest, LoadAsset_NonExistent_ReturnsNull)
  returned (caching behavior).
 */
 NOLINT_TEST_F(
-  AssetLoaderLoadingTest, LoadAsset_SameAssetTwice_ReturnsSameInstance)
+  AssetLoaderLoadingTest, LoadAssetSameAssetTwiceReturnsSameInstance)
 {
   // Arrange
   const auto pak_path = GeneratePakFile("simple_material");
@@ -809,7 +806,7 @@ NOLINT_TEST_F(
  PAK-backed assets are still discovered and loaded correctly.
 */
 NOLINT_TEST_F(
-  AssetLoaderLoadingTest, LoadAsset_PakStillLoadsAfterLooseCookedRegistration)
+  AssetLoaderLoadingTest, LoadAssetPakStillLoadsAfterLooseCookedRegistration)
 {
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
@@ -857,7 +854,7 @@ NOLINT_TEST_F(
  a ResourceKey from that PAK. Verifies that the encoded PAK index remains 0 for
  the first added PAK, preserving deterministic ResourceKey encoding.
 */
-NOLINT_TEST_F(AssetLoaderLoadingTest, MakeResourceKey_PakIndexIgnoresLooseRoots)
+NOLINT_TEST_F(AssetLoaderLoadingTest, MakeResourceKeyPakIndexIgnoresLooseRoots)
 {
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
@@ -879,8 +876,8 @@ NOLINT_TEST_F(AssetLoaderLoadingTest, MakeResourceKey_PakIndexIgnoresLooseRoots)
 }
 
 //! Duplicate AssetKey conflict policy: newest mount wins by default.
-NOLINT_TEST_F(AssetLoaderLoadingTest,
-  DuplicateAssetKey_DefaultLookupUsesNewestMountedSource)
+NOLINT_TEST_F(
+  AssetLoaderLoadingTest, DuplicateAssetKeyDefaultLookupUsesNewestMountedSource)
 {
   const auto pak_a = GeneratePakFile("duplicate_key_source_a");
   const auto pak_b = GeneratePakFile("duplicate_key_source_b");
@@ -927,7 +924,7 @@ NOLINT_TEST_F(AssetLoaderLoadingTest,
 
 //! Preferred-source override policy: dependency loads follow the parent source.
 NOLINT_TEST_F(AssetLoaderLoadingTest,
-  DuplicateAssetKey_GeometryDependenciesPreferGeometrySource)
+  DuplicateAssetKeyGeometryDependenciesPreferGeometrySource)
 {
   const auto pak_a = GeneratePakFile("duplicate_key_source_a");
   const auto pak_b = GeneratePakFile("duplicate_key_source_b");
@@ -987,7 +984,7 @@ NOLINT_TEST_F(AssetLoaderLoadingTest,
 }
 
 NOLINT_TEST_F(AssetLoaderLoadingTest,
-  EnumerateMountedSources_MixedMountsExpectedToExposeRuntimeMountedState)
+  EnumerateMountedSourcesMixedMountsExpectedToExposeRuntimeMountedState)
 {
   const auto cooked_root = temp_dir_ / "mounted_sources_loose";
   WriteMinimalLooseCookedIndex(cooked_root);
@@ -1019,7 +1016,7 @@ NOLINT_TEST_F(AssetLoaderLoadingTest,
 }
 
 NOLINT_TEST_F(AssetLoaderLoadingTest,
-  EnumerateMountedSources_RemountExpectedToRefreshNotDuplicateMountedSource)
+  EnumerateMountedSourcesRemountExpectedToRefreshNotDuplicateMountedSource)
 {
   const auto pak_path = GeneratePakFile("simple_material");
 
@@ -1036,7 +1033,7 @@ NOLINT_TEST_F(AssetLoaderLoadingTest,
 }
 
 NOLINT_TEST_F(AssetLoaderLoadingTest,
-  EnumerateMountedScenes_MixedSourcesExpectedToExposeSceneEntries)
+  EnumerateMountedScenesMixedSourcesExpectedToExposeSceneEntries)
 {
   const auto pak_path = GeneratePakFile("scene_with_renderable");
   const auto pak_scene_key = CreateTestAssetKey("test_scene");
@@ -1074,7 +1071,7 @@ NOLINT_TEST_F(AssetLoaderLoadingTest,
 }
 
 NOLINT_TEST_F(AssetLoaderLoadingTest,
-  TrimCacheExpectedToPreserveMountedCatalog_ClearMountsExpectedToClearCatalog)
+  TrimCacheExpectedToPreserveMountedCatalogClearMountsExpectedToClearCatalog)
 {
   const auto loose_scene_key = CreateTestAssetKey("loose_scene_catalog_2");
   const auto cooked_root = temp_dir_ / "mounted_scenes_loose_2";
@@ -1100,7 +1097,7 @@ NOLINT_TEST_F(AssetLoaderLoadingTest,
 }
 
 NOLINT_TEST_F(AssetLoaderLoadingTest,
-  ContentSourceConformance_BufferTextureCapabilitiesExpectedToMatch)
+  ContentSourceConformanceBufferTextureCapabilitiesExpectedToMatch)
 {
   const auto material_key = CreateTestAssetKey("test_material");
   const auto pak_path = GeneratePakFile("simple_material");

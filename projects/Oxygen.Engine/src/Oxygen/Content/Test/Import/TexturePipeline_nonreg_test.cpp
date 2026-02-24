@@ -219,7 +219,7 @@ protected:
 };
 
 //! Verify pipeline payload matches sync cooker payload (byte-for-byte).
-NOLINT_TEST_F(TexturePipelineNonRegTest, Collect_ParityWithSyncCooker_Matches)
+NOLINT_TEST_F(TexturePipelineNonRegTest, CollectParityWithSyncCookerMatches)
 {
   // Arrange
   TextureImportDesc desc;
@@ -272,7 +272,7 @@ NOLINT_TEST_F(TexturePipelineNonRegTest, Collect_ParityWithSyncCooker_Matches)
 }
 
 //! Verify 3D depth slices assemble into a volume with parity to sync cook.
-NOLINT_TEST_F(TexturePipelineNonRegTest, Collect_DepthSlices_ParityMatches)
+NOLINT_TEST_F(TexturePipelineNonRegTest, CollectDepthSlicesParityMatches)
 {
   // Arrange
   TextureImportDesc desc;
@@ -333,7 +333,7 @@ NOLINT_TEST_F(TexturePipelineNonRegTest, Collect_DepthSlices_ParityMatches)
 
 //! Verify missing depth slices fail with a diagnostic.
 NOLINT_TEST_F(
-  TexturePipelineNonRegTest, Collect_DepthSlicesWithGap_EmitsDiagnostic)
+  TexturePipelineNonRegTest, CollectDepthSlicesWithGapEmitsDiagnostic)
 {
   // Arrange
   TextureImportDesc desc;

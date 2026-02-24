@@ -182,7 +182,7 @@ protected:
 //===-------------------------------------------------//
 
 //! Verify emitting a single buffer returns index 1 (index 0 is sentinel).
-NOLINT_TEST_F(BufferEmitterTest, Emit_SingleBuffer_ReturnsIndexOne)
+NOLINT_TEST_F(BufferEmitterTest, EmitSingleBufferReturnsIndexOne)
 {
   // Arrange
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
@@ -204,7 +204,7 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_SingleBuffer_ReturnsIndexOne)
 }
 
 //! Verify emitting multiple buffers returns sequential indices.
-NOLINT_TEST_F(BufferEmitterTest, Emit_MultipleBuffers_ReturnsSequentialIndices)
+NOLINT_TEST_F(BufferEmitterTest, EmitMultipleBuffersReturnsSequentialIndices)
 {
   // Arrange
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
@@ -232,7 +232,7 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_MultipleBuffers_ReturnsSequentialIndices)
 }
 
 //! Verify emitting identical buffers returns the same index.
-NOLINT_TEST_F(BufferEmitterTest, Emit_DuplicateBuffer_ReturnsSameIndex)
+NOLINT_TEST_F(BufferEmitterTest, EmitDuplicateBufferReturnsSameIndex)
 {
   // Arrange
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
@@ -269,7 +269,7 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_DuplicateBuffer_ReturnsSameIndex)
 }
 
 //! Verify index is returned immediately before I/O completes.
-NOLINT_TEST_F(BufferEmitterTest, Emit_ReturnsImmediately_BeforeIOCompletes)
+NOLINT_TEST_F(BufferEmitterTest, EmitReturnsImmediatelyBeforeIOCompletes)
 {
   // Arrange
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
@@ -293,7 +293,7 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_ReturnsImmediately_BeforeIOCompletes)
 }
 
 //! Verify emitting after Finalize() is rejected.
-NOLINT_TEST_F(BufferEmitterTest, Emit_AfterFinalize_Throws)
+NOLINT_TEST_F(BufferEmitterTest, EmitAfterFinalizeThrows)
 {
   // Arrange
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
@@ -312,7 +312,7 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_AfterFinalize_Throws)
 //===------------------------------------------//
 
 //! Verify table file has correct packed size (32 bytes per entry).
-NOLINT_TEST_F(BufferEmitterTest, Finalize_TableFileHasCorrectPackedSize)
+NOLINT_TEST_F(BufferEmitterTest, FinalizeTableFileHasCorrectPackedSize)
 {
   // Arrange
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
@@ -344,7 +344,7 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_TableFileHasCorrectPackedSize)
 
 //! Verify table entries have correctly aligned offsets based on buffer
 //! alignment.
-NOLINT_TEST_F(BufferEmitterTest, Finalize_TableEntriesHaveCorrectAlignedOffsets)
+NOLINT_TEST_F(BufferEmitterTest, FinalizeTableEntriesHaveCorrectAlignedOffsets)
 {
   // Arrange: Create buffers with different alignments
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
@@ -402,7 +402,7 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_TableEntriesHaveCorrectAlignedOffsets)
 }
 
 //! Verify table entries preserve buffer metadata (usage, stride, format, hash).
-NOLINT_TEST_F(BufferEmitterTest, Finalize_TableEntriesPreserveMetadata)
+NOLINT_TEST_F(BufferEmitterTest, FinalizeTableEntriesPreserveMetadata)
 {
   // Arrange
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
@@ -458,7 +458,7 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_TableEntriesPreserveMetadata)
 }
 
 //! Verify data file contains correct content at aligned offsets.
-NOLINT_TEST_F(BufferEmitterTest, Finalize_DataFileContainsCorrectContent)
+NOLINT_TEST_F(BufferEmitterTest, FinalizeDataFileContainsCorrectContent)
 {
   // Arrange
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
@@ -511,7 +511,7 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_DataFileContainsCorrectContent)
 }
 
 //! Verify data file size accounts for alignment padding.
-NOLINT_TEST_F(BufferEmitterTest, Finalize_DataFileSizeIncludesPadding)
+NOLINT_TEST_F(BufferEmitterTest, FinalizeDataFileSizeIncludesPadding)
 {
   // Arrange
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
@@ -542,7 +542,7 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_DataFileSizeIncludesPadding)
 //===---------------------------------------------------//
 
 //! Verify finalization waits for pending I/O.
-NOLINT_TEST_F(BufferEmitterTest, Finalize_WaitsForPendingIO)
+NOLINT_TEST_F(BufferEmitterTest, FinalizeWaitsForPendingIO)
 {
   // Arrange
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
@@ -562,7 +562,7 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_WaitsForPendingIO)
 }
 
 //! Verify finalization with no buffers succeeds without writing files.
-NOLINT_TEST_F(BufferEmitterTest, Finalize_NoBuffers_SucceedsWithoutWritingFiles)
+NOLINT_TEST_F(BufferEmitterTest, FinalizeNoBuffersSucceedsWithoutWritingFiles)
 {
   // Arrange
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
@@ -582,7 +582,7 @@ NOLINT_TEST_F(BufferEmitterTest, Finalize_NoBuffers_SucceedsWithoutWritingFiles)
 //===----------------------------------------------------//
 
 //! Verify DataFileSize tracks accumulated data with alignment.
-NOLINT_TEST_F(BufferEmitterTest, DataFileSize_TracksAccumulatedSize)
+NOLINT_TEST_F(BufferEmitterTest, DataFileSizeTracksAccumulatedSize)
 {
   // Arrange
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
@@ -614,7 +614,7 @@ NOLINT_TEST_F(BufferEmitterTest, DataFileSize_TracksAccumulatedSize)
 }
 
 //! Verify Count tracks number of emitted buffers.
-NOLINT_TEST_F(BufferEmitterTest, Count_TracksEmittedBuffers)
+NOLINT_TEST_F(BufferEmitterTest, CountTracksEmittedBuffers)
 {
   // Arrange
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
@@ -643,7 +643,7 @@ NOLINT_TEST_F(BufferEmitterTest, Count_TracksEmittedBuffers)
 //=== Edge Cases ===----------------------------------------------------------//
 
 //! Verify handling of zero-alignment (should default to 1 or minimum).
-NOLINT_TEST_F(BufferEmitterTest, Emit_ZeroAlignment_UsesDefaultAlignment)
+NOLINT_TEST_F(BufferEmitterTest, EmitZeroAlignmentUsesDefaultAlignment)
 {
   // Arrange
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
@@ -671,7 +671,7 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_ZeroAlignment_UsesDefaultAlignment)
 }
 
 //! Verify large buffer emission.
-NOLINT_TEST_F(BufferEmitterTest, Emit_LargeBuffer_SucceedsWithCorrectSize)
+NOLINT_TEST_F(BufferEmitterTest, EmitLargeBufferSucceedsWithCorrectSize)
 {
   // Arrange
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
@@ -704,7 +704,7 @@ NOLINT_TEST_F(BufferEmitterTest, Emit_LargeBuffer_SucceedsWithCorrectSize)
 }
 
 //! Verify many small buffers with alignment padding.
-NOLINT_TEST_F(BufferEmitterTest, Emit_ManySmallBuffers_AllAlignedCorrectly)
+NOLINT_TEST_F(BufferEmitterTest, EmitManySmallBuffersAllAlignedCorrectly)
 {
   // Arrange
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);

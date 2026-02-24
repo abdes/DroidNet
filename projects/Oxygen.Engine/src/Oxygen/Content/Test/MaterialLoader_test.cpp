@@ -151,7 +151,7 @@ protected:
   correctly.
 */
 NOLINT_TEST_F(
-  MaterialLoaderBasicTest, LoadMaterial_ValidInput_ReturnsMaterialAsset)
+  MaterialLoaderBasicTest, LoadMaterialValidInputReturnsMaterialAsset)
 {
   using oxygen::ShaderType;
   using oxygen::data::AssetType;
@@ -263,7 +263,7 @@ class MaterialLoaderErrorTest : public MaterialLoaderBasicTest {
   Scenario: Tests error handling when the material descriptor header is
   truncated or corrupted, ensuring proper error propagation.
 */
-NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterial_TruncatedHeader_Throws)
+NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterialTruncatedHeaderThrows)
 {
   using oxygen::content::testing::ParseHexDumpWithOffset;
 
@@ -291,7 +291,7 @@ NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterial_TruncatedHeader_Throws)
   verifying no resource dependencies are registered.
 */
 NOLINT_TEST_F(
-  MaterialLoaderBasicTest, LoadMaterial_ZeroTextureIndices_NoDependencies)
+  MaterialLoaderBasicTest, LoadMaterialZeroTextureIndicesNoDependencies)
 {
   using oxygen::content::internal::ResourceRef;
   using oxygen::data::AssetType;
@@ -334,7 +334,7 @@ NOLINT_TEST_F(
 }
 
 //! Test: Non-parse-only loads require a dependency collector.
-NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterial_NoCollector_Throws)
+NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterialNoCollectorThrows)
 {
   auto desc = MakeMaterialDescriptor("Test Material");
   WriteMaterialDescriptor(desc);
@@ -352,7 +352,7 @@ NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterial_NoCollector_Throws)
   Scenario: Tests material loading with only one shader stage bit set,
   verifying correct shader parsing and popcount calculation.
 */
-NOLINT_TEST_F(MaterialLoaderBasicTest, LoadMaterial_SingleShaderStage_Works)
+NOLINT_TEST_F(MaterialLoaderBasicTest, LoadMaterialSingleShaderStageWorks)
 {
   using oxygen::ShaderType;
   using oxygen::data::AssetType;
@@ -392,7 +392,7 @@ NOLINT_TEST_F(MaterialLoaderBasicTest, LoadMaterial_SingleShaderStage_Works)
   Scenario: Tests error handling when shader_stages indicates shaders exist
   but reading the shader reference fails due to insufficient data.
 */
-NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterial_ShaderReadFailure_Throws)
+NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterialShaderReadFailureThrows)
 {
   using oxygen::content::testing::ParseHexDumpWithOffset;
 
@@ -424,7 +424,7 @@ NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterial_ShaderReadFailure_Throws)
 
 //! Test: Non-zero texture indices are collected as ResourceRef dependencies.
 NOLINT_TEST_F(
-  MaterialLoaderBasicTest, LoadMaterial_NonZeroTexture_CollectsDependency)
+  MaterialLoaderBasicTest, LoadMaterialNonZeroTextureCollectsDependency)
 {
   using oxygen::content::internal::ResourceRef;
   using oxygen::data::TextureResource;

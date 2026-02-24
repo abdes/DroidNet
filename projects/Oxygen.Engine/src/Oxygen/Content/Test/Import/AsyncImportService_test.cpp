@@ -66,8 +66,7 @@ protected:
 };
 
 //! Verify service constructs and destructs without crash.
-NOLINT_TEST_F(
-  AsyncImportServiceLifecycleTest, ConstructDestruct_NoJobs_Succeeds)
+NOLINT_TEST_F(AsyncImportServiceLifecycleTest, ConstructDestructNoJobsSucceeds)
 {
   // Arrange & Act
   {
@@ -83,7 +82,7 @@ NOLINT_TEST_F(
 
 //! Verify multiple construct/destruct cycles work correctly.
 NOLINT_TEST_F(
-  AsyncImportServiceLifecycleTest, MultipleConstructDestruct_Succeeds)
+  AsyncImportServiceLifecycleTest, MultipleConstructDestructSucceeds)
 {
   // Arrange & Act
   for (int i = 0; i < 3; ++i) {
@@ -97,8 +96,8 @@ NOLINT_TEST_F(
 }
 
 //! Verify IsAcceptingJobs returns true after construction.
-NOLINT_TEST_F(AsyncImportServiceLifecycleTest,
-  IsAcceptingJobs_AfterConstruction_ReturnsTrue)
+NOLINT_TEST_F(
+  AsyncImportServiceLifecycleTest, IsAcceptingJobsAfterConstructionReturnsTrue)
 {
   // Arrange
   AsyncImportService service(config_);
@@ -111,7 +110,7 @@ NOLINT_TEST_F(AsyncImportServiceLifecycleTest,
 
 //! Verify counts are zero after construction.
 NOLINT_TEST_F(
-  AsyncImportServiceLifecycleTest, JobCounts_AfterConstruction_AreZero)
+  AsyncImportServiceLifecycleTest, JobCountsAfterConstructionAreZero)
 {
   // Arrange
   AsyncImportService service(config_);
@@ -131,7 +130,7 @@ protected:
 };
 
 //! Verify SubmitImport returns a valid job ID.
-NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImport_ReturnsValidJobId)
+NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImportReturnsValidJobId)
 {
   // Arrange
   AsyncImportService service(config_);
@@ -153,7 +152,7 @@ NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImport_ReturnsValidJobId)
 
 //! Verify completion callback is invoked.
 NOLINT_TEST_F(
-  AsyncImportServiceSubmitTest, SubmitImport_CompletionCallback_IsInvoked)
+  AsyncImportServiceSubmitTest, SubmitImportCompletionCallbackIsInvoked)
 {
   // Arrange
   AsyncImportService service(config_);
@@ -183,7 +182,7 @@ NOLINT_TEST_F(
 
 //! Verify custom job factory can run unknown formats.
 NOLINT_TEST_F(
-  AsyncImportServiceSubmitTest, SubmitImport_CustomJobFactory_AllowsUnknown)
+  AsyncImportServiceSubmitTest, SubmitImportCustomJobFactoryAllowsUnknown)
 {
   // Arrange
   AsyncImportService service(config_);
@@ -210,7 +209,7 @@ NOLINT_TEST_F(
 }
 
 //! Verify custom job completes successfully.
-NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImport_CustomJob_Completes)
+NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImportCustomJobCompletes)
 {
   // Arrange
   AsyncImportService service(config_);
@@ -241,7 +240,7 @@ NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImport_CustomJob_Completes)
 
 //! Verify progress callback is invoked if provided.
 NOLINT_TEST_F(
-  AsyncImportServiceSubmitTest, SubmitImport_ProgressCallback_IsInvoked)
+  AsyncImportServiceSubmitTest, SubmitImportProgressCallbackIsInvoked)
 {
   // Arrange
   AsyncImportService service(config_);
@@ -274,7 +273,7 @@ NOLINT_TEST_F(
 }
 
 //! Verify multiple jobs get unique IDs.
-NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImport_MultipleJobs_UniqueIds)
+NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImportMultipleJobsUniqueIds)
 {
   // Arrange
   AsyncImportService service(config_);
@@ -309,7 +308,7 @@ NOLINT_TEST_F(AsyncImportServiceSubmitTest, SubmitImport_MultipleJobs_UniqueIds)
 
 //! Verify SubmitImport returns kInvalidJobId after shutdown.
 NOLINT_TEST_F(
-  AsyncImportServiceSubmitTest, SubmitImport_AfterShutdown_ReturnsInvalid)
+  AsyncImportServiceSubmitTest, SubmitImportAfterShutdownReturnsInvalid)
 {
   // Arrange
   AsyncImportService service(config_);
@@ -334,7 +333,7 @@ protected:
 };
 
 //! Verify CancelJob returns false for invalid job ID.
-NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelJob_InvalidId_ReturnsFalse)
+NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelJobInvalidIdReturnsFalse)
 {
   // Arrange
   AsyncImportService service(config_);
@@ -347,7 +346,7 @@ NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelJob_InvalidId_ReturnsFalse)
 }
 
 //! Verify CancelJob returns false for completed job.
-NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelJob_CompletedJob_ReturnsFalse)
+NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelJobCompletedJobReturnsFalse)
 {
   // Arrange
   AsyncImportService service(config_);
@@ -368,7 +367,7 @@ NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelJob_CompletedJob_ReturnsFalse)
 }
 
 //! Verify CancelAll does not crash with no jobs.
-NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelAll_NoJobs_Succeeds)
+NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelAllNoJobsSucceeds)
 {
   // Arrange
   AsyncImportService service(config_);
@@ -381,8 +380,7 @@ NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelAll_NoJobs_Succeeds)
 }
 
 //! Verify CancelJob can cancel a job during execution.
-NOLINT_TEST_F(
-  AsyncImportServiceCancelTest, CancelJob_DuringExecution_CancelsJob)
+NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelJobDuringExecutionCancelsJob)
 {
   // Arrange
   AsyncImportService service(config_);
@@ -429,7 +427,7 @@ NOLINT_TEST_F(
 
 //! Verify CancelJob before execution prevents job from starting.
 NOLINT_TEST_F(
-  AsyncImportServiceCancelTest, CancelJob_BeforeExecution_PreventsStart)
+  AsyncImportServiceCancelTest, CancelJobBeforeExecutionPreventsStart)
 {
   // Arrange - configure with only 1 worker to ensure jobs queue up
   AsyncImportService::Config blocking_config {
@@ -490,7 +488,7 @@ NOLINT_TEST_F(
 }
 
 //! Verify CancelAll cancels all active jobs.
-NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelAll_MultipleJobs_CancelsAll)
+NOLINT_TEST_F(AsyncImportServiceCancelTest, CancelAllMultipleJobsCancelsAll)
 {
   // Arrange
   constexpr int kJobCount = 5;
@@ -591,7 +589,7 @@ protected:
 
 //! Verify RequestShutdown makes IsAcceptingJobs return false.
 NOLINT_TEST_F(
-  AsyncImportServiceShutdownTest, RequestShutdown_IsAcceptingJobs_ReturnsFalse)
+  AsyncImportServiceShutdownTest, RequestShutdownIsAcceptingJobsReturnsFalse)
 {
   // Arrange
   AsyncImportService service(config_);
@@ -618,8 +616,7 @@ protected:
 };
 
 //! Verify destruction without Stop aborts the process.
-NOLINT_TEST_F(
-  AsyncImportServiceShutdownDeathTest, Destructor_WithoutStop_Aborts)
+NOLINT_TEST_F(AsyncImportServiceShutdownDeathTest, DestructorWithoutStopAborts)
 {
   // Arrange
   const auto exercise = [this]() {
@@ -634,12 +631,11 @@ NOLINT_TEST_F(
   };
 
   // Act & Assert
-  EXPECT_DEATH(
-    exercise(), ".*Destroyed without Stop\\(\\).*");
+  EXPECT_DEATH(exercise(), ".*Destroyed without Stop\\(\\).*");
 }
 
 //! Verify Stop completes with pending jobs before destruction.
-NOLINT_TEST_F(AsyncImportServiceShutdownTest, Stop_WithPendingJobs_Completes)
+NOLINT_TEST_F(AsyncImportServiceShutdownTest, StopWithPendingJobsCompletes)
 {
   // Arrange
   AsyncImportService service(config_);
@@ -667,7 +663,7 @@ protected:
 
 //! Verify concurrent submissions from multiple threads work correctly.
 NOLINT_TEST_F(AsyncImportServiceConcurrencyTest,
-  SubmitImport_ConcurrentSubmissions_AllComplete)
+  SubmitImportConcurrentSubmissionsAllComplete)
 {
   // Arrange
   constexpr int kJobsPerThread = 10;
@@ -713,8 +709,7 @@ NOLINT_TEST_F(AsyncImportServiceConcurrencyTest,
 }
 
 //! Verify rapid submit and cancel operations don't cause deadlocks.
-NOLINT_TEST_F(
-  AsyncImportServiceConcurrencyTest, RapidSubmitAndCancel_NoDeadlock)
+NOLINT_TEST_F(AsyncImportServiceConcurrencyTest, RapidSubmitAndCancelNoDeadlock)
 {
   // Arrange
   constexpr int kIterations = 50;
@@ -763,7 +758,7 @@ protected:
 
 //! Verify IsJobActive returns false for invalid job.
 NOLINT_TEST_F(
-  AsyncImportServiceJobActiveTest, IsJobActive_InvalidJob_ReturnsFalse)
+  AsyncImportServiceJobActiveTest, IsJobActiveInvalidJobReturnsFalse)
 {
   // Arrange
   AsyncImportService service(config_);
@@ -777,7 +772,7 @@ NOLINT_TEST_F(
 
 //! Verify IsJobActive returns false after job completes.
 NOLINT_TEST_F(
-  AsyncImportServiceJobActiveTest, IsJobActive_CompletedJob_ReturnsFalse)
+  AsyncImportServiceJobActiveTest, IsJobActiveCompletedJobReturnsFalse)
 {
   // Arrange
   AsyncImportService service(config_);

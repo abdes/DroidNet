@@ -70,7 +70,7 @@ protected:
 };
 
 //! Verify importer constructs and destructs without crash.
-NOLINT_TEST_F(AsyncImporterLifecycleTest, ConstructDestruct_Succeeds)
+NOLINT_TEST_F(AsyncImporterLifecycleTest, ConstructDestructSucceeds)
 {
   // Arrange & Act
   {
@@ -82,8 +82,7 @@ NOLINT_TEST_F(AsyncImporterLifecycleTest, ConstructDestruct_Succeeds)
 }
 
 //! Verify IsRunning returns false before activation.
-NOLINT_TEST_F(
-  AsyncImporterLifecycleTest, IsRunning_BeforeActivation_ReturnsFalse)
+NOLINT_TEST_F(AsyncImporterLifecycleTest, IsRunningBeforeActivationReturnsFalse)
 {
   // Arrange
   AsyncImporter importer(config_);
@@ -94,7 +93,7 @@ NOLINT_TEST_F(
 
 //! Verify IsAcceptingJobs returns true after construction.
 NOLINT_TEST_F(
-  AsyncImporterLifecycleTest, IsAcceptingJobs_AfterConstruction_ReturnsTrue)
+  AsyncImporterLifecycleTest, IsAcceptingJobsAfterConstructionReturnsTrue)
 {
   // Arrange
   AsyncImporter importer(config_);
@@ -104,8 +103,7 @@ NOLINT_TEST_F(
 }
 
 //! Verify full lifecycle: activate, run, stop.
-NOLINT_TEST_F(
-  AsyncImporterLifecycleTest, ActivateRunStop_FullLifecycle_Succeeds)
+NOLINT_TEST_F(AsyncImporterLifecycleTest, ActivateRunStopFullLifecycleSucceeds)
 {
   // Arrange
   AsyncImporter importer(config_);
@@ -133,7 +131,7 @@ NOLINT_TEST_F(
 }
 
 //! Verify Stop closes the job channel.
-NOLINT_TEST_F(AsyncImporterLifecycleTest, Stop_ClosesJobChannel)
+NOLINT_TEST_F(AsyncImporterLifecycleTest, StopClosesJobChannel)
 {
   // Arrange
   AsyncImporter importer(config_);
@@ -229,7 +227,7 @@ protected:
 };
 
 //! Verify job submission and completion callback.
-NOLINT_TEST_F(AsyncImporterJobTest, SubmitJob_CallsCompletionCallback)
+NOLINT_TEST_F(AsyncImporterJobTest, SubmitJobCallsCompletionCallback)
 {
   // Arrange
   AsyncImporter importer(config_);
@@ -282,7 +280,7 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitJob_CallsCompletionCallback)
 }
 
 //! Verify multiple jobs are processed in order.
-NOLINT_TEST_F(AsyncImporterJobTest, SubmitMultipleJobs_ProcessedInOrder)
+NOLINT_TEST_F(AsyncImporterJobTest, SubmitMultipleJobsProcessedInOrder)
 {
   // Arrange
   AsyncImporter importer(config_);
@@ -341,7 +339,7 @@ NOLINT_TEST_F(AsyncImporterJobTest, SubmitMultipleJobs_ProcessedInOrder)
 }
 
 //! Verify progress callback is invoked.
-NOLINT_TEST_F(AsyncImporterJobTest, SubmitJob_CallsProgressCallback)
+NOLINT_TEST_F(AsyncImporterJobTest, SubmitJobCallsProgressCallback)
 {
   // Arrange
   AsyncImporter importer(config_);
@@ -416,7 +414,7 @@ protected:
 
 //! Verify job with triggered cancel event calls cancellation callback.
 NOLINT_TEST_F(
-  AsyncImporterCancellationTest, CancelEvent_CompletesWithCancelledDiagnostic)
+  AsyncImporterCancellationTest, CancelEventCompletesWithCancelledDiagnostic)
 {
   // Arrange
   AsyncImporter importer(config_);
@@ -490,8 +488,7 @@ NOLINT_TEST_F(
 }
 
 //! Verify CloseJobChannel prevents new submissions.
-NOLINT_TEST_F(
-  AsyncImporterCancellationTest, CloseJobChannel_PreventsSubmissions)
+NOLINT_TEST_F(AsyncImporterCancellationTest, CloseJobChannelPreventsSubmissions)
 {
   // Arrange
   AsyncImporter importer(config_);
@@ -515,7 +512,7 @@ protected:
 };
 
 //! Verify TrySubmitJob succeeds when channel has space.
-NOLINT_TEST_F(AsyncImporterTrySubmitTest, TrySubmitJob_WhenSpace_ReturnsTrue)
+NOLINT_TEST_F(AsyncImporterTrySubmitTest, TrySubmitJobWhenSpaceReturnsTrue)
 {
   // Arrange
   AsyncImporter importer({ .channel_capacity = 4 });
@@ -530,7 +527,7 @@ NOLINT_TEST_F(AsyncImporterTrySubmitTest, TrySubmitJob_WhenSpace_ReturnsTrue)
 }
 
 //! Verify TrySubmitJob fails when channel is full.
-NOLINT_TEST_F(AsyncImporterTrySubmitTest, TrySubmitJob_WhenFull_ReturnsFalse)
+NOLINT_TEST_F(AsyncImporterTrySubmitTest, TrySubmitJobWhenFullReturnsFalse)
 {
   // Arrange
   AsyncImporter importer({ .channel_capacity = 2 });
@@ -552,7 +549,7 @@ NOLINT_TEST_F(AsyncImporterTrySubmitTest, TrySubmitJob_WhenFull_ReturnsFalse)
 }
 
 //! Verify TrySubmitJob fails when channel is closed.
-NOLINT_TEST_F(AsyncImporterTrySubmitTest, TrySubmitJob_WhenClosed_ReturnsFalse)
+NOLINT_TEST_F(AsyncImporterTrySubmitTest, TrySubmitJobWhenClosedReturnsFalse)
 {
   // Arrange
   AsyncImporter importer({ .channel_capacity = 4 });

@@ -52,7 +52,7 @@ auto MakeBytesFromHexdump(const std::string& hexdump, const std::size_t size,
 // Regression test: subscriber that calls back into the loader during eviction
 // must not cause a re-entrant/looping eviction notification. Handler should
 // be invoked exactly once.
-NOLINT_TEST_F(AssetLoaderLoadingTest, ResourceEviction_ReentrantHandler)
+NOLINT_TEST_F(AssetLoaderLoadingTest, ResourceEvictionReentrantHandler)
 {
   using namespace std::chrono_literals;
 
@@ -129,7 +129,7 @@ NOLINT_TEST_F(AssetLoaderLoadingTest, ResourceEviction_ReentrantHandler)
 // Regression test: unsubscribing from inside an eviction callback must not
 // invalidate iteration or skip other subscribers in the same dispatch.
 NOLINT_TEST_F(
-  AssetLoaderLoadingTest, ResourceEviction_CallbackSelfUnsubscribeExpectedSafe)
+  AssetLoaderLoadingTest, ResourceEvictionCallbackSelfUnsubscribeExpectedSafe)
 {
   using namespace std::chrono_literals;
 
@@ -163,36 +163,33 @@ NOLINT_TEST_F(
       std::atomic<int> self_count { 0 };
       std::atomic<int> other_count { 0 };
 
-      auto self_subscription
-        = std::make_unique<oxygen::content::IAssetLoader::EvictionSubscription>();
-      *self_subscription
-        = loader.SubscribeResourceEvictions(BufferResource::ClassTypeId(),
-          [&](const EvictionEvent&) {
-            self_count.fetch_add(1, std::memory_order_relaxed);
-            self_subscription->Cancel();
-          });
+      auto self_subscription = std::make_unique<
+        oxygen::content::IAssetLoader::EvictionSubscription>();
+      *self_subscription = loader.SubscribeResourceEvictions(
+        BufferResource::ClassTypeId(), [&](const EvictionEvent&) {
+          self_count.fetch_add(1, std::memory_order_relaxed);
+          self_subscription->Cancel();
+        });
 
-      auto other_subscription
-        = loader.SubscribeResourceEvictions(BufferResource::ClassTypeId(),
-          [&](const EvictionEvent&) {
-            other_count.fetch_add(1, std::memory_order_relaxed);
-          });
+      auto other_subscription = loader.SubscribeResourceEvictions(
+        BufferResource::ClassTypeId(), [&](const EvictionEvent&) {
+          other_count.fetch_add(1, std::memory_order_relaxed);
+        });
 
-      const auto evict_once
-        = [&](const ResourceKey key) -> Co<> {
-            auto bytes = make_payload();
-            std::span<const uint8_t> span(bytes.data(), bytes.size());
-            auto resource = co_await loader.LoadResourceAsync<BufferResource>(
-              CookedResourceData<BufferResource> {
-                .key = key,
-                .bytes = span,
-              });
-            EXPECT_NE(resource, nullptr);
-            resource.reset();
-            (void)loader.ReleaseResource(key);
-            loader.TrimCache();
-            co_return;
-          };
+      const auto evict_once = [&](const ResourceKey key) -> Co<> {
+        auto bytes = make_payload();
+        std::span<const uint8_t> span(bytes.data(), bytes.size());
+        auto resource = co_await loader.LoadResourceAsync<BufferResource>(
+          CookedResourceData<BufferResource> {
+            .key = key,
+            .bytes = span,
+          });
+        EXPECT_NE(resource, nullptr);
+        resource.reset();
+        (void)loader.ReleaseResource(key);
+        loader.TrimCache();
+        co_return;
+      };
 
       co_await evict_once(loader.MintSyntheticBufferKey());
       co_await evict_once(loader.MintSyntheticBufferKey());
@@ -210,7 +207,7 @@ NOLINT_TEST_F(
 // Regression test: subscribing during callback must not join current dispatch,
 // and should participate in subsequent evictions.
 NOLINT_TEST_F(AssetLoaderLoadingTest,
-  ResourceEviction_CallbackSubscribeDuringDispatchExpectedNextDispatchOnly)
+  ResourceEvictionCallbackSubscribeDuringDispatchExpectedNextDispatchOnly)
 {
   using namespace std::chrono_literals;
 
@@ -243,37 +240,35 @@ NOLINT_TEST_F(AssetLoaderLoadingTest,
 
       std::atomic<int> first_count { 0 };
       std::atomic<int> late_count { 0 };
-      auto late_subscription
-        = std::make_unique<oxygen::content::IAssetLoader::EvictionSubscription>();
+      auto late_subscription = std::make_unique<
+        oxygen::content::IAssetLoader::EvictionSubscription>();
 
-      auto first_subscription
-        = loader.SubscribeResourceEvictions(BufferResource::ClassTypeId(),
-          [&](const EvictionEvent&) {
-            const auto prior = first_count.fetch_add(1, std::memory_order_relaxed);
-            if (prior == 0) {
-              *late_subscription
-                = loader.SubscribeResourceEvictions(BufferResource::ClassTypeId(),
-                  [&](const EvictionEvent&) {
-                    late_count.fetch_add(1, std::memory_order_relaxed);
-                  });
-            }
-          });
-
-      const auto evict_once
-        = [&](const ResourceKey key) -> Co<> {
-            auto bytes = make_payload();
-            std::span<const uint8_t> span(bytes.data(), bytes.size());
-            auto resource = co_await loader.LoadResourceAsync<BufferResource>(
-              CookedResourceData<BufferResource> {
-                .key = key,
-                .bytes = span,
+      auto first_subscription = loader.SubscribeResourceEvictions(
+        BufferResource::ClassTypeId(), [&](const EvictionEvent&) {
+          const auto prior
+            = first_count.fetch_add(1, std::memory_order_relaxed);
+          if (prior == 0) {
+            *late_subscription = loader.SubscribeResourceEvictions(
+              BufferResource::ClassTypeId(), [&](const EvictionEvent&) {
+                late_count.fetch_add(1, std::memory_order_relaxed);
               });
-            EXPECT_NE(resource, nullptr);
-            resource.reset();
-            (void)loader.ReleaseResource(key);
-            loader.TrimCache();
-            co_return;
-          };
+          }
+        });
+
+      const auto evict_once = [&](const ResourceKey key) -> Co<> {
+        auto bytes = make_payload();
+        std::span<const uint8_t> span(bytes.data(), bytes.size());
+        auto resource = co_await loader.LoadResourceAsync<BufferResource>(
+          CookedResourceData<BufferResource> {
+            .key = key,
+            .bytes = span,
+          });
+        EXPECT_NE(resource, nullptr);
+        resource.reset();
+        (void)loader.ReleaseResource(key);
+        loader.TrimCache();
+        co_return;
+      };
 
       co_await evict_once(loader.MintSyntheticBufferKey());
       co_await evict_once(loader.MintSyntheticBufferKey());
