@@ -86,4 +86,17 @@ auto to_string(NodePruningPolicy value) -> std::string
   return "Unknown";
 }
 
+auto to_string(DedupCollisionPolicy value) -> std::string
+{
+  switch (value) {
+  case DedupCollisionPolicy::kError:
+    return "Error";
+  case DedupCollisionPolicy::kWarnKeepFirst:
+    return "WarnKeepFirst";
+  case DedupCollisionPolicy::kWarnReplace:
+    return "WarnReplace";
+  }
+  return "Unknown";
+}
+
 } // namespace oxygen::content::import

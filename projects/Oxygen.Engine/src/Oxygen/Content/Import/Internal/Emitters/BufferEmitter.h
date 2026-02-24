@@ -9,12 +9,17 @@
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
+#include <memory>
 #include <optional>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Content/Import/BufferImportTypes.h>
+#include <Oxygen/Content/Import/ImportDiagnostics.h>
+#include <Oxygen/Content/Import/ImportOptions.h>
 #include <Oxygen/Content/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Content/LooseCooked/LooseCookedLayout.h>
 #include <Oxygen/Content/api_export.h>
@@ -46,14 +51,14 @@ struct FileErrorInfo;
    shutdown.
 
  4. **Signature-Based Deduplication**: Buffers are deduplicated using a
-   signature derived from the cooked payload metadata (usage/format/stride,
-   alignment, and byte size). When `CookedBufferPayload::content_hash` is
-   present (non-zero), it is incorporated as well. Duplicate buffers reuse an
-   existing index without any additional I/O.
-
-   @note When content hashing is disabled (hash is zero), the signature does
-       not include content bytes and may deduplicate different buffers that
-       share identical metadata and size.
+ stable
+ payload identity signature. When `CookedBufferPayload::content_hash`
+   is
+ present (non-zero), it is used directly. Otherwise the emitter computes a
+ fast
+ deterministic payload fingerprint for identity. Duplicate buffers reuse
+   an
+ existing index without any additional I/O.
 
  5. **Per-Buffer Alignment**: Each buffer specifies its own alignment
     requirement (vertex buffers = 16 bytes, index buffers = 4 bytes, etc.).
@@ -89,6 +94,12 @@ struct FileErrorInfo;
 */
 class BufferEmitter final {
 public:
+  struct Config final {
+    DedupCollisionPolicy collision_policy
+      = DedupCollisionPolicy::kWarnKeepFirst;
+    std::function<void(ImportDiagnostic)> on_dedup_diagnostic;
+  };
+
   //! Create a buffer emitter for the given layout.
   /*!
    @param file_writer Async file writer for output operations.
@@ -97,7 +108,7 @@ public:
   */
   OXGN_CNTT_API BufferEmitter(IAsyncFileWriter& file_writer,
     BufferTableAggregator& table_aggregator, const LooseCookedLayout& layout,
-    const std::filesystem::path& cooked_root);
+    const std::filesystem::path& cooked_root, Config config = {});
 
   OXGN_CNTT_API ~BufferEmitter();
 
@@ -190,11 +201,14 @@ private:
 
   IAsyncFileWriter& file_writer_;
   BufferTableAggregator& table_aggregator_;
+  Config config_ {};
   std::filesystem::path data_path_;
   std::atomic<bool> finalize_started_ { false };
   std::atomic<uint32_t> emitted_count_ { 0 };
   std::atomic<size_t> pending_count_ { 0 };
   std::atomic<size_t> error_count_ { 0 };
+  std::unordered_map<std::string, std::string> identity_by_key_;
+  std::unordered_map<std::string, uint32_t> index_by_key_;
 };
 
 } // namespace oxygen::content::import

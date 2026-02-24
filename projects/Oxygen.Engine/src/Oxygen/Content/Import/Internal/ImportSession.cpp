@@ -94,8 +94,12 @@ ImportSession::ImportSession(const ImportRequest& request,
   , cooked_writer_(cooked_root_)
 {
   DLOG_F(INFO, "Session created for: {}", request_.source_path.string());
-  DLOG_F(INFO, "Session options: with_content_hashing={}",
-    request_.options.with_content_hashing);
+  DLOG_F(INFO,
+    "Session options: requested_hashing={} effective_hashing={} "
+    "dedup_collision_policy={}",
+    request_.options.with_content_hashing,
+    EffectiveContentHashingEnabled(request_.options.with_content_hashing),
+    to_string(request_.options.dedup_collision_policy));
 
   DCHECK_F(file_writer_ != nullptr,
     "ImportSession requires a valid async file writer");
@@ -163,7 +167,12 @@ auto ImportSession::TextureEmitter() -> import::TextureEmitter&
     TextureEmitter::Config config {};
     config.cooked_root = cooked_root_;
     config.layout = request_.loose_cooked_layout;
-    config.with_content_hashing = request_.options.with_content_hashing;
+    config.with_content_hashing
+      = EffectiveContentHashingEnabled(request_.options.with_content_hashing);
+    config.collision_policy = request_.options.dedup_collision_policy;
+    config.on_dedup_diagnostic = [this](ImportDiagnostic diagnostic) {
+      AddDiagnostic(std::move(diagnostic));
+    };
     texture_emitter_.emplace(std::make_unique<import::TextureEmitter>(
       *file_writer_, aggregator, std::move(config)));
   }
@@ -183,8 +192,14 @@ auto ImportSession::BufferEmitter() -> import::BufferEmitter&
       "ImportSession requires a ResourceTableRegistry for buffer emission");
     auto& aggregator = table_registry_->BufferAggregator(
       cooked_root_, request_.loose_cooked_layout);
-    buffer_emitter_.emplace(std::make_unique<import::BufferEmitter>(
-      *file_writer_, aggregator, request_.loose_cooked_layout, cooked_root_));
+    BufferEmitter::Config config {};
+    config.collision_policy = request_.options.dedup_collision_policy;
+    config.on_dedup_diagnostic = [this](ImportDiagnostic diagnostic) {
+      AddDiagnostic(std::move(diagnostic));
+    };
+    buffer_emitter_.emplace(
+      std::make_unique<import::BufferEmitter>(*file_writer_, aggregator,
+        request_.loose_cooked_layout, cooked_root_, std::move(config)));
   }
   return **buffer_emitter_;
 }

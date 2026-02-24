@@ -43,7 +43,8 @@ auto BuildTextureRequest(const TextureImportSettings& settings,
     }
   }
 
-  request.options.with_content_hashing = settings.with_content_hashing;
+  request.options.with_content_hashing
+    = EffectiveContentHashingEnabled(settings.with_content_hashing);
 
   auto& tuning = request.options.texture_tuning;
 

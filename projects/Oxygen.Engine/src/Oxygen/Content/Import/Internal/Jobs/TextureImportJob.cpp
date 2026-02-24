@@ -217,7 +217,8 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   TexturePipeline pipeline(*ThreadPool(),
     TexturePipeline::Config {
-      .with_content_hashing = Request().options.with_content_hashing,
+      .with_content_hashing
+      = EffectiveContentHashingEnabled(Request().options.with_content_hashing),
     });
   StartPipeline(pipeline);
 

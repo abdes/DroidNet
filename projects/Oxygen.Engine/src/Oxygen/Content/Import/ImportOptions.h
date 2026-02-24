@@ -200,6 +200,36 @@ enum class NodePruningPolicy : uint8_t {
 //! String representation of enum values in `NodePruningPolicy`.
 OXGN_CNTT_API auto to_string(NodePruningPolicy value) -> std::string;
 
+//! Collision handling policy for dedup identity-key conflicts.
+enum class DedupCollisionPolicy : uint8_t {
+  //! Treat conflicts as hard errors.
+  kError = 0,
+  //! Keep the first payload bound to the key and warn.
+  kWarnKeepFirst,
+  //! Replace the key binding with the most recent payload and warn.
+  kWarnReplace,
+};
+
+//! String representation of enum values in `DedupCollisionPolicy`.
+OXGN_CNTT_API auto to_string(DedupCollisionPolicy value) -> std::string;
+
+//! Effective import hashing policy for the current build configuration.
+/*!
+ Release builds always hash content, even if callers request disabling it.
+
+ * Debug builds honor the caller-provided flag for faster iteration.
+*/
+[[nodiscard]] constexpr auto EffectiveContentHashingEnabled(
+  const bool requested) noexcept -> bool
+{
+#if defined(NDEBUG)
+  static_cast<void>(requested);
+  return true;
+#else
+  return requested;
+#endif
+}
+
 //! Coordinate conversion policy.
 /*!
  This policy configures how source authoring data is converted into Oxygen's
@@ -295,10 +325,18 @@ struct ImportOptions final {
 
   //! Enable or disable content hashing across import pipelines.
   /*!
-   When false, pipelines MUST NOT compute any `content_hash` values.
-   This applies to textures, buffers, geometry, materials, and scenes.
+   Debug builds honor this flag directly. Release builds force hashing ON
+   * via
+   `EffectiveContentHashingEnabled()` and ignore attempts to disable
+   * hashing.
+   This applies to textures, buffers, geometry, materials, and
+   * scenes.
   */
   bool with_content_hashing = true;
+
+  //! Collision policy for dedup identity-key conflicts in import emitters.
+  DedupCollisionPolicy dedup_collision_policy
+    = DedupCollisionPolicy::kWarnKeepFirst;
 
   //! How to handle vertex normals.
   /*! Default is `kGenerateMissing`. */

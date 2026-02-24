@@ -4,9 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <filesystem>
+#include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <utility>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Import/IAsyncFileWriter.h>
@@ -18,42 +22,58 @@ namespace oxygen::content::import {
 
 namespace {
 
+  [[nodiscard]] auto ComputeFastFingerprint(
+    const std::span<const std::byte> bytes) -> uint64_t
+  {
+    constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
+    constexpr uint64_t kFnvPrime = 1099511628211ULL;
+    auto hash = kFnvOffsetBasis;
+    for (const auto b : bytes) {
+      hash ^= static_cast<uint64_t>(std::to_integer<uint8_t>(b));
+      hash *= kFnvPrime;
+    }
+    return hash;
+  }
+
+  [[nodiscard]] auto ComputeBufferIdentity(const CookedBufferPayload& cooked)
+    -> std::string
+  {
+    std::string identity;
+    identity.reserve(128);
+    identity.append("buf:");
+    identity.append("u=");
+    identity.append(std::to_string(cooked.usage_flags));
+    identity.append(";s=");
+    identity.append(std::to_string(cooked.element_stride));
+    identity.append(";f=");
+    identity.append(std::to_string(cooked.element_format));
+    identity.append(";n=");
+    identity.append(std::to_string(cooked.data.size()));
+    if (cooked.content_hash != 0ULL) {
+      identity.append(";h=");
+      identity.append(std::to_string(cooked.content_hash));
+      return identity;
+    }
+    identity.append(";fp=");
+    identity.append(std::to_string(ComputeFastFingerprint(cooked.data)));
+    return identity;
+  }
+
   [[nodiscard]] auto MakeBufferSignature(const CookedBufferPayload& cooked,
     std::string_view signature_salt) -> std::string
   {
-    std::string signature;
-    signature.reserve(96);
-
-    // Dedupe signature is always present. When `content_hash` is available, it
-    // is incorporated to distinguish buffers that share metadata.
-    signature.append("buf:");
-    signature.append("u=");
-    signature.append(std::to_string(cooked.usage_flags));
-    signature.append(";s=");
-    signature.append(std::to_string(cooked.element_stride));
-    signature.append(";f=");
-    signature.append(std::to_string(cooked.element_format));
-    signature.append(";a=");
-    signature.append(std::to_string(cooked.alignment));
-    signature.append(";n=");
-    signature.append(std::to_string(cooked.data.size()));
-    if (cooked.content_hash != 0) {
-      signature.append(";h=");
-      signature.append(std::to_string(cooked.content_hash));
-    } else if (!signature_salt.empty()) {
-      signature.append(";id=");
-      signature.append(signature_salt.begin(), signature_salt.end());
-    }
-    return signature;
+    static_cast<void>(signature_salt);
+    return ComputeBufferIdentity(cooked);
   }
 
 } // namespace
 
 BufferEmitter::BufferEmitter(IAsyncFileWriter& file_writer,
   BufferTableAggregator& table_aggregator, const LooseCookedLayout& layout,
-  const std::filesystem::path& cooked_root)
+  const std::filesystem::path& cooked_root, Config config)
   : file_writer_(file_writer)
   , table_aggregator_(table_aggregator)
+  , config_(std::move(config))
   , data_path_(cooked_root / layout.BuffersDataRelPath())
 {
   DLOG_F(INFO, "Created buffer emitter: data='{}'", data_path_.string());
@@ -74,6 +94,62 @@ auto BufferEmitter::Emit(
     throw std::runtime_error("BufferEmitter is finalized");
   }
 
+  const auto identity = ComputeBufferIdentity(cooked);
+  DCHECK_F(!identity.empty(), "buffer identity must not be empty");
+
+  if (cooked.content_hash == 0ULL && !signature_salt.empty()) {
+    const std::string key(signature_salt);
+    if (const auto it = identity_by_key_.find(key);
+      it != identity_by_key_.end() && it->second != identity) {
+      const auto existing_index_it = index_by_key_.find(key);
+      const uint32_t existing_index = (existing_index_it != index_by_key_.end())
+        ? existing_index_it->second
+        : 0U;
+
+      ImportDiagnostic diagnostic {
+        .severity = (config_.collision_policy == DedupCollisionPolicy::kError)
+          ? ImportSeverity::kError
+          : ImportSeverity::kWarning,
+        .code = "import.dedup_collision.buffer",
+        .message = "policy=" + to_string(config_.collision_policy) + ";action="
+          + std::string(
+            config_.collision_policy == DedupCollisionPolicy::kWarnReplace
+              ? "replace"
+              : (config_.collision_policy
+                      == DedupCollisionPolicy::kWarnKeepFirst
+                    ? "keep_first"
+                    : "error"))
+          + ";existing_index=" + std::to_string(existing_index),
+        .source_path = key,
+        .object_path = "buffer",
+      };
+      if (config_.on_dedup_diagnostic) {
+        config_.on_dedup_diagnostic(diagnostic);
+      }
+      if (config_.collision_policy == DedupCollisionPolicy::kError) {
+        LOG_F(ERROR,
+          "buffer dedup collision: policy={} key='{}' existing_index={} "
+          "action={}",
+          to_string(config_.collision_policy), key, existing_index, "error");
+      } else {
+        LOG_F(WARNING,
+          "buffer dedup collision: policy={} key='{}' existing_index={} "
+          "action={}",
+          to_string(config_.collision_policy), key, existing_index,
+          (config_.collision_policy == DedupCollisionPolicy::kWarnReplace)
+            ? "replace"
+            : "keep_first");
+      }
+
+      if (config_.collision_policy == DedupCollisionPolicy::kError) {
+        throw std::runtime_error("buffer dedup collision");
+      }
+      if (config_.collision_policy == DedupCollisionPolicy::kWarnKeepFirst) {
+        return existing_index;
+      }
+    }
+  }
+
   const auto signature = MakeBufferSignature(cooked, signature_salt);
   DCHECK_F(!signature.empty(), "buffer signature must not be empty");
 
@@ -88,6 +164,11 @@ auto BufferEmitter::Emit(
   });
 
   if (!acquire.is_new) {
+    if (cooked.content_hash == 0ULL && !signature_salt.empty()) {
+      const std::string key(signature_salt);
+      identity_by_key_[key] = identity;
+      index_by_key_[key] = acquire.index;
+    }
     return acquire.index;
   }
 
@@ -114,6 +195,12 @@ auto BufferEmitter::Emit(
   // Queue async write at explicit offset for buffer data
   QueueDataWrite(
     WriteKind::kPayload, acquire.index, reserved.aligned_offset, payload_ptr);
+
+  if (cooked.content_hash == 0ULL && !signature_salt.empty()) {
+    const std::string key(signature_salt);
+    identity_by_key_[key] = identity;
+    index_by_key_[key] = acquire.index;
+  }
 
   return acquire.index;
 }
@@ -212,7 +299,9 @@ auto BufferEmitter::MakeTableEntry(
   entry.usage_flags = cooked.usage_flags;
   entry.element_stride = cooked.element_stride;
   entry.element_format = cooked.element_format;
-  entry.content_hash = cooked.content_hash;
+  entry.content_hash = (cooked.content_hash != 0ULL)
+    ? cooked.content_hash
+    : ComputeFastFingerprint(cooked.data);
   // entry.reserved is zero-initialized by default
 
   return entry;
