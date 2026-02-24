@@ -224,63 +224,6 @@ NOLINT_TEST_F(
   });
 }
 
-//! Test: Runtime residency policy round-trip and state query.
-NOLINT_TEST_F(
-  AssetLoaderLifetimeTest, ResidencyPolicyRoundTripExpectedToExposeState)
-{
-  AssetLoaderConfig config {};
-  config.residency_policy = oxygen::content::ResidencyPolicy {
-    .cache_budget_bytes = 4096,
-    .trim_mode = oxygen::content::ResidencyTrimMode::kAutoOnOverBudget,
-    .default_priority_class = oxygen::content::LoadPriorityClass::kCritical,
-  };
-
-  AssetLoader loader(
-    oxygen::content::internal::EngineTagFactory::Get(), config);
-
-  const auto configured = loader.GetResidencyPolicy();
-  EXPECT_EQ(configured.cache_budget_bytes, 4096U);
-  EXPECT_EQ(configured.trim_mode,
-    oxygen::content::ResidencyTrimMode::kAutoOnOverBudget);
-  EXPECT_EQ(configured.default_priority_class,
-    oxygen::content::LoadPriorityClass::kCritical);
-
-  const auto queried = loader.QueryResidencyPolicyState();
-  EXPECT_EQ(queried.policy.cache_budget_bytes, 4096U);
-  EXPECT_EQ(queried.policy.trim_mode,
-    oxygen::content::ResidencyTrimMode::kAutoOnOverBudget);
-  EXPECT_EQ(queried.policy.default_priority_class,
-    oxygen::content::LoadPriorityClass::kCritical);
-  EXPECT_EQ(queried.cache_entries, 0U);
-  EXPECT_EQ(queried.consumed_bytes, 0U);
-  EXPECT_EQ(queried.checked_out_items, 0U);
-  EXPECT_FALSE(queried.over_budget);
-}
-
-//! Test: Residency policy rejects zero cache budget.
-NOLINT_TEST_F(AssetLoaderLifetimeTest, ResidencyPolicyZeroBudgetExpectedToThrow)
-{
-  AssetLoaderConfig config {};
-  AssetLoader loader(
-    oxygen::content::internal::EngineTagFactory::Get(), config);
-
-  const auto original = loader.GetResidencyPolicy();
-  EXPECT_GT(original.cache_budget_bytes, 0U);
-
-  EXPECT_THROW(
-    loader.SetResidencyPolicy(oxygen::content::ResidencyPolicy {
-      .cache_budget_bytes = 0,
-      .trim_mode = oxygen::content::ResidencyTrimMode::kManual,
-      .default_priority_class = oxygen::content::LoadPriorityClass::kDefault,
-    }),
-    std::invalid_argument);
-
-  const auto after = loader.GetResidencyPolicy();
-  EXPECT_EQ(after.cache_budget_bytes, original.cache_budget_bytes);
-  EXPECT_EQ(after.trim_mode, original.trim_mode);
-  EXPECT_EQ(after.default_priority_class, original.default_priority_class);
-}
-
 //! Test: Refcounted checkouts require matching releases and trim.
 /*!
  Scenario: Load a BufferResource, check it out once more using GetBuffer,

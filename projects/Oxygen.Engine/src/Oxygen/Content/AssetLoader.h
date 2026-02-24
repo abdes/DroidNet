@@ -1147,6 +1147,10 @@ private:
 
   //! Recursively invalidates an asset and all its cached resource dependencies.
   OXGN_CNTT_API auto InvalidateAssetTree(const data::AssetKey& key) -> void;
+  OXGN_CNTT_API auto ExecuteTrimPass(std::string_view trigger, bool automatic)
+    -> void;
+  OXGN_CNTT_API auto MaybeAutoTrimOnBudgetPressure(
+    std::string_view trigger, bool force = false) -> void;
 
   //=== Type-erased Loading/Unloading ===-------------------------------------//
 
@@ -1264,6 +1268,12 @@ private:
   std::atomic<uint64_t> next_load_request_sequence_ { 1 };
   std::unordered_map<uint64_t, uint32_t> pinned_resource_counts_ {};
   std::unordered_map<uint64_t, uint32_t> pinned_asset_counts_ {};
+  struct TrimTelemetry final {
+    uint64_t attempts { 0 };
+    uint64_t reclaimed_items { 0 };
+    uint64_t reclaimed_bytes { 0 };
+    uint64_t blocked_roots { 0 };
+  } trim_telemetry_ {};
 
   [[nodiscard]] auto NormalizeLoadRequest(LoadRequest request) const noexcept
     -> LoadRequest

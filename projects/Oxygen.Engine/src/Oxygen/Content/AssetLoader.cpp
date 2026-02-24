@@ -278,6 +278,9 @@ AssetLoader::AssetLoader(
       = [this]() { return residency_policy_.default_priority_class; },
       .next_request_sequence
       = [this]() { return next_load_request_sequence_.fetch_add(1); },
+      .on_store_pressure
+      = [this](const std::string_view trigger,
+          const bool force) { MaybeAutoTrimOnBudgetPressure(trigger, force); },
     });
 
   if (residency_policy_.cache_budget_bytes == 0) {
@@ -343,6 +346,8 @@ auto AssetLoader::SetResidencyPolicy(const ResidencyPolicy& policy) -> void
     residency_policy_.cache_budget_bytes, residency_policy_.trim_mode,
     residency_policy_.default_priority_class,
     oxygen::to_string(set_budget_status));
+
+  MaybeAutoTrimOnBudgetPressure("policy_updated");
 }
 
 auto AssetLoader::GetResidencyPolicy() const noexcept -> ResidencyPolicy
@@ -360,6 +365,10 @@ auto AssetLoader::QueryResidencyPolicyState() const -> ResidencyPolicyState
     .consumed_bytes = static_cast<uint64_t>(stats.consumed),
     .checked_out_items = stats.checked_out_items,
     .over_budget = stats.over_budget,
+    .trim_attempts = trim_telemetry_.attempts,
+    .reclaimed_items = trim_telemetry_.reclaimed_items,
+    .reclaimed_bytes = trim_telemetry_.reclaimed_bytes,
+    .blocked_roots = trim_telemetry_.blocked_roots,
   };
 }
 
@@ -602,12 +611,15 @@ auto AssetLoader::ClearMounts() -> void
     "ClearMounts", /*expect_dependency_graphs_empty=*/true);
 }
 
-auto AssetLoader::TrimCache() -> void
+auto AssetLoader::ExecuteTrimPass(
+  const std::string_view trigger, const bool automatic) -> void
 {
-  LOG_F(INFO, "AssetLoader::TrimCache thread={} owner={}",
-    std::hash<std::thread::id> {}(std::this_thread::get_id()),
+  LOG_F(INFO, "trim start trigger={} automatic={} thread={} owner={}", trigger,
+    automatic, std::hash<std::thread::id> {}(std::this_thread::get_id()),
     std::hash<std::thread::id> {}(owning_thread_id_));
   AssertOwningThread();
+  ++trim_telemetry_.attempts;
+  const auto before = content_cache_.SnapshotStats();
 
   auto eviction_guard = content_cache_.OnEviction(
     [&](const uint64_t cache_key, std::shared_ptr<void> value,
@@ -641,20 +653,49 @@ auto AssetLoader::TrimCache() -> void
     asset_identity_index_->AssetKeyByHash(), resource_key_registry_->Entries(),
     *dependency_graph_, content_cache_, callbacks);
 
+  const auto after = content_cache_.SnapshotStats();
+  const auto reclaimed_items = before.size > after.size
+    ? static_cast<uint64_t>(before.size - after.size)
+    : 0ULL;
+  const auto reclaimed_bytes = before.consumed > after.consumed
+    ? static_cast<uint64_t>(before.consumed - after.consumed)
+    : 0ULL;
+  trim_telemetry_.reclaimed_items += reclaimed_items;
+  trim_telemetry_.reclaimed_bytes += reclaimed_bytes;
+  trim_telemetry_.blocked_roots
+    += static_cast<uint64_t>(trim_result.pruned_live_branches);
+
   LOG_F(INFO,
-    "AssetLoader::TrimCache roots={} pruned_live_branches={} "
-    "standalone_resource_candidates={}",
-    trim_result.trim_roots, trim_result.pruned_live_branches,
-    trim_result.standalone_resource_candidates);
+    "trim summary trigger={} automatic={} roots={} blocked_roots={} "
+    "standalone_resource_candidates={} reclaimed_items={} reclaimed_bytes={}",
+    trigger, automatic, trim_result.trim_roots,
+    trim_result.pruned_live_branches,
+    trim_result.standalone_resource_candidates, reclaimed_items,
+    reclaimed_bytes);
   if (trim_result.trim_roots == 0U
     && trim_result.standalone_resource_candidates > 0U) {
     LOG_F(INFO,
-      "AssetLoader::TrimCache removed standalone resources without trim roots; "
+      "trim removed standalone resources without trim roots; "
       "this usually means resource edges were not published by current owners");
   }
 
   FlushResourceEvictionsForUncachedMappings(EvictionReason::kClear, false);
 }
+
+auto AssetLoader::MaybeAutoTrimOnBudgetPressure(
+  const std::string_view trigger, const bool force) -> void
+{
+  AssertOwningThread();
+  if (residency_policy_.trim_mode != ResidencyTrimMode::kAutoOnOverBudget) {
+    return;
+  }
+  if (!force && !content_cache_.IsOverBudget()) {
+    return;
+  }
+  ExecuteTrimPass(trigger, true);
+}
+
+auto AssetLoader::TrimCache() -> void { ExecuteTrimPass("manual_trim", false); }
 
 auto AssetLoader::EnumerateMountedScenes() const
   -> std::vector<IAssetLoader::MountedSceneEntry>
@@ -1630,10 +1671,16 @@ auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key,
         decoded->SetTextureResourceKeys(std::move(texture_keys));
       }
 
-      if (content_cache_.Store(hash_key, decoded)) {
+      auto stored = content_cache_.Store(hash_key, decoded);
+      if (!stored) {
+        MaybeAutoTrimOnBudgetPressure("material_store_failed", true);
+        stored = content_cache_.Store(hash_key, decoded);
+      }
+      if (stored) {
         IndexAssetHashMapping(hash_key, key, source_id);
         // Keep one loader-owned cache retain; load caller gets its own retain.
         content_cache_.Touch(hash_key);
+        MaybeAutoTrimOnBudgetPressure("material_store_succeeded");
       }
 
       // Publish resolved texture slots for this material even on cache reuse.
@@ -2025,10 +2072,16 @@ auto AssetLoader::LoadGeometryAssetAsyncImpl(const data::AssetKey& key,
         *decoded, loaded_buffers_by_index, loaded_materials);
 
       // Store the fully published asset.
-      if (content_cache_.Store(hash_key, decoded)) {
+      auto stored = content_cache_.Store(hash_key, decoded);
+      if (!stored) {
+        MaybeAutoTrimOnBudgetPressure("geometry_store_failed", true);
+        stored = content_cache_.Store(hash_key, decoded);
+      }
+      if (stored) {
         IndexAssetHashMapping(hash_key, key, source_id);
         // Keep one loader-owned cache retain; load caller gets its own retain.
         content_cache_.Touch(hash_key);
+        MaybeAutoTrimOnBudgetPressure("geometry_store_succeeded");
       }
 
       PublishGeometryDependencyEdges(
@@ -2188,10 +2241,16 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
 
       // Publish: store the scene asset, then load asset dependencies and
       // register dependency edges.
-      if (content_cache_.Store(hash_key, decoded)) {
+      auto stored = content_cache_.Store(hash_key, decoded);
+      if (!stored) {
+        MaybeAutoTrimOnBudgetPressure("scene_store_failed", true);
+        stored = content_cache_.Store(hash_key, decoded);
+      }
+      if (stored) {
         IndexAssetHashMapping(hash_key, key, source_id);
         // Keep one loader-owned cache retain; load caller gets its own retain.
         content_cache_.Touch(hash_key);
+        MaybeAutoTrimOnBudgetPressure("scene_store_succeeded");
       }
 
       // Publish only what needs async residency management:
@@ -2269,9 +2328,15 @@ auto AssetLoader::LoadPhysicsSceneAssetAsyncImpl(const data::AssetKey& key,
       }
 
       // Publish: store the asset in cache and keep one loader-owned retain.
-      if (content_cache_.Store(hash_key, typed)) {
+      auto stored = content_cache_.Store(hash_key, typed);
+      if (!stored) {
+        MaybeAutoTrimOnBudgetPressure("physics_scene_store_failed", true);
+        stored = content_cache_.Store(hash_key, typed);
+      }
+      if (stored) {
         IndexAssetHashMapping(hash_key, key, source_id);
         content_cache_.Touch(hash_key);
+        MaybeAutoTrimOnBudgetPressure("physics_scene_store_succeeded");
       }
       co_return typed;
     } catch (const co::TaskCancelledException& e) {
@@ -2363,10 +2428,16 @@ auto AssetLoader::LoadScriptAssetAsyncImpl(const data::AssetKey& key,
         co_return nullptr;
       }
 
-      if (content_cache_.Store(hash_key, decoded)) {
+      auto stored = content_cache_.Store(hash_key, decoded);
+      if (!stored) {
+        MaybeAutoTrimOnBudgetPressure("script_asset_store_failed", true);
+        stored = content_cache_.Store(hash_key, decoded);
+      }
+      if (stored) {
         IndexAssetHashMapping(hash_key, key, source_id);
         // Baseline pinning: retain one loader-owned checkout.
         content_cache_.Touch(hash_key);
+        MaybeAutoTrimOnBudgetPressure("script_asset_store_succeeded");
       }
 
       co_await PublishResourceDependenciesAsync<data::ScriptResource>(
@@ -2422,10 +2493,16 @@ auto AssetLoader::LoadInputActionAssetAsyncImpl(const data::AssetKey& key,
         co_return nullptr;
       }
 
-      if (content_cache_.Store(hash_key, decoded)) {
+      auto stored = content_cache_.Store(hash_key, decoded);
+      if (!stored) {
+        MaybeAutoTrimOnBudgetPressure("input_action_store_failed", true);
+        stored = content_cache_.Store(hash_key, decoded);
+      }
+      if (stored) {
         IndexAssetHashMapping(hash_key, key, source_id);
         // Baseline pinning: retain one loader-owned checkout.
         content_cache_.Touch(hash_key);
+        MaybeAutoTrimOnBudgetPressure("input_action_store_succeeded");
       }
 
       co_return decoded;
@@ -2550,10 +2627,17 @@ auto AssetLoader::LoadInputMappingContextAssetAsyncImpl(
         co_return nullptr;
       }
 
-      if (content_cache_.Store(hash_key, decoded)) {
+      auto stored = content_cache_.Store(hash_key, decoded);
+      if (!stored) {
+        MaybeAutoTrimOnBudgetPressure(
+          "input_mapping_context_store_failed", true);
+        stored = content_cache_.Store(hash_key, decoded);
+      }
+      if (stored) {
         IndexAssetHashMapping(hash_key, key, source_id);
         // Baseline pinning: retain one loader-owned checkout.
         content_cache_.Touch(hash_key);
+        MaybeAutoTrimOnBudgetPressure("input_mapping_context_store_succeeded");
       }
 
       co_await publish_input_action_dependencies(decoded);
