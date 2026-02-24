@@ -7,6 +7,8 @@
 #include <filesystem>
 #include <fstream>
 
+#include <Oxygen/Testing/GTest.h>
+
 #include "./AssetLoader_test.h"
 
 using oxygen::content::testing::AssetLoaderBasicTest;

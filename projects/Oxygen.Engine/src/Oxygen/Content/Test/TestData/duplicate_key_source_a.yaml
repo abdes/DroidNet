@@ -1,0 +1,73 @@
+# Duplicate-key source A:
+# - Defines shared material key with GREEN base color.
+# - Defines geometry key that references shared material.
+version: 7
+content_version: 1
+
+buffers:
+  - name: "default_empty_buffer"
+    data_hex: ""
+    size: 0
+    usage: 0
+
+  - name: "vertex_buffer"
+    usage: 1
+    stride: 72
+    format: 0
+    data_hex: "000000000000000000000000000000000000803f00000000000000000000003f0000803f000000000000000000000000000000000000803f000000000000803f0000803e0000803f0000803f0000000000000000000000000000803f000000000000003f0000003f0000803f000000000000000000000000000000000000803fabaaaa3eabaa2a3f0000803e0000803f000000400000000000000000000000000000803f000000000000803f0000003f0000803f000000000000000000000000000000000000803fabaa2a3fabaaaa3e0000803e0000803f"
+
+  - name: "index_buffer"
+    usage: 2
+    stride: 0
+    format: 10
+    data_hex: "000000000100000002000000"
+
+textures:
+  - name: "default_texture"
+    width: 1
+    height: 1
+    format: 30
+    texture_type: 3
+    compression_type: 0
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"
+
+assets:
+  - name: "shared_material_a"
+    type: "material"
+    asset_key: "abcdabcd-abcd-abcd-abcd-abcdabcdabcd"
+    material_domain: 0
+    flags: 0
+    shader_stages: 0x44
+    base_color: [0.0, 1.0, 0.0, 1.0]
+    shader_references:
+      - source_path: "Forward/ForwardMesh.hlsl"
+        entry_point: "VS"
+        defines: ""
+        shader_hash: 0x1234567890abcdef
+      - source_path: "Forward/ForwardMesh.hlsl"
+        entry_point: "PS"
+        defines: ""
+        shader_hash: 0xfedcba0987654321
+
+  - name: "source_a_geometry"
+    type: "geometry"
+    asset_key: "eeeeeeee-dddd-cccc-bbbb-aaaaaaaaaaaa"
+    bounding_box_min: [-1.0, -1.0, -1.0]
+    bounding_box_max: [1.0, 1.0, 1.0]
+    lods:
+      - name: "lod0"
+        mesh_type: 1
+        vertex_buffer: "vertex_buffer"
+        index_buffer: "index_buffer"
+        bounding_box_min: [-1.0, -1.0, -1.0]
+        bounding_box_max: [1.0, 1.0, 1.0]
+        submeshes:
+          - name: "submesh0"
+            material: "shared_material_a"
+            bounding_box_min: [-1.0, -1.0, -1.0]
+            bounding_box_max: [1.0, 1.0, 1.0]
+            mesh_views:
+              - first_index: 0
+                index_count: 3
+                first_vertex: 0
+                vertex_count: 3

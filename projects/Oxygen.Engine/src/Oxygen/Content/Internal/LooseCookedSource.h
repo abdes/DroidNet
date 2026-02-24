@@ -61,6 +61,7 @@ public:
       scripts_table_path_ = cooked_root_ / std::filesystem::path(*rel);
       ValidateFileRecordExistsAndMatchesSize(
         FileKind::kScriptsTable, *scripts_table_path_);
+      InitializeScriptTable();
     }
 
     if (const auto rel = index_.FindFileRelPath(FileKind::kScriptsData); rel) {
@@ -161,7 +162,10 @@ public:
   [[nodiscard]] auto CreateScriptTableReader() const
     -> std::unique_ptr<serio::AnyReader> override
   {
-    return nullptr;
+    if (!scripts_table_path_) {
+      return nullptr;
+    }
+    return std::make_unique<OwningFileReader>(*scripts_table_path_);
   }
 
   [[nodiscard]] auto CreatePhysicsTableReader() const
@@ -188,7 +192,7 @@ public:
   [[nodiscard]] auto GetScriptTable() const noexcept
     -> const ResourceTable<data::ScriptResource>* override
   {
-    return nullptr;
+    return scripts_table_ ? &(*scripts_table_) : nullptr;
   }
 
   [[nodiscard]] auto GetPhysicsTable() const noexcept
@@ -218,7 +222,10 @@ public:
   [[nodiscard]] auto CreateScriptDataReader() const
     -> std::unique_ptr<serio::AnyReader> override
   {
-    return nullptr;
+    if (!scripts_data_path_) {
+      return nullptr;
+    }
+    return std::make_unique<OwningFileReader>(*scripts_data_path_);
   }
 
   [[nodiscard]] auto CreatePhysicsDataReader() const
@@ -230,8 +237,9 @@ public:
     return std::make_unique<OwningFileReader>(*physics_data_path_);
   }
 
-  [[nodiscard]] auto ReadScriptSlotRecords(const uint32_t start_index,
-    const uint32_t count) const -> std::vector<data::pak::ScriptSlotRecord>
+  [[nodiscard]] auto ReadScriptSlotRecords(
+    const uint32_t start_index, const uint32_t count) const
+    -> std::vector<data::pak::ScriptSlotRecord> override
   {
     std::vector<data::pak::ScriptSlotRecord> records;
     if (count == 0) {
@@ -271,7 +279,7 @@ public:
 
   [[nodiscard]] auto ReadScriptParamRecords(
     const data::pak::OffsetT absolute_offset, const uint32_t count) const
-    -> std::vector<data::pak::ScriptParamRecord>
+    -> std::vector<data::pak::ScriptParamRecord> override
   {
     std::vector<data::pak::ScriptParamRecord> records;
     if (count == 0) {
@@ -560,6 +568,55 @@ private:
     physics_table_.emplace(meta);
   }
 
+  [[nodiscard]] auto ScriptSlotCount() const noexcept -> uint32_t override
+  {
+    if (!scripts_table_path_) {
+      return 0;
+    }
+    constexpr uint64_t kSlotRecordSize = sizeof(data::pak::ScriptSlotRecord);
+    if (kSlotRecordSize == 0) {
+      return 0;
+    }
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(*scripts_table_path_, ec);
+    if (ec) {
+      return 0;
+    }
+    return static_cast<uint32_t>(size / kSlotRecordSize);
+  }
+
+  auto InitializeScriptTable() -> void
+  {
+    if (!scripts_table_path_) {
+      return;
+    }
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(*scripts_table_path_, ec);
+    if (ec) {
+      throw std::runtime_error(
+        "Failed to stat scripts.table: " + scripts_table_path_->string());
+    }
+
+    constexpr uint64_t kEntrySize = sizeof(data::pak::ScriptResourceDesc);
+    if (kEntrySize == 0 || (size % kEntrySize) != 0) {
+      throw std::runtime_error(
+        "Invalid scripts.table size: " + scripts_table_path_->string());
+    }
+
+    const auto count = size / kEntrySize;
+    if (count > (std::numeric_limits<uint32_t>::max)()) {
+      throw std::runtime_error(
+        "scripts.table too large: " + scripts_table_path_->string());
+    }
+
+    data::pak::ResourceTable meta {
+      .offset = 0,
+      .count = static_cast<uint32_t>(count),
+      .entry_size = static_cast<uint32_t>(kEntrySize),
+    };
+    scripts_table_.emplace(meta);
+  }
+
   class OwningFileReader final : public serio::AnyReader {
   public:
     explicit OwningFileReader(const std::filesystem::path& path)
@@ -636,6 +693,7 @@ private:
 
   std::optional<ResourceTable<data::BufferResource>> buffers_table_;
   std::optional<ResourceTable<data::TextureResource>> textures_table_;
+  std::optional<ResourceTable<data::ScriptResource>> scripts_table_;
   std::optional<ResourceTable<data::PhysicsResource>> physics_table_;
 };
 

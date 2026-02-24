@@ -4,18 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "./AssetLoader_test.h"
-
 #include <atomic>
 
-#include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/Run.h>
-#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 
+#include "./AssetLoader_test.h"
 #include "Utils/PakUtils.h"
 
 using oxygen::observer_ptr;

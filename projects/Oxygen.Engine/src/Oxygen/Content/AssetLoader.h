@@ -12,6 +12,7 @@
 #include <optional>
 #include <span>
 #include <stdexcept>
+#include <string_view>
 #include <thread>
 #include <type_traits>
 #include <unordered_map>
@@ -278,12 +279,12 @@ public:
   template <IsTyped T>
   auto GetAsset(const data::AssetKey& key) const -> std::shared_ptr<T>
   {
-    for (const auto& [hash_key, asset_key] : asset_key_by_hash_) {
-      if (asset_key == key) {
-        if (auto cached = content_cache_.Peek<T>(hash_key)) {
-          return cached;
-        }
-      }
+    const auto identity = ResolveAssetIdentityForKey(key);
+    if (!identity.has_value()) {
+      return nullptr;
+    }
+    if (auto cached = content_cache_.Peek<T>(identity->hash_key)) {
+      return cached;
     }
     return nullptr;
   }
@@ -301,12 +302,11 @@ public:
   */
   template <IsTyped T> auto HasAsset(const data::AssetKey& key) const -> bool
   {
-    for (const auto& [hash_key, asset_key] : asset_key_by_hash_) {
-      if (asset_key == key && content_cache_.Contains(hash_key)) {
-        return true;
-      }
+    const auto identity = ResolveAssetIdentityForKey(key);
+    if (!identity.has_value()) {
+      return false;
     }
-    return false;
+    return content_cache_.Contains(identity->hash_key);
   }
 
   //! Release an asset, indicating it is no longer in use by the caller.
@@ -958,8 +958,29 @@ private:
   OXGN_CNTT_API static auto HashAssetKey(const data::AssetKey& key) -> uint64_t;
   OXGN_CNTT_API auto HashAssetKey(
     const data::AssetKey& key, uint16_t source_id) const -> uint64_t;
+  struct ResolvedAssetIdentity final {
+    uint64_t hash_key = 0;
+    uint16_t source_id = 0;
+  };
+  OXGN_CNTT_API auto ResolveAssetIdentityForKey(const data::AssetKey& key,
+    std::optional<uint16_t> preferred_source_id = std::nullopt) const
+    -> std::optional<ResolvedAssetIdentity>;
+  OXGN_CNTT_API auto IndexAssetHashMapping(
+    uint64_t hash_key, const data::AssetKey& key, uint16_t source_id) -> void;
+  OXGN_CNTT_API auto UnindexAssetHashMapping(uint64_t hash_key) -> void;
+  OXGN_CNTT_API auto AssertSourceKeyConsistency(std::string_view context) const
+    -> void;
+  OXGN_CNTT_API auto AssertDependencyEdgeRefcountSymmetry(
+    std::string_view context) const -> void;
+  OXGN_CNTT_API auto AssertMountStateResetCompleteness(std::string_view context,
+    bool expect_dependency_graphs_empty) const -> void;
+  OXGN_CNTT_API auto AssertResourceMappingConsistency(
+    std::string_view context) const -> void;
   OXGN_CNTT_API auto ResolveSourceIdForAsset(
     const data::AssetKey& context_asset_key) const -> std::optional<uint16_t>;
+  OXGN_CNTT_API auto ResolveLoadSourceId(const data::AssetKey& key,
+    std::optional<uint16_t> preferred_source_id = std::nullopt) const
+    -> std::optional<uint16_t>;
   OXGN_CNTT_API auto ResolveSourceForId(uint16_t source_id) const
     -> const internal::IContentSource*;
 
@@ -1002,10 +1023,12 @@ private:
     }
   }
 
+  // Debug-only structural guard. In release builds this returns false and
+  // runtime relies on upstream import/authoring/CI acyclicity validation.
   auto DetectCycle(const data::AssetKey& start, const data::AssetKey& target)
     -> bool; // returns true if adding edge start->target introduces cycle
 
-  // Debug visited guard for ReleaseAssetTree recursion protection.
+  // Debug-only visited guard for ReleaseAssetTree recursion diagnostics.
   struct ReleaseVisitGuard;
 
   OXGN_CNTT_NDAPI auto GetCurrentSourceId() const -> uint16_t;
@@ -1080,6 +1103,8 @@ private:
   std::unordered_map<uint64_t, ResourceKey> resource_key_by_hash_;
   std::unordered_map<uint64_t, data::AssetKey> asset_key_by_hash_;
   std::unordered_map<uint64_t, uint16_t> asset_source_id_by_hash_;
+  std::unordered_map<data::AssetKey, std::unordered_map<uint16_t, uint64_t>>
+    asset_hash_by_key_and_source_;
   std::unordered_map<std::string, data::AssetKey> script_path_to_asset_key_;
   uint64_t next_eviction_subscriber_id_ { 1 };
   std::shared_ptr<int> eviction_alive_token_;

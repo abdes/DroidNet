@@ -169,6 +169,23 @@ public:
       pak_.FilePath(), static_cast<size_t>(footer_->physics_region.offset));
   }
 
+  [[nodiscard]] auto ScriptSlotCount() const noexcept -> uint32_t override
+  {
+    return pak_.ScriptSlotCount();
+  }
+
+  [[nodiscard]] auto ReadScriptSlotRecords(uint32_t start_index,
+    uint32_t count) const -> std::vector<data::pak::ScriptSlotRecord> override
+  {
+    return pak_.ReadScriptSlotRecords(start_index, count);
+  }
+
+  [[nodiscard]] auto ReadScriptParamRecords(data::pak::OffsetT absolute_offset,
+    uint32_t count) const -> std::vector<data::pak::ScriptParamRecord> override
+  {
+    return pak_.ReadScriptParamRecords(absolute_offset, count);
+  }
+
   [[nodiscard]] auto Pak() const noexcept -> const PakFile& { return pak_; }
 
 private:

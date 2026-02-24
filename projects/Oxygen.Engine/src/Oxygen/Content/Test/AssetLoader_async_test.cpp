@@ -10,21 +10,19 @@
 #include <string>
 #include <thread>
 #include <utility>
-#include <vector>
 
-#include <algorithm>
-
-#include "./AssetLoader_test.h"
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/Loaders/MaterialLoader.h>
+#include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 
-#include <Oxygen/Content/Loaders/MaterialLoader.h>
-#include <Oxygen/Content/Loaders/TextureLoader.h>
+#include "./AssetLoader_test.h"
 
 using ::testing::NotNull;
 

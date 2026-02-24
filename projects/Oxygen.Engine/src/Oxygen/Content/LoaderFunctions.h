@@ -37,8 +37,15 @@ concept LoadFunctionForStream = requires(F f, LoaderContext context) {
 
  - Must be callable as `std::unique_ptr<T> f(LoaderContext)`.
  - The returned type `T` must satisfy the `IsTyped` concept.
- - Failure to load must be indicated by returning a null pointer.
- - Must not retain ownership of the context or any temporary resources.
+ - Structural/data decode failures SHOULD throw `std::runtime_error` (or a
+
+ derived exception) with actionable diagnostics.
+ - Returning a null pointer is
+ reserved for explicit soft-decline paths (for
+   example, intentionally skipped
+ object materialization), not malformed input.
+ - Must not retain ownership of
+ the context or any temporary resources.
 
  ### How Load Functions Are Called
 
@@ -51,8 +58,14 @@ concept LoadFunctionForStream = requires(F f, LoaderContext context) {
      as needed. It must not retain ownership of the context or any temporary
      resources.
    - Return: A fully initialized `std::unique_ptr<T>` (where T satisfies
-     `IsTyped`). If loading fails, return a null pointer. Do not use exceptions
-     for normal load errors; only throw for unrecoverable system errors.
+
+ `IsTyped`).
+   - Error semantics:
+     - Throw on structural/content
+ corruption, invalid descriptor layout, or
+       failed decode/validation.
+ -
+ Return null only for explicit non-error soft-decline cases.
 
  @param context LoaderContext for the load function (see above)
  @param resource Shared pointer to resource for unload function

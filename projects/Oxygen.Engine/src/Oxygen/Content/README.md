@@ -2,6 +2,62 @@
 
 > Canonical feature status & index for the Content (PAK) subsystem. Individual deep-dive docs are under `Docs/` and intentionally avoid duplicating the status tables below.
 
+## Non-Negotiable Runtime Invariants (AssetLoader)
+
+This section is normative. "MUST" and "MUST NOT" are strict requirements.
+
+1. Single owning-thread execution for `AssetLoader` public API:
+   `AssetLoader` public methods MUST run on the owning thread only. Ownership is bound on `ActivateAsync`.
+   References: `AssetLoader.h:995-1003`, `AssetLoader.cpp:262-275`.
+
+2. Async preconditions:
+   Any async load path MUST fail fast if `nursery_` is not active or `thread_pool_` is null.
+   References: `AssetLoader.cpp:1727-1734`, `AssetLoader.cpp:3115-3122`, `AssetLoader.cpp:987-995`.
+
+3. Decode/publish split:
+   Worker decode MUST be pure decode plus identity collection only.
+   Owning-thread publish MUST perform cache insertion, dependency-edge publication, and refcount mutations.
+   References: `AssetLoader.cpp:1721-1835`, `DependencyCollector.h:18-25`.
+
+4. Identity-only dependency handoff:
+   `DependencyCollector` MUST contain only `AssetKey`, `ResourceKey`, `ResourceRef`.
+   It MUST NOT store paths, locators, readers, or stream handles.
+   References: `DependencyCollector.h:18-25`, `AssetLoader.h:935-939`.
+
+5. Source-aware identity:
+   Asset and resource cache identity MUST be source-aware through `SourceKey` semantics, not mount order.
+   References: `AssetLoader.cpp:4203-4215`, `AssetLoader.cpp:4217-4247`.
+
+6. Resource key construction boundary:
+   `ResourceKey` packing MUST remain an `AssetLoader`-internal concern.
+   Decode code MUST use `ResourceRef` + `SourceToken` and bind on owning thread.
+   References: `AssetLoader.h:1049-1056`, `ResourceRef.h:34-39`, `AssetLoader.cpp:743-757`.
+
+7. Deterministic mount resolution:
+   Source lookup for assets MUST preserve deterministic precedence (newest mount wins unless explicitly overridden).
+   References: `AssetLoader.cpp:1782-1787`, per-type `resolve_source_id` lambdas.
+
+8. Baseline cache retention model:
+   After first store, loader keeps one baseline retain (`Touch`); dependency edges add retains; releases and trim remove retains symmetrically.
+   References: `AssetLoader.cpp:544-550`, `AssetLoader.cpp:2007-2012`, `AssetLoader.cpp:2257-2263`.
+
+9. Dependency release order:
+   Asset release MUST process resource dependencies before asset dependencies, then the asset itself.
+   References: `AssetLoader.cpp:1591-1637`.
+
+10. Mount invalidation correctness:
+    Refreshing or clearing mounts MUST leave no stale dependency graph edges or stale hash mappings.
+    References: `AssetLoader.cpp:323-364`, `AssetLoader.cpp:408-433`, `AssetLoader.cpp:492-528`.
+
+11. Source capability parity:
+    If a source claims script table/data availability, generic script resource loading MUST work for that source.
+    References: `LooseCookedSource.h:161-222`, `AssetLoader.cpp:3443-3463`.
+
+12. Debug-only structural guards:
+    Graph cycle detection and recursive-release visit guards are diagnostics only and MAY remain debug-only.
+    Release runtime assumes acyclicity is guaranteed by import/authoring validation and CI checks.
+    References: `AssetLoader.cpp:4131-4156`, `AssetLoader.cpp:1569-1589`.
+
 ## Documentation Index
 
 | Topic | File | Focus |
@@ -36,9 +92,10 @@ The authoritative definition is in `LoaderContext.h`.
 - `desc_reader`: positioned at the start of the descriptor to decode
 - `data_readers`: per-resource-type readers positioned at the start of each
   resource data region (do not use `desc_reader` for data regions)
-- `offline`: CPU-only mode flag (no renderer/GPU side effects)
+- `work_offline`: CPU-only mode flag (no renderer/GPU side effects)
 - `dependency_collector`: optional identity-only dependency handoff for async decode
 - `source_pak`: the `PakFile` the descriptor originates from
+- `source_content`: source-agnostic content view for auxiliary reads (for example, scripting tables)
 - `parse_only`: skip dependency collection (tooling/unit tests)
 
 ### Loader function shape
@@ -77,8 +134,10 @@ if (!context.parse_only && context.dependency_collector) {
 }
 ```
 
-Cycle detection is enforced for asset→asset dependencies, and release is
-ordered (resources first, then asset dependencies, then the asset itself).
+Asset→asset cycle detection is a debug-only runtime diagnostic. Release/runtime
+behavior assumes acyclic graphs are enforced upstream by import/authoring
+validation and CI tests. Release order remains resources first, then asset
+dependencies, then the asset itself.
 
 ## Overview
 

@@ -8,11 +8,12 @@
 #include <chrono>
 #include <memory>
 
+#include <Oxygen/Testing/GTest.h>
+
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
-#include <Oxygen/Testing/GTest.h>
 
 #include "./AssetLoader_test.h"
 

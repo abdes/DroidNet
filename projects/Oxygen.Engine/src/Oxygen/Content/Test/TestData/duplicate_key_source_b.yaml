@@ -1,0 +1,37 @@
+# Duplicate-key source B:
+# - Defines the SAME material key as source A, but BLUE base color.
+version: 7
+content_version: 1
+
+buffers:
+  - name: "default_empty_buffer"
+    data_hex: ""
+    size: 0
+    usage: 0
+
+textures:
+  - name: "default_texture"
+    width: 1
+    height: 1
+    format: 30
+    texture_type: 3
+    compression_type: 0
+    data_hex: "4f545831020001002c0000001c000000280000000000000000000000000000000400000004000000ffffffff"
+
+assets:
+  - name: "shared_material_b"
+    type: "material"
+    asset_key: "abcdabcd-abcd-abcd-abcd-abcdabcdabcd"
+    material_domain: 0
+    flags: 0
+    shader_stages: 0x44
+    base_color: [0.0, 0.0, 1.0, 1.0]
+    shader_references:
+      - source_path: "Forward/ForwardMesh.hlsl"
+        entry_point: "VS"
+        defines: ""
+        shader_hash: 0x2234567890abcdef
+      - source_path: "Forward/ForwardMesh.hlsl"
+        entry_point: "PS"
+        defines: ""
+        shader_hash: 0xeedcba0987654321

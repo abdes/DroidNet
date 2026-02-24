@@ -4,17 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Serio/MemoryStream.h>
 #include <array>
 #include <cstring>
 #include <span>
 #include <vector>
 
+#include <Oxygen/Testing/GTest.h>
+
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
-#include <Oxygen/Testing/GTest.h>
 
 namespace {
 

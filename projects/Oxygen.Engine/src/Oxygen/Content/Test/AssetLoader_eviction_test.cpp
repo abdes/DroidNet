@@ -5,30 +5,26 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <span>
 #include <string>
 #include <unordered_set>
-#include <utility>
 #include <vector>
-
-#include "./AssetLoader_test.h"
 
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/Run.h>
-#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
-
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 
+#include "./AssetLoader_test.h"
 #include "Utils/PakUtils.h"
 
 using ::testing::NotNull;
@@ -504,6 +500,86 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, TrimCache_RepeatedCyclesStable)
       }
 
       EXPECT_EQ(events.size(), kCycles * kTexturesPerMaterial);
+
+      loader.Stop();
+      (void)subscription;
+      co_return oxygen::co::kJoin;
+    };
+  });
+}
+
+//! Regression: refresh must not leave stale uncached resource mappings.
+/*!
+ Scenario: Load a textured material, then refresh the same mounted PAK path.
+ Refresh performs a destructive cache clear and eviction flush. Repeated
+ TrimCache calls after each refresh must not emit duplicate texture evictions.
+*/
+NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, RefreshPak_NoDuplicateTrimEvictions)
+{
+  constexpr std::size_t kRefreshCycles = 4U;
+  constexpr std::size_t kTexturesPerCycle = 3U;
+  constexpr std::size_t kNoOpTrimPasses = 3U;
+
+  const auto pak_path = GeneratePakFile("material_with_textures");
+  const auto material_key = CreateTestAssetKey("textured_material");
+
+  TestEventLoop el;
+
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
+
+    loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
+    loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
+
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+      loader.AddPakFile(pak_path);
+
+      std::vector<EvictionEvent> events;
+      auto subscription
+        = loader.SubscribeResourceEvictions(TextureResource::ClassTypeId(),
+          [&](const EvictionEvent& event) { events.push_back(event); });
+
+      for (std::size_t cycle = 0; cycle < kRefreshCycles; ++cycle) {
+        auto material
+          = co_await loader.LoadAssetAsync<MaterialAsset>(material_key);
+        EXPECT_THAT(material, NotNull());
+        if (!material) {
+          loader.Stop();
+          (void)subscription;
+          co_return oxygen::co::kJoin;
+        }
+        material.reset();
+
+        const auto before_refresh = events.size();
+        loader.AddPakFile(pak_path); // refresh mounted source
+        const auto after_refresh = events.size();
+        EXPECT_EQ(after_refresh - before_refresh, kTexturesPerCycle);
+
+        std::unordered_set<std::size_t> unique_refresh_keys;
+        for (std::size_t i = before_refresh; i < after_refresh; ++i) {
+          const auto& event = events[i];
+          EXPECT_EQ(event.type_id, TextureResource::ClassTypeId());
+          EXPECT_EQ(event.reason, EvictionReason::kClear);
+          unique_refresh_keys.insert(std::hash<ResourceKey> {}(event.key));
+        }
+        EXPECT_EQ(unique_refresh_keys.size(), kTexturesPerCycle);
+
+        const auto before_noop_trims = events.size();
+        for (std::size_t i = 0; i < kNoOpTrimPasses; ++i) {
+          loader.TrimCache();
+        }
+        EXPECT_EQ(events.size(), before_noop_trims);
+      }
+
+      EXPECT_EQ(events.size(), kRefreshCycles * kTexturesPerCycle);
 
       loader.Stop();
       (void)subscription;

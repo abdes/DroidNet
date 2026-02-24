@@ -4,28 +4,28 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <chrono>
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <mutex>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <utility>
 #include <vector>
 
-#include "./AssetLoader_test.h"
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/Loaders/BufferLoader.h>
+#include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 
-#include <Oxygen/Content/Loaders/BufferLoader.h>
-#include <Oxygen/Content/Loaders/TextureLoader.h>
-
+#include "./AssetLoader_test.h"
 #include "Utils/PakUtils.h"
 
 using ::testing::NotNull;
@@ -194,9 +194,8 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
           callback_called.store(true, std::memory_order_release);
         });
 
-      for (int i = 0; i < 1500
-          && !callback_called.load(std::memory_order_acquire);
-           ++i) {
+      for (int i = 0;
+        i < 1500 && !callback_called.load(std::memory_order_acquire); ++i) {
         co_await el.Sleep(1ms);
       }
 

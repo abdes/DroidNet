@@ -3,6 +3,3 @@
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
-
-// NOTE: Geometry asset lifetime tests were consolidated into
-// AssetLoader_lifetime_test.cpp.

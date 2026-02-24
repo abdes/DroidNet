@@ -18,6 +18,7 @@ namespace oxygen::content {
 
 namespace internal {
   struct DependencyCollector;
+  class IContentSource;
 } // namespace internal
 
 class PakFile;
@@ -85,6 +86,15 @@ struct LoaderContext {
   //! Source PAK file from which the asset/resource is being loaded. Guaranteed
   //! to be valid during a load operation.
   const PakFile* source_pak { nullptr };
+
+  //! Source abstraction for source-agnostic runtime data access.
+  /*!
+   This pointer is valid for the duration of the load operation and
+   * provides
+   source-neutral access to auxiliary data such as script
+   * slot/param records.
+  */
+  const internal::IContentSource* source_content { nullptr };
 
   //! Parse-only mode: loaders should not attempt to load/register dependencies.
   /*!
