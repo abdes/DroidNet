@@ -182,6 +182,18 @@ auto AssetLoaderLoadingTest::CreateTestAssetKey(const std::string& name)
     const auto bytes = { 0xff, 0xff, 0xff, 0xff, 0x11, 0x11, 0x22, 0x22, 0x33,
       0x33, 0x44, 0x44, 0x44, 0x44, 0x44, 0x44 };
     std::ranges::copy(bytes, key.guid.begin());
+  } else if (name == "test_script") {
+    // Matches scene_with_scripting.yaml:
+    // "11111111-1111-1111-1111-111111111111"
+    const auto bytes = { 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11,
+      0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11 };
+    std::ranges::copy(bytes, key.guid.begin());
+  } else if (name == "test_scene_with_scripting") {
+    // Matches scene_with_scripting.yaml:
+    // "22222222-2222-2222-2222-222222222222"
+    const auto bytes = { 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22,
+      0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22 };
+    std::ranges::copy(bytes, key.guid.begin());
   } else if (name == "duplicate_shared_material") {
     // Matches duplicate_key_source_a.yaml + duplicate_key_source_b.yaml:
     // "abcdabcd-abcd-abcd-abcd-abcdabcdabcd"

@@ -36,6 +36,11 @@ public:
   {
     return debug_name_;
   }
+  [[nodiscard]] auto SourcePath() const noexcept
+    -> std::filesystem::path override
+  {
+    return pak_.FilePath();
+  }
 
   [[nodiscard]] auto GetSourceKey() const noexcept -> data::SourceKey override
   {
@@ -184,6 +189,21 @@ public:
     uint32_t count) const -> std::vector<data::pak::ScriptParamRecord> override
   {
     return pak_.ReadScriptParamRecords(absolute_offset, count);
+  }
+
+  [[nodiscard]] auto ResolveVirtualPath(
+    const data::AssetKey& key) const noexcept
+    -> std::optional<std::string> override
+  {
+    if (!pak_.HasBrowseIndex()) {
+      return std::nullopt;
+    }
+    for (const auto& entry : pak_.BrowseIndex()) {
+      if (entry.asset_key == key) {
+        return entry.virtual_path;
+      }
+    }
+    return std::nullopt;
   }
 
   [[nodiscard]] auto Pak() const noexcept -> const PakFile& { return pak_; }

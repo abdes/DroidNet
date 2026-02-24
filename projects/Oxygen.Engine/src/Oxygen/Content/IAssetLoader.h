@@ -6,10 +6,12 @@
 
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
 #include <span>
+#include <string>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -68,6 +70,28 @@ template <PakResource T> struct CookedResourceData final {
 */
 class IAssetLoader {
 public:
+  enum class ContentSourceKind : uint8_t {
+    kPak = 0,
+    kLooseCooked = 1,
+  };
+
+  struct MountedSceneEntry final {
+    data::AssetKey scene_key {};
+    data::SourceKey source_key {};
+    uint16_t source_id { 0 };
+    ContentSourceKind source_kind { ContentSourceKind::kPak };
+    std::filesystem::path source_path;
+    std::string display_name;
+    std::string virtual_path;
+  };
+
+  struct MountedSourceEntry final {
+    data::SourceKey source_key {};
+    uint16_t source_id { 0 };
+    ContentSourceKind source_kind { ContentSourceKind::kPak };
+    std::filesystem::path source_path;
+  };
+
   struct HydratedScriptSlot final {
     data::AssetKey script_asset_key {};
     data::pak::ScriptSlotFlags flags { data::pak::ScriptSlotFlags::kNone };
@@ -221,6 +245,16 @@ public:
 
   //! Clear cached assets/resources without unmounting sources.
   virtual auto TrimCache() -> void = 0;
+
+  //! Enumerate scene entries available from currently mounted sources.
+  [[nodiscard]] virtual auto EnumerateMountedScenes() const
+    -> std::vector<MountedSceneEntry>
+    = 0;
+
+  //! Enumerate mounted content sources.
+  [[nodiscard]] virtual auto EnumerateMountedSources() const
+    -> std::vector<MountedSourceEntry>
+    = 0;
 
   //! Register content-owned commands/CVars (`cntt.*`).
   virtual auto RegisterConsoleBindings(

@@ -59,6 +59,16 @@ auto FillTestGuid(oxygen::data::loose_cooked::IndexHeader& header) -> void
   }
 }
 
+auto NormalizePath(const std::filesystem::path& path) -> std::filesystem::path
+{
+  std::error_code ec;
+  auto normalized = std::filesystem::weakly_canonical(path, ec);
+  if (ec) {
+    normalized = path.lexically_normal();
+  }
+  return normalized;
+}
+
 auto WriteMinimalLooseCookedIndex(const std::filesystem::path& cooked_root)
   -> void
 {
@@ -883,6 +893,55 @@ NOLINT_TEST_F(AssetLoaderLoadingTest,
       co_return oxygen::co::kJoin;
     };
   });
+}
+
+NOLINT_TEST_F(AssetLoaderLoadingTest,
+  EnumerateMountedSources_MixedMountsExpectedToExposeRuntimeMountedState)
+{
+  const auto cooked_root = temp_dir_ / "mounted_sources_loose";
+  WriteMinimalLooseCookedIndex(cooked_root);
+  const auto pak_path = GeneratePakFile("simple_material");
+
+  asset_loader_->AddPakFile(pak_path);
+  asset_loader_->AddLooseCookedRoot(cooked_root);
+
+  const auto mounted_sources = asset_loader_->EnumerateMountedSources();
+  ASSERT_EQ(mounted_sources.size(), 2U);
+
+  bool saw_pak = false;
+  bool saw_loose = false;
+  for (const auto& source : mounted_sources) {
+    if (source.source_kind
+        == oxygen::content::IAssetLoader::ContentSourceKind::kPak
+      && source.source_path == NormalizePath(pak_path)) {
+      saw_pak = true;
+    }
+    if (source.source_kind
+        == oxygen::content::IAssetLoader::ContentSourceKind::kLooseCooked
+      && source.source_path == NormalizePath(cooked_root)) {
+      saw_loose = true;
+    }
+  }
+
+  EXPECT_TRUE(saw_pak);
+  EXPECT_TRUE(saw_loose);
+}
+
+NOLINT_TEST_F(AssetLoaderLoadingTest,
+  EnumerateMountedSources_RemountExpectedToRefreshNotDuplicateMountedSource)
+{
+  const auto pak_path = GeneratePakFile("simple_material");
+
+  asset_loader_->AddPakFile(pak_path);
+  const auto first_mount_snapshot = asset_loader_->EnumerateMountedSources();
+  ASSERT_EQ(first_mount_snapshot.size(), 1U);
+
+  asset_loader_->AddPakFile(pak_path);
+  const auto second_mount_snapshot = asset_loader_->EnumerateMountedSources();
+  ASSERT_EQ(second_mount_snapshot.size(), 1U);
+  EXPECT_EQ(second_mount_snapshot.front().source_kind,
+    oxygen::content::IAssetLoader::ContentSourceKind::kPak);
+  EXPECT_EQ(second_mount_snapshot.front().source_path, NormalizePath(pak_path));
 }
 
 } // namespace

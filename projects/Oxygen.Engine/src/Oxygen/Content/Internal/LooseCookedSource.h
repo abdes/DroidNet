@@ -95,10 +95,26 @@ public:
   {
     return debug_name_;
   }
+  [[nodiscard]] auto SourcePath() const noexcept
+    -> std::filesystem::path override
+  {
+    return cooked_root_;
+  }
 
   [[nodiscard]] auto GetSourceKey() const noexcept -> data::SourceKey override
   {
     return index_.Guid();
+  }
+
+  [[nodiscard]] auto CookedRoot() const noexcept -> const std::filesystem::path&
+  {
+    return cooked_root_;
+  }
+
+  [[nodiscard]] auto FindVirtualPath(const data::AssetKey& key) const noexcept
+    -> std::optional<std::string_view>
+  {
+    return index_.FindVirtualPath(key);
   }
 
   [[nodiscard]] auto FindAsset(const data::AssetKey& key) const noexcept
@@ -314,6 +330,16 @@ public:
         kRecordSize);
     }
     return records;
+  }
+
+  [[nodiscard]] auto ResolveVirtualPath(
+    const data::AssetKey& key) const noexcept
+    -> std::optional<std::string> override
+  {
+    if (const auto vpath = index_.FindVirtualPath(key); vpath.has_value()) {
+      return std::string(*vpath);
+    }
+    return std::nullopt;
   }
 
 private:

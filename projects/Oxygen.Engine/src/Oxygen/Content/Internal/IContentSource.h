@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <variant>
 #include <vector>
@@ -69,6 +70,9 @@ public:
   auto operator=(IContentSource&&) -> IContentSource& = delete;
 
   [[nodiscard]] virtual auto DebugName() const noexcept -> std::string_view = 0;
+  [[nodiscard]] virtual auto SourcePath() const noexcept
+    -> std::filesystem::path
+    = 0;
 
   [[nodiscard]] virtual auto GetSourceKey() const noexcept -> data::SourceKey
     = 0;
@@ -138,6 +142,10 @@ public:
   [[nodiscard]] virtual auto ReadScriptParamRecords(
     data::pak::OffsetT absolute_offset, uint32_t count) const
     -> std::vector<data::pak::ScriptParamRecord>
+    = 0;
+
+  [[nodiscard]] virtual auto ResolveVirtualPath(
+    const data::AssetKey& key) const noexcept -> std::optional<std::string>
     = 0;
 };
 

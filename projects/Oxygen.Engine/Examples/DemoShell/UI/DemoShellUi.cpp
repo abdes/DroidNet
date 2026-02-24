@@ -12,6 +12,7 @@
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/ImGui/Console/CommandPalette.h>
@@ -264,7 +265,12 @@ struct DemoShellUi::Impl {
 
     // Create Content VM and Panel
     if (panel_config.content_loader && content_settings && file_browser) {
-      content_vm = std::make_shared<ContentVm>(content_settings, file_browser);
+      observer_ptr<content::IAssetLoader> asset_loader { nullptr };
+      if (engine) {
+        asset_loader = engine->GetAssetLoader();
+      }
+      content_vm = std::make_shared<ContentVm>(
+        content_settings, file_browser, asset_loader);
       content_panel = std::make_shared<ContentLoaderPanel>(
         observer_ptr { content_vm.get() });
       if (panel_registry->RegisterPanel(content_panel)) {

@@ -388,11 +388,11 @@ auto WriteLooseCookedSceneWithScripting(
     sizeof(scripts_data_record));
 }
 
-class AssetLoaderCharacterizationTest : public AssetLoaderLoadingTest { };
+class AssetLoaderScriptingTest : public AssetLoaderLoadingTest { };
 
 // P0.1.1: Source capability parity characterization.
-NOLINT_TEST_F(AssetLoaderCharacterizationTest,
-  Characterization_LooseCookedScriptResource_GenericLoadExpectedToSucceed)
+NOLINT_TEST_F(AssetLoaderScriptingTest,
+  LoadAsset_LooseCookedScriptResource_GenericLoadExpectedToSucceed)
 {
   const auto script_key
     = AssetKeyFromHex("11111111-1111-1111-1111-111111111111");
@@ -441,8 +441,8 @@ NOLINT_TEST_F(AssetLoaderCharacterizationTest,
 }
 
 // P0.1.2: Scene scripting dependency behavior characterization on loose roots.
-NOLINT_TEST_F(AssetLoaderCharacterizationTest,
-  Characterization_LooseCookedSceneWithScriptingExpectedToLoad)
+NOLINT_TEST_F(AssetLoaderScriptingTest,
+  LoadAsset_LooseCookedSceneWithScriptingExpectedToLoad)
 {
   const auto scene_key
     = AssetKeyFromHex("22222222-2222-2222-2222-222222222222");
@@ -477,8 +477,8 @@ NOLINT_TEST_F(AssetLoaderCharacterizationTest,
 }
 
 // P0.1.3: Source-aware script reload/invalidation characterization (YAML spec).
-NOLINT_TEST_F(AssetLoaderCharacterizationTest,
-  Characterization_ReloadAllScriptsExpectedToNotifyForNonZeroSourceId)
+NOLINT_TEST_F(AssetLoaderScriptingTest,
+  LoadAsset_ReloadAllScriptsExpectedToNotifyForNonZeroSourceId)
 {
   using namespace std::chrono_literals;
 
@@ -553,8 +553,8 @@ NOLINT_TEST_F(AssetLoaderCharacterizationTest,
 }
 
 // P0.1.4: Refresh graph coherence characterization on loose refresh.
-NOLINT_TEST_F(AssetLoaderCharacterizationTest,
-  Characterization_LooseRefreshExpectedToClearDependencyGraph)
+NOLINT_TEST_F(AssetLoaderScriptingTest,
+  LoadAsset_LooseRefreshExpectedToClearDependencyGraph)
 {
   const auto cooked_root = temp_dir_ / "loose_refresh_graph";
   WriteMinimalLooseCookedIndex(cooked_root);
@@ -585,8 +585,8 @@ NOLINT_TEST_F(AssetLoaderCharacterizationTest,
 }
 
 // YAML integration baseline for scripting scene load path.
-NOLINT_TEST_F(AssetLoaderCharacterizationTest,
-  Integration_YamlSpec_ScriptingSceneFromPak_Loads)
+NOLINT_TEST_F(
+  AssetLoaderScriptingTest, LoadAsset_YamlSpec_ScriptingSceneFromPak_Loads)
 {
   const auto pak_path = GeneratePakFile("scene_with_scripting");
   const auto scene_key

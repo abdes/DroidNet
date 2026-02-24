@@ -53,6 +53,17 @@
 namespace oxygen::content {
 
 namespace internal {
+  class AssetIdentityIndex;
+  class DependencyGraphStore;
+  class DependencyReleaseEngine;
+  class EvictionRegistry;
+  class InFlightOperationTable;
+  class PhysicsQueryService;
+  class ResourceKeyRegistry;
+  class ResourceLoadPipeline;
+  class SceneCatalogQueryService;
+  class ScriptQueryService;
+  class ScriptHotReloadService;
   class IContentSource;
   struct ResourceRef;
   struct DependencyCollector;
@@ -153,6 +164,10 @@ public:
   OXGN_CNTT_API auto ClearMounts() -> void override;
   //! Clear cached assets/resources without unmounting sources.
   OXGN_CNTT_API auto TrimCache() -> void override;
+  [[nodiscard]] OXGN_CNTT_API auto EnumerateMountedScenes() const
+    -> std::vector<IAssetLoader::MountedSceneEntry> override;
+  [[nodiscard]] OXGN_CNTT_API auto EnumerateMountedSources() const
+    -> std::vector<IAssetLoader::MountedSourceEntry> override;
   OXGN_CNTT_API auto RegisterConsoleBindings(
     observer_ptr<console::Console> console) noexcept -> void override;
   OXGN_CNTT_API auto ApplyConsoleCVars(const console::Console& console)
@@ -394,27 +409,6 @@ public:
     auto resource_type_index
       = static_cast<uint16_t>(IndexOf<T, ResourceTypeList>::value);
     return PackResourceKey(pak_index, resource_type_index, resource_index);
-  }
-
-  //! Create a resource key for the current source and resource index.
-  /*!
-   This overload is intended for use inside loader functions. The current
-   source is established by AssetLoader when invoking a loader.
-
-   @tparam T The resource type (must satisfy PakResource concept)
-   @param resource_index The index of the resource within the current source
-   @return A ResourceKey that uniquely identifies the resource
-
-   @warning Calling this outside of a load operation is invalid.
-  */
-  template <typename T>
-  inline auto MakeResourceKey(data::pak::ResourceIndexT resource_index)
-    -> ResourceKey
-  {
-    const auto source_index = GetCurrentSourceId();
-    auto resource_type_index
-      = static_cast<uint16_t>(IndexOf<T, ResourceTypeList>::value);
-    return PackResourceKey(source_index, resource_type_index, resource_index);
   }
 
   //! Coroutine-based resource load by source-aware ResourceKey.
@@ -937,13 +931,8 @@ private:
   // This graph MUST NOT store access state such as locators, paths, streams, or
   // readers. Resolution from identity to access is a separate concern.
 
-  // Asset-to-asset dependencies: dependent_asset -> set of dependency_assets
-  std::unordered_map<data::AssetKey, std::unordered_set<data::AssetKey>>
-    asset_dependencies_;
-
-  // Asset-to-resource dependencies: dependent_asset -> set of resource_keys
-  std::unordered_map<data::AssetKey, std::unordered_set<ResourceKey>>
-    resource_dependencies_;
+  std::unique_ptr<internal::DependencyGraphStore> dependency_graph_;
+  std::unique_ptr<internal::DependencyReleaseEngine> dependency_release_engine_;
 
   //! Helper method for the recursive descent of asset dependencies when
   //! releasing assets.
@@ -958,6 +947,13 @@ private:
   OXGN_CNTT_API static auto HashAssetKey(const data::AssetKey& key) -> uint64_t;
   OXGN_CNTT_API auto HashAssetKey(
     const data::AssetKey& key, uint16_t source_id) const -> uint64_t;
+  struct AssetLoadRequest final {
+    uint16_t source_id = 0;
+    uint64_t hash_key = 0;
+  };
+  OXGN_CNTT_API auto PrepareAssetLoadRequest(const data::AssetKey& key,
+    std::optional<uint16_t> preferred_source_id = std::nullopt) const
+    -> std::optional<AssetLoadRequest>;
   struct ResolvedAssetIdentity final {
     uint64_t hash_key = 0;
     uint16_t source_id = 0;
@@ -1031,8 +1027,6 @@ private:
   // Debug-only visited guard for ReleaseAssetTree recursion diagnostics.
   struct ReleaseVisitGuard;
 
-  OXGN_CNTT_NDAPI auto GetCurrentSourceId() const -> uint16_t;
-
   template <typename ResourceT>
   auto PublishResourceDependenciesAsync(
     const data::AssetKey& dependent_asset_key,
@@ -1084,79 +1078,23 @@ private:
 
   bool verify_content_hashes_ { false };
 
-  std::optional<PathFinder> path_finder_;
+  std::unique_ptr<internal::ScriptHotReloadService> script_hot_reload_service_;
 
   //=== Eviction Notifications ===-----------------------------------------//
 
-  struct EvictionSubscriber final {
-    uint64_t id { 0 };
-    EvictionHandler handler;
-  };
-
-  std::unordered_map<TypeId, std::vector<EvictionSubscriber>>
-    eviction_subscribers_;
-  struct ScriptReloadSubscriber final {
-    uint64_t id { 0 };
-    ScriptReloadCallback handler;
-  };
-  std::vector<ScriptReloadSubscriber> script_reload_subscribers_;
-  std::unordered_map<uint64_t, ResourceKey> resource_key_by_hash_;
-  std::unordered_map<uint64_t, data::AssetKey> asset_key_by_hash_;
-  std::unordered_map<uint64_t, uint16_t> asset_source_id_by_hash_;
-  std::unordered_map<data::AssetKey, std::unordered_map<uint16_t, uint64_t>>
-    asset_hash_by_key_and_source_;
-  std::unordered_map<std::string, data::AssetKey> script_path_to_asset_key_;
+  std::unique_ptr<internal::EvictionRegistry> eviction_registry_;
+  std::unique_ptr<internal::ResourceKeyRegistry> resource_key_registry_;
+  std::unique_ptr<internal::AssetIdentityIndex> asset_identity_index_;
   uint64_t next_eviction_subscriber_id_ { 1 };
   std::shared_ptr<int> eviction_alive_token_;
 
-  // Eviction in-progress guard to prevent re-entrant notifications for the
-  // same cache key (safely handles subscribers calling back into the loader).
-  std::unordered_set<uint64_t> eviction_in_progress_;
-
-  //=== In-flight Deduplication (Phase 2) ===--------------------------------//
-
-  // Maps are owning-thread only.
-  std::unordered_map<uint64_t,
-    co::Shared<co::Co<std::shared_ptr<data::MaterialAsset>>>>
-    in_flight_material_assets_;
-
-  std::unordered_map<uint64_t,
-    co::Shared<co::Co<std::shared_ptr<data::GeometryAsset>>>>
-    in_flight_geometry_assets_;
-
-  std::unordered_map<uint64_t,
-    co::Shared<co::Co<std::shared_ptr<data::SceneAsset>>>>
-    in_flight_scene_assets_;
-
-  std::unordered_map<uint64_t,
-    co::Shared<co::Co<std::shared_ptr<data::PhysicsSceneAsset>>>>
-    in_flight_physics_scene_assets_;
-
-  std::unordered_map<uint64_t,
-    co::Shared<co::Co<std::shared_ptr<data::ScriptAsset>>>>
-    in_flight_script_assets_;
-  std::unordered_map<uint64_t,
-    co::Shared<co::Co<std::shared_ptr<data::InputActionAsset>>>>
-    in_flight_input_action_assets_;
-  std::unordered_map<uint64_t,
-    co::Shared<co::Co<std::shared_ptr<data::InputMappingContextAsset>>>>
-    in_flight_input_mapping_context_assets_;
-
-  std::unordered_map<uint64_t,
-    co::Shared<co::Co<std::shared_ptr<data::TextureResource>>>>
-    in_flight_textures_;
-
-  std::unordered_map<uint64_t,
-    co::Shared<co::Co<std::shared_ptr<data::BufferResource>>>>
-    in_flight_buffers_;
-
-  std::unordered_map<uint64_t,
-    co::Shared<co::Co<std::shared_ptr<data::ScriptResource>>>>
-    in_flight_script_resources_;
-
-  std::unordered_map<uint64_t,
-    co::Shared<co::Co<std::shared_ptr<data::PhysicsResource>>>>
-    in_flight_physics_resources_;
+  //=== In-flight Deduplication ===------------------------------------------//
+  std::unique_ptr<internal::InFlightOperationTable> in_flight_ops_;
+  std::unique_ptr<internal::ResourceLoadPipeline> resource_load_pipeline_;
+  std::unique_ptr<internal::SceneCatalogQueryService>
+    scene_catalog_query_service_;
+  std::unique_ptr<internal::ScriptQueryService> script_query_service_;
+  std::unique_ptr<internal::PhysicsQueryService> physics_query_service_;
 
   std::atomic<uint32_t> next_synthetic_texture_index_ { 1 };
   std::atomic<uint32_t> next_synthetic_buffer_index_ { 1 };
@@ -1166,11 +1104,17 @@ public:
   // Provided as public debug API below when OXYGEN_DEBUG is defined.
 
 #if !defined(NDEBUG)
+  using DebugAssetDependencyMap
+    = std::unordered_map<data::AssetKey, std::unordered_set<data::AssetKey>>;
+  OXGN_CNTT_NDAPI auto GetDebugAssetDependencyMap() const
+    -> const DebugAssetDependencyMap&;
+
   // Enumerate direct dependents (debug only) by scanning forward map.
   template <typename Fn>
   auto ForEachDependent(const data::AssetKey& dependency, Fn&& fn) const -> void
   {
-    for (const auto& [dependent, deps] : asset_dependencies_) {
+    const auto& asset_deps = GetDebugAssetDependencyMap();
+    for (const auto& [dependent, deps] : asset_deps) {
       if (deps.contains(dependency)) {
         fn(dependent);
       }

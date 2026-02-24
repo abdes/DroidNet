@@ -29,6 +29,10 @@
 #include "DemoShell/Services/ContentSettingsService.h"
 #include "DemoShell/Services/FileBrowserService.h"
 
+namespace oxygen::content {
+class IAssetLoader;
+}
+
 namespace oxygen::examples::ui {
 
 //! Identifies the content source for a scene entry.
@@ -60,7 +64,8 @@ struct ContentSource {
 class ContentVm {
 public:
   explicit ContentVm(observer_ptr<ContentSettingsService> settings_service,
-    observer_ptr<FileBrowserService> file_browser_service);
+    observer_ptr<FileBrowserService> file_browser_service,
+    observer_ptr<content::IAssetLoader> asset_loader);
   ~ContentVm();
 
   // --- Discovery (Sources & Mounts) ---
@@ -236,6 +241,7 @@ private:
     std::vector<SceneEntry>& out) -> void;
   auto PersistMountedSources() -> void;
   auto PersistActiveSceneSelection(const SceneEntry& entry) -> void;
+  auto TryResolvePendingSceneSelection() -> void;
 
   enum class BrowseMode {
     kNone,
@@ -249,7 +255,9 @@ private:
 
   observer_ptr<ContentSettingsService> settings_;
   observer_ptr<FileBrowserService> file_browser_;
+  observer_ptr<content::IAssetLoader> asset_loader_;
   bool persisted_library_state_restored_ { false };
+  std::optional<ContentActiveSceneSelection> pending_scene_selection_restore_;
 
   std::unique_ptr<content::import::AsyncImportService> import_service_;
   content::import::AsyncImportService::Config service_config_ {};
@@ -264,7 +272,6 @@ private:
   std::unordered_map<SceneEntryKey, SceneEntry, SceneEntryKeyHash,
     SceneEntryKeyEq>
     scenes_map_;
-  std::uint64_t settings_epoch_ { 0 };
 
   //! Callbacks to update engine state
   std::function<void(const std::filesystem::path&)> on_pak_mounted_;
