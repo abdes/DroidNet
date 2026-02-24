@@ -82,7 +82,7 @@
         }
     },
     "testMate.cpp.log.logpanel": true,
-    "testMate.cpp.test.executables": "out/build/bin/Debug/*.Tests.exe",
+    "testMate.cpp.test.executables": "out/build-ninja/bin/Debug/*.Tests.exe",
     "testMate.cpp.test.stderrDecorator": false,
     "yaml.schemas": {
         "src/Oxygen/Core/Bindless/Spec.schema.json": [

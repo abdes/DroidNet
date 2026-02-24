@@ -193,9 +193,8 @@ namespace {
     SourceToken source_token {};
   };
 
-  auto ResolveSourceById(
-    const ContentSourceRegistry& source_registry, const uint16_t source_id)
-    -> std::optional<ResolvedSourceForDecode>
+  auto ResolveSourceById(const ContentSourceRegistry& source_registry,
+    const uint16_t source_id) -> std::optional<ResolvedSourceForDecode>
   {
     const auto source_it = source_registry.SourceIdToIndex().find(source_id);
     if (source_it == source_registry.SourceIdToIndex().end()) {
@@ -215,8 +214,8 @@ namespace {
   {
     const auto loader_it = resource_loaders.find(resource_type);
     if (loader_it == resource_loaders.end()) {
-      LOG_F(ERROR, "No loader registered for resource type id: {}",
-        resource_type);
+      LOG_F(
+        ERROR, "No loader registered for resource type id: {}", resource_type);
       return std::nullopt;
     }
     return loader_it->second;
@@ -233,7 +232,8 @@ namespace {
 
   auto ResolveDescriptorOffsetAndReader(const IContentSource& source,
     const TypeId resource_type, const data::pak::ResourceIndexT resource_index)
-    -> std::optional<std::pair<std::unique_ptr<serio::AnyReader>, data::pak::OffsetT>>
+    -> std::optional<
+      std::pair<std::unique_ptr<serio::AnyReader>, data::pak::OffsetT>>
   {
     std::unique_ptr<serio::AnyReader> desc_reader;
     std::optional<data::pak::OffsetT> offset;
@@ -319,24 +319,29 @@ namespace {
     return prepared;
   }
 
-  auto BuildLoaderContextFromPrepared(
-    PreparedResourceDecode& prepared, const bool work_offline) -> LoaderContext
+  auto BuildLoaderContextFromPrepared(PreparedResourceDecode& prepared,
+    const bool work_offline, const LoadPriorityClass default_priority_class,
+    const LoadRequest& request) -> LoaderContext
   {
     return LoaderContext {
       .current_asset_key = {},
       .source_token = prepared.source_token,
       .desc_reader = prepared.desc_reader.get(),
-      .data_readers = std::make_tuple(prepared.buf_reader.get(),
-        prepared.tex_reader.get(), prepared.script_reader.get(),
-        prepared.phys_reader.get()),
+      .data_readers
+      = std::make_tuple(prepared.buf_reader.get(), prepared.tex_reader.get(),
+        prepared.script_reader.get(), prepared.phys_reader.get()),
       .work_offline = work_offline,
+      .default_priority_class = default_priority_class,
+      .request_priority = request.priority,
+      .request_intent = request.intent,
       .source_pak = prepared.source_pak,
       .source_content = prepared.source_content,
     };
   }
 
-  auto BuildCookedLoaderContext(
-    serio::AnyReader* cooked_reader, const bool work_offline) -> LoaderContext
+  auto BuildCookedLoaderContext(serio::AnyReader* cooked_reader,
+    const bool work_offline, const LoadPriorityClass default_priority_class,
+    const LoadRequest& request) -> LoaderContext
   {
     return LoaderContext {
       .current_asset_key = {},
@@ -345,6 +350,9 @@ namespace {
       .data_readers = std::make_tuple(
         cooked_reader, cooked_reader, cooked_reader, cooked_reader),
       .work_offline = work_offline,
+      .default_priority_class = default_priority_class,
+      .request_priority = request.priority,
+      .request_intent = request.intent,
       .source_pak = nullptr,
       .source_content = nullptr,
     };
@@ -354,8 +362,9 @@ namespace {
   auto RunResourceLoadSharedStages(const TypeId resource_type,
     const ResourceKey key, ResourceLoadPipeline::ContentCache& content_cache,
     InFlightOperationTable& in_flight_ops,
-    const ResourceLoadPipeline::Callbacks& callbacks, DecodeFn&& decode_fn)
-    -> co::Co<std::shared_ptr<void>>
+    const ResourceLoadPipeline::Callbacks& callbacks,
+    const LoadRequest& request, const uint64_t request_sequence,
+    DecodeFn&& decode_fn) -> co::Co<std::shared_ptr<void>>
   {
     callbacks.assert_owning_thread();
 
@@ -366,7 +375,12 @@ namespace {
       co_return cached;
     }
 
-    if (auto shared_join = in_flight_ops.Find(resource_type, key_hash);
+    if (auto shared_join = in_flight_ops.Find(resource_type, key_hash,
+          InFlightOperationTable::RequestMeta {
+            .priority = request.priority,
+            .intent = request.intent,
+            .sequence = request_sequence,
+          });
       shared_join.has_value()) {
       co_return co_await *shared_join;
     }
@@ -414,7 +428,12 @@ namespace {
     }();
 
     co::Shared shared(std::move(op));
-    in_flight_ops.InsertOrAssign(resource_type, key_hash, shared);
+    in_flight_ops.InsertOrAssign(resource_type, key_hash, shared,
+      InFlightOperationTable::RequestMeta {
+        .priority = request.priority,
+        .intent = request.intent,
+        .sequence = request_sequence,
+      });
     co_return co_await shared;
   }
 
@@ -439,13 +458,20 @@ ResourceLoadPipeline::ResourceLoadPipeline(
 auto ResourceLoadPipeline::LoadErased(const TypeId resource_type,
   const ResourceKey key) -> co::Co<std::shared_ptr<void>>
 {
+  co_return co_await LoadErased(resource_type, key, LoadRequest {});
+}
+
+auto ResourceLoadPipeline::LoadErased(
+  const TypeId resource_type, const ResourceKey key, const LoadRequest& request)
+  -> co::Co<std::shared_ptr<void>>
+{
   if (!thread_pool_) {
     throw std::runtime_error(
       "AssetLoader requires a thread pool for async loads (LoadResourceAsync)");
   }
 
   auto decode_fn
-    = [this, resource_type, key]() -> co::Co<std::shared_ptr<void>> {
+    = [this, resource_type, key, request]() -> co::Co<std::shared_ptr<void>> {
     const InternalResourceKey internal_key(key);
     const uint16_t source_id = internal_key.GetPakIndex();
     const auto resource_index = internal_key.GetResourceIndex();
@@ -457,19 +483,35 @@ auto ResourceLoadPipeline::LoadErased(const TypeId resource_type,
     }
 
     co_return co_await thread_pool_->Run(
-      [this, prepared = std::move(*prepared_opt)]() mutable {
-        auto context = BuildLoaderContextFromPrepared(prepared, work_offline_);
+      [this, prepared = std::move(*prepared_opt), request]() mutable {
+        auto context = BuildLoaderContextFromPrepared(prepared, work_offline_,
+          callbacks_.default_priority_class
+            ? callbacks_.default_priority_class()
+            : LoadPriorityClass::kDefault,
+          request);
         return prepared.loader(context);
       });
   };
 
+  const auto request_sequence = callbacks_.next_request_sequence
+    ? callbacks_.next_request_sequence()
+    : 0U;
   co_return co_await RunResourceLoadSharedStages(resource_type, key,
-    content_cache_, in_flight_ops_, callbacks_, std::move(decode_fn));
+    content_cache_, in_flight_ops_, callbacks_, request, request_sequence,
+    std::move(decode_fn));
 }
 
 auto ResourceLoadPipeline::LoadErasedFromCooked(const TypeId resource_type,
   const ResourceKey key, std::span<const uint8_t> bytes)
   -> co::Co<std::shared_ptr<void>>
+{
+  co_return co_await LoadErasedFromCooked(
+    resource_type, key, bytes, LoadRequest {});
+}
+
+auto ResourceLoadPipeline::LoadErasedFromCooked(const TypeId resource_type,
+  const ResourceKey key, std::span<const uint8_t> bytes,
+  const LoadRequest& request) -> co::Co<std::shared_ptr<void>>
 {
   if (!thread_pool_) {
     throw std::runtime_error("AssetLoader requires a thread pool for async "
@@ -487,26 +529,34 @@ auto ResourceLoadPipeline::LoadErasedFromCooked(const TypeId resource_type,
   auto owned_bytes
     = std::make_shared<std::vector<uint8_t>>(bytes.begin(), bytes.end());
 
-  auto decode_fn
-    = [this, resource_type, owned_bytes]() -> co::Co<std::shared_ptr<void>> {
+  auto decode_fn = [this, resource_type, owned_bytes,
+                     request]() -> co::Co<std::shared_ptr<void>> {
     auto loader_opt = ResolveLoaderForType(resource_loaders_, resource_type);
     if (!loader_opt.has_value()) {
       co_return nullptr;
     }
 
     co_return co_await thread_pool_->Run(
-      [this, owned_bytes,
-        loader = std::move(*loader_opt)]() mutable -> std::shared_ptr<void> {
+      [this, owned_bytes, loader = std::move(*loader_opt),
+        request]() mutable -> std::shared_ptr<void> {
         std::span<const uint8_t> span(owned_bytes->data(), owned_bytes->size());
         auto reader = std::make_unique<MemoryAnyReader>(span);
-        auto context = BuildCookedLoaderContext(reader.get(), work_offline_);
+        auto context = BuildCookedLoaderContext(reader.get(), work_offline_,
+          callbacks_.default_priority_class
+            ? callbacks_.default_priority_class()
+            : LoadPriorityClass::kDefault,
+          request);
 
         return loader(context);
       });
   };
 
+  const auto request_sequence = callbacks_.next_request_sequence
+    ? callbacks_.next_request_sequence()
+    : 0U;
   co_return co_await RunResourceLoadSharedStages(resource_type, key,
-    content_cache_, in_flight_ops_, callbacks_, std::move(decode_fn));
+    content_cache_, in_flight_ops_, callbacks_, request, request_sequence,
+    std::move(decode_fn));
 }
 
 } // namespace oxygen::content::internal

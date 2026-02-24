@@ -71,6 +71,7 @@ set(
   "LoaderFunctions.h"
   "OperationCancelledException.h"
   "ResourceKey.h"
+  "ResidencyPolicy.h"
   "ResourceTable.h"
   "ResourceTypeList.h"
   "SourceToken.h"

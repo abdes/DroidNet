@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "Oxygen/Data/PhysicsResource.h"
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -27,6 +28,7 @@
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/OperationCancelledException.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Core/AnyCache.h>
@@ -111,6 +113,9 @@ struct AssetLoaderConfig final {
 
   //! Path resolution service used for mapping disk changes to script assets.
   std::optional<PathFinder> path_finder;
+
+  //! Runtime residency policy (budget/trim/default-priority).
+  ResidencyPolicy residency_policy {};
 };
 
 class AssetLoader : public oxygen::co::LiveObject, public IAssetLoader {
@@ -165,6 +170,12 @@ public:
   OXGN_CNTT_API auto ClearMounts() -> void override;
   //! Clear cached assets/resources without unmounting sources.
   OXGN_CNTT_API auto TrimCache() -> void override;
+  OXGN_CNTT_API auto SetResidencyPolicy(const ResidencyPolicy& policy)
+    -> void override;
+  [[nodiscard]] OXGN_CNTT_NDAPI auto GetResidencyPolicy() const noexcept
+    -> ResidencyPolicy override;
+  [[nodiscard]] OXGN_CNTT_NDAPI auto QueryResidencyPolicyState() const
+    -> ResidencyPolicyState override;
   [[nodiscard]] OXGN_CNTT_API auto EnumerateMountedScenes() const
     -> std::vector<IAssetLoader::MountedSceneEntry> override;
   [[nodiscard]] OXGN_CNTT_API auto EnumerateMountedSources() const
@@ -224,20 +235,34 @@ public:
   template <IsTyped T>
   auto LoadAssetAsync(const data::AssetKey& key) -> co::Co<std::shared_ptr<T>>
   {
+    // Non-canonical convenience overload for call sites that do not classify
+    // request intent/priority. Canonical execution uses the request-aware
+    // overload.
+    co_return co_await LoadAssetAsync<T>(key, LoadRequest {});
+  }
+
+  template <IsTyped T>
+  auto LoadAssetAsync(const data::AssetKey& key, LoadRequest request)
+    -> co::Co<std::shared_ptr<T>>
+  {
+    request = NormalizeLoadRequest(request);
     if constexpr (std::is_same_v<T, data::MaterialAsset>) {
-      co_return co_await LoadMaterialAssetAsyncImpl(key);
+      co_return co_await LoadMaterialAssetAsyncImpl(key, std::nullopt, request);
     } else if constexpr (std::is_same_v<T, data::GeometryAsset>) {
-      co_return co_await LoadGeometryAssetAsyncImpl(key);
+      co_return co_await LoadGeometryAssetAsyncImpl(key, std::nullopt, request);
     } else if constexpr (std::is_same_v<T, data::SceneAsset>) {
-      co_return co_await LoadSceneAssetAsyncImpl(key);
+      co_return co_await LoadSceneAssetAsyncImpl(key, std::nullopt, request);
     } else if constexpr (std::is_same_v<T, data::PhysicsSceneAsset>) {
-      co_return co_await LoadPhysicsSceneAssetAsyncImpl(key);
+      co_return co_await LoadPhysicsSceneAssetAsyncImpl(
+        key, std::nullopt, request);
     } else if constexpr (std::is_same_v<T, data::ScriptAsset>) {
-      co_return co_await LoadScriptAssetAsyncImpl(key);
+      co_return co_await LoadScriptAssetAsyncImpl(key, std::nullopt, request);
     } else if constexpr (std::is_same_v<T, data::InputActionAsset>) {
-      co_return co_await LoadInputActionAssetAsyncImpl(key);
+      co_return co_await LoadInputActionAssetAsyncImpl(
+        key, std::nullopt, request);
     } else if constexpr (std::is_same_v<T, data::InputMappingContextAsset>) {
-      co_return co_await LoadInputMappingContextAssetAsyncImpl(key);
+      co_return co_await LoadInputMappingContextAssetAsyncImpl(
+        key, std::nullopt, request);
     } else {
       throw std::runtime_error(
         "LoadAssetAsync<T> is not implemented for this asset type yet");
@@ -257,6 +282,15 @@ public:
   void StartLoadAsset(const data::AssetKey& key,
     std::function<void(std::shared_ptr<T>)> on_complete)
   {
+    // Non-canonical convenience wrapper for callers that do not pass an
+    // explicit request classification. Canonical path is request-aware.
+    StartLoadAsset<T>(key, LoadRequest {}, std::move(on_complete));
+  }
+
+  template <IsTyped T>
+  void StartLoadAsset(const data::AssetKey& key, LoadRequest request,
+    std::function<void(std::shared_ptr<T>)> on_complete)
+  {
     AssertOwningThread();
     if (!nursery_) {
       throw std::runtime_error(
@@ -268,9 +302,10 @@ public:
     }
 
     nursery_->Start(
-      [this, key, on_complete = std::move(on_complete)]() mutable -> co::Co<> {
+      [this, key, request,
+        on_complete = std::move(on_complete)]() mutable -> co::Co<> {
         try {
-          auto res = co_await LoadAssetAsync<T>(key);
+          auto res = co_await LoadAssetAsync<T>(key, request);
           on_complete(std::move(res));
         } catch (const std::exception& e) {
           LOG_F(ERROR, "StartLoadAsset failed: {}", e.what());
@@ -351,6 +386,8 @@ public:
    @see LoadAsset, HasAsset, ReleaseResource
   */
   OXGN_CNTT_API auto ReleaseAsset(const data::AssetKey& key) -> bool override;
+  OXGN_CNTT_API auto PinAsset(const data::AssetKey& key) -> bool override;
+  OXGN_CNTT_API auto UnpinAsset(const data::AssetKey& key) -> bool override;
 
   //! Subscribe to resource eviction notifications for a resource type.
   OXGN_CNTT_API auto SubscribeResourceEvictions(TypeId resource_type,
@@ -413,16 +450,30 @@ public:
   }
 
   //! Coroutine-based resource load by source-aware ResourceKey.
+  //! Non-canonical convenience overload: for callers without explicit request
+  //! classification. Canonical load path is request-aware.
   template <PakResource T>
   auto LoadResourceAsync(ResourceKey key) -> co::Co<std::shared_ptr<T>>;
+  template <PakResource T>
+  auto LoadResourceAsync(ResourceKey key, LoadRequest request)
+    -> co::Co<std::shared_ptr<T>>;
 
   //! Coroutine-based resource decode from caller-provided cooked bytes.
   template <PakResource T>
   auto LoadResourceAsync(CookedResourceData<T> cooked)
     -> co::Co<std::shared_ptr<T>>
   {
+    // Non-canonical convenience overload for cooked payload callers without
+    // explicit request classification. Canonical load path is request-aware.
+    co_return co_await LoadResourceAsync<T>(cooked, LoadRequest {});
+  }
+
+  template <PakResource T>
+  auto LoadResourceAsync(CookedResourceData<T> cooked, LoadRequest request)
+    -> co::Co<std::shared_ptr<T>>
+  {
     auto decoded = co_await LoadResourceAsyncFromCookedErased(
-      T::ClassTypeId(), cooked.key, cooked.bytes);
+      T::ClassTypeId(), cooked.key, cooked.bytes, request);
     co_return std::static_pointer_cast<T>(std::move(decoded));
   }
 
@@ -446,26 +497,88 @@ public:
       possible. This helper simply starts a coroutine inside the loader's
       nursery and will invoke the callback when complete. */
   OXGN_CNTT_API void StartLoadTexture(
-    ResourceKey key, TextureCallback on_complete) override;
+    ResourceKey key, TextureCallback on_complete) override
+  {
+    // Non-canonical convenience wrapper for callers that do not classify load
+    // intent/priority. Canonical path is the request-aware overload below.
+    StartLoadTexture(key, LoadRequest {}, std::move(on_complete));
+  }
+  OXGN_CNTT_API void StartLoadTexture(
+    ResourceKey key, LoadRequest request, TextureCallback on_complete) override
+  {
+    StartLoadResource<data::TextureResource>(
+      key, request, std::move(on_complete));
+  }
 
   OXGN_CNTT_API void StartLoadTexture(
     CookedResourceData<data::TextureResource> cooked,
-    TextureCallback on_complete) override;
+    TextureCallback on_complete) override
+  {
+    // Non-canonical convenience wrapper for callers that do not classify load
+    // intent/priority. Canonical path is the request-aware overload below.
+    StartLoadTexture(cooked, LoadRequest {}, std::move(on_complete));
+  }
+  OXGN_CNTT_API void StartLoadTexture(
+    CookedResourceData<data::TextureResource> cooked, LoadRequest request,
+    TextureCallback on_complete) override
+  {
+    StartLoadResource<data::TextureResource>(
+      cooked, request, std::move(on_complete));
+  }
 
   OXGN_CNTT_API void StartLoadBuffer(
-    ResourceKey key, BufferCallback on_complete) override;
+    ResourceKey key, BufferCallback on_complete) override
+  {
+    // Non-canonical convenience wrapper for callers that do not classify load
+    // intent/priority. Canonical path is the request-aware overload below.
+    StartLoadBuffer(key, LoadRequest {}, std::move(on_complete));
+  }
+  OXGN_CNTT_API void StartLoadBuffer(
+    ResourceKey key, LoadRequest request, BufferCallback on_complete) override
+  {
+    StartLoadResource<data::BufferResource>(
+      key, request, std::move(on_complete));
+  }
 
   OXGN_CNTT_API void StartLoadBuffer(
     CookedResourceData<data::BufferResource> cooked,
-    BufferCallback on_complete) override;
+    BufferCallback on_complete) override
+  {
+    // Non-canonical convenience wrapper for callers that do not classify load
+    // intent/priority. Canonical path is the request-aware overload below.
+    StartLoadBuffer(cooked, LoadRequest {}, std::move(on_complete));
+  }
+  OXGN_CNTT_API void StartLoadBuffer(
+    CookedResourceData<data::BufferResource> cooked, LoadRequest request,
+    BufferCallback on_complete) override
+  {
+    StartLoadResource<data::BufferResource>(
+      cooked, request, std::move(on_complete));
+  }
 
   OXGN_CNTT_API void StartLoadPhysicsResource(
-    ResourceKey key, PhysicsResourceCallback on_complete) override;
+    ResourceKey key, PhysicsResourceCallback on_complete) override
+  {
+    // Non-canonical convenience wrapper for callers that do not classify load
+    // intent/priority. Canonical path is the request-aware overload below.
+    StartLoadPhysicsResource(key, LoadRequest {}, std::move(on_complete));
+  }
+  OXGN_CNTT_API void StartLoadPhysicsResource(ResourceKey key,
+    LoadRequest request, PhysicsResourceCallback on_complete) override
+  {
+    StartLoadResource<data::PhysicsResource>(
+      key, request, std::move(on_complete));
+  }
 
   OXGN_CNTT_API void StartLoadMaterialAsset(
     const data::AssetKey& key, MaterialCallback on_complete) override
   {
     StartLoadAsset<data::MaterialAsset>(key, std::move(on_complete));
+  }
+  OXGN_CNTT_API void StartLoadMaterialAsset(const data::AssetKey& key,
+    LoadRequest request, MaterialCallback on_complete) override
+  {
+    StartLoadAsset<data::MaterialAsset>(key, request, std::move(on_complete));
   }
 
   OXGN_CNTT_API void StartLoadGeometryAsset(
@@ -473,11 +586,21 @@ public:
   {
     StartLoadAsset<data::GeometryAsset>(key, std::move(on_complete));
   }
+  OXGN_CNTT_API void StartLoadGeometryAsset(const data::AssetKey& key,
+    LoadRequest request, GeometryCallback on_complete) override
+  {
+    StartLoadAsset<data::GeometryAsset>(key, request, std::move(on_complete));
+  }
 
   OXGN_CNTT_API void StartLoadScene(
     const data::AssetKey& key, SceneCallback on_complete) override
   {
     StartLoadAsset<data::SceneAsset>(key, std::move(on_complete));
+  }
+  OXGN_CNTT_API void StartLoadScene(const data::AssetKey& key,
+    LoadRequest request, SceneCallback on_complete) override
+  {
+    StartLoadAsset<data::SceneAsset>(key, request, std::move(on_complete));
   }
 
   OXGN_CNTT_API void StartLoadPhysicsSceneAsset(
@@ -485,11 +608,22 @@ public:
   {
     StartLoadAsset<data::PhysicsSceneAsset>(key, std::move(on_complete));
   }
+  OXGN_CNTT_API void StartLoadPhysicsSceneAsset(const data::AssetKey& key,
+    LoadRequest request, PhysicsSceneCallback on_complete) override
+  {
+    StartLoadAsset<data::PhysicsSceneAsset>(
+      key, request, std::move(on_complete));
+  }
 
   OXGN_CNTT_API void StartLoadScriptAsset(
     const data::AssetKey& key, ScriptCallback on_complete) override
   {
     StartLoadAsset<data::ScriptAsset>(key, std::move(on_complete));
+  }
+  OXGN_CNTT_API void StartLoadScriptAsset(const data::AssetKey& key,
+    LoadRequest request, ScriptCallback on_complete) override
+  {
+    StartLoadAsset<data::ScriptAsset>(key, request, std::move(on_complete));
   }
 
   //! Start an async resource load and invoke a callback on completion.
@@ -505,6 +639,15 @@ public:
   void StartLoadResource(
     ResourceKey key, std::function<void(std::shared_ptr<T>)> on_complete)
   {
+    // Non-canonical convenience wrapper for callers that do not classify load
+    // intent/priority. Canonical path is the request-aware overload below.
+    StartLoadResource<T>(key, LoadRequest {}, std::move(on_complete));
+  }
+
+  template <PakResource T>
+  void StartLoadResource(ResourceKey key, LoadRequest request,
+    std::function<void(std::shared_ptr<T>)> on_complete)
+  {
     AssertOwningThread();
     if (!nursery_) {
       throw std::runtime_error(
@@ -516,9 +659,10 @@ public:
     }
 
     nursery_->Start(
-      [this, key, on_complete = std::move(on_complete)]() mutable -> co::Co<> {
+      [this, key, request,
+        on_complete = std::move(on_complete)]() mutable -> co::Co<> {
         try {
-          auto res = co_await LoadResourceAsync<T>(key);
+          auto res = co_await LoadResourceAsync<T>(key, request);
           on_complete(std::move(res));
         } catch (const std::exception& e) {
           LOG_F(ERROR, "StartLoadResource failed: {}", e.what());
@@ -541,6 +685,15 @@ public:
   void StartLoadResource(CookedResourceData<T> cooked,
     std::function<void(std::shared_ptr<T>)> on_complete)
   {
+    // Non-canonical convenience wrapper for callers that do not classify load
+    // intent/priority. Canonical path is the request-aware overload below.
+    StartLoadResource<T>(cooked, LoadRequest {}, std::move(on_complete));
+  }
+
+  template <PakResource T>
+  void StartLoadResource(CookedResourceData<T> cooked, LoadRequest request,
+    std::function<void(std::shared_ptr<T>)> on_complete)
+  {
     AssertOwningThread();
     if (!nursery_) {
       throw std::runtime_error(
@@ -554,13 +707,15 @@ public:
     nursery_->Start(
       [this, key = cooked.key,
         bytes = std::vector<uint8_t>(cooked.bytes.begin(), cooked.bytes.end()),
-        on_complete = std::move(on_complete)]() mutable -> co::Co<> {
+        request, on_complete = std::move(on_complete)]() mutable -> co::Co<> {
         try {
           std::span<const uint8_t> span(bytes.data(), bytes.size());
-          auto res = co_await LoadResourceAsync<T>({
-            .key = key,
-            .bytes = span,
-          });
+          auto res = co_await LoadResourceAsync<T>(
+            {
+              .key = key,
+              .bytes = span,
+            },
+            request);
           on_complete(std::move(res));
         } catch (const std::exception& e) {
           LOG_F(ERROR, "StartLoadResource (cooked) failed: {}", e.what());
@@ -793,6 +948,8 @@ public:
    @see LoadResource, HasResource, ReleaseAsset, AnyCache
   */
   OXGN_CNTT_API auto ReleaseResource(ResourceKey key) -> bool override;
+  OXGN_CNTT_API auto PinResource(ResourceKey key) -> bool override;
+  OXGN_CNTT_API auto UnpinResource(ResourceKey key) -> bool override;
 
   //! Mint a synthetic, texture-typed ResourceKey suitable for buffer-driven
   //! loads.
@@ -888,34 +1045,37 @@ private:
     -> co::Co<DecodedAssetAsyncResult>;
 
   OXGN_CNTT_API auto LoadMaterialAssetAsyncImpl(const data::AssetKey& key,
-    std::optional<uint16_t> preferred_source_id = std::nullopt)
-    -> co::Co<std::shared_ptr<data::MaterialAsset>>;
+    std::optional<uint16_t> preferred_source_id = std::nullopt,
+    LoadRequest request = {}) -> co::Co<std::shared_ptr<data::MaterialAsset>>;
 
   OXGN_CNTT_API auto LoadGeometryAssetAsyncImpl(const data::AssetKey& key,
-    std::optional<uint16_t> preferred_source_id = std::nullopt)
-    -> co::Co<std::shared_ptr<data::GeometryAsset>>;
+    std::optional<uint16_t> preferred_source_id = std::nullopt,
+    LoadRequest request = {}) -> co::Co<std::shared_ptr<data::GeometryAsset>>;
 
   OXGN_CNTT_API auto LoadSceneAssetAsyncImpl(const data::AssetKey& key,
-    std::optional<uint16_t> preferred_source_id = std::nullopt)
-    -> co::Co<std::shared_ptr<data::SceneAsset>>;
+    std::optional<uint16_t> preferred_source_id = std::nullopt,
+    LoadRequest request = {}) -> co::Co<std::shared_ptr<data::SceneAsset>>;
 
   OXGN_CNTT_API auto LoadPhysicsSceneAssetAsyncImpl(const data::AssetKey& key,
-    std::optional<uint16_t> preferred_source_id = std::nullopt)
+    std::optional<uint16_t> preferred_source_id = std::nullopt,
+    LoadRequest request = {})
     -> co::Co<std::shared_ptr<data::PhysicsSceneAsset>>;
 
   OXGN_CNTT_API auto LoadScriptAssetAsyncImpl(const data::AssetKey& key,
-    std::optional<uint16_t> preferred_source_id = std::nullopt)
-    -> co::Co<std::shared_ptr<data::ScriptAsset>>;
+    std::optional<uint16_t> preferred_source_id = std::nullopt,
+    LoadRequest request = {}) -> co::Co<std::shared_ptr<data::ScriptAsset>>;
   OXGN_CNTT_API auto LoadInputActionAssetAsyncImpl(const data::AssetKey& key,
-    std::optional<uint16_t> preferred_source_id = std::nullopt)
+    std::optional<uint16_t> preferred_source_id = std::nullopt,
+    LoadRequest request = {})
     -> co::Co<std::shared_ptr<data::InputActionAsset>>;
   OXGN_CNTT_API auto LoadInputMappingContextAssetAsyncImpl(
     const data::AssetKey& key,
-    std::optional<uint16_t> preferred_source_id = std::nullopt)
+    std::optional<uint16_t> preferred_source_id = std::nullopt,
+    LoadRequest request = {})
     -> co::Co<std::shared_ptr<data::InputMappingContextAsset>>;
 
-  OXGN_CNTT_API auto LoadResourceAsyncFromCookedErased(
-    TypeId type_id, ResourceKey key, std::span<const uint8_t> bytes)
+  OXGN_CNTT_API auto LoadResourceAsyncFromCookedErased(TypeId type_id,
+    ResourceKey key, std::span<const uint8_t> bytes, LoadRequest request = {})
     -> co::Co<std::shared_ptr<void>>;
 
   struct Impl;
@@ -1031,7 +1191,8 @@ private:
   template <typename ResourceT>
   auto PublishResourceDependenciesAsync(
     const data::AssetKey& dependent_asset_key,
-    const internal::DependencyCollector& collector) -> co::Co<>;
+    const internal::DependencyCollector& collector, LoadRequest request = {})
+    -> co::Co<>;
 
   struct LoadedGeometryBuffer final {
     ResourceKey key {};
@@ -1045,13 +1206,13 @@ private:
     = std::unordered_map<data::AssetKey, std::shared_ptr<data::MaterialAsset>>;
 
   auto LoadGeometryBufferDependenciesAsync(
-    const internal::DependencyCollector& collector)
+    const internal::DependencyCollector& collector, LoadRequest request = {})
     -> co::Co<LoadedGeometryBuffersByIndex>;
 
   auto LoadGeometryMaterialDependenciesAsync(
     const internal::DependencyCollector& collector,
-    std::optional<uint16_t> preferred_source_id = std::nullopt)
-    -> co::Co<LoadedGeometryMaterialsByKey>;
+    std::optional<uint16_t> preferred_source_id = std::nullopt,
+    LoadRequest request = {}) -> co::Co<LoadedGeometryMaterialsByKey>;
 
   auto BindGeometryRuntimePointers(data::GeometryAsset& asset,
     const LoadedGeometryBuffersByIndex& buffers_by_index,
@@ -1078,6 +1239,7 @@ private:
   bool work_offline_ { false };
 
   bool verify_content_hashes_ { false };
+  ResidencyPolicy residency_policy_ {};
 
   std::unique_ptr<internal::ScriptHotReloadService> script_hot_reload_service_;
 
@@ -1099,6 +1261,28 @@ private:
 
   std::atomic<uint32_t> next_synthetic_texture_index_ { 1 };
   std::atomic<uint32_t> next_synthetic_buffer_index_ { 1 };
+  std::atomic<uint64_t> next_load_request_sequence_ { 1 };
+  std::unordered_map<uint64_t, uint32_t> pinned_resource_counts_ {};
+  std::unordered_map<uint64_t, uint32_t> pinned_asset_counts_ {};
+
+  [[nodiscard]] auto NormalizeLoadRequest(LoadRequest request) const noexcept
+    -> LoadRequest
+  {
+    if (request.priority == LoadPriority::kDefault) {
+      switch (residency_policy_.default_priority_class) {
+      case LoadPriorityClass::kBackground:
+        request.priority = LoadPriority::kBackground;
+        break;
+      case LoadPriorityClass::kDefault:
+        request.priority = LoadPriority::kDefault;
+        break;
+      case LoadPriorityClass::kCritical:
+        request.priority = LoadPriority::kCritical;
+        break;
+      }
+    }
+    return request;
+  }
 
 public:
   // Debug-only dependent enumeration helper (implemented via forward scan).
@@ -1128,6 +1312,36 @@ private:
     TypeId resource_type, uint64_t id) noexcept override;
 };
 
+//=== Static asserts for CookedResourceData ==================================//
+
+static_assert(
+  std::is_trivially_copyable_v<CookedResourceData<data::TextureResource>>
+    && std::is_trivially_destructible_v<
+      CookedResourceData<data::TextureResource>>,
+  "CookedResourceData must remain a trivial value carrier (ResourceKey + "
+  "span) so it is safe and cheap to pass by value.");
+
+static_assert(
+  std::is_trivially_copyable_v<CookedResourceData<data::BufferResource>>
+    && std::is_trivially_destructible_v<
+      CookedResourceData<data::BufferResource>>,
+  "CookedResourceData must remain a trivial value carrier (ResourceKey + "
+  "span) so it is safe and cheap to pass by value.");
+
+static_assert(
+  std::is_trivially_copyable_v<CookedResourceData<data::ScriptResource>>
+    && std::is_trivially_destructible_v<
+      CookedResourceData<data::ScriptResource>>,
+  "CookedResourceData must remain a trivial value carrier (ResourceKey + "
+  "span) so it is safe and cheap to pass by value.");
+
+static_assert(
+  std::is_trivially_copyable_v<CookedResourceData<data::PhysicsResource>>
+    && std::is_trivially_destructible_v<
+      CookedResourceData<data::PhysicsResource>>,
+  "CookedResourceData must remain a trivial value carrier (ResourceKey + "
+  "span) so it is safe and cheap to pass by value.");
+
 //=== Explicit Template Declarations for DLL Export ==========================//
 
 //-- Known Asset Types --
@@ -1155,17 +1369,29 @@ AssetLoader::LoadAssetAsync<data::InputMappingContextAsset>(
 extern template OXGN_CNTT_API auto
   AssetLoader::LoadResourceAsync<data::BufferResource>(ResourceKey)
     -> co::Co<std::shared_ptr<data::BufferResource>>;
+extern template OXGN_CNTT_API auto
+  AssetLoader::LoadResourceAsync<data::BufferResource>(ResourceKey, LoadRequest)
+    -> co::Co<std::shared_ptr<data::BufferResource>>;
 
 extern template OXGN_CNTT_API auto
   AssetLoader::LoadResourceAsync<data::TextureResource>(ResourceKey)
     -> co::Co<std::shared_ptr<data::TextureResource>>;
+extern template OXGN_CNTT_API auto
+  AssetLoader::LoadResourceAsync<data::TextureResource>(
+    ResourceKey, LoadRequest) -> co::Co<std::shared_ptr<data::TextureResource>>;
 
 extern template OXGN_CNTT_API auto
   AssetLoader::LoadResourceAsync<data::ScriptResource>(ResourceKey)
+    -> co::Co<std::shared_ptr<data::ScriptResource>>;
+extern template OXGN_CNTT_API auto
+  AssetLoader::LoadResourceAsync<data::ScriptResource>(ResourceKey, LoadRequest)
     -> co::Co<std::shared_ptr<data::ScriptResource>>;
 
 extern template OXGN_CNTT_API auto
   AssetLoader::LoadResourceAsync<data::PhysicsResource>(ResourceKey)
     -> co::Co<std::shared_ptr<data::PhysicsResource>>;
+extern template OXGN_CNTT_API auto
+  AssetLoader::LoadResourceAsync<data::PhysicsResource>(
+    ResourceKey, LoadRequest) -> co::Co<std::shared_ptr<data::PhysicsResource>>;
 
 } // namespace oxygen::content

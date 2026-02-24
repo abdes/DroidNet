@@ -922,6 +922,80 @@ NOLINT_TEST_F(
   });
 }
 
+//! Characterization: duplicate-key resolution follows mount order.
+/*!
+ Scenario: Mount two sources that define the same Material AssetKey and assert
+ lookup result changes when mount order is reversed. This captures current
+ behavior where explicit load priority metadata is not part of the runtime load
+ API surface.
+*/
+NOLINT_TEST_F(AssetLoaderLoadingTest,
+  Characterization_DuplicateAssetLookupFollowsMountOrderNotPriority)
+{
+  const auto pak_a = GeneratePakFile("duplicate_key_source_a");
+  const auto pak_b = GeneratePakFile("duplicate_key_source_b");
+  const auto material_key = CreateTestAssetKey("duplicate_shared_material");
+
+  TestEventLoop el;
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    using oxygen::content::AssetLoader;
+    using oxygen::content::AssetLoaderConfig;
+
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
+
+    loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
+    loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
+
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+
+      loader.AddPakFile(pak_a);
+      loader.AddPakFile(pak_b);
+      auto newest_wins_material
+        = co_await loader.LoadAssetAsync<MaterialAsset>(material_key);
+      EXPECT_THAT(newest_wins_material, NotNull());
+      if (!newest_wins_material) {
+        loader.Stop();
+        co_return oxygen::co::kJoin;
+      }
+      const auto newest_base = newest_wins_material->GetBaseColor();
+      EXPECT_FLOAT_EQ(newest_base[0], 0.0F);
+      EXPECT_FLOAT_EQ(newest_base[1], 0.0F);
+      EXPECT_FLOAT_EQ(newest_base[2], 1.0F);
+      EXPECT_FLOAT_EQ(newest_base[3], 1.0F);
+
+      newest_wins_material.reset();
+      (void)loader.ReleaseAsset(material_key);
+      loader.TrimCache();
+      loader.ClearMounts();
+
+      loader.AddPakFile(pak_b);
+      loader.AddPakFile(pak_a);
+      auto reversed_order_material
+        = co_await loader.LoadAssetAsync<MaterialAsset>(material_key);
+      EXPECT_THAT(reversed_order_material, NotNull());
+      if (!reversed_order_material) {
+        loader.Stop();
+        co_return oxygen::co::kJoin;
+      }
+      const auto reversed_base = reversed_order_material->GetBaseColor();
+      EXPECT_FLOAT_EQ(reversed_base[0], 0.0F);
+      EXPECT_FLOAT_EQ(reversed_base[1], 1.0F);
+      EXPECT_FLOAT_EQ(reversed_base[2], 0.0F);
+      EXPECT_FLOAT_EQ(reversed_base[3], 1.0F);
+
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
+}
+
 //! Preferred-source override policy: dependency loads follow the parent source.
 NOLINT_TEST_F(AssetLoaderLoadingTest,
   DuplicateAssetKeyGeometryDependenciesPreferGeometrySource)

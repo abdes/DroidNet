@@ -17,6 +17,8 @@
 #include <Oxygen/Content/LooseCooked/LooseCookedLayout.h>
 #include <Oxygen/Data/AssetType.h>
 
+// NOLINTBEGIN(*-magic-numbers)
+
 namespace oxygen::content::testing {
 
 namespace {
@@ -144,15 +146,15 @@ namespace {
     inspection.LoadFromFile(cooked_root / "container.index.bin");
 
     const auto assets = inspection.Assets();
-    const auto it = std::find_if(assets.begin(), assets.end(),
-      [&](const Inspection::AssetEntry& e) { return e.key == key; });
+    const auto it = std::ranges::find_if(
+      assets, [&](const Inspection::AssetEntry& e) { return e.key == key; });
 
     // Assert
-    EXPECT_EQ(assets.size(), 1u);
+    EXPECT_EQ(assets.size(), 1U);
     ASSERT_NE(it, assets.end());
     EXPECT_EQ(it->descriptor_relpath,
       "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A2"));
-    EXPECT_EQ(it->descriptor_size, 1u);
+    EXPECT_EQ(it->descriptor_size, 1U);
   }
 
   //! Test: Conflicting virtual path mapping throws
@@ -362,10 +364,81 @@ namespace {
       });
 
     // Assert
-    EXPECT_EQ(files.size(), 2u);
+    EXPECT_EQ(files.size(), 2U);
     ASSERT_NE(it, files.end());
     EXPECT_EQ(it->relpath, "Resources/buffers_v2.data");
-    EXPECT_EQ(it->size, 2u);
+    EXPECT_EQ(it->size, 2U);
+  }
+
+  //! Characterization: duplicate writes in one session overwrite by key/kind.
+  /*!
+   Scenario: Writes the same AssetKey and the same FileKind twice within a
+   single writer session. Verifies current overwrite semantics keep one entry
+   per key/kind with latest metadata.
+  */
+  NOLINT_TEST(
+    LooseCookedWriterTest, Characterization_SameSessionWritesOverwrite)
+  {
+    const auto cooked_root
+      = MakeTempCookedRoot("loose_cooked_writer_same_session_overwrite");
+
+    AssetKey key {};
+    key.guid[0] = 0x61;
+
+    const std::vector<std::byte> desc_a = {
+      std::byte { 0x01 },
+    };
+    const std::vector<std::byte> desc_b = {
+      std::byte { 0xAA },
+      std::byte { 0xBB },
+    };
+    const std::vector<std::byte> file_a = {
+      std::byte { 0x02 },
+    };
+    const std::vector<std::byte> file_b = {
+      std::byte { 0x10 },
+      std::byte { 0x20 },
+      std::byte { 0x30 },
+    };
+
+    LooseCookedWriter writer(cooked_root);
+    writer.WriteAssetDescriptor(key, AssetType::kMaterial,
+      "/.cooked/Materials/"
+        + LooseCookedLayout::MaterialDescriptorFileName("A"),
+      "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("A"),
+      desc_a);
+    writer.WriteAssetDescriptor(key, AssetType::kMaterial,
+      "/.cooked/Materials/"
+        + LooseCookedLayout::MaterialDescriptorFileName("A"),
+      "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("B"),
+      desc_b);
+
+    writer.WriteFile(
+      FileKind::kBuffersData, "Resources/buffers_a.data", file_a);
+    writer.WriteFile(
+      FileKind::kBuffersData, "Resources/buffers_b.data", file_b);
+    writer.WriteFile(
+      FileKind::kBuffersTable, "Resources/buffers.table", file_a);
+
+    (void)writer.Finish();
+
+    Inspection inspection;
+    inspection.LoadFromFile(cooked_root / "container.index.bin");
+
+    ASSERT_EQ(inspection.Assets().size(), 1U);
+    EXPECT_EQ(inspection.Assets().front().descriptor_relpath,
+      "Materials/" + LooseCookedLayout::MaterialDescriptorFileName("B"));
+    EXPECT_EQ(inspection.Assets().front().descriptor_size, 2U);
+
+    const auto files = inspection.Files();
+    ASSERT_EQ(files.size(), 2U);
+    const auto it
+      = std::ranges::find_if(files, [](const Inspection::FileEntry& e) {
+          return e.kind == FileKind::kBuffersData;
+        });
+    ASSERT_NE(it, files.end());
+    EXPECT_EQ(it->relpath, "Resources/buffers_b.data");
+    EXPECT_EQ(it->size, 3U);
   }
 
   //! Test: Writing a new key merges with existing assets
@@ -414,7 +487,7 @@ namespace {
     inspection.LoadFromFile(cooked_root / "container.index.bin");
 
     // Assert
-    EXPECT_EQ(inspection.Assets().size(), 2u);
+    EXPECT_EQ(inspection.Assets().size(), 2U);
   }
 
   //! Test: Disabling SHA-256 emits zero hashes
@@ -451,7 +524,7 @@ namespace {
     inspection.LoadFromFile(cooked_root / "container.index.bin");
 
     // Assert
-    ASSERT_EQ(inspection.Assets().size(), 1u);
+    ASSERT_EQ(inspection.Assets().size(), 1U);
     const auto& asset = inspection.Assets().front();
     if (asset.descriptor_sha256.has_value()) {
       EXPECT_TRUE(IsAllZerosDigest(*asset.descriptor_sha256));
@@ -681,3 +754,5 @@ namespace {
 } // namespace
 
 } // namespace oxygen::content::testing
+
+// NOLINTEND(*-magic-numbers)
