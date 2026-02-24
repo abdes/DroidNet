@@ -144,7 +144,8 @@ auto BuildSceneRequest(const SceneImportSettings& settings,
   auto options = request.options;
   options.import_content = BuildContentFlags(settings);
   options.coordinate.bake_transforms_into_meshes = settings.bake_transforms;
-  options.with_content_hashing = settings.with_content_hashing;
+  options.with_content_hashing
+    = EffectiveContentHashingEnabled(settings.with_content_hashing);
 
   if (!settings.naming_policy.empty()) {
     if (settings.naming_policy == "normalize") {

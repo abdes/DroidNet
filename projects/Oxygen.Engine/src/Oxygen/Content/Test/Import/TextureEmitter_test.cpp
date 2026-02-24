@@ -23,6 +23,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Content/Import/ImportOptions.h>
 #include <Oxygen/Content/Import/Internal/Emitters/TextureEmitter.h>
 #include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Content/Import/Internal/ResourceTableAggregator.h>
@@ -165,8 +166,7 @@ protected:
     payload.desc.texture_type = oxygen::TextureType::kTexture2D;
     payload.desc.format = oxygen::Format::kBC7UNorm;
 
-    // Default to no hashing so deduplication can be controlled via the
-    // Emit() signature salt in tests.
+    // Default to no hashing so tests cover the fast identity path.
     payload.desc.content_hash = 0;
 
     // Fill payload with recognizable pattern
@@ -256,8 +256,12 @@ NOLINT_TEST_F(TextureEmitterTest, EmitUniqueTexturesAssignsSequentialIndices)
     };
     std::vector<uint32_t> indices;
     indices.reserve(kSalts.size());
-    for (const auto salt : kSalts) {
+    for (size_t i = 0; i < kSalts.size(); ++i) {
+      const auto salt = kSalts[i];
       auto payload = MakeTestPayload();
+      if (!payload.payload.empty()) {
+        payload.payload[0] = static_cast<std::byte>(i + 1);
+      }
       indices.push_back(emitter.Emit(std::move(payload), salt));
     }
 
@@ -341,8 +345,13 @@ NOLINT_TEST_F(TextureEmitterTest, FinalizeWritesTextureTableFile)
   co::Run(*loop_, [&]() -> co::Co<> {
     // Arrange
     TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
-    const auto idx0 = emitter.Emit(MakeTestPayload(), "t0");
-    const auto idx1 = emitter.Emit(MakeTestPayload(), "t1");
+    auto payload0 = MakeTestPayload();
+    auto payload1 = MakeTestPayload();
+    if (!payload1.payload.empty()) {
+      payload1.payload[0] ^= std::byte { 0xFF };
+    }
+    const auto idx0 = emitter.Emit(std::move(payload0), "t0");
+    const auto idx1 = emitter.Emit(std::move(payload1), "t1");
     EXPECT_EQ(idx0, 1);
     EXPECT_EQ(idx1, 2);
 
@@ -567,12 +576,21 @@ NOLINT_TEST_F(TextureEmitterTest, StatsEmittedTexturesCountsFallbackAndUsers)
     // Assert initial state
     EXPECT_EQ(emitter.GetStats().emitted_textures, 0);
 
-    const auto idx0 = emitter.Emit(MakeTestPayload(), "test_texture1");
+    auto payload0 = MakeTestPayload();
+    auto payload1 = MakeTestPayload();
+    auto payload2 = MakeTestPayload();
+    if (!payload1.payload.empty()) {
+      payload1.payload[0] ^= std::byte { 0x11 };
+    }
+    if (!payload2.payload.empty()) {
+      payload2.payload[0] ^= std::byte { 0x22 };
+    }
+    const auto idx0 = emitter.Emit(std::move(payload0), "test_texture1");
     EXPECT_EQ(idx0, 1);
     EXPECT_EQ(emitter.GetStats().emitted_textures, 2);
 
-    const auto idx1 = emitter.Emit(MakeTestPayload(), "test_texture2");
-    const auto idx2 = emitter.Emit(MakeTestPayload(), "test_texture3");
+    const auto idx1 = emitter.Emit(std::move(payload1), "test_texture2");
+    const auto idx2 = emitter.Emit(std::move(payload2), "test_texture3");
     EXPECT_EQ(idx1, 2);
     EXPECT_EQ(idx2, 3);
     EXPECT_EQ(emitter.GetStats().emitted_textures, 4);
@@ -669,7 +687,8 @@ NOLINT_TEST_F(TextureEmitterTest, DataFileWritesMultiplePayloadsInOrder)
 
     // Act - emit all and finalize in a single Run
     for (size_t i = 0; i < payloads.size(); ++i) {
-      const auto idx = emitter.Emit(std::move(payloads.at(i)), "test_texture");
+      const auto key = "test_texture_" + std::to_string(i);
+      const auto idx = emitter.Emit(std::move(payloads.at(i)), key);
       EXPECT_EQ(idx, static_cast<uint32_t>(i + 1));
     }
     co_await emitter.Finalize();
@@ -711,8 +730,8 @@ NOLINT_TEST_F(TextureEmitterTest, DataFileWritesMultiplePayloadsInOrder)
 
 //=== Deduplication Tests ===-------------------------------------------------//
 
-//! Verify with no content hashing, different salts do not collide.
-NOLINT_TEST_F(TextureEmitterTest, DedupNoHashDifferentSaltsNoCollision)
+//! Verify no-hash mode still dedups identical payloads across salts.
+NOLINT_TEST_F(TextureEmitterTest, DedupNoHashIdenticalPayloadAcrossSalts)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
@@ -730,23 +749,32 @@ NOLINT_TEST_F(TextureEmitterTest, DedupNoHashDifferentSaltsNoCollision)
     // Assert
     EXPECT_TRUE(tables_ok);
     EXPECT_EQ(idx1, 1);
-    EXPECT_EQ(idx2, 2);
+    EXPECT_EQ(idx2, 1);
 
     const auto table_path = test_dir_ / Layout().TexturesTableRelPath();
     const auto table = ParseTextureTable(ReadBinaryFile(table_path));
-    EXPECT_EQ(table.size(), 3);
+    EXPECT_EQ(table.size(), 2);
   });
 }
 
-//! Verify with no content hashing, same salt causes collision.
-NOLINT_TEST_F(TextureEmitterTest, DedupNoHashSameSaltCollision)
+//! Verify collision policy keep-first warns and preserves first mapping.
+NOLINT_TEST_F(
+  TextureEmitterTest, CollisionPolicyWarnKeepFirstExpectedToKeepIndex)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&]() -> co::Co<> {
     // Arrange
-    TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
+    std::vector<import::ImportDiagnostic> diagnostics;
+    auto config = MakeEmitterConfig();
+    config.collision_policy = import::DedupCollisionPolicy::kWarnKeepFirst;
+    config.on_dedup_diagnostic = [&](import::ImportDiagnostic diagnostic) {
+      diagnostics.push_back(std::move(diagnostic));
+    };
+    TextureEmitter emitter(*writer_, TextureAggregator(), std::move(config));
     auto payload1 = MakeTestPayload();
     auto payload2 = MakeTestPayload();
+    EXPECT_FALSE(payload2.payload.empty());
+    payload2.payload[0] ^= std::byte { 0xFF };
 
     // Act
     const uint32_t idx1 = emitter.Emit(std::move(payload1), "same_salt");
@@ -758,10 +786,70 @@ NOLINT_TEST_F(TextureEmitterTest, DedupNoHashSameSaltCollision)
     EXPECT_TRUE(tables_ok);
     EXPECT_EQ(idx1, 1);
     EXPECT_EQ(idx2, 1);
+    EXPECT_EQ(diagnostics.size(), 1U);
+    if (diagnostics.size() == 1U) {
+      EXPECT_EQ(diagnostics.front().code, "import.dedup_collision.texture");
+      EXPECT_EQ(diagnostics.front().severity, import::ImportSeverity::kWarning);
+    }
 
     const auto table_path = test_dir_ / Layout().TexturesTableRelPath();
     const auto table = ParseTextureTable(ReadBinaryFile(table_path));
     EXPECT_EQ(table.size(), 2);
+    co_return;
+  });
+}
+
+//! Verify collision policy replace remaps key to latest payload.
+NOLINT_TEST_F(TextureEmitterTest, CollisionPolicyWarnReplaceExpectedToEmitNew)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&]() -> co::Co<> {
+    std::vector<import::ImportDiagnostic> diagnostics;
+    auto config = MakeEmitterConfig();
+    config.collision_policy = import::DedupCollisionPolicy::kWarnReplace;
+    config.on_dedup_diagnostic = [&](import::ImportDiagnostic diagnostic) {
+      diagnostics.push_back(std::move(diagnostic));
+    };
+    TextureEmitter emitter(*writer_, TextureAggregator(), std::move(config));
+    auto payload1 = MakeTestPayload();
+    auto payload2 = MakeTestPayload();
+    EXPECT_FALSE(payload2.payload.empty());
+    payload2.payload[0] ^= std::byte { 0x0F };
+
+    const uint32_t idx1 = emitter.Emit(std::move(payload1), "same_salt");
+    const uint32_t idx2 = emitter.Emit(std::move(payload2), "same_salt");
+    co_await emitter.Finalize();
+    const bool tables_ok = co_await table_registry_->FinalizeAll();
+
+    EXPECT_TRUE(tables_ok);
+    EXPECT_EQ(idx1, 1);
+    EXPECT_EQ(idx2, 2);
+    EXPECT_EQ(diagnostics.size(), 1U);
+    if (diagnostics.size() == 1U) {
+      EXPECT_EQ(diagnostics.front().code, "import.dedup_collision.texture");
+      EXPECT_EQ(diagnostics.front().severity, import::ImportSeverity::kWarning);
+    }
+    co_return;
+  });
+}
+
+//! Verify collision policy error rejects key remap ambiguity.
+NOLINT_TEST_F(TextureEmitterTest, CollisionPolicyErrorExpectedToThrow)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&]() -> co::Co<> {
+    auto config = MakeEmitterConfig();
+    config.collision_policy = import::DedupCollisionPolicy::kError;
+    TextureEmitter emitter(*writer_, TextureAggregator(), std::move(config));
+    auto payload1 = MakeTestPayload();
+    auto payload2 = MakeTestPayload();
+    EXPECT_FALSE(payload2.payload.empty());
+    payload2.payload[0] ^= std::byte { 0xF0 };
+
+    (void)emitter.Emit(std::move(payload1), "same_salt");
+    EXPECT_THROW(
+      (void)emitter.Emit(std::move(payload2), "same_salt"), std::runtime_error);
+    co_return;
   });
 }
 

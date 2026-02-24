@@ -9,13 +9,17 @@
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Content/Import/ImportDiagnostics.h>
+#include <Oxygen/Content/Import/ImportOptions.h>
 #include <Oxygen/Content/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Content/Import/TextureImportTypes.h>
 #include <Oxygen/Content/LooseCooked/LooseCookedLayout.h>
@@ -106,6 +110,13 @@ public:
      When false, fallback payloads MUST NOT compute `content_hash`.
     */
     bool with_content_hashing = true;
+
+    //! Collision policy for identity-key conflicts during dedup.
+    DedupCollisionPolicy collision_policy
+      = DedupCollisionPolicy::kWarnKeepFirst;
+
+    //! Optional sink used to publish collision diagnostics.
+    std::function<void(ImportDiagnostic)> on_dedup_diagnostic;
   };
 
   //! Runtime statistics for the emitter.
@@ -228,6 +239,8 @@ private:
   std::atomic<bool> fallback_emitted_ { false };
   std::atomic<uint32_t> emitted_count_ { 0 };
   std::unordered_set<std::string> emitted_signatures_;
+  std::unordered_map<std::string, std::string> identity_by_key_;
+  std::unordered_map<std::string, uint32_t> index_by_key_;
   std::atomic<uint64_t> data_file_size_ { 0 };
   std::atomic<size_t> pending_count_ { 0 };
   std::atomic<size_t> error_count_ { 0 };

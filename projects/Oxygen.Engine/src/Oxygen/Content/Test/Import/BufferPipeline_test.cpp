@@ -13,6 +13,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Content/Import/ImportOptions.h>
 #include <Oxygen/Content/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Content/Import/Internal/Pipelines/BufferPipeline.h>
 #include <Oxygen/Content/Import/Internal/Utils/ContentHashUtils.h>
@@ -59,6 +60,18 @@ class BufferPipelineTest : public testing::Test {
 protected:
   ImportEventLoop loop_;
 };
+
+NOLINT_TEST_F(
+  BufferPipelineTest, EffectiveContentHashingPolicyRespectsBuildConfig)
+{
+#if defined(NDEBUG)
+  EXPECT_TRUE(EffectiveContentHashingEnabled(false));
+  EXPECT_TRUE(EffectiveContentHashingEnabled(true));
+#else
+  EXPECT_FALSE(EffectiveContentHashingEnabled(false));
+  EXPECT_TRUE(EffectiveContentHashingEnabled(true));
+#endif
+}
 
 //! Verify hashing stage fills content_hash when enabled.
 NOLINT_TEST_F(BufferPipelineTest, CollectWithHashingEnabledComputesHash)

@@ -388,8 +388,8 @@ auto WorkDispatcher::EnsureTexturePipeline(co::Nursery& nursery)
   -> TexturePipeline&
 {
   if (!texture_pipeline_) {
-    const bool with_content_hashing
-      = session_.Request().options.with_content_hashing;
+    const bool with_content_hashing = EffectiveContentHashingEnabled(
+      session_.Request().options.with_content_hashing);
     texture_pipeline_ = std::make_unique<TexturePipeline>(*thread_pool_,
       TexturePipeline::Config {
         .queue_capacity = concurrency_.texture.queue_capacity,
@@ -409,8 +409,8 @@ auto WorkDispatcher::EnsureBufferPipeline(co::Nursery& nursery)
   -> BufferPipeline&
 {
   if (!buffer_pipeline_) {
-    const bool with_content_hashing
-      = session_.Request().options.with_content_hashing;
+    const bool with_content_hashing = EffectiveContentHashingEnabled(
+      session_.Request().options.with_content_hashing);
     buffer_pipeline_ = std::make_unique<BufferPipeline>(*thread_pool_,
       BufferPipeline::Config {
         .queue_capacity = concurrency_.buffer.queue_capacity,
@@ -426,8 +426,8 @@ auto WorkDispatcher::EnsureMaterialPipeline(co::Nursery& nursery)
   -> MaterialPipeline&
 {
   if (!material_pipeline_) {
-    const bool with_content_hashing
-      = session_.Request().options.with_content_hashing;
+    const bool with_content_hashing = EffectiveContentHashingEnabled(
+      session_.Request().options.with_content_hashing);
     material_pipeline_ = std::make_unique<MaterialPipeline>(*thread_pool_,
       MaterialPipeline::Config {
         .queue_capacity = concurrency_.material.queue_capacity,
@@ -443,8 +443,8 @@ auto WorkDispatcher::EnsureMeshBuildPipeline(co::Nursery& nursery)
   -> MeshBuildPipeline&
 {
   if (!mesh_build_pipeline_) {
-    const bool with_content_hashing
-      = session_.Request().options.with_content_hashing;
+    const bool with_content_hashing = EffectiveContentHashingEnabled(
+      session_.Request().options.with_content_hashing);
     mesh_build_pipeline_ = std::make_unique<MeshBuildPipeline>(*thread_pool_,
       MeshBuildPipeline::Config {
         .queue_capacity = concurrency_.mesh_build.queue_capacity,
@@ -460,8 +460,8 @@ auto WorkDispatcher::EnsureGeometryPipeline(co::Nursery& nursery)
   -> GeometryPipeline&
 {
   if (!geometry_pipeline_) {
-    const bool with_content_hashing
-      = session_.Request().options.with_content_hashing;
+    const bool with_content_hashing = EffectiveContentHashingEnabled(
+      session_.Request().options.with_content_hashing);
     geometry_pipeline_ = std::make_unique<GeometryPipeline>(*thread_pool_,
       GeometryPipeline::Config {
         .queue_capacity = concurrency_.geometry.queue_capacity,
@@ -476,8 +476,8 @@ auto WorkDispatcher::EnsureGeometryPipeline(co::Nursery& nursery)
 auto WorkDispatcher::EnsureScenePipeline(co::Nursery& nursery) -> ScenePipeline&
 {
   if (!scene_pipeline_) {
-    const bool with_content_hashing
-      = session_.Request().options.with_content_hashing;
+    const bool with_content_hashing = EffectiveContentHashingEnabled(
+      session_.Request().options.with_content_hashing);
     scene_pipeline_ = std::make_unique<ScenePipeline>(*thread_pool_,
       ScenePipeline::Config {
         .queue_capacity = concurrency_.scene.queue_capacity,

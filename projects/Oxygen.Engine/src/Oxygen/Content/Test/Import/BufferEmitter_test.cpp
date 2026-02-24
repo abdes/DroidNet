@@ -254,8 +254,8 @@ NOLINT_TEST_F(BufferEmitterTest, EmitDuplicateBufferReturnsSameIndex)
   ASSERT_EQ(table.size(), 2);
 }
 
-//! Characterization: with no content hash, different salts do not collide.
-NOLINT_TEST_F(BufferEmitterTest, Characterization_DedupNoHashDifferentSalts)
+//! With no content hash, payload fingerprint still dedups identical buffers.
+NOLINT_TEST_F(BufferEmitterTest, DedupNoHashIdenticalPayloadAcrossSalts)
 {
   BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
 
@@ -278,25 +278,33 @@ NOLINT_TEST_F(BufferEmitterTest, Characterization_DedupNoHashDifferentSalts)
 
   EXPECT_TRUE(tables_ok);
   EXPECT_EQ(idx0, 1U);
-  EXPECT_EQ(idx1, 2U);
-  EXPECT_EQ(emitter.Count(), 2U);
+  EXPECT_EQ(idx1, 1U);
+  EXPECT_EQ(emitter.Count(), 1U);
 
   const auto table_path = test_dir_ / Layout().BuffersTableRelPath();
   const auto table = ParseBufferTable(ReadBinaryFile(table_path));
-  EXPECT_EQ(table.size(), 3U); // includes sentinel
+  EXPECT_EQ(table.size(), 2U); // includes sentinel
 }
 
-//! Characterization: with no content hash, same salt collides.
-NOLINT_TEST_F(BufferEmitterTest, Characterization_DedupNoHashSameSaltCollides)
+//! Collision policy keep-first preserves first mapping and warns.
+NOLINT_TEST_F(
+  BufferEmitterTest, CollisionPolicyWarnKeepFirstExpectedToKeepIndex)
 {
-  BufferEmitter emitter(*writer_, BufferAggregator(), Layout(), test_dir_);
+  std::vector<ImportDiagnostic> diagnostics;
+  BufferEmitter::Config config {};
+  config.collision_policy = DedupCollisionPolicy::kWarnKeepFirst;
+  config.on_dedup_diagnostic = [&](ImportDiagnostic diagnostic) {
+    diagnostics.push_back(std::move(diagnostic));
+  };
+  BufferEmitter emitter(
+    *writer_, BufferAggregator(), Layout(), test_dir_, std::move(config));
 
   uint32_t idx0 = 0;
   uint32_t idx1 = 0;
   bool tables_ok = false;
   co::Run(*loop_, [&]() -> Co<> {
     auto buf0 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0xEF });
-    auto buf1 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0xEF });
+    auto buf1 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0xE0 });
     buf0.content_hash = 0;
     buf1.content_hash = 0;
 
@@ -312,10 +320,143 @@ NOLINT_TEST_F(BufferEmitterTest, Characterization_DedupNoHashSameSaltCollides)
   EXPECT_EQ(idx0, 1U);
   EXPECT_EQ(idx1, 1U);
   EXPECT_EQ(emitter.Count(), 1U);
+  ASSERT_EQ(diagnostics.size(), 1U);
+  EXPECT_EQ(diagnostics.front().code, "import.dedup_collision.buffer");
+  EXPECT_EQ(diagnostics.front().severity, ImportSeverity::kWarning);
 
   const auto table_path = test_dir_ / Layout().BuffersTableRelPath();
   const auto table = ParseBufferTable(ReadBinaryFile(table_path));
   EXPECT_EQ(table.size(), 2U); // sentinel + one emitted entry
+}
+
+//! Collision policy replace remaps key to newest payload.
+NOLINT_TEST_F(BufferEmitterTest, CollisionPolicyWarnReplaceExpectedToEmitNew)
+{
+  std::vector<ImportDiagnostic> diagnostics;
+  BufferEmitter::Config config {};
+  config.collision_policy = DedupCollisionPolicy::kWarnReplace;
+  config.on_dedup_diagnostic = [&](ImportDiagnostic diagnostic) {
+    diagnostics.push_back(std::move(diagnostic));
+  };
+  BufferEmitter emitter(
+    *writer_, BufferAggregator(), Layout(), test_dir_, std::move(config));
+
+  uint32_t idx0 = 0;
+  uint32_t idx1 = 0;
+  bool tables_ok = false;
+  co::Run(*loop_, [&]() -> Co<> {
+    auto buf0 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0x11 });
+    auto buf1 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0x22 });
+    buf0.content_hash = 0;
+    buf1.content_hash = 0;
+    idx0 = emitter.Emit(std::move(buf0), "same_salt");
+    idx1 = emitter.Emit(std::move(buf1), "same_salt");
+    co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
+  });
+
+  EXPECT_TRUE(tables_ok);
+  EXPECT_EQ(idx0, 1U);
+  EXPECT_EQ(idx1, 2U);
+  EXPECT_EQ(emitter.Count(), 2U);
+  ASSERT_EQ(diagnostics.size(), 1U);
+  EXPECT_EQ(diagnostics.front().code, "import.dedup_collision.buffer");
+  EXPECT_EQ(diagnostics.front().severity, ImportSeverity::kWarning);
+}
+
+//! Collision policy error rejects ambiguous key remap.
+NOLINT_TEST_F(BufferEmitterTest, CollisionPolicyErrorExpectedToThrow)
+{
+  BufferEmitter::Config config {};
+  config.collision_policy = DedupCollisionPolicy::kError;
+  BufferEmitter emitter(
+    *writer_, BufferAggregator(), Layout(), test_dir_, std::move(config));
+
+  co::Run(*loop_, [&]() -> Co<> {
+    auto buf0 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0x44 });
+    auto buf1 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0x55 });
+    buf0.content_hash = 0;
+    buf1.content_hash = 0;
+
+    (void)emitter.Emit(std::move(buf0), "same_salt");
+    EXPECT_THROW(
+      (void)emitter.Emit(std::move(buf1), "same_salt"), std::runtime_error);
+    co_return;
+  });
+}
+
+//! Hashed buffers must bypass non-hash collision policy gating.
+NOLINT_TEST_F(
+  BufferEmitterTest, HashedSameSaltDifferentContentExpectedToEmitNewIndex)
+{
+  std::vector<ImportDiagnostic> diagnostics;
+  BufferEmitter::Config config {};
+  config.collision_policy = DedupCollisionPolicy::kWarnKeepFirst;
+  config.on_dedup_diagnostic = [&](ImportDiagnostic diagnostic) {
+    diagnostics.push_back(std::move(diagnostic));
+  };
+  BufferEmitter emitter(
+    *writer_, BufferAggregator(), Layout(), test_dir_, std::move(config));
+
+  uint32_t idx0 = 0;
+  uint32_t idx1 = 0;
+  bool tables_ok = false;
+  co::Run(*loop_, [&]() -> Co<> {
+    auto buf0 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0x31 });
+    auto buf1 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0x32 });
+    buf0.content_hash = 0x1111222233334444ULL;
+    buf1.content_hash = 0xAAAABBBBCCCCDDDDULL;
+
+    idx0 = emitter.Emit(std::move(buf0), "same_salt");
+    idx1 = emitter.Emit(std::move(buf1), "same_salt");
+
+    co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
+  });
+
+  EXPECT_TRUE(tables_ok);
+  EXPECT_EQ(idx0, 1U);
+  EXPECT_EQ(idx1, 2U);
+  EXPECT_EQ(emitter.Count(), 2U);
+  EXPECT_TRUE(diagnostics.empty());
+}
+
+//! Hashed buffers with identical content hash still dedup.
+NOLINT_TEST_F(BufferEmitterTest, HashedSameSaltIdenticalContentExpectedToDedup)
+{
+  std::vector<ImportDiagnostic> diagnostics;
+  BufferEmitter::Config config {};
+  config.collision_policy = DedupCollisionPolicy::kWarnReplace;
+  config.on_dedup_diagnostic = [&](ImportDiagnostic diagnostic) {
+    diagnostics.push_back(std::move(diagnostic));
+  };
+  BufferEmitter emitter(
+    *writer_, BufferAggregator(), Layout(), test_dir_, std::move(config));
+
+  uint32_t idx0 = 0;
+  uint32_t idx1 = 0;
+  bool tables_ok = false;
+  co::Run(*loop_, [&]() -> Co<> {
+    auto buf0 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0x7A });
+    auto buf1 = MakeTestBuffer(256, 0x01, 16, 32, std::byte { 0x7A });
+    buf0.content_hash = 0xDEADBEEFCAFEBABEULL;
+    buf1.content_hash = 0xDEADBEEFCAFEBABEULL;
+
+    idx0 = emitter.Emit(std::move(buf0), "same_salt");
+    idx1 = emitter.Emit(std::move(buf1), "same_salt");
+
+    co_await emitter.Finalize();
+    tables_ok = co_await table_registry_->FinalizeAll();
+    co_return;
+  });
+
+  EXPECT_TRUE(tables_ok);
+  EXPECT_EQ(idx0, 1U);
+  EXPECT_EQ(idx1, 1U);
+  EXPECT_EQ(emitter.Count(), 1U);
+  EXPECT_TRUE(diagnostics.empty());
 }
 
 //! Characterization: emitter count exposes unique entries, not request total.

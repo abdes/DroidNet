@@ -5,12 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstddef>
 #include <filesystem>
 #include <limits>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Import/IAsyncFileWriter.h>
@@ -73,16 +75,56 @@ namespace {
     return data::pak::TexturePackingPolicyId::kD3D12;
   }
 
-  [[nodiscard]] auto MakeTextureSignature(
+  [[nodiscard]] auto ComputeFastFingerprint(
+    const std::span<const std::byte> bytes) -> uint64_t
+  {
+    constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
+    constexpr uint64_t kFnvPrime = 1099511628211ULL;
+    auto hash = kFnvOffsetBasis;
+    for (const auto b : bytes) {
+      hash ^= static_cast<uint64_t>(std::to_integer<uint8_t>(b));
+      hash *= kFnvPrime;
+    }
+    return hash;
+  }
+
+  [[nodiscard]] auto MakeTextureSignature(const CookedTexturePayload& cooked,
     const data::pak::TextureResourceDesc& desc,
     const std::string_view signature_salt) -> std::string
   {
+    static_cast<void>(signature_salt);
     auto signature = TextureTableTraits::SignatureForDescriptor(desc);
     if (desc.content_hash == 0U) {
-      signature.append(";id=");
-      signature.append(signature_salt);
+      signature.append(";fp=");
+      signature.append(std::to_string(ComputeFastFingerprint(cooked.payload)));
     }
     return signature;
+  }
+
+  [[nodiscard]] auto ComputeTextureIdentity(const CookedTexturePayload& cooked)
+    -> std::string
+  {
+    std::string identity;
+    identity.reserve(128);
+    identity.append("tex:");
+    identity.append("w=");
+    identity.append(std::to_string(cooked.desc.width));
+    identity.append("x");
+    identity.append(std::to_string(cooked.desc.height));
+    identity.append(";m=");
+    identity.append(std::to_string(cooked.desc.mip_levels));
+    identity.append(";f=");
+    identity.append(std::to_string(static_cast<uint8_t>(cooked.desc.format)));
+    identity.append(";n=");
+    identity.append(std::to_string(cooked.payload.size()));
+    if (cooked.desc.content_hash != 0U) {
+      identity.append(";h=");
+      identity.append(std::to_string(cooked.desc.content_hash));
+      return identity;
+    }
+    identity.append(";fp=");
+    identity.append(std::to_string(ComputeFastFingerprint(cooked.payload)));
+    return identity;
   }
 
   [[nodiscard]] auto BuildFallbackPayloadBytes(
@@ -193,10 +235,60 @@ auto TextureEmitter::Emit(CookedTexturePayload cooked,
     throw std::runtime_error("TextureEmitter is finalized");
   }
 
+  const auto identity = ComputeTextureIdentity(cooked);
+  DCHECK_F(!identity.empty(), "texture identity must not be empty");
+  if (cooked.desc.content_hash == 0U && !signature_salt.empty()) {
+    const std::string key(signature_salt);
+    if (const auto it = identity_by_key_.find(key);
+      it != identity_by_key_.end() && it->second != identity) {
+      const auto existing_index_it = index_by_key_.find(key);
+      const uint32_t existing_index = (existing_index_it != index_by_key_.end())
+        ? existing_index_it->second
+        : data::pak::kFallbackResourceIndex;
+      ImportDiagnostic diagnostic {
+        .severity = (config_.collision_policy == DedupCollisionPolicy::kError)
+          ? ImportSeverity::kError
+          : ImportSeverity::kWarning,
+        .code = "import.dedup_collision.texture",
+        .message = "policy=" + to_string(config_.collision_policy) + ";action="
+          + std::string(
+            config_.collision_policy == DedupCollisionPolicy::kWarnReplace
+              ? "replace"
+              : (config_.collision_policy
+                      == DedupCollisionPolicy::kWarnKeepFirst
+                    ? "keep_first"
+                    : "error"))
+          + ";existing_index=" + std::to_string(existing_index),
+        .source_path = key,
+        .object_path = "texture",
+      };
+      if (config_.on_dedup_diagnostic) {
+        config_.on_dedup_diagnostic(diagnostic);
+      }
+      if (config_.collision_policy == DedupCollisionPolicy::kError) {
+        LOG_F(ERROR,
+          "texture dedup collision: policy={} key='{}' existing_index={} "
+          "action={}",
+          to_string(config_.collision_policy), key, existing_index, "error");
+        throw std::runtime_error("texture dedup collision");
+      }
+      LOG_F(WARNING,
+        "texture dedup collision: policy={} key='{}' existing_index={} "
+        "action={}",
+        to_string(config_.collision_policy), key, existing_index,
+        (config_.collision_policy == DedupCollisionPolicy::kWarnReplace)
+          ? "replace"
+          : "keep_first");
+      if (config_.collision_policy == DedupCollisionPolicy::kWarnKeepFirst) {
+        return existing_index;
+      }
+    }
+  }
+
   EnsureFallbackTexture();
 
   const auto tmp_desc = ToPakDescriptor(cooked, 0);
-  const auto signature = MakeTextureSignature(tmp_desc, signature_salt);
+  const auto signature = MakeTextureSignature(cooked, tmp_desc, signature_salt);
   DCHECK_F(!signature.empty(), "texture signature must not be empty");
   const auto acquire = table_aggregator_.AcquireOrInsert(signature, [&]() {
     const auto reserved = table_aggregator_.ReserveDataRange(
@@ -208,6 +300,11 @@ auto TextureEmitter::Emit(CookedTexturePayload cooked,
   RecordEmissionSignature(signature);
 
   if (!acquire.is_new) {
+    if (cooked.desc.content_hash == 0U && !signature_salt.empty()) {
+      const std::string key(signature_salt);
+      identity_by_key_[key] = identity;
+      index_by_key_[key] = acquire.index;
+    }
     return acquire.index;
   }
 
@@ -234,6 +331,12 @@ auto TextureEmitter::Emit(CookedTexturePayload cooked,
   // Queue async write at explicit offset for texture data
   QueueDataWrite(WriteKind::kPayload, TextureKind::kUser, acquire.index,
     reserved.aligned_offset, payload_ptr);
+
+  if (cooked.desc.content_hash == 0U && !signature_salt.empty()) {
+    const std::string key(signature_salt);
+    identity_by_key_[key] = identity;
+    index_by_key_[key] = acquire.index;
+  }
 
   return acquire.index;
 }
@@ -389,7 +492,9 @@ auto TextureEmitter::ToPakDescriptor(const CookedTexturePayload& cooked,
   desc.mip_levels = cooked.desc.mip_levels;
   desc.format = static_cast<uint8_t>(cooked.desc.format);
   desc.alignment = static_cast<uint16_t>(policy.AlignRowPitchBytes(1));
-  desc.content_hash = cooked.desc.content_hash;
+  desc.content_hash = (cooked.desc.content_hash != 0U)
+    ? cooked.desc.content_hash
+    : ComputeFastFingerprint(cooked.payload);
 
   switch (cooked.desc.format) {
   case Format::kBC7UNorm:
@@ -413,7 +518,7 @@ auto TextureEmitter::EnsureFallbackTexture() -> void
 
   CookedTexturePayload fallback = CreateFallbackPayload();
   const auto tmp_desc = ToPakDescriptor(fallback, 0);
-  const auto signature = MakeTextureSignature(tmp_desc, "fallback");
+  const auto signature = MakeTextureSignature(fallback, tmp_desc, "fallback");
   DCHECK_F(!signature.empty(), "fallback texture signature must not be empty");
 
   const auto acquire = table_aggregator_.AcquireOrInsert(signature, [&]() {

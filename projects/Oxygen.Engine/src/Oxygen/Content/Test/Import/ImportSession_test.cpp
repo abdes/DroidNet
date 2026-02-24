@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <latch>
 #include <memory>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
@@ -341,6 +342,42 @@ NOLINT_TEST_F(ImportSessionTest, HasErrorsErrorAddedReturnsTrue)
 
   // Assert
   EXPECT_TRUE(session.HasErrors());
+}
+
+//! Verify emitter dedup collisions flow into session diagnostics.
+NOLINT_TEST_F(
+  ImportSessionTest, BufferEmitterCollisionDiagnosticFlowsIntoSessionReport)
+{
+  auto request = MakeRequest();
+  request.options.with_content_hashing = false;
+  request.options.dedup_collision_policy
+    = import::DedupCollisionPolicy::kWarnKeepFirst;
+  ImportSession session(request, observer_ptr(reader_.get()),
+    oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
+    observer_ptr(thread_pool_.get()), observer_ptr(table_registry_.get()),
+    observer_ptr(index_registry_.get()));
+
+  co::Run(*loop_, [&]() -> co::Co<> {
+    auto first = MakeTestBufferPayload();
+    auto second = MakeTestBufferPayload();
+    second.content_hash = 0;
+    if (!second.data.empty()) {
+      second.data[0] ^= std::byte { 0xFF };
+    }
+    first.content_hash = 0;
+
+    (void)session.BufferEmitter().Emit(std::move(first), "same_salt");
+    (void)session.BufferEmitter().Emit(std::move(second), "same_salt");
+    (void)co_await session.BufferEmitter().Finalize();
+    co_return;
+  });
+
+  const auto diagnostics = session.Diagnostics();
+  const auto has_collision
+    = std::ranges::any_of(diagnostics, [](const ImportDiagnostic& d) {
+        return d.code == "import.dedup_collision.buffer";
+      });
+  EXPECT_TRUE(has_collision);
 }
 
 //! Verify diagnostics can be added from multiple threads.
