@@ -49,6 +49,8 @@ m_gtest_program(
     "AssetLoader_test_helpers.cpp"
     "EngineTagFactory_test_impl.cpp"
     "LooseCookedIndex_test.cpp"
+    "LooseCookedLayout_test.cpp"
+    "LooseCookedSource_test.cpp"
     "AssetLoader_test.h"
     "Utils/PakUtils.h"
     "VirtualPathResolver_test.cpp"

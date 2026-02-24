@@ -14,7 +14,7 @@ using oxygen::data::AssetType;
 
 namespace {
 
-TEST(LooseCookedLayoutTest, DefaultSettings_AreCorrect)
+TEST(LooseCookedLayoutTest, DefaultSettingsAreCorrect)
 {
   LooseCookedLayout layout {};
   EXPECT_EQ(layout.index_file_name, "container.index.bin");
@@ -31,7 +31,7 @@ TEST(LooseCookedLayoutTest, DefaultSettings_AreCorrect)
   EXPECT_EQ(layout.materials_subdir, "Materials");
 }
 
-TEST(LooseCookedLayoutTest, DescriptorFileNames_AreCorrect)
+TEST(LooseCookedLayoutTest, DescriptorFileNamesAreCorrect)
 {
   EXPECT_EQ(
     LooseCookedLayout::MaterialDescriptorFileName("MyMat"), "MyMat.omat");
@@ -43,7 +43,7 @@ TEST(LooseCookedLayoutTest, DescriptorFileNames_AreCorrect)
     "MyScene.physics");
 }
 
-TEST(LooseCookedLayoutTest, DescriptorDirFor_YieldsExpectedDirs)
+TEST(LooseCookedLayoutTest, DescriptorDirForYieldsExpectedDirs)
 {
   LooseCookedLayout layout {};
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kMaterial), "Materials");
@@ -62,7 +62,7 @@ TEST(LooseCookedLayoutTest, DescriptorDirFor_YieldsExpectedDirs)
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kMaterial), "Assets");
 }
 
-TEST(LooseCookedLayoutTest, VirtualLeafPaths_AreCorrect)
+TEST(LooseCookedLayoutTest, VirtualLeafPathsAreCorrect)
 {
   LooseCookedLayout layout {};
   EXPECT_EQ(layout.MaterialVirtualLeaf("M1"), "Materials/M1.omat");
@@ -71,7 +71,7 @@ TEST(LooseCookedLayoutTest, VirtualLeafPaths_AreCorrect)
   EXPECT_EQ(layout.PhysicsSceneVirtualLeaf("S1"), "Scenes/S1.physics");
 }
 
-TEST(LooseCookedLayoutTest, VirtualPaths_JoinCorrectly)
+TEST(LooseCookedLayoutTest, VirtualPathsJoinCorrectly)
 {
   LooseCookedLayout layout {};
 
@@ -87,7 +87,7 @@ TEST(LooseCookedLayoutTest, VirtualPaths_JoinCorrectly)
   EXPECT_EQ(layout.MaterialVirtualPath("M1"), "/MyMount/Materials/M1.omat");
 }
 
-TEST(LooseCookedLayoutTest, ResourcePaths_AreCorrect)
+TEST(LooseCookedLayoutTest, ResourcePathsAreCorrect)
 {
   LooseCookedLayout layout {};
   EXPECT_EQ(layout.BuffersTableRelPath(), "Resources/buffers.table");
