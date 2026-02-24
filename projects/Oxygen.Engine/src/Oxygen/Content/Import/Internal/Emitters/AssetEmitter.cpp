@@ -134,6 +134,12 @@ auto AssetEmitter::Emit(const data::AssetKey& key, data::AssetType asset_type,
     throw std::runtime_error(
       "Conflicting virtual path mapping in loose cooked container");
   }
+  if (const auto it
+    = key_by_descriptor_relpath_.find(std::string(descriptor_relpath));
+    it != key_by_descriptor_relpath_.end() && it->second != key) {
+    throw std::runtime_error(
+      "Conflicting descriptor path mapping in loose cooked container");
+  }
 
   std::optional<base::Sha256Digest> sha256;
   if (compute_sha256_) {
@@ -187,6 +193,16 @@ auto AssetEmitter::RecordAsset(const data::AssetKey& key,
       }
       key_by_virtual_path_.insert_or_assign(std::string(virtual_path), key);
     }
+    if (record.descriptor_relpath != descriptor_relpath) {
+      const auto old_descriptor_relpath = record.descriptor_relpath;
+      if (const auto key_it
+        = key_by_descriptor_relpath_.find(old_descriptor_relpath);
+        key_it != key_by_descriptor_relpath_.end() && key_it->second == key) {
+        key_by_descriptor_relpath_.erase(key_it);
+      }
+      key_by_descriptor_relpath_.insert_or_assign(
+        std::string(descriptor_relpath), key);
+    }
 
     record.asset_type = asset_type;
     record.virtual_path = std::string(virtual_path);
@@ -209,6 +225,8 @@ auto AssetEmitter::RecordAsset(const data::AssetKey& key,
   records_.push_back(std::move(record));
   record_index_by_key_.emplace(key, index);
   key_by_virtual_path_.insert_or_assign(std::string(virtual_path), key);
+  key_by_descriptor_relpath_.insert_or_assign(
+    std::string(descriptor_relpath), key);
 }
 
 auto AssetEmitter::QueueDescriptorWrite(
