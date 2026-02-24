@@ -392,6 +392,78 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
 }
 
 NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
+  AutoTrimDeterministicVictimSelectionExpectedAcrossRepeatedRuns)
+{
+  const std::string hexdump = R"(
+     0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
+    16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
+  )";
+  constexpr std::size_t kDataOffset = 256;
+  constexpr std::size_t kSizeBytes = 192;
+
+  auto run_once = [&]() {
+    AssetLoaderConfig config {};
+    config.residency_policy = oxygen::content::ResidencyPolicy {
+      .cache_budget_bytes = 1,
+      .trim_mode = oxygen::content::ResidencyTrimMode::kAutoOnOverBudget,
+      .default_priority_class = oxygen::content::LoadPriorityClass::kDefault,
+    };
+
+    const auto bytes_a
+      = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, 0x31);
+    const auto bytes_b
+      = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, 0x32);
+
+    TestEventLoop el;
+    bool a_alive = false;
+    bool b_alive = false;
+    (oxygen::co::Run)(el, [&]() -> Co<> {
+      oxygen::co::ThreadPool pool(el, 2);
+      config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+      AssetLoader loader(
+        oxygen::content::internal::EngineTagFactory::Get(), config);
+      loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
+
+      OXCO_WITH_NURSERY(n)
+      {
+        co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+        loader.Run();
+        const auto key_a = loader.MintSyntheticBufferKey();
+        const auto key_b = loader.MintSyntheticBufferKey();
+
+        auto a = co_await loader.LoadResourceAsync<BufferResource>(
+          CookedResourceData<BufferResource> {
+            .key = key_a,
+            .bytes = std::span<const uint8_t>(bytes_a.data(), bytes_a.size()),
+          });
+        EXPECT_THAT(a, NotNull());
+        loader.ReleaseResource(key_a);
+
+        auto b = co_await loader.LoadResourceAsync<BufferResource>(
+          CookedResourceData<BufferResource> {
+            .key = key_b,
+            .bytes = std::span<const uint8_t>(bytes_b.data(), bytes_b.size()),
+          });
+        EXPECT_THAT(b, NotNull());
+
+        a_alive = loader.HasBuffer(key_a);
+        b_alive = loader.HasBuffer(key_b);
+
+        loader.Stop();
+        co_return oxygen::co::kJoin;
+      };
+    });
+
+    return std::pair { a_alive, b_alive };
+  };
+
+  const auto [a1, b1] = run_once();
+  const auto [a2, b2] = run_once();
+  EXPECT_EQ(a1, a2);
+  EXPECT_EQ(b1, b2);
+}
+
+NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
   StoreFailureRetryAfterForcedTrimExpectedToCacheDecodedResource)
 {
   const std::string hexdump = R"(

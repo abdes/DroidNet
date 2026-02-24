@@ -35,6 +35,7 @@ public:
   struct TrimResult final {
     size_t trim_roots = 0;
     size_t pruned_live_branches = 0;
+    size_t blocked_priority_roots = 0;
     size_t standalone_resource_candidates = 0;
   };
 
