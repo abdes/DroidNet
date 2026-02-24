@@ -25,6 +25,8 @@ namespace {
 
   using oxygen::content::import::LooseCookedLayout;
   using oxygen::content::import::LooseCookedWriter;
+  using CollisionPolicy
+    = oxygen::content::import::LooseCookedWriter::CollisionPolicy;
   using oxygen::content::lc::Inspection;
   using oxygen::data::AssetKey;
   using oxygen::data::AssetType;
@@ -439,6 +441,86 @@ namespace {
     ASSERT_NE(it, files.end());
     EXPECT_EQ(it->relpath, "Resources/buffers_b.data");
     EXPECT_EQ(it->size, 3U);
+  }
+
+  NOLINT_TEST(LooseCookedWriterTest, CollisionPolicyErrorRejectsFileOverwrite)
+  {
+    const auto cooked_root
+      = MakeTempCookedRoot("loose_cooked_writer_collision_error");
+
+    const std::vector<std::byte> file_a = { std::byte { 0x01 } };
+    const std::vector<std::byte> file_b
+      = { std::byte { 0x02 }, std::byte { 0x03 } };
+
+    LooseCookedWriter writer(cooked_root);
+    writer.SetCollisionPolicy(CollisionPolicy::kError);
+    writer.WriteFile(
+      FileKind::kBuffersData, "Resources/buffers_a.data", file_a);
+    EXPECT_THROW(writer.WriteFile(
+                   FileKind::kBuffersData, "Resources/buffers_b.data", file_b),
+      std::runtime_error);
+  }
+
+  NOLINT_TEST(LooseCookedWriterTest, CollisionPolicyKeepExistingPreservesFirst)
+  {
+    const auto cooked_root
+      = MakeTempCookedRoot("loose_cooked_writer_collision_keep");
+
+    const std::vector<std::byte> bytes_a = { std::byte { 0x01 } };
+    const std::vector<std::byte> bytes_b
+      = { std::byte { 0x10 }, std::byte { 0x20 } };
+
+    LooseCookedWriter writer(cooked_root);
+    writer.SetCollisionPolicy(CollisionPolicy::kWarnKeepExisting);
+    writer.WriteFile(
+      FileKind::kBuffersData, "Resources/buffers_a.data", bytes_a);
+    writer.WriteFile(
+      FileKind::kBuffersData, "Resources/buffers_b.data", bytes_b);
+    writer.WriteFile(
+      FileKind::kBuffersTable, "Resources/buffers.table", bytes_a);
+    (void)writer.Finish();
+
+    Inspection inspection;
+    inspection.LoadFromFile(cooked_root / "container.index.bin");
+    const auto files = inspection.Files();
+    const auto it
+      = std::ranges::find_if(files, [](const Inspection::FileEntry& e) {
+          return e.kind == FileKind::kBuffersData;
+        });
+    ASSERT_NE(it, files.end());
+    EXPECT_EQ(it->relpath, "Resources/buffers_a.data");
+    EXPECT_EQ(it->size, 1U);
+  }
+
+  NOLINT_TEST(LooseCookedWriterTest, CollisionPolicyReplaceOverwritesEntry)
+  {
+    const auto cooked_root
+      = MakeTempCookedRoot("loose_cooked_writer_collision_replace");
+
+    const std::vector<std::byte> bytes_a = { std::byte { 0x01 } };
+    const std::vector<std::byte> bytes_b
+      = { std::byte { 0x10 }, std::byte { 0x20 } };
+
+    LooseCookedWriter writer(cooked_root);
+    writer.SetCollisionPolicy(CollisionPolicy::kWarnReplace);
+    writer.WriteFile(
+      FileKind::kBuffersData, "Resources/buffers_a.data", bytes_a);
+    writer.WriteFile(
+      FileKind::kBuffersData, "Resources/buffers_b.data", bytes_b);
+    writer.WriteFile(
+      FileKind::kBuffersTable, "Resources/buffers.table", bytes_a);
+    (void)writer.Finish();
+
+    Inspection inspection;
+    inspection.LoadFromFile(cooked_root / "container.index.bin");
+    const auto files = inspection.Files();
+    const auto it
+      = std::ranges::find_if(files, [](const Inspection::FileEntry& e) {
+          return e.kind == FileKind::kBuffersData;
+        });
+    ASSERT_NE(it, files.end());
+    EXPECT_EQ(it->relpath, "Resources/buffers_b.data");
+    EXPECT_EQ(it->size, 2U);
   }
 
   //! Test: Writing a new key merges with existing assets

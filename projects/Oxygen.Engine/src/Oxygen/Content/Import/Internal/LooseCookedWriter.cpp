@@ -192,6 +192,23 @@ namespace {
     uint64_t size = 0;
   };
 
+  [[nodiscard]] auto IsEquivalent(
+    const StoredAsset& lhs, const StoredAsset& rhs) -> bool
+  {
+    return lhs.key == rhs.key && lhs.asset_type == rhs.asset_type
+      && lhs.virtual_path == rhs.virtual_path
+      && lhs.descriptor_relpath == rhs.descriptor_relpath
+      && lhs.descriptor_size == rhs.descriptor_size
+      && lhs.descriptor_sha256 == rhs.descriptor_sha256;
+  }
+
+  [[nodiscard]] auto IsEquivalent(const StoredFile& lhs, const StoredFile& rhs)
+    -> bool
+  {
+    return lhs.kind == rhs.kind && lhs.relpath == rhs.relpath
+      && lhs.size == rhs.size;
+  }
+
   auto WriteBinaryFile(const std::filesystem::path& path,
     const std::span<const std::byte> bytes) -> void
   {
@@ -266,6 +283,60 @@ struct LooseCookedWriter::Impl final {
 
   auto SetComputeSha256(bool enabled) -> void { compute_sha256_ = enabled; }
 
+  auto SetCollisionPolicy(const LooseCookedWriter::CollisionPolicy policy)
+    -> void
+  {
+    collision_policy_ = policy;
+  }
+
+  auto HandleAssetCollision_(const data::AssetKey& key,
+    const StoredAsset& existing, const StoredAsset& incoming,
+    std::string_view context) -> bool
+  {
+    if (IsEquivalent(existing, incoming)) {
+      return true;
+    }
+    if (collision_policy_ == LooseCookedWriter::CollisionPolicy::kError) {
+      throw std::runtime_error(std::string(context)
+        + ": asset collision for key " + data::to_string(key));
+    }
+    if (collision_policy_
+      == LooseCookedWriter::CollisionPolicy::kWarnKeepExisting) {
+      LOG_F(WARNING,
+        "{}: asset collision for key {} policy=warn_keep_existing action=keep",
+        context, data::to_string(key));
+      return false;
+    }
+    LOG_F(WARNING,
+      "{}: asset collision for key {} policy=warn_replace action=replace",
+      context, data::to_string(key));
+    return true;
+  }
+
+  auto HandleFileCollision_(const FileKind kind, const StoredFile& existing,
+    const StoredFile& incoming, std::string_view context) -> bool
+  {
+    if (IsEquivalent(existing, incoming)) {
+      return true;
+    }
+    if (collision_policy_ == LooseCookedWriter::CollisionPolicy::kError) {
+      throw std::runtime_error(std::string(context)
+        + ": file collision for kind "
+        + std::to_string(static_cast<uint16_t>(kind)));
+    }
+    if (collision_policy_
+      == LooseCookedWriter::CollisionPolicy::kWarnKeepExisting) {
+      LOG_F(WARNING,
+        "{}: file collision for kind={} policy=warn_keep_existing action=keep",
+        context, static_cast<uint16_t>(kind));
+      return false;
+    }
+    LOG_F(WARNING,
+      "{}: file collision for kind={} policy=warn_replace action=replace",
+      context, static_cast<uint16_t>(kind));
+    return true;
+  }
+
   auto WriteAssetDescriptor(const data::AssetKey& key,
     data::AssetType asset_type, std::string_view virtual_path,
     std::string_view descriptor_relpath, std::span<const std::byte> bytes)
@@ -281,10 +352,6 @@ struct LooseCookedWriter::Impl final {
         "Conflicting virtual path mapping in loose cooked container");
     }
 
-    const auto path_on_disk
-      = cooked_root_ / std::filesystem::path(descriptor_relpath);
-    WriteBinaryFile(path_on_disk, bytes);
-
     std::optional<base::Sha256Digest> digest;
     if (compute_sha256_) {
       digest = base::ComputeSha256(bytes);
@@ -298,6 +365,15 @@ struct LooseCookedWriter::Impl final {
       .descriptor_size = (bytes.size()),
       .descriptor_sha256 = CopyDigestOrZero(digest),
     };
+    if (const auto existing_it = assets_.find(key); existing_it != assets_.end()
+      && !HandleAssetCollision_(
+        key, existing_it->second, record, "WriteAssetDescriptor")) {
+      return;
+    }
+
+    const auto path_on_disk
+      = cooked_root_ / std::filesystem::path(descriptor_relpath);
+    WriteBinaryFile(path_on_disk, bytes);
 
     assets_.insert_or_assign(key, record);
     key_by_virtual_path_.insert_or_assign(std::string(virtual_path), key);
@@ -317,6 +393,11 @@ struct LooseCookedWriter::Impl final {
       .size = (bytes.size()),
     };
 
+    if (const auto existing_it = files_.find(kind); existing_it != files_.end()
+      && !HandleFileCollision_(
+        kind, existing_it->second, record, "WriteFile")) {
+      return;
+    }
     files_.insert_or_assign(kind, record);
   }
 
@@ -345,6 +426,11 @@ struct LooseCookedWriter::Impl final {
       .size = size,
     };
 
+    if (const auto existing_it = files_.find(kind); existing_it != files_.end()
+      && !HandleFileCollision_(
+        kind, existing_it->second, record, "RegisterExternalFile")) {
+      return;
+    }
     files_.insert_or_assign(kind, record);
   }
 
@@ -401,6 +487,11 @@ struct LooseCookedWriter::Impl final {
       .descriptor_sha256 = CopyDigestOrZero(descriptor_sha256),
     };
 
+    if (const auto existing_it = assets_.find(key); existing_it != assets_.end()
+      && !HandleAssetCollision_(
+        key, existing_it->second, record, "RegisterExternalAssetDescriptor")) {
+      return;
+    }
     assets_.insert_or_assign(key, record);
     key_by_virtual_path_.insert_or_assign(std::string(virtual_path), key);
   }
@@ -427,11 +518,21 @@ struct LooseCookedWriter::Impl final {
         throw std::runtime_error(
           "Conflicting virtual path mapping in loose cooked container");
       }
+      if (const auto existing = assets_.find(key); existing != assets_.end()
+        && !HandleAssetCollision_(
+          key, existing->second, asset, "Finish.merge_assets")) {
+        continue;
+      }
       assets_.insert_or_assign(key, asset);
       key_by_virtual_path_.insert_or_assign(asset.virtual_path, key);
     }
 
     for (const auto& [kind, file] : current_files) {
+      if (const auto existing = files_.find(kind); existing != files_.end()
+        && !HandleFileCollision_(
+          kind, existing->second, file, "Finish.merge_files")) {
+        continue;
+      }
       files_.insert_or_assign(kind, file);
     }
 
@@ -746,6 +847,8 @@ private:
   std::filesystem::path cooked_root_;
 
   bool compute_sha256_ = true;
+  LooseCookedWriter::CollisionPolicy collision_policy_
+    = LooseCookedWriter::CollisionPolicy::kWarnReplace;
 
   std::optional<data::SourceKey> source_key_override_;
   std::optional<uint16_t> content_version_override_;
@@ -778,6 +881,11 @@ auto LooseCookedWriter::SetContentVersion(const uint16_t version) -> void
 auto LooseCookedWriter::SetComputeSha256(const bool enabled) -> void
 {
   impl_->SetComputeSha256(enabled);
+}
+
+auto LooseCookedWriter::SetCollisionPolicy(const CollisionPolicy policy) -> void
+{
+  impl_->SetCollisionPolicy(policy);
 }
 
 auto LooseCookedWriter::WriteAssetDescriptor(const data::AssetKey& key,
