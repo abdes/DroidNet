@@ -94,12 +94,13 @@ forward map (useful for tests/diagnostics, not for runtime behavior).
 
 ### Dependency types
 
-#### Asset → Asset
+#### Asset -> Asset
 
 - Example: GeometryAsset → MaterialAsset
 - Registration: `AddAssetDependency()`
 - Safety: enforced by cache refcounts (Touch on dependency)
-- Cycle handling: cycles are rejected (see below)
+- Cycle handling: runtime has debug-only diagnostics; upstream pipeline must
+  reject cycles before runtime (see below)
 
 #### Asset → Resource
 
@@ -114,20 +115,24 @@ forward map (useful for tests/diagnostics, not for runtime behavior).
 
 ---
 
-## Cycle rejection
+## Cycle policy and upstream rejection
 
 Cycles in asset→asset edges are invalid for two reasons:
 
 - They prevent a strict release order.
 - They create “immortal” graphs that never reach refcount zero naturally.
 
-The implementation rejects cycles when registering an asset→asset edge.
+Runtime cycle detection in `AssetLoader` is a debug-only structural guard.
+Release runtime does not enforce cycle rejection and assumes acyclicity has
+already been validated upstream.
 
 Notes:
 
-- Cycle detection currently runs in debug builds (DFS over forward edges).
-- On detecting a cycle, the edge is rejected; in debug builds a DCHECK also
-   fires.
+- Cycle detection runs in debug builds (DFS over forward edges) as a runtime
+  diagnostic.
+- Upstream import planning/authoring validation must reject cyclic graphs
+  before runtime. `ImportPlanner::MakePlan()` fails hard on cycles and is
+  covered by `ImportPlanner_test` cycle cases in CI.
 
 ---
 

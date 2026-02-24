@@ -4,21 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "./AssetLoader_test.h"
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
-
-#include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/MaterialAsset.h>
-
-#include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/Run.h>
-#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
-
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
+#include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+
+#include "./AssetLoader_test.h"
 
 using testing::NotNull;
 

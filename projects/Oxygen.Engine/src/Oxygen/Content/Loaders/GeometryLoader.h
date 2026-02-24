@@ -403,11 +403,8 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
     // For procedural meshes, generate vertex/index data (owned data)
     detail::LoadProceduralMeshBuffers(reader, desc, vertices, indices);
   } else {
-    LOG_F(ERROR, "Unsupported mesh type: {}", static_cast<int>(desc.mesh_type));
-    auto skip_result
-      = reader.Forward(static_cast<std::streamoff>(detail::kMeshInfoSize));
-    detail::CheckResult(skip_result, "m.unknown_mesh_info");
-    return nullptr;
+    throw std::runtime_error(fmt::format(
+      "unsupported mesh type: {}", static_cast<int>(desc.mesh_type)));
   }
 
   std::string name(
@@ -440,9 +437,9 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
     auto sm_desc = detail::LoadSubMeshDesc(reader);
     auto mesh_views = detail::LoadSubMeshViews(reader, sm_desc.mesh_view_count);
     if (sm_desc.mesh_view_count != mesh_views.size()) {
-      LOG_F(ERROR, "SubMesh {} has {} mesh views, expected {}", i,
-        mesh_views.size(), sm_desc.mesh_view_count);
-      return nullptr;
+      throw std::runtime_error(
+        fmt::format("submesh {} has {} mesh views, expected {}", i,
+          mesh_views.size(), sm_desc.mesh_view_count));
     }
     total_read_views += sm_desc.mesh_view_count;
 
@@ -484,9 +481,9 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
   }
 
   if (total_read_views != desc.mesh_view_count) {
-    LOG_F(ERROR, "Total read mesh views ({}) != expected ({})",
-      total_read_views, desc.mesh_view_count);
-    return nullptr;
+    throw std::runtime_error(
+      fmt::format("total read mesh views ({}) != expected ({})",
+        total_read_views, desc.mesh_view_count));
   }
 
   if (!should_build_mesh) {

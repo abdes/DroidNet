@@ -11,6 +11,7 @@
 #include <optional>
 #include <string_view>
 #include <variant>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Sha256.h>
@@ -126,6 +127,17 @@ public:
 
   [[nodiscard]] virtual auto CreatePhysicsDataReader() const
     -> std::unique_ptr<serio::AnyReader>
+    = 0;
+
+  [[nodiscard]] virtual auto ScriptSlotCount() const noexcept -> uint32_t = 0;
+
+  [[nodiscard]] virtual auto ReadScriptSlotRecords(uint32_t start_index,
+    uint32_t count) const -> std::vector<data::pak::ScriptSlotRecord>
+    = 0;
+
+  [[nodiscard]] virtual auto ReadScriptParamRecords(
+    data::pak::OffsetT absolute_offset, uint32_t count) const
+    -> std::vector<data::pak::ScriptParamRecord>
     = 0;
 };
 

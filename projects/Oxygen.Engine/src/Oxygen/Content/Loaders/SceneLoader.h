@@ -17,6 +17,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
+#include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Content/PakFile.h>
@@ -461,13 +462,13 @@ inline auto LoadSceneAsset(const LoaderContext& context)
       has_scripting_table = true;
 
       if (!context.parse_only) {
-        if (context.source_pak == nullptr) {
+        if (context.source_content == nullptr) {
           throw std::runtime_error(
-            "scene scripting dependencies require source_pak");
+            "scene scripting dependencies require source_content");
         }
 
         detail::ValidateScriptingSlotRanges(table_bytes, entry.table.count,
-          context.source_pak->ScriptSlotCount());
+          context.source_content->ScriptSlotCount());
 
         for (uint32_t i = 0; i < entry.table.count; ++i) {
           oxygen::data::pak::ScriptingComponentRecord record {};
@@ -477,7 +478,7 @@ inline auto LoadSceneAsset(const LoaderContext& context)
               .data(),
             sizeof(record));
 
-          auto slot_records = context.source_pak->ReadScriptSlotRecords(
+          auto slot_records = context.source_content->ReadScriptSlotRecords(
             record.slot_start_index, record.slot_count);
           for (const auto& slot : slot_records) {
             if (slot.script_asset_key == oxygen::data::AssetKey {}) {

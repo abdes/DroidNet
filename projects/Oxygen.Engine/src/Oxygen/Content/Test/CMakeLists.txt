@@ -38,6 +38,7 @@ m_gtest_program(
     "AssetLoader_async_test.cpp"
     "AssetLoader_basic_test.cpp"
     "AssetLoader_buffer_test.cpp"
+    "AssetLoader_characterization_test.cpp"
     "AssetLoader_cancellation_test.cpp"
     "AssetLoader_deps_test.cpp"
     "AssetLoader_eviction_test.cpp"
@@ -63,6 +64,7 @@ m_gtest_program(
   SOURCES
     "AssetHeaderLoader_test.cpp"
     "BufferLoader_test.cpp"
+    "GeometryLoader_test.cpp"
     "InputLoaders_test.cpp"
     "MaterialLoader_test.cpp"
     "Mocks/MockStream.h"

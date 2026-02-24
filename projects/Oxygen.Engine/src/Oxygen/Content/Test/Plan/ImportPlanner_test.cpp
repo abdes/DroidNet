@@ -442,6 +442,24 @@ NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_CycleDies)
   NOLINT_EXPECT_DEATH(planner_.MakePlan(), "cycle detected");
 }
 
+//! Validate upstream planning rejects cyclic asset authoring before runtime.
+NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_MakePlan_CrossAssetCycleDies)
+{
+  // Arrange
+  RegisterAllPipelines();
+
+  const auto scene = planner_.AddSceneAsset("scene", {});
+  const auto geometry = planner_.AddGeometryAsset("geometry", {});
+  const auto material = planner_.AddMaterialAsset("material", {});
+
+  planner_.AddDependency(scene, geometry);
+  planner_.AddDependency(geometry, material);
+  planner_.AddDependency(material, scene);
+
+  // Act + Assert
+  NOLINT_EXPECT_DEATH(planner_.MakePlan(), "cycle detected");
+}
+
 //! Verify mutations are blocked after the planner is sealed.
 NOLINT_TEST_F(ImportPlannerPlanTest, ImportPlanner_AddAfterSeal_Dies)
 {

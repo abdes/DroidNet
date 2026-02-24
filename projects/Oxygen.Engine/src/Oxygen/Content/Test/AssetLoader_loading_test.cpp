@@ -12,10 +12,10 @@
 #include <fstream>
 #include <vector>
 
-#include "./AssetLoader_test.h"
-#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Import/LooseCookedLayout.h>
 #include <Oxygen/Content/Internal/InternalResourceKey.h>
@@ -30,6 +30,7 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 
+#include "./AssetLoader_test.h"
 #include "Utils/PakUtils.h"
 
 using testing::IsNull;
@@ -774,6 +775,114 @@ NOLINT_TEST_F(AssetLoaderLoadingTest, MakeResourceKey_PakIndexIgnoresLooseRoots)
 
   // Assert
   EXPECT_EQ(decoded.GetPakIndex(), 0u);
+}
+
+//! Duplicate AssetKey conflict policy: newest mount wins by default.
+NOLINT_TEST_F(AssetLoaderLoadingTest,
+  DuplicateAssetKey_DefaultLookupUsesNewestMountedSource)
+{
+  const auto pak_a = GeneratePakFile("duplicate_key_source_a");
+  const auto pak_b = GeneratePakFile("duplicate_key_source_b");
+  const auto material_key = CreateTestAssetKey("duplicate_shared_material");
+
+  TestEventLoop el;
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    using oxygen::content::AssetLoader;
+    using oxygen::content::AssetLoaderConfig;
+
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
+
+    loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
+    loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
+
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+
+      loader.AddPakFile(pak_a);
+      loader.AddPakFile(pak_b); // newest mount should win
+
+      const auto material
+        = co_await loader.LoadAssetAsync<MaterialAsset>(material_key);
+      EXPECT_THAT(material, NotNull());
+      if (material) {
+        const auto base = material->GetBaseColor();
+        EXPECT_FLOAT_EQ(base[0], 0.0F);
+        EXPECT_FLOAT_EQ(base[1], 0.0F);
+        EXPECT_FLOAT_EQ(base[2], 1.0F);
+        EXPECT_FLOAT_EQ(base[3], 1.0F);
+      }
+
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
+}
+
+//! Preferred-source override policy: dependency loads follow the parent source.
+NOLINT_TEST_F(AssetLoaderLoadingTest,
+  DuplicateAssetKey_GeometryDependenciesPreferGeometrySource)
+{
+  const auto pak_a = GeneratePakFile("duplicate_key_source_a");
+  const auto pak_b = GeneratePakFile("duplicate_key_source_b");
+  const auto geometry_key = CreateTestAssetKey("duplicate_source_a_geometry");
+
+  TestEventLoop el;
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    using oxygen::content::AssetLoader;
+    using oxygen::content::AssetLoaderConfig;
+
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
+
+    loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
+    loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
+    loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
+    loader.RegisterLoader(oxygen::content::loaders::LoadGeometryAsset);
+
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+
+      loader.AddPakFile(pak_a); // geometry + green material
+      loader.AddPakFile(pak_b); // duplicate material key with blue color
+
+      const auto geometry
+        = co_await loader.LoadAssetAsync<GeometryAsset>(geometry_key);
+      EXPECT_THAT(geometry, NotNull());
+      if (geometry) {
+        const auto meshes = geometry->Meshes();
+        EXPECT_FALSE(meshes.empty());
+        if (!meshes.empty() && meshes[0]) {
+          const auto submeshes = meshes[0]->SubMeshes();
+          EXPECT_FALSE(submeshes.empty());
+          if (!submeshes.empty()) {
+            const auto material = submeshes[0].Material();
+            EXPECT_THAT(material, NotNull());
+            if (material) {
+              const auto base = material->GetBaseColor();
+              EXPECT_FLOAT_EQ(base[0], 0.0F);
+              EXPECT_FLOAT_EQ(base[1], 1.0F);
+              EXPECT_FLOAT_EQ(base[2], 0.0F);
+              EXPECT_FLOAT_EQ(base[3], 1.0F);
+            }
+          }
+        }
+      }
+
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
 }
 
 } // namespace

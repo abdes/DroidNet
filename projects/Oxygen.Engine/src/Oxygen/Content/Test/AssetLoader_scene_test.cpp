@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "./AssetLoader_test.h"
-
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
@@ -14,9 +12,11 @@
 #include <string>
 #include <vector>
 
-#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/Import/LooseCookedLayout.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/InputActionLoader.h>
@@ -25,19 +25,17 @@
 #include <Oxygen/Content/Loaders/PhysicsSceneLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
-
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
-
-#include <Oxygen/Content/Import/LooseCookedLayout.h>
-
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+
+#include "./AssetLoader_test.h"
 
 using ::testing::NotNull;
 

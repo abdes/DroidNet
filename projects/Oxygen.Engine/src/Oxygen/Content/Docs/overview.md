@@ -197,8 +197,9 @@ This is the conceptual role of the core types (names match the code).
 - `LoaderContext`
   - Passed by value into every loader.
   - Provides `desc_reader` (descriptor stream) and `data_readers` (data region
-    readers) plus `source_token`, `offline` policy, and an optional
-    `DependencyCollector` for identity-only dependency recording.
+    readers) plus `source_token`, `work_offline` policy, optional
+    `DependencyCollector` for identity-only dependency recording, and optional
+    `source_pak` / `source_content` source views.
 - `ResourceTable<T>`
   - Lightweight offset resolver: maps a PAK resource index to the descriptor
     offset.
