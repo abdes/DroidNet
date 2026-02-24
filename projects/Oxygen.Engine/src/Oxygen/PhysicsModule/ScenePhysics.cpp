@@ -20,6 +20,25 @@ namespace internal {
 } // namespace internal
 #endif
 
+namespace {
+
+  auto SeedCharacterDescFromNodeWorldPose(scene::SceneNode& node,
+    const character::CharacterDesc& input_desc) -> character::CharacterDesc
+  {
+    auto seeded_desc = input_desc;
+    if (const auto world_position = node.GetTransform().GetWorldPosition();
+      world_position.has_value()) {
+      seeded_desc.initial_position = *world_position;
+    }
+    if (const auto world_rotation = node.GetTransform().GetWorldRotation();
+      world_rotation.has_value()) {
+      seeded_desc.initial_rotation = *world_rotation;
+    }
+    return seeded_desc;
+  }
+
+} // namespace
+
 auto ScenePhysics::CharacterFacade::Move(
   const character::CharacterMoveInput& input, float delta_time) const
   -> PhysicsResult<character::CharacterMoveResult>
@@ -180,7 +199,8 @@ auto ScenePhysics::AttachCharacterDetailed(
     return Err(PhysicsError::kNotInitialized);
   }
 
-  const auto result = character_api.CreateCharacter(world_id, desc);
+  const auto seeded_desc = SeedCharacterDescFromNodeWorldPose(node, desc);
+  const auto result = character_api.CreateCharacter(world_id, seeded_desc);
   if (!result.has_value()) {
     return Err(result.error());
   }
