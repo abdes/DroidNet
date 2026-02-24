@@ -8,6 +8,7 @@
 #include <exception>
 #include <filesystem>
 #include <source_location>
+#include <string_view>
 
 #include <glm/gtc/quaternion.hpp>
 
@@ -40,6 +41,7 @@ using oxygen::scene::SceneNodeFlags;
 namespace oxygen::examples::render_scene {
 
 namespace {
+  constexpr std::string_view kLooseCookedIndexFileName = "container.index.bin";
 
   auto TryGetLastWriteTime(const std::filesystem::path& path)
     -> std::optional<std::filesystem::file_time_type>
@@ -76,6 +78,12 @@ namespace {
           == content::IAssetLoader::ContentSourceKind::kLooseCooked
           && runtime::NormalizePath(source.source_path) == normalized;
       });
+  }
+
+  auto LooseIndexPathForRoot(const std::filesystem::path& root_path)
+    -> std::filesystem::path
+  {
+    return root_path / std::string(kLooseCookedIndexFileName);
   }
 
 } // namespace
@@ -202,6 +210,7 @@ void MainModule::OnShutdown() noexcept
   ReleaseCurrentSceneAsset("module shutdown");
   ClearSceneRuntime("module shutdown");
   mounted_pak_write_times_.clear();
+  mounted_loose_index_write_times_.clear();
   Base::OnShutdown();
 }
 
@@ -301,6 +310,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
         if (action == PendingSourceAction::kClear) {
           asset_loader->ClearMounts();
           mounted_pak_write_times_.clear();
+          mounted_loose_index_write_times_.clear();
           refresh_library = true;
         } else if (action == PendingSourceAction::kTrimCache) {
           asset_loader->TrimCache();
@@ -348,15 +358,53 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
         } else if (action == PendingSourceAction::kMountIndex) {
           const auto root = path.parent_path();
           const auto normalized = runtime::NormalizePath(root);
-          const auto already_mounted = IsMountedLooseRoot(*asset_loader, root);
+          const auto already_mounted
+            = IsMountedLooseRoot(*asset_loader, normalized);
+          const auto write_time
+            = TryGetLastWriteTime(LooseIndexPathForRoot(normalized));
 
           if (already_mounted) {
-            LOG_F(INFO,
-              "RenderScene: Loose cooked root '{}' already mounted; skipping "
-              "remount to preserve cache",
-              normalized.string());
+            const auto known_time_it
+              = mounted_loose_index_write_times_.find(normalized);
+            const bool has_known_time
+              = known_time_it != mounted_loose_index_write_times_.end();
+            const bool file_changed = has_known_time && write_time.has_value()
+              && known_time_it->second != *write_time;
+
+            if (file_changed) {
+              LOG_F(INFO,
+                "RenderScene: Loose cooked index '{}' changed on disk; "
+                "refreshing mounted source",
+                LooseIndexPathForRoot(normalized).string());
+              asset_loader->AddLooseCookedRoot(normalized);
+              mounted_loose_index_write_times_.insert_or_assign(
+                normalized, *write_time);
+              refresh_library = true;
+            } else if (!has_known_time && write_time.has_value()) {
+              LOG_F(INFO,
+                "RenderScene: Loose cooked root '{}' mounted with unknown "
+                "index timestamp; refreshing once to bind latest index",
+                normalized.string());
+              asset_loader->AddLooseCookedRoot(normalized);
+              mounted_loose_index_write_times_.insert_or_assign(
+                normalized, *write_time);
+              refresh_library = true;
+            } else {
+              LOG_F(INFO,
+                "RenderScene: Loose cooked root '{}' already mounted and "
+                "unchanged; preserving cache",
+                normalized.string());
+              if (write_time.has_value() && !has_known_time) {
+                mounted_loose_index_write_times_.insert_or_assign(
+                  normalized, *write_time);
+              }
+            }
           } else {
-            asset_loader->AddLooseCookedRoot(root);
+            asset_loader->AddLooseCookedRoot(normalized);
+            if (write_time.has_value()) {
+              mounted_loose_index_write_times_.insert_or_assign(
+                normalized, *write_time);
+            }
             refresh_library = true;
           }
         }
@@ -432,18 +480,54 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
         } else if (request.source_kind == ui::SceneSourceKind::kLooseIndex) {
           const auto root = request.source_path.parent_path();
           const auto normalized = runtime::NormalizePath(root);
-          const auto already_mounted = IsMountedLooseRoot(*asset_loader, root);
+          const auto already_mounted
+            = IsMountedLooseRoot(*asset_loader, normalized);
+          const auto write_time
+            = TryGetLastWriteTime(LooseIndexPathForRoot(normalized));
 
           if (already_mounted) {
-            LOG_F(INFO,
-              "RenderScene: Loose cooked root '{}' already mounted for scene "
-              "load; preserving cache",
-              normalized.string());
+            const auto known_time_it
+              = mounted_loose_index_write_times_.find(normalized);
+            const bool has_known_time
+              = known_time_it != mounted_loose_index_write_times_.end();
+            const bool file_changed = has_known_time && write_time.has_value()
+              && known_time_it->second != *write_time;
+
+            if (file_changed) {
+              LOG_F(INFO,
+                "RenderScene: Loose cooked index '{}' changed for scene load; "
+                "refreshing mounted source",
+                LooseIndexPathForRoot(normalized).string());
+              asset_loader->AddLooseCookedRoot(normalized);
+              mounted_loose_index_write_times_.insert_or_assign(
+                normalized, *write_time);
+            } else if (!has_known_time && write_time.has_value()) {
+              LOG_F(INFO,
+                "RenderScene: Loose cooked root '{}' mounted for scene load "
+                "with unknown timestamp; refreshing once",
+                normalized.string());
+              asset_loader->AddLooseCookedRoot(normalized);
+              mounted_loose_index_write_times_.insert_or_assign(
+                normalized, *write_time);
+            } else {
+              LOG_F(INFO,
+                "RenderScene: Loose cooked root '{}' already mounted for scene "
+                "load and unchanged; preserving cache",
+                normalized.string());
+              if (write_time.has_value() && !has_known_time) {
+                mounted_loose_index_write_times_.insert_or_assign(
+                  normalized, *write_time);
+              }
+            }
           } else {
-            asset_loader->AddLooseCookedRoot(root);
+            asset_loader->AddLooseCookedRoot(normalized);
+            if (write_time.has_value()) {
+              mounted_loose_index_write_times_.insert_or_assign(
+                normalized, *write_time);
+            }
             LOG_F(INFO,
               "RenderScene: Mounted loose cooked root '{}' for scene load '{}'",
-              root.string(), request.scene_name);
+              normalized.string(), request.scene_name);
           }
         }
       } catch (const std::exception& ex) {
