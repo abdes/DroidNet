@@ -34,6 +34,10 @@
 
 struct lua_State;
 
+namespace oxygen {
+class IAsyncEngine;
+}
+
 namespace oxygen::scripting {
 
 struct ScriptExecutionResult {
@@ -224,7 +228,7 @@ public:
       core::PhaseId::kSceneMutation, core::PhaseId::kFrameEnd>();
   }
 
-  OXGN_SCRP_NDAPI auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept
+  OXGN_SCRP_NDAPI auto OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
     -> bool override;
   OXGN_SCRP_API auto OnShutdown() noexcept -> void override;
   OXGN_SCRP_API auto RegisterConsoleBindings(
@@ -347,7 +351,7 @@ private:
   int runtime_env_ref_ { -1 };
   int global_env_ref_ { -1 };
   engine::ModulePriority priority_;
-  observer_ptr<AsyncEngine> engine_;
+  observer_ptr<IAsyncEngine> engine_;
   bool input_bridge_logs_enabled_ { false };
   int input_bridge_log_verbosity_ { 2 };
   std::vector<bindings::contracts::ScriptBindingPackPtr> binding_packs_;

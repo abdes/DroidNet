@@ -10,6 +10,7 @@
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/ImGui/Icons/OxygenIcons.h>
@@ -32,7 +33,7 @@ ImGuiModule::ImGuiModule(std::shared_ptr<Platform> platform,
 
 ImGuiModule::~ImGuiModule() { OnShutdown(); }
 
-auto ImGuiModule::OnAttached(const observer_ptr<AsyncEngine> engine) noexcept
+auto ImGuiModule::OnAttached(const observer_ptr<IAsyncEngine> engine) noexcept
   -> bool
 {
   DCHECK_NOTNULL_F(graphics_backend_);

@@ -153,7 +153,8 @@ public:
   {
     return MakeModuleMask<PhaseId::kInput>();
   }
-  auto OnAttached(oxygen::observer_ptr<oxygen::AsyncEngine> /*engine*/) noexcept
+  auto OnAttached(
+    oxygen::observer_ptr<oxygen::IAsyncEngine> /*engine*/) noexcept
     -> bool override
   {
     *external_state = 1;

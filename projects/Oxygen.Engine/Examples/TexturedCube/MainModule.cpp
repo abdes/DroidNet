@@ -18,10 +18,12 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Renderer/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Pipeline/CompositionView.h>
 #include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
 #include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/Scene/Camera/Perspective.h>
 
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Services/FileBrowserService.h"
@@ -29,7 +31,6 @@
 #include "DemoShell/Services/SkyboxService.h"
 #include "DemoShell/UI/DemoShellUi.h"
 #include "TexturedCube/MainModule.h"
-#include <Oxygen/Scene/Camera/Perspective.h>
 
 namespace oxygen::examples::textured_cube {
 
@@ -76,7 +77,7 @@ auto MainModule::ClearBackbufferReferences() -> void
   }
 }
 
-auto MainModule::OnAttachedImpl(observer_ptr<AsyncEngine> engine) noexcept
+auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   -> std::unique_ptr<DemoShell>
 {
   if (!engine) {

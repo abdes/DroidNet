@@ -27,7 +27,7 @@
 #include "DemoShell/UI/DemoPanel.h"
 
 namespace oxygen {
-class AsyncEngine;
+class IAsyncEngine;
 namespace engine {
   class FrameContext;
   class InputSystem;
@@ -45,7 +45,6 @@ namespace oxygen::examples {
 class SkyboxService;
 class CameraSettingsService;
 class ContentSettingsService;
-class RenderingPipeline;
 } // namespace oxygen::examples
 
 namespace oxygen::examples::ui {
@@ -93,7 +92,7 @@ struct DemoShellPanelConfig {
  @see DemoShell, DemoShell::Initialize
 */
 struct DemoShellConfig {
-  observer_ptr<AsyncEngine> engine { nullptr };
+  observer_ptr<IAsyncEngine> engine { nullptr };
   bool enable_camera_rig { true };
 
   ContentRootConfig content_roots {};

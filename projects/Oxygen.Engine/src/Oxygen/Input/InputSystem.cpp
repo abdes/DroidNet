@@ -59,7 +59,7 @@ InputSystem::InputSystem(co::ReaderContext<platform::InputEvent> input_reader)
   AddComponent<ObjectMetadata>("InputSystem");
 }
 
-auto InputSystem::OnAttached(observer_ptr<AsyncEngine> /*engine*/) noexcept
+auto InputSystem::OnAttached(observer_ptr<IAsyncEngine> /*engine*/) noexcept
   -> bool
 {
   // InputSystem is now ready for frame-based processing

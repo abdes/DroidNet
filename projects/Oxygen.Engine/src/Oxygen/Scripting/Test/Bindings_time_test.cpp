@@ -17,7 +17,7 @@ class TimeBindingsTest : public ScriptingModuleTest { };
 NOLINT_TEST_F(TimeBindingsTest, ExecuteScriptTimeBindingRequiresFrameContext)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -34,7 +34,7 @@ local _ = oxygen.time.delta_seconds()
 NOLINT_TEST_F(TimeBindingsTest, OnFrameStartTimeBindingUsesFrameContextValues)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(

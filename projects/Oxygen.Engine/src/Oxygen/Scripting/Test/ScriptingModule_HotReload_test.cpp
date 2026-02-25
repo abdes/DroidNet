@@ -45,7 +45,7 @@ namespace {
 
 struct TestContext {
   std::shared_ptr<oxygen::Platform> platform;
-  std::shared_ptr<oxygen::AsyncEngine> engine;
+  std::shared_ptr<oxygen::IAsyncEngine> engine;
   std::atomic<bool> running { false };
 };
 
@@ -238,7 +238,8 @@ NOLINT_TEST_F(ScriptingAdvancedTest, ScriptingModuleExecutesResolvedSource)
 
   constexpr oxygen::engine::ModulePriority kScriptingPriority { 450 };
   ScriptingModule module(kScriptingPriority);
-  ASSERT_TRUE(module.OnAttached(oxygen::observer_ptr { Ctx().engine.get() }));
+  ASSERT_TRUE(module.OnAttached(
+    oxygen::observer_ptr<oxygen::IAsyncEngine> { Ctx().engine.get() }));
 
   const auto execute_result = module.ExecuteScript(blob);
   EXPECT_TRUE(execute_result.ok) << execute_result.message;
@@ -250,7 +251,8 @@ NOLINT_TEST_F(ScriptingAdvancedTest, ScriptInstancesAreIsolated)
 {
   constexpr oxygen::engine::ModulePriority kScriptingPriority { 450 };
   ScriptingModule module(kScriptingPriority);
-  ASSERT_TRUE(module.OnAttached(oxygen::observer_ptr { Ctx().engine.get() }));
+  ASSERT_TRUE(module.OnAttached(
+    oxygen::observer_ptr<oxygen::IAsyncEngine> { Ctx().engine.get() }));
 
   // Source script: if 'counter' is nil, set it to 1. Else increment.
   // In an isolated world, running this twice returns 1 twice.

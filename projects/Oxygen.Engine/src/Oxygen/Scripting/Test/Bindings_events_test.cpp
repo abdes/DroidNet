@@ -13,7 +13,7 @@ class EventsBindingsTest : public ScriptingModuleTest { };
 NOLINT_TEST_F(EventsBindingsTest, EventsBindingOnOnceEmitAndStatsWork)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto setup_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(

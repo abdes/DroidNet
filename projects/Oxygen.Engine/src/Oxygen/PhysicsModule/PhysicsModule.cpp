@@ -535,7 +535,7 @@ auto PhysicsModule::ConsumeSceneEvents() -> std::vector<ScenePhysicsEvent>
   return drained;
 }
 
-auto PhysicsModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept
+auto PhysicsModule::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
   -> bool
 {
   engine_ = engine;

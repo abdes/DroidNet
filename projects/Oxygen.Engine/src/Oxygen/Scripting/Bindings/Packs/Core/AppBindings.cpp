@@ -8,18 +8,18 @@
 #include <lualib.h>
 
 #include <Oxygen/Config/EngineConfig.h>
-#include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/AppBindings.h>
 
 namespace oxygen::scripting::bindings {
 
 namespace {
-  auto RequireEngine(lua_State* state) -> observer_ptr<AsyncEngine>
+  auto RequireEngine(lua_State* state) -> observer_ptr<IAsyncEngine>
   {
     const auto engine = GetActiveEngine(state);
     if (engine == nullptr) {
-      (void)luaL_error(state, "oxygen.app requires active AsyncEngine");
+      (void)luaL_error(state, "oxygen.app requires active IAsyncEngine");
       return nullptr;
     }
     return engine;

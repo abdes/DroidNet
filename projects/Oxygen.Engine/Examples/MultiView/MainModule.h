@@ -24,7 +24,7 @@
 #include "MultiView/SceneBootstrapper.h"
 
 namespace oxygen {
-class AsyncEngine;
+class IAsyncEngine;
 class Graphics;
 namespace renderer {
   struct CompositionView;
@@ -96,7 +96,7 @@ public:
   }
 
   // EngineModule lifecycle
-  auto OnAttachedImpl(observer_ptr<AsyncEngine> engine) noexcept
+  auto OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
     -> std::unique_ptr<DemoShell> override;
   void OnShutdown() noexcept override;
 

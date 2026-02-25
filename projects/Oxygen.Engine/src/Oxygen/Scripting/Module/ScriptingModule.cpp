@@ -21,9 +21,7 @@
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Data/ScriptResource.h>
-#include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/Scripting/IScriptCompilationService.h>
-#include <Oxygen/Engine/Scripting/ScriptHotReloadService.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentAsyncBindings.h>
@@ -267,7 +265,7 @@ ScriptingModule::ScriptingModule(const engine::ModulePriority priority)
 
 ScriptingModule::~ScriptingModule() { OnShutdown(); }
 
-auto ScriptingModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept
+auto ScriptingModule::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
   -> bool
 {
   // TODO(engine-tests): Uncomment CHECK_NOTNULL_F(engine) after the test engine

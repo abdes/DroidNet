@@ -8,6 +8,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Data/ScriptAsset.h>
+#include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Scripting/ScriptingComponent.h>
 #include <Oxygen/Scripting/api_export.h>
@@ -16,8 +17,9 @@ struct lua_State;
 namespace oxygen::engine {
 class FrameContext;
 }
+
 namespace oxygen {
-class AsyncEngine;
+class IAsyncEngine;
 }
 
 namespace oxygen::scripting::bindings {
@@ -145,10 +147,10 @@ OXGN_SCRP_NDAPI auto GetActiveFrameContext(lua_State* state) noexcept
   -> observer_ptr<engine::FrameContext>;
 
 OXGN_SCRP_API auto SetActiveEngine(
-  lua_State* state, observer_ptr<AsyncEngine> engine) noexcept -> void;
+  lua_State* state, observer_ptr<IAsyncEngine> engine) noexcept -> void;
 
 OXGN_SCRP_NDAPI auto GetActiveEngine(lua_State* state) noexcept
-  -> observer_ptr<AsyncEngine>;
+  -> observer_ptr<IAsyncEngine>;
 
 OXGN_SCRP_NDAPI auto GetBindingContextFromScriptArg(
   lua_State* state, int arg_index = 1) noexcept -> LuaBindingContext*;

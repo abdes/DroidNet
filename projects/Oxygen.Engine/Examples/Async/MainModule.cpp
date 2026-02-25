@@ -29,6 +29,7 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -337,7 +338,7 @@ MainModule::MainModule(const DemoAppContext& app)
 }
 
 auto MainModule::OnAttachedImpl(
-  oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
+  oxygen::observer_ptr<oxygen::IAsyncEngine> engine) noexcept
   -> std::unique_ptr<DemoShell>
 {
   DCHECK_NOTNULL_F(engine);

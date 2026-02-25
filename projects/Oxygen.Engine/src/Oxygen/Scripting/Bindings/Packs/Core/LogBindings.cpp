@@ -13,7 +13,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Console/Console.h>
-#include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/LogBindings.h>
 
@@ -87,7 +87,7 @@ namespace {
     });
   }
 
-  auto DispatchToConsole(const observer_ptr<AsyncEngine> engine,
+  auto DispatchToConsole(const observer_ptr<IAsyncEngine> engine,
     std::string_view level, std::string_view message) -> void
   {
     if (engine == nullptr) {

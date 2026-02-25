@@ -84,7 +84,7 @@ if (!physics_opt) { return SoftFail; }
 PhysicsModule& physics = physics_opt->get();
 ```
 
-`AsyncEngine::GetModule<T>()` returns
+`IAsyncEngine::GetModule<T>()` returns
 `std::optional<std::reference_wrapper<T>>`. It returns an empty optional when
 the module is not registered. The binding must unwrap it via `.get()` before
 use. All binding functions that need physics must apply this pattern and

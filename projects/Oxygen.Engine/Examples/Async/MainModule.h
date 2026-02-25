@@ -103,7 +103,8 @@ public:
   //! Example-specific setup: scene, input, and animation.
 
   //! Module attachment (initialization).
-  auto OnAttachedImpl(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
+  auto OnAttachedImpl(
+    oxygen::observer_ptr<oxygen::IAsyncEngine> engine) noexcept
     -> std::unique_ptr<DemoShell> override;
 
   //! Shutdown cleanup.

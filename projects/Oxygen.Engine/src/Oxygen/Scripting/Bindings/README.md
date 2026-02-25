@@ -144,7 +144,7 @@ key `__oxgn_runtime_context` (tag: `kTagRuntimeContext`, metatable:
 `oxygen.scripting.runtime_context`). It holds:
 
 - `observer_ptr<engine::FrameContext>` — the active frame context
-- `observer_ptr<AsyncEngine>` — the active engine
+- `observer_ptr<IAsyncEngine>` — the active engine
 
 `ScriptingModule` calls `SetActiveEngine` once at engine-attach time and
 null-clears it at shutdown. The `FrameContext` pointer is **not** set

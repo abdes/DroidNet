@@ -40,7 +40,7 @@
 
 namespace oxygen {
 class Graphics;
-class AsyncEngine;
+class IAsyncEngine;
 }
 
 namespace oxygen::scene {
@@ -176,7 +176,7 @@ public:
     // kRender. Renderer participates in both via its module hooks.
   }
 
-  OXGN_RNDR_NDAPI auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept
+  OXGN_RNDR_NDAPI auto OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
     -> bool override;
   OXGN_RNDR_API auto RegisterConsoleBindings(
     observer_ptr<console::Console> console) noexcept -> void override;

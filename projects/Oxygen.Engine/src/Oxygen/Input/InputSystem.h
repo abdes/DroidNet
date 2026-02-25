@@ -19,6 +19,10 @@
 #include <Oxygen/OxCo/BroadcastChannel.h>
 #include <Oxygen/Platform/Platform.h>
 
+namespace oxygen {
+class IAsyncEngine;
+}
+
 namespace oxygen::input {
 class Action;
 class InputMappingContext;
@@ -63,7 +67,7 @@ public:
 
   void SetName(std::string_view name) noexcept override;
 
-  OXGN_NPUT_NDAPI auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept
+  OXGN_NPUT_NDAPI auto OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
     -> bool override;
   OXGN_NPUT_API auto RegisterConsoleBindings(
     observer_ptr<console::Console> console) noexcept -> void override;

@@ -16,6 +16,7 @@
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -66,7 +67,7 @@ using internal::ViewRenderPlan;
 
 class ForwardPipeline::Impl {
 public:
-  explicit Impl(observer_ptr<AsyncEngine> engine_ptr);
+  explicit Impl(observer_ptr<IAsyncEngine> engine_ptr);
   ~Impl() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(Impl)
@@ -174,7 +175,7 @@ private:
   void EnsureViewLifecycleService(engine::Renderer& renderer);
   void ApplyCommittedSettings(const PipelineSettings& settings);
 
-  observer_ptr<AsyncEngine> engine;
+  observer_ptr<IAsyncEngine> engine;
 
   std::unique_ptr<ViewLifecycleService> view_lifecycle_service;
   std::unique_ptr<FramePlanBuilder> frame_plan_builder;
@@ -778,7 +779,7 @@ void ForwardPipeline::Impl::EnsureViewLifecycleService(
     });
 }
 
-ForwardPipeline::Impl::Impl(observer_ptr<AsyncEngine> engine_ptr)
+ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
   : engine(engine_ptr)
   , frame_plan_builder(std::make_unique<FramePlanBuilder>())
   , composition_planner(observer_ptr { frame_plan_builder.get() })
@@ -1137,7 +1138,7 @@ auto ForwardPipeline::Impl::GetImGuiPass() const
   return imgui_pass;
 }
 
-ForwardPipeline::ForwardPipeline(observer_ptr<AsyncEngine> engine) noexcept
+ForwardPipeline::ForwardPipeline(observer_ptr<IAsyncEngine> engine) noexcept
   : impl_(std::make_unique<Impl>(engine))
 {
 }

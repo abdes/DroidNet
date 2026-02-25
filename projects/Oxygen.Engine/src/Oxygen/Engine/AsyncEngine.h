@@ -20,6 +20,7 @@
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Engine/ModuleManager.h>
 #include <Oxygen/Engine/api_export.h>
 #include <Oxygen/OxCo/Co.h>
@@ -55,7 +56,9 @@ class Platform;
 class Graphics;
 
 //! Async engine simulator orchestrating frame phases.
-class AsyncEngine final : public co::LiveObject, public Composition {
+class AsyncEngine final : public co::LiveObject,
+                          public Composition,
+                          public IAsyncEngine {
   OXYGEN_TYPED(AsyncEngine)
 public:
   OXGN_NGIN_API AsyncEngine(std::shared_ptr<Platform> platform,
@@ -95,7 +98,8 @@ public:
     return gfx_weak_;
   }
 
-  [[nodiscard]] auto GetGraphics() const noexcept -> std::weak_ptr<Graphics>
+  [[nodiscard]] auto GetGraphics() const noexcept
+    -> std::weak_ptr<Graphics> override
   {
     return gfx_weak_;
   }
@@ -145,23 +149,25 @@ public:
 
   OXGN_NGIN_API auto SubscribeModuleAttached(
     ::oxygen::engine::ModuleAttachedCallback cb, bool replay_existing = false)
-    -> ModuleSubscription;
+    -> ModuleSubscription override;
 
   //! Get current engine configuration
-  OXGN_NGIN_NDAPI auto GetEngineConfig() const noexcept -> const EngineConfig&;
+  OXGN_NGIN_NDAPI auto GetEngineConfig() const noexcept
+    -> const EngineConfig& override;
 
-  [[nodiscard]] auto GetPathFinder() const noexcept -> const PathFinder&
+  [[nodiscard]] auto GetPathFinder() const noexcept
+    -> const PathFinder& override
   {
     return path_finder_;
   }
 
   //! Access the optional AssetLoader service created during initialization.
   OXGN_NGIN_NDAPI auto GetAssetLoader() const noexcept
-    -> observer_ptr<content::IAssetLoader>;
+    -> observer_ptr<content::IAssetLoader> override;
   OXGN_NGIN_NDAPI auto GetScriptCompilationService() noexcept
-    -> scripting::IScriptCompilationService&;
+    -> scripting::IScriptCompilationService& override;
   OXGN_NGIN_NDAPI auto GetScriptCompilationService() const noexcept
-    -> const scripting::IScriptCompilationService&;
+    -> const scripting::IScriptCompilationService& override;
   OXGN_NGIN_NDAPI auto GetHotReloadService() noexcept
     -> observer_ptr<scripting::ScriptHotReloadService>;
 
@@ -187,8 +193,12 @@ public:
   OXGN_NGIN_NDAPI auto GetAuditClock() const noexcept
     -> const time::AuditClock&;
   OXGN_NGIN_NDAPI auto GetAuditClock() noexcept -> time::AuditClock&;
-  OXGN_NGIN_NDAPI auto GetConsole() noexcept -> console::Console&;
-  OXGN_NGIN_NDAPI auto GetConsole() const noexcept -> const console::Console&;
+  OXGN_NGIN_NDAPI auto GetConsole() noexcept -> console::Console& override;
+  OXGN_NGIN_NDAPI auto GetConsole() const noexcept
+    -> const console::Console& override;
+
+  OXGN_NGIN_NDAPI auto GetModuleByType(TypeId type_id) const noexcept
+    -> std::optional<std::reference_wrapper<engine::EngineModule>> override;
 
 private:
   auto Shutdown() -> co::Co<>;

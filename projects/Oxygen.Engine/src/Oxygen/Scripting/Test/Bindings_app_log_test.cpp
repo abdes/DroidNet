@@ -10,10 +10,10 @@ namespace oxygen::scripting::test {
 
 class AppLogBindingsTest : public ScriptingModuleTest { };
 
-NOLINT_TEST_F(AppLogBindingsTest, ExecuteScriptAppBindingRequiresAsyncEngine)
+NOLINT_TEST_F(AppLogBindingsTest, ExecuteScriptAppBindingRequiresIAsyncEngine)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -24,14 +24,14 @@ local _ = oxygen.app.name()
   EXPECT_FALSE(result.ok);
   EXPECT_EQ(result.stage, "runtime");
   EXPECT_NE(
-    result.message.find("requires active AsyncEngine"), std::string::npos);
+    result.message.find("requires active IAsyncEngine"), std::string::npos);
 }
 
 NOLINT_TEST_F(
-  AppLogBindingsTest, ExecuteScriptLogBindingWorksWithoutAsyncEngine)
+  AppLogBindingsTest, ExecuteScriptLogBindingWorksWithoutIAsyncEngine)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(

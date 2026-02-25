@@ -477,7 +477,7 @@ auto Renderer::ResetStats() noexcept -> void
   compositing_last_frame_ns_ = 0;
 }
 
-auto Renderer::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
+auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
 {
   DCHECK_NOTNULL_F(engine);
 

@@ -85,7 +85,7 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(MainModule);
   OXYGEN_MAKE_NON_MOVABLE(MainModule);
 
-  auto OnAttachedImpl(observer_ptr<AsyncEngine> engine) noexcept
+  auto OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
     -> std::unique_ptr<DemoShell> override;
   void OnShutdown() noexcept override;
 
