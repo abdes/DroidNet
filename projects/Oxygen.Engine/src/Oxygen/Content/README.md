@@ -58,6 +58,43 @@ This section is normative. "MUST" and "MUST NOT" are strict requirements.
     Release runtime assumes acyclicity is guaranteed by import/authoring validation and CI checks.
     References: `AssetLoader.cpp:4131-4156`, `AssetLoader.cpp:1569-1589`.
 
+## Non-Negotiable Runtime Invariants (Residency + Dedup Diagnostics)
+
+This section is normative. "MUST" and "MUST NOT" are strict requirements.
+
+1. Residency budget enforcement:
+   Content residency MUST be governed by explicit configurable budgets; unbounded default residency is forbidden for production runtime modes.
+   References: `AssetLoader.h:944`, `AnyCache.h:282-283`.
+
+2. Residency control API:
+   Public runtime surfaces MUST provide explicit residency control points (at minimum: budget configuration, pin/retain, unpin/release, and query/telemetry). Implicit checkout-only retention is insufficient.
+   References: `IAssetLoader.h:419`, `IAssetLoader.h:415-419`, `AnyCache.h:381`.
+
+3. Priority-aware scheduling:
+   Resource load orchestration MUST accept explicit priority/urgency metadata; key-only scheduling is forbidden for gameplay-critical paths.
+   References: `AssetLoader.cpp:853`, `ResourceLoadPipeline.h:35-47`.
+
+4. Automatic reclamation:
+   Residency maintenance MUST support automatic reclaim under budget pressure; manual-only trim operations are diagnostics/tools, not the primary control loop.
+   References: `AssetLoader.cpp:530-577`, `DependencyReleaseEngine.cpp:83-166`.
+
+5. Stable dedup identity by build configuration:
+   Release builds MUST always hash content for dedup identity, even if caller/options request hashing disabled. Release runtime/import paths MUST ignore disable-hashing flags.
+   Debug builds MAY allow non-hash fast paths for iteration speed, but MUST surface collision risk through diagnostics when weaker identity is used.
+   References: `BufferEmitter.cpp:21-46`, `TextureEmitter.cpp:76-84`.
+
+6. No silent dedup collisions:
+   When dedup falls back to weaker identity, collision risk MUST be surfaced through explicit import diagnostics.
+   References: `ResourceTableAggregator.h:155-182`, `TextureEmitter.cpp:199-208`, `BufferEmitter.cpp:77-90`.
+
+7. No silent record overwrite in cooked outputs:
+   Loose-cooked asset/file registration collisions MUST emit explicit diagnostics (and policy-driven behavior), never silent `insert_or_assign` replacement.
+   References: `LooseCookedWriter.cpp:302-303`, `LooseCookedWriter.cpp:320`, `LooseCookedWriter.cpp:430-435`.
+
+8. Deterministic diagnostics:
+   Packaging diagnostics MUST be deterministic and machine-readable (counts, keys, signatures, collision classes) to support CI quality gates.
+   References: `ResourceTableAggregator.h:201-209`, `LooseCookedWriter.cpp:430-435`.
+
 ## AssetLoader Decomposed Architecture
 
 `AssetLoader` is a facade and orchestration boundary. It MUST keep API, lifecycle, and delegation responsibilities only.
