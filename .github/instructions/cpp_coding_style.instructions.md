@@ -78,3 +78,28 @@ applyTo: '**/*.cpp;**/*.h'
 ## UNIT TEST WRITING RULES
 
 - Use rules from .github/instructions/TEST_INSTRUCTIONS.md when writing unit tests.
+
+## Collaboration Rules (Normative)
+
+This section is normative for all Content module remediation work in this repository.
+
+1. No shortcuts:
+   Tasks MUST be implemented in full scope. No scope downgrade, omission, or hack is allowed unless explicitly approved.
+
+2. Truthfulness and verification:
+   Progress and completion claims MUST be factual and verifiable. A task is complete only when objective acceptance criteria are met.
+
+3. Trackable execution:
+   Remediation plan task status MUST be kept current after each completed task.
+
+4. API correctness over guessing:
+   Runtime behavior MUST be implemented through explicit query/state APIs. Code MUST NOT infer loaded state through implicit assumptions.
+
+5. No regressions:
+   Enhancements MUST preserve existing validated behavior unless an intentional, approved behavior change is documented.
+
+6. Clean boundaries:
+   Engine runtime code MUST NOT depend on demo/example implementations.
+
+7. Search discipline:
+   Impact analysis MUST use `rg` with absolute paths and precise globbing patterns.
