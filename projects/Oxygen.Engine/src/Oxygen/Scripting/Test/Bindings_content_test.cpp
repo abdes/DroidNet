@@ -14,7 +14,7 @@ NOLINT_TEST_F(
   ContentBindingsTest, ExecuteScriptContentBindingsExposeV1AssetsModuleSurface)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -50,7 +50,7 @@ NOLINT_TEST_F(ContentBindingsTest,
   ExecuteScriptContentBindingsNoLoaderDeterministicDefaults)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -90,7 +90,7 @@ NOLINT_TEST_F(ContentBindingsTest,
   ExecuteScriptContentBindingsProceduralCreationAndUserdataSurfaceWorks)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -118,7 +118,7 @@ NOLINT_TEST_F(
   ContentBindingsTest, ExecuteScriptContentBindingsRejectLegacyAndBadGuidShape)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(

@@ -13,6 +13,7 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Surface.h>
@@ -43,7 +44,7 @@ MainModule::MainModule(
 }
 
 auto MainModule::OnAttachedImpl(
-  oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
+  oxygen::observer_ptr<oxygen::IAsyncEngine> engine) noexcept
   -> std::unique_ptr<DemoShell>
 {
   CHECK_F(static_cast<bool>(engine), "MultiView requires a valid engine");

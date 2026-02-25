@@ -337,10 +337,11 @@ NOLINT_TEST_F(
   auto gfx = loader.LoadBackend(graphics::BackendType::kHeadless,
     GraphicsConfig { .headless = true }, *pfc);
 
-  auto engine = std::make_shared<AsyncEngine>(platform, gfx, EngineConfig {});
+  std::shared_ptr<IAsyncEngine> engine
+    = std::make_shared<AsyncEngine>(platform, gfx, EngineConfig {});
 
   ScriptingModule module(engine::kScriptingModulePriority);
-  ASSERT_TRUE(module.OnAttached(observer_ptr { engine.get() }));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> { engine.get() }));
 
   const auto execute_result = module.ExecuteScript(blob);
   EXPECT_TRUE(execute_result.ok) << execute_result.message;

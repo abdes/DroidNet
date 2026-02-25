@@ -115,7 +115,7 @@ auto MainModule::BuildDefaultWindowProperties() const
   return props;
 }
 
-auto MainModule::OnAttachedImpl(observer_ptr<AsyncEngine> engine) noexcept
+auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   -> std::unique_ptr<DemoShell>
 {
   if (!engine) {

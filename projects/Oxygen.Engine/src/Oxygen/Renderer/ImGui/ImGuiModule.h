@@ -13,7 +13,6 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/EngineModule.h>
-#include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h>
 #include <Oxygen/Platform/Types.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -22,6 +21,7 @@ struct ImGuiContext;
 struct ImDrawData;
 
 namespace oxygen {
+class IAsyncEngine;
 namespace platform::imgui {
   class ImGuiSdl3Backend;
 }
@@ -70,7 +70,7 @@ public:
   }
 
   // Lifecycle
-  OXGN_RNDR_NDAPI auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept
+  OXGN_RNDR_NDAPI auto OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
     -> bool override;
 
   OXGN_RNDR_API auto OnShutdown() noexcept -> void override;

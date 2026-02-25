@@ -19,7 +19,7 @@
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen {
-class AsyncEngine;
+class IAsyncEngine;
 namespace console {
   class Console;
 } // namespace console
@@ -99,7 +99,8 @@ public:
    engine was successful, false otherwise. When false is returned, the
    module will be unregistered and will no longer be used.
   */
-  virtual auto OnAttached(observer_ptr<AsyncEngine> /*engine*/) noexcept -> bool
+  virtual auto OnAttached(observer_ptr<IAsyncEngine> /*engine*/) noexcept
+    -> bool
   {
     return true;
   }

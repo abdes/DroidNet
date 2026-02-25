@@ -13,7 +13,7 @@ class UuidHashBindingsTest : public ScriptingModuleTest { };
 NOLINT_TEST_F(UuidHashBindingsTest, ExecuteScriptUuidAndHashBindingsWork)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(

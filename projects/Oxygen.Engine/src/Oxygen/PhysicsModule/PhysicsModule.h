@@ -32,6 +32,10 @@
 #include <Oxygen/PhysicsModule/api_export.h>
 #include <Oxygen/Scene/Scene.h>
 
+namespace oxygen {
+class IAsyncEngine;
+}
+
 namespace oxygen::physics {
 namespace internal {
   struct ScenePhysicsTagFactory;
@@ -179,7 +183,7 @@ public:
   [[nodiscard]] auto GetSupportedPhases() const noexcept
     -> engine::ModulePhaseMask override;
 
-  OXGN_PHSYNC_API auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept
+  OXGN_PHSYNC_API auto OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
     -> bool override;
   OXGN_PHSYNC_API auto OnShutdown() noexcept -> void override;
 
@@ -350,7 +354,7 @@ private:
   auto DrainPhysicsEvents() -> void;
 
   engine::ModulePriority priority_;
-  observer_ptr<AsyncEngine> engine_;
+  observer_ptr<IAsyncEngine> engine_;
   observer_ptr<scene::Scene> observed_scene_;
   std::weak_ptr<scene::Scene> observed_scene_owner_ {};
   std::unique_ptr<system::IPhysicsSystem> physics_system_;

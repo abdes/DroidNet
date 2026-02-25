@@ -13,7 +13,7 @@
 #include <lua.h>
 #include <lualib.h>
 
-#include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/Shape.h>

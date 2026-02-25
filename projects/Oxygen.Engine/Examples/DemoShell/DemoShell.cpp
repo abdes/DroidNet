@@ -15,6 +15,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Engine/ModuleEvent.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>

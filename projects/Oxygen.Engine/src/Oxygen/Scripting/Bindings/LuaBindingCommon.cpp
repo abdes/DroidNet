@@ -35,7 +35,7 @@ namespace {
 
   struct LuaRuntimeContext {
     observer_ptr<engine::FrameContext> frame_context;
-    observer_ptr<AsyncEngine> engine;
+    observer_ptr<IAsyncEngine> engine;
   };
 
   void LuaRuntimeContextDtor(lua_State* /*state*/, void* p)
@@ -208,7 +208,7 @@ auto GetActiveFrameContext(lua_State* state) noexcept
 }
 
 auto SetActiveEngine(
-  lua_State* state, const observer_ptr<AsyncEngine> engine) noexcept -> void
+  lua_State* state, const observer_ptr<IAsyncEngine> engine) noexcept -> void
 {
   if (auto* runtime_context = EnsureRuntimeContext(state);
     runtime_context != nullptr) {
@@ -216,7 +216,7 @@ auto SetActiveEngine(
   }
 }
 
-auto GetActiveEngine(lua_State* state) noexcept -> observer_ptr<AsyncEngine>
+auto GetActiveEngine(lua_State* state) noexcept -> observer_ptr<IAsyncEngine>
 {
   const auto* runtime_context = FindRuntimeContext(state);
   if (runtime_context == nullptr) {

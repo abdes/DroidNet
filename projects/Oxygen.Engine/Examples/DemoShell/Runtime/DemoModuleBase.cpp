@@ -62,7 +62,7 @@ auto DemoModuleBase::BuildDefaultWindowProperties() const
   return p;
 }
 
-auto DemoModuleBase::OnAttached(observer_ptr<AsyncEngine> engine) noexcept
+auto DemoModuleBase::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
   -> bool
 {
   DCHECK_NOTNULL_F(engine);

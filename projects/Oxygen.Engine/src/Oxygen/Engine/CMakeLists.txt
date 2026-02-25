@@ -50,6 +50,7 @@ set(
   OXYGEN_ENGINE_HEADERS
   "api_export.h"
   "AsyncEngine.h"
+  "IAsyncEngine.h"
   "InputHandler.h"
   "ModuleEvent.h"
   "ModuleManager.h"

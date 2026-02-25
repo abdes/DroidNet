@@ -180,7 +180,7 @@ auto MainModule::ClearBackbufferReferences() -> void
 }
 
 auto MainModule::OnAttachedImpl(
-  oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
+  oxygen::observer_ptr<oxygen::IAsyncEngine> engine) noexcept
   -> std::unique_ptr<DemoShell>
 {
   DCHECK_NOTNULL_F(engine, "expecting a valid engine");
@@ -776,8 +776,7 @@ auto MainModule::InitializePhysicsScenario() -> bool
       Vec3 { 0.0F, 0.0F, 0.0F });
     desc.initial_rotation = node.GetTransform().GetLocalRotation().value_or(
       Quat { 1.0F, 0.0F, 0.0F, 0.0F });
-    desc.friction
-      = is_ramp_surface ? 0.14F : (is_sphere ? 0.80F : 0.88F);
+    desc.friction = is_ramp_surface ? 0.14F : (is_sphere ? 0.80F : 0.88F);
     desc.restitution = is_sphere ? 0.03F : 0.02F;
 
     if (!AttachRigidBody(node, desc)) {

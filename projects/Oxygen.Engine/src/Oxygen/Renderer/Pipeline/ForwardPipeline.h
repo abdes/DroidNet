@@ -15,7 +15,7 @@
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen {
-class AsyncEngine;
+class IAsyncEngine;
 } // namespace oxygen
 
 namespace oxygen::renderer {
@@ -41,7 +41,7 @@ class ForwardPipeline : public RenderingPipeline {
   OXYGEN_TYPED(ForwardPipeline)
 public:
   OXGN_RNDR_API explicit ForwardPipeline(
-    observer_ptr<AsyncEngine> engine) noexcept;
+    observer_ptr<IAsyncEngine> engine) noexcept;
   OXGN_RNDR_API ~ForwardPipeline() override;
 
   OXYGEN_MAKE_NON_COPYABLE(ForwardPipeline)

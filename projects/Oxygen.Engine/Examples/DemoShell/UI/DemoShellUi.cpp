@@ -15,6 +15,7 @@
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/ImGui/Console/CommandPalette.h>
 #include <Oxygen/ImGui/Console/ConsolePanel.h>
 #include <Oxygen/ImGui/Console/ConsoleUiState.h>
@@ -164,7 +165,7 @@ namespace {
 } // namespace
 
 struct DemoShellUi::Impl {
-  observer_ptr<AsyncEngine> engine;
+  observer_ptr<IAsyncEngine> engine;
   observer_ptr<PanelRegistry> panel_registry;
   observer_ptr<RenderingSettingsService> rendering_settings_service;
   observer_ptr<LightCullingSettingsService> light_culling_settings_service;
@@ -221,7 +222,7 @@ struct DemoShellUi::Impl {
   std::unique_ptr<GridVm> grid_vm;
   std::shared_ptr<GridPanel> grid_panel;
 
-  Impl(observer_ptr<AsyncEngine> engine_ptr,
+  Impl(observer_ptr<IAsyncEngine> engine_ptr,
     observer_ptr<PanelRegistry> registry,
     observer_ptr<UiSettingsService> ui_settings_service,
     observer_ptr<RenderingSettingsService> rendering_settings,
@@ -420,7 +421,7 @@ struct DemoShellUi::Impl {
   }
 };
 
-DemoShellUi::DemoShellUi(observer_ptr<AsyncEngine> engine,
+DemoShellUi::DemoShellUi(observer_ptr<IAsyncEngine> engine,
   observer_ptr<PanelRegistry> panel_registry,
   observer_ptr<UiSettingsService> ui_settings_service,
   observer_ptr<RenderingSettingsService> rendering_settings_service,

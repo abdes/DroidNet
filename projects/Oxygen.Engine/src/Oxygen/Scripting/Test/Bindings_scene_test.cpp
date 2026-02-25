@@ -34,7 +34,7 @@ NOLINT_TEST_F(
   SceneBindingsTest, ExecuteScriptSceneBindingsExposeV1SceneModuleSurface)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -66,7 +66,7 @@ NOLINT_TEST_F(
   SceneBindingsTest, ExecuteScriptSceneBindingsDoNotExportLegacySceneNames)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -103,7 +103,7 @@ NOLINT_TEST_F(SceneBindingsTest,
   OnSceneMutationSceneEnvironmentBindingsSupportSystemRoundtrip)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -170,7 +170,7 @@ end
 NOLINT_TEST_F(SceneBindingsTest, OnSceneMutationSceneNodeScriptingBindingsWork)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -231,7 +231,7 @@ NOLINT_TEST_F(SceneBindingsTest,
   OnSceneMutationSceneNodeScriptingRejectsTamperedSlotReference)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -285,7 +285,7 @@ NOLINT_TEST_F(SceneBindingsTest,
   OnSceneMutationSceneRenderableBindingsGeometryMaterialMarshallingWorks)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -353,7 +353,7 @@ NOLINT_TEST_F(SceneBindingsTest,
   OnSceneMutationSceneRenderableBindingsAcceptAssetsUserdataHandles)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -414,7 +414,7 @@ NOLINT_TEST_F(SceneBindingsTest,
   OnSceneMutationSceneRenderableBindingsRejectWrongAssetsUserdataKinds)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -474,7 +474,7 @@ NOLINT_TEST_F(SceneBindingsTest,
   OnSceneMutationSceneQueryUserdataReturnsDeterministicDefaultsAfterSceneExpiry)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -538,7 +538,7 @@ NOLINT_TEST_F(SceneBindingsTest,
   OnSceneMutationSceneComponentBindingsRejectInvalidArgumentShapes)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -601,7 +601,7 @@ NOLINT_TEST_F(SceneBindingsTest,
   OnSceneMutationSceneScenarioHierarchyQueryComponentsEnvironment)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -686,7 +686,7 @@ NOLINT_TEST_F(SceneBindingsTest,
   OnSceneMutationSceneNodeMetatableExposesRequiredComponentMethods)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -736,7 +736,7 @@ NOLINT_TEST_F(SceneBindingsTest,
   OnSceneMutationSceneQueryScopeAndClearScopeEdgeBehaviorWorks)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -791,7 +791,7 @@ NOLINT_TEST_F(SceneBindingsTest,
   OnSceneMutationSceneNodeHandlesFromExpiredSceneFailDeterministically)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<AsyncEngine> {}));
+  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(

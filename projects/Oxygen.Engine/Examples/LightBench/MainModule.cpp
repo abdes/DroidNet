@@ -63,7 +63,7 @@ auto MainModule::ClearBackbufferReferences() -> void
   }
 }
 
-auto MainModule::OnAttachedImpl(observer_ptr<AsyncEngine> engine) noexcept
+auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   -> std::unique_ptr<DemoShell>
 {
   DCHECK_NOTNULL_F(engine, "expecting a valid engine");

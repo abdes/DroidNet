@@ -321,6 +321,22 @@ auto AsyncEngine::GetHotReloadService() noexcept
   return observer_ptr { hot_reload_service_.get() };
 }
 
+auto AsyncEngine::GetModuleByType(const TypeId type_id) const noexcept
+  -> std::optional<std::reference_wrapper<engine::EngineModule>>
+{
+  if (!module_manager_) {
+    return std::nullopt;
+  }
+
+  for (auto& module : module_manager_->GetModules()) {
+    if (module.GetTypeId() == type_id) {
+      return std::ref(module);
+    }
+  }
+
+  return std::nullopt;
+}
+
 auto AsyncEngine::SetTargetFps(uint32_t fps) noexcept -> void
 {
   if (fps > EngineConfig::kMaxTargetFps) {

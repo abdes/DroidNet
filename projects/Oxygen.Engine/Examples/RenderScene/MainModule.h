@@ -27,7 +27,7 @@
 #include "DemoShell/UI/ContentVm.h"
 
 namespace oxygen {
-class AsyncEngine;
+class IAsyncEngine;
 namespace engine {
   class FrameContext;
 }
@@ -85,7 +85,8 @@ public:
   auto UpdateComposition(engine::FrameContext& context,
     std::vector<renderer::CompositionView>& views) -> void override;
 
-  auto OnAttachedImpl(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
+  auto OnAttachedImpl(
+    oxygen::observer_ptr<oxygen::IAsyncEngine> engine) noexcept
     -> std::unique_ptr<DemoShell> override;
   void OnShutdown() noexcept override;
 

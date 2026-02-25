@@ -22,7 +22,7 @@
 #include "DemoShell/Runtime/AppWindow.h"
 
 namespace oxygen {
-class AsyncEngine;
+class IAsyncEngine;
 namespace engine {
   class FrameContext;
 }
@@ -53,7 +53,7 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(DemoModuleBase)
   OXYGEN_MAKE_NON_MOVABLE(DemoModuleBase)
 
-  auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool final;
+  auto OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool final;
   auto OnShutdown() noexcept -> void override;
 
   auto OnFrameStart(observer_ptr<engine::FrameContext> context)
@@ -69,7 +69,7 @@ public:
 
 protected:
   //! Hook: derived demos create and configure the DemoShell instance.
-  virtual auto OnAttachedImpl(observer_ptr<AsyncEngine> engine) noexcept
+  virtual auto OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
     -> std::unique_ptr<DemoShell>
     = 0;
 

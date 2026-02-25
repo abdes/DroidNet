@@ -14,7 +14,7 @@
 #include <Oxygen/Base/Types/Geometry.h>
 
 namespace oxygen {
-class AsyncEngine;
+class IAsyncEngine;
 namespace engine {
   class FrameContext;
   struct ShaderPassConfig;
@@ -40,7 +40,6 @@ class ContentSettingsService;
 class EnvironmentSettingsService;
 class GridSettingsService;
 class FileBrowserService;
-class RenderingPipeline;
 struct DemoShellPanelConfig;
 
 namespace ui {
@@ -64,7 +63,7 @@ namespace ui {
   */
   class DemoShellUi {
   public:
-    DemoShellUi(observer_ptr<AsyncEngine> engine,
+    DemoShellUi(observer_ptr<IAsyncEngine> engine,
       observer_ptr<PanelRegistry> panel_registry,
       observer_ptr<UiSettingsService> ui_settings_service,
       observer_ptr<RenderingSettingsService> rendering_settings_service,
