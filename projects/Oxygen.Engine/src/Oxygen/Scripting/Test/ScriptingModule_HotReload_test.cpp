@@ -241,7 +241,20 @@ NOLINT_TEST_F(ScriptingAdvancedTest, ScriptingModuleExecutesResolvedSource)
   ASSERT_TRUE(module.OnAttached(
     oxygen::observer_ptr<oxygen::IAsyncEngine> { Ctx().engine.get() }));
 
-  const auto execute_result = module.ExecuteScript(blob);
+  std::string source_text;
+  {
+    const auto bytes = blob.BytesView();
+    source_text.reserve(bytes.size());
+    for (const auto byte : bytes) {
+      source_text.push_back(static_cast<char>(byte));
+    }
+  }
+  const auto execute_result
+    = module.ExecuteScript(oxygen::scripting::ScriptExecutionRequest {
+      .source_text = oxygen::scripting::ScriptSourceText { source_text },
+      .chunk_name
+      = oxygen::scripting::ScriptChunkName { blob.GetCanonicalName().get() },
+    });
   EXPECT_TRUE(execute_result.ok) << execute_result.message;
 }
 
@@ -267,8 +280,26 @@ NOLINT_TEST_F(ScriptingAdvancedTest, ScriptInstancesAreIsolated)
     oxygen::scripting::ScriptBlobCanonicalName { "isolation_test" });
 
   // ExecuteScript handles sandboxing for each call.
-  const auto result1 = module.ExecuteScript(blob);
-  const auto result2 = module.ExecuteScript(blob);
+  std::string source_text;
+  {
+    const auto bytes = blob.BytesView();
+    source_text.reserve(bytes.size());
+    for (const auto byte : bytes) {
+      source_text.push_back(static_cast<char>(byte));
+    }
+  }
+  const auto result1
+    = module.ExecuteScript(oxygen::scripting::ScriptExecutionRequest {
+      .source_text = oxygen::scripting::ScriptSourceText { source_text },
+      .chunk_name
+      = oxygen::scripting::ScriptChunkName { blob.GetCanonicalName().get() },
+    });
+  const auto result2
+    = module.ExecuteScript(oxygen::scripting::ScriptExecutionRequest {
+      .source_text = oxygen::scripting::ScriptSourceText { source_text },
+      .chunk_name
+      = oxygen::scripting::ScriptChunkName { blob.GetCanonicalName().get() },
+    });
 
   EXPECT_TRUE(result1.ok) << result1.message;
   EXPECT_TRUE(result2.ok) << result2.message;

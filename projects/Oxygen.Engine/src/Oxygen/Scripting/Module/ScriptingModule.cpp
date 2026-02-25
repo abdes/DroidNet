@@ -268,50 +268,47 @@ ScriptingModule::~ScriptingModule() { OnShutdown(); }
 auto ScriptingModule::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
   -> bool
 {
-  // TODO(engine-tests): Uncomment CHECK_NOTNULL_F(engine) after the test engine
-  // dummy is ready and scripting tests no longer attach with null engine.
-  // CHECK_NOTNULL_F(engine);
+  CHECK_NOTNULL_F(engine);
   engine_ = engine;
-  if (engine_ != nullptr) {
-    (void)engine_->GetScriptCompilationService().RegisterCompiler(
-      std::make_shared<LuauScriptCompiler>());
+  attached_ = true;
+  (void)engine_->GetScriptCompilationService().RegisterCompiler(
+    std::make_shared<LuauScriptCompiler>());
 
-    if (auto loader = engine_->GetAssetLoader()) {
-      script_reload_subscription_ = loader->SubscribeScriptReload(
-        [this](const data::AssetKey& key,
-          const std::shared_ptr<const data::ScriptResource>& resource) {
-          if (!resource) {
-            return;
+  if (auto loader = engine_->GetAssetLoader()) {
+    script_reload_subscription_ = loader->SubscribeScriptReload(
+      [this](const data::AssetKey& key,
+        const std::shared_ptr<const data::ScriptResource>& resource) {
+        if (!resource) {
+          return;
+        }
+
+        // Wrap data::ScriptResource into scripting::ScriptBytecodeBlob
+        const auto& data = resource->GetData();
+        std::vector<uint8_t> bytes(data.begin(), data.end());
+        auto bytecode = std::make_shared<const ScriptBytecodeBlob>(
+          ScriptBytecodeBlob::FromOwned(std::move(bytes),
+            resource->GetLanguage(), resource->GetCompression(),
+            resource->GetContentHash(), ScriptBlobOrigin::kExternalFile,
+            ScriptBlobCanonicalName { "hot-reload" }));
+
+        LOG_F(INFO, "applying hot-reload for asset {} (new_hash={})",
+          data::to_string(key), bytecode->ContentHash());
+
+        // Find all instances using this asset and update their executable
+        // bytecode. The next observer sync/update will detect executable
+        // change and rebuild runtimes.
+        for (auto& [slot_key, state] : slot_runtimes_) {
+          if (state.asset_key == key && state.executable
+            && slot_key.node_handle.IsValid()) {
+            // Downcast to CompiledScriptExecutable to update bytecode
+            // NOLINTNEXTLINE(*-static-cast-downcast)
+            auto* compiled = static_cast<CompiledScriptExecutable*>(
+              // NOLINTNEXTLINE(*-const-cast)
+              const_cast<ScriptExecutable*>(state.executable.get()));
+            compiled->UpdateBytecode(bytecode);
           }
-
-          // Wrap data::ScriptResource into scripting::ScriptBytecodeBlob
-          const auto& data = resource->GetData();
-          std::vector<uint8_t> bytes(data.begin(), data.end());
-          auto bytecode = std::make_shared<const ScriptBytecodeBlob>(
-            ScriptBytecodeBlob::FromOwned(std::move(bytes),
-              resource->GetLanguage(), resource->GetCompression(),
-              resource->GetContentHash(), ScriptBlobOrigin::kExternalFile,
-              ScriptBlobCanonicalName { "hot-reload" }));
-
-          LOG_F(INFO, "applying hot-reload for asset {} (new_hash={})",
-            data::to_string(key), bytecode->ContentHash());
-
-          // Find all instances using this asset and update their executable
-          // bytecode. The next observer sync/update will detect executable
-          // change and rebuild runtimes.
-          for (auto& [slot_key, state] : slot_runtimes_) {
-            if (state.asset_key == key && state.executable
-              && slot_key.node_handle.IsValid()) {
-              // Downcast to CompiledScriptExecutable to update bytecode
-              // NOLINTNEXTLINE(*-static-cast-downcast)
-              auto* compiled = static_cast<CompiledScriptExecutable*>(
-                // NOLINTNEXTLINE(*-const-cast)
-                const_cast<ScriptExecutable*>(state.executable.get()));
-              compiled->UpdateBytecode(bytecode);
-            }
-          }
-        });
-    }
+        }
+      });
   }
 
   lua_state_ = luaL_newstate();
@@ -345,9 +342,11 @@ auto ScriptingModule::OnShutdown() noexcept -> void
   }
   observed_scene_.reset();
 
-  if (engine_ != nullptr) {
+  if (attached_) {
+    DCHECK_NOTNULL_F(engine_);
     (void)engine_->GetScriptCompilationService().UnregisterCompiler(
       data::pak::ScriptLanguage::kLuau);
+    attached_ = false;
     engine_ = nullptr;
   }
 
@@ -412,12 +411,17 @@ auto ScriptingModule::RegisterConsoleBindings(
     .name = "scripting.reload_all",
     .help = "Manually trigger a full reload of all script assets",
     .handler = [this](const auto&, const auto&) -> console::ExecutionResult {
-      if (engine_) {
-        if (auto loader = engine_->GetAssetLoader()) {
-          loader->ReloadAllScripts();
-          return { .status = console::ExecutionStatus::kOk,
-            .output = "Reloading all scripts..." };
-        }
+      if (!attached_) {
+        return {
+          .status = console::ExecutionStatus::kError,
+          .error = "Engine not attached",
+        };
+      }
+      DCHECK_NOTNULL_F(engine_);
+      if (auto loader = engine_->GetAssetLoader()) {
+        loader->ReloadAllScripts();
+        return { .status = console::ExecutionStatus::kOk,
+          .output = "Reloading all scripts..." };
       }
       return {
         .status = console::ExecutionStatus::kError,
@@ -430,10 +434,11 @@ auto ScriptingModule::RegisterConsoleBindings(
     .name = "scripting.list_roots",
     .help = "List all registered script source roots",
     .handler = [this](const auto&, const auto&) -> console::ExecutionResult {
-      if (!engine_) {
+      if (!attached_) {
         return { .status = console::ExecutionStatus::kError,
-          .error = "Engine not available" };
+          .error = "Engine not attached" };
       }
+      DCHECK_NOTNULL_F(engine_);
       const auto roots = engine_->GetPathFinder().ScriptSourceRoots();
       std::string output = "Registered Script Source Roots:\n";
       for (const auto& root : roots) {
@@ -684,25 +689,6 @@ auto ScriptingModule::ExecuteScript(const ScriptExecutionRequest& request)
   }
 
   return OkResult();
-}
-
-auto ScriptingModule::ExecuteScript(const ScriptSourceBlob& blob)
-  -> ScriptExecutionResult
-{
-  if (blob.IsEmpty()) {
-    return ErrorResult("load", "script source blob is empty");
-  }
-
-  const auto bytes = blob.BytesView();
-  std::string source_text;
-  source_text.reserve(bytes.size());
-  for (const auto byte : bytes) {
-    source_text.push_back(static_cast<char>(byte));
-  }
-  return ExecuteScript(ScriptExecutionRequest {
-    .source_text = ScriptSourceText { source_text },
-    .chunk_name = ScriptChunkName { blob.GetCanonicalName().get() },
-  });
 }
 
 auto ScriptingModule::InitializeSandbox() -> ScriptExecutionResult

@@ -12,6 +12,7 @@
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
+#include <Oxygen/Scripting/Test/Fakes/FakeAsyncEngine.h>
 
 namespace oxygen::scripting::test {
 
@@ -31,6 +32,24 @@ protected:
   {
     return ScriptingModule { kDefaultTestPriority };
   }
+
+  auto AttachModule(ScriptingModule& module) -> bool
+  {
+    return module.OnAttached(observer_ptr<IAsyncEngine> { &fake_engine_ });
+  }
+
+  [[nodiscard]] auto FakeEngine() noexcept -> FakeAsyncEngine&
+  {
+    return fake_engine_;
+  }
+
+  [[nodiscard]] auto FakeEngine() const noexcept -> const FakeAsyncEngine&
+  {
+    return fake_engine_;
+  }
+
+private:
+  FakeAsyncEngine fake_engine_ {};
 };
 
 } // namespace oxygen::scripting::test

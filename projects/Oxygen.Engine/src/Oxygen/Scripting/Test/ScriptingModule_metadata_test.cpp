@@ -11,6 +11,7 @@ namespace oxygen::scripting::test {
 NOLINT_TEST_F(ScriptingModuleTest, MetadataIsStable)
 {
   auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
 
   EXPECT_EQ(module.GetName(), "ScriptingModule");
   EXPECT_EQ(module.GetPriority().get(), kDefaultTestPriority.get());
@@ -20,6 +21,7 @@ NOLINT_TEST_F(ScriptingModuleTest, PriorityIsInjectable)
 {
   constexpr auto kCustomPriority = engine::ModulePriority { 120U };
   ScriptingModule module { kCustomPriority };
+  ASSERT_TRUE(AttachModule(module));
 
   EXPECT_EQ(module.GetPriority().get(), kCustomPriority.get());
 }

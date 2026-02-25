@@ -12,6 +12,7 @@ NOLINT_TEST_F(
   ScriptingModuleTest, SupportedPhasesIncludeScriptingRelevantPhases)
 {
   auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
   const auto mask = module.GetSupportedPhases();
 
   EXPECT_NE(mask & MakePhaseMask(PhaseId::kFrameStart), 0U);

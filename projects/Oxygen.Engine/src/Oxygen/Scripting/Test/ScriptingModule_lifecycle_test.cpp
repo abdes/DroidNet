@@ -12,7 +12,7 @@ NOLINT_TEST_F(ScriptingModuleTest, AttachAndShutdownAreCallable)
 {
   auto module = MakeModule();
 
-  EXPECT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
+  EXPECT_TRUE(AttachModule(module));
   module.OnShutdown();
   module.OnShutdown();
 }
@@ -20,7 +20,7 @@ NOLINT_TEST_F(ScriptingModuleTest, AttachAndShutdownAreCallable)
 NOLINT_TEST_F(ScriptingModuleTest, PhaseHandlersAreInvocableAfterAttach)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
+  ASSERT_TRUE(AttachModule(module));
 
   module.OnFrameStart(observer_ptr<engine::FrameContext> {});
   auto fixed = module.OnFixedSimulation(observer_ptr<engine::FrameContext> {});
