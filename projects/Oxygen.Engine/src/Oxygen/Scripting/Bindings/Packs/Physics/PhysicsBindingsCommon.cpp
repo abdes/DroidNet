@@ -999,14 +999,21 @@ auto ParseBodyIdArray(lua_State* state, const int table_index)
 
 auto ParseBodyIdOrHandle(lua_State* state, const int index) -> physics::BodyId
 {
-  if (lua_isuserdata(state, index) == 0) {
-    luaL_argerror(state, index, "expected BodyId or BodyHandle userdata");
+  const auto raise_type_error = [&]() -> physics::BodyId {
+    if (index > 0) {
+      luaL_argerror(state, index, "expected BodyId or BodyHandle userdata");
+      return physics::kInvalidBodyId;
+    }
+    luaL_error(state, "expected BodyId or BodyHandle userdata");
     return physics::kInvalidBodyId;
+  };
+
+  if (lua_isuserdata(state, index) == 0) {
+    return raise_type_error();
   }
 
   if (lua_getmetatable(state, index) == 0) {
-    luaL_argerror(state, index, "expected BodyId or BodyHandle userdata");
-    return physics::kInvalidBodyId;
+    return raise_type_error();
   }
   const int mt_index = lua_gettop(state);
 
@@ -1029,8 +1036,7 @@ auto ParseBodyIdOrHandle(lua_State* state, const int index) -> physics::BodyId
   }
 
   lua_pop(state, 1);
-  luaL_argerror(state, index, "expected BodyId or BodyHandle userdata");
-  return physics::kInvalidBodyId;
+  return raise_type_error();
 }
 
 auto ParseBodyIdOrHandleArray(lua_State* state, const int table_index)

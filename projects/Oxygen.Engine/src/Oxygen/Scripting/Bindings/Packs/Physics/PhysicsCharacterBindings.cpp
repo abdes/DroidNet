@@ -251,7 +251,11 @@ namespace {
     // jump_pressed is optional; detect by checking if arg 3 is boolean.
     bool jump_pressed = false;
     int dt_arg_index = 3;
-    if (lua_gettop(state) >= 4 || lua_isboolean(state, 3) != 0) {
+    if (lua_gettop(state) >= 4) {
+      luaL_checktype(state, 3, LUA_TBOOLEAN);
+      jump_pressed = (lua_toboolean(state, 3) != 0);
+      dt_arg_index = 4;
+    } else if (lua_isboolean(state, 3) != 0) {
       jump_pressed = (lua_toboolean(state, 3) != 0);
       dt_arg_index = 4;
     }

@@ -147,4 +147,42 @@ end
   EXPECT_TRUE(result.ok) << result.message;
 }
 
+NOLINT_TEST_F(ContentBindingsTest,
+  ExecuteScriptContentBindingsProceduralRejectsInvalidOptionShapes)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+
+  const auto result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+local assets = oxygen.assets
+
+local ok_type, _ = pcall(function()
+  assets.create_procedural_geometry("sphere", { latitude_segments = "bad" })
+end)
+if ok_type then
+  error("sphere.latitude_segments should reject non-numeric type")
+end
+
+local ok_integral, _ = pcall(function()
+  assets.create_procedural_geometry("sphere", { longitude_segments = 4.5 })
+end)
+if ok_integral then
+  error("sphere.longitude_segments should reject non-integer number")
+end
+
+local ok_finite, _ = pcall(function()
+  assets.create_procedural_geometry("plane", { size = math.huge })
+end)
+if ok_finite then
+  error("plane.size should reject non-finite number")
+end
+)lua" },
+    .chunk_name
+    = ScriptChunkName { "content_bindings_procedural_option_shapes" },
+  });
+
+  EXPECT_TRUE(result.ok) << result.message;
+}
+
 } // namespace oxygen::scripting::test

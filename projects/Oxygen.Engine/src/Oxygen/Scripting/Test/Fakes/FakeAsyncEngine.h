@@ -69,6 +69,8 @@ public:
     return config_;
   }
 
+  auto MutableConfig() noexcept -> ::oxygen::EngineConfig& { return config_; }
+
   auto GetConsole() noexcept -> ::oxygen::console::Console& override
   {
     return console_;

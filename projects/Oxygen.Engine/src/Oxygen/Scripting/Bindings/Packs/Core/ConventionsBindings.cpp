@@ -15,13 +15,7 @@ namespace oxygen::scripting::bindings {
 namespace {
   auto PushVec3(lua_State* state, const Vec3& value) -> void
   {
-    lua_newtable(state);
-    lua_pushnumber(state, value.x);
-    lua_setfield(state, -2, "x");
-    lua_pushnumber(state, value.y);
-    lua_setfield(state, -2, "y");
-    lua_pushnumber(state, value.z);
-    lua_setfield(state, -2, "z");
+    lua_pushvector(state, value.x, value.y, value.z);
   }
 } // namespace
 

@@ -161,37 +161,26 @@ namespace {
 
   auto LuaUuidToString(lua_State* state) -> int
   {
-    // ARG 1 can be Userdata OR String (for compatibility/validation helper)
     if (auto* u = ToUuid(state, kLuaArg1); u != nullptr) {
       std::string s = BytesToUuidString(u->bytes);
       lua_pushlstring(state, s.c_str(), s.size());
       return 1;
     }
-
-    // Check if it's already a string, validate it
-    size_t len = 0;
-    const char* str = lua_tolstring(state, kLuaArg1, &len);
-    if (str != nullptr) {
-      UuidBytes bytes;
-      if (ParseUuidString(std::string_view(str, len), bytes)) {
-        // Normalize it
-        std::string s = BytesToUuidString(bytes);
-        lua_pushlstring(state, s.c_str(), s.size());
-        return 1;
-      }
-    }
-
-    luaL_error(
-      state, "uuid.to_string expects uuid userdata or valid uuid string");
+    luaL_error(state, "uuid.to_string expects uuid userdata");
     return 0;
   }
 
   auto LuaUuidFromString(lua_State* state) -> int
   {
+    if (lua_type(state, kLuaArg1) != LUA_TSTRING) {
+      luaL_argerror(state, kLuaArg1, "uuid string expected");
+      return 0;
+    }
     size_t len = 0;
     const char* str = lua_tolstring(state, kLuaArg1, &len);
     if (str == nullptr) {
-      return 0; // or error
+      luaL_argerror(state, kLuaArg1, "uuid string expected");
+      return 0;
     }
 
     UuidBytes bytes;
@@ -200,8 +189,8 @@ namespace {
       return 1;
     }
 
-    // Return nil on failure?
-    return 0;
+    lua_pushnil(state);
+    return 1;
   }
 
   auto LuaUuidIsValid(lua_State* state) -> int
@@ -250,11 +239,16 @@ namespace {
       }
     }
     if (lua_isnumber(state, index) != 0) {
-      return static_cast<std::uint64_t>(
-        lua_tonumber(state, index)); // Precision loss warning?
+      const lua_Number number_value = lua_tonumber(state, index);
+      const lua_Integer integer_value = lua_tointeger(state, index);
+      if (static_cast<lua_Number>(integer_value) == number_value) {
+        return static_cast<std::uint64_t>(integer_value);
+      }
+      luaL_argerror(
+        state, index, "hash integer, hash userdata, or string expected");
+      return 0;
     }
     if (lua_isstring(state, index) != 0) {
-      // Auto-hash string?
       size_t len = 0;
       const char* s = lua_tolstring(state, index, &len);
       if (s != nullptr) {
@@ -267,26 +261,25 @@ namespace {
 
   auto LuaHash64(lua_State* state) -> int
   {
-    // Args: string -> hash userdata
+    if (lua_type(state, kLuaArg1) != LUA_TSTRING) {
+      luaL_argerror(state, kLuaArg1, "string expected");
+      return 0;
+    }
     size_t len = 0;
     const char* s = lua_tolstring(state, kLuaArg1, &len);
     if (s != nullptr) {
       PushHash(state, ComputeFNV1a64(s, len));
       return 1;
     }
+    luaL_argerror(state, kLuaArg1, "string expected");
     return 0;
   }
 
   auto LuaHashCombine64(lua_State* state) -> int
   {
-    // Args: seed (hash/int), value (hash/int) -> hash userdata
     std::uint64_t seed = CheckHash(state, 1);
     std::uint64_t value = CheckHash(state, 2);
 
-    // HashCombine modifies seed
-    // Using Oxygen/Base/Hash.h implementation pattern?
-    // HashCombine(seed, value) usually: seed ^= value + 0x9e3779b9 + (seed<<6)
-    // + (seed>>2); Assuming HashCombine matches strictly.
     HashCombine(seed, value);
 
     PushHash(state, seed);

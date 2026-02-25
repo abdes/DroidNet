@@ -46,6 +46,9 @@ local function current_shape()
 end
 
 local function request_material_once(guid, on_ready)
+  if type(assets.load_material_async) ~= "function" then
+    return
+  end
   if type(guid) ~= "string" or #guid == 0 then
     return
   end
@@ -100,6 +103,10 @@ local function resolve_host_node(ctx, allow_lock)
 end
 
 local function apply_shape(node)
+  if type(assets.create_procedural_geometry) ~= "function" then
+    log.error("showcase: create_procedural_geometry not available")
+    return false
+  end
   local geometry = assets.create_procedural_geometry(current_shape())
   if geometry == nil then
     log.error("showcase: failed to create geometry for " .. current_shape())
@@ -213,6 +220,20 @@ local function wire_input_once()
   input_wired = true
 end
 
+local function assets_available()
+  if type(assets.available) ~= "function" then
+    return false
+  end
+  return assets.available()
+end
+
+local function assets_enabled()
+  if type(assets.enabled) ~= "function" then
+    return false
+  end
+  return assets.enabled()
+end
+
 function script.on_gameplay(ctx, dt_seconds)
   if not valid(node_ref) then
     host_runtime_id = nil
@@ -238,9 +259,9 @@ function script.on_gameplay(ctx, dt_seconds)
 
   if not boot_logged then
     log.info("showcase boot: assets.available="
-      .. tostring(assets.available())
+      .. tostring(assets_available())
       .. " assets.enabled="
-      .. tostring(assets.enabled()))
+      .. tostring(assets_enabled()))
     boot_logged = true
   end
 

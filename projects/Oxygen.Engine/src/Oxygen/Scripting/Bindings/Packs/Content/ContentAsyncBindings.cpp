@@ -18,6 +18,50 @@
 namespace oxygen::scripting::bindings {
 
 namespace {
+  constexpr int kLuaMessageIndex = 1;
+  constexpr int kLuaCallbackArgCount = 1;
+  constexpr int kLuaNoResults = 0;
+  constexpr const char* kLuaTracebackFnName = "AssetsTraceback";
+
+  class ScopedLuaStackTop final {
+  public:
+    explicit ScopedLuaStackTop(lua_State* state, const char* context) noexcept
+      : state_(state)
+      , top_(state != nullptr ? lua_gettop(state) : 0)
+      , context_(context)
+    {
+    }
+
+    ~ScopedLuaStackTop()
+    {
+      if (state_ != nullptr) {
+        const int current_top = lua_gettop(state_);
+        CHECK_F(current_top == top_,
+          "lua stack imbalance in {}: entry_top={} exit_top={}", context_, top_,
+          current_top);
+      }
+    }
+
+  private:
+    lua_State* state_ { nullptr };
+    int top_ { 0 };
+    const char* context_ { "assets callback" };
+  };
+
+  auto LuaTraceback(lua_State* state) -> int
+  {
+    const auto* message = lua_tostring(state, kLuaMessageIndex);
+    luaL_traceback(state, state, message, kLuaMessageIndex);
+    return kLuaMessageIndex;
+  }
+
+  auto LuaErrorText(lua_State* state, const int index) -> const char*
+  {
+    if (const auto* message = lua_tostring(state, index); message != nullptr) {
+      return message;
+    }
+    return "unknown lua error";
+  }
 
   auto GetScriptingModule(lua_State* state) -> ScriptingModule*
   {
@@ -37,9 +81,13 @@ namespace {
     std::shared_ptr<const data::TextureResource> texture,
     std::shared_ptr<const data::BufferResource> buffer) -> void
   {
+    ScopedLuaStackTop stack_guard(state, "assets resource callback");
+    lua_pushcfunction(state, LuaTraceback, kLuaTracebackFnName);
+    const int traceback_index = lua_gettop(state);
+
     lua_getref(state, callback_ref);
     if (lua_isfunction(state, -1) == 0) {
-      lua_pop(state, 1);
+      lua_pop(state, 2);
       LOG_F(ERROR, "oxygen.assets callback ref is not callable");
       return;
     }
@@ -52,12 +100,16 @@ namespace {
       lua_pushnil(state);
     }
 
-    if (lua_pcall(state, 1, 0, 0) != LUA_OK) {
-      const auto* err = lua_tostring(state, -1);
-      LOG_F(ERROR, "oxygen.assets callback failed: {}",
-        err == nullptr ? "unknown error" : err);
+    const int call_status
+      = lua_pcall(state, kLuaCallbackArgCount, kLuaNoResults, traceback_index);
+    CHECK_F(call_status != LUA_ERRERR,
+      "lua_pcall returned LUA_ERRERR in assets resource callback");
+    if (call_status != LUA_OK) {
+      LOG_F(
+        ERROR, "oxygen.assets callback failed: {}", LuaErrorText(state, -1));
       lua_pop(state, 1);
     }
+    lua_remove(state, traceback_index);
   }
 
   auto CallLuaAssetCallback(lua_State* state, const int callback_ref,
@@ -68,9 +120,13 @@ namespace {
     std::shared_ptr<const data::InputMappingContextAsset> input_mapping_context)
     -> void
   {
+    ScopedLuaStackTop stack_guard(state, "assets asset callback");
+    lua_pushcfunction(state, LuaTraceback, kLuaTracebackFnName);
+    const int traceback_index = lua_gettop(state);
+
     lua_getref(state, callback_ref);
     if (lua_isfunction(state, -1) == 0) {
-      lua_pop(state, 1);
+      lua_pop(state, 2);
       LOG_F(ERROR, "oxygen.assets callback ref is not callable");
       return;
     }
@@ -90,12 +146,16 @@ namespace {
       lua_pushnil(state);
     }
 
-    if (lua_pcall(state, 1, 0, 0) != LUA_OK) {
-      const auto* err = lua_tostring(state, -1);
-      LOG_F(ERROR, "oxygen.assets callback failed: {}",
-        err == nullptr ? "unknown error" : err);
+    const int call_status
+      = lua_pcall(state, kLuaCallbackArgCount, kLuaNoResults, traceback_index);
+    CHECK_F(call_status != LUA_ERRERR,
+      "lua_pcall returned LUA_ERRERR in assets asset callback");
+    if (call_status != LUA_OK) {
+      LOG_F(
+        ERROR, "oxygen.assets callback failed: {}", LuaErrorText(state, -1));
       lua_pop(state, 1);
     }
+    lua_remove(state, traceback_index);
   }
 
   auto RequireCallbackRef(lua_State* state, const int arg_index) -> int

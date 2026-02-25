@@ -34,6 +34,8 @@ namespace {
     case physics::events::PhysicsEventType::kTriggerEnd:
       return "physics.trigger_end";
     }
+    CHECK_F(false, "unsupported physics event type value: {}",
+      static_cast<int>(type));
     return "physics.contact_begin";
   }
 

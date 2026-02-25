@@ -466,8 +466,9 @@ namespace {
     }
     Vec3 velocity {};
     if (!TryCheckVec3(state, 2, velocity)) {
-      lua_pushboolean(state, 0);
-      return 1;
+      luaL_error(
+        state, "physics.body_handle.set_linear_velocity expects vec3 velocity");
+      return 0;
     }
     auto* physics_module = GetPhysicsModule(state);
     if (physics_module == nullptr) {
@@ -494,8 +495,9 @@ namespace {
     }
     Vec3 velocity {};
     if (!TryCheckVec3(state, 2, velocity)) {
-      lua_pushboolean(state, 0);
-      return 1;
+      luaL_error(state,
+        "physics.body_handle.set_angular_velocity expects vec3 velocity");
+      return 0;
     }
     auto* physics_module = GetPhysicsModule(state);
     if (physics_module == nullptr) {
@@ -522,8 +524,8 @@ namespace {
     }
     Vec3 force {};
     if (!TryCheckVec3(state, 2, force)) {
-      lua_pushboolean(state, 0);
-      return 1;
+      luaL_error(state, "physics.body_handle.add_force expects vec3 force");
+      return 0;
     }
     auto* physics_module = GetPhysicsModule(state);
     if (physics_module == nullptr) {
@@ -550,8 +552,8 @@ namespace {
     }
     Vec3 impulse {};
     if (!TryCheckVec3(state, 2, impulse)) {
-      lua_pushboolean(state, 0);
-      return 1;
+      luaL_error(state, "physics.body_handle.add_impulse expects vec3 impulse");
+      return 0;
     }
     auto* physics_module = GetPhysicsModule(state);
     if (physics_module == nullptr) {
@@ -578,8 +580,8 @@ namespace {
     }
     Vec3 torque {};
     if (!TryCheckVec3(state, 2, torque)) {
-      lua_pushboolean(state, 0);
-      return 1;
+      luaL_error(state, "physics.body_handle.add_torque expects vec3 torque");
+      return 0;
     }
     auto* physics_module = GetPhysicsModule(state);
     if (physics_module == nullptr) {
@@ -612,13 +614,15 @@ namespace {
 
     Vec3 target_pos {};
     if (!TryCheckVec3(state, 2, target_pos)) {
-      lua_pushboolean(state, 0);
-      return 1;
+      luaL_error(
+        state, "physics.body_handle.move_kinematic expects vec3 target_pos");
+      return 0;
     }
     const auto* target_rot = TryCheckQuat(state, 3);
     if (target_rot == nullptr) {
-      lua_pushboolean(state, 0);
-      return 1;
+      luaL_error(
+        state, "physics.body_handle.move_kinematic expects quat target_rot");
+      return 0;
     }
     const auto dt = static_cast<float>(luaL_checknumber(state, 4));
     if (!std::isfinite(dt) || dt <= 0.0F) {
@@ -658,15 +662,17 @@ namespace {
     Quat local_rotation { 1.0F, 0.0F, 0.0F, 0.0F };
     if (lua_isnoneornil(state, 3) == 0) {
       if (!TryCheckVec3(state, 3, local_position)) {
-        lua_pushnil(state);
-        return 1;
+        luaL_error(
+          state, "physics.body_handle.add_shape local_position must be vec3");
+        return 0;
       }
     }
     if (lua_isnoneornil(state, 4) == 0) {
       const auto* q = TryCheckQuat(state, 4);
       if (q == nullptr) {
-        lua_pushnil(state);
-        return 1;
+        luaL_error(
+          state, "physics.body_handle.add_shape local_rotation must be quat");
+        return 0;
       }
       local_rotation = Quat { q->w, q->x, q->y, q->z };
     }
