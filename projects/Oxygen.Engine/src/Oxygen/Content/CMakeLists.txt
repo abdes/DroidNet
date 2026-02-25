@@ -56,7 +56,6 @@ set(
   "PakFile.h"
   "AssetLoader.h"
   "Constants.h"
-  "EngineTag.h"
   "EvictionEvents.h"
   "VirtualPathResolver.h"
   "LooseCooked/Errors.h"

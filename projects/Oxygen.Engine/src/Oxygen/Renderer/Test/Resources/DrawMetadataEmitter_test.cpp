@@ -32,8 +32,6 @@
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/Upload/UploaderTag.h>
 
-#ifdef OXYGEN_ENGINE_TESTING
-
 namespace oxygen::engine::upload::internal {
 auto UploaderTagFactory::Get() noexcept -> UploaderTag
 {
@@ -47,8 +45,6 @@ auto RendererTagFactory::Get() noexcept -> RendererTag
   return RendererTag {};
 }
 } // namespace oxygen::renderer::internal
-
-#endif // OXYGEN_ENGINE_TESTING
 
 namespace {
 
@@ -257,7 +253,8 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
     = reinterpret_cast<const oxygen::engine::DrawMetadata*>(bytes.data());
   ASSERT_NE(draws, nullptr);
 
-  // Sorting keys are equal for both draws; order should remain the emit order.
+  // Sorting keys are equal for both draws; order should remain the emit
+  // order.
   EXPECT_EQ(draws[0].first_index, 0U);
   EXPECT_EQ(draws[1].first_index, 3U);
 }

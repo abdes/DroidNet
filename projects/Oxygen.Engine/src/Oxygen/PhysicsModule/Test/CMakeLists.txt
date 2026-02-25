@@ -40,8 +40,3 @@ m_gtest_program(
     "Fakes/FakeWorldApi.h"
     "PhysicsModule_sync_test.cpp"
 )
-target_compile_definitions(
-  Oxygen.PhysicsModule.Sync.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
-)

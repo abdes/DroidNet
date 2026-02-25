@@ -31,8 +31,8 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Content/AssetLoader.h>
-#include <Oxygen/Content/EngineTag.h>
 #include <Oxygen/Content/LooseCooked/Inspection.h>
+#include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -43,11 +43,11 @@
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
 
-namespace oxygen::content::internal {
-
-auto EngineTagFactory::Get() noexcept -> EngineTag { return EngineTag {}; }
-
-} // namespace oxygen::content::internal
+namespace oxygen::engine::internal {
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
+} // namespace oxygen::engine::internal
 
 namespace {
 

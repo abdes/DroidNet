@@ -11,19 +11,19 @@
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/AssetLoader.h>
-#include <Oxygen/Content/EngineTag.h>
 #include <Oxygen/Content/ResourceTypeList.h>
+#include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Data/AssetType.h>
 
 class DummyAsset : public oxygen::Object {
   OXYGEN_TYPED(DummyAsset)
 };
 
-namespace oxygen::content::internal {
-
-auto EngineTagFactory::Get() noexcept -> EngineTag { return EngineTag {}; }
-
-} // namespace oxygen::content::internal
+namespace oxygen::engine::internal {
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
+} // namespace oxygen::engine::internal
 
 namespace {
 
@@ -44,7 +44,7 @@ auto TouchLoadResourceAsyncInstantiations(oxygen::TypeList<Ts...>) -> void
 
 auto main(int /*argc*/, char** /*argv*/) -> int
 {
-  using oxygen::content::internal::EngineTagFactory;
+  using oxygen::engine::internal::EngineTagFactory;
   using enum oxygen::data::AssetType;
 
   oxygen::content::AssetLoader loader(EngineTagFactory::Get());

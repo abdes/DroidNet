@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -25,6 +26,23 @@
 #include <Oxygen/Core/CachePolicyContract.h>
 
 namespace oxygen {
+
+enum class CheckoutOwner : uint8_t {
+  kInternal = 0,
+  kExternal = 1,
+};
+
+[[nodiscard]] constexpr auto to_string(const CheckoutOwner owner) noexcept
+  -> const char*
+{
+  switch (owner) {
+  case CheckoutOwner::kInternal:
+    return "internal";
+  case CheckoutOwner::kExternal:
+    return "external";
+  }
+  return "__Unknown__";
+}
 
 //! Concept for cache value types: only allows std::shared_ptr<T> where T :
 //! IsTyped
@@ -113,6 +131,10 @@ public:
     CostType budget { 0 };
     CostType consumed { 0 };
     std::size_t checked_out_items { 0 };
+    std::size_t checked_out_internal { 0 };
+    std::size_t checked_out_external { 0 };
+    std::size_t pinned_internal { 0 };
+    std::size_t pinned_external { 0 };
     std::size_t total_checkouts { 0 };
     bool over_budget { false };
   };
@@ -245,12 +267,21 @@ public:
 
     @see CheckIn, Peek
   */
-  template <IsTyped V> auto CheckOut(const KeyType& key) -> std::shared_ptr<V>
+  template <IsTyped V>
+  auto CheckOut(const KeyType& key, const CheckoutOwner owner)
+    -> std::shared_ptr<V>
   {
     std::unique_lock lock(mutex_);
     auto it = map_.find(key);
     if (it != map_.end()) {
       eviction_.CheckOut(it->second);
+      auto& owner_counts = owner_counts_[key];
+      if (owner == CheckoutOwner::kInternal) {
+        ++owner_counts.checkout_internal;
+      } else {
+        ++owner_counts.checkout_external;
+      }
+      LOG_F(1, "AnyCache::CheckOut owner={} hit=true", to_string(owner));
       TypeId stored_type = eviction_.TypeOf(it->second);
       if constexpr (requires { V::ClassTypeId(); }) {
         if (stored_type == V::ClassTypeId()) {
@@ -258,6 +289,7 @@ public:
         }
       }
     }
+    LOG_F(1, "AnyCache::CheckOut owner={} hit=false", to_string(owner));
     return {};
   }
 
@@ -268,20 +300,31 @@ public:
    retrieving it. This is similar to touching a file to update its stats without
    actually accessing its contents.
   */
-  auto Touch(const KeyType& key) -> void { static_cast<void>(Pin(key)); }
+  auto Touch(const KeyType& key, const CheckoutOwner owner) -> void
+  {
+    static_cast<void>(Pin(key, owner));
+  }
 
   //! Mark an item as resident/in-use without retrieving it.
   /*!
     @return true if the key exists and was pinned, false otherwise.
   */
-  auto Pin(const KeyType& key) -> bool
+  auto Pin(const KeyType& key, const CheckoutOwner owner) -> bool
   {
     std::unique_lock lock(mutex_);
     auto it = map_.find(key);
     if (it != map_.end()) {
       eviction_.CheckOut(it->second);
+      auto& owner_counts = owner_counts_[key];
+      if (owner == CheckoutOwner::kInternal) {
+        ++owner_counts.pin_internal;
+      } else {
+        ++owner_counts.pin_external;
+      }
+      LOG_F(1, "AnyCache::Pin owner={} hit=true", to_string(owner));
       return true;
     }
+    LOG_F(1, "AnyCache::Pin owner={} hit=false", to_string(owner));
     return false;
   }
 
@@ -316,10 +359,31 @@ public:
     std::unique_lock lock(mutex_);
     auto it = map_.find(key);
     if (it != map_.end()) {
+      if (auto owner_it = owner_counts_.find(key);
+        owner_it != owner_counts_.end()) {
+        auto& counts = owner_it->second;
+        if (counts.checkout_external > 0U) {
+          --counts.checkout_external;
+        } else if (counts.checkout_internal > 0U) {
+          --counts.checkout_internal;
+        } else if (counts.pin_external > 0U) {
+          --counts.pin_external;
+        } else if (counts.pin_internal > 0U) {
+          --counts.pin_internal;
+        }
+        if (counts.checkout_internal == 0U && counts.checkout_external == 0U
+          && counts.pin_internal == 0U && counts.pin_external == 0U) {
+          owner_counts_.erase(owner_it);
+        }
+      }
       evicted_entry = eviction_.CheckIn(it->second);
       if (evicted_entry.has_value()) {
         map_.erase(it);
+        owner_counts_.erase(key);
       }
+      LOG_F(1, "AnyCache::CheckIn hit=true");
+    } else {
+      LOG_F(1, "AnyCache::CheckIn hit=false");
     }
     lock.unlock();
     if (on_eviction_ && evicted_entry.has_value()) {
@@ -340,15 +404,36 @@ public:
     std::unique_lock lock(mutex_);
     auto it = map_.find(key);
     if (it == map_.end()) {
+      LOG_F(1, "AnyCache::Unpin hit=false released=false");
       return false;
     }
     if (eviction_.RefCountOf(it->second) == 0) {
+      LOG_F(1, "AnyCache::Unpin hit=true released=false");
       return false;
+    }
+    if (auto owner_it = owner_counts_.find(key);
+      owner_it != owner_counts_.end()) {
+      auto& counts = owner_it->second;
+      if (counts.pin_external > 0U) {
+        --counts.pin_external;
+      } else if (counts.pin_internal > 0U) {
+        --counts.pin_internal;
+      } else if (counts.checkout_external > 0U) {
+        --counts.checkout_external;
+      } else if (counts.checkout_internal > 0U) {
+        --counts.checkout_internal;
+      }
+      if (counts.checkout_internal == 0U && counts.checkout_external == 0U
+        && counts.pin_internal == 0U && counts.pin_external == 0U) {
+        owner_counts_.erase(owner_it);
+      }
     }
     evicted_entry = eviction_.CheckIn(it->second);
     if (evicted_entry.has_value()) {
       map_.erase(it);
+      owner_counts_.erase(key);
     }
+    LOG_F(1, "AnyCache::Unpin hit=true released=true");
     lock.unlock();
     if (on_eviction_ && evicted_entry.has_value()) {
       on_eviction_(eviction_.EntryKey(*evicted_entry),
@@ -367,6 +452,7 @@ public:
     if (it != map_.end()) {
       evicted_entry = eviction_.Evict(it->second);
       if (evicted_entry.has_value()) {
+        owner_counts_.erase(key);
         map_.erase(it);
         lock.unlock();
         if (on_eviction_) {
@@ -395,6 +481,7 @@ public:
     }
     eviction_.Clear();
     map_.clear();
+    owner_counts_.clear();
     lock.unlock();
 
     if (on_eviction_) {
@@ -549,8 +636,27 @@ public:
     std::shared_lock lock(mutex_);
     std::size_t total_checkouts = 0;
     std::size_t checked_out_items = 0;
+    std::size_t checked_out_internal = 0;
+    std::size_t checked_out_external = 0;
+    std::size_t pinned_internal = 0;
+    std::size_t pinned_external = 0;
     for (const auto& [key, it] : map_) {
-      static_cast<void>(key);
+      if (const auto owner_it = owner_counts_.find(key);
+        owner_it != owner_counts_.end()) {
+        const auto& counts = owner_it->second;
+        if (counts.checkout_internal > 0U) {
+          ++checked_out_internal;
+        }
+        if (counts.checkout_external > 0U) {
+          ++checked_out_external;
+        }
+        if (counts.pin_internal > 0U) {
+          ++pinned_internal;
+        }
+        if (counts.pin_external > 0U) {
+          ++pinned_external;
+        }
+      }
       const auto refs = eviction_.RefCountOf(it);
       total_checkouts += refs;
       if (refs > 0) {
@@ -562,6 +668,10 @@ public:
       .budget = eviction_.Budget(),
       .consumed = eviction_.Consumed(),
       .checked_out_items = checked_out_items,
+      .checked_out_internal = checked_out_internal,
+      .checked_out_external = checked_out_external,
+      .pinned_internal = pinned_internal,
+      .pinned_external = pinned_external,
       .total_checkouts = total_checkouts,
       .over_budget = eviction_.Consumed() > eviction_.Budget(),
     };
@@ -581,6 +691,7 @@ public:
       if (it != map_.end()) {
         evicted.push_back(eviction_.MakeEntry(it->first,
           eviction_.TypeOf(it->second), eviction_.ValueOf(it->second)));
+        owner_counts_.erase(it->first);
         map_.erase(it);
       }
     });
@@ -751,6 +862,13 @@ private:
   mutable std::shared_mutex mutex_;
   EvictionPolicyType eviction_;
   std::unordered_map<KeyType, IteratorType, Hash> map_;
+  struct OwnerCounts final {
+    uint32_t checkout_internal { 0 };
+    uint32_t checkout_external { 0 };
+    uint32_t pin_internal { 0 };
+    uint32_t pin_external { 0 };
+  };
+  std::unordered_map<KeyType, OwnerCounts, Hash> owner_counts_;
   EvictionCallbackFunction on_eviction_;
 };
 

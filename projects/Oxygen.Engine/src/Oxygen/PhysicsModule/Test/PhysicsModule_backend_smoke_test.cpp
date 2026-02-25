@@ -17,10 +17,18 @@
 #include <Oxygen/PhysicsModule/ScenePhysics.h>
 #include <Oxygen/Scene/Scene.h>
 
+namespace oxygen::engine::internal {
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
+} // namespace oxygen::engine::internal
+
 namespace oxygen::physics::test {
 
 NOLINT_TEST(PhysicsModuleBackendSmokeTest, InjectedBackendRunsBasicLifecycle)
 {
+  using Tag = oxygen::engine::internal::EngineTagFactory;
+
   auto physics_system_result = CreatePhysicsSystem();
   if (!physics_system_result.has_value()) {
     ASSERT_EQ(physics_system_result.error(), PhysicsError::kBackendUnavailable);
@@ -35,14 +43,13 @@ NOLINT_TEST(PhysicsModuleBackendSmokeTest, InjectedBackendRunsBasicLifecycle)
   engine::ModuleTimingData timing {};
   timing.fixed_delta_time
     = time::CanonicalDuration { std::chrono::milliseconds(16) };
-  frame.SetModuleTimingData(timing, engine::internal::EngineTagFactory::Get());
+  frame.SetModuleTimingData(timing, Tag::Get());
 
   auto module = std::make_unique<PhysicsModule>(
     engine::ModulePriority { 100U }, std::move(physics_system_result.value()));
   co::testing::TestEventLoop loop {};
 
-  frame.SetCurrentPhase(
-    core::PhaseId::kGameplay, engine::internal::EngineTagFactory::Get());
+  frame.SetCurrentPhase(core::PhaseId::kGameplay, Tag::Get());
   co::Run(loop, [&]() -> co::Co<> {
     co_await module->OnGameplay(observer_ptr<engine::FrameContext> { &frame });
     co_return;
@@ -58,16 +65,14 @@ NOLINT_TEST(PhysicsModuleBackendSmokeTest, InjectedBackendRunsBasicLifecycle)
     observer_ptr<PhysicsModule> { module.get() }, node, desc)
       .has_value());
 
-  frame.SetCurrentPhase(
-    core::PhaseId::kFixedSimulation, engine::internal::EngineTagFactory::Get());
+  frame.SetCurrentPhase(core::PhaseId::kFixedSimulation, Tag::Get());
   co::Run(loop, [&]() -> co::Co<> {
     co_await module->OnFixedSimulation(
       observer_ptr<engine::FrameContext> { &frame });
     co_return;
   });
 
-  frame.SetCurrentPhase(
-    core::PhaseId::kSceneMutation, engine::internal::EngineTagFactory::Get());
+  frame.SetCurrentPhase(core::PhaseId::kSceneMutation, Tag::Get());
   co::Run(loop, [&]() -> co::Co<> {
     co_await module->OnSceneMutation(
       observer_ptr<engine::FrameContext> { &frame });

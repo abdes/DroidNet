@@ -28,16 +28,12 @@
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
 
-#ifdef OXYGEN_ENGINE_TESTING
-
 namespace oxygen::renderer::internal {
 auto RendererTagFactory::Get() noexcept -> RendererTag
 {
   return RendererTag {};
 }
 } // namespace oxygen::renderer::internal
-
-#endif
 
 namespace {
 

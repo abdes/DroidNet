@@ -27,14 +27,9 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 
-// Implementation of IblPassTagFactory. Provides access to IblPassTag capability
-// tokens, only from the IblComputePass. When building tests, allow tests to
-// override by defining OXYGEN_ENGINE_TESTING.
-#if !defined(OXYGEN_ENGINE_TESTING)
 namespace oxygen::engine::internal {
 auto IblPassTagFactory::Get() noexcept -> IblPassTag { return IblPassTag {}; }
 } // namespace oxygen::engine::internal
-#endif
 
 namespace {
 

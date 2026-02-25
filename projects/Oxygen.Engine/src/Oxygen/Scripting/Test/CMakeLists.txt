@@ -49,11 +49,6 @@ m_gtest_program(
 )
 
 m_gtest_program(CompilationService SOURCES "ScriptCompilationService_test.cpp")
-target_compile_definitions(
-  Oxygen.Scripting.CompilationService.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
-)
 
 m_gtest_program(Resolver SOURCES "ScriptSourceResolver_test.cpp")
 target_link_libraries("Oxygen.Scripting.Resolver.Tests" PRIVATE oxygen::loader)
@@ -66,6 +61,7 @@ target_link_libraries("Oxygen.Scripting.Advanced.Tests" PRIVATE oxygen::loader)
 m_gtest_program(
   Bindings
   SOURCES
+    "ScriptingModule_test_fixture.h"
     "Fakes/FakeAsyncEngine.h"
     "Fakes/FakeScriptCompilationService.h"
     "Bindings_app_test.cpp"
@@ -91,10 +87,10 @@ m_gtest_program(
     "Bindings_scene_test.cpp"
     "Bindings_content_test.cpp"
 )
-target_compile_definitions(
+target_link_libraries(
   Oxygen.Scripting.Bindings.Tests
   PRIVATE
-    OXYGEN_ENGINE_TESTING
+    oxygen::physicsmodule
 )
 
 # Aggregate target that builds all scripting test targets (excludes LinkTest)

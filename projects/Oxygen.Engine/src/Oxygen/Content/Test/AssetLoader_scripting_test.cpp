@@ -428,8 +428,7 @@ NOLINT_TEST_F(AssetLoaderScriptingTest,
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadScriptAsset);
     loader.RegisterLoader(oxygen::content::loaders::LoadScriptResource);
@@ -478,8 +477,7 @@ NOLINT_TEST_F(AssetLoaderScriptingTest,
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
     loader.RegisterLoader(oxygen::content::loaders::LoadSceneAsset);
 
     OXCO_WITH_NURSERY(n)
@@ -516,8 +514,7 @@ NOLINT_TEST_F(AssetLoaderScriptingTest,
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
     loader.RegisterLoader(oxygen::content::loaders::LoadScriptAsset);
     loader.RegisterLoader(oxygen::content::loaders::LoadScriptResource);
 
@@ -664,8 +661,7 @@ NOLINT_TEST_F(
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
     loader.RegisterLoader(oxygen::content::loaders::LoadSceneAsset);
     loader.RegisterLoader(oxygen::content::loaders::LoadScriptAsset);
     loader.RegisterLoader(oxygen::content::loaders::LoadScriptResource);

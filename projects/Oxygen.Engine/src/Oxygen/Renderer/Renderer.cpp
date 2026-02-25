@@ -324,17 +324,12 @@ auto BuildSkyAtmosphereParamsFromEnvironment(
 }
 } // namespace
 
-// Implementation of RendererTagFactory. Provides access to RendererTag
-// capability tokens, only from the engine core. When building tests, allow
-// tests to override by defining OXYGEN_ENGINE_TESTING.
-#if !defined(OXYGEN_ENGINE_TESTING)
 namespace oxygen::renderer::internal {
 auto RendererTagFactory::Get() noexcept -> RendererTag
 {
   return RendererTag {};
 }
 } // namespace oxygen::renderer::internal
-#endif
 
 using oxygen::Graphics;
 using oxygen::data::Mesh;

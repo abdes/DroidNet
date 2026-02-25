@@ -75,8 +75,7 @@ NOLINT_TEST_F(AssetLoaderAsyncTest,
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
     loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
@@ -126,8 +125,7 @@ NOLINT_TEST_F(AssetLoaderAsyncTest, StartLoadAssetMaterialInvokesCallback)
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     std::shared_ptr<MaterialAsset> loaded_material;
     auto callback_called = std::make_shared<std::atomic<bool>>(false);

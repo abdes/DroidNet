@@ -48,18 +48,12 @@ m_gtest_program(
     "AssetLoader_scene_test.cpp"
     "AssetLoader_scripting_test.cpp"
     "AssetLoader_test_helpers.cpp"
-    "EngineTagFactory_test_impl.cpp"
     "LooseCookedIndex_test.cpp"
     "LooseCookedLayout_test.cpp"
     "LooseCookedSource_test.cpp"
     "AssetLoader_test.h"
     "Utils/PakUtils.h"
     "VirtualPathResolver_test.cpp"
-)
-target_compile_definitions(
-  Oxygen.Content.AssetLoader.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
 )
 
 m_gtest_program(
@@ -74,17 +68,8 @@ m_gtest_program(
     "SceneLoader_test.cpp"
     "TextureLoader_test.cpp"
 )
-target_compile_definitions(
-  Oxygen.Content.Loaders.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
-)
 
-m_gtest_program(
-  PakFile
-  SOURCES
-    "PakFile_test.cpp"
-)
+m_gtest_program(PakFile SOURCES "PakFile_test.cpp")
 
 m_gtest_program(
   LoadersPhysics
@@ -92,18 +77,8 @@ m_gtest_program(
     "PhysicsResourceLoader_test.cpp"
     "PhysicsSceneLoader_test.cpp"
 )
-target_compile_definitions(
-  Oxygen.Content.LoadersPhysics.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
-)
 
 m_gtest_program(LoadersScripting SOURCES "SceneScriptingLoader_test.cpp")
-target_compile_definitions(
-  Oxygen.Content.LoadersScripting.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
-)
 
 # Ensure the Loaders tests run only after PakGen editable install so the
 # pakgen CLI is available for any dynamic pack builds performed by tests.

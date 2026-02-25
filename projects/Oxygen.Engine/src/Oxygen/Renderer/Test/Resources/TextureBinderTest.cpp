@@ -10,8 +10,6 @@
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Upload/UploaderTag.h>
 
-#ifdef OXYGEN_ENGINE_TESTING
-
 namespace oxygen::engine::upload::internal {
 auto UploaderTagFactory::Get() noexcept -> UploaderTag
 {
@@ -25,8 +23,6 @@ auto RendererTagFactory::Get() noexcept -> RendererTag
   return RendererTag {};
 }
 } // namespace oxygen::renderer::internal
-
-#endif // OXYGEN_ENGINE_TESTING
 
 namespace oxygen::renderer::testing {
 

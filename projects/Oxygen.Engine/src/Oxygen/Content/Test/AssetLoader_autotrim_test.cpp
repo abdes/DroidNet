@@ -79,8 +79,7 @@ NOLINT_TEST_F(
     .default_priority_class = oxygen::content::LoadPriorityClass::kCritical,
   };
 
-  AssetLoader loader(
-    oxygen::content::internal::EngineTagFactory::Get(), config);
+  AssetLoader loader(Tag::Get(), config);
 
   const auto configured = loader.GetResidencyPolicy();
   EXPECT_EQ(configured.cache_budget_bytes, 4096U);
@@ -108,8 +107,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(AssetLoaderAutoTrimTest, ResidencyPolicyZeroBudgetExpectedToThrow)
 {
   AssetLoaderConfig config {};
-  AssetLoader loader(
-    oxygen::content::internal::EngineTagFactory::Get(), config);
+  AssetLoader loader(Tag::Get(), config);
 
   const auto original = loader.GetResidencyPolicy();
   EXPECT_GT(original.cache_budget_bytes, 0U);
@@ -156,8 +154,7 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
   (oxygen::co::Run)(el, [&]() -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
     OXCO_WITH_NURSERY(n)
@@ -191,6 +188,82 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
       EXPECT_GE(state.trim_attempts, 1U);
       EXPECT_GE(state.reclaimed_items, 1U);
       EXPECT_GE(state.reclaimed_bytes, 1U);
+      const auto telemetry = loader.GetTelemetryStats();
+      EXPECT_GE(
+        telemetry.buffer_resources[AssetLoader::TypedLoadMetric::kRequests],
+        2U);
+      EXPECT_GE(
+        telemetry.buffer_resources[AssetLoader::TypedLoadMetric::kCacheMisses],
+        2U);
+      EXPECT_GE(
+        telemetry.buffer_resources[AssetLoader::TypedLoadMetric::kTasksSpawned],
+        2U);
+      EXPECT_EQ(telemetry.trim.manual_attempts + telemetry.trim.auto_attempts,
+        state.trim_attempts);
+      EXPECT_EQ(telemetry.trim.reclaimed_items, state.reclaimed_items);
+      EXPECT_EQ(telemetry.trim.reclaimed_bytes, state.reclaimed_bytes);
+
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
+}
+
+NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
+  TelemetryDisabledExpectedToSuppressCounterAccumulation)
+{
+  const std::string hexdump = R"(
+     0: 00 01 00 00 00 00 00 00 C0 00 00 00 01 00 00 00
+    16: 00 00 00 00 1B 00 00 00 00 00 00 00 00 00 00 00
+  )";
+  constexpr std::size_t kDataOffset = 256;
+  constexpr std::size_t kSizeBytes = 192;
+
+  AssetLoaderConfig config {};
+  config.residency_policy = oxygen::content::ResidencyPolicy {
+    .cache_budget_bytes = 4096,
+    .trim_mode = oxygen::content::ResidencyTrimMode::kManual,
+    .default_priority_class = oxygen::content::LoadPriorityClass::kDefault,
+  };
+
+  auto bytes = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, 0xEE);
+
+  TestEventLoop el;
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    oxygen::co::ThreadPool pool(el, 2);
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+    AssetLoader loader(Tag::Get(), config);
+    loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
+
+    OXCO_WITH_NURSERY(n)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+      loader.SetTelemetryEnabled(false);
+
+      const auto key = loader.MintSyntheticBufferKey();
+      auto first = co_await loader.LoadResourceAsync<BufferResource>(
+        CookedResourceData<BufferResource> { .key = key, .bytes = bytes });
+      EXPECT_THAT(first, NotNull());
+
+      auto second = co_await loader.LoadResourceAsync<BufferResource>(
+        CookedResourceData<BufferResource> { .key = key, .bytes = bytes });
+      EXPECT_THAT(second, NotNull());
+
+      const auto telemetry = loader.GetTelemetryStats();
+      EXPECT_FALSE(telemetry.telemetry_enabled);
+      EXPECT_EQ(
+        telemetry.buffer_resources[AssetLoader::TypedLoadMetric::kRequests],
+        0U);
+      EXPECT_EQ(
+        telemetry.buffer_resources[AssetLoader::TypedLoadMetric::kCacheHits],
+        0U);
+      EXPECT_EQ(
+        telemetry.buffer_resources[AssetLoader::TypedLoadMetric::kCacheMisses],
+        0U);
+      EXPECT_EQ(telemetry.trim.manual_attempts, 0U);
+      EXPECT_EQ(telemetry.trim.auto_attempts, 0U);
+      EXPECT_GE(telemetry.cache.entries, 1U);
 
       loader.Stop();
       co_return oxygen::co::kJoin;
@@ -226,8 +299,7 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
   (oxygen::co::Run)(el, [&]() -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
     OXCO_WITH_NURSERY(n)
@@ -290,8 +362,7 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
   (oxygen::co::Run)(el, [&]() -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
     OXCO_WITH_NURSERY(n)
@@ -355,8 +426,7 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
   (oxygen::co::Run)(el, [&]() -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
     OXCO_WITH_NURSERY(n)
@@ -420,8 +490,7 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
     (oxygen::co::Run)(el, [&]() -> Co<> {
       oxygen::co::ThreadPool pool(el, 2);
       config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-      AssetLoader loader(
-        oxygen::content::internal::EngineTagFactory::Get(), config);
+      AssetLoader loader(Tag::Get(), config);
       loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
       OXCO_WITH_NURSERY(n)
@@ -487,8 +556,7 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
   (oxygen::co::Run)(el, [&]() -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
     OXCO_WITH_NURSERY(n)
@@ -542,8 +610,7 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
   (oxygen::co::Run)(el, [&]() -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
     OXCO_WITH_NURSERY(n)
@@ -599,8 +666,7 @@ NOLINT_TEST_F(
   (oxygen::co::Run)(el, [&]() -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
     OXCO_WITH_NURSERY(n)
@@ -655,8 +721,7 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
   (oxygen::co::Run)(el, [&]() -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
     loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
     loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
@@ -718,8 +783,7 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
   (oxygen::co::Run)(el, [&]() -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
     loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
     loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
 
@@ -776,8 +840,7 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
   (oxygen::co::Run)(el, [&]() -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
     OXCO_WITH_NURSERY(n)
@@ -818,8 +881,7 @@ NOLINT_TEST_F(AssetLoaderAutoTrimTest,
     .default_priority_class = oxygen::content::LoadPriorityClass::kDefault,
   };
 
-  AssetLoader loader(
-    oxygen::content::internal::EngineTagFactory::Get(), config);
+  AssetLoader loader(Tag::Get(), config);
   const auto s1 = loader.QueryResidencyPolicyState();
   const auto s2 = loader.QueryResidencyPolicyState();
   EXPECT_EQ(s1.policy.cache_budget_bytes, s2.policy.cache_budget_bytes);
@@ -859,8 +921,7 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
     (oxygen::co::Run)(el, [&]() -> Co<> {
       oxygen::co::ThreadPool pool(el, 2);
       config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-      AssetLoader loader(
-        oxygen::content::internal::EngineTagFactory::Get(), config);
+      AssetLoader loader(Tag::Get(), config);
       loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
       OXCO_WITH_NURSERY(n)

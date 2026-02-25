@@ -40,6 +40,15 @@ public:
     std::function<void(uint64_t, ResourceKey)> map_resource_key;
     std::function<LoadPriorityClass()> default_priority_class;
     std::function<uint64_t()> next_request_sequence;
+    std::function<void(TypeId)> on_resource_request;
+    std::function<void(TypeId)> on_resource_cache_hit;
+    std::function<void(TypeId)> on_resource_cache_miss;
+    std::function<void(TypeId)> on_resource_joined_inflight;
+    std::function<void(TypeId)> on_resource_started_inflight;
+    std::function<void(TypeId)> on_resource_decode_failure;
+    std::function<void(TypeId)> on_resource_type_mismatch;
+    std::function<void(TypeId)> on_resource_store_retry;
+    std::function<void(TypeId)> on_resource_store_retry_failed;
     std::function<void(std::string_view, bool)> on_store_pressure;
   };
 

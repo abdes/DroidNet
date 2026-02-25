@@ -9,11 +9,16 @@
 #include <cstring>
 #include <limits>
 #include <mutex>
+#include <optional>
+#include <string>
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
+#include <fmt/format.h>
+
+#include <Oxygen/Base/EnumIndexedArray.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ScopeGuard.h>
@@ -75,7 +80,11 @@ namespace internal = oxygen::content::internal;
 namespace {
 constexpr std::string_view kCVarVerifyContentHashes
   = "cntt.verify_content_hashes";
+constexpr std::string_view kCVarTelemetryEnabled = "cntt.telemetry_enabled";
+constexpr std::string_view kCVarLastStats = "cntt.last_stats";
 constexpr std::string_view kCommandTrimCache = "cntt.trim_cache";
+constexpr std::string_view kCommandDumpStats = "cntt.dump_stats";
+constexpr std::string_view kCommandResetStats = "cntt.reset_stats";
 
 // Debug-only hash collision tracking for AssetKey hashes.
 #if !defined(NDEBUG)
@@ -100,6 +109,7 @@ auto IsZeroGuidBytes(const std::array<uint8_t, 16>& bytes) -> bool
   }
   return true;
 }
+
 } // namespace
 
 namespace oxygen::content {
@@ -181,15 +191,33 @@ auto SanityCheckResourceEviction(const uint64_t expected_key_hash,
 } // namespace
 
 namespace {
+struct AssetLoadTelemetryCallbacks final {
+  std::function<void()> on_request;
+  std::function<void()> on_cache_hit;
+  std::function<void()> on_cache_miss;
+  std::function<void()> on_joined_inflight;
+  std::function<void()> on_started_new_inflight;
+};
+
 template <typename AssetT, typename CacheHitFn, typename DecodeAndPublishFn>
 auto RunAssetLoadPipeline(const oxygen::TypeId type_id, const uint64_t hash_key,
   internal::InFlightOperationTable& in_flight_ops,
   const oxygen::content::LoadRequest& request, const uint64_t request_sequence,
-  CacheHitFn&& cache_hit_fn, DecodeAndPublishFn&& decode_and_publish_fn)
+  CacheHitFn&& cache_hit_fn, DecodeAndPublishFn&& decode_and_publish_fn,
+  const AssetLoadTelemetryCallbacks& telemetry_callbacks = {})
   -> oxygen::co::Co<std::shared_ptr<AssetT>>
 {
+  if (telemetry_callbacks.on_request) {
+    telemetry_callbacks.on_request();
+  }
   if (auto cached = co_await cache_hit_fn()) {
+    if (telemetry_callbacks.on_cache_hit) {
+      telemetry_callbacks.on_cache_hit();
+    }
     co_return cached;
+  }
+  if (telemetry_callbacks.on_cache_miss) {
+    telemetry_callbacks.on_cache_miss();
   }
 
   if (auto shared_join = in_flight_ops.Find(type_id, hash_key,
@@ -199,8 +227,14 @@ auto RunAssetLoadPipeline(const oxygen::TypeId type_id, const uint64_t hash_key,
           .sequence = request_sequence,
         });
     shared_join.has_value()) {
+    if (telemetry_callbacks.on_joined_inflight) {
+      telemetry_callbacks.on_joined_inflight();
+    }
     auto joined = co_await *shared_join;
     co_return std::static_pointer_cast<AssetT>(std::move(joined));
+  }
+  if (telemetry_callbacks.on_started_new_inflight) {
+    telemetry_callbacks.on_started_new_inflight();
   }
 
   auto op = [type_id, hash_key, &in_flight_ops,
@@ -236,19 +270,19 @@ auto RunAssetLoadPipeline(const oxygen::TypeId type_id, const uint64_t hash_key,
 //=== Basic methods ==========================================================//
 
 AssetLoader::AssetLoader(
-  [[maybe_unused]] EngineTag tag, const AssetLoaderConfig& config)
+  engine::EngineTag /*tag*/, const AssetLoaderConfig& config)
   : impl_(std::make_unique<Impl>())
-  , asset_identity_index_(std::make_unique<internal::AssetIdentityIndex>())
   , dependency_graph_(std::make_unique<internal::DependencyGraphStore>())
   , dependency_release_engine_(
       std::make_unique<internal::DependencyReleaseEngine>())
-  , eviction_registry_(std::make_unique<internal::EvictionRegistry>())
-  , resource_key_registry_(std::make_unique<internal::ResourceKeyRegistry>())
-  , in_flight_ops_(std::make_unique<internal::InFlightOperationTable>())
   , thread_pool_(config.thread_pool)
   , work_offline_(config.work_offline)
   , verify_content_hashes_(config.verify_content_hashes)
   , residency_policy_(config.residency_policy)
+  , eviction_registry_(std::make_unique<internal::EvictionRegistry>())
+  , resource_key_registry_(std::make_unique<internal::ResourceKeyRegistry>())
+  , asset_identity_index_(std::make_unique<internal::AssetIdentityIndex>())
+  , in_flight_ops_(std::make_unique<internal::InFlightOperationTable>())
 {
   using serio::FileStream;
 
@@ -278,6 +312,39 @@ AssetLoader::AssetLoader(
       = [this]() { return residency_policy_.default_priority_class; },
       .next_request_sequence
       = [this]() { return next_load_request_sequence_.fetch_add(1); },
+      .on_resource_request =
+        [this](const TypeId type_id) {
+          RecordResourceTelemetry(type_id, LoadTelemetryEvent::kRequest);
+        },
+      .on_resource_cache_hit =
+        [this](const TypeId type_id) {
+          RecordResourceTelemetry(type_id, LoadTelemetryEvent::kCacheHit);
+        },
+      .on_resource_cache_miss =
+        [this](const TypeId type_id) {
+          RecordResourceTelemetry(type_id, LoadTelemetryEvent::kCacheMiss);
+        },
+      .on_resource_joined_inflight =
+        [this](const TypeId type_id) {
+          RecordResourceTelemetry(type_id, LoadTelemetryEvent::kTasksDeduped);
+        },
+      .on_resource_started_inflight =
+        [this](const TypeId type_id) {
+          RecordResourceTelemetry(type_id, LoadTelemetryEvent::kTasksSpawned);
+        },
+      .on_resource_decode_failure =
+        [this](const TypeId type_id) {
+          RecordResourceTelemetry(type_id, LoadTelemetryEvent::kDecodeFailure);
+        },
+      .on_resource_type_mismatch =
+        [this](const TypeId type_id) {
+          RecordResourceTelemetry(type_id, LoadTelemetryEvent::kTypeMismatch);
+        },
+      .on_resource_store_retry_failed =
+        [this](const TypeId type_id) {
+          RecordResourceTelemetry(
+            type_id, LoadTelemetryEvent::kStoreRetryFailure);
+        },
       .on_store_pressure
       = [this](const std::string_view trigger,
           const bool force) { MaybeAutoTrimOnBudgetPressure(trigger, force); },
@@ -370,6 +437,286 @@ auto AssetLoader::QueryResidencyPolicyState() const -> ResidencyPolicyState
     .reclaimed_bytes = trim_telemetry_.reclaimed_bytes,
     .blocked_roots = trim_telemetry_.blocked_roots,
   };
+}
+
+auto AssetLoader::MutableAssetTelemetry(const data::AssetType type) noexcept
+  -> TypedLoadTelemetry*
+{
+  switch (type) {
+  case data::AssetType::kMaterial:
+    return &telemetry_stats_.material_assets;
+  case data::AssetType::kGeometry:
+    return &telemetry_stats_.geometry_assets;
+  case data::AssetType::kScene:
+    return &telemetry_stats_.scene_assets;
+  case data::AssetType::kPhysicsScene:
+    return &telemetry_stats_.physics_scene_assets;
+  case data::AssetType::kScript:
+    return &telemetry_stats_.script_assets;
+  case data::AssetType::kInputAction:
+    return &telemetry_stats_.input_action_assets;
+  case data::AssetType::kInputMappingContext:
+    return &telemetry_stats_.input_mapping_context_assets;
+  case data::AssetType::kUnknown:
+  case data::AssetType::kPhysicsMaterial:
+  case data::AssetType::kCollisionShape:
+    return nullptr;
+  }
+  return nullptr;
+}
+
+auto AssetLoader::MutableResourceTelemetry(const TypeId type_id) noexcept
+  -> TypedLoadTelemetry*
+{
+  if (type_id == data::TextureResource::ClassTypeId()) {
+    return &telemetry_stats_.texture_resources;
+  }
+  if (type_id == data::BufferResource::ClassTypeId()) {
+    return &telemetry_stats_.buffer_resources;
+  }
+  if (type_id == data::ScriptResource::ClassTypeId()) {
+    return &telemetry_stats_.script_resources;
+  }
+  if (type_id == data::PhysicsResource::ClassTypeId()) {
+    return &telemetry_stats_.physics_resources;
+  }
+  return nullptr;
+}
+
+auto AssetLoader::RecordAssetTelemetry(
+  const data::AssetType type, const LoadTelemetryEvent event) noexcept -> void
+{
+  if (!telemetry_stats_.telemetry_enabled) {
+    return;
+  }
+  auto* counters = MutableAssetTelemetry(type);
+  if (counters == nullptr) {
+    return;
+  }
+  ApplyLoadTelemetryEvent(*counters, event);
+}
+
+auto AssetLoader::RecordResourceTelemetry(
+  const TypeId type_id, const LoadTelemetryEvent event) noexcept -> void
+{
+  if (!telemetry_stats_.telemetry_enabled) {
+    return;
+  }
+  auto* counters = MutableResourceTelemetry(type_id);
+  if (counters == nullptr) {
+    return;
+  }
+  ApplyLoadTelemetryEvent(*counters, event);
+}
+
+auto oxygen::content::to_string(
+  const AssetLoader::LoadTelemetryEvent event) noexcept -> std::string_view
+{
+  using LoadTelemetryEvent = AssetLoader::LoadTelemetryEvent;
+  static constexpr oxygen::EnumIndexedArray<LoadTelemetryEvent, std::string_view>
+    kEventNames {
+      .data = {
+        "request",
+        "cache_hit",
+        "cache_miss",
+        "tasks_deduped",
+        "tasks_spawned",
+        "err_decode",
+        "err_type_mismatch",
+        "err_retry_failed",
+        "err_canceled",
+      },
+    };
+  return kEventNames[event];
+}
+
+auto oxygen::content::to_string(
+  const AssetLoader::TypedLoadMetric metric) noexcept -> std::string_view
+{
+  using TypedLoadMetric = AssetLoader::TypedLoadMetric;
+  static constexpr oxygen::EnumIndexedArray<TypedLoadMetric, std::string_view>
+    kMetricNames {
+      .data = {
+        "requests",
+        "cache_hits",
+        "cache_misses",
+        "tasks_deduped",
+        "tasks_spawned",
+        "err_decode",
+        "err_type_mismatch",
+        "err_retry_failed",
+        "err_canceled",
+      },
+    };
+  return kMetricNames[metric];
+}
+
+auto AssetLoader::ApplyLoadTelemetryEvent(
+  TypedLoadTelemetry& counters, const LoadTelemetryEvent event) noexcept -> void
+{
+  static constexpr oxygen::EnumIndexedArray<LoadTelemetryEvent, std::optional<TypedLoadMetric>>
+    kEventCounters {
+      .data = {
+        TypedLoadMetric::kRequests,
+        TypedLoadMetric::kCacheHits,
+        TypedLoadMetric::kCacheMisses,
+        TypedLoadMetric::kTasksDeduped,
+        TypedLoadMetric::kTasksSpawned,
+        TypedLoadMetric::kErrDecode,
+        TypedLoadMetric::kErrTypeMismatch,
+        TypedLoadMetric::kErrRetryFailed,
+        TypedLoadMetric::kErrCanceled,
+      },
+    };
+  if (const auto metric = kEventCounters[event]; metric.has_value()) {
+    ++counters[*metric];
+  }
+}
+
+auto AssetLoader::RecordStorePressureEvent(
+  const std::string_view trigger, const bool forced) -> void
+{
+  if (!telemetry_stats_.telemetry_enabled) {
+    return;
+  }
+  ++telemetry_stats_.pressure.events_total;
+  if (forced) {
+    ++telemetry_stats_.pressure.events_forced;
+  } else {
+    ++telemetry_stats_.pressure.events_soft;
+  }
+  if (trigger == "resource_store_failed") {
+    ++telemetry_stats_.pressure.resource_store_failed;
+  } else if (trigger == "resource_store_over_budget") {
+    ++telemetry_stats_.pressure.resource_store_over_budget;
+  } else if (trigger.find("_store_failed") != std::string_view::npos) {
+    ++telemetry_stats_.pressure.asset_store_failed;
+  } else if (trigger.find("_store_succeeded") != std::string_view::npos) {
+    ++telemetry_stats_.pressure.asset_store_succeeded;
+  }
+}
+
+auto AssetLoader::RecordTrimAttempt(
+  const std::string_view trigger, const bool automatic) -> void
+{
+  static_cast<void>(trigger);
+  if (!telemetry_stats_.telemetry_enabled) {
+    return;
+  }
+  if (automatic) {
+    ++telemetry_stats_.trim.auto_attempts;
+  } else {
+    ++telemetry_stats_.trim.manual_attempts;
+  }
+}
+
+auto AssetLoader::RecordEviction(const EvictionReason reason) noexcept -> void
+{
+  if (!telemetry_stats_.telemetry_enabled) {
+    return;
+  }
+  if (reason == EvictionReason::kRefCountZero) {
+    ++telemetry_stats_.eviction.on_refcount_zero;
+    return;
+  }
+  if (reason == EvictionReason::kTrim) {
+    ++telemetry_stats_.eviction.on_trim;
+    return;
+  }
+  if (reason == EvictionReason::kClear) {
+    ++telemetry_stats_.eviction.on_clear;
+    return;
+  }
+  if (reason == EvictionReason::kShutdown) {
+    ++telemetry_stats_.eviction.on_shutdown;
+  }
+}
+
+auto AssetLoader::GetTelemetryStats() const -> TelemetryStats
+{
+  AssertOwningThread();
+  auto snapshot = telemetry_stats_;
+  snapshot.telemetry_enabled = telemetry_stats_.telemetry_enabled;
+  snapshot.trim.reclaimed_items = trim_telemetry_.reclaimed_items;
+  snapshot.trim.reclaimed_bytes = trim_telemetry_.reclaimed_bytes;
+  snapshot.trim.blocked_total = trim_telemetry_.blocked_roots;
+  snapshot.trim.pruned_live_branches = trim_telemetry_.pruned_live_branches;
+  snapshot.trim.blocked_priority_roots = trim_telemetry_.blocked_priority_roots;
+  snapshot.trim.orphan_resources = trim_telemetry_.orphan_resources;
+  const auto cache_stats = content_cache_.SnapshotStats();
+  snapshot.cache.entries = cache_stats.size;
+  snapshot.cache.consumed_budget = static_cast<uint64_t>(cache_stats.consumed);
+  // Fast telemetry path: report entries with checkout count above baseline
+  // loader retain (refcount > 1).
+  snapshot.cache.checked_out_items = cache_stats.checked_out_external;
+  snapshot.cache.over_budget = cache_stats.over_budget;
+  const auto in_flight_stats = in_flight_ops_->GetStats();
+  snapshot.in_flight = InFlightTelemetry {
+    .find_calls = in_flight_stats.find_calls,
+    .find_hits = in_flight_stats.find_hits,
+    .insert_calls = in_flight_stats.insert_calls,
+    .erase_calls = in_flight_stats.erase_calls,
+    .clear_calls = in_flight_stats.clear_calls,
+    .active_type_buckets = in_flight_stats.active_type_buckets,
+    .active_operations = in_flight_stats.active_operations,
+  };
+  return snapshot;
+}
+
+auto AssetLoader::ResetTelemetryStats() noexcept -> void
+{
+  AssertOwningThread();
+  const bool was_enabled = telemetry_stats_.telemetry_enabled;
+  telemetry_stats_ = {};
+  telemetry_stats_.telemetry_enabled = was_enabled;
+  trim_telemetry_ = {};
+  if (in_flight_ops_) {
+    in_flight_ops_->ResetStats();
+  }
+}
+
+auto AssetLoader::SetTelemetryEnabled(const bool enabled) -> void
+{
+  AssertOwningThread();
+  telemetry_stats_.telemetry_enabled = enabled;
+}
+
+auto AssetLoader::IsTelemetryEnabled() const noexcept -> bool
+{
+  return telemetry_stats_.telemetry_enabled;
+}
+
+auto AssetLoader::UpdateTelemetrySummaryCVar() -> void
+{
+  if (console_ == nullptr) {
+    return;
+  }
+  const auto stats = GetTelemetryStats();
+  const auto requests = TypedLoadMetric::kRequests;
+  const auto cache_hits = TypedLoadMetric::kCacheHits;
+  const auto summary = fmt::format(
+    "cache_entries={},consumed_budget={},over_budget={},"
+    "asset_requests={},resource_requests={},asset_hits={},resource_hits={}",
+    stats.cache.entries, stats.cache.consumed_budget,
+    stats.cache.over_budget ? 1 : 0,
+    stats.material_assets[requests] + stats.geometry_assets[requests]
+      + stats.scene_assets[requests] + stats.physics_scene_assets[requests]
+      + stats.script_assets[requests] + stats.input_action_assets[requests]
+      + stats.input_mapping_context_assets[requests],
+    stats.texture_resources[requests] + stats.buffer_resources[requests]
+      + stats.script_resources[requests] + stats.physics_resources[requests],
+    stats.material_assets[cache_hits] + stats.geometry_assets[cache_hits]
+      + stats.scene_assets[cache_hits] + stats.physics_scene_assets[cache_hits]
+      + stats.script_assets[cache_hits] + stats.input_action_assets[cache_hits]
+      + stats.input_mapping_context_assets[cache_hits],
+    stats.texture_resources[cache_hits] + stats.buffer_resources[cache_hits]
+      + stats.script_resources[cache_hits]
+      + stats.physics_resources[cache_hits]);
+  (void)console_->SetCVarFromText(
+    { .name = std::string(kCVarLastStats), .text = summary },
+    { .source = console::CommandSource::kAutomation,
+      .shipping_build = false,
+      .record_history = false });
 }
 
 AssetLoader::~AssetLoader() = default;
@@ -618,6 +965,7 @@ auto AssetLoader::ExecuteTrimPass(
     automatic, std::hash<std::thread::id> {}(std::this_thread::get_id()),
     std::hash<std::thread::id> {}(owning_thread_id_));
   AssertOwningThread();
+  RecordTrimAttempt(trigger, automatic);
   ++trim_telemetry_.attempts;
   const auto before = content_cache_.SnapshotStats();
 
@@ -625,7 +973,7 @@ auto AssetLoader::ExecuteTrimPass(
     [&](const uint64_t cache_key, std::shared_ptr<void> value,
       const TypeId type_id) {
       static_cast<void>(value);
-      UnloadObject(cache_key, type_id, EvictionReason::kClear);
+      UnloadObject(cache_key, type_id, EvictionReason::kTrim);
     });
 
   const internal::DependencyReleaseEngine::ReleaseCallbacks callbacks {
@@ -664,29 +1012,37 @@ auto AssetLoader::ExecuteTrimPass(
   trim_telemetry_.reclaimed_bytes += reclaimed_bytes;
   trim_telemetry_.blocked_roots += static_cast<uint64_t>(
     trim_result.pruned_live_branches + trim_result.blocked_priority_roots);
+  trim_telemetry_.pruned_live_branches
+    += static_cast<uint64_t>(trim_result.pruned_live_branches);
+  trim_telemetry_.blocked_priority_roots
+    += static_cast<uint64_t>(trim_result.blocked_priority_roots);
+  trim_telemetry_.orphan_resources
+    += static_cast<uint64_t>(trim_result.orphan_resources);
+  const auto blocked_total
+    = static_cast<uint64_t>(trim_result.pruned_live_branches)
+    + static_cast<uint64_t>(trim_result.blocked_priority_roots);
 
   LOG_F(INFO,
-    "trim summary trigger={} automatic={} roots={} blocked_roots={} "
-    "priority_blocked_roots={} standalone_resource_candidates={} "
+    "trim summary trigger={} automatic={} roots={} blocked_total={} "
+    "blocked_priority_roots={} orphan_resources={} "
     "reclaimed_items={} reclaimed_bytes={}",
-    trigger, automatic, trim_result.trim_roots,
-    trim_result.pruned_live_branches, trim_result.blocked_priority_roots,
-    trim_result.standalone_resource_candidates, reclaimed_items,
-    reclaimed_bytes);
-  if (trim_result.trim_roots == 0U
-    && trim_result.standalone_resource_candidates > 0U) {
+    trigger, automatic, trim_result.trim_roots, blocked_total,
+    trim_result.blocked_priority_roots, trim_result.orphan_resources,
+    reclaimed_items, reclaimed_bytes);
+  if (trim_result.trim_roots == 0U && trim_result.orphan_resources > 0U) {
     LOG_F(INFO,
-      "trim removed standalone resources without trim roots; "
+      "trim removed orphan resources without trim roots; "
       "this usually means resource edges were not published by current owners");
   }
 
-  FlushResourceEvictionsForUncachedMappings(EvictionReason::kClear, false);
+  FlushResourceEvictionsForUncachedMappings(EvictionReason::kTrim, false);
 }
 
 auto AssetLoader::MaybeAutoTrimOnBudgetPressure(
   const std::string_view trigger, const bool force) -> void
 {
   AssertOwningThread();
+  RecordStorePressureEvent(trigger, force);
   if (residency_policy_.trim_mode != ResidencyTrimMode::kAutoOnOverBudget) {
     return;
   }
@@ -740,12 +1096,27 @@ auto AssetLoader::RegisterConsoleBindings(
   if (console == nullptr) {
     return;
   }
+  console_ = console;
 
   (void)console->RegisterCVar(console::CVarDefinition {
     .name = std::string(kCVarVerifyContentHashes),
     .help = "Enable content hash verification for AssetLoader mounts",
     .default_value = verify_content_hashes_,
     .flags = console::CVarFlags::kArchive,
+  });
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarTelemetryEnabled),
+    .help = "Enable AssetLoader telemetry accumulation",
+    .default_value = telemetry_stats_.telemetry_enabled,
+    .flags = console::CVarFlags::kDevOnly,
+  });
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarLastStats),
+    .help = "AssetLoader telemetry summary snapshot",
+    .default_value = std::string {},
+    .flags = console::CVarFlags::kDevOnly,
+    .min_value = std::nullopt,
+    .max_value = std::nullopt,
   });
 
   (void)console->RegisterCommand(console::CommandDefinition {
@@ -763,6 +1134,148 @@ auto AssetLoader::RegisterConsoleBindings(
       };
     },
   });
+  (void)console->RegisterCommand(console::CommandDefinition {
+    .name = std::string(kCommandDumpStats),
+    .help = "Dump AssetLoader telemetry [scope]",
+    .flags = console::CommandFlags::kDevOnly,
+    .handler = [this](const std::vector<std::string>& args,
+                 const console::CommandContext&) -> console::ExecutionResult {
+      if (args.size() > 1) {
+        return console::ExecutionResult {
+          .status = console::ExecutionStatus::kInvalidArguments,
+          .exit_code = 2,
+          .output = {},
+          .error = "usage: cntt.dump_stats [scope]",
+        };
+      }
+
+      const auto scope = args.empty() ? std::string("all") : args[0];
+      const auto stats = GetTelemetryStats();
+      LOG_SCOPE_F(INFO, "AssetLoader Telemetry (%s)", scope.c_str());
+      auto log_kv = [](const std::string_view key, const auto& value) -> void {
+        LOG_F(INFO, "{:<30}: {}", key, value);
+      };
+      auto log_typed
+        = [&](const char* label, const TypedLoadTelemetry& counters) -> void {
+        LOG_SCOPE_F(INFO, "%s", label);
+        for (const auto idx : ::enum_as_index<TypedLoadMetric>) {
+          const auto metric = idx.to_enum();
+          log_kv(nostd::to_string(metric), counters[metric]);
+        }
+      };
+
+      if (scope == "all" || scope == "asset") {
+        LOG_SCOPE_F(INFO, "Asset Telemetry");
+        log_typed("material_assets", stats.material_assets);
+        log_typed("geometry_assets", stats.geometry_assets);
+        log_typed("scene_assets", stats.scene_assets);
+        log_typed("physics_scene_assets", stats.physics_scene_assets);
+        log_typed("script_assets", stats.script_assets);
+        log_typed("input_action_assets", stats.input_action_assets);
+        log_typed("input_mapping_context", stats.input_mapping_context_assets);
+      }
+      if (scope == "all" || scope == "resource") {
+        LOG_SCOPE_F(INFO, "Resource Telemetry");
+        log_typed("texture_resources", stats.texture_resources);
+        log_typed("buffer_resources", stats.buffer_resources);
+        log_typed("script_resources", stats.script_resources);
+        log_typed("physics_resources", stats.physics_resources);
+      }
+      if (scope == "all" || scope == "pressure") {
+        LOG_SCOPE_F(INFO, "Pressure Telemetry");
+        log_kv("events_total", stats.pressure.events_total);
+        log_kv("events_forced", stats.pressure.events_forced);
+        log_kv("events_soft", stats.pressure.events_soft);
+        log_kv("resource_store_failed", stats.pressure.resource_store_failed);
+        log_kv("resource_store_over_budget",
+          stats.pressure.resource_store_over_budget);
+        log_kv("asset_store_failed", stats.pressure.asset_store_failed);
+        log_kv("asset_store_succeeded", stats.pressure.asset_store_succeeded);
+      }
+      if (scope == "all" || scope == "trim") {
+        LOG_SCOPE_F(INFO, "Trim Telemetry");
+        log_kv("manual_attempts", stats.trim.manual_attempts);
+        log_kv("auto_attempts", stats.trim.auto_attempts);
+        log_kv("reclaimed_items", stats.trim.reclaimed_items);
+        log_kv("reclaimed_bytes", stats.trim.reclaimed_bytes);
+        log_kv("blocked_total", stats.trim.blocked_total);
+        log_kv("pruned_live_branches", stats.trim.pruned_live_branches);
+        log_kv("blocked_priority_roots", stats.trim.blocked_priority_roots);
+        log_kv("orphan_resources", stats.trim.orphan_resources);
+      }
+      if (scope == "all" || scope == "eviction") {
+        LOG_SCOPE_F(INFO, "Eviction Telemetry");
+        log_kv("on_refcount_zero", stats.eviction.on_refcount_zero);
+        log_kv("on_trim", stats.eviction.on_trim);
+        log_kv("on_clear", stats.eviction.on_clear);
+        log_kv("on_shutdown", stats.eviction.on_shutdown);
+      }
+      if (scope == "all" || scope == "cache") {
+        LOG_SCOPE_F(INFO, "Cache Snapshot");
+        log_kv("entries", stats.cache.entries);
+        log_kv("consumed_budget", stats.cache.consumed_budget);
+        log_kv("checked_out", stats.cache.checked_out_items);
+        log_kv("over_budget", stats.cache.over_budget ? "true" : "false");
+      }
+      if (scope == "all" || scope == "inflight") {
+        LOG_SCOPE_F(INFO, "InFlight Telemetry");
+        log_kv("find_calls", stats.in_flight.find_calls);
+        log_kv("find_hits", stats.in_flight.find_hits);
+        log_kv("insert_calls", stats.in_flight.insert_calls);
+        log_kv("erase_calls", stats.in_flight.erase_calls);
+        log_kv("clear_calls", stats.in_flight.clear_calls);
+        log_kv("active_type_buckets", stats.in_flight.active_type_buckets);
+        log_kv("active_operations", stats.in_flight.active_operations);
+      }
+
+      const auto output = fmt::format(
+        "entries={} consumed_budget={} over_budget={} asset_req={} "
+        "resource_req={}",
+        stats.cache.entries, stats.cache.consumed_budget,
+        stats.cache.over_budget ? 1 : 0,
+        stats.material_assets[TypedLoadMetric::kRequests]
+          + stats.geometry_assets[TypedLoadMetric::kRequests]
+          + stats.scene_assets[TypedLoadMetric::kRequests]
+          + stats.physics_scene_assets[TypedLoadMetric::kRequests]
+          + stats.script_assets[TypedLoadMetric::kRequests]
+          + stats.input_action_assets[TypedLoadMetric::kRequests]
+          + stats.input_mapping_context_assets[TypedLoadMetric::kRequests],
+        stats.texture_resources[TypedLoadMetric::kRequests]
+          + stats.buffer_resources[TypedLoadMetric::kRequests]
+          + stats.script_resources[TypedLoadMetric::kRequests]
+          + stats.physics_resources[TypedLoadMetric::kRequests]);
+      return console::ExecutionResult {
+        .status = console::ExecutionStatus::kOk,
+        .exit_code = 0,
+        .output = output,
+        .error = {},
+      };
+    },
+  });
+  (void)console->RegisterCommand(console::CommandDefinition {
+    .name = std::string(kCommandResetStats),
+    .help = "Reset AssetLoader telemetry counters",
+    .flags = console::CommandFlags::kDevOnly,
+    .handler = [this](const std::vector<std::string>& args,
+                 const console::CommandContext&) -> console::ExecutionResult {
+      if (!args.empty()) {
+        return console::ExecutionResult {
+          .status = console::ExecutionStatus::kInvalidArguments,
+          .exit_code = 2,
+          .output = {},
+          .error = "usage: cntt.reset_stats",
+        };
+      }
+      ResetTelemetryStats();
+      UpdateTelemetrySummaryCVar();
+      return console::ExecutionResult {
+        .status = console::ExecutionStatus::kOk,
+        .exit_code = 0,
+        .output = "AssetLoader telemetry reset",
+        .error = {},
+      };
+    },
+  });
 }
 
 auto AssetLoader::ApplyConsoleCVars(const console::Console& console) -> void
@@ -772,6 +1285,12 @@ auto AssetLoader::ApplyConsoleCVars(const console::Console& console) -> void
     && verify_hashes != verify_content_hashes_) {
     SetVerifyContentHashes(verify_hashes);
   }
+  bool telemetry_enabled = telemetry_stats_.telemetry_enabled;
+  if (console.TryGetCVarValue<bool>(kCVarTelemetryEnabled, telemetry_enabled)
+    && telemetry_enabled != telemetry_stats_.telemetry_enabled) {
+    SetTelemetryEnabled(telemetry_enabled);
+  }
+  UpdateTelemetrySummaryCVar();
 }
 
 auto AssetLoader::BindResourceRefToKey(const internal::ResourceRef& ref)
@@ -1007,7 +1526,8 @@ auto AssetLoader::AddAssetDependency(
     ? std::optional<uint64_t> { dependency_identity->hash_key }
     : std::nullopt;
   content_cache_.Touch(
-    dependency_hash.has_value() ? *dependency_hash : HashAssetKey(dependency));
+    dependency_hash.has_value() ? *dependency_hash : HashAssetKey(dependency),
+    oxygen::CheckoutOwner::kInternal);
   AssertDependencyEdgeRefcountSymmetry("AddAssetDependency");
 }
 
@@ -1033,7 +1553,8 @@ auto AssetLoader::AddResourceDependency(
 
   // Touch the dependency resource in the cache to increment its reference
   // count.
-  content_cache_.Touch(HashResourceKey(resource_key));
+  content_cache_.Touch(
+    HashResourceKey(resource_key), oxygen::CheckoutOwner::kInternal);
   AssertDependencyEdgeRefcountSymmetry("AddResourceDependency");
 }
 
@@ -1085,7 +1606,7 @@ auto AssetLoader::PinAsset(const data::AssetKey& key) -> bool
     return false;
   }
   const auto key_hash = identity->hash_key;
-  if (!content_cache_.Pin(key_hash)) {
+  if (!content_cache_.Pin(key_hash, oxygen::CheckoutOwner::kExternal)) {
     LOG_F(WARNING, "pin asset failed: key={} missing in cache",
       data::to_string(key));
     return false;
@@ -1546,6 +2067,33 @@ auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key,
   }
   const auto source_id = load_target->source_id;
   const auto hash_key = load_target->hash_key;
+  const AssetLoadTelemetryCallbacks telemetry_callbacks {
+    .on_request =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kMaterial, LoadTelemetryEvent::kRequest);
+      },
+    .on_cache_hit =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kMaterial, LoadTelemetryEvent::kCacheHit);
+      },
+    .on_cache_miss =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kMaterial, LoadTelemetryEvent::kCacheMiss);
+      },
+    .on_joined_inflight =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kMaterial, LoadTelemetryEvent::kTasksDeduped);
+      },
+    .on_started_new_inflight =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kMaterial, LoadTelemetryEvent::kTasksSpawned);
+      },
+  };
   const auto publish_material_texture_dependencies
     = [this, key, source_id, request](
         const std::shared_ptr<data::MaterialAsset>& material) -> co::Co<> {
@@ -1600,7 +2148,8 @@ auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key,
   const auto cache_hit
     = [this, hash_key, publish_material_texture_dependencies]()
     -> co::Co<std::shared_ptr<data::MaterialAsset>> {
-    if (auto cached = content_cache_.CheckOut<data::MaterialAsset>(hash_key)) {
+    if (auto cached = content_cache_.CheckOut<data::MaterialAsset>(
+          hash_key, oxygen::CheckoutOwner::kInternal)) {
       // Cache-hit material loads must still rebuild dependency edges if they
       // were trimmed previously. Without this, live textures can become
       // standalone trim candidates and get evicted while still in use.
@@ -1620,12 +2169,20 @@ auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key,
         = std::static_pointer_cast<data::MaterialAsset>(decoded_result.asset);
       if (!decoded
         || decoded->GetTypeId() != data::MaterialAsset::ClassTypeId()) {
+        RecordAssetTelemetry(
+          data::AssetType::kMaterial, LoadTelemetryEvent::kTypeMismatch);
+        if (!decoded) {
+          RecordAssetTelemetry(
+            data::AssetType::kMaterial, LoadTelemetryEvent::kDecodeFailure);
+        }
         LOG_F(ERROR, "Loaded asset type mismatch (async): expected {}, got {}",
           data::MaterialAsset::ClassTypeNamePretty(),
           decoded ? decoded->GetTypeName() : "nullptr");
         co_return nullptr;
       }
       if (!decoded_result.dependency_collector) {
+        RecordAssetTelemetry(
+          data::AssetType::kMaterial, LoadTelemetryEvent::kDecodeFailure);
         LOG_F(ERROR, "Missing dependency collector for decoded material asset");
         co_return nullptr;
       }
@@ -1676,11 +2233,15 @@ auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key,
       if (!stored) {
         MaybeAutoTrimOnBudgetPressure("material_store_failed", true);
         stored = content_cache_.Store(hash_key, decoded);
+        if (!stored) {
+          RecordAssetTelemetry(
+            data::AssetType::kMaterial, LoadTelemetryEvent::kStoreRetryFailure);
+        }
       }
       if (stored) {
         IndexAssetHashMapping(hash_key, key, source_id);
         // Keep one loader-owned cache retain; load caller gets its own retain.
-        content_cache_.Touch(hash_key);
+        content_cache_.Touch(hash_key, oxygen::CheckoutOwner::kInternal);
         MaybeAutoTrimOnBudgetPressure("material_store_succeeded");
       }
 
@@ -1694,13 +2255,15 @@ auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key,
 
       co_return decoded;
     } catch (const co::TaskCancelledException& e) {
+      RecordAssetTelemetry(
+        data::AssetType::kMaterial, LoadTelemetryEvent::kCancellation);
       throw OperationCancelledException(e.what());
     }
   };
 
   co_return co_await RunAssetLoadPipeline<data::MaterialAsset>(
     data::MaterialAsset::ClassTypeId(), hash_key, *in_flight_ops_, request,
-    request_sequence, cache_hit, decode_and_publish);
+    request_sequence, cache_hit, decode_and_publish, telemetry_callbacks);
 }
 
 auto AssetLoader::LoadGeometryBufferDependenciesAsync(
@@ -1986,6 +2549,33 @@ auto AssetLoader::LoadGeometryAssetAsyncImpl(const data::AssetKey& key,
   }
   const auto source_id = load_target->source_id;
   const auto hash_key = load_target->hash_key;
+  const AssetLoadTelemetryCallbacks telemetry_callbacks {
+    .on_request =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kGeometry, LoadTelemetryEvent::kRequest);
+      },
+    .on_cache_hit =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kGeometry, LoadTelemetryEvent::kCacheHit);
+      },
+    .on_cache_miss =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kGeometry, LoadTelemetryEvent::kCacheMiss);
+      },
+    .on_joined_inflight =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kGeometry, LoadTelemetryEvent::kTasksDeduped);
+      },
+    .on_started_new_inflight =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kGeometry, LoadTelemetryEvent::kTasksSpawned);
+      },
+  };
   const auto publish_geometry_material_dependencies
     = [this, key, source_id, request](
         const std::shared_ptr<data::GeometryAsset>& geometry) -> co::Co<> {
@@ -2027,7 +2617,8 @@ auto AssetLoader::LoadGeometryAssetAsyncImpl(const data::AssetKey& key,
   const auto cache_hit
     = [this, hash_key, publish_geometry_material_dependencies]()
     -> co::Co<std::shared_ptr<data::GeometryAsset>> {
-    if (auto cached = content_cache_.CheckOut<data::GeometryAsset>(hash_key)) {
+    if (auto cached = content_cache_.CheckOut<data::GeometryAsset>(
+          hash_key, oxygen::CheckoutOwner::kInternal)) {
       // Cache-hit geometry loads must restore geometry->material edges after
       // trim.
       co_await publish_geometry_material_dependencies(cached);
@@ -2046,12 +2637,20 @@ auto AssetLoader::LoadGeometryAssetAsyncImpl(const data::AssetKey& key,
         = std::static_pointer_cast<data::GeometryAsset>(decoded_result.asset);
       if (!decoded
         || decoded->GetTypeId() != data::GeometryAsset::ClassTypeId()) {
+        RecordAssetTelemetry(
+          data::AssetType::kGeometry, LoadTelemetryEvent::kTypeMismatch);
+        if (!decoded) {
+          RecordAssetTelemetry(
+            data::AssetType::kGeometry, LoadTelemetryEvent::kDecodeFailure);
+        }
         LOG_F(ERROR, "Loaded asset type mismatch (async): expected {}, got {}",
           data::GeometryAsset::ClassTypeNamePretty(),
           decoded ? decoded->GetTypeName() : "nullptr");
         co_return nullptr;
       }
       if (!decoded_result.dependency_collector) {
+        RecordAssetTelemetry(
+          data::AssetType::kGeometry, LoadTelemetryEvent::kDecodeFailure);
         LOG_F(ERROR, "Missing dependency collector for decoded geometry asset");
         co_return nullptr;
       }
@@ -2077,11 +2676,15 @@ auto AssetLoader::LoadGeometryAssetAsyncImpl(const data::AssetKey& key,
       if (!stored) {
         MaybeAutoTrimOnBudgetPressure("geometry_store_failed", true);
         stored = content_cache_.Store(hash_key, decoded);
+        if (!stored) {
+          RecordAssetTelemetry(
+            data::AssetType::kGeometry, LoadTelemetryEvent::kStoreRetryFailure);
+        }
       }
       if (stored) {
         IndexAssetHashMapping(hash_key, key, source_id);
         // Keep one loader-owned cache retain; load caller gets its own retain.
-        content_cache_.Touch(hash_key);
+        content_cache_.Touch(hash_key, oxygen::CheckoutOwner::kInternal);
         MaybeAutoTrimOnBudgetPressure("geometry_store_succeeded");
       }
 
@@ -2090,13 +2693,15 @@ auto AssetLoader::LoadGeometryAssetAsyncImpl(const data::AssetKey& key,
 
       co_return decoded;
     } catch (const co::TaskCancelledException& e) {
+      RecordAssetTelemetry(
+        data::AssetType::kGeometry, LoadTelemetryEvent::kCancellation);
       throw OperationCancelledException(e.what());
     }
   };
 
   co_return co_await RunAssetLoadPipeline<data::GeometryAsset>(
     data::GeometryAsset::ClassTypeId(), hash_key, *in_flight_ops_, request,
-    request_sequence, cache_hit, decode_and_publish);
+    request_sequence, cache_hit, decode_and_publish, telemetry_callbacks);
 }
 
 auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
@@ -2117,6 +2722,33 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
   }
   const auto source_id = load_target->source_id;
   const auto hash_key = load_target->hash_key;
+  const AssetLoadTelemetryCallbacks telemetry_callbacks {
+    .on_request =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kScene, LoadTelemetryEvent::kRequest);
+      },
+    .on_cache_hit =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kScene, LoadTelemetryEvent::kCacheHit);
+      },
+    .on_cache_miss =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kScene, LoadTelemetryEvent::kCacheMiss);
+      },
+    .on_joined_inflight =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kScene, LoadTelemetryEvent::kTasksDeduped);
+      },
+    .on_started_new_inflight =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kScene, LoadTelemetryEvent::kTasksSpawned);
+      },
+  };
   const auto publish_scene_geometry_dependencies
     = [this, key, source_id, request](
         const std::shared_ptr<data::SceneAsset>& scene_asset) -> co::Co<> {
@@ -2207,7 +2839,8 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
                            publish_scene_script_dependencies,
                            publish_scene_input_mapping_context_dependencies]()
     -> co::Co<std::shared_ptr<data::SceneAsset>> {
-    if (auto cached = content_cache_.CheckOut<data::SceneAsset>(hash_key)) {
+    if (auto cached = content_cache_.CheckOut<data::SceneAsset>(
+          hash_key, oxygen::CheckoutOwner::kInternal)) {
       // Cache-hit scene loads must republish scene->geometry edges so live
       // scene content is protected from trim and can be rebuilt
       // deterministically.
@@ -2230,12 +2863,20 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
       auto decoded
         = std::static_pointer_cast<data::SceneAsset>(decoded_result.asset);
       if (!decoded || decoded->GetTypeId() != data::SceneAsset::ClassTypeId()) {
+        RecordAssetTelemetry(
+          data::AssetType::kScene, LoadTelemetryEvent::kTypeMismatch);
+        if (!decoded) {
+          RecordAssetTelemetry(
+            data::AssetType::kScene, LoadTelemetryEvent::kDecodeFailure);
+        }
         LOG_F(ERROR, "Loaded asset type mismatch (async): expected {}, got {}",
           data::SceneAsset::ClassTypeNamePretty(),
           decoded ? decoded->GetTypeName() : "nullptr");
         co_return nullptr;
       }
       if (!decoded_result.dependency_collector) {
+        RecordAssetTelemetry(
+          data::AssetType::kScene, LoadTelemetryEvent::kDecodeFailure);
         LOG_F(ERROR, "Missing dependency collector for decoded scene asset");
         co_return nullptr;
       }
@@ -2246,11 +2887,15 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
       if (!stored) {
         MaybeAutoTrimOnBudgetPressure("scene_store_failed", true);
         stored = content_cache_.Store(hash_key, decoded);
+        if (!stored) {
+          RecordAssetTelemetry(
+            data::AssetType::kScene, LoadTelemetryEvent::kStoreRetryFailure);
+        }
       }
       if (stored) {
         IndexAssetHashMapping(hash_key, key, source_id);
         // Keep one loader-owned cache retain; load caller gets its own retain.
-        content_cache_.Touch(hash_key);
+        content_cache_.Touch(hash_key, oxygen::CheckoutOwner::kInternal);
         MaybeAutoTrimOnBudgetPressure("scene_store_succeeded");
       }
 
@@ -2274,13 +2919,15 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
 
       co_return decoded;
     } catch (const co::TaskCancelledException& e) {
+      RecordAssetTelemetry(
+        data::AssetType::kScene, LoadTelemetryEvent::kCancellation);
       throw OperationCancelledException(e.what());
     }
   };
 
   co_return co_await RunAssetLoadPipeline<data::SceneAsset>(
     data::SceneAsset::ClassTypeId(), hash_key, *in_flight_ops_, request,
-    request_sequence, cache_hit, decode_and_publish);
+    request_sequence, cache_hit, decode_and_publish, telemetry_callbacks);
 }
 
 auto AssetLoader::LoadPhysicsSceneAssetAsyncImpl(const data::AssetKey& key,
@@ -2301,11 +2948,38 @@ auto AssetLoader::LoadPhysicsSceneAssetAsyncImpl(const data::AssetKey& key,
   }
   const auto source_id = load_target->source_id;
   const auto hash_key = load_target->hash_key;
+  const AssetLoadTelemetryCallbacks telemetry_callbacks {
+    .on_request =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kPhysicsScene, LoadTelemetryEvent::kRequest);
+      },
+    .on_cache_hit =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kPhysicsScene, LoadTelemetryEvent::kCacheHit);
+      },
+    .on_cache_miss =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kPhysicsScene, LoadTelemetryEvent::kCacheMiss);
+      },
+    .on_joined_inflight =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kPhysicsScene, LoadTelemetryEvent::kTasksDeduped);
+      },
+    .on_started_new_inflight =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kPhysicsScene, LoadTelemetryEvent::kTasksSpawned);
+      },
+  };
 
   const auto cache_hit
     = [this, hash_key]() -> co::Co<std::shared_ptr<data::PhysicsSceneAsset>> {
-    if (auto cached
-      = content_cache_.CheckOut<data::PhysicsSceneAsset>(hash_key)) {
+    if (auto cached = content_cache_.CheckOut<data::PhysicsSceneAsset>(
+          hash_key, oxygen::CheckoutOwner::kInternal)) {
       // Physics sidecar has no sub-asset dependencies to republish.
       co_return cached;
     }
@@ -2322,6 +2996,12 @@ auto AssetLoader::LoadPhysicsSceneAssetAsyncImpl(const data::AssetKey& key,
         decoded_result.asset);
       if (!typed
         || typed->GetTypeId() != data::PhysicsSceneAsset::ClassTypeId()) {
+        RecordAssetTelemetry(
+          data::AssetType::kPhysicsScene, LoadTelemetryEvent::kTypeMismatch);
+        if (!typed) {
+          RecordAssetTelemetry(
+            data::AssetType::kPhysicsScene, LoadTelemetryEvent::kDecodeFailure);
+        }
         LOG_F(ERROR, "Loaded asset type mismatch (async): expected {}, got {}",
           data::PhysicsSceneAsset::ClassTypeNamePretty(),
           typed ? typed->GetTypeName() : "nullptr");
@@ -2333,21 +3013,27 @@ auto AssetLoader::LoadPhysicsSceneAssetAsyncImpl(const data::AssetKey& key,
       if (!stored) {
         MaybeAutoTrimOnBudgetPressure("physics_scene_store_failed", true);
         stored = content_cache_.Store(hash_key, typed);
+        if (!stored) {
+          RecordAssetTelemetry(data::AssetType::kPhysicsScene,
+            LoadTelemetryEvent::kStoreRetryFailure);
+        }
       }
       if (stored) {
         IndexAssetHashMapping(hash_key, key, source_id);
-        content_cache_.Touch(hash_key);
+        content_cache_.Touch(hash_key, oxygen::CheckoutOwner::kInternal);
         MaybeAutoTrimOnBudgetPressure("physics_scene_store_succeeded");
       }
       co_return typed;
     } catch (const co::TaskCancelledException& e) {
+      RecordAssetTelemetry(
+        data::AssetType::kPhysicsScene, LoadTelemetryEvent::kCancellation);
       throw OperationCancelledException(e.what());
     }
   };
 
   co_return co_await RunAssetLoadPipeline<data::PhysicsSceneAsset>(
     data::PhysicsSceneAsset::ClassTypeId(), hash_key, *in_flight_ops_, request,
-    request_sequence, cache_hit, decode_and_publish);
+    request_sequence, cache_hit, decode_and_publish, telemetry_callbacks);
 }
 
 auto AssetLoader::LoadScriptAssetAsyncImpl(const data::AssetKey& key,
@@ -2368,6 +3054,33 @@ auto AssetLoader::LoadScriptAssetAsyncImpl(const data::AssetKey& key,
   }
   const auto source_id = load_target->source_id;
   const auto hash_key = load_target->hash_key;
+  const AssetLoadTelemetryCallbacks telemetry_callbacks {
+    .on_request =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kScript, LoadTelemetryEvent::kRequest);
+      },
+    .on_cache_hit =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kScript, LoadTelemetryEvent::kCacheHit);
+      },
+    .on_cache_miss =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kScript, LoadTelemetryEvent::kCacheMiss);
+      },
+    .on_joined_inflight =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kScript, LoadTelemetryEvent::kTasksDeduped);
+      },
+    .on_started_new_inflight =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kScript, LoadTelemetryEvent::kTasksSpawned);
+      },
+  };
   const auto publish_script_resource_dependency
     = [this, key, source_id, request](
         const std::shared_ptr<data::ScriptAsset>& script_asset) -> co::Co<> {
@@ -2402,7 +3115,8 @@ auto AssetLoader::LoadScriptAssetAsyncImpl(const data::AssetKey& key,
 
   const auto cache_hit = [this, hash_key, publish_script_resource_dependency]()
     -> co::Co<std::shared_ptr<data::ScriptAsset>> {
-    if (auto cached = content_cache_.CheckOut<data::ScriptAsset>(hash_key)) {
+    if (auto cached = content_cache_.CheckOut<data::ScriptAsset>(
+          hash_key, oxygen::CheckoutOwner::kInternal)) {
       co_await publish_script_resource_dependency(cached);
       co_return cached;
     }
@@ -2419,12 +3133,20 @@ auto AssetLoader::LoadScriptAssetAsyncImpl(const data::AssetKey& key,
         = std::static_pointer_cast<data::ScriptAsset>(decoded_result.asset);
       if (!decoded
         || decoded->GetTypeId() != data::ScriptAsset::ClassTypeId()) {
+        RecordAssetTelemetry(
+          data::AssetType::kScript, LoadTelemetryEvent::kTypeMismatch);
+        if (!decoded) {
+          RecordAssetTelemetry(
+            data::AssetType::kScript, LoadTelemetryEvent::kDecodeFailure);
+        }
         LOG_F(ERROR, "Loaded asset type mismatch (async): expected {}, got {}",
           data::ScriptAsset::ClassTypeNamePretty(),
           decoded ? decoded->GetTypeName() : "nullptr");
         co_return nullptr;
       }
       if (!decoded_result.dependency_collector) {
+        RecordAssetTelemetry(
+          data::AssetType::kScript, LoadTelemetryEvent::kDecodeFailure);
         LOG_F(ERROR, "Missing dependency collector for decoded script asset");
         co_return nullptr;
       }
@@ -2433,11 +3155,15 @@ auto AssetLoader::LoadScriptAssetAsyncImpl(const data::AssetKey& key,
       if (!stored) {
         MaybeAutoTrimOnBudgetPressure("script_asset_store_failed", true);
         stored = content_cache_.Store(hash_key, decoded);
+        if (!stored) {
+          RecordAssetTelemetry(
+            data::AssetType::kScript, LoadTelemetryEvent::kStoreRetryFailure);
+        }
       }
       if (stored) {
         IndexAssetHashMapping(hash_key, key, source_id);
         // Baseline pinning: retain one loader-owned checkout.
-        content_cache_.Touch(hash_key);
+        content_cache_.Touch(hash_key, oxygen::CheckoutOwner::kInternal);
         MaybeAutoTrimOnBudgetPressure("script_asset_store_succeeded");
       }
 
@@ -2445,13 +3171,15 @@ auto AssetLoader::LoadScriptAssetAsyncImpl(const data::AssetKey& key,
         key, *decoded_result.dependency_collector, request);
       co_return decoded;
     } catch (const co::TaskCancelledException& e) {
+      RecordAssetTelemetry(
+        data::AssetType::kScript, LoadTelemetryEvent::kCancellation);
       throw OperationCancelledException(e.what());
     }
   };
 
   co_return co_await RunAssetLoadPipeline<data::ScriptAsset>(
     data::ScriptAsset::ClassTypeId(), hash_key, *in_flight_ops_, request,
-    request_sequence, cache_hit, decode_and_publish);
+    request_sequence, cache_hit, decode_and_publish, telemetry_callbacks);
 }
 
 auto AssetLoader::LoadInputActionAssetAsyncImpl(const data::AssetKey& key,
@@ -2472,10 +3200,38 @@ auto AssetLoader::LoadInputActionAssetAsyncImpl(const data::AssetKey& key,
   }
   const auto source_id = load_target->source_id;
   const auto hash_key = load_target->hash_key;
+  const AssetLoadTelemetryCallbacks telemetry_callbacks {
+    .on_request =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kInputAction, LoadTelemetryEvent::kRequest);
+      },
+    .on_cache_hit =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kInputAction, LoadTelemetryEvent::kCacheHit);
+      },
+    .on_cache_miss =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kInputAction, LoadTelemetryEvent::kCacheMiss);
+      },
+    .on_joined_inflight =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kInputAction, LoadTelemetryEvent::kTasksDeduped);
+      },
+    .on_started_new_inflight =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kInputAction, LoadTelemetryEvent::kTasksSpawned);
+      },
+  };
 
   const auto cache_hit
     = [this, hash_key]() -> co::Co<std::shared_ptr<data::InputActionAsset>> {
-    co_return content_cache_.CheckOut<data::InputActionAsset>(hash_key);
+    co_return content_cache_.CheckOut<data::InputActionAsset>(
+      hash_key, oxygen::CheckoutOwner::kInternal);
   };
 
   const auto decode_and_publish
@@ -2488,6 +3244,12 @@ auto AssetLoader::LoadInputActionAssetAsyncImpl(const data::AssetKey& key,
         decoded_result.asset);
       if (!decoded
         || decoded->GetTypeId() != data::InputActionAsset::ClassTypeId()) {
+        RecordAssetTelemetry(
+          data::AssetType::kInputAction, LoadTelemetryEvent::kTypeMismatch);
+        if (!decoded) {
+          RecordAssetTelemetry(
+            data::AssetType::kInputAction, LoadTelemetryEvent::kDecodeFailure);
+        }
         LOG_F(ERROR, "Loaded asset type mismatch (async): expected {}, got {}",
           data::InputActionAsset::ClassTypeNamePretty(),
           decoded ? decoded->GetTypeName() : "nullptr");
@@ -2498,23 +3260,29 @@ auto AssetLoader::LoadInputActionAssetAsyncImpl(const data::AssetKey& key,
       if (!stored) {
         MaybeAutoTrimOnBudgetPressure("input_action_store_failed", true);
         stored = content_cache_.Store(hash_key, decoded);
+        if (!stored) {
+          RecordAssetTelemetry(data::AssetType::kInputAction,
+            LoadTelemetryEvent::kStoreRetryFailure);
+        }
       }
       if (stored) {
         IndexAssetHashMapping(hash_key, key, source_id);
         // Baseline pinning: retain one loader-owned checkout.
-        content_cache_.Touch(hash_key);
+        content_cache_.Touch(hash_key, oxygen::CheckoutOwner::kInternal);
         MaybeAutoTrimOnBudgetPressure("input_action_store_succeeded");
       }
 
       co_return decoded;
     } catch (const co::TaskCancelledException& e) {
+      RecordAssetTelemetry(
+        data::AssetType::kInputAction, LoadTelemetryEvent::kCancellation);
       throw OperationCancelledException(e.what());
     }
   };
 
   co_return co_await RunAssetLoadPipeline<data::InputActionAsset>(
     data::InputActionAsset::ClassTypeId(), hash_key, *in_flight_ops_, request,
-    request_sequence, cache_hit, decode_and_publish);
+    request_sequence, cache_hit, decode_and_publish, telemetry_callbacks);
 }
 
 auto AssetLoader::LoadInputMappingContextAssetAsyncImpl(
@@ -2536,6 +3304,33 @@ auto AssetLoader::LoadInputMappingContextAssetAsyncImpl(
   }
   const auto source_id = load_target->source_id;
   const auto hash_key = load_target->hash_key;
+  const AssetLoadTelemetryCallbacks telemetry_callbacks {
+    .on_request =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kInputMappingContext, LoadTelemetryEvent::kRequest);
+      },
+    .on_cache_hit =
+      [this]() {
+        RecordAssetTelemetry(
+          data::AssetType::kInputMappingContext, LoadTelemetryEvent::kCacheHit);
+      },
+    .on_cache_miss =
+      [this]() {
+        RecordAssetTelemetry(data::AssetType::kInputMappingContext,
+          LoadTelemetryEvent::kCacheMiss);
+      },
+    .on_joined_inflight =
+      [this]() {
+        RecordAssetTelemetry(data::AssetType::kInputMappingContext,
+          LoadTelemetryEvent::kTasksDeduped);
+      },
+    .on_started_new_inflight =
+      [this]() {
+        RecordAssetTelemetry(data::AssetType::kInputMappingContext,
+          LoadTelemetryEvent::kTasksSpawned);
+      },
+  };
   const auto publish_input_action_dependencies
     = [this, key, source_id, request](
         const std::shared_ptr<data::InputMappingContextAsset>& context_asset)
@@ -2603,8 +3398,8 @@ auto AssetLoader::LoadInputMappingContextAssetAsyncImpl(
 
   const auto cache_hit = [this, hash_key, publish_input_action_dependencies]()
     -> co::Co<std::shared_ptr<data::InputMappingContextAsset>> {
-    if (auto cached
-      = content_cache_.CheckOut<data::InputMappingContextAsset>(hash_key)) {
+    if (auto cached = content_cache_.CheckOut<data::InputMappingContextAsset>(
+          hash_key, oxygen::CheckoutOwner::kInternal)) {
       co_await publish_input_action_dependencies(cached);
       co_return cached;
     }
@@ -2622,6 +3417,12 @@ auto AssetLoader::LoadInputMappingContextAssetAsyncImpl(
       if (!decoded
         || decoded->GetTypeId()
           != data::InputMappingContextAsset::ClassTypeId()) {
+        RecordAssetTelemetry(data::AssetType::kInputMappingContext,
+          LoadTelemetryEvent::kTypeMismatch);
+        if (!decoded) {
+          RecordAssetTelemetry(data::AssetType::kInputMappingContext,
+            LoadTelemetryEvent::kDecodeFailure);
+        }
         LOG_F(ERROR, "Loaded asset type mismatch (async): expected {}, got {}",
           data::InputMappingContextAsset::ClassTypeNamePretty(),
           decoded ? decoded->GetTypeName() : "nullptr");
@@ -2633,24 +3434,31 @@ auto AssetLoader::LoadInputMappingContextAssetAsyncImpl(
         MaybeAutoTrimOnBudgetPressure(
           "input_mapping_context_store_failed", true);
         stored = content_cache_.Store(hash_key, decoded);
+        if (!stored) {
+          RecordAssetTelemetry(data::AssetType::kInputMappingContext,
+            LoadTelemetryEvent::kStoreRetryFailure);
+        }
       }
       if (stored) {
         IndexAssetHashMapping(hash_key, key, source_id);
         // Baseline pinning: retain one loader-owned checkout.
-        content_cache_.Touch(hash_key);
+        content_cache_.Touch(hash_key, oxygen::CheckoutOwner::kInternal);
         MaybeAutoTrimOnBudgetPressure("input_mapping_context_store_succeeded");
       }
 
       co_await publish_input_action_dependencies(decoded);
       co_return decoded;
     } catch (const co::TaskCancelledException& e) {
+      RecordAssetTelemetry(data::AssetType::kInputMappingContext,
+        LoadTelemetryEvent::kCancellation);
       throw OperationCancelledException(e.what());
     }
   };
 
   co_return co_await RunAssetLoadPipeline<data::InputMappingContextAsset>(
     data::InputMappingContextAsset::ClassTypeId(), hash_key, *in_flight_ops_,
-    request, request_sequence, cache_hit, decode_and_publish);
+    request, request_sequence, cache_hit, decode_and_publish,
+    telemetry_callbacks);
 }
 
 template <PakResource T>
@@ -2691,6 +3499,19 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key,
   const auto expected_type_index
     = static_cast<uint16_t>(IndexOf<T, ResourceTypeList>::value);
   if (internal_key.GetResourceTypeIndex() != expected_type_index) {
+    if constexpr (std::same_as<T, data::TextureResource>) {
+      RecordResourceTelemetry(data::TextureResource::ClassTypeId(),
+        LoadTelemetryEvent::kTypeMismatch);
+    } else if constexpr (std::same_as<T, data::BufferResource>) {
+      RecordResourceTelemetry(
+        data::BufferResource::ClassTypeId(), LoadTelemetryEvent::kTypeMismatch);
+    } else if constexpr (std::same_as<T, data::ScriptResource>) {
+      RecordResourceTelemetry(
+        data::ScriptResource::ClassTypeId(), LoadTelemetryEvent::kTypeMismatch);
+    } else if constexpr (std::same_as<T, data::PhysicsResource>) {
+      RecordResourceTelemetry(data::PhysicsResource::ClassTypeId(),
+        LoadTelemetryEvent::kTypeMismatch);
+    }
     LOG_F(ERROR,
       "ResourceKey type mismatch for {}: key_type={} expected_type={}",
       T::ClassTypeNamePretty(), internal_key.GetResourceTypeIndex(),
@@ -2707,12 +3528,38 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key,
       T::ClassTypeId(), key, request);
     auto typed = std::static_pointer_cast<T>(decoded);
     if (!typed || typed->GetTypeId() != T::ClassTypeId()) {
+      if constexpr (std::same_as<T, data::TextureResource>) {
+        RecordResourceTelemetry(data::TextureResource::ClassTypeId(),
+          LoadTelemetryEvent::kTypeMismatch);
+      } else if constexpr (std::same_as<T, data::BufferResource>) {
+        RecordResourceTelemetry(data::BufferResource::ClassTypeId(),
+          LoadTelemetryEvent::kTypeMismatch);
+      } else if constexpr (std::same_as<T, data::ScriptResource>) {
+        RecordResourceTelemetry(data::ScriptResource::ClassTypeId(),
+          LoadTelemetryEvent::kTypeMismatch);
+      } else if constexpr (std::same_as<T, data::PhysicsResource>) {
+        RecordResourceTelemetry(data::PhysicsResource::ClassTypeId(),
+          LoadTelemetryEvent::kTypeMismatch);
+      }
       LOG_F(ERROR, "Loaded resource type mismatch: expected {}",
         T::ClassTypeNamePretty());
       co_return nullptr;
     }
     co_return typed;
   } catch (const co::TaskCancelledException& e) {
+    if constexpr (std::same_as<T, data::TextureResource>) {
+      RecordResourceTelemetry(data::TextureResource::ClassTypeId(),
+        LoadTelemetryEvent::kCancellation);
+    } else if constexpr (std::same_as<T, data::BufferResource>) {
+      RecordResourceTelemetry(
+        data::BufferResource::ClassTypeId(), LoadTelemetryEvent::kCancellation);
+    } else if constexpr (std::same_as<T, data::ScriptResource>) {
+      RecordResourceTelemetry(
+        data::ScriptResource::ClassTypeId(), LoadTelemetryEvent::kCancellation);
+    } else if constexpr (std::same_as<T, data::PhysicsResource>) {
+      RecordResourceTelemetry(data::PhysicsResource::ClassTypeId(),
+        LoadTelemetryEvent::kCancellation);
+    }
     throw OperationCancelledException(e.what());
   }
 }
@@ -2720,6 +3567,7 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key,
 void oxygen::content::AssetLoader::UnloadObject(const uint64_t cache_key,
   const oxygen::TypeId& type_id, const EvictionReason reason)
 {
+  RecordEviction(reason);
   EvictionEvent event {
     .key = ResourceKey {},
     .type_id = type_id,
@@ -2890,7 +3738,7 @@ auto AssetLoader::PinResource(const ResourceKey key) -> bool
 {
   AssertOwningThread();
   const auto key_hash = HashResourceKey(key);
-  if (!content_cache_.Pin(key_hash)) {
+  if (!content_cache_.Pin(key_hash, oxygen::CheckoutOwner::kExternal)) {
     LOG_F(WARNING, "pin resource failed: key={} not loaded", to_string(key));
     return false;
   }

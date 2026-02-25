@@ -21,12 +21,12 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Content/AssetLoader.h>
-#include <Oxygen/Content/EngineTag.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/PhysicsResourceLoader.h>
 #include <Oxygen/Content/Loaders/ScriptLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
@@ -35,11 +35,11 @@
 #include "DumpContext.h"
 #include "PakFileDumper.h"
 
-namespace oxygen::content::internal {
-
-auto EngineTagFactory::Get() noexcept -> EngineTag { return EngineTag {}; }
-
-} // namespace oxygen::content::internal
+namespace oxygen::engine::internal {
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
+} // namespace oxygen::engine::internal
 
 namespace {
 
@@ -188,7 +188,7 @@ auto main(int argc, char** argv) -> int
       return 1;
     }
 
-    using oxygen::content::internal::EngineTagFactory;
+    using oxygen::engine::internal::EngineTagFactory;
 
     PakFile pak(ctx.pak_path);
 

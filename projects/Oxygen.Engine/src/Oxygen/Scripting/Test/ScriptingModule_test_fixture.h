@@ -8,11 +8,18 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 #include <Oxygen/Scripting/Test/Fakes/FakeAsyncEngine.h>
+
+namespace oxygen::engine::internal {
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
+} // namespace oxygen::engine::internal
 
 namespace oxygen::scripting::test {
 
@@ -28,6 +35,8 @@ public:
 protected:
   static constexpr auto kDefaultTestPriority = engine::ModulePriority { 100U };
 
+  using Tag = oxygen::engine::internal::EngineTagFactory;
+
   static auto MakeModule() -> ScriptingModule
   {
     return ScriptingModule { kDefaultTestPriority };
@@ -35,7 +44,7 @@ protected:
 
   auto AttachModule(ScriptingModule& module) -> bool
   {
-    return module.OnAttached(observer_ptr<IAsyncEngine> { &fake_engine_ });
+    return module.OnAttached(observer_ptr { &fake_engine_ });
   }
 
   [[nodiscard]] auto FakeEngine() noexcept -> FakeAsyncEngine&
@@ -49,7 +58,7 @@ protected:
   }
 
 private:
-  FakeAsyncEngine fake_engine_ {};
+  FakeAsyncEngine fake_engine_;
 };
 
 } // namespace oxygen::scripting::test

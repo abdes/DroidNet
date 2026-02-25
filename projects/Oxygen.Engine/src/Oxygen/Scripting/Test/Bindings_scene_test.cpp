@@ -154,8 +154,7 @@ end
   auto scene = std::make_shared<scene::Scene>(
     "scene_binding_test", kDefaultSceneCapacity);
   engine::FrameContext context;
-  const auto tag = engine::internal::EngineTagFactory::Get();
-  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
   context.SetScene(observer_ptr<scene::Scene> { scene.get() });
 
   RunSceneMutationPhase(
@@ -215,8 +214,7 @@ end
   auto scene = std::make_shared<scene::Scene>(
     "scene_binding_test", kDefaultSceneCapacity);
   engine::FrameContext context;
-  const auto tag = engine::internal::EngineTagFactory::Get();
-  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
   context.SetScene(observer_ptr<scene::Scene> { scene.get() });
 
   RunSceneMutationPhase(
@@ -268,8 +266,7 @@ end
   auto scene = std::make_shared<scene::Scene>(
     "scene_binding_test", kDefaultSceneCapacity);
   engine::FrameContext context;
-  const auto tag = engine::internal::EngineTagFactory::Get();
-  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
   context.SetScene(observer_ptr<scene::Scene> { scene.get() });
 
   RunSceneMutationPhase(
@@ -336,8 +333,7 @@ end
   auto scene = std::make_shared<scene::Scene>(
     "scene_binding_test", kDefaultSceneCapacity);
   engine::FrameContext context;
-  const auto tag = engine::internal::EngineTagFactory::Get();
-  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
   context.SetScene(observer_ptr<scene::Scene> { scene.get() });
 
   RunSceneMutationPhase(
@@ -397,8 +393,7 @@ end
   auto scene = std::make_shared<scene::Scene>(
     "scene_binding_test", kDefaultSceneCapacity);
   engine::FrameContext context;
-  const auto tag = engine::internal::EngineTagFactory::Get();
-  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
   context.SetScene(observer_ptr<scene::Scene> { scene.get() });
 
   RunSceneMutationPhase(
@@ -457,8 +452,7 @@ end
   auto scene = std::make_shared<scene::Scene>(
     "scene_binding_test", kDefaultSceneCapacity);
   engine::FrameContext context;
-  const auto tag = engine::internal::EngineTagFactory::Get();
-  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
   context.SetScene(observer_ptr<scene::Scene> { scene.get() });
 
   RunSceneMutationPhase(
@@ -509,8 +503,7 @@ end
   auto scene_a
     = std::make_shared<scene::Scene>("scene_a", kDefaultSceneCapacity);
   engine::FrameContext frame_a;
-  const auto tag = engine::internal::EngineTagFactory::Get();
-  frame_a.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
+  frame_a.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
   frame_a.SetScene(observer_ptr<scene::Scene> { scene_a.get() });
   module.OnFrameStart(observer_ptr<engine::FrameContext> { &frame_a });
   if (frame_a.HasErrors()) {
@@ -524,7 +517,7 @@ end
   auto scene_b
     = std::make_shared<scene::Scene>("scene_b", kDefaultSceneCapacity);
   engine::FrameContext frame_b;
-  frame_b.SetFrameSequenceNumber(frame::SequenceNumber { 2 }, tag);
+  frame_b.SetFrameSequenceNumber(frame::SequenceNumber { 2 }, Tag::Get());
   frame_b.SetScene(observer_ptr<scene::Scene> { scene_b.get() });
   module.OnFrameStart(observer_ptr<engine::FrameContext> { &frame_b });
   if (frame_b.HasErrors()) {
@@ -584,8 +577,7 @@ end
   auto scene = std::make_shared<scene::Scene>(
     "scene_binding_test", kDefaultSceneCapacity);
   engine::FrameContext context;
-  const auto tag = engine::internal::EngineTagFactory::Get();
-  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
   context.SetScene(observer_ptr<scene::Scene> { scene.get() });
 
   RunSceneMutationPhase(
@@ -669,8 +661,7 @@ end
   auto scene = std::make_shared<scene::Scene>(
     "scene_binding_test", kDefaultSceneCapacity);
   engine::FrameContext context;
-  const auto tag = engine::internal::EngineTagFactory::Get();
-  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
   context.SetScene(observer_ptr<scene::Scene> { scene.get() });
 
   RunSceneMutationPhase(
@@ -719,8 +710,7 @@ end
   auto scene = std::make_shared<scene::Scene>(
     "scene_binding_test", kDefaultSceneCapacity);
   engine::FrameContext context;
-  const auto tag = engine::internal::EngineTagFactory::Get();
-  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
   context.SetScene(observer_ptr<scene::Scene> { scene.get() });
 
   RunSceneMutationPhase(
@@ -775,8 +765,7 @@ end
   auto scene = std::make_shared<scene::Scene>(
     "scene_binding_test", kDefaultSceneCapacity);
   engine::FrameContext context;
-  const auto tag = engine::internal::EngineTagFactory::Get();
-  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
   context.SetScene(observer_ptr<scene::Scene> { scene.get() });
 
   module.OnFrameStart(observer_ptr<engine::FrameContext> { &context });
@@ -824,8 +813,7 @@ end
   auto scene_a
     = std::make_shared<scene::Scene>("scene_a", kDefaultSceneCapacity);
   engine::FrameContext frame_a;
-  const auto tag = engine::internal::EngineTagFactory::Get();
-  frame_a.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, tag);
+  frame_a.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
   frame_a.SetScene(observer_ptr<scene::Scene> { scene_a.get() });
   RunSceneMutationPhase(
     module, observer_ptr<engine::FrameContext> { &frame_a });
@@ -840,7 +828,7 @@ end
   auto scene_b
     = std::make_shared<scene::Scene>("scene_b", kDefaultSceneCapacity);
   engine::FrameContext frame_b;
-  frame_b.SetFrameSequenceNumber(frame::SequenceNumber { 2 }, tag);
+  frame_b.SetFrameSequenceNumber(frame::SequenceNumber { 2 }, Tag::Get());
   frame_b.SetScene(observer_ptr<scene::Scene> { scene_b.get() });
   RunSceneMutationPhase(
     module, observer_ptr<engine::FrameContext> { &frame_b });

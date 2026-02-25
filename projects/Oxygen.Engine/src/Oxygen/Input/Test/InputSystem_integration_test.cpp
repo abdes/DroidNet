@@ -30,6 +30,12 @@ using oxygen::platform::ButtonState;
 using oxygen::platform::InputSlots;
 using oxygen::platform::Key;
 
+namespace oxygen::engine::internal {
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
+} // namespace oxygen::engine::internal
+
 namespace {
 
 class InputSystemIntegrationTest : public InputSystemTest { };
@@ -185,26 +191,26 @@ NOLINT_TEST_F(
     // Build scenario frames -------------------------------------------------
     std::vector<FrameStep> steps = {
       // F1: Jump
-      FrameStep { { { Key::kSpace, ButtonState::kPressed } }, 0 },
+      FrameStep { .events={ { Key::kSpace, ButtonState::kPressed } }, .dt_ms=0 },
       // F2: Attack (tap J in same frame)
       FrameStep {
-        {
+        .events={
           { Key::kJ, ButtonState::kPressed },
           { Key::kJ, ButtonState::kReleased },
         },
-        0,
+        .dt_ms=0,
       },
       // F3..F6: Charged (hold J across time, release)
-      FrameStep { { { Key::kJ, ButtonState::kPressed } }, 0 }, // F3
-      FrameStep { {}, 300 }, // F4 +300ms
-      FrameStep { {}, 250 }, // F5 +250ms (total 550ms)
-      FrameStep { { { Key::kJ, ButtonState::kReleased } }, 0 }, // F6
+      FrameStep { .events={ { Key::kJ, ButtonState::kPressed } }, .dt_ms=0 }, // F3
+      FrameStep { .events={}, .dt_ms=300 }, // F4 +300ms
+      FrameStep { .events={}, .dt_ms=250 }, // F5 +250ms (total 550ms)
+      FrameStep { .events={ { Key::kJ, ButtonState::kReleased } }, .dt_ms=0 }, // F6
       // F7-F9: Dodge roll while moving (W held, then K press, then stop move)
-      FrameStep { { { Key::kW, ButtonState::kPressed } }, 0 }, // F7
-      FrameStep { { { Key::kK, ButtonState::kPressed } }, 0 }, // F8
-      FrameStep { { { Key::kW, ButtonState::kReleased } }, 0 }, // F9
+      FrameStep { .events={ { Key::kW, ButtonState::kPressed } }, .dt_ms=0 }, // F7
+      FrameStep { .events={ { Key::kK, ButtonState::kPressed } }, .dt_ms=0 }, // F8
+      FrameStep { .events={ { Key::kW, ButtonState::kReleased } }, .dt_ms=0 }, // F9
       // F10: Roll without movement
-      FrameStep { { { Key::kK, ButtonState::kPressed } }, 0 }, // F10
+      FrameStep { .events={ { Key::kK, ButtonState::kPressed } }, .dt_ms=0 }, // F10
     };
 
     // Expected log ----------------------------------------------------------
@@ -227,7 +233,7 @@ NOLINT_TEST_F(
     std::vector<std::string> history;
     history.reserve(steps.size());
 
-    auto engine_tag = oxygen::engine::internal::EngineTagFactory::Get();
+    using Tag = oxygen::engine::internal::EngineTagFactory;
 
     for (size_t i = 0; i < steps.size(); ++i) {
       const auto frame_index = static_cast<int>(i + 1);
@@ -260,7 +266,7 @@ NOLINT_TEST_F(
         timing.fixed_delta_time = oxygen::time::CanonicalDuration {
           std::chrono::milliseconds(step.dt_ms)
         };
-        frame_context_->SetModuleTimingData(timing, engine_tag);
+        frame_context_->SetModuleTimingData(timing, Tag::Get());
       }
 
       // Process a frame through the InputSystem

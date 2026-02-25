@@ -262,7 +262,8 @@ NOLINT_TEST_F(
         for (int i = 0; i < kOperationsPerThread; ++i) {
           for (int key = start_key; key < end_key; ++key) {
             // Checkout
-            auto obj = cache_.CheckOut<TestObject>(key);
+            auto obj = cache_.CheckOut<TestObject>(
+              key, oxygen::CheckoutOwner::kExternal);
             if (obj && obj->value == key) {
               successful_checkouts.fetch_add(1, std::memory_order_relaxed);
 
@@ -328,7 +329,8 @@ NOLINT_TEST_F(
 
       for (int i = 0; i < kOperationsPerThread; ++i) {
         int key = dist(rng);
-        auto obj = cache_.CheckOut<TestObject>(key);
+        auto obj
+          = cache_.CheckOut<TestObject>(key, oxygen::CheckoutOwner::kExternal);
         if (obj) {
           // Brief work simulation
           std::this_thread::sleep_for(
@@ -379,7 +381,7 @@ NOLINT_TEST_F(AnyCacheConcurrentCheckoutTest, ConcurrentTouch_ThreadSafe)
 
       for (int i = 0; i < kOperationsPerThread; ++i) {
         int key = dist(rng);
-        cache_.Touch(key);
+        cache_.Touch(key, oxygen::CheckoutOwner::kExternal);
         touch_operations.fetch_add(1, std::memory_order_relaxed);
 
         // Balance with checkins to prevent accumulation
@@ -520,7 +522,8 @@ NOLINT_TEST_F(
               key, std::make_shared<TestObject>(key + kWriteValueOffset));
           } else if (i % kWriterOperationModulo == kWriterCheckout) {
             // Checkout and checkin
-            auto obj = cache_.CheckOut<TestObject>(key);
+            auto obj = cache_.CheckOut<TestObject>(
+              key, oxygen::CheckoutOwner::kExternal);
             if (obj) {
               std::this_thread::sleep_for(
                 std::chrono::microseconds(kCheckoutWorkMicros));
@@ -638,14 +641,15 @@ NOLINT_TEST_F(
             break;
           case kStressOpCheckoutFirst:
           case kStressOpCheckoutSecond: // CheckOut/CheckIn (20%)
-            if (auto obj = cache_.CheckOut<TestObject>(key)) {
+            if (auto obj = cache_.CheckOut<TestObject>(
+                  key, oxygen::CheckoutOwner::kExternal)) {
               std::this_thread::sleep_for(
                 std::chrono::microseconds(kCheckoutWorkMicros));
               cache_.CheckIn(key);
             }
             break;
           case kStressOpTouch: // Touch (10%)
-            cache_.Touch(key);
+            cache_.Touch(key, oxygen::CheckoutOwner::kExternal);
             if (i % kTouchCheckInModulo == 0) {
               cache_.CheckIn(key); // Occasional checkin
             }

@@ -11,23 +11,19 @@
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/UploaderTag.h>
 
-// Implementation of UploaderTagFactory. Provides access to UploaderTag
-// capability tokens, only from the engine core. When building tests, allow
-// tests to override by defining OXYGEN_ENGINE_TESTING.
-#if defined(OXYGEN_ENGINE_TESTING)
 namespace oxygen::engine::upload::internal {
 auto UploaderTagFactory::Get() noexcept -> UploaderTag
 {
   return UploaderTag {};
 }
 } // namespace oxygen::engine::upload::internal
+
 namespace oxygen::renderer::internal {
 auto RendererTagFactory::Get() noexcept -> RendererTag
 {
   return RendererTag {};
 }
 } // namespace oxygen::renderer::internal
-#endif
 
 namespace oxygen::engine::upload::testing {
 

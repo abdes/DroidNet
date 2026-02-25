@@ -39,6 +39,7 @@ protected:
 //! Verifies that Stop() cancels StartLoad work promptly.
 NOLINT_TEST_F(AssetLoaderCancellationTest, StopCancelsStartLoadAsset)
 {
+
   // Arrange
   const auto pak_path = GeneratePakFile("material_with_textures");
   const auto material_key = CreateTestAssetKey("textured_material");
@@ -53,8 +54,7 @@ NOLINT_TEST_F(AssetLoaderCancellationTest, StopCancelsStartLoadAsset)
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = oxygen::observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
     {

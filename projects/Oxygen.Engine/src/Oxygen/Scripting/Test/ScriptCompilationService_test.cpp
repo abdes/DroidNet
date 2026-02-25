@@ -29,7 +29,9 @@
 using namespace std::chrono_literals;
 
 namespace oxygen::engine::internal {
-auto EngineTagFactory::Get() noexcept -> EngineTag { return EngineTag {}; }
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
 } // namespace oxygen::engine::internal
 
 namespace {
