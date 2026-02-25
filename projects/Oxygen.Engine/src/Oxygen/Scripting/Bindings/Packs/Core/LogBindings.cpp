@@ -51,11 +51,7 @@ namespace {
 
   auto EnsureLuaLogCommandRegistered(console::Console& console_service) -> void
   {
-    // Fast check if already registered?
-    // Console service usually handles re-registration or deduplication.
-    // For performance, we might want to do this once, but this function is
-    // stateless. Rely on Console::RegisterCommand to be efficient or
-    // idempotent.
+    // Console registration is expected to be idempotent.
     (void)console_service.RegisterCommand(console::CommandDefinition {
       .name = std::string(kConsoleLuaLogCommand),
       .help = "internal lua log sink",
@@ -87,13 +83,10 @@ namespace {
     });
   }
 
-  auto DispatchToConsole(const observer_ptr<IAsyncEngine> engine,
-    std::string_view level, std::string_view message) -> void
+  auto DispatchToConsole(IAsyncEngine& engine, std::string_view level,
+    std::string_view message) -> void
   {
-    if (engine == nullptr) {
-      return;
-    }
-    auto& console_service = engine->GetConsole();
+    auto& console_service = engine.GetConsole();
     EnsureLuaLogCommandRegistered(console_service);
 
     std::string line;
@@ -133,33 +126,52 @@ namespace {
   auto LogImpl(lua_State* state, LuaLogLevel level, const char* level_name)
     -> int
   {
-    int n = lua_gettop(state); // Number of arguments
+    const int n = lua_gettop(state);
     std::string buffer;
 
-    // Variadic concatenation
+    // Variadic concatenation using protected tostring calls.
     lua_getglobal(state, "tostring");
+    if (lua_isfunction(state, -1) == 0) {
+      lua_pop(state, 1);
+      luaL_error(state, "global tostring must be a function");
+      return 0;
+    }
+
     for (int i = 1; i <= n; ++i) {
-      lua_pushvalue(state, -1); // function to be called
-      lua_pushvalue(state, i); // value to print
-      lua_call(state, 1, 1);
-      size_t len = 0;
-      const char* s = lua_tolstring(state, -1, &len);
-      if (s != nullptr) {
+      lua_pushvalue(state, -1); // copy the tostring function
+      lua_pushvalue(state, i); // copy the argument
+
+      const int status = lua_pcall(state, 1, 1, 0);
+      if (status != LUA_OK) {
+        // an error occurred
+        lua_pop(state, 1); // pop error message
         if (i > 1) {
           buffer.push_back(' ');
         }
-        buffer.append(s, len);
+        buffer.append("<tostring error>");
+      } else {
+        // success
+        size_t len = 0;
+        const char* s = lua_tolstring(state, -1, &len);
+        if (s != nullptr) {
+          if (i > 1) {
+            buffer.push_back(' ');
+          }
+          buffer.append(s, len);
+        }
+        lua_pop(state, 1); // pop result
       }
-      lua_pop(state, 1); // pop result
     }
-    lua_pop(state, 1); // pop tostring
+
+    lua_pop(
+      state, 1); // pop the tostring function from the stack out of the loop
 
     EmitEngineLog(level, buffer, level_name);
 
-    // Graceful fallback for Console Access
-    const auto engine = GetActiveEngine(state); // May be null
-    DispatchToConsole(engine, level_name, buffer);
-
+    auto engine = GetActiveEngine(state);
+    if (engine) {
+      DispatchToConsole(*engine, level_name, buffer);
+    }
     return 0;
   }
 

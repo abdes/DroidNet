@@ -54,6 +54,10 @@ namespace {
   auto RequireStringArg(lua_State* state, const int arg_index,
     const char* error_message) -> std::string_view
   {
+    if (lua_type(state, arg_index) != LUA_TSTRING) {
+      (void)luaL_error(state, "%s", error_message);
+      return {};
+    }
     const auto* value = lua_tostring(state, arg_index);
     const std::string_view value_sv
       = value == nullptr ? std::string_view {} : std::string_view(value);
@@ -67,6 +71,16 @@ namespace {
   auto CallEventsRegistration(lua_State* state, std::string_view event_name)
     -> int
   {
+    const bool has_nil_or_missing_options
+      = lua_isnoneornil(state, kLuaArg4) != 0;
+    const bool has_table_options = lua_istable(state, kLuaArg4) != 0;
+    if (!has_nil_or_missing_options && !has_table_options) {
+      (void)luaL_error(state,
+        "oxygen.input action registration expects options table as arg #4 "
+        "when provided");
+      return kLuaNoResults;
+    }
+
     if (lua_isfunction(state, lua_upvalueindex(kLuaUpvalue1)) == 0) {
       (void)luaL_error(state,
         "oxygen.input is not bound to a valid events registration function");
@@ -76,7 +90,7 @@ namespace {
     lua_pushvalue(state, lua_upvalueindex(kLuaUpvalue1));
     lua_pushlstring(state, event_name.data(), event_name.size());
     lua_pushvalue(state, kLuaArg3);
-    if (lua_istable(state, kLuaArg4) != 0) {
+    if (has_table_options) {
       lua_pushvalue(state, kLuaArg4);
     } else {
       lua_pushnil(state);

@@ -231,6 +231,8 @@ namespace {
       return PushVec3(state, res);
     }
 
+    (void)luaL_error(
+      state, "oxygen.math.quat_mul expects quaternion or vector as arg #2");
     return 0;
   }
 
@@ -342,14 +344,16 @@ namespace {
   auto LuaMathRotateVec3(lua_State* state) -> int
   {
     auto* q = CheckQuat(state, 1);
-    if (lua_isvector(state, 2)) {
-      const float* v = lua_tovector(state, 2);
-      std::span<const float> span(v, 3);
-      Vec3 res = ToGlmQuat(q)
-        * Vec3(span[kVecIndexX], span[kVecIndexY], span[kVecIndexZ]);
-      return PushVec3(state, res);
+    if (!lua_isvector(state, 2)) {
+      (void)luaL_error(
+        state, "oxygen.math.rotate_vec3 expects vector as arg #2");
+      return 0;
     }
-    return 0;
+    const float* v = lua_tovector(state, 2);
+    std::span<const float> span(v, 3);
+    Vec3 res = ToGlmQuat(q)
+      * Vec3(span[kVecIndexX], span[kVecIndexY], span[kVecIndexZ]);
+    return PushVec3(state, res);
   }
 
   auto LuaMathMat4Identity(lua_State* state) -> int
@@ -362,7 +366,12 @@ namespace {
     Vec3 t(0);
     Vec3 s(1);
     Quat r {};
-    if (lua_gettop(state) >= 1 && lua_isvector(state, 1)) {
+    if (lua_gettop(state) >= 1) {
+      if (!lua_isvector(state, 1)) {
+        (void)luaL_error(
+          state, "oxygen.math.mat4_trs expects vector as arg #1");
+        return 0;
+      }
       const float* v = lua_tovector(state, 1);
       std::span<const float> span(v, 3);
       t = Vec3(span[kVecIndexX], span[kVecIndexY], span[kVecIndexZ]);
@@ -371,7 +380,12 @@ namespace {
       auto* q = CheckQuat(state, 2);
       r = ToGlmQuat(q);
     }
-    if (lua_gettop(state) >= 3 && lua_isvector(state, 3)) {
+    if (lua_gettop(state) >= 3) {
+      if (!lua_isvector(state, 3)) {
+        (void)luaL_error(
+          state, "oxygen.math.mat4_trs expects vector as arg #3");
+        return 0;
+      }
       const float* v = lua_tovector(state, 3);
       std::span<const float> span(v, 3);
       s = Vec3(span[kVecIndexX], span[kVecIndexY], span[kVecIndexZ]);
@@ -392,6 +406,11 @@ namespace {
   auto LuaMathMat4TransformPoint(lua_State* state) -> int
   {
     auto* m = CheckMat4(state, 1);
+    if (!lua_isvector(state, 2)) {
+      (void)luaL_error(
+        state, "oxygen.math.mat4_transform_point expects vector as arg #2");
+      return 0;
+    }
     const float* v = lua_tovector(state, 2);
     std::span<const float> span(v, 3);
     Vec4 res = ToGlmMat4(m)
@@ -402,6 +421,11 @@ namespace {
   auto LuaMathMat4TransformDirection(lua_State* state) -> int
   {
     auto* m = CheckMat4(state, 1);
+    if (!lua_isvector(state, 2)) {
+      (void)luaL_error(
+        state, "oxygen.math.mat4_transform_direction expects vector as arg #2");
+      return 0;
+    }
     const float* v = lua_tovector(state, 2);
     std::span<const float> span(v, 3);
     Vec4 res = ToGlmMat4(m)
@@ -411,6 +435,16 @@ namespace {
 
   auto LuaMathMat4LookAtRh(lua_State* state) -> int
   {
+    if (!lua_isvector(state, 1)) {
+      (void)luaL_error(
+        state, "oxygen.math.mat4_look_at_rh expects vector as arg #1");
+      return 0;
+    }
+    if (!lua_isvector(state, 2)) {
+      (void)luaL_error(
+        state, "oxygen.math.mat4_look_at_rh expects vector as arg #2");
+      return 0;
+    }
     const float* ve = lua_tovector(state, 1);
     std::span<const float> span_e(ve, 3);
     const float* vt = lua_tovector(state, 2);
@@ -424,6 +458,10 @@ namespace {
       const float* vu = lua_tovector(state, 3);
       std::span<const float> span_u(vu, 3);
       up = Vec3(span_u[kVecIndexX], span_u[kVecIndexY], span_u[kVecIndexZ]);
+    } else if (lua_gettop(state) >= 3) {
+      (void)luaL_error(
+        state, "oxygen.math.mat4_look_at_rh expects vector as arg #3");
+      return 0;
     }
     return PushMat4(state, glm::lookAtRH(eye, target, up));
   }
@@ -475,8 +513,9 @@ namespace {
       return 1;
     }
 
-    lua_pushboolean(state, 0);
-    return 1;
+    (void)luaL_error(state,
+      "oxygen.math.is_finite expects number, vector, vec4, quat, or mat4");
+    return 0;
   }
 
   auto LuaMathNearEqual(lua_State* state) -> int
@@ -546,8 +585,9 @@ namespace {
       }
     }
 
-    lua_pushboolean(state, 0);
-    return 1;
+    (void)luaL_error(
+      state, "oxygen.math.near_equal expects comparable numeric/math types");
+    return 0;
   }
 
 } // namespace

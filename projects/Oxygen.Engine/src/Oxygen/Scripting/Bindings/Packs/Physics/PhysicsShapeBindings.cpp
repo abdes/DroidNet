@@ -71,6 +71,7 @@ namespace {
 
     lua_getfield(state, desc_index, "is_sensor");
     if (lua_isnil(state, -1) == 0) {
+      luaL_checktype(state, -1, LUA_TBOOLEAN);
       desc.is_sensor = lua_toboolean(state, -1) != 0;
     }
     lua_pop(state, 1);

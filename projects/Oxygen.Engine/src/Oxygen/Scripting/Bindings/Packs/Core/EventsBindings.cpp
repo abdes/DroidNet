@@ -268,10 +268,16 @@ namespace {
   auto LuaConnectionDisconnect(lua_State* state) -> int
   {
     if (!lua_istable(state, kLuaArg1)) {
+      luaL_typeerror(state, kLuaArg1, "events.connection");
       return 0;
     }
 
     lua_getfield(state, kLuaArg1, kEventConnectionIdFieldName);
+    if (lua_isnumber(state, -1) == 0) {
+      lua_pop(state, 1);
+      luaL_argerror(state, kLuaArg1, "invalid events connection object");
+      return 0;
+    }
     const auto listener_id
       = static_cast<std::uint64_t>(lua_tointeger(state, -1));
     lua_pop(state, 1);
@@ -288,11 +294,16 @@ namespace {
   auto LuaConnectionConnected(lua_State* state) -> int
   {
     if (!lua_istable(state, kLuaArg1)) {
-      lua_pushboolean(state, 0);
-      return 1;
+      luaL_typeerror(state, kLuaArg1, "events.connection");
+      return 0;
     }
 
     lua_getfield(state, kLuaArg1, kEventConnectionIdFieldName);
+    if (lua_isnumber(state, -1) == 0) {
+      lua_pop(state, 1);
+      luaL_argerror(state, kLuaArg1, "invalid events connection object");
+      return 0;
+    }
     const auto listener_id
       = static_cast<std::uint64_t>(lua_tointeger(state, -1));
     lua_pop(state, 1);
@@ -369,6 +380,11 @@ namespace {
     if (runtime == nullptr) {
       return 0;
     }
+    if (!lua_isnoneornil(state, kLuaArg3) && !lua_istable(state, kLuaArg3)) {
+      (void)luaL_error(state,
+        "oxygen.events.on expects options table as arg #3 when provided");
+      return 0;
+    }
     const std::string phase_name
       = ParsePhaseName(state, kLuaArg3, runtime->current_phase);
     const int priority = ParsePriority(state, kLuaArg3);
@@ -434,8 +450,14 @@ namespace {
     if (phase_name.empty()) {
       phase_name = kDefaultPhaseName;
     }
-    if (lua_istable(state, kLuaArg3)) {
+    if (lua_isnoneornil(state, kLuaArg3)) {
+      // keep current/default phase
+    } else if (lua_istable(state, kLuaArg3)) {
       phase_name = ParsePhaseName(state, kLuaArg3, phase_name);
+    } else {
+      (void)luaL_error(state,
+        "oxygen.events.emit expects options table as arg #3 when provided");
+      return 0;
     }
 
     int payload_ref = kLuaNoRef;
@@ -719,6 +741,10 @@ auto ShutdownEventsRuntime(lua_State* state) -> void
   }
 
   lua_getfield(state, LUA_REGISTRYINDEX, kEventsRuntimeFieldName);
+  if (lua_userdatatag(state, -1) != kTagEventRuntime) {
+    lua_pop(state, 1);
+    return;
+  }
   auto* runtime = static_cast<EventRuntime*>(lua_touserdata(state, -1));
   if (runtime == nullptr) {
     lua_pop(state, 1);

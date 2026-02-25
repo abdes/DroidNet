@@ -29,29 +29,53 @@ namespace {
     const char* field, const unsigned int fallback_value) -> unsigned int
   {
     lua_getfield(state, table_index, field);
-    if (lua_isnumber(state, -1) != 0) {
-      const auto raw = lua_tointeger(state, -1);
+    if (lua_isnil(state, -1) != 0) {
       lua_pop(state, 1);
-      if (raw <= 0) {
-        return fallback_value;
-      }
-      return static_cast<unsigned int>(raw);
+      return fallback_value;
     }
+    if (lua_isnumber(state, -1) == 0) {
+      lua_pop(state, 1);
+      luaL_error(state,
+        "assets.create_procedural_geometry option '%s' must be a positive "
+        "integer",
+        field);
+      return fallback_value;
+    }
+
+    const double raw = lua_tonumber(state, -1);
     lua_pop(state, 1);
-    return fallback_value;
+    if (!std::isfinite(raw) || raw <= 0.0 || std::floor(raw) != raw) {
+      luaL_error(state,
+        "assets.create_procedural_geometry option '%s' must be a positive "
+        "integer",
+        field);
+      return fallback_value;
+    }
+    return static_cast<unsigned int>(raw);
   }
 
   auto ReadOptionalFloat(lua_State* state, const int table_index,
     const char* field, const float fallback_value) -> float
   {
     lua_getfield(state, table_index, field);
-    if (lua_isnumber(state, -1) != 0) {
-      const float value = static_cast<float>(lua_tonumber(state, -1));
+    if (lua_isnil(state, -1) != 0) {
       lua_pop(state, 1);
-      return value;
+      return fallback_value;
     }
+    if (lua_isnumber(state, -1) == 0) {
+      lua_pop(state, 1);
+      luaL_error(state,
+        "assets.create_procedural_geometry option '%s' must be numeric", field);
+      return fallback_value;
+    }
+    const double value = lua_tonumber(state, -1);
     lua_pop(state, 1);
-    return fallback_value;
+    if (!std::isfinite(value)) {
+      luaL_error(state,
+        "assets.create_procedural_geometry option '%s' must be finite", field);
+      return fallback_value;
+    }
+    return static_cast<float>(value);
   }
 
   auto BuildGeometryAsset(const std::string& name, MeshData mesh_data)
