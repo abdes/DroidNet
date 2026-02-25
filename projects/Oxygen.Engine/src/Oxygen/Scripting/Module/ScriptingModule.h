@@ -257,9 +257,8 @@ public:
     const scene::NodeHandle& node_handle,
     scene::ScriptSlotIndex slot_index) noexcept -> void override;
 
+  //! For testing only. Should never be used for engine runtime.
   OXGN_SCRP_NDAPI auto ExecuteScript(const ScriptExecutionRequest& request)
-    -> ScriptExecutionResult;
-  OXGN_SCRP_NDAPI auto ExecuteScript(const ScriptSourceBlob& blob)
     -> ScriptExecutionResult;
   OXGN_SCRP_NDAPI auto RegisterBindingPack(
     bindings::contracts::ScriptBindingPackPtr pack) -> bool;
@@ -351,7 +350,8 @@ private:
   int runtime_env_ref_ { -1 };
   int global_env_ref_ { -1 };
   engine::ModulePriority priority_;
-  observer_ptr<IAsyncEngine> engine_;
+  observer_ptr<IAsyncEngine> engine_ {};
+  bool attached_ { false };
   bool input_bridge_logs_enabled_ { false };
   int input_bridge_log_verbosity_ { 2 };
   std::vector<bindings::contracts::ScriptBindingPackPtr> binding_packs_;

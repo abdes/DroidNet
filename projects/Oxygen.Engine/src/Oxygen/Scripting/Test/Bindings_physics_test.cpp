@@ -71,7 +71,7 @@ NOLINT_TEST_F(PhysicsBindingsTest,
   ExecuteScriptPhysicsBindingsExposeV1V2PhysicsModuleSurface)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
+  ASSERT_TRUE(AttachModule(module));
 
   const auto result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -140,7 +140,7 @@ NOLINT_TEST_F(PhysicsBindingsTest,
   ExecuteScriptPhysicsBindingsNoEngineDeterministicFallbacks)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
+  ASSERT_TRUE(AttachModule(module));
 
   const auto result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -200,7 +200,7 @@ end
 NOLINT_TEST_F(PhysicsBindingsTest, ExecuteScriptPhysicsConstantsAreReadOnly)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
+  ASSERT_TRUE(AttachModule(module));
 
   const auto result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -244,7 +244,7 @@ NOLINT_TEST_F(PhysicsBindingsTest,
   // The velocity argument value is irrelevant to the dispatch logic; a plain
   // number is passed to avoid any dependency on the vector constructor.
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
+  ASSERT_TRUE(AttachModule(module));
 
   // Form 1: move(velocity, dt) — jump_pressed omitted, dt at arg index 3
   const auto result1 = module.ExecuteScript(ScriptExecutionRequest {
@@ -291,7 +291,7 @@ if math.abs(d - 0.033) > 1e-6 then error("dt mismatch in three-arg form") end
 NOLINT_TEST_F(PhysicsBindingsTest, OnFixedSimulationPhysicsApiIsFullyBlocked)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
+  ASSERT_TRUE(AttachModule(module));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -345,7 +345,7 @@ NOLINT_TEST_F(
   PhysicsBindingsTest, ExecuteScriptEventsEmitRejectsReservedPhysicsPrefix)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
+  ASSERT_TRUE(AttachModule(module));
 
   const auto result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(

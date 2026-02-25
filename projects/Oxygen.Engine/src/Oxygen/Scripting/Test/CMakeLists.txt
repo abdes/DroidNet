@@ -39,6 +39,8 @@ m_gtest_program(
   Module
   SOURCES
     "ScriptingModule_test_fixture.h"
+    "Fakes/FakeAsyncEngine.h"
+    "Fakes/FakeScriptCompilationService.h"
     "ScriptingModule_metadata_test.cpp"
     "ScriptingModule_phases_test.cpp"
     "ScriptingModule_lifecycle_test.cpp"
@@ -46,48 +48,26 @@ m_gtest_program(
     "ScriptingModule_scene_observer_test.cpp"
 )
 
-m_gtest_program(
-  CompilationService
-  SOURCES
-    "ScriptCompilationService_test.cpp"
-)
+m_gtest_program(CompilationService SOURCES "ScriptCompilationService_test.cpp")
 target_compile_definitions(
   Oxygen.Scripting.CompilationService.Tests
   PRIVATE
     OXYGEN_ENGINE_TESTING
 )
 
-m_gtest_program(
-  Resolver
-  SOURCES
-    "ScriptSourceResolver_test.cpp"
-)
-target_link_libraries(
-  "Oxygen.Scripting.Resolver.Tests"
-  PRIVATE
-    oxygen::loader
-)
+m_gtest_program(Resolver SOURCES "ScriptSourceResolver_test.cpp")
+target_link_libraries("Oxygen.Scripting.Resolver.Tests" PRIVATE oxygen::loader)
 
-m_gtest_program(
-  LuauScriptCompiler
-  SOURCES
-    "LuauScriptCompiler_test.cpp"
-)
+m_gtest_program(LuauScriptCompiler SOURCES "LuauScriptCompiler_test.cpp")
 
-m_gtest_program(
-  Advanced
-  SOURCES
-    "ScriptingModule_HotReload_test.cpp"
-)
-target_link_libraries(
-  "Oxygen.Scripting.Advanced.Tests"
-  PRIVATE
-    oxygen::loader
-)
+m_gtest_program(Advanced SOURCES "ScriptingModule_HotReload_test.cpp")
+target_link_libraries("Oxygen.Scripting.Advanced.Tests" PRIVATE oxygen::loader)
 
 m_gtest_program(
   Bindings
   SOURCES
+    "Fakes/FakeAsyncEngine.h"
+    "Fakes/FakeScriptCompilationService.h"
     "Bindings_time_test.cpp"
     "Bindings_app_log_test.cpp"
     "Bindings_math_test.cpp"

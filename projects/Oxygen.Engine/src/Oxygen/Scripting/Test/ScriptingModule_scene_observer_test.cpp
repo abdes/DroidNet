@@ -88,7 +88,7 @@ NOLINT_TEST_F(
   ScriptingModuleTest, GameplaySceneSwitchAfterOldSceneDestroyedDoesNotCrash)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
+  ASSERT_TRUE(AttachModule(module));
 
   TestEventLoop loop;
 

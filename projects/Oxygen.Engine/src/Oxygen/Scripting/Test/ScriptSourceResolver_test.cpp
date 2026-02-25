@@ -343,7 +343,18 @@ NOLINT_TEST_F(
   ScriptingModule module(engine::kScriptingModulePriority);
   ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> { engine.get() }));
 
-  const auto execute_result = module.ExecuteScript(blob);
+  std::string source_text;
+  const auto bytes = blob.BytesView();
+  source_text.reserve(bytes.size());
+  for (const auto byte : bytes) {
+    source_text.push_back(static_cast<char>(byte));
+  }
+  const auto execute_result
+    = module.ExecuteScript(oxygen::scripting::ScriptExecutionRequest {
+      .source_text = oxygen::scripting::ScriptSourceText { source_text },
+      .chunk_name
+      = oxygen::scripting::ScriptChunkName { blob.GetCanonicalName().get() },
+    });
   EXPECT_TRUE(execute_result.ok) << execute_result.message;
 
   loader.UnloadBackend();

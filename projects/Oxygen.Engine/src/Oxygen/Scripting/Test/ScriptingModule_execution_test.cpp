@@ -11,7 +11,7 @@ namespace oxygen::scripting::test {
 NOLINT_TEST_F(ScriptingModuleTest, ExecuteScriptSucceedsForValidScript)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
+  ASSERT_TRUE(AttachModule(module));
 
   const auto result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -28,7 +28,7 @@ value = value + 1
 NOLINT_TEST_F(ScriptingModuleTest, ExecuteScriptFailsForSyntaxError)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
+  ASSERT_TRUE(AttachModule(module));
 
   const auto result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -45,7 +45,7 @@ NOLINT_TEST_F(
   ScriptingModuleTest, ExecuteScriptRuntimeErrorReturnsStructuredFailure)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
+  ASSERT_TRUE(AttachModule(module));
 
   const auto result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -61,7 +61,7 @@ error("boom from script")
 NOLINT_TEST_F(ScriptingModuleTest, SandboxBlocksUnsafeGlobals)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
+  ASSERT_TRUE(AttachModule(module));
 
   const auto result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
@@ -78,7 +78,7 @@ NOLINT_TEST_F(
   ScriptingModuleTest, OnFrameStartHookErrorIsReportedToFrameContext)
 {
   auto module = MakeModule();
-  ASSERT_TRUE(module.OnAttached(observer_ptr<IAsyncEngine> {}));
+  ASSERT_TRUE(AttachModule(module));
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
