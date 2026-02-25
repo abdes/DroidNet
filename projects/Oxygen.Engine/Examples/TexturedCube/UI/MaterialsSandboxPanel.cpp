@@ -140,7 +140,6 @@ auto MaterialsSandboxPanel::DrawContents() -> void
       == oxygen::examples::textured_cube::TextureIndexMode::kCustom
     || cube_slot.mode
       == oxygen::examples::textured_cube::TextureIndexMode::kCustom);
-  const bool is_solid_color = vm_->GetSurfaceState().use_constant_base_color;
 
   // Only draw the Texture Browser when a slot is in Custom mode. Do not
   // render a disabled/collapsed header in other modes (prevents interactivity
