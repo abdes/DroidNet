@@ -60,14 +60,16 @@ NOLINT_TEST_F(AnyCacheBasicTest, Smoke)
   EXPECT_EQ(cache_.Peek<CachedString>(2)->value, "two");
 
   {
-    const auto num = cache_.CheckOut<CachedNumber>(1);
+    const auto num
+      = cache_.CheckOut<CachedNumber>(1, oxygen::CheckoutOwner::kExternal);
     EXPECT_EQ(num->value, 1);
     cache_.CheckIn(1);
   }
   EXPECT_TRUE(cache_.Remove(1));
 
   {
-    const auto str = cache_.CheckOut<CachedString>(2);
+    const auto str
+      = cache_.CheckOut<CachedString>(2, oxygen::CheckoutOwner::kExternal);
     EXPECT_EQ(str->value, "two");
     cache_.CheckIn(2);
   }
@@ -247,7 +249,8 @@ NOLINT_TEST_F(AnyCacheStoreTest, Store_ExistingKeyCheckedOut_Fails)
 {
   // Arrange
   cache_.Store(1, std::make_shared<TestObject>(42));
-  auto checked_out = cache_.CheckOut<TestObject>(1);
+  auto checked_out
+    = cache_.CheckOut<TestObject>(1, oxygen::CheckoutOwner::kExternal);
 
   // Act
   const bool result = cache_.Store(1, std::make_shared<TestObject>(99));
@@ -310,7 +313,8 @@ NOLINT_TEST_F(AnyCacheReplaceTest, Replace_CheckedOutItem_Fails)
 {
   // Arrange
   cache_.Store(1, std::make_shared<TestObject>(42));
-  auto checked_out = cache_.CheckOut<TestObject>(1);
+  auto checked_out
+    = cache_.CheckOut<TestObject>(1, oxygen::CheckoutOwner::kExternal);
 
   // Act
   const bool result = cache_.Replace(1, std::make_shared<TestObject>(99));
@@ -356,7 +360,8 @@ protected:
 NOLINT_TEST_F(AnyCacheCheckOutTest, CheckOut_NonExistentKey_ReturnsNull)
 {
   // Arrange, Act
-  auto result = cache_.CheckOut<TestObject>(1);
+  auto result
+    = cache_.CheckOut<TestObject>(1, oxygen::CheckoutOwner::kExternal);
 
   // Assert
   EXPECT_FALSE(result);
@@ -370,7 +375,8 @@ NOLINT_TEST_F(AnyCacheCheckOutTest, CheckOut_ExistingItemCorrectType_Succeeds)
   EXPECT_TRUE(cache_.IsCheckedOut(1)); // Initially checked out after Store
 
   // Act
-  auto result = cache_.CheckOut<TestObject>(1);
+  auto result
+    = cache_.CheckOut<TestObject>(1, oxygen::CheckoutOwner::kExternal);
 
   // Assert
   EXPECT_TRUE(result);
@@ -389,7 +395,8 @@ NOLINT_TEST_F(AnyCacheCheckOutTest, CheckOut_WrongType_ReturnsNull)
   cache_.Store(1, std::make_shared<TestObject>(42));
 
   // Act
-  auto result = cache_.CheckOut<OtherObject>(1);
+  auto result
+    = cache_.CheckOut<OtherObject>(1, oxygen::CheckoutOwner::kExternal);
 
   // Assert
   EXPECT_FALSE(result);
@@ -405,9 +412,12 @@ NOLINT_TEST_F(
   EXPECT_EQ(cache_.GetCheckoutCount(1), 1); // Initial checkout count
 
   // Act
-  auto result1 = cache_.CheckOut<TestObject>(1);
-  auto result2 = cache_.CheckOut<TestObject>(1);
-  auto result3 = cache_.CheckOut<TestObject>(1);
+  auto result1
+    = cache_.CheckOut<TestObject>(1, oxygen::CheckoutOwner::kExternal);
+  auto result2
+    = cache_.CheckOut<TestObject>(1, oxygen::CheckoutOwner::kExternal);
+  auto result3
+    = cache_.CheckOut<TestObject>(1, oxygen::CheckoutOwner::kExternal);
 
   // Assert
   EXPECT_TRUE(result1);
@@ -436,7 +446,8 @@ NOLINT_TEST_F(AnyCacheCheckOutTest, CheckIn_ReducesRefCountAndEvicts)
 {
   // Arrange
   cache_.Store(1, std::make_shared<TestObject>(42));
-  auto checked_out = cache_.CheckOut<TestObject>(1);
+  auto checked_out
+    = cache_.CheckOut<TestObject>(1, oxygen::CheckoutOwner::kExternal);
   EXPECT_EQ(cache_.Size(), 1);
 
   // Act - first check in brings refcount from 2 to 1, item stays
@@ -482,7 +493,7 @@ protected:
 NOLINT_TEST_F(AnyCacheTouchTest, Touch_NonExistentKey_Safe)
 {
   // Arrange, Act, Assert
-  EXPECT_NO_THROW(cache_.Touch(999));
+  EXPECT_NO_THROW(cache_.Touch(999, oxygen::CheckoutOwner::kExternal));
 }
 
 //! Test touch increments reference count without returning value
@@ -493,7 +504,7 @@ NOLINT_TEST_F(AnyCacheTouchTest, Touch_ExistingKey_IncrementsRefCount)
   EXPECT_TRUE(cache_.IsCheckedOut(1)); // Initially checked out after Store
 
   // Act
-  cache_.Touch(1);
+  cache_.Touch(1, oxygen::CheckoutOwner::kExternal);
 
   // Assert - Touch should increment checkout count
   EXPECT_TRUE(cache_.IsCheckedOut(1)); // Still checked out (count = 2)
@@ -613,7 +624,8 @@ NOLINT_TEST_F(AnyCacheRemoveTest, Remove_CheckedOutItem_Fails)
 {
   // Arrange
   cache_.Store(1, std::make_shared<TestObject>(42));
-  auto checked_out = cache_.CheckOut<TestObject>(1);
+  auto checked_out
+    = cache_.CheckOut<TestObject>(1, oxygen::CheckoutOwner::kExternal);
 
   // Act
   const bool result = cache_.Remove(1);
@@ -834,7 +846,7 @@ NOLINT_TEST_F(AnyCacheUtilityTest, IsCheckedOut_ReflectsCheckoutState)
   EXPECT_TRUE(cache_.IsCheckedOut(1));
 
   // Act & Assert - check out increases checkout count
-  auto obj = cache_.CheckOut<TestObject>(1);
+  auto obj = cache_.CheckOut<TestObject>(1, oxygen::CheckoutOwner::kExternal);
   EXPECT_TRUE(cache_.IsCheckedOut(1)); // Still checked out (count = 2)
 
   // Act & Assert - check in once (count 2 -> 1)
@@ -857,15 +869,15 @@ NOLINT_TEST_F(AnyCacheUtilityTest, GetCheckoutCount_TracksCheckoutState)
   EXPECT_EQ(cache_.GetCheckoutCount(1), 1);
 
   // Act & Assert - after CheckOut, count should be 2
-  auto obj1 = cache_.CheckOut<TestObject>(1);
+  auto obj1 = cache_.CheckOut<TestObject>(1, oxygen::CheckoutOwner::kExternal);
   EXPECT_EQ(cache_.GetCheckoutCount(1), 2);
 
   // Act & Assert - after another CheckOut, count should be 3
-  auto obj2 = cache_.CheckOut<TestObject>(1);
+  auto obj2 = cache_.CheckOut<TestObject>(1, oxygen::CheckoutOwner::kExternal);
   EXPECT_EQ(cache_.GetCheckoutCount(1), 3);
 
   // Act & Assert - after Touch, count should be 4
-  cache_.Touch(1);
+  cache_.Touch(1, oxygen::CheckoutOwner::kExternal);
   EXPECT_EQ(cache_.GetCheckoutCount(1), 4);
 
   // Act & Assert - after CheckIn, count should be 3
@@ -900,16 +912,16 @@ NOLINT_TEST_F(AnyCacheUtilityTest, GetCheckoutCount_MultipleItems)
   EXPECT_EQ(cache_.GetCheckoutCount(3), 1);
 
   // Act - check out item 1 multiple times
-  auto obj1a = cache_.CheckOut<TestObject>(1);
-  auto obj1b = cache_.CheckOut<TestObject>(1);
+  auto obj1a = cache_.CheckOut<TestObject>(1, oxygen::CheckoutOwner::kExternal);
+  auto obj1b = cache_.CheckOut<TestObject>(1, oxygen::CheckoutOwner::kExternal);
   EXPECT_EQ(cache_.GetCheckoutCount(1), 3);
 
   // Act - check out item 2 once
-  auto obj2 = cache_.CheckOut<TestObject>(2);
+  auto obj2 = cache_.CheckOut<TestObject>(2, oxygen::CheckoutOwner::kExternal);
   EXPECT_EQ(cache_.GetCheckoutCount(2), 2);
 
   // Act - touch item 3
-  cache_.Touch(3);
+  cache_.Touch(3, oxygen::CheckoutOwner::kExternal);
   EXPECT_EQ(cache_.GetCheckoutCount(3), 2);
 
   // Assert other items unchanged
@@ -1061,9 +1073,9 @@ NOLINT_TEST_F(AnyCacheEdgeTest, ComplexCheckoutScenario_BudgetConstraints)
   EXPECT_EQ(cache_.Consumed(), 5);
 
   // Act - check out some items, creating additional references
-  auto obj0 = cache_.CheckOut<TestObject>(0);
-  auto obj1 = cache_.CheckOut<TestObject>(1);
-  auto obj2 = cache_.CheckOut<TestObject>(2);
+  auto obj0 = cache_.CheckOut<TestObject>(0, oxygen::CheckoutOwner::kExternal);
+  auto obj1 = cache_.CheckOut<TestObject>(1, oxygen::CheckoutOwner::kExternal);
+  auto obj2 = cache_.CheckOut<TestObject>(2, oxygen::CheckoutOwner::kExternal);
 
   // Act - check in items 3 and 4 to evict them (refcount 1->0)
   cache_.CheckIn(3); // This should evict item 3
@@ -1166,7 +1178,7 @@ protected:
 NOLINT_TEST_F(AnyCacheResidencyContractTest, PinAndUnpinExposeExplicitContract)
 {
   cache_.Store(1, std::make_shared<TestObject>(10));
-  EXPECT_TRUE(cache_.Pin(1));
+  EXPECT_TRUE(cache_.Pin(1, oxygen::CheckoutOwner::kExternal));
   EXPECT_EQ(cache_.GetCheckoutCount(1), 2U);
 
   EXPECT_TRUE(cache_.Unpin(1));
@@ -1176,14 +1188,15 @@ NOLINT_TEST_F(AnyCacheResidencyContractTest, PinAndUnpinExposeExplicitContract)
   EXPECT_FALSE(cache_.Contains(1));
 
   EXPECT_FALSE(cache_.Unpin(1));
-  EXPECT_FALSE(cache_.Pin(99));
+  EXPECT_FALSE(cache_.Pin(99, oxygen::CheckoutOwner::kExternal));
 }
 
 NOLINT_TEST_F(AnyCacheResidencyContractTest, SnapshotStatsReportsResidencyState)
 {
   cache_.Store(1, std::make_shared<TestObject>(1)); // checkout count: 1
   cache_.Store(2, std::make_shared<TestObject>(2)); // checkout count: 1
-  cache_.Pin(1); // checkout count for key 1: 2
+  cache_.Pin(
+    1, oxygen::CheckoutOwner::kExternal); // checkout count for key 1: 2
 
   const auto stats = cache_.SnapshotStats();
   EXPECT_EQ(stats.size, 2U);

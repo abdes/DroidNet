@@ -6,10 +6,6 @@
 
 #include "ScriptingModule_test_fixture.h"
 
-namespace oxygen::engine::internal {
-auto EngineTagFactory::Get() noexcept -> EngineTag { return EngineTag {}; }
-} // namespace oxygen::engine::internal
-
 namespace oxygen::scripting::test {
 
 class TimeBindingsTest : public ScriptingModuleTest { };
@@ -72,8 +68,7 @@ NOLINT_TEST_F(TimeBindingsTest, OnFrameStartTimeBindingUsesFrameContextValues)
   ASSERT_TRUE(AttachModule(module));
 
   engine::FrameContext context;
-  const auto tag = engine::internal::EngineTagFactory::Get();
-  context.SetFrameSequenceNumber(frame::SequenceNumber { 42 }, tag);
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 42 }, Tag::Get());
   context.SetModuleTimingData(
     ModuleTimingData {
       .game_delta_time = time::CanonicalDuration { 10ms },
@@ -83,7 +78,7 @@ NOLINT_TEST_F(TimeBindingsTest, OnFrameStartTimeBindingUsesFrameContextValues)
       .interpolation_alpha = 0.25f,
       .current_fps = 120.0f,
     },
-    tag);
+    Tag::Get());
 
   const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(

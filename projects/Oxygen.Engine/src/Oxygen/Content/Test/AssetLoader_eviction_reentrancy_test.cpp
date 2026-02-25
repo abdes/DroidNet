@@ -64,8 +64,7 @@ NOLINT_TEST_F(AssetLoaderLoadingTest, ResourceEvictionReentrantHandler)
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
@@ -140,8 +139,7 @@ NOLINT_TEST_F(
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
     OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
@@ -218,8 +216,7 @@ NOLINT_TEST_F(AssetLoaderLoadingTest,
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
     OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)

@@ -10,10 +10,6 @@
 #include <memory>
 #include <optional>
 
-#if defined(OXYGEN_ENGINE_TESTING)
-#  include <optional>
-#endif
-
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/ResourceKey.h>

@@ -23,6 +23,12 @@
 #include <Oxygen/PhysicsModule/Test/Fakes/FakePhysicsSystem.h>
 #include <Oxygen/Scene/Scene.h>
 
+namespace oxygen::engine::internal {
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
+} // namespace oxygen::engine::internal
+
 namespace oxygen::physics::test {
 
 class PhysicsModuleSyncTest : public testing::Test {

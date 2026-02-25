@@ -100,8 +100,7 @@ NOLINT_TEST_F(
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
@@ -135,7 +134,7 @@ NOLINT_TEST_F(
       if (!events.empty()) {
         EXPECT_EQ(events.front().key, key);
         EXPECT_EQ(events.front().type_id, BufferResource::ClassTypeId());
-        EXPECT_EQ(events.front().reason, EvictionReason::kClear);
+        EXPECT_EQ(events.front().reason, EvictionReason::kTrim);
       }
 
       loader.Stop();
@@ -172,8 +171,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionFiltersByType)
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
@@ -238,8 +236,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionClearMounts)
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
@@ -307,8 +304,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionStop)
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
@@ -370,8 +366,7 @@ NOLINT_TEST_F(
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
     loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
@@ -403,8 +398,8 @@ NOLINT_TEST_F(
       EXPECT_EQ(events.size(), 3u);
       for (const auto& event : events) {
         EXPECT_EQ(event.type_id, TextureResource::ClassTypeId());
-        // We force eviction via TrimCache(), which reports kClear.
-        EXPECT_EQ(event.reason, EvictionReason::kClear);
+        // We force eviction via TrimCache(), which reports kTrim.
+        EXPECT_EQ(event.reason, EvictionReason::kTrim);
       }
 
       std::unordered_set<std::size_t> unique_keys;
@@ -445,8 +440,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, TrimCacheRepeatedCyclesStable)
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
     loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
@@ -487,7 +481,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, TrimCacheRepeatedCyclesStable)
         for (std::size_t i = before_trim; i < after_trim; ++i) {
           const auto& event = events[i];
           EXPECT_EQ(event.type_id, TextureResource::ClassTypeId());
-          EXPECT_EQ(event.reason, EvictionReason::kClear);
+          EXPECT_EQ(event.reason, EvictionReason::kTrim);
           unique_cycle_keys.insert(std::hash<ResourceKey> {}(event.key));
         }
         EXPECT_EQ(unique_cycle_keys.size(), kTexturesPerMaterial);
@@ -530,8 +524,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, RefreshPakNoDuplicateTrimEvictions)
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
     loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);

@@ -4,18 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/EngineTag.h>
+#include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/Upload/UploaderTag.h>
 
 #include <Oxygen/Renderer/Test/Resources/MaterialBinderTest.h>
 
-#ifdef OXYGEN_ENGINE_TESTING
-
-namespace oxygen::content::internal {
-auto EngineTagFactory::Get() noexcept -> EngineTag { return EngineTag {}; }
-} // namespace oxygen::content::internal
+namespace oxygen::engine::internal {
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
+} // namespace oxygen::engine::internal
 
 namespace oxygen::engine::upload::internal {
 auto UploaderTagFactory::Get() noexcept -> UploaderTag
@@ -30,8 +30,6 @@ auto RendererTagFactory::Get() noexcept -> RendererTag
   return RendererTag {};
 }
 } // namespace oxygen::renderer::internal
-
-#endif // OXYGEN_ENGINE_TESTING
 
 namespace oxygen::renderer::testing {
 

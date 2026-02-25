@@ -27,15 +27,16 @@ namespace internal {
   struct EngineTagFactory;
 } // namespace internal
 
-class EngineTag {
+class EngineTag final {
   friend struct internal::EngineTagFactory;
   EngineTag() noexcept = default;
-};
+  EngineTag(const EngineTag&) noexcept = default;
 
-namespace internal {
-  struct EngineTagFactory {
-    static auto Get() noexcept -> EngineTag;
-  };
-} // namespace internal
+public:
+  ~EngineTag() noexcept = default;
+  EngineTag(EngineTag&&) noexcept = default;
+  auto operator=(const EngineTag&) noexcept -> EngineTag& = delete;
+  auto operator=(EngineTag&&) noexcept -> EngineTag& = delete;
+};
 
 } // namespace oxygen::engine

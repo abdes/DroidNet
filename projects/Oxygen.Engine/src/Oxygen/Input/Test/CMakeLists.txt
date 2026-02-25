@@ -57,8 +57,3 @@ m_gtest_program(
     "InputSystemTest.cpp"
     "InputSystemTest.h"
 )
-target_compile_definitions(
-  Oxygen.Input.InputSystem.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
-)

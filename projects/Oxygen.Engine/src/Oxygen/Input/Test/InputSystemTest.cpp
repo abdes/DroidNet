@@ -8,14 +8,11 @@
 #include <Oxygen/Input/Test/InputSystemTest.h>
 #include <Oxygen/Platform/Types.h>
 
-// Implementation of EngineTagFactory. Provides access to EngineTag
-// capability tokens, only from the engine core. When building tests, allow
-// tests to override by defining OXYGEN_ENGINE_TESTING.
-#if defined(OXYGEN_ENGINE_TESTING)
 namespace oxygen::engine::internal {
-auto EngineTagFactory::Get() noexcept -> EngineTag { return EngineTag {}; }
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
 } // namespace oxygen::engine::internal
-#endif
 
 namespace oxygen::input::testing {
 

@@ -38,11 +38,6 @@ m_gtest_program(Frustum SOURCES "Frustum_test.cpp")
 m_gtest_program(MaterialPermutations SOURCES "MaterialPermutations_test.cpp")
 
 m_gtest_program(SunResolver SOURCES "SunResolver_basic_test.cpp")
-target_compile_definitions(
-  Oxygen.Renderer.SunResolver.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
-)
 
 m_gtest_program(
   ScenePrep
@@ -59,11 +54,6 @@ m_gtest_program(
     "ScenePrep/ScenePrepPipeline_collection_test.cpp"
     "ScenePrep/SubMeshVisibilityFilter_test.cpp"
 )
-target_compile_definitions(
-  Oxygen.Renderer.ScenePrep.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
-)
 
 # UploadCoordinator (buffer path) mocked tests
 m_gtest_program(
@@ -76,11 +66,6 @@ m_gtest_program(
     "Upload/UploadCoordinator_texture2d_test.cpp"
     "Upload/UploadCoordinator_texture3d_test.cpp"
 )
-target_compile_definitions(
-  Oxygen.Renderer.UploadCoordinator.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
-)
 
 # Upload unit tests (no backend dependency)
 m_gtest_program(
@@ -89,24 +74,12 @@ m_gtest_program(
     "Fakes/Graphics.h"
     "Upload/RingBufferStaging_basic_test.cpp"
     "Upload/RingBufferStaging_error_test.cpp"
-    "Upload/RingBufferStagingFixture.cpp"
-    "Upload/RingBufferStagingFixture.h"
     "Upload/UploadCoordinatorTest.cpp"
     "Upload/UploadCoordinatorTest.h"
-)
-target_compile_definitions(
-  Oxygen.Renderer.RingBufferStaging.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
 )
 
 # Upload unit tests (no backend dependency)
 m_gtest_program(UploadTracker SOURCES "Upload/UploadTracker_basic_test.cpp")
-target_compile_definitions(
-  Oxygen.Renderer.UploadTracker.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
-)
 
 # AtlasBuffer unit tests (no backend dependency)
 m_gtest_program(AtlasBuffer SOURCES "Upload/AtlasBuffer_basic_test.cpp")
@@ -129,11 +102,6 @@ m_gtest_program(
     "Upload/UploadCoordinatorTest.cpp"
     "Upload/UploadCoordinatorTest.h"
 )
-target_compile_definitions(
-  Oxygen.Renderer.TransientStructuredBuffer.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
-)
 
 # TextureBinder unit tests (no backend dependency)
 m_gtest_program(
@@ -146,11 +114,6 @@ m_gtest_program(
     "Resources/TextureBinder_upload_test.cpp"
     "Resources/TextureBinder_eviction_test.cpp"
     "Resources/TextureBinder_failures_test.cpp"
-)
-target_compile_definitions(
-  Oxygen.Renderer.TextureBinder.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
 )
 
 # MaterialBinder contract tests (backend-free)
@@ -167,11 +130,6 @@ m_gtest_program(
     "Resources/MaterialBinder_lifecycle_test.cpp"
     "Resources/MaterialBinder_error_stress_test.cpp"
 )
-target_compile_definitions(
-  Oxygen.Renderer.MaterialBinder.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
-)
 
 # TextureBinder unit tests (no backend dependency)
 m_gtest_program(
@@ -179,11 +137,6 @@ m_gtest_program(
   SOURCES
     "Fakes/Graphics.h"
     "Resources/TransformUploader_test.cpp"
-)
-target_compile_definitions(
-  Oxygen.Renderer.TransformUploader.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
 )
 
 # DrawMetadataEmitter unit tests
@@ -194,11 +147,6 @@ m_gtest_program(
     "Resources/GeometryUploaderTest.h"
     "Resources/DrawMetadataEmitter_test.cpp"
 )
-target_compile_definitions(
-  Oxygen.Renderer.DrawMetadataEmitter.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
-)
 
 # LightManager unit tests
 m_gtest_program(
@@ -206,11 +154,6 @@ m_gtest_program(
   SOURCES
     "Fakes/Graphics.h"
     "LightManager_basic_test.cpp"
-)
-target_compile_definitions(
-  Oxygen.Renderer.LightManager.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
 )
 
 # GeometryUploader unit tests
@@ -229,9 +172,4 @@ m_gtest_program(
     "Resources/GeometryUploader_eviction_test.cpp"
     "Resources/GeometryUploader_failures_test.cpp"
     "Resources/GeometryUploader_edge_test.cpp"
-)
-target_compile_definitions(
-  Oxygen.Renderer.GeometryUploader.Tests
-  PRIVATE
-    OXYGEN_ENGINE_TESTING
 )

@@ -95,8 +95,7 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
@@ -162,8 +161,7 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
@@ -254,8 +252,7 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
 

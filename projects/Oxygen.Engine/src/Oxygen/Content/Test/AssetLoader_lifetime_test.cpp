@@ -114,8 +114,7 @@ NOLINT_TEST_F(
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
@@ -179,8 +178,7 @@ NOLINT_TEST_F(
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
     std::vector<ResourceKey> loaded_keys;
@@ -255,8 +253,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourceUnloadRefcountedCheckouts)
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
@@ -309,8 +306,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourcePinUnpinSymmetryExpected)
     AssetLoaderConfig config {};
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
     OXCO_WITH_NURSERY(n)
@@ -421,8 +417,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
     AssetLoaderConfig config {};
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     auto seen_priority = oxygen::content::LoadPriority::kDefault;
     auto seen_intent = oxygen::content::LoadIntent::kRuntime;
@@ -479,8 +474,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, AssetUnloadRequiresExplicitRelease)
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
     loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
@@ -528,8 +522,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
     loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
@@ -650,8 +643,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
     loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
@@ -722,8 +714,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadInputActionAsset);
     loader.RegisterLoader(

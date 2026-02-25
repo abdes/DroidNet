@@ -48,6 +48,7 @@ class AssetLoaderDependencyTest : public AssetLoaderLoadingTest { };
 NOLINT_TEST_F(
   AssetLoaderDependencyTest, LoadAssetMaterialWithTexturesLoadsDependencies)
 {
+
   // Arrange
   const auto pak_path = GeneratePakFile("material_with_textures");
   const auto material_key = CreateTestAssetKey("textured_material");
@@ -62,8 +63,7 @@ NOLINT_TEST_F(
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
     loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
@@ -108,6 +108,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   AssetLoaderDependencyTest, LoadAssetGeometryWithBuffersLoadsDependencies)
 {
+
   // Arrange
   const auto pak_path = GeneratePakFile("geometry_with_buffers");
   const auto geometry_key = CreateTestAssetKey("buffered_geometry");
@@ -122,8 +123,7 @@ NOLINT_TEST_F(
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::content::internal::EngineTagFactory::Get(), config);
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
     loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);

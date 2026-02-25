@@ -216,13 +216,13 @@ auto DependencyReleaseEngine::TrimCache(
   }
   std::ranges::sort(resource_hash_snapshot);
 
-  size_t standalone_resource_candidates = 0U;
+  size_t orphan_resources = 0U;
   for (const auto resource_hash : resource_hash_snapshot) {
     if (!content_cache.Contains(resource_hash)) {
       continue;
     }
     if (content_cache.GetCheckoutCount(resource_hash) == 1U) {
-      ++standalone_resource_candidates;
+      ++orphan_resources;
       (void)content_cache.Remove(resource_hash);
     }
   }
@@ -231,7 +231,7 @@ auto DependencyReleaseEngine::TrimCache(
     .trim_roots = trim_roots.size(),
     .pruned_live_branches = pruned_live_branches,
     .blocked_priority_roots = blocked_roots.size(),
-    .standalone_resource_candidates = standalone_resource_candidates,
+    .orphan_resources = orphan_resources,
   };
 }
 

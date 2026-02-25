@@ -17,12 +17,10 @@
 
 namespace oxygen::renderer::internal {
 
-#if !defined(OXYGEN_ENGINE_TESTING)
 auto access::ViewLifecycleTagFactory::Get() noexcept -> ViewLifecycleAccessTag
 {
   return ViewLifecycleAccessTag {};
 }
-#endif // !defined(OXYGEN_ENGINE_TESTING)
 
 struct ViewLifecycleService::State {
   std::map<ViewId, CompositionViewImpl> view_pool;

@@ -7,7 +7,6 @@
 #include <cstdint>
 #include <iterator>
 #include <memory>
-#include <ranges>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -16,13 +15,15 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/TypedObject.h>
+#include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Graphics/Common/Surface.h>
-#include <Oxygen/core/EngineTag.h>
 
 namespace oxygen::engine::internal {
-auto EngineTagFactory::Get() noexcept -> EngineTag { return EngineTag {}; }
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
 } // namespace oxygen::engine::internal
 
 namespace {
@@ -96,16 +97,16 @@ auto MakeDummyViewContext() -> oxygen::engine::ViewContext
 //! Stage and read back module data using new facade API
 NOLINT_TEST(FrameContext_basic_test, StageModuleData)
 {
+  using Tag = oxygen::engine::internal::EngineTagFactory;
   // Arrange
   FrameContext ctx;
-  auto tag = EngineTagFactory::Get();
-  ctx.SetCurrentPhase(
-    PhaseId::kSceneMutation, tag); // Use mutation phase instead of kSnapshot
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation,
+    Tag::Get()); // Use mutation phase instead of kSnapshot
 
   // Act - Use new facade API for staging data
   ctx.StageModuleData<TestPayload>(TestPayload { 42 });
-  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
-  auto& snap = ctx.PublishSnapshots(tag);
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, Tag::Get());
+  auto& snap = ctx.PublishSnapshots(Tag::Get());
   const auto version = snap.gameSnapshot.version;
 
   // Assert
@@ -123,10 +124,10 @@ NOLINT_TEST(FrameContext_basic_test, StageModuleData)
 //! Test Has() and Keys() methods of ModuleData facade
 NOLINT_TEST(FrameContext_basic_test, ModuleDataQueries)
 {
+  using Tag = oxygen::engine::internal::EngineTagFactory;
   // Arrange
   FrameContext ctx;
-  auto tag = EngineTagFactory::Get();
-  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, Tag::Get());
 
   struct AnotherPayload {
     static constexpr auto ClassTypeId() -> oxygen::TypeId
@@ -141,8 +142,8 @@ NOLINT_TEST(FrameContext_basic_test, ModuleDataQueries)
   // Act - Stage multiple different types
   ctx.StageModuleData<TestPayload>(TestPayload { 7 });
   ctx.StageModuleData<AnotherPayload>(AnotherPayload { "test" });
-  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
-  auto& snap = ctx.PublishSnapshots(tag);
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, Tag::Get());
+  auto& snap = ctx.PublishSnapshots(Tag::Get());
   const auto version = snap.gameSnapshot.version;
 
   // Assert
@@ -170,16 +171,17 @@ NOLINT_TEST(FrameContext_basic_test, ModuleDataQueries)
 //! Staging during non-mutation phases is rejected
 NOLINT_TEST(FrameContext_basic_test, StageOutsideMutationPhasesRejected)
 {
+  using Tag = oxygen::engine::internal::EngineTagFactory;
   // Arrange
   FrameContext ctx;
-  auto tag = EngineTagFactory::Get();
-  ctx.SetCurrentPhase(PhaseId::kParallelTasks, tag); // Non-mutation phase
+  ctx.SetCurrentPhase(
+    PhaseId::kParallelTasks, Tag::Get()); // Non-mutation phase
 
   // Act
   NOLINT_ASSERT_DEATH(
     ctx.StageModuleData<TestPayload>(TestPayload { 1 }), ".*");
-  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
-  auto& snap = ctx.PublishSnapshots(tag);
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, Tag::Get());
+  auto& snap = ctx.PublishSnapshots(Tag::Get());
   const auto v1 = snap.gameSnapshot.version;
 
   // Assert
@@ -194,19 +196,19 @@ NOLINT_TEST(FrameContext_basic_test, StageOutsideMutationPhasesRejected)
 //! Staging is per-frame and cleared after publish
 NOLINT_TEST(FrameContext_basic_test, StagingClearedAfterPublish)
 {
+  using Tag = oxygen::engine::internal::EngineTagFactory;
   // Arrange
   FrameContext ctx;
-  auto tag = EngineTagFactory::Get();
-  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, Tag::Get());
 
   // Act
   ctx.StageModuleData<TestPayload>(TestPayload { 9 });
-  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
-  (void)ctx.PublishSnapshots(tag); // First publish
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, Tag::Get());
+  (void)ctx.PublishSnapshots(Tag::Get()); // First publish
 
   // After publish, the next publish without restaging should not carry over
-  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
-  auto& snap = ctx.PublishSnapshots(tag); // Second publish
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, Tag::Get());
+  auto& snap = ctx.PublishSnapshots(Tag::Get()); // Second publish
 
   // Assert
   const auto& module_data = snap.moduleData;
@@ -218,10 +220,10 @@ NOLINT_TEST(FrameContext_basic_test, StagingClearedAfterPublish)
 //! Test duplicate staging detection
 NOLINT_TEST(FrameContext_basic_test, DuplicateStagingRejected)
 {
+  using Tag = oxygen::engine::internal::EngineTagFactory;
   // Arrange
   FrameContext ctx;
-  auto tag = EngineTagFactory::Get();
-  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, Tag::Get());
 
   // Act
   ctx.StageModuleData<TestPayload>(TestPayload { 1 });
@@ -233,20 +235,20 @@ NOLINT_TEST(FrameContext_basic_test, DuplicateStagingRejected)
 //! Test Views mutations blocked in non-GameState phases
 NOLINT_TEST(FrameContext_basic_test, ViewsBlockedInNonGameStateMutationPhases)
 {
+  using Tag = oxygen::engine::internal::EngineTagFactory;
   // Arrange
   FrameContext ctx;
-  auto tag = EngineTagFactory::Get();
 
   // Initially in kSceneMutation phase - should allow GameState mutations
-  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, Tag::Get());
 
   // Add a view (should succeed in GameState mutation phase)
   ctx.RegisterView(MakeDummyViewContext());
   EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 1u);
 
   // Move to snapshot phase (allows FrameState but not GameState mutations)
-  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
-  (void)ctx.PublishSnapshots(tag); // Publish snapshots
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, Tag::Get());
+  (void)ctx.PublishSnapshots(Tag::Get()); // Publish snapshots
 
   // Now try to mutate Views - should trigger CHECK_F (death) due to phase
   // restrictions. Use ASSERT_DEATH to verify behavior in tests.
@@ -259,10 +261,10 @@ NOLINT_TEST(FrameContext_basic_test, SetViewRenderTargetUpdatesOnlyRenderTarget)
 {
   using oxygen::observer_ptr;
   using oxygen::graphics::Framebuffer;
+  using Tag = oxygen::engine::internal::EngineTagFactory;
 
   FrameContext ctx;
-  auto tag = EngineTagFactory::Get();
-  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, Tag::Get());
 
   auto view_ctx = MakeDummyViewContext();
   auto* const composite_fb = reinterpret_cast<Framebuffer*>(0x2);
@@ -282,10 +284,10 @@ NOLINT_TEST(FrameContext_basic_test, ViewTargetsArePublishedInSnapshot)
 {
   using oxygen::observer_ptr;
   using oxygen::graphics::Framebuffer;
+  using Tag = oxygen::engine::internal::EngineTagFactory;
 
   FrameContext ctx;
-  auto tag = EngineTagFactory::Get();
-  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, Tag::Get());
 
   auto view_ctx = MakeDummyViewContext();
   auto* const render_fb = reinterpret_cast<Framebuffer*>(0x10);
@@ -295,22 +297,23 @@ NOLINT_TEST(FrameContext_basic_test, ViewTargetsArePublishedInSnapshot)
 
   const auto view_id = ctx.RegisterView(view_ctx);
 
-  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
-  auto& snap = ctx.PublishSnapshots(tag);
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, Tag::Get());
+  auto& snap = ctx.PublishSnapshots(Tag::Get());
   ASSERT_EQ(snap.gameSnapshot.views.size(), 1u);
   EXPECT_EQ(snap.gameSnapshot.views[0].id, view_id);
   EXPECT_EQ(snap.gameSnapshot.views[0].render_target.get(), render_fb);
   EXPECT_EQ(snap.gameSnapshot.views[0].composite_source.get(), composite_fb);
 }
 
-NOLINT_TEST(FrameContext_basic_test, UpdateViewReplacesRenderAndCompositeTargets)
+NOLINT_TEST(
+  FrameContext_basic_test, UpdateViewReplacesRenderAndCompositeTargets)
 {
   using oxygen::observer_ptr;
   using oxygen::graphics::Framebuffer;
+  using Tag = oxygen::engine::internal::EngineTagFactory;
 
   FrameContext ctx;
-  auto tag = EngineTagFactory::Get();
-  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, Tag::Get());
 
   auto initial = MakeDummyViewContext();
   initial.render_target = observer_ptr { reinterpret_cast<Framebuffer*>(0x30) };
@@ -335,58 +338,58 @@ NOLINT_TEST(FrameContext_basic_test, UpdateViewReplacesRenderAndCompositeTargets
 // Views: adding/clearing in Snapshot phase should die
 NOLINT_TEST(FrameContext_basic_test, ViewsMutatorsDieInSnapshot)
 {
-  FrameContext ctx;
-  auto tag = EngineTagFactory::Get();
+  using Tag = oxygen::engine::internal::EngineTagFactory;
 
-  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
-  (void)ctx.PublishSnapshots(tag);
+  FrameContext ctx;
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, Tag::Get());
+  (void)ctx.PublishSnapshots(Tag::Get());
 
   NOLINT_ASSERT_DEATH(ctx.RegisterView(MakeDummyViewContext()), ".*");
-  NOLINT_ASSERT_DEATH(ctx.ClearViews(tag), ".*");
+  NOLINT_ASSERT_DEATH(ctx.ClearViews(Tag::Get()), ".*");
 }
 
 // Surfaces: structural mutations must die in Snapshot phase
 NOLINT_TEST(FrameContext_basic_test, SurfaceMutatorsDieInSnapshot)
 {
   using oxygen::observer_ptr;
+  using Tag = oxygen::engine::internal::EngineTagFactory;
 
   FrameContext ctx;
-  auto tag = EngineTagFactory::Get();
 
   // Insert a surface while in a mutation phase so we have a valid starting
   // state for removal/presentable tests
   auto dummy_surface = std::make_shared<DummySurface>();
   auto surface_ptr = observer_ptr { dummy_surface.get() };
-  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, Tag::Get());
   ctx.AddSurface(surface_ptr);
 
   // Move to Snapshot where structural mutations must be rejected
-  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
-  (void)ctx.PublishSnapshots(tag);
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, Tag::Get());
+  (void)ctx.PublishSnapshots(Tag::Get());
 
   NOLINT_ASSERT_DEATH(ctx.AddSurface(surface_ptr), ".*");
   NOLINT_ASSERT_DEATH(ctx.RemoveSurfaceAt(0u), ".*");
-  NOLINT_ASSERT_DEATH(ctx.ClearSurfaces(tag), ".*");
+  NOLINT_ASSERT_DEATH(ctx.ClearSurfaces(Tag::Get()), ".*");
 }
 
 // Presentable flags: must not be mutated at or after Present
 NOLINT_TEST(FrameContext_basic_test, PresentableFlagsDieAtOrAfterPresent)
 {
   using oxygen::observer_ptr;
+  using Tag = oxygen::engine::internal::EngineTagFactory;
 
   FrameContext ctx;
-  auto tag = EngineTagFactory::Get();
 
   // Add a surface in a mutation phase so index 0 exists
   auto dummy_surface = std::make_shared<DummySurface>();
   auto surface_ptr = observer_ptr { dummy_surface.get() };
-  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, Tag::Get());
   ctx.AddSurface(surface_ptr);
 
   // Move to Present phase and verify presentable flag mutations die
-  ctx.SetCurrentPhase(PhaseId::kPresent, tag);
+  ctx.SetCurrentPhase(PhaseId::kPresent, Tag::Get());
   NOLINT_ASSERT_DEATH(ctx.SetSurfacePresentable(0u, true), ".*");
-  NOLINT_ASSERT_DEATH(ctx.ClearPresentableFlags(tag), ".*");
+  NOLINT_ASSERT_DEATH(ctx.ClearPresentableFlags(Tag::Get()), ".*");
 }
 
 // Exhaustive per-phase checks for the various PhaseId-guarded operations.
@@ -397,23 +400,23 @@ NOLINT_TEST(FrameContext_basic_test, PresentableFlagsDieAtOrAfterPresent)
 
 NOLINT_TEST(FrameContext_basic_test, ViewsPhaseMatrix)
 {
-  auto tag = EngineTagFactory::Get();
+  using Tag = oxygen::engine::internal::EngineTagFactory;
 
   for (uint32_t ui = 0u; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
     const auto phase = static_cast<PhaseId>(ui);
     FrameContext ctx;
-    ctx.SetCurrentPhase(phase, tag);
+    ctx.SetCurrentPhase(phase, Tag::Get());
 
     if (ui < static_cast<uint32_t>(PhaseId::kSnapshot)) {
       // Allowed: adding/clearing views before Snapshot
       ctx.RegisterView(MakeDummyViewContext());
       EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 1u);
-      ctx.ClearViews(tag);
+      ctx.ClearViews(Tag::Get());
       EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 0u);
     } else {
       // Disallowed: should be fatal
       NOLINT_ASSERT_DEATH(ctx.RegisterView(MakeDummyViewContext()), ".*");
-      NOLINT_ASSERT_DEATH(ctx.ClearViews(tag), ".*");
+      NOLINT_ASSERT_DEATH(ctx.ClearViews(Tag::Get()), ".*");
     }
   }
 }
@@ -421,13 +424,12 @@ NOLINT_TEST(FrameContext_basic_test, ViewsPhaseMatrix)
 NOLINT_TEST(FrameContext_basic_test, SurfacesPhaseMatrix)
 {
   using oxygen::observer_ptr;
-
-  auto tag = EngineTagFactory::Get();
+  using Tag = oxygen::engine::internal::EngineTagFactory;
 
   for (uint32_t ui = 0u; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
     const auto phase = static_cast<PhaseId>(ui);
     FrameContext ctx;
-    ctx.SetCurrentPhase(phase, tag);
+    ctx.SetCurrentPhase(phase, Tag::Get());
 
     auto dummy_surface = std::make_shared<DummySurface>();
     auto surface_ptr = observer_ptr { dummy_surface.get() };
@@ -442,12 +444,12 @@ NOLINT_TEST(FrameContext_basic_test, SurfacesPhaseMatrix)
 
       // Clear and replace operations should succeed
       ctx.AddSurface(surface_ptr);
-      ctx.ClearSurfaces(tag);
+      ctx.ClearSurfaces(Tag::Get());
     } else {
       // Disallowed structural mutations
       NOLINT_ASSERT_DEATH(ctx.AddSurface(surface_ptr), ".*");
       NOLINT_ASSERT_DEATH(ctx.RemoveSurfaceAt(0u), ".*");
-      NOLINT_ASSERT_DEATH(ctx.ClearSurfaces(tag), ".*");
+      NOLINT_ASSERT_DEATH(ctx.ClearSurfaces(Tag::Get()), ".*");
     }
   }
 }
@@ -455,32 +457,31 @@ NOLINT_TEST(FrameContext_basic_test, SurfacesPhaseMatrix)
 NOLINT_TEST(FrameContext_basic_test, PresentableFlagsPhaseMatrix)
 {
   using oxygen::observer_ptr;
-
-  auto tag = EngineTagFactory::Get();
+  using Tag = oxygen::engine::internal::EngineTagFactory;
 
   for (uint32_t ui = 0u; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
     const auto phase = static_cast<PhaseId>(ui);
     FrameContext ctx;
 
     // Ensure a surface exists by inserting in a mutation phase first
-    ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+    ctx.SetCurrentPhase(PhaseId::kSceneMutation, Tag::Get());
     auto dummy_surface = std::make_shared<DummySurface>();
     auto surface_ptr = observer_ptr { dummy_surface.get() };
     ctx.AddSurface(surface_ptr);
 
     // Move to the phase under test
-    ctx.SetCurrentPhase(phase, tag);
+    ctx.SetCurrentPhase(phase, Tag::Get());
 
     if (ui < static_cast<uint32_t>(PhaseId::kPresent)) {
       // Allowed to set/clear presentable flags before Present
       ctx.SetSurfacePresentable(0u, true);
       EXPECT_TRUE(ctx.IsSurfacePresentable(0u));
-      ctx.ClearPresentableFlags(tag);
+      ctx.ClearPresentableFlags(Tag::Get());
       EXPECT_FALSE(ctx.IsSurfacePresentable(0u));
     } else {
       // Disallowed at or after Present
       NOLINT_ASSERT_DEATH(ctx.SetSurfacePresentable(0u, true), ".*");
-      NOLINT_ASSERT_DEATH(ctx.ClearPresentableFlags(tag), ".*");
+      NOLINT_ASSERT_DEATH(ctx.ClearPresentableFlags(Tag::Get()), ".*");
     }
   }
 }
@@ -489,13 +490,12 @@ NOLINT_TEST(FrameContext_basic_test, SetScenePhaseMatrix)
 {
   using oxygen::observer_ptr;
   using oxygen::scene::Scene;
-
-  auto tag = EngineTagFactory::Get();
+  using Tag = oxygen::engine::internal::EngineTagFactory;
 
   for (uint32_t ui = 0u; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
     const auto phase = static_cast<PhaseId>(ui);
     FrameContext ctx;
-    ctx.SetCurrentPhase(phase, tag);
+    ctx.SetCurrentPhase(phase, Tag::Get());
 
     if (ui < static_cast<uint32_t>(PhaseId::kSceneMutation)) {
       // Allowed before SceneMutation
@@ -509,31 +509,31 @@ NOLINT_TEST(FrameContext_basic_test, SetScenePhaseMatrix)
 // Bounds and invalid-index behavior for surface operations
 NOLINT_TEST(FrameContext_basic_test, RemoveSurfaceAtOutOfRangeAllowedPhase)
 {
-  auto tag = EngineTagFactory::Get();
+  using Tag = oxygen::engine::internal::EngineTagFactory;
 
   // In allowed phase (before Snapshot), removal of a non-existent index
   // should return false rather than fatal.
   FrameContext ctx;
-  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, Tag::Get());
   EXPECT_FALSE(ctx.RemoveSurfaceAt(42u)); // out-of-range
 }
 
 NOLINT_TEST(FrameContext_basic_test, RemoveSurfaceAtOutOfRangeDiesInSnapshot)
 {
-  auto tag = EngineTagFactory::Get();
+  using Tag = oxygen::engine::internal::EngineTagFactory;
 
   // In Snapshot phase structural mutations are disallowed; the guard should
   // trigger before the bounds check and cause a fatal assertion.
   FrameContext ctx;
-  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
-  (void)ctx.PublishSnapshots(tag);
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, Tag::Get());
+  (void)ctx.PublishSnapshots(Tag::Get());
 
   NOLINT_ASSERT_DEATH(ctx.RemoveSurfaceAt(42u), ".*");
 }
 
 NOLINT_TEST(FrameContext_basic_test, SetSurfacePresentableOutOfRangeNoOp)
 {
-  auto tag = EngineTagFactory::Get();
+  using Tag = oxygen::engine::internal::EngineTagFactory;
 
   // Setting presentable on an out-of-range index should be ignored and not
   // cause a fatal assertion when allowed by phase guards. Verify that
@@ -541,62 +541,62 @@ NOLINT_TEST(FrameContext_basic_test, SetSurfacePresentableOutOfRangeNoOp)
   // phase guard is checked first in later phases (e.g. Present) and will
   // trigger before any bounds access.
   FrameContext ctx;
-  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, Tag::Get());
   ctx.SetSurfacePresentable(999u, true); // should be ignored
   EXPECT_FALSE(ctx.IsSurfacePresentable(999u));
 
   // In Present phase the phase-guard runs first and will cause a fatal
   // assertion for any attempt to mutate presentable flags. Ensure this
   // happens even for out-of-range indices.
-  ctx.SetCurrentPhase(PhaseId::kPresent, tag);
+  ctx.SetCurrentPhase(PhaseId::kPresent, Tag::Get());
   NOLINT_ASSERT_DEATH(ctx.SetSurfacePresentable(999u, true), ".*");
 }
 
 NOLINT_TEST(FrameContext_basic_test, PublishSnapshotsPhaseMatrix)
 {
-  auto tag = EngineTagFactory::Get();
+  using Tag = oxygen::engine::internal::EngineTagFactory;
 
   for (uint32_t ui = 0u; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
     const auto phase = static_cast<PhaseId>(ui);
     FrameContext ctx;
-    ctx.SetCurrentPhase(phase, tag);
+    ctx.SetCurrentPhase(phase, Tag::Get());
 
     if (phase == PhaseId::kSnapshot) {
       // Allowed only during Snapshot
-      (void)ctx.PublishSnapshots(tag);
+      (void)ctx.PublishSnapshots(Tag::Get());
     } else {
-      NOLINT_ASSERT_DEATH((void)ctx.PublishSnapshots(tag), ".*");
+      NOLINT_ASSERT_DEATH((void)ctx.PublishSnapshots(Tag::Get()), ".*");
     }
   }
 }
 
 NOLINT_TEST(FrameContext_basic_test, SetInputSnapshotPhaseMatrix)
 {
-  auto tag = EngineTagFactory::Get();
+  using Tag = oxygen::engine::internal::EngineTagFactory;
 
   for (uint32_t ui = 0u; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
     const auto phase = static_cast<PhaseId>(ui);
     FrameContext ctx;
-    ctx.SetCurrentPhase(phase, tag);
+    ctx.SetCurrentPhase(phase, Tag::Get());
 
     auto inp = std::shared_ptr<const void> { nullptr };
     // Using nullptr is allowed for interface tests; only phase gating checked
     if (phase == PhaseId::kInput) {
-      ctx.SetInputSnapshot(inp, tag);
+      ctx.SetInputSnapshot(inp, Tag::Get());
     } else {
-      NOLINT_ASSERT_DEATH(ctx.SetInputSnapshot(inp, tag), ".*");
+      NOLINT_ASSERT_DEATH(ctx.SetInputSnapshot(inp, Tag::Get()), ".*");
     }
   }
 }
 
 NOLINT_TEST(FrameContext_basic_test, GetStagingModuleDataPhaseMatrix)
 {
-  auto tag = EngineTagFactory::Get();
+  using Tag = oxygen::engine::internal::EngineTagFactory;
 
   for (uint32_t ui = 0u; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
     const auto phase = static_cast<PhaseId>(ui);
     FrameContext ctx;
-    ctx.SetCurrentPhase(phase, tag);
+    ctx.SetCurrentPhase(phase, Tag::Get());
 
     const bool allowed = oxygen::core::meta::PhaseCanMutateGameState(phase)
       || phase == PhaseId::kSnapshot;
@@ -614,12 +614,12 @@ NOLINT_TEST(FrameContext_basic_test, StageDuringSnapshotAllowed)
 {
   // Arrange
   FrameContext ctx;
-  auto tag = EngineTagFactory::Get();
-  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
+  using Tag = oxygen::engine::internal::EngineTagFactory;
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, Tag::Get());
 
   // Act
   ctx.StageModuleData<TestPayload>(TestPayload { 111 });
-  auto& snap = ctx.PublishSnapshots(tag);
+  auto& snap = ctx.PublishSnapshots(Tag::Get());
 
   // Assert
   const auto& md = snap.moduleData;
@@ -634,8 +634,8 @@ NOLINT_TEST(FrameContext_basic_test, MutableViewMutationReflectedInSnapshot)
 {
   // Arrange
   FrameContext ctx;
-  auto tag = EngineTagFactory::Get();
-  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+  using Tag = oxygen::engine::internal::EngineTagFactory;
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, Tag::Get());
 
   // Act
   ctx.StageModuleData<TestPayload>(TestPayload { 5 });
@@ -647,8 +647,8 @@ NOLINT_TEST(FrameContext_basic_test, MutableViewMutationReflectedInSnapshot)
   v->get().value = 9;
 
   // Publish and read back immutable view
-  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
-  auto& snap = ctx.PublishSnapshots(tag);
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, Tag::Get());
+  auto& snap = ctx.PublishSnapshots(Tag::Get());
 
   // Assert
   const auto& md = snap.moduleData;
@@ -662,12 +662,12 @@ NOLINT_TEST(FrameContext_basic_test, ModuleDataKeysAndMembership)
 {
   // Arrange
   FrameContext ctx;
-  auto tag = EngineTagFactory::Get();
-  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+  using Tag = oxygen::engine::internal::EngineTagFactory;
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, Tag::Get());
 
   // No staged data yet
-  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
-  auto& snap0 = ctx.PublishSnapshots(tag);
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, Tag::Get());
+  auto& snap0 = ctx.PublishSnapshots(Tag::Get());
   const auto& md0 = snap0.moduleData;
   auto keys0 = md0.Keys();
   EXPECT_TRUE(keys0.empty());
@@ -675,7 +675,7 @@ NOLINT_TEST(FrameContext_basic_test, ModuleDataKeysAndMembership)
   EXPECT_FALSE(md0.Get<TestPayload>().has_value());
 
   // Act - stage two types
-  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, Tag::Get());
   ctx.StageModuleData<TestPayload>(TestPayload { 1 });
   struct P2 {
     static constexpr auto ClassTypeId() -> oxygen::TypeId
@@ -687,8 +687,8 @@ NOLINT_TEST(FrameContext_basic_test, ModuleDataKeysAndMembership)
   ctx.StageModuleData<P2>(P2 { 2 });
 
   // Publish
-  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
-  auto& snap1 = ctx.PublishSnapshots(tag);
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, Tag::Get());
+  auto& snap1 = ctx.PublishSnapshots(Tag::Get());
   const auto& md1 = snap1.moduleData;
 
   // Assert - order agnostic
@@ -704,15 +704,15 @@ NOLINT_TEST(FrameContext_basic_test, ImmutableConstAndDecayRetrieval)
 {
   // Arrange
   FrameContext ctx;
-  auto tag = EngineTagFactory::Get();
-  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+  using Tag = oxygen::engine::internal::EngineTagFactory;
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, Tag::Get());
 
   const TestPayload kPayload { 77 };
 
   // Act
   ctx.StageModuleData<const TestPayload>(kPayload);
-  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
-  auto& snap = ctx.PublishSnapshots(tag);
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, Tag::Get());
+  auto& snap = ctx.PublishSnapshots(Tag::Get());
   const auto& md = snap.moduleData;
 
   // Assert - both retrieval spellings should succeed
@@ -729,8 +729,8 @@ NOLINT_TEST(FrameContext_basic_test, MoveOnlyPayloadStagingAndAccess)
 {
   // Arrange
   FrameContext ctx;
-  auto tag = EngineTagFactory::Get();
-  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+  using Tag = oxygen::engine::internal::EngineTagFactory;
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, Tag::Get());
 
   struct MoveOnlyPayload {
     static constexpr auto ClassTypeId() -> oxygen::TypeId
@@ -759,8 +759,8 @@ NOLINT_TEST(FrameContext_basic_test, MoveOnlyPayloadStagingAndAccess)
   v->get().value = 654;
 
   // Publish and read back
-  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
-  auto& snap = ctx.PublishSnapshots(tag);
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, Tag::Get());
+  auto& snap = ctx.PublishSnapshots(Tag::Get());
   const auto& md = snap.moduleData;
   auto got = md.Get<MoveOnlyPayload>();
   ASSERT_TRUE(got.has_value());
@@ -770,10 +770,11 @@ NOLINT_TEST(FrameContext_basic_test, MoveOnlyPayloadStagingAndAccess)
 //! Keys() returns the exact set of staged TypeIds (order independent)
 NOLINT_TEST(FrameContext_basic_test, ModuleDataExactKeysSet)
 {
+  using Tag = oxygen::engine::internal::EngineTagFactory;
+
   // Arrange
   FrameContext ctx;
-  auto tag = EngineTagFactory::Get();
-  ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, Tag::Get());
 
   struct P3 {
     static constexpr auto ClassTypeId() -> oxygen::TypeId
@@ -788,8 +789,8 @@ NOLINT_TEST(FrameContext_basic_test, ModuleDataExactKeysSet)
   ctx.StageModuleData<P3>(P3 { 2 });
 
   // Publish and inspect keys
-  ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
-  auto& snap = ctx.PublishSnapshots(tag);
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, Tag::Get());
+  auto& snap = ctx.PublishSnapshots(Tag::Get());
   const auto& md = snap.moduleData;
   const auto keys = md.Keys();
 

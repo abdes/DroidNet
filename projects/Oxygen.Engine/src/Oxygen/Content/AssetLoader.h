@@ -20,10 +20,10 @@
 #include <unordered_set>
 #include <vector>
 
+#include <Oxygen/Base/EnumIndexedArray.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/PathFinder.h>
-#include <Oxygen/Content/EngineTag.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/OperationCancelledException.h>
@@ -32,8 +32,10 @@
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Core/AnyCache.h>
+#include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/RefCountedEviction.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/InputActionAsset.h>
@@ -130,6 +132,104 @@ public:
   using IAssetLoader::ScriptCallback;
   using IAssetLoader::TextureCallback;
 
+  enum class TypedLoadMetric : uint8_t {
+    kFirst = 0,
+    kRequests = kFirst,
+    kCacheHits,
+    kCacheMisses,
+    kTasksDeduped,
+    kTasksSpawned,
+    kErrDecode,
+    kErrTypeMismatch,
+    kErrRetryFailed,
+    kErrCanceled,
+    kCount,
+  };
+  enum class LoadTelemetryEvent : uint8_t {
+    kFirst = 0,
+    kRequest = kFirst,
+    kCacheHit,
+    kCacheMiss,
+    kTasksDeduped,
+    kTasksSpawned,
+    kDecodeFailure,
+    kTypeMismatch,
+    kStoreRetryFailure,
+    kCancellation,
+    kCount,
+  };
+  using TypedLoadTelemetry
+    = oxygen::EnumIndexedArray<TypedLoadMetric, uint64_t>;
+
+  struct InFlightTelemetry final {
+    uint64_t find_calls { 0 };
+    uint64_t find_hits { 0 };
+    uint64_t insert_calls { 0 };
+    uint64_t erase_calls { 0 };
+    uint64_t clear_calls { 0 };
+    std::size_t active_type_buckets { 0 };
+    std::size_t active_operations { 0 };
+  };
+
+  struct TelemetryStats final {
+    bool telemetry_enabled { true };
+
+    struct PressureTelemetry final {
+      uint64_t events_total { 0 };
+      uint64_t events_forced { 0 };
+      uint64_t events_soft { 0 };
+      uint64_t resource_store_failed { 0 };
+      uint64_t resource_store_over_budget { 0 };
+      uint64_t asset_store_failed { 0 };
+      uint64_t asset_store_succeeded { 0 };
+    };
+
+    struct TrimTelemetry final {
+      uint64_t manual_attempts { 0 };
+      uint64_t auto_attempts { 0 };
+      uint64_t reclaimed_items { 0 };
+      uint64_t reclaimed_bytes { 0 };
+      uint64_t blocked_total { 0 };
+      uint64_t pruned_live_branches { 0 };
+      uint64_t blocked_priority_roots { 0 };
+      uint64_t orphan_resources { 0 };
+    };
+
+    struct EvictionTelemetry final {
+      uint64_t on_refcount_zero { 0 };
+      uint64_t on_trim { 0 };
+      uint64_t on_clear { 0 };
+      uint64_t on_shutdown { 0 };
+    };
+
+    struct CacheTelemetry final {
+      std::size_t entries { 0 };
+      uint64_t consumed_budget { 0 };
+      std::size_t checked_out_items { 0 };
+      bool over_budget { false };
+    };
+
+    TypedLoadTelemetry material_assets {};
+    TypedLoadTelemetry geometry_assets {};
+    TypedLoadTelemetry scene_assets {};
+    TypedLoadTelemetry physics_scene_assets {};
+    TypedLoadTelemetry script_assets {};
+    TypedLoadTelemetry input_action_assets {};
+    TypedLoadTelemetry input_mapping_context_assets {};
+
+    TypedLoadTelemetry texture_resources {};
+    TypedLoadTelemetry buffer_resources {};
+    TypedLoadTelemetry script_resources {};
+    TypedLoadTelemetry physics_resources {};
+
+    PressureTelemetry pressure {};
+    TrimTelemetry trim {};
+    EvictionTelemetry eviction {};
+    CacheTelemetry cache {};
+
+    InFlightTelemetry in_flight {};
+  };
+
   //! LiveObject contract
   OXGN_CNTT_NDAPI auto ActivateAsync(co::TaskStarted<> started = {})
     -> co::Co<> override;
@@ -142,7 +242,7 @@ public:
 
   //! Engine-only capability token is required for construction.
   OXGN_CNTT_API explicit AssetLoader(
-    EngineTag tag, const AssetLoaderConfig& config = {});
+    engine::EngineTag tag, const AssetLoaderConfig& config = {});
   OXGN_CNTT_API virtual ~AssetLoader();
 
   OXYGEN_MAKE_NON_COPYABLE(AssetLoader)
@@ -184,6 +284,12 @@ public:
     observer_ptr<console::Console> console) noexcept -> void override;
   OXGN_CNTT_API auto ApplyConsoleCVars(const console::Console& console)
     -> void override;
+  [[nodiscard]] OXGN_CNTT_NDAPI auto GetTelemetryStats() const
+    -> TelemetryStats;
+  OXGN_CNTT_API auto ResetTelemetryStats() noexcept -> void;
+  OXGN_CNTT_API auto SetTelemetryEnabled(bool enabled) -> void;
+  [[nodiscard]] OXGN_CNTT_NDAPI auto IsTelemetryEnabled() const noexcept
+    -> bool;
 
   //=== Dependency Management ===---------------------------------------------//
 
@@ -910,7 +1016,9 @@ public:
   template <PakResource T>
   auto CheckOutResource(ResourceKey key) const noexcept -> std::shared_ptr<T>
   {
-    return content_cache_.CheckOut<T>(HashResourceKey(key));
+    const auto key_hash = HashResourceKey(key);
+    return content_cache_.CheckOut<T>(
+      key_hash, oxygen::CheckoutOwner::kExternal);
   }
 
   //! Check if resource is loaded
@@ -1268,12 +1376,17 @@ private:
   std::atomic<uint64_t> next_load_request_sequence_ { 1 };
   std::unordered_map<uint64_t, uint32_t> pinned_resource_counts_ {};
   std::unordered_map<uint64_t, uint32_t> pinned_asset_counts_ {};
+  observer_ptr<console::Console> console_ { nullptr };
   struct TrimTelemetry final {
     uint64_t attempts { 0 };
     uint64_t reclaimed_items { 0 };
     uint64_t reclaimed_bytes { 0 };
     uint64_t blocked_roots { 0 };
+    uint64_t pruned_live_branches { 0 };
+    uint64_t blocked_priority_roots { 0 };
+    uint64_t orphan_resources { 0 };
   } trim_telemetry_ {};
+  TelemetryStats telemetry_stats_ {};
 
   [[nodiscard]] auto NormalizeLoadRequest(LoadRequest request) const noexcept
     -> LoadRequest
@@ -1294,10 +1407,24 @@ private:
     return request;
   }
 
+  auto RecordAssetTelemetry(
+    data::AssetType type, LoadTelemetryEvent event) noexcept -> void;
+  auto RecordResourceTelemetry(
+    TypeId type_id, LoadTelemetryEvent event) noexcept -> void;
+  static auto ApplyLoadTelemetryEvent(
+    TypedLoadTelemetry& counters, LoadTelemetryEvent event) noexcept -> void;
+  auto RecordStorePressureEvent(std::string_view trigger, bool forced) -> void;
+  auto RecordTrimAttempt(std::string_view trigger, bool automatic) -> void;
+  auto RecordEviction(EvictionReason reason) noexcept -> void;
+  auto UpdateTelemetrySummaryCVar() -> void;
+  [[nodiscard]] auto MutableAssetTelemetry(data::AssetType type) noexcept
+    -> TypedLoadTelemetry*;
+  [[nodiscard]] auto MutableResourceTelemetry(TypeId type_id) noexcept
+    -> TypedLoadTelemetry*;
+
 public:
   // Debug-only dependent enumeration helper (implemented via forward scan).
   // Provided as public debug API below when OXYGEN_DEBUG is defined.
-
 #if !defined(NDEBUG)
   using DebugAssetDependencyMap
     = std::unordered_map<data::AssetKey, std::unordered_set<data::AssetKey>>;
@@ -1321,6 +1448,11 @@ private:
   void UnsubscribeResourceEvictions(
     TypeId resource_type, uint64_t id) noexcept override;
 };
+
+auto to_string(AssetLoader::LoadTelemetryEvent event) noexcept
+  -> std::string_view;
+auto to_string(AssetLoader::TypedLoadMetric metric) noexcept
+  -> std::string_view;
 
 //=== Static asserts for CookedResourceData ==================================//
 

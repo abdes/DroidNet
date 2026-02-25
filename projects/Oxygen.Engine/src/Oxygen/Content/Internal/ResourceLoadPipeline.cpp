@@ -150,7 +150,8 @@ namespace {
   auto CheckOutCached(ResourceLoadPipeline::ContentCache& cache,
     const uint64_t key_hash) -> std::shared_ptr<void>
   {
-    if (auto cached = cache.CheckOut<ResourceT>(key_hash)) {
+    if (auto cached
+      = cache.CheckOut<ResourceT>(key_hash, oxygen::CheckoutOwner::kInternal)) {
       return std::static_pointer_cast<void>(std::move(cached));
     }
     return nullptr;
@@ -367,12 +368,21 @@ namespace {
     DecodeFn&& decode_fn) -> co::Co<std::shared_ptr<void>>
   {
     callbacks.assert_owning_thread();
+    if (callbacks.on_resource_request) {
+      callbacks.on_resource_request(resource_type);
+    }
 
     const auto key_hash = callbacks.hash_resource_key(key);
     if (auto cached
       = CheckOutCachedByType(resource_type, content_cache, key_hash)) {
+      if (callbacks.on_resource_cache_hit) {
+        callbacks.on_resource_cache_hit(resource_type);
+      }
       callbacks.map_resource_key(key_hash, key);
       co_return cached;
+    }
+    if (callbacks.on_resource_cache_miss) {
+      callbacks.on_resource_cache_miss(resource_type);
     }
 
     if (auto shared_join = in_flight_ops.Find(resource_type, key_hash,
@@ -382,7 +392,13 @@ namespace {
             .sequence = request_sequence,
           });
       shared_join.has_value()) {
+      if (callbacks.on_resource_joined_inflight) {
+        callbacks.on_resource_joined_inflight(resource_type);
+      }
       co_return co_await *shared_join;
+    }
+    if (callbacks.on_resource_started_inflight) {
+      callbacks.on_resource_started_inflight(resource_type);
     }
 
     auto op = [resource_type, key, key_hash, &content_cache, &in_flight_ops,
@@ -401,9 +417,18 @@ namespace {
       }
 
       auto decoded = co_await decode_fn();
+      if (!decoded) {
+        if (callbacks.on_resource_decode_failure) {
+          callbacks.on_resource_decode_failure(resource_type);
+        }
+        co_return nullptr;
+      }
 
       callbacks.assert_owning_thread();
       if (!ValidateTypeFromDecoded(resource_type, decoded)) {
+        if (callbacks.on_resource_type_mismatch) {
+          callbacks.on_resource_type_mismatch(resource_type);
+        }
         LOG_F(ERROR, "Loaded resource type mismatch: expected type_id={}",
           resource_type);
         co_return nullptr;
@@ -412,16 +437,21 @@ namespace {
       auto stored
         = StoreDecodedByType(resource_type, content_cache, key_hash, decoded);
       if (!stored && callbacks.on_store_pressure) {
+        if (callbacks.on_resource_store_retry) {
+          callbacks.on_resource_store_retry(resource_type);
+        }
         callbacks.on_store_pressure("resource_store_failed", true);
         stored
           = StoreDecodedByType(resource_type, content_cache, key_hash, decoded);
+        if (!stored && callbacks.on_resource_store_retry_failed) {
+          callbacks.on_resource_store_retry_failed(resource_type);
+        }
       }
       if (stored) {
         callbacks.map_resource_key(key_hash, key);
-        content_cache.Touch(key_hash);
+        content_cache.Touch(key_hash, oxygen::CheckoutOwner::kInternal);
         if (callbacks.on_store_pressure && content_cache.IsOverBudget()) {
-          callbacks.on_store_pressure(
-            "resource_store_succeeded_over_budget", false);
+          callbacks.on_store_pressure("resource_store_over_budget", false);
         }
       }
 

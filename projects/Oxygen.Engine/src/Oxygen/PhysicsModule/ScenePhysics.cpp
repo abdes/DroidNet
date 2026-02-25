@@ -11,14 +11,12 @@
 
 namespace oxygen::physics {
 
-#if !defined(OXYGEN_ENGINE_TESTING)
 namespace internal {
   auto ScenePhysicsTagFactory::Get() noexcept -> ScenePhysicsTag
   {
     return ScenePhysicsTag {};
   }
 } // namespace internal
-#endif
 
 namespace {
 

@@ -38,6 +38,12 @@ using oxygen::platform::ButtonState;
 using oxygen::platform::InputSlots;
 using oxygen::platform::Key;
 
+namespace oxygen::engine::internal {
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
+} // namespace oxygen::engine::internal
+
 namespace {
 
 //! Basic: Space pressed triggers Jump via Pressed trigger
@@ -557,6 +563,8 @@ NOLINT_TEST_F(InputSystemTest, CrossContextConsumptionFlushesLowerPriority)
 //! Chain+Tap with timing: Shift then Space tap within window triggers SuperJump
 NOLINT_TEST_F(InputSystemTest, ChainPlusTap_TimingWindow)
 {
+  using Tag = oxygen::engine::internal::EngineTagFactory;
+
   oxygen::co::Run(loop_, [&]() -> oxygen::co::Co<> {
     auto shift = std::make_shared<Action>("Shift", ActionValueType::kBool);
     auto super = std::make_shared<Action>("Super", ActionValueType::kBool);
@@ -606,7 +614,6 @@ NOLINT_TEST_F(InputSystemTest, ChainPlusTap_TimingWindow)
 
     // Negative: release Space after long delay (> window) should not trigger
     // (simulate time via multiple frames)
-    auto engine_tag = oxygen::engine::internal::EngineTagFactory::Get();
     // Hold shift ongoing
     SendKeyEvent(Key::kLeftShift, ButtonState::kPressed);
     // Provide module timing to accumulate enough delta time beyond tap window
@@ -614,7 +621,7 @@ NOLINT_TEST_F(InputSystemTest, ChainPlusTap_TimingWindow)
       oxygen::engine::ModuleTimingData timing;
       timing.game_delta_time = oxygen::time::CanonicalDuration { 200ms };
       timing.fixed_delta_time = oxygen::time::CanonicalDuration { 200ms };
-      frame_context_->SetModuleTimingData(timing, engine_tag);
+      frame_context_->SetModuleTimingData(timing, Tag::Get());
     }
     input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
     co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
@@ -628,7 +635,7 @@ NOLINT_TEST_F(InputSystemTest, ChainPlusTap_TimingWindow)
       oxygen::engine::ModuleTimingData timing;
       timing.game_delta_time = oxygen::time::CanonicalDuration { 200ms };
       timing.fixed_delta_time = oxygen::time::CanonicalDuration { 200ms };
-      frame_context_->SetModuleTimingData(timing, engine_tag);
+      frame_context_->SetModuleTimingData(timing, Tag::Get());
     }
     input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
     co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
@@ -639,7 +646,7 @@ NOLINT_TEST_F(InputSystemTest, ChainPlusTap_TimingWindow)
       oxygen::engine::ModuleTimingData timing;
       timing.game_delta_time = oxygen::time::CanonicalDuration { 250ms };
       timing.fixed_delta_time = oxygen::time::CanonicalDuration { 250ms };
-      frame_context_->SetModuleTimingData(timing, engine_tag);
+      frame_context_->SetModuleTimingData(timing, Tag::Get());
     }
     input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
     co_await input_system_->OnInput(observer_ptr { frame_context_.get() });

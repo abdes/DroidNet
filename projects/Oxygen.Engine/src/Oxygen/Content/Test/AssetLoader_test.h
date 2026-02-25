@@ -13,13 +13,15 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Content/AssetLoader.h>
-#include <Oxygen/content/EngineTag.h>
+#include <Oxygen/Core/EngineTag.h>
 
 namespace oxygen::content::testing {
 
 //! Base test fixture for AssetLoader tests using real PAK files
 class AssetLoaderBasicTest : public ::testing::Test {
 protected:
+  using Tag = oxygen::engine::internal::EngineTagFactory;
+
   auto SetUp() -> void override;
   auto TearDown() -> void override;
 
@@ -48,3 +50,9 @@ protected:
 };
 
 } // namespace oxygen::content::testing
+
+namespace oxygen::engine::internal {
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
+} // namespace oxygen::engine::internal

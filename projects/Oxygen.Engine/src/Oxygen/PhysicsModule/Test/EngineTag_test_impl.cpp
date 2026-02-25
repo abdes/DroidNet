@@ -6,8 +6,8 @@
 
 #include <Oxygen/Core/EngineTag.h>
 
-#if defined(OXYGEN_ENGINE_TESTING)
 namespace oxygen::engine::internal {
-auto EngineTagFactory::Get() noexcept -> EngineTag { return EngineTag {}; }
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
 } // namespace oxygen::engine::internal
-#endif

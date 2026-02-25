@@ -19,6 +19,7 @@ namespace oxygen::content {
 //! Reasons that trigger resource eviction notifications.
 enum class EvictionReason : uint8_t {
   kRefCountZero,
+  kTrim,
   kClear,
   kShutdown,
 };
@@ -29,6 +30,8 @@ enum class EvictionReason : uint8_t {
   switch (reason) {
   case EvictionReason::kRefCountZero:
     return "RefCountZero";
+  case EvictionReason::kTrim:
+    return "Trim";
   case EvictionReason::kClear:
     return "Clear";
   case EvictionReason::kShutdown:

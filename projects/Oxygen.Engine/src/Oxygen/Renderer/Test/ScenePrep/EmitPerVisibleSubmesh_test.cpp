@@ -37,17 +37,12 @@
 #include <Oxygen/Renderer/Test/Sceneprep/ScenePrepHelpers.h>
 #include <Oxygen/Renderer/Test/Sceneprep/ScenePrepTestFixture.h>
 
-// Implementation of UploaderTagFactory. Provides access to UploaderTag
-// capability tokens, only from the engine core. When building tests, allow
-// tests to override by defining OXYGEN_ENGINE_TESTING.
-#if defined(OXYGEN_ENGINE_TESTING)
 namespace oxygen::engine::upload::internal {
 auto UploaderTagFactory::Get() noexcept -> UploaderTag
 {
   return UploaderTag {};
 }
 } // namespace oxygen::engine::upload::internal
-#endif
 
 using oxygen::View;
 

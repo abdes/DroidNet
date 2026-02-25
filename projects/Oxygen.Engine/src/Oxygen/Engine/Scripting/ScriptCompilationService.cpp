@@ -633,7 +633,8 @@ auto ScriptCompilationService::TryGetCachedBytecode(
   const CompileKey compile_key) -> std::shared_ptr<const ScriptBytecodeBlob>
 {
   std::lock_guard lock(l1_cache_mutex_);
-  auto cached = l1_cache_.CheckOut<const ScriptBytecodeBlob>(compile_key.get());
+  auto cached = l1_cache_.CheckOut<const ScriptBytecodeBlob>(
+    compile_key.get(), oxygen::CheckoutOwner::kInternal);
   if (cached == nullptr) {
     return nullptr;
   }

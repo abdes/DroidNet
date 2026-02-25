@@ -12,6 +12,10 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Console/Command.h>
+#include <Oxygen/Console/Console.h>
+
 #include "./AssetLoader_test.h"
 
 using oxygen::content::testing::AssetLoaderBasicTest;
@@ -42,8 +46,7 @@ auto AssetLoaderBasicTest::SetUp() -> void
   std::filesystem::create_directories(temp_dir_);
 
   // Create AssetLoader instance
-  asset_loader_ = std::make_unique<AssetLoader>(
-    oxygen::content::internal::EngineTagFactory::Get());
+  asset_loader_ = std::make_unique<AssetLoader>(Tag::Get());
 }
 
 auto AssetLoaderBasicTest::TearDown() -> void
@@ -99,6 +102,28 @@ NOLINT_TEST_F(AssetLoaderBasicTest, AddPakFileNonExistentHandlesGracefully)
       // Expected behavior for missing file
     }
   });
+}
+
+NOLINT_TEST_F(AssetLoaderBasicTest, ConsoleTelemetryBindingsExpectedToRoundTrip)
+{
+  oxygen::console::Console console;
+  asset_loader_->RegisterConsoleBindings(oxygen::observer_ptr { &console });
+
+  const auto disable = console.Execute("cntt.telemetry_enabled 0");
+  EXPECT_EQ(disable.status, oxygen::console::ExecutionStatus::kOk);
+  asset_loader_->ApplyConsoleCVars(console);
+  EXPECT_FALSE(asset_loader_->IsTelemetryEnabled());
+
+  const auto dump = console.Execute("cntt.dump_stats");
+  EXPECT_EQ(dump.status, oxygen::console::ExecutionStatus::kOk);
+  EXPECT_FALSE(dump.output.empty());
+
+  const auto reset = console.Execute("cntt.reset_stats");
+  EXPECT_EQ(reset.status, oxygen::console::ExecutionStatus::kOk);
+
+  std::string last_stats;
+  EXPECT_TRUE(
+    console.TryGetCVarValue<std::string>("cntt.last_stats", last_stats));
 }
 
 } // namespace

@@ -9,6 +9,8 @@
 #include <filesystem>
 #include <optional>
 #include <system_error>
+#include <unordered_map>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Config/EngineConfig.h>
@@ -91,10 +93,27 @@ public:
     return {};
   }
 
-  auto GetModuleByType(oxygen::TypeId /*type_id*/) const noexcept
+  auto GetModuleByType(oxygen::TypeId type_id) const noexcept
     -> std::optional<std::reference_wrapper<engine::EngineModule>> override
   {
+    const auto it = modules_.find(type_id);
+    if (it != modules_.end()) {
+      return it->second;
+    }
     return std::nullopt;
+  }
+
+  template <typename TModule>
+  auto AddModule(std::unique_ptr<TModule> module) -> void
+  {
+    modules_.emplace(TModule::TypeInfo(),
+      std::ref(static_cast<engine::EngineModule&>(*module)));
+    owned_modules_.push_back(std::move(module));
+  }
+
+  auto AddModule(engine::EngineModule& module) -> void
+  {
+    modules_.emplace(module.GetTypeId(), std::ref(module));
   }
 
   auto ScriptCompilationService() noexcept -> FakeScriptCompilationService&
@@ -133,6 +152,10 @@ private:
   console::Console console_ {};
   FakeScriptCompilationService compilation_service_ {};
   bool running_ { true };
+  std::unordered_map<oxygen::TypeId,
+    std::reference_wrapper<engine::EngineModule>>
+    modules_ {};
+  std::vector<std::unique_ptr<engine::EngineModule>> owned_modules_ {};
 };
 
 } // namespace oxygen::scripting::test
