@@ -86,12 +86,12 @@ NOLINT_TEST_F(InputLoadersTest, LoadInputActionAssetValidDescriptorParses)
 {
   using oxygen::content::loaders::LoadInputActionAsset;
   using oxygen::data::AssetType;
-  using oxygen::data::pak::InputActionAssetDesc;
-  using oxygen::data::pak::InputActionAssetFlags;
+  using oxygen::data::pak::input::InputActionAssetDesc;
+  using oxygen::data::pak::input::InputActionAssetFlags;
 
   InputActionAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(AssetType::kInputAction);
-  desc.header.version = oxygen::data::pak::kInputActionAssetVersion;
+  desc.header.version = oxygen::data::pak::input::kInputActionAssetVersion;
   std::snprintf(desc.header.name, sizeof(desc.header.name), "%s", "Accel");
   desc.value_type = 2;
   desc.flags = InputActionAssetFlags::kConsumesInput;
@@ -112,12 +112,12 @@ NOLINT_TEST_F(InputLoadersTest,
   using oxygen::content::loaders::LoadInputMappingContextAsset;
   using oxygen::data::AssetKey;
   using oxygen::data::AssetType;
-  using oxygen::data::pak::InputActionMappingRecord;
-  using oxygen::data::pak::InputMappingContextAssetDesc;
-  using oxygen::data::pak::InputTriggerAuxRecord;
-  using oxygen::data::pak::InputTriggerBehavior;
-  using oxygen::data::pak::InputTriggerRecord;
-  using oxygen::data::pak::InputTriggerType;
+  using oxygen::data::pak::input::InputActionMappingRecord;
+  using oxygen::data::pak::input::InputMappingContextAssetDesc;
+  using oxygen::data::pak::input::InputTriggerAuxRecord;
+  using oxygen::data::pak::input::InputTriggerBehavior;
+  using oxygen::data::pak::input::InputTriggerRecord;
+  using oxygen::data::pak::input::InputTriggerType;
 
   constexpr size_t kDescSize = sizeof(InputMappingContextAssetDesc);
   constexpr size_t kMappingSize = sizeof(InputActionMappingRecord);
@@ -134,7 +134,8 @@ NOLINT_TEST_F(InputLoadersTest,
   InputMappingContextAssetDesc desc {};
   desc.header.asset_type
     = static_cast<uint8_t>(AssetType::kInputMappingContext);
-  desc.header.version = oxygen::data::pak::kInputMappingContextAssetVersion;
+  desc.header.version
+    = oxygen::data::pak::input::kInputMappingContextAssetVersion;
   std::snprintf(desc.header.name, sizeof(desc.header.name), "%s", "Gameplay");
 
   desc.mappings.offset = kDescSize;
@@ -201,11 +202,11 @@ NOLINT_TEST_F(InputLoadersTest, LoadInputActionAssetInvalidValueTypeThrows)
 {
   using oxygen::content::loaders::LoadInputActionAsset;
   using oxygen::data::AssetType;
-  using oxygen::data::pak::InputActionAssetDesc;
+  using oxygen::data::pak::input::InputActionAssetDesc;
 
   InputActionAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(AssetType::kInputAction);
-  desc.header.version = oxygen::data::pak::kInputActionAssetVersion;
+  desc.header.version = oxygen::data::pak::input::kInputActionAssetVersion;
   desc.value_type = 7;
 
   WriteBlob(desc);
@@ -220,11 +221,11 @@ NOLINT_TEST_F(
 {
   using oxygen::content::loaders::LoadInputMappingContextAsset;
   using oxygen::data::AssetType;
-  using oxygen::data::pak::InputActionMappingRecord;
-  using oxygen::data::pak::InputMappingContextAssetDesc;
-  using oxygen::data::pak::InputTriggerBehavior;
-  using oxygen::data::pak::InputTriggerRecord;
-  using oxygen::data::pak::InputTriggerType;
+  using oxygen::data::pak::input::InputActionMappingRecord;
+  using oxygen::data::pak::input::InputMappingContextAssetDesc;
+  using oxygen::data::pak::input::InputTriggerBehavior;
+  using oxygen::data::pak::input::InputTriggerRecord;
+  using oxygen::data::pak::input::InputTriggerType;
 
   constexpr size_t kDescSize = sizeof(InputMappingContextAssetDesc);
   constexpr size_t kMappingSize = sizeof(InputActionMappingRecord);
@@ -233,7 +234,8 @@ NOLINT_TEST_F(
   InputMappingContextAssetDesc desc {};
   desc.header.asset_type
     = static_cast<uint8_t>(AssetType::kInputMappingContext);
-  desc.header.version = oxygen::data::pak::kInputMappingContextAssetVersion;
+  desc.header.version
+    = oxygen::data::pak::input::kInputMappingContextAssetVersion;
   desc.mappings.offset = kDescSize;
   desc.mappings.count = 1;
   desc.mappings.entry_size = static_cast<uint32_t>(kMappingSize);
@@ -243,7 +245,7 @@ NOLINT_TEST_F(
   desc.trigger_aux.offset = desc.triggers.offset + kTriggerSize;
   desc.trigger_aux.count = 0;
   desc.trigger_aux.entry_size
-    = sizeof(oxygen::data::pak::InputTriggerAuxRecord);
+    = sizeof(oxygen::data::pak::input::InputTriggerAuxRecord);
   desc.strings.offset = desc.trigger_aux.offset;
   desc.strings.count = 2;
   desc.strings.entry_size = 1;
@@ -275,8 +277,8 @@ NOLINT_TEST_F(
 {
   using oxygen::content::loaders::LoadInputMappingContextAsset;
   using oxygen::data::AssetType;
-  using oxygen::data::pak::InputActionMappingRecord;
-  using oxygen::data::pak::InputMappingContextAssetDesc;
+  using oxygen::data::pak::input::InputActionMappingRecord;
+  using oxygen::data::pak::input::InputMappingContextAssetDesc;
 
   constexpr size_t kDescSize = sizeof(InputMappingContextAssetDesc);
   constexpr size_t kMappingSize = sizeof(InputActionMappingRecord);
@@ -284,17 +286,19 @@ NOLINT_TEST_F(
   InputMappingContextAssetDesc desc {};
   desc.header.asset_type
     = static_cast<uint8_t>(AssetType::kInputMappingContext);
-  desc.header.version = oxygen::data::pak::kInputMappingContextAssetVersion;
+  desc.header.version
+    = oxygen::data::pak::input::kInputMappingContextAssetVersion;
   desc.mappings.offset = kDescSize;
   desc.mappings.count = 1;
   desc.mappings.entry_size = static_cast<uint32_t>(kMappingSize);
   desc.triggers.offset = kDescSize + kMappingSize;
   desc.triggers.count = 0;
-  desc.triggers.entry_size = sizeof(oxygen::data::pak::InputTriggerRecord);
+  desc.triggers.entry_size
+    = sizeof(oxygen::data::pak::input::InputTriggerRecord);
   desc.trigger_aux.offset = desc.triggers.offset;
   desc.trigger_aux.count = 0;
   desc.trigger_aux.entry_size
-    = sizeof(oxygen::data::pak::InputTriggerAuxRecord);
+    = sizeof(oxygen::data::pak::input::InputTriggerAuxRecord);
   desc.strings.offset = desc.trigger_aux.offset;
   desc.strings.count = 2;
   desc.strings.entry_size = 1;
@@ -321,8 +325,8 @@ NOLINT_TEST_F(
 {
   using oxygen::content::loaders::LoadInputMappingContextAsset;
   using oxygen::data::AssetType;
-  using oxygen::data::pak::InputActionMappingRecord;
-  using oxygen::data::pak::InputMappingContextAssetDesc;
+  using oxygen::data::pak::input::InputActionMappingRecord;
+  using oxygen::data::pak::input::InputMappingContextAssetDesc;
 
   constexpr size_t kDescSize = sizeof(InputMappingContextAssetDesc);
   constexpr size_t kMappingSize = sizeof(InputActionMappingRecord);
@@ -330,17 +334,19 @@ NOLINT_TEST_F(
   InputMappingContextAssetDesc desc {};
   desc.header.asset_type
     = static_cast<uint8_t>(AssetType::kInputMappingContext);
-  desc.header.version = oxygen::data::pak::kInputMappingContextAssetVersion;
+  desc.header.version
+    = oxygen::data::pak::input::kInputMappingContextAssetVersion;
   desc.mappings.offset = kDescSize;
   desc.mappings.count = 1;
   desc.mappings.entry_size = static_cast<uint32_t>(kMappingSize);
   desc.triggers.offset = kDescSize + kMappingSize;
   desc.triggers.count = 0;
-  desc.triggers.entry_size = sizeof(oxygen::data::pak::InputTriggerRecord);
+  desc.triggers.entry_size
+    = sizeof(oxygen::data::pak::input::InputTriggerRecord);
   desc.trigger_aux.offset = desc.triggers.offset;
   desc.trigger_aux.count = 0;
   desc.trigger_aux.entry_size
-    = sizeof(oxygen::data::pak::InputTriggerAuxRecord);
+    = sizeof(oxygen::data::pak::input::InputTriggerAuxRecord);
   desc.strings.offset = desc.trigger_aux.offset;
   desc.strings.count = 2;
   desc.strings.entry_size = 1;
@@ -367,11 +373,11 @@ NOLINT_TEST_F(
 {
   using oxygen::content::loaders::LoadInputMappingContextAsset;
   using oxygen::data::AssetType;
-  using oxygen::data::pak::InputActionMappingRecord;
-  using oxygen::data::pak::InputMappingContextAssetDesc;
-  using oxygen::data::pak::InputTriggerBehavior;
-  using oxygen::data::pak::InputTriggerRecord;
-  using oxygen::data::pak::InputTriggerType;
+  using oxygen::data::pak::input::InputActionMappingRecord;
+  using oxygen::data::pak::input::InputMappingContextAssetDesc;
+  using oxygen::data::pak::input::InputTriggerBehavior;
+  using oxygen::data::pak::input::InputTriggerRecord;
+  using oxygen::data::pak::input::InputTriggerType;
 
   constexpr size_t kDescSize = sizeof(InputMappingContextAssetDesc);
   constexpr size_t kMappingSize = sizeof(InputActionMappingRecord);
@@ -380,7 +386,8 @@ NOLINT_TEST_F(
   InputMappingContextAssetDesc desc {};
   desc.header.asset_type
     = static_cast<uint8_t>(AssetType::kInputMappingContext);
-  desc.header.version = oxygen::data::pak::kInputMappingContextAssetVersion;
+  desc.header.version
+    = oxygen::data::pak::input::kInputMappingContextAssetVersion;
   desc.mappings.offset = kDescSize;
   desc.mappings.count = 1;
   desc.mappings.entry_size = static_cast<uint32_t>(kMappingSize);
@@ -390,7 +397,7 @@ NOLINT_TEST_F(
   desc.trigger_aux.offset = desc.triggers.offset + kTriggerSize;
   desc.trigger_aux.count = 0;
   desc.trigger_aux.entry_size
-    = sizeof(oxygen::data::pak::InputTriggerAuxRecord);
+    = sizeof(oxygen::data::pak::input::InputTriggerAuxRecord);
   desc.strings.offset = desc.trigger_aux.offset;
   desc.strings.count = 2;
   desc.strings.entry_size = 1;
@@ -424,12 +431,13 @@ NOLINT_TEST_F(
 {
   using oxygen::content::loaders::LoadInputMappingContextAsset;
   using oxygen::data::AssetType;
-  using oxygen::data::pak::InputMappingContextAssetDesc;
+  using oxygen::data::pak::input::InputMappingContextAssetDesc;
 
   InputMappingContextAssetDesc desc {};
   desc.header.asset_type
     = static_cast<uint8_t>(AssetType::kInputMappingContext);
-  desc.header.version = oxygen::data::pak::kInputMappingContextAssetVersion;
+  desc.header.version
+    = oxygen::data::pak::input::kInputMappingContextAssetVersion;
   desc.strings.offset = sizeof(InputMappingContextAssetDesc);
   desc.strings.count = 1;
   desc.strings.entry_size = 1;

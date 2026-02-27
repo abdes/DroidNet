@@ -35,7 +35,7 @@ struct WriteReservation {
 };
 
 struct TextureTableTraits {
-  using Descriptor = data::pak::TextureResourceDesc;
+  using Descriptor = data::pak::render::TextureResourceDesc;
   using Reservation = WriteReservation;
 
   //! Textures use index 0 for the engine fallback texture (1x1 white
@@ -82,7 +82,7 @@ struct TextureTableTraits {
 };
 
 struct BufferTableTraits {
-  using Descriptor = data::pak::BufferResourceDesc;
+  using Descriptor = data::pak::core::BufferResourceDesc;
   using Reservation = WriteReservation;
 
   //! Buffer tables reserve index 0 as a zeroed sentinel meaning

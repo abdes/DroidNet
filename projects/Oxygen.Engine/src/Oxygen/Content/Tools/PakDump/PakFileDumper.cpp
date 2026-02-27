@@ -43,11 +43,25 @@
 #include "PakFileDumper.h"
 #include "PrintUtils.h"
 
-using namespace PrintUtils;
+using PrintUtils::Field;
+using PrintUtils::HexDump;
+using PrintUtils::Separator;
+using PrintUtils::SubSeparator;
 
-using namespace oxygen::content;
-using namespace oxygen::data;
-using namespace oxygen::data::pak;
+using oxygen::content::AssetLoader;
+using oxygen::content::PakFile;
+using oxygen::data::BufferResource;
+using oxygen::data::PhysicsResource;
+using oxygen::data::ScriptResource;
+using oxygen::data::TextureResource;
+using oxygen::data::to_string;
+using oxygen::data::pak::core::kPakFooterMagic;
+using oxygen::data::pak::core::PakFooter;
+using oxygen::data::pak::core::PakHeader;
+using oxygen::data::pak::core::ResourceIndexT;
+using oxygen::data::pak::render::kTexturePayloadMagic;
+using oxygen::data::pak::render::SubresourceLayout;
+using oxygen::data::pak::render::TexturePayloadHeader;
 
 //=== Resource Data Access ===================================================//
 
@@ -140,15 +154,14 @@ auto TexturePackingPolicyName(uint8_t policy) -> std::string_view
 auto PrintV4TexturePayloadSummary(std::span<const uint8_t> payload, int indent)
   -> void
 {
-  using namespace PrintUtils;
-  if (payload.size() < sizeof(v4::TexturePayloadHeader)) {
+  if (payload.size() < sizeof(TexturePayloadHeader)) {
     Field("Texture Payload", "Too small to contain v4 header", indent);
     return;
   }
 
-  v4::TexturePayloadHeader header {};
+  TexturePayloadHeader header {};
   std::memcpy(&header, payload.data(), sizeof(header));
-  if (header.magic != v4::kTexturePayloadMagic) {
+  if (header.magic != kTexturePayloadMagic) {
     Field("Texture Payload", "Missing v4 magic (expected 'OTX1')", indent);
     return;
   }
@@ -176,7 +189,7 @@ auto PrintV4TexturePayloadSummary(std::span<const uint8_t> payload, int indent)
   const auto layouts_offset = static_cast<size_t>(header.layouts_offset_bytes);
   const auto data_offset = static_cast<size_t>(header.data_offset_bytes);
   const auto layout_count = static_cast<size_t>(header.subresource_count);
-  const auto layouts_bytes = layout_count * sizeof(v4::SubresourceLayout);
+  const auto layouts_bytes = layout_count * sizeof(SubresourceLayout);
 
   if (layouts_offset + layouts_bytes > payload.size()) {
     Field("Layouts", "Out of bounds", indent);
@@ -197,8 +210,8 @@ auto PrintV4TexturePayloadSummary(std::span<const uint8_t> payload, int indent)
             << "Subresource Layouts (" << count
             << (layout_count > count ? " shown" : "") << "):\n";
   for (size_t i = 0; i < count; ++i) {
-    v4::SubresourceLayout layout {};
-    const auto offset = layouts_offset + i * sizeof(v4::SubresourceLayout);
+    SubresourceLayout layout {};
+    const auto offset = layouts_offset + i * sizeof(SubresourceLayout);
     std::memcpy(&layout, payload.data() + offset, sizeof(layout));
     const auto abs_data_offset
       = data_offset + static_cast<size_t>(layout.offset_bytes);
@@ -241,7 +254,6 @@ public:
       std::cout << "    No buffer resource table present\n\n";
       co_return;
     }
-    using namespace PrintUtils;
     SubSeparator("BUFFER RESOURCES");
     auto& buffers_table = pak.BuffersTable();
     size_t buffer_count = buffers_table.Size();
@@ -323,7 +335,6 @@ public:
       std::cout << "    No texture resource table present\n\n";
       co_return;
     }
-    using namespace PrintUtils;
     SubSeparator("TEXTURE RESOURCES");
     auto& textures_table = pak.TexturesTable();
     size_t texture_count = textures_table.Size();
@@ -399,7 +410,6 @@ public:
       co_return;
     }
 
-    using namespace PrintUtils;
     SubSeparator("SCRIPT RESOURCES");
     auto& scripts_table = pak.ScriptsTable();
     const size_t script_count = scripts_table.Size();
@@ -472,7 +482,6 @@ public:
       co_return;
     }
 
-    using namespace PrintUtils;
     SubSeparator("PHYSICS RESOURCES");
     auto& physics_table = pak.PhysicsTable();
     const size_t physics_count = physics_table.Size();
@@ -574,7 +583,6 @@ public:
     if (!ctx.show_resources) {
       co_return;
     }
-    using namespace PrintUtils;
     Separator("RESOURCE TABLES");
     co_await registry_.Get("buffer").DumpAsync(pak, ctx, asset_loader);
     co_await registry_.Get("texture").DumpAsync(pak, ctx, asset_loader);
@@ -599,7 +607,6 @@ auto PakFileDumper::DumpAsync(const PakFile& pak, AssetLoader& asset_loader)
         fmt::format("PakDump supports PAK v{} only; found version {}",
           kSupportedPakVersion, pak.FormatVersion()));
     }
-    using namespace PrintUtils;
     Separator("PAK FILE ANALYSIS: " + ctx_.pak_path.filename().string());
     Field("File Path", ctx_.pak_path.string());
     Field("File Size",
@@ -629,7 +636,6 @@ void PakFileDumper::PrintPakHeader(const PakFile& pak)
   if (!ctx_.show_header) {
     return;
   }
-  using namespace PrintUtils;
   Separator("PAK HEADER");
   Field("Magic", "OXPAK (verified by successful load)");
   Field("Format Version", pak.FormatVersion());
@@ -644,7 +650,6 @@ void PakFileDumper::PrintPakFooter(const PakFile& pak)
   if (!ctx_.show_footer) {
     return;
   }
-  using namespace PrintUtils;
   Separator("PAK FOOTER");
 
   const auto footer = ReadPakFooter(ctx_.pak_path);

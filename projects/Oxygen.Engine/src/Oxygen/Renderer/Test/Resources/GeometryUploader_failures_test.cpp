@@ -74,7 +74,7 @@ using oxygen::renderer::testing::GeometryUploaderTest;
     builder.WithIndices(indices);
   }
 
-  oxygen::data::pak::MeshViewDesc view_desc {
+  oxygen::data::pak::geometry::MeshViewDesc view_desc {
     .first_index = 0,
     // MeshView enforces index_count > 0 even if the mesh has no index buffer.
     // For non-indexed meshes (no indices provided), keep a non-zero draw range

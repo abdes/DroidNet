@@ -115,7 +115,7 @@ namespace {
   }
 
   auto HydrateSkyAtmosphere(scene::environment::SkyAtmosphere& target,
-    const data::pak::SkyAtmosphereEnvironmentRecord& source) -> void
+    const data::pak::world::SkyAtmosphereEnvironmentRecord& source) -> void
   {
     target.SetPlanetRadiusMeters(source.planet_radius_m);
     target.SetAtmosphereHeightMeters(source.atmosphere_height_m);
@@ -144,7 +144,7 @@ namespace {
   }
 
   auto HydrateSkySphere(scene::environment::SkySphere& target,
-    const data::pak::SkySphereEnvironmentRecord& source) -> void
+    const data::pak::world::SkySphereEnvironmentRecord& source) -> void
   {
     if (source.source
       == static_cast<std::uint32_t>(
@@ -168,7 +168,7 @@ namespace {
   }
 
   auto HydrateFog(scene::environment::Fog& target,
-    const data::pak::FogEnvironmentRecord& source) -> void
+    const data::pak::world::FogEnvironmentRecord& source) -> void
   {
     target.SetModel(static_cast<scene::environment::FogModel>(source.model));
     target.SetExtinctionSigmaTPerMeter(source.extinction_sigma_t_per_m);
@@ -184,7 +184,7 @@ namespace {
   }
 
   auto HydrateSkyLight(scene::environment::SkyLight& target,
-    const data::pak::SkyLightEnvironmentRecord& source) -> void
+    const data::pak::world::SkyLightEnvironmentRecord& source) -> void
   {
     target.SetSource(
       static_cast<scene::environment::SkyLightSource>(source.source));
@@ -203,7 +203,7 @@ namespace {
   }
 
   auto HydrateVolumetricClouds(scene::environment::VolumetricClouds& target,
-    const data::pak::VolumetricCloudsEnvironmentRecord& source) -> void
+    const data::pak::world::VolumetricCloudsEnvironmentRecord& source) -> void
   {
     target.SetBaseAltitudeMeters(source.base_altitude_m);
     target.SetLayerThicknessMeters(source.layer_thickness_m);
@@ -221,7 +221,7 @@ namespace {
   }
 
   auto HydratePostProcessVolume(scene::environment::PostProcessVolume& target,
-    const data::pak::PostProcessVolumeEnvironmentRecord& source) -> void
+    const data::pak::world::PostProcessVolumeEnvironmentRecord& source) -> void
   {
     target.SetToneMapper(source.tone_mapper);
     target.SetExposureMode(source.exposure_mode);

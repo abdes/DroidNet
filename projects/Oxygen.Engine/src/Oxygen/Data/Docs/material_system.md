@@ -125,7 +125,7 @@ Until codified in a shared header, treat these as advisory only.
 
 ### 🧩 Material Asset Structure
 
-Current PAK v1 layout (summarized):
+Current PAK v7 layout (summarized):
 
 | Offset | Size | Field | Notes |
 |--------|------|-------|-------|

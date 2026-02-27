@@ -31,7 +31,7 @@ template <typename T> struct BindingTraits;
 
 // Hash functor for PhysicsBindingType (scoped enum over uint32_t)
 struct PhysicsBindingTypeHash {
-  size_t operator()(pak::PhysicsBindingType bt) const noexcept
+  size_t operator()(pak::physics::PhysicsBindingType bt) const noexcept
   {
     return std::hash<uint32_t> {}(static_cast<uint32_t>(bt));
   }
@@ -57,7 +57,7 @@ struct PhysicsBindingTypeHash {
   ### Usage
   ```cpp
   // Constructed by PhysicsSceneLoader; held by AssetLoader cache.
-  auto rigid_bodies = asset.GetBindings<pak::RigidBodyBindingRecord>();
+  auto rigid_bodies = asset.GetBindings<pak::physics::RigidBodyBindingRecord>();
   for (const auto& rec : rigid_bodies) {
       // rec.node_index -> paired SceneAsset node
       // rec.body_type, rec.shape_asset_index, etc.
@@ -83,7 +83,7 @@ public:
   //=== Asset Interface ===---------------------------------------------------//
 
   [[nodiscard]] auto GetHeader() const noexcept
-    -> const pak::AssetHeader& override
+    -> const pak::core::AssetHeader& override
   {
     return desc_.header;
   }
@@ -106,14 +106,15 @@ public:
 
   //! Returns a view of all binding records of the specified physics type.
   /*!
-    @tparam T  A binding record type (e.g. pak::RigidBodyBindingRecord).
-               The mapping to PhysicsBindingType is via BindingTraits<T>.
+    @tparam T  A binding record type (e.g.
+    pak::physics::RigidBodyBindingRecord). The mapping to PhysicsBindingType is
+    via BindingTraits<T>.
     @return    Span of decoded binding records. Returns empty span if absent.
   */
   template <typename T>
   [[nodiscard]] auto GetBindings() const noexcept -> std::span<const T>
   {
-    constexpr pak::PhysicsBindingType type = BindingTraits<T>::kType;
+    constexpr pak::physics::PhysicsBindingType type = BindingTraits<T>::kType;
     const BindingTableEntry* entry = FindBindingTableEntry(type);
     if (entry == nullptr || entry->count == 0) {
       return {};
@@ -152,12 +153,12 @@ public:
     Uses binary search (tables are sorted by node_index per spec).
   */
   template <typename T>
-  [[nodiscard]] auto FindBinding(pak::SceneNodeIndexT node_index) const noexcept
-    -> const T*
+  [[nodiscard]] auto FindBinding(
+    pak::world::SceneNodeIndexT node_index) const noexcept -> const T*
   {
     auto bindings = GetBindings<T>();
     auto it = std::lower_bound(bindings.begin(), bindings.end(), node_index,
-      [](const T& rec, pak::SceneNodeIndexT idx) {
+      [](const T& rec, pak::world::SceneNodeIndexT idx) {
         return rec.node_index < idx;
       });
     if (it != bindings.end() && it->node_index == node_index) {
@@ -170,7 +171,8 @@ private:
   struct BindingTableEntry;
 
   [[nodiscard]] inline auto FindBindingTableEntry(
-    pak::PhysicsBindingType type) const noexcept -> const BindingTableEntry*
+    pak::physics::PhysicsBindingType type) const noexcept
+    -> const BindingTableEntry*
   {
     for (const auto& entry : binding_tables_) {
       if (entry.type == type) {
@@ -184,17 +186,17 @@ private:
 
   std::shared_ptr<std::vector<std::byte>> owned_data_ {};
   std::span<const std::byte> data_;
-  pak::v7::PhysicsSceneAssetDesc desc_ {};
+  pak::physics::PhysicsSceneAssetDesc desc_ {};
 
   struct BindingTableEntry {
-    pak::PhysicsBindingType type;
-    pak::OffsetT offset;
+    pak::physics::PhysicsBindingType type;
+    pak::core::OffsetT offset;
     size_t count;
     uint32_t entry_size;
   };
   std::vector<BindingTableEntry> binding_tables_;
 
-  mutable std::unordered_map<pak::PhysicsBindingType, std::any,
+  mutable std::unordered_map<pak::physics::PhysicsBindingType, std::any,
     PhysicsBindingTypeHash>
     binding_cache_ {};
 };
@@ -204,39 +206,39 @@ private:
 // ---------------------------------------------------------------------------
 // (Primary template declared before the class; specializations below.)
 
-template <> struct BindingTraits<pak::RigidBodyBindingRecord> {
-  static constexpr pak::PhysicsBindingType kType
-    = pak::PhysicsBindingType::kRigidBody;
+template <> struct BindingTraits<pak::physics::RigidBodyBindingRecord> {
+  static constexpr pak::physics::PhysicsBindingType kType
+    = pak::physics::PhysicsBindingType::kRigidBody;
 };
 
-template <> struct BindingTraits<pak::ColliderBindingRecord> {
-  static constexpr pak::PhysicsBindingType kType
-    = pak::PhysicsBindingType::kCollider;
+template <> struct BindingTraits<pak::physics::ColliderBindingRecord> {
+  static constexpr pak::physics::PhysicsBindingType kType
+    = pak::physics::PhysicsBindingType::kCollider;
 };
 
-template <> struct BindingTraits<pak::CharacterBindingRecord> {
-  static constexpr pak::PhysicsBindingType kType
-    = pak::PhysicsBindingType::kCharacter;
+template <> struct BindingTraits<pak::physics::CharacterBindingRecord> {
+  static constexpr pak::physics::PhysicsBindingType kType
+    = pak::physics::PhysicsBindingType::kCharacter;
 };
 
-template <> struct BindingTraits<pak::SoftBodyBindingRecord> {
-  static constexpr pak::PhysicsBindingType kType
-    = pak::PhysicsBindingType::kSoftBody;
+template <> struct BindingTraits<pak::physics::SoftBodyBindingRecord> {
+  static constexpr pak::physics::PhysicsBindingType kType
+    = pak::physics::PhysicsBindingType::kSoftBody;
 };
 
-template <> struct BindingTraits<pak::JointBindingRecord> {
-  static constexpr pak::PhysicsBindingType kType
-    = pak::PhysicsBindingType::kJoint;
+template <> struct BindingTraits<pak::physics::JointBindingRecord> {
+  static constexpr pak::physics::PhysicsBindingType kType
+    = pak::physics::PhysicsBindingType::kJoint;
 };
 
-template <> struct BindingTraits<pak::VehicleBindingRecord> {
-  static constexpr pak::PhysicsBindingType kType
-    = pak::PhysicsBindingType::kVehicle;
+template <> struct BindingTraits<pak::physics::VehicleBindingRecord> {
+  static constexpr pak::physics::PhysicsBindingType kType
+    = pak::physics::PhysicsBindingType::kVehicle;
 };
 
-template <> struct BindingTraits<pak::AggregateBindingRecord> {
-  static constexpr pak::PhysicsBindingType kType
-    = pak::PhysicsBindingType::kAggregate;
+template <> struct BindingTraits<pak::physics::AggregateBindingRecord> {
+  static constexpr pak::physics::PhysicsBindingType kType
+    = pak::physics::PhysicsBindingType::kAggregate;
 };
 
 } // namespace oxygen::data

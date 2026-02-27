@@ -21,7 +21,7 @@ namespace {
 
 using oxygen::data::AssetKey;
 using oxygen::data::ScriptAsset;
-using oxygen::data::pak::ScriptAssetDesc;
+using oxygen::data::pak::scripting::ScriptAssetDesc;
 using oxygen::scene::DirectionalLight;
 using oxygen::scene::ISceneObserver;
 using oxygen::scene::NodeHandle;

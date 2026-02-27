@@ -49,10 +49,11 @@ NOLINT_TEST_F(MaterialBinderErrorStressTest, DescriptorExhaustionStress)
     const ResourceKey base { static_cast<uint32_t>(100000 + (i * 2)) };
     const ResourceKey normal { static_cast<uint32_t>(100001 + (i * 2)) };
 
-    auto desc = std::make_shared<oxygen::data::MaterialAsset>(
-      oxygen::data::AssetKey {}, oxygen::data::pak::MaterialAssetDesc {},
-      std::vector<oxygen::data::ShaderReference> {},
-      std::vector { base, normal });
+    auto desc
+      = std::make_shared<oxygen::data::MaterialAsset>(oxygen::data::AssetKey {},
+        oxygen::data::pak::render::MaterialAssetDesc {},
+        std::vector<oxygen::data::ShaderReference> {},
+        std::vector { base, normal });
 
     oxygen::engine::sceneprep::MaterialRef ref;
     ref.resolved_asset = desc;
@@ -83,7 +84,7 @@ NOLINT_TEST_F(MaterialBinderErrorStressTest, EnsureFrameResourcesUploads)
     oxygen::frame::Slot { 1 });
 
   const auto mat = std::make_shared<oxygen::data::MaterialAsset>(
-    oxygen::data::AssetKey {}, oxygen::data::pak::MaterialAssetDesc {},
+    oxygen::data::AssetKey {}, oxygen::data::pak::render::MaterialAssetDesc {},
     std::vector<oxygen::data::ShaderReference> {},
     std::vector { base, normal });
   oxygen::engine::sceneprep::MaterialRef ref;
@@ -114,10 +115,11 @@ NOLINT_TEST_F(MaterialBinderErrorStressTest, StressAllocation)
     const ResourceKey base { static_cast<uint32_t>(200000 + i) };
     const ResourceKey normal { static_cast<uint32_t>(300000 + i) };
 
-    auto m = std::make_shared<oxygen::data::MaterialAsset>(
-      oxygen::data::AssetKey {}, oxygen::data::pak::MaterialAssetDesc {},
-      std::vector<oxygen::data::ShaderReference> {},
-      std::vector { base, normal });
+    auto m
+      = std::make_shared<oxygen::data::MaterialAsset>(oxygen::data::AssetKey {},
+        oxygen::data::pak::render::MaterialAssetDesc {},
+        std::vector<oxygen::data::ShaderReference> {},
+        std::vector { base, normal });
 
     oxygen::engine::sceneprep::MaterialRef ref;
     ref.resolved_asset = m;

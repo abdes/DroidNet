@@ -25,12 +25,12 @@ namespace oxygen::content::pakdump {
 class ScriptAssetDumper final : public AssetDumper {
 public:
   auto DumpAsync(const oxygen::content::PakFile& pak,
-    const oxygen::data::pak::v2::AssetDirectoryEntry& entry, DumpContext& ctx,
+    const oxygen::data::pak::core::AssetDirectoryEntry& entry, DumpContext& ctx,
     const size_t idx, oxygen::content::AssetLoader& asset_loader) const
     -> oxygen::co::Co<> override
   {
     using oxygen::data::ScriptResource;
-    using oxygen::data::pak::ScriptAssetDesc;
+    using oxygen::data::pak::scripting::ScriptAssetDesc;
 
     std::cout << "Asset #" << idx << ":\n";
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
@@ -90,7 +90,7 @@ public:
 
     auto& scripts_table = pak.ScriptsTable();
     const auto selected_resource_index
-      = data::pak::ResourceIndexT { selected_index };
+      = data::pak::core::ResourceIndexT { selected_index };
     if (!scripts_table.IsValidKey(selected_resource_index)) {
       PrintUtils::Field(
         "Resource Entry", "Index out of script table bounds", 8);

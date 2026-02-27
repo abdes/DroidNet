@@ -25,6 +25,7 @@
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/ResourceTable.h>
@@ -136,10 +137,11 @@ namespace {
       && scale.z > 0.0F;
   }
 
-  auto ScriptParamFromRecord(const data::pak::ScriptParamRecord& record)
+  auto ScriptParamFromRecord(
+    const data::pak::scripting::ScriptParamRecord& record)
     -> std::optional<data::ScriptParam>
   {
-    using data::pak::ScriptParamType;
+    using data::pak::scripting::ScriptParamType;
     switch (record.type) {
     case ScriptParamType::kBool:
       return data::ScriptParam { record.value.as_bool };
@@ -225,20 +227,21 @@ namespace {
     return nullptr;
   }
 
-  void ApplyTriggerBehavior(const data::pak::InputTriggerBehavior behavior,
+  void ApplyTriggerBehavior(
+    const data::pak::input::InputTriggerBehavior behavior,
     const std::shared_ptr<input::ActionTrigger>& trigger)
   {
     if (!trigger) {
       return;
     }
     switch (behavior) {
-    case data::pak::InputTriggerBehavior::kExplicit:
+    case data::pak::input::InputTriggerBehavior::kExplicit:
       trigger->MakeExplicit();
       break;
-    case data::pak::InputTriggerBehavior::kBlocker:
+    case data::pak::input::InputTriggerBehavior::kBlocker:
       trigger->MakeBlocker();
       break;
-    case data::pak::InputTriggerBehavior::kImplicit:
+    case data::pak::input::InputTriggerBehavior::kImplicit:
     default:
       trigger->MakeImplicit();
       break;
@@ -259,22 +262,22 @@ namespace {
   constexpr uint64_t kPlatformAbiSalt = 0x756E6B6E6F776E5FULL;
 #endif
 
-  auto CompilerFingerprintForLanguage(const data::pak::ScriptLanguage language)
-    -> uint64_t
+  auto CompilerFingerprintForLanguage(
+    const data::pak::scripting::ScriptLanguage language) -> uint64_t
   {
     switch (language) {
-    case data::pak::ScriptLanguage::kLuau:
+    case data::pak::scripting::ScriptLanguage::kLuau:
       return kLuauCompilerFingerprint;
     default:
       return kUnknownCompilerFingerprint;
     }
   }
 
-  auto VmBytecodeVersionForLanguage(const data::pak::ScriptLanguage language)
-    -> uint64_t
+  auto VmBytecodeVersionForLanguage(
+    const data::pak::scripting::ScriptLanguage language) -> uint64_t
   {
     switch (language) {
-    case data::pak::ScriptLanguage::kLuau:
+    case data::pak::scripting::ScriptLanguage::kLuau:
       return kLuauVmBytecodeVersion;
     default:
       return kUnknownVmBytecodeVersion;
@@ -581,11 +584,11 @@ void SceneLoaderService::ValidateUnsupportedPhysicsDomains(
   const data::PhysicsSceneAsset& physics_asset) const
 {
   const auto soft_body_bindings
-    = physics_asset.GetBindings<data::pak::SoftBodyBindingRecord>();
+    = physics_asset.GetBindings<data::pak::physics::SoftBodyBindingRecord>();
   const auto vehicle_bindings
-    = physics_asset.GetBindings<data::pak::VehicleBindingRecord>();
+    = physics_asset.GetBindings<data::pak::physics::VehicleBindingRecord>();
   const auto aggregate_bindings
-    = physics_asset.GetBindings<data::pak::AggregateBindingRecord>();
+    = physics_asset.GetBindings<data::pak::physics::AggregateBindingRecord>();
 
   if (!soft_body_bindings.empty()) {
     throw std::runtime_error(
@@ -618,9 +621,9 @@ void SceneLoaderService::ValidateUnsupportedPhysicsDomains(
 
 auto SceneLoaderService::ResolveCollisionShapeAsset(
   const uint32_t shape_asset_index, const std::string_view binding_kind,
-  const uint32_t node_index) -> data::pak::CollisionShapeAssetDesc
+  const uint32_t node_index) -> data::pak::physics::CollisionShapeAssetDesc
 {
-  if (shape_asset_index == data::pak::kNoResourceIndex) {
+  if (shape_asset_index == data::pak::core::kNoResourceIndex) {
     throw std::runtime_error(std::string(binding_kind)
       + " shape_asset_index is kNoResourceIndex for node_index="
       + std::to_string(node_index));
@@ -634,7 +637,7 @@ auto SceneLoaderService::ResolveCollisionShapeAsset(
   }
   const auto shape_desc_opt = loader_.ReadCollisionShapeAssetDescForAsset(
     *current_physics_context_asset_key_,
-    data::pak::ResourceIndexT { shape_asset_index });
+    data::pak::core::ResourceIndexT { shape_asset_index });
   if (!shape_desc_opt.has_value()) {
     throw std::runtime_error(std::string(binding_kind)
       + " shape_asset_index could not be resolved from content source "
@@ -647,9 +650,9 @@ auto SceneLoaderService::ResolveCollisionShapeAsset(
 
 auto SceneLoaderService::ResolvePhysicsMaterialAsset(
   const uint32_t material_asset_index, const std::string_view binding_kind,
-  const uint32_t node_index) -> data::pak::PhysicsMaterialAssetDesc
+  const uint32_t node_index) -> data::pak::physics::PhysicsMaterialAssetDesc
 {
-  if (material_asset_index == data::pak::kNoResourceIndex) {
+  if (material_asset_index == data::pak::core::kNoResourceIndex) {
     throw std::runtime_error(std::string(binding_kind)
       + " material_asset_index is kNoResourceIndex for node_index="
       + std::to_string(node_index));
@@ -663,7 +666,7 @@ auto SceneLoaderService::ResolvePhysicsMaterialAsset(
   }
   const auto material_desc_opt = loader_.ReadPhysicsMaterialAssetDescForAsset(
     *current_physics_context_asset_key_,
-    data::pak::ResourceIndexT { material_asset_index });
+    data::pak::core::ResourceIndexT { material_asset_index });
   if (!material_desc_opt.has_value()) {
     throw std::runtime_error(std::string(binding_kind)
       + " material_asset_index could not be resolved from content source "
@@ -675,15 +678,15 @@ auto SceneLoaderService::ResolvePhysicsMaterialAsset(
 }
 
 auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
-  const data::pak::CollisionShapeAssetDesc& shape_desc,
+  const data::pak::physics::CollisionShapeAssetDesc& shape_desc,
   const std::string_view binding_kind, const uint32_t node_index)
   -> physics::CollisionShape
 {
   const auto ensure_no_cooked_ref = [&]() {
     if (shape_desc.cooked_shape_ref.resource_index
-        != data::pak::kNoResourceIndex
+        != data::pak::core::kNoResourceIndex
       || shape_desc.cooked_shape_ref.payload_type
-        != data::pak::kInvalidShapePayloadType) {
+        != data::pak::physics::kInvalidShapePayloadType) {
       throw std::runtime_error(
         std::string("OXY-SHAPE-005: cooked_shape_ref must be invalid for "
                     "descriptor-only shape in ")
@@ -691,7 +694,7 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
         + " binding (node_index=" + std::to_string(node_index) + ")");
     }
   };
-  if (shape_desc.shape_type == data::pak::ShapeType::kInvalid) {
+  if (shape_desc.shape_type == data::pak::physics::ShapeType::kInvalid) {
     throw std::runtime_error(
       std::string("OXY-SHAPE-001: invalid shape_type in ")
       + std::string(binding_kind)
@@ -715,8 +718,8 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
   const Vec3 local_scale(shape_desc.local_scale[0], shape_desc.local_scale[1],
     shape_desc.local_scale[2]);
   const bool ignore_local_scale
-    = shape_desc.shape_type == data::pak::ShapeType::kPlane
-    || shape_desc.shape_type == data::pak::ShapeType::kWorldBoundary;
+    = shape_desc.shape_type == data::pak::physics::ShapeType::kPlane
+    || shape_desc.shape_type == data::pak::physics::ShapeType::kWorldBoundary;
   if (!ignore_local_scale && !IsValidFiniteScale(local_scale)) {
     throw std::runtime_error(
       std::string("OXY-SHAPE-008: invalid local_scale in ")
@@ -724,10 +727,10 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
       + " binding (node_index=" + std::to_string(node_index) + ")");
   }
   if (!ignore_local_scale && !IsUniformScale(local_scale)
-    && (shape_desc.shape_type == data::pak::ShapeType::kSphere
-      || shape_desc.shape_type == data::pak::ShapeType::kCapsule
-      || shape_desc.shape_type == data::pak::ShapeType::kCylinder
-      || shape_desc.shape_type == data::pak::ShapeType::kCone)) {
+    && (shape_desc.shape_type == data::pak::physics::ShapeType::kSphere
+      || shape_desc.shape_type == data::pak::physics::ShapeType::kCapsule
+      || shape_desc.shape_type == data::pak::physics::ShapeType::kCylinder
+      || shape_desc.shape_type == data::pak::physics::ShapeType::kCone)) {
     throw std::runtime_error(
       std::string("OXY-SHAPE-008: non-uniform local_scale "
                   "is not valid for shape_type in ")
@@ -737,7 +740,7 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
   }
 
   switch (shape_desc.shape_type) {
-  case data::pak::ShapeType::kSphere: {
+  case data::pak::physics::ShapeType::kSphere: {
     const float radius = shape_desc.shape_params.sphere.radius;
     ensure_no_cooked_ref();
     if (!(radius > 0.0F)) {
@@ -748,7 +751,7 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
     }
     return physics::SphereShape { .radius = radius };
   }
-  case data::pak::ShapeType::kCapsule: {
+  case data::pak::physics::ShapeType::kCapsule: {
     const float radius = shape_desc.shape_params.capsule.radius;
     const float half_height = shape_desc.shape_params.capsule.half_height;
     ensure_no_cooked_ref();
@@ -763,7 +766,7 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
       .half_height = half_height,
     };
   }
-  case data::pak::ShapeType::kBox: {
+  case data::pak::physics::ShapeType::kBox: {
     const auto& half_extents = shape_desc.shape_params.box.half_extents;
     ensure_no_cooked_ref();
     if (!(half_extents[0] > 0.0F && half_extents[1] > 0.0F
@@ -777,7 +780,7 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
       .extents = Vec3(half_extents[0], half_extents[1], half_extents[2]),
     };
   }
-  case data::pak::ShapeType::kCylinder: {
+  case data::pak::physics::ShapeType::kCylinder: {
     const float radius = shape_desc.shape_params.cylinder.radius;
     const float half_height = shape_desc.shape_params.cylinder.half_height;
     ensure_no_cooked_ref();
@@ -792,7 +795,7 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
       .half_height = half_height,
     };
   }
-  case data::pak::ShapeType::kCone: {
+  case data::pak::physics::ShapeType::kCone: {
     const float radius = shape_desc.shape_params.cone.radius;
     const float half_height = shape_desc.shape_params.cone.half_height;
     if (!(radius > 0.0F && half_height > 0.0F)) {
@@ -805,24 +808,27 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
       .radius = radius,
       .half_height = half_height,
       .cooked_payload = ResolveCookedShapePayload(shape_desc,
-        data::pak::ShapePayloadType::kConvex, binding_kind, node_index),
+        data::pak::physics::ShapePayloadType::kConvex, binding_kind,
+        node_index),
     };
   }
-  case data::pak::ShapeType::kConvexHull:
-    return physics::ConvexHullShape { .cooked_payload
-      = ResolveCookedShapePayload(shape_desc,
-        data::pak::ShapePayloadType::kConvex, binding_kind, node_index) };
-  case data::pak::ShapeType::kTriangleMesh:
+  case data::pak::physics::ShapeType::kConvexHull:
+    return physics::ConvexHullShape {
+      .cooked_payload = ResolveCookedShapePayload(shape_desc,
+        data::pak::physics::ShapePayloadType::kConvex, binding_kind, node_index)
+    };
+  case data::pak::physics::ShapeType::kTriangleMesh:
     return physics::TriangleMeshShape {
       .cooked_payload = ResolveCookedShapePayload(shape_desc,
-        data::pak::ShapePayloadType::kMesh, binding_kind, node_index),
+        data::pak::physics::ShapePayloadType::kMesh, binding_kind, node_index),
     };
-  case data::pak::ShapeType::kHeightField:
+  case data::pak::physics::ShapeType::kHeightField:
     return physics::HeightFieldShape {
       .cooked_payload = ResolveCookedShapePayload(shape_desc,
-        data::pak::ShapePayloadType::kHeightField, binding_kind, node_index),
+        data::pak::physics::ShapePayloadType::kHeightField, binding_kind,
+        node_index),
     };
-  case data::pak::ShapeType::kPlane: {
+  case data::pak::physics::ShapeType::kPlane: {
     ensure_no_cooked_ref();
     const auto& normal = shape_desc.shape_params.plane.normal;
     const Vec3 n(normal[0], normal[1], normal[2]);
@@ -837,11 +843,13 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
       .distance = shape_desc.shape_params.plane.distance,
     };
   }
-  case data::pak::ShapeType::kWorldBoundary: {
+  case data::pak::physics::ShapeType::kWorldBoundary: {
     ensure_no_cooked_ref();
     const auto& params = shape_desc.shape_params.world_boundary;
-    if (params.boundary_mode != data::pak::WorldBoundaryMode::kAabbClamp
-      && params.boundary_mode != data::pak::WorldBoundaryMode::kPlaneSet) {
+    if (params.boundary_mode
+        != data::pak::physics::WorldBoundaryMode::kAabbClamp
+      && params.boundary_mode
+        != data::pak::physics::WorldBoundaryMode::kPlaneSet) {
       throw std::runtime_error(
         std::string("OXY-SHAPE-008: invalid world_boundary boundary_mode in ")
         + std::string(binding_kind)
@@ -863,10 +871,11 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
       = Vec3(params.limits_max[0], params.limits_max[1], params.limits_max[2]),
     };
   }
-  case data::pak::ShapeType::kCompound:
+  case data::pak::physics::ShapeType::kCompound:
     return physics::CompoundShape { .cooked_payload
       = ResolveCookedShapePayload(shape_desc,
-        data::pak::ShapePayloadType::kCompound, binding_kind, node_index) };
+        data::pak::physics::ShapePayloadType::kCompound, binding_kind,
+        node_index) };
   default:
     throw std::runtime_error(
       std::string("OXY-SHAPE-001: unsupported shape_type in ")
@@ -877,8 +886,8 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
 }
 
 auto SceneLoaderService::ResolveCookedShapePayload(
-  const data::pak::CollisionShapeAssetDesc& shape_desc,
-  const data::pak::ShapePayloadType expected_payload_type,
+  const data::pak::physics::CollisionShapeAssetDesc& shape_desc,
+  const data::pak::physics::ShapePayloadType expected_payload_type,
   const std::string_view binding_kind, const uint32_t node_index) const
   -> physics::CookedShapePayload
 {
@@ -888,7 +897,7 @@ auto SceneLoaderService::ResolveCookedShapePayload(
       + std::to_string(node_index) + ")");
   }
   const auto& cooked_ref = shape_desc.cooked_shape_ref;
-  if (cooked_ref.resource_index == data::pak::kNoResourceIndex) {
+  if (cooked_ref.resource_index == data::pak::core::kNoResourceIndex) {
     throw std::runtime_error(
       std::string("OXY-SHAPE-004: missing cooked_shape_ref.resource_index in ")
       + std::string(binding_kind)
@@ -924,7 +933,7 @@ auto SceneLoaderService::ResolveCookedShapePayload(
   }
 
   if (resource->GetFormat()
-    != data::pak::PhysicsResourceFormat::kJoltShapeBinary) {
+    != data::pak::physics::PhysicsResourceFormat::kJoltShapeBinary) {
     throw std::runtime_error(
       std::string("OXY-SHAPE-007: unsupported physics resource format in ")
       + std::string(binding_kind) + " binding (node_index="
@@ -944,7 +953,7 @@ auto SceneLoaderService::ResolveCookedShapePayload(
 
 void SceneLoaderService::HydrateJointBindings(
   physics::PhysicsModule& physics_module,
-  const std::span<const data::pak::JointBindingRecord> bindings)
+  const std::span<const data::pak::physics::JointBindingRecord> bindings)
 {
   const auto world_id = physics_module.GetWorldId();
   if (!physics::IsValid(world_id)) {
@@ -958,7 +967,7 @@ void SceneLoaderService::HydrateJointBindings(
       throw std::runtime_error(std::string("joint node_index_a out of range: ")
         + std::to_string(record.node_index_a));
     }
-    if (record.node_index_b == data::pak::kNoResourceIndex) {
+    if (record.node_index_b == data::pak::core::kNoResourceIndex) {
       throw std::runtime_error(
         std::string("joint world-anchor mode is not supported by SceneLoader "
                     "hydrator (node_index_a=")
@@ -968,7 +977,7 @@ void SceneLoaderService::HydrateJointBindings(
       throw std::runtime_error(std::string("joint node_index_b out of range: ")
         + std::to_string(record.node_index_b));
     }
-    if (record.constraint_resource_index != data::pak::kNoResourceIndex) {
+    if (record.constraint_resource_index != data::pak::core::kNoResourceIndex) {
       throw std::runtime_error(
         std::string("joint constraint_resource_index is not supported by "
                     "SceneLoader hydrator (node_index_a=")
@@ -1011,7 +1020,7 @@ void SceneLoaderService::HydrateJointBindings(
 
 void SceneLoaderService::HydrateColliderBindings(
   physics::PhysicsModule& physics_module,
-  const std::span<const data::pak::ColliderBindingRecord> bindings)
+  const std::span<const data::pak::physics::ColliderBindingRecord> bindings)
 {
   for (const auto& record : bindings) {
     const auto node_index = static_cast<size_t>(record.node_index);
@@ -1031,7 +1040,7 @@ void SceneLoaderService::HydrateColliderBindings(
       record.collision_layer) };
     desc.collision_mask
       = physics::CollisionMask { static_cast<uint32_t>(record.collision_mask) };
-    if (record.shape_asset_index != data::pak::kNoResourceIndex) {
+    if (record.shape_asset_index != data::pak::core::kNoResourceIndex) {
       const auto shape_desc = ResolveCollisionShapeAsset(
         record.shape_asset_index, "collider", record.node_index);
       desc.shape = BuildCollisionShapeFromDescriptor(
@@ -1043,7 +1052,7 @@ void SceneLoaderService::HydrateColliderBindings(
           shape_desc.local_rotation[1], shape_desc.local_rotation[2]);
       desc.shape_local_scale = Vec3(shape_desc.local_scale[0],
         shape_desc.local_scale[1], shape_desc.local_scale[2]);
-      if (shape_desc.material_ref != data::pak::kNoResourceIndex) {
+      if (shape_desc.material_ref != data::pak::core::kNoResourceIndex) {
         const auto material_desc = ResolvePhysicsMaterialAsset(
           shape_desc.material_ref.get(), "collider", record.node_index);
         desc.friction = (std::max)(0.0F, material_desc.friction);
@@ -1070,7 +1079,7 @@ void SceneLoaderService::HydrateColliderBindings(
 
 void SceneLoaderService::HydrateRigidBodyBindings(
   physics::PhysicsModule& physics_module,
-  const std::span<const data::pak::RigidBodyBindingRecord> bindings)
+  const std::span<const data::pak::physics::RigidBodyBindingRecord> bindings)
 {
   for (const auto& record : bindings) {
     const auto node_index = static_cast<size_t>(record.node_index);
@@ -1082,13 +1091,13 @@ void SceneLoaderService::HydrateRigidBodyBindings(
 
     physics::body::BodyDesc desc {};
     switch (record.body_type) {
-    case data::pak::PhysicsBodyType::kStatic:
+    case data::pak::physics::PhysicsBodyType::kStatic:
       desc.type = physics::body::BodyType::kStatic;
       break;
-    case data::pak::PhysicsBodyType::kDynamic:
+    case data::pak::physics::PhysicsBodyType::kDynamic:
       desc.type = physics::body::BodyType::kDynamic;
       break;
-    case data::pak::PhysicsBodyType::kKinematic:
+    case data::pak::physics::PhysicsBodyType::kKinematic:
       desc.type = physics::body::BodyType::kKinematic;
       break;
     default:
@@ -1105,7 +1114,8 @@ void SceneLoaderService::HydrateRigidBodyBindings(
     if (record.is_sensor != 0U) {
       desc.flags = desc.flags | physics::body::BodyFlags::kIsTrigger;
     }
-    if (record.motion_quality == data::pak::PhysicsMotionQuality::kLinearCast) {
+    if (record.motion_quality
+      == data::pak::physics::PhysicsMotionQuality::kLinearCast) {
       desc.flags = desc.flags
         | physics::body::BodyFlags::kEnableContinuousCollisionDetection;
     }
@@ -1116,15 +1126,19 @@ void SceneLoaderService::HydrateRigidBodyBindings(
       record.collision_layer) };
     desc.collision_mask
       = physics::CollisionMask { static_cast<uint32_t>(record.collision_mask) };
-    std::optional<data::pak::CollisionShapeAssetDesc> shape_desc_opt {};
-    if (record.shape_asset_index != data::pak::kNoResourceIndex) {
+    std::optional<data::pak::physics::CollisionShapeAssetDesc>
+      shape_desc_opt {};
+    if (record.shape_asset_index != data::pak::core::kNoResourceIndex) {
       const auto shape_desc = ResolveCollisionShapeAsset(
         record.shape_asset_index, "rigid-body", record.node_index);
       if (desc.type == physics::body::BodyType::kDynamic
-        && (shape_desc.shape_type == data::pak::ShapeType::kTriangleMesh
-          || shape_desc.shape_type == data::pak::ShapeType::kHeightField
-          || shape_desc.shape_type == data::pak::ShapeType::kPlane
-          || shape_desc.shape_type == data::pak::ShapeType::kWorldBoundary)) {
+        && (shape_desc.shape_type
+            == data::pak::physics::ShapeType::kTriangleMesh
+          || shape_desc.shape_type
+            == data::pak::physics::ShapeType::kHeightField
+          || shape_desc.shape_type == data::pak::physics::ShapeType::kPlane
+          || shape_desc.shape_type
+            == data::pak::physics::ShapeType::kWorldBoundary)) {
         throw std::runtime_error(
           std::string(
             "OXY-SHAPE-008: shape_type is not valid for dynamic body in ")
@@ -1142,7 +1156,7 @@ void SceneLoaderService::HydrateRigidBodyBindings(
           shape_desc.local_rotation[1], shape_desc.local_rotation[2]);
       desc.shape_local_scale = Vec3(shape_desc.local_scale[0],
         shape_desc.local_scale[1], shape_desc.local_scale[2]);
-      if (shape_desc.material_ref != data::pak::kNoResourceIndex) {
+      if (shape_desc.material_ref != data::pak::core::kNoResourceIndex) {
         const auto material_desc = ResolvePhysicsMaterialAsset(
           shape_desc.material_ref.get(), "rigid-body", record.node_index);
         desc.friction = (std::max)(0.0F, material_desc.friction);
@@ -1187,7 +1201,7 @@ void SceneLoaderService::HydrateRigidBodyBindings(
 
 void SceneLoaderService::HydrateCharacterBindings(
   physics::PhysicsModule& physics_module,
-  const std::span<const data::pak::CharacterBindingRecord> bindings)
+  const std::span<const data::pak::physics::CharacterBindingRecord> bindings)
 {
   for (const auto& record : bindings) {
     const auto node_index = static_cast<size_t>(record.node_index);
@@ -1206,7 +1220,7 @@ void SceneLoaderService::HydrateCharacterBindings(
       record.collision_layer) };
     desc.collision_mask
       = physics::CollisionMask { static_cast<uint32_t>(record.collision_mask) };
-    if (record.shape_asset_index != data::pak::kNoResourceIndex) {
+    if (record.shape_asset_index != data::pak::core::kNoResourceIndex) {
       const auto shape_desc = ResolveCollisionShapeAsset(
         record.shape_asset_index, "character", record.node_index);
       desc.shape = BuildCollisionShapeFromDescriptor(
@@ -1249,13 +1263,13 @@ void SceneLoaderService::HydratePhysicsBindings(
   ValidateUnsupportedPhysicsDomains(physics_asset);
 
   const auto rigid_body_bindings
-    = physics_asset.GetBindings<data::pak::RigidBodyBindingRecord>();
+    = physics_asset.GetBindings<data::pak::physics::RigidBodyBindingRecord>();
   const auto collider_bindings
-    = physics_asset.GetBindings<data::pak::ColliderBindingRecord>();
+    = physics_asset.GetBindings<data::pak::physics::ColliderBindingRecord>();
   const auto character_bindings
-    = physics_asset.GetBindings<data::pak::CharacterBindingRecord>();
+    = physics_asset.GetBindings<data::pak::physics::CharacterBindingRecord>();
   const auto joint_bindings
-    = physics_asset.GetBindings<data::pak::JointBindingRecord>();
+    = physics_asset.GetBindings<data::pak::physics::JointBindingRecord>();
 
   HydrateRigidBodyBindings(*physics_module, rigid_body_bindings);
   HydrateColliderBindings(*physics_module, collider_bindings);
@@ -1359,30 +1373,30 @@ auto SceneLoaderService::PreloadPhysicsShapeResources(
     const auto shape_desc
       = ResolveCollisionShapeAsset(shape_asset_index, binding_kind, node_index);
     if (shape_desc.cooked_shape_ref.resource_index
-      != data::pak::kNoResourceIndex) {
+      != data::pak::core::kNoResourceIndex) {
       payload_indices.insert(shape_desc.cooked_shape_ref.resource_index.get());
     }
   };
 
   for (const auto& record :
-    physics_asset.GetBindings<data::pak::RigidBodyBindingRecord>()) {
+    physics_asset.GetBindings<data::pak::physics::RigidBodyBindingRecord>()) {
     collect_payload_ref(
       record.shape_asset_index, "rigid-body", record.node_index);
   }
   for (const auto& record :
-    physics_asset.GetBindings<data::pak::CharacterBindingRecord>()) {
+    physics_asset.GetBindings<data::pak::physics::CharacterBindingRecord>()) {
     collect_payload_ref(
       record.shape_asset_index, "character", record.node_index);
   }
   for (const auto& record :
-    physics_asset.GetBindings<data::pak::ColliderBindingRecord>()) {
+    physics_asset.GetBindings<data::pak::physics::ColliderBindingRecord>()) {
     collect_payload_ref(
       record.shape_asset_index, "collider", record.node_index);
   }
 
   for (const auto resource_index_raw : payload_indices) {
     const auto resource_index
-      = data::pak::ResourceIndexT { resource_index_raw };
+      = data::pak::core::ResourceIndexT { resource_index_raw };
     const auto resource_key_opt = loader_.MakePhysicsResourceKeyForAsset(
       context_asset_key, resource_index);
     if (!resource_key_opt.has_value()) {
@@ -1422,12 +1436,12 @@ auto SceneLoaderService::BuildEnvironment(const data::SceneAsset& asset)
 
 void SceneLoaderService::LogSceneSummary(const data::SceneAsset& asset) const
 {
-  using data::pak::DirectionalLightRecord;
-  using data::pak::OrthographicCameraRecord;
-  using data::pak::PerspectiveCameraRecord;
-  using data::pak::PointLightRecord;
-  using data::pak::RenderableRecord;
-  using data::pak::SpotLightRecord;
+  using data::pak::world::DirectionalLightRecord;
+  using data::pak::world::OrthographicCameraRecord;
+  using data::pak::world::PerspectiveCameraRecord;
+  using data::pak::world::PointLightRecord;
+  using data::pak::world::RenderableRecord;
+  using data::pak::world::SpotLightRecord;
 
   const auto nodes = asset.GetNodes();
 
@@ -1446,7 +1460,7 @@ void SceneLoaderService::LogSceneSummary(const data::SceneAsset& asset) const
 void SceneLoaderService::InstantiateNodes(
   scene::Scene& scene, const data::SceneAsset& asset)
 {
-  using data::pak::NodeRecord;
+  using data::pak::world::NodeRecord;
 
   const auto nodes = asset.GetNodes();
   runtime_nodes_.reserve(nodes.size());
@@ -1492,7 +1506,7 @@ void SceneLoaderService::ApplyHierarchy(
 
 void SceneLoaderService::AttachRenderables(const data::SceneAsset& asset)
 {
-  using data::pak::RenderableRecord;
+  using data::pak::world::RenderableRecord;
 
   const auto renderables = asset.GetComponents<RenderableRecord>();
   int valid_renderables = 0;
@@ -1526,24 +1540,25 @@ void SceneLoaderService::AttachRenderables(const data::SceneAsset& asset)
 
 void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
 {
-  using data::pak::DirectionalLightRecord;
-  using data::pak::PointLightRecord;
-  using data::pak::SpotLightRecord;
+  using data::pak::world::DirectionalLightRecord;
+  using data::pak::world::PointLightRecord;
+  using data::pak::world::SpotLightRecord;
 
-  const auto ApplyCommonLight = [](scene::CommonLightProperties& dst,
-                                  const data::pak::LightCommonRecord& src) {
-    dst.affects_world = (src.affects_world != 0U);
-    dst.color_rgb = { src.color_rgb[0], src.color_rgb[1], src.color_rgb[2] };
-    // intensity REMOVED from common - set via specific light class methods
-    dst.mobility = static_cast<scene::LightMobility>(src.mobility);
-    dst.casts_shadows = (src.casts_shadows != 0U);
-    dst.shadow.bias = src.shadow.bias;
-    dst.shadow.normal_bias = src.shadow.normal_bias;
-    dst.shadow.contact_shadows = (src.shadow.contact_shadows != 0U);
-    dst.shadow.resolution_hint
-      = static_cast<scene::ShadowResolutionHint>(src.shadow.resolution_hint);
-    dst.exposure_compensation_ev = src.exposure_compensation_ev;
-  };
+  const auto ApplyCommonLight =
+    [](scene::CommonLightProperties& dst,
+      const data::pak::world::LightCommonRecord& src) {
+      dst.affects_world = (src.affects_world != 0U);
+      dst.color_rgb = { src.color_rgb[0], src.color_rgb[1], src.color_rgb[2] };
+      // intensity REMOVED from common - set via specific light class methods
+      dst.mobility = static_cast<scene::LightMobility>(src.mobility);
+      dst.casts_shadows = (src.casts_shadows != 0U);
+      dst.shadow.bias = src.shadow.bias;
+      dst.shadow.normal_bias = src.shadow.normal_bias;
+      dst.shadow.contact_shadows = (src.shadow.contact_shadows != 0U);
+      dst.shadow.resolution_hint
+        = static_cast<scene::ShadowResolutionHint>(src.shadow.resolution_hint);
+      dst.exposure_compensation_ev = src.exposure_compensation_ev;
+    };
 
   int attached_directional = 0;
   for (const DirectionalLightRecord& rec :
@@ -1646,7 +1661,7 @@ void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
 
 void SceneLoaderService::AttachScripting(const data::SceneAsset& asset)
 {
-  using data::pak::ScriptingComponentRecord;
+  using data::pak::scripting::ScriptingComponentRecord;
 
   const auto scripting_components
     = asset.GetComponents<ScriptingComponentRecord>();
@@ -1715,9 +1730,9 @@ void SceneLoaderService::AttachScripting(const data::SceneAsset& asset)
 
 void SceneLoaderService::AttachInputMappings(const data::SceneAsset& asset)
 {
-  using data::pak::InputContextBindingFlags;
-  using data::pak::InputContextBindingRecord;
-  using data::pak::InputTriggerType;
+  using data::pak::input::InputContextBindingFlags;
+  using data::pak::input::InputContextBindingRecord;
+  using data::pak::input::InputTriggerType;
 
   if (!input_system_) {
     return;
@@ -1920,12 +1935,12 @@ void SceneLoaderService::AttachInputMappings(const data::SceneAsset& asset)
           LOG_F(WARNING,
             "SceneLoader: Trigger type '{}' is not supported yet "
             "(context={})",
-            data::pak::to_string(trigger_record.type), context_name);
+            trigger_record.type, context_name);
           break;
         default:
           LOG_F(WARNING,
             "SceneLoader: Unknown trigger type '{}' in input context '{}'",
-            data::pak::to_string(trigger_record.type), context_name);
+            trigger_record.type, context_name);
           break;
         }
 
@@ -1960,7 +1975,7 @@ void SceneLoaderService::AttachInputMappings(const data::SceneAsset& asset)
 void SceneLoaderService::ApplySlotParameters(
   scene::SceneNode::Scripting& scripting,
   const scene::SceneNode::Scripting::Slot& slot,
-  std::span<const data::pak::ScriptParamRecord> params)
+  std::span<const data::pak::scripting::ScriptParamRecord> params)
 {
   for (const auto& param : params) {
     const auto* const key_begin = std::begin(param.key);
@@ -2115,8 +2130,8 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
 
 void SceneLoaderService::SelectActiveCamera(const data::SceneAsset& asset)
 {
-  using data::pak::OrthographicCameraRecord;
-  using data::pak::PerspectiveCameraRecord;
+  using data::pak::world::OrthographicCameraRecord;
+  using data::pak::world::PerspectiveCameraRecord;
 
   const auto perspective_cams = asset.GetComponents<PerspectiveCameraRecord>();
   if (!perspective_cams.empty()) {
@@ -2325,7 +2340,7 @@ auto SceneLoaderService::ReadScriptResource(
   -> std::shared_ptr<const data::ScriptResource>
 {
   const auto resource_key_opt = loader_.MakeScriptResourceKeyForAsset(
-    context_asset_key, data::pak::ResourceIndexT { index });
+    context_asset_key, data::pak::core::ResourceIndexT { index });
   if (!resource_key_opt.has_value()) {
     LOG_F(WARNING,
       "failed to resolve script resource key (context_asset={} index={})",
@@ -2337,7 +2352,7 @@ auto SceneLoaderService::ReadScriptResource(
   if (!resource) {
     resource = std::const_pointer_cast<data::ScriptResource>(
       loader_.ReadScriptResourceForAsset(
-        context_asset_key, data::pak::ResourceIndexT { index }));
+        context_asset_key, data::pak::core::ResourceIndexT { index }));
   }
   if (!resource) {
     LOG_F(WARNING,

@@ -27,14 +27,14 @@ namespace oxygen::content::pakdump {
 class MaterialAssetDumper final : public AssetDumper {
 public:
   auto DumpAsync(const oxygen::content::PakFile& pak,
-    const oxygen::data::pak::v2::AssetDirectoryEntry& entry, DumpContext& ctx,
+    const oxygen::data::pak::core::AssetDirectoryEntry& entry, DumpContext& ctx,
     const size_t idx, oxygen::content::AssetLoader& asset_loader) const
     -> oxygen::co::Co<> override
   {
     (void)asset_loader;
 
-    using oxygen::data::pak::MaterialAssetDesc;
-    using oxygen::data::pak::ShaderReferenceDesc;
+    using oxygen::data::pak::render::MaterialAssetDesc;
+    using oxygen::data::pak::render::ShaderReferenceDesc;
 
     std::cout << "Asset #" << idx << ":\n";
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
@@ -150,9 +150,9 @@ public:
         mat.grid_axis_color_y[3]),
       8);
     PrintUtils::Field("Grid Origin Color",
-      fmt::format("[{:.3f}, {:.3f}, {:.3f}, {:.3f}]",
-        mat.grid_origin_color[0], mat.grid_origin_color[1],
-        mat.grid_origin_color[2], mat.grid_origin_color[3]),
+      fmt::format("[{:.3f}, {:.3f}, {:.3f}, {:.3f}]", mat.grid_origin_color[0],
+        mat.grid_origin_color[1], mat.grid_origin_color[2],
+        mat.grid_origin_color[3]),
       8);
     std::cout << "\n";
 

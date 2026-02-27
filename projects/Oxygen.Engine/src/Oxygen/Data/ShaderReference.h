@@ -23,7 +23,7 @@ namespace oxygen::data {
  not a first-class asset: it is not named or globally identified, but is
  included inline after a material asset descriptor.
 
- ### Binary Encoding (PAK v2, 424 bytes)
+ ### Binary Encoding (PAK v7, 424 bytes)
 
  Stores a structured shader request (stage, source path, entry point, defines)
  plus a source hash for validation.
@@ -33,7 +33,7 @@ namespace oxygen::data {
 class ShaderReference : public oxygen::Object {
   OXYGEN_TYPED(ShaderReference)
 public:
-  explicit ShaderReference(pak::ShaderReferenceDesc desc)
+  explicit ShaderReference(pak::render::ShaderReferenceDesc desc)
     : desc_(std::move(desc))
   {
   }
@@ -70,7 +70,7 @@ public:
   }
 
 private:
-  pak::ShaderReferenceDesc desc_ {};
+  pak::render::ShaderReferenceDesc desc_ {};
 };
 
 } // namespace oxygen::data

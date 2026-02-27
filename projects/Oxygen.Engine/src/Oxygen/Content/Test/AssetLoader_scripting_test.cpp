@@ -138,8 +138,8 @@ auto WriteLooseCookedScriptAsset(const std::filesystem::path& cooked_root,
   using oxygen::data::loose_cooked::FileKind;
   using oxygen::data::loose_cooked::FileRecord;
   using oxygen::data::loose_cooked::IndexHeader;
-  using oxygen::data::pak::ScriptAssetDesc;
-  using oxygen::data::pak::ScriptResourceDesc;
+  using oxygen::data::pak::scripting::ScriptAssetDesc;
+  using oxygen::data::pak::scripting::ScriptResourceDesc;
 
   const oxygen::content::import::LooseCookedLayout layout {};
   std::filesystem::create_directories(cooked_root / "Scripts");
@@ -149,8 +149,9 @@ auto WriteLooseCookedScriptAsset(const std::filesystem::path& cooked_root,
   script_desc.header.asset_type = static_cast<uint8_t>(AssetType::kScript);
   std::snprintf(
     script_desc.header.name, sizeof(script_desc.header.name), "%s", "Reload");
-  script_desc.bytecode_resource_index = oxygen::data::pak::ResourceIndexT { 0 };
-  script_desc.source_resource_index = oxygen::data::pak::kNoResourceIndex;
+  script_desc.bytecode_resource_index
+    = oxygen::data::pak::core::ResourceIndexT { 0 };
+  script_desc.source_resource_index = oxygen::data::pak::core::kNoResourceIndex;
 
   const auto desc_rel = std::filesystem::path("Scripts") / "Reload.oscript";
   {
@@ -249,12 +250,12 @@ auto WriteLooseCookedSceneWithScripting(
   using oxygen::data::loose_cooked::FileKind;
   using oxygen::data::loose_cooked::FileRecord;
   using oxygen::data::loose_cooked::IndexHeader;
-  using oxygen::data::pak::NodeRecord;
-  using oxygen::data::pak::SceneAssetDesc;
-  using oxygen::data::pak::SceneComponentTableDesc;
-  using oxygen::data::pak::SceneEnvironmentBlockHeader;
-  using oxygen::data::pak::ScriptingComponentRecord;
-  using oxygen::data::pak::ScriptSlotRecord;
+  using oxygen::data::pak::scripting::ScriptingComponentRecord;
+  using oxygen::data::pak::scripting::ScriptSlotRecord;
+  using oxygen::data::pak::world::NodeRecord;
+  using oxygen::data::pak::world::SceneAssetDesc;
+  using oxygen::data::pak::world::SceneComponentTableDesc;
+  using oxygen::data::pak::world::SceneEnvironmentBlockHeader;
 
   const oxygen::content::import::LooseCookedLayout layout {};
   std::filesystem::create_directories(cooked_root / layout.scenes_subdir);
@@ -264,7 +265,7 @@ auto WriteLooseCookedSceneWithScripting(
   desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
   std::snprintf(
     desc.header.name, sizeof(desc.header.name), "%s", "ScriptScene");
-  desc.header.version = oxygen::data::pak::kSceneAssetVersion;
+  desc.header.version = oxygen::data::pak::world::kSceneAssetVersion;
 
   const uint32_t offset_nodes = sizeof(SceneAssetDesc);
   const uint32_t offset_strings = offset_nodes + sizeof(NodeRecord);
@@ -394,20 +395,20 @@ auto WriteLooseCookedSceneWithScripting(
 
 auto ReadAssetHeader(oxygen::content::internal::IContentSource& source,
   const oxygen::data::AssetKey& key)
-  -> std::optional<oxygen::data::pak::AssetHeader>
+  -> std::optional<oxygen::data::pak::core::AssetHeader>
 {
   auto desc_reader = source.CreateAssetDescriptorReader(key);
   if (!desc_reader) {
     return std::nullopt;
   }
   auto header_blob
-    = desc_reader->ReadBlob(sizeof(oxygen::data::pak::AssetHeader));
+    = desc_reader->ReadBlob(sizeof(oxygen::data::pak::core::AssetHeader));
   if (!header_blob
-    || header_blob->size() < sizeof(oxygen::data::pak::AssetHeader)) {
+    || header_blob->size() < sizeof(oxygen::data::pak::core::AssetHeader)) {
     return std::nullopt;
   }
 
-  oxygen::data::pak::AssetHeader header {};
+  oxygen::data::pak::core::AssetHeader header {};
   std::memcpy(&header, header_blob->data(), sizeof(header));
   return header;
 }
@@ -444,7 +445,7 @@ NOLINT_TEST_F(AssetLoaderScriptingTest,
       EXPECT_THAT(script_asset, NotNull());
 
       const auto key = loader.MakeScriptResourceKeyForAsset(
-        script_key, oxygen::data::pak::ResourceIndexT { 0 });
+        script_key, oxygen::data::pak::core::ResourceIndexT { 0 });
       EXPECT_TRUE(key.has_value());
       if (!key.has_value()) {
         loader.Stop();
@@ -675,8 +676,8 @@ NOLINT_TEST_F(
       const auto scene = co_await loader.LoadAssetAsync<SceneAsset>(scene_key);
       EXPECT_THAT(scene, NotNull());
       if (scene) {
-        const auto scripting
-          = scene->GetComponents<oxygen::data::pak::ScriptingComponentRecord>();
+        const auto scripting = scene->GetComponents<
+          oxygen::data::pak::scripting::ScriptingComponentRecord>();
         EXPECT_FALSE(scripting.empty());
       }
 

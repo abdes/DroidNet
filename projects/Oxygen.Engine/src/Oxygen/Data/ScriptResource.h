@@ -31,11 +31,11 @@ class ScriptResource : public Object {
 
 public:
   //! Type alias for the descriptor type used by this resource.
-  using DescT = pak::v5::ScriptResourceDesc;
+  using DescT = pak::scripting::ScriptResourceDesc;
 
   //! Constructs a ScriptResource with descriptor + payload bytes.
   OXGN_DATA_API ScriptResource(
-    pak::v5::ScriptResourceDesc desc, std::vector<uint8_t> data);
+    pak::scripting::ScriptResourceDesc desc, std::vector<uint8_t> data);
 
   ~ScriptResource() override = default;
 
@@ -76,7 +76,7 @@ public:
   }
 
 private:
-  pak::v5::ScriptResourceDesc desc_ {};
+  pak::scripting::ScriptResourceDesc desc_ {};
   std::vector<uint8_t> data_;
 };
 

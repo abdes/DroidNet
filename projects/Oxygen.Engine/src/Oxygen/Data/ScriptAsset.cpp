@@ -18,9 +18,10 @@ namespace oxygen::data {
 namespace {
 
   // Internal helper
-  auto ToScriptParam(const pak::ScriptParamRecord& record) -> ScriptParam
+  auto ToScriptParam(const pak::scripting::ScriptParamRecord& record)
+    -> ScriptParam
   {
-    using pak::ScriptParamType;
+    using pak::scripting::ScriptParamType;
 
     switch (record.type) {
     case ScriptParamType::kBool:
@@ -50,11 +51,12 @@ namespace {
 
 } // namespace
 
-static_assert(std::is_trivially_copyable_v<pak::ScriptAssetDesc>,
+static_assert(std::is_trivially_copyable_v<pak::scripting::ScriptAssetDesc>,
   "ScriptAssetDesc must be trivially copyable");
 
-ScriptAsset::ScriptAsset(AssetKey asset_key, pak::ScriptAssetDesc desc,
-  const std::vector<pak::ScriptParamRecord>& params)
+ScriptAsset::ScriptAsset(AssetKey asset_key,
+  pak::scripting::ScriptAssetDesc desc,
+  const std::vector<pak::scripting::ScriptParamRecord>& params)
   : Asset(asset_key)
   , desc_(desc)
 {
@@ -69,7 +71,7 @@ ScriptAsset::ScriptAsset(AssetKey asset_key, pak::ScriptAssetDesc desc,
       std::string_view(static_cast<const char*>(param.key), 16));
 
     ScriptParam value;
-    if (param.type == pak::ScriptParamType::kString) {
+    if (param.type == pak::scripting::ScriptParamType::kString) {
       const auto& str = param.value.as_string;
       const auto* const str_end = std::ranges::find(str, '\0');
       CHECK_F(str_end != std::end(str),

@@ -34,7 +34,7 @@ namespace oxygen::data {
  This is a direct, binary-compatible wrapper for the PAK format, providing
  access to all fields and metadata for rendering and asset management.
 
- ### Binary Encoding (PAK v1, 256 bytes)
+ ### Binary Encoding (PAK v7, 256 bytes)
 
  ```text
  offset size   name                  description
@@ -68,7 +68,8 @@ class MaterialAsset : public Asset {
   OXYGEN_TYPED(MaterialAsset)
 
 public:
-  explicit MaterialAsset(AssetKey asset_key, pak::MaterialAssetDesc desc,
+  explicit MaterialAsset(AssetKey asset_key,
+    pak::render::MaterialAssetDesc desc,
     std::vector<ShaderReference> shader_refs = {},
     std::vector<oxygen::content::ResourceKey> texture_resource_keys = {})
     : Asset(asset_key)
@@ -84,7 +85,7 @@ public:
   OXYGEN_DEFAULT_MOVABLE(MaterialAsset)
 
   //! Returns the asset header metadata.
-  [[nodiscard]] auto GetHeader() const noexcept -> const pak::AssetHeader&
+  [[nodiscard]] auto GetHeader() const noexcept -> const pak::core::AssetHeader&
   {
     return desc_.header;
   }
@@ -128,7 +129,7 @@ public:
   //! Returns whether this material uses the procedural grid feature.
   [[nodiscard]] auto HasProceduralGrid() const noexcept -> bool
   {
-    return (GetFlags() & pak::kMaterialFlag_ProceduralGrid) != 0u;
+    return (GetFlags() & pak::render::kMaterialFlag_ProceduralGrid) != 0u;
   }
 
   //! Returns whether this material is double-sided.
@@ -140,7 +141,7 @@ public:
   */
   [[nodiscard]] auto IsDoubleSided() const noexcept -> bool
   {
-    return (GetFlags() & pak::kMaterialFlag_DoubleSided) != 0u;
+    return (GetFlags() & pak::render::kMaterialFlag_DoubleSided) != 0u;
   }
 
   //! Returns the shader references for all stages used by this material.
@@ -188,32 +189,36 @@ public:
   }
 
   //! Returns the index of the base color texture.
-  [[nodiscard]] auto GetBaseColorTexture() const noexcept -> pak::ResourceIndexT
+  [[nodiscard]] auto GetBaseColorTexture() const noexcept
+    -> pak::core::ResourceIndexT
   {
     return desc_.base_color_texture;
   }
 
   //! Returns the index of the normal texture.
-  [[nodiscard]] auto GetNormalTexture() const noexcept -> pak::ResourceIndexT
+  [[nodiscard]] auto GetNormalTexture() const noexcept
+    -> pak::core::ResourceIndexT
   {
     return desc_.normal_texture;
   }
 
   //! Returns the index of the metallic texture.
-  [[nodiscard]] auto GetMetallicTexture() const noexcept -> pak::ResourceIndexT
+  [[nodiscard]] auto GetMetallicTexture() const noexcept
+    -> pak::core::ResourceIndexT
   {
     return desc_.metallic_texture;
   }
 
   //! Returns the index of the roughness texture.
-  [[nodiscard]] auto GetRoughnessTexture() const noexcept -> pak::ResourceIndexT
+  [[nodiscard]] auto GetRoughnessTexture() const noexcept
+    -> pak::core::ResourceIndexT
   {
     return desc_.roughness_texture;
   }
 
   //! Returns the index of the ambient occlusion texture.
   [[nodiscard]] auto GetAmbientOcclusionTexture() const noexcept
-    -> pak::ResourceIndexT
+    -> pak::core::ResourceIndexT
   {
     return desc_.ambient_occlusion_texture;
   }
@@ -229,7 +234,8 @@ public:
   }
 
   //! Returns the index of the emissive texture.
-  [[nodiscard]] auto GetEmissiveTexture() const noexcept -> pak::ResourceIndexT
+  [[nodiscard]] auto GetEmissiveTexture() const noexcept
+    -> pak::core::ResourceIndexT
   {
     return desc_.emissive_texture;
   }
@@ -263,7 +269,7 @@ public:
   }
 
 private:
-  pak::MaterialAssetDesc desc_ {};
+  pak::render::MaterialAssetDesc desc_ {};
   std::vector<ShaderReference> shader_refs_ {};
   // Runtime-only: per-slot source-aware resource keys produced by loader.
   // Order matches getters: base_color, normal, metallic, roughness,
@@ -327,7 +333,8 @@ public:
     return oxygen::content::ResourceKey { 0 };
   }
 
-  [[nodiscard]] auto GetSpecularTexture() const noexcept -> pak::ResourceIndexT
+  [[nodiscard]] auto GetSpecularTexture() const noexcept
+    -> pak::core::ResourceIndexT
   {
     return desc_.specular_texture;
   }
@@ -342,7 +349,7 @@ public:
   }
 
   [[nodiscard]] auto GetSheenColorTexture() const noexcept
-    -> pak::ResourceIndexT
+    -> pak::core::ResourceIndexT
   {
     return desc_.sheen_color_texture;
   }
@@ -356,7 +363,8 @@ public:
     return oxygen::content::ResourceKey { 0 };
   }
 
-  [[nodiscard]] auto GetClearcoatTexture() const noexcept -> pak::ResourceIndexT
+  [[nodiscard]] auto GetClearcoatTexture() const noexcept
+    -> pak::core::ResourceIndexT
   {
     return desc_.clearcoat_texture;
   }
@@ -371,7 +379,7 @@ public:
   }
 
   [[nodiscard]] auto GetClearcoatNormalTexture() const noexcept
-    -> pak::ResourceIndexT
+    -> pak::core::ResourceIndexT
   {
     return desc_.clearcoat_normal_texture;
   }
@@ -386,7 +394,7 @@ public:
   }
 
   [[nodiscard]] auto GetTransmissionTexture() const noexcept
-    -> pak::ResourceIndexT
+    -> pak::core::ResourceIndexT
   {
     return desc_.transmission_texture;
   }
@@ -400,7 +408,8 @@ public:
     return oxygen::content::ResourceKey { 0 };
   }
 
-  [[nodiscard]] auto GetThicknessTexture() const noexcept -> pak::ResourceIndexT
+  [[nodiscard]] auto GetThicknessTexture() const noexcept
+    -> pak::core::ResourceIndexT
   {
     return desc_.thickness_texture;
   }

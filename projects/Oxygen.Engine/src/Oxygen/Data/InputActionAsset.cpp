@@ -10,11 +10,11 @@
 
 namespace oxygen::data {
 
-static_assert(std::is_trivially_copyable_v<pak::InputActionAssetDesc>,
+static_assert(std::is_trivially_copyable_v<pak::input::InputActionAssetDesc>,
   "InputActionAssetDesc must be trivially copyable");
 
 InputActionAsset::InputActionAsset(
-  AssetKey asset_key, pak::InputActionAssetDesc desc)
+  AssetKey asset_key, pak::input::InputActionAssetDesc desc)
   : Asset(asset_key)
   , desc_(desc)
 {

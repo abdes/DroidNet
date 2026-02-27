@@ -70,7 +70,7 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   namespace d = oxygen::data;
   namespace pak = oxygen::data::pak;
 
-  pak::MaterialAssetDesc desc {};
+  pak::render::MaterialAssetDesc desc {};
   desc.header.asset_type
     = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
   constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
@@ -103,8 +103,8 @@ auto BuildGeometryAsset(const char* mesh_name,
   -> std::shared_ptr<oxygen::data::GeometryAsset>
 {
   using oxygen::data::MeshBuilder;
-  using oxygen::data::pak::GeometryAssetDesc;
-  using oxygen::data::pak::MeshViewDesc;
+  using oxygen::data::pak::geometry::GeometryAssetDesc;
+  using oxygen::data::pak::geometry::MeshViewDesc;
 
   auto mesh = MeshBuilder(0, mesh_name)
                 .WithVertices(mesh_data.first)

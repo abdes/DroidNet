@@ -29,12 +29,13 @@ using oxygen::renderer::testing::MaterialBinderTest;
   uint32_t raw_normal_index)
   -> std::shared_ptr<const oxygen::data::MaterialAsset>
 {
-  using oxygen::data::pak::MaterialAssetDesc;
+  using oxygen::data::pak::render::MaterialAssetDesc;
 
   MaterialAssetDesc desc {};
   desc.base_color_texture
-    = oxygen::data::pak::ResourceIndexT { raw_base_color_index };
-  desc.normal_texture = oxygen::data::pak::ResourceIndexT { raw_normal_index };
+    = oxygen::data::pak::core::ResourceIndexT { raw_base_color_index };
+  desc.normal_texture
+    = oxygen::data::pak::core::ResourceIndexT { raw_normal_index };
 
   // Non-zero defaults so we can distinguish from memset/zero init.
   desc.base_color[0] = 1.0F;
@@ -54,12 +55,13 @@ using oxygen::renderer::testing::MaterialBinderTest;
   std::array<float, 2> uv_offset, float uv_rotation_radians, uint8_t uv_set)
   -> std::shared_ptr<const oxygen::data::MaterialAsset>
 {
-  using oxygen::data::pak::MaterialAssetDesc;
+  using oxygen::data::pak::render::MaterialAssetDesc;
 
   MaterialAssetDesc desc {};
   desc.base_color_texture
-    = oxygen::data::pak::ResourceIndexT { raw_base_color_index };
-  desc.normal_texture = oxygen::data::pak::ResourceIndexT { raw_normal_index };
+    = oxygen::data::pak::core::ResourceIndexT { raw_base_color_index };
+  desc.normal_texture
+    = oxygen::data::pak::core::ResourceIndexT { raw_normal_index };
   desc.uv_scale[0] = uv_scale[0];
   desc.uv_scale[1] = uv_scale[1];
   desc.uv_offset[0] = uv_offset[0];

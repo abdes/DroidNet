@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Data/PakFormat.h>
 
 #include "AssetDumpHelpers.h"
@@ -27,15 +28,15 @@ namespace oxygen::content::pakdump {
 class InputMappingContextAssetDumper final : public AssetDumper {
 public:
   auto DumpAsync(const oxygen::content::PakFile& pak,
-    const oxygen::data::pak::v2::AssetDirectoryEntry& entry, DumpContext& ctx,
+    const oxygen::data::pak::core::AssetDirectoryEntry& entry, DumpContext& ctx,
     const size_t idx, oxygen::content::AssetLoader& asset_loader) const
     -> oxygen::co::Co<> override
   {
     (void)asset_loader;
-    using oxygen::data::pak::InputActionMappingRecord;
-    using oxygen::data::pak::InputMappingContextAssetDesc;
-    using oxygen::data::pak::InputTriggerAuxRecord;
-    using oxygen::data::pak::InputTriggerRecord;
+    using oxygen::data::pak::input::InputActionMappingRecord;
+    using oxygen::data::pak::input::InputMappingContextAssetDesc;
+    using oxygen::data::pak::input::InputTriggerAuxRecord;
+    using oxygen::data::pak::input::InputTriggerRecord;
 
     std::cout << "Asset #" << idx << ":\n";
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
@@ -58,7 +59,7 @@ public:
 
     asset_dump_helpers::PrintAssetHeaderFields(desc.header, 4);
     std::cout << "    --- Input Mapping Context Descriptor Fields ---\n";
-    PrintUtils::Field("Flags", oxygen::data::pak::to_string(desc.flags), 8);
+    PrintUtils::Field("Flags", nostd::to_string(desc.flags), 8);
     PrintUtils::Field("Mappings Count", desc.mappings.count, 8);
     PrintUtils::Field("Mappings Entry Size", desc.mappings.entry_size, 8);
     PrintUtils::Field(
@@ -67,7 +68,7 @@ public:
     PrintUtils::Field("String Table Bytes", desc.strings.count, 8);
 
     const auto ParseTable
-      = [&](const oxygen::data::pak::InputDataTable& table,
+      = [&](const oxygen::data::pak::input::InputDataTable& table,
           const size_t expected_size, const char* const table_name) -> bool {
       const auto offset = static_cast<size_t>(table.offset);
       const auto count = static_cast<size_t>(table.count);
@@ -150,8 +151,7 @@ public:
           fmt::format("[{}, {}]", record.trigger_start_index,
             record.trigger_start_index + record.trigger_count),
           10);
-        PrintUtils::Field(
-          "Flags", oxygen::data::pak::to_string(record.flags), 10);
+        PrintUtils::Field("Flags", nostd::to_string(record.flags), 10);
         PrintUtils::Field("Scale",
           fmt::format("[{:.3f}, {:.3f}]", record.scale[0], record.scale[1]),
           10);
@@ -177,9 +177,8 @@ public:
         std::memcpy(&record, data->data() + record_offset, sizeof(record));
 
         std::cout << "      [" << i
-                  << "] type=" << oxygen::data::pak::to_string(record.type)
-                  << " behavior="
-                  << oxygen::data::pak::to_string(record.behavior) << "\n";
+                  << "] type=" << nostd::to_string(record.type)
+                  << " behavior=" << nostd::to_string(record.behavior) << "\n";
         PrintUtils::Field(
           "Actuation Threshold", record.actuation_threshold, 10);
         PrintUtils::Field("Linked Action",

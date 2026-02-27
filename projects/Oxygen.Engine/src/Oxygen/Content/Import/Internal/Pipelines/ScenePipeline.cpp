@@ -34,17 +34,17 @@ namespace {
   using data::AssetKey;
   using data::AssetType;
   using data::ComponentType;
-  using data::pak::DirectionalLightRecord;
-  using data::pak::NodeRecord;
-  using data::pak::OrthographicCameraRecord;
-  using data::pak::PerspectiveCameraRecord;
-  using data::pak::PointLightRecord;
-  using data::pak::RenderableRecord;
-  using data::pak::SceneAssetDesc;
-  using data::pak::SceneComponentTableDesc;
-  using data::pak::SceneEnvironmentBlockHeader;
-  using data::pak::SceneEnvironmentSystemRecordHeader;
-  using data::pak::SpotLightRecord;
+  using data::pak::world::DirectionalLightRecord;
+  using data::pak::world::NodeRecord;
+  using data::pak::world::OrthographicCameraRecord;
+  using data::pak::world::PerspectiveCameraRecord;
+  using data::pak::world::PointLightRecord;
+  using data::pak::world::RenderableRecord;
+  using data::pak::world::SceneAssetDesc;
+  using data::pak::world::SceneComponentTableDesc;
+  using data::pak::world::SceneEnvironmentBlockHeader;
+  using data::pak::world::SceneEnvironmentSystemRecordHeader;
+  using data::pak::world::SpotLightRecord;
 
   struct BuildOutcome {
     std::vector<std::byte> bytes;
@@ -158,7 +158,7 @@ namespace {
     desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
     util::TruncateAndNullTerminate(
       desc.header.name, sizeof(desc.header.name), scene_name);
-    desc.header.version = data::pak::kSceneAssetVersion;
+    desc.header.version = data::pak::world::kSceneAssetVersion;
     desc.header.content_hash = 0;
     desc.nodes.offset = sizeof(SceneAssetDesc);
     desc.nodes.count = static_cast<uint32_t>(build.nodes.size());
@@ -166,10 +166,11 @@ namespace {
 
     const auto nodes_bytes = std::as_bytes(std::span(build.nodes));
 
-    desc.scene_strings.offset = static_cast<data::pak::StringTableOffsetT>(
-      sizeof(SceneAssetDesc) + nodes_bytes.size());
+    desc.scene_strings.offset
+      = static_cast<data::pak::core::StringTableOffsetT>(
+        sizeof(SceneAssetDesc) + nodes_bytes.size());
     desc.scene_strings.size
-      = static_cast<data::pak::StringTableSizeT>(build.strings.size());
+      = static_cast<data::pak::core::StringTableSizeT>(build.strings.size());
 
     struct ComponentTablePayload {
       SceneComponentTableDesc desc {};
@@ -340,7 +341,8 @@ namespace {
   auto PatchContentHash(
     std::vector<std::byte>& bytes, const uint64_t content_hash) -> void
   {
-    constexpr auto kOffset = offsetof(data::pak::AssetHeader, content_hash);
+    constexpr auto kOffset
+      = offsetof(data::pak::core::AssetHeader, content_hash);
     if (bytes.size() < kOffset + sizeof(content_hash)) {
       return;
     }

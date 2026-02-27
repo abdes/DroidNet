@@ -21,7 +21,7 @@
 
 namespace oxygen::content::testing {
 
-namespace pak7 = oxygen::data::pak::v7;
+namespace pak7 = oxygen::data::pak::physics;
 
 class PhysicsLoaderFixtureBase : public ::testing::Test {
 protected:
@@ -66,8 +66,8 @@ protected:
   }
 
   auto WriteDescriptorAndData(
-    const oxygen::data::pak::PhysicsResourceDesc& desc, const uint8_t fill)
-    -> void
+    const oxygen::data::pak::physics::PhysicsResourceDesc& desc,
+    const uint8_t fill) -> void
   {
     auto packed_desc = desc_writer_.ScopedAlignment(1);
     const auto desc_bytes = std::span<const std::byte>(

@@ -78,7 +78,7 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
 {
   static const std::shared_ptr<const MaterialAsset> kDefaultMaterial
     = []() -> std::shared_ptr<const MaterialAsset> {
-    pak::MaterialAssetDesc desc {};
+    pak::render::MaterialAssetDesc desc {};
 
     // Asset header - mark as procedural/default
     desc.header.asset_type
@@ -89,14 +89,14 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
       = (std::min)(sizeof(desc.header.name) - 1, std::strlen(default_name));
     std::memcpy(desc.header.name, default_name, copy_len);
     desc.header.name[copy_len] = '\0';
-    desc.header.version = pak::kMaterialAssetVersion;
+    desc.header.version = pak::render::kMaterialAssetVersion;
     desc.header.streaming_priority = 255; // Lowest priority
     desc.header.content_hash = 0; // No specific content hash
     desc.header.variant_flags = 0;
 
     // Material properties
     desc.material_domain = static_cast<uint8_t>(MaterialDomain::kOpaque);
-    desc.flags = pak::kMaterialFlag_NoTextureSampling;
+    desc.flags = pak::render::kMaterialFlag_NoTextureSampling;
     desc.shader_stages = 0; // No shaders initially (filled by renderer)
 
     // PBR material values - neutral defaults
@@ -110,21 +110,21 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
     desc.ambient_occlusion = Unorm16 { 1.0f }; // No AO
 
     // Texture indices - fallback texture. Sampling is disabled via flags.
-    desc.base_color_texture = pak::kFallbackResourceIndex;
-    desc.normal_texture = pak::kFallbackResourceIndex;
-    desc.metallic_texture = pak::kFallbackResourceIndex;
-    desc.roughness_texture = pak::kFallbackResourceIndex;
-    desc.ambient_occlusion_texture = pak::kFallbackResourceIndex;
+    desc.base_color_texture = pak::core::kFallbackResourceIndex;
+    desc.normal_texture = pak::core::kFallbackResourceIndex;
+    desc.metallic_texture = pak::core::kFallbackResourceIndex;
+    desc.roughness_texture = pak::core::kFallbackResourceIndex;
+    desc.ambient_occlusion_texture = pak::core::kFallbackResourceIndex;
 
     // Tier 1/2 texture indices - fallback texture. Sampling is disabled via
     // flags.
-    desc.emissive_texture = pak::kFallbackResourceIndex;
-    desc.specular_texture = pak::kFallbackResourceIndex;
-    desc.sheen_color_texture = pak::kFallbackResourceIndex;
-    desc.clearcoat_texture = pak::kFallbackResourceIndex;
-    desc.clearcoat_normal_texture = pak::kFallbackResourceIndex;
-    desc.transmission_texture = pak::kFallbackResourceIndex;
-    desc.thickness_texture = pak::kFallbackResourceIndex;
+    desc.emissive_texture = pak::core::kFallbackResourceIndex;
+    desc.specular_texture = pak::core::kFallbackResourceIndex;
+    desc.sheen_color_texture = pak::core::kFallbackResourceIndex;
+    desc.clearcoat_texture = pak::core::kFallbackResourceIndex;
+    desc.clearcoat_normal_texture = pak::core::kFallbackResourceIndex;
+    desc.transmission_texture = pak::core::kFallbackResourceIndex;
+    desc.thickness_texture = pak::core::kFallbackResourceIndex;
 
     desc.uv_scale[0] = 1.0f;
     desc.uv_scale[1] = 1.0f;
@@ -167,7 +167,7 @@ auto MaterialAsset::CreateDebug() -> std::shared_ptr<const MaterialAsset>
   auto material = CreateDefault();
 
   // Copy the default and modify for debug use
-  pak::MaterialAssetDesc debug_desc = material->desc_;
+  pak::render::MaterialAssetDesc debug_desc = material->desc_;
   // Safe string copy with null termination
   constexpr const char* debug_name = "Debug";
   std::size_t copy_len

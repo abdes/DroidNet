@@ -29,11 +29,11 @@ class PhysicsResource : public Object {
 
 public:
   //! Type alias for the descriptor type used by this resource.
-  using DescT = pak::PhysicsResourceDesc;
+  using DescT = pak::physics::PhysicsResourceDesc;
 
   //! Constructs a PhysicsResource with descriptor + exclusive data ownership.
   OXGN_DATA_API PhysicsResource(
-    pak::PhysicsResourceDesc desc, std::vector<uint8_t> data);
+    pak::physics::PhysicsResourceDesc desc, std::vector<uint8_t> data);
 
   ~PhysicsResource() override = default;
 
@@ -57,7 +57,7 @@ public:
   }
 
 private:
-  pak::PhysicsResourceDesc desc_ {};
+  pak::physics::PhysicsResourceDesc desc_ {};
   std::vector<uint8_t> data_;
 };
 

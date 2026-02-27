@@ -33,7 +33,7 @@ namespace detail {
 
   inline auto ValidateStringOffset(
     const std::span<const std::byte> string_table,
-    const oxygen::data::pak::StringTableOffsetT offset) -> void
+    const oxygen::data::pak::core::StringTableOffsetT offset) -> void
   {
     if (offset >= string_table.size()) {
       throw std::runtime_error("scene asset node name offset out of bounds");
@@ -62,7 +62,7 @@ namespace detail {
       throw std::runtime_error("scene asset component table out of bounds");
     }
 
-    oxygen::data::pak::SceneNodeIndexT prev = 0;
+    oxygen::data::pak::world::SceneNodeIndexT prev = 0;
     bool have_prev = false;
     for (uint32_t i = 0; i < count; ++i) {
       RecordT record {};
@@ -90,7 +90,7 @@ namespace detail {
     const std::span<const std::byte> table_bytes, const uint32_t count,
     const uint32_t global_slot_count) -> void
   {
-    using RecordT = oxygen::data::pak::ScriptingComponentRecord;
+    using RecordT = oxygen::data::pak::scripting::ScriptingComponentRecord;
 
     if (count == 0) {
       return;
@@ -139,21 +139,22 @@ namespace detail {
       throw std::runtime_error("scene asset payload end out of bounds");
     }
 
-    if (payload_end + sizeof(oxygen::data::pak::SceneEnvironmentBlockHeader)
+    if (payload_end
+        + sizeof(oxygen::data::pak::world::SceneEnvironmentBlockHeader)
       > bytes.size()) {
       return;
     }
 
-    oxygen::data::pak::SceneEnvironmentBlockHeader header {};
+    oxygen::data::pak::world::SceneEnvironmentBlockHeader header {};
     std::memcpy(&header,
       bytes
-        .subspan(
-          payload_end, sizeof(oxygen::data::pak::SceneEnvironmentBlockHeader))
+        .subspan(payload_end,
+          sizeof(oxygen::data::pak::world::SceneEnvironmentBlockHeader))
         .data(),
       sizeof(header));
 
     if (header.byte_size
-      < sizeof(oxygen::data::pak::SceneEnvironmentBlockHeader)) {
+      < sizeof(oxygen::data::pak::world::SceneEnvironmentBlockHeader)) {
       throw std::runtime_error("scene environment block byte_size too small");
     }
 
@@ -162,25 +163,28 @@ namespace detail {
       throw std::runtime_error("scene environment block out of bounds");
     }
 
-    size_t cursor
-      = payload_end + sizeof(oxygen::data::pak::SceneEnvironmentBlockHeader);
+    size_t cursor = payload_end
+      + sizeof(oxygen::data::pak::world::SceneEnvironmentBlockHeader);
     for (uint32_t i = 0; i < header.systems_count; ++i) {
-      if (cursor + sizeof(oxygen::data::pak::SceneEnvironmentSystemRecordHeader)
+      if (cursor
+          + sizeof(oxygen::data::pak::world::SceneEnvironmentSystemRecordHeader)
         > env_end) {
         throw std::runtime_error(
           "scene environment record header out of bounds");
       }
 
-      oxygen::data::pak::SceneEnvironmentSystemRecordHeader record_header {};
+      oxygen::data::pak::world::SceneEnvironmentSystemRecordHeader
+        record_header {};
       std::memcpy(&record_header,
         bytes
           .subspan(cursor,
-            sizeof(oxygen::data::pak::SceneEnvironmentSystemRecordHeader))
+            sizeof(
+              oxygen::data::pak::world::SceneEnvironmentSystemRecordHeader))
           .data(),
         sizeof(record_header));
 
-      if (record_header.record_size
-        < sizeof(oxygen::data::pak::SceneEnvironmentSystemRecordHeader)) {
+      if (record_header.record_size < sizeof(
+            oxygen::data::pak::world::SceneEnvironmentSystemRecordHeader)) {
         throw std::runtime_error("scene environment record_size too small");
       }
 
@@ -190,40 +194,44 @@ namespace detail {
       }
 
       const auto type
-        = static_cast<oxygen::data::pak::EnvironmentComponentType>(
+        = static_cast<oxygen::data::pak::world::EnvironmentComponentType>(
           record_header.system_type);
       switch (type) {
-      case oxygen::data::pak::EnvironmentComponentType::kSkyAtmosphere:
+      case oxygen::data::pak::world::EnvironmentComponentType::kSkyAtmosphere:
         if (record_header.record_size
-          != sizeof(oxygen::data::pak::SkyAtmosphereEnvironmentRecord)) {
+          != sizeof(oxygen::data::pak::world::SkyAtmosphereEnvironmentRecord)) {
           throw std::runtime_error(
             "scene environment SkyAtmosphere record size mismatch");
         }
         break;
-      case oxygen::data::pak::EnvironmentComponentType::kVolumetricClouds:
+      case oxygen::data::pak::world::EnvironmentComponentType::
+        kVolumetricClouds:
         if (record_header.record_size
-          != sizeof(oxygen::data::pak::VolumetricCloudsEnvironmentRecord)) {
+          != sizeof(
+            oxygen::data::pak::world::VolumetricCloudsEnvironmentRecord)) {
           throw std::runtime_error(
             "scene environment VolumetricClouds record size mismatch");
         }
         break;
-      case oxygen::data::pak::EnvironmentComponentType::kSkyLight:
+      case oxygen::data::pak::world::EnvironmentComponentType::kSkyLight:
         if (record_header.record_size
-          != sizeof(oxygen::data::pak::SkyLightEnvironmentRecord)) {
+          != sizeof(oxygen::data::pak::world::SkyLightEnvironmentRecord)) {
           throw std::runtime_error(
             "scene environment SkyLight record size mismatch");
         }
         break;
-      case oxygen::data::pak::EnvironmentComponentType::kSkySphere:
+      case oxygen::data::pak::world::EnvironmentComponentType::kSkySphere:
         if (record_header.record_size
-          != sizeof(oxygen::data::pak::SkySphereEnvironmentRecord)) {
+          != sizeof(oxygen::data::pak::world::SkySphereEnvironmentRecord)) {
           throw std::runtime_error(
             "scene environment SkySphere record size mismatch");
         }
         break;
-      case oxygen::data::pak::EnvironmentComponentType::kPostProcessVolume:
+      case oxygen::data::pak::world::EnvironmentComponentType::
+        kPostProcessVolume:
         if (record_header.record_size
-          != sizeof(oxygen::data::pak::PostProcessVolumeEnvironmentRecord)) {
+          != sizeof(
+            oxygen::data::pak::world::PostProcessVolumeEnvironmentRecord)) {
           throw std::runtime_error(
             "scene environment PostProcessVolume record size mismatch");
         }
@@ -261,7 +269,7 @@ inline auto LoadSceneAsset(const LoaderContext& context)
   const size_t base_pos = *base_pos_res;
 
   // Read the fixed header first so we can compute the total descriptor size.
-  data::pak::SceneAssetDesc desc {};
+  data::pak::world::SceneAssetDesc desc {};
   {
     auto blob_res = reader.ReadBlob(sizeof(desc));
     CheckLoaderResult(blob_res, "scene asset", "ReadBlob(SceneAssetDesc)");
@@ -275,16 +283,16 @@ inline auto LoadSceneAsset(const LoaderContext& context)
 
   // Scene descriptor format versioning is per-asset (AssetHeader::version),
   // independent from the PAK container format version.
-  // v2: no trailing SceneEnvironment block.
-  // v3: trailing SceneEnvironment block is required (empty allowed).
+  // Scene descriptors include a trailing SceneEnvironment block (empty
+  // allowed).
   const bool expects_environment_block
-    = desc.header.version >= oxygen::data::pak::v3::kSceneAssetVersion;
+    = desc.header.version >= oxygen::data::pak::world::kSceneAssetVersion;
 
   // Compute the full payload size from the descriptor ranges.
-  size_t end = sizeof(data::pak::SceneAssetDesc);
+  size_t end = sizeof(data::pak::world::SceneAssetDesc);
 
   if (desc.nodes.count > 0) {
-    if (desc.nodes.entry_size != sizeof(data::pak::NodeRecord)) {
+    if (desc.nodes.entry_size != sizeof(data::pak::world::NodeRecord)) {
       throw std::runtime_error("scene asset node record size mismatch");
     }
     const size_t bytes
@@ -295,10 +303,10 @@ inline auto LoadSceneAsset(const LoaderContext& context)
   AddRangeEnd(end, desc.scene_strings.offset, desc.scene_strings.size);
 
   // Read the component directory entries (if any) to validate and extend end.
-  std::vector<data::pak::SceneComponentTableDesc> tables;
+  std::vector<data::pak::world::SceneComponentTableDesc> tables;
   if (desc.component_table_count > 0) {
     const size_t dir_bytes = static_cast<size_t>(desc.component_table_count)
-      * sizeof(data::pak::SceneComponentTableDesc);
+      * sizeof(data::pak::world::SceneComponentTableDesc);
     AddRangeEnd(end, desc.component_table_directory_offset, dir_bytes);
 
     auto seek_res
@@ -308,7 +316,7 @@ inline auto LoadSceneAsset(const LoaderContext& context)
 
     tables.reserve(desc.component_table_count);
     for (uint32_t i = 0; i < desc.component_table_count; ++i) {
-      data::pak::SceneComponentTableDesc entry {};
+      data::pak::world::SceneComponentTableDesc entry {};
       auto entry_blob = reader.ReadBlob(sizeof(entry));
       CheckLoaderResult(
         entry_blob, "scene asset", "ReadBlob(SceneComponentTableDesc)");
@@ -336,17 +344,18 @@ inline auto LoadSceneAsset(const LoaderContext& context)
 
   const size_t payload_end = end;
   if (expects_environment_block) {
-    data::pak::SceneEnvironmentBlockHeader env_header {};
+    data::pak::world::SceneEnvironmentBlockHeader env_header {};
     const auto header_res = reader.ReadBlob(sizeof(env_header));
     CheckLoaderResult(
       header_res, "scene asset", "ReadBlob(scene_environment_header)");
     std::memcpy(&env_header, (*header_res).data(), sizeof(env_header));
-    if (env_header.byte_size < sizeof(data::pak::SceneEnvironmentBlockHeader)) {
+    if (env_header.byte_size
+      < sizeof(data::pak::world::SceneEnvironmentBlockHeader)) {
       throw std::runtime_error("scene environment block byte_size too small");
     }
 
-    const size_t tail_size
-      = env_header.byte_size - sizeof(data::pak::SceneEnvironmentBlockHeader);
+    const size_t tail_size = env_header.byte_size
+      - sizeof(data::pak::world::SceneEnvironmentBlockHeader);
     const auto tail_res = reader.ReadBlob(tail_size);
     CheckLoaderResult(
       tail_res, "scene asset", "ReadBlob(scene_environment_block)");
@@ -368,9 +377,10 @@ inline auto LoadSceneAsset(const LoaderContext& context)
 
     if (desc.nodes.count > 0) {
       const auto nodes_bytes = bytes_span.subspan(desc.nodes.offset,
-        static_cast<size_t>(desc.nodes.count) * sizeof(data::pak::NodeRecord));
+        static_cast<size_t>(desc.nodes.count)
+          * sizeof(data::pak::world::NodeRecord));
       for (uint32_t i = 0; i < desc.nodes.count; ++i) {
-        data::pak::NodeRecord node {};
+        data::pak::world::NodeRecord node {};
         std::memcpy(&node,
           nodes_bytes
             .subspan(static_cast<size_t>(i) * sizeof(node), sizeof(node))
@@ -409,12 +419,13 @@ inline auto LoadSceneAsset(const LoaderContext& context)
       = static_cast<oxygen::data::ComponentType>(entry.component_type);
 
     if (type == oxygen::data::ComponentType::kRenderable) {
-      detail::ValidateComponentTable<oxygen::data::pak::RenderableRecord>(
+      detail::ValidateComponentTable<
+        oxygen::data::pak::world::RenderableRecord>(
         table_bytes, entry.table.count, entry.table.entry_size, node_count);
 
       // Dependency collection is identity-only.
       for (uint32_t i = 0; i < entry.table.count; ++i) {
-        oxygen::data::pak::RenderableRecord record {};
+        oxygen::data::pak::world::RenderableRecord record {};
         std::memcpy(&record,
           table_bytes
             .subspan(static_cast<size_t>(i) * sizeof(record), sizeof(record))
@@ -424,28 +435,30 @@ inline auto LoadSceneAsset(const LoaderContext& context)
       }
     } else if (type == oxygen::data::ComponentType::kPerspectiveCamera) {
       detail::ValidateComponentTable<
-        oxygen::data::pak::PerspectiveCameraRecord>(
+        oxygen::data::pak::world::PerspectiveCameraRecord>(
         table_bytes, entry.table.count, entry.table.entry_size, node_count);
     } else if (type == oxygen::data::ComponentType::kOrthographicCamera) {
       detail::ValidateComponentTable<
-        oxygen::data::pak::OrthographicCameraRecord>(
+        oxygen::data::pak::world::OrthographicCameraRecord>(
         table_bytes, entry.table.count, entry.table.entry_size, node_count);
     } else if (type == oxygen::data::ComponentType::kDirectionalLight) {
-      detail::ValidateComponentTable<oxygen::data::pak::DirectionalLightRecord>(
+      detail::ValidateComponentTable<
+        oxygen::data::pak::world::DirectionalLightRecord>(
         table_bytes, entry.table.count, entry.table.entry_size, node_count);
     } else if (type == oxygen::data::ComponentType::kPointLight) {
-      detail::ValidateComponentTable<oxygen::data::pak::PointLightRecord>(
+      detail::ValidateComponentTable<
+        oxygen::data::pak::world::PointLightRecord>(
         table_bytes, entry.table.count, entry.table.entry_size, node_count);
     } else if (type == oxygen::data::ComponentType::kSpotLight) {
-      detail::ValidateComponentTable<oxygen::data::pak::SpotLightRecord>(
+      detail::ValidateComponentTable<oxygen::data::pak::world::SpotLightRecord>(
         table_bytes, entry.table.count, entry.table.entry_size, node_count);
     } else if (type == oxygen::data::ComponentType::kInputContextBinding) {
       detail::ValidateComponentTable<
-        oxygen::data::pak::InputContextBindingRecord>(
+        oxygen::data::pak::input::InputContextBindingRecord>(
         table_bytes, entry.table.count, entry.table.entry_size, node_count);
 
       for (uint32_t i = 0; i < entry.table.count; ++i) {
-        oxygen::data::pak::InputContextBindingRecord record {};
+        oxygen::data::pak::input::InputContextBindingRecord record {};
         std::memcpy(&record,
           table_bytes
             .subspan(static_cast<size_t>(i) * sizeof(record), sizeof(record))
@@ -457,7 +470,7 @@ inline auto LoadSceneAsset(const LoaderContext& context)
       }
     } else if (type == oxygen::data::ComponentType::kScripting) {
       detail::ValidateComponentTable<
-        oxygen::data::pak::ScriptingComponentRecord>(
+        oxygen::data::pak::scripting::ScriptingComponentRecord>(
         table_bytes, entry.table.count, entry.table.entry_size, node_count);
       has_scripting_table = true;
 
@@ -471,7 +484,7 @@ inline auto LoadSceneAsset(const LoaderContext& context)
           context.source_content->ScriptSlotCount());
 
         for (uint32_t i = 0; i < entry.table.count; ++i) {
-          oxygen::data::pak::ScriptingComponentRecord record {};
+          oxygen::data::pak::scripting::ScriptingComponentRecord record {};
           std::memcpy(&record,
             table_bytes
               .subspan(static_cast<size_t>(i) * sizeof(record), sizeof(record))

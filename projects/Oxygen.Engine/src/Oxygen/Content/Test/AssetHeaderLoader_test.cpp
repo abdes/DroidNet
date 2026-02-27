@@ -23,7 +23,7 @@ using testing::AllOf;
 using testing::Eq;
 using testing::SizeIs;
 
-using AssetHeader = oxygen::data::pak::AssetHeader;
+using AssetHeader = oxygen::data::pak::core::AssetHeader;
 using MemoryStream = oxygen::serio::MemoryStream;
 using Reader = oxygen::serio::Reader<MemoryStream>;
 
@@ -93,7 +93,7 @@ NOLINT_TEST(LoadAssetHeaderEdge, WarnsIfNameNotNullTerminated)
   std::array<std::byte, sizeof(AssetHeader)> buffer {};
   auto* header = reinterpret_cast<AssetHeader*>(buffer.data());
   // Fill name with non-null chars
-  for (size_t i = 0; i < oxygen::data::pak::kMaxNameSize; ++i) {
+  for (size_t i = 0; i < oxygen::data::pak::core::kMaxNameSize; ++i) {
     header->name[i] = 'A';
   }
   header->asset_type = 1;
@@ -109,7 +109,8 @@ NOLINT_TEST(LoadAssetHeaderEdge, WarnsIfNameNotNullTerminated)
   // Assert
   EXPECT_EQ(result.asset_type, 1);
   // Name will not be null-terminated, so string_view will be full buffer
-  std::string_view name_view(result.name, oxygen::data::pak::kMaxNameSize);
+  std::string_view name_view(
+    result.name, oxygen::data::pak::core::kMaxNameSize);
   EXPECT_EQ(name_view.find('\0'), std::string_view::npos);
 }
 

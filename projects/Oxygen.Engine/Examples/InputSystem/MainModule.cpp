@@ -57,7 +57,7 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   namespace d = oxygen::data;
   namespace pak = oxygen::data::pak;
 
-  pak::MaterialAssetDesc desc {};
+  pak::render::MaterialAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(
     oxygen::data::AssetType::kMaterial); // MaterialAsset (for tooling/debug)
   // Safe copy name
@@ -360,8 +360,8 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   // Build sphere mesh if not present
   using oxygen::data::MaterialAsset;
   using oxygen::data::MeshBuilder;
-  using oxygen::data::pak::GeometryAssetDesc;
-  using oxygen::data::pak::MeshViewDesc;
+  using oxygen::data::pak::geometry::GeometryAssetDesc;
+  using oxygen::data::pak::geometry::MeshViewDesc;
 
   if (!std::ranges::any_of(scene->GetRootNodes(),
         [](auto& n) { return n.GetName() == "Sphere"; })) {

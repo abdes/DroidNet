@@ -37,10 +37,10 @@ namespace {
 struct SceneStringTableBuilder final {
   std::vector<std::byte> bytes { std::byte { 0 } };
 
-  auto Add(std::string_view text) -> data::pak::StringTableOffsetT
+  auto Add(std::string_view text) -> data::pak::core::StringTableOffsetT
   {
     const auto offset
-      = static_cast<data::pak::StringTableOffsetT>(bytes.size());
+      = static_cast<data::pak::core::StringTableOffsetT>(bytes.size());
     for (const char c : text) {
       bytes.push_back(std::byte { static_cast<unsigned char>(c) });
     }
@@ -68,7 +68,7 @@ auto MakeMinimalSceneBuild(std::string_view name) -> SceneBuild
   const auto name_offset = strings.Add(name);
 
   SceneBuild build;
-  build.nodes.push_back(data::pak::NodeRecord {
+  build.nodes.push_back(data::pak::world::NodeRecord {
     .node_id = data::AssetKey { .guid = { 1 } },
     .scene_name_offset = name_offset,
     .parent_index = 0,
@@ -82,9 +82,9 @@ auto MakeMinimalSceneBuild(std::string_view name) -> SceneBuild
 }
 
 auto ReadSceneDesc(const std::vector<std::byte>& bytes)
-  -> data::pak::SceneAssetDesc
+  -> data::pak::world::SceneAssetDesc
 {
-  data::pak::SceneAssetDesc desc {};
+  data::pak::world::SceneAssetDesc desc {};
   if (bytes.size() < sizeof(desc)) {
     return desc;
   }
@@ -93,9 +93,10 @@ auto ReadSceneDesc(const std::vector<std::byte>& bytes)
 }
 
 auto ReadNodeRecord(const std::vector<std::byte>& bytes,
-  const data::pak::SceneAssetDesc& desc, size_t index) -> data::pak::NodeRecord
+  const data::pak::world::SceneAssetDesc& desc, size_t index)
+  -> data::pak::world::NodeRecord
 {
-  data::pak::NodeRecord record {};
+  data::pak::world::NodeRecord record {};
   const auto offset = desc.nodes.offset + index * sizeof(record);
   if (bytes.size() < offset + sizeof(record)) {
     return record;
@@ -105,9 +106,9 @@ auto ReadNodeRecord(const std::vector<std::byte>& bytes,
 }
 
 auto ReadEnvironmentHeader(const std::vector<std::byte>& bytes, size_t offset)
-  -> data::pak::SceneEnvironmentBlockHeader
+  -> data::pak::world::SceneEnvironmentBlockHeader
 {
-  data::pak::SceneEnvironmentBlockHeader header {};
+  data::pak::world::SceneEnvironmentBlockHeader header {};
   if (bytes.size() < offset + sizeof(header)) {
     return header;
   }
@@ -115,21 +116,21 @@ auto ReadEnvironmentHeader(const std::vector<std::byte>& bytes, size_t offset)
   return header;
 }
 
-auto ReadComponentDirectory(
-  const std::vector<std::byte>& bytes, const data::pak::SceneAssetDesc& desc)
-  -> std::vector<data::pak::SceneComponentTableDesc>
+auto ReadComponentDirectory(const std::vector<std::byte>& bytes,
+  const data::pak::world::SceneAssetDesc& desc)
+  -> std::vector<data::pak::world::SceneComponentTableDesc>
 {
   if (desc.component_table_count == 0) {
     return {};
   }
 
   const size_t dir_bytes = static_cast<size_t>(desc.component_table_count)
-    * sizeof(data::pak::SceneComponentTableDesc);
+    * sizeof(data::pak::world::SceneComponentTableDesc);
   if (bytes.size() < desc.component_table_directory_offset + dir_bytes) {
     return {};
   }
 
-  std::vector<data::pak::SceneComponentTableDesc> entries;
+  std::vector<data::pak::world::SceneComponentTableDesc> entries;
   entries.resize(desc.component_table_count);
   std::memcpy(entries.data(),
     bytes.data() + desc.component_table_directory_offset, dir_bytes);
@@ -137,10 +138,10 @@ auto ReadComponentDirectory(
 }
 
 auto ReadRenderableRecord(const std::vector<std::byte>& bytes,
-  const data::pak::SceneComponentTableDesc& entry, size_t index)
-  -> data::pak::RenderableRecord
+  const data::pak::world::SceneComponentTableDesc& entry, size_t index)
+  -> data::pak::world::RenderableRecord
 {
-  data::pak::RenderableRecord record {};
+  data::pak::world::RenderableRecord record {};
   const auto offset = entry.table.offset + index * sizeof(record);
   if (bytes.size() < offset + sizeof(record)) {
     return record;
@@ -204,11 +205,11 @@ NOLINT_TEST_F(ScenePipelineTest, CollectMinimalSceneBuildsDescriptor)
   EXPECT_NE(node.scene_name_offset, 0u);
 
   const auto env_header_offset
-    = bytes.size() - sizeof(data::pak::SceneEnvironmentBlockHeader);
+    = bytes.size() - sizeof(data::pak::world::SceneEnvironmentBlockHeader);
   const auto env_header = ReadEnvironmentHeader(bytes, env_header_offset);
   EXPECT_EQ(env_header.systems_count, 0u);
-  EXPECT_EQ(
-    env_header.byte_size, sizeof(data::pak::SceneEnvironmentBlockHeader));
+  EXPECT_EQ(env_header.byte_size,
+    sizeof(data::pak::world::SceneEnvironmentBlockHeader));
 }
 
 //! Verify renderable component tables are sorted by node index.
@@ -220,7 +221,7 @@ NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
   const auto child_offset = strings.Add("Child");
 
   SceneBuild build;
-  build.nodes.push_back(data::pak::NodeRecord {
+  build.nodes.push_back(data::pak::world::NodeRecord {
     .node_id = data::AssetKey { .guid = { 1 } },
     .scene_name_offset = root_offset,
     .parent_index = 0,
@@ -229,7 +230,7 @@ NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
     .rotation = { 0.0F, 0.0F, 0.0F, 1.0F },
     .scale = { 1.0F, 1.0F, 1.0F },
   });
-  build.nodes.push_back(data::pak::NodeRecord {
+  build.nodes.push_back(data::pak::world::NodeRecord {
     .node_id = data::AssetKey { .guid = { 2 } },
     .scene_name_offset = child_offset,
     .parent_index = 0,
@@ -240,12 +241,12 @@ NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
   });
   build.strings = std::move(strings.bytes);
   build.renderables = {
-    data::pak::RenderableRecord {
+    data::pak::world::RenderableRecord {
       .node_index = 1,
       .geometry_key = data::AssetKey { .guid = { 42 } },
       .visible = 1,
     },
-    data::pak::RenderableRecord {
+    data::pak::world::RenderableRecord {
       .node_index = 0,
       .geometry_key = data::AssetKey { .guid = { 43 } },
       .visible = 1,
@@ -298,7 +299,8 @@ NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
   ASSERT_EQ(entries.size(), 1u);
   EXPECT_EQ(entries[0].component_type,
     static_cast<uint32_t>(data::ComponentType::kRenderable));
-  EXPECT_EQ(entries[0].table.entry_size, sizeof(data::pak::RenderableRecord));
+  EXPECT_EQ(
+    entries[0].table.entry_size, sizeof(data::pak::world::RenderableRecord));
   EXPECT_EQ(entries[0].table.count, 2u);
 
   const auto renderable0 = ReadRenderableRecord(bytes, entries[0], 0);
@@ -310,10 +312,10 @@ NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
 NOLINT_TEST_F(ScenePipelineTest, CollectWithEnvironmentBlockAppendsBlock)
 {
   // Arrange
-  data::pak::FogEnvironmentRecord fog {};
+  data::pak::world::FogEnvironmentRecord fog {};
   fog.extinction_sigma_t_per_m = 0.05F;
   const auto fog_bytes = std::as_bytes(
-    std::span<const data::pak::FogEnvironmentRecord, 1>(&fog, 1));
+    std::span<const data::pak::world::FogEnvironmentRecord, 1>(&fog, 1));
 
   auto adapter = std::make_shared<FakeSceneAdapter>();
   adapter->build = MakeMinimalSceneBuild("Root");
@@ -335,8 +337,8 @@ NOLINT_TEST_F(ScenePipelineTest, CollectWithEnvironmentBlockAppendsBlock)
       = ScenePipeline::WorkItem::MakeWorkItem(std::move(adapter), "Scene", {},
         {
           SceneEnvironmentSystem {
-            .system_type
-            = static_cast<uint32_t>(data::pak::EnvironmentComponentType::kFog),
+            .system_type = static_cast<uint32_t>(
+              data::pak::world::EnvironmentComponentType::kFog),
             .record_bytes
             = std::vector<std::byte>(fog_bytes.begin(), fog_bytes.end()),
           },
@@ -361,8 +363,9 @@ NOLINT_TEST_F(ScenePipelineTest, CollectWithEnvironmentBlockAppendsBlock)
   ASSERT_TRUE(result.cooked.has_value());
 
   const auto& bytes = result.cooked->descriptor_bytes;
-  const auto header_size = sizeof(data::pak::SceneEnvironmentBlockHeader);
-  const auto record_size = sizeof(data::pak::FogEnvironmentRecord);
+  const auto header_size
+    = sizeof(data::pak::world::SceneEnvironmentBlockHeader);
+  const auto record_size = sizeof(data::pak::world::FogEnvironmentRecord);
   const auto env_header_offset = bytes.size() - header_size - record_size;
   const auto env_header = ReadEnvironmentHeader(bytes, env_header_offset);
   EXPECT_EQ(env_header.systems_count, 1u);

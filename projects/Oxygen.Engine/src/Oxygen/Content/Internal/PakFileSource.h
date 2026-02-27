@@ -186,18 +186,19 @@ public:
     return pak_.ScriptSlotCount();
   }
 
-  [[nodiscard]] auto ReadScriptSlotRecords(uint32_t start_index,
-    uint32_t count) const -> std::vector<data::pak::ScriptSlotRecord> override
+  [[nodiscard]] auto ReadScriptSlotRecords(
+    uint32_t start_index, uint32_t count) const
+    -> std::vector<data::pak::scripting::ScriptSlotRecord> override
   {
     return pak_.ReadScriptSlotRecords(start_index, count);
   }
 
-  [[nodiscard]] auto ReadScriptParamRecords(data::pak::OffsetT absolute_offset,
-    uint32_t count) const -> std::vector<data::pak::ScriptParamRecord> override
+  [[nodiscard]] auto ReadScriptParamRecords(
+    data::pak::core::OffsetT absolute_offset, uint32_t count) const
+    -> std::vector<data::pak::scripting::ScriptParamRecord> override
   {
-    return pak_.ReadScriptParamRecords(
-      PakFile::ScriptParamReadRequest { .absolute_offset = absolute_offset,
-        .count = count });
+    return pak_.ReadScriptParamRecords(PakFile::ScriptParamReadRequest {
+      .absolute_offset = absolute_offset, .count = count });
   }
 
   [[nodiscard]] auto ResolveVirtualPath(
@@ -279,21 +280,21 @@ private:
   };
 
   [[nodiscard]] static auto ReadFooter(const std::filesystem::path& pak_path)
-    -> std::optional<data::pak::PakFooter>
+    -> std::optional<data::pak::core::PakFooter>
   {
     std::error_code ec;
     const auto file_size = std::filesystem::file_size(pak_path, ec);
-    if (ec || file_size < sizeof(data::pak::PakFooter)) {
+    if (ec || file_size < sizeof(data::pak::core::PakFooter)) {
       return std::nullopt;
     }
 
     serio::FileStream<> stream(pak_path, std::ios::in);
-    if (!stream.Seek(
-          static_cast<size_t>(file_size - sizeof(data::pak::PakFooter)))) {
+    if (!stream.Seek(static_cast<size_t>(
+          file_size - sizeof(data::pak::core::PakFooter)))) {
       return std::nullopt;
     }
 
-    data::pak::PakFooter footer {};
+    data::pak::core::PakFooter footer {};
     const auto footer_bytes = std::as_writable_bytes(std::span { &footer, 1 });
     auto read_result = stream.Read(footer_bytes.data(), footer_bytes.size());
     if (!read_result) {
@@ -301,8 +302,8 @@ private:
     }
 
     // Basic magic check.
-    if (!std::ranges::equal(
-          std::span { footer.footer_magic }, data::pak::kPakFooterMagic)) {
+    if (!std::ranges::equal(std::span { footer.footer_magic },
+          data::pak::core::kPakFooterMagic)) {
       return std::nullopt;
     }
 
@@ -311,7 +312,7 @@ private:
 
   PakFile pak_;
   std::string debug_name_;
-  std::optional<data::pak::PakFooter> footer_;
+  std::optional<data::pak::core::PakFooter> footer_;
 };
 
 } // namespace oxygen::content::internal

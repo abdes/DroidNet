@@ -38,7 +38,7 @@ public:
       start_load_script_asset;
     std::function<std::optional<uint16_t>(const data::AssetKey&)>
       resolve_source_id_for_asset;
-    std::function<ResourceKey(uint16_t, data::pak::ResourceIndexT)>
+    std::function<ResourceKey(uint16_t, data::pak::core::ResourceIndexT)>
       make_script_resource_key;
     std::function<std::shared_ptr<data::ScriptResource>(ResourceKey)>
       get_script_resource;

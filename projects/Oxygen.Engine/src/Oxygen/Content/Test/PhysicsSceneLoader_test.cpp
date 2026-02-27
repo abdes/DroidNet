@@ -26,7 +26,7 @@ using oxygen::content::loaders::LoadPhysicsSceneAsset;
 
 namespace {
 
-namespace pak7 = oxygen::data::pak::v7;
+namespace pak7 = oxygen::data::pak::physics;
 
 class PhysicsSceneLoaderHappyPathTest
   : public oxygen::content::testing::PhysicsSceneFixtureBase { };
@@ -354,8 +354,8 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest,
   rec.linear_damping = 0.1F;
   rec.angular_damping = 0.2F;
   rec.gravity_factor = 0.5F;
-  rec.shape_asset_index = oxygen::data::pak::ResourceIndexT { 3u };
-  rec.material_asset_index = oxygen::data::pak::ResourceIndexT { 1u };
+  rec.shape_asset_index = oxygen::data::pak::core::ResourceIndexT { 3u };
+  rec.material_asset_index = oxygen::data::pak::core::ResourceIndexT { 1u };
 
   WriteOneRigidBodyTable(rec);
 

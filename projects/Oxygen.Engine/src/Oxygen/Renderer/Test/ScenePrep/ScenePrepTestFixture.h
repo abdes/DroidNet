@@ -188,7 +188,7 @@ protected:
                                    .EndSubMesh()
                                    .Build();
 
-    pak::GeometryAssetDesc desc {};
+    pak::geometry::GeometryAssetDesc desc {};
     desc.lod_count = 1;
     std::vector<std::shared_ptr<Mesh>> lods;
     lods.push_back(mesh);

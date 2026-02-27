@@ -15,7 +15,7 @@ namespace oxygen::content::internal {
 
 auto PhysicsQueryService::MakePhysicsResourceKey(
   const data::SourceKey source_key,
-  const data::pak::ResourceIndexT resource_index,
+  const data::pak::core::ResourceIndexT resource_index,
   const Callbacks& callbacks) const noexcept -> std::optional<ResourceKey>
 {
   const auto source_id = callbacks.resolve_source_id_for_source_key(source_key);
@@ -27,7 +27,7 @@ auto PhysicsQueryService::MakePhysicsResourceKey(
 
 auto PhysicsQueryService::MakePhysicsResourceKeyForAsset(
   const data::AssetKey& context_asset_key,
-  const data::pak::ResourceIndexT resource_index,
+  const data::pak::core::ResourceIndexT resource_index,
   const Callbacks& callbacks) const noexcept -> std::optional<ResourceKey>
 {
   const auto source_id
@@ -40,9 +40,9 @@ auto PhysicsQueryService::MakePhysicsResourceKeyForAsset(
 
 auto PhysicsQueryService::ReadCollisionShapeAssetDescForAsset(
   const data::AssetKey& context_asset_key,
-  const data::pak::ResourceIndexT shape_asset_index,
+  const data::pak::core::ResourceIndexT shape_asset_index,
   const Callbacks& callbacks) const
-  -> std::optional<data::pak::CollisionShapeAssetDesc>
+  -> std::optional<data::pak::physics::CollisionShapeAssetDesc>
 {
   const auto source_id
     = callbacks.resolve_source_id_for_asset(context_asset_key);
@@ -65,11 +65,12 @@ auto PhysicsQueryService::ReadCollisionShapeAssetDescForAsset(
   if (!desc_reader) {
     return std::nullopt;
   }
-  auto blob = desc_reader->ReadBlob(sizeof(data::pak::CollisionShapeAssetDesc));
+  auto blob = desc_reader->ReadBlob(
+    sizeof(data::pak::physics::CollisionShapeAssetDesc));
   if (!blob) {
     return std::nullopt;
   }
-  data::pak::CollisionShapeAssetDesc desc {};
+  data::pak::physics::CollisionShapeAssetDesc desc {};
   std::memcpy(&desc, blob->data(), sizeof(desc));
   if (static_cast<data::AssetType>(desc.header.asset_type)
     != data::AssetType::kCollisionShape) {
@@ -80,9 +81,9 @@ auto PhysicsQueryService::ReadCollisionShapeAssetDescForAsset(
 
 auto PhysicsQueryService::ReadPhysicsMaterialAssetDescForAsset(
   const data::AssetKey& context_asset_key,
-  const data::pak::ResourceIndexT material_asset_index,
+  const data::pak::core::ResourceIndexT material_asset_index,
   const Callbacks& callbacks) const
-  -> std::optional<data::pak::PhysicsMaterialAssetDesc>
+  -> std::optional<data::pak::physics::PhysicsMaterialAssetDesc>
 {
   const auto source_id
     = callbacks.resolve_source_id_for_asset(context_asset_key);
@@ -105,12 +106,12 @@ auto PhysicsQueryService::ReadPhysicsMaterialAssetDescForAsset(
   if (!desc_reader) {
     return std::nullopt;
   }
-  auto blob
-    = desc_reader->ReadBlob(sizeof(data::pak::PhysicsMaterialAssetDesc));
+  auto blob = desc_reader->ReadBlob(
+    sizeof(data::pak::physics::PhysicsMaterialAssetDesc));
   if (!blob) {
     return std::nullopt;
   }
-  data::pak::PhysicsMaterialAssetDesc desc {};
+  data::pak::physics::PhysicsMaterialAssetDesc desc {};
   std::memcpy(&desc, blob->data(), sizeof(desc));
   if (static_cast<data::AssetType>(desc.header.asset_type)
     != data::AssetType::kPhysicsMaterial) {
@@ -148,11 +149,12 @@ auto PhysicsQueryService::FindPhysicsSidecarAssetKeyForScene(
     if (!desc_reader) {
       continue;
     }
-    auto header_blob = desc_reader->ReadBlob(sizeof(data::pak::AssetHeader));
+    auto header_blob
+      = desc_reader->ReadBlob(sizeof(data::pak::core::AssetHeader));
     if (!header_blob) {
       continue;
     }
-    data::pak::AssetHeader header {};
+    data::pak::core::AssetHeader header {};
     std::memcpy(&header, header_blob->data(), sizeof(header));
     if (static_cast<data::AssetType>(header.asset_type)
       != data::AssetType::kPhysicsScene) {
@@ -163,11 +165,12 @@ auto PhysicsQueryService::FindPhysicsSidecarAssetKeyForScene(
     if (!desc_reader) {
       continue;
     }
-    auto blob = desc_reader->ReadBlob(sizeof(data::pak::PhysicsSceneAssetDesc));
+    auto blob = desc_reader->ReadBlob(
+      sizeof(data::pak::physics::PhysicsSceneAssetDesc));
     if (!blob) {
       continue;
     }
-    data::pak::PhysicsSceneAssetDesc desc {};
+    data::pak::physics::PhysicsSceneAssetDesc desc {};
     std::memcpy(&desc, blob->data(), sizeof(desc));
     if (desc.target_scene_key != scene_key) {
       continue;

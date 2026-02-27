@@ -77,14 +77,14 @@ protected:
   auto WriteMinimalSceneWithRenderable(
     const oxygen::data::AssetKey geometry_key) -> void
   {
-    using oxygen::data::pak::NodeRecord;
-    using oxygen::data::pak::RenderableRecord;
-    using oxygen::data::pak::SceneAssetDesc;
+    using oxygen::data::pak::world::NodeRecord;
+    using oxygen::data::pak::world::RenderableRecord;
+    using oxygen::data::pak::world::SceneAssetDesc;
 
     SceneAssetDesc desc {};
     desc.header.asset_type
       = static_cast<uint8_t>(oxygen::data::AssetType::kScene);
-    desc.header.version = oxygen::data::pak::v2::kSceneAssetVersion;
+    desc.header.version = oxygen::data::pak::world::kSceneAssetVersion;
 
     // Layout:
     // [SceneAssetDesc][NodeRecord x1][StringTable "\0root\0"][Directory
@@ -100,7 +100,7 @@ protected:
 
     const uint32_t offset_directory = offset_strings + strings_bytes;
     const uint32_t dir_bytes = static_cast<uint32_t>(
-      sizeof(oxygen::data::pak::SceneComponentTableDesc));
+      sizeof(oxygen::data::pak::world::SceneComponentTableDesc));
 
     const uint32_t offset_renderables = offset_directory + dir_bytes;
 
@@ -130,7 +130,7 @@ protected:
     auto strings_write = writer_.WriteBlob(strings);
     ASSERT_TRUE(strings_write) << strings_write.error().message();
 
-    oxygen::data::pak::SceneComponentTableDesc table_desc {};
+    oxygen::data::pak::world::SceneComponentTableDesc table_desc {};
     table_desc.component_type
       = static_cast<uint32_t>(oxygen::data::ComponentType::kRenderable);
     table_desc.table.offset = offset_renderables;
@@ -188,14 +188,14 @@ NOLINT_TEST_F(SceneLoaderTest, LoadSceneInputContextBindingNodeOutOfRangeThrows)
 {
   using oxygen::data::AssetKey;
   using oxygen::data::AssetType;
-  using oxygen::data::pak::InputContextBindingRecord;
-  using oxygen::data::pak::NodeRecord;
-  using oxygen::data::pak::SceneAssetDesc;
-  using oxygen::data::pak::SceneComponentTableDesc;
+  using oxygen::data::pak::input::InputContextBindingRecord;
+  using oxygen::data::pak::world::NodeRecord;
+  using oxygen::data::pak::world::SceneAssetDesc;
+  using oxygen::data::pak::world::SceneComponentTableDesc;
 
   SceneAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
-  desc.header.version = oxygen::data::pak::kSceneAssetVersion;
+  desc.header.version = oxygen::data::pak::world::kSceneAssetVersion;
 
   const uint32_t offset_nodes = static_cast<uint32_t>(sizeof(SceneAssetDesc));
   const uint32_t offset_strings = offset_nodes + sizeof(NodeRecord);
@@ -252,13 +252,13 @@ NOLINT_TEST_F(SceneLoaderTest, LoadSceneInputContextBindingNodeOutOfRangeThrows)
 NOLINT_TEST_F(SceneLoaderTest, LoadSceneInputContextBindingBadEntrySizeThrows)
 {
   using oxygen::data::AssetType;
-  using oxygen::data::pak::NodeRecord;
-  using oxygen::data::pak::SceneAssetDesc;
-  using oxygen::data::pak::SceneComponentTableDesc;
+  using oxygen::data::pak::world::NodeRecord;
+  using oxygen::data::pak::world::SceneAssetDesc;
+  using oxygen::data::pak::world::SceneComponentTableDesc;
 
   SceneAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
-  desc.header.version = oxygen::data::pak::kSceneAssetVersion;
+  desc.header.version = oxygen::data::pak::world::kSceneAssetVersion;
 
   const uint32_t offset_nodes = static_cast<uint32_t>(sizeof(SceneAssetDesc));
   const uint32_t offset_strings = offset_nodes + sizeof(NodeRecord);
@@ -309,14 +309,14 @@ NOLINT_TEST_F(SceneLoaderTest, LoadSceneInputContextBindingUnsortedByNodeThrows)
 {
   using oxygen::data::AssetKey;
   using oxygen::data::AssetType;
-  using oxygen::data::pak::InputContextBindingRecord;
-  using oxygen::data::pak::NodeRecord;
-  using oxygen::data::pak::SceneAssetDesc;
-  using oxygen::data::pak::SceneComponentTableDesc;
+  using oxygen::data::pak::input::InputContextBindingRecord;
+  using oxygen::data::pak::world::NodeRecord;
+  using oxygen::data::pak::world::SceneAssetDesc;
+  using oxygen::data::pak::world::SceneComponentTableDesc;
 
   SceneAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
-  desc.header.version = oxygen::data::pak::kSceneAssetVersion;
+  desc.header.version = oxygen::data::pak::world::kSceneAssetVersion;
 
   const uint32_t offset_nodes = static_cast<uint32_t>(sizeof(SceneAssetDesc));
   const uint32_t nodes_size = 2U * sizeof(NodeRecord);

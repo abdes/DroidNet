@@ -147,8 +147,9 @@ NOLINT_TEST_F(ScriptingAdvancedTest, FirstRootWinsPrecedence)
   // Resolver should find root1 first
   ScriptSourceResolver resolver(PathFinder(PFC(), TempDir()));
 
-  oxygen::data::pak::ScriptAssetDesc desc {};
-  desc.flags = oxygen::data::pak::ScriptAssetFlags::kAllowExternalSource;
+  oxygen::data::pak::scripting::ScriptAssetDesc desc {};
+  desc.flags
+    = oxygen::data::pak::scripting::ScriptAssetFlags::kAllowExternalSource;
   const std::string p = "shared.lua";
   std::ranges::copy(p.substr(0, sizeof(desc.external_source_path)),
     &desc.external_source_path[0]); // NOLINT
@@ -173,15 +174,15 @@ NOLINT_TEST_F(ScriptingAdvancedTest, BytecodeUpdatesAreThreadSafe)
 {
   auto blob1
     = std::make_shared<const ScriptBytecodeBlob>(ScriptBytecodeBlob::FromOwned(
-      { 1 }, oxygen::data::pak::ScriptLanguage::kLuau,
-      oxygen::data::pak::ScriptCompression::kNone, 1,
+      { 1 }, oxygen::data::pak::scripting::ScriptLanguage::kLuau,
+      oxygen::data::pak::scripting::ScriptCompression::kNone, 1,
       oxygen::scripting::ScriptBlobOrigin::kExternalFile,
       oxygen::scripting::ScriptBlobCanonicalName { "v1" }));
 
   auto blob2
     = std::make_shared<const ScriptBytecodeBlob>(ScriptBytecodeBlob::FromOwned(
-      { 2 }, oxygen::data::pak::ScriptLanguage::kLuau,
-      oxygen::data::pak::ScriptCompression::kNone, 2,
+      { 2 }, oxygen::data::pak::scripting::ScriptLanguage::kLuau,
+      oxygen::data::pak::scripting::ScriptCompression::kNone, 2,
       oxygen::scripting::ScriptBlobOrigin::kExternalFile,
       oxygen::scripting::ScriptBlobCanonicalName { "v2" }));
 
@@ -220,8 +221,9 @@ NOLINT_TEST_F(ScriptingAdvancedTest, ScriptingModuleExecutesResolvedSource)
 
   ScriptSourceResolver resolver(PathFinder(PFC(), TempDir()));
 
-  oxygen::data::pak::ScriptAssetDesc desc {};
-  desc.flags = oxygen::data::pak::ScriptAssetFlags::kAllowExternalSource;
+  oxygen::data::pak::scripting::ScriptAssetDesc desc {};
+  desc.flags
+    = oxygen::data::pak::scripting::ScriptAssetFlags::kAllowExternalSource;
   const std::string p = "module_test.lua";
   std::ranges::copy(p.substr(0, sizeof(desc.external_source_path)),
     &desc.external_source_path[0]); // NOLINT
@@ -274,8 +276,8 @@ NOLINT_TEST_F(ScriptingAdvancedTest, ScriptInstancesAreIsolated)
   const auto bytes_vec = std::vector<uint8_t>(source.begin(), source.end());
   constexpr uint64_t kTestId = 123;
   auto blob = ScriptSourceBlob::FromOwned(bytes_vec,
-    oxygen::data::pak::ScriptLanguage::kLuau,
-    oxygen::data::pak::ScriptCompression::kNone, kTestId,
+    oxygen::data::pak::scripting::ScriptLanguage::kLuau,
+    oxygen::data::pak::scripting::ScriptCompression::kNone, kTestId,
     oxygen::scripting::ScriptBlobOrigin::kExternalFile,
     oxygen::scripting::ScriptBlobCanonicalName { "isolation_test" });
 

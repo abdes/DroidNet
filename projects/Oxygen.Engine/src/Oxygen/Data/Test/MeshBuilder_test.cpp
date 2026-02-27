@@ -73,9 +73,9 @@ protected:
 
     // Create mock buffer resources for referenced storage tests
     // Create descriptor for vertex buffer
-    pak::BufferResourceDesc vertex_desc = { .data_offset = 0,
-      .size_bytes
-      = static_cast<pak::DataBlobSizeT>(vertices_.size() * sizeof(Vertex)),
+    pak::core::BufferResourceDesc vertex_desc = { .data_offset = 0,
+      .size_bytes = static_cast<pak::core::DataBlobSizeT>(
+        vertices_.size() * sizeof(Vertex)),
       .usage_flags
       = static_cast<uint32_t>(BufferResource::UsageFlags::kVertexBuffer),
       .element_stride = sizeof(Vertex),
@@ -90,8 +90,8 @@ protected:
       std::move(vertex_desc), std::move(vertex_data));
 
     // Create descriptor for index buffer
-    pak::BufferResourceDesc index_desc = { .data_offset = 0,
-      .size_bytes = static_cast<pak::DataBlobSizeT>(
+    pak::core::BufferResourceDesc index_desc = { .data_offset = 0,
+      .size_bytes = static_cast<pak::core::DataBlobSizeT>(
         indices_.size() * sizeof(std::uint32_t)),
       .usage_flags
       = static_cast<uint32_t>(BufferResource::UsageFlags::kIndexBuffer),
@@ -134,9 +134,9 @@ protected:
 
     // Create mock buffer resources for referenced storage tests
     // Create descriptor for vertex buffer
-    pak::BufferResourceDesc vertex_desc = { .data_offset = 0,
-      .size_bytes
-      = static_cast<pak::DataBlobSizeT>(vertices_.size() * sizeof(Vertex)),
+    pak::core::BufferResourceDesc vertex_desc = { .data_offset = 0,
+      .size_bytes = static_cast<pak::core::DataBlobSizeT>(
+        vertices_.size() * sizeof(Vertex)),
       .usage_flags
       = static_cast<uint32_t>(BufferResource::UsageFlags::kVertexBuffer),
       .element_stride = sizeof(Vertex),
@@ -151,8 +151,8 @@ protected:
       std::move(vertex_desc), std::move(vertex_data));
 
     // Create descriptor for index buffer
-    pak::BufferResourceDesc index_desc = { .data_offset = 0,
-      .size_bytes = static_cast<pak::DataBlobSizeT>(
+    pak::core::BufferResourceDesc index_desc = { .data_offset = 0,
+      .size_bytes = static_cast<pak::core::DataBlobSizeT>(
         indices_.size() * sizeof(std::uint32_t)),
       .usage_flags
       = static_cast<uint32_t>(BufferResource::UsageFlags::kIndexBuffer),
@@ -203,9 +203,9 @@ protected:
     material_ = MaterialAsset::CreateDefault();
 
     // Valid referenced storage buffers for tests needing them
-    pak::BufferResourceDesc vertex_desc = { .data_offset = 0,
-      .size_bytes
-      = static_cast<pak::DataBlobSizeT>(vertices_.size() * sizeof(Vertex)),
+    pak::core::BufferResourceDesc vertex_desc = { .data_offset = 0,
+      .size_bytes = static_cast<pak::core::DataBlobSizeT>(
+        vertices_.size() * sizeof(Vertex)),
       .usage_flags
       = static_cast<uint32_t>(BufferResource::UsageFlags::kVertexBuffer),
       .element_stride = sizeof(Vertex),

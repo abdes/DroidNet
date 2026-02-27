@@ -20,7 +20,7 @@ auto BuildMesh(std::string_view name,
 {
   using oxygen::data::MaterialAsset;
   using oxygen::data::MeshBuilder;
-  using oxygen::data::pak::MeshViewDesc;
+  using oxygen::data::pak::geometry::MeshViewDesc;
 
   auto mesh = MeshBuilder(0, name)
                 .WithVertices(std::move(vertices))

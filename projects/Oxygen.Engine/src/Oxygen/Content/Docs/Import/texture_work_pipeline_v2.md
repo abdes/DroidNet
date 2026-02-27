@@ -372,7 +372,7 @@ These stages follow the current synchronous implementation in
 14) **Return cooked result**
     - `CookedTexturePayload.desc` includes shape, mip count, final format,
       `packing_policy_id`, and `content_hash`
-    - `payload` contains the complete PAK v4 payload
+    - `payload` contains the complete PAK v7 payload
     - `layouts` mirrors the packed subresource layouts
 
 ### Cancellation Observability
@@ -382,7 +382,7 @@ encoder. The pipeline must wire the job’s stop token into the descriptor.
 
 ---
 
-## Cooked Output Contract (PAK v4)
+## Cooked Output Contract (PAK v7)
 
 The pipeline must produce payload bytes identical to the sync cooker.
 
@@ -402,7 +402,7 @@ Subresource data (layer-major order)
 ### `textures.table` Entry (Emitter Conversion)
 
 `TextureEmitter::Emit()` converts `CookedTexturePayload` into
-`data::pak::TextureResourceDesc` using its internal descriptor conversion:
+`data::pak::render::TextureResourceDesc` using its internal descriptor conversion:
 
 - `compression_type = 7` for BC7, `0` otherwise
 - `alignment = policy.AlignRowPitchBytes(1)` (256 for D3D12, 1 for tight)
@@ -536,7 +536,7 @@ The pipeline is UI-agnostic.
 6) Bounded channels are mandatory.
 7) The pipeline may perform file reads only when configured with an `IAsyncFileReader`; such IO must be read-only and limited to resolving `WorkItem::source_path`.
 8) Placeholder policy maps to fallback texture index `0` (no payload emitted).
-9) Payload headers/layouts must conform to PAK v4 (`TexturePayloadHeader`).
+9) Payload headers/layouts must conform to PAK v7 (`TexturePayloadHeader`).
 
 ---
 

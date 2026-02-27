@@ -41,8 +41,8 @@ struct FileErrorInfo;
 
  ### PAK Compliance Notes
 
- - Texture resource index `data::pak::kFallbackResourceIndex` is reserved for
-   the fallback texture.
+ - Texture resource index `data::pak::core::kFallbackResourceIndex` is reserved
+ for the fallback texture.
  - The fallback entry is ensured on the first call to `Emit()` or
     `Finalize()`.
 
@@ -153,9 +153,9 @@ public:
    @param signature_salt Salt appended to the dedupe signature when
      `content_hash` is zero.
    @return Table index for this texture. Index
-        `data::pak::kFallbackResourceIndex` is reserved for the fallback
+        `data::pak::core::kFallbackResourceIndex` is reserved for the fallback
         texture; user-emitted textures start at
-        `data::pak::kFallbackResourceIndex + 1`.
+        `data::pak::core::kFallbackResourceIndex + 1`.
 
    ### What Happens
 
@@ -202,7 +202,7 @@ public:
   OXGN_CNTT_NDAPI auto Finalize() -> co::Co<bool>;
 
 private:
-  using TextureResourceDesc = data::pak::TextureResourceDesc;
+  using TextureResourceDesc = data::pak::render::TextureResourceDesc;
 
   enum class WriteKind : uint8_t {
     kPadding,

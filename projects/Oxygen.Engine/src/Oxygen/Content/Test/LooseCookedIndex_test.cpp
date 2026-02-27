@@ -797,10 +797,10 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootTableWithoutDataThrows)
   using oxygen::data::loose_cooked::FileKind;
   using oxygen::data::loose_cooked::FileRecord;
   using oxygen::data::loose_cooked::IndexHeader;
-  using oxygen::data::pak::MaterialAssetDesc;
+  using oxygen::data::pak::render::MaterialAssetDesc;
 
   const LooseCookedLayout layout {};
-  using oxygen::data::pak::TextureResourceDesc;
+  using oxygen::data::pak::render::TextureResourceDesc;
 
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
@@ -824,7 +824,8 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootTableWithoutDataThrows)
 
   MaterialAssetDesc material_desc {};
   material_desc.header.asset_type = static_cast<uint8_t>(AssetType::kMaterial);
-  material_desc.header.version = oxygen::data::pak::v2::kMaterialAssetVersion;
+  material_desc.header.version
+    = oxygen::data::pak::render::kMaterialAssetVersion;
   {
     const auto material_file
       = LooseCookedLayout::MaterialDescriptorFileName("TestMaterial");
@@ -1211,7 +1212,7 @@ NOLINT_TEST_F(
   using oxygen::data::loose_cooked::FileKind;
   using oxygen::data::loose_cooked::FileRecord;
   using oxygen::data::loose_cooked::IndexHeader;
-  using oxygen::data::pak::TextureResourceDesc;
+  using oxygen::data::pak::render::TextureResourceDesc;
 
   const LooseCookedLayout layout {};
 
@@ -1299,7 +1300,7 @@ NOLINT_TEST_F(
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileRecord;
   using oxygen::data::loose_cooked::IndexHeader;
-  using oxygen::data::pak::MaterialAssetDesc;
+  using oxygen::data::pak::render::MaterialAssetDesc;
 
   const LooseCookedLayout layout {};
 
@@ -1310,7 +1311,8 @@ NOLINT_TEST_F(
 
   MaterialAssetDesc material_desc {};
   material_desc.header.asset_type = static_cast<uint8_t>(AssetType::kMaterial);
-  material_desc.header.version = oxygen::data::pak::v2::kMaterialAssetVersion;
+  material_desc.header.version
+    = oxygen::data::pak::render::kMaterialAssetVersion;
   {
     const auto material_file
       = LooseCookedLayout::MaterialDescriptorFileName("TestMaterial");

@@ -24,10 +24,10 @@ class InputMappingContextAsset final : public Asset {
 
 public:
   OXGN_DATA_API InputMappingContextAsset(AssetKey asset_key,
-    pak::InputMappingContextAssetDesc desc,
-    std::vector<pak::InputActionMappingRecord> mappings = {},
-    std::vector<pak::InputTriggerRecord> triggers = {},
-    std::vector<pak::InputTriggerAuxRecord> trigger_aux = {},
+    pak::input::InputMappingContextAssetDesc desc,
+    std::vector<pak::input::InputActionMappingRecord> mappings = {},
+    std::vector<pak::input::InputTriggerRecord> triggers = {},
+    std::vector<pak::input::InputTriggerAuxRecord> trigger_aux = {},
     std::vector<char> strings = {});
 
   ~InputMappingContextAsset() override = default;
@@ -36,30 +36,31 @@ public:
   OXYGEN_DEFAULT_MOVABLE(InputMappingContextAsset)
 
   [[nodiscard]] auto GetHeader() const noexcept
-    -> const pak::AssetHeader& override
+    -> const pak::core::AssetHeader& override
   {
     return desc_.header;
   }
 
-  [[nodiscard]] auto GetFlags() const noexcept -> pak::InputMappingContextFlags
+  [[nodiscard]] auto GetFlags() const noexcept
+    -> pak::input::InputMappingContextFlags
   {
     return desc_.flags;
   }
 
   [[nodiscard]] auto GetMappings() const noexcept
-    -> std::span<const pak::InputActionMappingRecord>
+    -> std::span<const pak::input::InputActionMappingRecord>
   {
     return mappings_;
   }
 
   [[nodiscard]] auto GetTriggers() const noexcept
-    -> std::span<const pak::InputTriggerRecord>
+    -> std::span<const pak::input::InputTriggerRecord>
   {
     return triggers_;
   }
 
   [[nodiscard]] auto GetTriggerAuxRecords() const noexcept
-    -> std::span<const pak::InputTriggerAuxRecord>
+    -> std::span<const pak::input::InputTriggerAuxRecord>
   {
     return trigger_aux_;
   }
@@ -73,10 +74,10 @@ public:
     -> std::optional<std::string_view>;
 
 private:
-  pak::InputMappingContextAssetDesc desc_ {};
-  std::vector<pak::InputActionMappingRecord> mappings_;
-  std::vector<pak::InputTriggerRecord> triggers_;
-  std::vector<pak::InputTriggerAuxRecord> trigger_aux_;
+  pak::input::InputMappingContextAssetDesc desc_ {};
+  std::vector<pak::input::InputActionMappingRecord> mappings_;
+  std::vector<pak::input::InputTriggerRecord> triggers_;
+  std::vector<pak::input::InputTriggerAuxRecord> trigger_aux_;
   std::vector<char> strings_;
 };
 

@@ -45,12 +45,12 @@ namespace oxygen::content {
  - Used by resource loaders and registry systems for fast descriptor lookup.
 
  @tparam T Resource type (must satisfy PakResource concept)
- @see oxygen::content::PakResource, data::pak::ResourceTable
+ @see oxygen::content::PakResource, data::pak::core::ResourceTable
 */
 template <PakResource T> class ResourceTable {
 public:
   using DescT = typename T::DescT;
-  using ResourceKeyT = data::pak::ResourceIndexT;
+  using ResourceKeyT = data::pak::core::ResourceIndexT;
 
   //! Construct a ResourceTable with resource table metadata
   /*!
@@ -64,7 +64,7 @@ public:
    @note The entry_size field in table_meta must match sizeof(DescT).
    @throw std::invalid_argument if entry_size does not match the expected size.
   */
-  explicit ResourceTable(const data::pak::ResourceTable& table_meta)
+  explicit ResourceTable(const data::pak::core::ResourceTable& table_meta)
     : table_meta_(table_meta)
   {
     // Validate entry size
@@ -87,7 +87,7 @@ public:
    data itself.
   */
   [[nodiscard]] auto GetResourceOffset(const ResourceKeyT& key) const noexcept
-    -> std::optional<data::pak::OffsetT>
+    -> std::optional<data::pak::core::OffsetT>
   {
     if (!IsValidKey(key)) {
       return std::nullopt;
@@ -103,13 +103,13 @@ public:
   }
 
   //! Returns the number of resources described in the table
-  [[nodiscard]] auto Size() const noexcept -> data::pak::ResourceIndexT
+  [[nodiscard]] auto Size() const noexcept -> data::pak::core::ResourceIndexT
   {
-    return data::pak::ResourceIndexT { table_meta_.count };
+    return data::pak::core::ResourceIndexT { table_meta_.count };
   }
 
 private:
-  data::pak::ResourceTable table_meta_;
+  data::pak::core::ResourceTable table_meta_;
 };
 
 } // namespace oxygen::content

@@ -10,6 +10,7 @@
 #include <cstring>
 #include <iostream>
 
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Data/PakFormat.h>
 
 #include "AssetDumpHelpers.h"
@@ -21,12 +22,12 @@ namespace oxygen::content::pakdump {
 class InputActionAssetDumper final : public AssetDumper {
 public:
   auto DumpAsync(const oxygen::content::PakFile& pak,
-    const oxygen::data::pak::v2::AssetDirectoryEntry& entry, DumpContext& ctx,
+    const oxygen::data::pak::core::AssetDirectoryEntry& entry, DumpContext& ctx,
     const size_t idx, oxygen::content::AssetLoader& asset_loader) const
     -> oxygen::co::Co<> override
   {
     (void)asset_loader;
-    using oxygen::data::pak::InputActionAssetDesc;
+    using oxygen::data::pak::input::InputActionAssetDesc;
 
     std::cout << "Asset #" << idx << ":\n";
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
@@ -50,7 +51,7 @@ public:
     asset_dump_helpers::PrintAssetHeaderFields(desc.header, 4);
     std::cout << "    --- Input Action Descriptor Fields ---\n";
     PrintUtils::Field("Value Type", static_cast<uint32_t>(desc.value_type), 8);
-    PrintUtils::Field("Flags", oxygen::data::pak::to_string(desc.flags), 8);
+    PrintUtils::Field("Flags", nostd::to_string(desc.flags), 8);
 
     std::cout << "\n";
     co_return;

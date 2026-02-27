@@ -113,8 +113,8 @@ auto WriteLooseCookedMaterialWithTexture(
   using oxygen::data::loose_cooked::FileKind;
   using oxygen::data::loose_cooked::FileRecord;
   using oxygen::data::loose_cooked::IndexHeader;
-  using oxygen::data::pak::MaterialAssetDesc;
-  using oxygen::data::pak::TextureResourceDesc;
+  using oxygen::data::pak::render::MaterialAssetDesc;
+  using oxygen::data::pak::render::TextureResourceDesc;
 
   const LooseCookedLayout layout {};
 
@@ -174,7 +174,8 @@ auto WriteLooseCookedMaterialWithTexture(
   material_desc.header.asset_type = static_cast<uint8_t>(AssetType::kMaterial);
   std::snprintf(material_desc.header.name, sizeof(material_desc.header.name),
     "%s", "TestMaterial");
-  material_desc.header.version = oxygen::data::pak::kMaterialAssetVersion;
+  material_desc.header.version
+    = oxygen::data::pak::render::kMaterialAssetVersion;
   material_desc.header.streaming_priority = 0;
   material_desc.header.content_hash = 0;
   material_desc.header.variant_flags = 0;
@@ -182,7 +183,8 @@ auto WriteLooseCookedMaterialWithTexture(
   material_desc.material_domain = 0;
   material_desc.flags = 0;
   material_desc.shader_stages = 0;
-  material_desc.base_color_texture = oxygen::data::pak::ResourceIndexT { 1u };
+  material_desc.base_color_texture
+    = oxygen::data::pak::core::ResourceIndexT { 1u };
 
   {
     const auto material_file
@@ -331,7 +333,7 @@ auto WriteLooseCookedIndexWithInvalidTexturesTable(
 
 auto ReadAssetHeader(oxygen::content::internal::IContentSource& source,
   const oxygen::data::AssetKey& key)
-  -> std::optional<oxygen::data::pak::AssetHeader>
+  -> std::optional<oxygen::data::pak::core::AssetHeader>
 {
   auto desc_reader = source.CreateAssetDescriptorReader(key);
   if (!desc_reader) {
@@ -339,13 +341,13 @@ auto ReadAssetHeader(oxygen::content::internal::IContentSource& source,
   }
 
   auto header_blob
-    = desc_reader->ReadBlob(sizeof(oxygen::data::pak::AssetHeader));
+    = desc_reader->ReadBlob(sizeof(oxygen::data::pak::core::AssetHeader));
   if (!header_blob
-    || header_blob->size() < sizeof(oxygen::data::pak::AssetHeader)) {
+    || header_blob->size() < sizeof(oxygen::data::pak::core::AssetHeader)) {
     return std::nullopt;
   }
 
-  oxygen::data::pak::AssetHeader header {};
+  oxygen::data::pak::core::AssetHeader header {};
   std::memcpy(&header, header_blob->data(), sizeof(header));
   return header;
 }
@@ -357,7 +359,7 @@ auto WriteLooseCookedSceneForCatalog(const std::filesystem::path& cooked_root,
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileRecord;
   using oxygen::data::loose_cooked::IndexHeader;
-  using oxygen::data::pak::SceneAssetDesc;
+  using oxygen::data::pak::world::SceneAssetDesc;
 
   const LooseCookedLayout layout {};
   std::filesystem::create_directories(cooked_root / layout.scenes_subdir);
@@ -365,7 +367,7 @@ auto WriteLooseCookedSceneForCatalog(const std::filesystem::path& cooked_root,
   SceneAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
   std::snprintf(desc.header.name, sizeof(desc.header.name), "%s", "LooseScene");
-  desc.header.version = oxygen::data::pak::kSceneAssetVersion;
+  desc.header.version = oxygen::data::pak::world::kSceneAssetVersion;
 
   const auto rel_desc
     = std::filesystem::path(layout.scenes_subdir) / "LooseScene.scene";
@@ -860,7 +862,7 @@ NOLINT_TEST_F(AssetLoaderLoadingTest, MakeResourceKeyPakIndexIgnoresLooseRoots)
 
   // Act
   const auto resource_key = asset_loader_->MakeResourceKey<BufferResource>(
-    pak_file, oxygen::data::pak::ResourceIndexT { 0u });
+    pak_file, oxygen::data::pak::core::ResourceIndexT { 0u });
   const auto decoded = InternalResourceKey(resource_key);
 
   // Assert

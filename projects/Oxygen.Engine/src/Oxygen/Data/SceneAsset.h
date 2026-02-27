@@ -35,35 +35,35 @@ namespace oxygen::data {
 //! Traits class to map component record types to their ComponentType enum.
 template <typename T> struct ComponentTraits;
 
-template <> struct ComponentTraits<pak::RenderableRecord> {
+template <> struct ComponentTraits<pak::world::RenderableRecord> {
   static constexpr ComponentType kType = ComponentType::kRenderable;
 };
 
-template <> struct ComponentTraits<pak::PerspectiveCameraRecord> {
+template <> struct ComponentTraits<pak::world::PerspectiveCameraRecord> {
   static constexpr ComponentType kType = ComponentType::kPerspectiveCamera;
 };
 
-template <> struct ComponentTraits<pak::OrthographicCameraRecord> {
+template <> struct ComponentTraits<pak::world::OrthographicCameraRecord> {
   static constexpr ComponentType kType = ComponentType::kOrthographicCamera;
 };
 
-template <> struct ComponentTraits<pak::DirectionalLightRecord> {
+template <> struct ComponentTraits<pak::world::DirectionalLightRecord> {
   static constexpr ComponentType kType = ComponentType::kDirectionalLight;
 };
 
-template <> struct ComponentTraits<pak::PointLightRecord> {
+template <> struct ComponentTraits<pak::world::PointLightRecord> {
   static constexpr ComponentType kType = ComponentType::kPointLight;
 };
 
-template <> struct ComponentTraits<pak::SpotLightRecord> {
+template <> struct ComponentTraits<pak::world::SpotLightRecord> {
   static constexpr ComponentType kType = ComponentType::kSpotLight;
 };
 
-template <> struct ComponentTraits<pak::ScriptingComponentRecord> {
+template <> struct ComponentTraits<pak::scripting::ScriptingComponentRecord> {
   static constexpr ComponentType kType = ComponentType::kScripting;
 };
 
-template <> struct ComponentTraits<pak::InputContextBindingRecord> {
+template <> struct ComponentTraits<pak::input::InputContextBindingRecord> {
   static constexpr ComponentType kType = ComponentType::kInputContextBinding;
 };
 
@@ -93,7 +93,7 @@ template <> struct ComponentTraits<pak::InputContextBindingRecord> {
   }
 
   // Access components
-  auto renderables = scene.GetComponents<pak::RenderableRecord>();
+  auto renderables = scene.GetComponents<pak::world::RenderableRecord>();
   for (const auto& renderable : renderables) {
       // ...
   }
@@ -105,7 +105,7 @@ public:
   //! View over a single environment-system record stored in the environment
   //! block.
   struct EnvironmentSystemRecordView {
-    pak::SceneEnvironmentSystemRecordHeader header {};
+    pak::world::SceneEnvironmentSystemRecordHeader header {};
     std::span<const std::byte> bytes {};
   };
 
@@ -137,7 +137,7 @@ public:
   //=== Asset Interface ===---------------------------------------------------//
 
   [[nodiscard]] auto GetHeader() const noexcept
-    -> const pak::AssetHeader& override
+    -> const pak::core::AssetHeader& override
   {
     return desc_.header;
   }
@@ -146,7 +146,7 @@ public:
 
   //! Returns a view of all nodes in the scene.
   OXGN_DATA_NDAPI auto GetNodes() const noexcept
-    -> std::span<const pak::NodeRecord>;
+    -> std::span<const pak::world::NodeRecord>;
 
   //! Returns the node at the specified index.
   /*!
@@ -155,19 +155,20 @@ public:
     @warning No bounds checking in Release builds. Use GetNodes().size() to
     check.
   */
-  OXGN_DATA_NDAPI auto GetNode(pak::SceneNodeIndexT index) const noexcept
-    -> const pak::NodeRecord&;
+  OXGN_DATA_NDAPI auto GetNode(pak::world::SceneNodeIndexT index) const noexcept
+    -> const pak::world::NodeRecord&;
 
   //! Returns the name of the specified node.
   /*!
     Resolves the `scene_name_offset` in the node record to a string view from
     the string table.
   */
-  OXGN_DATA_NDAPI auto GetNodeName(const pak::NodeRecord& node) const noexcept
-    -> std::string_view;
+  OXGN_DATA_NDAPI auto GetNodeName(
+    const pak::world::NodeRecord& node) const noexcept -> std::string_view;
 
   //! Returns the root node (always index 0).
-  OXGN_DATA_NDAPI auto GetRootNode() const noexcept -> const pak::NodeRecord&;
+  OXGN_DATA_NDAPI auto GetRootNode() const noexcept
+    -> const pak::world::NodeRecord&;
 
   //=== Environment Access (v3+) ===----------------------------------------//
 
@@ -179,7 +180,7 @@ public:
 
   //! Gets the parsed environment block header (if present).
   OXGN_DATA_NDAPI auto GetEnvironmentBlockHeader() const noexcept
-    -> const pak::SceneEnvironmentBlockHeader*
+    -> const pak::world::SceneEnvironmentBlockHeader*
   {
     return has_environment_block_ ? &environment_block_header_ : nullptr;
   }
@@ -194,28 +195,28 @@ public:
   // Typed environment access (v3+). These return structs as defined in the
   // PAK format, not runtime Scene objects.
   OXGN_DATA_NDAPI auto TryGetSkyAtmosphereEnvironment() const
-    -> std::optional<pak::SkyAtmosphereEnvironmentRecord>;
+    -> std::optional<pak::world::SkyAtmosphereEnvironmentRecord>;
 
   OXGN_DATA_NDAPI auto TryGetVolumetricCloudsEnvironment() const
-    -> std::optional<pak::VolumetricCloudsEnvironmentRecord>;
+    -> std::optional<pak::world::VolumetricCloudsEnvironmentRecord>;
 
   OXGN_DATA_NDAPI auto TryGetFogEnvironment() const
-    -> std::optional<pak::FogEnvironmentRecord>;
+    -> std::optional<pak::world::FogEnvironmentRecord>;
 
   OXGN_DATA_NDAPI auto TryGetSkyLightEnvironment() const
-    -> std::optional<pak::SkyLightEnvironmentRecord>;
+    -> std::optional<pak::world::SkyLightEnvironmentRecord>;
 
   OXGN_DATA_NDAPI auto TryGetSkySphereEnvironment() const
-    -> std::optional<pak::SkySphereEnvironmentRecord>;
+    -> std::optional<pak::world::SkySphereEnvironmentRecord>;
 
   OXGN_DATA_NDAPI auto TryGetPostProcessVolumeEnvironment() const
-    -> std::optional<pak::PostProcessVolumeEnvironmentRecord>;
+    -> std::optional<pak::world::PostProcessVolumeEnvironmentRecord>;
 
   //=== Component Access ===--------------------------------------------------//
 
   //! Returns a view of all components of the specified type.
   /*!
-    @tparam T The component record type (e.g. pak::RenderableRecord).
+    @tparam T The component record type (e.g. pak::world::RenderableRecord).
     @return A span of component records. Returns empty span if no table exists.
   */
   template <typename T>
@@ -280,13 +281,13 @@ public:
   */
   template <typename T>
   [[nodiscard]] auto FindComponent(
-    pak::SceneNodeIndexT node_index) const noexcept -> const T*
+    pak::world::SceneNodeIndexT node_index) const noexcept -> const T*
   {
     auto components = GetComponents<T>();
 
     // Binary search for the node_index
     auto it = std::lower_bound(components.begin(), components.end(), node_index,
-      [](const T& record, pak::SceneNodeIndexT index) {
+      [](const T& record, pak::world::SceneNodeIndexT index) {
         return record.node_index < index;
       });
 
@@ -316,14 +317,14 @@ private:
 
   std::shared_ptr<std::vector<std::byte>> owned_data_ {};
   std::span<const std::byte> data_;
-  pak::SceneAssetDesc desc_ {};
+  pak::world::SceneAssetDesc desc_ {};
 
   // Cached pointers for fast access
   size_t node_count_ { 0 };
 
   // Nodes are stored packed (alignment 1). Decode lazily into an aligned
   // cache to avoid unaligned typed pointers.
-  mutable std::vector<pak::NodeRecord> nodes_cache_ {};
+  mutable std::vector<pak::world::NodeRecord> nodes_cache_ {};
   mutable bool nodes_cache_valid_ { false };
 
   const char* string_table_ptr_ { nullptr };
@@ -332,7 +333,7 @@ private:
   // Component directory cache (type -> {ptr, count})
   struct ComponentTableEntry {
     ComponentType type;
-    pak::OffsetT offset;
+    pak::core::OffsetT offset;
     size_t count;
     uint32_t entry_size;
   };
@@ -340,15 +341,15 @@ private:
 
   // Optional trailing environment block.
   bool has_environment_block_ { false };
-  pak::SceneEnvironmentBlockHeader environment_block_header_ {};
+  pak::world::SceneEnvironmentBlockHeader environment_block_header_ {};
   std::vector<EnvironmentSystemRecordView> environment_system_records_;
 
   // Decoded component tables, keyed by ComponentType.
   mutable std::unordered_map<ComponentType, std::any> component_cache_ {};
 
   template <typename RecordT>
-  auto TryGetEnvironmentRecordAs(pak::EnvironmentComponentType type) const
-    -> std::optional<RecordT>;
+  auto TryGetEnvironmentRecordAs(
+    pak::world::EnvironmentComponentType type) const -> std::optional<RecordT>;
 };
 
 } // namespace oxygen::data

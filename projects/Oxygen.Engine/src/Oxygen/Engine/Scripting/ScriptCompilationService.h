@@ -76,10 +76,10 @@ public:
 
   OXGN_NGIN_NDAPI auto RegisterCompiler(
     std::shared_ptr<const IScriptCompiler> compiler) -> bool override;
-  OXGN_NGIN_NDAPI auto UnregisterCompiler(data::pak::ScriptLanguage language)
-    -> bool override;
-  OXGN_NGIN_NDAPI auto HasCompiler(data::pak::ScriptLanguage language) const
-    -> bool override;
+  OXGN_NGIN_NDAPI auto UnregisterCompiler(
+    data::pak::scripting::ScriptLanguage language) -> bool override;
+  OXGN_NGIN_NDAPI auto HasCompiler(
+    data::pak::scripting::ScriptLanguage language) const -> bool override;
 
   OXGN_NGIN_NDAPI auto CompileAsync(Request request) -> co::Co<Result> override;
   OXGN_NGIN_NDAPI auto InFlightCount() const -> size_t override;
@@ -138,7 +138,7 @@ private:
   std::atomic<bool> active_ { true };
 
   mutable std::mutex compilers_mutex_;
-  std::unordered_map<data::pak::ScriptLanguage,
+  std::unordered_map<data::pak::scripting::ScriptLanguage,
     std::shared_ptr<const IScriptCompiler>>
     compilers_;
 

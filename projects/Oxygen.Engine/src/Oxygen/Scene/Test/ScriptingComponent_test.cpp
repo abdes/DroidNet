@@ -18,7 +18,7 @@ namespace {
 
 using oxygen::data::AssetKey;
 using oxygen::data::ScriptAsset;
-using oxygen::data::pak::ScriptAssetDesc;
+using oxygen::data::pak::scripting::ScriptAssetDesc;
 using oxygen::scene::ScriptingComponent;
 using oxygen::scripting::ScriptExecutable;
 

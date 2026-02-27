@@ -43,12 +43,12 @@ public:
   //! index
   constexpr InternalResourceKey(const uint16_t pak_index,
     const uint16_t resource_type_index,
-    const data::pak::ResourceIndexT resource_index) noexcept
+    const data::pak::core::ResourceIndexT resource_index) noexcept
     : key_((static_cast<uint64_t>(pak_index) << 48)
         | (static_cast<uint64_t>(resource_type_index) << 32)
         | static_cast<uint64_t>(resource_index))
   {
-    static_assert(sizeof(data::pak::ResourceIndexT) <= sizeof(uint32_t));
+    static_assert(sizeof(data::pak::core::ResourceIndexT) <= sizeof(uint32_t));
   }
 
   //! Construct from raw 64-bit key value
@@ -77,9 +77,9 @@ public:
 
   //! Get the resource index within the PAK file (lower 32 bits of the key)
   [[nodiscard]] constexpr auto GetResourceIndex() const noexcept
-    -> data::pak::ResourceIndexT
+    -> data::pak::core::ResourceIndexT
   {
-    return static_cast<data::pak::ResourceIndexT>(key_ & 0xFFFFFFFF);
+    return static_cast<data::pak::core::ResourceIndexT>(key_ & 0xFFFFFFFF);
   }
 
   //! Get the raw 64-bit key value

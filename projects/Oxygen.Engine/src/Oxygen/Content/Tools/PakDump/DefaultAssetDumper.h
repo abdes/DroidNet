@@ -18,7 +18,7 @@ namespace oxygen::content::pakdump {
 class DefaultAssetDumper final : public AssetDumper {
 public:
   auto DumpAsync(const oxygen::content::PakFile& pak,
-    const oxygen::data::pak::v2::AssetDirectoryEntry& entry, DumpContext& ctx,
+    const oxygen::data::pak::core::AssetDirectoryEntry& entry, DumpContext& ctx,
     const size_t idx, oxygen::content::AssetLoader& asset_loader) const
     -> oxygen::co::Co<> override
   {

@@ -20,7 +20,7 @@ class InputActionAsset final : public Asset {
 
 public:
   OXGN_DATA_API InputActionAsset(
-    AssetKey asset_key, pak::InputActionAssetDesc desc);
+    AssetKey asset_key, pak::input::InputActionAssetDesc desc);
 
   ~InputActionAsset() override = default;
 
@@ -28,20 +28,21 @@ public:
   OXYGEN_DEFAULT_MOVABLE(InputActionAsset)
 
   [[nodiscard]] auto GetHeader() const noexcept
-    -> const pak::AssetHeader& override
+    -> const pak::core::AssetHeader& override
   {
     return desc_.header;
   }
 
-  [[nodiscard]] auto GetFlags() const noexcept -> pak::InputActionAssetFlags
+  [[nodiscard]] auto GetFlags() const noexcept
+    -> pak::input::InputActionAssetFlags
   {
     return desc_.flags;
   }
 
   [[nodiscard]] auto ConsumesInput() const noexcept -> bool
   {
-    return (desc_.flags & pak::InputActionAssetFlags::kConsumesInput)
-      == pak::InputActionAssetFlags::kConsumesInput;
+    return (desc_.flags & pak::input::InputActionAssetFlags::kConsumesInput)
+      == pak::input::InputActionAssetFlags::kConsumesInput;
   }
 
   [[nodiscard]] auto GetValueTypeId() const noexcept -> uint8_t
@@ -50,7 +51,7 @@ public:
   }
 
 private:
-  pak::InputActionAssetDesc desc_ {};
+  pak::input::InputActionAssetDesc desc_ {};
 };
 
 } // namespace oxygen::data

@@ -77,10 +77,10 @@ public:
     std::shared_ptr<const IScriptCompiler> compiler) -> bool
     = 0;
   [[nodiscard]] virtual auto UnregisterCompiler(
-    data::pak::ScriptLanguage language) -> bool
+    data::pak::scripting::ScriptLanguage language) -> bool
     = 0;
   [[nodiscard]] virtual auto HasCompiler(
-    data::pak::ScriptLanguage language) const -> bool
+    data::pak::scripting::ScriptLanguage language) const -> bool
     = 0;
 
   [[nodiscard]] virtual auto CompileAsync(Request request) -> co::Co<Result>

@@ -248,7 +248,7 @@ auto WorkDispatcher::EmitTexturePayload(TexturePipeline::WorkResult& result)
 
     // Ensure the texture emitter is initialized so the fallback index is valid.
     [[maybe_unused]] auto& texture_emitter = session_.TextureEmitter();
-    return data::pak::kFallbackResourceIndex;
+    return data::pak::core::kFallbackResourceIndex;
   }
 
   if (!result.success || !result.cooked.has_value()) {
@@ -264,7 +264,7 @@ auto WorkDispatcher::EmitTexturePayload(TexturePipeline::WorkResult& result)
     if (!has_diagnostics) {
       return std::nullopt;
     }
-    using data::pak::ResourceIndexT;
+    using data::pak::core::ResourceIndexT;
     constexpr ResourceIndexT kErrorTextureIndex { (
       std::numeric_limits<uint32_t>::max)() };
     return kErrorTextureIndex;
@@ -357,7 +357,7 @@ auto WorkDispatcher::UpdateMaterialBindings(
         binding.source_id));
       DLOG_F(WARNING, "Material '{}' missing texture '{}' ({})", item.source_id,
         binding.source_id, label);
-      using data::pak::ResourceIndexT;
+      using data::pak::core::ResourceIndexT;
       constexpr ResourceIndexT kErrorTextureIndex { (
         std::numeric_limits<uint32_t>::max)() };
       binding.index = kErrorTextureIndex;
@@ -1055,22 +1055,26 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       auto& lod_binding = bindings[lod_index];
       switch (kind) {
       case GeometryBufferKind::kVertex:
-        lod_binding.vertex_buffer = data::pak::ResourceIndexT { emitted };
+        lod_binding.vertex_buffer = data::pak::core::ResourceIndexT { emitted };
         break;
       case GeometryBufferKind::kIndex:
-        lod_binding.index_buffer = data::pak::ResourceIndexT { emitted };
+        lod_binding.index_buffer = data::pak::core::ResourceIndexT { emitted };
         break;
       case GeometryBufferKind::kJointIndex:
-        lod_binding.joint_index_buffer = data::pak::ResourceIndexT { emitted };
+        lod_binding.joint_index_buffer
+          = data::pak::core::ResourceIndexT { emitted };
         break;
       case GeometryBufferKind::kJointWeight:
-        lod_binding.joint_weight_buffer = data::pak::ResourceIndexT { emitted };
+        lod_binding.joint_weight_buffer
+          = data::pak::core::ResourceIndexT { emitted };
         break;
       case GeometryBufferKind::kInverseBind:
-        lod_binding.inverse_bind_buffer = data::pak::ResourceIndexT { emitted };
+        lod_binding.inverse_bind_buffer
+          = data::pak::core::ResourceIndexT { emitted };
         break;
       case GeometryBufferKind::kJointRemap:
-        lod_binding.joint_remap_buffer = data::pak::ResourceIndexT { emitted };
+        lod_binding.joint_remap_buffer
+          = data::pak::core::ResourceIndexT { emitted };
         break;
       }
 

@@ -12,20 +12,22 @@
 
 namespace oxygen::data {
 
-static_assert(std::is_trivially_copyable_v<pak::InputMappingContextAssetDesc>,
+static_assert(
+  std::is_trivially_copyable_v<pak::input::InputMappingContextAssetDesc>,
   "InputMappingContextAssetDesc must be trivially copyable");
-static_assert(std::is_trivially_copyable_v<pak::InputActionMappingRecord>,
+static_assert(
+  std::is_trivially_copyable_v<pak::input::InputActionMappingRecord>,
   "InputActionMappingRecord must be trivially copyable");
-static_assert(std::is_trivially_copyable_v<pak::InputTriggerRecord>,
+static_assert(std::is_trivially_copyable_v<pak::input::InputTriggerRecord>,
   "InputTriggerRecord must be trivially copyable");
-static_assert(std::is_trivially_copyable_v<pak::InputTriggerAuxRecord>,
+static_assert(std::is_trivially_copyable_v<pak::input::InputTriggerAuxRecord>,
   "InputTriggerAuxRecord must be trivially copyable");
 
 InputMappingContextAsset::InputMappingContextAsset(AssetKey asset_key,
-  pak::InputMappingContextAssetDesc desc,
-  std::vector<pak::InputActionMappingRecord> mappings,
-  std::vector<pak::InputTriggerRecord> triggers,
-  std::vector<pak::InputTriggerAuxRecord> trigger_aux,
+  pak::input::InputMappingContextAssetDesc desc,
+  std::vector<pak::input::InputActionMappingRecord> mappings,
+  std::vector<pak::input::InputTriggerRecord> triggers,
+  std::vector<pak::input::InputTriggerAuxRecord> trigger_aux,
   std::vector<char> strings)
   : Asset(asset_key)
   , desc_(desc)

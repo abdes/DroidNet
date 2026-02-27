@@ -147,35 +147,35 @@ private:
     const data::PhysicsSceneAsset& physics_asset) -> co::Co<>;
   //! Attach rigid-body bindings; hard-fail on invalid/unsupported data.
   void HydrateRigidBodyBindings(physics::PhysicsModule& physics_module,
-    std::span<const data::pak::RigidBodyBindingRecord> bindings);
+    std::span<const data::pak::physics::RigidBodyBindingRecord> bindings);
   //! Attach character bindings; hard-fail on invalid/unsupported data.
   void HydrateCharacterBindings(physics::PhysicsModule& physics_module,
-    std::span<const data::pak::CharacterBindingRecord> bindings);
+    std::span<const data::pak::physics::CharacterBindingRecord> bindings);
   //! Attach collider-only bindings as static trigger bodies.
   void HydrateColliderBindings(physics::PhysicsModule& physics_module,
-    std::span<const data::pak::ColliderBindingRecord> bindings);
+    std::span<const data::pak::physics::ColliderBindingRecord> bindings);
   //! Attach joint bindings between already-hydrated rigid bodies.
   void HydrateJointBindings(physics::PhysicsModule& physics_module,
-    std::span<const data::pak::JointBindingRecord> bindings);
+    std::span<const data::pak::physics::JointBindingRecord> bindings);
   //! Resolve and decode cooked collision shape descriptor by global asset
   //! index.
   auto ResolveCollisionShapeAsset(uint32_t shape_asset_index,
     std::string_view binding_kind, uint32_t node_index)
-    -> data::pak::CollisionShapeAssetDesc;
+    -> data::pak::physics::CollisionShapeAssetDesc;
   //! Resolve and decode cooked physics material descriptor by global asset
   //! index.
   auto ResolvePhysicsMaterialAsset(uint32_t material_asset_index,
     std::string_view binding_kind, uint32_t node_index)
-    -> data::pak::PhysicsMaterialAssetDesc;
+    -> data::pak::physics::PhysicsMaterialAssetDesc;
   //! Convert cooked collision-shape descriptor to runtime physics shape.
   auto BuildCollisionShapeFromDescriptor(
-    const data::pak::CollisionShapeAssetDesc& shape_desc,
+    const data::pak::physics::CollisionShapeAssetDesc& shape_desc,
     std::string_view binding_kind, uint32_t node_index)
     -> physics::CollisionShape;
   //! Resolve cooked shape payload bytes from physics resource table/region.
   auto ResolveCookedShapePayload(
-    const data::pak::CollisionShapeAssetDesc& shape_desc,
-    data::pak::ShapePayloadType expected_payload_type,
+    const data::pak::physics::CollisionShapeAssetDesc& shape_desc,
+    data::pak::physics::ShapePayloadType expected_payload_type,
     std::string_view binding_kind, uint32_t node_index) const
     -> physics::CookedShapePayload;
   //! Enforce explicit failure for sidecar domains not yet hydrated.
@@ -205,7 +205,7 @@ private:
   //! Apply script parameter overrides for one slot.
   void ApplySlotParameters(scene::SceneNode::Scripting& scripting,
     const scene::SceneNode::Scripting::Slot& slot,
-    std::span<const data::pak::ScriptParamRecord> params);
+    std::span<const data::pak::scripting::ScriptParamRecord> params);
   //! Queue script compilation for a slot when source is available.
   void QueueSlotCompilation(scene::SceneNode node,
     const scene::SceneNode::Scripting::Slot& slot,

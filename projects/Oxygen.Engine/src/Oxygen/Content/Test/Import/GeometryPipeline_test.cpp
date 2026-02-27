@@ -353,12 +353,14 @@ NOLINT_TEST_F(
   EXPECT_EQ(lod0.index_buffer.data.size(), sizeof(uint32_t) * 3u);
 
   const auto& bytes = cooked.descriptor_bytes;
-  ASSERT_GE(bytes.size(), sizeof(data::pak::GeometryAssetDesc));
+  ASSERT_GE(bytes.size(), sizeof(data::pak::geometry::GeometryAssetDesc));
 
-  const auto asset_desc = ReadStructAt<data::pak::GeometryAssetDesc>(bytes, 0);
+  const auto asset_desc
+    = ReadStructAt<data::pak::geometry::GeometryAssetDesc>(bytes, 0);
   EXPECT_EQ(asset_desc.header.asset_type,
     static_cast<uint8_t>(data::AssetType::kGeometry));
-  EXPECT_EQ(asset_desc.header.version, data::pak::kGeometryAssetVersion);
+  EXPECT_EQ(
+    asset_desc.header.version, data::pak::geometry::kGeometryAssetVersion);
   EXPECT_EQ(asset_desc.lod_count, 1u);
   EXPECT_NE((asset_desc.header.variant_flags & kGeomAttr_Normal), 0u);
   EXPECT_NE((asset_desc.header.variant_flags & kGeomAttr_Tangent), 0u);
@@ -368,20 +370,23 @@ NOLINT_TEST_F(
   EXPECT_EQ((asset_desc.header.variant_flags & kGeomAttr_JointIndices), 0u);
   EXPECT_EQ((asset_desc.header.variant_flags & kGeomAttr_JointWeights), 0u);
 
-  size_t offset = sizeof(data::pak::GeometryAssetDesc);
-  const auto mesh_desc = ReadStructAt<data::pak::MeshDesc>(bytes, offset);
+  size_t offset = sizeof(data::pak::geometry::GeometryAssetDesc);
+  const auto mesh_desc
+    = ReadStructAt<data::pak::geometry::MeshDesc>(bytes, offset);
   EXPECT_EQ(mesh_desc.submesh_count, 1u);
   EXPECT_EQ(mesh_desc.mesh_view_count, 1u);
   EXPECT_EQ(
     mesh_desc.mesh_type, static_cast<uint8_t>(data::MeshType::kStandard));
 
-  offset += sizeof(data::pak::MeshDesc);
-  const auto submesh_desc = ReadStructAt<data::pak::SubMeshDesc>(bytes, offset);
+  offset += sizeof(data::pak::geometry::MeshDesc);
+  const auto submesh_desc
+    = ReadStructAt<data::pak::geometry::SubMeshDesc>(bytes, offset);
   EXPECT_EQ(submesh_desc.mesh_view_count, 1u);
   EXPECT_EQ(submesh_desc.material_asset_key, MakeDefaultMaterialKey());
 
-  offset += sizeof(data::pak::SubMeshDesc);
-  const auto view_desc = ReadStructAt<data::pak::MeshViewDesc>(bytes, offset);
+  offset += sizeof(data::pak::geometry::SubMeshDesc);
+  const auto view_desc
+    = ReadStructAt<data::pak::geometry::MeshViewDesc>(bytes, offset);
   EXPECT_EQ(view_desc.first_index, 0u);
   EXPECT_EQ(view_desc.index_count, 3u);
   EXPECT_EQ(view_desc.vertex_count, 3u);
@@ -397,9 +402,10 @@ NOLINT_TEST_F(
   co::ThreadPool pool(loop_, 2);
 
   auto item = MakeWorkItem(buffers);
-  item.mesh_name = std::string(data::pak::kMaxNameSize + 8, 'M');
+  item.mesh_name = std::string(data::pak::core::kMaxNameSize + 8, 'M');
   item.storage_mesh_name = item.mesh_name;
-  item.lods.front().lod_name = std::string(data::pak::kMaxNameSize + 8, 'L');
+  item.lods.front().lod_name
+    = std::string(data::pak::core::kMaxNameSize + 8, 'L');
 
   // Act
   co::Run(loop_, [&]() -> co::Co<> {
@@ -463,28 +469,31 @@ NOLINT_TEST_F(GeometryPipelineBasicTest, CollectWithSkinnedMeshEmitsSkinnedBlob)
   ASSERT_EQ(cooked.lods.size(), 1u);
 
   const auto& bytes = cooked.descriptor_bytes;
-  ASSERT_GE(bytes.size(), sizeof(data::pak::GeometryAssetDesc));
+  ASSERT_GE(bytes.size(), sizeof(data::pak::geometry::GeometryAssetDesc));
 
-  size_t offset = sizeof(data::pak::GeometryAssetDesc);
-  const auto mesh_desc = ReadStructAt<data::pak::MeshDesc>(bytes, offset);
+  size_t offset = sizeof(data::pak::geometry::GeometryAssetDesc);
+  const auto mesh_desc
+    = ReadStructAt<data::pak::geometry::MeshDesc>(bytes, offset);
   EXPECT_EQ(
     mesh_desc.mesh_type, static_cast<uint8_t>(data::MeshType::kSkinned));
   EXPECT_EQ(mesh_desc.submesh_count, 1u);
   EXPECT_EQ(mesh_desc.mesh_view_count, 1u);
 
-  offset += sizeof(data::pak::MeshDesc);
+  offset += sizeof(data::pak::geometry::MeshDesc);
   const auto skinned_blob
-    = ReadStructAt<data::pak::SkinnedMeshInfo>(bytes, offset);
+    = ReadStructAt<data::pak::geometry::SkinnedMeshInfo>(bytes, offset);
   EXPECT_EQ(skinned_blob.joint_count, 3u);
   EXPECT_EQ(skinned_blob.influences_per_vertex, 4u);
 
-  offset += sizeof(data::pak::SkinnedMeshInfo);
-  const auto submesh_desc = ReadStructAt<data::pak::SubMeshDesc>(bytes, offset);
+  offset += sizeof(data::pak::geometry::SkinnedMeshInfo);
+  const auto submesh_desc
+    = ReadStructAt<data::pak::geometry::SubMeshDesc>(bytes, offset);
   EXPECT_EQ(submesh_desc.mesh_view_count, 1u);
   EXPECT_EQ(submesh_desc.material_asset_key, MakeDefaultMaterialKey());
 
-  offset += sizeof(data::pak::SubMeshDesc);
-  const auto view_desc = ReadStructAt<data::pak::MeshViewDesc>(bytes, offset);
+  offset += sizeof(data::pak::geometry::SubMeshDesc);
+  const auto view_desc
+    = ReadStructAt<data::pak::geometry::MeshViewDesc>(bytes, offset);
   EXPECT_EQ(view_desc.first_index, 0u);
   EXPECT_EQ(view_desc.index_count, 3u);
   EXPECT_EQ(view_desc.vertex_count, 3u);
@@ -596,8 +605,8 @@ NOLINT_TEST_F(
       }
 
       const MeshBufferBindings bindings {
-        .vertex_buffer = data::pak::ResourceIndexT { 11u },
-        .index_buffer = data::pak::ResourceIndexT { 22u },
+        .vertex_buffer = data::pak::core::ResourceIndexT { 11u },
+        .index_buffer = data::pak::core::ResourceIndexT { 22u },
       };
 
       finalized = co_await finalizer.FinalizeDescriptorBytes(
@@ -613,11 +622,13 @@ NOLINT_TEST_F(
   ASSERT_TRUE(diagnostics.empty());
 
   const auto& bytes = *finalized;
-  const auto asset_desc = ReadStructAt<data::pak::GeometryAssetDesc>(bytes, 0);
+  const auto asset_desc
+    = ReadStructAt<data::pak::geometry::GeometryAssetDesc>(bytes, 0);
   EXPECT_NE(asset_desc.header.content_hash, 0u);
 
-  size_t offset = sizeof(data::pak::GeometryAssetDesc);
-  const auto mesh_desc = ReadStructAt<data::pak::MeshDesc>(bytes, offset);
+  size_t offset = sizeof(data::pak::geometry::GeometryAssetDesc);
+  const auto mesh_desc
+    = ReadStructAt<data::pak::geometry::MeshDesc>(bytes, offset);
   EXPECT_EQ(mesh_desc.info.standard.vertex_buffer, 11u);
   EXPECT_EQ(mesh_desc.info.standard.index_buffer, 22u);
 }

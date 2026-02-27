@@ -16,12 +16,12 @@
 namespace oxygen::serio {
 
 // ResourceIndexT is a NamedType; deserialize from its packed uint32 payload.
-inline auto Load(AnyReader& reader, data::pak::ResourceIndexT& value)
+inline auto Load(AnyReader& reader, data::pak::core::ResourceIndexT& value)
   -> Result<void>
 {
   uint32_t raw_value = 0;
   CHECK_RESULT(reader.ReadInto(raw_value));
-  value = data::pak::ResourceIndexT { raw_value };
+  value = data::pak::core::ResourceIndexT { raw_value };
   return {};
 }
 
@@ -33,7 +33,7 @@ inline auto Load(AnyReader& reader, data::AssetKey& key) -> Result<void>
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::AssetHeader& header)
+inline auto Load(AnyReader& reader, data::pak::core::AssetHeader& header)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
@@ -49,7 +49,7 @@ inline auto Load(AnyReader& reader, data::pak::AssetHeader& header)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::ResourceRegion& region)
+inline auto Load(AnyReader& reader, data::pak::core::ResourceRegion& region)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
@@ -58,7 +58,7 @@ inline auto Load(AnyReader& reader, data::pak::ResourceRegion& region)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::ResourceTable& table)
+inline auto Load(AnyReader& reader, data::pak::core::ResourceTable& table)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
@@ -68,7 +68,7 @@ inline auto Load(AnyReader& reader, data::pak::ResourceTable& table)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::PakHeader& header)
+inline auto Load(AnyReader& reader, data::pak::core::PakHeader& header)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
@@ -83,7 +83,7 @@ inline auto Load(AnyReader& reader, data::pak::PakHeader& header)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::PakFooter& footer)
+inline auto Load(AnyReader& reader, data::pak::core::PakFooter& footer)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
@@ -110,10 +110,9 @@ inline auto Load(AnyReader& reader, data::pak::PakFooter& footer)
     std::as_writable_bytes(std::span { footer.footer_magic })));
   return {};
 }
-// Note: v7 versions are explicit because of the footer field changes
-// All other versions and common types are handled below.
+// Note: v7 is the only supported schema for PakHeader/PakFooter in core.
 
-inline auto Load(AnyReader& reader, data::pak::AssetDirectoryEntry& entry)
+inline auto Load(AnyReader& reader, data::pak::core::AssetDirectoryEntry& entry)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
@@ -127,8 +126,8 @@ inline auto Load(AnyReader& reader, data::pak::AssetDirectoryEntry& entry)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::PakBrowseIndexHeader& header)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::core::PakBrowseIndexHeader& header) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(
@@ -140,7 +139,7 @@ inline auto Load(AnyReader& reader, data::pak::PakBrowseIndexHeader& header)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::PakBrowseIndexEntry& entry)
+inline auto Load(AnyReader& reader, data::pak::core::PakBrowseIndexEntry& entry)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
@@ -150,7 +149,7 @@ inline auto Load(AnyReader& reader, data::pak::PakBrowseIndexEntry& entry)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::BufferResourceDesc& desc)
+inline auto Load(AnyReader& reader, data::pak::core::BufferResourceDesc& desc)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
@@ -164,8 +163,8 @@ inline auto Load(AnyReader& reader, data::pak::BufferResourceDesc& desc)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::TextureResourceDesc& desc)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::render::TextureResourceDesc& desc) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(desc.data_offset));
@@ -184,7 +183,7 @@ inline auto Load(AnyReader& reader, data::pak::TextureResourceDesc& desc)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::MeshViewDesc& desc)
+inline auto Load(AnyReader& reader, data::pak::geometry::MeshViewDesc& desc)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
@@ -195,8 +194,8 @@ inline auto Load(AnyReader& reader, data::pak::MeshViewDesc& desc)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::ShaderReferenceDesc& desc)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::render::ShaderReferenceDesc& desc) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(desc.shader_type));
@@ -230,7 +229,7 @@ inline auto Load(AnyReader& reader, engine::ExposureMode& value) -> Result<void>
 
 //=== Scene: Nodes & Components (v2/v3) ===----------------------------------//
 
-inline auto Load(AnyReader& reader, data::pak::NodeRecord& record)
+inline auto Load(AnyReader& reader, data::pak::world::NodeRecord& record)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
@@ -254,7 +253,7 @@ inline auto Load(AnyReader& reader, data::pak::NodeRecord& record)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::RenderableRecord& record)
+inline auto Load(AnyReader& reader, data::pak::world::RenderableRecord& record)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
@@ -269,8 +268,8 @@ inline auto Load(AnyReader& reader, data::pak::RenderableRecord& record)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::PerspectiveCameraRecord& record)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::world::PerspectiveCameraRecord& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
 
@@ -285,8 +284,8 @@ inline auto Load(AnyReader& reader, data::pak::PerspectiveCameraRecord& record)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::OrthographicCameraRecord& record)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::world::OrthographicCameraRecord& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
 
@@ -303,8 +302,8 @@ inline auto Load(AnyReader& reader, data::pak::OrthographicCameraRecord& record)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::ScriptingComponentRecord& record)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::scripting::ScriptingComponentRecord& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
 
@@ -318,8 +317,8 @@ inline auto Load(AnyReader& reader, data::pak::ScriptingComponentRecord& record)
 
 //=== Scene: Environment (v3+) ===------------------------------------------//
 
-inline auto Load(AnyReader& reader, data::pak::SceneEnvironmentBlockHeader& hdr)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::world::SceneEnvironmentBlockHeader& hdr) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(hdr.byte_size));
@@ -330,7 +329,7 @@ inline auto Load(AnyReader& reader, data::pak::SceneEnvironmentBlockHeader& hdr)
 }
 
 inline auto Load(AnyReader& reader,
-  data::pak::SceneEnvironmentSystemRecordHeader& hdr) -> Result<void>
+  data::pak::world::SceneEnvironmentSystemRecordHeader& hdr) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(hdr.system_type));
@@ -339,7 +338,7 @@ inline auto Load(AnyReader& reader,
 }
 
 inline auto Load(AnyReader& reader,
-  data::pak::SkyAtmosphereEnvironmentRecord& r) -> Result<void>
+  data::pak::world::SkyAtmosphereEnvironmentRecord& r) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
 
@@ -378,7 +377,7 @@ inline auto Load(AnyReader& reader,
 }
 
 inline auto Load(AnyReader& reader,
-  data::pak::VolumetricCloudsEnvironmentRecord& r) -> Result<void>
+  data::pak::world::VolumetricCloudsEnvironmentRecord& r) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
 
@@ -406,7 +405,7 @@ inline auto Load(AnyReader& reader,
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::FogEnvironmentRecord& r)
+inline auto Load(AnyReader& reader, data::pak::world::FogEnvironmentRecord& r)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
@@ -430,8 +429,8 @@ inline auto Load(AnyReader& reader, data::pak::FogEnvironmentRecord& r)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::SkyLightEnvironmentRecord& r)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::world::SkyLightEnvironmentRecord& r) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
 
@@ -454,8 +453,8 @@ inline auto Load(AnyReader& reader, data::pak::SkyLightEnvironmentRecord& r)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::SkySphereEnvironmentRecord& r)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::world::SkySphereEnvironmentRecord& r) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
 
@@ -481,7 +480,7 @@ inline auto Load(AnyReader& reader, data::pak::SkySphereEnvironmentRecord& r)
 }
 
 inline auto Load(AnyReader& reader,
-  data::pak::PostProcessVolumeEnvironmentRecord& r) -> Result<void>
+  data::pak::world::PostProcessVolumeEnvironmentRecord& r) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
 
@@ -507,8 +506,8 @@ inline auto Load(AnyReader& reader,
 
 //=== Scene: Lights (v3+) ===------------------------------------------------//
 
-inline auto Load(AnyReader& reader, data::pak::LightShadowSettingsRecord& r)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::world::LightShadowSettingsRecord& r) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
 
@@ -522,7 +521,7 @@ inline auto Load(AnyReader& reader, data::pak::LightShadowSettingsRecord& r)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::LightCommonRecord& r)
+inline auto Load(AnyReader& reader, data::pak::world::LightCommonRecord& r)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
@@ -546,7 +545,7 @@ inline auto Load(AnyReader& reader, data::pak::LightCommonRecord& r)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::DirectionalLightRecord& r)
+inline auto Load(AnyReader& reader, data::pak::world::DirectionalLightRecord& r)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
@@ -569,7 +568,7 @@ inline auto Load(AnyReader& reader, data::pak::DirectionalLightRecord& r)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::PointLightRecord& r)
+inline auto Load(AnyReader& reader, data::pak::world::PointLightRecord& r)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
@@ -589,7 +588,7 @@ inline auto Load(AnyReader& reader, data::pak::PointLightRecord& r)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::SpotLightRecord& r)
+inline auto Load(AnyReader& reader, data::pak::world::SpotLightRecord& r)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
@@ -613,7 +612,7 @@ inline auto Load(AnyReader& reader, data::pak::SpotLightRecord& r)
 
 //=== Input (v6) ===---------------------------------------------------------//
 
-inline auto Load(AnyReader& reader, data::pak::InputDataTable& record)
+inline auto Load(AnyReader& reader, data::pak::input::InputDataTable& record)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
@@ -625,8 +624,8 @@ inline auto Load(AnyReader& reader, data::pak::InputDataTable& record)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::InputActionMappingRecord& record)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::input::InputActionMappingRecord& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
 
@@ -648,8 +647,8 @@ inline auto Load(AnyReader& reader, data::pak::InputActionMappingRecord& record)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::InputTriggerRecord& record)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::input::InputTriggerRecord& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
 
@@ -674,8 +673,8 @@ inline auto Load(AnyReader& reader, data::pak::InputTriggerRecord& record)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::InputTriggerAuxRecord& record)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::input::InputTriggerAuxRecord& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
 
@@ -689,7 +688,7 @@ inline auto Load(AnyReader& reader, data::pak::InputTriggerAuxRecord& record)
 }
 
 inline auto Load(AnyReader& reader,
-  data::pak::InputContextBindingRecord& record) -> Result<void>
+  data::pak::input::InputContextBindingRecord& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
 
@@ -705,98 +704,100 @@ inline auto Load(AnyReader& reader,
 
 //=== Physics (v7) ===-------------------------------------------------------//
 
-inline auto Load(AnyReader& reader, data::pak::v7::PhysicsResourceFormat& value)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::physics::PhysicsResourceFormat& value) -> Result<void>
 {
-  std::underlying_type_t<data::pak::v7::PhysicsResourceFormat> raw_value = 0;
+  std::underlying_type_t<data::pak::physics::PhysicsResourceFormat> raw_value
+    = 0;
   CHECK_RESULT(reader.ReadInto(raw_value));
-  value = static_cast<data::pak::v7::PhysicsResourceFormat>(raw_value);
+  value = static_cast<data::pak::physics::PhysicsResourceFormat>(raw_value);
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::v7::PhysicsCombineMode& value)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::physics::PhysicsCombineMode& value) -> Result<void>
 {
-  std::underlying_type_t<data::pak::v7::PhysicsCombineMode> raw_value = 0;
+  std::underlying_type_t<data::pak::physics::PhysicsCombineMode> raw_value = 0;
   CHECK_RESULT(reader.ReadInto(raw_value));
-  value = static_cast<data::pak::v7::PhysicsCombineMode>(raw_value);
+  value = static_cast<data::pak::physics::PhysicsCombineMode>(raw_value);
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::v7::ShapeType& value)
+inline auto Load(AnyReader& reader, data::pak::physics::ShapeType& value)
   -> Result<void>
 {
-  std::underlying_type_t<data::pak::v7::ShapeType> raw_value = 0;
+  std::underlying_type_t<data::pak::physics::ShapeType> raw_value = 0;
   CHECK_RESULT(reader.ReadInto(raw_value));
-  value = static_cast<data::pak::v7::ShapeType>(raw_value);
+  value = static_cast<data::pak::physics::ShapeType>(raw_value);
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::v7::ShapePayloadType& value)
+inline auto Load(AnyReader& reader, data::pak::physics::ShapePayloadType& value)
   -> Result<void>
 {
-  std::underlying_type_t<data::pak::v7::ShapePayloadType> raw_value = 0;
+  std::underlying_type_t<data::pak::physics::ShapePayloadType> raw_value = 0;
   CHECK_RESULT(reader.ReadInto(raw_value));
-  value = static_cast<data::pak::v7::ShapePayloadType>(raw_value);
+  value = static_cast<data::pak::physics::ShapePayloadType>(raw_value);
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::v7::WorldBoundaryMode& value)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::physics::WorldBoundaryMode& value) -> Result<void>
 {
-  std::underlying_type_t<data::pak::v7::WorldBoundaryMode> raw_value = 0;
+  std::underlying_type_t<data::pak::physics::WorldBoundaryMode> raw_value = 0;
   CHECK_RESULT(reader.ReadInto(raw_value));
-  value = static_cast<data::pak::v7::WorldBoundaryMode>(raw_value);
+  value = static_cast<data::pak::physics::WorldBoundaryMode>(raw_value);
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::v7::PhysicsBodyType& value)
+inline auto Load(AnyReader& reader, data::pak::physics::PhysicsBodyType& value)
   -> Result<void>
 {
-  std::underlying_type_t<data::pak::v7::PhysicsBodyType> raw_value = 0;
+  std::underlying_type_t<data::pak::physics::PhysicsBodyType> raw_value = 0;
   CHECK_RESULT(reader.ReadInto(raw_value));
-  value = static_cast<data::pak::v7::PhysicsBodyType>(raw_value);
+  value = static_cast<data::pak::physics::PhysicsBodyType>(raw_value);
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::v7::PhysicsMotionQuality& value)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::physics::PhysicsMotionQuality& value) -> Result<void>
 {
-  std::underlying_type_t<data::pak::v7::PhysicsMotionQuality> raw_value = 0;
+  std::underlying_type_t<data::pak::physics::PhysicsMotionQuality> raw_value
+    = 0;
   CHECK_RESULT(reader.ReadInto(raw_value));
-  value = static_cast<data::pak::v7::PhysicsMotionQuality>(raw_value);
+  value = static_cast<data::pak::physics::PhysicsMotionQuality>(raw_value);
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::v7::SoftBodyTetherMode& value)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::physics::SoftBodyTetherMode& value) -> Result<void>
 {
-  std::underlying_type_t<data::pak::v7::SoftBodyTetherMode> raw_value = 0;
+  std::underlying_type_t<data::pak::physics::SoftBodyTetherMode> raw_value = 0;
   CHECK_RESULT(reader.ReadInto(raw_value));
-  value = static_cast<data::pak::v7::SoftBodyTetherMode>(raw_value);
+  value = static_cast<data::pak::physics::SoftBodyTetherMode>(raw_value);
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::v7::AggregateAuthority& value)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::physics::AggregateAuthority& value) -> Result<void>
 {
-  std::underlying_type_t<data::pak::v7::AggregateAuthority> raw_value = 0;
+  std::underlying_type_t<data::pak::physics::AggregateAuthority> raw_value = 0;
   CHECK_RESULT(reader.ReadInto(raw_value));
-  value = static_cast<data::pak::v7::AggregateAuthority>(raw_value);
+  value = static_cast<data::pak::physics::AggregateAuthority>(raw_value);
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::v7::PhysicsBindingType& value)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::physics::PhysicsBindingType& value) -> Result<void>
 {
-  std::underlying_type_t<data::pak::v7::PhysicsBindingType> raw_value = 0;
+  std::underlying_type_t<data::pak::physics::PhysicsBindingType> raw_value = 0;
   CHECK_RESULT(reader.ReadInto(raw_value));
-  value = static_cast<data::pak::v7::PhysicsBindingType>(raw_value);
+  value = static_cast<data::pak::physics::PhysicsBindingType>(raw_value);
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::v7::PhysicsResourceDesc& record)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::physics::PhysicsResourceDesc& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.data_offset));
@@ -809,7 +810,7 @@ inline auto Load(AnyReader& reader, data::pak::v7::PhysicsResourceDesc& record)
 }
 
 inline auto Load(AnyReader& reader,
-  data::pak::v7::PhysicsMaterialAssetDesc& record) -> Result<void>
+  data::pak::physics::PhysicsMaterialAssetDesc& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.header));
@@ -824,7 +825,7 @@ inline auto Load(AnyReader& reader,
 }
 
 inline auto Load(AnyReader& reader,
-  data::pak::v7::CookedShapePayloadRef& record) -> Result<void>
+  data::pak::physics::CookedShapePayloadRef& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.resource_index));
@@ -834,7 +835,7 @@ inline auto Load(AnyReader& reader,
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::v7::ShapeParams& record)
+inline auto Load(AnyReader& reader, data::pak::physics::ShapeParams& record)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
@@ -843,8 +844,8 @@ inline auto Load(AnyReader& reader, data::pak::v7::ShapeParams& record)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::v7::ShapeDescriptor& record)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::physics::CollisionShapeAssetDesc& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.header));
@@ -870,7 +871,7 @@ inline auto Load(AnyReader& reader, data::pak::v7::ShapeDescriptor& record)
 }
 
 inline auto Load(AnyReader& reader,
-  data::pak::v7::PhysicsComponentTableDesc& record) -> Result<void>
+  data::pak::physics::PhysicsComponentTableDesc& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.binding_type));
@@ -879,7 +880,7 @@ inline auto Load(AnyReader& reader,
 }
 
 inline auto Load(AnyReader& reader,
-  data::pak::v7::PhysicsSceneAssetDesc& record) -> Result<void>
+  data::pak::physics::PhysicsSceneAssetDesc& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.header));
@@ -893,7 +894,7 @@ inline auto Load(AnyReader& reader,
 }
 
 inline auto Load(AnyReader& reader,
-  data::pak::v7::RigidBodyBindingRecord& record) -> Result<void>
+  data::pak::physics::RigidBodyBindingRecord& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.node_index));
@@ -915,7 +916,7 @@ inline auto Load(AnyReader& reader,
 }
 
 inline auto Load(AnyReader& reader,
-  data::pak::v7::ColliderBindingRecord& record) -> Result<void>
+  data::pak::physics::ColliderBindingRecord& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.node_index));
@@ -929,7 +930,7 @@ inline auto Load(AnyReader& reader,
 }
 
 inline auto Load(AnyReader& reader,
-  data::pak::v7::CharacterBindingRecord& record) -> Result<void>
+  data::pak::physics::CharacterBindingRecord& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.node_index));
@@ -946,7 +947,7 @@ inline auto Load(AnyReader& reader,
 }
 
 inline auto Load(AnyReader& reader,
-  data::pak::v7::SoftBodyBindingRecord& record) -> Result<void>
+  data::pak::physics::SoftBodyBindingRecord& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.node_index));
@@ -965,8 +966,8 @@ inline auto Load(AnyReader& reader,
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::v7::JointBindingRecord& record)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::physics::JointBindingRecord& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.node_index_a));
@@ -977,8 +978,8 @@ inline auto Load(AnyReader& reader, data::pak::v7::JointBindingRecord& record)
   return {};
 }
 
-inline auto Load(AnyReader& reader, data::pak::v7::VehicleBindingRecord& record)
-  -> Result<void>
+inline auto Load(AnyReader& reader,
+  data::pak::physics::VehicleBindingRecord& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.node_index));
@@ -989,7 +990,7 @@ inline auto Load(AnyReader& reader, data::pak::v7::VehicleBindingRecord& record)
 }
 
 inline auto Load(AnyReader& reader,
-  data::pak::v7::AggregateBindingRecord& record) -> Result<void>
+  data::pak::physics::AggregateBindingRecord& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.node_index));

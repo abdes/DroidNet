@@ -198,14 +198,14 @@ public:
   }
   [[nodiscard]] auto MakeScriptResourceKeyForAsset(
     const data::AssetKey& /*context_asset_key*/,
-    data::pak::ResourceIndexT /*resource_index*/) const noexcept
+    data::pak::core::ResourceIndexT /*resource_index*/) const noexcept
     -> std::optional<content::ResourceKey> override
   {
     return std::nullopt;
   }
   [[nodiscard]] auto ReadScriptResourceForAsset(
     const data::AssetKey& /*context_asset_key*/,
-    data::pak::ResourceIndexT /*resource_index*/) const
+    data::pak::core::ResourceIndexT /*resource_index*/) const
     -> std::shared_ptr<const data::ScriptResource> override
   {
     return nullptr;
@@ -229,29 +229,29 @@ public:
     co_return nullptr;
   }
   [[nodiscard]] auto MakePhysicsResourceKey(data::SourceKey /*source_key*/,
-    data::pak::ResourceIndexT /*resource_index*/) const noexcept
+    data::pak::core::ResourceIndexT /*resource_index*/) const noexcept
     -> std::optional<content::ResourceKey> override
   {
     return std::nullopt;
   }
   [[nodiscard]] auto MakePhysicsResourceKeyForAsset(
     const data::AssetKey& /*context_asset_key*/,
-    data::pak::ResourceIndexT /*resource_index*/) const noexcept
+    data::pak::core::ResourceIndexT /*resource_index*/) const noexcept
     -> std::optional<content::ResourceKey> override
   {
     return std::nullopt;
   }
   [[nodiscard]] auto ReadCollisionShapeAssetDescForAsset(
     const data::AssetKey& /*context_asset_key*/,
-    data::pak::ResourceIndexT /*shape_asset_index*/) const
-    -> std::optional<data::pak::CollisionShapeAssetDesc> override
+    data::pak::core::ResourceIndexT /*shape_asset_index*/) const
+    -> std::optional<data::pak::physics::CollisionShapeAssetDesc> override
   {
     return std::nullopt;
   }
   [[nodiscard]] auto ReadPhysicsMaterialAssetDescForAsset(
     const data::AssetKey& /*context_asset_key*/,
-    data::pak::ResourceIndexT /*material_asset_index*/) const
-    -> std::optional<data::pak::PhysicsMaterialAssetDesc> override
+    data::pak::core::ResourceIndexT /*material_asset_index*/) const
+    -> std::optional<data::pak::physics::PhysicsMaterialAssetDesc> override
   {
     return std::nullopt;
   }
@@ -272,7 +272,7 @@ public:
 
   [[nodiscard]] auto GetHydratedScriptSlots(
     const data::SceneAsset& /*scene_asset*/,
-    const data::pak::ScriptingComponentRecord& /*component*/) const
+    const data::pak::scripting::ScriptingComponentRecord& /*component*/) const
     -> std::vector<HydratedScriptSlot> override
   {
     return {};

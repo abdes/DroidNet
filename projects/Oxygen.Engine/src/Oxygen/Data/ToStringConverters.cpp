@@ -140,8 +140,8 @@ auto oxygen::data::to_string(oxygen::data::BufferResource::UsageFlags value)
   return result;
 }
 
-auto oxygen::data::pak::v5::to_string(
-  const oxygen::data::pak::v5::ScriptParamType value) noexcept
+auto oxygen::data::pak::scripting::to_string(
+  const oxygen::data::pak::scripting::ScriptParamType value) noexcept
   -> std::string_view
 {
   switch (value) {
@@ -159,8 +159,8 @@ auto oxygen::data::pak::v5::to_string(
   return "__NotSupported__";
 }
 
-auto oxygen::data::pak::v5::to_string(
-  const oxygen::data::pak::v5::ScriptLanguage value) noexcept
+auto oxygen::data::pak::scripting::to_string(
+  const oxygen::data::pak::scripting::ScriptLanguage value) noexcept
   -> std::string_view
 {
   switch (value) {
@@ -171,8 +171,8 @@ auto oxygen::data::pak::v5::to_string(
   return "__NotSupported__";
 }
 
-auto oxygen::data::pak::v5::to_string(
-  const oxygen::data::pak::v5::ScriptEncoding value) noexcept
+auto oxygen::data::pak::scripting::to_string(
+  const oxygen::data::pak::scripting::ScriptEncoding value) noexcept
   -> std::string_view
 {
   switch (value) {
@@ -184,8 +184,8 @@ auto oxygen::data::pak::v5::to_string(
   return "__NotSupported__";
 }
 
-auto oxygen::data::pak::v5::to_string(
-  const oxygen::data::pak::v5::ScriptCompression value) noexcept
+auto oxygen::data::pak::scripting::to_string(
+  const oxygen::data::pak::scripting::ScriptCompression value) noexcept
   -> std::string_view
 {
   switch (value) {
@@ -197,10 +197,10 @@ auto oxygen::data::pak::v5::to_string(
   return "__NotSupported__";
 }
 
-auto oxygen::data::pak::v5::to_string(
-  const oxygen::data::pak::v5::ScriptAssetFlags value) -> std::string
+auto oxygen::data::pak::scripting::to_string(
+  const oxygen::data::pak::scripting::ScriptAssetFlags value) -> std::string
 {
-  using Flags = oxygen::data::pak::v5::ScriptAssetFlags;
+  using Flags = oxygen::data::pak::scripting::ScriptAssetFlags;
 
   if (value == Flags::kNone) {
     return "None";
@@ -230,11 +230,11 @@ auto oxygen::data::pak::v5::to_string(
   return result;
 }
 
-auto oxygen::data::pak::v5::to_string(
-  const oxygen::data::pak::v5::ScriptingComponentFlags value) noexcept
+auto oxygen::data::pak::scripting::to_string(
+  const oxygen::data::pak::scripting::ScriptingComponentFlags value) noexcept
   -> std::string
 {
-  using Flags = oxygen::data::pak::v5::ScriptingComponentFlags;
+  using Flags = oxygen::data::pak::scripting::ScriptingComponentFlags;
 
   if (value == Flags::kNone) {
     return "None";
@@ -264,10 +264,11 @@ auto oxygen::data::pak::v5::to_string(
   return result;
 }
 
-auto oxygen::data::pak::v5::to_string(
-  const oxygen::data::pak::v5::ScriptSlotFlags value) noexcept -> std::string
+auto oxygen::data::pak::scripting::to_string(
+  const oxygen::data::pak::scripting::ScriptSlotFlags value) noexcept
+  -> std::string
 {
-  using Flags = oxygen::data::pak::v5::ScriptSlotFlags;
+  using Flags = oxygen::data::pak::scripting::ScriptSlotFlags;
 
   if (value == Flags::kNone) {
     return "None";
@@ -297,8 +298,8 @@ auto oxygen::data::pak::v5::to_string(
   return result;
 }
 
-auto oxygen::data::pak::v6::to_string(
-  const oxygen::data::pak::v6::InputTriggerType value) noexcept
+auto oxygen::data::pak::input::to_string(
+  const oxygen::data::pak::input::InputTriggerType value) noexcept
   -> std::string_view
 {
   switch (value) {
@@ -326,8 +327,8 @@ auto oxygen::data::pak::v6::to_string(
   return "__NotSupported__";
 }
 
-auto oxygen::data::pak::v6::to_string(
-  const oxygen::data::pak::v6::InputTriggerBehavior value) noexcept
+auto oxygen::data::pak::input::to_string(
+  const oxygen::data::pak::input::InputTriggerBehavior value) noexcept
   -> std::string_view
 {
   switch (value) {
@@ -341,10 +342,10 @@ auto oxygen::data::pak::v6::to_string(
   return "__NotSupported__";
 }
 
-auto oxygen::data::pak::v6::to_string(
-  const oxygen::data::pak::v6::InputActionAssetFlags value) -> std::string
+auto oxygen::data::pak::input::to_string(
+  const oxygen::data::pak::input::InputActionAssetFlags value) -> std::string
 {
-  using Flags = oxygen::data::pak::v6::InputActionAssetFlags;
+  using Flags = oxygen::data::pak::input::InputActionAssetFlags;
 
   if (value == Flags::kNone) {
     return "None";
@@ -371,10 +372,10 @@ auto oxygen::data::pak::v6::to_string(
   return result;
 }
 
-auto oxygen::data::pak::v6::to_string(
-  const oxygen::data::pak::v6::InputMappingContextFlags value) -> std::string
+auto oxygen::data::pak::input::to_string(
+  const oxygen::data::pak::input::InputMappingContextFlags value) -> std::string
 {
-  using Flags = oxygen::data::pak::v6::InputMappingContextFlags;
+  using Flags = oxygen::data::pak::input::InputMappingContextFlags;
 
   if (value == Flags::kNone) {
     return "None";
@@ -387,10 +388,10 @@ auto oxygen::data::pak::v6::to_string(
   return result;
 }
 
-auto oxygen::data::pak::v6::to_string(
-  const oxygen::data::pak::v6::InputMappingFlags value) -> std::string
+auto oxygen::data::pak::input::to_string(
+  const oxygen::data::pak::input::InputMappingFlags value) -> std::string
 {
-  using Flags = oxygen::data::pak::v6::InputMappingFlags;
+  using Flags = oxygen::data::pak::input::InputMappingFlags;
 
   if (value == Flags::kNone) {
     return "None";
@@ -403,10 +404,10 @@ auto oxygen::data::pak::v6::to_string(
   return result;
 }
 
-auto oxygen::data::pak::v6::to_string(
-  const oxygen::data::pak::v6::InputContextBindingFlags value) -> std::string
+auto oxygen::data::pak::input::to_string(
+  const oxygen::data::pak::input::InputContextBindingFlags value) -> std::string
 {
-  using Flags = oxygen::data::pak::v6::InputContextBindingFlags;
+  using Flags = oxygen::data::pak::input::InputContextBindingFlags;
 
   if (value == Flags::kNone) {
     return "None";

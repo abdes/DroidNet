@@ -35,10 +35,10 @@ inline auto LoadMaterialAsset(LoaderContext context)
 
   using data::ShaderReference;
   using data::Unorm16;
-  using data::pak::kMaxNameSize;
-  using data::pak::MaterialAssetDesc;
-  using data::pak::ResourceIndexT;
-  using data::pak::ShaderReferenceDesc;
+  using data::pak::core::kMaxNameSize;
+  using data::pak::core::ResourceIndexT;
+  using data::pak::render::MaterialAssetDesc;
+  using data::pak::render::ShaderReferenceDesc;
   using oxygen::ShaderType;
 
   auto check_result = [](auto&& result, const char* field) {
@@ -214,7 +214,8 @@ inline auto LoadMaterialAsset(LoaderContext context)
     check_result(grid_spacing_result, "MaterialAssetDesc.grid_spacing");
   }
 
-  auto grid_major_every_result = reader.ReadInto<uint32_t>(desc.grid_major_every);
+  auto grid_major_every_result
+    = reader.ReadInto<uint32_t>(desc.grid_major_every);
   check_result(grid_major_every_result, "MaterialAssetDesc.grid_major_every");
 
   auto grid_line_thickness_result
@@ -348,8 +349,8 @@ inline auto LoadMaterialAsset(LoaderContext context)
 
   if (!context.parse_only) {
     using data::TextureResource;
-    using data::pak::kNoResourceIndex;
-    using data::pak::ResourceIndexT;
+    using data::pak::core::kNoResourceIndex;
+    using data::pak::core::ResourceIndexT;
 
     auto collect_texture_ref = [&](const ResourceIndexT texture_index) {
       if (texture_index == kNoResourceIndex) {

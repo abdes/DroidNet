@@ -71,7 +71,8 @@ namespace detail {
 
 class MeshView {
 public:
-  OXGN_DATA_API MeshView(const Mesh& mesh, pak::MeshViewDesc desc) noexcept;
+  OXGN_DATA_API MeshView(
+    const Mesh& mesh, pak::geometry::MeshViewDesc desc) noexcept;
 
   ~MeshView() = default;
 
@@ -109,7 +110,7 @@ public:
 private:
   std::reference_wrapper<const Mesh> mesh_;
 
-  pak::MeshViewDesc desc_ {};
+  pak::geometry::MeshViewDesc desc_ {};
 };
 
 //! Represents a submesh within a mesh asset.
@@ -127,8 +128,8 @@ private:
 
  ### Constructor Variants
 
- - **From PAK data**: Uses pak::SubMeshDesc and resolves material reference
- later
+ - **From PAK data**: Uses pak::geometry::SubMeshDesc and resolves material
+ reference later
  - **For procedural/builder**: Directly accepts MaterialAsset for
  runtime-generated meshes
 
@@ -154,8 +155,8 @@ public:
   //! Returns the submesh name as a string view (for debugging/tools).
   /*!
     Returns the asset name from the descriptor as a string view. The name is
-    guaranteed not to exceed pak::kMaxNameSize. This is primarily for debugging
-    and tools, not for runtime use.
+    guaranteed not to exceed pak::core::kMaxNameSize. This is primarily for
+    debugging and tools, not for runtime use.
   */
   auto GetName() const noexcept -> std::string_view { return name_; }
 
@@ -183,7 +184,7 @@ public:
 
   //! Returns the optional PAK descriptor used to construct this submesh.
   [[nodiscard]] auto Descriptor() const noexcept
-    -> const std::optional<pak::SubMeshDesc>&
+    -> const std::optional<pak::geometry::SubMeshDesc>&
   {
     return desc_;
   }
@@ -205,13 +206,16 @@ protected:
     std::shared_ptr<const MaterialAsset> material);
 
   // Only for MeshBuilder: set mesh views after construction
-  void AddMeshViewInternal(pak::MeshViewDesc view_desc)
+  void AddMeshViewInternal(pak::geometry::MeshViewDesc view_desc)
   {
     mesh_views_.emplace_back(mesh_.get(), std::move(view_desc));
   }
 
   // Only for SubMeshBuilder: set PAK descriptor for bounding optimization
-  void SetDescriptor(pak::SubMeshDesc desc) { desc_ = std::move(desc); }
+  void SetDescriptor(pak::geometry::SubMeshDesc desc)
+  {
+    desc_ = std::move(desc);
+  }
 
 private:
   //! Computes bounding box and sphere - handles both PAK and procedural cases.
@@ -234,7 +238,7 @@ private:
   std::vector<MeshView> mesh_views_;
   std::shared_ptr<const MaterialAsset> material_;
 
-  std::optional<pak::SubMeshDesc> desc_ {};
+  std::optional<pak::geometry::SubMeshDesc> desc_ {};
 };
 
 //! Immutable, shareable mesh asset containing geometry data and submeshes.
@@ -464,8 +468,8 @@ public:
   //! Returns the mesh name as a string view (for debugging/tools).
   /*!
     Returns the asset name from the descriptor as a string view. The name is
-    guaranteed not to exceed pak::kMaxNameSize. This is primarily for debugging
-    and tools, not for runtime use.
+    guaranteed not to exceed pak::core::kMaxNameSize. This is primarily for
+    debugging and tools, not for runtime use.
   */
   auto GetName() const noexcept -> std::string_view { return name_; }
 
@@ -556,7 +560,7 @@ public:
 
   //! Returns the skinned mesh descriptor if available.
   [[nodiscard]] auto SkinnedDescriptor() const noexcept
-    -> const pak::SkinnedMeshInfo*
+    -> const pak::geometry::SkinnedMeshInfo*
   {
     if (!desc_.has_value() || !desc_.value().IsSkinned()) {
       return nullptr;
@@ -611,7 +615,7 @@ public:
 
   //! Returns the optional PAK descriptor used to construct this mesh.
   [[nodiscard]] auto Descriptor() const noexcept
-    -> const std::optional<pak::MeshDesc>&
+    -> const std::optional<pak::geometry::MeshDesc>&
   {
     return desc_;
   }
@@ -663,7 +667,7 @@ protected:
   void SetName(std::string name) { name_ = std::move(name); }
 
   // Only for MeshBuilder: set PAK descriptor for bounding optimization
-  void SetDescriptor(pak::MeshDesc desc)
+  void SetDescriptor(pak::geometry::MeshDesc desc)
   {
     desc_ = std::move(desc);
     ComputeBounds();
@@ -695,7 +699,7 @@ private:
   std::shared_ptr<BufferResource> inverse_bind_buffer_;
   std::shared_ptr<BufferResource> joint_remap_buffer_;
 
-  std::optional<pak::MeshDesc> desc_ {};
+  std::optional<pak::geometry::MeshDesc> desc_ {};
 };
 
 //! Geometry asset as stored in the PAK file resource table.
@@ -704,7 +708,7 @@ private:
   This is a direct, binary-compatible wrapper for the PAK format, providing
   access to all fields and metadata for rendering and asset management.
 
-  ### Binary Encoding (PAK v1, 256 bytes)
+  ### Binary Encoding (PAK v7, 256 bytes)
 
   ```text
   offset size   name                description
@@ -726,7 +730,7 @@ class GeometryAsset : public Asset {
   OXYGEN_TYPED(GeometryAsset)
 
 public:
-  GeometryAsset(AssetKey asset_key, pak::GeometryAssetDesc desc,
+  GeometryAsset(AssetKey asset_key, pak::geometry::GeometryAssetDesc desc,
     std::vector<std::shared_ptr<Mesh>> lod_meshes)
     : Asset(asset_key)
     , desc_(std::move(desc))
@@ -740,7 +744,7 @@ public:
   OXYGEN_DEFAULT_MOVABLE(GeometryAsset)
 
   //! Returns the asset header metadata.
-  [[nodiscard]] auto GetHeader() const noexcept -> const pak::AssetHeader&
+  [[nodiscard]] auto GetHeader() const noexcept -> const pak::core::AssetHeader&
   {
     return desc_.header;
   }
@@ -785,7 +789,7 @@ public:
   }
 
 private:
-  pak::GeometryAssetDesc desc_ {};
+  pak::geometry::GeometryAssetDesc desc_ {};
   std::vector<std::shared_ptr<Mesh>> lod_meshes_;
 };
 
@@ -809,13 +813,13 @@ public:
 
   ~SubMeshBuilder() = default;
 
-  auto WithMeshView(pak::MeshViewDesc desc) -> SubMeshBuilder&
+  auto WithMeshView(pak::geometry::MeshViewDesc desc) -> SubMeshBuilder&
   {
     mesh_views_.push_back(std::move(desc));
     return *this;
   }
 
-  auto WithDescriptor(pak::SubMeshDesc desc) -> SubMeshBuilder&
+  auto WithDescriptor(pak::geometry::SubMeshDesc desc) -> SubMeshBuilder&
   {
     desc_ = std::move(desc);
     return *this;
@@ -844,7 +848,7 @@ public:
 
   //! Accessor for the mesh view descriptors.
   [[nodiscard]] auto MeshViews() const noexcept
-    -> const std::vector<pak::MeshViewDesc>&
+    -> const std::vector<pak::geometry::MeshViewDesc>&
   {
     return mesh_views_;
   }
@@ -853,8 +857,8 @@ private:
   std::reference_wrapper<MeshBuilder> parent_;
   std::string name_;
   std::shared_ptr<const MaterialAsset> material_;
-  std::vector<pak::MeshViewDesc> mesh_views_;
-  std::optional<pak::SubMeshDesc> desc_;
+  std::vector<pak::geometry::MeshViewDesc> mesh_views_;
+  std::optional<pak::geometry::SubMeshDesc> desc_;
 
   friend class MeshBuilder;
 };
@@ -995,7 +999,7 @@ public:
     return *this;
   }
 
-  auto WithDescriptor(pak::MeshDesc desc) -> MeshBuilder&
+  auto WithDescriptor(pak::geometry::MeshDesc desc) -> MeshBuilder&
   {
     desc_ = std::move(desc);
     return *this;
@@ -1122,11 +1126,11 @@ private:
   struct SubMeshSpec {
     std::string name;
     std::shared_ptr<const MaterialAsset> material;
-    std::vector<pak::MeshViewDesc> mesh_views;
-    std::optional<pak::SubMeshDesc> desc;
+    std::vector<pak::geometry::MeshViewDesc> mesh_views;
+    std::optional<pak::geometry::SubMeshDesc> desc;
   };
   std::vector<SubMeshSpec> submeshes_;
-  std::optional<pak::MeshDesc> desc_;
+  std::optional<pak::geometry::MeshDesc> desc_;
   bool submesh_in_progress_
     = false; //!< Tracks an active (unfinalized) SubMeshBuilder
 

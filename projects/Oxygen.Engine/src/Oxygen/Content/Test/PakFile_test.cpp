@@ -41,19 +41,21 @@ protected:
 
   // Helper macro-like configuration for custom pak generation
   struct PakConfig {
-    data::pak::PakHeader header {};
-    data::pak::PakFooter footer {};
-    std::vector<data::pak::AssetDirectoryEntry> directory;
+    data::pak::core::PakHeader header {};
+    data::pak::core::PakFooter footer {};
+    std::vector<data::pak::core::AssetDirectoryEntry> directory;
     std::vector<PakFile::BrowseEntry> browse_index;
 
     PakConfig()
     {
-      const std::span<const char> header_magic(data::pak::kPakHeaderMagic);
+      const std::span<const char> header_magic(
+        data::pak::core::kPakHeaderMagic);
       std::ranges::copy(header_magic, std::ranges::begin(header.magic));
       // I'll use the default format version for the tests.
-      header.version = data::pak::kCurrantPakFormatVersion;
+      header.version = data::pak::core::kCurrentPakFormatVersion;
 
-      const std::span<const char> footer_magic(data::pak::kPakFooterMagic);
+      const std::span<const char> footer_magic(
+        data::pak::core::kPakFooterMagic);
       std::ranges::copy(footer_magic, std::ranges::begin(footer.footer_magic));
     }
   };
@@ -106,7 +108,8 @@ TEST_F(PakFileTest, LoadValidPakFile)
 
   PakFile pak(test_pak_path_);
   EXPECT_EQ(pak.FilePath(), test_pak_path_);
-  EXPECT_EQ(pak.FormatVersion(), oxygen::data::pak::kCurrantPakFormatVersion);
+  EXPECT_EQ(
+    pak.FormatVersion(), oxygen::data::pak::core::kCurrentPakFormatVersion);
   EXPECT_EQ(pak.ContentVersion(), 42);
   EXPECT_FALSE(pak.HasBrowseIndex());
   EXPECT_TRUE(pak.Directory().empty());
@@ -148,15 +151,15 @@ TEST_F(PakFileTest, MissingFileThrows)
 TEST_F(PakFileTest, AssetDirectoryLookup)
 {
   PakConfig config;
-  data::pak::AssetDirectoryEntry entry1;
-  constexpr uint8_t kAssetType1 = 1;
+  data::pak::core::AssetDirectoryEntry entry1;
+  constexpr auto kAssetType1 = data::AssetType::kMaterial;
   constexpr uint64_t kDescOffset1 = 512;
   entry1.asset_key = MakeTestAssetKey(1);
   entry1.asset_type = kAssetType1;
   entry1.desc_offset = kDescOffset1;
 
-  data::pak::AssetDirectoryEntry entry2;
-  constexpr uint8_t kAssetType2 = 2;
+  data::pak::core::AssetDirectoryEntry entry2;
+  constexpr auto kAssetType2 = data::AssetType::kGeometry;
   constexpr uint64_t kDescOffset2 = 1024;
   entry2.asset_key = MakeTestAssetKey(2);
   entry2.asset_type = kAssetType2;

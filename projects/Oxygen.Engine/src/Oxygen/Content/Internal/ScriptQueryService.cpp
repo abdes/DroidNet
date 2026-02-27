@@ -14,7 +14,7 @@ namespace oxygen::content::internal {
 
 auto ScriptQueryService::MakeScriptResourceKeyForAsset(
   const data::AssetKey& context_asset_key,
-  const data::pak::ResourceIndexT resource_index,
+  const data::pak::core::ResourceIndexT resource_index,
   const Callbacks& callbacks) const noexcept -> std::optional<ResourceKey>
 {
   const auto source_id
@@ -27,7 +27,7 @@ auto ScriptQueryService::MakeScriptResourceKeyForAsset(
 
 auto ScriptQueryService::ReadScriptResourceForAsset(
   const data::AssetKey& context_asset_key,
-  const data::pak::ResourceIndexT resource_index,
+  const data::pak::core::ResourceIndexT resource_index,
   const Callbacks& callbacks) const
   -> std::shared_ptr<const data::ScriptResource>
 {
@@ -61,11 +61,11 @@ auto ScriptQueryService::ReadScriptResourceForAsset(
   }
 
   auto desc_blob
-    = table_reader->ReadBlob(sizeof(data::pak::ScriptResourceDesc));
+    = table_reader->ReadBlob(sizeof(data::pak::scripting::ScriptResourceDesc));
   if (!desc_blob) {
     return nullptr;
   }
-  data::pak::ScriptResourceDesc desc {};
+  data::pak::scripting::ScriptResourceDesc desc {};
   std::memcpy(&desc, desc_blob->data(), sizeof(desc));
 
   std::vector<uint8_t> data_buffer(desc.size_bytes);

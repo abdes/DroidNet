@@ -19,7 +19,7 @@ Core properties:
 - **No I/O**: `AssetEmitter` writes `.oscene` files.
 - **Job-scoped**: created per job and started in the job’s child nursery.
 - **Geometry-aware**: links nodes to geometry assets via `geometry_keys`.
-- **PAK v4 container, v3 scene asset**: uses the v3 scene asset layout as
+- **PAK v7 container, v3 scene asset**: uses the v3 scene asset layout as
   defined in [src/Oxygen/Data/PakFormat.h](../src/Oxygen/Data/PakFormat.h).
 - **Planner‑gated**: the planner submits scene work only after referenced
   geometry assets are ready.
@@ -53,15 +53,15 @@ struct SceneEnvironmentSystem {
 
 // Intermediate scene build data produced by adapters.
 struct SceneBuild {
-  std::vector<data::pak::NodeRecord> nodes;
+  std::vector<data::pak::world::NodeRecord> nodes;
   std::vector<std::byte> strings; // string table bytes (must start with '\0')
 
-  std::vector<data::pak::RenderableRecord> renderables;
-  std::vector<data::pak::PerspectiveCameraRecord> perspective_cameras;
-  std::vector<data::pak::OrthographicCameraRecord> orthographic_cameras;
-  std::vector<data::pak::DirectionalLightRecord> directional_lights;
-  std::vector<data::pak::PointLightRecord> point_lights;
-  std::vector<data::pak::SpotLightRecord> spot_lights;
+  std::vector<data::pak::world::RenderableRecord> renderables;
+  std::vector<data::pak::world::PerspectiveCameraRecord> perspective_cameras;
+  std::vector<data::pak::world::OrthographicCameraRecord> orthographic_cameras;
+  std::vector<data::pak::world::DirectionalLightRecord> directional_lights;
+  std::vector<data::pak::world::PointLightRecord> point_lights;
+  std::vector<data::pak::world::SpotLightRecord> spot_lights;
 };
 
 // Input to adapter scene stage.
@@ -127,7 +127,7 @@ Notes:
   offset `0` maps to the empty string.
 - `request` provides naming strategy and asset key policy; the pipeline
   performs final scene naming only to build asset keys and paths.
-- `environment_systems` encodes the trailing scene environment block (PAK v3).
+- `environment_systems` encodes the trailing scene environment block (PAK v7).
   The pipeline validates system record headers and computes the block size.
 - `geometry_keys` must contain resolved geometry keys; the planner must
   ensure geometry assets are ready before submission. The adapter’s mesh
@@ -324,10 +324,10 @@ Notes:
 
 ---
 
-## Cooked Output Contract (PAK v4 Container, v3 Scene Asset)
+## Cooked Output Contract (PAK v7 Container, v3 Scene Asset)
 
 This pipeline targets the latest PAK container while emitting the
-`data::pak::v3` scene asset layout. Layout changes that exceed the existing
+`data::pak::v7` scene asset layout. Layout changes that exceed the existing
 structures must introduce a new PAK namespace and a new scene asset version.
 
 ### Scene Descriptor (`.oscene`)
@@ -348,7 +348,7 @@ Notes:
 - Offsets are relative to the start of the descriptor payload.
 - `nodes.entry_size` must equal `sizeof(NodeRecord)`.
 - Component tables use `ComponentType` FourCC values (e.g., `kRenderable`).
-- `SceneAssetDesc.header.version = data::pak::v3::kSceneAssetVersion`.
+- `SceneAssetDesc.header.version = data::pak::kSceneAssetVersion`.
 - `SceneAssetDesc.header.content_hash` must cover descriptor bytes + environment
   block bytes and is computed on the ThreadPool after dependencies are ready
   **when hashing is enabled**.

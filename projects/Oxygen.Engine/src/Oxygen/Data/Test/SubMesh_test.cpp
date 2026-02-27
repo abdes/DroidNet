@@ -31,7 +31,7 @@ protected:
   std::shared_ptr<const MaterialAsset> MakeMaterial() const
   {
     return std::make_shared<const MaterialAsset>(oxygen::data::AssetKey {},
-      oxygen::data::pak::MaterialAssetDesc {},
+      oxygen::data::pak::render::MaterialAssetDesc {},
       std::vector<oxygen::data::ShaderReference> {});
   }
 };
@@ -218,7 +218,7 @@ NOLINT_TEST_F(SubMeshBuilderFixture, DescriptorBoundsUsed)
   };
   std::vector<std::uint32_t> indices { 0, 1 };
   auto material = MakeMaterial();
-  oxygen::data::pak::SubMeshDesc desc {
+  oxygen::data::pak::geometry::SubMeshDesc desc {
     .name = {},
     .material_asset_key = {},
     .mesh_view_count = 1,
@@ -277,7 +277,7 @@ NOLINT_TEST_F(SubMeshBuilderFixture, DescriptorBoundsMatchExpected)
   };
   std::vector<std::uint32_t> indices { 0, 1, 2 };
   auto material = MakeMaterial();
-  oxygen::data::pak::SubMeshDesc desc {
+  oxygen::data::pak::geometry::SubMeshDesc desc {
     .name = {},
     .material_asset_key = {},
     .mesh_view_count = 1,

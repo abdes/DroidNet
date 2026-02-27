@@ -51,14 +51,15 @@ public:
   //! Returns the asset name as a string view (for debugging/tools).
   /*!
     Returns the asset name from the header as a string view. The name is
-    guaranteed not to exceed pak::kMaxNameSize. This is primarily for debugging
+    guaranteed not to exceed `pak::core::kMaxNameSize`. This is primarily for
+    debugging
     and tools, not for runtime use.
   */
   auto GetAssetName() const noexcept -> std::string_view
   {
     const char* name = GetHeader().name;
     std::size_t len = 0;
-    while (len < pak::kMaxNameSize && name[len] != '\0') {
+    while (len < pak::core::kMaxNameSize && name[len] != '\0') {
       ++len;
     }
     return std::string_view(name, len);
@@ -87,7 +88,7 @@ public:
 
 protected:
   //! Returns the asset header (to be implemented by derived classes).
-  virtual auto GetHeader() const noexcept -> const pak::AssetHeader& = 0;
+  virtual auto GetHeader() const noexcept -> const pak::core::AssetHeader& = 0;
 
 private:
   AssetKey asset_key_ {};

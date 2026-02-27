@@ -27,7 +27,7 @@ NOLINT_TEST_F(BufferResourceDeathTest, IndexBufferSizeNotAligned_Throws)
 #if !defined(NDEBUG)
   // Arrange
   // Crafted descriptor: size_bytes=3, element_stride=4 (invalid alignment)
-  oxygen::data::pak::BufferResourceDesc bad_desc = { .data_offset = 0,
+  oxygen::data::pak::core::BufferResourceDesc bad_desc = { .data_offset = 0,
     .size_bytes = 3, // not divisible by 4
     .usage_flags
     = static_cast<uint32_t>(BufferResource::UsageFlags::kIndexBuffer),
@@ -52,7 +52,7 @@ NOLINT_TEST_F(BufferResourceDeathTest, FormattedBufferNonzeroStride_Throws)
 {
 #if !defined(NDEBUG)
   // Arrange
-  oxygen::data::pak::BufferResourceDesc bad_desc = { .data_offset = 0,
+  oxygen::data::pak::core::BufferResourceDesc bad_desc = { .data_offset = 0,
     .size_bytes = 16,
     .usage_flags
     = static_cast<uint32_t>(BufferResource::UsageFlags::kVertexBuffer),
@@ -74,7 +74,7 @@ NOLINT_TEST_F(BufferResourceDeathTest, StructuredBufferZeroStride_Throws)
 {
 #if !defined(NDEBUG)
   // Arrange
-  oxygen::data::pak::BufferResourceDesc bad_desc = { .data_offset = 0,
+  oxygen::data::pak::core::BufferResourceDesc bad_desc = { .data_offset = 0,
     .size_bytes = 16,
     .usage_flags
     = static_cast<uint32_t>(BufferResource::UsageFlags::kVertexBuffer),
@@ -98,7 +98,7 @@ class BufferResourceBasicTest : public testing::Test { };
 //! correctly by the helper methods.
 NOLINT_TEST_F(BufferResourceBasicTest, ClassificationVariants_Correct)
 {
-  using oxygen::data::pak::BufferResourceDesc;
+  using oxygen::data::pak::core::BufferResourceDesc;
 
   // Arrange
   // Formatted buffer: element_format != 0 (e.g. R32G32B32A32Float), stride is
@@ -163,7 +163,7 @@ class BufferResourceDataOffsetTest : public testing::Test { };
 //! Tests GetDataOffset returns the descriptor-provided value.
 NOLINT_TEST_F(BufferResourceDataOffsetTest, DataOffsetPreserved)
 {
-  using oxygen::data::pak::BufferResourceDesc;
+  using oxygen::data::pak::core::BufferResourceDesc;
   constexpr std::uint64_t kOffset = 4096;
   BufferResourceDesc desc {
     .data_offset = kOffset,
@@ -190,7 +190,7 @@ class BufferResourceDataSizeTest : public testing::Test { };
 //! Tests that GetDataSize() matches the vector size passed at construction.
 NOLINT_TEST_F(BufferResourceDataSizeTest, DataSizeMatchesDescriptor)
 {
-  using oxygen::data::pak::BufferResourceDesc;
+  using oxygen::data::pak::core::BufferResourceDesc;
   BufferResourceDesc desc {
     .data_offset = 0,
     .size_bytes = 48,
@@ -217,7 +217,7 @@ class BufferResourceMoveTest : public testing::Test { };
 //! an empty state (size==0).
 NOLINT_TEST_F(BufferResourceMoveTest, MoveConstructor_TransfersOwnership)
 {
-  using oxygen::data::pak::BufferResourceDesc;
+  using oxygen::data::pak::core::BufferResourceDesc;
 
   // Arrange
   BufferResourceDesc desc {

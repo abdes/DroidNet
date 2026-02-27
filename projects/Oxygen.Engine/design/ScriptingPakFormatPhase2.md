@@ -106,9 +106,9 @@ reading v4 PAK files (no script region/table — treat as "no scripts").
 ### 2.2 PakHeader (v5)
 
 ```cpp
-namespace oxygen::data::pak::v5 {
+namespace oxygen::data::pak::v7 {
 
-using namespace v4;
+using namespace v7;
 
 #pragma pack(push, 1)
 struct PakHeader {
@@ -141,12 +141,12 @@ space (3 × 16 bytes) to add two new tables and one new region.
 | `pak_crc32`              | 4    | 244       | 244 |
 | `footer_magic`           | 8    | 248       | 248 |
 
-> **Note:** `v5::PakFooter` MUST remain exactly **256 bytes** for backward
+> **Note:** `v7::PakFooter` MUST remain exactly **256 bytes** for backward
 > compatibility with the "read footer from end-of-file" strategy in
 > `PakFile.cpp`.
 
 ```cpp
-namespace oxygen::data::pak::v5 {
+namespace oxygen::data::pak::v7 {
 
 #pragma pack(push, 1)
 struct PakFooter {
@@ -181,7 +181,7 @@ struct PakFooter {
 #pragma pack(pop)
 static_assert(sizeof(PakFooter) == 256);
 
-} // namespace oxygen::data::pak::v5
+} // namespace oxygen::data::pak::v7
 ```
 
 > **CRITICAL:** The `script_slot_table` reuses the existing `ResourceTable`
@@ -391,7 +391,7 @@ Script bytecode/source lives in the `script_region` and is indexed by
 ### 3.1 Enumerations
 
 ```cpp
-namespace oxygen::data::pak::v5 {
+namespace oxygen::data::pak::v7 {
 
 enum class ScriptLanguage : uint8_t {
   kLuau = 0,
@@ -407,13 +407,13 @@ enum class ScriptCompression : uint8_t {
   kZstd = 1,
 };
 
-} // namespace oxygen::data::pak::v5
+} // namespace oxygen::data::pak::v7
 ```
 
 ### 3.2 ScriptResourceDesc (32 bytes)
 
 ```cpp
-namespace oxygen::data::pak::v5 {
+namespace oxygen::data::pak::v7 {
 
 #pragma pack(push, 1)
 struct ScriptResourceDesc {
@@ -428,7 +428,7 @@ struct ScriptResourceDesc {
 #pragma pack(pop)
 static_assert(sizeof(ScriptResourceDesc) == 32);
 
-} // namespace oxygen::data::pak::v5
+} // namespace oxygen::data::pak::v7
 ```
 
 ### 3.3 Data Payload Format (On-Disk)
@@ -522,14 +522,14 @@ Therefore, for the `script_resource_table`:
 ### 4.1 ScriptAssetFlags
 
 ```cpp
-namespace oxygen::data::pak::v5 {
+namespace oxygen::data::pak::v7 {
 
 enum class ScriptAssetFlags : uint32_t {
   kNone = 0,
   kAllowExternalSource = (1u << 0),
 };
 
-} // namespace oxygen::data::pak::v5
+} // namespace oxygen::data::pak::v7
 ```
 
 **Flag Rationale:**
@@ -542,7 +542,7 @@ enum class ScriptAssetFlags : uint32_t {
 ### 4.2 ScriptAssetDesc (256 bytes)
 
 ```cpp
-namespace oxygen::data::pak::v5 {
+namespace oxygen::data::pak::v7 {
 
 #pragma pack(push, 1)
 struct ScriptAssetDesc {
@@ -556,7 +556,7 @@ struct ScriptAssetDesc {
 #pragma pack(pop)
 static_assert(sizeof(ScriptAssetDesc) == 256);
 
-} // namespace oxygen::data::pak::v5
+} // namespace oxygen::data::pak::v7
 ```
 
 **Runtime resolution:**
@@ -585,7 +585,7 @@ variable-length serialization overhead and ensures bit-identical results.
 
 ```cpp
 #pragma pack(push, 1)
-namespace oxygen::data::pak::v5 {
+namespace oxygen::data::pak::v7 {
 
 struct ScriptParamRecord {
   char key[64];           // Parameter name (null-terminated)
@@ -600,7 +600,7 @@ struct ScriptParamRecord {
 };
 static_assert(sizeof(ScriptParamRecord) == 128);
 
-} // namespace oxygen::data::pak::v5
+} // namespace oxygen::data::pak::v7
 #pragma pack(pop)
 ```
 
@@ -612,7 +612,7 @@ While the on-disk format uses raw unions for predictability, the runtime uses
 #### 5.3.1 ScriptParamValue (Runtime)
 
 ```cpp
-namespace oxygen::data::pak::v5 {
+namespace oxygen::data::pak::v7 {
 
 using ScriptParamValue = std::variant<
   std::monostate,   // kNone
@@ -642,7 +642,7 @@ struct ScriptParamList {
   std::vector<ScriptParam> params;
 };
 
-} // namespace oxygen::data::pak::v5
+} // namespace oxygen::data::pak::v7
 ```
 
 #### 5.3.3 Helper Loaders (Math Types)
@@ -652,27 +652,27 @@ These Serio overloads ensure we can read/write the math types used in scripts.
 ```cpp
 namespace oxygen::serio {
 
-inline auto Load(AnyReader& r, data::pak::v5::Vec2& v) -> Result<void> {
+inline auto Load(AnyReader& r, data::pak::Vec2& v) -> Result<void> {
   CHECK_RESULT(r.ReadInto(v.x)); return r.ReadInto(v.y);
 }
-inline auto Store(AnyWriter& w, const data::pak::v5::Vec2& v) -> Result<void> {
+inline auto Store(AnyWriter& w, const data::pak::Vec2& v) -> Result<void> {
   CHECK_RESULT(w.Write(v.x)); return w.Write(v.y);
 }
 
-inline auto Load(AnyReader& r, data::pak::v5::Vec3& v) -> Result<void> {
+inline auto Load(AnyReader& r, data::pak::Vec3& v) -> Result<void> {
   CHECK_RESULT(r.ReadInto(v.x)); CHECK_RESULT(r.ReadInto(v.y));
   return r.ReadInto(v.z);
 }
-inline auto Store(AnyWriter& w, const data::pak::v5::Vec3& v) -> Result<void> {
+inline auto Store(AnyWriter& w, const data::pak::Vec3& v) -> Result<void> {
   CHECK_RESULT(w.Write(v.x)); CHECK_RESULT(w.Write(v.y));
   return w.Write(v.z);
 }
 
-inline auto Load(AnyReader& r, data::pak::v5::Vec4& v) -> Result<void> {
+inline auto Load(AnyReader& r, data::pak::Vec4& v) -> Result<void> {
   CHECK_RESULT(r.ReadInto(v.x)); CHECK_RESULT(r.ReadInto(v.y));
   CHECK_RESULT(r.ReadInto(v.z)); return r.ReadInto(v.w);
 }
-inline auto Store(AnyWriter& w, const data::pak::v5::Vec4& v) -> Result<void> {
+inline auto Store(AnyWriter& w, const data::pak::Vec4& v) -> Result<void> {
   CHECK_RESULT(w.Write(v.x)); CHECK_RESULT(w.Write(v.y));
   CHECK_RESULT(w.Write(v.z)); return w.Write(v.w);
 }
@@ -686,7 +686,7 @@ The `ScriptLoader` uses the following logic to hydrate runtime `ScriptParam`
 objects from binary `ScriptParamRecord`s:
 
 ```cpp
-auto Hydrate(const data::pak::v5::ScriptParamRecord& binary) -> ScriptParam {
+auto Hydrate(const data::pak::ScriptParamRecord& binary) -> ScriptParam {
   ScriptParam runtime;
   runtime.key = binary.key;
 
@@ -708,7 +708,7 @@ auto Hydrate(const data::pak::v5::ScriptParamRecord& binary) -> ScriptParam {
 **Usage Examples:**
 
 ```cpp
-using namespace oxygen::data::pak::v5;
+using namespace oxygen::data::pak;
 
 // Construction:
 ScriptParam p1 { .key = "speed",  .value = 42.0f };          // kFloat
@@ -822,7 +822,7 @@ enum class AssetType : uint8_t {
 ### 6.3 Flag Enumerations
 
 ```cpp
-namespace oxygen::data::pak::v5 {
+namespace oxygen::data::pak::v7 {
 
 enum class ScriptingComponentFlags : uint32_t {
   kNone          = 0,
@@ -838,7 +838,7 @@ enum class ScriptSlotFlags : uint32_t {
   kCatchErrors = (1u << 3),
 };
 
-} // namespace oxygen::data::pak::v5
+} // namespace oxygen::data::pak::v7
 ```
 
 **Flag Rationale:**
@@ -855,7 +855,7 @@ enum class ScriptSlotFlags : uint32_t {
 ### 6.4 ScriptingComponentRecord (16 bytes)
 
 ```cpp
-namespace oxygen::data::pak::v5 {
+namespace oxygen::data::pak::v7 {
 
 #pragma pack(push, 1)
 struct ScriptingComponentRecord {
@@ -870,7 +870,7 @@ struct ScriptingComponentRecord {
 #pragma pack(pop)
 static_assert(sizeof(ScriptingComponentRecord) == 16);
 
-} // namespace oxygen::data::pak::v5
+} // namespace oxygen::data::pak::v7
 ```
 
 > This follows the same pattern as `RenderableRecord`, `PerspectiveCameraRecord`,
@@ -880,7 +880,7 @@ static_assert(sizeof(ScriptingComponentRecord) == 16);
 ### 6.5 ScriptSlotRecord (128 bytes)
 
 ```cpp
-namespace oxygen::data::pak::v5 {
+namespace oxygen::data::pak::v7 {
 
 #pragma pack(push, 1)
 struct ScriptSlotRecord {
@@ -897,7 +897,7 @@ struct ScriptSlotRecord {
 #pragma pack(pop)
 static_assert(sizeof(ScriptSlotRecord) == 128);
 
-} // namespace oxygen::data::pak::v5
+} // namespace oxygen::data::pak::v7
 ```
 
 ### 6.6 Scene Asset Descriptor (v5)
@@ -907,13 +907,13 @@ are needed — scripting components are just another entry in the component tabl
 directory (like `kRenderable`, `kPerspectiveCamera`, etc.).
 
 ```cpp
-namespace oxygen::data::pak::v5 {
+namespace oxygen::data::pak::v7 {
 
-//! Scene asset descriptor version for PAK v5.
+//! Scene asset descriptor version for PAK v7.
 //! Same as v4 (no scene descriptor structural changes for scripting).
-constexpr uint8_t kSceneAssetVersion = v4::kSceneAssetVersion;
+constexpr uint8_t kSceneAssetVersion = v7::kSceneAssetVersion;
 
-} // namespace oxygen::data::pak::v5
+} // namespace oxygen::data::pak::v7
 ```
 
 ### 6.7 Namespace Alias
@@ -923,7 +923,7 @@ At the bottom of `PakFormat.h`, update the default namespace alias:
 ```cpp
 namespace oxygen::data::pak {
 //! Default namespace alias for latest version of the PAK format
-using namespace v5;
+using namespace v7;
 } // namespace oxygen::data::pak
 ```
 
@@ -969,11 +969,11 @@ When loading a scene with a `kScripting` component table:
 ```cpp
 // In SceneLoader.h detail namespace:
 template <>
-inline auto ValidateComponentTable<data::pak::v5::ScriptingComponentRecord>(
+inline auto ValidateComponentTable<data::pak::ScriptingComponentRecord>(
   const std::span<const std::byte> table_bytes, const uint32_t count,
   const uint32_t entry_size, const uint32_t node_count) -> void
 {
-  using Record = data::pak::v5::ScriptingComponentRecord;
+  using Record = data::pak::ScriptingComponentRecord;
   if (count == 0) return;
   if (entry_size != sizeof(Record)) {
     throw std::runtime_error("scene asset scripting component record size mismatch");
@@ -1027,7 +1027,7 @@ This follows the exact same pattern used for geometry dependencies from
 namespace oxygen::data {
 
 template <>
-struct ComponentTraits<pak::v5::ScriptingComponentRecord> {
+struct ComponentTraits<pak::ScriptingComponentRecord> {
   static constexpr ComponentType kType = ComponentType::kScripting;
 };
 
@@ -1041,7 +1041,7 @@ In `SceneAsset::ParseAndValidate()`, add entry-size validation for
 
 ```cpp
 if (type == ComponentType::kScripting
-  && entry.table.entry_size != sizeof(pak::v5::ScriptingComponentRecord)) {
+  && entry.table.entry_size != sizeof(pak::ScriptingComponentRecord)) {
   throw std::runtime_error("SceneAsset scripting component record size mismatch");
 }
 ```
@@ -1073,11 +1073,11 @@ OXGN_CNTT_NDAPI auto CreateScriptDataReader() const -> /* Reader type */;
 ```cpp
 //! Read a ScriptSlotRecord at the given global index.
 OXGN_CNTT_NDAPI auto ReadScriptSlotRecord(uint32_t index) const
-  -> data::pak::v5::ScriptSlotRecord;
+  -> data::pak::ScriptSlotRecord;
 
 //! Read `count` ScriptSlotRecords starting at `start_index`.
 OXGN_CNTT_NDAPI auto ReadScriptSlotRecords(uint32_t start_index, uint32_t count) const
-  -> std::vector<data::pak::v5::ScriptSlotRecord>;
+  -> std::vector<data::pak::ScriptSlotRecord>;
 
 //! Number of entries in the global script slot table.
 OXGN_CNTT_NDAPI auto ScriptSlotCount() const -> uint32_t;

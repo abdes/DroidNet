@@ -95,7 +95,7 @@ std::unordered_map<uint64_t, oxygen::data::AssetKey> g_asset_hash_to_key;
 struct ResourceCompositeKey final {
   oxygen::data::SourceKey source_key;
   uint16_t resource_type_index = 0;
-  pak::ResourceIndexT resource_index = pak::kNoResourceIndex;
+  pak::core::ResourceIndexT resource_index = pak::core::kNoResourceIndex;
 
   auto operator==(const ResourceCompositeKey&) const -> bool = default;
 };
@@ -120,7 +120,7 @@ using oxygen::content::constants::kSyntheticSourceId;
 // Implement the private helper declared in the header to avoid exposing the
 // internal header in the public API.
 auto AssetLoader::PackResourceKey(uint16_t pak_index,
-  uint16_t resource_type_index, pak::ResourceIndexT resource_index)
+  uint16_t resource_type_index, pak::core::ResourceIndexT resource_index)
   -> ResourceKey
 {
   internal::InternalResourceKey key(
@@ -1312,7 +1312,7 @@ auto AssetLoader::BindResourceRefToKey(const internal::ResourceRef& ref)
 }
 
 auto AssetLoader::GetHydratedScriptSlots(const data::SceneAsset& scene_asset,
-  const data::pak::ScriptingComponentRecord& component) const
+  const data::pak::scripting::ScriptingComponentRecord& component) const
   -> std::vector<IAssetLoader::HydratedScriptSlot>
 {
   AssertOwningThread();
@@ -1370,9 +1370,10 @@ auto AssetLoader::GetHydratedScriptSlots(const data::SceneAsset& scene_asset,
   }
 
   const auto& source = *impl_->source_registry.Sources().at(source_it->second);
-  std::vector<data::pak::ScriptSlotRecord> slot_records;
-  auto read_params = [&](const data::pak::ScriptSlotRecord& slot_record)
-    -> std::vector<data::pak::ScriptParamRecord> {
+  std::vector<data::pak::scripting::ScriptSlotRecord> slot_records;
+  auto read_params
+    = [&](const data::pak::scripting::ScriptSlotRecord& slot_record)
+    -> std::vector<data::pak::scripting::ScriptParamRecord> {
     if (slot_record.params_count == 0) {
       return {};
     }
@@ -1688,8 +1689,8 @@ auto AssetLoader::InvalidateAssetTree(const data::AssetKey& key) -> void
     const auto resource_type_index = static_cast<uint16_t>(
       IndexOf<data::ScriptResource, ResourceTypeList>::value);
 
-    auto invalidate_resource = [&](const pak::ResourceIndexT index) {
-      if (index != data::pak::kNoResourceIndex) {
+    auto invalidate_resource = [&](const pak::core::ResourceIndexT index) {
+      if (index != data::pak::core::kNoResourceIndex) {
         const auto rkey
           = PackResourceKey(source_id, resource_type_index, index);
         content_cache_.Remove(HashResourceKey(rkey));
@@ -1738,7 +1739,8 @@ auto AssetLoader::ReloadScript(const std::filesystem::path& path) -> void
     = [this](
         const data::AssetKey& key) { return ResolveSourceIdForAsset(key); },
     .make_script_resource_key =
-      [this](const uint16_t source_id, const data::pak::ResourceIndexT index) {
+      [this](
+        const uint16_t source_id, const data::pak::core::ResourceIndexT index) {
         const auto resource_type_index = static_cast<uint16_t>(
           IndexOf<data::ScriptResource, ResourceTypeList>::value);
         return PackResourceKey(source_id, resource_type_index, index);
@@ -1781,7 +1783,8 @@ auto AssetLoader::ReloadAllScripts() -> void
     = [this](
         const data::AssetKey& key) { return ResolveSourceIdForAsset(key); },
     .make_script_resource_key =
-      [this](const uint16_t source_id, const data::pak::ResourceIndexT index) {
+      [this](
+        const uint16_t source_id, const data::pak::core::ResourceIndexT index) {
         const auto resource_type_index = static_cast<uint16_t>(
           IndexOf<data::ScriptResource, ResourceTypeList>::value);
         return PackResourceKey(source_id, resource_type_index, index);
@@ -2101,8 +2104,8 @@ auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key,
       co_return;
     }
 
-    using data::pak::kNoResourceIndex;
-    using data::pak::ResourceIndexT;
+    using data::pak::core::kNoResourceIndex;
+    using data::pak::core::ResourceIndexT;
 
     const auto texture_type_index = static_cast<uint16_t>(
       IndexOf<data::TextureResource, ResourceTypeList>::value);
@@ -2190,8 +2193,8 @@ auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key,
       // Publish (owning thread): store asset, then ensure resource dependencies
       // are loaded and held via dependency edges.
       {
-        using data::pak::kNoResourceIndex;
-        using data::pak::ResourceIndexT;
+        using data::pak::core::kNoResourceIndex;
+        using data::pak::core::ResourceIndexT;
 
         const auto texture_type_index = static_cast<uint16_t>(
           IndexOf<data::TextureResource, ResourceTypeList>::value);
@@ -2758,7 +2761,7 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
 
     std::unordered_set<data::AssetKey> seen_geometry_keys;
     for (const auto& renderable :
-      scene_asset->GetComponents<pak::RenderableRecord>()) {
+      scene_asset->GetComponents<pak::world::RenderableRecord>()) {
       if (!seen_geometry_keys.insert(renderable.geometry_key).second) {
         continue;
       }
@@ -2783,7 +2786,7 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
 
     std::unordered_set<data::AssetKey> seen_script_keys;
     for (const auto& scripting_component :
-      scene_asset->GetComponents<pak::ScriptingComponentRecord>()) {
+      scene_asset->GetComponents<pak::scripting::ScriptingComponentRecord>()) {
       const auto hydrated_slots
         = GetHydratedScriptSlots(*scene_asset, scripting_component);
       for (const auto& slot : hydrated_slots) {
@@ -2815,7 +2818,7 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
 
     std::unordered_set<data::AssetKey> seen_context_keys;
     for (const auto& binding :
-      scene_asset->GetComponents<pak::InputContextBindingRecord>()) {
+      scene_asset->GetComponents<pak::input::InputContextBindingRecord>()) {
       if (binding.context_asset_key == data::AssetKey {}) {
         continue;
       }
@@ -3094,7 +3097,7 @@ auto AssetLoader::LoadScriptAssetAsyncImpl(const data::AssetKey& key,
 
     for (size_t i = 0; i < indices.size(); ++i) {
       const auto resource_index = indices[i];
-      if (resource_index == data::pak::kNoResourceIndex) {
+      if (resource_index == data::pak::core::kNoResourceIndex) {
         continue;
       }
       if (i == 1 && resource_index == indices[0]) {
@@ -3784,7 +3787,7 @@ auto AssetLoader::GetPakIndex(const PakFile& pak) const -> uint16_t
 }
 
 auto AssetLoader::MakePhysicsResourceKey(const data::SourceKey source_key,
-  const data::pak::ResourceIndexT resource_index) const noexcept
+  const data::pak::core::ResourceIndexT resource_index) const noexcept
   -> std::optional<ResourceKey>
 {
   const internal::PhysicsQueryService::Callbacks callbacks {
@@ -3805,7 +3808,8 @@ auto AssetLoader::MakePhysicsResourceKey(const data::SourceKey source_key,
       return std::nullopt;
     },
     .make_physics_resource_key =
-      [this](const uint16_t source_id, const data::pak::ResourceIndexT index) {
+      [this](
+        const uint16_t source_id, const data::pak::core::ResourceIndexT index) {
         const auto resource_type_index = static_cast<uint16_t>(
           IndexOf<data::PhysicsResource, ResourceTypeList>::value);
         return PackResourceKey(source_id, resource_type_index, index);
@@ -3817,7 +3821,7 @@ auto AssetLoader::MakePhysicsResourceKey(const data::SourceKey source_key,
 
 auto AssetLoader::MakeScriptResourceKeyForAsset(
   const data::AssetKey& context_asset_key,
-  const data::pak::ResourceIndexT resource_index) const noexcept
+  const data::pak::core::ResourceIndexT resource_index) const noexcept
   -> std::optional<ResourceKey>
 {
   const internal::ScriptQueryService::Callbacks callbacks {
@@ -3828,7 +3832,8 @@ auto AssetLoader::MakeScriptResourceKeyForAsset(
     = [this](
         const uint16_t source_id) { return ResolveSourceForId(source_id); },
     .make_script_resource_key =
-      [this](const uint16_t source_id, const data::pak::ResourceIndexT index) {
+      [this](
+        const uint16_t source_id, const data::pak::core::ResourceIndexT index) {
         const auto resource_type_index = static_cast<uint16_t>(
           IndexOf<data::ScriptResource, ResourceTypeList>::value);
         return PackResourceKey(source_id, resource_type_index, index);
@@ -3840,7 +3845,7 @@ auto AssetLoader::MakeScriptResourceKeyForAsset(
 
 auto AssetLoader::ReadScriptResourceForAsset(
   const data::AssetKey& context_asset_key,
-  const data::pak::ResourceIndexT resource_index) const
+  const data::pak::core::ResourceIndexT resource_index) const
   -> std::shared_ptr<const data::ScriptResource>
 {
   const internal::ScriptQueryService::Callbacks callbacks {
@@ -3851,7 +3856,8 @@ auto AssetLoader::ReadScriptResourceForAsset(
     = [this](
         const uint16_t source_id) { return ResolveSourceForId(source_id); },
     .make_script_resource_key =
-      [this](const uint16_t source_id, const data::pak::ResourceIndexT index) {
+      [this](
+        const uint16_t source_id, const data::pak::core::ResourceIndexT index) {
         const auto resource_type_index = static_cast<uint16_t>(
           IndexOf<data::ScriptResource, ResourceTypeList>::value);
         return PackResourceKey(source_id, resource_type_index, index);
@@ -3863,7 +3869,7 @@ auto AssetLoader::ReadScriptResourceForAsset(
 
 auto AssetLoader::MakePhysicsResourceKeyForAsset(
   const data::AssetKey& context_asset_key,
-  const data::pak::ResourceIndexT resource_index) const noexcept
+  const data::pak::core::ResourceIndexT resource_index) const noexcept
   -> std::optional<ResourceKey>
 {
   const internal::PhysicsQueryService::Callbacks callbacks {
@@ -3884,7 +3890,8 @@ auto AssetLoader::MakePhysicsResourceKeyForAsset(
       return std::nullopt;
     },
     .make_physics_resource_key =
-      [this](const uint16_t source_id, const data::pak::ResourceIndexT index) {
+      [this](
+        const uint16_t source_id, const data::pak::core::ResourceIndexT index) {
         const auto resource_type_index = static_cast<uint16_t>(
           IndexOf<data::PhysicsResource, ResourceTypeList>::value);
         return PackResourceKey(source_id, resource_type_index, index);
@@ -3896,8 +3903,8 @@ auto AssetLoader::MakePhysicsResourceKeyForAsset(
 
 auto AssetLoader::ReadCollisionShapeAssetDescForAsset(
   const data::AssetKey& context_asset_key,
-  const data::pak::ResourceIndexT shape_asset_index) const
-  -> std::optional<data::pak::CollisionShapeAssetDesc>
+  const data::pak::core::ResourceIndexT shape_asset_index) const
+  -> std::optional<data::pak::physics::CollisionShapeAssetDesc>
 {
   const internal::PhysicsQueryService::Callbacks callbacks {
     .resolve_source_id_for_asset
@@ -3917,7 +3924,8 @@ auto AssetLoader::ReadCollisionShapeAssetDescForAsset(
       return std::nullopt;
     },
     .make_physics_resource_key =
-      [this](const uint16_t source_id, const data::pak::ResourceIndexT index) {
+      [this](
+        const uint16_t source_id, const data::pak::core::ResourceIndexT index) {
         const auto resource_type_index = static_cast<uint16_t>(
           IndexOf<data::PhysicsResource, ResourceTypeList>::value);
         return PackResourceKey(source_id, resource_type_index, index);
@@ -3929,8 +3937,8 @@ auto AssetLoader::ReadCollisionShapeAssetDescForAsset(
 
 auto AssetLoader::ReadPhysicsMaterialAssetDescForAsset(
   const data::AssetKey& context_asset_key,
-  const data::pak::ResourceIndexT material_asset_index) const
-  -> std::optional<data::pak::PhysicsMaterialAssetDesc>
+  const data::pak::core::ResourceIndexT material_asset_index) const
+  -> std::optional<data::pak::physics::PhysicsMaterialAssetDesc>
 {
   const internal::PhysicsQueryService::Callbacks callbacks {
     .resolve_source_id_for_asset
@@ -3950,7 +3958,8 @@ auto AssetLoader::ReadPhysicsMaterialAssetDescForAsset(
       return std::nullopt;
     },
     .make_physics_resource_key =
-      [this](const uint16_t source_id, const data::pak::ResourceIndexT index) {
+      [this](
+        const uint16_t source_id, const data::pak::core::ResourceIndexT index) {
         const auto resource_type_index = static_cast<uint16_t>(
           IndexOf<data::PhysicsResource, ResourceTypeList>::value);
         return PackResourceKey(source_id, resource_type_index, index);
@@ -3981,7 +3990,8 @@ auto AssetLoader::FindPhysicsSidecarAssetKeyForScene(
       return std::nullopt;
     },
     .make_physics_resource_key =
-      [this](const uint16_t source_id, const data::pak::ResourceIndexT index) {
+      [this](
+        const uint16_t source_id, const data::pak::core::ResourceIndexT index) {
         const auto resource_type_index = static_cast<uint16_t>(
           IndexOf<data::PhysicsResource, ResourceTypeList>::value);
         return PackResourceKey(source_id, resource_type_index, index);
@@ -4098,7 +4108,7 @@ auto AssetLoader::MintSyntheticTextureKey() -> ResourceKey
   const auto resource_type_index = static_cast<uint16_t>(
     IndexOf<data::TextureResource, ResourceTypeList>::value);
   return PackResourceKey(kSyntheticSourceId, resource_type_index,
-    pak::ResourceIndexT { synthetic_index });
+    pak::core::ResourceIndexT { synthetic_index });
 }
 
 auto AssetLoader::MintSyntheticBufferKey() -> ResourceKey
@@ -4108,7 +4118,7 @@ auto AssetLoader::MintSyntheticBufferKey() -> ResourceKey
   const auto resource_type_index = static_cast<uint16_t>(
     IndexOf<data::BufferResource, ResourceTypeList>::value);
   return PackResourceKey(kSyntheticSourceId, resource_type_index,
-    pak::ResourceIndexT { synthetic_index });
+    pak::core::ResourceIndexT { synthetic_index });
 }
 
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)

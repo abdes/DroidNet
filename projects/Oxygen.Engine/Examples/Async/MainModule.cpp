@@ -87,7 +87,7 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   namespace d = oxygen::data;
   namespace pak = oxygen::data::pak;
 
-  pak::MaterialAssetDesc desc {};
+  pak::render::MaterialAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(
     oxygen::data::AssetType::kMaterial); // MaterialAsset (for tooling/debug)
   // Safe copy name
@@ -98,7 +98,7 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.header.version = 1;
   desc.header.streaming_priority = 255;
   desc.material_domain = static_cast<uint8_t>(domain);
-  desc.flags = double_sided ? pak::kMaterialFlag_DoubleSided : 0u;
+  desc.flags = double_sided ? pak::render::kMaterialFlag_DoubleSided : 0u;
   desc.shader_stages = 0;
   desc.base_color[0] = rgba.r;
   desc.base_color[1] = rgba.g;
@@ -121,8 +121,8 @@ auto BuildSphereLodAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
   // NOLINTBEGIN(*-magic-numbers)
   using oxygen::data::MaterialAsset;
   using oxygen::data::MeshBuilder;
-  using oxygen::data::pak::GeometryAssetDesc;
-  using oxygen::data::pak::MeshViewDesc;
+  using oxygen::data::pak::geometry::GeometryAssetDesc;
+  using oxygen::data::pak::geometry::MeshViewDesc;
 
   // Diagnostic toggle: force single-LOD spheres to rule out LOD switch pops
   // as a source of per-mesh stutter. Set to false to restore dual-LOD.
@@ -198,8 +198,8 @@ auto BuildTwoSubmeshQuadAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
 {
   using oxygen::data::MaterialAsset;
   using oxygen::data::MeshBuilder;
-  using oxygen::data::pak::GeometryAssetDesc;
-  using oxygen::data::pak::MeshViewDesc;
+  using oxygen::data::pak::geometry::GeometryAssetDesc;
+  using oxygen::data::pak::geometry::MeshViewDesc;
 
   // Simple quad (XY plane), two triangles
   std::vector<Vertex> vertices;
@@ -1048,7 +1048,7 @@ auto MainModule::UpdateSceneMutations(const float delta_time) -> void
       last_ovr_toggle_ = ovr_phase;
       const bool apply_override = (ovr_phase % 2) == 1;
       if (apply_override) {
-        data::pak::MaterialAssetDesc desc {};
+        data::pak::render::MaterialAssetDesc desc {};
         desc.header.asset_type
           = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
         const auto* name = "BlueOverride";

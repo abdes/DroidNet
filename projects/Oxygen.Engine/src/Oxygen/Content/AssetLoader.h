@@ -547,7 +547,7 @@ public:
   */
   template <typename T>
   inline auto MakeResourceKey(const PakFile& pak_file,
-    data::pak::ResourceIndexT resource_index) -> ResourceKey
+    data::pak::core::ResourceIndexT resource_index) -> ResourceKey
   {
     auto pak_index = GetPakIndex(pak_file);
     auto resource_type_index
@@ -872,11 +872,11 @@ public:
   }
   [[nodiscard]] OXGN_CNTT_API auto MakeScriptResourceKeyForAsset(
     const data::AssetKey& context_asset_key,
-    data::pak::ResourceIndexT resource_index) const noexcept
+    data::pak::core::ResourceIndexT resource_index) const noexcept
     -> std::optional<ResourceKey> override;
   [[nodiscard]] OXGN_CNTT_API auto ReadScriptResourceForAsset(
     const data::AssetKey& context_asset_key,
-    data::pak::ResourceIndexT resource_index) const
+    data::pak::core::ResourceIndexT resource_index) const
     -> std::shared_ptr<const data::ScriptResource> override;
 
   [[nodiscard]] auto GetPhysicsSceneAsset(
@@ -900,20 +900,20 @@ public:
 
   [[nodiscard]] OXGN_CNTT_API auto MakePhysicsResourceKey(
     data::SourceKey source_key,
-    data::pak::ResourceIndexT resource_index) const noexcept
+    data::pak::core::ResourceIndexT resource_index) const noexcept
     -> std::optional<ResourceKey> override;
   [[nodiscard]] OXGN_CNTT_API auto MakePhysicsResourceKeyForAsset(
     const data::AssetKey& context_asset_key,
-    data::pak::ResourceIndexT resource_index) const noexcept
+    data::pak::core::ResourceIndexT resource_index) const noexcept
     -> std::optional<ResourceKey> override;
   [[nodiscard]] OXGN_CNTT_API auto ReadCollisionShapeAssetDescForAsset(
     const data::AssetKey& context_asset_key,
-    data::pak::ResourceIndexT shape_asset_index) const
-    -> std::optional<data::pak::CollisionShapeAssetDesc> override;
+    data::pak::core::ResourceIndexT shape_asset_index) const
+    -> std::optional<data::pak::physics::CollisionShapeAssetDesc> override;
   [[nodiscard]] OXGN_CNTT_API auto ReadPhysicsMaterialAssetDescForAsset(
     const data::AssetKey& context_asset_key,
-    data::pak::ResourceIndexT material_asset_index) const
-    -> std::optional<data::pak::PhysicsMaterialAssetDesc> override;
+    data::pak::core::ResourceIndexT material_asset_index) const
+    -> std::optional<data::pak::physics::PhysicsMaterialAssetDesc> override;
   [[nodiscard]] OXGN_CNTT_API auto FindPhysicsSidecarAssetKeyForScene(
     const data::AssetKey& scene_key) const
     -> std::optional<data::AssetKey> override;
@@ -934,7 +934,7 @@ public:
 
   [[nodiscard]] OXGN_CNTT_API auto GetHydratedScriptSlots(
     const data::SceneAsset& scene_asset,
-    const data::pak::ScriptingComponentRecord& component) const
+    const data::pak::scripting::ScriptingComponentRecord& component) const
     -> std::vector<IAssetLoader::HydratedScriptSlot> override;
 
   [[nodiscard]] auto HasTexture(ResourceKey key) const noexcept -> bool override
@@ -1338,8 +1338,8 @@ private:
   // Private helper to pack resource key without exposing internal type in the
   // public header. Implemented in the .cpp which includes InternalResourceKey.
   OXGN_CNTT_API static auto PackResourceKey(uint16_t pak_index,
-    uint16_t resource_type_index, data::pak::ResourceIndexT resource_index)
-    -> ResourceKey;
+    uint16_t resource_type_index,
+    data::pak::core::ResourceIndexT resource_index) -> ResourceKey;
 
   // Bind an internal container-relative resource reference into an opaque
   // ResourceKey. Owning-thread only.

@@ -1,8 +1,8 @@
-# Input Assets In PAK v6
+# Input Assets In PAK v7
 
 ## Purpose
 
-Define a production-ready, data-driven input asset model in `PAK v6` that matches Oxygen's existing action-based runtime semantics exactly, while adding complete tooling coverage (`PakGen`, `PakDump`, `Inspector`).
+Define a production-ready, data-driven input asset model in `PAK v7` that matches Oxygen's existing action-based runtime semantics exactly, while adding complete tooling coverage (`PakGen`, `PakDump`, `Inspector`).
 
 This document is intentionally constrained to what the engine already supports today in:
 
@@ -35,7 +35,7 @@ The spec must preserve all of these runtime facts:
 6. Input consumption is action-driven (`Action::ConsumesInput`) and short-circuits lower-priority contexts in current frame path.
 7. Modifiers are not implemented yet (`InputActionMapping` has TODO only). They are out of scope for v6.
 
-## PAK v6 Contract
+## PAK v7 Contract
 
 ## AssetType additions
 
@@ -55,11 +55,11 @@ File: `src/Oxygen/Data/ComponentType.h`
 
 File: `src/Oxygen/Data/PakFormat.h`
 
-1. Add `namespace oxygen::data::pak::v6`.
-2. `using namespace v5;` in `v6`.
-3. `v6::PakHeader` defaults to `version = 6`.
-4. `v6::PakFooter` layout remains byte-compatible with `v5::PakFooter`.
-5. Default `pak` aliases move from `v5::*` to `v6::*`.
+1. Add `namespace oxygen::data::pak::v7`.
+2. Use the latest unversioned `pak` namespace directly.
+3. `v7::PakHeader` defaults to `version = 6`.
+4. `v7::PakFooter` layout remains byte-compatible with `v7::PakFooter`.
+5. Default `pak` aliases resolve directly to the latest schema symbols.
 
 ## v6 enums and records
 
@@ -312,7 +312,7 @@ Files:
 
 Required changes:
 
-1. Accept `PAK v6` (`PakFileDumper` currently hard-limits to v4/v5).
+1. Accept `PAK v7` (`PakFileDumper` currently hard-limits to v4/v5).
 2. Register new asset dumpers for `AssetType::kInputAction` and `AssetType::kInputMappingContext`.
 3. Scene dumper must include `ComponentType::kInputContextBinding` table summary and record dump.
 4. Add output for trigger arrays, aux records, and resolved slot names in mapping context asset dump.
@@ -364,19 +364,19 @@ Required changes:
    - `ComponentType::kInputContextBinding`
 3. `src/Oxygen/Data/PakFormat.h` (`namespace pak::v6`)
    - symbols:
-   - `v6::kInputActionAssetVersion`
-   - `v6::kInputMappingContextAssetVersion`
-   - `v6::InputActionAssetFlags`
-   - `v6::InputTriggerType`
-   - `v6::InputTriggerBehavior`
-   - `v6::InputActionAssetDesc`
-   - `v6::InputMappingContextAssetDesc`
-   - `v6::InputActionMappingRecord`
-   - `v6::InputTriggerRecord`
-   - `v6::InputTriggerAuxRecord`
-   - `v6::InputContextBindingRecord`
-   - `v6::PakHeader`
-   - `v6::PakFooter`
+   - `v7::kInputActionAssetVersion`
+   - `v7::kInputMappingContextAssetVersion`
+   - `v7::InputActionAssetFlags`
+   - `v7::InputTriggerType`
+   - `v7::InputTriggerBehavior`
+   - `v7::InputActionAssetDesc`
+   - `v7::InputMappingContextAssetDesc`
+   - `v7::InputActionMappingRecord`
+   - `v7::InputTriggerRecord`
+   - `v7::InputTriggerAuxRecord`
+   - `v7::InputContextBindingRecord`
+   - `v7::PakHeader`
+   - `v7::PakFooter`
 4. `src/Oxygen/Data/ToStringConverters.cpp`
    - symbols:
    - `to_string(AssetType::kInputAction)`

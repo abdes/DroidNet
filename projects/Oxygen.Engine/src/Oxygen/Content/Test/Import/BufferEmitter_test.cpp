@@ -18,7 +18,7 @@
 
 using namespace oxygen::content::import;
 using namespace oxygen::co;
-using PakBufferResourceDesc = oxygen::data::pak::BufferResourceDesc;
+using PakBufferResourceDesc = oxygen::data::pak::core::BufferResourceDesc;
 namespace co = oxygen::co;
 
 // NOLINTBEGIN(*-magic-numbers)

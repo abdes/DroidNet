@@ -43,7 +43,7 @@ using oxygen::data::BufferResource;
 ### Usage Example
 
  ```cpp
- pak::BufferResourceDesc desc { .data_offset = 0,
+ pak::core::BufferResourceDesc desc { .data_offset = 0,
    .size_bytes = sizeof(uint32_t) * index_count,
    .usage_flags = static_cast<uint32_t>(
      BufferResource::UsageFlags::kIndexBuffer),
@@ -54,10 +54,10 @@ using oxygen::data::BufferResource;
  auto resource = BufferResource(desc, std::move(bytes));
  ```
 
- @see pak::BufferResourceDesc, to_string(BufferResource::UsageFlags)
+ @see pak::core::BufferResourceDesc, to_string(BufferResource::UsageFlags)
 */
 BufferResource::BufferResource(
-  pak::BufferResourceDesc desc, std::vector<uint8_t> data)
+  pak::core::BufferResourceDesc desc, std::vector<uint8_t> data)
   : desc_(std::move(desc))
   , data_(std::move(data))
 {

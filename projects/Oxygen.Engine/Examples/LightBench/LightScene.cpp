@@ -424,8 +424,8 @@ auto LightScene::BuildQuadGeometry(
   -> std::shared_ptr<const data::GeometryAsset>
 {
   using oxygen::data::MeshBuilder;
-  using oxygen::data::pak::GeometryAssetDesc;
-  using oxygen::data::pak::MeshViewDesc;
+  using oxygen::data::pak::geometry::GeometryAssetDesc;
+  using oxygen::data::pak::geometry::MeshViewDesc;
 
   auto quad_data = oxygen::data::MakeQuadMeshAsset(1.0F, 1.0F);
   CHECK_F(quad_data.has_value());
@@ -466,8 +466,8 @@ auto LightScene::BuildSphereGeometry(
   -> std::shared_ptr<const data::GeometryAsset>
 {
   using oxygen::data::MeshBuilder;
-  using oxygen::data::pak::GeometryAssetDesc;
-  using oxygen::data::pak::MeshViewDesc;
+  using oxygen::data::pak::geometry::GeometryAssetDesc;
+  using oxygen::data::pak::geometry::MeshViewDesc;
 
   auto sphere_data = oxygen::data::MakeSphereMeshAsset(32, 64);
   CHECK_F(sphere_data.has_value());
@@ -509,7 +509,7 @@ auto LightScene::MakeSolidColorMaterial(std::string_view name, const Vec4& rgba,
 {
   using namespace oxygen::data;
 
-  pak::MaterialAssetDesc desc {};
+  pak::render::MaterialAssetDesc desc {};
   desc.header.asset_type
     = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
   constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
@@ -519,7 +519,7 @@ auto LightScene::MakeSolidColorMaterial(std::string_view name, const Vec4& rgba,
   desc.header.version = 1;
   desc.header.streaming_priority = 255;
   desc.material_domain = static_cast<uint8_t>(MaterialDomain::kOpaque);
-  desc.flags = double_sided ? pak::kMaterialFlag_DoubleSided : 0u;
+  desc.flags = double_sided ? pak::render::kMaterialFlag_DoubleSided : 0u;
   desc.shader_stages = 0;
   desc.base_color[0] = rgba.r;
   desc.base_color[1] = rgba.g;

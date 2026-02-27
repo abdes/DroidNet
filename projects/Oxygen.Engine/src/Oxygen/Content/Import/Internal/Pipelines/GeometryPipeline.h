@@ -48,7 +48,7 @@ public:
 
   //! Material patch to apply at a descriptor offset.
   struct MaterialKeyPatch {
-    data::pak::DataBlobSizeT material_key_offset = 0;
+    data::pak::core::DataBlobSizeT material_key_offset = 0;
     data::AssetKey key {};
   };
 

@@ -49,7 +49,7 @@ inline auto LoadPhysicsSceneAsset(const LoaderContext& context)
   const size_t base_pos = *base_pos_res;
 
   // Read the fixed descriptor to compute the total payload size.
-  data::pak::v7::PhysicsSceneAssetDesc desc {};
+  data::pak::physics::PhysicsSceneAssetDesc desc {};
   {
     auto blob_res = reader.ReadBlob(sizeof(desc));
     CheckLoaderResult(
@@ -65,17 +65,17 @@ inline auto LoadPhysicsSceneAsset(const LoaderContext& context)
   }
 
   // Validate descriptor version.
-  if (desc.header.version != data::pak::v7::kPhysicsSceneAssetVersion) {
+  if (desc.header.version != data::pak::physics::kPhysicsSceneAssetVersion) {
     throw std::runtime_error(
       "unsupported PhysicsSceneAssetDesc descriptor version");
   }
 
   // Compute the full payload extent from the component table directory.
-  size_t payload_end = sizeof(data::pak::v7::PhysicsSceneAssetDesc);
+  size_t payload_end = sizeof(data::pak::physics::PhysicsSceneAssetDesc);
 
   if (desc.component_table_count > 0) {
     const size_t dir_bytes = static_cast<size_t>(desc.component_table_count)
-      * sizeof(data::pak::v7::PhysicsComponentTableDesc);
+      * sizeof(data::pak::physics::PhysicsComponentTableDesc);
 
     AddRangeEnd(payload_end,
       static_cast<size_t>(desc.component_table_directory_offset), dir_bytes);
@@ -87,7 +87,7 @@ inline auto LoadPhysicsSceneAsset(const LoaderContext& context)
       seek_res, "physics scene asset", "Seek(component_table_directory)");
 
     for (uint32_t i = 0; i < desc.component_table_count; ++i) {
-      data::pak::v7::PhysicsComponentTableDesc entry {};
+      data::pak::physics::PhysicsComponentTableDesc entry {};
       auto entry_blob = reader.ReadBlob(sizeof(entry));
       CheckLoaderResult(entry_blob, "physics scene asset",
         "ReadBlob(PhysicsComponentTableDesc)");

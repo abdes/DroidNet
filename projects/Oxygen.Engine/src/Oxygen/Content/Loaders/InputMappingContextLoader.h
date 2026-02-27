@@ -40,10 +40,10 @@ namespace detail {
     }
   }
 
-  inline auto ValidateTriggerType(const data::pak::InputTriggerType type)
+  inline auto ValidateTriggerType(const data::pak::input::InputTriggerType type)
     -> void
   {
-    using T = data::pak::InputTriggerType;
+    using T = data::pak::input::InputTriggerType;
     switch (type) {
     case T::kPressed:
     case T::kReleased:
@@ -79,10 +79,10 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
   const size_t base_pos = *base_pos_res;
 
   auto desc_blob
-    = reader.ReadBlob(sizeof(data::pak::InputMappingContextAssetDesc));
+    = reader.ReadBlob(sizeof(data::pak::input::InputMappingContextAssetDesc));
   CheckLoaderResult(
     desc_blob, "input mapping context asset", "InputMappingContextAssetDesc");
-  data::pak::InputMappingContextAssetDesc desc {};
+  data::pak::input::InputMappingContextAssetDesc desc {};
   std::memcpy(&desc, desc_blob->data(), sizeof(desc));
 
   if (static_cast<data::AssetType>(desc.header.asset_type)
@@ -102,23 +102,24 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
 
   if (desc.mappings.count > 0
     && desc.mappings.entry_size
-      != sizeof(data::pak::InputActionMappingRecord)) {
+      != sizeof(data::pak::input::InputActionMappingRecord)) {
     throw std::runtime_error("input mappings entry_size mismatch");
   }
   if (desc.triggers.count > 0
-    && desc.triggers.entry_size != sizeof(data::pak::InputTriggerRecord)) {
+    && desc.triggers.entry_size
+      != sizeof(data::pak::input::InputTriggerRecord)) {
     throw std::runtime_error("input triggers entry_size mismatch");
   }
   if (desc.trigger_aux.count > 0
     && desc.trigger_aux.entry_size
-      != sizeof(data::pak::InputTriggerAuxRecord)) {
+      != sizeof(data::pak::input::InputTriggerAuxRecord)) {
     throw std::runtime_error("input trigger_aux entry_size mismatch");
   }
   if (desc.strings.count > 0 && desc.strings.entry_size != sizeof(char)) {
     throw std::runtime_error("input strings entry_size mismatch");
   }
 
-  size_t end = sizeof(data::pak::InputMappingContextAssetDesc);
+  size_t end = sizeof(data::pak::input::InputMappingContextAssetDesc);
   AddRangeEnd(end, desc.mappings.offset, mappings_bytes);
   AddRangeEnd(end, desc.triggers.offset, triggers_bytes);
   AddRangeEnd(end, desc.trigger_aux.offset, trigger_aux_bytes);
@@ -132,42 +133,44 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
   auto bytes = std::move(*bytes_res);
   const auto payload = std::span<const std::byte>(bytes);
 
-  std::vector<data::pak::InputActionMappingRecord> mappings(
+  std::vector<data::pak::input::InputActionMappingRecord> mappings(
     desc.mappings.count);
   for (uint32_t i = 0; i < desc.mappings.count; ++i) {
     std::memcpy(&mappings[i],
       payload
         .subspan(desc.mappings.offset
             + (static_cast<size_t>(i)
-              * sizeof(data::pak::InputActionMappingRecord)),
-          sizeof(data::pak::InputActionMappingRecord))
+              * sizeof(data::pak::input::InputActionMappingRecord)),
+          sizeof(data::pak::input::InputActionMappingRecord))
         .data(),
-      sizeof(data::pak::InputActionMappingRecord));
+      sizeof(data::pak::input::InputActionMappingRecord));
   }
 
-  std::vector<data::pak::InputTriggerRecord> triggers(desc.triggers.count);
+  std::vector<data::pak::input::InputTriggerRecord> triggers(
+    desc.triggers.count);
   for (uint32_t i = 0; i < desc.triggers.count; ++i) {
     std::memcpy(&triggers[i],
       payload
         .subspan(desc.triggers.offset
-            + (static_cast<size_t>(i) * sizeof(data::pak::InputTriggerRecord)),
-          sizeof(data::pak::InputTriggerRecord))
+            + (static_cast<size_t>(i)
+              * sizeof(data::pak::input::InputTriggerRecord)),
+          sizeof(data::pak::input::InputTriggerRecord))
         .data(),
-      sizeof(data::pak::InputTriggerRecord));
+      sizeof(data::pak::input::InputTriggerRecord));
     detail::ValidateTriggerType(triggers[i].type);
   }
 
-  std::vector<data::pak::InputTriggerAuxRecord> trigger_aux(
+  std::vector<data::pak::input::InputTriggerAuxRecord> trigger_aux(
     desc.trigger_aux.count);
   for (uint32_t i = 0; i < desc.trigger_aux.count; ++i) {
     std::memcpy(&trigger_aux[i],
       payload
         .subspan(desc.trigger_aux.offset
             + (static_cast<size_t>(i)
-              * sizeof(data::pak::InputTriggerAuxRecord)),
-          sizeof(data::pak::InputTriggerAuxRecord))
+              * sizeof(data::pak::input::InputTriggerAuxRecord)),
+          sizeof(data::pak::input::InputTriggerAuxRecord))
         .data(),
-      sizeof(data::pak::InputTriggerAuxRecord));
+      sizeof(data::pak::input::InputTriggerAuxRecord));
   }
 
   std::vector<char> strings(strings_bytes, '\0');
@@ -190,7 +193,7 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
   }
 
   for (const auto& trigger : triggers) {
-    if (trigger.type == data::pak::InputTriggerType::kCombo) {
+    if (trigger.type == data::pak::input::InputTriggerType::kCombo) {
       const auto aux_end = trigger.aux_start_index + trigger.aux_count;
       if (aux_end < trigger.aux_start_index || aux_end > trigger_aux.size()) {
         throw std::runtime_error("input combo trigger aux range out of bounds");

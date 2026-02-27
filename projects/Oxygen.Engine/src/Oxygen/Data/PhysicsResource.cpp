@@ -9,7 +9,7 @@
 namespace oxygen::data {
 
 PhysicsResource::PhysicsResource(
-  pak::PhysicsResourceDesc desc, std::vector<uint8_t> data)
+  pak::physics::PhysicsResourceDesc desc, std::vector<uint8_t> data)
   : desc_(desc)
   , data_(std::move(data))
 {

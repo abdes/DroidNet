@@ -38,9 +38,10 @@ inline auto LoadScriptAsset(const LoaderContext& context)
 
   auto pack = reader.ScopedAlignment(1);
 
-  auto desc_blob = reader.ReadBlob(sizeof(data::pak::ScriptAssetDesc));
+  auto desc_blob
+    = reader.ReadBlob(sizeof(data::pak::scripting::ScriptAssetDesc));
   CheckLoaderResult(desc_blob, "script asset", "ScriptAssetDesc");
-  data::pak::ScriptAssetDesc desc {};
+  data::pak::scripting::ScriptAssetDesc desc {};
   std::memcpy(&desc, desc_blob->data(), sizeof(desc));
 
   if (static_cast<data::AssetType>(desc.header.asset_type)
@@ -63,7 +64,7 @@ inline auto LoadScriptAsset(const LoaderContext& context)
       = std::array { desc.bytecode_resource_index, desc.source_resource_index };
     for (size_t i = 0; i < script_indices.size(); ++i) {
       const auto resource_index = script_indices.at(i);
-      if (resource_index == data::pak::kNoResourceIndex) {
+      if (resource_index == data::pak::core::kNoResourceIndex) {
         continue;
       }
       if (i == 1 && resource_index == script_indices[0]) {
@@ -81,7 +82,7 @@ inline auto LoadScriptAsset(const LoaderContext& context)
   // ScriptAsset defaults are currently carried by ScriptSlotRecord parameter
   // arrays in scene data. Asset-level defaults remain empty in this phase.
   return std::make_unique<data::ScriptAsset>(context.current_asset_key, desc,
-    std::vector<data::pak::ScriptParamRecord> {});
+    std::vector<data::pak::scripting::ScriptParamRecord> {});
 }
 
 //! Loader for script resources (bytecode or source blobs).
@@ -94,9 +95,10 @@ inline auto LoadScriptResource(LoaderContext context)
   auto& reader = *context.desc_reader;
 
   auto pack = reader.ScopedAlignment(1);
-  auto desc_blob = reader.ReadBlob(sizeof(data::pak::ScriptResourceDesc));
+  auto desc_blob
+    = reader.ReadBlob(sizeof(data::pak::scripting::ScriptResourceDesc));
   CheckLoaderResult(desc_blob, "script resource", "ScriptResourceDesc");
-  data::pak::ScriptResourceDesc desc {};
+  data::pak::scripting::ScriptResourceDesc desc {};
   std::memcpy(&desc, desc_blob->data(), sizeof(desc));
 
   std::vector<uint8_t> data_buffer(desc.size_bytes);

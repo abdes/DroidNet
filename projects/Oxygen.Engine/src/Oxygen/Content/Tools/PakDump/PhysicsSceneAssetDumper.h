@@ -23,9 +23,9 @@ namespace oxygen::content::pakdump {
 //! Dumps physics scene asset descriptors.
 class PhysicsSceneAssetDumper final : public AssetDumper {
   static auto BindingTypeName(
-    const oxygen::data::pak::v7::PhysicsBindingType type) -> const char*
+    const oxygen::data::pak::physics::PhysicsBindingType type) -> const char*
   {
-    using oxygen::data::pak::v7::PhysicsBindingType;
+    using oxygen::data::pak::physics::PhysicsBindingType;
     switch (type) {
     case PhysicsBindingType::kRigidBody:
       return "RigidBody";
@@ -54,9 +54,16 @@ class PhysicsSceneAssetDumper final : public AssetDumper {
 
   static auto PrintSampleRecord(const std::vector<std::byte>& blob,
     const size_t table_offset,
-    const oxygen::data::pak::v7::PhysicsBindingType type) -> void
+    const oxygen::data::pak::physics::PhysicsBindingType type) -> void
   {
-    using namespace oxygen::data::pak::v7;
+    using oxygen::data::pak::physics::AggregateBindingRecord;
+    using oxygen::data::pak::physics::CharacterBindingRecord;
+    using oxygen::data::pak::physics::ColliderBindingRecord;
+    using oxygen::data::pak::physics::JointBindingRecord;
+    using oxygen::data::pak::physics::PhysicsBindingType;
+    using oxygen::data::pak::physics::RigidBodyBindingRecord;
+    using oxygen::data::pak::physics::SoftBodyBindingRecord;
+    using oxygen::data::pak::physics::VehicleBindingRecord;
 
     switch (type) {
     case PhysicsBindingType::kRigidBody: {
@@ -116,13 +123,13 @@ class PhysicsSceneAssetDumper final : public AssetDumper {
 
 public:
   auto DumpAsync(const oxygen::content::PakFile& pak,
-    const oxygen::data::pak::v2::AssetDirectoryEntry& entry, DumpContext& ctx,
+    const oxygen::data::pak::core::AssetDirectoryEntry& entry, DumpContext& ctx,
     const size_t idx, oxygen::content::AssetLoader& asset_loader) const
     -> oxygen::co::Co<> override
   {
     (void)asset_loader;
 
-    using oxygen::data::pak::v7::PhysicsSceneAssetDesc;
+    using oxygen::data::pak::physics::PhysicsSceneAssetDesc;
 
     std::cout << "Asset #" << idx << " (PhysicsScene):\n";
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
@@ -162,7 +169,7 @@ public:
     const size_t dir_offset
       = static_cast<size_t>(scene.component_table_directory_offset);
     const size_t dir_size = static_cast<size_t>(scene.component_table_count)
-      * sizeof(oxygen::data::pak::v7::PhysicsComponentTableDesc);
+      * sizeof(oxygen::data::pak::physics::PhysicsComponentTableDesc);
     if (!InRange(dir_offset, dir_size, data->size())) {
       PrintUtils::Field("Binding Tables", "directory out of bounds", 8);
       std::cout << "\n";
@@ -174,8 +181,8 @@ public:
     for (uint32_t i = 0; i < scene.component_table_count; ++i) {
       const size_t entry_offset = dir_offset
         + static_cast<size_t>(i)
-          * sizeof(oxygen::data::pak::v7::PhysicsComponentTableDesc);
-      oxygen::data::pak::v7::PhysicsComponentTableDesc table_desc {};
+          * sizeof(oxygen::data::pak::physics::PhysicsComponentTableDesc);
+      oxygen::data::pak::physics::PhysicsComponentTableDesc table_desc {};
       std::memcpy(&table_desc, data->data() + entry_offset, sizeof(table_desc));
 
       const auto table_offset = static_cast<size_t>(table_desc.table.offset);

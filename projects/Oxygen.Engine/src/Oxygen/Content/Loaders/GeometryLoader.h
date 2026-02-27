@@ -31,7 +31,8 @@ namespace oxygen::content::loaders {
 
 namespace detail {
 
-  constexpr size_t kMeshInfoSize = sizeof(oxygen::data::pak::SkinnedMeshInfo);
+  constexpr size_t kMeshInfoSize
+    = sizeof(oxygen::data::pak::geometry::SkinnedMeshInfo);
 
   // Accepts any Result<T> and checks for error, logs and throws if needed
   template <typename ResultT>
@@ -58,12 +59,12 @@ namespace detail {
 
   // Handles loading of vertex/index buffers for standard meshes
   inline auto LoadStandardMeshBuffers(
-    LoaderContext& context, data::pak::MeshDesc& desc)
+    LoaderContext& context, data::pak::geometry::MeshDesc& desc)
     -> std::pair<std::shared_ptr<data::BufferResource>,
       std::shared_ptr<data::BufferResource>>
   {
-    using namespace oxygen::data::pak;
     using data::BufferResource;
+    using oxygen::data::pak::core::ResourceIndexT;
 
     DCHECK_NOTNULL_F(
       context.desc_reader, "expecting desc_reader not to be null");
@@ -92,7 +93,8 @@ namespace detail {
       CheckResult(max_result, "m.bounding_box_max");
     }
 
-    constexpr size_t kStandardInfoSize = sizeof(data::pak::StandardMeshInfo);
+    constexpr size_t kStandardInfoSize
+      = sizeof(data::pak::geometry::StandardMeshInfo);
     constexpr size_t kStandardPadding = kMeshInfoSize - kStandardInfoSize;
     auto skip_result
       = reader.Forward(static_cast<std::streamoff>(kStandardPadding));
@@ -111,7 +113,7 @@ namespace detail {
     }
 
     auto collect_buffer_ref = [&](const ResourceIndexT resource_index) {
-      if (resource_index == data::pak::kNoResourceIndex) {
+      if (resource_index == data::pak::core::kNoResourceIndex) {
         return; // sentinel / absent – nothing to collect
       }
       internal::ResourceRef ref {
@@ -129,7 +131,7 @@ namespace detail {
 
   // Handles loading and generation for procedural meshes
   inline auto LoadProceduralMeshBuffers(serio::AnyReader& reader,
-    data::pak::MeshDesc& desc, std::vector<data::Vertex>& vertices,
+    data::pak::geometry::MeshDesc& desc, std::vector<data::Vertex>& vertices,
     std::vector<uint32_t>& indices) -> void
   {
     // Access union field via desc.info.procedural
@@ -141,7 +143,7 @@ namespace detail {
     LOG_F(2, "param blob size : {}", info.params_size);
 
     constexpr size_t kProceduralInfoSize
-      = sizeof(data::pak::ProceduralMeshInfo);
+      = sizeof(data::pak::geometry::ProceduralMeshInfo);
     constexpr size_t kProceduralPadding = kMeshInfoSize - kProceduralInfoSize;
     auto skip_result
       = reader.Forward(static_cast<std::streamoff>(kProceduralPadding));
@@ -165,12 +167,12 @@ namespace detail {
   }
 
   inline auto LoadSkinnedMeshBuffers(
-    LoaderContext& context, data::pak::MeshDesc& desc)
+    LoaderContext& context, data::pak::geometry::MeshDesc& desc)
     -> std::pair<std::shared_ptr<data::BufferResource>,
       std::shared_ptr<data::BufferResource>>
   {
-    using namespace oxygen::data::pak;
     using data::BufferResource;
+    using oxygen::data::pak::core::ResourceIndexT;
 
     DCHECK_NOTNULL_F(
       context.desc_reader, "expecting desc_reader not to be null");
@@ -209,8 +211,7 @@ namespace detail {
     auto skeleton_key_result
       = reader.ReadInto<data::AssetKey>(info.skeleton_asset_key);
     CheckResult(skeleton_key_result, "m.skeleton_asset_key");
-    LOG_F(2, "skeleton asset  : {}",
-      nostd::to_string(info.skeleton_asset_key).c_str());
+    LOG_F(2, "skeleton asset  : {}", info.skeleton_asset_key);
 
     auto joint_count_result = reader.ReadInto<uint16_t>(info.joint_count);
     CheckResult(joint_count_result, "m.joint_count");
@@ -247,7 +248,7 @@ namespace detail {
     }
 
     auto collect_buffer_ref = [&](const ResourceIndexT resource_index) {
-      if (resource_index == data::pak::kNoResourceIndex) {
+      if (resource_index == data::pak::core::kNoResourceIndex) {
         return; // sentinel / absent – nothing to collect
       }
       internal::ResourceRef ref {
@@ -273,12 +274,11 @@ namespace detail {
   }
 
   inline auto LoadMeshViewDesc(serio::AnyReader& desc_reader)
-    -> data::pak::MeshViewDesc
+    -> data::pak::geometry::MeshViewDesc
   {
     LOG_SCOPE_F(1, "Mesh View");
 
-    using namespace oxygen::data;
-    using namespace oxygen::data::pak;
+    using oxygen::data::pak::geometry::MeshViewDesc;
 
     // Read MeshViewDesc from the stream
     MeshViewDesc mesh_view_desc;
@@ -294,12 +294,13 @@ namespace detail {
   }
 
   inline auto LoadSubMeshDesc(serio::AnyReader& desc_reader)
-    -> data::pak::SubMeshDesc
+    -> data::pak::geometry::SubMeshDesc
   {
     LOG_SCOPE_F(1, "Sub-Mesh");
 
-    using namespace oxygen::data;
-    using namespace oxygen::data::pak;
+    using oxygen::data::AssetKey;
+    using oxygen::data::pak::core::kMaxNameSize;
+    using oxygen::data::pak::geometry::SubMeshDesc;
 
     SubMeshDesc desc;
 
@@ -314,8 +315,7 @@ namespace detail {
     auto mat_key_result
       = desc_reader.ReadInto<AssetKey>(desc.material_asset_key);
     CheckResult(mat_key_result, "sm.material_asset_key");
-    LOG_F(2, "material asset : {}",
-      nostd::to_string(desc.material_asset_key).c_str());
+    LOG_F(2, "material asset : {}", desc.material_asset_key);
 
     // mesh_view_count
     auto mesh_view_count_result
@@ -337,10 +337,9 @@ namespace detail {
   }
 
   inline auto LoadSubMeshViews(serio::AnyReader& reader,
-    uint32_t mesh_view_count) -> std::vector<data::pak::MeshViewDesc>
+    uint32_t mesh_view_count) -> std::vector<data::pak::geometry::MeshViewDesc>
   {
-    using namespace oxygen::data;
-    using namespace oxygen::data::pak;
+    using oxygen::data::pak::geometry::MeshViewDesc;
 
     std::vector<MeshViewDesc> mesh_views;
     mesh_views.reserve(mesh_view_count);
@@ -361,8 +360,13 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
   DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
   auto& reader = *context.desc_reader;
 
-  using namespace oxygen::data;
-  using namespace oxygen::data::pak;
+  using oxygen::data::AssetKey;
+  using oxygen::data::MaterialAsset;
+  using oxygen::data::MeshBuilder;
+  using oxygen::data::MeshType;
+  using oxygen::data::Vertex;
+  using oxygen::data::pak::core::kMaxNameSize;
+  using oxygen::data::pak::geometry::MeshDesc;
 
   // Read MeshDesc fields one by one
   MeshDesc desc;
@@ -374,8 +378,7 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
   // mesh_type (must be read before union)
   auto mesh_type_result = reader.ReadInto<uint8_t>(desc.mesh_type);
   detail::CheckResult(mesh_type_result, "m.mesh_type");
-  LOG_F(2, "mesh type       : {}",
-    nostd::to_string(static_cast<MeshType>(desc.mesh_type)));
+  LOG_F(2, "mesh type       : {}", static_cast<MeshType>(desc.mesh_type));
 
   // submesh_count
   auto submesh_count_result = reader.ReadInto<uint32_t>(desc.submesh_count);
@@ -496,8 +499,8 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
 inline auto LoadGeometryAsset(LoaderContext context)
   -> std::unique_ptr<data::GeometryAsset>
 {
-  using namespace oxygen::data;
-  using namespace oxygen::data::pak;
+  using oxygen::data::Mesh;
+  using oxygen::data::pak::geometry::GeometryAssetDesc;
 
   LOG_SCOPE_F(1, "Geometry");
 
@@ -537,7 +540,7 @@ inline auto LoadGeometryAsset(LoaderContext context)
   }
 
   // Construct and return GeometryAsset with LOD meshes
-  return std::make_unique<GeometryAsset>(
+  return std::make_unique<data::GeometryAsset>(
     context.current_asset_key, std::move(desc), std::move(lod_meshes));
 }
 
