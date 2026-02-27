@@ -164,7 +164,7 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
     return static_cast<bool>(reader.ReadBlobInto(bytes));
   };
 
-  data::pak::GeometryAssetDesc asset_desc {};
+  data::pak::geometry::GeometryAssetDesc asset_desc {};
   if (!read_pod(asset_desc)) {
     diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
       "Failed to read geometry asset descriptor", "", ""));
@@ -183,14 +183,15 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
 
   asset_desc.header.content_hash = 0;
   if (!writer.WriteBlob(std::as_bytes(
-        std::span<const data::pak::GeometryAssetDesc, 1>(&asset_desc, 1)))) {
+        std::span<const data::pak::geometry::GeometryAssetDesc, 1>(
+          &asset_desc, 1)))) {
     diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
       "Failed to write geometry asset descriptor", "", ""));
     co_return std::nullopt;
   }
 
   for (uint32_t lod_i = 0; lod_i < asset_desc.lod_count; ++lod_i) {
-    data::pak::MeshDesc mesh_desc {};
+    data::pak::geometry::MeshDesc mesh_desc {};
     if (!read_pod(mesh_desc)) {
       diagnostics.push_back(MakeErrorDiagnostic(
         "mesh.finalize_failed", "Failed to read mesh descriptor", "", ""));
@@ -201,7 +202,7 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
 
     if (static_cast<data::MeshType>(mesh_desc.mesh_type)
       == data::MeshType::kSkinned) {
-      data::pak::SkinnedMeshInfo skinned_blob {};
+      data::pak::geometry::SkinnedMeshInfo skinned_blob {};
       if (!read_pod(skinned_blob)) {
         diagnostics.push_back(MakeErrorDiagnostic(
           "mesh.finalize_failed", "Failed to read skinned mesh blob", "", ""));
@@ -222,15 +223,16 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
       skinned_blob.inverse_bind_buffer = binding.inverse_bind_buffer;
       skinned_blob.joint_remap_buffer = binding.joint_remap_buffer;
 
-      if (!writer.WriteBlob(std::as_bytes(
-            std::span<const data::pak::MeshDesc, 1>(&mesh_desc, 1)))) {
+      if (!writer.WriteBlob(
+            std::as_bytes(std::span<const data::pak::geometry::MeshDesc, 1>(
+              &mesh_desc, 1)))) {
         diagnostics.push_back(MakeErrorDiagnostic(
           "mesh.finalize_failed", "Failed to write mesh descriptor", "", ""));
         co_return std::nullopt;
       }
 
-      if (!writer.WriteBlob(
-            std::as_bytes(std::span<const data::pak::SkinnedMeshInfo, 1>(
+      if (!writer.WriteBlob(std::as_bytes(
+            std::span<const data::pak::geometry::SkinnedMeshInfo, 1>(
               &skinned_blob, 1)))) {
         diagnostics.push_back(MakeErrorDiagnostic(
           "mesh.finalize_failed", "Failed to write skinned mesh blob", "", ""));
@@ -238,7 +240,7 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
       }
     } else if (static_cast<data::MeshType>(mesh_desc.mesh_type)
       == data::MeshType::kProcedural) {
-      data::pak::ProceduralMeshInfo procedural_info {};
+      data::pak::geometry::ProceduralMeshInfo procedural_info {};
       if (!read_pod(procedural_info)) {
         diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
           "Failed to read procedural mesh blob", "", ""));
@@ -252,15 +254,16 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
         co_return std::nullopt;
       }
 
-      if (!writer.WriteBlob(std::as_bytes(
-            std::span<const data::pak::MeshDesc, 1>(&mesh_desc, 1)))) {
+      if (!writer.WriteBlob(
+            std::as_bytes(std::span<const data::pak::geometry::MeshDesc, 1>(
+              &mesh_desc, 1)))) {
         diagnostics.push_back(MakeErrorDiagnostic(
           "mesh.finalize_failed", "Failed to write mesh descriptor", "", ""));
         co_return std::nullopt;
       }
 
-      if (!writer.WriteBlob(
-            std::as_bytes(std::span<const data::pak::ProceduralMeshInfo, 1>(
+      if (!writer.WriteBlob(std::as_bytes(
+            std::span<const data::pak::geometry::ProceduralMeshInfo, 1>(
               &procedural_info, 1)))) {
         diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
           "Failed to write procedural mesh blob", "", ""));
@@ -277,8 +280,9 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
       mesh_desc.info.standard.vertex_buffer = binding.vertex_buffer;
       mesh_desc.info.standard.index_buffer = binding.index_buffer;
 
-      if (!writer.WriteBlob(std::as_bytes(
-            std::span<const data::pak::MeshDesc, 1>(&mesh_desc, 1)))) {
+      if (!writer.WriteBlob(
+            std::as_bytes(std::span<const data::pak::geometry::MeshDesc, 1>(
+              &mesh_desc, 1)))) {
         diagnostics.push_back(MakeErrorDiagnostic(
           "mesh.finalize_failed", "Failed to write mesh descriptor", "", ""));
         co_return std::nullopt;
@@ -286,15 +290,16 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
     }
 
     for (uint32_t sub = 0; sub < mesh_desc.submesh_count; ++sub) {
-      data::pak::SubMeshDesc submesh_desc {};
+      data::pak::geometry::SubMeshDesc submesh_desc {};
       if (!read_pod(submesh_desc)) {
         diagnostics.push_back(MakeErrorDiagnostic(
           "mesh.finalize_failed", "Failed to read submesh descriptor", "", ""));
         co_return std::nullopt;
       }
 
-      if (!writer.WriteBlob(std::as_bytes(
-            std::span<const data::pak::SubMeshDesc, 1>(&submesh_desc, 1)))) {
+      if (!writer.WriteBlob(
+            std::as_bytes(std::span<const data::pak::geometry::SubMeshDesc, 1>(
+              &submesh_desc, 1)))) {
         diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
           "Failed to write submesh descriptor", "", ""));
         co_return std::nullopt;
@@ -302,15 +307,16 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
     }
 
     for (uint32_t view = 0; view < mesh_desc.mesh_view_count; ++view) {
-      data::pak::MeshViewDesc view_desc {};
+      data::pak::geometry::MeshViewDesc view_desc {};
       if (!read_pod(view_desc)) {
         diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
           "Failed to read mesh view descriptor", "", ""));
         co_return std::nullopt;
       }
 
-      if (!writer.WriteBlob(std::as_bytes(
-            std::span<const data::pak::MeshViewDesc, 1>(&view_desc, 1)))) {
+      if (!writer.WriteBlob(
+            std::as_bytes(std::span<const data::pak::geometry::MeshViewDesc, 1>(
+              &view_desc, 1)))) {
         diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
           "Failed to write mesh view descriptor", "", ""));
         co_return std::nullopt;
@@ -367,8 +373,8 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
         std::span(output_bytes.data(), output_bytes.size()));
       serio::Writer patch_writer(patch_stream);
       const auto patch_pack = patch_writer.ScopedAlignment(1);
-      if (!patch_writer.WriteBlob(
-            std::as_bytes(std::span<const data::pak::GeometryAssetDesc, 1>(
+      if (!patch_writer.WriteBlob(std::as_bytes(
+            std::span<const data::pak::geometry::GeometryAssetDesc, 1>(
               &asset_desc, 1)))) {
         diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
           "Failed to write geometry asset descriptor hash", "", ""));

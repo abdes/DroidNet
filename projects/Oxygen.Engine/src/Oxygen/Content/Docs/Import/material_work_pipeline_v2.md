@@ -309,9 +309,9 @@ The pipeline is defined as two stages with explicit parallelization boundaries:
 
 ---
 
-## Cooked Output Contract (PAK v2)
+## Cooked Output Contract (PAK v7)
 
-This pipeline targets `oxygen::data::pak::v2`. No new material asset versions
+This pipeline targets `oxygen::data::pak::v7`. No new material asset versions
 are introduced; the existing `kMaterialAssetVersion` remains authoritative. Any
 future descriptor layout changes that exceed reserved bytes must introduce a new
 PAK namespace.

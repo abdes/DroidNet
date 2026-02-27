@@ -27,10 +27,11 @@ class PhysicsResourceLoaderValidationTest
 NOLINT_TEST_F(
   PhysicsResourceLoaderHappyPathTest, LoadPhysicsResourceValidInputSucceeds)
 {
-  oxygen::data::pak::PhysicsResourceDesc desc {};
+  oxygen::data::pak::physics::PhysicsResourceDesc desc {};
   desc.data_offset = 256;
   desc.size_bytes = 96;
-  desc.format = oxygen::data::pak::PhysicsResourceFormat::kJoltShapeBinary;
+  desc.format
+    = oxygen::data::pak::physics::PhysicsResourceFormat::kJoltShapeBinary;
   desc.content_hash = 0x1122334455667788ULL;
   WriteDescriptorAndData(desc, 0x7A);
 
@@ -40,7 +41,7 @@ NOLINT_TEST_F(
   EXPECT_EQ(resource->GetDataOffset(), 256U);
   EXPECT_EQ(resource->GetDataSize(), 96U);
   EXPECT_EQ(resource->GetFormat(),
-    oxygen::data::pak::PhysicsResourceFormat::kJoltShapeBinary);
+    oxygen::data::pak::physics::PhysicsResourceFormat::kJoltShapeBinary);
   EXPECT_EQ(resource->GetContentHash(), 0x1122334455667788ULL);
   EXPECT_THAT(resource->GetData(), ::testing::Each(static_cast<uint8_t>(0x7A)));
 }
@@ -49,7 +50,8 @@ NOLINT_TEST_F(
   PhysicsResourceLoaderValidationTest, LoadPhysicsResourceTruncatedDescThrows)
 {
   std::vector<std::byte> short_bytes(
-    sizeof(oxygen::data::pak::PhysicsResourceDesc) / 2, std::byte { 0 });
+    sizeof(oxygen::data::pak::physics::PhysicsResourceDesc) / 2,
+    std::byte { 0 });
   auto packed_desc = desc_writer_.ScopedAlignment(1);
   const auto write_result = desc_writer_.WriteBlob(
     std::span<const std::byte>(short_bytes.data(), short_bytes.size()));
@@ -62,10 +64,11 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   PhysicsResourceLoaderValidationTest, LoadPhysicsResourceDataReadFailureThrows)
 {
-  oxygen::data::pak::PhysicsResourceDesc desc {};
+  oxygen::data::pak::physics::PhysicsResourceDesc desc {};
   desc.data_offset = 64;
   desc.size_bytes = 8;
-  desc.format = oxygen::data::pak::PhysicsResourceFormat::kJoltShapeBinary;
+  desc.format
+    = oxygen::data::pak::physics::PhysicsResourceFormat::kJoltShapeBinary;
   desc.content_hash = 0;
 
   auto packed_desc = desc_writer_.ScopedAlignment(1);

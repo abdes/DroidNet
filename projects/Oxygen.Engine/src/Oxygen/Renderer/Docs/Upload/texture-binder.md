@@ -66,7 +66,7 @@ This document distinguishes:
 
 **Current Implementation (Dec 2025)**:
 
-- `pak::v1::kFallbackResourceIndex` (currently `0`) is a **reserved, valid** index *within each content source's texture
+- `pak::kFallbackResourceIndex` (currently `0`) is a **reserved, valid** index *within each content source's texture
   table*. The asset pipeline/packer must store the **fallback texture** at index `0` so the meaning of "fallback" is
   consistent across tooling and runtime.
 - The renderer uses `content::ResourceKey(0)` as a **fallback sentinel** meaning "no runtime texture identity provided";

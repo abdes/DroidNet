@@ -28,8 +28,8 @@ auto MakeBlob(const size_t size) -> std::shared_ptr<ScriptBytecodeBlob>
 {
   std::vector<uint8_t> bytes(size, kFillPattern);
   return std::make_shared<ScriptBytecodeBlob>(ScriptBytecodeBlob::FromOwned(
-    std::move(bytes), oxygen::data::pak::ScriptLanguage::kLuau,
-    oxygen::data::pak::ScriptCompression::kNone, 0,
+    std::move(bytes), oxygen::data::pak::scripting::ScriptLanguage::kLuau,
+    oxygen::data::pak::scripting::ScriptCompression::kNone, 0,
     ScriptBlobOrigin::kEmbeddedResource,
     ScriptBlobCanonicalName { "test-bytecode" }));
 }

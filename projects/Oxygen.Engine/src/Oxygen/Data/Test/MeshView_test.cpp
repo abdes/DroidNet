@@ -99,7 +99,7 @@ NOLINT_TEST_F(MeshViewBasicTest, ConstructAndAccess)
 
   // Act
   MeshView view(*mesh_,
-    oxygen::data::pak::MeshViewDesc {
+    oxygen::data::pak::geometry::MeshViewDesc {
       .first_index = 0,
       .index_count = 6,
       .first_vertex = 0,
@@ -160,7 +160,7 @@ NOLINT_TEST(MeshViewBasicRealMeshTest, RealMesh_ViewValidity)
 
   // Act
   MeshView mesh_view(*mesh,
-    oxygen::data::pak::MeshViewDesc { .first_index = 0,
+    oxygen::data::pak::geometry::MeshViewDesc { .first_index = 0,
       .index_count = 3,
       .first_vertex = 0,
       .vertex_count = 3 });
@@ -217,25 +217,25 @@ NOLINT_TEST_F(MeshViewDeathTest, OutOfBoundsCreation_Death)
 
   // Assert
   EXPECT_DEATH((MeshView { *mesh,
-                 oxygen::data::pak::MeshViewDesc { .first_index = 0,
+                 oxygen::data::pak::geometry::MeshViewDesc { .first_index = 0,
                    .index_count = 3,
                    .first_vertex = 10,
                    .vertex_count = 3 } }),
     "");
   EXPECT_DEATH((MeshView { *mesh,
-                 oxygen::data::pak::MeshViewDesc { .first_index = 10,
+                 oxygen::data::pak::geometry::MeshViewDesc { .first_index = 10,
                    .index_count = 3,
                    .first_vertex = 0,
                    .vertex_count = 3 } }),
     "");
   EXPECT_DEATH((MeshView { *mesh,
-                 oxygen::data::pak::MeshViewDesc { .first_index = 0,
+                 oxygen::data::pak::geometry::MeshViewDesc { .first_index = 0,
                    .index_count = 3,
                    .first_vertex = 5,
                    .vertex_count = 1 } }),
     "");
   EXPECT_DEATH((MeshView { *mesh,
-                 oxygen::data::pak::MeshViewDesc { .first_index = 0,
+                 oxygen::data::pak::geometry::MeshViewDesc { .first_index = 0,
                    .index_count = 1,
                    .first_vertex = 3,
                    .vertex_count = 5 } }),
@@ -255,7 +255,7 @@ NOLINT_TEST_F(MeshViewDeathTest, Empty)
 
   // Assert
   EXPECT_DEATH(MeshView mesh_view(*mesh_,
-                 oxygen::data::pak::MeshViewDesc {
+                 oxygen::data::pak::geometry::MeshViewDesc {
                    .first_index = 0,
                    .index_count = 0,
                    .first_vertex = 0,
@@ -273,7 +273,7 @@ NOLINT_TEST_F(MeshViewBasicTest, CopyMove)
   SetupMesh(vertices, indices);
 
   MeshView mesh_view1(*mesh_,
-    oxygen::data::pak::MeshViewDesc {
+    oxygen::data::pak::geometry::MeshViewDesc {
       .first_index = 0,
       .index_count = 2,
       .first_vertex = 0,
@@ -304,7 +304,7 @@ NOLINT_TEST_F(MeshViewDeathTest, ZeroIndexCountPositiveVertexCount_Death)
 
   // Assert
   EXPECT_DEATH((MeshView { *mesh_,
-                 oxygen::data::pak::MeshViewDesc {
+                 oxygen::data::pak::geometry::MeshViewDesc {
                    .first_index = 0,
                    .index_count = 0, // invalid
                    .first_vertex = 0,
@@ -326,7 +326,7 @@ NOLINT_TEST_F(MeshViewDeathTest, ZeroVertexCountPositiveIndexCount_Death)
 
   // Assert
   EXPECT_DEATH((MeshView { *mesh_,
-                 oxygen::data::pak::MeshViewDesc {
+                 oxygen::data::pak::geometry::MeshViewDesc {
                    .first_index = 0,
                    .index_count = 3, // valid
                    .first_vertex = 0,
@@ -345,7 +345,7 @@ NOLINT_TEST_F(MeshViewDeathTest, EdgeOutOfRange_LastIndexPastEnd_Death)
 
   // Sanity: a valid slice touching the end should succeed
   NOLINT_EXPECT_NO_THROW((MeshView { *mesh_,
-    oxygen::data::pak::MeshViewDesc {
+    oxygen::data::pak::geometry::MeshViewDesc {
       .first_index = 0,
       .index_count = static_cast<uint32_t>(indices.size()),
       .first_vertex = 0,
@@ -358,7 +358,7 @@ NOLINT_TEST_F(MeshViewDeathTest, EdgeOutOfRange_LastIndexPastEnd_Death)
   // Assert: one past end should death
   EXPECT_DEATH(
     (MeshView { *mesh_,
-      oxygen::data::pak::MeshViewDesc {
+      oxygen::data::pak::geometry::MeshViewDesc {
         .first_index = 1, // shift by 1
         .index_count = static_cast<uint32_t>(indices.size()), // now overflows
         .first_vertex = 0,
@@ -384,9 +384,9 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_WidenedIterationMatches)
   std::vector<std::uint16_t> u16_indices { 0, 1, 2, 2, 3, 0 };
 
   // Vertex buffer desc (structured: stride = sizeof(Vertex), format=0)
-  pak::BufferResourceDesc vertex_desc { .data_offset = 0,
+  pak::core::BufferResourceDesc vertex_desc { .data_offset = 0,
     .size_bytes
-    = static_cast<pak::DataBlobSizeT>(vertices.size() * sizeof(Vertex)),
+    = static_cast<pak::core::DataBlobSizeT>(vertices.size() * sizeof(Vertex)),
     .usage_flags = 0x01, // VertexBuffer
     .element_stride = sizeof(Vertex),
     .element_format = 0,
@@ -397,9 +397,9 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_WidenedIterationMatches)
     = std::make_shared<BufferResource>(vertex_desc, std::move(vertex_bytes));
 
   // Index buffer desc: element_format = kR16UInt, stride inferred by format
-  pak::BufferResourceDesc index_desc { .data_offset = 0,
-    .size_bytes
-    = static_cast<pak::DataBlobSizeT>(u16_indices.size() * sizeof(uint16_t)),
+  pak::core::BufferResourceDesc index_desc { .data_offset = 0,
+    .size_bytes = static_cast<pak::core::DataBlobSizeT>(
+      u16_indices.size() * sizeof(uint16_t)),
     .usage_flags = 0x02, // IndexBuffer
     .element_stride = 0, // unused because format specifies size
     .element_format = static_cast<uint8_t>(oxygen::Format::kR16UInt),
@@ -447,10 +447,10 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_IndexTypeCached)
   namespace pak = oxygen::data::pak;
   std::vector<Vertex> vertices = { Vertex {}, Vertex {}, Vertex {} };
   std::vector<std::uint16_t> indices16 { 0, 1, 2 };
-  pak::BufferResourceDesc vdesc {
+  pak::core::BufferResourceDesc vdesc {
     .data_offset = 0,
     .size_bytes
-    = static_cast<pak::DataBlobSizeT>(vertices.size() * sizeof(Vertex)),
+    = static_cast<pak::core::DataBlobSizeT>(vertices.size() * sizeof(Vertex)),
     .usage_flags = 0x01,
     .element_stride = sizeof(Vertex),
     .element_format = 0,
@@ -459,10 +459,10 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_IndexTypeCached)
   std::vector<uint8_t> vbytes(vertices.size() * sizeof(Vertex));
   std::memcpy(vbytes.data(), vertices.data(), vbytes.size());
   auto vbuf = std::make_shared<BufferResource>(vdesc, std::move(vbytes));
-  pak::BufferResourceDesc idesc {
+  pak::core::BufferResourceDesc idesc {
     .data_offset = 0,
-    .size_bytes
-    = static_cast<pak::DataBlobSizeT>(indices16.size() * sizeof(uint16_t)),
+    .size_bytes = static_cast<pak::core::DataBlobSizeT>(
+      indices16.size() * sizeof(uint16_t)),
     .usage_flags = 0x02,
     .element_stride = 0,
     .element_format = static_cast<uint8_t>(oxygen::Format::kR16UInt),
@@ -501,10 +501,10 @@ NOLINT_TEST_F(MeshViewBasicTest, VertexOnlyMesh_IndexBufferEmpty)
   namespace pak = oxygen::data::pak;
 
   std::vector<Vertex> vertices = { Vertex {}, Vertex {}, Vertex {} };
-  pak::BufferResourceDesc vdesc {
+  pak::core::BufferResourceDesc vdesc {
     .data_offset = 0,
     .size_bytes
-    = static_cast<pak::DataBlobSizeT>(vertices.size() * sizeof(Vertex)),
+    = static_cast<pak::core::DataBlobSizeT>(vertices.size() * sizeof(Vertex)),
     .usage_flags = 0x01,
     .element_stride = sizeof(Vertex),
     .element_format = 0,
@@ -543,10 +543,10 @@ NOLINT_TEST(MeshBasicTest, VertexOnlyMesh_IsIndexedFalse)
   using oxygen::data::MeshBuilder;
   namespace pak = oxygen::data::pak;
   std::vector<Vertex> vertices = { Vertex {}, Vertex {}, Vertex {}, Vertex {} };
-  pak::BufferResourceDesc vdesc {
+  pak::core::BufferResourceDesc vdesc {
     .data_offset = 0,
     .size_bytes
-    = static_cast<pak::DataBlobSizeT>(vertices.size() * sizeof(Vertex)),
+    = static_cast<pak::core::DataBlobSizeT>(vertices.size() * sizeof(Vertex)),
     .usage_flags = 0x01,
     .element_stride = sizeof(Vertex),
     .element_format = 0,
@@ -580,7 +580,7 @@ NOLINT_TEST_F(MeshViewBasicTest, VerticesSpanSharesUnderlyingStorage)
   std::vector<uint32_t> indices = { 0, 1, 2 };
   SetupMesh(vertices, indices);
   MeshView view(*mesh_,
-    oxygen::data::pak::MeshViewDesc { .first_index = 0,
+    oxygen::data::pak::geometry::MeshViewDesc { .first_index = 0,
       .index_count = 3,
       .first_vertex = 0,
       .vertex_count = 3 });
@@ -603,10 +603,10 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, IndexBufferView_NoCopySizeMatches)
   namespace pak = oxygen::data::pak;
   std::vector<Vertex> vertices = { Vertex {}, Vertex {}, Vertex {} };
   std::vector<uint32_t> indices = { 0, 1, 2 };
-  pak::BufferResourceDesc vdesc {
+  pak::core::BufferResourceDesc vdesc {
     .data_offset = 0,
     .size_bytes
-    = static_cast<pak::DataBlobSizeT>(vertices.size() * sizeof(Vertex)),
+    = static_cast<pak::core::DataBlobSizeT>(vertices.size() * sizeof(Vertex)),
     .usage_flags = 0x01,
     .element_stride = sizeof(Vertex),
     .element_format = 0,
@@ -615,10 +615,10 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, IndexBufferView_NoCopySizeMatches)
   std::vector<uint8_t> vbytes(vertices.size() * sizeof(Vertex));
   std::memcpy(vbytes.data(), vertices.data(), vbytes.size());
   auto vbuf = std::make_shared<BufferResource>(vdesc, std::move(vbytes));
-  pak::BufferResourceDesc idesc {
+  pak::core::BufferResourceDesc idesc {
     .data_offset = 0,
     .size_bytes
-    = static_cast<pak::DataBlobSizeT>(indices.size() * sizeof(uint32_t)),
+    = static_cast<pak::core::DataBlobSizeT>(indices.size() * sizeof(uint32_t)),
     .usage_flags = 0x02,
     .element_stride = sizeof(uint32_t),
     .element_format = 0,

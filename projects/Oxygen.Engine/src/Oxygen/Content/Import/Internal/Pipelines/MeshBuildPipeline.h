@@ -84,12 +84,18 @@ struct MeshLod {
 
 //! Buffer bindings used to finalize geometry descriptors.
 struct MeshBufferBindings {
-  data::pak::ResourceIndexT vertex_buffer = data::pak::kNoResourceIndex;
-  data::pak::ResourceIndexT index_buffer = data::pak::kNoResourceIndex;
-  data::pak::ResourceIndexT joint_index_buffer = data::pak::kNoResourceIndex;
-  data::pak::ResourceIndexT joint_weight_buffer = data::pak::kNoResourceIndex;
-  data::pak::ResourceIndexT inverse_bind_buffer = data::pak::kNoResourceIndex;
-  data::pak::ResourceIndexT joint_remap_buffer = data::pak::kNoResourceIndex;
+  data::pak::core::ResourceIndexT vertex_buffer
+    = data::pak::core::kNoResourceIndex;
+  data::pak::core::ResourceIndexT index_buffer
+    = data::pak::core::kNoResourceIndex;
+  data::pak::core::ResourceIndexT joint_index_buffer
+    = data::pak::core::kNoResourceIndex;
+  data::pak::core::ResourceIndexT joint_weight_buffer
+    = data::pak::core::kNoResourceIndex;
+  data::pak::core::ResourceIndexT inverse_bind_buffer
+    = data::pak::core::kNoResourceIndex;
+  data::pak::core::ResourceIndexT joint_remap_buffer
+    = data::pak::core::kNoResourceIndex;
 };
 
 //! Pipeline for CPU-bound mesh build (VB/IB + auxiliary buffers).
@@ -109,7 +115,7 @@ public:
     size_t queue_capacity = 32;
     uint32_t worker_count = 2;
     bool with_content_hashing = true;
-    uint64_t max_data_blob_bytes = data::pak::kDataBlobMaxSize;
+    uint64_t max_data_blob_bytes = data::pak::core::kDataBlobMaxSize;
   };
 
   //! Cooked buffer payloads for one mesh LOD.
@@ -123,7 +129,7 @@ public:
   //! Descriptor patch location for a material slot.
   struct MaterialSlotPatchOffset {
     uint32_t slot = 0;
-    data::pak::DataBlobSizeT material_key_offset = 0;
+    data::pak::core::DataBlobSizeT material_key_offset = 0;
   };
 
   //! Cooked geometry payload returned by the pipeline.

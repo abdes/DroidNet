@@ -44,15 +44,15 @@ struct SceneEnvironmentSystem {
 
 //! Intermediate scene build data produced by adapters.
 struct SceneBuild final {
-  std::vector<data::pak::NodeRecord> nodes;
+  std::vector<data::pak::world::NodeRecord> nodes;
   std::vector<std::byte> strings;
 
-  std::vector<data::pak::RenderableRecord> renderables;
-  std::vector<data::pak::PerspectiveCameraRecord> perspective_cameras;
-  std::vector<data::pak::OrthographicCameraRecord> orthographic_cameras;
-  std::vector<data::pak::DirectionalLightRecord> directional_lights;
-  std::vector<data::pak::PointLightRecord> point_lights;
-  std::vector<data::pak::SpotLightRecord> spot_lights;
+  std::vector<data::pak::world::RenderableRecord> renderables;
+  std::vector<data::pak::world::PerspectiveCameraRecord> perspective_cameras;
+  std::vector<data::pak::world::OrthographicCameraRecord> orthographic_cameras;
+  std::vector<data::pak::world::DirectionalLightRecord> directional_lights;
+  std::vector<data::pak::world::PointLightRecord> point_lights;
+  std::vector<data::pak::world::SpotLightRecord> spot_lights;
 };
 
 //! Input provided to adapter scene stage processing.

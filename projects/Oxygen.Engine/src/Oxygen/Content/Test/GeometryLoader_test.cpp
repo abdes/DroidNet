@@ -35,12 +35,12 @@ protected:
 NOLINT_TEST_F(
   GeometryLoaderContractTest, LoadGeometryAssetUnsupportedMeshTypeThrows)
 {
-  oxygen::data::pak::GeometryAssetDesc desc {};
+  oxygen::data::pak::geometry::GeometryAssetDesc desc {};
   desc.header.asset_type
     = static_cast<uint8_t>(oxygen::data::AssetType::kGeometry);
   desc.lod_count = 1;
 
-  oxygen::data::pak::MeshDesc mesh {};
+  oxygen::data::pak::geometry::MeshDesc mesh {};
   mesh.mesh_type = 0xFF;
 
   {

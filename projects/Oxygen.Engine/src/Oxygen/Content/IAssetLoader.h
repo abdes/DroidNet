@@ -96,8 +96,10 @@ public:
 
   struct HydratedScriptSlot final {
     data::AssetKey script_asset_key {};
-    data::pak::ScriptSlotFlags flags { data::pak::ScriptSlotFlags::kNone };
-    std::vector<data::pak::ScriptParamRecord> params;
+    data::pak::scripting::ScriptSlotFlags flags {
+      data::pak::scripting::ScriptSlotFlags::kNone
+    };
+    std::vector<data::pak::scripting::ScriptParamRecord> params;
   };
 
   IAssetLoader() = default;
@@ -378,13 +380,13 @@ public:
   //! Build script resource key from a loaded asset's source and table index.
   [[nodiscard]] virtual auto MakeScriptResourceKeyForAsset(
     const data::AssetKey& context_asset_key,
-    data::pak::ResourceIndexT resource_index) const noexcept
+    data::pak::core::ResourceIndexT resource_index) const noexcept
     -> std::optional<ResourceKey>
     = 0;
   //! Read a script resource by table index from the context asset's source.
   [[nodiscard]] virtual auto ReadScriptResourceForAsset(
     const data::AssetKey& context_asset_key,
-    data::pak::ResourceIndexT resource_index) const
+    data::pak::core::ResourceIndexT resource_index) const
     -> std::shared_ptr<const data::ScriptResource>
     = 0;
 
@@ -403,28 +405,28 @@ public:
     = 0;
   //! Build physics resource key from source identity and table index.
   [[nodiscard]] virtual auto MakePhysicsResourceKey(data::SourceKey source_key,
-    data::pak::ResourceIndexT resource_index) const noexcept
+    data::pak::core::ResourceIndexT resource_index) const noexcept
     -> std::optional<ResourceKey>
     = 0;
   //! Build physics resource key from a loaded asset's source and table index.
   [[nodiscard]] virtual auto MakePhysicsResourceKeyForAsset(
     const data::AssetKey& context_asset_key,
-    data::pak::ResourceIndexT resource_index) const noexcept
+    data::pak::core::ResourceIndexT resource_index) const noexcept
     -> std::optional<ResourceKey>
     = 0;
   //! Read a collision shape descriptor by global asset index in the context
   //! asset's source.
   [[nodiscard]] virtual auto ReadCollisionShapeAssetDescForAsset(
     const data::AssetKey& context_asset_key,
-    data::pak::ResourceIndexT shape_asset_index) const
-    -> std::optional<data::pak::CollisionShapeAssetDesc>
+    data::pak::core::ResourceIndexT shape_asset_index) const
+    -> std::optional<data::pak::physics::CollisionShapeAssetDesc>
     = 0;
   //! Read a physics material descriptor by global asset index in the context
   //! asset's source.
   [[nodiscard]] virtual auto ReadPhysicsMaterialAssetDescForAsset(
     const data::AssetKey& context_asset_key,
-    data::pak::ResourceIndexT material_asset_index) const
-    -> std::optional<data::pak::PhysicsMaterialAssetDesc>
+    data::pak::core::ResourceIndexT material_asset_index) const
+    -> std::optional<data::pak::physics::PhysicsMaterialAssetDesc>
     = 0;
   //! Find a physics scene sidecar in the same source that targets `scene_key`.
   [[nodiscard]] virtual auto FindPhysicsSidecarAssetKeyForScene(
@@ -446,7 +448,7 @@ public:
   //! Hydrate script slots for one scripting component from the scene source.
   [[nodiscard]] virtual auto GetHydratedScriptSlots(
     const data::SceneAsset& scene_asset,
-    const data::pak::ScriptingComponentRecord& component) const
+    const data::pak::scripting::ScriptingComponentRecord& component) const
     -> std::vector<HydratedScriptSlot>
     = 0;
 

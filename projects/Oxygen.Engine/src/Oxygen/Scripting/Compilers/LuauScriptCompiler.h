@@ -15,7 +15,7 @@ namespace oxygen::scripting {
 class LuauScriptCompiler final : public IScriptCompiler {
 public:
   OXGN_SCRP_NDAPI auto Language() const noexcept
-    -> data::pak::ScriptLanguage override;
+    -> data::pak::scripting::ScriptLanguage override;
 
   OXGN_SCRP_NDAPI auto Compile(ScriptSourceBlob source, CompileMode mode) const
     -> ScriptCompileResult override;

@@ -49,13 +49,13 @@ GltfAdapter::~GltfAdapter() = default;
 
 namespace {
 
-  using data::pak::DirectionalLightRecord;
-  using data::pak::NodeRecord;
-  using data::pak::OrthographicCameraRecord;
-  using data::pak::PerspectiveCameraRecord;
-  using data::pak::PointLightRecord;
-  using data::pak::RenderableRecord;
-  using data::pak::SpotLightRecord;
+  using data::pak::world::DirectionalLightRecord;
+  using data::pak::world::NodeRecord;
+  using data::pak::world::OrthographicCameraRecord;
+  using data::pak::world::PerspectiveCameraRecord;
+  using data::pak::world::PointLightRecord;
+  using data::pak::world::RenderableRecord;
+  using data::pak::world::SpotLightRecord;
 
   [[nodiscard]] auto MakeErrorDiagnostic(std::string code, std::string message,
     std::string_view source_id, std::string_view object_path)
@@ -847,10 +847,10 @@ namespace {
   };
 
   [[nodiscard]] auto AppendString(std::vector<std::byte>& strings,
-    const std::string_view value) -> data::pak::StringTableOffsetT
+    const std::string_view value) -> data::pak::core::StringTableOffsetT
   {
     const auto offset
-      = static_cast<data::pak::StringTableOffsetT>(strings.size());
+      = static_cast<data::pak::core::StringTableOffsetT>(strings.size());
     const auto bytes = std::as_bytes(std::span(value.data(), value.size()));
     strings.insert(strings.end(), bytes.begin(), bytes.end());
     strings.push_back(std::byte { 0 });
@@ -2434,7 +2434,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     rec.node_id = MakeNodeKey(std::string(virtual_path) + "/" + name);
     rec.scene_name_offset = AppendString(build.strings, name);
     rec.parent_index = node.parent_index;
-    rec.node_flags = node.visible ? data::pak::kSceneNodeFlag_Visible : 0;
+    rec.node_flags
+      = node.visible ? data::pak::world::kSceneNodeFlag_Visible : 0;
     rec.translation[0] = translation.x;
     rec.translation[1] = translation.y;
     rec.translation[2] = translation.z;

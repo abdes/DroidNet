@@ -30,18 +30,19 @@ using oxygen::Vec3;
 
 auto ResolveBaseColorTextureResourceIndex(
   oxygen::examples::textured_cube::TextureIndexMode mode,
-  std::uint32_t custom_resource_index) -> oxygen::data::pak::ResourceIndexT
+  std::uint32_t custom_resource_index)
+  -> oxygen::data::pak::core::ResourceIndexT
 {
-  using oxygen::data::pak::ResourceIndexT;
+  using oxygen::data::pak::core::ResourceIndexT;
   using oxygen::examples::textured_cube::TextureIndexMode;
 
   switch (mode) {
   case TextureIndexMode::kFallback:
-    return oxygen::data::pak::kFallbackResourceIndex;
+    return oxygen::data::pak::core::kFallbackResourceIndex;
   case TextureIndexMode::kCustom:
     return static_cast<ResourceIndexT>(custom_resource_index);
   case TextureIndexMode::kProceduralGrid:
-    return oxygen::data::pak::kFallbackResourceIndex;
+    return oxygen::data::pak::core::kFallbackResourceIndex;
   case TextureIndexMode::kForcedError:
   default:
     return (std::numeric_limits<ResourceIndexT>::max)();
@@ -49,7 +50,7 @@ auto ResolveBaseColorTextureResourceIndex(
 }
 
 auto MakeMaterial(const char* name, const glm::vec4& rgba,
-  oxygen::data::pak::ResourceIndexT base_color_texture_resource_index,
+  oxygen::data::pak::core::ResourceIndexT base_color_texture_resource_index,
   oxygen::content::ResourceKey base_color_texture_key, float metalness,
   float roughness, bool disable_texture_sampling, bool enable_procedural_grid,
   oxygen::data::MaterialDomain domain = oxygen::data::MaterialDomain::kOpaque)
@@ -59,7 +60,7 @@ auto MakeMaterial(const char* name, const glm::vec4& rgba,
   namespace c = oxygen::content;
   namespace pak = d::pak;
 
-  pak::MaterialAssetDesc desc {};
+  pak::render::MaterialAssetDesc desc {};
   desc.header.asset_type
     = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
 
@@ -73,10 +74,10 @@ auto MakeMaterial(const char* name, const glm::vec4& rgba,
   desc.material_domain = static_cast<uint8_t>(domain);
   desc.flags = 0U;
   if (disable_texture_sampling) {
-    desc.flags |= oxygen::data::pak::kMaterialFlag_NoTextureSampling;
+    desc.flags |= oxygen::data::pak::render::kMaterialFlag_NoTextureSampling;
   }
   if (enable_procedural_grid) {
-    desc.flags |= oxygen::data::pak::kMaterialFlag_ProceduralGrid;
+    desc.flags |= oxygen::data::pak::render::kMaterialFlag_ProceduralGrid;
   }
   desc.shader_stages = 0;
 
@@ -139,7 +140,7 @@ auto BuildSphereGeometry(
         .WithVertices(vertices)
         .WithIndices(sphere_data->second)
         .BeginSubMesh("full", material)
-        .WithMeshView(pak::MeshViewDesc {
+        .WithMeshView(pak::geometry::MeshViewDesc {
           .first_index = 0,
           .index_count = static_cast<uint32_t>(sphere_data->second.size()),
           .first_vertex = 0,
@@ -148,7 +149,7 @@ auto BuildSphereGeometry(
         .EndSubMesh()
         .Build();
 
-  pak::GeometryAssetDesc geo_desc {};
+  pak::geometry::GeometryAssetDesc geo_desc {};
   geo_desc.lod_count = 1;
   const auto bb_min = mesh->BoundingBoxMin();
   const auto bb_max = mesh->BoundingBoxMax();
@@ -184,7 +185,7 @@ auto BuildCubeGeometry(
         .WithVertices(vertices)
         .WithIndices(cube_data->second)
         .BeginSubMesh("full", material)
-        .WithMeshView(pak::MeshViewDesc {
+        .WithMeshView(pak::geometry::MeshViewDesc {
           .first_index = 0,
           .index_count = static_cast<uint32_t>(cube_data->second.size()),
           .first_vertex = 0,
@@ -193,7 +194,7 @@ auto BuildCubeGeometry(
         .EndSubMesh()
         .Build();
 
-  pak::GeometryAssetDesc geo_desc {};
+  pak::geometry::GeometryAssetDesc geo_desc {};
   geo_desc.lod_count = 1;
   const auto bb_min = mesh->BoundingBoxMin();
   const auto bb_max = mesh->BoundingBoxMax();

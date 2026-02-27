@@ -27,7 +27,7 @@ protected:
   {
     using oxygen::data::AssetKey;
     using oxygen::data::GeometryAsset;
-    using oxygen::data::pak::GeometryAssetDesc;
+    using oxygen::data::pak::geometry::GeometryAssetDesc;
 
     GeometryAssetDesc desc {};
     desc.lod_count = 1;
@@ -45,7 +45,7 @@ protected:
   {
     using oxygen::data::AssetKey;
     using oxygen::data::GeometryAsset;
-    using oxygen::data::pak::GeometryAssetDesc;
+    using oxygen::data::pak::geometry::GeometryAssetDesc;
 
     GeometryAssetDesc desc {};
     desc.lod_count = 2;

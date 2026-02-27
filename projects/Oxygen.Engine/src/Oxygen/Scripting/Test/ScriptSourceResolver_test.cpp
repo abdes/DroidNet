@@ -36,16 +36,20 @@ namespace oxygen::scripting::test {
 namespace {
 
   struct ScriptAssetResourceIndices {
-    data::pak::ResourceIndexT bytecode_index { data::pak::kNoResourceIndex };
-    data::pak::ResourceIndexT source_index { data::pak::kNoResourceIndex };
+    data::pak::core::ResourceIndexT bytecode_index {
+      data::pak::core::kNoResourceIndex
+    };
+    data::pak::core::ResourceIndexT source_index {
+      data::pak::core::kNoResourceIndex
+    };
   };
 
   auto MakeScriptAsset(std::string_view external_source,
     const ScriptAssetResourceIndices indices,
-    const data::pak::ScriptAssetFlags flags)
+    const data::pak::scripting::ScriptAssetFlags flags)
     -> std::shared_ptr<data::ScriptAsset>
   {
-    data::pak::ScriptAssetDesc desc {};
+    data::pak::scripting::ScriptAssetDesc desc {};
     desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kScript);
     desc.bytecode_resource_index = indices.bytecode_index;
     desc.source_resource_index = indices.source_index;
@@ -57,19 +61,19 @@ namespace {
       const auto out_it = std::ranges::copy(src_view, writable.begin()).out;
       *out_it = '\0';
     }
-    return std::make_shared<data::ScriptAsset>(
-      data::AssetKey { 1 }, desc, std::vector<data::pak::ScriptParamRecord> {});
+    return std::make_shared<data::ScriptAsset>(data::AssetKey { 1 }, desc,
+      std::vector<data::pak::scripting::ScriptParamRecord> {});
   }
 
   auto MakeScriptResource(const std::vector<uint8_t>& bytes,
-    const data::pak::ScriptEncoding encoding, const uint64_t hash = 0)
-    -> std::shared_ptr<const data::ScriptResource>
+    const data::pak::scripting::ScriptEncoding encoding,
+    const uint64_t hash = 0) -> std::shared_ptr<const data::ScriptResource>
   {
-    data::pak::ScriptResourceDesc desc {};
+    data::pak::scripting::ScriptResourceDesc desc {};
     desc.size_bytes = static_cast<uint32_t>(bytes.size());
-    desc.language = data::pak::ScriptLanguage::kLuau;
+    desc.language = data::pak::scripting::ScriptLanguage::kLuau;
     desc.encoding = encoding;
-    desc.compression = data::pak::ScriptCompression::kNone;
+    desc.compression = data::pak::scripting::ScriptCompression::kNone;
     desc.content_hash = hash;
     return std::make_shared<const data::ScriptResource>(desc, bytes);
   }
@@ -130,15 +134,15 @@ NOLINT_TEST_F(
 {
   const auto asset = MakeScriptAsset("external.luau",
     ScriptAssetResourceIndices {
-      .bytecode_index = data::pak::ResourceIndexT { 1u },
-      .source_index = data::pak::ResourceIndexT { 2u },
+      .bytecode_index = data::pak::core::ResourceIndexT { 1u },
+      .source_index = data::pak::core::ResourceIndexT { 2u },
     },
-    data::pak::ScriptAssetFlags::kAllowExternalSource);
+    data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
 
-  auto bytecode = MakeScriptResource(
-    std::vector<uint8_t> { 'b', 'c' }, data::pak::ScriptEncoding::kBytecode);
-  auto source = MakeScriptResource(
-    std::vector<uint8_t> { 's', 'r', 'c' }, data::pak::ScriptEncoding::kSource);
+  auto bytecode = MakeScriptResource(std::vector<uint8_t> { 'b', 'c' },
+    data::pak::scripting::ScriptEncoding::kBytecode);
+  auto source = MakeScriptResource(std::vector<uint8_t> { 's', 'r', 'c' },
+    data::pak::scripting::ScriptEncoding::kSource);
 
   const auto result = Resolver().Resolve({
     .asset = *asset,
@@ -166,7 +170,7 @@ NOLINT_TEST_F(
 {
   const auto asset
     = MakeScriptAsset("runtime/fallback", ScriptAssetResourceIndices {},
-      data::pak::ScriptAssetFlags::kAllowExternalSource);
+      data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
 
   const auto script_path = TempRoot() / "scripts/runtime/fallback.luau";
   WriteFile(script_path, "fallback content");
@@ -191,7 +195,7 @@ NOLINT_TEST_F(
 {
   const auto asset
     = MakeScriptAsset("runtime/hash_test", ScriptAssetResourceIndices {},
-      data::pak::ScriptAssetFlags::kAllowExternalSource);
+      data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
 
   const auto script_path = TempRoot() / "scripts/runtime/hash_test.luau";
 
@@ -235,7 +239,7 @@ NOLINT_TEST_F(ScriptSourceResolverTest, ResolveRejectsAbsoluteExternalPath)
 {
   const auto asset
     = MakeScriptAsset("C:/absolute/path.luau", ScriptAssetResourceIndices {},
-      data::pak::ScriptAssetFlags::kAllowExternalSource);
+      data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
 
   const auto result = Resolver().Resolve({
     .asset = *asset,
@@ -254,7 +258,7 @@ NOLINT_TEST_F(ScriptSourceResolverTest, ResolveRejectsParentTraversalPath)
 {
   const auto asset
     = MakeScriptAsset("../escape.luau", ScriptAssetResourceIndices {},
-      data::pak::ScriptAssetFlags::kAllowExternalSource);
+      data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
 
   const auto result = Resolver().Resolve({
     .asset = *asset,
@@ -274,13 +278,13 @@ NOLINT_TEST_F(ScriptSourceResolverTest, ResolveUsesMappedLooseCookedOrigin)
 {
   const auto asset = MakeScriptAsset({},
     ScriptAssetResourceIndices {
-      .bytecode_index = data::pak::ResourceIndexT { 3u },
-      .source_index = data::pak::kNoResourceIndex,
+      .bytecode_index = data::pak::core::ResourceIndexT { 3u },
+      .source_index = data::pak::core::kNoResourceIndex,
     },
-    data::pak::ScriptAssetFlags::kNone);
+    data::pak::scripting::ScriptAssetFlags::kNone);
 
   auto source = MakeScriptResource(std::vector<uint8_t> { 'l', 'o', 'a', 'd' },
-    data::pak::ScriptEncoding::kBytecode);
+    data::pak::scripting::ScriptEncoding::kBytecode);
   const auto result = Resolver().Resolve({
     .asset = *asset,
     .load_script_resource =
@@ -311,7 +315,7 @@ NOLINT_TEST_F(
 {
   const auto asset
     = MakeScriptAsset("runtime/module_test", ScriptAssetResourceIndices {},
-      data::pak::ScriptAssetFlags::kAllowExternalSource);
+      data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
 
   const auto script_path = TempRoot() / "scripts/runtime/module_test.luau";
   constexpr auto kScript = "return 42";

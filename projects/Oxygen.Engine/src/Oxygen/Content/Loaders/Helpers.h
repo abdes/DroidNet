@@ -107,13 +107,13 @@ inline auto CheckLoaderResult(const oxygen::Result<T>& result,
  - Optimization: Reads fields individually to avoid padding/representation
  issues
 
- @see oxygen::data::pak::AssetHeader
+ @see oxygen::data::pak::core::AssetHeader
 */
 inline auto LoadAssetHeader(
-  serio::AnyReader& reader, data::pak::AssetHeader& header) -> void
+  serio::AnyReader& reader, data::pak::core::AssetHeader& header) -> void
 {
   using data::AssetType;
-  using data::pak::AssetHeader;
+  using data::pak::core::AssetHeader;
 
   LOG_SCOPE_F(1, "Header");
 
@@ -142,7 +142,7 @@ inline auto LoadAssetHeader(
     // valid std::string_view. But we log a warning to help debugging.
     LOG_F(WARNING, "-fishy- on name not null-terminated");
   }
-  std::string_view name_view(name, data::pak::kMaxNameSize);
+  std::string_view name_view(name, data::pak::core::kMaxNameSize);
   LOG_F(1, "asset name         : {}", name_view);
 
   LOG_F(1, "format version     : {}", header.version);

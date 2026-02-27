@@ -74,9 +74,9 @@ auto MakeBaseItem() -> MaterialPipeline::WorkItem
 }
 
 auto ReadMaterialDesc(const std::vector<std::byte>& bytes)
-  -> data::pak::MaterialAssetDesc
+  -> data::pak::render::MaterialAssetDesc
 {
-  data::pak::MaterialAssetDesc desc {};
+  data::pak::render::MaterialAssetDesc desc {};
   if (bytes.size() < sizeof(desc)) {
     return desc;
   }
@@ -85,11 +85,11 @@ auto ReadMaterialDesc(const std::vector<std::byte>& bytes)
 }
 
 auto ReadShaderRefs(const std::vector<std::byte>& bytes, size_t count)
-  -> std::vector<data::pak::ShaderReferenceDesc>
+  -> std::vector<data::pak::render::ShaderReferenceDesc>
 {
-  std::vector<data::pak::ShaderReferenceDesc> refs;
-  const size_t offset = sizeof(data::pak::MaterialAssetDesc);
-  const size_t total = count * sizeof(data::pak::ShaderReferenceDesc);
+  std::vector<data::pak::render::ShaderReferenceDesc> refs;
+  const size_t offset = sizeof(data::pak::render::MaterialAssetDesc);
+  const size_t total = count * sizeof(data::pak::render::ShaderReferenceDesc);
   if (bytes.size() < offset + total) {
     return refs;
   }
@@ -99,7 +99,7 @@ auto ReadShaderRefs(const std::vector<std::byte>& bytes, size_t count)
   return refs;
 }
 
-auto ReadUvTransform(const data::pak::MaterialAssetDesc& desc)
+auto ReadUvTransform(const data::pak::render::MaterialAssetDesc& desc)
   -> MaterialUvTransformDesc
 {
   MaterialUvTransformDesc out {};
@@ -140,8 +140,9 @@ auto ExpectedShaderStages(const std::vector<ShaderRequest>& requests)
 
 auto ZeroContentHash(std::vector<std::byte> bytes) -> std::vector<std::byte>
 {
-  constexpr size_t kOffset = offsetof(data::pak::MaterialAssetDesc, header)
-    + offsetof(data::pak::AssetHeader, content_hash);
+  constexpr size_t kOffset
+    = offsetof(data::pak::render::MaterialAssetDesc, header)
+    + offsetof(data::pak::core::AssetHeader, content_hash);
   if (bytes.size() >= kOffset + sizeof(uint64_t)) {
     uint64_t zero = 0;
     std::memcpy(bytes.data() + kOffset, &zero, sizeof(zero));
@@ -260,8 +261,9 @@ NOLINT_TEST_F(MaterialPipelineOrmTest, CollectAutoOrmPackedSetsFlags)
   ASSERT_TRUE(result.cooked.has_value());
   const auto desc = ReadMaterialDesc(result.cooked->descriptor_bytes);
 
-  EXPECT_NE(desc.flags & data::pak::kMaterialFlag_GltfOrmPacked, 0u);
-  EXPECT_EQ(desc.flags & data::pak::kMaterialFlag_NoTextureSampling, 0u);
+  EXPECT_NE(desc.flags & data::pak::render::kMaterialFlag_GltfOrmPacked, 0u);
+  EXPECT_EQ(
+    desc.flags & data::pak::render::kMaterialFlag_NoTextureSampling, 0u);
   EXPECT_EQ(desc.metallic_texture, 7u);
   EXPECT_EQ(desc.roughness_texture, 7u);
   EXPECT_EQ(desc.ambient_occlusion_texture, 7u);

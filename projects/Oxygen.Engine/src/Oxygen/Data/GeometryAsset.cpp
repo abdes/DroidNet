@@ -23,11 +23,11 @@ namespace {
 
 // Helper function for converting PAK name arrays to strings
 // TODO: This duplicates Asset::GetAssetName() logic - consider consolidation
-auto GetNameFromDesc(const char name[oxygen::data::pak::kMaxNameSize])
+auto GetNameFromDesc(const char name[oxygen::data::pak::core::kMaxNameSize])
   -> std::string
 {
   std::size_t len = 0;
-  while (len < oxygen::data::pak::kMaxNameSize && name[len] != '\0') {
+  while (len < oxygen::data::pak::core::kMaxNameSize && name[len] != '\0') {
     ++len;
   }
   return { name, len };
@@ -79,7 +79,7 @@ void ReferencedBufferStorage::InitializeIndexInfo() const noexcept
 
 } // namespace oxygen::data::detail
 
-MeshView::MeshView(const Mesh& mesh, pak::MeshViewDesc desc) noexcept
+MeshView::MeshView(const Mesh& mesh, pak::geometry::MeshViewDesc desc) noexcept
   : mesh_(mesh)
   , desc_(std::move(desc))
 {

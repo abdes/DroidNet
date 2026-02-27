@@ -22,13 +22,13 @@ namespace oxygen::content::pakdump {
 class PhysicsMaterialAssetDumper final : public AssetDumper {
 public:
   auto DumpAsync(const oxygen::content::PakFile& pak,
-    const oxygen::data::pak::v2::AssetDirectoryEntry& entry, DumpContext& ctx,
+    const oxygen::data::pak::core::AssetDirectoryEntry& entry, DumpContext& ctx,
     const size_t idx, oxygen::content::AssetLoader& asset_loader) const
     -> oxygen::co::Co<> override
   {
     (void)asset_loader;
 
-    using oxygen::data::pak::v7::PhysicsMaterialAssetDesc;
+    using oxygen::data::pak::physics::PhysicsMaterialAssetDesc;
 
     std::cout << "Asset #" << idx << " (PhysicsMaterial):\n";
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);

@@ -87,11 +87,11 @@ auto WriteSingleAssetPakWithBrowseIndex(const std::filesystem::path& pak_path,
   const oxygen::data::AssetKey& key, const std::string_view virtual_path)
   -> void
 {
-  using oxygen::data::pak::AssetDirectoryEntry;
-  using oxygen::data::pak::PakBrowseIndexEntry;
-  using oxygen::data::pak::PakBrowseIndexHeader;
-  using oxygen::data::pak::PakFooter;
-  using oxygen::data::pak::PakHeader;
+  using oxygen::data::pak::core::AssetDirectoryEntry;
+  using oxygen::data::pak::core::PakBrowseIndexEntry;
+  using oxygen::data::pak::core::PakBrowseIndexHeader;
+  using oxygen::data::pak::core::PakFooter;
+  using oxygen::data::pak::core::PakHeader;
 
   PakHeader header {};
 
@@ -111,7 +111,7 @@ auto WriteSingleAssetPakWithBrowseIndex(const std::filesystem::path& pak_path,
 
   AssetDirectoryEntry dir {};
   dir.asset_key = key;
-  dir.asset_type = 1;
+  dir.asset_type = oxygen::data::AssetType::kUnknown;
 
   const uint64_t directory_offset = sizeof(PakHeader);
   const uint64_t browse_offset = directory_offset + sizeof(AssetDirectoryEntry);

@@ -25,7 +25,7 @@ namespace {
   using oxygen::co::testing::TestEventLoop;
   using oxygen::data::AssetKey;
   using oxygen::data::ScriptAsset;
-  using oxygen::data::pak::ScriptAssetDesc;
+  using oxygen::data::pak::scripting::ScriptAssetDesc;
   using oxygen::scene::Scene;
   using oxygen::scripting::ScriptExecutable;
 

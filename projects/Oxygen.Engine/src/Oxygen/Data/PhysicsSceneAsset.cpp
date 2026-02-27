@@ -30,12 +30,13 @@ PhysicsSceneAsset::PhysicsSceneAsset(AssetKey key, std::vector<std::byte> data)
 
 auto PhysicsSceneAsset::ParseAndValidate() -> void
 {
-  if (data_.size() < sizeof(pak::v7::PhysicsSceneAssetDesc)) {
+  if (data_.size() < sizeof(pak::physics::PhysicsSceneAssetDesc)) {
     throw std::runtime_error(
       "PhysicsSceneAsset data too small for descriptor header");
   }
 
-  std::memcpy(&desc_, data_.data(), sizeof(pak::v7::PhysicsSceneAssetDesc));
+  std::memcpy(
+    &desc_, data_.data(), sizeof(pak::physics::PhysicsSceneAssetDesc));
 
   if (static_cast<data::AssetType>(desc_.header.asset_type)
     != data::AssetType::kPhysicsScene) {
@@ -43,7 +44,7 @@ auto PhysicsSceneAsset::ParseAndValidate() -> void
       "PhysicsSceneAsset: invalid asset_type in descriptor header");
   }
 
-  if (desc_.header.version != pak::v7::kPhysicsSceneAssetVersion) {
+  if (desc_.header.version != pak::physics::kPhysicsSceneAssetVersion) {
     throw std::runtime_error(
       "PhysicsSceneAsset: unsupported asset descriptor version");
   }
@@ -60,7 +61,7 @@ auto PhysicsSceneAsset::ParseAndValidate() -> void
   }
 
   const size_t dir_bytes = static_cast<size_t>(desc_.component_table_count)
-    * sizeof(pak::v7::PhysicsComponentTableDesc);
+    * sizeof(pak::physics::PhysicsComponentTableDesc);
 
   if (!range_ok(static_cast<size_t>(desc_.component_table_directory_offset),
         dir_bytes, data_.size())) {
@@ -74,12 +75,12 @@ auto PhysicsSceneAsset::ParseAndValidate() -> void
   binding_tables_.reserve(desc_.component_table_count);
 
   for (uint32_t i = 0; i < desc_.component_table_count; ++i) {
-    pak::v7::PhysicsComponentTableDesc entry {};
+    pak::physics::PhysicsComponentTableDesc entry {};
     std::memcpy(&entry,
       dir_span
-        .subspan(
-          static_cast<size_t>(i) * sizeof(pak::v7::PhysicsComponentTableDesc),
-          sizeof(pak::v7::PhysicsComponentTableDesc))
+        .subspan(static_cast<size_t>(i)
+            * sizeof(pak::physics::PhysicsComponentTableDesc),
+          sizeof(pak::physics::PhysicsComponentTableDesc))
         .data(),
       sizeof(entry));
 
@@ -97,46 +98,52 @@ auto PhysicsSceneAsset::ParseAndValidate() -> void
     }
 
     // Validate known record sizes per PhysicsBindingType.
-    using BT = pak::PhysicsBindingType;
+    using BT = pak::physics::PhysicsBindingType;
     switch (entry.binding_type) {
     case BT::kRigidBody:
-      if (entry.table.entry_size != sizeof(pak::v7::RigidBodyBindingRecord)) {
+      if (entry.table.entry_size
+        != sizeof(pak::physics::RigidBodyBindingRecord)) {
         throw std::runtime_error(
           "PhysicsSceneAsset: RigidBodyBindingRecord entry_size mismatch");
       }
       break;
     case BT::kCollider:
-      if (entry.table.entry_size != sizeof(pak::v7::ColliderBindingRecord)) {
+      if (entry.table.entry_size
+        != sizeof(pak::physics::ColliderBindingRecord)) {
         throw std::runtime_error(
           "PhysicsSceneAsset: ColliderBindingRecord entry_size mismatch");
       }
       break;
     case BT::kCharacter:
-      if (entry.table.entry_size != sizeof(pak::v7::CharacterBindingRecord)) {
+      if (entry.table.entry_size
+        != sizeof(pak::physics::CharacterBindingRecord)) {
         throw std::runtime_error(
           "PhysicsSceneAsset: CharacterBindingRecord entry_size mismatch");
       }
       break;
     case BT::kSoftBody:
-      if (entry.table.entry_size != sizeof(pak::v7::SoftBodyBindingRecord)) {
+      if (entry.table.entry_size
+        != sizeof(pak::physics::SoftBodyBindingRecord)) {
         throw std::runtime_error(
           "PhysicsSceneAsset: SoftBodyBindingRecord entry_size mismatch");
       }
       break;
     case BT::kJoint:
-      if (entry.table.entry_size != sizeof(pak::v7::JointBindingRecord)) {
+      if (entry.table.entry_size != sizeof(pak::physics::JointBindingRecord)) {
         throw std::runtime_error(
           "PhysicsSceneAsset: JointBindingRecord entry_size mismatch");
       }
       break;
     case BT::kVehicle:
-      if (entry.table.entry_size != sizeof(pak::v7::VehicleBindingRecord)) {
+      if (entry.table.entry_size
+        != sizeof(pak::physics::VehicleBindingRecord)) {
         throw std::runtime_error(
           "PhysicsSceneAsset: VehicleBindingRecord entry_size mismatch");
       }
       break;
     case BT::kAggregate:
-      if (entry.table.entry_size != sizeof(pak::v7::AggregateBindingRecord)) {
+      if (entry.table.entry_size
+        != sizeof(pak::physics::AggregateBindingRecord)) {
         throw std::runtime_error(
           "PhysicsSceneAsset: AggregateBindingRecord entry_size mismatch");
       }

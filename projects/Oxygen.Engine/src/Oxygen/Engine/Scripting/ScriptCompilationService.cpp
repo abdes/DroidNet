@@ -62,9 +62,9 @@ namespace {
   {
     return std::make_shared<const ScriptBytecodeBlob>(
       ScriptBytecodeBlob::FromOwned(std::move(payload),
-        static_cast<data::pak::ScriptLanguage>(language),
-        static_cast<data::pak::ScriptCompression>(compression), content_hash,
-        static_cast<ScriptBlobOrigin>(origin),
+        static_cast<data::pak::scripting::ScriptLanguage>(language),
+        static_cast<data::pak::scripting::ScriptCompression>(compression),
+        content_hash, static_cast<ScriptBlobOrigin>(origin),
         ScriptBlobCanonicalName { "persistent-cache" }));
   }
 
@@ -275,7 +275,7 @@ auto ScriptCompilationService::RegisterCompiler(
 }
 
 auto ScriptCompilationService::UnregisterCompiler(
-  const data::pak::ScriptLanguage language) -> bool
+  const data::pak::scripting::ScriptLanguage language) -> bool
 {
   std::lock_guard lock(compilers_mutex_);
   const auto erased = compilers_.erase(language) > 0;
@@ -286,7 +286,7 @@ auto ScriptCompilationService::UnregisterCompiler(
 }
 
 auto ScriptCompilationService::HasCompiler(
-  const data::pak::ScriptLanguage language) const -> bool
+  const data::pak::scripting::ScriptLanguage language) const -> bool
 {
   std::lock_guard lock(compilers_mutex_);
   return compilers_.contains(language);

@@ -28,7 +28,7 @@ namespace oxygen::data {
  a first-class asset: it is not named or globally identified, but is referenced
  by index in the textures resource table from materials or geometry.
 
- ### Resource Descriptor Encoding (PAK v4, 40 bytes)
+ ### Resource Descriptor Encoding (PAK v7, 40 bytes)
 
  ```text
  offset size name             description
@@ -48,11 +48,12 @@ namespace oxygen::data {
  0x27   1    reserved         Reserved for future use (must be 0)
  ```
 
- ### Texture Payload Encoding (PAK v4)
+ ### Texture Payload Encoding (PAK v7)
 
  `data_offset` points at a cooked texture payload stored in the textures
  resource data blob. Payloads are **v4-only** and start with a
- `pak::TexturePayloadHeader` (magic `pak::kTexturePayloadMagic`, "OTX1").
+ `pak::render::TexturePayloadHeader` (magic `pak::render::kTexturePayloadMagic`,
+ "OTX1").
 
  ```text
  offset size name
@@ -75,14 +76,15 @@ class TextureResource : public oxygen::Object {
 
 public:
   //! Type alias for the descriptor type used by this resource.
-  using DescT = pak::TextureResourceDesc;
+  using DescT = pak::render::TextureResourceDesc;
 
   /*! Constructs a TextureResource with descriptor and exclusive payload
       ownership.
       @param desc Texture resource descriptor from PAK file.
       @param data Cooked texture payload buffer (ownership transferred).
   */
-  TextureResource(pak::TextureResourceDesc desc, std::vector<uint8_t> data)
+  TextureResource(
+    pak::render::TextureResourceDesc desc, std::vector<uint8_t> data)
     : desc_(std::move(desc))
     , payload_(std::move(data))
   {
@@ -192,22 +194,22 @@ public:
 
   //! Returns the parsed payload header.
   [[nodiscard]] auto GetPayloadHeader() const noexcept
-    -> const pak::TexturePayloadHeader&
+    -> const pak::render::TexturePayloadHeader&
   {
     return payload_header_;
   }
 
   //! Returns the parsed subresource layouts stored in the payload.
   [[nodiscard]] auto GetSubresourceLayouts() const noexcept
-    -> std::span<const pak::SubresourceLayout>
+    -> std::span<const pak::render::SubresourceLayout>
   {
     return subresource_layouts_;
   }
 
 private:
-  pak::TextureResourceDesc desc_ {};
-  pak::TexturePayloadHeader payload_header_ {};
-  std::vector<pak::SubresourceLayout> subresource_layouts_ {};
+  pak::render::TextureResourceDesc desc_ {};
+  pak::render::TexturePayloadHeader payload_header_ {};
+  std::vector<pak::render::SubresourceLayout> subresource_layouts_ {};
   std::vector<uint8_t> payload_;
   std::size_t payload_data_offset_bytes_ = 0;
   std::size_t payload_data_size_bytes_ = 0;
@@ -226,8 +228,8 @@ private:
   void ParseV4Payload()
   {
     const auto payload_size = payload_.size();
-    std::memcpy(
-      &payload_header_, payload_.data(), sizeof(pak::TexturePayloadHeader));
+    std::memcpy(&payload_header_, payload_.data(),
+      sizeof(pak::render::TexturePayloadHeader));
 
     const auto expected_subresources = static_cast<std::uint32_t>(
       static_cast<std::uint64_t>(desc_.array_layers) * desc_.mip_levels);
@@ -247,9 +249,10 @@ private:
       = static_cast<std::size_t>(payload_header_.data_offset_bytes);
     const auto layout_count
       = static_cast<std::size_t>(payload_header_.subresource_count);
-    const auto layouts_bytes = layout_count * sizeof(pak::SubresourceLayout);
+    const auto layouts_bytes
+      = layout_count * sizeof(pak::render::SubresourceLayout);
 
-    if (layouts_offset < sizeof(pak::TexturePayloadHeader)
+    if (layouts_offset < sizeof(pak::render::TexturePayloadHeader)
       || layouts_offset > payload_size) {
       throw std::invalid_argument("TextureResource: invalid layouts offset");
     }
@@ -296,13 +299,13 @@ private:
 
   void ParsePayload()
   {
-    if (payload_.size() < sizeof(pak::TexturePayloadHeader)) {
+    if (payload_.size() < sizeof(pak::render::TexturePayloadHeader)) {
       throw std::invalid_argument("TextureResource: payload too small");
     }
 
     uint32_t magic = 0;
     std::memcpy(&magic, payload_.data(), sizeof(magic));
-    if (magic != pak::kTexturePayloadMagic) {
+    if (magic != pak::render::kTexturePayloadMagic) {
       throw std::invalid_argument("TextureResource: invalid payload magic");
     }
 

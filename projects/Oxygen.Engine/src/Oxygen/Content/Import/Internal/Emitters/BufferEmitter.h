@@ -180,7 +180,7 @@ public:
   OXGN_CNTT_NDAPI auto Finalize() -> co::Co<bool>;
 
 private:
-  using BufferResourceDesc = data::pak::BufferResourceDesc;
+  using BufferResourceDesc = data::pak::core::BufferResourceDesc;
 
   enum class WriteKind : uint8_t {
     kPadding,

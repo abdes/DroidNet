@@ -67,17 +67,17 @@ inline auto ParseHexDumpWithOffset(const std::string& hexdump,
 
 inline auto MakeV4TexturePayload(const uint32_t data_size,
   const std::byte fill_value,
-  const oxygen::data::pak::TexturePackingPolicyId policy
-  = oxygen::data::pak::TexturePackingPolicyId::kD3D12,
+  const oxygen::data::pak::render::TexturePackingPolicyId policy
+  = oxygen::data::pak::render::TexturePackingPolicyId::kD3D12,
   const uint32_t row_pitch_bytes = 0U) -> std::vector<uint8_t>
 {
-  using oxygen::data::pak::SubresourceLayout;
-  using oxygen::data::pak::TexturePackingPolicyId;
-  using oxygen::data::pak::TexturePayloadFlags;
-  using oxygen::data::pak::TexturePayloadHeader;
+  using oxygen::data::pak::render::SubresourceLayout;
+  using oxygen::data::pak::render::TexturePackingPolicyId;
+  using oxygen::data::pak::render::TexturePayloadFlags;
+  using oxygen::data::pak::render::TexturePayloadHeader;
 
   TexturePayloadHeader header {};
-  header.magic = oxygen::data::pak::kTexturePayloadMagic;
+  header.magic = oxygen::data::pak::render::kTexturePayloadMagic;
   header.packing_policy = static_cast<uint8_t>(policy);
   header.flags = static_cast<uint8_t>(TexturePayloadFlags::kNone);
   header.subresource_count = 1;

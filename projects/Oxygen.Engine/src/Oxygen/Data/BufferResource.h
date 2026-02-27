@@ -43,7 +43,7 @@ class BufferResource : public Object {
 
 public:
   //! Type alias for the descriptor type used by this resource.
-  using DescT = pak::BufferResourceDesc;
+  using DescT = pak::core::BufferResourceDesc;
 
   //! Buffer usage and access flags for BufferResource.
   enum class UsageFlags : uint32_t {
@@ -68,7 +68,7 @@ public:
 
   //! Constructs a BufferResource with descriptor + exclusive data ownership.
   OXGN_DATA_API BufferResource(
-    pak::BufferResourceDesc desc, std::vector<uint8_t> data);
+    pak::core::BufferResourceDesc desc, std::vector<uint8_t> data);
 
   ~BufferResource() override = default;
 
@@ -132,7 +132,7 @@ public:
   }
 
 private:
-  pak::BufferResourceDesc desc_ {};
+  pak::core::BufferResourceDesc desc_ {};
   std::vector<uint8_t> data_;
 };
 

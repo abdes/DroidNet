@@ -17,7 +17,7 @@ As the physics architecture of Oxygen Engine matures with full Jolt integration,
 ### 2.1 Header & Namespace Updates
 
 - `PakHeader::version` must be bumped to `7`.
-- A new `namespace oxygen::data::pak::v7` block will be introduced, importing `v6`.
+- A new `namespace oxygen::data::pak::v7` block will be introduced, importing the latest schema layer.
 - The default namespace alias at the bottom of the file will target `v7`.
 
 ### 2.2 PAK Footer Extensions

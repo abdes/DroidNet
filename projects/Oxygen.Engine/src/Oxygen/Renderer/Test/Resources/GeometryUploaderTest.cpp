@@ -106,7 +106,7 @@ auto GeometryUploaderTest::BeginFrame(frame::Slot slot) -> void
 auto GeometryUploaderTest::DefaultMaterial() const
   -> std::shared_ptr<const data::MaterialAsset>
 {
-  data::pak::MaterialAssetDesc desc {};
+  data::pak::render::MaterialAssetDesc desc {};
   return std::make_shared<const data::MaterialAsset>(data::AssetKey {}, desc);
 }
 
@@ -147,7 +147,7 @@ auto GeometryUploaderTest::MakeValidTriangleMesh(std::string_view name,
     builder.WithIndices(indices);
   }
 
-  data::pak::MeshViewDesc view_desc {
+  data::pak::geometry::MeshViewDesc view_desc {
     .first_index = 0,
     // MeshView enforces index_count > 0 even if the mesh has no index buffer.
     // For non-indexed meshes (no indices provided), keep a non-zero draw range
@@ -212,7 +212,7 @@ auto GeometryUploaderTest::MakeInvalidMesh_NonFiniteVertex(
   auto builder
     = data::MeshBuilder(0, name).WithVertices(vertices).WithIndices(indices);
 
-  data::pak::MeshViewDesc view_desc {
+  data::pak::geometry::MeshViewDesc view_desc {
     .first_index = 0,
     .index_count = 3U,
     .first_vertex = 0,

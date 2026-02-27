@@ -19,10 +19,10 @@
 namespace oxygen::engine::sceneprep::testing {
 
 [[nodiscard]] inline auto MakeStandardMeshDesc(const glm::vec3 bounds_min,
-  const glm::vec3 bounds_max) -> oxygen::data::pak::MeshDesc
+  const glm::vec3 bounds_max) -> oxygen::data::pak::geometry::MeshDesc
 {
   using oxygen::data::MeshType;
-  oxygen::data::pak::MeshDesc desc {};
+  oxygen::data::pak::geometry::MeshDesc desc {};
   desc.mesh_type
     = static_cast<std::underlying_type_t<MeshType>>(MeshType::kStandard);
   desc.info.standard.bounding_box_min[0] = bounds_min.x;
@@ -36,9 +36,9 @@ namespace oxygen::engine::sceneprep::testing {
 
 [[nodiscard]] inline auto MakeSubMeshDesc(const glm::vec3 bounds_min,
   const glm::vec3 bounds_max, const uint32_t mesh_view_count = 1U)
-  -> oxygen::data::pak::SubMeshDesc
+  -> oxygen::data::pak::geometry::SubMeshDesc
 {
-  oxygen::data::pak::SubMeshDesc desc {
+  oxygen::data::pak::geometry::SubMeshDesc desc {
     .name = {},
     .material_asset_key = {},
     .mesh_view_count = mesh_view_count,
@@ -68,10 +68,11 @@ inline auto MakeSimpleMesh(const uint32_t lod, const std::string_view name = {})
   builder.BeginSubMesh("S0", mat)
     .WithDescriptor(submesh_desc)
     .WithMeshView({ .first_index = 0u,
-      .index_count = static_cast<pak::MeshViewDesc::BufferIndexT>(idx.size()),
+      .index_count
+      = static_cast<pak::geometry::MeshViewDesc::BufferIndexT>(idx.size()),
       .first_vertex = 0u,
-      .vertex_count
-      = static_cast<pak::MeshViewDesc::BufferIndexT>(vertices.size()) })
+      .vertex_count = static_cast<pak::geometry::MeshViewDesc::BufferIndexT>(
+        vertices.size()) })
     .EndSubMesh();
   return std::shared_ptr<Mesh>(builder.Build().release());
 }
@@ -98,10 +99,11 @@ inline auto MakeMeshWithSubmeshes(const uint32_t lod,
     b.BeginSubMesh("SM", mat)
       .WithDescriptor(submesh_desc)
       .WithMeshView({ .first_index = 0u,
-        .index_count = static_cast<pak::MeshViewDesc::BufferIndexT>(idx.size()),
+        .index_count
+        = static_cast<pak::geometry::MeshViewDesc::BufferIndexT>(idx.size()),
         .first_vertex = 0u,
-        .vertex_count
-        = static_cast<pak::MeshViewDesc::BufferIndexT>(vertices.size()) })
+        .vertex_count = static_cast<pak::geometry::MeshViewDesc::BufferIndexT>(
+          vertices.size()) })
       .EndSubMesh();
   }
   return std::shared_ptr<Mesh>(b.Build().release());
@@ -150,9 +152,11 @@ inline auto MakeSpreadMesh(uint32_t lod, const std::vector<glm::vec3>& centers,
       .WithDescriptor(
         MakeSubMeshDesc(submesh_bounds[s].first, submesh_bounds[s].second))
       .WithMeshView({ .first_index = base_i,
-        .index_count = static_cast<pak::MeshViewDesc::BufferIndexT>(6),
+        .index_count
+        = static_cast<pak::geometry::MeshViewDesc::BufferIndexT>(6),
         .first_vertex = base_v,
-        .vertex_count = static_cast<pak::MeshViewDesc::BufferIndexT>(4) })
+        .vertex_count
+        = static_cast<pak::geometry::MeshViewDesc::BufferIndexT>(4) })
       .EndSubMesh();
   }
 
@@ -164,7 +168,7 @@ inline auto MakeGeometryWithLods(const size_t lod_count, const glm::vec3 bb_min,
   const glm::vec3 bb_max) -> std::shared_ptr<oxygen::data::GeometryAsset>
 {
   using namespace oxygen::data;
-  data::pak::GeometryAssetDesc desc {};
+  data::pak::geometry::GeometryAssetDesc desc {};
   desc.lod_count = static_cast<uint32_t>(lod_count);
   desc.bounding_box_min[0] = bb_min.x;
   desc.bounding_box_min[1] = bb_min.y;
@@ -188,7 +192,7 @@ inline auto MakeGeometryWithLODSubmeshes(
   -> std::shared_ptr<oxygen::data::GeometryAsset>
 {
   using namespace oxygen::data;
-  data::pak::GeometryAssetDesc desc {};
+  data::pak::geometry::GeometryAssetDesc desc {};
   desc.lod_count = static_cast<uint32_t>(per_lod_counts.size());
   desc.bounding_box_min[0] = -1.0f;
   desc.bounding_box_min[1] = -1.0f;

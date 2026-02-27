@@ -115,7 +115,7 @@ Every mounted cooked source has a **stable, globally-unique identity** that is
 derived from its container/header GUID and represented in code as
 `data::SourceKey`.
 
-- **PAK sources**: `data::pak::PakHeader.guid` (16 bytes) is the source GUID.
+- **PAK sources**: `data::pak::core::PakHeader.guid` (16 bytes) is the source GUID.
   Runtime derives `data::SourceKey` from these bytes.
 - **Loose cooked roots**: `data::IndexHeader.guid` (16 bytes, in
   `container.index.bin`) is the source GUID. Runtime derives `data::SourceKey`

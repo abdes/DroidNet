@@ -160,13 +160,13 @@ namespace {
   }
 
   [[nodiscard]] auto ToPackingPolicyId(const std::string_view id)
-    -> std::optional<data::pak::TexturePackingPolicyId>
+    -> std::optional<data::pak::render::TexturePackingPolicyId>
   {
     if (id == D3D12PackingPolicy::Instance().Id()) {
-      return data::pak::TexturePackingPolicyId::kD3D12;
+      return data::pak::render::TexturePackingPolicyId::kD3D12;
     }
     if (id == TightPackedPolicy::Instance().Id()) {
-      return data::pak::TexturePackingPolicyId::kTightPacked;
+      return data::pak::render::TexturePackingPolicyId::kTightPacked;
     }
     return std::nullopt;
   }
@@ -975,7 +975,7 @@ namespace {
     }
 
     // Map layouts to PAK representation (32-bit offsets/pitches)
-    std::vector<data::pak::SubresourceLayout> layouts;
+    std::vector<data::pak::render::SubresourceLayout> layouts;
     layouts.reserve(raw_layouts.size());
     for (const auto& layout : raw_layouts) {
       if (layout.offset > std::numeric_limits<uint32_t>::max()
@@ -984,7 +984,7 @@ namespace {
         return Err(TextureImportError::kOutputFormatInvalid);
       }
 
-      layouts.push_back(data::pak::SubresourceLayout {
+      layouts.push_back(data::pak::render::SubresourceLayout {
         .offset_bytes = static_cast<uint32_t>(layout.offset),
         .row_pitch_bytes = static_cast<uint32_t>(layout.row_pitch),
         .size_bytes = static_cast<uint32_t>(layout.size_bytes),
@@ -996,9 +996,10 @@ namespace {
       return Err(TextureImportError::kOutputFormatInvalid);
     }
 
-    constexpr uint32_t layouts_offset = sizeof(data::pak::TexturePayloadHeader);
+    constexpr uint32_t layouts_offset
+      = sizeof(data::pak::render::TexturePayloadHeader);
     const uint64_t layouts_bytes64
-      = layouts.size() * sizeof(data::pak::SubresourceLayout);
+      = layouts.size() * sizeof(data::pak::render::SubresourceLayout);
     if (layouts_bytes64 > std::numeric_limits<uint32_t>::max()) {
       return Err(TextureImportError::kOutputFormatInvalid);
     }
@@ -1017,10 +1018,11 @@ namespace {
     }
     const auto total_payload_size = static_cast<uint32_t>(total_payload64);
 
-    data::pak::TexturePayloadHeader header {};
-    header.magic = data::pak::kTexturePayloadMagic;
+    data::pak::render::TexturePayloadHeader header {};
+    header.magic = data::pak::render::kTexturePayloadMagic;
     header.packing_policy = static_cast<uint8_t>(*policy_id_opt);
-    header.flags = static_cast<uint8_t>(data::pak::TexturePayloadFlags::kNone);
+    header.flags
+      = static_cast<uint8_t>(data::pak::render::TexturePayloadFlags::kNone);
     header.subresource_count = static_cast<uint16_t>(layouts.size());
     header.total_payload_size = total_payload_size;
     header.layouts_offset_bytes = layouts_offset;

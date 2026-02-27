@@ -32,7 +32,7 @@ inline auto LoadPhysicsResource(LoaderContext context)
   DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
   auto& reader = *context.desc_reader;
 
-  using data::pak::PhysicsResourceDesc;
+  using data::pak::physics::PhysicsResourceDesc;
 
   auto check_result = [](auto&& result, const char* field) {
     if (!result) {

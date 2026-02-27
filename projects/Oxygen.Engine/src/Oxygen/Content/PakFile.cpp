@@ -19,11 +19,11 @@
 
 using oxygen::content::PakFile;
 using oxygen::data::AssetKey;
-using oxygen::data::pak::AssetDirectoryEntry;
-using oxygen::data::pak::PakBrowseIndexEntry;
-using oxygen::data::pak::PakBrowseIndexHeader;
-using oxygen::data::pak::PakFooter;
-using oxygen::data::pak::PakHeader;
+using oxygen::data::pak::core::AssetDirectoryEntry;
+using oxygen::data::pak::core::PakFooter;
+using oxygen::data::pak::core::PakHeader;
+using oxygen::data::pak::core::PakBrowseIndexEntry;
+using oxygen::data::pak::core::PakBrowseIndexHeader;
 
 namespace {
 
@@ -168,15 +168,16 @@ auto ReadPakHeader(oxygen::serio::FileStream<>& stream) -> PakHeader
     oxygen::data::to_string(oxygen::data::SourceKey::FromBytes(header.guid)));
 
   if (!std::ranges::equal(
-        std::span { header.magic }, oxygen::data::pak::kPakHeaderMagic)) {
+        std::span { header.magic }, oxygen::data::pak::core::kPakHeaderMagic)) {
     LOG_F(ERROR, "Invalid pak file header magic");
     throw std::runtime_error("Invalid pak file header magic");
   }
 
-  if (header.version != oxygen::data::pak::kCurrantPakFormatVersion) {
+  if (header.version != oxygen::data::pak::core::kCurrentPakFormatVersion) {
     const auto msg = std::string("Unsupported PAK format version: ")
       + std::to_string(header.version) + " (this build loads v"
-      + std::to_string(oxygen::data::pak::kCurrantPakFormatVersion) + " only).";
+      + std::to_string(oxygen::data::pak::core::kCurrentPakFormatVersion)
+      + " only).";
     LOG_F(ERROR, "{}", msg);
     throw std::runtime_error(msg);
   }
@@ -218,7 +219,7 @@ auto ReadPakFooter(oxygen::serio::FileStream<>& stream) -> PakFooter
 
   const auto footer_magic = std::as_bytes(std::span { footer.footer_magic });
   const auto expected_footer_magic
-    = std::as_bytes(std::span { oxygen::data::pak::kPakFooterMagic });
+    = std::as_bytes(std::span { oxygen::data::pak::core::kPakFooterMagic });
   if (!std::ranges::equal(footer_magic, expected_footer_magic)) {
     LOG_F(ERROR, "Invalid pak file footer magic");
     throw std::runtime_error("Invalid pak file footer magic");
@@ -272,7 +273,8 @@ auto LoadBrowseIndex(oxygen::serio::FileStream<>& stream,
   LOG_SCOPE_FUNCTION(INFO);
 
   ParsedBrowseIndex parsed {};
-  const oxygen::data::pak::OffsetT browse_offset = footer.browse_index_offset;
+  const oxygen::data::pak::core::OffsetT browse_offset
+    = footer.browse_index_offset;
   const uint64_t browse_size = footer.browse_index_size;
 
   if (browse_offset == 0 || browse_size == 0) {
@@ -691,7 +693,7 @@ auto PakFile::PhysicsTable() const -> PhysicsTableT&
 }
 
 auto PakFile::ReadScriptSlotRecord(const uint32_t index) const
-  -> data::pak::ScriptSlotRecord
+  -> data::pak::scripting::ScriptSlotRecord
 {
   std::scoped_lock lock(mutex_);
 
@@ -699,7 +701,7 @@ auto PakFile::ReadScriptSlotRecord(const uint32_t index) const
     throw std::out_of_range("Script slot index out of bounds");
   }
   if (footer_.script_slot_table.entry_size
-    != sizeof(data::pak::ScriptSlotRecord)) {
+    != sizeof(data::pak::scripting::ScriptSlotRecord)) {
     throw std::runtime_error("Script slot table entry size mismatch");
   }
 
@@ -712,20 +714,22 @@ auto PakFile::ReadScriptSlotRecord(const uint32_t index) const
   }
 
   Reader reader(*meta_stream_);
-  auto blob_res = reader.ReadBlob(sizeof(data::pak::ScriptSlotRecord));
+  auto blob_res
+    = reader.ReadBlob(sizeof(data::pak::scripting::ScriptSlotRecord));
   if (!blob_res) {
     throw std::runtime_error("Failed to read script slot record");
   }
 
-  data::pak::ScriptSlotRecord record {};
+  data::pak::scripting::ScriptSlotRecord record {};
   std::memcpy(&record, blob_res->data(), sizeof(record));
   return record;
 }
 
-auto PakFile::ReadScriptSlotRecords(const uint32_t start_index,
-  const uint32_t count) const -> std::vector<data::pak::ScriptSlotRecord>
+auto PakFile::ReadScriptSlotRecords(
+  const uint32_t start_index, const uint32_t count) const
+  -> std::vector<data::pak::scripting::ScriptSlotRecord>
 {
-  std::vector<data::pak::ScriptSlotRecord> result;
+  std::vector<data::pak::scripting::ScriptSlotRecord> result;
   result.reserve(count);
 
   if (count == 0) {
@@ -743,16 +747,16 @@ auto PakFile::ReadScriptSlotRecords(const uint32_t start_index,
 }
 
 auto PakFile::ReadScriptParamRecords(const ScriptParamReadRequest request) const
-  -> std::vector<data::pak::ScriptParamRecord>
+  -> std::vector<data::pak::scripting::ScriptParamRecord>
 {
-  std::vector<data::pak::ScriptParamRecord> result;
+  std::vector<data::pak::scripting::ScriptParamRecord> result;
   if (request.count == 0) {
     return result;
   }
 
   std::scoped_lock lock(mutex_);
   constexpr auto kRecordSize
-    = static_cast<uint64_t>(sizeof(data::pak::ScriptParamRecord));
+    = static_cast<uint64_t>(sizeof(data::pak::scripting::ScriptParamRecord));
   const auto total_bytes = static_cast<uint64_t>(request.count) * kRecordSize;
 
   const auto stream_size_result = meta_stream_->Size();
@@ -795,10 +799,11 @@ auto PakFile::ReadScriptParamRecords(const ScriptParamReadRequest request) const
   return result;
 }
 
-auto PakFile::ReadScriptResource(const data::pak::ResourceIndexT index) const
+auto PakFile::ReadScriptResource(
+  const data::pak::core::ResourceIndexT index) const
   -> std::shared_ptr<const data::ScriptResource>
 {
-  if (index == data::pak::kNoResourceIndex) {
+  if (index == data::pak::core::kNoResourceIndex) {
     return nullptr;
   }
 
@@ -822,12 +827,13 @@ auto PakFile::ReadScriptResource(const data::pak::ResourceIndexT index) const
   }
 
   Reader meta_reader(*meta_stream_);
-  auto desc_blob = meta_reader.ReadBlob(sizeof(data::pak::ScriptResourceDesc));
+  auto desc_blob
+    = meta_reader.ReadBlob(sizeof(data::pak::scripting::ScriptResourceDesc));
   if (!desc_blob) {
     throw std::runtime_error("Failed to read script resource descriptor");
   }
 
-  data::pak::ScriptResourceDesc desc {};
+  data::pak::scripting::ScriptResourceDesc desc {};
   std::memcpy(&desc, desc_blob->data(), sizeof(desc));
 
   std::vector<uint8_t> payload;

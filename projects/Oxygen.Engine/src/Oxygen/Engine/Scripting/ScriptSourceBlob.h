@@ -60,8 +60,8 @@ public:
   ~ScriptSourceBlob() = default;
 
   [[nodiscard]] static auto FromOwned(std::vector<uint8_t> bytes,
-    data::pak::ScriptLanguage language,
-    data::pak::ScriptCompression compression, uint64_t content_hash,
+    data::pak::scripting::ScriptLanguage language,
+    data::pak::scripting::ScriptCompression compression, uint64_t content_hash,
     ScriptBlobOrigin origin, ScriptBlobCanonicalName canonical_name)
     -> ScriptSourceBlob
   {
@@ -71,8 +71,8 @@ public:
   }
 
   [[nodiscard]] static auto FromReferenced(std::span<const uint8_t> bytes,
-    data::pak::ScriptLanguage language,
-    data::pak::ScriptCompression compression, uint64_t content_hash,
+    data::pak::scripting::ScriptLanguage language,
+    data::pak::scripting::ScriptCompression compression, uint64_t content_hash,
     ScriptBlobOrigin origin, ScriptBlobCanonicalName canonical_name)
     -> ScriptSourceBlob
   {
@@ -99,20 +99,21 @@ public:
     return std::holds_alternative<ReferencedStorage>(storage_);
   }
 
-  [[nodiscard]] auto Language() const noexcept -> data::pak::ScriptLanguage
+  [[nodiscard]] auto Language() const noexcept
+    -> data::pak::scripting::ScriptLanguage
   {
     return language_;
   }
 
   [[nodiscard]] auto Compression() const noexcept
-    -> data::pak::ScriptCompression
+    -> data::pak::scripting::ScriptCompression
   {
     return compression_;
   }
 
   [[nodiscard]] auto IsCompressed() const noexcept -> bool
   {
-    return compression_ != data::pak::ScriptCompression::kNone;
+    return compression_ != data::pak::scripting::ScriptCompression::kNone;
   }
 
   [[nodiscard]] auto ContentHash() const noexcept -> uint64_t
@@ -132,8 +133,9 @@ public:
   }
 
 private:
-  ScriptSourceBlob(Storage storage, data::pak::ScriptLanguage language,
-    data::pak::ScriptCompression compression, uint64_t content_hash,
+  ScriptSourceBlob(Storage storage,
+    data::pak::scripting::ScriptLanguage language,
+    data::pak::scripting::ScriptCompression compression, uint64_t content_hash,
     ScriptBlobOrigin origin, ScriptBlobCanonicalName canonical_name)
     : storage_(std::move(storage))
     , bytes_(std::visit(
@@ -149,8 +151,8 @@ private:
 
   Storage storage_;
   std::span<const uint8_t> bytes_;
-  data::pak::ScriptLanguage language_;
-  data::pak::ScriptCompression compression_;
+  data::pak::scripting::ScriptLanguage language_;
+  data::pak::scripting::ScriptCompression compression_;
   uint64_t content_hash_;
   ScriptBlobOrigin origin_;
   ScriptBlobCanonicalName canonical_name_;

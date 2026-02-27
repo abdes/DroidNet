@@ -23,8 +23,8 @@ namespace {
 [[nodiscard]] auto MakeValidPayload(uint16_t array_layers, uint16_t mip_levels,
   uint32_t bytes_per_subresource, uint64_t content_hash) -> std::vector<uint8_t>
 {
-  using oxygen::data::pak::SubresourceLayout;
-  using oxygen::data::pak::TexturePayloadHeader;
+  using oxygen::data::pak::render::SubresourceLayout;
+  using oxygen::data::pak::render::TexturePayloadHeader;
 
   const auto subresource_count = static_cast<uint16_t>(
     static_cast<uint32_t>(array_layers) * static_cast<uint32_t>(mip_levels));
@@ -60,7 +60,7 @@ namespace {
 //! 35).
 NOLINT_TEST(TextureResourceBasicTest, AccessorsReturnDescriptorValues)
 {
-  using oxygen::data::pak::TextureResourceDesc;
+  using oxygen::data::pak::render::TextureResourceDesc;
   TextureResourceDesc desc {
     .data_offset = 4096,
     .size_bytes = 0,
@@ -104,7 +104,7 @@ class TextureResourceValidationTest : public testing::Test { };
 //! Move semantics transfer ownership of data buffer (additional coverage).
 NOLINT_TEST_F(TextureResourceValidationTest, MoveConstructor_TransfersOwnership)
 {
-  using oxygen::data::pak::TextureResourceDesc;
+  using oxygen::data::pak::render::TextureResourceDesc;
   TextureResourceDesc desc {
     .data_offset = 1024,
     .size_bytes = 0,
@@ -138,7 +138,7 @@ NOLINT_TEST_F(TextureResourceValidationTest, MoveConstructor_TransfersOwnership)
 //! Invalid descriptor: zero width must throw.
 NOLINT_TEST_F(TextureResourceValidationTest, InvalidDescriptor_ZeroWidth_Throws)
 {
-  using oxygen::data::pak::TextureResourceDesc;
+  using oxygen::data::pak::render::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
     .size_bytes = 0,
@@ -168,7 +168,7 @@ NOLINT_TEST_F(TextureResourceValidationTest, InvalidDescriptor_ZeroWidth_Throws)
 NOLINT_TEST_F(
   TextureResourceValidationTest, InvalidDescriptor_ZeroHeight_Throws)
 {
-  using oxygen::data::pak::TextureResourceDesc;
+  using oxygen::data::pak::render::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
     .size_bytes = 0,
@@ -199,7 +199,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   TextureResourceValidationTest, InvalidDescriptor_ZeroDepth3D_Throws)
 {
-  using oxygen::data::pak::TextureResourceDesc;
+  using oxygen::data::pak::render::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
     .size_bytes = 0,
@@ -230,7 +230,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   TextureResourceValidationTest, InvalidDescriptor_ZeroMipLevels_Throws)
 {
-  using oxygen::data::pak::TextureResourceDesc;
+  using oxygen::data::pak::render::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
     .size_bytes = 0,
@@ -262,7 +262,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   TextureResourceValidationTest, InvalidDescriptor_ExcessiveMipLevels_Throws)
 {
-  using oxygen::data::pak::TextureResourceDesc;
+  using oxygen::data::pak::render::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
     .size_bytes = 0,
@@ -294,7 +294,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   TextureResourceValidationTest, InvalidDescriptor_ZeroArrayLayers_Throws)
 {
-  using oxygen::data::pak::TextureResourceDesc;
+  using oxygen::data::pak::render::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
     .size_bytes = 0,
@@ -326,7 +326,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   TextureResourceValidationTest, InvalidDescriptor_DataSizeMismatch_Throws)
 {
-  using oxygen::data::pak::TextureResourceDesc;
+  using oxygen::data::pak::render::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
     .size_bytes = 0,
@@ -357,7 +357,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   TextureResourceValidationTest, InvalidDescriptor_WrongAlignment_Throws)
 {
-  using oxygen::data::pak::TextureResourceDesc;
+  using oxygen::data::pak::render::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
     .size_bytes = 0,
@@ -388,7 +388,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   TextureResourceValidationTest, Resiliency_InvalidEnums_MapToUnknownNoThrow)
 {
-  using oxygen::data::pak::TextureResourceDesc;
+  using oxygen::data::pak::render::TextureResourceDesc;
   TextureResourceDesc weird {
     .data_offset = 0,
     .size_bytes = 0,

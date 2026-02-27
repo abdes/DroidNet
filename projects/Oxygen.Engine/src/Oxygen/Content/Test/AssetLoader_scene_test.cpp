@@ -68,9 +68,9 @@ auto WriteLooseCookedSceneWithSingleRootNode(
   using oxygen::data::AssetType;
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::IndexHeader;
-  using oxygen::data::pak::NodeRecord;
-  using oxygen::data::pak::SceneAssetDesc;
-  using oxygen::data::pak::SceneEnvironmentBlockHeader;
+  using oxygen::data::pak::world::NodeRecord;
+  using oxygen::data::pak::world::SceneAssetDesc;
+  using oxygen::data::pak::world::SceneEnvironmentBlockHeader;
 
   const oxygen::content::import::LooseCookedLayout layout {};
 
@@ -80,7 +80,7 @@ auto WriteLooseCookedSceneWithSingleRootNode(
   SceneAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
   std::snprintf(desc.header.name, sizeof(desc.header.name), "%s", "TestScene");
-  desc.header.version = oxygen::data::pak::kSceneAssetVersion;
+  desc.header.version = oxygen::data::pak::world::kSceneAssetVersion;
 
   desc.nodes.offset = sizeof(SceneAssetDesc);
   desc.nodes.count = 1;
@@ -224,7 +224,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
       EXPECT_EQ(scene->GetNodeName(scene->GetNode(1)), "empty_node");
 
       const auto renderables
-        = scene->GetComponents<oxygen::data::pak::RenderableRecord>();
+        = scene->GetComponents<oxygen::data::pak::world::RenderableRecord>();
       EXPECT_TRUE(renderables.empty());
 
 #if !defined(NDEBUG)
@@ -301,7 +301,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
 
       // Assert: renderables
       const auto renderables
-        = scene->GetComponents<oxygen::data::pak::RenderableRecord>();
+        = scene->GetComponents<oxygen::data::pak::world::RenderableRecord>();
       const auto renderable_count = renderables.size();
       EXPECT_EQ(renderable_count, 1U);
       if (renderable_count != 1U) {
@@ -387,7 +387,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
       }
 
       const auto renderables
-        = scene->GetComponents<oxygen::data::pak::RenderableRecord>();
+        = scene->GetComponents<oxygen::data::pak::world::RenderableRecord>();
       const auto renderable_count = renderables.size();
       EXPECT_EQ(renderable_count, 2U);
       if (renderable_count != 2U) {
@@ -460,7 +460,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
       }
 
       const auto renderables
-        = scene->GetComponents<oxygen::data::pak::RenderableRecord>();
+        = scene->GetComponents<oxygen::data::pak::world::RenderableRecord>();
       const auto renderable_count = renderables.size();
       EXPECT_EQ(renderable_count, 2U);
       if (renderable_count != 2U) {
@@ -537,21 +537,22 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
       }
 
       const auto directional
-        = scene->GetComponents<oxygen::data::pak::DirectionalLightRecord>();
+        = scene
+            ->GetComponents<oxygen::data::pak::world::DirectionalLightRecord>();
       EXPECT_EQ(directional.size(), 1U);
       if (directional.size() == 1U) {
         EXPECT_EQ(directional[0].node_index, 1U);
       }
 
       const auto points
-        = scene->GetComponents<oxygen::data::pak::PointLightRecord>();
+        = scene->GetComponents<oxygen::data::pak::world::PointLightRecord>();
       EXPECT_EQ(points.size(), 1U);
       if (points.size() == 1U) {
         EXPECT_EQ(points[0].node_index, 2U);
       }
 
       const auto spots
-        = scene->GetComponents<oxygen::data::pak::SpotLightRecord>();
+        = scene->GetComponents<oxygen::data::pak::world::SpotLightRecord>();
       EXPECT_TRUE(spots.empty());
 
       EXPECT_TRUE(scene->HasEnvironmentBlock());
@@ -563,10 +564,10 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
       EXPECT_EQ(env_records.size(), 2U);
 
       uint32_t expected_byte_size = static_cast<uint32_t>(
-        sizeof(oxygen::data::pak::SceneEnvironmentBlockHeader));
+        sizeof(oxygen::data::pak::world::SceneEnvironmentBlockHeader));
       for (const auto& record : env_records) {
         EXPECT_GE(record.header.record_size,
-          sizeof(oxygen::data::pak::SceneEnvironmentSystemRecordHeader));
+          sizeof(oxygen::data::pak::world::SceneEnvironmentSystemRecordHeader));
         EXPECT_EQ(record.bytes.size(), record.header.record_size);
         expected_byte_size += record.header.record_size;
       }
@@ -576,20 +577,20 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
       EXPECT_TRUE(sky.has_value());
       if (sky) {
         EXPECT_EQ(sky->header.system_type,
-          static_cast<uint32_t>(
-            oxygen::data::pak::EnvironmentComponentType::kSkyAtmosphere));
+          static_cast<uint32_t>(oxygen::data::pak::world::
+              EnvironmentComponentType::kSkyAtmosphere));
         EXPECT_EQ(sky->header.record_size,
-          sizeof(oxygen::data::pak::SkyAtmosphereEnvironmentRecord));
+          sizeof(oxygen::data::pak::world::SkyAtmosphereEnvironmentRecord));
       }
 
       const auto ppv = scene->TryGetPostProcessVolumeEnvironment();
       EXPECT_TRUE(ppv.has_value());
       if (ppv) {
         EXPECT_EQ(ppv->header.system_type,
-          static_cast<uint32_t>(
-            oxygen::data::pak::EnvironmentComponentType::kPostProcessVolume));
+          static_cast<uint32_t>(oxygen::data::pak::world::
+              EnvironmentComponentType::kPostProcessVolume));
         EXPECT_EQ(ppv->header.record_size,
-          sizeof(oxygen::data::pak::PostProcessVolumeEnvironmentRecord));
+          sizeof(oxygen::data::pak::world::PostProcessVolumeEnvironmentRecord));
       }
 
       loader.Stop();
@@ -647,16 +648,16 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
         co_return oxygen::co::kJoin;
       }
 
-      const auto bindings
-        = scene->GetComponents<oxygen::data::pak::InputContextBindingRecord>();
+      const auto bindings = scene->GetComponents<
+        oxygen::data::pak::input::InputContextBindingRecord>();
       EXPECT_EQ(bindings.size(), 1U);
       EXPECT_EQ(bindings[0].node_index, 1U);
       EXPECT_EQ(bindings[0].context_asset_key, context_key);
       EXPECT_EQ(bindings[0].priority, 10);
-      EXPECT_EQ(
-        (bindings[0].flags
-          & oxygen::data::pak::InputContextBindingFlags::kActivateOnLoad),
-        oxygen::data::pak::InputContextBindingFlags::kActivateOnLoad);
+      EXPECT_EQ((bindings[0].flags
+                  & oxygen::data::pak::input::InputContextBindingFlags::
+                    kActivateOnLoad),
+        oxygen::data::pak::input::InputContextBindingFlags::kActivateOnLoad);
 
 #if !defined(NDEBUG)
       bool has_scene_as_dependent = false;
@@ -825,19 +826,26 @@ NOLINT_TEST_F(AssetLoaderSceneTest, LoadAssetSceneWithPhysicsSidecarLoadsV7)
       EXPECT_EQ(sidecar->GetTargetNodeCount(), 2U);
 
       const auto rigid
-        = sidecar->GetBindings<oxygen::data::pak::RigidBodyBindingRecord>();
+        = sidecar
+            ->GetBindings<oxygen::data::pak::physics::RigidBodyBindingRecord>();
       const auto colliders
-        = sidecar->GetBindings<oxygen::data::pak::ColliderBindingRecord>();
+        = sidecar
+            ->GetBindings<oxygen::data::pak::physics::ColliderBindingRecord>();
       const auto characters
-        = sidecar->GetBindings<oxygen::data::pak::CharacterBindingRecord>();
+        = sidecar
+            ->GetBindings<oxygen::data::pak::physics::CharacterBindingRecord>();
       const auto soft_bodies
-        = sidecar->GetBindings<oxygen::data::pak::SoftBodyBindingRecord>();
+        = sidecar
+            ->GetBindings<oxygen::data::pak::physics::SoftBodyBindingRecord>();
       const auto joints
-        = sidecar->GetBindings<oxygen::data::pak::JointBindingRecord>();
+        = sidecar
+            ->GetBindings<oxygen::data::pak::physics::JointBindingRecord>();
       const auto vehicles
-        = sidecar->GetBindings<oxygen::data::pak::VehicleBindingRecord>();
+        = sidecar
+            ->GetBindings<oxygen::data::pak::physics::VehicleBindingRecord>();
       const auto aggregates
-        = sidecar->GetBindings<oxygen::data::pak::AggregateBindingRecord>();
+        = sidecar
+            ->GetBindings<oxygen::data::pak::physics::AggregateBindingRecord>();
 
       EXPECT_EQ(rigid.size(), 1U);
       EXPECT_EQ(colliders.size(), 1U);
@@ -901,7 +909,8 @@ NOLINT_TEST_F(AssetLoaderSceneTest, LoadAssetLooseCookedSceneLoads)
         EXPECT_EQ(scene->GetNodes().size(), 1);
         EXPECT_EQ(scene->GetNodeName(scene->GetRootNode()), "root");
         EXPECT_TRUE(
-          scene->GetComponents<oxygen::data::pak::RenderableRecord>().empty());
+          scene->GetComponents<oxygen::data::pak::world::RenderableRecord>()
+            .empty());
       }
 
       loader.Stop();

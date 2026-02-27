@@ -122,12 +122,12 @@ public:
   [[nodiscard]] virtual auto ScriptSlotCount() const noexcept -> uint32_t = 0;
 
   [[nodiscard]] virtual auto ReadScriptSlotRecords(uint32_t start_index,
-    uint32_t count) const -> std::vector<data::pak::ScriptSlotRecord>
+    uint32_t count) const -> std::vector<data::pak::scripting::ScriptSlotRecord>
     = 0;
 
   [[nodiscard]] virtual auto ReadScriptParamRecords(
-    data::pak::OffsetT absolute_offset, uint32_t count) const
-    -> std::vector<data::pak::ScriptParamRecord>
+    data::pak::core::OffsetT absolute_offset, uint32_t count) const
+    -> std::vector<data::pak::scripting::ScriptParamRecord>
     = 0;
 
   [[nodiscard]] virtual auto ResolveVirtualPath(

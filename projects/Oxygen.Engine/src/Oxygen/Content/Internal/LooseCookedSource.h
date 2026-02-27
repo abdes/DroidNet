@@ -249,9 +249,9 @@ public:
 
   [[nodiscard]] auto ReadScriptSlotRecords(
     const uint32_t start_index, const uint32_t count) const
-    -> std::vector<data::pak::ScriptSlotRecord> override
+    -> std::vector<data::pak::scripting::ScriptSlotRecord> override
   {
-    std::vector<data::pak::ScriptSlotRecord> records;
+    std::vector<data::pak::scripting::ScriptSlotRecord> records;
     if (count == 0) {
       return records;
     }
@@ -260,7 +260,8 @@ public:
         "scripts.table is required to read script slot records");
     }
 
-    constexpr size_t kRecordSize = sizeof(data::pak::ScriptSlotRecord);
+    constexpr size_t kRecordSize
+      = sizeof(data::pak::scripting::ScriptSlotRecord);
     const size_t start_offset = static_cast<size_t>(start_index) * kRecordSize;
     const size_t bytes_to_read = static_cast<size_t>(count) * kRecordSize;
 
@@ -290,10 +291,10 @@ public:
   }
 
   [[nodiscard]] auto ReadScriptParamRecords(
-    const data::pak::OffsetT absolute_offset, const uint32_t count) const
-    -> std::vector<data::pak::ScriptParamRecord> override
+    const data::pak::core::OffsetT absolute_offset, const uint32_t count) const
+    -> std::vector<data::pak::scripting::ScriptParamRecord> override
   {
-    std::vector<data::pak::ScriptParamRecord> records;
+    std::vector<data::pak::scripting::ScriptParamRecord> records;
     if (count == 0) {
       return records;
     }
@@ -302,7 +303,8 @@ public:
         "scripts.data is required to read script parameter records");
     }
 
-    constexpr size_t kRecordSize = sizeof(data::pak::ScriptParamRecord);
+    constexpr size_t kRecordSize
+      = sizeof(data::pak::scripting::ScriptParamRecord);
     const size_t bytes_to_read = static_cast<size_t>(count) * kRecordSize;
 
     serio::FileStream<> stream(*scripts_data_path_, std::ios::in);
@@ -508,7 +510,7 @@ private:
         "Failed to stat buffers.table: " + buffers_table_path_->string());
     }
 
-    constexpr uint64_t kEntrySize = sizeof(data::pak::BufferResourceDesc);
+    constexpr uint64_t kEntrySize = sizeof(data::pak::core::BufferResourceDesc);
     if (kEntrySize == 0 || (size % kEntrySize) != 0) {
       throw std::runtime_error(
         "Invalid buffers.table size: " + buffers_table_path_->string());
@@ -520,7 +522,7 @@ private:
         "buffers.table too large: " + buffers_table_path_->string());
     }
 
-    data::pak::ResourceTable meta {
+    data::pak::core::ResourceTable meta {
       .offset = 0,
       .count = static_cast<uint32_t>(count),
       .entry_size = static_cast<uint32_t>(kEntrySize),
@@ -540,7 +542,8 @@ private:
         "Failed to stat textures.table: " + textures_table_path_->string());
     }
 
-    constexpr uint64_t kEntrySize = sizeof(data::pak::TextureResourceDesc);
+    constexpr uint64_t kEntrySize
+      = sizeof(data::pak::render::TextureResourceDesc);
     if (kEntrySize == 0 || (size % kEntrySize) != 0) {
       throw std::runtime_error(
         "Invalid textures.table size: " + textures_table_path_->string());
@@ -552,7 +555,7 @@ private:
         "textures.table too large: " + textures_table_path_->string());
     }
 
-    data::pak::ResourceTable meta {
+    data::pak::core::ResourceTable meta {
       .offset = 0,
       .count = static_cast<uint32_t>(count),
       .entry_size = static_cast<uint32_t>(kEntrySize),
@@ -572,7 +575,8 @@ private:
         "Failed to stat physics.table: " + physics_table_path_->string());
     }
 
-    constexpr uint64_t kEntrySize = sizeof(data::pak::PhysicsResourceDesc);
+    constexpr uint64_t kEntrySize
+      = sizeof(data::pak::physics::PhysicsResourceDesc);
     if (kEntrySize == 0 || (size % kEntrySize) != 0) {
       throw std::runtime_error(
         "Invalid physics.table size: " + physics_table_path_->string());
@@ -584,7 +588,7 @@ private:
         "physics.table too large: " + physics_table_path_->string());
     }
 
-    data::pak::ResourceTable meta {
+    data::pak::core::ResourceTable meta {
       .offset = 0,
       .count = static_cast<uint32_t>(count),
       .entry_size = static_cast<uint32_t>(kEntrySize),
@@ -597,7 +601,8 @@ private:
     if (!scripts_table_path_) {
       return 0;
     }
-    constexpr uint64_t kSlotRecordSize = sizeof(data::pak::ScriptSlotRecord);
+    constexpr uint64_t kSlotRecordSize
+      = sizeof(data::pak::scripting::ScriptSlotRecord);
     if (kSlotRecordSize == 0) {
       return 0;
     }
@@ -621,7 +626,8 @@ private:
         "Failed to stat scripts.table: " + scripts_table_path_->string());
     }
 
-    constexpr uint64_t kEntrySize = sizeof(data::pak::ScriptResourceDesc);
+    constexpr uint64_t kEntrySize
+      = sizeof(data::pak::scripting::ScriptResourceDesc);
     if (kEntrySize == 0 || (size % kEntrySize) != 0) {
       throw std::runtime_error(
         "Invalid scripts.table size: " + scripts_table_path_->string());
@@ -633,7 +639,7 @@ private:
         "scripts.table too large: " + scripts_table_path_->string());
     }
 
-    data::pak::ResourceTable meta {
+    data::pak::core::ResourceTable meta {
       .offset = 0,
       .count = static_cast<uint32_t>(count),
       .entry_size = static_cast<uint32_t>(kEntrySize),

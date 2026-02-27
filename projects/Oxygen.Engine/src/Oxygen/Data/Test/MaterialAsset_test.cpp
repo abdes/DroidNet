@@ -91,9 +91,9 @@ NOLINT_TEST(MaterialAssetBasicTest, DefaultMaterialDomainAndFlags)
   // Assert
   ASSERT_THAT(mat, NotNull());
   EXPECT_EQ(mat->GetMaterialDomain(), oxygen::data::MaterialDomain::kOpaque);
-  EXPECT_EQ(
-    mat->GetFlags() & oxygen::data::pak::kMaterialFlag_NoTextureSampling,
-    oxygen::data::pak::kMaterialFlag_NoTextureSampling);
+  EXPECT_EQ(mat->GetFlags()
+      & oxygen::data::pak::render::kMaterialFlag_NoTextureSampling,
+    oxygen::data::pak::render::kMaterialFlag_NoTextureSampling);
 }
 
 //! Tests default material texture indices unset (ID 31).
@@ -135,8 +135,8 @@ NOLINT_TEST(MaterialAssetConsistencyTest, ShaderRefsMatchStageMask)
 {
   using oxygen::ShaderType;
   using oxygen::data::ShaderReference;
-  using oxygen::data::pak::MaterialAssetDesc;
-  using oxygen::data::pak::ShaderReferenceDesc;
+  using oxygen::data::pak::render::MaterialAssetDesc;
+  using oxygen::data::pak::render::ShaderReferenceDesc;
 
   // Arrange
   MaterialAssetDesc desc {};
@@ -181,7 +181,7 @@ NOLINT_TEST(ShaderReferenceBasicTest, ConstructionAndAccessors)
 {
   using oxygen::ShaderType;
   using oxygen::data::ShaderReference;
-  using oxygen::data::pak::ShaderReferenceDesc;
+  using oxygen::data::pak::render::ShaderReferenceDesc;
 
   // Arrange
   ShaderReferenceDesc desc {};

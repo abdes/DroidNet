@@ -26,30 +26,30 @@ public:
     std::function<const IContentSource*(uint16_t)> resolve_source_for_id;
     std::function<std::optional<uint16_t>(data::SourceKey)>
       resolve_source_id_for_source_key;
-    std::function<ResourceKey(uint16_t, data::pak::ResourceIndexT)>
+    std::function<ResourceKey(uint16_t, data::pak::core::ResourceIndexT)>
       make_physics_resource_key;
   };
 
   [[nodiscard]] auto MakePhysicsResourceKey(data::SourceKey source_key,
-    data::pak::ResourceIndexT resource_index,
+    data::pak::core::ResourceIndexT resource_index,
     const Callbacks& callbacks) const noexcept -> std::optional<ResourceKey>;
 
   [[nodiscard]] auto MakePhysicsResourceKeyForAsset(
     const data::AssetKey& context_asset_key,
-    data::pak::ResourceIndexT resource_index,
+    data::pak::core::ResourceIndexT resource_index,
     const Callbacks& callbacks) const noexcept -> std::optional<ResourceKey>;
 
   [[nodiscard]] auto ReadCollisionShapeAssetDescForAsset(
     const data::AssetKey& context_asset_key,
-    data::pak::ResourceIndexT shape_asset_index,
+    data::pak::core::ResourceIndexT shape_asset_index,
     const Callbacks& callbacks) const
-    -> std::optional<data::pak::CollisionShapeAssetDesc>;
+    -> std::optional<data::pak::physics::CollisionShapeAssetDesc>;
 
   [[nodiscard]] auto ReadPhysicsMaterialAssetDescForAsset(
     const data::AssetKey& context_asset_key,
-    data::pak::ResourceIndexT material_asset_index,
+    data::pak::core::ResourceIndexT material_asset_index,
     const Callbacks& callbacks) const
-    -> std::optional<data::pak::PhysicsMaterialAssetDesc>;
+    -> std::optional<data::pak::physics::PhysicsMaterialAssetDesc>;
 
   [[nodiscard]] auto FindPhysicsSidecarAssetKeyForScene(
     const data::AssetKey& scene_key, const Callbacks& callbacks) const

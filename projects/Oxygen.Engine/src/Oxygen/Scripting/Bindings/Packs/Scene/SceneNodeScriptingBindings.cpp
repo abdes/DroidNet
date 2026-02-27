@@ -310,11 +310,11 @@ namespace {
       CHECK_F(lua_gettop(state) == entry_top + 1, "stack imbalance");
       return 1;
     }
-    data::pak::ScriptAssetDesc desc {};
+    data::pak::scripting::ScriptAssetDesc desc {};
     desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kScript);
-    desc.bytecode_resource_index = data::pak::kNoResourceIndex;
-    desc.source_resource_index = data::pak::kNoResourceIndex;
-    desc.flags = data::pak::ScriptAssetFlags::kAllowExternalSource;
+    desc.bytecode_resource_index = data::pak::core::kNoResourceIndex;
+    desc.source_resource_index = data::pak::core::kNoResourceIndex;
+    desc.flags = data::pak::scripting::ScriptAssetFlags::kAllowExternalSource;
 
     auto path_span = std::span(desc.external_source_path);
     auto writable = path_span.first(path_span.size() - 1);
@@ -324,8 +324,8 @@ namespace {
     }
     writable[copy_len] = '\0';
 
-    auto asset = std::make_shared<data::ScriptAsset>(
-      data::AssetKey {}, desc, std::vector<data::pak::ScriptParamRecord> {});
+    auto asset = std::make_shared<data::ScriptAsset>(data::AssetKey {}, desc,
+      std::vector<data::pak::scripting::ScriptParamRecord> {});
     lua_pushboolean(
       state, node->GetScripting().AddSlot(std::move(asset)) ? 1 : 0);
     CHECK_F(lua_gettop(state) == entry_top + 1, "stack imbalance");

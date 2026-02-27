@@ -38,7 +38,7 @@ namespace {
     using data::Unorm16;
     namespace pak = data::pak;
 
-    pak::MaterialAssetDesc desc {};
+    pak::render::MaterialAssetDesc desc {};
     desc.header.asset_type = static_cast<uint8_t>(AssetType::kMaterial);
     constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
     const std::size_t n = (std::min)(maxn, std::strlen(name));
@@ -141,8 +141,8 @@ auto SceneBootstrapper::EnsureSphere(scene::Scene& scene) -> void
     = MakeSolidColorMaterial("SphereMaterial", { 0.2F, 0.7F, 0.3F, 1.0F });
 
   using data::MeshBuilder;
-  using data::pak::GeometryAssetDesc;
-  using data::pak::MeshViewDesc;
+  using data::pak::geometry::GeometryAssetDesc;
+  using data::pak::geometry::MeshViewDesc;
 
   auto mesh
     = MeshBuilder(0, "Sphere")
@@ -201,8 +201,8 @@ auto SceneBootstrapper::EnsureCube(scene::Scene& scene) -> void
     = MakeSolidColorMaterial("CubeMaterial", { 0.7F, 0.7F, 0.7F, 1.0F });
 
   using data::MeshBuilder;
-  using data::pak::GeometryAssetDesc;
-  using data::pak::MeshViewDesc;
+  using data::pak::geometry::GeometryAssetDesc;
+  using data::pak::geometry::MeshViewDesc;
 
   auto mesh
     = MeshBuilder(0, "Cube")
@@ -261,8 +261,8 @@ auto SceneBootstrapper::EnsureCylinder(scene::Scene& scene) -> void
     = MakeSolidColorMaterial("CylinderMaterial", { 0.4F, 0.4F, 0.9F, 1.0F });
 
   using data::MeshBuilder;
-  using data::pak::GeometryAssetDesc;
-  using data::pak::MeshViewDesc;
+  using data::pak::geometry::GeometryAssetDesc;
+  using data::pak::geometry::MeshViewDesc;
 
   auto mesh = MeshBuilder(0, "Cylinder")
                 .WithVertices(cyl_data->first)
@@ -328,8 +328,8 @@ auto SceneBootstrapper::EnsureCone(scene::Scene& scene) -> void
     = MakeSolidColorMaterial("ConeMaterial", { 0.9F, 0.4F, 0.4F, 1.0F });
 
   using data::MeshBuilder;
-  using data::pak::GeometryAssetDesc;
-  using data::pak::MeshViewDesc;
+  using data::pak::geometry::GeometryAssetDesc;
+  using data::pak::geometry::MeshViewDesc;
 
   auto mesh
     = MeshBuilder(0, "Cone")
@@ -393,8 +393,8 @@ auto SceneBootstrapper::EnsureGroundPlane(scene::Scene& scene) -> void
     = MakeSolidColorMaterial("GroundMaterial", { 0.18F, 0.18F, 0.18F, 1.0F });
 
   using data::MeshBuilder;
-  using data::pak::GeometryAssetDesc;
-  using data::pak::MeshViewDesc;
+  using data::pak::geometry::GeometryAssetDesc;
+  using data::pak::geometry::MeshViewDesc;
 
   auto mesh
     = MeshBuilder(0, "Ground")

@@ -127,7 +127,7 @@ A DDC key must include all inputs that affect output bytes:
 Recommended representation:
 
 - canonical string like:
-  - `OxygenDDC:v1:<platform>:<toolVersion>:<assetType>:<inputHash>:<settingsHash>`
+  - `OxygenDDC:v7:<platform>:<toolVersion>:<assetType>:<inputHash>:<settingsHash>`
 - plus a strong hash (SHA-256) of that string for filesystem storage
 
 ### Store interface (conceptual)

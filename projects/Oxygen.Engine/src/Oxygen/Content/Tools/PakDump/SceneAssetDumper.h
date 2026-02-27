@@ -32,28 +32,28 @@ namespace oxygen::content::pakdump {
 class SceneAssetDumper final : public AssetDumper {
 public:
   auto DumpAsync(const oxygen::content::PakFile& pak,
-    const oxygen::data::pak::v2::AssetDirectoryEntry& entry, DumpContext& ctx,
+    const oxygen::data::pak::core::AssetDirectoryEntry& entry, DumpContext& ctx,
     const size_t idx, oxygen::content::AssetLoader& asset_loader) const
     -> oxygen::co::Co<> override
   {
     using oxygen::data::ComponentType;
-    using oxygen::data::pak::DirectionalLightRecord;
-    using oxygen::data::pak::EnvironmentComponentType;
-    using oxygen::data::pak::InputContextBindingRecord;
-    using oxygen::data::pak::NodeRecord;
-    using oxygen::data::pak::OrthographicCameraRecord;
-    using oxygen::data::pak::PerspectiveCameraRecord;
-    using oxygen::data::pak::PointLightRecord;
-    using oxygen::data::pak::PostProcessVolumeEnvironmentRecord;
-    using oxygen::data::pak::RenderableRecord;
-    using oxygen::data::pak::SceneEnvironmentBlockHeader;
-    using oxygen::data::pak::SceneEnvironmentSystemRecordHeader;
-    using oxygen::data::pak::ScriptingComponentRecord;
-    using oxygen::data::pak::SkyAtmosphereEnvironmentRecord;
-    using oxygen::data::pak::SkyLightEnvironmentRecord;
-    using oxygen::data::pak::SkySphereEnvironmentRecord;
-    using oxygen::data::pak::SpotLightRecord;
-    using oxygen::data::pak::VolumetricCloudsEnvironmentRecord;
+    using oxygen::data::pak::input::InputContextBindingRecord;
+    using oxygen::data::pak::scripting::ScriptingComponentRecord;
+    using oxygen::data::pak::world::DirectionalLightRecord;
+    using oxygen::data::pak::world::EnvironmentComponentType;
+    using oxygen::data::pak::world::NodeRecord;
+    using oxygen::data::pak::world::OrthographicCameraRecord;
+    using oxygen::data::pak::world::PerspectiveCameraRecord;
+    using oxygen::data::pak::world::PointLightRecord;
+    using oxygen::data::pak::world::PostProcessVolumeEnvironmentRecord;
+    using oxygen::data::pak::world::RenderableRecord;
+    using oxygen::data::pak::world::SceneEnvironmentBlockHeader;
+    using oxygen::data::pak::world::SceneEnvironmentSystemRecordHeader;
+    using oxygen::data::pak::world::SkyAtmosphereEnvironmentRecord;
+    using oxygen::data::pak::world::SkyLightEnvironmentRecord;
+    using oxygen::data::pak::world::SkySphereEnvironmentRecord;
+    using oxygen::data::pak::world::SpotLightRecord;
+    using oxygen::data::pak::world::VolumetricCloudsEnvironmentRecord;
 
     std::cout << "Asset #" << idx << ":\n";
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
@@ -288,8 +288,7 @@ public:
                   << " context="
                   << oxygen::data::to_string(record.context_asset_key) << "\n";
         PrintUtils::Field("Priority", record.priority, 10);
-        PrintUtils::Field(
-          "Flags", oxygen::data::pak::to_string(record.flags), 10);
+        PrintUtils::Field("Flags", nostd::to_string(record.flags), 10);
       }
 
       std::cout << "\n";

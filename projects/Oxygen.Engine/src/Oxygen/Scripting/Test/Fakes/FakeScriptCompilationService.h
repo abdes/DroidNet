@@ -43,14 +43,14 @@ public:
     return true;
   }
 
-  auto UnregisterCompiler(const data::pak::ScriptLanguage language)
+  auto UnregisterCompiler(const data::pak::scripting::ScriptLanguage language)
     -> bool override
   {
     return compilers_.erase(language) > 0;
   }
 
-  [[nodiscard]] auto HasCompiler(const data::pak::ScriptLanguage language) const
-    -> bool override
+  [[nodiscard]] auto HasCompiler(
+    const data::pak::scripting::ScriptLanguage language) const -> bool override
   {
     return compilers_.contains(language);
   }
@@ -172,7 +172,7 @@ private:
     }
   }
 
-  using CompilerMap = std::unordered_map<data::pak::ScriptLanguage,
+  using CompilerMap = std::unordered_map<data::pak::scripting::ScriptLanguage,
     std::shared_ptr<const IScriptCompiler>>;
   using SubscriberMap = std::unordered_map<SubscriberId, CompletionSubscriber>;
 

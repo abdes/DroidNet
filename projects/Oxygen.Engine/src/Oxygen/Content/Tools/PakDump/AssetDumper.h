@@ -18,9 +18,7 @@ class PakFile;
 } // namespace oxygen::content
 
 namespace oxygen::data::pak {
-namespace v1 {
-  struct AssetDirectoryEntry;
-} // namespace v1
+struct AssetDirectoryEntry;
 } // namespace oxygen::data::pak
 
 namespace oxygen::content::pakdump {
@@ -31,7 +29,7 @@ public:
   virtual ~AssetDumper() = default;
 
   virtual auto DumpAsync(const oxygen::content::PakFile& pak,
-    const oxygen::data::pak::v2::AssetDirectoryEntry& entry, DumpContext& ctx,
+    const oxygen::data::pak::core::AssetDirectoryEntry& entry, DumpContext& ctx,
     size_t idx, oxygen::content::AssetLoader& asset_loader) const
     -> oxygen::co::Co<>
     = 0;

@@ -183,7 +183,7 @@ def pack_script_param_record(param: Dict[str, Any]) -> bytes:
             )
 
     payload = _pack_script_param_payload(param_type, value)
-    # Fixed layout in v5: key[64], type(u32), union payload[60].
+    # Fixed layout in v7: key[64], type(u32), union payload[60].
     record = struct.pack("<64sI60s", key_bytes, int(param_type), payload)
     if len(record) != 128:
         raise PakError("E_SIZE", f"ScriptParamRecord size mismatch: {len(record)}")
@@ -1201,7 +1201,7 @@ def pack_scene_asset_descriptor_and_payload(
 
     # SceneAssetDesc
     scene.setdefault("type", "scene")
-    # Scene descriptor version. Mirrors pak::v3::kSceneAssetVersion.
+    # Scene descriptor version. Mirrors pak::kSceneAssetVersion.
     scene.setdefault("version", SCENE_ASSET_VERSION_CURRENT)
     header = header_builder(scene)
     nodes_table = struct.pack("<QII", nodes_offset, node_count, 68)
@@ -1464,7 +1464,7 @@ def pack_material_asset_descriptor(
             f"AssetHeader size mismatch: expected {ASSET_HEADER_SIZE} got {len(header)}",
         )
 
-    # Match oxygen::data::pak::MaterialAssetDesc exactly (see PakFormat.h).
+    # Match oxygen::data::pak::render::MaterialAssetDesc exactly (see PakFormat.h).
     reserved = b"\x00" * 35
     desc = (
         header

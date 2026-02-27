@@ -176,11 +176,11 @@ auto SkyboxService::StartLoadSkybox(const std::string& file_path,
   const auto& payload = cooked_result->payload;
 
   // Build PAK descriptor
-  using data::pak::TextureResourceDesc;
+  using data::pak::render::TextureResourceDesc;
   TextureResourceDesc pak_desc {};
   pak_desc.data_offset = sizeof(TextureResourceDesc);
   pak_desc.size_bytes
-    = static_cast<data::pak::DataBlobSizeT>(payload.payload.size());
+    = static_cast<data::pak::core::DataBlobSizeT>(payload.payload.size());
   pak_desc.texture_type = static_cast<std::uint8_t>(payload.desc.texture_type);
   pak_desc.compression_type = 0;
   pak_desc.width = payload.desc.width;

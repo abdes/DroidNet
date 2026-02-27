@@ -32,10 +32,10 @@ using oxygen::data::Vertex;
 
 namespace {
 [[nodiscard]] auto MakeStandardMeshDesc(const glm::vec3& bounds_min,
-  const glm::vec3& bounds_max) -> oxygen::data::pak::MeshDesc
+  const glm::vec3& bounds_max) -> oxygen::data::pak::geometry::MeshDesc
 {
   using oxygen::data::MeshType;
-  using oxygen::data::pak::MeshDesc;
+  using oxygen::data::pak::geometry::MeshDesc;
 
   MeshDesc desc {};
   desc.mesh_type
@@ -167,8 +167,8 @@ NOLINT_TEST_F(
   const auto vb_view = temp_mesh->Vertices();
   const auto ib_view = temp_mesh->IndexBuffer().AsU32();
 
-  oxygen::data::pak::BufferResourceDesc vdesc { .data_offset = 0,
-    .size_bytes = static_cast<oxygen::data::pak::DataBlobSizeT>(
+  oxygen::data::pak::core::BufferResourceDesc vdesc { .data_offset = 0,
+    .size_bytes = static_cast<oxygen::data::pak::core::DataBlobSizeT>(
       vb_view.size() * sizeof(Vertex)),
     .usage_flags = static_cast<uint32_t>(
       oxygen::data::BufferResource::UsageFlags::kVertexBuffer),
@@ -178,8 +178,8 @@ NOLINT_TEST_F(
   std::vector<uint8_t> vbytes(vb_view.size() * sizeof(Vertex));
   std::memcpy(vbytes.data(), vb_view.data(), vbytes.size());
 
-  oxygen::data::pak::BufferResourceDesc idesc { .data_offset = 0,
-    .size_bytes = static_cast<oxygen::data::pak::DataBlobSizeT>(
+  oxygen::data::pak::core::BufferResourceDesc idesc { .data_offset = 0,
+    .size_bytes = static_cast<oxygen::data::pak::core::DataBlobSizeT>(
       ib_view.size() * sizeof(uint32_t)),
     .usage_flags = static_cast<uint32_t>(
       oxygen::data::BufferResource::UsageFlags::kIndexBuffer),

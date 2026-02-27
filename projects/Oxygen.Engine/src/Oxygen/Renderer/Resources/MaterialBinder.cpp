@@ -238,7 +238,7 @@ auto SerializeMaterialConstants(
   //   `kMaterialFlag_NoTextureSampling`.
   const auto no_texture_sampling
     = (material.resolved_asset->GetFlags()
-        & oxygen::data::pak::kMaterialFlag_NoTextureSampling)
+        & oxygen::data::pak::render::kMaterialFlag_NoTextureSampling)
     != 0U;
 
   const auto kDoNotSample = oxygen::kInvalidShaderVisibleIndex;
@@ -259,7 +259,7 @@ auto SerializeMaterialConstants(
     // - If author index is 0, the material requests the fallback texture.
     // - If author index is non-zero, a texture was authored but not resolved
     //   yet, so bind a shared placeholder to keep sampling stable.
-    if (authored_index == oxygen::data::pak::kFallbackResourceIndex) {
+    if (authored_index == oxygen::data::pak::core::kFallbackResourceIndex) {
       return texture_binder.GetOrAllocate(
         oxygen::content::ResourceKey::kFallback);
     }
@@ -298,7 +298,7 @@ auto SerializeMaterialConstants(
   constants.flags = material.resolved_asset->GetFlags();
   if (material.resolved_asset->GetMaterialDomain()
     == oxygen::data::MaterialDomain::kMasked) {
-    constants.flags |= oxygen::data::pak::kMaterialFlag_AlphaTest;
+    constants.flags |= oxygen::data::pak::render::kMaterialFlag_AlphaTest;
   }
 
   constants.alpha_cutoff = material.resolved_asset->GetAlphaCutoff();
@@ -306,7 +306,8 @@ auto SerializeMaterialConstants(
   // Opacity is currently sourced from the base color texture alpha.
   // If texture sampling is disabled, keep it invalid to skip sampling.
   const auto alpha_test_enabled
-    = (constants.flags & oxygen::data::pak::kMaterialFlag_AlphaTest) != 0U;
+    = (constants.flags & oxygen::data::pak::render::kMaterialFlag_AlphaTest)
+    != 0U;
   if (alpha_test_enabled) {
     constants.opacity_texture_index = constants.base_color_texture_index;
   } else {
@@ -879,7 +880,7 @@ auto MaterialBinder::Impl::GetOrAllocate(
       const auto& cached_asset = *material.resolved_asset;
       const bool no_texture_sampling
         = (cached_asset.GetFlags()
-            & oxygen::data::pak::kMaterialFlag_NoTextureSampling)
+            & oxygen::data::pak::render::kMaterialFlag_NoTextureSampling)
         != 0U;
       if (!no_texture_sampling) {
         const auto needs_refresh

@@ -39,9 +39,10 @@ inline auto LoadInputActionAsset(const LoaderContext& context)
 
   auto pack = reader.ScopedAlignment(1);
 
-  auto desc_blob = reader.ReadBlob(sizeof(data::pak::InputActionAssetDesc));
+  auto desc_blob
+    = reader.ReadBlob(sizeof(data::pak::input::InputActionAssetDesc));
   check_result(desc_blob, "InputActionAssetDesc");
-  data::pak::InputActionAssetDesc desc {};
+  data::pak::input::InputActionAssetDesc desc {};
   std::memcpy(&desc, desc_blob->data(), sizeof(desc));
 
   if (static_cast<data::AssetType>(desc.header.asset_type)

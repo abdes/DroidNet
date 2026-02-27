@@ -44,7 +44,7 @@ namespace oxygen::content::internal {
 struct ResourceRef final {
   SourceToken source {};
   TypeId resource_type_id {};
-  data::pak::ResourceIndexT resource_index {};
+  data::pak::core::ResourceIndexT resource_index {};
 
   constexpr auto operator==(const ResourceRef& other) const noexcept -> bool
   {

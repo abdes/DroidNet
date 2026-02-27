@@ -29,8 +29,8 @@ using oxygen::renderer::testing::MaterialBinderTest;
 [[nodiscard]] auto MakeSolidMaterial(const float base_color_r)
   -> std::shared_ptr<const oxygen::data::MaterialAsset>
 {
-  using oxygen::data::pak::kMaterialFlag_NoTextureSampling;
-  using oxygen::data::pak::MaterialAssetDesc;
+  using oxygen::data::pak::render::kMaterialFlag_NoTextureSampling;
+  using oxygen::data::pak::render::MaterialAssetDesc;
 
   oxygen::data::AssetKey asset_key { .guid = {} };
   const auto bits = std::bit_cast<std::uint32_t>(base_color_r);

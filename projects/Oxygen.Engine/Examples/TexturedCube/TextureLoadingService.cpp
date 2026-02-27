@@ -46,8 +46,8 @@ using oxygen::content::import::MipPolicy;
 using oxygen::content::import::ProgressEvent;
 using oxygen::content::import::TextureIntent;
 using oxygen::content::lc::Inspection;
-using oxygen::data::loose_cooked::v1::FileKind;
-using oxygen::data::pak::TextureResourceDesc;
+using oxygen::data::loose_cooked::FileKind;
+using oxygen::data::pak::render::TextureResourceDesc;
 
 auto IsHdrPath(const std::filesystem::path& path) -> bool
 {
@@ -450,7 +450,7 @@ auto TextureLoadingService::RefreshCookedTextureEntries(
 
       // Read header to get content hash
       std::filesystem::path desc_path = cooked_root_ / asset.descriptor_relpath;
-      oxygen::data::pak::AssetHeader header;
+      oxygen::data::pak::core::AssetHeader header;
       bool header_read = false;
 
       std::ifstream file(desc_path, std::ios::binary);
@@ -697,8 +697,8 @@ auto TextureLoadingService::StartLoadCookedTexture(
     return;
   }
 
-  desc.data_offset
-    = static_cast<oxygen::data::pak::OffsetT>(sizeof(TextureResourceDesc));
+  desc.data_offset = static_cast<oxygen::data::pak::core::OffsetT>(
+    sizeof(TextureResourceDesc));
 
   auto packed = std::make_shared<std::vector<std::uint8_t>>();
   packed->resize(sizeof(TextureResourceDesc) + payload.size());

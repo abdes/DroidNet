@@ -10,11 +10,12 @@
 
 using oxygen::data::ScriptResource;
 
-static_assert(
-  std::is_trivially_copyable_v<oxygen::data::pak::ScriptResourceDesc>,
+static_assert(std::is_trivially_copyable_v<
+                oxygen::data::pak::scripting::ScriptResourceDesc>,
   "ScriptResourceDesc must be trivially copyable");
 ScriptResource::ScriptResource(
-  oxygen::data::pak::ScriptResourceDesc desc, std::vector<uint8_t> data)
+  oxygen::data::pak::scripting::ScriptResourceDesc desc,
+  std::vector<uint8_t> data)
   : desc_(desc)
   , data_(std::move(data))
 {

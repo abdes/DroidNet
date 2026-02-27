@@ -49,7 +49,8 @@ namespace {
       }
     }
 
-    if (resource->GetEncoding() == data::pak::ScriptEncoding::kSource) {
+    if (resource->GetEncoding()
+      == data::pak::scripting::ScriptEncoding::kSource) {
       return IScriptSourceResolver::ResolveResult {
         .ok = true,
         .blob = std::optional<ResolvedScriptBlob> { ScriptSourceBlob::FromOwned(
@@ -62,7 +63,7 @@ namespace {
         .error_message = {},
       };
     } else if (resource->GetEncoding()
-      == data::pak::ScriptEncoding::kBytecode) {
+      == data::pak::scripting::ScriptEncoding::kBytecode) {
       return IScriptSourceResolver::ResolveResult {
         .ok = true,
         .blob
@@ -98,7 +99,7 @@ auto EmbeddedSourceResolver::Resolve(
 
   for (size_t i = 0; i < preferred_indices.size(); ++i) {
     const auto index = preferred_indices.at(i);
-    if (index == data::pak::kNoResourceIndex) {
+    if (index == data::pak::core::kNoResourceIndex) {
       continue;
     }
     if (i == 1 && index == preferred_indices[0]) {

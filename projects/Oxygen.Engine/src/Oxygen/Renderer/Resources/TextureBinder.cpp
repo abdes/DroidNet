@@ -192,7 +192,7 @@ namespace {
     const graphics::TextureDesc& desc,
     const graphics::detail::FormatInfo& format_info,
     const std::span<const std::byte> data_bytes,
-    const std::span<const data::pak::SubresourceLayout> layouts)
+    const std::span<const data::pak::render::SubresourceLayout> layouts)
     -> std::variant<UploadLayout, UploadLayoutFailure>
   {
     UploadLayout layout;

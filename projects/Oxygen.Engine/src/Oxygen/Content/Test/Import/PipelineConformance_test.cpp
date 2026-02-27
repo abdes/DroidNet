@@ -47,10 +47,10 @@ namespace {
 struct SceneStringTableBuilder final {
   std::vector<std::byte> bytes { std::byte { 0 } };
 
-  auto Add(std::string_view text) -> data::pak::StringTableOffsetT
+  auto Add(std::string_view text) -> data::pak::core::StringTableOffsetT
   {
     const auto offset
-      = static_cast<data::pak::StringTableOffsetT>(bytes.size());
+      = static_cast<data::pak::core::StringTableOffsetT>(bytes.size());
     for (const char c : text) {
       bytes.push_back(std::byte { static_cast<unsigned char>(c) });
     }
@@ -238,7 +238,7 @@ auto MakeMinimalSceneBuild(std::string_view name) -> SceneBuild
   const auto name_offset = strings.Add(name);
 
   SceneBuild build;
-  build.nodes.push_back(data::pak::NodeRecord {
+  build.nodes.push_back(data::pak::world::NodeRecord {
     .node_id = data::AssetKey { .guid = { 1 } },
     .scene_name_offset = name_offset,
     .parent_index = 0,

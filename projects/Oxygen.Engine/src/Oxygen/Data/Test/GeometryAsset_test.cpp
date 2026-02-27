@@ -80,7 +80,7 @@ public:
     auto mesh0 = MakeSimpleMesh("lod0", ::oxygen::Vec3(0, 0, 0));
     auto mesh1 = MakeSimpleMesh("lod1", ::oxygen::Vec3(10, 0, 0));
 
-    oxygen::data::pak::GeometryAssetDesc desc {};
+    oxygen::data::pak::geometry::GeometryAssetDesc desc {};
     // Minimal header setup (name left default). Lod count implied by vector
     // size
     desc.lod_count = 2;

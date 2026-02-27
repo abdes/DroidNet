@@ -203,7 +203,7 @@ struct CookedTexturePayload {
   std::vector<std::byte> payload;
 
   //! Subresource layouts for the payload.
-  std::vector<data::pak::SubresourceLayout> layouts;
+  std::vector<data::pak::render::SubresourceLayout> layouts;
 };
 
 } // namespace oxygen::content::import

@@ -290,8 +290,8 @@ auto BufferEmitter::Finalize() -> co::Co<bool>
 auto BufferEmitter::MakeTableEntry(
   const CookedBufferPayload& cooked, uint64_t data_offset) -> BufferResourceDesc
 {
-  using data::pak::DataBlobSizeT;
-  using data::pak::OffsetT;
+  using data::pak::core::DataBlobSizeT;
+  using data::pak::core::OffsetT;
 
   BufferResourceDesc entry {};
   entry.data_offset = data_offset;

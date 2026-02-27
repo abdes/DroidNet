@@ -7,7 +7,6 @@
 #pragma once
 
 #include <array>
-#include <compare>
 #include <cstdint>
 #include <string>
 
@@ -18,23 +17,25 @@ namespace oxygen::data {
 
 //! Uniquely identifies an asset in the system, using a 128-bit GUID.
 struct AssetKey {
-  std::array<uint8_t, 16> guid; //!< 128-bit GUID (raw bytes)
+  static constexpr size_t kSizeBytes = 16;
+  std::array<uint8_t, kSizeBytes> guid { 0 }; // NOLINT(*-magic-numbers)
 
   auto operator<=>(const AssetKey&) const = default;
 };
-static_assert(sizeof(AssetKey) == 16);
+static_assert(sizeof(AssetKey) == AssetKey::kSizeBytes);
 
 //! String representation of AssetKey.
 OXGN_DATA_NDAPI auto to_string(AssetKey value) noexcept -> std::string;
 
 //! Generates a random 128-bit GUID using stduuid and stores as array of bytes.
-OXGN_DATA_NDAPI auto GenerateAssetGuid() -> std::array<uint8_t, 16>;
+OXGN_DATA_NDAPI auto GenerateAssetGuid()
+  -> std::array<uint8_t, AssetKey::kSizeBytes>;
 
 } // namespace oxygen::data
 
 //! Hash specialization for AssetKey.
 template <> struct std::hash<oxygen::data::AssetKey> {
-  size_t operator()(const oxygen::data::AssetKey& key) const noexcept
+  auto operator()(const oxygen::data::AssetKey& key) const noexcept -> size_t
   {
     size_t seed = 0;
     for (auto b : key.guid) {

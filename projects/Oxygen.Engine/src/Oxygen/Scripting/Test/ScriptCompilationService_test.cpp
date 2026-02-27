@@ -41,7 +41,7 @@ using oxygen::co::AllOf;
 using oxygen::co::Co;
 using oxygen::co::ThreadPool;
 using oxygen::co::testing::TestEventLoop;
-using oxygen::data::pak::ScriptLanguage;
+using oxygen::data::pak::scripting::ScriptLanguage;
 using oxygen::scripting::CompileMode;
 using oxygen::scripting::IScriptCompiler;
 using oxygen::scripting::ScriptBytecodeBlob;
@@ -52,7 +52,7 @@ using oxygen::scripting::ScriptSourceBlob;
 auto MakeSourceBlob(std::vector<uint8_t> bytes) -> ScriptSourceBlob
 {
   return ScriptSourceBlob::FromOwned(std::move(bytes), ScriptLanguage::kLuau,
-    oxygen::data::pak::ScriptCompression::kNone, 0,
+    oxygen::data::pak::scripting::ScriptCompression::kNone, 0,
     oxygen::scripting::ScriptBlobOrigin::kEmbeddedResource,
     oxygen::scripting::ScriptBlobCanonicalName { "test-script" });
 }
@@ -62,7 +62,7 @@ auto MakeBytecodeBlob(std::vector<uint8_t> bytes)
 {
   return std::make_shared<const ScriptBytecodeBlob>(
     ScriptBytecodeBlob::FromOwned(std::move(bytes), ScriptLanguage::kLuau,
-      oxygen::data::pak::ScriptCompression::kNone, 0,
+      oxygen::data::pak::scripting::ScriptCompression::kNone, 0,
       oxygen::scripting::ScriptBlobOrigin::kEmbeddedResource,
       oxygen::scripting::ScriptBlobCanonicalName { "test-bytecode" }));
 }

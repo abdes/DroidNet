@@ -19,19 +19,18 @@ namespace oxygen::content::internal {
 
 namespace {
 
-  auto ReadAssetHeader(
-    const IContentSource& source, const data::AssetKey& key)
-    -> std::optional<data::pak::AssetHeader>
+  auto ReadAssetHeader(const IContentSource& source, const data::AssetKey& key)
+    -> std::optional<data::pak::core::AssetHeader>
   {
     auto desc_reader = source.CreateAssetDescriptorReader(key);
     if (!desc_reader) {
       return std::nullopt;
     }
-    auto blob = desc_reader->ReadBlob(sizeof(data::pak::AssetHeader));
-    if (!blob || blob->size() < sizeof(data::pak::AssetHeader)) {
+    auto blob = desc_reader->ReadBlob(sizeof(data::pak::core::AssetHeader));
+    if (!blob || blob->size() < sizeof(data::pak::core::AssetHeader)) {
       return std::nullopt;
     }
-    data::pak::AssetHeader header {};
+    data::pak::core::AssetHeader header {};
     std::memcpy(&header, blob->data(), sizeof(header));
     return header;
   }

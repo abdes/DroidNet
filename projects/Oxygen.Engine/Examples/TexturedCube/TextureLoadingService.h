@@ -187,7 +187,7 @@ private:
   std::filesystem::path cooked_root_ {};
   std::filesystem::path textures_table_path_ {};
   std::filesystem::path textures_data_path_ {};
-  std::vector<oxygen::data::pak::TextureResourceDesc> texture_table_ {};
+  std::vector<oxygen::data::pak::render::TextureResourceDesc> texture_table_ {};
   std::vector<CookedTextureEntry> cooked_entries_ {};
 };
 

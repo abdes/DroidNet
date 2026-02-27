@@ -111,7 +111,7 @@ namespace {
       }
     }
 
-    data::pak::GeometryAssetDesc desc {};
+    data::pak::geometry::GeometryAssetDesc desc {};
     desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kGeometry);
     desc.lod_count = 1;
     desc.bounding_box_min[0] = bbox_min.x;
@@ -247,7 +247,7 @@ namespace {
       return std::clamp(value, 0.0F, 1.0F);
     };
 
-    data::pak::MaterialAssetDesc desc {};
+    data::pak::render::MaterialAssetDesc desc {};
     desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kMaterial);
     desc.base_color[0] = sanitize_channel(r);
     desc.base_color[1] = sanitize_channel(g);

@@ -63,9 +63,9 @@ namespace {
     data::MeshType mesh_type = data::MeshType::kStandard;
     std::vector<data::Vertex> vertices;
     std::vector<uint32_t> indices;
-    std::vector<data::pak::SubMeshDesc> submeshes;
+    std::vector<data::pak::geometry::SubMeshDesc> submeshes;
     std::vector<uint32_t> submesh_slots;
-    std::vector<data::pak::MeshViewDesc> views;
+    std::vector<data::pak::geometry::MeshViewDesc> views;
     std::vector<glm::uvec4> joint_indices;
     std::vector<glm::vec4> joint_weights;
     std::vector<glm::mat4> inverse_bind_matrices;
@@ -266,16 +266,16 @@ namespace {
     std::vector<ImportDiagnostic>& diagnostics, std::string_view source_id)
     -> std::vector<std::byte>
   {
-    using data::pak::GeometryAssetDesc;
-    using data::pak::MeshDesc;
-    using data::pak::MeshViewDesc;
-    using data::pak::SkinnedMeshInfo;
-    using data::pak::SubMeshDesc;
+    using data::pak::geometry::GeometryAssetDesc;
+    using data::pak::geometry::MeshDesc;
+    using data::pak::geometry::MeshViewDesc;
+    using data::pak::geometry::SkinnedMeshInfo;
+    using data::pak::geometry::SubMeshDesc;
 
     GeometryAssetDesc asset_desc {};
     asset_desc.header.asset_type
       = static_cast<uint8_t>(data::AssetType::kGeometry);
-    asset_desc.header.version = data::pak::kGeometryAssetVersion;
+    asset_desc.header.version = data::pak::geometry::kGeometryAssetVersion;
     asset_desc.header.variant_flags = attr_mask;
     if (mesh_name.size() >= std::size(asset_desc.header.name)) {
       diagnostics.push_back(MakeWarningDiagnostic("mesh.name_truncated",
@@ -327,14 +327,17 @@ namespace {
       mesh_desc.mesh_view_count = static_cast<uint32_t>(lod.views.size());
 
       if (lod.mesh_type == data::MeshType::kSkinned) {
-        mesh_desc.info.skinned.vertex_buffer = data::pak::kNoResourceIndex;
-        mesh_desc.info.skinned.index_buffer = data::pak::kNoResourceIndex;
-        mesh_desc.info.skinned.joint_index_buffer = data::pak::kNoResourceIndex;
+        mesh_desc.info.skinned.vertex_buffer
+          = data::pak::core::kNoResourceIndex;
+        mesh_desc.info.skinned.index_buffer = data::pak::core::kNoResourceIndex;
+        mesh_desc.info.skinned.joint_index_buffer
+          = data::pak::core::kNoResourceIndex;
         mesh_desc.info.skinned.joint_weight_buffer
-          = data::pak::kNoResourceIndex;
+          = data::pak::core::kNoResourceIndex;
         mesh_desc.info.skinned.inverse_bind_buffer
-          = data::pak::kNoResourceIndex;
-        mesh_desc.info.skinned.joint_remap_buffer = data::pak::kNoResourceIndex;
+          = data::pak::core::kNoResourceIndex;
+        mesh_desc.info.skinned.joint_remap_buffer
+          = data::pak::core::kNoResourceIndex;
         mesh_desc.info.skinned.joint_count = lod.joint_count;
         mesh_desc.info.skinned.influences_per_vertex
           = lod.influences_per_vertex;
@@ -344,8 +347,10 @@ namespace {
         std::copy_n(
           lod.bounds.max.data(), 3, mesh_desc.info.skinned.bounding_box_max);
       } else {
-        mesh_desc.info.standard.vertex_buffer = data::pak::kNoResourceIndex;
-        mesh_desc.info.standard.index_buffer = data::pak::kNoResourceIndex;
+        mesh_desc.info.standard.vertex_buffer
+          = data::pak::core::kNoResourceIndex;
+        mesh_desc.info.standard.index_buffer
+          = data::pak::core::kNoResourceIndex;
         std::copy_n(
           lod.bounds.min.data(), 3, mesh_desc.info.standard.bounding_box_min);
         std::copy_n(
@@ -391,7 +396,8 @@ namespace {
 
         const auto offset
           = pos.value() + offsetof(SubMeshDesc, material_asset_key);
-        if (offset > (std::numeric_limits<data::pak::DataBlobSizeT>::max)()) {
+        if (offset
+          > (std::numeric_limits<data::pak::core::DataBlobSizeT>::max)()) {
           diagnostics.push_back(MakeErrorDiagnostic("mesh.serialize_failed",
             "Submesh material patch offset exceeds supported range", source_id,
             mesh_name));
@@ -401,7 +407,7 @@ namespace {
           MeshBuildPipeline::MaterialSlotPatchOffset {
             .slot = lod.submesh_slots[i],
             .material_key_offset
-            = static_cast<data::pak::DataBlobSizeT>(offset),
+            = static_cast<data::pak::core::DataBlobSizeT>(offset),
           });
 
         const auto sm_result = writer.WriteBlob(
@@ -620,13 +626,13 @@ namespace {
 
   auto BuildSubmeshDescriptors(const std::vector<data::Vertex>& vertices,
     const std::vector<SubmeshBucket>& buckets,
-    std::vector<data::pak::SubMeshDesc>& submeshes,
+    std::vector<data::pak::geometry::SubMeshDesc>& submeshes,
     std::vector<uint32_t>& submesh_slots,
-    std::vector<data::pak::MeshViewDesc>& views,
+    std::vector<data::pak::geometry::MeshViewDesc>& views,
     std::vector<uint32_t>& merged_indices) -> Bounds3
   {
-    using data::pak::MeshViewDesc;
-    using data::pak::SubMeshDesc;
+    using data::pak::geometry::MeshViewDesc;
+    using data::pak::geometry::SubMeshDesc;
 
     Bounds3 mesh_bounds = MakeEmptyBounds();
 

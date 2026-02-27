@@ -72,12 +72,12 @@ namespace detail {
   }
 
   [[nodiscard]] inline auto BuildV4TexturePayload(
-    const data::pak::TextureResourceDesc& desc,
-    const std::span<const data::pak::SubresourceLayout> layouts,
+    const data::pak::render::TextureResourceDesc& desc,
+    const std::span<const data::pak::render::SubresourceLayout> layouts,
     const std::span<const std::uint8_t> data_region) -> std::vector<uint8_t>
   {
-    using data::pak::SubresourceLayout;
-    using data::pak::TexturePayloadHeader;
+    using data::pak::render::SubresourceLayout;
+    using data::pak::render::TexturePayloadHeader;
 
     constexpr std::size_t kDataOffsetAlignment = 256U;
 
@@ -90,7 +90,7 @@ namespace detail {
     const auto total_payload_size = data_offset + data_region.size();
 
     TexturePayloadHeader header {};
-    header.magic = data::pak::kTexturePayloadMagic;
+    header.magic = data::pak::render::kTexturePayloadMagic;
     header.packing_policy = 0U;
     header.flags = 0U;
     header.subresource_count = static_cast<std::uint16_t>(layouts.size());
@@ -120,14 +120,14 @@ namespace detail {
 } // namespace detail
 
 //! Decode a cooked TextureResource payload into a CPU-side TextureResource.
-/*! The payload must begin with a `data::pak::TextureResourceDesc` and contain
-    `desc.size_bytes` bytes of data starting at `desc.data_offset`.
+/*! The payload must begin with a `data::pak::render::TextureResourceDesc` and
+   contain `desc.size_bytes` bytes of data starting at `desc.data_offset`.
 */
 [[nodiscard]] inline auto DecodeCookedTexturePayload(
   const std::span<const uint8_t> payload)
   -> std::shared_ptr<data::TextureResource>
 {
-  using data::pak::TextureResourceDesc;
+  using data::pak::render::TextureResourceDesc;
 
   if (payload.size() < sizeof(TextureResourceDesc)) {
     return nullptr;
@@ -159,8 +159,8 @@ namespace detail {
 [[nodiscard]] inline auto MakeCookedTexture1x1Rgba8Payload()
   -> std::vector<uint8_t>
 {
-  using data::pak::SubresourceLayout;
-  using data::pak::TextureResourceDesc;
+  using data::pak::render::SubresourceLayout;
+  using data::pak::render::TextureResourceDesc;
 
   TextureResourceDesc desc {};
   desc.data_offset = sizeof(desc);
@@ -207,8 +207,8 @@ namespace detail {
 [[nodiscard]] inline auto MakeTightPackedTexture1x1Rgba8Payload()
   -> std::vector<uint8_t>
 {
-  using data::pak::SubresourceLayout;
-  using data::pak::TextureResourceDesc;
+  using data::pak::render::SubresourceLayout;
+  using data::pak::render::TextureResourceDesc;
 
   TextureResourceDesc desc {};
   desc.data_offset = sizeof(desc);
@@ -251,8 +251,8 @@ namespace detail {
 [[nodiscard]] inline auto MakeInvalidTexture1x1Rgba8Payload_RowPitchTooSmall()
   -> std::vector<uint8_t>
 {
-  using data::pak::SubresourceLayout;
-  using data::pak::TextureResourceDesc;
+  using data::pak::render::SubresourceLayout;
+  using data::pak::render::TextureResourceDesc;
 
   TextureResourceDesc desc {};
   desc.data_offset = sizeof(desc);
@@ -293,8 +293,8 @@ namespace detail {
 [[nodiscard]] inline auto MakeCookedTexture8x8Bc7MipChainPayload()
   -> std::vector<uint8_t>
 {
-  using data::pak::SubresourceLayout;
-  using data::pak::TextureResourceDesc;
+  using data::pak::render::SubresourceLayout;
+  using data::pak::render::TextureResourceDesc;
 
   TextureResourceDesc desc {};
   desc.data_offset = sizeof(desc);
@@ -352,8 +352,8 @@ namespace detail {
 [[nodiscard]] inline auto MakeCookedTexture4x4Bc1Payload()
   -> std::vector<uint8_t>
 {
-  using data::pak::SubresourceLayout;
-  using data::pak::TextureResourceDesc;
+  using data::pak::render::SubresourceLayout;
+  using data::pak::render::TextureResourceDesc;
 
   TextureResourceDesc desc {};
   desc.data_offset = sizeof(desc);

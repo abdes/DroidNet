@@ -49,8 +49,9 @@ public:
 
   //! Constructs a ScriptAsset with descriptor, default parameters, and resource
   //! metadata.
-  OXGN_DATA_API ScriptAsset(AssetKey asset_key, pak::ScriptAssetDesc desc,
-    const std::vector<pak::ScriptParamRecord>& default_params = {});
+  OXGN_DATA_API ScriptAsset(AssetKey asset_key,
+    pak::scripting::ScriptAssetDesc desc,
+    const std::vector<pak::scripting::ScriptParamRecord>& default_params = {});
 
   ~ScriptAsset() override = default;
 
@@ -59,13 +60,14 @@ public:
 
   //! Returns the asset header metadata.
   [[nodiscard]] auto GetHeader() const noexcept
-    -> const pak::AssetHeader& override
+    -> const pak::core::AssetHeader& override
   {
     return desc_.header;
   }
 
   //! Returns the script flags bitfield.
-  [[nodiscard]] auto GetFlags() const noexcept -> pak::ScriptAssetFlags
+  [[nodiscard]] auto GetFlags() const noexcept
+    -> pak::scripting::ScriptAssetFlags
   {
     return desc_.flags;
   }
@@ -87,7 +89,7 @@ public:
   {
     return (static_cast<uint32_t>(desc_.flags)
              & static_cast<uint32_t>(
-               pak::ScriptAssetFlags::kAllowExternalSource))
+               pak::scripting::ScriptAssetFlags::kAllowExternalSource))
       != 0u;
   }
 
@@ -102,8 +104,8 @@ public:
   //! Returns true if any embedded script payload is assigned.
   [[nodiscard]] auto HasEmbeddedResource() const noexcept -> bool
   {
-    return GetBytecodeResourceIndex() != pak::kNoResourceIndex
-      || GetSourceResourceIndex() != pak::kNoResourceIndex;
+    return GetBytecodeResourceIndex() != pak::core::kNoResourceIndex
+      || GetSourceResourceIndex() != pak::core::kNoResourceIndex;
   }
 
   //! Returns the number of default parameters defined for this script.
@@ -138,7 +140,7 @@ public:
   }
 
 private:
-  pak::ScriptAssetDesc desc_ {};
+  pak::scripting::ScriptAssetDesc desc_ {};
   std::unordered_map<std::string, ScriptParam> params_;
 };
 

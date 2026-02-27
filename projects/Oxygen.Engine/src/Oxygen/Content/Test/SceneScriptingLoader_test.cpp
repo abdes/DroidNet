@@ -15,12 +15,12 @@
 
 namespace {
 
-auto PackScriptingRecords(
-  const std::initializer_list<oxygen::data::pak::ScriptingComponentRecord>
+auto PackScriptingRecords(const std::initializer_list<
+  oxygen::data::pak::scripting::ScriptingComponentRecord>
     records) -> std::vector<std::byte>
 {
-  std::vector<std::byte> bytes(
-    records.size() * sizeof(oxygen::data::pak::ScriptingComponentRecord));
+  std::vector<std::byte> bytes(records.size()
+    * sizeof(oxygen::data::pak::scripting::ScriptingComponentRecord));
   size_t i = 0;
   for (const auto& record : records) {
     auto slot
@@ -81,8 +81,8 @@ NOLINT_TEST(SceneScriptingLoaderTest, ValidateComponentTableRejectsBadSort)
   EXPECT_THROW(
     {
       oxygen::content::loaders::detail::ValidateComponentTable<
-        oxygen::data::pak::ScriptingComponentRecord>(
-        bytes, 2, sizeof(oxygen::data::pak::ScriptingComponentRecord), 3);
+        oxygen::data::pak::scripting::ScriptingComponentRecord>(bytes, 2,
+        sizeof(oxygen::data::pak::scripting::ScriptingComponentRecord), 3);
     },
     std::runtime_error);
 }

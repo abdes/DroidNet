@@ -345,7 +345,7 @@ auto ScriptingModule::OnShutdown() noexcept -> void
   if (attached_) {
     DCHECK_NOTNULL_F(engine_);
     (void)engine_->GetScriptCompilationService().UnregisterCompiler(
-      data::pak::ScriptLanguage::kLuau);
+      data::pak::scripting::ScriptLanguage::kLuau);
     attached_ = false;
     engine_ = nullptr;
   }

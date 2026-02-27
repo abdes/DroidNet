@@ -67,12 +67,12 @@ namespace {
   }
 
   [[nodiscard]] auto ResolvePackingPolicyId(std::string_view id) noexcept
-    -> data::pak::TexturePackingPolicyId
+    -> data::pak::render::TexturePackingPolicyId
   {
     if (id == "tight") {
-      return data::pak::TexturePackingPolicyId::kTightPacked;
+      return data::pak::render::TexturePackingPolicyId::kTightPacked;
     }
-    return data::pak::TexturePackingPolicyId::kD3D12;
+    return data::pak::render::TexturePackingPolicyId::kD3D12;
   }
 
   [[nodiscard]] auto ComputeFastFingerprint(
@@ -89,7 +89,7 @@ namespace {
   }
 
   [[nodiscard]] auto MakeTextureSignature(const CookedTexturePayload& cooked,
-    const data::pak::TextureResourceDesc& desc,
+    const data::pak::render::TextureResourceDesc& desc,
     const std::string_view signature_salt) -> std::string
   {
     static_cast<void>(signature_salt);
@@ -129,15 +129,16 @@ namespace {
 
   [[nodiscard]] auto BuildFallbackPayloadBytes(
     const ITexturePackingPolicy& policy,
-    const data::pak::TexturePackingPolicyId policy_id,
+    const data::pak::render::TexturePackingPolicyId policy_id,
     const bool with_content_hashing) -> std::vector<std::byte>
   {
     LOG_SCOPE_FUNCTION(1);
     constexpr uint32_t kUnalignedPitch = 4;
     const uint32_t aligned_pitch = policy.AlignRowPitchBytes(kUnalignedPitch);
 
-    const uint32_t layouts_offset = sizeof(data::pak::TexturePayloadHeader);
-    const uint32_t layouts_bytes = sizeof(data::pak::SubresourceLayout);
+    const uint32_t layouts_offset
+      = sizeof(data::pak::render::TexturePayloadHeader);
+    const uint32_t layouts_bytes = sizeof(data::pak::render::SubresourceLayout);
 
     const uint64_t data_offset64
       = policy.AlignSubresourceOffset(layouts_offset + layouts_bytes);
@@ -152,16 +153,17 @@ namespace {
       return {};
     }
 
-    data::pak::TexturePayloadHeader header {};
-    header.magic = data::pak::kTexturePayloadMagic;
+    data::pak::render::TexturePayloadHeader header {};
+    header.magic = data::pak::render::kTexturePayloadMagic;
     header.packing_policy = static_cast<uint8_t>(policy_id);
-    header.flags = static_cast<uint8_t>(data::pak::TexturePayloadFlags::kNone);
+    header.flags
+      = static_cast<uint8_t>(data::pak::render::TexturePayloadFlags::kNone);
     header.subresource_count = 1;
     header.total_payload_size = static_cast<uint32_t>(total_payload64);
     header.layouts_offset_bytes = layouts_offset;
     header.data_offset_bytes = data_offset_bytes;
 
-    const data::pak::SubresourceLayout layout {
+    const data::pak::render::SubresourceLayout layout {
       .offset_bytes = 0,
       .row_pitch_bytes = aligned_pitch,
       .size_bytes = aligned_pitch,
@@ -244,7 +246,7 @@ auto TextureEmitter::Emit(CookedTexturePayload cooked,
       const auto existing_index_it = index_by_key_.find(key);
       const uint32_t existing_index = (existing_index_it != index_by_key_.end())
         ? existing_index_it->second
-        : data::pak::kFallbackResourceIndex;
+        : data::pak::core::kFallbackResourceIndex;
       ImportDiagnostic diagnostic {
         .severity = (config_.collision_policy == DedupCollisionPolicy::kError)
           ? ImportSeverity::kError
@@ -482,7 +484,7 @@ auto TextureEmitter::ToPakDescriptor(const CookedTexturePayload& cooked,
   TextureResourceDesc desc {};
   desc.data_offset = data_offset;
   desc.size_bytes
-    = static_cast<data::pak::DataBlobSizeT>(cooked.payload.size());
+    = static_cast<data::pak::core::DataBlobSizeT>(cooked.payload.size());
   desc.texture_type = static_cast<uint8_t>(cooked.desc.texture_type);
   desc.compression_type = 0;
   desc.width = cooked.desc.width;

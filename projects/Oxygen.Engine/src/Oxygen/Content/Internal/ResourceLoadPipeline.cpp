@@ -232,12 +232,13 @@ namespace {
   }
 
   auto ResolveDescriptorOffsetAndReader(const IContentSource& source,
-    const TypeId resource_type, const data::pak::ResourceIndexT resource_index)
+    const TypeId resource_type,
+    const data::pak::core::ResourceIndexT resource_index)
     -> std::optional<
-      std::pair<std::unique_ptr<serio::AnyReader>, data::pak::OffsetT>>
+      std::pair<std::unique_ptr<serio::AnyReader>, data::pak::core::OffsetT>>
   {
     std::unique_ptr<serio::AnyReader> desc_reader;
-    std::optional<data::pak::OffsetT> offset;
+    std::optional<data::pak::core::OffsetT> offset;
 
     if (resource_type == data::TextureResource::ClassTypeId()) {
       const auto* table = source.GetTextureTable();
@@ -286,7 +287,7 @@ namespace {
   auto PrepareResourceDecode(const ContentSourceRegistry& source_registry,
     const ResourceLoadPipeline::ResourceLoaderMap& resource_loaders,
     const TypeId resource_type, const uint16_t source_id,
-    const data::pak::ResourceIndexT resource_index)
+    const data::pak::core::ResourceIndexT resource_index)
     -> std::optional<PreparedResourceDecode>
   {
     const auto resolved_source = ResolveSourceById(source_registry, source_id);

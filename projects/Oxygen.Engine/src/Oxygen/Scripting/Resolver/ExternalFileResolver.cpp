@@ -149,8 +149,9 @@ auto ExternalFileResolver::Resolve(
   const auto content_hash = ComputeExternalSourceFingerprint(full_path, bytes);
 
   auto blob = ScriptSourceBlob::FromOwned(std::move(bytes),
-    data::pak::ScriptLanguage::kLuau, data::pak::ScriptCompression::kNone,
-    content_hash, ScriptBlobOrigin::kExternalFile,
+    data::pak::scripting::ScriptLanguage::kLuau,
+    data::pak::scripting::ScriptCompression::kNone, content_hash,
+    ScriptBlobOrigin::kExternalFile,
     ScriptBlobCanonicalName { full_path.generic_string() });
   return IScriptSourceResolver::ResolveResult {
     .ok = true,

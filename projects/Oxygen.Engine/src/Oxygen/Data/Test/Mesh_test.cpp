@@ -72,7 +72,7 @@ protected:
     auto material = MaterialAsset::CreateDefault();
     const glm::vec3 bounds_min { 0.0f, 0.0f, 0.0f };
     const glm::vec3 bounds_max { 1.0f, 1.0f, 0.0f };
-    oxygen::data::pak::MeshDesc desc {};
+    oxygen::data::pak::geometry::MeshDesc desc {};
     desc.mesh_type
       = static_cast<std::underlying_type_t<MeshType>>(MeshType::kStandard);
     desc.info.standard.bounding_box_min[0] = bounds_min.x;

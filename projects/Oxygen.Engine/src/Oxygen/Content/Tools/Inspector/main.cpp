@@ -266,12 +266,12 @@ auto DumpAssets(
 auto ValidateRootOrThrow(const std::filesystem::path& cooked_root) -> void
 {
   using oxygen::data::AssetType;
-  using oxygen::data::pak::AssetHeader;
-  using oxygen::data::pak::GeometryAssetDesc;
-  using oxygen::data::pak::InputMappingContextAssetDesc;
-  using oxygen::data::pak::MaterialAssetDesc;
-  using oxygen::data::pak::SceneAssetDesc;
-  using oxygen::data::pak::ScriptAssetDesc;
+  using oxygen::data::pak::core::AssetHeader;
+  using oxygen::data::pak::geometry::GeometryAssetDesc;
+  using oxygen::data::pak::input::InputMappingContextAssetDesc;
+  using oxygen::data::pak::render::MaterialAssetDesc;
+  using oxygen::data::pak::scripting::ScriptAssetDesc;
+  using oxygen::data::pak::world::SceneAssetDesc;
   using oxygen::serio::FileStream;
   using oxygen::serio::Reader;
 
@@ -336,19 +336,19 @@ auto ValidateRootOrThrow(const std::filesystem::path& cooked_root) -> void
       min_size = sizeof(ScriptAssetDesc);
       break;
     case AssetType::kInputAction:
-      min_size = sizeof(oxygen::data::pak::InputActionAssetDesc);
+      min_size = sizeof(oxygen::data::pak::input::InputActionAssetDesc);
       break;
     case AssetType::kInputMappingContext:
       min_size = sizeof(InputMappingContextAssetDesc);
       break;
     case AssetType::kPhysicsMaterial:
-      min_size = sizeof(oxygen::data::pak::PhysicsMaterialAssetDesc);
+      min_size = sizeof(oxygen::data::pak::physics::PhysicsMaterialAssetDesc);
       break;
     case AssetType::kCollisionShape:
-      min_size = sizeof(oxygen::data::pak::CollisionShapeAssetDesc);
+      min_size = sizeof(oxygen::data::pak::physics::CollisionShapeAssetDesc);
       break;
     case AssetType::kPhysicsScene:
-      min_size = sizeof(oxygen::data::pak::PhysicsSceneAssetDesc);
+      min_size = sizeof(oxygen::data::pak::physics::PhysicsSceneAssetDesc);
       break;
     default:
       break;
@@ -425,8 +425,8 @@ auto RunDumpBuffers(const DumpResourceOptions& opts) -> int
     }
 
     const auto table_path = cooked_root / *relpath;
-    auto entries
-      = LoadPackedTable<oxygen::data::pak::BufferResourceDesc>(table_path);
+    auto entries = LoadPackedTable<oxygen::data::pak::core::BufferResourceDesc>(
+      table_path);
 
     if (entries.empty()) {
       std::cout << "No buffers found in: '" << table_path.string() << "'\n";
@@ -485,7 +485,8 @@ auto RunDumpTextures(const DumpResourceOptions& opts) -> int
 
     const auto table_path = cooked_root / *relpath;
     auto entries
-      = LoadPackedTable<oxygen::data::pak::TextureResourceDesc>(table_path);
+      = LoadPackedTable<oxygen::data::pak::render::TextureResourceDesc>(
+        table_path);
 
     std::cout << "Dumping " << entries.size() << " textures in: '"
               << table_path.string() << "'\n\n";
@@ -544,7 +545,8 @@ auto RunDumpPhysics(const DumpResourceOptions& opts) -> int
 
     const auto table_path = cooked_root / *relpath;
     auto entries
-      = LoadPackedTable<oxygen::data::pak::PhysicsResourceDesc>(table_path);
+      = LoadPackedTable<oxygen::data::pak::physics::PhysicsResourceDesc>(
+        table_path);
 
     if (entries.empty()) {
       std::cout << "No physics resources found in: '" << table_path.string()
@@ -564,14 +566,16 @@ auto RunDumpPhysics(const DumpResourceOptions& opts) -> int
     for (size_t i = 0; i < entries.size(); ++i) {
       const auto& e = entries[i];
       std::string_view format_name = "Unknown";
-      switch (static_cast<oxygen::data::pak::PhysicsResourceFormat>(e.format)) {
-      case oxygen::data::pak::PhysicsResourceFormat::kJoltShapeBinary:
+      switch (static_cast<oxygen::data::pak::physics::PhysicsResourceFormat>(
+        e.format)) {
+      case oxygen::data::pak::physics::PhysicsResourceFormat::kJoltShapeBinary:
         format_name = "JoltShapeBinary";
         break;
-      case oxygen::data::pak::PhysicsResourceFormat::kJoltConstraintBinary:
+      case oxygen::data::pak::physics::PhysicsResourceFormat::
+        kJoltConstraintBinary:
         format_name = "JoltConstraintBinary";
         break;
-      case oxygen::data::pak::PhysicsResourceFormat::
+      case oxygen::data::pak::physics::PhysicsResourceFormat::
         kJoltSoftBodySharedSettingsBinary:
         format_name = "JoltSoftBodySharedSettingsBinary";
         break;
@@ -607,10 +611,10 @@ auto ReadFixedString(const char* bytes, size_t max_len) -> std::string
   return std::string(bytes, len);
 }
 
-auto FormatScriptParamValue(const oxygen::data::pak::ScriptParamRecord& record)
-  -> std::string
+auto FormatScriptParamValue(
+  const oxygen::data::pak::scripting::ScriptParamRecord& record) -> std::string
 {
-  using oxygen::data::pak::ScriptParamType;
+  using oxygen::data::pak::scripting::ScriptParamType;
   switch (record.type) {
   case ScriptParamType::kBool:
     return record.value.as_bool ? "true" : "false";
@@ -693,7 +697,7 @@ auto ParseStringFromTable(
 auto RunDumpInputActions(const DumpInputOptions& opts) -> int
 {
   using oxygen::data::AssetType;
-  using oxygen::data::pak::InputActionAssetDesc;
+  using oxygen::data::pak::input::InputActionAssetDesc;
 
   const std::filesystem::path cooked_root(opts.cooked_root);
   try {
@@ -726,8 +730,7 @@ auto RunDumpInputActions(const DumpInputOptions& opts) -> int
       std::cout << "  name='"
                 << ReadFixedString(desc->header.name, sizeof(desc->header.name))
                 << "' value_type=" << static_cast<uint32_t>(desc->value_type)
-                << " flags=" << oxygen::data::pak::to_string(desc->flags)
-                << "\n";
+                << " flags=" << nostd::to_string(desc->flags) << "\n";
     }
 
     if (count == 0) {
@@ -743,10 +746,10 @@ auto RunDumpInputActions(const DumpInputOptions& opts) -> int
 auto RunDumpInputMappings(const DumpInputOptions& opts) -> int
 {
   using oxygen::data::AssetType;
-  using oxygen::data::pak::InputActionMappingRecord;
-  using oxygen::data::pak::InputMappingContextAssetDesc;
-  using oxygen::data::pak::InputTriggerAuxRecord;
-  using oxygen::data::pak::InputTriggerRecord;
+  using oxygen::data::pak::input::InputActionMappingRecord;
+  using oxygen::data::pak::input::InputMappingContextAssetDesc;
+  using oxygen::data::pak::input::InputTriggerAuxRecord;
+  using oxygen::data::pak::input::InputTriggerRecord;
 
   const std::filesystem::path cooked_root(opts.cooked_root);
   try {
@@ -781,7 +784,7 @@ auto RunDumpInputMappings(const DumpInputOptions& opts) -> int
 
       std::cout << "  name='"
                 << ReadFixedString(desc->header.name, sizeof(desc->header.name))
-                << "' flags=" << oxygen::data::pak::to_string(desc->flags)
+                << "' flags=" << nostd::to_string(desc->flags)
                 << " mappings=" << desc->mappings.count
                 << " triggers=" << desc->triggers.count
                 << " aux=" << desc->trigger_aux.count
@@ -813,8 +816,7 @@ auto RunDumpInputMappings(const DumpInputOptions& opts) -> int
                   << ParseStringFromTable(string_table, rec->slot_name_offset)
                   << "' triggers=[" << rec->trigger_start_index << ","
                   << (rec->trigger_start_index + rec->trigger_count)
-                  << ") flags=" << oxygen::data::pak::to_string(rec->flags)
-                  << "\n";
+                  << ") flags=" << nostd::to_string(rec->flags) << "\n";
       }
 
       const auto trigger_count = static_cast<size_t>(desc->triggers.count);
@@ -828,8 +830,8 @@ auto RunDumpInputMappings(const DumpInputOptions& opts) -> int
           continue;
         }
         std::cout << "    trigger[" << i
-                  << "] type=" << oxygen::data::pak::to_string(rec->type)
-                  << " behavior=" << oxygen::data::pak::to_string(rec->behavior)
+                  << "] type=" << nostd::to_string(rec->type)
+                  << " behavior=" << nostd::to_string(rec->behavior)
                   << " threshold=" << rec->actuation_threshold << " aux=["
                   << rec->aux_start_index << ","
                   << (rec->aux_start_index + rec->aux_count) << ")\n";
@@ -866,10 +868,10 @@ auto RunDumpInputMappings(const DumpInputOptions& opts) -> int
 auto RunDumpPhysicsAssets(const DumpPhysicsAssetsOptions& opts) -> int
 {
   using oxygen::data::AssetType;
-  using oxygen::data::pak::CollisionShapeAssetDesc;
-  using oxygen::data::pak::PhysicsComponentTableDesc;
-  using oxygen::data::pak::PhysicsMaterialAssetDesc;
-  using oxygen::data::pak::PhysicsSceneAssetDesc;
+  using oxygen::data::pak::physics::CollisionShapeAssetDesc;
+  using oxygen::data::pak::physics::PhysicsComponentTableDesc;
+  using oxygen::data::pak::physics::PhysicsMaterialAssetDesc;
+  using oxygen::data::pak::physics::PhysicsSceneAssetDesc;
 
   const std::filesystem::path cooked_root(opts.cooked_root);
   try {
@@ -1018,7 +1020,8 @@ auto RunDumpScriptSlots(const DumpScriptOptions& opts) -> int
 
     const auto table_path = cooked_root / *relpath;
     auto entries
-      = LoadPackedTable<oxygen::data::pak::ScriptSlotRecord>(table_path);
+      = LoadPackedTable<oxygen::data::pak::scripting::ScriptSlotRecord>(
+        table_path);
     if (entries.empty()) {
       std::cout << "No script slots found in: '" << table_path.string()
                 << "'\n";
@@ -1072,7 +1075,8 @@ auto RunDumpScriptParams(const DumpScriptOptions& opts) -> int
     const auto slots_path = cooked_root / *slots_relpath;
     const auto data_path = cooked_root / *data_relpath;
     auto slots
-      = LoadPackedTable<oxygen::data::pak::ScriptSlotRecord>(slots_path);
+      = LoadPackedTable<oxygen::data::pak::scripting::ScriptSlotRecord>(
+        slots_path);
     if (slots.empty()) {
       std::cout << "(no script slots)\n";
       return 0;
@@ -1101,7 +1105,7 @@ auto RunDumpScriptParams(const DumpScriptOptions& opts) -> int
       }
 
       const size_t bytes_to_read = static_cast<size_t>(slot.params_count)
-        * sizeof(oxygen::data::pak::ScriptParamRecord);
+        * sizeof(oxygen::data::pak::scripting::ScriptParamRecord);
       auto blob = reader.ReadBlob(bytes_to_read);
       if (!blob) {
         std::cout << "  ! failed to read params blob (skipping)\n";
@@ -1109,7 +1113,7 @@ auto RunDumpScriptParams(const DumpScriptOptions& opts) -> int
       }
 
       for (uint32_t pi = 0; pi < slot.params_count; ++pi) {
-        oxygen::data::pak::ScriptParamRecord record {};
+        oxygen::data::pak::scripting::ScriptParamRecord record {};
         std::memcpy(&record,
           blob->data() + static_cast<size_t>(pi) * sizeof(record),
           sizeof(record));

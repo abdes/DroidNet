@@ -27,12 +27,13 @@ using oxygen::renderer::testing::MaterialBinderTest;
   uint32_t raw_normal_index)
   -> std::shared_ptr<const oxygen::data::MaterialAsset>
 {
-  using oxygen::data::pak::MaterialAssetDesc;
+  using oxygen::data::pak::render::MaterialAssetDesc;
 
   MaterialAssetDesc desc {};
   desc.base_color_texture
-    = oxygen::data::pak::ResourceIndexT { raw_base_color_index };
-  desc.normal_texture = oxygen::data::pak::ResourceIndexT { raw_normal_index };
+    = oxygen::data::pak::core::ResourceIndexT { raw_base_color_index };
+  desc.normal_texture
+    = oxygen::data::pak::core::ResourceIndexT { raw_normal_index };
 
   desc.base_color[0] = 0.2F;
   desc.base_color[1] = 0.3F;

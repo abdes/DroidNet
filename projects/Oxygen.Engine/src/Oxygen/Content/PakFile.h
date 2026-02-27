@@ -63,8 +63,8 @@ namespace oxygen::content {
  - Integrates with ResourceTable and asset registry systems.
  - Only supports reading; writing is not implemented.
 
- @see oxygen::content::ResourceTable, data::pak::AssetDirectoryEntry,
-      data::pak::PakHeader, data::pak::PakFooter
+  @see oxygen::content::ResourceTable, data::pak::core::AssetDirectoryEntry,
+      data::pak::core::PakHeader, data::pak::core::PakFooter
 */
 class PakFile {
 public:
@@ -97,15 +97,15 @@ public:
 
   //! Find a directory entry by asset key.
   OXGN_CNTT_NDAPI auto FindEntry(const data::AssetKey& key) const noexcept
-    -> std::optional<data::pak::AssetDirectoryEntry>;
+    -> std::optional<data::pak::core::AssetDirectoryEntry>;
 
   //! Get the full asset directory.
   OXGN_CNTT_NDAPI auto Directory() const noexcept
-    -> std::span<const data::pak::AssetDirectoryEntry>;
+    -> std::span<const data::pak::core::AssetDirectoryEntry>;
 
   //! Create a Reader positioned at the asset's data.
   OXGN_CNTT_NDAPI auto CreateReader(
-    const data::pak::AssetDirectoryEntry& entry) const -> Reader;
+    const data::pak::core::AssetDirectoryEntry& entry) const -> Reader;
 
   //=== Browse Index (Virtual Paths) ===-------------------------------------//
 
@@ -214,24 +214,26 @@ public:
 
   //! Read one ScriptSlotRecord from the global slot table.
   OXGN_CNTT_NDAPI auto ReadScriptSlotRecord(uint32_t index) const
-    -> data::pak::ScriptSlotRecord;
+    -> data::pak::scripting::ScriptSlotRecord;
 
   //! Read a contiguous ScriptSlotRecord range from the global slot table.
-  OXGN_CNTT_NDAPI auto ReadScriptSlotRecords(uint32_t start_index,
-    uint32_t count) const -> std::vector<data::pak::ScriptSlotRecord>;
+  OXGN_CNTT_NDAPI auto ReadScriptSlotRecords(
+    uint32_t start_index, uint32_t count) const
+    -> std::vector<data::pak::scripting::ScriptSlotRecord>;
 
   //! Read ScriptParamRecord array from an absolute PAK offset.
   struct ScriptParamReadRequest final {
-    data::pak::OffsetT absolute_offset { 0 };
+    data::pak::core::OffsetT absolute_offset { 0 };
     uint32_t count { 0 };
   };
 
   OXGN_CNTT_NDAPI auto ReadScriptParamRecords(
     ScriptParamReadRequest request) const
-    -> std::vector<data::pak::ScriptParamRecord>;
+    -> std::vector<data::pak::scripting::ScriptParamRecord>;
 
   //! Read one script resource entry and payload by table index.
-  OXGN_CNTT_NDAPI auto ReadScriptResource(data::pak::ResourceIndexT index) const
+  OXGN_CNTT_NDAPI auto ReadScriptResource(
+    data::pak::core::ResourceIndexT index) const
     -> std::shared_ptr<const data::ScriptResource>;
 
   //! Number of entries in the global script slot table.
@@ -274,8 +276,8 @@ private:
 
   std::filesystem::path file_path_; // Path to the PAK file
 
-  data::pak::PakHeader header_ {};
-  data::pak::PakFooter footer_ {};
+  data::pak::core::PakHeader header_ {};
+  data::pak::core::PakFooter footer_ {};
 
   //! Stream for reading the PAK file metadata (header, footer, directory,
   //! descriptor tables)
@@ -287,7 +289,7 @@ private:
   std::unique_ptr<serio::FileStream<>> script_data_stream_;
   std::unique_ptr<serio::FileStream<>> physics_data_stream_;
 
-  std::vector<data::pak::AssetDirectoryEntry> directory_;
+  std::vector<data::pak::core::AssetDirectoryEntry> directory_;
   mutable std::mutex mutex_;
   mutable std::unordered_map<data::AssetKey, size_t> key_to_index_;
 

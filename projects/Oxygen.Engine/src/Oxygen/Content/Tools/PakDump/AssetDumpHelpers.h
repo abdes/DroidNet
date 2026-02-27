@@ -7,7 +7,6 @@
 #pragma once
 
 #include <algorithm>
-#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -31,11 +30,10 @@
 
 namespace oxygen::content::pakdump::asset_dump_helpers {
 
-[[nodiscard]] inline auto GetAssetTypeName(const uint8_t asset_type) -> const
-  char*
+[[nodiscard]] inline auto GetAssetTypeName(
+  const oxygen::data::AssetType asset_type) -> const char*
 {
-  return oxygen::data::to_string(
-    static_cast<oxygen::data::AssetType>(asset_type));
+  return oxygen::data::to_string(asset_type);
 }
 
 inline auto PrintAssetKey(const oxygen::data::AssetKey& key, DumpContext& ctx)
@@ -73,7 +71,7 @@ inline auto PrintAssetDescriptorHexPreview(
 }
 
 inline auto PrintAssetHeaderFields(
-  const oxygen::data::pak::v2::AssetHeader& h, const int indent = 8) -> void
+  const oxygen::data::pak::core::AssetHeader& h, const int indent = 8) -> void
 {
   PrintUtils::Field(
     "Name", std::string(h.name, strnlen(h.name, sizeof(h.name))), indent);
@@ -85,9 +83,9 @@ inline auto PrintAssetHeaderFields(
 }
 
 [[nodiscard]] inline auto TryReadAssetHeader(const std::vector<std::byte>& data)
-  -> std::optional<oxygen::data::pak::v2::AssetHeader>
+  -> std::optional<oxygen::data::pak::core::AssetHeader>
 {
-  using oxygen::data::pak::v2::AssetHeader;
+  using oxygen::data::pak::core::AssetHeader;
 
   if (data.size() < sizeof(AssetHeader)) {
     return std::nullopt;
@@ -132,12 +130,12 @@ inline auto PrintAssetHeaderFields(
 }
 
 inline auto PrintAssetMetadata(
-  const oxygen::data::pak::v2::AssetDirectoryEntry& e) -> void
+  const oxygen::data::pak::core::AssetDirectoryEntry& e) -> void
 {
   std::cout << "    --- asset metadata ---\n";
   PrintUtils::Field("Asset Type",
     std::string(GetAssetTypeName(e.asset_type)) + " ("
-      + std::to_string(e.asset_type) + ")");
+      + nostd::to_string(e.asset_type) + ")");
   PrintUtils::Field("Entry Offset", ToHexString(e.entry_offset));
   PrintUtils::Field("Desc Offset", ToHexString(e.desc_offset));
   PrintUtils::Field("Desc Size", std::to_string(e.desc_size) + " bytes");
@@ -145,7 +143,7 @@ inline auto PrintAssetMetadata(
 
 [[nodiscard]] inline auto ReadDescriptorBytes(
   const oxygen::content::PakFile& pak,
-  const oxygen::data::pak::v2::AssetDirectoryEntry& entry)
+  const oxygen::data::pak::core::AssetDirectoryEntry& entry)
   -> std::optional<std::vector<std::byte>>
 {
   try {

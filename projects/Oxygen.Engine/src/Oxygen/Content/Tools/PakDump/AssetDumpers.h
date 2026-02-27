@@ -14,6 +14,7 @@
 #include <string>
 #include <unordered_map>
 
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Data/AssetType.h>
 
 #include <Oxygen/OxCo/Co.h>
@@ -45,28 +46,28 @@ public:
   AssetDumperRegistry()
     : default_dumper_(std::make_unique<DefaultAssetDumper>())
   {
-    Register(static_cast<uint8_t>(oxygen::data::AssetType::kMaterial),
+    Register(oxygen::data::AssetType::kMaterial,
       std::make_unique<MaterialAssetDumper>());
-    Register(static_cast<uint8_t>(oxygen::data::AssetType::kGeometry),
+    Register(oxygen::data::AssetType::kGeometry,
       std::make_unique<GeometryAssetDumper>());
-    Register(static_cast<uint8_t>(oxygen::data::AssetType::kScene),
-      std::make_unique<SceneAssetDumper>());
-    Register(static_cast<uint8_t>(oxygen::data::AssetType::kScript),
-      std::make_unique<ScriptAssetDumper>());
-    Register(static_cast<uint8_t>(oxygen::data::AssetType::kInputAction),
-      std::make_unique<InputActionAssetDumper>());
     Register(
-      static_cast<uint8_t>(oxygen::data::AssetType::kInputMappingContext),
+      oxygen::data::AssetType::kScene, std::make_unique<SceneAssetDumper>());
+    Register(
+      oxygen::data::AssetType::kScript, std::make_unique<ScriptAssetDumper>());
+    Register(oxygen::data::AssetType::kInputAction,
+      std::make_unique<InputActionAssetDumper>());
+    Register(oxygen::data::AssetType::kInputMappingContext,
       std::make_unique<InputMappingContextAssetDumper>());
-    Register(static_cast<uint8_t>(oxygen::data::AssetType::kPhysicsMaterial),
+    Register(oxygen::data::AssetType::kPhysicsMaterial,
       std::make_unique<PhysicsMaterialAssetDumper>());
-    Register(static_cast<uint8_t>(oxygen::data::AssetType::kCollisionShape),
+    Register(oxygen::data::AssetType::kCollisionShape,
       std::make_unique<CollisionShapeAssetDumper>());
-    Register(static_cast<uint8_t>(oxygen::data::AssetType::kPhysicsScene),
+    Register(oxygen::data::AssetType::kPhysicsScene,
       std::make_unique<PhysicsSceneAssetDumper>());
   }
 
-  [[nodiscard]] auto Get(const uint8_t asset_type) const -> const AssetDumper&
+  [[nodiscard]] auto Get(const oxygen::data::AssetType asset_type) const
+    -> const AssetDumper&
   {
     const auto it = dumpers_.find(asset_type);
     if (it != dumpers_.end()) {
@@ -76,12 +77,14 @@ public:
   }
 
 private:
-  void Register(const uint8_t asset_type, std::unique_ptr<AssetDumper> dumper)
+  void Register(const oxygen::data::AssetType asset_type,
+    std::unique_ptr<AssetDumper> dumper)
   {
     dumpers_[asset_type] = std::move(dumper);
   }
 
-  std::unordered_map<uint8_t, std::unique_ptr<AssetDumper>> dumpers_;
+  std::unordered_map<oxygen::data::AssetType, std::unique_ptr<AssetDumper>>
+    dumpers_;
   std::unique_ptr<AssetDumper> default_dumper_;
 };
 
@@ -111,11 +114,11 @@ public:
           .DumpAsync(pak, entry, ctx, i, asset_loader);
       } catch (const std::exception& ex) {
         std::cerr << "ERROR: failed to dump asset #" << i
-                  << " (type=" << static_cast<int>(entry.asset_type)
+                  << " (type=" << nostd::to_string(entry.asset_type)
                   << "): " << ex.what() << "\n\n";
       } catch (...) {
         std::cerr << "ERROR: failed to dump asset #" << i
-                  << " (type=" << static_cast<int>(entry.asset_type)
+                  << " (type=" << nostd::to_string(entry.asset_type)
                   << "): unknown exception\n\n";
       }
     }

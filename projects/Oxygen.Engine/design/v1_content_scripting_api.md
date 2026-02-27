@@ -1,10 +1,10 @@
-# Content Scripting API v1 (Production)
+# Content Scripting API v7 (Production)
 
-Status: Implemented (v1)
+Status: Implemented (v7)
 Audience: Engine, tools, gameplay scripting
 Language target: Luau / Lua 5.1-style runtime with Luau extensions
 
-This document defines the authoritative v1 content scripting API for Oxygen.
+This document defines the authoritative v7 content scripting API for Oxygen.
 It is a production API, not a transitional API.
 
 ## 1. Goals
@@ -14,7 +14,7 @@ It is a production API, not a transitional API.
    - snake_case names
    - clear separation between module-level operations and userdata methods
 3. Keep behavior deterministic and explicit under failure.
-4. Expose only code-factual capabilities of `content::IAssetLoader` for v1.
+4. Expose only code-factual capabilities of `content::IAssetLoader` for v7.
 5. Remove obsolete/legacy script APIs entirely.
 6. Reuse existing core script packs (`oxygen.ids`, `oxygen.events`) instead of duplicating utilities.
 
@@ -53,7 +53,7 @@ It is a production API, not a transitional API.
 
 ## 2.5 Stability
 
-1. v1 names in this spec are stable and versioned.
+1. v7 names in this spec are stable and versioned.
 2. Legacy names listed in section 9 must not be exported.
 3. GUID/resource-key identity is runtime content identity; no cross-run persistence guarantee.
 
@@ -105,7 +105,7 @@ Semantics:
 
 ## 3.4 Async Loading
 
-v1 uses callback-based async APIs (code-factual in `IAssetLoader::StartLoad*`).
+v7 uses callback-based async APIs (code-factual in `IAssetLoader::StartLoad*`).
 
 Resources:
 
@@ -129,7 +129,7 @@ Callback contract:
 2. Success: receives non-nil userdata.
 3. Failure: receives `nil`.
 4. Code-factual gap note: input-action and input-mapping-context async use
-   deterministic cache-resolve fallback in v1 because `IAssetLoader` does not
+   deterministic cache-resolve fallback in v7 because `IAssetLoader` does not
    yet expose `StartLoadInputActionAsset` / `StartLoadInputMappingContextAsset`.
 
 ## 3.5 Lifecycle and Cache Control
@@ -184,26 +184,26 @@ Notes:
 
 ## 4. Resource Userdata API
 
-`TextureResource` and `BufferResource` are opaque in v1.
+`TextureResource` and `BufferResource` are opaque in v7.
 
 1. `obj:is_valid() -> boolean`
 2. `obj:key() -> integer`
 3. `obj:type_name() -> string`
 4. `obj:to_string() -> string`
 
-No mutable decode/raw-memory write APIs in v1.
+No mutable decode/raw-memory write APIs in v7.
 
 ## 5. Asset Userdata API
 
 `MaterialAsset`, `GeometryAsset`, `ScriptAsset`, `InputActionAsset`,
-`InputMappingContextAsset` are opaque in v1.
+`InputMappingContextAsset` are opaque in v7.
 
 1. `asset:is_valid() -> boolean`
 2. `asset:guid() -> string`
 3. `asset:type_name() -> string`
 4. `asset:to_string() -> string`
 
-No direct mutable asset editing in v1.
+No direct mutable asset editing in v7.
 
 ## 6. Idiomatic Lua Usage Examples
 
@@ -246,7 +246,7 @@ assets.trim_cache()
 
 ## 7. Validation and Test Requirements
 
-1. API presence tests for all v1 symbols.
+1. API presence tests for all v7 symbols.
 2. API absence tests for removed legacy symbols.
 3. Error-contract tests (wrong type, bad UUID, missing loader).
 4. Async callback tests (success/failure exactly-once behavior).
@@ -258,18 +258,18 @@ assets.trim_cache()
 ## 8. Event Integration (Code-Fact Status)
 
 1. `IAssetLoader` supports eviction subscriptions in C++ (`SubscribeResourceEvictions`).
-2. v1 must not claim `oxygen.assets.on_*` event APIs until scripting bridge exists.
+2. v7 must not claim `oxygen.assets.on_*` event APIs until scripting bridge exists.
 3. When implemented, content-domain events must route via `oxygen.events`.
 4. Payload identity should include at least `{ kind, key/guid, type_name, reason }`.
 
 ## 9. Removed Legacy API (Must Not Exist)
 
-The following names must not be exported by v1:
+The following names must not be exported by v7:
 
 1. `oxygen.content.*` (old namespace alias)
 2. `oxygen.assets.find`
 3. `oxygen.assets.find_path`
-4. any camelCase variants of v1 names
+4. any camelCase variants of v7 names
 
 ## 10. Implementation Readiness Matrix
 
@@ -356,7 +356,7 @@ Legend:
 
 ## 12. Future Enhancements / Missing Features
 
-### 12.1 Missing Features (Not in v1)
+### 12.1 Missing Features (Not in v7)
 
 1. Promise/future/coroutine-native async asset API.
 2. True async loader hooks for input action and input mapping context assets.

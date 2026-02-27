@@ -44,9 +44,10 @@ namespace {
 
 } // namespace
 
-auto LuauScriptCompiler::Language() const noexcept -> data::pak::ScriptLanguage
+auto LuauScriptCompiler::Language() const noexcept
+  -> data::pak::scripting::ScriptLanguage
 {
-  return data::pak::ScriptLanguage::kLuau;
+  return data::pak::scripting::ScriptLanguage::kLuau;
 }
 
 auto LuauScriptCompiler::Compile(
@@ -102,7 +103,7 @@ auto LuauScriptCompiler::Compile(
     DLOG_F(3, "compile succeeded ({} bytes)", bytecode.size());
     auto bytecode_blob = std::make_shared<const ScriptBytecodeBlob>(
       ScriptBytecodeBlob::FromOwned(std::move(bytecode), Language(),
-        data::pak::ScriptCompression::kNone, 0,
+        data::pak::scripting::ScriptCompression::kNone, 0,
         ScriptBlobOrigin::kEmbeddedResource,
         ScriptBlobCanonicalName { "compiled:luau" }));
     return ScriptCompileResult {

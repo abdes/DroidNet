@@ -27,11 +27,11 @@ namespace oxygen::content::import {
 namespace {
 
   constexpr size_t kShaderSourcePathMax
-    = sizeof(data::pak::ShaderReferenceDesc::source_path);
+    = sizeof(data::pak::render::ShaderReferenceDesc::source_path);
   constexpr size_t kShaderEntryPointMax
-    = sizeof(data::pak::ShaderReferenceDesc::entry_point);
+    = sizeof(data::pak::render::ShaderReferenceDesc::entry_point);
   constexpr size_t kShaderDefinesMax
-    = sizeof(data::pak::ShaderReferenceDesc::defines);
+    = sizeof(data::pak::render::ShaderReferenceDesc::defines);
 
   constexpr uint32_t kMaxShaderStages = 32;
 
@@ -43,7 +43,7 @@ namespace {
   };
 
   struct ShaderBuildResult {
-    std::vector<data::pak::ShaderReferenceDesc> shader_refs;
+    std::vector<data::pak::render::ShaderReferenceDesc> shader_refs;
     uint32_t shader_stages = 0;
     bool has_error = false;
   };
@@ -117,7 +117,7 @@ namespace {
     -> std::vector<ShaderRequest>
   {
     const bool alpha_test_enabled
-      = (flags & data::pak::kMaterialFlag_AlphaTest) != 0u;
+      = (flags & data::pak::render::kMaterialFlag_AlphaTest) != 0u;
     const auto defines = BuildDefinesString(alpha_test_enabled);
 
     std::vector<ShaderRequest> shaders;
@@ -229,7 +229,7 @@ namespace {
 
     result.shader_refs.reserve(shader_requests.size());
     for (const auto& request : shader_requests) {
-      data::pak::ShaderReferenceDesc ref {};
+      data::pak::render::ShaderReferenceDesc ref {};
       ref.shader_type = request.shader_type;
       WriteShaderString(ref.source_path, kShaderSourcePathMax,
         request.source_path, "source_path", source_id, object_path,
@@ -303,7 +303,7 @@ namespace {
     auto resolved = domain;
 
     if (alpha_mode == MaterialAlphaMode::kMasked) {
-      flags |= data::pak::kMaterialFlag_AlphaTest;
+      flags |= data::pak::render::kMaterialFlag_AlphaTest;
       if (domain != data::MaterialDomain::kDecal
         && domain != data::MaterialDomain::kUserInterface
         && domain != data::MaterialDomain::kPostProcess) {
@@ -323,7 +323,7 @@ namespace {
   auto ApplyMaterialInputs(const MaterialInputs& inputs,
     const MaterialAlphaMode alpha_mode, std::string_view source_id,
     std::string_view object_path, std::vector<ImportDiagnostic>& diagnostics,
-    data::pak::MaterialAssetDesc& desc) -> void
+    data::pak::render::MaterialAssetDesc& desc) -> void
   {
     desc.base_color[0] = Normalize01(inputs.base_color[0]);
     desc.base_color[1] = Normalize01(inputs.base_color[1]);
@@ -396,25 +396,25 @@ namespace {
   }
 
   auto AssignTextureIndices(const MaterialTextureBindings& textures,
-    const bool orm_packed, const data::pak::ResourceIndexT orm_index,
-    data::pak::MaterialAssetDesc& desc) -> void
+    const bool orm_packed, const data::pak::core::ResourceIndexT orm_index,
+    data::pak::render::MaterialAssetDesc& desc) -> void
   {
     desc.base_color_texture = textures.base_color.assigned
-      ? data::pak::ResourceIndexT { textures.base_color.index }
-      : data::pak::kNoResourceIndex;
+      ? data::pak::core::ResourceIndexT { textures.base_color.index }
+      : data::pak::core::kNoResourceIndex;
     desc.normal_texture = textures.normal.assigned
-      ? data::pak::ResourceIndexT { textures.normal.index }
-      : data::pak::kNoResourceIndex;
+      ? data::pak::core::ResourceIndexT { textures.normal.index }
+      : data::pak::core::kNoResourceIndex;
 
     const auto metallic_index = textures.metallic.assigned
-      ? data::pak::ResourceIndexT { textures.metallic.index }
-      : data::pak::kNoResourceIndex;
+      ? data::pak::core::ResourceIndexT { textures.metallic.index }
+      : data::pak::core::kNoResourceIndex;
     const auto roughness_index = textures.roughness.assigned
-      ? data::pak::ResourceIndexT { textures.roughness.index }
-      : data::pak::kNoResourceIndex;
+      ? data::pak::core::ResourceIndexT { textures.roughness.index }
+      : data::pak::core::kNoResourceIndex;
     const auto ao_index = textures.ambient_occlusion.assigned
-      ? data::pak::ResourceIndexT { textures.ambient_occlusion.index }
-      : data::pak::kNoResourceIndex;
+      ? data::pak::core::ResourceIndexT { textures.ambient_occlusion.index }
+      : data::pak::core::kNoResourceIndex;
 
     if (orm_packed) {
       desc.metallic_texture = orm_index;
@@ -436,32 +436,32 @@ namespace {
     }
 
     desc.emissive_texture = textures.emissive.assigned
-      ? data::pak::ResourceIndexT { textures.emissive.index }
-      : data::pak::kNoResourceIndex;
+      ? data::pak::core::ResourceIndexT { textures.emissive.index }
+      : data::pak::core::kNoResourceIndex;
     desc.specular_texture = textures.specular.assigned
-      ? data::pak::ResourceIndexT { textures.specular.index }
-      : data::pak::kNoResourceIndex;
+      ? data::pak::core::ResourceIndexT { textures.specular.index }
+      : data::pak::core::kNoResourceIndex;
     desc.sheen_color_texture = textures.sheen_color.assigned
-      ? data::pak::ResourceIndexT { textures.sheen_color.index }
-      : data::pak::kNoResourceIndex;
+      ? data::pak::core::ResourceIndexT { textures.sheen_color.index }
+      : data::pak::core::kNoResourceIndex;
     desc.clearcoat_texture = textures.clearcoat.assigned
-      ? data::pak::ResourceIndexT { textures.clearcoat.index }
-      : data::pak::kNoResourceIndex;
+      ? data::pak::core::ResourceIndexT { textures.clearcoat.index }
+      : data::pak::core::kNoResourceIndex;
     desc.clearcoat_normal_texture = textures.clearcoat_normal.assigned
-      ? data::pak::ResourceIndexT { textures.clearcoat_normal.index }
-      : data::pak::kNoResourceIndex;
+      ? data::pak::core::ResourceIndexT { textures.clearcoat_normal.index }
+      : data::pak::core::kNoResourceIndex;
     desc.transmission_texture = textures.transmission.assigned
-      ? data::pak::ResourceIndexT { textures.transmission.index }
-      : data::pak::kNoResourceIndex;
+      ? data::pak::core::ResourceIndexT { textures.transmission.index }
+      : data::pak::core::kNoResourceIndex;
     desc.thickness_texture = textures.thickness.assigned
-      ? data::pak::ResourceIndexT { textures.thickness.index }
-      : data::pak::kNoResourceIndex;
+      ? data::pak::core::ResourceIndexT { textures.thickness.index }
+      : data::pak::core::kNoResourceIndex;
   }
 
   [[nodiscard]] auto ResolveOrmPacked(const OrmPolicy policy,
     const MaterialTextureBindings& textures, std::string_view source_id,
     std::string_view object_path, std::vector<ImportDiagnostic>& diagnostics)
-    -> std::optional<data::pak::ResourceIndexT>
+    -> std::optional<data::pak::core::ResourceIndexT>
   {
     const auto& metallic = textures.metallic;
     const auto& roughness = textures.roughness;
@@ -493,19 +493,19 @@ namespace {
           source_id, object_path));
         return std::nullopt;
       }
-      return data::pak::ResourceIndexT { metallic.index };
+      return data::pak::core::ResourceIndexT { metallic.index };
     }
 
     if (policy == OrmPolicy::kAuto && can_pack) {
-      return data::pak::ResourceIndexT { metallic.index };
+      return data::pak::core::ResourceIndexT { metallic.index };
     }
 
     return std::nullopt;
   }
 
   [[nodiscard]] auto SerializeMaterialDescriptor(
-    const data::pak::MaterialAssetDesc& desc,
-    const std::vector<data::pak::ShaderReferenceDesc>& shader_refs)
+    const data::pak::render::MaterialAssetDesc& desc,
+    const std::vector<data::pak::render::ShaderReferenceDesc>& shader_refs)
     -> std::vector<std::byte>
   {
     serio::MemoryStream stream;
@@ -513,7 +513,7 @@ namespace {
     const auto pack = writer.ScopedAlignment(1);
 
     [[maybe_unused]] const auto desc_write = writer.WriteBlob(std::as_bytes(
-      std::span<const data::pak::MaterialAssetDesc, 1>(&desc, 1)));
+      std::span<const data::pak::render::MaterialAssetDesc, 1>(&desc, 1)));
     DCHECK_F(!desc_write.has_error(),
       "Material descriptor write Result<void> must not have an error");
     if (!shader_refs.empty()) {
@@ -530,8 +530,9 @@ namespace {
   auto PatchContentHash(
     std::vector<std::byte>& bytes, const uint64_t content_hash) -> void
   {
-    constexpr size_t kOffset = offsetof(data::pak::MaterialAssetDesc, header)
-      + offsetof(data::pak::AssetHeader, content_hash);
+    constexpr size_t kOffset
+      = offsetof(data::pak::render::MaterialAssetDesc, header)
+      + offsetof(data::pak::core::AssetHeader, content_hash);
     if (bytes.size() < kOffset + sizeof(content_hash)) {
       return;
     }
@@ -574,18 +575,18 @@ namespace {
 
     const auto object_path = std::string_view(item.material_name);
 
-    data::pak::MaterialAssetDesc desc {};
+    data::pak::render::MaterialAssetDesc desc {};
     desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kMaterial);
-    desc.header.version = data::pak::kMaterialAssetVersion;
+    desc.header.version = data::pak::render::kMaterialAssetVersion;
     util::TruncateAndNullTerminate(
       desc.header.name, std::size(desc.header.name), item.material_name);
 
-    desc.flags = data::pak::kMaterialFlag_NoTextureSampling;
+    desc.flags = data::pak::render::kMaterialFlag_NoTextureSampling;
     if (item.inputs.double_sided) {
-      desc.flags |= data::pak::kMaterialFlag_DoubleSided;
+      desc.flags |= data::pak::render::kMaterialFlag_DoubleSided;
     }
     if (item.inputs.unlit) {
-      desc.flags |= data::pak::kMaterialFlag_Unlit;
+      desc.flags |= data::pak::render::kMaterialFlag_Unlit;
     }
 
     const auto resolved_domain = ResolveMaterialDomain(
@@ -605,12 +606,12 @@ namespace {
     }
 
     if (orm_packed) {
-      desc.flags |= data::pak::kMaterialFlag_GltfOrmPacked;
+      desc.flags |= data::pak::render::kMaterialFlag_GltfOrmPacked;
     }
 
     if ([[maybe_unused]] const auto any_textures
       = HasAnyAssignedTextures(item.textures)) {
-      desc.flags &= ~data::pak::kMaterialFlag_NoTextureSampling;
+      desc.flags &= ~data::pak::render::kMaterialFlag_NoTextureSampling;
     } else {
       DLOG_F(INFO,
         "Material '{}' has no assigned textures; using scalar fallbacks",
@@ -618,7 +619,7 @@ namespace {
     }
 
     AssignTextureIndices(item.textures, orm_packed,
-      orm_packed ? *orm_index : data::pak::kNoResourceIndex, desc);
+      orm_packed ? *orm_index : data::pak::core::kNoResourceIndex, desc);
 
     const std::vector bindings {
       &item.textures.base_color,
