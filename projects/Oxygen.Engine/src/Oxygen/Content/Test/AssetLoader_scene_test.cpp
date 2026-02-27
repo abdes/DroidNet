@@ -24,7 +24,6 @@
 #include <Oxygen/Content/Loaders/PhysicsSceneLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
-#include <Oxygen/Content/LooseCooked/LooseCookedLayout.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -36,6 +35,7 @@
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 
 #include "./AssetLoader_test.h"
+#include "Fixtures/LooseCookedTestLayout.h"
 
 using ::testing::NotNull;
 
@@ -46,6 +46,7 @@ using oxygen::co::testing::TestEventLoop;
 using oxygen::content::AssetLoader;
 using oxygen::content::AssetLoaderConfig;
 using oxygen::content::testing::AssetLoaderLoadingTest;
+using oxygen::content::testing::LooseCookedLayout;
 
 using oxygen::data::GeometryAsset;
 using oxygen::data::InputMappingContextAsset;
@@ -72,7 +73,7 @@ auto WriteLooseCookedSceneWithSingleRootNode(
   using oxygen::data::pak::world::SceneAssetDesc;
   using oxygen::data::pak::world::SceneEnvironmentBlockHeader;
 
-  const oxygen::content::import::LooseCookedLayout layout {};
+  const LooseCookedLayout layout {};
 
   std::filesystem::create_directories(cooked_root / layout.scenes_subdir);
 

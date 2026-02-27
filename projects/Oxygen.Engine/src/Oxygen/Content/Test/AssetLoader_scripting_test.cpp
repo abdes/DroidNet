@@ -27,7 +27,6 @@
 #include <Oxygen/Content/Internal/PakFileSource.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/ScriptLoader.h>
-#include <Oxygen/Content/LooseCooked/LooseCookedLayout.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -41,6 +40,7 @@
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 
 #include "./AssetLoader_test.h"
+#include "Fixtures/LooseCookedTestLayout.h"
 
 using ::testing::NotNull;
 
@@ -50,6 +50,7 @@ using oxygen::co::testing::TestEventLoop;
 using oxygen::content::AssetLoader;
 using oxygen::content::AssetLoaderConfig;
 using oxygen::content::testing::AssetLoaderLoadingTest;
+using oxygen::content::testing::LooseCookedLayout;
 using oxygen::data::SceneAsset;
 using oxygen::data::ScriptAsset;
 using oxygen::data::ScriptResource;
@@ -141,7 +142,7 @@ auto WriteLooseCookedScriptAsset(const std::filesystem::path& cooked_root,
   using oxygen::data::pak::scripting::ScriptAssetDesc;
   using oxygen::data::pak::scripting::ScriptResourceDesc;
 
-  const oxygen::content::import::LooseCookedLayout layout {};
+  const LooseCookedLayout layout {};
   std::filesystem::create_directories(cooked_root / "Scripts");
   std::filesystem::create_directories(cooked_root / layout.resources_dir);
 
@@ -257,7 +258,7 @@ auto WriteLooseCookedSceneWithScripting(
   using oxygen::data::pak::world::SceneComponentTableDesc;
   using oxygen::data::pak::world::SceneEnvironmentBlockHeader;
 
-  const oxygen::content::import::LooseCookedLayout layout {};
+  const LooseCookedLayout layout {};
   std::filesystem::create_directories(cooked_root / layout.scenes_subdir);
   std::filesystem::create_directories(cooked_root / layout.resources_dir);
 

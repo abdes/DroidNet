@@ -1,0 +1,63 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#pragma once
+
+#include <filesystem>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <unordered_map>
+
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Cooker/api_export.h>
+#include <Oxygen/OxCo/Co.h>
+
+namespace oxygen::content::import {
+
+class IAsyncFileWriter;
+
+class ResourceTableRegistry final {
+public:
+  OXGN_COOK_API explicit ResourceTableRegistry(IAsyncFileWriter& file_writer);
+
+  OXYGEN_MAKE_NON_COPYABLE(ResourceTableRegistry)
+  OXYGEN_MAKE_NON_MOVABLE(ResourceTableRegistry)
+
+  OXGN_COOK_NDAPI auto TextureAggregator(
+    const std::filesystem::path& cooked_root, const LooseCookedLayout& layout)
+    -> TextureTableAggregator&;
+
+  OXGN_COOK_NDAPI auto BufferAggregator(
+    const std::filesystem::path& cooked_root, const LooseCookedLayout& layout)
+    -> BufferTableAggregator&;
+
+  //! Register an active import session for a cooked root.
+  OXGN_COOK_API auto BeginSession(const std::filesystem::path& cooked_root)
+    -> void;
+
+  //! Complete a session and finalize tables if it was the last one.
+  OXGN_COOK_API auto EndSession(const std::filesystem::path& cooked_root)
+    -> co::Co<bool>;
+
+  OXGN_COOK_NDAPI auto FinalizeAll() -> co::Co<bool>;
+
+private:
+  [[nodiscard]] auto NormalizeKey(
+    const std::filesystem::path& cooked_root) const -> std::string;
+
+  IAsyncFileWriter& file_writer_;
+  std::mutex mutex_;
+  std::unordered_map<std::string, std::unique_ptr<TextureTableAggregator>>
+    texture_tables_;
+  std::unordered_map<std::string, std::unique_ptr<BufferTableAggregator>>
+    buffer_tables_;
+  std::unordered_map<std::string, uint32_t> active_sessions_;
+};
+
+} // namespace oxygen::content::import

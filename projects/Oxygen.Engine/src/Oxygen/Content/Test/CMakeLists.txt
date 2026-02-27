@@ -47,13 +47,23 @@ m_gtest_program(
     "AssetLoader_loading_test.cpp"
     "AssetLoader_scene_test.cpp"
     "AssetLoader_scripting_test.cpp"
+    "AssetLoader_test_fixture.cpp"
     "AssetLoader_test_helpers.cpp"
-    "LooseCookedIndex_test.cpp"
-    "LooseCookedLayout_test.cpp"
-    "LooseCookedSource_test.cpp"
     "AssetLoader_test.h"
+    "Fixtures/LooseCookedTestLayout.h"
     "Utils/PakUtils.h"
+)
+
+m_gtest_program(
+  LooseCooked
+  SOURCES
+    "AssetLoader_test_fixture.cpp"
+    "AssetLoader_test.h"
+    "LooseCookedIndex_test.cpp"
+    "LooseCookedSource_test.cpp"
     "VirtualPathResolver_test.cpp"
+    "Fixtures/LooseCookedTestLayout.h"
+    "Fixtures/LooseCookedTestWriter.h"
 )
 
 m_gtest_program(
@@ -87,81 +97,3 @@ add_dependencies(
   "${META_MODULE_NAME}.LoadersPhysics.Tests"
   pakgen_editable_install
 )
-
-# -- Async Import Test Programs ------------------------------------------------
-
-m_gtest_program(
-  AsyncImportCore
-  SOURCES
-    "Import/ImageDecode_test.cpp"
-    "Import/Bc7Encoder_test.cpp"
-    "Import/ImageProcessing_test.cpp"
-    "Import/LooseCookedWriter_test.cpp"
-    "Import/AsyncImporter_test.cpp"
-    "Import/AsyncImportService_test.cpp"
-    "Import/ImportEventLoop_test.cpp"
-    "Import/ImportJob_test.cpp"
-    "Import/ImportSession_test.cpp"
-    "Mocks/TestImportJob.cpp"
-    "Mocks/TestImportJob.h"
-)
-
-m_gtest_program(
-  AsyncImportIO
-  SOURCES
-    "Import/FileError_test.cpp"
-    $<$<BOOL:${WIN32}>:Import/WindowsFileReader_test.cpp>
-    $<$<BOOL:${WIN32}>:Import/WindowsFileWriter_test.cpp>
-)
-
-m_gtest_program(
-  AsyncImportBuffer
-  SOURCES
-    "Import/BufferPipeline_test.cpp"
-    "Import/BufferEmitter_test.cpp"
-)
-
-m_gtest_program(
-  AsyncImportAssets
-  SOURCES
-    "Import/AssetEmitter_test.cpp"
-    "Import/GeometryPipeline_test.cpp"
-    "Import/MaterialPipeline_test.cpp"
-    "Import/PipelineConformance_test.cpp"
-    "Import/ScenePipeline_test.cpp"
-)
-
-m_gtest_program(
-  AsyncImportTexture
-  SOURCES
-    "Import/ScratchImage_test.cpp"
-    "Import/TextureCooker_basic_test.cpp"
-    "Import/TextureImportPresets_test.cpp"
-    "Import/TexturePackingPolicy_test.cpp"
-    "Import/TextureSourceAssembly_test.cpp"
-    "Import/TexturePipeline_basic_test.cpp"
-    "Import/TexturePipeline_nonreg_test.cpp"
-    "Import/TexturePipeline_edge_test.cpp"
-    "Import/TextureImportJob_policy_test.cpp"
-    "Import/TextureEmitter_test.cpp"
-)
-
-m_gtest_program(
-  AsyncImportFbx
-  SOURCES
-    "Import/AsyncImporterFullTestBase.cpp"
-    "Import/AsyncImporterFullTestBase.h"
-    "Import/AsyncFbxImporter_test.cpp"
-)
-
-m_gtest_program(
-  AsyncImportGltf
-  SOURCES
-    "Import/AsyncImporterFullTestBase.cpp"
-    "Import/AsyncImporterFullTestBase.h"
-    "Import/AsyncGltfImporter_test.cpp"
-)
-
-# -- Plan Test Programs -------------------------------------------------------
-
-m_gtest_program(AsyncImportPlan SOURCES "Plan/ImportPlanner_test.cpp")

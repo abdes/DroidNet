@@ -10,8 +10,8 @@
 #include <string>
 
 #include <Oxygen/Content/IAssetLoader.h>
-#include <Oxygen/Content/Import/TextureImporter.h>
-#include <Oxygen/Content/Import/TexturePackingPolicy.h>
+#include <Oxygen/Cooker/Import/TextureImporter.h>
+#include <Oxygen/Cooker/Import/TexturePackingPolicy.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>

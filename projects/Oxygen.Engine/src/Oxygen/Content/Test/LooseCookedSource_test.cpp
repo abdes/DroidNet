@@ -12,13 +12,14 @@
 #include <gtest/gtest.h>
 
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
-#include <Oxygen/Content/LooseCooked/Writer.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 
+#include "Fixtures/LooseCookedTestWriter.h"
+
 using oxygen::content::internal::LooseCookedSource;
-using oxygen::content::lc::Writer;
+using oxygen::content::testing::LooseCookedTestWriter;
 using oxygen::data::AssetKey;
 using oxygen::data::AssetType;
 using oxygen::data::loose_cooked::FileKind;
@@ -47,7 +48,7 @@ protected:
 
   auto WriteValidEmptyIndex() const -> void
   {
-    Writer writer(CookedRoot());
+    LooseCookedTestWriter writer(CookedRoot());
     (void)writer.Finish();
   }
 
@@ -75,7 +76,7 @@ TEST_F(LooseCookedSourceTest, ConstructorValidEmptyIndexInitializes)
 TEST_F(LooseCookedSourceTest, ConstructorFileMissingThrows)
 {
   {
-    Writer writer(CookedRoot());
+    LooseCookedTestWriter writer(CookedRoot());
     const std::vector<std::byte> data { std::byte { 0 } };
     writer.WriteFile(FileKind::kBuffersTable, "buffers.table", data);
     writer.WriteFile(FileKind::kBuffersData, "buffers.data", data);
@@ -83,7 +84,7 @@ TEST_F(LooseCookedSourceTest, ConstructorFileMissingThrows)
   }
 
   // Remove the data file, but retain the index entry.
-  // We can do this safely because Writer releases files when it goes out of
+  // We can do this safely because writer releases files when it goes out of
   // scope.
   std::filesystem::remove(CookedRoot() / "buffers.data");
 
@@ -94,7 +95,7 @@ TEST_F(LooseCookedSourceTest, ConstructorFileMissingThrows)
 TEST_F(LooseCookedSourceTest, ConstructorFileSizeMismatchThrows)
 {
   {
-    Writer writer(CookedRoot());
+    LooseCookedTestWriter writer(CookedRoot());
     const std::vector<std::byte> data { std::byte { 0 } };
     writer.WriteFile(FileKind::kBuffersTable, "buffers.table", data);
     writer.WriteFile(FileKind::kBuffersData, "buffers.data", data);
@@ -112,7 +113,7 @@ TEST_F(LooseCookedSourceTest, ConstructorFileSizeMismatchThrows)
 TEST_F(LooseCookedSourceTest, ConstructorDescriptorMissingThrows)
 {
   {
-    Writer writer(CookedRoot());
+    LooseCookedTestWriter writer(CookedRoot());
     const std::vector<std::byte> data { std::byte { 0 } };
     writer.WriteAssetDescriptor(
       AssetKey { 1 }, AssetType::kMaterial, "/test.omat", "test.omat", data);
@@ -128,7 +129,7 @@ TEST_F(LooseCookedSourceTest, ConstructorDescriptorMissingThrows)
 TEST_F(LooseCookedSourceTest, ConstructorDescriptorSha256MismatchThrows)
 {
   {
-    Writer writer(CookedRoot());
+    LooseCookedTestWriter writer(CookedRoot());
     writer.SetComputeSha256(true); // Tell writer to generate a real hash
     const std::vector<std::byte> data { std::byte { 0 } };
     writer.WriteAssetDescriptor(
@@ -174,7 +175,7 @@ TEST_F(LooseCookedSourceTest, ReadersReturnNullWhenFilesOmitted)
 TEST_F(LooseCookedSourceTest, ReadScriptSlotRecordsEmptyReturnsEmpty)
 {
   {
-    Writer writer(CookedRoot());
+    LooseCookedTestWriter writer(CookedRoot());
     std::vector<std::byte> data; // 0 entries
     writer.WriteFile(FileKind::kScriptsTable, "scripts.table", data);
     writer.WriteFile(FileKind::kScriptsData, "scripts.data", data);
