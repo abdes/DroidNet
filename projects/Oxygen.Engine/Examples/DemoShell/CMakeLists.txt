@@ -199,6 +199,7 @@ target_link_libraries(
   ${META_MODULE_TARGET}
   PUBLIC
     oxygen::base
+    oxygen::cooker
     oxygen::content
     oxygen::data
     oxygen::engine

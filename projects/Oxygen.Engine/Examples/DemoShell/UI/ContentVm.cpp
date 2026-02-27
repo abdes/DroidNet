@@ -10,7 +10,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/IAssetLoader.h>
-#include <Oxygen/Content/LooseCooked/Inspection.h>
+#include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Data/AssetType.h>
 
 #include "DemoShell/Runtime/PathNormalization.h"

@@ -25,7 +25,6 @@
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
-#include <Oxygen/Content/LooseCooked/LooseCookedLayout.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -36,6 +35,7 @@
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 
 #include "./AssetLoader_test.h"
+#include "Fixtures/LooseCookedTestLayout.h"
 #include "Utils/PakUtils.h"
 
 using testing::IsNull;
@@ -55,7 +55,7 @@ using oxygen::content::testing::AssetLoaderLoadingTest;
 
 namespace {
 
-using oxygen::content::import::LooseCookedLayout;
+using oxygen::content::testing::LooseCookedLayout;
 
 auto FillTestGuid(oxygen::data::loose_cooked::IndexHeader& header) -> void
 {

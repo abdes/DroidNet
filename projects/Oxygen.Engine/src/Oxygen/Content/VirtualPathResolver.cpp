@@ -12,8 +12,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Content/LooseCooked/Index.h>
-#include <Oxygen/Content/LooseCooked/Reader.h>
+#include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -67,7 +66,7 @@ namespace {
 struct VirtualPathResolver::Impl final {
   struct LooseCookedMount {
     std::filesystem::path root;
-    lc::Index index;
+    internal::LooseCookedIndexImpl index;
   };
 
   struct PakMount {
@@ -94,7 +93,7 @@ auto VirtualPathResolver::AddLooseCookedRoot(
 
   DLOG_F(
     INFO, "VirtualPathResolver: loading index from {}", index_path.string());
-  auto index = lc::Reader::LoadFromFile(index_path);
+  auto index = internal::LooseCookedIndexImpl::LoadFromFile(index_path);
   DLOG_F(INFO, "VirtualPathResolver: loaded index with {} assets",
     index.GetAllAssetKeys().size());
 

@@ -8,15 +8,15 @@
 #include <fstream>
 
 #include "./AssetLoader_test.h"
+#include "Fixtures/LooseCookedTestLayout.h"
 
-#include <Oxygen/Content/LooseCooked/LooseCookedLayout.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 
 using oxygen::content::testing::AssetLoaderBasicTest;
 
 namespace {
 
-using oxygen::content::import::LooseCookedLayout;
+using oxygen::content::testing::LooseCookedLayout;
 
 //! Fixture for AssetLoader dependency tests
 class LooseCookedIndexTest : public AssetLoaderBasicTest {

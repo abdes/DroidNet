@@ -16,9 +16,9 @@
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/Import/AsyncImportService.h>
-#include <Oxygen/Content/Import/ImportReport.h>
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/PakFormat.h>

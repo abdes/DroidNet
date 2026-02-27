@@ -20,10 +20,10 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/IAssetLoader.h>
-#include <Oxygen/Content/Import/ImportOptions.h>
-#include <Oxygen/Content/Import/ImportRequest.h>
-#include <Oxygen/Content/Import/TextureImportTypes.h>
-#include <Oxygen/Content/LooseCooked/Inspection.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>

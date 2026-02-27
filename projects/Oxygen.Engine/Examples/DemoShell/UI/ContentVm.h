@@ -19,11 +19,11 @@
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/Import/AsyncImportService.h>
-#include <Oxygen/Content/Import/ImportOptions.h>
-#include <Oxygen/Content/Import/ImportReport.h>
-#include <Oxygen/Content/Import/ImportRequest.h>
-#include <Oxygen/Content/LooseCooked/LooseCookedLayout.h>
+#include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Data/AssetKey.h>
 
 #include "DemoShell/Services/ContentSettingsService.h"

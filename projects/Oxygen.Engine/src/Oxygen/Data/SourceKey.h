@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <functional>
@@ -30,6 +31,7 @@ struct SourceKey
       Printable,
       Hashable> // clang-format on
 {
+  // NOLINTNEXTLINE(*-magic-numbers)
   using Base = NamedType<std::array<uint8_t, 16>, struct SourceKeyTag,
     // clang-format off
     oxygen::Comparable,
@@ -41,9 +43,9 @@ struct SourceKey
   //! Create a SourceKey from a C-style byte array.
   static auto FromBytes(const uint8_t (&bytes)[16]) -> SourceKey
   {
-    std::array<uint8_t, 16> arr;
-    std::copy(std::begin(bytes), std::end(bytes), arr.begin());
-    return SourceKey(arr);
+    std::array<uint8_t, 16> arr {};
+    std::ranges::copy(bytes, arr.begin());
+    return SourceKey { arr };
   }
 };
 

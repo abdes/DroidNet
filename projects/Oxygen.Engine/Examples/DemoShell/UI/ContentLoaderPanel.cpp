@@ -14,9 +14,9 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Content/Import/ImportDiagnostics.h>
-#include <Oxygen/Content/Import/ImportOptions.h>
-#include <Oxygen/Content/Import/TextureSourceAssembly.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/ImGui/Styles/IconsFontAwesome.h>

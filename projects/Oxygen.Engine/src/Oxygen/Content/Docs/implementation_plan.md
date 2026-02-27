@@ -159,8 +159,8 @@ Repro steps (when a test fails):
 
 PakDump notes:
 
-- Build target name: `Oxygen.Content.PakDump`.
-- Example: `Oxygen.Content.PakDump <path-to.pak> --verbose --show-data`.
+- Build target name: `Oxygen.Cooker.PakDump`.
+- Example: `Oxygen.Cooker.PakDump <path-to.pak> --verbose --show-data`.
 
 ## Detailed feature matrix (status snapshot)
 
