@@ -1009,9 +1009,25 @@ namespace {
     co_return state;
   }
 
+  auto ResolveMountedAssetTypeByKey(
+    std::span<const CookedInspectionContext> cooked_contexts,
+    const data::AssetKey& key) -> std::optional<data::AssetType>
+  {
+    for (size_t i = cooked_contexts.size(); i > 0; --i) {
+      const auto& context = cooked_contexts[i - 1U];
+      for (const auto& asset : context.inspection.Assets()) {
+        if (asset.key == key) {
+          return static_cast<data::AssetType>(asset.asset_type);
+        }
+      }
+    }
+    return std::nullopt;
+  }
+
   auto BuildMergedScriptsState(ImportSession& session,
     const ImportRequest& request, content::VirtualPathResolver& resolver,
     const SidecarDocument& parsed, const uint32_t node_count,
+    std::span<const CookedInspectionContext> cooked_contexts,
     const std::vector<script::ScriptingComponentRecord>& existing_components,
     const ExistingScriptTables& existing_tables)
     -> std::optional<MergedScriptsState>
@@ -1093,6 +1109,22 @@ namespace {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           "script.sidecar.script_ref_unresolved",
           "Script virtual path did not resolve to an asset key",
+          object_path + ".script_virtual_path");
+        continue;
+      }
+      const auto resolved_asset_type
+        = ResolveMountedAssetTypeByKey(cooked_contexts, *resolved_script_key);
+      if (!resolved_asset_type.has_value()) {
+        AddDiagnosticAtPath(session, request, ImportSeverity::kError,
+          "script.sidecar.script_ref_unresolved",
+          "Resolved script key is not present in mounted cooked context",
+          object_path + ".script_virtual_path");
+        continue;
+      }
+      if (*resolved_asset_type != data::AssetType::kScript) {
+        AddDiagnosticAtPath(session, request, ImportSeverity::kError,
+          "script.sidecar.script_ref_not_script_asset",
+          "Resolved reference does not identify a script asset",
           object_path + ".script_virtual_path");
         continue;
       }
@@ -1530,7 +1562,7 @@ auto ScriptingSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
   }
 
   const auto merged_scripts_state = BuildMergedScriptsState(*session, req,
-    resolver, *parsed, resolved_scene_state->node_count,
+    resolver, *parsed, resolved_scene_state->node_count, cooked_contexts,
     resolved_scene_state->existing_components, scripts_table_state->tables);
   if (!merged_scripts_state.has_value()) {
     co_return false;
