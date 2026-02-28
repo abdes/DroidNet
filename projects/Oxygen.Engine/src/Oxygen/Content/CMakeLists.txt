@@ -100,6 +100,8 @@ set(
   "Internal/LooseCookedIndexImpl.cpp"
   "Internal/LooseCookedIndexCodec.h"
   "Internal/LooseCookedSource.h"
+  "Internal/PatchResolutionPolicy.h"
+  "Internal/PatchResolutionPolicy.cpp"
   "Internal/PakFileSource.h"
   "Internal/ResourceRef.h"
   "Loaders/BufferLoader.h"

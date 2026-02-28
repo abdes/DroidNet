@@ -41,7 +41,9 @@
 #include <Oxygen/Data/InputActionAsset.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PatchManifest.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/ScriptAsset.h>
@@ -250,6 +252,28 @@ public:
 
   OXGN_CNTT_API auto AddPakFile(const std::filesystem::path& path)
     -> void override;
+
+  //! Mount a patch pak and register manifest tombstones.
+  /*!
+   Validates the patch manifest compatibility envelope against the mounted
+   * base
+   catalogs, then mounts the patch pak at highest precedence and
+   * registers
+   deleted-key tombstones on that mount layer.
+
+   @param path
+   * Path to the patch `.pak`.
+   @param manifest Patch manifest emitted by the
+   * cooker.
+   @param mounted_base_catalogs Catalog snapshot for the currently
+   * mounted base
+     set.
+   @throw std::runtime_error on compatibility
+   * validation failures.
+  */
+  OXGN_CNTT_API auto AddPatchPakFile(const std::filesystem::path& path,
+    const data::PatchManifest& manifest,
+    std::span<const data::PakCatalog> mounted_base_catalogs) -> void;
 
   OXGN_CNTT_API auto AddLooseCookedRoot(const std::filesystem::path& path)
     -> void override;
@@ -1246,6 +1270,8 @@ private:
   OXGN_CNTT_API auto ResolveLoadSourceId(const data::AssetKey& key,
     std::optional<uint16_t> preferred_source_id = std::nullopt) const
     -> std::optional<uint16_t>;
+  OXGN_CNTT_API auto MountPakFile(const std::filesystem::path& path)
+    -> uint16_t;
   OXGN_CNTT_API auto ResolveSourceForId(uint16_t source_id) const
     -> const internal::IContentSource*;
 

@@ -101,7 +101,7 @@ Both provide:
   - `AssetLoader::AddPakFile(path)`
   - `AssetLoader::AddLooseCookedRoot(path)`
 - Mount operations are owning-thread only.
-- Asset resolution is **first-match-wins** in source registration order.
+- Asset resolution is **last-mounted-wins** in source registration order.
 
 This ordering is editor policy: if multiple mounted sources overlap (engine content, project content, overrides), the editor must register them deterministically.
 
@@ -112,7 +112,7 @@ Runtime Content APIs are keyed by `AssetKey`/`ResourceKey` and do not interpret 
 For editor/tooling workflows, `VirtualPathResolver` exists as a helper:
 
 - It maps canonical virtual paths to `data::AssetKey` using mounted cooked indexes (and PAK browse indexes when available).
-- It uses **first-match-wins** in registration order.
+- It uses **last-mounted-wins** in registration order.
 - It logs a `WARNING` when the same virtual path exists in multiple mounts but maps to different `AssetKey`s.
 
 ---
@@ -183,8 +183,8 @@ Overlaps are expected (engine content + project content + user overrides), but m
 
 Rules:
 
-- `AssetLoader` resolves `AssetKey` using first-match-wins in source registration order.
-- `VirtualPathResolver` resolves `VirtualPath -> AssetKey` using first-match-wins in mount registration order and logs collisions when the same virtual path maps to different `AssetKey`s.
+- `AssetLoader` resolves `AssetKey` using last-mounted-wins in source registration order, with mount-level tombstone terminal masking.
+- `VirtualPathResolver` resolves `VirtualPath -> AssetKey` using the same last-mounted-wins + tombstone policy and logs collisions when the same virtual path maps to different `AssetKey`s.
 
 Strictness policy is editor-owned:
 
@@ -277,7 +277,7 @@ This section merges the editor capabilities required to use loose cooked roots a
 
 ### 9) Override/overlap policy and collision diagnostics
 
-- Implement deterministic first-match-wins resolution across sources.
+- Implement deterministic last-mounted-wins resolution across sources.
 - Detect and report collisions:
   - same virtual path mapping to different `AssetKey` across sources
   - same `AssetKey` present in multiple sources (identical or different bytes)

@@ -104,7 +104,7 @@ directory).
 ### Sources and resolution order
 
 - `AssetLoader` mounts sources via `AddPakFile(...)` and `AddLooseCookedRoot(...)`.
-- Asset discovery is `AssetKey`-based and **first-match-wins** in deterministic
+- Asset discovery is `AssetKey`-based and **last-mounted-wins** in deterministic
   registration order.
 - The editor is responsible for registering sources in a deterministic order
   for Play-in-Editor workflows.
@@ -177,7 +177,7 @@ The helper responsible for the first step is `VirtualPathResolver`:
 
 - Uses mounted cooked indexes (`container.index.bin`) for loose cooked roots.
 - Can use PAK browse indexes when present.
-- Resolves **first-match-wins** and logs a warning when the same virtual path
+- Resolves **last-mounted-wins** and logs a warning when the same virtual path
   maps to different `AssetKey`s across mounts.
 
 ## Key types and where they fit

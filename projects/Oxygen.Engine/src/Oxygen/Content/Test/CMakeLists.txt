@@ -80,6 +80,7 @@ m_gtest_program(
 )
 
 m_gtest_program(PakFile SOURCES "PakFile_test.cpp")
+m_gtest_program(PatchResolution SOURCES "PatchResolution_test.cpp")
 
 m_gtest_program(
   LoadersPhysics
