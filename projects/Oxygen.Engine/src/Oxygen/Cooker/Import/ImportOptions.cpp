@@ -99,4 +99,28 @@ auto to_string(DedupCollisionPolicy value) -> std::string
   return "Unknown";
 }
 
+auto to_string(ScriptStorageMode value) -> std::string
+{
+  switch (value) {
+  case ScriptStorageMode::kEmbedded:
+    return "Embedded";
+  case ScriptStorageMode::kExternal:
+    return "External";
+  }
+  return "Unknown";
+}
+
+auto to_string(ScriptingImportKind value) -> std::string
+{
+  switch (value) {
+  case ScriptingImportKind::kNone:
+    return "None";
+  case ScriptingImportKind::kScriptAsset:
+    return "ScriptAsset";
+  case ScriptingImportKind::kScriptingSidecar:
+    return "ScriptingSidecar";
+  }
+  return "Unknown";
+}
+
 } // namespace oxygen::content::import

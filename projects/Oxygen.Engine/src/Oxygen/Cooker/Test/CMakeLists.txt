@@ -46,6 +46,8 @@ m_gtest_program(
     "Import/AsyncImportService_test.cpp"
     "Import/ImportEventLoop_test.cpp"
     "Import/ImportJob_test.cpp"
+    "Import/ScriptImportRequestBuilder_test.cpp"
+    "Import/ScriptImportJob_test.cpp"
     "Import/ImportSession_test.cpp"
     "Import/ScriptCompileMode_contract_test.cpp"
     "Mocks/TestImportJob.cpp"
