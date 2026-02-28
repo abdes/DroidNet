@@ -83,6 +83,11 @@ set(
   "Loose/LooseCookedLayout.h"
   "Loose/Types.h"
   "Loose/Validation.h"
+  "Pak/PakBuilder.h"
+  "Pak/PakBuildPhase.h"
+  "Pak/PakBuildRequest.h"
+  "Pak/PakBuildResult.h"
+  "Pak/PakBuildReport.h"
 )
 
 set(
@@ -138,6 +143,10 @@ set(
   "Import/Internal/WindowsFileWriter.h"
   "Import/Internal/WorkDispatcher.h"
   "Import/Internal/WorkPayloadStore.h"
+  "Pak/PakPlan.h"
+  "Pak/PakPlanBuilder.h"
+  "Pak/PakPlanPolicy.h"
+  "Pak/PakValidation.h"
 )
 
 set(
@@ -194,6 +203,12 @@ set(
   "Import/TextureSourceAssembly.cpp"
   "Loose/Inspection.cpp"
   "Loose/Validation.cpp"
+  "Pak/PakPlan.cpp"
+  "Pak/PakPlanBuilder.cpp"
+  "Pak/PakPlanPolicy.cpp"
+  "Pak/PakValidation.cpp"
+  "Pak/PakBuilder.cpp"
+  "Pak/PakBuildToString.cpp"
   ${OXYGEN_COOKER_PRIVATE_HEADERS}
 )
 
