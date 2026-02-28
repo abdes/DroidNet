@@ -48,12 +48,14 @@ namespace {
   [[nodiscard]] auto ResolveCookedRootForRequest(const ImportRequest& request)
     -> std::filesystem::path
   {
+    if (request.cooked_root.has_value()) {
+      return request.cooked_root->lexically_normal();
+    }
+
     const auto mount_leaf = VirtualMountRootLeaf(request);
 
     std::filesystem::path base_root;
-    if (request.cooked_root.has_value()) {
-      base_root = *request.cooked_root;
-    } else if (!request.source_path.empty()) {
+    if (!request.source_path.empty()) {
       std::error_code ec;
       auto absolute_source = std::filesystem::absolute(request.source_path, ec);
       if (!ec) {

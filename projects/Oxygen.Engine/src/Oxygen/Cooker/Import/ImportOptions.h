@@ -18,6 +18,7 @@
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Cooker/api_export.h>
+#include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Core/Types/Format.h>
 
@@ -213,6 +214,34 @@ enum class DedupCollisionPolicy : uint8_t {
 //! String representation of enum values in `DedupCollisionPolicy`.
 OXGN_COOK_API auto to_string(DedupCollisionPolicy value) -> std::string;
 
+//! Storage policy for script asset payloads.
+/*!
+ This is a runtime semantic choice carried in `ImportRequest::options`.
+ Tooling-facing string values are translated into this enum by the script
+ request builders.
+*/
+enum class ScriptStorageMode : uint8_t {
+  kEmbedded = 0,
+  kExternal,
+};
+
+//! String representation of enum values in `ScriptStorageMode`.
+OXGN_COOK_API auto to_string(ScriptStorageMode value) -> std::string;
+
+//! Script import request kind carried through generic ImportRequest options.
+/*!
+ This keeps script and sidecar operations inside the same `ImportRequest`
+ model used by texture/scene import jobs.
+*/
+enum class ScriptingImportKind : uint8_t {
+  kNone = 0,
+  kScriptAsset,
+  kScriptingSidecar,
+};
+
+//! String representation of enum values in `ScriptingImportKind`.
+OXGN_COOK_API auto to_string(ScriptingImportKind value) -> std::string;
+
 //! Effective import hashing policy for the current build configuration.
 /*!
  Release builds always hash content, even if callers request disabling it.
@@ -337,6 +366,35 @@ struct ImportOptions final {
   //! Collision policy for dedup identity-key conflicts in import emitters.
   DedupCollisionPolicy dedup_collision_policy
     = DedupCollisionPolicy::kWarnKeepFirst;
+
+  //! Scripting import tuning carried through the shared ImportRequest model.
+  /*!
+   This is the authoritative runtime scripting contract consumed by import
+   pipelines and jobs.
+
+   `ScriptAssetImportSettings` and `ScriptingSidecarImportSettings` are only
+   tooling-facing ingress DTOs. Builders must validate and normalize those
+   settings into this struct before dispatch.
+  */
+  struct ScriptingTuning final {
+    //! Identifies whether this request is a script-asset or sidecar import.
+    ScriptingImportKind import_kind = ScriptingImportKind::kNone;
+
+    //! For script-asset imports: compile source into bytecode at import time.
+    bool compile_scripts = false;
+
+    //! Script compiler mode when `compile_scripts` is enabled.
+    core::meta::scripting::ScriptCompileMode compile_mode
+      = core::meta::scripting::ScriptCompileMode::kDebug;
+
+    //! Script payload storage strategy.
+    ScriptStorageMode script_storage = ScriptStorageMode::kEmbedded;
+
+    //! For sidecar imports only: canonical target scene virtual path.
+    std::string target_scene_virtual_path;
+  };
+
+  ScriptingTuning scripting {};
 
   //! How to handle vertex normals.
   /*! Default is `kGenerateMissing`. */

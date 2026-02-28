@@ -43,6 +43,7 @@
 #include <Oxygen/Cooker/Import/Internal/JobEntry.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/FbxImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/GlbImportJob.h>
+#include <Oxygen/Cooker/Import/Internal/Jobs/ScriptImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/TextureImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
@@ -63,6 +64,14 @@ namespace {
     const auto name_part = file_name.empty() ? "source" : file_name;
     return std::string(nostd::to_string(format)) + ":"
       + nostd::to_string(job_id) + ":" + name_part;
+  }
+
+  [[nodiscard]] auto MakeScriptingJobName(ScriptingImportKind kind,
+    ImportJobId job_id, const std::filesystem::path& source_path) -> std::string
+  {
+    const auto file_name = source_path.filename().string();
+    const auto name_part = file_name.empty() ? "source" : file_name;
+    return to_string(kind) + ":" + nostd::to_string(job_id) + ":" + name_part;
   }
 
   [[nodiscard]] auto CreateJobForFormat(ImportFormat format,
@@ -400,10 +409,26 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   }
 
   const bool use_custom_factory = static_cast<bool>(job_factory);
+  const auto scripting_kind = request.options.scripting.import_kind;
+  const auto is_script_asset_request
+    = (scripting_kind == ScriptingImportKind::kScriptAsset);
+  const auto is_sidecar_request
+    = (scripting_kind == ScriptingImportKind::kScriptingSidecar);
+
+  if (!use_custom_factory && is_sidecar_request) {
+    LOG_F(WARNING,
+      "Submit rejected: scripting sidecar import dispatch is not implemented "
+      "yet for '{}'",
+      request.source_path.string());
+    return std::nullopt;
+  }
+
   auto format = ImportFormat::kUnknown;
   if (!use_custom_factory) {
-    format = request.GetFormat();
-    if (format == ImportFormat::kUnknown) {
+    if (!is_script_asset_request) {
+      format = request.GetFormat();
+    }
+    if (!is_script_asset_request && format == ImportFormat::kUnknown) {
       LOG_F(WARNING, "Submit rejected: unknown format for '{}'",
         request.source_path.string());
       return std::nullopt;
@@ -434,6 +459,8 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
 
   const auto job_name = request.job_name.value_or(use_custom_factory
       ? std::string("custom:") + nostd::to_string(job_id)
+      : is_script_asset_request
+      ? MakeScriptingJobName(scripting_kind, job_id, request.source_path)
       : MakeJobName(format, job_id, request.source_path));
 
   const auto file_reader = observer_ptr(impl_->file_reader_.get());
@@ -464,6 +491,8 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   std::shared_ptr<detail::ImportJob> job;
   if (use_custom_factory) {
     job = job_factory(std::move(params));
+  } else if (is_script_asset_request) {
+    job = std::make_shared<detail::ScriptImportJob>(std::move(params));
   } else {
     job = CreateJobForFormat(format, std::move(params));
   }
