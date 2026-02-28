@@ -4,25 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <array>
 #include <chrono>
-#include <cstddef>
 #include <string_view>
 #include <utility>
 
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
+#include <Oxygen/Cooker/Pak/PakWriter.h>
 
 namespace {
 namespace data = oxygen::data;
 namespace pak = oxygen::content::pak;
 
-constexpr auto kSourceKeySize = std::size_t { 16 };
-constexpr std::array<uint8_t, kSourceKeySize> kZeroSourceKeyBytes {};
-
 auto IsZeroSourceKey(const data::SourceKey& source_key) noexcept -> bool
 {
-  return source_key.get() == kZeroSourceKeyBytes;
+  return source_key.IsNil();
 }
 
 auto AddDiagnostic(pak::PakBuildResult& result,
@@ -143,12 +139,6 @@ auto PakBuilder::Build(const PakBuildRequest& request) noexcept
     AddDiagnosticRecord(result, diagnostic);
   }
 
-  if (request.options.fail_on_warnings && result.summary.diagnostics_warning > 0
-    && result.summary.diagnostics_error == 0) {
-    AddRequestError(result, "pak.request.fail_on_warnings",
-      "fail_on_warnings=true and at least one warning was emitted.");
-  }
-
   if (result.summary.diagnostics_error > 0 || !plan_result.plan.has_value()) {
     result.telemetry.total_duration
       = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -156,11 +146,20 @@ auto PakBuilder::Build(const PakBuildRequest& request) noexcept
     return Result<PakBuildResult>::Ok(std::move(result));
   }
 
-  if (result.summary.diagnostics_error == 0) {
-    AddDiagnostic(result, PakDiagnosticSeverity::kError,
-      PakBuildPhase::kFinalize, "pak.write.phase3_writer_unavailable",
-      "Phase 3 implements full planning semantics; writer integration is "
-      "not available yet.");
+  PakWriter writer;
+  auto write_result = writer.Write(request, *plan_result.plan);
+  result.file_size = write_result.file_size;
+  result.pak_crc32 = write_result.pak_crc32;
+  result.telemetry.writing_duration = write_result.writing_duration;
+
+  for (const auto& diagnostic : write_result.diagnostics) {
+    AddDiagnosticRecord(result, diagnostic);
+  }
+
+  if (request.options.fail_on_warnings && result.summary.diagnostics_warning > 0
+    && result.summary.diagnostics_error == 0) {
+    AddRequestError(result, "pak.request.fail_on_warnings",
+      "fail_on_warnings=true and at least one warning was emitted.");
   }
 
   result.telemetry.total_duration

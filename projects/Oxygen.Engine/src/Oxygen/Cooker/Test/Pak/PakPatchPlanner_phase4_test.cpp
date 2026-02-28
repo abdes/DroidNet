@@ -54,9 +54,9 @@ struct FileSpec final {
 
 auto MakeAssetKey(const uint8_t seed) -> data::AssetKey
 {
-  auto key = data::AssetKey {};
-  key.guid.fill(seed);
-  return key;
+  auto bytes = std::array<uint8_t, data::AssetKey::kSizeBytes> {};
+  bytes.fill(seed);
+  return data::AssetKey::FromBytes(bytes);
 }
 
 auto MakeSourceKey(const uint8_t seed) -> data::SourceKey

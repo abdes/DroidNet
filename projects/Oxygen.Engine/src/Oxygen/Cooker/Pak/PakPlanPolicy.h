@@ -10,6 +10,7 @@
 #include <string_view>
 
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
+#include <Oxygen/Cooker/api_export.h>
 
 namespace oxygen::content::pak {
 
@@ -18,7 +19,7 @@ enum class PakPlanMode : uint8_t {
   kPatch,
 };
 
-[[nodiscard]] auto to_string(PakPlanMode value) noexcept -> std::string_view;
+OXGN_COOK_NDAPI auto to_string(PakPlanMode value) noexcept -> std::string_view;
 
 struct PakPlanPolicy {
   PakPlanMode mode = PakPlanMode::kFull;
@@ -26,7 +27,7 @@ struct PakPlanPolicy {
   bool emits_manifest = false;
 };
 
-[[nodiscard]] auto DerivePakPlanPolicy(const PakBuildRequest& request) noexcept
-  -> PakPlanPolicy;
+OXGN_COOK_NDAPI auto DerivePakPlanPolicy(
+  const PakBuildRequest& request) noexcept -> PakPlanPolicy;
 
 } // namespace oxygen::content::pak

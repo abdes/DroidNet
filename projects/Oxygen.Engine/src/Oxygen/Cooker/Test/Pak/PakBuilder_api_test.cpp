@@ -33,9 +33,9 @@ auto MakeSourceKey(const uint8_t seed) -> data::SourceKey
 
 auto MakeAssetKey(const uint8_t seed) -> data::AssetKey
 {
-  data::AssetKey key {};
-  key.guid.fill(seed);
-  return key;
+  auto bytes = std::array<uint8_t, data::AssetKey::kSizeBytes> {};
+  bytes.fill(seed);
+  return data::AssetKey::FromBytes(bytes);
 }
 
 auto HasDiagnosticCode(
@@ -135,8 +135,7 @@ NOLINT_TEST(
     result, "pak.request.full_manifest_requires_output_manifest_path"));
 }
 
-NOLINT_TEST(PakBuilderApiContractTest,
-  ValidRequestReportsPhase3WriterUnavailableExplicitly)
+NOLINT_TEST(PakBuilderApiContractTest, ValidRequestWritesPakAndReportsTelemetry)
 {
   using pak::BuildMode;
   using pak::PakBuilder;
@@ -160,10 +159,14 @@ NOLINT_TEST(PakBuilderApiContractTest,
   ASSERT_TRUE(result_or_error.has_value());
   const auto& result = result_or_error.value();
 
-  EXPECT_EQ(result.summary.diagnostics_error, 1U);
-  EXPECT_TRUE(HasDiagnosticCode(result, "pak.write.phase3_writer_unavailable"));
+  EXPECT_EQ(result.summary.diagnostics_error, 0U);
+  EXPECT_FALSE(
+    HasDiagnosticCode(result, "pak.write.phase3_writer_unavailable"));
+  EXPECT_GT(result.file_size, 0U);
+  EXPECT_TRUE(result.pak_crc32 != 0U);
   EXPECT_TRUE(result.telemetry.total_duration.has_value());
   EXPECT_TRUE(result.telemetry.planning_duration.has_value());
+  EXPECT_TRUE(result.telemetry.writing_duration.has_value());
 }
 
 NOLINT_TEST(PakBuilderApiContractTest, PlannerRejectsBaseCatalogTypeMismatch)
@@ -264,7 +267,7 @@ NOLINT_TEST(PakBuilderApiContractTest, PatchModeClassifiesMissingSourceAsDelete)
   EXPECT_EQ(result.summary.patch_replaced, 0U);
   EXPECT_EQ(result.summary.patch_deleted, expected_deleted);
   EXPECT_EQ(result.summary.patch_unchanged, 0U);
-  EXPECT_TRUE(HasDiagnosticCode(result, "pak.write.phase3_writer_unavailable"));
+  EXPECT_EQ(result.summary.diagnostics_error, 0U);
 }
 
 } // namespace

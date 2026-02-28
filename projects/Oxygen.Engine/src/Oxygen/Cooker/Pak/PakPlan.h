@@ -7,15 +7,16 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/SourceKey.h>
-#include <Oxygen/Cooker/api_export.h>
 
 namespace oxygen::content::pak {
 
@@ -26,7 +27,8 @@ enum class PakPatchAction : uint8_t {
   kUnchanged,
 };
 
-OXGN_COOK_NDAPI auto to_string(PakPatchAction value) noexcept -> std::string_view;
+OXGN_COOK_NDAPI auto to_string(PakPatchAction value) noexcept
+  -> std::string_view;
 
 struct PakHeaderPlan {
   uint64_t offset = 0;
@@ -124,6 +126,12 @@ struct PakScriptParamRangePlan {
   uint32_t params_count = 0;
 };
 
+struct PakPayloadSourceSlicePlan {
+  std::filesystem::path source_path;
+  uint64_t source_offset = 0;
+  uint64_t size_bytes = 0;
+};
+
 class PakPlan final {
 public:
   struct Data {
@@ -132,6 +140,8 @@ public:
     std::vector<PakTablePlan> tables;
     std::vector<PakAssetPlacementPlan> assets;
     std::vector<PakResourcePlacementPlan> resources;
+    std::vector<PakPayloadSourceSlicePlan> asset_payload_sources;
+    std::vector<PakPayloadSourceSlicePlan> resource_payload_sources;
     PakDirectoryPlan directory {};
     PakBrowseIndexPlan browse_index {};
     PakFooterPlan footer {};
@@ -145,14 +155,20 @@ public:
   OXGN_COOK_API explicit PakPlan(Data data) noexcept;
 
   OXGN_COOK_NDAPI auto Header() const noexcept -> const PakHeaderPlan&;
-  OXGN_COOK_NDAPI auto Regions() const noexcept -> std::span<const PakRegionPlan>;
+  OXGN_COOK_NDAPI auto Regions() const noexcept
+    -> std::span<const PakRegionPlan>;
   OXGN_COOK_NDAPI auto Tables() const noexcept -> std::span<const PakTablePlan>;
   OXGN_COOK_NDAPI auto Assets() const noexcept
     -> std::span<const PakAssetPlacementPlan>;
   OXGN_COOK_NDAPI auto Resources() const noexcept
     -> std::span<const PakResourcePlacementPlan>;
+  OXGN_COOK_NDAPI auto AssetPayloadSources() const noexcept
+    -> std::span<const PakPayloadSourceSlicePlan>;
+  OXGN_COOK_NDAPI auto ResourcePayloadSources() const noexcept
+    -> std::span<const PakPayloadSourceSlicePlan>;
   OXGN_COOK_NDAPI auto Directory() const noexcept -> const PakDirectoryPlan&;
-  OXGN_COOK_NDAPI auto BrowseIndex() const noexcept -> const PakBrowseIndexPlan&;
+  OXGN_COOK_NDAPI auto BrowseIndex() const noexcept
+    -> const PakBrowseIndexPlan&;
   OXGN_COOK_NDAPI auto Footer() const noexcept -> const PakFooterPlan&;
   OXGN_COOK_NDAPI auto PatchActions() const noexcept
     -> std::span<const PakPatchActionRecord>;

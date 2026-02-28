@@ -57,6 +57,18 @@ auto PakPlan::Resources() const noexcept
   return data_.resources;
 }
 
+auto PakPlan::AssetPayloadSources() const noexcept
+  -> std::span<const PakPayloadSourceSlicePlan>
+{
+  return data_.asset_payload_sources;
+}
+
+auto PakPlan::ResourcePayloadSources() const noexcept
+  -> std::span<const PakPayloadSourceSlicePlan>
+{
+  return data_.resource_payload_sources;
+}
+
 auto PakPlan::Directory() const noexcept -> const PakDirectoryPlan&
 {
   return data_.directory;
