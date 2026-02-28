@@ -5,6 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -53,6 +55,13 @@ namespace {
       bytes[i] = static_cast<uint8_t>(seed + i);
     }
     return SourceKey(bytes);
+  }
+
+  auto MakeTestAssetKey(const uint8_t seed) -> AssetKey
+  {
+    auto bytes = std::array<uint8_t, AssetKey::kSizeBytes> {};
+    bytes[0] = seed;
+    return AssetKey::FromBytes(bytes);
   }
 
   auto IsAllZerosDigest(const oxygen::base::Sha256Digest& digest) -> bool
@@ -110,8 +119,7 @@ namespace {
     // Arrange
     const auto cooked_root = MakeTempCookedRoot("loose_cooked_writer_update");
 
-    AssetKey key {};
-    key.guid[0] = 0x11;
+    const auto key = MakeTestAssetKey(0x11);
 
     const std::vector<std::byte> bytes0 = {
       std::byte { 0x01 },
@@ -170,10 +178,8 @@ namespace {
     // Arrange
     const auto cooked_root = MakeTempCookedRoot("loose_cooked_writer_conflict");
 
-    AssetKey key0 {};
-    key0.guid[0] = 0x11;
-    AssetKey key1 {};
-    key1.guid[0] = 0x22;
+    const auto key0 = MakeTestAssetKey(0x11);
+    const auto key1 = MakeTestAssetKey(0x22);
 
     const std::vector<std::byte> bytes = {
       std::byte { 0x01 },
@@ -384,8 +390,7 @@ namespace {
     const auto cooked_root
       = MakeTempCookedRoot("loose_cooked_writer_same_session_overwrite");
 
-    AssetKey key {};
-    key.guid[0] = 0x61;
+    const auto key = MakeTestAssetKey(0x61);
 
     const std::vector<std::byte> desc_a = {
       std::byte { 0x01 },
@@ -550,10 +555,8 @@ namespace {
     const auto cooked_root
       = MakeTempCookedRoot("loose_cooked_writer_merge_assets");
 
-    AssetKey key0 {};
-    key0.guid[0] = 0x10;
-    AssetKey key1 {};
-    key1.guid[0] = 0x20;
+    const auto key0 = MakeTestAssetKey(0x10);
+    const auto key1 = MakeTestAssetKey(0x20);
 
     const std::vector<std::byte> bytes = {
       std::byte { 0x01 },
@@ -597,8 +600,7 @@ namespace {
     // Arrange
     const auto cooked_root = MakeTempCookedRoot("loose_cooked_writer_no_sha");
 
-    AssetKey key {};
-    key.guid[0] = 0x33;
+    const auto key = MakeTestAssetKey(0x33);
 
     const std::vector<std::byte> bytes = {
       std::byte { 0xDE },
@@ -641,8 +643,7 @@ namespace {
       = std::string("loose_cooked_writer_bad_vpath_") + GetParam().case_name;
     const auto cooked_root = MakeTempCookedRoot(suffix);
 
-    AssetKey key {};
-    key.guid[0] = 0x44;
+    const auto key = MakeTestAssetKey(0x44);
 
     const std::vector<std::byte> bytes = {
       std::byte { 0x01 },
@@ -701,8 +702,7 @@ namespace {
     const auto cooked_root
       = MakeTempCookedRoot("loose_cooked_writer_bad_rel_abs");
 
-    AssetKey key {};
-    key.guid[0] = 0x46;
+    const auto key = MakeTestAssetKey(0x46);
 
     const std::vector<std::byte> bytes = {
       std::byte { 0x01 },
@@ -757,10 +757,8 @@ namespace {
     const auto cooked_root
       = MakeTempCookedRoot("loose_cooked_writer_conflict_across_runs");
 
-    AssetKey key0 {};
-    key0.guid[0] = 0x50;
-    AssetKey key1 {};
-    key1.guid[0] = 0x51;
+    const auto key0 = MakeTestAssetKey(0x50);
+    const auto key1 = MakeTestAssetKey(0x51);
 
     const std::vector<std::byte> bytes = {
       std::byte { 0x01 },
@@ -798,8 +796,7 @@ namespace {
     const auto cooked_root
       = MakeTempCookedRoot("loose_cooked_writer_bad_rel_dotdot");
 
-    AssetKey key {};
-    key.guid[0] = 0x63;
+    const auto key = MakeTestAssetKey(0x63);
 
     const std::vector<std::byte> bytes = {
       std::byte { 0x01 },
@@ -829,8 +826,7 @@ namespace {
     const auto cooked_root
       = MakeTempCookedRoot("loose_cooked_writer_bad_rel_colon");
 
-    AssetKey key {};
-    key.guid[0] = 0x64;
+    const auto key = MakeTestAssetKey(0x64);
 
     const std::vector<std::byte> bytes = {
       std::byte { 0x01 },

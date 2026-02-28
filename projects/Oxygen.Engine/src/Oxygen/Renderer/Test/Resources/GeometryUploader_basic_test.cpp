@@ -42,9 +42,7 @@ NOLINT_TEST_F(
   BeginFrame(oxygen::frame::Slot { 0 });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key {
-    .guid = oxygen::data::GenerateAssetGuid(),
-  };
+  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,
@@ -67,9 +65,7 @@ NOLINT_TEST_F(
   BeginFrame(oxygen::frame::Slot { 0 });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key {
-    .guid = oxygen::data::GenerateAssetGuid(),
-  };
+  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,
@@ -95,10 +91,10 @@ NOLINT_TEST_F(GeometryUploaderBasicTest,
   const auto mesh_a = MakeValidTriangleMesh("TriA", true);
   const auto mesh_b = MakeValidTriangleMesh("TriB", true);
   const oxygen::data::AssetKey asset_key_a {
-    .guid = oxygen::data::GenerateAssetGuid(),
+    oxygen::data::GenerateAssetGuid()
   };
   const oxygen::data::AssetKey asset_key_b {
-    .guid = oxygen::data::GenerateAssetGuid(),
+    oxygen::data::GenerateAssetGuid()
   };
   const oxygen::engine::sceneprep::GeometryRef geometry_a {
     .asset_key = asset_key_a,
@@ -128,9 +124,7 @@ NOLINT_TEST_F(
   BeginFrame(oxygen::frame::Slot { 0 });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key {
-    .guid = oxygen::data::GenerateAssetGuid(),
-  };
+  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,
@@ -171,9 +165,7 @@ NOLINT_TEST_F(GeometryUploaderBasicTest,
   BeginFrame(oxygen::frame::Slot { 0 });
 
   const auto mesh = MakeInvalidMesh_NoVertices("Bad");
-  const oxygen::data::AssetKey asset_key {
-    .guid = oxygen::data::GenerateAssetGuid(),
-  };
+  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,

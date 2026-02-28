@@ -77,7 +77,7 @@ namespace {
     desc.bounding_box_max[1] = bbox_max.y;
     desc.bounding_box_max[2] = bbox_max.z;
 
-    data::AssetKey key { .guid = data::GenerateAssetGuid() };
+    data::AssetKey key { data::GenerateAssetGuid() };
     std::vector<std::shared_ptr<data::Mesh>> lods;
     lods.emplace_back(std::shared_ptr<data::Mesh>(std::move(mesh)));
     return std::make_shared<const data::GeometryAsset>(
@@ -182,7 +182,7 @@ namespace {
     desc.metalness = data::Unorm16 { 0.0F };
     desc.roughness = data::Unorm16 { 0.5F }; // NOLINT(*-magic-numbers)
     desc.ambient_occlusion = data::Unorm16 { 1.0F };
-    data::AssetKey key { .guid = data::GenerateAssetGuid() };
+    data::AssetKey key { data::GenerateAssetGuid() };
     (void)token;
     return std::make_shared<const data::MaterialAsset>(key, desc);
   }
@@ -375,7 +375,7 @@ namespace {
       lua_pushnil(state);
       return 1;
     }
-    const auto geometry = node->GetRenderable().GetGeometry();
+    auto geometry = node->GetRenderable().GetGeometry();
     if (!geometry) {
       lua_pushnil(state);
       return 1;
@@ -691,7 +691,7 @@ namespace {
       lua_pushnil(state);
       return 1;
     }
-    const auto material
+    auto material
       = node->GetRenderable().ResolveSubmeshMaterial(*lod, *submesh);
     if (!material) {
       lua_pushnil(state);

@@ -63,7 +63,7 @@ struct LooseCookedCollisionSummary final {
 //! Result of writing a loose cooked container.
 struct LooseCookedWriteResult final {
   std::filesystem::path cooked_root;
-  data::SourceKey source_key { std::array<uint8_t, 16> {} };
+  data::SourceKey source_key {};
 
   uint16_t content_version = 0;
   std::vector<LooseCookedAssetRecord> assets;

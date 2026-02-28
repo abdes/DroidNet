@@ -4,13 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <array>
 #include <new>
 #include <string_view>
 
 #include <lua.h>
 #include <lualib.h>
 
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>
@@ -18,27 +18,6 @@
 namespace oxygen::scripting::bindings {
 
 namespace {
-  constexpr int kBaseTen = 10;
-  constexpr size_t kUuidStringLength = 36;
-  constexpr size_t kUuidByteCount = 16;
-  constexpr size_t kDashIndex0 = 8;
-  constexpr size_t kDashIndex1 = 13;
-  constexpr size_t kDashIndex2 = 18;
-  constexpr size_t kDashIndex3 = 23;
-
-  auto HexValue(const char c) -> int
-  {
-    if (c >= '0' && c <= '9') {
-      return c - '0';
-    }
-    if (c >= 'a' && c <= 'f') {
-      return kBaseTen + (c - 'a');
-    }
-    if (c >= 'A' && c <= 'F') {
-      return kBaseTen + (c - 'A');
-    }
-    return -1;
-  }
 } // namespace
 
 auto PushTextureResource(lua_State* state, const content::ResourceKey key,
@@ -146,41 +125,11 @@ auto RequireResourceKey(lua_State* state, const int arg_index)
 auto TryParseAssetGuid(const std::string_view text)
   -> std::optional<data::AssetKey>
 {
-  if (text.size() != kUuidStringLength) {
+  const auto parsed = Uuid::FromString(text);
+  if (!parsed) {
     return std::nullopt;
   }
-  if (text[kDashIndex0] != '-' || text[kDashIndex1] != '-'
-    || text[kDashIndex2] != '-' || text[kDashIndex3] != '-') {
-    return std::nullopt;
-  }
-
-  std::array<uint8_t, kUuidByteCount> bytes {};
-  size_t byte_index = 0;
-  for (size_t i = 0; i < text.size(); ++i) {
-    if (text[i] == '-') {
-      continue;
-    }
-    if (i + 1 >= text.size()) {
-      return std::nullopt;
-    }
-    const int hi = HexValue(text[i]);
-    const int lo = HexValue(text[i + 1]);
-    if (hi < 0 || lo < 0) {
-      return std::nullopt;
-    }
-    if (byte_index >= bytes.size()) {
-      return std::nullopt;
-    }
-    bytes[byte_index] = static_cast<uint8_t>((hi << 4) | lo);
-    ++byte_index;
-    ++i;
-  }
-
-  if (byte_index != bytes.size()) {
-    return std::nullopt;
-  }
-
-  return data::AssetKey { .guid = bytes };
+  return data::AssetKey { parsed.value() };
 }
 
 auto RequireAssetGuid(lua_State* state, const int arg_index) -> data::AssetKey

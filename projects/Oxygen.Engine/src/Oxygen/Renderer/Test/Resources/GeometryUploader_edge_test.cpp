@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <unordered_set>
 #include <vector>
 
@@ -36,11 +37,13 @@ NOLINT_TEST_F(
 
   // Act
   for (std::size_t i = 0; i < kCount; ++i) {
-    oxygen::data::AssetKey key {};
+    auto key_bytes
+      = std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
     // NOLINTBEGIN(*-magic-numbers)
-    key.guid[0] = static_cast<std::uint8_t>(i & 0xFFU);
-    key.guid[1] = static_cast<std::uint8_t>((i >> 8) & 0xFFU);
+    key_bytes[0] = static_cast<std::uint8_t>(i & 0xFFU);
+    key_bytes[1] = static_cast<std::uint8_t>((i >> 8) & 0xFFU);
     // NOLINTEND(*-magic-numbers)
+    const auto key = oxygen::data::AssetKey::FromBytes(key_bytes);
 
     const oxygen::engine::sceneprep::GeometryRef geometry {
       .asset_key = key,
@@ -72,9 +75,7 @@ NOLINT_TEST_F(GeometryUploaderEdgeTest, RepeatedEnsureNoUnboundedTicketGrowth)
 
   BeginFrame(Slot { 0 });
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key {
-    .guid = oxygen::data::GenerateAssetGuid(),
-  };
+  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -34,6 +35,40 @@ namespace adl_helper {
   auto as_string(T&& value) -> decltype(to_string(std::declval<T>()))
   {
     return to_string(std::forward<T>(value));
+  }
+
+  //! ADL helper: bring std::as_bytes into scope and perform unqualified call.
+  /*!
+    This enables `nostd::as_bytes(x)` to resolve either:
+    - custom ADL
+   * overloads `as_bytes(x)` defined in `x`'s namespace, or
+    -
+   * `std::as_bytes(span)` when called with spans.
+  */
+  using std::as_bytes;
+
+  template <class T>
+  auto as_read_only_bytes(T&& value)
+    -> decltype(as_bytes(std::forward<T>(value)))
+  {
+    return as_bytes(std::forward<T>(value));
+  }
+
+  //! ADL helper: bring std::as_writable_bytes into scope and unqualified call.
+  /*!
+    This enables `nostd::as_writable_bytes(x)` to resolve either:
+    -
+   * custom ADL overloads `as_writable_bytes(x)` in `x`'s namespace, or
+    -
+   * `std::as_writable_bytes(span)` when called with writable spans.
+  */
+  using std::as_writable_bytes;
+
+  template <class T>
+  auto as_mutable_bytes(T&& value)
+    -> decltype(as_writable_bytes(std::forward<T>(value)))
+  {
+    return as_writable_bytes(std::forward<T>(value));
   }
 
 } // namespace adl_helper
@@ -79,6 +114,32 @@ auto to_string(T&& value)
   -> decltype(adl_helper::as_string(std::forward<T>(value)))
 {
   return adl_helper::as_string(std::forward<T>(value));
+}
+
+//! Project-wide ADL entrypoint: nostd::as_bytes
+/*!
+  Forwards to ADL-visible `as_bytes(x)` and falls back to
+ * `std::as_bytes(span)`
+  when appropriate.
+*/
+template <class T>
+auto as_bytes(T&& value)
+  -> decltype(adl_helper::as_read_only_bytes(std::forward<T>(value)))
+{
+  return adl_helper::as_read_only_bytes(std::forward<T>(value));
+}
+
+//! Project-wide ADL entrypoint: nostd::as_writable_bytes
+/*!
+  Forwards to ADL-visible `as_writable_bytes(x)` and falls back to
+
+ * `std::as_writable_bytes(span)` when appropriate.
+*/
+template <class T>
+auto as_writable_bytes(T&& value)
+  -> decltype(adl_helper::as_mutable_bytes(std::forward<T>(value)))
+{
+  return adl_helper::as_mutable_bytes(std::forward<T>(value));
 }
 
 //! Concept: does nostd::to_string(T) return something convertible to

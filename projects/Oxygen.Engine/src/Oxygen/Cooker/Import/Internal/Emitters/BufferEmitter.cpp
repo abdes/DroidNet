@@ -70,6 +70,13 @@ namespace {
 
 BufferEmitter::BufferEmitter(IAsyncFileWriter& file_writer,
   BufferTableAggregator& table_aggregator, const LooseCookedLayout& layout,
+  const std::filesystem::path& cooked_root)
+  : BufferEmitter(file_writer, table_aggregator, layout, cooked_root, Config {})
+{
+}
+
+BufferEmitter::BufferEmitter(IAsyncFileWriter& file_writer,
+  BufferTableAggregator& table_aggregator, const LooseCookedLayout& layout,
   const std::filesystem::path& cooked_root, Config config)
   : file_writer_(file_writer)
   , table_aggregator_(table_aggregator)

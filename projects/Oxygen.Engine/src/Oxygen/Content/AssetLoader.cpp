@@ -100,16 +100,6 @@ struct ResourceCompositeKey final {
   auto operator==(const ResourceCompositeKey&) const -> bool = default;
 };
 
-auto IsZeroGuidBytes(const std::array<uint8_t, 16>& bytes) -> bool
-{
-  for (const auto b : bytes) {
-    if (b != 0) {
-      return false;
-    }
-  }
-  return true;
-}
-
 } // namespace
 
 namespace oxygen::content {
@@ -792,8 +782,7 @@ auto AssetLoader::AddPakFile(const std::filesystem::path& path) -> void
 #if !defined(NDEBUG)
   {
     const auto source_key = new_source->GetSourceKey();
-    const auto u_source_key = source_key.get();
-    if (IsZeroGuidBytes(u_source_key)) {
+    if (source_key.IsNil()) {
       LOG_F(WARNING,
         "Mounted PAK has zero SourceKey (PakHeader.guid); cache aliasing risk: "
         "path={}",
@@ -805,7 +794,7 @@ auto AssetLoader::AddPakFile(const std::filesystem::path& path) -> void
           "Mounted PAK shares SourceKey with an existing source; cache "
           "aliasing "
           "risk: source_key={} new_path={}",
-          data::to_string(source_key), normalized.string());
+          source_key, normalized.string());
         break;
       }
     }
@@ -887,8 +876,7 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
 #if !defined(NDEBUG)
   {
     const auto source_key = new_source->GetSourceKey();
-    const auto u_source_key = source_key.get();
-    if (IsZeroGuidBytes(u_source_key)) {
+    if (source_key.IsNil()) {
       LOG_F(WARNING,
         "Mounted loose cooked root has zero SourceKey (IndexHeader.guid); "
         "cache aliasing risk: root={}",
@@ -899,7 +887,7 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
         LOG_F(WARNING,
           "Mounted loose cooked root shares SourceKey with an existing source; "
           "cache aliasing risk: source_key={} new_root={}",
-          data::to_string(source_key), normalized.string());
+          source_key, normalized.string());
         break;
       }
     }
@@ -1573,8 +1561,8 @@ auto AssetLoader::ReleaseAsset(const data::AssetKey& key) -> bool
     content_cache_.CheckIn(key_hash);
     const bool still_present = content_cache_.Contains(key_hash);
     LOG_F(INFO,
-      "release asset with active pins: key={} pins={} still_present={}",
-      data::to_string(key), pin_it->second, still_present ? "true" : "false");
+      "release asset with active pins: key={} pins={} still_present={}", key,
+      pin_it->second, still_present ? "true" : "false");
     return !still_present;
   }
 
@@ -1593,8 +1581,8 @@ auto AssetLoader::ReleaseAsset(const data::AssetKey& key) -> bool
   ReleaseAssetTree(key);
   // Return true if the asset is no longer present in the cache
   const bool still_present = content_cache_.Contains(key_hash);
-  LOG_F(2, "ReleaseAsset key={} evicted={}", data::to_string(key),
-    still_present ? "false" : "true");
+  LOG_F(
+    2, "ReleaseAsset key={} evicted={}", key, still_present ? "false" : "true");
   return !still_present;
 }
 
@@ -1603,13 +1591,12 @@ auto AssetLoader::PinAsset(const data::AssetKey& key) -> bool
   AssertOwningThread();
   const auto identity = ResolveAssetIdentityForKey(key);
   if (!identity.has_value()) {
-    LOG_F(WARNING, "pin asset failed: key={} not loaded", data::to_string(key));
+    LOG_F(WARNING, "pin asset failed: key={} not loaded", key);
     return false;
   }
   const auto key_hash = identity->hash_key;
   if (!content_cache_.Pin(key_hash, oxygen::CheckoutOwner::kExternal)) {
-    LOG_F(WARNING, "pin asset failed: key={} missing in cache",
-      data::to_string(key));
+    LOG_F(WARNING, "pin asset failed: key={} missing in cache", key);
     return false;
   }
   ++pinned_asset_counts_[key_hash];
@@ -1621,20 +1608,17 @@ auto AssetLoader::UnpinAsset(const data::AssetKey& key) -> bool
   AssertOwningThread();
   const auto identity = ResolveAssetIdentityForKey(key);
   if (!identity.has_value()) {
-    LOG_F(
-      WARNING, "unpin asset failed: key={} not loaded", data::to_string(key));
+    LOG_F(WARNING, "unpin asset failed: key={} not loaded", key);
     return false;
   }
   const auto key_hash = identity->hash_key;
   auto pin_it = pinned_asset_counts_.find(key_hash);
   if (pin_it == pinned_asset_counts_.end() || pin_it->second == 0U) {
-    LOG_F(ERROR, "unpin asset failed: key={} has no matching pin",
-      data::to_string(key));
+    LOG_F(ERROR, "unpin asset failed: key={} has no matching pin", key);
     return false;
   }
   if (!content_cache_.Unpin(key_hash)) {
-    LOG_F(ERROR, "unpin asset failed: key={} cache refcount underflow",
-      data::to_string(key));
+    LOG_F(ERROR, "unpin asset failed: key={} cache refcount underflow", key);
     return false;
   }
   --pin_it->second;
@@ -2469,7 +2453,7 @@ auto AssetLoader::BindGeometryRuntimePointers(data::GeometryAsset& asset,
         LOG_F(WARNING,
           "AssetLoader: Material asset not found for submesh {} (key={}), "
           "using default material.",
-          i, oxygen::data::to_string(mat_key));
+          i, mat_key);
         mesh.SetSubMeshMaterial(i, MaterialAsset::CreateDefault());
         continue;
       }
@@ -3608,8 +3592,8 @@ void oxygen::content::AssetLoader::UnloadObject(const uint64_t cache_key,
     event.asset_key = *asset_key;
     UnindexAssetHashMapping(cache_key);
     pinned_asset_counts_.erase(cache_key);
-    LOG_F(2, "Evicted asset {} type_id={} reason={}",
-      data::to_string(*event.asset_key), type_id, reason);
+    LOG_F(2, "Evicted asset {} type_id={} reason={}", *event.asset_key, type_id,
+      reason);
   }
 
   const auto subscribers = eviction_registry_->SnapshotSubscribers(type_id);
@@ -4215,7 +4199,7 @@ auto AssetLoader::HashAssetKey(const data::AssetKey& key) -> uint64_t
       LOG_F(WARNING,
         "AssetKey hash collision detected: hash=0x{:016x} existing={} new={} "
         "(cache aliasing risk)",
-        hash, data::to_string(collision_it->second), data::to_string(key));
+        hash, collision_it->second, key);
     }
   }
 #endif
@@ -4374,10 +4358,9 @@ auto AssetLoader::HashResourceKey(const ResourceKey& key) const -> uint64_t
         "existing=(source={} type={} index={}) new=(source={} type={} "
         "index={}) "
         "(cache aliasing risk)",
-        hash, data::to_string(it->second.source_key),
-        it->second.resource_type_index, it->second.resource_index,
-        data::to_string(composite.source_key), composite.resource_type_index,
-        composite.resource_index);
+        hash, it->second.source_key, it->second.resource_type_index,
+        it->second.resource_index, composite.source_key,
+        composite.resource_type_index, composite.resource_index);
     }
   }
 #endif

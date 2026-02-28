@@ -58,7 +58,7 @@ namespace {
     desc.roughness = Unorm16 { 0.5F };
     desc.ambient_occlusion = Unorm16 { 1.0F };
 
-    const AssetKey asset_key { .guid = data::GenerateAssetGuid() };
+    const AssetKey asset_key { data::GenerateAssetGuid() };
     return std::make_shared<const MaterialAsset>(
       asset_key, desc, std::vector<ShaderReference> {});
   }
@@ -170,7 +170,7 @@ auto SceneBootstrapper::EnsureSphere(scene::Scene& scene) -> void
   geo_desc.bounding_box_max[2] = bb_max.z;
 
   auto geom_asset = std::make_shared<data::GeometryAsset>(
-    data::AssetKey { .guid = data::GenerateAssetGuid() }, geo_desc,
+    data::AssetKey { data::GenerateAssetGuid() }, geo_desc,
     std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh) });
 
   sphere_node_ = scene.CreateNode("Sphere");
@@ -230,7 +230,7 @@ auto SceneBootstrapper::EnsureCube(scene::Scene& scene) -> void
   geo_desc.bounding_box_max[2] = bb_max.z;
 
   auto geom_asset = std::make_shared<data::GeometryAsset>(
-    data::AssetKey { .guid = data::GenerateAssetGuid() }, geo_desc,
+    data::AssetKey { data::GenerateAssetGuid() }, geo_desc,
     std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh) });
 
   cube_node_ = scene.CreateNode("Cube");
@@ -289,7 +289,7 @@ auto SceneBootstrapper::EnsureCylinder(scene::Scene& scene) -> void
   geo_desc.bounding_box_max[2] = bb_max.z;
 
   auto geom_asset = std::make_shared<data::GeometryAsset>(
-    data::AssetKey { .guid = data::GenerateAssetGuid() }, geo_desc,
+    data::AssetKey { data::GenerateAssetGuid() }, geo_desc,
     std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh) });
 
   cylinder_node_ = scene.CreateNode("Cylinder");
@@ -357,7 +357,7 @@ auto SceneBootstrapper::EnsureCone(scene::Scene& scene) -> void
   geo_desc.bounding_box_max[2] = bb_max.z;
 
   auto geom_asset = std::make_shared<data::GeometryAsset>(
-    data::AssetKey { .guid = data::GenerateAssetGuid() }, geo_desc,
+    data::AssetKey { data::GenerateAssetGuid() }, geo_desc,
     std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh) });
 
   cone_node_ = scene.CreateNode("Cone");
@@ -422,7 +422,7 @@ auto SceneBootstrapper::EnsureGroundPlane(scene::Scene& scene) -> void
   geo_desc.bounding_box_max[2] = bb_max.z;
 
   auto geom_asset = std::make_shared<data::GeometryAsset>(
-    data::AssetKey { .guid = data::GenerateAssetGuid() }, geo_desc,
+    data::AssetKey { data::GenerateAssetGuid() }, geo_desc,
     std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh) });
 
   ground_plane_node_ = scene.CreateNode("GroundPlane");

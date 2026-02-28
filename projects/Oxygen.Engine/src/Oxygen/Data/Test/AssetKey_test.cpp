@@ -33,7 +33,7 @@ NOLINT_TEST_F(AssetKeyBasicTest, GenerateDistinct_StableStringHash)
 
   // Act
   for (int i = 0; i < kKeyCount; ++i) {
-    AssetKey key { .guid = GenerateAssetGuid() };
+    AssetKey key { GenerateAssetGuid() };
     keys.push_back(key);
     auto s = to_string(key);
 
@@ -80,7 +80,7 @@ NOLINT_TEST_F(AssetKeyOrderingTest, LexicalOrderConsistentWithGuid)
   std::vector<AssetKey> keys;
   keys.reserve(kKeyCount);
   for (int i = 0; i < kKeyCount; ++i) {
-    keys.push_back(AssetKey { .guid = GenerateAssetGuid() });
+    keys.push_back(AssetKey { GenerateAssetGuid() });
   }
 
   // Act: sort by AssetKey ordering

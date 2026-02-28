@@ -21,7 +21,6 @@ asap_push_module("${META_MODULE_NAME}")
 
 find_package(glm CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
-find_package(stduuid CONFIG REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -92,7 +91,6 @@ set(
 )
 set(
   OXYGEN_DATA_PRIVATE_SOURCES
-  "AssetKey.cpp"
   "BufferResource.cpp"
   "CookedSource.cpp"
   "GeometryAsset.cpp"
@@ -106,7 +104,6 @@ set(
   "ScriptAsset.cpp"
   "ScriptResource.cpp"
   "ShaderReference.cpp"
-  "SourceKey.cpp"
   "TextureResource.cpp"
   "ToStringConverters.cpp"
   "Procedural/ArrowGizmo.cpp"
@@ -148,7 +145,6 @@ target_link_libraries(
     oxygen::serio
     fmt::fmt-header-only
     glm::glm
-    stduuid::stduuid
 )
 
 # ------------------------------------------------------------------------------

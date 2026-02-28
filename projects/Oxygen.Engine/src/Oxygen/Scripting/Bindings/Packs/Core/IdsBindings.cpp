@@ -4,16 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
-#include <tuple>
 
 #include <lua.h>
 #include <lualib.h>
 
 #include <Oxygen/Base/Hash.h>
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/IdsBindings.h>
@@ -26,24 +26,8 @@ namespace {
   constexpr const char* kUuidMetatableName = "oxygen.uuid";
   constexpr const char* kHashMetatableName = "oxygen.hash";
 
-  using UuidBytes = decltype(data::GenerateAssetGuid());
-  constexpr size_t kUuidByteCount = std::tuple_size_v<UuidBytes>;
-  constexpr size_t kUuidStringLength = 36;
-  constexpr unsigned kHexMask = 0xF;
-  constexpr size_t kDashPosA = 4;
-  constexpr size_t kDashPosB = 6;
-  constexpr size_t kDashPosC = 8;
-  constexpr size_t kDashPosD = 10;
-  constexpr size_t kDashIndex0 = 8;
-  constexpr size_t kDashIndex1 = 13;
-  constexpr size_t kDashIndex2 = 18;
-  constexpr size_t kDashIndex3 = 23;
-
-  // Hex lookup optimization could go here, but std::from_chars is C++17.
-  // We'll stick to a robust manual parser or optimized version.
-
   struct UuidUserdata {
-    UuidBytes bytes;
+    Uuid value;
   };
 
   struct HashUserdata {
@@ -68,76 +52,25 @@ namespace {
     return nullptr;
   }
 
-  auto BytesToUuidString(const UuidBytes& bytes) -> std::string
+  auto UuidToString(const Uuid& value) -> std::string
   {
-    // Optimized string formatting
-    // Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-    static constexpr std::string_view kHexChars { "0123456789abcdef" };
-    std::string out;
-    out.resize(kUuidStringLength);
-
-    size_t out_idx = 0;
-    for (size_t i = 0; i < bytes.size(); ++i) {
-      if (i == kDashPosA || i == kDashPosB || i == kDashPosC
-        || i == kDashPosD) {
-        out[out_idx++] = '-';
-      }
-      uint8_t b = bytes.at(i);
-      out[out_idx++] = kHexChars[static_cast<size_t>((b >> 4) & kHexMask)];
-      out[out_idx++] = kHexChars[static_cast<size_t>(b & kHexMask)];
-    }
-    return out;
+    return oxygen::to_string(value);
   }
 
-  auto ParseUuidString(std::string_view text, UuidBytes& out) -> bool
+  auto ParseUuidString(const std::string_view text) -> std::optional<Uuid>
   {
-    if (text.size() != kUuidStringLength) {
-      return false;
+    const auto parsed = Uuid::FromString(text);
+    if (!parsed) {
+      return std::nullopt;
     }
-
-    // Validate dashes
-    if (text[kDashIndex0] != '-' || text[kDashIndex1] != '-'
-      || text[kDashIndex2] != '-' || text[kDashIndex3] != '-') {
-      return false;
-    }
-
-    auto hex_val = [](char c) -> int {
-      constexpr int kBaseTen = 10;
-      if (c >= '0' && c <= '9') {
-        return c - '0';
-      }
-      if (c >= 'a' && c <= 'f') {
-        return kBaseTen + (c - 'a');
-      }
-      if (c >= 'A' && c <= 'F') {
-        return kBaseTen + (c - 'A');
-      }
-      return -1;
-    };
-
-    size_t byte_idx = 0;
-    for (size_t i = 0; i < text.size(); ++i) {
-      if (text[i] == '-') {
-        continue;
-      }
-
-      int hi = hex_val(text[i]);
-      int lo = hex_val(text[++i]);
-
-      if (hi < 0 || lo < 0) {
-        return false;
-      }
-
-      out.at(byte_idx++) = static_cast<uint8_t>((hi << 4) | lo);
-    }
-    return byte_idx == kUuidByteCount;
+    return parsed.value();
   }
 
-  auto PushUuid(lua_State* state, const UuidBytes& bytes) -> void
+  auto PushUuid(lua_State* state, const Uuid& value) -> void
   {
     auto* data = static_cast<UuidUserdata*>(
       lua_newuserdata(state, sizeof(UuidUserdata)));
-    data->bytes = bytes;
+    data->value = value;
     luaL_getmetatable(state, kUuidMetatableName);
     lua_setmetatable(state, -2);
   }
@@ -162,7 +95,7 @@ namespace {
   auto LuaUuidToString(lua_State* state) -> int
   {
     if (auto* u = ToUuid(state, kLuaArg1); u != nullptr) {
-      std::string s = BytesToUuidString(u->bytes);
+      std::string s = UuidToString(u->value);
       lua_pushlstring(state, s.c_str(), s.size());
       return 1;
     }
@@ -183,9 +116,9 @@ namespace {
       return 0;
     }
 
-    UuidBytes bytes;
-    if (ParseUuidString(std::string_view(str, len), bytes)) {
-      PushUuid(state, bytes);
+    if (const auto parsed = ParseUuidString(std::string_view(str, len));
+      parsed.has_value()) {
+      PushUuid(state, *parsed);
       return 1;
     }
 
@@ -202,9 +135,8 @@ namespace {
     size_t len = 0;
     const char* str = lua_tolstring(state, kLuaArg1, &len);
     if (str != nullptr) {
-      UuidBytes bytes;
-      lua_pushboolean(
-        state, ParseUuidString(std::string_view(str, len), bytes) ? 1 : 0);
+      const auto parsed = ParseUuidString(std::string_view(str, len));
+      lua_pushboolean(state, parsed.has_value() ? 1 : 0);
       return 1;
     }
     lua_pushboolean(state, 0);
@@ -216,7 +148,7 @@ namespace {
     auto* a = ToUuid(state, 1);
     auto* b = ToUuid(state, 2);
     if (a != nullptr && b != nullptr) {
-      lua_pushboolean(state, (a->bytes == b->bytes) ? 1 : 0);
+      lua_pushboolean(state, (a->value == b->value) ? 1 : 0);
     } else {
       lua_pushboolean(state, 0);
     }

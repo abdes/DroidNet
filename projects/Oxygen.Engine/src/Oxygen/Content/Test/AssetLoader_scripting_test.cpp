@@ -92,13 +92,13 @@ auto AssetKeyFromHex(std::string_view input) -> oxygen::data::AssetKey
     throw std::runtime_error("asset key must contain exactly 32 hex digits");
   }
 
-  oxygen::data::AssetKey key {};
-  for (size_t i = 0; i < key.guid.size(); ++i) {
+  auto key_bytes = std::array<uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
+  for (size_t i = 0; i < key_bytes.size(); ++i) {
     const uint8_t hi = HexNibble(hex[2 * i]);
     const uint8_t lo = HexNibble(hex[2 * i + 1]);
-    key.guid[i] = static_cast<uint8_t>((hi << 4) | lo);
+    key_bytes[i] = static_cast<uint8_t>((hi << 4) | lo);
   }
-  return key;
+  return oxygen::data::AssetKey::FromBytes(key_bytes);
 }
 
 auto WriteMinimalLooseCookedIndex(const std::filesystem::path& cooked_root)

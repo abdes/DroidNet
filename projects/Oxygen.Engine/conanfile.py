@@ -108,7 +108,6 @@ class OxygenConan(ConanFile):
         self.requires("glm/1.0.1")
         self.requires("nlohmann_json/3.11.3")
         self.requires("json-schema-validator/2.4.0")
-        self.requires("stduuid/1.2.3")
         self.requires("magic_enum/0.9.7")
         self.requires("tinyexr/1.0.12")
         self.requires("pdcurses/3.9")

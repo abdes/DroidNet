@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -61,24 +62,10 @@ struct MeshBuffers {
 
 [[nodiscard]] auto MakeDefaultMaterialKey() -> data::AssetKey
 {
-  return data::AssetKey { .guid = {
-                            0x10,
-                            0x11,
-                            0x12,
-                            0x13,
-                            0x14,
-                            0x15,
-                            0x16,
-                            0x17,
-                            0x18,
-                            0x19,
-                            0x1A,
-                            0x1B,
-                            0x1C,
-                            0x1D,
-                            0x1E,
-                            0x1F,
-                          } };
+  return data::AssetKey::FromBytes(
+    std::array<std::uint8_t, data::AssetKey::kSizeBytes> { 0x10, 0x11, 0x12,
+      0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E,
+      0x1F });
 }
 
 [[nodiscard]] auto MakeTriangleMeshBuffers() -> std::shared_ptr<MeshBuffers>

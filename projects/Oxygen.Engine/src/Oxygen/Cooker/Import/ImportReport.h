@@ -113,7 +113,7 @@ struct ImportPackagingSummary final {
 //! Summary of an import to a cooked container.
 struct ImportReport final {
   std::filesystem::path cooked_root;
-  data::SourceKey source_key { std::array<uint8_t, 16> {} };
+  data::SourceKey source_key {};
 
   //! Diagnostics (warnings/errors) emitted during import.
   std::vector<ImportDiagnostic> diagnostics;
