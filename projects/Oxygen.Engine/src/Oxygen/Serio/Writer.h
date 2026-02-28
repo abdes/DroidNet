@@ -10,10 +10,10 @@
 #include <bit>
 #include <functional>
 #include <span>
-#include <string_view>
 
 #include <Oxygen/Base/Endian.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Serio/AlignmentGuard.h>
 #include <Oxygen/Serio/Stream.h>
 
@@ -211,6 +211,7 @@ auto Store(AnyWriter& writer, T value) -> Result<void>
     value = ByteSwap(value);
   }
   return writer.WriteBlob(
+    // NOLINTNEXTLINE(*-reinterpret-cast)
     std::span(reinterpret_cast<const std::byte*>(&value), sizeof(T)));
 }
 
@@ -240,6 +241,7 @@ auto Store(AnyWriter& writer, T value) -> Result<void>
     value = ByteSwap(value);
   }
   return writer.WriteBlob(
+    // NOLINTNEXTLINE(*-reinterpret-cast)
     std::span(reinterpret_cast<const std::byte*>(&value), sizeof(T)));
 }
 
@@ -295,9 +297,27 @@ inline auto Store(AnyWriter& writer, const std::string& value) -> Result<void>
   // Write string data
   if (!value.empty()) {
     CHECK_RESULT(writer.WriteBlob(std::span(
+      // NOLINTNEXTLINE(*-reinterpret-cast)
       reinterpret_cast<const std::byte*>(value.data()), value.length())));
   }
   return {};
+}
+
+//! Serializes a UUID as its raw 16-byte canonical binary payload.
+/*!
+ Writes exactly 16 bytes in UUID canonical byte order.
+ Serialization is byte-stable and does not apply endian conversion.
+
+ @param writer Writer to serialize to.
+ @param value UUID value to serialize.
+ @return Result of the write operation.
+
+ @see Load(AnyReader&, Uuid&)
+*/
+inline auto Store(AnyWriter& writer, const Uuid& value) -> Result<void>
+{
+  auto pack = writer.ScopedAlignment(1);
+  return writer.WriteBlob(oxygen::as_bytes(value));
 }
 
 //! Serializes a std::vector as a 32-bit length prefix followed by each element.
@@ -358,7 +378,7 @@ template <typename T, std::size_t N>
 auto Store(AnyWriter& writer, const std::array<T, N>& value) -> Result<void>
 {
   if (N > limits::kMaxArrayLength) {
-    return std::make_error_code(std::errc::message_size);
+    return ::oxygen::Err(std::errc::message_size);
   }
 
   // Write the size of the array, bounds-checked and properly aligned.
@@ -374,6 +394,8 @@ auto Store(AnyWriter& writer, const std::array<T, N>& value) -> Result<void>
   for (const auto& item : value) {
     CHECK_RESULT(writer.Write(item));
   }
+
+  return {};
 }
 
 //! Serializes a std::span as a 32-bit length prefix followed by each element.
@@ -394,7 +416,7 @@ template <typename T>
 auto Store(AnyWriter& writer, const std::span<T>& value) -> Result<void>
 {
   if (value.size() > limits::kMaxArrayLength) {
-    return std::make_error_code(std::errc::message_size);
+    return ::oxygen::Err(std::errc::message_size);
   }
 
   // Write the size of the array, bounds-checked and properly aligned.

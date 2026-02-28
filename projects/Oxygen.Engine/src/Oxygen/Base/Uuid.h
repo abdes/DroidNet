@@ -1,0 +1,210 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+#pragma once
+
+#include <array>
+#include <compare>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <type_traits>
+
+#include <fmt/format.h>
+
+#include <Oxygen/Base/Hash.h>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/api_export.h>
+
+namespace oxygen {
+
+//! Represents a 128-bit UUID value constrained to RFC 9562 version 7.
+/*!
+ The type stores UUID bytes in canonical RFC byte order and is intentionally
+ lightweight for hashing, ordering, and binary serialization.
+
+### Key Features
+
+- **UUIDv7-first**: Public generation and parsing paths target v7 semantics.
+- **Value semantics**: Trivially copyable, fixed-size storage.
+- **Container-friendly**: Supports ordering and hash specializations.
+
+ @see to_string(const Uuid&), as_bytes(const Uuid&)
+*/
+class Uuid {
+public:
+  // Standard Container Type Aliases
+  using value_type = std::uint8_t;
+  using size_type = std::size_t;
+  using difference_type = std::ptrdiff_t;
+  using reference = value_type&;
+  using const_reference = const value_type&;
+  using pointer = value_type*;
+  using const_pointer = const value_type*;
+
+  static constexpr size_type kSize = 16U;
+
+  using iterator = std::array<value_type, kSize>::iterator;
+  using const_iterator = std::array<value_type, kSize>::const_iterator;
+  using SpanType = std::span<const value_type, kSize>;
+
+  //! Constructs a nil UUID (all bytes set to zero).
+  constexpr Uuid() noexcept = default;
+
+  //! Constructs a UUID from an exact 16-byte array.
+  constexpr explicit Uuid(const std::array<std::uint8_t, kSize>& bytes) noexcept
+    : bytes_(bytes)
+  {
+  }
+
+  ~Uuid() noexcept = default;
+
+  OXYGEN_DEFAULT_COPYABLE(Uuid)
+  OXYGEN_DEFAULT_MOVABLE(Uuid)
+
+  //! Constructs a UUID from any 16-byte span of one-byte elements.
+  template <typename T>
+    requires(sizeof(T) == 1)
+  constexpr explicit Uuid(std::span<const T, kSize> bytes) noexcept
+  {
+    auto out = bytes_.begin();
+    for (const auto& b : bytes) {
+      *out++ = static_cast<std::uint8_t>(b);
+    }
+  }
+
+  //! Generates a new RFC 9562 UUIDv7 value.
+  OXGN_BASE_NDAPI static auto Generate() -> Uuid;
+
+  //! Parses a canonical v7 UUID text representation.
+  OXGN_BASE_NDAPI static auto FromString(std::string_view str) -> Result<Uuid>;
+
+  //! Returns the canonical lower-case UUID string (`8-4-4-4-12`).
+  OXGN_BASE_NDAPI auto ToString() const -> std::string;
+
+  //! Returns mutable access to the underlying 16-byte UUID storage.
+  [[nodiscard]] constexpr auto data() noexcept -> std::uint8_t*
+  {
+    return bytes_.data();
+  }
+
+  //! Returns read-only access to the underlying 16-byte UUID storage.
+  [[nodiscard]] constexpr auto data() const noexcept -> const std::uint8_t*
+  {
+    return bytes_.data();
+  }
+
+  //! Returns the UUID byte count (always `16`).
+  [[nodiscard]] constexpr auto size() const noexcept -> std::size_t
+  {
+    return kSize;
+  }
+
+  //! Returns an iterator to the first byte.
+  [[nodiscard]] constexpr auto begin() noexcept { return bytes_.begin(); }
+
+  //! Returns a const iterator to the first byte.
+  [[nodiscard]] constexpr auto begin() const noexcept { return bytes_.begin(); }
+
+  //! Returns an iterator one past the last byte.
+  [[nodiscard]] constexpr auto end() noexcept { return bytes_.end(); }
+
+  //! Returns a const iterator one past the last byte.
+  [[nodiscard]] constexpr auto end() const noexcept { return bytes_.end(); }
+
+  //! Returns the encoded UUID version nibble.
+  [[nodiscard]] constexpr auto Version() const noexcept -> std::uint8_t
+  {
+    constexpr auto kVersionByteIndex = std::size_t { 6U };
+    constexpr auto kVersionShift = uint8_t { 4U };
+    return static_cast<std::uint8_t>(
+      bytes_[kVersionByteIndex] >> kVersionShift);
+  }
+
+  //! Returns true when all UUID bytes are zero.
+  [[nodiscard]] constexpr auto IsNil() const noexcept -> bool
+  {
+    return *this == Uuid {};
+  }
+
+  // Modern C++ standard spaceship comparison.
+  // Facilitates correct time-ordered lexical sorting (RFC Sec 6.11).
+  [[nodiscard]] friend constexpr std::strong_ordering operator<=>(
+    const Uuid&, const Uuid&) noexcept
+    = default;
+  [[nodiscard]] friend constexpr bool operator==(
+    const Uuid&, const Uuid&) noexcept
+    = default;
+
+private:
+  std::array<std::uint8_t, kSize> bytes_ {};
+};
+
+// Compile-time ABI and Type Trait Assertions
+static_assert(sizeof(Uuid) == Uuid::kSize, "Uuid must be exactly 16 bytes");
+static_assert(std::is_trivially_copyable_v<Uuid>,
+  "Uuid must be trivially copyable for raw serialization");
+static_assert(std::is_standard_layout_v<Uuid>,
+  "Uuid must have standard layout for Vulkan/D3D12 ABI compatibility");
+static_assert(
+  std::is_nothrow_move_constructible_v<Uuid>, "Uuid must not throw on move");
+static_assert(
+  std::is_nothrow_copy_constructible_v<Uuid>, "Uuid must not throw on copy");
+static_assert(std::is_nothrow_move_assignable_v<Uuid>,
+  "Uuid must not throw on move assign");
+static_assert(std::is_nothrow_copy_assignable_v<Uuid>,
+  "Uuid must not throw on copy assign");
+static_assert(
+  std::is_nothrow_destructible_v<Uuid>, "Uuid must not throw on destruction");
+
+//! Converts a UUID to canonical lower-case text (`8-4-4-4-12`).
+OXGN_BASE_NDAPI auto to_string(const Uuid& uuid) -> std::string;
+
+//! Returns a read-only byte span view of UUID storage.
+[[nodiscard]] inline auto as_bytes(const Uuid& uuid) noexcept
+  -> std::span<const std::byte, Uuid::kSize>
+{
+  return std::as_bytes(
+    std::span<const Uuid::value_type, Uuid::kSize>(uuid.data(), uuid.size()));
+}
+
+//! Returns a writable byte span view of UUID storage.
+[[nodiscard]] inline auto as_writable_bytes(Uuid& uuid) noexcept
+  -> std::span<std::byte, Uuid::kSize>
+{
+  return std::as_writable_bytes(
+    std::span<Uuid::value_type, Uuid::kSize>(uuid.data(), uuid.size()));
+}
+
+} // namespace oxygen
+
+//------------------------------------------------------------------------------
+// Standard Library & FMT Integrations
+//------------------------------------------------------------------------------
+
+template <> struct std::hash<oxygen::Uuid> {
+  //! Hashes UUID bytes using Oxygen's FNV-1a helper.
+  [[nodiscard]] auto operator()(const oxygen::Uuid& uuid) const noexcept
+    -> std::size_t
+  {
+    return static_cast<std::size_t>(
+      oxygen::ComputeFNV1a64(uuid.data(), uuid.size()));
+  }
+};
+
+template <> struct fmt::formatter<oxygen::Uuid> : fmt::formatter<std::string> {
+  //! Parses UUID format options (delegates to default string formatter).
+  constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
+
+  //! Formats UUID using canonical lower-case text representation.
+  auto format(const oxygen::Uuid& uuid, fmt::format_context& ctx) const
+  {
+    return fmt::format_to(ctx.out(), "{}", oxygen::to_string(uuid));
+  }
+};

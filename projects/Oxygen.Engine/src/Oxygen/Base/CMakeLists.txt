@@ -84,6 +84,7 @@ set(
   "Types/Geometry.h"
   "Types/Overload.h"
   "Unreachable.h"
+  "Uuid.h"
   "VariantHelpers.h"
   "Windows/ComError.h"
   "Windows/Exceptions.h"
@@ -92,6 +93,7 @@ set(
   OXYGEN_BASE_PRIVATE_SOURCES
   "Detail/loguru.cpp"
   "Sha256.cpp"
+  "Uuid.cpp"
   "Windows/ComError.cpp"
   "Windows/Exceptions.cpp"
 )

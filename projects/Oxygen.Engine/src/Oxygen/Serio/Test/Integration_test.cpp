@@ -6,6 +6,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
@@ -92,9 +93,24 @@ NOLINT_TEST(SerioFullCycle, SerializeDeserializeComposite)
 
   // Arrange
   const std::vector<Person> people = {
-    { 1, "Alice", { 95.5f, 88.0f }, true },
-    { 2, "Bob", { 72.0f, 85.5f, 90.0f }, false },
-    { 3, "Charlie", {}, true },
+    {
+      .id = 1,
+      .name = "Alice",
+      .scores = { 95.5F, 88.0F },
+      .is_active = 1U,
+    },
+    {
+      .id = 2,
+      .name = "Bob",
+      .scores = { 72.0F, 85.5F, 90.0F },
+      .is_active = 0U,
+    },
+    {
+      .id = 3,
+      .name = "Charlie",
+      .scores = {},
+      .is_active = 1U,
+    },
   };
 
   // Expected Hex Dump (as bytes)
@@ -158,6 +174,29 @@ NOLINT_TEST(SerioFullCycle, SerializeDeserializeComposite)
   for (size_t i = 0; i < people.size(); ++i) {
     EXPECT_EQ(people[i], loaded_people[i]);
   }
+}
+
+NOLINT_TEST(SerioFullCycle, SerializeDeserializeUuidRoundTrip)
+{
+  using oxygen::Uuid;
+  using oxygen::serio::MemoryStream;
+  using oxygen::serio::Reader;
+  using oxygen::serio::Writer;
+
+  const auto source = Uuid::Generate();
+  auto stream = MemoryStream {};
+  auto writer = Writer<MemoryStream> { stream };
+
+  ASSERT_TRUE(writer.Write(source));
+  ASSERT_TRUE(writer.Flush());
+  EXPECT_EQ(stream.Data().size(), Uuid::kSize);
+
+  ASSERT_TRUE(stream.Seek(0));
+  auto reader = Reader<MemoryStream> { stream };
+  auto decoded = Uuid {};
+
+  ASSERT_TRUE(reader.ReadInto(decoded));
+  EXPECT_EQ(decoded, source);
 }
 
 } // namespace

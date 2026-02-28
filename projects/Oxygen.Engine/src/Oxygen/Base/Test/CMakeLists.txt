@@ -60,7 +60,12 @@ m_gtest_program(
 )
 
 m_gtest_program(StaticVector SOURCES "StaticVector_test.cpp")
-m_gtest_program(Logging SOURCES "Logging_test.cpp" "Logging_vmodule_test.cpp")
+m_gtest_program(
+  Logging
+  SOURCES
+    "Logging_test.cpp"
+    "Logging_vmodule_test.cpp"
+)
 m_gtest_program(
   StateMachine
   SOURCES
@@ -84,3 +89,4 @@ m_gtest_program(NoInline SOURCES "NoInline_test.cpp")
 m_gtest_program(Result SOURCES "Result_test.cpp")
 m_gtest_program(ReturnAddress SOURCES "ReturnAddress_test.cpp")
 m_gtest_program(Unreachable SOURCES "Unreachable_test.cpp")
+m_gtest_program(Uuid SOURCES "Uuid_test.cpp")
