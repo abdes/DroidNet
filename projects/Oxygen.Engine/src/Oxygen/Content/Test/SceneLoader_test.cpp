@@ -74,6 +74,19 @@ protected:
       collector };
   }
 
+  auto WriteEmptyEnvironmentBlock() -> void
+  {
+    using oxygen::data::pak::world::SceneEnvironmentBlockHeader;
+
+    SceneEnvironmentBlockHeader header {};
+    header.byte_size = sizeof(SceneEnvironmentBlockHeader);
+    header.systems_count = 0;
+
+    const auto header_write = writer_.WriteBlob(std::span<const std::byte>(
+      reinterpret_cast<const std::byte*>(&header), sizeof(header)));
+    ASSERT_TRUE(header_write) << header_write.error().message();
+  }
+
   auto WriteMinimalSceneWithRenderable(
     const oxygen::data::AssetKey geometry_key) -> void
   {
@@ -148,6 +161,8 @@ protected:
     auto rend_write = writer_.WriteBlob(std::span<const std::byte>(
       reinterpret_cast<const std::byte*>(&renderable), sizeof(renderable)));
     ASSERT_TRUE(rend_write) << rend_write.error().message();
+
+    WriteEmptyEnvironmentBlock();
 
     auto flush_res = writer_.Flush();
     ASSERT_TRUE(flush_res) << flush_res.error().message();
@@ -245,6 +260,7 @@ NOLINT_TEST_F(SceneLoaderTest, LoadSceneInputContextBindingNodeOutOfRangeThrows)
   auto table_write = writer_.WriteBlob(std::span<const std::byte>(
     reinterpret_cast<const std::byte*>(&binding), sizeof(binding)));
   ASSERT_TRUE(table_write) << table_write.error().message();
+  WriteEmptyEnvironmentBlock();
   ASSERT_TRUE(writer_.Flush());
 
   EXPECT_THROW(
@@ -301,6 +317,7 @@ NOLINT_TEST_F(SceneLoaderTest, LoadSceneInputContextBindingBadEntrySizeThrows)
 
   const std::array<std::byte, 16> bad_entry {};
   ASSERT_TRUE(writer_.WriteBlob(bad_entry));
+  WriteEmptyEnvironmentBlock();
   ASSERT_TRUE(writer_.Flush());
 
   EXPECT_THROW(
@@ -374,6 +391,7 @@ NOLINT_TEST_F(SceneLoaderTest, LoadSceneInputContextBindingUnsortedByNodeThrows)
     reinterpret_cast<const std::byte*>(&a), sizeof(a))));
   ASSERT_TRUE(writer_.WriteBlob(std::span<const std::byte>(
     reinterpret_cast<const std::byte*>(&b), sizeof(b))));
+  WriteEmptyEnvironmentBlock();
   ASSERT_TRUE(writer_.Flush());
 
   EXPECT_THROW(
