@@ -201,7 +201,7 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsContainsCorrectMetadata)
   const auto& records = emitter.Records();
   ASSERT_EQ(records.size(), 1);
 
-  EXPECT_EQ(records[0].key.guid, key.guid);
+  EXPECT_EQ(records[0].key, key);
   EXPECT_EQ(records[0].asset_type, AssetType::kGeometry);
   EXPECT_EQ(records[0].virtual_path, "/.cooked/Geometry/MyMesh");
   EXPECT_EQ(records[0].descriptor_relpath, "Geometry/MyMesh.ogeo");
@@ -230,7 +230,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitSameKeyTwiceUpdatesRecordAndOverwrites)
   // Assert
   EXPECT_EQ(emitter.Count(), 1);
   ASSERT_EQ(emitter.Records().size(), 1);
-  EXPECT_EQ(emitter.Records()[0].key.guid, key.guid);
+  EXPECT_EQ(emitter.Records()[0].key, key);
   EXPECT_EQ(emitter.Records()[0].descriptor_relpath, "Materials/Wood.omat");
   EXPECT_EQ(emitter.Records()[0].descriptor_size,
     static_cast<uint64_t>(bytes_v2.size()));

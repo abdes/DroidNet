@@ -4,7 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <thread>
@@ -42,6 +44,13 @@ using oxygen::scripting::ScriptSourceResolver;
 using namespace std::chrono_literals;
 
 namespace {
+
+auto MakeAssetKey(const std::uint8_t seed) -> oxygen::data::AssetKey
+{
+  auto bytes = std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
+  bytes[0] = seed;
+  return oxygen::data::AssetKey::FromBytes(bytes);
+}
 
 struct TestContext {
   std::shared_ptr<oxygen::Platform> platform;
@@ -153,7 +162,7 @@ NOLINT_TEST_F(ScriptingAdvancedTest, FirstRootWinsPrecedence)
   const std::string p = "shared.lua";
   std::ranges::copy(p.substr(0, sizeof(desc.external_source_path)),
     &desc.external_source_path[0]); // NOLINT
-  oxygen::data::ScriptAsset asset(oxygen::data::AssetKey { 1 }, desc);
+  oxygen::data::ScriptAsset asset(MakeAssetKey(1U), desc);
 
   auto result = resolver.Resolve({ .asset = asset,
     .load_script_resource = [](uint32_t) { return nullptr; },
@@ -227,7 +236,7 @@ NOLINT_TEST_F(ScriptingAdvancedTest, ScriptingModuleExecutesResolvedSource)
   const std::string p = "module_test.lua";
   std::ranges::copy(p.substr(0, sizeof(desc.external_source_path)),
     &desc.external_source_path[0]); // NOLINT
-  oxygen::data::ScriptAsset asset(oxygen::data::AssetKey { 1 }, desc);
+  oxygen::data::ScriptAsset asset(MakeAssetKey(1U), desc);
 
   auto result = resolver.Resolve({ .asset = asset,
     .load_script_resource = [](uint32_t) { return nullptr; },

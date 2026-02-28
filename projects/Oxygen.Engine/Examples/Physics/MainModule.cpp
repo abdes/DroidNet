@@ -91,7 +91,7 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.roughness = d::Unorm16 { 0.6F };
   desc.ambient_occlusion = d::Unorm16 { 1.0F };
 
-  const d::AssetKey asset_key { .guid = d::GenerateAssetGuid() };
+  const d::AssetKey asset_key { d::GenerateAssetGuid() };
   return std::make_shared<const d::MaterialAsset>(
     asset_key, desc, std::vector<d::ShaderReference> {});
 }
@@ -131,8 +131,7 @@ auto BuildGeometryAsset(const char* mesh_name,
   geo_desc.bounding_box_max[2] = bb_max.z;
 
   return std::make_shared<oxygen::data::GeometryAsset>(
-    oxygen::data::AssetKey { .guid = oxygen::data::GenerateAssetGuid() },
-    geo_desc,
+    oxygen::data::AssetKey { oxygen::data::GenerateAssetGuid() }, geo_desc,
     std::vector<std::shared_ptr<oxygen::data::Mesh>> { std::move(mesh) });
 }
 

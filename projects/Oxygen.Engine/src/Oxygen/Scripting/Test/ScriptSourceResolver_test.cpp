@@ -5,7 +5,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -35,6 +37,13 @@ namespace oxygen::scripting::test {
 
 namespace {
 
+  auto MakeAssetKey(const std::uint8_t seed) -> data::AssetKey
+  {
+    auto bytes = std::array<std::uint8_t, data::AssetKey::kSizeBytes> {};
+    bytes[0] = seed;
+    return data::AssetKey::FromBytes(bytes);
+  }
+
   struct ScriptAssetResourceIndices {
     data::pak::core::ResourceIndexT bytecode_index {
       data::pak::core::kNoResourceIndex
@@ -61,7 +70,7 @@ namespace {
       const auto out_it = std::ranges::copy(src_view, writable.begin()).out;
       *out_it = '\0';
     }
-    return std::make_shared<data::ScriptAsset>(data::AssetKey { 1 }, desc,
+    return std::make_shared<data::ScriptAsset>(MakeAssetKey(1U), desc,
       std::vector<data::pak::scripting::ScriptParamRecord> {});
   }
 

@@ -106,7 +106,7 @@ auto MakeMaterial(const char* name, const glm::vec4& rgba,
     desc.grid_fade_end = 0.0F;
   }
 
-  const d::AssetKey asset_key { .guid = d::GenerateAssetGuid() };
+  const d::AssetKey asset_key { d::GenerateAssetGuid() };
 
   if (base_color_texture_key != static_cast<c::ResourceKey>(0)) {
     std::vector<c::ResourceKey> texture_keys;
@@ -161,8 +161,7 @@ auto BuildSphereGeometry(
   geo_desc.bounding_box_max[2] = bb_max.z;
 
   return std::make_shared<oxygen::data::GeometryAsset>(
-    oxygen::data::AssetKey { .guid = oxygen::data::GenerateAssetGuid() },
-    geo_desc,
+    oxygen::data::AssetKey { oxygen::data::GenerateAssetGuid() }, geo_desc,
     std::vector<std::shared_ptr<oxygen::data::Mesh>> { std::move(mesh) });
 }
 
@@ -206,8 +205,7 @@ auto BuildCubeGeometry(
   geo_desc.bounding_box_max[2] = bb_max.z;
 
   return std::make_shared<oxygen::data::GeometryAsset>(
-    oxygen::data::AssetKey { .guid = oxygen::data::GenerateAssetGuid() },
-    geo_desc,
+    oxygen::data::AssetKey { oxygen::data::GenerateAssetGuid() }, geo_desc,
     std::vector<std::shared_ptr<oxygen::data::Mesh>> { std::move(mesh) });
 }
 

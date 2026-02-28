@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
+#include <cstdint>
 #include <gtest/gtest.h>
 
 #include <filesystem>
@@ -17,9 +19,9 @@ namespace oxygen::content::testing {
 
 inline auto MakeTestAssetKey(const uint8_t id) -> oxygen::data::AssetKey
 {
-  oxygen::data::AssetKey key {};
-  std::ranges::fill(key.guid, id);
-  return key;
+  auto bytes = std::array<uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
+  bytes.fill(id);
+  return oxygen::data::AssetKey::FromBytes(bytes);
 }
 
 class PakFileTest : public ::testing::Test {

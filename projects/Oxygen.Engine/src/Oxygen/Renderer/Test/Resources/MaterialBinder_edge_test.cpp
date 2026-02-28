@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cstdint>
 #include <limits>
@@ -32,13 +33,15 @@ using oxygen::renderer::testing::MaterialBinderTest;
   using oxygen::data::pak::render::kMaterialFlag_NoTextureSampling;
   using oxygen::data::pak::render::MaterialAssetDesc;
 
-  oxygen::data::AssetKey asset_key { .guid = {} };
+  auto asset_key_bytes
+    = std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
   const auto bits = std::bit_cast<std::uint32_t>(base_color_r);
-  asset_key.guid[0] = static_cast<std::uint8_t>((bits >> 0U) & 0xFFU);
-  asset_key.guid[1] = static_cast<std::uint8_t>((bits >> 8U) & 0xFFU);
-  asset_key.guid[2] = static_cast<std::uint8_t>((bits >> 16U) & 0xFFU);
-  asset_key.guid[3] = static_cast<std::uint8_t>((bits >> 24U) & 0xFFU);
-  asset_key.guid[15] = 0x4DU;
+  asset_key_bytes[0] = static_cast<std::uint8_t>((bits >> 0U) & 0xFFU);
+  asset_key_bytes[1] = static_cast<std::uint8_t>((bits >> 8U) & 0xFFU);
+  asset_key_bytes[2] = static_cast<std::uint8_t>((bits >> 16U) & 0xFFU);
+  asset_key_bytes[3] = static_cast<std::uint8_t>((bits >> 24U) & 0xFFU);
+  asset_key_bytes[15] = 0x4DU;
+  const auto asset_key = oxygen::data::AssetKey::FromBytes(asset_key_bytes);
 
   MaterialAssetDesc desc {};
   desc.flags |= kMaterialFlag_NoTextureSampling;

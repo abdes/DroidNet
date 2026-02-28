@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
@@ -25,6 +27,13 @@ using oxygen::data::AssetType;
 using oxygen::data::loose_cooked::FileKind;
 
 namespace {
+
+auto MakeAssetKey(const std::uint8_t seed) -> AssetKey
+{
+  auto bytes = std::array<std::uint8_t, AssetKey::kSizeBytes> {};
+  bytes[0] = seed;
+  return AssetKey::FromBytes(bytes);
+}
 
 class LooseCookedSourceTest : public ::testing::Test {
 protected:
@@ -116,7 +125,7 @@ TEST_F(LooseCookedSourceTest, ConstructorDescriptorMissingThrows)
     LooseCookedTestWriter writer(CookedRoot());
     const std::vector<std::byte> data { std::byte { 0 } };
     writer.WriteAssetDescriptor(
-      AssetKey { 1 }, AssetType::kMaterial, "/test.omat", "test.omat", data);
+      MakeAssetKey(1U), AssetType::kMaterial, "/test.omat", "test.omat", data);
     (void)writer.Finish();
   }
 
@@ -133,7 +142,7 @@ TEST_F(LooseCookedSourceTest, ConstructorDescriptorSha256MismatchThrows)
     writer.SetComputeSha256(true); // Tell writer to generate a real hash
     const std::vector<std::byte> data { std::byte { 0 } };
     writer.WriteAssetDescriptor(
-      AssetKey { 1 }, AssetType::kMaterial, "/test.omat", "test.omat", data);
+      MakeAssetKey(1U), AssetType::kMaterial, "/test.omat", "test.omat", data);
     (void)writer.Finish();
   }
 
@@ -168,7 +177,7 @@ TEST_F(LooseCookedSourceTest, ReadersReturnNullWhenFilesOmitted)
     EXPECT_EQ(source.CreatePhysicsTableReader(), nullptr);
     EXPECT_EQ(source.CreatePhysicsDataReader(), nullptr);
 
-    EXPECT_EQ(source.CreateAssetDescriptorReader(AssetKey { 1 }), nullptr);
+    EXPECT_EQ(source.CreateAssetDescriptorReader(MakeAssetKey(1U)), nullptr);
   }
 }
 

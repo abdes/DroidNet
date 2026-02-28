@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -124,12 +126,14 @@ NOLINT_TEST_F(InputLoadersTest,
   constexpr size_t kTriggerSize = sizeof(InputTriggerRecord);
   constexpr size_t kAuxSize = sizeof(InputTriggerAuxRecord);
 
-  AssetKey action_a {};
-  action_a.guid[0] = 0xAA;
-  AssetKey action_b {};
-  action_b.guid[0] = 0xBB;
-  AssetKey action_c {};
-  action_c.guid[0] = 0xCC;
+  const auto make_asset_key = [](const std::uint8_t seed) {
+    auto bytes = std::array<std::uint8_t, AssetKey::kSizeBytes> {};
+    bytes[0] = seed;
+    return AssetKey::FromBytes(bytes);
+  };
+  const AssetKey action_a = make_asset_key(0xAAU);
+  const AssetKey action_b = make_asset_key(0xBBU);
+  const AssetKey action_c = make_asset_key(0xCCU);
 
   InputMappingContextAssetDesc desc {};
   desc.header.asset_type

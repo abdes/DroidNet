@@ -7,6 +7,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <string>
 #include <string_view>
 
@@ -23,17 +24,15 @@ namespace oxygen::content::import::util {
     = std::as_bytes(std::span(virtual_path.data(), virtual_path.size()));
   const auto digest = base::ComputeSha256(bytes);
 
-  data::AssetKey key {};
-  std::copy_n(digest.begin(), key.guid.size(), key.guid.begin());
-  return key;
+  auto key_bytes = std::array<uint8_t, data::AssetKey::kSizeBytes> {};
+  std::copy_n(digest.begin(), key_bytes.size(), key_bytes.begin());
+  return data::AssetKey::FromBytes(key_bytes);
 }
 
 //! Creates a random AssetKey.
 [[nodiscard]] inline auto MakeRandomAssetKey() -> data::AssetKey
 {
-  data::AssetKey key {};
-  key.guid = data::GenerateAssetGuid();
-  return key;
+  return data::AssetKey { data::GenerateAssetGuid() };
 }
 
 } // namespace oxygen::content::import::util

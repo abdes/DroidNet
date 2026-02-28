@@ -103,12 +103,18 @@ public:
   //! Create a buffer emitter for the given layout.
   /*!
    @param file_writer Async file writer for output operations.
-   @param layout      Loose cooked layout defining paths.
-   @param cooked_root Root directory for cooked output.
+   @param
+   * layout      Loose cooked layout defining paths.
+   @param cooked_root Root
+   * directory for cooked output.
   */
   OXGN_COOK_API BufferEmitter(IAsyncFileWriter& file_writer,
     BufferTableAggregator& table_aggregator, const LooseCookedLayout& layout,
-    const std::filesystem::path& cooked_root, Config config = {});
+    const std::filesystem::path& cooked_root);
+
+  OXGN_COOK_API BufferEmitter(IAsyncFileWriter& file_writer,
+    BufferTableAggregator& table_aggregator, const LooseCookedLayout& layout,
+    const std::filesystem::path& cooked_root, Config config);
 
   OXGN_COOK_API ~BufferEmitter();
 

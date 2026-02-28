@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <span>
 #include <string>
@@ -30,6 +31,13 @@ namespace co = oxygen::co;
 namespace data = oxygen::data;
 
 namespace {
+
+auto MakeAssetKey(const std::uint8_t seed) -> data::AssetKey
+{
+  auto bytes = std::array<std::uint8_t, data::AssetKey::kSizeBytes> {};
+  bytes[0] = seed;
+  return data::AssetKey::FromBytes(bytes);
+}
 
 //=== Test Helpers
 //===---------------------------------------------------------//
@@ -69,7 +77,7 @@ auto MakeMinimalSceneBuild(std::string_view name) -> SceneBuild
 
   SceneBuild build;
   build.nodes.push_back(data::pak::world::NodeRecord {
-    .node_id = data::AssetKey { .guid = { 1 } },
+    .node_id = MakeAssetKey(1U),
     .scene_name_offset = name_offset,
     .parent_index = 0,
     .node_flags = 0,
@@ -222,7 +230,7 @@ NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
 
   SceneBuild build;
   build.nodes.push_back(data::pak::world::NodeRecord {
-    .node_id = data::AssetKey { .guid = { 1 } },
+    .node_id = MakeAssetKey(1U),
     .scene_name_offset = root_offset,
     .parent_index = 0,
     .node_flags = 0,
@@ -231,7 +239,7 @@ NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
     .scale = { 1.0F, 1.0F, 1.0F },
   });
   build.nodes.push_back(data::pak::world::NodeRecord {
-    .node_id = data::AssetKey { .guid = { 2 } },
+    .node_id = MakeAssetKey(2U),
     .scene_name_offset = child_offset,
     .parent_index = 0,
     .node_flags = 0,
@@ -243,12 +251,12 @@ NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
   build.renderables = {
     data::pak::world::RenderableRecord {
       .node_index = 1,
-      .geometry_key = data::AssetKey { .guid = { 42 } },
+      .geometry_key = MakeAssetKey(42U),
       .visible = 1,
     },
     data::pak::world::RenderableRecord {
       .node_index = 0,
-      .geometry_key = data::AssetKey { .guid = { 43 } },
+      .geometry_key = MakeAssetKey(43U),
       .visible = 1,
     },
   };

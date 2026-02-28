@@ -28,8 +28,9 @@ inline auto Load(AnyReader& reader, data::pak::core::ResourceIndexT& value)
 inline auto Load(AnyReader& reader, data::AssetKey& key) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { key.guid })));
+  auto uuid = oxygen::Uuid {};
+  CHECK_RESULT(reader.ReadInto(uuid));
+  key = data::AssetKey { uuid };
   return {};
 }
 
@@ -234,8 +235,7 @@ inline auto Load(AnyReader& reader, data::pak::world::NodeRecord& record)
 {
   auto pack = reader.ScopedAlignment(1);
 
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record.node_id.guid })));
+  CHECK_RESULT(reader.ReadInto(record.node_id));
   CHECK_RESULT(reader.ReadInto(record.scene_name_offset));
   CHECK_RESULT(reader.ReadInto(record.parent_index));
   CHECK_RESULT(reader.ReadInto(record.node_flags));
@@ -259,8 +259,7 @@ inline auto Load(AnyReader& reader, data::pak::world::RenderableRecord& record)
   auto pack = reader.ScopedAlignment(1);
 
   CHECK_RESULT(reader.ReadInto(record.node_index));
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record.geometry_key.guid })));
+  CHECK_RESULT(reader.ReadInto(record.geometry_key));
   CHECK_RESULT(reader.ReadInto(record.visible));
   CHECK_RESULT(
     reader.ReadBlobInto(std::as_writable_bytes(std::span { record.reserved })));
@@ -438,8 +437,7 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(r.enabled));
   CHECK_RESULT(reader.ReadInto(r.source));
 
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { r.cubemap_asset.guid })));
+  CHECK_RESULT(reader.ReadInto(r.cubemap_asset));
 
   CHECK_RESULT(reader.ReadInto(r.intensity));
   for (auto& v : r.tint_rgb) {
@@ -462,8 +460,7 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(r.enabled));
   CHECK_RESULT(reader.ReadInto(r.source));
 
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { r.cubemap_asset.guid })));
+  CHECK_RESULT(reader.ReadInto(r.cubemap_asset));
 
   for (auto& v : r.solid_color_rgb) {
     CHECK_RESULT(reader.ReadInto(v));
@@ -629,8 +626,7 @@ inline auto Load(AnyReader& reader,
 {
   auto pack = reader.ScopedAlignment(1);
 
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record.action_asset_key.guid })));
+  CHECK_RESULT(reader.ReadInto(record.action_asset_key));
   CHECK_RESULT(reader.ReadInto(record.slot_name_offset));
   CHECK_RESULT(reader.ReadInto(record.trigger_start_index));
   CHECK_RESULT(reader.ReadInto(record.trigger_count));
@@ -657,8 +653,7 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.reserved0));
   CHECK_RESULT(reader.ReadInto(record.flags));
   CHECK_RESULT(reader.ReadInto(record.actuation_threshold));
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record.linked_action_asset_key.guid })));
+  CHECK_RESULT(reader.ReadInto(record.linked_action_asset_key));
   CHECK_RESULT(reader.ReadInto(record.aux_start_index));
   CHECK_RESULT(reader.ReadInto(record.aux_count));
   for (auto& v : record.fparams) {
@@ -678,8 +673,7 @@ inline auto Load(AnyReader& reader,
 {
   auto pack = reader.ScopedAlignment(1);
 
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record.action_asset_key.guid })));
+  CHECK_RESULT(reader.ReadInto(record.action_asset_key));
   CHECK_RESULT(reader.ReadInto(record.completion_states));
   CHECK_RESULT(reader.ReadInto(record.time_to_complete_ns));
   CHECK_RESULT(reader.ReadInto(record.flags));
@@ -693,8 +687,7 @@ inline auto Load(AnyReader& reader,
   auto pack = reader.ScopedAlignment(1);
 
   CHECK_RESULT(reader.ReadInto(record.node_index));
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record.context_asset_key.guid })));
+  CHECK_RESULT(reader.ReadInto(record.context_asset_key));
   CHECK_RESULT(reader.ReadInto(record.priority));
   CHECK_RESULT(reader.ReadInto(record.flags));
   CHECK_RESULT(reader.ReadInto(record.reserved));

@@ -7,40 +7,91 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <span>
 #include <string>
 
 #include <Oxygen/Base/Hash.h>
+#include <Oxygen/Base/NamedType.h>
+#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Data/api_export.h>
 
 namespace oxygen::data {
 
-//! Uniquely identifies an asset in the system, using a 128-bit GUID.
-struct AssetKey {
-  static constexpr size_t kSizeBytes = 16;
-  std::array<uint8_t, kSizeBytes> guid { 0 }; // NOLINT(*-magic-numbers)
+//! Strongly typed UUID identity for a cooked/runtime asset.
+struct AssetKey : public NamedType<Uuid, struct AssetKeyTag, // clang-format off
+      Comparable,
+      Printable,
+      Hashable> // clang-format on
+{
+  static constexpr std::size_t kSizeBytes = Uuid::kSize;
 
-  auto operator<=>(const AssetKey&) const = default;
+  // NOLINTNEXTLINE(*-magic-numbers)
+  using Base = NamedType<Uuid, struct AssetKeyTag, // clang-format off
+    oxygen::Comparable,
+    oxygen::Printable,
+    oxygen::Hashable>; // clang-format on
+
+  using Base::Base;
+
+  constexpr explicit AssetKey(
+    const std::array<std::uint8_t, kSizeBytes>& bytes) noexcept
+    : Base(Uuid { bytes })
+  {
+  }
+
+  [[nodiscard]] constexpr auto IsNil() const noexcept -> bool
+  {
+    return get().IsNil();
+  }
+
+  [[nodiscard]] static auto FromBytes(
+    const std::array<std::uint8_t, kSizeBytes>& bytes) -> AssetKey
+  {
+    return AssetKey { Uuid { bytes } };
+  }
 };
 static_assert(sizeof(AssetKey) == AssetKey::kSizeBytes);
 
 //! String representation of AssetKey.
-OXGN_DATA_NDAPI auto to_string(AssetKey value) noexcept -> std::string;
+[[nodiscard]] inline auto to_string(const AssetKey& value) noexcept
+  -> std::string
+{
+  return nostd::to_string(value.get());
+}
 
-//! Generates a random 128-bit GUID using stduuid and stores as array of bytes.
-OXGN_DATA_NDAPI auto GenerateAssetGuid()
-  -> std::array<uint8_t, AssetKey::kSizeBytes>;
+//! Read-only byte span view for binary serialization.
+[[nodiscard]] inline auto as_bytes(const AssetKey& key) noexcept
+  -> std::span<const std::byte, AssetKey::kSizeBytes>
+{
+  return nostd::as_bytes(key.get());
+}
+
+//! Writable byte span view for binary serialization.
+[[nodiscard]] inline auto as_writable_bytes(AssetKey& key) noexcept
+  -> std::span<std::byte, AssetKey::kSizeBytes>
+{
+  return nostd::as_writable_bytes(key.get());
+}
+
+//! Generates a random UUIDv7 for asset identity assignment.
+[[nodiscard]] inline auto GenerateAssetGuid() -> Uuid
+{
+  return Uuid::Generate();
+}
 
 } // namespace oxygen::data
 
-//! Hash specialization for AssetKey.
-template <> struct std::hash<oxygen::data::AssetKey> {
-  auto operator()(const oxygen::data::AssetKey& key) const noexcept -> size_t
+namespace std {
+template <> struct hash<oxygen::data::AssetKey> {
+  [[nodiscard]] auto operator()(
+    const oxygen::data::AssetKey& key) const noexcept -> size_t
   {
-    size_t seed = 0;
-    for (auto b : key.guid) {
-      oxygen::HashCombine(seed, b);
-    }
-    return seed;
+    return static_cast<size_t>(
+      oxygen::ComputeFNV1a64(key.get().data(), key.get().size()));
   }
 };
+} // namespace std

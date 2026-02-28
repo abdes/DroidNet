@@ -4,11 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <stdexcept>
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 
@@ -46,7 +49,8 @@ NOLINT_TEST_F(InspectionTest, LoadFromRootValidPopulatesCorrectly)
 
   const auto assets = inspection.Assets();
   ASSERT_EQ(assets.size(), 1);
-  EXPECT_EQ(assets[0].key.guid[0], 0xAA);
+  const auto key_bytes = nostd::as_bytes(assets[0].key);
+  EXPECT_EQ(std::to_integer<uint8_t>(key_bytes[0]), 0xAA);
   EXPECT_EQ(assets[0].virtual_path, "/.cooked/MyAsset.bin");
   EXPECT_EQ(assets[0].descriptor_relpath, "MyAsset.bin");
   EXPECT_EQ(assets[0].descriptor_size, 42);
@@ -64,8 +68,9 @@ NOLINT_TEST_F(InspectionTest, LoadFromRootValidPopulatesCorrectly)
   EXPECT_EQ(files[0].size, 100);
 
   const auto guid = inspection.Guid();
-  EXPECT_EQ(guid.get()[0], 1);
-  EXPECT_EQ(guid.get()[15], 16);
+  const auto guid_bytes = nostd::as_bytes(guid);
+  EXPECT_EQ(std::to_integer<uint8_t>(guid_bytes[0]), 1);
+  EXPECT_EQ(std::to_integer<uint8_t>(guid_bytes[15]), 16);
 }
 
 NOLINT_TEST_F(InspectionTest, LoadFromFileValidPopulatesCorrectly)

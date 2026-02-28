@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -675,9 +676,9 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeWithEmittersRegistersInIndex)
       observer_ptr(thread_pool_.get()), observer_ptr(table_registry_.get()),
       observer_ptr(index_registry_.get()));
 
-    constexpr oxygen::data::AssetKey kKey {
-      .guid = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 },
-    };
+    const auto kKey = oxygen::data::AssetKey::FromBytes(
+      std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 });
     const auto descriptor_relpath
       = request.loose_cooked_layout.MaterialDescriptorRelPath("Wood");
     const auto virtual_path

@@ -25,9 +25,7 @@ NOLINT_TEST_F(
   BeginFrame(Slot { 0 });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key {
-    .guid = oxygen::data::GenerateAssetGuid(),
-  };
+  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,
@@ -54,9 +52,7 @@ NOLINT_TEST_F(
   BeginFrame(Slot { 0 });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key {
-    .guid = oxygen::data::GenerateAssetGuid(),
-  };
+  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,
@@ -83,9 +79,7 @@ NOLINT_TEST_F(
   auto& uploader = GeoUploader();
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key {
-    .guid = oxygen::data::GenerateAssetGuid(),
-  };
+  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,

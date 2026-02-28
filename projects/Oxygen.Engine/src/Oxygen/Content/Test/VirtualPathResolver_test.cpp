@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -17,10 +19,17 @@
 
 namespace {
 
+auto MakeAssetKey(const std::uint8_t seed) -> oxygen::data::AssetKey
+{
+  auto bytes = std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
+  bytes[0] = seed;
+  return oxygen::data::AssetKey::FromBytes(bytes);
+}
+
 //! Test helper: write a minimal loose cooked index with one asset entry.
 /*!
- Scenario: Creates a `container.index.bin` mapping the given virtual path to the
- provided `AssetKey`.
+ Scenario: Creates a `container.index.bin` mapping the given virtual path to
+ the provided `AssetKey`.
 */
 auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
   const oxygen::data::AssetKey& key, const std::string_view descriptor_relpath,
@@ -151,8 +160,7 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyFoundReturnsKey)
     = std::filesystem::temp_directory_path() / "oxygen_vpath_resolver_test";
   const auto cooked_root = root / "root0";
 
-  oxygen::data::AssetKey key {};
-  key.guid[0] = 0x11;
+  const auto key = MakeAssetKey(0x11U);
 
   WriteSingleAssetIndex(cooked_root, key, "A.bin", "/.cooked/A.bin");
 
@@ -164,7 +172,7 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyFoundReturnsKey)
 
   // Assert
   EXPECT_TRUE(resolved.has_value());
-  EXPECT_EQ(resolved->guid[0], 0x11);
+  EXPECT_EQ(*resolved, key);
 }
 
 //! Test: Resolver prefers the first mounted root
@@ -180,10 +188,8 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyDuplicatePathFirstWins)
   const auto cooked_root0 = root / "root0";
   const auto cooked_root1 = root / "root1";
 
-  oxygen::data::AssetKey key0 {};
-  key0.guid[0] = 0x11;
-  oxygen::data::AssetKey key1 {};
-  key1.guid[0] = 0x22;
+  const auto key0 = MakeAssetKey(0x11U);
+  const auto key1 = MakeAssetKey(0x22U);
 
   WriteSingleAssetIndex(cooked_root0, key0, "A0.bin", "/.cooked/A.bin");
   WriteSingleAssetIndex(cooked_root1, key1, "A1.bin", "/.cooked/A.bin");
@@ -197,7 +203,7 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyDuplicatePathFirstWins)
 
   // Assert
   EXPECT_TRUE(resolved.has_value());
-  EXPECT_EQ(resolved->guid[0], 0x11);
+  EXPECT_EQ(*resolved, key0);
 }
 
 //! Test: Resolver returns nullopt when the virtual path is not found
@@ -211,8 +217,7 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyNotFoundReturnsNullopt)
     = std::filesystem::temp_directory_path() / "oxygen_vpath_resolver_test";
   const auto cooked_root = root / "root0";
 
-  oxygen::data::AssetKey key {};
-  key.guid[0] = 0x11;
+  const auto key = MakeAssetKey(0x11U);
 
   WriteSingleAssetIndex(cooked_root, key, "A.bin", "/.cooked/A.bin");
 
@@ -255,8 +260,7 @@ NOLINT_TEST(
     = std::filesystem::temp_directory_path() / "oxygen_vpath_resolver_test";
   const auto pak_path = root / "mounted.pak";
 
-  oxygen::data::AssetKey key {};
-  key.guid[0] = 0x33;
+  const auto key = MakeAssetKey(0x33U);
 
   WriteSingleAssetPakWithBrowseIndex(pak_path, key, "/.cooked/Pak.bin");
 
@@ -268,7 +272,7 @@ NOLINT_TEST(
 
   // Assert
   EXPECT_TRUE(resolved.has_value());
-  EXPECT_EQ(resolved->guid[0], 0x33);
+  EXPECT_EQ(*resolved, key);
 }
 
 } // namespace

@@ -711,11 +711,11 @@ private:
       return *existing_guid_;
     }
 
-    auto bytes = data::GenerateAssetGuid();
-    if (IsAllZeros(bytes)) {
-      bytes[0] = 1;
+    auto guid = data::GenerateAssetGuid();
+    if (guid.IsNil()) {
+      guid.data()[0] = 1;
     }
-    return data::SourceKey { bytes };
+    return data::SourceKey { guid };
   }
 
   [[nodiscard]] auto ResolveContentVersion_() const -> uint16_t
@@ -824,8 +824,9 @@ private:
     header.file_record_count = static_cast<uint32_t>(file_records.size());
     header.file_record_size = sizeof(FileRecord);
 
-    const auto& guid_bytes = source_key.get();
-    std::ranges::copy(guid_bytes, std::begin(header.guid));
+    const auto guid_bytes = data::as_bytes(source_key);
+    std::ranges::transform(guid_bytes, std::begin(header.guid),
+      [](const auto byte) { return std::to_integer<uint8_t>(byte); });
 
     serio::FileStream stream(index_path, std::ios::out | std::ios::trunc);
     serio::Writer writer(stream);

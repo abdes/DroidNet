@@ -20,10 +20,10 @@
 using oxygen::content::PakFile;
 using oxygen::data::AssetKey;
 using oxygen::data::pak::core::AssetDirectoryEntry;
-using oxygen::data::pak::core::PakFooter;
-using oxygen::data::pak::core::PakHeader;
 using oxygen::data::pak::core::PakBrowseIndexEntry;
 using oxygen::data::pak::core::PakBrowseIndexHeader;
+using oxygen::data::pak::core::PakFooter;
+using oxygen::data::pak::core::PakHeader;
 
 namespace {
 
@@ -162,10 +162,10 @@ auto ReadPakHeader(oxygen::serio::FileStream<>& stream) -> PakHeader
   }
 
   const auto header = header_result.value();
+  const auto source_key = oxygen::data::SourceKey::FromBytes(header.guid);
   LOG_F(INFO, "format version  : {}", header.version);
   LOG_F(INFO, "content version : {}", header.content_version);
-  LOG_F(INFO, "pak guid        : {}",
-    oxygen::data::to_string(oxygen::data::SourceKey::FromBytes(header.guid)));
+  LOG_F(INFO, "pak guid        : {}", source_key);
 
   if (!std::ranges::equal(
         std::span { header.magic }, oxygen::data::pak::core::kPakHeaderMagic)) {

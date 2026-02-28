@@ -8,46 +8,51 @@
 
 #include <Oxygen/Data/MaterialAsset.h>
 
+#include <algorithm>
+
 using oxygen::data::MaterialAsset;
 namespace {
 
-constexpr auto kDefaultMaterialAssetKey = oxygen::data::AssetKey { {
-  0x4d,
-  0x41,
-  0x54,
-  0x5f,
-  0x44,
-  0x45,
-  0x46,
-  0x41,
-  0x55,
-  0x4c,
-  0x54,
-  0x5f,
-  0x5f,
-  0x5f,
-  0x5f,
-  0x5f,
-} };
+constexpr auto kDefaultMaterialAssetKey = oxygen::data::AssetKey {
+  oxygen::Uuid { std::array<std::uint8_t, oxygen::Uuid::kSize> {
+    0x4d,
+    0x41,
+    0x54,
+    0x5f,
+    0x44,
+    0x45,
+    0x46,
+    0x41,
+    0x55,
+    0x4c,
+    0x54,
+    0x5f,
+    0x5f,
+    0x5f,
+    0x5f,
+    0x5f,
+  } }
+};
 
-constexpr auto kDebugMaterialAssetKey = oxygen::data::AssetKey { {
-  0x4d,
-  0x41,
-  0x54,
-  0x5f,
-  0x44,
-  0x45,
-  0x42,
-  0x55,
-  0x47,
-  0x5f,
-  0x5f,
-  0x5f,
-  0x5f,
-  0x5f,
-  0x5f,
-  0x5f,
-} };
+constexpr auto kDebugMaterialAssetKey = oxygen::data::AssetKey { oxygen::Uuid {
+  std::array<std::uint8_t, oxygen::Uuid::kSize> {
+    0x4d,
+    0x41,
+    0x54,
+    0x5f,
+    0x44,
+    0x45,
+    0x42,
+    0x55,
+    0x47,
+    0x5f,
+    0x5f,
+    0x5f,
+    0x5f,
+    0x5f,
+    0x5f,
+    0x5f,
+  } } };
 
 } // namespace
 
@@ -132,15 +137,14 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
     desc.uv_offset[1] = 0.0f;
     desc.uv_rotation_radians = 0.0f;
     desc.uv_set = 0;
-    std::fill(
-      std::begin(desc.reserved), std::end(desc.reserved), uint8_t { 0 });
+    std::ranges::fill(desc.reserved, uint8_t { 0 });
 
     // No shader references initially - renderer will provide appropriate
     // shaders
     std::vector<ShaderReference> shader_refs {};
 
     return std::make_shared<const MaterialAsset>(
-      kDefaultMaterialAssetKey, std::move(desc), std::move(shader_refs));
+      kDefaultMaterialAssetKey, desc, std::move(shader_refs));
   }();
 
   return kDefaultMaterial;
@@ -182,6 +186,6 @@ auto MaterialAsset::CreateDebug() -> std::shared_ptr<const MaterialAsset>
   debug_desc.base_color[3] = 1.0f; // A - fully opaque
   debug_desc.roughness = Unorm16 { 1.0f }; // Fully rough (no reflections)
 
-  return std::make_shared<const MaterialAsset>(kDebugMaterialAssetKey,
-    std::move(debug_desc), std::vector<ShaderReference> {});
+  return std::make_shared<const MaterialAsset>(
+    kDebugMaterialAssetKey, debug_desc, std::vector<ShaderReference> {});
 }

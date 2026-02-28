@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <array>
+#include <cstdint>
 #include <filesystem>
 #include <ios>
 #include <numeric>
@@ -58,7 +60,6 @@ inline auto CreateDummyIndex(
   header.file_record_count = 2;
   header.file_record_size = sizeof(FileRecord);
 
-  // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
   constexpr uint8_t kKeyFirst = 0xAA;
   constexpr uint32_t kAssetType = 12;
   constexpr uint32_t kDescriptorSize = 42;
@@ -67,10 +68,10 @@ inline auto CreateDummyIndex(
   constexpr uint64_t kRecordTableSize = 100;
   constexpr uint64_t kRecordDataSize = 200;
   constexpr size_t kShaLastIndex = 31;
-  // NOLINTEND(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
 
-  oxygen::data::AssetKey key {};
-  key.guid[0] = kKeyFirst;
+  auto key_bytes = std::array<uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
+  key_bytes[0] = kKeyFirst;
+  const auto key = oxygen::data::AssetKey::FromBytes(key_bytes);
   AssetEntry entry {};
   entry.asset_key = key;
   entry.descriptor_relpath_offset = off_desc;

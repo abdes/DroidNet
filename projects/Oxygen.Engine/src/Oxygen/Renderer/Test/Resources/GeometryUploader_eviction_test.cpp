@@ -28,9 +28,7 @@ NOLINT_TEST_F(GeometryUploaderEvictionTest, AssetEvictionInvalidatesHandles)
   BeginFrame(Slot { 0 });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key {
-    .guid = oxygen::data::GenerateAssetGuid(),
-  };
+  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,
@@ -64,9 +62,7 @@ NOLINT_TEST_F(GeometryUploaderEvictionTest, EvictionSuppressesLateCompletion)
   BeginFrame(Slot { 0 });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key {
-    .guid = oxygen::data::GenerateAssetGuid(),
-  };
+  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,
@@ -100,9 +96,7 @@ NOLINT_TEST_F(GeometryUploaderEvictionTest, AssetEvictionInvalidatesAllLods)
 
   BeginFrame(Slot { 0 });
 
-  const oxygen::data::AssetKey asset_key {
-    .guid = oxygen::data::GenerateAssetGuid(),
-  };
+  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
   const auto mesh_lod0 = MakeValidTriangleMesh("TriLod0", true);
   const auto mesh_lod1 = MakeValidTriangleMesh("TriLod1", true);
 
@@ -147,9 +141,7 @@ NOLINT_TEST_F(GeometryUploaderEvictionTest, EvictionThenReloadPublishes)
   BeginFrame(Slot { 0 });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key {
-    .guid = oxygen::data::GenerateAssetGuid(),
-  };
+  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,

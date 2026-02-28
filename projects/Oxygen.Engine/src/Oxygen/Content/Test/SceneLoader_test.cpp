@@ -170,9 +170,11 @@ NOLINT_TEST_F(SceneLoaderTest, LoadSceneParseOnlySucceeds)
 
 NOLINT_TEST_F(SceneLoaderTest, LoadSceneDecodeCollectsGeometryDependencies)
 {
-  oxygen::data::AssetKey geom {};
-  geom.guid[0] = 0xAB;
-  geom.guid[1] = 0xCD;
+  auto geom_bytes
+    = std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
+  geom_bytes[0] = 0xABU;
+  geom_bytes[1] = 0xCDU;
+  const auto geom = oxygen::data::AssetKey::FromBytes(geom_bytes);
 
   WriteMinimalSceneWithRenderable(geom);
 

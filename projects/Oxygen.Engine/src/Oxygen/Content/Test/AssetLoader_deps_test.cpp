@@ -4,21 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "./AssetLoader_test.h"
-
 #include <Oxygen/Base/ObserverPtr.h>
-
-#include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/MaterialAsset.h>
-
-#include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/Run.h>
-#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
-
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
+#include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+
+#include "./AssetLoader_test.h"
 
 using testing::NotNull;
 
@@ -48,7 +45,6 @@ class AssetLoaderDependencyTest : public AssetLoaderLoadingTest { };
 NOLINT_TEST_F(
   AssetLoaderDependencyTest, LoadAssetMaterialWithTexturesLoadsDependencies)
 {
-
   // Arrange
   const auto pak_path = GeneratePakFile("material_with_textures");
   const auto material_key = CreateTestAssetKey("textured_material");
@@ -63,7 +59,8 @@ NOLINT_TEST_F(
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(Tag::Get(), config);
+    AssetLoader loader(
+      oxygen::engine::internal::EngineTagFactory::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
     loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
@@ -108,7 +105,6 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   AssetLoaderDependencyTest, LoadAssetGeometryWithBuffersLoadsDependencies)
 {
-
   // Arrange
   const auto pak_path = GeneratePakFile("geometry_with_buffers");
   const auto geometry_key = CreateTestAssetKey("buffered_geometry");
@@ -123,7 +119,8 @@ NOLINT_TEST_F(
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(Tag::Get(), config);
+    AssetLoader loader(
+      oxygen::engine::internal::EngineTagFactory::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
     loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
@@ -232,7 +229,7 @@ NOLINT_TEST_F(AssetLoaderDependencyTest, DebugDependentEnumerationWorks)
   EXPECT_EQ(dependents_of_b.size(), 2);
   size_t hits = 0;
   for (const auto& k : dependents_of_b) {
-    if (k.guid == key_a.guid || k.guid == key_c.guid) {
+    if (k == key_a || k == key_c) {
       ++hits;
     }
   }

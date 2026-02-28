@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 
@@ -753,10 +755,10 @@ NOLINT_TEST_F(
   header.file_record_count = 0;
   header.file_record_size = sizeof(FileRecord);
 
-  oxygen::data::AssetKey key_a {};
-  key_a.guid[0] = 0x11;
-  oxygen::data::AssetKey key_b {};
-  key_b.guid[0] = 0x22;
+  const auto key_a = oxygen::data::AssetKey::FromBytes(
+    std::array<uint8_t, oxygen::data::AssetKey::kSizeBytes> { 0x11 });
+  const auto key_b = oxygen::data::AssetKey::FromBytes(
+    std::array<uint8_t, oxygen::data::AssetKey::kSizeBytes> { 0x22 });
 
   AssetEntry a {};
   a.asset_key = key_a;

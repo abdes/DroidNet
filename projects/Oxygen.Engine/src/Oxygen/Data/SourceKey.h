@@ -7,12 +7,16 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <span>
 #include <string>
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/NamedType.h>
+#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Data/api_export.h>
 
 namespace oxygen::data {
@@ -23,15 +27,16 @@ namespace oxygen::data {
  ensure that resources are correctly scoped and cached even when content sources
  are mounted/unmounted or reordered.
 */
-struct SourceKey
-  : public NamedType<std::array<uint8_t, 16>, struct SourceKeyTag,
-      // clang-format off
+struct SourceKey : public NamedType<Uuid, struct SourceKeyTag,
+                     // clang-format off
       Comparable,
       Printable,
       Hashable> // clang-format on
 {
+  static constexpr std::size_t kSizeBytes = Uuid::kSize;
+
   // NOLINTNEXTLINE(*-magic-numbers)
-  using Base = NamedType<std::array<uint8_t, 16>, struct SourceKeyTag,
+  using Base = NamedType<Uuid, struct SourceKeyTag,
     // clang-format off
     oxygen::Comparable,
     oxygen::Printable,
@@ -39,26 +44,54 @@ struct SourceKey
 
   using Base::Base;
 
-  //! Create a SourceKey from a C-style byte array.
-  static auto FromBytes(const std::array<uint8_t, 16>& bytes) -> SourceKey
+  constexpr explicit SourceKey(
+    const std::array<std::uint8_t, kSizeBytes>& bytes) noexcept
+    : Base(Uuid { bytes })
   {
-    return SourceKey { bytes };
+  }
+
+  [[nodiscard]] constexpr auto IsNil() const noexcept -> bool
+  {
+    return get().IsNil();
+  }
+
+  //! Create a SourceKey from a C-style byte array.
+  static auto FromBytes(const std::array<std::uint8_t, kSizeBytes>& bytes)
+    -> SourceKey
+  {
+    return SourceKey { Uuid { bytes } };
   }
 };
 
 //! String representation of SourceKey.
-OXGN_DATA_NDAPI auto to_string(const SourceKey& key) -> std::string;
+[[nodiscard]] inline auto to_string(const SourceKey& key) -> std::string
+{
+  return nostd::to_string(key.get());
+}
+
+//! Read-only byte span view for binary serialization.
+[[nodiscard]] inline auto as_bytes(const SourceKey& key) noexcept
+  -> std::span<const std::byte, SourceKey::kSizeBytes>
+{
+  return nostd::as_bytes(key.get());
+}
+
+//! Writable byte span view for binary serialization.
+[[nodiscard]] inline auto as_writable_bytes(SourceKey& key) noexcept
+  -> std::span<std::byte, SourceKey::kSizeBytes>
+{
+  return nostd::as_writable_bytes(key.get());
+}
 
 } // namespace oxygen::data
 
-template <> struct std::hash<oxygen::data::SourceKey> {
-  auto operator()(const oxygen::data::SourceKey& k) const noexcept
-    -> std::size_t
+namespace std {
+template <> struct hash<oxygen::data::SourceKey> {
+  [[nodiscard]] auto operator()(
+    const oxygen::data::SourceKey& key) const noexcept -> size_t
   {
-    size_t seed = 0;
-    for (auto b : k.get()) {
-      oxygen::HashCombine(seed, b);
-    }
-    return seed;
+    return static_cast<size_t>(
+      oxygen::ComputeFNV1a64(key.get().data(), key.get().size()));
   }
 };
+} // namespace std

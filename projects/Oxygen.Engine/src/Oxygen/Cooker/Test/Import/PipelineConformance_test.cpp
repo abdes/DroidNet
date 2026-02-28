@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <span>
 #include <stop_token>
@@ -43,6 +44,13 @@ namespace {
 
 //=== Helpers
 //===--------------------------------------------------------------//
+
+auto MakeAssetKey(const std::uint8_t seed) -> data::AssetKey
+{
+  auto bytes = std::array<std::uint8_t, data::AssetKey::kSizeBytes> {};
+  bytes[0] = seed;
+  return data::AssetKey::FromBytes(bytes);
+}
 
 struct SceneStringTableBuilder final {
   std::vector<std::byte> bytes { std::byte { 0 } };
@@ -239,7 +247,7 @@ auto MakeMinimalSceneBuild(std::string_view name) -> SceneBuild
 
   SceneBuild build;
   build.nodes.push_back(data::pak::world::NodeRecord {
-    .node_id = data::AssetKey { .guid = { 1 } },
+    .node_id = MakeAssetKey(1U),
     .scene_name_offset = name_offset,
     .parent_index = 0,
     .node_flags = 0,
