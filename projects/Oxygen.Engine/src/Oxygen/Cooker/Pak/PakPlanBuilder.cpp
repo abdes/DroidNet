@@ -24,13 +24,13 @@
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
 #include <Oxygen/Cooker/Pak/PakMeasureStore.h>
+#include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
 #include <Oxygen/Cooker/Pak/PakPlanPolicy.h>
 #include <Oxygen/Cooker/Pak/PakValidation.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -63,6 +63,8 @@ constexpr uint32_t kBrowseAlignment = 16U;
 constexpr uint32_t kFooterAlignment = 16U;
 constexpr uint64_t kMaxCountAsUint64 = (std::numeric_limits<uint32_t>::max)();
 constexpr int kUnknownRegionOrder = (std::numeric_limits<int>::max)();
+constexpr std::string_view kPatchDiffBasisIdentifier
+  = "descriptor_plus_transitive_resources_v1";
 
 struct AlignmentBytes final {
   uint32_t value = 1U;
@@ -95,6 +97,35 @@ struct TableCounts {
   uint64_t script_resource_count = 0;
   uint64_t script_slot_count = 0;
   uint64_t physics_count = 0;
+};
+
+struct SourceContribution final {
+  TableCounts table_counts {};
+  std::vector<pak::PakScriptParamRangePlan> local_script_param_ranges;
+  uint32_t script_param_record_count = 0;
+  std::vector<std::pair<uint16_t, oxygen::base::Sha256Digest>>
+    transitive_inputs;
+  oxygen::base::Sha256Digest transitive_resource_digest {};
+};
+
+struct PatchCompatibilityEnvelopeData final {
+  std::vector<data::SourceKey> required_base_source_keys;
+  std::vector<uint16_t> required_base_content_versions;
+  std::vector<oxygen::base::Sha256Digest> required_base_catalog_digests;
+  uint16_t patch_content_version = 0;
+};
+
+struct PatchCompatibilityPolicySnapshotData final {
+  bool require_exact_base_set = true;
+  bool require_content_version_match = true;
+  bool require_base_source_key_match = true;
+  bool require_catalog_digest_match = true;
+};
+
+struct ScriptSlotReadContext final {
+  uint32_t slot_index_base = 0;
+  uint32_t params_array_index_base = 0;
+  uint32_t source_params_record_count = 0;
 };
 
 auto AddDiagnostic(std::vector<pak::PakDiagnostic>& diagnostics,
@@ -150,6 +181,53 @@ auto SafeAdd(const uint64_t lhs, const uint64_t rhs, uint64_t& out) -> bool
   return true;
 }
 
+auto EmptyDigest() -> oxygen::base::Sha256Digest
+{
+  static const auto digest
+    = oxygen::base::ComputeSha256(std::span<const std::byte> {});
+  return digest;
+}
+
+auto AggregateTransitiveDigest(
+  std::span<const std::pair<uint16_t, oxygen::base::Sha256Digest>> inputs)
+  -> oxygen::base::Sha256Digest
+{
+  auto hasher = oxygen::base::Sha256 {};
+  for (const auto& [kind, digest] : inputs) {
+    hasher.Update(std::as_bytes(std::span(&kind, 1)));
+    hasher.Update(std::as_bytes(std::span(digest)));
+  }
+  return hasher.Finalize();
+}
+
+auto AddTransitiveInputDigest(SourceContribution& contribution,
+  const uint16_t kind, const std::filesystem::path& file_path,
+  std::vector<pak::PakDiagnostic>& diagnostics) -> void
+{
+  try {
+    contribution.transitive_inputs.emplace_back(
+      kind, oxygen::base::ComputeFileSha256(file_path));
+  } catch (const std::exception& ex) {
+    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+      pak::PakBuildPhase::kPlanning, "pak.plan.transitive_digest_input_failed",
+      std::string("Failed to compute transitive digest input: ") + ex.what(),
+      file_path);
+  }
+}
+
+auto SortAndUniqueSourceKeys(std::vector<data::SourceKey>& keys) -> void
+{
+  std::ranges::sort(keys);
+  keys.erase(std::ranges::unique(keys).begin(), keys.end());
+}
+
+auto SortAndUniqueDigests(std::vector<oxygen::base::Sha256Digest>& digests)
+  -> void
+{
+  std::ranges::sort(digests);
+  digests.erase(std::ranges::unique(digests).begin(), digests.end());
+}
+
 auto ToCanonicalSourcePath(const std::filesystem::path& input)
   -> std::filesystem::path
 {
@@ -190,8 +268,8 @@ auto MeasureFileSize(const std::filesystem::path& path,
 }
 
 auto ReadScriptSlotRangesFromTable(
-  const std::filesystem::path& scripts_table_path, uint32_t slot_index_base,
-  uint32_t params_array_index_base, uint32_t source_params_record_count,
+  const std::filesystem::path& scripts_table_path,
+  const ScriptSlotReadContext& context,
   std::vector<pak::PakScriptParamRangePlan>& ranges,
   std::vector<pak::PakDiagnostic>& diagnostics) -> uint32_t
 {
@@ -256,7 +334,7 @@ auto ReadScriptSlotRangesFromTable(
     uint64_t local_params_array_end = 0;
     if (!SafeAdd(local_params_array_offset, record.params_count,
           local_params_array_end)
-      || local_params_array_end > source_params_record_count) {
+      || local_params_array_end > context.source_params_record_count) {
       AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
         pak::PakBuildPhase::kPlanning,
         "pak.plan.script_params_range_out_of_bounds",
@@ -266,19 +344,18 @@ auto ReadScriptSlotRangesFromTable(
     }
 
     uint64_t global_params_array_offset = 0;
-    if (!SafeAdd(params_array_index_base, local_params_array_offset,
+    if (!SafeAdd(context.params_array_index_base, local_params_array_offset,
           global_params_array_offset)
       || global_params_array_offset > kMaxCountAsUint64) {
       AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-        pak::PakBuildPhase::kPlanning,
-        "pak.plan.script_params_offset_overflow",
+        pak::PakBuildPhase::kPlanning, "pak.plan.script_params_offset_overflow",
         "ScriptSlotRecord params offset overflowed global script param index.",
         scripts_table_path);
       continue;
     }
 
     uint64_t slot_index64 = 0;
-    if (!SafeAdd(slot_index_base, i, slot_index64)
+    if (!SafeAdd(context.slot_index_base, i, slot_index64)
       || slot_index64 > kMaxCountAsUint64) {
       AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
         pak::PakBuildPhase::kPlanning, "pak.plan.script_slot_index_overflow",
@@ -524,7 +601,8 @@ auto AccumulateTableCountFromFile(const std::filesystem::path& table_path,
   count_accumulator += file_size / entry_size;
 }
 
-auto ComputeDescriptorDigestFromFile(const std::filesystem::path& descriptor_path,
+auto ComputeDescriptorDigestFromFile(
+  const std::filesystem::path& descriptor_path,
   std::vector<pak::PakDiagnostic>& diagnostics)
   -> std::optional<oxygen::base::Sha256Digest>
 {
@@ -532,7 +610,8 @@ auto ComputeDescriptorDigestFromFile(const std::filesystem::path& descriptor_pat
     return oxygen::base::ComputeFileSha256(descriptor_path);
   } catch (const std::exception& ex) {
     AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
-      pak::PakBuildPhase::kPlanning, "pak.plan.descriptor_digest_compute_failed",
+      pak::PakBuildPhase::kPlanning,
+      "pak.plan.descriptor_digest_compute_failed",
       std::string("Failed to compute descriptor digest: ") + ex.what(),
       descriptor_path);
     return std::nullopt;
@@ -540,7 +619,8 @@ auto ComputeDescriptorDigestFromFile(const std::filesystem::path& descriptor_pat
 }
 
 auto ComputeDescriptorDigestFromPakEntry(const content::PakFile& pak_file,
-  const core::AssetDirectoryEntry& entry, const std::filesystem::path& source_path,
+  const core::AssetDirectoryEntry& entry,
+  const std::filesystem::path& source_path,
   std::vector<pak::PakDiagnostic>& diagnostics)
   -> std::optional<oxygen::base::Sha256Digest>
 {
@@ -553,11 +633,13 @@ auto ComputeDescriptorDigestFromPakEntry(const content::PakFile& pak_file,
         "Failed to read descriptor bytes from pak source.", source_path);
       return std::nullopt;
     }
-    return oxygen::base::ComputeSha256(std::span<const std::byte>(*blob_result));
+    return oxygen::base::ComputeSha256(
+      std::span<const std::byte>(*blob_result));
   } catch (const std::exception& ex) {
     AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
       pak::PakBuildPhase::kPlanning, "pak.plan.pak_descriptor_read_failed",
-      std::string("Failed to read descriptor bytes from pak source: ") + ex.what(),
+      std::string("Failed to read descriptor bytes from pak source: ")
+        + ex.what(),
       source_path);
     return std::nullopt;
   }
@@ -575,7 +657,8 @@ auto ToCatalogEntry(const AggregatedAsset& asset) -> data::PakCatalogEntry
 
 struct PlanningState final {
   explicit PlanningState(const pak::PakBuildRequest& request_in)
-    : request(oxygen::observer_ptr<const pak::PakBuildRequest> { std::addressof(request_in) })
+    : request(oxygen::observer_ptr<const pak::PakBuildRequest> {
+        std::addressof(request_in) })
     , policy(pak::DerivePakPlanPolicy(request_in))
     , data_plan(MakeSkeletonPlan(request_in))
   {
@@ -589,29 +672,39 @@ struct PlanningState final {
   std::vector<AggregatedAsset> assets;
   std::unordered_map<data::AssetKey, size_t> asset_positions;
   std::vector<PendingResource> pending_resources;
+  std::unordered_map<size_t, SourceContribution> source_contributions;
+  std::vector<size_t> included_source_orders;
+  std::vector<size_t> planned_resource_source_orders;
   std::vector<pak::PakScriptParamRangePlan> script_param_ranges;
   std::unordered_map<std::string, data::AssetKey> browse_map;
   TableCounts table_counts {};
   uint32_t script_param_record_count = 0;
+
+  PatchCompatibilityEnvelopeData patch_compatibility_envelope {};
+  PatchCompatibilityPolicySnapshotData patch_compatibility_policy_snapshot {};
+  std::string patch_diff_basis_identifier
+    = std::string(kPatchDiffBasisIdentifier);
+  bool patch_manifest_basis_ready = false;
 };
 
 auto HasPlanningErrors(const PlanningState& state) -> bool
 {
-  return std::ranges::any_of(state.output.diagnostics,
-    [](const pak::PakDiagnostic& diagnostic) {
+  return std::ranges::any_of(
+    state.output.diagnostics, [](const pak::PakDiagnostic& diagnostic) {
       return diagnostic.severity == pak::PakDiagnosticSeverity::kError;
     });
 }
 
-auto AddStageInvariantDiagnostic(PlanningState& state, const std::string_view code,
-  const std::string_view message) -> void
+auto AddStageInvariantDiagnostic(PlanningState& state,
+  const std::string_view code, const std::string_view message) -> void
 {
   AddDiagnostic(state.output.diagnostics, pak::PakDiagnosticSeverity::kError,
     pak::PakBuildPhase::kPlanning, code, message);
 }
 
-[[nodiscard]] auto CheckStageInvariant(PlanningState& state, const bool condition,
-  const std::string_view code, const std::string_view message) -> bool
+[[nodiscard]] auto CheckStageInvariant(PlanningState& state,
+  const bool condition, const std::string_view code,
+  const std::string_view message) -> bool
 {
   if (condition) {
     return true;
@@ -701,7 +794,8 @@ auto ValidateCollectSourceDataInvariants(PlanningState& state) -> void
     const auto position_valid = position < state.assets.size();
     if (!CheckStageInvariant(state, position_valid,
           "pak.plan.stage.collect.asset_position_out_of_range",
-          "Source collection produced an out-of-range asset_positions index.")) {
+          "Source collection produced an out-of-range asset_positions "
+          "index.")) {
       continue;
     }
 
@@ -734,6 +828,8 @@ auto CollectSourceData(PlanningState& state) -> void
   for (size_t source_order = 0; source_order < sources.size(); ++source_order) {
     const auto& source = sources[source_order];
     const auto source_root = ToCanonicalSourcePath(source.path);
+    auto& source_contribution = state.source_contributions[source_order];
+    auto source_asset_keys = std::vector<data::AssetKey> {};
 
     if (source.kind == data::CookedSourceKind::kLooseCooked) {
       lc::Inspection inspection;
@@ -816,6 +912,7 @@ auto CollectSourceData(PlanningState& state) -> void
         } else {
           state.assets[position_it->second] = std::move(aggregated);
         }
+        source_asset_keys.push_back(source_asset.key);
       }
 
       auto source_files = std::vector<lc::Inspection::FileEntry>(
@@ -838,7 +935,8 @@ auto CollectSourceData(PlanningState& state) -> void
       };
 
       auto script_table_candidates = std::vector<ScriptTableCandidate> {};
-      auto script_data_files = std::vector<std::pair<std::filesystem::path, uint64_t>> {};
+      auto script_data_files
+        = std::vector<std::pair<std::filesystem::path, uint64_t>> {};
       bool source_uses_script_slot_layout = false;
 
       for (const auto& file_entry : source_files) {
@@ -855,6 +953,8 @@ auto CollectSourceData(PlanningState& state) -> void
 
         switch (file_entry.kind) {
         case data::loose_cooked::FileKind::kTexturesData:
+          AddTransitiveInputDigest(source_contribution,
+            static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
           state.pending_resources.push_back(PendingResource {
             .region_name = "texture_region",
             .resource_kind = "texture",
@@ -865,6 +965,8 @@ auto CollectSourceData(PlanningState& state) -> void
           });
           break;
         case data::loose_cooked::FileKind::kBuffersData:
+          AddTransitiveInputDigest(source_contribution,
+            static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
           state.pending_resources.push_back(PendingResource {
             .region_name = "buffer_region",
             .resource_kind = "buffer",
@@ -875,9 +977,13 @@ auto CollectSourceData(PlanningState& state) -> void
           });
           break;
         case data::loose_cooked::FileKind::kScriptsData:
+          AddTransitiveInputDigest(source_contribution,
+            static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
           script_data_files.emplace_back(file_path, file_size);
           break;
         case data::loose_cooked::FileKind::kPhysicsData:
+          AddTransitiveInputDigest(source_contribution,
+            static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
           state.pending_resources.push_back(PendingResource {
             .region_name = "physics_region",
             .resource_kind = "physics",
@@ -888,28 +994,39 @@ auto CollectSourceData(PlanningState& state) -> void
           });
           break;
         case data::loose_cooked::FileKind::kTexturesTable:
+          AddTransitiveInputDigest(source_contribution,
+            static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
           AccumulateTableCountFromFile(file_path, file_size,
-            sizeof(render::TextureResourceDesc), state.table_counts.texture_count,
-            diagnostics, "pak.plan.texture_table_size_invalid");
+            sizeof(render::TextureResourceDesc),
+            source_contribution.table_counts.texture_count, diagnostics,
+            "pak.plan.texture_table_size_invalid");
           break;
         case data::loose_cooked::FileKind::kBuffersTable:
+          AddTransitiveInputDigest(source_contribution,
+            static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
           AccumulateTableCountFromFile(file_path, file_size,
-            sizeof(core::BufferResourceDesc), state.table_counts.buffer_count,
-            diagnostics, "pak.plan.buffer_table_size_invalid");
+            sizeof(core::BufferResourceDesc),
+            source_contribution.table_counts.buffer_count, diagnostics,
+            "pak.plan.buffer_table_size_invalid");
           break;
         case data::loose_cooked::FileKind::kPhysicsTable:
+          AddTransitiveInputDigest(source_contribution,
+            static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
           AccumulateTableCountFromFile(file_path, file_size,
-            sizeof(physics::PhysicsResourceDesc), state.table_counts.physics_count,
-            diagnostics, "pak.plan.physics_table_size_invalid");
+            sizeof(physics::PhysicsResourceDesc),
+            source_contribution.table_counts.physics_count, diagnostics,
+            "pak.plan.physics_table_size_invalid");
           break;
         case data::loose_cooked::FileKind::kScriptsTable: {
+          AddTransitiveInputDigest(source_contribution,
+            static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
           const auto slot_compatible
             = (file_size % sizeof(script::ScriptSlotRecord)) == 0U;
           const auto resource_compatible
             = (file_size % sizeof(script::ScriptResourceDesc)) == 0U;
 
-          const bool parse_as_slots
-            = slot_compatible && (source_has_scene_assets || !resource_compatible);
+          const bool parse_as_slots = slot_compatible
+            && (source_has_scene_assets || !resource_compatible);
           script_table_candidates.push_back(ScriptTableCandidate {
             .path = file_path,
             .size_bytes = file_size,
@@ -919,10 +1036,11 @@ auto CollectSourceData(PlanningState& state) -> void
           source_uses_script_slot_layout
             = source_uses_script_slot_layout || parse_as_slots;
 
-          if (source_has_scene_assets && source_has_script_assets && slot_compatible
-            && resource_compatible) {
+          if (source_has_scene_assets && source_has_script_assets
+            && slot_compatible && resource_compatible) {
             AddDiagnostic(diagnostics, PakDiagnosticSeverity::kWarning,
-              PakBuildPhase::kPlanning, "pak.plan.scripts_table_ambiguous_layout",
+              PakBuildPhase::kPlanning,
+              "pak.plan.scripts_table_ambiguous_layout",
               "scripts.table is compatible with both slot and resource "
               "records; planner selected slot layout.",
               file_path);
@@ -935,7 +1053,8 @@ auto CollectSourceData(PlanningState& state) -> void
       }
 
       uint32_t source_script_param_record_count = 0;
-      for (const auto& [scripts_data_path, scripts_data_size] : script_data_files) {
+      for (const auto& [scripts_data_path, scripts_data_size] :
+        script_data_files) {
         state.pending_resources.push_back(PendingResource {
           .region_name = "script_region",
           .resource_kind = "script",
@@ -951,7 +1070,8 @@ auto CollectSourceData(PlanningState& state) -> void
 
         if ((scripts_data_size % sizeof(script::ScriptParamRecord)) != 0U) {
           AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-            PakBuildPhase::kPlanning, "pak.plan.script_params_file_size_invalid",
+            PakBuildPhase::kPlanning,
+            "pak.plan.script_params_file_size_invalid",
             "scripts.data size is not divisible by ScriptParamRecord size.",
             scripts_data_path);
           continue;
@@ -968,7 +1088,8 @@ auto CollectSourceData(PlanningState& state) -> void
         }
 
         uint64_t source_count_sum = 0;
-        if (!SafeAdd(source_script_param_record_count, record_count64, source_count_sum)
+        if (!SafeAdd(source_script_param_record_count, record_count64,
+              source_count_sum)
           || source_count_sum > kMaxCountAsUint64) {
           AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
             PakBuildPhase::kPlanning, "pak.plan.script_params_count_overflow",
@@ -976,22 +1097,27 @@ auto CollectSourceData(PlanningState& state) -> void
             scripts_data_path);
           continue;
         }
-        source_script_param_record_count = static_cast<uint32_t>(source_count_sum);
+        source_script_param_record_count
+          = static_cast<uint32_t>(source_count_sum);
       }
 
       for (const auto& script_table : script_table_candidates) {
         if (script_table.parse_as_slots) {
-          const auto parsed_slots = ReadScriptSlotRangesFromTable(
-            script_table.path,
-            static_cast<uint32_t>(state.script_param_ranges.size()),
-            state.script_param_record_count, source_script_param_record_count,
-            state.script_param_ranges, diagnostics);
-          state.table_counts.script_slot_count += parsed_slots;
+          const auto slot_context = ScriptSlotReadContext {
+            .slot_index_base = static_cast<uint32_t>(
+              source_contribution.local_script_param_ranges.size()),
+            .params_array_index_base = 0U,
+            .source_params_record_count = source_script_param_record_count,
+          };
+          const auto parsed_slots
+            = ReadScriptSlotRangesFromTable(script_table.path, slot_context,
+              source_contribution.local_script_param_ranges, diagnostics);
+          source_contribution.table_counts.script_slot_count += parsed_slots;
           continue;
         }
 
         if (script_table.resource_compatible) {
-          state.table_counts.script_resource_count
+          source_contribution.table_counts.script_resource_count
             += script_table.size_bytes / sizeof(script::ScriptResourceDesc);
           continue;
         }
@@ -1002,19 +1128,33 @@ auto CollectSourceData(PlanningState& state) -> void
           script_table.path);
       }
 
-      if (source_uses_script_slot_layout && source_script_param_record_count > 0U) {
-        uint64_t global_script_param_count = 0;
-        if (!SafeAdd(state.script_param_record_count, source_script_param_record_count,
-              global_script_param_count)
-          || global_script_param_count > kMaxCountAsUint64) {
-          AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-            PakBuildPhase::kPlanning, "pak.plan.script_params_count_overflow",
-            "Global ScriptParamRecord count overflowed uint32.",
-            source_root);
-        } else {
-          state.script_param_record_count
-            = static_cast<uint32_t>(global_script_param_count);
+      if (source_uses_script_slot_layout) {
+        source_contribution.script_param_record_count
+          = source_script_param_record_count;
+      }
+
+      std::ranges::sort(source_contribution.transitive_inputs,
+        [](const auto& lhs, const auto& rhs) {
+          if (lhs.first != rhs.first) {
+            return lhs.first < rhs.first;
+          }
+          return lhs.second < rhs.second;
+        });
+      source_contribution.transitive_resource_digest
+        = source_contribution.transitive_inputs.empty()
+        ? EmptyDigest()
+        : AggregateTransitiveDigest(
+            std::span<const std::pair<uint16_t, oxygen::base::Sha256Digest>>(
+              source_contribution.transitive_inputs.data(),
+              source_contribution.transitive_inputs.size()));
+
+      for (const auto& key : source_asset_keys) {
+        const auto position_it = state.asset_positions.find(key);
+        if (position_it == state.asset_positions.end()) {
+          continue;
         }
+        state.assets[position_it->second].transitive_resource_digest
+          = source_contribution.transitive_resource_digest;
       }
 
       continue;
@@ -1043,12 +1183,13 @@ auto CollectSourceData(PlanningState& state) -> void
         if (!IsKnownAssetType(entry.asset_type)) {
           AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
             PakBuildPhase::kPlanning, "pak.plan.asset_type_invalid",
-            "PAK source directory entry has an invalid asset_type.", source_root);
+            "PAK source directory entry has an invalid asset_type.",
+            source_root);
           continue;
         }
 
-        const auto descriptor_digest
-          = ComputeDescriptorDigestFromPakEntry(*pak_file, entry, source_root, diagnostics);
+        const auto descriptor_digest = ComputeDescriptorDigestFromPakEntry(
+          *pak_file, entry, source_root, diagnostics);
         if (!descriptor_digest.has_value()) {
           continue;
         }
@@ -1101,17 +1242,20 @@ auto ClassifyPatchActionsAndFinalizeBrowse(PlanningState& state) -> void
   auto& diagnostics = state.output.diagnostics;
   auto& assets = state.assets;
 
-  std::ranges::sort(assets, [](const AggregatedAsset& lhs, const AggregatedAsset& rhs) {
-    return IsAssetKeyLess(lhs.key, rhs.key);
-  });
+  std::ranges::sort(
+    assets, [](const AggregatedAsset& lhs, const AggregatedAsset& rhs) {
+      return IsAssetKeyLess(lhs.key, rhs.key);
+    });
 
-  std::unordered_map<data::AssetKey, data::PakCatalogEntry> source_catalog_entries;
+  std::unordered_map<data::AssetKey, data::PakCatalogEntry>
+    source_catalog_entries;
   source_catalog_entries.reserve(assets.size());
   for (const auto& asset : assets) {
     source_catalog_entries[asset.key] = ToCatalogEntry(asset);
   }
 
-  std::unordered_map<data::AssetKey, data::PakCatalogEntry> base_catalog_entries;
+  std::unordered_map<data::AssetKey, data::PakCatalogEntry>
+    base_catalog_entries;
   for (const auto& catalog : state.request->base_catalogs) {
     for (const auto& entry : catalog.entries) {
       const auto [it, inserted]
@@ -1160,9 +1304,10 @@ auto ClassifyPatchActionsAndFinalizeBrowse(PlanningState& state) -> void
       } else if (!in_source && in_base) {
         action = pak::PakPatchAction::kDelete;
       } else if (in_source && in_base) {
-        const auto descriptor_equal
-          = source_it->second.descriptor_digest == base_it->second.descriptor_digest;
-        const auto transitive_equal = source_it->second.transitive_resource_digest
+        const auto descriptor_equal = source_it->second.descriptor_digest
+          == base_it->second.descriptor_digest;
+        const auto transitive_equal
+          = source_it->second.transitive_resource_digest
           == base_it->second.transitive_resource_digest;
         action = (descriptor_equal && transitive_equal)
           ? pak::PakPatchAction::kUnchanged
@@ -1186,13 +1331,14 @@ auto ClassifyPatchActionsAndFinalizeBrowse(PlanningState& state) -> void
     });
   }
 
-  auto browse_assets = std::vector<std::reference_wrapper<const AggregatedAsset>> {};
+  auto browse_assets
+    = std::vector<std::reference_wrapper<const AggregatedAsset>> {};
   browse_assets.reserve(assets.size());
   for (const auto& asset : assets) {
     browse_assets.emplace_back(asset);
   }
-  std::ranges::stable_sort(browse_assets,
-    [](const auto& lhs_ref, const auto& rhs_ref) {
+  std::ranges::stable_sort(
+    browse_assets, [](const auto& lhs_ref, const auto& rhs_ref) {
       const auto& lhs = lhs_ref.get();
       const auto& rhs = rhs_ref.get();
       if (lhs.source_order != rhs.source_order) {
@@ -1218,7 +1364,8 @@ auto ValidatePatchClassificationInvariants(PlanningState& state) -> void
 {
   std::unordered_map<data::AssetKey, pak::PakPatchAction> action_by_key;
   for (const auto& action : state.data_plan.patch_actions) {
-    const auto [_, inserted] = action_by_key.emplace(action.asset_key, action.action);
+    const auto [_, inserted]
+      = action_by_key.emplace(action.asset_key, action.action);
     EnforceStageInvariant(state, inserted,
       "pak.plan.stage.patch.duplicate_action_key",
       "Patch classification produced duplicate action keys.");
@@ -1241,6 +1388,259 @@ auto ValidatePatchClassificationInvariants(PlanningState& state) -> void
     EnforceStageInvariant(state, emitted_action,
       "pak.plan.stage.patch.non_emitted_action_retained",
       "Patch asset emission retained key without Create/Replace action.");
+  }
+}
+
+auto CollectIncludedSourceOrders(PlanningState& state) -> void
+{
+  state.included_source_orders.clear();
+  if (state.policy.mode == pak::PakPlanMode::kPatch) {
+    for (const auto& asset : state.assets) {
+      state.included_source_orders.push_back(asset.source_order);
+    }
+  } else {
+    state.included_source_orders.reserve(state.source_contributions.size());
+    for (const auto& [source_order, _] : state.source_contributions) {
+      state.included_source_orders.push_back(source_order);
+    }
+  }
+
+  std::ranges::sort(state.included_source_orders);
+  state.included_source_orders.erase(
+    std::ranges::unique(state.included_source_orders).begin(),
+    state.included_source_orders.end());
+}
+
+auto RebuildPatchLocalContributions(PlanningState& state) -> void
+{
+  using pak::PakBuildPhase;
+  using pak::PakDiagnosticSeverity;
+
+  CollectIncludedSourceOrders(state);
+  const auto included_source_orders = std::unordered_set<size_t>(
+    state.included_source_orders.begin(), state.included_source_orders.end());
+
+  std::erase_if(state.pending_resources,
+    [&included_source_orders](const PendingResource& resource) {
+      return !included_source_orders.contains(resource.source_order);
+    });
+
+  state.table_counts = {};
+  state.script_param_ranges.clear();
+  state.script_param_record_count = 0;
+
+  uint64_t slot_index_base = 0;
+  for (const auto source_order : state.included_source_orders) {
+    const auto contribution_it = state.source_contributions.find(source_order);
+    if (!CheckStageInvariant(state,
+          contribution_it != state.source_contributions.end(),
+          "pak.plan.stage.patch.missing_source_contribution",
+          "Included source order has no source contribution record.")) {
+      continue;
+    }
+
+    const auto& contribution = contribution_it->second;
+    const auto accumulate_count
+      = [&state](const uint64_t addend, uint64_t& target,
+          const std::string_view code, const std::string_view message) -> void {
+      uint64_t sum = 0;
+      if (!SafeAdd(target, addend, sum) || sum > kMaxCountAsUint64) {
+        AddDiagnostic(state.output.diagnostics, PakDiagnosticSeverity::kError,
+          PakBuildPhase::kPlanning, code, message);
+        target = kMaxCountAsUint64;
+        return;
+      }
+      target = sum;
+    };
+
+    accumulate_count(contribution.table_counts.texture_count,
+      state.table_counts.texture_count, "pak.plan.table_count_overflow.texture",
+      "Patch-local texture table count overflowed uint32 range.");
+    accumulate_count(contribution.table_counts.buffer_count,
+      state.table_counts.buffer_count, "pak.plan.table_count_overflow.buffer",
+      "Patch-local buffer table count overflowed uint32 range.");
+    accumulate_count(contribution.table_counts.audio_count,
+      state.table_counts.audio_count, "pak.plan.table_count_overflow.audio",
+      "Patch-local audio table count overflowed uint32 range.");
+    accumulate_count(contribution.table_counts.script_resource_count,
+      state.table_counts.script_resource_count,
+      "pak.plan.table_count_overflow.script_resource",
+      "Patch-local script resource table count overflowed uint32 range.");
+    accumulate_count(contribution.table_counts.script_slot_count,
+      state.table_counts.script_slot_count,
+      "pak.plan.table_count_overflow.script_slot",
+      "Patch-local script slot table count overflowed uint32 range.");
+    accumulate_count(contribution.table_counts.physics_count,
+      state.table_counts.physics_count, "pak.plan.table_count_overflow.physics",
+      "Patch-local physics table count overflowed uint32 range.");
+
+    for (const auto& local_range : contribution.local_script_param_ranges) {
+      uint64_t global_slot_index = 0;
+      if (!SafeAdd(slot_index_base, local_range.slot_index, global_slot_index)
+        || global_slot_index > kMaxCountAsUint64) {
+        AddDiagnostic(state.output.diagnostics, PakDiagnosticSeverity::kError,
+          PakBuildPhase::kPlanning, "pak.plan.script_slot_index_overflow",
+          "Patch-local script slot index overflowed uint32 bounds.");
+        continue;
+      }
+
+      uint64_t global_param_offset = 0;
+      if (!SafeAdd(state.script_param_record_count,
+            local_range.params_array_offset, global_param_offset)
+        || global_param_offset > kMaxCountAsUint64) {
+        AddDiagnostic(state.output.diagnostics, PakDiagnosticSeverity::kError,
+          PakBuildPhase::kPlanning, "pak.plan.script_params_offset_overflow",
+          "Patch-local script param offset overflowed uint32 bounds.");
+        continue;
+      }
+
+      state.script_param_ranges.push_back(pak::PakScriptParamRangePlan {
+        .slot_index = static_cast<uint32_t>(global_slot_index),
+        .params_array_offset = static_cast<uint32_t>(global_param_offset),
+        .params_count = local_range.params_count,
+      });
+    }
+
+    uint64_t next_slot_index_base = 0;
+    if (!SafeAdd(slot_index_base, contribution.table_counts.script_slot_count,
+          next_slot_index_base)) {
+      AddDiagnostic(state.output.diagnostics, PakDiagnosticSeverity::kError,
+        PakBuildPhase::kPlanning, "pak.plan.script_slot_index_overflow",
+        "Patch-local script slot count overflowed uint64 bounds.");
+      slot_index_base = kMaxCountAsUint64;
+    } else {
+      slot_index_base = next_slot_index_base;
+    }
+
+    uint64_t next_param_count = 0;
+    if (!SafeAdd(state.script_param_record_count,
+          contribution.script_param_record_count, next_param_count)
+      || next_param_count > kMaxCountAsUint64) {
+      AddDiagnostic(state.output.diagnostics, PakDiagnosticSeverity::kError,
+        PakBuildPhase::kPlanning, "pak.plan.script_params_count_overflow",
+        "Patch-local ScriptParamRecord count overflowed uint32 bounds.");
+      state.script_param_record_count
+        = static_cast<uint32_t>(kMaxCountAsUint64);
+    } else {
+      state.script_param_record_count = static_cast<uint32_t>(next_param_count);
+    }
+  }
+}
+
+auto PreparePatchCompatibilityEnvelope(PlanningState& state) -> void
+{
+  using pak::PakBuildPhase;
+  using pak::PakDiagnosticSeverity;
+
+  state.patch_manifest_basis_ready = false;
+  state.patch_compatibility_envelope = {};
+  state.patch_compatibility_envelope.patch_content_version
+    = state.request->content_version;
+  state.patch_compatibility_policy_snapshot
+    = PatchCompatibilityPolicySnapshotData {
+        .require_exact_base_set
+        = state.request->patch_compat.require_exact_base_set,
+        .require_content_version_match
+        = state.request->patch_compat.require_content_version_match,
+        .require_base_source_key_match
+        = state.request->patch_compat.require_base_source_key_match,
+        .require_catalog_digest_match
+        = state.request->patch_compat.require_catalog_digest_match,
+      };
+  state.patch_diff_basis_identifier = std::string(kPatchDiffBasisIdentifier);
+
+  if (!state.policy.emits_manifest) {
+    return;
+  }
+
+  if (state.policy.mode == pak::PakPlanMode::kPatch) {
+    for (const auto& base_catalog : state.request->base_catalogs) {
+      state.patch_compatibility_envelope.required_base_source_keys.push_back(
+        base_catalog.source_key);
+      state.patch_compatibility_envelope.required_base_content_versions
+        .push_back(base_catalog.content_version);
+      state.patch_compatibility_envelope.required_base_catalog_digests
+        .push_back(base_catalog.catalog_digest);
+    }
+
+    SortAndUniqueSourceKeys(
+      state.patch_compatibility_envelope.required_base_source_keys);
+    std::ranges::sort(
+      state.patch_compatibility_envelope.required_base_content_versions);
+    state.patch_compatibility_envelope.required_base_content_versions.erase(
+      std::ranges::unique(
+        state.patch_compatibility_envelope.required_base_content_versions)
+        .begin(),
+      state.patch_compatibility_envelope.required_base_content_versions.end());
+    SortAndUniqueDigests(
+      state.patch_compatibility_envelope.required_base_catalog_digests);
+
+    if (state.patch_compatibility_envelope.required_base_source_keys.empty()
+      || state.patch_compatibility_envelope.required_base_content_versions
+        .empty()
+      || state.patch_compatibility_envelope.required_base_catalog_digests
+        .empty()) {
+      AddDiagnostic(state.output.diagnostics, PakDiagnosticSeverity::kError,
+        PakBuildPhase::kPlanning, "pak.patch.compatibility_envelope_incomplete",
+        "Patch compatibility envelope requires non-empty base source/content/"
+        "catalog requirements.");
+      return;
+    }
+  }
+
+  if (state.policy.mode == pak::PakPlanMode::kFull) {
+    state.patch_compatibility_envelope.required_base_source_keys.clear();
+    state.patch_compatibility_envelope.required_base_content_versions.clear();
+    state.patch_compatibility_envelope.required_base_catalog_digests.clear();
+  }
+
+  state.patch_manifest_basis_ready = true;
+}
+
+auto ValidatePatchContributionInvariants(PlanningState& state) -> void
+{
+  EnforceStageInvariant(state,
+    state.patch_diff_basis_identifier == kPatchDiffBasisIdentifier,
+    "pak.plan.stage.patch.diff_basis_identifier_mismatch",
+    "Patch diff basis identifier must match the required "
+    "descriptor_plus_transitive_resources_v1 value.");
+
+  if (!CheckStageInvariant(state,
+        !state.policy.emits_manifest || state.patch_manifest_basis_ready,
+        "pak.plan.stage.patch.compatibility_basis_missing",
+        "Patch/full-manifest build must prepare compatibility envelope "
+        "basis.")) {
+    return;
+  }
+
+  EnforceStageInvariant(state,
+    state.patch_compatibility_envelope.patch_content_version
+      == state.request->content_version,
+    "pak.plan.stage.patch.patch_content_version_mismatch",
+    "Patch compatibility envelope patch_content_version must match request.");
+  EnforceStageInvariant(state,
+    state.patch_compatibility_policy_snapshot.require_exact_base_set
+        == state.request->patch_compat.require_exact_base_set
+      && state.patch_compatibility_policy_snapshot.require_content_version_match
+        == state.request->patch_compat.require_content_version_match
+      && state.patch_compatibility_policy_snapshot.require_base_source_key_match
+        == state.request->patch_compat.require_base_source_key_match
+      && state.patch_compatibility_policy_snapshot.require_catalog_digest_match
+        == state.request->patch_compat.require_catalog_digest_match,
+    "pak.plan.stage.patch.policy_snapshot_mismatch",
+    "Patch compatibility policy snapshot must match the request policy.");
+
+  if (state.policy.mode != pak::PakPlanMode::kPatch) {
+    return;
+  }
+
+  for (const auto& resource : state.pending_resources) {
+    EnforceStageInvariant(state,
+      std::ranges::find(state.included_source_orders, resource.source_order)
+        != state.included_source_orders.end(),
+      "pak.plan.stage.patch.resource_not_patch_local",
+      "Patch-local resource filtering retained a resource from a non-emitted "
+      "source.");
   }
 }
 
@@ -1328,6 +1728,7 @@ auto PlanFileLayout(PlanningState& state) -> void
   uint64_t cursor = state.data_plan.header.size_bytes;
   state.data_plan.regions.clear();
   state.data_plan.resources.clear();
+  state.planned_resource_source_orders.clear();
   const std::array<std::string_view, 5> region_names = { "texture_region",
     "buffer_region", "audio_region", "script_region", "physics_region" };
 
@@ -1351,6 +1752,7 @@ auto PlanFileLayout(PlanningState& state) -> void
         .alignment = resource.alignment,
         .reserved_bytes_zeroed = true,
       });
+      state.planned_resource_source_orders.push_back(resource.source_order);
       cursor += resource.size_bytes;
     }
 
@@ -1375,8 +1777,9 @@ auto PlanFileLayout(PlanningState& state) -> void
     cursor = AlignUp(cursor, AlignmentBytes { kAssetAlignment });
 
     if (asset.descriptor_size > (std::numeric_limits<uint32_t>::max)()) {
-      AddDiagnostic(state.output.diagnostics, pak::PakDiagnosticSeverity::kError,
-        pak::PakBuildPhase::kPlanning, "pak.plan.asset_descriptor_too_large",
+      AddDiagnostic(state.output.diagnostics,
+        pak::PakDiagnosticSeverity::kError, pak::PakBuildPhase::kPlanning,
+        "pak.plan.asset_descriptor_too_large",
         "Asset descriptor size exceeds uint32 range.", asset.descriptor_path);
       continue;
     }
@@ -1389,13 +1792,14 @@ auto PlanFileLayout(PlanningState& state) -> void
       .alignment = kAssetAlignment,
       .reserved_bytes_zeroed = true,
     });
-    state.data_plan.directory.entries.push_back(pak::PakAssetDirectoryEntryPlan {
-      .asset_key = asset.key,
-      .asset_type = asset.asset_type,
-      .entry_offset = 0,
-      .descriptor_offset = cursor,
-      .descriptor_size = static_cast<uint32_t>(asset.descriptor_size),
-    });
+    state.data_plan.directory.entries.push_back(
+      pak::PakAssetDirectoryEntryPlan {
+        .asset_key = asset.key,
+        .asset_type = asset.asset_type,
+        .entry_offset = 0,
+        .descriptor_offset = cursor,
+        .descriptor_size = static_cast<uint32_t>(asset.descriptor_size),
+      });
     cursor += asset.descriptor_size;
   }
 
@@ -1406,7 +1810,8 @@ auto PlanFileLayout(PlanningState& state) -> void
     * sizeof(core::AssetDirectoryEntry);
   for (size_t i = 0; i < state.data_plan.directory.entries.size(); ++i) {
     state.data_plan.directory.entries[i].entry_offset
-      = state.data_plan.directory.offset + (i * sizeof(core::AssetDirectoryEntry));
+      = state.data_plan.directory.offset
+      + (i * sizeof(core::AssetDirectoryEntry));
   }
   cursor += state.data_plan.directory.size_bytes;
 
@@ -1426,7 +1831,8 @@ auto PlanFileLayout(PlanningState& state) -> void
       });
     }
     std::ranges::sort(browse_entries,
-      [](const pak::PakBrowseEntryPlan& lhs, const pak::PakBrowseEntryPlan& rhs) {
+      [](const pak::PakBrowseEntryPlan& lhs,
+        const pak::PakBrowseEntryPlan& rhs) {
         return lhs.virtual_path < rhs.virtual_path;
       });
 
@@ -1434,8 +1840,9 @@ auto PlanFileLayout(PlanningState& state) -> void
       = pak::MeasureBrowseIndexPayload(std::span<const pak::PakBrowseEntryPlan>(
         browse_entries.data(), browse_entries.size()));
     if (!browse_payload_size.has_value()) {
-      AddDiagnostic(state.output.diagnostics, pak::PakDiagnosticSeverity::kError,
-        pak::PakBuildPhase::kPlanning, "pak.plan.browse_index_measure_failed",
+      AddDiagnostic(state.output.diagnostics,
+        pak::PakDiagnosticSeverity::kError, pak::PakBuildPhase::kPlanning,
+        "pak.plan.browse_index_measure_failed",
         "Browse index payload size measurement overflowed or failed.");
       return;
     }
@@ -1452,11 +1859,81 @@ auto PlanFileLayout(PlanningState& state) -> void
 
   cursor = AlignUp(cursor, AlignmentBytes { kFooterAlignment });
   state.data_plan.footer.offset = cursor;
-  state.data_plan.footer.size_bytes = static_cast<uint32_t>(sizeof(core::PakFooter));
+  state.data_plan.footer.size_bytes
+    = static_cast<uint32_t>(sizeof(core::PakFooter));
   state.data_plan.footer.crc32_field_absolute_offset
     = cursor + offsetof(core::PakFooter, pak_crc32);
   state.data_plan.planned_file_size
     = cursor + static_cast<uint64_t>(sizeof(core::PakFooter));
+}
+
+auto BuildPatchClosure(PlanningState& state) -> void
+{
+  state.data_plan.patch_closure.clear();
+  if (state.policy.mode != pak::PakPlanMode::kPatch) {
+    return;
+  }
+
+  EnforceStageInvariant(state,
+    state.planned_resource_source_orders.size()
+      == state.data_plan.resources.size(),
+    "pak.plan.stage.patch.resource_source_count_mismatch",
+    "Planned resource source-order metadata count does not match resource "
+    "plan.");
+
+  auto resources_by_source_order
+    = std::unordered_map<size_t, std::vector<size_t>> {};
+  resources_by_source_order.reserve(
+    state.planned_resource_source_orders.size());
+  for (size_t i = 0; i < state.planned_resource_source_orders.size(); ++i) {
+    resources_by_source_order[state.planned_resource_source_orders[i]]
+      .push_back(i);
+  }
+
+  for (const auto& asset : state.assets) {
+    const auto resource_indices_it
+      = resources_by_source_order.find(asset.source_order);
+    if (resource_indices_it == resources_by_source_order.end()) {
+      continue;
+    }
+
+    for (const auto resource_position : resource_indices_it->second) {
+      const auto& resource = state.data_plan.resources[resource_position];
+      state.data_plan.patch_closure.push_back(pak::PakPatchClosureRecord {
+        .asset_key = asset.key,
+        .resource_kind = resource.resource_kind,
+        .resource_index = resource.resource_index,
+      });
+    }
+  }
+}
+
+auto ValidatePatchClosureInvariants(PlanningState& state) -> void
+{
+  if (state.policy.mode != pak::PakPlanMode::kPatch) {
+    return;
+  }
+
+  auto resources_by_source_order = std::unordered_map<size_t, uint64_t> {};
+  for (const auto source_order : state.planned_resource_source_orders) {
+    ++resources_by_source_order[source_order];
+  }
+
+  auto closure_count_by_asset = std::unordered_map<data::AssetKey, uint64_t> {};
+  for (const auto& closure : state.data_plan.patch_closure) {
+    ++closure_count_by_asset[closure.asset_key];
+  }
+
+  for (const auto& asset : state.assets) {
+    const auto expected = resources_by_source_order[asset.source_order];
+    const auto actual_it = closure_count_by_asset.find(asset.key);
+    const auto actual
+      = actual_it == closure_count_by_asset.end() ? 0U : actual_it->second;
+    EnforceStageInvariant(state, expected == actual,
+      "pak.plan.stage.patch.closure_incomplete",
+      "Patch closure must include every patch-local resource for each emitted "
+      "asset.");
+  }
 }
 
 auto ValidateLayoutInvariants(PlanningState& state) -> void
@@ -1467,19 +1944,20 @@ auto ValidateLayoutInvariants(PlanningState& state) -> void
     "pak.plan.stage.layout.directory_asset_count_mismatch",
     "Directory entry count does not match planned asset count.");
 
-  const auto pair_count = (std::min)(
-    state.data_plan.directory.entries.size(), state.data_plan.assets.size());
+  const auto pair_count = (std::min)(state.data_plan.directory.entries.size(),
+    state.data_plan.assets.size());
   for (size_t i = 0; i < pair_count; ++i) {
-    const auto key_matches
-      = state.data_plan.directory.entries[i].asset_key == state.data_plan.assets[i].asset_key;
+    const auto key_matches = state.data_plan.directory.entries[i].asset_key
+      == state.data_plan.assets[i].asset_key;
     EnforceStageInvariant(state, key_matches,
       "pak.plan.stage.layout.directory_asset_key_mismatch",
       "Directory entry asset key does not match planned asset key.");
   }
 
-  const auto footer_end
-    = state.data_plan.footer.offset + static_cast<uint64_t>(state.data_plan.footer.size_bytes);
-  const auto size_covers_footer = state.data_plan.planned_file_size >= footer_end;
+  const auto footer_end = state.data_plan.footer.offset
+    + static_cast<uint64_t>(state.data_plan.footer.size_bytes);
+  const auto size_covers_footer
+    = state.data_plan.planned_file_size >= footer_end;
   EnforceStageInvariant(state, size_covers_footer,
     "pak.plan.stage.layout.file_size_before_footer_end",
     "Planned file size is smaller than footer end.");
@@ -1507,8 +1985,8 @@ auto ValidateLayoutInvariants(PlanningState& state) -> void
 
 auto ValidateAndFinalizeResult(PlanningState& state) -> void
 {
-  const auto validation
-    = pak::PakValidation::Validate(pak::PakPlan(state.data_plan), state.policy, *state.request);
+  const auto validation = pak::PakValidation::Validate(
+    pak::PakPlan(state.data_plan), state.policy, *state.request);
   state.output.diagnostics.insert(state.output.diagnostics.end(),
     validation.diagnostics.begin(), validation.diagnostics.end());
 
@@ -1518,7 +1996,8 @@ auto ValidateAndFinalizeResult(PlanningState& state) -> void
         return lhs.code < rhs.code;
       }
       if (lhs.phase != rhs.phase) {
-        return static_cast<uint8_t>(lhs.phase) < static_cast<uint8_t>(rhs.phase);
+        return static_cast<uint8_t>(lhs.phase)
+          < static_cast<uint8_t>(rhs.phase);
       }
       if (lhs.asset_key != rhs.asset_key) {
         return lhs.asset_key < rhs.asset_key;
@@ -1526,11 +2005,10 @@ auto ValidateAndFinalizeResult(PlanningState& state) -> void
       return lhs.message < rhs.message;
     });
 
-  const auto has_error
-    = std::ranges::any_of(state.output.diagnostics,
-      [](const pak::PakDiagnostic& diagnostic) {
-        return diagnostic.severity == pak::PakDiagnosticSeverity::kError;
-      });
+  const auto has_error = std::ranges::any_of(
+    state.output.diagnostics, [](const pak::PakDiagnostic& diagnostic) {
+      return diagnostic.severity == pak::PakDiagnosticSeverity::kError;
+    });
 
   if (has_error) {
     return;
@@ -1593,6 +2071,15 @@ auto PakPlanBuilder::Build(const PakBuildRequest& request) const -> BuildResult
   RunStage(state, "ValidatePatchClassificationInvariants",
     "pak.plan.stage.patch_invariants_exception",
     [&state]() { ValidatePatchClassificationInvariants(state); });
+  RunStage(state, "RebuildPatchLocalContributions",
+    "pak.plan.stage.patch_local_rebuild_exception",
+    [&state]() { RebuildPatchLocalContributions(state); });
+  RunStage(state, "PreparePatchCompatibilityEnvelope",
+    "pak.plan.stage.patch_compatibility_exception",
+    [&state]() { PreparePatchCompatibilityEnvelope(state); });
+  RunStage(state, "ValidatePatchContributionInvariants",
+    "pak.plan.stage.patch_local_invariants_exception",
+    [&state]() { ValidatePatchContributionInvariants(state); });
   RunStage(state, "FinalizeScriptAndTables",
     "pak.plan.stage.script_tables_exception",
     [&state]() { FinalizeScriptAndTables(state); });
@@ -1601,6 +2088,11 @@ auto PakPlanBuilder::Build(const PakBuildRequest& request) const -> BuildResult
     [&state]() { ValidateScriptAndTableInvariants(state); });
   RunStage(state, "PlanFileLayout", "pak.plan.stage.layout_exception",
     [&state]() { PlanFileLayout(state); });
+  RunStage(state, "BuildPatchClosure", "pak.plan.stage.patch_closure_exception",
+    [&state]() { BuildPatchClosure(state); });
+  RunStage(state, "ValidatePatchClosureInvariants",
+    "pak.plan.stage.patch_closure_invariants_exception",
+    [&state]() { ValidatePatchClosureInvariants(state); });
   RunStage(state, "ValidateLayoutInvariants",
     "pak.plan.stage.layout_invariants_exception",
     [&state]() { ValidateLayoutInvariants(state); });

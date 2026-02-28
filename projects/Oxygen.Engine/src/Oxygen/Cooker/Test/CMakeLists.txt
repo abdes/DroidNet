@@ -136,7 +136,7 @@ m_gtest_program(
     "Pak/PakPlanBuilder_phase3_test.cpp"
 )
 
-m_gtest_program(PakPatchPlanner SOURCES "Pak/PatchPlanner_placeholder_test.cpp")
+m_gtest_program(PakPatchPlanner SOURCES "Pak/PakPatchPlanner_phase4_test.cpp")
 
 m_gtest_program(PakWriter SOURCES "Pak/Writer_placeholder_test.cpp")
 

@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include "Oxygen/Data/AssetType.h"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -18,6 +17,7 @@
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Data/MeshType.h>
@@ -91,7 +91,7 @@ struct PakHeader {
   char magic[8] = { 'O', 'X', 'P', 'A', 'K', 0, 0, 0 };
   uint16_t version = kPakVersion; // Format version (must be v7)
   uint16_t content_version = 0; // Content version
-  uint8_t guid[16] = {}; // Unique identifier for this PAK
+  std::array<uint8_t, 16> guid = {}; // Unique identifier for this PAK
   // Reserved for future use
   uint8_t reserved[228] = {};
 };
