@@ -42,7 +42,9 @@ public:
   struct Request {
     CompileKey compile_key;
     ScriptSourceBlob source;
-    CompileMode compile_mode { CompileMode::kDebug };
+    core::meta::scripting::ScriptCompileMode compile_mode {
+      core::meta::scripting::ScriptCompileMode::kDebug
+    };
   };
 
   using Result = ScriptCompileResult;

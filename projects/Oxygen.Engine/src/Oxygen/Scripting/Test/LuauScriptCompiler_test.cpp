@@ -13,7 +13,7 @@
 
 namespace {
 
-using oxygen::scripting::CompileMode;
+using oxygen::core::meta::scripting::ScriptCompileMode;
 using oxygen::scripting::LuauScriptCompiler;
 using oxygen::scripting::ScriptBlobCanonicalName;
 using oxygen::scripting::ScriptBlobOrigin;
@@ -39,7 +39,7 @@ NOLINT_TEST(LuauScriptCompilerTest, CompileValidSourceProducesBytecode)
       oxygen::data::pak::scripting::ScriptLanguage::kLuau,
       oxygen::data::pak::scripting::ScriptCompression::kNone, 0,
       ScriptBlobOrigin::kEmbeddedResource, ScriptBlobCanonicalName { "test" }),
-    CompileMode::kDebug);
+    ScriptCompileMode::kDebug);
 
   EXPECT_TRUE(result.success);
   EXPECT_TRUE(result.HasBytecode());
@@ -56,7 +56,7 @@ NOLINT_TEST(LuauScriptCompilerTest, CompileInvalidSourceReturnsDiagnostics)
       oxygen::data::pak::scripting::ScriptLanguage::kLuau,
       oxygen::data::pak::scripting::ScriptCompression::kNone, 0,
       ScriptBlobOrigin::kEmbeddedResource, ScriptBlobCanonicalName { "test" }),
-    CompileMode::kDebug);
+    ScriptCompileMode::kDebug);
 
   EXPECT_FALSE(result.success);
   EXPECT_FALSE(result.HasBytecode());

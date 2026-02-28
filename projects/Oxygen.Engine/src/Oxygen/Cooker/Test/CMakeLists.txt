@@ -47,6 +47,7 @@ m_gtest_program(
     "Import/ImportEventLoop_test.cpp"
     "Import/ImportJob_test.cpp"
     "Import/ImportSession_test.cpp"
+    "Import/ScriptCompileMode_contract_test.cpp"
     "Mocks/TestImportJob.cpp"
     "Mocks/TestImportJob.h"
 )

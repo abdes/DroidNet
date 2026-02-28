@@ -50,13 +50,10 @@ m_gtest_program(
     "AnyCache_test.cpp"
     "AnyCache_concurrency_test.cpp"
 )
-m_gtest_program(
-  AnyCacheBudget
-  SOURCES
-    "AnyCache_Budget_test.cpp"
-)
+m_gtest_program(AnyCacheBudget SOURCES "AnyCache_Budget_test.cpp")
 m_gtest_program(BindlessHandle SOURCES "BindlessHandle_test.cpp")
 m_gtest_program(PhaseRegistry SOURCES "PhaseRegistry_test.cpp")
+m_gtest_program(ScriptCompileMode SOURCES "ScriptCompileMode_test.cpp")
 m_gtest_program(
   Time
   SOURCES

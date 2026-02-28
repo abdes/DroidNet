@@ -17,7 +17,8 @@ public:
   OXGN_SCRP_NDAPI auto Language() const noexcept
     -> data::pak::scripting::ScriptLanguage override;
 
-  OXGN_SCRP_NDAPI auto Compile(ScriptSourceBlob source, CompileMode mode) const
+  OXGN_SCRP_NDAPI auto Compile(ScriptSourceBlob source,
+    core::meta::scripting::ScriptCompileMode mode) const
     -> ScriptCompileResult override;
 };
 

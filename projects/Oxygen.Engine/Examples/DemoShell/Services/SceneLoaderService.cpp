@@ -286,7 +286,7 @@ namespace {
 
   auto ComputeCompileKey(const data::AssetKey asset_key,
     const scripting::ScriptSourceBlob& blob,
-    const scripting::CompileMode compile_mode)
+    const core::meta::scripting::ScriptCompileMode compile_mode)
     -> scripting::IScriptCompilationService::CompileKey
   {
     const auto bytes = blob.BytesView();
@@ -2084,7 +2084,8 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
 
   auto source_blob
     = std::get<scripting::ScriptSourceBlob>(std::move(resolved_blob));
-  constexpr auto kCompileMode = scripting::CompileMode::kDebug;
+  constexpr auto kCompileMode
+    = core::meta::scripting::ScriptCompileMode::kDebug;
   const auto compile_key
     = ComputeCompileKey(script_asset->GetAssetKey(), source_blob, kCompileMode);
   const auto source_size = source_blob.Size();

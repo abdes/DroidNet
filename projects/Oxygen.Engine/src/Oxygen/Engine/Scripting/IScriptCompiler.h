@@ -6,35 +6,17 @@
 
 #pragma once
 
-#include <cstdint>
 #include <memory>
 #include <string>
-#include <string_view>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
 #include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
 #include <Oxygen/Engine/api_export.h>
 
 namespace oxygen::scripting {
-
-enum class CompileMode : uint8_t {
-  kDebug,
-  kOptimized,
-};
-
-[[nodiscard]] constexpr auto to_string(const CompileMode mode) noexcept
-  -> std::string_view
-{
-  switch (mode) {
-    // clang-format off
-  case CompileMode::kDebug: return "debug";
-  case CompileMode::kOptimized: return "optimized";
-  default: return "__Unknown__";
-    // clang-format on
-  }
-}
 
 struct ScriptCompileResult {
   bool success { false };
@@ -59,8 +41,8 @@ public:
     -> data::pak::scripting::ScriptLanguage
     = 0;
 
-  [[nodiscard]] virtual auto Compile(
-    ScriptSourceBlob source, CompileMode mode) const -> ScriptCompileResult
+  [[nodiscard]] virtual auto Compile(ScriptSourceBlob source,
+    core::meta::scripting::ScriptCompileMode mode) const -> ScriptCompileResult
     = 0;
 };
 
