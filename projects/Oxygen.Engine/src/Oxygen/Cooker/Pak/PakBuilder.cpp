@@ -9,6 +9,7 @@
 #include <utility>
 
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
+#include <Oxygen/Cooker/Pak/PakManifestWriter.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
 #include <Oxygen/Cooker/Pak/PakWriter.h>
 
@@ -77,6 +78,13 @@ auto AddRequestError(pak::PakBuildResult& result, const std::string_view code,
   AddDiagnostic(result, pak::PakDiagnosticSeverity::kError,
     pak::PakBuildPhase::kRequestValidation, std::string(code),
     std::string(message), path);
+}
+
+auto IsManifestEmissionRequested(const pak::PakBuildRequest& request) -> bool
+{
+  return request.mode == pak::BuildMode::kPatch
+    || (request.mode == pak::BuildMode::kFull
+      && request.options.emit_manifest_in_full);
 }
 
 } // namespace
@@ -154,6 +162,27 @@ auto PakBuilder::Build(const PakBuildRequest& request) noexcept
 
   for (const auto& diagnostic : write_result.diagnostics) {
     AddDiagnosticRecord(result, diagnostic);
+  }
+
+  const auto emit_manifest = IsManifestEmissionRequested(request);
+  if (emit_manifest && result.summary.diagnostics_error == 0U) {
+    PakManifestWriter manifest_writer;
+    auto manifest_result
+      = manifest_writer.Write(request, *plan_result.plan, result.pak_crc32);
+    result.telemetry.manifest_duration = manifest_result.manifest_duration;
+
+    for (const auto& diagnostic : manifest_result.diagnostics) {
+      AddDiagnosticRecord(result, diagnostic);
+    }
+
+    if (manifest_result.manifest.has_value()) {
+      result.patch_manifest = std::move(manifest_result.manifest);
+    } else if (result.summary.diagnostics_error == 0U) {
+      AddDiagnostic(result, PakDiagnosticSeverity::kError,
+        PakBuildPhase::kManifest, "pak.manifest.missing_manifest_result",
+        "Manifest emission requested but no PatchManifest was produced.",
+        request.output_manifest_path);
+    }
   }
 
   if (request.options.fail_on_warnings && result.summary.diagnostics_warning > 0

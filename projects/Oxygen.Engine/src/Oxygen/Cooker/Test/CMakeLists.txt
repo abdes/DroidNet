@@ -144,5 +144,6 @@ m_gtest_program(
   PakE2E
   SOURCES
     "Pak/PakBuilder_api_test.cpp"
+    "Pak/PakManifest_phase6_test.cpp"
     "Pak/E2E_placeholder_test.cpp"
 )
