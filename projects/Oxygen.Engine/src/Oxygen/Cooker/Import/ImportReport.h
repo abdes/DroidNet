@@ -122,6 +122,17 @@ struct ImportReport final {
   uint32_t materials_written = 0;
   uint32_t geometry_written = 0;
   uint32_t scenes_written = 0;
+  uint32_t scripts_written = 0;
+
+  //! Scripting-sidecar emission counters.
+  /*!
+   Populated for `kScriptingSidecar` imports from the finalized emitted
+   * state.
+   For non-sidecar imports, these counters remain zero.
+  */
+  uint32_t scripting_components_written = 0;
+  uint32_t script_slots_written = 0;
+  uint32_t script_params_written = 0;
 
   //! Cooked outputs emitted during the import.
   std::vector<ImportOutputRecord> outputs;

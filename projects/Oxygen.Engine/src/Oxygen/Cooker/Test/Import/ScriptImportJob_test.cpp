@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -13,6 +14,7 @@
 #include <fstream>
 #include <latch>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <ranges>
 #include <string>
@@ -120,6 +122,46 @@ namespace {
     done.wait();
 
     return report;
+  }
+
+  struct CallbackCapture final {
+    ImportReport report {};
+    std::vector<ImportPhase> phases;
+    uint32_t completion_calls = 0;
+  };
+
+  auto SubmitAndCaptureCallbacks(AsyncImportService& service,
+    ImportRequest request) -> std::optional<CallbackCapture>
+  {
+    auto capture = CallbackCapture {};
+    auto callback_mutex = std::mutex {};
+    std::latch done(1);
+
+    const auto submitted = service.SubmitImport(
+      std::move(request),
+      [&capture, &callback_mutex, &done](
+        const auto /*job_id*/, const ImportReport& completed) {
+        std::scoped_lock lock(callback_mutex);
+        ++capture.completion_calls;
+        capture.report = completed;
+        done.count_down();
+      },
+      [&capture, &callback_mutex](const ProgressEvent& progress) {
+        std::scoped_lock lock(callback_mutex);
+        capture.phases.push_back(progress.header.phase);
+      });
+    if (!submitted.has_value()) {
+      return std::nullopt;
+    }
+
+    done.wait();
+    return capture;
+  }
+
+  auto ContainsPhase(
+    const std::vector<ImportPhase>& phases, const ImportPhase phase) -> bool
+  {
+    return std::ranges::find(phases, phase) != phases.end();
   }
 
   class ScopedImportService final {
@@ -394,6 +436,74 @@ namespace {
   class ScriptingSidecarImportTest : public ScriptingImportTestBase { };
 
   NOLINT_TEST_F(
+    ScriptAssetImportTest, SubmitRejectionReturnsNulloptForInvalidAndShutdown)
+  {
+    const auto cooked_root = MakeTempCookedRoot("script_submit_rejection");
+
+    auto invalid_callback_invoked = std::atomic<bool> { false };
+    auto invalid_request = ImportRequest {};
+    invalid_request.source_path = cooked_root / "input" / "unsupported.abc";
+    invalid_request.cooked_root = cooked_root;
+
+    const auto invalid_submit
+      = Service().SubmitImport(std::move(invalid_request),
+        [&invalid_callback_invoked](
+          const auto /*job_id*/, const ImportReport& /*report*/) {
+          invalid_callback_invoked.store(true, std::memory_order_release);
+        });
+    EXPECT_FALSE(invalid_submit.has_value());
+    EXPECT_FALSE(invalid_callback_invoked.load(std::memory_order_acquire));
+
+    Service().RequestShutdown();
+
+    auto shutdown_callback_invoked = std::atomic<bool> { false };
+    const auto shutdown_submit = Service().SubmitImport(
+      MakeScriptRequest(cooked_root / "input" / "shutdown.luau", cooked_root,
+        ScriptStorageMode::kExternal, false),
+      [&shutdown_callback_invoked](
+        const auto /*job_id*/, const ImportReport& /*report*/) {
+        shutdown_callback_invoked.store(true, std::memory_order_release);
+      });
+    EXPECT_FALSE(shutdown_submit.has_value());
+    EXPECT_FALSE(shutdown_callback_invoked.load(std::memory_order_acquire));
+  }
+
+  NOLINT_TEST_F(ScriptAssetImportTest,
+    ScriptAssetCallbacksProvideProgressAndSingleCompletion)
+  {
+    constexpr auto kScriptSource = std::string_view { "return 17" };
+    const auto cooked_root = MakeTempCookedRoot("script_callbacks_asset");
+    const auto source_path = cooked_root / "input" / "callback_asset.luau";
+    WriteTextFile(source_path, kScriptSource);
+
+    const auto capture = SubmitAndCaptureCallbacks(Service(),
+      MakeScriptRequest(
+        source_path, cooked_root, ScriptStorageMode::kExternal, false));
+    ASSERT_TRUE(capture.has_value());
+    EXPECT_EQ(capture->completion_calls, 1U);
+    EXPECT_TRUE(capture->report.success);
+    EXPECT_TRUE(ContainsPhase(capture->phases, ImportPhase::kLoading));
+    EXPECT_TRUE(ContainsPhase(capture->phases, ImportPhase::kWorking));
+    EXPECT_TRUE(ContainsPhase(capture->phases, ImportPhase::kComplete));
+  }
+
+  NOLINT_TEST_F(ScriptAssetImportTest, ScriptAssetReportCountersArePopulated)
+  {
+    constexpr auto kScriptSource = std::string_view { "return 5" };
+    const auto cooked_root = MakeTempCookedRoot("script_report_counters_asset");
+    const auto source_path = cooked_root / "input" / "counter_asset.luau";
+    WriteTextFile(source_path, kScriptSource);
+
+    const auto report = Submit(MakeScriptRequest(
+      source_path, cooked_root, ScriptStorageMode::kExternal, false));
+    ASSERT_TRUE(report.success);
+    EXPECT_EQ(report.scripts_written, 1U);
+    EXPECT_EQ(report.scripting_components_written, 0U);
+    EXPECT_EQ(report.script_slots_written, 0U);
+    EXPECT_EQ(report.script_params_written, 0U);
+  }
+
+  NOLINT_TEST_F(
     ScriptAssetImportTest, EmbeddedScriptImportWritesDescriptorAndScriptFiles)
   {
     using data::loose_cooked::FileKind;
@@ -643,6 +753,130 @@ namespace {
     ASSERT_EQ(components.size(), 1U);
     EXPECT_EQ(components[0].node_index, 0U);
     EXPECT_EQ(components[0].slot_count, 1U);
+  }
+
+  NOLINT_TEST_F(ScriptingSidecarImportTest,
+    ScriptingSidecarCallbacksProvideProgressAndSingleCompletion)
+  {
+    constexpr auto kScriptSource = std::string_view { "return 123" };
+    const auto cooked_root = MakeTempCookedRoot("script_callbacks_sidecar");
+    const auto script_source = cooked_root / "input" / "callback_sidecar.luau";
+    WriteTextFile(script_source, kScriptSource);
+
+    const auto model_path = ModelPath();
+    ASSERT_TRUE(std::filesystem::exists(model_path));
+    ASSERT_TRUE(Submit(MakeScriptRequest(script_source, cooked_root,
+                         ScriptStorageMode::kExternal, false))
+        .success);
+    ASSERT_TRUE(Submit(MakeSceneRequest(model_path, cooked_root)).success);
+
+    const auto inspection = LoadInspection(cooked_root);
+    const auto scene_asset
+      = FindFirstAssetByType(inspection, AssetType::kScene);
+    const auto script_asset
+      = FindFirstAssetByType(inspection, AssetType::kScript);
+    ASSERT_TRUE(scene_asset.has_value());
+    ASSERT_TRUE(script_asset.has_value());
+
+    const auto sidecar_source = cooked_root / "input" / "callback_sidecar.json";
+    WriteTextFile(
+      sidecar_source, MakeSidecarPayload(script_asset->virtual_path));
+
+    const auto capture = SubmitAndCaptureCallbacks(Service(),
+      MakeSidecarRequest(
+        sidecar_source, cooked_root, scene_asset->virtual_path));
+    ASSERT_TRUE(capture.has_value());
+    EXPECT_EQ(capture->completion_calls, 1U);
+    EXPECT_TRUE(capture->report.success);
+    EXPECT_TRUE(ContainsPhase(capture->phases, ImportPhase::kLoading));
+    EXPECT_TRUE(ContainsPhase(capture->phases, ImportPhase::kWorking));
+    EXPECT_TRUE(ContainsPhase(capture->phases, ImportPhase::kComplete));
+  }
+
+  NOLINT_TEST_F(
+    ScriptingSidecarImportTest, ScriptingSidecarReportCountersArePopulated)
+  {
+    constexpr auto kScriptSource = std::string_view { "return 123" };
+    const auto cooked_root
+      = MakeTempCookedRoot("script_report_counters_sidecar");
+    const auto script_source = cooked_root / "input" / "counter_sidecar.luau";
+    WriteTextFile(script_source, kScriptSource);
+
+    const auto model_path = ModelPath();
+    ASSERT_TRUE(std::filesystem::exists(model_path));
+    ASSERT_TRUE(Submit(MakeScriptRequest(script_source, cooked_root,
+                         ScriptStorageMode::kExternal, false))
+        .success);
+    ASSERT_TRUE(Submit(MakeSceneRequest(model_path, cooked_root)).success);
+
+    const auto inspection = LoadInspection(cooked_root);
+    const auto scene_asset
+      = FindFirstAssetByType(inspection, AssetType::kScene);
+    const auto script_asset
+      = FindFirstAssetByType(inspection, AssetType::kScript);
+    ASSERT_TRUE(scene_asset.has_value());
+    ASSERT_TRUE(script_asset.has_value());
+
+    const auto sidecar_source = cooked_root / "input" / "counter_sidecar.json";
+    WriteTextFile(
+      sidecar_source, MakeSidecarPayload(script_asset->virtual_path));
+
+    const auto report = Submit(MakeSidecarRequest(
+      sidecar_source, cooked_root, scene_asset->virtual_path));
+    ASSERT_TRUE(report.success);
+    EXPECT_EQ(report.scripts_written, 0U);
+    EXPECT_EQ(report.scripting_components_written, 1U);
+    EXPECT_EQ(report.script_slots_written, 1U);
+    EXPECT_EQ(report.script_params_written, 1U);
+  }
+
+  NOLINT_TEST_F(ScriptingSidecarImportTest,
+    MixedBatchCommitPreservesSuccessfulScriptWhenSidecarFails)
+  {
+    constexpr auto kScriptSource = std::string_view { "return 10" };
+    const auto cooked_root = MakeTempCookedRoot("script_mixed_batch_commit");
+    const auto script_source = cooked_root / "input" / "batch_success.luau";
+    const auto sidecar_source = cooked_root / "input" / "batch_failure.json";
+    WriteTextFile(script_source, kScriptSource);
+    WriteTextFile(sidecar_source, "{ \"bindings\": [] }");
+
+    auto script_report = ImportReport {};
+    auto sidecar_report = ImportReport {};
+    std::latch script_done(1);
+    std::latch sidecar_done(1);
+
+    const auto script_submit
+      = Service().SubmitImport(MakeScriptRequest(script_source, cooked_root,
+                                 ScriptStorageMode::kExternal, false),
+        [&script_report, &script_done](
+          const auto /*job_id*/, const ImportReport& report) {
+          script_report = report;
+          script_done.count_down();
+        });
+    ASSERT_TRUE(script_submit.has_value());
+    script_done.wait();
+    ASSERT_TRUE(script_report.success);
+
+    const auto sidecar_submit
+      = Service().SubmitImport(MakeSidecarRequest(sidecar_source, cooked_root,
+                                 "/Scenes/missing_scene.oscene"),
+        [&sidecar_report, &sidecar_done](
+          const auto /*job_id*/, const ImportReport& report) {
+          sidecar_report = report;
+          sidecar_done.count_down();
+        });
+    ASSERT_TRUE(sidecar_submit.has_value());
+    sidecar_done.wait();
+    EXPECT_FALSE(sidecar_report.success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      sidecar_report.diagnostics, "script.sidecar.target_scene_missing"));
+
+    const auto inspection = LoadInspection(cooked_root);
+    const auto script_asset
+      = FindFirstAssetByType(inspection, AssetType::kScript);
+    ASSERT_TRUE(script_asset.has_value());
+    EXPECT_TRUE(
+      std::filesystem::exists(cooked_root / script_asset->descriptor_relpath));
   }
 
   NOLINT_TEST_F(

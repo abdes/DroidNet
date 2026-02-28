@@ -4,9 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <fstream>
+#include <limits>
 #include <optional>
+#include <string>
 #include <string_view>
+#include <type_traits>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
@@ -17,6 +22,8 @@
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/SceneAsset.h>
 namespace oxygen::content::import {
 
 namespace {
@@ -118,6 +125,94 @@ namespace {
     }
 
     return summary;
+  }
+
+  auto JoinRelativePath(
+    const std::string_view base, const std::string_view child) -> std::string
+  {
+    if (base.empty()) {
+      return std::string { child };
+    }
+    if (child.empty()) {
+      return std::string { base };
+    }
+    return std::string { base } + "/" + std::string { child };
+  }
+
+  auto BuildScriptsTableRelPath(const ImportRequest& request) -> std::string
+  {
+    return JoinRelativePath(
+      request.loose_cooked_layout.resources_dir, "scripts.table");
+  }
+
+  auto BuildScriptsDataRelPath(const ImportRequest& request) -> std::string
+  {
+    return JoinRelativePath(
+      request.loose_cooked_layout.resources_dir, "scripts.data");
+  }
+
+  template <typename RecordT>
+  auto CountPackedRecords(const std::filesystem::path& file_path) -> uint32_t
+  {
+    static_assert(std::is_trivially_copyable_v<RecordT>);
+
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(file_path, ec);
+    if (ec || size == 0U || (size % sizeof(RecordT)) != 0U) {
+      return 0U;
+    }
+
+    const auto count = size / sizeof(RecordT);
+    if (count > (std::numeric_limits<uint32_t>::max)()) {
+      return (std::numeric_limits<uint32_t>::max)();
+    }
+    return static_cast<uint32_t>(count);
+  }
+
+  auto ReadBinaryFile(const std::filesystem::path& path)
+    -> std::vector<std::byte>
+  {
+    auto in = std::ifstream(path, std::ios::binary | std::ios::ate);
+    if (!in) {
+      return {};
+    }
+    const auto end = in.tellg();
+    if (end <= std::streampos { 0 }) {
+      return {};
+    }
+
+    const auto size = static_cast<size_t>(end);
+    auto bytes = std::vector<std::byte>(size);
+    in.seekg(0, std::ios::beg);
+    in.read(reinterpret_cast<char*>(bytes.data()),
+      static_cast<std::streamsize>(size));
+    if (!in.good() && !in.eof()) {
+      return {};
+    }
+    return bytes;
+  }
+
+  auto CountScriptingComponentsInSceneDescriptor(
+    const std::filesystem::path& descriptor_path, const data::AssetKey& key)
+    -> uint32_t
+  {
+    const auto bytes = ReadBinaryFile(descriptor_path);
+    if (bytes.empty()) {
+      return 0U;
+    }
+
+    try {
+      auto scene = data::SceneAsset(key, bytes);
+      const auto components
+        = scene.GetComponents<data::pak::scripting::ScriptingComponentRecord>();
+      const auto count = components.size();
+      if (count > (std::numeric_limits<uint32_t>::max)()) {
+        return (std::numeric_limits<uint32_t>::max)();
+      }
+      return static_cast<uint32_t>(count);
+    } catch (...) {
+      return 0U;
+    }
   }
 
 } // namespace
@@ -444,16 +539,9 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
 
   // Build the report
   bool had_errors = HasErrors();
-  ImportReport report {
-    .cooked_root = cooked_root_,
-    .source_key = {},
-    .diagnostics = Diagnostics(),
-    .materials_written = 0,
-    .geometry_written = 0,
-    .scenes_written = 0,
-    .packaging = {},
-    .success = false,
-  };
+  auto report = ImportReport {};
+  report.cooked_root = cooked_root_;
+  report.diagnostics = Diagnostics();
 
   // Always attempt to write the index to keep file sizes in sync, even if
   // diagnostics reported errors. This prevents stale index metadata from
@@ -564,9 +652,41 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
         case data::AssetType::kScene:
           ++report.scenes_written;
           break;
+        case data::AssetType::kScript:
+          ++report.scripts_written;
+          break;
         default:
           break;
         }
+      }
+    }
+
+    if (request_.options.scripting.import_kind
+      == ScriptingImportKind::kScriptingSidecar) {
+      report.script_slots_written
+        = CountPackedRecords<data::pak::scripting::ScriptSlotRecord>(
+          cooked_root_ / BuildScriptsTableRelPath(request_));
+      report.script_params_written
+        = CountPackedRecords<data::pak::scripting::ScriptParamRecord>(
+          cooked_root_ / BuildScriptsDataRelPath(request_));
+
+      auto component_count = uint64_t { 0 };
+      if (asset_emitter_.has_value()) {
+        for (const auto& rec : (*asset_emitter_)->Records()) {
+          if (rec.asset_type != data::AssetType::kScene) {
+            continue;
+          }
+          component_count += CountScriptingComponentsInSceneDescriptor(
+            cooked_root_ / std::filesystem::path(rec.descriptor_relpath),
+            rec.key);
+        }
+      }
+      if (component_count > (std::numeric_limits<uint32_t>::max)()) {
+        report.scripting_components_written
+          = (std::numeric_limits<uint32_t>::max)();
+      } else {
+        report.scripting_components_written
+          = static_cast<uint32_t>(component_count);
       }
     }
 
@@ -612,8 +732,12 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       report.packaging.index_collisions_replaced,
       report.packaging.index_collisions_rejected);
 
-    DLOG_F(INFO, "Finalize complete: {} materials, {} geometry, {} scenes",
-      report.materials_written, report.geometry_written, report.scenes_written);
+    DLOG_F(INFO,
+      "Finalize complete: {} materials, {} geometry, {} scenes, {} scripts, "
+      "{} scripting components, {} slots, {} params",
+      report.materials_written, report.geometry_written, report.scenes_written,
+      report.scripts_written, report.scripting_components_written,
+      report.script_slots_written, report.script_params_written);
   } catch (const std::exception& ex) {
     report.success = false;
     report.diagnostics.push_back({

@@ -533,23 +533,15 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
       // Use TrySubmitJob since we're not in a coroutine context
       if (!importer->TrySubmitJob(std::move(entry))) {
         LOG_F(WARNING, "Failed to submit job (channel full or closed)");
-        ImportReport report {
-        .cooked_root = {},
-        .source_key = {},
-        .diagnostics = {
-          {
-            .severity = ImportSeverity::kError,
-            .code = "import.queue_full",
-            .message = "Import queue is full",
-            .source_path = source_path,
-            .object_path = {},
-          },
-        },
-        .materials_written = 0,
-        .geometry_written = 0,
-        .scenes_written = 0,
-        .success = false,
-      };
+        auto report = ImportReport {};
+        report.diagnostics.push_back({
+          .severity = ImportSeverity::kError,
+          .code = "import.queue_full",
+          .message = "Import queue is full",
+          .source_path = source_path,
+          .object_path = {},
+        });
+        report.success = false;
         wrapped_complete(entry.job_id, report);
       }
     });

@@ -35,10 +35,10 @@ namespace {
 
 [[nodiscard]] auto MakeSuccessReport() -> ImportReport
 {
-  return ImportReport {
-    .cooked_root = std::filesystem::temp_directory_path(),
-    .success = true,
-  };
+  auto report = ImportReport {};
+  report.cooked_root = std::filesystem::temp_directory_path();
+  report.success = true;
+  return report;
 }
 
 class ImportJobTest : public testing::Test {

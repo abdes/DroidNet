@@ -38,11 +38,10 @@ namespace {
 [[nodiscard]] auto MakeSuccessReport(const ImportRequest& request)
   -> ImportReport
 {
-  ImportReport report {
-    .cooked_root
-    = request.cooked_root.value_or(request.source_path.parent_path()),
-    .success = true,
-  };
+  auto report = ImportReport {};
+  report.cooked_root
+    = request.cooked_root.value_or(request.source_path.parent_path());
+  report.success = true;
   return report;
 }
 
