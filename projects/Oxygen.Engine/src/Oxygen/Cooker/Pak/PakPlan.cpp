@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Cooker/Pak/PakPlan.h>
-
 #include <utility>
+
+#include <Oxygen/Cooker/Pak/PakPlan.h>
 
 namespace oxygen::content::pak {
 
