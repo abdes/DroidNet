@@ -10,6 +10,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <span>
 #include <vector>
 
 #include <Oxygen/Testing/GTest.h>
@@ -915,12 +916,64 @@ NOLINT_TEST_F(
   });
 }
 
+//! Patch tombstones must block fallback to lower-priority base mounts.
+NOLINT_TEST_F(AssetLoaderLoadingTest,
+  PatchTombstonePreventsAssetFallbackToLowerPriorityMount)
+{
+  const auto pak_a = GeneratePakFile("duplicate_key_source_a");
+  const auto pak_b = GeneratePakFile("duplicate_key_source_b");
+  const auto material_key = CreateTestAssetKey("duplicate_shared_material");
+
+  TestEventLoop el;
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    using oxygen::content::AssetLoader;
+    using oxygen::content::AssetLoaderConfig;
+    using oxygen::data::PakCatalog;
+    using oxygen::data::PatchManifest;
+
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+    AssetLoader loader(Tag::Get(), config);
+
+    loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
+    loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
+
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+
+      loader.AddPakFile(pak_a);
+
+      PatchManifest manifest {};
+      manifest.compatibility_policy_snapshot.require_exact_base_set = false;
+      manifest.compatibility_policy_snapshot.require_content_version_match
+        = false;
+      manifest.compatibility_policy_snapshot.require_base_source_key_match
+        = false;
+      manifest.compatibility_policy_snapshot.require_catalog_digest_match
+        = false;
+      manifest.deleted.push_back(material_key);
+
+      loader.AddPatchPakFile(pak_b, manifest, std::span<const PakCatalog> {});
+
+      const auto material
+        = co_await loader.LoadAssetAsync<MaterialAsset>(material_key);
+      EXPECT_THAT(material, IsNull());
+
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
+}
+
 //! Characterization: duplicate-key resolution follows mount order.
 /*!
- Scenario: Mount two sources that define the same Material AssetKey and assert
- lookup result changes when mount order is reversed. This captures current
- behavior where explicit load priority metadata is not part of the runtime load
- API surface.
+ Scenario: Mount two sources that define the same Material AssetKey and
+ assert lookup result changes when mount order is reversed. This captures
+ current behavior where explicit load priority metadata is not part of the
+ runtime load API surface.
 */
 NOLINT_TEST_F(AssetLoaderLoadingTest,
   Characterization_DuplicateAssetLookupFollowsMountOrderNotPriority)

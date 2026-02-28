@@ -10,31 +10,42 @@
 #include <fstream>
 #include <span>
 #include <string>
-#include <vector>
+#include <string_view>
 
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PatchManifest.h>
+#include <Oxygen/Data/SourceKey.h>
 
 namespace {
 
-auto MakeAssetKey(const std::uint8_t seed) -> oxygen::data::AssetKey
+constexpr auto kBaseGuidSeed = uint8_t { 0x01U };
+constexpr auto kAltGuidSeed = uint8_t { 0x31U };
+constexpr auto kMissingGuidSeed = uint8_t { 0xaaU };
+constexpr auto kAssetSeedA = uint8_t { 0x11U };
+constexpr auto kAssetSeedB = uint8_t { 0x22U };
+
+auto MakeAssetKey(const uint8_t seed) -> oxygen::data::AssetKey
 {
   auto bytes = std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
   bytes[0] = seed;
   return oxygen::data::AssetKey::FromBytes(bytes);
 }
 
-//! Test helper: write a minimal loose cooked index with one asset entry.
-/*!
- Scenario: Creates a `container.index.bin` mapping the given virtual path to
- the provided `AssetKey`.
-*/
+auto MakeSourceKey(const uint8_t seed) -> oxygen::data::SourceKey
+{
+  auto bytes = std::array<std::uint8_t, oxygen::data::SourceKey::kSizeBytes> {};
+  bytes[0] = seed;
+  return oxygen::data::SourceKey::FromBytes(bytes);
+}
+
 auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
   const oxygen::data::AssetKey& key, const std::string_view descriptor_relpath,
-  const std::string_view virtual_path) -> void
+  const std::string_view virtual_path, const uint8_t guid_seed) -> void
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileRecord;
@@ -57,10 +68,8 @@ auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
 
-  // The runtime loader rejects indexes with an all-zero GUID.
-  // For these tests we only need a valid (non-zero) value.
   for (size_t i = 0; i < sizeof(header.guid); ++i) {
-    header.guid[i] = static_cast<uint8_t>(i + 1);
+    header.guid[i] = static_cast<uint8_t>(guid_seed + i);
   }
 
   header.string_table_offset = sizeof(IndexHeader);
@@ -88,11 +97,6 @@ auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
   out.write(reinterpret_cast<const char*>(&entry), sizeof(entry));
 }
 
-//! Test helper: write a minimal pak with an embedded browse index.
-/*!
- Scenario: Creates a `.pak` file whose footer references an embedded browse
- index mapping the given virtual path to the provided AssetKey.
-*/
 auto WriteSingleAssetPakWithBrowseIndex(const std::filesystem::path& pak_path,
   const oxygen::data::AssetKey& key, const std::string_view virtual_path)
   -> void
@@ -136,7 +140,6 @@ auto WriteSingleAssetPakWithBrowseIndex(const std::filesystem::path& pak_path,
   footer.directory_offset = directory_offset;
   footer.directory_size = sizeof(AssetDirectoryEntry);
   footer.asset_count = 1;
-
   footer.browse_index_offset = browse_offset;
   footer.browse_index_size = browse_size;
 
@@ -150,155 +153,74 @@ auto WriteSingleAssetPakWithBrowseIndex(const std::filesystem::path& pak_path,
   out.write(reinterpret_cast<const char*>(&footer), sizeof(footer));
 }
 
-//! Test: Resolver returns the AssetKey for a matching virtual path
-/*!
- Scenario: Mounts a single cooked root and resolves a known virtual path.
-*/
-NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyFoundReturnsKey)
+NOLINT_TEST(PatchResolutionRuntimeTest, LastMountedWinsForVirtualPathLookup)
 {
-  // Arrange
-  const auto root
-    = std::filesystem::temp_directory_path() / "oxygen_vpath_resolver_test";
-  const auto cooked_root = root / "root0";
+  constexpr auto kVirtualPath = "/.cooked/Asset.bin";
+  const auto root = std::filesystem::temp_directory_path() / "oxygen_patch_rt";
+  const auto root0 = root / "root0";
+  const auto root1 = root / "root1";
+  const auto key0 = MakeAssetKey(kAssetSeedA);
+  const auto key1 = MakeAssetKey(kAssetSeedB);
 
-  const auto key = MakeAssetKey(0x11U);
-
-  WriteSingleAssetIndex(cooked_root, key, "A.bin", "/.cooked/A.bin");
+  WriteSingleAssetIndex(root0, key0, "A0.bin", kVirtualPath, kBaseGuidSeed);
+  WriteSingleAssetIndex(root1, key1, "A1.bin", kVirtualPath, kAltGuidSeed);
 
   oxygen::content::VirtualPathResolver resolver;
-  resolver.AddLooseCookedRoot(cooked_root);
+  resolver.AddLooseCookedRoot(root0);
+  resolver.AddLooseCookedRoot(root1);
 
-  // Act
-  const auto resolved = resolver.ResolveAssetKey("/.cooked/A.bin");
+  const auto resolved = resolver.ResolveAssetKey(kVirtualPath);
 
-  // Assert
-  EXPECT_TRUE(resolved.has_value());
-  EXPECT_EQ(*resolved, key);
-}
-
-//! Test: Resolver prefers the last mounted root
-/*!
- Scenario: Two roots contain the same virtual path, mapping to different
- * keys.
- Verifies that the last added root wins.
-*/
-NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyDuplicatePathLastWins)
-{
-  // Arrange
-  const auto root
-    = std::filesystem::temp_directory_path() / "oxygen_vpath_resolver_test";
-  const auto cooked_root0 = root / "root0";
-  const auto cooked_root1 = root / "root1";
-
-  const auto key0 = MakeAssetKey(0x11U);
-  const auto key1 = MakeAssetKey(0x22U);
-
-  WriteSingleAssetIndex(cooked_root0, key0, "A0.bin", "/.cooked/A.bin");
-  WriteSingleAssetIndex(cooked_root1, key1, "A1.bin", "/.cooked/A.bin");
-
-  oxygen::content::VirtualPathResolver resolver;
-  resolver.AddLooseCookedRoot(cooked_root0);
-  resolver.AddLooseCookedRoot(cooked_root1);
-
-  // Act
-  const auto resolved = resolver.ResolveAssetKey("/.cooked/A.bin");
-
-  // Assert
-  EXPECT_TRUE(resolved.has_value());
+  ASSERT_TRUE(resolved.has_value());
   EXPECT_EQ(*resolved, key1);
 }
 
-//! Test: Resolver returns nullopt when the virtual path is not found
-/*!
- Scenario: Mounts a cooked root and queries an unknown virtual path.
-*/
-NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyNotFoundReturnsNullopt)
-{
-  // Arrange
-  const auto root
-    = std::filesystem::temp_directory_path() / "oxygen_vpath_resolver_test";
-  const auto cooked_root = root / "root0";
-
-  const auto key = MakeAssetKey(0x11U);
-
-  WriteSingleAssetIndex(cooked_root, key, "A.bin", "/.cooked/A.bin");
-
-  oxygen::content::VirtualPathResolver resolver;
-  resolver.AddLooseCookedRoot(cooked_root);
-
-  // Act
-  const auto resolved = resolver.ResolveAssetKey("/.cooked/DoesNotExist.bin");
-
-  // Assert
-  EXPECT_FALSE(resolved.has_value());
-}
-
-//! Test: Resolver rejects non-canonical virtual paths
-/*!
- Scenario: Attempts to resolve a virtual path missing the leading '/'.
- Verifies the resolver throws.
-*/
-NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyInvalidVirtualPathThrows)
-{
-  // Arrange
-  oxygen::content::VirtualPathResolver resolver;
-
-  // Act & Assert
-  EXPECT_THROW(
-    { (void)resolver.ResolveAssetKey(".cooked/A.bin"); },
-    std::invalid_argument);
-}
-
-//! Test: Resolver can resolve virtual paths using mounted pak browse index.
-/*!
- Scenario: Creates a `.pak` with an embedded browse index and resolves a known
- virtual path.
-*/
 NOLINT_TEST(
-  VirtualPathResolverTest, ResolveAssetKeyPakBrowseIndexFoundReturnsKey)
+  PatchResolutionRuntimeTest, CompatibilityMismatchRejectsPatchMounting)
 {
-  // Arrange
-  const auto root
-    = std::filesystem::temp_directory_path() / "oxygen_vpath_resolver_test";
-  const auto pak_path = root / "mounted.pak";
+  constexpr auto kVirtualPath = "/.cooked/Asset.bin";
+  const auto root = std::filesystem::temp_directory_path() / "oxygen_patch_rt";
+  const auto base_root = root / "base";
+  const auto patch_pak = root / "patch.pak";
+  const auto key = MakeAssetKey(kAssetSeedA);
 
-  const auto key = MakeAssetKey(0x33U);
+  WriteSingleAssetIndex(
+    base_root, key, "Base.bin", kVirtualPath, kBaseGuidSeed);
+  WriteSingleAssetPakWithBrowseIndex(patch_pak, key, kVirtualPath);
 
-  WriteSingleAssetPakWithBrowseIndex(pak_path, key, "/.cooked/Pak.bin");
+  oxygen::data::PatchManifest manifest {};
+  manifest.compatibility_policy_snapshot.require_exact_base_set = false;
+  manifest.compatibility_policy_snapshot.require_content_version_match = false;
+  manifest.compatibility_policy_snapshot.require_catalog_digest_match = false;
+  manifest.compatibility_policy_snapshot.require_base_source_key_match = true;
+  manifest.compatibility_envelope.required_base_source_keys.push_back(
+    MakeSourceKey(kMissingGuidSeed));
 
   oxygen::content::VirtualPathResolver resolver;
-  resolver.AddPakFile(pak_path);
+  resolver.AddLooseCookedRoot(base_root);
 
-  // Act
-  const auto resolved = resolver.ResolveAssetKey("/.cooked/Pak.bin");
-
-  // Assert
-  EXPECT_TRUE(resolved.has_value());
-  EXPECT_EQ(*resolved, key);
+  EXPECT_THROW(
+    {
+      resolver.AddPatchPakFile(
+        patch_pak, manifest, std::span<const oxygen::data::PakCatalog> {});
+    },
+    std::runtime_error);
 }
 
-//! Test: Patch tombstones block virtual-path fallthrough deterministically.
-/*!
- Scenario: Base root and patch pak both map the same virtual path/key, and
- * the
- patch manifest tombstones that key. Resolution must return `nullopt`.
-*/
-NOLINT_TEST(VirtualPathResolverTest, PatchTombstoneBlocksVirtualPathLookup)
+NOLINT_TEST(
+  PatchResolutionRuntimeTest, TombstoneBlocksFallbackDeterministically)
 {
-  using oxygen::data::PatchManifest;
-  constexpr auto kPatchSeed = uint8_t { 0x66U };
-
-  const auto root
-    = std::filesystem::temp_directory_path() / "oxygen_vpath_resolver_test";
-  const auto cooked_root = root / "base";
-  const auto patch_pak_path = root / "patch.pak";
-  const auto key = MakeAssetKey(kPatchSeed);
   constexpr auto kVirtualPath = "/.cooked/Masked.bin";
+  const auto root = std::filesystem::temp_directory_path() / "oxygen_patch_rt";
+  const auto base_root = root / "base";
+  const auto patch_pak = root / "patch.pak";
+  const auto key = MakeAssetKey(kAssetSeedA);
 
-  WriteSingleAssetIndex(cooked_root, key, "Masked.bin", kVirtualPath);
-  WriteSingleAssetPakWithBrowseIndex(patch_pak_path, key, kVirtualPath);
+  WriteSingleAssetIndex(
+    base_root, key, "Base.bin", kVirtualPath, kBaseGuidSeed);
+  WriteSingleAssetPakWithBrowseIndex(patch_pak, key, kVirtualPath);
 
-  PatchManifest manifest {};
+  oxygen::data::PatchManifest manifest {};
   manifest.compatibility_policy_snapshot.require_exact_base_set = false;
   manifest.compatibility_policy_snapshot.require_content_version_match = false;
   manifest.compatibility_policy_snapshot.require_base_source_key_match = false;
@@ -306,9 +228,9 @@ NOLINT_TEST(VirtualPathResolverTest, PatchTombstoneBlocksVirtualPathLookup)
   manifest.deleted.push_back(key);
 
   oxygen::content::VirtualPathResolver resolver;
-  resolver.AddLooseCookedRoot(cooked_root);
+  resolver.AddLooseCookedRoot(base_root);
   resolver.AddPatchPakFile(
-    patch_pak_path, manifest, std::span<const oxygen::data::PakCatalog> {});
+    patch_pak, manifest, std::span<const oxygen::data::PakCatalog> {});
 
   const auto resolved = resolver.ResolveAssetKey(kVirtualPath);
 

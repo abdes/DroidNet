@@ -40,6 +40,7 @@
 #include <Oxygen/Content/Internal/InternalResourceKey.h>
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
 #include <Oxygen/Content/Internal/PakFileSource.h>
+#include <Oxygen/Content/Internal/PatchResolutionPolicy.h>
 #include <Oxygen/Content/Internal/PhysicsQueryService.h>
 #include <Oxygen/Content/Internal/ResourceKeyRegistry.h>
 #include <Oxygen/Content/Internal/ResourceLoadPipeline.h>
@@ -766,8 +767,42 @@ auto AssetLoader::IsRunning() const -> bool { return nursery_ != nullptr; }
 
 auto AssetLoader::AddPakFile(const std::filesystem::path& path) -> void
 {
+  (void)MountPakFile(path);
+}
+
+auto AssetLoader::AddPatchPakFile(const std::filesystem::path& path,
+  const data::PatchManifest& manifest,
+  const std::span<const data::PakCatalog> mounted_base_catalogs) -> void
+{
   AssertOwningThread();
-  // Normalize the path to ensure consistent handling
+
+  std::vector<data::SourceKey> mounted_source_keys;
+  mounted_source_keys.reserve(impl_->source_registry.Sources().size());
+  for (const auto& source : impl_->source_registry.Sources()) {
+    if (!source) {
+      continue;
+    }
+    mounted_source_keys.push_back(source->GetSourceKey());
+  }
+
+  const auto compatibility = internal::ValidatePatchCompatibility(
+    mounted_source_keys, mounted_base_catalogs, manifest);
+  if (!compatibility.compatible) {
+    for (const auto& diagnostic : compatibility.diagnostics) {
+      LOG_F(ERROR, "Patch compatibility violation [{}]: {}",
+        internal::to_string(diagnostic.code), diagnostic.message);
+    }
+    throw std::runtime_error(
+      "Patch compatibility validation failed against mounted base set");
+  }
+
+  const auto patch_source_id = MountPakFile(path);
+  impl_->source_registry.SetSourceTombstones(patch_source_id, manifest.deleted);
+}
+
+auto AssetLoader::MountPakFile(const std::filesystem::path& path) -> uint16_t
+{
+  AssertOwningThread();
   std::error_code ec {};
   auto normalized = std::filesystem::weakly_canonical(path, ec);
   if (ec) {
@@ -792,8 +827,7 @@ auto AssetLoader::AddPakFile(const std::filesystem::path& path) -> void
       if (existing && existing->GetSourceKey() == source_key) {
         LOG_F(WARNING,
           "Mounted PAK shares SourceKey with an existing source; cache "
-          "aliasing "
-          "risk: source_key={} new_path={}",
+          "aliasing risk: source_key={} new_path={}",
           source_key, normalized.string());
         break;
       }
@@ -803,7 +837,6 @@ auto AssetLoader::AddPakFile(const std::filesystem::path& path) -> void
 
   const auto mount_result
     = impl_->source_registry.MountPak(normalized, std::move(new_source));
-
   if (mount_result.action
       == internal::ContentSourceRegistry::MountAction::kRefreshed
     || was_already_mounted) {
@@ -830,12 +863,13 @@ auto AssetLoader::AddPakFile(const std::filesystem::path& path) -> void
     AssertSourceKeyConsistency("AddPakFile.refresh");
     AssertMountStateResetCompleteness(
       "AddPakFile.refresh", /*expect_dependency_graphs_empty=*/true);
-    return;
+    return mount_result.source_id;
   }
 
   LOG_F(INFO, "Mounted PAK content source: id={} path={}",
     mount_result.source_id, normalized.string());
   AssertSourceKeyConsistency("AddPakFile.mount");
+  return mount_result.source_id;
 }
 
 auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
@@ -3989,19 +4023,27 @@ auto AssetLoader::ResolveAssetIdentityForKey(
   const data::AssetKey& key, std::optional<uint16_t> preferred_source_id) const
   -> std::optional<ResolvedAssetIdentity>
 {
-  if (const auto indexed = asset_identity_index_->ResolveIndexed(
-        key, preferred_source_id, impl_->source_registry.SourceIdToIndex());
-    indexed.has_value()) {
-    return ResolvedAssetIdentity {
-      .hash_key = indexed->hash_key,
-      .source_id = indexed->source_id,
-    };
+  if (preferred_source_id.has_value()) {
+    if (const auto indexed = asset_identity_index_->ResolveIndexed(
+          key, preferred_source_id, impl_->source_registry.SourceIdToIndex());
+      indexed.has_value()
+      && !impl_->source_registry.IsSourceTombstoningAsset(
+        indexed->source_id, key)) {
+      return ResolvedAssetIdentity {
+        .hash_key = indexed->hash_key,
+        .source_id = indexed->source_id,
+      };
+    }
   }
 
   if (preferred_source_id.has_value()) {
     const auto source_it
       = impl_->source_registry.SourceIdToIndex().find(*preferred_source_id);
     if (source_it != impl_->source_registry.SourceIdToIndex().end()) {
+      if (impl_->source_registry.IsSourceTombstoningAsset(
+            *preferred_source_id, key)) {
+        return std::nullopt;
+      }
       const auto& source
         = impl_->source_registry.Sources().at(source_it->second);
       if (source && source->HasAsset(key)) {
@@ -4014,15 +4056,33 @@ auto AssetLoader::ResolveAssetIdentityForKey(
     return std::nullopt;
   }
 
-  for (size_t i = impl_->source_registry.Sources().size(); i-- > 0;) {
-    const auto& source = impl_->source_registry.Sources()[i];
-    if (source && source->HasAsset(key)) {
-      const auto source_id = impl_->source_registry.SourceIds()[i];
-      return ResolvedAssetIdentity {
-        .hash_key = HashAssetKey(key, source_id),
-        .source_id = source_id,
-      };
-    }
+  const internal::KeyResolutionCallbacks callbacks {
+    .source_has_asset = [this](const uint16_t source_id,
+                          const data::AssetKey& candidate_key) -> bool {
+      const auto source_index_opt
+        = impl_->source_registry.FindSourceIndexById(source_id);
+      if (!source_index_opt.has_value()) {
+        return false;
+      }
+      const auto& source
+        = impl_->source_registry.Sources().at(*source_index_opt);
+      return source && source->HasAsset(candidate_key);
+    },
+    .source_tombstones_asset = [this](const uint16_t source_id,
+                                 const data::AssetKey& candidate_key) -> bool {
+      return impl_->source_registry.IsSourceTombstoningAsset(
+        source_id, candidate_key);
+    },
+  };
+
+  const auto resolution = internal::ResolveAssetKeyByPrecedence(
+    impl_->source_registry.SourceIds(), key, callbacks);
+  if (resolution.status == internal::KeyResolutionStatus::kFound
+    && resolution.source_id.has_value()) {
+    return ResolvedAssetIdentity {
+      .hash_key = HashAssetKey(key, *resolution.source_id),
+      .source_id = *resolution.source_id,
+    };
   }
 
   return std::nullopt;
@@ -4055,6 +4115,10 @@ auto AssetLoader::ResolveLoadSourceId(const data::AssetKey& key,
   if (preferred_source_id.has_value()) {
     const auto source_it
       = impl_->source_registry.SourceIdToIndex().find(*preferred_source_id);
+    if (impl_->source_registry.IsSourceTombstoningAsset(
+          *preferred_source_id, key)) {
+      return std::nullopt;
+    }
     if (source_it != impl_->source_registry.SourceIdToIndex().end()
       && impl_->source_registry.Sources()
         .at(source_it->second)
@@ -4063,11 +4127,29 @@ auto AssetLoader::ResolveLoadSourceId(const data::AssetKey& key,
     }
   }
 
-  for (size_t source_index = impl_->source_registry.Sources().size();
-    source_index-- > 0;) {
-    if (impl_->source_registry.Sources()[source_index]->HasAsset(key)) {
-      return impl_->source_registry.SourceIds()[source_index];
-    }
+  const internal::KeyResolutionCallbacks callbacks {
+    .source_has_asset = [this](const uint16_t source_id,
+                          const data::AssetKey& candidate_key) -> bool {
+      const auto source_index_opt
+        = impl_->source_registry.FindSourceIndexById(source_id);
+      if (!source_index_opt.has_value()) {
+        return false;
+      }
+      const auto& source
+        = impl_->source_registry.Sources().at(*source_index_opt);
+      return source && source->HasAsset(candidate_key);
+    },
+    .source_tombstones_asset = [this](const uint16_t source_id,
+                                 const data::AssetKey& candidate_key) -> bool {
+      return impl_->source_registry.IsSourceTombstoningAsset(
+        source_id, candidate_key);
+    },
+  };
+
+  const auto resolution = internal::ResolveAssetKeyByPrecedence(
+    impl_->source_registry.SourceIds(), key, callbacks);
+  if (resolution.status == internal::KeyResolutionStatus::kFound) {
+    return resolution.source_id;
   }
 
   return std::nullopt;

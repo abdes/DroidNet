@@ -20,6 +20,7 @@ auto ContentSourceRegistry::MountPak(std::filesystem::path normalized_path,
       = static_cast<uint16_t>(std::distance(pak_paths_.begin(), it));
     const auto source_index = source_id_to_index_.at(source_id);
     sources_[source_index] = std::move(source);
+    ClearSourceTombstones(source_id);
     return {
       .action = MountAction::kRefreshed,
       .source_id = source_id,
@@ -58,6 +59,7 @@ auto ContentSourceRegistry::MountLoose(std::string_view normalized_debug_name,
     }
     if (sources_[source_index]->DebugName() == normalized_debug_name) {
       sources_[source_index] = std::move(source);
+      ClearSourceTombstones(source_id);
       return {
         .action = MountAction::kRefreshed,
         .source_id = source_id,
@@ -89,9 +91,42 @@ auto ContentSourceRegistry::Clear() -> void
   source_id_to_index_.clear();
   source_tokens_.clear();
   token_to_source_id_.clear();
+  tombstones_by_source_id_.clear();
   next_source_token_value_ = 1;
   next_loose_source_id_ = constants::kLooseCookedSourceIdBase;
   pak_paths_.clear();
+}
+
+auto ContentSourceRegistry::SetSourceTombstones(const uint16_t source_id,
+  const std::span<const data::AssetKey> tombstones) -> void
+{
+  if (!source_id_to_index_.contains(source_id)) {
+    LOG_F(WARNING,
+      "Ignoring tombstone registration for unknown source_id={} "
+      "(tombstones={})",
+      source_id, tombstones.size());
+    return;
+  }
+
+  auto& source_tombstones = tombstones_by_source_id_[source_id];
+  source_tombstones.clear();
+  source_tombstones.insert(tombstones.begin(), tombstones.end());
+}
+
+auto ContentSourceRegistry::ClearSourceTombstones(const uint16_t source_id)
+  -> void
+{
+  tombstones_by_source_id_.erase(source_id);
+}
+
+auto ContentSourceRegistry::IsSourceTombstoningAsset(
+  const uint16_t source_id, const data::AssetKey& key) const -> bool
+{
+  if (const auto it = tombstones_by_source_id_.find(source_id);
+    it != tombstones_by_source_id_.end()) {
+    return it->second.contains(key);
+  }
+  return false;
 }
 
 auto ContentSourceRegistry::FindSourceIdByToken(const SourceToken token) const
@@ -137,6 +172,15 @@ auto ContentSourceRegistry::AssertStructuralConsistency(
         "[invariant:{}] source_id_to_index points to null source: source_id={} "
         "index={}",
         context, source_id, index);
+    }
+  }
+
+  for (const auto& [source_id, tombstones] : tombstones_by_source_id_) {
+    if (!source_id_to_index_.contains(source_id)) {
+      LOG_F(ERROR,
+        "[invariant:{}] tombstones mapped to unknown source_id: "
+        "source_id={} tombstones={}",
+        context, source_id, tombstones.size());
     }
   }
 #else
