@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <gtest/gtest.h>
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Data/AssetType.h>
@@ -14,7 +14,7 @@ using oxygen::data::AssetType;
 
 namespace {
 
-TEST(LooseCookedLayoutTest, DefaultSettingsAreCorrect)
+NOLINT_TEST(LooseCookedLayoutTest, DefaultSettingsAreCorrect)
 {
   LooseCookedLayout layout {};
   EXPECT_EQ(layout.index_file_name, "container.index.bin");
@@ -31,7 +31,7 @@ TEST(LooseCookedLayoutTest, DefaultSettingsAreCorrect)
   EXPECT_EQ(layout.materials_subdir, "Materials");
 }
 
-TEST(LooseCookedLayoutTest, DescriptorFileNamesAreCorrect)
+NOLINT_TEST(LooseCookedLayoutTest, DescriptorFileNamesAreCorrect)
 {
   EXPECT_EQ(
     LooseCookedLayout::MaterialDescriptorFileName("MyMat"), "MyMat.omat");
@@ -43,7 +43,7 @@ TEST(LooseCookedLayoutTest, DescriptorFileNamesAreCorrect)
     "MyScene.physics");
 }
 
-TEST(LooseCookedLayoutTest, DescriptorDirForYieldsExpectedDirs)
+NOLINT_TEST(LooseCookedLayoutTest, DescriptorDirForYieldsExpectedDirs)
 {
   LooseCookedLayout layout {};
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kMaterial), "Materials");
@@ -62,7 +62,7 @@ TEST(LooseCookedLayoutTest, DescriptorDirForYieldsExpectedDirs)
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kMaterial), "Assets");
 }
 
-TEST(LooseCookedLayoutTest, VirtualLeafPathsAreCorrect)
+NOLINT_TEST(LooseCookedLayoutTest, VirtualLeafPathsAreCorrect)
 {
   LooseCookedLayout layout {};
   EXPECT_EQ(layout.MaterialVirtualLeaf("M1"), "Materials/M1.omat");
@@ -71,7 +71,16 @@ TEST(LooseCookedLayoutTest, VirtualLeafPathsAreCorrect)
   EXPECT_EQ(layout.PhysicsSceneVirtualLeaf("S1"), "Scenes/S1.physics");
 }
 
-TEST(LooseCookedLayoutTest, VirtualPathsJoinCorrectly)
+NOLINT_TEST(LooseCookedLayoutTest, DescriptorRelPathsAreCorrect)
+{
+  LooseCookedLayout layout {};
+  EXPECT_EQ(layout.MaterialDescriptorRelPath("M1"), "Materials/M1.omat");
+  EXPECT_EQ(layout.GeometryDescriptorRelPath("G1"), "Geometry/G1.ogeo");
+  EXPECT_EQ(layout.SceneDescriptorRelPath("S1"), "Scenes/S1.oscene");
+  EXPECT_EQ(layout.PhysicsSceneDescriptorRelPath("S1"), "Scenes/S1.physics");
+}
+
+NOLINT_TEST(LooseCookedLayoutTest, VirtualPathsJoinCorrectly)
 {
   LooseCookedLayout layout {};
 
@@ -87,7 +96,7 @@ TEST(LooseCookedLayoutTest, VirtualPathsJoinCorrectly)
   EXPECT_EQ(layout.MaterialVirtualPath("M1"), "/MyMount/Materials/M1.omat");
 }
 
-TEST(LooseCookedLayoutTest, ResourcePathsAreCorrect)
+NOLINT_TEST(LooseCookedLayoutTest, ResourcePathsAreCorrect)
 {
   LooseCookedLayout layout {};
   EXPECT_EQ(layout.BuffersTableRelPath(), "Resources/buffers.table");

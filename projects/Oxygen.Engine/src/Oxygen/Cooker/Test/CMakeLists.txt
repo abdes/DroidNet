@@ -108,3 +108,40 @@ m_gtest_program(
 )
 
 m_gtest_program(AsyncImportPlan SOURCES "Plan/ImportPlanner_test.cpp")
+
+# -- Loose Cooked --------------------------------------------------------------
+
+m_gtest_program(
+  LooseCooked
+  SOURCES
+    "Loose/DummyIndex.h"
+    "Loose/Inspection_test.cpp"
+    "Loose/LooseCookedLayout_test.cpp"
+    "Loose/Validation_test.cpp"
+)
+target_compile_features(Oxygen.Cooker.LooseCooked.Tests PUBLIC cxx_std_20)
+
+# -- Pak Builder (Phase 0 scaffolding) ----------------------------------------
+
+m_gtest_program(
+  PakBinaryConformance
+  SOURCES
+    "Pak/BinaryConformance_placeholder_test.cpp"
+)
+
+m_gtest_program(
+  PakDomainValidation
+  SOURCES
+    "Pak/DomainValidation_placeholder_test.cpp"
+)
+
+m_gtest_program(PakPatchPlanner SOURCES "Pak/PatchPlanner_placeholder_test.cpp")
+
+m_gtest_program(PakWriter SOURCES "Pak/Writer_placeholder_test.cpp")
+
+m_gtest_program(
+  PakE2E
+  SOURCES
+    "Pak/PakBuilder_api_test.cpp"
+    "Pak/E2E_placeholder_test.cpp"
+)

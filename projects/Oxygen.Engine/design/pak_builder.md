@@ -2,11 +2,13 @@
 
 ## 1. Scope
 
-This specification defines the canonical C++23 pipeline for building Oxygen Engine `.pak` files, including both full builds and patch workflows (generation + application contract).
+This specification defines the canonical C++20-minimum pipeline for building Oxygen Engine `.pak` files, including both full builds and patch workflows (generation + application contract).
 
 Hard constraints:
 
-- Engine language is C++23.
+- Pak builder public API headers and implementation defined by this spec require C++20 minimum.
+- Cross-module shared PAK model types used by both cooker and runtime content code must be defined in `Oxygen.Data` public headers (no `Content -> Cooker` dependency).
+- Public API namespace is `oxygen::content::pak`; this namespace choice does not imply module dependency from `Oxygen.Content` to `Oxygen.Cooker`.
 - PAK format targets the latest schema version only.
 - Schema ownership is split across:
   - `src/Oxygen/Data/PakFormat_core.h`
@@ -20,6 +22,7 @@ Hard constraints:
   - `src/Oxygen/Data/PakFormat_animation.h`
 - Binary layout must match schema exactly.
 - No schema version branching.
+- Acceptance criteria authority is frozen to this specification and `design/pak_builder_execution_plan.md` only; no external notes/reviews/chats are normative unless promoted into one of these files with formal approval.
 
 ## 2. Architecture Invariant
 
@@ -115,9 +118,17 @@ This rule is enforced directly in the schema headers: cross-domain aliases are r
 ## 5. Public API
 
 ```cpp
-namespace oxygen::content::cooker {
+namespace oxygen::content::pak {
 
 enum class BuildMode : uint8_t { kFull, kPatch };
+enum class PakDiagnosticSeverity : uint8_t { kInfo, kWarning, kError };
+enum class PakBuildPhase : uint8_t {
+  kRequestValidation,
+  kPlanning,
+  kWriting,
+  kManifest,
+  kFinalize,
+};
 
 struct PakBuildOptions {
   bool deterministic = true;
@@ -125,6 +136,43 @@ struct PakBuildOptions {
   bool emit_manifest_in_full = false;
   bool compute_crc32 = true;
   bool fail_on_warnings = false;
+};
+
+struct PakDiagnostic {
+  PakDiagnosticSeverity severity = PakDiagnosticSeverity::kInfo;
+  PakBuildPhase phase = PakBuildPhase::kPlanning;
+  std::string code; // stable identifier (e.g. "pak.plan.offset_mismatch")
+  std::string message;
+
+  // Optional structured context for tooling/CI.
+  std::string asset_key;
+  std::string resource_kind;
+  std::string table_name;
+  std::filesystem::path path;
+  std::optional<uint64_t> offset;
+};
+
+struct PakBuildSummary {
+  uint32_t diagnostics_info = 0;
+  uint32_t diagnostics_warning = 0;
+  uint32_t diagnostics_error = 0;
+
+  uint32_t assets_processed = 0;
+  uint32_t resources_processed = 0;
+
+  uint32_t patch_created = 0;
+  uint32_t patch_replaced = 0;
+  uint32_t patch_deleted = 0;
+  uint32_t patch_unchanged = 0;
+
+  bool crc_computed = true;
+};
+
+struct PakBuildTelemetry {
+  std::optional<std::chrono::microseconds> planning_duration;
+  std::optional<std::chrono::microseconds> writing_duration;
+  std::optional<std::chrono::microseconds> manifest_duration;
+  std::optional<std::chrono::microseconds> total_duration;
 };
 
 struct PatchCompatibilityPolicy {
@@ -139,7 +187,7 @@ struct PakBuildRequest {
   std::vector<CookedSource> sources;
 
   std::filesystem::path output_pak_path;
-  std::filesystem::path output_manifest_path; // required for kPatch
+  std::filesystem::path output_manifest_path; // required for kPatch; also required in kFull when emit_manifest_in_full=true
 
   uint16_t content_version = 0;
   data::SourceKey source_key; // must be non-zero
@@ -151,9 +199,12 @@ struct PakBuildRequest {
 
 struct PakBuildResult {
   PakCatalog output_catalog;
-  std::optional<PatchManifest> patch_manifest; // always set in kPatch
+  std::optional<PatchManifest> patch_manifest; // always set in kPatch; also set in kFull when emit_manifest_in_full=true
   uint64_t file_size = 0;
   uint32_t pak_crc32 = 0; // 0 if CRC disabled
+  std::vector<PakDiagnostic> diagnostics;
+  PakBuildSummary summary {};
+  PakBuildTelemetry telemetry {};
 };
 
 class PakBuilder {
@@ -163,8 +214,17 @@ public:
     -> Result<PakBuildResult>;
 };
 
-} // namespace oxygen::content::cooker
+} // namespace oxygen::content::pak
 ```
+
+### 5.1 Diagnostics Contract
+
+Diagnostics are first-class build artifacts, not log-only side effects.
+
+- Every validation and write failure must emit a structured `PakDiagnostic` with stable `code` and `phase`.
+- `fail_on_warnings=true` must fail build based on `summary.diagnostics_warning > 0`, not string matching.
+- Diagnostic ordering must be deterministic for deterministic inputs.
+- `PakBuildResult` must always return collected diagnostics and summary/telemetry whether success or failure.
 
 ## 6. Internal Plan Model
 
@@ -256,7 +316,7 @@ Writer phases:
 6. Write optional browse index payload.
 7. Write `pak::core::PakFooter` with `pak_crc32 = 0`.
 8. Flush.
-9. Patch `pak_crc32`.
+9. If `options.compute_crc32=true`, patch `pak_crc32`; otherwise leave `pak_crc32=0`.
 
 At each phase the writer checks actual cursor == planned offset.
 
@@ -268,7 +328,7 @@ Standard C++ struct padding and ad-hoc stream alignments naturally contain unini
 
 ### 8.2 CRC32 Streaming Rule (Skip-Field Semantics)
 
-CRC is computed incrementally during the same write stream; post-write full-file CRC passes are forbidden.
+When `options.compute_crc32=true`, CRC is computed incrementally during the same write stream; post-write full-file CRC passes are forbidden.
 
 - Initialize running CRC with `0xFFFFFFFF`.
 - Update CRC with every emitted byte range.
@@ -279,6 +339,12 @@ CRC is computed incrementally during the same write stream; post-write full-file
 - Seek once to patch `pak_crc32`.
 
 This matches runtime validation semantics and scales to multi-GB PAKs without a second read pass.
+
+When `options.compute_crc32=false`:
+
+- No CRC stream must be run.
+- Footer `pak_crc32` must remain `0`.
+- Writer must still emit all other bytes deterministically.
 
 ## 9. Script Slot/Param Requirements
 
@@ -294,6 +360,7 @@ No patch/full special casing is allowed for script slots.
 ## 10. Patch Manifest Contract
 
 `PatchManifest` is required for patch mode.
+In full mode, `PatchManifest` is emitted only when `options.emit_manifest_in_full=true`.
 
 It includes:
 
@@ -306,6 +373,14 @@ It includes:
 - Effective compatibility policy snapshot (resolved `PatchCompatibilityPolicy` used for this build).
 - Diff basis identifier: `descriptor_plus_transitive_resources_v1`.
 - Patch source key and patch pak digest/CRC metadata.
+
+For full-mode manifest emission (`emit_manifest_in_full=true`):
+
+- `created` contains all emitted asset keys.
+- `replaced` and `deleted` are empty.
+- compatibility envelope base requirements are empty.
+- policy snapshot and diff basis identifier are still recorded.
+- patch/source metadata fields are populated from full build output context.
 
 ## 11. Patch Application Contract (Runtime)
 
@@ -363,6 +438,16 @@ When `deterministic=true`:
 
 Determinism is required for meaningful patch diffs.
 
+Source-key determinism ownership:
+
+- `PakBuilder` consumes `PakBuildRequest::source_key`; it does not derive it.
+- Deterministic derivation policy is owned by the request-construction layer (CLI/tooling that produces `PakBuildRequest`).
+- `PakBuilder` enforces non-zero validation for `source_key`.
+- Coverage binding is mandatory:
+  - deterministic derivation stability for identical normalized inputs,
+  - non-zero source key guarantee,
+  - reproducibility across repeated invocations.
+
 ## 13. Validation Matrix (Must Pass Before Emit)
 
 Planner validations:
@@ -372,6 +457,7 @@ Planner validations:
   - non-zero source key.
   - patch mode requires non-empty base catalogs.
   - patch mode requires non-empty `output_manifest_path`.
+  - full mode with `emit_manifest_in_full=true` requires non-empty `output_manifest_path`.
 - Schema ownership checks:
   - asset type mapped to owning domain descriptor.
   - no domain/type mismatch.
@@ -409,13 +495,21 @@ Writer validations:
 - Directory entry `entry_offset` and `desc_offset` exact.
 - Final file size equals plan.
 - CRC patch offset valid and points to `pak_crc32` field in the footer.
-- CRC stream skips only the `pak_crc32` bytes and includes all other bytes.
+- when CRC enabled: CRC stream skips only the `pak_crc32` bytes and includes all other bytes.
+- when CRC disabled: no CRC stream is executed and final `pak_crc32 == 0`.
+
+Diagnostics validations:
+
+- Every reported error has non-empty `code` and `message`.
+- `summary.diagnostics_*` counters equal the emitted diagnostics vector counts.
+- If `fail_on_warnings=true`, warning count must cause build failure status.
 
 ## 14. Performance Contract
 
 - No redundant descriptor serialization passes.
 - No N^2 remapping behavior in patch closure.
 - **CRC Generation:** Streaming CRC state machine is **mandatory** with skip-field semantics for `pak_crc32` (field bytes excluded from CRC stream). Post-write full file passes are banned for performance and memory scaling reasons.
+- If CRC computation is disabled by option, no CRC pass (streaming or full-file) may run.
 
 ## 15. Extension Workflow (Low-Risk for Juniors)
 
@@ -425,7 +519,7 @@ To add new schema safely, choose one of two workflows:
 
 1. Add packed schema in owning `PakFormat_<domain>.h` with `static_assert(sizeof(...))`.
 2. Add domain serializers: **Must** implement a strictly coupled `Measure()` and `Store()` contract (e.g. via an ADL visitor pattern or identical logic) so the planner can query exact payload sizes deterministically before the writer starts emitting bytes.
-   > **Implementation Note**: The architecture requires a `Measure()` and `Store()` contract for payload domain definitions. From an implementation perspective, C++23 allows you to do this gracefully using a single templated visitor to avoid code duplication across `Measure` and `Store` passes. This technique should not be exposed in the API though and should remain an internal implementation detail, in order to keep the public API C++20 compatible.
+   > **Implementation Note**: The architecture requires a `Measure()` and `Store()` contract for payload domain definitions. From an implementation perspective, C++20 allows this cleanly with a single templated visitor to avoid code duplication across `Measure` and `Store` passes. This technique should remain an internal implementation detail.
 3. Register type mapping in planner traits (asset type -> descriptor type -> measuring/serialization visitor).
 4. Add domain validation rules.
 5. Add full + patch tests.
@@ -449,6 +543,7 @@ Do not claim no writer/runtime changes for this workflow.
 
 - Golden binary for header/footer offsets and table layout.
 - CRC skip-field correctness.
+- CRC-disabled path correctness (`pak_crc32 == 0`, no CRC patch step).
 - Directory offsets/sizes and descriptor offsets exact.
 
 ### 16.2 Domain Correctness
@@ -469,6 +564,7 @@ Do not claim no writer/runtime changes for this workflow.
 - Delete does-not-fall-through-to-base tests.
 - Wrong-base compatibility rejection tests.
 - Patch manifest required-field rejection tests.
+- Full build with `emit_manifest_in_full=true` manifest content tests.
 
 ### 16.4 Mount/Resolution Semantics
 
@@ -476,6 +572,21 @@ Do not claim no writer/runtime changes for this workflow.
 - Multi-mount patch-above-base behavior tests.
 - Last-mounted-wins tests for both key and virtual path lookups.
 - Virtual-path collision masking diagnostics tests.
+
+### 16.5 Diagnostics/Reporting Correctness
+
+- Stable diagnostics code emission tests (`pak.request.*`, `pak.plan.*`, `pak.write.*`, `pak.patch.*`).
+- Severity and phase mapping tests.
+- Diagnostic context-field population tests.
+- Summary counters vs diagnostics vector consistency tests.
+- `fail_on_warnings=true` enforcement tests.
+
+### 16.6 Source-Key Determinism Ownership Coverage
+
+- Request-construction layer tests proving deterministic `source_key` derivation stability for identical normalized inputs.
+- Request-construction layer tests proving non-zero `source_key` generation.
+- Repeated-run reproducibility tests for request-construction `source_key` policy.
+- Builder request-validation tests proving zero `source_key` is rejected.
 
 ## 17. Non-Goals
 
