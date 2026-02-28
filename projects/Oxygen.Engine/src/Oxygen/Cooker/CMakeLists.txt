@@ -150,6 +150,7 @@ set(
   "Pak/PakStreamingCrc32.h"
   "Pak/PakValidation.h"
   "Pak/PakWriter.h"
+  "Pak/PakManifestWriter.h"
 )
 
 set(
@@ -213,6 +214,7 @@ set(
   "Pak/PakStreamingCrc32.cpp"
   "Pak/PakValidation.cpp"
   "Pak/PakWriter.cpp"
+  "Pak/PakManifestWriter.cpp"
   "Pak/PakBuilder.cpp"
   "Pak/PakBuildToString.cpp"
   ${OXYGEN_COOKER_PRIVATE_HEADERS}
