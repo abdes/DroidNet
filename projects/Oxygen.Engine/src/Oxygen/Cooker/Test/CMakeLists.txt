@@ -138,7 +138,7 @@ m_gtest_program(
 
 m_gtest_program(PakPatchPlanner SOURCES "Pak/PakPatchPlanner_phase4_test.cpp")
 
-m_gtest_program(PakWriter SOURCES "Pak/Writer_placeholder_test.cpp")
+m_gtest_program(PakWriter SOURCES "Pak/PakWriter_phase5_test.cpp")
 
 m_gtest_program(
   PakE2E

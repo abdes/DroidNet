@@ -53,9 +53,9 @@ struct FileSpec final {
 
 auto MakeAssetKey(const uint8_t seed) -> data::AssetKey
 {
-  auto key = data::AssetKey {};
-  key.guid.fill(seed);
-  return key;
+  auto bytes = std::array<uint8_t, data::AssetKey::kSizeBytes> {};
+  bytes.fill(seed);
+  return data::AssetKey::FromBytes(bytes);
 }
 
 auto MakeNonZeroSourceKey(const uint8_t seed) -> data::SourceKey
@@ -107,7 +107,8 @@ auto WriteLooseIndex(const std::filesystem::path& root,
     entry.virtual_path_offset = virtual_path_offset;
     entry.asset_type = static_cast<uint8_t>(asset.asset_type);
     entry.descriptor_size = asset.descriptor_size;
-    std::ranges::copy(asset.descriptor_sha, std::begin(entry.descriptor_sha256));
+    std::ranges::copy(
+      asset.descriptor_sha, std::begin(entry.descriptor_sha256));
     asset_entries.push_back(entry);
   }
 
@@ -132,11 +133,13 @@ auto WriteLooseIndex(const std::filesystem::path& root,
     header.flags |= static_cast<uint32_t>(lc::kHasFileRecords);
   }
   for (size_t i = 0; i < std::size(header.guid); ++i) {
-    header.guid[i] = static_cast<uint8_t>(guid_seed + static_cast<uint8_t>(i + 1U));
+    header.guid[i]
+      = static_cast<uint8_t>(guid_seed + static_cast<uint8_t>(i + 1U));
   }
   header.string_table_offset = sizeof(lc::IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset = header.string_table_offset + header.string_table_size;
+  header.asset_entries_offset
+    = header.string_table_offset + header.string_table_size;
   header.asset_count = static_cast<uint32_t>(asset_entries.size());
   header.asset_entry_size = sizeof(lc::AssetEntry);
   header.file_records_offset = header.asset_entries_offset
@@ -160,27 +163,27 @@ auto WriteLooseIndex(const std::filesystem::path& root,
 
 auto HasError(std::span<const pak::PakDiagnostic> diagnostics) -> bool
 {
-  return std::ranges::any_of(diagnostics, [](const pak::PakDiagnostic& diagnostic) {
-    return diagnostic.severity == pak::PakDiagnosticSeverity::kError;
-  });
+  return std::ranges::any_of(
+    diagnostics, [](const pak::PakDiagnostic& diagnostic) {
+      return diagnostic.severity == pak::PakDiagnosticSeverity::kError;
+    });
 }
 
 auto HasDiagnosticCode(std::span<const pak::PakDiagnostic> diagnostics,
   const std::string_view code) -> bool
 {
-  return std::ranges::any_of(diagnostics,
-    [code](const pak::PakDiagnostic& diagnostic) {
+  return std::ranges::any_of(
+    diagnostics, [code](const pak::PakDiagnostic& diagnostic) {
       return diagnostic.code == code;
     });
 }
 
-auto FindTable(
-  const pak::PakPlan& plan, const std::string_view name) -> const pak::PakTablePlan*
+auto FindTable(const pak::PakPlan& plan, const std::string_view name)
+  -> const pak::PakTablePlan*
 {
   const auto tables = plan.Tables();
-  const auto it = std::ranges::find_if(tables, [name](const auto& table) {
-    return table.table_name == name;
-  });
+  const auto it = std::ranges::find_if(
+    tables, [name](const auto& table) { return table.table_name == name; });
   if (it == tables.end()) {
     return nullptr;
   }
@@ -195,7 +198,8 @@ auto ComputeExpectedBrowsePayloadSize(
     string_bytes += entry.virtual_path.size();
   }
   return static_cast<uint64_t>(sizeof(core::PakBrowseIndexHeader))
-    + (static_cast<uint64_t>(entries.size()) * sizeof(core::PakBrowseIndexEntry))
+    + (static_cast<uint64_t>(entries.size())
+      * sizeof(core::PakBrowseIndexEntry))
     + string_bytes;
 }
 
@@ -228,11 +232,15 @@ auto ExpectPlansEquivalent(const pak::PakPlan& lhs, const pak::PakPlan& rhs)
     EXPECT_EQ(lhs_tables[i].size_bytes, rhs_tables[i].size_bytes);
     EXPECT_EQ(lhs_tables[i].count, rhs_tables[i].count);
     EXPECT_EQ(lhs_tables[i].entry_size, rhs_tables[i].entry_size);
-    EXPECT_EQ(lhs_tables[i].expected_entry_size, rhs_tables[i].expected_entry_size);
+    EXPECT_EQ(
+      lhs_tables[i].expected_entry_size, rhs_tables[i].expected_entry_size);
     EXPECT_EQ(lhs_tables[i].alignment, rhs_tables[i].alignment);
-    EXPECT_EQ(lhs_tables[i].index_zero_required, rhs_tables[i].index_zero_required);
-    EXPECT_EQ(lhs_tables[i].index_zero_present, rhs_tables[i].index_zero_present);
-    EXPECT_EQ(lhs_tables[i].index_zero_forbidden, rhs_tables[i].index_zero_forbidden);
+    EXPECT_EQ(
+      lhs_tables[i].index_zero_required, rhs_tables[i].index_zero_required);
+    EXPECT_EQ(
+      lhs_tables[i].index_zero_present, rhs_tables[i].index_zero_present);
+    EXPECT_EQ(
+      lhs_tables[i].index_zero_forbidden, rhs_tables[i].index_zero_forbidden);
   }
 
   const auto lhs_assets = lhs.Assets();
@@ -244,7 +252,8 @@ auto ExpectPlansEquivalent(const pak::PakPlan& lhs, const pak::PakPlan& rhs)
     EXPECT_EQ(lhs_assets[i].offset, rhs_assets[i].offset);
     EXPECT_EQ(lhs_assets[i].size_bytes, rhs_assets[i].size_bytes);
     EXPECT_EQ(lhs_assets[i].alignment, rhs_assets[i].alignment);
-    EXPECT_EQ(lhs_assets[i].reserved_bytes_zeroed, rhs_assets[i].reserved_bytes_zeroed);
+    EXPECT_EQ(
+      lhs_assets[i].reserved_bytes_zeroed, rhs_assets[i].reserved_bytes_zeroed);
   }
 
   const auto lhs_resources = lhs.Resources();
@@ -257,8 +266,8 @@ auto ExpectPlansEquivalent(const pak::PakPlan& lhs, const pak::PakPlan& rhs)
     EXPECT_EQ(lhs_resources[i].offset, rhs_resources[i].offset);
     EXPECT_EQ(lhs_resources[i].size_bytes, rhs_resources[i].size_bytes);
     EXPECT_EQ(lhs_resources[i].alignment, rhs_resources[i].alignment);
-    EXPECT_EQ(
-      lhs_resources[i].reserved_bytes_zeroed, rhs_resources[i].reserved_bytes_zeroed);
+    EXPECT_EQ(lhs_resources[i].reserved_bytes_zeroed,
+      rhs_resources[i].reserved_bytes_zeroed);
   }
 
   EXPECT_EQ(lhs.Directory().offset, rhs.Directory().offset);
@@ -287,15 +296,16 @@ auto ExpectPlansEquivalent(const pak::PakPlan& lhs, const pak::PakPlan& rhs)
 
   EXPECT_EQ(lhs.Footer().offset, rhs.Footer().offset);
   EXPECT_EQ(lhs.Footer().size_bytes, rhs.Footer().size_bytes);
-  EXPECT_EQ(
-    lhs.Footer().crc32_field_absolute_offset, rhs.Footer().crc32_field_absolute_offset);
+  EXPECT_EQ(lhs.Footer().crc32_field_absolute_offset,
+    rhs.Footer().crc32_field_absolute_offset);
 
   const auto lhs_ranges = lhs.ScriptParamRanges();
   const auto rhs_ranges = rhs.ScriptParamRanges();
   ASSERT_EQ(lhs_ranges.size(), rhs_ranges.size());
   for (size_t i = 0; i < lhs_ranges.size(); ++i) {
     EXPECT_EQ(lhs_ranges[i].slot_index, rhs_ranges[i].slot_index);
-    EXPECT_EQ(lhs_ranges[i].params_array_offset, rhs_ranges[i].params_array_offset);
+    EXPECT_EQ(
+      lhs_ranges[i].params_array_offset, rhs_ranges[i].params_array_offset);
     EXPECT_EQ(lhs_ranges[i].params_count, rhs_ranges[i].params_count);
   }
 }
@@ -313,7 +323,10 @@ protected:
 
   void TearDown() override { std::filesystem::remove_all(root_); }
 
-  [[nodiscard]] auto Root() const -> const std::filesystem::path& { return root_; }
+  [[nodiscard]] auto Root() const -> const std::filesystem::path&
+  {
+    return root_;
+  }
 
 private:
   std::filesystem::path root_ {};
@@ -499,7 +512,8 @@ NOLINT_TEST_F(
   };
 
   const auto assets = std::array<AssetSpec, 2> { material_asset, script_asset };
-  WriteLooseIndex(source, std::span<const AssetSpec>(assets.data(), assets.size()),
+  WriteLooseIndex(source,
+    std::span<const AssetSpec>(assets.data(), assets.size()),
     std::span<const FileSpec>(files.data(), files.size()), kGuidSeed);
 
   const auto request = pak::PakBuildRequest {
@@ -577,7 +591,8 @@ NOLINT_TEST_F(PakPlanBuilderPhase3Test,
 
   auto slot = script::ScriptSlotRecord {};
   slot.script_asset_key = MakeAssetKey(0x44U);
-  slot.params_array_offset = static_cast<uint64_t>(sizeof(script::ScriptParamRecord))
+  slot.params_array_offset
+    = static_cast<uint64_t>(sizeof(script::ScriptParamRecord))
     * kParamsOffsetRecords;
   slot.params_count = kParamsCount;
 
@@ -604,8 +619,8 @@ NOLINT_TEST_F(PakPlanBuilderPhase3Test,
 
   const auto request = pak::PakBuildRequest {
     .mode = BuildMode::kFull,
-    .sources
-    = { CookedSource { .kind = CookedSourceKind::kLooseCooked, .path = source } },
+    .sources = { CookedSource {
+      .kind = CookedSourceKind::kLooseCooked, .path = source } },
     .output_pak_path = Root() / "script_slot_ok.pak",
     .output_manifest_path = {},
     .content_version = 1U,
@@ -662,7 +677,8 @@ NOLINT_TEST_F(PakPlanBuilderPhase3Test, ScriptSlotOutOfBoundsIsRejected)
 
   auto slot = script::ScriptSlotRecord {};
   slot.script_asset_key = MakeAssetKey(0x46U);
-  slot.params_array_offset = static_cast<uint64_t>(sizeof(script::ScriptParamRecord))
+  slot.params_array_offset
+    = static_cast<uint64_t>(sizeof(script::ScriptParamRecord))
     * kOutOfBoundsOffsetRecords;
   slot.params_count = kOutOfBoundsCount;
 
@@ -689,8 +705,8 @@ NOLINT_TEST_F(PakPlanBuilderPhase3Test, ScriptSlotOutOfBoundsIsRejected)
 
   const auto request = pak::PakBuildRequest {
     .mode = BuildMode::kFull,
-    .sources
-    = { CookedSource { .kind = CookedSourceKind::kLooseCooked, .path = source } },
+    .sources = { CookedSource {
+      .kind = CookedSourceKind::kLooseCooked, .path = source } },
     .output_pak_path = Root() / "script_slot_invalid.pak",
     .output_manifest_path = {},
     .content_version = 1U,
@@ -756,8 +772,8 @@ NOLINT_TEST_F(PakPlanBuilderPhase3Test, IndexZeroPolicyAppliedForResourceTables)
 
   const auto request = pak::PakBuildRequest {
     .mode = BuildMode::kFull,
-    .sources
-    = { CookedSource { .kind = CookedSourceKind::kLooseCooked, .path = source } },
+    .sources = { CookedSource {
+      .kind = CookedSourceKind::kLooseCooked, .path = source } },
     .output_pak_path = Root() / "index0.pak",
     .output_manifest_path = {},
     .content_version = 1U,
@@ -827,7 +843,8 @@ NOLINT_TEST_F(PakPlanBuilderPhase3Test,
   asset_b.descriptor_sha[0] = 0x62U;
 
   const auto assets = std::array<AssetSpec, 2> { asset_a, asset_b };
-  WriteLooseIndex(source, std::span<const AssetSpec>(assets.data(), assets.size()),
+  WriteLooseIndex(source,
+    std::span<const AssetSpec>(assets.data(), assets.size()),
     std::span<const FileSpec> {}, kGuidSeed);
 
   const auto request = pak::PakBuildRequest {
@@ -864,8 +881,8 @@ NOLINT_TEST_F(PakPlanBuilderPhase3Test,
   EXPECT_EQ(browse.size_bytes, expected_payload_size);
   EXPECT_FALSE(HasDiagnosticCode(
     result.diagnostics, "pak.plan.stage.layout.browse_store_failed"));
-  EXPECT_FALSE(
-    HasDiagnosticCode(result.diagnostics, "pak.plan.stage.layout.browse_size_mismatch"));
+  EXPECT_FALSE(HasDiagnosticCode(
+    result.diagnostics, "pak.plan.stage.layout.browse_size_mismatch"));
 }
 
 } // namespace

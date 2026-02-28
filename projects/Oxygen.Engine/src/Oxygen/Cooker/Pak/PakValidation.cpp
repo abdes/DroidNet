@@ -100,8 +100,7 @@ auto SafeMul(const uint64_t lhs, const uint64_t rhs, uint64_t& out) -> bool
 auto IsAssetKeyLess(const data::AssetKey& lhs, const data::AssetKey& rhs)
   -> bool
 {
-  return std::lexicographical_compare(
-    lhs.guid.begin(), lhs.guid.end(), rhs.guid.begin(), rhs.guid.end());
+  return lhs < rhs;
 }
 
 auto MakeAssetTypeName(const data::AssetType asset_type) -> std::string
@@ -158,13 +157,13 @@ auto IsKnownAssetType(const data::AssetType asset_type) -> bool
 }
 
 struct ValidationState final {
-  ValidationState(const pak::PakPlan& plan_in, const pak::PakPlanPolicy& policy_in,
-    const pak::PakBuildRequest& request_in)
+  ValidationState(const pak::PakPlan& plan_in,
+    const pak::PakPlanPolicy& policy_in, const pak::PakBuildRequest& request_in)
     : plan(oxygen::observer_ptr<const pak::PakPlan> { std::addressof(plan_in) })
-    , policy(
-        oxygen::observer_ptr<const pak::PakPlanPolicy> { std::addressof(policy_in) })
+    , policy(oxygen::observer_ptr<const pak::PakPlanPolicy> {
+        std::addressof(policy_in) })
     , request(oxygen::observer_ptr<const pak::PakBuildRequest> {
-      std::addressof(request_in) })
+        std::addressof(request_in) })
   {
   }
 
@@ -194,49 +193,50 @@ auto ValidateTablesAndSchemas(ValidationState& state) -> void
 
   for (const auto& table : state.plan->Tables()) {
     if (table.table_name.empty()) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.table_name_empty", "Resource table_name must be non-empty.");
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.table_name_empty",
+        "Resource table_name must be non-empty.");
     }
 
     if (table.entry_size == 0U && table.count > 0U) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.table_entry_size_zero",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.table_entry_size_zero",
         "Resource table has count > 0 but entry_size is 0.", table.table_name,
         table.offset);
     }
 
     if (table.expected_entry_size != 0U && table.entry_size != 0U
       && table.entry_size != table.expected_entry_size) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.table_entry_size_mismatch",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.table_entry_size_mismatch",
         "Resource table entry_size does not match schema size.",
         table.table_name, table.offset);
     }
 
     uint64_t required_bytes = 0;
     if (!SafeMul(table.count, table.entry_size, required_bytes)) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.table_size_multiply_overflow",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.table_size_multiply_overflow",
         "Table count * entry_size overflowed uint64.", std::nullopt, {},
         table.table_name, table.offset);
     } else if (table.size_bytes != required_bytes) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.table_size_mismatch",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.table_size_mismatch",
         "Table size_bytes does not equal count * entry_size.", std::nullopt, {},
         table.table_name, table.offset);
     }
 
     if (table.index_zero_required && table.count > 0U
       && !table.index_zero_present) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.index_zero_required_missing",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.index_zero_required_missing",
         "Table requires index 0 but it is not populated.", table.table_name,
         table.offset);
     }
 
     if (table.index_zero_forbidden && table.index_zero_present) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.index_zero_forbidden_present",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.index_zero_forbidden_present",
         "Table forbids index 0 but it is marked as present.", table.table_name,
         table.offset);
     }
@@ -252,21 +252,23 @@ auto CollectRegionBoundsAndRanges(ValidationState& state) -> void
 
   for (const auto& region : state.plan->Regions()) {
     if (region.region_name.empty()) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.region_name_empty", "Region name must be non-empty.");
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.region_name_empty",
+        "Region name must be non-empty.");
     }
 
     uint64_t end = 0;
     if (!SafeAdd(region.offset, region.size_bytes, end)) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.region_overflow", "Region offset + size overflowed uint64.",
-        region.region_name, region.offset);
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.region_overflow",
+        "Region offset + size overflowed uint64.", region.region_name,
+        region.offset);
       continue;
     }
 
     if (region.alignment == 0U || region.offset % region.alignment != 0U) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.region_alignment_mismatch",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.region_alignment_mismatch",
         "Region offset does not satisfy alignment.", region.region_name,
         region.offset);
     }
@@ -274,9 +276,10 @@ auto CollectRegionBoundsAndRanges(ValidationState& state) -> void
     const auto [it, inserted] = state.region_bounds.emplace(
       region.region_name, std::make_pair(region.offset, end));
     if (!inserted) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.region_duplicate_name", "Region name appears more than once.",
-        std::nullopt, {}, region.region_name, region.offset);
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.region_duplicate_name",
+        "Region name appears more than once.", std::nullopt, {},
+        region.region_name, region.offset);
       it->second.first = (std::min)(it->second.first, region.offset);
       it->second.second = (std::max)(it->second.second, end);
     }
@@ -288,8 +291,8 @@ auto CollectRegionBoundsAndRanges(ValidationState& state) -> void
     });
   }
 
-  std::ranges::sort(region_ranges,
-    [](const RangeRecord& lhs, const RangeRecord& rhs) {
+  std::ranges::sort(
+    region_ranges, [](const RangeRecord& lhs, const RangeRecord& rhs) {
       if (lhs.start != rhs.start) {
         return lhs.start < rhs.start;
       }
@@ -302,8 +305,8 @@ auto CollectRegionBoundsAndRanges(ValidationState& state) -> void
   for (size_t i = 0; i < region_ranges.size(); ++i) {
     const auto& range = region_ranges[i];
     if (range.end > state.plan->PlannedFileSize()) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.region_out_of_bounds",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.region_out_of_bounds",
         "Region end exceeds planned file size.", range.label, range.start);
     }
 
@@ -313,9 +316,9 @@ auto CollectRegionBoundsAndRanges(ValidationState& state) -> void
 
     const auto& prev = region_ranges[i - 1U];
     if (range.start < prev.end) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.region_overlap", "Planned regions overlap.", range.label,
-        range.start);
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.region_overlap", "Planned regions overlap.",
+        range.label, range.start);
     }
   }
 }
@@ -328,15 +331,16 @@ auto CollectTableRanges(ValidationState& state) -> void
   for (const auto& table : state.plan->Tables()) {
     uint64_t end = 0;
     if (!SafeAdd(table.offset, table.size_bytes, end)) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.table_overflow", "Table offset + size overflowed uint64.",
-        table.table_name, table.offset);
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.table_overflow",
+        "Table offset + size overflowed uint64.", table.table_name,
+        table.offset);
       continue;
     }
 
     if (table.alignment == 0U || table.offset % table.alignment != 0U) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.table_alignment_mismatch",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.table_alignment_mismatch",
         "Table offset does not satisfy alignment.", table.table_name,
         table.offset);
     }
@@ -356,29 +360,30 @@ auto CollectAssetRangesAndValidateAssets(ValidationState& state) -> void
 
   for (const auto& asset : state.plan->Assets()) {
     if (!IsKnownAssetType(asset.asset_type)) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.asset_type_unknown", "Asset plan contains unknown asset_type.",
-        asset.asset_key);
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.asset_type_unknown",
+        "Asset plan contains unknown asset_type.", asset.asset_key);
     }
 
     uint64_t end = 0;
     if (!SafeAdd(asset.offset, asset.size_bytes, end)) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.asset_overflow", "Asset offset + size overflowed uint64.",
-        asset.asset_key, {}, {}, asset.offset);
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.asset_overflow",
+        "Asset offset + size overflowed uint64.", asset.asset_key, {}, {},
+        asset.offset);
       continue;
     }
 
     if (asset.alignment == 0U || asset.offset % asset.alignment != 0U) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.asset_alignment_mismatch",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.asset_alignment_mismatch",
         "Asset offset does not satisfy alignment.", asset.asset_key, {}, {},
         asset.offset);
     }
 
     if (!asset.reserved_bytes_zeroed) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.asset_reserved_bytes_non_zero",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.asset_reserved_bytes_non_zero",
         "Asset descriptor reserved bytes must be zeroed.", asset.asset_key, {},
         {}, asset.offset);
     }
@@ -396,13 +401,13 @@ auto CollectResourceRangesAndValidateResources(ValidationState& state) -> void
   std::unordered_set<std::string> resource_keys;
   for (const auto& resource : state.plan->Resources()) {
     if (resource.resource_kind.empty()) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.resource_kind_empty",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.resource_kind_empty",
         "Resource placement kind must be non-empty.");
     }
     if (resource.region_name.empty()) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.resource_region_empty",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.resource_region_empty",
         "Resource placement region_name must be non-empty.", std::nullopt,
         resource.resource_kind);
     }
@@ -411,52 +416,53 @@ auto CollectResourceRangesAndValidateResources(ValidationState& state) -> void
       = resource.resource_kind + ":" + std::to_string(resource.resource_index);
     const auto [_, inserted] = resource_keys.insert(resource_key);
     if (!inserted) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.resource_duplicate_key",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.resource_duplicate_key",
         "Resource kind/index pair must be unique.", std::nullopt,
         resource.resource_kind, resource.region_name, resource.offset);
     }
 
     uint64_t end = 0;
     if (!SafeAdd(resource.offset, resource.size_bytes, end)) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.resource_overflow", "Resource offset + size overflowed uint64.",
-        std::nullopt, resource.resource_kind, resource.region_name,
-        resource.offset);
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.resource_overflow",
+        "Resource offset + size overflowed uint64.", std::nullopt,
+        resource.resource_kind, resource.region_name, resource.offset);
       continue;
     }
 
-    if (resource.alignment == 0U || resource.offset % resource.alignment != 0U) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.resource_alignment_mismatch",
+    if (resource.alignment == 0U
+      || resource.offset % resource.alignment != 0U) {
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.resource_alignment_mismatch",
         "Resource offset does not satisfy alignment.", std::nullopt,
         resource.resource_kind, resource.region_name, resource.offset);
     }
 
     if (!resource.reserved_bytes_zeroed) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.resource_reserved_bytes_non_zero",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.resource_reserved_bytes_non_zero",
         "Resource descriptor reserved bytes must be zeroed.", std::nullopt,
         resource.resource_kind, resource.region_name, resource.offset);
     }
 
     const auto region_it = state.region_bounds.find(resource.region_name);
     if (region_it == state.region_bounds.end()) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.resource_region_missing",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.resource_region_missing",
         "Resource references a region_name not present in plan.", std::nullopt,
         resource.resource_kind, resource.region_name, resource.offset);
     } else if (resource.offset < region_it->second.first
       || end > region_it->second.second) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.resource_out_of_region",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.resource_out_of_region",
         "Resource data range must be fully contained in its declared region.",
         std::nullopt, resource.resource_kind, resource.region_name,
         resource.offset);
     }
 
-    state.ranges.push_back(
-      RangeRecord { .start = resource.offset, .end = end, .label = resource_key });
+    state.ranges.push_back(RangeRecord {
+      .start = resource.offset, .end = end, .label = resource_key });
   }
 }
 
@@ -491,8 +497,8 @@ auto CollectBrowseRangeAndValidatePaths(ValidationState& state) -> void
   if (browse.enabled) {
     uint64_t end = 0;
     if (!SafeAdd(browse.offset, browse.size_bytes, end)) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.browse_index_overflow",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.browse_index_overflow",
         "Browse index offset + size overflowed uint64.", std::string_view {},
         browse.offset);
     } else {
@@ -507,16 +513,16 @@ auto CollectBrowseRangeAndValidatePaths(ValidationState& state) -> void
     for (const auto& browse_entry : browse.entries) {
       const auto& path = browse_entry.virtual_path;
       if (!IsCanonicalVirtualPath(path)) {
-        AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-          "pak.plan.browse_path_not_canonical",
+        AddDiagnostic(state.output.diagnostics, Severity::kError,
+          Phase::kPlanning, "pak.plan.browse_path_not_canonical",
           "Browse index virtual path must be canonical.", std::nullopt, {},
           "browse_index", {}, path);
       }
 
       const auto [_, inserted] = seen_paths.insert(path);
       if (!inserted) {
-        AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-          "pak.plan.browse_path_duplicate",
+        AddDiagnostic(state.output.diagnostics, Severity::kError,
+          Phase::kPlanning, "pak.plan.browse_path_duplicate",
           "Browse index virtual paths must be duplicate-free.", std::nullopt,
           {}, "browse_index", {}, path);
       }
@@ -562,22 +568,23 @@ auto ValidateSectionBoundsAndOverlaps(ValidationState& state) -> void
   using Severity = pak::PakDiagnosticSeverity;
   using Phase = pak::PakBuildPhase;
 
-  std::ranges::sort(state.ranges, [](const RangeRecord& lhs, const RangeRecord& rhs) {
-    if (lhs.start != rhs.start) {
-      return lhs.start < rhs.start;
-    }
-    if (lhs.end != rhs.end) {
-      return lhs.end < rhs.end;
-    }
-    return lhs.label < rhs.label;
-  });
+  std::ranges::sort(
+    state.ranges, [](const RangeRecord& lhs, const RangeRecord& rhs) {
+      if (lhs.start != rhs.start) {
+        return lhs.start < rhs.start;
+      }
+      if (lhs.end != rhs.end) {
+        return lhs.end < rhs.end;
+      }
+      return lhs.label < rhs.label;
+    });
 
   for (size_t i = 0; i < state.ranges.size(); ++i) {
     const auto& range = state.ranges[i];
 
     if (range.end > state.plan->PlannedFileSize()) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.section_out_of_bounds",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.section_out_of_bounds",
         "Planned section end exceeds planned file size.", range.label,
         range.start);
     }
@@ -588,9 +595,9 @@ auto ValidateSectionBoundsAndOverlaps(ValidationState& state) -> void
 
     const auto& prev = state.ranges[i - 1U];
     if (range.start < prev.end) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.section_overlap", "Planned sections overlap.", range.label,
-        range.start);
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.section_overlap",
+        "Planned sections overlap.", range.label, range.start);
     }
   }
 }
@@ -609,8 +616,8 @@ auto ValidatePlannedAssetKeysUnique(ValidationState& state) -> void
   std::ranges::sort(keys, IsAssetKeyLess);
   for (size_t i = 1; i < keys.size(); ++i) {
     if (keys[i] == keys[i - 1U]) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.duplicate_asset_key",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.duplicate_asset_key",
         "Duplicate AssetKey detected in planned assets.");
     }
   }
@@ -627,8 +634,8 @@ auto ValidateDirectoryKeysAndAssetTypes(ValidationState& state) -> void
     directory_keys.push_back(entry.asset_key);
 
     if (!IsKnownAssetType(entry.asset_type)) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.directory_asset_type_unknown",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.directory_asset_type_unknown",
         "Directory entry contains unknown asset_type.", entry.asset_key);
     }
   }
@@ -636,8 +643,8 @@ auto ValidateDirectoryKeysAndAssetTypes(ValidationState& state) -> void
   std::ranges::sort(directory_keys, IsAssetKeyLess);
   for (size_t i = 1; i < directory_keys.size(); ++i) {
     if (directory_keys[i] == directory_keys[i - 1U]) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.directory_duplicate_asset_key",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.directory_duplicate_asset_key",
         "Directory contains duplicate AssetKey entries.");
     }
   }
@@ -655,23 +662,24 @@ auto ValidateDirectoryEntriesAgainstAssets(ValidationState& state) -> void
       });
 
     if (it == state.plan->Assets().end()) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.directory_entry_missing_asset",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.directory_entry_missing_asset",
         "Directory entry references a missing asset placement.",
         std::string_view {}, entry.descriptor_offset);
       continue;
     }
 
     if (it->asset_type != entry.asset_type) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.asset_type_mismatch",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.asset_type_mismatch",
         "Directory entry asset_type mismatches planned descriptor type.");
     }
 
     uint64_t descriptor_end = 0;
-    if (!SafeAdd(entry.descriptor_offset, entry.descriptor_size, descriptor_end)) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.descriptor_offset_overflow",
+    if (!SafeAdd(
+          entry.descriptor_offset, entry.descriptor_size, descriptor_end)) {
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.descriptor_offset_overflow",
         "Directory descriptor_offset + descriptor_size overflowed uint64.",
         entry.asset_key, {}, "asset_directory", entry.descriptor_offset);
       continue;
@@ -679,15 +687,16 @@ auto ValidateDirectoryEntriesAgainstAssets(ValidationState& state) -> void
 
     uint64_t asset_end = 0;
     if (!SafeAdd(it->offset, it->size_bytes, asset_end)) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.asset_overflow", "Asset offset + size overflowed uint64.",
-        entry.asset_key, {}, "asset_directory", it->offset);
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.asset_overflow",
+        "Asset offset + size overflowed uint64.", entry.asset_key, {},
+        "asset_directory", it->offset);
       continue;
     }
 
     if (entry.descriptor_offset < it->offset || descriptor_end > asset_end) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.descriptor_out_of_asset_bounds",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.descriptor_out_of_asset_bounds",
         "Descriptor range must be contained in the planned asset range.",
         entry.asset_key, {}, "asset_directory", entry.descriptor_offset);
     }
@@ -704,17 +713,17 @@ auto ValidateScriptParamRanges(ValidationState& state) -> void
   for (const auto& range : state.plan->ScriptParamRanges()) {
     uint64_t end = 0;
     if (!SafeAdd(range.params_array_offset, range.params_count, end)) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.script_param_overflow", "Script param range overflow.",
-        std::nullopt, {}, "script_slot_table");
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.script_param_overflow",
+        "Script param range overflow.", std::nullopt, {}, "script_slot_table");
       continue;
     }
 
     if (end > state.plan->ScriptParamRecordCount()) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.script_param_out_of_bounds",
-        "Script param range exceeds script param record array.", std::nullopt, {},
-        "script_slot_table");
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.script_param_out_of_bounds",
+        "Script param range exceeds script param record array.", std::nullopt,
+        {}, "script_slot_table");
     }
 
     script_ranges.push_back(RangeRecord {
@@ -724,18 +733,20 @@ auto ValidateScriptParamRanges(ValidationState& state) -> void
     });
   }
 
-  std::ranges::sort(script_ranges, [](const RangeRecord& lhs, const RangeRecord& rhs) {
-    if (lhs.start != rhs.start) {
-      return lhs.start < rhs.start;
-    }
-    return lhs.end < rhs.end;
-  });
+  std::ranges::sort(
+    script_ranges, [](const RangeRecord& lhs, const RangeRecord& rhs) {
+      if (lhs.start != rhs.start) {
+        return lhs.start < rhs.start;
+      }
+      return lhs.end < rhs.end;
+    });
 
   for (size_t i = 1; i < script_ranges.size(); ++i) {
     if (script_ranges[i].start < script_ranges[i - 1U].end) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.script_param_overlap", "Script param ranges must not overlap.",
-        std::nullopt, {}, "script_slot_table", script_ranges[i].start);
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.script_param_overlap",
+        "Script param ranges must not overlap.", std::nullopt, {},
+        "script_slot_table", script_ranges[i].start);
     }
   }
 }
@@ -751,8 +762,8 @@ auto ValidatePatchActionsAgainstBaseCatalogs(ValidationState& state) -> void
       const auto [it, inserted]
         = base_asset_types.emplace(entry.asset_key, entry.asset_type);
       if (!inserted && it->second != entry.asset_type) {
-        AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-          "pak.plan.base_catalog_type_mismatch",
+        AddDiagnostic(state.output.diagnostics, Severity::kError,
+          Phase::kPlanning, "pak.plan.base_catalog_type_mismatch",
           "Same AssetKey appears in base catalogs with different asset_type.",
           entry.asset_key);
       }
@@ -763,8 +774,8 @@ auto ValidatePatchActionsAgainstBaseCatalogs(ValidationState& state) -> void
   patch_keys.reserve(state.plan->PatchActions().size());
   for (const auto& action : state.plan->PatchActions()) {
     if (!IsKnownAssetType(action.asset_type)) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.patch_action_asset_type_unknown",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.patch_action_asset_type_unknown",
         "Patch action contains unknown asset_type.", action.asset_key);
     }
 
@@ -785,16 +796,16 @@ auto ValidatePatchActionsAgainstBaseCatalogs(ValidationState& state) -> void
       }
 
       if (action.action == pak::PakPatchAction::kCreate && exists_in_base) {
-        AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-          "pak.plan.create_conflicts_with_base",
+        AddDiagnostic(state.output.diagnostics, Severity::kError,
+          Phase::kPlanning, "pak.plan.create_conflicts_with_base",
           "Create action requires key absent from base catalogs.",
           action.asset_key);
       }
 
       if (action.action == pak::PakPatchAction::kReplace && exists_in_base
         && base_it->second != action.asset_type) {
-        AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-          "pak.plan.replace_type_mismatch",
+        AddDiagnostic(state.output.diagnostics, Severity::kError,
+          Phase::kPlanning, "pak.plan.replace_type_mismatch",
           "Replace operation must preserve base asset_type.", action.asset_key,
           "asset_type", MakeAssetTypeName(action.asset_type));
       }
@@ -804,8 +815,8 @@ auto ValidatePatchActionsAgainstBaseCatalogs(ValidationState& state) -> void
   std::ranges::sort(patch_keys, IsAssetKeyLess);
   for (size_t i = 1; i < patch_keys.size(); ++i) {
     if (patch_keys[i] == patch_keys[i - 1U]) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.patch_action_duplicate_key",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.patch_action_duplicate_key",
         "Patch action map contains duplicate AssetKey records.");
     }
   }
@@ -826,8 +837,8 @@ auto ValidatePatchClosureConsistency(ValidationState& state) -> void
 
   for (const auto& closure : state.plan->PatchClosure()) {
     if (!emitted_asset_keys.contains(closure.asset_key)) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.patch_closure_for_non_emitted_asset",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.patch_closure_for_non_emitted_asset",
         "Patch closure entry must target Create/Replace asset keys.",
         closure.asset_key, closure.resource_kind);
     }
@@ -836,8 +847,8 @@ auto ValidatePatchClosureConsistency(ValidationState& state) -> void
       + closure.resource_kind + "|" + std::to_string(closure.resource_index);
     const auto [_, inserted] = closure_entries.insert(key);
     if (!inserted) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.patch_closure_duplicate_entry",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.patch_closure_duplicate_entry",
         "Patch closure contains duplicate asset/resource entries.",
         closure.asset_key, closure.resource_kind);
     }
@@ -848,8 +859,8 @@ auto ValidatePatchClosureConsistency(ValidationState& state) -> void
           && resource.resource_index == closure.resource_index;
       });
     if (resource_it == state.plan->Resources().end()) {
-      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
-        "pak.plan.patch_closure_resource_missing",
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.patch_closure_resource_missing",
         "Patch closure references a resource that is not planned.",
         closure.asset_key, closure.resource_kind);
     }
@@ -860,8 +871,8 @@ auto FinalizeValidation(ValidationState& state) -> pak::PakValidation::Result
 {
   using Severity = pak::PakDiagnosticSeverity;
 
-  state.output.success = std::ranges::none_of(state.output.diagnostics,
-    [](const pak::PakDiagnostic& diagnostic) {
+  state.output.success = std::ranges::none_of(
+    state.output.diagnostics, [](const pak::PakDiagnostic& diagnostic) {
       return diagnostic.severity == Severity::kError;
     });
   return std::move(state.output);

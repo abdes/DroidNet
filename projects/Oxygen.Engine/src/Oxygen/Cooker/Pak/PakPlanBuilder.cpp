@@ -54,7 +54,6 @@ namespace render = oxygen::data::pak::render;
 namespace script = oxygen::data::pak::scripting;
 namespace physics = oxygen::data::pak::physics;
 
-constexpr std::array<uint8_t, 16> kZeroSourceKeyBytes {};
 constexpr uint32_t kRegionAlignment = 256U;
 constexpr uint32_t kTableAlignment = 16U;
 constexpr uint32_t kAssetAlignment = 16U;
@@ -74,6 +73,7 @@ struct AggregatedAsset {
   data::AssetKey key {};
   data::AssetType asset_type = data::AssetType::kUnknown;
   std::filesystem::path descriptor_path;
+  uint64_t descriptor_source_offset = 0;
   uint64_t descriptor_size = 0;
   oxygen::base::Sha256Digest descriptor_digest {};
   oxygen::base::Sha256Digest transitive_resource_digest {};
@@ -85,6 +85,7 @@ struct PendingResource {
   std::string region_name;
   std::string resource_kind;
   uint64_t size_bytes = 0;
+  uint64_t source_offset = 0;
   uint32_t alignment = kRegionAlignment;
   size_t source_order = 0;
   std::filesystem::path path;
@@ -149,7 +150,7 @@ auto AddDiagnostic(std::vector<pak::PakDiagnostic>& diagnostics,
 auto IsAssetKeyLess(const data::AssetKey& lhs, const data::AssetKey& rhs)
   -> bool
 {
-  return std::ranges::lexicographical_compare(lhs.guid, rhs.guid);
+  return lhs < rhs;
 }
 
 auto IsKnownAssetType(const data::AssetType asset_type) -> bool
@@ -751,7 +752,7 @@ auto ValidatePlanningRequest(PlanningState& state) -> void
   const auto& policy = state.policy;
   auto& diagnostics = state.output.diagnostics;
 
-  if (request.source_key.get() == kZeroSourceKeyBytes) {
+  if (request.source_key.IsNil()) {
     AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
       PakBuildPhase::kPlanning, "pak.plan.source_key_zero",
       "Planning requires a non-zero source_key.");
@@ -886,6 +887,7 @@ auto CollectSourceData(PlanningState& state) -> void
           .key = source_asset.key,
           .asset_type = asset_type,
           .descriptor_path = descriptor_path,
+          .descriptor_source_offset = 0U,
           .descriptor_size = descriptor_size,
           .descriptor_digest = {},
           .transitive_resource_digest = {},
@@ -959,6 +961,7 @@ auto CollectSourceData(PlanningState& state) -> void
             .region_name = "texture_region",
             .resource_kind = "texture",
             .size_bytes = file_size,
+            .source_offset = 0U,
             .alignment = kRegionAlignment,
             .source_order = source_order,
             .path = file_path,
@@ -971,6 +974,7 @@ auto CollectSourceData(PlanningState& state) -> void
             .region_name = "buffer_region",
             .resource_kind = "buffer",
             .size_bytes = file_size,
+            .source_offset = 0U,
             .alignment = kRegionAlignment,
             .source_order = source_order,
             .path = file_path,
@@ -988,6 +992,7 @@ auto CollectSourceData(PlanningState& state) -> void
             .region_name = "physics_region",
             .resource_kind = "physics",
             .size_bytes = file_size,
+            .source_offset = 0U,
             .alignment = kRegionAlignment,
             .source_order = source_order,
             .path = file_path,
@@ -1059,6 +1064,7 @@ auto CollectSourceData(PlanningState& state) -> void
           .region_name = "script_region",
           .resource_kind = "script",
           .size_bytes = scripts_data_size,
+          .source_offset = 0U,
           .alignment = kRegionAlignment,
           .source_order = source_order,
           .path = scripts_data_path,
@@ -1198,6 +1204,7 @@ auto CollectSourceData(PlanningState& state) -> void
           .key = entry.asset_key,
           .asset_type = entry.asset_type,
           .descriptor_path = source_root,
+          .descriptor_source_offset = entry.desc_offset,
           .descriptor_size = entry.desc_size,
           .descriptor_digest = *descriptor_digest,
           .transitive_resource_digest = *descriptor_digest,
@@ -1728,6 +1735,7 @@ auto PlanFileLayout(PlanningState& state) -> void
   uint64_t cursor = state.data_plan.header.size_bytes;
   state.data_plan.regions.clear();
   state.data_plan.resources.clear();
+  state.data_plan.resource_payload_sources.clear();
   state.planned_resource_source_orders.clear();
   const std::array<std::string_view, 5> region_names = { "texture_region",
     "buffer_region", "audio_region", "script_region", "physics_region" };
@@ -1752,6 +1760,12 @@ auto PlanFileLayout(PlanningState& state) -> void
         .alignment = resource.alignment,
         .reserved_bytes_zeroed = true,
       });
+      state.data_plan.resource_payload_sources.push_back(
+        pak::PakPayloadSourceSlicePlan {
+          .source_path = resource.path,
+          .source_offset = resource.source_offset,
+          .size_bytes = resource.size_bytes,
+        });
       state.planned_resource_source_orders.push_back(resource.source_order);
       cursor += resource.size_bytes;
     }
@@ -1772,6 +1786,7 @@ auto PlanFileLayout(PlanningState& state) -> void
   }
 
   state.data_plan.assets.clear();
+  state.data_plan.asset_payload_sources.clear();
   state.data_plan.directory.entries.clear();
   for (const auto& asset : state.assets) {
     cursor = AlignUp(cursor, AlignmentBytes { kAssetAlignment });
@@ -1792,6 +1807,12 @@ auto PlanFileLayout(PlanningState& state) -> void
       .alignment = kAssetAlignment,
       .reserved_bytes_zeroed = true,
     });
+    state.data_plan.asset_payload_sources.push_back(
+      pak::PakPayloadSourceSlicePlan {
+        .source_path = asset.descriptor_path,
+        .source_offset = asset.descriptor_source_offset,
+        .size_bytes = asset.descriptor_size,
+      });
     state.data_plan.directory.entries.push_back(
       pak::PakAssetDirectoryEntryPlan {
         .asset_key = asset.key,
@@ -1938,6 +1959,50 @@ auto ValidatePatchClosureInvariants(PlanningState& state) -> void
 
 auto ValidateLayoutInvariants(PlanningState& state) -> void
 {
+  const auto resource_source_count_matches
+    = state.data_plan.resource_payload_sources.size()
+    == state.data_plan.resources.size();
+  EnforceStageInvariant(state, resource_source_count_matches,
+    "pak.plan.stage.layout.resource_source_count_mismatch",
+    "Resource payload source slice count must match planned resources.");
+
+  const auto asset_source_count_matches
+    = state.data_plan.asset_payload_sources.size()
+    == state.data_plan.assets.size();
+  EnforceStageInvariant(state, asset_source_count_matches,
+    "pak.plan.stage.layout.asset_source_count_mismatch",
+    "Asset payload source slice count must match planned assets.");
+
+  const auto resource_pair_count
+    = (std::min)(state.data_plan.resource_payload_sources.size(),
+      state.data_plan.resources.size());
+  for (size_t i = 0; i < resource_pair_count; ++i) {
+    const auto& source = state.data_plan.resource_payload_sources[i];
+    const auto& planned = state.data_plan.resources[i];
+    uint64_t source_end = 0;
+    const auto no_overflow
+      = SafeAdd(source.source_offset, source.size_bytes, source_end);
+    EnforceStageInvariant(state,
+      no_overflow && source.size_bytes == planned.size_bytes,
+      "pak.plan.stage.layout.resource_source_size_mismatch",
+      "Resource payload source size must match planned resource size.");
+  }
+
+  const auto asset_pair_count
+    = (std::min)(state.data_plan.asset_payload_sources.size(),
+      state.data_plan.assets.size());
+  for (size_t i = 0; i < asset_pair_count; ++i) {
+    const auto& source = state.data_plan.asset_payload_sources[i];
+    const auto& planned = state.data_plan.assets[i];
+    uint64_t source_end = 0;
+    const auto no_overflow
+      = SafeAdd(source.source_offset, source.size_bytes, source_end);
+    EnforceStageInvariant(state,
+      no_overflow && source.size_bytes == planned.size_bytes,
+      "pak.plan.stage.layout.asset_source_size_mismatch",
+      "Asset payload source size must match planned descriptor size.");
+  }
+
   const auto entries_match_assets
     = state.data_plan.directory.entries.size() == state.data_plan.assets.size();
   EnforceStageInvariant(state, entries_match_assets,

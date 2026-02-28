@@ -147,7 +147,9 @@ set(
   "Pak/PakPlanBuilder.h"
   "Pak/PakMeasureStore.h"
   "Pak/PakPlanPolicy.h"
+  "Pak/PakStreamingCrc32.h"
   "Pak/PakValidation.h"
+  "Pak/PakWriter.h"
 )
 
 set(
@@ -208,7 +210,9 @@ set(
   "Pak/PakPlanBuilder.cpp"
   "Pak/PakMeasureStore.cpp"
   "Pak/PakPlanPolicy.cpp"
+  "Pak/PakStreamingCrc32.cpp"
   "Pak/PakValidation.cpp"
+  "Pak/PakWriter.cpp"
   "Pak/PakBuilder.cpp"
   "Pak/PakBuildToString.cpp"
   ${OXYGEN_COOKER_PRIVATE_HEADERS}
