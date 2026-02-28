@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <new>
 #include <string_view>
 
@@ -18,6 +19,75 @@
 namespace oxygen::scripting::bindings {
 
 namespace {
+
+  constexpr auto kUuidTextLength = size_t { 36U };
+  constexpr auto kUuidByteLength = size_t { 16U };
+  constexpr auto kHyphenPos0 = size_t { 8U };
+  constexpr auto kHyphenPos1 = size_t { 13U };
+  constexpr auto kHyphenPos2 = size_t { 18U };
+  constexpr auto kHyphenPos3 = size_t { 23U };
+
+  constexpr auto IsHyphenPosition(const size_t index) noexcept -> bool
+  {
+    return index == kHyphenPos0 || index == kHyphenPos1 || index == kHyphenPos2
+      || index == kHyphenPos3;
+  }
+
+  auto DecodeHexNibble(const char ch) noexcept -> std::optional<uint8_t>
+  {
+    if (ch >= '0' && ch <= '9') {
+      return static_cast<uint8_t>(ch - '0');
+    }
+    if (ch >= 'a' && ch <= 'f') {
+      return static_cast<uint8_t>(10U + (ch - 'a'));
+    }
+    if (ch >= 'A' && ch <= 'F') {
+      return static_cast<uint8_t>(10U + (ch - 'A'));
+    }
+    return std::nullopt;
+  }
+
+  auto ParseCanonicalUuidBytes(const std::string_view text)
+    -> std::optional<std::array<uint8_t, kUuidByteLength>>
+  {
+    if (text.size() != kUuidTextLength) {
+      return std::nullopt;
+    }
+
+    auto bytes = std::array<uint8_t, kUuidByteLength> {};
+    size_t byte_index = 0;
+    std::optional<uint8_t> high_nibble {};
+
+    for (size_t char_index = 0; char_index < text.size(); ++char_index) {
+      const auto ch = text[char_index];
+      if (IsHyphenPosition(char_index)) {
+        if (ch != '-') {
+          return std::nullopt;
+        }
+        continue;
+      }
+
+      const auto nibble = DecodeHexNibble(ch);
+      if (!nibble.has_value()) {
+        return std::nullopt;
+      }
+      if (!high_nibble.has_value()) {
+        high_nibble = *nibble;
+        continue;
+      }
+      if (byte_index >= bytes.size()) {
+        return std::nullopt;
+      }
+      bytes[byte_index++]
+        = static_cast<uint8_t>((*high_nibble << 4U) | *nibble);
+      high_nibble.reset();
+    }
+
+    if (high_nibble.has_value() || byte_index != bytes.size()) {
+      return std::nullopt;
+    }
+    return bytes;
+  }
 } // namespace
 
 auto PushTextureResource(lua_State* state, const content::ResourceKey key,
@@ -125,11 +195,13 @@ auto RequireResourceKey(lua_State* state, const int arg_index)
 auto TryParseAssetGuid(const std::string_view text)
   -> std::optional<data::AssetKey>
 {
-  const auto parsed = Uuid::FromString(text);
-  if (!parsed) {
-    return std::nullopt;
+  if (const auto parsed = Uuid::FromString(text); parsed) {
+    return data::AssetKey { parsed.value() };
   }
-  return data::AssetKey { parsed.value() };
+  if (const auto bytes = ParseCanonicalUuidBytes(text); bytes.has_value()) {
+    return data::AssetKey::FromBytes(*bytes);
+  }
+  return std::nullopt;
 }
 
 auto RequireAssetGuid(lua_State* state, const int arg_index) -> data::AssetKey

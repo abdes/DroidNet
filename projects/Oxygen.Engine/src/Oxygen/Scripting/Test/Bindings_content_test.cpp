@@ -148,6 +148,31 @@ end
 }
 
 NOLINT_TEST_F(ContentBindingsTest,
+  ExecuteScriptContentBindingsAcceptsCanonicalNonV7AssetGuidStrings)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+
+  const auto result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+local assets = oxygen.assets
+local guid_lower = "01234567-89ab-cdef-0123-456789abcdef"
+local guid_upper = "01234567-89AB-CDEF-0123-456789ABCDEF"
+
+if assets.has_material(guid_lower) ~= false then
+  error("has_material(lower canonical non-v7) should be false")
+end
+if assets.has_material(guid_upper) ~= false then
+  error("has_material(upper canonical non-v7) should be false")
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "content_bindings_accept_nonv7_guid" },
+  });
+
+  EXPECT_TRUE(result.ok) << result.message;
+}
+
+NOLINT_TEST_F(ContentBindingsTest,
   ExecuteScriptContentBindingsProceduralRejectsInvalidOptionShapes)
 {
   auto module = MakeModule();
