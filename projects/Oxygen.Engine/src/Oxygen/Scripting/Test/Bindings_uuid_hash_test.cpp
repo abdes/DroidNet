@@ -199,7 +199,7 @@ NOLINT_TEST_F(UuidHashBindingsTest, ExecuteScriptIsValidValidatesThoroughly)
   const auto result = module.ExecuteScript(ScriptExecutionRequest {
     .source_text = ScriptSourceText { R"lua(
 -- valid uuid string
-if not oxygen.uuid.is_valid("12345678-1234-1234-1234-123456789abc") then
+if not oxygen.uuid.is_valid("018f4a7c-7b2d-7a3c-8f01-3b7e2f9c4d10") then
   error("is_valid failed for correct uuid string")
 end
 
@@ -216,6 +216,16 @@ end
 -- invalid hex
 if oxygen.uuid.is_valid("12345678-1234-1234-1234-123456789abg") then
   error("is_valid should reject invalid hex characters")
+end
+
+-- invalid version (must be v7)
+if oxygen.uuid.is_valid("12345678-1234-1234-8abc-123456789abc") then
+  error("is_valid should reject non-v7 uuid version")
+end
+
+-- invalid variant (must be RFC4122 10xx)
+if oxygen.uuid.is_valid("018f4a7c-7b2d-7a3c-4f01-3b7e2f9c4d10") then
+  error("is_valid should reject invalid uuid variant")
 end
 
 -- invalid type
