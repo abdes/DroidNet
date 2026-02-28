@@ -43,7 +43,8 @@
 #include <Oxygen/Cooker/Import/Internal/JobEntry.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/FbxImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/GlbImportJob.h>
-#include <Oxygen/Cooker/Import/Internal/Jobs/ScriptImportJob.h>
+#include <Oxygen/Cooker/Import/Internal/Jobs/ScriptAssetImportJob.h>
+#include <Oxygen/Cooker/Import/Internal/Jobs/ScriptingSidecarImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/TextureImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
@@ -414,21 +415,15 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
     = (scripting_kind == ScriptingImportKind::kScriptAsset);
   const auto is_sidecar_request
     = (scripting_kind == ScriptingImportKind::kScriptingSidecar);
-
-  if (!use_custom_factory && is_sidecar_request) {
-    LOG_F(WARNING,
-      "Submit rejected: scripting sidecar import dispatch is not implemented "
-      "yet for '{}'",
-      request.source_path.string());
-    return std::nullopt;
-  }
+  const auto is_scripting_request
+    = is_script_asset_request || is_sidecar_request;
 
   auto format = ImportFormat::kUnknown;
   if (!use_custom_factory) {
-    if (!is_script_asset_request) {
+    if (!is_scripting_request) {
       format = request.GetFormat();
     }
-    if (!is_script_asset_request && format == ImportFormat::kUnknown) {
+    if (!is_scripting_request && format == ImportFormat::kUnknown) {
       LOG_F(WARNING, "Submit rejected: unknown format for '{}'",
         request.source_path.string());
       return std::nullopt;
@@ -459,7 +454,7 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
 
   const auto job_name = request.job_name.value_or(use_custom_factory
       ? std::string("custom:") + nostd::to_string(job_id)
-      : is_script_asset_request
+      : is_scripting_request
       ? MakeScriptingJobName(scripting_kind, job_id, request.source_path)
       : MakeJobName(format, job_id, request.source_path));
 
@@ -492,7 +487,10 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   if (use_custom_factory) {
     job = job_factory(std::move(params));
   } else if (is_script_asset_request) {
-    job = std::make_shared<detail::ScriptImportJob>(std::move(params));
+    job = std::make_shared<detail::ScriptAssetImportJob>(std::move(params));
+  } else if (is_sidecar_request) {
+    job
+      = std::make_shared<detail::ScriptingSidecarImportJob>(std::move(params));
   } else {
     job = CreateJobForFormat(format, std::move(params));
   }

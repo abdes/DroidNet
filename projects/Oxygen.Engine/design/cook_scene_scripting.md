@@ -108,6 +108,17 @@ Inputs to dispatch:
 3. optional inflight scene context
 4. optional cooked scene context
 
+C++ request context shape (runtime-only, orchestration-populated):
+
+1. `ImportRequest::cooked_context_roots: std::vector<std::filesystem::path>`
+2. `ImportRequest::inflight_scene_contexts:
+   std::vector<ImportRequest::InflightSceneContext>`
+3. `ImportRequest::InflightSceneContext` fields:
+   - `scene_key`
+   - `virtual_path`
+   - `descriptor_relpath`
+   - `descriptor_bytes`
+
 Dispatch execution:
 
 1. Script-only:
@@ -159,6 +170,10 @@ Deterministic resolution algorithm:
 5. If lookup proceeds to resolver:
    - resolve via `content::VirtualPathResolver::ResolveAssetKey`.
    - missing result: reject as target scene missing.
+   - mount order is deterministic:
+     - request `cooked_root` first
+     - `cooked_context_roots` in listed order (later entries have higher
+       precedence / last-mounted-wins)
 6. Resolve scene binding context by final target scene key:
    - prefer inflight context; otherwise use cooked-scene inspection context.
    - if no binding context resolves, reject as target scene missing.
@@ -503,29 +518,33 @@ Exit criteria:
 
 Coding tasks:
 
-- [ ] Implement `ScriptingSidecarImportPipeline` endpoint.
-- [ ] Implement scene resolution using `target_scene_virtual_path` only.
-- [ ] Delegate path canonicalization/precedence/tombstones to
+- [x] Implement `ScriptingSidecarImportPipeline` endpoint.
+- [x] Implement scene resolution using `target_scene_virtual_path` only.
+- [x] Delegate path canonicalization/precedence/tombstones to
   `content::VirtualPathResolver` (no custom resolver wheel).
-- [ ] Implement inflight-context fast-path with duplicate-match rejection.
-- [ ] Resolve final `target_scene_key` and scene binding context.
-- [ ] Implement sidecar table emission:
+- [x] Implement inflight-context fast-path with duplicate-match rejection.
+- [x] Resolve final `target_scene_key` and scene binding context.
+- [x] Implement sidecar table emission:
   `ScriptingComponentRecord`, `ScriptSlotRecord`, `ScriptParamRecord`.
 
 Test tasks:
 
-- [ ] Sidecar path-only success with inflight scene context.
-- [ ] Sidecar path-only success with cooked scene context.
-- [ ] Sidecar request without path rejected.
-- [ ] Invalid canonical path rejected.
-- [ ] Inflight duplicate path match rejected deterministically.
-- [ ] Resolver delegation precedence test (last-mounted-wins + tombstone behavior).
-- [ ] Missing node and missing script reference hard-failure tests.
+- [x] Sidecar path-only success with inflight scene context.
+- [x] Sidecar path-only success with cooked scene context.
+- [x] Sidecar request without path rejected.
+- [x] Invalid canonical path rejected.
+- [x] Inflight duplicate path match rejected deterministically.
+- [x] Resolver delegation precedence test (last-mounted-wins + tombstone behavior).
+- [x] Missing node and missing script reference hard-failure tests.
+- [x] Sidecar payload malformed JSON hard-failure test.
+- [x] Sidecar duplicate `(node_index, slot_id)` hard-failure test.
+- [x] Sidecar missing source file hard-failure test.
+- [x] Sidecar missing target scene in valid cooked root hard-failure test.
 
 Exit criteria:
 
-- [ ] Sidecar scene resolution is deterministic and wheel-free.
-- [ ] Sidecar apply remains atomic on failures.
+- [x] Sidecar scene resolution is deterministic and wheel-free.
+- [x] Sidecar apply remains atomic on failures.
 
 ### 11.5 Phase 4: Cross-Pipeline Patching + Finalization
 
@@ -534,15 +553,16 @@ Coding tasks:
 - [ ] Implement scene binding context providers:
   from scene build output and cooked scene inspection.
 - [ ] Implement patch refs (`slot_start_index`, `slot_count`) and patch apply.
-- [ ] Implement standalone-mode descriptor rewrite/index update wiring.
-- [ ] Enforce sidecar node-binding overwrite semantics (node-index identity).
+- [x] Implement standalone-mode descriptor rewrite/index update wiring.
+- [x] Enforce sidecar node-binding overwrite semantics (node-index identity).
 
 Test tasks:
 
 - [ ] Concurrent flow parity test (scene + sidecar).
-- [ ] Standalone sidecar-after-scene flow test.
+- [x] Standalone sidecar-after-scene flow test.
 - [ ] Context parity test (concurrent vs standalone serialized equivalence).
 - [ ] Node-binding overwrite and additive update behavior tests.
+- [x] Node-binding overwrite/rebind behavior test.
 
 Exit criteria:
 
@@ -553,9 +573,9 @@ Exit criteria:
 
 Coding tasks:
 
-- [ ] Keep single submit path (`SubmitImport(ImportRequest, ...)`) and dispatch
+- [x] Keep single submit path (`SubmitImport(ImportRequest, ...)`) and dispatch
   script/sidecar via `request.options.scripting.import_kind`.
-- [ ] Wire scripting dispatch through existing job-factory/internal job path.
+- [x] Wire scripting dispatch through existing job-factory/internal job path.
 - [ ] Extend `ImportReport` counters:
   `scripts_written`, `scripting_components_written`, `script_slots_written`,
   `script_params_written`.
@@ -578,11 +598,13 @@ Exit criteria:
 
 Coding tasks:
 
-- [ ] Ensure script diagnostics use stable code families:
+- [x] Ensure script diagnostics use stable code families:
   `script.request.*`, `script.asset.*`, `script.sidecar.*`.
-- [ ] Ensure phase context is reported via existing `ProgressEvent`.
-- [ ] Ensure deterministic ordering for sidecar rows, slot/param emission,
+- [x] Ensure phase context is reported via existing `ProgressEvent`.
+- [x] Ensure deterministic ordering for sidecar rows, slot/param emission,
   and diagnostics.
+- [x] Move scripting import tests into dedicated `AsyncImportScripting` target.
+- [x] Consolidate scripting import tests into shared DRY fixtures/helpers.
 
 Test tasks:
 
@@ -591,7 +613,7 @@ Test tasks:
 - [ ] Summary-counter consistency tests vs emitted diagnostics.
 - [ ] Dispatch matrix tests:
   script-only, sidecar-only inflight, sidecar-only cooked, script+sidecar.
-- [ ] Deterministic repeated-run byte/record ordering tests.
+- [x] Deterministic repeated-run byte/record ordering tests.
 - [ ] Dependency ordering and cycle-rejection tests.
 
 Exit criteria:
@@ -604,127 +626,3 @@ Exit criteria:
 1. No universal asset/resource cooking abstraction forced across domains.
 2. No new sidecar transport mechanism.
 3. No runtime API redesign outside required scripting-sidecar compatibility.
-
-## 13. Public C++ API Shapes (Import-Module Consistent)
-
-This section defines the API shapes for pure C++ usage, aligned with existing
-`src/Oxygen/Cooker/Import` conventions. It reuses:
-
-1. `AsyncImportService`
-2. `ImportJobId`
-3. `ImportCompletionCallback`
-4. `ProgressEventCallback`
-5. `ImportReport` and `ImportDiagnostic`
-
-### 13.1 Request Envelopes
-
-Use only `ImportRequest` (single request model) with scripting knobs in
-`ImportOptions::scripting`.
-
-```cpp
-enum class ScriptStorageMode : uint8_t { kEmbedded = 0, kExternal = 1 };
-OXGN_COOK_API auto to_string(ScriptStorageMode value) -> std::string;
-
-enum class ScriptingImportKind : uint8_t {
-  kNone = 0,
-  kScriptAsset,
-  kScriptingSidecar,
-};
-OXGN_COOK_API auto to_string(ScriptingImportKind value) -> std::string;
-
-struct ImportOptions::ScriptingTuning final {
-  ScriptingImportKind import_kind = ScriptingImportKind::kNone;
-  bool compile_scripts = false;
-  core::meta::scripting::ScriptCompileMode compile_mode
-    = core::meta::scripting::ScriptCompileMode::kDebug;
-  ScriptStorageMode script_storage = ScriptStorageMode::kEmbedded;
-  std::string target_scene_virtual_path;
-};
-```
-
-Rules:
-
-1. Sidecar requests use `target_scene_virtual_path` only.
-2. Sidecar request does not accept authored `target_scene_key`.
-3. Scene key is resolved internally by `ScriptingSidecarImportPipeline`.
-4. `ScriptStorageMode::kExternal` with `compile_scripts=true` is invalid.
-
-### 13.2 AsyncImportService Entry Points
-
-Do not add a second submit API model.
-
-Use existing submit entry point:
-
-```cpp
-OXGN_COOK_NDAPI auto SubmitImport(
-  ImportRequest request,
-  const ImportCompletionCallback& on_complete,
-  const ProgressEventCallback& on_progress = nullptr,
-  const std::optional<ImportConcurrency>& concurrency_override = std::nullopt)
-  const -> std::optional<ImportJobId>;
-```
-
-Behavior:
-
-1. Return `std::nullopt` on submit rejection, matching existing `SubmitImport`.
-2. Completion/progress callbacks follow existing threading/cancellation
-   contracts from `AsyncImportService`.
-3. Script/sidecar dispatch is selected from `request.options.scripting.import_kind`.
-
-### 13.3 Settings + Builder Layer (Tooling/Manifest Friendly)
-
-Mirror existing scene/texture settings pattern for non-C++ callers:
-
-```cpp
-struct ScriptAssetImportSettings { /* string-based fields for manifest/CLI */ };
-struct ScriptingSidecarImportSettings { /* includes target_scene_virtual_path */ };
-
-namespace oxygen::content::import::internal {
-OXGN_COOK_API auto BuildScriptAssetRequest(
-  const ScriptAssetImportSettings& settings, std::ostream& error_stream)
-  -> std::optional<ImportRequest>;
-
-OXGN_COOK_API auto BuildScriptingSidecarRequest(
-  const ScriptingSidecarImportSettings& settings, std::ostream& error_stream)
-  -> std::optional<ImportRequest>;
-}
-```
-
-Rules:
-
-1. Builders perform parsing and validation.
-2. Built requests must set `request.options.scripting.import_kind` explicitly.
-3. No bypass of sidecar virtual-path canonical validation.
-
-### 13.4 ImportReport Shape Extension
-
-Keep `ImportReport` as the result type and extend counters for scripting:
-
-```cpp
-struct ImportReport final {
-  // existing fields...
-  uint32_t scripts_written = 0;
-  uint32_t scripting_components_written = 0;
-  uint32_t script_slots_written = 0;
-  uint32_t script_params_written = 0;
-};
-```
-
-Rules:
-
-1. Existing fields and semantics are preserved.
-2. Scripting jobs populate only relevant counters.
-3. `ImportPackagingSummary` diagnostic counters remain source of truth for
-   severity counts.
-
-### 13.5 Diagnostics and Progress Compatibility
-
-Do not introduce a parallel diagnostics channel.
-
-1. Use existing `ImportDiagnostic` shape (`severity`, `code`, `message`,
-   `source_path`, `object_path`).
-2. Use stable script diagnostic code families:
-   - `script.request.*`
-   - `script.asset.*`
-   - `script.sidecar.*`
-3. Use existing `ProgressEvent` for phase context and live updates.

@@ -17,14 +17,12 @@ class ImportSession;
 
 namespace oxygen::content::import::detail {
 
-//! Standalone script-asset import job.
+//! Standalone scripting-sidecar import job.
 /*!
- Imports one script asset and emits:
- 1. script descriptor (`ScriptAssetDesc`)
- 2. optional script resource table/data entries for embedded storage
+ Imports one scene scripting sidecar via ScriptingSidecarImportPipeline.
 */
-class ScriptImportJob final : public ImportJob {
-  OXYGEN_TYPED(ScriptImportJob)
+class ScriptingSidecarImportJob final : public ImportJob {
+  OXYGEN_TYPED(ScriptingSidecarImportJob)
 public:
   using ImportJob::ImportJob;
 
@@ -37,9 +35,6 @@ private:
   [[nodiscard]] auto ExecuteAsync() -> co::Co<ImportReport> override;
 
   [[nodiscard]] auto LoadSource(ImportSession& session) -> co::Co<LoadedSource>;
-
-  [[nodiscard]] auto EmitScriptAsset(
-    const LoadedSource& source, ImportSession& session) -> co::Co<bool>;
 
   [[nodiscard]] auto FinalizeSession(ImportSession& session)
     -> co::Co<ImportReport>;
