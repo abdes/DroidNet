@@ -4,16 +4,24 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Content/Internal/PatchResolutionPolicy.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakCatalog.h>
@@ -22,29 +30,295 @@
 #include <Oxygen/Data/SourceKey.h>
 
 namespace {
+namespace data = oxygen::data;
 
 constexpr auto kBaseGuidSeed = uint8_t { 0x01U };
 constexpr auto kAltGuidSeed = uint8_t { 0x31U };
 constexpr auto kMissingGuidSeed = uint8_t { 0xaaU };
 constexpr auto kAssetSeedA = uint8_t { 0x11U };
 constexpr auto kAssetSeedB = uint8_t { 0x22U };
+constexpr auto kAssetSeedC = uint8_t { 0x33U };
 
-auto MakeAssetKey(const uint8_t seed) -> oxygen::data::AssetKey
+auto MakeAssetKey(const uint8_t seed) -> data::AssetKey
 {
-  auto bytes = std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
+  auto bytes = std::array<std::uint8_t, data::AssetKey::kSizeBytes> {};
   bytes[0] = seed;
-  return oxygen::data::AssetKey::FromBytes(bytes);
+  return data::AssetKey::FromBytes(bytes);
 }
 
-auto MakeSourceKey(const uint8_t seed) -> oxygen::data::SourceKey
+auto MakeSourceKey(const uint8_t seed) -> data::SourceKey
 {
-  auto bytes = std::array<std::uint8_t, oxygen::data::SourceKey::kSizeBytes> {};
+  auto bytes = std::array<std::uint8_t, data::SourceKey::kSizeBytes> {};
   bytes[0] = seed;
-  return oxygen::data::SourceKey::FromBytes(bytes);
+  return data::SourceKey::FromBytes(bytes);
+}
+
+auto MakeCatalogDigest(const uint8_t seed) -> std::array<uint8_t, 32>
+{
+  auto digest = std::array<uint8_t, 32> {};
+  digest[0] = seed;
+  return digest;
+}
+
+struct SourceResolutionState final {
+  std::unordered_set<data::AssetKey> assets;
+  std::unordered_set<data::AssetKey> tombstones;
+  std::unordered_map<std::string, data::AssetKey> virtual_path_to_asset;
+};
+
+auto FindState(
+  const std::unordered_map<uint16_t, SourceResolutionState>& states,
+  const uint16_t source_id) -> const SourceResolutionState*
+{
+  if (const auto it = states.find(source_id); it != states.end()) {
+    return &it->second;
+  }
+  return nullptr;
+}
+
+auto MakeResolutionCallbacks(
+  const std::unordered_map<uint16_t, SourceResolutionState>& states)
+  -> oxygen::content::internal::VirtualPathResolutionCallbacks
+{
+  namespace policy = oxygen::content::internal;
+
+  return policy::VirtualPathResolutionCallbacks {
+    .key_resolution = policy::KeyResolutionCallbacks {
+      .source_has_asset
+      = [&states](const uint16_t source_id, const data::AssetKey& key) -> bool {
+        if (const auto* state = FindState(states, source_id);
+          state != nullptr) {
+          return state->assets.contains(key);
+        }
+        return false;
+      },
+      .source_tombstones_asset
+      = [&states](const uint16_t source_id, const data::AssetKey& key) -> bool {
+        if (const auto* state = FindState(states, source_id);
+          state != nullptr) {
+          return state->tombstones.contains(key);
+        }
+        return false;
+      },
+    },
+    .resolve_virtual_path
+    = [&states](const uint16_t source_id,
+        const std::string_view virtual_path) -> std::optional<data::AssetKey> {
+      if (const auto* state = FindState(states, source_id); state != nullptr) {
+        if (const auto it
+          = state->virtual_path_to_asset.find(std::string { virtual_path });
+          it != state->virtual_path_to_asset.end()) {
+          return it->second;
+        }
+      }
+      return std::nullopt;
+    },
+  };
+}
+
+auto CountCompatibilityCode(
+  const std::vector<oxygen::content::internal::PatchCompatibilityDiagnostic>&
+    diagnostics,
+  const oxygen::content::internal::PatchCompatibilityCode code) -> size_t
+{
+  return static_cast<size_t>(
+    std::count_if(diagnostics.begin(), diagnostics.end(),
+      [code](
+        const oxygen::content::internal::PatchCompatibilityDiagnostic& item) {
+        return item.code == code;
+      }));
+}
+
+NOLINT_TEST(PatchResolutionPolicyTest,
+  MultiMountVirtualPathCollisionsEmitMaskedSourceDiagnostics)
+{
+  namespace policy = oxygen::content::internal;
+
+  constexpr auto kVirtualPath = "/.cooked/collision.bin";
+  constexpr auto kSourceA = uint16_t { 10U };
+  constexpr auto kSourceB = uint16_t { 20U };
+  constexpr auto kSourceC = uint16_t { 30U };
+  constexpr auto kSourceD = uint16_t { 40U };
+
+  const auto key_a = MakeAssetKey(kAssetSeedA);
+  const auto key_b = MakeAssetKey(kAssetSeedB);
+  const auto key_c = MakeAssetKey(kAssetSeedC);
+
+  const auto source_ids = std::array<uint16_t, 4> {
+    kSourceA,
+    kSourceB,
+    kSourceC,
+    kSourceD,
+  };
+
+  auto states = std::unordered_map<uint16_t, SourceResolutionState> {};
+  states[kSourceA].assets.insert(key_a);
+  states[kSourceA].virtual_path_to_asset.emplace(kVirtualPath, key_a);
+
+  states[kSourceB].assets.insert(key_c);
+  states[kSourceB].virtual_path_to_asset.emplace(kVirtualPath, key_c);
+
+  states[kSourceC].assets.insert(key_b);
+  states[kSourceC].virtual_path_to_asset.emplace(kVirtualPath, key_b);
+
+  states[kSourceD].assets.insert(key_a);
+  states[kSourceD].virtual_path_to_asset.emplace(kVirtualPath, key_a);
+
+  const auto callbacks = MakeResolutionCallbacks(states);
+  const auto result = policy::ResolveVirtualPathByPrecedence(
+    source_ids, kVirtualPath, callbacks);
+
+  ASSERT_TRUE(result.asset_key.has_value());
+  EXPECT_EQ(*result.asset_key, key_a);
+  EXPECT_EQ(result.key_result.status, policy::KeyResolutionStatus::kFound);
+  ASSERT_TRUE(result.key_result.source_id.has_value());
+  EXPECT_EQ(*result.key_result.source_id, kSourceD);
+
+  ASSERT_EQ(result.collisions.size(), 2U);
+  EXPECT_EQ(result.collisions[0].winner_source_id, kSourceD);
+  EXPECT_EQ(result.collisions[0].masked_source_id, kSourceC);
+  EXPECT_EQ(result.collisions[0].winner_key, key_a);
+  EXPECT_EQ(result.collisions[0].masked_key, key_b);
+
+  EXPECT_EQ(result.collisions[1].winner_source_id, kSourceD);
+  EXPECT_EQ(result.collisions[1].masked_source_id, kSourceB);
+  EXPECT_EQ(result.collisions[1].winner_key, key_a);
+  EXPECT_EQ(result.collisions[1].masked_key, key_c);
+}
+
+NOLINT_TEST(PatchResolutionPolicyTest,
+  TombstoneInHigherPrecedenceMountMasksWinnerAndPreservesCollisionDiagnostics)
+{
+  namespace policy = oxygen::content::internal;
+
+  constexpr auto kVirtualPath = "/.cooked/masked.bin";
+  constexpr auto kSourceBase = uint16_t { 11U };
+  constexpr auto kSourceMid = uint16_t { 21U };
+  constexpr auto kSourceWinner = uint16_t { 31U };
+  constexpr auto kSourceTombstone = uint16_t { 41U };
+
+  const auto winner_key = MakeAssetKey(kAssetSeedA);
+  const auto masked_key = MakeAssetKey(kAssetSeedB);
+
+  const auto source_ids = std::array<uint16_t, 4> {
+    kSourceBase,
+    kSourceMid,
+    kSourceWinner,
+    kSourceTombstone,
+  };
+
+  auto states = std::unordered_map<uint16_t, SourceResolutionState> {};
+  states[kSourceWinner].assets.insert(winner_key);
+  states[kSourceWinner].virtual_path_to_asset.emplace(kVirtualPath, winner_key);
+
+  states[kSourceMid].assets.insert(masked_key);
+  states[kSourceMid].virtual_path_to_asset.emplace(kVirtualPath, masked_key);
+
+  states[kSourceBase].assets.insert(winner_key);
+  states[kSourceBase].virtual_path_to_asset.emplace(kVirtualPath, winner_key);
+
+  states[kSourceTombstone].tombstones.insert(winner_key);
+
+  const auto callbacks = MakeResolutionCallbacks(states);
+  const auto result = policy::ResolveVirtualPathByPrecedence(
+    source_ids, kVirtualPath, callbacks);
+
+  EXPECT_FALSE(result.asset_key.has_value());
+  EXPECT_EQ(result.key_result.status, policy::KeyResolutionStatus::kTombstoned);
+  ASSERT_TRUE(result.key_result.source_id.has_value());
+  EXPECT_EQ(*result.key_result.source_id, kSourceTombstone);
+
+  ASSERT_EQ(result.collisions.size(), 1U);
+  EXPECT_EQ(result.collisions[0].winner_source_id, kSourceWinner);
+  EXPECT_EQ(result.collisions[0].masked_source_id, kSourceMid);
+  EXPECT_EQ(result.collisions[0].winner_key, winner_key);
+  EXPECT_EQ(result.collisions[0].masked_key, masked_key);
+}
+
+NOLINT_TEST(PatchResolutionPolicyTest,
+  CompatibilityDiagnosticsEmitCompleteMissingAndUnexpectedSetsAcrossChains)
+{
+  namespace policy = oxygen::content::internal;
+
+  const auto source_a = MakeSourceKey(0x01U);
+  const auto source_b = MakeSourceKey(0x02U);
+  const auto source_c = MakeSourceKey(0x03U);
+  const auto required_source = MakeSourceKey(0x04U);
+
+  const auto digest_a = MakeCatalogDigest(0x21U);
+  const auto digest_b = MakeCatalogDigest(0x22U);
+  const auto required_digest = MakeCatalogDigest(0x24U);
+
+  const auto mounted_source_keys = std::array {
+    source_a,
+    source_b,
+    source_c,
+  };
+
+  const auto mounted_catalogs = std::array {
+    data::PakCatalog {
+      .source_key = source_a,
+      .content_version = 5U,
+      .catalog_digest = digest_a,
+      .entries = {},
+    },
+    data::PakCatalog {
+      .source_key = source_b,
+      .content_version = 9U,
+      .catalog_digest = digest_b,
+      .entries = {},
+    },
+  };
+
+  auto manifest = data::PatchManifest {};
+  manifest.compatibility_policy_snapshot.require_exact_base_set = true;
+  manifest.compatibility_policy_snapshot.require_base_source_key_match = true;
+  manifest.compatibility_policy_snapshot.require_content_version_match = true;
+  manifest.compatibility_policy_snapshot.require_catalog_digest_match = true;
+  manifest.compatibility_envelope.required_base_source_keys = {
+    source_a,
+    required_source,
+  };
+  manifest.compatibility_envelope.required_base_content_versions = {
+    5U,
+    11U,
+  };
+  manifest.compatibility_envelope.required_base_catalog_digests = {
+    digest_a,
+    required_digest,
+  };
+
+  const auto result = policy::ValidatePatchCompatibility(
+    mounted_source_keys, mounted_catalogs, manifest);
+
+  EXPECT_FALSE(result.compatible);
+  EXPECT_EQ(result.diagnostics.size(), 7U);
+  EXPECT_EQ(CountCompatibilityCode(result.diagnostics,
+              policy::PatchCompatibilityCode::kMissingBaseSourceKey),
+    1U);
+  EXPECT_EQ(CountCompatibilityCode(result.diagnostics,
+              policy::PatchCompatibilityCode::kUnexpectedBaseSourceKey),
+    2U);
+  EXPECT_EQ(CountCompatibilityCode(result.diagnostics,
+              policy::PatchCompatibilityCode::kMissingBaseContentVersion),
+    1U);
+  EXPECT_EQ(CountCompatibilityCode(result.diagnostics,
+              policy::PatchCompatibilityCode::kUnexpectedBaseContentVersion),
+    1U);
+  EXPECT_EQ(CountCompatibilityCode(result.diagnostics,
+              policy::PatchCompatibilityCode::kMissingBaseCatalogDigest),
+    1U);
+  EXPECT_EQ(CountCompatibilityCode(result.diagnostics,
+              policy::PatchCompatibilityCode::kUnexpectedBaseCatalogDigest),
+    1U);
+
+  for (const auto& diagnostic : result.diagnostics) {
+    EXPECT_FALSE(diagnostic.message.empty());
+  }
 }
 
 auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
-  const oxygen::data::AssetKey& key, const std::string_view descriptor_relpath,
+  const data::AssetKey& key, const std::string_view descriptor_relpath,
   const std::string_view virtual_path, const uint8_t guid_seed) -> void
 {
   using oxygen::data::loose_cooked::AssetEntry;
@@ -98,8 +372,7 @@ auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
 }
 
 auto WriteSingleAssetPakWithBrowseIndex(const std::filesystem::path& pak_path,
-  const oxygen::data::AssetKey& key, const std::string_view virtual_path)
-  -> void
+  const data::AssetKey& key, const std::string_view virtual_path) -> void
 {
   using oxygen::data::pak::core::AssetDirectoryEntry;
   using oxygen::data::pak::core::PakBrowseIndexEntry;
@@ -153,12 +426,33 @@ auto WriteSingleAssetPakWithBrowseIndex(const std::filesystem::path& pak_path,
   out.write(reinterpret_cast<const char*>(&footer), sizeof(footer));
 }
 
-NOLINT_TEST(PatchResolutionRuntimeTest, LastMountedWinsForVirtualPathLookup)
+class PatchResolutionRuntimeTest : public testing::Test {
+protected:
+  void SetUp() override
+  {
+    static auto counter = std::atomic_uint64_t { 0U };
+    const auto id = ++counter;
+    root_ = std::filesystem::temp_directory_path() / "oxygen_patch_resolution"
+      / std::to_string(id);
+    std::filesystem::create_directories(root_);
+  }
+
+  void TearDown() override { std::filesystem::remove_all(root_); }
+
+  [[nodiscard]] auto RootPath() const -> const std::filesystem::path&
+  {
+    return root_;
+  }
+
+private:
+  std::filesystem::path root_ {};
+};
+
+NOLINT_TEST_F(PatchResolutionRuntimeTest, LastMountedWinsForVirtualPathLookup)
 {
   constexpr auto kVirtualPath = "/.cooked/Asset.bin";
-  const auto root = std::filesystem::temp_directory_path() / "oxygen_patch_rt";
-  const auto root0 = root / "root0";
-  const auto root1 = root / "root1";
+  const auto root0 = RootPath() / "root0";
+  const auto root1 = RootPath() / "root1";
   const auto key0 = MakeAssetKey(kAssetSeedA);
   const auto key1 = MakeAssetKey(kAssetSeedB);
 
@@ -175,13 +469,12 @@ NOLINT_TEST(PatchResolutionRuntimeTest, LastMountedWinsForVirtualPathLookup)
   EXPECT_EQ(*resolved, key1);
 }
 
-NOLINT_TEST(
+NOLINT_TEST_F(
   PatchResolutionRuntimeTest, CompatibilityMismatchRejectsPatchMounting)
 {
   constexpr auto kVirtualPath = "/.cooked/Asset.bin";
-  const auto root = std::filesystem::temp_directory_path() / "oxygen_patch_rt";
-  const auto base_root = root / "base";
-  const auto patch_pak = root / "patch.pak";
+  const auto base_root = RootPath() / "base";
+  const auto patch_pak = RootPath() / "patch.pak";
   const auto key = MakeAssetKey(kAssetSeedA);
 
   WriteSingleAssetIndex(
@@ -207,13 +500,12 @@ NOLINT_TEST(
     std::runtime_error);
 }
 
-NOLINT_TEST(
+NOLINT_TEST_F(
   PatchResolutionRuntimeTest, TombstoneBlocksFallbackDeterministically)
 {
   constexpr auto kVirtualPath = "/.cooked/Masked.bin";
-  const auto root = std::filesystem::temp_directory_path() / "oxygen_patch_rt";
-  const auto base_root = root / "base";
-  const auto patch_pak = root / "patch.pak";
+  const auto base_root = RootPath() / "base";
+  const auto patch_pak = RootPath() / "patch.pak";
   const auto key = MakeAssetKey(kAssetSeedA);
 
   WriteSingleAssetIndex(

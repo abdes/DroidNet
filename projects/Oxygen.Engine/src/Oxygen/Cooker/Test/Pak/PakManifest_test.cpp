@@ -8,10 +8,8 @@
 
 #include <algorithm>
 #include <array>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <fstream>
 #include <optional>
 #include <span>
@@ -22,9 +20,12 @@
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
 #include <Oxygen/Cooker/Pak/PakManifestWriter.h>
 
+#include "PakTestSupport.h"
+
 namespace {
 namespace data = oxygen::data;
 namespace pak = oxygen::content::pak;
+namespace paktest = oxygen::content::pak::test;
 
 // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers)
 constexpr auto kContentVersion = uint16_t { 7U };
@@ -33,33 +34,23 @@ constexpr auto kPatchDiffBasisIdentifier
 
 auto MakeSourceKey(const uint8_t seed) -> data::SourceKey
 {
-  auto bytes = std::array<uint8_t, data::SourceKey::kSizeBytes> {};
-  bytes.fill(0U);
-  bytes[0] = seed;
-  return data::SourceKey::FromBytes(bytes);
+  return paktest::MakeSourceKey(seed);
 }
 
 auto MakeAssetKey(const uint8_t seed) -> data::AssetKey
 {
-  auto bytes = std::array<uint8_t, data::AssetKey::kSizeBytes> {};
-  bytes.fill(seed);
-  return data::AssetKey::FromBytes(bytes);
+  return paktest::MakeAssetKey(seed);
 }
 
 auto MakeDigest(const uint8_t seed) -> std::array<uint8_t, 32>
 {
-  auto digest = std::array<uint8_t, 32> {};
-  digest.fill(seed);
-  return digest;
+  return paktest::MakeDigest(seed);
 }
 
 auto HasDiagnosticCode(const std::span<const pak::PakDiagnostic> diagnostics,
   const std::string_view code) -> bool
 {
-  return std::ranges::any_of(
-    diagnostics, [code](const pak::PakDiagnostic& diagnostic) {
-      return diagnostic.code == code;
-    });
+  return paktest::HasDiagnosticCode(diagnostics, code);
 }
 
 auto ReadFileBytes(const std::filesystem::path& path) -> std::vector<std::byte>
@@ -78,24 +69,8 @@ auto ReadFileBytes(const std::filesystem::path& path) -> std::vector<std::byte>
   return bytes;
 }
 
-class PakManifestPhase6Test : public testing::Test {
+class PakManifestTest : public paktest::TempDirFixture {
 protected:
-  void SetUp() override
-  {
-    const auto timestamp
-      = std::chrono::steady_clock::now().time_since_epoch().count();
-    temp_dir_ = std::filesystem::temp_directory_path()
-      / ("oxygen_pak_phase6_test_" + std::to_string(timestamp));
-    std::filesystem::create_directories(temp_dir_);
-  }
-
-  void TearDown() override { std::filesystem::remove_all(temp_dir_); }
-
-  auto Path(std::string_view leaf) const -> std::filesystem::path
-  {
-    return temp_dir_ / std::filesystem::path(leaf);
-  }
-
   auto MakeBaseCatalog(std::span<const data::PakCatalogEntry> entries) const
     -> data::PakCatalog
   {
@@ -107,13 +82,10 @@ protected:
       = std::vector<data::PakCatalogEntry>(entries.begin(), entries.end()),
     };
   }
-
-private:
-  std::filesystem::path temp_dir_;
 };
 
-NOLINT_TEST_F(PakManifestPhase6Test,
-  PatchModeEmitsManifestWithDeletedSetAndCompatibilityEnvelope)
+NOLINT_TEST_F(
+  PakManifestTest, PatchModeEmitsManifestWithDeletedSetAndCompatibilityEnvelope)
 {
   using pak::BuildMode;
   using pak::PakBuilder;
@@ -187,8 +159,8 @@ NOLINT_TEST_F(PakManifestPhase6Test,
   EXPECT_EQ(*manifest.patch_pak_crc32, result.pak_crc32);
 }
 
-NOLINT_TEST_F(PakManifestPhase6Test,
-  FullModeEmitManifestInFullWritesManifestWithFullSemantics)
+NOLINT_TEST_F(
+  PakManifestTest, FullModeEmitManifestInFullWritesManifestWithFullSemantics)
 {
   using pak::BuildMode;
   using pak::PakBuilder;
@@ -257,7 +229,7 @@ NOLINT_TEST_F(PakManifestPhase6Test,
     request.patch_compat.require_catalog_digest_match);
 }
 
-NOLINT_TEST_F(PakManifestPhase6Test, PatchModeFailsWhenManifestCannotBeWritten)
+NOLINT_TEST_F(PakManifestTest, PatchModeFailsWhenManifestCannotBeWritten)
 {
   using pak::BuildMode;
   using pak::PakBuilder;
@@ -300,7 +272,7 @@ NOLINT_TEST_F(PakManifestPhase6Test, PatchModeFailsWhenManifestCannotBeWritten)
   EXPECT_FALSE(result.patch_manifest.has_value());
 }
 
-NOLINT_TEST_F(PakManifestPhase6Test, FullModeFailsWhenManifestCannotBeWritten)
+NOLINT_TEST_F(PakManifestTest, FullModeFailsWhenManifestCannotBeWritten)
 {
   using pak::BuildMode;
   using pak::PakBuilder;
@@ -340,7 +312,7 @@ NOLINT_TEST_F(PakManifestPhase6Test, FullModeFailsWhenManifestCannotBeWritten)
 }
 
 NOLINT_TEST_F(
-  PakManifestPhase6Test, ManifestValidationRejectsNonDisjointPatchSetsPreEmit)
+  PakManifestTest, ManifestValidationRejectsNonDisjointPatchSetsPreEmit)
 {
   using pak::BuildMode;
   using pak::PakBuildRequest;
@@ -390,8 +362,7 @@ NOLINT_TEST_F(
   EXPECT_FALSE(std::filesystem::exists(request.output_manifest_path));
 }
 
-NOLINT_TEST_F(
-  PakManifestPhase6Test, FullModeManifestEmissionIsBitExactDeterministic)
+NOLINT_TEST_F(PakManifestTest, FullModeManifestEmissionIsBitExactDeterministic)
 {
   using pak::BuildMode;
   using pak::PakBuilder;

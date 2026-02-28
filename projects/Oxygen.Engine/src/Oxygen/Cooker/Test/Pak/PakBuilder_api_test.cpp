@@ -7,45 +7,40 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <algorithm>
-#include <array>
 #include <cstdint>
 #include <string_view>
 
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
 
+#include "PakTestSupport.h"
+
 namespace {
 namespace data = oxygen::data;
 namespace pak = oxygen::content::pak;
+namespace paktest = oxygen::content::pak::test;
 
 auto MakeNonZeroSourceKey() -> data::SourceKey
 {
-  constexpr std::array<uint8_t, 16> bytes { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0 };
-  return data::SourceKey { bytes };
+  return paktest::MakeSourceKey(static_cast<uint8_t>(1U));
 }
 
 auto MakeSourceKey(const uint8_t seed) -> data::SourceKey
 {
-  std::array<uint8_t, 16> bytes {}; // NOLINT
-  bytes[0] = seed;
-  return data::SourceKey { bytes };
+  return paktest::MakeSourceKey(seed);
 }
 
 auto MakeAssetKey(const uint8_t seed) -> data::AssetKey
 {
-  auto bytes = std::array<uint8_t, data::AssetKey::kSizeBytes> {};
-  bytes.fill(seed);
-  return data::AssetKey::FromBytes(bytes);
+  return paktest::MakeAssetKey(seed);
 }
 
 auto HasDiagnosticCode(
   const pak::PakBuildResult& result, const std::string_view code) -> bool
 {
-  return std::ranges::any_of(
-    result.diagnostics, [code](const pak::PakDiagnostic& diagnostic) {
-      return diagnostic.code == code;
-    });
+  return paktest::HasDiagnosticCode(result.diagnostics, code);
 }
+
+class PakBuilderApiContractTestFixture : public paktest::TempDirFixture { };
 
 NOLINT_TEST(PakBuilderApiContractTest, PublicTypeDefaultsMatchSpec)
 {
@@ -66,7 +61,8 @@ NOLINT_TEST(PakBuilderApiContractTest, PublicTypeDefaultsMatchSpec)
   EXPECT_TRUE(patch_compat.require_catalog_digest_match);
 }
 
-NOLINT_TEST(PakBuilderApiContractTest, PatchRequestValidationEmitsAllModeErrors)
+NOLINT_TEST_F(
+  PakBuilderApiContractTestFixture, PatchRequestValidationEmitsAllModeErrors)
 {
   using pak::BuildMode;
   using pak::PakBuilder;
@@ -75,7 +71,7 @@ NOLINT_TEST(PakBuilderApiContractTest, PatchRequestValidationEmitsAllModeErrors)
   const PakBuildRequest request {
     .mode = BuildMode::kPatch,
     .sources = {},
-    .output_pak_path = "phase1_test_output.pak",
+    .output_pak_path = Path("api_validation_output.pak"),
     .output_manifest_path = {},
     .content_version = 0,
     .source_key = {},
@@ -98,8 +94,8 @@ NOLINT_TEST(PakBuilderApiContractTest, PatchRequestValidationEmitsAllModeErrors)
     result, "pak.request.patch_requires_output_manifest_path"));
 }
 
-NOLINT_TEST(
-  PakBuilderApiContractTest, FullManifestOptionRequiresOutputManifestPath)
+NOLINT_TEST_F(PakBuilderApiContractTestFixture,
+  FullManifestOptionRequiresOutputManifestPath)
 {
   using pak::BuildMode;
   using pak::PakBuilder;
@@ -109,7 +105,7 @@ NOLINT_TEST(
   const PakBuildRequest request {
     .mode = BuildMode::kFull,
     .sources = {},
-    .output_pak_path = "phase1_test_output.pak",
+    .output_pak_path = Path("full_manifest_option_output.pak"),
     .output_manifest_path = {},
     .content_version = 1,
     .source_key = MakeNonZeroSourceKey(),
@@ -135,7 +131,8 @@ NOLINT_TEST(
     result, "pak.request.full_manifest_requires_output_manifest_path"));
 }
 
-NOLINT_TEST(PakBuilderApiContractTest, ValidRequestWritesPakAndReportsTelemetry)
+NOLINT_TEST_F(
+  PakBuilderApiContractTestFixture, ValidRequestWritesPakAndReportsTelemetry)
 {
   using pak::BuildMode;
   using pak::PakBuilder;
@@ -144,7 +141,7 @@ NOLINT_TEST(PakBuilderApiContractTest, ValidRequestWritesPakAndReportsTelemetry)
   const PakBuildRequest request {
     .mode = BuildMode::kFull,
     .sources = {},
-    .output_pak_path = "phase1_test_output.pak",
+    .output_pak_path = Path("valid_request_output.pak"),
     .output_manifest_path = {},
     .content_version = 1,
     .source_key = MakeNonZeroSourceKey(),
@@ -169,7 +166,8 @@ NOLINT_TEST(PakBuilderApiContractTest, ValidRequestWritesPakAndReportsTelemetry)
   EXPECT_TRUE(result.telemetry.writing_duration.has_value());
 }
 
-NOLINT_TEST(PakBuilderApiContractTest, PlannerRejectsBaseCatalogTypeMismatch)
+NOLINT_TEST_F(
+  PakBuilderApiContractTestFixture, PlannerRejectsBaseCatalogTypeMismatch)
 {
   using pak::BuildMode;
   using pak::PakBuilder;
@@ -200,8 +198,8 @@ NOLINT_TEST(PakBuilderApiContractTest, PlannerRejectsBaseCatalogTypeMismatch)
   const PakBuildRequest request {
     .mode = BuildMode::kPatch,
     .sources = {},
-    .output_pak_path = "phase2_test_output.pak",
-    .output_manifest_path = "phase2_test_output.manifest",
+    .output_pak_path = Path("type_mismatch_output.pak"),
+    .output_manifest_path = Path("type_mismatch_output.manifest"),
     .content_version = 1,
     .source_key = MakeNonZeroSourceKey(),
     .base_catalogs = { base_a, base_b },
@@ -217,7 +215,8 @@ NOLINT_TEST(PakBuilderApiContractTest, PlannerRejectsBaseCatalogTypeMismatch)
   EXPECT_TRUE(HasDiagnosticCode(result, "pak.plan.base_catalog_type_mismatch"));
 }
 
-NOLINT_TEST(PakBuilderApiContractTest, PatchModeClassifiesMissingSourceAsDelete)
+NOLINT_TEST_F(
+  PakBuilderApiContractTestFixture, PatchModeClassifiesMissingSourceAsDelete)
 {
   using pak::BuildMode;
   using pak::PakBuilder;
@@ -249,8 +248,8 @@ NOLINT_TEST(PakBuilderApiContractTest, PatchModeClassifiesMissingSourceAsDelete)
   const PakBuildRequest request {
     .mode = BuildMode::kPatch,
     .sources = {},
-    .output_pak_path = "phase4_patch_classification_output.pak",
-    .output_manifest_path = "phase4_patch_classification_output.manifest",
+    .output_pak_path = Path("patch_classification_output.pak"),
+    .output_manifest_path = Path("patch_classification_output.manifest"),
     .content_version = 1,
     .source_key = MakeNonZeroSourceKey(),
     .base_catalogs = { base_catalog },

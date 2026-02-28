@@ -8,11 +8,8 @@
 
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
-#include <fstream>
 #include <span>
 #include <string>
 #include <string_view>
@@ -21,57 +18,41 @@
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
+
+#include "PakTestSupport.h"
 
 namespace {
 namespace base = oxygen::base;
 namespace data = oxygen::data;
 namespace lc = oxygen::data::loose_cooked;
 namespace pak = oxygen::content::pak;
+namespace paktest = oxygen::content::pak::test;
 namespace core = oxygen::data::pak::core;
 namespace render = oxygen::data::pak::render;
 
-constexpr auto kSourceKeySize = size_t { 16U };
-constexpr auto kPrimaryByteIndex = size_t { 0U };
+constexpr auto kDigestPrimaryByteIndex = size_t { 0U };
 
-struct AssetSpec final {
-  data::AssetKey key {};
-  data::AssetType asset_type = data::AssetType::kUnknown;
-  std::string descriptor_relpath;
-  std::string virtual_path;
-  uint64_t descriptor_size = 0;
-  std::array<uint8_t, lc::kSha256Size> descriptor_sha {};
-};
-
-struct FileSpec final {
-  lc::FileKind kind = lc::FileKind::kUnknown;
-  std::string relpath;
-  std::vector<std::byte> payload;
-};
-
-auto MakeAssetKey(const uint8_t seed) -> data::AssetKey
-{
-  auto bytes = std::array<uint8_t, data::AssetKey::kSizeBytes> {};
-  bytes.fill(seed);
-  return data::AssetKey::FromBytes(bytes);
-}
+using AssetSpec = paktest::AssetSpec;
+using FileSpec = paktest::FileSpec;
 
 auto MakeSourceKey(const uint8_t seed) -> data::SourceKey
 {
-  auto bytes = std::array<uint8_t, kSourceKeySize> {};
-  bytes.fill(0U);
-  bytes[kPrimaryByteIndex] = seed;
-  return data::SourceKey { bytes };
+  return paktest::MakeSourceKey(seed);
+}
+
+auto MakeAssetKey(const uint8_t seed) -> data::AssetKey
+{
+  return paktest::MakeAssetKey(seed);
 }
 
 auto MakeDigest(const uint8_t seed) -> base::Sha256Digest
 {
   auto digest = base::Sha256Digest {};
   digest.fill(0U);
-  digest[kPrimaryByteIndex] = seed;
+  digest[kDigestPrimaryByteIndex] = seed;
   return digest;
 }
 
@@ -82,117 +63,15 @@ auto EmptyDigest() -> base::Sha256Digest
   return kEmptyDigest;
 }
 
-auto WriteFileBytes(
-  const std::filesystem::path& path, std::span<const std::byte> bytes) -> void
-{
-  std::filesystem::create_directories(path.parent_path());
-  auto stream = std::ofstream(path, std::ios::binary | std::ios::trunc);
-  ASSERT_TRUE(stream.good());
-  // NOLINTNEXTLINE(*-reinterpret-cast)
-  stream.write(reinterpret_cast<const char*>(bytes.data()),
-    static_cast<std::streamsize>(bytes.size()));
-  ASSERT_TRUE(stream.good());
-}
-
-auto WriteLooseIndex(const std::filesystem::path& root,
-  std::span<const AssetSpec> assets, std::span<const FileSpec> files,
-  const uint8_t guid_seed) -> void
-{
-  std::filesystem::create_directories(root);
-  for (const auto& file : files) {
-    WriteFileBytes(root / file.relpath,
-      std::span<const std::byte>(file.payload.data(), file.payload.size()));
-  }
-
-  auto strings = std::string {};
-  strings.push_back('\0');
-
-  auto asset_entries = std::vector<lc::AssetEntry> {};
-  asset_entries.reserve(assets.size());
-  for (const auto& asset : assets) {
-    const auto descriptor_offset = static_cast<uint32_t>(strings.size());
-    strings += asset.descriptor_relpath;
-    strings.push_back('\0');
-
-    const auto virtual_path_offset = static_cast<uint32_t>(strings.size());
-    strings += asset.virtual_path;
-    strings.push_back('\0');
-
-    auto entry = lc::AssetEntry {};
-    entry.asset_key = asset.key;
-    entry.descriptor_relpath_offset = descriptor_offset;
-    entry.virtual_path_offset = virtual_path_offset;
-    entry.asset_type = static_cast<uint8_t>(asset.asset_type);
-    entry.descriptor_size = asset.descriptor_size;
-    std::ranges::copy(
-      asset.descriptor_sha, std::begin(entry.descriptor_sha256));
-    asset_entries.push_back(entry);
-  }
-
-  auto file_entries = std::vector<lc::FileRecord> {};
-  file_entries.reserve(files.size());
-  for (const auto& file : files) {
-    const auto relpath_offset = static_cast<uint32_t>(strings.size());
-    strings += file.relpath;
-    strings.push_back('\0');
-
-    auto entry = lc::FileRecord {};
-    entry.kind = file.kind;
-    entry.relpath_offset = relpath_offset;
-    entry.size = static_cast<uint64_t>(file.payload.size());
-    file_entries.push_back(entry);
-  }
-
-  auto header = lc::IndexHeader {};
-  header.version = 1;
-  header.flags = static_cast<uint32_t>(lc::kHasVirtualPaths);
-  if (!file_entries.empty()) {
-    header.flags |= static_cast<uint32_t>(lc::kHasFileRecords);
-  }
-  for (size_t i = 0; i < std::size(header.guid); ++i) {
-    header.guid[i]
-      = static_cast<uint8_t>(guid_seed + static_cast<uint8_t>(i + 1U));
-  }
-  header.string_table_offset = sizeof(lc::IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = static_cast<uint32_t>(asset_entries.size());
-  header.asset_entry_size = sizeof(lc::AssetEntry);
-  header.file_records_offset = header.asset_entries_offset
-    + (static_cast<uint64_t>(asset_entries.size()) * sizeof(lc::AssetEntry));
-  header.file_record_count = static_cast<uint32_t>(file_entries.size());
-  header.file_record_size = file_entries.empty() ? 0U : sizeof(lc::FileRecord);
-
-  auto index = std::ofstream(
-    root / "container.index.bin", std::ios::binary | std::ios::trunc);
-  ASSERT_TRUE(index.good());
-  index.write(reinterpret_cast<const char*>(&header), sizeof(header)); // NOLINT
-  index.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-  for (const auto& asset : asset_entries) {
-    index.write(reinterpret_cast<const char*>(&asset), sizeof(asset)); // NOLINT
-  }
-  for (const auto& file : file_entries) {
-    index.write(reinterpret_cast<const char*>(&file), sizeof(file)); // NOLINT
-  }
-  ASSERT_TRUE(index.good());
-}
-
 auto HasError(std::span<const pak::PakDiagnostic> diagnostics) -> bool
 {
-  return std::ranges::any_of(
-    diagnostics, [](const pak::PakDiagnostic& diagnostic) {
-      return diagnostic.severity == pak::PakDiagnosticSeverity::kError;
-    });
+  return paktest::HasError(diagnostics);
 }
 
 auto HasDiagnosticCode(std::span<const pak::PakDiagnostic> diagnostics,
   const std::string_view code) -> bool
 {
-  return std::ranges::any_of(
-    diagnostics, [code](const pak::PakDiagnostic& diagnostic) {
-      return diagnostic.code == code;
-    });
+  return paktest::HasDiagnosticCode(diagnostics, code);
 }
 
 auto FindAction(const pak::PakPlan& plan, const data::AssetKey& key)
@@ -340,29 +219,9 @@ auto PatchActionSignature(const pak::PakPlan& plan)
   return signature;
 }
 
-class PakPatchPlannerPhase4Test : public testing::Test {
-protected:
-  void SetUp() override
-  {
-    static auto counter = std::atomic_uint64_t { 0 };
-    const auto id = ++counter;
-    root_ = std::filesystem::temp_directory_path() / "oxygen_pak_patch_phase4"
-      / std::to_string(id);
-    std::filesystem::create_directories(root_);
-  }
+class PakPatchPlannerTest : public paktest::TempDirFixture { };
 
-  void TearDown() override { std::filesystem::remove_all(root_); }
-
-  [[nodiscard]] auto Root() const -> const std::filesystem::path&
-  {
-    return root_;
-  }
-
-private:
-  std::filesystem::path root_;
-};
-
-NOLINT_TEST_F(PakPatchPlannerPhase4Test,
+NOLINT_TEST_F(PakPatchPlannerTest,
   PatchClassificationIsDeterministicAndEmitsOnlyCreateReplaceDescriptors)
 {
   using data::CookedSource;
@@ -445,15 +304,16 @@ NOLINT_TEST_F(PakPatchPlannerPhase4Test,
     },
   };
 
-  WriteLooseIndex(source_create, std::span<const AssetSpec>(&create_asset, 1U),
-    std::span<const FileSpec> {}, kCreateGuidSeed);
-  WriteLooseIndex(source_replace,
+  ASSERT_TRUE(paktest::WriteLooseIndex(source_create,
+    std::span<const AssetSpec>(&create_asset, 1U), std::span<const FileSpec> {},
+    kCreateGuidSeed));
+  ASSERT_TRUE(paktest::WriteLooseIndex(source_replace,
     std::span<const AssetSpec>(&replace_asset, 1U),
     std::span<const FileSpec>(replace_files.data(), replace_files.size()),
-    kReplaceGuidSeed);
-  WriteLooseIndex(source_unchanged,
+    kReplaceGuidSeed));
+  ASSERT_TRUE(paktest::WriteLooseIndex(source_unchanged,
     std::span<const AssetSpec>(&unchanged_asset, 1U),
-    std::span<const FileSpec> {}, kUnchangedGuidSeed);
+    std::span<const FileSpec> {}, kUnchangedGuidSeed));
 
   const auto base_entries = std::array<data::PakCatalogEntry, 3> {
     MakeCatalogEntry(replace_key, data::AssetType::kMaterial,
@@ -524,8 +384,7 @@ NOLINT_TEST_F(PakPatchPlannerPhase4Test,
   EXPECT_EQ(result_a.summary.patch_unchanged, 1U);
 }
 
-NOLINT_TEST_F(
-  PakPatchPlannerPhase4Test, PatchModeUsesPatchLocalResourcesAndClosure)
+NOLINT_TEST_F(PakPatchPlannerTest, PatchModeUsesPatchLocalResourcesAndClosure)
 {
   using data::CookedSource;
   using data::CookedSourceKind;
@@ -591,14 +450,14 @@ NOLINT_TEST_F(
     },
   };
 
-  WriteLooseIndex(source_replace,
+  ASSERT_TRUE(paktest::WriteLooseIndex(source_replace,
     std::span<const AssetSpec>(&replace_asset, 1U),
     std::span<const FileSpec>(replace_files.data(), replace_files.size()),
-    kReplaceGuidSeed);
-  WriteLooseIndex(source_unchanged,
+    kReplaceGuidSeed));
+  ASSERT_TRUE(paktest::WriteLooseIndex(source_unchanged,
     std::span<const AssetSpec>(&unchanged_asset, 1U),
     std::span<const FileSpec>(unchanged_files.data(), unchanged_files.size()),
-    kUnchangedGuidSeed);
+    kUnchangedGuidSeed));
 
   const auto unchanged_transitive = ComputeTransitiveDigestFromFiles(
     std::span<const FileSpec>(unchanged_files.data(), unchanged_files.size()));
@@ -654,7 +513,7 @@ NOLINT_TEST_F(
     result.diagnostics, "pak.plan.stage.patch.closure_incomplete"));
 }
 
-NOLINT_TEST_F(PakPatchPlannerPhase4Test, ReplaceAssetTypeMismatchIsRejected)
+NOLINT_TEST_F(PakPatchPlannerTest, ReplaceAssetTypeMismatchIsRejected)
 {
   using data::CookedSource;
   using data::CookedSourceKind;
@@ -677,8 +536,9 @@ NOLINT_TEST_F(PakPatchPlannerPhase4Test, ReplaceAssetTypeMismatchIsRejected)
     .descriptor_sha = {},
   };
   source_asset.descriptor_sha[0] = kSourceDescriptorSeed;
-  WriteLooseIndex(source, std::span<const AssetSpec>(&source_asset, 1U),
-    std::span<const FileSpec> {}, kGuidSeed);
+  ASSERT_TRUE(paktest::WriteLooseIndex(source,
+    std::span<const AssetSpec>(&source_asset, 1U), std::span<const FileSpec> {},
+    kGuidSeed));
 
   const auto base_entries = std::array<data::PakCatalogEntry, 1> {
     MakeCatalogEntry(key, data::AssetType::kMaterial,

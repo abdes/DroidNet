@@ -121,29 +121,31 @@ m_gtest_program(
 )
 target_compile_features(Oxygen.Cooker.LooseCooked.Tests PUBLIC cxx_std_20)
 
-# -- Pak Builder (Phase 0 scaffolding) ----------------------------------------
+# -- Pak Builder ---------------------------------------------------------------
 
 m_gtest_program(
   PakBinaryConformance
   SOURCES
-    "Pak/BinaryConformance_placeholder_test.cpp"
+    "Pak/PakBinaryConformance_test.cpp"
+    "Pak/PakTestSupport.h"
 )
 
 m_gtest_program(
   PakDomainValidation
   SOURCES
-    "Pak/DomainValidation_placeholder_test.cpp"
-    "Pak/PakPlanBuilder_phase3_test.cpp"
+    "Pak/PakDomainValidation_test.cpp"
+    "Pak/PakPlanBuilder_test.cpp"
+    "Pak/PakTestSupport.h"
 )
 
-m_gtest_program(PakPatchPlanner SOURCES "Pak/PakPatchPlanner_phase4_test.cpp")
+m_gtest_program(PakPatchPlanner SOURCES "Pak/PakPatchPlanner_test.cpp")
 
-m_gtest_program(PakWriter SOURCES "Pak/PakWriter_phase5_test.cpp")
+m_gtest_program(PakWriter SOURCES "Pak/PakWriter_test.cpp")
 
 m_gtest_program(
   PakE2E
   SOURCES
     "Pak/PakBuilder_api_test.cpp"
-    "Pak/PakManifest_phase6_test.cpp"
-    "Pak/E2E_placeholder_test.cpp"
+    "Pak/PakManifest_test.cpp"
+    "Pak/PakTestSupport.h"
 )

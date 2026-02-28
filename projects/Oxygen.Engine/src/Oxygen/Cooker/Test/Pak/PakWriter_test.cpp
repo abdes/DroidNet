@@ -8,10 +8,8 @@
 
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <span>
@@ -32,16 +30,17 @@
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
 
+#include "PakTestSupport.h"
+
 namespace {
 namespace content = oxygen::content;
 namespace core = oxygen::data::pak::core;
 namespace data = oxygen::data;
 namespace pak = oxygen::content::pak;
+namespace paktest = oxygen::content::pak::test;
 namespace render = oxygen::data::pak::render;
 namespace serio = oxygen::serio;
 
-constexpr auto kSourceKeySize = size_t { 16U };
-constexpr auto kSourceKeySeedIndex = size_t { 0U };
 constexpr auto kSourceKeySeedValue = uint8_t { 0x7DU };
 constexpr auto kHeaderSize = uint32_t { sizeof(core::PakHeader) };
 constexpr auto kFooterSize = uint32_t { sizeof(core::PakFooter) };
@@ -58,27 +57,18 @@ constexpr auto kPhysicsEntrySize
 
 auto MakeSourceKey() -> data::SourceKey
 {
-  auto bytes = std::array<uint8_t, kSourceKeySize> {};
-  bytes.fill(0U);
-  bytes[kSourceKeySeedIndex] = kSourceKeySeedValue;
-  return data::SourceKey { bytes };
+  return paktest::MakeSourceKey(kSourceKeySeedValue);
 }
 
 auto HasError(std::span<const pak::PakDiagnostic> diagnostics) -> bool
 {
-  return std::ranges::any_of(
-    diagnostics, [](const pak::PakDiagnostic& diagnostic) {
-      return diagnostic.severity == pak::PakDiagnosticSeverity::kError;
-    });
+  return paktest::HasError(diagnostics);
 }
 
 auto HasDiagnosticCode(std::span<const pak::PakDiagnostic> diagnostics,
   const std::string_view code) -> bool
 {
-  return std::ranges::any_of(
-    diagnostics, [code](const pak::PakDiagnostic& diagnostic) {
-      return diagnostic.code == code;
-    });
+  return paktest::HasDiagnosticCode(diagnostics, code);
 }
 
 auto ReadFooter(const std::filesystem::path& path) -> core::PakFooter
@@ -121,9 +111,7 @@ auto IsAllZero(std::span<const std::byte> bytes) -> bool
 
 auto MakeAssetKey(const uint8_t seed) -> data::AssetKey
 {
-  auto bytes = std::array<uint8_t, data::AssetKey::kSizeBytes> {};
-  bytes.fill(seed);
-  return data::AssetKey::FromBytes(bytes);
+  return paktest::MakeAssetKey(seed);
 }
 
 auto WriteAllBytesToFile(const std::filesystem::path& path,
@@ -292,29 +280,9 @@ auto MakeCanonicalTables(const CanonicalTableSpec spec)
   };
 }
 
-class PakWriterPhase5Test : public testing::Test {
-protected:
-  void SetUp() override
-  {
-    static auto counter = std::atomic_uint64_t { 0 };
-    const auto id = ++counter;
-    root_ = std::filesystem::temp_directory_path() / "oxygen_pak_writer_phase5"
-      / std::to_string(id);
-    std::filesystem::create_directories(root_);
-  }
+class PakWriterTest : public paktest::TempDirFixture { };
 
-  void TearDown() override { std::filesystem::remove_all(root_); }
-
-  [[nodiscard]] auto Root() const -> const std::filesystem::path&
-  {
-    return root_;
-  }
-
-private:
-  std::filesystem::path root_ {};
-};
-
-NOLINT_TEST_F(PakWriterPhase5Test, CrcEnabledWritesValidPakAndPatchesFooterCrc)
+NOLINT_TEST_F(PakWriterTest, CrcEnabledWritesValidPakAndPatchesFooterCrc)
 {
   using pak::BuildMode;
   using pak::PakPlanBuilder;
@@ -358,7 +326,7 @@ NOLINT_TEST_F(PakWriterPhase5Test, CrcEnabledWritesValidPakAndPatchesFooterCrc)
   });
 }
 
-NOLINT_TEST_F(PakWriterPhase5Test, CrcDisabledLeavesFooterFieldAtZero)
+NOLINT_TEST_F(PakWriterTest, CrcDisabledLeavesFooterFieldAtZero)
 {
   using pak::BuildMode;
   using pak::PakPlanBuilder;
@@ -400,7 +368,7 @@ NOLINT_TEST_F(PakWriterPhase5Test, CrcDisabledLeavesFooterFieldAtZero)
   });
 }
 
-NOLINT_TEST_F(PakWriterPhase5Test, OffsetMismatchEmitsActionableDiagnostic)
+NOLINT_TEST_F(PakWriterTest, OffsetMismatchEmitsActionableDiagnostic)
 {
   using pak::BuildMode;
   using pak::PakWriter;
@@ -506,7 +474,7 @@ NOLINT_TEST_F(PakWriterPhase5Test, OffsetMismatchEmitsActionableDiagnostic)
     HasDiagnosticCode(write_result.diagnostics, "pak.write.offset_mismatch"));
 }
 
-NOLINT_TEST_F(PakWriterPhase5Test, InvalidCrcPatchOffsetEmitsDiagnostic)
+NOLINT_TEST_F(PakWriterTest, InvalidCrcPatchOffsetEmitsDiagnostic)
 {
   using pak::BuildMode;
   using pak::PakWriter;
@@ -618,7 +586,7 @@ NOLINT_TEST_F(PakWriterPhase5Test, InvalidCrcPatchOffsetEmitsDiagnostic)
     write_result.diagnostics, "pak.write.crc_field_offset_invalid"));
 }
 
-NOLINT_TEST_F(PakWriterPhase5Test, ResourcePayloadSourceCountMismatchIsRejected)
+NOLINT_TEST_F(PakWriterTest, ResourcePayloadSourceCountMismatchIsRejected)
 {
   using pak::BuildMode;
   using pak::PakWriter;
@@ -692,7 +660,7 @@ NOLINT_TEST_F(PakWriterPhase5Test, ResourcePayloadSourceCountMismatchIsRejected)
     write_result.diagnostics, "pak.write.resource_source_count_mismatch"));
 }
 
-NOLINT_TEST_F(PakWriterPhase5Test, AssetPayloadSourceCountMismatchIsRejected)
+NOLINT_TEST_F(PakWriterTest, AssetPayloadSourceCountMismatchIsRejected)
 {
   using pak::BuildMode;
   using pak::PakWriter;
@@ -776,8 +744,7 @@ NOLINT_TEST_F(PakWriterPhase5Test, AssetPayloadSourceCountMismatchIsRejected)
     write_result.diagnostics, "pak.write.asset_source_count_mismatch"));
 }
 
-NOLINT_TEST_F(
-  PakWriterPhase5Test, MissingResourceSourceFileEmitsStoreDiagnostic)
+NOLINT_TEST_F(PakWriterTest, MissingResourceSourceFileEmitsStoreDiagnostic)
 {
   using pak::BuildMode;
   using pak::PakWriter;
@@ -862,7 +829,7 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(
-  PakWriterPhase5Test, MissingAssetDescriptorSourceFileEmitsStoreDiagnostic)
+  PakWriterTest, MissingAssetDescriptorSourceFileEmitsStoreDiagnostic)
 {
   using pak::BuildMode;
   using pak::PakWriter;
@@ -953,7 +920,7 @@ NOLINT_TEST_F(
     write_result.diagnostics, "pak.write.asset_descriptor_store_failed"));
 }
 
-NOLINT_TEST_F(PakWriterPhase5Test, TablePayloadSizeMismatchEmitsDiagnostic)
+NOLINT_TEST_F(PakWriterTest, TablePayloadSizeMismatchEmitsDiagnostic)
 {
   using pak::BuildMode;
   using pak::PakWriter;
@@ -1066,8 +1033,7 @@ NOLINT_TEST_F(PakWriterPhase5Test, TablePayloadSizeMismatchEmitsDiagnostic)
     write_result.diagnostics, "pak.write.table_size_mismatch"));
 }
 
-NOLINT_TEST_F(
-  PakWriterPhase5Test, StoresResourceAndDescriptorPayloadBytesFromSources)
+NOLINT_TEST_F(PakWriterTest, StoresResourceAndDescriptorPayloadBytesFromSources)
 {
   using pak::BuildMode;
   using pak::PakWriter;
@@ -1268,7 +1234,7 @@ NOLINT_TEST_F(
   EXPECT_TRUE(std::ranges::equal(descriptor_view, descriptor_payload));
 }
 
-NOLINT_TEST_F(PakWriterPhase5Test, WriterZeroFillsPlannedPaddingAndTrailingGaps)
+NOLINT_TEST_F(PakWriterTest, WriterZeroFillsPlannedPaddingAndTrailingGaps)
 {
   using pak::BuildMode;
   using pak::PakWriter;
@@ -1414,7 +1380,7 @@ NOLINT_TEST_F(PakWriterPhase5Test, WriterZeroFillsPlannedPaddingAndTrailingGaps)
       static_cast<size_t>(kPlannedFileSize - (kFooterOffset + kFooterSize)))));
 }
 
-NOLINT_TEST_F(PakWriterPhase5Test, DeterministicModeProducesBitExactOutputs)
+NOLINT_TEST_F(PakWriterTest, DeterministicModeProducesBitExactOutputs)
 {
   using pak::BuildMode;
   using pak::PakPlanBuilder;
@@ -1457,8 +1423,7 @@ NOLINT_TEST_F(PakWriterPhase5Test, DeterministicModeProducesBitExactOutputs)
   EXPECT_EQ(first_bytes, second_bytes);
 }
 
-NOLINT_TEST_F(
-  PakWriterPhase5Test, ScriptSlotSerializerInvariantViolationFailsWriting)
+NOLINT_TEST_F(PakWriterTest, ScriptSlotSerializerInvariantViolationFailsWriting)
 {
   using pak::BuildMode;
   using pak::PakWriter;
