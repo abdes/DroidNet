@@ -19,9 +19,8 @@ inline auto Load(AnyReader& reader, data::loose_cooked::IndexHeader& header)
   -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
-  CHECK_RESULT(reader.ReadBlobInto(std::span(
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-    reinterpret_cast<std::byte*>(header.magic), std::size(header.magic))));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { header.magic })));
   CHECK_RESULT(reader.ReadInto(header.version));
   CHECK_RESULT(reader.ReadInto(header.content_version));
   CHECK_RESULT(reader.ReadInto(header.flags));
@@ -37,9 +36,8 @@ inline auto Load(AnyReader& reader, data::loose_cooked::IndexHeader& header)
   CHECK_RESULT(reader.ReadInto(header.file_record_count));
   CHECK_RESULT(reader.ReadInto(header.file_record_size));
 
-  CHECK_RESULT(reader.ReadBlobInto(std::span(
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-    reinterpret_cast<std::byte*>(header.guid), std::size(header.guid))));
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { header.guid })));
 
   CHECK_RESULT(reader.Forward(std::size(header.reserved)));
   return {};
@@ -56,10 +54,8 @@ inline auto Load(AnyReader& reader, data::loose_cooked::AssetEntry& entry)
   CHECK_RESULT(reader.ReadInto(entry.asset_type));
   CHECK_RESULT(reader.Forward(std::size(entry.reserved0)));
   CHECK_RESULT(reader.ReadInto(entry.descriptor_size));
-  CHECK_RESULT(reader.ReadBlobInto(std::span(
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-    reinterpret_cast<std::byte*>(entry.descriptor_sha256),
-    std::size(entry.descriptor_sha256))));
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::as_writable_bytes(std::span { entry.descriptor_sha256 })));
   CHECK_RESULT(reader.Forward(std::size(entry.reserved1)));
   return {};
 }

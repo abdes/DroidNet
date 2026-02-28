@@ -3,6 +3,11 @@
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
 
 #include <string>
 
@@ -10,6 +15,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -431,5 +437,37 @@ auto oxygen::data::pak::input::to_string(
   check_and_append(Flags::kActivateOnLoad, "ActivateOnLoad");
   DCHECK_EQ_F(checked, value,
     "to_string: Unchecked InputContextBindingFlags value detected");
+  return result;
+}
+
+auto oxygen::data::loose_cooked::latest_schema::to_string(
+  const oxygen::data::loose_cooked::latest_schema::IndexFlags value)
+  -> std::string
+{
+  using Flags = oxygen::data::loose_cooked::latest_schema::IndexFlags;
+
+  if (value == static_cast<Flags>(0)) {
+    return "None";
+  }
+
+  std::string result;
+  bool first = true;
+  [[maybe_unused]] auto checked = static_cast<Flags>(0);
+
+  const auto check_and_append = [&](const Flags flag, const char* name) {
+    if ((value & flag) == flag) {
+      if (!first) {
+        result += " | ";
+      }
+      result += name;
+      first = false;
+      checked |= flag;
+    }
+  };
+
+  check_and_append(Flags::kHasVirtualPaths, "HasVirtualPaths");
+  check_and_append(Flags::kHasFileRecords, "HasFileRecords");
+
+  DCHECK_EQ_F(checked, value, "to_string: Unchecked IndexFlags value detected");
   return result;
 }

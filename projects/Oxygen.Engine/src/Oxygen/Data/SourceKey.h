@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <functional>
@@ -41,11 +40,9 @@ struct SourceKey
   using Base::Base;
 
   //! Create a SourceKey from a C-style byte array.
-  static auto FromBytes(const uint8_t (&bytes)[16]) -> SourceKey
+  static auto FromBytes(const std::array<uint8_t, 16>& bytes) -> SourceKey
   {
-    std::array<uint8_t, 16> arr {};
-    std::ranges::copy(bytes, arr.begin());
-    return SourceKey { arr };
+    return SourceKey { bytes };
   }
 };
 

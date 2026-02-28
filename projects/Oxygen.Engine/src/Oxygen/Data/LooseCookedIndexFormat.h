@@ -9,8 +9,11 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/api_export.h>
 
 //! Oxygen loose cooked index binary format specification
 /**!
@@ -39,7 +42,7 @@ using CountT = uint32_t;
 //=== Constants ===-----------------------------------------------------------//
 
 //! 8-byte header magic: {'O','X','L','C','I','D','X',0}
-static constexpr std::array<char, 8> kHeaderMagic
+constexpr std::array<char, 8> kHeaderMagic
   = { 'O', 'X', 'L', 'C', 'I', 'D', 'X', 0 };
 
 //! SHA-256 size in bytes.
@@ -55,24 +58,28 @@ constexpr size_t kSha256Size = 32;
    that do not populate flags.
  - When `flags != 0`, loaders should enforce these bits strictly.
 */
-enum IndexFlags : uint32_t {
+enum IndexFlags : uint32_t { // NOLINT(*-enum-size)
   //! Declares that asset entries contain valid virtual paths.
-  kHasVirtualPaths = 1u << 0,
+  kHasVirtualPaths = OXYGEN_FLAG(0),
   //! Declares that the file-records section is present and must be validated.
-  kHasFileRecords = 1u << 1,
+  kHasFileRecords = OXYGEN_FLAG(1),
 };
 
+OXYGEN_DEFINE_FLAGS_OPERATORS(IndexFlags)
+
+//! String representation of IndexFlags bitmask.
+OXGN_DATA_NDAPI auto to_string(IndexFlags value) -> std::string;
+
 //! Mask of all known v1 index flags.
-static constexpr uint32_t kKnownIndexFlags
-  = static_cast<uint32_t>(kHasVirtualPaths)
-  | static_cast<uint32_t>(kHasFileRecords);
+[[maybe_unused]] constexpr IndexFlags kKnownIndexFlags
+  = kHasVirtualPaths | kHasFileRecords;
 
 //=== Index File Format Structures ===---------------------------------------//
 
 //! Fixed-size header at the start of the loose cooked index (256 bytes).
 #pragma pack(push, 1)
 struct IndexHeader {
-  char magic[8] = { 'O', 'X', 'L', 'C', 'I', 'D', 'X', 0 };
+  std::array<char, 8> magic = kHeaderMagic; // NOLINT
   uint16_t version = 1; // Schema version
   uint16_t content_version = 0; // Content version (cook-defined)
   uint32_t flags = 0; // IndexFlags bitset; 0 = legacy/unspecified
@@ -91,7 +98,7 @@ struct IndexHeader {
   CountT file_record_count = 0;
   uint32_t file_record_size = 0; // sizeof(FileRecord) for this schema
 
-  uint8_t guid[16] = {}; // Unique identifier for this loose cooked source
+  std::array<uint8_t, 16> guid = {};
   uint8_t reserved[176] = {};
 };
 #pragma pack(pop)
@@ -121,7 +128,7 @@ struct AssetEntry {
 static_assert(sizeof(AssetEntry) == 76);
 
 //! Kind of a file record.
-enum class FileKind : uint16_t {
+enum class FileKind : uint16_t { // NOLINT(*-enum-size)
   kUnknown = 0,
   kBuffersTable = 1,
   kBuffersData = 2,
