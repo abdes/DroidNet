@@ -76,6 +76,7 @@ set(
   "Resources.h"
   "SafeCall.h"
   "Scripting/ScriptExecutable.h"
+  "Meta/Scripting/ScriptCompileMode.h"
   "Types/Atmosphere.h"
   "Types/ColorSpace.h"
   "Types/Epoch.h"
@@ -151,6 +152,7 @@ set(
   "Meta/Input/PakFormat.inc"
   "Meta/Physics/PakPhysics.inc"
   "Meta/Physics/PakPhysicsShape.inc"
+  "Meta/Scripting/ScriptCompileMode.inc"
 )
 # Keep .def catalogs visible to IDE/target dependency graph without letting
 # MSVC treat them as linker module-definition files.

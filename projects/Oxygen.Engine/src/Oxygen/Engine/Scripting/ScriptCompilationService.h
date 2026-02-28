@@ -114,10 +114,12 @@ private:
   };
 
   OXGN_NGIN_NDAPI auto ExecuteCompileRequest(CompileKey compile_key,
-    ScriptSourceBlob source, CompileMode compile_mode) -> co::Co<Result>;
+    ScriptSourceBlob source,
+    core::meta::scripting::ScriptCompileMode compile_mode) -> co::Co<Result>;
   OXGN_NGIN_NDAPI auto KickoffCompileRequest(Request request) -> co::Co<>;
-  OXGN_NGIN_NDAPI auto CompileOnWorkerThread(
-    ScriptSourceBlob source, CompileMode compile_mode) const -> co::Co<Result>;
+  OXGN_NGIN_NDAPI auto CompileOnWorkerThread(ScriptSourceBlob source,
+    core::meta::scripting::ScriptCompileMode compile_mode) const
+    -> co::Co<Result>;
   OXGN_NGIN_API auto TryGetCachedBytecode(CompileKey compile_key)
     -> std::shared_ptr<const ScriptBytecodeBlob>;
   OXGN_NGIN_API auto StoreCachedBytecode(CompileKey compile_key,

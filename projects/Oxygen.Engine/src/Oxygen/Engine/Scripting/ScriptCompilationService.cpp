@@ -547,7 +547,7 @@ auto ScriptCompilationService::ApplyConsoleCVars(
 
 auto ScriptCompilationService::ExecuteCompileRequest(
   const CompileKey compile_key, ScriptSourceBlob source,
-  const CompileMode compile_mode) -> co::Co<Result>
+  const core::meta::scripting::ScriptCompileMode compile_mode) -> co::Co<Result>
 {
   auto erase = ScopeGuard([this, compile_key]() noexcept {
     std::lock_guard lock(in_flight_mutex_);
@@ -593,7 +593,8 @@ auto ScriptCompilationService::KickoffCompileRequest(Request request)
 }
 
 auto ScriptCompilationService::CompileOnWorkerThread(ScriptSourceBlob source,
-  const CompileMode compile_mode) const -> co::Co<Result>
+  const core::meta::scripting::ScriptCompileMode compile_mode) const
+  -> co::Co<Result>
 {
   const auto language = source.Language();
   std::shared_ptr<const IScriptCompiler> compiler;

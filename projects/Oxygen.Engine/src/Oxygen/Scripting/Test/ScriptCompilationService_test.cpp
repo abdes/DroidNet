@@ -41,8 +41,8 @@ using oxygen::co::AllOf;
 using oxygen::co::Co;
 using oxygen::co::ThreadPool;
 using oxygen::co::testing::TestEventLoop;
+using oxygen::core::meta::scripting::ScriptCompileMode;
 using oxygen::data::pak::scripting::ScriptLanguage;
-using oxygen::scripting::CompileMode;
 using oxygen::scripting::IScriptCompiler;
 using oxygen::scripting::ScriptBytecodeBlob;
 using oxygen::scripting::ScriptCompilationService;
@@ -80,7 +80,7 @@ public:
   }
 
   [[nodiscard]] auto Compile(ScriptSourceBlob source,
-    const CompileMode /*mode*/) const -> ScriptCompileResult override
+    const ScriptCompileMode /*mode*/) const -> ScriptCompileResult override
   {
     (void)source;
     ++compile_calls_;
@@ -108,7 +108,7 @@ public:
   }
 
   [[nodiscard]] auto Compile(ScriptSourceBlob /*source*/,
-    const CompileMode /*mode*/) const -> ScriptCompileResult override
+    const ScriptCompileMode /*mode*/) const -> ScriptCompileResult override
   {
     ++compile_calls_;
     ScriptCompileResult result {};
@@ -134,7 +134,7 @@ public:
   }
 
   [[nodiscard]] auto Compile(ScriptSourceBlob source,
-    const CompileMode /*mode*/) const -> ScriptCompileResult override
+    const ScriptCompileMode /*mode*/) const -> ScriptCompileResult override
   {
     ++compile_calls_;
     auto source_bytes = source.BytesView();

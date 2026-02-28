@@ -15,6 +15,7 @@
 namespace oxygen::scripting {
 
 namespace {
+  using core::meta::scripting::ScriptCompileMode;
 
   // Luau doesn't expose symbolic constants for these levels in public headers.
   // The documented ranges live in Luau/Compiler.h.
@@ -23,15 +24,15 @@ namespace {
   constexpr int kLuauNoDebugInfoLevel = 0;
   constexpr int kLuauMaxDebugInfoLevel = 2;
 
-  auto ApplyCompileMode(
-    Luau::CompileOptions& options, const CompileMode mode) noexcept -> void
+  auto ApplyCompileMode(Luau::CompileOptions& options,
+    const ScriptCompileMode mode) noexcept -> void
   {
     switch (mode) {
-    case CompileMode::kDebug:
+    case ScriptCompileMode::kDebug:
       options.optimizationLevel = kLuauNoOptimizationLevel;
       options.debugLevel = kLuauMaxDebugInfoLevel;
       return;
-    case CompileMode::kOptimized:
+    case ScriptCompileMode::kOptimized:
       options.optimizationLevel = kLuauMaxOptimizationLevel;
       options.debugLevel = kLuauNoDebugInfoLevel;
       return;
@@ -50,8 +51,8 @@ auto LuauScriptCompiler::Language() const noexcept
   return data::pak::scripting::ScriptLanguage::kLuau;
 }
 
-auto LuauScriptCompiler::Compile(
-  ScriptSourceBlob source, const CompileMode mode) const -> ScriptCompileResult
+auto LuauScriptCompiler::Compile(ScriptSourceBlob source,
+  const ScriptCompileMode mode) const -> ScriptCompileResult
 {
   const auto source_view = source.BytesView();
   LOG_F(INFO, "luau compile begin (source_size={})", source_view.size());
