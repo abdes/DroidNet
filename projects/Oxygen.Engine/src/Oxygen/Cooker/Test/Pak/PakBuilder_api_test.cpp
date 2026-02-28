@@ -136,7 +136,7 @@ NOLINT_TEST(
 }
 
 NOLINT_TEST(PakBuilderApiContractTest,
-  ValidRequestReportsPhase2WriterUnavailableExplicitly)
+  ValidRequestReportsPhase3WriterUnavailableExplicitly)
 {
   using pak::BuildMode;
   using pak::PakBuilder;
@@ -161,7 +161,7 @@ NOLINT_TEST(PakBuilderApiContractTest,
   const auto& result = result_or_error.value();
 
   EXPECT_EQ(result.summary.diagnostics_error, 1U);
-  EXPECT_TRUE(HasDiagnosticCode(result, "pak.write.phase2_writer_unavailable"));
+  EXPECT_TRUE(HasDiagnosticCode(result, "pak.write.phase3_writer_unavailable"));
   EXPECT_TRUE(result.telemetry.total_duration.has_value());
   EXPECT_TRUE(result.telemetry.planning_duration.has_value());
 }
@@ -212,6 +212,59 @@ NOLINT_TEST(PakBuilderApiContractTest, PlannerRejectsBaseCatalogTypeMismatch)
   ASSERT_TRUE(result_or_error.has_value());
   const auto& result = result_or_error.value();
   EXPECT_TRUE(HasDiagnosticCode(result, "pak.plan.base_catalog_type_mismatch"));
+}
+
+NOLINT_TEST(PakBuilderApiContractTest, PatchModeClassifiesMissingSourceAsDelete)
+{
+  using pak::BuildMode;
+  using pak::PakBuilder;
+  using pak::PakBuildRequest;
+  constexpr auto kBaseSourceSeed = static_cast<uint8_t>(21);
+  constexpr auto kAssetASeed = static_cast<uint8_t>(31);
+  constexpr auto kAssetBSeed = static_cast<uint8_t>(32);
+
+  data::PakCatalog base_catalog {};
+  base_catalog.source_key = MakeSourceKey(kBaseSourceSeed);
+  base_catalog.content_version = 1;
+  base_catalog.entries = {
+    data::PakCatalogEntry {
+      .asset_key = MakeAssetKey(kAssetASeed),
+      .asset_type = data::AssetType::kGeometry,
+      .descriptor_digest = {},
+      .transitive_resource_digest = {},
+    },
+    data::PakCatalogEntry {
+      .asset_key = MakeAssetKey(kAssetBSeed),
+      .asset_type = data::AssetType::kMaterial,
+      .descriptor_digest = {},
+      .transitive_resource_digest = {},
+    },
+  };
+  const auto expected_deleted
+    = static_cast<uint32_t>(base_catalog.entries.size());
+
+  const PakBuildRequest request {
+    .mode = BuildMode::kPatch,
+    .sources = {},
+    .output_pak_path = "phase4_patch_classification_output.pak",
+    .output_manifest_path = "phase4_patch_classification_output.manifest",
+    .content_version = 1,
+    .source_key = MakeNonZeroSourceKey(),
+    .base_catalogs = { base_catalog },
+    .patch_compat = {},
+    .options = {},
+  };
+
+  PakBuilder builder;
+  const auto result_or_error = builder.Build(request);
+
+  ASSERT_TRUE(result_or_error.has_value());
+  const auto& result = result_or_error.value();
+  EXPECT_EQ(result.summary.patch_created, 0U);
+  EXPECT_EQ(result.summary.patch_replaced, 0U);
+  EXPECT_EQ(result.summary.patch_deleted, expected_deleted);
+  EXPECT_EQ(result.summary.patch_unchanged, 0U);
+  EXPECT_TRUE(HasDiagnosticCode(result, "pak.write.phase3_writer_unavailable"));
 }
 
 } // namespace

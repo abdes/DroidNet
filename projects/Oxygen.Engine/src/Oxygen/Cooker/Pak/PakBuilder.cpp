@@ -4,14 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Cooker/Pak/PakBuilder.h>
-#include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
-
 #include <array>
 #include <chrono>
 #include <cstddef>
 #include <string_view>
 #include <utility>
+
+#include <Oxygen/Cooker/Pak/PakBuilder.h>
+#include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
 
 namespace {
 namespace data = oxygen::data;
@@ -158,8 +158,8 @@ auto PakBuilder::Build(const PakBuildRequest& request) noexcept
 
   if (result.summary.diagnostics_error == 0) {
     AddDiagnostic(result, PakDiagnosticSeverity::kError,
-      PakBuildPhase::kFinalize, "pak.write.phase2_writer_unavailable",
-      "Phase 2 implements plan building and validation; writer integration is "
+      PakBuildPhase::kFinalize, "pak.write.phase3_writer_unavailable",
+      "Phase 3 implements full planning semantics; writer integration is "
       "not available yet.");
   }
 
