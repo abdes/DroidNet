@@ -247,6 +247,8 @@ auto CollectRegionBoundsAndRanges(ValidationState& state) -> void
 {
   using Severity = pak::PakDiagnosticSeverity;
   using Phase = pak::PakBuildPhase;
+  auto region_ranges = std::vector<RangeRecord> {};
+  region_ranges.reserve(state.plan->Regions().size());
 
   for (const auto& region : state.plan->Regions()) {
     if (region.region_name.empty()) {
@@ -279,11 +281,42 @@ auto CollectRegionBoundsAndRanges(ValidationState& state) -> void
       it->second.second = (std::max)(it->second.second, end);
     }
 
-    state.ranges.push_back(RangeRecord {
+    region_ranges.push_back(RangeRecord {
       .start = region.offset,
       .end = end,
       .label = region.region_name,
     });
+  }
+
+  std::ranges::sort(region_ranges,
+    [](const RangeRecord& lhs, const RangeRecord& rhs) {
+      if (lhs.start != rhs.start) {
+        return lhs.start < rhs.start;
+      }
+      if (lhs.end != rhs.end) {
+        return lhs.end < rhs.end;
+      }
+      return lhs.label < rhs.label;
+    });
+
+  for (size_t i = 0; i < region_ranges.size(); ++i) {
+    const auto& range = region_ranges[i];
+    if (range.end > state.plan->PlannedFileSize()) {
+      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
+        "pak.plan.region_out_of_bounds",
+        "Region end exceeds planned file size.", range.label, range.start);
+    }
+
+    if (i == 0U) {
+      continue;
+    }
+
+    const auto& prev = region_ranges[i - 1U];
+    if (range.start < prev.end) {
+      AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
+        "pak.plan.region_overlap", "Planned regions overlap.", range.label,
+        range.start);
+    }
   }
 }
 
@@ -471,7 +504,8 @@ auto CollectBrowseRangeAndValidatePaths(ValidationState& state) -> void
     }
 
     std::unordered_set<std::string> seen_paths;
-    for (const auto& path : browse.virtual_paths) {
+    for (const auto& browse_entry : browse.entries) {
+      const auto& path = browse_entry.virtual_path;
       if (!IsCanonicalVirtualPath(path)) {
         AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
           "pak.plan.browse_path_not_canonical",
@@ -487,7 +521,7 @@ auto CollectBrowseRangeAndValidatePaths(ValidationState& state) -> void
           {}, "browse_index", {}, path);
       }
     }
-  } else if (!browse.virtual_paths.empty()) {
+  } else if (!browse.entries.empty()) {
     AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
       "pak.plan.browse_path_without_index",
       "Browse virtual paths are populated but browse index is disabled.",

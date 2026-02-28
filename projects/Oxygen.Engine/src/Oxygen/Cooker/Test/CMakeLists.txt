@@ -133,6 +133,7 @@ m_gtest_program(
   PakDomainValidation
   SOURCES
     "Pak/DomainValidation_placeholder_test.cpp"
+    "Pak/PakPlanBuilder_phase3_test.cpp"
 )
 
 m_gtest_program(PakPatchPlanner SOURCES "Pak/PatchPlanner_placeholder_test.cpp")

@@ -15,6 +15,7 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Cooker/api_export.h>
 
 namespace oxygen::content::pak {
 
@@ -25,7 +26,7 @@ enum class PakPatchAction : uint8_t {
   kUnchanged,
 };
 
-[[nodiscard]] auto to_string(PakPatchAction value) noexcept -> std::string_view;
+OXGN_COOK_NDAPI auto to_string(PakPatchAction value) noexcept -> std::string_view;
 
 struct PakHeaderPlan {
   uint64_t offset = 0;
@@ -87,11 +88,16 @@ struct PakDirectoryPlan {
   std::vector<PakAssetDirectoryEntryPlan> entries;
 };
 
+struct PakBrowseEntryPlan {
+  data::AssetKey asset_key {};
+  std::string virtual_path;
+};
+
 struct PakBrowseIndexPlan {
   bool enabled = false;
   uint64_t offset = 0;
   uint64_t size_bytes = 0;
-  std::vector<std::string> virtual_paths;
+  std::vector<PakBrowseEntryPlan> entries;
 };
 
 struct PakFooterPlan {
@@ -136,26 +142,26 @@ public:
     uint64_t planned_file_size = 0;
   };
 
-  explicit PakPlan(Data data) noexcept;
+  OXGN_COOK_API explicit PakPlan(Data data) noexcept;
 
-  [[nodiscard]] auto Header() const noexcept -> const PakHeaderPlan&;
-  [[nodiscard]] auto Regions() const noexcept -> std::span<const PakRegionPlan>;
-  [[nodiscard]] auto Tables() const noexcept -> std::span<const PakTablePlan>;
-  [[nodiscard]] auto Assets() const noexcept
+  OXGN_COOK_NDAPI auto Header() const noexcept -> const PakHeaderPlan&;
+  OXGN_COOK_NDAPI auto Regions() const noexcept -> std::span<const PakRegionPlan>;
+  OXGN_COOK_NDAPI auto Tables() const noexcept -> std::span<const PakTablePlan>;
+  OXGN_COOK_NDAPI auto Assets() const noexcept
     -> std::span<const PakAssetPlacementPlan>;
-  [[nodiscard]] auto Resources() const noexcept
+  OXGN_COOK_NDAPI auto Resources() const noexcept
     -> std::span<const PakResourcePlacementPlan>;
-  [[nodiscard]] auto Directory() const noexcept -> const PakDirectoryPlan&;
-  [[nodiscard]] auto BrowseIndex() const noexcept -> const PakBrowseIndexPlan&;
-  [[nodiscard]] auto Footer() const noexcept -> const PakFooterPlan&;
-  [[nodiscard]] auto PatchActions() const noexcept
+  OXGN_COOK_NDAPI auto Directory() const noexcept -> const PakDirectoryPlan&;
+  OXGN_COOK_NDAPI auto BrowseIndex() const noexcept -> const PakBrowseIndexPlan&;
+  OXGN_COOK_NDAPI auto Footer() const noexcept -> const PakFooterPlan&;
+  OXGN_COOK_NDAPI auto PatchActions() const noexcept
     -> std::span<const PakPatchActionRecord>;
-  [[nodiscard]] auto PatchClosure() const noexcept
+  OXGN_COOK_NDAPI auto PatchClosure() const noexcept
     -> std::span<const PakPatchClosureRecord>;
-  [[nodiscard]] auto ScriptParamRanges() const noexcept
+  OXGN_COOK_NDAPI auto ScriptParamRanges() const noexcept
     -> std::span<const PakScriptParamRangePlan>;
-  [[nodiscard]] auto ScriptParamRecordCount() const noexcept -> uint32_t;
-  [[nodiscard]] auto PlannedFileSize() const noexcept -> uint64_t;
+  OXGN_COOK_NDAPI auto ScriptParamRecordCount() const noexcept -> uint32_t;
+  OXGN_COOK_NDAPI auto PlannedFileSize() const noexcept -> uint64_t;
 
 private:
   Data data_;

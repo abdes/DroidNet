@@ -6,27 +6,21 @@
 
 #pragma once
 
-#include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <optional>
+#include <span>
 #include <vector>
 
-#include <Oxygen/Cooker/Pak/PakBuildReport.h>
-#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakPlan.h>
-#include <Oxygen/Cooker/api_export.h>
 
 namespace oxygen::content::pak {
 
-class PakPlanBuilder final {
-public:
-  struct BuildResult {
-    std::optional<PakPlan> plan;
-    std::vector<PakDiagnostic> diagnostics;
-    PakBuildSummary summary {};
-    std::optional<std::chrono::microseconds> planning_duration;
-  };
+[[nodiscard]] auto MeasureBrowseIndexPayload(
+  std::span<const PakBrowseEntryPlan> entries) -> std::optional<uint64_t>;
 
-  OXGN_COOK_NDAPI auto Build(const PakBuildRequest& request) const -> BuildResult;
-};
+[[nodiscard]] auto StoreBrowseIndexPayload(
+  std::span<const PakBrowseEntryPlan> entries,
+  std::vector<std::byte>& out_bytes) -> bool;
 
 } // namespace oxygen::content::pak

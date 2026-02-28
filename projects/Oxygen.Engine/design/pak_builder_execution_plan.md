@@ -209,12 +209,14 @@ Minimum contract:
 4. Explicitly extract and emit scripting sidecar tables in full mode:
    - populate `script_slot_table` when slots exist
    - emit/validate script param record arrays in-bounds.
-5. Implement domain serializer `Measure()` + `Store()` coupling (single logic path, no divergence).
+5. Implement planner-side payload sizing invariants required before writing:
+   - browse-index payload size planning uses the same structural encoding contract later used by writer serialization,
+   - script slot/param range planning validates strict in-bounds ranges against source param arrays.
 
 ### Exit Criteria
 
-1. Same inputs + `deterministic=true` produce bit-exact identical outputs.
-2. All domain serializers satisfy measure/store exact-size invariants.
+1. Same normalized inputs + `deterministic=true` produce equivalent `PakPlan` outputs (ordering, offsets, sizes, and table/range metadata are stable).
+2. Full-mode scripting sidecar extraction is complete and strictly validated (slot ranges in-bounds, invalid ranges fail planning with structured diagnostics).
 
 ---
 
@@ -257,6 +259,7 @@ Minimum contract:
    - expected vs actual offsets
    - write/seek/flush failures
    - CRC state errors.
+6. Implement domain serializer `Measure()` + `Store()` coupling for all writer-emitted payloads (single logic path, no divergence across domains/tables/descriptors).
 
 ### Exit Criteria
 
@@ -264,6 +267,8 @@ Minimum contract:
 2. CRC behavior matches runtime verification semantics in `Content/PakFile`.
 3. Writer failures are reported as actionable structured diagnostics, not opaque errors.
 4. CRC-disabled builds are deterministic and leave `pak_crc32==0`.
+5. Same inputs + `deterministic=true` produce bit-exact identical pak binary output.
+6. All writer-emitted domain serializers satisfy measure/store exact-size invariants.
 
 ---
 
@@ -287,6 +292,7 @@ Minimum contract:
 1. Patch mode fails if manifest cannot be emitted.
 2. Full mode with `emit_manifest_in_full=true` fails if manifest cannot be emitted.
 3. Manifest field completeness and disjointness are validated pre-emit.
+4. Same inputs + `deterministic=true` produce bit-exact identical manifest output when manifest emission is enabled.
 
 ---
 
