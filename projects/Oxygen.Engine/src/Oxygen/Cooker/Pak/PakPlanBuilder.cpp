@@ -30,6 +30,7 @@
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
+#include <Oxygen/Cooker/Pak/PakMeasureStore.h>
 #include <Oxygen/Cooker/Pak/PakPlanPolicy.h>
 #include <Oxygen/Cooker/Pak/PakValidation.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -190,6 +191,7 @@ auto MeasureFileSize(const std::filesystem::path& path,
 
 auto ReadScriptSlotRangesFromTable(
   const std::filesystem::path& scripts_table_path, uint32_t slot_index_base,
+  uint32_t params_array_index_base, uint32_t source_params_record_count,
   std::vector<pak::PakScriptParamRangePlan>& ranges,
   std::vector<pak::PakDiagnostic>& diagnostics) -> uint32_t
 {
@@ -249,11 +251,45 @@ auto ReadScriptSlotRangesFromTable(
       continue;
     }
 
-    const auto params_array_offset
-      = static_cast<uint32_t>(record.params_array_offset / kParamRecordSize);
+    const auto local_params_array_offset
+      = static_cast<uint64_t>(record.params_array_offset / kParamRecordSize);
+    uint64_t local_params_array_end = 0;
+    if (!SafeAdd(local_params_array_offset, record.params_count,
+          local_params_array_end)
+      || local_params_array_end > source_params_record_count) {
+      AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+        pak::PakBuildPhase::kPlanning,
+        "pak.plan.script_params_range_out_of_bounds",
+        "ScriptSlotRecord params range exceeds scripts.data bounds for source.",
+        scripts_table_path);
+      continue;
+    }
+
+    uint64_t global_params_array_offset = 0;
+    if (!SafeAdd(params_array_index_base, local_params_array_offset,
+          global_params_array_offset)
+      || global_params_array_offset > kMaxCountAsUint64) {
+      AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+        pak::PakBuildPhase::kPlanning,
+        "pak.plan.script_params_offset_overflow",
+        "ScriptSlotRecord params offset overflowed global script param index.",
+        scripts_table_path);
+      continue;
+    }
+
+    uint64_t slot_index64 = 0;
+    if (!SafeAdd(slot_index_base, i, slot_index64)
+      || slot_index64 > kMaxCountAsUint64) {
+      AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+        pak::PakBuildPhase::kPlanning, "pak.plan.script_slot_index_overflow",
+        "ScriptSlotRecord slot index overflowed uint32 bounds.",
+        scripts_table_path);
+      continue;
+    }
+
     ranges.push_back(pak::PakScriptParamRangePlan {
-      .slot_index = slot_index_base + i,
-      .params_array_offset = params_array_offset,
+      .slot_index = static_cast<uint32_t>(slot_index64),
+      .params_array_offset = static_cast<uint32_t>(global_params_array_offset),
       .params_count = record.params_count,
     });
   }
@@ -367,7 +403,7 @@ auto MakeSkeletonPlan(const pak::PakBuildRequest& request) -> pak::PakPlan::Data
     .enabled = false,
     .offset = 0,
     .size_bytes = 0,
-    .virtual_paths = {},
+    .entries = {},
   };
 
   const auto footer_offset = static_cast<uint64_t>(sizeof(core::PakHeader));
@@ -794,6 +830,17 @@ auto CollectSourceData(PlanningState& state) -> void
           return lhs.relpath < rhs.relpath;
         });
 
+      struct ScriptTableCandidate final {
+        std::filesystem::path path;
+        uint64_t size_bytes = 0;
+        bool resource_compatible = false;
+        bool parse_as_slots = false;
+      };
+
+      auto script_table_candidates = std::vector<ScriptTableCandidate> {};
+      auto script_data_files = std::vector<std::pair<std::filesystem::path, uint64_t>> {};
+      bool source_uses_script_slot_layout = false;
+
       for (const auto& file_entry : source_files) {
         const auto file_path
           = source_root / std::filesystem::path(file_entry.relpath);
@@ -828,28 +875,7 @@ auto CollectSourceData(PlanningState& state) -> void
           });
           break;
         case data::loose_cooked::FileKind::kScriptsData:
-          state.pending_resources.push_back(PendingResource {
-            .region_name = "script_region",
-            .resource_kind = "script",
-            .size_bytes = file_size,
-            .alignment = kRegionAlignment,
-            .source_order = source_order,
-            .path = file_path,
-          });
-          if ((file_size % sizeof(script::ScriptParamRecord)) == 0U) {
-            const auto record_count64
-              = file_size / sizeof(script::ScriptParamRecord);
-            if (record_count64 <= kMaxCountAsUint64) {
-              state.script_param_record_count = (std::max)(
-                state.script_param_record_count,
-                static_cast<uint32_t>(record_count64));
-            }
-          } else {
-            AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-              PakBuildPhase::kPlanning, "pak.plan.script_params_file_size_invalid",
-              "scripts.data size is not divisible by ScriptParamRecord size.",
-              file_path);
-          }
+          script_data_files.emplace_back(file_path, file_size);
           break;
         case data::loose_cooked::FileKind::kPhysicsData:
           state.pending_resources.push_back(PendingResource {
@@ -884,20 +910,14 @@ auto CollectSourceData(PlanningState& state) -> void
 
           const bool parse_as_slots
             = slot_compatible && (source_has_scene_assets || !resource_compatible);
-          if (parse_as_slots) {
-            const auto parsed_slots = ReadScriptSlotRangesFromTable(file_path,
-              static_cast<uint32_t>(state.script_param_ranges.size()),
-              state.script_param_ranges, diagnostics);
-            state.table_counts.script_slot_count += parsed_slots;
-          } else if (resource_compatible) {
-            state.table_counts.script_resource_count
-              += file_size / sizeof(script::ScriptResourceDesc);
-          } else {
-            AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-              PakBuildPhase::kPlanning, "pak.plan.scripts_table_size_invalid",
-              "scripts.table is incompatible with known script table layouts.",
-              file_path);
-          }
+          script_table_candidates.push_back(ScriptTableCandidate {
+            .path = file_path,
+            .size_bytes = file_size,
+            .resource_compatible = resource_compatible,
+            .parse_as_slots = parse_as_slots,
+          });
+          source_uses_script_slot_layout
+            = source_uses_script_slot_layout || parse_as_slots;
 
           if (source_has_scene_assets && source_has_script_assets && slot_compatible
             && resource_compatible) {
@@ -911,6 +931,89 @@ auto CollectSourceData(PlanningState& state) -> void
         }
         case data::loose_cooked::FileKind::kUnknown:
           break;
+        }
+      }
+
+      uint32_t source_script_param_record_count = 0;
+      for (const auto& [scripts_data_path, scripts_data_size] : script_data_files) {
+        state.pending_resources.push_back(PendingResource {
+          .region_name = "script_region",
+          .resource_kind = "script",
+          .size_bytes = scripts_data_size,
+          .alignment = kRegionAlignment,
+          .source_order = source_order,
+          .path = scripts_data_path,
+        });
+
+        if (!source_uses_script_slot_layout) {
+          continue;
+        }
+
+        if ((scripts_data_size % sizeof(script::ScriptParamRecord)) != 0U) {
+          AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+            PakBuildPhase::kPlanning, "pak.plan.script_params_file_size_invalid",
+            "scripts.data size is not divisible by ScriptParamRecord size.",
+            scripts_data_path);
+          continue;
+        }
+
+        const auto record_count64
+          = scripts_data_size / sizeof(script::ScriptParamRecord);
+        if (record_count64 > kMaxCountAsUint64) {
+          AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+            PakBuildPhase::kPlanning, "pak.plan.script_params_count_too_large",
+            "scripts.data contains too many ScriptParamRecord entries.",
+            scripts_data_path);
+          continue;
+        }
+
+        uint64_t source_count_sum = 0;
+        if (!SafeAdd(source_script_param_record_count, record_count64, source_count_sum)
+          || source_count_sum > kMaxCountAsUint64) {
+          AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+            PakBuildPhase::kPlanning, "pak.plan.script_params_count_overflow",
+            "Combined scripts.data ScriptParamRecord count overflowed uint32.",
+            scripts_data_path);
+          continue;
+        }
+        source_script_param_record_count = static_cast<uint32_t>(source_count_sum);
+      }
+
+      for (const auto& script_table : script_table_candidates) {
+        if (script_table.parse_as_slots) {
+          const auto parsed_slots = ReadScriptSlotRangesFromTable(
+            script_table.path,
+            static_cast<uint32_t>(state.script_param_ranges.size()),
+            state.script_param_record_count, source_script_param_record_count,
+            state.script_param_ranges, diagnostics);
+          state.table_counts.script_slot_count += parsed_slots;
+          continue;
+        }
+
+        if (script_table.resource_compatible) {
+          state.table_counts.script_resource_count
+            += script_table.size_bytes / sizeof(script::ScriptResourceDesc);
+          continue;
+        }
+
+        AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+          PakBuildPhase::kPlanning, "pak.plan.scripts_table_size_invalid",
+          "scripts.table is incompatible with known script table layouts.",
+          script_table.path);
+      }
+
+      if (source_uses_script_slot_layout && source_script_param_record_count > 0U) {
+        uint64_t global_script_param_count = 0;
+        if (!SafeAdd(state.script_param_record_count, source_script_param_record_count,
+              global_script_param_count)
+          || global_script_param_count > kMaxCountAsUint64) {
+          AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+            PakBuildPhase::kPlanning, "pak.plan.script_params_count_overflow",
+            "Global ScriptParamRecord count overflowed uint32.",
+            source_root);
+        } else {
+          state.script_param_record_count
+            = static_cast<uint32_t>(global_script_param_count);
         }
       }
 
@@ -1083,7 +1186,22 @@ auto ClassifyPatchActionsAndFinalizeBrowse(PlanningState& state) -> void
     });
   }
 
+  auto browse_assets = std::vector<std::reference_wrapper<const AggregatedAsset>> {};
+  browse_assets.reserve(assets.size());
   for (const auto& asset : assets) {
+    browse_assets.emplace_back(asset);
+  }
+  std::ranges::stable_sort(browse_assets,
+    [](const auto& lhs_ref, const auto& rhs_ref) {
+      const auto& lhs = lhs_ref.get();
+      const auto& rhs = rhs_ref.get();
+      if (lhs.source_order != rhs.source_order) {
+        return lhs.source_order < rhs.source_order;
+      }
+      return IsAssetKeyLess(lhs.key, rhs.key);
+    });
+  for (const auto& asset_ref : browse_assets) {
+    const auto& asset = asset_ref.get();
     if (!asset.virtual_path.empty()) {
       state.browse_map[asset.virtual_path] = asset.key;
     }
@@ -1139,7 +1257,6 @@ auto FinalizeScriptAndTables(PlanningState& state) -> void
       return lhs.slot_index < rhs.slot_index;
     });
 
-  uint32_t max_script_param_end = state.script_param_record_count;
   for (const auto& range : state.script_param_ranges) {
     uint64_t end = 0;
     if (!SafeAdd(range.params_array_offset, range.params_count, end)
@@ -1149,10 +1266,15 @@ auto FinalizeScriptAndTables(PlanningState& state) -> void
         "Script param range overflows uint32 bounds.");
       continue;
     }
-    max_script_param_end = (std::max)(max_script_param_end, static_cast<uint32_t>(end));
+
+    if (end > state.script_param_record_count) {
+      AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+        PakBuildPhase::kPlanning, "pak.plan.script_param_out_of_bounds",
+        "Script param range exceeds available ScriptParamRecord count.");
+    }
   }
 
-  state.data_plan.script_param_record_count = max_script_param_end;
+  state.data_plan.script_param_record_count = state.script_param_record_count;
   state.data_plan.script_param_ranges = std::move(state.script_param_ranges);
 
   SetTableCount(state.data_plan.tables, "texture_table",
@@ -1292,35 +1414,40 @@ auto PlanFileLayout(PlanningState& state) -> void
     .enabled = false,
     .offset = 0,
     .size_bytes = 0,
-    .virtual_paths = {},
+    .entries = {},
   };
   if (state.request->options.embed_browse_index && !state.browse_map.empty()) {
-    std::vector<std::string> browse_paths;
-    browse_paths.reserve(state.browse_map.size());
+    std::vector<pak::PakBrowseEntryPlan> browse_entries;
+    browse_entries.reserve(state.browse_map.size());
     for (const auto& entry : state.browse_map) {
-      browse_paths.push_back(entry.first);
+      browse_entries.push_back(pak::PakBrowseEntryPlan {
+        .asset_key = entry.second,
+        .virtual_path = entry.first,
+      });
     }
-    std::ranges::sort(browse_paths);
-
-    uint64_t string_table_size = 0;
-    for (const auto& path : browse_paths) {
-      string_table_size += path.size();
-    }
+    std::ranges::sort(browse_entries,
+      [](const pak::PakBrowseEntryPlan& lhs, const pak::PakBrowseEntryPlan& rhs) {
+        return lhs.virtual_path < rhs.virtual_path;
+      });
 
     const auto browse_payload_size
-      = static_cast<uint64_t>(sizeof(core::PakBrowseIndexHeader))
-      + (static_cast<uint64_t>(browse_paths.size())
-        * sizeof(core::PakBrowseIndexEntry))
-      + string_table_size;
+      = pak::MeasureBrowseIndexPayload(std::span<const pak::PakBrowseEntryPlan>(
+        browse_entries.data(), browse_entries.size()));
+    if (!browse_payload_size.has_value()) {
+      AddDiagnostic(state.output.diagnostics, pak::PakDiagnosticSeverity::kError,
+        pak::PakBuildPhase::kPlanning, "pak.plan.browse_index_measure_failed",
+        "Browse index payload size measurement overflowed or failed.");
+      return;
+    }
 
     cursor = AlignUp(cursor, AlignmentBytes { kBrowseAlignment });
     state.data_plan.browse_index = pak::PakBrowseIndexPlan {
       .enabled = true,
       .offset = cursor,
-      .size_bytes = browse_payload_size,
-      .virtual_paths = std::move(browse_paths),
+      .size_bytes = *browse_payload_size,
+      .entries = std::move(browse_entries),
     };
-    cursor += browse_payload_size;
+    cursor += *browse_payload_size;
   }
 
   cursor = AlignUp(cursor, AlignmentBytes { kFooterAlignment });
@@ -1356,6 +1483,26 @@ auto ValidateLayoutInvariants(PlanningState& state) -> void
   EnforceStageInvariant(state, size_covers_footer,
     "pak.plan.stage.layout.file_size_before_footer_end",
     "Planned file size is smaller than footer end.");
+
+  if (state.data_plan.browse_index.enabled) {
+    std::vector<std::byte> browse_payload;
+    const auto stored = pak::StoreBrowseIndexPayload(
+      std::span<const pak::PakBrowseEntryPlan>(
+        state.data_plan.browse_index.entries.data(),
+        state.data_plan.browse_index.entries.size()),
+      browse_payload);
+    EnforceStageInvariant(state, stored,
+      "pak.plan.stage.layout.browse_store_failed",
+      "Browse index measure/store serialization failed.");
+
+    if (stored) {
+      const auto measured_matches = state.data_plan.browse_index.size_bytes
+        == static_cast<uint64_t>(browse_payload.size());
+      EnforceStageInvariant(state, measured_matches,
+        "pak.plan.stage.layout.browse_size_mismatch",
+        "Browse index planned size does not match serialized payload size.");
+    }
+  }
 }
 
 auto ValidateAndFinalizeResult(PlanningState& state) -> void

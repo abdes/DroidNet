@@ -145,6 +145,7 @@ set(
   "Import/Internal/WorkPayloadStore.h"
   "Pak/PakPlan.h"
   "Pak/PakPlanBuilder.h"
+  "Pak/PakMeasureStore.h"
   "Pak/PakPlanPolicy.h"
   "Pak/PakValidation.h"
 )
@@ -205,6 +206,7 @@ set(
   "Loose/Validation.cpp"
   "Pak/PakPlan.cpp"
   "Pak/PakPlanBuilder.cpp"
+  "Pak/PakMeasureStore.cpp"
   "Pak/PakPlanPolicy.cpp"
   "Pak/PakValidation.cpp"
   "Pak/PakBuilder.cpp"
