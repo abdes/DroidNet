@@ -683,6 +683,17 @@ namespace {
     std::vector<script::ScriptParamRecord> params;
   };
 
+  struct SceneBindingContextOutcome final {
+    std::optional<ResolvedSceneState> state;
+    bool failed = false;
+  };
+
+  struct ComponentSlotPatchRef final {
+    size_t component_index = 0;
+    uint32_t slot_start_index = 0;
+    uint32_t slot_count = 0;
+  };
+
   auto BuildResolvedSceneStateFromDescriptor(ImportSession& session,
     const ImportRequest& request, const data::AssetKey scene_key,
     std::string scene_virtual_path, std::string scene_descriptor_relpath,
@@ -714,13 +725,163 @@ namespace {
     return state;
   }
 
+  auto ResolveSceneBindingContextFromInflightByVirtualPath(
+    ImportSession& session, const ImportRequest& request)
+    -> SceneBindingContextOutcome
+  {
+    const auto& target_scene_path
+      = request.options.scripting.target_scene_virtual_path;
+    auto matches = std::vector<const ImportRequest::InflightSceneContext*> {};
+    matches.reserve(request.inflight_scene_contexts.size());
+    for (const auto& candidate : request.inflight_scene_contexts) {
+      if (candidate.virtual_path == target_scene_path) {
+        matches.push_back(&candidate);
+      }
+    }
+
+    if (matches.size() > 1U) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "script.sidecar.inflight_target_scene_ambiguous",
+        "Multiple inflight scene contexts match target_scene_virtual_path");
+      return SceneBindingContextOutcome {
+        .state = std::nullopt,
+        .failed = true,
+      };
+    }
+    if (matches.empty()) {
+      return SceneBindingContextOutcome {
+        .state = std::nullopt,
+        .failed = false,
+      };
+    }
+
+    const auto* match = matches.front();
+    if (match->descriptor_relpath.empty()) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "script.sidecar.target_scene_invalid",
+        "Inflight scene context has empty descriptor_relpath");
+      return SceneBindingContextOutcome {
+        .state = std::nullopt,
+        .failed = true,
+      };
+    }
+
+    const auto state = BuildResolvedSceneStateFromDescriptor(session, request,
+      match->scene_key, match->virtual_path, match->descriptor_relpath,
+      match->descriptor_bytes);
+    return SceneBindingContextOutcome {
+      .state = state,
+      .failed = !state.has_value(),
+    };
+  }
+
+  auto ResolveSceneBindingContextFromInflightBySceneKey(ImportSession& session,
+    const ImportRequest& request, const data::AssetKey& scene_key)
+    -> SceneBindingContextOutcome
+  {
+    auto matches = std::vector<const ImportRequest::InflightSceneContext*> {};
+    matches.reserve(request.inflight_scene_contexts.size());
+    for (const auto& candidate : request.inflight_scene_contexts) {
+      if (candidate.scene_key == scene_key) {
+        matches.push_back(&candidate);
+      }
+    }
+
+    if (matches.size() > 1U) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "script.sidecar.inflight_target_scene_ambiguous",
+        "Multiple inflight scene contexts match the resolved target scene key");
+      return SceneBindingContextOutcome {
+        .state = std::nullopt,
+        .failed = true,
+      };
+    }
+    if (matches.empty()) {
+      return SceneBindingContextOutcome {
+        .state = std::nullopt,
+        .failed = false,
+      };
+    }
+
+    const auto* match = matches.front();
+    if (match->descriptor_relpath.empty()) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "script.sidecar.target_scene_invalid",
+        "Inflight scene context has empty descriptor_relpath");
+      return SceneBindingContextOutcome {
+        .state = std::nullopt,
+        .failed = true,
+      };
+    }
+
+    const auto state = BuildResolvedSceneStateFromDescriptor(session, request,
+      match->scene_key, match->virtual_path, match->descriptor_relpath,
+      match->descriptor_bytes);
+    return SceneBindingContextOutcome {
+      .state = state,
+      .failed = !state.has_value(),
+    };
+  }
+
+  auto ResolveSceneBindingContextFromCookedInspection(ImportSession& session,
+    const ImportRequest& request, const data::AssetKey& scene_key,
+    const std::vector<CookedInspectionContext>& cooked_contexts,
+    IAsyncFileReader& reader) -> co::Co<SceneBindingContextOutcome>
+  {
+    using data::AssetType;
+
+    for (auto it = cooked_contexts.rbegin(); it != cooked_contexts.rend();
+      ++it) {
+      const auto* scene_asset_entry
+        = FindAssetEntryByKey(it->inspection, scene_key);
+      if (scene_asset_entry == nullptr) {
+        continue;
+      }
+      if (static_cast<AssetType>(scene_asset_entry->asset_type)
+        != AssetType::kScene) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "script.sidecar.target_scene_not_scene",
+          "Target scene virtual path does not reference a scene asset");
+        co_return SceneBindingContextOutcome {
+          .state = std::nullopt,
+          .failed = true,
+        };
+      }
+
+      const auto descriptor_path
+        = it->cooked_root / scene_asset_entry->descriptor_relpath;
+      const auto scene_read = co_await reader.ReadFile(descriptor_path);
+      if (!scene_read.has_value()) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "script.sidecar.target_scene_read_failed",
+          "Failed reading target scene descriptor: "
+            + scene_read.error().ToString());
+        co_return SceneBindingContextOutcome {
+          .state = std::nullopt,
+          .failed = true,
+        };
+      }
+
+      const auto state = BuildResolvedSceneStateFromDescriptor(session, request,
+        scene_asset_entry->key, scene_asset_entry->virtual_path,
+        scene_asset_entry->descriptor_relpath, scene_read.value());
+      co_return SceneBindingContextOutcome {
+        .state = state,
+        .failed = !state.has_value(),
+      };
+    }
+
+    co_return SceneBindingContextOutcome {
+      .state = std::nullopt,
+      .failed = false,
+    };
+  }
+
   auto ResolveTargetSceneState(ImportSession& session,
     const ImportRequest& request, content::VirtualPathResolver& resolver,
     const std::vector<CookedInspectionContext>& cooked_contexts,
     IAsyncFileReader& reader) -> co::Co<std::optional<ResolvedSceneState>>
   {
-    using data::AssetType;
-
     const auto& target_scene_path
       = request.options.scripting.target_scene_virtual_path;
 
@@ -734,36 +895,12 @@ namespace {
       co_return std::nullopt;
     }
 
-    auto inflight_path_matches
-      = std::vector<const ImportRequest::InflightSceneContext*> {};
-    inflight_path_matches.reserve(request.inflight_scene_contexts.size());
-    for (const auto& candidate : request.inflight_scene_contexts) {
-      if (candidate.virtual_path == target_scene_path) {
-        inflight_path_matches.push_back(&candidate);
-      }
+    const auto inflight_path_outcome
+      = ResolveSceneBindingContextFromInflightByVirtualPath(session, request);
+    if (inflight_path_outcome.state.has_value()) {
+      co_return inflight_path_outcome.state;
     }
-
-    if (inflight_path_matches.size() > 1U) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.sidecar.inflight_target_scene_ambiguous",
-        "Multiple inflight scene contexts match target_scene_virtual_path");
-      co_return std::nullopt;
-    }
-
-    if (inflight_path_matches.size() == 1U) {
-      const auto* match = inflight_path_matches.front();
-      if (match->descriptor_relpath.empty()) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "script.sidecar.target_scene_invalid",
-          "Inflight scene context has empty descriptor_relpath");
-        co_return std::nullopt;
-      }
-      if (auto state = BuildResolvedSceneStateFromDescriptor(session, request,
-            match->scene_key, match->virtual_path, match->descriptor_relpath,
-            match->descriptor_bytes);
-        state.has_value()) {
-        co_return state;
-      }
+    if (inflight_path_outcome.failed) {
       co_return std::nullopt;
     }
 
@@ -774,70 +911,23 @@ namespace {
       co_return std::nullopt;
     }
 
-    auto inflight_key_matches
-      = std::vector<const ImportRequest::InflightSceneContext*> {};
-    inflight_key_matches.reserve(request.inflight_scene_contexts.size());
-    for (const auto& candidate : request.inflight_scene_contexts) {
-      if (candidate.scene_key == *resolver_key) {
-        inflight_key_matches.push_back(&candidate);
-      }
+    const auto inflight_key_outcome
+      = ResolveSceneBindingContextFromInflightBySceneKey(
+        session, request, *resolver_key);
+    if (inflight_key_outcome.state.has_value()) {
+      co_return inflight_key_outcome.state;
     }
-
-    if (inflight_key_matches.size() > 1U) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.sidecar.inflight_target_scene_ambiguous",
-        "Multiple inflight scene contexts match the resolved target scene key");
-      co_return std::nullopt;
-    }
-    if (inflight_key_matches.size() == 1U) {
-      const auto* match = inflight_key_matches.front();
-      if (match->descriptor_relpath.empty()) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "script.sidecar.target_scene_invalid",
-          "Inflight scene context has empty descriptor_relpath");
-        co_return std::nullopt;
-      }
-      if (auto state = BuildResolvedSceneStateFromDescriptor(session, request,
-            match->scene_key, match->virtual_path, match->descriptor_relpath,
-            match->descriptor_bytes);
-        state.has_value()) {
-        co_return state;
-      }
+    if (inflight_key_outcome.failed) {
       co_return std::nullopt;
     }
 
-    for (auto it = cooked_contexts.rbegin(); it != cooked_contexts.rend();
-      ++it) {
-      const auto* scene_asset_entry
-        = FindAssetEntryByKey(it->inspection, *resolver_key);
-      if (scene_asset_entry == nullptr) {
-        continue;
-      }
-      if (static_cast<AssetType>(scene_asset_entry->asset_type)
-        != AssetType::kScene) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "script.sidecar.target_scene_not_scene",
-          "Target scene virtual path does not reference a scene asset");
-        co_return std::nullopt;
-      }
-
-      const auto descriptor_path
-        = it->cooked_root / scene_asset_entry->descriptor_relpath;
-      const auto scene_read = co_await reader.ReadFile(descriptor_path);
-      if (!scene_read.has_value()) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "script.sidecar.target_scene_read_failed",
-          "Failed reading target scene descriptor: "
-            + scene_read.error().ToString());
-        co_return std::nullopt;
-      }
-
-      if (auto state = BuildResolvedSceneStateFromDescriptor(session, request,
-            scene_asset_entry->key, scene_asset_entry->virtual_path,
-            scene_asset_entry->descriptor_relpath, scene_read.value());
-        state.has_value()) {
-        co_return state;
-      }
+    const auto cooked_outcome
+      = co_await ResolveSceneBindingContextFromCookedInspection(
+        session, request, *resolver_key, cooked_contexts, reader);
+    if (cooked_outcome.state.has_value()) {
+      co_return cooked_outcome.state;
+    }
+    if (cooked_outcome.failed) {
       co_return std::nullopt;
     }
 
@@ -1031,6 +1121,7 @@ namespace {
     }
 
     auto result = MergedScriptsState {};
+    auto patch_refs = std::vector<ComponentSlotPatchRef> {};
     for (const auto& [node_index, slots] : merged_bindings) {
       if (slots.empty()) {
         continue;
@@ -1051,8 +1142,15 @@ namespace {
       auto component = script::ScriptingComponentRecord {};
       component.node_index = node_index;
       component.flags = script::ScriptingComponentFlags::kNone;
-      component.slot_start_index = static_cast<uint32_t>(result.slots.size());
-      component.slot_count = static_cast<uint32_t>(slots.size());
+      component.slot_start_index = 0;
+      component.slot_count = 0;
+      result.components.push_back(component);
+
+      patch_refs.push_back(ComponentSlotPatchRef {
+        .component_index = result.components.size() - 1U,
+        .slot_start_index = static_cast<uint32_t>(result.slots.size()),
+        .slot_count = static_cast<uint32_t>(slots.size()),
+      });
 
       for (const auto& slot_payload : slots) {
         auto slot = slot_payload.slot;
@@ -1077,8 +1175,15 @@ namespace {
         result.params.insert(result.params.end(), slot_payload.params.begin(),
           slot_payload.params.end());
       }
+    }
 
-      result.components.push_back(component);
+    for (const auto& patch_ref : patch_refs) {
+      DCHECK_F(patch_ref.component_index < result.components.size(),
+        "Sidecar patch-ref invariant failure: component index is out of "
+        "bounds");
+      auto& component = result.components[patch_ref.component_index];
+      component.slot_start_index = patch_ref.slot_start_index;
+      component.slot_count = patch_ref.slot_count;
     }
 
     return result;

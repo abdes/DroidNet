@@ -550,24 +550,24 @@ Exit criteria:
 
 Coding tasks:
 
-- [ ] Implement scene binding context providers:
+- [x] Implement scene binding context providers:
   from scene build output and cooked scene inspection.
-- [ ] Implement patch refs (`slot_start_index`, `slot_count`) and patch apply.
+- [x] Implement patch refs (`slot_start_index`, `slot_count`) and patch apply.
 - [x] Implement standalone-mode descriptor rewrite/index update wiring.
 - [x] Enforce sidecar node-binding overwrite semantics (node-index identity).
 
 Test tasks:
 
-- [ ] Concurrent flow parity test (scene + sidecar).
+- [x] Concurrent flow parity test (scene + sidecar).
 - [x] Standalone sidecar-after-scene flow test.
-- [ ] Context parity test (concurrent vs standalone serialized equivalence).
-- [ ] Node-binding overwrite and additive update behavior tests.
+- [x] Context parity test (concurrent vs standalone serialized equivalence).
+- [x] Node-binding overwrite and additive update behavior tests.
 - [x] Node-binding overwrite/rebind behavior test.
 
 Exit criteria:
 
-- [ ] Both concurrent and standalone workflows behave identically for same inputs.
-- [ ] Patch/ref application is deterministic and validated.
+- [x] Both concurrent and standalone workflows behave identically for same inputs.
+- [x] Patch/ref application is deterministic and validated.
 
 ### 11.6 Phase 5: Async Service and Reporting Integration
 
