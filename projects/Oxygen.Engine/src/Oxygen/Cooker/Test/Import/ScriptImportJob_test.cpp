@@ -51,6 +51,52 @@ namespace {
       [code](const auto& diagnostic) { return diagnostic.code == code; });
   }
 
+  auto CountSeverity(const std::vector<ImportDiagnostic>& diagnostics,
+    const ImportSeverity severity) -> uint32_t
+  {
+    return static_cast<uint32_t>(std::ranges::count_if(
+      diagnostics, [severity](const ImportDiagnostic& diagnostic) {
+        return diagnostic.severity == severity;
+      }));
+  }
+
+  auto HasAnyObjectPath(const std::vector<ImportDiagnostic>& diagnostics)
+    -> bool
+  {
+    return std::ranges::any_of(
+      diagnostics, [](const ImportDiagnostic& diagnostic) {
+        return !diagnostic.object_path.empty();
+      });
+  }
+
+  auto ExpectDiagnosticFieldsComplete(
+    const std::vector<ImportDiagnostic>& diagnostics) -> void
+  {
+    ASSERT_FALSE(diagnostics.empty());
+    for (const auto& diagnostic : diagnostics) {
+      const auto valid_severity = diagnostic.severity == ImportSeverity::kInfo
+        || diagnostic.severity == ImportSeverity::kWarning
+        || diagnostic.severity == ImportSeverity::kError;
+      EXPECT_TRUE(valid_severity);
+      EXPECT_FALSE(diagnostic.code.empty());
+      EXPECT_FALSE(diagnostic.message.empty());
+      EXPECT_FALSE(diagnostic.source_path.empty());
+    }
+  }
+
+  auto ExpectPackagingSummaryMatchesDiagnostics(const ImportReport& report)
+    -> void
+  {
+    EXPECT_EQ(report.packaging.outputs_written,
+      static_cast<uint32_t>(report.outputs.size()));
+    EXPECT_EQ(report.packaging.diagnostics_info,
+      CountSeverity(report.diagnostics, ImportSeverity::kInfo));
+    EXPECT_EQ(report.packaging.diagnostics_warning,
+      CountSeverity(report.diagnostics, ImportSeverity::kWarning));
+    EXPECT_EQ(report.packaging.diagnostics_error,
+      CountSeverity(report.diagnostics, ImportSeverity::kError));
+  }
+
   auto MakeTempCookedRoot(std::string_view suffix) -> std::filesystem::path
   {
     auto root = std::filesystem::temp_directory_path() / "oxygen_script_import";
@@ -699,6 +745,46 @@ namespace {
       HasDiagnosticCode(report.diagnostics, "script.asset.source_read_failed"));
   }
 
+  NOLINT_TEST_F(
+    ScriptAssetImportTest, DiagnosticsFieldsAreCompleteForScriptAssetFailures)
+  {
+    const auto cooked_root
+      = MakeTempCookedRoot("script_diagnostics_fields_asset_failure");
+    const auto source_path = cooked_root / "input" / "invalid_combo.luau";
+    WriteTextFile(source_path, "return 3");
+
+    const auto report = Submit(MakeScriptRequest(
+      source_path, cooked_root, ScriptStorageMode::kExternal, true));
+    ASSERT_FALSE(report.success);
+    ExpectDiagnosticFieldsComplete(report.diagnostics);
+  }
+
+  NOLINT_TEST_F(
+    ScriptAssetImportTest, PackagingSummaryMatchesDiagnosticsForFailures)
+  {
+    const auto cooked_root
+      = MakeTempCookedRoot("script_packaging_summary_asset_failure");
+    const auto source_path = cooked_root / "input" / "summary_failure.luau";
+    WriteTextFile(source_path, "return 8");
+
+    const auto report = Submit(MakeScriptRequest(
+      source_path, cooked_root, ScriptStorageMode::kExternal, true));
+    ASSERT_FALSE(report.success);
+    ExpectPackagingSummaryMatchesDiagnostics(report);
+  }
+
+  NOLINT_TEST_F(ScriptAssetImportTest, DispatchMatrixScriptOnly)
+  {
+    const auto cooked_root = MakeTempCookedRoot("script_dispatch_script_only");
+    const auto source_path = cooked_root / "input" / "dispatch_only.luau";
+    WriteTextFile(source_path, "return 11");
+
+    const auto report = Submit(MakeScriptRequest(
+      source_path, cooked_root, ScriptStorageMode::kExternal, false));
+    ASSERT_TRUE(report.success);
+    EXPECT_EQ(report.scripts_written, 1U);
+  }
+
   //! Sidecar success path uses external script assets so sidecar owns
   //! scripts.table/scripts.data slot+param layout in this cooked root.
   NOLINT_TEST_F(
@@ -877,6 +963,299 @@ namespace {
     ASSERT_TRUE(script_asset.has_value());
     EXPECT_TRUE(
       std::filesystem::exists(cooked_root / script_asset->descriptor_relpath));
+  }
+
+  NOLINT_TEST_F(
+    ScriptingSidecarImportTest, DispatchMatrixSidecarOnlyCookedContext)
+  {
+    const auto cooked_root
+      = MakeTempCookedRoot("script_dispatch_sidecar_cooked_context");
+    const auto script_source = cooked_root / "input" / "dispatch_cooked.luau";
+    WriteTextFile(script_source, "return 21");
+
+    const auto model_path = ModelPath();
+    ASSERT_TRUE(std::filesystem::exists(model_path));
+    ASSERT_TRUE(Submit(MakeScriptRequest(script_source, cooked_root,
+                         ScriptStorageMode::kExternal, false))
+        .success);
+    ASSERT_TRUE(Submit(MakeSceneRequest(model_path, cooked_root)).success);
+
+    const auto inspection = LoadInspection(cooked_root);
+    const auto scene_asset
+      = FindFirstAssetByType(inspection, AssetType::kScene);
+    const auto script_asset
+      = FindFirstAssetByType(inspection, AssetType::kScript);
+    ASSERT_TRUE(scene_asset.has_value());
+    ASSERT_TRUE(script_asset.has_value());
+
+    const auto sidecar_source = cooked_root / "input" / "dispatch_cooked.json";
+    WriteTextFile(
+      sidecar_source, MakeSidecarPayload(script_asset->virtual_path));
+
+    const auto report = Submit(MakeSidecarRequest(
+      sidecar_source, cooked_root, scene_asset->virtual_path));
+    ASSERT_TRUE(report.success);
+  }
+
+  NOLINT_TEST_F(
+    ScriptingSidecarImportTest, DispatchMatrixSidecarOnlyInflightContext)
+  {
+    const auto cooked_root
+      = MakeTempCookedRoot("script_dispatch_sidecar_inflight_context");
+    const auto inflight_scene_root
+      = MakeTempCookedRoot("script_dispatch_sidecar_inflight_scene");
+    const auto script_source = cooked_root / "input" / "dispatch_inflight.luau";
+    WriteTextFile(script_source, "return 31");
+
+    const auto model_path = ModelPath();
+    ASSERT_TRUE(std::filesystem::exists(model_path));
+    ASSERT_TRUE(Submit(MakeScriptRequest(script_source, cooked_root,
+                         ScriptStorageMode::kExternal, false))
+        .success);
+    ASSERT_TRUE(
+      Submit(MakeSceneRequest(model_path, inflight_scene_root)).success);
+
+    const auto inflight_inspection = LoadInspection(inflight_scene_root);
+    const auto inflight_scene
+      = FindFirstAssetByType(inflight_inspection, AssetType::kScene);
+    const auto script_asset
+      = FindFirstAssetByType(LoadInspection(cooked_root), AssetType::kScript);
+    ASSERT_TRUE(inflight_scene.has_value());
+    ASSERT_TRUE(script_asset.has_value());
+
+    const auto sidecar_source
+      = cooked_root / "input" / "dispatch_inflight.json";
+    WriteTextFile(
+      sidecar_source, MakeSidecarPayload(script_asset->virtual_path));
+
+    auto request = MakeSidecarRequest(
+      sidecar_source, cooked_root, inflight_scene->virtual_path);
+    request.inflight_scene_contexts.push_back(
+      MakeInflightSceneContext(inflight_scene_root, *inflight_scene));
+    const auto report = Submit(std::move(request));
+    ASSERT_TRUE(report.success);
+  }
+
+  NOLINT_TEST_F(ScriptingSidecarImportTest, DispatchMatrixScriptAndSidecarBatch)
+  {
+    const auto cooked_root = MakeTempCookedRoot("script_dispatch_batch");
+    const auto model_path = ModelPath();
+    ASSERT_TRUE(std::filesystem::exists(model_path));
+
+    const auto base_script_source = cooked_root / "input" / "base_batch.luau";
+    WriteTextFile(base_script_source, "return 1");
+    ASSERT_TRUE(Submit(MakeScriptRequest(base_script_source, cooked_root,
+                         ScriptStorageMode::kExternal, false))
+        .success);
+    ASSERT_TRUE(Submit(MakeSceneRequest(model_path, cooked_root)).success);
+
+    const auto inspection = LoadInspection(cooked_root);
+    const auto scene_asset
+      = FindFirstAssetByType(inspection, AssetType::kScene);
+    const auto base_script
+      = FindScriptAssetByDescriptorName(inspection, "base_batch.oscript");
+    ASSERT_TRUE(scene_asset.has_value());
+    ASSERT_TRUE(base_script.has_value());
+
+    const auto sidecar_source = cooked_root / "input" / "dispatch_batch.json";
+    WriteTextFile(
+      sidecar_source, MakeSidecarPayload(base_script->virtual_path));
+
+    const auto extra_script_source = cooked_root / "input" / "extra_batch.luau";
+    WriteTextFile(extra_script_source, "return 2");
+
+    auto script_report = ImportReport {};
+    auto sidecar_report = ImportReport {};
+    std::latch done(2);
+
+    const auto script_submit = Service().SubmitImport(
+      MakeScriptRequest(
+        extra_script_source, cooked_root, ScriptStorageMode::kExternal, false),
+      [&script_report, &done](
+        const auto /*job_id*/, const ImportReport& report) {
+        script_report = report;
+        done.count_down();
+      });
+    ASSERT_TRUE(script_submit.has_value());
+
+    const auto sidecar_submit
+      = Service().SubmitImport(MakeSidecarRequest(sidecar_source, cooked_root,
+                                 scene_asset->virtual_path),
+        [&sidecar_report, &done](
+          const auto /*job_id*/, const ImportReport& report) {
+          sidecar_report = report;
+          done.count_down();
+        });
+    ASSERT_TRUE(sidecar_submit.has_value());
+
+    done.wait();
+    EXPECT_TRUE(script_report.success);
+    EXPECT_TRUE(sidecar_report.success);
+  }
+
+  NOLINT_TEST_F(
+    ScriptingSidecarImportTest, DiagnosticsFieldsAreCompleteForSidecarFailures)
+  {
+    const auto cooked_root
+      = MakeTempCookedRoot("script_diagnostics_fields_sidecar_failure");
+    const auto model_path = ModelPath();
+    ASSERT_TRUE(std::filesystem::exists(model_path));
+    ASSERT_TRUE(Submit(MakeSceneRequest(model_path, cooked_root)).success);
+
+    const auto inspection = LoadInspection(cooked_root);
+    const auto scene_asset
+      = FindFirstAssetByType(inspection, AssetType::kScene);
+    ASSERT_TRUE(scene_asset.has_value());
+
+    const auto sidecar_source
+      = cooked_root / "input" / "diagnostics_fields_sidecar.json";
+    WriteTextFile(sidecar_source,
+      MakeSidecarPayload("Scripts/not_canonical_script_path.oscript"));
+
+    const auto report = Submit(MakeSidecarRequest(
+      sidecar_source, cooked_root, scene_asset->virtual_path));
+    ASSERT_FALSE(report.success);
+    ExpectDiagnosticFieldsComplete(report.diagnostics);
+    EXPECT_TRUE(HasAnyObjectPath(report.diagnostics));
+  }
+
+  NOLINT_TEST_F(
+    ScriptingSidecarImportTest, PackagingSummaryMatchesDiagnosticsForFailures)
+  {
+    const auto cooked_root
+      = MakeTempCookedRoot("script_packaging_summary_sidecar_failure");
+    const auto model_path = ModelPath();
+    ASSERT_TRUE(std::filesystem::exists(model_path));
+    ASSERT_TRUE(Submit(MakeSceneRequest(model_path, cooked_root)).success);
+
+    const auto inspection = LoadInspection(cooked_root);
+    const auto scene_asset
+      = FindFirstAssetByType(inspection, AssetType::kScene);
+    ASSERT_TRUE(scene_asset.has_value());
+
+    const auto sidecar_source
+      = cooked_root / "input" / "summary_sidecar_failure.json";
+    WriteTextFile(
+      sidecar_source, MakeSidecarPayload("/Scripts/missing_script.oscript"));
+
+    const auto report = Submit(MakeSidecarRequest(
+      sidecar_source, cooked_root, scene_asset->virtual_path));
+    ASSERT_FALSE(report.success);
+    ExpectPackagingSummaryMatchesDiagnostics(report);
+  }
+
+  NOLINT_TEST_F(ScriptingSidecarImportTest,
+    DependencyOrderingRequiresScriptAvailabilityBeforeSidecarResolution)
+  {
+    const auto cooked_root = MakeTempCookedRoot("script_dependency_ordering");
+    const auto model_path = ModelPath();
+    ASSERT_TRUE(std::filesystem::exists(model_path));
+    ASSERT_TRUE(Submit(MakeSceneRequest(model_path, cooked_root)).success);
+
+    const auto inspection_before = LoadInspection(cooked_root);
+    const auto scene_asset
+      = FindFirstAssetByType(inspection_before, AssetType::kScene);
+    ASSERT_TRUE(scene_asset.has_value());
+
+    const auto sidecar_source
+      = cooked_root / "input" / "dependency_ordering.json";
+    WriteTextFile(
+      sidecar_source, MakeSidecarPayload("/Scripts/deferred.oscript"));
+
+    const auto first_report = Submit(MakeSidecarRequest(
+      sidecar_source, cooked_root, scene_asset->virtual_path));
+    ASSERT_FALSE(first_report.success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      first_report.diagnostics, "script.sidecar.script_ref_unresolved"));
+
+    const auto script_source = cooked_root / "input" / "deferred.luau";
+    WriteTextFile(script_source, "return 55");
+    ASSERT_TRUE(Submit(MakeScriptRequest(script_source, cooked_root,
+                         ScriptStorageMode::kExternal, false))
+        .success);
+
+    const auto inspection_after_script = LoadInspection(cooked_root);
+    const auto deferred_script = FindScriptAssetByDescriptorName(
+      inspection_after_script, "deferred.oscript");
+    ASSERT_TRUE(deferred_script.has_value());
+    WriteTextFile(
+      sidecar_source, MakeSidecarPayload(deferred_script->virtual_path));
+
+    const auto second_report = Submit(MakeSidecarRequest(
+      sidecar_source, cooked_root, scene_asset->virtual_path));
+    EXPECT_TRUE(second_report.success);
+  }
+
+  NOLINT_TEST_F(ScriptingSidecarImportTest,
+    CycleRejectionFailsWhenReferenceResolvesToNonScriptAsset)
+  {
+    const auto cooked_root = MakeTempCookedRoot("script_cycle_rejection");
+    const auto model_path = ModelPath();
+    ASSERT_TRUE(std::filesystem::exists(model_path));
+    ASSERT_TRUE(Submit(MakeSceneRequest(model_path, cooked_root)).success);
+
+    const auto inspection = LoadInspection(cooked_root);
+    const auto scene_asset
+      = FindFirstAssetByType(inspection, AssetType::kScene);
+    ASSERT_TRUE(scene_asset.has_value());
+
+    const auto sidecar_source = cooked_root / "input" / "cycle_reject.json";
+    WriteTextFile(
+      sidecar_source, MakeSidecarPayload(scene_asset->virtual_path));
+
+    const auto report = Submit(MakeSidecarRequest(
+      sidecar_source, cooked_root, scene_asset->virtual_path));
+    EXPECT_FALSE(report.success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      report.diagnostics, "script.sidecar.script_ref_not_script_asset"));
+  }
+
+  NOLINT_TEST_F(ScriptingSidecarImportTest,
+    DiagnosticsOrderingIsDeterministicAcrossRepeatedInvalidRuns)
+  {
+    const auto cooked_root
+      = MakeTempCookedRoot("script_diagnostics_ordering_determinism");
+    const auto model_path = ModelPath();
+    ASSERT_TRUE(std::filesystem::exists(model_path));
+    ASSERT_TRUE(Submit(MakeSceneRequest(model_path, cooked_root)).success);
+
+    const auto inspection = LoadInspection(cooked_root);
+    const auto scene_asset
+      = FindFirstAssetByType(inspection, AssetType::kScene);
+    ASSERT_TRUE(scene_asset.has_value());
+
+    const auto sidecar_source
+      = cooked_root / "input" / "diagnostics_ordering.json";
+    WriteTextFile(sidecar_source,
+      MakeSidecarPayload(std::vector {
+        SidecarBindingSpec { .node_index = 99999U,
+          .slot_id = "oob",
+          .script_virtual_path = "/Scripts/missing.oscript",
+          .execution_order = 1 },
+        SidecarBindingSpec { .node_index = 0U,
+          .slot_id = "bad_path",
+          .script_virtual_path = "Scripts/not_canonical.oscript",
+          .execution_order = 2 },
+      }));
+
+    const auto first_report = Submit(MakeSidecarRequest(
+      sidecar_source, cooked_root, scene_asset->virtual_path));
+    const auto second_report = Submit(MakeSidecarRequest(
+      sidecar_source, cooked_root, scene_asset->virtual_path));
+    ASSERT_FALSE(first_report.success);
+    ASSERT_FALSE(second_report.success);
+
+    const auto MakeDiagnosticSignature
+      = [](const ImportReport& report) -> std::vector<std::string> {
+      auto signature = std::vector<std::string> {};
+      signature.reserve(report.diagnostics.size());
+      for (const auto& diagnostic : report.diagnostics) {
+        signature.push_back(diagnostic.code + "|" + diagnostic.object_path);
+      }
+      return signature;
+    };
+    EXPECT_EQ(MakeDiagnosticSignature(first_report),
+      MakeDiagnosticSignature(second_report));
   }
 
   NOLINT_TEST_F(

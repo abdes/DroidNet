@@ -608,18 +608,18 @@ Coding tasks:
 
 Test tasks:
 
-- [ ] Diagnostic field completeness tests (`severity`, `code`, `message`,
+- [x] Diagnostic field completeness tests (`severity`, `code`, `message`,
   optional `source_path`/`object_path`).
-- [ ] Summary-counter consistency tests vs emitted diagnostics.
-- [ ] Dispatch matrix tests:
+- [x] Summary-counter consistency tests vs emitted diagnostics.
+- [x] Dispatch matrix tests:
   script-only, sidecar-only inflight, sidecar-only cooked, script+sidecar.
 - [x] Deterministic repeated-run byte/record ordering tests.
-- [ ] Dependency ordering and cycle-rejection tests.
+- [x] Dependency ordering and cycle-rejection tests.
 
 Exit criteria:
 
-- [ ] Diagnostics are CI-grade, stable, and complete.
-- [ ] Determinism guarantees in Section 10 are fully covered by tests.
+- [x] Diagnostics are CI-grade, stable, and complete.
+- [x] Determinism guarantees in Section 10 are fully covered by tests.
 
 ## 12. Non-Goals
 
