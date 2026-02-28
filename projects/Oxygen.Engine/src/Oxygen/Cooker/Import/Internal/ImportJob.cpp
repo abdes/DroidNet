@@ -227,11 +227,10 @@ auto ImportJob::MainAsync() -> co::Co<>
     ProgressEventKind::kJobStarted, ImportPhase::kPending, 0.0f, "Job started");
 
   auto make_exception_report = [&](std::string_view message) -> ImportReport {
-    ImportReport report {
-      .cooked_root
-      = request_.cooked_root.value_or(request_.source_path.parent_path()),
-      .success = false,
-    };
+    auto report = ImportReport {};
+    report.cooked_root
+      = request_.cooked_root.value_or(request_.source_path.parent_path());
+    report.success = false;
 
     report.diagnostics.push_back({
       .severity = ImportSeverity::kError,
@@ -334,11 +333,10 @@ auto ImportJob::MainAsync() -> co::Co<>
 auto ImportJob::MakeCancelledReport(const ImportRequest& request) const
   -> ImportReport
 {
-  ImportReport report {
-    .cooked_root
-    = request.cooked_root.value_or(request.source_path.parent_path()),
-    .success = false,
-  };
+  auto report = ImportReport {};
+  report.cooked_root
+    = request.cooked_root.value_or(request.source_path.parent_path());
+  report.success = false;
 
   report.telemetry = MakeZeroTelemetry();
 
@@ -355,11 +353,10 @@ auto ImportJob::MakeCancelledReport(const ImportRequest& request) const
 auto ImportJob::MakeNoFileWriterReport(const ImportRequest& request) const
   -> ImportReport
 {
-  ImportReport report {
-    .cooked_root
-    = request.cooked_root.value_or(request.source_path.parent_path()),
-    .success = false,
-  };
+  auto report = ImportReport {};
+  report.cooked_root
+    = request.cooked_root.value_or(request.source_path.parent_path());
+  report.success = false;
 
   report.telemetry = MakeZeroTelemetry();
 

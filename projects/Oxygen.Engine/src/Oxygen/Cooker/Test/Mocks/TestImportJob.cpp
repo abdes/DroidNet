@@ -32,13 +32,10 @@ TestImportJob::TestImportJob(detail::ImportJobParams params, Config config)
 auto TestImportJob::ExecuteAsync() -> co::Co<ImportReport>
 {
   auto make_canceled_report = [&]() -> ImportReport {
-    ImportReport report {
-      .cooked_root
-      = Request().cooked_root.value_or(Request().source_path.parent_path()),
-      .diagnostics = {},
-      .outputs = {},
-      .success = false,
-    };
+    auto report = ImportReport {};
+    report.cooked_root
+      = Request().cooked_root.value_or(Request().source_path.parent_path());
+    report.success = false;
 
     report.diagnostics.push_back({
       .severity = ImportSeverity::kInfo,
@@ -102,13 +99,10 @@ auto TestImportJob::ExecuteAsync() -> co::Co<ImportReport>
     }
   }
 
-  ImportReport report {
-    .cooked_root
-    = Request().cooked_root.value_or(Request().source_path.parent_path()),
-    .diagnostics = {},
-    .outputs = {},
-    .success = true,
-  };
+  auto report = ImportReport {};
+  report.cooked_root
+    = Request().cooked_root.value_or(Request().source_path.parent_path());
+  report.success = true;
 
   co_return report;
 }

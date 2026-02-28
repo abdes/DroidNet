@@ -576,23 +576,23 @@ Coding tasks:
 - [x] Keep single submit path (`SubmitImport(ImportRequest, ...)`) and dispatch
   script/sidecar via `request.options.scripting.import_kind`.
 - [x] Wire scripting dispatch through existing job-factory/internal job path.
-- [ ] Extend `ImportReport` counters:
+- [x] Extend `ImportReport` counters:
   `scripts_written`, `scripting_components_written`, `script_slots_written`,
   `script_params_written`.
-- [ ] Preserve existing callback, shutdown, and cancellation contracts.
+- [x] Preserve existing callback, shutdown, and cancellation contracts.
 
 Test tasks:
 
-- [ ] Submit rejection semantics (`std::nullopt`) for invalid/shutdown cases.
-- [ ] Completion/progress callback behavior parity with existing imports.
-- [ ] Report counter population tests for script-only and sidecar jobs.
-- [ ] Mixed-batch commit semantics:
+- [x] Submit rejection semantics (`std::nullopt`) for invalid/shutdown cases.
+- [x] Completion/progress callback behavior parity with existing imports.
+- [x] Report counter population tests for script-only and sidecar jobs.
+- [x] Mixed-batch commit semantics:
   successful script imports remain committed when sidecar fails atomically.
 
 Exit criteria:
 
-- [ ] Single submit API behavior remains identical to existing import patterns.
-- [ ] Report and telemetry counters are consistent and deterministic.
+- [x] Single submit API behavior remains identical to existing import patterns.
+- [x] Report and telemetry counters are consistent and deterministic.
 
 ### 11.7 Phase 6: Diagnostics, Determinism, and Conformance Closure
 
