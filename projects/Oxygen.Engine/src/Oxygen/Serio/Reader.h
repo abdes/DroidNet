@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <array>
 #include <bit>
 #include <functional>
 #include <string>
@@ -15,6 +14,7 @@
 #include <Oxygen/Base/Endian.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Serio/AlignmentGuard.h>
 #include <Oxygen/Serio/Stream.h>
 
@@ -250,9 +250,9 @@ auto Load(AnyReader& reader, T& value) -> Result<void>
   static_assert(std::has_unique_object_representations_v<T>,
     "Type may have platform-dependent representation");
   CHECK_RESULT(reader.AlignTo(alignof(T)));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::span(reinterpret_cast<std::byte*>(&value),
-      sizeof(T)))); // NOLINT(*-reinterpret-cast)
+  CHECK_RESULT(reader.ReadBlobInto(
+    // NOLINTNEXTLINE(*-reinterpret-cast)
+    std::span(reinterpret_cast<std::byte*>(&value), sizeof(T))));
 
   if (!IsLittleEndian() && sizeof(T) > 1) {
     value = ByteSwap(value);
@@ -284,9 +284,9 @@ auto Load(AnyReader& reader, T& value) -> Result<void>
   static_assert(std::numeric_limits<T>::is_iec559,
     "Platform must use IEEE-754 floating point representation");
   CHECK_RESULT(reader.AlignTo(alignof(T)));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::span(reinterpret_cast<std::byte*>(&value),
-      sizeof(T)))); // NOLINT(*-reinterpret-cast)
+  CHECK_RESULT(reader.ReadBlobInto(
+    // NOLINTNEXTLINE(*-reinterpret-cast)
+    std::span(reinterpret_cast<std::byte*>(&value), sizeof(T))));
 
   if (!IsLittleEndian() && sizeof(T) > 1) {
     value = ByteSwap(value);
@@ -341,6 +341,23 @@ inline auto Load(AnyReader& reader, std::string& value) noexcept -> Result<void>
     // NOLINTNEXTLINE(*-reinterpret-cast)
     std::span(reinterpret_cast<std::byte*>(value.data()), length)));
   return {};
+}
+
+//! Deserializes a UUID as its raw 16-byte canonical binary payload.
+/*!
+ Reads exactly 16 bytes and stores them in UUID canonical byte order.
+ Serialization is byte-stable and does not apply endian conversion.
+
+ @param reader Reader to deserialize from.
+ @param value UUID output value.
+ @return Result of the read operation.
+
+ @see Store(AnyWriter&, const Uuid&)
+*/
+inline auto Load(AnyReader& reader, Uuid& value) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  return reader.ReadBlobInto(oxygen::as_writable_bytes(value));
 }
 
 //! Deserializes a std::vector from the stream.
