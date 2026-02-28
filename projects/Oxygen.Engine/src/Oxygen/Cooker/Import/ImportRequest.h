@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -14,6 +15,7 @@
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::import {
@@ -36,6 +38,21 @@ struct ImportSource final {
 
 //! Request for importing a source file into a loose cooked container.
 struct ImportRequest final {
+  //! Inflight scene binding context for scripting-sidecar resolution.
+  /*!
+   These entries are orchestration-provided runtime context, not authored
+
+   * import options. They are consumed only by sidecar imports to resolve and
+
+   * patch a scene that may not yet be present in the cooked-root index.
+  */
+  struct InflightSceneContext final {
+    data::AssetKey scene_key {};
+    std::string virtual_path;
+    std::string descriptor_relpath;
+    std::vector<std::byte> descriptor_bytes;
+  };
+
   //! Source file (FBX, glTF, GLB, or primary texture).
   std::filesystem::path source_path;
 
@@ -74,6 +91,26 @@ struct ImportRequest final {
 
   //! Import options.
   ImportOptions options = {};
+
+  //! Optional cooked roots mounted for resolver-only scene lookup context.
+  /*!
+   The sidecar pipeline mounts these roots in the listed order after the
+
+   * request cooked root, so later entries have higher precedence in
+
+   * `content::VirtualPathResolver`.
+  */
+  std::vector<std::filesystem::path> cooked_context_roots;
+
+  //! Optional inflight scene contexts for sidecar target resolution.
+  /*!
+   The sidecar pipeline treats exact virtual-path matches as an inflight
+
+   * fast-path. If multiple inflight entries match the target path, the request
+
+   * fails with an ambiguity diagnostic.
+  */
+  std::vector<InflightSceneContext> inflight_scene_contexts;
 
   //! Derives a stable scene name from the source file stem.
   /*!
