@@ -414,6 +414,60 @@ namespace {
     NOLINT_EXPECT_THROW(cli->Parse(argc, argv), CmdLineArgumentsError);
   }
 
+  //! Scenario: Dash-dash routes all following tokens to default positionals.
+  NOLINT_TEST(
+    GlobalOptions, DashDashWithDefaultCommandTreatsFollowingAsPositionalValues)
+  {
+    // Arrange
+    const Command::Ptr default_command { CommandBuilder(Command::DEFAULT)
+        .WithPositionalArguments(
+          Option::Rest().WithValue<std::string>().Build())
+        .Build() };
+    const Command::Ptr batch_command = CommandBuilder("batch");
+    const auto cli = CliBuilder()
+                       .ProgramName("tool")
+                       .WithTheme(CliTheme::Plain())
+                       .WithCommand(default_command)
+                       .WithCommand(batch_command)
+                       .Build();
+
+    constexpr int argc = 6;
+    const char* argv[argc]
+      = { "tool", "--", "batch", "--manifest", "m.json", "--to-ui" };
+
+    // Act
+    const auto context = cli->Parse(argc, argv);
+
+    // Assert
+    ASSERT_TRUE(context.ovm.HasOption(Option::key_rest_));
+    const auto& values = context.ovm.ValuesOf(Option::key_rest_);
+    ASSERT_THAT(values.size(), Eq(4U));
+    EXPECT_THAT(values[0].GetAs<std::string>(), Eq("batch"));
+    EXPECT_THAT(values[1].GetAs<std::string>(), Eq("--manifest"));
+    EXPECT_THAT(values[2].GetAs<std::string>(), Eq("m.json"));
+    EXPECT_THAT(values[3].GetAs<std::string>(), Eq("--to-ui"));
+  }
+
+  //! Scenario: Dash-dash with no positional sink reports an argument error.
+  NOLINT_TEST(GlobalOptions, DashDashWithDefaultCommandAndNoPositionalIsError)
+  {
+    // Arrange
+    const Command::Ptr default_command { CommandBuilder(Command::DEFAULT) };
+    const Command::Ptr batch_command = CommandBuilder("batch");
+    const auto cli = CliBuilder()
+                       .ProgramName("tool")
+                       .WithTheme(CliTheme::Plain())
+                       .WithCommand(default_command)
+                       .WithCommand(batch_command)
+                       .Build();
+
+    constexpr int argc = 3;
+    const char* argv[argc] = { "tool", "--", "batch" };
+
+    // Act & Assert
+    NOLINT_EXPECT_THROW(cli->Parse(argc, argv), CmdLineArgumentsError);
+  }
+
   //! Scenario: Hidden global options are not listed in help output.
   NOLINT_TEST(GlobalOptions, HiddenGlobals_AreNotListedInHelp)
   {

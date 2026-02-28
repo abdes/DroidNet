@@ -117,7 +117,16 @@ auto oxygen::clap::parser::CmdLineParser::Parse() const -> bool
         DLOG_F(
           1, "re-issuing event({}/{}) as requested ", token_type, token_value);
       } else {
-        DCHECK_NE_F(token.first, TokenType::kEndOfInput);
+        if (token.first == TokenType::kEndOfInput) {
+          LOG_F(ERROR,
+            "parser reached end-of-input but state requested continuation");
+          context_->err
+            << "internal parser error: unexpected continuation at end-of-input"
+            << '\n';
+          continue_running = false;
+          no_errors = false;
+          continue;
+        }
         token = tokenizer_.NextToken();
       }
     }

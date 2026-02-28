@@ -788,7 +788,46 @@ struct DashDashState : Will<ByDefault<DoNothing>> {
     return Continue {};
   }
 
+  auto Handle(const TokenEvent<TokenType::kEndOfInput>& /*event*/)
+    -> OneOf<TransitionTo<FinalState>, ReportError>
+  {
+    if (!context->active_command) {
+      return ReportError(MissingCommand(context));
+    }
+    return TransitionTo<FinalState> { context };
+  }
+
+  template <TokenType token_type>
+  auto Handle(const TokenEvent<token_type>& event) -> DoNothing
+  {
+    static_assert(token_type != TokenType::kEndOfInput);
+    context->allow_global_options = false;
+    context->positional_tokens.push_back(
+      ToPositionalToken<token_type>(event.token));
+    return DoNothing {};
+  }
+
 private:
+  template <TokenType token_type>
+  static auto ToPositionalToken(const std::string& token) -> std::string
+  {
+    if constexpr (token_type == TokenType::kValue) {
+      return token;
+    } else if constexpr (token_type == TokenType::kLongOption) {
+      return "--" + token;
+    } else if constexpr (token_type == TokenType::kShortOption) {
+      return "-" + token;
+    } else if constexpr (token_type == TokenType::kLoneDash) {
+      return token;
+    } else if constexpr (token_type == TokenType::kDashDash) {
+      return "--";
+    } else if constexpr (token_type == TokenType::kEqualSign) {
+      return "=";
+    } else {
+      Unreachable();
+    }
+  }
+
   ParserContextPtr context;
 };
 

@@ -32,7 +32,7 @@ auto Option::PrintValueDescription(
       context.out << "...";
     }
     if (!value_semantic_->IsRequired()) {
-      context.out << "[";
+      context.out << "]";
     }
   }
   context.out << "\n";
@@ -53,15 +53,19 @@ auto Option::Print(
     }
     context.out << "\n";
   } else {
-    if (!short_name_.empty()) {
-      context.out << "   "
-                  << fmt::format(theme.option_flag, "-{}", short_name_);
+    context.out << "   ";
+    if (!short_name_.empty() && !long_name_.empty()) {
+      context.out << fmt::format(
+        theme.option_flag, "-{}, --{}", short_name_, long_name_);
       PrintValueDescription(context, " ");
-    }
-    if (!long_name_.empty()) {
-      context.out << "   "
-                  << fmt::format(theme.option_flag, "--{}", long_name_);
+    } else if (!short_name_.empty()) {
+      context.out << fmt::format(theme.option_flag, "-{}", short_name_);
+      PrintValueDescription(context, " ");
+    } else if (!long_name_.empty()) {
+      context.out << fmt::format(theme.option_flag, "--{}", long_name_);
       PrintValueDescription(context, "=");
+    } else {
+      context.out << "\n";
     }
   }
 
@@ -91,8 +95,12 @@ auto Options::Print(
   if (!label.empty()) {
     context.out << fmt::format(theme.section_header, "{}", label) << '\n';
   }
-  for (const auto& option : options) {
+  for (size_t option_index = 0; option_index < options.size(); ++option_index) {
+    const auto& option = options[option_index];
     option->Print(context, width);
+    if (option_index + 1U < options.size()) {
+      context.out << "\n\n";
+    }
   }
 }
 
