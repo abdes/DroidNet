@@ -32,9 +32,12 @@ namespace oxygen::content::import {
    forward slashes.
 
  @note Only Oxygen asset types (`oxygen::data::AssetType`) have descriptor
-  folders here (scene/geometry/material). Cameras and lights are components
-  attached to scene nodes and are authored into the scene descriptor; they are
-  not emitted as standalone loose cooked assets.
+
+ folders here (scene/geometry/material/script/input). Cameras and lights are
+
+ components attached to scene nodes and are authored into the scene
+ descriptor;
+ they are not emitted as standalone loose cooked assets.
 
  @warning The runtime mount path is rooted at `container.index.bin`.
   Today, mounting assumes this filename at the container root.
@@ -51,6 +54,10 @@ struct LooseCookedLayout final : Layout {
   //! Physics sidecar descriptor extension. Must be colocated with `.oscene`.
   static constexpr std::string_view kPhysicsSceneDescriptorExtension
     = ".physics";
+  static constexpr std::string_view kScriptDescriptorExtension = ".oscript";
+  static constexpr std::string_view kInputActionDescriptorExtension = ".oiact";
+  static constexpr std::string_view kInputMappingContextDescriptorExtension
+    = ".oimap";
   static constexpr std::string_view kTextureDescriptorExtension = ".otex";
 
   [[nodiscard]] static auto MaterialDescriptorFileName(
@@ -78,6 +85,25 @@ struct LooseCookedLayout final : Layout {
   {
     return std::string(scene_name)
       + std::string(kPhysicsSceneDescriptorExtension);
+  }
+
+  [[nodiscard]] static auto ScriptDescriptorFileName(std::string_view name)
+    -> std::string
+  {
+    return std::string(name) + std::string(kScriptDescriptorExtension);
+  }
+
+  [[nodiscard]] static auto InputActionDescriptorFileName(std::string_view name)
+    -> std::string
+  {
+    return std::string(name) + std::string(kInputActionDescriptorExtension);
+  }
+
+  [[nodiscard]] static auto InputMappingContextDescriptorFileName(
+    std::string_view name) -> std::string
+  {
+    return std::string(name)
+      + std::string(kInputMappingContextDescriptorExtension);
   }
 
   [[nodiscard]] auto MaterialVirtualLeaf(std::string_view material_name) const
@@ -117,6 +143,27 @@ struct LooseCookedLayout final : Layout {
       PhysicsSceneDescriptorFileName(scene_name));
   }
 
+  [[nodiscard]] auto ScriptVirtualLeaf(std::string_view name) const
+    -> std::string
+  {
+    return JoinRelPath(DescriptorDirFor(data::AssetType::kScript),
+      ScriptDescriptorFileName(name));
+  }
+
+  [[nodiscard]] auto InputActionVirtualLeaf(std::string_view name) const
+    -> std::string
+  {
+    return JoinRelPath(DescriptorDirFor(data::AssetType::kInputAction),
+      InputActionDescriptorFileName(name));
+  }
+
+  [[nodiscard]] auto InputMappingContextVirtualLeaf(std::string_view name) const
+    -> std::string
+  {
+    return JoinRelPath(DescriptorDirFor(data::AssetType::kInputMappingContext),
+      InputMappingContextDescriptorFileName(name));
+  }
+
   [[nodiscard]] auto MaterialDescriptorRelPath(
     std::string_view material_name) const -> std::string
   {
@@ -139,6 +186,24 @@ struct LooseCookedLayout final : Layout {
     std::string_view scene_name) const -> std::string
   {
     return PhysicsSceneVirtualLeaf(scene_name);
+  }
+
+  [[nodiscard]] auto ScriptDescriptorRelPath(std::string_view name) const
+    -> std::string
+  {
+    return ScriptVirtualLeaf(name);
+  }
+
+  [[nodiscard]] auto InputActionDescriptorRelPath(std::string_view name) const
+    -> std::string
+  {
+    return InputActionVirtualLeaf(name);
+  }
+
+  [[nodiscard]] auto InputMappingContextDescriptorRelPath(
+    std::string_view name) const -> std::string
+  {
+    return InputMappingContextVirtualLeaf(name);
   }
 
   [[nodiscard]] auto MaterialVirtualPath(std::string_view material_name) const
@@ -166,6 +231,25 @@ struct LooseCookedLayout final : Layout {
   {
     return JoinVirtualPath(
       virtual_mount_root, PhysicsSceneVirtualLeaf(scene_name));
+  }
+
+  [[nodiscard]] auto ScriptVirtualPath(std::string_view name) const
+    -> std::string
+  {
+    return JoinVirtualPath(virtual_mount_root, ScriptVirtualLeaf(name));
+  }
+
+  [[nodiscard]] auto InputActionVirtualPath(std::string_view name) const
+    -> std::string
+  {
+    return JoinVirtualPath(virtual_mount_root, InputActionVirtualLeaf(name));
+  }
+
+  [[nodiscard]] auto InputMappingContextVirtualPath(std::string_view name) const
+    -> std::string
+  {
+    return JoinVirtualPath(
+      virtual_mount_root, InputMappingContextVirtualLeaf(name));
   }
 
   //! Index filename at the cooked-root directory.
@@ -205,6 +289,18 @@ struct LooseCookedLayout final : Layout {
   //! File name for the physics resource data.
   std::string physics_data_file_name = "physics.data";
 
+  //! File name for the scripts resource table.
+  std::string scripts_table_file_name = "scripts.table";
+
+  //! File name for the scripts resource data.
+  std::string scripts_data_file_name = "scripts.data";
+
+  //! File name for the script-bindings table.
+  std::string script_bindings_table_file_name = "script-bindings.table";
+
+  //! File name for the script-bindings data.
+  std::string script_bindings_data_file_name = "script-bindings.data";
+
   //! Optional base folder (relative to cooked root) for descriptors.
   /*!
    If empty, descriptors are written directly under the cooked root.
@@ -222,6 +318,21 @@ struct LooseCookedLayout final : Layout {
   //! Subfolder for material descriptors.
   /*! Set to empty to place materials directly under `descriptors_dir`. */
   std::string materials_subdir = std::string(kMaterialsDirName);
+
+  //! Subfolder for script descriptors.
+  /*! Set to empty to place script descriptors directly under `descriptors_dir`.
+   */
+  std::string scripts_subdir = "Scripts";
+
+  //! Subfolder for input-action descriptors.
+  /*! Set to empty to place input-action descriptors directly under
+   * `descriptors_dir`. */
+  std::string input_actions_subdir = "InputActions";
+
+  //! Subfolder for input-mapping-context descriptors.
+  /*! Set to empty to place context descriptors directly under
+   * `descriptors_dir`. */
+  std::string input_mapping_contexts_subdir = "InputMappingContexts";
 
   //! Subfolder for texture descriptors.
   /*!
@@ -267,6 +378,30 @@ struct LooseCookedLayout final : Layout {
     return JoinRelPath(resources_dir, physics_data_file_name);
   }
 
+  //! Resolve the container-relative path for the scripts table.
+  [[nodiscard]] auto ScriptsTableRelPath() const -> std::string
+  {
+    return JoinRelPath(resources_dir, scripts_table_file_name);
+  }
+
+  //! Resolve the container-relative path for the scripts data.
+  [[nodiscard]] auto ScriptsDataRelPath() const -> std::string
+  {
+    return JoinRelPath(resources_dir, scripts_data_file_name);
+  }
+
+  //! Resolve the container-relative path for the script-bindings table.
+  [[nodiscard]] auto ScriptBindingsTableRelPath() const -> std::string
+  {
+    return JoinRelPath(resources_dir, script_bindings_table_file_name);
+  }
+
+  //! Resolve the container-relative path for the script-bindings data.
+  [[nodiscard]] auto ScriptBindingsDataRelPath() const -> std::string
+  {
+    return JoinRelPath(resources_dir, script_bindings_data_file_name);
+  }
+
   //! Resolve the descriptor folder for an asset type.
   [[nodiscard]] auto DescriptorDirFor(data::AssetType asset_type) const
     -> std::string
@@ -282,7 +417,16 @@ struct LooseCookedLayout final : Layout {
       return JoinRelPath(descriptors_dir, geometry_subdir);
     case data::AssetType::kMaterial:
       return JoinRelPath(descriptors_dir, materials_subdir);
+    case data::AssetType::kScript:
+      return JoinRelPath(descriptors_dir, scripts_subdir);
+    case data::AssetType::kInputAction:
+      return JoinRelPath(descriptors_dir, input_actions_subdir);
+    case data::AssetType::kInputMappingContext:
+      return JoinRelPath(descriptors_dir, input_mapping_contexts_subdir);
     case data::AssetType::kUnknown:
+      break;
+    case data::AssetType::kPhysicsMaterial:
+    case data::AssetType::kCollisionShape:
       break;
     }
     return descriptors_dir;

@@ -49,35 +49,16 @@ namespace {
   namespace world = data::pak::world;
   namespace lc = oxygen::content::lc;
 
-  constexpr auto kScriptBindingsTableFileName
-    = std::string_view { "script-bindings.table" };
-  constexpr auto kScriptBindingsDataFileName
-    = std::string_view { "script-bindings.data" };
-
-  auto JoinRelativePath(
-    const std::string_view base, const std::string_view child) -> std::string
-  {
-    if (base.empty()) {
-      return std::string { child };
-    }
-    if (child.empty()) {
-      return std::string { base };
-    }
-    return std::string { base } + "/" + std::string { child };
-  }
-
   auto BuildScriptBindingsTableRelPath(const ImportRequest& request)
     -> std::string
   {
-    return JoinRelativePath(
-      request.loose_cooked_layout.resources_dir, kScriptBindingsTableFileName);
+    return request.loose_cooked_layout.ScriptBindingsTableRelPath();
   }
 
   auto BuildScriptBindingsDataRelPath(const ImportRequest& request)
     -> std::string
   {
-    return JoinRelativePath(
-      request.loose_cooked_layout.resources_dir, kScriptBindingsDataFileName);
+    return request.loose_cooked_layout.ScriptBindingsDataRelPath();
   }
 
   template <size_t N>

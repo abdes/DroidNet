@@ -108,8 +108,8 @@ namespace {
       = script_import::DeriveScriptName(request.source_path);
     const auto descriptor_relpath
       = script_import::BuildScriptDescriptorRelPath(request, script_name);
-    const auto virtual_path = script_import::JoinVirtualPath(
-      request.loose_cooked_layout.virtual_mount_root, descriptor_relpath);
+    const auto virtual_path
+      = request.loose_cooked_layout.ScriptVirtualPath(script_name);
 
     const auto key = [&]() -> data::AssetKey {
       switch (request.options.asset_key_policy) {
@@ -375,6 +375,11 @@ namespace {
 
 } // namespace
 
+ScriptAssetImportPipeline::ScriptAssetImportPipeline()
+  : ScriptAssetImportPipeline(Config {})
+{
+}
+
 ScriptAssetImportPipeline::ScriptAssetImportPipeline(Config config)
   : config_(config)
   , input_channel_(config.queue_capacity)
@@ -401,6 +406,7 @@ auto ScriptAssetImportPipeline::Start(co::Nursery& nursery) -> void
 
   const auto worker_count = std::max(1U, config_.worker_count);
   for (uint32_t i = 0; i < worker_count; ++i) {
+    // NOLINTNEXTLINE(*-lambda-coroutines)
     nursery.Start([this]() -> co::Co<> { co_await Worker(); });
   }
 }

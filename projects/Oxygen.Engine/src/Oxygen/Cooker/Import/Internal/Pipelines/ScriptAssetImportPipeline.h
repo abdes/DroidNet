@@ -7,7 +7,6 @@
 #pragma once
 
 #include <atomic>
-#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <stop_token>
@@ -45,9 +44,9 @@ public:
   struct WorkItem {
     std::string source_id;
     std::vector<std::byte> source_bytes;
-    observer_ptr<ImportSession> session {};
-    observer_ptr<LooseCookedIndexRegistry> index_registry {};
-    AsyncImportService::ScriptCompileCallback script_compile_callback {};
+    observer_ptr<ImportSession> session;
+    observer_ptr<LooseCookedIndexRegistry> index_registry;
+    AsyncImportService::ScriptCompileCallback script_compile_callback;
     std::function<void()> on_started;
     std::function<void()> on_finished;
     std::stop_token stop_token;
@@ -60,7 +59,9 @@ public:
     bool success = false;
   };
 
-  OXGN_COOK_API explicit ScriptAssetImportPipeline(Config config = {});
+  OXGN_COOK_API ScriptAssetImportPipeline();
+
+  OXGN_COOK_API explicit ScriptAssetImportPipeline(Config config);
 
   OXGN_COOK_API ~ScriptAssetImportPipeline();
 

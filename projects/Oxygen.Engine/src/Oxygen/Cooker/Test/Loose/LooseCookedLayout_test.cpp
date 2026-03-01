@@ -25,10 +25,17 @@ NOLINT_TEST(LooseCookedLayoutTest, DefaultSettingsAreCorrect)
   EXPECT_EQ(layout.textures_data_file_name, "textures.data");
   EXPECT_EQ(layout.physics_table_file_name, "physics.table");
   EXPECT_EQ(layout.physics_data_file_name, "physics.data");
+  EXPECT_EQ(layout.scripts_table_file_name, "scripts.table");
+  EXPECT_EQ(layout.scripts_data_file_name, "scripts.data");
+  EXPECT_EQ(layout.script_bindings_table_file_name, "script-bindings.table");
+  EXPECT_EQ(layout.script_bindings_data_file_name, "script-bindings.data");
   EXPECT_EQ(layout.descriptors_dir, "");
   EXPECT_EQ(layout.scenes_subdir, "Scenes");
   EXPECT_EQ(layout.geometry_subdir, "Geometry");
   EXPECT_EQ(layout.materials_subdir, "Materials");
+  EXPECT_EQ(layout.scripts_subdir, "Scripts");
+  EXPECT_EQ(layout.input_actions_subdir, "InputActions");
+  EXPECT_EQ(layout.input_mapping_contexts_subdir, "InputMappingContexts");
 }
 
 NOLINT_TEST(LooseCookedLayoutTest, DescriptorFileNamesAreCorrect)
@@ -41,6 +48,13 @@ NOLINT_TEST(LooseCookedLayoutTest, DescriptorFileNamesAreCorrect)
     LooseCookedLayout::SceneDescriptorFileName("MyScene"), "MyScene.oscene");
   EXPECT_EQ(LooseCookedLayout::PhysicsSceneDescriptorFileName("MyScene"),
     "MyScene.physics");
+  EXPECT_EQ(LooseCookedLayout::ScriptDescriptorFileName("MyScript"),
+    "MyScript.oscript");
+  EXPECT_EQ(
+    LooseCookedLayout::InputActionDescriptorFileName("Jump"), "Jump.oiact");
+  EXPECT_EQ(
+    LooseCookedLayout::InputMappingContextDescriptorFileName("Gameplay"),
+    "Gameplay.oimap");
 }
 
 NOLINT_TEST(LooseCookedLayoutTest, DescriptorDirForYieldsExpectedDirs)
@@ -50,12 +64,17 @@ NOLINT_TEST(LooseCookedLayoutTest, DescriptorDirForYieldsExpectedDirs)
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kGeometry), "Geometry");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kScene), "Scenes");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kPhysicsScene), "Scenes");
+  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kScript), "Scripts");
+  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kInputAction), "InputActions");
+  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kInputMappingContext),
+    "InputMappingContexts");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kUnknown), "");
 
   layout.descriptors_dir = "Assets";
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kMaterial), "Assets/Materials");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kGeometry), "Assets/Geometry");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kScene), "Assets/Scenes");
+  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kScript), "Assets/Scripts");
 
   // Setting empty subdirs
   layout.materials_subdir = "";
@@ -105,6 +124,12 @@ NOLINT_TEST(LooseCookedLayoutTest, ResourcePathsAreCorrect)
   EXPECT_EQ(layout.TexturesDataRelPath(), "Resources/textures.data");
   EXPECT_EQ(layout.PhysicsTableRelPath(), "Resources/physics.table");
   EXPECT_EQ(layout.PhysicsDataRelPath(), "Resources/physics.data");
+  EXPECT_EQ(layout.ScriptsTableRelPath(), "Resources/scripts.table");
+  EXPECT_EQ(layout.ScriptsDataRelPath(), "Resources/scripts.data");
+  EXPECT_EQ(
+    layout.ScriptBindingsTableRelPath(), "Resources/script-bindings.table");
+  EXPECT_EQ(
+    layout.ScriptBindingsDataRelPath(), "Resources/script-bindings.data");
 
   layout.resources_dir = "";
   EXPECT_EQ(layout.BuffersTableRelPath(), "buffers.table");
