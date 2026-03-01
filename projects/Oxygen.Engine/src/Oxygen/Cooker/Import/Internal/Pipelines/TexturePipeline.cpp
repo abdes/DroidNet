@@ -777,6 +777,167 @@ namespace {
       std::move(source));
   }
 
+  auto LoadSourceBytesIfNeeded(TexturePipeline::WorkItem& item,
+    const observer_ptr<IAsyncFileReader> reader,
+    const std::function<void(std::chrono::microseconds)>& on_io_duration)
+    -> co::Co<std::vector<ImportDiagnostic>>
+  {
+    const auto MakeDuration
+      = [](const std::chrono::steady_clock::time_point start,
+          const std::chrono::steady_clock::time_point end)
+      -> std::chrono::microseconds {
+      return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    };
+
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+
+    auto* source_bytes
+      = std::get_if<TexturePipeline::SourceBytes>(&item.source);
+    if (source_bytes == nullptr || !source_bytes->bytes.empty()
+      || item.source_path.empty()) {
+      co_return diagnostics;
+    }
+
+    const auto source_path_string = item.source_path.string();
+    if (reader == nullptr) {
+      diagnostics.push_back(MakeErrorDiagnosticMessage("import.file_reader",
+        "Import session has no async file reader", item.source_id,
+        source_path_string));
+      co_return diagnostics;
+    }
+
+    const auto read_start = std::chrono::steady_clock::now();
+    auto read_result = co_await reader.get()->ReadFile(item.source_path);
+    const auto read_end = std::chrono::steady_clock::now();
+    if (on_io_duration) {
+      on_io_duration(MakeDuration(read_start, read_end));
+    }
+    if (!read_result.has_value()) {
+      const auto message
+        = "Failed to read texture file: " + read_result.error().ToString();
+      diagnostics.push_back(MakeWarningDiagnostic("import.texture.load_failed",
+        message, item.source_id, source_path_string));
+      LOG_F(INFO,
+        "TexturePipeline::Worker read failed: source_id='{}' path='{}'",
+        item.source_id, source_path_string);
+      co_return diagnostics;
+    }
+
+    auto bytes = std::make_shared<std::vector<std::byte>>(
+      std::move(read_result.value()));
+    source_bytes->bytes
+      = std::span<const std::byte>(bytes->data(), bytes->size());
+    source_bytes->owner = std::static_pointer_cast<const void>(bytes);
+    LOG_F(INFO,
+      "TexturePipeline::Worker read ok: source_id='{}' path='{}' bytes={}",
+      item.source_id, source_path_string, bytes->size());
+    co_return diagnostics;
+  }
+
+  auto RunCookTaskForItem(TexturePipeline::WorkItem& item,
+    co::ThreadPool& thread_pool, const ITexturePackingPolicy& policy,
+    const bool with_content_hashing) -> co::Co<CookOutcome>
+  {
+    auto desc = item.desc;
+    desc.source_id = item.source_id;
+    desc.stop_token = item.stop_token;
+
+    auto source_ptr = std::make_shared<TexturePipeline::SourceContent>(
+      std::move(item.source));
+    co_return co_await thread_pool.Run(
+      [source_ptr, desc = std::move(desc), policy = &policy,
+        output_format_is_override = item.output_format_is_override,
+        equirect_to_cubemap = item.equirect_to_cubemap,
+        cubemap_face_size = item.cubemap_face_size,
+        cubemap_layout = item.cubemap_layout, with_content_hashing,
+        stop_token = item.stop_token](
+        co::ThreadPool::CancelToken canceled) -> CookOutcome {
+        DLOG_F(1, "Cook task begin");
+        if (stop_token.stop_requested() || canceled) {
+          return {
+            .cooked = Err(TextureImportError::kCancelled),
+            .decode_duration = {},
+          };
+        }
+        return CookFromSourceContent(std::move(*source_ptr), desc, *policy,
+          output_format_is_override, equirect_to_cubemap, cubemap_face_size,
+          cubemap_layout, with_content_hashing);
+      });
+  }
+
+  [[nodiscard]] auto ComputeCookDuration(
+    const std::chrono::microseconds total_cook,
+    const std::optional<std::chrono::microseconds> decode_duration)
+    -> std::chrono::microseconds
+  {
+    if (!decode_duration.has_value()) {
+      return total_cook;
+    }
+    return (total_cook > *decode_duration) ? (total_cook - *decode_duration)
+                                           : total_cook;
+  }
+
+  struct FinalizedTextureWork {
+    TexturePipeline::WorkResult output;
+    std::optional<TextureImportError> cook_error;
+  };
+
+  [[nodiscard]] auto FinalizeCookedTextureWork(TexturePipeline::WorkItem& item,
+    const ITexturePackingPolicy& policy, const bool unknown_policy,
+    std::vector<ImportDiagnostic> read_diagnostics, CookOutcome cooked,
+    const std::chrono::microseconds total_cook) -> FinalizedTextureWork
+  {
+    auto finalized = FinalizedTextureWork {
+      .output = TexturePipeline::WorkResult {
+        .source_id = std::move(item.source_id),
+        .texture_id = std::move(item.texture_id),
+        .source_key = item.source_key,
+        .cooked = std::nullopt,
+        .used_placeholder = false,
+        .diagnostics = {},
+        .success = false,
+      },
+      .cook_error = std::nullopt,
+    };
+
+    if (unknown_policy) {
+      finalized.output.diagnostics.push_back(MakePackingPolicyDiagnostic(
+        item.packing_policy_id, policy.Id(), finalized.output.source_id));
+    }
+    if (!read_diagnostics.empty()) {
+      finalized.output.diagnostics.insert(finalized.output.diagnostics.end(),
+        std::make_move_iterator(read_diagnostics.begin()),
+        std::make_move_iterator(read_diagnostics.end()));
+    }
+
+    finalized.output.telemetry.decode_duration = cooked.decode_duration;
+    finalized.output.telemetry.cook_duration
+      = ComputeCookDuration(total_cook, cooked.decode_duration);
+
+    if (cooked.cooked.has_value()) {
+      finalized.output.cooked = std::move(cooked.cooked.value());
+      finalized.output.success = true;
+      return finalized;
+    }
+
+    const auto error = cooked.cooked.error();
+    finalized.cook_error = error;
+    if (error == TextureImportError::kCancelled) {
+      return finalized;
+    }
+
+    if (item.failure_policy == TexturePipeline::FailurePolicy::kPlaceholder) {
+      finalized.output.used_placeholder = true;
+      finalized.output.diagnostics.push_back(
+        MakeErrorDiagnostic(error, finalized.output.source_id));
+      return finalized;
+    }
+
+    finalized.output.diagnostics.push_back(
+      MakeErrorDiagnostic(error, finalized.output.source_id));
+    return finalized;
+  }
+
 } // namespace
 
 TexturePipeline::TexturePipeline(
@@ -933,148 +1094,48 @@ auto TexturePipeline::Worker() -> co::Co<>
       }
     };
 
-    std::vector<ImportDiagnostic> read_diagnostics;
-    if (auto* source_bytes = std::get_if<SourceBytes>(&item.source);
-      source_bytes != nullptr && source_bytes->bytes.empty()
-      && !item.source_path.empty()) {
-      const auto source_path_string = item.source_path.string();
-      auto reader = config_.file_reader;
-      if (reader == nullptr) {
-        read_diagnostics.push_back(MakeErrorDiagnosticMessage(
-          "import.file_reader", "Import session has no async file reader",
-          item.source_id, source_path_string));
-      } else {
-        const auto read_start = std::chrono::steady_clock::now();
-        auto read_result = co_await reader.get()->ReadFile(item.source_path);
-        const auto read_end = std::chrono::steady_clock::now();
-        if (config_.on_io_duration) {
-          config_.on_io_duration(MakeDuration(read_start, read_end));
-        }
-        if (!read_result.has_value()) {
-          const auto message
-            = "Failed to read texture file: " + read_result.error().ToString();
-          read_diagnostics.push_back(
-            MakeWarningDiagnostic("import.texture.load_failed", message,
-              item.source_id, source_path_string));
-          LOG_F(INFO,
-            "TexturePipeline::Worker read failed: source_id='{}' path='{}'",
-            item.source_id, source_path_string);
-        } else {
-          auto bytes = std::make_shared<std::vector<std::byte>>(
-            std::move(read_result.value()));
-          source_bytes->bytes
-            = std::span<const std::byte>(bytes->data(), bytes->size());
-          source_bytes->owner = std::static_pointer_cast<const void>(bytes);
-          LOG_F(INFO,
-            "TexturePipeline::Worker read ok: source_id='{}' path='{}' "
-            "bytes={}",
-            item.source_id, source_path_string, bytes->size());
-        }
-      }
-    }
+    auto read_diagnostics = co_await LoadSourceBytesIfNeeded(
+      item, config_.file_reader, config_.on_io_duration);
 
     const auto& policy = ResolvePackingPolicy(item.packing_policy_id);
     const bool unknown_policy = item.packing_policy_id != policy.Id();
-    auto local_desc = item.desc;
-    local_desc.source_id = item.source_id;
-    local_desc.stop_token = item.stop_token;
-
-    auto source_ptr = std::make_shared<SourceContent>(std::move(item.source));
     const auto cook_start = std::chrono::steady_clock::now();
-    auto result = co_await thread_pool_.Run(
-      [source_ptr, desc = std::move(local_desc), &policy,
-        output_format_is_override = item.output_format_is_override,
-        equirect_to_cubemap = item.equirect_to_cubemap,
-        cubemap_face_size = item.cubemap_face_size,
-        cubemap_layout = item.cubemap_layout,
-        with_content_hashing = config_.with_content_hashing,
-        stop_token = item.stop_token](
-        co::ThreadPool::CancelToken canceled) -> CookOutcome {
-        DLOG_F(1, "Cook task begin");
-        if (stop_token.stop_requested() || canceled) {
-          return { .cooked = Err(TextureImportError::kCancelled),
-            .decode_duration = {} };
-        }
-        return CookFromSourceContent(std::move(*source_ptr), desc, policy,
-          output_format_is_override, equirect_to_cubemap, cubemap_face_size,
-          cubemap_layout, with_content_hashing);
-      });
+    auto cooked = co_await RunCookTaskForItem(
+      item, thread_pool_, policy, config_.with_content_hashing);
     const auto cook_end = std::chrono::steady_clock::now();
 
-    WorkResult output {
-      .source_id = std::move(item.source_id),
-      .texture_id = std::move(item.texture_id),
-      .source_key = item.source_key,
-      .cooked = std::nullopt,
-      .used_placeholder = false,
-      .diagnostics = {},
-      .success = false,
-    };
+    auto finalized = FinalizeCookedTextureWork(item, policy, unknown_policy,
+      std::move(read_diagnostics), std::move(cooked),
+      MakeDuration(cook_start, cook_end));
 
-    if (unknown_policy) {
-      output.diagnostics.push_back(MakePackingPolicyDiagnostic(
-        item.packing_policy_id, policy.Id(), output.source_id));
-    }
-    if (!read_diagnostics.empty()) {
-      output.diagnostics.insert(output.diagnostics.end(),
-        std::make_move_iterator(read_diagnostics.begin()),
-        std::make_move_iterator(read_diagnostics.end()));
-    }
-
-    output.telemetry.decode_duration = result.decode_duration;
-    const auto total_cook = MakeDuration(cook_start, cook_end);
-    if (result.decode_duration.has_value()) {
-      const auto decode = *result.decode_duration;
-      output.telemetry.cook_duration
-        = (total_cook > decode) ? (total_cook - decode) : total_cook;
-    } else {
-      output.telemetry.cook_duration = total_cook;
-    }
-
-    if (result.cooked.has_value()) {
-      output.cooked = std::move(result.cooked.value());
-      output.success = true;
+    if (!finalized.cook_error.has_value()) {
       LOG_F(INFO,
         "TexturePipeline::Worker cooked: source_id='{}' texture_id='{}' "
         "source_key={} success=true",
-        output.source_id, output.texture_id, output.source_key);
-      NotifyFinished();
-      co_await output_channel_.Send(std::move(output));
-      continue;
-    }
-
-    const auto error = result.cooked.error();
-    if (error == TextureImportError::kCancelled) {
+        finalized.output.source_id, finalized.output.texture_id,
+        finalized.output.source_key);
+    } else if (*finalized.cook_error == TextureImportError::kCancelled) {
       LOG_F(INFO,
         "TexturePipeline::Worker cancelled: source_id='{}' texture_id='{}' "
         "source_key={}",
-        output.source_id, output.texture_id, output.source_key);
-      NotifyFinished();
-      co_await output_channel_.Send(std::move(output));
-      continue;
-    }
-
-    if (item.failure_policy == FailurePolicy::kPlaceholder) {
-      output.used_placeholder = true;
-      output.diagnostics.push_back(
-        MakeErrorDiagnostic(error, output.source_id));
+        finalized.output.source_id, finalized.output.texture_id,
+        finalized.output.source_key);
+    } else if (finalized.output.used_placeholder) {
       LOG_F(INFO,
         "TexturePipeline::Worker placeholder: source_id='{}' texture_id='{}' "
         "source_key={}",
-        output.source_id, output.texture_id, output.source_key);
-      NotifyFinished();
-      co_await output_channel_.Send(std::move(output));
-      continue;
+        finalized.output.source_id, finalized.output.texture_id,
+        finalized.output.source_key);
+    } else {
+      LOG_F(INFO,
+        "TexturePipeline::Worker failed: source_id='{}' texture_id='{}' "
+        "source_key={} error={}",
+        finalized.output.source_id, finalized.output.texture_id,
+        finalized.output.source_key, static_cast<int>(*finalized.cook_error));
     }
 
-    output.diagnostics.push_back(MakeErrorDiagnostic(error, output.source_id));
-    LOG_F(INFO,
-      "TexturePipeline::Worker failed: source_id='{}' texture_id='{}' "
-      "source_key={} error={}",
-      output.source_id, output.texture_id, output.source_key,
-      static_cast<int>(error));
     NotifyFinished();
-    co_await output_channel_.Send(std::move(output));
+    co_await output_channel_.Send(std::move(finalized.output));
   }
 
   co_return;

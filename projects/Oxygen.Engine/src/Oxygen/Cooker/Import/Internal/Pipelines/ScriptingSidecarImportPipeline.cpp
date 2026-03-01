@@ -1462,6 +1462,162 @@ namespace {
     co_return true;
   }
 
+  struct ScriptingSidecarIoHandles final {
+    IAsyncFileReader* reader = nullptr;
+    IAsyncFileWriter* writer = nullptr;
+    LooseCookedIndexRegistry* index_registry = nullptr;
+  };
+
+  auto ValidateScriptingSidecarRequest(
+    ImportSession& session, const ImportRequest& request) -> bool
+  {
+    const auto& scripting = request.options.scripting;
+    if (scripting.import_kind != ScriptingImportKind::kScriptingSidecar) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "script.request.invalid_import_kind",
+        "Scripting sidecar import requires "
+        "options.scripting.import_kind=kScriptingSidecar");
+      return false;
+    }
+
+    if (scripting.target_scene_virtual_path.empty()) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "script.request.target_scene_virtual_path_missing",
+        "Scripting sidecar import requires target_scene_virtual_path");
+      return false;
+    }
+
+    return true;
+  }
+
+  auto ResolveScriptingSidecarIoHandles(ImportSession& session,
+    const ImportRequest& request,
+    observer_ptr<LooseCookedIndexRegistry> index_registry)
+    -> std::optional<ScriptingSidecarIoHandles>
+  {
+    auto handles = ScriptingSidecarIoHandles {
+      .reader = session.FileReader().get(),
+      .writer = session.FileWriter().get(),
+      .index_registry = index_registry.get(),
+    };
+    if (handles.reader == nullptr || handles.writer == nullptr
+      || handles.index_registry == nullptr) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "script.sidecar.io_unavailable",
+        "Scripting sidecar emission requires file reader/writer/index "
+        "registry");
+      return std::nullopt;
+    }
+    return handles;
+  }
+
+  auto LoadCookedContextsAndMountResolver(ImportSession& session,
+    const ImportRequest& request,
+    std::vector<SidecarCookedInspectionContext>& cooked_contexts,
+    content::VirtualPathResolver& resolver) -> bool
+  {
+    cooked_contexts.clear();
+    cooked_contexts.reserve(1U + request.cooked_context_roots.size());
+
+    auto primary_context = SidecarCookedInspectionContext {};
+    if (!detail::LoadCookedInspectionContext(session.CookedRoot(), session,
+          request, kScriptSidecarResolverDiagnostics, primary_context)) {
+      return false;
+    }
+    cooked_contexts.push_back(std::move(primary_context));
+
+    for (const auto& context_root : request.cooked_context_roots) {
+      auto context = SidecarCookedInspectionContext {};
+      if (!detail::LoadCookedInspectionContext(context_root, session, request,
+            kScriptSidecarResolverDiagnostics, context)) {
+        return false;
+      }
+      cooked_contexts.push_back(std::move(context));
+    }
+
+    for (const auto& context : cooked_contexts) {
+      try {
+        resolver.AddLooseCookedRoot(context.cooked_root);
+      } catch (const std::exception& ex) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "script.sidecar.resolver_mount_failed",
+          "Failed mounting cooked root for sidecar resolution: "
+            + context.cooked_root.string() + " (" + ex.what() + ")");
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  auto ResolveScriptsTableContext(
+    std::span<const SidecarCookedInspectionContext> cooked_contexts,
+    const data::AssetKey scene_key) -> const SidecarCookedInspectionContext*
+  {
+    if (cooked_contexts.empty()) {
+      return nullptr;
+    }
+    if (const auto* matched
+      = detail::ResolveSceneInspectionContextByKey(cooked_contexts, scene_key);
+      matched != nullptr) {
+      return matched;
+    }
+    return &cooked_contexts.front();
+  }
+
+  auto ApplyScriptingSidecar(ImportSession& session,
+    const ImportRequest& request, content::VirtualPathResolver& resolver,
+    std::span<const SidecarCookedInspectionContext> cooked_contexts,
+    const SidecarDocument& parsed,
+    const SidecarResolvedSceneState& resolved_scene_state,
+    const ScriptingSidecarIoHandles& io_handles) -> co::Co<bool>
+  {
+    const auto* scripts_table_context = ResolveScriptsTableContext(
+      cooked_contexts, resolved_scene_state.scene_key);
+    if (scripts_table_context == nullptr) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "script.sidecar.target_scene_missing",
+        "Resolved target scene key is not present in cooked scene context");
+      co_return false;
+    }
+
+    const auto scripts_table_state
+      = co_await LoadScriptsTableState(session, request,
+        scripts_table_context->cooked_root, scripts_table_context->inspection,
+        *io_handles.reader, resolved_scene_state.existing_scripting_components);
+    if (!scripts_table_state.has_value()) {
+      co_return false;
+    }
+
+    const auto merged_scripts_state = BuildMergedScriptsState(session, request,
+      resolver, parsed, resolved_scene_state.node_count, cooked_contexts,
+      resolved_scene_state.existing_scripting_components,
+      scripts_table_state->tables);
+    if (!merged_scripts_state.has_value()) {
+      co_return false;
+    }
+
+    const auto patched_scene_descriptor = BuildPatchedSceneDescriptor(
+      session, request, resolved_scene_state, merged_scripts_state->components);
+    if (!patched_scene_descriptor.has_value()) {
+      co_return false;
+    }
+
+    const auto wrote_scripts_tables = co_await WriteScriptsTables(session,
+      request, *io_handles.writer, *io_handles.index_registry,
+      *scripts_table_state, *merged_scripts_state);
+    if (!wrote_scripts_tables) {
+      co_return false;
+    }
+
+    if (!EmitPatchedScene(session, request, resolved_scene_state,
+          std::span<const std::byte>(*patched_scene_descriptor))) {
+      co_return false;
+    }
+
+    co_return true;
+  }
+
 } // namespace
 ScriptingSidecarImportPipeline::ScriptingSidecarImportPipeline(Config config)
   : config_(config)
@@ -1629,20 +1785,7 @@ auto ScriptingSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
   }
 
   const auto& req = session->Request();
-  const auto& scripting = req.options.scripting;
-
-  if (scripting.import_kind != ScriptingImportKind::kScriptingSidecar) {
-    AddDiagnostic(*session, req, ImportSeverity::kError,
-      "script.request.invalid_import_kind",
-      "Scripting sidecar import requires "
-      "options.scripting.import_kind=kScriptingSidecar");
-    co_return false;
-  }
-
-  if (scripting.target_scene_virtual_path.empty()) {
-    AddDiagnostic(*session, req, ImportSeverity::kError,
-      "script.request.target_scene_virtual_path_missing",
-      "Scripting sidecar import requires target_scene_virtual_path");
+  if (!ValidateScriptingSidecarRequest(*session, req)) {
     co_return false;
   }
 
@@ -1651,96 +1794,29 @@ auto ScriptingSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     co_return false;
   }
 
-  auto* const reader = session->FileReader().get();
-  auto* const writer = session->FileWriter().get();
-  auto* const index_registry = item.index_registry.get();
-  if (reader == nullptr || writer == nullptr || index_registry == nullptr) {
-    AddDiagnostic(*session, req, ImportSeverity::kError,
-      "script.sidecar.io_unavailable",
-      "Scripting sidecar emission requires file reader/writer/index registry");
+  const auto io_handles
+    = ResolveScriptingSidecarIoHandles(*session, req, item.index_registry);
+  if (!io_handles.has_value()) {
     co_return false;
   }
 
   auto cooked_contexts = std::vector<SidecarCookedInspectionContext> {};
-  cooked_contexts.reserve(1U + req.cooked_context_roots.size());
-
-  auto primary_context = SidecarCookedInspectionContext {};
-  if (!detail::LoadCookedInspectionContext(session->CookedRoot(), *session, req,
-        kScriptSidecarResolverDiagnostics, primary_context)) {
+  auto resolver = content::VirtualPathResolver {};
+  if (!LoadCookedContextsAndMountResolver(
+        *session, req, cooked_contexts, resolver)) {
     co_return false;
   }
-  cooked_contexts.push_back(std::move(primary_context));
 
-  for (const auto& context_root : req.cooked_context_roots) {
-    auto context = SidecarCookedInspectionContext {};
-    if (!detail::LoadCookedInspectionContext(context_root, *session, req,
-          kScriptSidecarResolverDiagnostics, context)) {
-      co_return false;
-    }
-    cooked_contexts.push_back(std::move(context));
-  }
-
-  auto resolver = content::VirtualPathResolver {};
-  for (const auto& context : cooked_contexts) {
-    try {
-      resolver.AddLooseCookedRoot(context.cooked_root);
-    } catch (const std::exception& ex) {
-      AddDiagnostic(*session, req, ImportSeverity::kError,
-        "script.sidecar.resolver_mount_failed",
-        "Failed mounting cooked root for sidecar resolution: "
-          + context.cooked_root.string() + " (" + ex.what() + ")");
-      co_return false;
-    }
-  }
-
-  const auto resolved_scene_state
-    = co_await detail::ResolveTargetSceneState(*session, req, resolver,
-      cooked_contexts, *reader, req.options.scripting.target_scene_virtual_path,
-      kScriptSidecarResolverDiagnostics);
+  const auto resolved_scene_state = co_await detail::ResolveTargetSceneState(
+    *session, req, resolver, cooked_contexts, *io_handles->reader,
+    req.options.scripting.target_scene_virtual_path,
+    kScriptSidecarResolverDiagnostics);
   if (!resolved_scene_state.has_value()) {
     co_return false;
   }
 
-  const auto* scripts_table_context
-    = detail::ResolveSceneInspectionContextByKey(
-      cooked_contexts, resolved_scene_state->scene_key);
-  if (scripts_table_context == nullptr) {
-    scripts_table_context = &cooked_contexts.front();
-  }
-
-  const auto scripts_table_state = co_await LoadScriptsTableState(*session, req,
-    scripts_table_context->cooked_root, scripts_table_context->inspection,
-    *reader, resolved_scene_state->existing_scripting_components);
-  if (!scripts_table_state.has_value()) {
-    co_return false;
-  }
-
-  const auto merged_scripts_state = BuildMergedScriptsState(*session, req,
-    resolver, *parsed, resolved_scene_state->node_count, cooked_contexts,
-    resolved_scene_state->existing_scripting_components,
-    scripts_table_state->tables);
-  if (!merged_scripts_state.has_value()) {
-    co_return false;
-  }
-
-  const auto patched_scene_descriptor = BuildPatchedSceneDescriptor(
-    *session, req, *resolved_scene_state, merged_scripts_state->components);
-  if (!patched_scene_descriptor.has_value()) {
-    co_return false;
-  }
-
-  const auto wrote_scripts_tables = co_await WriteScriptsTables(*session, req,
-    *writer, *index_registry, *scripts_table_state, *merged_scripts_state);
-  if (!wrote_scripts_tables) {
-    co_return false;
-  }
-
-  if (!EmitPatchedScene(*session, req, *resolved_scene_state,
-        std::span<const std::byte>(*patched_scene_descriptor))) {
-    co_return false;
-  }
-
-  co_return true;
+  co_return co_await ApplyScriptingSidecar(*session, req, resolver,
+    cooked_contexts, *parsed, *resolved_scene_state, *io_handles);
 }
 
 auto ScriptingSidecarImportPipeline::ReportCancelled(WorkItem item) -> co::Co<>

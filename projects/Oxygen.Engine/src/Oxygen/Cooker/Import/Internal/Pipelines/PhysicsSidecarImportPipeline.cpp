@@ -1043,6 +1043,197 @@ namespace {
     return bytes;
   }
 
+  auto ValidatePhysicsSidecarRequest(
+    ImportSession& session, const ImportRequest& request) -> bool
+  {
+    if (!request.physics.has_value()) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "physics.request.invalid_import_kind",
+        "Physics sidecar import requires ImportRequest::physics payload");
+      return false;
+    }
+    if (request.physics->target_scene_virtual_path.empty()) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "physics.request.target_scene_virtual_path_missing",
+        "Physics sidecar import requires target_scene_virtual_path");
+      return false;
+    }
+    if (!IsCanonicalVirtualPath(request.physics->target_scene_virtual_path)) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "physics.sidecar.target_scene_virtual_path_invalid",
+        "Target scene virtual path must be canonical");
+      return false;
+    }
+    return true;
+  }
+
+  auto LoadCookedContextsAndMountResolver(ImportSession& session,
+    const ImportRequest& request,
+    std::vector<SidecarCookedInspectionContext>& cooked_contexts,
+    content::VirtualPathResolver& resolver) -> bool
+  {
+    cooked_contexts.clear();
+    cooked_contexts.reserve(1U + request.cooked_context_roots.size());
+
+    auto primary_context = SidecarCookedInspectionContext {};
+    if (!detail::LoadCookedInspectionContext(session.CookedRoot(), session,
+          request, kPhysicsSidecarResolverDiagnostics, primary_context)) {
+      return false;
+    }
+    cooked_contexts.push_back(std::move(primary_context));
+
+    for (const auto& context_root : request.cooked_context_roots) {
+      auto context = SidecarCookedInspectionContext {};
+      if (!detail::LoadCookedInspectionContext(context_root, session, request,
+            kPhysicsSidecarResolverDiagnostics, context)) {
+        return false;
+      }
+      cooked_contexts.push_back(std::move(context));
+    }
+
+    for (const auto& context : cooked_contexts) {
+      try {
+        resolver.AddLooseCookedRoot(context.cooked_root);
+      } catch (const std::exception& ex) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "physics.sidecar.resolver_mount_failed",
+          "Failed mounting cooked root for sidecar resolution: "
+            + context.cooked_root.string() + " (" + ex.what() + ")");
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  auto ResolveAndValidateBindings(PhysicsSidecarDocument& parsed,
+    const SidecarResolvedSceneState& resolved_scene_state,
+    std::span<const SidecarCookedInspectionContext> cooked_contexts,
+    content::VirtualPathResolver& resolver, ImportSession& session,
+    const ImportRequest& request) -> bool
+  {
+    const auto* target_context = detail::ResolveSceneInspectionContextByKey(
+      cooked_contexts, resolved_scene_state.scene_key);
+    if (target_context == nullptr) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "physics.sidecar.target_scene_missing",
+        "Resolved target scene key is not present in cooked scene context");
+      return false;
+    }
+
+    const auto target_index_map
+      = BuildAssetIndexMap(target_context->inspection);
+    auto validation_ctx = BindingValidationContext { session, request, resolver,
+      cooked_contexts, target_index_map, resolved_scene_state.node_count };
+
+    ResolveShapeAndMaterialBindings(
+      parsed.rigid_bodies, "rigid_bodies", validation_ctx);
+    ResolveShapeAndMaterialBindings(
+      parsed.colliders, "colliders", validation_ctx);
+    ResolveShapeOnlyBindings(parsed.characters, "characters", validation_ctx);
+    ValidateNodeBindings(
+      parsed.soft_bodies, "soft_bodies",
+      [](const auto& record) { return record.node_index; }, validation_ctx);
+    ValidateJointBindings(parsed.joints, validation_ctx);
+    ValidateVehicleBindings(parsed.vehicles, validation_ctx);
+    ValidateNodeBindings(
+      parsed.aggregates, "aggregates",
+      [](const auto& record) { return record.node_index; }, validation_ctx);
+
+    return !session.HasErrors();
+  }
+
+  auto BuildPhysicsSidecarTables(const PhysicsSidecarDocument& parsed)
+    -> std::vector<TableBlob>
+  {
+    auto rigid_records = ExtractRecordVector(
+      parsed.rigid_bodies, &RigidBodyBindingSource::record);
+    auto collider_records
+      = ExtractRecordVector(parsed.colliders, &ColliderBindingSource::record);
+    auto character_records
+      = ExtractRecordVector(parsed.characters, &CharacterBindingSource::record);
+    auto soft_body_records = parsed.soft_bodies;
+    auto joint_records = parsed.joints;
+    auto vehicle_records = parsed.vehicles;
+    auto aggregate_records = parsed.aggregates;
+
+    auto tables = std::vector<TableBlob> {};
+    SortAndAppendTable(tables, phys::PhysicsBindingType::kRigidBody,
+      rigid_records, [](const auto& lhs, const auto& rhs) {
+        return lhs.node_index < rhs.node_index;
+      });
+    SortAndAppendTable(tables, phys::PhysicsBindingType::kCollider,
+      collider_records, [](const auto& lhs, const auto& rhs) {
+        return lhs.node_index < rhs.node_index;
+      });
+    SortAndAppendTable(tables, phys::PhysicsBindingType::kCharacter,
+      character_records, [](const auto& lhs, const auto& rhs) {
+        return lhs.node_index < rhs.node_index;
+      });
+    SortAndAppendTable(tables, phys::PhysicsBindingType::kSoftBody,
+      soft_body_records, [](const auto& lhs, const auto& rhs) {
+        return lhs.node_index < rhs.node_index;
+      });
+    SortAndAppendTable(tables, phys::PhysicsBindingType::kJoint, joint_records,
+      [](const auto& lhs, const auto& rhs) {
+        if (lhs.node_index_a != rhs.node_index_a) {
+          return lhs.node_index_a < rhs.node_index_a;
+        }
+        return lhs.node_index_b < rhs.node_index_b;
+      });
+    SortAndAppendTable(tables, phys::PhysicsBindingType::kVehicle,
+      vehicle_records, [](const auto& lhs, const auto& rhs) {
+        return lhs.node_index < rhs.node_index;
+      });
+    SortAndAppendTable(tables, phys::PhysicsBindingType::kAggregate,
+      aggregate_records, [](const auto& lhs, const auto& rhs) {
+        return lhs.node_index < rhs.node_index;
+      });
+
+    return tables;
+  }
+
+  auto SerializeAndEmitPhysicsSidecar(
+    const SidecarResolvedSceneState& scene_state, const ImportRequest& request,
+    const std::vector<TableBlob>& tables, ImportSession& session) -> bool
+  {
+    auto sidecar_relpath
+      = ReplaceSceneExtensionWithPhysics(scene_state.scene_descriptor_relpath);
+    auto sidecar_virtual_path
+      = ReplaceSceneExtensionWithPhysics(scene_state.scene_virtual_path);
+    auto sidecar_name = std::filesystem::path(sidecar_relpath).stem().string();
+    if (sidecar_name.empty()) {
+      sidecar_name = "PhysicsScene";
+    }
+
+    auto serialize_error = std::string {};
+    const auto descriptor_bytes
+      = SerializePhysicsSceneAsset(scene_state, sidecar_name, tables,
+        EffectiveContentHashingEnabled(request.options.with_content_hashing),
+        serialize_error);
+    if (!descriptor_bytes.has_value()) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "physics.sidecar.descriptor_serialize_failed",
+        std::move(serialize_error));
+      return false;
+    }
+
+    const auto sidecar_key
+      = util::MakeDeterministicAssetKey(sidecar_virtual_path);
+    try {
+      session.AssetEmitter().Emit(sidecar_key, data::AssetType::kPhysicsScene,
+        sidecar_virtual_path, sidecar_relpath,
+        std::span<const std::byte>(*descriptor_bytes));
+    } catch (const std::exception& ex) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "physics.sidecar.descriptor_emit_failed",
+        "Failed to emit physics sidecar descriptor: " + std::string(ex.what()));
+      return false;
+    }
+
+    return true;
+  }
+
 } // namespace
 
 PhysicsSidecarImportPipeline::PhysicsSidecarImportPipeline(Config config)
@@ -1200,22 +1391,7 @@ auto PhysicsSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
   }
 
   const auto& request = session->Request();
-  if (!request.physics.has_value()) {
-    AddDiagnostic(*session, request, ImportSeverity::kError,
-      "physics.request.invalid_import_kind",
-      "Physics sidecar import requires ImportRequest::physics payload");
-    co_return false;
-  }
-  if (request.physics->target_scene_virtual_path.empty()) {
-    AddDiagnostic(*session, request, ImportSeverity::kError,
-      "physics.request.target_scene_virtual_path_missing",
-      "Physics sidecar import requires target_scene_virtual_path");
-    co_return false;
-  }
-  if (!IsCanonicalVirtualPath(request.physics->target_scene_virtual_path)) {
-    AddDiagnostic(*session, request, ImportSeverity::kError,
-      "physics.sidecar.target_scene_virtual_path_invalid",
-      "Target scene virtual path must be canonical");
+  if (!ValidatePhysicsSidecarRequest(*session, request)) {
     co_return false;
   }
 
@@ -1233,35 +1409,10 @@ auto PhysicsSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
   }
 
   auto cooked_contexts = std::vector<SidecarCookedInspectionContext> {};
-  cooked_contexts.reserve(1U + request.cooked_context_roots.size());
-
-  auto primary_context = SidecarCookedInspectionContext {};
-  if (!detail::LoadCookedInspectionContext(session->CookedRoot(), *session,
-        request, kPhysicsSidecarResolverDiagnostics, primary_context)) {
-    co_return false;
-  }
-  cooked_contexts.push_back(std::move(primary_context));
-
-  for (const auto& context_root : request.cooked_context_roots) {
-    auto context = SidecarCookedInspectionContext {};
-    if (!detail::LoadCookedInspectionContext(context_root, *session, request,
-          kPhysicsSidecarResolverDiagnostics, context)) {
-      co_return false;
-    }
-    cooked_contexts.push_back(std::move(context));
-  }
-
   auto resolver = content::VirtualPathResolver {};
-  for (const auto& context : cooked_contexts) {
-    try {
-      resolver.AddLooseCookedRoot(context.cooked_root);
-    } catch (const std::exception& ex) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "physics.sidecar.resolver_mount_failed",
-        "Failed mounting cooked root for sidecar resolution: "
-          + context.cooked_root.string() + " (" + ex.what() + ")");
-      co_return false;
-    }
+  if (!LoadCookedContextsAndMountResolver(
+        *session, request, cooked_contexts, resolver)) {
+    co_return false;
   }
 
   auto resolved_scene_state
@@ -1272,107 +1423,14 @@ auto PhysicsSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     co_return false;
   }
 
-  const auto* target_context = detail::ResolveSceneInspectionContextByKey(
-    cooked_contexts, resolved_scene_state->scene_key);
-  if (target_context == nullptr) {
-    AddDiagnostic(*session, request, ImportSeverity::kError,
-      "physics.sidecar.target_scene_missing",
-      "Resolved target scene key is not present in cooked scene context");
-    co_return false;
-  }
-  const auto target_index_map = BuildAssetIndexMap(target_context->inspection);
-  auto validation_ctx = BindingValidationContext { *session, request, resolver,
-    cooked_contexts, target_index_map, resolved_scene_state->node_count };
-
-  ResolveShapeAndMaterialBindings(
-    parsed->rigid_bodies, "rigid_bodies", validation_ctx);
-  ResolveShapeAndMaterialBindings(
-    parsed->colliders, "colliders", validation_ctx);
-  ResolveShapeOnlyBindings(parsed->characters, "characters", validation_ctx);
-  ValidateNodeBindings(
-    parsed->soft_bodies, "soft_bodies",
-    [](const auto& record) { return record.node_index; }, validation_ctx);
-  ValidateJointBindings(parsed->joints, validation_ctx);
-  ValidateVehicleBindings(parsed->vehicles, validation_ctx);
-  ValidateNodeBindings(
-    parsed->aggregates, "aggregates",
-    [](const auto& record) { return record.node_index; }, validation_ctx);
-
-  if (session->HasErrors()) {
+  if (!ResolveAndValidateBindings(*parsed, *resolved_scene_state,
+        cooked_contexts, resolver, *session, request)) {
     co_return false;
   }
 
-  auto rigid_records = ExtractRecordVector(
-    parsed->rigid_bodies, &RigidBodyBindingSource::record);
-  auto collider_records
-    = ExtractRecordVector(parsed->colliders, &ColliderBindingSource::record);
-  auto character_records
-    = ExtractRecordVector(parsed->characters, &CharacterBindingSource::record);
-
-  auto tables = std::vector<TableBlob> {};
-  SortAndAppendTable(tables, phys::PhysicsBindingType::kRigidBody,
-    rigid_records, [](const auto& lhs, const auto& rhs) {
-      return lhs.node_index < rhs.node_index;
-    });
-  SortAndAppendTable(tables, phys::PhysicsBindingType::kCollider,
-    collider_records, [](const auto& lhs, const auto& rhs) {
-      return lhs.node_index < rhs.node_index;
-    });
-  SortAndAppendTable(tables, phys::PhysicsBindingType::kCharacter,
-    character_records, [](const auto& lhs, const auto& rhs) {
-      return lhs.node_index < rhs.node_index;
-    });
-  SortAndAppendTable(tables, phys::PhysicsBindingType::kSoftBody,
-    parsed->soft_bodies, [](const auto& lhs, const auto& rhs) {
-      return lhs.node_index < rhs.node_index;
-    });
-  SortAndAppendTable(tables, phys::PhysicsBindingType::kJoint, parsed->joints,
-    [](const auto& lhs, const auto& rhs) {
-      if (lhs.node_index_a != rhs.node_index_a) {
-        return lhs.node_index_a < rhs.node_index_a;
-      }
-      return lhs.node_index_b < rhs.node_index_b;
-    });
-  SortAndAppendTable(tables, phys::PhysicsBindingType::kVehicle,
-    parsed->vehicles, [](const auto& lhs, const auto& rhs) {
-      return lhs.node_index < rhs.node_index;
-    });
-  SortAndAppendTable(tables, phys::PhysicsBindingType::kAggregate,
-    parsed->aggregates, [](const auto& lhs, const auto& rhs) {
-      return lhs.node_index < rhs.node_index;
-    });
-
-  const auto sidecar_relpath = ReplaceSceneExtensionWithPhysics(
-    resolved_scene_state->scene_descriptor_relpath);
-  const auto sidecar_virtual_path = ReplaceSceneExtensionWithPhysics(
-    resolved_scene_state->scene_virtual_path);
-  auto sidecar_name = std::filesystem::path(sidecar_relpath).stem().string();
-  if (sidecar_name.empty()) {
-    sidecar_name = "PhysicsScene";
-  }
-
-  auto serialize_error = std::string {};
-  const auto descriptor_bytes
-    = SerializePhysicsSceneAsset(*resolved_scene_state, sidecar_name, tables,
-      EffectiveContentHashingEnabled(request.options.with_content_hashing),
-      serialize_error);
-  if (!descriptor_bytes.has_value()) {
-    AddDiagnostic(*session, request, ImportSeverity::kError,
-      "physics.sidecar.descriptor_serialize_failed",
-      std::move(serialize_error));
-    co_return false;
-  }
-
-  const auto sidecar_key
-    = util::MakeDeterministicAssetKey(sidecar_virtual_path);
-  try {
-    session->AssetEmitter().Emit(sidecar_key, data::AssetType::kPhysicsScene,
-      sidecar_virtual_path, sidecar_relpath,
-      std::span<const std::byte>(*descriptor_bytes));
-  } catch (const std::exception& ex) {
-    AddDiagnostic(*session, request, ImportSeverity::kError,
-      "physics.sidecar.descriptor_emit_failed",
-      "Failed to emit physics sidecar descriptor: " + std::string(ex.what()));
+  const auto tables = BuildPhysicsSidecarTables(*parsed);
+  if (!SerializeAndEmitPhysicsSidecar(
+        *resolved_scene_state, request, tables, *session)) {
     co_return false;
   }
 
