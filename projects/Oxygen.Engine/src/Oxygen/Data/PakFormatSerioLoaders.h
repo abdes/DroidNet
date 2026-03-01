@@ -681,20 +681,6 @@ inline auto Load(AnyReader& reader,
   return {};
 }
 
-inline auto Load(AnyReader& reader,
-  data::pak::input::InputContextBindingRecord& record) -> Result<void>
-{
-  auto pack = reader.ScopedAlignment(1);
-
-  CHECK_RESULT(reader.ReadInto(record.node_index));
-  CHECK_RESULT(reader.ReadInto(record.context_asset_key));
-  CHECK_RESULT(reader.ReadInto(record.priority));
-  CHECK_RESULT(reader.ReadInto(record.flags));
-  CHECK_RESULT(reader.ReadInto(record.reserved));
-
-  return {};
-}
-
 //=== Physics (v7) ===-------------------------------------------------------//
 
 inline auto Load(AnyReader& reader,

@@ -7,7 +7,7 @@
 #pragma once
 
 #include <Oxygen/Base/Compilers.h>
-#include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/PakFormat_core.h>
 
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
 OXYGEN_DIAGNOSTIC_PUSH
@@ -16,7 +16,7 @@ OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4315)
 
 //! Oxygen PAK format input domain schema.
 /*!
- Owns input action/mapping descriptors and input scene-component records.
+ Owns input action and mapping-context descriptors.
 */
 namespace oxygen::data::pak::input {
 
@@ -32,6 +32,8 @@ OXGN_DATA_NDAPI auto to_string(InputActionAssetFlags value) -> std::string;
 
 enum class InputMappingContextFlags : uint32_t { // NOLINT(*-enum-size)
   kNone = 0,
+  kAutoLoad = OXYGEN_FLAG(0),
+  kAutoActivate = OXYGEN_FLAG(1),
 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(InputMappingContextFlags)
 OXGN_DATA_NDAPI auto to_string(InputMappingContextFlags value) -> std::string;
@@ -64,13 +66,6 @@ enum class InputTriggerBehavior : uint8_t {
 OXGN_DATA_NDAPI auto to_string(InputTriggerBehavior value) noexcept
   -> std::string_view;
 
-enum class InputContextBindingFlags : uint32_t { // NOLINT(*-enum-size)
-  kNone = 0,
-  kActivateOnLoad = OXYGEN_FLAG(0),
-};
-OXYGEN_DEFINE_FLAGS_OPERATORS(InputContextBindingFlags)
-OXGN_DATA_NDAPI auto to_string(InputContextBindingFlags value) -> std::string;
-
 #pragma pack(push, 1)
 struct InputDataTable {
   uint64_t offset = 0;
@@ -95,11 +90,12 @@ static_assert(sizeof(InputActionAssetDesc) == 256);
 struct InputMappingContextAssetDesc {
   core::AssetHeader header;
   InputMappingContextFlags flags = InputMappingContextFlags::kNone;
+  int32_t default_priority = 0;
   InputDataTable mappings = {};
   InputDataTable triggers = {};
   InputDataTable trigger_aux = {};
   InputDataTable strings = {};
-  uint8_t reserved[93] = {};
+  uint8_t reserved[89] = {};
 };
 #pragma pack(pop)
 static_assert(sizeof(InputMappingContextAssetDesc) == 256);
@@ -144,17 +140,6 @@ struct InputTriggerAuxRecord {
 };
 #pragma pack(pop)
 static_assert(sizeof(InputTriggerAuxRecord) == 32);
-
-#pragma pack(push, 1)
-struct InputContextBindingRecord {
-  world::SceneNodeIndexT node_index = 0;
-  AssetKey context_asset_key = {};
-  int32_t priority = 0;
-  InputContextBindingFlags flags = InputContextBindingFlags::kNone;
-  uint32_t reserved = 0;
-};
-#pragma pack(pop)
-static_assert(sizeof(InputContextBindingRecord) == 32);
 
 } // namespace oxygen::data::pak::input
 

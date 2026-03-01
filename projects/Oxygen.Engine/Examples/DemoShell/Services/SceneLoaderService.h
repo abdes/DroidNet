@@ -200,8 +200,6 @@ private:
   void AttachLights(const data::SceneAsset& asset);
   //! Attach scripting components to nodes.
   void AttachScripting(const data::SceneAsset& asset);
-  //! Attach input mapping contexts to the InputSystem.
-  void AttachInputMappings(const data::SceneAsset& asset);
   //! Apply script parameter overrides for one slot.
   void ApplySlotParameters(scene::SceneNode::Scripting& scripting,
     const scene::SceneNode::Scripting::Slot& slot,

@@ -37,7 +37,6 @@ public:
     -> oxygen::co::Co<> override
   {
     using oxygen::data::ComponentType;
-    using oxygen::data::pak::input::InputContextBindingRecord;
     using oxygen::data::pak::scripting::ScriptingComponentRecord;
     using oxygen::data::pak::world::DirectionalLightRecord;
     using oxygen::data::pak::world::EnvironmentComponentType;
@@ -198,8 +197,6 @@ public:
       scene->GetComponents<SpotLightRecord>().size());
     DumpComponentTableHeader(ComponentType::kScripting,
       scene->GetComponents<ScriptingComponentRecord>().size());
-    DumpComponentTableHeader(ComponentType::kInputContextBinding,
-      scene->GetComponents<InputContextBindingRecord>().size());
     std::cout << "\n";
 
     const auto DumpDirectionalLights = [&]() -> void {
@@ -274,30 +271,9 @@ public:
       std::cout << "\n";
     };
 
-    const auto DumpInputContextBindings = [&]() -> void {
-      const auto bindings = scene->GetComponents<InputContextBindingRecord>();
-      if (bindings.empty()) {
-        return;
-      }
-
-      std::cout << "    Input Context Bindings (" << bindings.size() << "):\n";
-      for (size_t i = 0; i < bindings.size(); ++i) {
-        InputContextBindingRecord record {};
-        std::memcpy(&record, bindings.data() + i, sizeof(record));
-        std::cout << "      [" << i << "] node=" << record.node_index
-                  << " context="
-                  << oxygen::data::to_string(record.context_asset_key) << "\n";
-        PrintUtils::Field("Priority", record.priority, 10);
-        PrintUtils::Field("Flags", nostd::to_string(record.flags), 10);
-      }
-
-      std::cout << "\n";
-    };
-
     DumpDirectionalLights();
     DumpPointLights();
     DumpSpotLights();
-    DumpInputContextBindings();
 
     // v3+ scenes: validated trailing SceneEnvironment block.
     if (!scene->HasEnvironmentBlock()) {
