@@ -4,6 +4,7 @@
 
 Supported import kinds:
 - `texture`
+- `texture-descriptor` (manifest job type)
 - `fbx`
 - `gltf`
 - `input`
@@ -153,10 +154,12 @@ Optional:
 
 Shipped JSON schemas:
 - source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
+- source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json`
 - source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json`
 - source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json`
 - source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json`
 - installed for users as: `schemas/oxygen.import-manifest.schema.json`
+- installed for users as: `schemas/oxygen.texture-descriptor.schema.json`
 - installed for users as: `schemas/oxygen.input.schema.json`
 - installed for users as: `schemas/oxygen.input-action.schema.json`
 - installed for users as: `schemas/oxygen.physics-sidecar.schema.json`
@@ -169,6 +172,7 @@ Repository checkout:
 {
   "json.schemas": [
     { "fileMatch": ["import-manifest*.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json" },
+    { "fileMatch": ["*.texture.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json" },
     { "fileMatch": ["*.input.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json" },
     { "fileMatch": ["*.input-action.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json" },
     { "fileMatch": ["*.physics-sidecar.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json" }
@@ -182,6 +186,7 @@ Installed package layout:
 {
   "json.schemas": [
     { "fileMatch": ["import-manifest*.json"], "url": "./schemas/oxygen.import-manifest.schema.json" },
+    { "fileMatch": ["*.texture.json"], "url": "./schemas/oxygen.texture-descriptor.schema.json" },
     { "fileMatch": ["*.input.json"], "url": "./schemas/oxygen.input.schema.json" },
     { "fileMatch": ["*.input-action.json"], "url": "./schemas/oxygen.input-action.schema.json" },
     { "fileMatch": ["*.physics-sidecar.json"], "url": "./schemas/oxygen.physics-sidecar.schema.json" }
@@ -340,6 +345,10 @@ Top-level fields:
 Job rules:
 - each job requires `type`
 - non-sidecar jobs require `source`
+- `texture-descriptor` jobs:
+  - use `source` as descriptor JSON path
+  - support texture tuning keys (`intent`, `mip_policy`, `output_format`, etc.) as manifest-level defaults/job overrides
+  - reject non-texture keys (for example scene/script-specific keys)
 - `input` jobs require:
   - `id`
   - `source`

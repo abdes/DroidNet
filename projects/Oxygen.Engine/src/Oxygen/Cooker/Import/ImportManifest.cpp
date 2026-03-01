@@ -18,6 +18,7 @@
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/PhysicsImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/ScriptImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/TextureDescriptorImportRequestBuilder.h>
 
 namespace oxygen::content::import {
 
@@ -1131,6 +1132,14 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream) const
 {
   if (job_type == "texture") {
     return internal::BuildTextureRequest(texture, error_stream);
+  }
+  if (job_type == "texture-descriptor") {
+    return internal::BuildTextureDescriptorRequest(
+      TextureDescriptorImportSettings {
+        .descriptor_path = texture.source_path,
+        .texture = texture,
+      },
+      error_stream);
   }
   if (job_type == "fbx") {
     return internal::BuildSceneRequest(fbx, ImportFormat::kFbx, error_stream);

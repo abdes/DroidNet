@@ -62,6 +62,8 @@ oxygen_embed_json_schemas(
   SCHEMAS
     kImportManifestSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.import-manifest.schema.json"
+    kTextureDescriptorSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.texture-descriptor.schema.json"
     kInputSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input.schema.json"
     kInputActionSchema
@@ -96,6 +98,8 @@ set(
   "Import/SceneImportSettings.h"
   "Import/ScratchImage.h"
   "Import/TextureImportDesc.h"
+  "Import/TextureDescriptorImportRequestBuilder.h"
+  "Import/TextureDescriptorImportSettings.h"
   "Import/TextureImporter.h"
   "Import/TextureImportError.h"
   "Import/TextureImportPresets.h"
@@ -239,6 +243,7 @@ set(
   "Import/Internal/SceneImportRequestBuilder.cpp"
   "Import/Internal/SidecarSceneResolver.cpp"
   "Import/Internal/TextureCooker.cpp"
+  "Import/Internal/TextureDescriptorImportRequestBuilder.cpp"
   "Import/Internal/TextureImportRequestBuilder.cpp"
   "Import/Internal/Utils/ImportSettingsUtils.cpp"
   "Import/Internal/WindowsFileReader.cpp"
@@ -343,6 +348,7 @@ if(${META_PROJECT_ID}_INSTALL)
   set(
     _oxygen_cooker_schema_files
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.import-manifest.schema.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.texture-descriptor.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input-action.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-sidecar.schema.json"

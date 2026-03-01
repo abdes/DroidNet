@@ -1,0 +1,330 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Oxygen Texture Descriptor",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "source"
+    ],
+    "properties": {
+        "$schema": {
+            "type": "string"
+        },
+        "name": {
+            "type": "string"
+        },
+        "content_hashing": {
+            "type": "boolean"
+        },
+        "source": {
+            "type": "string",
+            "minLength": 1
+        },
+        "sources": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/source_mapping"
+            }
+        },
+        "preset": {
+            "$ref": "#/definitions/texture_preset"
+        },
+        "intent": {
+            "$ref": "#/definitions/texture_intent"
+        },
+        "decode": {
+            "$ref": "#/definitions/decode_settings"
+        },
+        "mips": {
+            "$ref": "#/definitions/mips_settings"
+        },
+        "output": {
+            "$ref": "#/definitions/output_settings"
+        },
+        "hdr": {
+            "$ref": "#/definitions/hdr_settings"
+        },
+        "cube": {
+            "$ref": "#/definitions/cube_settings"
+        }
+    },
+    "allOf": [
+        {
+            "if": {
+                "properties": {
+                    "mips": {
+                        "type": "object",
+                        "properties": {
+                            "policy": {
+                                "const": "max"
+                            }
+                        },
+                        "required": [
+                            "policy"
+                        ]
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "mips": {
+                        "required": [
+                            "max_mips"
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "cube": {
+                        "type": "object",
+                        "properties": {
+                            "equirect_to_cube": {
+                                "const": true
+                            }
+                        },
+                        "required": [
+                            "equirect_to_cube"
+                        ]
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "cube": {
+                        "required": [
+                            "cube_face_size"
+                        ]
+                    }
+                }
+            }
+        }
+    ],
+    "definitions": {
+        "source_mapping": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "file"
+            ],
+            "properties": {
+                "file": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "layer": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 65535
+                },
+                "mip": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 65535
+                },
+                "slice": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 65535
+                }
+            }
+        },
+        "texture_intent": {
+            "enum": [
+                "albedo",
+                "normal",
+                "roughness",
+                "metallic",
+                "ao",
+                "emissive",
+                "opacity",
+                "orm",
+                "hdr_env",
+                "hdr_probe",
+                "data",
+                "height"
+            ]
+        },
+        "color_space": {
+            "enum": [
+                "srgb",
+                "linear"
+            ]
+        },
+        "texture_format": {
+            "enum": [
+                "rgba8",
+                "rgba8_srgb",
+                "rgba8-srgb",
+                "bc7",
+                "bc7_srgb",
+                "bc7-srgb",
+                "rgba16f",
+                "rgba32f"
+            ]
+        },
+        "texture_preset": {
+            "enum": [
+                "albedo",
+                "albedo-srgb",
+                "albedo-linear",
+                "normal",
+                "normal-bc7",
+                "roughness",
+                "metallic",
+                "ao",
+                "orm",
+                "orm-bc7",
+                "emissive",
+                "ui",
+                "hdr-env",
+                "hdr-env-16f",
+                "hdr-env-32f",
+                "hdr-probe",
+                "data",
+                "height"
+            ]
+        },
+        "mip_policy": {
+            "enum": [
+                "none",
+                "full",
+                "max"
+            ]
+        },
+        "mip_filter": {
+            "enum": [
+                "box",
+                "kaiser",
+                "lanczos"
+            ]
+        },
+        "bc7_quality": {
+            "enum": [
+                "none",
+                "fast",
+                "default",
+                "high"
+            ]
+        },
+        "packing_policy": {
+            "enum": [
+                "d3d12",
+                "tight"
+            ]
+        },
+        "cube_layout": {
+            "enum": [
+                "auto",
+                "hstrip",
+                "vstrip",
+                "hcross",
+                "vcross"
+            ]
+        },
+        "hdr_handling": {
+            "enum": [
+                "error",
+                "tonemap",
+                "auto",
+                "keep",
+                "float"
+            ]
+        },
+        "decode_settings": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "color_space": {
+                    "$ref": "#/definitions/color_space"
+                },
+                "flip_y": {
+                    "type": "boolean"
+                },
+                "force_rgba": {
+                    "type": "boolean"
+                },
+                "flip_normal_green": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "mips_settings": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "policy": {
+                    "$ref": "#/definitions/mip_policy"
+                },
+                "max_mips": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 255
+                },
+                "filter": {
+                    "$ref": "#/definitions/mip_filter"
+                },
+                "filter_space": {
+                    "$ref": "#/definitions/color_space"
+                },
+                "renormalize": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "output_settings": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "format": {
+                    "$ref": "#/definitions/texture_format"
+                },
+                "data_format": {
+                    "$ref": "#/definitions/texture_format"
+                },
+                "bc7_quality": {
+                    "$ref": "#/definitions/bc7_quality"
+                },
+                "packing_policy": {
+                    "$ref": "#/definitions/packing_policy"
+                }
+            }
+        },
+        "hdr_settings": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "handling": {
+                    "$ref": "#/definitions/hdr_handling"
+                },
+                "exposure_ev": {
+                    "type": "number"
+                },
+                "bake_hdr": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "cube_settings": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "cubemap": {
+                    "type": "boolean"
+                },
+                "equirect_to_cube": {
+                    "type": "boolean"
+                },
+                "cube_face_size": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "cube_layout": {
+                    "$ref": "#/definitions/cube_layout"
+                }
+            }
+        }
+    }
+}

@@ -90,6 +90,52 @@
                     "if": {
                         "properties": {
                             "type": {
+                                "const": "texture-descriptor"
+                            }
+                        }
+                    },
+                    "then": {
+                        "propertyNames": {
+                            "enum": [
+                                "id",
+                                "depends_on",
+                                "type",
+                                "source",
+                                "sources",
+                                "output",
+                                "name",
+                                "verbose",
+                                "intent",
+                                "color_space",
+                                "output_format",
+                                "data_format",
+                                "preset",
+                                "mip_policy",
+                                "mip_filter",
+                                "mip_filter_space",
+                                "bc7_quality",
+                                "packing_policy",
+                                "cube_layout",
+                                "hdr_handling",
+                                "exposure_ev",
+                                "max_mips",
+                                "cube_face_size",
+                                "flip_y",
+                                "flip_normal_green",
+                                "renormalize",
+                                "bake_hdr",
+                                "force_rgba",
+                                "cubemap",
+                                "equirect_to_cube",
+                                "content_hashing"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "type": {
                                 "enum": [
                                     "script-sidecar",
                                     "physics-sidecar"
@@ -495,6 +541,7 @@
                 "type": {
                     "enum": [
                         "texture",
+                        "texture-descriptor",
                         "fbx",
                         "gltf",
                         "script",

@@ -42,7 +42,6 @@ m_gtest_program(
     "Import/ImageDecode_test.cpp"
     "Import/Bc7Encoder_test.cpp"
     "Import/ImageProcessing_test.cpp"
-    "Import/LooseCookedWriter_test.cpp"
     "Import/AsyncImporter_test.cpp"
     "Import/AsyncImportService_test.cpp"
     "Import/ImportEventLoop_test.cpp"
@@ -53,24 +52,60 @@ m_gtest_program(
 )
 
 m_gtest_program(
-  AsyncImportScripting
+  AsyncImportInput
   SOURCES
     "Import/InputJsonSchema_test.cpp"
     "Import/InputImportRequestBuilder_test.cpp"
     "Import/ImportManifest_input_test.cpp"
+)
+target_link_libraries(
+  Oxygen.Cooker.AsyncImportInput.Tests
+  PRIVATE
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
+)
+
+m_gtest_program(
+  AsyncImportPhysics
+  SOURCES
     "Import/ImportManifest_physics_sidecar_test.cpp"
     "Import/PhysicsImportJob_test.cpp"
     "Import/PhysicsImportPipeline_test.cpp"
-    "Import/ImportManifest_script_sidecar_test.cpp"
     "Import/PhysicsImportRequestBuilder_test.cpp"
     "Import/PhysicsJsonSchema_test.cpp"
+)
+target_link_libraries(
+  Oxygen.Cooker.AsyncImportPhysics.Tests
+  PRIVATE
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
+)
+
+m_gtest_program(
+  AsyncImportTextureDescriptor
+  SOURCES
+    "Import/ImportManifest_texture_descriptor_test.cpp"
+    "Import/TextureDescriptorImportRequestBuilder_test.cpp"
+    "Import/TextureDescriptorJsonSchema_test.cpp"
+)
+target_link_libraries(
+  Oxygen.Cooker.AsyncImportTextureDescriptor.Tests
+  PRIVATE
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
+)
+
+m_gtest_program(
+  AsyncImportScript
+  SOURCES
+    "Import/ImportManifest_script_sidecar_test.cpp"
     "Import/ScriptImportRequestBuilder_test.cpp"
     "Import/ScriptImportJob_test.cpp"
     "Import/ScriptImportPipeline_test.cpp"
     "Import/ScriptCompileMode_contract_test.cpp"
 )
 target_link_libraries(
-  Oxygen.Cooker.AsyncImportScripting.Tests
+  Oxygen.Cooker.AsyncImportScript.Tests
   PRIVATE
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator
@@ -141,6 +176,7 @@ m_gtest_program(
   SOURCES
     "Loose/DummyIndex.h"
     "Loose/Inspection_test.cpp"
+    "Loose/LooseCookedWriter_test.cpp"
     "Loose/LooseCookedLayout_test.cpp"
     "Loose/Validation_test.cpp"
 )
