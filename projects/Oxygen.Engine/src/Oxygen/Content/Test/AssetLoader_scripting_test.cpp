@@ -332,11 +332,26 @@ auto WriteLooseCookedSceneWithScripting(
     += std::string(layout.virtual_mount_root) + "/" + rel_desc.generic_string();
   strings.push_back('\0');
   const auto off_scripts_table = static_cast<uint32_t>(strings.size());
-  strings += std::string(layout.resources_dir) + "/script-bindings.table";
+  strings += std::string(layout.resources_dir) + "/scripts.table";
   strings.push_back('\0');
   const auto off_scripts_data = static_cast<uint32_t>(strings.size());
+  strings += std::string(layout.resources_dir) + "/scripts.data";
+  strings.push_back('\0');
+  const auto off_script_bindings_table = static_cast<uint32_t>(strings.size());
+  strings += std::string(layout.resources_dir) + "/script-bindings.table";
+  strings.push_back('\0');
+  const auto off_script_bindings_data = static_cast<uint32_t>(strings.size());
   strings += std::string(layout.resources_dir) + "/script-bindings.data";
   strings.push_back('\0');
+
+  {
+    std::ofstream out(
+      cooked_root / layout.resources_dir / "scripts.table", std::ios::binary);
+  }
+  {
+    std::ofstream out(
+      cooked_root / layout.resources_dir / "scripts.data", std::ios::binary);
+  }
 
   ScriptSlotRecord slot {};
   {
@@ -364,7 +379,7 @@ auto WriteLooseCookedSceneWithScripting(
   header.asset_count = 1;
   header.asset_entry_size = sizeof(AssetEntry);
   header.file_records_offset = header.asset_entries_offset + sizeof(AssetEntry);
-  header.file_record_count = 2;
+  header.file_record_count = 4;
   header.file_record_size = sizeof(oxygen::data::loose_cooked::FileRecord);
 
   AssetEntry asset_entry {};
@@ -374,15 +389,25 @@ auto WriteLooseCookedSceneWithScripting(
   asset_entry.asset_type = static_cast<uint8_t>(AssetType::kScene);
   asset_entry.descriptor_size = static_cast<uint64_t>(bytes.size());
 
-  FileRecord scripts_table_record {};
-  scripts_table_record.kind = FileKind::kScriptBindingsTable;
-  scripts_table_record.relpath_offset = off_scripts_table;
-  scripts_table_record.size = sizeof(ScriptSlotRecord);
+  FileRecord scripts_resource_table_record {};
+  scripts_resource_table_record.kind = FileKind::kScriptsTable;
+  scripts_resource_table_record.relpath_offset = off_scripts_table;
+  scripts_resource_table_record.size = 0;
 
-  FileRecord scripts_data_record {};
-  scripts_data_record.kind = FileKind::kScriptBindingsData;
-  scripts_data_record.relpath_offset = off_scripts_data;
-  scripts_data_record.size = 0;
+  FileRecord scripts_resource_data_record {};
+  scripts_resource_data_record.kind = FileKind::kScriptsData;
+  scripts_resource_data_record.relpath_offset = off_scripts_data;
+  scripts_resource_data_record.size = 0;
+
+  FileRecord script_bindings_table_record {};
+  script_bindings_table_record.kind = FileKind::kScriptBindingsTable;
+  script_bindings_table_record.relpath_offset = off_script_bindings_table;
+  script_bindings_table_record.size = sizeof(ScriptSlotRecord);
+
+  FileRecord script_bindings_data_record {};
+  script_bindings_data_record.kind = FileKind::kScriptBindingsData;
+  script_bindings_data_record.relpath_offset = off_script_bindings_data;
+  script_bindings_data_record.size = 0;
 
   std::ofstream index_out(
     cooked_root / "container.index.bin", std::ios::binary);
@@ -390,10 +415,14 @@ auto WriteLooseCookedSceneWithScripting(
   index_out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
   index_out.write(
     reinterpret_cast<const char*>(&asset_entry), sizeof(asset_entry));
-  index_out.write(reinterpret_cast<const char*>(&scripts_table_record),
-    sizeof(scripts_table_record));
-  index_out.write(reinterpret_cast<const char*>(&scripts_data_record),
-    sizeof(scripts_data_record));
+  index_out.write(reinterpret_cast<const char*>(&scripts_resource_table_record),
+    sizeof(scripts_resource_table_record));
+  index_out.write(reinterpret_cast<const char*>(&scripts_resource_data_record),
+    sizeof(scripts_resource_data_record));
+  index_out.write(reinterpret_cast<const char*>(&script_bindings_table_record),
+    sizeof(script_bindings_table_record));
+  index_out.write(reinterpret_cast<const char*>(&script_bindings_data_record),
+    sizeof(script_bindings_data_record));
 }
 
 auto ReadAssetHeader(oxygen::content::internal::IContentSource& source,
