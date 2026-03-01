@@ -139,16 +139,18 @@ namespace {
     return std::string { base } + "/" + std::string { child };
   }
 
-  auto BuildScriptsTableRelPath(const ImportRequest& request) -> std::string
+  auto BuildScriptBindingsTableRelPath(const ImportRequest& request)
+    -> std::string
   {
     return JoinRelativePath(
-      request.loose_cooked_layout.resources_dir, "scripts.table");
+      request.loose_cooked_layout.resources_dir, "script-bindings.table");
   }
 
-  auto BuildScriptsDataRelPath(const ImportRequest& request) -> std::string
+  auto BuildScriptBindingsDataRelPath(const ImportRequest& request)
+    -> std::string
   {
     return JoinRelativePath(
-      request.loose_cooked_layout.resources_dir, "scripts.data");
+      request.loose_cooked_layout.resources_dir, "script-bindings.data");
   }
 
   template <typename RecordT>
@@ -665,10 +667,10 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       == ScriptingImportKind::kScriptingSidecar) {
       report.script_slots_written
         = CountPackedRecords<data::pak::scripting::ScriptSlotRecord>(
-          cooked_root_ / BuildScriptsTableRelPath(request_));
+          cooked_root_ / BuildScriptBindingsTableRelPath(request_));
       report.script_params_written
         = CountPackedRecords<data::pak::scripting::ScriptParamRecord>(
-          cooked_root_ / BuildScriptsDataRelPath(request_));
+          cooked_root_ / BuildScriptBindingsDataRelPath(request_));
 
       auto component_count = uint64_t { 0 };
       if (asset_emitter_.has_value()) {

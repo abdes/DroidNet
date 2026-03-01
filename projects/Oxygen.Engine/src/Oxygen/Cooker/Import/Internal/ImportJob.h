@@ -120,6 +120,10 @@ protected:
   //! Access pipeline concurrency settings.
   OXGN_COOK_NDAPI auto Concurrency() const noexcept -> const ImportConcurrency&;
 
+  //! Access optional script compile callback.
+  OXGN_COOK_NDAPI auto ScriptCompileCallback() const noexcept
+    -> const AsyncImportService::ScriptCompileCallback&;
+
   //! Access the resource table registry.
   OXGN_COOK_NDAPI auto TableRegistry() const noexcept
     -> observer_ptr<ResourceTableRegistry>;
@@ -201,6 +205,7 @@ private:
   observer_ptr<ResourceTableRegistry> table_registry_ {};
   observer_ptr<LooseCookedIndexRegistry> index_registry_ {};
   ImportConcurrency concurrency_ {};
+  AsyncImportService::ScriptCompileCallback script_compile_callback_ {};
   std::stop_token stop_token_;
 
   std::string name_;

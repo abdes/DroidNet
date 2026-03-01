@@ -70,6 +70,20 @@ public:
         FileKind::kScriptsData, *scripts_data_path_);
     }
 
+    if (const auto rel = index_.FindFileRelPath(FileKind::kScriptBindingsTable);
+      rel) {
+      script_bindings_table_path_ = cooked_root_ / std::filesystem::path(*rel);
+      ValidateFileRecordExistsAndMatchesSize(
+        FileKind::kScriptBindingsTable, *script_bindings_table_path_);
+    }
+
+    if (const auto rel = index_.FindFileRelPath(FileKind::kScriptBindingsData);
+      rel) {
+      script_bindings_data_path_ = cooked_root_ / std::filesystem::path(*rel);
+      ValidateFileRecordExistsAndMatchesSize(
+        FileKind::kScriptBindingsData, *script_bindings_data_path_);
+    }
+
     if (const auto rel = index_.FindFileRelPath(FileKind::kPhysicsTable); rel) {
       physics_table_path_ = cooked_root_ / std::filesystem::path(*rel);
       ValidateFileRecordExistsAndMatchesSize(
@@ -255,9 +269,9 @@ public:
     if (count == 0) {
       return records;
     }
-    if (!scripts_table_path_.has_value()) {
+    if (!script_bindings_table_path_.has_value()) {
       throw std::runtime_error(
-        "scripts.table is required to read script slot records");
+        "script-bindings.table is required to read script slot records");
     }
 
     constexpr size_t kRecordSize
@@ -265,18 +279,20 @@ public:
     const size_t start_offset = static_cast<size_t>(start_index) * kRecordSize;
     const size_t bytes_to_read = static_cast<size_t>(count) * kRecordSize;
 
-    serio::FileStream<> stream(*scripts_table_path_, std::ios::in);
+    serio::FileStream<> stream(*script_bindings_table_path_, std::ios::in);
     serio::Reader<serio::FileStream<>> reader(stream);
     auto align_guard = reader.ScopedAlignment(1);
     (void)align_guard;
 
     auto seek_res = reader.Seek(start_offset);
     if (!seek_res) {
-      throw std::runtime_error("Failed to seek scripts.table slot range");
+      throw std::runtime_error("Failed to seek script-bindings.table slot "
+                               "range");
     }
     auto blob = reader.ReadBlob(bytes_to_read);
     if (!blob) {
-      throw std::runtime_error("Failed to read scripts.table slot range");
+      throw std::runtime_error("Failed to read script-bindings.table slot "
+                               "range");
     }
 
     records.resize(count);
@@ -298,27 +314,29 @@ public:
     if (count == 0) {
       return records;
     }
-    if (!scripts_data_path_.has_value()) {
+    if (!script_bindings_data_path_.has_value()) {
       throw std::runtime_error(
-        "scripts.data is required to read script parameter records");
+        "script-bindings.data is required to read script parameter records");
     }
 
     constexpr size_t kRecordSize
       = sizeof(data::pak::scripting::ScriptParamRecord);
     const size_t bytes_to_read = static_cast<size_t>(count) * kRecordSize;
 
-    serio::FileStream<> stream(*scripts_data_path_, std::ios::in);
+    serio::FileStream<> stream(*script_bindings_data_path_, std::ios::in);
     serio::Reader<serio::FileStream<>> reader(stream);
     auto align_guard = reader.ScopedAlignment(1);
     (void)align_guard;
 
     auto seek_res = reader.Seek(static_cast<size_t>(absolute_offset));
     if (!seek_res) {
-      throw std::runtime_error("Failed to seek scripts.data parameter range");
+      throw std::runtime_error("Failed to seek script-bindings.data parameter "
+                               "range");
     }
     auto blob = reader.ReadBlob(bytes_to_read);
     if (!blob) {
-      throw std::runtime_error("Failed to read scripts.data parameter range");
+      throw std::runtime_error("Failed to read script-bindings.data parameter "
+                               "range");
     }
 
     records.resize(count);
@@ -364,6 +382,14 @@ private:
     if (scripts_table != scripts_data) {
       throw std::runtime_error(
         "Loose cooked root must provide both scripts.table and scripts.data");
+    }
+
+    const auto script_bindings_table = script_bindings_table_path_.has_value();
+    const auto script_bindings_data = script_bindings_data_path_.has_value();
+    if (script_bindings_table != script_bindings_data) {
+      throw std::runtime_error("Loose cooked root must provide both "
+                               "script-bindings.table and "
+                               "script-bindings.data");
     }
 
     const auto physics_table = physics_table_path_.has_value();
@@ -598,7 +624,7 @@ private:
 
   [[nodiscard]] auto ScriptSlotCount() const noexcept -> uint32_t override
   {
-    if (!scripts_table_path_) {
+    if (!script_bindings_table_path_) {
       return 0;
     }
     constexpr uint64_t kSlotRecordSize
@@ -607,7 +633,8 @@ private:
       return 0;
     }
     std::error_code ec;
-    const auto size = std::filesystem::file_size(*scripts_table_path_, ec);
+    const auto size
+      = std::filesystem::file_size(*script_bindings_table_path_, ec);
     if (ec) {
       return 0;
     }
@@ -718,6 +745,8 @@ private:
   std::optional<std::filesystem::path> textures_data_path_;
   std::optional<std::filesystem::path> scripts_table_path_;
   std::optional<std::filesystem::path> scripts_data_path_;
+  std::optional<std::filesystem::path> script_bindings_table_path_;
+  std::optional<std::filesystem::path> script_bindings_data_path_;
   std::optional<std::filesystem::path> physics_table_path_;
   std::optional<std::filesystem::path> physics_data_path_;
 

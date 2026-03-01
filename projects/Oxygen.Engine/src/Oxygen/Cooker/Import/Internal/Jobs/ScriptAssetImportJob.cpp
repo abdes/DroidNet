@@ -103,6 +103,7 @@ auto ScriptAssetImportJob::ExecuteAsync() -> co::Co<ImportReport>
     .source_bytes = std::move(source.bytes),
     .session = make_observer(&session),
     .index_registry = IndexRegistry(),
+    .script_compile_callback = ScriptCompileCallback(),
     .on_started = {},
     .on_finished = {},
     .stop_token = StopToken(),

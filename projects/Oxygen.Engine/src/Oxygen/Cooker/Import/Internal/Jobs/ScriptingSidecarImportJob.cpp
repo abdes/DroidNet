@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <chrono>
+#include <cstring>
 #include <string>
 
 #include <Oxygen/Base/Logging.h>
@@ -133,6 +134,28 @@ auto ScriptingSidecarImportJob::LoadSource(ImportSession& session)
   -> co::Co<LoadedSource>
 {
   const auto& req = Request();
+  const auto& inline_bindings = req.options.scripting.inline_bindings_json;
+  if (!inline_bindings.empty()) {
+    auto bytes = std::vector<std::byte> {};
+    bytes.resize(inline_bindings.size());
+    if (!inline_bindings.empty()) {
+      std::memcpy(bytes.data(), inline_bindings.data(), inline_bindings.size());
+    }
+    co_return LoadedSource {
+      .success = true,
+      .bytes = std::move(bytes),
+    };
+  }
+
+  if (req.source_path.empty()) {
+    AddDiagnostic(session, req, ImportSeverity::kError,
+      "script.sidecar.source_missing",
+      "Scripting sidecar import requires source_path or inline_bindings_json");
+    co_return LoadedSource {
+      .success = false,
+    };
+  }
+
   auto* const reader = FileReader().get();
   if (reader == nullptr) {
     AddDiagnostic(session, req, ImportSeverity::kError,

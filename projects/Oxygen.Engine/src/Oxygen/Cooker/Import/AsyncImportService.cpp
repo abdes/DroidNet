@@ -480,6 +480,7 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
     .registry = table_registry,
     .index_registry = index_registry,
     .concurrency = concurrency,
+    .script_compile_callback = impl_->config_.script_compile_callback,
     .stop_token = impl_->stop_source_.get_token(),
   };
 

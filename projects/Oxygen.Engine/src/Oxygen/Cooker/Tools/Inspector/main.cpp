@@ -119,6 +119,10 @@ auto FileKindToString(const FileKind kind) -> std::string_view
     return "scripts.table";
   case FileKind::kScriptsData:
     return "scripts.data";
+  case FileKind::kScriptBindingsTable:
+    return "script-bindings.table";
+  case FileKind::kScriptBindingsData:
+    return "script-bindings.data";
   case FileKind::kPhysicsTable:
     return "physics.table";
   case FileKind::kPhysicsData:
@@ -1012,9 +1016,9 @@ auto RunDumpScriptSlots(const DumpScriptOptions& opts) -> int
     oxygen::content::lc::Inspection inspection;
     inspection.LoadFromRoot(cooked_root);
 
-    auto relpath = FindFileRelPathBySuffix(inspection, "scripts.table");
+    auto relpath = FindFileRelPathBySuffix(inspection, "script-bindings.table");
     if (!relpath) {
-      std::cerr << "ERROR: scripts.table not found in index\n";
+      std::cerr << "ERROR: script-bindings.table not found in index\n";
       return 2;
     }
 
@@ -1061,14 +1065,16 @@ auto RunDumpScriptParams(const DumpScriptOptions& opts) -> int
     oxygen::content::lc::Inspection inspection;
     inspection.LoadFromRoot(cooked_root);
 
-    auto slots_relpath = FindFileRelPathBySuffix(inspection, "scripts.table");
-    auto data_relpath = FindFileRelPathBySuffix(inspection, "scripts.data");
+    auto slots_relpath
+      = FindFileRelPathBySuffix(inspection, "script-bindings.table");
+    auto data_relpath
+      = FindFileRelPathBySuffix(inspection, "script-bindings.data");
     if (!slots_relpath) {
-      std::cerr << "ERROR: scripts.table not found in index\n";
+      std::cerr << "ERROR: script-bindings.table not found in index\n";
       return 2;
     }
     if (!data_relpath) {
-      std::cerr << "ERROR: scripts.data not found in index\n";
+      std::cerr << "ERROR: script-bindings.data not found in index\n";
       return 2;
     }
 
@@ -1240,7 +1246,7 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
 
   const std::shared_ptr<Command> script_slots_cmd
     = CommandBuilder("script-slots")
-        .About("Dump scripts.table slot entries.")
+        .About("Dump script-bindings.table slot entries.")
         .WithPositionalArguments(script_slots_root);
 
   auto script_params_root = Option::Positional("cooked_root")
@@ -1252,7 +1258,8 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
 
   const std::shared_ptr<Command> script_params_cmd
     = CommandBuilder("script-params")
-        .About("Dump script param arrays referenced by scripts.table slots.")
+        .About(
+          "Dump script param arrays referenced by script-bindings.table slots.")
         .WithPositionalArguments(script_params_root);
 
   auto input_actions_root = Option::Positional("cooked_root")

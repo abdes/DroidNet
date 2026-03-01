@@ -17,6 +17,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/TypedObject.h>
+#include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
@@ -46,6 +47,7 @@ public:
     std::vector<std::byte> source_bytes;
     observer_ptr<ImportSession> session {};
     observer_ptr<LooseCookedIndexRegistry> index_registry {};
+    AsyncImportService::ScriptCompileCallback script_compile_callback {};
     std::function<void()> on_started;
     std::function<void()> on_finished;
     std::stop_token stop_token;

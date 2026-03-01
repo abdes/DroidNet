@@ -49,8 +49,10 @@ namespace {
   namespace world = data::pak::world;
   namespace lc = oxygen::content::lc;
 
-  constexpr auto kScriptsTableFileName = std::string_view { "scripts.table" };
-  constexpr auto kScriptsDataFileName = std::string_view { "scripts.data" };
+  constexpr auto kScriptBindingsTableFileName
+    = std::string_view { "script-bindings.table" };
+  constexpr auto kScriptBindingsDataFileName
+    = std::string_view { "script-bindings.data" };
 
   auto JoinRelativePath(
     const std::string_view base, const std::string_view child) -> std::string
@@ -64,16 +66,18 @@ namespace {
     return std::string { base } + "/" + std::string { child };
   }
 
-  auto BuildScriptsTableRelPath(const ImportRequest& request) -> std::string
+  auto BuildScriptBindingsTableRelPath(const ImportRequest& request)
+    -> std::string
   {
     return JoinRelativePath(
-      request.loose_cooked_layout.resources_dir, kScriptsTableFileName);
+      request.loose_cooked_layout.resources_dir, kScriptBindingsTableFileName);
   }
 
-  auto BuildScriptsDataRelPath(const ImportRequest& request) -> std::string
+  auto BuildScriptBindingsDataRelPath(const ImportRequest& request)
+    -> std::string
   {
     return JoinRelativePath(
-      request.loose_cooked_layout.resources_dir, kScriptsDataFileName);
+      request.loose_cooked_layout.resources_dir, kScriptBindingsDataFileName);
   }
 
   template <size_t N>
@@ -683,6 +687,12 @@ namespace {
     std::vector<script::ScriptParamRecord> params;
   };
 
+  struct SerializedBindingsState final {
+    std::vector<script::ScriptingComponentRecord> components;
+    std::vector<script::ScriptSlotRecord> slots;
+    std::vector<script::ScriptParamRecord> params;
+  };
+
   struct SceneBindingContextOutcome final {
     std::optional<ResolvedSceneState> state;
     bool failed = false;
@@ -938,8 +948,8 @@ namespace {
   }
 
   auto LoadScriptsTableState(ImportSession& session,
-    const ImportRequest& request, const lc::Inspection& inspection,
-    IAsyncFileReader& reader,
+    const ImportRequest& request, const std::filesystem::path& inspection_root,
+    const lc::Inspection& inspection, IAsyncFileReader& reader,
     const std::vector<script::ScriptingComponentRecord>& existing_components)
     -> co::Co<std::optional<ScriptsTableState>>
   {
@@ -947,9 +957,9 @@ namespace {
 
     auto state = ScriptsTableState {};
     for (const auto& file : inspection.Files()) {
-      if (file.kind == FileKind::kScriptsTable) {
+      if (file.kind == FileKind::kScriptBindingsTable) {
         state.scripts_table_relpath = file.relpath;
-      } else if (file.kind == FileKind::kScriptsData) {
+      } else if (file.kind == FileKind::kScriptBindingsData) {
         state.scripts_data_relpath = file.relpath;
       }
     }
@@ -961,48 +971,51 @@ namespace {
       != state.scripts_data_relpath.has_value()) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "script.sidecar.scripts_pair_mismatch",
-        "scripts.table and scripts.data must either both exist or both be "
-        "absent");
+        "script-bindings.table and script-bindings.data must either both "
+        "exist or both be absent");
       co_return std::nullopt;
     }
 
     if (state.scripts_table_relpath.has_value()) {
       const auto table_read = co_await reader.ReadFile(
-        session.CookedRoot() / *state.scripts_table_relpath);
+        inspection_root / *state.scripts_table_relpath);
       if (!table_read.has_value()) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "script.sidecar.scripts_table_read_failed",
-          "Failed reading scripts.table: " + table_read.error().ToString());
+          "Failed reading script-bindings.table: "
+            + table_read.error().ToString());
         co_return std::nullopt;
       }
 
       const auto data_read = co_await reader.ReadFile(
-        session.CookedRoot() / *state.scripts_data_relpath);
+        inspection_root / *state.scripts_data_relpath);
       if (!data_read.has_value()) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "script.sidecar.scripts_data_read_failed",
-          "Failed reading scripts.data: " + data_read.error().ToString());
+          "Failed reading script-bindings.data: "
+            + data_read.error().ToString());
         co_return std::nullopt;
       }
 
       if (!ReadTypedVectorFromBytes(table_read.value(), state.tables.slots)) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "script.sidecar.scripts_table_size_invalid",
-          "scripts.table size is incompatible with ScriptSlotRecord layout");
+          "script-bindings.table size is incompatible with ScriptSlotRecord "
+          "layout");
         co_return std::nullopt;
       }
       if (!ReadTypedVectorFromBytes(data_read.value(), state.tables.params)) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "script.sidecar.scripts_data_size_invalid",
-          "scripts.data size is incompatible with ScriptParamRecord layout");
+          "script-bindings.data size is incompatible with ScriptParamRecord "
+          "layout");
         co_return std::nullopt;
       }
     } else if (!existing_components.empty()) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "script.sidecar.scripts_tables_missing",
         "Scene has existing scripting components but "
-        "scripts.table/scripts.data "
-        "are missing");
+        "script-bindings.table/script-bindings.data are missing");
       co_return std::nullopt;
     }
 
@@ -1024,22 +1037,35 @@ namespace {
     return std::nullopt;
   }
 
-  auto BuildMergedScriptsState(ImportSession& session,
-    const ImportRequest& request, content::VirtualPathResolver& resolver,
-    const SidecarDocument& parsed, const uint32_t node_count,
+  auto ResolveSceneInspectionContextByKey(
     std::span<const CookedInspectionContext> cooked_contexts,
-    const std::vector<script::ScriptingComponentRecord>& existing_components,
-    const ExistingScriptTables& existing_tables)
-    -> std::optional<MergedScriptsState>
+    const data::AssetKey& scene_key) -> const CookedInspectionContext*
   {
-    using data::pak::core::OffsetT;
+    for (size_t i = cooked_contexts.size(); i > 0; --i) {
+      const auto& context = cooked_contexts[i - 1U];
+      for (const auto& asset : context.inspection.Assets()) {
+        if (asset.key == scene_key
+          && static_cast<data::AssetType>(asset.asset_type)
+            == data::AssetType::kScene) {
+          return &context;
+        }
+      }
+    }
+    return nullptr;
+  }
 
-    auto merged_bindings = std::map<uint32_t, std::vector<SlotWithParams>> {};
-    for (const auto& component : existing_components) {
+  auto BuildBindingsByNodeFromComponents(ImportSession& session,
+    const ImportRequest& request,
+    const std::vector<script::ScriptingComponentRecord>& components,
+    const ExistingScriptTables& tables)
+    -> std::optional<std::map<uint32_t, std::vector<SlotWithParams>>>
+  {
+    auto bindings = std::map<uint32_t, std::vector<SlotWithParams>> {};
+    for (const auto& component : components) {
       const auto slot_start = component.slot_start_index;
       const auto slot_count = component.slot_count;
-      if (slot_start > existing_tables.slots.size()
-        || slot_count > (existing_tables.slots.size() - slot_start)) {
+      if (slot_start > tables.slots.size()
+        || slot_count > (tables.slots.size() - slot_start)) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "script.sidecar.patch_map_invariant_failure",
           "Existing scene scripting slot range is out of bounds");
@@ -1049,7 +1075,7 @@ namespace {
       auto slots = std::vector<SlotWithParams> {};
       slots.reserve(slot_count);
       for (uint32_t i = 0; i < slot_count; ++i) {
-        const auto& slot = existing_tables.slots[slot_start + i];
+        const auto& slot = tables.slots[slot_start + i];
         const auto param_record_size
           = uint64_t { sizeof(script::ScriptParamRecord) };
         if ((slot.params_array_offset % param_record_size) != 0U) {
@@ -1061,8 +1087,8 @@ namespace {
         const auto param_start
           = static_cast<size_t>(slot.params_array_offset / param_record_size);
         const auto param_count = static_cast<size_t>(slot.params_count);
-        if (param_start > existing_tables.params.size()
-          || param_count > (existing_tables.params.size() - param_start)) {
+        if (param_start > tables.params.size()
+          || param_count > (tables.params.size() - param_start)) {
           AddDiagnostic(session, request, ImportSeverity::kError,
             "script.sidecar.patch_map_invariant_failure",
             "Existing ScriptSlotRecord param range is out of bounds");
@@ -1075,12 +1101,241 @@ namespace {
           .params = {},
         };
         payload.params.insert(payload.params.end(),
-          existing_tables.params.begin() + static_cast<ptrdiff_t>(param_start),
-          existing_tables.params.begin()
+          tables.params.begin() + static_cast<ptrdiff_t>(param_start),
+          tables.params.begin()
             + static_cast<ptrdiff_t>(param_start + param_count));
         slots.push_back(std::move(payload));
       }
-      merged_bindings.insert_or_assign(component.node_index, std::move(slots));
+      bindings.insert_or_assign(component.node_index, std::move(slots));
+    }
+    return bindings;
+  }
+
+  auto SerializeBindingsByNode(ImportSession& session,
+    const ImportRequest& request,
+    const std::map<uint32_t, std::vector<SlotWithParams>>& bindings)
+    -> std::optional<SerializedBindingsState>
+  {
+    using data::pak::core::OffsetT;
+
+    auto serialized = SerializedBindingsState {};
+    auto patch_refs = std::vector<ComponentSlotPatchRef> {};
+    for (const auto& [node_index, slots] : bindings) {
+      if (slots.empty()) {
+        continue;
+      }
+      if (serialized.slots.size() > (std::numeric_limits<uint32_t>::max)()) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "script.sidecar.slot_count_overflow",
+          "Scripting slot count exceeded uint32 limits");
+        return std::nullopt;
+      }
+      if (slots.size() > (std::numeric_limits<uint32_t>::max)()) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "script.sidecar.slot_count_overflow",
+          "One scene node has too many script slots");
+        return std::nullopt;
+      }
+
+      auto component = script::ScriptingComponentRecord {};
+      component.node_index = node_index;
+      component.flags = script::ScriptingComponentFlags::kNone;
+      component.slot_start_index = 0;
+      component.slot_count = 0;
+      serialized.components.push_back(component);
+
+      patch_refs.push_back(ComponentSlotPatchRef {
+        .component_index = serialized.components.size() - 1U,
+        .slot_start_index = static_cast<uint32_t>(serialized.slots.size()),
+        .slot_count = static_cast<uint32_t>(slots.size()),
+      });
+
+      for (const auto& slot_payload : slots) {
+        auto slot = slot_payload.slot;
+        const auto param_offset = uint64_t { serialized.params.size() }
+          * sizeof(script::ScriptParamRecord);
+        if (param_offset > (std::numeric_limits<OffsetT>::max)()) {
+          AddDiagnostic(session, request, ImportSeverity::kError,
+            "script.sidecar.param_offset_overflow",
+            "Script param offset exceeded OffsetT limits");
+          return std::nullopt;
+        }
+        if (slot_payload.params.size()
+          > (std::numeric_limits<uint32_t>::max)()) {
+          AddDiagnostic(session, request, ImportSeverity::kError,
+            "script.sidecar.param_count_overflow",
+            "Script param count exceeded uint32 limits");
+          return std::nullopt;
+        }
+        slot.params_array_offset = static_cast<OffsetT>(param_offset);
+        slot.params_count = static_cast<uint32_t>(slot_payload.params.size());
+        serialized.slots.push_back(slot);
+        serialized.params.insert(serialized.params.end(),
+          slot_payload.params.begin(), slot_payload.params.end());
+      }
+    }
+
+    for (const auto& patch_ref : patch_refs) {
+      DCHECK_F(patch_ref.component_index < serialized.components.size(),
+        "Sidecar patch-ref invariant failure: component index is out of "
+        "bounds");
+      auto& component = serialized.components[patch_ref.component_index];
+      component.slot_start_index = patch_ref.slot_start_index;
+      component.slot_count = patch_ref.slot_count;
+    }
+
+    return serialized;
+  }
+
+  template <typename T>
+  auto PackedVectorsEqual(std::span<const T> lhs, std::span<const T> rhs)
+    -> bool
+  {
+    if (lhs.size() != rhs.size()) {
+      return false;
+    }
+    if (lhs.empty()) {
+      return true;
+    }
+    return std::memcmp(lhs.data(), rhs.data(), lhs.size_bytes()) == 0;
+  }
+
+  auto SerializedBindingsEqual(const SerializedBindingsState& lhs,
+    const SerializedBindingsState& rhs) -> bool
+  {
+    return PackedVectorsEqual(
+             std::span { lhs.components }, std::span { rhs.components })
+      && PackedVectorsEqual(std::span { lhs.slots }, std::span { rhs.slots })
+      && PackedVectorsEqual(std::span { lhs.params }, std::span { rhs.params });
+  }
+
+  auto TryBuildInPlaceMergedState(ImportSession& session,
+    const ImportRequest& request,
+    const std::vector<script::ScriptingComponentRecord>& existing_components,
+    const ExistingScriptTables& existing_tables,
+    const SerializedBindingsState& existing_serialized,
+    const SerializedBindingsState& merged_serialized)
+    -> std::optional<MergedScriptsState>
+  {
+    if (existing_serialized.components.size()
+      != merged_serialized.components.size()) {
+      return std::nullopt;
+    }
+
+    auto existing_by_node
+      = std::map<uint32_t, script::ScriptingComponentRecord> {};
+    for (const auto& component : existing_components) {
+      existing_by_node.insert_or_assign(component.node_index, component);
+    }
+
+    for (size_t i = 0; i < existing_serialized.components.size(); ++i) {
+      const auto& existing_component = existing_serialized.components[i];
+      const auto& merged_component = merged_serialized.components[i];
+      if (existing_component.node_index != merged_component.node_index
+        || existing_component.slot_count != merged_component.slot_count) {
+        return std::nullopt;
+      }
+    }
+
+    auto result = MergedScriptsState {
+      .components = existing_components,
+      .slots = existing_tables.slots,
+      .params = existing_tables.params,
+    };
+
+    const auto param_record_size
+      = uint64_t { sizeof(script::ScriptParamRecord) };
+    for (const auto& merged_component : merged_serialized.components) {
+      const auto existing_it
+        = existing_by_node.find(merged_component.node_index);
+      if (existing_it == existing_by_node.end()) {
+        return std::nullopt;
+      }
+      const auto& existing_component = existing_it->second;
+      const auto merged_slot_start
+        = static_cast<size_t>(merged_component.slot_start_index);
+      const auto merged_slot_count
+        = static_cast<size_t>(merged_component.slot_count);
+
+      for (size_t slot_index = 0; slot_index < merged_slot_count;
+        ++slot_index) {
+        const auto merged_slot_global_index = merged_slot_start + slot_index;
+        const auto existing_slot_global_index
+          = static_cast<size_t>(existing_component.slot_start_index)
+          + slot_index;
+        if (merged_slot_global_index >= merged_serialized.slots.size()
+          || existing_slot_global_index >= result.slots.size()) {
+          AddDiagnostic(session, request, ImportSeverity::kError,
+            "script.sidecar.patch_map_invariant_failure",
+            "In-place sidecar slot mapping is out of bounds");
+          return std::nullopt;
+        }
+
+        const auto& merged_slot
+          = merged_serialized.slots[merged_slot_global_index];
+        auto& existing_slot = result.slots[existing_slot_global_index];
+        if (existing_slot.params_count != merged_slot.params_count) {
+          return std::nullopt;
+        }
+
+        if ((existing_slot.params_array_offset % param_record_size) != 0U
+          || (merged_slot.params_array_offset % param_record_size) != 0U) {
+          AddDiagnostic(session, request, ImportSeverity::kError,
+            "script.sidecar.patch_map_invariant_failure",
+            "Script param offsets are not record-aligned");
+          return std::nullopt;
+        }
+
+        const auto existing_param_start = static_cast<size_t>(
+          existing_slot.params_array_offset / param_record_size);
+        const auto merged_param_start = static_cast<size_t>(
+          merged_slot.params_array_offset / param_record_size);
+        const auto param_count = static_cast<size_t>(merged_slot.params_count);
+        if (existing_param_start > result.params.size()
+          || param_count > (result.params.size() - existing_param_start)
+          || merged_param_start > merged_serialized.params.size()
+          || param_count
+            > (merged_serialized.params.size() - merged_param_start)) {
+          AddDiagnostic(session, request, ImportSeverity::kError,
+            "script.sidecar.patch_map_invariant_failure",
+            "In-place sidecar param mapping is out of bounds");
+          return std::nullopt;
+        }
+
+        auto updated_slot = merged_slot;
+        updated_slot.params_array_offset = existing_slot.params_array_offset;
+        result.slots[existing_slot_global_index] = updated_slot;
+
+        std::copy_n(merged_serialized.params.begin()
+            + static_cast<ptrdiff_t>(merged_param_start),
+          static_cast<ptrdiff_t>(param_count),
+          result.params.begin() + static_cast<ptrdiff_t>(existing_param_start));
+      }
+    }
+
+    return result;
+  }
+
+  auto BuildMergedScriptsState(ImportSession& session,
+    const ImportRequest& request, content::VirtualPathResolver& resolver,
+    const SidecarDocument& parsed, const uint32_t node_count,
+    std::span<const CookedInspectionContext> cooked_contexts,
+    const std::vector<script::ScriptingComponentRecord>& existing_components,
+    const ExistingScriptTables& existing_tables)
+    -> std::optional<MergedScriptsState>
+  {
+    using data::pak::core::OffsetT;
+
+    const auto existing_bindings = BuildBindingsByNodeFromComponents(
+      session, request, existing_components, existing_tables);
+    if (!existing_bindings.has_value()) {
+      return std::nullopt;
+    }
+
+    const auto existing_serialized
+      = SerializeBindingsByNode(session, request, *existing_bindings);
+    if (!existing_serialized.has_value()) {
+      return std::nullopt;
     }
 
     auto incoming_bindings = std::map<uint32_t, std::vector<SlotWithParams>> {};
@@ -1144,6 +1399,7 @@ namespace {
       return std::nullopt;
     }
 
+    auto merged_bindings = *existing_bindings;
     for (auto& [node_index, slots] : incoming_bindings) {
       std::ranges::sort(
         slots, [](const SlotWithParams& lhs, const SlotWithParams& rhs) {
@@ -1152,82 +1408,103 @@ namespace {
       merged_bindings.insert_or_assign(node_index, std::move(slots));
     }
 
-    auto result = MergedScriptsState {};
-    auto patch_refs = std::vector<ComponentSlotPatchRef> {};
-    for (const auto& [node_index, slots] : merged_bindings) {
-      if (slots.empty()) {
-        continue;
-      }
-      if (result.slots.size() > (std::numeric_limits<uint32_t>::max)()) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "script.sidecar.slot_count_overflow",
-          "Scripting slot count exceeded uint32 limits");
-        return std::nullopt;
-      }
-      if (slots.size() > (std::numeric_limits<uint32_t>::max)()) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "script.sidecar.slot_count_overflow",
-          "One scene node has too many script slots");
-        return std::nullopt;
-      }
-
-      auto component = script::ScriptingComponentRecord {};
-      component.node_index = node_index;
-      component.flags = script::ScriptingComponentFlags::kNone;
-      component.slot_start_index = 0;
-      component.slot_count = 0;
-      result.components.push_back(component);
-
-      patch_refs.push_back(ComponentSlotPatchRef {
-        .component_index = result.components.size() - 1U,
-        .slot_start_index = static_cast<uint32_t>(result.slots.size()),
-        .slot_count = static_cast<uint32_t>(slots.size()),
-      });
-
-      for (const auto& slot_payload : slots) {
-        auto slot = slot_payload.slot;
-        const auto param_offset = uint64_t { result.params.size() }
-          * sizeof(script::ScriptParamRecord);
-        if (param_offset > (std::numeric_limits<OffsetT>::max)()) {
-          AddDiagnostic(session, request, ImportSeverity::kError,
-            "script.sidecar.param_offset_overflow",
-            "Script param offset exceeded OffsetT limits");
-          return std::nullopt;
-        }
-        if (slot_payload.params.size()
-          > (std::numeric_limits<uint32_t>::max)()) {
-          AddDiagnostic(session, request, ImportSeverity::kError,
-            "script.sidecar.param_count_overflow",
-            "Script param count exceeded uint32 limits");
-          return std::nullopt;
-        }
-        slot.params_array_offset = static_cast<OffsetT>(param_offset);
-        slot.params_count = static_cast<uint32_t>(slot_payload.params.size());
-        result.slots.push_back(slot);
-        result.params.insert(result.params.end(), slot_payload.params.begin(),
-          slot_payload.params.end());
-      }
+    const auto merged_serialized
+      = SerializeBindingsByNode(session, request, merged_bindings);
+    if (!merged_serialized.has_value()) {
+      return std::nullopt;
     }
 
-    for (const auto& patch_ref : patch_refs) {
-      DCHECK_F(patch_ref.component_index < result.components.size(),
-        "Sidecar patch-ref invariant failure: component index is out of "
-        "bounds");
-      auto& component = result.components[patch_ref.component_index];
-      component.slot_start_index = patch_ref.slot_start_index;
-      component.slot_count = patch_ref.slot_count;
+    if (SerializedBindingsEqual(*existing_serialized, *merged_serialized)) {
+      return MergedScriptsState {
+        .components = existing_components,
+        .slots = existing_tables.slots,
+        .params = existing_tables.params,
+      };
+    }
+
+    const auto in_place_merged
+      = TryBuildInPlaceMergedState(session, request, existing_components,
+        existing_tables, *existing_serialized, *merged_serialized);
+    if (session.HasErrors()) {
+      return std::nullopt;
+    }
+    if (in_place_merged.has_value()) {
+      return in_place_merged;
+    }
+
+    auto result = MergedScriptsState {
+      .components = merged_serialized->components,
+      .slots = existing_tables.slots,
+      .params = existing_tables.params,
+    };
+    // Keep existing global table ranges intact so non-target scenes keep
+    // stable descriptor slot ranges across sidecar updates.
+
+    const auto slot_base = result.slots.size();
+    if (slot_base > (std::numeric_limits<uint32_t>::max)()) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "script.sidecar.slot_count_overflow",
+        "Global scripting slot count exceeded uint32 limits");
+      return std::nullopt;
+    }
+    for (auto& component : result.components) {
+      if (component.slot_start_index > (std::numeric_limits<uint32_t>::max)()
+          - static_cast<uint32_t>(slot_base)) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "script.sidecar.slot_count_overflow",
+          "Rebased scene slot index exceeded uint32 limits");
+        return std::nullopt;
+      }
+      component.slot_start_index += static_cast<uint32_t>(slot_base);
+    }
+
+    const auto param_record_size
+      = uint64_t { sizeof(script::ScriptParamRecord) };
+    for (const auto& source_slot : merged_serialized->slots) {
+      auto slot = source_slot;
+      if ((slot.params_array_offset % param_record_size) != 0U) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "script.sidecar.patch_map_invariant_failure",
+          "Merged ScriptSlotRecord param offset is not record-aligned");
+        return std::nullopt;
+      }
+      const auto local_param_start
+        = static_cast<size_t>(slot.params_array_offset / param_record_size);
+      const auto local_param_count = static_cast<size_t>(slot.params_count);
+      if (local_param_start > merged_serialized->params.size()
+        || local_param_count
+          > (merged_serialized->params.size() - local_param_start)) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "script.sidecar.patch_map_invariant_failure",
+          "Merged ScriptSlotRecord param range is out of bounds");
+        return std::nullopt;
+      }
+
+      const auto global_param_offset
+        = uint64_t { result.params.size() } * sizeof(script::ScriptParamRecord);
+      if (global_param_offset > (std::numeric_limits<OffsetT>::max)()) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "script.sidecar.param_offset_overflow",
+          "Script param offset exceeded OffsetT limits");
+        return std::nullopt;
+      }
+      slot.params_array_offset = static_cast<OffsetT>(global_param_offset);
+      result.params.insert(result.params.end(),
+        merged_serialized->params.begin()
+          + static_cast<ptrdiff_t>(local_param_start),
+        merged_serialized->params.begin()
+          + static_cast<ptrdiff_t>(local_param_start + local_param_count));
+      result.slots.push_back(slot);
     }
 
     return result;
   }
 
-  auto EmitPatchedScene(ImportSession& session, const ImportRequest& request,
-    const ResolvedSceneState& scene_state,
+  auto BuildPatchedSceneDescriptor(ImportSession& session,
+    const ImportRequest& request, const ResolvedSceneState& scene_state,
     const std::vector<script::ScriptingComponentRecord>& merged_components)
-    -> bool
+    -> std::optional<std::vector<std::byte>>
   {
-    using data::AssetType;
-
     auto patched_scene_bytes = std::vector<std::byte> {};
     auto patch_error = std::string {};
     if (!PatchSceneDescriptorScriptingComponents(
@@ -1235,7 +1512,7 @@ namespace {
           patched_scene_bytes, patch_error)) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "script.sidecar.scene_patch_failed", std::move(patch_error));
-      return false;
+      return std::nullopt;
     }
 
     if (EffectiveContentHashingEnabled(request.options.with_content_hashing)) {
@@ -1246,10 +1523,19 @@ namespace {
         patched_scene_bytes.data() + kContentHashOffset, &hash, sizeof(hash));
     }
 
+    return patched_scene_bytes;
+  }
+
+  auto EmitPatchedScene(ImportSession& session, const ImportRequest& request,
+    const ResolvedSceneState& scene_state,
+    std::span<const std::byte> patched_scene_bytes) -> bool
+  {
+    using data::AssetType;
+
     try {
       session.AssetEmitter().Emit(scene_state.scene_key, AssetType::kScene,
         scene_state.scene_virtual_path, scene_state.scene_descriptor_relpath,
-        std::span<const std::byte>(patched_scene_bytes));
+        patched_scene_bytes);
     } catch (const std::exception& ex) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "script.sidecar.scene_emit_failed", ex.what());
@@ -1268,11 +1554,11 @@ namespace {
 
     const auto table_relpath
       = scripts_table_state.scripts_table_relpath.value_or(
-        BuildScriptsTableRelPath(request));
+        BuildScriptBindingsTableRelPath(request));
     const auto data_relpath = scripts_table_state.scripts_data_relpath.value_or(
-      BuildScriptsDataRelPath(request));
+      BuildScriptBindingsDataRelPath(request));
 
-    if (!merged_scripts_state.components.empty()
+    if (!merged_scripts_state.slots.empty()
       || scripts_table_state.has_existing_script_tables) {
       const auto table_write
         = co_await writer.Write(session.CookedRoot() / table_relpath,
@@ -1281,7 +1567,8 @@ namespace {
       if (!table_write.has_value()) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "script.sidecar.scripts_table_write_failed",
-          "Failed writing scripts.table: " + table_write.error().ToString());
+          "Failed writing script-bindings.table: "
+            + table_write.error().ToString());
         co_return false;
       }
 
@@ -1292,15 +1579,16 @@ namespace {
       if (!data_write.has_value()) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "script.sidecar.scripts_data_write_failed",
-          "Failed writing scripts.data: " + data_write.error().ToString());
+          "Failed writing script-bindings.data: "
+            + data_write.error().ToString());
         co_return false;
       }
 
       try {
         index_registry.RegisterExternalFile(
-          session.CookedRoot(), FileKind::kScriptsTable, table_relpath);
+          session.CookedRoot(), FileKind::kScriptBindingsTable, table_relpath);
         index_registry.RegisterExternalFile(
-          session.CookedRoot(), FileKind::kScriptsData, data_relpath);
+          session.CookedRoot(), FileKind::kScriptBindingsData, data_relpath);
       } catch (const std::exception& ex) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "script.sidecar.index_registration_failed", ex.what());
@@ -1554,9 +1842,15 @@ auto ScriptingSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     co_return false;
   }
 
+  const auto* scripts_table_context = ResolveSceneInspectionContextByKey(
+    cooked_contexts, resolved_scene_state->scene_key);
+  if (scripts_table_context == nullptr) {
+    scripts_table_context = &cooked_contexts.front();
+  }
+
   const auto scripts_table_state = co_await LoadScriptsTableState(*session, req,
-    cooked_contexts.front().inspection, *reader,
-    resolved_scene_state->existing_components);
+    scripts_table_context->cooked_root, scripts_table_context->inspection,
+    *reader, resolved_scene_state->existing_components);
   if (!scripts_table_state.has_value()) {
     co_return false;
   }
@@ -1568,14 +1862,20 @@ auto ScriptingSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     co_return false;
   }
 
-  if (!EmitPatchedScene(*session, req, *resolved_scene_state,
-        merged_scripts_state->components)) {
+  const auto patched_scene_descriptor = BuildPatchedSceneDescriptor(
+    *session, req, *resolved_scene_state, merged_scripts_state->components);
+  if (!patched_scene_descriptor.has_value()) {
     co_return false;
   }
 
   const auto wrote_scripts_tables = co_await WriteScriptsTables(*session, req,
     *writer, *index_registry, *scripts_table_state, *merged_scripts_state);
   if (!wrote_scripts_tables) {
+    co_return false;
+  }
+
+  if (!EmitPatchedScene(*session, req, *resolved_scene_state,
+        std::span<const std::byte>(*patched_scene_descriptor))) {
     co_return false;
   }
 

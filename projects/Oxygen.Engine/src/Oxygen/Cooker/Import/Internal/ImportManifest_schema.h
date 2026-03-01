@@ -55,6 +55,9 @@ inline constexpr std::string_view kImportManifestSchema = R"({
     "defaults": {
         "$ref": "#/definitions/defaults_settings"
     },
+    "output": {
+        "type": "string"
+    },
     "jobs": {
         "type": "array",
         "items": {
@@ -92,9 +95,38 @@ inline constexpr std::string_view kImportManifestSchema = R"({
             },
             {
                 "required": [
-                    "source",
                     "type"
                 ]
+            },
+            {
+                "if": {
+                    "properties": {
+                        "type": {
+                            "const": "script-sidecar"
+                        }
+                    }
+                },
+                "then": {
+                    "oneOf": [
+                        {
+                            "required": [
+                                "source",
+                                "target_scene_virtual_path"
+                            ]
+                        },
+                        {
+                            "required": [
+                                "bindings",
+                                "target_scene_virtual_path"
+                            ]
+                        }
+                    ]
+                },
+                "else": {
+                    "required": [
+                        "source"
+                    ]
+                }
             }
         ]
     },
@@ -106,6 +138,12 @@ inline constexpr std::string_view kImportManifestSchema = R"({
             },
             "scene": {
                 "$ref": "#/definitions/scene_settings"
+            },
+            "script": {
+                "$ref": "#/definitions/script_settings"
+            },
+            "scripting_sidecar": {
+                "$ref": "#/definitions/scripting_sidecar_settings"
             }
         },
         "additionalProperties": false
@@ -308,6 +346,56 @@ inline constexpr std::string_view kImportManifestSchema = R"({
         },
         "additionalProperties": false
     },
+)"
+                                                          R"(
+    "script_settings": {
+        "type": "object",
+        "properties": {
+            "output": {
+                "type": "string"
+            },
+            "name": {
+                "type": "string"
+            },
+            "verbose": {
+                "type": "boolean"
+            },
+            "content_hashing": {
+                "type": "boolean"
+            },
+            "compile": {
+                "type": "boolean"
+            },
+            "compile_mode": {
+                "$ref": "#/definitions/script_compile_mode"
+            },
+            "script_storage": {
+                "$ref": "#/definitions/script_storage_mode"
+            }
+        },
+        "additionalProperties": false
+    },
+    "scripting_sidecar_settings": {
+        "type": "object",
+        "properties": {
+            "output": {
+                "type": "string"
+            },
+            "name": {
+                "type": "string"
+            },
+            "verbose": {
+                "type": "boolean"
+            },
+            "content_hashing": {
+                "type": "boolean"
+            },
+            "target_scene_virtual_path": {
+                "type": "string"
+            }
+        },
+        "additionalProperties": false
+    },
     "job_settings": {
         "type": "object",
         "properties": {
@@ -315,7 +403,9 @@ inline constexpr std::string_view kImportManifestSchema = R"({
                 "enum": [
                     "texture",
                     "fbx",
-                    "gltf"
+                    "gltf",
+                    "script",
+                    "script-sidecar"
                 ]
             },
             "source": {
@@ -494,10 +584,42 @@ inline constexpr std::string_view kImportManifestSchema = R"({
                 "additionalProperties": {
                     "$ref": "#/definitions/texture_settings"
                 }
+            },
+            "compile": {
+                "type": "boolean"
+            },
+            "compile_mode": {
+                "$ref": "#/definitions/script_compile_mode"
+            },
+            "script_storage": {
+                "$ref": "#/definitions/script_storage_mode"
+            },
+            "target_scene_virtual_path": {
+                "type": "string"
+            },
+            "bindings": {
+                "type": "array",
+                "items": {
+                    "type": "object"
+                }
             }
         },
         "additionalProperties": false
     },
+    "script_compile_mode": {
+        "enum": [
+            "debug",
+            "optimized"
+        ]
+    },
+    "script_storage_mode": {
+        "enum": [
+            "embedded",
+            "external"
+        ]
+    },
+)"
+                                                          R"(
     "texture_intent": {
         "enum": [
             "albedo",

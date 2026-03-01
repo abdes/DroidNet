@@ -431,198 +431,146 @@ For deterministic inputs:
 6. slot and param emission ordering is stable and derived from sorted identities.
 7. diagnostics ordering key is stable and documented.
 
-## 11. Implementation Work Plan
+## 11. C++ API Shapes (Import-Module Consistent)
 
-Tracking format:
+Scripting import uses existing Import-module request patterns; no separate
+"special API model" is introduced.
 
-1. `[ ]` not started
-2. `[x]` completed
-3. A phase is complete only when all coding tasks, test tasks, and exit criteria
-   are satisfied.
+Primary request carrier:
 
-### 11.1 Phase 0: Core Meta Compile-Mode Migration
+1. `ImportRequest`
+2. `ImportRequest::options.scripting`
+3. `ImportRequest::options.scripting.import_kind`:
+   - `kScriptAsset`
+   - `kScriptingSidecar`
 
-Coding tasks:
+Tooling-facing DTOs (CLI + manifest mapping only):
 
-- [x] Move Engine-local `ScriptCompileMode` source-of-truth into:
-  `src/Oxygen/Core/Meta/Scripting/ScriptCompileMode.inc`
-- [x] Define shared include facade:
-  `src/Oxygen/Core/Meta/Scripting/ScriptCompileMode.h`
-- [x] Update Engine includes to consume Core/Meta definition.
-- [x] Update Cooker/Import includes to consume Core/Meta definition.
-- [x] Remove duplicate Engine-local compile-mode catalogs.
+1. `ScriptAssetImportSettings`
+2. `ScriptingSidecarImportSettings`
 
-Test tasks:
+Normalization/validation boundary:
 
-- [x] Compile/link tests proving Engine and Cooker/Import both consume the same
-  Core/Meta compile-mode symbols.
-- [x] Regression tests for compile-mode string/enum mappings used by tooling.
+1. `BuildScriptAssetRequest(const ScriptAssetImportSettings&, std::ostream&)`
+2. `BuildScriptingSidecarRequest(const ScriptingSidecarImportSettings&,
+   std::ostream&)`
 
-Exit criteria:
+Canonical shared compile-mode ownership:
 
-- [x] No Engine-local `ScriptCompileMode` source-of-truth remains.
-- [x] Engine + Cooker/Import build against shared Core/Meta compile mode.
+1. `src/Oxygen/Core/Meta/Scripting/ScriptCompileMode.inc`
+2. `src/Oxygen/Core/Meta/Scripting/ScriptCompileMode.h`
+3. Engine + Cooker/Import consume the same shared enum catalog.
 
-### 11.2 Phase 1: Public Request + Builder API
+## 12. ImportTool and Manifest Contracts
 
-Coding tasks:
+### 12.1 CLI Surface
 
-- [x] Add `ImportOptions::scripting` with:
-  `ScriptingImportKind`, `ScriptStorageMode`, `compile_scripts`,
-  `compile_mode`, and `target_scene_virtual_path`.
-- [x] Keep a single request model: use only `ImportRequest`.
-- [x] Sidecar requests require `ImportOptions::scripting.target_scene_virtual_path`.
-- [x] Add settings types:
-  `ScriptAssetImportSettings`, `ScriptingSidecarImportSettings`.
-- [x] Add builder entrypoints:
-  `BuildScriptAssetRequest(...)`, `BuildScriptingSidecarRequest(...)`,
-  both returning `std::optional<ImportRequest>`.
-- [x] Keep `SceneImportSettings` script-agnostic.
-- [x] Keep `TextureImportSettings` script-agnostic.
+Commands:
 
-Test tasks:
+1. `texture`
+2. `fbx`
+3. `gltf`
+4. `script`
+5. `script-sidecar`
+6. `batch`
 
-- [x] API compile/link tests for settings/builder/ImportOptions scripting
-  symbols.
-- [x] Builder validation tests:
-  missing `target_scene_virtual_path`, invalid canonical path,
-  invalid compile/storage combination.
+Script command maps to `ScriptAssetImportSettings` and supports:
 
-Exit criteria:
+1. `--compile`
+2. `--compile-mode`
+3. `--script-storage`
+4. `-i/--output`, `--name`, `--report`, `--content-hashing`
 
-- [x] Script/sidecar C++ API uses the existing single `ImportRequest` model.
-- [x] Invalid builder inputs fail deterministically with structured diagnostics.
+Scripting sidecar command maps to `ScriptingSidecarImportSettings` and
+supports:
 
-### 11.3 Phase 2: ScriptAssetImportPipeline Endpoint
+1. positional `source` OR `--bindings-inline` (exactly one)
+2. required `--target-scene-virtual-path`
+3. `-i/--output`, `--name`, `--report`, `--content-hashing`
 
-Coding tasks:
+`--bindings-inline` accepted forms:
 
-- [x] Implement `ScriptAssetImportPipeline` endpoint in Import flow.
-- [x] Implement script asset descriptor/resource emission contract.
-- [x] Enforce `compile_scripts` + `script_storage` validity rules.
-- [x] Implement identity overwrite semantics for script-asset reimport.
+1. JSON array of rows: `[ ... ]`
+2. JSON object with `bindings` array: `{ "bindings": [ ... ] }`
 
-Test tasks:
+### 12.2 Manifest Surface
 
-- [x] Script asset standalone import success.
-- [x] Script asset reimport overwrite by script identity.
-- [x] Compile enabled/disabled behavior tests.
-- [x] External-storage + compile rejection tests.
+Manifest supports scripting jobs under existing `jobs[]` model:
 
-Exit criteria:
+1. `type: "script"` with `source` required
+2. `type: "script-sidecar"` with exactly one of:
+   - `source`
+   - `bindings` (inline array)
+   and always `target_scene_virtual_path`
 
-- [x] Script asset imports are repeatable and deterministic for same inputs.
-- [x] Reimport overwrite semantics are verified.
+Top-level output fallback is supported:
 
-### 11.4 Phase 3: ScriptingSidecarImportPipeline Resolution + Binding
+1. top-level `output` seeds typed defaults
+2. precedence is:
+   - job `output`
+   - `defaults.<type>.output`
+   - top-level manifest `output`
+   - global `--cooked-root`
 
-Coding tasks:
+## 13. Loose-Cooked Artifact Contract
 
-- [x] Implement `ScriptingSidecarImportPipeline` endpoint.
-- [x] Implement scene resolution using `target_scene_virtual_path` only.
-- [x] Delegate path canonicalization/precedence/tombstones to
-  `content::VirtualPathResolver` (no custom resolver wheel).
-- [x] Implement inflight-context fast-path with duplicate-match rejection.
-- [x] Resolve final `target_scene_key` and scene binding context.
-- [x] Implement sidecar table emission:
-  `ScriptingComponentRecord`, `ScriptSlotRecord`, `ScriptParamRecord`.
+### 13.1 Script Asset Artifacts
 
-Test tasks:
+`ScriptAssetImportPipeline` owns:
 
-- [x] Sidecar path-only success with inflight scene context.
-- [x] Sidecar path-only success with cooked scene context.
-- [x] Sidecar request without path rejected.
-- [x] Invalid canonical path rejected.
-- [x] Inflight duplicate path match rejected deterministically.
-- [x] Resolver delegation precedence test (last-mounted-wins + tombstone behavior).
-- [x] Missing node and missing script reference hard-failure tests.
-- [x] Sidecar payload malformed JSON hard-failure test.
-- [x] Sidecar duplicate `(node_index, slot_id)` hard-failure test.
-- [x] Sidecar missing source file hard-failure test.
-- [x] Sidecar missing target scene in valid cooked root hard-failure test.
+1. `*.oscript` descriptor emission
+2. `scripts.table`
+3. `scripts.data`
 
-Exit criteria:
+### 13.2 Scripting Sidecar Artifacts
 
-- [x] Sidecar scene resolution is deterministic and wheel-free.
-- [x] Sidecar apply remains atomic on failures.
+`ScriptingSidecarImportPipeline` owns:
 
-### 11.5 Phase 4: Cross-Pipeline Patching + Finalization
+1. `script-bindings.table`
+2. `script-bindings.data`
+3. scene scripting-component patching for exactly one target scene
 
-Coding tasks:
+### 13.3 Record Layout and Invariants
 
-- [x] Implement scene binding context providers:
-  from scene build output and cooked scene inspection.
-- [x] Implement patch refs (`slot_start_index`, `slot_count`) and patch apply.
-- [x] Implement standalone-mode descriptor rewrite/index update wiring.
-- [x] Enforce sidecar node-binding overwrite semantics (node-index identity).
+All serialized record layout/offset/range invariants are governed by:
 
-Test tasks:
+1. `PakFormat_core.h` (region/table contracts)
+2. `PakFormat_scripting.h` (scripting records and indexing semantics)
 
-- [x] Concurrent flow parity test (scene + sidecar).
-- [x] Standalone sidecar-after-scene flow test.
-- [x] Context parity test (concurrent vs standalone serialized equivalence).
-- [x] Node-binding overwrite and additive update behavior tests.
-- [x] Node-binding overwrite/rebind behavior test.
+No alternate table naming or parallel scripting record layouts are allowed.
 
-Exit criteria:
+## 14. Phased Implementation Plan and Status
 
-- [x] Both concurrent and standalone workflows behave identically for same inputs.
-- [x] Patch/ref application is deterministic and validated.
+Status snapshot:
 
-### 11.6 Phase 5: Async Service and Reporting Integration
+1. `[x]` Phase 1: Shared compile-mode ownership moved to Core/Meta/Scripting.
+2. `[x]` Phase 2: Request builders and validation contracts in place.
+3. `[x]` Phase 3: `ScriptAssetImportPipeline` + job path + deterministic output
+   behavior.
+4. `[x]` Phase 4: `ScriptingSidecarImportPipeline` scene resolution, merge,
+   overwrite/rebind semantics, diagnostics.
+5. `[x]` Phase 5: ImportTool integration for script + sidecar commands and
+   manifest support.
+6. `[x]` Phase 6: Hardening pass (context-aware resolution, sidecar atomicity
+   ordering, expanded diagnostics/tests).
 
-Coding tasks:
+Implementation guardrails for all phases:
 
-- [x] Keep single submit path (`SubmitImport(ImportRequest, ...)`) and dispatch
-  script/sidecar via `request.options.scripting.import_kind`.
-- [x] Wire scripting dispatch through existing job-factory/internal job path.
-- [x] Extend `ImportReport` counters:
-  `scripts_written`, `scripting_components_written`, `script_slots_written`,
-  `script_params_written`.
-- [x] Preserve existing callback, shutdown, and cancellation contracts.
+1. Scene pipeline and scripting pipelines stay separated by ownership.
+2. Jobs are narrow in scope; pipelines are the concurrent execution engines.
+3. No deprecated fallback code paths retained after replacement.
 
-Test tasks:
+Test obligations (tracked and maintained):
 
-- [x] Submit rejection semantics (`std::nullopt`) for invalid/shutdown cases.
-- [x] Completion/progress callback behavior parity with existing imports.
-- [x] Report counter population tests for script-only and sidecar jobs.
-- [x] Mixed-batch commit semantics:
-  successful script imports remain committed when sidecar fails atomically.
-
-Exit criteria:
-
-- [x] Single submit API behavior remains identical to existing import patterns.
-- [x] Report and telemetry counters are consistent and deterministic.
-
-### 11.7 Phase 6: Diagnostics, Determinism, and Conformance Closure
-
-Coding tasks:
-
-- [x] Ensure script diagnostics use stable code families:
-  `script.request.*`, `script.asset.*`, `script.sidecar.*`.
-- [x] Ensure phase context is reported via existing `ProgressEvent`.
-- [x] Ensure deterministic ordering for sidecar rows, slot/param emission,
-  and diagnostics.
-- [x] Move scripting import tests into dedicated `AsyncImportScripting` target.
-- [x] Consolidate scripting import tests into shared DRY fixtures/helpers.
-
-Test tasks:
-
-- [x] Diagnostic field completeness tests (`severity`, `code`, `message`,
-  optional `source_path`/`object_path`).
-- [x] Summary-counter consistency tests vs emitted diagnostics.
-- [x] Dispatch matrix tests:
-  script-only, sidecar-only inflight, sidecar-only cooked, script+sidecar.
-- [x] Deterministic repeated-run byte/record ordering tests.
-- [x] Dependency ordering and cycle-rejection tests.
-
-Exit criteria:
-
-- [x] Diagnostics are CI-grade, stable, and complete.
-- [x] Determinism guarantees in Section 10 are fully covered by tests.
-
-## 12. Non-Goals
-
-1. No universal asset/resource cooking abstraction forced across domains.
-2. No new sidecar transport mechanism.
-3. No runtime API redesign outside required scripting-sidecar compatibility.
+1. request-builder contract tests
+2. script asset pipeline/job tests
+3. sidecar pipeline/job tests including:
+   - missing target scene
+   - missing script ref
+   - duplicate slot conflict
+   - unresolved node
+   - deterministic ordering
+   - mixed-batch script success plus sidecar failure behavior
+4. manifest + CLI contract tests for script/sidecar options and inline bindings
+5. dedicated scripting import test program:
+   - `Oxygen.Cooker.AsyncImportScripting.Tests`

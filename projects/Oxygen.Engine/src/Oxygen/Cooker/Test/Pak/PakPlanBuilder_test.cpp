@@ -465,13 +465,13 @@ NOLINT_TEST_F(
     static_cast<size_t>(kParamRecordCount) * sizeof(script::ScriptParamRecord));
   const auto files = std::array<FileSpec, 2> {
     FileSpec {
-      .kind = lc::FileKind::kScriptsTable,
-      .relpath = "Resources/scripts.table",
+      .kind = lc::FileKind::kScriptBindingsTable,
+      .relpath = "Resources/script-bindings.table",
       .payload = slot_bytes,
     },
     FileSpec {
-      .kind = lc::FileKind::kScriptsData,
-      .relpath = "Resources/scripts.data",
+      .kind = lc::FileKind::kScriptBindingsData,
+      .relpath = "Resources/script-bindings.data",
       .payload = script_data_bytes,
     },
   };
@@ -552,13 +552,13 @@ NOLINT_TEST_F(PakPlanBuilderTest, ScriptSlotOutOfBoundsIsRejected)
     static_cast<size_t>(kParamRecordCount) * sizeof(script::ScriptParamRecord));
   const auto files = std::array<FileSpec, 2> {
     FileSpec {
-      .kind = lc::FileKind::kScriptsTable,
-      .relpath = "Resources/scripts.table",
+      .kind = lc::FileKind::kScriptBindingsTable,
+      .relpath = "Resources/script-bindings.table",
       .payload = slot_bytes,
     },
     FileSpec {
-      .kind = lc::FileKind::kScriptsData,
-      .relpath = "Resources/scripts.data",
+      .kind = lc::FileKind::kScriptBindingsData,
+      .relpath = "Resources/script-bindings.data",
       .payload = script_data_bytes,
     },
   };

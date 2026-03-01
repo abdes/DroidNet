@@ -25,6 +25,7 @@ find_package(fmt CONFIG REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(nlohmann_json_schema_validator REQUIRED)
 find_package(ftxui REQUIRED)
+find_package(Luau CONFIG REQUIRED)
 
 # ------------------------------------------------------------------------------
 # Build instructions
@@ -47,6 +48,10 @@ add_executable(
   "MessageWriter.h"
   "ReportJson.cpp"
   "ReportJson.h"
+  "ScriptCommand.cpp"
+  "ScriptCommand.h"
+  "ScriptingSidecarCommand.cpp"
+  "ScriptingSidecarCommand.h"
   "TextureCommand.cpp"
   "TextureCommand.h"
   "main.cpp"
@@ -86,6 +91,7 @@ target_link_libraries(
     ftxui::dom
     ftxui::component
     nlohmann_json::nlohmann_json
+    Luau::Compiler
 )
 
 target_compile_definitions(
