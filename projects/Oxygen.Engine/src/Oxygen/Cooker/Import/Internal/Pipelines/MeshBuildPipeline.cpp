@@ -969,6 +969,233 @@ namespace {
     return std::vector<std::byte>(bytes.begin(), bytes.end());
   }
 
+  [[nodiscard]] auto IsCanceled(const std::stop_token& stop_token,
+    const co::ThreadPool::CancelToken& canceled) -> bool
+  {
+    return stop_token.stop_requested() || canceled;
+  }
+
+  auto HashPayloadIfNeeded(CookedBufferPayload& payload,
+    const bool with_content_hashing, const std::stop_token& stop_token,
+    const co::ThreadPool::CancelToken& canceled) -> void
+  {
+    if (!with_content_hashing || payload.content_hash != 0
+      || IsCanceled(stop_token, canceled)) {
+      return;
+    }
+    const std::span<const std::byte> bytes(
+      payload.data.data(), payload.data.size());
+    const auto hash = util::ComputeContentHash(bytes);
+    if (hash != 0) {
+      payload.content_hash = hash;
+    }
+  }
+
+  [[nodiscard]] auto BuildCookedMeshPayload(const LodBuildData& lod,
+    const bool with_content_hashing, const std::stop_token& stop_token,
+    const co::ThreadPool::CancelToken& canceled)
+    -> MeshBuildPipeline::CookedMeshPayload
+  {
+    auto cooked_mesh = MeshBuildPipeline::CookedMeshPayload {};
+
+    const auto vb_usage_flags
+      = static_cast<uint32_t>(data::BufferResource::UsageFlags::kVertexBuffer)
+      | kDefaultStaticUsageFlags;
+    const auto ib_usage_flags
+      = static_cast<uint32_t>(data::BufferResource::UsageFlags::kIndexBuffer)
+      | kDefaultStaticUsageFlags;
+
+    cooked_mesh.vertex_buffer.data
+      = ToByteVector(std::span(lod.vertices.data(), lod.vertices.size()));
+    cooked_mesh.vertex_buffer.alignment = sizeof(data::Vertex);
+    cooked_mesh.vertex_buffer.usage_flags = vb_usage_flags;
+    cooked_mesh.vertex_buffer.element_stride = sizeof(data::Vertex);
+    cooked_mesh.vertex_buffer.element_format
+      = static_cast<uint8_t>(Format::kUnknown);
+
+    cooked_mesh.index_buffer.data
+      = ToByteVector(std::span(lod.indices.data(), lod.indices.size()));
+    cooked_mesh.index_buffer.alignment = alignof(uint32_t);
+    cooked_mesh.index_buffer.usage_flags = ib_usage_flags;
+    cooked_mesh.index_buffer.element_stride = 0;
+    cooked_mesh.index_buffer.element_format
+      = static_cast<uint8_t>(Format::kR32UInt);
+
+    if (lod.mesh_type == data::MeshType::kSkinned) {
+      const auto joint_usage_flags
+        = static_cast<uint32_t>(
+            data::BufferResource::UsageFlags::kStorageBuffer)
+        | kDefaultStaticUsageFlags;
+
+      auto joint_indices_payload = CookedBufferPayload {};
+      joint_indices_payload.data = ToByteVector(
+        std::span(lod.joint_indices.data(), lod.joint_indices.size()));
+      joint_indices_payload.alignment = 16;
+      joint_indices_payload.usage_flags = joint_usage_flags;
+      joint_indices_payload.element_stride = 0;
+      joint_indices_payload.element_format
+        = static_cast<uint8_t>(Format::kRGBA32UInt);
+
+      auto joint_weights_payload = CookedBufferPayload {};
+      joint_weights_payload.data = ToByteVector(
+        std::span(lod.joint_weights.data(), lod.joint_weights.size()));
+      joint_weights_payload.alignment = 16;
+      joint_weights_payload.usage_flags = joint_usage_flags;
+      joint_weights_payload.element_stride = 0;
+      joint_weights_payload.element_format
+        = static_cast<uint8_t>(Format::kRGBA32Float);
+
+      auto inverse_bind_payload = CookedBufferPayload {};
+      inverse_bind_payload.data = ToByteVector(std::span(
+        lod.inverse_bind_matrices.data(), lod.inverse_bind_matrices.size()));
+      inverse_bind_payload.alignment = 16;
+      inverse_bind_payload.usage_flags = joint_usage_flags;
+      inverse_bind_payload.element_stride = sizeof(glm::mat4);
+      inverse_bind_payload.element_format
+        = static_cast<uint8_t>(Format::kUnknown);
+
+      auto joint_remap_payload = CookedBufferPayload {};
+      joint_remap_payload.data = ToByteVector(
+        std::span(lod.joint_remap.data(), lod.joint_remap.size()));
+      joint_remap_payload.alignment = alignof(uint32_t);
+      joint_remap_payload.usage_flags = joint_usage_flags;
+      joint_remap_payload.element_stride = 0;
+      joint_remap_payload.element_format
+        = static_cast<uint8_t>(Format::kR32UInt);
+
+      HashPayloadIfNeeded(
+        joint_indices_payload, with_content_hashing, stop_token, canceled);
+      HashPayloadIfNeeded(
+        joint_weights_payload, with_content_hashing, stop_token, canceled);
+      HashPayloadIfNeeded(
+        inverse_bind_payload, with_content_hashing, stop_token, canceled);
+      HashPayloadIfNeeded(
+        joint_remap_payload, with_content_hashing, stop_token, canceled);
+
+      cooked_mesh.auxiliary_buffers.push_back(std::move(joint_indices_payload));
+      cooked_mesh.auxiliary_buffers.push_back(std::move(joint_weights_payload));
+      cooked_mesh.auxiliary_buffers.push_back(std::move(inverse_bind_payload));
+      cooked_mesh.auxiliary_buffers.push_back(std::move(joint_remap_payload));
+    }
+
+    HashPayloadIfNeeded(
+      cooked_mesh.vertex_buffer, with_content_hashing, stop_token, canceled);
+    HashPayloadIfNeeded(
+      cooked_mesh.index_buffer, with_content_hashing, stop_token, canceled);
+
+    cooked_mesh.bounds = lod.bounds;
+    return cooked_mesh;
+  }
+
+  [[nodiscard]] auto BuildCookedGeometryPayload(const WorkItem& item,
+    const std::vector<LodBuildData>& lods, const uint32_t attr_mask,
+    const bool with_content_hashing,
+    const co::ThreadPool::CancelToken& canceled,
+    std::vector<ImportDiagnostic>& diagnostics)
+    -> std::optional<MeshBuildPipeline::CookedGeometryPayload>
+  {
+    auto geom_bounds = MakeEmptyBounds();
+    for (const auto& lod : lods) {
+      ExpandBounds(geom_bounds,
+        glm::vec3(lod.bounds.min[0], lod.bounds.min[1], lod.bounds.min[2]));
+      ExpandBounds(geom_bounds,
+        glm::vec3(lod.bounds.max[0], lod.bounds.max[1], lod.bounds.max[2]));
+    }
+
+    auto material_patch_offsets
+      = std::vector<MeshBuildPipeline::MaterialSlotPatchOffset> {};
+    auto descriptor_bytes
+      = BuildDescriptorBytes(item.mesh_name, lods, geom_bounds, attr_mask,
+        material_patch_offsets, diagnostics, item.source_id);
+    if (HasAnyError(diagnostics)) {
+      return std::nullopt;
+    }
+
+    auto cooked_payload = MeshBuildPipeline::CookedGeometryPayload {};
+    cooked_payload.virtual_path
+      = item.request.loose_cooked_layout.GeometryVirtualPath(
+        item.storage_mesh_name);
+    cooked_payload.descriptor_relpath
+      = item.request.loose_cooked_layout.GeometryDescriptorRelPath(
+        item.storage_mesh_name);
+    cooked_payload.geometry_key
+      = ResolveGeometryKey(item.request, cooked_payload.virtual_path);
+    cooked_payload.descriptor_bytes = std::move(descriptor_bytes);
+    cooked_payload.material_patch_offsets = std::move(material_patch_offsets);
+    cooked_payload.lods.reserve(lods.size());
+    for (const auto& lod : lods) {
+      cooked_payload.lods.push_back(BuildCookedMeshPayload(
+        lod, with_content_hashing, item.stop_token, canceled));
+    }
+
+    return cooked_payload;
+  }
+
+  [[nodiscard]] auto BuildGeometryOutcome(WorkItem item,
+    const uint64_t max_data_blob_bytes, const bool with_content_hashing,
+    const co::ThreadPool::CancelToken& canceled) -> GeometryBuildOutcome
+  {
+    DLOG_F(1, "Build geometry payload");
+    auto out = GeometryBuildOutcome {
+      .source_id = item.source_id,
+      .source_key = item.source_key,
+    };
+
+    if (IsCanceled(item.stop_token, canceled)) {
+      out.canceled = true;
+      return out;
+    }
+
+    if (item.lods.empty()) {
+      out.diagnostics.push_back(MakeErrorDiagnostic("mesh.missing_lods",
+        "Mesh LOD list is empty", item.source_id, item.mesh_name));
+      return out;
+    }
+
+    if (item.lods.size() > 8) {
+      out.diagnostics.push_back(MakeErrorDiagnostic("mesh.invalid_lod_count",
+        "Mesh LOD count exceeds maximum of 8", item.source_id, item.mesh_name));
+      return out;
+    }
+
+    auto lods = std::vector<LodBuildData> {};
+    lods.reserve(item.lods.size());
+
+    uint32_t attr_mask = 0;
+    for (const auto& lod : item.lods) {
+      if (item.stop_token.stop_requested()) {
+        out.canceled = true;
+        return out;
+      }
+
+      const auto& triangle_mesh = lod.source;
+      auto lod_data = BuildLodData(triangle_mesh, lod, item,
+        max_data_blob_bytes, out.diagnostics, attr_mask);
+      if (!lod_data.has_value()) {
+        return out;
+      }
+      lods.push_back(std::move(*lod_data));
+    }
+
+    if (item.stop_token.stop_requested()) {
+      out.canceled = true;
+      return out;
+    }
+    if (HasAnyError(out.diagnostics)) {
+      return out;
+    }
+
+    const auto cooked_payload = BuildCookedGeometryPayload(
+      item, lods, attr_mask, with_content_hashing, canceled, out.diagnostics);
+    if (!cooked_payload.has_value()) {
+      return out;
+    }
+
+    out.cooked = std::move(*cooked_payload);
+    out.success = true;
+    return out;
+  }
+
 } // namespace
 
 MeshBuildPipeline::MeshBuildPipeline(
@@ -1099,208 +1326,16 @@ auto MeshBuildPipeline::Worker() -> co::Co<>
     auto on_finished = std::move(item.on_finished);
     const auto cook_start = std::chrono::steady_clock::now();
     auto build_outcome = co_await thread_pool_.Run(
-      [item = std::move(item), max_bytes = config_.max_data_blob_bytes,
+      [item = std::move(item),
+        max_data_blob_bytes = config_.max_data_blob_bytes,
         with_content_hashing = config_.with_content_hashing](
         co::ThreadPool::CancelToken canceled) mutable -> GeometryBuildOutcome {
-        DLOG_F(1, "Build geometry payload");
-        GeometryBuildOutcome out;
-        out.source_id = item.source_id;
-        out.source_key = item.source_key;
-
-        if (canceled || item.stop_token.stop_requested()) {
-          out.canceled = true;
-          return out;
-        }
-
-        if (item.lods.empty()) {
-          out.diagnostics.push_back(MakeErrorDiagnostic("mesh.missing_lods",
-            "Mesh LOD list is empty", item.source_id, item.mesh_name));
-          return out;
-        }
-
-        if (item.lods.size() > 8) {
-          out.diagnostics.push_back(MakeErrorDiagnostic(
-            "mesh.invalid_lod_count", "Mesh LOD count exceeds maximum of 8",
-            item.source_id, item.mesh_name));
-          return out;
-        }
-
-        std::vector<LodBuildData> lods;
-        lods.reserve(item.lods.size());
-
-        uint32_t attr_mask = 0;
-        for (const auto& lod : item.lods) {
-          if (item.stop_token.stop_requested()) {
-            out.canceled = true;
-            return out;
-          }
-
-          const auto& triangle_mesh = lod.source;
-          auto lod_data = BuildLodData(
-            triangle_mesh, lod, item, max_bytes, out.diagnostics, attr_mask);
-          if (!lod_data.has_value()) {
-            return out;
-          }
-          lods.push_back(std::move(*lod_data));
-        }
-
-        if (item.stop_token.stop_requested()) {
-          out.canceled = true;
-          return out;
-        }
-
-        if (HasAnyError(out.diagnostics)) {
-          return out;
-        }
-
-        Bounds3 geom_bounds = MakeEmptyBounds();
-        for (const auto& lod : lods) {
-          ExpandBounds(geom_bounds,
-            glm::vec3(lod.bounds.min[0], lod.bounds.min[1], lod.bounds.min[2]));
-          ExpandBounds(geom_bounds,
-            glm::vec3(lod.bounds.max[0], lod.bounds.max[1], lod.bounds.max[2]));
-        }
-
-        std::vector<MaterialSlotPatchOffset> material_patch_offsets;
-        auto descriptor_bytes
-          = BuildDescriptorBytes(item.mesh_name, lods, geom_bounds, attr_mask,
-            material_patch_offsets, out.diagnostics, item.source_id);
-
-        if (HasAnyError(out.diagnostics)) {
-          return out;
-        }
-
-        CookedGeometryPayload cooked_payload;
-        cooked_payload.virtual_path
-          = item.request.loose_cooked_layout.GeometryVirtualPath(
-            item.storage_mesh_name);
-        cooked_payload.descriptor_relpath
-          = item.request.loose_cooked_layout.GeometryDescriptorRelPath(
-            item.storage_mesh_name);
-        cooked_payload.geometry_key
-          = ResolveGeometryKey(item.request, cooked_payload.virtual_path);
-        cooked_payload.descriptor_bytes = std::move(descriptor_bytes);
-        cooked_payload.material_patch_offsets
-          = std::move(material_patch_offsets);
-
-        auto HashPayloadIfNeeded = [&](CookedBufferPayload& payload) -> void {
-          if (!with_content_hashing) {
-            return;
-          }
-          if (payload.content_hash != 0) {
-            return;
-          }
-          if (item.stop_token.stop_requested() || canceled) {
-            return;
-          }
-          const std::span<const std::byte> bytes(
-            payload.data.data(), payload.data.size());
-          const auto hash = util::ComputeContentHash(bytes);
-          if (hash != 0) {
-            payload.content_hash = hash;
-          }
-        };
-
-        for (const auto& lod : lods) {
-          CookedMeshPayload cooked_mesh;
-
-          const auto vb_usage_flags
-            = static_cast<uint32_t>(
-                data::BufferResource::UsageFlags::kVertexBuffer)
-            | kDefaultStaticUsageFlags;
-          const auto ib_usage_flags
-            = static_cast<uint32_t>(
-                data::BufferResource::UsageFlags::kIndexBuffer)
-            | kDefaultStaticUsageFlags;
-
-          cooked_mesh.vertex_buffer.data
-            = ToByteVector(std::span(lod.vertices.data(), lod.vertices.size()));
-          cooked_mesh.vertex_buffer.alignment = sizeof(data::Vertex);
-          cooked_mesh.vertex_buffer.usage_flags = vb_usage_flags;
-          cooked_mesh.vertex_buffer.element_stride = sizeof(data::Vertex);
-          cooked_mesh.vertex_buffer.element_format
-            = static_cast<uint8_t>(Format::kUnknown);
-
-          cooked_mesh.index_buffer.data
-            = ToByteVector(std::span(lod.indices.data(), lod.indices.size()));
-          cooked_mesh.index_buffer.alignment = alignof(uint32_t);
-          cooked_mesh.index_buffer.usage_flags = ib_usage_flags;
-          cooked_mesh.index_buffer.element_stride = 0;
-          cooked_mesh.index_buffer.element_format
-            = static_cast<uint8_t>(Format::kR32UInt);
-
-          if (lod.mesh_type == data::MeshType::kSkinned) {
-            const auto joint_usage_flags
-              = static_cast<uint32_t>(
-                  data::BufferResource::UsageFlags::kStorageBuffer)
-              | kDefaultStaticUsageFlags;
-
-            CookedBufferPayload joint_indices_payload;
-            joint_indices_payload.data = ToByteVector(
-              std::span(lod.joint_indices.data(), lod.joint_indices.size()));
-            joint_indices_payload.alignment = 16;
-            joint_indices_payload.usage_flags = joint_usage_flags;
-            joint_indices_payload.element_stride = 0;
-            joint_indices_payload.element_format
-              = static_cast<uint8_t>(Format::kRGBA32UInt);
-
-            CookedBufferPayload joint_weights_payload;
-            joint_weights_payload.data = ToByteVector(
-              std::span(lod.joint_weights.data(), lod.joint_weights.size()));
-            joint_weights_payload.alignment = 16;
-            joint_weights_payload.usage_flags = joint_usage_flags;
-            joint_weights_payload.element_stride = 0;
-            joint_weights_payload.element_format
-              = static_cast<uint8_t>(Format::kRGBA32Float);
-
-            CookedBufferPayload inverse_bind_payload;
-            inverse_bind_payload.data
-              = ToByteVector(std::span(lod.inverse_bind_matrices.data(),
-                lod.inverse_bind_matrices.size()));
-            inverse_bind_payload.alignment = 16;
-            inverse_bind_payload.usage_flags = joint_usage_flags;
-            inverse_bind_payload.element_stride = sizeof(glm::mat4);
-            inverse_bind_payload.element_format
-              = static_cast<uint8_t>(Format::kUnknown);
-
-            CookedBufferPayload joint_remap_payload;
-            joint_remap_payload.data = ToByteVector(
-              std::span(lod.joint_remap.data(), lod.joint_remap.size()));
-            joint_remap_payload.alignment = alignof(uint32_t);
-            joint_remap_payload.usage_flags = joint_usage_flags;
-            joint_remap_payload.element_stride = 0;
-            joint_remap_payload.element_format
-              = static_cast<uint8_t>(Format::kR32UInt);
-
-            HashPayloadIfNeeded(joint_indices_payload);
-            HashPayloadIfNeeded(joint_weights_payload);
-            HashPayloadIfNeeded(inverse_bind_payload);
-            HashPayloadIfNeeded(joint_remap_payload);
-
-            cooked_mesh.auxiliary_buffers.push_back(
-              std::move(joint_indices_payload));
-            cooked_mesh.auxiliary_buffers.push_back(
-              std::move(joint_weights_payload));
-            cooked_mesh.auxiliary_buffers.push_back(
-              std::move(inverse_bind_payload));
-            cooked_mesh.auxiliary_buffers.push_back(
-              std::move(joint_remap_payload));
-          }
-
-          HashPayloadIfNeeded(cooked_mesh.vertex_buffer);
-          HashPayloadIfNeeded(cooked_mesh.index_buffer);
-
-          cooked_mesh.bounds = lod.bounds;
-          cooked_payload.lods.push_back(std::move(cooked_mesh));
-        }
-
-        out.cooked = std::move(cooked_payload);
-        out.success = true;
-        return out;
+        return BuildGeometryOutcome(
+          std::move(item), max_data_blob_bytes, with_content_hashing, canceled);
       });
 
     if (build_outcome.canceled) {
-      WorkResult canceled {
+      auto canceled = WorkResult {
         .source_id = std::move(build_outcome.source_id),
         .source_key = build_outcome.source_key,
         .cooked = std::nullopt,
