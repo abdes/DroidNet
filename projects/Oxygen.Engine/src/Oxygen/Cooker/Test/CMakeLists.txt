@@ -39,14 +39,16 @@ include(GTestHelpers)
 m_gtest_program(
   AsyncImportCore
   SOURCES
-    "Import/ImageDecode_test.cpp"
-    "Import/Bc7Encoder_test.cpp"
-    "Import/ImageProcessing_test.cpp"
+    "Import/AssetEmitter_test.cpp"
     "Import/AsyncImporter_test.cpp"
     "Import/AsyncImportService_test.cpp"
+    "Import/Bc7Encoder_test.cpp"
+    "Import/ImageDecode_test.cpp"
+    "Import/ImageProcessing_test.cpp"
     "Import/ImportEventLoop_test.cpp"
     "Import/ImportJob_test.cpp"
     "Import/ImportSession_test.cpp"
+    "Import/PipelineConformance_test.cpp"
     "Mocks/TestImportJob.cpp"
     "Mocks/TestImportJob.h"
 )
@@ -127,13 +129,21 @@ m_gtest_program(
 )
 
 m_gtest_program(
-  AsyncImportAssets
+  AsyncImportGeometry
   SOURCES
-    "Import/AssetEmitter_test.cpp"
     "Import/GeometryPipeline_test.cpp"
-    "Import/MaterialPipeline_test.cpp"
-    "Import/PipelineConformance_test.cpp"
+)
+
+m_gtest_program(
+  AsyncImportScene
+  SOURCES
     "Import/ScenePipeline_test.cpp"
+)
+
+m_gtest_program(
+  AsyncImportMaterials
+  SOURCES
+    "Import/MaterialPipeline_test.cpp"
 )
 
 m_gtest_program(
