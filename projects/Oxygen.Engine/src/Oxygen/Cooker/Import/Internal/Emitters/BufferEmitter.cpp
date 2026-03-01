@@ -266,6 +266,12 @@ auto BufferEmitter::DataFileSize() const noexcept -> uint64_t
   return table_aggregator_.DataFileSize();
 }
 
+auto BufferEmitter::TryGetDescriptor(const uint32_t index) const
+  -> std::optional<BufferResourceDesc>
+{
+  return table_aggregator_.TryGetDescriptor(index);
+}
+
 auto BufferEmitter::Finalize() -> co::Co<bool>
 {
   finalize_started_.store(true, std::memory_order_release);

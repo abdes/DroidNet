@@ -18,6 +18,7 @@
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/BufferEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/Emitters/ResourceDescriptorEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/TextureEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
@@ -350,6 +351,25 @@ auto ImportSession::AssetEmitter() -> import::AssetEmitter&
   return **asset_emitter_;
 }
 
+/*!
+ Get (and lazily create) the resource descriptor emitter for this session.
+
+
+ * @warning This method is not thread-safe. It must be called from the importer
+
+ * thread only.
+*/
+auto ImportSession::ResourceDescriptorEmitter()
+  -> import::ResourceDescriptorEmitter&
+{
+  if (!resource_descriptor_emitter_.has_value()) {
+    resource_descriptor_emitter_.emplace(
+      std::make_unique<import::ResourceDescriptorEmitter>(
+        *file_writer_, request_.loose_cooked_layout, cooked_root_));
+  }
+  return **resource_descriptor_emitter_;
+}
+
 auto ImportSession::AddIoDuration(std::chrono::microseconds duration) noexcept
   -> void
 {
@@ -499,6 +519,19 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
     }
   }
 
+  if (resource_descriptor_emitter_.has_value()) {
+    const auto ok = co_await (*resource_descriptor_emitter_)->Finalize();
+    if (!ok) {
+      AddDiagnostic({
+        .severity = ImportSeverity::kError,
+        .code = "import.resource_descriptor_emitter_finalize_failed",
+        .message = "Resource descriptor emitter finalization failed",
+        .source_path = request_.source_path.string(),
+        .object_path = {},
+      });
+    }
+  }
+
   const auto texture_count = texture_emitter_.has_value()
     ? (*texture_emitter_)->GetStats().emitted_textures
     : 0U;
@@ -618,6 +651,16 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
           .path = rec.descriptor_relpath,
           .size_bytes = rec.descriptor_size,
         });
+      }
+    }
+
+    if (resource_descriptor_emitter_.has_value()) {
+      const auto records = (*resource_descriptor_emitter_)->Records();
+      report.outputs.reserve(report.outputs.size() + records.size());
+      for (const auto& rec : records) {
+        output_missing
+          |= !AppendOutputRecord(report.outputs, report.diagnostics,
+            cooked_root_, rec.relpath, request_.source_path.string());
       }
     }
 

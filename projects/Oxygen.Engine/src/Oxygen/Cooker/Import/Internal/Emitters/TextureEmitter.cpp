@@ -399,6 +399,12 @@ auto TextureEmitter::GetStats() const noexcept -> Stats
   };
 }
 
+auto TextureEmitter::TryGetDescriptor(const uint32_t index) const
+  -> std::optional<TextureResourceDesc>
+{
+  return table_aggregator_.TryGetDescriptor(index);
+}
+
 auto TextureEmitter::UpdateDataFileSize(const uint64_t new_size) -> void
 {
   auto current = data_file_size_.load(std::memory_order_acquire);

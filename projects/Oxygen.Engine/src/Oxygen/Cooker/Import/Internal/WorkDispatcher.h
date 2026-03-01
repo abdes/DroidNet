@@ -11,6 +11,7 @@
 #include <span>
 #include <stop_token>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -102,8 +103,19 @@ private:
   [[nodiscard]] auto EmitTexturePayload(TexturePipeline::WorkResult& result)
     -> std::optional<uint32_t>;
 
+  [[nodiscard]] auto EmitBufferPayload(CookedBufferPayload payload,
+    std::string_view source_id) -> std::optional<uint32_t>;
+
   [[nodiscard]] auto EmitBufferPayload(BufferPipeline::WorkResult result)
     -> std::optional<uint32_t>;
+
+  [[nodiscard]] auto EmitTextureSidecarDescriptor(
+    data::pak::core::ResourceIndexT resource_index, std::string_view source_id,
+    std::string_view name_hint, std::string_view stable_id) -> bool;
+
+  [[nodiscard]] auto EmitBufferSidecarDescriptor(
+    data::pak::core::ResourceIndexT resource_index, std::string_view source_id,
+    std::string_view name_hint, std::string_view stable_id) -> bool;
 
   [[nodiscard]] auto EmitMaterialPayload(MaterialPipeline::WorkResult result)
     -> bool;

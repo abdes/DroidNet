@@ -167,6 +167,10 @@ public:
   //! Get the current reserved data size.
   OXGN_COOK_NDAPI auto DataFileSize() const noexcept -> uint64_t;
 
+  //! Query the table descriptor for a previously emitted buffer index.
+  OXGN_COOK_NDAPI auto TryGetDescriptor(uint32_t index) const
+    -> std::optional<data::pak::core::BufferResourceDesc>;
+
   //=== Finalization ===------------------------------------------------------//
 
   //! Wait for all pending I/O for this session.

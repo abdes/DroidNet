@@ -31,6 +31,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/BufferEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/Emitters/ResourceDescriptorEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/TextureEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
@@ -743,6 +744,62 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeWithEmittersRegistersInIndex)
       EXPECT_EQ(*found_path, virtual_path);
     }
 
+    co_return;
+  });
+}
+
+//! Verify resource sidecar descriptors are emitted and reported as outputs.
+NOLINT_TEST_F(ImportSessionTest, FinalizeIncludesResourceSidecarOutputs)
+{
+  co::Run(*loop_, [&]() -> co::Co<> {
+    auto request = MakeRequest();
+    std::filesystem::create_directories(request.cooked_root.value());
+    ImportSession session(request, observer_ptr(reader_.get()),
+      oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
+      observer_ptr(thread_pool_.get()), observer_ptr(table_registry_.get()),
+      observer_ptr(index_registry_.get()));
+
+    const auto texture_index
+      = session.TextureEmitter().Emit(MakeTestTexturePayload(), "wood_albedo");
+    const auto texture_desc
+      = session.TextureEmitter().TryGetDescriptor(texture_index);
+    EXPECT_TRUE(texture_desc.has_value());
+    if (!texture_desc.has_value()) {
+      co_return;
+    }
+
+    const auto buffer_index
+      = session.BufferEmitter().Emit(MakeTestBufferPayload(), "mesh_vb");
+    const auto buffer_desc
+      = session.BufferEmitter().TryGetDescriptor(buffer_index);
+    EXPECT_TRUE(buffer_desc.has_value());
+    if (!buffer_desc.has_value()) {
+      co_return;
+    }
+
+    const auto texture_rel = session.ResourceDescriptorEmitter().EmitTexture(
+      "wood_albedo", "wood_albedo",
+      oxygen::data::pak::core::ResourceIndexT { texture_index }, *texture_desc);
+    const auto buffer_rel
+      = session.ResourceDescriptorEmitter().EmitBuffer("mesh_vb", "mesh_vb",
+        oxygen::data::pak::core::ResourceIndexT { buffer_index }, *buffer_desc);
+
+    const auto report = co_await session.Finalize();
+    EXPECT_TRUE(report.success);
+
+    const auto has_output = [&](std::string_view relpath) {
+      return std::ranges::any_of(
+        report.outputs, [&](const import::ImportOutputRecord& output) {
+          return output.path == relpath;
+        });
+    };
+    EXPECT_TRUE(has_output(texture_rel));
+    EXPECT_TRUE(has_output(buffer_rel));
+
+    EXPECT_TRUE(
+      std::filesystem::exists(request.cooked_root.value() / texture_rel));
+    EXPECT_TRUE(
+      std::filesystem::exists(request.cooked_root.value() / buffer_rel));
     co_return;
   });
 }

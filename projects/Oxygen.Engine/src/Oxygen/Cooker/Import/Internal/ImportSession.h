@@ -34,6 +34,7 @@ class ResourceTableRegistry;
 class TextureEmitter;
 class BufferEmitter;
 class AssetEmitter;
+class ResourceDescriptorEmitter;
 class LooseCookedIndexRegistry;
 
 //! Per-import-job state including diagnostics and output tracking.
@@ -131,6 +132,10 @@ public:
 
   //! Get the asset emitter (lazy, import-thread only).
   OXGN_COOK_NDAPI auto AssetEmitter() -> AssetEmitter&;
+
+  //! Get the resource-descriptor emitter (lazy, import-thread only).
+  OXGN_COOK_NDAPI auto ResourceDescriptorEmitter()
+    -> ResourceDescriptorEmitter&;
 
   //=== Telemetry
   //===----------------------------------------------------------//
@@ -234,6 +239,8 @@ private:
   std::optional<std::unique_ptr<import::TextureEmitter>> texture_emitter_;
   std::optional<std::unique_ptr<import::BufferEmitter>> buffer_emitter_;
   std::optional<std::unique_ptr<import::AssetEmitter>> asset_emitter_;
+  std::optional<std::unique_ptr<import::ResourceDescriptorEmitter>>
+    resource_descriptor_emitter_;
 
   mutable std::mutex diagnostics_mutex_;
   std::vector<ImportDiagnostic> diagnostics_;

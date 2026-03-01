@@ -182,6 +182,10 @@ public:
   //! Get a snapshot of the current emitter statistics.
   OXGN_COOK_NDAPI auto GetStats() const noexcept -> Stats;
 
+  //! Query the table descriptor for a previously emitted texture index.
+  OXGN_COOK_NDAPI auto TryGetDescriptor(uint32_t index) const
+    -> std::optional<data::pak::render::TextureResourceDesc>;
+
   //=== Finalization
   //===-------------------------------------------------------//
 

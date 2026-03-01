@@ -13,6 +13,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/Internal/Emitters/ResourceDescriptorEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/TextureEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImageDecode.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
@@ -280,6 +281,46 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
     }
     const auto emit_end = std::chrono::steady_clock::now();
     telemetry.emit_duration = MakeDuration(emit_start, emit_end);
+  } else if (cooked.used_fallback) {
+    const auto emit_start = std::chrono::steady_clock::now();
+    auto& emitter = session.TextureEmitter();
+    const auto descriptor
+      = emitter.TryGetDescriptor(data::pak::core::kFallbackResourceIndex);
+    if (!descriptor.has_value()) {
+      session.AddDiagnostic({
+        .severity = ImportSeverity::kError,
+        .code = "texture.fallback_descriptor_missing",
+        .message = "Missing fallback texture descriptor",
+        .source_path = Request().source_path.string(),
+        .object_path = {},
+      });
+      co_return co_await FinalizeWithTelemetry(session);
+    }
+    auto fallback_descriptor_emit_failed = false;
+    try {
+      const auto stable_id = NormalizeTextureId(Request().source_path);
+      const auto name_hint = Request().source_path.stem().string();
+      [[maybe_unused]] const auto relpath
+        = session.ResourceDescriptorEmitter().EmitTexture(
+          name_hint.empty() ? stable_id : name_hint,
+          stable_id.empty() ? name_hint : stable_id,
+          data::pak::core::kFallbackResourceIndex, *descriptor);
+    } catch (const std::exception& ex) {
+      session.AddDiagnostic({
+        .severity = ImportSeverity::kError,
+        .code = "texture.fallback_descriptor_emit_failed",
+        .message = std::string("Failed to emit fallback texture descriptor: ")
+          + ex.what(),
+        .source_path = Request().source_path.string(),
+        .object_path = {},
+      });
+      fallback_descriptor_emit_failed = true;
+    }
+    if (fallback_descriptor_emit_failed) {
+      co_return co_await FinalizeWithTelemetry(session);
+    }
+    const auto emit_end = std::chrono::steady_clock::now();
+    session.AddEmitDuration(MakeDuration(emit_start, emit_end));
   }
 
   ReportItemProgress(ProgressEventKind::kItemFinished, ImportPhase::kWorking,
@@ -761,8 +802,26 @@ auto TextureImportJob::EmitTexture(
     auto& emitter = session.TextureEmitter();
     const auto signature_salt = Request().source_path.string();
     const auto emit_start = std::chrono::steady_clock::now();
-    [[maybe_unused]] const auto index
-      = emitter.Emit(std::move(cooked), signature_salt);
+    const auto index = emitter.Emit(std::move(cooked), signature_salt);
+    const auto descriptor = emitter.TryGetDescriptor(index);
+    if (!descriptor.has_value()) {
+      session.AddDiagnostic({
+        .severity = ImportSeverity::kError,
+        .code = "texture.descriptor_missing",
+        .message = "Missing descriptor for emitted texture index "
+          + std::to_string(index),
+        .source_path = Request().source_path.string(),
+        .object_path = {},
+      });
+      co_return false;
+    }
+    const auto stable_id = NormalizeTextureId(Request().source_path);
+    const auto name_hint = Request().source_path.stem().string();
+    [[maybe_unused]] const auto relpath
+      = session.ResourceDescriptorEmitter().EmitTexture(
+        name_hint.empty() ? stable_id : name_hint,
+        stable_id.empty() ? name_hint : stable_id,
+        data::pak::core::ResourceIndexT { index }, *descriptor);
     const auto emit_end = std::chrono::steady_clock::now();
     session.AddEmitDuration(
       std::chrono::duration_cast<std::chrono::microseconds>(
