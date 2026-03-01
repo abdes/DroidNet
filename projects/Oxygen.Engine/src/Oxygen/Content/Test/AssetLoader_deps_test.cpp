@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Testing/GTest.h>
+
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
@@ -15,7 +17,7 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 
-#include "./AssetLoader_test.h"
+#include "AssetLoader_test.h"
 
 using testing::NotNull;
 
@@ -29,6 +31,7 @@ using oxygen::observer_ptr;
 using oxygen::co::Co;
 using oxygen::co::testing::TestEventLoop;
 using oxygen::content::testing::AssetLoaderLoadingTest;
+namespace oxco = oxygen::co;
 
 //=== AssetLoader Dependency Mgmt Tests ===-----------------------------------//
 
@@ -52,15 +55,14 @@ NOLINT_TEST_F(
   TestEventLoop el;
 
   // Act + Assert
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxco::Run(el, [&]() -> Co<> { // NOLINT(*-lambda-coroutines)
     using oxygen::content::AssetLoader;
     using oxygen::content::AssetLoaderConfig;
 
-    oxygen::co::ThreadPool pool(el, 2);
+    oxco::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
-    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::engine::internal::EngineTagFactory::Get(), config);
+    config.thread_pool = observer_ptr<oxco::ThreadPool> { &pool };
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
     loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
@@ -92,7 +94,7 @@ NOLINT_TEST_F(
       }
 
       loader.Stop();
-      co_return oxygen::co::kJoin;
+      co_return oxco::kJoin;
     };
   });
 }
@@ -112,15 +114,14 @@ NOLINT_TEST_F(
   TestEventLoop el;
 
   // Act + Assert
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxco::Run(el, [&]() -> Co<> { // NOLINT(*-lambda-coroutines)
     using oxygen::content::AssetLoader;
     using oxygen::content::AssetLoaderConfig;
 
-    oxygen::co::ThreadPool pool(el, 2);
+    oxco::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
-    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
-    AssetLoader loader(
-      oxygen::engine::internal::EngineTagFactory::Get(), config);
+    config.thread_pool = observer_ptr<oxco::ThreadPool> { &pool };
+    AssetLoader loader(Tag::Get(), config);
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
     loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
@@ -164,7 +165,7 @@ NOLINT_TEST_F(
       }
 
       loader.Stop();
-      co_return oxygen::co::kJoin;
+      co_return oxco::kJoin;
     };
   });
 }

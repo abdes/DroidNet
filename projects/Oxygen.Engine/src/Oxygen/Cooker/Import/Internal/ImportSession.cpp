@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <bit>
 #include <cstddef>
 #include <fstream>
 #include <limits>
@@ -24,6 +25,7 @@
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
+
 namespace oxygen::content::import {
 
 namespace {
@@ -71,6 +73,7 @@ namespace {
         .code = "import.output_missing",
         .message = "Expected output missing: " + std::string(relpath),
         .source_path = std::string(source_path),
+        .object_path = {},
       });
       return false;
     }
@@ -127,30 +130,16 @@ namespace {
     return summary;
   }
 
-  auto JoinRelativePath(
-    const std::string_view base, const std::string_view child) -> std::string
-  {
-    if (base.empty()) {
-      return std::string { child };
-    }
-    if (child.empty()) {
-      return std::string { base };
-    }
-    return std::string { base } + "/" + std::string { child };
-  }
-
   auto BuildScriptBindingsTableRelPath(const ImportRequest& request)
     -> std::string
   {
-    return JoinRelativePath(
-      request.loose_cooked_layout.resources_dir, "script-bindings.table");
+    return request.loose_cooked_layout.ScriptBindingsTableRelPath();
   }
 
   auto BuildScriptBindingsDataRelPath(const ImportRequest& request)
     -> std::string
   {
-    return JoinRelativePath(
-      request.loose_cooked_layout.resources_dir, "script-bindings.data");
+    return request.loose_cooked_layout.ScriptBindingsDataRelPath();
   }
 
   template <typename RecordT>
@@ -186,8 +175,8 @@ namespace {
     const auto size = static_cast<size_t>(end);
     auto bytes = std::vector<std::byte>(size);
     in.seekg(0, std::ios::beg);
-    in.read(reinterpret_cast<char*>(bytes.data()),
-      static_cast<std::streamsize>(size));
+    in.read(
+      std::bit_cast<char*>(bytes.data()), static_cast<std::streamsize>(size));
     if (!in.good() && !in.eof()) {
       return {};
     }
@@ -479,6 +468,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
         .code = "import.texture_emitter_finalize_failed",
         .message = "Texture emitter finalization failed",
         .source_path = request_.source_path.string(),
+        .object_path = {},
       });
     }
   }
@@ -491,6 +481,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
         .code = "import.buffer_emitter_finalize_failed",
         .message = "Buffer emitter finalization failed",
         .source_path = request_.source_path.string(),
+        .object_path = {},
       });
     }
   }
@@ -503,6 +494,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
         .code = "import.asset_emitter_finalize_failed",
         .message = "Asset emitter finalization failed",
         .source_path = request_.source_path.string(),
+        .object_path = {},
       });
     }
   }
@@ -525,6 +517,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       .code = "import.resource_table_finalize_failed",
       .message = "Resource table finalization failed",
       .source_path = request_.source_path.string(),
+      .object_path = {},
     });
   }
 
@@ -536,6 +529,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       .code = "import.flush_failed",
       .message = flush_result.error().message,
       .source_path = request_.source_path.string(),
+      .object_path = {},
     });
   }
 
@@ -698,6 +692,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
         .code = "import.outputs_missing",
         .message = "Import produced no outputs",
         .source_path = request_.source_path.string(),
+        .object_path = {},
       });
       output_missing = true;
     }
@@ -710,6 +705,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
         .code = "import.index_written_with_errors",
         .message = "Index written despite import errors",
         .source_path = request_.source_path.string(),
+        .object_path = {},
       });
     }
 
@@ -747,6 +743,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       .code = "import.index_write_failed",
       .message = ex.what(),
       .source_path = request_.source_path.string(),
+      .object_path = {},
     });
     LOG_F(ERROR, "Failed to write index: {}", ex.what());
   }

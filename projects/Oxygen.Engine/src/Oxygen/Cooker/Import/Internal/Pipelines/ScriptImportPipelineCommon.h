@@ -22,53 +22,13 @@
 
 namespace oxygen::content::import::detail::script_import {
 
-constexpr auto kScriptDescriptorExtension = std::string_view { ".oscript" };
-constexpr auto kScriptsTableFileName = std::string_view { "scripts.table" };
-constexpr auto kScriptsDataFileName = std::string_view { "scripts.data" };
-
 constexpr auto kScriptContentHashBytes = size_t { 8 };
 constexpr auto kByteShiftBits = size_t { 8 };
-
-inline auto JoinRelativePath(
-  const std::string_view base, const std::string_view child) -> std::string
-{
-  if (base.empty()) {
-    return std::string { child };
-  }
-  if (child.empty()) {
-    return std::string { base };
-  }
-  return std::string { base } + "/" + std::string { child };
-}
-
-inline auto EnsureLeadingSlash(const std::string_view path) -> std::string
-{
-  if (path.starts_with('/')) {
-    return std::string { path };
-  }
-  return std::string { "/" } + std::string { path };
-}
-
-inline auto JoinVirtualPath(
-  const std::string_view root, const std::string_view leaf) -> std::string
-{
-  auto rooted = EnsureLeadingSlash(root);
-  if (rooted == "/") {
-    return EnsureLeadingSlash(leaf);
-  }
-  if (leaf.empty()) {
-    return rooted;
-  }
-  if (leaf.front() == '/') {
-    return rooted + std::string { leaf };
-  }
-  return rooted + "/" + std::string { leaf };
-}
 
 inline auto DeriveScriptName(const std::filesystem::path& source_path)
   -> std::string
 {
-  const auto stem = source_path.stem().string();
+  auto stem = source_path.stem().string();
   if (!stem.empty()) {
     return stem;
   }
@@ -78,24 +38,18 @@ inline auto DeriveScriptName(const std::filesystem::path& source_path)
 inline auto BuildScriptDescriptorRelPath(const ImportRequest& request,
   const std::string_view script_name) -> std::string
 {
-  const auto leaf
-    = std::string { script_name } + std::string { kScriptDescriptorExtension };
-  const auto scripts_dir
-    = JoinRelativePath(request.loose_cooked_layout.descriptors_dir, "Scripts");
-  return JoinRelativePath(scripts_dir, leaf);
+  return request.loose_cooked_layout.ScriptDescriptorRelPath(script_name);
 }
 
 inline auto BuildScriptsTableRelPath(const ImportRequest& request)
   -> std::string
 {
-  return JoinRelativePath(
-    request.loose_cooked_layout.resources_dir, kScriptsTableFileName);
+  return request.loose_cooked_layout.ScriptsTableRelPath();
 }
 
 inline auto BuildScriptsDataRelPath(const ImportRequest& request) -> std::string
 {
-  return JoinRelativePath(
-    request.loose_cooked_layout.resources_dir, kScriptsDataFileName);
+  return request.loose_cooked_layout.ScriptsDataRelPath();
 }
 
 inline auto BuildExternalSourcePath(const std::filesystem::path& source_path)
@@ -139,6 +93,7 @@ inline auto AddDiagnostic(ImportSession& session, const ImportRequest& request,
     .code = std::move(code),
     .message = std::move(message),
     .source_path = request.source_path.string(),
+    .object_path = {},
   });
 }
 
