@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oxygen-engine.dev/schemas/oxygen.input-action.schema.json",
+  "title": "Oxygen Input Action Source Schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional self-reference to this schema file."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 63,
+      "description": "Stable action name used for deterministic asset identity and action references."
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "bool",
+        "axis1d",
+        "axis2d"
+      ],
+      "description": "Action value type."
+    },
+    "consumes_input": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, consumes matching input so lower-priority mappings do not also trigger."
+    }
+  },
+  "required": [
+    "name",
+    "type"
+  ]
+}

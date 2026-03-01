@@ -521,16 +521,6 @@ def _schema_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
                 path + ".orthographic_cameras",
             )
 
-        input_context_bindings = s.get("input_context_bindings")
-        if input_context_bindings is not None and not isinstance(
-            input_context_bindings, list
-        ):
-            _err(
-                errors,
-                "E_TYPE",
-                "input_context_bindings must be a list",
-                path + ".input_context_bindings",
-            )
     return errors
 
 

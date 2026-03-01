@@ -72,20 +72,6 @@ def _spec_with_input_assets() -> dict:
                     {"name": "Root", "parent": None},
                     {"name": "Cube", "parent": 0},
                 ],
-                "input_context_bindings": [
-                    {
-                        "node_index": 1,
-                        "context": "GameplayContext",
-                        "priority": 100,
-                        "activate_on_load": True,
-                    },
-                    {
-                        "node_index": 0,
-                        "context": "GameplayContext",
-                        "priority": 50,
-                        "flags": 2,
-                    },
-                ],
             },
         ],
     }
@@ -120,7 +106,7 @@ def test_v6_input_assets_are_planned_and_written(tmp_path: Path):  # noqa: N802
     assert len(_find_directory_entries_by_type(info, 3)) == 1  # scene
 
 
-def test_v6_input_mapping_and_scene_inpt_layout(tmp_path: Path):  # noqa: N802
+def test_v6_input_mapping_layout(tmp_path: Path):  # noqa: N802
     spec = _spec_with_input_assets()
     spec_path = _write_spec(tmp_path, spec)
     out_path = tmp_path / "out_layout.pak"
@@ -130,11 +116,8 @@ def test_v6_input_mapping_and_scene_inpt_layout(tmp_path: Path):  # noqa: N802
     data = out_path.read_bytes()
 
     imc_entry = _find_directory_entries_by_type(info, 6)[0]
-    scene_entry = _find_directory_entries_by_type(info, 3)[0]
 
     accel_key = bytes.fromhex("11" * 16)
-    context_key = bytes.fromhex("33" * 16)
-    inpt_component_type = 0x54504E49  # 'INPT'
 
     # InputMappingContextAssetDesc: header(95), flags(4), then 4 InputDataTable entries.
     imc_desc_off = imc_entry["desc_offset"]
@@ -172,54 +155,3 @@ def test_v6_input_mapping_and_scene_inpt_layout(tmp_path: Path):  # noqa: N802
     end = strings_blob.find(b"\x00", slot_name_offset)
     assert end > slot_name_offset
     assert strings_blob[slot_name_offset:end].decode("utf-8") == "Keyboard.PageUp"
-
-    # SceneAssetDesc: header(95), nodes table(16), strings table(8), component dir off(8), count(4).
-    scene_desc_off = scene_entry["desc_offset"]
-    scene_desc = data[scene_desc_off : scene_desc_off + 256]
-    component_dir_offset = struct.unpack_from("<Q", scene_desc, 119)[0]
-    component_dir_count = struct.unpack_from("<I", scene_desc, 127)[0]
-    assert component_dir_count > 0
-
-    inpt_table_offset = None
-    inpt_table_count = 0
-    inpt_table_entry_size = 0
-    for i in range(component_dir_count):
-        entry_off = scene_desc_off + component_dir_offset + i * 20
-        component_type = struct.unpack_from("<I", data, entry_off)[0]
-        table_offset, table_count, table_entry_size = struct.unpack_from(
-            "<QII", data, entry_off + 4
-        )
-        if component_type == inpt_component_type:
-            inpt_table_offset = table_offset
-            inpt_table_count = table_count
-            inpt_table_entry_size = table_entry_size
-            break
-
-    assert inpt_table_offset is not None
-    assert inpt_table_count == 2
-    assert inpt_table_entry_size == 32
-
-    record0 = data[
-        scene_desc_off + inpt_table_offset : scene_desc_off + inpt_table_offset + 32
-    ]
-    record1 = data[
-        scene_desc_off
-        + inpt_table_offset
-        + 32 : scene_desc_off
-        + inpt_table_offset
-        + 64
-    ]
-
-    node0, key0, priority0, flags0, _reserved0 = struct.unpack("<I16siII", record0)
-    node1, key1, priority1, flags1, _reserved1 = struct.unpack("<I16siII", record1)
-
-    # Sorted by (node_index, priority): node 0 first, then node 1.
-    assert node0 == 0
-    assert key0 == context_key
-    assert priority0 == 50
-    assert flags0 == 2
-
-    assert node1 == 1
-    assert key1 == context_key
-    assert priority1 == 100
-    assert (flags1 & 0x1) == 0x1  # activate_on_load

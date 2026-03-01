@@ -368,6 +368,143 @@ NOLINT_TEST_F(PakWriterTest, CrcDisabledLeavesFooterFieldAtZero)
   });
 }
 
+NOLINT_TEST_F(
+  PakWriterTest, FullModeWritesInputAssetDescriptorsIntoFinalPakDirectory)
+{
+  using data::CookedSource;
+  using data::CookedSourceKind;
+  using pak::BuildMode;
+  using pak::PakPlanBuilder;
+  using pak::PakWriter;
+
+  const auto source = Root() / "input_assets_loose";
+  const auto output_path = Root() / "input_assets_output.pak";
+
+  const auto action_desc_rel
+    = std::string { "Descriptors/InputActions/Move.oiact" };
+  const auto context_desc_rel
+    = std::string { "Descriptors/InputMappingContexts/Gameplay.oimap" };
+  const auto scene_desc_rel = std::string { "Descriptors/Scenes/Main.oscene" };
+
+  const auto action_desc_bytes = MakePatternBytes(0x31U, 48U);
+  const auto context_desc_bytes = MakePatternBytes(0x41U, 64U);
+  const auto scene_desc_bytes = MakePatternBytes(0x51U, 32U);
+
+  ASSERT_TRUE(paktest::WriteFileBytes(source / action_desc_rel,
+    std::span<const std::byte>(
+      action_desc_bytes.data(), action_desc_bytes.size())));
+  ASSERT_TRUE(paktest::WriteFileBytes(source / context_desc_rel,
+    std::span<const std::byte>(
+      context_desc_bytes.data(), context_desc_bytes.size())));
+  ASSERT_TRUE(paktest::WriteFileBytes(source / scene_desc_rel,
+    std::span<const std::byte>(
+      scene_desc_bytes.data(), scene_desc_bytes.size())));
+
+  const auto action_key = MakeAssetKey(0x61U);
+  const auto context_key = MakeAssetKey(0x62U);
+  const auto scene_key = MakeAssetKey(0x63U);
+  const auto assets = std::array<paktest::AssetSpec, 3> {
+    paktest::AssetSpec {
+      .key = action_key,
+      .asset_type = data::AssetType::kInputAction,
+      .descriptor_relpath = action_desc_rel,
+      .virtual_path = "/Content/InputActions/Move",
+      .descriptor_size = static_cast<uint64_t>(action_desc_bytes.size()),
+      .descriptor_sha = paktest::MakeDigest(0x61U),
+    },
+    paktest::AssetSpec {
+      .key = context_key,
+      .asset_type = data::AssetType::kInputMappingContext,
+      .descriptor_relpath = context_desc_rel,
+      .virtual_path = "/Content/InputMappingContexts/Gameplay",
+      .descriptor_size = static_cast<uint64_t>(context_desc_bytes.size()),
+      .descriptor_sha = paktest::MakeDigest(0x62U),
+    },
+    paktest::AssetSpec {
+      .key = scene_key,
+      .asset_type = data::AssetType::kScene,
+      .descriptor_relpath = scene_desc_rel,
+      .virtual_path = "/Content/Scenes/Main",
+      .descriptor_size = static_cast<uint64_t>(scene_desc_bytes.size()),
+      .descriptor_sha = paktest::MakeDigest(0x63U),
+    },
+  };
+  ASSERT_TRUE(paktest::WriteLooseIndex(source,
+    std::span<const paktest::AssetSpec>(assets.data(), assets.size()),
+    std::span<const paktest::FileSpec> {}, 0x71U));
+
+  const auto request = pak::PakBuildRequest {
+    .mode = BuildMode::kFull,
+    .sources
+    = { CookedSource { .kind = CookedSourceKind::kLooseCooked, .path = source } },
+    .output_pak_path = output_path,
+    .output_manifest_path = {},
+    .content_version = 1U,
+    .source_key = MakeSourceKey(),
+    .base_catalogs = {},
+    .patch_compat = {},
+    .options = {
+      .deterministic = true,
+      .embed_browse_index = true,
+      .emit_manifest_in_full = false,
+      .compute_crc32 = true,
+      .fail_on_warnings = false,
+    },
+  };
+
+  const auto plan_result = PakPlanBuilder {}.Build(request);
+  ASSERT_FALSE(HasError(plan_result.diagnostics));
+  ASSERT_TRUE(plan_result.plan.has_value());
+
+  const auto write_result = PakWriter {}.Write(request, *plan_result.plan);
+  ASSERT_FALSE(HasError(write_result.diagnostics));
+
+  const auto pak_bytes = ReadAllBytes(output_path);
+  auto pak_file = content::PakFile(output_path);
+  const auto directory = pak_file.Directory();
+  ASSERT_EQ(directory.size(), assets.size());
+
+  auto saw_input_action = false;
+  auto saw_input_mapping_context = false;
+  auto saw_scene = false;
+  for (const auto& entry : directory) {
+    const auto descriptor_offset = static_cast<size_t>(entry.desc_offset);
+    const auto descriptor_size = static_cast<size_t>(entry.desc_size);
+    ASSERT_LE(descriptor_offset + descriptor_size, pak_bytes.size());
+    const auto payload = std::span<const std::byte>(
+      pak_bytes.data() + descriptor_offset, descriptor_size);
+
+    if (entry.asset_key == action_key) {
+      EXPECT_EQ(static_cast<data::AssetType>(entry.asset_type),
+        data::AssetType::kInputAction);
+      EXPECT_EQ(payload.size(), action_desc_bytes.size());
+      EXPECT_TRUE(std::equal(payload.begin(), payload.end(),
+        action_desc_bytes.begin(), action_desc_bytes.end()));
+      saw_input_action = true;
+    } else if (entry.asset_key == context_key) {
+      EXPECT_EQ(static_cast<data::AssetType>(entry.asset_type),
+        data::AssetType::kInputMappingContext);
+      EXPECT_EQ(payload.size(), context_desc_bytes.size());
+      EXPECT_TRUE(std::equal(payload.begin(), payload.end(),
+        context_desc_bytes.begin(), context_desc_bytes.end()));
+      saw_input_mapping_context = true;
+    } else if (entry.asset_key == scene_key) {
+      EXPECT_EQ(static_cast<data::AssetType>(entry.asset_type),
+        data::AssetType::kScene);
+      EXPECT_EQ(payload.size(), scene_desc_bytes.size());
+      EXPECT_TRUE(std::equal(payload.begin(), payload.end(),
+        scene_desc_bytes.begin(), scene_desc_bytes.end()));
+      saw_scene = true;
+    } else {
+      FAIL() << "Unexpected asset key in directory";
+    }
+  }
+
+  EXPECT_TRUE(saw_input_action);
+  EXPECT_TRUE(saw_input_mapping_context);
+  EXPECT_TRUE(saw_scene);
+}
+
 NOLINT_TEST_F(PakWriterTest, OffsetMismatchEmitsActionableDiagnostic)
 {
   using pak::BuildMode;

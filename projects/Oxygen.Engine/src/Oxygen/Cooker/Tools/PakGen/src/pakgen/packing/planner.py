@@ -1636,14 +1636,6 @@ def compute_pak_plan(
         if isinstance(name, str) and isinstance(asset_key, (bytes, bytearray)):
             script_name_to_key[name] = bytes(asset_key)
 
-    input_mapping_context_name_to_key: Dict[str, bytes] = {}
-    for ctx_spec, ctx_key, _asset_type, _alignment in input_mapping_contexts:
-        if not isinstance(ctx_spec, dict):
-            continue
-        name = ctx_spec.get("name")
-        if isinstance(name, str) and isinstance(ctx_key, (bytes, bytearray)):
-            input_mapping_context_name_to_key[name] = bytes(ctx_key)
-
     for scene_spec, asset_key, _asset_type, alignment in scenes:
         cursor_aligned, _pad_scene = align(
             cursor, alignment or 1, "asset_scene"
@@ -1662,7 +1654,6 @@ def compute_pak_plan(
             header_builder=lambda _a: b"\x00" * 95,
             geometry_name_to_key=geometry_name_to_key,
             script_name_to_key=script_name_to_key,
-            input_mapping_context_name_to_key=input_mapping_context_name_to_key,
             scripting_slot_base_index=0,
         )
 

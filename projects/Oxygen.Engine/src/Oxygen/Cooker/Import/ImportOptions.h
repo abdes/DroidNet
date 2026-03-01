@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <stop_token>
 #include <string>
 #include <type_traits>
@@ -367,14 +368,27 @@ struct ImportOptions final {
   DedupCollisionPolicy dedup_collision_policy
     = DedupCollisionPolicy::kWarnKeepFirst;
 
+  //! Input import tuning carried through the shared ImportRequest model.
+  /*!
+   Presence signals that the request must be routed to the input import
+   * path.
+   The input pipeline infers document structure from source JSON; no
+   * explicit
+   asset-kind discriminator is carried in import options.
+  */
+  struct InputTuning final { };
+
+  std::optional<InputTuning> input {};
+
   //! Scripting import tuning carried through the shared ImportRequest model.
   /*!
-   This is the authoritative runtime scripting contract consumed by import
+   This is the authoritative runtime scripting contract consumed by
+   import
    pipelines and jobs.
-
-   `ScriptAssetImportSettings` and `ScriptingSidecarImportSettings` are only
-   tooling-facing ingress DTOs. Builders must validate and normalize those
-   settings into this struct before dispatch.
+ `ScriptAssetImportSettings` and
+   `ScriptingSidecarImportSettings` are only tooling-facing ingress DTOs.
+   Builders must validate and normalize those settings into this struct before
+   dispatch.
   */
   struct ScriptingTuning final {
     //! Identifies whether this request is a script-asset or sidecar import.

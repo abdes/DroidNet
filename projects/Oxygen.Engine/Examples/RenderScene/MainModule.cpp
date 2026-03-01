@@ -17,10 +17,15 @@
 #include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Config/PathFinderConfig.h>
+#include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Content/InputContextHydration.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Input/InputMappingContext.h>
+#include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Renderer/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Pipeline/CompositionView.h>
@@ -84,6 +89,95 @@ namespace {
     -> std::filesystem::path
   {
     return root_path / std::string(kLooseCookedIndexFileName);
+  }
+
+  auto CollectMountedSourceKeysForPath(
+    const content::IAssetLoader& asset_loader,
+    const content::IAssetLoader::ContentSourceKind source_kind,
+    const std::filesystem::path& source_path) -> std::vector<data::SourceKey>
+  {
+    const auto normalized = runtime::NormalizePath(source_path);
+    auto keys = std::vector<data::SourceKey> {};
+    for (const auto& source : asset_loader.EnumerateMountedSources()) {
+      if (source.source_kind != source_kind) {
+        continue;
+      }
+      if (runtime::NormalizePath(source.source_path) != normalized) {
+        continue;
+      }
+      keys.push_back(source.source_key);
+    }
+    return keys;
+  }
+
+  auto SourceKeyMatchesAny(const data::SourceKey& source_key,
+    const std::vector<data::SourceKey>& source_keys) -> bool
+  {
+    return std::ranges::any_of(source_keys,
+      [&](const data::SourceKey& key) { return key == source_key; });
+  }
+
+  auto HydrateMountedInputContextsForSource(content::AssetLoader& asset_loader,
+    observer_ptr<engine::InputSystem> input_system,
+    const content::IAssetLoader::ContentSourceKind source_kind,
+    const std::filesystem::path& source_path) -> co::Co<>
+  {
+    if (!input_system) {
+      co_return;
+    }
+
+    const auto source_keys
+      = CollectMountedSourceKeysForPath(asset_loader, source_kind, source_path);
+    if (source_keys.empty()) {
+      co_return;
+    }
+
+    constexpr auto kAutoLoadMask = static_cast<uint32_t>(
+      data::pak::input::InputMappingContextFlags::kAutoLoad);
+    constexpr auto kAutoActivateMask = static_cast<uint32_t>(
+      data::pak::input::InputMappingContextFlags::kAutoActivate);
+
+    for (const auto& entry : asset_loader.EnumerateMountedInputContexts()) {
+      if (!SourceKeyMatchesAny(entry.source_key, source_keys)) {
+        continue;
+      }
+
+      const auto flags = static_cast<uint32_t>(entry.flags);
+      if ((flags & kAutoLoadMask) == 0U) {
+        continue;
+      }
+
+      auto context_asset
+        = co_await asset_loader.LoadAssetAsync<data::InputMappingContextAsset>(
+          entry.asset_key);
+      if (!context_asset) {
+        LOG_F(WARNING,
+          "RenderScene: Failed to load mounted input context asset {}",
+          data::to_string(entry.asset_key));
+        continue;
+      }
+
+      auto hydrated = content::HydrateInputContext(
+        *context_asset, asset_loader, *input_system);
+      if (!hydrated) {
+        LOG_F(WARNING,
+          "RenderScene: Failed to hydrate mounted input context asset {}",
+          data::to_string(entry.asset_key));
+        (void)asset_loader.ReleaseAsset(entry.asset_key);
+        continue;
+      }
+
+      if (!input_system->GetMappingContextByName(hydrated->GetName())) {
+        input_system->AddMappingContext(hydrated, entry.default_priority);
+      }
+      if ((flags & kAutoActivateMask) != 0U) {
+        input_system->ActivateMappingContext(hydrated);
+      }
+
+      (void)asset_loader.ReleaseAsset(entry.asset_key);
+    }
+
+    co_return;
   }
 
 } // namespace
@@ -334,6 +428,10 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
                 "mounted source",
                 normalized.string());
               asset_loader->AddPakFile(normalized);
+              co_await HydrateMountedInputContextsForSource(
+                static_cast<content::AssetLoader&>(*asset_loader),
+                app_.input_system,
+                content::IAssetLoader::ContentSourceKind::kPak, normalized);
               mounted_pak_write_times_.insert_or_assign(
                 normalized, *write_time);
               refresh_library = true;
@@ -349,6 +447,10 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
             }
           } else {
             asset_loader->AddPakFile(normalized);
+            co_await HydrateMountedInputContextsForSource(
+              static_cast<content::AssetLoader&>(*asset_loader),
+              app_.input_system, content::IAssetLoader::ContentSourceKind::kPak,
+              normalized);
             if (write_time.has_value()) {
               mounted_pak_write_times_.insert_or_assign(
                 normalized, *write_time);
@@ -377,6 +479,11 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
                 "refreshing mounted source",
                 LooseIndexPathForRoot(normalized).string());
               asset_loader->AddLooseCookedRoot(normalized);
+              co_await HydrateMountedInputContextsForSource(
+                static_cast<content::AssetLoader&>(*asset_loader),
+                app_.input_system,
+                content::IAssetLoader::ContentSourceKind::kLooseCooked,
+                normalized);
               mounted_loose_index_write_times_.insert_or_assign(
                 normalized, *write_time);
               refresh_library = true;
@@ -386,6 +493,11 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
                 "index timestamp; refreshing once to bind latest index",
                 normalized.string());
               asset_loader->AddLooseCookedRoot(normalized);
+              co_await HydrateMountedInputContextsForSource(
+                static_cast<content::AssetLoader&>(*asset_loader),
+                app_.input_system,
+                content::IAssetLoader::ContentSourceKind::kLooseCooked,
+                normalized);
               mounted_loose_index_write_times_.insert_or_assign(
                 normalized, *write_time);
               refresh_library = true;
@@ -401,6 +513,11 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
             }
           } else {
             asset_loader->AddLooseCookedRoot(normalized);
+            co_await HydrateMountedInputContextsForSource(
+              static_cast<content::AssetLoader&>(*asset_loader),
+              app_.input_system,
+              content::IAssetLoader::ContentSourceKind::kLooseCooked,
+              normalized);
             if (write_time.has_value()) {
               mounted_loose_index_write_times_.insert_or_assign(
                 normalized, *write_time);
@@ -455,6 +572,10 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
                 "load; refreshing source",
                 normalized.string());
               asset_loader->AddPakFile(normalized);
+              co_await HydrateMountedInputContextsForSource(
+                static_cast<content::AssetLoader&>(*asset_loader),
+                app_.input_system,
+                content::IAssetLoader::ContentSourceKind::kPak, normalized);
               mounted_pak_write_times_.insert_or_assign(
                 normalized, *write_time);
             } else {
@@ -469,6 +590,10 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
             }
           } else {
             asset_loader->AddPakFile(normalized);
+            co_await HydrateMountedInputContextsForSource(
+              static_cast<content::AssetLoader&>(*asset_loader),
+              app_.input_system, content::IAssetLoader::ContentSourceKind::kPak,
+              normalized);
             if (write_time.has_value()) {
               mounted_pak_write_times_.insert_or_assign(
                 normalized, *write_time);
@@ -499,6 +624,11 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
                 "refreshing mounted source",
                 LooseIndexPathForRoot(normalized).string());
               asset_loader->AddLooseCookedRoot(normalized);
+              co_await HydrateMountedInputContextsForSource(
+                static_cast<content::AssetLoader&>(*asset_loader),
+                app_.input_system,
+                content::IAssetLoader::ContentSourceKind::kLooseCooked,
+                normalized);
               mounted_loose_index_write_times_.insert_or_assign(
                 normalized, *write_time);
             } else if (!has_known_time && write_time.has_value()) {
@@ -507,6 +637,11 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
                 "with unknown timestamp; refreshing once",
                 normalized.string());
               asset_loader->AddLooseCookedRoot(normalized);
+              co_await HydrateMountedInputContextsForSource(
+                static_cast<content::AssetLoader&>(*asset_loader),
+                app_.input_system,
+                content::IAssetLoader::ContentSourceKind::kLooseCooked,
+                normalized);
               mounted_loose_index_write_times_.insert_or_assign(
                 normalized, *write_time);
             } else {
@@ -521,6 +656,11 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
             }
           } else {
             asset_loader->AddLooseCookedRoot(normalized);
+            co_await HydrateMountedInputContextsForSource(
+              static_cast<content::AssetLoader&>(*asset_loader),
+              app_.input_system,
+              content::IAssetLoader::ContentSourceKind::kLooseCooked,
+              normalized);
             if (write_time.has_value()) {
               mounted_loose_index_write_times_.insert_or_assign(
                 normalized, *write_time);

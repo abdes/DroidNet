@@ -179,6 +179,33 @@ auto SanityCheckResourceEviction(const uint64_t expected_key_hash,
   CHECK_EQ_F(expected_type_id, actual_type_id);
   return true;
 }
+
+auto ReadInputMappingContextAssetDesc(
+  const internal::IContentSource& source, const oxygen::data::AssetKey& key)
+  -> std::optional<oxygen::data::pak::input::InputMappingContextAssetDesc>
+{
+  auto desc_reader = source.CreateAssetDescriptorReader(key);
+  if (!desc_reader) {
+    return std::nullopt;
+  }
+
+  auto blob = desc_reader->ReadBlob(
+    sizeof(oxygen::data::pak::input::InputMappingContextAssetDesc));
+  if (!blob
+    || blob->size()
+      < sizeof(oxygen::data::pak::input::InputMappingContextAssetDesc)) {
+    return std::nullopt;
+  }
+
+  oxygen::data::pak::input::InputMappingContextAssetDesc desc {};
+  std::memcpy(&desc, blob->data(), sizeof(desc));
+  if (static_cast<oxygen::data::AssetType>(desc.header.asset_type)
+    != oxygen::data::AssetType::kInputMappingContext) {
+    return std::nullopt;
+  }
+
+  return desc;
+}
 } // namespace
 
 namespace {
@@ -1082,6 +1109,49 @@ auto AssetLoader::EnumerateMountedScenes() const
   AssertOwningThread();
   return scene_catalog_query_service_->EnumerateMountedScenes(
     impl_->source_registry);
+}
+
+auto AssetLoader::EnumerateMountedInputContexts() const
+  -> std::vector<IAssetLoader::MountedInputContextEntry>
+{
+  AssertOwningThread();
+  std::vector<IAssetLoader::MountedInputContextEntry> contexts;
+  const auto& sources = impl_->source_registry.Sources();
+  contexts.reserve(sources.size() * 4U);
+
+  for (const auto& source : sources) {
+    if (!source) {
+      continue;
+    }
+
+    const auto source_key = source->GetSourceKey();
+    const auto asset_count = source->GetAssetCount();
+    for (size_t i = 0; i < asset_count; ++i) {
+      const auto asset_key_opt
+        = source->GetAssetKeyByIndex(static_cast<uint32_t>(i));
+      if (!asset_key_opt.has_value() || !source->HasAsset(*asset_key_opt)) {
+        continue;
+      }
+
+      const auto desc_opt
+        = ReadInputMappingContextAssetDesc(*source, *asset_key_opt);
+      if (!desc_opt.has_value()) {
+        continue;
+      }
+
+      IAssetLoader::MountedInputContextEntry entry {};
+      entry.asset_key = *asset_key_opt;
+      entry.source_key = source_key;
+      entry.name = desc_opt->header.name[0] == '\0'
+        ? std::string {}
+        : std::string(desc_opt->header.name);
+      entry.flags = desc_opt->flags;
+      entry.default_priority = desc_opt->default_priority;
+      contexts.push_back(std::move(entry));
+    }
+  }
+
+  return contexts;
 }
 
 auto AssetLoader::EnumerateMountedSources() const

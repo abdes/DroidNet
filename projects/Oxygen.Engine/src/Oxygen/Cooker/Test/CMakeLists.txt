@@ -9,6 +9,7 @@
 # ------------------------------------------------------------------------------
 
 find_package(GTest REQUIRED CONFIG)
+find_package(nlohmann_json_schema_validator REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -54,11 +55,19 @@ m_gtest_program(
 m_gtest_program(
   AsyncImportScripting
   SOURCES
+    "Import/InputJsonSchema_test.cpp"
+    "Import/InputImportRequestBuilder_test.cpp"
+    "Import/ImportManifest_input_test.cpp"
     "Import/ImportManifest_script_sidecar_test.cpp"
     "Import/ScriptImportRequestBuilder_test.cpp"
     "Import/ScriptImportJob_test.cpp"
     "Import/ScriptImportPipeline_test.cpp"
     "Import/ScriptCompileMode_contract_test.cpp"
+)
+target_link_libraries(
+  Oxygen.Cooker.AsyncImportScripting.Tests
+  PRIVATE
+    nlohmann_json_schema_validator
 )
 
 m_gtest_program(

@@ -51,8 +51,3 @@ assets:
     asset_key: "88888888888888888888888888888888"
     nodes:
       - name: Root
-    input_context_bindings:
-      - node_index: 0
-        context_asset: GameplayInputContext
-        priority: 100
-        activate_on_load: true

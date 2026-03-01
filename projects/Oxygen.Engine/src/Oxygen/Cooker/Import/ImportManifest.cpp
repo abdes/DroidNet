@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <fstream>
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
@@ -11,6 +12,7 @@
 #include <vector>
 
 #include <Oxygen/Cooker/Import/ImportManifest.h>
+#include <Oxygen/Cooker/Import/InputImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
@@ -130,6 +132,50 @@ namespace {
     }
     target = obj[name].get<std::string>();
     return true;
+  }
+
+  auto ReadStringArrayField(const json& obj, const char* name,
+    std::vector<std::string>& target, std::ostream& errors) -> bool
+  {
+    if (!obj.contains(name)) {
+      return true;
+    }
+    if (!obj[name].is_array()) {
+      errors << "ERROR: '" << name << "' must be an array\n";
+      return false;
+    }
+    target.clear();
+    target.reserve(obj[name].size());
+    for (size_t i = 0; i < obj[name].size(); ++i) {
+      if (!obj[name][i].is_string()) {
+        errors << "ERROR: '" << name << "[" << i << "]' must be a string\n";
+        return false;
+      }
+      target.push_back(obj[name][i].get<std::string>());
+    }
+    return true;
+  }
+
+  auto TrimInPlace(std::string& value) -> void
+  {
+    const auto is_ws = [](const unsigned char ch) {
+      return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n';
+    };
+    const auto first = std::find_if(value.begin(), value.end(),
+      [&](const char ch) { return !is_ws(static_cast<unsigned char>(ch)); });
+    if (first == value.end()) {
+      value.clear();
+      return;
+    }
+    const auto last = std::find_if(value.rbegin(), value.rend(),
+      [&](const char ch) { return !is_ws(static_cast<unsigned char>(ch)); });
+    value = std::string(first, last.base());
+  }
+
+  auto IsAllowedInputJobKey(const std::string_view key) -> bool
+  {
+    return key == "id" || key == "type" || key == "source"
+      || key == "depends_on";
   }
 
   auto ReadBoolField(const json& obj, const char* name, bool& target,
@@ -714,6 +760,57 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
       return std::nullopt;
     }
 
+    if (manifest_job.job_type == "input") {
+      for (auto it = job.begin(); it != job.end(); ++it) {
+        if (!IsAllowedInputJobKey(it.key())) {
+          error_stream << "ERROR [input.manifest.key_not_allowed]: key '"
+                       << it.key()
+                       << "' is not allowed for input jobs; allowed keys are "
+                          "'id', 'type', 'source', 'depends_on'\n";
+          return std::nullopt;
+        }
+      }
+
+      if (!job.contains("source") || !job["source"].is_string()) {
+        error_stream << "ERROR: input job.source is required and must be a "
+                        "string\n";
+        return std::nullopt;
+      }
+      if (!job.contains("id") || !job["id"].is_string()) {
+        error_stream << "ERROR [input.manifest.job_id_missing]: input job.id "
+                        "is required and must be a string\n";
+        return std::nullopt;
+      }
+
+      manifest_job.input.source_path
+        = ResolveSourcePath(root, job["source"].get<std::string>());
+      manifest_job.id = job["id"].get<std::string>();
+      TrimInPlace(manifest_job.id);
+      if (manifest_job.id.empty()) {
+        error_stream << "ERROR [input.manifest.job_id_missing]: input job.id "
+                        "must not be empty\n";
+        return std::nullopt;
+      }
+
+      if (!ReadStringArrayField(
+            job, "depends_on", manifest_job.depends_on, error_stream)) {
+        return std::nullopt;
+      }
+      for (size_t dep_index = 0; dep_index < manifest_job.depends_on.size();
+        ++dep_index) {
+        auto& dep = manifest_job.depends_on[dep_index];
+        TrimInPlace(dep);
+        if (dep.empty()) {
+          error_stream << "ERROR: input job.depends_on[" << dep_index
+                       << "] must not be empty\n";
+          return std::nullopt;
+        }
+      }
+
+      manifest.jobs.push_back(std::move(manifest_job));
+      continue;
+    }
+
     const auto has_source = job.contains("source");
     const auto has_bindings = job.contains("bindings");
     const auto is_sidecar_job = manifest_job.job_type == "script-sidecar";
@@ -846,6 +943,10 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream) const
   if (job_type == "script-sidecar") {
     return internal::BuildScriptingSidecarRequest(
       scripting_sidecar, error_stream);
+  }
+  if (job_type == "input") {
+    return internal::BuildInputImportRequest(
+      input, id, depends_on, error_stream);
   }
   error_stream << "ERROR: unknown job_type: " << job_type << "\n";
   return std::nullopt;

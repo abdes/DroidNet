@@ -666,10 +666,10 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
         "pak.write.offset_mismatch",
         "Failed to move cursor to planned footer offset.", "footer");
     } else {
-      const auto footer = BuildFooter(state);
-      if (footer.has_value()) {
+      const auto footer_bytes = BuildFooter(state);
+      if (footer_bytes.has_value()) {
         (void)WriteRawBytes(state,
-          std::as_bytes(std::span(&(*footer), size_t { 1 })),
+          std::as_bytes(std::span(&(*footer_bytes), size_t { 1 })),
           "pak.write.stream_write_failed", "Failed to write PakFooter bytes.",
           "footer");
       }

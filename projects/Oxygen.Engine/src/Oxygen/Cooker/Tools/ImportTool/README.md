@@ -6,6 +6,7 @@ Supported import kinds:
 - `texture`
 - `fbx`
 - `gltf`
+- `input`
 - `script`
 - `script-sidecar`
 - `batch` (manifest-driven)
@@ -50,7 +51,7 @@ Oxygen.Cooker.ImportTool --concurrency "t:4/64,b:2/32,g:2/32,s:2/32" batch --man
 
 Cooked root must resolve to an absolute path.
 
-Single-job commands (`texture`, `fbx`, `gltf`, `script`, `script-sidecar`):
+Single-job commands (`texture`, `fbx`, `gltf`, `input`, `script`, `script-sidecar`):
 1. `-i`, `--output` (command-local)
 2. global `-o`, `--cooked-root`
 
@@ -135,6 +136,57 @@ Rules:
 Script import writes script descriptors (`*.oscript`) and script payload tables:
 - `scripts.table`
 - `scripts.data`
+
+### `input`
+
+Imports one input authoring document (`*.input.json` or `*.input-action.json`).
+
+Required:
+- positional `source`
+
+Optional:
+- `-i`, `--output <path>`
+- `--name <job-name>`
+- `--report <path>`
+- `--content-hashing <true|false>`
+
+Shipped JSON schemas:
+- source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
+- source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json`
+- source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json`
+- installed for users as: `schemas/oxygen.import-manifest.schema.json`
+- installed for users as: `schemas/oxygen.input.schema.json`
+- installed for users as: `schemas/oxygen.input-action.schema.json`
+
+Editor association examples (VSCode):
+
+Repository checkout:
+
+```json
+{
+  "json.schemas": [
+    { "fileMatch": ["import-manifest*.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json" },
+    { "fileMatch": ["*.input.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json" },
+    { "fileMatch": ["*.input-action.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json" }
+  ]
+}
+```
+
+Installed package layout:
+
+```json
+{
+  "json.schemas": [
+    { "fileMatch": ["import-manifest*.json"], "url": "./schemas/oxygen.import-manifest.schema.json" },
+    { "fileMatch": ["*.input.json"], "url": "./schemas/oxygen.input.schema.json" },
+    { "fileMatch": ["*.input-action.json"], "url": "./schemas/oxygen.input-action.schema.json" }
+  ]
+}
+```
+
+Slot names:
+- Canonical runtime slot names are accepted (for example: `Up`, `RightCtrl`, `PrintScreen`).
+- Authoring aliases are also accepted and normalized during import (for example: `UpArrow` -> `Up`, `RightControl` -> `RightCtrl`, `Print` -> `PrintScreen`).
 
 ### `script-sidecar`
 
@@ -234,10 +286,18 @@ Top-level fields:
 Job rules:
 - each job requires `type`
 - non-sidecar jobs require `source`
+- `input` jobs require:
+  - `id`
+  - `source`
+  - optional `depends_on` (array of job ids)
+  - allowed keys are exactly: `id`, `type`, `source`, `depends_on`
 - `script-sidecar` requires exactly one of:
   - `source`
   - `bindings` (inline array)
 - `script-sidecar` always requires `target_scene_virtual_path`
+- duplicate `id`, missing dependency targets, and dependency cycles are rejected
+- if a dependency job fails, all transitive dependents are skipped with
+  `input.import.skipped_predecessor_failed`
 
 Batch example with one output shared at manifest level:
 

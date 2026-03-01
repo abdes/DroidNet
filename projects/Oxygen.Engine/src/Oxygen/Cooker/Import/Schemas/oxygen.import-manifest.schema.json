@@ -115,6 +115,29 @@
                             "source"
                         ]
                     }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "type": {
+                                "const": "input"
+                            }
+                        }
+                    },
+                    "then": {
+                        "required": [
+                            "id",
+                            "source"
+                        ],
+                        "propertyNames": {
+                            "enum": [
+                                "id",
+                                "type",
+                                "source",
+                                "depends_on"
+                            ]
+                        }
+                    }
                 }
             ]
         },
@@ -132,6 +155,10 @@
                 },
                 "scripting_sidecar": {
                     "$ref": "#/definitions/scripting_sidecar_settings"
+                },
+                "input": {
+                    "type": "object",
+                    "additionalProperties": false
                 }
             },
             "additionalProperties": false
@@ -391,8 +418,20 @@
                         "fbx",
                         "gltf",
                         "script",
-                        "script-sidecar"
+                        "script-sidecar",
+                        "input"
                     ]
+                },
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "depends_on": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "minLength": 1
+                    }
                 },
                 "source": {
                     "type": "string"

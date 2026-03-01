@@ -14,6 +14,7 @@
 
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/InputImportSettings.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Import/ScriptImportSettings.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
@@ -28,6 +29,9 @@ struct ImportManifestJob {
   SceneImportSettings gltf;
   ScriptAssetImportSettings script;
   ScriptingSidecarImportSettings scripting_sidecar;
+  InputImportSettings input;
+  std::string id;
+  std::vector<std::string> depends_on;
 
   OXGN_COOK_NDAPI auto BuildRequest(std::ostream& error_stream) const
     -> std::optional<ImportRequest>;

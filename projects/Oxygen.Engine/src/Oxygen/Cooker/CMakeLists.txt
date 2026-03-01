@@ -62,7 +62,7 @@ oxygen_embed_json_schemas(
   CHUNK_SIZE 8192
   SCHEMAS
     kImportManifestSchema
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/import-manifest.schema.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.import-manifest.schema.json"
 )
 
 set(
@@ -81,6 +81,8 @@ set(
   "Import/ImportProgress.h"
   "Import/ImportReport.h"
   "Import/ImportRequest.h"
+  "Import/InputImportRequestBuilder.h"
+  "Import/InputImportSettings.h"
   "Import/Naming.h"
   "Import/ScriptImportRequestBuilder.h"
   "Import/ScriptImportSettings.h"
@@ -133,6 +135,7 @@ set(
   "Import/Internal/Jobs/AudioImportJob.h"
   "Import/Internal/Jobs/FbxImportJob.h"
   "Import/Internal/Jobs/GlbImportJob.h"
+  "Import/Internal/Jobs/InputImportJob.h"
   "Import/Internal/Jobs/ScriptAssetImportJob.h"
   "Import/Internal/Jobs/ScriptingSidecarImportJob.h"
   "Import/Internal/Jobs/TextureImportJob.h"
@@ -142,6 +145,7 @@ set(
   "Import/Internal/Pipelines/BufferPipeline.h"
   "Import/Internal/Pipelines/GeometryPipeline_tangents.h"
   "Import/Internal/Pipelines/GeometryPipeline.h"
+  "Import/Internal/Pipelines/InputImportPipeline.h"
   "Import/Internal/Pipelines/MaterialPipeline.h"
   "Import/Internal/Pipelines/MeshBuildPipeline.h"
   "Import/Internal/Pipelines/ScriptAssetImportPipeline.h"
@@ -197,9 +201,11 @@ set(
   "Import/Internal/ImportJob.cpp"
   "Import/Internal/ImportPlanner.cpp"
   "Import/Internal/ImportSession.cpp"
+  "Import/Internal/InputImportRequestBuilder.cpp"
   "Import/Internal/Jobs/AudioImportJob.cpp"
   "Import/Internal/Jobs/FbxImportJob.cpp"
   "Import/Internal/Jobs/GlbImportJob.cpp"
+  "Import/Internal/Jobs/InputImportJob.cpp"
   "Import/Internal/Jobs/ScriptAssetImportJob.cpp"
   "Import/Internal/Jobs/ScriptingSidecarImportJob.cpp"
   "Import/Internal/Jobs/TextureImportJob.cpp"
@@ -207,6 +213,7 @@ set(
   "Import/Internal/LooseCookedWriter.cpp"
   "Import/Internal/Pipelines/BufferPipeline.cpp"
   "Import/Internal/Pipelines/GeometryPipeline.cpp"
+  "Import/Internal/Pipelines/InputImportPipeline.cpp"
   "Import/Internal/Pipelines/MaterialPipeline.cpp"
   "Import/Internal/Pipelines/MeshBuildPipeline.cpp"
   "Import/Internal/Pipelines/ScriptAssetImportPipeline.cpp"
@@ -316,6 +323,26 @@ endif()
 # ==============================================================================
 # Deployment instructions
 # ==============================================================================
+
+if(${META_PROJECT_ID}_INSTALL)
+  set(
+    _oxygen_cooker_schema_files
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.import-manifest.schema.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input.schema.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input-action.schema.json"
+  )
+  foreach(_schema_file IN LISTS _oxygen_cooker_schema_files)
+    if(NOT EXISTS "${_schema_file}")
+      message(FATAL_ERROR "Missing schema file: ${_schema_file}")
+    endif()
+  endforeach()
+
+  install(
+    FILES ${_oxygen_cooker_schema_files}
+    DESTINATION ${OXYGEN_INSTALL_DATA}/schemas
+    COMPONENT ${META_PROJECT_NAME}_data
+  )
+endif()
 
 oxygen_module_install(
   EXPORT ${META_MODULE_NAMESPACE}
