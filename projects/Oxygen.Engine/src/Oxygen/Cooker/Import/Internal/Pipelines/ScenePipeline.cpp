@@ -592,12 +592,12 @@ auto ScenePipeline::Worker() -> co::Co<>
 
 auto ScenePipeline::ReportCancelled(WorkItem item) -> co::Co<>
 {
-  WorkResult canceled {
-    .source_id = std::move(item.source_id),
-    .cooked = std::nullopt,
-    .diagnostics = { MakeCancelDiagnostic(item.source_id) },
-    .success = false,
-  };
+  WorkResult canceled {};
+  canceled.diagnostics = { MakeCancelDiagnostic(item.source_id) },
+  canceled.source_id = std::move(item.source_id);
+  canceled.cooked = std::nullopt;
+  canceled.success = false;
+
   if (item.on_finished) {
     item.on_finished();
   }
