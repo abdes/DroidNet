@@ -188,6 +188,10 @@ $repoRoot=$(git rev-parse --show-toplevel); git diff --name-only --cached | Wher
 $repoRoot=$(git rev-parse --show-toplevel); git diff --name-only --cached | Where-Object { $_ -match '(CMakeLists\.txt|\.cmake)$' } | ForEach-Object { $abs=Join-Path $repoRoot $_; gersemi -i $abs; Write-Output "Formatted: $abs" }
 ```
 
+## CMake helper docs
+
+1. See [cmake/README.md](cmake/README.md) for reusable CMake helper usage, including build-time JSON schema embedding.
+
 ## Developer notes: running the BindlessCodeGen CLI
 
 The bindless codegen tool is provided as a small library and a CLI entrypoint. To avoid a Python runtime warning when running the CLI directly, prefer invoking it as a module from a clean interpreter process:

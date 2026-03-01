@@ -2827,38 +2827,8 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
     }
   };
 
-  const auto publish_scene_input_mapping_context_dependencies
-    = [this, key, source_id, request](
-        const std::shared_ptr<data::SceneAsset>& scene_asset) -> co::Co<> {
-    if (!scene_asset) {
-      co_return;
-    }
-
-    std::unordered_set<data::AssetKey> seen_context_keys;
-    for (const auto& binding :
-      scene_asset->GetComponents<pak::input::InputContextBindingRecord>()) {
-      if (binding.context_asset_key == data::AssetKey {}) {
-        continue;
-      }
-      if (!seen_context_keys.insert(binding.context_asset_key).second) {
-        continue;
-      }
-
-      auto context = co_await LoadInputMappingContextAssetAsyncImpl(
-        binding.context_asset_key, source_id, request);
-      if (!context) {
-        continue;
-      }
-
-      AddAssetDependency(key, binding.context_asset_key);
-      content_cache_.CheckIn(
-        HashAssetKey(binding.context_asset_key, source_id));
-    }
-  };
-
   const auto cache_hit = [this, hash_key, publish_scene_geometry_dependencies,
-                           publish_scene_script_dependencies,
-                           publish_scene_input_mapping_context_dependencies]()
+                           publish_scene_script_dependencies]()
     -> co::Co<std::shared_ptr<data::SceneAsset>> {
     if (auto cached = content_cache_.CheckOut<data::SceneAsset>(
           hash_key, oxygen::CheckoutOwner::kInternal)) {
@@ -2867,16 +2837,14 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
       // deterministically.
       co_await publish_scene_geometry_dependencies(cached);
       co_await publish_scene_script_dependencies(cached);
-      co_await publish_scene_input_mapping_context_dependencies(cached);
       co_return cached;
     }
     co_return nullptr;
   };
 
-  const auto decode_and_publish
-    = [this, key, source_id, hash_key, request,
-        publish_scene_geometry_dependencies, publish_scene_script_dependencies,
-        publish_scene_input_mapping_context_dependencies]()
+  const auto decode_and_publish = [this, key, source_id, hash_key, request,
+                                    publish_scene_geometry_dependencies,
+                                    publish_scene_script_dependencies]()
     -> co::Co<std::shared_ptr<data::SceneAsset>> {
     try {
       auto decoded_result = co_await DecodeAssetAsyncErasedImpl(
@@ -2936,7 +2904,6 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
 
       co_await publish_scene_geometry_dependencies(decoded);
       co_await publish_scene_script_dependencies(decoded);
-      co_await publish_scene_input_mapping_context_dependencies(decoded);
 
       co_return decoded;
     } catch (const co::TaskCancelledException& e) {

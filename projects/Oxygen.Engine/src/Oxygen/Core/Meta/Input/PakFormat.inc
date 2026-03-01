@@ -17,7 +17,6 @@
 //   OXNPUT_PAK_ACTION_FLAG(name, value)
 //   OXNPUT_PAK_CONTEXT_FLAG(name, value)
 //   OXNPUT_PAK_MAPPING_FLAG(name, value)
-//   OXNPUT_PAK_CONTEXT_BINDING_FLAG(name, value)
 //
 // All macros are optional; undefined ones expand to nothing.
 
@@ -43,14 +42,9 @@
 #ifndef OXNPUT_PAK_MAPPING_FLAG
 #  define OXNPUT_PAK_MAPPING_FLAG(name, value)
 #endif
-#ifndef OXNPUT_PAK_CONTEXT_BINDING_FLAG
-#  define OXNPUT_PAK_CONTEXT_BINDING_FLAG(name, value)
-#endif
 
 OXNPUT_PAK_ASSET_TYPE(kInputAction, 5)
 OXNPUT_PAK_ASSET_TYPE(kInputMappingContext, 6)
-
-OXNPUT_PAK_COMPONENT_TYPE(kInputContextBinding, 0x54504E49) // INPT
 
 OXNPUT_PAK_VERSION(kInputActionAssetVersion, 1)
 OXNPUT_PAK_VERSION(kInputMappingContextAssetVersion, 1)
@@ -62,13 +56,9 @@ OXNPUT_PAK_CONTEXT_FLAG(kNone, 0)
 
 OXNPUT_PAK_MAPPING_FLAG(kNone, 0)
 
-OXNPUT_PAK_CONTEXT_BINDING_FLAG(kNone, 0)
-OXNPUT_PAK_CONTEXT_BINDING_FLAG(kActivateOnLoad, 0)
-
 #undef OXNPUT_PAK_ASSET_TYPE
 #undef OXNPUT_PAK_COMPONENT_TYPE
 #undef OXNPUT_PAK_VERSION
 #undef OXNPUT_PAK_ACTION_FLAG
 #undef OXNPUT_PAK_CONTEXT_FLAG
 #undef OXNPUT_PAK_MAPPING_FLAG
-#undef OXNPUT_PAK_CONTEXT_BINDING_FLAG

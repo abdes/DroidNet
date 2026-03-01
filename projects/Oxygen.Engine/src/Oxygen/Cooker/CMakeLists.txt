@@ -29,6 +29,8 @@ find_package(SPNG REQUIRED)
 # Build instructions
 # ==============================================================================
 
+include(JsonSchemaHelpers)
+
 # ------------------------------------------------------------------------------
 # Main module target
 # ------------------------------------------------------------------------------
@@ -48,6 +50,19 @@ set_target_properties(
       ${META_VERSION_MAJOR}
     PROJECT_LABEL
       ${META_MODULE_NAME}
+)
+
+oxygen_embed_json_schemas(
+  TARGET ${META_MODULE_TARGET}
+  OUTPUT_HEADER
+    "${CMAKE_BINARY_DIR}/generated/Oxygen/Cooker/Import/Internal/ImportManifest_schema.h"
+  NAMESPACE "oxygen::content::import"
+  INCLUDE_BASE_DIR
+    "${CMAKE_BINARY_DIR}/generated"
+  CHUNK_SIZE 8192
+  SCHEMAS
+    kImportManifestSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/import-manifest.schema.json"
 )
 
 set(
@@ -111,7 +126,6 @@ set(
   "Import/Internal/ImportEventLoop.h"
   "Import/Internal/ImportJob.h"
   "Import/Internal/ImportJobParams.h"
-  "Import/Internal/ImportManifest_schema.h"
   "Import/Internal/ImportPipeline.h"
   "Import/Internal/ImportPlanner.h"
   "Import/Internal/ImportSession.h"

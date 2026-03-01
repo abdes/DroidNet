@@ -75,7 +75,6 @@ auto oxygen::data::to_string(oxygen::data::ComponentType value) noexcept
     case ComponentType::kPointLight:         return "PLIT";
     case ComponentType::kSpotLight:          return "SLIT";
     case ComponentType::kScripting:          return "SCRP";
-    case ComponentType::kInputContextBinding:return "INPT";
     // clang-format on
   }
 
@@ -407,36 +406,6 @@ auto oxygen::data::pak::input::to_string(
   [[maybe_unused]] auto checked = Flags::kNone;
   DCHECK_EQ_F(
     checked, value, "to_string: Unchecked InputMappingFlags value detected");
-  return result;
-}
-
-auto oxygen::data::pak::input::to_string(
-  const oxygen::data::pak::input::InputContextBindingFlags value) -> std::string
-{
-  using Flags = oxygen::data::pak::input::InputContextBindingFlags;
-
-  if (value == Flags::kNone) {
-    return "None";
-  }
-
-  std::string result;
-  bool first = true;
-  [[maybe_unused]] auto checked = Flags::kNone;
-
-  const auto check_and_append = [&](const Flags flag, const char* name) {
-    if ((value & flag) == flag) {
-      if (!first) {
-        result += " | ";
-      }
-      result += name;
-      first = false;
-      checked |= flag;
-    }
-  };
-
-  check_and_append(Flags::kActivateOnLoad, "ActivateOnLoad");
-  DCHECK_EQ_F(checked, value,
-    "to_string: Unchecked InputContextBindingFlags value detected");
   return result;
 }
 

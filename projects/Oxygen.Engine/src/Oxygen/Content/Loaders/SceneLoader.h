@@ -401,7 +401,6 @@ inline auto LoadSceneAsset(const LoaderContext& context)
   // Validate known component tables and (optionally) collect dependencies.
   const uint32_t node_count = desc.nodes.count;
   std::unordered_set<oxygen::data::AssetKey> geometry_deps;
-  std::unordered_set<oxygen::data::AssetKey> input_context_deps;
   std::unordered_set<oxygen::data::AssetKey> script_deps;
   bool has_scripting_table = false;
 
@@ -452,22 +451,6 @@ inline auto LoadSceneAsset(const LoaderContext& context)
     } else if (type == oxygen::data::ComponentType::kSpotLight) {
       detail::ValidateComponentTable<oxygen::data::pak::world::SpotLightRecord>(
         table_bytes, entry.table.count, entry.table.entry_size, node_count);
-    } else if (type == oxygen::data::ComponentType::kInputContextBinding) {
-      detail::ValidateComponentTable<
-        oxygen::data::pak::input::InputContextBindingRecord>(
-        table_bytes, entry.table.count, entry.table.entry_size, node_count);
-
-      for (uint32_t i = 0; i < entry.table.count; ++i) {
-        oxygen::data::pak::input::InputContextBindingRecord record {};
-        std::memcpy(&record,
-          table_bytes
-            .subspan(static_cast<size_t>(i) * sizeof(record), sizeof(record))
-            .data(),
-          sizeof(record));
-        if (record.context_asset_key != oxygen::data::AssetKey {}) {
-          input_context_deps.insert(record.context_asset_key);
-        }
-      }
     } else if (type == oxygen::data::ComponentType::kScripting) {
       detail::ValidateComponentTable<
         oxygen::data::pak::scripting::ScriptingComponentRecord>(
@@ -515,9 +498,6 @@ inline auto LoadSceneAsset(const LoaderContext& context)
     }
 
     for (const auto& dep : geometry_deps) {
-      context.dependency_collector->AddAssetDependency(dep);
-    }
-    for (const auto& dep : input_context_deps) {
       context.dependency_collector->AddAssetDependency(dep);
     }
     if (has_scripting_table) {
