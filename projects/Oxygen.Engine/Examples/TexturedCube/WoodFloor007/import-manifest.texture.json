@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "output": "F:/projects/DroidNet/projects/Oxygen.Engine/Examples/TexturedCube/.cooked",
+  "defaults": {
+    "texture": {
+      "content_hashing": true,
+      "mip_policy": "full",
+      "mip_filter": "kaiser",
+      "mip_filter_space": "linear",
+      "bc7_quality": "high",
+      "packing_policy": "d3d12"
+    }
+  },
+  "jobs": [
+    {
+      "type": "texture-descriptor",
+      "source": "woodfloor007_color.texture.json",
+      "name": "woodfloor007_color"
+    },
+    {
+      "type": "texture-descriptor",
+      "source": "woodfloor007_ao.texture.json",
+      "name": "woodfloor007_ao"
+    },
+    {
+      "type": "texture-descriptor",
+      "source": "woodfloor007_roughness.texture.json",
+      "name": "woodfloor007_roughness"
+    }
+  ]
+}

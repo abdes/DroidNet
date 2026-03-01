@@ -1,0 +1,11 @@
+{
+  "$schema": "../../../src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json",
+  "source": "C:/Users/abdes/Downloads/WoodFloor007_1K-JPG/WoodFloor007_1K-JPG_Roughness.jpg",
+  "intent": "roughness",
+  "decode": {
+    "color_space": "linear"
+  },
+  "output": {
+    "format": "bc7"
+  }
+}

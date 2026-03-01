@@ -496,10 +496,10 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
   jobs.reserve(manifest->jobs.size());
 
   for (const auto& job : manifest->jobs) {
-    if (job.job_type != "texture" && job.job_type != "fbx"
-      && job.job_type != "gltf" && job.job_type != "script"
-      && job.job_type != "script-sidecar" && job.job_type != "physics-sidecar"
-      && job.job_type != "input") {
+    if (job.job_type != "texture" && job.job_type != "texture-descriptor"
+      && job.job_type != "fbx" && job.job_type != "gltf"
+      && job.job_type != "script" && job.job_type != "script-sidecar"
+      && job.job_type != "physics-sidecar" && job.job_type != "input") {
       writer->Error(
         fmt::format("ERROR: unsupported job type: {}", job.job_type));
       unsupported_seen = true;
@@ -1219,7 +1219,9 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
         const auto& job = jobs[index];
         const auto& report = common_context->reports[index];
 
-        const auto job_type = ResolveReportJobType(job.request);
+        const auto job_type = job.job_type.empty()
+          ? ResolveReportJobType(job.request)
+          : job.job_type;
 
         ordered_json job_json = ordered_json::object();
         job_json["index"] = DisplayJobNumber(index);
