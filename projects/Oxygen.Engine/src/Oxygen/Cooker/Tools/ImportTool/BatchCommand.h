@@ -53,8 +53,6 @@ private:
     uint32_t max_in_flight_jobs = 0U;
     bool max_in_flight_jobs_set = false;
     bool dry_run = false;
-    bool fail_fast = false;
-    bool quiet = false;
   } options_ {};
 };
 

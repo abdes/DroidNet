@@ -15,6 +15,7 @@
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
+#include <Oxygen/Cooker/Import/ScriptImportSettings.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
 #include <Oxygen/Cooker/api_export.h>
 
@@ -25,6 +26,8 @@ struct ImportManifestJob {
   TextureImportSettings texture;
   SceneImportSettings fbx;
   SceneImportSettings gltf;
+  ScriptAssetImportSettings script;
+  ScriptingSidecarImportSettings scripting_sidecar;
 
   OXGN_COOK_NDAPI auto BuildRequest(std::ostream& error_stream) const
     -> std::optional<ImportRequest>;
@@ -34,6 +37,8 @@ struct ImportManifestDefaults {
   TextureImportSettings texture;
   SceneImportSettings fbx;
   SceneImportSettings gltf;
+  ScriptAssetImportSettings script;
+  ScriptingSidecarImportSettings scripting_sidecar;
 };
 
 struct ImportManifest {

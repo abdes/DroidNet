@@ -14,6 +14,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/ScriptImportRequestBuilder.h>
 
 namespace oxygen::content::import {
 
@@ -380,6 +381,32 @@ namespace {
     return ReadBoolField(obj, "content_hashing", with_content_hashing, errors);
   }
 
+  auto ApplyScriptAssetOverrides(const json& obj,
+    ScriptAssetImportSettings& settings, std::ostream& errors) -> bool
+  {
+    if (!ReadBoolField(obj, "compile", settings.compile_scripts, errors)) {
+      return false;
+    }
+    if (!ReadStringField(obj, "compile_mode", settings.compile_mode, errors)) {
+      return false;
+    }
+    if (!ReadStringField(
+          obj, "script_storage", settings.script_storage, errors)) {
+      return false;
+    }
+    return true;
+  }
+
+  auto ApplyScriptingSidecarOverrides(const json& obj,
+    ScriptingSidecarImportSettings& settings, std::ostream& errors) -> bool
+  {
+    if (!ReadStringField(obj, "target_scene_virtual_path",
+          settings.target_scene_virtual_path, errors)) {
+      return false;
+    }
+    return true;
+  }
+
   auto ApplyCommonOverrides(const json& obj, TextureImportSettings& settings,
     std::ostream& errors) -> bool
   {
@@ -484,6 +511,36 @@ namespace {
     return true;
   }
 
+  auto ApplyCommonScriptOverrides(const json& obj,
+    ScriptAssetImportSettings& settings, std::ostream& errors) -> bool
+  {
+    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
+      return false;
+    }
+    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
+      return false;
+    }
+    if (!ReadBoolField(obj, "verbose", settings.verbose, errors)) {
+      return false;
+    }
+    return true;
+  }
+
+  auto ApplyCommonScriptOverrides(const json& obj,
+    ScriptingSidecarImportSettings& settings, std::ostream& errors) -> bool
+  {
+    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
+      return false;
+    }
+    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
+      return false;
+    }
+    if (!ReadBoolField(obj, "verbose", settings.verbose, errors)) {
+      return false;
+    }
+    return true;
+  }
+
 } // namespace
 
 auto ImportManifest::Load(const std::filesystem::path& manifest_path,
@@ -537,6 +594,19 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
   const auto root
     = root_override.has_value() ? *root_override : manifest_path.parent_path();
 
+  auto manifest_output_root = std::string {};
+  if (!ReadStringField(
+        *json_data, "output", manifest_output_root, error_stream)) {
+    return std::nullopt;
+  }
+  if (!manifest_output_root.empty()) {
+    manifest.defaults.texture.cooked_root = manifest_output_root;
+    manifest.defaults.fbx.cooked_root = manifest_output_root;
+    manifest.defaults.gltf.cooked_root = manifest_output_root;
+    manifest.defaults.script.cooked_root = manifest_output_root;
+    manifest.defaults.scripting_sidecar.cooked_root = manifest_output_root;
+  }
+
   if (json_data->contains("defaults")) {
     const auto& defaults = (*json_data)["defaults"];
     if (!defaults.is_object()) {
@@ -571,6 +641,47 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
       ApplySceneOverrides(scene_defaults, manifest.defaults.fbx, error_stream);
       ApplySceneOverrides(scene_defaults, manifest.defaults.gltf, error_stream);
     }
+
+    if (defaults.contains("script")) {
+      const auto& script_defaults = defaults["script"];
+      if (!script_defaults.is_object()) {
+        error_stream << "ERROR: defaults.script must be an object\n";
+        return std::nullopt;
+      }
+      if (!ApplyCommonScriptOverrides(
+            script_defaults, manifest.defaults.script, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyImportOptions(script_defaults,
+            manifest.defaults.script.with_content_hashing, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyScriptAssetOverrides(
+            script_defaults, manifest.defaults.script, error_stream)) {
+        return std::nullopt;
+      }
+    }
+
+    if (defaults.contains("scripting_sidecar")) {
+      const auto& sidecar_defaults = defaults["scripting_sidecar"];
+      if (!sidecar_defaults.is_object()) {
+        error_stream << "ERROR: defaults.scripting_sidecar must be an object\n";
+        return std::nullopt;
+      }
+      if (!ApplyCommonScriptOverrides(sidecar_defaults,
+            manifest.defaults.scripting_sidecar, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyImportOptions(sidecar_defaults,
+            manifest.defaults.scripting_sidecar.with_content_hashing,
+            error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyScriptingSidecarOverrides(sidecar_defaults,
+            manifest.defaults.scripting_sidecar, error_stream)) {
+        return std::nullopt;
+      }
+    }
   }
 
   if (!json_data->contains("jobs") || !(*json_data)["jobs"].is_array()) {
@@ -588,6 +699,8 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     manifest_job.texture = manifest.defaults.texture;
     manifest_job.fbx = manifest.defaults.fbx;
     manifest_job.gltf = manifest.defaults.gltf;
+    manifest_job.script = manifest.defaults.script;
+    manifest_job.scripting_sidecar = manifest.defaults.scripting_sidecar;
     manifest_job.fbx.texture_defaults = manifest.defaults.texture;
     manifest_job.gltf.texture_defaults = manifest.defaults.texture;
 
@@ -601,15 +714,65 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
       return std::nullopt;
     }
 
-    if (!job.contains("source") || !job["source"].is_string()) {
-      error_stream << "ERROR: job.source is required and must be a string\n";
+    const auto has_source = job.contains("source");
+    const auto has_bindings = job.contains("bindings");
+    const auto is_sidecar_job = manifest_job.job_type == "script-sidecar";
+
+    if (has_bindings && !is_sidecar_job) {
+      error_stream << "ERROR: job.bindings is only valid for type "
+                      "'script-sidecar'\n";
       return std::nullopt;
     }
 
-    const auto source = job["source"].get<std::string>();
-    manifest_job.texture.source_path = ResolveSourcePath(root, source);
-    manifest_job.fbx.source_path = manifest_job.texture.source_path;
-    manifest_job.gltf.source_path = manifest_job.texture.source_path;
+    if (!has_source && !has_bindings) {
+      if (is_sidecar_job) {
+        error_stream
+          << "ERROR: script-sidecar job requires 'source' or 'bindings'\n";
+      } else {
+        error_stream << "ERROR: job.source is required and must be a string\n";
+      }
+      return std::nullopt;
+    }
+
+    if (has_source && !job["source"].is_string()) {
+      error_stream << "ERROR: job.source must be a string\n";
+      return std::nullopt;
+    }
+
+    if (has_bindings && !job["bindings"].is_array()) {
+      error_stream << "ERROR: job.bindings must be an array\n";
+      return std::nullopt;
+    }
+
+    if (is_sidecar_job && (has_source == has_bindings)) {
+      error_stream << "ERROR: script-sidecar job requires exactly one of "
+                      "'source' or 'bindings'\n";
+      return std::nullopt;
+    }
+
+    if (has_source) {
+      const auto source = job["source"].get<std::string>();
+      manifest_job.texture.source_path = ResolveSourcePath(root, source);
+      manifest_job.fbx.source_path = manifest_job.texture.source_path;
+      manifest_job.gltf.source_path = manifest_job.texture.source_path;
+      manifest_job.script.source_path = manifest_job.texture.source_path;
+      manifest_job.scripting_sidecar.source_path
+        = manifest_job.texture.source_path;
+    } else {
+      manifest_job.texture.source_path.clear();
+      manifest_job.fbx.source_path.clear();
+      manifest_job.gltf.source_path.clear();
+      manifest_job.script.source_path.clear();
+      manifest_job.scripting_sidecar.source_path.clear();
+    }
+
+    if (has_bindings) {
+      auto sidecar_doc = json::object();
+      sidecar_doc["bindings"] = job["bindings"];
+      manifest_job.scripting_sidecar.inline_bindings_json = sidecar_doc.dump();
+    } else {
+      manifest_job.scripting_sidecar.inline_bindings_json.clear();
+    }
 
     if (!ApplyCommonOverrides(job, manifest_job.texture, error_stream)) {
       return std::nullopt;
@@ -620,6 +783,13 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
 
     if (!ApplyCommonSceneOverrides(job, manifest_job.gltf, error_stream)) {
+      return std::nullopt;
+    }
+    if (!ApplyCommonScriptOverrides(job, manifest_job.script, error_stream)) {
+      return std::nullopt;
+    }
+    if (!ApplyCommonScriptOverrides(
+          job, manifest_job.scripting_sidecar, error_stream)) {
       return std::nullopt;
     }
 
@@ -633,7 +803,22 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     if (!ApplySceneOverrides(job, manifest_job.gltf, error_stream)) {
       return std::nullopt;
     }
+    if (!ApplyImportOptions(
+          job, manifest_job.script.with_content_hashing, error_stream)) {
+      return std::nullopt;
+    }
+    if (!ApplyImportOptions(job,
+          manifest_job.scripting_sidecar.with_content_hashing, error_stream)) {
+      return std::nullopt;
+    }
     if (!ApplyTextureOverrides(job, manifest_job.texture, error_stream)) {
+      return std::nullopt;
+    }
+    if (!ApplyScriptAssetOverrides(job, manifest_job.script, error_stream)) {
+      return std::nullopt;
+    }
+    if (!ApplyScriptingSidecarOverrides(
+          job, manifest_job.scripting_sidecar, error_stream)) {
       return std::nullopt;
     }
 
@@ -654,6 +839,13 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream) const
   }
   if (job_type == "gltf") {
     return internal::BuildSceneRequest(gltf, ImportFormat::kGltf, error_stream);
+  }
+  if (job_type == "script") {
+    return internal::BuildScriptAssetRequest(script, error_stream);
+  }
+  if (job_type == "script-sidecar") {
+    return internal::BuildScriptingSidecarRequest(
+      scripting_sidecar, error_stream);
   }
   error_stream << "ERROR: unknown job_type: " << job_type << "\n";
   return std::nullopt;

@@ -59,6 +59,15 @@ auto MakeValidSidecarSettings() -> ScriptingSidecarImportSettings
   return settings;
 }
 
+auto MakeInlineSidecarSettings() -> ScriptingSidecarImportSettings
+{
+  auto settings = MakeValidSidecarSettings();
+  settings.source_path.clear();
+  settings.inline_bindings_json
+    = R"({"bindings":[{"node_index":0,"slot_id":"main","script_virtual_path":"/Scripts/test.oscript"}]})";
+  return settings;
+}
+
 NOLINT_TEST(ScriptImportRequestBuilderTest, ScriptStorageModeToStringIsStable)
 {
   using oxygen::content::import::to_string;
@@ -158,6 +167,94 @@ NOLINT_TEST(
     settings.target_scene_virtual_path);
   ASSERT_TRUE(request->cooked_root.has_value());
   EXPECT_TRUE(request->cooked_root->is_absolute());
+}
+
+NOLINT_TEST(
+  ScriptImportRequestBuilderTest, BuildScriptingSidecarRequestValidInlineInput)
+{
+  auto settings = MakeInlineSidecarSettings();
+  std::ostringstream errors;
+
+  const auto request = BuildScriptingSidecarRequest(settings, errors);
+
+  ASSERT_TRUE(request.has_value());
+  EXPECT_TRUE(errors.str().empty());
+  EXPECT_EQ(request->options.scripting.import_kind,
+    ScriptingImportKind::kScriptingSidecar);
+  EXPECT_EQ(request->options.scripting.target_scene_virtual_path,
+    settings.target_scene_virtual_path);
+  EXPECT_TRUE(
+    request->options.scripting.inline_bindings_json.find("\"bindings\"")
+    != std::string::npos);
+  EXPECT_TRUE(
+    request->options.scripting.inline_bindings_json.find("script_virtual_path")
+    != std::string::npos);
+  ASSERT_TRUE(request->cooked_root.has_value());
+  EXPECT_TRUE(request->cooked_root->is_absolute());
+}
+
+NOLINT_TEST(ScriptImportRequestBuilderTest,
+  BuildScriptingSidecarRequestAcceptsInlineBindingsArrayPayload)
+{
+  auto settings = MakeValidSidecarSettings();
+  settings.source_path.clear();
+  settings.inline_bindings_json
+    = R"([{"node_index":0,"slot_id":"main","script_virtual_path":"/Scripts/test.oscript"}])";
+  std::ostringstream errors;
+
+  const auto request = BuildScriptingSidecarRequest(settings, errors);
+
+  ASSERT_TRUE(request.has_value());
+  EXPECT_TRUE(errors.str().empty());
+  EXPECT_TRUE(
+    request->options.scripting.inline_bindings_json.find("\"bindings\"")
+    != std::string::npos);
+}
+
+NOLINT_TEST(ScriptImportRequestBuilderTest,
+  BuildScriptingSidecarRequestRejectsBothSourceAndInlineBindings)
+{
+  auto settings = MakeInlineSidecarSettings();
+  settings.source_path = "scripts/scene_scripting_sidecar.yaml";
+  std::ostringstream errors;
+
+  const auto request = BuildScriptingSidecarRequest(settings, errors);
+
+  EXPECT_FALSE(request.has_value());
+  EXPECT_TRUE(errors.str().find("exactly one of source_path or "
+                                "inline_bindings_json must be provided")
+    != std::string::npos);
+}
+
+NOLINT_TEST(ScriptImportRequestBuilderTest,
+  BuildScriptingSidecarRequestRejectsMissingSourceAndInlineBindings)
+{
+  auto settings = MakeValidSidecarSettings();
+  settings.source_path.clear();
+  settings.inline_bindings_json.clear();
+  std::ostringstream errors;
+
+  const auto request = BuildScriptingSidecarRequest(settings, errors);
+
+  EXPECT_FALSE(request.has_value());
+  EXPECT_TRUE(errors.str().find("exactly one of source_path or "
+                                "inline_bindings_json must be provided")
+    != std::string::npos);
+}
+
+NOLINT_TEST(ScriptImportRequestBuilderTest,
+  BuildScriptingSidecarRequestRejectsInvalidInlineBindingsJson)
+{
+  auto settings = MakeValidSidecarSettings();
+  settings.source_path.clear();
+  settings.inline_bindings_json = "{ invalid }";
+  std::ostringstream errors;
+
+  const auto request = BuildScriptingSidecarRequest(settings, errors);
+
+  EXPECT_FALSE(request.has_value());
+  EXPECT_TRUE(errors.str().find("inline_bindings_json is not valid JSON")
+    != std::string::npos);
 }
 
 } // namespace

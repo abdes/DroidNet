@@ -285,7 +285,7 @@ auto ReadScriptSlotRangesFromTable(
   if (kSlotSize == 0U || (*size_opt % kSlotSize) != 0U) {
     AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
       pak::PakBuildPhase::kPlanning, "pak.plan.script_slot_table_size_invalid",
-      "scripts.table size is not divisible by ScriptSlotRecord size.",
+      "script-bindings.table size is not divisible by ScriptSlotRecord size.",
       scripts_table_path);
     return 0;
   }
@@ -294,7 +294,7 @@ auto ReadScriptSlotRangesFromTable(
   if (slot_count64 > kMaxCountAsUint64) {
     AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
       pak::PakBuildPhase::kPlanning, "pak.plan.script_slot_table_too_large",
-      "scripts.table has too many slot records.", scripts_table_path);
+      "script-bindings.table has too many slot records.", scripts_table_path);
     return 0;
   }
 
@@ -307,7 +307,7 @@ auto ReadScriptSlotRangesFromTable(
   if (!blob_result) {
     AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
       pak::PakBuildPhase::kPlanning, "pak.plan.script_slot_table_read_failed",
-      "Failed to read scripts.table content.", scripts_table_path);
+      "Failed to read script-bindings.table content.", scripts_table_path);
     return 0;
   }
 
@@ -339,7 +339,8 @@ auto ReadScriptSlotRangesFromTable(
       AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
         pak::PakBuildPhase::kPlanning,
         "pak.plan.script_params_range_out_of_bounds",
-        "ScriptSlotRecord params range exceeds scripts.data bounds for source.",
+        "ScriptSlotRecord params range exceeds script-bindings.data bounds "
+        "for source.",
         scripts_table_path);
       continue;
     }
@@ -852,16 +853,6 @@ auto CollectSourceData(PlanningState& state) -> void
           return IsAssetKeyLess(lhs.key, rhs.key);
         });
 
-      bool source_has_scene_assets = false;
-      bool source_has_script_assets = false;
-      for (const auto& asset : source_assets) {
-        const auto asset_type = static_cast<data::AssetType>(asset.asset_type);
-        source_has_scene_assets
-          = source_has_scene_assets || asset_type == data::AssetType::kScene;
-        source_has_script_assets
-          = source_has_script_assets || asset_type == data::AssetType::kScript;
-      }
-
       for (const auto& source_asset : source_assets) {
         const auto asset_type
           = static_cast<data::AssetType>(source_asset.asset_type);
@@ -929,17 +920,12 @@ auto CollectSourceData(PlanningState& state) -> void
           return lhs.relpath < rhs.relpath;
         });
 
-      struct ScriptTableCandidate final {
+      struct ScriptBindingsTableInput final {
         std::filesystem::path path;
-        uint64_t size_bytes = 0;
-        bool resource_compatible = false;
-        bool parse_as_slots = false;
       };
 
-      auto script_table_candidates = std::vector<ScriptTableCandidate> {};
-      auto script_data_files
-        = std::vector<std::pair<std::filesystem::path, uint64_t>> {};
-      bool source_uses_script_slot_layout = false;
+      auto script_bindings_tables = std::vector<ScriptBindingsTableInput> {};
+      uint32_t source_script_param_record_count = 0;
 
       for (const auto& file_entry : source_files) {
         const auto file_path
@@ -983,7 +969,65 @@ auto CollectSourceData(PlanningState& state) -> void
         case data::loose_cooked::FileKind::kScriptsData:
           AddTransitiveInputDigest(source_contribution,
             static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
-          script_data_files.emplace_back(file_path, file_size);
+          state.pending_resources.push_back(PendingResource {
+            .region_name = "script_region",
+            .resource_kind = "script",
+            .size_bytes = file_size,
+            .source_offset = 0U,
+            .alignment = kRegionAlignment,
+            .source_order = source_order,
+            .path = file_path,
+          });
+          break;
+        case data::loose_cooked::FileKind::kScriptBindingsData:
+          AddTransitiveInputDigest(source_contribution,
+            static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
+          state.pending_resources.push_back(PendingResource {
+            .region_name = "script_region",
+            .resource_kind = "script",
+            .size_bytes = file_size,
+            .source_offset = 0U,
+            .alignment = kRegionAlignment,
+            .source_order = source_order,
+            .path = file_path,
+          });
+          if ((file_size % sizeof(script::ScriptParamRecord)) != 0U) {
+            AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+              PakBuildPhase::kPlanning,
+              "pak.plan.script_params_file_size_invalid",
+              "script-bindings.data size is not divisible by "
+              "ScriptParamRecord size.",
+              file_path);
+            break;
+          }
+          {
+            const auto record_count64
+              = file_size / sizeof(script::ScriptParamRecord);
+            if (record_count64 > kMaxCountAsUint64) {
+              AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+                PakBuildPhase::kPlanning,
+                "pak.plan.script_params_count_too_large",
+                "script-bindings.data contains too many ScriptParamRecord "
+                "entries.",
+                file_path);
+              break;
+            }
+
+            uint64_t source_count_sum = 0;
+            if (!SafeAdd(source_script_param_record_count, record_count64,
+                  source_count_sum)
+              || source_count_sum > kMaxCountAsUint64) {
+              AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+                PakBuildPhase::kPlanning,
+                "pak.plan.script_params_count_overflow",
+                "Combined script-bindings.data ScriptParamRecord count "
+                "overflowed uint32.",
+                file_path);
+              break;
+            }
+            source_script_param_record_count
+              = static_cast<uint32_t>(source_count_sum);
+          }
           break;
         case data::loose_cooked::FileKind::kPhysicsData:
           AddTransitiveInputDigest(source_contribution,
@@ -1022,122 +1066,61 @@ auto CollectSourceData(PlanningState& state) -> void
             source_contribution.table_counts.physics_count, diagnostics,
             "pak.plan.physics_table_size_invalid");
           break;
-        case data::loose_cooked::FileKind::kScriptsTable: {
+        case data::loose_cooked::FileKind::kScriptsTable:
           AddTransitiveInputDigest(source_contribution,
             static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
-          const auto slot_compatible
-            = (file_size % sizeof(script::ScriptSlotRecord)) == 0U;
-          const auto resource_compatible
-            = (file_size % sizeof(script::ScriptResourceDesc)) == 0U;
-
-          const bool parse_as_slots = slot_compatible
-            && (source_has_scene_assets || !resource_compatible);
-          script_table_candidates.push_back(ScriptTableCandidate {
-            .path = file_path,
-            .size_bytes = file_size,
-            .resource_compatible = resource_compatible,
-            .parse_as_slots = parse_as_slots,
-          });
-          source_uses_script_slot_layout
-            = source_uses_script_slot_layout || parse_as_slots;
-
-          if (source_has_scene_assets && source_has_script_assets
-            && slot_compatible && resource_compatible) {
-            AddDiagnostic(diagnostics, PakDiagnosticSeverity::kWarning,
-              PakBuildPhase::kPlanning,
-              "pak.plan.scripts_table_ambiguous_layout",
-              "scripts.table is compatible with both slot and resource "
-              "records; planner selected slot layout.",
-              file_path);
-          }
+          AccumulateTableCountFromFile(file_path, file_size,
+            sizeof(script::ScriptResourceDesc),
+            source_contribution.table_counts.script_resource_count, diagnostics,
+            "pak.plan.scripts_table_size_invalid");
           break;
-        }
+        case data::loose_cooked::FileKind::kScriptBindingsTable:
+          AddTransitiveInputDigest(source_contribution,
+            static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
+          script_bindings_tables.push_back(ScriptBindingsTableInput {
+            .path = file_path,
+          });
+          break;
         case data::loose_cooked::FileKind::kUnknown:
           break;
         }
       }
 
-      uint32_t source_script_param_record_count = 0;
-      for (const auto& [scripts_data_path, scripts_data_size] :
-        script_data_files) {
-        state.pending_resources.push_back(PendingResource {
-          .region_name = "script_region",
-          .resource_kind = "script",
-          .size_bytes = scripts_data_size,
-          .source_offset = 0U,
-          .alignment = kRegionAlignment,
-          .source_order = source_order,
-          .path = scripts_data_path,
-        });
-
-        if (!source_uses_script_slot_layout) {
-          continue;
-        }
-
-        if ((scripts_data_size % sizeof(script::ScriptParamRecord)) != 0U) {
+      for (const auto& script_bindings_table : script_bindings_tables) {
+        if (source_contribution.table_counts.script_slot_count
+          > kMaxCountAsUint64) {
           AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-            PakBuildPhase::kPlanning,
-            "pak.plan.script_params_file_size_invalid",
-            "scripts.data size is not divisible by ScriptParamRecord size.",
-            scripts_data_path);
+            PakBuildPhase::kPlanning, "pak.plan.script_slot_index_overflow",
+            "Combined script slot count overflowed uint32.",
+            script_bindings_table.path);
           continue;
         }
 
-        const auto record_count64
-          = scripts_data_size / sizeof(script::ScriptParamRecord);
-        if (record_count64 > kMaxCountAsUint64) {
+        const auto slot_context = ScriptSlotReadContext {
+          .slot_index_base = static_cast<uint32_t>(
+            source_contribution.table_counts.script_slot_count),
+          .params_array_index_base = 0U,
+          .source_params_record_count = source_script_param_record_count,
+        };
+        const auto parsed_slots = ReadScriptSlotRangesFromTable(
+          script_bindings_table.path, slot_context,
+          source_contribution.local_script_param_ranges, diagnostics);
+        uint64_t script_slot_count_sum = 0;
+        if (!SafeAdd(source_contribution.table_counts.script_slot_count,
+              parsed_slots, script_slot_count_sum)
+          || script_slot_count_sum > kMaxCountAsUint64) {
           AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-            PakBuildPhase::kPlanning, "pak.plan.script_params_count_too_large",
-            "scripts.data contains too many ScriptParamRecord entries.",
-            scripts_data_path);
+            PakBuildPhase::kPlanning, "pak.plan.script_slot_index_overflow",
+            "Combined script slot count overflowed uint32.",
+            script_bindings_table.path);
           continue;
         }
-
-        uint64_t source_count_sum = 0;
-        if (!SafeAdd(source_script_param_record_count, record_count64,
-              source_count_sum)
-          || source_count_sum > kMaxCountAsUint64) {
-          AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-            PakBuildPhase::kPlanning, "pak.plan.script_params_count_overflow",
-            "Combined scripts.data ScriptParamRecord count overflowed uint32.",
-            scripts_data_path);
-          continue;
-        }
-        source_script_param_record_count
-          = static_cast<uint32_t>(source_count_sum);
+        source_contribution.table_counts.script_slot_count
+          = script_slot_count_sum;
       }
 
-      for (const auto& script_table : script_table_candidates) {
-        if (script_table.parse_as_slots) {
-          const auto slot_context = ScriptSlotReadContext {
-            .slot_index_base = static_cast<uint32_t>(
-              source_contribution.local_script_param_ranges.size()),
-            .params_array_index_base = 0U,
-            .source_params_record_count = source_script_param_record_count,
-          };
-          const auto parsed_slots
-            = ReadScriptSlotRangesFromTable(script_table.path, slot_context,
-              source_contribution.local_script_param_ranges, diagnostics);
-          source_contribution.table_counts.script_slot_count += parsed_slots;
-          continue;
-        }
-
-        if (script_table.resource_compatible) {
-          source_contribution.table_counts.script_resource_count
-            += script_table.size_bytes / sizeof(script::ScriptResourceDesc);
-          continue;
-        }
-
-        AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-          PakBuildPhase::kPlanning, "pak.plan.scripts_table_size_invalid",
-          "scripts.table is incompatible with known script table layouts.",
-          script_table.path);
-      }
-
-      if (source_uses_script_slot_layout) {
-        source_contribution.script_param_record_count
-          = source_script_param_record_count;
-      }
+      source_contribution.script_param_record_count
+        = source_script_param_record_count;
 
       std::ranges::sort(source_contribution.transitive_inputs,
         [](const auto& lhs, const auto& rhs) {

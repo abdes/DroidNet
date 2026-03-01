@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "max_in_flight_jobs": 1,
+  "output": "F:/projects/DroidNet/projects/Oxygen.Engine/Examples/Content/.cooked",
+  "jobs": [
+    {
+      "type": "gltf",
+      "source": "C:/Users/abdes/Downloads/backpack.glb",
+      "name": "backpack_scene",
+      "content_hashing": true
+    },
+    {
+      "type": "gltf",
+      "source": "C:/Users/abdes/Downloads/chest.glb",
+      "name": "chest_scene",
+      "content_hashing": true
+    },
+    {
+      "type": "script",
+      "source": "F:/projects/DroidNet/projects/Oxygen.Engine/Examples/Content/rotate.lua",
+      "name": "rotate",
+      "compile": false,
+      "script_storage": "embedded",
+      "content_hashing": true
+    },
+    {
+      "type": "script-sidecar",
+      "name": "backpack_sidecar",
+      "target_scene_virtual_path": "/.cooked/Scenes/backpack.oscene",
+      "content_hashing": true,
+      "bindings": [
+        {
+          "node_index": 0,
+          "slot_id": "rotate",
+          "script_virtual_path": "/.cooked/Scripts/rotate.oscript",
+          "execution_order": 0,
+          "params": [
+            {
+              "key": "rotation_angle",
+              "type": "float",
+              "value": 0.7853982
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "script-sidecar",
+      "name": "chest_sidecar",
+      "target_scene_virtual_path": "/.cooked/Scenes/chest.oscene",
+      "content_hashing": true,
+      "bindings": [
+        {
+          "node_index": 0,
+          "slot_id": "rotate",
+          "script_virtual_path": "/.cooked/Scripts/rotate.oscript",
+          "execution_order": 0,
+          "params": [
+            {
+              "key": "rotation_angle",
+              "type": "float",
+              "value": 10.5707964
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

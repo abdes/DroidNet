@@ -54,6 +54,7 @@ m_gtest_program(
 m_gtest_program(
   AsyncImportScripting
   SOURCES
+    "Import/ImportManifest_script_sidecar_test.cpp"
     "Import/ScriptImportRequestBuilder_test.cpp"
     "Import/ScriptImportJob_test.cpp"
     "Import/ScriptImportPipeline_test.cpp"

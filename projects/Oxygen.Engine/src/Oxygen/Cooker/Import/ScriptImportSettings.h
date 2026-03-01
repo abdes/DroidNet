@@ -55,7 +55,19 @@ struct ScriptAssetImportSettings final {
 */
 struct ScriptingSidecarImportSettings final {
   //! Sidecar source file path (CLI/manifest authored value).
+  /*!
+   Optional when `inline_bindings_json` is provided.
+  */
   std::string source_path;
+  //! Inline sidecar payload as a JSON document string.
+  /*!
+   Accepted inputs:
+   - JSON array of binding rows (`[ ... ]`)
+   - JSON object with `bindings` array (`{ "bindings": [ ... ] }`)
+
+   Exactly one of `source_path` or `inline_bindings_json` must be set.
+  */
+  std::string inline_bindings_json;
   //! Absolute loose-cooked output root (CLI/manifest authored value).
   std::string cooked_root;
   //! Optional human-readable job name.

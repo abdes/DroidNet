@@ -89,6 +89,22 @@ namespace {
     return true;
   }
 
+  auto ResolveReportJobType(const ImportRequest& request) -> std::string
+  {
+    if (request.GetFormat() != ImportFormat::kUnknown) {
+      return std::string(to_string(request.GetFormat()));
+    }
+    switch (request.options.scripting.import_kind) {
+    case ScriptingImportKind::kScriptAsset:
+      return "script";
+    case ScriptingImportKind::kScriptingSidecar:
+      return "script-sidecar";
+    case ScriptingImportKind::kNone:
+      break;
+    }
+    return "unknown";
+  }
+
 } // namespace
 
 auto RunImportJob(const ImportRequest& request,
@@ -276,10 +292,7 @@ auto RunImportJob(const ImportRequest& request,
       { "time_ms_cpu", time_ms_cpu },
     };
 
-    const auto job_type
-      = std::string(request.GetFormat() != ImportFormat::kUnknown
-          ? to_string(request.GetFormat())
-          : "unknown");
+    const auto job_type = ResolveReportJobType(request);
     ordered_json job = ordered_json::object();
     job["index"] = 1;
     job["type"] = job_type;

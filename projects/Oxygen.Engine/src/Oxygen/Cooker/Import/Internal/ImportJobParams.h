@@ -41,6 +41,7 @@ namespace detail {
     observer_ptr<ResourceTableRegistry> registry;
     observer_ptr<LooseCookedIndexRegistry> index_registry;
     ImportConcurrency concurrency;
+    AsyncImportService::ScriptCompileCallback script_compile_callback;
     std::stop_token stop_token;
   };
 

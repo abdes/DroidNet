@@ -138,6 +138,8 @@ enum class FileKind : uint16_t { // NOLINT(*-enum-size)
   kScriptsData = 6,
   kPhysicsTable = 7,
   kPhysicsData = 8,
+  kScriptBindingsTable = 9,
+  kScriptBindingsData = 10,
 };
 
 //! File record for resources and other cooked artifacts.

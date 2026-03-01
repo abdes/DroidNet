@@ -49,6 +49,7 @@ namespace {
   using data::pak::scripting::ScriptEncoding;
   using data::pak::scripting::ScriptLanguage;
   using data::pak::scripting::ScriptResourceDesc;
+  enum class EmbeddedResourceKind : uint8_t { kSource = 0, kBytecode = 1 };
 
   struct ScriptDescriptorContext final {
     data::AssetKey key {};
@@ -63,8 +64,10 @@ namespace {
     return token.stop_possible() && token.stop_requested();
   }
 
-  auto ValidateScriptAssetRequest(
-    ImportSession& session, const ImportRequest& request) -> bool
+  auto ValidateScriptAssetRequest(ImportSession& session,
+    const ImportRequest& request,
+    const AsyncImportService::ScriptCompileCallback& script_compile_callback)
+    -> bool
   {
     const auto& scripting = request.options.scripting;
     if (scripting.import_kind != ScriptingImportKind::kScriptAsset) {
@@ -83,14 +86,14 @@ namespace {
       return false;
     }
 
-    if (scripting.compile_scripts) {
+    if (scripting.compile_scripts && !script_compile_callback) {
       const auto* const mode
         = (scripting.compile_mode == ScriptCompileMode::kDebug) ? "debug"
                                                                 : "optimized";
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
         "script.asset.compiler_unavailable",
-        "compile_scripts=true requested, but no script compiler is wired in "
-        "Cooker/Import for mode='"
+        "compile_scripts=true requested, but no script compiler callback is "
+        "wired in Cooker/Import for mode='"
           + std::string { mode } + "'");
       return false;
     }
@@ -144,7 +147,8 @@ namespace {
   auto AppendEmbeddedScriptResource(ImportSession& session,
     const ImportRequest& request, std::span<const std::byte> source_bytes,
     observer_ptr<LooseCookedIndexRegistry> index_registry,
-    ScriptAssetDesc& desc) -> co::Co<bool>
+    ScriptAssetDesc& desc, const EmbeddedResourceKind resource_kind)
+    -> co::Co<bool>
   {
     auto* const reader = session.FileReader().get();
     auto* const writer = session.FileWriter().get();
@@ -256,7 +260,9 @@ namespace {
     resource_desc.data_offset = static_cast<OffsetT>(data_blob.size());
     resource_desc.size_bytes = static_cast<DataBlobSizeT>(source_bytes.size());
     resource_desc.language = ScriptLanguage::kLuau;
-    resource_desc.encoding = ScriptEncoding::kSource;
+    resource_desc.encoding = resource_kind == EmbeddedResourceKind::kBytecode
+      ? ScriptEncoding::kBytecode
+      : ScriptEncoding::kSource;
     resource_desc.compression = ScriptCompression::kNone;
     resource_desc.content_hash
       = EffectiveContentHashingEnabled(request.options.with_content_hashing)
@@ -297,8 +303,39 @@ namespace {
       co_return false;
     }
 
-    desc.source_resource_index = resource_index;
+    if (resource_kind == EmbeddedResourceKind::kBytecode) {
+      desc.bytecode_resource_index = resource_index;
+    } else {
+      desc.source_resource_index = resource_index;
+    }
     co_return true;
+  }
+
+  auto CompileSourceToBytecode(ImportSession& session, const ImportRequest& req,
+    std::span<const std::byte> source_bytes,
+    const AsyncImportService::ScriptCompileCallback& script_compile_callback)
+    -> std::optional<std::vector<std::byte>>
+  {
+    auto compile_result
+      = script_compile_callback(AsyncImportService::ScriptCompileRequest {
+        .source_bytes = source_bytes,
+        .compile_mode = req.options.scripting.compile_mode,
+      });
+    if (!compile_result.success) {
+      const auto message = compile_result.diagnostics.empty()
+        ? std::string { "Script compile failed with no diagnostic text" }
+        : compile_result.diagnostics;
+      script_import::AddDiagnostic(session, req, ImportSeverity::kError,
+        "script.asset.compile_failed", message);
+      return std::nullopt;
+    }
+    if (compile_result.bytecode.empty()) {
+      script_import::AddDiagnostic(session, req, ImportSeverity::kError,
+        "script.asset.compile_failed",
+        "Script compiler produced empty bytecode output");
+      return std::nullopt;
+    }
+    return std::move(compile_result.bytecode);
   }
 
   auto ConfigureExternalSource(ImportSession& session,
@@ -502,7 +539,8 @@ auto ScriptAssetImportPipeline::Process(WorkItem& item) -> co::Co<bool>
   }
 
   const auto& req = session->Request();
-  if (!ValidateScriptAssetRequest(*session, req)) {
+  if (!ValidateScriptAssetRequest(
+        *session, req, item.script_compile_callback)) {
     co_return false;
   }
 
@@ -511,11 +549,33 @@ auto ScriptAssetImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     co_return false;
   }
 
+  auto bytecode_bytes = std::optional<std::vector<std::byte>> {};
+  if (req.options.scripting.compile_scripts) {
+    bytecode_bytes = CompileSourceToBytecode(
+      *session, req, item.source_bytes, item.script_compile_callback);
+    if (!bytecode_bytes.has_value()) {
+      co_return false;
+    }
+  }
+
   if (req.options.scripting.script_storage == ScriptStorageMode::kEmbedded) {
     const auto appended = co_await AppendEmbeddedScriptResource(*session, req,
-      item.source_bytes, item.index_registry, descriptor_context->descriptor);
+      item.source_bytes, item.index_registry, descriptor_context->descriptor,
+      EmbeddedResourceKind::kSource);
     if (!appended) {
       co_return false;
+    }
+
+    if (bytecode_bytes.has_value()) {
+      const auto appended_bytecode
+        = co_await AppendEmbeddedScriptResource(*session, req,
+          std::span<const std::byte>(
+            bytecode_bytes->data(), bytecode_bytes->size()),
+          item.index_registry, descriptor_context->descriptor,
+          EmbeddedResourceKind::kBytecode);
+      if (!appended_bytecode) {
+        co_return false;
+      }
     }
   } else if (!ConfigureExternalSource(
                *session, req, descriptor_context->descriptor)) {

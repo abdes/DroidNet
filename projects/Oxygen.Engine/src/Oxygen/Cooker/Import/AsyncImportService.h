@@ -6,8 +6,13 @@
 
 #pragma once
 
+#include <cstddef>
+#include <functional>
 #include <memory>
+#include <span>
+#include <string>
 #include <thread>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
@@ -16,6 +21,7 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/api_export.h>
+#include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 
 namespace oxygen::co {
 class Event;
@@ -117,6 +123,25 @@ using ImportJobFactory = std::function<std::shared_ptr<detail::ImportJob>(
 */
 class AsyncImportService final {
 public:
+  //! Script compile request payload used by optional compile callback wiring.
+  struct ScriptCompileRequest final {
+    std::span<const std::byte> source_bytes;
+    core::meta::scripting::ScriptCompileMode compile_mode
+      = core::meta::scripting::ScriptCompileMode::kDebug;
+  };
+
+  //! Script compile result payload used by optional compile callback wiring.
+  struct ScriptCompileResult final {
+    bool success = false;
+    std::vector<std::byte> bytecode;
+    std::string diagnostics;
+  };
+
+  //! Optional callback used by script asset import for compile-enabled
+  //! requests.
+  using ScriptCompileCallback
+    = std::function<ScriptCompileResult(const ScriptCompileRequest&)>;
+
   //! Configuration for the import service.
   struct Config {
     //! Number of worker threads in the import ThreadPool.
@@ -127,6 +152,14 @@ public:
 
     //! Per-pipeline concurrency settings (workers and queue capacity).
     ImportConcurrency concurrency {};
+
+    //! Optional script compiler callback.
+    /*!
+     When unset, compile-enabled script imports are rejected with
+
+     * `script.asset.compiler_unavailable`.
+    */
+    ScriptCompileCallback script_compile_callback {};
   };
 
   //! Construct and start the import thread.

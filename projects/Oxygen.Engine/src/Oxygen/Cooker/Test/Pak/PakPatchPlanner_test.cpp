@@ -105,6 +105,8 @@ auto ShouldContributeToTransitiveDigest(const lc::FileKind kind) -> bool
   case lc::FileKind::kBuffersData:
   case lc::FileKind::kScriptsTable:
   case lc::FileKind::kScriptsData:
+  case lc::FileKind::kScriptBindingsTable:
+  case lc::FileKind::kScriptBindingsData:
   case lc::FileKind::kPhysicsTable:
   case lc::FileKind::kPhysicsData:
     return true;

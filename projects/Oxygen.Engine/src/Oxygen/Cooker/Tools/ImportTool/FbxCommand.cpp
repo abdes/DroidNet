@@ -41,20 +41,11 @@ auto FbxCommand::BuildCommand() -> std::shared_ptr<clap::Command>
 
   auto cooked_root = Option::WithKey("output")
                        .About("Destination cooked root directory")
-                       .Short("o")
+                       .Short("i")
                        .Long("output")
                        .WithValue<std::string>()
                        .StoreTo(&options_.cooked_root)
                        .Build();
-
-  // Alias to match global option name; accepts --cooked-root after the
-  // subcommand
-  auto cooked_root_alias = Option::WithKey("cooked-root")
-                             .About("Destination cooked root directory")
-                             .Long("cooked-root")
-                             .WithValue<std::string>()
-                             .StoreTo(&options_.cooked_root)
-                             .Build();
 
   auto with_content_hashing
     = Option::WithKey("content-hashing")
@@ -170,13 +161,15 @@ auto FbxCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(normals))
     .WithOption(std::move(tangents))
     .WithOption(std::move(prune_nodes))
-    .WithOption(std::move(cooked_root_alias))
     .WithOption(std::move(with_content_hashing));
 }
 
 auto FbxCommand::Run() -> std::expected<void, std::error_code>
 {
   auto settings = options_;
+  if (global_options_ != nullptr && settings.cooked_root.empty()) {
+    settings.cooked_root = global_options_->cooked_root;
+  }
   DCHECK_F(global_options_ != nullptr && global_options_->writer,
     "Global message writer must be set by main");
   auto writer = global_options_->writer;

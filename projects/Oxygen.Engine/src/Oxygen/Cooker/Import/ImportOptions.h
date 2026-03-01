@@ -392,6 +392,20 @@ struct ImportOptions final {
 
     //! For sidecar imports only: canonical target scene virtual path.
     std::string target_scene_virtual_path;
+
+    //! For sidecar imports only: inline sidecar JSON payload.
+    /*!
+     Runtime payload shape is:
+     `{ "bindings": [ ... ] }`.
+
+
+     * Builders normalize accepted tooling inputs (array or full object) to
+     * this
+     shape and enforce mutual exclusivity between inline payload and
+     * file-based
+     source ingestion.
+    */
+    std::string inline_bindings_json;
   };
 
   ScriptingTuning scripting {};

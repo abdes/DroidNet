@@ -90,6 +90,7 @@ ImportJob::ImportJob(ImportJobParams params)
   , table_registry_(params.registry)
   , index_registry_(params.index_registry)
   , concurrency_(params.concurrency)
+  , script_compile_callback_(std::move(params.script_compile_callback))
   , stop_token_(std::move(params.stop_token))
 {
   CHECK_NOTNULL_F(thread_pool_, "ImportJob requires a non-null thread pool");
@@ -173,6 +174,12 @@ auto ImportJob::ThreadPool() const noexcept -> observer_ptr<co::ThreadPool>
 auto ImportJob::Concurrency() const noexcept -> const ImportConcurrency&
 {
   return concurrency_;
+}
+
+auto ImportJob::ScriptCompileCallback() const noexcept
+  -> const AsyncImportService::ScriptCompileCallback&
+{
+  return script_compile_callback_;
 }
 
 auto ImportJob::TableRegistry() const noexcept

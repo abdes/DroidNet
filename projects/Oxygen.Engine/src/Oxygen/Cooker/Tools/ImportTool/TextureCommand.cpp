@@ -75,20 +75,11 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
 
   auto cooked_root = Option::WithKey("output")
                        .About("Destination cooked root directory")
-                       .Short("o")
+                       .Short("i")
                        .Long("output")
                        .WithValue<std::string>()
                        .StoreTo(&options_.cooked_root)
                        .Build();
-
-  // Alias to match global option name; accepts --cooked-root after the
-  // subcommand
-  auto cooked_root_alias = Option::WithKey("cooked-root")
-                             .About("Destination cooked root directory")
-                             .Long("cooked-root")
-                             .WithValue<std::string>()
-                             .StoreTo(&options_.cooked_root)
-                             .Build();
 
   auto with_content_hashing
     = Option::WithKey("content-hashing")
@@ -265,7 +256,7 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                            .StoreTo(&options_.bake_hdr_to_ldr)
                            .Build();
 
-  auto sources = Option::WithKey("source")
+  auto sources = Option::WithKey("source-mapping")
                    .About("Additional source mapping (file:layer:mip:slice)")
                    .Long("source")
                    .WithValue<std::string>()
@@ -314,7 +305,6 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(bake_hdr_to_ldr))
     .WithOption(std::move(sources))
     .WithOption(std::move(report))
-    .WithOption(std::move(cooked_root_alias))
     .WithOption(std::move(with_content_hashing));
 }
 

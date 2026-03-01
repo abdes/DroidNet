@@ -4,7 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <exception>
 #include <filesystem>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <string_view>
 
@@ -83,6 +85,40 @@ namespace {
     return true;
   }
 
+  auto NormalizeInlineSidecarPayload(const std::string_view payload_text,
+    std::string& normalized_payload, std::ostream& error_stream) -> bool
+  {
+    using json = nlohmann::json;
+    json parsed;
+    try {
+      parsed = json::parse(payload_text);
+    } catch (const std::exception& ex) {
+      error_stream << "ERROR: inline_bindings_json is not valid JSON: "
+                   << ex.what() << "\n";
+      return false;
+    }
+
+    json sidecar_doc;
+    if (parsed.is_array()) {
+      sidecar_doc = json::object();
+      sidecar_doc["bindings"] = parsed;
+    } else if (parsed.is_object()) {
+      if (!parsed.contains("bindings") || !parsed["bindings"].is_array()) {
+        error_stream << "ERROR: inline_bindings_json object must contain array "
+                        "field 'bindings'\n";
+        return false;
+      }
+      sidecar_doc = std::move(parsed);
+    } else {
+      error_stream << "ERROR: inline_bindings_json must be a JSON array or an "
+                      "object with array field 'bindings'\n";
+      return false;
+    }
+
+    normalized_payload = sidecar_doc.dump();
+    return true;
+  }
+
   auto BuildBaseImportRequest(const std::string& source_path,
     const std::string& cooked_root, const std::string& job_name,
     const bool with_content_hashing, std::ostream& error_stream)
@@ -134,6 +170,11 @@ namespace {
 auto BuildScriptAssetRequest(const ScriptAssetImportSettings& settings,
   std::ostream& error_stream) -> std::optional<ImportRequest>
 {
+  if (settings.source_path.empty()) {
+    error_stream << "ERROR: source_path is required\n";
+    return std::nullopt;
+  }
+
   auto request
     = BuildBaseImportRequest(settings.source_path, settings.cooked_root,
       settings.job_name, settings.with_content_hashing, error_stream);
@@ -167,6 +208,7 @@ auto BuildScriptAssetRequest(const ScriptAssetImportSettings& settings,
   request->options.scripting.compile_mode = *compile_mode;
   request->options.scripting.script_storage = *storage_mode;
   request->options.scripting.target_scene_virtual_path.clear();
+  request->options.scripting.inline_bindings_json.clear();
   return request;
 }
 
@@ -185,8 +227,27 @@ auto BuildScriptingSidecarRequest(
   const ScriptingSidecarImportSettings& settings, std::ostream& error_stream)
   -> std::optional<ImportRequest>
 {
+  const auto has_source = !settings.source_path.empty();
+  const auto has_inline = !settings.inline_bindings_json.empty();
+  if (has_source == has_inline) {
+    error_stream << "ERROR: exactly one of source_path or inline_bindings_json "
+                    "must be provided\n";
+    return std::nullopt;
+  }
+
+  auto normalized_inline_bindings = std::string {};
+  if (has_inline
+    && !NormalizeInlineSidecarPayload(settings.inline_bindings_json,
+      normalized_inline_bindings, error_stream)) {
+    return std::nullopt;
+  }
+
+  const auto source_path_for_request = has_source
+    ? settings.source_path
+    : std::string("inline://script-sidecar");
+
   auto request
-    = BuildBaseImportRequest(settings.source_path, settings.cooked_root,
+    = BuildBaseImportRequest(source_path_for_request, settings.cooked_root,
       settings.job_name, settings.with_content_hashing, error_stream);
   if (!request.has_value()) {
     return std::nullopt;
@@ -210,6 +271,8 @@ auto BuildScriptingSidecarRequest(
   request->options.scripting.script_storage = ScriptStorageMode::kEmbedded;
   request->options.scripting.target_scene_virtual_path
     = settings.target_scene_virtual_path;
+  request->options.scripting.inline_bindings_json
+    = std::move(normalized_inline_bindings);
   return request;
 }
 

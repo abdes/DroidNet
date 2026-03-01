@@ -332,21 +332,23 @@ auto WriteLooseCookedSceneWithScripting(
     += std::string(layout.virtual_mount_root) + "/" + rel_desc.generic_string();
   strings.push_back('\0');
   const auto off_scripts_table = static_cast<uint32_t>(strings.size());
-  strings += std::string(layout.resources_dir) + "/scripts.table";
+  strings += std::string(layout.resources_dir) + "/script-bindings.table";
   strings.push_back('\0');
   const auto off_scripts_data = static_cast<uint32_t>(strings.size());
-  strings += std::string(layout.resources_dir) + "/scripts.data";
+  strings += std::string(layout.resources_dir) + "/script-bindings.data";
   strings.push_back('\0');
 
   ScriptSlotRecord slot {};
   {
     std::ofstream out(
-      cooked_root / layout.resources_dir / "scripts.table", std::ios::binary);
+      cooked_root / layout.resources_dir / "script-bindings.table",
+      std::ios::binary);
     out.write(reinterpret_cast<const char*>(&slot), sizeof(slot));
   }
   {
     std::ofstream out(
-      cooked_root / layout.resources_dir / "scripts.data", std::ios::binary);
+      cooked_root / layout.resources_dir / "script-bindings.data",
+      std::ios::binary);
   }
 
   IndexHeader header {};
@@ -373,12 +375,12 @@ auto WriteLooseCookedSceneWithScripting(
   asset_entry.descriptor_size = static_cast<uint64_t>(bytes.size());
 
   FileRecord scripts_table_record {};
-  scripts_table_record.kind = FileKind::kScriptsTable;
+  scripts_table_record.kind = FileKind::kScriptBindingsTable;
   scripts_table_record.relpath_offset = off_scripts_table;
   scripts_table_record.size = sizeof(ScriptSlotRecord);
 
   FileRecord scripts_data_record {};
-  scripts_data_record.kind = FileKind::kScriptsData;
+  scripts_data_record.kind = FileKind::kScriptBindingsData;
   scripts_data_record.relpath_offset = off_scripts_data;
   scripts_data_record.size = 0;
 

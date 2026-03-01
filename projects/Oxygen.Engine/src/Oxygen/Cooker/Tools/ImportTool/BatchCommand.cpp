@@ -44,6 +44,7 @@
 #include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
+#include <Oxygen/Cooker/Import/ScriptImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
 #include <Oxygen/Cooker/Tools/ImportTool/BatchCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
@@ -198,6 +199,22 @@ namespace {
     return std::nullopt;
   }
 
+  auto ResolveReportJobType(const ImportRequest& request) -> std::string
+  {
+    if (request.GetFormat() != ImportFormat::kUnknown) {
+      return std::string(to_string(request.GetFormat()));
+    }
+    switch (request.options.scripting.import_kind) {
+    case ScriptingImportKind::kScriptAsset:
+      return "script";
+    case ScriptingImportKind::kScriptingSidecar:
+      return "script-sidecar";
+    case ScriptingImportKind::kNone:
+      break;
+    }
+    return "unknown";
+  }
+
   auto ResolveReportPath(std::string_view report_path,
     const std::optional<std::filesystem::path>& cooked_root,
     std::ostream& error_stream) -> std::optional<std::filesystem::path>
@@ -298,21 +315,6 @@ auto BatchCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                    .StoreTo(&options_.dry_run)
                    .Build();
 
-  auto fail_fast = Option::WithKey("fail-fast")
-                     .About("Stop processing after the first failure")
-                     .Long("fail-fast")
-                     .WithValue<bool>()
-                     .StoreTo(&options_.fail_fast)
-                     .Build();
-
-  auto quiet = Option::WithKey("quiet")
-                 .About("Suppress non-error output")
-                 .Short("q")
-                 .Long("quiet")
-                 .WithValue<bool>()
-                 .StoreTo(&options_.quiet)
-                 .Build();
-
   auto report = Option::WithKey("report")
                   .About("Write a JSON report (absolute or relative to cooked "
                          "root)")
@@ -336,8 +338,6 @@ auto BatchCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(manifest))
     .WithOption(std::move(root))
     .WithOption(std::move(dry_run))
-    .WithOption(std::move(fail_fast))
-    .WithOption(std::move(quiet))
     .WithOption(std::move(report))
     .WithOption(std::move(max_in_flight));
 }
@@ -396,15 +396,10 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
 {
   const auto session_started = std::chrono::system_clock::now();
   // 1. Process Options
-  if (global_options_ != nullptr) {
-    if (!options_.fail_fast && global_options_->fail_fast) {
-      options_.fail_fast = true;
-    }
-    if (!options_.quiet && global_options_->quiet) {
-      options_.quiet = true;
-    }
-    // TUI control is global-only; respect the global --no-tui setting
-  }
+  const bool fail_fast
+    = global_options_ != nullptr && global_options_->fail_fast;
+  const bool quiet = global_options_ != nullptr && global_options_->quiet;
+  // TUI control is global-only; respect the global --no-tui setting.
 
   // Prepare a MessageWriter for console output. The global writer MUST be
   // provided by main; never create a local writer.
@@ -454,12 +449,13 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
 
   for (const auto& job : manifest->jobs) {
     if (job.job_type != "texture" && job.job_type != "fbx"
-      && job.job_type != "gltf") {
+      && job.job_type != "gltf" && job.job_type != "script"
+      && job.job_type != "script-sidecar") {
       writer->Error(
         fmt::format("ERROR: unsupported job type: {}", job.job_type));
       unsupported_seen = true;
       ++validation_failures;
-      if (options_.fail_fast) {
+      if (fail_fast) {
         return std::unexpected(std::make_error_code(std::errc::not_supported));
       }
       continue;
@@ -470,7 +466,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
       if (global_options_ != nullptr && settings.cooked_root.empty()) {
         settings.cooked_root = global_options_->cooked_root;
       }
-      if (options_.quiet) {
+      if (quiet) {
         settings.verbose = false;
       }
 
@@ -484,7 +480,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
             writer->Error(msg);
           }
           ++validation_failures;
-          if (options_.fail_fast) {
+          if (fail_fast) {
             break;
           }
           continue;
@@ -502,43 +498,120 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
       continue;
     }
 
-    // Scene Imports
-    SceneImportSettings settings = job.job_type == "fbx" ? job.fbx : job.gltf;
-    if (global_options_ != nullptr && settings.cooked_root.empty()) {
-      settings.cooked_root = global_options_->cooked_root;
-    }
-    if (options_.quiet) {
-      settings.verbose = false;
-    }
+    if (job.job_type == "fbx" || job.job_type == "gltf") {
+      SceneImportSettings settings = job.job_type == "fbx" ? job.fbx : job.gltf;
+      if (global_options_ != nullptr && settings.cooked_root.empty()) {
+        settings.cooked_root = global_options_->cooked_root;
+      }
+      if (quiet) {
+        settings.verbose = false;
+      }
 
-    const auto expected_format
-      = job.job_type == "fbx" ? ImportFormat::kFbx : ImportFormat::kGltf;
-    std::optional<ImportRequest> request;
-    {
-      std::ostringstream err;
-      request = internal::BuildSceneRequest(settings, expected_format, err);
-      if (!request) {
-        const auto msg = err.str();
-        if (!msg.empty()) {
-          writer->Error(msg);
+      const auto expected_format
+        = job.job_type == "fbx" ? ImportFormat::kFbx : ImportFormat::kGltf;
+      std::optional<ImportRequest> request;
+      {
+        std::ostringstream err;
+        request = internal::BuildSceneRequest(settings, expected_format, err);
+        if (!request) {
+          const auto msg = err.str();
+          if (!msg.empty()) {
+            writer->Error(msg);
+          }
+          ++validation_failures;
+          if (fail_fast) {
+            break;
+          }
+          continue;
         }
-        ++validation_failures;
-        if (options_.fail_fast) {
-          break;
-        }
+      }
+
+      if (options_.dry_run) {
+        writer->Info(
+          fmt::format("DRY-RUN: {} {}", job.job_type, settings.source_path));
         continue;
       }
-    }
 
-    if (options_.dry_run) {
-      writer->Info(
-        fmt::format("DRY-RUN: {} {}", job.job_type, settings.source_path));
+      jobs.push_back({ .request = *request,
+        .verbose = settings.verbose,
+        .source_path = settings.source_path });
       continue;
     }
 
-    jobs.push_back({ .request = *request,
-      .verbose = settings.verbose,
-      .source_path = settings.source_path });
+    if (job.job_type == "script") {
+      auto settings = job.script;
+      if (global_options_ != nullptr && settings.cooked_root.empty()) {
+        settings.cooked_root = global_options_->cooked_root;
+      }
+      if (quiet) {
+        settings.verbose = false;
+      }
+
+      std::optional<ImportRequest> request;
+      {
+        std::ostringstream err;
+        request = internal::BuildScriptAssetRequest(settings, err);
+        if (!request) {
+          const auto msg = err.str();
+          if (!msg.empty()) {
+            writer->Error(msg);
+          }
+          ++validation_failures;
+          if (fail_fast) {
+            break;
+          }
+          continue;
+        }
+      }
+
+      if (options_.dry_run) {
+        writer->Info(
+          fmt::format("DRY-RUN: {} {}", job.job_type, settings.source_path));
+        continue;
+      }
+
+      jobs.push_back({ .request = *request,
+        .verbose = settings.verbose,
+        .source_path = settings.source_path });
+      continue;
+    }
+
+    if (job.job_type == "script-sidecar") {
+      auto settings = job.scripting_sidecar;
+      if (global_options_ != nullptr && settings.cooked_root.empty()) {
+        settings.cooked_root = global_options_->cooked_root;
+      }
+      if (quiet) {
+        settings.verbose = false;
+      }
+
+      std::optional<ImportRequest> request;
+      {
+        std::ostringstream err;
+        request = internal::BuildScriptingSidecarRequest(settings, err);
+        if (!request) {
+          const auto msg = err.str();
+          if (!msg.empty()) {
+            writer->Error(msg);
+          }
+          ++validation_failures;
+          if (fail_fast) {
+            break;
+          }
+          continue;
+        }
+      }
+
+      if (options_.dry_run) {
+        writer->Info(
+          fmt::format("DRY-RUN: {} {}", job.job_type, settings.source_path));
+        continue;
+      }
+
+      jobs.push_back({ .request = *request,
+        .verbose = settings.verbose,
+        .source_path = settings.source_path });
+    }
   }
 
   if (options_.dry_run || jobs.empty()) {
@@ -551,7 +624,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
 
-  if (validation_failures > 0 && options_.fail_fast) {
+  if (validation_failures > 0 && fail_fast) {
     if (unsupported_seen) {
       return std::unexpected(std::make_error_code(std::errc::not_supported));
     }
@@ -1021,10 +1094,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
         const auto& job = jobs[index];
         const auto& report = common_context->reports[index];
 
-        const auto job_type
-          = std::string(job.request.GetFormat() != ImportFormat::kUnknown
-              ? to_string(job.request.GetFormat())
-              : "unknown");
+        const auto job_type = ResolveReportJobType(job.request);
 
         ordered_json job_json = ordered_json::object();
         job_json["index"] = DisplayJobNumber(index);
@@ -1077,7 +1147,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
     }
   }
 
-  if (options_.quiet) {
+  if (quiet) {
     for (size_t index = 0; index < jobs.size(); ++index) {
       const auto& report = common_context->reports[index];
       if (!report.has_value()) {

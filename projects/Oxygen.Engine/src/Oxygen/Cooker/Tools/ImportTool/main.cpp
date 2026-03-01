@@ -10,6 +10,8 @@
 #include <charconv>
 #include <chrono>
 #include <csignal>
+#include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <exception>
 #include <iostream>
@@ -20,6 +22,7 @@
 #include <thread>
 #include <vector>
 
+#include <Luau/Compiler.h>
 #include <fmt/color.h>
 #include <fmt/format.h>
 #include <ftxui/screen/terminal.hpp>
@@ -36,6 +39,8 @@
 #include <Oxygen/Cooker/Tools/ImportTool/GltfCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ImportCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
+#include <Oxygen/Cooker/Tools/ImportTool/ScriptCommand.h>
+#include <Oxygen/Cooker/Tools/ImportTool/ScriptingSidecarCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/TextureCommand.h>
 
 // Create and inject concrete writers. The concrete implementations live
@@ -288,6 +293,11 @@ auto CreateImportService(ImportCommand& active_command,
     return nullptr;
   }
   auto final_config = *config;
+  if (service_config.script_compile_callback
+    && !final_config.script_compile_callback) {
+    final_config.script_compile_callback
+      = service_config.script_compile_callback;
+  }
   if (thread_pool_size_set) {
     final_config.thread_pool_size = service_config.thread_pool_size;
   }
@@ -541,8 +551,16 @@ private:
 
 class MutedMessageWriter final : public IMessageWriter {
 public:
-  auto Error(std::string_view) -> bool override { return false; }
-  auto Warning(std::string_view) -> bool override { return false; }
+  auto Error(std::string_view message) -> bool override
+  {
+    std::cerr << message << "\n";
+    return true;
+  }
+  auto Warning(std::string_view message) -> bool override
+  {
+    std::cerr << message << "\n";
+    return true;
+  }
   auto Info(std::string_view) -> bool override { return false; }
   auto Report(std::string_view) -> bool override { return false; }
   auto Progress(std::string_view) -> bool override { return false; }
@@ -571,6 +589,80 @@ auto BuildCommandLineString(const int argc, char** argv) -> std::string
   }
   return line;
 }
+
+auto CompileScriptWithLuau(
+  const AsyncImportService::ScriptCompileRequest& request)
+  -> AsyncImportService::ScriptCompileResult
+{
+  using oxygen::core::meta::scripting::ScriptCompileMode;
+  constexpr int kLuauNoOptimizationLevel = 0;
+  constexpr int kLuauMaxOptimizationLevel = 2;
+  constexpr int kLuauNoDebugLevel = 0;
+  constexpr int kLuauMaxDebugLevel = 2;
+  constexpr char kLuauErrorPrefix = '\0';
+  constexpr auto kErrorPrefixLength = size_t { 1 };
+
+  auto luau_options = Luau::CompileOptions {};
+  switch (request.compile_mode) {
+  case ScriptCompileMode::kDebug:
+    luau_options.optimizationLevel = kLuauNoOptimizationLevel;
+    luau_options.debugLevel = kLuauMaxDebugLevel;
+    break;
+  case ScriptCompileMode::kOptimized:
+    luau_options.optimizationLevel = kLuauMaxOptimizationLevel;
+    luau_options.debugLevel = kLuauNoDebugLevel;
+    break;
+  default:
+    luau_options.optimizationLevel = kLuauNoOptimizationLevel;
+    luau_options.debugLevel = kLuauMaxDebugLevel;
+    break;
+  }
+
+  auto source_text = std::string {};
+  source_text.reserve(request.source_bytes.size());
+  for (const auto byte : request.source_bytes) {
+    source_text.push_back(static_cast<char>(std::to_integer<uint8_t>(byte)));
+  }
+
+  try {
+    const auto compiled = Luau::compile(source_text, luau_options);
+    if (compiled.empty()) {
+      return AsyncImportService::ScriptCompileResult {
+        .success = false,
+        .bytecode = {},
+        .diagnostics = "compiler returned empty output",
+      };
+    }
+    if (compiled.front() == kLuauErrorPrefix) {
+      const auto diagnostics = compiled.size() > kErrorPrefixLength
+        ? compiled.substr(kErrorPrefixLength)
+        : std::string { "compile failed without diagnostics" };
+      return AsyncImportService::ScriptCompileResult {
+        .success = false,
+        .bytecode = {},
+        .diagnostics = diagnostics,
+      };
+    }
+
+    auto bytecode = std::vector<std::byte> {};
+    bytecode.reserve(compiled.size());
+    for (const auto ch : compiled) {
+      bytecode.push_back(std::byte { static_cast<uint8_t>(ch) });
+    }
+
+    return AsyncImportService::ScriptCompileResult {
+      .success = true,
+      .bytecode = std::move(bytecode),
+      .diagnostics = {},
+    };
+  } catch (const std::exception& ex) {
+    return AsyncImportService::ScriptCompileResult {
+      .success = false,
+      .bytecode = {},
+      .diagnostics = ex.what(),
+    };
+  }
+}
 } // namespace
 
 auto main(int argc, char** argv) -> int
@@ -595,6 +687,8 @@ auto main(int argc, char** argv) -> int
     using oxygen::content::import::tool::BuildCli;
     using oxygen::content::import::tool::FbxCommand;
     using oxygen::content::import::tool::GltfCommand;
+    using oxygen::content::import::tool::ScriptCommand;
+    using oxygen::content::import::tool::ScriptingSidecarCommand;
     using oxygen::content::import::tool::TextureCommand;
 
     GlobalOptions global_options;
@@ -602,15 +696,20 @@ auto main(int argc, char** argv) -> int
     BatchCommand batch_command(&global_options);
     FbxCommand fbx_command(&global_options);
     GltfCommand gltf_command(&global_options);
+    ScriptCommand script_command(&global_options);
+    ScriptingSidecarCommand scripting_sidecar_command(&global_options);
     TextureCommand texture_command(&global_options);
     std::vector<ImportCommand*> commands {
       &texture_command,
       &fbx_command,
       &gltf_command,
+      &script_command,
+      &scripting_sidecar_command,
       &batch_command,
     };
 
     AsyncImportService::Config service_config {};
+    service_config.script_compile_callback = CompileScriptWithLuau;
     bool thread_pool_size_set = false;
     bool concurrency_override_set = false;
 
