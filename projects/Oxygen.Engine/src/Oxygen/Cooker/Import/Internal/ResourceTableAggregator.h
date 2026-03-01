@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <fstream>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <string>
 #include <system_error>
@@ -265,6 +266,16 @@ public:
   auto DataFileSize() const noexcept -> uint64_t
   {
     return data_file_size_.load(std::memory_order_acquire);
+  }
+
+  [[nodiscard]] auto TryGetDescriptor(uint32_t index) const
+    -> std::optional<Descriptor>
+  {
+    std::scoped_lock lock(mutex_);
+    if (index >= table_.size()) {
+      return std::nullopt;
+    }
+    return table_[index];
   }
 
 private:

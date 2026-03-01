@@ -12,11 +12,13 @@
 #include <chrono>
 #include <cstdint>
 #include <deque>
+#include <exception>
 #include <filesystem>
 #include <functional>
 #include <limits>
 #include <memory>
 #include <sstream>
+#include <string_view>
 #include <utility>
 #include <variant>
 
@@ -24,6 +26,7 @@
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/BufferEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/Emitters/ResourceDescriptorEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/TextureEmitter.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -63,6 +66,18 @@ namespace {
     if (telemetry.emit_duration.has_value()) {
       session.AddEmitDuration(*telemetry.emit_duration);
     }
+  }
+
+  [[nodiscard]] auto ChooseStableId(std::string_view preferred,
+    std::string_view secondary, std::string_view fallback) -> std::string_view
+  {
+    if (!preferred.empty()) {
+      return preferred;
+    }
+    if (!secondary.empty()) {
+      return secondary;
+    }
+    return fallback;
   }
 
   //! Strategy interface for selecting the next ready item to submit.
@@ -248,6 +263,12 @@ auto WorkDispatcher::EmitTexturePayload(TexturePipeline::WorkResult& result)
 
     // Ensure the texture emitter is initialized so the fallback index is valid.
     [[maybe_unused]] auto& texture_emitter = session_.TextureEmitter();
+    const auto stable_id
+      = ChooseStableId(result.texture_id, result.source_id, "texture");
+    if (!EmitTextureSidecarDescriptor(data::pak::core::kFallbackResourceIndex,
+          result.source_id, stable_id, stable_id)) {
+      return std::nullopt;
+    }
     return data::pak::core::kFallbackResourceIndex;
   }
 
@@ -279,6 +300,28 @@ auto WorkDispatcher::EmitTexturePayload(TexturePipeline::WorkResult& result)
   auto emitted = emitter.Emit(std::move(*result.cooked), signature_salt);
   const auto emit_end = std::chrono::steady_clock::now();
   session_.AddEmitDuration(MakeDuration(emit_start, emit_end));
+  const auto stable_id
+    = ChooseStableId(result.texture_id, result.source_id, "texture");
+  if (!EmitTextureSidecarDescriptor(data::pak::core::ResourceIndexT { emitted },
+        result.source_id, stable_id, stable_id)) {
+    return std::nullopt;
+  }
+  return emitted;
+}
+
+auto WorkDispatcher::EmitBufferPayload(CookedBufferPayload payload,
+  const std::string_view source_id) -> std::optional<uint32_t>
+{
+  auto& emitter = session_.BufferEmitter();
+  const auto emit_start = std::chrono::steady_clock::now();
+  const auto emitted = emitter.Emit(std::move(payload), source_id);
+  const auto emit_end = std::chrono::steady_clock::now();
+  session_.AddEmitDuration(MakeDuration(emit_start, emit_end));
+  const auto stable_id = ChooseStableId(source_id, source_id, "buffer");
+  if (!EmitBufferSidecarDescriptor(data::pak::core::ResourceIndexT { emitted },
+        source_id, stable_id, stable_id)) {
+    return std::nullopt;
+  }
   return emitted;
 }
 
@@ -291,13 +334,67 @@ auto WorkDispatcher::EmitBufferPayload(BufferPipeline::WorkResult result)
   }
 
   AddDiagnostics(session_, std::move(result.diagnostics));
+  return EmitBufferPayload(std::move(result.cooked), result.source_id);
+}
 
-  auto& emitter = session_.BufferEmitter();
-  const auto emit_start = std::chrono::steady_clock::now();
-  auto emitted = emitter.Emit(std::move(result.cooked), result.source_id);
-  const auto emit_end = std::chrono::steady_clock::now();
-  session_.AddEmitDuration(MakeDuration(emit_start, emit_end));
-  return emitted;
+auto WorkDispatcher::EmitTextureSidecarDescriptor(
+  const data::pak::core::ResourceIndexT resource_index,
+  const std::string_view source_id, const std::string_view name_hint,
+  const std::string_view stable_id) -> bool
+{
+  auto& texture_emitter = session_.TextureEmitter();
+  const auto descriptor
+    = texture_emitter.TryGetDescriptor(static_cast<uint32_t>(resource_index));
+  if (!descriptor.has_value()) {
+    session_.AddDiagnostic(
+      MakeErrorDiagnostic("import.texture_descriptor_missing",
+        "Missing texture descriptor for emitted resource index", source_id,
+        std::to_string(static_cast<uint32_t>(resource_index))));
+    return false;
+  }
+
+  try {
+    [[maybe_unused]] const auto relpath
+      = session_.ResourceDescriptorEmitter().EmitTexture(
+        name_hint, stable_id, resource_index, *descriptor);
+    return true;
+  } catch (const std::exception& ex) {
+    session_.AddDiagnostic(
+      MakeErrorDiagnostic("import.texture_descriptor_emit_failed",
+        "Failed to emit texture sidecar descriptor: " + std::string(ex.what()),
+        source_id, std::to_string(static_cast<uint32_t>(resource_index))));
+    return false;
+  }
+}
+
+auto WorkDispatcher::EmitBufferSidecarDescriptor(
+  const data::pak::core::ResourceIndexT resource_index,
+  const std::string_view source_id, const std::string_view name_hint,
+  const std::string_view stable_id) -> bool
+{
+  auto& buffer_emitter = session_.BufferEmitter();
+  const auto descriptor
+    = buffer_emitter.TryGetDescriptor(static_cast<uint32_t>(resource_index));
+  if (!descriptor.has_value()) {
+    session_.AddDiagnostic(
+      MakeErrorDiagnostic("import.buffer_descriptor_missing",
+        "Missing buffer descriptor for emitted resource index", source_id,
+        std::to_string(static_cast<uint32_t>(resource_index))));
+    return false;
+  }
+
+  try {
+    [[maybe_unused]] const auto relpath
+      = session_.ResourceDescriptorEmitter().EmitBuffer(
+        name_hint, stable_id, resource_index, *descriptor);
+    return true;
+  } catch (const std::exception& ex) {
+    session_.AddDiagnostic(
+      MakeErrorDiagnostic("import.buffer_descriptor_emit_failed",
+        "Failed to emit buffer sidecar descriptor: " + std::string(ex.what()),
+        source_id, std::to_string(static_cast<uint32_t>(resource_index))));
+    return false;
+  }
 }
 
 auto WorkDispatcher::EmitMaterialPayload(MaterialPipeline::WorkResult result)
@@ -1035,7 +1132,6 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
 
     AddDiagnostics(session_, std::move(result.diagnostics));
 
-    auto& buffer_emitter = session_.BufferEmitter();
     const auto EmitGeometryBuffer
       = [&](CookedBufferPayload payload, const GeometryBufferKind kind,
           const size_t lod_index, std::string_view suffix,
@@ -1048,33 +1144,34 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
         started();
       }
 
-      const auto emit_start = std::chrono::steady_clock::now();
-      const auto emitted = buffer_emitter.Emit(std::move(payload), buffer_id);
-      const auto emit_end = std::chrono::steady_clock::now();
-      session_.AddEmitDuration(MakeDuration(emit_start, emit_end));
+      const auto emitted = EmitBufferPayload(std::move(payload), buffer_id);
+      if (!emitted.has_value()) {
+        return false;
+      }
       auto& lod_binding = bindings[lod_index];
       switch (kind) {
       case GeometryBufferKind::kVertex:
-        lod_binding.vertex_buffer = data::pak::core::ResourceIndexT { emitted };
+        lod_binding.vertex_buffer
+          = data::pak::core::ResourceIndexT { *emitted };
         break;
       case GeometryBufferKind::kIndex:
-        lod_binding.index_buffer = data::pak::core::ResourceIndexT { emitted };
+        lod_binding.index_buffer = data::pak::core::ResourceIndexT { *emitted };
         break;
       case GeometryBufferKind::kJointIndex:
         lod_binding.joint_index_buffer
-          = data::pak::core::ResourceIndexT { emitted };
+          = data::pak::core::ResourceIndexT { *emitted };
         break;
       case GeometryBufferKind::kJointWeight:
         lod_binding.joint_weight_buffer
-          = data::pak::core::ResourceIndexT { emitted };
+          = data::pak::core::ResourceIndexT { *emitted };
         break;
       case GeometryBufferKind::kInverseBind:
         lod_binding.inverse_bind_buffer
-          = data::pak::core::ResourceIndexT { emitted };
+          = data::pak::core::ResourceIndexT { *emitted };
         break;
       case GeometryBufferKind::kJointRemap:
         lod_binding.joint_remap_buffer
-          = data::pak::core::ResourceIndexT { emitted };
+          = data::pak::core::ResourceIndexT { *emitted };
         break;
       }
 

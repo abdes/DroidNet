@@ -33,6 +33,7 @@ namespace oxygen::content::import {
 
  @note Only Oxygen asset types (`oxygen::data::AssetType`) have descriptor
 
+
  folders here (scene/geometry/material/script/input). Cameras and lights are
 
  components attached to scene nodes and are authored into the scene
@@ -59,6 +60,7 @@ struct LooseCookedLayout final : Layout {
   static constexpr std::string_view kInputMappingContextDescriptorExtension
     = ".oimap";
   static constexpr std::string_view kTextureDescriptorExtension = ".otex";
+  static constexpr std::string_view kBufferDescriptorExtension = ".obuf";
 
   [[nodiscard]] static auto MaterialDescriptorFileName(
     std::string_view material_name) -> std::string
@@ -104,6 +106,18 @@ struct LooseCookedLayout final : Layout {
   {
     return std::string(name)
       + std::string(kInputMappingContextDescriptorExtension);
+  }
+
+  [[nodiscard]] static auto TextureDescriptorFileName(std::string_view name)
+    -> std::string
+  {
+    return std::string(name) + std::string(kTextureDescriptorExtension);
+  }
+
+  [[nodiscard]] static auto BufferDescriptorFileName(std::string_view name)
+    -> std::string
+  {
+    return std::string(name) + std::string(kBufferDescriptorExtension);
   }
 
   [[nodiscard]] auto MaterialVirtualLeaf(std::string_view material_name) const
@@ -164,6 +178,18 @@ struct LooseCookedLayout final : Layout {
       InputMappingContextDescriptorFileName(name));
   }
 
+  [[nodiscard]] auto TextureVirtualLeaf(std::string_view name) const
+    -> std::string
+  {
+    return JoinRelPath(TextureDescriptorDir(), TextureDescriptorFileName(name));
+  }
+
+  [[nodiscard]] auto BufferVirtualLeaf(std::string_view name) const
+    -> std::string
+  {
+    return JoinRelPath(BufferDescriptorDir(), BufferDescriptorFileName(name));
+  }
+
   [[nodiscard]] auto MaterialDescriptorRelPath(
     std::string_view material_name) const -> std::string
   {
@@ -204,6 +230,18 @@ struct LooseCookedLayout final : Layout {
     std::string_view name) const -> std::string
   {
     return InputMappingContextVirtualLeaf(name);
+  }
+
+  [[nodiscard]] auto TextureDescriptorRelPath(std::string_view name) const
+    -> std::string
+  {
+    return TextureVirtualLeaf(name);
+  }
+
+  [[nodiscard]] auto BufferDescriptorRelPath(std::string_view name) const
+    -> std::string
+  {
+    return BufferVirtualLeaf(name);
   }
 
   [[nodiscard]] auto MaterialVirtualPath(std::string_view material_name) const
@@ -250,6 +288,18 @@ struct LooseCookedLayout final : Layout {
   {
     return JoinVirtualPath(
       virtual_mount_root, InputMappingContextVirtualLeaf(name));
+  }
+
+  [[nodiscard]] auto TextureVirtualPath(std::string_view name) const
+    -> std::string
+  {
+    return JoinVirtualPath(virtual_mount_root, TextureVirtualLeaf(name));
+  }
+
+  [[nodiscard]] auto BufferVirtualPath(std::string_view name) const
+    -> std::string
+  {
+    return JoinVirtualPath(virtual_mount_root, BufferVirtualLeaf(name));
   }
 
   //! Index filename at the cooked-root directory.
@@ -301,7 +351,7 @@ struct LooseCookedLayout final : Layout {
   //! File name for the script-bindings data.
   std::string script_bindings_data_file_name = "script-bindings.data";
 
-  //! Optional base folder (relative to cooked root) for descriptors.
+  //! Optional base folder (relative to cooked root) for asset descriptors.
   /*!
    If empty, descriptors are written directly under the cooked root.
   */
@@ -334,13 +384,17 @@ struct LooseCookedLayout final : Layout {
    * `descriptors_dir`. */
   std::string input_mapping_contexts_subdir = "InputMappingContexts";
 
-  //! Subfolder for texture descriptors.
-  /*!
-   Texture data is represented as resource table/data files (see
-   `textures_table_file_name` and `textures_data_file_name`). It is not a
-   loose-cooked "asset descriptor" today because it is not part of
-   `oxygen::data::AssetType`.
-  */
+  //! Subfolder for texture resource descriptors (`.otex`).
+  /*! Set to empty to place texture descriptors directly under
+   *
+   * `resources_dir`. */
+  std::string texture_descriptors_subdir = "Textures";
+
+  //! Subfolder for buffer resource descriptors (`.obuf`).
+  /*! Set to empty to place buffer descriptors directly under
+   *
+   * `resources_dir`. */
+  std::string buffer_descriptors_subdir = "Buffers";
 
   //! Resolve the container-relative path for the buffers table.
   [[nodiscard]] auto BuffersTableRelPath() const -> std::string
@@ -400,6 +454,18 @@ struct LooseCookedLayout final : Layout {
   [[nodiscard]] auto ScriptBindingsDataRelPath() const -> std::string
   {
     return JoinRelPath(resources_dir, script_bindings_data_file_name);
+  }
+
+  //! Resolve the container-relative directory for texture resource descriptors.
+  [[nodiscard]] auto TextureDescriptorDir() const -> std::string
+  {
+    return JoinRelPath(resources_dir, texture_descriptors_subdir);
+  }
+
+  //! Resolve the container-relative directory for buffer resource descriptors.
+  [[nodiscard]] auto BufferDescriptorDir() const -> std::string
+  {
+    return JoinRelPath(resources_dir, buffer_descriptors_subdir);
   }
 
   //! Resolve the descriptor folder for an asset type.
