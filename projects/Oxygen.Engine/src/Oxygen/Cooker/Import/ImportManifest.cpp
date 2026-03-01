@@ -29,16 +29,22 @@ namespace {
 
   class CollectingErrorHandler final : public error_handler {
   public:
+    static constexpr size_t kMaxErrors = 12;
+
     void error(const json::json_pointer& ptr, const json& instance,
       const std::string& message) override
     {
       std::ostringstream out;
       const auto path = ptr.to_string();
       out << (path.empty() ? "<root>" : path) << ": " << message;
-      if (!instance.is_discarded()) {
+      if (!instance.is_discarded() && instance.is_primitive()) {
         out << " (value=" << instance.dump() << ")";
       }
-      errors_.push_back(out.str());
+
+      if (errors_.size() < kMaxErrors) {
+        errors_.push_back(out.str());
+      }
+      ++total_errors_;
     }
 
     [[nodiscard]] auto HasErrors() const noexcept -> bool
@@ -52,11 +58,16 @@ namespace {
       for (const auto& error : errors_) {
         out << "- " << error << "\n";
       }
+      if (total_errors_ > errors_.size()) {
+        out << "- ... " << (total_errors_ - errors_.size())
+            << " additional schema error(s) suppressed\n";
+      }
       return out.str();
     }
 
   private:
     std::vector<std::string> errors_;
+    size_t total_errors_ = 0;
   };
 
   class SchemaValidator {

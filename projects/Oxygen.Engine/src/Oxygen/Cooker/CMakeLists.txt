@@ -62,6 +62,10 @@ oxygen_embed_json_schemas(
   SCHEMAS
     kImportManifestSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.import-manifest.schema.json"
+    kInputSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input.schema.json"
+    kInputActionSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input-action.schema.json"
     kPhysicsSidecarSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-sidecar.schema.json"
 )
@@ -169,6 +173,7 @@ set(
   "Import/Internal/Utils/AssetKeyUtils.h"
   "Import/Internal/Utils/ContentHashUtils.h"
   "Import/Internal/Utils/ImportSettingsUtils.h"
+  "Import/Internal/Utils/JsonSchemaValidation.h"
   "Import/Internal/Utils/StringUtils.h"
   "Import/Internal/WindowsFileReader.h"
   "Import/Internal/WindowsFileWriter.h"

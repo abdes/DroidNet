@@ -43,7 +43,11 @@ Why split:
 
 Current example:
 
-1. Source schema: `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
+1. Source schemas:
+   - `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
+   - `src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json`
+   - `src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json`
+   - `src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json`
 2. Generated header path: `out/<build>/generated/Oxygen/Cooker/Import/Internal/ImportManifest_schema.h`
 3. Include in C++ remains: `<Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>`
 
@@ -63,6 +67,12 @@ oxygen_embed_json_schemas(
   SCHEMAS
     kImportManifestSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.import-manifest.schema.json"
+    kInputSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input.schema.json"
+    kInputActionSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input-action.schema.json"
+    kPhysicsSidecarSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-sidecar.schema.json"
 )
 ```
 

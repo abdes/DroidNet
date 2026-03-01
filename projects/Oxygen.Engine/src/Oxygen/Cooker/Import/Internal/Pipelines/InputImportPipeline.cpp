@@ -26,15 +26,18 @@
 #include <utility>
 #include <vector>
 
+#include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/AssetKeyUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Data/AssetType.h>
@@ -134,48 +137,88 @@ namespace {
     });
   }
 
-  [[nodiscard]] auto AsInt32(const json& value, int32_t& out) -> bool
+  constexpr size_t kMaxSchemaDiagnostics = 12;
+
+  enum class InputDocumentKind : uint8_t {
+    kPrimary = 0,
+    kStandaloneAction,
+  };
+
+  auto PrimaryInputSchemaValidator() -> nlohmann::json_schema::json_validator&
   {
-    if (!value.is_number_integer()) {
-      return false;
-    }
-    const auto raw = value.get<int64_t>();
-    if (raw < (std::numeric_limits<int32_t>::min)()
-      || raw > (std::numeric_limits<int32_t>::max)()) {
-      return false;
-    }
-    out = static_cast<int32_t>(raw);
-    return true;
+    thread_local auto validator = [] {
+      auto out = nlohmann::json_schema::json_validator {};
+      out.set_root_schema(json::parse(kInputSchema));
+      return out;
+    }();
+    return validator;
   }
 
-  [[nodiscard]] auto AsUint32(const json& value, uint32_t& out) -> bool
+  auto StandaloneInputActionSchemaValidator()
+    -> nlohmann::json_schema::json_validator&
   {
-    if (!value.is_number_integer() && !value.is_number_unsigned()) {
-      return false;
-    }
-    if (value.is_number_unsigned()) {
-      const auto raw = value.get<uint64_t>();
-      if (raw > (std::numeric_limits<uint32_t>::max)()) {
-        return false;
-      }
-      out = static_cast<uint32_t>(raw);
-      return true;
-    }
-    const auto raw = value.get<int64_t>();
-    if (raw < 0 || raw > (std::numeric_limits<uint32_t>::max)()) {
-      return false;
-    }
-    out = static_cast<uint32_t>(raw);
-    return true;
+    thread_local auto validator = [] {
+      auto out = nlohmann::json_schema::json_validator {};
+      out.set_root_schema(json::parse(kInputActionSchema));
+      return out;
+    }();
+    return validator;
   }
 
-  [[nodiscard]] auto AsFloat(const json& value, float& out) -> bool
+  auto ValidateInputSchema(const json& doc, ImportSession& session,
+    const ImportRequest& request) -> std::optional<InputDocumentKind>
   {
-    if (!value.is_number()) {
-      return false;
+    auto primary_issues = std::vector<internal::JsonSchemaIssue> {};
+    auto internal_error = std::string {};
+    if (!internal::CollectJsonSchemaIssues(
+          PrimaryInputSchemaValidator(), doc, primary_issues, internal_error)) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "input.schema.validator_failure",
+        "Input primary schema validator failure: " + internal_error);
+      return std::nullopt;
     }
-    out = value.get<float>();
-    return std::isfinite(out);
+    if (primary_issues.empty()) {
+      return InputDocumentKind::kPrimary;
+    }
+
+    auto action_issues = std::vector<internal::JsonSchemaIssue> {};
+    if (!internal::CollectJsonSchemaIssues(
+          StandaloneInputActionSchemaValidator(), doc, action_issues,
+          internal_error)) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "input.schema.validator_failure",
+        "Input action schema validator failure: " + internal_error);
+      return std::nullopt;
+    }
+    if (action_issues.empty()) {
+      return InputDocumentKind::kStandaloneAction;
+    }
+
+    const bool likely_primary = doc.is_object() && doc.contains("contexts");
+    if (likely_primary) {
+      internal::EmitCollectedJsonSchemaIssues(primary_issues,
+        "input.schema.validation_failed",
+        "Schema validation failed (oxygen.input.schema.json): ",
+        "Schema validation (oxygen.input.schema.json) reported ",
+        kMaxSchemaDiagnostics,
+        [&](const std::string_view code, std::string message,
+          std::string object_path) {
+          AddDiagnostic(session, request, ImportSeverity::kError,
+            std::string(code), std::move(message), std::move(object_path));
+        });
+    } else {
+      internal::EmitCollectedJsonSchemaIssues(action_issues,
+        "input.schema.validation_failed",
+        "Schema validation failed (oxygen.input-action.schema.json): ",
+        "Schema validation (oxygen.input-action.schema.json) reported ",
+        kMaxSchemaDiagnostics,
+        [&](const std::string_view code, std::string message,
+          std::string object_path) {
+          AddDiagnostic(session, request, ImportSeverity::kError,
+            std::string(code), std::move(message), std::move(object_path));
+        });
+    }
+    return std::nullopt;
   }
 
   [[nodiscard]] auto SecondsToNanoseconds(const float seconds, uint64_t& out)
@@ -642,6 +685,520 @@ namespace {
     return bytes;
   }
 
+  struct ParsedInputSource final {
+    std::vector<DeclaredAction> declared_actions;
+    std::unordered_map<std::string, data::AssetKey> local_action_keys;
+    std::vector<ContextSource> context_sources;
+  };
+
+  auto ParseInputSourceDocument(const json& doc, const bool is_standalone,
+    ImportSession& session, const ImportRequest& request,
+    const std::unordered_set<std::string>& known_slots,
+    const std::unordered_map<std::string, std::pair<data::AssetKey, uint8_t>>&
+      mounted_actions,
+    ParsedInputSource& out) -> bool
+  {
+    out.declared_actions.clear();
+    out.local_action_keys.clear();
+    out.context_sources.clear();
+
+    auto local_action_types = std::unordered_map<std::string, uint8_t> {};
+
+    const auto parse_action = [&](const json& node, const std::string& path) {
+      auto action = DeclaredAction {};
+      action.name = node.at("name").get<std::string>();
+      const auto parsed_type
+        = ParseActionType(node.at("type").get<std::string>());
+      if (!parsed_type.has_value()) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "input.schema.contract_mismatch",
+          "Unsupported action type '" + node.at("type").get<std::string>()
+            + "'",
+          path + ".type");
+        return false;
+      }
+      action.value_type = *parsed_type;
+      action.consumes_input = node.value("consumes_input", false);
+
+      if (local_action_types.contains(action.name)) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "input.asset.action_conflict",
+          "Duplicate action declaration '" + action.name + "'", path + ".name");
+        return false;
+      }
+
+      if (const auto it = mounted_actions.find(action.name);
+        it != mounted_actions.end() && it->second.second != action.value_type) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "input.asset.action_conflict",
+          "Action '" + action.name + "' conflicts with mounted action type",
+          path + ".type");
+        return false;
+      }
+
+      action.descriptor_relpath
+        = request.loose_cooked_layout.InputActionDescriptorRelPath(action.name);
+      action.virtual_path
+        = request.loose_cooked_layout.InputActionVirtualPath(action.name);
+      action.key = MakeAssetKey(request, action.virtual_path);
+      local_action_types.emplace(action.name, action.value_type);
+      out.local_action_keys.emplace(action.name, action.key);
+      out.declared_actions.push_back(std::move(action));
+      return true;
+    };
+
+    const auto parse_trigger_aux_array
+      = [&](const json& node, const std::string& path,
+          std::vector<TriggerAuxSource>& trigger_aux) {
+          bool ok = true;
+          for (size_t i = 0; i < node.size(); ++i) {
+            const auto& entry = node[i];
+            const auto entry_path = path + "[" + std::to_string(i) + "]";
+            bool entry_ok = true;
+            auto aux = TriggerAuxSource {};
+            aux.action_name = entry.at("action").get<std::string>();
+
+            if (entry.contains("completion_states")) {
+              aux.completion_states
+                = entry.at("completion_states").get<uint32_t>();
+            }
+
+            if (entry.contains("time_to_complete")) {
+              const auto seconds = entry.at("time_to_complete").get<float>();
+              if (!SecondsToNanoseconds(seconds, aux.time_to_complete_ns)) {
+                AddDiagnostic(session, request, ImportSeverity::kError,
+                  "input.context.trigger_invalid",
+                  "'time_to_complete' exceeds supported range",
+                  entry_path + ".time_to_complete");
+                ok = false;
+                entry_ok = false;
+              }
+            }
+
+            if (entry_ok) {
+              trigger_aux.push_back(std::move(aux));
+            }
+          }
+          return ok;
+        };
+
+    const auto parse_trigger = [&](const json& node, const std::string& path,
+                                 TriggerSource& out_trigger) {
+      const auto parsed_type
+        = ParseTriggerType(node.at("type").get<std::string>());
+      if (!parsed_type.has_value()) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "input.schema.contract_mismatch",
+          "Unsupported trigger type '" + node.at("type").get<std::string>()
+            + "'",
+          path + ".type");
+        return false;
+      }
+      out_trigger.type = *parsed_type;
+
+      if (node.contains("behavior")) {
+        const auto parsed_behavior
+          = ParseTriggerBehavior(node.at("behavior").get<std::string>());
+        if (!parsed_behavior.has_value()) {
+          AddDiagnostic(session, request, ImportSeverity::kError,
+            "input.schema.contract_mismatch",
+            "Unsupported trigger behavior '"
+              + node.at("behavior").get<std::string>() + "'",
+            path + ".behavior");
+          return false;
+        }
+        out_trigger.behavior = *parsed_behavior;
+      }
+
+      if (node.contains("actuation_threshold")) {
+        out_trigger.actuation_threshold
+          = node.at("actuation_threshold").get<float>();
+      }
+      if (node.contains("hold_time")) {
+        out_trigger.has_hold_time = true;
+        out_trigger.hold_time = node.at("hold_time").get<float>();
+      }
+      if (node.contains("interval")) {
+        out_trigger.has_interval = true;
+        out_trigger.interval = node.at("interval").get<float>();
+      }
+      if (node.contains("chord_action")) {
+        out_trigger.linked_action_name
+          = node.at("chord_action").get<std::string>();
+      }
+      if (node.contains("combo_actions")) {
+        if (!parse_trigger_aux_array(node["combo_actions"],
+              path + ".combo_actions", out_trigger.aux)) {
+          return false;
+        }
+      }
+      if (node.contains("aux")) {
+        if (!parse_trigger_aux_array(
+              node["aux"], path + ".aux", out_trigger.aux)) {
+          return false;
+        }
+      }
+      if (out_trigger.type != InputTriggerType::kCombo
+        && !out_trigger.aux.empty()) {
+        AddDiagnostic(session, request, ImportSeverity::kWarning,
+          "input.context.trigger_aux_ignored",
+          "Aux records are ignored for non-combo triggers", path);
+        out_trigger.aux.clear();
+      }
+      return true;
+    };
+
+    const auto parse_mapping = [&](const json& node, const std::string& path,
+                                 MappingSource& out_mapping) {
+      out_mapping.action_name = node.at("action").get<std::string>();
+      const auto authored_slot_name = node.at("slot").get<std::string>();
+      const auto canonical_slot_name
+        = CanonicalizeInputSlotName(authored_slot_name);
+      out_mapping.slot_name = std::string(canonical_slot_name);
+      if (canonical_slot_name != authored_slot_name) {
+        AddDiagnostic(session, request, ImportSeverity::kInfo,
+          "input.context.slot_alias_normalized",
+          "Normalized slot alias '" + authored_slot_name + "' to '"
+            + out_mapping.slot_name + "'",
+          path + ".slot");
+      }
+      if (!known_slots.contains(out_mapping.slot_name)) {
+        AddDiagnostic(session, request, ImportSeverity::kWarning,
+          "input.context.slot_unknown",
+          "Unknown slot '" + authored_slot_name + "' after normalization to '"
+            + out_mapping.slot_name + "'; keeping authored value",
+          path + ".slot");
+      }
+
+      if (node.contains("scale")) {
+        out_mapping.scale[0] = node["scale"][0].get<float>();
+        out_mapping.scale[1] = node["scale"][1].get<float>();
+      }
+      if (node.contains("bias")) {
+        out_mapping.bias[0] = node["bias"][0].get<float>();
+        out_mapping.bias[1] = node["bias"][1].get<float>();
+      }
+
+      const bool has_trigger = node.contains("trigger");
+      const bool has_triggers = node.contains("triggers");
+
+      if (has_trigger) {
+        const auto type
+          = ParseTriggerType(node.at("trigger").get<std::string>());
+        if (!type.has_value()) {
+          AddDiagnostic(session, request, ImportSeverity::kError,
+            "input.schema.contract_mismatch",
+            "Unknown trigger shorthand '"
+              + node.at("trigger").get<std::string>() + "'",
+            path + ".trigger");
+          return false;
+        }
+        out_mapping.triggers.push_back(TriggerSource {
+          .type = *type,
+          .behavior = InputTriggerBehavior::kImplicit,
+          .actuation_threshold = 0.5F,
+        });
+      } else if (has_triggers) {
+        for (size_t i = 0; i < node["triggers"].size(); ++i) {
+          auto trigger = TriggerSource {};
+          if (!parse_trigger(node["triggers"][i],
+                path + ".triggers[" + std::to_string(i) + "]", trigger)) {
+            return false;
+          }
+          out_mapping.triggers.push_back(std::move(trigger));
+        }
+      }
+      return true;
+    };
+
+    const auto parse_context = [&](const json& node, const std::string& path,
+                                 ContextSource& out_context) {
+      out_context.name = node.at("name").get<std::string>();
+      out_context.auto_load = node.value("auto_load", false);
+      out_context.auto_activate = node.value("auto_activate", false);
+      if (node.contains("priority")) {
+        out_context.default_priority = node.at("priority").get<int32_t>();
+      }
+      const auto& mappings = node.at("mappings");
+      for (size_t i = 0; i < mappings.size(); ++i) {
+        auto mapping = MappingSource {};
+        if (!parse_mapping(mappings[i],
+              path + ".mappings[" + std::to_string(i) + "]", mapping)) {
+          return false;
+        }
+        out_context.mappings.push_back(std::move(mapping));
+      }
+      return true;
+    };
+
+    bool parse_ok = true;
+    try {
+      if (is_standalone) {
+        parse_ok = parse_action(doc, "$");
+      } else {
+        if (doc.contains("actions")) {
+          for (size_t i = 0; i < doc["actions"].size(); ++i) {
+            parse_ok = parse_action(doc["actions"][i],
+                         "$.actions[" + std::to_string(i) + "]")
+              && parse_ok;
+          }
+        }
+
+        auto context_names = std::unordered_set<std::string> {};
+        const auto& contexts = doc.at("contexts");
+        for (size_t i = 0; i < contexts.size(); ++i) {
+          auto context = ContextSource {};
+          if (!parse_context(contexts[i],
+                "$.contexts[" + std::to_string(i) + "]", context)) {
+            parse_ok = false;
+            continue;
+          }
+          if (!context_names.insert(context.name).second) {
+            AddDiagnostic(session, request, ImportSeverity::kError,
+              "input.context.name_duplicate",
+              "Duplicate context name '" + context.name + "'",
+              "$.contexts[" + std::to_string(i) + "].name");
+            parse_ok = false;
+            continue;
+          }
+          out.context_sources.push_back(std::move(context));
+        }
+      }
+    } catch (const std::exception& ex) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "input.schema.contract_mismatch",
+        std::string(
+          "Schema validated input document failed invariant extraction: ")
+          + ex.what());
+      return false;
+    }
+
+    return parse_ok;
+  }
+
+  auto BuildInputContextAssets(
+    const std::vector<ContextSource>& context_sources,
+    const std::unordered_map<std::string, data::AssetKey>& local_action_keys,
+    const std::unordered_map<std::string, std::pair<data::AssetKey, uint8_t>>&
+      mounted_actions,
+    ImportSession& session, const ImportRequest& request)
+    -> std::optional<std::vector<BuiltContextAsset>>
+  {
+    const auto resolve_action_key
+      = [&](const std::string& action_name,
+          const std::string& object_path) -> std::optional<data::AssetKey> {
+      if (const auto it = local_action_keys.find(action_name);
+        it != local_action_keys.end()) {
+        return it->second;
+      }
+      if (const auto it = mounted_actions.find(action_name);
+        it != mounted_actions.end()) {
+        return it->second.first;
+      }
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "input.context.action_unresolved",
+        "Could not resolve action reference '" + action_name + "'",
+        object_path);
+      return std::nullopt;
+    };
+
+    auto built_contexts = std::vector<BuiltContextAsset> {};
+    built_contexts.reserve(context_sources.size());
+    for (const auto& source_ctx : context_sources) {
+      auto context = BuiltContextAsset {};
+      context.name = source_ctx.name;
+      context.flags = InputMappingContextFlags::kNone;
+      if (source_ctx.auto_load) {
+        context.flags |= InputMappingContextFlags::kAutoLoad;
+      }
+      if (source_ctx.auto_activate) {
+        context.flags |= InputMappingContextFlags::kAutoActivate;
+      }
+      context.default_priority = source_ctx.default_priority;
+      context.descriptor_relpath
+        = request.loose_cooked_layout.InputMappingContextDescriptorRelPath(
+          context.name);
+      context.virtual_path
+        = request.loose_cooked_layout.InputMappingContextVirtualPath(
+          context.name);
+      context.key = MakeAssetKey(request, context.virtual_path);
+
+      auto slot_offsets = std::unordered_map<std::string, uint32_t> {};
+      const auto intern_slot
+        = [&](const std::string& slot_name) -> std::optional<uint32_t> {
+        if (const auto it = slot_offsets.find(slot_name);
+          it != slot_offsets.end()) {
+          return it->second;
+        }
+        if (context.strings.size()
+          > (std::numeric_limits<uint32_t>::max)() - (slot_name.size() + 1U)) {
+          AddDiagnostic(session, request, ImportSeverity::kError,
+            "input.context.string_table_overflow",
+            "Input mapping context string table exceeded uint32 limits",
+            "contexts." + context.name);
+          return std::nullopt;
+        }
+        const auto offset = static_cast<uint32_t>(context.strings.size());
+        context.strings.insert(
+          context.strings.end(), slot_name.begin(), slot_name.end());
+        context.strings.push_back('\0');
+        slot_offsets.emplace(slot_name, offset);
+        return offset;
+      };
+
+      bool build_ok = true;
+      for (size_t i = 0; i < source_ctx.mappings.size(); ++i) {
+        const auto& source_mapping = source_ctx.mappings[i];
+        const auto mapping_path
+          = "contexts." + context.name + ".mappings[" + std::to_string(i) + "]";
+        const auto action_key = resolve_action_key(
+          source_mapping.action_name, mapping_path + ".action");
+        const auto slot_offset = intern_slot(source_mapping.slot_name);
+        if (!action_key.has_value() || !slot_offset.has_value()) {
+          build_ok = false;
+          break;
+        }
+
+        if (context.triggers.size() > (std::numeric_limits<uint32_t>::max)()) {
+          AddDiagnostic(session, request, ImportSeverity::kError,
+            "input.context.trigger_count_overflow",
+            "Trigger table exceeded uint32 limits", mapping_path);
+          build_ok = false;
+          break;
+        }
+        const auto trigger_start
+          = static_cast<uint32_t>(context.triggers.size());
+
+        for (size_t t = 0; t < source_mapping.triggers.size(); ++t) {
+          const auto& source_trigger = source_mapping.triggers[t];
+          const auto trigger_path
+            = mapping_path + ".triggers[" + std::to_string(t) + "]";
+          auto trigger = InputTriggerRecord {};
+          trigger.type = source_trigger.type;
+          trigger.behavior = source_trigger.behavior;
+          trigger.actuation_threshold = source_trigger.actuation_threshold;
+          if (source_trigger.has_hold_time) {
+            trigger.fparams[0] = source_trigger.hold_time;
+          }
+          if (source_trigger.has_interval) {
+            trigger.fparams[1] = source_trigger.interval;
+          }
+          if (source_trigger.linked_action_name.has_value()) {
+            const auto linked
+              = resolve_action_key(*source_trigger.linked_action_name,
+                trigger_path + ".chord_action");
+            if (!linked.has_value()) {
+              build_ok = false;
+              break;
+            }
+            trigger.linked_action_asset_key = *linked;
+          }
+
+          if (source_trigger.type == InputTriggerType::kCombo) {
+            trigger.aux_start_index
+              = static_cast<uint32_t>(context.trigger_aux.size());
+            trigger.aux_count
+              = static_cast<uint32_t>(source_trigger.aux.size());
+            for (size_t a = 0; a < source_trigger.aux.size(); ++a) {
+              const auto& source_aux = source_trigger.aux[a];
+              const auto aux_key = resolve_action_key(source_aux.action_name,
+                trigger_path + ".aux[" + std::to_string(a) + "].action");
+              if (!aux_key.has_value()) {
+                build_ok = false;
+                break;
+              }
+              context.trigger_aux.push_back(InputTriggerAuxRecord {
+                .action_asset_key = *aux_key,
+                .completion_states = source_aux.completion_states,
+                .time_to_complete_ns = source_aux.time_to_complete_ns,
+                .flags = 0,
+              });
+            }
+          }
+
+          if (!build_ok) {
+            break;
+          }
+          context.triggers.push_back(trigger);
+        }
+
+        if (!build_ok) {
+          break;
+        }
+
+        const auto trigger_end = static_cast<uint32_t>(context.triggers.size());
+        auto mapping = InputActionMappingRecord {};
+        mapping.action_asset_key = *action_key;
+        mapping.slot_name_offset = *slot_offset;
+        mapping.trigger_start_index = trigger_start;
+        mapping.trigger_count = trigger_end - trigger_start;
+        mapping.scale[0] = source_mapping.scale[0];
+        mapping.scale[1] = source_mapping.scale[1];
+        mapping.bias[0] = source_mapping.bias[0];
+        mapping.bias[1] = source_mapping.bias[1];
+        context.mappings.push_back(mapping);
+      }
+
+      if (!build_ok) {
+        return std::nullopt;
+      }
+      built_contexts.push_back(std::move(context));
+    }
+
+    return built_contexts;
+  }
+
+  auto EmitInputActions(const std::vector<DeclaredAction>& actions,
+    const bool hashing, ImportSession& session, const ImportRequest& request)
+    -> bool
+  {
+    for (const auto& action : actions) {
+      const auto bytes = SerializeAction(action, hashing);
+      if (!bytes.has_value()) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "input.asset.serialize_failed",
+          "Failed to serialize input action '" + action.name + "'");
+        return false;
+      }
+      try {
+        session.AssetEmitter().Emit(action.key, AssetType::kInputAction,
+          action.virtual_path, action.descriptor_relpath, *bytes);
+      } catch (const std::exception& ex) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "input.asset.descriptor_emit_failed", ex.what(),
+          "actions." + action.name);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  auto EmitInputContexts(const std::vector<BuiltContextAsset>& contexts,
+    const bool hashing, ImportSession& session, const ImportRequest& request)
+    -> bool
+  {
+    for (const auto& context : contexts) {
+      auto error = std::string {};
+      const auto bytes = SerializeContext(context, hashing, error);
+      if (!bytes.has_value()) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "input.context.serialize_failed", error, "contexts." + context.name);
+        return false;
+      }
+      try {
+        session.AssetEmitter().Emit(context.key,
+          AssetType::kInputMappingContext, context.virtual_path,
+          context.descriptor_relpath, *bytes);
+      } catch (const std::exception& ex) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "input.context.descriptor_emit_failed", ex.what(),
+          "contexts." + context.name);
+        return false;
+      }
+    }
+    return true;
+  }
+
 } // namespace
 
 InputImportPipeline::InputImportPipeline()
@@ -822,711 +1379,33 @@ auto InputImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     co_return false;
   }
 
-  if (!doc.is_object()) {
-    AddDiagnostic(*session, request, ImportSeverity::kError,
-      "input.import.parse_failed", "Input source root must be an object");
+  const auto document_kind = ValidateInputSchema(doc, *session, request);
+  if (!document_kind.has_value()) {
     co_return false;
   }
-
-  const bool is_primary = doc.contains("contexts");
-  const bool is_standalone
-    = !is_primary && doc.contains("name") && doc.contains("type");
-  if (!is_primary && !is_standalone) {
-    AddDiagnostic(*session, request, ImportSeverity::kError,
-      "input.import.unknown_document_structure",
-      "Input document is neither primary format nor standalone action format");
-    co_return false;
-  }
-
   const auto known_slots = BuildKnownSlotNames();
   const auto mounted_actions = BuildMountedActions(*session, request);
-
-  auto declared_actions = std::vector<DeclaredAction> {};
-  auto local_action_keys = std::unordered_map<std::string, data::AssetKey> {};
-  auto local_action_types = std::unordered_map<std::string, uint8_t> {};
-  auto context_sources = std::vector<ContextSource> {};
-
-  const auto parse_action
-    = [&](const json& node, const std::string& path) -> bool {
-    if (!node.is_object()) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.asset.action_invalid", "Action node must be an object", path);
-      return false;
-    }
-    if (!node.contains("name") || !node["name"].is_string()) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.asset.action_invalid", "Action requires string field 'name'",
-        path + ".name");
-      return false;
-    }
-    if (!node.contains("type") || !node["type"].is_string()) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.asset.action_invalid", "Action requires string field 'type'",
-        path + ".type");
-      return false;
-    }
-
-    auto action = DeclaredAction {};
-    action.name = node["name"].get<std::string>();
-    if (action.name.empty()) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.asset.action_invalid", "Action name cannot be empty",
-        path + ".name");
-      return false;
-    }
-
-    const auto parsed_type = ParseActionType(node["type"].get<std::string>());
-    if (!parsed_type.has_value()) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.asset.action_invalid",
-        "Unsupported action type '" + node["type"].get<std::string>() + "'",
-        path + ".type");
-      return false;
-    }
-    action.value_type = *parsed_type;
-
-    if (node.contains("consumes_input")) {
-      if (!node["consumes_input"].is_boolean()) {
-        AddDiagnostic(*session, request, ImportSeverity::kError,
-          "input.asset.action_invalid", "'consumes_input' must be boolean",
-          path + ".consumes_input");
-        return false;
-      }
-      action.consumes_input = node["consumes_input"].get<bool>();
-    }
-
-    if (local_action_types.contains(action.name)) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.asset.action_conflict",
-        "Duplicate action declaration '" + action.name + "'", path + ".name");
-      return false;
-    }
-
-    if (const auto it = mounted_actions.find(action.name);
-      it != mounted_actions.end() && it->second.second != action.value_type) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.asset.action_conflict",
-        "Action '" + action.name + "' conflicts with mounted action type",
-        path + ".type");
-      return false;
-    }
-
-    action.descriptor_relpath
-      = request.loose_cooked_layout.InputActionDescriptorRelPath(action.name);
-    action.virtual_path
-      = request.loose_cooked_layout.InputActionVirtualPath(action.name);
-    action.key = MakeAssetKey(request, action.virtual_path);
-    local_action_types.emplace(action.name, action.value_type);
-    local_action_keys.emplace(action.name, action.key);
-    declared_actions.push_back(std::move(action));
-    return true;
-  };
-
-  const auto parse_trigger_aux_array
-    = [&](const json& node, const std::string& path,
-        std::vector<TriggerAuxSource>& out) -> bool {
-    if (!node.is_array()) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.context.trigger_invalid", "Trigger aux must be an array", path);
-      return false;
-    }
-    bool ok = true;
-    for (size_t i = 0; i < node.size(); ++i) {
-      const auto& entry = node[i];
-      const auto entry_path = path + "[" + std::to_string(i) + "]";
-      bool entry_ok = true;
-      if (!entry.is_object()) {
-        AddDiagnostic(*session, request, ImportSeverity::kError,
-          "input.context.trigger_invalid", "Trigger aux entry must be object",
-          entry_path);
-        ok = false;
-        continue;
-      }
-      if (!entry.contains("action") || !entry["action"].is_string()) {
-        AddDiagnostic(*session, request, ImportSeverity::kError,
-          "input.context.trigger_invalid",
-          "Trigger aux requires string field 'action'", entry_path + ".action");
-        ok = false;
-        continue;
-      }
-
-      auto aux = TriggerAuxSource {};
-      aux.action_name = entry["action"].get<std::string>();
-      if (aux.action_name.empty()) {
-        AddDiagnostic(*session, request, ImportSeverity::kError,
-          "input.context.trigger_invalid", "Trigger aux action cannot be empty",
-          entry_path + ".action");
-        ok = false;
-        entry_ok = false;
-      }
-
-      if (entry.contains("completion_states")) {
-        if (!AsUint32(entry["completion_states"], aux.completion_states)) {
-          AddDiagnostic(*session, request, ImportSeverity::kError,
-            "input.context.trigger_invalid",
-            "'completion_states' must be uint32",
-            entry_path + ".completion_states");
-          ok = false;
-          entry_ok = false;
-        }
-      }
-
-      if (entry.contains("time_to_complete")) {
-        float seconds = 0.0F;
-        if (!AsFloat(entry["time_to_complete"], seconds)
-          || !SecondsToNanoseconds(seconds, aux.time_to_complete_ns)) {
-          AddDiagnostic(*session, request, ImportSeverity::kError,
-            "input.context.trigger_invalid",
-            "'time_to_complete' must be finite and >= 0",
-            entry_path + ".time_to_complete");
-          ok = false;
-          entry_ok = false;
-        }
-      }
-
-      if (entry_ok) {
-        out.push_back(std::move(aux));
-      }
-    }
-    return ok;
-  };
-
-  const auto parse_trigger = [&](const json& node, const std::string& path,
-                               TriggerSource& out) -> bool {
-    if (!node.is_object()) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.context.trigger_invalid", "Trigger must be an object", path);
-      return false;
-    }
-    if (!node.contains("type") || !node["type"].is_string()) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.context.trigger_invalid", "Trigger requires string field 'type'",
-        path + ".type");
-      return false;
-    }
-
-    const auto parsed_type = ParseTriggerType(node["type"].get<std::string>());
-    if (!parsed_type.has_value()) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.context.trigger_invalid",
-        "Unsupported trigger type '" + node["type"].get<std::string>() + "'",
-        path + ".type");
-      return false;
-    }
-    out.type = *parsed_type;
-
-    if (node.contains("behavior")) {
-      if (!node["behavior"].is_string()) {
-        AddDiagnostic(*session, request, ImportSeverity::kError,
-          "input.context.trigger_invalid", "'behavior' must be string",
-          path + ".behavior");
-        return false;
-      }
-      const auto parsed_behavior
-        = ParseTriggerBehavior(node["behavior"].get<std::string>());
-      if (!parsed_behavior.has_value()) {
-        AddDiagnostic(*session, request, ImportSeverity::kError,
-          "input.context.trigger_invalid",
-          "Unsupported trigger behavior '" + node["behavior"].get<std::string>()
-            + "'",
-          path + ".behavior");
-        return false;
-      }
-      out.behavior = *parsed_behavior;
-    }
-
-    if (node.contains("actuation_threshold")) {
-      if (!AsFloat(node["actuation_threshold"], out.actuation_threshold)) {
-        AddDiagnostic(*session, request, ImportSeverity::kError,
-          "input.context.trigger_invalid",
-          "'actuation_threshold' must be number",
-          path + ".actuation_threshold");
-        return false;
-      }
-    }
-    if (node.contains("hold_time")) {
-      out.has_hold_time
-        = AsFloat(node["hold_time"], out.hold_time) && out.hold_time >= 0.0F;
-      if (!out.has_hold_time) {
-        AddDiagnostic(*session, request, ImportSeverity::kError,
-          "input.context.trigger_invalid", "'hold_time' must be >= 0",
-          path + ".hold_time");
-        return false;
-      }
-    }
-    if (node.contains("interval")) {
-      out.has_interval
-        = AsFloat(node["interval"], out.interval) && out.interval >= 0.0F;
-      if (!out.has_interval) {
-        AddDiagnostic(*session, request, ImportSeverity::kError,
-          "input.context.trigger_invalid", "'interval' must be >= 0",
-          path + ".interval");
-        return false;
-      }
-    }
-    if (node.contains("chord_action")) {
-      if (!node["chord_action"].is_string()) {
-        AddDiagnostic(*session, request, ImportSeverity::kError,
-          "input.context.trigger_invalid", "'chord_action' must be string",
-          path + ".chord_action");
-        return false;
-      }
-      out.linked_action_name = node["chord_action"].get<std::string>();
-    }
-    if (node.contains("combo_actions")) {
-      if (!parse_trigger_aux_array(
-            node["combo_actions"], path + ".combo_actions", out.aux)) {
-        return false;
-      }
-    }
-    if (node.contains("aux")) {
-      if (!parse_trigger_aux_array(node["aux"], path + ".aux", out.aux)) {
-        return false;
-      }
-    }
-    if (out.type != InputTriggerType::kCombo && !out.aux.empty()) {
-      AddDiagnostic(*session, request, ImportSeverity::kWarning,
-        "input.context.trigger_aux_ignored",
-        "Aux records are ignored for non-combo triggers", path);
-      out.aux.clear();
-    }
-    return true;
-  };
-
-  const auto parse_mapping = [&](const json& node, const std::string& path,
-                               MappingSource& out) -> bool {
-    if (!node.is_object()) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.context.mapping_invalid", "Mapping must be an object", path);
-      return false;
-    }
-    if (!node.contains("action") || !node["action"].is_string()) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.context.mapping_invalid", "Mapping requires string 'action'",
-        path + ".action");
-      return false;
-    }
-    if (!node.contains("slot") || !node["slot"].is_string()) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.context.mapping_invalid", "Mapping requires string 'slot'",
-        path + ".slot");
-      return false;
-    }
-
-    out.action_name = node["action"].get<std::string>();
-    const auto authored_slot_name = node["slot"].get<std::string>();
-    const auto canonical_slot_name
-      = CanonicalizeInputSlotName(authored_slot_name);
-    out.slot_name = std::string(canonical_slot_name);
-    if (out.action_name.empty() || authored_slot_name.empty()) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.context.mapping_invalid", "Mapping action/slot cannot be empty",
-        path);
-      return false;
-    }
-    if (canonical_slot_name != authored_slot_name) {
-      AddDiagnostic(*session, request, ImportSeverity::kInfo,
-        "input.context.slot_alias_normalized",
-        "Normalized slot alias '" + authored_slot_name + "' to '"
-          + out.slot_name + "'",
-        path + ".slot");
-    }
-    if (!known_slots.contains(out.slot_name)) {
-      AddDiagnostic(*session, request, ImportSeverity::kWarning,
-        "input.context.slot_unknown",
-        "Unknown slot '" + authored_slot_name + "' after normalization to '"
-          + out.slot_name + "'; keeping authored value",
-        path + ".slot");
-    }
-
-    if (node.contains("scale")) {
-      if (!node["scale"].is_array() || node["scale"].size() != 2
-        || !AsFloat(node["scale"][0], out.scale[0])
-        || !AsFloat(node["scale"][1], out.scale[1])) {
-        AddDiagnostic(*session, request, ImportSeverity::kError,
-          "input.context.mapping_invalid", "'scale' must be [x, y]",
-          path + ".scale");
-        return false;
-      }
-    }
-    if (node.contains("bias")) {
-      if (!node["bias"].is_array() || node["bias"].size() != 2
-        || !AsFloat(node["bias"][0], out.bias[0])
-        || !AsFloat(node["bias"][1], out.bias[1])) {
-        AddDiagnostic(*session, request, ImportSeverity::kError,
-          "input.context.mapping_invalid", "'bias' must be [x, y]",
-          path + ".bias");
-        return false;
-      }
-    }
-
-    const bool has_trigger = node.contains("trigger");
-    const bool has_triggers = node.contains("triggers");
-    if (has_trigger && has_triggers) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.context.trigger_ambiguous",
-        "Fields 'trigger' and 'triggers' are mutually exclusive", path);
-      return false;
-    }
-
-    if (has_trigger) {
-      if (!node["trigger"].is_string()) {
-        AddDiagnostic(*session, request, ImportSeverity::kError,
-          "input.context.trigger_invalid", "'trigger' must be string",
-          path + ".trigger");
-        return false;
-      }
-      const auto type = ParseTriggerType(node["trigger"].get<std::string>());
-      if (!type.has_value()) {
-        AddDiagnostic(*session, request, ImportSeverity::kError,
-          "input.context.trigger_invalid",
-          "Unknown trigger shorthand '" + node["trigger"].get<std::string>()
-            + "'",
-          path + ".trigger");
-        return false;
-      }
-      out.triggers.push_back(TriggerSource {
-        .type = *type,
-        .behavior = InputTriggerBehavior::kImplicit,
-        .actuation_threshold = 0.5F,
-      });
-    } else if (has_triggers) {
-      if (!node["triggers"].is_array()) {
-        AddDiagnostic(*session, request, ImportSeverity::kError,
-          "input.context.trigger_invalid", "'triggers' must be an array",
-          path + ".triggers");
-        return false;
-      }
-      for (size_t i = 0; i < node["triggers"].size(); ++i) {
-        auto trigger = TriggerSource {};
-        if (!parse_trigger(node["triggers"][i],
-              path + ".triggers[" + std::to_string(i) + "]", trigger)) {
-          return false;
-        }
-        out.triggers.push_back(std::move(trigger));
-      }
-    }
-    return true;
-  };
-
-  const auto parse_context = [&](const json& node, const std::string& path,
-                               ContextSource& out) -> bool {
-    if (!node.is_object()) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.context.invalid", "Context must be an object", path);
-      return false;
-    }
-    if (!node.contains("name") || !node["name"].is_string()) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.context.invalid", "Context requires string 'name'",
-        path + ".name");
-      return false;
-    }
-    out.name = node["name"].get<std::string>();
-    if (out.name.empty()) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.context.invalid", "Context name cannot be empty",
-        path + ".name");
-      return false;
-    }
-    if (node.contains("auto_load")) {
-      if (!node["auto_load"].is_boolean()) {
-        AddDiagnostic(*session, request, ImportSeverity::kError,
-          "input.context.invalid", "'auto_load' must be boolean",
-          path + ".auto_load");
-        return false;
-      }
-      out.auto_load = node["auto_load"].get<bool>();
-    }
-    if (node.contains("auto_activate")) {
-      if (!node["auto_activate"].is_boolean()) {
-        AddDiagnostic(*session, request, ImportSeverity::kError,
-          "input.context.invalid", "'auto_activate' must be boolean",
-          path + ".auto_activate");
-        return false;
-      }
-      out.auto_activate = node["auto_activate"].get<bool>();
-    }
-    if (node.contains("priority")
-      && !AsInt32(node["priority"], out.default_priority)) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.context.invalid", "'priority' must be int32",
-        path + ".priority");
-      return false;
-    }
-    if (out.auto_activate && !out.auto_load) {
-      AddDiagnostic(*session, request, ImportSeverity::kWarning,
-        "input.context.flags_invalid",
-        "auto_activate=true requires auto_load=true; forcing auto_load", path);
-      out.auto_load = true;
-    }
-    if (!node.contains("mappings") || !node["mappings"].is_array()) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.context.invalid", "Context requires array field 'mappings'",
-        path + ".mappings");
-      return false;
-    }
-    for (size_t i = 0; i < node["mappings"].size(); ++i) {
-      auto mapping = MappingSource {};
-      if (!parse_mapping(node["mappings"][i],
-            path + ".mappings[" + std::to_string(i) + "]", mapping)) {
-        return false;
-      }
-      out.mappings.push_back(std::move(mapping));
-    }
-    return true;
-  };
-
-  bool parse_ok = true;
-  if (is_standalone) {
-    parse_ok = parse_action(doc, "$");
-  } else {
-    if (doc.contains("actions")) {
-      if (!doc["actions"].is_array()) {
-        AddDiagnostic(*session, request, ImportSeverity::kError,
-          "input.asset.action_invalid", "'actions' must be an array",
-          "$.actions");
-        parse_ok = false;
-      } else {
-        for (size_t i = 0; i < doc["actions"].size(); ++i) {
-          parse_ok = parse_action(doc["actions"][i],
-                       "$.actions[" + std::to_string(i) + "]")
-            && parse_ok;
-        }
-      }
-    }
-
-    if (!doc.contains("contexts") || !doc["contexts"].is_array()) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.context.invalid",
-        "Primary input format requires array 'contexts'", "$.contexts");
-      parse_ok = false;
-    } else if (doc["contexts"].empty()) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.context.invalid",
-        "Primary input format requires at least one context", "$.contexts");
-      parse_ok = false;
-    } else {
-      auto context_names = std::unordered_set<std::string> {};
-      for (size_t i = 0; i < doc["contexts"].size(); ++i) {
-        auto context = ContextSource {};
-        if (!parse_context(doc["contexts"][i],
-              "$.contexts[" + std::to_string(i) + "]", context)) {
-          parse_ok = false;
-          continue;
-        }
-        if (!context_names.insert(context.name).second) {
-          AddDiagnostic(*session, request, ImportSeverity::kError,
-            "input.context.name_duplicate",
-            "Duplicate context name '" + context.name + "'",
-            "$.contexts[" + std::to_string(i) + "].name");
-          parse_ok = false;
-          continue;
-        }
-        context_sources.push_back(std::move(context));
-      }
-    }
-  }
-
-  if (!parse_ok) {
+  auto parsed_source = ParsedInputSource {};
+  if (!ParseInputSourceDocument(doc,
+        *document_kind == InputDocumentKind::kStandaloneAction, *session,
+        request, known_slots, mounted_actions, parsed_source)) {
     co_return false;
   }
 
-  const auto resolve_action_key
-    = [&](const std::string& action_name,
-        const std::string& object_path) -> std::optional<data::AssetKey> {
-    if (const auto it = local_action_keys.find(action_name);
-      it != local_action_keys.end()) {
-      return it->second;
-    }
-    if (const auto it = mounted_actions.find(action_name);
-      it != mounted_actions.end()) {
-      return it->second.first;
-    }
-    AddDiagnostic(*session, request, ImportSeverity::kError,
-      "input.context.action_unresolved",
-      "Could not resolve action reference '" + action_name + "'", object_path);
-    return std::nullopt;
-  };
-
-  auto built_contexts = std::vector<BuiltContextAsset> {};
-  built_contexts.reserve(context_sources.size());
-  for (const auto& source_ctx : context_sources) {
-    auto context = BuiltContextAsset {};
-    context.name = source_ctx.name;
-    context.flags = InputMappingContextFlags::kNone;
-    if (source_ctx.auto_load) {
-      context.flags |= InputMappingContextFlags::kAutoLoad;
-    }
-    if (source_ctx.auto_activate) {
-      context.flags |= InputMappingContextFlags::kAutoActivate;
-    }
-    context.default_priority = source_ctx.default_priority;
-    context.descriptor_relpath
-      = request.loose_cooked_layout.InputMappingContextDescriptorRelPath(
-        context.name);
-    context.virtual_path
-      = request.loose_cooked_layout.InputMappingContextVirtualPath(
-        context.name);
-    context.key = MakeAssetKey(request, context.virtual_path);
-
-    auto slot_offsets = std::unordered_map<std::string, uint32_t> {};
-    const auto intern_slot
-      = [&](const std::string& slot_name) -> std::optional<uint32_t> {
-      if (const auto it = slot_offsets.find(slot_name);
-        it != slot_offsets.end()) {
-        return it->second;
-      }
-      if (context.strings.size()
-        > (std::numeric_limits<uint32_t>::max)() - (slot_name.size() + 1U)) {
-        AddDiagnostic(*session, request, ImportSeverity::kError,
-          "input.context.string_table_overflow",
-          "Input mapping context string table exceeded uint32 limits",
-          "contexts." + context.name);
-        return std::nullopt;
-      }
-      const auto offset = static_cast<uint32_t>(context.strings.size());
-      context.strings.insert(
-        context.strings.end(), slot_name.begin(), slot_name.end());
-      context.strings.push_back('\0');
-      slot_offsets.emplace(slot_name, offset);
-      return offset;
-    };
-
-    bool build_ok = true;
-    for (size_t i = 0; i < source_ctx.mappings.size(); ++i) {
-      const auto& source_mapping = source_ctx.mappings[i];
-      const auto mapping_path
-        = "contexts." + context.name + ".mappings[" + std::to_string(i) + "]";
-      const auto action_key = resolve_action_key(
-        source_mapping.action_name, mapping_path + ".action");
-      const auto slot_offset = intern_slot(source_mapping.slot_name);
-      if (!action_key.has_value() || !slot_offset.has_value()) {
-        build_ok = false;
-        break;
-      }
-
-      if (context.triggers.size() > (std::numeric_limits<uint32_t>::max)()) {
-        AddDiagnostic(*session, request, ImportSeverity::kError,
-          "input.context.trigger_count_overflow",
-          "Trigger table exceeded uint32 limits", mapping_path);
-        build_ok = false;
-        break;
-      }
-      const auto trigger_start = static_cast<uint32_t>(context.triggers.size());
-
-      for (size_t t = 0; t < source_mapping.triggers.size(); ++t) {
-        const auto& source_trigger = source_mapping.triggers[t];
-        const auto trigger_path
-          = mapping_path + ".triggers[" + std::to_string(t) + "]";
-        auto trigger = InputTriggerRecord {};
-        trigger.type = source_trigger.type;
-        trigger.behavior = source_trigger.behavior;
-        trigger.actuation_threshold = source_trigger.actuation_threshold;
-        if (source_trigger.has_hold_time) {
-          trigger.fparams[0] = source_trigger.hold_time;
-        }
-        if (source_trigger.has_interval) {
-          trigger.fparams[1] = source_trigger.interval;
-        }
-        if (source_trigger.linked_action_name.has_value()) {
-          const auto linked = resolve_action_key(
-            *source_trigger.linked_action_name, trigger_path + ".chord_action");
-          if (!linked.has_value()) {
-            build_ok = false;
-            break;
-          }
-          trigger.linked_action_asset_key = *linked;
-        }
-
-        if (source_trigger.type == InputTriggerType::kCombo) {
-          trigger.aux_start_index
-            = static_cast<uint32_t>(context.trigger_aux.size());
-          trigger.aux_count = static_cast<uint32_t>(source_trigger.aux.size());
-          for (size_t a = 0; a < source_trigger.aux.size(); ++a) {
-            const auto& source_aux = source_trigger.aux[a];
-            const auto aux_key = resolve_action_key(source_aux.action_name,
-              trigger_path + ".aux[" + std::to_string(a) + "].action");
-            if (!aux_key.has_value()) {
-              build_ok = false;
-              break;
-            }
-            context.trigger_aux.push_back(InputTriggerAuxRecord {
-              .action_asset_key = *aux_key,
-              .completion_states = source_aux.completion_states,
-              .time_to_complete_ns = source_aux.time_to_complete_ns,
-              .flags = 0,
-            });
-          }
-        }
-
-        if (!build_ok) {
-          break;
-        }
-        context.triggers.push_back(trigger);
-      }
-
-      if (!build_ok) {
-        break;
-      }
-
-      const auto trigger_end = static_cast<uint32_t>(context.triggers.size());
-      auto mapping = InputActionMappingRecord {};
-      mapping.action_asset_key = *action_key;
-      mapping.slot_name_offset = *slot_offset;
-      mapping.trigger_start_index = trigger_start;
-      mapping.trigger_count = trigger_end - trigger_start;
-      mapping.scale[0] = source_mapping.scale[0];
-      mapping.scale[1] = source_mapping.scale[1];
-      mapping.bias[0] = source_mapping.bias[0];
-      mapping.bias[1] = source_mapping.bias[1];
-      context.mappings.push_back(mapping);
-    }
-
-    if (!build_ok) {
-      co_return false;
-    }
-    built_contexts.push_back(std::move(context));
+  auto built_contexts = BuildInputContextAssets(parsed_source.context_sources,
+    parsed_source.local_action_keys, mounted_actions, *session, request);
+  if (!built_contexts.has_value()) {
+    co_return false;
   }
 
   const auto hashing
     = EffectiveContentHashingEnabled(request.options.with_content_hashing);
-  for (const auto& action : declared_actions) {
-    const auto bytes = SerializeAction(action, hashing);
-    if (!bytes.has_value()) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.asset.serialize_failed",
-        "Failed to serialize input action '" + action.name + "'");
-      co_return false;
-    }
-    try {
-      session->AssetEmitter().Emit(action.key, AssetType::kInputAction,
-        action.virtual_path, action.descriptor_relpath, *bytes);
-    } catch (const std::exception& ex) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.asset.descriptor_emit_failed", ex.what(),
-        "actions." + action.name);
-      co_return false;
-    }
+  if (!EmitInputActions(
+        parsed_source.declared_actions, hashing, *session, request)) {
+    co_return false;
   }
-
-  for (const auto& context : built_contexts) {
-    auto error = std::string {};
-    const auto bytes = SerializeContext(context, hashing, error);
-    if (!bytes.has_value()) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.context.serialize_failed", error, "contexts." + context.name);
-      co_return false;
-    }
-    try {
-      session->AssetEmitter().Emit(context.key, AssetType::kInputMappingContext,
-        context.virtual_path, context.descriptor_relpath, *bytes);
-    } catch (const std::exception& ex) {
-      AddDiagnostic(*session, request, ImportSeverity::kError,
-        "input.context.descriptor_emit_failed", ex.what(),
-        "contexts." + context.name);
-      co_return false;
-    }
+  if (!EmitInputContexts(*built_contexts, hashing, *session, request)) {
+    co_return false;
   }
 
   co_return !session->HasErrors();
