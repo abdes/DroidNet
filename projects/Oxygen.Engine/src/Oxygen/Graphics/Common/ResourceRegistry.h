@@ -902,8 +902,8 @@ public:
   {
     auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
     return FindShaderVisibleIndex(
-      NativeResource { const_cast<Resource*>(&resource),
-        Resource::ClassTypeId() },
+      NativeResource {
+        const_cast<Resource*>(&resource), Resource::ClassTypeId() },
       key);
   }
 
@@ -1210,9 +1210,8 @@ private:
     const NativeResource& resource, size_t key_hash) const -> NativeView;
   // Find the shader-visible index (if any) for a registered view description
   // associated with `resource` and `key_hash`.
-  OXGN_GFX_NDAPI auto FindShaderVisibleIndex(
-    const NativeResource& resource, size_t key_hash) const
-    -> std::optional<bindless::ShaderVisibleIndex>;
+  OXGN_GFX_NDAPI auto FindShaderVisibleIndex(const NativeResource& resource,
+    size_t key_hash) const -> std::optional<bindless::ShaderVisibleIndex>;
 
   // Thread safety
   mutable std::mutex registry_mutex_;
