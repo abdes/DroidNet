@@ -10,7 +10,8 @@
 
 namespace oxygen::content::import {
 
-inline constexpr std::string_view kImportManifestSchema = R"({
+inline constexpr std::string_view kImportManifestSchema
+  = R"({
 "$schema": "http://json-schema.org/draft-07/schema#",
 "title": "Oxygen Import Manifest",
 "type": "object",
@@ -69,6 +70,9 @@ inline constexpr std::string_view kImportManifestSchema = R"({
     "jobs"
 ],
 "definitions": {
+)"
+    // definitions: pipeline scaffolding
+    R"(
     "concurrency_item": {
         "type": "object",
         "properties": {
@@ -148,6 +152,9 @@ inline constexpr std::string_view kImportManifestSchema = R"({
         },
         "additionalProperties": false
     },
+)"
+    // definitions: texture settings
+    R"(
     "texture_settings": {
         "type": "object",
         "properties": {
@@ -261,6 +268,9 @@ inline constexpr std::string_view kImportManifestSchema = R"({
         },
         "additionalProperties": false
     },
+)"
+    // definitions: scene settings
+    R"(
     "scene_settings": {
         "type": "object",
         "properties": {
@@ -347,7 +357,8 @@ inline constexpr std::string_view kImportManifestSchema = R"({
         "additionalProperties": false
     },
 )"
-                                                          R"(
+    // definitions: script asset settings
+    R"(
     "script_settings": {
         "type": "object",
         "properties": {
@@ -375,6 +386,9 @@ inline constexpr std::string_view kImportManifestSchema = R"({
         },
         "additionalProperties": false
     },
+)"
+    // definitions: scripting sidecar settings
+    R"(
     "scripting_sidecar_settings": {
         "type": "object",
         "properties": {
@@ -396,6 +410,9 @@ inline constexpr std::string_view kImportManifestSchema = R"({
         },
         "additionalProperties": false
     },
+)"
+    // definitions: shared per-job settings
+    R"(
     "job_settings": {
         "type": "object",
         "properties": {
@@ -606,6 +623,9 @@ inline constexpr std::string_view kImportManifestSchema = R"({
         },
         "additionalProperties": false
     },
+)"
+    // definitions: scripting enums
+    R"(
     "script_compile_mode": {
         "enum": [
             "debug",
@@ -619,7 +639,8 @@ inline constexpr std::string_view kImportManifestSchema = R"({
         ]
     },
 )"
-                                                          R"(
+    // definitions: texture enums and schema tail
+    R"(
     "texture_intent": {
         "enum": [
             "albedo",
