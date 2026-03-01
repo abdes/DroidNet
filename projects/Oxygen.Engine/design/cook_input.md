@@ -1,5 +1,16 @@
 # Input Cooking Architecture Specification (Job/Pipeline Locked)
 
+## 0. Status Tracking
+
+This document is the target architecture contract. Live implementation progress and explicit missing work are tracked in `design/cook_input_impl.md` (Section 4.1 and Section 11).
+
+Current implementation status snapshot:
+
+1. Implemented: input request contracts, `InputImportJob`, `InputImportPipeline`, async routing, manifest `type: "input"` integration, and ImportTool input command wiring.
+2. Implemented: runtime `EnumerateMountedInputContexts()` + `HydrateInputContext()` APIs, including trigger hydration, slot alias normalization, and mounted-context metadata extraction.
+3. Implemented: scene-binding infrastructure removal in PakGen/tooling/runtime (`INPT` and `input_context_bindings` paths removed) and shipped input JSON schemas (`src/Oxygen/Cooker/Import/Schemas/oxygen.input*.schema.json`) with schema validation tests.
+4. Verification caveat: by execution policy, no local project build was run during this implementation pass.
+
 ## 1. Scope
 
 This specification defines the authoritative architecture for importing, cooking, packaging, and runtime bootstrap of input assets in Oxygen.
@@ -29,9 +40,9 @@ Out of scope:
 7. Input import execution must use one pipeline class only: `InputImportPipeline`.
 8. Mapping-context imports must carry explicit dependencies to the input actions they require.
 
-## 3. Repository Analysis Snapshot (Current State)
+## 3. Repository Analysis Snapshot (Pre-Implementation Baseline)
 
-The following facts are from current code:
+The following facts were captured before implementation started and are retained as baseline context:
 
 | Fact | Evidence |
 | --- | --- |
@@ -73,7 +84,7 @@ flowchart LR
 
   subgraph Runtime
     E[ContentSourceRegistry]
-    F[InputBootstrapService]
+    F[EnumerateMountedInputContexts + HydrateInputContext]
     G[InputSystem]
   end
 
@@ -246,7 +257,7 @@ Schema target files:
 
 1. `src/Oxygen/Cooker/Import/ImportManifest.h`
 2. `src/Oxygen/Cooker/Import/ImportManifest.cpp`
-3. `src/Oxygen/Cooker/Import/Schemas/import-manifest.schema.json`
+3. `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
 4. Generated at build time:
    `out/<build>/generated/Oxygen/Cooker/Import/Internal/ImportManifest_schema.h`
 
@@ -414,16 +425,16 @@ Manifest example (split files — vehicle references actions from main input fil
 
 Source files use specific extensions for automatic schema association:
 
-1. `*.input.json` — primary format (actions + contexts). Associated with `oxygen.input.v1.schema.json`.
-2. `*.input-action.json` — standalone action (rare). Associated with `oxygen.input-action.v1.schema.json`.
+1. `*.input.json` — primary format (actions + contexts). Associated with `oxygen.input.schema.json`.
+2. `*.input-action.json` — standalone action (rare). Associated with `oxygen.input-action.schema.json`.
 
 Editor workspace settings (VSCode example):
 
 ```json
 {
   "json.schemas": [
-    { "fileMatch": ["*.input.json"],        "url": "./schemas/oxygen.input.v1.schema.json" },
-    { "fileMatch": ["*.input-action.json"], "url": "./schemas/oxygen.input-action.v1.schema.json" }
+    { "fileMatch": ["*.input.json"],        "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json" },
+    { "fileMatch": ["*.input-action.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json" }
   ]
 }
 ```
@@ -438,7 +449,7 @@ Canonical document (`Move.input-action.json`):
 
 ```json
 {
-  "$schema": "./schemas/oxygen.input-action.v1.schema.json",
+  "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json",
   "name": "Move",
   "type": "axis2d",
   "consumes_input": true
@@ -468,7 +479,7 @@ Canonical document (`PlayerInput.input.json`):
 
 ```json
 {
-  "$schema": "./schemas/oxygen.input.v1.schema.json",
+  "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json",
 
   "actions": [
     { "name": "Move",   "type": "axis2d" },
@@ -723,8 +734,8 @@ The engine ships JSON Schema files that provide real-time editor support:
 
 ### 7.5.1 Shipped Schema Files
 
-1. `schemas/oxygen.input.v1.schema.json` — primary format (actions + contexts).
-2. `schemas/oxygen.input-action.v1.schema.json` — standalone action format.
+1. `src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json` — primary format (actions + contexts).
+2. `src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json` — standalone action format.
 
 Schema features:
 
@@ -740,13 +751,13 @@ Schema features:
 Schema files are shipped in the engine's `schemas/` directory at the repository root. Source files reference them via relative path:
 
 ```json
-{ "$schema": "./schemas/oxygen.input.v1.schema.json" }
+{ "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json" }
 ```
 
 For projects where content is in a subdirectory, adjust the relative path accordingly:
 
 ```json
-{ "$schema": "../../schemas/oxygen.input.v1.schema.json" }
+{ "$schema": "../../src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json" }
 ```
 
 Alternatively, use workspace-level settings for automatic association (Section 7.4.1) and omit `$schema` from source files entirely.

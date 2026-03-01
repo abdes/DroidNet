@@ -43,6 +43,8 @@ add_executable(
   "GltfCommand.cpp"
   "GltfCommand.h"
   "ImportCommand.h"
+  "InputCommand.cpp"
+  "InputCommand.h"
   "ImportRunner.cpp"
   "ImportRunner.h"
   "MessageWriter.h"

@@ -279,7 +279,8 @@ auto BuildWorkItemsJson(const JobProgressTrace& trace,
 auto IsCanceledReport(const ImportReport& report) -> bool
 {
   for (const auto& diag : report.diagnostics) {
-    if (diag.code == "import.canceled") {
+    if (diag.code == "import.canceled"
+      || diag.code == "input.import.skipped_predecessor_failed") {
       return true;
     }
   }

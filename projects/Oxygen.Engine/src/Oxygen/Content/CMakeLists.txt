@@ -62,6 +62,7 @@ set(
   "ResourceTable.h"
   "ResourceTypeList.h"
   "SourceToken.h"
+  "InputContextHydration.h"
   "IAssetLoader.h"
   "Layout.h"
   "LooseCookedIndex.h"
@@ -95,6 +96,7 @@ set(
   "Internal/ScriptHotReloadService.cpp"
   "Internal/DependencyCollector.h"
   "Internal/IContentSource.h"
+  "Internal/InputContextHydration.cpp"
   "Internal/InternalResourceKey.h"
   "Internal/LooseCookedIndexImpl.h"
   "Internal/LooseCookedIndexImpl.cpp"
@@ -155,6 +157,7 @@ target_link_libraries(
     oxygen::data
   PRIVATE
     glm::glm
+    oxygen::input
 )
 
 # ------------------------------------------------------------------------------

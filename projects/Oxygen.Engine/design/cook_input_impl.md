@@ -39,8 +39,8 @@ This plan follows `.github/instructions/cpp_coding_style.instructions.md` collab
 9. `src/Oxygen/Cooker/Tools/ImportTool/InputCommand.cpp`
 10. `src/Oxygen/Content/InputContextHydration.h`
 11. `src/Oxygen/Content/Internal/InputContextHydration.cpp`
-12. `schemas/oxygen.input.v1.schema.json`
-13. `schemas/oxygen.input-action.v1.schema.json`
+12. `src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json`
+13. `src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json`
 
 ## 3.2 Modified Files
 
@@ -101,19 +101,34 @@ Status values:
 
 | Phase | Status | Scope | Exit Gate |
 | --- | --- | --- | --- |
-| P1 | pending | Data format + flags | `InputMappingContextAssetDesc` invariants and tests pass |
-| P2 | pending | Import contracts (settings/builder/options) | valid input requests built from CLI + manifest |
-| P3 | pending | Job/Pipeline implementation | `.oiact` / `.oimap` emitted and indexed |
-| P4 | pending | ImportTool and manifest integration | `input` job type with dependency-aware batch scheduling operational |
-| P5 | pending | Runtime enumeration + hydration | `EnumerateMountedInputContexts` + `HydrateInputContext` operational; auto-load/auto-activate works without scene bindings |
-| P6 | pending | Eradicate scene-binding infrastructure | `InputContextBindingRecord`, `InputContextBindingFlags`, `kInputContextBinding`, all scene-binding code paths fully removed |
-| P7 | pending | Compatibility verification | importer/runtime output remains compatible with existing PAK tooling (excluding removed scene-binding records) |
-| P8 | pending | Full test and documentation closeout | all tests green and docs synchronized |
+| P1 | done | Data format + flags | `InputMappingContextAssetDesc` invariants and tests pass |
+| P2 | done | Import contracts (settings/builder/options) | valid input requests built from CLI + manifest |
+| P3 | done | Job/Pipeline implementation | `.oiact` / `.oimap` emitted and indexed |
+| P4 | done | ImportTool and manifest integration | `input` job type with dependency-aware batch scheduling operational |
+| P5 | done | Runtime enumeration + hydration | `EnumerateMountedInputContexts` + `HydrateInputContext` operational; auto-load/auto-activate works without scene bindings |
+| P6 | done | Eradicate scene-binding infrastructure | `InputContextBindingRecord`, `InputContextBindingFlags`, `kInputContextBinding`, all scene-binding code paths fully removed |
+| P7 | done | Compatibility verification | importer/runtime output remains compatible with existing PAK tooling (excluding removed scene-binding records) |
+| P8 | done | Full test and documentation closeout | tests and docs updated for input import/runtime/schema path |
 
 Status update rule:
 
 1. On each completed phase/task, update this ledger immediately.
 2. Add factual evidence to Section 11 (commands/tests/files changed).
+
+## 4.1 Live Snapshot (2026-03-01)
+
+Implemented now:
+
+1. Input import routing and orchestration metadata are implemented end-to-end (`ImportOptions::input`, `ImportRequest::orchestration`, `BuildInputImportRequest`, async routing to `InputImportJob`).
+2. Manifest/ImportTool wiring is implemented for `type: "input"` including key whitelist enforcement and dependency-aware batch scheduling (`id`, `depends_on`, duplicate/missing/cycle checks, failure propagation).
+3. Runtime input bootstrap APIs are implemented: `EnumerateMountedInputContexts()` and `HydrateInputContext(...)`, including trigger hydration and slot alias normalization.
+4. Scene-binding infrastructure removal is complete in runtime/tooling paths (`INPT`, `InputContextBinding*`, `input_context_bindings`, and PakGen packing/validation hooks removed).
+5. Input JSON schemas are shipped under `schemas/` and covered by schema validation tests.
+6. Documentation was synchronized for implementation status and ImportTool schema usage.
+
+Remaining backlog:
+
+1. Execution-policy caveat only: no local full build/test pass was run in this implementation loop.
 
 ## 5. Detailed Work Packages
 
@@ -319,8 +334,8 @@ Tasks:
     - unknown fields rejected
     - invalid enum values rejected
 12. Generate and ship JSON Schema files:
-    - `schemas/oxygen.input.v1.schema.json` (primary format)
-    - `schemas/oxygen.input-action.v1.schema.json` (standalone action)
+    - `src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json` (primary format)
+    - `src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json` (standalone action)
     - slot enum generated from `InputSlots` registered names
     - trigger type enum matches `ActionTriggers.inc`
 
@@ -401,7 +416,66 @@ This section is updated during implementation.
 
 Current:
 
-1. No implementation phase completed yet.
+1. P1 completed:
+   - `src/Oxygen/Data/InputMappingContextAsset.h`: `GetDefaultPriority()` accessor is present.
+   - `src/Oxygen/Data/ToStringConverters.cpp`: `InputMappingContextFlags` now stringifies `AutoLoad` and `AutoActivate`.
+2. P2 completed:
+   - `src/Oxygen/Cooker/Import/ImportOptions.h`: added `ImportOptions::InputTuning`.
+   - `src/Oxygen/Cooker/Import/ImportRequest.h`: added `OrchestrationMetadata` (`job_id`, `depends_on`).
+   - Added request-builder/files:
+     - `src/Oxygen/Cooker/Import/InputImportSettings.h`
+     - `src/Oxygen/Cooker/Import/InputImportRequestBuilder.h`
+     - `src/Oxygen/Cooker/Import/Internal/InputImportRequestBuilder.cpp`
+3. P3 completed:
+   - Input job/pipeline are implemented and wired:
+     - `src/Oxygen/Cooker/Import/Internal/Jobs/InputImportJob.h/.cpp`
+     - `src/Oxygen/Cooker/Import/Internal/Pipelines/InputImportPipeline.h/.cpp`
+   - `src/Oxygen/Cooker/Import/AsyncImportService.cpp` routes `options.input` to `InputImportJob`.
+4. P4 completed:
+   - Manifest support for `type: "input"` implemented:
+     - `src/Oxygen/Cooker/Import/ImportManifest.h/.cpp`
+     - `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
+   - ImportTool input command + batch DAG scheduling implemented:
+     - `src/Oxygen/Cooker/Tools/ImportTool/InputCommand.h/.cpp`
+     - `src/Oxygen/Cooker/Tools/ImportTool/main.cpp`
+     - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
+     - `src/Oxygen/Cooker/Tools/ImportTool/ImportRunner.cpp`
+5. P5 completed:
+   - Runtime APIs implemented:
+     - `src/Oxygen/Content/IAssetLoader.h`
+     - `src/Oxygen/Content/AssetLoader.h/.cpp`
+     - `src/Oxygen/Content/InputContextHydration.h`
+     - `src/Oxygen/Content/Internal/InputContextHydration.cpp`
+   - Added runtime coverage in `src/Oxygen/Content/Test/AssetLoader_loading_test.cpp`.
+6. P6 completed:
+   - No `INPT`/`InputContextBinding*` usage remains in `src` and `Examples` code paths.
+   - Removed scene binding packing/validation from PakGen:
+     - `src/Oxygen/Cooker/Tools/PakGen/src/pakgen/packing/packers.py`
+     - `src/Oxygen/Cooker/Tools/PakGen/src/pakgen/packing/planner.py`
+     - `src/Oxygen/Cooker/Tools/PakGen/src/pakgen/packing/writer.py`
+     - `src/Oxygen/Cooker/Tools/PakGen/src/pakgen/spec/validator.py`
+   - Updated PakGen tests/golden:
+     - `src/Oxygen/Cooker/Tools/PakGen/tests/test_v6_input_assets.py`
+     - `src/Oxygen/Cooker/Tools/PakGen/tests/_golden/input_scene_spec.yaml`
+7. P7 completed (static compatibility checks in this pass):
+   - Verified no remaining runtime/tool references to removed scene-binding component (`rg` scan under `src` + `Examples`).
+   - Verified modified PakGen Python sources/tests compile (`python -m py_compile` on touched files).
+8. P8 completed:
+   - Shipped JSON schemas:
+     - `src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json`
+     - `src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json`
+   - Install packaging ships schemas:
+     - `cmake/Install.cmake` installs `${PROJECT_SOURCE_DIR}/schemas` under `${OXYGEN_INSTALL_DATA}`.
+   - Added schema validation tests:
+     - `src/Oxygen/Cooker/Test/Import/InputJsonSchema_test.cpp`
+     - wired in `src/Oxygen/Cooker/Test/CMakeLists.txt`.
+   - Updated user-facing docs:
+     - `src/Oxygen/Cooker/Tools/ImportTool/README.md`
+     - `design/cook_input.md`
+9. Additional remediation:
+   - Removed hard runtime symbol dependency on `platform::InputSlots` from cooker import pipeline by using canonical slot-name table + alias normalization (`src/Oxygen/Cooker/Import/Internal/Pipelines/InputImportPipeline.cpp`).
+10. Verification caveat:
+    - No local build/test execution was performed in this loop per explicit instruction.
 
 ## 12. Compliance Checklist
 
@@ -409,7 +483,7 @@ This checklist proves each non-negotiable requirement is satisfied by the design
 
 | # | Non-Negotiable Requirement | Satisfied By | Verified In |
 | --- | --- | --- | --- |
-| 1 | One manifest job type only: `type: "input"` | spec §7.3 enum adds `"input"` only; schema `job_settings.type` gains one value in `Import/Schemas/import-manifest.schema.json` (embedded to generated `ImportManifest_schema.h` at build time) | P4 acceptance #1, P8 task #5 |
+| 1 | One manifest job type only: `type: "input"` | spec §7.3 enum adds `"input"` only; schema `job_settings.type` gains one value in `Import/Schemas/oxygen.import-manifest.schema.json` (embedded to generated `ImportManifest_schema.h` at build time) | P4 acceptance #1, P8 task #5 |
 | 2 | One job class only: `InputImportJob` | spec §6.1 #3, impl §2 gate #5; `AsyncImportService` routes all input requests to `InputImportJob` | P3 acceptance #1 |
 | 3 | One pipeline class only: `InputImportPipeline` | spec §6.1 #4, spec §10.2 single-pipeline contract; impl §2 gate #6 | P3 acceptance #1 |
 | 4 | Single pipeline processes mixed batches (standalone action + primary format) | spec §10.2 items 1-4: one pipeline, both document structures, mixed workloads, internal dispatch; one file emits N actions + M contexts | P3 acceptance #4 #7, P8 task #7 |

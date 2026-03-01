@@ -53,6 +53,11 @@ public:
     return mappings_;
   }
 
+  [[nodiscard]] auto GetDefaultPriority() const noexcept -> int32_t
+  {
+    return desc_.default_priority;
+  }
+
   [[nodiscard]] auto GetTriggers() const noexcept
     -> std::span<const pak::input::InputTriggerRecord>
   {

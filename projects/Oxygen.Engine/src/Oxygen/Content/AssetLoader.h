@@ -302,6 +302,8 @@ public:
     -> ResidencyPolicyState override;
   [[nodiscard]] OXGN_CNTT_API auto EnumerateMountedScenes() const
     -> std::vector<IAssetLoader::MountedSceneEntry> override;
+  [[nodiscard]] OXGN_CNTT_API auto EnumerateMountedInputContexts() const
+    -> std::vector<IAssetLoader::MountedInputContextEntry> override;
   [[nodiscard]] OXGN_CNTT_API auto EnumerateMountedSources() const
     -> std::vector<IAssetLoader::MountedSourceEntry> override;
   OXGN_CNTT_API auto RegisterConsoleBindings(

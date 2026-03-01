@@ -1,7 +1,7 @@
 
 • With a corresponding JSON schema
 
-  - Import manifest schema source is `src/Oxygen/Cooker/Import/Schemas/import-manifest.schema.json`
+  - Import manifest schema source is `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
     (Draft-07). The C++ header `ImportManifest_schema.h` is generated at build time by
     `cmake/JsonSchemaHelpers.cmake`.
   - Manifest JSON is parsed and schema-validated in ImportManifest.cpp:63, ImportManifest.cpp:64,

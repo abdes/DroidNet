@@ -1,5 +1,17 @@
 # Input Assets In PAK v7
 
+> Status (2026-03-01): Historical reference only.
+>
+> The active implementation contract is `design/cook_input.md`.
+> Scene-attached input context bindings were removed from runtime/tooling:
+> - `InputContextBindingRecord` removed
+> - `InputContextBindingFlags` removed
+> - `ComponentType::kInputContextBinding` / `INPT` scene table removed
+> - PakGen `scene.input_context_bindings` removed
+>
+> Treat any `INPT`/scene-binding requirements below as superseded by
+> standalone input mapping-context assets plus app-driven runtime hydration.
+
 ## Purpose
 
 Define a production-ready, data-driven input asset model in `PAK v7` that matches Oxygen's existing action-based runtime semantics exactly, while adding complete tooling coverage (`PakGen`, `PakDump`, `Inspector`).

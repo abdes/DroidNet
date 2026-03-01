@@ -1,0 +1,47 @@
+{
+  "$schema": "../../src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json",
+  "actions": [
+    {
+      "name": "RotateSpeedUpAction",
+      "type": "axis1d",
+      "consumes_input": true
+    },
+    {
+      "name": "RotateSpeedDownAction",
+      "type": "axis1d",
+      "consumes_input": true
+    }
+  ],
+  "contexts": [
+    {
+      "name": "RotateInputContext",
+      "auto_load": true,
+      "auto_activate": true,
+      "priority": 100,
+      "mappings": [
+        {
+          "action": "RotateSpeedUpAction",
+          "slot": "PageUp",
+          "triggers": [
+            {
+              "type": "pulse",
+              "behavior": "implicit",
+              "interval": 0.08
+            }
+          ]
+        },
+        {
+          "action": "RotateSpeedDownAction",
+          "slot": "PageDown",
+          "triggers": [
+            {
+              "type": "pulse",
+              "behavior": "implicit",
+              "interval": 0.08
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -53,6 +53,7 @@ m_gtest_program(
     "Fixtures/LooseCookedTestLayout.h"
     "Utils/PakUtils.h"
 )
+target_link_libraries("${META_MODULE_NAME}.AssetLoader.Tests" PRIVATE oxygen::input)
 
 m_gtest_program(
   LooseCooked

@@ -87,6 +87,16 @@ public:
     std::string virtual_path;
   };
 
+  struct MountedInputContextEntry final {
+    data::AssetKey asset_key {};
+    data::SourceKey source_key {};
+    std::string name;
+    data::pak::input::InputMappingContextFlags flags {
+      data::pak::input::InputMappingContextFlags::kNone
+    };
+    int32_t default_priority { 0 };
+  };
+
   struct MountedSourceEntry final {
     data::SourceKey source_key {};
     uint16_t source_id { 0 };
@@ -327,6 +337,11 @@ public:
   //! Enumerate scene entries available from currently mounted sources.
   [[nodiscard]] virtual auto EnumerateMountedScenes() const
     -> std::vector<MountedSceneEntry>
+    = 0;
+
+  //! Enumerate input mapping-context entries from currently mounted sources.
+  [[nodiscard]] virtual auto EnumerateMountedInputContexts() const
+    -> std::vector<MountedInputContextEntry>
     = 0;
 
   //! Enumerate mounted content sources.

@@ -41,7 +41,6 @@ __all__ = [
     "pack_script_asset_descriptor",
     "pack_input_action_asset_descriptor",
     "pack_input_mapping_context_asset_descriptor_and_payload",
-    "pack_input_context_binding_record",
     "pack_script_slot_record",
     "pack_geometry_asset_descriptor",
     "pack_scene_asset_descriptor_and_payload",
@@ -68,7 +67,6 @@ _COMPONENT_TYPE_DIRECTIONAL_LIGHT = 0x54494C44  # 'DLIT'
 _COMPONENT_TYPE_POINT_LIGHT = 0x54494C50  # 'PLIT'
 _COMPONENT_TYPE_SPOT_LIGHT = 0x54494C53  # 'SLIT'
 _COMPONENT_TYPE_SCRIPTING = 0x50524353  # 'SCRP'
-_COMPONENT_TYPE_INPUT_CONTEXT_BINDING = 0x54504E49  # 'INPT'
 
 _ENV_SYSTEM_SKY_ATMOSPHERE = 0
 _ENV_SYSTEM_VOLUMETRIC_CLOUDS = 1
@@ -916,7 +914,6 @@ def pack_scene_asset_descriptor_and_payload(
     header_builder,
     geometry_name_to_key: Dict[str, bytes],
     script_name_to_key: Dict[str, bytes] | None = None,
-    input_mapping_context_name_to_key: Dict[str, bytes] | None = None,
     scripting_slot_base_index: int = 0,
 ) -> Tuple[bytes, bytes, List[Dict[str, Any]]]:
     """Pack SceneAssetDesc (256 bytes) plus trailing payload.
@@ -934,7 +931,6 @@ def pack_scene_asset_descriptor_and_payload(
     - DirectionalLightRecord table (component_type 'DLIT')
     - PointLightRecord table (component_type 'PLIT')
     - SpotLightRecord table (component_type 'SLIT')
-    - InputContextBindingRecord table (component_type 'INPT')
 
     The payload always includes a trailing SceneEnvironment block (empty allowed).
     """
@@ -1078,7 +1074,6 @@ def pack_scene_asset_descriptor_and_payload(
         )
 
     script_name_to_key = script_name_to_key or {}
-    input_mapping_context_name_to_key = input_mapping_context_name_to_key or {}
     scripting = scene.get("scripting", []) or []
     if not isinstance(scripting, list):
         raise PakError("E_TYPE", "scene.scripting must be a list")
@@ -1143,33 +1138,6 @@ def pack_scene_asset_descriptor_and_payload(
                 int(len(scripting_records) // 16),
                 16,
                 bytes(scripting_records),
-            )
-        )
-
-    input_context_bindings = scene.get("input_context_bindings", []) or []
-    if not isinstance(input_context_bindings, list):
-        raise PakError("E_TYPE", "scene.input_context_bindings must be a list")
-    input_context_bindings = [
-        b for b in input_context_bindings if isinstance(b, dict)
-    ]
-    input_context_bindings.sort(
-        key=lambda b: (int(b.get("node_index", 0) or 0), int(b.get("priority", 0) or 0))
-    )
-    input_context_binding_records = b"".join(
-        pack_input_context_binding_record(
-            b,
-            input_mapping_context_name_to_key=input_mapping_context_name_to_key,
-            node_count=node_count,
-        )
-        for b in input_context_bindings
-    )
-    if input_context_binding_records:
-        component_tables.append(
-            (
-                _COMPONENT_TYPE_INPUT_CONTEXT_BINDING,
-                len(input_context_bindings),
-                32,
-                input_context_binding_records,
             )
         )
 
@@ -2716,55 +2684,6 @@ def pack_input_mapping_context_asset_descriptor_and_payload(
             f"InputMappingContextAssetDesc size mismatch: {len(desc)}",
         )
     return desc, payload
-
-
-def pack_input_context_binding_record(
-    binding: Dict[str, Any],
-    *,
-    input_mapping_context_name_to_key: Dict[str, bytes],
-    node_count: int,
-) -> bytes:
-    node_index = binding.get("node_index", 0)
-    if (
-        not isinstance(node_index, int)
-        or node_index < 0
-        or node_index >= node_count
-    ):
-        raise PakError(
-            "E_REF", f"InputContextBinding node_index out of range: {node_index}"
-        )
-
-    context_value = binding.get("context_asset_key")
-    if context_value is None:
-        context_value = binding.get("context_asset")
-    if context_value is None:
-        context_value = binding.get("context")
-    context_key = _resolve_asset_key(
-        context_value,
-        name_to_key=input_mapping_context_name_to_key,
-        field_name="context_asset_key",
-    )
-    if context_key == b"\x00" * ASSET_KEY_SIZE:
-        raise PakError("E_REF", "InputContextBinding missing context reference")
-
-    priority = int(binding.get("priority", 0) or 0)
-    flags = int(binding.get("flags", 0) or 0)
-    if bool(binding.get("activate_on_load", False)):
-        flags |= 0x1
-
-    out = (
-        struct.pack("<I", int(node_index))
-        + context_key
-        + struct.pack("<i", int(priority))
-        + struct.pack("<I", flags & 0xFFFFFFFF)
-        + struct.pack("<I", 0)
-    )
-    if len(out) != 32:
-        raise PakError(
-            "E_SIZE", f"InputContextBindingRecord size mismatch: {len(out)}"
-        )
-    return out
-
 
 def pack_name_string(name: str, size: int) -> bytes:
     # Truncate UTF-8 to fit size-1 then null pad to fixed size

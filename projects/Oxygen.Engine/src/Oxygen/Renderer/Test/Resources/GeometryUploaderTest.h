@@ -138,6 +138,11 @@ public:
   {
     return {};
   }
+  [[nodiscard]] auto EnumerateMountedInputContexts() const
+    -> std::vector<MountedInputContextEntry> override
+  {
+    return {};
+  }
   [[nodiscard]] auto EnumerateMountedSources() const
     -> std::vector<MountedSourceEntry> override
   {

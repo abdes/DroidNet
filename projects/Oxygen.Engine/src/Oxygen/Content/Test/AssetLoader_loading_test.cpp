@@ -10,6 +10,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <ranges>
 #include <span>
 #include <vector>
 
@@ -18,6 +19,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/InputContextHydration.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Content/Internal/InternalResourceKey.h>
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
@@ -31,9 +33,13 @@
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Input/InputMappingContext.h>
+#include <Oxygen/Input/InputSystem.h>
+#include <Oxygen/OxCo/BroadcastChannel.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Platform/InputEvent.h>
 
 #include "./AssetLoader_test.h"
 #include "Fixtures/LooseCookedTestLayout.h"
@@ -49,6 +55,7 @@ using oxygen::co::Co;
 using oxygen::co::testing::TestEventLoop;
 using oxygen::data::BufferResource;
 using oxygen::data::GeometryAsset;
+using oxygen::data::InputMappingContextAsset;
 using oxygen::data::MaterialAsset;
 using oxygen::data::TextureResource;
 
@@ -416,6 +423,158 @@ auto WriteLooseCookedSceneForCatalog(const std::filesystem::path& cooked_root,
   out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
   out.write(reinterpret_cast<const char*>(&asset_entry),
     static_cast<std::streamsize>(sizeof(asset_entry)));
+}
+
+auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
+  const oxygen::data::AssetKey& action_key,
+  const oxygen::data::AssetKey& context_key) -> void
+{
+  using oxygen::data::AssetType;
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
+  using oxygen::data::pak::input::InputActionAssetDesc;
+  using oxygen::data::pak::input::InputActionAssetFlags;
+  using oxygen::data::pak::input::InputActionMappingRecord;
+  using oxygen::data::pak::input::InputMappingContextAssetDesc;
+  using oxygen::data::pak::input::InputMappingContextFlags;
+  using oxygen::data::pak::input::InputTriggerRecord;
+  using oxygen::data::pak::input::InputTriggerType;
+
+  const auto input_dir = cooked_root / "Input";
+  std::filesystem::create_directories(input_dir);
+
+  const auto action_rel_desc = std::filesystem::path("Input") / "Move.oiact";
+  InputActionAssetDesc action_desc {};
+  action_desc.header.asset_type = static_cast<uint8_t>(AssetType::kInputAction);
+  std::snprintf(
+    action_desc.header.name, sizeof(action_desc.header.name), "%s", "Move");
+  action_desc.header.version
+    = oxygen::data::pak::input::kInputActionAssetVersion;
+  action_desc.value_type = 0;
+  action_desc.flags = InputActionAssetFlags::kConsumesInput;
+  {
+    std::ofstream out(cooked_root / action_rel_desc, std::ios::binary);
+    out.write(reinterpret_cast<const char*>(&action_desc), sizeof(action_desc));
+  }
+
+  const auto context_rel_desc
+    = std::filesystem::path("Input") / "Hydrated.oimap";
+  InputMappingContextAssetDesc context_desc {};
+  context_desc.header.asset_type
+    = static_cast<uint8_t>(AssetType::kInputMappingContext);
+  std::snprintf(context_desc.header.name, sizeof(context_desc.header.name),
+    "%s", "HydratedContext");
+  context_desc.header.version
+    = oxygen::data::pak::input::kInputMappingContextAssetVersion;
+  context_desc.flags = InputMappingContextFlags::kAutoLoad
+    | InputMappingContextFlags::kAutoActivate;
+  context_desc.default_priority = 77;
+
+  constexpr const char kSlotName[] = "Space";
+  const auto strings_size = static_cast<uint32_t>(sizeof(kSlotName));
+  context_desc.mappings.offset = sizeof(InputMappingContextAssetDesc);
+  context_desc.mappings.count = 1;
+  context_desc.mappings.entry_size = sizeof(InputActionMappingRecord);
+  context_desc.triggers.offset
+    = context_desc.mappings.offset + sizeof(InputActionMappingRecord);
+  context_desc.triggers.count = 1;
+  context_desc.triggers.entry_size = sizeof(InputTriggerRecord);
+  context_desc.trigger_aux.offset
+    = context_desc.triggers.offset + sizeof(InputTriggerRecord);
+  context_desc.trigger_aux.count = 0;
+  context_desc.trigger_aux.entry_size
+    = sizeof(oxygen::data::pak::input::InputTriggerAuxRecord);
+  context_desc.strings.offset = context_desc.trigger_aux.offset;
+  context_desc.strings.count = strings_size;
+  context_desc.strings.entry_size = sizeof(char);
+
+  InputActionMappingRecord mapping {};
+  mapping.action_asset_key = action_key;
+  mapping.slot_name_offset = 0;
+  mapping.trigger_start_index = 0;
+  mapping.trigger_count = 1;
+  mapping.scale[0] = 1.0F;
+  mapping.scale[1] = 1.0F;
+  mapping.bias[0] = 0.0F;
+  mapping.bias[1] = 0.0F;
+
+  InputTriggerRecord trigger {};
+  trigger.type = InputTriggerType::kPressed;
+  trigger.actuation_threshold = 0.5F;
+
+  const auto context_blob_size
+    = static_cast<size_t>(context_desc.strings.offset)
+    + static_cast<size_t>(context_desc.strings.count);
+  std::vector<std::byte> context_blob(context_blob_size, std::byte { 0 });
+  std::memcpy(context_blob.data(), &context_desc, sizeof(context_desc));
+  std::memcpy(context_blob.data() + context_desc.mappings.offset, &mapping,
+    sizeof(mapping));
+  std::memcpy(context_blob.data() + context_desc.triggers.offset, &trigger,
+    sizeof(trigger));
+  std::memcpy(context_blob.data() + context_desc.strings.offset, kSlotName,
+    sizeof(kSlotName));
+  {
+    std::ofstream out(cooked_root / context_rel_desc, std::ios::binary);
+    out.write(reinterpret_cast<const char*>(context_blob.data()),
+      static_cast<std::streamsize>(context_blob.size()));
+  }
+
+  std::string strings;
+  strings.push_back('\0');
+  const auto action_off_desc = static_cast<uint32_t>(strings.size());
+  strings += action_rel_desc.generic_string();
+  strings.push_back('\0');
+  const auto action_off_vpath = static_cast<uint32_t>(strings.size());
+  strings += std::string("/Content/") + action_rel_desc.generic_string();
+  strings.push_back('\0');
+  const auto context_off_desc = static_cast<uint32_t>(strings.size());
+  strings += context_rel_desc.generic_string();
+  strings.push_back('\0');
+  const auto context_off_vpath = static_cast<uint32_t>(strings.size());
+  strings += std::string("/Content/") + context_rel_desc.generic_string();
+  strings.push_back('\0');
+
+  IndexHeader header {};
+  FillTestGuid(header);
+  header.version = 1;
+  header.content_version = 0;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
+  header.string_table_offset = sizeof(IndexHeader);
+  header.string_table_size = static_cast<uint64_t>(strings.size());
+  header.asset_entries_offset
+    = header.string_table_offset + header.string_table_size;
+  header.asset_count = 2;
+  header.asset_entry_size = sizeof(AssetEntry);
+  header.file_records_offset = header.asset_entries_offset
+    + static_cast<uint64_t>(sizeof(AssetEntry)) * 2U;
+  header.file_record_count = 0;
+  header.file_record_size = sizeof(FileRecord);
+
+  AssetEntry action_entry {};
+  action_entry.asset_key = action_key;
+  action_entry.descriptor_relpath_offset = action_off_desc;
+  action_entry.virtual_path_offset = action_off_vpath;
+  action_entry.asset_type = static_cast<uint8_t>(AssetType::kInputAction);
+  action_entry.descriptor_size = sizeof(InputActionAssetDesc);
+
+  AssetEntry context_entry {};
+  context_entry.asset_key = context_key;
+  context_entry.descriptor_relpath_offset = context_off_desc;
+  context_entry.virtual_path_offset = context_off_vpath;
+  context_entry.asset_type
+    = static_cast<uint8_t>(AssetType::kInputMappingContext);
+  context_entry.descriptor_size = static_cast<uint64_t>(context_blob.size());
+
+  std::ofstream out(cooked_root / "container.index.bin", std::ios::binary);
+  out.write(reinterpret_cast<const char*>(&header),
+    static_cast<std::streamsize>(sizeof(header)));
+  out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
+  out.write(reinterpret_cast<const char*>(&action_entry),
+    static_cast<std::streamsize>(sizeof(action_entry)));
+  out.write(reinterpret_cast<const char*>(&context_entry),
+    static_cast<std::streamsize>(sizeof(context_entry)));
 }
 
 //=== AssetLoader Basic Functionality Tests ===-----------------------------//
@@ -1186,6 +1345,87 @@ NOLINT_TEST_F(AssetLoaderLoadingTest,
 
   EXPECT_TRUE(saw_pak_scene);
   EXPECT_TRUE(saw_loose_scene);
+}
+
+NOLINT_TEST_F(AssetLoaderLoadingTest,
+  EnumerateMountedInputContextsLooseCookedExpectedToExposeEntries)
+{
+  const auto action_key = CreateTestAssetKey("loose_input_action_catalog");
+  const auto context_key = CreateTestAssetKey("loose_input_context_catalog");
+  const auto cooked_root = temp_dir_ / "mounted_input_contexts_loose";
+  WriteLooseCookedInputAssets(cooked_root, action_key, context_key);
+
+  asset_loader_->AddLooseCookedRoot(cooked_root);
+
+  const auto mounted_contexts = asset_loader_->EnumerateMountedInputContexts();
+  ASSERT_FALSE(mounted_contexts.empty());
+
+  const auto found = std::ranges::find_if(mounted_contexts,
+    [&](const auto& entry) { return entry.asset_key == context_key; });
+  ASSERT_NE(found, mounted_contexts.end());
+  EXPECT_EQ(found->name, "HydratedContext");
+  EXPECT_EQ(found->default_priority, 77);
+  EXPECT_EQ((found->flags
+              & oxygen::data::pak::input::InputMappingContextFlags::kAutoLoad),
+    oxygen::data::pak::input::InputMappingContextFlags::kAutoLoad);
+  EXPECT_EQ(
+    (found->flags
+      & oxygen::data::pak::input::InputMappingContextFlags::kAutoActivate),
+    oxygen::data::pak::input::InputMappingContextFlags::kAutoActivate);
+}
+
+NOLINT_TEST_F(AssetLoaderLoadingTest,
+  HydrateInputContextExpectedToRegisterActionsAndBuildMappingContext)
+{
+  const auto action_key = CreateTestAssetKey("loose_input_action_hydrate");
+  const auto context_key = CreateTestAssetKey("loose_input_context_hydrate");
+  const auto cooked_root = temp_dir_ / "hydrate_input_context_loose";
+  WriteLooseCookedInputAssets(cooked_root, action_key, context_key);
+
+  TestEventLoop el;
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    using oxygen::content::AssetLoader;
+    using oxygen::content::AssetLoaderConfig;
+
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+    AssetLoader loader(Tag::Get(), config);
+
+    oxygen::co::BroadcastChannel<oxygen::platform::InputEvent> input_channel;
+    oxygen::engine::InputSystem input_system(input_channel.ForRead());
+
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+
+      loader.AddLooseCookedRoot(cooked_root);
+
+      const auto context_asset
+        = co_await loader.LoadAssetAsync<InputMappingContextAsset>(context_key);
+      EXPECT_THAT(context_asset, NotNull());
+      EXPECT_THAT(loader.GetInputActionAsset(action_key), NotNull());
+
+      if (context_asset) {
+        const auto hydrated = oxygen::content::HydrateInputContext(
+          *context_asset, loader, input_system);
+        EXPECT_THAT(hydrated, NotNull());
+        if (hydrated) {
+          EXPECT_EQ(hydrated->GetName(), "HydratedContext");
+        }
+
+        const auto action = input_system.GetActionByName("Move");
+        EXPECT_THAT(action, NotNull());
+        if (action) {
+          EXPECT_TRUE(action->ConsumesInput());
+        }
+      }
+
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
 }
 
 NOLINT_TEST_F(AssetLoaderLoadingTest,

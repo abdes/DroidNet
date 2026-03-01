@@ -1,0 +1,522 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oxygen-engine.dev/schemas/oxygen.input.schema.json",
+  "title": "Oxygen Input Source Schema",
+  "description": "Primary input source format (actions + contexts).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional self-reference to this schema file."
+    },
+    "actions": {
+      "type": "array",
+      "description": "Shared action declarations for this file.",
+      "items": {
+        "$ref": "#/$defs/action"
+      },
+      "default": []
+    },
+    "contexts": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Input mapping contexts emitted from this source.",
+      "items": {
+        "$ref": "#/$defs/context"
+      }
+    }
+  },
+  "required": [
+    "contexts"
+  ],
+  "$defs": {
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 63
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "bool",
+            "axis1d",
+            "axis2d"
+          ]
+        },
+        "consumes_input": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ]
+    },
+    "trigger_aux": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "completion_states": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "default": 0
+        },
+        "time_to_complete": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0.0
+        }
+      },
+      "required": [
+        "action"
+      ]
+    },
+    "trigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "pressed",
+            "released",
+            "down",
+            "hold",
+            "hold_and_release",
+            "pulse",
+            "tap",
+            "chord",
+            "action_chain",
+            "combo"
+          ]
+        },
+        "behavior": {
+          "type": "string",
+          "enum": [
+            "explicit",
+            "implicit",
+            "blocker"
+          ],
+          "default": "implicit"
+        },
+        "actuation_threshold": {
+          "type": "number",
+          "default": 0.5
+        },
+        "hold_time": {
+          "type": "number",
+          "minimum": 0
+        },
+        "interval": {
+          "type": "number",
+          "minimum": 0
+        },
+        "chord_action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "combo_actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/trigger_aux"
+          }
+        },
+        "aux": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/trigger_aux"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "hold"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "hold_time"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "hold_and_release"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "hold_time"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "pulse"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "interval"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "chord"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "chord_action"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "combo"
+              }
+            }
+          },
+          "then": {
+            "anyOf": [
+              {
+                "required": [
+                  "combo_actions"
+                ]
+              },
+              {
+                "required": [
+                  "aux"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "slot": {
+          "type": "string",
+          "enum": [
+            "MouseWheelUp",
+            "MouseWheelDown",
+            "MouseWheelLeft",
+            "MouseWheelRight",
+            "MouseWheelX",
+            "MouseWheelY",
+            "MouseWheelXY",
+            "LeftMouseButton",
+            "RightMouseButton",
+            "MiddleMouseButton",
+            "ThumbMouseButton1",
+            "ThumbMouseButton2",
+            "MouseX",
+            "MouseY",
+            "MouseXY",
+            "None",
+            "AnyKey",
+            "BackSpace",
+            "Delete",
+            "Tab",
+            "Clear",
+            "Return",
+            "Pause",
+            "Escape",
+            "Space",
+            "Keypad0",
+            "Keypad1",
+            "Keypad2",
+            "Keypad3",
+            "Keypad4",
+            "Keypad5",
+            "Keypad6",
+            "Keypad7",
+            "Keypad8",
+            "Keypad9",
+            "KeypadPeriod",
+            "KeypadDivide",
+            "KeypadMultiply",
+            "KeypadMinus",
+            "KeypadPlus",
+            "KeypadEnter",
+            "KeypadEquals",
+            "Up",
+            "Down",
+            "Right",
+            "Left",
+            "Insert",
+            "Home",
+            "End",
+            "PageUp",
+            "PageDown",
+            "F1",
+            "F2",
+            "F3",
+            "F4",
+            "F5",
+            "F6",
+            "F7",
+            "F8",
+            "F9",
+            "F10",
+            "F11",
+            "F12",
+            "F13",
+            "F14",
+            "F15",
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "!",
+            "DoubleQuote",
+            "Hash",
+            "Dollar",
+            "Percent",
+            "Ampersand",
+            "Quote",
+            "LeftParen",
+            "RightParen",
+            "Asterisk",
+            "Plus",
+            "Comma",
+            "Minus",
+            "Period",
+            "Slash",
+            "Colon",
+            "Semicolon",
+            "Less",
+            "Equals",
+            "Greater",
+            "Question",
+            "At",
+            "LeftBracket",
+            "Backslash",
+            "RightBracket",
+            "Caret",
+            "Underscore",
+            "BackQuote",
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "G",
+            "H",
+            "I",
+            "J",
+            "K",
+            "L",
+            "M",
+            "N",
+            "O",
+            "P",
+            "Q",
+            "R",
+            "S",
+            "T",
+            "U",
+            "V",
+            "W",
+            "X",
+            "Y",
+            "Z",
+            "NumLock",
+            "CapsLock",
+            "ScrollLock",
+            "RightShift",
+            "LeftShift",
+            "RightCtrl",
+            "LeftCtrl",
+            "RightAlt",
+            "LeftAlt",
+            "LeftMeta",
+            "RightMeta",
+            "Help",
+            "PrintScreen",
+            "SysReq",
+            "Menu",
+            "UpArrow",
+            "DownArrow",
+            "RightArrow",
+            "LeftArrow",
+            "Alpha0",
+            "Alpha1",
+            "Alpha2",
+            "Alpha3",
+            "Alpha4",
+            "Alpha5",
+            "Alpha6",
+            "Alpha7",
+            "Alpha8",
+            "Alpha9",
+            "Exclaim",
+            "RightControl",
+            "LeftControl",
+            "Print"
+          ],
+          "description": "Input slot name. Canonical runtime names and authoring aliases are accepted."
+        },
+        "trigger": {
+          "type": "string",
+          "enum": [
+            "pressed",
+            "released",
+            "down",
+            "hold",
+            "hold_and_release",
+            "pulse",
+            "tap",
+            "chord",
+            "action_chain",
+            "combo"
+          ]
+        },
+        "triggers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/trigger"
+          },
+          "default": []
+        },
+        "scale": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "number"
+          },
+          "default": [
+            1.0,
+            1.0
+          ]
+        },
+        "bias": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "number"
+          },
+          "default": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "required": [
+        "action",
+        "slot"
+      ],
+      "allOf": [
+        {
+          "not": {
+            "required": [
+              "trigger",
+              "triggers"
+            ]
+          }
+        }
+      ]
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 63
+        },
+        "auto_load": {
+          "type": "boolean",
+          "default": false
+        },
+        "auto_activate": {
+          "type": "boolean",
+          "default": false
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647,
+          "default": 0
+        },
+        "mappings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/mapping"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "name",
+        "mappings"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "auto_activate": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "auto_load": {
+                "const": true
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -18,7 +18,7 @@ This plan translates the ImportTool README requirements into executable phases. 
    - [src/Oxygen/Cooker/Import/ImportOptions.h](src/Oxygen/Cooker/Import/ImportOptions.h)
    - [src/Oxygen/Cooker/Import/AsyncImportService.h](src/Oxygen/Cooker/Import/AsyncImportService.h)
    - [src/Oxygen/Cooker/Import/ImportManifest.h](src/Oxygen/Cooker/Import/ImportManifest.h)
-   - [src/Oxygen/Cooker/Import/Schemas/import-manifest.schema.json](src/Oxygen/Cooker/Import/Schemas/import-manifest.schema.json)
+   - [src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json](src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json)
    - [src/Oxygen/Cooker/Import/ImportReport.h](src/Oxygen/Cooker/Import/ImportReport.h)
 
 **Deliverables:**
@@ -119,7 +119,7 @@ This plan translates the ImportTool README requirements into executable phases. 
 1. Update or confirm manifest model supports:
    - `version`, `defaults`, `jobs`, `job_type`.
    - per‑job overrides and dependencies.
-2. Update schema definition in `Import/Schemas/import-manifest.schema.json` (embedded into generated `ImportManifest_schema.h` at build time) to match README.
+2. Update schema definition in `Import/Schemas/oxygen.import-manifest.schema.json` (embedded into generated `ImportManifest_schema.h` at build time) to match README.
 3. Ensure `ImportManifest::Load()` enforces schema version and provides errors.
 4. Add dependency validation for circular references and missing job IDs.
 5. Confirm default resolution order matches CLI precedence rules.

@@ -89,6 +89,21 @@ struct ImportRequest final {
   //! Optional human-readable job name for logging and UI.
   std::optional<std::string> job_name;
 
+  //! Optional orchestration metadata for batch scheduling.
+  /*!
+   This data is not consumed by import pipelines directly. It is carried
+   * by
+   tooling layers (manifest/batch execution) to model explicit
+   * dependency edges
+   between requests.
+  */
+  struct OrchestrationMetadata final {
+    std::string job_id;
+    std::vector<std::string> depends_on;
+  };
+
+  std::optional<OrchestrationMetadata> orchestration;
+
   //! Import options.
   ImportOptions options = {};
 

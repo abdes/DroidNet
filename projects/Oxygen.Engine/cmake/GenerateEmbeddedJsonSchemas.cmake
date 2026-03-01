@@ -214,6 +214,22 @@ foreach(_index RANGE 0 ${_schema_last_index})
   list(GET OXYGEN_JSON_SCHEMA_NAMES ${_index} _schema_symbol)
   list(GET OXYGEN_JSON_SCHEMA_FILES ${_index} _schema_file)
 
+  # Backward-compat migration: older generated manifests may still reference
+  # the pre-rename import schema filename. Remap to the canonical name so stale
+  # build trees continue to work until next reconfigure.
+  if(NOT EXISTS "${_schema_file}")
+    get_filename_component(_schema_file_name "${_schema_file}" NAME)
+    if(_schema_file_name STREQUAL "import-manifest.schema.json")
+      get_filename_component(_schema_file_dir "${_schema_file}" DIRECTORY)
+      set(_schema_file_candidate
+        "${_schema_file_dir}/oxygen.import-manifest.schema.json"
+      )
+      if(EXISTS "${_schema_file_candidate}")
+        set(_schema_file "${_schema_file_candidate}")
+      endif()
+    endif()
+  endif()
+
   if(NOT EXISTS "${_schema_file}")
     message(FATAL_ERROR "Schema file not found: ${_schema_file}")
   endif()

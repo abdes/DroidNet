@@ -91,6 +91,9 @@ namespace {
 
   auto ResolveReportJobType(const ImportRequest& request) -> std::string
   {
+    if (request.options.input.has_value()) {
+      return "input";
+    }
     if (request.GetFormat() != ImportFormat::kUnknown) {
       return std::string(to_string(request.GetFormat()));
     }

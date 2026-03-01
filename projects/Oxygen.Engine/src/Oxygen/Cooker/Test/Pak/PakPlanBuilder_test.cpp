@@ -425,6 +425,102 @@ NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesAllLiveAssetsAndResources)
   EXPECT_TRUE(result.plan->ScriptParamRanges().empty());
 }
 
+NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesInputAssetsFromLooseSource)
+{
+  using data::CookedSource;
+  using data::CookedSourceKind;
+  using pak::BuildMode;
+  using pak::PakPlanBuilder;
+
+  constexpr auto kGuidSeed = uint8_t { 42U };
+
+  const auto source = Root() / "full_include_input_assets";
+
+  const auto action_asset = AssetSpec {
+    .key = MakeAssetKey(0x51U),
+    .asset_type = data::AssetType::kInputAction,
+    .descriptor_relpath = "Descriptors/InputActions/Move.oiact",
+    .virtual_path = "/Content/InputActions/Move",
+    .descriptor_size = 48U,
+    .descriptor_sha = paktest::MakeDigest(0x51U),
+  };
+  const auto context_asset = AssetSpec {
+    .key = MakeAssetKey(0x52U),
+    .asset_type = data::AssetType::kInputMappingContext,
+    .descriptor_relpath = "Descriptors/InputMappingContexts/Gameplay.oimap",
+    .virtual_path = "/Content/InputMappingContexts/Gameplay",
+    .descriptor_size = 64U,
+    .descriptor_sha = paktest::MakeDigest(0x52U),
+  };
+  const auto scene_asset = AssetSpec {
+    .key = MakeAssetKey(0x53U),
+    .asset_type = data::AssetType::kScene,
+    .descriptor_relpath = "Descriptors/Scenes/Main.oscene",
+    .virtual_path = "/Content/Scenes/Main",
+    .descriptor_size = 32U,
+    .descriptor_sha = paktest::MakeDigest(0x53U),
+  };
+  const auto assets
+    = std::array<AssetSpec, 3> { action_asset, context_asset, scene_asset };
+  ASSERT_TRUE(paktest::WriteLooseIndex(source,
+    std::span<const AssetSpec>(assets.data(), assets.size()),
+    std::span<const FileSpec> {}, kGuidSeed));
+
+  const auto request = pak::PakBuildRequest {
+    .mode = BuildMode::kFull,
+    .sources = { CookedSource {
+      .kind = CookedSourceKind::kLooseCooked, .path = source } },
+    .output_pak_path = Root() / "full_include_input_assets.pak",
+    .output_manifest_path = {},
+    .content_version = 1U,
+    .source_key = MakeNonZeroSourceKey(0x91U),
+    .base_catalogs = {},
+    .patch_compat = {},
+    .options = {},
+  };
+
+  const auto result = PakPlanBuilder {}.Build(request);
+  ASSERT_FALSE(HasError(result.diagnostics));
+  ASSERT_TRUE(result.plan.has_value());
+
+  const auto plan_assets = result.plan->Assets();
+  ASSERT_EQ(plan_assets.size(), assets.size());
+
+  auto saw_input_action = false;
+  auto saw_input_mapping_context = false;
+  auto saw_scene = false;
+  for (const auto& asset : plan_assets) {
+    if (asset.asset_type == data::AssetType::kInputAction) {
+      saw_input_action = true;
+    } else if (asset.asset_type == data::AssetType::kInputMappingContext) {
+      saw_input_mapping_context = true;
+    } else if (asset.asset_type == data::AssetType::kScene) {
+      saw_scene = true;
+    }
+  }
+  EXPECT_TRUE(saw_input_action);
+  EXPECT_TRUE(saw_input_mapping_context);
+  EXPECT_TRUE(saw_scene);
+
+  const auto& directory_entries = result.plan->Directory().entries;
+  ASSERT_EQ(directory_entries.size(), assets.size());
+  auto dir_input_action_count = size_t { 0 };
+  auto dir_input_mapping_context_count = size_t { 0 };
+  auto dir_scene_count = size_t { 0 };
+  for (const auto& entry : directory_entries) {
+    if (entry.asset_type == data::AssetType::kInputAction) {
+      ++dir_input_action_count;
+    } else if (entry.asset_type == data::AssetType::kInputMappingContext) {
+      ++dir_input_mapping_context_count;
+    } else if (entry.asset_type == data::AssetType::kScene) {
+      ++dir_scene_count;
+    }
+  }
+  EXPECT_EQ(dir_input_action_count, 1U);
+  EXPECT_EQ(dir_input_mapping_context_count, 1U);
+  EXPECT_EQ(dir_scene_count, 1U);
+}
+
 NOLINT_TEST_F(
   PakPlanBuilderTest, FullModeExtractsScriptSlotSidecarWhenPresentAndInBounds)
 {

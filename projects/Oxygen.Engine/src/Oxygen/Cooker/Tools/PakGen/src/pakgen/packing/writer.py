@@ -215,7 +215,6 @@ def _prepare_scene_script_slots(
     header_builder,
     geometry_name_to_key: dict[str, bytes],
     script_name_to_key: dict[str, bytes],
-    input_mapping_context_name_to_key: dict[str, bytes],
 ):
     material_count = len(build.assets.material_assets)
     geometry_count = len(build.assets.geometry_assets)
@@ -247,7 +246,6 @@ def _prepare_scene_script_slots(
             header_builder=header_builder,
             geometry_name_to_key=geometry_name_to_key,
             script_name_to_key=script_name_to_key,
-            input_mapping_context_name_to_key=input_mapping_context_name_to_key,
             scripting_slot_base_index=global_slot_base,
         )
         cache[idx] = (base_desc, payload, slot_infos)
@@ -823,28 +821,12 @@ def write_pak(
                 if isinstance(name, str) and isinstance(asset_key, (bytes, bytearray)):
                     script_name_to_key[name] = bytes(asset_key)
 
-            input_mapping_context_name_to_key: dict[str, bytes] = {}
-            for (
-                input_mapping_context_spec,
-                asset_key,
-                _atype,
-                _align,
-            ) in build_plan.assets.input_mapping_context_assets:
-                if not isinstance(input_mapping_context_spec, dict):
-                    continue
-                name = input_mapping_context_spec.get("name")
-                if isinstance(name, str) and isinstance(
-                    asset_key, (bytes, bytearray)
-                ):
-                    input_mapping_context_name_to_key[name] = bytes(asset_key)
-
             scene_cache, slot_records = _prepare_scene_script_slots(
                 build_plan,
                 pak_plan,
                 header_builder=header_builder,
                 geometry_name_to_key=geometry_name_to_key,
                 script_name_to_key=script_name_to_key,
-                input_mapping_context_name_to_key=input_mapping_context_name_to_key,
             )
             table_info["script_slot"] = _write_script_slot_table_from_plan(
                 f, pak_plan, slot_records

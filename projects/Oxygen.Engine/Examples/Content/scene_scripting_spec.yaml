@@ -215,12 +215,6 @@ assets:
                 type: float
                 value: 60.0
 
-    input_context_bindings:
-      - node_index: 0
-        context_asset: RotateRuntimeInputContext
-        priority: 100
-        activate_on_load: true
-
     perspective_cameras:
       - node_index: 2
         fov_y: 0.785398

@@ -38,6 +38,7 @@
 #include <Oxygen/Cooker/Tools/ImportTool/GlobalOptions.h>
 #include <Oxygen/Cooker/Tools/ImportTool/GltfCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ImportCommand.h>
+#include <Oxygen/Cooker/Tools/ImportTool/InputCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ScriptCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ScriptingSidecarCommand.h>
@@ -60,6 +61,7 @@ using oxygen::content::import::ImportPipelineConcurrency;
 using oxygen::content::import::tool::BatchCommand;
 using oxygen::content::import::tool::GlobalOptions;
 using oxygen::content::import::tool::ImportCommand;
+using oxygen::content::import::tool::InputCommand;
 
 std::atomic<bool> g_stop_requested { false };
 std::atomic<bool> g_stop_handled { false };
@@ -696,6 +698,7 @@ auto main(int argc, char** argv) -> int
     BatchCommand batch_command(&global_options);
     FbxCommand fbx_command(&global_options);
     GltfCommand gltf_command(&global_options);
+    InputCommand input_command(&global_options);
     ScriptCommand script_command(&global_options);
     ScriptingSidecarCommand scripting_sidecar_command(&global_options);
     TextureCommand texture_command(&global_options);
@@ -703,6 +706,7 @@ auto main(int argc, char** argv) -> int
       &texture_command,
       &fbx_command,
       &gltf_command,
+      &input_command,
       &script_command,
       &scripting_sidecar_command,
       &batch_command,
