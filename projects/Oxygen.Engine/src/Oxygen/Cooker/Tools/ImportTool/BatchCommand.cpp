@@ -203,6 +203,9 @@ namespace {
 
   auto ResolveReportJobType(const ImportRequest& request) -> std::string
   {
+    if (request.physics.has_value()) {
+      return "physics-sidecar";
+    }
     if (request.options.input.has_value()) {
       return "input";
     }
@@ -295,16 +298,16 @@ namespace {
   auto MakeZeroTelemetry() -> ImportTelemetry
   {
     constexpr auto kZero = std::chrono::microseconds { 0 };
-    return ImportTelemetry {
-      .io_duration = kZero,
-      .source_load_duration = kZero,
-      .decode_duration = kZero,
-      .load_duration = kZero,
-      .cook_duration = kZero,
-      .emit_duration = kZero,
-      .finalize_duration = kZero,
-      .total_duration = kZero,
-    };
+    auto telemetry = ImportTelemetry {};
+    telemetry.io_duration = kZero;
+    telemetry.source_load_duration = kZero;
+    telemetry.decode_duration = kZero;
+    telemetry.load_duration = kZero;
+    telemetry.cook_duration = kZero;
+    telemetry.emit_duration = kZero;
+    telemetry.finalize_duration = kZero;
+    telemetry.total_duration = kZero;
+    return telemetry;
   }
 
   auto MakeSkippedDependencyReport(const ImportRequest& request,
@@ -495,7 +498,8 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
   for (const auto& job : manifest->jobs) {
     if (job.job_type != "texture" && job.job_type != "fbx"
       && job.job_type != "gltf" && job.job_type != "script"
-      && job.job_type != "script-sidecar" && job.job_type != "input") {
+      && job.job_type != "script-sidecar" && job.job_type != "physics-sidecar"
+      && job.job_type != "input") {
       writer->Error(
         fmt::format("ERROR: unsupported job type: {}", job.job_type));
       unsupported_seen = true;

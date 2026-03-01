@@ -16,6 +16,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/PhysicsImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/ScriptImportRequestBuilder.h>
 
 namespace oxygen::content::import {
@@ -176,6 +177,76 @@ namespace {
   {
     return key == "id" || key == "type" || key == "source"
       || key == "depends_on";
+  }
+
+  auto IsAllowedPhysicsSidecarJobKey(const std::string_view key) -> bool
+  {
+    return key == "id" || key == "depends_on" || key == "type"
+      || key == "source" || key == "bindings"
+      || key == "target_scene_virtual_path" || key == "output" || key == "name"
+      || key == "verbose" || key == "content_hashing";
+  }
+
+  auto ReportEarlyJobKeyWhitelistViolations(
+    const json& manifest, std::ostream& errors) -> bool
+  {
+    if (!manifest.contains("jobs") || !manifest["jobs"].is_array()) {
+      return false;
+    }
+
+    for (const auto& job : manifest["jobs"]) {
+      if (!job.is_object()) {
+        continue;
+      }
+      if (!job.contains("type") || !job["type"].is_string()) {
+        continue;
+      }
+
+      const auto job_type = job["type"].get<std::string>();
+      if (job_type == "input") {
+        for (auto it = job.begin(); it != job.end(); ++it) {
+          if (!IsAllowedInputJobKey(it.key())) {
+            errors << "ERROR [input.manifest.key_not_allowed]: key '"
+                   << it.key()
+                   << "' is not allowed for input jobs; allowed keys are "
+                      "'id', 'type', 'source', 'depends_on'\n";
+            return true;
+          }
+        }
+        if (!job.contains("id") || !job["id"].is_string()) {
+          errors << "ERROR [input.manifest.job_id_missing]: input job.id "
+                    "is required and must be a string\n";
+          return true;
+        }
+        auto job_id = job["id"].get<std::string>();
+        TrimInPlace(job_id);
+        if (job_id.empty()) {
+          errors << "ERROR [input.manifest.job_id_missing]: input job.id "
+                    "must not be empty\n";
+          return true;
+        }
+      } else if (job_type == "physics-sidecar") {
+        for (auto it = job.begin(); it != job.end(); ++it) {
+          if (!IsAllowedPhysicsSidecarJobKey(it.key())) {
+            errors << "ERROR [physics.manifest.key_not_allowed]: key '"
+                   << it.key() << "' is not allowed for physics-sidecar jobs\n";
+            return true;
+          }
+        }
+      }
+
+      if (job_type == "script-sidecar" || job_type == "physics-sidecar") {
+        const bool has_source = job.contains("source");
+        const bool has_bindings = job.contains("bindings");
+        if (has_source && has_bindings) {
+          errors << "ERROR: " << job_type
+                 << " job requires exactly one of 'source' or 'bindings'\n";
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   auto ReadBoolField(const json& obj, const char* name, bool& target,
@@ -453,6 +524,16 @@ namespace {
     return true;
   }
 
+  auto ApplyPhysicsSidecarOverrides(const json& obj,
+    PhysicsSidecarImportSettings& settings, std::ostream& errors) -> bool
+  {
+    if (!ReadStringField(obj, "target_scene_virtual_path",
+          settings.target_scene_virtual_path, errors)) {
+      return false;
+    }
+    return true;
+  }
+
   auto ApplyCommonOverrides(const json& obj, TextureImportSettings& settings,
     std::ostream& errors) -> bool
   {
@@ -587,6 +668,21 @@ namespace {
     return true;
   }
 
+  auto ApplyCommonScriptOverrides(const json& obj,
+    PhysicsSidecarImportSettings& settings, std::ostream& errors) -> bool
+  {
+    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
+      return false;
+    }
+    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
+      return false;
+    }
+    if (!ReadBoolField(obj, "verbose", settings.verbose, errors)) {
+      return false;
+    }
+    return true;
+  }
+
 } // namespace
 
 auto ImportManifest::Load(const std::filesystem::path& manifest_path,
@@ -595,6 +691,10 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
 {
   const auto json_data = ReadJsonFile(manifest_path, error_stream);
   if (!json_data.has_value()) {
+    return std::nullopt;
+  }
+
+  if (ReportEarlyJobKeyWhitelistViolations(*json_data, error_stream)) {
     return std::nullopt;
   }
 
@@ -651,6 +751,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     manifest.defaults.gltf.cooked_root = manifest_output_root;
     manifest.defaults.script.cooked_root = manifest_output_root;
     manifest.defaults.scripting_sidecar.cooked_root = manifest_output_root;
+    manifest.defaults.physics_sidecar.cooked_root = manifest_output_root;
   }
 
   if (json_data->contains("defaults")) {
@@ -728,6 +829,27 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
         return std::nullopt;
       }
     }
+
+    if (defaults.contains("physics_sidecar")) {
+      const auto& sidecar_defaults = defaults["physics_sidecar"];
+      if (!sidecar_defaults.is_object()) {
+        error_stream << "ERROR: defaults.physics_sidecar must be an object\n";
+        return std::nullopt;
+      }
+      if (!ApplyCommonScriptOverrides(sidecar_defaults,
+            manifest.defaults.physics_sidecar, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyImportOptions(sidecar_defaults,
+            manifest.defaults.physics_sidecar.with_content_hashing,
+            error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyPhysicsSidecarOverrides(sidecar_defaults,
+            manifest.defaults.physics_sidecar, error_stream)) {
+        return std::nullopt;
+      }
+    }
   }
 
   if (!json_data->contains("jobs") || !(*json_data)["jobs"].is_array()) {
@@ -747,6 +869,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     manifest_job.gltf = manifest.defaults.gltf;
     manifest_job.script = manifest.defaults.script;
     manifest_job.scripting_sidecar = manifest.defaults.scripting_sidecar;
+    manifest_job.physics_sidecar = manifest.defaults.physics_sidecar;
     manifest_job.fbx.texture_defaults = manifest.defaults.texture;
     manifest_job.gltf.texture_defaults = manifest.defaults.texture;
 
@@ -811,20 +934,56 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
       continue;
     }
 
+    if (manifest_job.job_type == "physics-sidecar") {
+      for (auto it = job.begin(); it != job.end(); ++it) {
+        if (!IsAllowedPhysicsSidecarJobKey(it.key())) {
+          error_stream << "ERROR [physics.manifest.key_not_allowed]: key '"
+                       << it.key() << "' is not allowed for physics-sidecar "
+                       << "jobs\n";
+          return std::nullopt;
+        }
+      }
+      if (!ReadStringField(job, "id", manifest_job.id, error_stream)) {
+        return std::nullopt;
+      }
+      TrimInPlace(manifest_job.id);
+      if (!ReadStringArrayField(
+            job, "depends_on", manifest_job.depends_on, error_stream)) {
+        return std::nullopt;
+      }
+      for (size_t dep_index = 0; dep_index < manifest_job.depends_on.size();
+        ++dep_index) {
+        auto& dep = manifest_job.depends_on[dep_index];
+        TrimInPlace(dep);
+        if (dep.empty()) {
+          error_stream << "ERROR: physics-sidecar job.depends_on[" << dep_index
+                       << "] must not be empty\n";
+          return std::nullopt;
+        }
+      }
+    }
+
     const auto has_source = job.contains("source");
     const auto has_bindings = job.contains("bindings");
-    const auto is_sidecar_job = manifest_job.job_type == "script-sidecar";
+    const auto is_script_sidecar_job
+      = manifest_job.job_type == "script-sidecar";
+    const auto is_physics_sidecar_job
+      = manifest_job.job_type == "physics-sidecar";
+    const auto is_sidecar_job = is_script_sidecar_job || is_physics_sidecar_job;
 
     if (has_bindings && !is_sidecar_job) {
       error_stream << "ERROR: job.bindings is only valid for type "
-                      "'script-sidecar'\n";
+                      "'script-sidecar' or 'physics-sidecar'\n";
       return std::nullopt;
     }
 
     if (!has_source && !has_bindings) {
-      if (is_sidecar_job) {
-        error_stream
-          << "ERROR: script-sidecar job requires 'source' or 'bindings'\n";
+      if (is_script_sidecar_job) {
+        error_stream << "ERROR: script-sidecar job requires 'source' or "
+                        "'bindings'\n";
+      } else if (is_physics_sidecar_job) {
+        error_stream << "ERROR: physics-sidecar job requires 'source' or "
+                        "'bindings'\n";
       } else {
         error_stream << "ERROR: job.source is required and must be a string\n";
       }
@@ -836,15 +995,24 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
       return std::nullopt;
     }
 
-    if (has_bindings && !job["bindings"].is_array()) {
-      error_stream << "ERROR: job.bindings must be an array\n";
+    if (is_sidecar_job && (has_source == has_bindings)) {
+      error_stream << "ERROR: "
+                   << (is_script_sidecar_job ? "script-sidecar"
+                                             : "physics-sidecar")
+                   << " job requires exactly one of 'source' or 'bindings'\n";
       return std::nullopt;
     }
 
-    if (is_sidecar_job && (has_source == has_bindings)) {
-      error_stream << "ERROR: script-sidecar job requires exactly one of "
-                      "'source' or 'bindings'\n";
-      return std::nullopt;
+    if (has_bindings) {
+      if (is_script_sidecar_job && !job["bindings"].is_array()) {
+        error_stream << "ERROR: script-sidecar job.bindings must be an array\n";
+        return std::nullopt;
+      }
+      if (is_physics_sidecar_job && !job["bindings"].is_object()) {
+        error_stream
+          << "ERROR: physics-sidecar job.bindings must be an object\n";
+        return std::nullopt;
+      }
     }
 
     if (has_source) {
@@ -855,20 +1023,30 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
       manifest_job.script.source_path = manifest_job.texture.source_path;
       manifest_job.scripting_sidecar.source_path
         = manifest_job.texture.source_path;
+      manifest_job.physics_sidecar.source_path
+        = manifest_job.texture.source_path;
     } else {
       manifest_job.texture.source_path.clear();
       manifest_job.fbx.source_path.clear();
       manifest_job.gltf.source_path.clear();
       manifest_job.script.source_path.clear();
       manifest_job.scripting_sidecar.source_path.clear();
+      manifest_job.physics_sidecar.source_path.clear();
     }
 
-    if (has_bindings) {
+    if (has_bindings && is_script_sidecar_job) {
       auto sidecar_doc = json::object();
       sidecar_doc["bindings"] = job["bindings"];
       manifest_job.scripting_sidecar.inline_bindings_json = sidecar_doc.dump();
+      manifest_job.physics_sidecar.inline_bindings_json.clear();
+    } else if (has_bindings && is_physics_sidecar_job) {
+      auto sidecar_doc = json::object();
+      sidecar_doc["bindings"] = job["bindings"];
+      manifest_job.physics_sidecar.inline_bindings_json = sidecar_doc.dump();
+      manifest_job.scripting_sidecar.inline_bindings_json.clear();
     } else {
       manifest_job.scripting_sidecar.inline_bindings_json.clear();
+      manifest_job.physics_sidecar.inline_bindings_json.clear();
     }
 
     if (!ApplyCommonOverrides(job, manifest_job.texture, error_stream)) {
@@ -887,6 +1065,10 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
     if (!ApplyCommonScriptOverrides(
           job, manifest_job.scripting_sidecar, error_stream)) {
+      return std::nullopt;
+    }
+    if (!ApplyCommonScriptOverrides(
+          job, manifest_job.physics_sidecar, error_stream)) {
       return std::nullopt;
     }
 
@@ -908,6 +1090,10 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
           manifest_job.scripting_sidecar.with_content_hashing, error_stream)) {
       return std::nullopt;
     }
+    if (!ApplyImportOptions(job,
+          manifest_job.physics_sidecar.with_content_hashing, error_stream)) {
+      return std::nullopt;
+    }
     if (!ApplyTextureOverrides(job, manifest_job.texture, error_stream)) {
       return std::nullopt;
     }
@@ -916,6 +1102,10 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
     if (!ApplyScriptingSidecarOverrides(
           job, manifest_job.scripting_sidecar, error_stream)) {
+      return std::nullopt;
+    }
+    if (!ApplyPhysicsSidecarOverrides(
+          job, manifest_job.physics_sidecar, error_stream)) {
       return std::nullopt;
     }
 
@@ -943,6 +1133,20 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream) const
   if (job_type == "script-sidecar") {
     return internal::BuildScriptingSidecarRequest(
       scripting_sidecar, error_stream);
+  }
+  if (job_type == "physics-sidecar") {
+    auto request
+      = internal::BuildPhysicsSidecarRequest(physics_sidecar, error_stream);
+    if (!request.has_value()) {
+      return std::nullopt;
+    }
+    if (!id.empty()) {
+      request->orchestration = ImportRequest::OrchestrationMetadata {
+        .job_id = id,
+        .depends_on = depends_on,
+      };
+    }
+    return request;
   }
   if (job_type == "input") {
     return internal::BuildInputImportRequest(

@@ -57,12 +57,13 @@ oxygen_embed_json_schemas(
   OUTPUT_HEADER
     "${CMAKE_BINARY_DIR}/generated/Oxygen/Cooker/Import/Internal/ImportManifest_schema.h"
   NAMESPACE "oxygen::content::import"
-  INCLUDE_BASE_DIR
-    "${CMAKE_BINARY_DIR}/generated"
+  INCLUDE_BASE_DIR "${CMAKE_BINARY_DIR}/generated"
   CHUNK_SIZE 8192
   SCHEMAS
     kImportManifestSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.import-manifest.schema.json"
+    kPhysicsSidecarSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-sidecar.schema.json"
 )
 
 set(
@@ -83,6 +84,8 @@ set(
   "Import/ImportRequest.h"
   "Import/InputImportRequestBuilder.h"
   "Import/InputImportSettings.h"
+  "Import/PhysicsImportRequestBuilder.h"
+  "Import/PhysicsImportSettings.h"
   "Import/Naming.h"
   "Import/ScriptImportRequestBuilder.h"
   "Import/ScriptImportSettings.h"
@@ -136,6 +139,7 @@ set(
   "Import/Internal/Jobs/FbxImportJob.h"
   "Import/Internal/Jobs/GlbImportJob.h"
   "Import/Internal/Jobs/InputImportJob.h"
+  "Import/Internal/Jobs/PhysicsSidecarImportJob.h"
   "Import/Internal/Jobs/ScriptAssetImportJob.h"
   "Import/Internal/Jobs/ScriptingSidecarImportJob.h"
   "Import/Internal/Jobs/TextureImportJob.h"
@@ -148,6 +152,7 @@ set(
   "Import/Internal/Pipelines/InputImportPipeline.h"
   "Import/Internal/Pipelines/MaterialPipeline.h"
   "Import/Internal/Pipelines/MeshBuildPipeline.h"
+  "Import/Internal/Pipelines/PhysicsSidecarImportPipeline.h"
   "Import/Internal/Pipelines/ScriptAssetImportPipeline.h"
   "Import/Internal/Pipelines/ScriptImportPipelineCommon.h"
   "Import/Internal/Pipelines/ScenePipeline.h"
@@ -156,6 +161,7 @@ set(
   "Import/Internal/ResourceTableAggregator.h"
   "Import/Internal/ResourceTableRegistry.h"
   "Import/Internal/SceneImportRequestBuilder.h"
+  "Import/Internal/SidecarSceneResolver.h"
   "Import/Internal/stb/stb_image.h"
   "Import/Internal/TextureCooker.h"
   "Import/Internal/TextureImportRequestBuilder.h"
@@ -202,10 +208,12 @@ set(
   "Import/Internal/ImportPlanner.cpp"
   "Import/Internal/ImportSession.cpp"
   "Import/Internal/InputImportRequestBuilder.cpp"
+  "Import/Internal/PhysicsImportRequestBuilder.cpp"
   "Import/Internal/Jobs/AudioImportJob.cpp"
   "Import/Internal/Jobs/FbxImportJob.cpp"
   "Import/Internal/Jobs/GlbImportJob.cpp"
   "Import/Internal/Jobs/InputImportJob.cpp"
+  "Import/Internal/Jobs/PhysicsSidecarImportJob.cpp"
   "Import/Internal/Jobs/ScriptAssetImportJob.cpp"
   "Import/Internal/Jobs/ScriptingSidecarImportJob.cpp"
   "Import/Internal/Jobs/TextureImportJob.cpp"
@@ -216,6 +224,7 @@ set(
   "Import/Internal/Pipelines/InputImportPipeline.cpp"
   "Import/Internal/Pipelines/MaterialPipeline.cpp"
   "Import/Internal/Pipelines/MeshBuildPipeline.cpp"
+  "Import/Internal/Pipelines/PhysicsSidecarImportPipeline.cpp"
   "Import/Internal/Pipelines/ScriptAssetImportPipeline.cpp"
   "Import/Internal/Pipelines/ScenePipeline.cpp"
   "Import/Internal/Pipelines/ScriptingSidecarImportPipeline.cpp"
@@ -223,6 +232,7 @@ set(
   "Import/Internal/ResourceTableRegistry.cpp"
   "Import/Internal/ScriptImportRequestBuilder.cpp"
   "Import/Internal/SceneImportRequestBuilder.cpp"
+  "Import/Internal/SidecarSceneResolver.cpp"
   "Import/Internal/TextureCooker.cpp"
   "Import/Internal/TextureImportRequestBuilder.cpp"
   "Import/Internal/Utils/ImportSettingsUtils.cpp"
@@ -330,6 +340,7 @@ if(${META_PROJECT_ID}_INSTALL)
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.import-manifest.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input-action.schema.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-sidecar.schema.json"
   )
   foreach(_schema_file IN LISTS _oxygen_cooker_schema_files)
     if(NOT EXISTS "${_schema_file}")
@@ -338,7 +349,8 @@ if(${META_PROJECT_ID}_INSTALL)
   endforeach()
 
   install(
-    FILES ${_oxygen_cooker_schema_files}
+    FILES
+      ${_oxygen_cooker_schema_files}
     DESTINATION ${OXYGEN_INSTALL_DATA}/schemas
     COMPONENT ${META_PROJECT_NAME}_data
   )

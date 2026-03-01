@@ -8,6 +8,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <filesystem>
 #include <latch>
 #include <mutex>
 #include <thread>
@@ -321,6 +322,61 @@ NOLINT_TEST_F(
 
   // Assert
   ASSERT_FALSE(job_id);
+
+  StopService(service);
+}
+
+//! Verify unknown format requests are rejected when no domain override is set.
+NOLINT_TEST_F(AsyncImportServiceSubmitTest, UnknownFormatWithoutDomainRejected)
+{
+  AsyncImportService service(config_);
+
+  auto request = ImportRequest {};
+  request.source_path = "unrecognized.asset";
+  request.cooked_root = std::filesystem::temp_directory_path();
+
+  const auto job_id
+    = service.SubmitImport(std::move(request), nullptr, nullptr);
+  EXPECT_FALSE(job_id.has_value());
+
+  StopService(service);
+}
+
+//! Verify physics-sidecar payload bypasses format detection and routes to
+//! the physics job path.
+NOLINT_TEST_F(
+  AsyncImportServiceSubmitTest, PhysicsSidecarRequestBypassesFormatDetection)
+{
+  AsyncImportService service(config_);
+
+  auto request = ImportRequest {};
+  request.source_path = "unrecognized.asset";
+  request.cooked_root = std::filesystem::temp_directory_path()
+    / "oxygen_physics_routing_submit_test";
+  std::filesystem::create_directories(*request.cooked_root);
+  request.physics = PhysicsImportSettings {
+    .target_scene_virtual_path = "/Scenes/MissingScene.oscene",
+    .inline_bindings_json = R"({"bindings":{"rigid_bodies":[]}})",
+  };
+
+  std::latch done(1);
+  ImportReport report {};
+  const auto job_id = service.SubmitImport(
+    std::move(request),
+    [&report, &done](ImportJobId, const ImportReport& completed) {
+      report = completed;
+      done.count_down();
+    },
+    nullptr);
+
+  ASSERT_TRUE(job_id.has_value());
+  done.wait();
+
+  EXPECT_FALSE(report.success);
+  EXPECT_TRUE(std::any_of(report.diagnostics.begin(), report.diagnostics.end(),
+    [](const ImportDiagnostic& diagnostic) {
+      return diagnostic.code.starts_with("physics.sidecar.");
+    }));
 
   StopService(service);
 }

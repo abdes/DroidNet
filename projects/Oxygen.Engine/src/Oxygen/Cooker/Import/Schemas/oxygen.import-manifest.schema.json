@@ -90,22 +90,29 @@
                     "if": {
                         "properties": {
                             "type": {
-                                "const": "script-sidecar"
+                                "enum": [
+                                    "script-sidecar",
+                                    "physics-sidecar"
+                                ]
                             }
                         }
                     },
                     "then": {
-                        "oneOf": [
+                        "allOf": [
                             {
-                                "required": [
-                                    "source",
-                                    "target_scene_virtual_path"
-                                ]
-                            },
-                            {
-                                "required": [
-                                    "bindings",
-                                    "target_scene_virtual_path"
+                                "oneOf": [
+                                    {
+                                        "required": [
+                                            "source",
+                                            "target_scene_virtual_path"
+                                        ]
+                                    },
+                                    {
+                                        "required": [
+                                            "bindings",
+                                            "target_scene_virtual_path"
+                                        ]
+                                    }
                                 ]
                             }
                         ]
@@ -114,6 +121,55 @@
                         "required": [
                             "source"
                         ]
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "type": {
+                                "const": "script-sidecar"
+                            }
+                        }
+                    },
+                    "then": {
+                        "properties": {
+                            "bindings": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "type": {
+                                "const": "physics-sidecar"
+                            }
+                        }
+                    },
+                    "then": {
+                        "properties": {
+                            "bindings": {
+                                "type": "object"
+                            }
+                        },
+                        "propertyNames": {
+                            "enum": [
+                                "id",
+                                "depends_on",
+                                "type",
+                                "source",
+                                "bindings",
+                                "target_scene_virtual_path",
+                                "output",
+                                "name",
+                                "verbose",
+                                "content_hashing"
+                            ]
+                        }
                     }
                 },
                 {
@@ -155,6 +211,9 @@
                 },
                 "scripting_sidecar": {
                     "$ref": "#/definitions/scripting_sidecar_settings"
+                },
+                "physics_sidecar": {
+                    "$ref": "#/definitions/physics_sidecar_settings"
                 },
                 "input": {
                     "type": "object",
@@ -409,6 +468,27 @@
             },
             "additionalProperties": false
         },
+        "physics_sidecar_settings": {
+            "type": "object",
+            "properties": {
+                "output": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "verbose": {
+                    "type": "boolean"
+                },
+                "content_hashing": {
+                    "type": "boolean"
+                },
+                "target_scene_virtual_path": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false
+        },
         "job_settings": {
             "type": "object",
             "properties": {
@@ -419,6 +499,7 @@
                         "gltf",
                         "script",
                         "script-sidecar",
+                        "physics-sidecar",
                         "input"
                     ]
                 },
@@ -623,10 +704,17 @@
                     "type": "string"
                 },
                 "bindings": {
-                    "type": "array",
-                    "items": {
-                        "type": "object"
-                    }
+                    "oneOf": [
+                        {
+                            "type": "array",
+                            "items": {
+                                "type": "object"
+                            }
+                        },
+                        {
+                            "type": "object"
+                        }
+                    ]
                 }
             },
             "additionalProperties": false

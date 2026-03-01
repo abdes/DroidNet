@@ -91,6 +91,9 @@ namespace {
 
   auto ResolveReportJobType(const ImportRequest& request) -> std::string
   {
+    if (request.physics.has_value()) {
+      return "physics-sidecar";
+    }
     if (request.options.input.has_value()) {
       return "input";
     }

@@ -40,6 +40,7 @@
 #include <Oxygen/Cooker/Tools/ImportTool/ImportCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/InputCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
+#include <Oxygen/Cooker/Tools/ImportTool/PhysicsSidecarCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ScriptCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ScriptingSidecarCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/TextureCommand.h>
@@ -689,6 +690,7 @@ auto main(int argc, char** argv) -> int
     using oxygen::content::import::tool::BuildCli;
     using oxygen::content::import::tool::FbxCommand;
     using oxygen::content::import::tool::GltfCommand;
+    using oxygen::content::import::tool::PhysicsSidecarCommand;
     using oxygen::content::import::tool::ScriptCommand;
     using oxygen::content::import::tool::ScriptingSidecarCommand;
     using oxygen::content::import::tool::TextureCommand;
@@ -699,6 +701,7 @@ auto main(int argc, char** argv) -> int
     FbxCommand fbx_command(&global_options);
     GltfCommand gltf_command(&global_options);
     InputCommand input_command(&global_options);
+    PhysicsSidecarCommand physics_sidecar_command(&global_options);
     ScriptCommand script_command(&global_options);
     ScriptingSidecarCommand scripting_sidecar_command(&global_options);
     TextureCommand texture_command(&global_options);
@@ -709,6 +712,7 @@ auto main(int argc, char** argv) -> int
       &input_command,
       &script_command,
       &scripting_sidecar_command,
+      &physics_sidecar_command,
       &batch_command,
     };
 

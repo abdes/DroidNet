@@ -48,6 +48,8 @@ add_executable(
   "ImportRunner.cpp"
   "ImportRunner.h"
   "MessageWriter.h"
+  "PhysicsSidecarCommand.cpp"
+  "PhysicsSidecarCommand.h"
   "ReportJson.cpp"
   "ReportJson.h"
   "ScriptCommand.cpp"
