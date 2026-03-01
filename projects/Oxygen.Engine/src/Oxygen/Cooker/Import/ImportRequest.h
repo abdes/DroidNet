@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -106,6 +107,14 @@ struct ImportRequest final {
 
   //! Import options.
   ImportOptions options = {};
+
+  //! Optional physics-sidecar request payload.
+  /*!
+   Presence indicates this request must be handled by the physics sidecar
+
+   * domain rather than format-based import routing.
+  */
+  std::optional<PhysicsImportSettings> physics;
 
   //! Optional cooked roots mounted for resolver-only scene lookup context.
   /*!

@@ -58,7 +58,12 @@ m_gtest_program(
     "Import/InputJsonSchema_test.cpp"
     "Import/InputImportRequestBuilder_test.cpp"
     "Import/ImportManifest_input_test.cpp"
+    "Import/ImportManifest_physics_sidecar_test.cpp"
+    "Import/PhysicsImportJob_test.cpp"
+    "Import/PhysicsImportPipeline_test.cpp"
     "Import/ImportManifest_script_sidecar_test.cpp"
+    "Import/PhysicsImportRequestBuilder_test.cpp"
+    "Import/PhysicsJsonSchema_test.cpp"
     "Import/ScriptImportRequestBuilder_test.cpp"
     "Import/ScriptImportJob_test.cpp"
     "Import/ScriptImportPipeline_test.cpp"
@@ -67,6 +72,7 @@ m_gtest_program(
 target_link_libraries(
   Oxygen.Cooker.AsyncImportScripting.Tests
   PRIVATE
+    nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator
 )
 

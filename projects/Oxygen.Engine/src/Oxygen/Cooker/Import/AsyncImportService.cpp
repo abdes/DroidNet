@@ -44,6 +44,7 @@
 #include <Oxygen/Cooker/Import/Internal/Jobs/FbxImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/GlbImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/InputImportJob.h>
+#include <Oxygen/Cooker/Import/Internal/Jobs/PhysicsSidecarImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/ScriptAssetImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/ScriptingSidecarImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/TextureImportJob.h>
@@ -74,6 +75,15 @@ namespace {
     const auto file_name = source_path.filename().string();
     const auto name_part = file_name.empty() ? "source" : file_name;
     return to_string(kind) + ":" + nostd::to_string(job_id) + ":" + name_part;
+  }
+
+  [[nodiscard]] auto MakePhysicsSidecarJobName(
+    ImportJobId job_id, const std::filesystem::path& source_path) -> std::string
+  {
+    const auto file_name = source_path.filename().string();
+    const auto name_part = file_name.empty() ? "source" : file_name;
+    return std::string("physics-sidecar:") + nostd::to_string(job_id) + ":"
+      + name_part;
   }
 
   [[nodiscard]] auto CreateJobForFormat(ImportFormat format,
@@ -412,6 +422,7 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
 
   const bool use_custom_factory = static_cast<bool>(job_factory);
   const auto scripting_kind = request.options.scripting.import_kind;
+  const bool is_physics_sidecar_request = request.physics.has_value();
   const bool is_input_request = request.options.input.has_value();
   const auto is_script_asset_request
     = (scripting_kind == ScriptingImportKind::kScriptAsset);
@@ -422,11 +433,12 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
 
   auto format = ImportFormat::kUnknown;
   if (!use_custom_factory) {
-    if (!is_scripting_request && !is_input_request) {
+    if (!is_scripting_request && !is_input_request
+      && !is_physics_sidecar_request) {
       format = request.GetFormat();
     }
     if (!is_scripting_request && !is_input_request
-      && format == ImportFormat::kUnknown) {
+      && !is_physics_sidecar_request && format == ImportFormat::kUnknown) {
       LOG_F(WARNING, "Submit rejected: unknown format for '{}'",
         request.source_path.string());
       return std::nullopt;
@@ -455,13 +467,21 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
 
   const auto source_path_string = request.source_path.string();
 
-  const auto job_name = request.job_name.value_or(use_custom_factory
-      ? std::string("custom:") + nostd::to_string(job_id)
-      : is_input_request ? std::string("input:") + nostd::to_string(job_id)
-        + ":" + request.source_path.filename().string()
-      : is_scripting_request
-      ? MakeScriptingJobName(scripting_kind, job_id, request.source_path)
-      : MakeJobName(format, job_id, request.source_path));
+  auto default_job_name = std::string {};
+  if (use_custom_factory) {
+    default_job_name = std::string("custom:") + nostd::to_string(job_id);
+  } else if (is_input_request) {
+    default_job_name = std::string("input:") + nostd::to_string(job_id) + ":"
+      + request.source_path.filename().string();
+  } else if (is_scripting_request) {
+    default_job_name
+      = MakeScriptingJobName(scripting_kind, job_id, request.source_path);
+  } else if (is_physics_sidecar_request) {
+    default_job_name = MakePhysicsSidecarJobName(job_id, request.source_path);
+  } else {
+    default_job_name = MakeJobName(format, job_id, request.source_path);
+  }
+  const auto job_name = request.job_name.value_or(default_job_name);
 
   const auto file_reader = observer_ptr(impl_->file_reader_.get());
   const auto file_writer = observer_ptr(impl_->file_writer_.get());
@@ -499,6 +519,8 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   } else if (is_sidecar_request) {
     job
       = std::make_shared<detail::ScriptingSidecarImportJob>(std::move(params));
+  } else if (is_physics_sidecar_request) {
+    job = std::make_shared<detail::PhysicsSidecarImportJob>(std::move(params));
   } else {
     job = CreateJobForFormat(format, std::move(params));
   }

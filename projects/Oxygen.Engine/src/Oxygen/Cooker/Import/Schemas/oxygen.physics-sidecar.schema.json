@@ -1,0 +1,307 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Oxygen Physics Sidecar",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "bindings"
+    ],
+    "properties": {
+        "$schema": {
+            "type": "string",
+            "description": "Optional self-reference to this schema file."
+        },
+        "bindings": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "rigid_bodies": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/rigid_body_binding"
+                    }
+                },
+                "colliders": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/collider_binding"
+                    }
+                },
+                "characters": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/character_binding"
+                    }
+                },
+                "soft_bodies": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/soft_body_binding"
+                    }
+                },
+                "joints": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/joint_binding"
+                    }
+                },
+                "vehicles": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/vehicle_binding"
+                    }
+                },
+                "aggregates": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/aggregate_binding"
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "node_index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+        },
+        "u16": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65535
+        },
+        "u32": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+        },
+        "resource_index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+        },
+        "rigid_body_binding": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "node_index",
+                "shape_virtual_path",
+                "material_virtual_path"
+            ],
+            "properties": {
+                "node_index": {
+                    "$ref": "#/definitions/node_index"
+                },
+                "shape_virtual_path": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "material_virtual_path": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "body_type": {
+                    "enum": [
+                        "static",
+                        "dynamic",
+                        "kinematic"
+                    ]
+                },
+                "motion_quality": {
+                    "enum": [
+                        "discrete",
+                        "linear_cast"
+                    ]
+                },
+                "collision_layer": {
+                    "$ref": "#/definitions/u16"
+                },
+                "collision_mask": {
+                    "$ref": "#/definitions/u32"
+                },
+                "mass": {
+                    "type": "number"
+                },
+                "linear_damping": {
+                    "type": "number"
+                },
+                "angular_damping": {
+                    "type": "number"
+                },
+                "gravity_factor": {
+                    "type": "number"
+                },
+                "initial_activation": {
+                    "type": "boolean"
+                },
+                "is_sensor": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "collider_binding": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "node_index",
+                "shape_virtual_path",
+                "material_virtual_path"
+            ],
+            "properties": {
+                "node_index": {
+                    "$ref": "#/definitions/node_index"
+                },
+                "shape_virtual_path": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "material_virtual_path": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "collision_layer": {
+                    "$ref": "#/definitions/u16"
+                },
+                "collision_mask": {
+                    "$ref": "#/definitions/u32"
+                }
+            }
+        },
+        "character_binding": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "node_index",
+                "shape_virtual_path"
+            ],
+            "properties": {
+                "node_index": {
+                    "$ref": "#/definitions/node_index"
+                },
+                "shape_virtual_path": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "mass": {
+                    "type": "number"
+                },
+                "max_slope_angle": {
+                    "type": "number"
+                },
+                "step_height": {
+                    "type": "number"
+                },
+                "max_strength": {
+                    "type": "number"
+                },
+                "collision_layer": {
+                    "$ref": "#/definitions/u16"
+                },
+                "collision_mask": {
+                    "$ref": "#/definitions/u32"
+                }
+            }
+        },
+        "soft_body_binding": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "node_index"
+            ],
+            "properties": {
+                "node_index": {
+                    "$ref": "#/definitions/node_index"
+                },
+                "cluster_count": {
+                    "$ref": "#/definitions/u32"
+                },
+                "stiffness": {
+                    "type": "number"
+                },
+                "damping": {
+                    "type": "number"
+                },
+                "edge_compliance": {
+                    "type": "number"
+                },
+                "shear_compliance": {
+                    "type": "number"
+                },
+                "bend_compliance": {
+                    "type": "number"
+                },
+                "tether_mode": {
+                    "enum": [
+                        "none",
+                        "euclidean",
+                        "geodesic"
+                    ]
+                },
+                "tether_max_distance_multiplier": {
+                    "type": "number"
+                }
+            }
+        },
+        "joint_binding": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "node_index_a",
+                "node_index_b",
+                "constraint_resource_index"
+            ],
+            "properties": {
+                "node_index_a": {
+                    "$ref": "#/definitions/node_index"
+                },
+                "node_index_b": {
+                    "$ref": "#/definitions/node_index"
+                },
+                "constraint_resource_index": {
+                    "$ref": "#/definitions/resource_index"
+                }
+            }
+        },
+        "vehicle_binding": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "node_index",
+                "constraint_resource_index"
+            ],
+            "properties": {
+                "node_index": {
+                    "$ref": "#/definitions/node_index"
+                },
+                "constraint_resource_index": {
+                    "$ref": "#/definitions/resource_index"
+                }
+            }
+        },
+        "aggregate_binding": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "node_index"
+            ],
+            "properties": {
+                "node_index": {
+                    "$ref": "#/definitions/node_index"
+                },
+                "max_bodies": {
+                    "$ref": "#/definitions/u32"
+                },
+                "filter_overlap": {
+                    "type": "boolean"
+                },
+                "authority": {
+                    "enum": [
+                        "simulation",
+                        "command"
+                    ]
+                }
+            }
+        }
+    }
+}

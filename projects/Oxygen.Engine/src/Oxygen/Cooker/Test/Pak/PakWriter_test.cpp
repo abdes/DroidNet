@@ -505,6 +505,88 @@ NOLINT_TEST_F(
   EXPECT_TRUE(saw_scene);
 }
 
+NOLINT_TEST_F(
+  PakWriterTest, FullModeWritesPhysicsSceneDescriptorsIntoFinalPakDirectory)
+{
+  using data::CookedSource;
+  using data::CookedSourceKind;
+  using pak::BuildMode;
+  using pak::PakPlanBuilder;
+  using pak::PakWriter;
+
+  const auto source = Root() / "physics_assets_loose";
+  const auto output_path = Root() / "physics_assets_output.pak";
+
+  const auto physics_desc_rel
+    = std::string { "Descriptors/Scenes/Main.physics" };
+  const auto physics_desc_bytes = MakePatternBytes(0x71U, 56U);
+
+  ASSERT_TRUE(paktest::WriteFileBytes(source / physics_desc_rel,
+    std::span<const std::byte>(
+      physics_desc_bytes.data(), physics_desc_bytes.size())));
+
+  const auto physics_key = MakeAssetKey(0xA1U);
+  const auto assets = std::array<paktest::AssetSpec, 1> {
+    paktest::AssetSpec {
+      .key = physics_key,
+      .asset_type = data::AssetType::kPhysicsScene,
+      .descriptor_relpath = physics_desc_rel,
+      .virtual_path = "/Content/Scenes/Main.physics",
+      .descriptor_size = static_cast<uint64_t>(physics_desc_bytes.size()),
+      .descriptor_sha = paktest::MakeDigest(0xA1U),
+    },
+  };
+  ASSERT_TRUE(paktest::WriteLooseIndex(source,
+    std::span<const paktest::AssetSpec>(assets.data(), assets.size()),
+    std::span<const paktest::FileSpec> {}, 0xA2U));
+
+  const auto request = pak::PakBuildRequest {
+    .mode = BuildMode::kFull,
+    .sources
+    = { CookedSource { .kind = CookedSourceKind::kLooseCooked, .path = source } },
+    .output_pak_path = output_path,
+    .output_manifest_path = {},
+    .content_version = 1U,
+    .source_key = MakeSourceKey(),
+    .base_catalogs = {},
+    .patch_compat = {},
+    .options = {
+      .deterministic = true,
+      .embed_browse_index = true,
+      .emit_manifest_in_full = false,
+      .compute_crc32 = true,
+      .fail_on_warnings = false,
+    },
+  };
+
+  const auto plan_result = PakPlanBuilder {}.Build(request);
+  ASSERT_FALSE(HasError(plan_result.diagnostics));
+  ASSERT_TRUE(plan_result.plan.has_value());
+
+  const auto write_result = PakWriter {}.Write(request, *plan_result.plan);
+  ASSERT_FALSE(HasError(write_result.diagnostics));
+
+  const auto pak_bytes = ReadAllBytes(output_path);
+  auto pak_file = content::PakFile(output_path);
+  const auto directory = pak_file.Directory();
+  ASSERT_EQ(directory.size(), assets.size());
+
+  const auto& entry = directory.front();
+  EXPECT_EQ(entry.asset_key, physics_key);
+  EXPECT_EQ(static_cast<data::AssetType>(entry.asset_type),
+    data::AssetType::kPhysicsScene);
+
+  const auto descriptor_offset = static_cast<size_t>(entry.desc_offset);
+  const auto descriptor_size = static_cast<size_t>(entry.desc_size);
+  ASSERT_LE(descriptor_offset + descriptor_size, pak_bytes.size());
+
+  const auto payload = std::span<const std::byte>(
+    pak_bytes.data() + descriptor_offset, descriptor_size);
+  ASSERT_EQ(payload.size(), physics_desc_bytes.size());
+  EXPECT_TRUE(std::equal(payload.begin(), payload.end(),
+    physics_desc_bytes.begin(), physics_desc_bytes.end()));
+}
+
 NOLINT_TEST_F(PakWriterTest, OffsetMismatchEmitsActionableDiagnostic)
 {
   using pak::BuildMode;

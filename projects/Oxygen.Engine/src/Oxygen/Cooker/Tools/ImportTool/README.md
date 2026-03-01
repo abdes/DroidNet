@@ -9,6 +9,7 @@ Supported import kinds:
 - `input`
 - `script`
 - `script-sidecar`
+- `physics-sidecar`
 - `batch` (manifest-driven)
 
 ## Quick Start
@@ -51,7 +52,7 @@ Oxygen.Cooker.ImportTool --concurrency "t:4/64,b:2/32,g:2/32,s:2/32" batch --man
 
 Cooked root must resolve to an absolute path.
 
-Single-job commands (`texture`, `fbx`, `gltf`, `input`, `script`, `script-sidecar`):
+Single-job commands (`texture`, `fbx`, `gltf`, `input`, `script`, `script-sidecar`, `physics-sidecar`):
 1. `-i`, `--output` (command-local)
 2. global `-o`, `--cooked-root`
 
@@ -154,9 +155,11 @@ Shipped JSON schemas:
 - source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
 - source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json`
 - source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json`
+- source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json`
 - installed for users as: `schemas/oxygen.import-manifest.schema.json`
 - installed for users as: `schemas/oxygen.input.schema.json`
 - installed for users as: `schemas/oxygen.input-action.schema.json`
+- installed for users as: `schemas/oxygen.physics-sidecar.schema.json`
 
 Editor association examples (VSCode):
 
@@ -167,7 +170,8 @@ Repository checkout:
   "json.schemas": [
     { "fileMatch": ["import-manifest*.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json" },
     { "fileMatch": ["*.input.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json" },
-    { "fileMatch": ["*.input-action.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json" }
+    { "fileMatch": ["*.input-action.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json" },
+    { "fileMatch": ["*.physics-sidecar.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json" }
   ]
 }
 ```
@@ -179,7 +183,8 @@ Installed package layout:
   "json.schemas": [
     { "fileMatch": ["import-manifest*.json"], "url": "./schemas/oxygen.import-manifest.schema.json" },
     { "fileMatch": ["*.input.json"], "url": "./schemas/oxygen.input.schema.json" },
-    { "fileMatch": ["*.input-action.json"], "url": "./schemas/oxygen.input-action.schema.json" }
+    { "fileMatch": ["*.input-action.json"], "url": "./schemas/oxygen.input-action.schema.json" },
+    { "fileMatch": ["*.physics-sidecar.json"], "url": "./schemas/oxygen.physics-sidecar.schema.json" }
   ]
 }
 ```
@@ -242,6 +247,54 @@ Sidecar import writes script-binding payload tables:
 
 It also patches scene scripting components for the target scene.
 
+### `physics-sidecar`
+
+Imports scene physics bindings as a standalone `.physics` descriptor.
+
+Input modes (exactly one required):
+- positional `source` (JSON sidecar file), or
+- `--bindings-inline '<json>'`
+
+`--bindings-inline` accepts either:
+- a JSON object with `bindings` object (`{ "bindings": { ... } }`)
+- or a bare bindings object (`{ "rigid_bodies": [...], ... }`)
+
+Required:
+- `--target-scene-virtual-path <canonical-virtual-path>`
+
+Optional:
+- `-i`, `--output <path>`
+- `--name <job-name>`
+- `--report <path>`
+- `--content-hashing <true|false>`
+
+Canonical virtual-path requirements:
+- starts with `/`
+- no backslashes
+- no `//`
+- no trailing slash (except root)
+- no `.` or `..` segments
+
+Minimal payload example:
+
+```json
+{
+  "bindings": {
+    "rigid_bodies": [
+      {
+        "node_index": 0,
+        "shape_virtual_path": "/.cooked/PhysicsShapes/box.ocshape",
+        "material_virtual_path": "/.cooked/PhysicsMaterials/default.opmat",
+        "body_type": "dynamic"
+      }
+    ]
+  }
+}
+```
+
+Physics sidecar import emits a `.physics` descriptor and does not patch the
+scene descriptor.
+
 ### `batch`
 
 Runs manifest jobs.
@@ -277,7 +330,8 @@ Top-level fields:
     "texture": { "output": "..." },
     "scene": { "output": "..." },
     "script": { "output": "...", "compile": true, "script_storage": "embedded" },
-    "scripting_sidecar": { "output": "...", "target_scene_virtual_path": "/Scenes/MyScene.oscene" }
+    "scripting_sidecar": { "output": "...", "target_scene_virtual_path": "/Scenes/MyScene.oscene" },
+    "physics_sidecar": { "output": "...", "target_scene_virtual_path": "/Scenes/MyScene.oscene" }
   },
   "jobs": []
 }
@@ -295,6 +349,10 @@ Job rules:
   - `source`
   - `bindings` (inline array)
 - `script-sidecar` always requires `target_scene_virtual_path`
+- `physics-sidecar` requires exactly one of:
+  - `source`
+  - `bindings` (inline object)
+- `physics-sidecar` always requires `target_scene_virtual_path`
 - duplicate `id`, missing dependency targets, and dependency cycles are rejected
 - if a dependency job fails, all transitive dependents are skipped with
   `input.import.skipped_predecessor_failed`
@@ -332,6 +390,20 @@ Batch example with one output shared at manifest level:
           ]
         }
       ]
+    },
+    {
+      "type": "physics-sidecar",
+      "target_scene_virtual_path": "/Scenes/backpack.oscene",
+      "bindings": {
+        "rigid_bodies": [
+          {
+            "node_index": 0,
+            "shape_virtual_path": "/PhysicsShapes/backpack_body.ocshape",
+            "material_virtual_path": "/PhysicsMaterials/default.opmat",
+            "body_type": "dynamic"
+          }
+        ]
+      }
     }
   ]
 }
