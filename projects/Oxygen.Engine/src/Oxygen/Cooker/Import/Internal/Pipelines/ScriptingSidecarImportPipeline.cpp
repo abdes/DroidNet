@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -127,12 +128,151 @@ namespace {
     return std::to_string(node_index) + "|" + std::string { slot_id };
   }
 
+  using ScriptParamParserFn = bool (*)(const nlohmann::json& value,
+    data::pak::scripting::ScriptParamRecord& out, std::string& error);
+
+  auto ParseBoolParamValue(const nlohmann::json& value,
+    data::pak::scripting::ScriptParamRecord& out, std::string& error) -> bool
+  {
+    using data::pak::scripting::ScriptParamType;
+    if (!value.is_boolean()) {
+      error = "bool param requires boolean value";
+      return false;
+    }
+    out.type = ScriptParamType::kBool;
+    out.value.as_bool = value.get<bool>();
+    return true;
+  }
+
+  auto ParseInt32ParamValue(const nlohmann::json& value,
+    data::pak::scripting::ScriptParamRecord& out, std::string& error) -> bool
+  {
+    using data::pak::scripting::ScriptParamType;
+    if (!value.is_number_integer()) {
+      error = "int32 param requires integer value";
+      return false;
+    }
+    const auto parsed = value.get<int64_t>();
+    if (parsed < (std::numeric_limits<int32_t>::min)()
+      || parsed > (std::numeric_limits<int32_t>::max)()) {
+      error = "int32 param value is out of range";
+      return false;
+    }
+    out.type = ScriptParamType::kInt32;
+    out.value.as_int32 = static_cast<int32_t>(parsed);
+    return true;
+  }
+
+  auto ParseFloatParamValue(const nlohmann::json& value,
+    data::pak::scripting::ScriptParamRecord& out, std::string& error) -> bool
+  {
+    using data::pak::scripting::ScriptParamType;
+    if (!value.is_number()) {
+      error = "float param requires numeric value";
+      return false;
+    }
+    out.type = ScriptParamType::kFloat;
+    out.value.as_float = value.get<float>();
+    return true;
+  }
+
+  auto ParseStringParamValue(const nlohmann::json& value,
+    data::pak::scripting::ScriptParamRecord& out, std::string& error) -> bool
+  {
+    using data::pak::scripting::ScriptParamType;
+    if (!value.is_string()) {
+      error = "string param requires string value";
+      return false;
+    }
+    const auto text = value.get<std::string>();
+    if (!CopyNullTerminated(text, std::span { out.value.as_string })) {
+      error = "string param exceeds ScriptParamRecord::value.as_string "
+              "capacity";
+      return false;
+    }
+    out.type = ScriptParamType::kString;
+    return true;
+  }
+
+  template <size_t N>
+  auto ParseVectorParamValue(const nlohmann::json& value,
+    data::pak::scripting::ScriptParamRecord& out,
+    const data::pak::scripting::ScriptParamType param_type,
+    const std::string_view type_name, std::string& error) -> bool
+  {
+    if (!value.is_array()) {
+      error = std::string(type_name) + " param requires array value";
+      return false;
+    }
+    if (value.size() != N) {
+      error = std::string(type_name) + " param requires array size "
+        + std::to_string(N);
+      return false;
+    }
+    for (size_t i = 0; i < N; ++i) {
+      if (!value[i].is_number()) {
+        error = std::string(type_name)
+          + " param array must contain numeric elements";
+        return false;
+      }
+      out.value.as_vec[i] = value[i].get<float>();
+    }
+    out.type = param_type;
+    return true;
+  }
+
+  auto ParseVec2ParamValue(const nlohmann::json& value,
+    data::pak::scripting::ScriptParamRecord& out, std::string& error) -> bool
+  {
+    using data::pak::scripting::ScriptParamType;
+    return ParseVectorParamValue<2>(
+      value, out, ScriptParamType::kVec2, "vec2", error);
+  }
+
+  auto ParseVec3ParamValue(const nlohmann::json& value,
+    data::pak::scripting::ScriptParamRecord& out, std::string& error) -> bool
+  {
+    using data::pak::scripting::ScriptParamType;
+    return ParseVectorParamValue<3>(
+      value, out, ScriptParamType::kVec3, "vec3", error);
+  }
+
+  auto ParseVec4ParamValue(const nlohmann::json& value,
+    data::pak::scripting::ScriptParamRecord& out, std::string& error) -> bool
+  {
+    using data::pak::scripting::ScriptParamType;
+    return ParseVectorParamValue<4>(
+      value, out, ScriptParamType::kVec4, "vec4", error);
+  }
+
+  struct ScriptParamParserEntry final {
+    std::string_view type_name;
+    ScriptParamParserFn parse_fn = nullptr;
+  };
+
+  constexpr auto kScriptParamParsers = std::array<ScriptParamParserEntry, 7> {
+    ScriptParamParserEntry { "bool", &ParseBoolParamValue },
+    ScriptParamParserEntry { "int32", &ParseInt32ParamValue },
+    ScriptParamParserEntry { "float", &ParseFloatParamValue },
+    ScriptParamParserEntry { "string", &ParseStringParamValue },
+    ScriptParamParserEntry { "vec2", &ParseVec2ParamValue },
+    ScriptParamParserEntry { "vec3", &ParseVec3ParamValue },
+    ScriptParamParserEntry { "vec4", &ParseVec4ParamValue },
+  };
+
+  auto FindScriptParamParser(const std::string_view type_name)
+    -> const ScriptParamParserEntry*
+  {
+    const auto it = std::ranges::find_if(kScriptParamParsers,
+      [type_name](const ScriptParamParserEntry& entry) {
+        return entry.type_name == type_name;
+      });
+    return it == kScriptParamParsers.end() ? nullptr : &(*it);
+  }
+
   auto ParseScriptParamRecord(const nlohmann::json& param,
     data::pak::scripting::ScriptParamRecord& out, std::string& error) -> bool
   {
-    using data::pak::scripting::ScriptParamRecord;
-    using data::pak::scripting::ScriptParamType;
-
     if (!param.is_object()) {
       error = "Param record must be an object";
       return false;
@@ -158,91 +298,12 @@ namespace {
 
     const auto type = param["type"].get<std::string>();
     const auto& value = param["value"];
-
-    if (type == "bool") {
-      if (!value.is_boolean()) {
-        error = "bool param requires boolean value";
-        return false;
-      }
-      out.type = ScriptParamType::kBool;
-      out.value.as_bool = value.get<bool>();
-      return true;
+    const auto* parser = FindScriptParamParser(type);
+    if (parser == nullptr || parser->parse_fn == nullptr) {
+      error = "Unsupported param type '" + type + "'";
+      return false;
     }
-    if (type == "int32") {
-      if (!value.is_number_integer()) {
-        error = "int32 param requires integer value";
-        return false;
-      }
-      const auto v = value.get<int64_t>();
-      if (v < (std::numeric_limits<int32_t>::min)()
-        || v > (std::numeric_limits<int32_t>::max)()) {
-        error = "int32 param value is out of range";
-        return false;
-      }
-      out.type = ScriptParamType::kInt32;
-      out.value.as_int32 = static_cast<int32_t>(v);
-      return true;
-    }
-    if (type == "float") {
-      if (!value.is_number()) {
-        error = "float param requires numeric value";
-        return false;
-      }
-      out.type = ScriptParamType::kFloat;
-      out.value.as_float = value.get<float>();
-      return true;
-    }
-    if (type == "string") {
-      if (!value.is_string()) {
-        error = "string param requires string value";
-        return false;
-      }
-      const auto text = value.get<std::string>();
-      if (!CopyNullTerminated(text, std::span { out.value.as_string })) {
-        error = "string param exceeds ScriptParamRecord::value.as_string "
-                "capacity";
-        return false;
-      }
-      out.type = ScriptParamType::kString;
-      return true;
-    }
-
-    const auto ParseVectorParam
-      = [&](const size_t expected_size, const ScriptParamType param_type,
-          const std::string_view type_name) -> bool {
-      if (!value.is_array()) {
-        error = std::string(type_name) + " param requires array value";
-        return false;
-      }
-      if (value.size() != expected_size) {
-        error = std::string(type_name) + " param requires array size "
-          + std::to_string(expected_size);
-        return false;
-      }
-      for (size_t i = 0; i < expected_size; ++i) {
-        if (!value[i].is_number()) {
-          error = std::string(type_name)
-            + " param array must contain numeric elements";
-          return false;
-        }
-        out.value.as_vec[i] = value[i].get<float>();
-      }
-      out.type = param_type;
-      return true;
-    };
-
-    if (type == "vec2") {
-      return ParseVectorParam(2, ScriptParamType::kVec2, "vec2");
-    }
-    if (type == "vec3") {
-      return ParseVectorParam(3, ScriptParamType::kVec3, "vec3");
-    }
-    if (type == "vec4") {
-      return ParseVectorParam(4, ScriptParamType::kVec4, "vec4");
-    }
-
-    error = "Unsupported param type '" + type + "'";
-    return false;
+    return parser->parse_fn(value, out, error);
   }
 
   auto ParseSidecarDocument(std::span<const std::byte> bytes,
@@ -448,75 +509,107 @@ namespace {
     return nullptr;
   }
 
-  struct ComponentPayload final {
-    uint32_t component_type = 0;
-    uint32_t entry_size = 0;
-    std::vector<std::byte> bytes;
-  };
-
-  auto PatchSceneDescriptorScriptingComponents(
-    const std::vector<std::byte>& source_descriptor,
-    std::span<const script::ScriptingComponentRecord> scripting_components,
-    std::vector<std::byte>& patched_descriptor, std::string& error) -> bool
-  {
-    using data::ComponentType;
-    using world::SceneAssetDesc;
-    using world::SceneComponentTableDesc;
-
-    if (source_descriptor.size() < sizeof(SceneAssetDesc)) {
-      error = "Scene descriptor is smaller than SceneAssetDesc";
-      return false;
+  class SceneDescriptorPatcher final {
+  public:
+    SceneDescriptorPatcher(const std::vector<std::byte>& source_descriptor,
+      std::span<const script::ScriptingComponentRecord> scripting_components)
+      : source_descriptor_(source_descriptor)
+      , scripting_components_(scripting_components)
+    {
     }
 
-    SceneAssetDesc source_desc {};
-    std::memcpy(&source_desc, source_descriptor.data(), sizeof(source_desc));
+    auto Patch(std::vector<std::byte>& patched_descriptor, std::string& error)
+      -> bool
+    {
+      if (!ValidateAndParseSource(error)) {
+        return false;
+      }
+      if (!CollectExistingComponentPayloads(error)) {
+        return false;
+      }
+      AppendScriptingComponentPayload();
+      std::ranges::sort(component_payloads_,
+        [](const ComponentPayload& lhs, const ComponentPayload& rhs) {
+          return lhs.component_type < rhs.component_type;
+        });
+      CaptureTrailingBytes();
+      return SerializePatchedDescriptor(patched_descriptor, error);
+    }
 
-    const auto range_ok = [&](const uint64_t offset, const uint64_t size) {
-      return offset <= source_descriptor.size()
-        && size <= (source_descriptor.size() - offset);
+  private:
+    struct ComponentPayload final {
+      uint32_t component_type = 0;
+      uint32_t entry_size = 0;
+      std::vector<std::byte> bytes;
     };
 
-    const auto node_table_size = static_cast<uint64_t>(source_desc.nodes.count)
-      * static_cast<uint64_t>(source_desc.nodes.entry_size);
-    if (!range_ok(source_desc.nodes.offset, node_table_size)) {
-      error = "Scene node table range is invalid";
-      return false;
+    [[nodiscard]] auto RangeOk(const uint64_t offset, const uint64_t size) const
+      -> bool
+    {
+      return offset <= source_descriptor_.size()
+        && size <= (source_descriptor_.size() - offset);
     }
 
-    const auto scene_string_size
-      = static_cast<uint64_t>(source_desc.scene_strings.size);
-    if (!range_ok(source_desc.scene_strings.offset, scene_string_size)) {
-      error = "Scene string table range is invalid";
-      return false;
+    auto ValidateAndParseSource(std::string& error) -> bool
+    {
+      using world::SceneAssetDesc;
+
+      if (source_descriptor_.size() < sizeof(SceneAssetDesc)) {
+        error = "Scene descriptor is smaller than SceneAssetDesc";
+        return false;
+      }
+
+      std::memcpy(&source_desc_, source_descriptor_.data(), sizeof(source_desc_));
+
+      node_table_size_ = static_cast<uint64_t>(source_desc_.nodes.count)
+        * static_cast<uint64_t>(source_desc_.nodes.entry_size);
+      if (!RangeOk(source_desc_.nodes.offset, node_table_size_)) {
+        error = "Scene node table range is invalid";
+        return false;
+      }
+
+      scene_string_size_
+        = static_cast<uint64_t>(source_desc_.scene_strings.size);
+      if (!RangeOk(source_desc_.scene_strings.offset, scene_string_size_)) {
+        error = "Scene string table range is invalid";
+        return false;
+      }
+
+      payload_end_ = static_cast<uint64_t>(sizeof(SceneAssetDesc));
+      payload_end_
+        = (std::max)(payload_end_, source_desc_.nodes.offset + node_table_size_);
+      payload_end_ = (std::max)(
+        payload_end_, source_desc_.scene_strings.offset + scene_string_size_);
+      return true;
     }
 
-    auto payload_end = static_cast<uint64_t>(sizeof(SceneAssetDesc));
-    payload_end
-      = (std::max)(payload_end, source_desc.nodes.offset + node_table_size);
-    payload_end = (std::max)(payload_end,
-      source_desc.scene_strings.offset + scene_string_size);
+    auto CollectExistingComponentPayloads(std::string& error) -> bool
+    {
+      using data::ComponentType;
+      using world::SceneComponentTableDesc;
 
-    auto component_payloads = std::vector<ComponentPayload> {};
-    if (source_desc.component_table_count > 0U) {
+      if (source_desc_.component_table_count == 0U) {
+        return true;
+      }
+
       const auto directory_size
-        = static_cast<uint64_t>(source_desc.component_table_count)
+        = static_cast<uint64_t>(source_desc_.component_table_count)
         * sizeof(SceneComponentTableDesc);
-      if (!range_ok(
-            source_desc.component_table_directory_offset, directory_size)) {
+      if (!RangeOk(source_desc_.component_table_directory_offset, directory_size)) {
         error = "Scene component directory range is invalid";
         return false;
       }
 
-      payload_end = (std::max)(payload_end,
-        source_desc.component_table_directory_offset + directory_size);
+      payload_end_ = (std::max)(
+        payload_end_, source_desc_.component_table_directory_offset + directory_size);
 
-      for (uint32_t i = 0; i < source_desc.component_table_count; ++i) {
+      for (uint32_t i = 0; i < source_desc_.component_table_count; ++i) {
         const auto dir_offset
-          = static_cast<size_t>(source_desc.component_table_directory_offset)
+          = static_cast<size_t>(source_desc_.component_table_directory_offset)
           + static_cast<size_t>(i) * sizeof(SceneComponentTableDesc);
         auto entry = SceneComponentTableDesc {};
         std::memcpy(
-          &entry, source_descriptor.data() + dir_offset, sizeof(entry));
+          &entry, source_descriptor_.data() + dir_offset, sizeof(entry));
 
         if (entry.table.count == 0U) {
           continue;
@@ -524,14 +617,15 @@ namespace {
 
         const auto table_size = static_cast<uint64_t>(entry.table.count)
           * static_cast<uint64_t>(entry.table.entry_size);
-        if (!range_ok(entry.table.offset, table_size)) {
+        if (!RangeOk(entry.table.offset, table_size)) {
           error = "Scene component table range is invalid";
           return false;
         }
-        payload_end = (std::max)(payload_end, entry.table.offset + table_size);
+        payload_end_ = (std::max)(payload_end_, entry.table.offset + table_size);
 
-        const auto type = static_cast<ComponentType>(entry.component_type);
-        if (type == ComponentType::kScripting) {
+        const auto component_type
+          = static_cast<ComponentType>(entry.component_type);
+        if (component_type == ComponentType::kScripting) {
           continue;
         }
 
@@ -542,103 +636,136 @@ namespace {
         };
         payload.bytes.resize(static_cast<size_t>(table_size));
         std::memcpy(payload.bytes.data(),
-          source_descriptor.data() + static_cast<size_t>(entry.table.offset),
+          source_descriptor_.data() + static_cast<size_t>(entry.table.offset),
           payload.bytes.size());
-        component_payloads.push_back(std::move(payload));
+        component_payloads_.push_back(std::move(payload));
       }
+
+      return true;
     }
 
-    if (!scripting_components.empty()) {
+    auto AppendScriptingComponentPayload() -> void
+    {
+      using data::ComponentType;
+      if (scripting_components_.empty()) {
+        return;
+      }
+
       auto payload = ComponentPayload {
         .component_type = static_cast<uint32_t>(ComponentType::kScripting),
         .entry_size = sizeof(script::ScriptingComponentRecord),
         .bytes = {},
       };
       payload.bytes.resize(
-        scripting_components.size() * sizeof(script::ScriptingComponentRecord));
-      std::memcpy(payload.bytes.data(), scripting_components.data(),
-        payload.bytes.size());
-      component_payloads.push_back(std::move(payload));
+        scripting_components_.size() * sizeof(script::ScriptingComponentRecord));
+      std::memcpy(
+        payload.bytes.data(), scripting_components_.data(), payload.bytes.size());
+      component_payloads_.push_back(std::move(payload));
     }
 
-    std::ranges::sort(component_payloads,
-      [](const ComponentPayload& lhs, const ComponentPayload& rhs) {
-        return lhs.component_type < rhs.component_type;
-      });
-
-    auto trailing_bytes = std::vector<std::byte> {};
-    if (payload_end < source_descriptor.size()) {
-      const auto remaining
-        = source_descriptor.size() - static_cast<size_t>(payload_end);
-      trailing_bytes.resize(remaining);
-      std::memcpy(trailing_bytes.data(),
-        source_descriptor.data() + static_cast<size_t>(payload_end), remaining);
-    }
-
-    auto out = std::vector<std::byte> {};
-    out.resize(sizeof(SceneAssetDesc));
-
-    auto desc = source_desc;
-    desc.header.content_hash = 0;
-    desc.nodes.offset = sizeof(SceneAssetDesc);
-    const auto scene_strings_offset
-      = uint64_t { desc.nodes.offset } + node_table_size;
-    using SceneStringOffsetT = decltype(desc.scene_strings.offset);
-    if (scene_strings_offset
-      > (std::numeric_limits<SceneStringOffsetT>::max)()) {
-      error = "Scene string table offset overflow";
-      return false;
-    }
-    desc.scene_strings.offset
-      = static_cast<SceneStringOffsetT>(scene_strings_offset);
-    desc.component_table_directory_offset = 0;
-    desc.component_table_count = 0;
-
-    const auto append_bytes = [&](std::span<const std::byte> bytes) {
-      out.insert(out.end(), bytes.begin(), bytes.end());
-    };
-
-    append_bytes(std::span<const std::byte>(
-      source_descriptor.data() + static_cast<size_t>(source_desc.nodes.offset),
-      static_cast<size_t>(node_table_size)));
-    append_bytes(std::span<const std::byte>(source_descriptor.data()
-        + static_cast<size_t>(source_desc.scene_strings.offset),
-      static_cast<size_t>(scene_string_size)));
-
-    if (!component_payloads.empty()) {
-      desc.component_table_directory_offset = out.size();
-      desc.component_table_count
-        = static_cast<uint32_t>(component_payloads.size());
-
-      const auto directory_size
-        = component_payloads.size() * sizeof(SceneComponentTableDesc);
-      const auto directory_offset = out.size();
-      out.resize(out.size() + directory_size);
-
-      auto directory = std::vector<SceneComponentTableDesc> {};
-      directory.resize(component_payloads.size());
-      for (size_t i = 0; i < component_payloads.size(); ++i) {
-        auto& entry = directory[i];
-        entry.component_type = component_payloads[i].component_type;
-        entry.table.entry_size = component_payloads[i].entry_size;
-        entry.table.count
-          = static_cast<uint32_t>(component_payloads[i].entry_size == 0U
-              ? 0U
-              : component_payloads[i].bytes.size()
-                / component_payloads[i].entry_size);
-        entry.table.offset = out.size();
-        append_bytes(component_payloads[i].bytes);
+    auto CaptureTrailingBytes() -> void
+    {
+      if (payload_end_ >= source_descriptor_.size()) {
+        trailing_bytes_.clear();
+        return;
       }
 
-      std::memcpy(
-        out.data() + directory_offset, directory.data(), directory_size);
+      const auto remaining
+        = source_descriptor_.size() - static_cast<size_t>(payload_end_);
+      trailing_bytes_.resize(remaining);
+      std::memcpy(trailing_bytes_.data(),
+        source_descriptor_.data() + static_cast<size_t>(payload_end_), remaining);
     }
 
-    append_bytes(trailing_bytes);
+    auto SerializePatchedDescriptor(
+      std::vector<std::byte>& patched_descriptor, std::string& error) -> bool
+    {
+      using world::SceneComponentTableDesc;
 
-    std::memcpy(out.data(), &desc, sizeof(desc));
-    patched_descriptor = std::move(out);
-    return true;
+      auto out = std::vector<std::byte> {};
+      out.resize(sizeof(world::SceneAssetDesc));
+
+      auto desc = source_desc_;
+      desc.header.content_hash = 0;
+      desc.nodes.offset = sizeof(world::SceneAssetDesc);
+      const auto scene_strings_offset
+        = uint64_t { desc.nodes.offset } + node_table_size_;
+      using SceneStringOffsetT = decltype(desc.scene_strings.offset);
+      if (scene_strings_offset
+        > (std::numeric_limits<SceneStringOffsetT>::max)()) {
+        error = "Scene string table offset overflow";
+        return false;
+      }
+      desc.scene_strings.offset
+        = static_cast<SceneStringOffsetT>(scene_strings_offset);
+      desc.component_table_directory_offset = 0;
+      desc.component_table_count = 0;
+
+      const auto append_bytes = [&](std::span<const std::byte> bytes) {
+        out.insert(out.end(), bytes.begin(), bytes.end());
+      };
+
+      append_bytes(std::span<const std::byte>(
+        source_descriptor_.data() + static_cast<size_t>(source_desc_.nodes.offset),
+        static_cast<size_t>(node_table_size_)));
+      append_bytes(std::span<const std::byte>(source_descriptor_.data()
+          + static_cast<size_t>(source_desc_.scene_strings.offset),
+        static_cast<size_t>(scene_string_size_)));
+
+      if (!component_payloads_.empty()) {
+        desc.component_table_directory_offset = out.size();
+        desc.component_table_count
+          = static_cast<uint32_t>(component_payloads_.size());
+
+        const auto directory_size
+          = component_payloads_.size() * sizeof(SceneComponentTableDesc);
+        const auto directory_offset = out.size();
+        out.resize(out.size() + directory_size);
+
+        auto directory = std::vector<SceneComponentTableDesc> {};
+        directory.resize(component_payloads_.size());
+        for (size_t i = 0; i < component_payloads_.size(); ++i) {
+          auto& entry = directory[i];
+          entry.component_type = component_payloads_[i].component_type;
+          entry.table.entry_size = component_payloads_[i].entry_size;
+          entry.table.count
+            = static_cast<uint32_t>(component_payloads_[i].entry_size == 0U
+                ? 0U
+                : component_payloads_[i].bytes.size()
+                  / component_payloads_[i].entry_size);
+          entry.table.offset = out.size();
+          append_bytes(component_payloads_[i].bytes);
+        }
+
+        std::memcpy(
+          out.data() + directory_offset, directory.data(), directory_size);
+      }
+
+      append_bytes(trailing_bytes_);
+
+      std::memcpy(out.data(), &desc, sizeof(desc));
+      patched_descriptor = std::move(out);
+      return true;
+    }
+
+    const std::vector<std::byte>& source_descriptor_;
+    std::span<const script::ScriptingComponentRecord> scripting_components_;
+    world::SceneAssetDesc source_desc_ {};
+    uint64_t node_table_size_ = 0;
+    uint64_t scene_string_size_ = 0;
+    uint64_t payload_end_ = 0;
+    std::vector<ComponentPayload> component_payloads_ {};
+    std::vector<std::byte> trailing_bytes_ {};
+  };
+
+  auto PatchSceneDescriptorScriptingComponents(
+    const std::vector<std::byte>& source_descriptor,
+    std::span<const script::ScriptingComponentRecord> scripting_components,
+    std::vector<std::byte>& patched_descriptor, std::string& error) -> bool
+  {
+    auto patcher
+      = SceneDescriptorPatcher(source_descriptor, scripting_components);
+    return patcher.Patch(patched_descriptor, error);
   }
 
   struct ResolvedSceneState final {
@@ -1297,6 +1424,214 @@ namespace {
     return result;
   }
 
+  class ScriptBindingsTableBuilder final {
+  public:
+    ScriptBindingsTableBuilder(ImportSession& session,
+      const ImportRequest& request, content::VirtualPathResolver& resolver,
+      const SidecarDocument& parsed, const uint32_t node_count,
+      std::span<const CookedInspectionContext> cooked_contexts,
+      const std::vector<script::ScriptingComponentRecord>& existing_components,
+      const ExistingScriptTables& existing_tables)
+      : session_(session)
+      , request_(request)
+      , resolver_(resolver)
+      , parsed_(parsed)
+      , node_count_(node_count)
+      , cooked_contexts_(cooked_contexts)
+      , existing_components_(existing_components)
+      , existing_tables_(existing_tables)
+    {
+    }
+
+    auto Build() -> std::optional<MergedScriptsState>
+    {
+      using data::pak::core::OffsetT;
+
+      const auto existing_bindings = BuildBindingsByNodeFromComponents(
+        session_, request_, existing_components_, existing_tables_);
+      if (!existing_bindings.has_value()) {
+        return std::nullopt;
+      }
+
+      const auto existing_serialized
+        = SerializeBindingsByNode(session_, request_, *existing_bindings);
+      if (!existing_serialized.has_value()) {
+        return std::nullopt;
+      }
+
+      auto incoming_bindings = std::map<uint32_t, std::vector<SlotWithParams>> {};
+      for (size_t row_index = 0; row_index < parsed_.rows.size(); ++row_index) {
+        const auto& row = parsed_.rows[row_index];
+        const auto object_path = "bindings[" + std::to_string(row_index) + "]";
+        if (row.node_index >= node_count_) {
+          AddDiagnosticAtPath(session_, request_, ImportSeverity::kError,
+            "script.sidecar.node_ref_unresolved",
+            "Node index is out of bounds for target scene",
+            object_path + ".node_index");
+          continue;
+        }
+
+        auto resolved_script_key = std::optional<data::AssetKey> {};
+        try {
+          resolved_script_key = resolver_.ResolveAssetKey(row.script_virtual_path);
+        } catch (const std::invalid_argument& ex) {
+          AddDiagnosticAtPath(session_, request_, ImportSeverity::kError,
+            "script.sidecar.script_virtual_path_invalid",
+            "Script virtual path is invalid: " + std::string(ex.what()),
+            object_path + ".script_virtual_path");
+          continue;
+        }
+        if (!resolved_script_key.has_value()) {
+          AddDiagnosticAtPath(session_, request_, ImportSeverity::kError,
+            "script.sidecar.script_ref_unresolved",
+            "Script virtual path did not resolve to an asset key",
+            object_path + ".script_virtual_path");
+          continue;
+        }
+        const auto resolved_asset_type
+          = ResolveMountedAssetTypeByKey(cooked_contexts_, *resolved_script_key);
+        if (!resolved_asset_type.has_value()) {
+          AddDiagnosticAtPath(session_, request_, ImportSeverity::kError,
+            "script.sidecar.script_ref_unresolved",
+            "Resolved script key is not present in mounted cooked context",
+            object_path + ".script_virtual_path");
+          continue;
+        }
+        if (*resolved_asset_type != data::AssetType::kScript) {
+          AddDiagnosticAtPath(session_, request_, ImportSeverity::kError,
+            "script.sidecar.script_ref_not_script_asset",
+            "Resolved reference does not identify a script asset",
+            object_path + ".script_virtual_path");
+          continue;
+        }
+
+        auto payload = SlotWithParams {};
+        payload.slot_id = row.slot_id;
+        payload.slot.script_asset_key = *resolved_script_key;
+        payload.slot.params_array_offset = 0;
+        payload.slot.params_count = 0;
+        payload.slot.execution_order = row.execution_order;
+        payload.slot.flags = script::ScriptSlotFlags::kNone;
+        payload.params = row.params;
+        incoming_bindings[row.node_index].push_back(std::move(payload));
+      }
+
+      if (session_.HasErrors()) {
+        return std::nullopt;
+      }
+
+      auto merged_bindings = *existing_bindings;
+      for (auto& [node_index, slots] : incoming_bindings) {
+        std::ranges::sort(
+          slots, [](const SlotWithParams& lhs, const SlotWithParams& rhs) {
+            return lhs.slot_id < rhs.slot_id;
+          });
+        merged_bindings.insert_or_assign(node_index, std::move(slots));
+      }
+
+      const auto merged_serialized
+        = SerializeBindingsByNode(session_, request_, merged_bindings);
+      if (!merged_serialized.has_value()) {
+        return std::nullopt;
+      }
+
+      if (SerializedBindingsEqual(*existing_serialized, *merged_serialized)) {
+        return MergedScriptsState {
+          .components = existing_components_,
+          .slots = existing_tables_.slots,
+          .params = existing_tables_.params,
+        };
+      }
+
+      const auto in_place_merged = TryBuildInPlaceMergedState(session_, request_,
+        existing_components_, existing_tables_, *existing_serialized,
+        *merged_serialized);
+      if (session_.HasErrors()) {
+        return std::nullopt;
+      }
+      if (in_place_merged.has_value()) {
+        return in_place_merged;
+      }
+
+      auto result = MergedScriptsState {
+        .components = merged_serialized->components,
+        .slots = existing_tables_.slots,
+        .params = existing_tables_.params,
+      };
+      // Keep existing global table ranges intact so non-target scenes keep
+      // stable descriptor slot ranges across sidecar updates.
+
+      const auto slot_base = result.slots.size();
+      if (slot_base > (std::numeric_limits<uint32_t>::max)()) {
+        AddDiagnostic(session_, request_, ImportSeverity::kError,
+          "script.sidecar.slot_count_overflow",
+          "Global scripting slot count exceeded uint32 limits");
+        return std::nullopt;
+      }
+      for (auto& component : result.components) {
+        if (component.slot_start_index > (std::numeric_limits<uint32_t>::max)()
+            - static_cast<uint32_t>(slot_base)) {
+          AddDiagnostic(session_, request_, ImportSeverity::kError,
+            "script.sidecar.slot_count_overflow",
+            "Rebased scene slot index exceeded uint32 limits");
+          return std::nullopt;
+        }
+        component.slot_start_index += static_cast<uint32_t>(slot_base);
+      }
+
+      const auto param_record_size
+        = uint64_t { sizeof(script::ScriptParamRecord) };
+      for (const auto& source_slot : merged_serialized->slots) {
+        auto slot = source_slot;
+        if ((slot.params_array_offset % param_record_size) != 0U) {
+          AddDiagnostic(session_, request_, ImportSeverity::kError,
+            "script.sidecar.patch_map_invariant_failure",
+            "Merged ScriptSlotRecord param offset is not record-aligned");
+          return std::nullopt;
+        }
+        const auto local_param_start
+          = static_cast<size_t>(slot.params_array_offset / param_record_size);
+        const auto local_param_count = static_cast<size_t>(slot.params_count);
+        if (local_param_start > merged_serialized->params.size()
+          || local_param_count
+            > (merged_serialized->params.size() - local_param_start)) {
+          AddDiagnostic(session_, request_, ImportSeverity::kError,
+            "script.sidecar.patch_map_invariant_failure",
+            "Merged ScriptSlotRecord param range is out of bounds");
+          return std::nullopt;
+        }
+
+        const auto global_param_offset = uint64_t { result.params.size() }
+          * sizeof(script::ScriptParamRecord);
+        if (global_param_offset > (std::numeric_limits<OffsetT>::max)()) {
+          AddDiagnostic(session_, request_, ImportSeverity::kError,
+            "script.sidecar.param_offset_overflow",
+            "Script param offset exceeded OffsetT limits");
+          return std::nullopt;
+        }
+        slot.params_array_offset = static_cast<OffsetT>(global_param_offset);
+        result.params.insert(result.params.end(),
+          merged_serialized->params.begin()
+            + static_cast<ptrdiff_t>(local_param_start),
+          merged_serialized->params.begin()
+            + static_cast<ptrdiff_t>(local_param_start + local_param_count));
+        result.slots.push_back(slot);
+      }
+
+      return result;
+    }
+
+  private:
+    ImportSession& session_;
+    const ImportRequest& request_;
+    content::VirtualPathResolver& resolver_;
+    const SidecarDocument& parsed_;
+    uint32_t node_count_ = 0;
+    std::span<const CookedInspectionContext> cooked_contexts_;
+    const std::vector<script::ScriptingComponentRecord>& existing_components_;
+    const ExistingScriptTables& existing_tables_;
+  };
+
   auto BuildMergedScriptsState(ImportSession& session,
     const ImportRequest& request, content::VirtualPathResolver& resolver,
     const SidecarDocument& parsed, const uint32_t node_count,
@@ -1305,180 +1640,9 @@ namespace {
     const ExistingScriptTables& existing_tables)
     -> std::optional<MergedScriptsState>
   {
-    using data::pak::core::OffsetT;
-
-    const auto existing_bindings = BuildBindingsByNodeFromComponents(
-      session, request, existing_components, existing_tables);
-    if (!existing_bindings.has_value()) {
-      return std::nullopt;
-    }
-
-    const auto existing_serialized
-      = SerializeBindingsByNode(session, request, *existing_bindings);
-    if (!existing_serialized.has_value()) {
-      return std::nullopt;
-    }
-
-    auto incoming_bindings = std::map<uint32_t, std::vector<SlotWithParams>> {};
-    for (size_t row_index = 0; row_index < parsed.rows.size(); ++row_index) {
-      const auto& row = parsed.rows[row_index];
-      const auto object_path = "bindings[" + std::to_string(row_index) + "]";
-      if (row.node_index >= node_count) {
-        AddDiagnosticAtPath(session, request, ImportSeverity::kError,
-          "script.sidecar.node_ref_unresolved",
-          "Node index is out of bounds for target scene",
-          object_path + ".node_index");
-        continue;
-      }
-
-      auto resolved_script_key = std::optional<data::AssetKey> {};
-      try {
-        resolved_script_key = resolver.ResolveAssetKey(row.script_virtual_path);
-      } catch (const std::invalid_argument& ex) {
-        AddDiagnosticAtPath(session, request, ImportSeverity::kError,
-          "script.sidecar.script_virtual_path_invalid",
-          "Script virtual path is invalid: " + std::string(ex.what()),
-          object_path + ".script_virtual_path");
-        continue;
-      }
-      if (!resolved_script_key.has_value()) {
-        AddDiagnosticAtPath(session, request, ImportSeverity::kError,
-          "script.sidecar.script_ref_unresolved",
-          "Script virtual path did not resolve to an asset key",
-          object_path + ".script_virtual_path");
-        continue;
-      }
-      const auto resolved_asset_type
-        = ResolveMountedAssetTypeByKey(cooked_contexts, *resolved_script_key);
-      if (!resolved_asset_type.has_value()) {
-        AddDiagnosticAtPath(session, request, ImportSeverity::kError,
-          "script.sidecar.script_ref_unresolved",
-          "Resolved script key is not present in mounted cooked context",
-          object_path + ".script_virtual_path");
-        continue;
-      }
-      if (*resolved_asset_type != data::AssetType::kScript) {
-        AddDiagnosticAtPath(session, request, ImportSeverity::kError,
-          "script.sidecar.script_ref_not_script_asset",
-          "Resolved reference does not identify a script asset",
-          object_path + ".script_virtual_path");
-        continue;
-      }
-
-      auto payload = SlotWithParams {};
-      payload.slot_id = row.slot_id;
-      payload.slot.script_asset_key = *resolved_script_key;
-      payload.slot.params_array_offset = 0;
-      payload.slot.params_count = 0;
-      payload.slot.execution_order = row.execution_order;
-      payload.slot.flags = script::ScriptSlotFlags::kNone;
-      payload.params = row.params;
-      incoming_bindings[row.node_index].push_back(std::move(payload));
-    }
-
-    if (session.HasErrors()) {
-      return std::nullopt;
-    }
-
-    auto merged_bindings = *existing_bindings;
-    for (auto& [node_index, slots] : incoming_bindings) {
-      std::ranges::sort(
-        slots, [](const SlotWithParams& lhs, const SlotWithParams& rhs) {
-          return lhs.slot_id < rhs.slot_id;
-        });
-      merged_bindings.insert_or_assign(node_index, std::move(slots));
-    }
-
-    const auto merged_serialized
-      = SerializeBindingsByNode(session, request, merged_bindings);
-    if (!merged_serialized.has_value()) {
-      return std::nullopt;
-    }
-
-    if (SerializedBindingsEqual(*existing_serialized, *merged_serialized)) {
-      return MergedScriptsState {
-        .components = existing_components,
-        .slots = existing_tables.slots,
-        .params = existing_tables.params,
-      };
-    }
-
-    const auto in_place_merged
-      = TryBuildInPlaceMergedState(session, request, existing_components,
-        existing_tables, *existing_serialized, *merged_serialized);
-    if (session.HasErrors()) {
-      return std::nullopt;
-    }
-    if (in_place_merged.has_value()) {
-      return in_place_merged;
-    }
-
-    auto result = MergedScriptsState {
-      .components = merged_serialized->components,
-      .slots = existing_tables.slots,
-      .params = existing_tables.params,
-    };
-    // Keep existing global table ranges intact so non-target scenes keep
-    // stable descriptor slot ranges across sidecar updates.
-
-    const auto slot_base = result.slots.size();
-    if (slot_base > (std::numeric_limits<uint32_t>::max)()) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.sidecar.slot_count_overflow",
-        "Global scripting slot count exceeded uint32 limits");
-      return std::nullopt;
-    }
-    for (auto& component : result.components) {
-      if (component.slot_start_index > (std::numeric_limits<uint32_t>::max)()
-          - static_cast<uint32_t>(slot_base)) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "script.sidecar.slot_count_overflow",
-          "Rebased scene slot index exceeded uint32 limits");
-        return std::nullopt;
-      }
-      component.slot_start_index += static_cast<uint32_t>(slot_base);
-    }
-
-    const auto param_record_size
-      = uint64_t { sizeof(script::ScriptParamRecord) };
-    for (const auto& source_slot : merged_serialized->slots) {
-      auto slot = source_slot;
-      if ((slot.params_array_offset % param_record_size) != 0U) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "script.sidecar.patch_map_invariant_failure",
-          "Merged ScriptSlotRecord param offset is not record-aligned");
-        return std::nullopt;
-      }
-      const auto local_param_start
-        = static_cast<size_t>(slot.params_array_offset / param_record_size);
-      const auto local_param_count = static_cast<size_t>(slot.params_count);
-      if (local_param_start > merged_serialized->params.size()
-        || local_param_count
-          > (merged_serialized->params.size() - local_param_start)) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "script.sidecar.patch_map_invariant_failure",
-          "Merged ScriptSlotRecord param range is out of bounds");
-        return std::nullopt;
-      }
-
-      const auto global_param_offset
-        = uint64_t { result.params.size() } * sizeof(script::ScriptParamRecord);
-      if (global_param_offset > (std::numeric_limits<OffsetT>::max)()) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "script.sidecar.param_offset_overflow",
-          "Script param offset exceeded OffsetT limits");
-        return std::nullopt;
-      }
-      slot.params_array_offset = static_cast<OffsetT>(global_param_offset);
-      result.params.insert(result.params.end(),
-        merged_serialized->params.begin()
-          + static_cast<ptrdiff_t>(local_param_start),
-        merged_serialized->params.begin()
-          + static_cast<ptrdiff_t>(local_param_start + local_param_count));
-      result.slots.push_back(slot);
-    }
-
-    return result;
+    auto builder = ScriptBindingsTableBuilder(session, request, resolver, parsed,
+      node_count, cooked_contexts, existing_components, existing_tables);
+    return builder.Build();
   }
 
   auto BuildPatchedSceneDescriptor(ImportSession& session,
