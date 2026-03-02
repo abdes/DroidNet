@@ -415,8 +415,8 @@ def _write_assets_and_directory_from_plan(
             if isinstance(nm, str) and isinstance(asset_key, (bytes, bytearray)):
                 input_action_name_to_key[nm] = bytes(asset_key)
 
-    physics_material_name_to_asset_index: dict[str, int] = {}
-    collision_shape_name_to_asset_index: dict[str, int] = {}
+    physics_material_name_to_asset_key: dict[str, bytes] = {}
+    collision_shape_name_to_asset_key: dict[str, bytes] = {}
     physics_resource_name_to_index: dict[str, int] = {}
 
     physics_descs = build.resources.desc_fields.get("physics", [])
@@ -427,35 +427,24 @@ def _write_assets_and_directory_from_plan(
         if isinstance(resource_name, str):
             physics_resource_name_to_index[resource_name] = resource_index
 
-    physics_asset_base_index = (
-        material_count
-        + geometry_count
-        + script_count
-        + input_action_count
-        + input_mapping_context_count
-        + scene_count
-    )
-    for pm_idx, pm_spec in enumerate(build.assets.physics_material_assets):
+    for pm_spec in build.assets.physics_material_assets:
         if not isinstance(pm_spec, dict):
             continue
         raw_spec = pm_spec.get("spec")
         if not isinstance(raw_spec, dict):
             continue
         pm_name = raw_spec.get("name")
-        if isinstance(pm_name, str):
-            physics_material_name_to_asset_index[pm_name] = (
-                physics_asset_base_index + pm_idx
-            )
-    collision_asset_base_index = physics_asset_base_index + physics_material_count
-    for cs_idx, cs_entry in enumerate(build.assets.collision_shape_assets):
+        pm_key = pm_spec.get("asset_key")
+        if isinstance(pm_name, str) and isinstance(pm_key, (bytes, bytearray)):
+            physics_material_name_to_asset_key[pm_name] = bytes(pm_key)
+    for cs_entry in build.assets.collision_shape_assets:
         cs_spec = cs_entry[0]
+        cs_key = cs_entry[1]
         if not isinstance(cs_spec, dict):
             continue
         cs_name = cs_spec.get("name")
-        if isinstance(cs_name, str):
-            collision_shape_name_to_asset_index[cs_name] = (
-                collision_asset_base_index + cs_idx
-            )
+        if isinstance(cs_name, str) and isinstance(cs_key, (bytes, bytearray)):
+            collision_shape_name_to_asset_key[cs_name] = bytes(cs_key)
 
     # Emit descriptors following plan order
     rep = get_reporter()
@@ -627,7 +616,12 @@ def _write_assets_and_directory_from_plan(
             cs_spec, key, _atype, _align = build.assets.collision_shape_assets[cs_idx]
             # collision shapes may need a physics resource index if they are mesh-based
             res_idx = build.resources.index_map.get("physics", {}).get(cs_spec.get("resource_name", ""), 0)
-            desc = pack_collision_shape_asset_descriptor(cs_spec, resource_index=res_idx, header_builder=header_builder)
+            desc = pack_collision_shape_asset_descriptor(
+                cs_spec,
+                resource_index=res_idx,
+                header_builder=header_builder,
+                physics_material_name_to_asset_key=physics_material_name_to_asset_key,
+            )
             f.write(desc)
             if len(desc) != asset_plan.descriptor_size:
                 raise RuntimeError(f"CollisionShape size mismatch: plan={asset_plan.descriptor_size} actual={len(desc)}")
@@ -641,8 +635,8 @@ def _write_assets_and_directory_from_plan(
             desc, payload = pack_physics_scene_asset_descriptor_and_payload(
                 ps_spec,
                 header_builder=header_builder,
-                shape_name_to_asset_index=collision_shape_name_to_asset_index,
-                physics_material_name_to_asset_index=physics_material_name_to_asset_index,
+                shape_name_to_asset_key=collision_shape_name_to_asset_key,
+                physics_material_name_to_asset_key=physics_material_name_to_asset_key,
                 physics_resource_name_to_index=physics_resource_name_to_index,
             )
             f.write(desc)

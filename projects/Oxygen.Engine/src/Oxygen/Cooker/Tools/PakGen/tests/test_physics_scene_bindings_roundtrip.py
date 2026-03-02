@@ -151,9 +151,9 @@ def test_physics_scene_with_all_bindings_roundtrip(tmp_path: Path):
     out = proc.stdout
     assert "__NotSupported__" not in out
     assert "PhysicsScene" in out
-    assert "PhysicsMaterial (7)" in out
-    assert "CollisionShape (8)" in out
-    assert "PhysicsScene (9)" in out
+    assert "(PhysicsMaterial)" in out
+    assert "(CollisionShape)" in out
+    assert "(PhysicsScene)" in out
     assert "Physics Scene Sidecar Fields" in out
 
 

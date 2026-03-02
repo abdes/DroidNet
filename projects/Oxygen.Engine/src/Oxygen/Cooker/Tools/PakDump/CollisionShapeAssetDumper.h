@@ -11,6 +11,7 @@
 
 #include <fmt/format.h>
 
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
 
 #include "AssetDumpHelpers.h"
@@ -68,7 +69,8 @@ public:
     PrintUtils::Field("Is Sensor", shape.is_sensor, 8);
     PrintUtils::Field("Own Layer", shape.collision_own_layer, 8);
     PrintUtils::Field("Target Layers", shape.collision_target_layers, 8);
-    PrintUtils::Field("Material Ref", shape.material_ref, 8);
+    PrintUtils::Field(
+      "Material Key", oxygen::data::to_string(shape.material_asset_key), 8);
     PrintUtils::Field(
       "Cooked Ref Index", shape.cooked_shape_ref.resource_index, 8);
     PrintUtils::Field("Cooked Ref Type",

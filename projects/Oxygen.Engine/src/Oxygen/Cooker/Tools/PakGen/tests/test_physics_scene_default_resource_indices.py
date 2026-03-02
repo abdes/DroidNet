@@ -38,8 +38,8 @@ def test_physics_scene_omitted_resource_indices_default_to_no_resource_index() -
     desc, payload = pack_physics_scene_asset_descriptor_and_payload(
         asset,
         header_builder=_header_builder,
-        shape_name_to_asset_index={},
-        physics_material_name_to_asset_index={},
+        shape_name_to_asset_key={},
+        physics_material_name_to_asset_key={},
         physics_resource_name_to_index={},
     )
     blob = desc + payload
@@ -62,18 +62,18 @@ def test_physics_scene_omitted_resource_indices_default_to_no_resource_index() -
     joint_off = table_offsets[_PHYSICS_BINDING_JOINT]
     vehicle_off = table_offsets[_PHYSICS_BINDING_VEHICLE]
 
-    rigid_shape = struct.unpack_from("<I", blob, rigid_off + 36)[0]
-    rigid_material = struct.unpack_from("<I", blob, rigid_off + 40)[0]
-    collider_shape = struct.unpack_from("<I", blob, collider_off + 4)[0]
-    collider_material = struct.unpack_from("<I", blob, collider_off + 8)[0]
-    character_shape = struct.unpack_from("<I", blob, character_off + 4)[0]
+    rigid_shape_key = blob[rigid_off + 36 : rigid_off + 52]
+    rigid_material_key = blob[rigid_off + 52 : rigid_off + 68]
+    collider_shape_key = blob[collider_off + 4 : collider_off + 20]
+    collider_material_key = blob[collider_off + 20 : collider_off + 36]
+    character_shape_key = blob[character_off + 4 : character_off + 20]
     joint_constraint = struct.unpack_from("<I", blob, joint_off + 8)[0]
     vehicle_constraint = struct.unpack_from("<I", blob, vehicle_off + 4)[0]
 
-    assert rigid_shape == _NO_RESOURCE_INDEX
-    assert rigid_material == _NO_RESOURCE_INDEX
-    assert collider_shape == _NO_RESOURCE_INDEX
-    assert collider_material == _NO_RESOURCE_INDEX
-    assert character_shape == _NO_RESOURCE_INDEX
+    assert rigid_shape_key == b"\x00" * 16
+    assert rigid_material_key == b"\x00" * 16
+    assert collider_shape_key == b"\x00" * 16
+    assert collider_material_key == b"\x00" * 16
+    assert character_shape_key == b"\x00" * 16
     assert joint_constraint == _NO_RESOURCE_INDEX
     assert vehicle_constraint == _NO_RESOURCE_INDEX

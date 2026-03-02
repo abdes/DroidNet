@@ -429,18 +429,18 @@ public:
     data::pak::core::ResourceIndexT resource_index) const noexcept
     -> std::optional<ResourceKey>
     = 0;
-  //! Read a collision shape descriptor by global asset index in the context
-  //! asset's source.
+  //! Read a collision shape descriptor by asset key in the context asset's
+  //! source.
   [[nodiscard]] virtual auto ReadCollisionShapeAssetDescForAsset(
     const data::AssetKey& context_asset_key,
-    data::pak::core::ResourceIndexT shape_asset_index) const
+    const data::AssetKey& shape_asset_key) const
     -> std::optional<data::pak::physics::CollisionShapeAssetDesc>
     = 0;
-  //! Read a physics material descriptor by global asset index in the context
-  //! asset's source.
+  //! Read a physics material descriptor by asset key in the context asset's
+  //! source.
   [[nodiscard]] virtual auto ReadPhysicsMaterialAssetDescForAsset(
     const data::AssetKey& context_asset_key,
-    data::pak::core::ResourceIndexT material_asset_index) const
+    const data::AssetKey& material_asset_key) const
     -> std::optional<data::pak::physics::PhysicsMaterialAssetDesc>
     = 0;
   //! Find a physics scene sidecar in the same source that targets `scene_key`.

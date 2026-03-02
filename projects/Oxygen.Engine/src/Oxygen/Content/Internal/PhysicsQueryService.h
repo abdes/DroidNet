@@ -41,14 +41,12 @@ public:
 
   [[nodiscard]] auto ReadCollisionShapeAssetDescForAsset(
     const data::AssetKey& context_asset_key,
-    data::pak::core::ResourceIndexT shape_asset_index,
-    const Callbacks& callbacks) const
+    const data::AssetKey& shape_asset_key, const Callbacks& callbacks) const
     -> std::optional<data::pak::physics::CollisionShapeAssetDesc>;
 
   [[nodiscard]] auto ReadPhysicsMaterialAssetDescForAsset(
     const data::AssetKey& context_asset_key,
-    data::pak::core::ResourceIndexT material_asset_index,
-    const Callbacks& callbacks) const
+    const data::AssetKey& material_asset_key, const Callbacks& callbacks) const
     -> std::optional<data::pak::physics::PhysicsMaterialAssetDesc>;
 
   [[nodiscard]] auto FindPhysicsSidecarAssetKeyForScene(

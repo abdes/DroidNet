@@ -70,23 +70,26 @@ class PhysicsSceneAssetDumper final : public AssetDumper {
       RigidBodyBindingRecord record {};
       std::memcpy(&record, blob.data() + table_offset, sizeof(record));
       PrintUtils::Field("Sample Node Index", record.node_index, 10);
-      PrintUtils::Field("Sample Shape Index", record.shape_asset_index, 10);
-      PrintUtils::Field(
-        "Sample Material Index", record.material_asset_index, 10);
+      PrintUtils::Field("Sample Shape Key",
+        oxygen::data::to_string(record.shape_asset_key), 10);
+      PrintUtils::Field("Sample Material Key",
+        oxygen::data::to_string(record.material_asset_key), 10);
       break;
     }
     case PhysicsBindingType::kCollider: {
       ColliderBindingRecord record {};
       std::memcpy(&record, blob.data() + table_offset, sizeof(record));
       PrintUtils::Field("Sample Node Index", record.node_index, 10);
-      PrintUtils::Field("Sample Shape Index", record.shape_asset_index, 10);
+      PrintUtils::Field("Sample Shape Key",
+        oxygen::data::to_string(record.shape_asset_key), 10);
       break;
     }
     case PhysicsBindingType::kCharacter: {
       CharacterBindingRecord record {};
       std::memcpy(&record, blob.data() + table_offset, sizeof(record));
       PrintUtils::Field("Sample Node Index", record.node_index, 10);
-      PrintUtils::Field("Sample Shape Index", record.shape_asset_index, 10);
+      PrintUtils::Field("Sample Shape Key",
+        oxygen::data::to_string(record.shape_asset_key), 10);
       break;
     }
     case PhysicsBindingType::kSoftBody: {

@@ -354,8 +354,12 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest,
   rec.linear_damping = 0.1F;
   rec.angular_damping = 0.2F;
   rec.gravity_factor = 0.5F;
-  rec.shape_asset_index = oxygen::data::pak::core::ResourceIndexT { 3u };
-  rec.material_asset_index = oxygen::data::pak::core::ResourceIndexT { 1u };
+  rec.shape_asset_key
+    = oxygen::data::AssetKey::FromBytes({ 0x10, 0x01, 0x02, 0x03, 0x44, 0x55,
+      0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0x01 });
+  rec.material_asset_key
+    = oxygen::data::AssetKey::FromBytes({ 0x20, 0x11, 0x22, 0x33, 0x54, 0x65,
+      0x76, 0x87, 0x98, 0xa9, 0xba, 0xcb, 0xdc, 0xed, 0xfe, 0x02 });
 
   WriteOneRigidBodyTable(rec);
 
@@ -372,8 +376,8 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest,
   EXPECT_FLOAT_EQ(r.linear_damping, 0.1F);
   EXPECT_FLOAT_EQ(r.angular_damping, 0.2F);
   EXPECT_FLOAT_EQ(r.gravity_factor, 0.5F);
-  EXPECT_EQ(r.shape_asset_index, 3U);
-  EXPECT_EQ(r.material_asset_index, 1U);
+  EXPECT_EQ(r.shape_asset_key, rec.shape_asset_key);
+  EXPECT_EQ(r.material_asset_key, rec.material_asset_key);
 }
 
 NOLINT_TEST_F(PhysicsSceneLoaderTypeTest, LoadAssetTypeIsPhysicsScene)

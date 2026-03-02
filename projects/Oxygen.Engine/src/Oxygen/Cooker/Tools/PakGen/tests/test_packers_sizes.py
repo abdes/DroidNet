@@ -129,13 +129,21 @@ def test_physics_scene_descriptor_size():
 
 def test_physics_binding_record_sizes():
     rigid = pack_rigid_body_binding_record(
-        {}, shape_index=0, material_index=0, node_count=1
+        {},
+        shape_asset_key=b"\x00" * 16,
+        material_asset_key=b"\x00" * 16,
+        node_count=1,
     )
     collider = pack_collider_binding_record(
-        {}, shape_index=0, material_index=0, node_count=1
+        {},
+        shape_asset_key=b"\x00" * 16,
+        material_asset_key=b"\x00" * 16,
+        node_count=1,
     )
     character = pack_character_binding_record(
-        {}, shape_index=0, node_count=1
+        {},
+        shape_asset_key=b"\x00" * 16,
+        node_count=1,
     )
     soft = pack_soft_body_binding_record({}, node_count=1)
     joint = pack_joint_binding_record({}, constraint_index=0, node_count=1)

@@ -1674,8 +1674,8 @@ def compute_pak_plan(
         )
         cursor += SCENE_DESC_SIZE + len(payload)
 
-    physics_material_name_to_asset_index: Dict[str, int] = {}
-    collision_shape_name_to_asset_index: Dict[str, int] = {}
+    physics_material_name_to_asset_key: Dict[str, bytes] = {}
+    collision_shape_name_to_asset_key: Dict[str, bytes] = {}
     physics_resource_name_to_index: Dict[str, int] = {}
     physics_descs = build_plan.resources.desc_fields.get("physics", [])
     for index, resource_spec in enumerate(physics_descs):
@@ -1713,10 +1713,13 @@ def compute_pak_plan(
         )
         if isinstance(pm, dict):
             spec = pm.get("spec")
+            key_bytes = pm.get("asset_key")
             if isinstance(spec, dict):
                 pm_name = spec.get("name")
-                if isinstance(pm_name, str):
-                    physics_material_name_to_asset_index[pm_name] = len(assets) - 1
+                if isinstance(pm_name, str) and isinstance(
+                    key_bytes, (bytes, bytearray)
+                ):
+                    physics_material_name_to_asset_key[pm_name] = bytes(key_bytes)
         cursor += PHYSICS_MATERIAL_ASSET_DESC_SIZE
 
     for shape_spec, asset_key, _asset_type, alignment in collision_shapes:
@@ -1745,8 +1748,10 @@ def compute_pak_plan(
         )
         if isinstance(shape_spec, dict):
             shape_name = shape_spec.get("name")
-            if isinstance(shape_name, str):
-                collision_shape_name_to_asset_index[shape_name] = len(assets) - 1
+            if isinstance(shape_name, str) and isinstance(
+                asset_key, (bytes, bytearray)
+            ):
+                collision_shape_name_to_asset_key[shape_name] = bytes(asset_key)
         cursor += COLLISION_SHAPE_ASSET_DESC_SIZE
 
     from .packers import pack_physics_scene_asset_descriptor_and_payload
@@ -1771,8 +1776,8 @@ def compute_pak_plan(
         _, payload = pack_physics_scene_asset_descriptor_and_payload(
             sidecar_for_pack,
             header_builder=lambda _a: b"\x00" * 95,
-            shape_name_to_asset_index=collision_shape_name_to_asset_index,
-            physics_material_name_to_asset_index=physics_material_name_to_asset_index,
+            shape_name_to_asset_key=collision_shape_name_to_asset_key,
+            physics_material_name_to_asset_key=physics_material_name_to_asset_key,
             physics_resource_name_to_index=physics_resource_name_to_index,
         )
         assets.append(

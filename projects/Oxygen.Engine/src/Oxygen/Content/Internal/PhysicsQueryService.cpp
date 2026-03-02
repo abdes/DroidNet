@@ -40,8 +40,7 @@ auto PhysicsQueryService::MakePhysicsResourceKeyForAsset(
 
 auto PhysicsQueryService::ReadCollisionShapeAssetDescForAsset(
   const data::AssetKey& context_asset_key,
-  const data::pak::core::ResourceIndexT shape_asset_index,
-  const Callbacks& callbacks) const
+  const data::AssetKey& shape_asset_key, const Callbacks& callbacks) const
   -> std::optional<data::pak::physics::CollisionShapeAssetDesc>
 {
   const auto source_id
@@ -54,14 +53,10 @@ auto PhysicsQueryService::ReadCollisionShapeAssetDescForAsset(
   if (source == nullptr) {
     return std::nullopt;
   }
-  const auto key_opt = source->GetAssetKeyByIndex(shape_asset_index.get());
-  if (!key_opt.has_value()) {
+  if (!source->HasAsset(shape_asset_key)) {
     return std::nullopt;
   }
-  if (!source->HasAsset(*key_opt)) {
-    return std::nullopt;
-  }
-  auto desc_reader = source->CreateAssetDescriptorReader(*key_opt);
+  auto desc_reader = source->CreateAssetDescriptorReader(shape_asset_key);
   if (!desc_reader) {
     return std::nullopt;
   }
@@ -81,8 +76,7 @@ auto PhysicsQueryService::ReadCollisionShapeAssetDescForAsset(
 
 auto PhysicsQueryService::ReadPhysicsMaterialAssetDescForAsset(
   const data::AssetKey& context_asset_key,
-  const data::pak::core::ResourceIndexT material_asset_index,
-  const Callbacks& callbacks) const
+  const data::AssetKey& material_asset_key, const Callbacks& callbacks) const
   -> std::optional<data::pak::physics::PhysicsMaterialAssetDesc>
 {
   const auto source_id
@@ -95,14 +89,10 @@ auto PhysicsQueryService::ReadPhysicsMaterialAssetDescForAsset(
   if (source == nullptr) {
     return std::nullopt;
   }
-  const auto key_opt = source->GetAssetKeyByIndex(material_asset_index.get());
-  if (!key_opt.has_value()) {
+  if (!source->HasAsset(material_asset_key)) {
     return std::nullopt;
   }
-  if (!source->HasAsset(*key_opt)) {
-    return std::nullopt;
-  }
-  auto desc_reader = source->CreateAssetDescriptorReader(*key_opt);
+  auto desc_reader = source->CreateAssetDescriptorReader(material_asset_key);
   if (!desc_reader) {
     return std::nullopt;
   }

@@ -679,24 +679,16 @@ namespace {
     return parsed;
   }
 
-  struct IndexedAssetEntry final {
-    uint32_t asset_index = 0;
-    data::AssetType asset_type = data::AssetType::kUnknown;
-  };
+  using AssetTypeMap = std::unordered_map<data::AssetKey, data::AssetType>;
 
-  using AssetIndexMap = std::unordered_map<data::AssetKey, IndexedAssetEntry>;
-
-  auto BuildAssetIndexMap(const lc::Inspection& inspection) -> AssetIndexMap
+  auto BuildAssetTypeMap(const lc::Inspection& inspection) -> AssetTypeMap
   {
-    auto out = AssetIndexMap {};
+    auto out = AssetTypeMap {};
     const auto assets = inspection.Assets();
     out.reserve(assets.size());
-    for (size_t i = 0; i < assets.size(); ++i) {
-      out.insert_or_assign(assets[i].key,
-        IndexedAssetEntry {
-          .asset_index = static_cast<uint32_t>(i),
-          .asset_type = static_cast<data::AssetType>(assets[i].asset_type),
-        });
+    for (const auto& asset : assets) {
+      out.insert_or_assign(
+        asset.key, static_cast<data::AssetType>(asset.asset_type));
     }
     return out;
   }
@@ -706,15 +698,15 @@ namespace {
     const ImportRequest& request;
     content::VirtualPathResolver& resolver;
     std::span<const SidecarCookedInspectionContext> cooked_contexts;
-    const AssetIndexMap& target_index_map;
+    const AssetTypeMap& target_asset_types;
     const std::filesystem::path& target_cooked_root;
     uint32_t node_count = 0;
   };
 
-  auto ResolveAssetIndexForVirtualPath(BindingValidationContext& ctx,
+  auto ResolveAssetKeyForVirtualPath(BindingValidationContext& ctx,
     std::string_view virtual_path, std::string_view object_path,
     const data::AssetType expected_type, std::string_view unresolved_code,
-    std::string_view wrong_type_code) -> std::optional<uint32_t>
+    std::string_view wrong_type_code) -> std::optional<data::AssetKey>
   {
     auto resolved_key = std::optional<data::AssetKey> {};
     try {
@@ -735,8 +727,8 @@ namespace {
       return std::nullopt;
     }
 
-    const auto target_it = ctx.target_index_map.find(*resolved_key);
-    if (target_it == ctx.target_index_map.end()) {
+    const auto target_it = ctx.target_asset_types.find(*resolved_key);
+    if (target_it == ctx.target_asset_types.end()) {
       bool found_in_other_source = false;
       for (const auto& context : ctx.cooked_contexts) {
         for (const auto& asset : context.inspection.Assets()) {
@@ -761,7 +753,7 @@ namespace {
       return std::nullopt;
     }
 
-    if (target_it->second.asset_type != expected_type) {
+    if (target_it->second != expected_type) {
       AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
         std::string(wrong_type_code),
         "Resolved reference has unexpected asset type",
@@ -769,7 +761,7 @@ namespace {
       return std::nullopt;
     }
 
-    return target_it->second.asset_index;
+    return *resolved_key;
   }
 
   auto ValidateNodeIndex(const uint32_t node_index, const uint32_t node_count,
@@ -798,25 +790,21 @@ namespace {
         continue;
       }
 
-      const auto shape_index
-        = ResolveAssetIndexForVirtualPath(ctx, binding.shape_ref,
+      const auto shape_key
+        = ResolveAssetKeyForVirtualPath(ctx, binding.shape_ref,
           base_path + ".shape_ref", data::AssetType::kCollisionShape,
           "physics.sidecar.shape_ref_unresolved",
           "physics.sidecar.shape_ref_not_collision_shape");
-      const auto material_index
-        = ResolveAssetIndexForVirtualPath(ctx, binding.material_ref,
+      const auto material_key
+        = ResolveAssetKeyForVirtualPath(ctx, binding.material_ref,
           base_path + ".material_ref", data::AssetType::kPhysicsMaterial,
           "physics.sidecar.material_ref_unresolved",
           "physics.sidecar.material_ref_not_physics_material");
-      if (shape_index.has_value()) {
-        binding.record.shape_asset_index = data::pak::core::ResourceIndexT {
-          *shape_index,
-        };
+      if (shape_key.has_value()) {
+        binding.record.shape_asset_key = *shape_key;
       }
-      if (material_index.has_value()) {
-        binding.record.material_asset_index = data::pak::core::ResourceIndexT {
-          *material_index,
-        };
+      if (material_key.has_value()) {
+        binding.record.material_asset_key = *material_key;
       }
     }
   }
@@ -834,15 +822,13 @@ namespace {
         continue;
       }
 
-      const auto shape_index
-        = ResolveAssetIndexForVirtualPath(ctx, binding.shape_ref,
+      const auto shape_key
+        = ResolveAssetKeyForVirtualPath(ctx, binding.shape_ref,
           base_path + ".shape_ref", data::AssetType::kCollisionShape,
           "physics.sidecar.shape_ref_unresolved",
           "physics.sidecar.shape_ref_not_collision_shape");
-      if (shape_index.has_value()) {
-        binding.record.shape_asset_index = data::pak::core::ResourceIndexT {
-          *shape_index,
-        };
+      if (shape_key.has_value()) {
+        binding.record.shape_asset_key = *shape_key;
       }
     }
   }
@@ -1237,10 +1223,10 @@ namespace {
       return false;
     }
 
-    const auto target_index_map
-      = BuildAssetIndexMap(target_context->inspection);
+    const auto target_asset_types
+      = BuildAssetTypeMap(target_context->inspection);
     auto validation_ctx = BindingValidationContext { session, request, resolver,
-      cooked_contexts, target_index_map, target_context->cooked_root,
+      cooked_contexts, target_asset_types, target_context->cooked_root,
       resolved_scene_state.node_count };
 
     ResolveShapeAndMaterialBindings(

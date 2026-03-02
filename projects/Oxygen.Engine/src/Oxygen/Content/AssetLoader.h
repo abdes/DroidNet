@@ -934,11 +934,11 @@ public:
     -> std::optional<ResourceKey> override;
   [[nodiscard]] OXGN_CNTT_API auto ReadCollisionShapeAssetDescForAsset(
     const data::AssetKey& context_asset_key,
-    data::pak::core::ResourceIndexT shape_asset_index) const
+    const data::AssetKey& shape_asset_key) const
     -> std::optional<data::pak::physics::CollisionShapeAssetDesc> override;
   [[nodiscard]] OXGN_CNTT_API auto ReadPhysicsMaterialAssetDescForAsset(
     const data::AssetKey& context_asset_key,
-    data::pak::core::ResourceIndexT material_asset_index) const
+    const data::AssetKey& material_asset_key) const
     -> std::optional<data::pak::physics::PhysicsMaterialAssetDesc> override;
   [[nodiscard]] OXGN_CNTT_API auto FindPhysicsSidecarAssetKeyForScene(
     const data::AssetKey& scene_key) const

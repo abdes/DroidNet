@@ -96,8 +96,8 @@ enum class PhysicsBindingType : uint32_t {
   = core::kNoResourceIndex;
 [[maybe_unused]] constexpr ShapePayloadType kInvalidShapePayloadType
   = ShapePayloadType::kInvalid;
-[[maybe_unused]] constexpr core::ResourceIndexT kInvalidPhysicsMaterialRef
-  = core::kNoResourceIndex;
+[[maybe_unused]] constexpr AssetKey kInvalidPhysicsMaterialAssetKey = {};
+[[maybe_unused]] constexpr AssetKey kInvalidCollisionShapeAssetKey = {};
 [[maybe_unused]] constexpr uint32_t kShapeIsSensorFalse = 0U;
 [[maybe_unused]] constexpr uint32_t kShapeIsSensorTrue = 1U;
 [[maybe_unused]] constexpr world::SceneNodeIndexT kWorldAttachmentNodeIndex
@@ -210,13 +210,13 @@ struct CollisionShapeAssetDesc {
   uint32_t is_sensor = kShapeIsSensorFalse;
   uint64_t collision_own_layer = 1ULL;
   uint64_t collision_target_layers = 0xFFFFFFFFFFFFFFFFULL;
-  core::ResourceIndexT material_ref = kInvalidPhysicsMaterialRef;
+  AssetKey material_asset_key = kInvalidPhysicsMaterialAssetKey;
   ShapeParams shape_params {};
   CookedShapePayloadRef cooked_shape_ref {};
   uint8_t reserved[8] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(CollisionShapeAssetDesc) == 256);
+static_assert(sizeof(CollisionShapeAssetDesc) == 268);
 
 //! Per-component binding table directory entry (20 bytes).
 //! Mirrors SceneComponentTableDesc layout for consistency.
@@ -272,34 +272,34 @@ struct RigidBodyBindingRecord {
   uint32_t initial_activation = 1; //!< Boolean
   uint32_t is_sensor = 0; //!< Boolean
 
-  core::ResourceIndexT shape_asset_index
-    = core::kNoResourceIndex; //!< CollisionShapeAssetDesc
-  core::ResourceIndexT material_asset_index
-    = core::kNoResourceIndex; //!< PhysicsMaterialAssetDesc
+  AssetKey shape_asset_key
+    = kInvalidCollisionShapeAssetKey; //!< CollisionShapeAssetDesc
+  AssetKey material_asset_key
+    = kInvalidPhysicsMaterialAssetKey; //!< PhysicsMaterialAssetDesc
 
   uint8_t reserved[20] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(RigidBodyBindingRecord) == 64);
+static_assert(sizeof(RigidBodyBindingRecord) == 88);
 
 //! Collider-only binding record (32 bytes) — static trigger/sensor shape.
 #pragma pack(push, 1)
 struct ColliderBindingRecord {
   world::SceneNodeIndexT node_index = 0;
-  core::ResourceIndexT shape_asset_index = core::kNoResourceIndex;
-  core::ResourceIndexT material_asset_index = core::kNoResourceIndex;
+  AssetKey shape_asset_key = kInvalidCollisionShapeAssetKey;
+  AssetKey material_asset_key = kInvalidPhysicsMaterialAssetKey;
   uint16_t collision_layer = 0;
   uint32_t collision_mask = 0xFFFFFFFF;
   uint8_t reserved[14] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(ColliderBindingRecord) == 32);
+static_assert(sizeof(ColliderBindingRecord) == 56);
 
 //! Character controller binding record (48 bytes).
 #pragma pack(push, 1)
 struct CharacterBindingRecord {
   world::SceneNodeIndexT node_index = 0;
-  core::ResourceIndexT shape_asset_index = core::kNoResourceIndex;
+  AssetKey shape_asset_key = kInvalidCollisionShapeAssetKey;
   float mass = 80.0F;
   float max_slope_angle = 0.7854F; //!< ~45 deg in radians
   float step_height = 0.3F;
@@ -309,7 +309,7 @@ struct CharacterBindingRecord {
   uint8_t reserved[18] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(CharacterBindingRecord) == 48);
+static_assert(sizeof(CharacterBindingRecord) == 60);
 
 //! Soft body binding record (48 bytes).
 #pragma pack(push, 1)

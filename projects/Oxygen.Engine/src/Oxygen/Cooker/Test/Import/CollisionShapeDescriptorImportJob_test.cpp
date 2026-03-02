@@ -176,9 +176,8 @@ namespace {
     return report;
   }
 
-  auto AssetTypeAtIndex(const std::filesystem::path& cooked_root,
-    const data::pak::core::ResourceIndexT index)
-    -> std::optional<data::AssetType>
+  auto AssetTypeForKey(const std::filesystem::path& cooked_root,
+    const data::AssetKey& key) -> std::optional<data::AssetType>
   {
     auto inspection = lc::Inspection {};
     try {
@@ -186,12 +185,12 @@ namespace {
     } catch (...) {
       return std::nullopt;
     }
-    const auto assets = inspection.Assets();
-    const auto u_index = index.get();
-    if (u_index >= assets.size()) {
-      return std::nullopt;
+    for (const auto& asset : inspection.Assets()) {
+      if (asset.key == key) {
+        return static_cast<data::AssetType>(asset.asset_type);
+      }
     }
-    return static_cast<data::AssetType>(assets[u_index].asset_type);
+    return std::nullopt;
   }
 
   auto MakeMaterialRequest(const std::filesystem::path& source_root,
@@ -300,7 +299,7 @@ namespace {
     EXPECT_EQ(descriptor->header.version, phys::kCollisionShapeAssetVersion);
     EXPECT_EQ(descriptor->shape_type, phys::ShapeType::kBox);
     const auto material_asset_type
-      = AssetTypeAtIndex(cooked_root, descriptor->material_ref);
+      = AssetTypeForKey(cooked_root, descriptor->material_asset_key);
     ASSERT_TRUE(material_asset_type.has_value());
     EXPECT_EQ(*material_asset_type, data::AssetType::kPhysicsMaterial);
     EXPECT_EQ(descriptor->shape_params.box.half_extents[0], 25.0F);
