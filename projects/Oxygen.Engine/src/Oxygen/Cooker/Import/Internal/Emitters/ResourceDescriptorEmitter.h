@@ -58,6 +58,11 @@ public:
     std::string_view stable_id, data::pak::core::ResourceIndexT resource_index,
     const data::pak::core::BufferResourceDesc& descriptor) -> std::string;
 
+  //! Emit a buffer descriptor at an explicit relative path and return it.
+  OXGN_COOK_NDAPI auto EmitBufferAtRelPath(std::string_view relpath,
+    data::pak::core::ResourceIndexT resource_index,
+    const data::pak::core::BufferResourceDesc& descriptor) -> std::string;
+
   //! Snapshot of emitted descriptor records.
   OXGN_COOK_NDAPI auto Records() const -> std::vector<Record>;
 

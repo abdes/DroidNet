@@ -39,6 +39,16 @@ struct ImportSource final {
 
 //! Request for importing a source file into a loose cooked container.
 struct ImportRequest final {
+  //! Buffer-container request payload.
+  /*!
+   Presence indicates this request must be handled by the
+   * buffer-container
+   descriptor domain.
+  */
+  struct BufferContainerPayload final {
+    std::string normalized_descriptor_json;
+  };
+
   //! Inflight scene binding context for scripting-sidecar resolution.
   /*!
    These entries are orchestration-provided runtime context, not authored
@@ -110,11 +120,20 @@ struct ImportRequest final {
 
   //! Optional physics-sidecar request payload.
   /*!
-   Presence indicates this request must be handled by the physics sidecar
+   Presence indicates this request must be handled by the physics
+   * sidecar
 
    * domain rather than format-based import routing.
   */
   std::optional<PhysicsImportSettings> physics;
+
+  //! Optional buffer-container request payload.
+  /*!
+   Presence indicates this request must be handled by the
+   * buffer-container
+   domain rather than format-based import routing.
+  */
+  std::optional<BufferContainerPayload> buffer_container;
 
   //! Optional cooked roots mounted for resolver-only scene lookup context.
   /*!

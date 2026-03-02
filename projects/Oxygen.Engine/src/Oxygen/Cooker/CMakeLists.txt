@@ -62,6 +62,8 @@ oxygen_embed_json_schemas(
   SCHEMAS
     kImportManifestSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.import-manifest.schema.json"
+    kBufferContainerSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.buffer-container.schema.json"
     kTextureDescriptorSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.texture-descriptor.schema.json"
     kMaterialDescriptorSchema
@@ -78,6 +80,8 @@ set(
   OXYGEN_COOKER_HEADERS
   "api_export.h"
   "Import/AsyncImportService.h"
+  "Import/BufferContainerImportRequestBuilder.h"
+  "Import/BufferContainerImportSettings.h"
   "Import/BufferImportTypes.h"
   "Import/FileError.h"
   "Import/IAsyncFileReader.h"
@@ -149,9 +153,11 @@ set(
   "Import/Internal/ImportSession.h"
   "Import/Internal/JobEntry.h"
   "Import/Internal/Jobs/AudioImportJob.h"
+  "Import/Internal/Jobs/BufferImportSubmitter.h"
   "Import/Internal/Jobs/FbxImportJob.h"
   "Import/Internal/Jobs/GlbImportJob.h"
   "Import/Internal/Jobs/InputImportJob.h"
+  "Import/Internal/Jobs/BufferContainerImportJob.h"
   "Import/Internal/Jobs/MaterialDescriptorImportJob.h"
   "Import/Internal/Jobs/PhysicsSidecarImportJob.h"
   "Import/Internal/Jobs/ScriptAssetImportJob.h"
@@ -224,12 +230,15 @@ set(
   "Import/Internal/ImportPlanner.cpp"
   "Import/Internal/ImportSession.cpp"
   "Import/Internal/InputImportRequestBuilder.cpp"
+  "Import/Internal/BufferContainerImportRequestBuilder.cpp"
+  "Import/Internal/Jobs/BufferImportSubmitter.cpp"
   "Import/Internal/MaterialDescriptorImportRequestBuilder.cpp"
   "Import/Internal/PhysicsImportRequestBuilder.cpp"
   "Import/Internal/Jobs/AudioImportJob.cpp"
   "Import/Internal/Jobs/FbxImportJob.cpp"
   "Import/Internal/Jobs/GlbImportJob.cpp"
   "Import/Internal/Jobs/InputImportJob.cpp"
+  "Import/Internal/Jobs/BufferContainerImportJob.cpp"
   "Import/Internal/Jobs/MaterialDescriptorImportJob.cpp"
   "Import/Internal/Jobs/PhysicsSidecarImportJob.cpp"
   "Import/Internal/Jobs/ScriptAssetImportJob.cpp"
@@ -357,6 +366,7 @@ if(${META_PROJECT_ID}_INSTALL)
   set(
     _oxygen_cooker_schema_files
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.import-manifest.schema.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.buffer-container.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.texture-descriptor.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.material-descriptor.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input.schema.json"

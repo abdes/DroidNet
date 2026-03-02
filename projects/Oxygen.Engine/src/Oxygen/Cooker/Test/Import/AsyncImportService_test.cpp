@@ -457,6 +457,45 @@ NOLINT_TEST_F(AsyncImportServiceSubmitTest,
   StopService(service);
 }
 
+//! Verify buffer-container payload bypasses format detection and routes to
+//! the buffer-container job path.
+NOLINT_TEST_F(
+  AsyncImportServiceSubmitTest, BufferContainerRequestBypassesFormatDetection)
+{
+  AsyncImportService service(config_);
+
+  auto request = ImportRequest {};
+  request.source_path = "unrecognized.asset";
+  request.cooked_root = std::filesystem::temp_directory_path()
+    / "oxygen_buffer_container_routing_submit_test";
+  std::filesystem::create_directories(*request.cooked_root);
+  request.buffer_container = ImportRequest::BufferContainerPayload {
+    .normalized_descriptor_json
+    = R"({"name":"BadContainer","buffers":[{"source":"missing.buffer.bin","virtual_path":"not/canonical","element_stride":16}]})",
+  };
+
+  std::latch done(1);
+  ImportReport report {};
+  const auto job_id = service.SubmitImport(
+    std::move(request),
+    [&report, &done](ImportJobId, const ImportReport& completed) {
+      report = completed;
+      done.count_down();
+    },
+    nullptr);
+
+  ASSERT_TRUE(job_id.has_value());
+  done.wait();
+
+  EXPECT_FALSE(report.success);
+  EXPECT_TRUE(std::any_of(report.diagnostics.begin(), report.diagnostics.end(),
+    [](const ImportDiagnostic& diagnostic) {
+      return diagnostic.code.starts_with("buffer.container.");
+    }));
+
+  StopService(service);
+}
+
 //=== Cancellation Tests ===--------------------------------------------------//
 
 class AsyncImportServiceCancelTest : public testing::Test {

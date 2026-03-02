@@ -11,6 +11,7 @@
 #include <sstream>
 #include <vector>
 
+#include <Oxygen/Cooker/Import/BufferContainerImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/InputImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
@@ -749,6 +750,25 @@ namespace {
       obj, "content_hashing", settings.with_content_hashing, errors);
   }
 
+  auto ApplyCommonBufferContainerOverrides(const json& obj,
+    BufferContainerImportSettings& settings, std::ostream& errors) -> bool
+  {
+    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
+      return false;
+    }
+    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
+      return false;
+    }
+    return true;
+  }
+
+  auto ApplyBufferContainerOverrides(const json& obj,
+    BufferContainerImportSettings& settings, std::ostream& errors) -> bool
+  {
+    return ReadBoolField(
+      obj, "content_hashing", settings.with_content_hashing, errors);
+  }
+
 } // namespace
 
 auto ImportManifest::Load(const std::filesystem::path& manifest_path,
@@ -818,6 +838,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     manifest.defaults.script.cooked_root = manifest_output_root;
     manifest.defaults.scripting_sidecar.cooked_root = manifest_output_root;
     manifest.defaults.physics_sidecar.cooked_root = manifest_output_root;
+    manifest.defaults.buffer_container.cooked_root = manifest_output_root;
     manifest.defaults.material_descriptor.cooked_root = manifest_output_root;
   }
 
@@ -834,12 +855,18 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
         error_stream << "ERROR: defaults.texture must be an object\n";
         return std::nullopt;
       }
-      ApplyCommonOverrides(
-        texture_defaults, manifest.defaults.texture, error_stream);
-      ApplyImportOptions(texture_defaults,
-        manifest.defaults.texture.with_content_hashing, error_stream);
-      ApplyTextureOverrides(
-        texture_defaults, manifest.defaults.texture, error_stream);
+      if (!ApplyCommonOverrides(
+            texture_defaults, manifest.defaults.texture, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyImportOptions(texture_defaults,
+            manifest.defaults.texture.with_content_hashing, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyTextureOverrides(
+            texture_defaults, manifest.defaults.texture, error_stream)) {
+        return std::nullopt;
+      }
     }
 
     if (defaults.contains("scene")) {
@@ -848,12 +875,22 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
         error_stream << "ERROR: defaults.scene must be an object\n";
         return std::nullopt;
       }
-      ApplyCommonSceneOverrides(
-        scene_defaults, manifest.defaults.fbx, error_stream);
-      ApplyCommonSceneOverrides(
-        scene_defaults, manifest.defaults.gltf, error_stream);
-      ApplySceneOverrides(scene_defaults, manifest.defaults.fbx, error_stream);
-      ApplySceneOverrides(scene_defaults, manifest.defaults.gltf, error_stream);
+      if (!ApplyCommonSceneOverrides(
+            scene_defaults, manifest.defaults.fbx, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyCommonSceneOverrides(
+            scene_defaults, manifest.defaults.gltf, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplySceneOverrides(
+            scene_defaults, manifest.defaults.fbx, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplySceneOverrides(
+            scene_defaults, manifest.defaults.gltf, error_stream)) {
+        return std::nullopt;
+      }
     }
 
     if (defaults.contains("script")) {
@@ -934,6 +971,22 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
         return std::nullopt;
       }
     }
+
+    if (defaults.contains("buffer_container")) {
+      const auto& buffer_container_defaults = defaults["buffer_container"];
+      if (!buffer_container_defaults.is_object()) {
+        error_stream << "ERROR: defaults.buffer_container must be an object\n";
+        return std::nullopt;
+      }
+      if (!ApplyCommonBufferContainerOverrides(buffer_container_defaults,
+            manifest.defaults.buffer_container, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyBufferContainerOverrides(buffer_container_defaults,
+            manifest.defaults.buffer_container, error_stream)) {
+        return std::nullopt;
+      }
+    }
   }
 
   if (!json_data->contains("jobs") || !(*json_data)["jobs"].is_array()) {
@@ -954,6 +1007,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     manifest_job.script = manifest.defaults.script;
     manifest_job.scripting_sidecar = manifest.defaults.scripting_sidecar;
     manifest_job.physics_sidecar = manifest.defaults.physics_sidecar;
+    manifest_job.buffer_container = manifest.defaults.buffer_container;
     manifest_job.material_descriptor = manifest.defaults.material_descriptor;
     manifest_job.fbx.texture_defaults = manifest.defaults.texture;
     manifest_job.gltf.texture_defaults = manifest.defaults.texture;
@@ -1081,6 +1135,8 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
         = manifest_job.texture.source_path;
       manifest_job.physics_sidecar.source_path
         = manifest_job.texture.source_path;
+      manifest_job.buffer_container.descriptor_path
+        = manifest_job.texture.source_path;
       manifest_job.material_descriptor.descriptor_path
         = manifest_job.texture.source_path;
     } else {
@@ -1090,6 +1146,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
       manifest_job.script.source_path.clear();
       manifest_job.scripting_sidecar.source_path.clear();
       manifest_job.physics_sidecar.source_path.clear();
+      manifest_job.buffer_container.descriptor_path.clear();
       manifest_job.material_descriptor.descriptor_path.clear();
     }
 
@@ -1134,6 +1191,10 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
           job, manifest_job.material_descriptor, error_stream)) {
       return std::nullopt;
     }
+    if (!ApplyCommonBufferContainerOverrides(
+          job, manifest_job.buffer_container, error_stream)) {
+      return std::nullopt;
+    }
 
     if (!ApplyImportOptions(
           job, manifest_job.texture.with_content_hashing, error_stream)) {
@@ -1159,6 +1220,10 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
     if (!ApplyMaterialDescriptorOverrides(
           job, manifest_job.material_descriptor, error_stream)) {
+      return std::nullopt;
+    }
+    if (!ApplyBufferContainerOverrides(
+          job, manifest_job.buffer_container, error_stream)) {
       return std::nullopt;
     }
     if (!ApplyTextureOverrides(job, manifest_job.texture, error_stream)) {
@@ -1214,6 +1279,10 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream) const
   if (job_type == "material-descriptor") {
     return AttachOrchestration(internal::BuildMaterialDescriptorRequest(
       material_descriptor, error_stream));
+  }
+  if (job_type == "buffer-container") {
+    return AttachOrchestration(
+      internal::BuildBufferContainerRequest(buffer_container, error_stream));
   }
   if (job_type == "fbx") {
     return AttachOrchestration(
