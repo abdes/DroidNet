@@ -108,7 +108,7 @@ public:
 
  @see AnyWriter, Store, MemoryStream, AlignmentGuard
 */
-template <Stream S> class Writer : protected Packer, public AnyWriter {
+template <OutputStream S> class Writer : protected Packer, public AnyWriter {
 public:
   explicit Writer(S& stream) noexcept
     : stream_(stream)

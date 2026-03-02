@@ -6,13 +6,18 @@
 
 #pragma once
 
+#include <algorithm>
 #include <bit>
-#include <functional>
+#include <cstddef>
+#include <span>
 #include <string>
+#include <system_error>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Endian.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Serio/AlignmentGuard.h>
@@ -128,7 +133,7 @@ public:
 
  @see AnyReader, Load, MemoryStream, AlignmentGuard
 */
-template <Stream S> class Reader : protected Packer, public AnyReader {
+template <InputStream S> class Reader : protected Packer, public AnyReader {
 public:
   explicit Reader(S& stream) noexcept
     : stream_(stream)

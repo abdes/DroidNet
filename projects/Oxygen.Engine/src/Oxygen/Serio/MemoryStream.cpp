@@ -5,8 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
+#include <limits>
 #include <span>
+#include <system_error>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Serio/MemoryStream.h>
 
 namespace oxygen::serio {
@@ -55,7 +59,7 @@ auto MemoryStream::Write(const std::byte* data, const size_t size) noexcept
   }
 
   if (size > 0) {
-    std::memcpy(buffer.data() + pos_, data, size);
+    std::ranges::copy(std::span { data, size }, buffer.subspan(pos_).begin());
   }
   pos_ += size;
   return {};
@@ -85,7 +89,7 @@ auto MemoryStream::Read(std::byte* data, const size_t size) noexcept
   }
 
   if (size > 0) {
-    std::memcpy(data, buffer.data() + pos_, read_size);
+    std::ranges::copy(buffer.subspan(pos_, read_size), data);
   }
   pos_ += read_size;
   return {};
@@ -156,6 +160,95 @@ auto MemoryStream::SeekEnd() noexcept -> Result<void>
 {
   const auto buffer = GetBuffer();
   pos_ = buffer.size();
+  return {};
+}
+
+//=== ReadOnlyMemoryStream Implementation
+//===----------------------------------//
+
+ReadOnlyMemoryStream::ReadOnlyMemoryStream(
+  const std::span<const std::byte> buffer) noexcept
+  : buffer_(buffer)
+{
+}
+
+auto ReadOnlyMemoryStream::Read(std::byte* data, const size_t size) noexcept
+  -> Result<void>
+{
+  if (size == 0) {
+    return {};
+  }
+
+  if (data == nullptr) {
+    return ::oxygen::Err(std::errc::invalid_argument);
+  }
+
+  if (pos_ >= buffer_.size()) {
+    return ::oxygen::Err(std::errc::io_error);
+  }
+
+  const auto available = buffer_.size() - pos_;
+  const auto read_size = (std::min)(size, available);
+
+  if (read_size < size) {
+    return ::oxygen::Err(std::errc::io_error);
+  }
+
+  if (size > 0) {
+    std::ranges::copy(buffer_.subspan(pos_, read_size), data);
+  }
+  pos_ += read_size;
+  return {};
+}
+
+auto ReadOnlyMemoryStream::Position() const noexcept -> Result<size_t>
+{
+  return ::oxygen::Ok(pos_);
+}
+
+auto ReadOnlyMemoryStream::Seek(const size_t pos) noexcept -> Result<void>
+{
+  if (pos > buffer_.size()) {
+    return ::oxygen::Err(std::errc::invalid_seek);
+  }
+  pos_ = pos;
+  return {};
+}
+
+auto ReadOnlyMemoryStream::Size() const noexcept -> Result<size_t>
+{
+  return ::oxygen::Ok(buffer_.size());
+}
+
+auto ReadOnlyMemoryStream::Data() const noexcept -> std::span<const std::byte>
+{
+  return buffer_;
+}
+
+auto ReadOnlyMemoryStream::Reset() noexcept -> void { pos_ = 0; }
+
+auto ReadOnlyMemoryStream::Backward(const size_t offset) noexcept
+  -> Result<void>
+{
+  if (offset > pos_) {
+    return ::oxygen::Err(std::errc::io_error);
+  }
+  pos_ -= offset;
+  return {};
+}
+
+auto ReadOnlyMemoryStream::Forward(const size_t offset) noexcept -> Result<void>
+{
+  if (pos_ + offset > buffer_.size()) {
+    return ::oxygen::Err(std::errc::io_error);
+  }
+  pos_ += offset;
+  return {};
+}
+
+auto ReadOnlyMemoryStream::SeekEnd() noexcept -> Result<void>
+{
+  pos_ = buffer_.size();
   return {};
 }
 

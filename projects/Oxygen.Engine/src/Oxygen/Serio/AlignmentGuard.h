@@ -39,7 +39,7 @@ protected:
   }
 
 private:
-  std::stack<AlignmentT> alignment_ {};
+  std::stack<AlignmentT> alignment_;
 };
 
 //! RAII helper for managing alignment stack via pack_push/pack_pop
@@ -67,7 +67,6 @@ class AlignmentGuard {
 public:
   AlignmentGuard(Packer& obj, uint16_t alignment) noexcept(false)
     : obj_(obj)
-    , active_(true)
   {
     obj_.get().PushAlignment(alignment);
   }
@@ -104,7 +103,7 @@ public:
 
 private:
   std::reference_wrapper<Packer> obj_;
-  bool active_;
+  bool active_ { true };
 };
 
 } // namespace oxygen::serio
