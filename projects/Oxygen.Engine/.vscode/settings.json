@@ -89,6 +89,44 @@
             "**/Spec.yaml"
         ]
     },
+    "json.schemas": [
+        {
+            "fileMatch": [
+                "import-manifest*.json"
+            ],
+            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json"
+        },
+        {
+            "fileMatch": [
+                "*.texture.json"
+            ],
+            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json"
+        },
+        {
+            "fileMatch": [
+                "*.material.json"
+            ],
+            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json"
+        },
+        {
+            "fileMatch": [
+                "*.input.json"
+            ],
+            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json"
+        },
+        {
+            "fileMatch": [
+                "*.input-action.json"
+            ],
+            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json"
+        },
+        {
+            "fileMatch": [
+                "*.physics-sidecar.json"
+            ],
+            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json"
+        }
+    ],
     "yaml.validate": true,
     "cmake.useCMakePresets": "always",
     "editor.rulers": [
