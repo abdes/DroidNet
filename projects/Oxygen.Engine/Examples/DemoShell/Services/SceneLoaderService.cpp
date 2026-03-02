@@ -1178,6 +1178,11 @@ void SceneLoaderService::HydrateRigidBodyBindings(
     if (!attached.has_value()) {
       const auto reason_text
         = std::string(physics::to_string(attached.error()));
+      const auto format_quat = [](const Quat& q) {
+        return std::string("(") + std::to_string(q.w) + ", "
+          + std::to_string(q.x) + ", " + std::to_string(q.y) + ", "
+          + std::to_string(q.z) + ")";
+      };
       if (shape_desc_opt.has_value()) {
         const auto& shape_desc = *shape_desc_opt;
         throw std::runtime_error(
@@ -1190,11 +1195,15 @@ void SceneLoaderService::HydrateRigidBodyBindings(
           + " cooked_ref_payload_type="
           + std::to_string(
             static_cast<uint32_t>(shape_desc.cooked_shape_ref.payload_type))
+          + " initial_rotation=" + format_quat(desc.initial_rotation)
+          + " shape_local_rotation=" + format_quat(desc.shape_local_rotation)
           + " reason=" + reason_text);
       }
       throw std::runtime_error(
         std::string("failed to attach rigid-body binding for node_index=")
-        + std::to_string(record.node_index) + " reason=" + reason_text);
+        + std::to_string(record.node_index) + " initial_rotation="
+        + format_quat(desc.initial_rotation) + " shape_local_rotation="
+        + format_quat(desc.shape_local_rotation) + " reason=" + reason_text);
     }
   }
 }

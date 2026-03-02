@@ -10,6 +10,8 @@
 
 find_package(GTest REQUIRED CONFIG)
 find_package(nlohmann_json_schema_validator REQUIRED)
+find_package(fmt CONFIG REQUIRED)
+find_package(ftxui REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -81,6 +83,30 @@ target_link_libraries(
   PRIVATE
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator
+)
+
+gtest_program(
+  "Oxygen.Cooker.ImportToolBatchDag.Tests"
+  SOURCES
+    "Import/BatchCommand_physics_dag_test.cpp"
+    "../Tools/ImportTool/BatchCommand.cpp"
+    "../Tools/ImportTool/ReportJson.cpp"
+    "../Tools/ImportTool/UI/Screens/BatchImportScreen.cpp"
+    "../Tools/ImportTool/UI/Screens/ImportScreen.cpp"
+  DEPS
+    ${META_MODULE_TARGET}
+    oxygen::testing
+    oxygen::clap
+    fmt::fmt-header-only
+    ftxui::screen
+    ftxui::dom
+    ftxui::component
+    nlohmann_json::nlohmann_json
+)
+target_compile_definitions(
+  Oxygen.Cooker.ImportToolBatchDag.Tests
+  PRIVATE
+    OXYGEN_IMPORT_TOOL_VERSION="0.1"
 )
 
 m_gtest_program(

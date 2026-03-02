@@ -1,0 +1,11 @@
+{
+    "$schema": "../../../src/Oxygen/Cooker/Import/Schemas/oxygen.physics-material-descriptor.schema.json",
+    "name": "plastic",
+    "content_hashing": true,
+    "virtual_path": "/.cooked/Physics/Materials/plastic.opmat",
+    "friction": 0.65,
+    "restitution": 0.1,
+    "density": 800.0,
+    "combine_mode_friction": "average",
+    "combine_mode_restitution": "average"
+}

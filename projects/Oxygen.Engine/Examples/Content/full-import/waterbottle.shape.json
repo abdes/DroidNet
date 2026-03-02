@@ -1,0 +1,10 @@
+{
+    "$schema": "../../../src/Oxygen/Cooker/Import/Schemas/oxygen.collision-shape-descriptor.schema.json",
+    "name": "waterbottle",
+    "content_hashing": true,
+    "virtual_path": "/.cooked/Physics/Shapes/waterbottle.ocshape",
+    "shape_type": "cylinder",
+    "material_ref": "/.cooked/Physics/Materials/plastic.opmat",
+    "radius": 0.18,
+    "half_height": 0.4
+}

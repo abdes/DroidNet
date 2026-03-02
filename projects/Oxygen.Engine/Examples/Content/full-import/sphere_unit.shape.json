@@ -1,0 +1,9 @@
+{
+    "$schema": "../../../src/Oxygen/Cooker/Import/Schemas/oxygen.collision-shape-descriptor.schema.json",
+    "name": "sphere_unit",
+    "content_hashing": true,
+    "virtual_path": "/.cooked/Physics/Shapes/sphere_unit.ocshape",
+    "shape_type": "sphere",
+    "material_ref": "/.cooked/Physics/Materials/bouncy_ball.opmat",
+    "radius": 0.5
+}

@@ -53,9 +53,9 @@ Status values:
 | P3 | done | P1 | Physics material descriptor domain | `physics-material-descriptor` end-to-end (`.opmat`) |
 | P4 | done | P2, P3 | Collision shape descriptor domain | `collision-shape-descriptor` end-to-end (`.ocshape`) |
 | P5 | done | P2, P3, P4 | Physics sidecar v2 upgrade | full binding-family support with virtual refs |
-| P6 | blocked | P2, P3, P4, P5 | Manifest + DAG integration | job types/defaults/key checks/dependency collection |
-| P7 | blocked | P2, P3, P4, P5, P6 | Schema embed/install integration | all physics schemas generated and installed |
-| P8 | blocked | P2, P3, P4, P5, P6 | Diagnostics hardening | stable diagnostic set and precedence behavior |
+| P6 | done | P2, P3, P4, P5 | Manifest + DAG integration | job types/defaults/key checks/dependency collection |
+| P7 | pending | P2, P3, P4, P5, P6 | Schema embed/install integration | all physics schemas generated and installed |
+| P8 | pending | P2, P3, P4, P5, P6 | Diagnostics hardening | stable diagnostic set and precedence behavior |
 | P9 | blocked | P1, P2, P3, P4, P5, P6, P7, P8 | Test matrix closure | domain + integration + pak tests complete |
 | P10 | pending | P9 | Parity and docs closeout | PakGen parity evidence and documentation finalization |
 
@@ -68,8 +68,8 @@ This is the mandatory execution order for closure:
 3. P1
 4. P2 + P3 (parallel allowed) [done]
 5. P4 [done]
-6. P5
-7. P6
+6. P5 [done]
+7. P6 [done]
 8. P7 + P8 (parallel allowed)
 9. P9
 10. P10
@@ -414,24 +414,57 @@ Acceptance:
    - closure evidence:
      - no new versioned type names/constants introduced in the sidecar-v2 path.
      - no legacy-sidecar field shims retained in schema/pipeline parsing.
-8. P6 `blocked`:
-   - evidence:
-     - manifest includes `physics-sidecar`, `physics-resource-descriptor`, and
-       `physics-material-descriptor` and `collision-shape-descriptor`
-       types/defaults/key-whitelists and request builder dispatch.
-   - gap evidence:
-     - full sidecar-v2 dependency collector rules are still pending explicit
-       P6 completion.
-9. P7 `blocked`:
+8. P6 `done`:
+   - implementation evidence:
+     - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
+       now adds physics-domain DAG inference based on canonical virtual refs:
+       - producer indexing from manifest jobs for:
+         - `physics-resource-descriptor` (`.opres`)
+         - `physics-material-descriptor` (`.opmat`)
+         - `collision-shape-descriptor` (`.ocshape`)
+         - scene producers (`scene-descriptor`, `fbx`, `gltf`) for sidecar target scene refs
+       - consumer ref extraction for:
+         - `collision-shape-descriptor` (`material_ref`, `payload_ref`)
+         - `physics-sidecar` (`target_scene_virtual_path`, `shape_ref`, `material_ref`, `constraint_ref`)
+       - deterministic merge of explicit `depends_on` + inferred producer edges
+         for scheduling (deduped and order-stable).
+       - diagnostics:
+         - `physics.manifest.dependency_inference_failed`
+         - `physics.manifest.dependency_unresolved`
+         - `physics.manifest.dependency_ambiguous`
+         - `physics.manifest.dependency_missing_target`
+         - `physics.manifest.dependency_cycle`
+       - tests added:
+         - `src/Oxygen/Cooker/Test/Import/BatchCommand_physics_dag_test.cpp`
+           covering:
+           - unresolved inferred physics refs
+           - ambiguous inferred producer refs
+           - physics dependency cycle diagnostic
+           - non-physics cycle diagnostic regression guard
+         - `src/Oxygen/Cooker/Test/CMakeLists.txt` target:
+           `Oxygen.Cooker.ImportToolBatchDag.Tests`
+       - precedence alignment in batch request preparation:
+         - CLI cooked-root override now takes highest priority over
+           manifest defaults and per-job settings.
+   - closure evidence:
+     - mixed multi-domain physics manifest import validated externally by user
+       (`All Green`) against `Examples/Content/full-import/import-manifest.json`.
+     - runtime scene load + deferred physics hydration validated externally by
+       user (`All Green`) in RenderScene after DAG/sidecar integration
+       remediations.
+     - deterministic dependency diagnostics remain covered by
+       `BatchCommand_physics_dag_test.cpp` cases for unresolved, ambiguous, and
+       cycle paths.
+9. P7 `pending`:
    - evidence:
      - CMake embed/install includes:
        - `oxygen.physics-sidecar.schema.json`
        - `oxygen.physics-resource-descriptor.schema.json`
        - `oxygen.physics-material-descriptor.schema.json`
    - gap evidence:
-     - no additional P7 gap for collision-shape schema; remaining P7 closure
-       is blocked by downstream phase ordering.
-10. P8 `blocked`:
+     - collision-shape + remaining full physics schema embed/install closure
+       remains to be executed in this phase.
+10. P8 `pending`:
     - evidence:
       - `physics.sidecar.*`, `physics.manifest.*`, `physics.resource.*`, and
         `physics.material.*` diagnostics are present.
@@ -655,3 +688,46 @@ Build/test execution in this pass:
 5. Closure evidence:
    - no new versioned sidecar-v2 type names or constants introduced.
    - no legacy-sidecar parsing path retained for removed field names.
+
+## P6 (done)
+
+1. Manifest + DAG integration implementation landed:
+   - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
+     - producer indexing covers:
+       - `physics-resource-descriptor` (`.opres`)
+       - `physics-material-descriptor` (`.opmat`)
+       - `collision-shape-descriptor` (`.ocshape`)
+       - scene producers (`scene-descriptor`, `fbx`, `gltf`)
+     - consumer extraction covers:
+       - collision-shape refs: `material_ref`, `payload_ref`
+       - sidecar refs: `target_scene_virtual_path`, `shape_ref`,
+         `material_ref`, `constraint_ref`
+     - explicit + inferred dependency merge is deterministic and deduped.
+     - CLI override precedence is enforced:
+       - manifest defaults < job settings < CLI overrides.
+2. Dependency diagnostics are explicit and stable:
+   - `physics.manifest.dependency_inference_failed`
+   - `physics.manifest.dependency_unresolved`
+   - `physics.manifest.dependency_ambiguous`
+   - `physics.manifest.dependency_missing_target`
+   - `physics.manifest.dependency_cycle`
+3. Test coverage:
+   - `src/Oxygen/Cooker/Test/Import/BatchCommand_physics_dag_test.cpp`
+     - unresolved inferred refs
+     - ambiguous inferred producers
+     - physics dependency cycle
+     - non-physics cycle regression guard
+4. Runtime hardening completed during phase validation:
+   - same-cooked-root sidecar producer fence integration in BatchCommand
+     to stabilize sidecar index resolution ordering.
+   - Jolt adapter guard/normalization for rigid-body and character rotations:
+     - `src/Oxygen/Physics/Jolt/Converters.h`
+     - `src/Oxygen/Physics/Jolt/JoltBodies.cpp`
+     - `src/Oxygen/Physics/Jolt/JoltCharacters.cpp`
+   - scene-loader rigid-body failure diagnostics enriched:
+     - `Examples/DemoShell/Services/SceneLoaderService.cpp`
+5. Closure evidence:
+   - user-reported validation: `All Green` for
+     `Examples/Content/full-import/import-manifest.json`.
+   - user-reported validation: `All Green` for RenderScene physics hydration
+     and floor/ball interaction after descriptor remediations.
