@@ -1,0 +1,11 @@
+{
+  "$schema": "../../../src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json",
+  "name": "sphere_blue",
+  "domain": "opaque",
+  "alpha_mode": "opaque",
+  "parameters": {
+    "base_color": [0.15, 0.35, 0.9, 1.0],
+    "roughness": 0.4,
+    "metalness": 0.2
+  }
+}

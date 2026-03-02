@@ -1,5 +1,4 @@
 {
-  "$schema": "../../src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json",
   "actions": [
     {
       "name": "RotateSpeedUpAction",

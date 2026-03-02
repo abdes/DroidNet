@@ -1,0 +1,21 @@
+{
+  "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.buffer-container.schema.json",
+  "name": "waterbottle_buffers",
+  "content_hashing": true,
+  "buffers": [
+    {
+      "source": "./waterbottle_waterbottle_p0_vb.bin",
+      "virtual_path": "/.cooked/Resources/Buffers/waterbottle_waterbottle_p0_vb.obuf",
+      "usage_flags": 1,
+      "element_stride": 72,
+      "alignment": 16
+    },
+    {
+      "source": "./waterbottle_waterbottle_p0_ib.bin",
+      "virtual_path": "/.cooked/Resources/Buffers/waterbottle_waterbottle_p0_ib.obuf",
+      "usage_flags": 2,
+      "element_stride": 4,
+      "alignment": 4
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json",
+  "name": "waterbottle_bottlemat",
+  "domain": "opaque",
+  "alpha_mode": "opaque",
+  "orm_policy": "auto",
+  "parameters": {
+    "base_color": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "metalness": 1.0,
+    "roughness": 1.0,
+    "normal_scale": 1.0,
+    "ambient_occlusion": 1.0,
+    "emissive_factor": [
+      1,
+      1,
+      1
+    ]
+  },
+  "textures": {
+    "base_color": {
+      "virtual_path": "/.cooked/Resources/Textures/waterbottle_albedo.otex"
+    },
+    "normal": {
+      "virtual_path": "/.cooked/Resources/Textures/waterbottle_normal.otex"
+    },
+    "metallic": {
+      "virtual_path": "/.cooked/Resources/Textures/waterbottle_orm.otex"
+    },
+    "roughness": {
+      "virtual_path": "/.cooked/Resources/Textures/waterbottle_orm.otex"
+    },
+    "ambient_occlusion": {
+      "virtual_path": "/.cooked/Resources/Textures/waterbottle_orm.otex"
+    },
+    "emissive": {
+      "virtual_path": "/.cooked/Resources/Textures/waterbottle_emissive.otex"
+    }
+  }
+}
