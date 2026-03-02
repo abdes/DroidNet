@@ -142,8 +142,8 @@ private:
   auto ResolvePhysicsModule() -> observer_ptr<physics::PhysicsModule>;
   //! Hydrate supported physics bindings from sidecar into runtime scene.
   void HydratePhysicsBindings(const data::PhysicsSceneAsset& physics_asset);
-  //! Preload all physics shape cooked payload resources required by sidecar.
-  auto PreloadPhysicsShapeResources(
+  //! Preload all physics dependency resources required by sidecar hydration.
+  auto PreloadPhysicsDependencyResources(
     const data::PhysicsSceneAsset& physics_asset) -> co::Co<>;
   //! Attach rigid-body bindings; hard-fail on invalid/unsupported data.
   void HydrateRigidBodyBindings(physics::PhysicsModule& physics_module,
@@ -154,6 +154,11 @@ private:
   //! Attach soft-body bindings and register aggregate mappings.
   void HydrateSoftBodyBindings(physics::PhysicsModule& physics_module,
     std::span<const data::pak::physics::SoftBodyBindingRecord> bindings);
+  //! Attach vehicle bindings and register aggregate mappings.
+  void HydrateVehicleBindings(physics::PhysicsModule& physics_module,
+    std::span<const data::pak::physics::VehicleBindingRecord> bindings,
+    std::span<const data::pak::physics::RigidBodyBindingRecord>
+      rigid_body_bindings);
   //! Attach collider-only bindings as static trigger bodies.
   void HydrateColliderBindings(physics::PhysicsModule& physics_module,
     std::span<const data::pak::physics::ColliderBindingRecord> bindings);
