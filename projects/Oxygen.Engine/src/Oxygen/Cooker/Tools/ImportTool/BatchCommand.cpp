@@ -209,6 +209,9 @@ namespace {
     if (request.physics_material_descriptor.has_value()) {
       return "physics-material-descriptor";
     }
+    if (request.collision_shape_descriptor.has_value()) {
+      return "collision-shape-descriptor";
+    }
     if (request.physics.has_value()) {
       return "physics-sidecar";
     }
@@ -518,6 +521,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
       && job.job_type != "material-descriptor"
       && job.job_type != "physics-resource-descriptor"
       && job.job_type != "physics-material-descriptor"
+      && job.job_type != "collision-shape-descriptor"
       && job.job_type != "buffer-container"
       && job.job_type != "geometry-descriptor" && job.job_type != "fbx"
       && job.job_type != "scene-descriptor" && job.job_type != "gltf"

@@ -51,7 +51,7 @@ Status values:
 | P1 | done | P11 | Physics layout foundation | materials/shapes/resources under `Physics/...`; sidecars co-located with target scenes |
 | P2 | done | P1 | Physics resource descriptor domain | `physics-resource-descriptor` end-to-end with `.opres` |
 | P3 | done | P1 | Physics material descriptor domain | `physics-material-descriptor` end-to-end (`.opmat`) |
-| P4 | in_progress | P2, P3 | Collision shape descriptor domain | `collision-shape-descriptor` end-to-end (`.ocshape`) |
+| P4 | done | P2, P3 | Collision shape descriptor domain | `collision-shape-descriptor` end-to-end (`.ocshape`) |
 | P5 | blocked | P2, P3, P4 | Physics sidecar v2 upgrade | full binding-family support with virtual refs |
 | P6 | blocked | P2, P3, P4, P5 | Manifest + DAG integration | job types/defaults/key checks/dependency collection |
 | P7 | blocked | P2, P3, P4, P5, P6 | Schema embed/install integration | all physics schemas generated and installed |
@@ -67,7 +67,7 @@ This is the mandatory execution order for closure:
 2. P11
 3. P1
 4. P2 + P3 (parallel allowed) [done]
-5. P4 [in progress]
+5. P4 [done]
 6. P5
 7. P6
 8. P7 + P8 (parallel allowed)
@@ -198,6 +198,8 @@ Acceptance:
 
 1. Full binding-family payload imports successfully.
 2. No implicit dependency cooking occurs.
+3. No version number attached to types or constants
+4. No legacy or backward compat shims left. Oxygen has a strict "live at the edge" policy.
 
 ## P6: Manifest and DAG Integration
 
@@ -355,10 +357,31 @@ Acceptance:
        - `src/Oxygen/Cooker/Test/Import/ImportManifest_physics_material_descriptor_test.cpp`
    - closure evidence:
      - user-reported external validation: `all green`.
-6. P4 `in_progress`:
-   - gap evidence:
-     - no `oxygen.collision-shape-descriptor.schema.json` exists.
-     - no collision-shape descriptor request-builder/job/pipeline exists.
+6. P4 `done`:
+   - implementation evidence:
+     - schema:
+       - `src/Oxygen/Cooker/Import/Schemas/oxygen.collision-shape-descriptor.schema.json`
+     - request ingress:
+       - `src/Oxygen/Cooker/Import/CollisionShapeDescriptorImportSettings.h`
+       - `src/Oxygen/Cooker/Import/CollisionShapeDescriptorImportRequestBuilder.h`
+       - `src/Oxygen/Cooker/Import/Internal/CollisionShapeDescriptorImportRequestBuilder.cpp`
+     - runtime/job/pipeline:
+       - `src/Oxygen/Cooker/Import/Internal/Jobs/CollisionShapeDescriptorImportJob.h/.cpp`
+       - `src/Oxygen/Cooker/Import/Internal/Pipelines/CollisionShapeImportPipeline.h/.cpp`
+     - manifest/tool routing:
+       - `src/Oxygen/Cooker/Import/ImportManifest.h/.cpp`
+       - `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
+       - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
+       - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
+     - tests:
+       - `src/Oxygen/Cooker/Test/Import/CollisionShapeDescriptorJsonSchema_test.cpp`
+       - `src/Oxygen/Cooker/Test/Import/CollisionShapeDescriptorImportRequestBuilder_test.cpp`
+       - `src/Oxygen/Cooker/Test/Import/CollisionShapeDescriptorImportJob_test.cpp`
+       - `src/Oxygen/Cooker/Test/Import/ImportManifest_collision_shape_descriptor_test.cpp`
+       - `src/Oxygen/Cooker/Test/CMakeLists.txt` target
+         `Oxygen.Cooker.AsyncImportCollisionShapeDescriptor.Tests`
+   - closure evidence:
+     - user-reported external validation: `all green`.
 7. P5 `blocked`:
    - evidence:
      - sidecar request-builder/job/pipeline/tests exist (`PhysicsImportRequestBuilder`, `PhysicsSidecarImportJob`, `PhysicsSidecarImportPipeline`, related tests).
@@ -367,11 +390,10 @@ Acceptance:
 8. P6 `blocked`:
    - evidence:
      - manifest includes `physics-sidecar`, `physics-resource-descriptor`, and
-       `physics-material-descriptor` types/defaults/key-whitelists and request
-       builder dispatch.
+       `physics-material-descriptor` and `collision-shape-descriptor`
+       types/defaults/key-whitelists and request builder dispatch.
    - gap evidence:
-     - `collision-shape-descriptor` orchestration/defaults/dependency collection
-       not integrated yet.
+     - full sidecar-v2 dependency collector rules are pending P5.
 9. P7 `blocked`:
    - evidence:
      - CMake embed/install includes:
@@ -379,21 +401,21 @@ Acceptance:
        - `oxygen.physics-resource-descriptor.schema.json`
        - `oxygen.physics-material-descriptor.schema.json`
    - gap evidence:
-     - embed/install wiring for `oxygen.collision-shape-descriptor.schema.json`
-       still missing.
+     - no additional P7 gap for collision-shape schema; remaining P7 closure
+       is blocked by downstream phase ordering.
 10. P8 `blocked`:
     - evidence:
       - `physics.sidecar.*`, `physics.manifest.*`, `physics.resource.*`, and
         `physics.material.*` diagnostics are present.
     - gap evidence:
-      - `physics.shape.*` namespace coverage remains pending with P4.
+      - cross-domain diagnostics precedence/noise hardening remains pending.
 11. P9 `blocked`:
      - evidence:
       - sidecar + physics resource/material schema/request/job/manifest tests
         exist in tree.
+      - collision-shape schema/request/job/manifest tests now exist in tree.
      - gap evidence:
-      - collision-shape domain and scene+physics integration matrix are still
-        pending.
+      - scene+physics integration matrix is still pending.
 12. P10 `pending`:
     - gap evidence:
       - no recorded full parity evidence for the complete four-domain physics authoring model.
@@ -528,5 +550,40 @@ Build/test execution in this pass:
    - `src/Oxygen/Cooker/Test/Import/PhysicsMaterialDescriptorImportRequestBuilder_test.cpp`
    - `src/Oxygen/Cooker/Test/Import/PhysicsMaterialDescriptorImportJob_test.cpp`
    - `src/Oxygen/Cooker/Test/Import/ImportManifest_physics_material_descriptor_test.cpp`
+4. Closure evidence:
+   - user-reported validation: `All Green`.
+
+## P4 (done)
+
+1. Collision shape descriptor domain implementation landed:
+   - schema:
+     - `src/Oxygen/Cooker/Import/Schemas/oxygen.collision-shape-descriptor.schema.json`
+   - request ingestion:
+     - `src/Oxygen/Cooker/Import/CollisionShapeDescriptorImportSettings.h`
+     - `src/Oxygen/Cooker/Import/CollisionShapeDescriptorImportRequestBuilder.h`
+     - `src/Oxygen/Cooker/Import/Internal/CollisionShapeDescriptorImportRequestBuilder.cpp`
+   - runtime/job/pipeline:
+     - `src/Oxygen/Cooker/Import/Internal/Jobs/CollisionShapeDescriptorImportJob.h/.cpp`
+     - `src/Oxygen/Cooker/Import/Internal/Pipelines/CollisionShapeImportPipeline.h/.cpp`
+   - resolver/ref integration:
+     - `material_ref` resolution to `/.cooked/Physics/Materials/*.opmat`
+       in the target source domain.
+     - payload-backed `payload_ref` resolution to
+       `/.cooked/Physics/Resources/*.opres` with sidecar parse and
+       `jolt_shape_binary` format enforcement.
+   - emission:
+     - deterministic `.ocshape` emission under `Physics/Shapes`.
+2. Manifest/tool routing integrated:
+   - `src/Oxygen/Cooker/Import/ImportManifest.h/.cpp`
+   - `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
+   - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
+   - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
+3. Test coverage added:
+   - `src/Oxygen/Cooker/Test/Import/CollisionShapeDescriptorJsonSchema_test.cpp`
+   - `src/Oxygen/Cooker/Test/Import/CollisionShapeDescriptorImportRequestBuilder_test.cpp`
+   - `src/Oxygen/Cooker/Test/Import/CollisionShapeDescriptorImportJob_test.cpp`
+   - `src/Oxygen/Cooker/Test/Import/ImportManifest_collision_shape_descriptor_test.cpp`
+   - `src/Oxygen/Cooker/Test/CMakeLists.txt` target:
+     `Oxygen.Cooker.AsyncImportCollisionShapeDescriptor.Tests`
 4. Closure evidence:
    - user-reported validation: `All Green`.

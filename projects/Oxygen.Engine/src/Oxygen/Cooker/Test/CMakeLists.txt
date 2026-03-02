@@ -114,6 +114,21 @@ target_link_libraries(
 )
 
 m_gtest_program(
+  AsyncImportCollisionShapeDescriptor
+  SOURCES
+    "Import/CollisionShapeDescriptorImportJob_test.cpp"
+    "Import/ImportManifest_collision_shape_descriptor_test.cpp"
+    "Import/CollisionShapeDescriptorImportRequestBuilder_test.cpp"
+    "Import/CollisionShapeDescriptorJsonSchema_test.cpp"
+)
+target_link_libraries(
+  Oxygen.Cooker.AsyncImportCollisionShapeDescriptor.Tests
+  PRIVATE
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
+)
+
+m_gtest_program(
   AsyncImportTextureDescriptor
   SOURCES
     "Import/ImportManifest_texture_descriptor_test.cpp"

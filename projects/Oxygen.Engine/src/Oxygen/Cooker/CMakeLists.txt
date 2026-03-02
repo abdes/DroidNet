@@ -82,6 +82,8 @@ oxygen_embed_json_schemas(
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-resource-descriptor.schema.json"
     kPhysicsMaterialDescriptorSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-material-descriptor.schema.json"
+    kCollisionShapeDescriptorSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.collision-shape-descriptor.schema.json"
 )
 
 set(
@@ -91,6 +93,8 @@ set(
   "Import/BufferContainerImportRequestBuilder.h"
   "Import/BufferContainerImportSettings.h"
   "Import/BufferImportTypes.h"
+  "Import/CollisionShapeDescriptorImportRequestBuilder.h"
+  "Import/CollisionShapeDescriptorImportSettings.h"
   "Import/FileError.h"
   "Import/GeometryDescriptorImportRequestBuilder.h"
   "Import/GeometryDescriptorImportSettings.h"
@@ -171,6 +175,7 @@ set(
   "Import/Internal/JobEntry.h"
   "Import/Internal/Jobs/AudioImportJob.h"
   "Import/Internal/Jobs/BufferContainerImportJob.h"
+  "Import/Internal/Jobs/CollisionShapeDescriptorImportJob.h"
   "Import/Internal/Jobs/BufferImportSubmitter.h"
   "Import/Internal/Jobs/FbxImportJob.h"
   "Import/Internal/Jobs/GeometryDescriptorImportJob.h"
@@ -188,6 +193,7 @@ set(
   "Import/Internal/LooseCookedIndexRegistry.h"
   "Import/Internal/LooseCookedWriter.h"
   "Import/Internal/Pipelines/BufferPipeline.h"
+  "Import/Internal/Pipelines/CollisionShapeImportPipeline.h"
   "Import/Internal/Pipelines/GeometryPipeline_tangents.h"
   "Import/Internal/Pipelines/GeometryPipeline.h"
   "Import/Internal/Pipelines/InputImportPipeline.h"
@@ -259,6 +265,7 @@ set(
   "Import/Internal/ImportSession.cpp"
   "Import/Internal/InputImportRequestBuilder.cpp"
   "Import/Internal/BufferContainerImportRequestBuilder.cpp"
+  "Import/Internal/CollisionShapeDescriptorImportRequestBuilder.cpp"
   "Import/Internal/GeometryDescriptorImportRequestBuilder.cpp"
   "Import/Internal/Jobs/BufferImportSubmitter.cpp"
   "Import/Internal/MaterialDescriptorImportRequestBuilder.cpp"
@@ -272,6 +279,7 @@ set(
   "Import/Internal/Jobs/GlbImportJob.cpp"
   "Import/Internal/Jobs/InputImportJob.cpp"
   "Import/Internal/Jobs/BufferContainerImportJob.cpp"
+  "Import/Internal/Jobs/CollisionShapeDescriptorImportJob.cpp"
   "Import/Internal/Jobs/MaterialDescriptorImportJob.cpp"
   "Import/Internal/Jobs/PhysicsMaterialDescriptorImportJob.cpp"
   "Import/Internal/Jobs/PhysicsResourceDescriptorImportJob.cpp"
@@ -283,6 +291,7 @@ set(
   "Import/Internal/LooseCookedIndexRegistry.cpp"
   "Import/Internal/LooseCookedWriter.cpp"
   "Import/Internal/Pipelines/BufferPipeline.cpp"
+  "Import/Internal/Pipelines/CollisionShapeImportPipeline.cpp"
   "Import/Internal/Pipelines/GeometryPipeline.cpp"
   "Import/Internal/Pipelines/InputImportPipeline.cpp"
   "Import/Internal/Pipelines/MaterialPipeline.cpp"
@@ -416,6 +425,7 @@ if(${META_PROJECT_ID}_INSTALL)
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-sidecar.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-resource-descriptor.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-material-descriptor.schema.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.collision-shape-descriptor.schema.json"
   )
   foreach(_schema_file IN LISTS _oxygen_cooker_schema_files)
     if(NOT EXISTS "${_schema_file}")
