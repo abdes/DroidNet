@@ -52,7 +52,7 @@ Status values:
 | P2 | done | P1 | Physics resource descriptor domain | `physics-resource-descriptor` end-to-end with `.opres` |
 | P3 | done | P1 | Physics material descriptor domain | `physics-material-descriptor` end-to-end (`.opmat`) |
 | P4 | done | P2, P3 | Collision shape descriptor domain | `collision-shape-descriptor` end-to-end (`.ocshape`) |
-| P5 | blocked | P2, P3, P4 | Physics sidecar v2 upgrade | full binding-family support with virtual refs |
+| P5 | done | P2, P3, P4 | Physics sidecar v2 upgrade | full binding-family support with virtual refs |
 | P6 | blocked | P2, P3, P4, P5 | Manifest + DAG integration | job types/defaults/key checks/dependency collection |
 | P7 | blocked | P2, P3, P4, P5, P6 | Schema embed/install integration | all physics schemas generated and installed |
 | P8 | blocked | P2, P3, P4, P5, P6 | Diagnostics hardening | stable diagnostic set and precedence behavior |
@@ -382,18 +382,46 @@ Acceptance:
          `Oxygen.Cooker.AsyncImportCollisionShapeDescriptor.Tests`
    - closure evidence:
      - user-reported external validation: `all green`.
-7. P5 `blocked`:
-   - evidence:
-     - sidecar request-builder/job/pipeline/tests exist (`PhysicsImportRequestBuilder`, `PhysicsSidecarImportJob`, `PhysicsSidecarImportPipeline`, related tests).
-   - gap evidence:
-     - sidecar schema still uses legacy fields (`shape_virtual_path`, `material_virtual_path`, `constraint_resource_index`) instead of full virtual-ref contract.
+7. P5 `done`:
+   - implementation evidence:
+     - schema migrated to virtual-ref contract for all binding families:
+       - `src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json`
+       - fields now use `shape_ref`, `material_ref`, `constraint_ref`
+         (legacy `*_virtual_path` and numeric `constraint_resource_index`
+         authoring removed from schema contract).
+     - sidecar pipeline migrated to virtual-ref resolution:
+       - `src/Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.cpp`
+       - `shape_ref` -> collision-shape asset index
+       - `material_ref` -> physics-material asset index
+       - `constraint_ref` -> `.opres` sidecar parse ->
+         `PhysicsResourceDesc` index with `jolt_constraint_binary` format
+         enforcement.
+     - node-bound and singleton invariants preserved:
+       - singleton-per-node validation remains for
+         `rigid_bodies`/`characters`/`soft_bodies`/`vehicles`/`aggregates`
+       - node bounds validation enforced across all binding families.
+     - `.opscene` emission remains co-located with target `.oscene`:
+       - sidecar relpath derived by replacing target scene extension only.
+   - validation evidence:
+     - schema tests updated:
+       - `src/Oxygen/Cooker/Test/Import/PhysicsJsonSchema_test.cpp`
+         now validates all seven binding families and rejects legacy field names.
+     - request/manifest fixture payloads updated to virtual-ref fields:
+       - `src/Oxygen/Cooker/Test/Import/PhysicsImportRequestBuilder_test.cpp`
+       - `src/Oxygen/Cooker/Test/Import/ImportManifest_physics_sidecar_test.cpp`
+     - content fixture updated:
+       - `Examples/Content/full-import/showcase_scene.physics-sidecar.json`
+   - closure evidence:
+     - no new versioned type names/constants introduced in the sidecar-v2 path.
+     - no legacy-sidecar field shims retained in schema/pipeline parsing.
 8. P6 `blocked`:
    - evidence:
      - manifest includes `physics-sidecar`, `physics-resource-descriptor`, and
        `physics-material-descriptor` and `collision-shape-descriptor`
        types/defaults/key-whitelists and request builder dispatch.
    - gap evidence:
-     - full sidecar-v2 dependency collector rules are pending P5.
+     - full sidecar-v2 dependency collector rules are still pending explicit
+       P6 completion.
 9. P7 `blocked`:
    - evidence:
      - CMake embed/install includes:
@@ -587,3 +615,43 @@ Build/test execution in this pass:
      `Oxygen.Cooker.AsyncImportCollisionShapeDescriptor.Tests`
 4. Closure evidence:
    - user-reported validation: `All Green`.
+
+## P5 (done)
+
+1. Physics sidecar v2 contract migration landed:
+   - schema:
+     - `src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json`
+       now models all seven binding families using:
+       - `shape_ref`
+       - `material_ref`
+       - `constraint_ref`
+   - legacy authoring fields removed from schema:
+       - `shape_virtual_path`
+       - `material_virtual_path`
+       - `constraint_resource_index`
+2. Sidecar pipeline ref resolution migration landed:
+   - `src/Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.cpp`
+   - rigid/collider/character resolution:
+     - `shape_ref` -> `AssetType::kCollisionShape`
+     - `material_ref` -> `AssetType::kPhysicsMaterial`
+   - joint/vehicle resolution:
+     - `constraint_ref` -> `.opres` parse ->
+       `ResourceIndexT constraint_resource_index`
+     - `PhysicsResourceFormat::kJoltConstraintBinary` enforced.
+3. Invariants and emission behavior:
+   - node bounds and singleton-per-node rules remain enforced.
+   - sidecar emission remains co-located with target scene:
+     - `<scene_dir>/<scene_stem>.opscene`.
+4. Test/fixture updates:
+   - `src/Oxygen/Cooker/Test/Import/PhysicsJsonSchema_test.cpp`
+     - canonical payload now exercises all seven families.
+     - explicit rejection test for legacy field names added.
+   - `src/Oxygen/Cooker/Test/Import/PhysicsImportRequestBuilder_test.cpp`
+     updated to virtual-ref payload fields.
+   - `src/Oxygen/Cooker/Test/Import/ImportManifest_physics_sidecar_test.cpp`
+     updated inline bindings to virtual-ref payload fields.
+   - `Examples/Content/full-import/showcase_scene.physics-sidecar.json`
+     migrated to virtual-ref fields.
+5. Closure evidence:
+   - no new versioned sidecar-v2 type names or constants introduced.
+   - no legacy-sidecar parsing path retained for removed field names.

@@ -304,8 +304,8 @@ Minimal payload example:
     "rigid_bodies": [
       {
         "node_index": 0,
-        "shape_virtual_path": "/.cooked/Physics/Shapes/box.ocshape",
-        "material_virtual_path": "/.cooked/Physics/Materials/default.opmat",
+        "shape_ref": "/.cooked/Physics/Shapes/box.ocshape",
+        "material_ref": "/.cooked/Physics/Materials/default.opmat",
         "body_type": "dynamic"
       }
     ]
@@ -441,8 +441,8 @@ Batch example with one output shared at manifest level:
         "rigid_bodies": [
           {
             "node_index": 0,
-            "shape_virtual_path": "/Physics/Shapes/backpack_body.ocshape",
-            "material_virtual_path": "/Physics/Materials/default.opmat",
+            "shape_ref": "/Physics/Shapes/backpack_body.ocshape",
+            "material_ref": "/Physics/Materials/default.opmat",
             "body_type": "dynamic"
           }
         ]

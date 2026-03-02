@@ -76,28 +76,23 @@
             "minimum": 0,
             "maximum": 4294967295
         },
-        "resource_index": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 4294967295
-        },
         "rigid_body_binding": {
             "type": "object",
             "additionalProperties": false,
             "required": [
                 "node_index",
-                "shape_virtual_path",
-                "material_virtual_path"
+                "shape_ref",
+                "material_ref"
             ],
             "properties": {
                 "node_index": {
                     "$ref": "#/definitions/node_index"
                 },
-                "shape_virtual_path": {
+                "shape_ref": {
                     "type": "string",
                     "minLength": 1
                 },
-                "material_virtual_path": {
+                "material_ref": {
                     "type": "string",
                     "minLength": 1
                 },
@@ -145,18 +140,18 @@
             "additionalProperties": false,
             "required": [
                 "node_index",
-                "shape_virtual_path",
-                "material_virtual_path"
+                "shape_ref",
+                "material_ref"
             ],
             "properties": {
                 "node_index": {
                     "$ref": "#/definitions/node_index"
                 },
-                "shape_virtual_path": {
+                "shape_ref": {
                     "type": "string",
                     "minLength": 1
                 },
-                "material_virtual_path": {
+                "material_ref": {
                     "type": "string",
                     "minLength": 1
                 },
@@ -173,13 +168,13 @@
             "additionalProperties": false,
             "required": [
                 "node_index",
-                "shape_virtual_path"
+                "shape_ref"
             ],
             "properties": {
                 "node_index": {
                     "$ref": "#/definitions/node_index"
                 },
-                "shape_virtual_path": {
+                "shape_ref": {
                     "type": "string",
                     "minLength": 1
                 },
@@ -249,7 +244,7 @@
             "required": [
                 "node_index_a",
                 "node_index_b",
-                "constraint_resource_index"
+                "constraint_ref"
             ],
             "properties": {
                 "node_index_a": {
@@ -272,8 +267,9 @@
                     ],
                     "description": "Body B node index, or null/\"world\" to attach constraint to world."
                 },
-                "constraint_resource_index": {
-                    "$ref": "#/definitions/resource_index"
+                "constraint_ref": {
+                    "type": "string",
+                    "minLength": 1
                 }
             }
         },
@@ -282,14 +278,15 @@
             "additionalProperties": false,
             "required": [
                 "node_index",
-                "constraint_resource_index"
+                "constraint_ref"
             ],
             "properties": {
                 "node_index": {
                     "$ref": "#/definitions/node_index"
                 },
-                "constraint_resource_index": {
-                    "$ref": "#/definitions/resource_index"
+                "constraint_ref": {
+                    "type": "string",
+                    "minLength": 1
                 }
             }
         },
