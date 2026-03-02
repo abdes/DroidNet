@@ -18,6 +18,7 @@
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/BufferEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/Emitters/PhysicsResourceEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/ResourceDescriptorEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/TextureEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
@@ -337,6 +338,33 @@ auto ImportSession::BufferEmitter() -> import::BufferEmitter&
 }
 
 /*!
+ Get (and lazily create) the physics resource emitter for this session.
+
+ @warning This method is not thread-safe. It must be called from the importer
+  thread only.
+*/
+auto ImportSession::PhysicsResourceEmitter() -> import::PhysicsResourceEmitter&
+{
+  if (!physics_resource_emitter_.has_value()) {
+    DCHECK_F(table_registry_ != nullptr,
+      "ImportSession requires a ResourceTableRegistry for physics resource "
+      "emission");
+    auto& aggregator = table_registry_->PhysicsAggregator(
+      cooked_root_, request_.loose_cooked_layout);
+    auto config = import::PhysicsResourceEmitter::Config {};
+    config.collision_policy = request_.options.dedup_collision_policy;
+    config.on_dedup_diagnostic = [this](ImportDiagnostic diagnostic) {
+      AddDiagnostic(std::move(diagnostic));
+    };
+    physics_resource_emitter_.emplace(
+      std::make_unique<import::PhysicsResourceEmitter>(*file_writer_,
+        aggregator, request_.loose_cooked_layout, cooked_root_,
+        std::move(config)));
+  }
+  return **physics_resource_emitter_;
+}
+
+/*!
  Get (and lazily create) the asset emitter for this session.
 
  @warning This method is not thread-safe. It must be called from the importer
@@ -500,6 +528,19 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
         .severity = ImportSeverity::kError,
         .code = "import.buffer_emitter_finalize_failed",
         .message = "Buffer emitter finalization failed",
+        .source_path = request_.source_path.string(),
+        .object_path = {},
+      });
+    }
+  }
+
+  if (physics_resource_emitter_.has_value()) {
+    const auto ok = co_await (*physics_resource_emitter_)->Finalize();
+    if (!ok) {
+      AddDiagnostic({
+        .severity = ImportSeverity::kError,
+        .code = "import.physics_resource_emitter_finalize_failed",
+        .message = "Physics resource emitter finalization failed",
         .source_path = request_.source_path.string(),
         .object_path = {},
       });

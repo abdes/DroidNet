@@ -135,7 +135,8 @@ Manual validation:
 
 1. source file existence and readability,
 2. format/payload compatibility checks where format-specific invariants exist,
-3. duplicate virtual path collision policy (same path + different content is error).
+3. dedup/collision behavior follows the universal importer policy via `ImportOptions::dedup_collision_policy`,
+4. canonical `.opres` path enforcement for deduped resources (`same physics resource index` must map to exactly one canonical virtual path).
 
 Artifacts:
 
@@ -753,6 +754,7 @@ Import-time diagnostics (examples):
 12. `physics.sidecar.constraint_ref_unresolved`
 13. `physics.manifest.key_not_allowed`
 14. `physics.manifest.dependency_cycle`
+15. `import.dedup_collision.physics`
 
 Runtime/load-time diagnostics parity (from `pak_physics` contract):
 

@@ -126,6 +126,45 @@ struct BufferTableTraits {
   }
 };
 
+struct PhysicsTableTraits {
+  using Descriptor = data::pak::physics::PhysicsResourceDesc;
+  using Reservation = WriteReservation;
+
+  //! Physics tables reserve index 0 for "absent / not assigned"
+  //! (kNoResourceIndex). Real resources start at index 1.
+  static constexpr bool kReserveSentinelAtZero = true;
+
+  [[nodiscard]] static auto TablePath(const LooseCookedLayout& layout)
+    -> std::filesystem::path
+  {
+    return layout.PhysicsTableRelPath();
+  }
+
+  [[nodiscard]] static auto DataPath(const LooseCookedLayout& layout)
+    -> std::filesystem::path
+  {
+    return layout.PhysicsDataRelPath();
+  }
+
+  [[nodiscard]] static auto SignatureForDescriptor(const Descriptor& desc)
+    -> std::string
+  {
+    std::string signature;
+    signature.reserve(96);
+
+    signature.append("phys:");
+    signature.append("f=");
+    signature.append(std::to_string(static_cast<uint32_t>(desc.format)));
+    signature.append(";n=");
+    signature.append(std::to_string(desc.size_bytes));
+    if (desc.content_hash != 0U) {
+      signature.append(";h=");
+      signature.append(std::to_string(desc.content_hash));
+    }
+    return signature;
+  }
+};
+
 template <typename Traits> class ResourceTableAggregator final {
 public:
   using Descriptor = Traits::Descriptor;
@@ -418,5 +457,6 @@ private:
 
 using TextureTableAggregator = ResourceTableAggregator<TextureTableTraits>;
 using BufferTableAggregator = ResourceTableAggregator<BufferTableTraits>;
+using PhysicsTableAggregator = ResourceTableAggregator<PhysicsTableTraits>;
 
 } // namespace oxygen::content::import

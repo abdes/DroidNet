@@ -1,0 +1,51 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Oxygen Physics Resource Descriptor",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "source",
+        "format"
+    ],
+    "properties": {
+        "$schema": {
+            "type": "string"
+        },
+        "name": {
+            "$ref": "#/definitions/identifier"
+        },
+        "content_hashing": {
+            "type": "boolean"
+        },
+        "source": {
+            "type": "string",
+            "minLength": 1
+        },
+        "format": {
+            "$ref": "#/definitions/resource_format"
+        },
+        "virtual_path": {
+            "$ref": "#/definitions/canonical_opres_path"
+        }
+    },
+    "definitions": {
+        "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 63,
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,62}$"
+        },
+        "resource_format": {
+            "enum": [
+                "jolt_shape_binary",
+                "jolt_constraint_binary",
+                "jolt_soft_body_shared_settings_binary"
+            ]
+        },
+        "canonical_opres_path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.opres$"
+        }
+    }
+}

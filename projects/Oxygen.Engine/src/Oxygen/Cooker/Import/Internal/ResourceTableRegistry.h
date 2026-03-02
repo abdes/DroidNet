@@ -6,10 +6,12 @@
 
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 
 #include <Oxygen/Base/Macros.h>
@@ -37,6 +39,10 @@ public:
     const std::filesystem::path& cooked_root, const LooseCookedLayout& layout)
     -> BufferTableAggregator&;
 
+  OXGN_COOK_NDAPI auto PhysicsAggregator(
+    const std::filesystem::path& cooked_root, const LooseCookedLayout& layout)
+    -> PhysicsTableAggregator&;
+
   //! Register an active import session for a cooked root.
   OXGN_COOK_API auto BeginSession(const std::filesystem::path& cooked_root)
     -> void;
@@ -46,6 +52,32 @@ public:
     -> co::Co<bool>;
 
   OXGN_COOK_NDAPI auto FinalizeAll() -> co::Co<bool>;
+
+  //! Register (or verify) the canonical .opres relpath for a physics resource.
+  /*!
+   For a given cooked root and physics resource index, all equivalent
+   * emitted
+   resources must use exactly one canonical descriptor relpath. The
+   * first
+   relpath seen for an index becomes canonical for the active
+   * cooked-root
+   session set.
+
+   @param cooked_root Cooked-root key for this
+   * mapping.
+   @param resource_index Physics resource table index.
+   @param
+   * requested_relpath Candidate descriptor relpath.
+   @param canonical_relpath
+   * Receives the canonical relpath bound to the index.
+   @return true if @p
+   * requested_relpath matches the canonical relpath, false
+           if it
+   * conflicts with an already-registered canonical relpath.
+  */
+  OXGN_COOK_API auto TryRegisterPhysicsCanonicalDescriptorRelPath(
+    const std::filesystem::path& cooked_root, uint32_t resource_index,
+    std::string_view requested_relpath, std::string& canonical_relpath) -> bool;
 
 private:
   [[nodiscard]] auto NormalizeKey(
@@ -57,6 +89,10 @@ private:
     texture_tables_;
   std::unordered_map<std::string, std::unique_ptr<BufferTableAggregator>>
     buffer_tables_;
+  std::unordered_map<std::string, std::unique_ptr<PhysicsTableAggregator>>
+    physics_tables_;
+  std::unordered_map<std::string, std::unordered_map<uint32_t, std::string>>
+    physics_descriptor_relpath_by_index_;
   std::unordered_map<std::string, uint32_t> active_sessions_;
 };
 

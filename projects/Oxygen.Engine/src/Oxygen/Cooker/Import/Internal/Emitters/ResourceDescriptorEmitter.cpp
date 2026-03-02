@@ -20,6 +20,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/ResourceDescriptorEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/PhysicsResourceDescriptorSidecar.h>
 
 namespace oxygen::content::import {
 
@@ -216,6 +217,40 @@ auto ResourceDescriptorEmitter::EmitBufferAtRelPath(
   auto bytes = std::make_shared<std::vector<std::byte>>(
     internal::SerializeBufferDescriptorSidecar(
       resource_index, descriptor, views));
+  record_sizes_[path] = bytes->size();
+  QueueWrite(std::move(path), std::move(bytes));
+  return std::string(relpath);
+}
+
+auto ResourceDescriptorEmitter::EmitPhysicsResource(std::string_view name_hint,
+  std::string_view stable_id,
+  const data::pak::core::ResourceIndexT resource_index,
+  const data::pak::physics::PhysicsResourceDesc& descriptor) -> std::string
+{
+  const auto stem = BuildStem(name_hint, stable_id, "physics_resource");
+  auto relpath = layout_.PhysicsResourceDescriptorRelPath(stem);
+  auto bytes = std::make_shared<std::vector<std::byte>>(
+    internal::SerializePhysicsResourceDescriptorSidecar(
+      resource_index, descriptor));
+  record_sizes_[relpath] = bytes->size();
+  QueueWrite(std::move(relpath), std::move(bytes));
+  return layout_.PhysicsResourceDescriptorRelPath(stem);
+}
+
+auto ResourceDescriptorEmitter::EmitPhysicsResourceAtRelPath(
+  const std::string_view relpath,
+  const data::pak::core::ResourceIndexT resource_index,
+  const data::pak::physics::PhysicsResourceDesc& descriptor) -> std::string
+{
+  if (relpath.empty()) {
+    throw std::runtime_error(
+      "physics resource descriptor relpath must not be empty");
+  }
+
+  auto path = std::string(relpath);
+  auto bytes = std::make_shared<std::vector<std::byte>>(
+    internal::SerializePhysicsResourceDescriptorSidecar(
+      resource_index, descriptor));
   record_sizes_[path] = bytes->size();
   QueueWrite(std::move(path), std::move(bytes));
   return std::string(relpath);

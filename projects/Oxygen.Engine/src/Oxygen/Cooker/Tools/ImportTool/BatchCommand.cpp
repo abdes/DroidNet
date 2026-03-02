@@ -203,6 +203,12 @@ namespace {
 
   auto ResolveReportJobType(const ImportRequest& request) -> std::string
   {
+    if (request.physics_resource_descriptor.has_value()) {
+      return "physics-resource-descriptor";
+    }
+    if (request.physics_material_descriptor.has_value()) {
+      return "physics-material-descriptor";
+    }
     if (request.physics.has_value()) {
       return "physics-sidecar";
     }
@@ -510,6 +516,8 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
   for (const auto& job : manifest->jobs) {
     if (job.job_type != "texture" && job.job_type != "texture-descriptor"
       && job.job_type != "material-descriptor"
+      && job.job_type != "physics-resource-descriptor"
+      && job.job_type != "physics-material-descriptor"
       && job.job_type != "buffer-container"
       && job.job_type != "geometry-descriptor" && job.job_type != "fbx"
       && job.job_type != "scene-descriptor" && job.job_type != "gltf"

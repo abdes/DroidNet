@@ -12,6 +12,15 @@
 
 namespace oxygen::content::import {
 
+namespace {
+
+  [[nodiscard]] auto NormalizeRelPath(std::string_view relpath) -> std::string
+  {
+    return std::filesystem::path(relpath).lexically_normal().generic_string();
+  }
+
+} // namespace
+
 ResourceTableRegistry::ResourceTableRegistry(IAsyncFileWriter& file_writer)
   : file_writer_(file_writer)
 {
@@ -55,6 +64,22 @@ auto ResourceTableRegistry::BufferAggregator(
   return *it->second;
 }
 
+auto ResourceTableRegistry::PhysicsAggregator(
+  const std::filesystem::path& cooked_root, const LooseCookedLayout& layout)
+  -> PhysicsTableAggregator&
+{
+  const auto key = NormalizeKey(cooked_root);
+  std::scoped_lock lock(mutex_);
+  auto it = physics_tables_.find(key);
+  if (it == physics_tables_.end()) {
+    auto created = std::make_unique<PhysicsTableAggregator>(
+      file_writer_, layout, cooked_root);
+    it = physics_tables_.emplace(key, std::move(created)).first;
+    DLOG_F(INFO, "Created physics table for '{}'", key);
+  }
+  return *it->second;
+}
+
 auto ResourceTableRegistry::BeginSession(
   const std::filesystem::path& cooked_root) -> void
 {
@@ -71,6 +96,7 @@ auto ResourceTableRegistry::EndSession(const std::filesystem::path& cooked_root)
   const auto key = NormalizeKey(cooked_root);
   std::unique_ptr<TextureTableAggregator> textures;
   std::unique_ptr<BufferTableAggregator> buffers;
+  std::unique_ptr<PhysicsTableAggregator> physics;
   uint32_t remaining = 0;
   {
     std::scoped_lock lock(mutex_);
@@ -88,6 +114,7 @@ auto ResourceTableRegistry::EndSession(const std::filesystem::path& cooked_root)
     }
 
     if (remaining == 0) {
+      physics_descriptor_relpath_by_index_.erase(key);
       if (const auto table_it = texture_tables_.find(key);
         table_it != texture_tables_.end()) {
         textures = std::move(table_it->second);
@@ -97,6 +124,11 @@ auto ResourceTableRegistry::EndSession(const std::filesystem::path& cooked_root)
         table_it != buffer_tables_.end()) {
         buffers = std::move(table_it->second);
         buffer_tables_.erase(table_it);
+      }
+      if (const auto table_it = physics_tables_.find(key);
+        table_it != physics_tables_.end()) {
+        physics = std::move(table_it->second);
+        physics_tables_.erase(table_it);
       }
     }
   }
@@ -116,6 +148,11 @@ auto ResourceTableRegistry::EndSession(const std::filesystem::path& cooked_root)
       ok = false;
     }
   }
+  if (physics != nullptr) {
+    if (!co_await physics->Finalize()) {
+      ok = false;
+    }
+  }
 
   co_return ok;
 }
@@ -126,6 +163,8 @@ auto ResourceTableRegistry::FinalizeAll() -> co::Co<bool>
     textures;
   std::unordered_map<std::string, std::unique_ptr<BufferTableAggregator>>
     buffers;
+  std::unordered_map<std::string, std::unique_ptr<PhysicsTableAggregator>>
+    physics;
   {
     std::scoped_lock lock(mutex_);
     if (!active_sessions_.empty()) {
@@ -134,6 +173,8 @@ auto ResourceTableRegistry::FinalizeAll() -> co::Co<bool>
     }
     textures = std::move(texture_tables_);
     buffers = std::move(buffer_tables_);
+    physics = std::move(physics_tables_);
+    physics_descriptor_relpath_by_index_.clear();
     active_sessions_.clear();
   }
 
@@ -152,8 +193,34 @@ auto ResourceTableRegistry::FinalizeAll() -> co::Co<bool>
       }
     }
   }
+  for (auto& table : physics | std::views::values) {
+    if (table != nullptr) {
+      if (!co_await table->Finalize()) {
+        ok = false;
+      }
+    }
+  }
 
   co_return ok;
+}
+
+auto ResourceTableRegistry::TryRegisterPhysicsCanonicalDescriptorRelPath(
+  const std::filesystem::path& cooked_root, const uint32_t resource_index,
+  const std::string_view requested_relpath, std::string& canonical_relpath)
+  -> bool
+{
+  const auto key = NormalizeKey(cooked_root);
+  const auto normalized = NormalizeRelPath(requested_relpath);
+
+  std::scoped_lock lock(mutex_);
+  auto& map_by_index = physics_descriptor_relpath_by_index_[key];
+  const auto [it, inserted]
+    = map_by_index.try_emplace(resource_index, normalized);
+  canonical_relpath = it->second;
+  if (inserted) {
+    return true;
+  }
+  return it->second == normalized;
 }
 
 } // namespace oxygen::content::import
