@@ -27,7 +27,7 @@ using oxygen::content::import::ImportManifest;
 auto MakeManifestPath(const std::string_view stem) -> std::filesystem::path
 {
   auto dir = std::filesystem::temp_directory_path()
-    / "oxygen_manifest_material_descriptor";
+    / "oxygen_manifest_geometry_descriptor";
   dir /= std::filesystem::path { std::string { stem } };
   std::error_code ec;
   std::filesystem::remove_all(dir, ec);
@@ -44,22 +44,31 @@ auto WriteTextFile(
   out << text;
 }
 
-NOLINT_TEST(ImportManifestMaterialDescriptorTest,
-  BuildsMaterialDescriptorRequestWithDefaultsAndDescriptorOverrides)
+NOLINT_TEST(ImportManifestGeometryDescriptorTest,
+  BuildsGeometryDescriptorRequestWithDefaultsAndDescriptorOverrides)
 {
-  const auto manifest_path = MakeManifestPath("builds_material_descriptor");
+  const auto manifest_path = MakeManifestPath("builds_geometry_descriptor");
   const auto root = manifest_path.parent_path();
-  const auto descriptor_path = root / "Materials" / "wood.material.json";
+  const auto descriptor_path = root / "Geometry" / "cube.geometry.json";
   WriteTextFile(descriptor_path,
     R"({
-      "name": "WoodFloor",
+      "name": "ProcCube",
       "content_hashing": false,
-      "domain": "opaque",
-      "textures": {
-        "base_color": {
-          "virtual_path": "/.cooked/Textures/WoodFloor_Color.otex"
+      "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
+      "lods": [
+        {
+          "name": "LOD0",
+          "mesh_type": "procedural",
+          "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
+          "procedural": { "generator": "Cube", "mesh_name": "CubeMesh" },
+          "submeshes": [
+            {
+              "material_ref": "/.cooked/Materials/default.omat",
+              "views": [ { "view_ref": "__all__" } ]
+            }
+          ]
         }
-      }
+      ]
     })");
 
   const auto cooked_root = (root / ".cooked").generic_string();
@@ -68,16 +77,16 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
       "output": ")" }
     + cooked_root + R"(",
       "defaults": {
-        "material_descriptor": {
+        "geometry_descriptor": {
           "content_hashing": true,
-          "name": "default-material-name"
+          "name": "default-geometry-name"
         }
       },
       "jobs": [
         {
-          "type": "material-descriptor",
-          "source": "Materials/wood.material.json",
-          "name": "wood-job",
+          "type": "geometry-descriptor",
+          "source": "Geometry/cube.geometry.json",
+          "name": "cube-job",
           "content_hashing": true
         }
       ]
@@ -95,46 +104,58 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   ASSERT_TRUE(request.has_value()) << request_errors.str();
   ASSERT_TRUE(request->cooked_root.has_value());
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
-  EXPECT_EQ(request->job_name, std::optional<std::string> { "wood-job" });
-  ASSERT_TRUE(request->material_descriptor.has_value());
+  EXPECT_EQ(request->job_name, std::optional<std::string> { "cube-job" });
+  ASSERT_TRUE(request->geometry_descriptor.has_value());
 
-  // Descriptor-level content_hashing overrides manifest defaults/job settings.
   EXPECT_FALSE(
     EffectiveContentHashingEnabled(request->options.with_content_hashing));
 
   const auto normalized
-    = json::parse(request->material_descriptor->normalized_descriptor_json);
-  EXPECT_EQ(normalized.at("name").get<std::string>(), "WoodFloor");
+    = json::parse(request->geometry_descriptor->normalized_descriptor_json);
+  EXPECT_EQ(normalized.at("name").get<std::string>(), "ProcCube");
 }
 
-NOLINT_TEST(ImportManifestMaterialDescriptorTest,
-  CollectsAndPropagatesMaterialDescriptorDependencies)
+NOLINT_TEST(ImportManifestGeometryDescriptorTest,
+  CollectsAndPropagatesGeometryDescriptorDependencies)
 {
-  const auto manifest_path = MakeManifestPath("collects_material_dependencies");
+  const auto manifest_path = MakeManifestPath("collects_geometry_dependencies");
   const auto root = manifest_path.parent_path();
-  const auto material_descriptor_path
-    = root / "Materials" / "wood.material.json";
-  WriteTextFile(material_descriptor_path,
+  const auto descriptor_path = root / "Geometry" / "cube.geometry.json";
+  WriteTextFile(descriptor_path,
     R"({
-      "name": "WoodFloor",
-      "domain": "opaque"
+      "name": "ProcCube",
+      "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
+      "lods": [
+        {
+          "name": "LOD0",
+          "mesh_type": "procedural",
+          "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
+          "procedural": { "generator": "Cube", "mesh_name": "CubeMesh" },
+          "submeshes": [
+            {
+              "material_ref": "/.cooked/Materials/default.omat",
+              "views": [ { "view_ref": "__all__" } ]
+            }
+          ]
+        }
+      ]
     })");
 
   WriteTextFile(manifest_path,
     R"({
       "version": 1,
-      "output": "C:/tmp/material-cooked",
+      "output": "C:/tmp/geometry-cooked",
       "jobs": [
         {
-          "id": "wood.color",
-          "type": "texture-descriptor",
-          "source": "woodfloor007_color.texture.json"
+          "id": "shared.buffers",
+          "type": "buffer-container",
+          "source": "Buffers/shared.buffers.json"
         },
         {
-          "id": "wood.material",
-          "type": "material-descriptor",
-          "source": "Materials/wood.material.json",
-          "depends_on": ["wood.color"]
+          "id": "proc.cube",
+          "type": "geometry-descriptor",
+          "source": "Geometry/cube.geometry.json",
+          "depends_on": ["shared.buffers"]
         }
       ]
     })");
@@ -144,21 +165,21 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
   ASSERT_TRUE(manifest.has_value()) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 2U);
-  EXPECT_EQ(manifest->jobs[1].id, "wood.material");
+  EXPECT_EQ(manifest->jobs[1].id, "proc.cube");
   ASSERT_EQ(manifest->jobs[1].depends_on.size(), 1U);
-  EXPECT_EQ(manifest->jobs[1].depends_on[0], "wood.color");
+  EXPECT_EQ(manifest->jobs[1].depends_on[0], "shared.buffers");
 
   auto request_errors = std::ostringstream {};
   const auto request = manifest->jobs[1].BuildRequest(request_errors);
   ASSERT_TRUE(request.has_value()) << request_errors.str();
   ASSERT_TRUE(request->orchestration.has_value());
-  EXPECT_EQ(request->orchestration->job_id, "wood.material");
+  EXPECT_EQ(request->orchestration->job_id, "proc.cube");
   ASSERT_EQ(request->orchestration->depends_on.size(), 1U);
-  EXPECT_EQ(request->orchestration->depends_on[0], "wood.color");
+  EXPECT_EQ(request->orchestration->depends_on[0], "shared.buffers");
 }
 
-NOLINT_TEST(ImportManifestMaterialDescriptorTest,
-  RejectsMaterialDescriptorJobWithDisallowedKeys)
+NOLINT_TEST(ImportManifestGeometryDescriptorTest,
+  RejectsGeometryDescriptorJobWithDisallowedKeys)
 {
   const auto manifest_path = MakeManifestPath("rejects_disallowed_key");
   WriteTextFile(manifest_path,
@@ -166,8 +187,8 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
       "version": 1,
       "jobs": [
         {
-          "type": "material-descriptor",
-          "source": "Materials/wood.material.json",
+          "type": "geometry-descriptor",
+          "source": "Geometry/cube.geometry.json",
           "intent": "albedo"
         }
       ]
@@ -178,50 +199,6 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
   EXPECT_FALSE(manifest.has_value());
   EXPECT_TRUE(errors.str().find("manifest schema validation failed")
-    != std::string::npos);
-}
-
-NOLINT_TEST(ImportManifestMaterialDescriptorTest,
-  RejectsDescriptorPayloadThatViolatesDescriptorSchema)
-{
-  const auto manifest_path
-    = MakeManifestPath("rejects_bad_material_descriptor_payload");
-  const auto root = manifest_path.parent_path();
-  const auto descriptor_path = root / "Materials" / "bad.material.json";
-  WriteTextFile(descriptor_path,
-    R"({
-      "name": "Bad",
-      "textures": {
-        "base_color": {
-          "virtual_path": "/.cooked/Textures/WoodFloor_Color.otex",
-          "bad_key": 1
-        }
-      }
-    })");
-
-  WriteTextFile(manifest_path,
-    R"({
-      "version": 1,
-      "output": "C:/tmp/material-cooked",
-      "jobs": [
-        {
-          "type": "material-descriptor",
-          "source": "Materials/bad.material.json"
-        }
-      ]
-    })");
-
-  auto errors = std::ostringstream {};
-  const auto manifest
-    = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
-  ASSERT_EQ(manifest->jobs.size(), 1U);
-
-  auto request_errors = std::ostringstream {};
-  const auto request = manifest->jobs[0].BuildRequest(request_errors);
-  EXPECT_FALSE(request.has_value());
-  EXPECT_TRUE(
-    request_errors.str().find("material.descriptor.schema_validation_failed")
     != std::string::npos);
 }
 

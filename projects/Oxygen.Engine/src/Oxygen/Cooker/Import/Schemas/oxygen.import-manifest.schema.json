@@ -184,6 +184,28 @@
                     "if": {
                         "properties": {
                             "type": {
+                                "const": "geometry-descriptor"
+                            }
+                        }
+                    },
+                    "then": {
+                        "propertyNames": {
+                            "enum": [
+                                "id",
+                                "depends_on",
+                                "type",
+                                "source",
+                                "output",
+                                "name",
+                                "content_hashing"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "type": {
                                 "enum": [
                                     "script-sidecar",
                                     "physics-sidecar"
@@ -314,6 +336,9 @@
                 },
                 "material_descriptor": {
                     "$ref": "#/definitions/material_descriptor_settings"
+                },
+                "geometry_descriptor": {
+                    "$ref": "#/definitions/geometry_descriptor_settings"
                 },
                 "input": {
                     "type": "object",
@@ -619,6 +644,21 @@
             },
             "additionalProperties": false
         },
+        "geometry_descriptor_settings": {
+            "type": "object",
+            "properties": {
+                "output": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "content_hashing": {
+                    "type": "boolean"
+                }
+            },
+            "additionalProperties": false
+        },
         "job_settings": {
             "type": "object",
             "properties": {
@@ -628,6 +668,7 @@
                         "texture-descriptor",
                         "buffer-container",
                         "material-descriptor",
+                        "geometry-descriptor",
                         "fbx",
                         "gltf",
                         "script",

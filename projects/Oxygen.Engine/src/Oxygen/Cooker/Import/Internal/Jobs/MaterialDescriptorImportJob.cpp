@@ -618,10 +618,11 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto session = ImportSession(Request(), FileReader(), FileWriter(),
     ThreadPool(), TableRegistry(), IndexRegistry());
 
-  if (!Request().options.material_descriptor.has_value()) {
+  if (!Request().material_descriptor.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
       "material.descriptor.request_invalid",
-      "MaterialDescriptorImportJob requires options.material_descriptor");
+      "MaterialDescriptorImportJob requires request material_descriptor "
+      "payload");
     ReportPhaseProgress(
       ImportPhase::kFailed, 1.0F, "Invalid material descriptor request");
     co_return co_await FinalizeWithTelemetry(session);
@@ -631,7 +632,7 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto parse_exception = std::optional<std::string> {};
   try {
     descriptor_doc = nlohmann::json::parse(
-      Request().options.material_descriptor->normalized_descriptor_json);
+      Request().material_descriptor->normalized_descriptor_json);
   } catch (const std::exception& ex) {
     parse_exception = ex.what();
   }

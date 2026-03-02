@@ -49,6 +49,32 @@ struct ImportRequest final {
     std::string normalized_descriptor_json;
   };
 
+  //! Input-import request payload.
+  /*!
+   Presence indicates this request must be handled by the input-import domain.
+  */
+  struct InputPayload final { };
+
+  //! Material-descriptor request payload.
+  /*!
+   Presence indicates this request must be handled by the
+   * material-descriptor
+   domain.
+  */
+  struct MaterialDescriptorPayload final {
+    std::string normalized_descriptor_json;
+  };
+
+  //! Geometry-descriptor request payload.
+  /*!
+   Presence indicates this request must be handled by the
+   * geometry-descriptor
+   domain.
+  */
+  struct GeometryDescriptorPayload final {
+    std::string normalized_descriptor_json;
+  };
+
   //! Inflight scene binding context for scripting-sidecar resolution.
   /*!
    These entries are orchestration-provided runtime context, not authored
@@ -134,6 +160,29 @@ struct ImportRequest final {
    domain rather than format-based import routing.
   */
   std::optional<BufferContainerPayload> buffer_container;
+
+  //! Optional input-import request payload.
+  /*!
+   Presence indicates this request must be handled by the input-import domain
+   rather than format-based import routing.
+  */
+  std::optional<InputPayload> input;
+
+  //! Optional material-descriptor request payload.
+  /*!
+   Presence indicates this request must be handled by the
+   * material-descriptor
+   domain rather than format-based import routing.
+  */
+  std::optional<MaterialDescriptorPayload> material_descriptor;
+
+  //! Optional geometry-descriptor request payload.
+  /*!
+   Presence indicates this request must be handled by the
+   * geometry-descriptor
+   domain rather than format-based import routing.
+  */
+  std::optional<GeometryDescriptorPayload> geometry_descriptor;
 
   //! Optional cooked roots mounted for resolver-only scene lookup context.
   /*!

@@ -134,7 +134,8 @@ auto BufferContainerImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  co_await submitter.CollectAndEmit(pipeline, submission);
+  [[maybe_unused]] const auto emitted_buffers
+    = co_await submitter.CollectAndEmit(pipeline, submission);
 
   auto report = co_await FinalizeWithTelemetry(session);
   ReportPhaseProgress(

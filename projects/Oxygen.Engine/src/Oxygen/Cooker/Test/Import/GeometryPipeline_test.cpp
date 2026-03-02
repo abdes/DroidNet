@@ -420,8 +420,9 @@ NOLINT_TEST_F(
   EXPECT_TRUE(HasDiagnosticCode(result.diagnostics, "mesh.lod_name_truncated"));
 }
 
-//! Verify skinned mesh descriptors include the skinned mesh blob.
-NOLINT_TEST_F(GeometryPipelineBasicTest, CollectWithSkinnedMeshEmitsSkinnedBlob)
+//! Verify skinned mesh descriptors serialize skinned info in MeshDesc.
+NOLINT_TEST_F(
+  GeometryPipelineBasicTest, CollectWithSkinnedMeshSerializesInfoInMeshDesc)
 {
   // Arrange
   const auto buffers = MakeSkinnedTriangleMeshBuffers();
@@ -465,14 +466,10 @@ NOLINT_TEST_F(GeometryPipelineBasicTest, CollectWithSkinnedMeshEmitsSkinnedBlob)
     mesh_desc.mesh_type, static_cast<uint8_t>(data::MeshType::kSkinned));
   EXPECT_EQ(mesh_desc.submesh_count, 1u);
   EXPECT_EQ(mesh_desc.mesh_view_count, 1u);
+  EXPECT_EQ(mesh_desc.info.skinned.joint_count, 3u);
+  EXPECT_EQ(mesh_desc.info.skinned.influences_per_vertex, 4u);
 
   offset += sizeof(data::pak::geometry::MeshDesc);
-  const auto skinned_blob
-    = ReadStructAt<data::pak::geometry::SkinnedMeshInfo>(bytes, offset);
-  EXPECT_EQ(skinned_blob.joint_count, 3u);
-  EXPECT_EQ(skinned_blob.influences_per_vertex, 4u);
-
-  offset += sizeof(data::pak::geometry::SkinnedMeshInfo);
   const auto submesh_desc
     = ReadStructAt<data::pak::geometry::SubMeshDesc>(bytes, offset);
   EXPECT_EQ(submesh_desc.mesh_view_count, 1u);

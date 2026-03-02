@@ -20,7 +20,7 @@ namespace oxygen::content::import::internal {
 //! Build a normalized `ImportRequest` for input import.
 /*!
  The builder is orchestration-only: it validates source presence, marks input
- routing in `ImportOptions`, and optionally carries batch dependency metadata.
+ routing in `ImportRequest`, and optionally carries batch dependency metadata.
  It does not inspect source JSON structure or infer asset kind.
 */
 OXGN_COOK_API auto BuildInputImportRequest(const InputImportSettings& settings,

@@ -68,6 +68,8 @@ oxygen_embed_json_schemas(
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.texture-descriptor.schema.json"
     kMaterialDescriptorSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.material-descriptor.schema.json"
+    kGeometryDescriptorSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.geometry-descriptor.schema.json"
     kInputSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input.schema.json"
     kInputActionSchema
@@ -84,6 +86,8 @@ set(
   "Import/BufferContainerImportSettings.h"
   "Import/BufferImportTypes.h"
   "Import/FileError.h"
+  "Import/GeometryDescriptorImportRequestBuilder.h"
+  "Import/GeometryDescriptorImportSettings.h"
   "Import/IAsyncFileReader.h"
   "Import/IAsyncFileWriter.h"
   "Import/ImportConcurrency.h"
@@ -155,6 +159,7 @@ set(
   "Import/Internal/Jobs/AudioImportJob.h"
   "Import/Internal/Jobs/BufferImportSubmitter.h"
   "Import/Internal/Jobs/FbxImportJob.h"
+  "Import/Internal/Jobs/GeometryDescriptorImportJob.h"
   "Import/Internal/Jobs/GlbImportJob.h"
   "Import/Internal/Jobs/InputImportJob.h"
   "Import/Internal/Jobs/BufferContainerImportJob.h"
@@ -232,11 +237,13 @@ set(
   "Import/Internal/ImportSession.cpp"
   "Import/Internal/InputImportRequestBuilder.cpp"
   "Import/Internal/BufferContainerImportRequestBuilder.cpp"
+  "Import/Internal/GeometryDescriptorImportRequestBuilder.cpp"
   "Import/Internal/Jobs/BufferImportSubmitter.cpp"
   "Import/Internal/MaterialDescriptorImportRequestBuilder.cpp"
   "Import/Internal/PhysicsImportRequestBuilder.cpp"
   "Import/Internal/Jobs/AudioImportJob.cpp"
   "Import/Internal/Jobs/FbxImportJob.cpp"
+  "Import/Internal/Jobs/GeometryDescriptorImportJob.cpp"
   "Import/Internal/Jobs/GlbImportJob.cpp"
   "Import/Internal/Jobs/InputImportJob.cpp"
   "Import/Internal/Jobs/BufferContainerImportJob.cpp"

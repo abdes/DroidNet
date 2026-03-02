@@ -393,7 +393,7 @@ NOLINT_TEST_F(AsyncImportServiceSubmitTest,
   request.cooked_root = std::filesystem::temp_directory_path()
     / "oxygen_material_descriptor_routing_submit_test";
   std::filesystem::create_directories(*request.cooked_root);
-  request.options.material_descriptor = ImportOptions::MaterialDescriptorTuning {
+  request.material_descriptor = ImportRequest::MaterialDescriptorPayload {
     .normalized_descriptor_json
     = R"({"name":"BadMat","textures":{"base_color":{"virtual_path":"not/canonical"}}})",
   };
@@ -431,11 +431,10 @@ NOLINT_TEST_F(AsyncImportServiceSubmitTest,
   request.cooked_root = std::filesystem::temp_directory_path()
     / "oxygen_material_descriptor_schema_submit_test";
   std::filesystem::create_directories(*request.cooked_root);
-  request.options.material_descriptor
-    = ImportOptions::MaterialDescriptorTuning {
-        .normalized_descriptor_json
-        = R"({"name":"BadMat","textures":{"base_color":{"virtual_path":42}}})",
-      };
+  request.material_descriptor = ImportRequest::MaterialDescriptorPayload {
+    .normalized_descriptor_json
+    = R"({"name":"BadMat","textures":{"base_color":{"virtual_path":42}}})",
+  };
 
   std::latch done(1);
   ImportReport report {};

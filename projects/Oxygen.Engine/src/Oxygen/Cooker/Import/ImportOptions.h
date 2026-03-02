@@ -308,6 +308,83 @@ struct CoordinateConversionPolicy final {
 };
 
 //! Import tuning options.
+/*!
+ This struct carries cross-cutting **runtime behavioral policy** that applies
+ to the import pipeline regardless of which asset domain is being processed:
+ key generation, coordinate-space conversion, content-type selection, vertex
+ attribute policies, and content hashing. It is not a payload transport layer.
+
+ ### Two Routing Models
+
+ The `AsyncImportService` dispatcher routes each `ImportRequest` through one
+ of two mutually exclusive routing paths:
+
+ **Payload-presence routing** is used by descriptor domains (physics,
+ buffer-container, material-descriptor, geometry-descriptor). The presence of
+ the corresponding `optional<>` field in `ImportRequest` is the routing
+ discriminator, and the field itself carries the complete normalized descriptor
+ JSON that the pipeline consumes. The contract — routing signal and cook data
+ — is self-contained in the `ImportRequest` payload.
+
+ **Format-based routing** is used by file-format pipelines (glTF, FBX,
+ texture images, scripts). The dispatcher derives the pipeline from
+ `source_path` extension via `ImportRequest::GetFormat()`. Even when these
+ pipelines are also reachable through a JSON descriptor workflow, the
+ descriptor identifies the source asset; it does not — and should not —
+ recapitulate every behavioral parameter of the pipeline that will process it.
+
+ ### Why TextureTuning and ScriptingTuning Belong Here
+
+ `TextureTuning` and `ScriptingTuning` are the only domain-specific tuning
+ blocks authorized in this struct. Both are justified by the same two
+ independent reasons, each sufficient on its own:
+
+ **Reason 1 — no descriptor payload in `ImportRequest`.**
+ Both pipelines use format-based routing. Standalone image files and script
+ files carry no normalized descriptor JSON. There is no existing payload field
+ in `ImportRequest` that could absorb these behavioral parameters without
+ introducing a new `optional<>` field — which would, in turn, implicitly split
+ the domain contract across two structs (`ImportRequest` for routing,
+ `ImportOptions` for behavior) in a way that is harder to reason about than
+ keeping the behavior co-located with the other pipeline-wide policy.
+
+ **Reason 2 — job-wide default parameters applied across many assets.**
+ Both pipelines expose a large, richly parameterized knob set (mip policy,
+ compression format, color space, compile mode, storage strategy, etc.). In
+ practice, the overwhelming majority of textures or scripts within a single
+ import job share the same cooking parameters. Requiring authors to reproduce
+ these parameters on every individual texture reference, per-material texture
+ slot, or per-script descriptor would create pervasive boilerplate, increase
+ error surface, and make global policy changes (for example, upgrading the
+ default compression tier) into multi-site edits scattered across many
+ descriptors. `TextureTuning` and `ScriptingTuning` in `ImportOptions` serve
+ as the authoritative job-wide defaults that descriptors may selectively
+ override (`texture_overrides` exists for exactly this purpose).
+
+ ### Why No Other Domain Tuning Blocks Are Permitted
+
+ Domains that use payload-presence routing already carry their entire contract
+ in the `ImportRequest` payload. Their behavioral parameters belong inside the
+ normalized descriptor JSON, where they are versioned, validated, and schema-
+ bound alongside the data they govern. Adding an `ImportOptions` tuning block
+ for such a domain would split its contract across both structs, forcing every
+ pipeline consumer to join them to understand a single request, and silently
+ widening the schema, builder, validation, and test surface for all callers.
+
+ A new domain-specific tuning block is warranted only when both of the
+ following hold:
+
+ 1. The domain uses format-based routing with no `optional<>` payload field in
+    `ImportRequest`, making it structurally impossible to carry behavioral
+    parameters in the request payload.
+ 2. The pipeline has a substantial, stable set of knobs that apply uniformly
+    across a large proportion of assets within most import jobs, making
+    per-asset repetition genuinely impractical.
+
+ Both conditions together define the structural niche that `TextureTuning` and
+ `ScriptingTuning` occupy. If either condition is absent, the parameters
+ belong in the domain's descriptor payload, not here.
+*/
 struct ImportOptions final {
   AssetKeyPolicy asset_key_policy
     = AssetKeyPolicy::kDeterministicFromVirtualPath;
@@ -367,35 +444,6 @@ struct ImportOptions final {
   //! Collision policy for dedup identity-key conflicts in import emitters.
   DedupCollisionPolicy dedup_collision_policy
     = DedupCollisionPolicy::kWarnKeepFirst;
-
-  //! Input import tuning carried through the shared ImportRequest model.
-  /*!
-   Presence signals that the request must be routed to the input import
-   * path.
-   The input pipeline infers document structure from source JSON; no
-   * explicit
-   asset-kind discriminator is carried in import options.
-  */
-  struct InputTuning final { };
-
-  std::optional<InputTuning> input {};
-
-  //! Material descriptor import payload carried in shared request options.
-  /*!
-   Presence signals that the request must be routed to the
-   * material-descriptor
-   import job path.
-
-   The payload stores the
-   * schema-validated descriptor document normalized as a
-   JSON object
-   * string.
-  */
-  struct MaterialDescriptorTuning final {
-    std::string normalized_descriptor_json;
-  };
-
-  std::optional<MaterialDescriptorTuning> material_descriptor {};
 
   //! Scripting import tuning carried through the shared ImportRequest model.
   /*!

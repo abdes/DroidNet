@@ -202,13 +202,6 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
 
     if (static_cast<data::MeshType>(mesh_desc.mesh_type)
       == data::MeshType::kSkinned) {
-      data::pak::geometry::SkinnedMeshInfo skinned_blob {};
-      if (!read_pod(skinned_blob)) {
-        diagnostics.push_back(MakeErrorDiagnostic(
-          "mesh.finalize_failed", "Failed to read skinned mesh blob", "", ""));
-        co_return std::nullopt;
-      }
-
       mesh_desc.info.skinned.vertex_buffer = binding.vertex_buffer;
       mesh_desc.info.skinned.index_buffer = binding.index_buffer;
       mesh_desc.info.skinned.joint_index_buffer = binding.joint_index_buffer;
@@ -216,44 +209,15 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
       mesh_desc.info.skinned.inverse_bind_buffer = binding.inverse_bind_buffer;
       mesh_desc.info.skinned.joint_remap_buffer = binding.joint_remap_buffer;
 
-      skinned_blob.vertex_buffer = binding.vertex_buffer;
-      skinned_blob.index_buffer = binding.index_buffer;
-      skinned_blob.joint_index_buffer = binding.joint_index_buffer;
-      skinned_blob.joint_weight_buffer = binding.joint_weight_buffer;
-      skinned_blob.inverse_bind_buffer = binding.inverse_bind_buffer;
-      skinned_blob.joint_remap_buffer = binding.joint_remap_buffer;
-
       if (!writer.WriteBlob(
             std::as_bytes(std::span<const data::pak::geometry::MeshDesc, 1>(
               &mesh_desc, 1)))) {
         diagnostics.push_back(MakeErrorDiagnostic(
           "mesh.finalize_failed", "Failed to write mesh descriptor", "", ""));
-        co_return std::nullopt;
-      }
-
-      if (!writer.WriteBlob(std::as_bytes(
-            std::span<const data::pak::geometry::SkinnedMeshInfo, 1>(
-              &skinned_blob, 1)))) {
-        diagnostics.push_back(MakeErrorDiagnostic(
-          "mesh.finalize_failed", "Failed to write skinned mesh blob", "", ""));
         co_return std::nullopt;
       }
     } else if (static_cast<data::MeshType>(mesh_desc.mesh_type)
       == data::MeshType::kProcedural) {
-      data::pak::geometry::ProceduralMeshInfo procedural_info {};
-      if (!read_pod(procedural_info)) {
-        diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
-          "Failed to read procedural mesh blob", "", ""));
-        co_return std::nullopt;
-      }
-
-      auto blob = reader.ReadBlob(procedural_info.params_size);
-      if (!blob) {
-        diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
-          "Failed to read procedural mesh params", "", ""));
-        co_return std::nullopt;
-      }
-
       if (!writer.WriteBlob(
             std::as_bytes(std::span<const data::pak::geometry::MeshDesc, 1>(
               &mesh_desc, 1)))) {
@@ -262,19 +226,20 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
         co_return std::nullopt;
       }
 
-      if (!writer.WriteBlob(std::as_bytes(
-            std::span<const data::pak::geometry::ProceduralMeshInfo, 1>(
-              &procedural_info, 1)))) {
-        diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
-          "Failed to write procedural mesh blob", "", ""));
-        co_return std::nullopt;
-      }
-
-      if (!writer.WriteBlob(std::as_bytes(
-            std::span<const std::byte>(blob->data(), blob->size())))) {
-        diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
-          "Failed to write procedural mesh params", "", ""));
-        co_return std::nullopt;
+      const auto params_size = mesh_desc.info.procedural.params_size;
+      if (params_size > 0) {
+        auto blob = reader.ReadBlob(params_size);
+        if (!blob) {
+          diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
+            "Failed to read procedural mesh params", "", ""));
+          co_return std::nullopt;
+        }
+        if (!writer.WriteBlob(std::as_bytes(
+              std::span<const std::byte>(blob->data(), blob->size())))) {
+          diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
+            "Failed to write procedural mesh params", "", ""));
+          co_return std::nullopt;
+        }
       }
     } else {
       mesh_desc.info.standard.vertex_buffer = binding.vertex_buffer;

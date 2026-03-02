@@ -36,6 +36,15 @@ namespace oxygen::content::import::detail {
 */
 class BufferImportSubmitter final {
 public:
+  struct EmittedBuffer final {
+    std::string source_id;
+    std::string descriptor_relpath;
+    data::pak::core::ResourceIndexT resource_index
+      = data::pak::core::kNoResourceIndex;
+    data::pak::core::BufferResourceDesc descriptor {};
+    std::vector<internal::BufferDescriptorView> views;
+  };
+
   struct Submission final {
     size_t submitted_count = 0;
     std::unordered_map<std::string, std::string>
@@ -51,8 +60,8 @@ public:
     const std::filesystem::path& descriptor_dir, BufferPipeline& pipeline,
     std::string_view object_path_prefix = "buffers") -> co::Co<Submission>;
 
-  [[nodiscard]] auto CollectAndEmit(
-    BufferPipeline& pipeline, const Submission& submission) -> co::Co<>;
+  [[nodiscard]] auto CollectAndEmit(BufferPipeline& pipeline,
+    const Submission& submission) -> co::Co<std::vector<EmittedBuffer>>;
 
 private:
   ImportSession& session_;

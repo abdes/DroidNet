@@ -13,9 +13,9 @@
 #include <string>
 #include <string_view>
 
+#include <Oxygen/Cooker/Import/GeometryDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
-#include <Oxygen/Cooker/Import/MaterialDescriptorImportRequestBuilder.h>
 
 namespace oxygen::content::import::internal {
 
@@ -29,7 +29,7 @@ namespace {
   {
     auto input = std::ifstream(descriptor_path, std::ios::binary);
     if (!input.is_open()) {
-      error_stream << "ERROR: failed to open material descriptor: "
+      error_stream << "ERROR: failed to open geometry descriptor: "
                    << descriptor_path.string() << "\n";
       return std::nullopt;
     }
@@ -39,22 +39,22 @@ namespace {
       input >> doc;
       if (!doc.is_object()) {
         error_stream
-          << "ERROR: material descriptor root must be a JSON object\n";
+          << "ERROR: geometry descriptor root must be a JSON object\n";
         return std::nullopt;
       }
       return doc;
     } catch (const std::exception& ex) {
-      error_stream << "ERROR: invalid material descriptor JSON: " << ex.what()
+      error_stream << "ERROR: invalid geometry descriptor JSON: " << ex.what()
                    << "\n";
       return std::nullopt;
     }
   }
 
-  auto GetMaterialDescriptorValidator() -> json_validator&
+  auto GetGeometryDescriptorValidator() -> json_validator&
   {
     static auto validator = []() {
       auto out = json_validator {};
-      out.set_root_schema(json::parse(kMaterialDescriptorSchema));
+      out.set_root_schema(json::parse(kGeometryDescriptorSchema));
       return out;
     }();
     return validator;
@@ -64,16 +64,16 @@ namespace {
     const json& descriptor_doc, std::ostream& error_stream) -> bool
   {
     const auto config = JsonSchemaValidationDiagnosticConfig {
-      .validation_failed_code = "material.descriptor.schema_validation_failed",
-      .validation_failed_prefix = "Material descriptor validation failed: ",
-      .validation_overflow_prefix = "Material descriptor validation emitted ",
-      .validator_failure_code = "material.descriptor.schema_validator_failure",
+      .validation_failed_code = "geometry.descriptor.schema_validation_failed",
+      .validation_failed_prefix = "Geometry descriptor validation failed: ",
+      .validation_overflow_prefix = "Geometry descriptor validation emitted ",
+      .validator_failure_code = "geometry.descriptor.schema_validator_failure",
       .validator_failure_prefix
-      = "Material descriptor schema validator failed: ",
+      = "Geometry descriptor schema validator failed: ",
       .max_issues = 12,
     };
 
-    return ValidateJsonSchemaWithDiagnostics(GetMaterialDescriptorValidator(),
+    return ValidateJsonSchemaWithDiagnostics(GetGeometryDescriptorValidator(),
       descriptor_doc, config,
       [&](const std::string_view code, const std::string& message,
         const std::string& object_path) {
@@ -87,8 +87,8 @@ namespace {
 
 } // namespace
 
-auto BuildMaterialDescriptorRequest(
-  const MaterialDescriptorImportSettings& settings, std::ostream& error_stream)
+auto BuildGeometryDescriptorRequest(
+  const GeometryDescriptorImportSettings& settings, std::ostream& error_stream)
   -> std::optional<ImportRequest>
 {
   if (settings.descriptor_path.empty()) {
@@ -141,7 +141,7 @@ auto BuildMaterialDescriptorRequest(
   request.options.with_content_hashing
     = EffectiveContentHashingEnabled(with_content_hashing);
 
-  request.material_descriptor = ImportRequest::MaterialDescriptorPayload {
+  request.geometry_descriptor = ImportRequest::GeometryDescriptorPayload {
     .normalized_descriptor_json = descriptor_doc->dump(),
   };
 
