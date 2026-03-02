@@ -20,6 +20,8 @@ namespace oxygen::engine {
 //! Per-material (draw-scope) constants snapshot.
 /*!
  @note Layout mirrors HLSL cbuffer MaterialConstants (b2, space0).
+ @note Opacity is implicitly sampled from the alpha channel of the base color
+       texture (glTF convention).
 */
 struct alignas(packing::kShaderDataFieldAlignment) MaterialConstants {
   // Register 0
@@ -45,9 +47,9 @@ struct alignas(packing::kShaderDataFieldAlignment) MaterialConstants {
   ShaderVisibleIndex ambient_occlusion_texture_index {
     kInvalidShaderVisibleIndex
   };
-  ShaderVisibleIndex opacity_texture_index { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex emissive_texture_index { kInvalidShaderVisibleIndex };
   float alpha_cutoff { 0.5F }; // NOLINT(*-magic-numbers)
+  uint32_t _pad2 { 0U };
 
   // Register 5
   glm::vec2 uv_scale { 1.0F, 1.0F };

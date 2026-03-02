@@ -139,11 +139,12 @@ float4 PS(VSOutput input) : SV_Target0 {
         MaterialConstants mat = materials[meta.material_handle];
         if ((mat.flags & MATERIAL_FLAG_ALPHA_TEST) != 0u) {
             const float2 uv = ApplyMaterialUv(input.uv, mat);
-            float alpha = 1.0f;
-            if (!((mat.flags & MATERIAL_FLAG_NO_TEXTURE_SAMPLING) != 0u) && mat.opacity_texture_index != K_INVALID_BINDLESS_INDEX) {
-                Texture2D<float4> opacity_tex = ResourceDescriptorHeap[mat.opacity_texture_index];
-                alpha = opacity_tex.Sample(linear_sampler, uv).a;
+            float alpha = mat.base_color.a;
+            if (!((mat.flags & MATERIAL_FLAG_NO_TEXTURE_SAMPLING) != 0u) && mat.base_color_texture_index != K_INVALID_BINDLESS_INDEX) {
+                Texture2D<float4> base_tex = ResourceDescriptorHeap[mat.base_color_texture_index];
+                alpha *= base_tex.Sample(linear_sampler, uv).a;
             }
+            // TODO: Remove this ternary fallback once the Pak Builder guarantees alpha_cutoff clamping for masked materials.
             clip(alpha - (mat.alpha_cutoff <= 0.0f ? 0.5f : mat.alpha_cutoff));
         }
     }
