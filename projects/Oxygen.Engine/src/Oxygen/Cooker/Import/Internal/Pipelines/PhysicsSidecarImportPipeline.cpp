@@ -208,6 +208,40 @@ namespace {
     return true;
   }
 
+  auto ReadJointNodeIndexB(
+    const nlohmann::json& obj, uint32_t& out, std::string& error) -> bool
+  {
+    if (!obj.contains("node_index_b")) {
+      error = "Missing required field: node_index_b";
+      return false;
+    }
+    const auto& value = obj.at("node_index_b");
+    if (value.is_null()) {
+      out = phys::kWorldAttachmentNodeIndex;
+      return true;
+    }
+    if (value.is_string()) {
+      const auto token = value.get<std::string>();
+      if (token == "world") {
+        out = phys::kWorldAttachmentNodeIndex;
+        return true;
+      }
+      error = "node_index_b string value must be \"world\"";
+      return false;
+    }
+    if (value.is_number_unsigned()) {
+      const auto raw = value.get<uint64_t>();
+      if (raw > (std::numeric_limits<uint32_t>::max)()) {
+        error = "node_index_b is out of uint32 range";
+        return false;
+      }
+      out = static_cast<uint32_t>(raw);
+      return true;
+    }
+    error = "node_index_b must be uint32, null, or \"world\"";
+    return false;
+  }
+
   auto ReadOptionalUInt32(const nlohmann::json& obj, const char* field,
     uint32_t& out, std::string& error) -> bool
   {
@@ -460,7 +494,7 @@ namespace {
     uint32_t node_index_b = 0;
     uint32_t constraint_resource_index = 0;
     if (!ReadRequiredUInt32(binding, "node_index_a", node_index_a, error)
-      || !ReadRequiredUInt32(binding, "node_index_b", node_index_b, error)
+      || !ReadJointNodeIndexB(binding, node_index_b, error)
       || !ReadRequiredUInt32(binding, "constraint_resource_index",
         constraint_resource_index, error)) {
       return false;
@@ -837,8 +871,10 @@ namespace {
         = std::string("bindings.joints[") + std::to_string(i) + "]";
       const bool node_a_ok = ValidateNodeIndex(records[i].node_index_a,
         ctx.node_count, ctx.session, ctx.request, base_path + ".node_index_a");
-      const bool node_b_ok = ValidateNodeIndex(records[i].node_index_b,
-        ctx.node_count, ctx.session, ctx.request, base_path + ".node_index_b");
+      const bool node_b_ok
+        = (records[i].node_index_b == phys::kWorldAttachmentNodeIndex)
+        || ValidateNodeIndex(records[i].node_index_b, ctx.node_count,
+          ctx.session, ctx.request, base_path + ".node_index_b");
       if (node_a_ok && node_b_ok) {
         (void)ValidateConstraintResourceIndex(
           records[i].constraint_resource_index, ctx.session, ctx.request,

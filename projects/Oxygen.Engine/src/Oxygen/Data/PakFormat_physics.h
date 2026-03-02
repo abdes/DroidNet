@@ -100,6 +100,8 @@ enum class PhysicsBindingType : uint32_t {
   = core::kNoResourceIndex;
 [[maybe_unused]] constexpr uint32_t kShapeIsSensorFalse = 0U;
 [[maybe_unused]] constexpr uint32_t kShapeIsSensorTrue = 1U;
+[[maybe_unused]] constexpr world::SceneNodeIndexT kWorldAttachmentNodeIndex
+  = 0xFFFFFFFFU;
 
 static_assert(core::kCurrentPakFormatVersion == 7);
 
@@ -332,7 +334,8 @@ static_assert(sizeof(SoftBodyBindingRecord) == 48);
 struct JointBindingRecord {
   world::SceneNodeIndexT node_index_a = 0; //!< Body A
   world::SceneNodeIndexT node_index_b
-    = 0; //!< Body B (core::kNoResourceIndex = world)
+    = kWorldAttachmentNodeIndex; //!< Body B (`kWorldAttachmentNodeIndex` =
+                                 //!< world attachment)
   core::ResourceIndexT constraint_resource_index = core::kNoResourceIndex;
   uint8_t reserved[20] = {};
 };
