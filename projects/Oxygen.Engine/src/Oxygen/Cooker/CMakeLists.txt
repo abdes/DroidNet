@@ -70,6 +70,8 @@ oxygen_embed_json_schemas(
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.material-descriptor.schema.json"
     kGeometryDescriptorSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.geometry-descriptor.schema.json"
+    kSceneDescriptorSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.scene-descriptor.schema.json"
     kInputSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input.schema.json"
     kInputActionSchema
@@ -108,6 +110,8 @@ set(
   "Import/ScriptImportRequestBuilder.h"
   "Import/ScriptImportSettings.h"
   "Import/SceneImportSettings.h"
+  "Import/SceneDescriptorImportRequestBuilder.h"
+  "Import/SceneDescriptorImportSettings.h"
   "Import/ScratchImage.h"
   "Import/TextureImportDesc.h"
   "Import/TextureDescriptorImportRequestBuilder.h"
@@ -165,6 +169,7 @@ set(
   "Import/Internal/Jobs/BufferContainerImportJob.h"
   "Import/Internal/Jobs/MaterialDescriptorImportJob.h"
   "Import/Internal/Jobs/PhysicsSidecarImportJob.h"
+  "Import/Internal/Jobs/SceneDescriptorImportJob.h"
   "Import/Internal/Jobs/ScriptAssetImportJob.h"
   "Import/Internal/Jobs/ScriptingSidecarImportJob.h"
   "Import/Internal/Jobs/TextureImportJob.h"
@@ -241,6 +246,7 @@ set(
   "Import/Internal/Jobs/BufferImportSubmitter.cpp"
   "Import/Internal/MaterialDescriptorImportRequestBuilder.cpp"
   "Import/Internal/PhysicsImportRequestBuilder.cpp"
+  "Import/Internal/SceneDescriptorImportRequestBuilder.cpp"
   "Import/Internal/Jobs/AudioImportJob.cpp"
   "Import/Internal/Jobs/FbxImportJob.cpp"
   "Import/Internal/Jobs/GeometryDescriptorImportJob.cpp"
@@ -249,6 +255,7 @@ set(
   "Import/Internal/Jobs/BufferContainerImportJob.cpp"
   "Import/Internal/Jobs/MaterialDescriptorImportJob.cpp"
   "Import/Internal/Jobs/PhysicsSidecarImportJob.cpp"
+  "Import/Internal/Jobs/SceneDescriptorImportJob.cpp"
   "Import/Internal/Jobs/ScriptAssetImportJob.cpp"
   "Import/Internal/Jobs/ScriptingSidecarImportJob.cpp"
   "Import/Internal/Jobs/TextureImportJob.cpp"
@@ -378,6 +385,8 @@ if(${META_PROJECT_ID}_INSTALL)
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.buffer-container.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.texture-descriptor.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.material-descriptor.schema.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.geometry-descriptor.schema.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.scene-descriptor.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input-action.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-sidecar.schema.json"

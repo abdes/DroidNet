@@ -68,10 +68,22 @@ struct ImportRequest final {
   //! Geometry-descriptor request payload.
   /*!
    Presence indicates this request must be handled by the
+   *
    * geometry-descriptor
    domain.
   */
   struct GeometryDescriptorPayload final {
+    std::string normalized_descriptor_json;
+  };
+
+  //! Scene-descriptor request payload.
+  /*!
+   Presence indicates this request must be handled by the
+   *
+   * scene-descriptor
+   domain.
+  */
+  struct SceneDescriptorPayload final {
     std::string normalized_descriptor_json;
   };
 
@@ -179,10 +191,20 @@ struct ImportRequest final {
   //! Optional geometry-descriptor request payload.
   /*!
    Presence indicates this request must be handled by the
+   *
    * geometry-descriptor
    domain rather than format-based import routing.
   */
   std::optional<GeometryDescriptorPayload> geometry_descriptor;
+
+  //! Optional scene-descriptor request payload.
+  /*!
+   Presence indicates this request must be handled by the
+   *
+   * scene-descriptor
+   domain rather than format-based import routing.
+  */
+  std::optional<SceneDescriptorPayload> scene_descriptor;
 
   //! Optional cooked roots mounted for resolver-only scene lookup context.
   /*!

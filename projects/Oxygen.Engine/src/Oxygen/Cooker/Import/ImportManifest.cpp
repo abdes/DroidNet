@@ -20,6 +20,7 @@
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/PhysicsImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/SceneDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/ScriptImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportRequestBuilder.h>
 
@@ -838,6 +839,25 @@ namespace {
       obj, "content_hashing", settings.with_content_hashing, errors);
   }
 
+  auto ApplyCommonSceneDescriptorOverrides(const json& obj,
+    SceneDescriptorImportSettings& settings, std::ostream& errors) -> bool
+  {
+    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
+      return false;
+    }
+    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
+      return false;
+    }
+    return true;
+  }
+
+  auto ApplySceneDescriptorOverrides(const json& obj,
+    SceneDescriptorImportSettings& settings, std::ostream& errors) -> bool
+  {
+    return ReadBoolField(
+      obj, "content_hashing", settings.with_content_hashing, errors);
+  }
+
 } // namespace
 
 auto ImportManifest::Load(const std::filesystem::path& manifest_path,
@@ -923,6 +943,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     manifest.defaults.buffer_container.cooked_root = manifest_output_root;
     manifest.defaults.material_descriptor.cooked_root = manifest_output_root;
     manifest.defaults.geometry_descriptor.cooked_root = manifest_output_root;
+    manifest.defaults.scene_descriptor.cooked_root = manifest_output_root;
   }
 
   if (json_data->contains("defaults")) {
@@ -1096,6 +1117,22 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
       }
     }
 
+    if (defaults.contains("scene_descriptor")) {
+      const auto& scene_descriptor_defaults = defaults["scene_descriptor"];
+      if (!scene_descriptor_defaults.is_object()) {
+        error_stream << "ERROR: defaults.scene_descriptor must be an object\n";
+        return std::nullopt;
+      }
+      if (!ApplyCommonSceneDescriptorOverrides(scene_descriptor_defaults,
+            manifest.defaults.scene_descriptor, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplySceneDescriptorOverrides(scene_descriptor_defaults,
+            manifest.defaults.scene_descriptor, error_stream)) {
+        return std::nullopt;
+      }
+    }
+
     if (defaults.contains("buffer_container")) {
       const auto& buffer_container_defaults = defaults["buffer_container"];
       if (!buffer_container_defaults.is_object()) {
@@ -1136,6 +1173,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     manifest_job.buffer_container = manifest.defaults.buffer_container;
     manifest_job.material_descriptor = manifest.defaults.material_descriptor;
     manifest_job.geometry_descriptor = manifest.defaults.geometry_descriptor;
+    manifest_job.scene_descriptor = manifest.defaults.scene_descriptor;
     manifest_job.fbx.texture_defaults = manifest.defaults.texture;
     manifest_job.gltf.texture_defaults = manifest.defaults.texture;
 
@@ -1271,6 +1309,8 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
         = manifest_job.texture.source_path;
       manifest_job.geometry_descriptor.descriptor_path
         = manifest_job.texture.source_path;
+      manifest_job.scene_descriptor.descriptor_path
+        = manifest_job.texture.source_path;
     } else {
       manifest_job.texture.source_path.clear();
       manifest_job.fbx.source_path.clear();
@@ -1281,6 +1321,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
       manifest_job.buffer_container.descriptor_path.clear();
       manifest_job.material_descriptor.descriptor_path.clear();
       manifest_job.geometry_descriptor.descriptor_path.clear();
+      manifest_job.scene_descriptor.descriptor_path.clear();
     }
 
     if (has_bindings && is_script_sidecar_job) {
@@ -1332,6 +1373,10 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
           job, manifest_job.geometry_descriptor, error_stream)) {
       return std::nullopt;
     }
+    if (!ApplyCommonSceneDescriptorOverrides(
+          job, manifest_job.scene_descriptor, error_stream)) {
+      return std::nullopt;
+    }
 
     if (!ApplyImportOptions(
           job, manifest_job.texture.with_content_hashing, error_stream)) {
@@ -1365,6 +1410,10 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
     if (!ApplyGeometryDescriptorOverrides(
           job, manifest_job.geometry_descriptor, error_stream)) {
+      return std::nullopt;
+    }
+    if (!ApplySceneDescriptorOverrides(
+          job, manifest_job.scene_descriptor, error_stream)) {
       return std::nullopt;
     }
     if (!ApplyTextureOverrides(job, manifest_job.texture, error_stream)) {
@@ -1429,6 +1478,10 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream) const
   if (job_type == "geometry-descriptor") {
     return AttachOrchestration(internal::BuildGeometryDescriptorRequest(
       geometry_descriptor, error_stream));
+  }
+  if (job_type == "scene-descriptor") {
+    return AttachOrchestration(
+      internal::BuildSceneDescriptorRequest(scene_descriptor, error_stream));
   }
   if (job_type == "fbx") {
     return AttachOrchestration(

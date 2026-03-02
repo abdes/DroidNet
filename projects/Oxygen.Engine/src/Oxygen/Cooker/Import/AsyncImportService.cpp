@@ -48,6 +48,7 @@
 #include <Oxygen/Cooker/Import/Internal/Jobs/InputImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/PhysicsSidecarImportJob.h>
+#include <Oxygen/Cooker/Import/Internal/Jobs/SceneDescriptorImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/ScriptAssetImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/ScriptingSidecarImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/TextureImportJob.h>
@@ -113,6 +114,15 @@ namespace {
     const auto file_name = source_path.filename().string();
     const auto name_part = file_name.empty() ? "source" : file_name;
     return std::string("geometry-descriptor:") + nostd::to_string(job_id) + ":"
+      + name_part;
+  }
+
+  [[nodiscard]] auto MakeSceneDescriptorJobName(
+    ImportJobId job_id, const std::filesystem::path& source_path) -> std::string
+  {
+    const auto file_name = source_path.filename().string();
+    const auto name_part = file_name.empty() ? "source" : file_name;
+    return std::string("scene-descriptor:") + nostd::to_string(job_id) + ":"
       + name_part;
   }
 
@@ -459,6 +469,7 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
     = request.material_descriptor.has_value();
   const bool is_geometry_descriptor_request
     = request.geometry_descriptor.has_value();
+  const bool is_scene_descriptor_request = request.scene_descriptor.has_value();
   const auto is_script_asset_request
     = (scripting_kind == ScriptingImportKind::kScriptAsset);
   const auto is_sidecar_request
@@ -470,13 +481,14 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   if (!use_custom_factory) {
     if (!is_scripting_request && !is_input_request
       && !is_physics_sidecar_request && !is_buffer_container_request
-      && !is_material_descriptor_request && !is_geometry_descriptor_request) {
+      && !is_material_descriptor_request && !is_geometry_descriptor_request
+      && !is_scene_descriptor_request) {
       format = request.GetFormat();
     }
     if (!is_scripting_request && !is_input_request
       && !is_physics_sidecar_request && !is_buffer_container_request
       && !is_material_descriptor_request && !is_geometry_descriptor_request
-      && format == ImportFormat::kUnknown) {
+      && !is_scene_descriptor_request && format == ImportFormat::kUnknown) {
       LOG_F(WARNING, "Submit rejected: unknown format for '{}'",
         request.source_path.string());
       return std::nullopt;
@@ -519,6 +531,8 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   } else if (is_geometry_descriptor_request) {
     default_job_name
       = MakeGeometryDescriptorJobName(job_id, request.source_path);
+  } else if (is_scene_descriptor_request) {
+    default_job_name = MakeSceneDescriptorJobName(job_id, request.source_path);
   } else if (is_scripting_request) {
     default_job_name
       = MakeScriptingJobName(scripting_kind, job_id, request.source_path);
@@ -568,6 +582,8 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   } else if (is_geometry_descriptor_request) {
     job = std::make_shared<detail::GeometryDescriptorImportJob>(
       std::move(params));
+  } else if (is_scene_descriptor_request) {
+    job = std::make_shared<detail::SceneDescriptorImportJob>(std::move(params));
   } else if (is_script_asset_request) {
     job = std::make_shared<detail::ScriptAssetImportJob>(std::move(params));
   } else if (is_sidecar_request) {

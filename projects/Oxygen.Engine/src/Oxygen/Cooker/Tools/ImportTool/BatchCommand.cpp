@@ -218,6 +218,9 @@ namespace {
     if (request.geometry_descriptor.has_value()) {
       return "geometry-descriptor";
     }
+    if (request.scene_descriptor.has_value()) {
+      return "scene-descriptor";
+    }
     if (request.GetFormat() != ImportFormat::kUnknown) {
       return std::string(to_string(request.GetFormat()));
     }
@@ -509,9 +512,9 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
       && job.job_type != "material-descriptor"
       && job.job_type != "buffer-container"
       && job.job_type != "geometry-descriptor" && job.job_type != "fbx"
-      && job.job_type != "gltf" && job.job_type != "script"
-      && job.job_type != "script-sidecar" && job.job_type != "physics-sidecar"
-      && job.job_type != "input") {
+      && job.job_type != "scene-descriptor" && job.job_type != "gltf"
+      && job.job_type != "script" && job.job_type != "script-sidecar"
+      && job.job_type != "physics-sidecar" && job.job_type != "input") {
       writer->Error(
         fmt::format("ERROR: unsupported job type: {}", job.job_type));
       unsupported_seen = true;
