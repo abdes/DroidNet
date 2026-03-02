@@ -7,6 +7,11 @@
 #ifndef OXYGEN_D3D12_SHADERS_RENDERER_MATERIALCONSTANTS_HLSLI
 #define OXYGEN_D3D12_SHADERS_RENDERER_MATERIALCONSTANTS_HLSLI
 
+// TODO: Add support for Tier 1/2 glTF material capabilities.
+// This requires expanding the ABI and adding support for the following missing features:
+// - Textures: specular, sheen_color, clearcoat, clearcoat_normal, transmission, thickness
+// - Scalars: ior, specular_factor, sheen_color_factor, clearcoat_factor, clearcoat_roughness,
+//            transmission_factor, thickness_factor, attenuation_color, attenuation_distance
 // ABI: must match sizeof(oxygen::engine::MaterialConstants) == 224
 struct MaterialConstants
 {
