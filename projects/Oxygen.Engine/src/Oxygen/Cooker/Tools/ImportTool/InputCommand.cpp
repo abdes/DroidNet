@@ -83,7 +83,15 @@ auto InputCommand::Run() -> std::expected<void, std::error_code>
     "Global message writer must be set by main");
   auto writer = global_options_->writer;
 
-  auto settings = InputImportSettings { .source_path = options_.source_path };
+  auto effective_cooked_root = options_.cooked_root;
+  if (effective_cooked_root.empty() && global_options_ != nullptr) {
+    effective_cooked_root = global_options_->cooked_root;
+  }
+
+  auto settings = InputImportSettings {
+    .source_path = options_.source_path,
+    .cooked_root = effective_cooked_root,
+  };
 
   std::ostringstream err;
   auto request = internal::BuildInputImportRequest(settings, err);
@@ -95,13 +103,6 @@ auto InputCommand::Run() -> std::expected<void, std::error_code>
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
 
-  auto effective_cooked_root = options_.cooked_root;
-  if (effective_cooked_root.empty() && global_options_ != nullptr) {
-    effective_cooked_root = global_options_->cooked_root;
-  }
-  if (!effective_cooked_root.empty()) {
-    request->cooked_root = effective_cooked_root;
-  }
   if (!options_.job_name.empty()) {
     request->job_name = options_.job_name;
   }

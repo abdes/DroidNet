@@ -374,15 +374,11 @@ struct LooseCookedLayout final : Layout {
    */
   std::string scripts_subdir = "Scripts";
 
-  //! Subfolder for input-action descriptors.
-  /*! Set to empty to place input-action descriptors directly under
+  //! Subfolder for all input descriptors (`.oiact`, `.oimap`).
+  /*! Set to empty to place input descriptors directly under
+   *
    * `descriptors_dir`. */
-  std::string input_actions_subdir = "InputActions";
-
-  //! Subfolder for input-mapping-context descriptors.
-  /*! Set to empty to place context descriptors directly under
-   * `descriptors_dir`. */
-  std::string input_mapping_contexts_subdir = "InputMappingContexts";
+  std::string input_subdir = "Input";
 
   //! Subfolder for texture resource descriptors (`.otex`).
   /*! Set to empty to place texture descriptors directly under
@@ -486,9 +482,9 @@ struct LooseCookedLayout final : Layout {
     case data::AssetType::kScript:
       return JoinRelPath(descriptors_dir, scripts_subdir);
     case data::AssetType::kInputAction:
-      return JoinRelPath(descriptors_dir, input_actions_subdir);
+      return JoinRelPath(descriptors_dir, input_subdir);
     case data::AssetType::kInputMappingContext:
-      return JoinRelPath(descriptors_dir, input_mapping_contexts_subdir);
+      return JoinRelPath(descriptors_dir, input_subdir);
     case data::AssetType::kUnknown:
       break;
     case data::AssetType::kPhysicsMaterial:

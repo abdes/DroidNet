@@ -337,6 +337,9 @@ Top-level fields:
     "scene": { "workers": 2, "queue_capacity": 32 }
   },
   "defaults": {
+    "layout": {
+      "input_subdir": "Input"
+    },
     "texture": { "output": "..." },
     "scene": { "output": "..." },
     "script": { "output": "...", "compile": true, "script_storage": "embedded" },
@@ -363,7 +366,10 @@ Job rules:
   - `id`
   - `source`
   - optional `depends_on` (array of job ids)
-  - allowed keys are exactly: `id`, `type`, `source`, `depends_on`
+  - optional `output`
+  - allowed keys are exactly: `id`, `type`, `source`, `depends_on`, `output`
+- layout overrides are shared across all importers via manifest `layout` or
+  `defaults.layout` (for example `input_subdir`)
 - `script-sidecar` requires exactly one of:
   - `source`
   - `bindings` (inline array)

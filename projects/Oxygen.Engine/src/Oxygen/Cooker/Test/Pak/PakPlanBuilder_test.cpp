@@ -439,16 +439,16 @@ NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesInputAssetsFromLooseSource)
   const auto action_asset = AssetSpec {
     .key = MakeAssetKey(0x51U),
     .asset_type = data::AssetType::kInputAction,
-    .descriptor_relpath = "Descriptors/InputActions/Move.oiact",
-    .virtual_path = "/Content/InputActions/Move",
+    .descriptor_relpath = "Descriptors/Input/Move.oiact",
+    .virtual_path = "/Content/Input/Move",
     .descriptor_size = 48U,
     .descriptor_sha = paktest::MakeDigest(0x51U),
   };
   const auto context_asset = AssetSpec {
     .key = MakeAssetKey(0x52U),
     .asset_type = data::AssetType::kInputMappingContext,
-    .descriptor_relpath = "Descriptors/InputMappingContexts/Gameplay.oimap",
-    .virtual_path = "/Content/InputMappingContexts/Gameplay",
+    .descriptor_relpath = "Descriptors/Input/Gameplay.oimap",
+    .virtual_path = "/Content/Input/Gameplay",
     .descriptor_size = 64U,
     .descriptor_sha = paktest::MakeDigest(0x52U),
   };

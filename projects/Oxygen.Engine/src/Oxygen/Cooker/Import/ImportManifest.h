@@ -28,6 +28,7 @@ namespace oxygen::content::import {
 
 struct ImportManifestJob {
   std::string job_type;
+  LooseCookedLayout loose_cooked_layout;
   TextureImportSettings texture;
   SceneImportSettings fbx;
   SceneImportSettings gltf;
@@ -46,12 +47,14 @@ struct ImportManifestJob {
 };
 
 struct ImportManifestDefaults {
+  LooseCookedLayout loose_cooked_layout;
   TextureImportSettings texture;
   SceneImportSettings fbx;
   SceneImportSettings gltf;
   ScriptAssetImportSettings script;
   ScriptingSidecarImportSettings scripting_sidecar;
   PhysicsSidecarImportSettings physics_sidecar;
+  InputImportSettings input;
   BufferContainerImportSettings buffer_container;
   MaterialDescriptorImportSettings material_descriptor;
   GeometryDescriptorImportSettings geometry_descriptor;

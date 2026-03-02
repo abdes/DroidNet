@@ -225,7 +225,7 @@ namespace {
   auto IsAllowedInputJobKey(const std::string_view key) -> bool
   {
     return key == "id" || key == "type" || key == "source"
-      || key == "depends_on";
+      || key == "depends_on" || key == "output";
   }
 
   auto IsAllowedPhysicsSidecarJobKey(const std::string_view key) -> bool
@@ -258,7 +258,7 @@ namespace {
             errors << "ERROR [input.manifest.key_not_allowed]: key '"
                    << it.key()
                    << "' is not allowed for input jobs; allowed keys are "
-                      "'id', 'type', 'source', 'depends_on'\n";
+                      "'id', 'type', 'source', 'depends_on', 'output'\n";
             return true;
           }
         }
@@ -583,6 +583,49 @@ namespace {
     return true;
   }
 
+  auto ApplyLayoutOverrides(
+    const json& obj, LooseCookedLayout& layout, std::ostream& errors) -> bool
+  {
+    if (!ReadStringField(
+          obj, "virtual_mount_root", layout.virtual_mount_root, errors)) {
+      return false;
+    }
+    if (!ReadStringField(obj, "resources_dir", layout.resources_dir, errors)) {
+      return false;
+    }
+    if (!ReadStringField(
+          obj, "descriptors_dir", layout.descriptors_dir, errors)) {
+      return false;
+    }
+    if (!ReadStringField(obj, "scenes_subdir", layout.scenes_subdir, errors)) {
+      return false;
+    }
+    if (!ReadStringField(
+          obj, "geometry_subdir", layout.geometry_subdir, errors)) {
+      return false;
+    }
+    if (!ReadStringField(
+          obj, "materials_subdir", layout.materials_subdir, errors)) {
+      return false;
+    }
+    if (!ReadStringField(
+          obj, "scripts_subdir", layout.scripts_subdir, errors)) {
+      return false;
+    }
+    if (!ReadStringField(obj, "input_subdir", layout.input_subdir, errors)) {
+      return false;
+    }
+    if (!ReadStringField(obj, "texture_descriptors_subdir",
+          layout.texture_descriptors_subdir, errors)) {
+      return false;
+    }
+    if (!ReadStringField(obj, "buffer_descriptors_subdir",
+          layout.buffer_descriptors_subdir, errors)) {
+      return false;
+    }
+    return true;
+  }
+
   auto ApplyCommonOverrides(const json& obj, TextureImportSettings& settings,
     std::ostream& errors) -> bool
   {
@@ -732,6 +775,12 @@ namespace {
     return true;
   }
 
+  auto ApplyCommonInputOverrides(const json& obj, InputImportSettings& settings,
+    std::ostream& errors) -> bool
+  {
+    return ReadStringField(obj, "output", settings.cooked_root, errors);
+  }
+
   auto ApplyCommonMaterialDescriptorOverrides(const json& obj,
     MaterialDescriptorImportSettings& settings, std::ostream& errors) -> bool
   {
@@ -843,6 +892,18 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     return std::nullopt;
   }
 
+  if (json_data->contains("layout")) {
+    const auto& layout = (*json_data)["layout"];
+    if (!layout.is_object()) {
+      error_stream << "ERROR: layout must be an object\n";
+      return std::nullopt;
+    }
+    if (!ApplyLayoutOverrides(
+          layout, manifest.defaults.loose_cooked_layout, error_stream)) {
+      return std::nullopt;
+    }
+  }
+
   const auto root
     = root_override.has_value() ? *root_override : manifest_path.parent_path();
 
@@ -858,6 +919,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     manifest.defaults.script.cooked_root = manifest_output_root;
     manifest.defaults.scripting_sidecar.cooked_root = manifest_output_root;
     manifest.defaults.physics_sidecar.cooked_root = manifest_output_root;
+    manifest.defaults.input.cooked_root = manifest_output_root;
     manifest.defaults.buffer_container.cooked_root = manifest_output_root;
     manifest.defaults.material_descriptor.cooked_root = manifest_output_root;
     manifest.defaults.geometry_descriptor.cooked_root = manifest_output_root;
@@ -976,6 +1038,30 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
       }
     }
 
+    if (defaults.contains("input")) {
+      const auto& input_defaults = defaults["input"];
+      if (!input_defaults.is_object()) {
+        error_stream << "ERROR: defaults.input must be an object\n";
+        return std::nullopt;
+      }
+      if (!ApplyCommonInputOverrides(
+            input_defaults, manifest.defaults.input, error_stream)) {
+        return std::nullopt;
+      }
+    }
+
+    if (defaults.contains("layout")) {
+      const auto& layout_defaults = defaults["layout"];
+      if (!layout_defaults.is_object()) {
+        error_stream << "ERROR: defaults.layout must be an object\n";
+        return std::nullopt;
+      }
+      if (!ApplyLayoutOverrides(layout_defaults,
+            manifest.defaults.loose_cooked_layout, error_stream)) {
+        return std::nullopt;
+      }
+    }
+
     if (defaults.contains("material_descriptor")) {
       const auto& material_defaults = defaults["material_descriptor"];
       if (!material_defaults.is_object()) {
@@ -1039,12 +1125,14 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
 
     ImportManifestJob manifest_job {};
+    manifest_job.loose_cooked_layout = manifest.defaults.loose_cooked_layout;
     manifest_job.texture = manifest.defaults.texture;
     manifest_job.fbx = manifest.defaults.fbx;
     manifest_job.gltf = manifest.defaults.gltf;
     manifest_job.script = manifest.defaults.script;
     manifest_job.scripting_sidecar = manifest.defaults.scripting_sidecar;
     manifest_job.physics_sidecar = manifest.defaults.physics_sidecar;
+    manifest_job.input = manifest.defaults.input;
     manifest_job.buffer_container = manifest.defaults.buffer_container;
     manifest_job.material_descriptor = manifest.defaults.material_descriptor;
     manifest_job.geometry_descriptor = manifest.defaults.geometry_descriptor;
@@ -1074,7 +1162,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
           error_stream << "ERROR [input.manifest.key_not_allowed]: key '"
                        << it.key()
                        << "' is not allowed for input jobs; allowed keys are "
-                          "'id', 'type', 'source', 'depends_on'\n";
+                          "'id', 'type', 'source', 'depends_on', 'output'\n";
           return std::nullopt;
         }
       }
@@ -1092,6 +1180,9 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
 
       manifest_job.input.source_path
         = ResolveSourcePath(root, job["source"].get<std::string>());
+      if (!ApplyCommonInputOverrides(job, manifest_job.input, error_stream)) {
+        return std::nullopt;
+      }
       if (!CollectJobDependencies(job, "input", true, manifest_job.id,
             manifest_job.depends_on, error_stream)) {
         return std::nullopt;
@@ -1305,6 +1396,7 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream) const
     if (!request.has_value()) {
       return std::nullopt;
     }
+    request->loose_cooked_layout = loose_cooked_layout;
     if (!id.empty()) {
       request->orchestration = ImportRequest::OrchestrationMetadata {
         .job_id = id,
@@ -1359,8 +1451,8 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream) const
       internal::BuildPhysicsSidecarRequest(physics_sidecar, error_stream));
   }
   if (job_type == "input") {
-    return internal::BuildInputImportRequest(
-      input, id, depends_on, error_stream);
+    return AttachOrchestration(
+      internal::BuildInputImportRequest(input, id, depends_on, error_stream));
   }
   error_stream << "ERROR: unknown job_type: " << job_type << "\n";
   return std::nullopt;

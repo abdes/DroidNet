@@ -34,8 +34,7 @@ NOLINT_TEST(LooseCookedLayoutTest, DefaultSettingsAreCorrect)
   EXPECT_EQ(layout.geometry_subdir, "Geometry");
   EXPECT_EQ(layout.materials_subdir, "Materials");
   EXPECT_EQ(layout.scripts_subdir, "Scripts");
-  EXPECT_EQ(layout.input_actions_subdir, "InputActions");
-  EXPECT_EQ(layout.input_mapping_contexts_subdir, "InputMappingContexts");
+  EXPECT_EQ(layout.input_subdir, "Input");
 }
 
 NOLINT_TEST(LooseCookedLayoutTest, DescriptorFileNamesAreCorrect)
@@ -65,9 +64,8 @@ NOLINT_TEST(LooseCookedLayoutTest, DescriptorDirForYieldsExpectedDirs)
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kScene), "Scenes");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kPhysicsScene), "Scenes");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kScript), "Scripts");
-  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kInputAction), "InputActions");
-  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kInputMappingContext),
-    "InputMappingContexts");
+  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kInputAction), "Input");
+  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kInputMappingContext), "Input");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kUnknown), "");
 
   layout.descriptors_dir = "Assets";

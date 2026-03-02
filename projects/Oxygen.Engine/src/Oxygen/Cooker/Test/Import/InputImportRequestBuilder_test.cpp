@@ -67,6 +67,35 @@ NOLINT_TEST(InputImportRequestBuilderTest, RejectsUnsupportedSourceExtension)
   EXPECT_TRUE(errors.str().find("*.input.json") != std::string::npos);
 }
 
+NOLINT_TEST(InputImportRequestBuilderTest, AcceptsAbsoluteCookedRoot)
+{
+  auto settings = InputImportSettings {};
+  settings.source_path = "Content/Input/Player.input.json";
+  settings.cooked_root = "C:/tmp/oxygen-input-cooked";
+  std::ostringstream errors;
+
+  const auto request = BuildInputImportRequest(settings, errors);
+
+  ASSERT_TRUE(request.has_value()) << errors.str();
+  ASSERT_TRUE(request->cooked_root.has_value());
+  EXPECT_EQ(
+    request->cooked_root->generic_string(), "C:/tmp/oxygen-input-cooked");
+}
+
+NOLINT_TEST(InputImportRequestBuilderTest, RejectsRelativeCookedRoot)
+{
+  auto settings = InputImportSettings {};
+  settings.source_path = "Content/Input/Player.input.json";
+  settings.cooked_root = ".cooked";
+  std::ostringstream errors;
+
+  const auto request = BuildInputImportRequest(settings, errors);
+
+  EXPECT_FALSE(request.has_value());
+  EXPECT_TRUE(errors.str().find("cooked root must be an absolute path")
+    != std::string::npos);
+}
+
 NOLINT_TEST(InputImportRequestBuilderTest, CarriesManifestOrchestrationMetadata)
 {
   auto settings = InputImportSettings {};

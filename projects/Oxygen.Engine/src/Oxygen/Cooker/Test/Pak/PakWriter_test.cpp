@@ -380,10 +380,9 @@ NOLINT_TEST_F(
   const auto source = Root() / "input_assets_loose";
   const auto output_path = Root() / "input_assets_output.pak";
 
-  const auto action_desc_rel
-    = std::string { "Descriptors/InputActions/Move.oiact" };
+  const auto action_desc_rel = std::string { "Descriptors/Input/Move.oiact" };
   const auto context_desc_rel
-    = std::string { "Descriptors/InputMappingContexts/Gameplay.oimap" };
+    = std::string { "Descriptors/Input/Gameplay.oimap" };
   const auto scene_desc_rel = std::string { "Descriptors/Scenes/Main.oscene" };
 
   const auto action_desc_bytes = MakePatternBytes(0x31U, 48U);
@@ -408,7 +407,7 @@ NOLINT_TEST_F(
       .key = action_key,
       .asset_type = data::AssetType::kInputAction,
       .descriptor_relpath = action_desc_rel,
-      .virtual_path = "/Content/InputActions/Move",
+      .virtual_path = "/Content/Input/Move",
       .descriptor_size = static_cast<uint64_t>(action_desc_bytes.size()),
       .descriptor_sha = paktest::MakeDigest(0x61U),
     },
@@ -416,7 +415,7 @@ NOLINT_TEST_F(
       .key = context_key,
       .asset_type = data::AssetType::kInputMappingContext,
       .descriptor_relpath = context_desc_rel,
-      .virtual_path = "/Content/InputMappingContexts/Gameplay",
+      .virtual_path = "/Content/Input/Gameplay",
       .descriptor_size = static_cast<uint64_t>(context_desc_bytes.size()),
       .descriptor_sha = paktest::MakeDigest(0x62U),
     },

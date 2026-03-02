@@ -63,6 +63,15 @@ auto BuildInputImportRequest(const InputImportSettings& settings,
   request.source_path = settings.source_path;
   request.input = ImportRequest::InputPayload {};
 
+  if (!settings.cooked_root.empty()) {
+    auto cooked_root = std::filesystem::path(settings.cooked_root);
+    if (!cooked_root.is_absolute()) {
+      error_stream << "ERROR: cooked root must be an absolute path\n";
+      return std::nullopt;
+    }
+    request.cooked_root = std::move(cooked_root);
+  }
+
   // Keep the currently requested hashing default for input jobs.
   request.options.with_content_hashing
     = EffectiveContentHashingEnabled(request.options.with_content_hashing);
