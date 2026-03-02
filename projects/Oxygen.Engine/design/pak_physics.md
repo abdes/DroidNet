@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-22
 **Status:** Design / Specification
-**Target File:** `src/Oxygen/Data/PakFormat.h`
+**Target Files:** `src/Oxygen/Data/PakFormat_core.h`, `src/Oxygen/Data/PakFormat_physics.h`
 
 ## 1. Executive Summary
 
@@ -62,7 +62,7 @@ struct PhysicsResourceDesc {
   OffsetT data_offset = 0;         // Absolute offset to cooked Jolt data
   DataBlobSizeT size_bytes = 0;    // Size in bytes
   PhysicsResourceFormat format = PhysicsResourceFormat::kJoltShapeBinary;
-  uint8_t reserved[7] = {};
+  uint8_t reserved[3] = {};
   uint64_t content_hash = 0;       // First 8 bytes of SHA256
 };
 #pragma pack(pop)
@@ -80,9 +80,9 @@ struct PhysicsMaterialAssetDesc {
   float friction = 0.5f;
   float restitution = 0.0f;
   float density = 1000.0f;                    // kg/m^3
-  uint8_t combine_mode_friction = 0;          // 0=Average, 1=Min, 2=Max, 3=Multiply
-  uint8_t combine_mode_restitution = 0;
-  uint8_t reserved[22] = {};                  // Pad to 128 bytes total
+  PhysicsCombineMode combine_mode_friction = PhysicsCombineMode::kAverage;
+  PhysicsCombineMode combine_mode_restitution = PhysicsCombineMode::kAverage;
+  uint8_t reserved[19] = {};                  // Pad to 128 bytes total
 };
 #pragma pack(pop)
 static_assert(sizeof(PhysicsMaterialAssetDesc) == 128);
@@ -90,25 +90,26 @@ static_assert(sizeof(PhysicsMaterialAssetDesc) == 128);
 
 ### 3.3 Collision Shape Asset (`CollisionShapeAssetDesc`)
 
-Maps an asset key to a cooked physical shape resource.
+Represents canonical collision-shape authoring with two categories:
+
+1. fully parameterized primitive/analytic shapes (`ShapeType` + `ShapeParams`),
+2. payload-backed shapes (`CookedShapePayloadRef`) for cooked mesh/hull/heightfield data.
 
 ```cpp
-// Sourced from engine Meta catalogs
-enum class CollisionShapeCategory : uint8_t {
-  kConvex = 0,
-  kMesh = 1,
-  kCompound = 2
-};
-
 #pragma pack(push, 1)
 struct CollisionShapeAssetDesc {
   AssetHeader header;
-  ResourceIndexT physics_resource_index = kNoResourceIndex;
-  CollisionShapeCategory shape_category = CollisionShapeCategory::kConvex;
-  uint8_t reserved0[3] = {};
-  float bounding_box_min[3] = {0,0,0};
-  float bounding_box_max[3] = {0,0,0};
-  uint8_t reserved1[100] = {};                // Pad to 256 bytes
+  ShapeType shape_type = ShapeType::kInvalid;
+  float local_position[3] = {0.0f, 0.0f, 0.0f};
+  float local_rotation[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+  float local_scale[3] = {1.0f, 1.0f, 1.0f};
+  uint32_t is_sensor = 0;
+  uint64_t collision_own_layer = 1ULL;
+  uint64_t collision_target_layers = 0xFFFFFFFFFFFFFFFFULL;
+  ResourceIndexT material_ref = kNoResourceIndex;
+  ShapeParams shape_params = {};
+  CookedShapePayloadRef cooked_shape_ref = {};
+  uint8_t reserved[8] = {};
 };
 #pragma pack(pop)
 static_assert(sizeof(CollisionShapeAssetDesc) == 256);
@@ -125,14 +126,14 @@ Instead, a dedicated sidecar asset (`PhysicsSceneAssetDesc`) is introduced. It m
 struct PhysicsSceneAssetDesc {
   AssetHeader header;
   AssetKey target_scene_key;                  // 16 bytes (Ref to SceneAssetDesc)
+  uint32_t target_node_count = 0;             // Expected node-count identity check
 
-  // Directory of physics component tables (analogous to Scene data tables)
-  // Points to an array of `SceneComponentTableDesc` entries mapped to physics components
+  // Directory of physics component tables.
+  // Points to an array of `PhysicsComponentTableDesc` entries.
   OffsetT component_table_directory_offset = 0;
   uint32_t component_table_count = 0;
 
-  // 95 + 16 + 8 + 4 = 123. 256 - 123 = 133
-  uint8_t reserved[133] = {};                 // Pad to 256 bytes
+  uint8_t reserved[129] = {};                 // Pad to 256 bytes
 };
 #pragma pack(pop)
 static_assert(sizeof(PhysicsSceneAssetDesc) == 256);
@@ -185,17 +186,14 @@ Attaches physical geometry and material to a RigidBody. (Supports `N` colliders 
 #pragma pack(push, 1)
 struct ColliderBindingRecord {
   SceneNodeIndexT node_index = 0;             // Must match a node with a RigidBody record
-  AssetKey shape_asset_key = {};              // Ref to CollisionShapeAssetDesc
-  AssetKey material_asset_key = {};           // Ref to PhysicsMaterialAssetDesc
-
-  float local_translation[3] = {0,0,0};
-  float local_rotation[4] = {0,0,0,1};        // Quat XYZW
-
-  uint32_t is_trigger = 0;
-  uint32_t override_collision_layer = 0;      // 0 = inherit from RigidBody
-  uint8_t reserved[16] = {};                  // Pad to 96 bytes approx
+  ResourceIndexT shape_asset_index = kNoResourceIndex;
+  ResourceIndexT material_asset_index = kNoResourceIndex;
+  uint16_t collision_layer = 0;
+  uint32_t collision_mask = 0xFFFFFFFF;
+  uint8_t reserved[14] = {};
 };
 #pragma pack(pop)
+static_assert(sizeof(ColliderBindingRecord) == 32);
 ```
 
 ### 4.3 Advanced Domain Bindings (Characters, Soft Bodies, Vehicles, Joints, Aggregates)
@@ -208,13 +206,17 @@ Reflecting the newly implemented physics architectures. For complex configuratio
 #pragma pack(push, 1)
 struct CharacterBindingRecord {
   SceneNodeIndexT node_index = 0;
-  AssetKey shape_asset_key = {};              // Typically a Capsule
-  float max_slope_angle_radians = 0.785f;     // ~45 degrees
+  ResourceIndexT shape_asset_index = kNoResourceIndex;
+  float mass = 80.0f;
+  float max_slope_angle = 0.7854f;            // ~45 degrees
+  float step_height = 0.3f;
   float max_strength = 100.0f;
-  float character_padding = 0.02f;
-  uint8_t reserved[12] = {};
+  uint16_t collision_layer = 0;
+  uint32_t collision_mask = 0xFFFFFFFF;
+  uint8_t reserved[18] = {};
 };
 #pragma pack(pop)
+static_assert(sizeof(CharacterBindingRecord) == 48);
 ```
 
 **Soft Body Binding:**
@@ -246,20 +248,14 @@ Declares an articulated link or two-body constraint between nodes. Because Jolt 
 #pragma pack(push, 1)
 struct JointBindingRecord {
   SceneNodeIndexT node_index_a = 0;
-  SceneNodeIndexT node_index_b = 0;           // Invalid/Sentinel = world attachment
+  SceneNodeIndexT node_index_b = 0;           // UINT32_MAX sentinel => world attachment
 
   // Maps to a binary JPH::ConstraintSettings blob in the physics_region
-  ResourceIndexT joint_settings_resource = kNoResourceIndex;
-
-  float local_space_a_translation[3] = {0};
-  float local_space_a_rotation[4] = {0,0,0,1};
-  float local_space_b_translation[3] = {0};
-  float local_space_b_rotation[4] = {0,0,0,1};
-
-  uint8_t reserved[12] = {};
+  ResourceIndexT constraint_resource_index = kNoResourceIndex;
+  uint8_t reserved[20] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(JointBindingRecord) == 60);
+static_assert(sizeof(JointBindingRecord) == 32);
 ```
 
 **Vehicle Binding:**
@@ -271,12 +267,11 @@ struct VehicleBindingRecord {
   SceneNodeIndexT node_index = 0;             // Must match a dynamic RigidBody node (chassis)
 
   // Maps to a binary JPH::VehicleConstraintSettings blob in the physics_region
-  ResourceIndexT vehicle_settings_resource = kNoResourceIndex;
-
-  uint8_t reserved[12] = {};
+  ResourceIndexT constraint_resource_index = kNoResourceIndex;
+  uint8_t reserved[24] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(VehicleBindingRecord) == 16);
+static_assert(sizeof(VehicleBindingRecord) == 32);
 ```
 
 **Aggregate Binding:**
@@ -321,7 +316,7 @@ All persistable IDs/enum-values/flag-bit positions introduced for v7 must follow
    - `src/Oxygen/Core/Meta/Data/AssetType.inc`
    - `src/Oxygen/Core/Meta/Data/ComponentType.inc`
    - `src/Oxygen/Core/Meta/Input/PakFormat.inc`
-2. Runtime enums/flags in `PakFormat.h` consume those macros; tooling and other modules consume the same catalog to avoid drift.
+2. Runtime enums/flags in `PakFormat_physics.h` consume those macros; tooling and other modules consume the same catalog to keep persisted IDs synchronized.
 3. No duplicated numeric literals across runtime/tooling code for the same persisted ID.
 4. New physics component/resource IDs must be declared once in Core Meta and referenced everywhere else.
 
@@ -339,7 +334,7 @@ All v7 physics records must:
 Replace raw numeric fields with typed enums where possible:
 
 - `PhysicsResourceDesc::format` -> `enum class PhysicsResourceFormat : uint8_t`
-- `CollisionShapeAssetDesc::shape_category` -> `enum class CollisionShapeCategory : uint8_t`
+- `CollisionShapeAssetDesc::shape_type` -> `enum class ShapeType : uint8_t`
 - `RigidBodyBindingRecord::body_type` -> `enum class PhysicsBodyType : uint8_t`
 - `RigidBodyBindingRecord::motion_quality` -> `enum class PhysicsMotionQuality : uint8_t`
 - `AggregateBindingRecord::authority` -> `enum class AggregateAuthority : uint8_t`
@@ -430,7 +425,21 @@ Hydration events and mutations must adhere strictly to Oxygen phase boundaries:
 
 ## 9. Validation and Diagnostics Contract (Required)
 
-Define canonical diagnostic codes (examples):
+Define canonical diagnostic codes (examples). Two tiers are expected:
+
+1. import/cook diagnostics (domain-prefixed, for authors),
+2. runtime/load diagnostics (asset/loader-prefixed).
+
+Import/cook examples:
+
+- `physics.sidecar.target_scene_missing`
+- `physics.sidecar.target_scene_virtual_path_invalid`
+- `physics.sidecar.node_ref_out_of_bounds`
+- `physics.sidecar.reference_source_mismatch`
+- `physics.sidecar.constraint_resource_index_invalid`
+- `physics.manifest.key_not_allowed`
+
+Runtime/load examples:
 
 - `physics_scene.target_scene_missing`
 - `physics_scene.target_scene_mismatch`
@@ -496,7 +505,7 @@ Section 4 is complete only when all are green:
 
 - Domain separation and phase contracts updated and aligned.
 
-## 12. Explicit Non-Goals for v7 (to avoid scope drift)
+## 12. Explicit Non-Goals for v7 (to avoid scope creep)
 
 1. Runtime authoring/editor mutation protocol over network.
 2. Cross-backend binary payload portability (Jolt blobs are backend-specific by design).

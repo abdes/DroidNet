@@ -1,414 +1,788 @@
-# Physics Sidecar Cooking Architecture Specification (Job/Pipeline Locked)
+# Comprehensive Physics Cooking Architecture Specification
 
-## 0. Status Tracking
+## 0. Purpose
 
-This document is the target architecture/spec contract for scene physics sidecar import integration.
-Live implementation progress and explicit missing work are tracked in `design/cook_physics_impl.md` (Section 4.1 and Section 11).
+This document defines the complete physics cooking design for Oxygen content import.
+It replaces sidecar-only scope with full physics domain coverage.
 
-Current implementation status snapshot:
+This spec is implementation-facing and must be treated as the source contract for:
 
-1. Implemented already:
-   - PAK/runtime physics domain format (`PhysicsSceneAssetDesc`, physics resource table/region) and runtime loaders/query helpers.
-   - Loose-cooked layout support for `.physics` descriptors and `physics.table`/`physics.data` files.
-   - Pak planner/writer handling for physics resources and physics scene asset type.
-2. Missing now:
-   - Import request/job/pipeline path for scene physics sidecar.
-   - ImportTool CLI + manifest `type: "physics-sidecar"` integration.
-   - Sidecar JSON schema for authoring validation and editor/IDE use.
-3. Verification caveat:
-   - by execution policy, no local project build was run during this design pass.
+1. import request/build behavior,
+2. job/pipeline orchestration,
+3. schema contracts,
+4. output layout,
+5. dependency planning,
+6. diagnostics,
+7. parity closure against legacy PakGen physics workflows.
 
-## 1. Scope
+## 1. Objective and Parity Target
 
-This specification defines the authoritative architecture for importing scene physics sidecar content into loose-cooked output and ensuring it is consumable by Pak planning/writing and runtime loaders.
+Objective:
+
+1. Import and cook full physics scene content through the JSON descriptor + manifest pipeline.
+2. Produce deterministic loose-cooked outputs consumable by the existing C++ Pak planner/writer.
+3. Remove sidecar-only limitation and eliminate demo-only behavior.
+
+Parity target:
+
+1. The manifest-based cooker must represent the same physics authoring surface required by existing PakGen scene+physics specs (including practical coverage exemplified by `Examples/Content/physics_domains_park_spec.yaml` patterns).
+
+Authoring intent:
+
+1. A content author must be able to map human domain concepts directly to JSON entities:
+   - "surface behavior" -> `physics-material-descriptor`
+   - "collision geometry" -> `collision-shape-descriptor`
+   - "serialized Jolt payload/config" -> `physics-resource-descriptor`
+   - "scene node to physics bindings" -> `physics-sidecar`
+2. A tech artist must be able to read one descriptor and understand:
+   - what entity it creates,
+   - where it is emitted,
+   - what it can reference,
+   - what can reference it.
+
+## 2. Scope
 
 In scope:
 
-1. New import domain: `physics-sidecar` via `ImportJob -> Pipeline`.
-2. Physics sidecar request contracts (CLI + manifest + builder normalization).
-3. Emission of `AssetType::kPhysicsScene` descriptors (`.physics`) via import sessions/index registration.
-4. Physics sidecar target-scene resolution from mounted cooked roots and inflight contexts.
-5. Compatibility with existing Pak planner/writer ingestion of loose-cooked outputs.
-6. Tests covering request/build/manifest/pipeline and pak inclusion behavior.
+1. First-class descriptor domains:
+   - `physics-resource-descriptor`
+   - `physics-material-descriptor`
+   - `collision-shape-descriptor`
+   - `physics-sidecar` (scene binding orchestration)
+2. Schema-first ingestion for all domains.
+3. Deterministic virtual-path resolution across mounts (loose + pak + inflight outputs).
+4. Full binding coverage for all physics sidecar record families.
+5. Manifest DAG dependency orchestration for inter-domain references.
+6. Output layout normalization under a dedicated `Physics/` root for materials/shapes/resources, with scene sidecars co-located to target scenes.
 
 Out of scope:
 
-1. Cooking new collision-shape assets, physics-material assets, or physics resource blobs from DCC authoring.
-2. FBX/glTF adapter changes to synthesize physics sidecars automatically.
-3. Runtime scene-physics hydration behavior changes (existing runtime contract remains authoritative).
+1. Runtime simulation code changes.
+2. Automatic extraction from FBX/glTF in this phase.
 
-## 2. Hard Constraints
+## 3. Hard Constraints
 
-1. Import execution must use `ImportJob -> Pipeline` architecture.
-2. No ad-hoc direct execution path outside AsyncImportService job routing.
-3. A single dedicated physics sidecar job class is used for this domain.
-4. A single dedicated physics sidecar pipeline class is used for this domain.
-5. Scene physics sidecar import must not patch/mutate the scene descriptor; it emits a separate `.physics` asset.
-6. New binary serialization/deserialization logic must use `oxygen::serio`.
-7. `target_scene_virtual_path` must be canonical and validated strictly.
-8. Asset references used for binding records must resolve deterministically and fail with explicit diagnostics on mismatch.
-9. No scope reduction without explicit approval.
+1. Import path is always `RequestBuilder -> ImportJob -> ImportPipeline`.
+2. No physics domain payloads are added to `ImportOptions`.
+3. Schema validation is mandatory for descriptor ingress.
+4. Manual validation is only for non-schema-enforceable rules.
+5. All author references are virtual-path based.
+6. No implicit upstream cooking in sidecar jobs.
+7. Latest-format-only policy applies; no compatibility branches.
 
-## 3. Repository Analysis Snapshot (Pre-Implementation Baseline)
+## 4. Authoritative Data Contract Mapping
 
-The following facts were captured before implementation starts and are retained as baseline context:
+All physics import contracts must map to `src/Oxygen/Data/PakFormat_physics.h`:
 
-| Fact | Evidence |
-| --- | --- |
-| Physics sidecar ABI/runtime model already exists | `src/Oxygen/Data/PakFormat_physics.h`, `src/Oxygen/Data/PhysicsSceneAsset.*`, `src/Oxygen/Content/Loaders/PhysicsSceneLoader.h` |
-| Loose-cooked layout already supports `.physics` descriptors | `src/Oxygen/Cooker/Loose/LooseCookedLayout.h` (`PhysicsSceneDescriptor*` helpers) |
-| Import session already registers `physics.table`/`physics.data` if present | `src/Oxygen/Cooker/Import/Internal/ImportSession.cpp` |
-| Pak planning/writing already supports physics region/table | `src/Oxygen/Cooker/Pak/PakPlanBuilder.cpp`, `src/Oxygen/Cooker/Pak/PakWriter.cpp` |
-| Import routing has no physics-sidecar domain | `src/Oxygen/Cooker/Import/AsyncImportService.cpp` |
-| Manifest/schema do not include physics-sidecar type | `src/Oxygen/Cooker/Import/ImportManifest.*`, `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json` |
-| ImportTool has no physics-sidecar command | `src/Oxygen/Cooker/Tools/ImportTool/*.cpp` (commands currently include script-sidecar, input, texture, fbx, gltf, script, batch) |
+1. `PhysicsResourceDesc`
+2. `PhysicsMaterialAssetDesc`
+3. `CollisionShapeAssetDesc`
+4. `PhysicsSceneAssetDesc`
+5. `RigidBodyBindingRecord`
+6. `ColliderBindingRecord`
+7. `CharacterBindingRecord`
+8. `SoftBodyBindingRecord`
+9. `JointBindingRecord`
+10. `VehicleBindingRecord`
+11. `AggregateBindingRecord`
 
-Conclusion:
+Enum mappings must use the Meta catalog values from:
 
-1. Pak/runtime infrastructure is already prepared.
-2. Missing integration is concentrated in Import contracts, routing, pipeline, manifest, and ImportTool.
-3. This is a domain integration problem, not a Pak writer architecture problem.
+1. `Oxygen/Core/Meta/Physics/PakPhysics.inc`
+2. `Oxygen/Core/Meta/Physics/PakPhysicsShape.inc`
 
-## 4. Decision
+## 5. Canonical Output Layout
 
-Scene physics sidecar is a standalone import domain.
+Physics outputs are under a dedicated human-readable root, except scene sidecars:
 
-1. It emits `AssetType::kPhysicsScene` descriptors only.
-2. It does not mutate paired scene descriptors.
-3. It resolves target scenes by canonical virtual path through mounted/inflight context resolution.
-4. It references already-available physics assets/resources; it does not author new shape/material/resource payloads in this phase.
+1. `Physics/Materials/*.opmat`
+2. `Physics/Shapes/*.ocshape`
+3. `Physics/Resources/*.opres`
+4. `Physics/Resources/physics.table`
+5. `Physics/Resources/physics.data`
+6. `<scene_dir>/<scene_stem>.opscene` (co-located with target `.oscene`)
 
-## 5. Target Architecture
+Rules:
 
-```mermaid
-flowchart LR
-  subgraph Import
-    A[PhysicsImportRequestBuilder]
-    B[PhysicsSidecarImportJob]
-    C[PhysicsSidecarImportPipeline]
-    D[AssetEmitter + IndexRegistry]
-  end
+1. Paths recorded in loose-cooked index are authoritative; runtime uses recorded paths, not fixed hardcoded folders.
+2. Descriptor and resource naming must be deterministic per virtual path/name contract.
+3. Sidecar scene pairing remains by semantic target (`target_scene_key`) and exact co-location with the target scene path.
 
-  subgraph Packaging
-    E[LooseCooked Inspection]
-    F[PakPlanBuilder]
-    G[PakWriter]
-  end
+## 6. Descriptor Domains
 
-  subgraph Runtime
-    H[PhysicsQueryService]
-    I[PhysicsSceneLoader]
-    J[Scene Physics Hydration]
-  end
+## 6.1 `physics-resource-descriptor`
 
-  A --> B --> C --> D
-  D --> E --> F --> G
-  G --> H --> I --> J
-```
+Purpose:
 
-Architectural split:
+1. Cook external physics binary payloads into `physics.table`/`physics.data`.
+2. Emit a resolvable sidecar metadata file (`.opres`) for author-facing virtual-path references.
 
-1. Import path owns sidecar parsing, validation, serialization, emission.
-2. Pak path consumes resulting loose-cooked outputs unchanged.
-3. Runtime remains consumer-only and unchanged in this scope.
+Schema:
 
-## 6. Class Design
+1. `oxygen.physics-resource-descriptor.schema.json`
 
-## 6.1 New Classes
+Required fields:
 
-### Import/Cooker
+1. `source` (path to binary payload)
+2. `format` (maps to `PhysicsResourceFormat`)
 
-1. `oxygen::content::import::PhysicsSidecarImportSettings`
-   - file: `src/Oxygen/Cooker/Import/PhysicsImportSettings.h`
-   - role: tooling-facing DTO for physics-sidecar ingress.
+Optional fields:
 
-2. `oxygen::content::import::internal::BuildPhysicsSidecarRequest(...)`
-   - files:
-     - `src/Oxygen/Cooker/Import/PhysicsImportRequestBuilder.h`
-     - `src/Oxygen/Cooker/Import/Internal/PhysicsImportRequestBuilder.cpp`
-   - role: validate + normalize settings into `ImportRequest`.
+1. `name`
+2. `virtual_path`
 
-3. `oxygen::content::import::detail::PhysicsSidecarImportJob`
-   - files:
-     - `src/Oxygen/Cooker/Import/Internal/Jobs/PhysicsSidecarImportJob.h`
-     - `src/Oxygen/Cooker/Import/Internal/Jobs/PhysicsSidecarImportJob.cpp`
-   - role: source loading, pipeline orchestration, finalize.
+Manual validation:
 
-4. `oxygen::content::import::PhysicsSidecarImportPipeline`
-   - files:
-     - `src/Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.h`
-     - `src/Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.cpp`
-   - role: parse/validate/resolve/serialize/emit `PhysicsSceneAssetDesc`.
+1. source file existence and readability,
+2. format/payload compatibility checks where format-specific invariants exist,
+3. duplicate virtual path collision policy (same path + different content is error).
 
-5. Shared sidecar target-scene resolver utility (for scripting + physics).
-   - files:
-     - `src/Oxygen/Cooker/Import/Internal/SidecarSceneResolver.h`
-     - `src/Oxygen/Cooker/Import/Internal/SidecarSceneResolver.cpp`
-   - role: eliminate duplicated target-scene resolution logic.
+Artifacts:
 
-### ImportTool
+1. `Physics/Resources/physics.table`
+2. `Physics/Resources/physics.data`
+3. `Physics/Resources/<name>.opres`
 
-6. `oxygen::content::import::tool::PhysicsSidecarCommand`
-   - files:
-     - `src/Oxygen/Cooker/Tools/ImportTool/PhysicsSidecarCommand.h`
-     - `src/Oxygen/Cooker/Tools/ImportTool/PhysicsSidecarCommand.cpp`
-   - role: CLI command wiring for physics-sidecar imports.
+## 6.2 `physics-material-descriptor`
 
-## 6.2 Changed Classes
+Purpose:
 
-1. `ImportRequest` + `PhysicsImportSettings`
-   - add physics-sidecar routing payload on `ImportRequest`.
-   - keep physics-specific fields in `PhysicsImportSettings` (domain-owned).
-   - files:
-     - `src/Oxygen/Cooker/Import/ImportRequest.h`
-     - `src/Oxygen/Cooker/Import/PhysicsImportSettings.h`
+1. Emit `PhysicsMaterialAssetDesc` assets (`.opmat`).
 
-2. `AsyncImportService`
-   - route `request.physics.has_value()` to `PhysicsSidecarImportJob`.
-   - file: `src/Oxygen/Cooker/Import/AsyncImportService.cpp`.
+Schema:
 
-3. `ImportManifest`
-   - add `type: "physics-sidecar"` defaults/job parsing/build-request path.
-   - files: `src/Oxygen/Cooker/Import/ImportManifest.h/.cpp`.
+1. `oxygen.physics-material-descriptor.schema.json`
 
-4. ImportTool wiring:
-   - files: `main.cpp`, `BatchCommand.cpp`, `ImportRunner.cpp`, `README.md`, `CMakeLists.txt`.
+Fields map to:
 
-5. `ImportReport` + `ImportSession`
-   - add/report physics sidecar counters (for CI/reporting fidelity).
-   - files: `ImportReport.h`, `Internal/ImportSession.cpp`.
+1. `friction`
+2. `restitution`
+3. `density`
+4. `combine_mode_friction`
+5. `combine_mode_restitution`
 
-6. `src/Oxygen/Cooker/CMakeLists.txt`
-   - compile/install/schema wiring for physics-sidecar domain.
+Artifacts:
 
-## 7. API Contracts
+1. `Physics/Materials/<name>.opmat`
 
-## 7.1 Physics Request Payload
+## 6.3 `collision-shape-descriptor`
 
-Add to `PhysicsImportSettings`:
+Purpose:
 
-```cpp
-struct PhysicsImportSettings final {
-  std::string target_scene_virtual_path;
-  std::string inline_bindings_json;
-};
-```
+1. Emit `CollisionShapeAssetDesc` assets (`.ocshape`).
 
-`ImportRequest` gains:
+Schema:
 
-```cpp
-std::optional<PhysicsImportSettings> physics;
-```
+1. `oxygen.collision-shape-descriptor.schema.json`
 
-Routing contract:
+Shape contract:
 
-1. `AsyncImportService` routes requests with `request.physics.has_value()` to `PhysicsSidecarImportJob`.
-2. This route is independent from `options.scripting` and `request.input`.
+1. Discriminated `shape_type`.
+2. Common fields:
+   - local transform
+   - collision layers/masks
+   - `material_ref` (virtual path to `.opmat`)
+3. Shape params map to `ShapeParams`.
+4. Optional `payload_ref` (virtual path to `.opres`) for payload-backed shape variants.
 
-## 7.2 Request Builder Contract
+Artifacts:
 
-`BuildPhysicsSidecarRequest(...)` requirements:
+1. `Physics/Shapes/<name>.ocshape`
 
-1. Exactly one of:
-   - `source_path`
-   - `inline_bindings_json`
-2. `target_scene_virtual_path` is required and must be canonical.
-3. Inline payload is normalized to canonical sidecar JSON object shape.
-4. Request is stamped with `request.physics = PhysicsImportSettings{...}`.
+## 6.4 `physics-sidecar`
 
-Canonical virtual-path rules:
+Purpose:
 
-1. starts with `/`
-2. no backslashes
-3. no `//`
-4. no trailing slash except root
-5. no `.` or `..` path segments
+1. Emit `PhysicsSceneAssetDesc` sidecars (`.opscene`) that bind scene nodes to physics component tables.
 
-## 7.3 CLI Contract
+Schema:
 
-Command:
+1. `oxygen.physics-sidecar.schema.json` (expanded and normalized)
 
-1. `physics-sidecar <source?>`
+Binding families (all supported):
 
-Required options:
+1. `rigid_bodies`
+2. `colliders`
+3. `characters`
+4. `soft_bodies`
+5. `joints`
+6. `vehicles`
+7. `aggregates`
 
-1. `--target-scene-virtual-path <canonical-path>`
+Reference model:
 
-Input mode (exactly one):
+1. `shape_ref` (virtual path to `.ocshape`)
+2. `material_ref` (virtual path to `.opmat`)
+3. `constraint_ref` (virtual path to `.opres`)
 
-1. positional `source` (file path)
-2. `--bindings-inline '<json>'`
+No author-facing numeric resource index fields are allowed in schema contracts.
 
-Optional:
+Artifact:
 
-1. `-i`, `--output <path>`
-2. `--name <job-name>`
-3. `--report <path>`
-4. `--content-hashing <true|false>`
+1. `<target_scene_dir>/<target_scene_stem>.opscene` (exactly beside target `.oscene`)
 
-## 7.4 Manifest Contract
+## 6.5 Canonical JSON Examples
 
-Schema/files:
-
-1. `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
-2. `src/Oxygen/Cooker/Import/ImportManifest.h`
-3. `src/Oxygen/Cooker/Import/ImportManifest.cpp`
-
-Manifest deltas:
-
-1. `job_settings.type` enum adds `"physics-sidecar"`.
-2. `defaults` adds `physics_sidecar`.
-3. For `physics-sidecar` jobs:
-   - `target_scene_virtual_path` required.
-   - exactly one of `source` or `bindings` required.
-
-Example:
+Example `physics-resource-descriptor`:
 
 ```json
 {
-  "type": "physics-sidecar",
-  "target_scene_virtual_path": "/.cooked/Scenes/city.oscene",
+  "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-resource-descriptor.schema.json",
+  "name": "park.hinge_joint_a",
+  "format": "jolt_constraint_binary",
+  "source": "Examples/Content/physics/bin/park_hinge_joint_a.jphbin",
+  "virtual_path": "/.cooked/Physics/Resources/park_hinge_joint_a.opres"
+}
+```
+
+Example `physics-material-descriptor`:
+
+```json
+{
+  "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-material-descriptor.schema.json",
+  "name": "ground",
+  "friction": 0.95,
+  "restitution": 0.05,
+  "density": 1800.0,
+  "combine_mode_friction": "max",
+  "combine_mode_restitution": "average"
+}
+```
+
+Example `collision-shape-descriptor` (primitive):
+
+```json
+{
+  "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.collision-shape-descriptor.schema.json",
+  "name": "floor_box",
+  "shape_type": "box",
+  "material_ref": "/.cooked/Physics/Materials/ground.opmat",
+  "half_extents": [25.0, 0.5, 25.0]
+}
+```
+
+Example `collision-shape-descriptor` (payload-backed):
+
+```json
+{
+  "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.collision-shape-descriptor.schema.json",
+  "name": "vehicle_chassis_hull",
+  "shape_type": "convex_hull",
+  "material_ref": "/.cooked/Physics/Materials/steel.opmat",
+  "payload_ref": "/.cooked/Physics/Resources/vehicle_chassis_hull.opres"
+}
+```
+
+Example `physics-sidecar`:
+
+```json
+{
+  "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json",
+  "target_scene_virtual_path": "/.cooked/Scenes/park.oscene",
   "bindings": {
     "rigid_bodies": [
       {
-        "node_index": 10,
-        "shape_virtual_path": "/.cooked/PhysicsShapes/City/box_01.ocshape",
-        "material_virtual_path": "/.cooked/PhysicsMaterials/default.opmat",
-        "body_type": "dynamic"
+        "node_index": 1,
+        "shape_ref": "/.cooked/Physics/Shapes/floor_box.ocshape",
+        "material_ref": "/.cooked/Physics/Materials/ground.opmat",
+        "body_type": "static"
+      }
+    ],
+    "joints": [
+      {
+        "node_index_a": 4,
+        "node_index_b": 5,
+        "constraint_ref": "/.cooked/Physics/Resources/park_hinge_joint_a.opres"
       }
     ]
   }
 }
 ```
 
-## 7.5 Physics Sidecar Source Schema Contract
-
-New schema file:
-
-1. `src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json`
-
-Top-level shape:
+Example manifest DAG (all domains):
 
 ```json
 {
-  "bindings": {
-    "rigid_bodies": [],
-    "colliders": [],
-    "characters": [],
-    "soft_bodies": [],
-    "joints": [],
-    "vehicles": [],
-    "aggregates": []
-  }
+  "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json",
+  "defaults": {
+    "physics_resource_descriptor": {
+      "output": "Examples/Content/.cooked"
+    },
+    "physics_material_descriptor": {
+      "output": "Examples/Content/.cooked"
+    },
+    "collision_shape_descriptor": {
+      "output": "Examples/Content/.cooked"
+    },
+    "physics_sidecar": {
+      "output": "Examples/Content/.cooked"
+    }
+  },
+  "jobs": [
+    {
+      "id": "joint_blob",
+      "type": "physics-resource-descriptor",
+      "source": "Examples/Content/physics/bin/park_hinge_joint_a.jphbin",
+      "name": "park_hinge_joint_a",
+      "format": "jolt_constraint_binary"
+    },
+    {
+      "id": "mat_ground",
+      "type": "physics-material-descriptor",
+      "source": "Examples/Content/physics/ground.material.json"
+    },
+    {
+      "id": "shape_floor",
+      "type": "collision-shape-descriptor",
+      "source": "Examples/Content/physics/floor.shape.json",
+      "depends_on": ["mat_ground"]
+    },
+    {
+      "id": "park_sidecar",
+      "type": "physics-sidecar",
+      "source": "Examples/Content/physics/park.physics.json",
+      "depends_on": ["joint_blob", "shape_floor"]
+    }
+  ]
 }
 ```
 
-Record fields map directly to `PakFormat_physics.h` binding records.
+## 6.6 Authoring Contract Tables
 
-Reference strategy:
+## 6.6.1 Domain Concept Map
 
-1. Shape/material references are authored as virtual paths and resolved to asset indices.
-2. Constraint resources (joint/vehicle) are authored as explicit numeric resource indices in this phase.
+| Human Concept | Descriptor Domain | Output Artifact | Runtime/Pak Target |
+| --- | --- | --- | --- |
+| Surface physical behavior | `physics-material-descriptor` | `Physics/Materials/*.opmat` | `PhysicsMaterialAssetDesc` |
+| Collision primitive/compound/mesh shape | `collision-shape-descriptor` | `Physics/Shapes/*.ocshape` | `CollisionShapeAssetDesc` |
+| Serialized backend payload blob | `physics-resource-descriptor` | `Physics/Resources/*.opres` + `physics.table/data` entries | `PhysicsResourceDesc` |
+| Scene-level binding orchestration | `physics-sidecar` | `<scene_dir>/<scene_stem>.opscene` (beside `.oscene`) | `PhysicsSceneAssetDesc` + binding tables |
 
-## 7.6 Resolution and Validation Contract
+## 6.6.2 `physics-resource-descriptor` Fields
 
-Target-scene resolution:
+| Field | Type | Required | Default | Constraints | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `$schema` | string | no | none | valid URI/path | Author/editor schema mapping |
+| `name` | string | conditional | source stem | non-empty | Required when `virtual_path` omitted |
+| `virtual_path` | string | no | derived from `name` | canonical virtual path | If set, determines emitted `.opres` path |
+| `source` | string | yes | none | file must exist/readable | Binary payload source |
+| `format` | enum | yes | none | one of schema values | Maps to `PhysicsResourceFormat` |
 
-1. Mount request cooked root plus `cooked_context_roots` in precedence order.
-2. Resolve `target_scene_virtual_path` via `VirtualPathResolver`.
-3. Prefer exact virtual-path inflight match if present.
-4. Reject ambiguities and missing targets deterministically.
-5. Load scene descriptor to obtain `scene_key` and `node_count`.
+`format` author values:
 
-Asset reference validation:
+1. `jolt_shape_binary`
+2. `jolt_constraint_binary`
+3. `jolt_soft_body_shared_settings_binary`
 
-1. `shape_virtual_path` resolves to `AssetType::kCollisionShape`.
-2. `material_virtual_path` resolves to `AssetType::kPhysicsMaterial`.
-3. Resolved assets must belong to the same source key/index domain as emitted sidecar.
-4. Node indices must be `< target_node_count`.
+## 6.6.3 `physics-material-descriptor` Fields
 
-Duplicate rules:
+| Field | Type | Required | Default | Constraints | Maps To |
+| --- | --- | --- | --- | --- | --- |
+| `$schema` | string | no | none | valid URI/path | schema self-ref |
+| `name` | string | conditional | source stem | non-empty | Required when `virtual_path` omitted |
+| `virtual_path` | string | no | derived from `name` | canonical virtual path | Optional explicit output path |
+| `friction` | number | no | `0.5` | `>= 0` | `PhysicsMaterialAssetDesc::friction` |
+| `restitution` | number | no | `0.0` | `>= 0` | `PhysicsMaterialAssetDesc::restitution` |
+| `density` | number | no | `1000.0` | `> 0` | `PhysicsMaterialAssetDesc::density` |
+| `combine_mode_friction` | enum | no | `average` | enum value | `combine_mode_friction` |
+| `combine_mode_restitution` | enum | no | `average` | enum value | `combine_mode_restitution` |
 
-1. At most one `rigid_body`, `character`, `soft_body`, `vehicle`, `aggregate` binding per node.
-2. Multiple colliders per node are allowed.
-3. Multiple joints are allowed.
+Combine mode values:
 
-## 7.7 Emission Contract
+1. `average`
+2. `min`
+3. `max`
+4. `multiply`
 
-1. Build `PhysicsSceneAssetDesc` with:
-   - `header.asset_type = kPhysicsScene`
-   - `target_scene_key`
-   - `target_node_count`
-   - component-table directory + payload blocks
-2. Emit descriptor via `AssetEmitter`.
-3. Sidecar descriptor naming:
-   - if target scene relpath is `Scenes/Foo.oscene`, sidecar relpath is `Scenes/Foo.physics`
-   - virtual path mirrors same base name with `.physics`.
-4. Hashing:
-   - if content hashing enabled, write computed hash into `AssetHeader::content_hash`.
+## 6.6.4 `collision-shape-descriptor` Common Fields
 
-## 7.8 Pak Integration Contract
+| Field | Type | Required | Default | Constraints | Maps To |
+| --- | --- | --- | --- | --- | --- |
+| `$schema` | string | no | none | valid URI/path | schema self-ref |
+| `name` | string | conditional | source stem | non-empty | Required when `virtual_path` omitted |
+| `virtual_path` | string | no | derived from `name` | canonical virtual path | Optional explicit output path |
+| `shape_type` | enum | yes | none | enum value | `CollisionShapeAssetDesc::shape_type` |
+| `material_ref` | string | yes | none | resolves to `.opmat` | `material_ref` index |
+| `payload_ref` | string | conditional | none | resolves to `.opres` | Required for payload-backed types |
+| `local_position` | vec3 | no | `[0,0,0]` | numeric array length 3 | `local_position` |
+| `local_rotation` | quat | no | `[0,0,0,1]` | numeric array length 4 | `local_rotation` |
+| `local_scale` | vec3 | no | `[1,1,1]` | numeric array length 3 | `local_scale` |
+| `is_sensor` | bool | no | `false` | boolean | `is_sensor` |
+| `collision_own_layer` | uint64 | no | `1` | `0..2^64-1` | `collision_own_layer` |
+| `collision_target_layers` | uint64 | no | `18446744073709551615` | `0..2^64-1` | `collision_target_layers` |
 
-1. No structural Pak writer changes are required for this feature.
-2. Physics sidecar descriptor appears in loose cooked index as `AssetType::kPhysicsScene`.
-3. `PakPlanBuilder`/`PakWriter` consume the descriptor through existing asset directory flow.
-4. If `physics.table` and `physics.data` exist, they are included through existing region/table logic.
-5. Pair invariant remains strict: never produce/register only one of the two files.
+## 6.6.5 `collision-shape-descriptor` Shape-Type Params
 
-## 8. Diagnostics Plan
+| `shape_type` | Required Params | Payload Requirement |
+| --- | --- | --- |
+| `sphere` | `radius` | no |
+| `capsule` | `radius`, `half_height` | no |
+| `box` | `half_extents` (vec3) | no |
+| `cylinder` | `radius`, `half_height` | no |
+| `cone` | `radius`, `half_height` | no |
+| `plane` | `normal` (vec3), `distance` | no |
+| `world_boundary` | `boundary_mode`, `limits_min` (vec3), `limits_max` (vec3) | no |
+| `compound` | compound children payload structure | optional/depends on schema branch |
+| `convex_hull` | none | yes (`payload_ref`) |
+| `triangle_mesh` | none | yes (`payload_ref`) |
+| `height_field` | none | yes (`payload_ref`) |
 
-Stable diagnostic namespaces:
+## 6.6.6 `physics-sidecar` Top-Level Fields
 
-1. `physics.request.*`
-2. `physics.sidecar.*`
-3. `physics.manifest.*`
+| Field | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| `$schema` | string | no | none | valid URI/path |
+| `target_scene_virtual_path` | string | yes | none | canonical virtual path to `.oscene` |
+| `bindings` | object | yes | none | contains binding arrays below |
 
-Required diagnostics:
+Emission rule:
 
-1. `physics.request.invalid_import_kind`
-2. `physics.request.target_scene_virtual_path_missing`
-3. `physics.sidecar.payload_parse_failed`
-4. `physics.sidecar.payload_invalid`
-5. `physics.sidecar.target_scene_virtual_path_invalid`
+1. For `target_scene_virtual_path = /.../name.oscene`, emitted sidecar path is exactly `/.../name.opscene`.
+
+## 6.6.7 Binding Record Fields
+
+Rigid body:
+
+| Field | Type | Required | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `node_index` | uint32 | yes | none | target scene node |
+| `shape_ref` | string | yes | none | `.ocshape` ref |
+| `material_ref` | string | yes | none | `.opmat` ref |
+| `body_type` | enum | no | `static` | static/dynamic/kinematic |
+| `motion_quality` | enum | no | `discrete` | discrete/linear_cast |
+| `collision_layer` | uint16 | no | `0` | layer |
+| `collision_mask` | uint32 | no | `4294967295` | mask |
+| `mass` | number | no | `0.0` | 0 means infer |
+| `linear_damping` | number | no | `0.05` |  |
+| `angular_damping` | number | no | `0.05` |  |
+| `gravity_factor` | number | no | `1.0` |  |
+| `initial_activation` | bool | no | `true` |  |
+| `is_sensor` | bool | no | `false` |  |
+
+Collider:
+
+| Field | Type | Required | Default |
+| --- | --- | --- | --- |
+| `node_index` | uint32 | yes | none |
+| `shape_ref` | string | yes | none |
+| `material_ref` | string | yes | none |
+| `collision_layer` | uint16 | no | `0` |
+| `collision_mask` | uint32 | no | `4294967295` |
+
+Character:
+
+| Field | Type | Required | Default |
+| --- | --- | --- | --- |
+| `node_index` | uint32 | yes | none |
+| `shape_ref` | string | yes | none |
+| `mass` | number | no | `80.0` |
+| `max_slope_angle` | number | no | `0.7854` |
+| `step_height` | number | no | `0.3` |
+| `max_strength` | number | no | `100.0` |
+| `collision_layer` | uint16 | no | `0` |
+| `collision_mask` | uint32 | no | `4294967295` |
+
+Soft body:
+
+| Field | Type | Required | Default |
+| --- | --- | --- | --- |
+| `node_index` | uint32 | yes | none |
+| `cluster_count` | uint32 | no | `0` |
+| `stiffness` | number | no | `0.0` |
+| `damping` | number | no | `0.0` |
+| `edge_compliance` | number | no | `0.0` |
+| `shear_compliance` | number | no | `0.0` |
+| `bend_compliance` | number | no | `1.0` |
+| `tether_mode` | enum | no | `none` |
+| `tether_max_distance_multiplier` | number | no | `1.0` |
+
+Joint:
+
+| Field | Type | Required | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `node_index_a` | uint32 | yes | none | body A |
+| `node_index_b` | uint32/null | yes | none | body B or world sentinel |
+| `constraint_ref` | string | yes | none | `.opres` ref with constraint format |
+
+Vehicle:
+
+| Field | Type | Required | Default |
+| --- | --- | --- | --- |
+| `node_index` | uint32 | yes | none |
+| `constraint_ref` | string | yes | none |
+
+Aggregate:
+
+| Field | Type | Required | Default |
+| --- | --- | --- | --- |
+| `node_index` | uint32 | yes | none |
+| `max_bodies` | uint32 | no | `0` |
+| `filter_overlap` | bool | no | `true` |
+| `authority` | enum | no | `simulation` |
+
+## 6.6.8 Cardinality and Invariants
+
+1. At most one `rigid_body` per `node_index`.
+2. At most one `character` per `node_index`.
+3. At most one `soft_body` per `node_index`.
+4. At most one `vehicle` per `node_index`.
+5. At most one `aggregate` per `node_index`.
+6. `colliders` can be many per node.
+7. `joints` can be many.
+8. All `node_index` values must be within target scene node bounds.
+9. All refs must resolve by type.
+
+## 7. Reference Resolution and Identity Rules
+
+All reference resolution is deterministic:
+
+1. normalize canonical virtual path,
+2. resolve against inflight outputs then mounted roots by precedence,
+3. reject ambiguity,
+4. verify expected type.
+
+Type checks:
+
+1. `shape_ref` -> `AssetType::kCollisionShape`
+2. `material_ref` -> `AssetType::kPhysicsMaterial`
+3. `constraint_ref`/`payload_ref` -> `.opres` metadata pointing to `PhysicsResourceDesc` entry with expected format
+
+Target scene checks:
+
+1. `target_scene_virtual_path` must resolve to a scene descriptor,
+2. `target_scene_key` must be read and embedded,
+3. node indices in sidecar bindings must be in-range for target node count.
+
+Source-domain consistency:
+
+1. resolved referenced assets/resources must belong to resolvable source context for current import session.
+2. mismatch errors are emitted explicitly.
+3. this source-domain lock is intentional design (`physics.sidecar.reference_source_mismatch`) to prevent accidental cross-source binding mismatch and non-deterministic packaging.
+
+## 8. Manifest and DAG Contract
+
+Manifest supports four physics job types:
+
+1. `physics-resource-descriptor`
+2. `physics-material-descriptor`
+3. `collision-shape-descriptor`
+4. `physics-sidecar`
+
+Rules:
+
+1. `id` required for descriptor jobs.
+2. `depends_on` optional explicit dependencies.
+3. key whitelist enforced per type.
+4. defaults + job overrides precedence:
+   - manifest defaults < job object settings < CLI explicit overrides
+   - when CLI override exists, it wins for all domains consistently
+5. dependency collector infers additional edges from virtual-path refs when producer jobs are in same manifest.
+6. cycles and unresolved in-manifest producer mappings are hard failures.
+
+## 9. Job/Pipeline Architecture
+
+Each domain has dedicated surfaces:
+
+1. `*ImportSettings`
+2. `*ImportRequestBuilder`
+3. `*ImportJob`
+4. `*ImportPipeline`
+
+Shared internals:
+
+1. schema diagnostic bridge helper,
+2. physics reference resolver helper,
+3. sidecar scene resolver helper,
+4. physics resource descriptor emitter/parser (`.opres`),
+5. existing session emit/finalize/index machinery.
+
+Ownership rule:
+
+1. containers/orchestration jobs do not emit `.opres` directly;
+2. resource-domain job owns physics resource emission and `.opres` side effect.
+
+## 10. Validation Policy
+
+Schema-first validation (mandatory):
+
+1. object shape and required fields,
+2. enum/range constraints,
+3. discriminator structure,
+4. `additionalProperties: false` throughout descriptor schemas.
+
+Manual validation (only where needed):
+
+1. cross-file reference existence/type checks,
+2. target scene and node bounds checks,
+3. duplicate singleton binding constraints per node,
+4. ambiguity and source mismatch checks,
+5. payload-format compatibility checks.
+
+## 11. Diagnostics Contract
+
+Diagnostic namespaces:
+
+1. `physics.resource.*`
+2. `physics.material.*`
+3. `physics.shape.*`
+4. `physics.sidecar.*`
+5. `physics.manifest.*`
+
+Examples of required diagnostics:
+
+1. `physics.resource.source_missing`
+2. `physics.resource.virtual_path_collision`
+3. `physics.material.schema_validation_failed`
+4. `physics.shape.material_ref_unresolved`
+5. `physics.shape.payload_ref_format_mismatch`
 6. `physics.sidecar.target_scene_missing`
-7. `physics.sidecar.target_scene_not_scene`
-8. `physics.sidecar.target_scene_read_failed`
-9. `physics.sidecar.inflight_target_scene_ambiguous`
-10. `physics.sidecar.node_ref_out_of_bounds`
-11. `physics.sidecar.shape_ref_unresolved`
-12. `physics.sidecar.shape_ref_not_collision_shape`
-13. `physics.sidecar.material_ref_unresolved`
-14. `physics.sidecar.material_ref_not_physics_material`
-15. `physics.sidecar.reference_source_mismatch`
-16. `physics.sidecar.constraint_resource_index_invalid`
-17. `physics.sidecar.descriptor_emit_failed`
-18. `physics.sidecar.pipeline_exception`
-19. `physics.manifest.source_bindings_exclusive`
-20. `physics.manifest.target_scene_virtual_path_missing`
+7. `physics.sidecar.node_ref_out_of_bounds`
+8. `physics.sidecar.shape_ref_not_collision_shape`
+9. `physics.sidecar.constraint_ref_unresolved`
+10. `physics.manifest.key_not_allowed`
 
-## 9. Regression Protection
+Diagnostics must remain concise and author-helpful (no ocean boiling).
 
-Must-not-regress areas:
+## 12. Testing Requirements
 
-1. Script asset and script-sidecar import behavior.
-2. Input import behavior and manifest validation rules.
-3. Existing pak writer/planner domain handling.
-4. Runtime loading of existing scene/script/input assets.
+Required test layers:
 
-## 10. Acceptance Criteria
+1. schema tests for each physics schema,
+2. request-builder tests per domain,
+3. job/pipeline tests per domain (success + canonical failures),
+4. manifest tests (defaults, overrides, DAG, key whitelist),
+5. integration tests for full scene+physics flow,
+6. pak planner/writer inclusion tests for emitted physics outputs.
 
-Done requires:
+Representative integration scenario:
 
-1. New `physics-sidecar` import domain fully wired through request builder, manifest, CLI, routing, job, pipeline.
-2. Physics sidecar descriptor emission works with canonical `.physics` naming derived from target scene.
-3. Pak planning/writing include emitted sidecar descriptors without special-case hacks.
-4. Validation diagnostics are deterministic and cover unresolved/mismatch/out-of-bounds cases.
-5. Tests cover contracts and critical negative paths.
-6. Docs and schema installation paths are updated and consistent.
+1. resource blobs -> shapes/materials -> sidecar -> scene pack inclusion.
 
-## 11. Reference Documents
+## 13. PakGen Supersession Alignment
 
-1. `design/pak_physics.md`
-2. `design/pak_builder.md`
-3. `design/cook_input.md`
-4. `design/cook_input_impl.md`
+This spec defines the physics track for PakGen supersession:
+
+1. all physics content authoring must be representable through descriptor domains + manifest DAG,
+2. no PakGen-only physics behavior remains required for production workflows,
+3. parity closure is evidence-based via tests and representative content scenarios.
+
+## 14. Completion Criteria
+
+Physics cook design is complete when:
+
+1. all four physics domains are implemented end-to-end,
+2. output layout is normalized under `Physics/...` for materials/shapes/resources, and scene sidecars are emitted beside their target scenes,
+3. schema-first validation is systematic,
+4. DAG orchestration is deterministic and tested,
+5. emitted outputs are consumed by C++ pak flow without special-case hacks,
+6. implementation plan (`design/cook_physics_impl.md`) reaches 100% with evidence.
+
+## 15. Pak Format and Footer Contracts (Parity with `pak_physics`)
+
+1. Pak format version for physics domain is v7.
+2. Footer carries:
+   - `physics_region`
+   - `physics_resource_table`
+3. Physics cook must never produce orphan table/data pair states.
+4. All emitted physics resources are representable through `PhysicsResourceDesc`.
+
+## 16. ABI and Serialization Contracts
+
+1. Serialized physics structs are packed and size-asserted by `PakFormat_physics.h`.
+2. Persisted enum values are sourced from Core Meta catalogs; no duplicated literals.
+3. New or changed persisted fields require explicit reserved-space policy and ABI update rationale.
+4. Wire format is little-endian; non-little-endian requires byte-swapping in loader path.
+
+## 17. Versioning and Migration Matrix
+
+| Container Version | Physics Resources | Physics Sidecar | Expected Behavior |
+| --- | --- | --- | --- |
+| v6 | not present | not present | legacy behavior without physics sidecar resources |
+| v7 | present | present | full physics import/hydration path enabled |
+
+Rules:
+
+1. v6 content must not pretend physics v7 features exist.
+2. v7 load with missing required physics references is hard error.
+3. scene/sidecar key mismatch is hard error.
+
+## 18. End-to-End Hydration and Authority Contracts
+
+Storage/cook/load pipeline:
+
+1. offline authoring -> cooker emits scene + physics descriptors/resources.
+2. content loading reconstructs scene and physics descriptors independently.
+3. hydration binds physics to scene nodes by indices/keys.
+
+Hydration actors:
+
+1. base scene hydrator triggers physics-sidecar hydration after scene node graph exists.
+2. C++ game modules can attach additional runtime physics entities via physics APIs.
+3. Lua scripting uses constrained gameplay APIs; scripts do not rewrite cooked source-of-truth descriptors.
+
+Phase boundaries:
+
+1. scene build/load,
+2. physics hydration,
+3. runtime ownership phases (`kGameplay`, `kFixedSimulation`, `kSceneMutation`) with strict authority splits.
+
+## 19. Backend Payload Versioning and Integrity
+
+1. Physics payload blobs include internal payload-family/version headers.
+2. Cooker validates payload family against declared descriptor `format`.
+3. Integrity policy:
+   - strict mode: hash/version mismatch is hard error,
+   - permissive dev mode: warning and configurable skip/fail behavior.
+4. Production defaults to strict integrity checks.
+
+## 20. Diagnostics Parity Catalog
+
+Import-time diagnostics (examples):
+
+1. `physics.resource.source_missing`
+2. `physics.resource.format_invalid`
+3. `physics.resource.virtual_path_collision`
+4. `physics.material.schema_validation_failed`
+5. `physics.shape.payload_ref_format_mismatch`
+6. `physics.sidecar.target_scene_missing`
+7. `physics.sidecar.target_scene_mismatch`
+8. `physics.sidecar.node_ref_out_of_bounds`
+9. `physics.sidecar.duplicate_binding`
+10. `physics.sidecar.shape_ref_not_collision_shape`
+11. `physics.sidecar.material_ref_not_physics_material`
+12. `physics.sidecar.constraint_ref_unresolved`
+13. `physics.manifest.key_not_allowed`
+14. `physics.manifest.dependency_cycle`
+
+Runtime/load-time diagnostics parity (from `pak_physics` contract):
+
+1. `physics_scene.target_scene_missing`
+2. `physics_scene.target_scene_mismatch`
+3. `physics_scene.node_index_out_of_range`
+4. `physics_scene.duplicate_binding`
+5. `physics_scene.shape_asset_missing`
+6. `physics_scene.material_asset_missing`
+7. `physics_scene.resource_index_out_of_bounds`
+8. `physics_scene.unsupported_record_version`
+9. `physics_scene.invalid_record_size`
+
+## 21. Conformance Matrix to `design/pak_physics.md`
+
+| `pak_physics` Section | Covered in this spec | Notes |
+| --- | --- | --- |
+| Global format evolution (`v7`) | yes | sections 15, 17 |
+| Physics resource/material/shape descriptors | yes | sections 6.1-6.3, 6.6 |
+| Physics sidecar + all binding families | yes | sections 6.4, 6.6.7, 6.6.8 |
+| Tooling and pipeline impact | yes | sections 8, 9, 12 |
+| ABI contracts (packing/enums/endianness) | yes | section 16 |
+| Versioning and migration behavior | yes | section 17 |
+| End-to-end hydration/authority phases | yes | section 18 |
+| Payload versioning/integrity | yes | section 19 |
+| Diagnostics contract | yes | section 20 |
+| Acceptance criteria/non-goals | yes | sections 14, 22 |
+
+## 22. Explicit Non-Goals
+
+1. Networked runtime authoring protocol design.
+2. Cross-backend portable binary payload ABI.
+3. Runtime fallback to render-bounds-derived physics in shipping paths.

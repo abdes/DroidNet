@@ -104,7 +104,7 @@ namespace {
     WriteTextFile(cooked_root / "Scripts" / "spin.oscript", "oscript");
     WriteTextFile(cooked_root / "Input" / "jump.oiact", "oiact");
     WriteTextFile(cooked_root / "Input" / "gameplay.oimap", "oimap");
-    WriteTextFile(cooked_root / "Scenes" / "DemoScene.physics", "physics");
+    WriteTextFile(cooked_root / "Scenes" / "DemoScene.opscene", "physics");
 
     auto service = AsyncImportService(AsyncImportService::Config {
       .thread_pool_size = 2U,
@@ -128,7 +128,7 @@ namespace {
         "scripts": ["/.cooked/Scripts/spin.oscript"],
         "input_actions": ["/.cooked/Input/jump.oiact"],
         "input_mapping_contexts": ["/.cooked/Input/gameplay.oimap"],
-        "physics_sidecars": ["/.cooked/Scenes/DemoScene.physics"]
+        "physics_sidecars": ["/.cooked/Scenes/DemoScene.opscene"]
       }
     })"));
 

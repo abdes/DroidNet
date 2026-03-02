@@ -125,8 +125,8 @@ NOLINT_TEST(PhysicsJsonSchemaTest, PhysicsSidecarSchemaAcceptsCanonicalDocument)
       "rigid_bodies": [
         {
           "node_index": 0,
-          "shape_virtual_path": "/.cooked/PhysicsShapes/test_shape.ocshape",
-          "material_virtual_path": "/.cooked/PhysicsMaterials/default.opmat",
+          "shape_virtual_path": "/.cooked/Physics/Shapes/test_shape.ocshape",
+          "material_virtual_path": "/.cooked/Physics/Materials/default.opmat",
           "body_type": "dynamic",
           "motion_quality": "discrete"
         }
@@ -134,8 +134,8 @@ NOLINT_TEST(PhysicsJsonSchemaTest, PhysicsSidecarSchemaAcceptsCanonicalDocument)
       "colliders": [
         {
           "node_index": 1,
-          "shape_virtual_path": "/.cooked/PhysicsShapes/test_shape.ocshape",
-          "material_virtual_path": "/.cooked/PhysicsMaterials/default.opmat"
+          "shape_virtual_path": "/.cooked/Physics/Shapes/test_shape.ocshape",
+          "material_virtual_path": "/.cooked/Physics/Materials/default.opmat"
         }
       ],
       "joints": [
@@ -166,8 +166,8 @@ NOLINT_TEST(PhysicsJsonSchemaTest, PhysicsSidecarSchemaRejectsUnknownFields)
       "rigid_bodies": [
         {
           "node_index": 0,
-          "shape_virtual_path": "/.cooked/PhysicsShapes/test_shape.ocshape",
-          "material_virtual_path": "/.cooked/PhysicsMaterials/default.opmat",
+          "shape_virtual_path": "/.cooked/Physics/Shapes/test_shape.ocshape",
+          "material_virtual_path": "/.cooked/Physics/Materials/default.opmat",
           "unknown_field": true
         }
       ]
@@ -224,7 +224,7 @@ NOLINT_TEST(PhysicsJsonSchemaTest,
       "rigid_bodies": [
         {
           "node_index": 0,
-          "material_virtual_path": "/.cooked/PhysicsMaterials/default.opmat"
+          "material_virtual_path": "/.cooked/Physics/Materials/default.opmat"
         }
       ]
     }

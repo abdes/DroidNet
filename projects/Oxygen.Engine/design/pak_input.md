@@ -4,6 +4,7 @@
 >
 > The active implementation contract is `design/cook_input.md`.
 > Scene-attached input context bindings were removed from runtime/tooling:
+>
 > - `InputContextBindingRecord` removed
 > - `InputContextBindingFlags` removed
 > - `ComponentType::kInputContextBinding` / `INPT` scene table removed

@@ -1,0 +1,35 @@
+{
+  "$schema": "../../../src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json",
+  "bindings": {
+    "rigid_bodies": [
+      {
+        "node_index": 1,
+        "shape_virtual_path": "/.cooked/Physics/Shapes/floor_box.ocshape",
+        "material_virtual_path": "/.cooked/Physics/Materials/ground.opmat",
+        "body_type": "static",
+        "motion_quality": "discrete",
+        "collision_layer": 1,
+        "collision_mask": 65535,
+        "mass": 0.0,
+        "linear_damping": 0.0,
+        "angular_damping": 0.0,
+        "gravity_factor": 0.0,
+        "initial_activation": false
+      },
+      {
+        "node_index": 3,
+        "shape_virtual_path": "/.cooked/Physics/Shapes/sphere_unit.ocshape",
+        "material_virtual_path": "/.cooked/Physics/Materials/bouncy_ball.opmat",
+        "body_type": "dynamic",
+        "motion_quality": "linear_cast",
+        "collision_layer": 2,
+        "collision_mask": 65535,
+        "mass": 4.0,
+        "linear_damping": 0.02,
+        "angular_damping": 0.1,
+        "gravity_factor": 1.0,
+        "initial_activation": true
+      }
+    ]
+  }
+}

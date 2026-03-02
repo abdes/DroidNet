@@ -64,8 +64,8 @@ NOLINT_TEST(
             "rigid_bodies": [
               {
                 "node_index": 0,
-                "shape_virtual_path": "/PhysicsShapes/test_shape.ocshape",
-                "material_virtual_path": "/PhysicsMaterials/default.opmat"
+                "shape_virtual_path": "/Physics/Shapes/test_shape.ocshape",
+                "material_virtual_path": "/Physics/Materials/default.opmat"
               }
             ]
           }

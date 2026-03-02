@@ -275,9 +275,7 @@ Architectural split:
 
 ### 6.1 Import / Cooker Classes
 
-**Tooling-Facing Settings (DTO):**
-
-1. `oxygen::content::import::GeometryDescriptorImportSettings`
+1. **Tooling-Facing Settings (DTO):** `oxygen::content::import::GeometryDescriptorImportSettings`
    - file: `src/Oxygen/Cooker/Import/GeometryDescriptorImportSettings.h`
    - role: tooling-facing DTO for one geometry descriptor import job request.
      Contains `descriptor_path` (path to `.geometry.json`), `cooked_root`
@@ -286,9 +284,7 @@ Architectural split:
    - note: This DTO is never passed to the pipeline directly. It is only
      consumed by `BuildGeometryDescriptorRequest`.
 
-**Request Builder:**
-
-2. `oxygen::content::import::internal::BuildGeometryDescriptorRequest(...)`
+2. **Request Builder:** `oxygen::content::import::internal::BuildGeometryDescriptorRequest(...)`
    - files:
      - `src/Oxygen/Cooker/Import/GeometryDescriptorImportRequestBuilder.h`
      - `src/Oxygen/Cooker/Import/Internal/GeometryDescriptorImportRequestBuilder.cpp`
@@ -299,9 +295,7 @@ Architectural split:
    - note: The presence of `request.geometry_descriptor` is the route
      discriminant that bypasses all format detection in `AsyncImportService`.
 
-**Job:**
-
-3. `oxygen::content::import::detail::GeometryDescriptorImportJob`
+3. **Job:** `oxygen::content::import::detail::GeometryDescriptorImportJob`
    - files:
      - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.h`
      - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
@@ -315,9 +309,7 @@ Architectural split:
      → `CookInlineBuffers` (if `buffers` present) → `PrepareGeometryDescriptor`
      → `FinalizeDescriptorBytes` → `EmitAsset` → `FinalizeSession`.
 
-**Pipeline:**
-
-4. `oxygen::content::import::GeometryPipeline`
+4. **Pipeline:** `oxygen::content::import::GeometryPipeline`
    - files:
      - `src/Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h`
      - `src/Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.cpp`
@@ -330,9 +322,7 @@ Architectural split:
    - config: default `queue_capacity=16`, `worker_count=1` (from
      `ImportConcurrency::geometry`).
 
-**Pipeline Types:**
-
-5. `oxygen::content::import::MeshBufferBindings`
+5. **Pipeline Types - Bindings:** `oxygen::content::import::MeshBufferBindings`
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h`
    - fields: `vertex_buffer`, `index_buffer`, `joint_index_buffer`,
      `joint_weight_buffer`, `inverse_bind_buffer`, `joint_remap_buffer`
@@ -340,28 +330,26 @@ Architectural split:
    - role: carries the resolved buffer resource indices for one LOD from the
      job to `FinalizeDescriptorBytes`.
 
-6. `oxygen::content::import::MeshStreamView`
+6. **Pipeline Types - Stream View:** `oxygen::content::import::MeshStreamView`
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h`
    - fields: spans over positions, normals, texcoords, tangents, bitangents,
      colors, joint indices, joint weights.
 
-7. `oxygen::content::import::TriangleMesh`
+7. **Pipeline Types - Triangle Mesh:** `oxygen::content::import::TriangleMesh`
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h`
    - fields: `mesh_type`, `MeshStreamView streams`,
      `inverse_bind_matrices`, `joint_remap`, `indices`, `ranges`, optional
      `bounds`.
 
-8. `oxygen::content::import::TriangleRange`
+8. **Pipeline Types - Triangle Range:** `oxygen::content::import::TriangleRange`
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h`
    - fields: `material_slot`, `first_index`, `index_count`.
 
-9. `oxygen::content::import::GeometryPipeline::MaterialKeyPatch`
+9. **Pipeline Types - Material Patch:** `oxygen::content::import::GeometryPipeline::MaterialKeyPatch`
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h`
    - fields: `material_key_offset` (`DataBlobSizeT`), `key` (`AssetKey`).
 
-**Buffer Sidecar Resolution (Internal):**
-
-10. `ResolveBufferSidecarByVirtualPath` (free function, anonymous namespace)
+10. **Internal Helper - Buffer Sidecar Resolution:** `ResolveBufferSidecarByVirtualPath`
     - file: `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
     - role: async coroutine. Validates canonical virtual path (no `..`, no
       `//`), checks in-memory `buffer_cache` first, then strips mount root to
@@ -372,9 +360,7 @@ Architectural split:
       `ResolvedBufferSidecar`. Emits `geometry.buffer.sidecar_ambiguous` if
       multiple candidate files are found.
 
-**Material Key Resolution (Internal):**
-
-11. `ResolveMaterialKeyByVirtualPath` (free function, anonymous namespace)
+11. **Internal Helper - Material Key Resolution:** `ResolveMaterialKeyByVirtualPath`
     - file: `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
     - role: synchronous. Validates canonical virtual path, checks in-memory
       `material_cache` first, then searches each `MountedInspection` that has

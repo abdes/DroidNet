@@ -260,7 +260,8 @@ namespace {
     };
 
     LooseCookedWriter writer(cooked_root);
-    writer.WriteFile(FileKind::kPhysicsTable, "Resources/physics.table", bytes);
+    writer.WriteFile(
+      FileKind::kPhysicsTable, "Physics/Resources/physics.table", bytes);
 
     EXPECT_THROW(
       { [[maybe_unused]] const auto ignored = writer.Finish(); },

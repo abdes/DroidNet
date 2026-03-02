@@ -129,13 +129,13 @@ Architectural split:
 
 ### Runtime
 
-5. `oxygen::content::HydrateInputContext(...)`
+1. `oxygen::content::HydrateInputContext(...)`
    - files:
      - `src/Oxygen/Content/InputContextHydration.h`
      - `src/Oxygen/Content/Internal/InputContextHydration.cpp`
    - role: free function — converts a binary `InputMappingContextAsset` into a live `InputMappingContext` by resolving action references, building trigger chains, and registering with `InputSystem`.
 
-6. `IAssetLoader::EnumerateMountedInputContexts()`
+2. `IAssetLoader::EnumerateMountedInputContexts()`
    - file: `src/Oxygen/Content/IAssetLoader.h` (declaration), `src/Oxygen/Content/AssetLoader.cpp` (implementation)
    - role: scan mounted sources for `kInputMappingContext` assets and return metadata entries. Mirrors existing `EnumerateMountedScenes()`.
 
@@ -194,18 +194,18 @@ Architectural split:
 15. `PakGen test_v6_input_assets.py`
     - remove or update tests that reference `input_context_bindings`.
 
-15. PakGen/PakDump
+16. PakGen/PakDump
     - remove scene input-context binding infrastructure from PakGen (`input_context_bindings` packing/validation, `pack_input_context_binding_record`).
     - remove `kInputContextBinding` dump branch from PakDump `SceneAssetDumper`.
     - read-only reference for all other existing binary contracts.
     - no other PakGen/PakDump implementation changes in this plan.
 
-16. `IAssetLoader`
+17. `IAssetLoader`
     - add `EnumerateMountedInputContexts()` returning `std::vector<MountedInputContextEntry>`.
     - mirrors existing `EnumerateMountedScenes()` pattern.
     - file: `src/Oxygen/Content/IAssetLoader.h`.
 
-17. `InputMappingContextAsset`
+18. `InputMappingContextAsset`
     - add `GetDefaultPriority()` accessor.
     - file: `src/Oxygen/Data/InputMappingContextAsset.h`.
 
@@ -381,7 +381,7 @@ A source JSON contains:
 
 One file = all actions + all contexts. No separate files needed.
 
-```
+```text
 Content/Input/
   PlayerInput.input.json    ← defines all actions (Move, Look, Jump, Sprint) + all contexts (Gameplay, Menu)
 ```
@@ -855,7 +855,7 @@ This function replaces the ~200-line inline hydration in `SceneLoaderService::At
 
 The application (or a game-specific service) drives the full lifecycle using the enumeration API, hydration function, and existing `InputSystem` methods:
 
-```
+```text
 Enumerate  →  Hydrate  →  AddMappingContext  →  ActivateMappingContext
                                                 ↕
                                          DeactivateMappingContext

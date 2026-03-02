@@ -52,15 +52,17 @@ struct LooseCookedLayout final : Layout {
   static constexpr std::string_view kMaterialDescriptorExtension = ".omat";
   static constexpr std::string_view kGeometryDescriptorExtension = ".ogeo";
   static constexpr std::string_view kSceneDescriptorExtension = ".oscene";
-  //! Physics sidecar descriptor extension. Must be colocated with `.oscene`.
+  //! Physics scene sidecar descriptor extension.
   static constexpr std::string_view kPhysicsSceneDescriptorExtension
-    = ".physics";
+    = ".opscene";
   static constexpr std::string_view kScriptDescriptorExtension = ".oscript";
   static constexpr std::string_view kInputActionDescriptorExtension = ".oiact";
   static constexpr std::string_view kInputMappingContextDescriptorExtension
     = ".oimap";
   static constexpr std::string_view kTextureDescriptorExtension = ".otex";
   static constexpr std::string_view kBufferDescriptorExtension = ".obuf";
+  static constexpr std::string_view kPhysicsResourceDescriptorExtension
+    = ".opres";
 
   [[nodiscard]] static auto MaterialDescriptorFileName(
     std::string_view material_name) -> std::string
@@ -147,7 +149,7 @@ struct LooseCookedLayout final : Layout {
    - Same descriptor directory as the paired scene descriptor.
 
    * - Same base scene name as the paired scene descriptor.
-   - `.physics`
+   - `.opscene`
    * extension.
   */
   [[nodiscard]] auto PhysicsSceneVirtualLeaf(std::string_view scene_name) const
@@ -389,8 +391,23 @@ struct LooseCookedLayout final : Layout {
   //! Subfolder for buffer resource descriptors (`.obuf`).
   /*! Set to empty to place buffer descriptors directly under
    *
+   *
    * `resources_dir`. */
   std::string buffer_descriptors_subdir = "Buffers";
+
+  //! Base folder (relative to cooked root) for physics
+  //! materials/shapes/resources.
+  /*! Set to empty to place these physics outputs directly under cooked root. */
+  std::string physics_dir = "Physics";
+
+  //! Subfolder for physics material assets (`.opmat`) under `physics_dir`.
+  std::string physics_materials_subdir = "Materials";
+
+  //! Subfolder for collision shape assets (`.ocshape`) under `physics_dir`.
+  std::string physics_shapes_subdir = "Shapes";
+
+  //! Subfolder for physics resource files under `physics_dir`.
+  std::string physics_resources_subdir = "Resources";
 
   //! Resolve the container-relative path for the buffers table.
   [[nodiscard]] auto BuffersTableRelPath() const -> std::string
@@ -419,13 +436,13 @@ struct LooseCookedLayout final : Layout {
   //! Resolve the container-relative path for the physics table.
   [[nodiscard]] auto PhysicsTableRelPath() const -> std::string
   {
-    return JoinRelPath(resources_dir, physics_table_file_name);
+    return JoinRelPath(PhysicsResourcesDir(), physics_table_file_name);
   }
 
   //! Resolve the container-relative path for the physics data.
   [[nodiscard]] auto PhysicsDataRelPath() const -> std::string
   {
-    return JoinRelPath(resources_dir, physics_data_file_name);
+    return JoinRelPath(PhysicsResourcesDir(), physics_data_file_name);
   }
 
   //! Resolve the container-relative path for the scripts table.
@@ -464,6 +481,30 @@ struct LooseCookedLayout final : Layout {
     return JoinRelPath(resources_dir, buffer_descriptors_subdir);
   }
 
+  //! Resolve the container-relative base directory for physics outputs.
+  [[nodiscard]] auto PhysicsRootDir() const -> std::string
+  {
+    return physics_dir;
+  }
+
+  //! Resolve the container-relative directory for physics resources.
+  [[nodiscard]] auto PhysicsResourcesDir() const -> std::string
+  {
+    return JoinRelPath(PhysicsRootDir(), physics_resources_subdir);
+  }
+
+  //! Resolve the container-relative directory for physics materials.
+  [[nodiscard]] auto PhysicsMaterialsDir() const -> std::string
+  {
+    return JoinRelPath(PhysicsRootDir(), physics_materials_subdir);
+  }
+
+  //! Resolve the container-relative directory for physics shapes.
+  [[nodiscard]] auto PhysicsShapesDir() const -> std::string
+  {
+    return JoinRelPath(PhysicsRootDir(), physics_shapes_subdir);
+  }
+
   //! Resolve the descriptor folder for an asset type.
   [[nodiscard]] auto DescriptorDirFor(data::AssetType asset_type) const
     -> std::string
@@ -472,8 +513,6 @@ struct LooseCookedLayout final : Layout {
     case data::AssetType::kScene:
       return JoinRelPath(descriptors_dir, scenes_subdir);
     case data::AssetType::kPhysicsScene:
-      // Physics sidecars are scene companions and must be colocated with
-      // `.oscene` descriptors.
       return JoinRelPath(descriptors_dir, scenes_subdir);
     case data::AssetType::kGeometry:
       return JoinRelPath(descriptors_dir, geometry_subdir);
@@ -485,10 +524,11 @@ struct LooseCookedLayout final : Layout {
       return JoinRelPath(descriptors_dir, input_subdir);
     case data::AssetType::kInputMappingContext:
       return JoinRelPath(descriptors_dir, input_subdir);
-    case data::AssetType::kUnknown:
-      break;
     case data::AssetType::kPhysicsMaterial:
+      return PhysicsMaterialsDir();
     case data::AssetType::kCollisionShape:
+      return PhysicsShapesDir();
+    case data::AssetType::kUnknown:
       break;
     }
     return descriptors_dir;

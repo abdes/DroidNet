@@ -235,7 +235,8 @@ static_assert(sizeof(PhysicsComponentTableDesc) == 20);
  *  components. Loading is strictly separated from the base SceneAssetDesc.
  *
  *  The sidecar is identified by the same base name as its paired Scene asset
- *  with a ".physics" suffix in the asset directory.
+ *
+ * with a ".opscene" suffix in the asset directory.
  *
  *  @par Hydration contract
  *  `target_scene_key` must identify a Scene asset already loaded in the same

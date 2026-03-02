@@ -215,7 +215,7 @@ Architectural split:
 
 **Request Builder:**
 
-2. `oxygen::content::import::internal::BuildBufferContainerRequest(...)`
+1. `oxygen::content::import::internal::BuildBufferContainerRequest(...)`
    - files:
      - `src/Oxygen/Cooker/Import/BufferContainerImportRequestBuilder.h`
      - `src/Oxygen/Cooker/Import/Internal/BufferContainerImportRequestBuilder.cpp`
@@ -231,7 +231,7 @@ Architectural split:
 
 **Job:**
 
-3. `oxygen::content::import::detail::BufferContainerImportJob`
+1. `oxygen::content::import::detail::BufferContainerImportJob`
    - files:
      - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferContainerImportJob.h`
      - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferContainerImportJob.cpp`
@@ -245,7 +245,7 @@ Architectural split:
 
 **Submitter (Reusable):**
 
-4. `oxygen::content::import::detail::BufferImportSubmitter`
+1. `oxygen::content::import::detail::BufferImportSubmitter`
    - files:
      - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.h`
      - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.cpp`
@@ -273,7 +273,7 @@ Architectural split:
 
 **Pipeline:**
 
-5. `oxygen::content::import::BufferPipeline`
+1. `oxygen::content::import::BufferPipeline`
    - files:
      - `src/Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h`
      - `src/Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.cpp`
@@ -292,25 +292,25 @@ Architectural split:
 
 **Buffer View Types:**
 
-6. `oxygen::content::import::internal::BufferDescriptorViewSpec`
+1. `oxygen::content::import::internal::BufferDescriptorViewSpec`
    - file: `src/Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h`
    - role: optionally-addressed view specification parsed from JSON. Fields
      `byte_offset`, `byte_length`, `element_offset`, `element_count` may all
      be `std::nullopt` before normalization.
 
-7. `oxygen::content::import::internal::BufferDescriptorView`
+2. `oxygen::content::import::internal::BufferDescriptorView`
    - file: `src/Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h`
    - role: resolved view with all address fields populated. Produced by
      `NormalizeBufferViews`. Written into the `.obuf` sidecar.
 
-8. `oxygen::content::import::internal::ParsedBufferDescriptorSidecar`
+3. `oxygen::content::import::internal::ParsedBufferDescriptorSidecar`
    - file: `src/Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h`
    - role: result of reading back a `.obuf` sidecar at runtime or import time.
      Contains `resource_index`, `BufferResourceDesc`, and `vector<BufferDescriptorView>`.
 
 **Cooked Payload:**
 
-9. `oxygen::content::import::CookedBufferPayload`
+1. `oxygen::content::import::CookedBufferPayload`
    - file: `src/Oxygen/Cooker/Import/BufferImportTypes.h`
    - role: in-flight payload between `BufferImportSubmitter` and `BufferPipeline`.
      Carries raw `data` bytes, `alignment`, `usage_flags`, `element_stride`,

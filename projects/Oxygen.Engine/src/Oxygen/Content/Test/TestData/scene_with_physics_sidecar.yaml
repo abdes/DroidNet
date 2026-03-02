@@ -47,7 +47,7 @@ assets:
     shape_params:
       half_extents: [0.5, 0.5, 0.5]
 
-  - name: "test_scene_with_physics.physics"
+  - name: "test_scene_with_physics.opscene"
     type: "physics_scene"
     asset_key: "ffffffff-1111-2222-3333-444444444444"
     target_scene_key: "cccccccc-1111-2222-3333-444444444444"

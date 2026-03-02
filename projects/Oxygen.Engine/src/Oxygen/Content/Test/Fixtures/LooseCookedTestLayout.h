@@ -17,7 +17,7 @@ struct LooseCookedLayout {
   static constexpr std::string_view kGeometryDescriptorExtension = ".ogeo";
   static constexpr std::string_view kSceneDescriptorExtension = ".oscene";
   static constexpr std::string_view kPhysicsSceneDescriptorExtension
-    = ".physics";
+    = ".opscene";
 
   [[nodiscard]] static auto MaterialDescriptorFileName(
     std::string_view material_name) -> std::string

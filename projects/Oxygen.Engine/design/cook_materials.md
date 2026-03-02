@@ -204,7 +204,7 @@ Architectural split:
 
 **Request Builder:**
 
-2. `oxygen::content::import::internal::BuildMaterialDescriptorRequest(...)`
+1. `oxygen::content::import::internal::BuildMaterialDescriptorRequest(...)`
    - files:
      - `src/Oxygen/Cooker/Import/MaterialDescriptorImportRequestBuilder.h`
      - `src/Oxygen/Cooker/Import/Internal/MaterialDescriptorImportRequestBuilder.cpp`
@@ -218,7 +218,7 @@ Architectural split:
 
 **Job:**
 
-3. `oxygen::content::import::detail::MaterialDescriptorImportJob`
+1. `oxygen::content::import::detail::MaterialDescriptorImportJob`
    - files:
      - `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.h`
      - `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp`
@@ -232,7 +232,7 @@ Architectural split:
 
 **Pipeline:**
 
-4. `oxygen::content::import::MaterialPipeline`
+1. `oxygen::content::import::MaterialPipeline`
    - files:
      - `src/Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h`
      - `src/Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.cpp`
@@ -272,36 +272,36 @@ Architectural split:
 
 **Pipeline Types:**
 
-5. `oxygen::content::import::MaterialAlphaMode`
+1. `oxygen::content::import::MaterialAlphaMode`
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h`
    - values: `kOpaque`, `kMasked`, `kBlended`
 
-6. `oxygen::content::import::OrmPolicy`
+2. `oxygen::content::import::OrmPolicy`
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h`
    - values: `kAuto`, `kForcePacked`, `kForceSeparate`
 
-7. `oxygen::content::import::MaterialTextureBinding`
+3. `oxygen::content::import::MaterialTextureBinding`
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h`
    - fields: `index` (`ResourceIndexT`), `assigned` (bool), `source_id`
      (string), `uv_set` (uint8), `uv_transform` (`MaterialUvTransform`).
 
-8. `oxygen::content::import::MaterialTextureBindings`
+4. `oxygen::content::import::MaterialTextureBindings`
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h`
    - holds 12 named slots: `base_color`, `normal`, `metallic`, `roughness`,
      `ambient_occlusion`, `emissive`, `specular`, `sheen_color`, `clearcoat`,
      `clearcoat_normal`, `transmission`, `thickness`.
 
-9. `oxygen::content::import::MaterialInputs`
+5. `oxygen::content::import::MaterialInputs`
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h`
    - holds all PBR scalar inputs with engine defaults.
 
-10. `oxygen::content::import::MaterialUvTransform`
+6. `oxygen::content::import::MaterialUvTransform`
     - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h`
     - fields: `scale[2]`, `offset[2]`, `rotation_radians`.
 
 **Texture Sidecar Resolution (Internal):**
 
-11. `ResolveTextureIndexFromVirtualPath` (free function, anonymous namespace)
+1. `ResolveTextureIndexFromVirtualPath` (free function, anonymous namespace)
     - file: `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp`
     - role: async coroutine. Validates canonical virtual path (no `..`, no
       `//`), strips mount root to a rel-path, searches `cooked_root` and
@@ -312,10 +312,10 @@ Architectural split:
 
 ### 6.2 Runtime Classes
 
-12. `oxygen::content::loaders::LoadMaterialAsset`
+1. `oxygen::content::loaders::LoadMaterialAsset`
     - file: `src/Oxygen/Content/Loaders/MaterialLoader.h`
 
-13. `oxygen::data::MaterialAsset`
+2. `oxygen::data::MaterialAsset`
     - file: `src/Oxygen/Data/MaterialAsset.h`
 
 ### 6.3 Routing

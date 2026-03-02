@@ -516,8 +516,7 @@ NOLINT_TEST_F(
   const auto source = Root() / "physics_assets_loose";
   const auto output_path = Root() / "physics_assets_output.pak";
 
-  const auto physics_desc_rel
-    = std::string { "Descriptors/Scenes/Main.physics" };
+  const auto physics_desc_rel = std::string { "Scenes/Main.opscene" };
   const auto physics_desc_bytes = MakePatternBytes(0x71U, 56U);
 
   ASSERT_TRUE(paktest::WriteFileBytes(source / physics_desc_rel,
@@ -530,7 +529,7 @@ NOLINT_TEST_F(
       .key = physics_key,
       .asset_type = data::AssetType::kPhysicsScene,
       .descriptor_relpath = physics_desc_rel,
-      .virtual_path = "/Content/Scenes/Main.physics",
+      .virtual_path = "/Content/Scenes/Main.opscene",
       .descriptor_size = static_cast<uint64_t>(physics_desc_bytes.size()),
       .descriptor_sha = paktest::MakeDigest(0xA1U),
     },

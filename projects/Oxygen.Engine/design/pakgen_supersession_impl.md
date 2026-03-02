@@ -41,7 +41,7 @@ Status values:
 | P3 | done | 8% | Geometry buffer subdocument model | container-owned `buffers[]`/`views[]` contract implemented end-to-end under geometry descriptor flow, including deterministic mounted-root `.obuf` resolution and canonical dedupe constraints |
 | P4 | done | 14% | Material descriptor domain | `material-descriptor` implemented end-to-end with schema/tests |
 | P5 | done | 16% | Geometry descriptor domain | `geometry-descriptor` implemented end-to-end with schema/tests and external green build/test confirmation |
-| P6 | pending | 16% | Scene descriptor domain | `scene-descriptor` implemented end-to-end with schema/tests |
+| P6 | in_progress | 16% | Scene descriptor domain | `scene-descriptor` implemented end-to-end with schema/tests; external green validation pending |
 | P7 | pending | 8% | Manifest DAG integration | Descriptor job types + defaults + strict key policies + DAG checks |
 | P8 | pending | 7% | Pak builder toolflow integration | Official C++ pack flow wired and documented |
 | P9 | pending | 3% | PakGen deprecation | PakGen removed from default build/CI path after parity gates |
@@ -421,8 +421,8 @@ Current status:
 3. P4 is `done` (external test pass confirmation received for the material-descriptor suite and DAG scenario).
 4. P3 is `done` (geometry-domain integration completed with deterministic `.obuf` mounted-root resolution, canonical dedupe constraints, and expanded job-test coverage).
 5. P5 is `done` (external green build/tests confirmed after geometry-descriptor execution + coverage closure).
-6. P1 is `done`; P6-P10 are `pending`.
-7. Computed progress snapshot: `64.0%` (P1 completion factor `1.00`, P3 completion factor `1.00`, P5 completion factor `1.00`).
+6. P1 is `done`; P6 is `in_progress`; P7-P10 are `pending`.
+7. Computed progress snapshot: `76.0%` (P6 completion factor `0.75` pending external run/CI confirmation).
 8. P3/P5 geometry execution plan remains the baseline reference in Section 6, with both P3 and P5 marked closed.
 
 ## 11. Evidence Log
@@ -729,3 +729,33 @@ Initial entries:
 4. Tests run: none (no-build policy active)
 5. Result: completed shared descriptor ingress and virtual-path/reference utility consolidation. Descriptor request-builders now use a common JSON document loader/error shaper; canonical virtual path and mounted-root resolution logic is centralized and reused by descriptor jobs and related sidecar request paths.
 6. Remaining delta to phase exit gate: none
+
+1. Date: 2026-03-02
+2. Phase: P6 (scene descriptor ingress/execution integration)
+3. Files changed:
+   - `src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json`
+   - `src/Oxygen/Cooker/Import/SceneDescriptorImportSettings.h`
+   - `src/Oxygen/Cooker/Import/SceneDescriptorImportRequestBuilder.h`
+   - `src/Oxygen/Cooker/Import/Internal/SceneDescriptorImportRequestBuilder.cpp`
+   - `src/Oxygen/Cooker/Import/Internal/Jobs/SceneDescriptorImportJob.h`
+   - `src/Oxygen/Cooker/Import/Internal/Jobs/SceneDescriptorImportJob.cpp`
+   - `src/Oxygen/Cooker/Import/ImportRequest.h`
+   - `src/Oxygen/Cooker/Import/ImportManifest.h`
+   - `src/Oxygen/Cooker/Import/ImportManifest.cpp`
+   - `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
+   - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
+   - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
+   - `src/Oxygen/Cooker/Tools/ImportTool/README.md`
+   - `src/Oxygen/Cooker/CMakeLists.txt`
+   - `src/Oxygen/Cooker/Test/Import/SceneDescriptorJsonSchema_test.cpp`
+   - `src/Oxygen/Cooker/Test/Import/SceneDescriptorImportRequestBuilder_test.cpp`
+   - `src/Oxygen/Cooker/Test/Import/ImportManifest_scene_descriptor_test.cpp`
+   - `src/Oxygen/Cooker/Test/Import/SceneDescriptorImportJob_test.cpp`
+   - `src/Oxygen/Cooker/Test/Import/AsyncImportService_test.cpp`
+   - `src/Oxygen/Cooker/Test/CMakeLists.txt`
+   - `design/pakgen_supersession_impl.md`
+4. Tests run: none (no-build policy active)
+5. Result: scene-descriptor domain is now first-class across schema generation, request building, manifest defaults/job wiring, async job routing, batch report classification, job execution (`.oscene` emission with deterministic mounted reference resolution), and focused schema/request/manifest/job/routing test coverage.
+6. Remaining delta to phase exit gate:
+   - run and pass new scene-descriptor suites externally/CI
+   - validate end-to-end mixed-domain manifest DAG scenario with scene-descriptor dependencies

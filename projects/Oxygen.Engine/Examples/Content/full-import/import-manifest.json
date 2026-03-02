@@ -179,6 +179,30 @@
         "waterbottle.buffers",
         "waterbottle.material.waterbottle_bottlemat"
       ]
+    },
+    {
+      "id": "showcase.scene",
+      "type": "scene-descriptor",
+      "source": "./showcase_scene.scene.json",
+      "name": "showcase_scene",
+      "content_hashing": true,
+      "depends_on": [
+        "floor.geometry",
+        "cube.geometry",
+        "sphere.geometry",
+        "waterbottle.geometry.waterbottle_waterbottle_p0_geo"
+      ]
+    },
+    {
+      "id": "showcase.opscene",
+      "type": "physics-sidecar",
+      "source": "./showcase_scene.physics-sidecar.json",
+      "target_scene_virtual_path": "/.cooked/Scenes/showcase_scene.oscene",
+      "name": "showcase_scene_physics",
+      "content_hashing": true,
+      "depends_on": [
+        "showcase.scene"
+      ]
     }
   ]
 }

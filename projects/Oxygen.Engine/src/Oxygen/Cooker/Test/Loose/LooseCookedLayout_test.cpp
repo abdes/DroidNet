@@ -35,6 +35,10 @@ NOLINT_TEST(LooseCookedLayoutTest, DefaultSettingsAreCorrect)
   EXPECT_EQ(layout.materials_subdir, "Materials");
   EXPECT_EQ(layout.scripts_subdir, "Scripts");
   EXPECT_EQ(layout.input_subdir, "Input");
+  EXPECT_EQ(layout.physics_dir, "Physics");
+  EXPECT_EQ(layout.physics_materials_subdir, "Materials");
+  EXPECT_EQ(layout.physics_shapes_subdir, "Shapes");
+  EXPECT_EQ(layout.physics_resources_subdir, "Resources");
 }
 
 NOLINT_TEST(LooseCookedLayoutTest, DescriptorFileNamesAreCorrect)
@@ -46,7 +50,7 @@ NOLINT_TEST(LooseCookedLayoutTest, DescriptorFileNamesAreCorrect)
   EXPECT_EQ(
     LooseCookedLayout::SceneDescriptorFileName("MyScene"), "MyScene.oscene");
   EXPECT_EQ(LooseCookedLayout::PhysicsSceneDescriptorFileName("MyScene"),
-    "MyScene.physics");
+    "MyScene.opscene");
   EXPECT_EQ(LooseCookedLayout::ScriptDescriptorFileName("MyScript"),
     "MyScript.oscript");
   EXPECT_EQ(
@@ -63,6 +67,10 @@ NOLINT_TEST(LooseCookedLayoutTest, DescriptorDirForYieldsExpectedDirs)
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kGeometry), "Geometry");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kScene), "Scenes");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kPhysicsScene), "Scenes");
+  EXPECT_EQ(
+    layout.DescriptorDirFor(AssetType::kPhysicsMaterial), "Physics/Materials");
+  EXPECT_EQ(
+    layout.DescriptorDirFor(AssetType::kCollisionShape), "Physics/Shapes");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kScript), "Scripts");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kInputAction), "Input");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kInputMappingContext), "Input");
@@ -85,7 +93,7 @@ NOLINT_TEST(LooseCookedLayoutTest, VirtualLeafPathsAreCorrect)
   EXPECT_EQ(layout.MaterialVirtualLeaf("M1"), "Materials/M1.omat");
   EXPECT_EQ(layout.GeometryVirtualLeaf("G1"), "Geometry/G1.ogeo");
   EXPECT_EQ(layout.SceneVirtualLeaf("S1"), "Scenes/S1.oscene");
-  EXPECT_EQ(layout.PhysicsSceneVirtualLeaf("S1"), "Scenes/S1.physics");
+  EXPECT_EQ(layout.PhysicsSceneVirtualLeaf("S1"), "Scenes/S1.opscene");
 }
 
 NOLINT_TEST(LooseCookedLayoutTest, DescriptorRelPathsAreCorrect)
@@ -94,7 +102,7 @@ NOLINT_TEST(LooseCookedLayoutTest, DescriptorRelPathsAreCorrect)
   EXPECT_EQ(layout.MaterialDescriptorRelPath("M1"), "Materials/M1.omat");
   EXPECT_EQ(layout.GeometryDescriptorRelPath("G1"), "Geometry/G1.ogeo");
   EXPECT_EQ(layout.SceneDescriptorRelPath("S1"), "Scenes/S1.oscene");
-  EXPECT_EQ(layout.PhysicsSceneDescriptorRelPath("S1"), "Scenes/S1.physics");
+  EXPECT_EQ(layout.PhysicsSceneDescriptorRelPath("S1"), "Scenes/S1.opscene");
 }
 
 NOLINT_TEST(LooseCookedLayoutTest, VirtualPathsJoinCorrectly)
@@ -120,8 +128,8 @@ NOLINT_TEST(LooseCookedLayoutTest, ResourcePathsAreCorrect)
   EXPECT_EQ(layout.BuffersDataRelPath(), "Resources/buffers.data");
   EXPECT_EQ(layout.TexturesTableRelPath(), "Resources/textures.table");
   EXPECT_EQ(layout.TexturesDataRelPath(), "Resources/textures.data");
-  EXPECT_EQ(layout.PhysicsTableRelPath(), "Resources/physics.table");
-  EXPECT_EQ(layout.PhysicsDataRelPath(), "Resources/physics.data");
+  EXPECT_EQ(layout.PhysicsTableRelPath(), "Physics/Resources/physics.table");
+  EXPECT_EQ(layout.PhysicsDataRelPath(), "Physics/Resources/physics.data");
   EXPECT_EQ(layout.ScriptsTableRelPath(), "Resources/scripts.table");
   EXPECT_EQ(layout.ScriptsDataRelPath(), "Resources/scripts.data");
   EXPECT_EQ(
@@ -132,6 +140,8 @@ NOLINT_TEST(LooseCookedLayoutTest, ResourcePathsAreCorrect)
   layout.resources_dir = "";
   EXPECT_EQ(layout.BuffersTableRelPath(), "buffers.table");
   EXPECT_EQ(layout.TexturesDataRelPath(), "textures.data");
+  EXPECT_EQ(layout.PhysicsTableRelPath(), "Physics/Resources/physics.table");
+  EXPECT_EQ(layout.PhysicsDataRelPath(), "Physics/Resources/physics.data");
 }
 
 } // namespace

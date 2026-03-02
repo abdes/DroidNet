@@ -136,12 +136,6 @@ set(
   "Pak/PakBuildReport.h"
 )
 
-# utility headers used internally but not previously listed
-list(APPEND OXYGEN_COOKER_PRIVATE_HEADERS
-  "Import/Internal/Utils/DescriptorDocument.h"
-  "Import/Internal/Utils/VirtualPathResolution.h"
-)
-
 set(
   OXYGEN_COOKER_PRIVATE_HEADERS
   "Import/Internal/AdapterTypes.h"
@@ -167,12 +161,12 @@ set(
   "Import/Internal/ImportSession.h"
   "Import/Internal/JobEntry.h"
   "Import/Internal/Jobs/AudioImportJob.h"
+  "Import/Internal/Jobs/BufferContainerImportJob.h"
   "Import/Internal/Jobs/BufferImportSubmitter.h"
   "Import/Internal/Jobs/FbxImportJob.h"
   "Import/Internal/Jobs/GeometryDescriptorImportJob.h"
   "Import/Internal/Jobs/GlbImportJob.h"
   "Import/Internal/Jobs/InputImportJob.h"
-  "Import/Internal/Jobs/BufferContainerImportJob.h"
   "Import/Internal/Jobs/MaterialDescriptorImportJob.h"
   "Import/Internal/Jobs/PhysicsSidecarImportJob.h"
   "Import/Internal/Jobs/SceneDescriptorImportJob.h"
@@ -189,9 +183,9 @@ set(
   "Import/Internal/Pipelines/MaterialPipeline.h"
   "Import/Internal/Pipelines/MeshBuildPipeline.h"
   "Import/Internal/Pipelines/PhysicsSidecarImportPipeline.h"
+  "Import/Internal/Pipelines/ScenePipeline.h"
   "Import/Internal/Pipelines/ScriptAssetImportPipeline.h"
   "Import/Internal/Pipelines/ScriptImportPipelineCommon.h"
-  "Import/Internal/Pipelines/ScenePipeline.h"
   "Import/Internal/Pipelines/ScriptingSidecarImportPipeline.h"
   "Import/Internal/Pipelines/TexturePipeline.h"
   "Import/Internal/ResourceTableAggregator.h"
@@ -205,9 +199,11 @@ set(
   "Import/Internal/Utils/AssetKeyUtils.h"
   "Import/Internal/Utils/BufferDescriptorSidecar.h"
   "Import/Internal/Utils/ContentHashUtils.h"
+  "Import/Internal/Utils/DescriptorDocument.h"
   "Import/Internal/Utils/ImportSettingsUtils.h"
   "Import/Internal/Utils/JsonSchemaValidation.h"
   "Import/Internal/Utils/StringUtils.h"
+  "Import/Internal/Utils/VirtualPathResolution.h"
   "Import/Internal/WindowsFileReader.h"
   "Import/Internal/WindowsFileWriter.h"
   "Import/Internal/WorkDispatcher.h"

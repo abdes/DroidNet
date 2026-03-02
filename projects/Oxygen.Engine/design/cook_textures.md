@@ -171,14 +171,14 @@ Architectural split:
 
 **Request Builders:**
 
-3. `oxygen::content::import::internal::BuildTextureRequest(...)`
+1. `oxygen::content::import::internal::BuildTextureRequest(...)`
    - files:
      - `src/Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h`
      - `src/Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.cpp`
    - role: validate + normalize `TextureImportSettings` into `ImportRequest`
      routed via `ImportFormat::kTextureImage`.
 
-4. `oxygen::content::import::internal::BuildTextureDescriptorRequest(...)`
+2. `oxygen::content::import::internal::BuildTextureDescriptorRequest(...)`
    - files:
      - `src/Oxygen/Cooker/Import/TextureDescriptorImportRequestBuilder.h`
      - `src/Oxygen/Cooker/Import/Internal/TextureDescriptorImportRequestBuilder.cpp`
@@ -188,7 +188,7 @@ Architectural split:
 
 **Job and Pipeline:**
 
-5. `oxygen::content::import::detail::TextureImportJob`
+1. `oxygen::content::import::detail::TextureImportJob`
    - files:
      - `src/Oxygen/Cooker/Import/Internal/Jobs/TextureImportJob.h`
      - `src/Oxygen/Cooker/Import/Internal/Jobs/TextureImportJob.cpp`
@@ -197,7 +197,7 @@ Architectural split:
      calls `TextureEmitter` on success.
    - stages: `LoadSource` → `CookTexture` → `EmitTexture` → `FinalizeSession`.
 
-6. `oxygen::content::import::TexturePipeline`
+2. `oxygen::content::import::TexturePipeline`
    - files:
      - `src/Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h`
      - `src/Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.cpp`
@@ -217,14 +217,14 @@ Architectural split:
 
 **Low-Level Processing Types:**
 
-7. `oxygen::content::import::TextureImportDesc`
+1. `oxygen::content::import::TextureImportDesc`
    - file: `src/Oxygen/Cooker/Import/TextureImportDesc.h`
    - role: complete processing contract for one texture. Consumed directly
      by `CookTexture()` / `TexturePipeline`. Contains shape, intent, decode
      options, color space, mip policy, output format, BC7 quality, HDR
      handling, and a cooperative cancellation token.
 
-8. `oxygen::content::import::ScratchImage`
+2. `oxygen::content::import::ScratchImage`
    - files:
      - `src/Oxygen/Cooker/Import/ScratchImage.h`
      - `src/Oxygen/Cooker/Import/ScratchImage.cpp`
@@ -232,7 +232,7 @@ Architectural split:
      decoded/processed texture. Provides `GetImage(layer, mip)` access
      via `ImageView` (non-owning view).
 
-9. `oxygen::content::import::TextureSourceSet`
+3. `oxygen::content::import::TextureSourceSet`
    - file: `src/Oxygen/Cooker/Import/TextureSourceAssembly.h`
    - role: collection of per-subresource source bytes for multi-source
      textures (cube maps, arrays, 3D).
@@ -240,24 +240,24 @@ Architectural split:
 
 **Packing Policies:**
 
-10. `oxygen::content::import::ITexturePackingPolicy`
+1. `oxygen::content::import::ITexturePackingPolicy`
     - file: `src/Oxygen/Cooker/Import/TexturePackingPolicy.h`
     - role: interface for backend-specific alignment strategies.
       Methods: `Id()`, `AlignRowPitchBytes()`, `AlignSubresourceOffset()`.
 
-11. `oxygen::content::import::D3D12PackingPolicy`
+2. `oxygen::content::import::D3D12PackingPolicy`
     - file: `src/Oxygen/Cooker/Import/TexturePackingPolicy.h`
     - role: D3D12 alignment — row pitch aligned to 256 bytes, subresource
       offset aligned to 512 bytes. Singleton via `Instance()`.
 
-12. `oxygen::content::import::TightPackedPolicy`
+3. `oxygen::content::import::TightPackedPolicy`
     - file: `src/Oxygen/Cooker/Import/TexturePackingPolicy.h`
     - role: minimal 4-byte alignment for storage efficiency. Singleton via
       `Instance()`.
 
 **High-Level Programmatic API:**
 
-13. Free functions in `oxygen::content::import`
+1. Free functions in `oxygen::content::import`
     - file: `src/Oxygen/Cooker/Import/TextureImporter.h`
     - role: single-call convenience API for common workflows.
     - functions:
@@ -275,7 +275,7 @@ Architectural split:
       - `CookScratchImage(image, preset, policy)` — cook pre-decoded image
       - `DetectPresetFromFilename(path)` — filename convention detection
 
-14. `oxygen::content::import::TextureImportBuilder`
+2. `oxygen::content::import::TextureImportBuilder`
     - file: `src/Oxygen/Cooker/Import/TextureImporter.h`
     - role: fluent builder for advanced configuration. Supports
       `FromFile()`, `FromMemory()`, `AddCubeFace()`, `AddArrayLayer()`,
@@ -284,14 +284,14 @@ Architectural split:
 
 **Preset System:**
 
-15. `oxygen::content::import::TexturePreset`
+1. `oxygen::content::import::TexturePreset`
     - file: `src/Oxygen/Cooker/Import/TextureImportPresets.h`
     - role: enum of named presets covering common material and HDR workflows.
     - values: `kAlbedo`, `kNormal`, `kRoughness`, `kMetallic`, `kAO`,
       `kORMPacked`, `kEmissive`, `kUI`, `kHdrEnvironment`, `kHdrLightProbe`,
       `kData`, `kHeightMap`.
 
-16. `ApplyPreset(desc, preset)` / `MakeDescFromPreset(preset)`
+2. `ApplyPreset(desc, preset)` / `MakeDescFromPreset(preset)`
     - file: `src/Oxygen/Cooker/Import/TextureImportPresets.h`
     - role: populate a `TextureImportDesc` with sensible defaults for the
       given preset. Shape fields (`width`, `height`, `depth`,
@@ -299,13 +299,13 @@ Architectural split:
 
 ### 6.2 Runtime Classes
 
-17. `oxygen::content::loaders::LoadTextureResource`
+1. `oxygen::content::loaders::LoadTextureResource`
     - file: `src/Oxygen/Content/Loaders/TextureLoader.h`
     - role: inline loader function. Reads `TextureResourceDesc` and pixel
       payload from PAK stream into `data::TextureResource`. Registered
       with `AssetLoader` as the loader for `kTexture` asset type.
 
-18. `oxygen::data::TextureResource`
+2. `oxygen::data::TextureResource`
     - file: `src/Oxygen/Data/TextureResource.h`
     - role: runtime wrapper around `TextureResourceDesc` + pixel payload
       bytes. Provides dimension, format, and data accessors.

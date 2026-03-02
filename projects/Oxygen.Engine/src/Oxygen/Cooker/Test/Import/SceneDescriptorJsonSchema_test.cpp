@@ -140,7 +140,7 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsCanonicalDocument)
       "scripts": ["/.cooked/Scripts/spin.oscript"],
       "input_actions": ["/.cooked/Input/jump.oiact"],
       "input_mapping_contexts": ["/.cooked/Input/gameplay.oimap"],
-      "physics_sidecars": ["/.cooked/Scenes/DemoScene.physics"]
+      "physics_sidecars": ["/.cooked/Scenes/DemoScene.opscene"]
     }
   })");
 

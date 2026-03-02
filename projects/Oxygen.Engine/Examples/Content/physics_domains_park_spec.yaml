@@ -687,7 +687,7 @@ assets:
         is_sun_light: true
 
   - type: physics_scene
-    name: PhysicsDomainsPark.physics
+    name: PhysicsDomainsPark.opscene
     asset_key: "30000000000000000000000000000002"
     target_scene_key: "30000000000000000000000000000001"
     target_node_count: 25

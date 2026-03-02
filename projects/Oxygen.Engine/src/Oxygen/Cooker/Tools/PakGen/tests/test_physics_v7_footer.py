@@ -30,7 +30,7 @@ def test_v7_footer_reports_physics_region_and_table(tmp_path: Path):
             },
             {
                 "type": "physics_scene",
-                "name": "scene0.physics",
+                "name": "scene0.opscene",
                 "asset_key": "33333333-3333-3333-3333-333333333333",
                 "target_scene_key": "44444444-4444-4444-4444-444444444444",
                 "target_node_count": 0,
