@@ -374,13 +374,28 @@ namespace {
       co_return std::nullopt;
     }
 
+    auto matches = std::vector<std::filesystem::path> {};
     for (auto it = context.mounts.rbegin(); it != context.mounts.rend(); ++it) {
       const auto descriptor_path = it->root / std::filesystem::path(relpath);
-      std::error_code ec;
+      auto ec = std::error_code {};
       if (!std::filesystem::exists(descriptor_path, ec)) {
         continue;
       }
+      matches.push_back(descriptor_path);
+    }
 
+    if (matches.size() > 1U) {
+      auto message = std::string {
+        "Buffer descriptor virtual_path resolved to multiple mounted "
+        "sidecars; provide a single canonical source: "
+      } + std::string(virtual_path);
+      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+        "geometry.buffer.sidecar_ambiguous", std::move(message), object_path);
+      co_return std::nullopt;
+    }
+
+    if (!matches.empty()) {
+      const auto& descriptor_path = matches.front();
       const auto read_start = std::chrono::steady_clock::now();
       const auto read_result
         = co_await context.reader->ReadFile(descriptor_path);

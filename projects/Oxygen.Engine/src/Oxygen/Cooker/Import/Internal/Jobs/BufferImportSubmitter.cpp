@@ -4,13 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -254,6 +258,95 @@ namespace {
     return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
   }
 
+  [[nodiscard]] auto NormalizeRelPath(std::string relpath) -> std::string
+  {
+    return std::filesystem::path(std::move(relpath))
+      .lexically_normal()
+      .generic_string();
+  }
+
+  [[nodiscard]] auto ReadBinaryFile(const std::filesystem::path& path)
+    -> std::optional<std::vector<std::byte>>
+  {
+    auto in = std::ifstream(path, std::ios::binary | std::ios::ate);
+    if (!in.is_open()) {
+      return std::nullopt;
+    }
+    const auto end = in.tellg();
+    if (end < 0) {
+      return std::nullopt;
+    }
+    const auto size = static_cast<size_t>(end);
+    in.seekg(0, std::ios::beg);
+
+    auto bytes = std::vector<std::byte>(size);
+    if (size > 0U) {
+      in.read(reinterpret_cast<char*>(bytes.data()),
+        static_cast<std::streamsize>(size));
+      if (!in) {
+        return std::nullopt;
+      }
+    }
+    return bytes;
+  }
+
+  [[nodiscard]] auto LoadCanonicalBufferSidecarRelpathsByIndex(
+    const std::filesystem::path& cooked_root)
+    -> std::unordered_map<uint32_t, std::string>
+  {
+    auto sidecar_paths = std::vector<std::filesystem::path> {};
+    auto ec = std::error_code {};
+    if (!std::filesystem::exists(cooked_root, ec)) {
+      return {};
+    }
+
+    for (auto it
+      = std::filesystem::recursive_directory_iterator(cooked_root, ec);
+      !ec && it != std::filesystem::recursive_directory_iterator {};
+      it.increment(ec)) {
+      if (ec) {
+        break;
+      }
+      if (!it->is_regular_file(ec)) {
+        continue;
+      }
+      if (it->path().extension() != ".obuf") {
+        continue;
+      }
+      sidecar_paths.push_back(it->path());
+    }
+
+    std::ranges::sort(sidecar_paths, [](const auto& lhs, const auto& rhs) {
+      return lhs.generic_string() < rhs.generic_string();
+    });
+
+    auto by_index = std::unordered_map<uint32_t, std::string> {};
+    for (const auto& path : sidecar_paths) {
+      const auto bytes = ReadBinaryFile(path);
+      if (!bytes.has_value()) {
+        continue;
+      }
+
+      auto parsed = internal::ParsedBufferDescriptorSidecar {};
+      auto parse_error = std::string {};
+      if (!internal::ParseBufferDescriptorSidecar(
+            *bytes, parsed, parse_error)) {
+        continue;
+      }
+
+      const auto relpath = std::filesystem::relative(path, cooked_root, ec);
+      if (ec) {
+        ec.clear();
+        continue;
+      }
+
+      by_index.try_emplace(parsed.resource_index.get(),
+        NormalizeRelPath(relpath.generic_string()));
+    }
+
+    return by_index;
+  }
+
 } // namespace
 
 BufferImportSubmitter::BufferImportSubmitter(ImportSession& session,
@@ -359,7 +452,11 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
 {
   auto emitted_buffers = std::vector<EmittedBuffer> {};
   emitted_buffers.reserve(submission.submitted_count);
-  auto index_to_source_id = std::unordered_map<uint32_t, std::string> {};
+  const auto cooked_root = request_.cooked_root.has_value()
+    ? request_.cooked_root.value()
+    : request_.source_path.parent_path();
+  auto canonical_relpath_by_index
+    = LoadCanonicalBufferSidecarRelpathsByIndex(cooked_root);
 
   for (size_t i = 0; i < submission.submitted_count; ++i) {
     auto result = co_await pipeline.Collect();
@@ -406,9 +503,10 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
       continue;
     }
 
-    const auto existing = index_to_source_id.find(emitted_index);
-    if (existing != index_to_source_id.end()
-      && existing->second != result.source_id) {
+    const auto requested_relpath = NormalizeRelPath(relpath_it->second);
+    const auto existing = canonical_relpath_by_index.find(emitted_index);
+    if (existing != canonical_relpath_by_index.end()
+      && existing->second != requested_relpath) {
       AddDiagnostic(session_, request_, ImportSeverity::kError,
         "buffer.container.dedup_virtual_path_conflict",
         "Equivalent buffers deduped to one resource index must share one "
@@ -416,12 +514,13 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
         result.source_id);
       continue;
     }
-    index_to_source_id.emplace(emitted_index, result.source_id);
+    canonical_relpath_by_index.insert_or_assign(
+      emitted_index, requested_relpath);
 
     try {
       [[maybe_unused]] const auto relpath
         = session_.ResourceDescriptorEmitter().EmitBufferAtRelPath(
-          relpath_it->second, data::pak::core::ResourceIndexT { emitted_index },
+          requested_relpath, data::pak::core::ResourceIndexT { emitted_index },
           *descriptor, views_it->second);
     } catch (const std::exception& ex) {
       AddDiagnostic(session_, request_, ImportSeverity::kError,
@@ -432,7 +531,7 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
 
     emitted_buffers.push_back(EmittedBuffer {
       .source_id = result.source_id,
-      .descriptor_relpath = relpath_it->second,
+      .descriptor_relpath = requested_relpath,
       .resource_index = data::pak::core::ResourceIndexT { emitted_index },
       .descriptor = *descriptor,
       .views = views_it->second,

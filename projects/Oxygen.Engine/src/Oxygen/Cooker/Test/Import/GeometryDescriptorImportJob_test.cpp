@@ -151,12 +151,14 @@ namespace {
   }
 
   auto MakeGeometryRequest(const std::filesystem::path& source_path,
-    const std::filesystem::path& cooked_root, const json& descriptor_doc)
+    const std::filesystem::path& cooked_root, const json& descriptor_doc,
+    std::vector<std::filesystem::path> cooked_context_roots = {})
     -> ImportRequest
   {
     auto request = ImportRequest {};
     request.source_path = source_path.lexically_normal();
     request.cooked_root = cooked_root;
+    request.cooked_context_roots = std::move(cooked_context_roots);
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.geometry_descriptor = ImportRequest::GeometryDescriptorPayload {
       .normalized_descriptor_json = descriptor_doc.dump(),
@@ -734,6 +736,208 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobTest,
+  ResolvesBufferSidecarsFromAdditionalCookedContextRoot)
+{
+  const auto main_root = MakeTempCookedRoot("resolve_from_context_root_main");
+  const auto context_root = MakeTempCookedRoot("resolve_from_context_root_ctx");
+  const auto source_dir = main_root / "Sources";
+  const auto cooked_root = main_root / ".cooked";
+  const auto context_cooked_root = context_root / ".cooked";
+  const auto buffer_manifest_path = source_dir / "context_shared.buffers.json";
+  const auto geometry_path = source_dir / "context_ref.geometry.json";
+  const auto vb_source = source_dir / "context.vertices.buffer.bin";
+  const auto ib_source = source_dir / "context.indices.buffer.bin";
+
+  std::filesystem::create_directories(cooked_root / "Materials");
+  WriteTextFile(cooked_root / "Materials" / "default.omat", "placeholder");
+
+  const auto vb_bytes = std::array<std::byte, 96> {};
+  const auto ib_bytes = std::array<std::byte, 12> {};
+  WriteBytesFile(vb_source, std::span<const std::byte>(vb_bytes));
+  WriteBytesFile(ib_source, std::span<const std::byte>(ib_bytes));
+
+  const auto buffer_descriptor = json {
+    { "name", "ContextSharedBuffers" },
+    { "buffers",
+      json::array({
+        json {
+          { "source", vb_source.generic_string() },
+          { "virtual_path",
+            "/.cooked/Resources/Buffers/context_vertices.obuf" },
+          { "usage_flags", 1U },
+          { "element_stride", 32U },
+          { "views",
+            json::array({
+              json {
+                { "name", "lod0" },
+                { "element_offset", 0U },
+                { "element_count", 3U },
+              },
+            }) },
+        },
+        json {
+          { "source", ib_source.generic_string() },
+          { "virtual_path", "/.cooked/Resources/Buffers/context_indices.obuf" },
+          { "usage_flags", 2U },
+          { "element_stride", 4U },
+          { "views",
+            json::array({
+              json {
+                { "name", "lod0" },
+                { "element_offset", 0U },
+                { "element_count", 3U },
+              },
+            }) },
+        },
+      }) },
+  };
+  WriteTextFile(buffer_manifest_path, buffer_descriptor.dump(2));
+
+  const auto geometry_descriptor = MakeStandardDescriptorDoc(
+    "ContextSharedCube", "/.cooked/Materials/default.omat",
+    "/.cooked/Resources/Buffers/context_vertices.obuf",
+    "/.cooked/Resources/Buffers/context_indices.obuf", "lod0", std::nullopt);
+  WriteTextFile(geometry_path, geometry_descriptor.dump(2));
+
+  auto service = AsyncImportService(AsyncImportService::Config {
+    .thread_pool_size = 2U,
+  });
+  [[maybe_unused]] auto stop_service
+    = oxygen::Finally([&service]() { service.Stop(); });
+
+  const auto buffer_report = SubmitAndWait(service,
+    MakeBufferContainerRequest(
+      buffer_manifest_path, context_cooked_root, buffer_descriptor));
+  ASSERT_TRUE(buffer_report.success);
+
+  const auto geometry_report = SubmitAndWait(service,
+    MakeGeometryRequest(geometry_path, cooked_root, geometry_descriptor,
+      { context_cooked_root }));
+  EXPECT_TRUE(geometry_report.success);
+  EXPECT_EQ(geometry_report.geometry_written, 1U);
+  EXPECT_FALSE(HasDiagnosticCode(
+    geometry_report.diagnostics, "geometry.buffer.sidecar_missing"));
+}
+
+NOLINT_TEST(GeometryDescriptorImportJobTest,
+  DuplicateMountedBufferSidecarsFailWithAmbiguousDiagnostic)
+{
+  const auto main_root = MakeTempCookedRoot("ambiguous_sidecar_main");
+  const auto context_root = MakeTempCookedRoot("ambiguous_sidecar_ctx");
+  const auto source_dir = main_root / "Sources";
+  const auto cooked_root = main_root / ".cooked";
+  const auto context_cooked_root = context_root / ".cooked";
+  const auto buffer_manifest_path = source_dir / "ambiguous.buffers.json";
+  const auto geometry_path = source_dir / "ambiguous.geometry.json";
+  const auto vb_source = source_dir / "ambiguous.vertices.buffer.bin";
+  const auto ib_source = source_dir / "ambiguous.indices.buffer.bin";
+
+  std::filesystem::create_directories(cooked_root / "Materials");
+  WriteTextFile(cooked_root / "Materials" / "default.omat", "placeholder");
+
+  const auto vb_bytes = std::array<std::byte, 96> {};
+  const auto ib_bytes = std::array<std::byte, 12> {};
+  WriteBytesFile(vb_source, std::span<const std::byte>(vb_bytes));
+  WriteBytesFile(ib_source, std::span<const std::byte>(ib_bytes));
+
+  const auto buffer_descriptor = json {
+    { "name", "AmbiguousBuffers" },
+    { "buffers",
+      json::array({
+        json {
+          { "source", vb_source.generic_string() },
+          { "virtual_path",
+            "/.cooked/Resources/Buffers/ambiguous_vertices.obuf" },
+          { "usage_flags", 1U },
+          { "element_stride", 32U },
+          { "views",
+            json::array({
+              json {
+                { "name", "lod0" },
+                { "element_offset", 0U },
+                { "element_count", 3U },
+              },
+            }) },
+        },
+        json {
+          { "source", ib_source.generic_string() },
+          { "virtual_path",
+            "/.cooked/Resources/Buffers/ambiguous_indices.obuf" },
+          { "usage_flags", 2U },
+          { "element_stride", 4U },
+          { "views",
+            json::array({
+              json {
+                { "name", "lod0" },
+                { "element_offset", 0U },
+                { "element_count", 3U },
+              },
+            }) },
+        },
+      }) },
+  };
+  WriteTextFile(buffer_manifest_path, buffer_descriptor.dump(2));
+
+  const auto geometry_descriptor = MakeStandardDescriptorDoc("AmbiguousCube",
+    "/.cooked/Materials/default.omat",
+    "/.cooked/Resources/Buffers/ambiguous_vertices.obuf",
+    "/.cooked/Resources/Buffers/ambiguous_indices.obuf", "lod0", std::nullopt);
+  WriteTextFile(geometry_path, geometry_descriptor.dump(2));
+
+  auto service = AsyncImportService(AsyncImportService::Config {
+    .thread_pool_size = 2U,
+  });
+  [[maybe_unused]] auto stop_service
+    = oxygen::Finally([&service]() { service.Stop(); });
+
+  const auto main_report = SubmitAndWait(service,
+    MakeBufferContainerRequest(
+      buffer_manifest_path, cooked_root, buffer_descriptor));
+  ASSERT_TRUE(main_report.success);
+  const auto context_report = SubmitAndWait(service,
+    MakeBufferContainerRequest(
+      buffer_manifest_path, context_cooked_root, buffer_descriptor));
+  ASSERT_TRUE(context_report.success);
+
+  const auto geometry_report = SubmitAndWait(service,
+    MakeGeometryRequest(geometry_path, cooked_root, geometry_descriptor,
+      { context_cooked_root }));
+  EXPECT_FALSE(geometry_report.success);
+  EXPECT_TRUE(HasDiagnosticCode(
+    geometry_report.diagnostics, "geometry.buffer.sidecar_ambiguous"));
+}
+
+NOLINT_TEST(GeometryDescriptorImportJobTest,
+  BufferReferenceOutsideMountedRootsFailsWithHelpfulDiagnostic)
+{
+  const auto root = MakeTempCookedRoot("unmounted_buffer_reference");
+  const auto source_dir = root / "Sources";
+  const auto cooked_root = root / ".cooked";
+  const auto descriptor_path = source_dir / "unmounted.geometry.json";
+
+  std::filesystem::create_directories(cooked_root / "Materials");
+  WriteTextFile(cooked_root / "Materials" / "default.omat", "placeholder");
+
+  const auto descriptor_doc = MakeStandardDescriptorDoc("UnmountedBuffers",
+    "/.cooked/Materials/default.omat",
+    "/foreign/Resources/Buffers/foreign_vertices.obuf",
+    "/foreign/Resources/Buffers/foreign_indices.obuf", "lod0", std::nullopt);
+  WriteTextFile(descriptor_path, descriptor_doc.dump(2));
+
+  auto service = AsyncImportService(AsyncImportService::Config {
+    .thread_pool_size = 2U,
+  });
+  [[maybe_unused]] auto stop_service
+    = oxygen::Finally([&service]() { service.Stop(); });
+
+  const auto report = SubmitAndWait(
+    service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
+  EXPECT_FALSE(report.success);
+  EXPECT_TRUE(HasDiagnosticCode(
+    report.diagnostics, "geometry.buffer.virtual_path_unmounted"));
+}
+
+NOLINT_TEST(GeometryDescriptorImportJobTest,
   UnknownBufferViewReferenceFailsWithHelpfulDiagnostic)
 {
   const auto root = MakeTempCookedRoot("missing_buffer_view_reference");
@@ -1030,6 +1234,127 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   const auto descriptor_bytes
     = ReadBinaryFile(cooked_root / std::filesystem::path(*geometry_relpath));
   EXPECT_TRUE(CanParseGeometryDescriptor(descriptor_bytes));
+}
+
+NOLINT_TEST(GeometryDescriptorImportJobTest,
+  EquivalentLocalBuffersAcrossGeometryJobsWithDifferentVirtualPathsFail)
+{
+  const auto root = MakeTempCookedRoot("cross_job_dedup_virtual_path_conflict");
+  const auto source_dir = root / "Sources";
+  const auto cooked_root = root / ".cooked";
+  const auto descriptor_a_path = source_dir / "shared_a.geometry.json";
+  const auto descriptor_b_path = source_dir / "shared_b.geometry.json";
+  const auto vb_source = source_dir / "shared.vertices.buffer.bin";
+  const auto ib_source = source_dir / "shared.indices.buffer.bin";
+
+  std::filesystem::create_directories(cooked_root / "Materials");
+  WriteTextFile(cooked_root / "Materials" / "default.omat", "placeholder");
+
+  const auto vb_bytes = std::array<std::byte, 96> {};
+  const auto ib_bytes = std::array<std::byte, 12> {
+    std::byte { 0x00 },
+    std::byte { 0x00 },
+    std::byte { 0x00 },
+    std::byte { 0x00 },
+    std::byte { 0x01 },
+    std::byte { 0x00 },
+    std::byte { 0x00 },
+    std::byte { 0x00 },
+    std::byte { 0x02 },
+    std::byte { 0x00 },
+    std::byte { 0x00 },
+    std::byte { 0x00 },
+  };
+  WriteBytesFile(vb_source, std::span<const std::byte>(vb_bytes));
+  WriteBytesFile(ib_source, std::span<const std::byte>(ib_bytes));
+
+  const auto descriptor_a
+    = MakeStandardDescriptorDoc("SharedA", "/.cooked/Materials/default.omat",
+      "/.cooked/Resources/Buffers/shared_vertices.obuf",
+      "/.cooked/Resources/Buffers/shared_indices.obuf", "lod0",
+      json::array({
+        json {
+          { "uri", vb_source.generic_string() },
+          { "virtual_path", "/.cooked/Resources/Buffers/shared_vertices.obuf" },
+          { "usage_flags", 1U },
+          { "element_stride", 32U },
+          { "views",
+            json::array({
+              json {
+                { "name", "lod0" },
+                { "element_offset", 0U },
+                { "element_count", 3U },
+              },
+            }) },
+        },
+        json {
+          { "uri", ib_source.generic_string() },
+          { "virtual_path", "/.cooked/Resources/Buffers/shared_indices.obuf" },
+          { "usage_flags", 2U },
+          { "element_stride", 4U },
+          { "views",
+            json::array({
+              json {
+                { "name", "lod0" },
+                { "element_offset", 0U },
+                { "element_count", 3U },
+              },
+            }) },
+        },
+      }));
+  WriteTextFile(descriptor_a_path, descriptor_a.dump(2));
+
+  const auto descriptor_b
+    = MakeStandardDescriptorDoc("SharedB", "/.cooked/Materials/default.omat",
+      "/.cooked/Resources/Buffers/alt_vertices.obuf",
+      "/.cooked/Resources/Buffers/alt_indices.obuf", "lod0",
+      json::array({
+        json {
+          { "uri", vb_source.generic_string() },
+          { "virtual_path", "/.cooked/Resources/Buffers/alt_vertices.obuf" },
+          { "usage_flags", 1U },
+          { "element_stride", 32U },
+          { "views",
+            json::array({
+              json {
+                { "name", "lod0" },
+                { "element_offset", 0U },
+                { "element_count", 3U },
+              },
+            }) },
+        },
+        json {
+          { "uri", ib_source.generic_string() },
+          { "virtual_path", "/.cooked/Resources/Buffers/alt_indices.obuf" },
+          { "usage_flags", 2U },
+          { "element_stride", 4U },
+          { "views",
+            json::array({
+              json {
+                { "name", "lod0" },
+                { "element_offset", 0U },
+                { "element_count", 3U },
+              },
+            }) },
+        },
+      }));
+  WriteTextFile(descriptor_b_path, descriptor_b.dump(2));
+
+  auto service = AsyncImportService(AsyncImportService::Config {
+    .thread_pool_size = 2U,
+  });
+  [[maybe_unused]] auto stop_service
+    = oxygen::Finally([&service]() { service.Stop(); });
+
+  const auto report_a = SubmitAndWait(
+    service, MakeGeometryRequest(descriptor_a_path, cooked_root, descriptor_a));
+  ASSERT_TRUE(report_a.success);
+
+  const auto report_b = SubmitAndWait(
+    service, MakeGeometryRequest(descriptor_b_path, cooked_root, descriptor_b));
+  EXPECT_FALSE(report_b.success);
+  EXPECT_TRUE(HasDiagnosticCode(
+    report_b.diagnostics, "buffer.container.dedup_virtual_path_conflict"));
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobTest,
