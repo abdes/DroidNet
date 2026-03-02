@@ -424,7 +424,6 @@ Current status:
 6. P1 is `done`; P6 is `in_progress`; P7-P10 are `pending`.
 7. Computed progress snapshot: `76.0%` (P6 completion factor `0.75` pending external run/CI confirmation).
 8. P3/P5 geometry execution plan remains the baseline reference in Section 6, with both P3 and P5 marked closed.
-
 ## 11. Evidence Log
 
 Use this section as append-only factual evidence.

@@ -48,7 +48,7 @@ Status values:
 | --- | --- | --- | --- | --- |
 | P0 | done | none | Scope correction and plan reset | sidecar-only plan replaced by comprehensive plan/spec |
 | P11 | done | P0 | Contract finalization vs canonical physics headers | design/schema/implementation contracts are aligned and validation evidence is captured |
-| P1 | in_progress | P11 | Physics layout foundation | materials/shapes/resources under `Physics/...`; sidecars co-located with target scenes |
+| P1 | done | P11 | Physics layout foundation | materials/shapes/resources under `Physics/...`; sidecars co-located with target scenes |
 | P2 | pending | P1 | Physics resource descriptor domain | `physics-resource-descriptor` end-to-end with `.opres` |
 | P3 | pending | P1 | Physics material descriptor domain | `physics-material-descriptor` end-to-end (`.opmat`) |
 | P4 | pending | P2, P3 | Collision shape descriptor domain | `collision-shape-descriptor` end-to-end (`.ocshape`) |
@@ -297,7 +297,7 @@ Acceptance:
      - canonical header correction: `src/Oxygen/Data/PakFormat_physics.h` (`PhysicsComponentTableDesc` comment corrected to 20 bytes to match `static_assert(sizeof(... ) == 20)`).
    - closure evidence:
      - user-reported external validation: `all green`.
-3. P1 `in_progress`:
+3. P1 `done`:
    - implementation evidence:
      - `src/Oxygen/Cooker/Loose/LooseCookedLayout.h` now models dedicated physics layout roots/subdirs:
        - scene sidecars emitted beside target scenes (`<scene_dir>/<scene_stem>.opscene`)
@@ -306,8 +306,17 @@ Acceptance:
      - `DescriptorDirFor(AssetType::kPhysicsScene)` follows target-scene co-location rules.
      - `PhysicsTableRelPath()` and `PhysicsDataRelPath()` now resolve under `Physics/Resources`.
      - `src/Oxygen/Cooker/Test/Loose/LooseCookedLayout_test.cpp` expectations updated to canonical `Physics/...` paths.
-   - remaining:
-     - user-run validation required to close P1 (`no build/test execution by agent` rule).
+   - closure evidence:
+     - physics/scene extension usage in import pipelines and scene-descriptor
+       dependency inference now resolves through
+       `LooseCookedLayout` extension constants (no local hardcoded extension
+       strings in those paths).
+     - `LooseCookedLayout` now defines explicit physics descriptor extension
+       constants and relpath/virtual-path helpers for:
+       `*.opmat`, `*.ocshape`, `*.opres`.
+     - `src/Oxygen/Cooker/Test/Loose/LooseCookedLayout_test.cpp` expanded with
+       assertions for the new physics descriptor file-name/relpath/virtual-path
+       helpers.
 4. P2 `pending`:
    - gap evidence:
      - no `physics-resource-descriptor` schema exists under `src/Oxygen/Cooker/Import/Schemas`.
@@ -381,7 +390,7 @@ Build/test execution in this pass:
    - previous agent-side test execution claims were removed.
    - P11 is closed using user-run validation evidence only.
 
-## P1 (in progress)
+## P1 (done)
 
 1. Layout foundation remediation applied:
    - `src/Oxygen/Cooker/Loose/LooseCookedLayout.h`
@@ -399,6 +408,15 @@ Build/test execution in this pass:
 2. Test expectation updates:
    - `src/Oxygen/Cooker/Test/Loose/LooseCookedLayout_test.cpp` updated to
      canonical `Physics/...` path assertions.
-3. Remaining closure requirement:
-   - user-run validation required to mark P1 `done` (`no build/test execution
-     by agent` rule).
+3. Additional hardening applied for extension/path consistency:
+   - `src/Oxygen/Cooker/Loose/LooseCookedLayout.h`
+     now provides explicit helpers for:
+     - `PhysicsMaterialDescriptorFileName/RelPath/VirtualPath`
+     - `CollisionShapeDescriptorFileName/RelPath/VirtualPath`
+     - `PhysicsResourceDescriptorFileName/RelPath/VirtualPath`
+   - `src/Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.cpp`
+     now uses layout extension constants when pairing `.oscene` -> `.opscene`.
+   - `src/Oxygen/Cooker/Import/Internal/Jobs/SceneDescriptorImportJob.cpp`
+     now uses layout extension constants for descriptor-type inference.
+   - `src/Oxygen/Cooker/Test/Loose/LooseCookedLayout_test.cpp`
+     now covers these new helpers.

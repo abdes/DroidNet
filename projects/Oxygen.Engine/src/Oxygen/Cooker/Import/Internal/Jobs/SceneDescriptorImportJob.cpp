@@ -33,6 +33,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
 
@@ -222,25 +223,25 @@ namespace {
   {
     const auto ext
       = ToLowerAscii(std::filesystem::path(relpath).extension().string());
-    if (ext == ".ogeo") {
+    if (ext == LooseCookedLayout::kGeometryDescriptorExtension) {
       return data::AssetType::kGeometry;
     }
-    if (ext == ".omat") {
+    if (ext == LooseCookedLayout::kMaterialDescriptorExtension) {
       return data::AssetType::kMaterial;
     }
-    if (ext == ".oscript") {
+    if (ext == LooseCookedLayout::kScriptDescriptorExtension) {
       return data::AssetType::kScript;
     }
-    if (ext == ".oiact") {
+    if (ext == LooseCookedLayout::kInputActionDescriptorExtension) {
       return data::AssetType::kInputAction;
     }
-    if (ext == ".oimap") {
+    if (ext == LooseCookedLayout::kInputMappingContextDescriptorExtension) {
       return data::AssetType::kInputMappingContext;
     }
-    if (ext == ".opscene") {
+    if (ext == LooseCookedLayout::kPhysicsSceneDescriptorExtension) {
       return data::AssetType::kPhysicsScene;
     }
-    if (ext == ".oscene") {
+    if (ext == LooseCookedLayout::kSceneDescriptorExtension) {
       return data::AssetType::kScene;
     }
     return std::nullopt;
