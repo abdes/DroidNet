@@ -4,6 +4,10 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {
+        "$schema": {
+            "type": "string",
+            "description": "Optional self-reference to this schema file."
+        },
         "version": {
             "type": "integer",
             "const": 1

@@ -1,4 +1,5 @@
 {
+  "$schema": "../../../src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json",
   "version": 1,
   "output": "F:/projects/DroidNet/projects/Oxygen.Engine/Examples/TexturedCube/.cooked",
   "defaults": {
