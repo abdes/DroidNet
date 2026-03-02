@@ -248,7 +248,7 @@ OXGN_COOK_API auto to_string(ScriptingImportKind value) -> std::string;
  Release builds always hash content, even if callers request disabling it.
 
  * Debug builds honor the caller-provided flag for faster iteration.
-*/
+ */
 [[nodiscard]] constexpr auto EffectiveContentHashingEnabled(
   const bool requested) noexcept -> bool
 {
@@ -380,9 +380,27 @@ struct ImportOptions final {
 
   std::optional<InputTuning> input {};
 
+  //! Material descriptor import payload carried in shared request options.
+  /*!
+   Presence signals that the request must be routed to the
+   * material-descriptor
+   import job path.
+
+   The payload stores the
+   * schema-validated descriptor document normalized as a
+   JSON object
+   * string.
+  */
+  struct MaterialDescriptorTuning final {
+    std::string normalized_descriptor_json;
+  };
+
+  std::optional<MaterialDescriptorTuning> material_descriptor {};
+
   //! Scripting import tuning carried through the shared ImportRequest model.
   /*!
    This is the authoritative runtime scripting contract consumed by
+
    import
    pipelines and jobs.
  `ScriptAssetImportSettings` and

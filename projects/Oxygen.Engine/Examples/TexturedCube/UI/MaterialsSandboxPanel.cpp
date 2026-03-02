@@ -4,9 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <string>
 
+#include <fmt/format.h>
 #include <imgui.h>
 
 #include <Oxygen/Base/NoStd.h>
@@ -18,18 +20,6 @@
 #include "TexturedCube/UI/MaterialsSandboxVm.h"
 
 namespace {
-
-void DrawHelpMarker(const char* desc)
-{
-  ImGui::TextDisabled("(?)");
-  if (ImGui::IsItemHovered()) {
-    ImGui::BeginTooltip();
-    ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0F);
-    ImGui::TextUnformatted(desc);
-    ImGui::PopTextWrapPos();
-    ImGui::EndTooltip();
-  }
-}
 
 template <typename EnumT, std::size_t N>
 auto DrawEnumCombo(
@@ -132,6 +122,15 @@ auto MaterialsSandboxPanel::DrawContents() -> void
     ImGui::EndDisabled();
   }
 
+  const bool use_custom_material = vm_->IsUseCustomMaterial();
+  if (use_custom_material) {
+    ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+    if (ImGui::CollapsingHeader(
+          "Material Browser", ImGuiTreeNodeFlags_DefaultOpen)) {
+      DrawMaterialBrowserSection();
+    }
+  }
+
   // Show/Collapse Texture Browser depending on modes. Solid Color collapses
   // and disables the browser; Custom auto-expands and enables it.
   const auto& sphere_slot = vm_->GetSphereTextureState();
@@ -144,7 +143,7 @@ auto MaterialsSandboxPanel::DrawContents() -> void
   // Only draw the Texture Browser when a slot is in Custom mode. Do not
   // render a disabled/collapsed header in other modes (prevents interactivity
   // and clutter).
-  if (any_custom) {
+  if (any_custom && !use_custom_material) {
     ImGui::SetNextItemOpen(true, ImGuiCond_Always);
     if (ImGui::CollapsingHeader(
           "Texture Browser", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -284,13 +283,16 @@ auto MaterialsSandboxPanel::DrawMaterialsSection() -> void
   auto& uv = vm_->GetUvState();
 
   // Texture mode controls (global - applies to both sphere and cube)
-  // 0 = Fallback, 1 = Forced Error, 2 = Solid Color, 3 = Custom
+  // 0 = Fallback, 1 = Forced Error, 2 = Solid Color, 3 = Custom Texture,
+  // 4 = Grid Material, 5 = Custom Material
   int current_mode = 0;
   const auto& sphere_slot = vm_->GetSphereTextureState();
   const auto& cube_slot = vm_->GetCubeTextureState();
 
-  // Solid color mode takes visual priority
-  if (surface.use_constant_base_color) {
+  if (vm_->IsUseCustomMaterial()) {
+    current_mode = 5;
+  } else if (surface.use_constant_base_color) {
+    // Solid color mode takes visual priority for texture-driven shading.
     current_mode = 2;
   } else if (sphere_slot.mode == cube_slot.mode) {
     switch (sphere_slot.mode) {
@@ -316,6 +318,7 @@ auto MaterialsSandboxPanel::DrawMaterialsSection() -> void
   auto apply_mode = [this](int mode) {
     switch (mode) {
     case 0: // Fallback
+      vm_->SetUseCustomMaterial(false);
       vm_->GetSphereTextureState().mode
         = oxygen::examples::textured_cube::TextureIndexMode::kFallback;
       vm_->GetCubeTextureState().mode
@@ -323,6 +326,7 @@ auto MaterialsSandboxPanel::DrawMaterialsSection() -> void
       vm_->GetSurfaceState().use_constant_base_color = false;
       break;
     case 1: // Forced Error
+      vm_->SetUseCustomMaterial(false);
       vm_->GetSphereTextureState().mode
         = oxygen::examples::textured_cube::TextureIndexMode::kForcedError;
       vm_->GetCubeTextureState().mode
@@ -330,6 +334,7 @@ auto MaterialsSandboxPanel::DrawMaterialsSection() -> void
       vm_->GetSurfaceState().use_constant_base_color = false;
       break;
     case 2: // Solid Color
+      vm_->SetUseCustomMaterial(false);
       vm_->GetSurfaceState().use_constant_base_color = true;
       // Keep resource indices but ensure textures are ignored by using
       // fallback mode for sampling
@@ -339,6 +344,7 @@ auto MaterialsSandboxPanel::DrawMaterialsSection() -> void
         = oxygen::examples::textured_cube::TextureIndexMode::kFallback;
       break;
     case 3: // Custom
+      vm_->SetUseCustomMaterial(false);
       vm_->GetSphereTextureState().mode
         = oxygen::examples::textured_cube::TextureIndexMode::kCustom;
       vm_->GetCubeTextureState().mode
@@ -346,11 +352,15 @@ auto MaterialsSandboxPanel::DrawMaterialsSection() -> void
       vm_->GetSurfaceState().use_constant_base_color = false;
       break;
     case 4: // Grid Material
+      vm_->SetUseCustomMaterial(false);
       vm_->GetSphereTextureState().mode
         = oxygen::examples::textured_cube::TextureIndexMode::kProceduralGrid;
       vm_->GetCubeTextureState().mode
         = oxygen::examples::textured_cube::TextureIndexMode::kProceduralGrid;
       vm_->GetSurfaceState().use_constant_base_color = false;
+      break;
+    case 5: // Custom Material
+      vm_->SetUseCustomMaterial(true);
       break;
     default:
       break;
@@ -374,6 +384,16 @@ auto MaterialsSandboxPanel::DrawMaterialsSection() -> void
   if (ImGui::RadioButton("Grid Material", &current_mode, 4)) {
     apply_mode(4);
   }
+  if (ImGui::RadioButton("Custom Material", &current_mode, 5)) {
+    apply_mode(5);
+  }
+
+  if (current_mode == 5) {
+    return;
+  }
+
+  ImGui::Separator();
+  ImGui::Spacing();
 
   // Solid Color exposes the color picker
   if (surface.use_constant_base_color) {
@@ -457,7 +477,9 @@ auto MaterialsSandboxPanel::DrawBrowserSection() -> void
 
   ImGui::BeginDisabled(!is_idle);
 
-  ImGui::BeginChild("CookedList", ImVec2(0, 300), true);
+  const float texture_list_height
+    = std::max(160.0F, ImGui::GetContentRegionAvail().y);
+  ImGui::BeginChild("CookedList", ImVec2(0, texture_list_height), true);
   for (const auto& entry : cooked) {
     ImGui::PushID((int)entry.index);
 
@@ -527,6 +549,46 @@ auto MaterialsSandboxPanel::DrawBrowserSection() -> void
   }
   ImGui::EndChild();
   ImGui::EndDisabled();
+}
+
+auto MaterialsSandboxPanel::DrawMaterialBrowserSection() -> void
+{
+  if (ImGui::Button(ICON_FA_ARROW_ROTATE_RIGHT " Refresh Materials")) {
+    vm_->RequestRefresh();
+  }
+
+  ImGui::SameLine();
+  if (ImGui::Button("Clear Selection")) {
+    vm_->ClearSelectedCustomMaterial();
+  }
+
+  const auto selected_key = vm_->GetSelectedCustomMaterialKey();
+  const auto& entries = vm_->GetCookedMaterialEntries();
+
+  const float material_list_height
+    = std::max(160.0F, ImGui::GetContentRegionAvail().y);
+  ImGui::BeginChild(
+    "CookedMaterialList", ImVec2(0, material_list_height), true);
+  if (entries.empty()) {
+    ImGui::TextDisabled("No cooked materials found in current cooked root.");
+  }
+
+  for (std::size_t i = 0; i < entries.size(); ++i) {
+    const auto& entry = entries[i];
+    ImGui::PushID(static_cast<int>(i));
+
+    const bool is_selected
+      = selected_key.has_value() && selected_key.value() == entry.key;
+    const std::string label = entry.virtual_path.empty()
+      ? fmt::format("material:{} ({})", i, entry.descriptor_relpath)
+      : entry.virtual_path;
+    if (ImGui::Selectable(label.c_str(), is_selected)) {
+      vm_->SelectCustomMaterialByEntryIndex(i);
+    }
+
+    ImGui::PopID();
+  }
+  ImGui::EndChild();
 }
 
 } // namespace oxygen::examples::textured_cube::ui

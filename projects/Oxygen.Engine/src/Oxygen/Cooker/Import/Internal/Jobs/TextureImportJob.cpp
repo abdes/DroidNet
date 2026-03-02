@@ -87,6 +87,26 @@ auto IsColorIntent(const TextureIntent intent) -> bool
   return normalized.generic_string();
 }
 
+[[nodiscard]] auto BuildTextureDescriptorNamingIdentity(
+  const oxygen::content::import::ImportRequest& request)
+  -> std::pair<std::string, std::string>
+{
+  if (request.job_name.has_value() && !request.job_name->empty()) {
+    const auto& job_name = *request.job_name;
+    return { job_name, job_name };
+  }
+
+  auto stable_id = NormalizeTextureId(request.source_path);
+  auto name_hint = request.source_path.stem().string();
+  if (name_hint.empty()) {
+    name_hint = stable_id;
+  }
+  if (stable_id.empty()) {
+    stable_id = name_hint;
+  }
+  return { std::move(name_hint), std::move(stable_id) };
+}
+
 [[nodiscard]] auto BuildPreflightDesc(
   const ImportOptions::TextureTuning& tuning, const bool is_hdr_input,
   const bool is_cubemap) -> TextureImportDesc
@@ -298,8 +318,8 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
     }
     auto fallback_descriptor_emit_failed = false;
     try {
-      const auto stable_id = NormalizeTextureId(Request().source_path);
-      const auto name_hint = Request().source_path.stem().string();
+      const auto [name_hint, stable_id]
+        = BuildTextureDescriptorNamingIdentity(Request());
       [[maybe_unused]] const auto relpath
         = session.ResourceDescriptorEmitter().EmitTexture(
           name_hint.empty() ? stable_id : name_hint,
@@ -815,8 +835,8 @@ auto TextureImportJob::EmitTexture(
       });
       co_return false;
     }
-    const auto stable_id = NormalizeTextureId(Request().source_path);
-    const auto name_hint = Request().source_path.stem().string();
+    const auto [name_hint, stable_id]
+      = BuildTextureDescriptorNamingIdentity(Request());
     [[maybe_unused]] const auto relpath
       = session.ResourceDescriptorEmitter().EmitTexture(
         name_hint.empty() ? stable_id : name_hint,

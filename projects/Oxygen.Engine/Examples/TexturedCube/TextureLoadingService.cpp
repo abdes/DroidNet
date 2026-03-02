@@ -390,6 +390,13 @@ auto TextureLoadingService::RefreshCookedTextureEntries(
     }
     normalized_root = normalized_root.lexically_normal();
 
+    // Keep asset loader mount state synchronized with the same cooked root that
+    // feeds the browser table/data inspection so texture/material browsing and
+    // loading operate from one source of truth.
+    if (asset_loader_) {
+      asset_loader_->AddLooseCookedRoot(normalized_root);
+    }
+
     Inspection inspection;
     inspection.LoadFromRoot(normalized_root);
 

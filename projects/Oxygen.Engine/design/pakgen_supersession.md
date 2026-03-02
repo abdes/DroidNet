@@ -54,7 +54,7 @@ Out of scope:
 
 | Fact | Evidence |
 | --- | --- |
-| Manifest parser recognizes current job types only (`texture`, `fbx`, `gltf`, `script`, `script-sidecar`, `physics-sidecar`, `input`) | `src/Oxygen/Cooker/Import/ImportManifest.cpp` |
+| Manifest parser recognizes current job types (`texture`, `texture-descriptor`, `material-descriptor`, `fbx`, `gltf`, `script`, `script-sidecar`, `physics-sidecar`, `input`) | `src/Oxygen/Cooker/Import/ImportManifest.cpp` |
 | ImportTool commands currently mirror those job types | `src/Oxygen/Cooker/Tools/ImportTool/main.cpp` |
 | C++ Pak path exists and is callable | `src/Oxygen/Cooker/Pak/PakBuilder.h`, `src/Oxygen/Cooker/Pak/PakPlanBuilder.h`, `src/Oxygen/Cooker/Pak/PakWriter.h` |
 | PakGen still exists as tool target | `src/Oxygen/Cooker/Tools/PakGen/CMakeLists.txt` |

@@ -8,6 +8,8 @@
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -15,6 +17,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/AssetKey.h>
 
 #include "DemoShell/Services/FileBrowserService.h"
 #include "TexturedCube/SceneSetup.h"
@@ -75,6 +78,14 @@ public:
     std::string name {};
     oxygen::Format format { oxygen::Format::kUnknown };
     oxygen::TextureType texture_type { oxygen::TextureType::kTexture2D };
+  };
+
+  //! One cooked material entry for the browser list.
+  struct CookedMaterialEntry {
+    oxygen::data::AssetKey key {};
+    std::string virtual_path {};
+    std::string descriptor_relpath {};
+    std::uint64_t descriptor_size { 0U };
   };
 
   //! State for per-object texture selection.
@@ -188,6 +199,23 @@ public:
 
   [[nodiscard]] std::pair<glm::vec2, glm::vec2> GetEffectiveUvTransform() const;
 
+  [[nodiscard]] bool IsUseCustomMaterial() const
+  {
+    return use_custom_material_;
+  }
+  void SetUseCustomMaterial(bool enabled);
+
+  [[nodiscard]] const std::vector<CookedMaterialEntry>&
+  GetCookedMaterialEntries() const
+  {
+    return cooked_material_entries_;
+  }
+
+  [[nodiscard]] auto GetSelectedCustomMaterialKey() const
+    -> std::optional<oxygen::data::AssetKey>;
+  void ClearSelectedCustomMaterial();
+  bool SelectCustomMaterialByEntryIndex(std::size_t entry_index);
+
   [[nodiscard]] bool IsCubeRebuildNeeded() const { return cube_needs_rebuild_; }
   void ClearCubeRebuildNeeded() { cube_needs_rebuild_ = false; }
   void SetCubeRebuildNeeded() { cube_needs_rebuild_ = true; }
@@ -199,6 +227,7 @@ private:
   void UpdateImportStatus();
   void HandleRefresh();
   void UpdateCookedEntries();
+  void UpdateCookedMaterialEntries(const std::filesystem::path& cooked_root);
 
   observer_ptr<TextureLoadingService> texture_service_;
   observer_ptr<oxygen::examples::FileBrowserService> file_browser_;
@@ -216,6 +245,9 @@ private:
   UvState uv_state_;
 
   std::vector<CookedTextureEntry> cooked_entries_;
+  std::vector<CookedMaterialEntry> cooked_material_entries_;
+  std::optional<oxygen::data::AssetKey> selected_custom_material_key_ {};
+  bool use_custom_material_ { false };
   bool cube_needs_rebuild_ { false };
   bool refresh_requested_ { false };
 

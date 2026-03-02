@@ -6,12 +6,16 @@
 
 #pragma once
 
+#include <filesystem>
 #include <memory>
+#include <optional>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
@@ -108,6 +112,10 @@ protected:
     std::vector<renderer::CompositionView>& views) -> void override;
 
 private:
+  auto ResolveSelectedCustomMaterial()
+    -> std::shared_ptr<const data::MaterialAsset>;
+  auto RequestCustomMaterialLoad(const data::AssetKey& key) -> void;
+
   // Scene is owned by DemoShell, we keep a value object for safe access
   ActiveScene active_scene_;
   std::unique_ptr<TextureLoadingService> texture_service_;
@@ -126,6 +134,9 @@ private:
   std::filesystem::path cooked_root_;
   std::filesystem::path content_root_;
   oxygen::content::ResourceKey forced_error_key_ { 0U };
+  std::shared_ptr<const data::MaterialAsset> selected_custom_material_;
+  std::optional<data::AssetKey> selected_custom_material_key_ {};
+  std::optional<data::AssetKey> custom_material_load_inflight_key_ {};
 
   // Track last viewport size to inform camera
   platform::window::ExtentT last_viewport_ { 0, 0 };

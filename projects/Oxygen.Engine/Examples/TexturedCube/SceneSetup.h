@@ -77,12 +77,14 @@ public:
 
   //! Update sphere material (geometry is created once; material is overridden).
   auto UpdateSphere(const ObjectTextureState& sphere_texture,
-    const SurfaceParams& surface, content::ResourceKey forced_error_key)
+    const SurfaceParams& surface, content::ResourceKey forced_error_key,
+    std::shared_ptr<const data::MaterialAsset> custom_material = nullptr)
     -> void;
 
   //! Update cube material (geometry is created once; material is overridden).
   auto UpdateCube(const ObjectTextureState& cube_texture,
-    const SurfaceParams& surface, content::ResourceKey forced_error_key)
+    const SurfaceParams& surface, content::ResourceKey forced_error_key,
+    std::shared_ptr<const data::MaterialAsset> custom_material = nullptr)
     -> void;
 
   //! Apply UV transform overrides to the current sample materials.

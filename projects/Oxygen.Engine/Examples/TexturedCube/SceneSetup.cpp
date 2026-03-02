@@ -253,10 +253,25 @@ auto SceneSetup::EnsureNodes() -> void
 }
 
 auto SceneSetup::UpdateSphere(const ObjectTextureState& sphere_texture,
-  const SurfaceParams& surface, oxygen::content::ResourceKey forced_error_key)
-  -> void
+  const SurfaceParams& surface, oxygen::content::ResourceKey forced_error_key,
+  std::shared_ptr<const oxygen::data::MaterialAsset> custom_material) -> void
 {
   EnsureNodes();
+
+  if (custom_material) {
+    if (!sphere_geometry_) {
+      sphere_geometry_ = BuildSphereGeometry(custom_material);
+      if (sphere_geometry_) {
+        sphere_node_.GetRenderable().SetGeometry(sphere_geometry_);
+      }
+    }
+
+    if (!sphere_material_ || sphere_material_.get() != custom_material.get()) {
+      sphere_node_.GetRenderable().SetMaterialOverride(0, 0, custom_material);
+    }
+    sphere_material_ = std::move(custom_material);
+    return;
+  }
 
   const auto sphere_res_index = ResolveBaseColorTextureResourceIndex(
     sphere_texture.mode, sphere_texture.resource_index);
@@ -303,10 +318,25 @@ auto SceneSetup::UpdateSphere(const ObjectTextureState& sphere_texture,
 }
 
 auto SceneSetup::UpdateCube(const ObjectTextureState& cube_texture,
-  const SurfaceParams& surface, oxygen::content::ResourceKey forced_error_key)
-  -> void
+  const SurfaceParams& surface, oxygen::content::ResourceKey forced_error_key,
+  std::shared_ptr<const oxygen::data::MaterialAsset> custom_material) -> void
 {
   EnsureNodes();
+
+  if (custom_material) {
+    if (!cube_geometry_) {
+      cube_geometry_ = BuildCubeGeometry(custom_material);
+      if (cube_geometry_) {
+        cube_node_.GetRenderable().SetGeometry(cube_geometry_);
+      }
+    }
+
+    if (!cube_material_ || cube_material_.get() != custom_material.get()) {
+      cube_node_.GetRenderable().SetMaterialOverride(0, 0, custom_material);
+    }
+    cube_material_ = std::move(custom_material);
+    return;
+  }
 
   const auto cube_res_index = ResolveBaseColorTextureResourceIndex(
     cube_texture.mode, cube_texture.resource_index);

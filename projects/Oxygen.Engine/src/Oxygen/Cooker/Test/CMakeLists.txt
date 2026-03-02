@@ -98,6 +98,20 @@ target_link_libraries(
 )
 
 m_gtest_program(
+  AsyncImportMaterialDescriptor
+  SOURCES
+    "Import/ImportManifest_material_descriptor_test.cpp"
+    "Import/MaterialDescriptorImportRequestBuilder_test.cpp"
+    "Import/MaterialDescriptorJsonSchema_test.cpp"
+)
+target_link_libraries(
+  Oxygen.Cooker.AsyncImportMaterialDescriptor.Tests
+  PRIVATE
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
+)
+
+m_gtest_program(
   AsyncImportScript
   SOURCES
     "Import/ImportManifest_script_sidecar_test.cpp"
@@ -128,23 +142,11 @@ m_gtest_program(
     "Import/BufferEmitter_test.cpp"
 )
 
-m_gtest_program(
-  AsyncImportGeometry
-  SOURCES
-    "Import/GeometryPipeline_test.cpp"
-)
+m_gtest_program(AsyncImportGeometry SOURCES "Import/GeometryPipeline_test.cpp")
 
-m_gtest_program(
-  AsyncImportScene
-  SOURCES
-    "Import/ScenePipeline_test.cpp"
-)
+m_gtest_program(AsyncImportScene SOURCES "Import/ScenePipeline_test.cpp")
 
-m_gtest_program(
-  AsyncImportMaterials
-  SOURCES
-    "Import/MaterialPipeline_test.cpp"
-)
+m_gtest_program(AsyncImportMaterials SOURCES "Import/MaterialPipeline_test.cpp")
 
 m_gtest_program(
   AsyncImportTexture

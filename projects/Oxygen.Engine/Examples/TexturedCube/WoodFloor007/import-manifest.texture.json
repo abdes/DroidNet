@@ -9,23 +9,47 @@
       "mip_filter_space": "linear",
       "bc7_quality": "high",
       "packing_policy": "d3d12"
+    },
+    "material_descriptor": {
+      "content_hashing": true
     }
   },
   "jobs": [
     {
+      "id": "woodfloor007.color",
       "type": "texture-descriptor",
       "source": "woodfloor007_color.texture.json",
       "name": "woodfloor007_color"
     },
     {
+      "id": "woodfloor007.ao",
       "type": "texture-descriptor",
       "source": "woodfloor007_ao.texture.json",
       "name": "woodfloor007_ao"
     },
     {
+      "id": "woodfloor007.roughness",
       "type": "texture-descriptor",
       "source": "woodfloor007_roughness.texture.json",
       "name": "woodfloor007_roughness"
+    },
+    {
+      "id": "woodfloor007.normal",
+      "type": "texture-descriptor",
+      "source": "woodfloor007_normal.texture.json",
+      "name": "woodfloor007_normal"
+    },
+    {
+      "id": "woodfloor007.material",
+      "type": "material-descriptor",
+      "source": "woodfloor007.material.json",
+      "name": "woodfloor007",
+      "depends_on": [
+        "woodfloor007.color",
+        "woodfloor007.ao",
+        "woodfloor007.roughness",
+        "woodfloor007.normal"
+      ]
     }
   ]
 }

@@ -15,6 +15,7 @@
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/InputImportSettings.h>
+#include <Oxygen/Cooker/Import/MaterialDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Import/ScriptImportSettings.h>
@@ -32,6 +33,7 @@ struct ImportManifestJob {
   ScriptingSidecarImportSettings scripting_sidecar;
   PhysicsSidecarImportSettings physics_sidecar;
   InputImportSettings input;
+  MaterialDescriptorImportSettings material_descriptor;
   std::string id;
   std::vector<std::string> depends_on;
 
@@ -46,6 +48,7 @@ struct ImportManifestDefaults {
   ScriptAssetImportSettings script;
   ScriptingSidecarImportSettings scripting_sidecar;
   PhysicsSidecarImportSettings physics_sidecar;
+  MaterialDescriptorImportSettings material_descriptor;
 };
 
 struct ImportManifest {

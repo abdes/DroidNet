@@ -34,6 +34,7 @@ private:
   auto DrawImportSection() -> void;
   auto DrawMaterialsSection() -> void;
   auto DrawBrowserSection() -> void;
+  auto DrawMaterialBrowserSection() -> void;
 
   observer_ptr<MaterialsSandboxVm> vm_;
 };
