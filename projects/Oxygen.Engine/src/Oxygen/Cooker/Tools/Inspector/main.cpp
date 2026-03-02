@@ -938,8 +938,8 @@ auto RunDumpPhysicsAssets(const DumpPhysicsAssetsOptions& opts) -> int
                   << desc->local_position[1] << "," << desc->local_position[2]
                   << ") local_scale=(" << desc->local_scale[0] << ","
                   << desc->local_scale[1] << "," << desc->local_scale[2]
-                  << ") is_sensor=" << desc->is_sensor
-                  << " material_ref=" << desc->material_ref
+                  << ") is_sensor=" << desc->is_sensor << " material_asset_key="
+                  << oxygen::data::to_string(desc->material_asset_key)
                   << " cooked_ref.index="
                   << desc->cooked_shape_ref.resource_index
                   << " cooked_ref.type="

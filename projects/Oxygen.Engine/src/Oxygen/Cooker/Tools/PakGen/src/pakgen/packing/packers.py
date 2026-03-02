@@ -24,6 +24,10 @@ from .constants import (
     FOOTER_SIZE,
     SHADER_REF_DESC_SIZE,
     SCENE_ASSET_VERSION_CURRENT,
+    COLLISION_SHAPE_ASSET_DESC_SIZE,
+    RIGID_BODY_BINDING_RECORD_SIZE,
+    COLLIDER_BINDING_RECORD_SIZE,
+    CHARACTER_BINDING_RECORD_SIZE,
 )
 from .errors import PakError
 from ..utils.io import DataError, read_data_from_spec
@@ -1705,9 +1709,11 @@ def pack_collision_shape_asset_descriptor(
     resource_index: int,
     *,
     header_builder,
+    physics_material_name_to_asset_key: Dict[str, bytes] | None = None,
 ) -> bytes:
-    """Pack CollisionShapeAssetDesc (256 bytes)."""
+    """Pack CollisionShapeAssetDesc."""
     header = header_builder(asset)
+    physics_material_name_to_asset_key = physics_material_name_to_asset_key or {}
     shape_type_raw = asset.get("shape_type", 0)
     if isinstance(shape_type_raw, str):
         shape_type = {
@@ -1736,7 +1742,41 @@ def pack_collision_shape_asset_descriptor(
     is_sensor = 1 if bool(asset.get("is_sensor", False)) else 0
     collision_own_layer = int(asset.get("collision_own_layer", 1)) & 0xFFFFFFFFFFFFFFFF
     collision_target_layers = int(asset.get("collision_target_layers", 0xFFFFFFFFFFFFFFFF)) & 0xFFFFFFFFFFFFFFFF
-    material_ref = int(asset.get("material_ref", asset.get("material_asset_index", 0))) & 0xFFFFFFFF
+    material_asset_key = b"\x00" * 16
+    if "material_asset_key" in asset:
+        material_asset_key = _pack_asset_key_bytes(
+            asset.get("material_asset_key"), "material_asset_key"
+        )
+    else:
+        material_ref = asset.get(
+            "material_asset",
+            asset.get("material_asset_name", asset.get("material_ref")),
+        )
+        if material_ref is not None:
+            if isinstance(material_ref, str):
+                if material_ref in physics_material_name_to_asset_key:
+                    material_asset_key = bytes(
+                        physics_material_name_to_asset_key[material_ref]
+                    )
+                else:
+                    try:
+                        material_asset_key = _pack_asset_key_bytes(
+                            material_ref, "material_ref"
+                        )
+                    except PakError as exc:
+                        raise PakError(
+                            "E_REF",
+                            f"material_ref '{material_ref}' not found in authored assets",
+                        ) from exc
+            elif isinstance(material_ref, (bytes, bytearray)):
+                material_asset_key = _pack_asset_key_bytes(
+                    material_ref, "material_ref"
+                )
+            else:
+                raise PakError(
+                    "E_TYPE",
+                    "material_ref/material_asset must be asset key bytes/hex or authored asset name",
+                )
 
     params = asset.get("shape_params")
     params = params if isinstance(params, dict) else {}
@@ -1809,12 +1849,12 @@ def pack_collision_shape_asset_descriptor(
         + struct.pack("<I", is_sensor)
         + struct.pack("<Q", collision_own_layer)
         + struct.pack("<Q", collision_target_layers)
-        + struct.pack("<I", material_ref)
+        + material_asset_key
         + bytes(shape_params_blob)
         + struct.pack("<IB3x", cooked_index, payload_type & 0xFF)
         + b"\x00" * 8
     )
-    if len(desc) != 256:
+    if len(desc) != COLLISION_SHAPE_ASSET_DESC_SIZE:
         raise PakError("E_SIZE", f"CollisionShapeAssetDesc size mismatch: {len(desc)}")
     return desc
 
@@ -1823,18 +1863,49 @@ def pack_physics_scene_asset_descriptor_and_payload(
     asset: Dict[str, Any],
     *,
     header_builder,
-    shape_name_to_asset_index: Dict[str, int] | None = None,
-    physics_material_name_to_asset_index: Dict[str, int] | None = None,
+    shape_name_to_asset_key: Dict[str, bytes] | None = None,
+    physics_material_name_to_asset_key: Dict[str, bytes] | None = None,
     physics_resource_name_to_index: Dict[str, int] | None = None,
 ) -> tuple[bytes, bytes]:
     """Pack PhysicsSceneAssetDesc (256 bytes) and physics binding payload."""
 
-    shape_name_to_asset_index = shape_name_to_asset_index or {}
-    physics_material_name_to_asset_index = (
-        physics_material_name_to_asset_index or {}
+    shape_name_to_asset_key = shape_name_to_asset_key or {}
+    physics_material_name_to_asset_key = (
+        physics_material_name_to_asset_key or {}
     )
     physics_resource_name_to_index = physics_resource_name_to_index or {}
     no_resource_index = 0
+    no_asset_key = b"\x00" * 16
+
+    def _resolve_asset_key(
+        binding: Dict[str, Any],
+        *,
+        key_fields: Sequence[str],
+        name_fields: Sequence[str],
+        name_to_key: Dict[str, bytes],
+        field_name: str,
+        default_key: bytes,
+    ) -> bytes:
+        for field in key_fields:
+            if field in binding:
+                return _pack_asset_key_bytes(binding.get(field), field)
+        for field in name_fields:
+            value = binding.get(field)
+            if value is None:
+                continue
+            if isinstance(value, str):
+                if value in name_to_key:
+                    return bytes(name_to_key[value])
+                try:
+                    return _pack_asset_key_bytes(value, field)
+                except PakError as exc:
+                    raise PakError(
+                        "E_REF", f"{field_name} '{value}' not found in authored assets"
+                    ) from exc
+            if isinstance(value, (bytes, bytearray)):
+                return _pack_asset_key_bytes(value, field)
+            raise PakError("E_TYPE", f"{field_name} name must be a string")
+        return default_key
 
     def _resolve_index(
         binding: Dict[str, Any],
@@ -1874,38 +1945,43 @@ def pack_physics_scene_asset_descriptor_and_payload(
     for binding in rigid_body_bindings:
         if not isinstance(binding, dict):
             continue
-        shape_index = _resolve_index(
+        shape_key = _resolve_asset_key(
             binding,
-            index_fields=("shape_asset_index", "shape_index"),
+            key_fields=("shape_asset_key",),
             name_fields=("shape_asset", "shape_asset_name", "shape"),
-            name_to_index=shape_name_to_asset_index,
+            name_to_key=shape_name_to_asset_key,
             field_name="rigid_body.shape_asset",
-            default_index=no_resource_index,
+            default_key=no_asset_key,
         )
-        material_index = _resolve_index(
+        material_key = _resolve_asset_key(
             binding,
-            index_fields=("material_asset_index", "material_index"),
+            key_fields=("material_asset_key",),
             name_fields=(
                 "material_asset",
                 "material_asset_name",
                 "material",
             ),
-            name_to_index=physics_material_name_to_asset_index,
+            name_to_key=physics_material_name_to_asset_key,
             field_name="rigid_body.material_asset",
-            default_index=no_resource_index,
+            default_key=no_asset_key,
         )
         rigid_body_records.append(
             pack_rigid_body_binding_record(
                 binding,
-                shape_index,
-                material_index,
+                shape_key,
+                material_key,
                 node_count=target_node_count,
             )
         )
     if rigid_body_records:
         blob = b"".join(rigid_body_records)
         tables.append(
-            (_PHYSICS_BINDING_RIGID_BODY, len(rigid_body_records), 64, blob)
+            (
+                _PHYSICS_BINDING_RIGID_BODY,
+                len(rigid_body_records),
+                RIGID_BODY_BINDING_RECORD_SIZE,
+                blob,
+            )
         )
 
     collider_bindings = asset.get("collider_bindings", []) or []
@@ -1915,37 +1991,44 @@ def pack_physics_scene_asset_descriptor_and_payload(
     for binding in collider_bindings:
         if not isinstance(binding, dict):
             continue
-        shape_index = _resolve_index(
+        shape_key = _resolve_asset_key(
             binding,
-            index_fields=("shape_asset_index", "shape_index"),
+            key_fields=("shape_asset_key",),
             name_fields=("shape_asset", "shape_asset_name", "shape"),
-            name_to_index=shape_name_to_asset_index,
+            name_to_key=shape_name_to_asset_key,
             field_name="collider.shape_asset",
-            default_index=no_resource_index,
+            default_key=no_asset_key,
         )
-        material_index = _resolve_index(
+        material_key = _resolve_asset_key(
             binding,
-            index_fields=("material_asset_index", "material_index"),
+            key_fields=("material_asset_key",),
             name_fields=(
                 "material_asset",
                 "material_asset_name",
                 "material",
             ),
-            name_to_index=physics_material_name_to_asset_index,
+            name_to_key=physics_material_name_to_asset_key,
             field_name="collider.material_asset",
-            default_index=no_resource_index,
+            default_key=no_asset_key,
         )
         collider_records.append(
             pack_collider_binding_record(
                 binding,
-                shape_index,
-                material_index,
+                shape_key,
+                material_key,
                 node_count=target_node_count,
             )
         )
     if collider_records:
         blob = b"".join(collider_records)
-        tables.append((_PHYSICS_BINDING_COLLIDER, len(collider_records), 32, blob))
+        tables.append(
+            (
+                _PHYSICS_BINDING_COLLIDER,
+                len(collider_records),
+                COLLIDER_BINDING_RECORD_SIZE,
+                blob,
+            )
+        )
 
     character_bindings = asset.get("character_bindings", []) or []
     if not isinstance(character_bindings, list):
@@ -1954,25 +2037,30 @@ def pack_physics_scene_asset_descriptor_and_payload(
     for binding in character_bindings:
         if not isinstance(binding, dict):
             continue
-        shape_index = _resolve_index(
+        shape_key = _resolve_asset_key(
             binding,
-            index_fields=("shape_asset_index", "shape_index"),
+            key_fields=("shape_asset_key",),
             name_fields=("shape_asset", "shape_asset_name", "shape"),
-            name_to_index=shape_name_to_asset_index,
+            name_to_key=shape_name_to_asset_key,
             field_name="character.shape_asset",
-            default_index=no_resource_index,
+            default_key=no_asset_key,
         )
         character_records.append(
             pack_character_binding_record(
                 binding,
-                shape_index,
+                shape_key,
                 node_count=target_node_count,
             )
         )
     if character_records:
         blob = b"".join(character_records)
         tables.append(
-            (_PHYSICS_BINDING_CHARACTER, len(character_records), 48, blob)
+            (
+                _PHYSICS_BINDING_CHARACTER,
+                len(character_records),
+                CHARACTER_BINDING_RECORD_SIZE,
+                blob,
+            )
         )
 
     soft_body_bindings = asset.get("soft_body_bindings", []) or []
@@ -2098,12 +2186,12 @@ def pack_physics_scene_asset_descriptor_and_payload(
 
 def pack_rigid_body_binding_record(
     binding: Dict[str, Any],
-    shape_index: int,
-    material_index: int,
+    shape_asset_key: bytes,
+    material_asset_key: bytes,
     *,
     node_count: int,
 ) -> bytes:
-    """Pack RigidBodyBindingRecord (64 bytes)."""
+    """Pack RigidBodyBindingRecord."""
     node_index = int(binding.get("node_index", 0))
     if node_index < 0 or node_index >= node_count:
         raise PakError("E_REF", f"RigidBody node_index out of range: {node_index}")
@@ -2118,9 +2206,13 @@ def pack_rigid_body_binding_record(
     activation = 1 if bool(binding.get("initial_activation", True)) else 0
     is_sensor = 1 if bool(binding.get("is_sensor", False)) else 0
     reserved = b"\x00" * 20
+    shape_key_bytes = _pack_asset_key_bytes(shape_asset_key, "shape_asset_key")
+    material_key_bytes = _pack_asset_key_bytes(
+        material_asset_key, "material_asset_key"
+    )
     desc = (
         struct.pack(
-            "<IBBHIffffIIII",
+            "<IBBHIffffII",
             node_index,
             body_type,
             motion_quality,
@@ -2132,50 +2224,53 @@ def pack_rigid_body_binding_record(
             gravity_factor,
             activation,
             is_sensor,
-            shape_index,
-            material_index,
         )
+        + shape_key_bytes
+        + material_key_bytes
         + reserved
     )
-    if len(desc) != 64:
+    if len(desc) != RIGID_BODY_BINDING_RECORD_SIZE:
         raise PakError("E_SIZE", f"RigidBodyBindingRecord size mismatch: {len(desc)}")
     return desc
 
 
 def pack_collider_binding_record(
     binding: Dict[str, Any],
-    shape_index: int,
-    material_index: int,
+    shape_asset_key: bytes,
+    material_asset_key: bytes,
     *,
     node_count: int,
 ) -> bytes:
-    """Pack ColliderBindingRecord (32 bytes)."""
+    """Pack ColliderBindingRecord."""
     node_index = int(binding.get("node_index", 0))
     if node_index < 0 or node_index >= node_count:
         raise PakError("E_REF", f"Collider node_index out of range: {node_index}")
     layer = int(binding.get("collision_layer", 0))
     mask = int(binding.get("collision_mask", 0xFFFFFFFF))
     reserved = b"\x00" * 14
+    shape_key_bytes = _pack_asset_key_bytes(shape_asset_key, "shape_asset_key")
+    material_key_bytes = _pack_asset_key_bytes(
+        material_asset_key, "material_asset_key"
+    )
     desc = (
-        struct.pack("<IIIIHI", node_index, shape_index, material_index, 0, layer, mask)
+        struct.pack("<I", node_index)
+        + shape_key_bytes
+        + material_key_bytes
+        + struct.pack("<HI", layer, mask)
         + reserved
     )
-    # Re-checking PakFormat.h: node_index(u32), shape_index(u32), material_index(u32), layer(u16), mask(u32)
-    # PakFormat.h: node_index(4), shape_asset_index(4), material_asset_index(4), collision_layer(2), collision_mask(4) = 18 bytes.
-    # + reserved(14) = 32 bytes.
-    desc = struct.pack("<IIIHI", node_index, shape_index, material_index, layer, mask) + reserved
-    if len(desc) != 32:
+    if len(desc) != COLLIDER_BINDING_RECORD_SIZE:
         raise PakError("E_SIZE", f"ColliderBindingRecord size mismatch: {len(desc)}")
     return desc
 
 
 def pack_character_binding_record(
     binding: Dict[str, Any],
-    shape_index: int,
+    shape_asset_key: bytes,
     *,
     node_count: int,
 ) -> bytes:
-    """Pack CharacterBindingRecord (48 bytes)."""
+    """Pack CharacterBindingRecord."""
     node_index = int(binding.get("node_index", 0))
     if node_index < 0 or node_index >= node_count:
         raise PakError("E_REF", f"Character node_index out of range: {node_index}")
@@ -2186,11 +2281,14 @@ def pack_character_binding_record(
     layer = int(binding.get("collision_layer", 0))
     mask = int(binding.get("collision_mask", 0xFFFFFFFF))
     reserved = b"\x00" * 18
+    shape_key_bytes = _pack_asset_key_bytes(shape_asset_key, "shape_asset_key")
     desc = (
-        struct.pack("<IIffffHI", node_index, shape_index, mass, max_slope, step_height, max_strength, layer, mask)
+        struct.pack("<I", node_index)
+        + shape_key_bytes
+        + struct.pack("<ffffHI", mass, max_slope, step_height, max_strength, layer, mask)
         + reserved
     )
-    if len(desc) != 48:
+    if len(desc) != CHARACTER_BINDING_RECORD_SIZE:
         raise PakError("E_SIZE", f"CharacterBindingRecord size mismatch: {len(desc)}")
     return desc
 

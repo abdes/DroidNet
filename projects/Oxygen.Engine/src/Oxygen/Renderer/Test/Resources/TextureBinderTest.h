@@ -238,14 +238,14 @@ public:
   }
   [[nodiscard]] auto ReadCollisionShapeAssetDescForAsset(
     const data::AssetKey& /*context_asset_key*/,
-    data::pak::core::ResourceIndexT /*shape_asset_index*/) const
+    const data::AssetKey& /*shape_asset_key*/) const
     -> std::optional<data::pak::physics::CollisionShapeAssetDesc> override
   {
     return std::nullopt;
   }
   [[nodiscard]] auto ReadPhysicsMaterialAssetDescForAsset(
     const data::AssetKey& /*context_asset_key*/,
-    data::pak::core::ResourceIndexT /*material_asset_index*/) const
+    const data::AssetKey& /*material_asset_key*/) const
     -> std::optional<data::pak::physics::PhysicsMaterialAssetDesc> override
   {
     return std::nullopt;

@@ -841,7 +841,7 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.is_sensor));
   CHECK_RESULT(reader.ReadInto(record.collision_own_layer));
   CHECK_RESULT(reader.ReadInto(record.collision_target_layers));
-  CHECK_RESULT(reader.ReadInto(record.material_ref));
+  CHECK_RESULT(reader.ReadInto(record.material_asset_key));
   CHECK_RESULT(reader.ReadInto(record.shape_params));
   CHECK_RESULT(reader.ReadInto(record.cooked_shape_ref));
   CHECK_RESULT(
@@ -887,8 +887,8 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.gravity_factor));
   CHECK_RESULT(reader.ReadInto(record.initial_activation));
   CHECK_RESULT(reader.ReadInto(record.is_sensor));
-  CHECK_RESULT(reader.ReadInto(record.shape_asset_index));
-  CHECK_RESULT(reader.ReadInto(record.material_asset_index));
+  CHECK_RESULT(reader.ReadInto(record.shape_asset_key));
+  CHECK_RESULT(reader.ReadInto(record.material_asset_key));
   CHECK_RESULT(
     reader.ReadBlobInto(std::as_writable_bytes(std::span { record.reserved })));
   return {};
@@ -899,8 +899,8 @@ inline auto Load(AnyReader& reader,
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.node_index));
-  CHECK_RESULT(reader.ReadInto(record.shape_asset_index));
-  CHECK_RESULT(reader.ReadInto(record.material_asset_index));
+  CHECK_RESULT(reader.ReadInto(record.shape_asset_key));
+  CHECK_RESULT(reader.ReadInto(record.material_asset_key));
   CHECK_RESULT(reader.ReadInto(record.collision_layer));
   CHECK_RESULT(reader.ReadInto(record.collision_mask));
   CHECK_RESULT(
@@ -913,7 +913,7 @@ inline auto Load(AnyReader& reader,
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.node_index));
-  CHECK_RESULT(reader.ReadInto(record.shape_asset_index));
+  CHECK_RESULT(reader.ReadInto(record.shape_asset_key));
   CHECK_RESULT(reader.ReadInto(record.mass));
   CHECK_RESULT(reader.ReadInto(record.max_slope_angle));
   CHECK_RESULT(reader.ReadInto(record.step_height));

@@ -157,14 +157,12 @@ private:
   //! Attach joint bindings between already-hydrated rigid bodies.
   void HydrateJointBindings(physics::PhysicsModule& physics_module,
     std::span<const data::pak::physics::JointBindingRecord> bindings);
-  //! Resolve and decode cooked collision shape descriptor by global asset
-  //! index.
-  auto ResolveCollisionShapeAsset(uint32_t shape_asset_index,
+  //! Resolve and decode cooked collision shape descriptor by asset key.
+  auto ResolveCollisionShapeAsset(const data::AssetKey& shape_asset_key,
     std::string_view binding_kind, uint32_t node_index)
     -> data::pak::physics::CollisionShapeAssetDesc;
-  //! Resolve and decode cooked physics material descriptor by global asset
-  //! index.
-  auto ResolvePhysicsMaterialAsset(uint32_t material_asset_index,
+  //! Resolve and decode cooked physics material descriptor by asset key.
+  auto ResolvePhysicsMaterialAsset(const data::AssetKey& material_asset_key,
     std::string_view binding_kind, uint32_t node_index)
     -> data::pak::physics::PhysicsMaterialAssetDesc;
   //! Convert cooked collision-shape descriptor to runtime physics shape.

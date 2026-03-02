@@ -48,12 +48,7 @@ namespace {
     std::string virtual_path;
   };
 
-  struct IndexedAssetEntry final {
-    uint32_t asset_index = 0;
-    data::AssetType asset_type = data::AssetType::kUnknown;
-  };
-
-  using AssetIndexMap = std::unordered_map<data::AssetKey, IndexedAssetEntry>;
+  using AssetTypeMap = std::unordered_map<data::AssetKey, data::AssetType>;
 
   struct MountedInspectionContext final {
     std::filesystem::path cooked_root;
@@ -264,53 +259,19 @@ namespace {
     return util::MakeDeterministicAssetKey(virtual_path);
   }
 
-  auto BuildProjectedAssetIndexMap(const lc::Inspection& inspection,
+  auto BuildProjectedAssetTypeMap(const lc::Inspection& inspection,
     const std::optional<std::pair<data::AssetKey, data::AssetType>>& pending)
-    -> AssetIndexMap
+    -> AssetTypeMap
   {
-    struct Candidate final {
-      data::AssetKey key {};
-      data::AssetType asset_type = data::AssetType::kUnknown;
-    };
-
-    auto candidates = std::vector<Candidate> {};
+    auto out = AssetTypeMap {};
     const auto assets = inspection.Assets();
-    candidates.reserve(assets.size() + (pending.has_value() ? 1U : 0U));
+    out.reserve(assets.size() + (pending.has_value() ? 1U : 0U));
     for (const auto& asset : assets) {
-      candidates.push_back(Candidate {
-        .key = asset.key,
-        .asset_type = static_cast<data::AssetType>(asset.asset_type),
-      });
+      out.insert_or_assign(
+        asset.key, static_cast<data::AssetType>(asset.asset_type));
     }
-
     if (pending.has_value()) {
-      const auto it
-        = std::ranges::find_if(candidates, [&](const Candidate& candidate) {
-            return candidate.key == pending->first;
-          });
-      if (it == candidates.end()) {
-        candidates.push_back(Candidate {
-          .key = pending->first,
-          .asset_type = pending->second,
-        });
-      } else {
-        it->asset_type = pending->second;
-      }
-    }
-
-    std::ranges::sort(
-      candidates, [](const Candidate& lhs, const Candidate& rhs) {
-        return lhs.key < rhs.key;
-      });
-
-    auto out = AssetIndexMap {};
-    out.reserve(candidates.size());
-    for (size_t i = 0; i < candidates.size(); ++i) {
-      out.insert_or_assign(candidates[i].key,
-        IndexedAssetEntry {
-          .asset_index = static_cast<uint32_t>(i),
-          .asset_type = candidates[i].asset_type,
-        });
+      out.insert_or_assign(pending->first, pending->second);
     }
     return out;
   }
@@ -408,11 +369,11 @@ namespace {
     return false;
   }
 
-  auto ResolvePhysicsMaterialIndex(ImportSession& session,
+  auto ResolvePhysicsMaterialKey(ImportSession& session,
     const ImportRequest& request, content::VirtualPathResolver& resolver,
     const std::vector<MountedInspectionContext>& contexts,
-    const AssetIndexMap& primary_assets, const std::string_view material_ref,
-    data::pak::core::ResourceIndexT& out_material_index) -> bool
+    const AssetTypeMap& primary_assets, const std::string_view material_ref,
+    data::AssetKey& out_material_key) -> bool
   {
     auto resolved_key = std::optional<data::AssetKey> {};
     auto resolve_error = std::optional<std::string> {};
@@ -450,16 +411,14 @@ namespace {
       return false;
     }
 
-    if (primary_it->second.asset_type != data::AssetType::kPhysicsMaterial) {
+    if (primary_it->second != data::AssetType::kPhysicsMaterial) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "physics.shape.material_ref_not_physics_material",
         "Resolved material_ref has unexpected asset type", "material_ref");
       return false;
     }
 
-    out_material_index = data::pak::core::ResourceIndexT {
-      primary_it->second.asset_index,
-    };
+    out_material_key = *resolved_key;
     return true;
   }
 
@@ -758,7 +717,7 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
 
   const auto shape_key = ResolveAssetKey(Request(), target->virtual_path);
-  const auto primary_assets = BuildProjectedAssetIndexMap(*primary_inspection,
+  const auto primary_assets = BuildProjectedAssetTypeMap(*primary_inspection,
     std::pair<data::AssetKey, data::AssetType> {
       shape_key,
       data::AssetType::kCollisionShape,
@@ -816,18 +775,16 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  auto material_index = data::pak::core::ResourceIndexT {
-    data::pak::core::kNoResourceIndex,
-  };
+  auto material_key = data::AssetKey {};
   const auto material_ref
     = descriptor_doc.at("material_ref").get<std::string>();
-  if (!ResolvePhysicsMaterialIndex(session, Request(), resolver, contexts,
-        primary_assets, material_ref, material_index)) {
+  if (!ResolvePhysicsMaterialKey(session, Request(), resolver, contexts,
+        primary_assets, material_ref, material_key)) {
     ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
       "Collision shape material_ref resolution failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
-  descriptor.material_ref = material_index;
+  descriptor.material_asset_key = material_key;
 
   if (const auto payload_type = PayloadTypeForShapeType(shape_type);
     payload_type.has_value()) {

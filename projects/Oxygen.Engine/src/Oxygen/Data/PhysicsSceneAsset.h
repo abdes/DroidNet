@@ -60,7 +60,7 @@ struct PhysicsBindingTypeHash {
   auto rigid_bodies = asset.GetBindings<pak::physics::RigidBodyBindingRecord>();
   for (const auto& rec : rigid_bodies) {
       // rec.node_index -> paired SceneAsset node
-      // rec.body_type, rec.shape_asset_index, etc.
+      // rec.body_type, rec.shape_asset_key, etc.
   }
   ```
 */

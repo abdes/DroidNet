@@ -684,8 +684,8 @@ NOLINT_TEST_F(AssetLoaderSceneTest, LoadAssetSceneWithPhysicsSidecarLoadsV7)
 
       if (!rigid.empty()) {
         EXPECT_EQ(rigid[0].node_index, 1U);
-        EXPECT_EQ(rigid[0].shape_asset_index, 2U);
-        EXPECT_EQ(rigid[0].material_asset_index, 1U);
+        EXPECT_FALSE(rigid[0].shape_asset_key.IsNil());
+        EXPECT_FALSE(rigid[0].material_asset_key.IsNil());
       }
 
       loader.Stop();

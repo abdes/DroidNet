@@ -3958,7 +3958,7 @@ auto AssetLoader::MakePhysicsResourceKeyForAsset(
 
 auto AssetLoader::ReadCollisionShapeAssetDescForAsset(
   const data::AssetKey& context_asset_key,
-  const data::pak::core::ResourceIndexT shape_asset_index) const
+  const data::AssetKey& shape_asset_key) const
   -> std::optional<data::pak::physics::CollisionShapeAssetDesc>
 {
   const internal::PhysicsQueryService::Callbacks callbacks {
@@ -3987,12 +3987,12 @@ auto AssetLoader::ReadCollisionShapeAssetDescForAsset(
       },
   };
   return physics_query_service_->ReadCollisionShapeAssetDescForAsset(
-    context_asset_key, shape_asset_index, callbacks);
+    context_asset_key, shape_asset_key, callbacks);
 }
 
 auto AssetLoader::ReadPhysicsMaterialAssetDescForAsset(
   const data::AssetKey& context_asset_key,
-  const data::pak::core::ResourceIndexT material_asset_index) const
+  const data::AssetKey& material_asset_key) const
   -> std::optional<data::pak::physics::PhysicsMaterialAssetDesc>
 {
   const internal::PhysicsQueryService::Callbacks callbacks {
@@ -4021,7 +4021,7 @@ auto AssetLoader::ReadPhysicsMaterialAssetDescForAsset(
       },
   };
   return physics_query_service_->ReadPhysicsMaterialAssetDescForAsset(
-    context_asset_key, material_asset_index, callbacks);
+    context_asset_key, material_asset_key, callbacks);
 }
 
 auto AssetLoader::FindPhysicsSidecarAssetKeyForScene(
