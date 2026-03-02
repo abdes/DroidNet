@@ -39,6 +39,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -151,48 +152,6 @@ namespace {
     }
     value.append(kPhysicsSuffix);
     return value;
-  }
-
-  auto ValidateNoDotSegments(const std::string_view path) -> bool
-  {
-    size_t pos = 0;
-    while (pos <= path.size()) {
-      const auto next = path.find('/', pos);
-      const auto len
-        = (next == std::string_view::npos) ? (path.size() - pos) : (next - pos);
-      const auto segment = path.substr(pos, len);
-      if (segment == "." || segment == "..") {
-        return false;
-      }
-      if (next == std::string_view::npos) {
-        break;
-      }
-      pos = next + 1;
-    }
-    return true;
-  }
-
-  auto IsCanonicalVirtualPath(const std::string_view virtual_path) -> bool
-  {
-    if (virtual_path.empty()) {
-      return false;
-    }
-    if (virtual_path.front() != '/') {
-      return false;
-    }
-    if (virtual_path.find('\\') != std::string_view::npos) {
-      return false;
-    }
-    if (virtual_path.find("//") != std::string_view::npos) {
-      return false;
-    }
-    if (virtual_path.size() > 1 && virtual_path.back() == '/') {
-      return false;
-    }
-    if (!ValidateNoDotSegments(virtual_path)) {
-      return false;
-    }
-    return true;
   }
 
   auto PatchContentHash(std::vector<std::byte>& bytes, const uint64_t hash)
@@ -1058,7 +1017,8 @@ namespace {
         "Physics sidecar import requires target_scene_virtual_path");
       return false;
     }
-    if (!IsCanonicalVirtualPath(request.physics->target_scene_virtual_path)) {
+    if (!internal::IsCanonicalVirtualPath(
+          request.physics->target_scene_virtual_path)) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "physics.sidecar.target_scene_virtual_path_invalid",
         "Target scene virtual path must be canonical");
