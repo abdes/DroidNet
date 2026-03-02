@@ -159,6 +159,11 @@ private:
     std::span<const data::pak::physics::VehicleBindingRecord> bindings,
     std::span<const data::pak::physics::RigidBodyBindingRecord>
       rigid_body_bindings);
+  //! Attach aggregate bindings and register aggregate mappings.
+  void HydrateAggregateBindings(physics::PhysicsModule& physics_module,
+    std::span<const data::pak::physics::AggregateBindingRecord> bindings,
+    std::span<const data::pak::physics::RigidBodyBindingRecord>
+      rigid_body_bindings);
   //! Attach collider-only bindings as static trigger bodies.
   void HydrateColliderBindings(physics::PhysicsModule& physics_module,
     std::span<const data::pak::physics::ColliderBindingRecord> bindings);
@@ -184,9 +189,6 @@ private:
     data::pak::physics::ShapePayloadType expected_payload_type,
     std::string_view binding_kind, uint32_t node_index) const
     -> physics::CookedShapePayload;
-  //! Enforce explicit failure for sidecar domains not yet hydrated.
-  void ValidateUnsupportedPhysicsDomains(
-    const data::PhysicsSceneAsset& physics_asset) const;
 
   //! Legacy hook for geometry dependency readiness (currently no-op).
   void QueueGeometryDependencies(const data::SceneAsset& asset);
