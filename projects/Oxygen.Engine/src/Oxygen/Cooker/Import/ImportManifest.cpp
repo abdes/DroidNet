@@ -12,6 +12,7 @@
 #include <vector>
 
 #include <Oxygen/Cooker/Import/BufferContainerImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/GeometryDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/InputImportRequestBuilder.h>
@@ -845,6 +846,27 @@ namespace {
       obj, "content_hashing", settings.with_content_hashing, errors);
   }
 
+  auto ApplyCommonCollisionShapeDescriptorOverrides(const json& obj,
+    CollisionShapeDescriptorImportSettings& settings, std::ostream& errors)
+    -> bool
+  {
+    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
+      return false;
+    }
+    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
+      return false;
+    }
+    return true;
+  }
+
+  auto ApplyCollisionShapeDescriptorOverrides(const json& obj,
+    CollisionShapeDescriptorImportSettings& settings, std::ostream& errors)
+    -> bool
+  {
+    return ReadBoolField(
+      obj, "content_hashing", settings.with_content_hashing, errors);
+  }
+
   auto ApplyCommonBufferContainerOverrides(const json& obj,
     BufferContainerImportSettings& settings, std::ostream& errors) -> bool
   {
@@ -989,6 +1011,8 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     manifest.defaults.physics_resource_descriptor.cooked_root
       = manifest_output_root;
     manifest.defaults.physics_material_descriptor.cooked_root
+      = manifest_output_root;
+    manifest.defaults.collision_shape_descriptor.cooked_root
       = manifest_output_root;
     manifest.defaults.geometry_descriptor.cooked_root = manifest_output_root;
     manifest.defaults.scene_descriptor.cooked_root = manifest_output_root;
@@ -1182,6 +1206,23 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
       }
     }
 
+    if (defaults.contains("collision_shape_descriptor")) {
+      const auto& shape_defaults = defaults["collision_shape_descriptor"];
+      if (!shape_defaults.is_object()) {
+        error_stream
+          << "ERROR: defaults.collision_shape_descriptor must be an object\n";
+        return std::nullopt;
+      }
+      if (!ApplyCommonCollisionShapeDescriptorOverrides(shape_defaults,
+            manifest.defaults.collision_shape_descriptor, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyCollisionShapeDescriptorOverrides(shape_defaults,
+            manifest.defaults.collision_shape_descriptor, error_stream)) {
+        return std::nullopt;
+      }
+    }
+
     if (defaults.contains("geometry_descriptor")) {
       const auto& geometry_defaults = defaults["geometry_descriptor"];
       if (!geometry_defaults.is_object()) {
@@ -1258,6 +1299,8 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
       = manifest.defaults.physics_resource_descriptor;
     manifest_job.physics_material_descriptor
       = manifest.defaults.physics_material_descriptor;
+    manifest_job.collision_shape_descriptor
+      = manifest.defaults.collision_shape_descriptor;
     manifest_job.geometry_descriptor = manifest.defaults.geometry_descriptor;
     manifest_job.scene_descriptor = manifest.defaults.scene_descriptor;
     manifest_job.fbx.texture_defaults = manifest.defaults.texture;
@@ -1397,6 +1440,8 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
         = manifest_job.texture.source_path;
       manifest_job.physics_material_descriptor.descriptor_path
         = manifest_job.texture.source_path;
+      manifest_job.collision_shape_descriptor.descriptor_path
+        = manifest_job.texture.source_path;
       manifest_job.geometry_descriptor.descriptor_path
         = manifest_job.texture.source_path;
       manifest_job.scene_descriptor.descriptor_path
@@ -1412,6 +1457,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
       manifest_job.material_descriptor.descriptor_path.clear();
       manifest_job.physics_resource_descriptor.descriptor_path.clear();
       manifest_job.physics_material_descriptor.descriptor_path.clear();
+      manifest_job.collision_shape_descriptor.descriptor_path.clear();
       manifest_job.geometry_descriptor.descriptor_path.clear();
       manifest_job.scene_descriptor.descriptor_path.clear();
     }
@@ -1465,6 +1511,10 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
           job, manifest_job.physics_material_descriptor, error_stream)) {
       return std::nullopt;
     }
+    if (!ApplyCommonCollisionShapeDescriptorOverrides(
+          job, manifest_job.collision_shape_descriptor, error_stream)) {
+      return std::nullopt;
+    }
     if (!ApplyCommonBufferContainerOverrides(
           job, manifest_job.buffer_container, error_stream)) {
       return std::nullopt;
@@ -1510,6 +1560,10 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
     if (!ApplyPhysicsMaterialDescriptorOverrides(
           job, manifest_job.physics_material_descriptor, error_stream)) {
+      return std::nullopt;
+    }
+    if (!ApplyCollisionShapeDescriptorOverrides(
+          job, manifest_job.collision_shape_descriptor, error_stream)) {
       return std::nullopt;
     }
     if (!ApplyBufferContainerOverrides(
@@ -1586,6 +1640,10 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream) const
   if (job_type == "physics-material-descriptor") {
     return AttachOrchestration(internal::BuildPhysicsMaterialDescriptorRequest(
       physics_material_descriptor, error_stream));
+  }
+  if (job_type == "collision-shape-descriptor") {
+    return AttachOrchestration(internal::BuildCollisionShapeDescriptorRequest(
+      collision_shape_descriptor, error_stream));
   }
   if (job_type == "buffer-container") {
     return AttachOrchestration(

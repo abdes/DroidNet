@@ -77,9 +77,20 @@ struct ImportRequest final {
   //! Physics material-descriptor request payload.
   /*!
    Presence indicates this request must be handled by the
+   *
    * physics-material-descriptor domain.
   */
   struct PhysicsMaterialDescriptorPayload final {
+    std::string normalized_descriptor_json;
+  };
+
+  //! Collision shape-descriptor request payload.
+  /*!
+   Presence indicates this request must be handled by the
+   *
+   * collision-shape-descriptor domain.
+  */
+  struct CollisionShapeDescriptorPayload final {
     std::string normalized_descriptor_json;
   };
 
@@ -217,10 +228,21 @@ struct ImportRequest final {
   //! Optional physics material-descriptor request payload.
   /*!
    Presence indicates this request must be handled by the
+   *
    * physics-material-descriptor domain rather than format-based import
-   routing.
+
+   * routing.
   */
   std::optional<PhysicsMaterialDescriptorPayload> physics_material_descriptor;
+
+  //! Optional collision-shape-descriptor request payload.
+  /*!
+   Presence indicates this request must be handled by the
+   *
+   * collision-shape-descriptor domain rather than format-based import routing.
+
+   */
+  std::optional<CollisionShapeDescriptorPayload> collision_shape_descriptor;
 
   //! Optional geometry-descriptor request payload.
   /*!

@@ -231,6 +231,28 @@
                     "if": {
                         "properties": {
                             "type": {
+                                "const": "collision-shape-descriptor"
+                            }
+                        }
+                    },
+                    "then": {
+                        "propertyNames": {
+                            "enum": [
+                                "id",
+                                "depends_on",
+                                "type",
+                                "source",
+                                "output",
+                                "name",
+                                "content_hashing"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "type": {
                                 "const": "geometry-descriptor"
                             }
                         }
@@ -412,6 +434,9 @@
                 },
                 "physics_material_descriptor": {
                     "$ref": "#/definitions/physics_material_descriptor_settings"
+                },
+                "collision_shape_descriptor": {
+                    "$ref": "#/definitions/collision_shape_descriptor_settings"
                 },
                 "geometry_descriptor": {
                     "$ref": "#/definitions/geometry_descriptor_settings"
@@ -785,6 +810,21 @@
             },
             "additionalProperties": false
         },
+        "collision_shape_descriptor_settings": {
+            "type": "object",
+            "properties": {
+                "output": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "content_hashing": {
+                    "type": "boolean"
+                }
+            },
+            "additionalProperties": false
+        },
         "buffer_container_settings": {
             "type": "object",
             "properties": {
@@ -841,6 +881,7 @@
                         "material-descriptor",
                         "physics-resource-descriptor",
                         "physics-material-descriptor",
+                        "collision-shape-descriptor",
                         "geometry-descriptor",
                         "scene-descriptor",
                         "fbx",
