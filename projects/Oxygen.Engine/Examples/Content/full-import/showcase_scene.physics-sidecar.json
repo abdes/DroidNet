@@ -4,8 +4,8 @@
     "rigid_bodies": [
       {
         "node_index": 1,
-        "shape_virtual_path": "/.cooked/Physics/Shapes/floor_box.ocshape",
-        "material_virtual_path": "/.cooked/Physics/Materials/ground.opmat",
+        "shape_ref": "/.cooked/Physics/Shapes/floor_box.ocshape",
+        "material_ref": "/.cooked/Physics/Materials/ground.opmat",
         "body_type": "static",
         "motion_quality": "discrete",
         "collision_layer": 1,
@@ -18,8 +18,8 @@
       },
       {
         "node_index": 3,
-        "shape_virtual_path": "/.cooked/Physics/Shapes/sphere_unit.ocshape",
-        "material_virtual_path": "/.cooked/Physics/Materials/bouncy_ball.opmat",
+        "shape_ref": "/.cooked/Physics/Shapes/sphere_unit.ocshape",
+        "material_ref": "/.cooked/Physics/Materials/bouncy_ball.opmat",
         "body_type": "dynamic",
         "motion_quality": "linear_cast",
         "collision_layer": 2,

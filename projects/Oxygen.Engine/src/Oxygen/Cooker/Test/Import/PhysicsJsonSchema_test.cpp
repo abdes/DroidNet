@@ -125,8 +125,8 @@ NOLINT_TEST(PhysicsJsonSchemaTest, PhysicsSidecarSchemaAcceptsCanonicalDocument)
       "rigid_bodies": [
         {
           "node_index": 0,
-          "shape_virtual_path": "/.cooked/Physics/Shapes/test_shape.ocshape",
-          "material_virtual_path": "/.cooked/Physics/Materials/default.opmat",
+          "shape_ref": "/.cooked/Physics/Shapes/test_shape.ocshape",
+          "material_ref": "/.cooked/Physics/Materials/default.opmat",
           "body_type": "dynamic",
           "motion_quality": "discrete"
         }
@@ -134,15 +134,39 @@ NOLINT_TEST(PhysicsJsonSchemaTest, PhysicsSidecarSchemaAcceptsCanonicalDocument)
       "colliders": [
         {
           "node_index": 1,
-          "shape_virtual_path": "/.cooked/Physics/Shapes/test_shape.ocshape",
-          "material_virtual_path": "/.cooked/Physics/Materials/default.opmat"
+          "shape_ref": "/.cooked/Physics/Shapes/test_shape.ocshape",
+          "material_ref": "/.cooked/Physics/Materials/default.opmat"
+        }
+      ],
+      "characters": [
+        {
+          "node_index": 2,
+          "shape_ref": "/.cooked/Physics/Shapes/test_shape.ocshape"
+        }
+      ],
+      "soft_bodies": [
+        {
+          "node_index": 3,
+          "cluster_count": 8
         }
       ],
       "joints": [
         {
           "node_index_a": 0,
           "node_index_b": 1,
-          "constraint_resource_index": 5
+          "constraint_ref": "/.cooked/Physics/Resources/joint_5.opres"
+        }
+      ],
+      "vehicles": [
+        {
+          "node_index": 4,
+          "constraint_ref": "/.cooked/Physics/Resources/vehicle_chassis.opres"
+        }
+      ],
+      "aggregates": [
+        {
+          "node_index": 5,
+          "max_bodies": 32
         }
       ]
     }
@@ -166,8 +190,8 @@ NOLINT_TEST(PhysicsJsonSchemaTest, PhysicsSidecarSchemaRejectsUnknownFields)
       "rigid_bodies": [
         {
           "node_index": 0,
-          "shape_virtual_path": "/.cooked/Physics/Shapes/test_shape.ocshape",
-          "material_virtual_path": "/.cooked/Physics/Materials/default.opmat",
+          "shape_ref": "/.cooked/Physics/Shapes/test_shape.ocshape",
+          "material_ref": "/.cooked/Physics/Materials/default.opmat",
           "unknown_field": true
         }
       ]
@@ -194,12 +218,12 @@ NOLINT_TEST(
         {
           "node_index_a": 0,
           "node_index_b": null,
-          "constraint_resource_index": 1
+          "constraint_ref": "/.cooked/Physics/Resources/joint_world_a.opres"
         },
         {
           "node_index_a": 2,
           "node_index_b": "world",
-          "constraint_resource_index": 3
+          "constraint_ref": "/.cooked/Physics/Resources/joint_world_b.opres"
         }
       ]
     }
@@ -224,7 +248,39 @@ NOLINT_TEST(PhysicsJsonSchemaTest,
       "rigid_bodies": [
         {
           "node_index": 0,
+          "material_ref": "/.cooked/Physics/Materials/default.opmat"
+        }
+      ]
+    }
+  })");
+
+  auto errors = std::string {};
+  EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
+}
+
+NOLINT_TEST(PhysicsJsonSchemaTest, PhysicsSidecarSchemaRejectsLegacyFieldNames)
+{
+  const auto repo_root = FindRepoRoot();
+  ASSERT_FALSE(repo_root.empty());
+
+  const auto schema
+    = LoadJsonFile(SchemaFile(repo_root, "oxygen.physics-sidecar.schema.json"));
+  ASSERT_TRUE(schema.has_value());
+
+  const auto doc = json::parse(R"({
+    "bindings": {
+      "rigid_bodies": [
+        {
+          "node_index": 0,
+          "shape_virtual_path": "/.cooked/Physics/Shapes/test_shape.ocshape",
           "material_virtual_path": "/.cooked/Physics/Materials/default.opmat"
+        }
+      ],
+      "joints": [
+        {
+          "node_index_a": 0,
+          "node_index_b": 1,
+          "constraint_resource_index": 1
         }
       ]
     }

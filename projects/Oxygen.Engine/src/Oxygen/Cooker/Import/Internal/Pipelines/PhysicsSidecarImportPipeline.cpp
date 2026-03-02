@@ -12,6 +12,7 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <optional>
 #include <span>
@@ -38,6 +39,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/PhysicsResourceDescriptorSidecar.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
@@ -156,6 +158,12 @@ namespace {
     return value;
   }
 
+  [[nodiscard]] auto NormalizeRelPath(std::string relpath) -> std::string
+  {
+    std::replace(relpath.begin(), relpath.end(), '\\', '/');
+    return relpath;
+  }
+
   auto PatchContentHash(std::vector<std::byte>& bytes, const uint64_t hash)
     -> void
   {
@@ -169,19 +177,29 @@ namespace {
 
   struct RigidBodyBindingSource final {
     phys::RigidBodyBindingRecord record {};
-    std::string shape_virtual_path;
-    std::string material_virtual_path;
+    std::string shape_ref;
+    std::string material_ref;
   };
 
   struct ColliderBindingSource final {
     phys::ColliderBindingRecord record {};
-    std::string shape_virtual_path;
-    std::string material_virtual_path;
+    std::string shape_ref;
+    std::string material_ref;
   };
 
   struct CharacterBindingSource final {
     phys::CharacterBindingRecord record {};
-    std::string shape_virtual_path;
+    std::string shape_ref;
+  };
+
+  struct JointBindingSource final {
+    phys::JointBindingRecord record {};
+    std::string constraint_ref;
+  };
+
+  struct VehicleBindingSource final {
+    phys::VehicleBindingRecord record {};
+    std::string constraint_ref;
   };
 
   struct PhysicsSidecarDocument final {
@@ -189,8 +207,8 @@ namespace {
     std::vector<ColliderBindingSource> colliders;
     std::vector<CharacterBindingSource> characters;
     std::vector<phys::SoftBodyBindingRecord> soft_bodies;
-    std::vector<phys::JointBindingRecord> joints;
-    std::vector<phys::VehicleBindingRecord> vehicles;
+    std::vector<JointBindingSource> joints;
+    std::vector<VehicleBindingSource> vehicles;
     std::vector<phys::AggregateBindingRecord> aggregates;
   };
 
@@ -379,12 +397,10 @@ namespace {
     if (!ReadRequiredUInt32(binding, "node_index", node_index, error)) {
       return false;
     }
-    if (!ReadRequiredString(
-          binding, "shape_virtual_path", out.shape_virtual_path, error)) {
+    if (!ReadRequiredString(binding, "shape_ref", out.shape_ref, error)) {
       return false;
     }
-    if (!ReadRequiredString(
-          binding, "material_virtual_path", out.material_virtual_path, error)) {
+    if (!ReadRequiredString(binding, "material_ref", out.material_ref, error)) {
       return false;
     }
 
@@ -424,12 +440,10 @@ namespace {
     if (!ReadRequiredUInt32(binding, "node_index", node_index, error)) {
       return false;
     }
-    if (!ReadRequiredString(
-          binding, "shape_virtual_path", out.shape_virtual_path, error)) {
+    if (!ReadRequiredString(binding, "shape_ref", out.shape_ref, error)) {
       return false;
     }
-    if (!ReadRequiredString(
-          binding, "material_virtual_path", out.material_virtual_path, error)) {
+    if (!ReadRequiredString(binding, "material_ref", out.material_ref, error)) {
       return false;
     }
 
@@ -447,8 +461,7 @@ namespace {
     if (!ReadRequiredUInt32(binding, "node_index", node_index, error)) {
       return false;
     }
-    if (!ReadRequiredString(
-          binding, "shape_virtual_path", out.shape_virtual_path, error)) {
+    if (!ReadRequiredString(binding, "shape_ref", out.shape_ref, error)) {
       return false;
     }
 
@@ -489,38 +502,32 @@ namespace {
         out.tether_max_distance_multiplier, error);
   }
 
-  auto ParseJointBinding(const nlohmann::json& binding,
-    phys::JointBindingRecord& out, std::string& error) -> bool
+  auto ParseJointBinding(const nlohmann::json& binding, JointBindingSource& out,
+    std::string& error) -> bool
   {
     uint32_t node_index_a = 0;
     uint32_t node_index_b = 0;
-    uint32_t constraint_resource_index = 0;
     if (!ReadRequiredUInt32(binding, "node_index_a", node_index_a, error)
       || !ReadJointNodeIndexB(binding, node_index_b, error)
-      || !ReadRequiredUInt32(binding, "constraint_resource_index",
-        constraint_resource_index, error)) {
+      || !ReadRequiredString(
+        binding, "constraint_ref", out.constraint_ref, error)) {
       return false;
     }
-    out.node_index_a = node_index_a;
-    out.node_index_b = node_index_b;
-    out.constraint_resource_index
-      = data::pak::core::ResourceIndexT { constraint_resource_index };
+    out.record.node_index_a = node_index_a;
+    out.record.node_index_b = node_index_b;
     return true;
   }
 
   auto ParseVehicleBinding(const nlohmann::json& binding,
-    phys::VehicleBindingRecord& out, std::string& error) -> bool
+    VehicleBindingSource& out, std::string& error) -> bool
   {
     uint32_t node_index = 0;
-    uint32_t constraint_resource_index = 0;
     if (!ReadRequiredUInt32(binding, "node_index", node_index, error)
-      || !ReadRequiredUInt32(binding, "constraint_resource_index",
-        constraint_resource_index, error)) {
+      || !ReadRequiredString(
+        binding, "constraint_ref", out.constraint_ref, error)) {
       return false;
     }
-    out.node_index = node_index;
-    out.constraint_resource_index
-      = data::pak::core::ResourceIndexT { constraint_resource_index };
+    out.record.node_index = node_index;
     return true;
   }
 
@@ -653,7 +660,8 @@ namespace {
         [](const auto& record) { return record.node_index; }, session, request);
       ValidateSingletonBindings(
         parsed.vehicles, "vehicles",
-        [](const auto& record) { return record.node_index; }, session, request);
+        [](const auto& record) { return record.record.node_index; }, session,
+        request);
       ValidateSingletonBindings(
         parsed.aggregates, "aggregates",
         [](const auto& record) { return record.node_index; }, session, request);
@@ -699,6 +707,7 @@ namespace {
     content::VirtualPathResolver& resolver;
     std::span<const SidecarCookedInspectionContext> cooked_contexts;
     const AssetIndexMap& target_index_map;
+    const std::filesystem::path& target_cooked_root;
     uint32_t node_count = 0;
   };
 
@@ -776,19 +785,6 @@ namespace {
     return false;
   }
 
-  auto ValidateConstraintResourceIndex(
-    const data::pak::core::ResourceIndexT index, ImportSession& session,
-    const ImportRequest& request, std::string_view object_path) -> bool
-  {
-    if (index != data::pak::core::kNoResourceIndex) {
-      return true;
-    }
-    AddDiagnosticAtPath(session, request, ImportSeverity::kError,
-      "physics.sidecar.constraint_resource_index_invalid",
-      "constraint_resource_index must not be zero", std::string(object_path));
-    return false;
-  }
-
   template <typename BindingSourceT>
   auto ResolveShapeAndMaterialBindings(std::vector<BindingSourceT>& bindings,
     std::string_view category, BindingValidationContext& ctx) -> void
@@ -803,15 +799,15 @@ namespace {
       }
 
       const auto shape_index
-        = ResolveAssetIndexForVirtualPath(ctx, binding.shape_virtual_path,
-          base_path + ".shape_virtual_path", data::AssetType::kCollisionShape,
+        = ResolveAssetIndexForVirtualPath(ctx, binding.shape_ref,
+          base_path + ".shape_ref", data::AssetType::kCollisionShape,
           "physics.sidecar.shape_ref_unresolved",
           "physics.sidecar.shape_ref_not_collision_shape");
-      const auto material_index = ResolveAssetIndexForVirtualPath(ctx,
-        binding.material_virtual_path, base_path + ".material_virtual_path",
-        data::AssetType::kPhysicsMaterial,
-        "physics.sidecar.material_ref_unresolved",
-        "physics.sidecar.material_ref_not_physics_material");
+      const auto material_index
+        = ResolveAssetIndexForVirtualPath(ctx, binding.material_ref,
+          base_path + ".material_ref", data::AssetType::kPhysicsMaterial,
+          "physics.sidecar.material_ref_unresolved",
+          "physics.sidecar.material_ref_not_physics_material");
       if (shape_index.has_value()) {
         binding.record.shape_asset_index = data::pak::core::ResourceIndexT {
           *shape_index,
@@ -839,8 +835,8 @@ namespace {
       }
 
       const auto shape_index
-        = ResolveAssetIndexForVirtualPath(ctx, binding.shape_virtual_path,
-          base_path + ".shape_virtual_path", data::AssetType::kCollisionShape,
+        = ResolveAssetIndexForVirtualPath(ctx, binding.shape_ref,
+          base_path + ".shape_ref", data::AssetType::kCollisionShape,
           "physics.sidecar.shape_ref_unresolved",
           "physics.sidecar.shape_ref_not_collision_shape");
       if (shape_index.has_value()) {
@@ -864,39 +860,161 @@ namespace {
     }
   }
 
-  auto ValidateJointBindings(
-    const std::vector<phys::JointBindingRecord>& records,
+  [[nodiscard]] auto ReadBinaryFile(const std::filesystem::path& path)
+    -> std::optional<std::vector<std::byte>>
+  {
+    auto in = std::ifstream(path, std::ios::binary | std::ios::ate);
+    if (!in.is_open()) {
+      return std::nullopt;
+    }
+
+    const auto end = in.tellg();
+    if (end < 0) {
+      return std::nullopt;
+    }
+
+    const auto size = static_cast<size_t>(end);
+    in.seekg(0, std::ios::beg);
+    auto bytes = std::vector<std::byte>(size);
+    if (size > 0U) {
+      in.read(reinterpret_cast<char*>(bytes.data()),
+        static_cast<std::streamsize>(size));
+      if (!in.good()) {
+        return std::nullopt;
+      }
+    }
+    return bytes;
+  }
+
+  auto ResolveConstraintRef(BindingValidationContext& ctx,
+    std::string_view constraint_ref, std::string_view object_path)
+    -> std::optional<data::pak::core::ResourceIndexT>
+  {
+    if (!internal::IsCanonicalVirtualPath(constraint_ref)) {
+      AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        "physics.sidecar.constraint_ref_invalid",
+        "constraint_ref must be canonical", std::string(object_path));
+      return std::nullopt;
+    }
+
+    auto relpath = std::string {};
+    if (!internal::TryVirtualPathToRelPath(
+          ctx.request, constraint_ref, relpath)) {
+      AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        "physics.sidecar.constraint_ref_unmounted",
+        "constraint_ref is outside mounted cooked roots",
+        std::string(object_path));
+      return std::nullopt;
+    }
+    relpath = NormalizeRelPath(std::move(relpath));
+
+    const auto target_file
+      = ctx.target_cooked_root / std::filesystem::path(relpath);
+    if (!std::filesystem::exists(target_file)) {
+      auto found_elsewhere = false;
+      for (const auto& mounted : ctx.cooked_contexts) {
+        if (mounted.cooked_root == ctx.target_cooked_root) {
+          continue;
+        }
+        const auto candidate
+          = mounted.cooked_root / std::filesystem::path(relpath);
+        if (std::filesystem::exists(candidate)) {
+          found_elsewhere = true;
+          break;
+        }
+      }
+
+      AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        found_elsewhere ? "physics.sidecar.reference_source_mismatch"
+                        : "physics.sidecar.constraint_ref_unresolved",
+        found_elsewhere
+          ? "Resolved constraint_ref is not in the target source domain"
+          : "Resolved constraint_ref was not found: "
+            + std::string(constraint_ref),
+        std::string(object_path));
+      return std::nullopt;
+    }
+
+    const auto sidecar_bytes = ReadBinaryFile(target_file);
+    if (!sidecar_bytes.has_value()) {
+      AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        "physics.sidecar.constraint_ref_read_failed",
+        "Failed reading constraint_ref sidecar: " + target_file.string(),
+        std::string(object_path));
+      return std::nullopt;
+    }
+
+    auto parsed = internal::ParsedPhysicsResourceDescriptorSidecar {};
+    auto parse_error = std::string {};
+    if (!internal::ParsePhysicsResourceDescriptorSidecar(
+          *sidecar_bytes, parsed, parse_error)) {
+      AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        "physics.sidecar.constraint_ref_parse_failed",
+        "Failed parsing constraint_ref sidecar: " + parse_error,
+        std::string(object_path));
+      return std::nullopt;
+    }
+
+    if (parsed.descriptor.format
+      != phys::PhysicsResourceFormat::kJoltConstraintBinary) {
+      AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        "physics.sidecar.constraint_ref_format_mismatch",
+        "constraint_ref must reference a physics resource with format "
+        "'jolt_constraint_binary'",
+        std::string(object_path));
+      return std::nullopt;
+    }
+
+    if (parsed.resource_index == data::pak::core::kNoResourceIndex) {
+      AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+        "physics.sidecar.constraint_ref_unresolved",
+        "constraint_ref sidecar references invalid resource index zero",
+        std::string(object_path));
+      return std::nullopt;
+    }
+
+    return parsed.resource_index;
+  }
+
+  auto ResolveJointBindings(std::vector<JointBindingSource>& records,
     BindingValidationContext& ctx) -> void
   {
     for (size_t i = 0; i < records.size(); ++i) {
       const auto base_path
         = std::string("bindings.joints[") + std::to_string(i) + "]";
-      const bool node_a_ok = ValidateNodeIndex(records[i].node_index_a,
+      const bool node_a_ok = ValidateNodeIndex(records[i].record.node_index_a,
         ctx.node_count, ctx.session, ctx.request, base_path + ".node_index_a");
       const bool node_b_ok
-        = (records[i].node_index_b == phys::kWorldAttachmentNodeIndex)
-        || ValidateNodeIndex(records[i].node_index_b, ctx.node_count,
+        = (records[i].record.node_index_b == phys::kWorldAttachmentNodeIndex)
+        || ValidateNodeIndex(records[i].record.node_index_b, ctx.node_count,
           ctx.session, ctx.request, base_path + ".node_index_b");
-      if (node_a_ok && node_b_ok) {
-        (void)ValidateConstraintResourceIndex(
-          records[i].constraint_resource_index, ctx.session, ctx.request,
-          base_path + ".constraint_resource_index");
+      if (!(node_a_ok && node_b_ok)) {
+        continue;
+      }
+
+      const auto constraint_index = ResolveConstraintRef(
+        ctx, records[i].constraint_ref, base_path + ".constraint_ref");
+      if (constraint_index.has_value()) {
+        records[i].record.constraint_resource_index = *constraint_index;
       }
     }
   }
 
-  auto ValidateVehicleBindings(
-    const std::vector<phys::VehicleBindingRecord>& records,
+  auto ResolveVehicleBindings(std::vector<VehicleBindingSource>& records,
     BindingValidationContext& ctx) -> void
   {
     for (size_t i = 0; i < records.size(); ++i) {
       const auto base_path
         = std::string("bindings.vehicles[") + std::to_string(i) + "]";
-      if (ValidateNodeIndex(records[i].node_index, ctx.node_count, ctx.session,
-            ctx.request, base_path + ".node_index")) {
-        (void)ValidateConstraintResourceIndex(
-          records[i].constraint_resource_index, ctx.session, ctx.request,
-          base_path + ".constraint_resource_index");
+      if (!ValidateNodeIndex(records[i].record.node_index, ctx.node_count,
+            ctx.session, ctx.request, base_path + ".node_index")) {
+        continue;
+      }
+
+      const auto constraint_index = ResolveConstraintRef(
+        ctx, records[i].constraint_ref, base_path + ".constraint_ref");
+      if (constraint_index.has_value()) {
+        records[i].record.constraint_resource_index = *constraint_index;
       }
     }
   }
@@ -1122,7 +1240,8 @@ namespace {
     const auto target_index_map
       = BuildAssetIndexMap(target_context->inspection);
     auto validation_ctx = BindingValidationContext { session, request, resolver,
-      cooked_contexts, target_index_map, resolved_scene_state.node_count };
+      cooked_contexts, target_index_map, target_context->cooked_root,
+      resolved_scene_state.node_count };
 
     ResolveShapeAndMaterialBindings(
       parsed.rigid_bodies, "rigid_bodies", validation_ctx);
@@ -1132,8 +1251,8 @@ namespace {
     ValidateNodeBindings(
       parsed.soft_bodies, "soft_bodies",
       [](const auto& record) { return record.node_index; }, validation_ctx);
-    ValidateJointBindings(parsed.joints, validation_ctx);
-    ValidateVehicleBindings(parsed.vehicles, validation_ctx);
+    ResolveJointBindings(parsed.joints, validation_ctx);
+    ResolveVehicleBindings(parsed.vehicles, validation_ctx);
     ValidateNodeBindings(
       parsed.aggregates, "aggregates",
       [](const auto& record) { return record.node_index; }, validation_ctx);
@@ -1151,8 +1270,10 @@ namespace {
     auto character_records
       = ExtractRecordVector(parsed.characters, &CharacterBindingSource::record);
     auto soft_body_records = parsed.soft_bodies;
-    auto joint_records = parsed.joints;
-    auto vehicle_records = parsed.vehicles;
+    auto joint_records
+      = ExtractRecordVector(parsed.joints, &JointBindingSource::record);
+    auto vehicle_records
+      = ExtractRecordVector(parsed.vehicles, &VehicleBindingSource::record);
     auto aggregate_records = parsed.aggregates;
 
     auto tables = std::vector<TableBlob> {};
