@@ -715,12 +715,12 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     }
   }
 
-  if (descriptor_doc.contains("inputs")) {
+  if (descriptor_doc.contains("parameters")) {
     if (!ApplyMaterialInputsFromJson(
-          descriptor_doc.at("inputs"), item.inputs)) {
+          descriptor_doc.at("parameters"), item.inputs)) {
       AddDiagnostic(session, Request(), ImportSeverity::kError,
-        "material.descriptor.inputs_invalid",
-        "Material inputs payload has invalid shape");
+        "material.descriptor.parameters_invalid",
+        "Material parameters payload has invalid shape");
     }
   }
 

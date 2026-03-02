@@ -123,7 +123,7 @@ NOLINT_TEST(MaterialDescriptorJsonSchemaTest, AcceptsCanonicalDocument)
     "domain": "opaque",
     "alpha_mode": "opaque",
     "orm_policy": "auto",
-    "inputs": {
+    "parameters": {
       "base_color": [1.0, 1.0, 1.0, 1.0],
       "metalness": 0.1,
       "roughness": 0.8
