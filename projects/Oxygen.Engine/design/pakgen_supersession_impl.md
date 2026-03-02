@@ -38,7 +38,7 @@ Status values:
 | P0 | done | 4% | Baseline + tracking scaffold | Ledger, evidence rubric, and CI matrix committed |
 | P1 | pending | 12% | Shared descriptor infrastructure | Common schema validation + diagnostics helpers integrated for descriptor domains |
 | P2 | done | 10% | Texture descriptor domain | `texture-descriptor` implemented end-to-end with schema/tests |
-| P3 | in_progress | 8% | Geometry buffer subdocument model | container-owned `buffers[]`/`views[]` contract implemented with schema/tests under geometry descriptor flow, including virtual-path references and `.obuf` metadata resolution |
+| P3 | done | 8% | Geometry buffer subdocument model | container-owned `buffers[]`/`views[]` contract implemented end-to-end under geometry descriptor flow, including deterministic mounted-root `.obuf` resolution and canonical dedupe constraints |
 | P4 | done | 14% | Material descriptor domain | `material-descriptor` implemented end-to-end with schema/tests |
 | P5 | done | 16% | Geometry descriptor domain | `geometry-descriptor` implemented end-to-end with schema/tests and external green build/test confirmation |
 | P6 | pending | 16% | Scene descriptor domain | `scene-descriptor` implemented end-to-end with schema/tests |
@@ -147,13 +147,13 @@ Acceptance:
 Tasks:
 
 1. Define and enforce geometry schema contract for container-owned `buffers[]` with nested `views[]`.
-2. `[done-via-buffer-container]` Enforce external buffer data only (`.buffer.bin` URI); disallow inline JSON payload encodings.
-3. `[done-via-buffer-container]` Require canonical buffer `virtual_path` per buffer descriptor and require mesh/submesh buffer references by virtual path (no local-ID reference model).
-4. `[done-via-buffer-container]` Emit and validate `.obuf` metadata sidecars for emitted buffer resources.
-5. `[pending]` Resolve virtual-path references deterministically across mounted loose + PAK sources (`virtual_path -> .obuf -> resource_index -> buffers.table/data`).
-6. `[in_progress]` Reuse existing buffer cook path (`BufferPipeline`, emitters/index wiring) during geometry import execution.
-7. `[in_progress]` Enforce cross-container dedupe so equivalent buffers are cooked once and reused by shared `resource_index`, with a single canonical `.obuf` at the shared virtual path.
-8. `[in_progress]` Add tests for canonical and failure cases:
+2. `[done]` Enforce external buffer data only (`.buffer.bin` URI); disallow inline JSON payload encodings.
+3. `[done]` Require canonical buffer `virtual_path` per buffer descriptor and require mesh/submesh buffer references by virtual path (no local-ID reference model).
+4. `[done]` Emit and validate `.obuf` metadata sidecars for emitted buffer resources.
+5. `[done]` Resolve virtual-path references deterministically across mounted loose + PAK sources (`virtual_path -> .obuf -> resource_index -> buffers.table/data`).
+6. `[done]` Reuse existing buffer cook path (`BufferPipeline`, emitters/index wiring) during geometry import execution.
+7. `[done]` Enforce cross-container dedupe so equivalent buffers are cooked once and reused by shared `resource_index`, with a single canonical `.obuf` at the shared virtual path.
+8. `[done]` Add tests for canonical and failure cases:
    - missing buffer/view reference
    - missing/unmounted/ambiguous `.obuf` virtual path
    - invalid/out-of-range view slice
@@ -419,11 +419,11 @@ Current status:
 1. P0 is done.
 2. P2 is done (validated in practice with one manifest + multiple texture descriptors flow).
 3. P4 is `done` (external test pass confirmation received for the material-descriptor suite and DAG scenario).
-4. P3 is `in_progress` (buffer-container interim milestone complete: schema/request/job/routing/tests; geometry-domain hardening remains before phase closure).
+4. P3 is `done` (geometry-domain integration completed with deterministic `.obuf` mounted-root resolution, canonical dedupe constraints, and expanded job-test coverage).
 5. P5 is `done` (external green build/tests confirmed after geometry-descriptor execution + coverage closure).
 6. P1 and P6-P10 are `pending`.
-7. Computed progress snapshot: `48.0%` (P3 completion factor `0.50`, P5 completion factor `1.00`).
-8. P3/P5 geometry execution plan remains the baseline reference in Section 6, with P5 tasks closed and P3 residual work still tracked.
+7. Computed progress snapshot: `52.0%` (P3 completion factor `1.00`, P5 completion factor `1.00`).
+8. P3/P5 geometry execution plan remains the baseline reference in Section 6, with both P3 and P5 marked closed.
 
 ## 11. Evidence Log
 
@@ -697,4 +697,15 @@ Initial entries:
 4. Tests run:
    - external execution (user confirmation): build/tests pass after geometry descriptor updates
 5. Result: P5 exit gate satisfied; phase status moved to `done` and completion math updated.
+6. Remaining delta to phase exit gate: none
+
+1. Date: 2026-03-02
+2. Phase: P3 (geometry buffer subdocument model closeout)
+3. Files changed:
+   - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.cpp`
+   - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
+   - `src/Oxygen/Cooker/Test/Import/GeometryDescriptorImportJob_test.cpp`
+   - `design/pakgen_supersession_impl.md`
+4. Tests run: none (no-build policy active)
+5. Result: closed remaining P3 implementation gaps with deterministic mounted-root `.obuf` resolution rules, canonical cross-job dedupe sidecar constraints, and expanded geometry job coverage for mounted-root resolution, ambiguity diagnostics, unmounted virtual paths, and cross-job dedupe conflicts.
 6. Remaining delta to phase exit gate: none
