@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -18,6 +19,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -56,12 +58,14 @@ public:
   //! Emit a buffer resource descriptor file and return its relative path.
   OXGN_COOK_NDAPI auto EmitBuffer(std::string_view name_hint,
     std::string_view stable_id, data::pak::core::ResourceIndexT resource_index,
-    const data::pak::core::BufferResourceDesc& descriptor) -> std::string;
+    const data::pak::core::BufferResourceDesc& descriptor,
+    std::span<const internal::BufferDescriptorView> views = {}) -> std::string;
 
   //! Emit a buffer descriptor at an explicit relative path and return it.
   OXGN_COOK_NDAPI auto EmitBufferAtRelPath(std::string_view relpath,
     data::pak::core::ResourceIndexT resource_index,
-    const data::pak::core::BufferResourceDesc& descriptor) -> std::string;
+    const data::pak::core::BufferResourceDesc& descriptor,
+    std::span<const internal::BufferDescriptorView> views = {}) -> std::string;
 
   //! Snapshot of emitted descriptor records.
   OXGN_COOK_NDAPI auto Records() const -> std::vector<Record>;

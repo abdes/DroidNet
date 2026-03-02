@@ -8,8 +8,7 @@
             "type": "string"
         },
         "name": {
-            "type": "string",
-            "minLength": 1
+            "$ref": "#/definitions/identifier"
         },
         "content_hashing": {
             "type": "boolean"
@@ -18,116 +17,224 @@
             "type": "array",
             "minItems": 1,
             "items": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                    "source": {
-                        "type": "string",
-                        "minLength": 1
-                    },
-                    "virtual_path": {
-                        "type": "string",
-                        "minLength": 1,
-                        "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.obuf$"
-                    },
-                    "usage_flags": {
-                        "type": "integer",
-                        "minimum": 0
-                    },
-                    "element_stride": {
-                        "type": "integer",
-                        "minimum": 0
-                    },
-                    "element_format": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 255
-                    },
-                    "alignment": {
-                        "type": "integer",
-                        "minimum": 1
-                    },
-                    "content_hash": {
-                        "type": "integer",
-                        "minimum": 0
-                    }
-                },
-                "required": [
-                    "source",
-                    "virtual_path"
-                ],
-                "allOf": [
-                    {
-                        "if": {
-                            "properties": {
-                                "element_format": {
-                                    "type": "integer",
-                                    "minimum": 1
-                                }
-                            },
-                            "required": [
-                                "element_format"
-                            ]
-                        },
-                        "then": {
-                            "properties": {
-                                "element_stride": {
-                                    "type": "integer",
-                                    "const": 0
-                                }
-                            }
-                        }
-                    },
-                    {
-                        "if": {
-                            "properties": {
-                                "element_stride": {
-                                    "type": "integer",
-                                    "minimum": 1
-                                }
-                            },
-                            "required": [
-                                "element_stride"
-                            ]
-                        },
-                        "then": {
-                            "properties": {
-                                "element_format": {
-                                    "type": "integer",
-                                    "maximum": 0
-                                }
-                            }
-                        }
-                    },
-                    {
-                        "if": {
-                            "properties": {
-                                "element_stride": {
-                                    "type": "integer",
-                                    "const": 0
-                                }
-                            },
-                            "required": [
-                                "element_stride"
-                            ]
-                        },
-                        "then": {
-                            "properties": {
-                                "element_format": {
-                                    "type": "integer",
-                                    "minimum": 1
-                                }
-                            },
-                            "required": [
-                                "element_format"
-                            ]
-                        }
-                    }
-                ]
+                "$ref": "#/definitions/buffer_descriptor"
             }
         }
     },
     "required": [
         "buffers"
-    ]
+    ],
+    "definitions": {
+        "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 63,
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,62}$"
+        },
+        "canonical_obuf_path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.obuf$"
+        },
+        "buffer_view_descriptor": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "name": {
+                    "$ref": "#/definitions/identifier"
+                },
+                "byte_offset": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "byte_length": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "element_offset": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "element_count": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "name"
+            ],
+            "allOf": [
+                {
+                    "not": {
+                        "properties": {
+                            "name": {
+                                "const": "__all__"
+                            }
+                        },
+                        "required": [
+                            "name"
+                        ]
+                    }
+                },
+                {
+                    "oneOf": [
+                        {
+                            "required": [
+                                "byte_offset",
+                                "byte_length"
+                            ],
+                            "not": {
+                                "anyOf": [
+                                    {
+                                        "required": [
+                                            "element_offset"
+                                        ]
+                                    },
+                                    {
+                                        "required": [
+                                            "element_count"
+                                        ]
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "required": [
+                                "element_offset",
+                                "element_count"
+                            ],
+                            "not": {
+                                "anyOf": [
+                                    {
+                                        "required": [
+                                            "byte_offset"
+                                        ]
+                                    },
+                                    {
+                                        "required": [
+                                            "byte_length"
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        "buffer_descriptor": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "source": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "virtual_path": {
+                    "$ref": "#/definitions/canonical_obuf_path"
+                },
+                "usage_flags": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "element_stride": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "element_format": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                },
+                "alignment": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "content_hash": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "views": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/buffer_view_descriptor"
+                    },
+                    "uniqueItems": true
+                }
+            },
+            "required": [
+                "source",
+                "virtual_path"
+            ],
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "element_format": {
+                                "type": "integer",
+                                "minimum": 1
+                            }
+                        },
+                        "required": [
+                            "element_format"
+                        ]
+                    },
+                    "then": {
+                        "properties": {
+                            "element_stride": {
+                                "type": "integer",
+                                "const": 0
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "element_stride": {
+                                "type": "integer",
+                                "minimum": 1
+                            }
+                        },
+                        "required": [
+                            "element_stride"
+                        ]
+                    },
+                    "then": {
+                        "properties": {
+                            "element_format": {
+                                "type": "integer",
+                                "maximum": 0
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "element_stride": {
+                                "type": "integer",
+                                "const": 0
+                            }
+                        },
+                        "required": [
+                            "element_stride"
+                        ]
+                    },
+                    "then": {
+                        "properties": {
+                            "element_format": {
+                                "type": "integer",
+                                "minimum": 1
+                            }
+                        },
+                        "required": [
+                            "element_format"
+                        ]
+                    }
+                }
+            ]
+        }
+    }
 }

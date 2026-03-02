@@ -42,12 +42,8 @@ namespace {
   using TextureSidecarFile
     = SidecarDescriptorFile<data::pak::render::TextureResourceDesc, 'O', 'T',
       'E', 'X'>;
-  using BufferSidecarFile
-    = SidecarDescriptorFile<data::pak::core::BufferResourceDesc, 'O', 'B', 'U',
-      'F'>;
 
   static_assert(std::is_trivially_copyable_v<TextureSidecarFile>);
-  static_assert(std::is_trivially_copyable_v<BufferSidecarFile>);
 
   template <typename T>
   [[nodiscard]] auto SerializePod(const T& pod) -> std::vector<std::byte>
@@ -193,15 +189,14 @@ auto ResourceDescriptorEmitter::EmitTexture(std::string_view name_hint,
 auto ResourceDescriptorEmitter::EmitBuffer(std::string_view name_hint,
   std::string_view stable_id,
   const data::pak::core::ResourceIndexT resource_index,
-  const data::pak::core::BufferResourceDesc& descriptor) -> std::string
+  const data::pak::core::BufferResourceDesc& descriptor,
+  const std::span<const internal::BufferDescriptorView> views) -> std::string
 {
-  BufferSidecarFile file {};
-  file.resource_index = resource_index;
-  file.descriptor = descriptor;
-
   const auto stem = BuildStem(name_hint, stable_id, "buffer");
   auto relpath = layout_.BufferDescriptorRelPath(stem);
-  auto bytes = std::make_shared<std::vector<std::byte>>(SerializePod(file));
+  auto bytes = std::make_shared<std::vector<std::byte>>(
+    internal::SerializeBufferDescriptorSidecar(
+      resource_index, descriptor, views));
   record_sizes_[relpath] = bytes->size();
   QueueWrite(std::move(relpath), std::move(bytes));
   return layout_.BufferDescriptorRelPath(stem);
@@ -210,18 +205,17 @@ auto ResourceDescriptorEmitter::EmitBuffer(std::string_view name_hint,
 auto ResourceDescriptorEmitter::EmitBufferAtRelPath(
   const std::string_view relpath,
   const data::pak::core::ResourceIndexT resource_index,
-  const data::pak::core::BufferResourceDesc& descriptor) -> std::string
+  const data::pak::core::BufferResourceDesc& descriptor,
+  const std::span<const internal::BufferDescriptorView> views) -> std::string
 {
   if (relpath.empty()) {
     throw std::runtime_error("buffer descriptor relpath must not be empty");
   }
 
-  BufferSidecarFile file {};
-  file.resource_index = resource_index;
-  file.descriptor = descriptor;
-
   auto path = std::string(relpath);
-  auto bytes = std::make_shared<std::vector<std::byte>>(SerializePod(file));
+  auto bytes = std::make_shared<std::vector<std::byte>>(
+    internal::SerializeBufferDescriptorSidecar(
+      resource_index, descriptor, views));
   record_sizes_[path] = bytes->size();
   QueueWrite(std::move(path), std::move(bytes));
   return std::string(relpath);

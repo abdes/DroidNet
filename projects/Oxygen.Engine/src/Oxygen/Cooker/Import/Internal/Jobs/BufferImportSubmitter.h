@@ -12,11 +12,13 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import {
@@ -38,6 +40,8 @@ public:
     size_t submitted_count = 0;
     std::unordered_map<std::string, std::string>
       descriptor_relpath_by_source_id;
+    std::unordered_map<std::string, std::vector<internal::BufferDescriptorView>>
+      descriptor_views_by_source_id;
   };
 
   BufferImportSubmitter(ImportSession& session, const ImportRequest& request,

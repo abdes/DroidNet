@@ -1,0 +1,816 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Oxygen Geometry Descriptor",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "$schema": {
+            "type": "string"
+        },
+        "name": {
+            "$ref": "#/definitions/identifier"
+        },
+        "content_hashing": {
+            "type": "boolean"
+        },
+        "bounds": {
+            "$ref": "#/definitions/bounds3"
+        },
+        "buffers": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "$ref": "#/definitions/buffer_descriptor"
+            }
+        },
+        "lods": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "items": {
+                "$ref": "#/definitions/lod_descriptor"
+            }
+        }
+    },
+    "required": [
+        "name",
+        "bounds",
+        "lods"
+    ],
+    "definitions": {
+        "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 63,
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,62}$"
+        },
+        "canonical_virtual_path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+$"
+        },
+        "canonical_obuf_path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.obuf$"
+        },
+        "canonical_omat_path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.omat$"
+        },
+        "vec3": {
+            "type": "array",
+            "items": {
+                "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+        },
+        "bounds3": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "min": {
+                    "$ref": "#/definitions/vec3"
+                },
+                "max": {
+                    "$ref": "#/definitions/vec3"
+                }
+            },
+            "required": [
+                "min",
+                "max"
+            ]
+        },
+        "view_selector": {
+            "oneOf": [
+                {
+                    "const": "__all__"
+                },
+                {
+                    "$ref": "#/definitions/identifier"
+                }
+            ]
+        },
+        "buffer_view_descriptor": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "name": {
+                    "$ref": "#/definitions/identifier"
+                },
+                "byte_offset": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "byte_length": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "element_offset": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "element_count": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "name"
+            ],
+            "allOf": [
+                {
+                    "not": {
+                        "properties": {
+                            "name": {
+                                "const": "__all__"
+                            }
+                        },
+                        "required": [
+                            "name"
+                        ]
+                    }
+                },
+                {
+                    "anyOf": [
+                        {
+                            "required": [
+                                "byte_offset",
+                                "byte_length"
+                            ]
+                        },
+                        {
+                            "required": [
+                                "element_offset",
+                                "element_count"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "if": {
+                        "required": [
+                            "byte_offset"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "byte_length"
+                        ]
+                    }
+                },
+                {
+                    "if": {
+                        "required": [
+                            "byte_length"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "byte_offset"
+                        ]
+                    }
+                },
+                {
+                    "if": {
+                        "required": [
+                            "element_offset"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "element_count"
+                        ]
+                    }
+                },
+                {
+                    "if": {
+                        "required": [
+                            "element_count"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "element_offset"
+                        ]
+                    }
+                }
+            ]
+        },
+        "buffer_descriptor": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "uri": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "virtual_path": {
+                    "$ref": "#/definitions/canonical_obuf_path"
+                },
+                "usage_flags": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "element_stride": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "element_format": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                },
+                "alignment": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "content_hash": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "views": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/buffer_view_descriptor"
+                    },
+                    "uniqueItems": true
+                }
+            },
+            "required": [
+                "uri",
+                "virtual_path"
+            ],
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "element_format": {
+                                "type": "integer",
+                                "minimum": 1
+                            }
+                        },
+                        "required": [
+                            "element_format"
+                        ]
+                    },
+                    "then": {
+                        "properties": {
+                            "element_stride": {
+                                "type": "integer",
+                                "const": 0
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "element_stride": {
+                                "type": "integer",
+                                "minimum": 1
+                            }
+                        },
+                        "required": [
+                            "element_stride"
+                        ]
+                    },
+                    "then": {
+                        "properties": {
+                            "element_format": {
+                                "type": "integer",
+                                "maximum": 0
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "element_stride": {
+                                "type": "integer",
+                                "const": 0
+                            }
+                        },
+                        "required": [
+                            "element_stride"
+                        ]
+                    },
+                    "then": {
+                        "properties": {
+                            "element_format": {
+                                "type": "integer",
+                                "minimum": 1
+                            }
+                        },
+                        "required": [
+                            "element_format"
+                        ]
+                    }
+                }
+            ]
+        },
+        "mesh_buffer_refs": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "vb_ref": {
+                    "$ref": "#/definitions/canonical_obuf_path"
+                },
+                "ib_ref": {
+                    "$ref": "#/definitions/canonical_obuf_path"
+                }
+            },
+            "required": [
+                "vb_ref",
+                "ib_ref"
+            ]
+        },
+        "skinning_buffer_refs": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "joint_index_ref": {
+                    "$ref": "#/definitions/canonical_obuf_path"
+                },
+                "joint_weight_ref": {
+                    "$ref": "#/definitions/canonical_obuf_path"
+                },
+                "inverse_bind_ref": {
+                    "$ref": "#/definitions/canonical_obuf_path"
+                },
+                "joint_remap_ref": {
+                    "$ref": "#/definitions/canonical_obuf_path"
+                },
+                "skeleton_ref": {
+                    "$ref": "#/definitions/canonical_virtual_path"
+                },
+                "joint_count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535
+                },
+                "influences_per_vertex": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 8
+                },
+                "flags": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            },
+            "required": [
+                "joint_index_ref",
+                "joint_weight_ref",
+                "inverse_bind_ref",
+                "joint_remap_ref"
+            ]
+        },
+        "sphere_params": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "latitude_segments": {
+                    "type": "integer",
+                    "minimum": 3
+                },
+                "longitude_segments": {
+                    "type": "integer",
+                    "minimum": 3
+                }
+            }
+        },
+        "plane_params": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "x_segments": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "z_segments": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "size": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                }
+            }
+        },
+        "cylinder_params": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "segments": {
+                    "type": "integer",
+                    "minimum": 3
+                },
+                "height": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                },
+                "radius": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                }
+            }
+        },
+        "cone_params": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "segments": {
+                    "type": "integer",
+                    "minimum": 3
+                },
+                "height": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                },
+                "radius": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                }
+            }
+        },
+        "torus_params": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "major_segments": {
+                    "type": "integer",
+                    "minimum": 3
+                },
+                "minor_segments": {
+                    "type": "integer",
+                    "minimum": 3
+                },
+                "major_radius": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                },
+                "minor_radius": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                }
+            }
+        },
+        "quad_params": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "width": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                },
+                "height": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                }
+            }
+        },
+        "procedural_descriptor": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "generator": {
+                    "type": "string",
+                    "enum": [
+                        "Cube",
+                        "ArrowGizmo",
+                        "Sphere",
+                        "Plane",
+                        "Cylinder",
+                        "Cone",
+                        "Torus",
+                        "Quad"
+                    ]
+                },
+                "mesh_name": {
+                    "$ref": "#/definitions/identifier"
+                },
+                "params": {
+                    "type": "object"
+                }
+            },
+            "required": [
+                "generator",
+                "mesh_name"
+            ],
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "generator": {
+                                "enum": [
+                                    "Cube",
+                                    "ArrowGizmo"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "generator"
+                        ]
+                    },
+                    "then": {
+                        "properties": {
+                            "params": {
+                                "type": "object",
+                                "maxProperties": 0
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "generator": {
+                                "const": "Sphere"
+                            }
+                        },
+                        "required": [
+                            "generator"
+                        ]
+                    },
+                    "then": {
+                        "properties": {
+                            "params": {
+                                "$ref": "#/definitions/sphere_params"
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "generator": {
+                                "const": "Plane"
+                            }
+                        },
+                        "required": [
+                            "generator"
+                        ]
+                    },
+                    "then": {
+                        "properties": {
+                            "params": {
+                                "$ref": "#/definitions/plane_params"
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "generator": {
+                                "const": "Cylinder"
+                            }
+                        },
+                        "required": [
+                            "generator"
+                        ]
+                    },
+                    "then": {
+                        "properties": {
+                            "params": {
+                                "$ref": "#/definitions/cylinder_params"
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "generator": {
+                                "const": "Cone"
+                            }
+                        },
+                        "required": [
+                            "generator"
+                        ]
+                    },
+                    "then": {
+                        "properties": {
+                            "params": {
+                                "$ref": "#/definitions/cone_params"
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "generator": {
+                                "const": "Torus"
+                            }
+                        },
+                        "required": [
+                            "generator"
+                        ]
+                    },
+                    "then": {
+                        "properties": {
+                            "params": {
+                                "$ref": "#/definitions/torus_params"
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "generator": {
+                                "const": "Quad"
+                            }
+                        },
+                        "required": [
+                            "generator"
+                        ]
+                    },
+                    "then": {
+                        "properties": {
+                            "params": {
+                                "$ref": "#/definitions/quad_params"
+                            }
+                        }
+                    }
+                }
+            ]
+        },
+        "submesh_view": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "name": {
+                    "$ref": "#/definitions/identifier"
+                },
+                "view_ref": {
+                    "$ref": "#/definitions/view_selector"
+                }
+            },
+            "required": [
+                "view_ref"
+            ]
+        },
+        "submesh_descriptor": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "name": {
+                    "$ref": "#/definitions/identifier"
+                },
+                "material_ref": {
+                    "$ref": "#/definitions/canonical_omat_path"
+                },
+                "bounds": {
+                    "$ref": "#/definitions/bounds3"
+                },
+                "views": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/submesh_view"
+                    }
+                }
+            },
+            "required": [
+                "material_ref",
+                "views"
+            ]
+        },
+        "lod_descriptor": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "name": {
+                    "$ref": "#/definitions/identifier"
+                },
+                "mesh_type": {
+                    "type": "string",
+                    "enum": [
+                        "standard",
+                        "skinned",
+                        "procedural"
+                    ]
+                },
+                "bounds": {
+                    "$ref": "#/definitions/bounds3"
+                },
+                "buffers": {
+                    "$ref": "#/definitions/mesh_buffer_refs"
+                },
+                "skinning": {
+                    "$ref": "#/definitions/skinning_buffer_refs"
+                },
+                "procedural": {
+                    "$ref": "#/definitions/procedural_descriptor"
+                },
+                "submeshes": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/submesh_descriptor"
+                    }
+                }
+            },
+            "required": [
+                "name",
+                "mesh_type",
+                "bounds",
+                "submeshes"
+            ],
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "mesh_type": {
+                                "const": "standard"
+                            }
+                        },
+                        "required": [
+                            "mesh_type"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "buffers"
+                        ],
+                        "not": {
+                            "anyOf": [
+                                {
+                                    "required": [
+                                        "skinning"
+                                    ]
+                                },
+                                {
+                                    "required": [
+                                        "procedural"
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "mesh_type": {
+                                "const": "skinned"
+                            }
+                        },
+                        "required": [
+                            "mesh_type"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "buffers",
+                            "skinning"
+                        ],
+                        "not": {
+                            "required": [
+                                "procedural"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "mesh_type": {
+                                "const": "procedural"
+                            }
+                        },
+                        "required": [
+                            "mesh_type"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "procedural"
+                        ],
+                        "not": {
+                            "anyOf": [
+                                {
+                                    "required": [
+                                        "buffers"
+                                    ]
+                                },
+                                {
+                                    "required": [
+                                        "skinning"
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        }
+    }
+}

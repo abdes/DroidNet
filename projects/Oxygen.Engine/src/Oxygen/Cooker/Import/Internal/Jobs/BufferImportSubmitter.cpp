@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <limits>
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
 #include <string>
@@ -38,7 +39,9 @@ namespace {
   struct ParsedBufferEntry final {
     std::filesystem::path source_path;
     std::string source_id;
+    std::string object_path;
     std::string descriptor_relpath;
+    std::vector<internal::BufferDescriptorViewSpec> view_specs;
     uint32_t usage_flags = 0;
     uint32_t element_stride = 1;
     uint8_t element_format = 0;
@@ -51,8 +54,11 @@ namespace {
     static auto validator = []() {
       auto out = json_validator {};
       const auto root_schema = json::parse(kBufferContainerSchema);
-      const auto& item_schema
-        = root_schema.at("properties").at("buffers").at("items");
+      auto item_schema = json {
+        { "$schema", "http://json-schema.org/draft-07/schema#" },
+        { "definitions", root_schema.at("definitions") },
+        { "$ref", "#/definitions/buffer_descriptor" },
+      };
       out.set_root_schema(item_schema);
       return out;
     }();
@@ -77,6 +83,15 @@ namespace {
   {
     for (auto& diagnostic : diagnostics) {
       session.AddDiagnostic(std::move(diagnostic));
+    }
+  }
+
+  auto AddViewIssues(ImportSession& session, const ImportRequest& request,
+    const std::vector<internal::BufferDescriptorViewIssue>& issues) -> void
+  {
+    for (const auto& issue : issues) {
+      AddDiagnostic(session, request, ImportSeverity::kError, issue.code,
+        issue.message, issue.object_path);
     }
   }
 
@@ -170,6 +185,7 @@ namespace {
       }
 
       auto entry = ParsedBufferEntry {};
+      entry.object_path = object_path;
       const auto source_text = buffer_doc.at("source").get<std::string>();
       auto source_path = std::filesystem::path(source_text);
       if (source_path.is_relative()) {
@@ -204,12 +220,24 @@ namespace {
       if (buffer_doc.contains("element_format")) {
         const auto value = buffer_doc.at("element_format").get<uint32_t>();
         entry.element_format = static_cast<uint8_t>(value);
+        if (!buffer_doc.contains("element_stride")) {
+          // Format-driven descriptors use stride derived from format metadata.
+          entry.element_stride = 0;
+        }
       }
       if (buffer_doc.contains("alignment")) {
         entry.alignment = buffer_doc.at("alignment").get<uint64_t>();
       }
       if (buffer_doc.contains("content_hash")) {
         entry.content_hash = buffer_doc.at("content_hash").get<uint64_t>();
+      }
+
+      auto view_issues = std::vector<internal::BufferDescriptorViewIssue> {};
+      entry.view_specs = internal::ParseBufferViewSpecs(
+        buffer_doc, object_path + ".views", view_issues);
+      AddViewIssues(session, request, view_issues);
+      if (!view_issues.empty()) {
+        continue;
       }
 
       entries.push_back(std::move(entry));
@@ -265,10 +293,8 @@ auto BufferImportSubmitter::SubmitBufferChunks(
   }
 
   submission.descriptor_relpath_by_source_id.reserve(entries.size());
+  submission.descriptor_views_by_source_id.reserve(entries.size());
   for (const auto& entry : entries) {
-    submission.descriptor_relpath_by_source_id.emplace(
-      entry.source_id, entry.descriptor_relpath);
-
     const auto read_start = std::chrono::steady_clock::now();
     auto read_result = co_await reader_->ReadFile(entry.source_path);
     session_.AddSourceLoadDuration(
@@ -280,6 +306,35 @@ auto BufferImportSubmitter::SubmitBufferChunks(
         entry.source_id);
       continue;
     }
+
+    const auto source_size = read_result.value().size();
+    if (source_size > (std::numeric_limits<uint32_t>::max)()) {
+      AddDiagnostic(session_, request_, ImportSeverity::kError,
+        "buffer.container.source_too_large",
+        "Buffer source exceeds maximum supported size of 4 GiB",
+        entry.object_path + ".source");
+      continue;
+    }
+
+    auto descriptor = data::pak::core::BufferResourceDesc {};
+    descriptor.size_bytes = static_cast<uint32_t>(source_size);
+    descriptor.usage_flags = entry.usage_flags;
+    descriptor.element_stride = entry.element_stride;
+    descriptor.element_format = entry.element_format;
+    descriptor.content_hash = entry.content_hash;
+
+    auto view_issues = std::vector<internal::BufferDescriptorViewIssue> {};
+    auto normalized_views = internal::NormalizeBufferViews(
+      entry.view_specs, descriptor, entry.object_path + ".views", view_issues);
+    AddViewIssues(session_, request_, view_issues);
+    if (!view_issues.empty()) {
+      continue;
+    }
+
+    submission.descriptor_relpath_by_source_id.emplace(
+      entry.source_id, entry.descriptor_relpath);
+    submission.descriptor_views_by_source_id.emplace(
+      entry.source_id, std::move(normalized_views));
 
     auto item = BufferPipeline::WorkItem {};
     item.source_id = entry.source_id;
@@ -324,6 +379,15 @@ auto BufferImportSubmitter::CollectAndEmit(
       continue;
     }
 
+    const auto views_it
+      = submission.descriptor_views_by_source_id.find(result.source_id);
+    if (views_it == submission.descriptor_views_by_source_id.end()) {
+      AddDiagnostic(session_, request_, ImportSeverity::kError,
+        "buffer.container.internal_lookup_failed",
+        "Internal buffer views lookup failed", result.source_id);
+      continue;
+    }
+
     const auto emit_start = std::chrono::steady_clock::now();
     const auto emitted_index = session_.BufferEmitter().Emit(
       std::move(result.cooked), result.source_id);
@@ -356,7 +420,7 @@ auto BufferImportSubmitter::CollectAndEmit(
       [[maybe_unused]] const auto relpath
         = session_.ResourceDescriptorEmitter().EmitBufferAtRelPath(
           relpath_it->second, data::pak::core::ResourceIndexT { emitted_index },
-          *descriptor);
+          *descriptor, views_it->second);
     } catch (const std::exception& ex) {
       AddDiagnostic(session_, request_, ImportSeverity::kError,
         "buffer.container.sidecar_emit_failed",

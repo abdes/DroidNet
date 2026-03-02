@@ -197,4 +197,107 @@ NOLINT_TEST(
     != std::string::npos);
 }
 
+NOLINT_TEST(
+  BufferContainerImportRequestBuilderTest, AcceptsBufferViewsWithElementRanges)
+{
+  const auto dir = MakeTempDir("accepts_buffer_views");
+  const auto descriptor_path = dir / "Buffers" / "views.buffers.json";
+  WriteTextFile(descriptor_path,
+    R"({
+      "name": "Container",
+      "buffers": [
+        {
+          "source": "mesh.buffer.bin",
+          "virtual_path": "/.cooked/Resources/Buffers/views.obuf",
+          "element_format": 10,
+          "views": [
+            {
+              "name": "lod0",
+              "element_offset": 0,
+              "element_count": 12
+            }
+          ]
+        }
+      ]
+    })");
+
+  const auto settings = MakeBaseSettings(descriptor_path);
+  auto errors = std::ostringstream {};
+
+  const auto request = BuildBufferContainerRequest(settings, errors);
+
+  ASSERT_TRUE(request.has_value()) << errors.str();
+  EXPECT_TRUE(errors.str().empty());
+}
+
+NOLINT_TEST(BufferContainerImportRequestBuilderTest,
+  RejectsExplicitImplicitAllViewDeclaration)
+{
+  const auto dir = MakeTempDir("rejects_explicit_all_view");
+  const auto descriptor_path = dir / "Buffers" / "bad_view.buffers.json";
+  WriteTextFile(descriptor_path,
+    R"({
+      "name": "Container",
+      "buffers": [
+        {
+          "source": "mesh.buffer.bin",
+          "virtual_path": "/.cooked/Resources/Buffers/views.obuf",
+          "element_stride": 16,
+          "views": [
+            {
+              "name": "__all__",
+              "byte_offset": 0,
+              "byte_length": 64
+            }
+          ]
+        }
+      ]
+    })");
+
+  const auto settings = MakeBaseSettings(descriptor_path);
+  auto errors = std::ostringstream {};
+
+  const auto request = BuildBufferContainerRequest(settings, errors);
+
+  EXPECT_FALSE(request.has_value());
+  EXPECT_TRUE(errors.str().find("buffer.container.schema_validation_failed")
+    != std::string::npos);
+}
+
+NOLINT_TEST(BufferContainerImportRequestBuilderTest,
+  RejectsViewWithBothByteAndElementRanges)
+{
+  const auto dir = MakeTempDir("rejects_mixed_view_ranges");
+  const auto descriptor_path = dir / "Buffers" / "mixed_view.buffers.json";
+  WriteTextFile(descriptor_path,
+    R"({
+      "name": "Container",
+      "buffers": [
+        {
+          "source": "mesh.buffer.bin",
+          "virtual_path": "/.cooked/Resources/Buffers/views.obuf",
+          "element_stride": 16,
+          "views": [
+            {
+              "name": "lod0",
+              "byte_offset": 0,
+              "byte_length": 64,
+              "element_offset": 0,
+              "element_count": 4
+            }
+          ]
+        }
+      ]
+    })");
+
+  const auto settings = MakeBaseSettings(descriptor_path);
+  auto errors = std::ostringstream {};
+
+  const auto request = BuildBufferContainerRequest(settings, errors);
+
+  EXPECT_FALSE(request.has_value());
+  EXPECT_TRUE(errors.str().find("buffer.container.schema_validation_failed")
+    != std::string::npos);
+}
+
 } // namespace
