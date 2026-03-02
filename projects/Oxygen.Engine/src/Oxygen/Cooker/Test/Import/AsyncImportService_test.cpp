@@ -495,6 +495,45 @@ NOLINT_TEST_F(
   StopService(service);
 }
 
+//! Verify scene-descriptor payload bypasses format detection and routes to
+//! the scene-descriptor job path.
+NOLINT_TEST_F(
+  AsyncImportServiceSubmitTest, SceneDescriptorRequestBypassesFormatDetection)
+{
+  AsyncImportService service(config_);
+
+  auto request = ImportRequest {};
+  request.source_path = "unrecognized.asset";
+  request.cooked_root = std::filesystem::temp_directory_path()
+    / "oxygen_scene_descriptor_routing_submit_test";
+  std::filesystem::create_directories(*request.cooked_root);
+  request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
+    .normalized_descriptor_json
+    = R"({"name":"BadScene","nodes":[{"name":"Root"},{"name":"Mesh","parent":0}],"renderables":[{"node":1,"geometry_ref":"not/canonical"}]})",
+  };
+
+  std::latch done(1);
+  ImportReport report {};
+  const auto job_id = service.SubmitImport(
+    std::move(request),
+    [&report, &done](ImportJobId, const ImportReport& completed) {
+      report = completed;
+      done.count_down();
+    },
+    nullptr);
+
+  ASSERT_TRUE(job_id.has_value());
+  done.wait();
+
+  EXPECT_FALSE(report.success);
+  EXPECT_TRUE(std::any_of(report.diagnostics.begin(), report.diagnostics.end(),
+    [](const ImportDiagnostic& diagnostic) {
+      return diagnostic.code.starts_with("scene.descriptor.");
+    }));
+
+  StopService(service);
+}
+
 //=== Cancellation Tests ===--------------------------------------------------//
 
 class AsyncImportServiceCancelTest : public testing::Test {

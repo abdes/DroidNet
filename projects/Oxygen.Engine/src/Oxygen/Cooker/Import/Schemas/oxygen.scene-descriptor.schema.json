@@ -1,0 +1,517 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Oxygen Scene Descriptor",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "$schema": {
+            "type": "string"
+        },
+        "name": {
+            "$ref": "#/definitions/identifier"
+        },
+        "content_hashing": {
+            "type": "boolean"
+        },
+        "nodes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 65535,
+            "items": {
+                "$ref": "#/definitions/node"
+            }
+        },
+        "renderables": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/renderable"
+            }
+        },
+        "cameras": {
+            "$ref": "#/definitions/cameras"
+        },
+        "lights": {
+            "$ref": "#/definitions/lights"
+        },
+        "references": {
+            "$ref": "#/definitions/references"
+        }
+    },
+    "required": [
+        "name",
+        "nodes"
+    ],
+    "definitions": {
+        "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 63,
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,62}$"
+        },
+        "vec2": {
+            "type": "array",
+            "items": {
+                "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+        },
+        "vec3": {
+            "type": "array",
+            "items": {
+                "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+        },
+        "quat": {
+            "type": "array",
+            "items": {
+                "type": "number"
+            },
+            "minItems": 4,
+            "maxItems": 4
+        },
+        "canonical_virtual_path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+$"
+        },
+        "canonical_ogeo_path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.ogeo$"
+        },
+        "canonical_omat_path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.omat$"
+        },
+        "canonical_oscript_path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.oscript$"
+        },
+        "canonical_input_action_path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.oiact$"
+        },
+        "canonical_input_mapping_context_path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.oimap$"
+        },
+        "canonical_physics_scene_path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.physics$"
+        },
+        "node_flags": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "visible": {
+                    "type": "boolean"
+                },
+                "static": {
+                    "type": "boolean"
+                },
+                "casts_shadows": {
+                    "type": "boolean"
+                },
+                "receives_shadows": {
+                    "type": "boolean"
+                },
+                "ray_cast_selectable": {
+                    "type": "boolean"
+                },
+                "ignore_parent_transform": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "node_transform": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "translation": {
+                    "$ref": "#/definitions/vec3"
+                },
+                "rotation": {
+                    "$ref": "#/definitions/quat"
+                },
+                "scale": {
+                    "$ref": "#/definitions/vec3"
+                }
+            }
+        },
+        "node": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "parent": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "flags": {
+                    "$ref": "#/definitions/node_flags"
+                },
+                "transform": {
+                    "$ref": "#/definitions/node_transform"
+                }
+            }
+        },
+        "renderable": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "node",
+                "geometry_ref"
+            ],
+            "properties": {
+                "node": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "geometry_ref": {
+                    "$ref": "#/definitions/canonical_ogeo_path"
+                },
+                "material_ref": {
+                    "$ref": "#/definitions/canonical_omat_path"
+                },
+                "visible": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "perspective_camera": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "node"
+            ],
+            "properties": {
+                "node": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "fov_y": {
+                    "type": "number",
+                    "exclusiveMinimum": 0.0
+                },
+                "aspect_ratio": {
+                    "type": "number",
+                    "exclusiveMinimum": 0.0
+                },
+                "near_plane": {
+                    "type": "number",
+                    "exclusiveMinimum": 0.0
+                },
+                "far_plane": {
+                    "type": "number",
+                    "exclusiveMinimum": 0.0
+                }
+            }
+        },
+        "orthographic_camera": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "node"
+            ],
+            "properties": {
+                "node": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "left": {
+                    "type": "number"
+                },
+                "right": {
+                    "type": "number"
+                },
+                "bottom": {
+                    "type": "number"
+                },
+                "top": {
+                    "type": "number"
+                },
+                "near_plane": {
+                    "type": "number"
+                },
+                "far_plane": {
+                    "type": "number"
+                }
+            }
+        },
+        "cameras": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "perspective": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/perspective_camera"
+                    }
+                },
+                "orthographic": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/orthographic_camera"
+                    }
+                }
+            }
+        },
+        "light_shadow": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "bias": {
+                    "type": "number"
+                },
+                "normal_bias": {
+                    "type": "number"
+                },
+                "contact_shadows": {
+                    "type": "boolean"
+                },
+                "resolution_hint": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                }
+            }
+        },
+        "light_common": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "affects_world": {
+                    "type": "boolean"
+                },
+                "color_rgb": {
+                    "$ref": "#/definitions/vec3"
+                },
+                "mobility": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                },
+                "casts_shadows": {
+                    "type": "boolean"
+                },
+                "exposure_compensation_ev": {
+                    "type": "number"
+                },
+                "shadow": {
+                    "$ref": "#/definitions/light_shadow"
+                }
+            }
+        },
+        "directional_light": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "node"
+            ],
+            "properties": {
+                "node": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "common": {
+                    "$ref": "#/definitions/light_common"
+                },
+                "angular_size_radians": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "environment_contribution": {
+                    "type": "boolean"
+                },
+                "is_sun_light": {
+                    "type": "boolean"
+                },
+                "cascade_count": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 4
+                },
+                "cascade_distances": {
+                    "type": "array",
+                    "items": {
+                        "type": "number"
+                    },
+                    "minItems": 4,
+                    "maxItems": 4
+                },
+                "distribution_exponent": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "intensity_lux": {
+                    "type": "number",
+                    "minimum": 0.0
+                }
+            }
+        },
+        "point_light": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "node"
+            ],
+            "properties": {
+                "node": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "common": {
+                    "$ref": "#/definitions/light_common"
+                },
+                "range": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "attenuation_model": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                },
+                "decay_exponent": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "source_radius": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "luminous_flux_lm": {
+                    "type": "number",
+                    "minimum": 0.0
+                }
+            }
+        },
+        "spot_light": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "node"
+            ],
+            "properties": {
+                "node": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "common": {
+                    "$ref": "#/definitions/light_common"
+                },
+                "range": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "attenuation_model": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                },
+                "decay_exponent": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "inner_cone_angle_radians": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "outer_cone_angle_radians": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "source_radius": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "luminous_flux_lm": {
+                    "type": "number",
+                    "minimum": 0.0
+                }
+            }
+        },
+        "lights": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "directional": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/directional_light"
+                    }
+                },
+                "point": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/point_light"
+                    }
+                },
+                "spot": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/spot_light"
+                    }
+                }
+            }
+        },
+        "references": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "materials": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/canonical_omat_path"
+                    },
+                    "uniqueItems": true
+                },
+                "scripts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/canonical_oscript_path"
+                    },
+                    "uniqueItems": true
+                },
+                "input_actions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/canonical_input_action_path"
+                    },
+                    "uniqueItems": true
+                },
+                "input_mapping_contexts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/canonical_input_mapping_context_path"
+                    },
+                    "uniqueItems": true
+                },
+                "physics_sidecars": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/canonical_physics_scene_path"
+                    },
+                    "uniqueItems": true
+                },
+                "extra_assets": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/canonical_virtual_path"
+                    },
+                    "uniqueItems": true
+                }
+            }
+        }
+    }
+}

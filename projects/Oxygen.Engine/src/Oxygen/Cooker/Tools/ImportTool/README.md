@@ -5,7 +5,10 @@
 Supported import kinds:
 - `texture`
 - `texture-descriptor` (manifest job type)
+- `buffer-container` (manifest job type)
 - `material-descriptor` (manifest job type)
+- `geometry-descriptor` (manifest job type)
+- `scene-descriptor` (manifest job type)
 - `fbx`
 - `gltf`
 - `input`
@@ -157,12 +160,16 @@ Shipped JSON schemas:
 - source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
 - source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json`
 - source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json`
+- source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json`
+- source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json`
 - source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json`
 - source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json`
 - source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json`
 - installed for users as: `schemas/oxygen.import-manifest.schema.json`
 - installed for users as: `schemas/oxygen.texture-descriptor.schema.json`
 - installed for users as: `schemas/oxygen.material-descriptor.schema.json`
+- installed for users as: `schemas/oxygen.geometry-descriptor.schema.json`
+- installed for users as: `schemas/oxygen.scene-descriptor.schema.json`
 - installed for users as: `schemas/oxygen.input.schema.json`
 - installed for users as: `schemas/oxygen.input-action.schema.json`
 - installed for users as: `schemas/oxygen.physics-sidecar.schema.json`
@@ -177,6 +184,8 @@ Repository checkout:
     { "fileMatch": ["import-manifest*.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json" },
     { "fileMatch": ["*.texture.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json" },
     { "fileMatch": ["*.material.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json" },
+    { "fileMatch": ["*.geometry.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json" },
+    { "fileMatch": ["*.scene.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json" },
     { "fileMatch": ["*.input.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json" },
     { "fileMatch": ["*.input-action.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json" },
     { "fileMatch": ["*.physics-sidecar.json"], "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json" }
@@ -192,6 +201,8 @@ Installed package layout:
     { "fileMatch": ["import-manifest*.json"], "url": "./schemas/oxygen.import-manifest.schema.json" },
     { "fileMatch": ["*.texture.json"], "url": "./schemas/oxygen.texture-descriptor.schema.json" },
     { "fileMatch": ["*.material.json"], "url": "./schemas/oxygen.material-descriptor.schema.json" },
+    { "fileMatch": ["*.geometry.json"], "url": "./schemas/oxygen.geometry-descriptor.schema.json" },
+    { "fileMatch": ["*.scene.json"], "url": "./schemas/oxygen.scene-descriptor.schema.json" },
     { "fileMatch": ["*.input.json"], "url": "./schemas/oxygen.input.schema.json" },
     { "fileMatch": ["*.input-action.json"], "url": "./schemas/oxygen.input-action.schema.json" },
     { "fileMatch": ["*.physics-sidecar.json"], "url": "./schemas/oxygen.physics-sidecar.schema.json" }
@@ -362,6 +373,13 @@ Job rules:
   - use `source` as descriptor JSON path
   - accept `output`, `name`, and `content_hashing`
   - descriptor `textures.*.virtual_path` must resolve to mounted cooked roots
+- `geometry-descriptor` jobs:
+  - use `source` as descriptor JSON path
+  - accept `output`, `name`, and `content_hashing`
+- `scene-descriptor` jobs:
+  - use `source` as descriptor JSON path
+  - accept `output`, `name`, and `content_hashing`
+  - resolve geometry/material/script/input/physics references from mounted cooked roots
 - `input` jobs require:
   - `id`
   - `source`

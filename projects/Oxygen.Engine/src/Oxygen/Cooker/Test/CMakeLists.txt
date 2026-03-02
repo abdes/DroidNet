@@ -128,6 +128,21 @@ target_link_libraries(
 )
 
 m_gtest_program(
+  AsyncImportSceneDescriptor
+  SOURCES
+    "Import/SceneDescriptorImportJob_test.cpp"
+    "Import/ImportManifest_scene_descriptor_test.cpp"
+    "Import/SceneDescriptorImportRequestBuilder_test.cpp"
+    "Import/SceneDescriptorJsonSchema_test.cpp"
+)
+target_link_libraries(
+  Oxygen.Cooker.AsyncImportSceneDescriptor.Tests
+  PRIVATE
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
+)
+
+m_gtest_program(
   AsyncImportScript
   SOURCES
     "Import/ImportManifest_script_sidecar_test.cpp"
