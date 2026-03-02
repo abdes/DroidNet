@@ -645,4 +645,156 @@ NOLINT_TEST_F(InternalBufferMemoryStreamTest, StressTest_LargeData)
   EXPECT_EQ(read_buffer, large_data);
 }
 
+//=== ReadOnlyMemoryStream tests ===------------------------------------------//
+
+//! Fixture for ReadOnlyMemoryStream tests.
+class ReadOnlyMemoryStreamTest : public testing::Test {
+protected:
+  std::array<std::byte, 5> buffer_ { 'a'_b, 'b'_b, 'c'_b, 'd'_b, 'e'_b };
+  oxygen::serio::ReadOnlyMemoryStream sut_ { std::span(buffer_) };
+};
+
+/*!
+ Verifies that the constructor successfully wraps the constant span and reports
+ size.
+*/
+NOLINT_TEST_F(ReadOnlyMemoryStreamTest, Constructor_InitializesState)
+{
+  const auto size_result = sut_.Size();
+  const auto position_result = sut_.Position();
+
+  EXPECT_TRUE(size_result);
+  EXPECT_EQ(size_result.value(), buffer_.size());
+  EXPECT_TRUE(position_result);
+  EXPECT_EQ(position_result.value(), 0);
+}
+
+/*!
+ Verifies that Data() correctly returns the underlying span.
+*/
+NOLINT_TEST_F(ReadOnlyMemoryStreamTest, Data_ReturnsUnderlyingSpan)
+{
+  const auto data = sut_.Data();
+
+  EXPECT_EQ(data.size(), buffer_.size());
+  EXPECT_EQ(data.data(), buffer_.data());
+}
+
+/*!
+ Verifies that Read() correctly reads exactly what is in the immutable buffer.
+*/
+NOLINT_TEST_F(ReadOnlyMemoryStreamTest, Read_ReadsDataCorrectly)
+{
+  std::array<std::byte, 5> buffer {};
+
+  const auto read_result = sut_.Read(buffer.data(), buffer.size());
+  const std::string_view result(
+    reinterpret_cast<const char*>(buffer.data()), buffer.size());
+
+  ASSERT_TRUE(read_result);
+  EXPECT_EQ(result, "abcde");
+}
+
+/*!
+ Verifies that Seek() and Position() function normally for a read-only stream.
+*/
+NOLINT_TEST_F(ReadOnlyMemoryStreamTest, Seek_MovesToCorrectPosition)
+{
+  // Act
+  const auto seek_result = sut_.Seek(3);
+  const auto position_result = sut_.Position();
+
+  // Assert
+  EXPECT_TRUE(seek_result);
+  EXPECT_TRUE(position_result);
+  EXPECT_EQ(position_result.value(), 3);
+}
+
+/*!
+ Verifies that reading past the buffer limit fails as expected.
+*/
+NOLINT_TEST_F(ReadOnlyMemoryStreamTest, Read_FailsWhenExceedingLimit)
+{
+  std::array<std::byte, 6> over_buffer {};
+
+  const auto read_result = sut_.Read(over_buffer.data(), over_buffer.size());
+
+  EXPECT_FALSE(read_result);
+  EXPECT_EQ(read_result.error(), std::make_error_code(std::errc::io_error));
+}
+
+/*!
+ Verifies that Backward() moves the position backward and subsequent reads are
+ correct.
+*/
+NOLINT_TEST_F(ReadOnlyMemoryStreamTest, Backward_MovesPositionAndReadsCorrectly)
+{
+  ASSERT_TRUE(sut_.Seek(4));
+
+  const auto result = sut_.Backward(2);
+  const auto position = sut_.Position();
+  std::array<std::byte, 3> buffer {};
+  ASSERT_TRUE(sut_.Read(buffer.data(), 3));
+
+  EXPECT_TRUE(result);
+  EXPECT_TRUE(position);
+  EXPECT_EQ(position.value(), 2);
+
+  const std::string_view read_str(
+    // NOLINTNEXTLINE(*-reinterpret-cast)
+    reinterpret_cast<const char*>(buffer.data()), 3);
+  EXPECT_EQ(read_str, "cde");
+}
+
+/*!
+ Verifies that Forward() moves the position forward and subsequent reads are
+ correct.
+*/
+NOLINT_TEST_F(ReadOnlyMemoryStreamTest, Forward_MovesPositionAndReadsCorrectly)
+{
+  const auto result = sut_.Forward(3);
+  const auto position = sut_.Position();
+  std::array<std::byte, 2> buffer {};
+  ASSERT_TRUE(sut_.Read(buffer.data(), 2));
+
+  EXPECT_TRUE(result);
+  EXPECT_TRUE(position);
+  EXPECT_EQ(position.value(), 3);
+
+  const std::string_view read_str(
+    // NOLINTNEXTLINE(*-reinterpret-cast)
+    reinterpret_cast<const char*>(buffer.data()), 2);
+  EXPECT_EQ(read_str, "de");
+}
+
+/*!
+ Verifies that SeekEnd() moves position to end and further reads fail.
+*/
+NOLINT_TEST_F(ReadOnlyMemoryStreamTest, SeekEnd_MovesToEndAndReadFails)
+{
+  const auto result = sut_.SeekEnd();
+  const auto position = sut_.Position();
+  std::array<std::byte, 1> buffer {};
+  const auto read_result = sut_.Read(buffer.data(), 1);
+
+  EXPECT_TRUE(result);
+  EXPECT_TRUE(position);
+  EXPECT_EQ(position.value(), buffer_.size());
+  EXPECT_FALSE(read_result);
+  EXPECT_EQ(read_result.error(), std::make_error_code(std::errc::io_error));
+}
+
+/*!
+ Verifies that Reset() sets position back to 0.
+*/
+NOLINT_TEST_F(ReadOnlyMemoryStreamTest, Reset_ResetsPosition)
+{
+  ASSERT_TRUE(sut_.Seek(3));
+  sut_.Reset();
+
+  const auto position = sut_.Position();
+  EXPECT_TRUE(position);
+  EXPECT_EQ(position.value(), 0);
+}
+
 } // namespace

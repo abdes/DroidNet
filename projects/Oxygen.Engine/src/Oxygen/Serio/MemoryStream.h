@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <span>
 #include <vector>
 
@@ -186,6 +187,110 @@ public:
 
 private:
   MemoryStream mem_stream_;
+};
+
+//! Read-only memory stream for reading binary data from an immutable buffer.
+/*!
+  ReadOnlyMemoryStream provides a seekable, input-only stream interface backed
+  by an external immutable buffer (std::span<const std::byte>). It supports
+  reading and seeking operations, making it suitable for deserialization from
+  mapped memory or pre-allocated read-only buffers.
+
+  This class implements the InputStream concept.
+
+  @see MemoryStream, InputStream
+*/
+class ReadOnlyMemoryStream {
+public:
+  OXGN_SERIO_API explicit ReadOnlyMemoryStream(
+    std::span<const std::byte> buffer = {}) noexcept;
+
+  ~ReadOnlyMemoryStream() = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(ReadOnlyMemoryStream)
+  OXYGEN_DEFAULT_MOVABLE(ReadOnlyMemoryStream)
+
+  OXGN_SERIO_NDAPI auto Read(std::byte* data, size_t size) noexcept
+    -> Result<void>;
+  OXGN_SERIO_NDAPI auto Size() const noexcept -> Result<size_t>;
+  OXGN_SERIO_NDAPI auto Position() const noexcept -> Result<size_t>;
+  OXGN_SERIO_NDAPI auto Seek(size_t pos) noexcept -> Result<void>;
+  OXGN_SERIO_NDAPI auto Backward(size_t offset) noexcept -> Result<void>;
+  OXGN_SERIO_NDAPI auto Forward(size_t offset) noexcept -> Result<void>;
+  OXGN_SERIO_NDAPI auto SeekEnd() noexcept -> Result<void>;
+  OXGN_SERIO_API auto Reset() noexcept -> void;
+
+  OXGN_SERIO_NDAPI auto Data() const noexcept -> std::span<const std::byte>;
+
+private:
+  std::span<const std::byte> buffer_;
+  size_t pos_ = 0;
+};
+
+static_assert(InputStream<ReadOnlyMemoryStream>);
+
+//! Type-erased, polymorphic wrapper for ReadOnlyMemoryStream implementing
+//! AnyInputStream.
+class AnyReadOnlyMemoryStream : public AnyInputStream {
+public:
+  explicit AnyReadOnlyMemoryStream(
+    const std::span<const std::byte> buffer = {}) noexcept
+    : mem_stream_(buffer)
+  {
+  }
+
+  ~AnyReadOnlyMemoryStream() override = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(AnyReadOnlyMemoryStream)
+  OXYGEN_DEFAULT_MOVABLE(AnyReadOnlyMemoryStream)
+
+  [[nodiscard]] auto Read(std::byte* data, const size_t size) noexcept
+    -> Result<void> override
+  {
+    return mem_stream_.Read(data, size);
+  }
+
+  [[nodiscard]] auto Size() const noexcept -> Result<size_t> override
+  {
+    return mem_stream_.Size();
+  }
+
+  [[nodiscard]] auto Position() const noexcept -> Result<size_t> override
+  {
+    return mem_stream_.Position();
+  }
+
+  [[nodiscard]] auto Seek(const size_t pos) noexcept -> Result<void> override
+  {
+    return mem_stream_.Seek(pos);
+  }
+
+  [[nodiscard]] auto Backward(const size_t offset) noexcept
+    -> Result<void> override
+  {
+    return mem_stream_.Backward(offset);
+  }
+
+  [[nodiscard]] auto Forward(const size_t offset) noexcept
+    -> Result<void> override
+  {
+    return mem_stream_.Forward(offset);
+  }
+
+  [[nodiscard]] auto SeekEnd() noexcept -> Result<void> override
+  {
+    return mem_stream_.SeekEnd();
+  }
+
+  auto Reset() noexcept -> void override { mem_stream_.Reset(); }
+
+  [[nodiscard]] auto Data() const noexcept -> std::span<const std::byte>
+  {
+    return mem_stream_.Data();
+  }
+
+private:
+  ReadOnlyMemoryStream mem_stream_;
 };
 
 } // namespace oxygen::serio

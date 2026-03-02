@@ -9,24 +9,18 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <span>
+#include <stdexcept>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
 
 namespace oxygen::serio {
 
-//! Concept to specify a stream that can be written to and read from.
-/*!
- @note All methods should be noexcept.
-*/
+//! Concept to specify common stream operations.
 template <typename T>
-concept Stream = requires(T t, const std::byte* cdata, std::byte* data,
-  std::span<const std::byte> sdata, size_t size) {
-  { t.Read(data, size) } -> std::same_as<Result<void>>;
-  { t.Write(cdata, size) } -> std::same_as<Result<void>>;
-  { t.Write(sdata) } -> std::same_as<Result<void>>;
-  { t.Flush() } -> std::same_as<Result<void>>;
+concept StreamBase = requires(T t, size_t size) {
   { t.Size() } -> std::same_as<Result<size_t>>;
   { t.Position() } -> std::same_as<Result<size_t>>;
   { t.Seek(size) } -> std::same_as<Result<void>>;
@@ -35,6 +29,27 @@ concept Stream = requires(T t, const std::byte* cdata, std::byte* data,
   { t.SeekEnd() } -> std::same_as<Result<void>>;
   { t.Reset() } -> std::same_as<void>;
 };
+
+//! Concept to specify an input stream that can be read from.
+template <typename T>
+concept InputStream
+  = StreamBase<T> && requires(T t, std::byte* data, size_t size) {
+      { t.Read(data, size) } -> std::same_as<Result<void>>;
+    };
+
+//! Concept to specify an output stream that can be written to.
+template <typename T>
+concept OutputStream = StreamBase<T>
+  && requires(T t, const std::byte* cdata, std::span<const std::byte> sdata,
+    size_t size) {
+       { t.Write(cdata, size) } -> std::same_as<Result<void>>;
+       { t.Write(sdata) } -> std::same_as<Result<void>>;
+       { t.Flush() } -> std::same_as<Result<void>>;
+     };
+
+//! Concept to specify a stream that can be both written to and read from.
+template <typename T>
+concept Stream = InputStream<T> && OutputStream<T>;
 
 //! Serialization limits and type definitions for serio streams.
 /*!
@@ -49,9 +64,61 @@ concept Stream = requires(T t, const std::byte* cdata, std::byte* data,
 */
 namespace limits {
   using SequenceSizeType = uint32_t;
-  constexpr SequenceSizeType kMaxStringLength = 1024ULL * 1024; // 1MB
-  constexpr SequenceSizeType kMaxArrayLength = 1024ULL * 1024; // 1MB
+  [[maybe_unused]] constexpr SequenceSizeType kMaxStringLength
+    = 1024ULL * 1024; // 1MB
+  [[maybe_unused]] constexpr SequenceSizeType kMaxArrayLength
+    = 1024ULL * 1024; // 1MB
 }
+
+//! Abstract base class for generic byte input streams.
+class AnyInputStream {
+public:
+  AnyInputStream() = default;
+  virtual ~AnyInputStream() = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(AnyInputStream)
+  OXYGEN_DEFAULT_MOVABLE(AnyInputStream)
+
+  [[nodiscard]] virtual auto Read(std::byte* data, size_t size) noexcept
+    -> Result<void>
+    = 0;
+  [[nodiscard]] virtual auto Size() const noexcept -> Result<size_t> = 0;
+  [[nodiscard]] virtual auto Position() const noexcept -> Result<size_t> = 0;
+  [[nodiscard]] virtual auto Seek(size_t pos) noexcept -> Result<void> = 0;
+  [[nodiscard]] virtual auto Backward(size_t offset) noexcept -> Result<void>
+    = 0;
+  [[nodiscard]] virtual auto Forward(size_t offset) noexcept -> Result<void>
+    = 0;
+  [[nodiscard]] virtual auto SeekEnd() noexcept -> Result<void> = 0;
+  virtual auto Reset() noexcept -> void = 0;
+};
+
+//! Abstract base class for generic byte output streams.
+class AnyOutputStream {
+public:
+  AnyOutputStream() = default;
+  virtual ~AnyOutputStream() = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(AnyOutputStream)
+  OXYGEN_DEFAULT_MOVABLE(AnyOutputStream)
+
+  [[nodiscard]] virtual auto Write(const std::byte* data, size_t size) noexcept
+    -> Result<void>
+    = 0;
+  [[nodiscard]] virtual auto Write(std::span<const std::byte> data) noexcept
+    -> Result<void>
+    = 0;
+  [[nodiscard]] virtual auto Flush() noexcept -> Result<void> = 0;
+  [[nodiscard]] virtual auto Size() const noexcept -> Result<size_t> = 0;
+  [[nodiscard]] virtual auto Position() const noexcept -> Result<size_t> = 0;
+  [[nodiscard]] virtual auto Seek(size_t pos) noexcept -> Result<void> = 0;
+  [[nodiscard]] virtual auto Backward(size_t offset) noexcept -> Result<void>
+    = 0;
+  [[nodiscard]] virtual auto Forward(size_t offset) noexcept -> Result<void>
+    = 0;
+  [[nodiscard]] virtual auto SeekEnd() noexcept -> Result<void> = 0;
+  virtual auto Reset() noexcept -> void = 0;
+};
 
 //! Abstract base class for generic byte streams.
 /*!
@@ -79,36 +146,34 @@ namespace limits {
 
  @see oxygen::serio::Stream, oxygen::serio::MemoryStream
 */
-class AnyStream {
+class AnyStream : public AnyInputStream, public AnyOutputStream {
 public:
   AnyStream() = default;
-  virtual ~AnyStream() = default;
+  ~AnyStream() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(AnyStream)
   OXYGEN_DEFAULT_MOVABLE(AnyStream)
 
-  [[nodiscard]] virtual auto Read(std::byte* data, size_t size) noexcept
-    -> Result<void>
+  [[nodiscard]] auto Read(std::byte* data, size_t size) noexcept
+    -> Result<void> override
     = 0;
-  [[nodiscard]] virtual auto Write(const std::byte* data, size_t size) noexcept
-    -> Result<void>
+  [[nodiscard]] auto Write(const std::byte* data, size_t size) noexcept
+    -> Result<void> override
     = 0;
-  [[nodiscard]] virtual auto Write(std::span<const std::byte> data) noexcept
-    -> Result<void>
+  [[nodiscard]] auto Write(std::span<const std::byte> data) noexcept
+    -> Result<void> override
     = 0;
-  [[nodiscard]] virtual auto Flush() noexcept -> Result<void> = 0;
-  [[nodiscard]] virtual auto Size() const noexcept -> Result<size_t> = 0;
-  [[nodiscard]] virtual auto Position() const noexcept -> Result<size_t> = 0;
-  [[nodiscard]] virtual auto Seek(size_t pos) noexcept -> Result<void> = 0;
-  [[nodiscard]] virtual auto Backward(size_t offset) noexcept -> Result<void>
-    = 0;
-  [[nodiscard]] virtual auto Forward(size_t offset) noexcept -> Result<void>
-    = 0;
-  [[nodiscard]] virtual auto SeekEnd() noexcept -> Result<void> = 0;
+  [[nodiscard]] auto Flush() noexcept -> Result<void> override = 0;
 
-  //! Reset the stream to the beginning, and clear any previous error or
-  //! end-of-stream conditions.
-  virtual auto Reset() noexcept -> void = 0;
+  [[nodiscard]] auto Size() const noexcept -> Result<size_t> override = 0;
+  [[nodiscard]] auto Position() const noexcept -> Result<size_t> override = 0;
+  [[nodiscard]] auto Seek(size_t pos) noexcept -> Result<void> override = 0;
+  [[nodiscard]] auto Backward(size_t offset) noexcept -> Result<void> override
+    = 0;
+  [[nodiscard]] auto Forward(size_t offset) noexcept -> Result<void> override
+    = 0;
+  [[nodiscard]] auto SeekEnd() noexcept -> Result<void> override = 0;
+  auto Reset() noexcept -> void override = 0;
 };
 
 } // namespace oxygen::serio
@@ -135,7 +200,7 @@ constexpr auto operator""_b(char c) noexcept -> std::byte
 consteval auto operator""_b(unsigned long long n) -> std::byte
 {
   // Compile-time check: only allow values that fit in a byte
-  if (n > 0xFF) {
+  if (n > (std::numeric_limits<unsigned char>::max)()) {
     throw std::out_of_range("byte literal out of range (must be <= 0xFF)");
   }
   return static_cast<std::byte>(n);
