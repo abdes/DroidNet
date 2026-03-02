@@ -56,8 +56,8 @@ Status values:
 | P6 | done | P2, P3, P4, P5 | Manifest + DAG integration | job types/defaults/key checks/dependency collection |
 | P7 | done | P2, P3, P4, P5, P6 | Schema embed/install integration | all physics schemas generated and installed |
 | P8 | done | P2, P3, P4, P5, P6 | Diagnostics hardening | stable diagnostic set and precedence behavior |
-| P9 | in_progress | P1, P2, P3, P4, P5, P6, P7, P8 | Test matrix closure | domain + integration + pak tests complete |
-| P10 | pending | P9 | Parity and docs closeout | PakGen parity evidence and documentation finalization |
+| P9 | done | P1, P2, P3, P4, P5, P6, P7, P8 | Test matrix closure | domain + integration + pak tests complete |
+| P10 | in_progress | P9 | Parity and docs closeout | PakGen parity evidence and documentation finalization |
 
 ## 3.1 Strict Execution Order
 
@@ -71,9 +71,9 @@ This is the mandatory execution order for closure:
 6. P5 [done]
 7. P6 [done]
 8. P7 [done]
-9. P8
-10. P9
-11. P10
+9. P8 [done]
+10. P9 [done]
+11. P10 [in_progress]
 
 ## 4. Detailed Phase Work
 
@@ -490,16 +490,31 @@ Acceptance:
             `physics.manifest.job_id_duplicate`
     - closure evidence:
       - user-reported validation: `All Green` for P8 test updates.
-11. P9 `in_progress`:
+11. P9 `done`:
      - evidence:
-      - sidecar + physics resource/material schema/request/job/manifest tests
-        exist in tree.
-      - collision-shape schema/request/job/manifest tests now exist in tree.
-     - gap evidence:
-      - scene+physics integration matrix is still pending.
-12. P10 `pending`:
-    - gap evidence:
-      - no recorded full parity evidence for the complete four-domain physics authoring model.
+      - cooker domain test coverage exists for all four physics domains:
+        - schema/request/job/manifest:
+          - `PhysicsResourceDescriptor*`
+          - `PhysicsMaterialDescriptor*`
+          - `CollisionShapeDescriptor*`
+          - `Physics*` (sidecar)
+      - sidecar success-path job coverage added:
+        - `PhysicsImportJobTest.InlineSidecarWithExistingTargetSceneImportsSuccessfullyAndEmitsOpscene`
+      - manifest DAG diagnostics/orchestration coverage:
+        - `BatchCommand_physics_dag_test.cpp`
+      - scene+physics runtime load integration coverage exists:
+        - `src/Oxygen/Content/Test/AssetLoader_scene_test.cpp`
+        - `src/Oxygen/Content/Test/PhysicsSceneLoader_test.cpp`
+      - pak planner/writer physics inclusion coverage exists:
+        - `src/Oxygen/Cooker/Test/Pak/PakPlanBuilder_test.cpp`
+        - `src/Oxygen/Cooker/Test/Pak/PakWriter_test.cpp`
+     - closure evidence:
+      - user-reported validation: `All Green` for full P9 matrix.
+12. P10 `in_progress`:
+    - evidence:
+      - P9 closure gate satisfied; parity/docs closeout can start.
+    - remaining gate:
+      - finalize parity evidence pack and lock docs/spec/plan status consistency.
 
 ## P0
 
@@ -798,16 +813,52 @@ Build/test execution in this pass:
    - build/test execution was not run by the agent (per user constraints).
    - user-reported validation: `All Green`.
 
-## P9 (in_progress)
+## P9 (done)
 
 1. Entry criteria:
    - P1..P8 closed.
-2. Active objective:
-   - close remaining test-matrix deltas across:
-     - schema tests for all physics schemas
-     - request builder tests for all physics domains
-     - job/pipeline success + canonical failures
-     - manifest orchestration tests (defaults/overrides/deps)
-     - scene+physics integration and pak inclusion assertions
-3. Validation mode:
+2. Implemented objective:
+   - full matrix closure across schema/request/job/pipeline/manifest/integration/pak coverage.
+3. Coverage audit evidence:
+   - schema tests (all physics schemas):
+     - `PhysicsJsonSchema_test.cpp`
+     - `PhysicsResourceDescriptorJsonSchema_test.cpp`
+     - `PhysicsMaterialDescriptorJsonSchema_test.cpp`
+     - `CollisionShapeDescriptorJsonSchema_test.cpp`
+   - request builder tests (all physics domains):
+     - `PhysicsImportRequestBuilder_test.cpp`
+     - `PhysicsResourceDescriptorImportRequestBuilder_test.cpp`
+     - `PhysicsMaterialDescriptorImportRequestBuilder_test.cpp`
+     - `CollisionShapeDescriptorImportRequestBuilder_test.cpp`
+   - job/pipeline tests (success + canonical failures):
+     - `PhysicsImportJob_test.cpp` (now includes sidecar success path)
+     - `PhysicsResourceDescriptorImportJob_test.cpp`
+     - `PhysicsMaterialDescriptorImportJob_test.cpp`
+     - `CollisionShapeDescriptorImportJob_test.cpp`
+     - `PhysicsImportPipeline_test.cpp`
+   - manifest orchestration tests:
+     - `ImportManifest_physics_*` tests
+     - `ImportManifest_collision_shape_descriptor_test.cpp`
+     - `BatchCommand_physics_dag_test.cpp`
+   - scene+physics integration tests:
+     - `src/Oxygen/Content/Test/AssetLoader_scene_test.cpp`
+     - `src/Oxygen/Content/Test/PhysicsSceneLoader_test.cpp`
+   - pak inclusion tests:
+     - `src/Oxygen/Cooker/Test/Pak/PakPlanBuilder_test.cpp`
+     - `src/Oxygen/Cooker/Test/Pak/PakWriter_test.cpp`
+4. Validation mode:
    - build/test execution is user-run only in this flow.
+5. Closure evidence:
+   - user-reported validation: `All Green`.
+
+## P10 (in_progress)
+
+1. Entry criteria:
+   - P9 closed with user-run green validation.
+2. Active objective:
+   - parity and docs closeout:
+     - validate representative parity scenarios against legacy PakGen physics coverage.
+     - finalize docs/examples for descriptor-first physics workflows.
+     - ensure spec/plan/status consistency with explicit evidence.
+3. Validation mode:
+   - build/test execution remains user-run only in this flow.

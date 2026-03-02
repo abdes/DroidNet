@@ -57,6 +57,61 @@ namespace {
     return report;
   }
 
+  auto MakeSceneDescriptorRequest(const std::filesystem::path& cooked_root)
+    -> ImportRequest
+  {
+    auto request = ImportRequest {};
+    request.source_path = "inline://scene-descriptor";
+    request.job_name = "DemoScene";
+    request.cooked_root = cooked_root;
+    request.loose_cooked_layout.virtual_mount_root = "/.cooked";
+    request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
+      .normalized_descriptor_json
+      = R"({"name":"DemoScene","nodes":[{"name":"Root"}]})",
+    };
+    return request;
+  }
+
+  auto MakePhysicsSidecarRequest(const std::filesystem::path& cooked_root)
+    -> ImportRequest
+  {
+    auto request = ImportRequest {};
+    request.source_path = "inline://physics-sidecar";
+    request.job_name = "DemoScene.physics";
+    request.cooked_root = cooked_root;
+    request.loose_cooked_layout.virtual_mount_root = "/.cooked";
+    request.physics = PhysicsImportSettings {
+      .target_scene_virtual_path = "/.cooked/Scenes/DemoScene.oscene",
+      .inline_bindings_json = R"({"bindings":{}})",
+    };
+    return request;
+  }
+
+  NOLINT_TEST(PhysicsImportJobTest,
+    InlineSidecarWithExistingTargetSceneImportsSuccessfullyAndEmitsOpscene)
+  {
+    auto service = AsyncImportService(AsyncImportService::Config {
+      .thread_pool_size = 2U,
+    });
+    const auto cooked_root = MakeTempCookedRoot("inline_sidecar_success");
+
+    const auto scene_report
+      = SubmitAndWait(service, MakeSceneDescriptorRequest(cooked_root));
+    ASSERT_TRUE(scene_report.success);
+
+    const auto physics_report
+      = SubmitAndWait(service, MakePhysicsSidecarRequest(cooked_root));
+    EXPECT_TRUE(physics_report.success);
+    EXPECT_FALSE(HasDiagnosticCode(
+      physics_report.diagnostics, "physics.sidecar.target_scene_missing"));
+    EXPECT_FALSE(HasDiagnosticCode(
+      physics_report.diagnostics, "physics.sidecar.payload_parse_failed"));
+    EXPECT_TRUE(std::filesystem::exists(
+      cooked_root / std::filesystem::path("Scenes/DemoScene.opscene")));
+
+    service.Stop();
+  }
+
   NOLINT_TEST(PhysicsImportJobTest, InvalidTargetSceneVirtualPathFailsRequest)
   {
     auto service = AsyncImportService(AsyncImportService::Config {
