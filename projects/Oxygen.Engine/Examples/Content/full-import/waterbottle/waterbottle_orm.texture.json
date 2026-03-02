@@ -1,0 +1,11 @@
+{
+  "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json",
+  "source": "./waterbottle_orm.png",
+  "intent": "orm",
+  "decode": {
+    "color_space": "linear"
+  },
+  "output": {
+    "format": "bc7"
+  }
+}

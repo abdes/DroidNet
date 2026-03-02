@@ -1,0 +1,35 @@
+{
+  "$schema": "../../../src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json",
+  "name": "sphere",
+  "bounds": {
+    "min": [-1.0, -1.0, -1.0],
+    "max": [1.0, 1.0, 1.0]
+  },
+  "lods": [
+    {
+      "name": "sphere_lod0",
+      "mesh_type": "procedural",
+      "bounds": {
+        "min": [-1.0, -1.0, -1.0],
+        "max": [1.0, 1.0, 1.0]
+      },
+      "procedural": {
+        "generator": "Sphere",
+        "mesh_name": "Sphere",
+        "params": {
+          "latitude_segments": 24,
+          "longitude_segments": 48
+        }
+      },
+      "submeshes": [
+        {
+          "name": "sphere_surface",
+          "material_ref": "/.cooked/Materials/sphere_blue.omat",
+          "views": [
+            { "view_ref": "__all__" }
+          ]
+        }
+      ]
+    }
+  ]
+}

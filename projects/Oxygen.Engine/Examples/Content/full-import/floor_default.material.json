@@ -1,0 +1,11 @@
+{
+  "$schema": "../../../src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json",
+  "name": "floor_default",
+  "domain": "opaque",
+  "alpha_mode": "opaque",
+  "parameters": {
+    "base_color": [0.75, 0.75, 0.75, 1.0],
+    "roughness": 0.8,
+    "metalness": 0.0
+  }
+}
