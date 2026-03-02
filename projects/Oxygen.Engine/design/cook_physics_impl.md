@@ -890,9 +890,13 @@ Build/test execution in this pass:
        - resolving chassis/wheel rigid-body mappings from scene hierarchy,
        - creating vehicles through `PhysicsModule::Vehicles()`,
        - registering node-to-aggregate mapping with resolved authority.
-     - `ValidateUnsupportedPhysicsDomains(...)` now rejects only unsupported
-       aggregate bindings (vehicle bindings are no longer hard-failed as
-       unsupported).
+     - aggregate sidecar hydration is now implemented by:
+       - resolving aggregate membership deterministically from rigid-body
+         subtree membership rooted at `AggregateBindingRecord::node_index`,
+       - creating aggregate instances through `PhysicsModule::Aggregates()`,
+       - adding resolved member `BodyId`s to each aggregate,
+       - registering aggregate mapping with runtime authority converted from
+         `AggregateBindingRecord::authority`.
      - physics dependency preload now includes joint/vehicle
        `constraint_resource_index` payloads.
    - examples updated:

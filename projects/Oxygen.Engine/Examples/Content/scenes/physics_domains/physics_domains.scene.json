@@ -22,7 +22,7 @@
         },
         {
             "name": "Vehicle",
-            "parent": 0
+            "parent": 8
         },
         {
             "name": "TriggerZone",

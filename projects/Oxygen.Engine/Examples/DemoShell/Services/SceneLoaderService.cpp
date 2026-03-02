@@ -155,6 +155,20 @@ namespace {
     }
   }
 
+  auto ToRuntimeAggregateAuthority(
+    const data::pak::physics::AggregateAuthority authority)
+    -> physics::aggregate::AggregateAuthority
+  {
+    switch (authority) {
+    case data::pak::physics::AggregateAuthority::kSimulation:
+      return physics::aggregate::AggregateAuthority::kSimulation;
+    case data::pak::physics::AggregateAuthority::kCommand:
+      return physics::aggregate::AggregateAuthority::kCommand;
+    default:
+      return physics::aggregate::AggregateAuthority::kSimulation;
+    }
+  }
+
   auto IsDescendantNode(const std::vector<scene::SceneNode>& runtime_nodes,
     const size_t candidate_index, const size_t ancestor_index) -> bool
   {
@@ -198,6 +212,32 @@ namespace {
     wheel_node_indices.erase(std::ranges::unique(wheel_node_indices).begin(),
       wheel_node_indices.end());
     return wheel_node_indices;
+  }
+
+  auto CollectSubtreeRigidBodyNodeIndices(
+    const std::span<const data::pak::physics::RigidBodyBindingRecord>
+      rigid_body_bindings,
+    const std::vector<scene::SceneNode>& runtime_nodes,
+    const uint32_t root_node_index) -> std::vector<uint32_t>
+  {
+    auto member_node_indices = std::vector<uint32_t> {};
+    const auto root_index = static_cast<size_t>(root_node_index);
+    for (const auto& rigid_body : rigid_body_bindings) {
+      const auto candidate_index = static_cast<size_t>(rigid_body.node_index);
+      if (candidate_index == root_index) {
+        member_node_indices.push_back(rigid_body.node_index);
+        continue;
+      }
+      if (!IsDescendantNode(runtime_nodes, candidate_index, root_index)) {
+        continue;
+      }
+      member_node_indices.push_back(rigid_body.node_index);
+    }
+
+    std::ranges::sort(member_node_indices);
+    member_node_indices.erase(std::ranges::unique(member_node_indices).begin(),
+      member_node_indices.end());
+    return member_node_indices;
   }
 
   auto ScriptParamFromRecord(
@@ -641,23 +681,6 @@ auto SceneLoaderService::ResolvePhysicsModule()
   }
   physics_module_ = nullptr;
   return nullptr;
-}
-
-void SceneLoaderService::ValidateUnsupportedPhysicsDomains(
-  const data::PhysicsSceneAsset& physics_asset) const
-{
-  const auto aggregate_bindings
-    = physics_asset.GetBindings<data::pak::physics::AggregateBindingRecord>();
-
-  if (!aggregate_bindings.empty()) {
-    throw std::runtime_error(
-      std::string(
-        "aggregate sidecar hydration is not implemented in "
-        "SceneLoader (aggregate membership encoding is not defined in "
-        "PhysicsSceneAsset binding records). sidecar key=")
-      + data::to_string(physics_asset.GetAssetKey())
-      + " aggregate=" + std::to_string(aggregate_bindings.size()) + ")");
-  }
 }
 
 auto SceneLoaderService::ResolveCollisionShapeAsset(
@@ -1533,6 +1556,135 @@ void SceneLoaderService::HydrateVehicleBindings(
   }
 }
 
+void SceneLoaderService::HydrateAggregateBindings(
+  physics::PhysicsModule& physics_module,
+  const std::span<const data::pak::physics::AggregateBindingRecord> bindings,
+  const std::span<const data::pak::physics::RigidBodyBindingRecord>
+    rigid_body_bindings)
+{
+  const auto world_id = physics_module.GetWorldId();
+  if (!physics::IsValid(world_id)) {
+    throw std::runtime_error(
+      "aggregate hydration requires a valid physics world");
+  }
+
+  auto& aggregate_api = physics_module.Aggregates();
+  for (const auto& record : bindings) {
+    const auto root_node_index = static_cast<size_t>(record.node_index);
+    if (root_node_index >= runtime_nodes_.size()) {
+      throw std::runtime_error(
+        std::string("aggregate node_index out of range: ")
+        + std::to_string(record.node_index));
+    }
+
+    auto& root_node = runtime_nodes_[root_node_index];
+    if (physics::ScenePhysics::GetRigidBody(
+          observer_ptr<physics::PhysicsModule> { &physics_module },
+          root_node.GetHandle())
+          .has_value()) {
+      throw std::runtime_error(
+        std::string("aggregate root node must not have a rigid body ")
+        + "(node_index=" + std::to_string(record.node_index) + ")");
+    }
+    if (physics::ScenePhysics::GetCharacter(
+          observer_ptr<physics::PhysicsModule> { &physics_module },
+          root_node.GetHandle())
+          .has_value()) {
+      throw std::runtime_error(
+        std::string("aggregate root node must not have a character ")
+        + "(node_index=" + std::to_string(record.node_index) + ")");
+    }
+    if (physics_module.HasAggregateForNode(root_node.GetHandle())) {
+      throw std::runtime_error(
+        std::string("aggregate root node already has aggregate mapping ")
+        + "(node_index=" + std::to_string(record.node_index) + ")");
+    }
+
+    auto member_node_indices = CollectSubtreeRigidBodyNodeIndices(
+      rigid_body_bindings, runtime_nodes_, record.node_index);
+    if (member_node_indices.empty()) {
+      throw std::runtime_error(
+        std::string("aggregate requires at least one rigid body in subtree ")
+        + "(node_index=" + std::to_string(record.node_index) + ")");
+    }
+
+    auto member_body_ids = std::vector<physics::BodyId> {};
+    member_body_ids.reserve(member_node_indices.size());
+    for (const auto member_node_index_u32 : member_node_indices) {
+      const auto member_node_index = static_cast<size_t>(member_node_index_u32);
+      if (member_node_index >= runtime_nodes_.size()) {
+        throw std::runtime_error(
+          std::string("aggregate member node_index out of range: ")
+          + std::to_string(member_node_index_u32));
+      }
+
+      const auto rigid_body = physics::ScenePhysics::GetRigidBody(
+        observer_ptr<physics::PhysicsModule> { &physics_module },
+        runtime_nodes_[member_node_index].GetHandle());
+      if (!rigid_body.has_value()) {
+        throw std::runtime_error(
+          std::string("aggregate member node does not have a rigid body ")
+          + "(aggregate_node_index=" + std::to_string(record.node_index)
+          + " member_node_index=" + std::to_string(member_node_index_u32)
+          + ")");
+      }
+      member_body_ids.push_back(rigid_body->GetBodyId());
+    }
+
+    std::ranges::sort(member_body_ids);
+    member_body_ids.erase(
+      std::ranges::unique(member_body_ids).begin(), member_body_ids.end());
+    if (record.max_bodies > 0U
+      && member_body_ids.size() > static_cast<size_t>(record.max_bodies)) {
+      throw std::runtime_error(
+        std::string("aggregate max_bodies exceeded by resolved rigid bodies ")
+        + "(node_index=" + std::to_string(record.node_index)
+        + " max_bodies=" + std::to_string(record.max_bodies)
+        + " resolved_members=" + std::to_string(member_body_ids.size()) + ")");
+    }
+
+    const auto created = aggregate_api.CreateAggregate(world_id);
+    if (!created.has_value()) {
+      throw std::runtime_error(
+        std::string("failed to create aggregate binding for node_index=")
+        + std::to_string(record.node_index)
+        + " reason=" + std::string(physics::to_string(created.error())));
+    }
+
+    const auto aggregate_id = created.value();
+    auto keep_aggregate = false;
+    ScopeGuard destroy_on_failure([&]() noexcept {
+      if (!keep_aggregate) {
+        (void)aggregate_api.DestroyAggregate(world_id, aggregate_id);
+      }
+    });
+
+    for (const auto body_id : member_body_ids) {
+      const auto add_result
+        = aggregate_api.AddMemberBody(world_id, aggregate_id, body_id);
+      if (!add_result.has_value()) {
+        throw std::runtime_error(
+          std::string("failed adding rigid body to aggregate ")
+          + "(aggregate_node_index=" + std::to_string(record.node_index)
+          + " body_id=" + physics::to_string(body_id) + " reason="
+          + std::string(physics::to_string(add_result.error())) + ")");
+      }
+    }
+
+    physics_module.RegisterNodeAggregateMapping(root_node.GetHandle(),
+      aggregate_id, ToRuntimeAggregateAuthority(record.authority));
+    if (!physics_module.HasAggregateForNode(root_node.GetHandle())
+      || physics_module.GetAggregateIdForNode(root_node.GetHandle())
+        != aggregate_id) {
+      throw std::runtime_error(
+        std::string("failed to register aggregate mapping for node_index=")
+        + std::to_string(record.node_index));
+    }
+
+    keep_aggregate = true;
+  }
+}
+
 void SceneLoaderService::HydratePhysicsBindings(
   const data::PhysicsSceneAsset& physics_asset)
 {
@@ -1541,8 +1693,6 @@ void SceneLoaderService::HydratePhysicsBindings(
     throw std::runtime_error(
       "physics sidecar present but PhysicsModule is unavailable");
   }
-
-  ValidateUnsupportedPhysicsDomains(physics_asset);
 
   const auto rigid_body_bindings
     = physics_asset.GetBindings<data::pak::physics::RigidBodyBindingRecord>();
@@ -1556,8 +1706,12 @@ void SceneLoaderService::HydratePhysicsBindings(
     = physics_asset.GetBindings<data::pak::physics::JointBindingRecord>();
   const auto vehicle_bindings
     = physics_asset.GetBindings<data::pak::physics::VehicleBindingRecord>();
+  const auto aggregate_bindings
+    = physics_asset.GetBindings<data::pak::physics::AggregateBindingRecord>();
 
   HydrateRigidBodyBindings(*physics_module, rigid_body_bindings);
+  HydrateAggregateBindings(
+    *physics_module, aggregate_bindings, rigid_body_bindings);
   HydrateVehicleBindings(
     *physics_module, vehicle_bindings, rigid_body_bindings);
   HydrateColliderBindings(*physics_module, collider_bindings);
@@ -1567,10 +1721,10 @@ void SceneLoaderService::HydratePhysicsBindings(
 
   LOG_F(INFO,
     "SceneLoader: Physics hydration complete (rigid_bodies={} colliders={} "
-    "characters={} soft_bodies={} joints={} vehicles={})",
+    "characters={} soft_bodies={} joints={} vehicles={} aggregates={})",
     rigid_body_bindings.size(), collider_bindings.size(),
     character_bindings.size(), soft_body_bindings.size(), joint_bindings.size(),
-    vehicle_bindings.size());
+    vehicle_bindings.size(), aggregate_bindings.size());
 }
 
 /*!
