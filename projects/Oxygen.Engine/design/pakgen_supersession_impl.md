@@ -7,18 +7,19 @@ This is the execution tracker for `design/pakgen_supersession.md`.
 1. No shortcut implementations that bypass `ImportJob -> Pipeline`.
 2. No hidden scope changes: any spec delta must be reflected first in the design docs.
 3. Progress is evidence-based only (files, tests, diagnostics, docs).
-4. Domain parity is mandatory: `texture`, `buffer`, `material`, `geometry`, `scene` move as first-class peers.
+4. Domain parity is mandatory for descriptor domains: `texture`, `material`, `geometry`, `scene` are first-class peers; buffer descriptors are container-owned geometry subdocuments.
 5. Manual validation must be trimmed to non-schema-enforceable rules only.
 
 ## 2. Mandatory Architecture Gates
 
 1. Descriptor domains are independent and explicit:
    - `texture-descriptor`
-   - `buffer-descriptor`
    - `material-descriptor`
    - `geometry-descriptor`
    - `scene-descriptor`
-2. Scene import path must not implicitly cook geometry/material/texture/buffer.
+   - geometry-owned `buffers[]`/`views[]` subdocuments (no standalone top-level buffer descriptor contract)
+   - all buffer references are virtual-path based (`.obuf`), not local-ID based
+2. Scene import path must not implicitly cook geometry/material/texture or container-owned geometry buffer content.
 3. JSON schema validation is systematic and diagnostics are surfaced through import diagnostics.
 4. All schema embedding is generated at build time; no manually embedded schema blobs.
 5. C++ Pak path is authoritative (`PakBuilder`/`PakPlanBuilder`/`PakWriter`) before PakGen default-path removal.
@@ -37,7 +38,7 @@ Status values:
 | P0 | done | 4% | Baseline + tracking scaffold | Ledger, evidence rubric, and CI matrix committed |
 | P1 | pending | 12% | Shared descriptor infrastructure | Common schema validation + diagnostics helpers integrated for descriptor domains |
 | P2 | done | 10% | Texture descriptor domain | `texture-descriptor` implemented end-to-end with schema/tests |
-| P3 | pending | 8% | Buffer descriptor domain | `buffer-descriptor` implemented end-to-end with schema/tests |
+| P3 | in_progress | 8% | Geometry buffer subdocument model | container-owned `buffers[]`/`views[]` contract implemented with schema/tests under geometry descriptor flow, including virtual-path references and `.obuf` metadata resolution |
 | P4 | done | 14% | Material descriptor domain | `material-descriptor` implemented end-to-end with schema/tests |
 | P5 | pending | 16% | Geometry descriptor domain | `geometry-descriptor` implemented end-to-end with schema/tests |
 | P6 | pending | 16% | Scene descriptor domain | `scene-descriptor` implemented end-to-end with schema/tests |
@@ -67,22 +68,20 @@ Overall completion:
 ## 5.1 New Schema Sources
 
 1. `src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json`
-2. `src/Oxygen/Cooker/Import/Schemas/oxygen.buffer-descriptor.schema.json`
-3. `src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json`
-4. `src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json`
-5. `src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json`
+2. `src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json`
+3. `src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json`
+4. `src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json`
 
 ## 5.2 New Import Domain Surfaces (Representative)
 
 1. `src/Oxygen/Cooker/Import/TextureDescriptorImportSettings.h`
-2. `src/Oxygen/Cooker/Import/BufferDescriptorImportSettings.h`
-3. `src/Oxygen/Cooker/Import/MaterialDescriptorImportSettings.h`
-4. `src/Oxygen/Cooker/Import/GeometryDescriptorImportSettings.h`
-5. `src/Oxygen/Cooker/Import/SceneDescriptorImportSettings.h`
-6. `src/Oxygen/Cooker/Import/*DescriptorImportRequestBuilder.h`
-7. `src/Oxygen/Cooker/Import/Internal/*DescriptorImportRequestBuilder.cpp`
-8. `src/Oxygen/Cooker/Import/Internal/Jobs/*DescriptorImportJob.h/.cpp`
-9. `src/Oxygen/Cooker/Import/Internal/Pipelines/*DescriptorImportPipeline.h/.cpp`
+2. `src/Oxygen/Cooker/Import/MaterialDescriptorImportSettings.h`
+3. `src/Oxygen/Cooker/Import/GeometryDescriptorImportSettings.h`
+4. `src/Oxygen/Cooker/Import/SceneDescriptorImportSettings.h`
+5. `src/Oxygen/Cooker/Import/*DescriptorImportRequestBuilder.h`
+6. `src/Oxygen/Cooker/Import/Internal/*DescriptorImportRequestBuilder.cpp`
+7. `src/Oxygen/Cooker/Import/Internal/Jobs/*DescriptorImportJob.h/.cpp`
+8. `src/Oxygen/Cooker/Import/Internal/Pipelines/*DescriptorImportPipeline.h/.cpp`
 
 ## 5.3 Core Integration Touchpoints (Representative)
 
@@ -143,19 +142,27 @@ Acceptance:
 
 1. Texture descriptor imports work independently of FBX/glTF paths.
 
-## P3: Buffer Descriptor Domain
+## P3: Geometry Buffer Subdocument Model
 
 Tasks:
 
-1. Add schema for buffer descriptor contract.
-2. Add request-builder/job/pipeline domain path.
-3. Reuse existing buffer cook path (`BufferPipeline`, emitters/index wiring).
-4. Add manifest `type: "buffer-descriptor"` integration and defaults.
-5. Add tests for valid/invalid descriptors and emitted resource indexing.
+1. Define and enforce geometry schema contract for container-owned `buffers[]` with nested `views[]`.
+2. `[done-via-buffer-container]` Enforce external buffer data only (`.buffer.bin` URI); disallow inline JSON payload encodings.
+3. `[done-via-buffer-container]` Require canonical buffer `virtual_path` per buffer descriptor and require mesh/submesh buffer references by virtual path (no local-ID reference model).
+4. `[done-via-buffer-container]` Emit and validate `.obuf` metadata sidecars for emitted buffer resources.
+5. `[pending]` Resolve virtual-path references deterministically across mounted loose + PAK sources (`virtual_path -> .obuf -> resource_index -> buffers.table/data`).
+6. `[in_progress]` Reuse existing buffer cook path (`BufferPipeline`, emitters/index wiring) during geometry import execution.
+7. `[in_progress]` Enforce cross-container dedupe so equivalent buffers are cooked once and reused by shared `resource_index`, with a single canonical `.obuf` at the shared virtual path.
+8. `[in_progress]` Add tests for canonical and failure cases:
+   - missing buffer/view reference
+   - missing/unmounted/ambiguous `.obuf` virtual path
+   - invalid/out-of-range view slice
+   - shared external `.buffer.bin` referenced by multiple geometry containers
+   - equivalent buffers across multiple containers produce one `buffers.table` entry, one payload region, and one canonical `.obuf`.
 
 Acceptance:
 
-1. Buffer descriptor imports produce deterministic `buffers.table`/`buffers.data` outputs.
+1. Geometry descriptor imports produce deterministic `buffers.table`/`buffers.data` outputs and `.obuf` metadata through container-owned buffer definitions, with no standalone buffer descriptor authoring contract, and dedupe equivalent shared buffers to a single cooked resource entry.
 
 ## P4: Material Descriptor Domain
 
@@ -288,8 +295,9 @@ Current status:
 1. P0 is done.
 2. P2 is done (validated in practice with one manifest + multiple texture descriptors flow).
 3. P4 is `done` (external test pass confirmation received for the material-descriptor suite and DAG scenario).
-4. P1, P3, and P5-P10 are `pending`.
-5. Computed progress snapshot: `28.0%`.
+4. P3 is `in_progress` (buffer-container interim milestone complete: schema/request/job/routing/tests; geometry-descriptor integration remains).
+5. P1 and P5-P10 are `pending`.
+6. Computed progress snapshot: `32.0%` (P3 completion factor `0.50`).
 
 ## 11. Evidence Log
 
@@ -392,3 +400,77 @@ Initial entries:
    - external manifest DAG run (texture-descriptor -> material-descriptor): passed
 5. Result: P4 exit gate satisfied; phase status moved to `done`.
 6. Remaining delta to phase exit gate: none
+
+1. Date: 2026-03-02
+2. Phase: P3/P5 (spec alignment)
+3. Files changed:
+   - `design/pakgen_supersession.md`
+   - `design/pakgen_supersession_impl.md`
+4. Tests run: none (documentation/spec update only; no-build policy active)
+5. Result: standardized buffer contract to container-owned geometry subdocuments (`buffers[]` with nested `views[]`), external-only `.buffer.bin` data, and per-container metadata duplication semantics; removed standalone `buffer-descriptor` domain references from supersession scope/plan.
+6. Remaining delta to phase exit gate:
+   - implement P3 code/tests for geometry-owned buffer subdocument validation and deterministic resolution
+   - implement P5 geometry descriptor domain code/tests using the finalized buffer contract
+
+1. Date: 2026-03-02
+2. Phase: P3/P5 (spec alignment)
+3. Files changed:
+   - `design/pakgen_supersession.md`
+   - `design/pakgen_supersession_impl.md`
+4. Tests run: none (documentation/spec update only; no-build policy active)
+5. Result: tightened buffer contract to require virtual-path-based references and explicit `.obuf` metadata as deterministic cross-mount lookup anchor (`virtual_path -> .obuf -> resource_index -> buffers.table/data`).
+6. Remaining delta to phase exit gate:
+   - implement P3 code/tests for `.obuf` emission + lookup and virtual-path-only buffer reference validation
+   - implement P3 dedupe tests proving one cooked buffer resource for equivalent cross-container inputs
+   - implement P5 geometry descriptor domain code/tests using the tightened contract
+
+1. Date: 2026-03-02
+2. Phase: P3/P5 (spec alignment)
+3. Files changed:
+   - `design/pakgen_supersession.md`
+   - `design/pakgen_supersession_impl.md`
+4. Tests run: none (documentation/spec update only; no-build policy active)
+5. Result: made cross-container buffer dedupe an explicit requirement: equivalent shared buffers must cook once and reuse the same `resource_index` across `.obuf` sidecars.
+6. Remaining delta to phase exit gate:
+   - implement P3 code/tests for dedupe behavior across multi-container geometry descriptor inputs
+   - complete P5 geometry descriptor implementation against dedupe + virtual-path `.obuf` rules
+
+1. Date: 2026-03-02
+2. Phase: P3/P5 (spec alignment)
+3. Files changed:
+   - `design/pakgen_supersession.md`
+   - `design/pakgen_supersession_impl.md`
+4. Tests run: none (documentation/spec update only; no-build policy active)
+5. Result: corrected dedupe contract wording to match engine semantics: one cooked shared buffer implies one `buffers.table` entry, one payload region, and one canonical `.obuf` (not multiple `.obuf` outputs).
+6. Remaining delta to phase exit gate:
+   - implement P3 code/tests that assert single-canonical-`.obuf` output for equivalent cross-container buffers
+   - complete P5 geometry descriptor implementation against the corrected dedupe contract
+
+1. Date: 2026-03-02
+2. Phase: P3 (interim buffer-container milestone)
+3. Files changed:
+   - `src/Oxygen/Cooker/Import/Schemas/oxygen.buffer-container.schema.json`
+   - `src/Oxygen/Cooker/Import/BufferContainerImportSettings.h`
+   - `src/Oxygen/Cooker/Import/BufferContainerImportRequestBuilder.h`
+   - `src/Oxygen/Cooker/Import/Internal/BufferContainerImportRequestBuilder.cpp`
+   - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferContainerImportJob.h`
+   - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferContainerImportJob.cpp`
+   - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.h`
+   - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.cpp`
+   - `src/Oxygen/Cooker/Import/ImportManifest.h`
+   - `src/Oxygen/Cooker/Import/ImportManifest.cpp`
+   - `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
+   - `src/Oxygen/Cooker/Import/ImportRequest.h`
+   - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
+   - `src/Oxygen/Cooker/Test/Import/BufferContainerImportRequestBuilder_test.cpp`
+   - `src/Oxygen/Cooker/Test/Import/ImportManifest_buffer_container_test.cpp`
+   - `src/Oxygen/Cooker/Test/Import/BufferContainerImportJob_test.cpp`
+   - `src/Oxygen/Cooker/Test/CMakeLists.txt`
+   - `design/pakgen_supersession_impl.md`
+4. Tests run:
+   - external execution (user confirmation): `BufferContainerImportJobTest.SuccessfulJobEmitsExpectedArtifacts` passed
+   - external execution (user confirmation): `ImportManifestBufferContainerTest.RejectsBufferContainerJobWithDisallowedKeys` passed after schema-first diagnostic-path fix
+5. Result: interim buffer-container path is green and validates core P3 mechanics (schema-first validation, `.obuf` emission, buffer table/data artifact emission, manifest integration, and strict disallowed-key rejection via schema diagnostics).
+6. Remaining delta to phase exit gate:
+   - migrate the P3 contract from interim buffer-container ingress into the `geometry-descriptor` domain (`buffers[]` + nested `views[]`)
+   - add geometry-domain tests for virtual-path `.obuf` resolution and cross-container dedupe invariants

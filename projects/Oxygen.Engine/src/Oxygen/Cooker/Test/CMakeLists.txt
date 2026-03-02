@@ -143,6 +143,20 @@ m_gtest_program(
     "Import/BufferEmitter_test.cpp"
 )
 
+m_gtest_program(
+  AsyncImportBufferContainer
+  SOURCES
+    "Import/BufferContainerImportJob_test.cpp"
+    "Import/BufferContainerImportRequestBuilder_test.cpp"
+    "Import/ImportManifest_buffer_container_test.cpp"
+)
+target_link_libraries(
+  Oxygen.Cooker.AsyncImportBufferContainer.Tests
+  PRIVATE
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
+)
+
 m_gtest_program(AsyncImportGeometry SOURCES "Import/GeometryPipeline_test.cpp")
 
 m_gtest_program(AsyncImportScene SOURCES "Import/ScenePipeline_test.cpp")

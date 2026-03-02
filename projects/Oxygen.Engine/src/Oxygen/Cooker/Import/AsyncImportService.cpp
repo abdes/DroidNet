@@ -41,6 +41,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/ImportJobParams.h>
 #include <Oxygen/Cooker/Import/Internal/JobEntry.h>
+#include <Oxygen/Cooker/Import/Internal/Jobs/BufferContainerImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/FbxImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/GlbImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/InputImportJob.h>
@@ -93,6 +94,15 @@ namespace {
     const auto file_name = source_path.filename().string();
     const auto name_part = file_name.empty() ? "source" : file_name;
     return std::string("material-descriptor:") + nostd::to_string(job_id) + ":"
+      + name_part;
+  }
+
+  [[nodiscard]] auto MakeBufferContainerJobName(
+    ImportJobId job_id, const std::filesystem::path& source_path) -> std::string
+  {
+    const auto file_name = source_path.filename().string();
+    const auto name_part = file_name.empty() ? "source" : file_name;
+    return std::string("buffer-container:") + nostd::to_string(job_id) + ":"
       + name_part;
   }
 
@@ -434,6 +444,7 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   const auto scripting_kind = request.options.scripting.import_kind;
   const bool is_physics_sidecar_request = request.physics.has_value();
   const bool is_input_request = request.options.input.has_value();
+  const bool is_buffer_container_request = request.buffer_container.has_value();
   const bool is_material_descriptor_request
     = request.options.material_descriptor.has_value();
   const auto is_script_asset_request
@@ -446,12 +457,13 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   auto format = ImportFormat::kUnknown;
   if (!use_custom_factory) {
     if (!is_scripting_request && !is_input_request
-      && !is_physics_sidecar_request && !is_material_descriptor_request) {
+      && !is_physics_sidecar_request && !is_buffer_container_request
+      && !is_material_descriptor_request) {
       format = request.GetFormat();
     }
     if (!is_scripting_request && !is_input_request
-      && !is_physics_sidecar_request && !is_material_descriptor_request
-      && format == ImportFormat::kUnknown) {
+      && !is_physics_sidecar_request && !is_buffer_container_request
+      && !is_material_descriptor_request && format == ImportFormat::kUnknown) {
       LOG_F(WARNING, "Submit rejected: unknown format for '{}'",
         request.source_path.string());
       return std::nullopt;
@@ -486,6 +498,8 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   } else if (is_input_request) {
     default_job_name = std::string("input:") + nostd::to_string(job_id) + ":"
       + request.source_path.filename().string();
+  } else if (is_buffer_container_request) {
+    default_job_name = MakeBufferContainerJobName(job_id, request.source_path);
   } else if (is_material_descriptor_request) {
     default_job_name
       = MakeMaterialDescriptorJobName(job_id, request.source_path);
@@ -530,6 +544,8 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
     job = job_factory(std::move(params));
   } else if (is_input_request) {
     job = std::make_shared<detail::InputImportJob>(std::move(params));
+  } else if (is_buffer_container_request) {
+    job = std::make_shared<detail::BufferContainerImportJob>(std::move(params));
   } else if (is_material_descriptor_request) {
     job = std::make_shared<detail::MaterialDescriptorImportJob>(
       std::move(params));

@@ -207,6 +207,26 @@ auto ResourceDescriptorEmitter::EmitBuffer(std::string_view name_hint,
   return layout_.BufferDescriptorRelPath(stem);
 }
 
+auto ResourceDescriptorEmitter::EmitBufferAtRelPath(
+  const std::string_view relpath,
+  const data::pak::core::ResourceIndexT resource_index,
+  const data::pak::core::BufferResourceDesc& descriptor) -> std::string
+{
+  if (relpath.empty()) {
+    throw std::runtime_error("buffer descriptor relpath must not be empty");
+  }
+
+  BufferSidecarFile file {};
+  file.resource_index = resource_index;
+  file.descriptor = descriptor;
+
+  auto path = std::string(relpath);
+  auto bytes = std::make_shared<std::vector<std::byte>>(SerializePod(file));
+  record_sizes_[path] = bytes->size();
+  QueueWrite(std::move(path), std::move(bytes));
+  return std::string(relpath);
+}
+
 auto ResourceDescriptorEmitter::QueueWrite(
   std::string relpath, std::shared_ptr<std::vector<std::byte>> bytes) -> void
 {

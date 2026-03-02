@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include <Oxygen/Cooker/Import/BufferContainerImportSettings.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/InputImportSettings.h>
@@ -33,6 +34,7 @@ struct ImportManifestJob {
   ScriptingSidecarImportSettings scripting_sidecar;
   PhysicsSidecarImportSettings physics_sidecar;
   InputImportSettings input;
+  BufferContainerImportSettings buffer_container;
   MaterialDescriptorImportSettings material_descriptor;
   std::string id;
   std::vector<std::string> depends_on;
@@ -48,6 +50,7 @@ struct ImportManifestDefaults {
   ScriptAssetImportSettings script;
   ScriptingSidecarImportSettings scripting_sidecar;
   PhysicsSidecarImportSettings physics_sidecar;
+  BufferContainerImportSettings buffer_container;
   MaterialDescriptorImportSettings material_descriptor;
 };
 
