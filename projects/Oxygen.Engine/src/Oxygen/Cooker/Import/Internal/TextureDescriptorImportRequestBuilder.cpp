@@ -4,9 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <exception>
 #include <filesystem>
-#include <fstream>
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -16,6 +14,7 @@
 
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportRequestBuilder.h>
 
@@ -34,32 +33,6 @@ namespace {
       path = (base_dir / path).lexically_normal();
     }
     return path.string();
-  }
-
-  auto LoadDescriptorDocument(const std::filesystem::path& descriptor_path,
-    std::ostream& error_stream) -> std::optional<json>
-  {
-    auto input = std::ifstream(descriptor_path, std::ios::binary);
-    if (!input.is_open()) {
-      error_stream << "ERROR: failed to open texture descriptor: "
-                   << descriptor_path.string() << "\n";
-      return std::nullopt;
-    }
-
-    try {
-      auto doc = json {};
-      input >> doc;
-      if (!doc.is_object()) {
-        error_stream
-          << "ERROR: texture descriptor root must be a JSON object\n";
-        return std::nullopt;
-      }
-      return doc;
-    } catch (const std::exception& ex) {
-      error_stream << "ERROR: invalid texture descriptor JSON: " << ex.what()
-                   << "\n";
-      return std::nullopt;
-    }
   }
 
   auto GetTextureDescriptorValidator() -> json_validator&
@@ -236,7 +209,7 @@ auto BuildTextureDescriptorRequest(
     = std::filesystem::path(settings.descriptor_path).lexically_normal();
 
   const auto descriptor_doc
-    = LoadDescriptorDocument(descriptor_path, error_stream);
+    = LoadDescriptorJsonObject(descriptor_path, "texture", error_stream);
   if (!descriptor_doc.has_value()) {
     return std::nullopt;
   }

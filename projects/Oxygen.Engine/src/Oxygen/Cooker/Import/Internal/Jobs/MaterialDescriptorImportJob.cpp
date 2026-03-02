@@ -27,6 +27,7 @@
 #include <Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MaterialDomain.h>
@@ -134,79 +135,6 @@ namespace {
       });
   }
 
-  auto ValidateNoDotSegments(const std::string_view path) -> bool
-  {
-    size_t pos = 0;
-    while (pos <= path.size()) {
-      const auto next = path.find('/', pos);
-      const auto len
-        = (next == std::string_view::npos) ? (path.size() - pos) : (next - pos);
-      const auto segment = path.substr(pos, len);
-      if (segment == "." || segment == "..") {
-        return false;
-      }
-      if (next == std::string_view::npos) {
-        break;
-      }
-      pos = next + 1;
-    }
-    return true;
-  }
-
-  auto IsCanonicalVirtualPath(const std::string_view virtual_path) -> bool
-  {
-    if (virtual_path.empty()) {
-      return false;
-    }
-    if (virtual_path.front() != '/') {
-      return false;
-    }
-    if (virtual_path.find('\\') != std::string_view::npos) {
-      return false;
-    }
-    if (virtual_path.find("//") != std::string_view::npos) {
-      return false;
-    }
-    if (virtual_path.size() > 1 && virtual_path.back() == '/') {
-      return false;
-    }
-    return ValidateNoDotSegments(virtual_path);
-  }
-
-  auto NormalizeMountRoot(std::string mount_root) -> std::string
-  {
-    if (mount_root.empty()) {
-      return "/";
-    }
-    if (mount_root.front() != '/') {
-      mount_root.insert(mount_root.begin(), '/');
-    }
-    while (mount_root.size() > 1 && mount_root.back() == '/') {
-      mount_root.pop_back();
-    }
-    return mount_root;
-  }
-
-  auto TryVirtualPathToRelPath(const ImportRequest& request,
-    const std::string_view virtual_path, std::string& relpath) -> bool
-  {
-    const auto mount_root
-      = NormalizeMountRoot(request.loose_cooked_layout.virtual_mount_root);
-    if (!virtual_path.starts_with(mount_root)) {
-      return false;
-    }
-    if (virtual_path.size() == mount_root.size()) {
-      relpath.clear();
-      return false;
-    }
-    const auto slash_pos = mount_root.size();
-    if (virtual_path[slash_pos] != '/') {
-      return false;
-    }
-    relpath = std::string(virtual_path.substr(slash_pos + 1));
-    return !relpath.empty();
-  }
-
   auto ParseTextureSidecar(std::span<const std::byte> bytes,
     TextureSidecarFile& file, std::string& error_message) -> bool
   {
@@ -311,7 +239,7 @@ namespace {
     std::string_view virtual_path, std::string object_path)
     -> co::Co<std::optional<uint32_t>>
   {
-    if (!IsCanonicalVirtualPath(virtual_path)) {
+    if (!internal::IsCanonicalVirtualPath(virtual_path)) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "material.descriptor.texture_virtual_path_invalid",
         "Texture reference virtual_path must be canonical",
@@ -320,7 +248,7 @@ namespace {
     }
 
     auto relpath = std::string {};
-    if (!TryVirtualPathToRelPath(request, virtual_path, relpath)) {
+    if (!internal::TryVirtualPathToRelPath(request, virtual_path, relpath)) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "material.descriptor.texture_virtual_path_unmounted",
         "Texture reference virtual_path is outside mounted cooked roots",
@@ -328,15 +256,7 @@ namespace {
       co_return std::nullopt;
     }
 
-    auto mounted_roots = std::vector<std::filesystem::path> {};
-    if (request.cooked_root.has_value()) {
-      mounted_roots.push_back(*request.cooked_root);
-    } else {
-      mounted_roots.push_back(request.source_path.parent_path());
-    }
-    for (const auto& root : request.cooked_context_roots) {
-      mounted_roots.push_back(root);
-    }
+    auto mounted_roots = internal::BuildMountedCookedRoots(request);
 
     for (auto it = mounted_roots.rbegin(); it != mounted_roots.rend(); ++it) {
       auto descriptor_path = *it / std::filesystem::path(relpath);
@@ -742,13 +662,6 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
     const auto object_path = std::string("textures.") + std::string(slot_name);
     const auto& binding_doc = textures_doc.at(slot_name);
-    if (!binding_doc.is_object()) {
-      AddDiagnostic(session, Request(), ImportSeverity::kError,
-        "material.descriptor.texture_binding_invalid",
-        "Texture binding must be an object", object_path);
-      parse_failed = true;
-      co_return;
-    }
 
     const auto virtual_path = binding_doc.at("virtual_path").get<std::string>();
     if (reader == nullptr) {
@@ -796,60 +709,39 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   if (descriptor_doc.contains("textures")) {
     const auto& textures_doc = descriptor_doc.at("textures");
-    if (!textures_doc.is_object()) {
-      AddDiagnostic(session, Request(), ImportSeverity::kError,
-        "material.descriptor.textures_invalid",
-        "Material textures payload must be an object");
-      parse_failed = true;
-    } else {
-      for (const auto& entry : kTextureSlotBindings) {
-        co_await resolve_texture_binding(
-          textures_doc, entry.slot_name, item.textures.*(entry.binding_member));
-      }
+    for (const auto& entry : kTextureSlotBindings) {
+      co_await resolve_texture_binding(
+        textures_doc, entry.slot_name, item.textures.*(entry.binding_member));
     }
   }
 
   if (descriptor_doc.contains("shaders")) {
     const auto& shaders_doc = descriptor_doc.at("shaders");
-    if (!shaders_doc.is_array()) {
-      AddDiagnostic(session, Request(), ImportSeverity::kError,
-        "material.descriptor.shaders_invalid",
-        "Material shaders payload must be an array");
-      parse_failed = true;
-    } else {
-      for (size_t i = 0; i < shaders_doc.size(); ++i) {
-        const auto& stage_doc = shaders_doc[i];
-        const auto object_path = "shaders[" + std::to_string(i) + "]";
-        if (!stage_doc.is_object()) {
-          AddDiagnostic(session, Request(), ImportSeverity::kError,
-            "material.descriptor.shaders_invalid",
-            "Shader stage entry must be an object", object_path);
-          parse_failed = true;
-          continue;
-        }
+    for (size_t i = 0; i < shaders_doc.size(); ++i) {
+      const auto& stage_doc = shaders_doc[i];
+      const auto object_path = "shaders[" + std::to_string(i) + "]";
 
-        const auto shader_type
-          = ParseShaderType(stage_doc.at("stage").get<std::string>());
-        if (!shader_type.has_value()) {
-          AddDiagnostic(session, Request(), ImportSeverity::kError,
-            "material.descriptor.shader_stage_invalid",
-            "Shader stage is not recognized", object_path);
-          parse_failed = true;
-          continue;
-        }
-
-        auto shader = ShaderRequest {};
-        shader.shader_type = *shader_type;
-        shader.source_path = stage_doc.at("source_path").get<std::string>();
-        shader.entry_point = stage_doc.at("entry_point").get<std::string>();
-        if (stage_doc.contains("defines")) {
-          shader.defines = stage_doc.at("defines").get<std::string>();
-        }
-        if (stage_doc.contains("shader_hash")) {
-          shader.shader_hash = stage_doc.at("shader_hash").get<uint64_t>();
-        }
-        item.shader_requests.push_back(std::move(shader));
+      const auto shader_type
+        = ParseShaderType(stage_doc.at("stage").get<std::string>());
+      if (!shader_type.has_value()) {
+        AddDiagnostic(session, Request(), ImportSeverity::kError,
+          "material.descriptor.shader_stage_invalid",
+          "Shader stage is not recognized", object_path);
+        parse_failed = true;
+        continue;
       }
+
+      auto shader = ShaderRequest {};
+      shader.shader_type = *shader_type;
+      shader.source_path = stage_doc.at("source_path").get<std::string>();
+      shader.entry_point = stage_doc.at("entry_point").get<std::string>();
+      if (stage_doc.contains("defines")) {
+        shader.defines = stage_doc.at("defines").get<std::string>();
+      }
+      if (stage_doc.contains("shader_hash")) {
+        shader.shader_hash = stage_doc.at("shader_hash").get<uint64_t>();
+      }
+      item.shader_requests.push_back(std::move(shader));
     }
   }
 

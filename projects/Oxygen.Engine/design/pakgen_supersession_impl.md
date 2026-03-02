@@ -36,7 +36,7 @@ Status values:
 | Phase | Status | Weight | Scope | Exit Gate |
 | --- | --- | --- | --- | --- |
 | P0 | done | 4% | Baseline + tracking scaffold | Ledger, evidence rubric, and CI matrix committed |
-| P1 | pending | 12% | Shared descriptor infrastructure | Common schema validation + diagnostics helpers integrated for descriptor domains |
+| P1 | done | 12% | Shared descriptor infrastructure | Common schema validation + diagnostics helpers integrated for descriptor domains |
 | P2 | done | 10% | Texture descriptor domain | `texture-descriptor` implemented end-to-end with schema/tests |
 | P3 | done | 8% | Geometry buffer subdocument model | container-owned `buffers[]`/`views[]` contract implemented end-to-end under geometry descriptor flow, including deterministic mounted-root `.obuf` resolution and canonical dedupe constraints |
 | P4 | done | 14% | Material descriptor domain | `material-descriptor` implemented end-to-end with schema/tests |
@@ -113,12 +113,12 @@ Acceptance:
 
 Tasks:
 
-1. Standardize descriptor schema validation through shared helper(s):
+1. `[done]` Standardize descriptor schema validation through shared helper(s):
    - reuse `Import/Internal/Utils/JsonSchemaValidation.h`
    - map schema diagnostics to import diagnostics by domain
-2. Add shared descriptor document loader/parsing helpers (UTF-8, JSON parse error shaping, source path/object path conventions).
-3. Add shared reference-resolution helpers for mounted/inflight assets/resources.
-4. Remove redundant manual validation already enforceable via schemas.
+2. `[done]` Add shared descriptor document loader/parsing helpers (UTF-8, JSON parse error shaping, source path/object path conventions).
+3. `[done]` Add shared reference-resolution helpers for mounted/inflight assets/resources.
+4. `[done]` Remove redundant manual validation already enforceable via schemas.
 
 Acceptance:
 
@@ -421,8 +421,8 @@ Current status:
 3. P4 is `done` (external test pass confirmation received for the material-descriptor suite and DAG scenario).
 4. P3 is `done` (geometry-domain integration completed with deterministic `.obuf` mounted-root resolution, canonical dedupe constraints, and expanded job-test coverage).
 5. P5 is `done` (external green build/tests confirmed after geometry-descriptor execution + coverage closure).
-6. P1 and P6-P10 are `pending`.
-7. Computed progress snapshot: `52.0%` (P3 completion factor `1.00`, P5 completion factor `1.00`).
+6. P1 is `done`; P6-P10 are `pending`.
+7. Computed progress snapshot: `64.0%` (P1 completion factor `1.00`, P3 completion factor `1.00`, P5 completion factor `1.00`).
 8. P3/P5 geometry execution plan remains the baseline reference in Section 6, with both P3 and P5 marked closed.
 
 ## 11. Evidence Log
@@ -708,4 +708,24 @@ Initial entries:
    - `design/pakgen_supersession_impl.md`
 4. Tests run: none (no-build policy active)
 5. Result: closed remaining P3 implementation gaps with deterministic mounted-root `.obuf` resolution rules, canonical cross-job dedupe sidecar constraints, and expanded geometry job coverage for mounted-root resolution, ambiguity diagnostics, unmounted virtual paths, and cross-job dedupe conflicts.
+6. Remaining delta to phase exit gate: none
+
+1. Date: 2026-03-02
+2. Phase: P1 (shared descriptor infrastructure closeout)
+3. Files changed:
+   - `src/Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h`
+   - `src/Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h`
+   - `src/Oxygen/Cooker/Import/Internal/TextureDescriptorImportRequestBuilder.cpp`
+   - `src/Oxygen/Cooker/Import/Internal/MaterialDescriptorImportRequestBuilder.cpp`
+   - `src/Oxygen/Cooker/Import/Internal/GeometryDescriptorImportRequestBuilder.cpp`
+   - `src/Oxygen/Cooker/Import/Internal/BufferContainerImportRequestBuilder.cpp`
+   - `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp`
+   - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
+   - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.cpp`
+   - `src/Oxygen/Cooker/Import/Internal/ScriptImportRequestBuilder.cpp`
+   - `src/Oxygen/Cooker/Import/Internal/PhysicsImportRequestBuilder.cpp`
+   - `src/Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.cpp`
+   - `design/pakgen_supersession_impl.md`
+4. Tests run: none (no-build policy active)
+5. Result: completed shared descriptor ingress and virtual-path/reference utility consolidation. Descriptor request-builders now use a common JSON document loader/error shaper; canonical virtual path and mounted-root resolution logic is centralized and reused by descriptor jobs and related sidecar request paths.
 6. Remaining delta to phase exit gate: none

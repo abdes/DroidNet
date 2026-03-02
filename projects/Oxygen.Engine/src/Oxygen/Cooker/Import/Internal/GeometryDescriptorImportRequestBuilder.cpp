@@ -4,9 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <exception>
 #include <filesystem>
-#include <fstream>
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -15,6 +13,7 @@
 
 #include <Oxygen/Cooker/Import/GeometryDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 
 namespace oxygen::content::import::internal {
@@ -23,32 +22,6 @@ namespace {
 
   using nlohmann::json;
   using nlohmann::json_schema::json_validator;
-
-  auto LoadDescriptorDocument(const std::filesystem::path& descriptor_path,
-    std::ostream& error_stream) -> std::optional<json>
-  {
-    auto input = std::ifstream(descriptor_path, std::ios::binary);
-    if (!input.is_open()) {
-      error_stream << "ERROR: failed to open geometry descriptor: "
-                   << descriptor_path.string() << "\n";
-      return std::nullopt;
-    }
-
-    try {
-      auto doc = json {};
-      input >> doc;
-      if (!doc.is_object()) {
-        error_stream
-          << "ERROR: geometry descriptor root must be a JSON object\n";
-        return std::nullopt;
-      }
-      return doc;
-    } catch (const std::exception& ex) {
-      error_stream << "ERROR: invalid geometry descriptor JSON: " << ex.what()
-                   << "\n";
-      return std::nullopt;
-    }
-  }
 
   auto GetGeometryDescriptorValidator() -> json_validator&
   {
@@ -99,7 +72,7 @@ auto BuildGeometryDescriptorRequest(
   const auto descriptor_path
     = std::filesystem::path(settings.descriptor_path).lexically_normal();
   const auto descriptor_doc
-    = LoadDescriptorDocument(descriptor_path, error_stream);
+    = LoadDescriptorJsonObject(descriptor_path, "geometry", error_stream);
   if (!descriptor_doc.has_value()) {
     return std::nullopt;
   }

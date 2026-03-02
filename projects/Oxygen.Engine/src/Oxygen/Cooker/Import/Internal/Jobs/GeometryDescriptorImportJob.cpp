@@ -19,7 +19,6 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -38,6 +37,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
@@ -134,92 +134,12 @@ namespace {
       });
   }
 
-  auto ValidateNoDotSegments(const std::string_view path) -> bool
-  {
-    size_t pos = 0;
-    while (pos <= path.size()) {
-      const auto next = path.find('/', pos);
-      const auto len
-        = (next == std::string_view::npos) ? (path.size() - pos) : (next - pos);
-      const auto segment = path.substr(pos, len);
-      if (segment == "." || segment == "..") {
-        return false;
-      }
-      if (next == std::string_view::npos) {
-        break;
-      }
-      pos = next + 1;
-    }
-    return true;
-  }
-
-  auto IsCanonicalVirtualPath(const std::string_view virtual_path) -> bool
-  {
-    if (virtual_path.empty()) {
-      return false;
-    }
-    if (virtual_path.front() != '/') {
-      return false;
-    }
-    if (virtual_path.find('\\') != std::string_view::npos) {
-      return false;
-    }
-    if (virtual_path.find("//") != std::string_view::npos) {
-      return false;
-    }
-    if (virtual_path.size() > 1 && virtual_path.back() == '/') {
-      return false;
-    }
-    return ValidateNoDotSegments(virtual_path);
-  }
-
-  auto NormalizeMountRoot(std::string mount_root) -> std::string
-  {
-    if (mount_root.empty()) {
-      return "/";
-    }
-    if (mount_root.front() != '/') {
-      mount_root.insert(mount_root.begin(), '/');
-    }
-    while (mount_root.size() > 1 && mount_root.back() == '/') {
-      mount_root.pop_back();
-    }
-    return mount_root;
-  }
-
-  auto TryVirtualPathToRelPath(const ImportRequest& request,
-    const std::string_view virtual_path, std::string& relpath) -> bool
-  {
-    const auto mount_root
-      = NormalizeMountRoot(request.loose_cooked_layout.virtual_mount_root);
-    if (!virtual_path.starts_with(mount_root)) {
-      return false;
-    }
-    if (virtual_path.size() == mount_root.size()) {
-      relpath.clear();
-      return false;
-    }
-    const auto slash_pos = mount_root.size();
-    if (virtual_path[slash_pos] != '/') {
-      return false;
-    }
-    relpath = std::string(virtual_path.substr(slash_pos + 1));
-    return !relpath.empty();
-  }
-
   auto LoadMountedInspections(GeometryExecutionContext& context) -> void
   {
-    auto seen = std::unordered_set<std::string> {};
-
-    const auto append_root = [&](const std::filesystem::path& root) {
-      auto normalized = root.lexically_normal();
-      const auto key = normalized.generic_string();
-      if (!seen.insert(key).second) {
-        return;
-      }
-
+    for (const auto& root :
+      internal::BuildUniqueMountedCookedRoots(context.request)) {
       auto mount = MountedInspection {
-        .root = std::move(normalized),
+        .root = root,
         .inspection = std::nullopt,
       };
 
@@ -239,15 +159,6 @@ namespace {
       }
 
       context.mounts.push_back(std::move(mount));
-    };
-
-    if (context.request.cooked_root.has_value()) {
-      append_root(*context.request.cooked_root);
-    } else {
-      append_root(context.request.source_path.parent_path());
-    }
-    for (const auto& root : context.request.cooked_context_roots) {
-      append_root(root);
     }
   }
 
@@ -345,7 +256,7 @@ namespace {
     std::string_view virtual_path, std::string object_path)
     -> co::Co<std::optional<ResolvedBufferSidecar>>
   {
-    if (!IsCanonicalVirtualPath(virtual_path)) {
+    if (!internal::IsCanonicalVirtualPath(virtual_path)) {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "geometry.buffer.virtual_path_invalid",
         "Buffer reference virtual_path must be canonical",
@@ -359,7 +270,8 @@ namespace {
     }
 
     auto relpath = std::string {};
-    if (!TryVirtualPathToRelPath(context.request, virtual_path, relpath)) {
+    if (!internal::TryVirtualPathToRelPath(
+          context.request, virtual_path, relpath)) {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "geometry.buffer.virtual_path_unmounted",
         "Buffer reference virtual_path is outside mounted cooked roots",
@@ -440,7 +352,7 @@ namespace {
     std::string_view virtual_path, std::string object_path)
     -> std::optional<data::AssetKey>
   {
-    if (!IsCanonicalVirtualPath(virtual_path)) {
+    if (!internal::IsCanonicalVirtualPath(virtual_path)) {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "geometry.material.virtual_path_invalid",
         "Material reference virtual_path must be canonical",
@@ -478,7 +390,8 @@ namespace {
     }
 
     auto relpath = std::string {};
-    if (!TryVirtualPathToRelPath(context.request, virtual_path, relpath)) {
+    if (!internal::TryVirtualPathToRelPath(
+          context.request, virtual_path, relpath)) {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "geometry.material.virtual_path_unmounted",
         "Material reference virtual_path is outside mounted cooked roots",
@@ -519,7 +432,7 @@ namespace {
     std::string_view virtual_path, std::string object_path)
     -> std::optional<data::AssetKey>
   {
-    if (!IsCanonicalVirtualPath(virtual_path)) {
+    if (!internal::IsCanonicalVirtualPath(virtual_path)) {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "geometry.asset.virtual_path_invalid",
         "Asset reference virtual_path must be canonical",
@@ -539,7 +452,8 @@ namespace {
     }
 
     auto relpath = std::string {};
-    if (!TryVirtualPathToRelPath(context.request, virtual_path, relpath)) {
+    if (!internal::TryVirtualPathToRelPath(
+          context.request, virtual_path, relpath)) {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "geometry.asset.virtual_path_unmounted",
         "Asset reference virtual_path is outside mounted cooked roots",

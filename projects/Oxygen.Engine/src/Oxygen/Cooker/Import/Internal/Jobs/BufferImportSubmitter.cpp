@@ -32,6 +32,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 
 namespace oxygen::content::import::detail {
 
@@ -97,40 +98,6 @@ namespace {
       AddDiagnostic(session, request, ImportSeverity::kError, issue.code,
         issue.message, issue.object_path);
     }
-  }
-
-  auto NormalizeMountRoot(std::string mount_root) -> std::string
-  {
-    if (mount_root.empty()) {
-      return "/";
-    }
-    if (mount_root.front() != '/') {
-      mount_root.insert(mount_root.begin(), '/');
-    }
-    while (mount_root.size() > 1 && mount_root.back() == '/') {
-      mount_root.pop_back();
-    }
-    return mount_root;
-  }
-
-  auto TryVirtualPathToRelPath(const ImportRequest& request,
-    const std::string_view virtual_path, std::string& relpath) -> bool
-  {
-    const auto mount_root
-      = NormalizeMountRoot(request.loose_cooked_layout.virtual_mount_root);
-    if (!virtual_path.starts_with(mount_root)) {
-      return false;
-    }
-    if (virtual_path.size() == mount_root.size()) {
-      relpath.clear();
-      return false;
-    }
-    const auto slash_pos = mount_root.size();
-    if (virtual_path[slash_pos] != '/') {
-      return false;
-    }
-    relpath = std::string(virtual_path.substr(slash_pos + 1));
-    return !relpath.empty();
   }
 
   auto ValidateBufferChunkSchema(ImportSession& session,
@@ -206,7 +173,7 @@ namespace {
         continue;
       }
 
-      if (!TryVirtualPathToRelPath(
+      if (!internal::TryVirtualPathToRelPath(
             request, entry.source_id, entry.descriptor_relpath)) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "buffer.container.virtual_path_unmounted",
