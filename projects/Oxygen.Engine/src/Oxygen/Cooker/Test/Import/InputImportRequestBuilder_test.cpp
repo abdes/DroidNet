@@ -27,7 +27,7 @@ NOLINT_TEST(InputImportRequestBuilderTest, AcceptsPrimaryInputDocument)
 
   ASSERT_TRUE(request.has_value()) << errors.str();
   EXPECT_TRUE(errors.str().empty());
-  EXPECT_TRUE(request->options.input.has_value());
+  EXPECT_TRUE(request->input.has_value());
   EXPECT_FALSE(request->orchestration.has_value());
 }
 
@@ -40,7 +40,7 @@ NOLINT_TEST(InputImportRequestBuilderTest, AcceptsStandaloneActionDocument)
   const auto request = BuildInputImportRequest(settings, errors);
 
   ASSERT_TRUE(request.has_value()) << errors.str();
-  EXPECT_TRUE(request->options.input.has_value());
+  EXPECT_TRUE(request->input.has_value());
 }
 
 NOLINT_TEST(InputImportRequestBuilderTest, RejectsMissingSourcePath)

@@ -1355,10 +1355,10 @@ auto InputImportPipeline::Process(WorkItem& item) -> co::Co<bool>
   }
 
   const auto& request = session->Request();
-  if (!request.options.input.has_value()) {
+  if (!request.input.has_value()) {
     AddDiagnostic(*session, request, ImportSeverity::kError,
       "input.request.invalid_job_type",
-      "Input import pipeline requires options.input to be set");
+      "Input import pipeline requires request input payload to be set");
     co_return false;
   }
 

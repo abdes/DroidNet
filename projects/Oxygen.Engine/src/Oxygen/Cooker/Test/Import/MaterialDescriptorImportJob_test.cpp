@@ -23,7 +23,6 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Data/PakFormat.h>
 
 namespace oxygen::content::import::test {
@@ -143,10 +142,9 @@ namespace {
       request.job_name = std::string(job_name);
       request.cooked_root = cooked_root;
       request.loose_cooked_layout.virtual_mount_root = "/.cooked";
-      request.options.material_descriptor
-        = ImportOptions::MaterialDescriptorTuning {
-            .normalized_descriptor_json = std::move(descriptor_json),
-          };
+      request.material_descriptor = ImportRequest::MaterialDescriptorPayload {
+        .normalized_descriptor_json = std::move(descriptor_json),
+      };
       return request;
     }
   };

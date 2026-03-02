@@ -89,7 +89,16 @@
                     "const": "__all__"
                 },
                 {
-                    "$ref": "#/definitions/identifier"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/identifier"
+                        },
+                        {
+                            "not": {
+                                "const": "__all__"
+                            }
+                        }
+                    ]
                 }
             ]
         },

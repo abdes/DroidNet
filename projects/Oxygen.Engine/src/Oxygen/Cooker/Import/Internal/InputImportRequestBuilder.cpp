@@ -61,7 +61,7 @@ auto BuildInputImportRequest(const InputImportSettings& settings,
 
   auto request = ImportRequest {};
   request.source_path = settings.source_path;
-  request.options.input = ImportOptions::InputTuning {};
+  request.input = ImportRequest::InputPayload {};
 
   // Keep the currently requested hashing default for input jobs.
   request.options.with_content_hashing

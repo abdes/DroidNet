@@ -69,10 +69,10 @@ auto InputImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto session = ImportSession(Request(), FileReader(), FileWriter(),
     ThreadPool(), TableRegistry(), IndexRegistry());
 
-  if (!Request().options.input.has_value()) {
+  if (!Request().input.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
       "input.request.invalid_job_type",
-      "InputImportJob requires options.input to be present");
+      "InputImportJob requires request input payload to be present");
     ReportPhaseProgress(
       ImportPhase::kFailed, 1.0F, "Invalid input import options");
     co_return co_await FinalizeWithTelemetry(session);

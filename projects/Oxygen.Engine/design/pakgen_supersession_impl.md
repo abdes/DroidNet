@@ -40,7 +40,7 @@ Status values:
 | P2 | done | 10% | Texture descriptor domain | `texture-descriptor` implemented end-to-end with schema/tests |
 | P3 | in_progress | 8% | Geometry buffer subdocument model | container-owned `buffers[]`/`views[]` contract implemented with schema/tests under geometry descriptor flow, including virtual-path references and `.obuf` metadata resolution |
 | P4 | done | 14% | Material descriptor domain | `material-descriptor` implemented end-to-end with schema/tests |
-| P5 | in_progress | 16% | Geometry descriptor domain | execution path implemented; broad schema/request/manifest/job coverage landed; remaining closure is external execution confirmation |
+| P5 | done | 16% | Geometry descriptor domain | `geometry-descriptor` implemented end-to-end with schema/tests and external green build/test confirmation |
 | P6 | pending | 16% | Scene descriptor domain | `scene-descriptor` implemented end-to-end with schema/tests |
 | P7 | pending | 8% | Manifest DAG integration | Descriptor job types + defaults + strict key policies + DAG checks |
 | P8 | pending | 7% | Pak builder toolflow integration | Official C++ pack flow wired and documented |
@@ -261,7 +261,7 @@ Status markers:
    - use resolved index in geometry descriptor binding
 2. `[done]` Resolve material refs by canonical virtual path to `AssetKey` via mounted content precedence rules.
 3. `[done]` Support simultaneously cooked dependencies through manifest DAG (`id`/`depends_on`) and mounted cooked-root state at job execution time.
-4. `[in_progress]` Emit explicit diagnostics for:
+4. `[done]` Emit explicit diagnostics for:
    - invalid virtual path
    - undefined view reference for either VB or IB
    - reserved view name misuse (`__all__` declared explicitly)
@@ -291,7 +291,7 @@ Status markers:
 
 #### G. Test Matrix (Targeted, Not Ocean-Boiling)
 
-1. `[in_progress]` Schema tests:
+1. `[done]` Schema tests:
    - canonical descriptor acceptance
    - canonical paired `view_ref` acceptance (including `__all__`)
    - rejected unknown keys / invalid branch combos
@@ -303,15 +303,15 @@ Status markers:
    - geometry-descriptor job acceptance
    - strict disallowed-key rejection
    - DAG dependency wiring with material/texture/buffer jobs
-4. `[in_progress]` Job tests:
+4. `[done]` Job tests:
    - canonical standard/skinned descriptor import with local `buffers[]`
    - canonical mixed references (local + pre-cooked `.obuf` + pre-cooked `.omat`)
    - canonical procedural descriptor import
    - failure diagnostics for missing/ambiguous/unmounted refs and arity mismatches
-5. `[in_progress]` Pipeline/loader compatibility tests:
+5. `[done]` Pipeline/loader compatibility tests:
    - finalized descriptor byte layout checks
    - procedural descriptor consumed by `GeometryLoader` without structural errors
-6. `[in_progress]` Dedupe invariants:
+6. `[done]` Dedupe invariants:
    - equivalent local buffer definitions collapse to one cooked buffer resource index
    - conflicting virtual paths for deduped equivalent buffers fail with explicit diagnostic
 
@@ -419,11 +419,11 @@ Current status:
 1. P0 is done.
 2. P2 is done (validated in practice with one manifest + multiple texture descriptors flow).
 3. P4 is `done` (external test pass confirmation received for the material-descriptor suite and DAG scenario).
-4. P3 is `in_progress` (buffer-container interim milestone complete: schema/request/job/routing/tests; geometry-descriptor integration remains).
-5. P5 is `in_progress` (geometry-descriptor execution path is implemented and test coverage has been expanded to job-level and loader-compat scenarios; phase closure is pending external execution confirmation under no-build policy).
+4. P3 is `in_progress` (buffer-container interim milestone complete: schema/request/job/routing/tests; geometry-domain hardening remains before phase closure).
+5. P5 is `done` (external green build/tests confirmed after geometry-descriptor execution + coverage closure).
 6. P1 and P6-P10 are `pending`.
-7. Computed progress snapshot: `46.4%` (P3 completion factor `0.50`, P5 completion factor `0.90`).
-8. P3/P5 geometry execution plan remains the execution baseline in Section 6 (`P3/P5 Geometry Execution Plan (Approval-Gated)`), with job execution and targeted test matrix substantially implemented.
+7. Computed progress snapshot: `48.0%` (P3 completion factor `0.50`, P5 completion factor `1.00`).
+8. P3/P5 geometry execution plan remains the baseline reference in Section 6, with P5 tasks closed and P3 residual work still tracked.
 
 ## 11. Evidence Log
 
@@ -689,3 +689,12 @@ Initial entries:
 6. Remaining delta to phase exit gate:
    - run and pass updated geometry descriptor and geometry pipeline suites externally
    - confirm updated P5 tests in CI, then flip phase status to `done`
+
+1. Date: 2026-03-02
+2. Phase: P5 (geometry descriptor domain closeout)
+3. Files changed:
+   - `design/pakgen_supersession_impl.md`
+4. Tests run:
+   - external execution (user confirmation): build/tests pass after geometry descriptor updates
+5. Result: P5 exit gate satisfied; phase status moved to `done` and completion math updated.
+6. Remaining delta to phase exit gate: none

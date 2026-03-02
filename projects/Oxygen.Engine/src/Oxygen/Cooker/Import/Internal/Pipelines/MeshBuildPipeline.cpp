@@ -269,7 +269,6 @@ namespace {
     using data::pak::geometry::GeometryAssetDesc;
     using data::pak::geometry::MeshDesc;
     using data::pak::geometry::MeshViewDesc;
-    using data::pak::geometry::SkinnedMeshInfo;
     using data::pak::geometry::SubMeshDesc;
 
     GeometryAssetDesc asset_desc {};
@@ -363,17 +362,6 @@ namespace {
         diagnostics.push_back(MakeErrorDiagnostic("mesh.serialize_failed",
           "Failed to serialize mesh descriptor", source_id, mesh_name));
         return {};
-      }
-
-      if (lod.mesh_type == data::MeshType::kSkinned) {
-        const auto& skinned_blob = mesh_desc.info.skinned;
-        const auto blob_result = writer.WriteBlob(
-          std::as_bytes(std::span<const SkinnedMeshInfo, 1>(&skinned_blob, 1)));
-        if (!blob_result.has_value()) {
-          diagnostics.push_back(MakeErrorDiagnostic("mesh.serialize_failed",
-            "Failed to serialize skinned mesh blob", source_id, mesh_name));
-          return {};
-        }
       }
 
       if (lod.submesh_slots.size() != lod.submeshes.size()) {

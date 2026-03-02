@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <Oxygen/Cooker/Import/BufferContainerImportSettings.h>
+#include <Oxygen/Cooker/Import/GeometryDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/InputImportSettings.h>
@@ -36,6 +37,7 @@ struct ImportManifestJob {
   InputImportSettings input;
   BufferContainerImportSettings buffer_container;
   MaterialDescriptorImportSettings material_descriptor;
+  GeometryDescriptorImportSettings geometry_descriptor;
   std::string id;
   std::vector<std::string> depends_on;
 
@@ -52,6 +54,7 @@ struct ImportManifestDefaults {
   PhysicsSidecarImportSettings physics_sidecar;
   BufferContainerImportSettings buffer_container;
   MaterialDescriptorImportSettings material_descriptor;
+  GeometryDescriptorImportSettings geometry_descriptor;
 };
 
 struct ImportManifest {

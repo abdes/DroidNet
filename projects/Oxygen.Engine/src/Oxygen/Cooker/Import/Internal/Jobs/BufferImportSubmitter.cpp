@@ -354,9 +354,11 @@ auto BufferImportSubmitter::SubmitBufferChunks(
   co_return submission;
 }
 
-auto BufferImportSubmitter::CollectAndEmit(
-  BufferPipeline& pipeline, const Submission& submission) -> co::Co<>
+auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
+  const Submission& submission) -> co::Co<std::vector<EmittedBuffer>>
 {
+  auto emitted_buffers = std::vector<EmittedBuffer> {};
+  emitted_buffers.reserve(submission.submitted_count);
   auto index_to_source_id = std::unordered_map<uint32_t, std::string> {};
 
   for (size_t i = 0; i < submission.submitted_count; ++i) {
@@ -427,9 +429,17 @@ auto BufferImportSubmitter::CollectAndEmit(
         "Failed to emit buffer sidecar descriptor: " + std::string(ex.what()),
         result.source_id);
     }
+
+    emitted_buffers.push_back(EmittedBuffer {
+      .source_id = result.source_id,
+      .descriptor_relpath = relpath_it->second,
+      .resource_index = data::pak::core::ResourceIndexT { emitted_index },
+      .descriptor = *descriptor,
+      .views = views_it->second,
+    });
   }
 
-  co_return;
+  co_return emitted_buffers;
 }
 
 } // namespace oxygen::content::import::detail

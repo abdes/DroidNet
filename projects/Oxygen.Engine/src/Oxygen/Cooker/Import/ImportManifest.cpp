@@ -12,6 +12,7 @@
 #include <vector>
 
 #include <Oxygen/Cooker/Import/BufferContainerImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/GeometryDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/InputImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
@@ -769,6 +770,25 @@ namespace {
       obj, "content_hashing", settings.with_content_hashing, errors);
   }
 
+  auto ApplyCommonGeometryDescriptorOverrides(const json& obj,
+    GeometryDescriptorImportSettings& settings, std::ostream& errors) -> bool
+  {
+    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
+      return false;
+    }
+    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
+      return false;
+    }
+    return true;
+  }
+
+  auto ApplyGeometryDescriptorOverrides(const json& obj,
+    GeometryDescriptorImportSettings& settings, std::ostream& errors) -> bool
+  {
+    return ReadBoolField(
+      obj, "content_hashing", settings.with_content_hashing, errors);
+  }
+
 } // namespace
 
 auto ImportManifest::Load(const std::filesystem::path& manifest_path,
@@ -840,6 +860,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     manifest.defaults.physics_sidecar.cooked_root = manifest_output_root;
     manifest.defaults.buffer_container.cooked_root = manifest_output_root;
     manifest.defaults.material_descriptor.cooked_root = manifest_output_root;
+    manifest.defaults.geometry_descriptor.cooked_root = manifest_output_root;
   }
 
   if (json_data->contains("defaults")) {
@@ -972,6 +993,23 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
       }
     }
 
+    if (defaults.contains("geometry_descriptor")) {
+      const auto& geometry_defaults = defaults["geometry_descriptor"];
+      if (!geometry_defaults.is_object()) {
+        error_stream
+          << "ERROR: defaults.geometry_descriptor must be an object\n";
+        return std::nullopt;
+      }
+      if (!ApplyCommonGeometryDescriptorOverrides(geometry_defaults,
+            manifest.defaults.geometry_descriptor, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyGeometryDescriptorOverrides(geometry_defaults,
+            manifest.defaults.geometry_descriptor, error_stream)) {
+        return std::nullopt;
+      }
+    }
+
     if (defaults.contains("buffer_container")) {
       const auto& buffer_container_defaults = defaults["buffer_container"];
       if (!buffer_container_defaults.is_object()) {
@@ -1009,6 +1047,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     manifest_job.physics_sidecar = manifest.defaults.physics_sidecar;
     manifest_job.buffer_container = manifest.defaults.buffer_container;
     manifest_job.material_descriptor = manifest.defaults.material_descriptor;
+    manifest_job.geometry_descriptor = manifest.defaults.geometry_descriptor;
     manifest_job.fbx.texture_defaults = manifest.defaults.texture;
     manifest_job.gltf.texture_defaults = manifest.defaults.texture;
 
@@ -1139,6 +1178,8 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
         = manifest_job.texture.source_path;
       manifest_job.material_descriptor.descriptor_path
         = manifest_job.texture.source_path;
+      manifest_job.geometry_descriptor.descriptor_path
+        = manifest_job.texture.source_path;
     } else {
       manifest_job.texture.source_path.clear();
       manifest_job.fbx.source_path.clear();
@@ -1148,6 +1189,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
       manifest_job.physics_sidecar.source_path.clear();
       manifest_job.buffer_container.descriptor_path.clear();
       manifest_job.material_descriptor.descriptor_path.clear();
+      manifest_job.geometry_descriptor.descriptor_path.clear();
     }
 
     if (has_bindings && is_script_sidecar_job) {
@@ -1195,6 +1237,10 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
           job, manifest_job.buffer_container, error_stream)) {
       return std::nullopt;
     }
+    if (!ApplyCommonGeometryDescriptorOverrides(
+          job, manifest_job.geometry_descriptor, error_stream)) {
+      return std::nullopt;
+    }
 
     if (!ApplyImportOptions(
           job, manifest_job.texture.with_content_hashing, error_stream)) {
@@ -1224,6 +1270,10 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
     if (!ApplyBufferContainerOverrides(
           job, manifest_job.buffer_container, error_stream)) {
+      return std::nullopt;
+    }
+    if (!ApplyGeometryDescriptorOverrides(
+          job, manifest_job.geometry_descriptor, error_stream)) {
       return std::nullopt;
     }
     if (!ApplyTextureOverrides(job, manifest_job.texture, error_stream)) {
@@ -1283,6 +1333,10 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream) const
   if (job_type == "buffer-container") {
     return AttachOrchestration(
       internal::BuildBufferContainerRequest(buffer_container, error_stream));
+  }
+  if (job_type == "geometry-descriptor") {
+    return AttachOrchestration(internal::BuildGeometryDescriptorRequest(
+      geometry_descriptor, error_stream));
   }
   if (job_type == "fbx") {
     return AttachOrchestration(

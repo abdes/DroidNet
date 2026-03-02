@@ -68,7 +68,7 @@ NOLINT_TEST(ImportManifestInputTest, AcceptsInputJobWithDependencies)
   std::ostringstream req_errors;
   const auto request = manifest->jobs[1].BuildRequest(req_errors);
   ASSERT_TRUE(request.has_value()) << req_errors.str();
-  EXPECT_TRUE(request->options.input.has_value());
+  EXPECT_TRUE(request->input.has_value());
   ASSERT_TRUE(request->orchestration.has_value());
   EXPECT_EQ(request->orchestration->job_id, "vehicle.contexts");
   ASSERT_EQ(request->orchestration->depends_on.size(), 1U);

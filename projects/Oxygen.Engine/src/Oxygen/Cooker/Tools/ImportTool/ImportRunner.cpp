@@ -94,7 +94,7 @@ namespace {
     if (request.physics.has_value()) {
       return "physics-sidecar";
     }
-    if (request.options.input.has_value()) {
+    if (request.input.has_value()) {
       return "input";
     }
     if (request.GetFormat() != ImportFormat::kUnknown) {

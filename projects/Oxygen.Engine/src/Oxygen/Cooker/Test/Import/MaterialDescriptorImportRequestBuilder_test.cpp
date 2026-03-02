@@ -93,10 +93,10 @@ NOLINT_TEST(MaterialDescriptorImportRequestBuilderTest,
     request->job_name, std::optional<std::string> { "manifest-material" });
   EXPECT_FALSE(oxygen::content::import::EffectiveContentHashingEnabled(
     request->options.with_content_hashing));
-  ASSERT_TRUE(request->options.material_descriptor.has_value());
+  ASSERT_TRUE(request->material_descriptor.has_value());
 
-  const auto normalized = json::parse(
-    request->options.material_descriptor->normalized_descriptor_json);
+  const auto normalized
+    = json::parse(request->material_descriptor->normalized_descriptor_json);
   EXPECT_EQ(normalized.at("name").get<std::string>(), "WoodFloor");
   EXPECT_EQ(normalized.at("textures")
               .at("base_color")
