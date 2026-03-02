@@ -38,8 +38,8 @@
                 "force_separate"
             ]
         },
-        "inputs": {
-            "$ref": "#/definitions/inputs"
+        "parameters": {
+            "$ref": "#/definitions/parameters"
         },
         "textures": {
             "$ref": "#/definitions/textures"
@@ -210,7 +210,7 @@
                 }
             }
         },
-        "inputs": {
+        "parameters": {
             "type": "object",
             "additionalProperties": false,
             "properties": {

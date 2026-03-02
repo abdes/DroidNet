@@ -67,7 +67,7 @@ NOLINT_TEST(MaterialDescriptorImportRequestBuilderTest,
       "domain": "opaque",
       "alpha_mode": "opaque",
       "orm_policy": "auto",
-      "inputs": {
+      "parameters": {
         "metalness": 0.2,
         "roughness": 0.7
       },
