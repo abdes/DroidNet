@@ -1,0 +1,8 @@
+{
+    "name": "actor",
+    "virtual_path": "/.cooked/Physics/Shapes/actor.ocshape",
+    "shape_type": "capsule",
+    "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+    "radius": 0.35,
+    "half_height": 0.9
+}

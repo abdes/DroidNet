@@ -1,5 +1,4 @@
 {
-    "$schema": "../../../src/Oxygen/Cooker/Import/Schemas/oxygen.physics-material-descriptor.schema.json",
     "name": "plastic",
     "content_hashing": true,
     "virtual_path": "/.cooked/Physics/Materials/plastic.opmat",

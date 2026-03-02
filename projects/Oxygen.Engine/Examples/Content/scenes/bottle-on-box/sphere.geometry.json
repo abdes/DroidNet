@@ -1,5 +1,4 @@
 {
-  "$schema": "../../../src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json",
   "name": "sphere",
   "bounds": {
     "min": [-1.0, -1.0, -1.0],

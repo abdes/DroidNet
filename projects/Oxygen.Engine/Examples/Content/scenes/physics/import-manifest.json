@@ -1,0 +1,63 @@
+{
+    "version": 1,
+    "output": "F:/projects/DroidNet/projects/Oxygen.Engine/Examples/Content/.cooked",
+    "jobs": [
+        {
+            "id": "scene.physics_park",
+            "type": "scene-descriptor",
+            "source": "./physics_park.scene.json",
+            "name": "physics_park"
+        },
+        {
+            "id": "physics.resource.joint_hinge_a",
+            "type": "physics-resource-descriptor",
+            "source": "./park_hinge_joint_a.physics-resource.json",
+            "name": "park_hinge_joint_a"
+        },
+        {
+            "id": "physics.material.ground",
+            "type": "physics-material-descriptor",
+            "source": "./ground.physics-material.json",
+            "name": "ground"
+        },
+        {
+            "id": "physics.material.dynamic",
+            "type": "physics-material-descriptor",
+            "source": "./dynamic.physics-material.json",
+            "name": "dynamic"
+        },
+        {
+            "id": "physics.shape.floor",
+            "type": "collision-shape-descriptor",
+            "source": "./floor.shape.json",
+            "name": "floor_shape",
+            "depends_on": [
+                "physics.material.ground"
+            ]
+        },
+        {
+            "id": "physics.shape.actor",
+            "type": "collision-shape-descriptor",
+            "source": "./actor.shape.json",
+            "name": "actor_shape",
+            "depends_on": [
+                "physics.material.dynamic"
+            ]
+        },
+        {
+            "id": "physics.sidecar.park",
+            "type": "physics-sidecar",
+            "source": "./physics_park.physics-sidecar.json",
+            "name": "physics_park_sidecar",
+            "target_scene_virtual_path": "/.cooked/Scenes/physics_park.oscene",
+            "depends_on": [
+                "scene.physics_park",
+                "physics.resource.joint_hinge_a",
+                "physics.shape.floor",
+                "physics.shape.actor",
+                "physics.material.ground",
+                "physics.material.dynamic"
+            ]
+        }
+    ]
+}

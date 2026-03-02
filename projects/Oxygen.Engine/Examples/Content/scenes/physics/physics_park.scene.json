@@ -1,0 +1,45 @@
+{
+    "name": "physics_park",
+    "nodes": [
+        {
+            "name": "Root"
+        },
+        {
+            "name": "Floor",
+            "parent": 0
+        },
+        {
+            "name": "DynamicA",
+            "parent": 0
+        },
+        {
+            "name": "DynamicB",
+            "parent": 0
+        },
+        {
+            "name": "Character",
+            "parent": 0
+        },
+        {
+            "name": "Vehicle",
+            "parent": 0
+        },
+        {
+            "name": "TriggerZone",
+            "parent": 0
+        },
+        {
+            "name": "SoftBody",
+            "parent": 0
+        },
+        {
+            "name": "AggregateAnchor",
+            "parent": 0
+        }
+    ],
+    "references": {
+        "physics_sidecars": [
+            "/.cooked/Scenes/physics_park.opscene"
+        ]
+    }
+}

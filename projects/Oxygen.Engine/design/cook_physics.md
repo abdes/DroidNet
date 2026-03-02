@@ -348,6 +348,15 @@ Example manifest DAG (all domains):
 }
 ```
 
+Repository-backed examples:
+
+1. Full four-domain descriptor sample:
+   - `Examples/Content/physics/import-manifest.physics.json`
+   - `Examples/Content/physics/README.md`
+2. Mixed real-content supersession sample (scene/geo/material/texture/input/script
+   + physics):
+   - `Examples/Content/full-import/import-manifest.json`
+
 ## 6.6 Authoring Contract Tables
 
 ## 6.6.1 Domain Concept Map
@@ -666,6 +675,20 @@ This spec defines the physics track for PakGen supersession:
 1. all physics content authoring must be representable through descriptor domains + manifest DAG,
 2. no PakGen-only physics behavior remains required for production workflows,
 3. parity closure is evidence-based via tests and representative content scenarios.
+
+Representative parity evidence set:
+
+1. Legacy park-spec concept coverage (`physics_domains_park_spec.yaml`) is
+   represented by descriptor workflows and tests:
+   - physics resources (`.opres`): `PhysicsResourceDescriptor*` tests
+   - physics materials (`.opmat`): `PhysicsMaterialDescriptor*` tests
+   - collision shapes (`.ocshape`): `CollisionShapeDescriptor*` tests
+   - scene bindings (`.opscene`): `Physics*` sidecar tests
+2. Concrete repository examples:
+   - `Examples/Content/physics/import-manifest.physics.json` (all four physics
+     domains, including all seven sidecar binding families).
+   - `Examples/Content/full-import/import-manifest.json` (mixed-domain
+     supersession scenario used in runtime validation).
 
 ## 14. Completion Criteria
 

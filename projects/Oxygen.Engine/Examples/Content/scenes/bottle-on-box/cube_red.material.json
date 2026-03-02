@@ -1,5 +1,4 @@
 {
-  "$schema": "../../../src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json",
   "name": "cube_red",
   "domain": "opaque",
   "alpha_mode": "opaque",

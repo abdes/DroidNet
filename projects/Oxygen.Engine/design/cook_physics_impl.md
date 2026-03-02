@@ -515,6 +515,20 @@ Acceptance:
       - P9 closure gate satisfied; parity/docs closeout can start.
     - remaining gate:
       - finalize parity evidence pack and lock docs/spec/plan status consistency.
+    - progress evidence:
+      - parity example pack added under `Examples/Content/physics`:
+        - `import-manifest.physics.json`
+        - `park.scene.json`
+        - `park_hinge_joint_a.physics-resource.json`
+        - `ground.physics-material.json`
+        - `dynamic.physics-material.json`
+        - `floor.shape.json`
+        - `actor.shape.json`
+        - `park.physics-sidecar.json`
+        - `bin/park_hinge_joint_a.jphbin`
+        - `README.md`
+      - spec updated with repository-backed examples and parity evidence mapping:
+        - `design/cook_physics.md` sections 6.5 and 13.
 
 ## P0
 
@@ -862,3 +876,22 @@ Build/test execution in this pass:
      - ensure spec/plan/status consistency with explicit evidence.
 3. Validation mode:
    - build/test execution remains user-run only in this flow.
+4. Progress evidence:
+   - docs updated:
+     - `design/cook_physics.md` now references concrete repository examples
+       for four-domain physics workflows and parity evidence mapping.
+   - examples updated:
+     - `Examples/Content/physics/README.md`
+     - `Examples/Content/physics/import-manifest.physics.json`
+     - `Examples/Content/physics/park.scene.json`
+     - `Examples/Content/physics/park_hinge_joint_a.physics-resource.json`
+     - `Examples/Content/physics/ground.physics-material.json`
+     - `Examples/Content/physics/dynamic.physics-material.json`
+     - `Examples/Content/physics/floor.shape.json`
+     - `Examples/Content/physics/actor.shape.json`
+     - `Examples/Content/physics/park.physics-sidecar.json`
+     - `Examples/Content/physics/bin/park_hinge_joint_a.jphbin`
+5. Remaining gate:
+   - user-run validation confirmation for the new repository example manifest
+     (`Examples/Content/physics/import-manifest.physics.json`) before phase
+     can be marked `done`.
