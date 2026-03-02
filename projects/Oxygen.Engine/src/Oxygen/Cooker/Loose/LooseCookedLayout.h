@@ -55,6 +55,12 @@ struct LooseCookedLayout final : Layout {
   //! Physics scene sidecar descriptor extension.
   static constexpr std::string_view kPhysicsSceneDescriptorExtension
     = ".opscene";
+  //! Physics material descriptor extension.
+  static constexpr std::string_view kPhysicsMaterialDescriptorExtension
+    = ".opmat";
+  //! Collision shape descriptor extension.
+  static constexpr std::string_view kCollisionShapeDescriptorExtension
+    = ".ocshape";
   static constexpr std::string_view kScriptDescriptorExtension = ".oscript";
   static constexpr std::string_view kInputActionDescriptorExtension = ".oiact";
   static constexpr std::string_view kInputMappingContextDescriptorExtension
@@ -120,6 +126,24 @@ struct LooseCookedLayout final : Layout {
     -> std::string
   {
     return std::string(name) + std::string(kBufferDescriptorExtension);
+  }
+
+  [[nodiscard]] static auto PhysicsMaterialDescriptorFileName(
+    std::string_view name) -> std::string
+  {
+    return std::string(name) + std::string(kPhysicsMaterialDescriptorExtension);
+  }
+
+  [[nodiscard]] static auto CollisionShapeDescriptorFileName(
+    std::string_view name) -> std::string
+  {
+    return std::string(name) + std::string(kCollisionShapeDescriptorExtension);
+  }
+
+  [[nodiscard]] static auto PhysicsResourceDescriptorFileName(
+    std::string_view name) -> std::string
+  {
+    return std::string(name) + std::string(kPhysicsResourceDescriptorExtension);
   }
 
   [[nodiscard]] auto MaterialVirtualLeaf(std::string_view material_name) const
@@ -192,6 +216,27 @@ struct LooseCookedLayout final : Layout {
     return JoinRelPath(BufferDescriptorDir(), BufferDescriptorFileName(name));
   }
 
+  [[nodiscard]] auto PhysicsMaterialVirtualLeaf(std::string_view name) const
+    -> std::string
+  {
+    return JoinRelPath(DescriptorDirFor(data::AssetType::kPhysicsMaterial),
+      PhysicsMaterialDescriptorFileName(name));
+  }
+
+  [[nodiscard]] auto CollisionShapeVirtualLeaf(std::string_view name) const
+    -> std::string
+  {
+    return JoinRelPath(DescriptorDirFor(data::AssetType::kCollisionShape),
+      CollisionShapeDescriptorFileName(name));
+  }
+
+  [[nodiscard]] auto PhysicsResourceVirtualLeaf(std::string_view name) const
+    -> std::string
+  {
+    return JoinRelPath(
+      PhysicsResourcesDir(), PhysicsResourceDescriptorFileName(name));
+  }
+
   [[nodiscard]] auto MaterialDescriptorRelPath(
     std::string_view material_name) const -> std::string
   {
@@ -244,6 +289,24 @@ struct LooseCookedLayout final : Layout {
     -> std::string
   {
     return BufferVirtualLeaf(name);
+  }
+
+  [[nodiscard]] auto PhysicsMaterialDescriptorRelPath(
+    std::string_view name) const -> std::string
+  {
+    return PhysicsMaterialVirtualLeaf(name);
+  }
+
+  [[nodiscard]] auto CollisionShapeDescriptorRelPath(
+    std::string_view name) const -> std::string
+  {
+    return CollisionShapeVirtualLeaf(name);
+  }
+
+  [[nodiscard]] auto PhysicsResourceDescriptorRelPath(
+    std::string_view name) const -> std::string
+  {
+    return PhysicsResourceVirtualLeaf(name);
   }
 
   [[nodiscard]] auto MaterialVirtualPath(std::string_view material_name) const
@@ -302,6 +365,26 @@ struct LooseCookedLayout final : Layout {
     -> std::string
   {
     return JoinVirtualPath(virtual_mount_root, BufferVirtualLeaf(name));
+  }
+
+  [[nodiscard]] auto PhysicsMaterialVirtualPath(std::string_view name) const
+    -> std::string
+  {
+    return JoinVirtualPath(
+      virtual_mount_root, PhysicsMaterialVirtualLeaf(name));
+  }
+
+  [[nodiscard]] auto CollisionShapeVirtualPath(std::string_view name) const
+    -> std::string
+  {
+    return JoinVirtualPath(virtual_mount_root, CollisionShapeVirtualLeaf(name));
+  }
+
+  [[nodiscard]] auto PhysicsResourceVirtualPath(std::string_view name) const
+    -> std::string
+  {
+    return JoinVirtualPath(
+      virtual_mount_root, PhysicsResourceVirtualLeaf(name));
   }
 
   //! Index filename at the cooked-root directory.

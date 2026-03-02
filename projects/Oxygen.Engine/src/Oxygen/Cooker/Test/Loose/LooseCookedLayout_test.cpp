@@ -58,6 +58,12 @@ NOLINT_TEST(LooseCookedLayoutTest, DescriptorFileNamesAreCorrect)
   EXPECT_EQ(
     LooseCookedLayout::InputMappingContextDescriptorFileName("Gameplay"),
     "Gameplay.oimap");
+  EXPECT_EQ(LooseCookedLayout::PhysicsMaterialDescriptorFileName("Ground"),
+    "Ground.opmat");
+  EXPECT_EQ(LooseCookedLayout::CollisionShapeDescriptorFileName("Floor"),
+    "Floor.ocshape");
+  EXPECT_EQ(LooseCookedLayout::PhysicsResourceDescriptorFileName("JointA"),
+    "JointA.opres");
 }
 
 NOLINT_TEST(LooseCookedLayoutTest, DescriptorDirForYieldsExpectedDirs)
@@ -103,6 +109,12 @@ NOLINT_TEST(LooseCookedLayoutTest, DescriptorRelPathsAreCorrect)
   EXPECT_EQ(layout.GeometryDescriptorRelPath("G1"), "Geometry/G1.ogeo");
   EXPECT_EQ(layout.SceneDescriptorRelPath("S1"), "Scenes/S1.oscene");
   EXPECT_EQ(layout.PhysicsSceneDescriptorRelPath("S1"), "Scenes/S1.opscene");
+  EXPECT_EQ(layout.PhysicsMaterialDescriptorRelPath("Ground"),
+    "Physics/Materials/Ground.opmat");
+  EXPECT_EQ(layout.CollisionShapeDescriptorRelPath("Floor"),
+    "Physics/Shapes/Floor.ocshape");
+  EXPECT_EQ(layout.PhysicsResourceDescriptorRelPath("JointA"),
+    "Physics/Resources/JointA.opres");
 }
 
 NOLINT_TEST(LooseCookedLayoutTest, VirtualPathsJoinCorrectly)
@@ -119,6 +131,12 @@ NOLINT_TEST(LooseCookedLayoutTest, VirtualPathsJoinCorrectly)
 
   layout.virtual_mount_root = "MyMount";
   EXPECT_EQ(layout.MaterialVirtualPath("M1"), "/MyMount/Materials/M1.omat");
+  EXPECT_EQ(layout.PhysicsMaterialVirtualPath("Ground"),
+    "/MyMount/Physics/Materials/Ground.opmat");
+  EXPECT_EQ(layout.CollisionShapeVirtualPath("Floor"),
+    "/MyMount/Physics/Shapes/Floor.ocshape");
+  EXPECT_EQ(layout.PhysicsResourceVirtualPath("JointA"),
+    "/MyMount/Physics/Resources/JointA.opres");
 }
 
 NOLINT_TEST(LooseCookedLayoutTest, ResourcePathsAreCorrect)

@@ -41,6 +41,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/MemoryStream.h>
@@ -135,8 +136,9 @@ namespace {
 
   auto ReplaceSceneExtensionWithPhysics(std::string value) -> std::string
   {
-    constexpr auto kSceneSuffix = std::string_view { ".oscene" };
-    constexpr auto kPhysicsSuffix = std::string_view { ".opscene" };
+    constexpr auto kSceneSuffix = LooseCookedLayout::kSceneDescriptorExtension;
+    constexpr auto kPhysicsSuffix
+      = LooseCookedLayout::kPhysicsSceneDescriptorExtension;
 
     if (value.size() >= kSceneSuffix.size() && value.ends_with(kSceneSuffix)) {
       value.resize(value.size() - kSceneSuffix.size());
