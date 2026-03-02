@@ -100,14 +100,24 @@ PakGen supersession is done by introducing descriptor-first import domains as pe
 3. A buffer view descriptor is a JSON object inside `buffers[i].views[]`.
 4. Buffer data is always external via `buffers[i].uri` to `.buffer.bin`.
 5. Inline JSON payloads (base64/data-URI/raw arrays) are not part of the standard contract.
-6. Mesh/submesh references must use `buffer_virtual_path` (plus view selector), never local buffer IDs.
-7. Equivalent cross-container buffer definitions are allowed in authoring input, but they must collapse to one cooked buffer resource and one `.obuf` at the canonical `virtual_path`.
-8. Multiple containers may reference the same external `.buffer.bin` file.
-9. Deterministic resolution chain is required:
-   - `buffer_virtual_path` -> resolve mounted source -> load `.obuf`
+6. Geometry mesh-level primary buffer refs use concise fields:
+   - `buffers.vb_ref`: vertex buffer virtual path (`.obuf`)
+   - `buffers.ib_ref`: index buffer virtual path (`.obuf`)
+7. Submesh-level material refs use concise field:
+   - `material_ref`: material virtual path (`.omat`)
+8. Submesh view refs use a single paired selector:
+   - `view_ref`: view name resolved against both `vb_ref` and `ib_ref`
+   - reserved implicit selector `__all__` always means whole-buffer view on both sides
+9. Mesh/submesh references must use virtual paths (through `vb_ref`/`ib_ref`), never local buffer IDs.
+10. Buffer view name `__all__` is reserved and cannot be explicitly declared in `buffers[i].views[]`.
+11. Equivalent cross-container buffer definitions are allowed in authoring input, but they must collapse to one cooked buffer resource and one `.obuf` at the canonical `virtual_path`.
+12. Multiple containers may reference the same external `.buffer.bin` file.
+13. Deterministic resolution chain is required:
+   - buffer reference -> canonical buffer virtual path
+   - canonical virtual path -> resolve mounted source -> load `.obuf`
    - parse `.obuf` -> `resource_index` + `BufferResourceDesc`
    - use resolved source scope + `resource_index` to read exact `buffers.table` row and payload in `buffers.data`
-10. Cross-container dedupe is mandatory: if two containers resolve to equivalent buffer identity, the cooker emits one `buffers.table` entry, one payload region, and one `.obuf`; all references resolve through that single canonical buffer virtual path.
+14. Cross-container dedupe is mandatory: if two containers resolve to equivalent buffer identity, the cooker emits one `buffers.table` entry, one payload region, and one `.obuf`; all references resolve through that single canonical buffer virtual path.
 
 ## 6. Target Import Architecture
 

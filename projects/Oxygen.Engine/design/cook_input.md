@@ -141,10 +141,10 @@ Architectural split:
 
 ## 6.2 Changed Classes
 
-1. `ImportOptions`
-   - add `InputTuning` (orchestration-only; presence signals input import routing).
-   - `InputImportKind` is NOT added to `ImportOptions`. Document structure (standalone action vs. primary format) is determined solely inside `InputImportPipeline` from the source JSON structure.
-   - file: `src/Oxygen/Cooker/Import/ImportOptions.h/.cpp`.
+1. `ImportRequest`
+   - add top-level `InputPayload` marker (orchestration-only; presence signals input import routing).
+   - `InputImportKind` is NOT added to `ImportOptions` or `ImportRequest`. Document structure (standalone action vs. primary format) is determined solely inside `InputImportPipeline` from the source JSON structure.
+   - file: `src/Oxygen/Cooker/Import/ImportRequest.h`.
 
 2. `AsyncImportService`
    - route input requests to `InputImportJob`.
@@ -211,28 +211,28 @@ Architectural split:
 
 ## 7. API Contracts
 
-## 7.1 Import Options
+## 7.1 Import Request Payload
 
-Add to `ImportOptions`:
+Add to `ImportRequest`:
 
 ```cpp
-struct InputTuning final {
+struct InputPayload final {
   // Orchestration-only. Presence signals input import routing.
   // No asset-kind field: the pipeline determines document structure from source JSON.
 };
 ```
 
-`ImportOptions` gains:
+`ImportRequest` gains:
 
 ```cpp
-InputTuning input {};
+std::optional<InputPayload> input;
 ```
 
 Routing contract:
 
-1. `AsyncImportService` routes requests with `options.input` present to `InputImportJob`.
+1. `AsyncImportService` routes requests with `request.input` present to `InputImportJob`.
 2. No `InputImportKind` enum exists. Document structure is determined inside `InputImportPipeline` only.
-3. `ImportManifestJob::BuildRequest()` sets `options.input` when `job_type == "input"`.
+3. `ImportManifestJob::BuildRequest()` sets `request.input` when `job_type == "input"`.
 
 ## 7.2 Input Command (CLI Only)
 

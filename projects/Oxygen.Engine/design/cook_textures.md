@@ -143,8 +143,9 @@ Architectural split:
 2. `TexturePipeline` is a reusable async cooking unit shared by all entry points.
 3. Runtime loading reads `TextureResourceDesc` from the table and pixel data from
    the data blob — no cooking at load time.
-4. Scene imports do not own texture cooking policy; that policy comes from
-   `ImportOptions::TextureTuning`.
+4. No import path owns per-texture cooking policy inline. All three paths
+   source their behavioral parameters from `ImportOptions::TextureTuning` as the
+   job-wide default, with `texture_overrides` providing per-asset granularity.
 
 ## 6. Class Design
 
@@ -326,10 +327,25 @@ descriptor JSON.
 
 ## 7. API Contracts
 
-### 7.1 Import Options (Embedded Texture Cooking)
+### 7.1 Import Options (Job-Wide Texture Tuning Defaults)
 
-When textures are imported as a side effect of FBX/glTF scene imports,
-`ImportOptions::TextureTuning` controls cooking behavior:
+`ImportOptions::TextureTuning` is the authoritative behavioral parameter set
+consumed by all three texture import paths. It serves two roles that together
+justify its presence in `ImportOptions` rather than in a per-request descriptor:
+
+- **Format-based routing anchor.** Texture imports use format-based routing
+  (`ImportFormat::kTextureImage` derived from file extension). There is no
+  normalized descriptor JSON on `ImportRequest` to carry behavioral parameters.
+  `TextureTuning` fills that gap for all import paths, including standalone CLI
+  jobs and descriptor-driven jobs.
+
+- **Job-wide cooking defaults.** A typical import job covers many textures that
+  share the same compression tier, mip policy, and color-space treatment.
+  Requiring authors to reproduce these parameters on every individual texture
+  reference or per-material texture slot creates pervasive boilerplate and makes
+  global policy changes (for example, upgrading the default compression tier) into
+  multi-site edits. `texture_tuning` is the single authoritative default; per-asset
+  exceptions are expressed via `texture_overrides`.
 
 ```cpp
 struct TextureTuning final {
@@ -352,6 +368,7 @@ struct TextureTuning final {
   Format data_output_format = Format::kBC7UNorm;
   Bc7Quality bc7_quality = Bc7Quality::kDefault;
   std::string packing_policy_id = "d3d12";
+  bool placeholder_on_failure = false;             // Use placeholder payload on cook failure
 
   // HDR
   HdrHandling hdr_handling = HdrHandling::kTonemapAuto;
@@ -367,25 +384,24 @@ struct TextureTuning final {
   bool equirect_to_cubemap = false;
   uint32_t cubemap_face_size = 0;
   CubeMapImageLayout cubemap_layout = CubeMapImageLayout::kUnknown;
-
-  // Failure handling
-  bool placeholder_on_failure = false;
 };
 ```
 
 `ImportOptions` additionally carries:
 
 ```cpp
-TextureTuning texture_tuning = {};  // Global defaults for all textures
+TextureTuning texture_tuning = {};  // Job-wide defaults for all textures
 std::unordered_map<std::string, TextureTuning> texture_overrides;  // Per-texture overrides by name
 ```
 
-Routing contract:
+Contracts:
 
 1. `TextureTuning::enabled` must be `true` for textures to be cooked during
-   scene imports.
+   FBX/glTF scene imports. For standalone and descriptor-driven imports,
+   `enabled` is implicitly satisfied by the choice of import path.
 2. `texture_overrides` keys are matched against the texture name/path from the
-   source format. Per-texture overrides take precedence over `texture_tuning`.
+   source format. Per-texture overrides take precedence over `texture_tuning`
+   for all fields.
 3. `FailurePolicyForTextureTuning()` maps `placeholder_on_failure` →
    `TexturePipeline::FailurePolicy::kPlaceholder` or `kStrict`.
 

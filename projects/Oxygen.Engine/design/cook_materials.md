@@ -92,8 +92,8 @@ The following facts were confirmed during the documentation pass:
 
 | Fact | Evidence |
 | --- | --- |
-| Material import is descriptor-only | No `MaterialCommand.cpp` in `ImportTool`; no `ImportFormat::kMaterial`; routing discriminant is `options.material_descriptor.has_value()` |
-| Route discriminant is option presence | `src/Oxygen/Cooker/Import/AsyncImportService.cpp` (`const bool is_material_descriptor_request = request.options.material_descriptor.has_value()`) |
+| Material import is descriptor-only | No `MaterialCommand.cpp` in `ImportTool`; no `ImportFormat::kMaterial`; routing discriminant is `request.material_descriptor.has_value()` |
+| Route discriminant is request payload presence | `src/Oxygen/Cooker/Import/AsyncImportService.cpp` (`const bool is_material_descriptor_request = request.material_descriptor.has_value()`) |
 | Manifest job type exists | `src/Oxygen/Cooker/Import/ImportManifest.cpp`: `if (job_type == "material-descriptor")` |
 | Schema is embedded | `src/Oxygen/Cooker/Import/Internal/ImportManifest_schema.h` (`kMaterialDescriptorSchema`) |
 | Binary format is locked | `src/Oxygen/Data/PakFormat_render.h` (`MaterialAssetDesc`, `static_assert(sizeof(...))==384)`, `ShaderReferenceDesc`, `static_assert(sizeof(...))==424)`) |
@@ -140,7 +140,7 @@ flowchart LR
   subgraph Ingress
     B[MaterialDescriptorImportSettings]
     C["BuildMaterialDescriptorRequest()"]
-    D[ImportRequest\noptions.material_descriptor]
+    D[ImportRequest\nmaterial_descriptor payload]
   end
 
   subgraph Manifest
@@ -212,8 +212,8 @@ Architectural split:
      `ImportRequest`. Loads the descriptor JSON file, schema-validates it
      against `kMaterialDescriptorSchema`, resolves `job_name`, resolves
      `with_content_hashing`, and stores `descriptor_doc->dump()` in
-     `request.options.material_descriptor.normalized_descriptor_json`.
-   - note: The presence of `options.material_descriptor` is the route
+      `request.material_descriptor.normalized_descriptor_json`.
+   - note: The presence of `request.material_descriptor` is the route
      discriminant that bypasses all format detection in `AsyncImportService`.
 
 **Job:**
@@ -320,16 +320,16 @@ Architectural split:
 
 ### 6.3 Routing
 
-`AsyncImportService` routes based on `ImportRequest::options.material_descriptor`:
+`AsyncImportService` routes based on `ImportRequest::material_descriptor`:
 
 ```text
-options.material_descriptor.has_value() == true → MaterialDescriptorImportJob
+request.material_descriptor.has_value() == true → MaterialDescriptorImportJob
 (all other routing: format-based detection is skipped for material requests)
 ```
 
 Unlike textures, there is no `ImportFormat` enum value for materials. The
-discriminant is the presence of the `MaterialDescriptorTuning` optional in
-`ImportOptions`. This means material descriptor requests bypass all file
+discriminant is the presence of the top-level
+`ImportRequest::material_descriptor` payload. This means material descriptor requests bypass all file
 extension detection and format routing logic.
 
 ---

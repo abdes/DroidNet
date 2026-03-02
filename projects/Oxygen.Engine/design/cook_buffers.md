@@ -94,7 +94,7 @@ The following facts were confirmed during the documentation pass:
 | --- | --- |
 | Buffer import is descriptor-only (no CLI command) | No `BufferCommand.cpp` in `ImportTool`; routing is discriminant-based, not format-based |
 | Route discriminant is payload presence | `src/Oxygen/Cooker/Import/AsyncImportService.cpp` (`const bool is_buffer_container_request = request.buffer_container.has_value()`) |
-| Payload field is top-level on `ImportRequest` | `src/Oxygen/Cooker/Import/ImportRequest.h` (`std::optional<BufferContainerPayload> buffer_container`) — distinct from `options.material_descriptor` nesting |
+| Payload field is top-level on `ImportRequest` | `src/Oxygen/Cooker/Import/ImportRequest.h` (`std::optional<BufferContainerPayload> buffer_container`) — same top-level payload pattern as material/geometry descriptors |
 | Manifest job type exists | `src/Oxygen/Cooker/Import/ImportManifest.cpp` (`if (job_type == "buffer-container")`) |
 | Schema is embedded | `src/Oxygen/Cooker/Import/Internal/ImportManifest_schema.h` (`kBufferContainerSchema`) |
 | Per-entry validation (not job-level re-validation) | `BufferImportSubmitter.cpp` (`ValidateBufferChunkSchema` per entry; job only re-parses JSON, no schema re-validate) |
@@ -226,8 +226,8 @@ Architectural split:
      `request.buffer_container.normalized_descriptor_json`.
    - note: The presence of `request.buffer_container` is the route discriminant
      that bypasses all format detection in `AsyncImportService`. This field is a
-     **top-level optional on `ImportRequest`** (not nested inside `ImportOptions`,
-     unlike `options.material_descriptor`).
+      **top-level optional on `ImportRequest`** (not nested inside `ImportOptions`,
+      same pattern used by descriptor payloads like `request.material_descriptor`).
 
 **Job:**
 
@@ -337,8 +337,7 @@ request.buffer_container.has_value() == true → BufferContainerImportJob
 Unlike textures (which use `ImportFormat` enum values), buffer-container
 requests skip format detection entirely. The discriminant is a **top-level
 optional field** on `ImportRequest` (not nested inside `ImportOptions`),
-which is distinct from the material path where the discriminant is
-`options.material_descriptor`.
+matching the material/geometry descriptor route-discriminant pattern.
 
 ---
 
