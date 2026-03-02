@@ -32,20 +32,30 @@ auto oxygen::physics::jolt::JoltCharacters::CreateCharacter(
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
   }
+  if (!IsFiniteTranslation(desc.initial_position)
+    || !IsFiniteTranslation(desc.shape_local_position)
+    || !IsValidRotation(desc.initial_rotation)
+    || !IsValidRotation(desc.shape_local_rotation)) {
+    return Err(PhysicsError::kInvalidArgument);
+  }
+  const auto normalized_initial_rotation
+    = NormalizeRotation(desc.initial_rotation);
+  const auto normalized_shape_local_rotation
+    = NormalizeRotation(desc.shape_local_rotation);
 
   const auto shape_result = MakeShape(desc.shape);
   if (shape_result.has_error()) {
     return Err(shape_result.error());
   }
   const auto transformed_shape_result = ApplyShapeLocalTransform(desc.shape,
-    shape_result.value(), desc.shape_local_position, desc.shape_local_rotation,
-    desc.shape_local_scale);
+    shape_result.value(), desc.shape_local_position,
+    normalized_shape_local_rotation, desc.shape_local_scale);
   if (transformed_shape_result.has_error()) {
     return Err(transformed_shape_result.error());
   }
 
   JPH::BodyCreationSettings settings(transformed_shape_result.value(),
-    ToJoltRVec3(desc.initial_position), ToJoltQuat(desc.initial_rotation),
+    ToJoltRVec3(desc.initial_position), ToJoltQuat(normalized_initial_rotation),
     JPH::EMotionType::Kinematic, ToObjectLayer(body::BodyType::kKinematic));
   settings.mIsSensor = false;
   settings.mGravityFactor = 1.0F;
