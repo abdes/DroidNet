@@ -40,7 +40,7 @@ Status values:
 | P2 | done | 10% | Texture descriptor domain | `texture-descriptor` implemented end-to-end with schema/tests |
 | P3 | in_progress | 8% | Geometry buffer subdocument model | container-owned `buffers[]`/`views[]` contract implemented with schema/tests under geometry descriptor flow, including virtual-path references and `.obuf` metadata resolution |
 | P4 | done | 14% | Material descriptor domain | `material-descriptor` implemented end-to-end with schema/tests |
-| P5 | pending | 16% | Geometry descriptor domain | `geometry-descriptor` implemented end-to-end with schema/tests |
+| P5 | in_progress | 16% | Geometry descriptor domain | execution path implemented; broad schema/request/manifest/job coverage landed; remaining closure is external execution confirmation |
 | P6 | pending | 16% | Scene descriptor domain | `scene-descriptor` implemented end-to-end with schema/tests |
 | P7 | pending | 8% | Manifest DAG integration | Descriptor job types + defaults + strict key policies + DAG checks |
 | P8 | pending | 7% | Pak builder toolflow integration | Official C++ pack flow wired and documented |
@@ -197,6 +197,130 @@ Acceptance:
 
 1. Geometry descriptor import is independent and does not rely on scene import side effects.
 
+### P3/P5 Geometry Execution Plan (Approval-Gated)
+
+This section is the concrete execution plan for geometry-descriptor implementation.
+It is intentionally detailed and approval-gated before production code changes.
+
+Status markers:
+
+1. `[done]` verified in current codebase.
+2. `[in_progress]` partially delivered, requires geometry-domain integration.
+3. `[pending]` not implemented yet.
+
+#### A. Contract and Schema Lock
+
+1. `[done]` Add `oxygen.geometry-descriptor.schema.json` with full `additionalProperties: false` coverage.
+2. `[done]` Encode Pak-format arity constraints as far as JSON Schema allows:
+   - geometry has `lods[]`.
+   - each LOD has one mesh descriptor payload.
+   - each submesh has one material reference and one-or-more mesh views.
+3. `[done]` Keep container-owned buffer contract inside geometry:
+   - `buffers[]` entries are buffer descriptor subdocuments.
+   - `buffers[i].views[]` entries are container-scoped buffer views.
+   - mesh-level refs use concise keys under `buffers`: `vb_ref`, `ib_ref`.
+   - submesh material refs use `material_ref`.
+   - submesh view refs use a single paired selector:
+     - `view_ref = "<view_name>"`, resolved against both `vb_ref` and `ib_ref`
+     - reserved implicit selector `view_ref = "__all__"` means whole-buffer view on both sides
+4. `[done]` Encode mesh variants as discriminated schema branches aligned with `PakFormat_geometry.h`:
+   - standard
+   - skinned
+   - procedural
+5. `[done]` Keep procedural mesh contract explicit and runtime-aligned:
+   - generated mesh identity uses `Generator/MeshName`.
+   - parameter payload is encoded into `ProceduralMeshInfo.params_size` + blob.
+
+#### B. Ingress and Request-Building
+
+1. `[done]` Add `GeometryDescriptorImportSettings` DTO.
+2. `[done]` Add `GeometryDescriptorImportRequestBuilder` with schema-first validation and normalized JSON payload.
+3. `[done]` Carry geometry-descriptor normalized payload on `ImportRequest` (not in `ImportOptions`) and keep `ImportOptions` limited to runtime behavior/tuning controls.
+4. `[done]` Route request creation through `ImportManifestJob::BuildRequest` and CLI/import-tool code paths.
+
+#### C. Job and Pipeline Orchestration (No Parallel Cooking Path Duplication)
+
+1. `[done]` Add `GeometryDescriptorImportJob`.
+2. `[done]` Reuse existing buffer cook path via `BufferImportSubmitter` for `buffers[]` local definitions (same `BufferPipeline` + emitters/index wiring).
+3. `[done]` Reuse `GeometryPipeline` for descriptor finalization and hash patching.
+4. `[done]` Do not duplicate emission/index logic; only use `ImportSession` emitters and finalize path.
+5. `[done]` Keep execution graph explicit inside the job:
+   - parse + schema validate
+   - submit/collect local buffers
+   - resolve external and/or local references
+   - build descriptor bytes
+   - finalize via `GeometryPipeline`
+   - emit `.ogeo`
+
+#### D. Reference Resolution Strategy (Pre-Cooked + Simultaneously Cooked)
+
+1. `[done]` Implement deterministic buffer resolution chain for all non-local buffer refs:
+   - decode concise refs (`vb_ref`/`ib_ref` + paired `view_ref`) to canonical buffer virtual paths
+   - canonical buffer virtual path -> locate `.obuf` in mounted roots
+   - parse `.obuf` -> `resource_index` + `BufferResourceDesc`
+   - use resolved index in geometry descriptor binding
+2. `[done]` Resolve material refs by canonical virtual path to `AssetKey` via mounted content precedence rules.
+3. `[done]` Support simultaneously cooked dependencies through manifest DAG (`id`/`depends_on`) and mounted cooked-root state at job execution time.
+4. `[in_progress]` Emit explicit diagnostics for:
+   - invalid virtual path
+   - undefined view reference for either VB or IB
+   - reserved view name misuse (`__all__` declared explicitly)
+   - unmounted virtual path
+   - missing descriptor
+   - ambiguous descriptor resolution
+   - type mismatch (not material / not buffer sidecar)
+
+#### E. PakFormat and Loader Alignment Rules (Mandatory)
+
+1. `[done]` Generated `.ogeo` bytes must satisfy `PakFormat_geometry.h` layout exactly:
+   - `GeometryAssetDesc` then LOD `MeshDesc` blocks with mesh-type payload.
+   - `SubMeshDesc` and `MeshViewDesc` sequence/order preserved.
+2. `[done]` Enforce counts/arity consistency:
+   - `lod_count` equals number of emitted mesh descriptors.
+   - each mesh `mesh_view_count` equals total views across its submeshes.
+   - each submesh `mesh_view_count` equals number of emitted views for that submesh.
+3. `[done]` Standard/skinned meshes must patch required buffer indices into mesh info blocks.
+4. `[done]` Procedural meshes must emit procedural info + params blob only, and remain compatible with `GeometryLoader` procedural generation path.
+
+#### F. Manifest/Service/Tool Integration
+
+1. `[done]` Add manifest schema + parser support for `type: "geometry-descriptor"`.
+2. `[done]` Add defaults block handling for geometry-descriptor requests.
+3. `[done]` Add async service routing (`AsyncImportService`) to geometry-descriptor job.
+4. `[done]` Add ImportTool batch validation/reporting support for geometry-descriptor job type.
+
+#### G. Test Matrix (Targeted, Not Ocean-Boiling)
+
+1. `[in_progress]` Schema tests:
+   - canonical descriptor acceptance
+   - canonical paired `view_ref` acceptance (including `__all__`)
+   - rejected unknown keys / invalid branch combos
+   - rejected reserved explicit view name `__all__`
+2. `[done]` Request-builder tests:
+   - normalized payload generation
+   - schema diagnostics propagation
+3. `[done]` Manifest tests:
+   - geometry-descriptor job acceptance
+   - strict disallowed-key rejection
+   - DAG dependency wiring with material/texture/buffer jobs
+4. `[in_progress]` Job tests:
+   - canonical standard/skinned descriptor import with local `buffers[]`
+   - canonical mixed references (local + pre-cooked `.obuf` + pre-cooked `.omat`)
+   - canonical procedural descriptor import
+   - failure diagnostics for missing/ambiguous/unmounted refs and arity mismatches
+5. `[in_progress]` Pipeline/loader compatibility tests:
+   - finalized descriptor byte layout checks
+   - procedural descriptor consumed by `GeometryLoader` without structural errors
+6. `[in_progress]` Dedupe invariants:
+   - equivalent local buffer definitions collapse to one cooked buffer resource index
+   - conflicting virtual paths for deduped equivalent buffers fail with explicit diagnostic
+
+#### H. Explicit Non-Goals for This Slice
+
+1. `[done]` No standalone top-level buffer descriptor authoring domain reintroduction.
+2. `[done]` No implicit scene-driven cooking of geometry/material/texture domains.
+3. `[done]` No manual validation duplication for rules already enforced by schema.
+
 ## P6: Scene Descriptor Domain
 
 Tasks:
@@ -296,8 +420,10 @@ Current status:
 2. P2 is done (validated in practice with one manifest + multiple texture descriptors flow).
 3. P4 is `done` (external test pass confirmation received for the material-descriptor suite and DAG scenario).
 4. P3 is `in_progress` (buffer-container interim milestone complete: schema/request/job/routing/tests; geometry-descriptor integration remains).
-5. P1 and P5-P10 are `pending`.
-6. Computed progress snapshot: `32.0%` (P3 completion factor `0.50`).
+5. P5 is `in_progress` (geometry-descriptor execution path is implemented and test coverage has been expanded to job-level and loader-compat scenarios; phase closure is pending external execution confirmation under no-build policy).
+6. P1 and P6-P10 are `pending`.
+7. Computed progress snapshot: `46.4%` (P3 completion factor `0.50`, P5 completion factor `0.90`).
+8. P3/P5 geometry execution plan remains the execution baseline in Section 6 (`P3/P5 Geometry Execution Plan (Approval-Gated)`), with job execution and targeted test matrix substantially implemented.
 
 ## 11. Evidence Log
 
@@ -474,3 +600,92 @@ Initial entries:
 6. Remaining delta to phase exit gate:
    - migrate the P3 contract from interim buffer-container ingress into the `geometry-descriptor` domain (`buffers[]` + nested `views[]`)
    - add geometry-domain tests for virtual-path `.obuf` resolution and cross-container dedupe invariants
+
+1. Date: 2026-03-02
+2. Phase: P3/P5 (geometry planning)
+3. Files changed:
+   - `design/pakgen_supersession_impl.md`
+4. Tests run: none (planning/documentation update only; no-build policy active)
+5. Result: added approval-gated, implementation-ready geometry execution plan with explicit workstreams for schema, request/job routing, resolver semantics (pre-cooked + simultaneously cooked dependencies), procedural mesh support, PakFormat/loader alignment, and targeted test matrix.
+6. Remaining delta to phase exit gate:
+   - approve the detailed plan
+   - implement P3/P5 code and tests per the plan
+
+1. Date: 2026-03-02
+2. Phase: P3/P5 (geometry schema ergonomics refinement)
+3. Files changed:
+   - `design/pakgen_supersession.md`
+   - `design/pakgen_supersession_impl.md`
+4. Tests run: none (planning/spec update only; no-build policy active)
+5. Result: geometry descriptor contract refined for concise author-facing keys and paired view resolution (`buffers.vb_ref`, `buffers.ib_ref`, `material_ref`, `view_ref` with implicit `__all__`), with explicit plan tasks for parser/schema/diagnostics coverage.
+6. Remaining delta to phase exit gate:
+   - approve refined concise contract
+   - implement schema + parser + diagnostics + tests per refined contract
+
+1. Date: 2026-03-02
+2. Phase: P5 (geometry descriptor ingress scaffold)
+3. Files changed:
+   - `src/Oxygen/Cooker/Import/GeometryDescriptorImportSettings.h`
+   - `src/Oxygen/Cooker/Import/GeometryDescriptorImportRequestBuilder.h`
+   - `src/Oxygen/Cooker/Import/Internal/GeometryDescriptorImportRequestBuilder.cpp`
+   - `src/Oxygen/Cooker/Import/ImportOptions.h`
+   - `src/Oxygen/Cooker/Import/ImportManifest.h`
+   - `src/Oxygen/Cooker/Import/ImportManifest.cpp`
+   - `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
+   - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
+   - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.h`
+   - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
+   - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
+   - `src/Oxygen/Cooker/CMakeLists.txt`
+   - `src/Oxygen/Cooker/Test/Import/GeometryDescriptorJsonSchema_test.cpp`
+   - `src/Oxygen/Cooker/Test/Import/GeometryDescriptorImportRequestBuilder_test.cpp`
+   - `src/Oxygen/Cooker/Test/Import/ImportManifest_geometry_descriptor_test.cpp`
+   - `src/Oxygen/Cooker/Test/CMakeLists.txt`
+   - `design/pakgen_supersession_impl.md`
+4. Tests run: none (per current no-build execution policy)
+5. Result: geometry-descriptor is now first-class at ingress/routing level (schema embedding, manifest defaults/job type, request-builder, ImportRequest payload, async service routing, import-tool job typing) with initial job shell and focused schema/request/manifest tests added.
+6. Remaining delta to phase exit gate:
+   - implement full geometry descriptor job execution path (buffer/material resolution, descriptor assembly/finalization, `.ogeo` emission)
+   - add and pass job-level integration tests for standard/skinned/procedural and mixed dependency scenarios
+
+1. Date: 2026-03-02
+2. Phase: P1/P4/P5 (descriptor payload architecture correction)
+3. Files changed:
+   - `src/Oxygen/Cooker/Import/ImportOptions.h`
+   - `src/Oxygen/Cooker/Import/ImportRequest.h`
+   - `src/Oxygen/Cooker/Import/Internal/MaterialDescriptorImportRequestBuilder.cpp`
+   - `src/Oxygen/Cooker/Import/Internal/GeometryDescriptorImportRequestBuilder.cpp`
+   - `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp`
+   - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
+   - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
+   - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
+   - `src/Oxygen/Cooker/Test/Import/AsyncImportService_test.cpp`
+   - `src/Oxygen/Cooker/Test/Import/MaterialDescriptorImportRequestBuilder_test.cpp`
+   - `src/Oxygen/Cooker/Test/Import/ImportManifest_material_descriptor_test.cpp`
+   - `src/Oxygen/Cooker/Test/Import/MaterialDescriptorImportJob_test.cpp`
+   - `src/Oxygen/Cooker/Test/Import/GeometryDescriptorImportRequestBuilder_test.cpp`
+   - `src/Oxygen/Cooker/Test/Import/ImportManifest_geometry_descriptor_test.cpp`
+   - `design/cook_materials.md`
+   - `design/cook_buffers.md`
+   - `design/pakgen_supersession_impl.md`
+4. Tests run: none (no-build policy active)
+5. Result: removed material/geometry descriptor payload carriers from `ImportOptions`; routing/builders/jobs now use top-level `ImportRequest` payloads (`material_descriptor`, `geometry_descriptor`). Added explicit governance comment in `ImportOptions` to prevent adding new non-texture domain payload/tuning without owner approval.
+6. Remaining delta to phase exit gate:
+   - run and pass affected descriptor/material/geometry test suites externally
+   - continue P5 geometry job completion and close remaining pending tasks in Section 6
+
+1. Date: 2026-03-02
+2. Phase: P5 (geometry descriptor execution + coverage closure)
+3. Files changed:
+   - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
+   - `src/Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.cpp`
+   - `src/Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.cpp`
+   - `src/Oxygen/Cooker/Test/Import/GeometryPipeline_test.cpp`
+   - `src/Oxygen/Cooker/Test/Import/GeometryDescriptorImportJob_test.cpp`
+   - `src/Oxygen/Cooker/Test/CMakeLists.txt`
+   - `design/pakgen_supersession_impl.md`
+4. Tests run: none (no-build policy active)
+5. Result: completed geometry-descriptor job execution hardening and expanded coverage with dedicated job tests for standard, pre-cooked `.obuf` references, procedural descriptors, skinned descriptors, failure diagnostics, and dedupe conflict invariant; aligned skinned descriptor serialization/finalization to avoid duplicated skinned payload writes and keep descriptor layout loader-compatible.
+6. Remaining delta to phase exit gate:
+   - run and pass updated geometry descriptor and geometry pipeline suites externally
+   - confirm updated P5 tests in CI, then flip phase status to `done`

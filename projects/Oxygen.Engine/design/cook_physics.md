@@ -203,7 +203,7 @@ std::optional<PhysicsImportSettings> physics;
 Routing contract:
 
 1. `AsyncImportService` routes requests with `request.physics.has_value()` to `PhysicsSidecarImportJob`.
-2. This route is independent from `options.scripting` and `options.input`.
+2. This route is independent from `options.scripting` and `request.input`.
 
 ## 7.2 Request Builder Contract
 

@@ -150,7 +150,7 @@ Acceptance:
 
 Tasks:
 
-1. Add `InputTuning` in `ImportOptions` (orchestration-only; presence signals input import routing). Do NOT add `InputImportKind`; document structure is determined solely inside `InputImportPipeline` from source JSON structure.
+1. Add top-level `InputPayload` marker in `ImportRequest` (orchestration-only; presence signals input import routing). Do NOT add `InputImportKind`; document structure is determined solely inside `InputImportPipeline` from source JSON structure.
 2. Add `InputImportSettings` DTO in `InputImportSettings.h` (orchestration-only fields: `source_path` only).
 3. Implement `BuildInputImportRequest(...)`:
    with validation:
@@ -420,7 +420,7 @@ Current:
    - `src/Oxygen/Data/InputMappingContextAsset.h`: `GetDefaultPriority()` accessor is present.
    - `src/Oxygen/Data/ToStringConverters.cpp`: `InputMappingContextFlags` now stringifies `AutoLoad` and `AutoActivate`.
 2. P2 completed:
-   - `src/Oxygen/Cooker/Import/ImportOptions.h`: added `ImportOptions::InputTuning`.
+   - `src/Oxygen/Cooker/Import/ImportRequest.h`: added `ImportRequest::InputPayload`.
    - `src/Oxygen/Cooker/Import/ImportRequest.h`: added `OrchestrationMetadata` (`job_id`, `depends_on`).
    - Added request-builder/files:
      - `src/Oxygen/Cooker/Import/InputImportSettings.h`
@@ -430,7 +430,7 @@ Current:
    - Input job/pipeline are implemented and wired:
      - `src/Oxygen/Cooker/Import/Internal/Jobs/InputImportJob.h/.cpp`
      - `src/Oxygen/Cooker/Import/Internal/Pipelines/InputImportPipeline.h/.cpp`
-   - `src/Oxygen/Cooker/Import/AsyncImportService.cpp` routes `options.input` to `InputImportJob`.
+   - `src/Oxygen/Cooker/Import/AsyncImportService.cpp` routes `request.input` to `InputImportJob`.
 4. P4 completed:
    - Manifest support for `type: "input"` implemented:
      - `src/Oxygen/Cooker/Import/ImportManifest.h/.cpp`
