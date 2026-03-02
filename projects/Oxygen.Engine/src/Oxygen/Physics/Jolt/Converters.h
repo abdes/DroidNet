@@ -179,6 +179,42 @@ inline auto IsNearlyEqual(const float lhs, const float rhs) noexcept -> bool
   return std::abs(lhs - rhs) <= 1e-5F;
 }
 
+inline auto IsFiniteTranslation(const Vec3& value) noexcept -> bool
+{
+  return std::isfinite(value.x) && std::isfinite(value.y)
+    && std::isfinite(value.z);
+}
+
+inline auto IsFiniteRotation(const Quat& value) noexcept -> bool
+{
+  return std::isfinite(value.w) && std::isfinite(value.x)
+    && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+inline auto RotationNormSquared(const Quat& value) noexcept -> float
+{
+  return value.w * value.w + value.x * value.x + value.y * value.y
+    + value.z * value.z;
+}
+
+inline auto IsValidRotation(const Quat& value) noexcept -> bool
+{
+  const auto norm2 = RotationNormSquared(value);
+  return IsFiniteRotation(value) && std::isfinite(norm2) && norm2 > 1e-8F;
+}
+
+inline auto NormalizeRotation(const Quat& value) noexcept -> Quat
+{
+  const auto norm2 = RotationNormSquared(value);
+  const auto inv_norm = 1.0F / std::sqrt(norm2);
+  return Quat {
+    value.w * inv_norm,
+    value.x * inv_norm,
+    value.y * inv_norm,
+    value.z * inv_norm,
+  };
+}
+
 inline auto IsIdentityRotation(const Quat& value) noexcept -> bool
 {
   const Quat identity { 1.0F, 0.0F, 0.0F, 0.0F };
@@ -242,6 +278,12 @@ inline auto ApplyShapeLocalTransform(const CollisionShape& source_shape,
   const Quat& local_rotation, const Vec3& local_scale)
   -> PhysicsResult<JPH::RefConst<JPH::Shape>>
 {
+  if (!IsFiniteTranslation(local_position)
+    || !IsValidRotation(local_rotation)) {
+    return Err(PhysicsError::kInvalidArgument);
+  }
+  const auto normalized_local_rotation = NormalizeRotation(local_rotation);
+
   if (!IgnoresScale(source_shape)) {
     if (!IsFinitePositiveScale(local_scale)) {
       return Err(PhysicsError::kInvalidArgument);
@@ -261,9 +303,9 @@ inline auto ApplyShapeLocalTransform(const CollisionShape& source_shape,
   }
 
   if (!IsIdentityTranslation(local_position)
-    || !IsIdentityRotation(local_rotation)) {
+    || !IsIdentityRotation(normalized_local_rotation)) {
     base_shape = JPH::RefConst<JPH::Shape> { new JPH::RotatedTranslatedShape(
-      ToJoltVec3(local_position), ToJoltQuat(local_rotation),
+      ToJoltVec3(local_position), ToJoltQuat(normalized_local_rotation),
       base_shape.GetPtr()) };
   }
 
