@@ -218,7 +218,7 @@ struct CollisionShapeAssetDesc {
 #pragma pack(pop)
 static_assert(sizeof(CollisionShapeAssetDesc) == 256);
 
-//! Per-component binding table directory entry (16 bytes).
+//! Per-component binding table directory entry (20 bytes).
 //! Mirrors SceneComponentTableDesc layout for consistency.
 #pragma pack(push, 1)
 struct PhysicsComponentTableDesc {
