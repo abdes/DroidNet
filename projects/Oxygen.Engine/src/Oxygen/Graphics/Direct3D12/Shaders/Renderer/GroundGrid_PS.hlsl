@@ -216,8 +216,10 @@ float4 PS(GroundGridPSInput input) : SV_TARGET
     // precision only matters when we are near 0,0.
     // When near 0,0, pos_abs_approx is small and precise.
     // When far, it's large and imprecise, but Axis lines are invisible or subpixel anyway.
-    const float axis_x_mask = AxisLineMask(pos_abs_approx.x - grid_origin.x, axis_thickness, kAxisMinPixelWidth);
-    const float axis_y_mask = AxisLineMask(pos_abs_approx.y - grid_origin.y, axis_thickness, kAxisMinPixelWidth);
+    // X axis runs along +X at Y=0  ->  detect by distance from Y=0  ->  use .y
+    // Y axis runs along +Y at X=0  ->  detect by distance from X=0  ->  use .x
+    const float axis_x_mask = AxisLineMask(pos_abs_approx.y - grid_origin.y, axis_thickness, kAxisMinPixelWidth);
+    const float axis_y_mask = AxisLineMask(pos_abs_approx.x - grid_origin.x, axis_thickness, kAxisMinPixelWidth);
     const float origin_mask = axis_x_mask * axis_y_mask;
 
     // Composition

@@ -14,8 +14,9 @@
 /*!
  Creates a new Mesh representing a simple arrow gizmo, typically used for
  axis visualization in editors and debug views. The arrow is aligned along the
- +Y axis, composed of a cylinder shaft and a cone head, with distinct colors
- for shaft and head. All geometry is centered at the origin.
+ +Z axis (the engine Up direction), composed of a cylinder shaft and a cone
+ head, with distinct colors for shaft and head. All geometry is centered at
+ the origin.
 
  @return Shared pointer to the immutable Mesh containing the arrow gizmo.
  Returns nullptr on invalid input. Never throws.
