@@ -1398,9 +1398,42 @@ void SceneLoaderService::HydrateSoftBodyBindings(
         + std::string(physics::to_string(authority_result.error())));
     }
 
+    const auto node_handle = runtime_nodes_[node_index].GetHandle();
+    if (physics::ScenePhysics::GetRigidBody(
+          observer_ptr<physics::PhysicsModule> { &physics_module }, node_handle)
+      .has_value()) {
+      (void)physics_module.SoftBodies().DestroySoftBody(world_id, soft_body_id);
+      throw std::runtime_error(
+        std::string("soft-body node already has a rigid body mapping ")
+        + "(node_index=" + std::to_string(record.node_index) + ")");
+    }
+    if (physics::ScenePhysics::GetCharacter(
+          observer_ptr<physics::PhysicsModule> { &physics_module }, node_handle)
+      .has_value()) {
+      (void)physics_module.SoftBodies().DestroySoftBody(world_id, soft_body_id);
+      throw std::runtime_error(
+        std::string("soft-body node already has a character mapping ")
+        + "(node_index=" + std::to_string(record.node_index) + ")");
+    }
+    if (physics_module.HasAggregateForNode(node_handle)) {
+      (void)physics_module.SoftBodies().DestroySoftBody(world_id, soft_body_id);
+      throw std::runtime_error(
+        std::string("soft-body node already has an aggregate mapping ")
+        + "(node_index=" + std::to_string(record.node_index) + ")");
+    }
+    if (const auto existing_node
+      = physics_module.GetNodeForAggregateId(soft_body_id);
+      existing_node.has_value() && *existing_node != node_handle) {
+      (void)physics_module.SoftBodies().DestroySoftBody(world_id, soft_body_id);
+      throw std::runtime_error(
+        std::string(
+          "soft-body aggregate id collides with existing mapping id=")
+        + physics::to_string(soft_body_id) + " (node_index="
+        + std::to_string(record.node_index) + ")");
+    }
+
     physics_module.RegisterNodeAggregateMapping(
-      runtime_nodes_[node_index].GetHandle(), soft_body_id,
-      authority_result.value());
+      node_handle, soft_body_id, authority_result.value());
   }
 }
 
@@ -1419,6 +1452,22 @@ void SceneLoaderService::HydrateVehicleBindings(
     throw std::runtime_error(
       "vehicle hydration requires active physics hydration context");
   }
+
+  auto rigid_body_node_indices = std::unordered_set<uint32_t> {};
+  rigid_body_node_indices.reserve(rigid_body_bindings.size());
+  for (const auto& rigid_body : rigid_body_bindings) {
+    rigid_body_node_indices.insert(rigid_body.node_index);
+  }
+
+  const auto find_runtime_node_index
+    = [&](const scene::NodeHandle& node_handle) -> std::optional<size_t> {
+    for (size_t i = 0; i < runtime_nodes_.size(); ++i) {
+      if (runtime_nodes_[i].GetHandle() == node_handle) {
+        return i;
+      }
+    }
+    return std::nullopt;
+  };
 
   for (const auto& record : bindings) {
     const auto chassis_node_index = static_cast<size_t>(record.node_index);
@@ -1550,9 +1599,57 @@ void SceneLoaderService::HydrateVehicleBindings(
         + std::to_string(record.node_index)
         + " reason=" + std::string(physics::to_string(authority.error())));
     }
+
+    auto mapping_node_index = std::optional<size_t> { chassis_node_index };
+    while (mapping_node_index.has_value()) {
+      const auto node_handle = runtime_nodes_[*mapping_node_index].GetHandle();
+      const auto has_rigid_body = rigid_body_node_indices.contains(
+        static_cast<uint32_t>(*mapping_node_index));
+      const auto has_character = physics::ScenePhysics::GetCharacter(
+        observer_ptr<physics::PhysicsModule> { &physics_module }, node_handle)
+                                   .has_value();
+      const auto has_aggregate = physics_module.HasAggregateForNode(node_handle);
+      if (!has_rigid_body && !has_character && !has_aggregate) {
+        break;
+      }
+      const auto parent = runtime_nodes_[*mapping_node_index].GetParent();
+      if (!parent.has_value()) {
+        mapping_node_index.reset();
+        break;
+      }
+      mapping_node_index = find_runtime_node_index(parent->GetHandle());
+    }
+
+    if (!mapping_node_index.has_value()) {
+      LOG_F(WARNING,
+        "SceneLoader: Vehicle aggregate mapping skipped (no valid anchor) "
+        "(node_index={} aggregate_id={})",
+        record.node_index, physics::to_string(created.value()));
+      continue;
+    }
+
+    const auto mapping_node_handle
+      = runtime_nodes_[*mapping_node_index].GetHandle();
+    if (const auto existing_node
+      = physics_module.GetNodeForAggregateId(created.value());
+      existing_node.has_value() && *existing_node != mapping_node_handle) {
+      LOG_F(WARNING,
+        "SceneLoader: Vehicle aggregate mapping skipped (aggregate id "
+        "collision) (node_index={} aggregate_id={})",
+        record.node_index, physics::to_string(created.value()));
+      continue;
+    }
+
     physics_module.RegisterNodeAggregateMapping(
-      runtime_nodes_[chassis_node_index].GetHandle(), created.value(),
-      authority.value());
+      mapping_node_handle, created.value(), authority.value());
+    if (!physics_module.HasAggregateForNode(mapping_node_handle)
+      || physics_module.GetAggregateIdForNode(mapping_node_handle)
+        != created.value()) {
+      throw std::runtime_error(
+        std::string("failed to register vehicle aggregate mapping ")
+        + "(node_index=" + std::to_string(record.node_index)
+        + " aggregate_id=" + physics::to_string(created.value()) + ")");
+    }
   }
 }
 

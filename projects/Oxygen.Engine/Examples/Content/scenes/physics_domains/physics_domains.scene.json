@@ -10,7 +10,7 @@
         },
         {
             "name": "DynamicA",
-            "parent": 0
+            "parent": 8
         },
         {
             "name": "DynamicB",
@@ -22,7 +22,7 @@
         },
         {
             "name": "Vehicle",
-            "parent": 8
+            "parent": 0
         },
         {
             "name": "TriggerZone",
