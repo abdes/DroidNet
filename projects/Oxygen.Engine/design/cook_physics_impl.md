@@ -880,6 +880,21 @@ Build/test execution in this pass:
    - docs updated:
      - `design/cook_physics.md` now references concrete repository examples
        for four-domain physics workflows and parity evidence mapping.
+     - `design/cook_physics.md` now explicitly documents vehicle hydration
+       runtime contract (dynamic chassis, descendant dynamic wheels,
+       mandatory constraint ref resolution).
+   - runtime hydration gap closure:
+     - `Examples/DemoShell/Services/SceneLoaderService.cpp`
+       now hydrates `VehicleBindingRecord` entries by:
+       - validating `constraint_resource_index` resolution/loading/format,
+       - resolving chassis/wheel rigid-body mappings from scene hierarchy,
+       - creating vehicles through `PhysicsModule::Vehicles()`,
+       - registering node-to-aggregate mapping with resolved authority.
+     - `ValidateUnsupportedPhysicsDomains(...)` now rejects only unsupported
+       aggregate bindings (vehicle bindings are no longer hard-failed as
+       unsupported).
+     - physics dependency preload now includes joint/vehicle
+       `constraint_resource_index` payloads.
    - examples updated:
      - `Examples/Content/physics/README.md`
      - `Examples/Content/physics/import-manifest.physics.json`
@@ -891,6 +906,10 @@ Build/test execution in this pass:
      - `Examples/Content/physics/actor.shape.json`
      - `Examples/Content/physics/park.physics-sidecar.json`
      - `Examples/Content/physics/bin/park_hinge_joint_a.jphbin`
+   - regression coverage update:
+     - `src/Oxygen/Content/Test/AssetLoader_scene_test.cpp`
+       now asserts non-zero joint/vehicle `constraint_resource_index` in the
+       v7 sidecar load path.
 5. Remaining gate:
    - user-run validation confirmation for the new repository example manifest
      (`Examples/Content/physics/import-manifest.physics.json`) before phase

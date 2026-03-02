@@ -687,6 +687,14 @@ NOLINT_TEST_F(AssetLoaderSceneTest, LoadAssetSceneWithPhysicsSidecarLoadsV7)
         EXPECT_FALSE(rigid[0].shape_asset_key.IsNil());
         EXPECT_FALSE(rigid[0].material_asset_key.IsNil());
       }
+      if (!joints.empty()) {
+        EXPECT_NE(joints[0].constraint_resource_index,
+          oxygen::data::pak::core::kNoResourceIndex);
+      }
+      if (!vehicles.empty()) {
+        EXPECT_NE(vehicles[0].constraint_resource_index,
+          oxygen::data::pak::core::kNoResourceIndex);
+      }
 
       loader.Stop();
       co_return oxygen::co::kJoin;

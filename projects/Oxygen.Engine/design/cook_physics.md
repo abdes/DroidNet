@@ -521,6 +521,13 @@ Vehicle:
 | `node_index` | uint32 | yes | none |
 | `constraint_ref` | string | yes | none |
 
+Vehicle hydration contract:
+
+1. `node_index` is the chassis node and must resolve to a dynamic rigid-body binding.
+2. Wheel topology is resolved from dynamic rigid-body descendants of the chassis node.
+3. At least two distinct wheel rigid bodies must resolve.
+4. `constraint_ref` must resolve to `.opres` with `jolt_constraint_binary` format and is mandatory for vehicle binding validity.
+
 Aggregate:
 
 | Field | Type | Required | Default |
