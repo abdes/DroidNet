@@ -100,6 +100,7 @@ target_link_libraries(
 m_gtest_program(
   AsyncImportMaterialDescriptor
   SOURCES
+    "Import/MaterialDescriptorImportJob_test.cpp"
     "Import/ImportManifest_material_descriptor_test.cpp"
     "Import/MaterialDescriptorImportRequestBuilder_test.cpp"
     "Import/MaterialDescriptorJsonSchema_test.cpp"
