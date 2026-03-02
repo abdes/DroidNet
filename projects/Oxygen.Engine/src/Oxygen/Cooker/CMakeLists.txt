@@ -136,6 +136,12 @@ set(
   "Pak/PakBuildReport.h"
 )
 
+# utility headers used internally but not previously listed
+list(APPEND OXYGEN_COOKER_PRIVATE_HEADERS
+  "Import/Internal/Utils/DescriptorDocument.h"
+  "Import/Internal/Utils/VirtualPathResolution.h"
+)
+
 set(
   OXYGEN_COOKER_PRIVATE_HEADERS
   "Import/Internal/AdapterTypes.h"
