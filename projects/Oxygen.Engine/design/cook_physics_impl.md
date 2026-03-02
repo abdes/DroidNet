@@ -1,372 +1,404 @@
-# Physics Sidecar Implementation Plan (Execution Locked)
+# Comprehensive Physics Cooking Implementation Plan
 
-This is the implementation plan for `design/cook_physics.md`.
+This plan executes `design/cook_physics.md`.
+It replaces the earlier sidecar-only implementation scope.
 
-## 1. Rules of Engagement Compliance
+## 1. Scope Lock (Task Start Gate)
 
-This plan follows `.github/instructions/cpp_coding_style.instructions.md` collaboration rules.
+Goal:
 
-1. No shortcuts.
-2. Truthful progress only.
-3. Trackable status after each completed task.
-4. API correctness over guessing.
-5. No regressions.
-6. Keep runtime/import boundaries clean.
-7. Search discipline with `rg` and explicit impacted-file tracking.
+1. Deliver full physics cooking support across resources, materials, shapes, and sidecars through descriptor domains and manifest DAG orchestration.
 
-## 2. Mandatory Architecture Gates
+In scope:
 
-1. Physics sidecar import path must be `PhysicsSidecarImportJob -> PhysicsSidecarImportPipeline`.
-2. `AsyncImportService` must route only requests where `request.physics.has_value()` to `PhysicsSidecarImportJob`.
-3. No direct import execution path outside job/pipeline flow.
-4. New physics-sidecar binary serialization logic must use `oxygen::serio`.
-5. Physics sidecar import must emit standalone `.physics` descriptor assets and must not patch scenes.
-6. Manifest + CLI must converge on the same `BuildPhysicsSidecarRequest(...)` normalization path.
+1. New descriptor domains and schemas.
+2. Request/job/pipeline integration.
+3. Resolver/emitter internals.
+4. Layout normalization under `Physics/...` for materials/shapes/resources, with sidecars co-located to target scenes.
+5. Validation/diagnostics hardening.
+6. Test and parity closure.
 
-## 3. File-Level Change Map
+Out of scope:
 
-## 3.1 New Files
+1. Runtime simulation behavior changes.
+2. FBX/glTF automatic physics extraction.
 
-1. `src/Oxygen/Cooker/Import/PhysicsImportSettings.h`
-2. `src/Oxygen/Cooker/Import/PhysicsImportRequestBuilder.h`
-3. `src/Oxygen/Cooker/Import/Internal/PhysicsImportRequestBuilder.cpp`
-4. `src/Oxygen/Cooker/Import/Internal/Jobs/PhysicsSidecarImportJob.h`
-5. `src/Oxygen/Cooker/Import/Internal/Jobs/PhysicsSidecarImportJob.cpp`
-6. `src/Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.h`
-7. `src/Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.cpp`
-8. `src/Oxygen/Cooker/Import/Internal/SidecarSceneResolver.h`
-9. `src/Oxygen/Cooker/Import/Internal/SidecarSceneResolver.cpp`
-10. `src/Oxygen/Cooker/Tools/ImportTool/PhysicsSidecarCommand.h`
-11. `src/Oxygen/Cooker/Tools/ImportTool/PhysicsSidecarCommand.cpp`
-12. `src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json`
-13. `src/Oxygen/Cooker/Test/Import/PhysicsImportRequestBuilder_test.cpp`
-14. `src/Oxygen/Cooker/Test/Import/ImportManifest_physics_sidecar_test.cpp`
-15. `src/Oxygen/Cooker/Test/Import/PhysicsImportJob_test.cpp`
-16. `src/Oxygen/Cooker/Test/Import/PhysicsJsonSchema_test.cpp`
+Exit gate:
 
-## 3.2 Modified Files
+1. All phases below are `done` with file+test evidence.
 
-### Import Core
+## 2. Rules of Engagement
 
-1. `src/Oxygen/Cooker/Import/ImportRequest.h`
-2. `src/Oxygen/Cooker/Import/PhysicsImportSettings.h`
-3. `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
-4. `src/Oxygen/Cooker/Import/ImportManifest.h`
-5. `src/Oxygen/Cooker/Import/ImportManifest.cpp`
-6. `src/Oxygen/Cooker/Import/ImportReport.h`
-7. `src/Oxygen/Cooker/Import/Internal/ImportSession.cpp`
-8. `src/Oxygen/Cooker/Import/ScriptImportRequestBuilder.h` (if shared resolver/request helper extraction requires signature touch)
-9. `src/Oxygen/Cooker/Import/Internal/Pipelines/ScriptingSidecarImportPipeline.cpp` (consume shared resolver utility)
-10. `src/Oxygen/Cooker/CMakeLists.txt`
-11. `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
+1. No shortcut paths outside `ImportJob -> Pipeline`.
+2. No false completion claims.
+3. Design/doc updates precede any scope shifts.
+4. Schema-first validation is mandatory.
+5. Manual validation only for non-schema-enforceable checks.
 
-### ImportTool
-
-1. `src/Oxygen/Cooker/Tools/ImportTool/main.cpp`
-2. `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
-3. `src/Oxygen/Cooker/Tools/ImportTool/ImportRunner.cpp`
-4. `src/Oxygen/Cooker/Tools/ImportTool/CMakeLists.txt`
-5. `src/Oxygen/Cooker/Tools/ImportTool/README.md`
-
-### Tests/CMake
-
-1. `src/Oxygen/Cooker/Test/CMakeLists.txt`
-2. `src/Oxygen/Cooker/Test/Import/ScriptImportJob_test.cpp` (if shared resolver refactor requires adaptation)
-3. `src/Oxygen/Cooker/Test/Pak/PakPlanBuilder_test.cpp`
-4. `src/Oxygen/Cooker/Test/Pak/PakWriter_test.cpp`
-
-## 4. Phase Plan and Status Ledger
+## 3. Phase Ledger
 
 Status values:
 
 1. `pending`
 2. `in_progress`
 3. `done`
+4. `blocked`
 
-| Phase | Status | Scope | Exit Gate |
-| --- | --- | --- | --- |
-| P1 | done | Contracts + schemas | physics-sidecar settings/request/schema contracts compile and validate |
-| P2 | done | Routing + job shell | async routing + job lifecycle complete |
-| P3 | done | Shared sidecar scene resolver extraction | script + physics sidecar use one target-scene resolver path |
-| P4 | done | Physics sidecar pipeline core | parse/validate/serialize/emit `.physics` descriptor works |
-| P5 | done | Manifest + ImportTool integration | `physics-sidecar` works in CLI and batch manifest flow |
-| P6 | in_progress | Test coverage + pak inclusion checks | importer and pak tests cover happy/negative paths |
-| P7 | done | Docs + install/schema closeout | docs and schema install wiring complete |
+| Phase | Status | Depends On | Scope | Exit Gate |
+| --- | --- | --- | --- | --- |
+| P0 | done | none | Scope correction and plan reset | sidecar-only plan replaced by comprehensive plan/spec |
+| P11 | done | P0 | Contract finalization vs canonical physics headers | design/schema/implementation contracts are aligned and validation evidence is captured |
+| P1 | in_progress | P11 | Physics layout foundation | materials/shapes/resources under `Physics/...`; sidecars co-located with target scenes |
+| P2 | pending | P1 | Physics resource descriptor domain | `physics-resource-descriptor` end-to-end with `.opres` |
+| P3 | pending | P1 | Physics material descriptor domain | `physics-material-descriptor` end-to-end (`.opmat`) |
+| P4 | pending | P2, P3 | Collision shape descriptor domain | `collision-shape-descriptor` end-to-end (`.ocshape`) |
+| P5 | blocked | P2, P3, P4 | Physics sidecar v2 upgrade | full binding-family support with virtual refs |
+| P6 | blocked | P2, P3, P4, P5 | Manifest + DAG integration | job types/defaults/key checks/dependency collection |
+| P7 | blocked | P2, P3, P4, P5, P6 | Schema embed/install integration | all physics schemas generated and installed |
+| P8 | blocked | P2, P3, P4, P5, P6 | Diagnostics hardening | stable diagnostic set and precedence behavior |
+| P9 | blocked | P1, P2, P3, P4, P5, P6, P7, P8 | Test matrix closure | domain + integration + pak tests complete |
+| P10 | pending | P9 | Parity and docs closeout | PakGen parity evidence and documentation finalization |
 
-Status update rule:
+## 3.1 Strict Execution Order
 
-1. On each completed phase/task, update this ledger immediately.
-2. Add factual evidence to Section 11 (commands/tests/files changed).
+This is the mandatory execution order for closure:
 
-## 4.1 Live Snapshot (2026-03-01)
+1. P0
+2. P11
+3. P1
+4. P2 + P3 (parallel allowed)
+5. P4
+6. P5
+7. P6
+8. P7 + P8 (parallel allowed)
+9. P9
+10. P10
 
-Current progress snapshot:
+## 4. Detailed Phase Work
 
-1. P1-P5 are implemented in code (contracts/schemas, routing/job shell, shared resolver, pipeline core, CLI/manifest integration).
-2. Physics sidecar request payload lives in `ImportRequest::physics` (`PhysicsImportSettings`), not `ImportOptions`.
-3. ImportTool now includes a dedicated `physics-sidecar` command and batch classification recognizes `physics-sidecar`.
-4. P6 remains in progress for final verification depth; P7 docs/schema closeout is complete.
-5. Execution-policy caveat: no local full build/test run performed in this pass.
-
-## 5. Detailed Work Packages
-
-## P1: Contracts and Schemas
-
-Tasks:
-
-1. Add domain-owned `PhysicsImportSettings` and `ImportRequest::physics` payload.
-2. Add `PhysicsSidecarImportSettings` DTO.
-3. Implement `BuildPhysicsSidecarRequest(...)` with:
-   - source vs inline exclusivity
-   - canonical target scene path validation
-   - normalized inline payload handling
-4. Extend import manifest schema (`oxygen.import-manifest.schema.json`) with:
-   - `type: "physics-sidecar"`
-   - `defaults.physics_sidecar`
-   - one-of source/bindings + required `target_scene_virtual_path`.
-5. Add dedicated sidecar authoring schema `oxygen.physics-sidecar.schema.json`.
-6. Wire schema install in module CMake.
-7. Wire embedded-schema generation inputs for updated manifest schema and new physics-sidecar schema.
-
-Acceptance:
-
-1. Builder emits normalized `ImportRequest` with `request.physics.has_value()` and normalized physics payload.
-2. Invalid settings fail with deterministic diagnostics.
-3. Manifest schema rejects malformed physics-sidecar jobs.
-4. Embedded-schema generation includes updated manifest schema and physics-sidecar schema.
-
-## P2: Routing and Job Shell
+## P0: Scope Correction and Plan Reset
 
 Tasks:
 
-1. Add `PhysicsSidecarImportJob` class (session/load/process/finalize flow).
-2. Extend `AsyncImportService` routing and job naming to include physics-sidecar.
-3. Add minimal telemetry/report wiring for physics sidecar execution.
+1. replace sidecar-only design with comprehensive physics design.
+2. replace sidecar-only implementation tracker with phased comprehensive tracker.
 
-Acceptance:
+Evidence:
 
-1. Physics-sidecar requests are accepted and routed to the new job.
-2. Non-physics requests remain behaviorally unchanged.
+1. `design/cook_physics.md`
+2. `design/cook_physics_impl.md`
 
-## P3: Shared Sidecar Scene Resolver
+## P11: Contract Finalization Gate
 
-Tasks:
-
-1. Extract sidecar target-scene resolution logic from `ScriptingSidecarImportPipeline` into `SidecarSceneResolver`.
-2. Rewire scripting-sidecar pipeline to use the extracted utility (no behavior change).
-3. Use the same utility from physics-sidecar pipeline.
-
-Acceptance:
-
-1. One shared resolver implementation is used by both sidecar domains.
-2. Existing scripting-sidecar tests continue to pass after refactor.
-
-## P4: Physics Sidecar Pipeline Core
+This phase is a pre-domain gate and must be executed immediately after P0.
 
 Tasks:
 
-1. Implement parser for physics-sidecar JSON payload.
-2. Validate:
-   - target-scene existence/type
-   - node index bounds
-   - shape/material reference resolvability and asset types
-   - duplicate policy for per-node singleton binding kinds.
-3. Convert resolved refs to source-local asset indices.
-4. Serialize `PhysicsSceneAssetDesc` + component tables with `oxygen::serio`.
-5. Derive emitted descriptor path from resolved target scene descriptor (`.oscene` -> `.physics`).
-6. Emit sidecar via `AssetEmitter`.
+1. Verify canonical physics contracts between:
+   - `design/pak_physics.md`
+   - `src/Oxygen/Data/PakFormat_physics.h`
+2. Update:
+   - `design/cook_physics.md` contracts
+   - schema expectations
+   - test expectations
+   to match canonical format contracts.
+3. Record finalization evidence in this log.
 
 Acceptance:
 
-1. Pipeline emits valid `AssetType::kPhysicsScene` descriptors.
-2. Descriptor binary validates under existing `PhysicsSceneAsset` runtime parser.
-3. Failures produce stable `physics.sidecar.*` diagnostics.
+1. Physics design docs present one canonical final contract vs `PakFormat_physics.h`.
+2. Any schema/test/implementation updates performed in this gate (for already-existing physics import surfaces) are aligned to the finalized contracts.
 
-## P5: Manifest and ImportTool Integration
+Current execution note:
+
+1. Canonical contract updates have been applied to the physics design docs.
+2. Joint world-attachment authoring is supported in schema and cooker implementation.
+3. External validation has been provided by the user (`all green`) and recorded in the Evidence Log.
+
+## P1: Physics Layout Foundation
 
 Tasks:
 
-1. Add `PhysicsSidecarCommand` and register in ImportTool `main.cpp`.
-2. Extend batch/report job-type classification for `physics-sidecar`.
-3. Extend `ImportManifest` parsing/build request path and defaults application.
-4. Update ImportTool README command/docs examples.
-5. Enforce physics-sidecar manifest key whitelist and reject command-only keys.
+1. Update loose-cooked layout contract for dedicated physics root:
+   - `Physics/Materials`
+   - `Physics/Shapes`
+   - `Physics/Resources`
+2. Ensure emitters and relpath helpers use the new contract.
+3. Ensure sidecar output location is exactly co-located with target scene (`<scene_dir>/<scene_stem>.opscene`).
+4. Ensure index registration and virtual-path helpers remain deterministic.
 
 Acceptance:
 
-1. `physics-sidecar` command works with file or inline input mode.
-2. Manifest batch supports `type: "physics-sidecar"` and validates constraints.
-3. `id`/`depends_on` metadata continues to flow through batch orchestration unchanged.
+1. No physics descriptor is emitted under generic `Descriptors/*`.
+2. `physics.table` + `physics.data` live under `Physics/Resources`.
 
-## P6: Test Coverage and Pak Inclusion Checks
+## P2: Physics Resource Descriptor Domain
 
 Tasks:
 
-1. Add request-builder tests:
-   - exclusivity rules
-   - canonical path checks
-   - inline JSON normalization failures.
-2. Add manifest tests:
-   - valid/invalid physics-sidecar job objects
-   - defaults propagation.
-3. Add import job/pipeline tests:
-   - successful descriptor emission
-   - unresolved refs/type mismatch/node bounds/ambiguity failures.
-4. Add pak-oriented tests:
-   - loose index with physics-sidecar descriptor is planned/written correctly
-   - physics table/data pair handling remains correct.
-5. Add schema-validation tests for `oxygen.physics-sidecar.schema.json` (valid canonical doc + invalid docs).
+1. Add settings/request builder/job/pipeline for `physics-resource-descriptor`.
+2. Add schema: `oxygen.physics-resource-descriptor.schema.json`.
+3. Implement payload ingestion to `physics.table`/`physics.data`.
+4. Implement `.opres` sidecar emission and parser.
+5. Implement virtual-path resolution contract for `.opres`.
+6. Integrate manifest and ImportTool command.
 
 Acceptance:
 
-1. New tests cover all critical contracts and diagnostics.
-2. Existing pak tests remain green after changes.
-3. Physics sidecar schema-validation tests cover editor-facing schema contract.
+1. Canonical import emits table/data + `.opres`.
+2. Dedupe and collision policy behavior is deterministic and diagnosed.
 
-## P7: Docs and Schema Closeout
+## P3: Physics Material Descriptor Domain
 
 Tasks:
 
-1. Finalize `design/cook_physics.md` and this impl plan status/evidence sections.
-2. Ensure schema install docs include physics-sidecar schema.
-3. Update import-tool README with editor/IDE schema mapping examples.
+1. Add settings/request builder/job/pipeline for `physics-material-descriptor`.
+2. Add schema: `oxygen.physics-material-descriptor.schema.json`.
+3. Map descriptor to `PhysicsMaterialAssetDesc`.
+4. Emit deterministic `.opmat` under `Physics/Materials`.
+5. Integrate manifest and ImportTool command.
 
 Acceptance:
 
-1. Docs and implementation are aligned.
-2. No undocumented behavior deltas remain.
+1. Canonical descriptor imports successfully and emits `.opmat`.
+2. Schema/manual validation failures produce `physics.material.*` diagnostics.
 
-## 6. Diagnostics Plan
+## P4: Collision Shape Descriptor Domain
 
-Stable diagnostic namespaces:
+Tasks:
 
-1. `physics.request.*`
-2. `physics.sidecar.*`
-3. `physics.manifest.*`
+1. Add settings/request builder/job/pipeline for `collision-shape-descriptor`.
+2. Add schema: `oxygen.collision-shape-descriptor.schema.json`.
+3. Implement shape-type discriminated mapping to `CollisionShapeAssetDesc`.
+4. Resolve `material_ref` -> `.opmat`.
+5. Resolve `payload_ref` -> `.opres` -> `PhysicsResourceDesc` index/type.
+6. Emit deterministic `.ocshape` under `Physics/Shapes`.
+7. Integrate manifest and ImportTool command.
 
-Required concrete diagnostics:
+Acceptance:
 
-1. `physics.request.invalid_import_kind`
-2. `physics.request.target_scene_virtual_path_missing`
-3. `physics.sidecar.payload_parse_failed`
-4. `physics.sidecar.payload_invalid`
-5. `physics.sidecar.target_scene_virtual_path_invalid`
-6. `physics.sidecar.target_scene_missing`
-7. `physics.sidecar.target_scene_not_scene`
-8. `physics.sidecar.target_scene_read_failed`
-9. `physics.sidecar.inflight_target_scene_ambiguous`
-10. `physics.sidecar.node_ref_out_of_bounds`
-11. `physics.sidecar.shape_ref_unresolved`
-12. `physics.sidecar.shape_ref_not_collision_shape`
-13. `physics.sidecar.material_ref_unresolved`
-14. `physics.sidecar.material_ref_not_physics_material`
-15. `physics.sidecar.reference_source_mismatch`
-16. `physics.sidecar.constraint_resource_index_invalid`
-17. `physics.sidecar.descriptor_emit_failed`
-18. `physics.sidecar.pipeline_exception`
-19. `physics.manifest.source_bindings_exclusive`
-20. `physics.manifest.target_scene_virtual_path_missing`
+1. Primitive and payload-backed shapes import correctly.
+2. Ref/type mismatch failures are deterministic and diagnosed.
 
-## 7. Regression Protection
+## P5: Physics Sidecar v2 Upgrade
 
-Must-not-regress areas:
+Tasks:
 
-1. Existing script-sidecar behavior.
-2. Existing input-import behavior.
-3. Existing scene/texture/script import routing.
-4. Existing PakPlanBuilder/PakWriter physics region/table behavior.
+1. Expand `oxygen.physics-sidecar.schema.json` for full binding families.
+2. Replace numeric resource-index authoring with virtual-path refs (`constraint_ref`).
+3. Update sidecar pipeline to resolve refs:
+   - `shape_ref` -> `.ocshape`
+   - `material_ref` -> `.opmat`
+   - `constraint_ref` -> `.opres`
+4. Validate node bounds and singleton binding rules.
+5. Emit `.opscene` exactly beside target `.oscene`.
 
-## 8. Minimal File Proliferation Rule
+Acceptance:
 
-1. Add only files listed in Section 3.1.
-2. Prefer extracting shared sidecar resolver utility instead of duplicating logic.
-3. Reuse existing import session/emitter/index infrastructure.
+1. Full binding-family payload imports successfully.
+2. No implicit dependency cooking occurs.
 
-## 9. Verification Commands (to run during implementation)
+## P6: Manifest and DAG Integration
 
-1. Targeted import unit tests for request builders and manifest parsers.
-2. Targeted sidecar import job/pipeline tests.
-3. Targeted pak planner/writer tests for physics domain inclusion.
-4. ImportTool command-level tests (where available).
+Tasks:
 
-Exact command lines are logged in Section 11 when executed.
+1. Extend import-manifest schema/types/defaults for all physics domains.
+2. Enforce strict per-type key whitelists.
+3. Implement dependency collector rules for physics refs.
+4. Merge explicit + inferred dependencies deterministically.
+5. Enforce consistent defaults/override precedence:
+   - manifest defaults < job settings < CLI explicit overrides
+6. Add cycle/ambiguity diagnostics.
 
-## 10. Done Definition
+Acceptance:
 
-Done requires:
+1. Multi-domain physics manifests execute deterministically.
+2. Dependency errors are explicit and stable.
 
-1. All phase exit gates satisfied.
-2. `physics-sidecar` fully integrated through request -> routing -> job -> pipeline -> emission.
-3. Manifest and CLI wiring complete with schema-backed validation.
-4. Pak inclusion verified through existing planner/writer paths without hacks.
-5. Status ledger and evidence log updated.
+## P7: Schema Embed/Install Integration
 
-## 11. Evidence Log
+Tasks:
 
-This section is updated during implementation.
+1. Wire all new physics schemas into build-time embed generation.
+2. Wire module-owned install entries for all physics schemas.
+3. Verify install naming consistency.
 
-Current:
+Acceptance:
 
-1. P1 contract/schema files added:
-   - `src/Oxygen/Cooker/Import/PhysicsImportSettings.h`
-   - `src/Oxygen/Cooker/Import/PhysicsImportRequestBuilder.h/.cpp`
+1. All physics schemas are available as generated embedded headers.
+2. Installed schema set is complete and consistent.
+
+## P8: Diagnostics Hardening
+
+Tasks:
+
+1. Stabilize domain diagnostic namespaces:
+   - `physics.resource.*`
+   - `physics.material.*`
+   - `physics.shape.*`
+   - `physics.sidecar.*`
+   - `physics.manifest.*`
+2. Ensure deterministic precedence where multiple failures are possible.
+3. Limit redundant noise while keeping author-helpful messages.
+
+Acceptance:
+
+1. Diagnostics are stable, bounded, and actionable.
+
+## P9: Test Matrix Closure
+
+Tasks:
+
+1. Schema tests for all physics schemas.
+2. Request builder tests for all physics domains.
+3. Job/pipeline tests for success and canonical failures.
+4. Manifest orchestration tests (defaults/overrides/deps).
+5. End-to-end integration tests for scene+physics workflows.
+6. Pak planner/writer inclusion tests for physics outputs.
+
+Acceptance:
+
+1. Test coverage demonstrates contract correctness and orchestration behavior.
+
+## P10: Parity and Docs Closeout
+
+Tasks:
+
+1. Validate representative parity scenarios against legacy PakGen physics content coverage.
+2. Update docs/examples for full physics descriptor workflows.
+3. Mark phases complete only with explicit evidence.
+
+Acceptance:
+
+1. No remaining PakGen-only physics gap in scoped feature set.
+2. Docs/spec/plan/status are consistent.
+
+## 5. Risks and Mitigations
+
+1. Cross-mount ref ambiguity:
+   - Mitigation: deterministic precedence + ambiguity diagnostic hard fail.
+2. Resource dedupe collisions:
+   - Mitigation: content-hash + format identity, virtual-path collision checks.
+3. Layout migration regressions:
+   - Mitigation: focused layout tests and index path assertions.
+4. Sidecar dependency race conditions:
+   - Mitigation: dependency collector + explicit DAG ordering validation.
+
+## 6. Evidence Log
+
+## Phase Completion Audit (2026-03-02)
+
+1. P0 `done`:
+   - evidence: `design/cook_physics.md`, `design/cook_physics_impl.md`.
+2. P11 `done`:
+   - evidence:
+     - docs: `design/pak_physics.md`, `design/cook_physics.md`.
+     - implementation/schema/test: `src/Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.cpp`, `src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json`, `src/Oxygen/Cooker/Test/Import/PhysicsJsonSchema_test.cpp`.
+     - canonical header correction: `src/Oxygen/Data/PakFormat_physics.h` (`PhysicsComponentTableDesc` comment corrected to 20 bytes to match `static_assert(sizeof(... ) == 20)`).
+   - closure evidence:
+     - user-reported external validation: `all green`.
+3. P1 `in_progress`:
+   - implementation evidence:
+     - `src/Oxygen/Cooker/Loose/LooseCookedLayout.h` now models dedicated physics layout roots/subdirs:
+       - scene sidecars emitted beside target scenes (`<scene_dir>/<scene_stem>.opscene`)
+       - `Physics/Resources` for `physics.table` and `physics.data`
+       - `Physics/Materials` and `Physics/Shapes` directory mapping hooks
+     - `DescriptorDirFor(AssetType::kPhysicsScene)` follows target-scene co-location rules.
+     - `PhysicsTableRelPath()` and `PhysicsDataRelPath()` now resolve under `Physics/Resources`.
+     - `src/Oxygen/Cooker/Test/Loose/LooseCookedLayout_test.cpp` expectations updated to canonical `Physics/...` paths.
+   - remaining:
+     - user-run validation required to close P1 (`no build/test execution by agent` rule).
+4. P2 `pending`:
+   - gap evidence:
+     - no `physics-resource-descriptor` schema exists under `src/Oxygen/Cooker/Import/Schemas`.
+     - no resource descriptor request-builder/job/pipeline files under `src/Oxygen/Cooker/Import/Internal`.
+5. P3 `pending`:
+   - gap evidence:
+     - no `oxygen.physics-material-descriptor.schema.json` exists.
+     - no dedicated physics-material descriptor request-builder/job/pipeline exists.
+6. P4 `pending`:
+   - gap evidence:
+     - no `oxygen.collision-shape-descriptor.schema.json` exists.
+     - no collision-shape descriptor request-builder/job/pipeline exists.
+7. P5 `blocked`:
+   - evidence:
+     - sidecar request-builder/job/pipeline/tests exist (`PhysicsImportRequestBuilder`, `PhysicsSidecarImportJob`, `PhysicsSidecarImportPipeline`, related tests).
+   - gap evidence:
+     - sidecar schema still uses legacy fields (`shape_virtual_path`, `material_virtual_path`, `constraint_resource_index`) instead of full virtual-ref contract.
+8. P6 `blocked`:
+   - evidence:
+     - manifest includes `physics-sidecar` type and key-whitelist checks.
+   - gap evidence:
+     - manifest does not yet include `physics-resource-descriptor`, `physics-material-descriptor`, `collision-shape-descriptor` job types/defaults.
+9. P7 `blocked`:
+   - evidence:
+     - CMake embed/install includes `oxygen.physics-sidecar.schema.json`.
+   - gap evidence:
+     - embed/install wiring missing the three new physics descriptor schemas required by P2-P4.
+10. P8 `blocked`:
+    - evidence:
+      - strong `physics.sidecar.*` and `physics.manifest.*` diagnostics are present.
+    - gap evidence:
+      - `physics.resource.*`, `physics.material.*`, `physics.shape.*` namespaces are not present because domains are not implemented yet.
+11. P9 `blocked`:
+    - evidence:
+      - sidecar schema/request/job/pipeline/manifest tests exist.
+    - gap evidence:
+      - no test coverage yet for physics resource/material/shape domains or their DAG integration.
+12. P10 `pending`:
+    - gap evidence:
+      - no recorded full parity evidence for the complete four-domain physics authoring model.
+
+## P0
+
+1. Replaced sidecar-only physics design/plan with comprehensive scope:
+   - `design/cook_physics.md`
+   - `design/cook_physics_impl.md`
+
+Build/test execution in this pass:
+
+1. Not run (design/docs pass only).
+
+## P11 (done)
+
+1. Canonical physics contract updates applied in docs:
+   - `design/pak_physics.md` updated to align with `PakFormat_physics.h`.
+   - `design/cook_physics.md` updated with final contract content.
+2. Joint world-attachment implementation remediation applied:
+   - `src/Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.cpp`
+     supports world-attached joint parsing/validation (`node_index_b` as `null`/`"world"` -> sentinel).
    - `src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json`
-   - `src/Oxygen/Cooker/Test/Import/PhysicsImportRequestBuilder_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/ImportManifest_physics_sidecar_test.cpp`
+     accepts `node_index_b` as index, `null`, or `"world"`.
    - `src/Oxygen/Cooker/Test/Import/PhysicsJsonSchema_test.cpp`
-2. Manifest schema and parser extended for `type: "physics-sidecar"` and `defaults.physics_sidecar`.
-3. Architecture correction completed: removed physics-sidecar payload from `ImportOptions`; runtime payload now lives in `ImportRequest::physics` via `PhysicsImportSettings`.
-4. ImportTool report job-type resolvers now recognize physics-sidecar requests.
-5. P2 routing/job-shell completed:
-   - added `PhysicsSidecarImportJob` class shell and source-loading path.
-   - wired `AsyncImportService` routing via `request.physics.has_value()`.
-   - added cooker CMake entries for the new job files.
-6. P3 shared resolver extraction completed:
-   - added `Import/Internal/SidecarSceneResolver.h/.cpp`.
-   - rewired both scripting and physics sidecar pipelines to use shared resolver entry points.
-7. P4 pipeline core completed:
-   - added `Import/Internal/Pipelines/PhysicsSidecarImportPipeline.h/.cpp`.
-   - implemented sidecar parse/validate/resolve/serialize/emit path for `.physics` descriptors.
-   - enforced node bounds, duplicate singleton-per-node policy, reference-type checks, and source-domain consistency checks.
-8. P5 manifest/CLI integration completed:
-   - added `Tools/ImportTool/PhysicsSidecarCommand.h/.cpp`.
-   - wired command registration in `Tools/ImportTool/main.cpp`.
-   - wired command compilation in `Tools/ImportTool/CMakeLists.txt`.
-   - updated ImportTool docs for `physics-sidecar` command and schema mappings.
-9. P6 test coverage progressed:
-   - added `Test/Import/PhysicsImportPipeline_test.cpp` (pipeline null-session conformance).
-   - added `Test/Import/PhysicsImportJob_test.cpp` (async physics job diagnostics for invalid target path and invalid payload).
-   - extended `Test/Import/AsyncImportService_test.cpp` with routing tests:
-     - unknown format rejected without domain override.
-     - physics-sidecar request bypasses format detection and reaches physics diagnostics path.
-   - extended `Test/Pak/PakWriter_test.cpp` with physics-sidecar descriptor inclusion coverage in final pak directory.
-   - remediated deterministic diagnostics ordering: canonical `target_scene_virtual_path` validation now runs in `PhysicsSidecarImportPipeline` before cooked-index loading, ensuring `physics.sidecar.target_scene_virtual_path_invalid` is emitted first for malformed paths.
-   - remediated manifest diagnostics precedence: early job-key whitelist precheck now emits `physics.manifest.key_not_allowed` before schema-generic failures for disallowed physics-sidecar job keys.
-   - remediated sidecar exclusivity diagnostics precedence: early pre-schema check now emits `physics-sidecar job requires exactly one of 'source' or 'bindings'` when both are present.
-   - remediated input required-id diagnostics precedence: early pre-schema check now emits `input.manifest.job_id_missing` for missing/empty `input` job ids.
-   - aligned physics request builder with import job root-derivation behavior: `BuildPhysicsSidecarRequest(...)` no longer requires explicit cooked root when omitted.
-10. P7 docs/schema closeout completed:
-    - module-level schema install list includes `oxygen.physics-sidecar.schema.json`.
-    - ImportTool README includes `physics-sidecar` command, manifest examples, and editor schema mapping examples.
-11. Remaining P6 backlog:
-    - run and verify targeted tests/build to close execution evidence.
-12. No local build/test execution performed in this pass (per execution policy).
+     adds coverage for joint world-attachment forms.
+3. Canonical ABI comment consistency remediation:
+   - `src/Oxygen/Data/PakFormat_physics.h`
+     updated `PhysicsComponentTableDesc` size comment to 20 bytes, matching `static_assert(sizeof(PhysicsComponentTableDesc) == 20)`.
+4. Validation status:
+   - build/test execution is intentionally not recorded by the agent in this flow.
+   - closure achieved via user-run targeted validation confirmation (`all green`).
+5. Compliance correction:
+   - previous agent-side test execution claims were removed.
+   - P11 is closed using user-run validation evidence only.
 
-## 12. Compliance Checklist
+## P1 (in progress)
 
-This checklist proves each non-negotiable requirement is explicitly covered by this plan.
-
-| # | Non-Negotiable Requirement | Satisfied By | Verified In |
-| --- | --- | --- | --- |
-| 1 | One manifest job type added for this domain: `type: "physics-sidecar"` | P1 task #4; modified schema `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json` | P1 acceptance #3 |
-| 2 | One job class only: `PhysicsSidecarImportJob` | §2 gate #1 and P2 task #1 | P2 acceptance #1 |
-| 3 | One pipeline class only: `PhysicsSidecarImportPipeline` | §2 gate #1 and P4 scope | P4 acceptance #1 |
-| 4 | Import routing only through async job path | §2 gate #2/#3 and P2 task #2 | P2 acceptance #1/#2 |
-| 5 | Sidecar import never mutates scene descriptors | §2 gate #5 and P4 emission scope | P4 acceptance #1 |
-| 6 | CLI and manifest converge on one request builder | §2 gate #6 and P1 task #3 + P5 task #3 | P1 acceptance #1 and P5 acceptance #2 |
-| 7 | Exactly-one source mode enforced (`source` xor inline `bindings`) | P1 task #3/#4 | P1 acceptance #2/#3 |
-| 8 | Canonical `target_scene_virtual_path` required | P1 task #3/#4 and diagnostics list (`physics.request.*`, `physics.manifest.*`) | P1 acceptance #2/#3 |
-| 9 | Shared sidecar scene resolver used by scripting + physics | P3 tasks #1-#3 | P3 acceptance #1/#2 |
-| 10 | Serialization uses `oxygen::serio` for new logic | §2 gate #4 and P4 task #4 | P4 acceptance #2 |
-| 11 | Pak integration uses existing planner/writer flow, no side hacks | P6 task #4 and §7 regression protection #4 | P6 acceptance #2 |
-| 12 | Editor-facing schema is shipped and validated | new file `oxygen.physics-sidecar.schema.json`; P1 tasks #5/#6/#7; P6 task #5 | P6 acceptance #3, P7 acceptance #1/#2 |
+1. Layout foundation remediation applied:
+   - `src/Oxygen/Cooker/Loose/LooseCookedLayout.h`
+     introduces dedicated physics root/subdir model (`physics_dir`,
+      `physics_materials_subdir`, `physics_shapes_subdir`,
+      `physics_resources_subdir`), with physics sidecars co-located to target scenes.
+   - `DescriptorDirFor(AssetType::kPhysicsScene)` now follows
+     target-scene co-location (`<scene_dir>/<scene_stem>.opscene`).
+   - `DescriptorDirFor(AssetType::kPhysicsMaterial)` now resolves to
+     `Physics/Materials`.
+   - `DescriptorDirFor(AssetType::kCollisionShape)` now resolves to
+     `Physics/Shapes`.
+   - `PhysicsTableRelPath()` and `PhysicsDataRelPath()` now resolve to
+     `Physics/Resources/physics.table` and `Physics/Resources/physics.data`.
+2. Test expectation updates:
+   - `src/Oxygen/Cooker/Test/Loose/LooseCookedLayout_test.cpp` updated to
+     canonical `Physics/...` path assertions.
+3. Remaining closure requirement:
+   - user-run validation required to mark P1 `done` (`no build/test execution
+     by agent` rule).

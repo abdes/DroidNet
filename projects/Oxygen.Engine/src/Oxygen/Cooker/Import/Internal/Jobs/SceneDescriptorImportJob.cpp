@@ -237,7 +237,7 @@ namespace {
     if (ext == ".oimap") {
       return data::AssetType::kInputMappingContext;
     }
-    if (ext == ".physics") {
+    if (ext == ".opscene") {
       return data::AssetType::kPhysicsScene;
     }
     if (ext == ".oscene") {

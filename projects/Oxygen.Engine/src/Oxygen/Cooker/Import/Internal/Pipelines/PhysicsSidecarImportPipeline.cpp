@@ -136,7 +136,7 @@ namespace {
   auto ReplaceSceneExtensionWithPhysics(std::string value) -> std::string
   {
     constexpr auto kSceneSuffix = std::string_view { ".oscene" };
-    constexpr auto kPhysicsSuffix = std::string_view { ".physics" };
+    constexpr auto kPhysicsSuffix = std::string_view { ".opscene" };
 
     if (value.size() >= kSceneSuffix.size() && value.ends_with(kSceneSuffix)) {
       value.resize(value.size() - kSceneSuffix.size());

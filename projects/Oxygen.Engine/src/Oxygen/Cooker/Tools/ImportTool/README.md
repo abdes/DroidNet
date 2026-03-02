@@ -270,7 +270,7 @@ It also patches scene scripting components for the target scene.
 
 ### `physics-sidecar`
 
-Imports scene physics bindings as a standalone `.physics` descriptor.
+Imports scene physics bindings as a standalone `.opscene` descriptor.
 
 Input modes (exactly one required):
 - positional `source` (JSON sidecar file), or
@@ -304,8 +304,8 @@ Minimal payload example:
     "rigid_bodies": [
       {
         "node_index": 0,
-        "shape_virtual_path": "/.cooked/PhysicsShapes/box.ocshape",
-        "material_virtual_path": "/.cooked/PhysicsMaterials/default.opmat",
+        "shape_virtual_path": "/.cooked/Physics/Shapes/box.ocshape",
+        "material_virtual_path": "/.cooked/Physics/Materials/default.opmat",
         "body_type": "dynamic"
       }
     ]
@@ -313,7 +313,7 @@ Minimal payload example:
 }
 ```
 
-Physics sidecar import emits a `.physics` descriptor and does not patch the
+Physics sidecar import emits a `.opscene` descriptor and does not patch the
 scene descriptor.
 
 ### `batch`
@@ -441,8 +441,8 @@ Batch example with one output shared at manifest level:
         "rigid_bodies": [
           {
             "node_index": 0,
-            "shape_virtual_path": "/PhysicsShapes/backpack_body.ocshape",
-            "material_virtual_path": "/PhysicsMaterials/default.opmat",
+            "shape_virtual_path": "/Physics/Shapes/backpack_body.ocshape",
+            "material_virtual_path": "/Physics/Materials/default.opmat",
             "body_type": "dynamic"
           }
         ]

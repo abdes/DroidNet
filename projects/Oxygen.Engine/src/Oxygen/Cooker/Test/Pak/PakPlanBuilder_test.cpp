@@ -363,12 +363,12 @@ NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesAllLiveAssetsAndResources)
     },
     FileSpec {
       .kind = lc::FileKind::kPhysicsTable,
-      .relpath = "Resources/physics.table",
+      .relpath = "Physics/Resources/physics.table",
       .payload = std::vector<std::byte>(sizeof(physics::PhysicsResourceDesc)),
     },
     FileSpec {
       .kind = lc::FileKind::kPhysicsData,
-      .relpath = "Resources/physics.data",
+      .relpath = "Physics/Resources/physics.data",
       .payload = std::vector<std::byte>(kPhysicsPayloadBytes),
     },
   };

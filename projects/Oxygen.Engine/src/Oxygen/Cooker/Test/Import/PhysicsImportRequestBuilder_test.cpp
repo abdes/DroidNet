@@ -40,7 +40,7 @@ auto MakeValidInlineSettings() -> PhysicsSidecarImportSettings
   auto settings = MakeValidSourceSettings();
   settings.source_path.clear();
   settings.inline_bindings_json
-    = R"({"bindings":{"rigid_bodies":[{"node_index":0,"shape_virtual_path":"/.cooked/PhysicsShapes/test_shape.ocshape","material_virtual_path":"/.cooked/PhysicsMaterials/default.opmat"}]}})";
+    = R"({"bindings":{"rigid_bodies":[{"node_index":0,"shape_virtual_path":"/.cooked/Physics/Shapes/test_shape.ocshape","material_virtual_path":"/.cooked/Physics/Materials/default.opmat"}]}})";
   return settings;
 }
 
@@ -85,7 +85,7 @@ NOLINT_TEST(PhysicsImportRequestBuilderTest,
   auto settings = MakeValidSourceSettings();
   settings.source_path.clear();
   settings.inline_bindings_json
-    = R"({"rigid_bodies":[{"node_index":0,"shape_virtual_path":"/.cooked/PhysicsShapes/test_shape.ocshape","material_virtual_path":"/.cooked/PhysicsMaterials/default.opmat"}]})";
+    = R"({"rigid_bodies":[{"node_index":0,"shape_virtual_path":"/.cooked/Physics/Shapes/test_shape.ocshape","material_virtual_path":"/.cooked/Physics/Materials/default.opmat"}]})";
   auto errors = std::ostringstream {};
 
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
