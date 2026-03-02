@@ -12,11 +12,6 @@ content_version: 1
 # -----------------------------------------------------------------------------
 
 buffers:
-  - name: default_empty_buffer
-    data_hex: ""
-    size: 0
-    usage: 0
-
   - name: cube_vb
     # oxygen::data::BufferResource::UsageFlags::kVertexBuffer
     usage: 1
@@ -997,11 +992,3 @@ assets:
         range: 10.0
         mobility: 0
         casts_shadows: 0
-
-    environment:
-      sky_atmosphere:
-        sun_disk_enabled: true
-
-      post_process_volume:
-        tone_mapper: 0
-        exposure_mode: 1

@@ -1,5 +1,5 @@
 {
-    "name": "physics_park",
+    "name": "physics_domains",
     "nodes": [
         {
             "name": "Root"
@@ -35,11 +35,14 @@
         {
             "name": "AggregateAnchor",
             "parent": 0
+        },
+        {
+            "name": "VehicleWheelFL",
+            "parent": 5
+        },
+        {
+            "name": "VehicleWheelFR",
+            "parent": 5
         }
-    ],
-    "references": {
-        "physics_sidecars": [
-            "/.cooked/Scenes/physics_park.opscene"
-        ]
-    }
+    ]
 }

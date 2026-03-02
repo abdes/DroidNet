@@ -28,6 +28,48 @@
                 "angular_damping": 0.1,
                 "gravity_factor": 1.0,
                 "initial_activation": true
+            },
+            {
+                "node_index": 5,
+                "shape_ref": "/.cooked/Physics/Shapes/actor.ocshape",
+                "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+                "body_type": "dynamic",
+                "motion_quality": "linear_cast",
+                "collision_layer": 2,
+                "collision_mask": 65535,
+                "mass": 20.0,
+                "linear_damping": 0.05,
+                "angular_damping": 0.05,
+                "gravity_factor": 1.0,
+                "initial_activation": true
+            },
+            {
+                "node_index": 9,
+                "shape_ref": "/.cooked/Physics/Shapes/actor.ocshape",
+                "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+                "body_type": "dynamic",
+                "motion_quality": "linear_cast",
+                "collision_layer": 2,
+                "collision_mask": 65535,
+                "mass": 2.0,
+                "linear_damping": 0.05,
+                "angular_damping": 0.05,
+                "gravity_factor": 1.0,
+                "initial_activation": true
+            },
+            {
+                "node_index": 10,
+                "shape_ref": "/.cooked/Physics/Shapes/actor.ocshape",
+                "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+                "body_type": "dynamic",
+                "motion_quality": "linear_cast",
+                "collision_layer": 2,
+                "collision_mask": 65535,
+                "mass": 2.0,
+                "linear_damping": 0.05,
+                "angular_damping": 0.05,
+                "gravity_factor": 1.0,
+                "initial_activation": true
             }
         ],
         "colliders": [

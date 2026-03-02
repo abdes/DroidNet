@@ -37,8 +37,8 @@ Expected output root:
 
 Key emitted artifacts:
 
-1. `Scenes/physics_park.oscene`
-2. `Scenes/physics_park.opscene`
+1. `Scenes/physics_domains.oscene`
+2. `Scenes/physics_domains.opscene`
 3. `Physics/Materials/*.opmat`
 4. `Physics/Shapes/*.ocshape`
 5. `Physics/Resources/*.opres`

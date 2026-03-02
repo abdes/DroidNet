@@ -6,16 +6,16 @@ version: 7
 content_version: 1
 
 scripts:
-  - name: scene_core_lua_src
+  - name: orbit_shapes_lua_src
     language: luau
     encoding: source
     compression: none
-    file: scene_core_script.lua
-  - name: scene_time_of_day_lua_src
+    file: orbit-shapes.lua
+  - name: day_night_lua_src
     language: luau
     encoding: source
     compression: none
-    file: scene_time_of_day_script.lua
+    file: day-night.lua
 
 assets:
   - type: material
@@ -141,17 +141,17 @@ assets:
             behavior: implicit
 
   - type: script
-    name: SceneV1ContentSceneInputCoreScript
+    name: OrbitShapesScript
     asset_key: "95555555555555555555555555555555"
-    source_resource: scene_core_lua_src
+    source_resource: orbit_shapes_lua_src
 
   - type: script
-    name: SceneV1TimeOfDayScript
+    name: TimeOfDayScript
     asset_key: "9bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    source_resource: scene_time_of_day_lua_src
+    source_resource: day_night_lua_src
 
   - type: scene
-    name: SceneV1ContentSceneInputCore
+    name: multi_script_scene
     asset_key: "96666666666666666666666666666666"
     alignment: 1
     nodes:
@@ -190,7 +190,7 @@ assets:
     scripting:
       - node_index: 1
         slots:
-          - script_asset: SceneV1ContentSceneInputCoreScript
+          - script_asset: OrbitShapesScript
             execution_order: 0
             params:
               - key: speed
@@ -208,7 +208,7 @@ assets:
 
       - node_index: 4
         slots:
-          - script_asset: SceneV1TimeOfDayScript
+          - script_asset: TimeOfDayScript
             execution_order: 1
             params:
               - key: day_duration_seconds
