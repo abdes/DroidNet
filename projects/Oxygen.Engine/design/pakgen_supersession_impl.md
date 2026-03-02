@@ -38,7 +38,7 @@ Status values:
 | P1 | pending | 12% | Shared descriptor infrastructure | Common schema validation + diagnostics helpers integrated for descriptor domains |
 | P2 | done | 10% | Texture descriptor domain | `texture-descriptor` implemented end-to-end with schema/tests |
 | P3 | pending | 8% | Buffer descriptor domain | `buffer-descriptor` implemented end-to-end with schema/tests |
-| P4 | pending | 14% | Material descriptor domain | `material-descriptor` implemented end-to-end with schema/tests |
+| P4 | in_progress | 14% | Material descriptor domain | `material-descriptor` implemented end-to-end with schema/tests |
 | P5 | pending | 16% | Geometry descriptor domain | `geometry-descriptor` implemented end-to-end with schema/tests |
 | P6 | pending | 16% | Scene descriptor domain | `scene-descriptor` implemented end-to-end with schema/tests |
 | P7 | pending | 8% | Manifest DAG integration | Descriptor job types + defaults + strict key policies + DAG checks |
@@ -287,8 +287,9 @@ Current status:
 
 1. P0 is done.
 2. P2 is done (validated in practice with one manifest + multiple texture descriptors flow).
-3. P1 and P3-P10 are `pending`.
-4. Computed progress snapshot: `14.0%`.
+3. P4 is `in_progress` with schema/request-builder/manifest/service/tool/test wiring landed; external test execution remains.
+4. P1, P3, and P5-P10 are `pending`.
+5. Computed progress snapshot: `24.5%`.
 
 ## 11. Evidence Log
 
@@ -333,3 +334,30 @@ Initial entries:
 4. Tests run: none (per current no-build execution policy)
 5. Result: texture-descriptor ingress implemented through existing texture request/job path with schema-first validation and manifest integration
 6. Remaining delta to phase exit gate: none (phase closure approved after external execution validation)
+
+1. Date: 2026-03-01
+2. Phase: P4
+3. Files changed:
+   - `src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json`
+   - `src/Oxygen/Cooker/Import/MaterialDescriptorImportSettings.h`
+   - `src/Oxygen/Cooker/Import/MaterialDescriptorImportRequestBuilder.h`
+   - `src/Oxygen/Cooker/Import/Internal/MaterialDescriptorImportRequestBuilder.cpp`
+   - `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.h`
+   - `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp`
+   - `src/Oxygen/Cooker/Import/ImportOptions.h`
+   - `src/Oxygen/Cooker/Import/ImportManifest.h`
+   - `src/Oxygen/Cooker/Import/ImportManifest.cpp`
+   - `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
+   - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
+   - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
+   - `src/Oxygen/Cooker/Tools/ImportTool/README.md`
+   - `src/Oxygen/Cooker/Test/Import/MaterialDescriptorJsonSchema_test.cpp`
+   - `src/Oxygen/Cooker/Test/Import/MaterialDescriptorImportRequestBuilder_test.cpp`
+   - `src/Oxygen/Cooker/Test/Import/ImportManifest_material_descriptor_test.cpp`
+   - `src/Oxygen/Cooker/Test/Import/AsyncImportService_test.cpp`
+   - `src/Oxygen/Cooker/Test/CMakeLists.txt`
+4. Tests run: none (per current no-build execution policy)
+5. Result: material-descriptor domain integrated through schema-first request build, dedicated async job routing, manifest/job-type/tool reporting support, and focused test coverage additions
+6. Remaining delta to phase exit gate:
+   - execute and pass new material-descriptor test suites externally
+   - verify end-to-end manifest run with real texture `.otex` sidecar references

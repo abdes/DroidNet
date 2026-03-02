@@ -1,0 +1,298 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Oxygen Material Descriptor",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "$schema": {
+            "type": "string"
+        },
+        "name": {
+            "type": "string",
+            "minLength": 1
+        },
+        "content_hashing": {
+            "type": "boolean"
+        },
+        "domain": {
+            "enum": [
+                "opaque",
+                "alpha_blended",
+                "masked",
+                "decal",
+                "ui",
+                "post_process"
+            ]
+        },
+        "alpha_mode": {
+            "enum": [
+                "opaque",
+                "masked",
+                "blended"
+            ]
+        },
+        "orm_policy": {
+            "enum": [
+                "auto",
+                "force_packed",
+                "force_separate"
+            ]
+        },
+        "inputs": {
+            "$ref": "#/definitions/inputs"
+        },
+        "textures": {
+            "$ref": "#/definitions/textures"
+        },
+        "shaders": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/shader_stage"
+            }
+        }
+    },
+    "definitions": {
+        "vec2": {
+            "type": "array",
+            "items": {
+                "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+        },
+        "vec3": {
+            "type": "array",
+            "items": {
+                "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+        },
+        "vec3_01": {
+            "type": "array",
+            "items": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0
+            },
+            "minItems": 3,
+            "maxItems": 3
+        },
+        "vec4_01": {
+            "type": "array",
+            "items": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0
+            },
+            "minItems": 4,
+            "maxItems": 4
+        },
+        "uv_transform": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "scale": {
+                    "$ref": "#/definitions/vec2"
+                },
+                "offset": {
+                    "$ref": "#/definitions/vec2"
+                },
+                "rotation_radians": {
+                    "type": "number"
+                }
+            }
+        },
+        "texture_binding": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "virtual_path"
+            ],
+            "properties": {
+                "virtual_path": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "uv_set": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                },
+                "uv_transform": {
+                    "$ref": "#/definitions/uv_transform"
+                }
+            }
+        },
+        "textures": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "base_color": {
+                    "$ref": "#/definitions/texture_binding"
+                },
+                "normal": {
+                    "$ref": "#/definitions/texture_binding"
+                },
+                "metallic": {
+                    "$ref": "#/definitions/texture_binding"
+                },
+                "roughness": {
+                    "$ref": "#/definitions/texture_binding"
+                },
+                "ambient_occlusion": {
+                    "$ref": "#/definitions/texture_binding"
+                },
+                "emissive": {
+                    "$ref": "#/definitions/texture_binding"
+                },
+                "specular": {
+                    "$ref": "#/definitions/texture_binding"
+                },
+                "sheen_color": {
+                    "$ref": "#/definitions/texture_binding"
+                },
+                "clearcoat": {
+                    "$ref": "#/definitions/texture_binding"
+                },
+                "clearcoat_normal": {
+                    "$ref": "#/definitions/texture_binding"
+                },
+                "transmission": {
+                    "$ref": "#/definitions/texture_binding"
+                },
+                "thickness": {
+                    "$ref": "#/definitions/texture_binding"
+                }
+            }
+        },
+        "shader_stage": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "stage",
+                "source_path",
+                "entry_point"
+            ],
+            "properties": {
+                "stage": {
+                    "enum": [
+                        "amplification",
+                        "mesh",
+                        "vertex",
+                        "hull",
+                        "domain",
+                        "geometry",
+                        "pixel",
+                        "compute",
+                        "ray_gen",
+                        "intersection",
+                        "any_hit",
+                        "closest_hit",
+                        "miss",
+                        "callable"
+                    ]
+                },
+                "source_path": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "entry_point": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "defines": {
+                    "type": "string"
+                },
+                "shader_hash": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            }
+        },
+        "inputs": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "base_color": {
+                    "$ref": "#/definitions/vec4_01"
+                },
+                "normal_scale": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "metalness": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                },
+                "roughness": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                },
+                "ambient_occlusion": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                },
+                "emissive_factor": {
+                    "$ref": "#/definitions/vec3"
+                },
+                "alpha_cutoff": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                },
+                "ior": {
+                    "type": "number",
+                    "minimum": 1.0
+                },
+                "specular_factor": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                },
+                "sheen_color_factor": {
+                    "$ref": "#/definitions/vec3_01"
+                },
+                "clearcoat_factor": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                },
+                "clearcoat_roughness": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                },
+                "transmission_factor": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                },
+                "thickness_factor": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                },
+                "attenuation_color": {
+                    "$ref": "#/definitions/vec3_01"
+                },
+                "attenuation_distance": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "double_sided": {
+                    "type": "boolean"
+                },
+                "unlit": {
+                    "type": "boolean"
+                },
+                "roughness_as_glossiness": {
+                    "type": "boolean"
+                }
+            }
+        }
+    }
+}

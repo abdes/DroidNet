@@ -1,0 +1,28 @@
+{
+  "$schema": "../../../src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json",
+  "name": "woodfloor007",
+  "domain": "opaque",
+  "alpha_mode": "opaque",
+  "orm_policy": "auto",
+  "inputs": {
+    "base_color": [1.0, 1.0, 1.0, 1.0],
+    "normal_scale": 1.0,
+    "metalness": 0.0,
+    "roughness": 1.0,
+    "ambient_occlusion": 1.0
+  },
+  "textures": {
+    "base_color": {
+      "virtual_path": "/.cooked/Resources/Textures/woodfloor007_color.otex"
+    },
+    "ambient_occlusion": {
+      "virtual_path": "/.cooked/Resources/Textures/woodfloor007_ao.otex"
+    },
+    "roughness": {
+      "virtual_path": "/.cooked/Resources/Textures/woodfloor007_roughness.otex"
+    },
+    "normal": {
+      "virtual_path": "/.cooked/Resources/Textures/woodfloor007_normal.otex"
+    }
+  }
+}

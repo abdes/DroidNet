@@ -16,6 +16,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/MaterialDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/PhysicsImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/ScriptImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportRequestBuilder.h>
@@ -183,6 +184,40 @@ namespace {
     const auto last = std::find_if(value.rbegin(), value.rend(),
       [&](const char ch) { return !is_ws(static_cast<unsigned char>(ch)); });
     value = std::string(first, last.base());
+  }
+
+  auto CollectJobDependencies(const json& job, const std::string_view job_type,
+    const bool require_job_id, std::string& job_id,
+    std::vector<std::string>& depends_on, std::ostream& errors) -> bool
+  {
+    if (!ReadStringField(job, "id", job_id, errors)) {
+      return false;
+    }
+    TrimInPlace(job_id);
+    if (require_job_id && job_id.empty()) {
+      if (job_type == "input") {
+        errors << "ERROR [input.manifest.job_id_missing]: input job.id is "
+                  "required and must be a string\n";
+      } else {
+        errors << "ERROR: " << job_type
+               << " job.id is required and must be a string\n";
+      }
+      return false;
+    }
+
+    if (!ReadStringArrayField(job, "depends_on", depends_on, errors)) {
+      return false;
+    }
+    for (size_t dep_index = 0; dep_index < depends_on.size(); ++dep_index) {
+      auto& dep = depends_on[dep_index];
+      TrimInPlace(dep);
+      if (dep.empty()) {
+        errors << "ERROR: " << job_type << " job.depends_on[" << dep_index
+               << "] must not be empty\n";
+        return false;
+      }
+    }
+    return true;
   }
 
   auto IsAllowedInputJobKey(const std::string_view key) -> bool
@@ -695,6 +730,25 @@ namespace {
     return true;
   }
 
+  auto ApplyCommonMaterialDescriptorOverrides(const json& obj,
+    MaterialDescriptorImportSettings& settings, std::ostream& errors) -> bool
+  {
+    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
+      return false;
+    }
+    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
+      return false;
+    }
+    return true;
+  }
+
+  auto ApplyMaterialDescriptorOverrides(const json& obj,
+    MaterialDescriptorImportSettings& settings, std::ostream& errors) -> bool
+  {
+    return ReadBoolField(
+      obj, "content_hashing", settings.with_content_hashing, errors);
+  }
+
 } // namespace
 
 auto ImportManifest::Load(const std::filesystem::path& manifest_path,
@@ -764,6 +818,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     manifest.defaults.script.cooked_root = manifest_output_root;
     manifest.defaults.scripting_sidecar.cooked_root = manifest_output_root;
     manifest.defaults.physics_sidecar.cooked_root = manifest_output_root;
+    manifest.defaults.material_descriptor.cooked_root = manifest_output_root;
   }
 
   if (json_data->contains("defaults")) {
@@ -862,6 +917,23 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
         return std::nullopt;
       }
     }
+
+    if (defaults.contains("material_descriptor")) {
+      const auto& material_defaults = defaults["material_descriptor"];
+      if (!material_defaults.is_object()) {
+        error_stream
+          << "ERROR: defaults.material_descriptor must be an object\n";
+        return std::nullopt;
+      }
+      if (!ApplyCommonMaterialDescriptorOverrides(material_defaults,
+            manifest.defaults.material_descriptor, error_stream)) {
+        return std::nullopt;
+      }
+      if (!ApplyMaterialDescriptorOverrides(material_defaults,
+            manifest.defaults.material_descriptor, error_stream)) {
+        return std::nullopt;
+      }
+    }
   }
 
   if (!json_data->contains("jobs") || !(*json_data)["jobs"].is_array()) {
@@ -882,6 +954,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     manifest_job.script = manifest.defaults.script;
     manifest_job.scripting_sidecar = manifest.defaults.scripting_sidecar;
     manifest_job.physics_sidecar = manifest.defaults.physics_sidecar;
+    manifest_job.material_descriptor = manifest.defaults.material_descriptor;
     manifest_job.fbx.texture_defaults = manifest.defaults.texture;
     manifest_job.gltf.texture_defaults = manifest.defaults.texture;
 
@@ -893,6 +966,13 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     if (manifest_job.job_type.empty()) {
       error_stream << "ERROR: job.type must not be empty\n";
       return std::nullopt;
+    }
+
+    if (manifest_job.job_type != "input") {
+      if (!CollectJobDependencies(job, manifest_job.job_type, false,
+            manifest_job.id, manifest_job.depends_on, error_stream)) {
+        return std::nullopt;
+      }
     }
 
     if (manifest_job.job_type == "input") {
@@ -919,27 +999,9 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
 
       manifest_job.input.source_path
         = ResolveSourcePath(root, job["source"].get<std::string>());
-      manifest_job.id = job["id"].get<std::string>();
-      TrimInPlace(manifest_job.id);
-      if (manifest_job.id.empty()) {
-        error_stream << "ERROR [input.manifest.job_id_missing]: input job.id "
-                        "must not be empty\n";
+      if (!CollectJobDependencies(job, "input", true, manifest_job.id,
+            manifest_job.depends_on, error_stream)) {
         return std::nullopt;
-      }
-
-      if (!ReadStringArrayField(
-            job, "depends_on", manifest_job.depends_on, error_stream)) {
-        return std::nullopt;
-      }
-      for (size_t dep_index = 0; dep_index < manifest_job.depends_on.size();
-        ++dep_index) {
-        auto& dep = manifest_job.depends_on[dep_index];
-        TrimInPlace(dep);
-        if (dep.empty()) {
-          error_stream << "ERROR: input job.depends_on[" << dep_index
-                       << "] must not be empty\n";
-          return std::nullopt;
-        }
       }
 
       manifest.jobs.push_back(std::move(manifest_job));
@@ -952,24 +1014,6 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
           error_stream << "ERROR [physics.manifest.key_not_allowed]: key '"
                        << it.key() << "' is not allowed for physics-sidecar "
                        << "jobs\n";
-          return std::nullopt;
-        }
-      }
-      if (!ReadStringField(job, "id", manifest_job.id, error_stream)) {
-        return std::nullopt;
-      }
-      TrimInPlace(manifest_job.id);
-      if (!ReadStringArrayField(
-            job, "depends_on", manifest_job.depends_on, error_stream)) {
-        return std::nullopt;
-      }
-      for (size_t dep_index = 0; dep_index < manifest_job.depends_on.size();
-        ++dep_index) {
-        auto& dep = manifest_job.depends_on[dep_index];
-        TrimInPlace(dep);
-        if (dep.empty()) {
-          error_stream << "ERROR: physics-sidecar job.depends_on[" << dep_index
-                       << "] must not be empty\n";
           return std::nullopt;
         }
       }
@@ -1037,6 +1081,8 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
         = manifest_job.texture.source_path;
       manifest_job.physics_sidecar.source_path
         = manifest_job.texture.source_path;
+      manifest_job.material_descriptor.descriptor_path
+        = manifest_job.texture.source_path;
     } else {
       manifest_job.texture.source_path.clear();
       manifest_job.fbx.source_path.clear();
@@ -1044,6 +1090,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
       manifest_job.script.source_path.clear();
       manifest_job.scripting_sidecar.source_path.clear();
       manifest_job.physics_sidecar.source_path.clear();
+      manifest_job.material_descriptor.descriptor_path.clear();
     }
 
     if (has_bindings && is_script_sidecar_job) {
@@ -1083,6 +1130,10 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
           job, manifest_job.physics_sidecar, error_stream)) {
       return std::nullopt;
     }
+    if (!ApplyCommonMaterialDescriptorOverrides(
+          job, manifest_job.material_descriptor, error_stream)) {
+      return std::nullopt;
+    }
 
     if (!ApplyImportOptions(
           job, manifest_job.texture.with_content_hashing, error_stream)) {
@@ -1104,6 +1155,10 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
     if (!ApplyImportOptions(job,
           manifest_job.physics_sidecar.with_content_hashing, error_stream)) {
+      return std::nullopt;
+    }
+    if (!ApplyMaterialDescriptorOverrides(
+          job, manifest_job.material_descriptor, error_stream)) {
       return std::nullopt;
     }
     if (!ApplyTextureOverrides(job, manifest_job.texture, error_stream)) {
@@ -1130,33 +1185,8 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
 auto ImportManifestJob::BuildRequest(std::ostream& error_stream) const
   -> std::optional<ImportRequest>
 {
-  if (job_type == "texture") {
-    return internal::BuildTextureRequest(texture, error_stream);
-  }
-  if (job_type == "texture-descriptor") {
-    return internal::BuildTextureDescriptorRequest(
-      TextureDescriptorImportSettings {
-        .descriptor_path = texture.source_path,
-        .texture = texture,
-      },
-      error_stream);
-  }
-  if (job_type == "fbx") {
-    return internal::BuildSceneRequest(fbx, ImportFormat::kFbx, error_stream);
-  }
-  if (job_type == "gltf") {
-    return internal::BuildSceneRequest(gltf, ImportFormat::kGltf, error_stream);
-  }
-  if (job_type == "script") {
-    return internal::BuildScriptAssetRequest(script, error_stream);
-  }
-  if (job_type == "script-sidecar") {
-    return internal::BuildScriptingSidecarRequest(
-      scripting_sidecar, error_stream);
-  }
-  if (job_type == "physics-sidecar") {
-    auto request
-      = internal::BuildPhysicsSidecarRequest(physics_sidecar, error_stream);
+  const auto AttachOrchestration =
+    [&](std::optional<ImportRequest> request) -> std::optional<ImportRequest> {
     if (!request.has_value()) {
       return std::nullopt;
     }
@@ -1167,6 +1197,43 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream) const
       };
     }
     return request;
+  };
+
+  if (job_type == "texture") {
+    return AttachOrchestration(
+      internal::BuildTextureRequest(texture, error_stream));
+  }
+  if (job_type == "texture-descriptor") {
+    return AttachOrchestration(internal::BuildTextureDescriptorRequest(
+      TextureDescriptorImportSettings {
+        .descriptor_path = texture.source_path,
+        .texture = texture,
+      },
+      error_stream));
+  }
+  if (job_type == "material-descriptor") {
+    return AttachOrchestration(internal::BuildMaterialDescriptorRequest(
+      material_descriptor, error_stream));
+  }
+  if (job_type == "fbx") {
+    return AttachOrchestration(
+      internal::BuildSceneRequest(fbx, ImportFormat::kFbx, error_stream));
+  }
+  if (job_type == "gltf") {
+    return AttachOrchestration(
+      internal::BuildSceneRequest(gltf, ImportFormat::kGltf, error_stream));
+  }
+  if (job_type == "script") {
+    return AttachOrchestration(
+      internal::BuildScriptAssetRequest(script, error_stream));
+  }
+  if (job_type == "script-sidecar") {
+    return AttachOrchestration(
+      internal::BuildScriptingSidecarRequest(scripting_sidecar, error_stream));
+  }
+  if (job_type == "physics-sidecar") {
+    return AttachOrchestration(
+      internal::BuildPhysicsSidecarRequest(physics_sidecar, error_stream));
   }
   if (job_type == "input") {
     return internal::BuildInputImportRequest(

@@ -52,6 +52,88 @@ MainModule::MainModule(const DemoAppContext& app)
     / "Content";
 }
 
+auto MainModule::ResolveSelectedCustomMaterial()
+  -> std::shared_ptr<const data::MaterialAsset>
+{
+  if (!texture_vm_ || !texture_vm_->IsUseCustomMaterial()) {
+    selected_custom_material_.reset();
+    selected_custom_material_key_.reset();
+    custom_material_load_inflight_key_.reset();
+    return nullptr;
+  }
+
+  const auto selected_key = texture_vm_->GetSelectedCustomMaterialKey();
+  if (!selected_key.has_value()) {
+    selected_custom_material_.reset();
+    selected_custom_material_key_.reset();
+    custom_material_load_inflight_key_.reset();
+    return nullptr;
+  }
+
+  if (selected_custom_material_key_.has_value()
+    && selected_custom_material_key_.value() == selected_key.value()
+    && selected_custom_material_) {
+    return selected_custom_material_;
+  }
+
+  auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+  if (!asset_loader) {
+    return nullptr;
+  }
+
+  if (auto cached = asset_loader->GetMaterialAsset(selected_key.value())) {
+    selected_custom_material_ = cached;
+    selected_custom_material_key_ = selected_key.value();
+    custom_material_load_inflight_key_.reset();
+    return selected_custom_material_;
+  }
+
+  RequestCustomMaterialLoad(selected_key.value());
+  return nullptr;
+}
+
+auto MainModule::RequestCustomMaterialLoad(const data::AssetKey& key) -> void
+{
+  auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+  if (!asset_loader) {
+    return;
+  }
+
+  if (custom_material_load_inflight_key_.has_value()
+    && custom_material_load_inflight_key_.value() == key) {
+    return;
+  }
+
+  selected_custom_material_.reset();
+  custom_material_load_inflight_key_ = key;
+  asset_loader->StartLoadMaterialAsset(
+    key, [this, key](std::shared_ptr<data::MaterialAsset> material) {
+      if (!texture_vm_ || !texture_vm_->IsUseCustomMaterial()) {
+        custom_material_load_inflight_key_.reset();
+        return;
+      }
+
+      const auto selected_key = texture_vm_->GetSelectedCustomMaterialKey();
+      if (!selected_key.has_value() || selected_key.value() != key) {
+        custom_material_load_inflight_key_.reset();
+        return;
+      }
+
+      custom_material_load_inflight_key_.reset();
+      if (!material) {
+        LOG_F(WARNING,
+          "TexturedCube: failed to load selected custom material from cooked "
+          "root (asset_key={})",
+          key);
+        return;
+      }
+
+      selected_custom_material_ = material;
+      selected_custom_material_key_ = key;
+      texture_vm_->SetCubeRebuildNeeded();
+    });
+}
+
 auto MainModule::BuildDefaultWindowProperties() const
   -> platform::window::Properties
 {
@@ -138,6 +220,9 @@ auto MainModule::OnShutdown() noexcept -> void
 
   texture_panel_.reset();
   texture_vm_.reset();
+  selected_custom_material_.reset();
+  selected_custom_material_key_.reset();
+  custom_material_load_inflight_key_.reset();
 
   last_viewport_ = { 0, 0 };
 
@@ -295,11 +380,13 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
       }
       surface_params.disable_texture_sampling
         = surface_vm.use_constant_base_color || grid_selected;
+      const auto custom_material = ResolveSelectedCustomMaterial();
 
       // Update each object independently so callers can later update only one
       scene_setup_->UpdateSphere(
-        sphere_state, surface_params, forced_error_key_);
-      scene_setup_->UpdateCube(cube_state, surface_params, forced_error_key_);
+        sphere_state, surface_params, forced_error_key_, custom_material);
+      scene_setup_->UpdateCube(
+        cube_state, surface_params, forced_error_key_, custom_material);
 
       // Apply overrides immediately
       if (app_.engine) {

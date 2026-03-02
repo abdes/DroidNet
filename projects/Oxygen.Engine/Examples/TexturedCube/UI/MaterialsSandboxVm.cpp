@@ -6,9 +6,12 @@
 
 #include <algorithm>
 #include <cctype>
+#include <exception>
 #include <filesystem>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Data/AssetType.h>
 
 #include "DemoShell/Services/FileBrowserService.h"
 #include "TexturedCube/UI/MaterialsSandboxVm.h"
@@ -357,6 +360,48 @@ bool MaterialsSandboxVm::SelectSkybox(uint32_t entry_index,
   return true;
 }
 
+void MaterialsSandboxVm::SetUseCustomMaterial(const bool enabled)
+{
+  if (use_custom_material_ == enabled) {
+    return;
+  }
+  use_custom_material_ = enabled;
+  cube_needs_rebuild_ = true;
+}
+
+auto MaterialsSandboxVm::GetSelectedCustomMaterialKey() const
+  -> std::optional<oxygen::data::AssetKey>
+{
+  return selected_custom_material_key_;
+}
+
+void MaterialsSandboxVm::ClearSelectedCustomMaterial()
+{
+  if (!selected_custom_material_key_.has_value()) {
+    return;
+  }
+  selected_custom_material_key_.reset();
+  cube_needs_rebuild_ = true;
+}
+
+bool MaterialsSandboxVm::SelectCustomMaterialByEntryIndex(
+  const std::size_t entry_index)
+{
+  if (entry_index >= cooked_material_entries_.size()) {
+    return false;
+  }
+
+  const auto key = cooked_material_entries_[entry_index].key;
+  if (selected_custom_material_key_.has_value()
+    && selected_custom_material_key_.value() == key) {
+    return true;
+  }
+
+  selected_custom_material_key_ = key;
+  cube_needs_rebuild_ = true;
+  return true;
+}
+
 void MaterialsSandboxVm::Update()
 {
   if (!texture_service_) {
@@ -401,8 +446,10 @@ void MaterialsSandboxVm::Update()
     }
 
     std::string error;
-    if (texture_service_->RefreshCookedTextureEntries(
-          report.cooked_root, &error)) {
+    const bool refreshed = texture_service_->RefreshCookedTextureEntries(
+      report.cooked_root, &error);
+    UpdateCookedMaterialEntries(report.cooked_root);
+    if (refreshed) {
       UpdateCookedEntries();
       import_state_.status_message = "Import Successful";
       // import_state_.in_flight = false;
@@ -449,8 +496,10 @@ void MaterialsSandboxVm::HandleRefresh()
   std::string error;
   if (texture_service_->RefreshCookedTextureEntries(root_path, &error)) {
     UpdateCookedEntries();
+    UpdateCookedMaterialEntries(root_path);
     import_state_.status_message = "Cooked root refreshed";
   } else {
+    UpdateCookedMaterialEntries(root_path);
     LOG_F(INFO, "TexturedCube: refresh failed root='{}' error='{}'",
       root_path.string(), error);
     import_state_.status_message = error;
@@ -495,6 +544,74 @@ void MaterialsSandboxVm::UpdateCookedEntries()
 
   LOG_F(INFO, "TexturedCube: refresh completed entries={} ",
     cooked_entries_.size());
+}
+
+void MaterialsSandboxVm::UpdateCookedMaterialEntries(
+  const std::filesystem::path& cooked_root)
+{
+  cooked_material_entries_.clear();
+  bool selection_cleared = false;
+
+  if (cooked_root.empty()) {
+    selection_cleared = selected_custom_material_key_.has_value();
+    selected_custom_material_key_.reset();
+    if (selection_cleared && use_custom_material_) {
+      cube_needs_rebuild_ = true;
+    }
+    return;
+  }
+
+  try {
+    oxygen::content::lc::Inspection inspection;
+    inspection.LoadFromRoot(cooked_root);
+
+    constexpr auto kMaterialAssetType
+      = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
+    for (const auto& asset : inspection.Assets()) {
+      if (asset.asset_type != kMaterialAssetType) {
+        continue;
+      }
+
+      cooked_material_entries_.push_back(CookedMaterialEntry {
+        .key = asset.key,
+        .virtual_path = asset.virtual_path,
+        .descriptor_relpath = asset.descriptor_relpath,
+        .descriptor_size = asset.descriptor_size,
+      });
+    }
+
+    std::sort(cooked_material_entries_.begin(), cooked_material_entries_.end(),
+      [](const CookedMaterialEntry& lhs, const CookedMaterialEntry& rhs) {
+        if (lhs.virtual_path == rhs.virtual_path) {
+          return lhs.descriptor_relpath < rhs.descriptor_relpath;
+        }
+        return lhs.virtual_path < rhs.virtual_path;
+      });
+
+    if (selected_custom_material_key_.has_value()) {
+      const auto it = std::find_if(cooked_material_entries_.begin(),
+        cooked_material_entries_.end(),
+        [selected = selected_custom_material_key_.value()](
+          const CookedMaterialEntry& entry) { return entry.key == selected; });
+      if (it == cooked_material_entries_.end()) {
+        selected_custom_material_key_.reset();
+        selection_cleared = true;
+      }
+    }
+  } catch (const std::exception& e) {
+    selection_cleared = selected_custom_material_key_.has_value();
+    LOG_F(WARNING,
+      "TexturedCube: failed to enumerate cooked materials from '{}' error='{}'",
+      cooked_root.string(), e.what());
+    selected_custom_material_key_.reset();
+  }
+
+  if (selection_cleared && use_custom_material_) {
+    cube_needs_rebuild_ = true;
+  }
+
+  LOG_F(INFO, "TexturedCube: material refresh completed entries={}",
+    cooked_material_entries_.size());
 }
 
 auto MaterialsSandboxVm::GetMetadataJson(uint32_t entry_index) const

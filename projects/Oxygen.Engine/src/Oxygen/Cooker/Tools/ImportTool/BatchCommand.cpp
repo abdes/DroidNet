@@ -209,6 +209,9 @@ namespace {
     if (request.options.input.has_value()) {
       return "input";
     }
+    if (request.options.material_descriptor.has_value()) {
+      return "material-descriptor";
+    }
     if (request.GetFormat() != ImportFormat::kUnknown) {
       return std::string(to_string(request.GetFormat()));
     }
@@ -497,9 +500,10 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
 
   for (const auto& job : manifest->jobs) {
     if (job.job_type != "texture" && job.job_type != "texture-descriptor"
-      && job.job_type != "fbx" && job.job_type != "gltf"
-      && job.job_type != "script" && job.job_type != "script-sidecar"
-      && job.job_type != "physics-sidecar" && job.job_type != "input") {
+      && job.job_type != "material-descriptor" && job.job_type != "fbx"
+      && job.job_type != "gltf" && job.job_type != "script"
+      && job.job_type != "script-sidecar" && job.job_type != "physics-sidecar"
+      && job.job_type != "input") {
       writer->Error(
         fmt::format("ERROR: unsupported job type: {}", job.job_type));
       unsupported_seen = true;

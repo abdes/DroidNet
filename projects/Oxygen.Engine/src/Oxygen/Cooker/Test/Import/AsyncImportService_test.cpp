@@ -381,6 +381,82 @@ NOLINT_TEST_F(
   StopService(service);
 }
 
+//! Verify material-descriptor payload bypasses format detection and routes to
+//! the material-descriptor job path.
+NOLINT_TEST_F(AsyncImportServiceSubmitTest,
+  MaterialDescriptorRequestBypassesFormatDetection)
+{
+  AsyncImportService service(config_);
+
+  auto request = ImportRequest {};
+  request.source_path = "unrecognized.asset";
+  request.cooked_root = std::filesystem::temp_directory_path()
+    / "oxygen_material_descriptor_routing_submit_test";
+  std::filesystem::create_directories(*request.cooked_root);
+  request.options.material_descriptor = ImportOptions::MaterialDescriptorTuning {
+    .normalized_descriptor_json
+    = R"({"name":"BadMat","textures":{"base_color":{"virtual_path":"not/canonical"}}})",
+  };
+
+  std::latch done(1);
+  ImportReport report {};
+  const auto job_id = service.SubmitImport(
+    std::move(request),
+    [&report, &done](ImportJobId, const ImportReport& completed) {
+      report = completed;
+      done.count_down();
+    },
+    nullptr);
+
+  ASSERT_TRUE(job_id.has_value());
+  done.wait();
+
+  EXPECT_FALSE(report.success);
+  EXPECT_TRUE(std::any_of(report.diagnostics.begin(), report.diagnostics.end(),
+    [](const ImportDiagnostic& diagnostic) {
+      return diagnostic.code.starts_with("material.descriptor.");
+    }));
+
+  StopService(service);
+}
+
+//! Verify malformed material-descriptor payloads surface schema diagnostics.
+NOLINT_TEST_F(AsyncImportServiceSubmitTest,
+  MaterialDescriptorInvalidSchemaProducesDiagnostics)
+{
+  AsyncImportService service(config_);
+
+  auto request = ImportRequest {};
+  request.source_path = "unrecognized.asset";
+  request.cooked_root = std::filesystem::temp_directory_path()
+    / "oxygen_material_descriptor_schema_submit_test";
+  std::filesystem::create_directories(*request.cooked_root);
+  request.options.material_descriptor
+    = ImportOptions::MaterialDescriptorTuning {
+        .normalized_descriptor_json
+        = R"({"name":"BadMat","textures":{"base_color":{"virtual_path":42}}})",
+      };
+
+  std::latch done(1);
+  ImportReport report {};
+  const auto job_id = service.SubmitImport(
+    std::move(request),
+    [&report, &done](ImportJobId, const ImportReport& completed) {
+      report = completed;
+      done.count_down();
+    },
+    nullptr);
+
+  ASSERT_TRUE(job_id.has_value());
+  done.wait();
+
+  EXPECT_FALSE(report.success);
+  EXPECT_TRUE(HasDiagnosticCode(
+    report.diagnostics, "material.descriptor.schema_validation_failed"));
+
+  StopService(service);
+}
+
 //=== Cancellation Tests ===--------------------------------------------------//
 
 class AsyncImportServiceCancelTest : public testing::Test {

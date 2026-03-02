@@ -64,6 +64,8 @@ oxygen_embed_json_schemas(
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.import-manifest.schema.json"
     kTextureDescriptorSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.texture-descriptor.schema.json"
+    kMaterialDescriptorSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.material-descriptor.schema.json"
     kInputSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input.schema.json"
     kInputActionSchema
@@ -90,6 +92,8 @@ set(
   "Import/ImportRequest.h"
   "Import/InputImportRequestBuilder.h"
   "Import/InputImportSettings.h"
+  "Import/MaterialDescriptorImportRequestBuilder.h"
+  "Import/MaterialDescriptorImportSettings.h"
   "Import/PhysicsImportRequestBuilder.h"
   "Import/PhysicsImportSettings.h"
   "Import/Naming.h"
@@ -148,6 +152,7 @@ set(
   "Import/Internal/Jobs/FbxImportJob.h"
   "Import/Internal/Jobs/GlbImportJob.h"
   "Import/Internal/Jobs/InputImportJob.h"
+  "Import/Internal/Jobs/MaterialDescriptorImportJob.h"
   "Import/Internal/Jobs/PhysicsSidecarImportJob.h"
   "Import/Internal/Jobs/ScriptAssetImportJob.h"
   "Import/Internal/Jobs/ScriptingSidecarImportJob.h"
@@ -219,11 +224,13 @@ set(
   "Import/Internal/ImportPlanner.cpp"
   "Import/Internal/ImportSession.cpp"
   "Import/Internal/InputImportRequestBuilder.cpp"
+  "Import/Internal/MaterialDescriptorImportRequestBuilder.cpp"
   "Import/Internal/PhysicsImportRequestBuilder.cpp"
   "Import/Internal/Jobs/AudioImportJob.cpp"
   "Import/Internal/Jobs/FbxImportJob.cpp"
   "Import/Internal/Jobs/GlbImportJob.cpp"
   "Import/Internal/Jobs/InputImportJob.cpp"
+  "Import/Internal/Jobs/MaterialDescriptorImportJob.cpp"
   "Import/Internal/Jobs/PhysicsSidecarImportJob.cpp"
   "Import/Internal/Jobs/ScriptAssetImportJob.cpp"
   "Import/Internal/Jobs/ScriptingSidecarImportJob.cpp"
@@ -351,6 +358,7 @@ if(${META_PROJECT_ID}_INSTALL)
     _oxygen_cooker_schema_files
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.import-manifest.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.texture-descriptor.schema.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.material-descriptor.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input-action.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-sidecar.schema.json"

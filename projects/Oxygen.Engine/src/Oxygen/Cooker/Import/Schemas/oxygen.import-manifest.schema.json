@@ -136,6 +136,28 @@
                     "if": {
                         "properties": {
                             "type": {
+                                "const": "material-descriptor"
+                            }
+                        }
+                    },
+                    "then": {
+                        "propertyNames": {
+                            "enum": [
+                                "id",
+                                "depends_on",
+                                "type",
+                                "source",
+                                "output",
+                                "name",
+                                "content_hashing"
+                            ]
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "type": {
                                 "enum": [
                                     "script-sidecar",
                                     "physics-sidecar"
@@ -260,6 +282,9 @@
                 },
                 "physics_sidecar": {
                     "$ref": "#/definitions/physics_sidecar_settings"
+                },
+                "material_descriptor": {
+                    "$ref": "#/definitions/material_descriptor_settings"
                 },
                 "input": {
                     "type": "object",
@@ -535,6 +560,21 @@
             },
             "additionalProperties": false
         },
+        "material_descriptor_settings": {
+            "type": "object",
+            "properties": {
+                "output": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "content_hashing": {
+                    "type": "boolean"
+                }
+            },
+            "additionalProperties": false
+        },
         "job_settings": {
             "type": "object",
             "properties": {
@@ -542,6 +582,7 @@
                     "enum": [
                         "texture",
                         "texture-descriptor",
+                        "material-descriptor",
                         "fbx",
                         "gltf",
                         "script",
