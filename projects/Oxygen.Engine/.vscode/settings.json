@@ -125,6 +125,42 @@
                 "*.physics-sidecar.json"
             ],
             "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json"
+        },
+        {
+            "fileMatch": [
+                "*.geometry.json"
+            ],
+            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json"
+        },
+        {
+            "fileMatch": [
+                "*.scene.json"
+            ],
+            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json"
+        },
+        {
+            "fileMatch": [
+                "*.buffers.json"
+            ],
+            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.buffer-container.schema.json"
+        },
+        {
+            "fileMatch": [
+                "*.shape.json"
+            ],
+            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.collision-shape-descriptor.schema.json"
+        },
+        {
+            "fileMatch": [
+                "*.physics-material.json"
+            ],
+            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-material-descriptor.schema.json"
+        },
+        {
+            "fileMatch": [
+                "*.resource.json"
+            ],
+            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-resource-descriptor.schema.json"
         }
     ],
     "yaml.validate": true,
