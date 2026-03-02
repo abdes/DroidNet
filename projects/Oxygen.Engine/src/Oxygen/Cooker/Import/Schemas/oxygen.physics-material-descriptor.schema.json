@@ -1,0 +1,59 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Oxygen Physics Material Descriptor",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "$schema": {
+            "type": "string"
+        },
+        "name": {
+            "$ref": "#/definitions/identifier"
+        },
+        "content_hashing": {
+            "type": "boolean"
+        },
+        "virtual_path": {
+            "$ref": "#/definitions/canonical_opmat_path"
+        },
+        "friction": {
+            "type": "number",
+            "minimum": 0.0
+        },
+        "restitution": {
+            "type": "number",
+            "minimum": 0.0
+        },
+        "density": {
+            "type": "number",
+            "exclusiveMinimum": 0.0
+        },
+        "combine_mode_friction": {
+            "$ref": "#/definitions/combine_mode"
+        },
+        "combine_mode_restitution": {
+            "$ref": "#/definitions/combine_mode"
+        }
+    },
+    "definitions": {
+        "identifier": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 63,
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,62}$"
+        },
+        "combine_mode": {
+            "enum": [
+                "average",
+                "min",
+                "max",
+                "multiply"
+            ]
+        },
+        "canonical_opmat_path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.opmat$"
+        }
+    }
+}

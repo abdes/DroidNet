@@ -33,6 +33,7 @@ class IAsyncFileWriter;
 class ResourceTableRegistry;
 class TextureEmitter;
 class BufferEmitter;
+class PhysicsResourceEmitter;
 class AssetEmitter;
 class ResourceDescriptorEmitter;
 class LooseCookedIndexRegistry;
@@ -129,6 +130,9 @@ public:
 
   //! Get the buffer emitter (lazy, import-thread only).
   OXGN_COOK_NDAPI auto BufferEmitter() -> BufferEmitter&;
+
+  //! Get the physics resource emitter (lazy, import-thread only).
+  OXGN_COOK_NDAPI auto PhysicsResourceEmitter() -> PhysicsResourceEmitter&;
 
   //! Get the asset emitter (lazy, import-thread only).
   OXGN_COOK_NDAPI auto AssetEmitter() -> AssetEmitter&;
@@ -238,6 +242,8 @@ private:
 
   std::optional<std::unique_ptr<import::TextureEmitter>> texture_emitter_;
   std::optional<std::unique_ptr<import::BufferEmitter>> buffer_emitter_;
+  std::optional<std::unique_ptr<import::PhysicsResourceEmitter>>
+    physics_resource_emitter_;
   std::optional<std::unique_ptr<import::AssetEmitter>> asset_emitter_;
   std::optional<std::unique_ptr<import::ResourceDescriptorEmitter>>
     resource_descriptor_emitter_;

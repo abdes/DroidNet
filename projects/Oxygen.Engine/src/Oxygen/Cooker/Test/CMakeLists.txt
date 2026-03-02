@@ -84,6 +84,36 @@ target_link_libraries(
 )
 
 m_gtest_program(
+  AsyncImportPhysicsResourceDescriptor
+  SOURCES
+    "Import/PhysicsResourceDescriptorImportJob_test.cpp"
+    "Import/ImportManifest_physics_resource_descriptor_test.cpp"
+    "Import/PhysicsResourceDescriptorImportRequestBuilder_test.cpp"
+    "Import/PhysicsResourceDescriptorJsonSchema_test.cpp"
+)
+target_link_libraries(
+  Oxygen.Cooker.AsyncImportPhysicsResourceDescriptor.Tests
+  PRIVATE
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
+)
+
+m_gtest_program(
+  AsyncImportPhysicsMaterialDescriptor
+  SOURCES
+    "Import/PhysicsMaterialDescriptorImportJob_test.cpp"
+    "Import/ImportManifest_physics_material_descriptor_test.cpp"
+    "Import/PhysicsMaterialDescriptorImportRequestBuilder_test.cpp"
+    "Import/PhysicsMaterialDescriptorJsonSchema_test.cpp"
+)
+target_link_libraries(
+  Oxygen.Cooker.AsyncImportPhysicsMaterialDescriptor.Tests
+  PRIVATE
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
+)
+
+m_gtest_program(
   AsyncImportTextureDescriptor
   SOURCES
     "Import/ImportManifest_texture_descriptor_test.cpp"

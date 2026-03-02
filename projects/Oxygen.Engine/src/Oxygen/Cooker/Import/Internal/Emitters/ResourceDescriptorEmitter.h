@@ -67,6 +67,16 @@ public:
     const data::pak::core::BufferResourceDesc& descriptor,
     std::span<const internal::BufferDescriptorView> views = {}) -> std::string;
 
+  //! Emit a physics resource descriptor file and return its relative path.
+  OXGN_COOK_NDAPI auto EmitPhysicsResource(std::string_view name_hint,
+    std::string_view stable_id, data::pak::core::ResourceIndexT resource_index,
+    const data::pak::physics::PhysicsResourceDesc& descriptor) -> std::string;
+
+  //! Emit a physics resource descriptor at an explicit relative path.
+  OXGN_COOK_NDAPI auto EmitPhysicsResourceAtRelPath(std::string_view relpath,
+    data::pak::core::ResourceIndexT resource_index,
+    const data::pak::physics::PhysicsResourceDesc& descriptor) -> std::string;
+
   //! Snapshot of emitted descriptor records.
   OXGN_COOK_NDAPI auto Records() const -> std::vector<Record>;
 
