@@ -1,5 +1,4 @@
 {
-  "$schema": "../../../src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json",
   "name": "cube",
   "bounds": {
     "min": [-0.5, -0.5, -0.5],

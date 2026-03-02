@@ -1,0 +1,6 @@
+{
+    "name": "park_hinge_joint_a",
+    "format": "jolt_constraint_binary",
+    "source": "./data/park_hinge_joint_a.jphbin",
+    "virtual_path": "/.cooked/Physics/Resources/park_hinge_joint_a.opres"
+}

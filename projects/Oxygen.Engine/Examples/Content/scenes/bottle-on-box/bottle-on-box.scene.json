@@ -1,6 +1,5 @@
 {
-  "$schema": "../../../src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
-  "name": "showcase_scene",
+  "name": "bottle-on-box",
   "nodes": [
     {
       "name": "world",

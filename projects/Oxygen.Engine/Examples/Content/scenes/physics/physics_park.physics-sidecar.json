@@ -1,0 +1,89 @@
+{
+    "bindings": {
+        "rigid_bodies": [
+            {
+                "node_index": 1,
+                "shape_ref": "/.cooked/Physics/Shapes/floor.ocshape",
+                "material_ref": "/.cooked/Physics/Materials/ground.opmat",
+                "body_type": "static",
+                "motion_quality": "discrete",
+                "collision_layer": 1,
+                "collision_mask": 65535,
+                "mass": 0.0,
+                "linear_damping": 0.0,
+                "angular_damping": 0.0,
+                "gravity_factor": 0.0,
+                "initial_activation": false
+            },
+            {
+                "node_index": 2,
+                "shape_ref": "/.cooked/Physics/Shapes/actor.ocshape",
+                "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+                "body_type": "dynamic",
+                "motion_quality": "linear_cast",
+                "collision_layer": 2,
+                "collision_mask": 65535,
+                "mass": 5.0,
+                "linear_damping": 0.05,
+                "angular_damping": 0.1,
+                "gravity_factor": 1.0,
+                "initial_activation": true
+            }
+        ],
+        "colliders": [
+            {
+                "node_index": 6,
+                "shape_ref": "/.cooked/Physics/Shapes/actor.ocshape",
+                "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+                "collision_layer": 4,
+                "collision_mask": 65535
+            }
+        ],
+        "characters": [
+            {
+                "node_index": 4,
+                "shape_ref": "/.cooked/Physics/Shapes/actor.ocshape",
+                "mass": 90.0,
+                "max_slope_angle": 0.785398,
+                "step_height": 0.35,
+                "max_strength": 120.0,
+                "collision_layer": 5,
+                "collision_mask": 65535
+            }
+        ],
+        "soft_bodies": [
+            {
+                "node_index": 7,
+                "cluster_count": 16,
+                "stiffness": 0.8,
+                "damping": 0.2,
+                "edge_compliance": 0.01,
+                "shear_compliance": 0.01,
+                "bend_compliance": 0.02,
+                "tether_mode": "euclidean",
+                "tether_max_distance_multiplier": 1.2
+            }
+        ],
+        "joints": [
+            {
+                "node_index_a": 2,
+                "node_index_b": 3,
+                "constraint_ref": "/.cooked/Physics/Resources/park_hinge_joint_a.opres"
+            }
+        ],
+        "vehicles": [
+            {
+                "node_index": 5,
+                "constraint_ref": "/.cooked/Physics/Resources/park_hinge_joint_a.opres"
+            }
+        ],
+        "aggregates": [
+            {
+                "node_index": 8,
+                "max_bodies": 16,
+                "filter_overlap": true,
+                "authority": "simulation"
+            }
+        ]
+    }
+}

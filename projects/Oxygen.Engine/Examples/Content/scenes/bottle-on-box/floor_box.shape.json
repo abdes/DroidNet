@@ -1,5 +1,4 @@
 {
-    "$schema": "../../../src/Oxygen/Cooker/Import/Schemas/oxygen.collision-shape-descriptor.schema.json",
     "name": "floor_box",
     "content_hashing": true,
     "virtual_path": "/.cooked/Physics/Shapes/floor_box.ocshape",
