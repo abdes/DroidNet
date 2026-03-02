@@ -18,6 +18,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Clap/CommandLineContext.h> // used
 #include <Oxygen/Clap/Fluent/CliBuilder.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Tools/ImportTool/BatchCommand.h>
@@ -96,6 +97,25 @@ auto MakeScenarioDir(const std::string_view scenario) -> std::filesystem::path
   return dir;
 }
 
+auto CountOccurrences(const std::string& text, const std::string_view token)
+  -> size_t
+{
+  if (token.empty()) {
+    return 0U;
+  }
+  size_t count = 0U;
+  size_t position = 0U;
+  while (true) {
+    position = text.find(token, position);
+    if (position == std::string::npos) {
+      break;
+    }
+    ++count;
+    position += token.size();
+  }
+  return count;
+}
+
 class BatchCommandPhysicsDagTest : public testing::Test {
 protected:
   void SetUp() override
@@ -165,8 +185,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     std::string { R"({
       "version": 1,
       "output": ")" }
-      + cooked_root.generic_string()
-      + R"(",
+      + cooked_root.generic_string() + R"(",
       "jobs": [
         {
           "id": "physics.sidecar.main",
@@ -183,15 +202,57 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
           }
         }
       ]
-    })"
-});
+    })");
 
-const auto result = RunBatch(manifest_path);
-EXPECT_FALSE(result.has_value());
+  const auto result = RunBatch(manifest_path);
+  EXPECT_FALSE(result.has_value());
 
-const auto messages = Messages();
-EXPECT_NE(
-  messages.find("physics.manifest.dependency_unresolved"), std::string::npos);
+  const auto messages = Messages();
+  EXPECT_NE(
+    messages.find("physics.manifest.dependency_unresolved"), std::string::npos);
+}
+
+NOLINT_TEST_F(BatchCommandPhysicsDagTest,
+  PhysicsSidecarDuplicateUnresolvedRefsEmitSingleDependencyUnresolvedDiagnostic)
+{
+  const auto root = MakeScenarioDir("physics_unresolved_duplicate_refs");
+  const auto cooked_root = root / ".cooked";
+  const auto manifest_path = root / "import-manifest.json";
+
+  WriteTextFile(manifest_path,
+    std::string { R"({
+      "version": 1,
+      "output": ")" }
+      + cooked_root.generic_string() + R"(",
+      "jobs": [
+        {
+          "id": "physics.sidecar.main",
+          "type": "physics-sidecar",
+          "target_scene_virtual_path": "/.cooked/Scenes/level.oscene",
+          "bindings": {
+            "rigid_bodies": [
+              {
+                "node_index": 0,
+                "shape_ref": "/.cooked/Physics/Shapes/floor.ocshape",
+                "material_ref": "/.cooked/Physics/Materials/floor.opmat"
+              },
+              {
+                "node_index": 1,
+                "shape_ref": "/.cooked/Physics/Shapes/floor.ocshape",
+                "material_ref": "/.cooked/Physics/Materials/floor.opmat"
+              }
+            ]
+          }
+        }
+      ]
+    })");
+
+  const auto result = RunBatch(manifest_path);
+  EXPECT_FALSE(result.has_value());
+
+  const auto messages = Messages();
+  EXPECT_EQ(
+    CountOccurrences(messages, "physics.manifest.dependency_unresolved"), 3U);
 }
 
 NOLINT_TEST_F(BatchCommandPhysicsDagTest,
@@ -234,8 +295,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     std::string { R"({
       "version": 1,
       "output": ")" }
-      + cooked_root.generic_string()
-      + R"(",
+      + cooked_root.generic_string() + R"(",
       "jobs": [
         {
           "id": "physics.material.shared_a",
@@ -253,15 +313,129 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
           "source": "Physics/floor.physics-shape.json"
         }
       ]
-    })"
-});
+    })");
 
-const auto result = RunBatch(manifest_path);
-EXPECT_FALSE(result.has_value());
+  const auto result = RunBatch(manifest_path);
+  EXPECT_FALSE(result.has_value());
 
-const auto messages = Messages();
-EXPECT_NE(
-  messages.find("physics.manifest.dependency_ambiguous"), std::string::npos);
+  const auto messages = Messages();
+  EXPECT_NE(
+    messages.find("physics.manifest.dependency_ambiguous"), std::string::npos);
+}
+
+NOLINT_TEST_F(BatchCommandPhysicsDagTest,
+  PhysicsSidecarDuplicateAmbiguousRefsEmitSingleDependencyAmbiguousDiagnostic)
+{
+  const auto root = MakeScenarioDir("physics_ambiguous_duplicate_refs");
+  const auto cooked_root = root / ".cooked";
+  const auto manifest_path = root / "import-manifest.json";
+  const auto descriptors_dir = root / "Physics";
+  const auto mat_a = descriptors_dir / "shared_a.physics-material.json";
+  const auto mat_b = descriptors_dir / "shared_b.physics-material.json";
+  const auto mat_base = descriptors_dir / "base.physics-material.json";
+  const auto shape_a = descriptors_dir / "floor_a.physics-shape.json";
+  const auto shape_b = descriptors_dir / "floor_b.physics-shape.json";
+
+  WriteTextFile(mat_a,
+    R"({
+      "name": "shared_a",
+      "virtual_path": "/.cooked/Physics/Materials/shared.opmat",
+      "friction": 0.8,
+      "restitution": 0.1,
+      "density": 1.0
+    })");
+  WriteTextFile(mat_b,
+    R"({
+      "name": "shared_b",
+      "virtual_path": "/.cooked/Physics/Materials/shared.opmat",
+      "friction": 0.7,
+      "restitution": 0.2,
+      "density": 1.0
+    })");
+  WriteTextFile(mat_base,
+    R"({
+      "name": "base",
+      "virtual_path": "/.cooked/Physics/Materials/base.opmat",
+      "friction": 0.5,
+      "restitution": 0.1,
+      "density": 1.0
+    })");
+  WriteTextFile(shape_a,
+    R"({
+      "name": "floor_shape_a",
+      "shape_type": "box",
+      "half_extents": [10.0, 1.0, 10.0],
+      "material_ref": "/.cooked/Physics/Materials/base.opmat",
+      "virtual_path": "/.cooked/Physics/Shapes/floor.ocshape"
+    })");
+  WriteTextFile(shape_b,
+    R"({
+      "name": "floor_shape_b",
+      "shape_type": "box",
+      "half_extents": [10.0, 1.0, 10.0],
+      "material_ref": "/.cooked/Physics/Materials/base.opmat",
+      "virtual_path": "/.cooked/Physics/Shapes/floor.ocshape"
+    })");
+
+  WriteTextFile(manifest_path,
+    std::string { R"({
+      "version": 1,
+      "output": ")" }
+      + cooked_root.generic_string() + R"(",
+      "jobs": [
+        {
+          "id": "physics.material.shared_a",
+          "type": "physics-material-descriptor",
+          "source": "Physics/shared_a.physics-material.json"
+        },
+        {
+          "id": "physics.material.shared_b",
+          "type": "physics-material-descriptor",
+          "source": "Physics/shared_b.physics-material.json"
+        },
+        {
+          "id": "physics.material.base",
+          "type": "physics-material-descriptor",
+          "source": "Physics/base.physics-material.json"
+        },
+        {
+          "id": "physics.shape.floor_a",
+          "type": "collision-shape-descriptor",
+          "source": "Physics/floor_a.physics-shape.json"
+        },
+        {
+          "id": "physics.shape.floor_b",
+          "type": "collision-shape-descriptor",
+          "source": "Physics/floor_b.physics-shape.json"
+        },
+        {
+          "id": "physics.sidecar.main",
+          "type": "physics-sidecar",
+          "target_scene_virtual_path": "/.cooked/Scenes/level.oscene",
+          "bindings": {
+            "rigid_bodies": [
+              {
+                "node_index": 0,
+                "shape_ref": "/.cooked/Physics/Shapes/floor.ocshape",
+                "material_ref": "/.cooked/Physics/Materials/shared.opmat"
+              },
+              {
+                "node_index": 1,
+                "shape_ref": "/.cooked/Physics/Shapes/floor.ocshape",
+                "material_ref": "/.cooked/Physics/Materials/shared.opmat"
+              }
+            ]
+          }
+        }
+      ]
+    })");
+
+  const auto result = RunBatch(manifest_path);
+  EXPECT_FALSE(result.has_value());
+
+  const auto messages = Messages();
+  EXPECT_EQ(
+    CountOccurrences(messages, "physics.manifest.dependency_ambiguous"), 2U);
 }
 
 NOLINT_TEST_F(
@@ -295,8 +469,7 @@ NOLINT_TEST_F(
     std::string { R"({
       "version": 1,
       "output": ")" }
-      + cooked_root.generic_string()
-      + R"(",
+      + cooked_root.generic_string() + R"(",
       "jobs": [
         {
           "id": "mat.a",
@@ -311,15 +484,14 @@ NOLINT_TEST_F(
           "source": "Physics/mat_b.physics-material.json"
         }
       ]
-    })"
-});
+    })");
 
-const auto result = RunBatch(manifest_path);
-EXPECT_FALSE(result.has_value());
+  const auto result = RunBatch(manifest_path);
+  EXPECT_FALSE(result.has_value());
 
-const auto messages = Messages();
-EXPECT_NE(
-  messages.find("physics.manifest.dependency_cycle"), std::string::npos);
+  const auto messages = Messages();
+  EXPECT_NE(
+    messages.find("physics.manifest.dependency_cycle"), std::string::npos);
 }
 
 NOLINT_TEST_F(BatchCommandPhysicsDagTest,
@@ -340,8 +512,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     std::string { R"({
       "version": 1,
       "output": ")" }
-      + cooked_root.generic_string()
-      + R"(",
+      + cooked_root.generic_string() + R"(",
       "jobs": [
         {
           "id": "scene.base",
@@ -362,15 +533,14 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
           "bindings": {}
         }
       ]
-    })"
-});
+    })");
 
-const auto result = RunBatch(manifest_path);
-EXPECT_FALSE(result.has_value());
+  const auto result = RunBatch(manifest_path);
+  EXPECT_FALSE(result.has_value());
 
-const auto messages = Messages();
-EXPECT_NE(
-  messages.find("physics.manifest.dependency_cycle"), std::string::npos);
+  const auto messages = Messages();
+  EXPECT_EQ(
+    messages.find("physics.manifest.dependency_cycle"), std::string::npos);
 }
 
 NOLINT_TEST_F(BatchCommandPhysicsDagTest, NonPhysicsCycleStillUsesLegacyCode)
@@ -383,8 +553,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, NonPhysicsCycleStillUsesLegacyCode)
     std::string { R"({
       "version": 1,
       "output": ")" }
-      + cooked_root.generic_string()
-      + R"(",
+      + cooked_root.generic_string() + R"(",
       "jobs": [
         {
           "id": "input.a",
@@ -399,14 +568,109 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, NonPhysicsCycleStillUsesLegacyCode)
           "source": "Input/b.input.json"
         }
       ]
-    })"
-});
+    })");
 
-const auto result = RunBatch(manifest_path);
-EXPECT_FALSE(result.has_value());
+  const auto result = RunBatch(manifest_path);
+  EXPECT_FALSE(result.has_value());
 
-const auto messages = Messages();
-EXPECT_NE(messages.find("input.manifest.dep_cycle"), std::string::npos);
+  const auto messages = Messages();
+  EXPECT_NE(messages.find("input.manifest.dep_cycle"), std::string::npos);
+}
+
+NOLINT_TEST_F(BatchCommandPhysicsDagTest,
+  DuplicateMissingDependencyIdEmitsSingleMissingTargetDiagnostic)
+{
+  const auto root = MakeScenarioDir("physics_duplicate_missing_dep");
+  const auto cooked_root = root / ".cooked";
+  const auto manifest_path = root / "import-manifest.json";
+  const auto material_source = root / "Physics" / "mat.physics-material.json";
+
+  WriteTextFile(material_source,
+    R"({
+      "name": "mat",
+      "virtual_path": "/.cooked/Physics/Materials/mat.opmat",
+      "friction": 0.6,
+      "restitution": 0.1,
+      "density": 1.0
+    })");
+
+  WriteTextFile(manifest_path,
+    std::string { R"({
+      "version": 1,
+      "output": ")" }
+      + cooked_root.generic_string() + R"(",
+      "jobs": [
+        {
+          "id": "physics.material.main",
+          "type": "physics-material-descriptor",
+          "source": "Physics/mat.physics-material.json",
+          "depends_on": ["missing.id", "missing.id"]
+        }
+      ]
+    })");
+
+  const auto result = RunBatch(manifest_path);
+  EXPECT_FALSE(result.has_value());
+
+  const auto messages = Messages();
+  EXPECT_EQ(
+    CountOccurrences(messages, "physics.manifest.dependency_missing_target"),
+    1U);
+}
+
+NOLINT_TEST_F(BatchCommandPhysicsDagTest,
+  PhysicsDuplicateJobIdsUsePhysicsManifestDiagnosticNamespace)
+{
+  const auto root = MakeScenarioDir("physics_duplicate_job_ids");
+  const auto cooked_root = root / ".cooked";
+  const auto manifest_path = root / "import-manifest.json";
+  const auto mat_a = root / "Physics" / "mat_a.physics-material.json";
+  const auto mat_b = root / "Physics" / "mat_b.physics-material.json";
+
+  WriteTextFile(mat_a,
+    R"({
+      "name": "mat_a",
+      "virtual_path": "/.cooked/Physics/Materials/mat_a.opmat",
+      "friction": 0.6,
+      "restitution": 0.1,
+      "density": 1.0
+    })");
+  WriteTextFile(mat_b,
+    R"({
+      "name": "mat_b",
+      "virtual_path": "/.cooked/Physics/Materials/mat_b.opmat",
+      "friction": 0.7,
+      "restitution": 0.2,
+      "density": 1.0
+    })");
+
+  WriteTextFile(manifest_path,
+    std::string { R"({
+      "version": 1,
+      "output": ")" }
+      + cooked_root.generic_string() + R"(",
+      "jobs": [
+        {
+          "id": "dup.id",
+          "type": "physics-material-descriptor",
+          "source": "Physics/mat_a.physics-material.json"
+        },
+        {
+          "id": "dup.id",
+          "type": "physics-material-descriptor",
+          "source": "Physics/mat_b.physics-material.json"
+        }
+      ]
+    })");
+
+  const auto result = RunBatch(manifest_path);
+  EXPECT_FALSE(result.has_value());
+
+  const auto messages = Messages();
+  EXPECT_NE(
+    messages.find("physics.manifest.job_id_duplicate"), std::string::npos);
+  EXPECT_EQ(
+    messages.find("input.manifest.job_id_duplicate"), std::string::npos);
 }
 
 } // namespace

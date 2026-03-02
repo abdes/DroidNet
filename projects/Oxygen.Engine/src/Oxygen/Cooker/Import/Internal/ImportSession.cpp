@@ -208,6 +208,23 @@ namespace {
     }
   }
 
+  auto BuildDiagnosticKey(const ImportDiagnostic& diagnostic) -> std::string
+  {
+    auto key = std::string {};
+    key.reserve(diagnostic.code.size() + diagnostic.message.size()
+      + diagnostic.source_path.size() + diagnostic.object_path.size() + 16U);
+    key.append(std::to_string(static_cast<uint32_t>(diagnostic.severity)));
+    key.push_back('\x1F');
+    key.append(diagnostic.code);
+    key.push_back('\x1F');
+    key.append(diagnostic.message);
+    key.push_back('\x1F');
+    key.append(diagnostic.source_path);
+    key.push_back('\x1F');
+    key.append(diagnostic.object_path);
+    return key;
+  }
+
 } // namespace
 
 ImportSession::ImportSession(const ImportRequest& request,
@@ -467,18 +484,32 @@ auto ImportSession::EmitDuration() const noexcept -> std::chrono::microseconds
 
 auto ImportSession::AddDiagnostic(ImportDiagnostic diagnostic) -> void
 {
-  const bool is_error = (diagnostic.severity == ImportSeverity::kError);
+  auto added = ImportDiagnostic {};
+  auto should_log = false;
+  const bool is_error = diagnostic.severity == ImportSeverity::kError;
+  const auto key = BuildDiagnosticKey(diagnostic);
 
   {
     std::scoped_lock lock(diagnostics_mutex_);
+    if (!diagnostic_keys_.insert(key).second) {
+      if (is_error) {
+        has_errors_ = true;
+      }
+      return;
+    }
     diagnostics_.push_back(std::move(diagnostic));
+    added = diagnostics_.back();
+    should_log = true;
     if (is_error) {
       has_errors_ = true;
     }
   }
 
+  if (!should_log) {
+    return;
+  }
+
   // Log based on severity
-  const auto& added = diagnostics_.back();
   switch (added.severity) {
   case ImportSeverity::kError:
     LOG_F(ERROR, "[{}] {}", added.code, added.message);

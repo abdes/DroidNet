@@ -552,9 +552,15 @@ namespace {
       }
 
       auto unique_producers = std::unordered_set<size_t> {};
+      auto emitted_ref_diagnostics = std::unordered_set<std::string> {};
       for (const auto& ref : refs) {
         const auto it = producers_by_path.find(ref.virtual_path);
         if (it == producers_by_path.end()) {
+          const auto diagnostic_key
+            = std::string("unresolved:") + ref.virtual_path;
+          if (!emitted_ref_diagnostics.insert(diagnostic_key).second) {
+            continue;
+          }
           writer->Error(fmt::format(
             "ERROR [physics.manifest.dependency_unresolved]: job '{}' "
             "references '{}' at '{}' but no manifest job produces that "
@@ -566,6 +572,11 @@ namespace {
         }
 
         if (it->second.size() > 1U) {
+          const auto diagnostic_key
+            = std::string("ambiguous:") + ref.virtual_path;
+          if (!emitted_ref_diagnostics.insert(diagnostic_key).second) {
+            continue;
+          }
           auto producer_list = std::vector<std::string> {};
           producer_list.reserve(it->second.size());
           for (const auto producer_index : it->second) {
@@ -1155,8 +1166,9 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
       continue;
     }
     if (!job_id_to_index.emplace(job_id, index).second) {
-      writer->Error(fmt::format(
-        "ERROR [input.manifest.job_id_duplicate]: duplicate job id '{}'",
+      writer->Error(fmt::format("ERROR [{}]: duplicate job id '{}'",
+        has_physics_jobs ? "physics.manifest.job_id_duplicate"
+                         : "input.manifest.job_id_duplicate",
         job_id));
       ++validation_failures;
     }
@@ -1176,9 +1188,13 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
   std::vector<size_t> dependency_remaining(jobs.size(), 0U);
   for (size_t index = 0; index < jobs.size(); ++index) {
     auto unique_producers = std::unordered_set<size_t> {};
+    auto missing_dep_ids = std::unordered_set<std::string> {};
     for (const auto& dep_id : jobs[index].depends_on) {
       const auto it = job_id_to_index.find(dep_id);
       if (it == job_id_to_index.end()) {
+        if (!missing_dep_ids.insert(dep_id).second) {
+          continue;
+        }
         writer->Error(
           fmt::format("ERROR [{}]: job '{}' depends on missing id '{}'",
             has_physics_jobs ? "physics.manifest.dependency_missing_target"
