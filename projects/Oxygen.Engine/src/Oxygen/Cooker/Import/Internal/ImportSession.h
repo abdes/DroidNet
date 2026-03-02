@@ -11,6 +11,8 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string>
+#include <unordered_set>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -250,6 +252,7 @@ private:
 
   mutable std::mutex diagnostics_mutex_;
   std::vector<ImportDiagnostic> diagnostics_;
+  std::unordered_set<std::string> diagnostic_keys_;
   bool has_errors_ = false;
   std::chrono::microseconds io_duration_ { 0 };
   std::chrono::microseconds source_load_duration_ { 0 };

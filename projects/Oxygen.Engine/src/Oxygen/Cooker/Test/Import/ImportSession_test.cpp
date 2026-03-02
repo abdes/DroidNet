@@ -306,6 +306,37 @@ NOLINT_TEST_F(ImportSessionTest, AddDiagnosticMultipleAllAdded)
   EXPECT_EQ(diagnostics.size(), 3);
 }
 
+//! Verify duplicate diagnostics are de-duplicated.
+NOLINT_TEST_F(ImportSessionTest, AddDiagnosticDuplicateSuppressed)
+{
+  // Arrange
+  const auto request = MakeRequest();
+  ImportSession session(request, observer_ptr(reader_.get()),
+    oxygen::observer_ptr<IAsyncFileWriter>(writer_.get()),
+    observer_ptr(thread_pool_.get()), observer_ptr(table_registry_.get()),
+    observer_ptr(index_registry_.get()));
+
+  const auto diagnostic = ImportDiagnostic {
+    .severity = ImportSeverity::kWarning,
+    .code = "test.duplicate",
+    .message = "Duplicate warning",
+    .source_path = "same.source",
+    .object_path = "same.object",
+  };
+
+  // Act
+  session.AddDiagnostic(diagnostic);
+  session.AddDiagnostic(diagnostic);
+
+  // Assert
+  const auto diagnostics = session.Diagnostics();
+  EXPECT_EQ(diagnostics.size(), 1);
+  if (diagnostics.size() != 1) {
+    return;
+  }
+  EXPECT_EQ(diagnostics.at(0).code, "test.duplicate");
+}
+
 //! Verify HasErrors returns false when no errors.
 NOLINT_TEST_F(ImportSessionTest, HasErrorsNoErrorsReturnsFalse)
 {

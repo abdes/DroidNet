@@ -54,25 +54,26 @@ Status values:
 | P4 | done | P2, P3 | Collision shape descriptor domain | `collision-shape-descriptor` end-to-end (`.ocshape`) |
 | P5 | done | P2, P3, P4 | Physics sidecar v2 upgrade | full binding-family support with virtual refs |
 | P6 | done | P2, P3, P4, P5 | Manifest + DAG integration | job types/defaults/key checks/dependency collection |
-| P7 | pending | P2, P3, P4, P5, P6 | Schema embed/install integration | all physics schemas generated and installed |
-| P8 | pending | P2, P3, P4, P5, P6 | Diagnostics hardening | stable diagnostic set and precedence behavior |
-| P9 | blocked | P1, P2, P3, P4, P5, P6, P7, P8 | Test matrix closure | domain + integration + pak tests complete |
+| P7 | done | P2, P3, P4, P5, P6 | Schema embed/install integration | all physics schemas generated and installed |
+| P8 | done | P2, P3, P4, P5, P6 | Diagnostics hardening | stable diagnostic set and precedence behavior |
+| P9 | in_progress | P1, P2, P3, P4, P5, P6, P7, P8 | Test matrix closure | domain + integration + pak tests complete |
 | P10 | pending | P9 | Parity and docs closeout | PakGen parity evidence and documentation finalization |
 
 ## 3.1 Strict Execution Order
 
 This is the mandatory execution order for closure:
 
-1. P0
-2. P11
-3. P1
+1. P0 [done]
+2. P11 [done]
+3. P1 [done]
 4. P2 + P3 (parallel allowed) [done]
 5. P4 [done]
 6. P5 [done]
 7. P6 [done]
-8. P7 + P8 (parallel allowed)
-9. P9
-10. P10
+8. P7 [done]
+9. P8
+10. P9
+11. P10
 
 ## 4. Detailed Phase Work
 
@@ -455,22 +456,41 @@ Acceptance:
      - deterministic dependency diagnostics remain covered by
        `BatchCommand_physics_dag_test.cpp` cases for unresolved, ambiguous, and
        cycle paths.
-9. P7 `pending`:
+9. P7 `done`:
    - evidence:
-     - CMake embed/install includes:
+     - build-time embed wiring (`oxygen_embed_json_schemas`) includes:
        - `oxygen.physics-sidecar.schema.json`
        - `oxygen.physics-resource-descriptor.schema.json`
        - `oxygen.physics-material-descriptor.schema.json`
-   - gap evidence:
-     - collision-shape + remaining full physics schema embed/install closure
-       remains to be executed in this phase.
-10. P8 `pending`:
+       - `oxygen.collision-shape-descriptor.schema.json`
+       in `src/Oxygen/Cooker/CMakeLists.txt`.
+     - module-owned install wiring (`install(FILES ... DESTINATION .../schemas)`)
+       includes the same four physics schemas in
+       `src/Oxygen/Cooker/CMakeLists.txt`.
+   - closure evidence:
+     - no root-project install script dependency for these schema entries;
+       ownership remains in module CMake as required.
+10. P8 `done`:
     - evidence:
-      - `physics.sidecar.*`, `physics.manifest.*`, `physics.resource.*`, and
-        `physics.material.*` diagnostics are present.
-    - gap evidence:
-      - cross-domain diagnostics precedence/noise hardening remains pending.
-11. P9 `blocked`:
+      - `ImportSession` diagnostic sink now de-duplicates exact repeats and
+        emits logging from a stable local copy under lock:
+        - `src/Oxygen/Cooker/Import/Internal/ImportSession.h`
+        - `src/Oxygen/Cooker/Import/Internal/ImportSession.cpp`
+      - `BatchCommand` physics DAG diagnostics now suppress duplicate unresolved,
+        ambiguous, and missing-target emissions per job/ref key:
+        - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
+      - test coverage added/extended:
+        - `src/Oxygen/Cooker/Test/Import/ImportSession_test.cpp`
+          - `ImportSessionTest.AddDiagnosticDuplicateSuppressed`
+        - `src/Oxygen/Cooker/Test/Import/BatchCommand_physics_dag_test.cpp`
+          - duplicate unresolved ref diagnostics are bounded
+          - duplicate ambiguous ref diagnostics are bounded
+          - duplicate missing explicit dependency diagnostics are bounded
+          - physics duplicate-job-id namespace diagnostic uses
+            `physics.manifest.job_id_duplicate`
+    - closure evidence:
+      - user-reported validation: `All Green` for P8 test updates.
+11. P9 `in_progress`:
      - evidence:
       - sidecar + physics resource/material schema/request/job/manifest tests
         exist in tree.
@@ -731,3 +751,63 @@ Build/test execution in this pass:
      `Examples/Content/full-import/import-manifest.json`.
    - user-reported validation: `All Green` for RenderScene physics hydration
      and floor/ball interaction after descriptor remediations.
+
+## P7 (done)
+
+1. Schema embed integration verified:
+   - `src/Oxygen/Cooker/CMakeLists.txt` `oxygen_embed_json_schemas(...)`
+     includes:
+     - `oxygen.physics-sidecar.schema.json`
+     - `oxygen.physics-resource-descriptor.schema.json`
+     - `oxygen.physics-material-descriptor.schema.json`
+     - `oxygen.collision-shape-descriptor.schema.json`
+2. Schema install integration verified (module-owned):
+   - `src/Oxygen/Cooker/CMakeLists.txt` `_oxygen_cooker_schema_files` and
+     `install(FILES ... DESTINATION ${OXYGEN_INSTALL_DATA}/schemas ...)`
+     include the same four physics schemas.
+3. Closure evidence:
+   - P7 scope has no remaining code gap; embed + install wiring for physics
+     schemas is complete and centralized in module CMake.
+
+## P8 (done)
+
+1. Diagnostics noise hardening landed:
+   - session-level duplicate suppression:
+     - `src/Oxygen/Cooker/Import/Internal/ImportSession.h`
+     - `src/Oxygen/Cooker/Import/Internal/ImportSession.cpp`
+   - batch DAG duplicate suppression for physics diagnostics:
+     - unresolved refs (`physics.manifest.dependency_unresolved`)
+     - ambiguous refs (`physics.manifest.dependency_ambiguous`)
+     - missing explicit targets (`physics.manifest.dependency_missing_target`)
+     in:
+     - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
+2. Diagnostic namespace stabilization refinement:
+   - duplicate job-id diagnostic now uses physics namespace for physics batches:
+     - `physics.manifest.job_id_duplicate`
+     and retains legacy namespace for non-physics-only batches:
+     - `input.manifest.job_id_duplicate`
+3. Test coverage added/expanded:
+   - `src/Oxygen/Cooker/Test/Import/ImportSession_test.cpp`
+     - `ImportSessionTest.AddDiagnosticDuplicateSuppressed`
+   - `src/Oxygen/Cooker/Test/Import/BatchCommand_physics_dag_test.cpp`
+     - `PhysicsSidecarDuplicateUnresolvedRefsEmitSingleDependencyUnresolvedDiagnostic`
+     - `PhysicsSidecarDuplicateAmbiguousRefsEmitSingleDependencyAmbiguousDiagnostic`
+     - `DuplicateMissingDependencyIdEmitsSingleMissingTargetDiagnostic`
+     - `PhysicsDuplicateJobIdsUsePhysicsManifestDiagnosticNamespace`
+4. Validation status:
+   - build/test execution was not run by the agent (per user constraints).
+   - user-reported validation: `All Green`.
+
+## P9 (in_progress)
+
+1. Entry criteria:
+   - P1..P8 closed.
+2. Active objective:
+   - close remaining test-matrix deltas across:
+     - schema tests for all physics schemas
+     - request builder tests for all physics domains
+     - job/pipeline success + canonical failures
+     - manifest orchestration tests (defaults/overrides/deps)
+     - scene+physics integration and pak inclusion assertions
+3. Validation mode:
+   - build/test execution is user-run only in this flow.
