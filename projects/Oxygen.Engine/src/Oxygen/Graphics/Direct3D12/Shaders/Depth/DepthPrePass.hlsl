@@ -128,11 +128,13 @@ void PS(VS_OUTPUT_DEPTH input)
     const bool no_texture_sampling =
         (mat.flags & MATERIAL_FLAG_NO_TEXTURE_SAMPLING) != 0u;
 
-    if (!no_texture_sampling && mat.opacity_texture_index != K_INVALID_BINDLESS_INDEX) {
+    // Note: Depth pre-pass relies entirely on the base color texture's alpha for cutouts,
+    // satisfying masked material contracts without needing the heavy PBR evaluations.
+    if (!no_texture_sampling && mat.base_color_texture_index != K_INVALID_BINDLESS_INDEX) {
         const float2 uv = ApplyMaterialUv(input.uv, mat);
-        Texture2D<float4> opacity_tex = ResourceDescriptorHeap[mat.opacity_texture_index];
+        Texture2D<float4> base_tex = ResourceDescriptorHeap[mat.base_color_texture_index];
         SamplerState samp = SamplerDescriptorHeap[0];
-        const float4 texel = opacity_tex.Sample(samp, uv);
+        const float4 texel = base_tex.Sample(samp, uv);
         alpha *= texel.a;
     }
 

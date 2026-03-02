@@ -353,6 +353,10 @@ namespace {
         "Alpha cutoff outside [0,1] was clamped", source_id, object_path));
     }
     alpha_cutoff = Normalize01(alpha_cutoff);
+    // TODO: Clamp alpha_cutoff to a reasonable default (e.g., 0.5f) during
+    // cooker emission if it is <= 0.0f and the material domain is Masked. This
+    // will allow removing runtime fallback checks from the shader clip()
+    // instructions.
     desc.alpha_cutoff = data::Unorm16 { alpha_cutoff };
 
     desc.ior = (std::max)(1.0f, inputs.ior);

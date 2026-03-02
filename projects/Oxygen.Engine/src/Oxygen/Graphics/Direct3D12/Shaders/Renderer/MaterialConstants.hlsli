@@ -31,7 +31,7 @@ struct MaterialConstants
 
     // Register 4
     uint ambient_occlusion_texture_index;
-    uint opacity_texture_index;
+    uint _pad2;
     uint emissive_texture_index;
     float alpha_cutoff;
 

@@ -303,16 +303,8 @@ auto SerializeMaterialConstants(
 
   constants.alpha_cutoff = material.resolved_asset->GetAlphaCutoff();
 
-  // Opacity is currently sourced from the base color texture alpha.
-  // If texture sampling is disabled, keep it invalid to skip sampling.
-  const auto alpha_test_enabled
-    = (constants.flags & oxygen::data::pak::render::kMaterialFlag_AlphaTest)
-    != 0U;
-  if (alpha_test_enabled) {
-    constants.opacity_texture_index = constants.base_color_texture_index;
-  } else {
-    constants.opacity_texture_index = oxygen::kInvalidShaderVisibleIndex;
-  }
+  // Opacity is implicitly sourced from the base color texture alpha.
+  // No explicit opacity_texture_index is kept in the constant buffer.
 
   const auto uv_scale = material.resolved_asset->GetUvScale();
   constants.uv_scale = { uv_scale[0], uv_scale[1] };
