@@ -47,6 +47,9 @@
         "defaults": {
             "$ref": "#/definitions/defaults_settings"
         },
+        "layout": {
+            "$ref": "#/definitions/layout_settings"
+        },
         "output": {
             "type": "string"
         },
@@ -306,7 +309,8 @@
                                 "id",
                                 "type",
                                 "source",
-                                "depends_on"
+                                "depends_on",
+                                "output"
                             ]
                         }
                     }
@@ -341,8 +345,55 @@
                     "$ref": "#/definitions/geometry_descriptor_settings"
                 },
                 "input": {
-                    "type": "object",
-                    "additionalProperties": false
+                    "$ref": "#/definitions/input_settings"
+                },
+                "layout": {
+                    "$ref": "#/definitions/layout_settings"
+                }
+            },
+            "additionalProperties": false
+        },
+        "layout_settings": {
+            "type": "object",
+            "properties": {
+                "virtual_mount_root": {
+                    "type": "string"
+                },
+                "resources_dir": {
+                    "type": "string"
+                },
+                "descriptors_dir": {
+                    "type": "string"
+                },
+                "scenes_subdir": {
+                    "type": "string"
+                },
+                "geometry_subdir": {
+                    "type": "string"
+                },
+                "materials_subdir": {
+                    "type": "string"
+                },
+                "scripts_subdir": {
+                    "type": "string"
+                },
+                "input_subdir": {
+                    "type": "string"
+                },
+                "texture_descriptors_subdir": {
+                    "type": "string"
+                },
+                "buffer_descriptors_subdir": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false
+        },
+        "input_settings": {
+            "type": "object",
+            "properties": {
+                "output": {
+                    "type": "string"
                 }
             },
             "additionalProperties": false

@@ -18,6 +18,8 @@ namespace oxygen::content::import {
 struct InputImportSettings final {
   //! Source input JSON file path (`*.input.json` or `*.input-action.json`).
   std::string source_path;
+  //! Destination cooked root directory (absolute path when provided).
+  std::string cooked_root;
 };
 
 } // namespace oxygen::content::import

@@ -108,6 +108,51 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
 }
 
 NOLINT_TEST(ImportManifestMaterialDescriptorTest,
+  AppliesSharedLayoutOverridesToMaterialDescriptorRequests)
+{
+  const auto manifest_path = MakeManifestPath("material_shared_layout");
+  const auto root = manifest_path.parent_path();
+  const auto descriptor_path = root / "Materials" / "wood.material.json";
+  WriteTextFile(descriptor_path,
+    R"({
+      "name": "WoodFloor",
+      "domain": "opaque"
+    })");
+
+  WriteTextFile(manifest_path,
+    R"({
+      "version": 1,
+      "layout": {
+        "materials_subdir": "DescriptorMaterialsTop"
+      },
+      "defaults": {
+        "layout": {
+          "materials_subdir": "DescriptorMaterialsDefault"
+        }
+      },
+      "output": "C:/tmp/material-layout-cooked",
+      "jobs": [
+        {
+          "type": "material-descriptor",
+          "source": "Materials/wood.material.json"
+        }
+      ]
+    })");
+
+  auto errors = std::ostringstream {};
+  const auto manifest
+    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_EQ(manifest->jobs.size(), 1U);
+
+  auto request_errors = std::ostringstream {};
+  const auto request = manifest->jobs[0].BuildRequest(request_errors);
+  ASSERT_TRUE(request.has_value()) << request_errors.str();
+  EXPECT_EQ(request->loose_cooked_layout.materials_subdir,
+    "DescriptorMaterialsDefault");
+}
+
+NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   CollectsAndPropagatesMaterialDescriptorDependencies)
 {
   const auto manifest_path = MakeManifestPath("collects_material_dependencies");
