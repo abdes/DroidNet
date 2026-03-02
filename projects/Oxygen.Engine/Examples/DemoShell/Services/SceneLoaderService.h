@@ -151,6 +151,9 @@ private:
   //! Attach character bindings; hard-fail on invalid/unsupported data.
   void HydrateCharacterBindings(physics::PhysicsModule& physics_module,
     std::span<const data::pak::physics::CharacterBindingRecord> bindings);
+  //! Attach soft-body bindings and register aggregate mappings.
+  void HydrateSoftBodyBindings(physics::PhysicsModule& physics_module,
+    std::span<const data::pak::physics::SoftBodyBindingRecord> bindings);
   //! Attach collider-only bindings as static trigger bodies.
   void HydrateColliderBindings(physics::PhysicsModule& physics_module,
     std::span<const data::pak::physics::ColliderBindingRecord> bindings);

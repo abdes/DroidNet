@@ -47,6 +47,7 @@
 #include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/Character/CharacterController.h>
 #include <Oxygen/Physics/Joint/JointDesc.h>
+#include <Oxygen/Physics/SoftBody/SoftBodyDesc.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
 #include <Oxygen/PhysicsModule/ScenePhysics.h>
 #include <Oxygen/Platform/Input.h>
@@ -135,6 +136,22 @@ namespace {
     return std::isfinite(scale.x) && std::isfinite(scale.y)
       && std::isfinite(scale.z) && scale.x > 0.0F && scale.y > 0.0F
       && scale.z > 0.0F;
+  }
+
+  auto ToRuntimeSoftBodyTetherMode(
+    const data::pak::physics::SoftBodyTetherMode mode)
+    -> physics::softbody::SoftBodyTetherMode
+  {
+    switch (mode) {
+    case data::pak::physics::SoftBodyTetherMode::kNone:
+      return physics::softbody::SoftBodyTetherMode::kNone;
+    case data::pak::physics::SoftBodyTetherMode::kEuclidean:
+      return physics::softbody::SoftBodyTetherMode::kEuclidean;
+    case data::pak::physics::SoftBodyTetherMode::kGeodesic:
+      return physics::softbody::SoftBodyTetherMode::kGeodesic;
+    default:
+      return physics::softbody::SoftBodyTetherMode::kNone;
+    }
   }
 
   auto ScriptParamFromRecord(
@@ -583,21 +600,10 @@ auto SceneLoaderService::ResolvePhysicsModule()
 void SceneLoaderService::ValidateUnsupportedPhysicsDomains(
   const data::PhysicsSceneAsset& physics_asset) const
 {
-  const auto soft_body_bindings
-    = physics_asset.GetBindings<data::pak::physics::SoftBodyBindingRecord>();
   const auto vehicle_bindings
     = physics_asset.GetBindings<data::pak::physics::VehicleBindingRecord>();
   const auto aggregate_bindings
     = physics_asset.GetBindings<data::pak::physics::AggregateBindingRecord>();
-
-  if (!soft_body_bindings.empty()) {
-    throw std::runtime_error(
-      std::string("soft-body sidecar hydration is not implemented in "
-                  "SceneLoader (requires shape/material resource resolution). "
-                  "sidecar key=")
-      + data::to_string(physics_asset.GetAssetKey())
-      + " soft_body=" + std::to_string(soft_body_bindings.size()) + ")");
-  }
 
   if (!vehicle_bindings.empty()) {
     throw std::runtime_error(
@@ -1257,6 +1263,89 @@ void SceneLoaderService::HydrateCharacterBindings(
   }
 }
 
+void SceneLoaderService::HydrateSoftBodyBindings(
+  physics::PhysicsModule& physics_module,
+  const std::span<const data::pak::physics::SoftBodyBindingRecord> bindings)
+{
+  const auto world_id = physics_module.GetWorldId();
+  if (!physics::IsValid(world_id)) {
+    throw std::runtime_error(
+      "soft-body hydration requires a valid physics world");
+  }
+
+  for (const auto& record : bindings) {
+    const auto node_index = static_cast<size_t>(record.node_index);
+    if (node_index >= runtime_nodes_.size()) {
+      throw std::runtime_error(
+        std::string("soft-body node_index out of range: ")
+        + std::to_string(record.node_index));
+    }
+    if (record.cluster_count == 0U) {
+      throw std::runtime_error(
+        std::string("soft-body cluster_count must be > 0 (node_index=")
+        + std::to_string(record.node_index) + ")");
+    }
+
+    const auto validate_non_negative_finite
+      = [&](const float value, const std::string_view field) {
+          if (!std::isfinite(value) || value < 0.0F) {
+            throw std::runtime_error(std::string("soft-body ")
+              + std::string(field) + " must be finite and >= 0 (node_index="
+              + std::to_string(record.node_index) + ")");
+          }
+        };
+    validate_non_negative_finite(record.stiffness, "stiffness");
+    validate_non_negative_finite(record.damping, "damping");
+    validate_non_negative_finite(record.edge_compliance, "edge_compliance");
+    validate_non_negative_finite(record.shear_compliance, "shear_compliance");
+    validate_non_negative_finite(record.bend_compliance, "bend_compliance");
+    if (!std::isfinite(record.tether_max_distance_multiplier)
+      || record.tether_max_distance_multiplier < 1.0F) {
+      throw std::runtime_error(
+        std::string(
+          "soft-body tether_max_distance_multiplier must be finite and >= 1 "
+          "(node_index=")
+        + std::to_string(record.node_index) + ")");
+    }
+
+    auto desc = physics::softbody::SoftBodyDesc {};
+    desc.cluster_count = record.cluster_count;
+    desc.material_params.stiffness = record.stiffness;
+    desc.material_params.damping = record.damping;
+    desc.material_params.edge_compliance = record.edge_compliance;
+    desc.material_params.shear_compliance = record.shear_compliance;
+    desc.material_params.bend_compliance = record.bend_compliance;
+    desc.material_params.tether_mode
+      = ToRuntimeSoftBodyTetherMode(record.tether_mode);
+    desc.material_params.tether_max_distance_multiplier
+      = record.tether_max_distance_multiplier;
+
+    const auto created
+      = physics_module.SoftBodies().CreateSoftBody(world_id, desc);
+    if (!created.has_value()) {
+      throw std::runtime_error(
+        std::string("failed to attach soft-body binding for node_index=")
+        + std::to_string(record.node_index)
+        + " reason=" + std::string(physics::to_string(created.error())));
+    }
+
+    const auto soft_body_id = created.value();
+    const auto authority_result
+      = physics_module.SoftBodies().GetAuthority(world_id, soft_body_id);
+    if (!authority_result.has_value()) {
+      (void)physics_module.SoftBodies().DestroySoftBody(world_id, soft_body_id);
+      throw std::runtime_error(
+        std::string("failed to resolve soft-body authority for node_index=")
+        + std::to_string(record.node_index) + " reason="
+        + std::string(physics::to_string(authority_result.error())));
+    }
+
+    physics_module.RegisterNodeAggregateMapping(
+      runtime_nodes_[node_index].GetHandle(), soft_body_id,
+      authority_result.value());
+  }
+}
+
 void SceneLoaderService::HydratePhysicsBindings(
   const data::PhysicsSceneAsset& physics_asset)
 {
@@ -1274,19 +1363,23 @@ void SceneLoaderService::HydratePhysicsBindings(
     = physics_asset.GetBindings<data::pak::physics::ColliderBindingRecord>();
   const auto character_bindings
     = physics_asset.GetBindings<data::pak::physics::CharacterBindingRecord>();
+  const auto soft_body_bindings
+    = physics_asset.GetBindings<data::pak::physics::SoftBodyBindingRecord>();
   const auto joint_bindings
     = physics_asset.GetBindings<data::pak::physics::JointBindingRecord>();
 
   HydrateRigidBodyBindings(*physics_module, rigid_body_bindings);
   HydrateColliderBindings(*physics_module, collider_bindings);
   HydrateCharacterBindings(*physics_module, character_bindings);
+  HydrateSoftBodyBindings(*physics_module, soft_body_bindings);
   HydrateJointBindings(*physics_module, joint_bindings);
 
   LOG_F(INFO,
     "SceneLoader: Physics hydration complete (rigid_bodies={} colliders={} "
-    "characters={} joints={})",
+    "characters={} soft_bodies={} joints={})",
     rigid_body_bindings.size(), collider_bindings.size(),
-    character_bindings.size(), joint_bindings.size());
+    character_bindings.size(), soft_body_bindings.size(),
+    joint_bindings.size());
 }
 
 /*!
