@@ -38,7 +38,7 @@ Status values:
 | P1 | pending | 12% | Shared descriptor infrastructure | Common schema validation + diagnostics helpers integrated for descriptor domains |
 | P2 | done | 10% | Texture descriptor domain | `texture-descriptor` implemented end-to-end with schema/tests |
 | P3 | pending | 8% | Buffer descriptor domain | `buffer-descriptor` implemented end-to-end with schema/tests |
-| P4 | in_progress | 14% | Material descriptor domain | `material-descriptor` implemented end-to-end with schema/tests |
+| P4 | done | 14% | Material descriptor domain | `material-descriptor` implemented end-to-end with schema/tests |
 | P5 | pending | 16% | Geometry descriptor domain | `geometry-descriptor` implemented end-to-end with schema/tests |
 | P6 | pending | 16% | Scene descriptor domain | `scene-descriptor` implemented end-to-end with schema/tests |
 | P7 | pending | 8% | Manifest DAG integration | Descriptor job types + defaults + strict key policies + DAG checks |
@@ -161,12 +161,12 @@ Acceptance:
 
 Tasks:
 
-1. Add schema for material descriptor contract.
-2. Add request-builder/job/pipeline domain path.
-3. Resolve referenced texture resources deterministically with clear type/lookup diagnostics.
-4. Emit `.omat` with stable descriptor serialization.
-5. Add manifest `type: "material-descriptor"` integration and defaults.
-6. Add tests for:
+1. `[done]` Add schema for material descriptor contract.
+2. `[done]` Add request-builder/job/pipeline domain path.
+3. `[done]` Resolve referenced texture resources deterministically with clear type/lookup diagnostics.
+4. `[done]` Emit `.omat` with stable descriptor serialization.
+5. `[done]` Add manifest `type: "material-descriptor"` integration and defaults.
+6. `[done]` Add tests for:
    - reference resolution success
    - missing/invalid references
    - schema violations
@@ -281,15 +281,15 @@ After each implementation iteration:
 3. Append evidence entries.
 4. List explicit remaining tasks for next iteration.
 
-## 10. Live Snapshot (2026-03-01)
+## 10. Live Snapshot (2026-03-02)
 
 Current status:
 
 1. P0 is done.
 2. P2 is done (validated in practice with one manifest + multiple texture descriptors flow).
-3. P4 is `in_progress` with schema/request-builder/manifest/service/tool/test wiring landed; external test execution remains.
+3. P4 is `done` (external test pass confirmation received for the material-descriptor suite and DAG scenario).
 4. P1, P3, and P5-P10 are `pending`.
-5. Computed progress snapshot: `24.5%`.
+5. Computed progress snapshot: `28.0%`.
 
 ## 11. Evidence Log
 
@@ -361,3 +361,34 @@ Initial entries:
 6. Remaining delta to phase exit gate:
    - execute and pass new material-descriptor test suites externally
    - verify end-to-end manifest run with real texture `.otex` sidecar references
+
+1. Date: 2026-03-02
+2. Phase: P4
+3. Files changed:
+   - `design/pakgen_supersession_impl.md`
+4. Tests run: none (per current no-build execution policy)
+5. Result: task-level completion for material-descriptor phase updated to explicit done/in-progress markers; phase remains `in_progress` (`0.75`) pending final runtime hardening/validation.
+6. Remaining delta to phase exit gate:
+   - execute and pass material-descriptor suites externally
+   - close deterministic texture descriptor reference-resolution + `.omat` emission validation in end-to-end manifest execution
+
+1. Date: 2026-03-02
+2. Phase: P4
+3. Files changed:
+   - `src/Oxygen/Cooker/Test/Import/MaterialDescriptorImportJob_test.cpp`
+   - `src/Oxygen/Cooker/Test/CMakeLists.txt`
+4. Tests run: none (per current no-build execution policy)
+5. Result: added dedicated material-descriptor import fixture/tests that cover hashed `.otex` virtual-path resolution, emitted `.omat` verification, and missing-descriptor diagnostics.
+6. Remaining delta to phase exit gate:
+   - execute and pass material-descriptor suites externally
+   - re-run manifest DAG scenario externally and confirm material job resolves dependent texture sidecars end-to-end
+
+1. Date: 2026-03-02
+2. Phase: P4
+3. Files changed:
+   - `design/pakgen_supersession_impl.md`
+4. Tests run:
+   - external execution (user confirmation): all material-descriptor tests passed
+   - external manifest DAG run (texture-descriptor -> material-descriptor): passed
+5. Result: P4 exit gate satisfied; phase status moved to `done`.
+6. Remaining delta to phase exit gate: none
