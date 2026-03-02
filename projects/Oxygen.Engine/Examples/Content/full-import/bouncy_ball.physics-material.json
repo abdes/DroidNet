@@ -1,0 +1,11 @@
+{
+    "$schema": "../../../src/Oxygen/Cooker/Import/Schemas/oxygen.physics-material-descriptor.schema.json",
+    "name": "bouncy_ball",
+    "content_hashing": true,
+    "virtual_path": "/.cooked/Physics/Materials/bouncy_ball.opmat",
+    "friction": 0.6,
+    "restitution": 0.6,
+    "density": 500.0,
+    "combine_mode_friction": "average",
+    "combine_mode_restitution": "average"
+}

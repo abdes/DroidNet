@@ -201,7 +201,75 @@
       "name": "showcase_scene_physics",
       "content_hashing": true,
       "depends_on": [
-        "showcase.scene"
+        "showcase.scene",
+        "physics.shape.floor",
+        "physics.shape.sphere",
+        "physics.shape.cube",
+        "physics.shape.waterbottle",
+        "physics.material.ground",
+        "physics.material.bouncy_ball",
+        "physics.material.plastic"
+      ]
+    },
+    {
+      "id": "physics.material.ground",
+      "type": "physics-material-descriptor",
+      "source": "./ground.physics-material.json",
+      "name": "ground_material",
+      "content_hashing": true
+    },
+    {
+      "id": "physics.material.bouncy_ball",
+      "type": "physics-material-descriptor",
+      "source": "./bouncy_ball.physics-material.json",
+      "name": "bouncy_ball_material",
+      "content_hashing": true
+    },
+    {
+      "id": "physics.material.plastic",
+      "type": "physics-material-descriptor",
+      "source": "./plastic.physics-material.json",
+      "name": "plastic_material",
+      "content_hashing": true
+    },
+    {
+      "id": "physics.shape.floor",
+      "type": "collision-shape-descriptor",
+      "source": "./floor_box.shape.json",
+      "name": "floor_shape",
+      "content_hashing": true,
+      "depends_on": [
+        "physics.material.ground"
+      ]
+    },
+    {
+      "id": "physics.shape.sphere",
+      "type": "collision-shape-descriptor",
+      "source": "./sphere_unit.shape.json",
+      "name": "sphere_shape",
+      "content_hashing": true,
+      "depends_on": [
+        "physics.material.bouncy_ball"
+      ]
+    },
+    {
+      "id": "physics.shape.cube",
+      "type": "collision-shape-descriptor",
+      "source": "./cube_unit.shape.json",
+      "name": "cube_shape",
+      "content_hashing": true,
+      "depends_on": [
+        "physics.material.ground"
+      ]
+    },
+    {
+      "id": "physics.shape.waterbottle",
+      "type": "collision-shape-descriptor",
+      "source": "./waterbottle.shape.json",
+      "name": "waterbottle_shape",
+      "content_hashing": true,
+      "depends_on": [
+        "physics.material.plastic"
       ]
     }
   ]

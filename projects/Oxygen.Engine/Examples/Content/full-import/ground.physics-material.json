@@ -1,0 +1,11 @@
+{
+    "$schema": "../../../src/Oxygen/Cooker/Import/Schemas/oxygen.physics-material-descriptor.schema.json",
+    "name": "ground",
+    "content_hashing": true,
+    "virtual_path": "/.cooked/Physics/Materials/ground.opmat",
+    "friction": 0.9,
+    "restitution": 0.15,
+    "density": 1000.0,
+    "combine_mode_friction": "max",
+    "combine_mode_restitution": "average"
+}

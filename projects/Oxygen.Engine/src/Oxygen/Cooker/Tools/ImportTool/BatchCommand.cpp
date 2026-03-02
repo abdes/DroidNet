@@ -12,6 +12,7 @@
 #include <condition_variable>
 #include <cstdlib>
 #include <deque>
+#include <exception>
 #include <expected>
 #include <filesystem>
 #include <fstream>
@@ -73,6 +74,572 @@ namespace {
     std::string job_id;
     std::vector<std::string> depends_on;
   };
+
+  struct PhysicsDependencyRef final {
+    std::string virtual_path;
+    std::string object_path;
+  };
+
+  auto DisplayJobNumber(const size_t job_index) -> size_t;
+
+  auto IsPhysicsDomainJobType(const std::string_view job_type) -> bool
+  {
+    return job_type == "physics-resource-descriptor"
+      || job_type == "physics-material-descriptor"
+      || job_type == "collision-shape-descriptor"
+      || job_type == "physics-sidecar";
+  }
+
+  auto IsAssetProducingJobType(const std::string_view job_type) -> bool
+  {
+    return job_type == "material-descriptor"
+      || job_type == "physics-material-descriptor"
+      || job_type == "collision-shape-descriptor"
+      || job_type == "geometry-descriptor" || job_type == "scene-descriptor"
+      || job_type == "fbx" || job_type == "gltf" || job_type == "script"
+      || job_type == "script-sidecar" || job_type == "input"
+      || job_type == "physics-sidecar";
+  }
+
+  auto ResolveCookedRootKey(const PreparedJob& job)
+    -> std::optional<std::string>
+  {
+    if (!job.request.cooked_root.has_value()) {
+      return std::nullopt;
+    }
+    return job.request.cooked_root->lexically_normal().generic_string();
+  }
+
+  auto JobLabel(const PreparedJob& job, const size_t job_index) -> std::string
+  {
+    if (!job.job_id.empty()) {
+      return job.job_id;
+    }
+    return fmt::format("#{}", DisplayJobNumber(job_index));
+  }
+
+  auto ParseJsonObject(const std::string_view text,
+    const std::string_view context, nlohmann::json& doc, std::string& error)
+    -> bool
+  {
+    try {
+      doc = nlohmann::json::parse(text);
+    } catch (const std::exception& ex) {
+      error = fmt::format("{} JSON parse failed: {}", context, ex.what());
+      return false;
+    }
+    if (!doc.is_object()) {
+      error = fmt::format("{} JSON document must be an object", context);
+      return false;
+    }
+    return true;
+  }
+
+  auto ReadJsonObjectFile(const std::filesystem::path& path,
+    const std::string_view context, nlohmann::json& doc, std::string& error)
+    -> bool
+  {
+    auto in = std::ifstream(path);
+    if (!in.is_open()) {
+      error = fmt::format(
+        "{} source file could not be opened: {}", context, path.string());
+      return false;
+    }
+
+    try {
+      in >> doc;
+    } catch (const std::exception& ex) {
+      error
+        = fmt::format("{} source JSON parse failed: {}", context, ex.what());
+      return false;
+    }
+
+    if (!doc.is_object()) {
+      error = fmt::format("{} source JSON document must be an object", context);
+      return false;
+    }
+    return true;
+  }
+
+  auto ResolvePhysicsResourceProducedVirtualPath(const PreparedJob& job,
+    std::string& virtual_path, std::string& error) -> bool
+  {
+    try {
+      if (!job.request.physics_resource_descriptor.has_value()) {
+        error = "Missing request.physics_resource_descriptor payload";
+        return false;
+      }
+
+      auto descriptor_doc = nlohmann::json {};
+      if (!ParseJsonObject(
+            job.request.physics_resource_descriptor->normalized_descriptor_json,
+            "physics-resource-descriptor", descriptor_doc, error)) {
+        return false;
+      }
+
+      if (descriptor_doc.contains("virtual_path")) {
+        virtual_path = descriptor_doc.at("virtual_path").get<std::string>();
+        return true;
+      }
+
+      auto name = std::string {};
+      if (job.request.job_name.has_value() && !job.request.job_name->empty()) {
+        name = *job.request.job_name;
+      } else if (descriptor_doc.contains("name")) {
+        name = descriptor_doc.at("name").get<std::string>();
+      } else {
+        name = job.request.source_path.stem().string();
+      }
+      if (name.empty()) {
+        name = "physics_resource";
+      }
+      virtual_path
+        = job.request.loose_cooked_layout.PhysicsResourceVirtualPath(name);
+      return true;
+    } catch (const std::exception& ex) {
+      error = fmt::format(
+        "physics-resource-descriptor output inference failed: {}", ex.what());
+      return false;
+    }
+  }
+
+  auto ResolvePhysicsMaterialProducedVirtualPath(const PreparedJob& job,
+    std::string& virtual_path, std::string& error) -> bool
+  {
+    try {
+      if (!job.request.physics_material_descriptor.has_value()) {
+        error = "Missing request.physics_material_descriptor payload";
+        return false;
+      }
+
+      auto descriptor_doc = nlohmann::json {};
+      if (!ParseJsonObject(
+            job.request.physics_material_descriptor->normalized_descriptor_json,
+            "physics-material-descriptor", descriptor_doc, error)) {
+        return false;
+      }
+
+      if (descriptor_doc.contains("virtual_path")) {
+        virtual_path = descriptor_doc.at("virtual_path").get<std::string>();
+        return true;
+      }
+
+      auto name = std::string {};
+      if (job.request.job_name.has_value() && !job.request.job_name->empty()) {
+        name = *job.request.job_name;
+      } else if (descriptor_doc.contains("name")) {
+        name = descriptor_doc.at("name").get<std::string>();
+      } else {
+        name = job.request.source_path.stem().string();
+      }
+      if (name.empty()) {
+        name = "physics_material";
+      }
+      virtual_path
+        = job.request.loose_cooked_layout.PhysicsMaterialVirtualPath(name);
+      return true;
+    } catch (const std::exception& ex) {
+      error = fmt::format(
+        "physics-material-descriptor output inference failed: {}", ex.what());
+      return false;
+    }
+  }
+
+  auto ResolveCollisionShapeProducedVirtualPath(const PreparedJob& job,
+    std::string& virtual_path, std::string& error) -> bool
+  {
+    try {
+      if (!job.request.collision_shape_descriptor.has_value()) {
+        error = "Missing request.collision_shape_descriptor payload";
+        return false;
+      }
+
+      auto descriptor_doc = nlohmann::json {};
+      if (!ParseJsonObject(
+            job.request.collision_shape_descriptor->normalized_descriptor_json,
+            "collision-shape-descriptor", descriptor_doc, error)) {
+        return false;
+      }
+
+      if (descriptor_doc.contains("virtual_path")) {
+        virtual_path = descriptor_doc.at("virtual_path").get<std::string>();
+        return true;
+      }
+
+      auto name = std::string {};
+      if (job.request.job_name.has_value() && !job.request.job_name->empty()) {
+        name = *job.request.job_name;
+      } else if (descriptor_doc.contains("name")) {
+        name = descriptor_doc.at("name").get<std::string>();
+      } else {
+        name = job.request.source_path.stem().string();
+      }
+      if (name.empty()) {
+        name = "collision_shape";
+      }
+      virtual_path
+        = job.request.loose_cooked_layout.CollisionShapeVirtualPath(name);
+      return true;
+    } catch (const std::exception& ex) {
+      error = fmt::format(
+        "collision-shape-descriptor output inference failed: {}", ex.what());
+      return false;
+    }
+  }
+
+  auto ResolveSceneProducedVirtualPath(const PreparedJob& job,
+    std::string& virtual_path, std::string& error) -> bool
+  {
+    try {
+      if (job.job_type == "scene-descriptor") {
+        if (!job.request.scene_descriptor.has_value()) {
+          error = "Missing request.scene_descriptor payload";
+          return false;
+        }
+
+        auto descriptor_doc = nlohmann::json {};
+        if (!ParseJsonObject(
+              job.request.scene_descriptor->normalized_descriptor_json,
+              "scene-descriptor", descriptor_doc, error)) {
+          return false;
+        }
+        if (!descriptor_doc.contains("name")
+          || !descriptor_doc.at("name").is_string()) {
+          error = "scene-descriptor requires a string 'name'";
+          return false;
+        }
+
+        const auto scene_name = descriptor_doc.at("name").get<std::string>();
+        virtual_path
+          = job.request.loose_cooked_layout.SceneVirtualPath(scene_name);
+        return true;
+      }
+
+      if (job.job_type == "fbx" || job.job_type == "gltf") {
+        const auto imports_scene
+          = (job.request.options.import_content & ImportContentFlags::kScene)
+          != ImportContentFlags::kNone;
+        if (!imports_scene) {
+          return true;
+        }
+        virtual_path = job.request.loose_cooked_layout.SceneVirtualPath(
+          job.request.GetSceneName());
+        return true;
+      }
+
+      return true;
+    } catch (const std::exception& ex) {
+      error = fmt::format("scene output inference failed: {}", ex.what());
+      return false;
+    }
+  }
+
+  auto CollectSidecarRefField(const nlohmann::json& bindings_doc,
+    const std::string_view family, const std::string_view field,
+    std::vector<PhysicsDependencyRef>& refs) -> void
+  {
+    if (!bindings_doc.contains(family)) {
+      return;
+    }
+    const auto& rows = bindings_doc.at(family);
+    if (!rows.is_array()) {
+      return;
+    }
+    for (size_t row_index = 0; row_index < rows.size(); ++row_index) {
+      const auto& row = rows.at(row_index);
+      if (!row.is_object()) {
+        continue;
+      }
+      if (!row.contains(field) || !row.at(field).is_string()) {
+        continue;
+      }
+      refs.push_back(PhysicsDependencyRef {
+        .virtual_path = row.at(field).get<std::string>(),
+        .object_path
+        = fmt::format("bindings.{}[{}].{}", family, row_index, field),
+      });
+    }
+  }
+
+  auto CollectPhysicsDependencyRefs(const PreparedJob& job,
+    std::vector<PhysicsDependencyRef>& refs, std::string& error) -> bool
+  {
+    try {
+      refs.clear();
+
+      if (job.job_type == "collision-shape-descriptor") {
+        if (!job.request.collision_shape_descriptor.has_value()) {
+          error = "Missing request.collision_shape_descriptor payload";
+          return false;
+        }
+        auto descriptor_doc = nlohmann::json {};
+        if (!ParseJsonObject(job.request.collision_shape_descriptor
+                               ->normalized_descriptor_json,
+              "collision-shape-descriptor", descriptor_doc, error)) {
+          return false;
+        }
+        if (descriptor_doc.contains("material_ref")
+          && descriptor_doc.at("material_ref").is_string()) {
+          refs.push_back(PhysicsDependencyRef {
+            .virtual_path
+            = descriptor_doc.at("material_ref").get<std::string>(),
+            .object_path = "material_ref",
+          });
+        }
+        if (descriptor_doc.contains("payload_ref")
+          && descriptor_doc.at("payload_ref").is_string()) {
+          refs.push_back(PhysicsDependencyRef {
+            .virtual_path = descriptor_doc.at("payload_ref").get<std::string>(),
+            .object_path = "payload_ref",
+          });
+        }
+        return true;
+      }
+
+      if (job.job_type != "physics-sidecar") {
+        return true;
+      }
+
+      if (!job.request.physics.has_value()) {
+        error = "Missing request.physics payload";
+        return false;
+      }
+
+      if (!job.request.physics->target_scene_virtual_path.empty()) {
+        refs.push_back(PhysicsDependencyRef {
+          .virtual_path = job.request.physics->target_scene_virtual_path,
+          .object_path = "target_scene_virtual_path",
+        });
+      }
+
+      auto doc = nlohmann::json {};
+      if (!job.request.physics->inline_bindings_json.empty()) {
+        if (!ParseJsonObject(job.request.physics->inline_bindings_json,
+              "physics-sidecar", doc, error)) {
+          return false;
+        }
+      } else {
+        if (!ReadJsonObjectFile(
+              job.request.source_path, "physics-sidecar", doc, error)) {
+          return false;
+        }
+      }
+
+      const auto* bindings_doc = &doc;
+      if (doc.contains("bindings")) {
+        if (!doc.at("bindings").is_object()) {
+          error = "physics-sidecar 'bindings' must be an object";
+          return false;
+        }
+        bindings_doc = &doc.at("bindings");
+      }
+
+      CollectSidecarRefField(*bindings_doc, "rigid_bodies", "shape_ref", refs);
+      CollectSidecarRefField(
+        *bindings_doc, "rigid_bodies", "material_ref", refs);
+      CollectSidecarRefField(*bindings_doc, "colliders", "shape_ref", refs);
+      CollectSidecarRefField(*bindings_doc, "colliders", "material_ref", refs);
+      CollectSidecarRefField(*bindings_doc, "characters", "shape_ref", refs);
+      CollectSidecarRefField(*bindings_doc, "joints", "constraint_ref", refs);
+      CollectSidecarRefField(*bindings_doc, "vehicles", "constraint_ref", refs);
+
+      return true;
+    } catch (const std::exception& ex) {
+      error = fmt::format(
+        "physics dependency reference inference failed: {}", ex.what());
+      return false;
+    }
+  }
+
+  auto CollectProducedVirtualPathByJob(const PreparedJob& job,
+    std::optional<std::string>& produced_virtual_path, std::string& error)
+    -> bool
+  {
+    produced_virtual_path.reset();
+
+    auto virtual_path = std::string {};
+    if (job.job_type == "physics-resource-descriptor") {
+      if (!ResolvePhysicsResourceProducedVirtualPath(
+            job, virtual_path, error)) {
+        return false;
+      }
+      produced_virtual_path = std::move(virtual_path);
+      return true;
+    }
+    if (job.job_type == "physics-material-descriptor") {
+      if (!ResolvePhysicsMaterialProducedVirtualPath(
+            job, virtual_path, error)) {
+        return false;
+      }
+      produced_virtual_path = std::move(virtual_path);
+      return true;
+    }
+    if (job.job_type == "collision-shape-descriptor") {
+      if (!ResolveCollisionShapeProducedVirtualPath(job, virtual_path, error)) {
+        return false;
+      }
+      produced_virtual_path = std::move(virtual_path);
+      return true;
+    }
+    if (job.job_type == "scene-descriptor" || job.job_type == "fbx"
+      || job.job_type == "gltf") {
+      if (!ResolveSceneProducedVirtualPath(job, virtual_path, error)) {
+        return false;
+      }
+      if (!virtual_path.empty()) {
+        produced_virtual_path = std::move(virtual_path);
+      }
+      return true;
+    }
+    return true;
+  }
+
+  auto BuildProducedVirtualPathIndex(const std::vector<PreparedJob>& jobs,
+    std::unordered_map<std::string, std::vector<size_t>>& producers_by_path,
+    const oxygen::observer_ptr<IMessageWriter>& writer,
+    int& validation_failures) -> void
+  {
+    producers_by_path.clear();
+    for (size_t job_index = 0; job_index < jobs.size(); ++job_index) {
+      std::optional<std::string> produced_virtual_path;
+      auto error = std::string {};
+      if (!CollectProducedVirtualPathByJob(
+            jobs[job_index], produced_virtual_path, error)) {
+        writer->Error(fmt::format(
+          "ERROR [physics.manifest.dependency_inference_failed]: job '{}' "
+          "output inference failed: {}",
+          JobLabel(jobs[job_index], job_index), error));
+        ++validation_failures;
+        continue;
+      }
+
+      if (!produced_virtual_path.has_value()
+        || produced_virtual_path->empty()) {
+        continue;
+      }
+
+      producers_by_path[*produced_virtual_path].push_back(job_index);
+    }
+  }
+
+  auto BuildInferredPhysicsDependencyEdges(const std::vector<PreparedJob>& jobs,
+    const std::unordered_map<std::string, std::vector<size_t>>&
+      producers_by_path,
+    std::vector<std::vector<size_t>>& inferred_producers,
+    const oxygen::observer_ptr<IMessageWriter>& writer,
+    int& validation_failures) -> void
+  {
+    inferred_producers.assign(jobs.size(), {});
+
+    for (size_t job_index = 0; job_index < jobs.size(); ++job_index) {
+      if (!IsPhysicsDomainJobType(jobs[job_index].job_type)) {
+        continue;
+      }
+      if (jobs[job_index].job_type != "physics-sidecar"
+        && jobs[job_index].job_type != "collision-shape-descriptor") {
+        continue;
+      }
+
+      auto refs = std::vector<PhysicsDependencyRef> {};
+      auto error = std::string {};
+      if (!CollectPhysicsDependencyRefs(jobs[job_index], refs, error)) {
+        writer->Error(fmt::format(
+          "ERROR [physics.manifest.dependency_inference_failed]: job '{}' "
+          "reference collection failed: {}",
+          JobLabel(jobs[job_index], job_index), error));
+        ++validation_failures;
+        continue;
+      }
+
+      auto unique_producers = std::unordered_set<size_t> {};
+      for (const auto& ref : refs) {
+        const auto it = producers_by_path.find(ref.virtual_path);
+        if (it == producers_by_path.end()) {
+          writer->Error(fmt::format(
+            "ERROR [physics.manifest.dependency_unresolved]: job '{}' "
+            "references '{}' at '{}' but no manifest job produces that "
+            "virtual path",
+            JobLabel(jobs[job_index], job_index), ref.virtual_path,
+            ref.object_path));
+          ++validation_failures;
+          continue;
+        }
+
+        if (it->second.size() > 1U) {
+          auto producer_list = std::vector<std::string> {};
+          producer_list.reserve(it->second.size());
+          for (const auto producer_index : it->second) {
+            producer_list.push_back(
+              JobLabel(jobs[producer_index], producer_index));
+          }
+          auto producer_list_text = std::string {};
+          for (size_t i = 0; i < producer_list.size(); ++i) {
+            if (i > 0U) {
+              producer_list_text.append(", ");
+            }
+            producer_list_text.append(producer_list[i]);
+          }
+          writer->Error(fmt::format(
+            "ERROR [physics.manifest.dependency_ambiguous]: job '{}' "
+            "reference '{}' at '{}' matches multiple producer jobs: {}",
+            JobLabel(jobs[job_index], job_index), ref.virtual_path,
+            ref.object_path, producer_list_text));
+          ++validation_failures;
+          continue;
+        }
+
+        const auto producer_index = it->second.front();
+        if (unique_producers.insert(producer_index).second) {
+          inferred_producers[job_index].push_back(producer_index);
+        }
+      }
+    }
+  }
+
+  auto BuildSameCookedRootPhysicsSidecarFenceEdges(
+    const std::vector<PreparedJob>& jobs,
+    std::vector<std::vector<size_t>>& inferred_producers) -> void
+  {
+    for (size_t sidecar_index = 0; sidecar_index < jobs.size();
+      ++sidecar_index) {
+      if (jobs[sidecar_index].job_type != "physics-sidecar") {
+        continue;
+      }
+
+      const auto sidecar_root = ResolveCookedRootKey(jobs[sidecar_index]);
+      if (!sidecar_root.has_value()) {
+        continue;
+      }
+
+      auto unique_producers = std::unordered_set<size_t> {};
+      unique_producers.reserve(inferred_producers[sidecar_index].size());
+      for (const auto producer_index : inferred_producers[sidecar_index]) {
+        unique_producers.insert(producer_index);
+      }
+
+      for (size_t producer_index = 0; producer_index < jobs.size();
+        ++producer_index) {
+        if (producer_index == sidecar_index) {
+          continue;
+        }
+        if (jobs[producer_index].job_type == "physics-sidecar") {
+          continue;
+        }
+        if (!IsAssetProducingJobType(jobs[producer_index].job_type)) {
+          continue;
+        }
+
+        const auto producer_root = ResolveCookedRootKey(jobs[producer_index]);
+        if (!producer_root.has_value() || *producer_root != *sidecar_root) {
+          continue;
+        }
+
+        if (unique_producers.insert(producer_index).second) {
+          inferred_producers[sidecar_index].push_back(producer_index);
+        }
+      }
+    }
+  }
 
   auto DisplayJobNumber(const size_t job_index) -> size_t
   {
@@ -554,12 +1121,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
       }
     }
 
-    if (global_options_ != nullptr && !global_options_->cooked_root.empty()
-      && request->cooked_root.has_value() && request->cooked_root->empty()) {
-      request->cooked_root
-        = std::filesystem::path(global_options_->cooked_root);
-    } else if (global_options_ != nullptr && !request->cooked_root.has_value()
-      && !global_options_->cooked_root.empty()) {
+    if (global_options_ != nullptr && !global_options_->cooked_root.empty()) {
       request->cooked_root
         = std::filesystem::path(global_options_->cooked_root);
     }
@@ -585,6 +1147,8 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
 
   std::unordered_map<std::string, size_t> job_id_to_index {};
   job_id_to_index.reserve(jobs.size());
+  const auto has_physics_jobs = std::ranges::any_of(
+    jobs, [](const auto& job) { return IsPhysicsDomainJobType(job.job_type); });
   for (size_t index = 0; index < jobs.size(); ++index) {
     const auto& job_id = jobs[index].job_id;
     if (job_id.empty()) {
@@ -598,27 +1162,45 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
     }
   }
 
+  auto producers_by_path
+    = std::unordered_map<std::string, std::vector<size_t>> {};
+  BuildProducedVirtualPathIndex(
+    jobs, producers_by_path, writer, validation_failures);
+
+  auto inferred_producers = std::vector<std::vector<size_t>> {};
+  BuildInferredPhysicsDependencyEdges(
+    jobs, producers_by_path, inferred_producers, writer, validation_failures);
+  BuildSameCookedRootPhysicsSidecarFenceEdges(jobs, inferred_producers);
+
   std::vector<std::vector<size_t>> dependents(jobs.size());
   std::vector<size_t> dependency_remaining(jobs.size(), 0U);
   for (size_t index = 0; index < jobs.size(); ++index) {
-    auto unique_dep_ids = std::unordered_set<std::string> {};
+    auto unique_producers = std::unordered_set<size_t> {};
     for (const auto& dep_id : jobs[index].depends_on) {
-      if (!unique_dep_ids.insert(dep_id).second) {
-        continue;
-      }
       const auto it = job_id_to_index.find(dep_id);
       if (it == job_id_to_index.end()) {
-        writer->Error(fmt::format(
-          "ERROR [input.manifest.dep_missing_target]: job '{}' depends on "
-          "missing id '{}'",
-          jobs[index].job_id.empty()
-            ? fmt::format("#{}", DisplayJobNumber(index))
-            : jobs[index].job_id,
-          dep_id));
+        writer->Error(
+          fmt::format("ERROR [{}]: job '{}' depends on missing id '{}'",
+            has_physics_jobs ? "physics.manifest.dependency_missing_target"
+                             : "input.manifest.dep_missing_target",
+            JobLabel(jobs[index], index), dep_id));
         ++validation_failures;
         continue;
       }
-      dependents[it->second].push_back(index);
+
+      const auto producer_index = it->second;
+      if (!unique_producers.insert(producer_index).second) {
+        continue;
+      }
+      dependents[producer_index].push_back(index);
+      ++dependency_remaining[index];
+    }
+
+    for (const auto producer_index : inferred_producers[index]) {
+      if (!unique_producers.insert(producer_index).second) {
+        continue;
+      }
+      dependents[producer_index].push_back(index);
       ++dependency_remaining[index];
     }
   }
@@ -647,8 +1229,9 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
     }
     if (visited != jobs.size()) {
       writer->Error(
-        "ERROR [input.manifest.dep_cycle]: dependency cycle detected in batch "
-        "jobs");
+        fmt::format("ERROR [{}]: dependency cycle detected in batch jobs",
+          has_physics_jobs ? "physics.manifest.dependency_cycle"
+                           : "input.manifest.dep_cycle"));
       ++validation_failures;
     }
   }

@@ -25,8 +25,36 @@
         "collision_layer": 2,
         "collision_mask": 65535,
         "mass": 4.0,
-        "linear_damping": 0.02,
-        "angular_damping": 0.1,
+        "linear_damping": 0.08,
+        "angular_damping": 0.9,
+        "gravity_factor": 1.0,
+        "initial_activation": true
+      },
+      {
+        "node_index": 2,
+        "shape_ref": "/.cooked/Physics/Shapes/cube_unit.ocshape",
+        "material_ref": "/.cooked/Physics/Materials/ground.opmat",
+        "body_type": "static",
+        "motion_quality": "discrete",
+        "collision_layer": 1,
+        "collision_mask": 65535,
+        "mass": 0.0,
+        "linear_damping": 0.0,
+        "angular_damping": 0.0,
+        "gravity_factor": 0.0,
+        "initial_activation": false
+      },
+      {
+        "node_index": 4,
+        "shape_ref": "/.cooked/Physics/Shapes/waterbottle.ocshape",
+        "material_ref": "/.cooked/Physics/Materials/plastic.opmat",
+        "body_type": "dynamic",
+        "motion_quality": "discrete",
+        "collision_layer": 2,
+        "collision_mask": 65535,
+        "mass": 2.0,
+        "linear_damping": 0.15,
+        "angular_damping": 1.0,
         "gravity_factor": 1.0,
         "initial_activation": true
       }
