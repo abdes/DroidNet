@@ -97,8 +97,15 @@ class PhysicsSceneAssetDumper final : public AssetDumper {
       std::memcpy(&record, blob.data() + table_offset, sizeof(record));
       PrintUtils::Field("Sample Node Index", record.node_index, 10);
       PrintUtils::Field("Sample Clusters", record.cluster_count, 10);
-      PrintUtils::Field(
-        "Sample Settings Resource", record.settings_resource_index.get(), 10);
+      PrintUtils::Field("Sample Jolt Settings Resource",
+        record.jolt_settings_resource_index.get(), 10);
+      PrintUtils::Field("Sample PhysX Settings Resource",
+        record.physx_settings_resource_index.get(), 10);
+      PrintUtils::Field("Sample Scale X", record.settings_scale[0], 10);
+      PrintUtils::Field("Sample Scale Y", record.settings_scale[1], 10);
+      PrintUtils::Field("Sample Scale Z", record.settings_scale[2], 10);
+      PrintUtils::Field("Sample Restitution", record.restitution, 10);
+      PrintUtils::Field("Sample Friction", record.friction, 10);
       break;
     }
     case PhysicsBindingType::kJoint: {
@@ -112,6 +119,8 @@ class PhysicsSceneAssetDumper final : public AssetDumper {
       VehicleBindingRecord record {};
       std::memcpy(&record, blob.data() + table_offset, sizeof(record));
       PrintUtils::Field("Sample Node Index", record.node_index, 10);
+      PrintUtils::Field("Sample Wheel Offset", record.wheel_table_offset, 10);
+      PrintUtils::Field("Sample Wheel Count", record.wheel_count, 10);
       break;
     }
     case PhysicsBindingType::kAggregate: {

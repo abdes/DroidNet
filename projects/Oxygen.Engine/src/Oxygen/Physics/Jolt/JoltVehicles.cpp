@@ -5,8 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <span>
 #include <sstream>
 #include <string>
@@ -18,6 +20,7 @@
 #include <Jolt/Core/RTTI.h>
 #include <Jolt/Core/StreamWrapper.h>
 #include <Jolt/Physics/Body/Body.h>
+#include <Jolt/Physics/Body/BodyFilter.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Body/BodyLock.h>
 #include <Jolt/Physics/Collision/ObjectLayer.h>
@@ -159,12 +162,65 @@ auto RestoreVehicleConstraintSettings(std::span<const uint8_t> blob)
     && input.steering >= -1.0F && input.steering <= 1.0F;
 }
 
+[[nodiscard]] auto ValidateVehicleAttachmentBody(
+  const JPH::BodyLockInterface& body_lock_interface, const JPH::BodyID body_id,
+  const char* role, const bool require_dynamic) -> bool
+{
+  JPH::BodyLockRead body_lock(body_lock_interface, body_id);
+  if (!body_lock.Succeeded()) {
+    LOG_F(ERROR,
+      "JoltVehicles: {} body lock failed (body_id={}) while creating vehicle.",
+      role, body_id.GetIndexAndSequenceNumber());
+    return false;
+  }
+
+  const auto& body = body_lock.GetBody();
+  const auto is_rigid = body.IsRigidBody();
+  const auto is_soft = body.IsSoftBody();
+  const auto is_dynamic = body.IsDynamic();
+  const auto is_static = body.IsStatic();
+  const auto is_kinematic = body.IsKinematic();
+  if (!is_rigid || (require_dynamic && !is_dynamic)) {
+    LOG_F(ERROR,
+      "JoltVehicles: {} body contract violation "
+      "(body_id={} rigid={} soft={} dynamic={} static={} kinematic={} "
+      "require_dynamic={}).",
+      role, body_id.GetIndexAndSequenceNumber(), is_rigid, is_soft, is_dynamic,
+      is_static, is_kinematic, require_dynamic);
+    return false;
+  }
+  return true;
+}
+
+class VehicleWheelRigidBodyFilter final : public JPH::BodyFilter {
+public:
+  auto ShouldCollideLocked(const JPH::Body& body) const -> bool override
+  {
+    if (body.IsRigidBody()) {
+      return true;
+    }
+    const auto is_soft = body.IsSoftBody();
+    if (is_soft
+      && !soft_body_reject_logged_.exchange(true, std::memory_order_acq_rel)) {
+      LOG_F(WARNING,
+        "JoltVehicles: wheel collision filtered a non-rigid soft body "
+        "(body_id={}).",
+        body.GetID().GetIndexAndSequenceNumber());
+    }
+    return false;
+  }
+
+private:
+  mutable std::atomic<bool> soft_body_reject_logged_ { false };
+};
+
 } // namespace
 
 struct oxygen::physics::jolt::JoltVehicles::Impl final {
   struct RuntimeVehicleState final {
     JPH::Ref<JPH::VehicleConstraint> constraint;
     JPH::Ref<JPH::VehicleCollisionTester> collision_tester;
+    std::unique_ptr<VehicleWheelRigidBodyFilter> wheel_body_filter;
   };
 
   std::unordered_map<AggregateId, RuntimeVehicleState> runtime_vehicles;
@@ -218,6 +274,7 @@ auto oxygen::physics::jolt::JoltVehicles::CreateVehicle(const WorldId world_id,
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
+  const auto simulation_lock = world->LockSimulationApi();
   auto body_interface = world->TryGetBodyInterface(world_id);
   auto body_lock_interface = world->TryGetBodyLockInterface(world_id);
   auto physics_system = world->TryGetPhysicsSystem(world_id);
@@ -227,6 +284,22 @@ auto oxygen::physics::jolt::JoltVehicles::CreateVehicle(const WorldId world_id,
   }
 
   const auto chassis_jolt_id = ToJoltBodyId(desc.chassis_body_id);
+  if (!ValidateVehicleAttachmentBody(
+        *body_lock_interface, chassis_jolt_id, "chassis", true)) {
+    return Err(PhysicsError::kInvalidArgument);
+  }
+  for (size_t i = 0; i < wheels.size(); ++i) {
+    const auto wheel_jolt_id = ToJoltBodyId(wheels[i].body_id);
+    if (!ValidateVehicleAttachmentBody(
+          *body_lock_interface, wheel_jolt_id, "wheel", false)) {
+      LOG_F(ERROR,
+        "JoltVehicles: invalid wheel attachment at wheel_index={} "
+        "(body_id={}).",
+        i, wheels[i].body_id.get());
+      return Err(PhysicsError::kInvalidArgument);
+    }
+  }
+
   const auto chassis_position
     = ToOxygenVec3(body_interface->GetCenterOfMassPosition(chassis_jolt_id));
   const auto chassis_rotation
@@ -325,6 +398,8 @@ auto oxygen::physics::jolt::JoltVehicles::CreateVehicle(const WorldId world_id,
     new JPH::VehicleCollisionTesterRay(
       chassis_object_layer, ToJoltVec3(oxygen::space::move::Up)),
   };
+  auto wheel_body_filter = std::make_unique<VehicleWheelRigidBodyFilter>();
+  collision_tester->SetBodyFilter(wheel_body_filter.get());
 
   // Check ID availability BEFORE registering constraint/step listener to avoid
   // a window where the constraint is active but untracked.
@@ -338,6 +413,7 @@ auto oxygen::physics::jolt::JoltVehicles::CreateVehicle(const WorldId world_id,
   auto& runtime_state = impl_->runtime_vehicles[vehicle_id];
   runtime_state.constraint = constraint;
   runtime_state.collision_tester = collision_tester;
+  runtime_state.wheel_body_filter = std::move(wheel_body_filter);
   constraint->SetVehicleCollisionTester(collision_tester.GetPtr());
 
   physics_system->AddConstraint(constraint.GetPtr());
@@ -364,6 +440,7 @@ auto oxygen::physics::jolt::JoltVehicles::DestroyVehicle(
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
+  const auto simulation_lock = world->LockSimulationApi();
   auto physics_system = world->TryGetPhysicsSystem(world_id);
   if (physics_system == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -415,6 +492,12 @@ auto oxygen::physics::jolt::JoltVehicles::SetControlInput(
     return Err(PhysicsError::kInvalidArgument);
   }
 
+  auto* world = world_.get();
+  if (world == nullptr) {
+    return Err(PhysicsError::kNotInitialized);
+  }
+  const auto simulation_lock = world->LockSimulationApi();
+
   BodyId chassis_body_id = kInvalidBodyId;
   JPH::Ref<JPH::VehicleConstraint> constraint {};
   {
@@ -451,10 +534,6 @@ auto oxygen::physics::jolt::JoltVehicles::SetControlInput(
   controller->SetDriverInput(
     input.forward, input.steering, input.brake, input.hand_brake);
 
-  auto* world = world_.get();
-  if (world == nullptr) {
-    return Err(PhysicsError::kNotInitialized);
-  }
   auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -494,6 +573,7 @@ auto oxygen::physics::jolt::JoltVehicles::GetState(const WorldId world_id,
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
+  const auto simulation_lock = world->LockSimulationApi();
   auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);

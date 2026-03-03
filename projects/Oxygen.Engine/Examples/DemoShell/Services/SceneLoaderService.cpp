@@ -27,6 +27,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/ResourceTable.h>
 #include <Oxygen/Core/Constants.h>
@@ -1462,11 +1463,34 @@ void SceneLoaderService::HydrateSoftBodyBindings(
         std::string("soft-body cluster_count must be > 0 (node_index=")
         + std::to_string(record.node_index) + ")");
     }
-    if (record.settings_resource_index == data::pak::core::kNoResourceIndex) {
+    const auto backend = engine_->GetEngineConfig().physics.backend;
+    const auto use_jolt_settings = backend == EnginePhysicsBackend::kJolt;
+    const auto use_physx_settings = backend == EnginePhysicsBackend::kPhysX;
+    if (!use_jolt_settings && !use_physx_settings) {
       throw std::runtime_error(
-        std::string("soft-body settings_resource_index is missing ")
+        std::string("soft-body hydration does not support physics backend ")
+        + std::to_string(static_cast<uint32_t>(backend)));
+    }
+
+    if (record.jolt_settings_resource_index == data::pak::core::kNoResourceIndex
+      || record.physx_settings_resource_index
+        == data::pak::core::kNoResourceIndex) {
+      throw std::runtime_error(
+        std::string("soft-body requires both jolt/physx settings resources ")
         + "(node_index=" + std::to_string(record.node_index) + ")");
     }
+
+    const auto selected_settings_resource_index = use_jolt_settings
+      ? record.jolt_settings_resource_index
+      : record.physx_settings_resource_index;
+    const auto expected_settings_format = use_jolt_settings
+      ? data::pak::physics::PhysicsResourceFormat::
+          kJoltSoftBodySharedSettingsBinary
+      : data::pak::physics::PhysicsResourceFormat::kPhysXSoftBodySettingsBinary;
+    const auto expected_settings_format_name = use_jolt_settings
+      ? "jolt_soft_body_shared_settings_binary"
+      : "physx_soft_body_settings_binary";
+    const auto selected_backend_name = use_jolt_settings ? "jolt" : "physx";
 
     const auto validate_non_negative_finite
       = [&](const float value, const std::string_view field) {
@@ -1489,40 +1513,56 @@ void SceneLoaderService::HydrateSoftBodyBindings(
           "(node_index=")
         + std::to_string(record.node_index) + ")");
     }
+    const auto validate_positive_finite
+      = [&](const float value, const std::string_view field) {
+          if (!std::isfinite(value) || value <= 0.0F) {
+            throw std::runtime_error(std::string("soft-body ")
+              + std::string(field) + " must be finite and > 0 (node_index="
+              + std::to_string(record.node_index) + ")");
+          }
+        };
+    validate_positive_finite(record.settings_scale[0], "settings_scale[0]");
+    validate_positive_finite(record.settings_scale[1], "settings_scale[1]");
+    validate_positive_finite(record.settings_scale[2], "settings_scale[2]");
+    validate_non_negative_finite(record.restitution, "restitution");
+    validate_non_negative_finite(record.friction, "friction");
+    validate_non_negative_finite(record.vertex_radius, "vertex_radius");
 
     const auto settings_resource_key_opt
       = loader_.MakePhysicsResourceKeyForAsset(
-        *current_physics_context_asset_key_, record.settings_resource_index);
+        *current_physics_context_asset_key_, selected_settings_resource_index);
     if (!settings_resource_key_opt.has_value()) {
       throw std::runtime_error(
-        std::string("soft-body settings_resource_index could not be resolved ")
-        + "(node_index=" + std::to_string(record.node_index) + " index="
-        + std::to_string(record.settings_resource_index.get()) + ")");
+        std::string("soft-body selected settings resource index could not be "
+                    "resolved ")
+        + "(node_index=" + std::to_string(record.node_index)
+        + " index=" + std::to_string(selected_settings_resource_index.get())
+        + " backend=" + selected_backend_name + ")");
     }
     const auto settings_resource
       = loader_.GetPhysicsResource(*settings_resource_key_opt);
     if (!settings_resource) {
       throw std::runtime_error(
         std::string("soft-body settings resource is not loaded ")
-        + "(node_index=" + std::to_string(record.node_index) + " index="
-        + std::to_string(record.settings_resource_index.get()) + ")");
+        + "(node_index=" + std::to_string(record.node_index)
+        + " index=" + std::to_string(selected_settings_resource_index.get())
+        + " backend=" + selected_backend_name + ")");
     }
-    if (settings_resource->GetFormat()
-      != data::pak::physics::PhysicsResourceFormat::
-        kJoltSoftBodySharedSettingsBinary) {
+    if (settings_resource->GetFormat() != expected_settings_format) {
       throw std::runtime_error(
         std::string("soft-body settings resource format is not ")
-        + "jolt_soft_body_shared_settings_binary (node_index="
-        + std::to_string(record.node_index) + " index="
-        + std::to_string(record.settings_resource_index.get()) + " format="
+        + expected_settings_format_name
+        + " (node_index=" + std::to_string(record.node_index) + " index="
+        + std::to_string(selected_settings_resource_index.get()) + " format="
         + std::to_string(static_cast<uint32_t>(settings_resource->GetFormat()))
-        + ")");
+        + " backend=" + selected_backend_name + ")");
     }
     if (settings_resource->GetData().empty()) {
       throw std::runtime_error(
         std::string("soft-body settings resource payload is empty ")
-        + "(node_index=" + std::to_string(record.node_index) + " index="
-        + std::to_string(record.settings_resource_index.get()) + ")");
+        + "(node_index=" + std::to_string(record.node_index)
+        + " index=" + std::to_string(selected_settings_resource_index.get())
+        + " backend=" + selected_backend_name + ")");
     }
 
     auto desc = physics::softbody::SoftBodyDesc {};
@@ -1536,6 +1576,11 @@ void SceneLoaderService::HydrateSoftBodyBindings(
       = ToRuntimeSoftBodyTetherMode(record.tether_mode);
     desc.material_params.tether_max_distance_multiplier
       = record.tether_max_distance_multiplier;
+    desc.settings_scale = oxygen::Vec3 { record.settings_scale[0],
+      record.settings_scale[1], record.settings_scale[2] };
+    desc.restitution = record.restitution;
+    desc.friction = record.friction;
+    desc.vertex_radius = record.vertex_radius;
     const auto [initial_position, initial_rotation]
       = ReadHydrationWorldPose(node_index);
     desc.initial_position = initial_position;
@@ -1598,6 +1643,19 @@ void SceneLoaderService::HydrateSoftBodyBindings(
 
     physics_module.RegisterNodeAggregateMapping(
       node_handle, soft_body_id, authority_result.value());
+    const auto node_name = node.GetName();
+    LOG_F(INFO,
+      "SceneLoader: hydrated soft body binding (node_index={} node='{}' "
+      "aggregate_id={} backend={} selected_settings_resource_index={} "
+      "jolt_settings_resource_index={} physx_settings_resource_index={} "
+      "scale=[{:.3f},{:.3f},{:.3f}] restitution={:.3f} friction={:.3f} "
+      "vertex_radius={:.3f}).",
+      record.node_index, node_name.c_str(), soft_body_id.get(),
+      selected_backend_name, selected_settings_resource_index.get(),
+      record.jolt_settings_resource_index.get(),
+      record.physx_settings_resource_index.get(), record.settings_scale[0],
+      record.settings_scale[1], record.settings_scale[2], record.restitution,
+      record.friction, record.vertex_radius);
   }
 }
 
@@ -2232,7 +2290,8 @@ auto SceneLoaderService::PreloadPhysicsDependencyResources(
   }
   for (const auto& record :
     physics_asset.GetBindings<data::pak::physics::SoftBodyBindingRecord>()) {
-    collect_constraint_resource_index(record.settings_resource_index);
+    collect_constraint_resource_index(record.jolt_settings_resource_index);
+    collect_constraint_resource_index(record.physx_settings_resource_index);
   }
 
   for (const auto resource_index_raw : payload_indices) {

@@ -58,8 +58,14 @@ struct SoftBodyDesc final {
   SoftBodyMaterialParams material_params {};
   Vec3 initial_position { 0.0F, 0.0F, 0.0F };
   Quat initial_rotation { 1.0F, 0.0F, 0.0F, 0.0F };
-  //! Serialized kJoltSoftBodySharedSettingsBinary payload.
+  //! Serialized backend-selected soft-body settings payload.
   std::span<const uint8_t> settings_blob {};
+  //! Per-axis authored scale applied to shared-settings vertices at runtime.
+  Vec3 settings_scale { 1.0F, 1.0F, 1.0F };
+  //! Collision response authored at sidecar level.
+  float restitution { 0.0F };
+  float friction { 0.2F };
+  float vertex_radius { 0.0F };
 };
 
 /*!

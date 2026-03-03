@@ -16,7 +16,9 @@
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include <Jolt/Physics/Constraints/TwoBodyConstraint.h>
 #include <Jolt/Physics/PhysicsSystem.h>
+#include <Jolt/Physics/Vehicle/VehicleConstraint.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Physics/Jolt/Converters.h>
 #include <Oxygen/Physics/Jolt/JoltBodies.h>
 #include <Oxygen/Physics/Jolt/JoltShapes.h>
@@ -36,6 +38,7 @@ auto oxygen::physics::jolt::JoltBodies::CreateBody(
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
+  const auto simulation_lock = world->LockSimulationApi();
   auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -138,6 +141,7 @@ auto oxygen::physics::jolt::JoltBodies::DestroyBody(
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
+  const auto simulation_lock = world->LockSimulationApi();
   auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -166,32 +170,54 @@ auto oxygen::physics::jolt::JoltBodies::DestroyBody(
   }
 
   // Remove all constraints referencing this body before destroying it.
-  // This prevents stale two-body constraints from surviving scene reload
-  // teardown and being evaluated against an invalid body pointer.
+  // This prevents stale constraints from surviving scene teardown and being
+  // evaluated against an invalid body pointer.
   const auto target_jolt_body_id = ToJoltBodyId(body_id);
   const auto constraints = physics_system->GetConstraints();
   std::vector<JPH::Constraint*> constraints_to_remove {};
   constraints_to_remove.reserve(constraints.size());
+  std::vector<JPH::VehicleConstraint*> vehicle_step_listeners_to_remove {};
   for (const auto& constraint_ref : constraints) {
     if (constraint_ref == nullptr) {
       continue;
     }
     auto* constraint = constraint_ref.GetPtr();
-    if (constraint->GetType() != JPH::EConstraintType::TwoBodyConstraint) {
-      continue;
+    bool references_target = false;
+    if (constraint->GetType() == JPH::EConstraintType::TwoBodyConstraint) {
+      auto* two_body = static_cast<JPH::TwoBodyConstraint*>(constraint);
+      const auto body1 = two_body->GetBody1();
+      const auto body2 = two_body->GetBody2();
+      const bool matches_body_1
+        = body1 != nullptr && body1->GetID() == target_jolt_body_id;
+      const bool matches_body_2
+        = body2 != nullptr && body2->GetID() == target_jolt_body_id;
+      references_target = matches_body_1 || matches_body_2;
+    } else if (constraint->GetSubType() == JPH::EConstraintSubType::Vehicle) {
+      auto* vehicle_constraint
+        = static_cast<JPH::VehicleConstraint*>(constraint);
+      if (vehicle_constraint != nullptr) {
+        const auto* vehicle_body = vehicle_constraint->GetVehicleBody();
+        references_target = vehicle_body != nullptr
+          && vehicle_body->GetID() == target_jolt_body_id;
+        if (references_target) {
+          vehicle_step_listeners_to_remove.push_back(vehicle_constraint);
+        }
+      }
     }
-    auto* two_body = static_cast<JPH::TwoBodyConstraint*>(constraint);
-    const auto body1 = two_body->GetBody1();
-    const auto body2 = two_body->GetBody2();
-    const bool matches_body_1
-      = body1 != nullptr && body1->GetID() == target_jolt_body_id;
-    const bool matches_body_2
-      = body2 != nullptr && body2->GetID() == target_jolt_body_id;
-    if (matches_body_1 || matches_body_2) {
+
+    if (references_target) {
       constraints_to_remove.push_back(constraint);
     }
   }
+  for (auto* listener : vehicle_step_listeners_to_remove) {
+    physics_system->RemoveStepListener(listener);
+  }
   if (!constraints_to_remove.empty()) {
+    LOG_F(INFO,
+      "JoltBodies: removing {} constraint(s) while destroying body id={} "
+      "(vehicle_step_listeners={})",
+      constraints_to_remove.size(), body_id.get(), // NOLINT
+      vehicle_step_listeners_to_remove.size());
     physics_system->RemoveConstraints(constraints_to_remove.data(),
       static_cast<int>(constraints_to_remove.size()));
   }
@@ -221,6 +247,7 @@ auto oxygen::physics::jolt::JoltBodies::GetBodyPosition(
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
+  const auto simulation_lock = world->LockSimulationApi();
   const auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -239,6 +266,7 @@ auto oxygen::physics::jolt::JoltBodies::GetBodyRotation(
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
+  const auto simulation_lock = world->LockSimulationApi();
   const auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -257,6 +285,7 @@ auto oxygen::physics::jolt::JoltBodies::SetBodyPosition(const WorldId world_id,
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
+  const auto simulation_lock = world->LockSimulationApi();
   auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -277,6 +306,7 @@ auto oxygen::physics::jolt::JoltBodies::SetBodyRotation(const WorldId world_id,
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
+  const auto simulation_lock = world->LockSimulationApi();
   auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -298,6 +328,7 @@ auto oxygen::physics::jolt::JoltBodies::SetBodyPose(const WorldId world_id,
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
+  const auto simulation_lock = world->LockSimulationApi();
   auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -325,6 +356,7 @@ auto oxygen::physics::jolt::JoltBodies::GetBodyPoses(const WorldId world_id,
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
+  const auto simulation_lock = world->LockSimulationApi();
   const auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -350,6 +382,7 @@ auto oxygen::physics::jolt::JoltBodies::GetLinearVelocity(
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
+  const auto simulation_lock = world->LockSimulationApi();
   const auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -369,6 +402,7 @@ auto oxygen::physics::jolt::JoltBodies::GetAngularVelocity(
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
+  const auto simulation_lock = world->LockSimulationApi();
   const auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -389,6 +423,7 @@ auto oxygen::physics::jolt::JoltBodies::SetLinearVelocity(
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
+  const auto simulation_lock = world->LockSimulationApi();
   auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -411,6 +446,7 @@ auto oxygen::physics::jolt::JoltBodies::SetAngularVelocity(
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
+  const auto simulation_lock = world->LockSimulationApi();
   auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -432,6 +468,7 @@ auto oxygen::physics::jolt::JoltBodies::AddForce(const WorldId world_id,
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
+  const auto simulation_lock = world->LockSimulationApi();
   auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -453,6 +490,7 @@ auto oxygen::physics::jolt::JoltBodies::AddImpulse(const WorldId world_id,
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
+  const auto simulation_lock = world->LockSimulationApi();
   auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -474,6 +512,7 @@ auto oxygen::physics::jolt::JoltBodies::AddTorque(const WorldId world_id,
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
+  const auto simulation_lock = world->LockSimulationApi();
   auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -500,6 +539,7 @@ auto oxygen::physics::jolt::JoltBodies::MoveKinematic(const WorldId world_id,
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
+  const auto simulation_lock = world->LockSimulationApi();
   auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -537,6 +577,7 @@ auto oxygen::physics::jolt::JoltBodies::MoveKinematicBatch(
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
+  const auto simulation_lock = world->LockSimulationApi();
   auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -716,6 +757,7 @@ auto oxygen::physics::jolt::JoltBodies::RebuildBodyShape(const WorldId world_id,
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
+  const auto simulation_lock = world->LockSimulationApi();
   auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);

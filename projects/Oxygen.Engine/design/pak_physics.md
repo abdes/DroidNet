@@ -55,11 +55,13 @@ enum class PhysicsResourceFormat : uint8_t {
   kJoltShapeBinary = 0,
   kJoltConstraintBinary = 1,
   kJoltSoftBodySharedSettingsBinary = 2,
+  kJoltVehicleConstraintBinary = 3,
+  kPhysXSoftBodySettingsBinary = 4,
 };
 
 #pragma pack(push, 1)
 struct PhysicsResourceDesc {
-  OffsetT data_offset = 0;         // Absolute offset to cooked Jolt data
+  OffsetT data_offset = 0;         // Absolute offset to cooked backend data
   DataBlobSizeT size_bytes = 0;    // Size in bytes
   PhysicsResourceFormat format = PhysicsResourceFormat::kJoltShapeBinary;
   uint8_t reserved[3] = {};
@@ -235,16 +237,25 @@ struct SoftBodyBindingRecord {
   uint8_t tether_mode = 0;                    // kNone, kEuclidean, kGeodesic
   uint8_t reserved0[3] = {};
   float tether_max_distance_multiplier = 1.0f;
-  ResourceIndexT settings_resource_index = kNoResourceIndex;
-  uint8_t reserved1[8] = {};                  // Pad to 48 bytes
+  ResourceIndexT jolt_settings_resource_index = kNoResourceIndex;
+  ResourceIndexT physx_settings_resource_index = kNoResourceIndex;
+  float settings_scale[3] = { 1.0f, 1.0f, 1.0f };
+  float restitution = 0.0f;
+  float friction = 0.2f;
+  float vertex_radius = 0.0f;
 };
 #pragma pack(pop)
-static_assert(sizeof(SoftBodyBindingRecord) == 48);
+static_assert(sizeof(SoftBodyBindingRecord) == 68);
 ```
 
-`settings_resource_index` resolves from sidecar `bindings.soft_bodies[].settings_ref`
-and must reference a `PhysicsResourceDesc` with format
+`jolt_settings_resource_index` resolves from
+`bindings.soft_bodies[].jolt_settings_ref` and must reference
 `kJoltSoftBodySharedSettingsBinary`.
+`physx_settings_resource_index` resolves from
+`bindings.soft_bodies[].physx_settings_ref` and must reference
+`kPhysXSoftBodySettingsBinary`.
+`settings_scale` is applied to shared-settings vertices before runtime
+constraint derivation.
 
 **Joints/Constraints Binding:**
 Declares an articulated link or two-body constraint between nodes. Because Jolt constraint properties (motor settings, limits, degrees of freedom) are highly variable and complex, the record points to a serialized `JPH::ConstraintSettings` binary block.
@@ -273,7 +284,9 @@ struct VehicleBindingRecord {
 
   // Maps to a binary JPH::VehicleConstraintSettings blob in the physics_region
   ResourceIndexT constraint_resource_index = kNoResourceIndex;
-  uint8_t reserved[24] = {};
+  uint32_t wheel_table_offset = 0;            // Offset in kVehicleWheel table
+  uint16_t wheel_count = 0;
+  uint8_t reserved[18] = {};
 };
 #pragma pack(pop)
 static_assert(sizeof(VehicleBindingRecord) == 32);

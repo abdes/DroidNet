@@ -40,7 +40,8 @@
                 "jolt_shape_binary",
                 "jolt_constraint_binary",
                 "jolt_soft_body_shared_settings_binary",
-                "jolt_vehicle_constraint_binary"
+                "jolt_vehicle_constraint_binary",
+                "physx_soft_body_settings_binary"
             ]
         },
         "canonical_opres_path": {

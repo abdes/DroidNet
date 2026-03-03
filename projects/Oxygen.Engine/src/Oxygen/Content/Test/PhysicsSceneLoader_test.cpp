@@ -155,7 +155,9 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadAllBindingTypesSucceeds)
   pak7::SoftBodyBindingRecord soft {};
   soft.node_index = 14;
   soft.cluster_count = 9;
-  soft.settings_resource_index
+  soft.jolt_settings_resource_index
+    = oxygen::data::pak::core::ResourceIndexT { 42U };
+  soft.physx_settings_resource_index
     = oxygen::data::pak::core::ResourceIndexT { 42U };
 
   pak7::JointBindingRecord joint {};
@@ -236,7 +238,10 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadAllBindingTypesSucceeds)
   EXPECT_EQ(
     asset->GetBindings<pak7::SoftBodyBindingRecord>()[0].node_index, 14U);
   EXPECT_EQ(asset->GetBindings<pak7::SoftBodyBindingRecord>()[0]
-              .settings_resource_index,
+              .jolt_settings_resource_index,
+    oxygen::data::pak::core::ResourceIndexT { 42U });
+  EXPECT_EQ(asset->GetBindings<pak7::SoftBodyBindingRecord>()[0]
+              .physx_settings_resource_index,
     oxygen::data::pak::core::ResourceIndexT { 42U });
   EXPECT_EQ(
     asset->GetBindings<pak7::JointBindingRecord>()[0].node_index_a, 15U);

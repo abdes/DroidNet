@@ -111,10 +111,10 @@ enum class PhysicsBindingType : uint32_t {
 
 static_assert(core::kCurrentPakFormatVersion == 7);
 
-//! Describes a cooked Jolt physics binary blob stored in the physics_region.
+//! Describes a cooked backend physics binary blob stored in the physics_region.
 #pragma pack(push, 1)
 struct PhysicsResourceDesc {
-  core::OffsetT data_offset = 0; //!< Absolute offset to cooked Jolt data
+  core::OffsetT data_offset = 0; //!< Absolute offset to cooked physics data
   core::DataBlobSizeT size_bytes = 0; //!< Size in bytes
   PhysicsResourceFormat format = PhysicsResourceFormat::kJoltShapeBinary;
   uint8_t reserved[3] = {};
@@ -317,7 +317,7 @@ struct CharacterBindingRecord {
 #pragma pack(pop)
 static_assert(sizeof(CharacterBindingRecord) == 60);
 
-//! Soft body binding record (48 bytes).
+//! Soft body binding record (68 bytes).
 #pragma pack(push, 1)
 struct SoftBodyBindingRecord {
   world::SceneNodeIndexT node_index = 0;
@@ -330,11 +330,15 @@ struct SoftBodyBindingRecord {
   SoftBodyTetherMode tether_mode = SoftBodyTetherMode::kNone;
   uint8_t reserved0[3] = {};
   float tether_max_distance_multiplier = 1.0F;
-  core::ResourceIndexT settings_resource_index = core::kNoResourceIndex;
-  uint8_t reserved1[8] = {};
+  core::ResourceIndexT jolt_settings_resource_index = core::kNoResourceIndex;
+  core::ResourceIndexT physx_settings_resource_index = core::kNoResourceIndex;
+  float settings_scale[3] = { 1.0F, 1.0F, 1.0F };
+  float restitution = 0.0F;
+  float friction = 0.2F;
+  float vertex_radius = 0.0F;
 };
 #pragma pack(pop)
-static_assert(sizeof(SoftBodyBindingRecord) == 48);
+static_assert(sizeof(SoftBodyBindingRecord) == 68);
 
 //! Joint binding record (32 bytes). The joint blob is stored as a
 //! kJoltConstraintBinary entry in the physics_resource_table.

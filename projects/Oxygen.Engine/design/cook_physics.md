@@ -383,6 +383,8 @@ Repository-backed examples:
 1. `jolt_shape_binary`
 2. `jolt_constraint_binary`
 3. `jolt_soft_body_shared_settings_binary`
+4. `jolt_vehicle_constraint_binary`
+5. `physx_soft_body_settings_binary`
 
 ## 6.6.3 `physics-material-descriptor` Fields
 
@@ -497,21 +499,30 @@ Soft body:
 | Field | Type | Required | Default |
 | --- | --- | --- | --- |
 | `node_index` | uint32 | yes | none |
-| `settings_ref` | string | yes | none |
-| `cluster_count` | uint32 | no | `0` |
-| `stiffness` | number | no | `0.0` |
-| `damping` | number | no | `0.0` |
-| `edge_compliance` | number | no | `0.0` |
-| `shear_compliance` | number | no | `0.0` |
-| `bend_compliance` | number | no | `1.0` |
-| `tether_mode` | enum | no | `none` |
-| `tether_max_distance_multiplier` | number | no | `1.0` |
+| `jolt_settings_ref` | string | yes | none |
+| `physx_settings_ref` | string | yes | none |
+| `cluster_count` | uint32 | yes | none |
+| `stiffness` | number | yes | none |
+| `damping` | number | yes | none |
+| `edge_compliance` | number | yes | none |
+| `shear_compliance` | number | yes | none |
+| `bend_compliance` | number | yes | none |
+| `tether_mode` | enum | yes | none |
+| `tether_max_distance_multiplier` | number | yes | none |
+| `settings_scale` | vec3 | yes | none |
+| `restitution` | number | yes | none |
+| `friction` | number | yes | none |
+| `vertex_radius` | number | yes | none |
 
 Soft-body binding validation:
 
 1. `cluster_count` must be greater than zero.
-2. `settings_ref` must resolve to a physics resource with format
+2. `jolt_settings_ref` must resolve to a physics resource with format
    `jolt_soft_body_shared_settings_binary`.
+3. `physx_settings_ref` must resolve to a physics resource with format
+   `physx_soft_body_settings_binary`.
+4. `settings_scale` components must be finite and strictly positive.
+5. `restitution`, `friction`, and `vertex_radius` must be finite and >= 0.
 
 Joint:
 
@@ -527,13 +538,14 @@ Vehicle:
 | --- | --- | --- | --- |
 | `node_index` | uint32 | yes | none |
 | `constraint_ref` | string | yes | none |
+| `wheels` | array | yes | none |
 
 Vehicle hydration contract:
 
 1. `node_index` is the chassis node and must resolve to a dynamic rigid-body binding.
-2. Wheel topology is resolved from dynamic rigid-body descendants of the chassis node.
-3. At least two distinct wheel rigid bodies must resolve.
-4. `constraint_ref` must resolve to `.opres` with `jolt_constraint_binary` format and is mandatory for vehicle binding validity.
+2. Wheel topology is resolved from authored `wheels[]` entries only (no hierarchy inference).
+3. At least two distinct wheel entries are required; wheel roles (`axle_index` + `side`) must be unique.
+4. `constraint_ref` must resolve to `.opres` with `jolt_vehicle_constraint_binary` format and is mandatory for vehicle binding validity.
 
 Aggregate:
 

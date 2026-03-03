@@ -26,8 +26,10 @@
 #include <Jolt/Physics/Collision/ContactListener.h>
 #include <Jolt/Physics/EPhysicsUpdateError.h>
 #include <Jolt/Physics/PhysicsSystem.h>
+#include <Jolt/Physics/Vehicle/VehicleConstraint.h>
 #include <Jolt/RegisterTypes.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Physics/Jolt/Converters.h>
 #include <Oxygen/Physics/Jolt/JoltWorld.h>
 
@@ -48,6 +50,69 @@ constexpr uint32_t kMaxContactConstraints = 10240U;
 constexpr uint32_t kMaxPhysicsJobs = 1024U;
 constexpr uint32_t kMaxPhysicsBarriers = 64U;
 constexpr size_t kTempAllocatorBytes = 10U * 1024U * 1024U;
+
+[[nodiscard]] auto RemoveInvalidVehicleConstraintsBeforeStep(
+  JPH::PhysicsSystem& physics_system,
+  const std::unordered_set<oxygen::physics::BodyId>& known_body_ids) -> bool
+{
+  const auto constraints = physics_system.GetConstraints();
+  std::vector<JPH::Constraint*> invalid_constraints {};
+  invalid_constraints.reserve(constraints.size());
+  std::vector<JPH::VehicleConstraint*> invalid_vehicle_listeners {};
+
+  for (const auto& constraint_ref : constraints) {
+    if (constraint_ref == nullptr) {
+      continue;
+    }
+    auto* constraint = constraint_ref.GetPtr();
+    if (constraint == nullptr
+      || constraint->GetSubType() != JPH::EConstraintSubType::Vehicle) {
+      continue;
+    }
+
+    auto* vehicle_constraint = static_cast<JPH::VehicleConstraint*>(constraint);
+    const auto* vehicle_body = vehicle_constraint->GetVehicleBody();
+    const auto has_body = vehicle_body != nullptr;
+    const auto body_id = has_body
+      ? oxygen::physics::BodyId {
+          vehicle_body->GetID().GetIndexAndSequenceNumber(),
+        }
+      : oxygen::physics::kInvalidBodyId;
+    const auto body_known = has_body && known_body_ids.contains(body_id);
+    const auto is_rigid = has_body && vehicle_body->IsRigidBody();
+    const auto is_soft = has_body && vehicle_body->IsSoftBody();
+    const auto is_dynamic = has_body && vehicle_body->IsDynamic();
+    const auto is_static = has_body && vehicle_body->IsStatic();
+    const auto is_kinematic = has_body && vehicle_body->IsKinematic();
+    if (has_body && body_known && is_rigid && is_dynamic) {
+      continue;
+    }
+
+    LOG_F(ERROR,
+      "JoltWorld: invalid vehicle constraint before step "
+      "(constraint_ptr={} body_ptr={} body_id={} known_body={} rigid={} "
+      "soft={} dynamic={} static={} kinematic={}).",
+      static_cast<const void*>(vehicle_constraint),
+      static_cast<const void*>(vehicle_body), has_body ? body_id.get() : 0U,
+      body_known, is_rigid, is_soft, is_dynamic, is_static, is_kinematic);
+    invalid_constraints.push_back(vehicle_constraint);
+    invalid_vehicle_listeners.push_back(vehicle_constraint);
+  }
+
+  if (invalid_constraints.empty()) {
+    return false;
+  }
+
+  for (auto* listener : invalid_vehicle_listeners) {
+    physics_system.RemoveStepListener(listener);
+  }
+  physics_system.RemoveConstraints(
+    invalid_constraints.data(), static_cast<int>(invalid_constraints.size()));
+  LOG_F(ERROR,
+    "JoltWorld: removed {} invalid vehicle constraint(s) before step.",
+    invalid_constraints.size());
+  return true;
+}
 
 struct ObjectLayerMetadata final {
   oxygen::physics::CollisionLayer collision_layer {
@@ -515,6 +580,7 @@ oxygen::physics::jolt::JoltWorld::~JoltWorld()
 auto oxygen::physics::jolt::JoltWorld::CreateWorld(const world::WorldDesc& desc)
   -> PhysicsResult<WorldId>
 {
+  const auto simulation_lock = LockSimulationApi();
   if (!runtime_ready_) {
     return Err(PhysicsError::kBackendInitFailed);
   }
@@ -534,6 +600,7 @@ auto oxygen::physics::jolt::JoltWorld::CreateWorld(const world::WorldDesc& desc)
 auto oxygen::physics::jolt::JoltWorld::DestroyWorld(const WorldId world_id)
   -> PhysicsResult<void>
 {
+  const auto simulation_lock = LockSimulationApi();
   if (worlds_.erase(world_id) == 0U) {
     return Err(PhysicsError::kWorldNotFound);
   }
@@ -544,6 +611,7 @@ auto oxygen::physics::jolt::JoltWorld::Step(const WorldId world_id,
   const float delta_time, const int max_sub_steps, const float fixed_dt_seconds)
   -> PhysicsResult<void>
 {
+  const auto simulation_lock = LockSimulationApi();
   auto world = TryGetWorld(world_id);
   if (world == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -551,12 +619,18 @@ auto oxygen::physics::jolt::JoltWorld::Step(const WorldId world_id,
   if (delta_time <= 0.0F || fixed_dt_seconds <= 0.0F || max_sub_steps <= 0) {
     return Err(PhysicsError::kInvalidArgument);
   }
+  if (RemoveInvalidVehicleConstraintsBeforeStep(
+        world->physics_system, world->body_ids)) {
+    return Err(PhysicsError::kBackendInitFailed);
+  }
 
   const auto required_sub_steps = static_cast<int>(std::ceil(delta_time
     / std::max(fixed_dt_seconds, std::numeric_limits<float>::epsilon())));
   const auto collision_steps = std::clamp(required_sub_steps, 1, max_sub_steps);
+  simulation_step_in_progress_.store(true, std::memory_order_release);
   const auto update_error = world->physics_system.Update(
     delta_time, collision_steps, &world->temp_allocator, &world->job_system);
+  simulation_step_in_progress_.store(false, std::memory_order_release);
   if (update_error != JPH::EPhysicsUpdateError::None) {
     return Err(PhysicsError::kBackendInitFailed);
   }
@@ -568,6 +642,7 @@ auto oxygen::physics::jolt::JoltWorld::GetActiveBodyTransforms(
   std::span<system::ActiveBodyTransform> out_transforms) const
   -> PhysicsResult<size_t>
 {
+  const auto simulation_lock = LockSimulationApi();
   const auto world = TryGetWorld(world_id);
   if (world == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -600,6 +675,7 @@ auto oxygen::physics::jolt::JoltWorld::GetActiveBodyTransforms(
 auto oxygen::physics::jolt::JoltWorld::GetGravity(const WorldId world_id) const
   -> PhysicsResult<Vec3>
 {
+  const auto simulation_lock = LockSimulationApi();
   const auto world = TryGetWorld(world_id);
   if (world == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -611,6 +687,7 @@ auto oxygen::physics::jolt::JoltWorld::GetGravity(const WorldId world_id) const
 auto oxygen::physics::jolt::JoltWorld::SetGravity(
   const WorldId world_id, const Vec3& gravity) -> PhysicsResult<void>
 {
+  const auto simulation_lock = LockSimulationApi();
   auto world = TryGetWorld(world_id);
   if (world == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
@@ -783,6 +860,25 @@ auto oxygen::physics::jolt::JoltWorld::UnregisterBody(
     return Err(PhysicsError::kBodyNotFound);
   }
   return PhysicsResult<void>::Ok();
+}
+
+auto oxygen::physics::jolt::JoltWorld::LockSimulationApi() const
+  -> std::unique_lock<std::mutex>
+{
+  if (simulation_api_mutex_.try_lock()) {
+    return std::unique_lock<std::mutex>(simulation_api_mutex_, std::adopt_lock);
+  }
+
+  if (simulation_step_in_progress_.load(std::memory_order_acquire)
+    && !simulation_overlap_log_emitted_.exchange(
+      true, std::memory_order_acq_rel)) {
+    LOG_F(WARNING,
+      "JoltWorld: physics API call attempted while simulation step was "
+      "in progress; serializing via simulation API lock.");
+  }
+
+  simulation_api_mutex_.lock();
+  return std::unique_lock<std::mutex>(simulation_api_mutex_, std::adopt_lock);
 }
 
 auto oxygen::physics::jolt::JoltWorld::TryGetWorld(

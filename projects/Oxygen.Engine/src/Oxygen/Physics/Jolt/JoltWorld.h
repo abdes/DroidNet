@@ -6,8 +6,10 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 
 #include <Oxygen/Base/Macros.h>
@@ -74,6 +76,7 @@ public:
     -> bool;
   auto RegisterBody(WorldId world_id, BodyId body_id) -> PhysicsResult<void>;
   auto UnregisterBody(WorldId world_id, BodyId body_id) -> PhysicsResult<void>;
+  auto LockSimulationApi() const -> std::unique_lock<std::mutex>;
 
 private:
   struct WorldState;
@@ -85,6 +88,9 @@ private:
 
   bool runtime_ready_ { false };
   uint32_t next_world_id_ { 1U };
+  mutable std::mutex simulation_api_mutex_ {};
+  mutable std::atomic<bool> simulation_step_in_progress_ { false };
+  mutable std::atomic<bool> simulation_overlap_log_emitted_ { false };
   std::unordered_map<WorldId, std::unique_ptr<WorldState>> worlds_ {};
 };
 

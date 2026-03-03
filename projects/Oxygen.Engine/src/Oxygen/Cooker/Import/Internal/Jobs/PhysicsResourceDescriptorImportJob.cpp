@@ -116,6 +116,9 @@ namespace {
     if (value == "jolt_vehicle_constraint_binary") {
       return PhysicsResourceFormat::kJoltVehicleConstraintBinary;
     }
+    if (value == "physx_soft_body_settings_binary") {
+      return PhysicsResourceFormat::kPhysXSoftBodySettingsBinary;
+    }
     DCHECK_F(
       false, "Unsupported physics resource format after schema validation");
     return PhysicsResourceFormat::kJoltShapeBinary;
