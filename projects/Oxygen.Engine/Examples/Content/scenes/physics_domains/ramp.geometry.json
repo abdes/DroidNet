@@ -1,0 +1,48 @@
+{
+    "name": "ramp_geo",
+    "bounds": {
+        "min": [
+            -0.5,
+            -0.5,
+            -0.5
+        ],
+        "max": [
+            0.5,
+            0.5,
+            0.5
+        ]
+    },
+    "lods": [
+        {
+            "name": "ramp_geo_lod0",
+            "mesh_type": "procedural",
+            "bounds": {
+                "min": [
+                    -0.5,
+                    -0.5,
+                    -0.5
+                ],
+                "max": [
+                    0.5,
+                    0.5,
+                    0.5
+                ]
+            },
+            "procedural": {
+                "generator": "Cube",
+                "mesh_name": "RampBox"
+            },
+            "submeshes": [
+                {
+                    "name": "ramp_surface",
+                    "material_ref": "/.cooked/Materials/ramp_orange.omat",
+                    "views": [
+                        {
+                            "view_ref": "__all__"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

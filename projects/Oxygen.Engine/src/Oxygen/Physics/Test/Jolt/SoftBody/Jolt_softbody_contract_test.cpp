@@ -7,6 +7,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Physics/Test/Jolt/Jolt_test_fixture.h>
+#include <Oxygen/Physics/Test/TestBlobBuilders.h>
 #include <Oxygen/Physics/World/WorldDesc.h>
 
 namespace oxygen::physics::test::jolt {
@@ -94,10 +95,12 @@ NOLINT_TEST_F(
   ASSERT_TRUE(invalid_desc.has_error());
   EXPECT_EQ(invalid_desc.error(), PhysicsError::kInvalidArgument);
 
+  const auto valid_soft_body_settings_blob = MakeSoftBodySettingsBlob(3U);
   const auto valid_soft_body = soft_bodies.CreateSoftBody(world_id,
     softbody::SoftBodyDesc {
       .anchor_body_id = kInvalidBodyId,
       .cluster_count = 3U,
+      .settings_blob = valid_soft_body_settings_blob,
     });
   ASSERT_TRUE(valid_soft_body.has_value());
 
@@ -130,6 +133,7 @@ NOLINT_TEST_F(
   ASSERT_TRUE(world.has_value());
   const auto world_id = world.value();
 
+  const auto soft_body_settings_blob = MakeSoftBodySettingsBlob(4U);
   const auto created = soft_bodies.CreateSoftBody(world_id,
     softbody::SoftBodyDesc {
       .anchor_body_id = kInvalidBodyId,
@@ -143,6 +147,7 @@ NOLINT_TEST_F(
         .tether_mode = softbody::SoftBodyTetherMode::kNone,
         .tether_max_distance_multiplier = 1.0F,
       },
+      .settings_blob = soft_body_settings_blob,
     });
   ASSERT_TRUE(created.has_value());
   EXPECT_TRUE(soft_bodies.FlushStructuralChanges(world_id).has_value());

@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <string_view>
 
 #include <lua.h>
@@ -192,6 +193,83 @@ namespace {
     return PushAggregateHandle(state, *world_id_opt, result.value());
   }
 
+  auto PushSoftBodyHandleForNode(lua_State* state,
+    physics::PhysicsModule& physics_module, const physics::WorldId world_id,
+    const scene::NodeHandle node_handle) -> int
+  {
+    const auto aggregate_id = physics_module.GetAggregateIdForNode(node_handle);
+    if (!physics::IsValid(aggregate_id)) {
+      lua_pushnil(state);
+      return 1;
+    }
+
+    const auto state_result
+      = physics_module.SoftBodies().GetState(world_id, aggregate_id);
+    if (!state_result.has_value()) {
+      lua_pushnil(state);
+      return 1;
+    }
+
+    return PushAggregateHandle(state, world_id, aggregate_id);
+  }
+
+  auto LuaSoftBodyGetExact(lua_State* state) -> int
+  {
+    if (RejectFixedSimulationWithNil(state, "get_exact")) {
+      return 1;
+    }
+
+    const auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr) {
+      lua_pushnil(state);
+      return 1;
+    }
+
+    auto* physics_module = GetPhysicsModule(state);
+    const auto world_id_opt = GetPhysicsWorldId(state);
+    if (physics_module == nullptr || !world_id_opt.has_value()) {
+      lua_pushnil(state);
+      return 1;
+    }
+
+    return PushSoftBodyHandleForNode(
+      state, *physics_module, *world_id_opt, node->GetHandle());
+  }
+
+  auto LuaSoftBodyFindInAncestors(lua_State* state) -> int
+  {
+    if (RejectFixedSimulationWithNil(state, "find_in_ancestors")) {
+      return 1;
+    }
+
+    const auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr || !node->IsAlive()) {
+      lua_pushnil(state);
+      return 1;
+    }
+
+    auto* physics_module = GetPhysicsModule(state);
+    const auto world_id_opt = GetPhysicsWorldId(state);
+    if (physics_module == nullptr || !world_id_opt.has_value()) {
+      lua_pushnil(state);
+      return 1;
+    }
+
+    auto current = std::optional<scene::SceneNode> { *node };
+    while (current.has_value() && current->IsAlive()) {
+      const auto pushed = PushSoftBodyHandleForNode(
+        state, *physics_module, *world_id_opt, current->GetHandle());
+      if (lua_isnil(state, -1) == 0) {
+        return pushed;
+      }
+      lua_pop(state, 1);
+      current = current->GetParent();
+    }
+
+    lua_pushnil(state);
+    return 1;
+  }
+
   auto LuaSoftBodyDestroy(lua_State* state) -> int
   {
     if (RejectFixedSimulationWithBool(state, "destroy")) {
@@ -318,6 +396,11 @@ auto RegisterPhysicsSoftBodyBindings(
 
   lua_pushcfunction(state, LuaSoftBodyCreate, "physics.soft_body.create");
   lua_setfield(state, soft_body_index, "create");
+  lua_pushcfunction(state, LuaSoftBodyGetExact, "physics.soft_body.get_exact");
+  lua_setfield(state, soft_body_index, "get_exact");
+  lua_pushcfunction(
+    state, LuaSoftBodyFindInAncestors, "physics.soft_body.find_in_ancestors");
+  lua_setfield(state, soft_body_index, "find_in_ancestors");
   lua_pushcfunction(state, LuaSoftBodyDestroy, "physics.soft_body.destroy");
   lua_setfield(state, soft_body_index, "destroy");
   lua_pushcfunction(state, LuaSoftBodySetMaterialParams,

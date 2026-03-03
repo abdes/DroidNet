@@ -1,0 +1,15 @@
+{
+    "name": "softbody_pink",
+    "domain": "opaque",
+    "alpha_mode": "opaque",
+    "parameters": {
+        "base_color": [
+            0.9,
+            0.35,
+            0.55,
+            1.0
+        ],
+        "roughness": 0.3,
+        "metalness": 0.0
+    }
+}

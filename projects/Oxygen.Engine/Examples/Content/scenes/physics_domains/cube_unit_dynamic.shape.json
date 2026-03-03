@@ -1,0 +1,11 @@
+{
+    "name": "cube_unit_dynamic",
+    "virtual_path": "/.cooked/Physics/Shapes/cube_unit_dynamic.ocshape",
+    "shape_type": "box",
+    "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+    "half_extents": [
+        0.5,
+        0.5,
+        0.5
+    ]
+}

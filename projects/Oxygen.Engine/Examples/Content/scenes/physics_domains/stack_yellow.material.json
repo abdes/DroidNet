@@ -1,0 +1,15 @@
+{
+    "name": "stack_yellow",
+    "domain": "opaque",
+    "alpha_mode": "opaque",
+    "parameters": {
+        "base_color": [
+            0.95,
+            0.8,
+            0.15,
+            1.0
+        ],
+        "roughness": 0.5,
+        "metalness": 0.0
+    }
+}

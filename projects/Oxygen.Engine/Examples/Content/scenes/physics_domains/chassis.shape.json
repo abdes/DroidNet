@@ -1,0 +1,11 @@
+{
+    "name": "chassis_shape",
+    "virtual_path": "/.cooked/Physics/Shapes/chassis.ocshape",
+    "shape_type": "box",
+    "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+    "half_extents": [
+        0.9,
+        1.8,
+        0.3
+    ]
+}

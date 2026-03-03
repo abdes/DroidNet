@@ -175,6 +175,20 @@ namespace {
     }
   }
 
+  auto ToRuntimeVehicleWheelSide(
+    const data::pak::physics::VehicleWheelSide side)
+    -> physics::vehicle::VehicleWheelSide
+  {
+    switch (side) {
+    case data::pak::physics::VehicleWheelSide::kLeft:
+      return physics::vehicle::VehicleWheelSide::kLeft;
+    case data::pak::physics::VehicleWheelSide::kRight:
+      return physics::vehicle::VehicleWheelSide::kRight;
+    default:
+      return physics::vehicle::VehicleWheelSide::kLeft;
+    }
+  }
+
   auto IsDescendantNode(const std::vector<scene::SceneNode>& runtime_nodes,
     const size_t candidate_index, const size_t ancestor_index) -> bool
   {
@@ -198,46 +212,22 @@ namespace {
     }
   }
 
-  auto CollectDescendantRigidBodyNodeIndices(
-    const std::span<const data::pak::physics::RigidBodyBindingRecord>
-      rigid_body_bindings,
-    const std::vector<scene::SceneNode>& runtime_nodes,
-    const uint32_t chassis_node_index) -> std::vector<uint32_t>
-  {
-    auto wheel_node_indices = std::vector<uint32_t> {};
-    const auto chassis_index = static_cast<size_t>(chassis_node_index);
-    for (const auto& rigid_body : rigid_body_bindings) {
-      const auto candidate_index = static_cast<size_t>(rigid_body.node_index);
-      if (!IsDescendantNode(runtime_nodes, candidate_index, chassis_index)) {
-        continue;
-      }
-      wheel_node_indices.push_back(rigid_body.node_index);
-    }
-
-    std::ranges::sort(wheel_node_indices);
-    wheel_node_indices.erase(std::ranges::unique(wheel_node_indices).begin(),
-      wheel_node_indices.end());
-    return wheel_node_indices;
-  }
-
   auto CollectVehicleAssociatedRigidBodyNodeIndices(
     const std::span<const data::pak::physics::VehicleBindingRecord>
       vehicle_bindings,
-    const std::span<const data::pak::physics::RigidBodyBindingRecord>
-      rigid_body_bindings,
-    const std::vector<scene::SceneNode>& runtime_nodes)
-    -> std::unordered_set<uint32_t>
+    const std::span<const data::pak::physics::VehicleWheelBindingRecord>
+      vehicle_wheel_bindings) -> std::unordered_set<uint32_t>
   {
     auto forbidden_node_indices = std::unordered_set<uint32_t> {};
     forbidden_node_indices.reserve(
-      vehicle_bindings.size() + rigid_body_bindings.size());
+      vehicle_bindings.size() + vehicle_wheel_bindings.size());
 
     for (const auto& vehicle : vehicle_bindings) {
       forbidden_node_indices.insert(vehicle.node_index);
-      const auto wheel_node_indices = CollectDescendantRigidBodyNodeIndices(
-        rigid_body_bindings, runtime_nodes, vehicle.node_index);
-      for (const auto node_index : wheel_node_indices) {
-        forbidden_node_indices.insert(node_index);
+      for (const auto& wheel : vehicle_wheel_bindings) {
+        if (wheel.vehicle_node_index == vehicle.node_index) {
+          forbidden_node_indices.insert(wheel.wheel_node_index);
+        }
       }
     }
 
@@ -514,6 +504,9 @@ void SceneLoaderService::StartLoad(const data::AssetKey& key)
   swap_.scene_key = key;
   swap_.asset.reset();
   swap_.physics_asset.reset();
+  runtime_scene_ = observer_ptr<scene::Scene> { nullptr };
+  hydration_window_active_ = false;
+  hydration_transforms_resolved_ = false;
   ready_ = false;
   failed_ = false;
   consumed_ = false;
@@ -531,6 +524,9 @@ void SceneLoaderService::MarkConsumed()
   consumed_ = true;
   swap_.asset.reset();
   swap_.physics_asset.reset();
+  runtime_scene_ = observer_ptr<scene::Scene> { nullptr };
+  hydration_window_active_ = false;
+  hydration_transforms_resolved_ = false;
   runtime_nodes_.clear();
   active_camera_ = {};
   // Drop any pins that were never released due to early consumption.
@@ -1197,11 +1193,11 @@ void SceneLoaderService::HydrateColliderBindings(
       }
     }
 
+    const auto [initial_position, initial_rotation]
+      = ReadHydrationWorldPose(node_index);
+    desc.initial_position = initial_position;
+    desc.initial_rotation = initial_rotation;
     auto& node = runtime_nodes_[node_index];
-    desc.initial_position
-      = node.GetTransform().GetLocalPosition().value_or(Vec3(0.0F));
-    desc.initial_rotation = node.GetTransform().GetLocalRotation().value_or(
-      Quat(1.0F, 0.0F, 0.0F, 0.0F));
     const auto attached = physics::ScenePhysics::AttachRigidBodyDetailed(
       observer_ptr<physics::PhysicsModule> { &physics_module }, node, desc);
     if (!attached.has_value()) {
@@ -1313,11 +1309,11 @@ void SceneLoaderService::HydrateRigidBodyBindings(
       }
     }
 
+    const auto [initial_position, initial_rotation]
+      = ReadHydrationWorldPose(node_index);
+    desc.initial_position = initial_position;
+    desc.initial_rotation = initial_rotation;
     auto& node = runtime_nodes_[node_index];
-    desc.initial_position
-      = node.GetTransform().GetLocalPosition().value_or(Vec3(0.0F));
-    desc.initial_rotation = node.GetTransform().GetLocalRotation().value_or(
-      Quat(1.0F, 0.0F, 0.0F, 0.0F));
     const auto attached = physics::ScenePhysics::AttachRigidBodyDetailed(
       observer_ptr<physics::PhysicsModule> { &physics_module }, node, desc);
     if (!attached.has_value()) {
@@ -1388,11 +1384,11 @@ void SceneLoaderService::HydrateCharacterBindings(
         shape_desc.local_scale[1], shape_desc.local_scale[2]);
     }
 
+    const auto [initial_position, initial_rotation]
+      = ReadHydrationWorldPose(node_index);
+    desc.initial_position = initial_position;
+    desc.initial_rotation = initial_rotation;
     auto& node = runtime_nodes_[node_index];
-    desc.initial_position
-      = node.GetTransform().GetLocalPosition().value_or(Vec3(0.0F));
-    desc.initial_rotation = node.GetTransform().GetLocalRotation().value_or(
-      Quat(1.0F, 0.0F, 0.0F, 0.0F));
     const auto attached = physics::ScenePhysics::AttachCharacterDetailed(
       observer_ptr<physics::PhysicsModule> { &physics_module }, node, desc);
     if (!attached.has_value()) {
@@ -1414,6 +1410,10 @@ void SceneLoaderService::HydrateSoftBodyBindings(
     throw std::runtime_error(
       "soft-body hydration requires a valid physics world");
   }
+  if (!current_physics_context_asset_key_.has_value()) {
+    throw std::runtime_error(
+      "soft-body hydration requires active physics hydration context");
+  }
 
   for (const auto& record : bindings) {
     const auto node_index = static_cast<size_t>(record.node_index);
@@ -1426,6 +1426,11 @@ void SceneLoaderService::HydrateSoftBodyBindings(
       throw std::runtime_error(
         std::string("soft-body cluster_count must be > 0 (node_index=")
         + std::to_string(record.node_index) + ")");
+    }
+    if (record.settings_resource_index == data::pak::core::kNoResourceIndex) {
+      throw std::runtime_error(
+        std::string("soft-body settings_resource_index is missing ")
+        + "(node_index=" + std::to_string(record.node_index) + ")");
     }
 
     const auto validate_non_negative_finite
@@ -1450,6 +1455,41 @@ void SceneLoaderService::HydrateSoftBodyBindings(
         + std::to_string(record.node_index) + ")");
     }
 
+    const auto settings_resource_key_opt
+      = loader_.MakePhysicsResourceKeyForAsset(
+        *current_physics_context_asset_key_, record.settings_resource_index);
+    if (!settings_resource_key_opt.has_value()) {
+      throw std::runtime_error(
+        std::string("soft-body settings_resource_index could not be resolved ")
+        + "(node_index=" + std::to_string(record.node_index) + " index="
+        + std::to_string(record.settings_resource_index.get()) + ")");
+    }
+    const auto settings_resource
+      = loader_.GetPhysicsResource(*settings_resource_key_opt);
+    if (!settings_resource) {
+      throw std::runtime_error(
+        std::string("soft-body settings resource is not loaded ")
+        + "(node_index=" + std::to_string(record.node_index) + " index="
+        + std::to_string(record.settings_resource_index.get()) + ")");
+    }
+    if (settings_resource->GetFormat()
+      != data::pak::physics::PhysicsResourceFormat::
+        kJoltSoftBodySharedSettingsBinary) {
+      throw std::runtime_error(
+        std::string("soft-body settings resource format is not ")
+        + "jolt_soft_body_shared_settings_binary (node_index="
+        + std::to_string(record.node_index) + " index="
+        + std::to_string(record.settings_resource_index.get()) + " format="
+        + std::to_string(static_cast<uint32_t>(settings_resource->GetFormat()))
+        + ")");
+    }
+    if (settings_resource->GetData().empty()) {
+      throw std::runtime_error(
+        std::string("soft-body settings resource payload is empty ")
+        + "(node_index=" + std::to_string(record.node_index) + " index="
+        + std::to_string(record.settings_resource_index.get()) + ")");
+    }
+
     auto desc = physics::softbody::SoftBodyDesc {};
     desc.cluster_count = record.cluster_count;
     desc.material_params.stiffness = record.stiffness;
@@ -1461,12 +1501,12 @@ void SceneLoaderService::HydrateSoftBodyBindings(
       = ToRuntimeSoftBodyTetherMode(record.tether_mode);
     desc.material_params.tether_max_distance_multiplier
       = record.tether_max_distance_multiplier;
+    const auto [initial_position, initial_rotation]
+      = ReadHydrationWorldPose(node_index);
+    desc.initial_position = initial_position;
+    desc.initial_rotation = initial_rotation;
+    desc.settings_blob = settings_resource->GetData();
     auto& node = runtime_nodes_[node_index];
-    auto node_tf = node.GetTransform();
-    desc.initial_position = node_tf.GetWorldPosition().value_or(
-      node_tf.GetLocalPosition().value_or(Vec3(0.0F)));
-    desc.initial_rotation = node_tf.GetWorldRotation().value_or(
-      node_tf.GetLocalRotation().value_or(Quat(1.0F, 0.0F, 0.0F, 0.0F)));
 
     const auto created
       = physics_module.SoftBodies().CreateSoftBody(world_id, desc);
@@ -1529,8 +1569,8 @@ void SceneLoaderService::HydrateSoftBodyBindings(
 void SceneLoaderService::HydrateVehicleBindings(
   physics::PhysicsModule& physics_module,
   const std::span<const data::pak::physics::VehicleBindingRecord> bindings,
-  const std::span<const data::pak::physics::RigidBodyBindingRecord>
-    rigid_body_bindings)
+  const std::span<const data::pak::physics::VehicleWheelBindingRecord>
+    wheel_bindings)
 {
   const auto world_id = physics_module.GetWorldId();
   if (!physics::IsValid(world_id)) {
@@ -1541,22 +1581,6 @@ void SceneLoaderService::HydrateVehicleBindings(
     throw std::runtime_error(
       "vehicle hydration requires active physics hydration context");
   }
-
-  auto rigid_body_node_indices = std::unordered_set<uint32_t> {};
-  rigid_body_node_indices.reserve(rigid_body_bindings.size());
-  for (const auto& rigid_body : rigid_body_bindings) {
-    rigid_body_node_indices.insert(rigid_body.node_index);
-  }
-
-  const auto find_runtime_node_index
-    = [&](const scene::NodeHandle& node_handle) -> std::optional<size_t> {
-    for (size_t i = 0; i < runtime_nodes_.size(); ++i) {
-      if (runtime_nodes_[i].GetHandle() == node_handle) {
-        return i;
-      }
-    }
-    return std::nullopt;
-  };
 
   for (const auto& record : bindings) {
     const auto chassis_node_index = static_cast<size_t>(record.node_index);
@@ -1588,15 +1612,22 @@ void SceneLoaderService::HydrateVehicleBindings(
         + std::to_string(record.constraint_resource_index.get()) + ")");
     }
     if (constraint_resource->GetFormat()
-      != data::pak::physics::PhysicsResourceFormat::kJoltConstraintBinary) {
+      != data::pak::physics::PhysicsResourceFormat::
+        kJoltVehicleConstraintBinary) {
       throw std::runtime_error(
         std::string("vehicle constraint resource format is not ")
-        + "jolt_constraint_binary (node_index="
+        + "jolt_vehicle_constraint_binary (node_index="
         + std::to_string(record.node_index) + " index="
         + std::to_string(record.constraint_resource_index.get()) + " format="
         + std::to_string(
           static_cast<uint32_t>(constraint_resource->GetFormat()))
         + ")");
+    }
+    if (constraint_resource->GetData().empty()) {
+      throw std::runtime_error(
+        std::string("vehicle constraint resource payload is empty ")
+        + "(node_index=" + std::to_string(record.node_index) + " index="
+        + std::to_string(record.constraint_resource_index.get()) + ")");
     }
 
     const auto chassis_body = physics::ScenePhysics::GetRigidBody(
@@ -1626,24 +1657,40 @@ void SceneLoaderService::HydrateVehicleBindings(
     }
     const auto chassis_position = chassis_position_result.value();
 
-    const auto wheel_node_indices = CollectDescendantRigidBodyNodeIndices(
-      rigid_body_bindings, runtime_nodes_, record.node_index);
-    if (wheel_node_indices.size() < 2U) {
+    auto wheel_records_for_vehicle
+      = std::vector<data::pak::physics::VehicleWheelBindingRecord> {};
+    wheel_records_for_vehicle.reserve(record.wheel_count);
+    for (const auto& wheel_binding : wheel_bindings) {
+      if (wheel_binding.vehicle_node_index == record.node_index) {
+        wheel_records_for_vehicle.push_back(wheel_binding);
+      }
+    }
+    if (wheel_records_for_vehicle.size()
+      != static_cast<size_t>(record.wheel_count)) {
       throw std::runtime_error(
-        std::string("vehicle requires at least two descendant rigid-body ")
-        + "wheel nodes under chassis node_index="
-        + std::to_string(record.node_index));
+        std::string("vehicle wheel_count does not match wheel table entries ")
+        + "(node_index=" + std::to_string(record.node_index)
+        + " declared=" + std::to_string(record.wheel_count) + " resolved="
+        + std::to_string(wheel_records_for_vehicle.size()) + ")");
+    }
+    if (wheel_records_for_vehicle.size() < 2U) {
+      throw std::runtime_error(
+        std::string("vehicle requires at least two wheel entries ")
+        + "(node_index=" + std::to_string(record.node_index) + ")");
     }
 
-    auto wheel_ids_storage = std::vector<physics::BodyId> {};
-    wheel_ids_storage.reserve(wheel_node_indices.size());
+    auto wheel_desc_storage
+      = std::vector<physics::vehicle::VehicleWheelDesc> {};
+    wheel_desc_storage.reserve(wheel_records_for_vehicle.size());
     auto wheel_positions_storage = std::vector<Vec3> {};
-    wheel_positions_storage.reserve(wheel_node_indices.size());
+    wheel_positions_storage.reserve(wheel_records_for_vehicle.size());
     auto distinct_wheel_ids = std::unordered_set<physics::BodyId> {};
-    distinct_wheel_ids.reserve(wheel_node_indices.size());
+    distinct_wheel_ids.reserve(wheel_records_for_vehicle.size());
     constexpr float kMinWheelOffsetSq = 1.0e-6F;
-    for (const auto wheel_node_index_u32 : wheel_node_indices) {
-      const auto wheel_node_index = static_cast<size_t>(wheel_node_index_u32);
+    for (const auto& wheel_binding : wheel_records_for_vehicle) {
+      const auto wheel_node_index_u32 = wheel_binding.wheel_node_index;
+      const auto wheel_node_index
+        = static_cast<size_t>(wheel_binding.wheel_node_index);
       if (wheel_node_index >= runtime_nodes_.size()) {
         throw std::runtime_error(
           std::string("vehicle wheel node_index out of range: ")
@@ -1660,14 +1707,18 @@ void SceneLoaderService::HydrateVehicleBindings(
           + " wheel_node_index=" + std::to_string(wheel_node_index_u32) + ")");
       }
       if (wheel_body->GetBodyId() == chassis_body->GetBodyId()) {
-        continue;
+        throw std::runtime_error(
+          std::string("vehicle wheel must not resolve to chassis body ")
+          + "(chassis_node_index=" + std::to_string(record.node_index)
+          + " wheel_node_index=" + std::to_string(wheel_node_index_u32) + ")");
       }
       const auto wheel_body_type
         = physics_module.GetBodyTypeForBodyId(wheel_body->GetBodyId());
       if (!wheel_body_type.has_value()
-        || *wheel_body_type != physics::body::BodyType::kDynamic) {
+        || (*wheel_body_type != physics::body::BodyType::kDynamic
+          && *wheel_body_type != physics::body::BodyType::kKinematic)) {
         throw std::runtime_error(
-          std::string("vehicle wheel body must be dynamic ")
+          std::string("vehicle wheel body must be dynamic or kinematic ")
           + "(chassis_node_index=" + std::to_string(record.node_index)
           + " wheel_node_index=" + std::to_string(wheel_node_index_u32) + ")");
       }
@@ -1708,11 +1759,15 @@ void SceneLoaderService::HydrateVehicleBindings(
           + " wheel_node_index=" + std::to_string(wheel_node_index_u32)
           + " body_id=" + physics::to_string(wheel_body->GetBodyId()) + ")");
       }
-      wheel_ids_storage.push_back(wheel_body->GetBodyId());
+      wheel_desc_storage.push_back(physics::vehicle::VehicleWheelDesc {
+        .body_id = wheel_body->GetBodyId(),
+        .axle_index = wheel_binding.axle_index,
+        .side = ToRuntimeVehicleWheelSide(wheel_binding.side),
+      });
       wheel_positions_storage.push_back(wheel_position);
     }
 
-    if (wheel_ids_storage.size() < 2U) {
+    if (wheel_desc_storage.size() < 2U) {
       throw std::runtime_error(
         std::string("vehicle wheel body topology must resolve to at least two ")
         + "distinct wheel bodies (chassis_node_index="
@@ -1721,7 +1776,9 @@ void SceneLoaderService::HydrateVehicleBindings(
 
     auto vehicle_desc = physics::vehicle::VehicleDesc {
       .chassis_body_id = chassis_body->GetBodyId(),
-      .wheel_body_ids = std::span<const physics::BodyId>(wheel_ids_storage),
+      .wheels
+      = std::span<const physics::vehicle::VehicleWheelDesc>(wheel_desc_storage),
+      .constraint_settings_blob = constraint_resource->GetData(),
     };
     const auto created
       = physics_module.Vehicles().CreateVehicle(world_id, vehicle_desc);
@@ -1742,45 +1799,15 @@ void SceneLoaderService::HydrateVehicleBindings(
         + " reason=" + std::string(physics::to_string(authority.error())));
     }
 
-    auto mapping_node_index = std::optional<size_t> { chassis_node_index };
-    while (mapping_node_index.has_value()) {
-      const auto node_handle = runtime_nodes_[*mapping_node_index].GetHandle();
-      const auto has_rigid_body = rigid_body_node_indices.contains(
-        static_cast<uint32_t>(*mapping_node_index));
-      const auto has_character = physics::ScenePhysics::GetCharacter(
-        observer_ptr<physics::PhysicsModule> { &physics_module }, node_handle)
-                                   .has_value();
-      const auto has_aggregate
-        = physics_module.HasAggregateForNode(node_handle);
-      if (!has_rigid_body && !has_character && !has_aggregate) {
-        break;
-      }
-      const auto parent = runtime_nodes_[*mapping_node_index].GetParent();
-      if (!parent.has_value()) {
-        mapping_node_index.reset();
-        break;
-      }
-      mapping_node_index = find_runtime_node_index(parent->GetHandle());
-    }
-
-    if (!mapping_node_index.has_value()) {
-      LOG_F(WARNING,
-        "SceneLoader: Vehicle aggregate mapping skipped (no valid anchor) "
-        "(node_index={} aggregate_id={})",
-        record.node_index, physics::to_string(created.value()));
-      continue;
-    }
-
     const auto mapping_node_handle
-      = runtime_nodes_[*mapping_node_index].GetHandle();
+      = runtime_nodes_[chassis_node_index].GetHandle();
     if (const auto existing_node
       = physics_module.GetNodeForAggregateId(created.value());
       existing_node.has_value() && *existing_node != mapping_node_handle) {
-      LOG_F(WARNING,
-        "SceneLoader: Vehicle aggregate mapping skipped (aggregate id "
-        "collision) (node_index={} aggregate_id={})",
-        record.node_index, physics::to_string(created.value()));
-      continue;
+      throw std::runtime_error(
+        std::string("vehicle aggregate id collides with existing mapping id=")
+        + physics::to_string(created.value())
+        + " (node_index=" + std::to_string(record.node_index) + ")");
     }
 
     physics_module.RegisterNodeAggregateMapping(
@@ -1946,12 +1973,15 @@ void SceneLoaderService::HydratePhysicsBindings(
     = physics_asset.GetBindings<data::pak::physics::JointBindingRecord>();
   const auto vehicle_bindings
     = physics_asset.GetBindings<data::pak::physics::VehicleBindingRecord>();
+  const auto vehicle_wheel_bindings
+    = physics_asset
+        .GetBindings<data::pak::physics::VehicleWheelBindingRecord>();
   const auto aggregate_bindings
     = physics_asset.GetBindings<data::pak::physics::AggregateBindingRecord>();
 
   const auto ccd_forbidden_node_indices
     = CollectVehicleAssociatedRigidBodyNodeIndices(
-      vehicle_bindings, rigid_body_bindings, runtime_nodes_);
+      vehicle_bindings, vehicle_wheel_bindings);
   auto ccd_forbidden = ccd_forbidden_node_indices;
   if (!soft_body_bindings.empty()) {
     for (const auto& rigid_body : rigid_body_bindings) {
@@ -1968,7 +1998,7 @@ void SceneLoaderService::HydratePhysicsBindings(
   HydrateAggregateBindings(
     *physics_module, aggregate_bindings, rigid_body_bindings);
   HydrateVehicleBindings(
-    *physics_module, vehicle_bindings, rigid_body_bindings);
+    *physics_module, vehicle_bindings, vehicle_wheel_bindings);
   HydrateColliderBindings(*physics_module, collider_bindings);
   HydrateCharacterBindings(*physics_module, character_bindings);
   HydrateSoftBodyBindings(*physics_module, soft_body_bindings);
@@ -1980,6 +2010,65 @@ void SceneLoaderService::HydratePhysicsBindings(
     rigid_body_bindings.size(), collider_bindings.size(),
     character_bindings.size(), soft_body_bindings.size(), joint_bindings.size(),
     vehicle_bindings.size(), aggregate_bindings.size());
+}
+
+void SceneLoaderService::BeginHydrationWindow()
+{
+  if (runtime_scene_ == nullptr) {
+    throw std::runtime_error(
+      "physics hydration requires an instantiated runtime scene");
+  }
+  if (hydration_window_active_) {
+    throw std::runtime_error(
+      "physics hydration window re-entry is not supported");
+  }
+  hydration_window_active_ = true;
+  hydration_transforms_resolved_ = false;
+}
+
+void SceneLoaderService::EndHydrationWindow() noexcept
+{
+  hydration_window_active_ = false;
+  hydration_transforms_resolved_ = false;
+}
+
+void SceneLoaderService::ResolveHydrationTransforms()
+{
+  if (!hydration_window_active_) {
+    throw std::runtime_error(
+      "ResolveHydrationTransforms requires an active hydration window");
+  }
+  if (hydration_transforms_resolved_) {
+    return;
+  }
+  CHECK_NOTNULL_F(runtime_scene_.get());
+  runtime_scene_->Update();
+  hydration_transforms_resolved_ = true;
+}
+
+auto SceneLoaderService::ReadHydrationWorldPose(const size_t node_index) const
+  -> std::pair<Vec3, Quat>
+{
+  if (!hydration_window_active_ || !hydration_transforms_resolved_) {
+    throw std::runtime_error(
+      "world transform read is forbidden before hydration transforms are "
+      "resolved");
+  }
+  if (node_index >= runtime_nodes_.size()) {
+    throw std::runtime_error(
+      "hydration world-pose read node_index out of range");
+  }
+
+  const auto node = runtime_nodes_[node_index];
+  const auto transform = node.GetTransform();
+  const auto world_position = transform.GetWorldPosition();
+  const auto world_rotation = transform.GetWorldRotation();
+  if (!world_position.has_value() || !world_rotation.has_value()) {
+    throw std::runtime_error(
+      "world transform unavailable after ResolveHydrationTransforms");
+  }
+
+  return { *world_position, *world_rotation };
 }
 
 /*!
@@ -2041,6 +2130,9 @@ auto SceneLoaderService::BuildSceneAsync(scene::Scene& scene,
 
   runtime_nodes_.clear();
   active_camera_ = {};
+  runtime_scene_ = observer_ptr<scene::Scene> { &scene };
+  hydration_window_active_ = false;
+  hydration_transforms_resolved_ = false;
 
   scene.SetEnvironment(BuildEnvironment(asset));
   LogSceneSummary(asset);
@@ -2103,6 +2195,10 @@ auto SceneLoaderService::PreloadPhysicsDependencyResources(
     physics_asset.GetBindings<data::pak::physics::VehicleBindingRecord>()) {
     collect_constraint_resource_index(record.constraint_resource_index);
   }
+  for (const auto& record :
+    physics_asset.GetBindings<data::pak::physics::SoftBodyBindingRecord>()) {
+    collect_constraint_resource_index(record.settings_resource_index);
+  }
 
   for (const auto resource_index_raw : payload_indices) {
     const auto resource_index
@@ -2129,8 +2225,12 @@ auto SceneLoaderService::HydratePhysicsSidecar(
   const data::PhysicsSceneAsset& physics_asset) -> co::Co<>
 {
   current_physics_context_asset_key_ = physics_asset.GetAssetKey();
-  ScopeGuard clear_context(
-    [this]() noexcept { current_physics_context_asset_key_.reset(); });
+  BeginHydrationWindow();
+  ScopeGuard clear_context([this]() noexcept {
+    EndHydrationWindow();
+    current_physics_context_asset_key_.reset();
+  });
+  ResolveHydrationTransforms();
   co_await PreloadPhysicsDependencyResources(physics_asset);
   HydratePhysicsBindings(physics_asset);
   co_return;

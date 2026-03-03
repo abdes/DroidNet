@@ -113,6 +113,9 @@ namespace {
     if (value == "jolt_soft_body_shared_settings_binary") {
       return PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary;
     }
+    if (value == "jolt_vehicle_constraint_binary") {
+      return PhysicsResourceFormat::kJoltVehicleConstraintBinary;
+    }
     DCHECK_F(
       false, "Unsupported physics resource format after schema validation");
     return PhysicsResourceFormat::kJoltShapeBinary;

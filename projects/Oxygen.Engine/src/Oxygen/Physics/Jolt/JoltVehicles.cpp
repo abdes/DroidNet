@@ -5,11 +5,17 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstdint>
+#include <span>
+#include <sstream>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include <Jolt/Jolt.h> // Must always be first (keep separate)
 
+#include <Jolt/Core/RTTI.h>
+#include <Jolt/Core/StreamWrapper.h>
 #include <Jolt/Physics/Body/Body.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Body/BodyLock.h>
@@ -27,11 +33,107 @@
 
 namespace {
 
-constexpr JPH::ObjectLayer kNonMovingObjectLayer = 0;
-
 auto VehicleUnknown() -> oxygen::ErrValue<oxygen::physics::PhysicsError>
 {
   return oxygen::Err(oxygen::physics::PhysicsError::kInvalidArgument);
+}
+
+auto RestoreVehicleConstraintSettings(std::span<const uint8_t> blob)
+  -> JPH::Ref<JPH::VehicleConstraintSettings>
+{
+  if (blob.empty()) {
+    return nullptr;
+  }
+
+  const std::string serialized(
+    reinterpret_cast<const char*>(blob.data()), blob.size());
+  std::istringstream stream(serialized, std::ios::in | std::ios::binary);
+  JPH::StreamInWrapper wrapped(stream);
+
+  auto settings = JPH::Ref<JPH::VehicleConstraintSettings> {
+    new JPH::VehicleConstraintSettings()
+  };
+
+  // ConstraintSettings base payload.
+  uint32_t settings_hash = 0U;
+  wrapped.Read(settings_hash);
+  if (wrapped.IsEOF() || wrapped.IsFailed()
+    || settings_hash != settings->GetRTTI()->GetHash()) {
+    return nullptr;
+  }
+  wrapped.Read(settings->mEnabled);
+  wrapped.Read(settings->mDrawConstraintSize);
+  wrapped.Read(settings->mConstraintPriority);
+  wrapped.Read(settings->mNumVelocityStepsOverride);
+  wrapped.Read(settings->mNumPositionStepsOverride);
+  if (wrapped.IsEOF() || wrapped.IsFailed()) {
+    return nullptr;
+  }
+
+  // VehicleConstraintSettings payload.
+  wrapped.Read(settings->mUp);
+  wrapped.Read(settings->mForward);
+  wrapped.Read(settings->mMaxPitchRollAngle);
+  if (wrapped.IsEOF() || wrapped.IsFailed()) {
+    return nullptr;
+  }
+
+  uint32_t num_anti_rollbars = 0U;
+  wrapped.Read(num_anti_rollbars);
+  if (wrapped.IsEOF() || wrapped.IsFailed()) {
+    return nullptr;
+  }
+  settings->mAntiRollBars.resize(num_anti_rollbars);
+  for (auto& anti_roll_bar : settings->mAntiRollBars) {
+    anti_roll_bar.RestoreBinaryState(wrapped);
+    if (wrapped.IsEOF() || wrapped.IsFailed()) {
+      return nullptr;
+    }
+  }
+
+  uint32_t num_wheels = 0U;
+  wrapped.Read(num_wheels);
+  if (wrapped.IsEOF() || wrapped.IsFailed()) {
+    return nullptr;
+  }
+  settings->mWheels.resize(num_wheels);
+
+  for (uint32_t i = 0U; i < num_wheels; ++i) {
+    auto wheel_settings
+      = JPH::Ref<JPH::WheelSettingsWV> { new JPH::WheelSettingsWV() };
+    auto* const wheel_ptr = wheel_settings.GetPtr();
+    if (wheel_ptr == nullptr) {
+      return nullptr;
+    }
+
+    auto* const wheel_base = static_cast<JPH::WheelSettings*>(wheel_ptr);
+    wheel_base->RestoreBinaryState(wrapped);
+    if (wrapped.IsEOF() || wrapped.IsFailed()) {
+      return nullptr;
+    }
+    settings->mWheels[i] = wheel_ptr;
+  }
+
+  uint32_t controller_hash = 0U;
+  wrapped.Read(controller_hash);
+  if (wrapped.IsEOF() || wrapped.IsFailed()) {
+    return nullptr;
+  }
+
+  auto wheeled_controller = JPH::Ref<JPH::WheeledVehicleControllerSettings> {
+    new JPH::WheeledVehicleControllerSettings()
+  };
+  if (wheeled_controller == nullptr
+    || controller_hash != wheeled_controller->GetRTTI()->GetHash()) {
+    return nullptr;
+  }
+  wheeled_controller->RestoreBinaryState(wrapped);
+  if (wrapped.IsEOF() || wrapped.IsFailed()) {
+    return nullptr;
+  }
+  settings->mController = wheeled_controller;
+
+  return settings;
 }
 
 [[nodiscard]] auto IsControlInputValid(
@@ -40,58 +142,8 @@ auto VehicleUnknown() -> oxygen::ErrValue<oxygen::physics::PhysicsError>
   const auto in_range_01
     = [](const float value) { return value >= 0.0F && value <= 1.0F; };
   return input.forward >= -1.0F && input.forward <= 1.0F
-    && in_range_01(input.brake) && in_range_01(input.handbrake)
+    && in_range_01(input.brake) && in_range_01(input.hand_brake)
     && input.steering >= -1.0F && input.steering <= 1.0F;
-}
-
-auto AppendDifferential(JPH::WheeledVehicleControllerSettings& settings,
-  const int left_wheel, const int right_wheel, const float engine_torque_ratio)
-  -> void
-{
-  auto differential = JPH::VehicleDifferentialSettings {};
-  differential.mLeftWheel = left_wheel;
-  differential.mRightWheel = right_wheel;
-  differential.mEngineTorqueRatio = engine_torque_ratio;
-  settings.mDifferentials.push_back(differential);
-}
-
-[[nodiscard]] auto ConfigureDefaultDifferentials(
-  JPH::WheeledVehicleControllerSettings& settings,
-  const size_t wheel_count) noexcept -> bool
-{
-  settings.mDifferentials.clear();
-  if (wheel_count < 2U) {
-    return false;
-  }
-
-  const auto pair_count = wheel_count / 2U;
-  const auto single_wheel_count = wheel_count % 2U;
-  const auto differential_count = pair_count + single_wheel_count;
-  if (differential_count == 0U) {
-    return false;
-  }
-
-  const auto base_torque_ratio = 1.0F / static_cast<float>(differential_count);
-  auto assigned_torque_ratio = 0.0F;
-  auto emitted_differentials = size_t { 0 };
-
-  for (auto pair_index = size_t { 0 }; pair_index < pair_count; ++pair_index) {
-    const auto left_wheel = static_cast<int>(pair_index * 2U);
-    const auto right_wheel = static_cast<int>(pair_index * 2U + 1U);
-    const auto is_last = (++emitted_differentials == differential_count);
-    const auto torque_ratio
-      = is_last ? (1.0F - assigned_torque_ratio) : base_torque_ratio;
-    AppendDifferential(settings, left_wheel, right_wheel, torque_ratio);
-    assigned_torque_ratio += torque_ratio;
-  }
-
-  if (single_wheel_count == 1U) {
-    const auto wheel_index = static_cast<int>(wheel_count - 1U);
-    const auto remaining = 1.0F - assigned_torque_ratio;
-    AppendDifferential(settings, wheel_index, -1, remaining);
-  }
-
-  return !settings.mDifferentials.empty();
 }
 
 } // namespace
@@ -100,12 +152,6 @@ struct oxygen::physics::jolt::JoltVehicles::Impl final {
   struct RuntimeVehicleState final {
     JPH::Ref<JPH::VehicleConstraint> constraint;
     JPH::Ref<JPH::VehicleCollisionTester> collision_tester;
-    // The collision tester holds a raw pointer to this filter, so it must
-    // outlive the collision tester. Stored per-vehicle to avoid file-scope
-    // globals with non-trivial lifetime.
-    JPH::SpecifiedObjectLayerFilter static_only_filter {
-      kNonMovingObjectLayer,
-    };
   };
 
   std::unordered_map<AggregateId, RuntimeVehicleState> runtime_vehicles;
@@ -131,23 +177,28 @@ auto oxygen::physics::jolt::JoltVehicles::CreateVehicle(const WorldId world_id,
   if (!IsBodyKnown(world_id, desc.chassis_body_id)) {
     return Err(PhysicsError::kBodyNotFound);
   }
-  if (desc.wheel_body_ids.size() < 2U) {
+  if (desc.wheels.size() < 2U) {
+    return Err(PhysicsError::kInvalidArgument);
+  }
+  if (desc.constraint_settings_blob.empty()) {
     return Err(PhysicsError::kInvalidArgument);
   }
 
-  std::vector<BodyId> wheels {};
-  wheels.reserve(desc.wheel_body_ids.size());
-  for (const auto wheel_id : desc.wheel_body_ids) {
-    if (!IsBodyKnown(world_id, wheel_id)) {
+  std::vector<vehicle::VehicleWheelDesc> wheels {};
+  wheels.reserve(desc.wheels.size());
+  for (const auto& wheel : desc.wheels) {
+    if (!IsBodyKnown(world_id, wheel.body_id)) {
       return Err(PhysicsError::kBodyNotFound);
     }
-    if (wheel_id == desc.chassis_body_id) {
+    if (wheel.body_id == desc.chassis_body_id) {
       return Err(PhysicsError::kInvalidArgument);
     }
-    if (std::find(wheels.begin(), wheels.end(), wheel_id) != wheels.end()) {
+    const auto duplicate = std::find_if(wheels.begin(), wheels.end(),
+      [&](const auto& existing) { return existing.body_id == wheel.body_id; });
+    if (duplicate != wheels.end()) {
       return Err(PhysicsError::kAlreadyExists);
     }
-    wheels.push_back(wheel_id);
+    wheels.push_back(wheel);
   }
 
   auto* world = world_.get();
@@ -169,41 +220,33 @@ auto oxygen::physics::jolt::JoltVehicles::CreateVehicle(const WorldId world_id,
     = ToOxygenQuat(body_interface->GetRotation(chassis_jolt_id));
   const auto inv_chassis_rotation = glm::inverse(chassis_rotation);
 
-  JPH::VehicleConstraintSettings settings {};
-  auto controller_settings = JPH::Ref<JPH::WheeledVehicleControllerSettings> {
-    new JPH::WheeledVehicleControllerSettings()
-  };
-  settings.mController = controller_settings;
-  settings.mUp = ToJoltVec3(oxygen::space::move::Up);
-  settings.mForward = ToJoltVec3(oxygen::space::move::Forward);
+  auto settings
+    = RestoreVehicleConstraintSettings(desc.constraint_settings_blob);
+  if (settings == nullptr) {
+    return Err(PhysicsError::kInvalidArgument);
+  }
+  if (settings->mWheels.size() != wheels.size()) {
+    return Err(PhysicsError::kInvalidArgument);
+  }
+  if (settings->mController == nullptr
+    || JPH::DynamicCast<JPH::WheeledVehicleControllerSettings>(
+         settings->mController.GetPtr())
+      == nullptr) {
+    return Err(PhysicsError::kInvalidArgument);
+  }
 
-  // Only the first two wheels (assumed to be the front axle) can steer.
-  // This is a simplification; per-wheel steering configuration can be
-  // exposed through VehicleDesc if more complex setups are needed.
-  constexpr size_t kFrontAxleWheelCount = 2U;
+  settings->mUp = ToJoltVec3(oxygen::space::move::Up);
+  settings->mForward = ToJoltVec3(oxygen::space::move::Forward);
+
   for (size_t i = 0; i < wheels.size(); ++i) {
+    if (settings->mWheels[i] == nullptr) {
+      return Err(PhysicsError::kInvalidArgument);
+    }
     const auto wheel_world_position = ToOxygenVec3(
-      body_interface->GetCenterOfMassPosition(ToJoltBodyId(wheels[i])));
+      body_interface->GetCenterOfMassPosition(ToJoltBodyId(wheels[i].body_id)));
     const auto local_position
       = inv_chassis_rotation * (wheel_world_position - chassis_position);
-
-    auto wheel_settings
-      = JPH::Ref<JPH::WheelSettingsWV> { new JPH::WheelSettingsWV() };
-    wheel_settings->mPosition = ToJoltVec3(local_position);
-    wheel_settings->mSuspensionDirection
-      = ToJoltVec3(oxygen::space::move::Down);
-    wheel_settings->mSteeringAxis = ToJoltVec3(oxygen::space::move::Up);
-    wheel_settings->mWheelUp = ToJoltVec3(oxygen::space::move::Up);
-    wheel_settings->mWheelForward = ToJoltVec3(oxygen::space::move::Forward);
-    constexpr float kMaxSteeringAngleDeg = 35.0F;
-    wheel_settings->mMaxSteerAngle = i < kFrontAxleWheelCount
-      ? JPH::DegreesToRadians(kMaxSteeringAngleDeg)
-      : 0.0F;
-    settings.mWheels.push_back(
-      JPH::Ref<JPH::WheelSettings> { wheel_settings.GetPtr() });
-  }
-  if (!ConfigureDefaultDifferentials(*controller_settings, wheels.size())) {
-    return Err(PhysicsError::kInvalidArgument);
+    settings->mWheels[i]->mPosition = ToJoltVec3(local_position);
   }
 
   JPH::Ref<JPH::VehicleConstraint> constraint {};
@@ -212,13 +255,16 @@ auto oxygen::physics::jolt::JoltVehicles::CreateVehicle(const WorldId world_id,
     if (!chassis_lock.Succeeded()) {
       return Err(PhysicsError::kBodyNotFound);
     }
-    constraint = new JPH::VehicleConstraint(chassis_lock.GetBody(), settings);
+    constraint = new JPH::VehicleConstraint(chassis_lock.GetBody(), *settings);
   }
+
+  const auto chassis_object_layer
+    = body_interface->GetObjectLayer(chassis_jolt_id);
 
   // Use engine Z-up vector for collision tester slope filtering.
   auto collision_tester = JPH::Ref<JPH::VehicleCollisionTester> {
     new JPH::VehicleCollisionTesterRay(
-      kNonMovingObjectLayer, ToJoltVec3(oxygen::space::move::Up)),
+      chassis_object_layer, ToJoltVec3(oxygen::space::move::Up)),
   };
 
   // Check ID availability BEFORE registering constraint/step listener to avoid
@@ -230,14 +276,9 @@ auto oxygen::physics::jolt::JoltVehicles::CreateVehicle(const WorldId world_id,
 
   const auto vehicle_id = AggregateId { next_vehicle_id_++ };
 
-  // Store the per-vehicle filter in the RuntimeVehicleState so its lifetime
-  // is tied to the vehicle, not to a file-scope global.
   auto& runtime_state = impl_->runtime_vehicles[vehicle_id];
   runtime_state.constraint = constraint;
   runtime_state.collision_tester = collision_tester;
-  // Set the filter pointer AFTER the RuntimeVehicleState is emplaced so the
-  // address is stable. The collision tester stores a raw pointer to it.
-  collision_tester->SetObjectLayerFilter(&runtime_state.static_only_filter);
   constraint->SetVehicleCollisionTester(collision_tester.GetPtr());
 
   physics_system->AddConstraint(constraint.GetPtr());
@@ -349,7 +390,7 @@ auto oxygen::physics::jolt::JoltVehicles::SetControlInput(
     return Err(PhysicsError::kBackendInitFailed);
   }
   controller->SetDriverInput(
-    input.forward, input.steering, input.brake, input.handbrake);
+    input.forward, input.steering, input.brake, input.hand_brake);
 
   auto* world = world_.get();
   if (world == nullptr) {

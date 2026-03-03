@@ -236,6 +236,11 @@ template <> struct BindingTraits<pak::physics::VehicleBindingRecord> {
     = pak::physics::PhysicsBindingType::kVehicle;
 };
 
+template <> struct BindingTraits<pak::physics::VehicleWheelBindingRecord> {
+  static constexpr pak::physics::PhysicsBindingType kType
+    = pak::physics::PhysicsBindingType::kVehicleWheel;
+};
+
 template <> struct BindingTraits<pak::physics::AggregateBindingRecord> {
   static constexpr pak::physics::PhysicsBindingType kType
     = pak::physics::PhysicsBindingType::kAggregate;

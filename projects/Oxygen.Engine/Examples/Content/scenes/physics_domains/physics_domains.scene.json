@@ -2,97 +2,419 @@
     "name": "physics_domains",
     "nodes": [
         {
-            "name": "Root"
+            "name": "Root",
+            "flags": {
+                "visible": true,
+                "static": true
+            }
         },
         {
             "name": "Floor",
-            "parent": 0
-            ,
-            "transform": {
-                "translation": [0.0, 0.0, 0.0],
-                "rotation": [0.0, 0.0, 0.0, 1.0],
-                "scale": [12.0, 12.0, 1.0]
-            }
-        },
-        {
-            "name": "DynamicA",
-            "parent": 8,
-            "transform": {
-                "translation": [0.0, 0.0, 2.0]
-            }
-        },
-        {
-            "name": "DynamicB",
             "parent": 0,
+            "flags": {
+                "visible": true,
+                "static": true,
+                "receives_shadows": true
+            },
             "transform": {
-                "translation": [2.0, 0.0, 2.0]
+                "translation": [
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "rotation": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                ],
+                "scale": [
+                    12.0,
+                    12.0,
+                    1.0
+                ]
             }
         },
         {
-            "name": "Character",
+            "name": "Ramp",
             "parent": 0,
+            "flags": {
+                "visible": true,
+                "static": true,
+                "casts_shadows": true,
+                "receives_shadows": true
+            },
             "transform": {
-                "translation": [-2.0, 0.0, 2.0]
+                "translation": [
+                    -4.0,
+                    0.0,
+                    1.2
+                ],
+                "rotation": [
+                    0.0,
+                    0.1305,
+                    0.0,
+                    0.9914
+                ],
+                "scale": [
+                    4.0,
+                    6.0,
+                    0.3
+                ]
             }
         },
         {
-            "name": "Vehicle",
+            "name": "BouncySphere",
             "parent": 0,
+            "flags": {
+                "visible": true,
+                "casts_shadows": true,
+                "receives_shadows": true
+            },
             "transform": {
-                "translation": [0.0, -4.0, 2.0]
-            }
-        },
-        {
-            "name": "TriggerZone",
-            "parent": 0,
-            "transform": {
-                "translation": [0.0, 3.0, 1.0]
-            }
-        },
-        {
-            "name": "SoftBody",
-            "parent": 0,
-            "transform": {
-                "translation": [0.0, 4.0, 3.0]
+                "translation": [
+                    -4.0,
+                    0.0,
+                    5.0
+                ]
             }
         },
         {
             "name": "AggregateAnchor",
             "parent": 0,
+            "flags": {
+                "visible": false
+            },
             "transform": {
-                "translation": [4.0, 0.0, 0.0]
+                "translation": [
+                    2.5,
+                    2.5,
+                    0.0
+                ]
+            }
+        },
+        {
+            "name": "HingedCubeA",
+            "parent": 4,
+            "flags": {
+                "visible": true,
+                "casts_shadows": true,
+                "receives_shadows": true
+            },
+            "transform": {
+                "translation": [
+                    0.0,
+                    0.0,
+                    1.0
+                ]
+            }
+        },
+        {
+            "name": "HingedCubeB",
+            "parent": 4,
+            "flags": {
+                "visible": true,
+                "casts_shadows": true,
+                "receives_shadows": true
+            },
+            "transform": {
+                "translation": [
+                    0.0,
+                    0.0,
+                    2.5
+                ]
+            }
+        },
+        {
+            "name": "StackCube0",
+            "parent": 0,
+            "flags": {
+                "visible": true,
+                "casts_shadows": true,
+                "receives_shadows": true
+            },
+            "transform": {
+                "translation": [
+                    3.0,
+                    -2.0,
+                    0.4
+                ],
+                "scale": [
+                    0.8,
+                    0.8,
+                    0.8
+                ]
+            }
+        },
+        {
+            "name": "StackCube1",
+            "parent": 0,
+            "flags": {
+                "visible": true,
+                "casts_shadows": true,
+                "receives_shadows": true
+            },
+            "transform": {
+                "translation": [
+                    3.0,
+                    -2.0,
+                    1.2
+                ],
+                "scale": [
+                    0.8,
+                    0.8,
+                    0.8
+                ]
+            }
+        },
+        {
+            "name": "StackCube2",
+            "parent": 0,
+            "flags": {
+                "visible": true,
+                "casts_shadows": true,
+                "receives_shadows": true
+            },
+            "transform": {
+                "translation": [
+                    3.0,
+                    -2.0,
+                    2.0
+                ],
+                "scale": [
+                    0.8,
+                    0.8,
+                    0.8
+                ]
+            }
+        },
+        {
+            "name": "StackCube3",
+            "parent": 0,
+            "flags": {
+                "visible": true,
+                "casts_shadows": true,
+                "receives_shadows": true
+            },
+            "transform": {
+                "translation": [
+                    3.0,
+                    -2.0,
+                    2.8
+                ],
+                "scale": [
+                    0.8,
+                    0.8,
+                    0.8
+                ]
+            }
+        },
+        {
+            "name": "Character",
+            "parent": 0,
+            "flags": {
+                "visible": true,
+                "casts_shadows": true
+            },
+            "transform": {
+                "translation": [
+                    -2.0,
+                    -3.0,
+                    1.0
+                ]
+            }
+        },
+        {
+            "name": "Vehicle",
+            "parent": 0,
+            "flags": {
+                "visible": false
+            },
+            "transform": {
+                "translation": [
+                    0.0,
+                    -4.0,
+                    0.3
+                ]
+            }
+        },
+        {
+            "name": "ChassisVisual",
+            "parent": 12,
+            "flags": {
+                "visible": true,
+                "casts_shadows": true,
+                "receives_shadows": true
+            },
+            "transform": {
+                "scale": [
+                    1.8,
+                    3.6,
+                    0.6
+                ]
             }
         },
         {
             "name": "VehicleWheelFL",
-            "parent": 5,
+            "parent": 12,
+            "flags": {
+                "visible": true,
+                "casts_shadows": true
+            },
             "transform": {
-                "translation": [-0.8, 0.8, -0.9]
+                "translation": [
+                    -0.95,
+                    1.3,
+                    0.0
+                ],
+                "rotation": [
+                    0.0,
+                    0.7071,
+                    0.0,
+                    0.7071
+                ]
             }
         },
         {
             "name": "VehicleWheelFR",
-            "parent": 5,
+            "parent": 12,
+            "flags": {
+                "visible": true,
+                "casts_shadows": true
+            },
             "transform": {
-                "translation": [0.8, 0.8, -0.9]
+                "translation": [
+                    0.95,
+                    1.3,
+                    0.0
+                ],
+                "rotation": [
+                    0.0,
+                    0.7071,
+                    0.0,
+                    0.7071
+                ]
+            }
+        },
+        {
+            "name": "VehicleWheelRL",
+            "parent": 12,
+            "flags": {
+                "visible": true,
+                "casts_shadows": true
+            },
+            "transform": {
+                "translation": [
+                    -0.95,
+                    -1.3,
+                    0.0
+                ],
+                "rotation": [
+                    0.0,
+                    0.7071,
+                    0.0,
+                    0.7071
+                ]
+            }
+        },
+        {
+            "name": "VehicleWheelRR",
+            "parent": 12,
+            "flags": {
+                "visible": true,
+                "casts_shadows": true
+            },
+            "transform": {
+                "translation": [
+                    0.95,
+                    -1.3,
+                    0.0
+                ],
+                "rotation": [
+                    0.0,
+                    0.7071,
+                    0.0,
+                    0.7071
+                ]
+            }
+        },
+        {
+            "name": "TriggerZone",
+            "parent": 0,
+            "flags": {
+                "visible": false
+            },
+            "transform": {
+                "translation": [
+                    0.0,
+                    3.0,
+                    1.5
+                ]
+            }
+        },
+        {
+            "name": "SoftBody",
+            "parent": 0,
+            "flags": {
+                "visible": true,
+                "casts_shadows": true
+            },
+            "transform": {
+                "translation": [
+                    -1.0,
+                    3.5,
+                    1.0
+                ]
             }
         },
         {
             "name": "sun_light_node",
             "parent": 0,
+            "flags": {
+                "visible": true
+            },
             "transform": {
-                "translation": [0.0, 0.0, 50.0],
-                "rotation": [0.3827, 0.0, 0.0, 0.9239],
-                "scale": [1.0, 1.0, 1.0]
+                "translation": [
+                    0.0,
+                    0.0,
+                    50.0
+                ],
+                "rotation": [
+                    0.3827,
+                    0.0,
+                    0.0,
+                    0.9239
+                ],
+                "scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ]
             }
         },
         {
             "name": "camera_node",
             "parent": 0,
+            "flags": {
+                "visible": true
+            },
             "transform": {
-                "translation": [0.0, 8.0, 0.0],
-                "rotation": [0.0, 0.0, 0.0, 1.0],
-                "scale": [1.0, 1.0, 1.0]
+                "translation": [
+                    8.0,
+                    -14.0,
+                    10.0
+                ],
+                "rotation": [
+                    0.2706,
+                    0.0,
+                    0.0,
+                    0.9627
+                ],
+                "scale": [
+                    1.0,
+                    1.0,
+                    1.0
+                ]
             }
         }
     ],
@@ -103,7 +425,7 @@
         },
         {
             "node": 2,
-            "geometry_ref": "/.cooked/Geometry/cube.ogeo"
+            "geometry_ref": "/.cooked/Geometry/ramp_geo.ogeo"
         },
         {
             "node": 3,
@@ -112,12 +434,60 @@
         {
             "node": 5,
             "geometry_ref": "/.cooked/Geometry/cube.ogeo"
+        },
+        {
+            "node": 6,
+            "geometry_ref": "/.cooked/Geometry/cube.ogeo"
+        },
+        {
+            "node": 7,
+            "geometry_ref": "/.cooked/Geometry/stack_cube.ogeo"
+        },
+        {
+            "node": 8,
+            "geometry_ref": "/.cooked/Geometry/stack_cube.ogeo"
+        },
+        {
+            "node": 9,
+            "geometry_ref": "/.cooked/Geometry/stack_cube.ogeo"
+        },
+        {
+            "node": 10,
+            "geometry_ref": "/.cooked/Geometry/stack_cube.ogeo"
+        },
+        {
+            "node": 11,
+            "geometry_ref": "/.cooked/Geometry/character_capsule.ogeo"
+        },
+        {
+            "node": 13,
+            "geometry_ref": "/.cooked/Geometry/chassis_box.ogeo"
+        },
+        {
+            "node": 14,
+            "geometry_ref": "/.cooked/Geometry/cylinder_wheel.ogeo"
+        },
+        {
+            "node": 15,
+            "geometry_ref": "/.cooked/Geometry/cylinder_wheel.ogeo"
+        },
+        {
+            "node": 16,
+            "geometry_ref": "/.cooked/Geometry/cylinder_wheel.ogeo"
+        },
+        {
+            "node": 17,
+            "geometry_ref": "/.cooked/Geometry/cylinder_wheel.ogeo"
+        },
+        {
+            "node": 19,
+            "geometry_ref": "/.cooked/Geometry/softbody_sphere.ogeo"
         }
     ],
     "cameras": {
         "perspective": [
             {
-                "node": 12,
+                "node": 21,
                 "fov_y": 0.7854,
                 "aspect_ratio": 1.7778,
                 "near_plane": 0.1,
@@ -128,9 +498,13 @@
     "lights": {
         "directional": [
             {
-                "node": 11,
+                "node": 20,
                 "common": {
-                    "color_rgb": [1.0, 0.98, 0.95],
+                    "color_rgb": [
+                        1.0,
+                        0.98,
+                        0.95
+                    ],
                     "casts_shadows": true,
                     "mobility": 0,
                     "exposure_compensation_ev": 0.0
@@ -139,7 +513,12 @@
                 "angular_size_radians": 0.00931,
                 "is_sun_light": true,
                 "cascade_count": 3,
-                "cascade_distances": [10.0, 25.0, 60.0, 200.0]
+                "cascade_distances": [
+                    10.0,
+                    30.0,
+                    70.0,
+                    200.0
+                ]
             }
         ]
     }

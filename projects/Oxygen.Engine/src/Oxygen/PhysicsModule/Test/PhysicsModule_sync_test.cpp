@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cmath>
+#include <cstdint>
 
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -856,24 +857,46 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, VehicleBaselineMappingUsesCommandAuthority)
   body_desc.type = body::BodyType::kDynamic;
   const auto chassis
     = fake_physics_->Bodies().CreateBody(module_->GetWorldId(), body_desc);
-  const auto wheel
+  const auto wheel_left
+    = fake_physics_->Bodies().CreateBody(module_->GetWorldId(), body_desc);
+  const auto wheel_right
     = fake_physics_->Bodies().CreateBody(module_->GetWorldId(), body_desc);
   ASSERT_TRUE(chassis.has_value());
-  ASSERT_TRUE(wheel.has_value());
+  ASSERT_TRUE(wheel_left.has_value());
+  ASSERT_TRUE(wheel_right.has_value());
 
   auto& vehicles = fake_physics_->Vehicles();
-  const std::array<BodyId, 1> wheel_ids {
-    wheel.value(),
+  const std::array<vehicle::VehicleWheelDesc, 2> wheel_descs {
+    vehicle::VehicleWheelDesc {
+      .body_id = wheel_left.value(),
+      .axle_index = 0U,
+      .side = vehicle::VehicleWheelSide::kLeft,
+    },
+    vehicle::VehicleWheelDesc {
+      .body_id = wheel_right.value(),
+      .axle_index = 0U,
+      .side = vehicle::VehicleWheelSide::kRight,
+    },
   };
+  const std::array<uint8_t, 1> vehicle_blob { 0x1U };
   const auto created_vehicle = vehicles.CreateVehicle(module_->GetWorldId(),
     vehicle::VehicleDesc {
       .chassis_body_id = chassis.value(),
-      .wheel_body_ids = wheel_ids,
+      .wheels = wheel_descs,
+      .constraint_settings_blob = vehicle_blob,
     });
   ASSERT_TRUE(created_vehicle.has_value());
 
   module_->RegisterNodeAggregateMapping(node.GetHandle(),
     created_vehicle.value(), aggregate::AggregateAuthority::kCommand);
+
+  EXPECT_TRUE(module_->HasAggregateForNode(node.GetHandle()));
+  EXPECT_EQ(
+    module_->GetAggregateIdForNode(node.GetHandle()), created_vehicle.value());
+  const auto mapped_node
+    = module_->GetNodeForAggregateId(created_vehicle.value());
+  ASSERT_TRUE(mapped_node.has_value());
+  EXPECT_EQ(mapped_node.value(), node.GetHandle());
 
   const auto authority
     = module_->GetAggregateAuthorityForAggregateId(created_vehicle.value());
@@ -890,20 +913,94 @@ NOLINT_TEST_F(
   scene_->Update();
 
   auto& soft_bodies = fake_physics_->SoftBodies();
+  const std::array<uint8_t, 1> soft_body_blob { 0x1U };
   const auto created_soft_body
     = soft_bodies.CreateSoftBody(module_->GetWorldId(),
       softbody::SoftBodyDesc {
         .cluster_count = 4U,
+        .settings_blob = soft_body_blob,
       });
   ASSERT_TRUE(created_soft_body.has_value());
 
   module_->RegisterNodeAggregateMapping(node.GetHandle(),
     created_soft_body.value(), aggregate::AggregateAuthority::kSimulation);
 
+  EXPECT_TRUE(module_->HasAggregateForNode(node.GetHandle()));
+  EXPECT_EQ(module_->GetAggregateIdForNode(node.GetHandle()),
+    created_soft_body.value());
+  const auto mapped_node
+    = module_->GetNodeForAggregateId(created_soft_body.value());
+  ASSERT_TRUE(mapped_node.has_value());
+  EXPECT_EQ(mapped_node.value(), node.GetHandle());
+
   const auto authority
     = module_->GetAggregateAuthorityForAggregateId(created_soft_body.value());
   ASSERT_TRUE(authority.has_value());
   EXPECT_EQ(authority.value(), aggregate::AggregateAuthority::kSimulation);
+}
+
+NOLINT_TEST_F(PhysicsModuleSyncTest, VehicleControlInputUpdatesBackendState)
+{
+  auto node = scene_->CreateNode("vehicle-control-node");
+  ASSERT_TRUE(node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  body::BodyDesc body_desc {};
+  body_desc.type = body::BodyType::kDynamic;
+  const auto chassis
+    = fake_physics_->Bodies().CreateBody(module_->GetWorldId(), body_desc);
+  const auto wheel_left
+    = fake_physics_->Bodies().CreateBody(module_->GetWorldId(), body_desc);
+  const auto wheel_right
+    = fake_physics_->Bodies().CreateBody(module_->GetWorldId(), body_desc);
+  ASSERT_TRUE(chassis.has_value());
+  ASSERT_TRUE(wheel_left.has_value());
+  ASSERT_TRUE(wheel_right.has_value());
+
+  auto& vehicles = fake_physics_->Vehicles();
+  const std::array<vehicle::VehicleWheelDesc, 2> wheel_descs {
+    vehicle::VehicleWheelDesc {
+      .body_id = wheel_left.value(),
+      .axle_index = 0U,
+      .side = vehicle::VehicleWheelSide::kLeft,
+    },
+    vehicle::VehicleWheelDesc {
+      .body_id = wheel_right.value(),
+      .axle_index = 0U,
+      .side = vehicle::VehicleWheelSide::kRight,
+    },
+  };
+  const std::array<uint8_t, 1> vehicle_blob { 0x1U };
+  const auto created_vehicle = vehicles.CreateVehicle(module_->GetWorldId(),
+    vehicle::VehicleDesc {
+      .chassis_body_id = chassis.value(),
+      .wheels = wheel_descs,
+      .constraint_settings_blob = vehicle_blob,
+    });
+  ASSERT_TRUE(created_vehicle.has_value());
+  const auto vehicle_id = created_vehicle.value();
+  module_->RegisterNodeAggregateMapping(
+    node.GetHandle(), vehicle_id, aggregate::AggregateAuthority::kCommand);
+
+  EXPECT_EQ(FakeState().vehicle_set_control_calls, 0U);
+  const auto input = vehicle::VehicleControlInput {
+    .forward = 0.75F,
+    .brake = 0.0F,
+    .steering = -0.15F,
+    .hand_brake = 0.0F,
+  };
+  EXPECT_TRUE(module_->Vehicles()
+      .SetControlInput(module_->GetWorldId(), vehicle_id, input)
+      .has_value());
+  EXPECT_EQ(FakeState().vehicle_set_control_calls, 1U);
+
+  const auto it = FakeState().vehicles.find(vehicle_id);
+  ASSERT_NE(it, FakeState().vehicles.end());
+  EXPECT_FLOAT_EQ(it->second.control_input.forward, input.forward);
+  EXPECT_FLOAT_EQ(it->second.control_input.brake, input.brake);
+  EXPECT_FLOAT_EQ(it->second.control_input.steering, input.steering);
+  EXPECT_FLOAT_EQ(it->second.control_input.hand_brake, input.hand_brake);
 }
 
 NOLINT_TEST_F(PhysicsModuleSyncTest, DestroyNodeDestroysTrackedAggregate)
@@ -941,19 +1038,33 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, DestroyNodeDestroysTrackedVehicleAggregate)
   body_desc.type = body::BodyType::kDynamic;
   const auto chassis
     = fake_physics_->Bodies().CreateBody(module_->GetWorldId(), body_desc);
-  const auto wheel
+  const auto wheel_left
+    = fake_physics_->Bodies().CreateBody(module_->GetWorldId(), body_desc);
+  const auto wheel_right
     = fake_physics_->Bodies().CreateBody(module_->GetWorldId(), body_desc);
   ASSERT_TRUE(chassis.has_value());
-  ASSERT_TRUE(wheel.has_value());
+  ASSERT_TRUE(wheel_left.has_value());
+  ASSERT_TRUE(wheel_right.has_value());
 
   auto& vehicles = fake_physics_->Vehicles();
-  const std::array<BodyId, 1> wheel_ids {
-    wheel.value(),
+  const std::array<vehicle::VehicleWheelDesc, 2> wheel_descs {
+    vehicle::VehicleWheelDesc {
+      .body_id = wheel_left.value(),
+      .axle_index = 0U,
+      .side = vehicle::VehicleWheelSide::kLeft,
+    },
+    vehicle::VehicleWheelDesc {
+      .body_id = wheel_right.value(),
+      .axle_index = 0U,
+      .side = vehicle::VehicleWheelSide::kRight,
+    },
   };
+  const std::array<uint8_t, 1> vehicle_blob { 0x1U };
   const auto created_vehicle = vehicles.CreateVehicle(module_->GetWorldId(),
     vehicle::VehicleDesc {
       .chassis_body_id = chassis.value(),
-      .wheel_body_ids = wheel_ids,
+      .wheels = wheel_descs,
+      .constraint_settings_blob = vehicle_blob,
     });
   ASSERT_TRUE(created_vehicle.has_value());
   module_->RegisterNodeAggregateMapping(node.GetHandle(),
@@ -977,10 +1088,12 @@ NOLINT_TEST_F(
   scene_->Update();
 
   auto& soft_bodies = fake_physics_->SoftBodies();
+  const std::array<uint8_t, 1> soft_body_blob { 0x1U };
   const auto created_soft_body
     = soft_bodies.CreateSoftBody(module_->GetWorldId(),
       softbody::SoftBodyDesc {
         .cluster_count = 4U,
+        .settings_blob = soft_body_blob,
       });
   ASSERT_TRUE(created_soft_body.has_value());
   module_->RegisterNodeAggregateMapping(node.GetHandle(),
@@ -1033,19 +1146,33 @@ NOLINT_TEST_F(
   body_desc.type = body::BodyType::kDynamic;
   const auto chassis
     = fake_physics_->Bodies().CreateBody(module_->GetWorldId(), body_desc);
-  const auto wheel
+  const auto wheel_left
+    = fake_physics_->Bodies().CreateBody(module_->GetWorldId(), body_desc);
+  const auto wheel_right
     = fake_physics_->Bodies().CreateBody(module_->GetWorldId(), body_desc);
   ASSERT_TRUE(chassis.has_value());
-  ASSERT_TRUE(wheel.has_value());
+  ASSERT_TRUE(wheel_left.has_value());
+  ASSERT_TRUE(wheel_right.has_value());
 
   auto& vehicles = fake_physics_->Vehicles();
-  const std::array<BodyId, 1> wheel_ids {
-    wheel.value(),
+  const std::array<vehicle::VehicleWheelDesc, 2> wheel_descs {
+    vehicle::VehicleWheelDesc {
+      .body_id = wheel_left.value(),
+      .axle_index = 0U,
+      .side = vehicle::VehicleWheelSide::kLeft,
+    },
+    vehicle::VehicleWheelDesc {
+      .body_id = wheel_right.value(),
+      .axle_index = 0U,
+      .side = vehicle::VehicleWheelSide::kRight,
+    },
   };
+  const std::array<uint8_t, 1> vehicle_blob { 0x1U };
   const auto vehicle = vehicles.CreateVehicle(module_->GetWorldId(),
     vehicle::VehicleDesc {
       .chassis_body_id = chassis.value(),
-      .wheel_body_ids = wheel_ids,
+      .wheels = wheel_descs,
+      .constraint_settings_blob = vehicle_blob,
     });
   ASSERT_TRUE(vehicle.has_value());
   module_->RegisterNodeAggregateMapping(node_a.GetHandle(), vehicle.value(),
@@ -1073,9 +1200,11 @@ NOLINT_TEST_F(
   scene_a->Update();
 
   auto& soft_bodies = fake_physics_->SoftBodies();
+  const std::array<uint8_t, 1> soft_body_blob { 0x1U };
   const auto soft_body = soft_bodies.CreateSoftBody(module_->GetWorldId(),
     softbody::SoftBodyDesc {
       .cluster_count = 4U,
+      .settings_blob = soft_body_blob,
     });
   ASSERT_TRUE(soft_body.has_value());
   module_->RegisterNodeAggregateMapping(node_a.GetHandle(), soft_body.value(),

@@ -89,6 +89,8 @@ inline auto ToMotionType(const body::BodyType type) -> JPH::EMotionType
 
 inline auto ToObjectLayer(const body::BodyType type) -> JPH::ObjectLayer
 {
+  // Legacy fallback mapping used by non-authored domains (e.g. characters).
+  // Authored rigid-body layer/mask routing is resolved by JoltWorld.
   return type == body::BodyType::kStatic ? 0 : 1;
 }
 

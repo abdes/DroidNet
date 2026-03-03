@@ -20,6 +20,7 @@
 #include <string_view>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -192,6 +193,17 @@ namespace {
     std::string shape_ref;
   };
 
+  struct SoftBodyBindingSource final {
+    phys::SoftBodyBindingRecord record {};
+    std::string settings_ref;
+  };
+
+  struct VehicleWheelSource final {
+    uint32_t node_index { 0 };
+    uint16_t axle_index { 0 };
+    phys::VehicleWheelSide side { phys::VehicleWheelSide::kLeft };
+  };
+
   struct JointBindingSource final {
     phys::JointBindingRecord record {};
     std::string constraint_ref;
@@ -200,15 +212,17 @@ namespace {
   struct VehicleBindingSource final {
     phys::VehicleBindingRecord record {};
     std::string constraint_ref;
+    std::vector<VehicleWheelSource> wheels;
   };
 
   struct PhysicsSidecarDocument final {
     std::vector<RigidBodyBindingSource> rigid_bodies;
     std::vector<ColliderBindingSource> colliders;
     std::vector<CharacterBindingSource> characters;
-    std::vector<phys::SoftBodyBindingRecord> soft_bodies;
+    std::vector<SoftBodyBindingSource> soft_bodies;
     std::vector<JointBindingSource> joints;
     std::vector<VehicleBindingSource> vehicles;
+    std::vector<phys::VehicleWheelBindingRecord> vehicle_wheels;
     std::vector<phys::AggregateBindingRecord> aggregates;
   };
 
@@ -371,6 +385,22 @@ namespace {
     return false;
   }
 
+  auto ParseWheelSide(const nlohmann::json& obj, phys::VehicleWheelSide& out,
+    std::string& error) -> bool
+  {
+    const auto value = obj.at("side").get<std::string>();
+    if (value == "left") {
+      out = phys::VehicleWheelSide::kLeft;
+      return true;
+    }
+    if (value == "right") {
+      out = phys::VehicleWheelSide::kRight;
+      return true;
+    }
+    error = "Field 'side' has unsupported value";
+    return false;
+  }
+
   auto ParseAggregateAuthority(const nlohmann::json& obj,
     phys::AggregateAuthority& out, std::string& error) -> bool
   {
@@ -480,26 +510,29 @@ namespace {
   }
 
   auto ParseSoftBodyBinding(const nlohmann::json& binding,
-    phys::SoftBodyBindingRecord& out, std::string& error) -> bool
+    SoftBodyBindingSource& out, std::string& error) -> bool
   {
     uint32_t node_index = 0;
     if (!ReadRequiredUInt32(binding, "node_index", node_index, error)) {
       return false;
     }
-    out.node_index = node_index;
+    if (!ReadRequiredString(binding, "settings_ref", out.settings_ref, error)) {
+      return false;
+    }
+    out.record.node_index = node_index;
     return ReadOptionalUInt32(
-             binding, "cluster_count", out.cluster_count, error)
-      && ReadOptionalFloat(binding, "stiffness", out.stiffness, error)
-      && ReadOptionalFloat(binding, "damping", out.damping, error)
+             binding, "cluster_count", out.record.cluster_count, error)
+      && ReadOptionalFloat(binding, "stiffness", out.record.stiffness, error)
+      && ReadOptionalFloat(binding, "damping", out.record.damping, error)
       && ReadOptionalFloat(
-        binding, "edge_compliance", out.edge_compliance, error)
+        binding, "edge_compliance", out.record.edge_compliance, error)
       && ReadOptionalFloat(
-        binding, "shear_compliance", out.shear_compliance, error)
+        binding, "shear_compliance", out.record.shear_compliance, error)
       && ReadOptionalFloat(
-        binding, "bend_compliance", out.bend_compliance, error)
-      && ParseTetherMode(binding, out.tether_mode, error)
+        binding, "bend_compliance", out.record.bend_compliance, error)
+      && ParseTetherMode(binding, out.record.tether_mode, error)
       && ReadOptionalFloat(binding, "tether_max_distance_multiplier",
-        out.tether_max_distance_multiplier, error);
+        out.record.tether_max_distance_multiplier, error);
   }
 
   auto ParseJointBinding(const nlohmann::json& binding, JointBindingSource& out,
@@ -528,6 +561,28 @@ namespace {
       return false;
     }
     out.record.node_index = node_index;
+
+    const auto& wheels = binding.at("wheels");
+    out.wheels.clear();
+    out.wheels.reserve(wheels.size());
+    for (size_t i = 0; i < wheels.size(); ++i) {
+      const auto& wheel = wheels[i];
+      auto wheel_source = VehicleWheelSource {};
+      uint32_t wheel_node_index = 0;
+      uint32_t axle_index_u32 = 0;
+      if (!ReadRequiredUInt32(wheel, "node_index", wheel_node_index, error)
+        || !ReadRequiredUInt32(wheel, "axle_index", axle_index_u32, error)
+        || axle_index_u32 > (std::numeric_limits<uint16_t>::max)()
+        || !ParseWheelSide(wheel, wheel_source.side, error)) {
+        if (axle_index_u32 > (std::numeric_limits<uint16_t>::max)()) {
+          error = "Field 'axle_index' exceeds uint16 range";
+        }
+        return false;
+      }
+      wheel_source.node_index = wheel_node_index;
+      wheel_source.axle_index = static_cast<uint16_t>(axle_index_u32);
+      out.wheels.push_back(wheel_source);
+    }
     return true;
   }
 
@@ -657,7 +712,8 @@ namespace {
         request);
       ValidateSingletonBindings(
         parsed.soft_bodies, "soft_bodies",
-        [](const auto& record) { return record.node_index; }, session, request);
+        [](const auto& record) { return record.record.node_index; }, session,
+        request);
       ValidateSingletonBindings(
         parsed.vehicles, "vehicles",
         [](const auto& record) { return record.record.node_index; }, session,
@@ -702,6 +758,12 @@ namespace {
     const std::filesystem::path& target_cooked_root;
     uint32_t node_count = 0;
   };
+
+  auto ResolvePhysicsResourceRef(BindingValidationContext& ctx,
+    std::string_view reference_path, std::string_view object_path,
+    phys::PhysicsResourceFormat expected_format,
+    std::string_view expected_format_name, std::string_view diagnostic_prefix)
+    -> std::optional<data::pak::core::ResourceIndexT>;
 
   auto ResolveAssetKeyForVirtualPath(BindingValidationContext& ctx,
     std::string_view virtual_path, std::string_view object_path,
@@ -846,6 +908,35 @@ namespace {
     }
   }
 
+  auto ResolveSoftBodyBindings(std::vector<SoftBodyBindingSource>& records,
+    BindingValidationContext& ctx) -> void
+  {
+    for (size_t i = 0; i < records.size(); ++i) {
+      const auto base_path
+        = std::string("bindings.soft_bodies[") + std::to_string(i) + "]";
+      if (!ValidateNodeIndex(records[i].record.node_index, ctx.node_count,
+            ctx.session, ctx.request, base_path + ".node_index")) {
+        continue;
+      }
+
+      if (records[i].record.cluster_count == 0U) {
+        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+          "physics.sidecar.payload_invalid",
+          "soft_bodies.cluster_count must be greater than zero",
+          base_path + ".cluster_count");
+        continue;
+      }
+
+      const auto settings_index = ResolvePhysicsResourceRef(ctx,
+        records[i].settings_ref, base_path + ".settings_ref",
+        phys::PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary,
+        "jolt_soft_body_shared_settings_binary", "settings_ref");
+      if (settings_index.has_value()) {
+        records[i].record.settings_resource_index = *settings_index;
+      }
+    }
+  }
+
   [[nodiscard]] auto ReadBinaryFile(const std::filesystem::path& path)
     -> std::optional<std::vector<std::byte>>
   {
@@ -872,23 +963,28 @@ namespace {
     return bytes;
   }
 
-  auto ResolveConstraintRef(BindingValidationContext& ctx,
-    std::string_view constraint_ref, std::string_view object_path)
+  auto ResolvePhysicsResourceRef(BindingValidationContext& ctx,
+    std::string_view reference_path, std::string_view object_path,
+    const phys::PhysicsResourceFormat expected_format,
+    std::string_view expected_format_name, std::string_view diagnostic_prefix)
     -> std::optional<data::pak::core::ResourceIndexT>
   {
-    if (!internal::IsCanonicalVirtualPath(constraint_ref)) {
+    if (!internal::IsCanonicalVirtualPath(reference_path)) {
       AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-        "physics.sidecar.constraint_ref_invalid",
-        "constraint_ref must be canonical", std::string(object_path));
+        std::string("physics.sidecar.") + std::string(diagnostic_prefix)
+          + "_invalid",
+        std::string(diagnostic_prefix) + " must be canonical",
+        std::string(object_path));
       return std::nullopt;
     }
 
     auto relpath = std::string {};
     if (!internal::TryVirtualPathToRelPath(
-          ctx.request, constraint_ref, relpath)) {
+          ctx.request, reference_path, relpath)) {
       AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-        "physics.sidecar.constraint_ref_unmounted",
-        "constraint_ref is outside mounted cooked roots",
+        std::string("physics.sidecar.") + std::string(diagnostic_prefix)
+          + "_unmounted",
+        std::string(diagnostic_prefix) + " is outside mounted cooked roots",
         std::string(object_path));
       return std::nullopt;
     }
@@ -912,11 +1008,13 @@ namespace {
 
       AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
         found_elsewhere ? "physics.sidecar.reference_source_mismatch"
-                        : "physics.sidecar.constraint_ref_unresolved",
+                        : std::string("physics.sidecar.")
+            + std::string(diagnostic_prefix) + "_unresolved",
         found_elsewhere
-          ? "Resolved constraint_ref is not in the target source domain"
-          : "Resolved constraint_ref was not found: "
-            + std::string(constraint_ref),
+          ? std::string("Resolved ") + std::string(diagnostic_prefix)
+            + " is not in the target source domain"
+          : std::string("Resolved ") + std::string(diagnostic_prefix)
+            + " was not found: " + std::string(reference_path),
         std::string(object_path));
       return std::nullopt;
     }
@@ -924,8 +1022,10 @@ namespace {
     const auto sidecar_bytes = ReadBinaryFile(target_file);
     if (!sidecar_bytes.has_value()) {
       AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-        "physics.sidecar.constraint_ref_read_failed",
-        "Failed reading constraint_ref sidecar: " + target_file.string(),
+        std::string("physics.sidecar.") + std::string(diagnostic_prefix)
+          + "_read_failed",
+        std::string("Failed reading ") + std::string(diagnostic_prefix)
+          + " sidecar: " + target_file.string(),
         std::string(object_path));
       return std::nullopt;
     }
@@ -935,26 +1035,31 @@ namespace {
     if (!internal::ParsePhysicsResourceDescriptorSidecar(
           *sidecar_bytes, parsed, parse_error)) {
       AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-        "physics.sidecar.constraint_ref_parse_failed",
-        "Failed parsing constraint_ref sidecar: " + parse_error,
+        std::string("physics.sidecar.") + std::string(diagnostic_prefix)
+          + "_parse_failed",
+        std::string("Failed parsing ") + std::string(diagnostic_prefix)
+          + " sidecar: " + parse_error,
         std::string(object_path));
       return std::nullopt;
     }
 
-    if (parsed.descriptor.format
-      != phys::PhysicsResourceFormat::kJoltConstraintBinary) {
+    if (parsed.descriptor.format != expected_format) {
       AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-        "physics.sidecar.constraint_ref_format_mismatch",
-        "constraint_ref must reference a physics resource with format "
-        "'jolt_constraint_binary'",
+        std::string("physics.sidecar.") + std::string(diagnostic_prefix)
+          + "_format_mismatch",
+        std::string(diagnostic_prefix)
+          + " must reference a physics resource with format '"
+          + std::string(expected_format_name) + "'",
         std::string(object_path));
       return std::nullopt;
     }
 
     if (parsed.resource_index == data::pak::core::kNoResourceIndex) {
       AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-        "physics.sidecar.constraint_ref_unresolved",
-        "constraint_ref sidecar references invalid resource index zero",
+        std::string("physics.sidecar.") + std::string(diagnostic_prefix)
+          + "_unresolved",
+        std::string(diagnostic_prefix)
+          + " sidecar references invalid resource index zero",
         std::string(object_path));
       return std::nullopt;
     }
@@ -978,8 +1083,10 @@ namespace {
         continue;
       }
 
-      const auto constraint_index = ResolveConstraintRef(
-        ctx, records[i].constraint_ref, base_path + ".constraint_ref");
+      const auto constraint_index = ResolvePhysicsResourceRef(ctx,
+        records[i].constraint_ref, base_path + ".constraint_ref",
+        phys::PhysicsResourceFormat::kJoltConstraintBinary,
+        "jolt_constraint_binary", "constraint_ref");
       if (constraint_index.has_value()) {
         records[i].record.constraint_resource_index = *constraint_index;
       }
@@ -987,8 +1094,10 @@ namespace {
   }
 
   auto ResolveVehicleBindings(std::vector<VehicleBindingSource>& records,
+    std::vector<phys::VehicleWheelBindingRecord>& wheel_records,
     BindingValidationContext& ctx) -> void
   {
+    wheel_records.clear();
     for (size_t i = 0; i < records.size(); ++i) {
       const auto base_path
         = std::string("bindings.vehicles[") + std::to_string(i) + "]";
@@ -997,11 +1106,93 @@ namespace {
         continue;
       }
 
-      const auto constraint_index = ResolveConstraintRef(
-        ctx, records[i].constraint_ref, base_path + ".constraint_ref");
+      const auto constraint_index = ResolvePhysicsResourceRef(ctx,
+        records[i].constraint_ref, base_path + ".constraint_ref",
+        phys::PhysicsResourceFormat::kJoltVehicleConstraintBinary,
+        "jolt_vehicle_constraint_binary", "constraint_ref");
       if (constraint_index.has_value()) {
         records[i].record.constraint_resource_index = *constraint_index;
       }
+
+      if (records[i].wheels.size() < 2U) {
+        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+          "physics.sidecar.payload_invalid",
+          "Vehicle must declare at least two wheels", base_path + ".wheels");
+        continue;
+      }
+
+      auto wheel_nodes = std::unordered_set<uint32_t> {};
+      auto wheel_roles
+        = std::unordered_set<uint32_t> {}; // packed (axle << 16) | side
+      const auto wheel_offset = wheel_records.size();
+      auto wheel_count = uint16_t { 0 };
+      for (size_t w = 0; w < records[i].wheels.size(); ++w) {
+        const auto wheel_path
+          = base_path + ".wheels[" + std::to_string(w) + "]";
+        const auto& wheel = records[i].wheels[w];
+        if (!ValidateNodeIndex(wheel.node_index, ctx.node_count, ctx.session,
+              ctx.request, wheel_path + ".node_index")) {
+          continue;
+        }
+        if (wheel.node_index == records[i].record.node_index) {
+          AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+            "physics.sidecar.payload_invalid",
+            "Vehicle wheel node_index must differ from chassis node_index",
+            wheel_path + ".node_index");
+          continue;
+        }
+        if (!wheel_nodes.insert(wheel.node_index).second) {
+          AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+            "physics.sidecar.payload_invalid",
+            "Vehicle wheels must reference distinct node_index values",
+            wheel_path + ".node_index");
+          continue;
+        }
+        const auto role_key = (static_cast<uint32_t>(wheel.axle_index) << 16U)
+          | static_cast<uint32_t>(wheel.side);
+        if (!wheel_roles.insert(role_key).second) {
+          AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+            "physics.sidecar.payload_invalid",
+            "Vehicle wheel role (axle_index + side) must be unique",
+            wheel_path);
+          continue;
+        }
+        if (wheel_count == (std::numeric_limits<uint16_t>::max)()) {
+          AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+            "physics.sidecar.payload_invalid",
+            "Vehicle wheel count exceeds uint16 range", wheel_path);
+          continue;
+        }
+
+        wheel_records.push_back(phys::VehicleWheelBindingRecord {
+          .vehicle_node_index = records[i].record.node_index,
+          .wheel_node_index = wheel.node_index,
+          .axle_index = wheel.axle_index,
+          .side = wheel.side,
+        });
+        wheel_count = static_cast<uint16_t>(wheel_count + 1U);
+      }
+
+      if (wheel_count < 2U) {
+        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+          "physics.sidecar.payload_invalid",
+          "Vehicle wheel bindings must resolve to at least two valid wheels",
+          base_path + ".wheels");
+        wheel_records.resize(wheel_offset);
+        continue;
+      }
+
+      if (wheel_offset > (std::numeric_limits<uint32_t>::max)()) {
+        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+          "physics.sidecar.payload_invalid",
+          "Vehicle wheel table offset exceeds uint32 range", base_path);
+        wheel_records.resize(wheel_offset);
+        continue;
+      }
+
+      records[i].record.wheel_table_offset
+        = static_cast<uint32_t>(wheel_offset);
+      records[i].record.wheel_count = wheel_count;
     }
   }
 
@@ -1234,11 +1425,10 @@ namespace {
     ResolveShapeAndMaterialBindings(
       parsed.colliders, "colliders", validation_ctx);
     ResolveShapeOnlyBindings(parsed.characters, "characters", validation_ctx);
-    ValidateNodeBindings(
-      parsed.soft_bodies, "soft_bodies",
-      [](const auto& record) { return record.node_index; }, validation_ctx);
+    ResolveSoftBodyBindings(parsed.soft_bodies, validation_ctx);
     ResolveJointBindings(parsed.joints, validation_ctx);
-    ResolveVehicleBindings(parsed.vehicles, validation_ctx);
+    ResolveVehicleBindings(
+      parsed.vehicles, parsed.vehicle_wheels, validation_ctx);
     ValidateNodeBindings(
       parsed.aggregates, "aggregates",
       [](const auto& record) { return record.node_index; }, validation_ctx);
@@ -1255,11 +1445,13 @@ namespace {
       = ExtractRecordVector(parsed.colliders, &ColliderBindingSource::record);
     auto character_records
       = ExtractRecordVector(parsed.characters, &CharacterBindingSource::record);
-    auto soft_body_records = parsed.soft_bodies;
+    auto soft_body_records
+      = ExtractRecordVector(parsed.soft_bodies, &SoftBodyBindingSource::record);
     auto joint_records
       = ExtractRecordVector(parsed.joints, &JointBindingSource::record);
     auto vehicle_records
       = ExtractRecordVector(parsed.vehicles, &VehicleBindingSource::record);
+    auto wheel_records = parsed.vehicle_wheels;
     auto aggregate_records = parsed.aggregates;
 
     auto tables = std::vector<TableBlob> {};
@@ -1289,6 +1481,20 @@ namespace {
     SortAndAppendTable(tables, phys::PhysicsBindingType::kVehicle,
       vehicle_records, [](const auto& lhs, const auto& rhs) {
         return lhs.node_index < rhs.node_index;
+      });
+    SortAndAppendTable(tables, phys::PhysicsBindingType::kVehicleWheel,
+      wheel_records, [](const auto& lhs, const auto& rhs) {
+        if (lhs.vehicle_node_index != rhs.vehicle_node_index) {
+          return lhs.vehicle_node_index < rhs.vehicle_node_index;
+        }
+        if (lhs.axle_index != rhs.axle_index) {
+          return lhs.axle_index < rhs.axle_index;
+        }
+        if (lhs.side != rhs.side) {
+          return static_cast<uint32_t>(lhs.side)
+            < static_cast<uint32_t>(rhs.side);
+        }
+        return lhs.wheel_node_index < rhs.wheel_node_index;
       });
     SortAndAppendTable(tables, phys::PhysicsBindingType::kAggregate,
       aggregate_records, [](const auto& lhs, const auto& rhs) {

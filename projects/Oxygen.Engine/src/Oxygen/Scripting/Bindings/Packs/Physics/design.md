@@ -504,10 +504,12 @@ Vehicle aggregate API over `PhysicsModule::Vehicles()` / `system::IVehicleApi`.
 | Function | Phase required | Returns | C++ call |
 | --- | --- | --- | --- |
 | `create(desc)` | `gameplay` | `AggregateHandle \| nil` | `IVehicleApi::CreateVehicle(world_id, desc)` |
+| `get_exact(node)` | not `fixed_simulation` | `AggregateHandle \| nil` | `PhysicsModule::GetAggregateIdForNode(node)` + `IVehicleApi::GetState(world_id, ...)` validation |
+| `find_in_ancestors(node)` | not `fixed_simulation` | `AggregateHandle \| nil` | ancestor traversal over `SceneNode::GetParent()` with per-node `GetAggregateIdForNode` + `IVehicleApi::GetState` validation |
 | `destroy(aggregate)` | `gameplay` | `bool` | `IVehicleApi::DestroyVehicle(world_id, ...)` |
 | `set_control_input(aggregate, input)` | `gameplay` | `bool` | `IVehicleApi::SetControlInput(world_id, ...)` |
-| `get_state(aggregate)` | any | `VehicleState \| nil` | `IVehicleApi::GetState(world_id, ...)` |
-| `get_authority(aggregate)` | any | `string \| nil` | `IVehicleApi::GetAuthority(world_id, ...)` |
+| `get_state(aggregate)` | not `fixed_simulation` | `VehicleState \| nil` | `IVehicleApi::GetState(world_id, ...)` |
+| `get_authority(aggregate)` | not `fixed_simulation` | `string \| nil` | `IVehicleApi::GetAuthority(world_id, ...)` |
 | `flush_structural_changes()` | `gameplay` | `integer \| nil` | `IVehicleApi::FlushStructuralChanges(world_id)` |
 
 > `set_control_input` is a per-frame **command**, not a structural mutation. Its
@@ -520,16 +522,21 @@ Vehicle aggregate API over `PhysicsModule::Vehicles()` / `system::IVehicleApi`.
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `chassis_body_id` | `BodyId \| BodyHandle` | yes | existing world body |
-| `wheel_body_ids` | `BodyId[] \| BodyHandle[]` | yes | non-empty, cannot include chassis |
+| `wheels` | `table[]` | yes | at least two entries; each entry requires `{ body_id, axle_index, side }` |
+| `constraint_settings_blob` | `string` | yes | binary payload for `JPH::VehicleConstraintSettings` |
 
 **`set_control_input` fields (`vehicle::VehicleControlInput`):**
 
 | Field | Type | Default | Domain |
 | --- | --- | --- | --- |
-| `throttle` | `number` | `0.0` | `[0, 1]` (validated/clamped) |
+| `forward` | `number` | `0.0` | `[-1, 1]` (validated/clamped) |
 | `brake` | `number` | `0.0` | `[0, 1]` (validated/clamped) |
 | `steering` | `number` | `0.0` | `[-1, 1]` (validated/clamped) |
-| `handbrake` | `number` | `0.0` | `[0, 1]` (validated/clamped) |
+| `hand_brake` | `number` | `0.0` | `[0, 1]` (validated/clamped) |
+
+Unknown keys are rejected with a hard error.
+Lookup APIs are explicit-only: `get_exact` does not traverse, and
+`find_in_ancestors` is opt-in traversal.
 
 **`VehicleState` table fields (`vehicle::VehicleState`):**
 
@@ -546,10 +553,12 @@ Soft-body aggregate API over `PhysicsModule::SoftBodies()` /
 | Function | Phase required | Returns | C++ call |
 | --- | --- | --- | --- |
 | `create(desc)` | `gameplay` | `AggregateHandle \| nil` | `ISoftBodyApi::CreateSoftBody` |
+| `get_exact(node)` | not `fixed_simulation` | `AggregateHandle \| nil` | `PhysicsModule::GetAggregateIdForNode(node)` + `ISoftBodyApi::GetState` validation |
+| `find_in_ancestors(node)` | not `fixed_simulation` | `AggregateHandle \| nil` | ancestor traversal over `SceneNode::GetParent()` with per-node `GetAggregateIdForNode` + `ISoftBodyApi::GetState` validation |
 | `destroy(aggregate)` | `gameplay` | `bool` | `ISoftBodyApi::DestroySoftBody` |
 | `set_material_params(aggregate, params)` | `gameplay` | `bool` | `ISoftBodyApi::SetMaterialParams` |
-| `get_state(aggregate)` | any | `SoftBodyState \| nil` | `ISoftBodyApi::GetState` |
-| `get_authority(aggregate)` | any | `string \| nil` | `ISoftBodyApi::GetAuthority` |
+| `get_state(aggregate)` | not `fixed_simulation` | `SoftBodyState \| nil` | `ISoftBodyApi::GetState` |
+| `get_authority(aggregate)` | not `fixed_simulation` | `string \| nil` | `ISoftBodyApi::GetAuthority` |
 | `flush_structural_changes()` | `gameplay` | `integer \| nil` | `ISoftBodyApi::FlushStructuralChanges` |
 
 **`create` descriptor fields (`softbody::SoftBodyDesc`):**
@@ -571,6 +580,9 @@ Soft-body aggregate API over `PhysicsModule::SoftBodies()` /
 | `bend_compliance` | `number` | `max_float` |
 | `tether_mode` | `string` | `"none"` |
 | `tether_max_distance_multiplier` | `number` | `1.0` |
+
+Lookup APIs are explicit-only: `get_exact` does not traverse, and
+`find_in_ancestors` is opt-in traversal.
 
 **`SoftBodyState` table fields (`softbody::SoftBodyState`):**
 
@@ -827,10 +839,11 @@ Policy table:
 | `aggregate.*` mutators (`create`, `destroy`, `add/remove_member_body`, `flush_structural_changes`) | `IsAggregateMutationAllowed` | Return `nil`/`false`, log `WARNING` |
 | `articulation.*` mutators (`create`, `destroy`, `add_link`, `remove_link`, `flush_structural_changes`) | `IsAggregateMutationAllowed` | Return `nil`/`false`, log `WARNING` |
 | `joint.*` mutators (`create`, `destroy`, `set_enabled`) | `IsAggregateMutationAllowed` | Return `nil`/`false`, log `WARNING` |
-| `vehicle.*` mutators (`create`, `destroy`, `set_control_input`, `flush_structural_changes`) | `IsAggregateMutationAllowed` | Return `nil`/`false`, log `WARNING` |
+| `vehicle.*` structural mutators (`create`, `destroy`, `flush_structural_changes`) | `IsAggregateMutationAllowed` | Return `nil`/`false`, log `WARNING` |
+| `vehicle.set_control_input` | `IsCommandAllowed` | Return `false`, log `WARNING` |
 | `soft_body.*` mutators (`create`, `destroy`, `set_material_params`, `flush_structural_changes`) | `IsAggregateMutationAllowed` | Return `nil`/`false`, log `WARNING` |
-| `query.*` | none (read-only) | Return `nil` if engine unavailable |
-| `aggregate/articulation/joint/vehicle/soft_body` read methods | none (read-only) | Return `nil` if engine unavailable |
+| `query.*` | `IsPhysicsScriptablePhase` | Return `nil` when phase-blocked or engine unavailable |
+| `aggregate/articulation/joint/vehicle/soft_body` read methods | `IsPhysicsScriptablePhase` | Return `nil` when phase-blocked or engine unavailable |
 
 ---
 

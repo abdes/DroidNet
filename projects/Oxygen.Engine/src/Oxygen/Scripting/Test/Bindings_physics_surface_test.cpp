@@ -74,6 +74,8 @@ if type(physics.joint.destroy) ~= "function" then error("missing physics.joint.d
 if type(physics.joint.set_enabled) ~= "function" then error("missing physics.joint.set_enabled") end
 if type(physics.vehicle) ~= "table" then error("missing physics.vehicle") end
 if type(physics.vehicle.create) ~= "function" then error("missing physics.vehicle.create") end
+if type(physics.vehicle.get_exact) ~= "function" then error("missing physics.vehicle.get_exact") end
+if type(physics.vehicle.find_in_ancestors) ~= "function" then error("missing physics.vehicle.find_in_ancestors") end
 if type(physics.vehicle.destroy) ~= "function" then error("missing physics.vehicle.destroy") end
 if type(physics.vehicle.set_control_input) ~= "function" then error("missing physics.vehicle.set_control_input") end
 if type(physics.vehicle.get_state) ~= "function" then error("missing physics.vehicle.get_state") end
@@ -81,6 +83,8 @@ if type(physics.vehicle.get_authority) ~= "function" then error("missing physics
 if type(physics.vehicle.flush_structural_changes) ~= "function" then error("missing physics.vehicle.flush_structural_changes") end
 if type(physics.soft_body) ~= "table" then error("missing physics.soft_body") end
 if type(physics.soft_body.create) ~= "function" then error("missing physics.soft_body.create") end
+if type(physics.soft_body.get_exact) ~= "function" then error("missing physics.soft_body.get_exact") end
+if type(physics.soft_body.find_in_ancestors) ~= "function" then error("missing physics.soft_body.find_in_ancestors") end
 if type(physics.soft_body.destroy) ~= "function" then error("missing physics.soft_body.destroy") end
 if type(physics.soft_body.set_material_params) ~= "function" then error("missing physics.soft_body.set_material_params") end
 if type(physics.soft_body.get_state) ~= "function" then error("missing physics.soft_body.get_state") end
@@ -160,7 +164,14 @@ function on_fixed_simulation()
   if physics.joint.create({ body_a_id = 1, body_b_id = 2 }) ~= nil then error("joint.create must be blocked in fixed_simulation") end
   if physics.joint.destroy(nil) ~= false then error("joint.destroy must be blocked in fixed_simulation") end
   if physics.joint.set_enabled(nil, true) ~= false then error("joint.set_enabled must be blocked in fixed_simulation") end
-  if physics.vehicle.create({ chassis_body_id = 1, wheel_body_ids = { 2 } }) ~= nil then error("vehicle.create must be blocked in fixed_simulation") end
+  if physics.vehicle.create({
+    chassis_body_id = 1,
+    wheels = {
+      { body_id = 2, axle_index = 0, side = "left" },
+      { body_id = 3, axle_index = 0, side = "right" },
+    },
+    constraint_settings_blob = "x",
+  }) ~= nil then error("vehicle.create must be blocked in fixed_simulation") end
   if physics.soft_body.create({ cluster_count = 1 }) ~= nil then error("soft_body.create must be blocked in fixed_simulation") end
 end
 )lua" },

@@ -691,6 +691,10 @@ NOLINT_TEST_F(AssetLoaderSceneTest, LoadAssetSceneWithPhysicsSidecarLoadsV7)
         EXPECT_NE(joints[0].constraint_resource_index,
           oxygen::data::pak::core::kNoResourceIndex);
       }
+      if (!soft_bodies.empty()) {
+        EXPECT_NE(soft_bodies[0].settings_resource_index,
+          oxygen::data::pak::core::kNoResourceIndex);
+      }
       if (!vehicles.empty()) {
         EXPECT_NE(vehicles[0].constraint_resource_index,
           oxygen::data::pak::core::kNoResourceIndex);

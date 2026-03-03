@@ -178,4 +178,23 @@ NOLINT_TEST_F(
   EXPECT_EQ(result.error(), PhysicsError::kWorldNotFound);
 }
 
+NOLINT_TEST_F(JoltBodyContractTest, CollisionLayerOutsideMaskBitRangeIsRejected)
+{
+  RequireBackend();
+
+  auto& worlds = System().Worlds();
+  auto& bodies = System().Bodies();
+  const auto world_result = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(world_result.has_value());
+  const auto world_id = world_result.value();
+
+  body::BodyDesc desc {};
+  desc.collision_layer = CollisionLayer { 32U };
+  const auto create_result = bodies.CreateBody(world_id, desc);
+  ASSERT_TRUE(create_result.has_error());
+  EXPECT_EQ(create_result.error(), PhysicsError::kInvalidCollisionMask);
+
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
 } // namespace oxygen::physics::test::jolt

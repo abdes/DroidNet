@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <span>
 #include <string_view>
 
 #include <Oxygen/Core/Constants.h>
@@ -52,12 +53,13 @@ struct SoftBodyMaterialParams final {
 */
 struct SoftBodyDesc final {
   BodyId anchor_body_id { kInvalidBodyId };
-  //! Resolution parameter for generated backend topology.
-  //! Current Jolt backend creates a procedural cube soft body.
+  //! Authoring-time topology hint retained for validation/runtime policy.
   uint32_t cluster_count { 0U };
   SoftBodyMaterialParams material_params {};
   Vec3 initial_position { 0.0F, 0.0F, 0.0F };
   Quat initial_rotation { 1.0F, 0.0F, 0.0F, 0.0F };
+  //! Serialized kJoltSoftBodySharedSettingsBinary payload.
+  std::span<const uint8_t> settings_blob {};
 };
 
 /*!

@@ -31,12 +31,12 @@ public:
       return Err(PhysicsError::kWorldNotFound);
     }
     if (!state_->bodies.contains(desc.chassis_body_id)
-      || desc.wheel_body_ids.empty()) {
+      || desc.wheels.size() < 2U || desc.constraint_settings_blob.empty()) {
       return Err(PhysicsError::kInvalidArgument);
     }
-    for (const auto wheel_id : desc.wheel_body_ids) {
-      if (!state_->bodies.contains(wheel_id)
-        || wheel_id == desc.chassis_body_id) {
+    for (const auto& wheel : desc.wheels) {
+      if (!state_->bodies.contains(wheel.body_id)
+        || wheel.body_id == desc.chassis_body_id) {
         return Err(PhysicsError::kInvalidArgument);
       }
     }
@@ -47,8 +47,8 @@ public:
     state_->vehicles.insert_or_assign(vehicle_id,
       VehicleState {
         .chassis_body_id = desc.chassis_body_id,
-        .wheel_body_ids = std::vector<BodyId>(
-          desc.wheel_body_ids.begin(), desc.wheel_body_ids.end()),
+        .wheels = std::vector<vehicle::VehicleWheelDesc>(
+          desc.wheels.begin(), desc.wheels.end()),
       });
     state_->vehicle_create_calls += 1;
     return PhysicsResult<AggregateId>::Ok(vehicle_id);
@@ -95,7 +95,7 @@ public:
     }
     return PhysicsResult<vehicle::VehicleState>::Ok(vehicle::VehicleState {
       .forward_speed_mps = 0.0F,
-      .grounded = !it->second.wheel_body_ids.empty(),
+      .grounded = !it->second.wheels.empty(),
     });
   }
 

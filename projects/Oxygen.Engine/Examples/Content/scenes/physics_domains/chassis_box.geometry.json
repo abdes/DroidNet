@@ -1,0 +1,48 @@
+{
+    "name": "chassis_box",
+    "bounds": {
+        "min": [
+            -0.9,
+            -1.8,
+            -0.3
+        ],
+        "max": [
+            0.9,
+            1.8,
+            0.3
+        ]
+    },
+    "lods": [
+        {
+            "name": "chassis_box_lod0",
+            "mesh_type": "procedural",
+            "bounds": {
+                "min": [
+                    -0.9,
+                    -1.8,
+                    -0.3
+                ],
+                "max": [
+                    0.9,
+                    1.8,
+                    0.3
+                ]
+            },
+            "procedural": {
+                "generator": "Cube",
+                "mesh_name": "ChassisBox"
+            },
+            "submeshes": [
+                {
+                    "name": "chassis_surface",
+                    "material_ref": "/.cooked/Materials/chassis_green.omat",
+                    "views": [
+                        {
+                            "view_ref": "__all__"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

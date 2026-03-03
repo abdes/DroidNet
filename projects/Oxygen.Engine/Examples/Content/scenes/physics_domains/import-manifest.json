@@ -21,6 +21,42 @@
             "name": "sphere_blue"
         },
         {
+            "id": "chassis.material",
+            "type": "material-descriptor",
+            "source": "./chassis_green.material.json",
+            "name": "chassis_green"
+        },
+        {
+            "id": "wheel.material",
+            "type": "material-descriptor",
+            "source": "./wheel_dark.material.json",
+            "name": "wheel_dark"
+        },
+        {
+            "id": "ramp.material",
+            "type": "material-descriptor",
+            "source": "./ramp_orange.material.json",
+            "name": "ramp_orange"
+        },
+        {
+            "id": "softbody.material",
+            "type": "material-descriptor",
+            "source": "./softbody_pink.material.json",
+            "name": "softbody_pink"
+        },
+        {
+            "id": "character.material",
+            "type": "material-descriptor",
+            "source": "./character_teal.material.json",
+            "name": "character_teal"
+        },
+        {
+            "id": "stack.material",
+            "type": "material-descriptor",
+            "source": "./stack_yellow.material.json",
+            "name": "stack_yellow"
+        },
+        {
             "id": "floor.geometry",
             "type": "geometry-descriptor",
             "source": "../bottle-on-box/floor.geometry.json",
@@ -48,6 +84,60 @@
             ]
         },
         {
+            "id": "chassis_box.geometry",
+            "type": "geometry-descriptor",
+            "source": "./chassis_box.geometry.json",
+            "name": "chassis_box",
+            "depends_on": [
+                "chassis.material"
+            ]
+        },
+        {
+            "id": "cylinder_wheel.geometry",
+            "type": "geometry-descriptor",
+            "source": "./cylinder_wheel.geometry.json",
+            "name": "cylinder_wheel",
+            "depends_on": [
+                "wheel.material"
+            ]
+        },
+        {
+            "id": "ramp.geometry",
+            "type": "geometry-descriptor",
+            "source": "./ramp.geometry.json",
+            "name": "ramp_geo",
+            "depends_on": [
+                "ramp.material"
+            ]
+        },
+        {
+            "id": "character_capsule.geometry",
+            "type": "geometry-descriptor",
+            "source": "./character_capsule.geometry.json",
+            "name": "character_capsule",
+            "depends_on": [
+                "character.material"
+            ]
+        },
+        {
+            "id": "softbody_sphere.geometry",
+            "type": "geometry-descriptor",
+            "source": "./softbody_sphere.geometry.json",
+            "name": "softbody_sphere",
+            "depends_on": [
+                "softbody.material"
+            ]
+        },
+        {
+            "id": "stack_cube.geometry",
+            "type": "geometry-descriptor",
+            "source": "./stack_cube.geometry.json",
+            "name": "stack_cube",
+            "depends_on": [
+                "stack.material"
+            ]
+        },
+        {
             "id": "scene.physics_domains",
             "type": "scene-descriptor",
             "source": "./physics_domains.scene.json",
@@ -55,7 +145,46 @@
             "depends_on": [
                 "floor.geometry",
                 "cube.geometry",
-                "sphere.geometry"
+                "sphere.geometry",
+                "chassis_box.geometry",
+                "cylinder_wheel.geometry",
+                "ramp.geometry",
+                "character_capsule.geometry",
+                "softbody_sphere.geometry",
+                "stack_cube.geometry"
+            ]
+        },
+        {
+            "id": "script.physics_domains_controller",
+            "type": "script",
+            "source": "./physics_domains_controller.lua",
+            "name": "physics_domains_controller",
+            "compile": true,
+            "script_storage": "embedded",
+            "content_hashing": true
+        },
+        {
+            "id": "input.physics_domains",
+            "type": "input",
+            "source": "./physics_domains.input.json"
+        },
+        {
+            "id": "script.sidecar.physics_domains_controller",
+            "type": "script-sidecar",
+            "name": "physics_domains_controller_sidecar",
+            "target_scene_virtual_path": "/.cooked/Scenes/physics_domains.oscene",
+            "depends_on": [
+                "scene.physics_domains",
+                "script.physics_domains_controller",
+                "input.physics_domains"
+            ],
+            "bindings": [
+                {
+                    "node_index": 0,
+                    "slot_id": "physics_domains_controller",
+                    "script_virtual_path": "/.cooked/Scripts/physics_domains_controller.oscript",
+                    "execution_order": 0
+                }
             ]
         },
         {
@@ -63,6 +192,12 @@
             "type": "physics-resource-descriptor",
             "source": "./park_hinge_joint_a.physics-resource.json",
             "name": "park_hinge_joint_a"
+        },
+        {
+            "id": "physics.resource.vehicle_constraint_a",
+            "type": "physics-resource-descriptor",
+            "source": "./park_vehicle_constraint_a.physics-resource.json",
+            "name": "park_vehicle_constraint_a"
         },
         {
             "id": "physics.material.ground",
@@ -75,6 +210,12 @@
             "type": "physics-material-descriptor",
             "source": "./dynamic.physics-material.json",
             "name": "dynamic"
+        },
+        {
+            "id": "physics.material.bouncy",
+            "type": "physics-material-descriptor",
+            "source": "./bouncy.physics-material.json",
+            "name": "bouncy"
         },
         {
             "id": "physics.shape.floor",
@@ -95,6 +236,69 @@
             ]
         },
         {
+            "id": "physics.shape.chassis",
+            "type": "collision-shape-descriptor",
+            "source": "./chassis.shape.json",
+            "name": "chassis_shape",
+            "depends_on": [
+                "physics.material.dynamic"
+            ]
+        },
+        {
+            "id": "physics.shape.wheel",
+            "type": "collision-shape-descriptor",
+            "source": "./wheel.shape.json",
+            "name": "wheel_shape",
+            "depends_on": [
+                "physics.material.dynamic"
+            ]
+        },
+        {
+            "id": "physics.shape.ramp",
+            "type": "collision-shape-descriptor",
+            "source": "./ramp.shape.json",
+            "name": "ramp_shape",
+            "depends_on": [
+                "physics.material.ground"
+            ]
+        },
+        {
+            "id": "physics.shape.stack_cube",
+            "type": "collision-shape-descriptor",
+            "source": "./stack_cube.shape.json",
+            "name": "stack_cube_shape",
+            "depends_on": [
+                "physics.material.dynamic"
+            ]
+        },
+        {
+            "id": "physics.shape.trigger_zone",
+            "type": "collision-shape-descriptor",
+            "source": "./trigger_zone.shape.json",
+            "name": "trigger_zone_shape",
+            "depends_on": [
+                "physics.material.dynamic"
+            ]
+        },
+        {
+            "id": "physics.shape.sphere_bouncy",
+            "type": "collision-shape-descriptor",
+            "source": "./sphere_bouncy.shape.json",
+            "name": "sphere_bouncy_shape",
+            "depends_on": [
+                "physics.material.bouncy"
+            ]
+        },
+        {
+            "id": "physics.shape.cube_unit_dynamic",
+            "type": "collision-shape-descriptor",
+            "source": "./cube_unit_dynamic.shape.json",
+            "name": "cube_unit_dynamic_shape",
+            "depends_on": [
+                "physics.material.dynamic"
+            ]
+        },
+        {
             "id": "physics.sidecar.park",
             "type": "physics-sidecar",
             "source": "./physics_domains.physics-sidecar.json",
@@ -103,10 +307,19 @@
             "depends_on": [
                 "scene.physics_domains",
                 "physics.resource.joint_hinge_a",
+                "physics.resource.vehicle_constraint_a",
                 "physics.shape.floor",
                 "physics.shape.actor",
+                "physics.shape.chassis",
+                "physics.shape.wheel",
+                "physics.shape.ramp",
+                "physics.shape.stack_cube",
+                "physics.shape.trigger_zone",
+                "physics.shape.sphere_bouncy",
+                "physics.shape.cube_unit_dynamic",
                 "physics.material.ground",
-                "physics.material.dynamic"
+                "physics.material.dynamic",
+                "physics.material.bouncy"
             ]
         }
     ]

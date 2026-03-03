@@ -278,11 +278,6 @@ auto PhysicsModule::RegisterNodeBodyMapping(
   if (node_to_character_binding_.contains(node_handle)) {
     return;
   }
-  DCHECK_F(!node_to_aggregate_binding_.contains(node_handle),
-    "Physics authority conflict: node already has an aggregate mapping.");
-  if (node_to_aggregate_binding_.contains(node_handle)) {
-    return;
-  }
 
   CHECK_NOTNULL_F(bindings_.get());
   const auto binding_handle = bindings_->Insert(PhysicsBinding {
@@ -428,11 +423,6 @@ auto PhysicsModule::RegisterNodeAggregateMapping(
     = aggregate_to_binding_.find(aggregate_id);
     existing_aggregate_it != aggregate_to_binding_.end()) {
     (void)RemoveAggregateBinding(existing_aggregate_it->second);
-  }
-  DCHECK_F(!node_to_binding_.contains(node_handle),
-    "Physics authority conflict: node already has a rigid body mapping.");
-  if (node_to_binding_.contains(node_handle)) {
-    return;
   }
   DCHECK_F(!node_to_character_binding_.contains(node_handle),
     "Physics authority conflict: node already has a character mapping.");
@@ -817,11 +807,12 @@ auto PhysicsModule::OnTransformChanged(
   if (node_to_character_binding_.contains(node_handle)) {
     return;
   }
-  if (node_to_aggregate_binding_.contains(node_handle)) {
-    return;
-  }
   if (node_to_binding_.contains(node_handle)) {
     pending_transform_updates_.insert(node_handle);
+    return;
+  }
+  if (node_to_aggregate_binding_.contains(node_handle)) {
+    return;
   }
 }
 

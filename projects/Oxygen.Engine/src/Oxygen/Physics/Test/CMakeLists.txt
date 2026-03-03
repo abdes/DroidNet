@@ -35,6 +35,8 @@ include(GTestHelpers)
 m_gtest_program(
   Basic
   SOURCES
+    "TestBlobBuilders.h"
+    "TestBlobBuilders.cpp"
     "Physics_test.cpp"
     "Physics_source_contract_test.cpp"
 )
@@ -44,6 +46,8 @@ if(OXYGEN_PHYSICS_BACKEND STREQUAL "jolt")
     Jolt
     SOURCES
       "Jolt/Jolt_test_fixture.h"
+      "TestBlobBuilders.h"
+      "TestBlobBuilders.cpp"
       "Jolt/Body/Jolt_body_basic_test.cpp"
       "Jolt/Body/Jolt_body_contract_test.cpp"
       "Jolt/Body/Jolt_body_domain_test.cpp"

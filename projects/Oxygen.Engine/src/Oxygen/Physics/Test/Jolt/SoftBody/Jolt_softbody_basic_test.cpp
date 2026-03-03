@@ -7,6 +7,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Physics/Test/Jolt/Jolt_test_fixture.h>
+#include <Oxygen/Physics/Test/TestBlobBuilders.h>
 #include <Oxygen/Physics/World/WorldDesc.h>
 
 namespace oxygen::physics::test::jolt {
@@ -30,10 +31,12 @@ NOLINT_TEST_F(JoltSoftBodyBasicTest, CreateAndDestroySoftBodySucceeds)
   ASSERT_TRUE(world.has_value());
   const auto world_id = world.value();
 
+  const auto soft_body_settings_blob = MakeSoftBodySettingsBlob(4U);
   const auto soft_body = soft_bodies.CreateSoftBody(world_id,
     softbody::SoftBodyDesc {
       .anchor_body_id = kInvalidBodyId,
       .cluster_count = 4U,
+      .settings_blob = soft_body_settings_blob,
     });
   ASSERT_TRUE(soft_body.has_value());
   EXPECT_TRUE(IsValid(soft_body.value()));
