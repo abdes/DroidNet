@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <limits>
-
 #include <Oxygen/Physics/Jolt/JoltArticulations.h>
 
 namespace {
@@ -34,7 +32,7 @@ auto oxygen::physics::jolt::JoltArticulations::CreateArticulation(
   }
 
   std::scoped_lock lock(mutex_);
-  if (next_articulation_id_ == std::numeric_limits<uint32_t>::max()) {
+  if (next_articulation_id_ > kArticulationAggregateIdMax) {
     return Err(PhysicsError::kNotInitialized);
   }
 

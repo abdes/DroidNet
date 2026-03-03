@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <limits>
-
 #include <Jolt/Jolt.h> // Must always be first (keep separate)
 
 #include <Jolt/Physics/PhysicsSystem.h>
@@ -35,7 +33,7 @@ auto oxygen::physics::jolt::JoltAggregates::CreateAggregate(
   }
 
   std::scoped_lock lock(mutex_);
-  if (next_aggregate_id_ == std::numeric_limits<uint32_t>::max()) {
+  if (next_aggregate_id_ > kGenericAggregateIdMax) {
     return Err(PhysicsError::kNotInitialized);
   }
 

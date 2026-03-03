@@ -118,8 +118,8 @@ namespace {
     const auto input_index = lua_absindex(state, arg_index);
     luaL_checktype(state, input_index, LUA_TTABLE);
     return physics::vehicle::VehicleControlInput {
-      .throttle
-      = ParseClampedFinite(state, input_index, "throttle", 0.0F, 1.0F, 0.0F),
+      .forward
+      = ParseClampedFinite(state, input_index, "forward", -1.0F, 1.0F, 0.0F),
       .brake
       = ParseClampedFinite(state, input_index, "brake", 0.0F, 1.0F, 0.0F),
       .steering

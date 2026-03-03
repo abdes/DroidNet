@@ -29,6 +29,8 @@ OXGN_PHYS_NDAPI auto to_string(SoftBodyTetherMode value) noexcept
  Runtime soft-body material/tuning parameters.
 */
 struct SoftBodyMaterialParams final {
+  //! Global rigidity bias; higher values reduce effective compliances.
+  //! This is not gas/inflation pressure.
   float stiffness { 0.0F };
   float damping { 0.0F };
   float edge_compliance { 0.0F };
@@ -50,8 +52,12 @@ struct SoftBodyMaterialParams final {
 */
 struct SoftBodyDesc final {
   BodyId anchor_body_id { kInvalidBodyId };
+  //! Resolution parameter for generated backend topology.
+  //! Current Jolt backend creates a procedural cube soft body.
   uint32_t cluster_count { 0U };
   SoftBodyMaterialParams material_params {};
+  Vec3 initial_position { 0.0F, 0.0F, 0.0F };
+  Quat initial_rotation { 1.0F, 0.0F, 0.0F, 0.0F };
 };
 
 /*!

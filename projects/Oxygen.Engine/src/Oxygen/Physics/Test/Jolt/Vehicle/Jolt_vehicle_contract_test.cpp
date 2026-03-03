@@ -9,6 +9,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Physics/Body/BodyDesc.h>
+#include <Oxygen/Physics/SoftBody/SoftBodyDesc.h>
 #include <Oxygen/Physics/Test/Jolt/Jolt_test_fixture.h>
 #include <Oxygen/Physics/World/WorldDesc.h>
 
@@ -105,7 +106,7 @@ NOLINT_TEST_F(JoltVehicleContractTest, SetControlInputValidatesNormalizedRanges)
 
   const auto invalid = vehicles.SetControlInput(world_id, vehicle.value(),
     vehicle::VehicleControlInput {
-      .throttle = 2.0F,
+      .forward = 2.0F,
       .brake = 0.0F,
       .steering = 0.0F,
       .handbrake = 0.0F,
@@ -158,6 +159,108 @@ NOLINT_TEST_F(JoltVehicleContractTest, CreateVehicleRejectsSingleWheelTopology)
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
 }
 
+NOLINT_TEST_F(JoltVehicleContractTest, CreateVehicleAcceptsOddWheelTopology)
+{
+  AssertBackendAvailabilityContract();
+  if (!HasBackend()) {
+    return;
+  }
+
+  auto& vehicles = System().Vehicles();
+  auto& worlds = System().Worlds();
+  auto& bodies = System().Bodies();
+
+  const auto world = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(world.has_value());
+  const auto world_id = world.value();
+
+  body::BodyDesc body_desc {};
+  body_desc.type = body::BodyType::kDynamic;
+  const auto chassis = bodies.CreateBody(world_id, body_desc);
+  const auto wheel_a = bodies.CreateBody(world_id, body_desc);
+  const auto wheel_b = bodies.CreateBody(world_id, body_desc);
+  const auto wheel_c = bodies.CreateBody(world_id, body_desc);
+  ASSERT_TRUE(chassis.has_value());
+  ASSERT_TRUE(wheel_a.has_value());
+  ASSERT_TRUE(wheel_b.has_value());
+  ASSERT_TRUE(wheel_c.has_value());
+
+  const std::array<BodyId, 3> wheel_ids {
+    wheel_a.value(),
+    wheel_b.value(),
+    wheel_c.value(),
+  };
+  const auto vehicle = vehicles.CreateVehicle(world_id,
+    vehicle::VehicleDesc {
+      .chassis_body_id = chassis.value(),
+      .wheel_body_ids = wheel_ids,
+    });
+  ASSERT_TRUE(vehicle.has_value());
+
+  EXPECT_TRUE(worlds.Step(world_id, 1.0F / 60.0F, 1, 1.0F / 60.0F).has_value());
+
+  EXPECT_TRUE(vehicles.DestroyVehicle(world_id, vehicle.value()).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, wheel_c.value()).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, wheel_b.value()).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, wheel_a.value()).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, chassis.value()).has_value());
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
+NOLINT_TEST_F(
+  JoltVehicleContractTest, VehicleAndSoftBodyAggregateIdsAreDisjoint)
+{
+  AssertBackendAvailabilityContract();
+  if (!HasBackend()) {
+    return;
+  }
+
+  auto& vehicles = System().Vehicles();
+  auto& soft_bodies = System().SoftBodies();
+  auto& worlds = System().Worlds();
+  auto& bodies = System().Bodies();
+
+  const auto world = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(world.has_value());
+  const auto world_id = world.value();
+
+  body::BodyDesc body_desc {};
+  body_desc.type = body::BodyType::kDynamic;
+  const auto chassis = bodies.CreateBody(world_id, body_desc);
+  const auto wheel_a = bodies.CreateBody(world_id, body_desc);
+  const auto wheel_b = bodies.CreateBody(world_id, body_desc);
+  ASSERT_TRUE(chassis.has_value());
+  ASSERT_TRUE(wheel_a.has_value());
+  ASSERT_TRUE(wheel_b.has_value());
+
+  const std::array<BodyId, 2> wheel_ids {
+    wheel_a.value(),
+    wheel_b.value(),
+  };
+  const auto vehicle = vehicles.CreateVehicle(world_id,
+    vehicle::VehicleDesc {
+      .chassis_body_id = chassis.value(),
+      .wheel_body_ids = wheel_ids,
+    });
+  ASSERT_TRUE(vehicle.has_value());
+
+  const auto soft_body = soft_bodies.CreateSoftBody(world_id,
+    softbody::SoftBodyDesc {
+      .cluster_count = 4U,
+    });
+  ASSERT_TRUE(soft_body.has_value());
+
+  EXPECT_NE(vehicle.value(), soft_body.value());
+
+  EXPECT_TRUE(
+    soft_bodies.DestroySoftBody(world_id, soft_body.value()).has_value());
+  EXPECT_TRUE(vehicles.DestroyVehicle(world_id, vehicle.value()).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, wheel_b.value()).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, wheel_a.value()).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, chassis.value()).has_value());
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
 NOLINT_TEST_F(
   JoltVehicleContractTest, DestroyAfterWorldDestroyedPurgesLocalVehicleState)
 {
@@ -203,7 +306,7 @@ NOLINT_TEST_F(
 
   const auto destroy_again = vehicles.DestroyVehicle(world_id, vehicle.value());
   ASSERT_TRUE(destroy_again.has_error());
-  EXPECT_EQ(destroy_again.error(), PhysicsError::kInvalidArgument);
+  EXPECT_EQ(destroy_again.error(), PhysicsError::kWorldNotFound);
 }
 
 } // namespace oxygen::physics::test::jolt

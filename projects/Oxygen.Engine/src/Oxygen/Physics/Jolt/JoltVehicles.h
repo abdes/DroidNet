@@ -10,7 +10,6 @@
 #include <memory>
 #include <mutex>
 #include <unordered_map>
-#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -47,7 +46,6 @@ private:
   struct VehicleState final {
     WorldId world_id { kInvalidWorldId };
     BodyId chassis_body_id { kInvalidBodyId };
-    std::vector<BodyId> wheel_body_ids {};
     vehicle::VehicleControlInput control_input {};
     aggregate::AggregateAuthority authority {
       aggregate::AggregateAuthority::kCommand,
@@ -58,10 +56,13 @@ private:
   [[nodiscard]] auto IsBodyKnown(
     WorldId world_id, BodyId body_id) const noexcept -> bool;
   auto NoteStructuralChange(WorldId world_id, size_t count = 1U) -> void;
+  auto UnregisterAllConstraints() -> void;
 
   observer_ptr<JoltWorld> world_ {};
   mutable std::mutex mutex_ {};
-  uint32_t next_vehicle_id_ { 1U };
+  static constexpr uint32_t kVehicleAggregateIdBase { 0x10000000U };
+  static constexpr uint32_t kVehicleAggregateIdMax { 0x1FFFFFFFU };
+  uint32_t next_vehicle_id_ { kVehicleAggregateIdBase };
   std::unordered_map<AggregateId, VehicleState> vehicles_ {};
   std::unordered_map<WorldId, size_t> pending_structural_changes_ {};
   std::unique_ptr<Impl> impl_ {};

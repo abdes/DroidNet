@@ -67,7 +67,9 @@ private:
 
   observer_ptr<JoltWorld> world_ {};
   mutable std::mutex mutex_ {};
-  uint32_t next_articulation_id_ { 1U };
+  static constexpr uint32_t kArticulationAggregateIdBase { 0x20000000U };
+  static constexpr uint32_t kArticulationAggregateIdMax { 0x2FFFFFFFU };
+  uint32_t next_articulation_id_ { kArticulationAggregateIdBase };
   std::unordered_map<AggregateId, ArticulationState> articulations_ {};
   std::unordered_map<WorldId, size_t> pending_structural_changes_ {};
 };

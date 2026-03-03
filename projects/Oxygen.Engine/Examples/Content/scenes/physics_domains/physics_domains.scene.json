@@ -7,42 +7,140 @@
         {
             "name": "Floor",
             "parent": 0
+            ,
+            "transform": {
+                "translation": [0.0, 0.0, 0.0],
+                "rotation": [0.0, 0.0, 0.0, 1.0],
+                "scale": [12.0, 12.0, 1.0]
+            }
         },
         {
             "name": "DynamicA",
-            "parent": 8
+            "parent": 8,
+            "transform": {
+                "translation": [0.0, 0.0, 2.0]
+            }
         },
         {
             "name": "DynamicB",
-            "parent": 0
+            "parent": 0,
+            "transform": {
+                "translation": [2.0, 0.0, 2.0]
+            }
         },
         {
             "name": "Character",
-            "parent": 0
+            "parent": 0,
+            "transform": {
+                "translation": [-2.0, 0.0, 2.0]
+            }
         },
         {
             "name": "Vehicle",
-            "parent": 0
+            "parent": 0,
+            "transform": {
+                "translation": [0.0, -4.0, 2.0]
+            }
         },
         {
             "name": "TriggerZone",
-            "parent": 0
+            "parent": 0,
+            "transform": {
+                "translation": [0.0, 3.0, 1.0]
+            }
         },
         {
             "name": "SoftBody",
-            "parent": 0
+            "parent": 0,
+            "transform": {
+                "translation": [0.0, 4.0, 3.0]
+            }
         },
         {
             "name": "AggregateAnchor",
-            "parent": 0
+            "parent": 0,
+            "transform": {
+                "translation": [4.0, 0.0, 0.0]
+            }
         },
         {
             "name": "VehicleWheelFL",
-            "parent": 5
+            "parent": 5,
+            "transform": {
+                "translation": [-0.8, 0.8, -0.9]
+            }
         },
         {
             "name": "VehicleWheelFR",
-            "parent": 5
+            "parent": 5,
+            "transform": {
+                "translation": [0.8, 0.8, -0.9]
+            }
+        },
+        {
+            "name": "sun_light_node",
+            "parent": 0,
+            "transform": {
+                "translation": [0.0, 0.0, 50.0],
+                "rotation": [0.3827, 0.0, 0.0, 0.9239],
+                "scale": [1.0, 1.0, 1.0]
+            }
+        },
+        {
+            "name": "camera_node",
+            "parent": 0,
+            "transform": {
+                "translation": [0.0, 8.0, 0.0],
+                "rotation": [0.0, 0.0, 0.0, 1.0],
+                "scale": [1.0, 1.0, 1.0]
+            }
         }
-    ]
+    ],
+    "renderables": [
+        {
+            "node": 1,
+            "geometry_ref": "/.cooked/Geometry/floor.ogeo"
+        },
+        {
+            "node": 2,
+            "geometry_ref": "/.cooked/Geometry/cube.ogeo"
+        },
+        {
+            "node": 3,
+            "geometry_ref": "/.cooked/Geometry/sphere.ogeo"
+        },
+        {
+            "node": 5,
+            "geometry_ref": "/.cooked/Geometry/cube.ogeo"
+        }
+    ],
+    "cameras": {
+        "perspective": [
+            {
+                "node": 12,
+                "fov_y": 0.7854,
+                "aspect_ratio": 1.7778,
+                "near_plane": 0.1,
+                "far_plane": 200.0
+            }
+        ]
+    },
+    "lights": {
+        "directional": [
+            {
+                "node": 11,
+                "common": {
+                    "color_rgb": [1.0, 0.98, 0.95],
+                    "casts_shadows": true,
+                    "mobility": 0,
+                    "exposure_compensation_ev": 0.0
+                },
+                "intensity_lux": 100000.0,
+                "angular_size_radians": 0.00931,
+                "is_sun_light": true,
+                "cascade_count": 3,
+                "cascade_distances": [10.0, 25.0, 60.0, 200.0]
+            }
+        ]
+    }
 }
