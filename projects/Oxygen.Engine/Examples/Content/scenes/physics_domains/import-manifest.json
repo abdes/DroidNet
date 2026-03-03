@@ -159,8 +159,8 @@
             "type": "script",
             "source": "./physics_domains_controller.lua",
             "name": "physics_domains_controller",
-            "compile": true,
-            "script_storage": "embedded",
+            "compile": false,
+            "script_storage": "external",
             "content_hashing": true
         },
         {

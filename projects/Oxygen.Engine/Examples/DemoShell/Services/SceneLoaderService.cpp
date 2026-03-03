@@ -452,6 +452,41 @@ namespace {
     return out;
   }
 
+  auto AssetNameView(const data::pak::core::AssetHeader& header)
+    -> std::string_view
+  {
+    const auto* const begin = std::begin(header.name);
+    const auto* const end = std::end(header.name);
+    const auto* const nul = std::ranges::find(header.name, '\0');
+    return { begin, static_cast<size_t>((nul == end ? end : nul) - begin) };
+  }
+
+  auto JoinScriptRoots(const std::vector<std::filesystem::path>& roots)
+    -> std::string
+  {
+    if (roots.empty()) {
+      return "<none>";
+    }
+    std::string out;
+    for (size_t i = 0; i < roots.size(); ++i) {
+      if (i > 0) {
+        out.append("; ");
+      }
+      out.append(roots[i].lexically_normal().generic_string());
+    }
+    return out;
+  }
+
+  auto NormalizeExternalProbePath(std::string_view path_text)
+    -> std::filesystem::path
+  {
+    std::filesystem::path path { path_text };
+    if (path.extension().empty()) {
+      path.replace_extension(".luau");
+    }
+    return path.lexically_normal();
+  }
+
 } // namespace
 
 SceneLoaderService::SceneLoaderService(content::IAssetLoader& loader,
@@ -2599,8 +2634,46 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
       .map_resource_origin = std::move(map_origin),
     });
   if (!resolve_result.ok) {
-    LOG_F(ERROR, "failed to resolve script source: {}",
-      resolve_result.error_message);
+    const auto external_path = script_asset->TryGetExternalSourcePath();
+    const auto script_roots = path_finder_.ScriptSourceRoots();
+    LOG_F(ERROR,
+      "failed to resolve script source: {} (asset_key={}, script_name='{}', "
+      "allows_external={}, has_embedded={}, bytecode_index={}, "
+      "source_index={}, external_source_path='{}')",
+      resolve_result.error_message,
+      data::to_string(script_asset->GetAssetKey()),
+      AssetNameView(script_asset->GetHeader()),
+      script_asset->AllowsExternalSource() ? "true" : "false",
+      script_asset->HasEmbeddedResource() ? "true" : "false",
+      script_asset->GetBytecodeResourceIndex(),
+      script_asset->GetSourceResourceIndex(),
+      external_path.has_value() ? std::string(*external_path) : "<none>");
+    LOG_F(ERROR,
+      "script source resolve context (asset_key={}, workspace_root='{}', "
+      "source_pak='{}', script_roots={})",
+      data::to_string(script_asset->GetAssetKey()),
+      path_finder_.WorkspaceRoot().lexically_normal().generic_string(),
+      source_pak_path_.lexically_normal().generic_string(),
+      JoinScriptRoots(script_roots));
+    if (external_path.has_value()) {
+      const auto external_relative = NormalizeExternalProbePath(*external_path);
+      for (const auto& root : script_roots) {
+        const auto candidate = (root / external_relative).lexically_normal();
+        const auto exists = std::filesystem::exists(candidate);
+        LOG_F(ERROR,
+          "script source resolve probe (asset_key={}, root='{}', "
+          "relative='{}', candidate='{}', exists={})",
+          data::to_string(script_asset->GetAssetKey()),
+          root.lexically_normal().generic_string(),
+          external_relative.generic_string(), candidate.generic_string(),
+          exists ? "true" : "false");
+      }
+    } else {
+      LOG_F(ERROR,
+        "script source resolve probe skipped (asset_key={}): no external "
+        "source path is set",
+        data::to_string(script_asset->GetAssetKey()));
+    }
     return;
   }
   if (!resolve_result.blob.has_value()) {

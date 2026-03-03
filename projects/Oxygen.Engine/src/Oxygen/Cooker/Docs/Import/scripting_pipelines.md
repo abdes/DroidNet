@@ -127,7 +127,7 @@ For each `WorkItem`, the worker performs the following tasks:
    - Repeats the embedding path to associate `kBytecode` outputs on successful compilation.
    - Dynamically records the generated `ResourceIndexT` identifiers into the `ScriptAssetDesc`.
 5. **Data Externalization** (When StorageMode = `kExternal`):
-   - Sets flags `kAllowExternalSource` and embeds the physical file system path inside the descriptor's reserved string arrays explicitly without updating blob repositories.
+   - Sets flags `kAllowExternalSource` and writes a normalized relative source path into `external_source_path` (relative to the cooked root parent when possible, e.g. `scenes/physics_domains/foo.lua`), without writing scripts.table/scripts.data payload blobs.
 6. **Emission**: Passes the fully generated descriptor back to the central `AssetEmitter` logic.
 
 ### Scripting Sidecar Pipeline Worker
