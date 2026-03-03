@@ -2,9 +2,10 @@ local script = {}
 
 local input = oxygen.input
 local log = oxygen.log
+local input_test_wired = false
 
 local function wire_input_once()
-  if _G.__input_test_wired then return end
+  if input_test_wired then return end
   local function bind_hold(action_name)
     input.on_action(action_name, input.edges.triggered, function()
       log.info(">>>>>> [INPUT TEST] PRESSED: " .. action_name .. " <<<<<<")
@@ -23,11 +24,11 @@ local function wire_input_once()
   bind_hold("VehicleBrakeAction")
   bind_hold("VehicleHandbrakeAction")
 
-  _G.__input_test_wired = true
+  input_test_wired = true
   log.info("[INPUT TEST] Inputs successfully wired. Waiting for key presses...")
 end
 
-function script.on_gameplay(_ctx, dt_seconds)
+function script.on_gameplay(_ctx, _dt_seconds)
   wire_input_once()
 end
 
