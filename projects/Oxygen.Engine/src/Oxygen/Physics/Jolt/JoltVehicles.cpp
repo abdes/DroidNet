@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <span>
 #include <sstream>
 #include <string>
@@ -255,6 +256,10 @@ auto oxygen::physics::jolt::JoltVehicles::CreateVehicle(const WorldId world_id,
   const auto engine_down = -engine_up;
   const auto engine_forward = NormalizeOr(
     oxygen::space::move::Forward, oxygen::Vec3 { 0.0F, -1.0F, 0.0F });
+  auto steering_axle_index = std::numeric_limits<uint16_t>::max();
+  for (const auto& wheel : wheels) {
+    steering_axle_index = std::min(steering_axle_index, wheel.axle_index);
+  }
 
   for (size_t i = 0; i < settings->mWheels.size(); ++i) {
     auto* const wheel_settings = settings->mWheels[i].GetPtr();
@@ -269,12 +274,27 @@ auto oxygen::physics::jolt::JoltVehicles::CreateVehicle(const WorldId world_id,
     wheel_settings->mSteeringAxis = ToJoltVec3(engine_up);
     wheel_settings->mWheelUp = ToJoltVec3(engine_up);
     wheel_settings->mWheelForward = ToJoltVec3(engine_forward);
+
+    auto* const wheel_wv
+      = JPH::DynamicCast<JPH::WheelSettingsWV>(wheel_settings);
+    if (wheel_wv == nullptr) {
+      return Err(PhysicsError::kInvalidArgument);
+    }
+
+    // Steering contract: only the leading axle (lowest axle_index) steers.
+    // Other axles are constrained to zero steering angle.
+    if (wheels[i].axle_index != steering_axle_index) {
+      wheel_wv->mMaxSteerAngle = 0.0F;
+    }
+
+    const auto steer_enabled = wheel_wv->mMaxSteerAngle > 0.0F;
     LOG_F(INFO,
       "JoltVehicles: canonicalized wheel axes to engine basis "
-      "(wheel_index={}, up=[{:.3f},{:.3f},{:.3f}], "
+      "(wheel_index={}, axle_index={}, steer_enabled={}, "
+      "up=[{:.3f},{:.3f},{:.3f}], "
       "forward=[{:.3f},{:.3f},{:.3f}])",
-      i, engine_up.x, engine_up.y, engine_up.z, engine_forward.x,
-      engine_forward.y, engine_forward.z);
+      i, wheels[i].axle_index, steer_enabled, engine_up.x, engine_up.y,
+      engine_up.z, engine_forward.x, engine_forward.y, engine_forward.z);
   }
 
   for (size_t i = 0; i < wheels.size(); ++i) {
