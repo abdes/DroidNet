@@ -180,7 +180,7 @@
             ],
             "bindings": [
                 {
-                    "node_index": 0,
+                    "node_index": 12,
                     "slot_id": "physics_domains_controller",
                     "script_virtual_path": "/.cooked/Scripts/physics_domains_controller.oscript",
                     "execution_order": 0

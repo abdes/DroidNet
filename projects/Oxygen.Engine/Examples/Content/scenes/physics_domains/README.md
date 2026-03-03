@@ -87,6 +87,7 @@ in a single, visually interesting scene.
 ### Data
 
 - `data/park_hinge_joint_a.jphbin` — Binary payload for hinge constraint
+- `data/park_vehicle_constraint_a.jphbin` — Binary payload for vehicle constraint
 
 ## Run
 
