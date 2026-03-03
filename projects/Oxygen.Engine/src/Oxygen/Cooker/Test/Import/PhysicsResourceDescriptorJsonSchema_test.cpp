@@ -127,6 +127,24 @@ NOLINT_TEST(PhysicsResourceDescriptorJsonSchemaTest, AcceptsCanonicalDocument)
   EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
 }
 
+NOLINT_TEST(PhysicsResourceDescriptorJsonSchemaTest, AcceptsPhysXSoftBodyFormat)
+{
+  const auto repo_root = FindRepoRoot();
+  ASSERT_FALSE(repo_root.empty());
+  const auto schema = LoadJsonFile(SchemaFile(repo_root));
+  ASSERT_TRUE(schema.has_value());
+
+  const auto doc = json::parse(R"({
+    "name": "park_soft_body_settings_physx_a",
+    "source": "Examples/Content/physics/bin/park_soft_body_settings_physx_a.bin",
+    "format": "physx_soft_body_settings_binary",
+    "virtual_path": "/.cooked/Physics/Resources/park_soft_body_settings_physx_a.opres"
+  })");
+
+  auto errors = std::string {};
+  EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
+}
+
 NOLINT_TEST(PhysicsResourceDescriptorJsonSchemaTest, RejectsUnknownFields)
 {
   const auto repo_root = FindRepoRoot();

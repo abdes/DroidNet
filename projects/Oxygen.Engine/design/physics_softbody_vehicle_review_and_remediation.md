@@ -3,6 +3,30 @@
 Date: 2026-03-03
 Audience: Junior engine/gameplay developer implementing fixes under senior review.
 
+## 0. Execution Tracker (Live)
+
+Tracking policy:
+
+1. Status values: `pending`, `in_progress`, `completed`.
+2. A phase is `completed` only when code + docs are updated and validation evidence is recorded.
+3. If build/tests are not run by the implementer, phase remains `in_progress` with explicit validation delta.
+
+| Phase | Status | Scope | Evidence | Remaining Gap |
+| --- | --- | --- | --- | --- |
+| F0 Contract Freeze | `in_progress` | Lock final architecture: PhysicsModule owns sidecar hydration; backend parses vendor blobs via Serio; SceneLoader dispatch-only | Architectural direction documented in this file and active discussion decisions | Convert decisions into explicit API/type signatures and file-level contract bullets |
+| F1 Runtime Backend Selection | `in_progress` | Read physics backend from `EngineConfig` and route physics-system creation from config | Added shared backend metadata header and consumed it from EngineConfig + Physics API (`src/Oxygen/Core/Meta/Physics/Backend.h`, `src/Oxygen/Config/EngineConfig.h`, `src/Oxygen/Physics/Backend.h`, `src/Oxygen/PhysicsModule/PhysicsModule.cpp`, `src/Oxygen/Physics/Internal/ToStringConverters.cpp`) | Build/test validation still pending (not run in this iteration) |
+| F2 Sidecar/Pak Soft-Body Record Cutover | `in_progress` | Replace legacy soft-body record contract with common fields + backend blob refs in same binding | Soft-body schema switched to `jolt_settings_ref` + `physx_settings_ref`; pak record switched to `jolt_settings_resource_index` + `physx_settings_resource_index`; importer/serio/runtime call-sites migrated (`src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json`, `src/Oxygen/Data/PakFormat_physics.h`, `src/Oxygen/Data/PakFormatSerioLoaders.h`, `src/Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.cpp`, `Examples/DemoShell/Services/SceneLoaderService.cpp`) | Build/test validation still pending (not run in this iteration); F3/F4 runtime ownership migration still pending |
+| F3 Cooker Sidecar Import Migration | `in_progress` | Parse/validate common + vendor refs and emit canonical sidecar payload refs | Importer now parses and resolves `jolt_settings_ref` + `physx_settings_ref` into backend resource indices with strict format checks (`src/Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.cpp`) | Build/test validation still pending (not run in this iteration); remaining migration of hydration ownership (F4/F5) pending |
+| F4 PhysicsModule Hydrator Ownership | `pending` | Move full sidecar hydration flow into PhysicsModule (common + backend-specific dispatch) | None yet | Add PhysicsModule hydration entrypoint and migrate all sidecar-domain hydration there |
+| F5 SceneLoader Minimal Dispatch | `pending` | SceneLoader decodes minimum scene data and dispatches sidecar hydration via Physics API only | None yet | Remove per-domain physics decode/materialization logic from SceneLoader |
+| F6 Backend-Only Vendor Decode | `pending` | Backend API takes `common params + vendor blob`, Jolt parses blob with Serio | Jolt currently parses settings payload, but contract still in transition | Complete API split and delete non-backend parsing paths/fallbacks |
+| F7 Content Full Migration | `pending` | All soft-body data authored in descriptors/manifest; no authored binary source file | Partial sidecar content migration started | Remove soft-body `.jphbin` and all source references; ensure descriptor-only authoring path |
+| F8 Tests + Docs Hard Cleanup | `pending` | Update tests/docs to new single-path model (no compat) | Ongoing doc edits | Add/update schema/import/hydration/runtime tests and remove legacy references |
+
+Current focus:
+
+1. Finalize F0 explicit contracts and continue F1/F2 implementation in code.
+
 ## 1. Scope and Goal
 
 This review covered:
@@ -369,11 +393,12 @@ Done when:
 
 ---
 
-### P1.2 Add authored soft-body payload path (not procedural-only)
+### P1.2 Wire authored soft-body payload reference path (resource-ref only)
 
 Problem:
 
-- `kJoltSoftBodySharedSettingsBinary` exists in format, but runtime path is missing.
+- Runtime/hydration must resolve sidecar soft-body bindings to a concrete
+  physics resource index and feed the payload to backend creation.
 
 Files:
 
@@ -387,15 +412,112 @@ Steps:
 
 1. Add explicit soft-body payload reference in sidecar binding data (single canonical location; no implicit alternate source).
 2. Validate resource format is `kJoltSoftBodySharedSettingsBinary`.
-3. Use reserved bytes in `SoftBodyBindingRecord` to store `settings_resource_index` while preserving record size/static asserts; document this explicitly in pak/cook specs.
+3. Store explicit backend resource indices in `SoftBodyBindingRecord` (`jolt_settings_resource_index`, `physx_settings_resource_index`) and document the binary layout in pak/cook specs.
 4. Deserialize into Jolt shared settings during soft-body creation.
 5. Keep procedural cube only as explicit fallback/prototype mode behind an explicit non-shipping flag.
 
 Done when:
 
-1. Authored soft-body topology/material settings can be cooked and loaded.
-2. Soft-body runtime path matches declared format capabilities.
+1. `jolt_settings_ref` and `physx_settings_ref` are required and resolve to backend-specific resource indices.
+2. Runtime consumes backend-selected settings resource index and rejects missing/format-invalid payloads.
 3. Shipping content does not silently fall back to procedural cube when authored payload is missing/invalid.
+
+---
+
+### P1.2b Replace opaque `.jphbin` authoring with declarative cooker generation
+
+Problem:
+
+- Current `physics-resource-descriptor` contract for soft-body settings is
+  pass-through bytes (`source`), so content authors must provide opaque binary
+  payloads manually. This violates the desired "schema/C++ fields -> cooker ->
+  cooked payload" contract.
+
+Files:
+
+- `src/Oxygen/Cooker/Import/Schemas/oxygen.physics-resource-descriptor.schema.json`
+- `src/Oxygen/Cooker/Import/Internal/Jobs/PhysicsResourceDescriptorImportJob.cpp`
+- `src/Oxygen/Cooker/Import/Internal/Jobs/PhysicsResourceDescriptorImportJob.h`
+- `src/Oxygen/Cooker/Test/Import/PhysicsResourceDescriptorJsonSchema_test.cpp`
+- `src/Oxygen/Cooker/Test/Import/PhysicsResourceDescriptorImportJob_test.cpp`
+- `design/cook_physics.md`
+- `Examples/Content/scenes/physics_domains/park_soft_body_settings_a.physics-resource.json`
+
+Steps:
+
+1. Extend `physics-resource-descriptor` schema with a required declarative
+   settings object for `format = jolt_soft_body_shared_settings_binary`
+   (explicit numeric fields and topology preset; no embedded binary field).
+2. In `PhysicsResourceDescriptorImportJob`, synthesize payload bytes from those
+   validated fields inside cooker (single authoritative generation path).
+3. For soft-body settings descriptors, reject raw `source` pass-through mode.
+4. Keep dedup/content-hash behavior unchanged for generated payload output.
+5. Update sample content and docs to declarative authoring only.
+
+Done when:
+
+1. Soft-body settings descriptor can be authored and cooked with no `.jphbin`
+   source file.
+2. Generated payload bytes are deterministic for the same descriptor fields.
+3. Import fails with clear diagnostics if declarative fields are missing or
+   invalid.
+4. Demo scene sidecar continues to resolve backend settings refs through cooked
+   `.opres`, but backing resource payload comes from cooker synthesis.
+
+---
+
+### P1.2c Soft-body runtime/render contract correctness (scale, restitution, deformation authority)
+
+Problem:
+
+- Current runtime synchronization for soft bodies is center-of-mass only.
+- Rendered mesh deformation is not driven by soft-body vertices.
+- Soft-body collision scale/restitution are not explicitly authored at binding
+  contract level, causing mismatch between visual mesh and physical volume.
+
+Evidence:
+
+1. Runtime soft-body topology summary logs may show bounds far smaller than
+   renderable geometry bounds (e.g. ~0.104 vs 0.5 half-extent in demo).
+2. `PhysicsModule` soft-body sync path applies only aggregate COM transform to
+   scene node, not per-vertex deformation.
+3. Jolt soft-body creation defaults to restitution `0.0` unless explicitly set.
+
+Files:
+
+- `src/Oxygen/Physics/SoftBody/SoftBodyDesc.h`
+- `src/Oxygen/Physics/System/ISoftBodyApi.h`
+- `src/Oxygen/Physics/Jolt/JoltSoftBodies.cpp`
+- `src/Oxygen/PhysicsModule/PhysicsModule.cpp`
+- `src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json`
+- `src/Oxygen/Data/PakFormat_physics.h`
+- `src/Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.cpp`
+- `Examples/Content/scenes/physics_domains/physics_domains.physics-sidecar.json`
+- `design/cook_physics.md`, `design/pak_physics.md`
+
+Steps:
+
+1. Define explicit soft-body binding authoring fields for physical scale and
+   restitution (single authoritative path; no implicit defaults for parity
+   scenes).
+2. Apply authored soft-body scale before runtime constraint derivation
+   (edge/volume/LRA recalculation) so physical volume matches authored intent.
+3. Apply authored restitution to Jolt `SoftBodyCreationSettings`.
+4. Define explicit engine contract for deformation authority:
+   - either expose per-vertex soft-body data to rendering/scripting and
+     implement deformation sync,
+   - or codify COM-only representation as intentional non-deforming proxy
+     mode and enforce it in docs/tests.
+5. Add acceptance tests for:
+   - COM floor-stop height consistent with authored scale,
+   - restitution response (drop test),
+   - deformation contract behavior (true deforming vs proxy mode).
+
+Done when:
+
+1. Soft-body physical contact size matches authored visual expectation in demo.
+2. Bounce behavior is controlled by authored restitution, not hidden defaults.
+3. Deformation behavior is explicit, test-covered, and contractually clear.
 
 ---
 
@@ -467,8 +589,10 @@ Done when:
 7. P0.6
 8. P1.1
 9. P1.2
-10. P1.3
-11. P2.1
+10. P1.2b
+11. P1.2c
+12. P1.3
+13. P2.1
 
 ## 7. Validation Gate (No False Completion)
 
@@ -485,6 +609,8 @@ Do not mark this effort complete until all are true:
    - sidecar aggregate mapping correctness,
    - vehicle control range + phase-latching semantics,
    - payload-family mismatch rejection for vehicle/joint/soft-body resources.
+6. Soft-body settings content no longer requires manually-authored opaque
+   `.jphbin` payloads.
 
 ## 8. Current Status
 
@@ -498,15 +624,37 @@ Do not mark this effort complete until all are true:
     filtering for raycast/sweep/overlap.
   - Coverage includes query mask filtering, collision-mask contact blocking,
     world collision-filter pair blocking, and invalid collision-layer rejection.
-- `P1.2` implementation landed and was validated green:
+- `P1.2` reference-path implementation landed:
   - sidecar/cooker/runtime soft-body settings resource path is wired through
-    `settings_ref` -> `settings_resource_index` -> `SoftBodyDesc.settings_blob`.
-  - `PakFormatSerioLoaders` now deserializes
-    `SoftBodyBindingRecord.settings_resource_index`.
+    `jolt_settings_ref` / `physx_settings_ref` ->
+    `jolt_settings_resource_index` / `physx_settings_resource_index` ->
+    `SoftBodyDesc.settings_blob` (selected by configured backend).
+  - `PakFormatSerioLoaders` now deserializes backend soft-body settings
+    resource indices from `SoftBodyBindingRecord`.
   - Jolt soft-body runtime now persists authored settings payload per aggregate
     for material-topology rebuilds; procedural rebuild is prototype-only.
-  - cook/pak docs updated to document required `settings_ref` and
-    `settings_resource_index` contract.
+  - cook/pak docs updated to document required backend settings refs and
+    backend settings resource index contract.
+- `P1.2b` is required and not yet complete:
+  - current soft-body resource descriptors still require opaque byte `source`
+    payloads (`.jphbin`) rather than declarative field-based cooker synthesis.
+  - until `P1.2b` lands, soft-body authoring contract remains partially manual.
+- `P1.2c` is required and not yet complete:
+  - **contract migration started (in progress):**
+    - sidecar schema now requires explicit soft-body authored fields:
+      `settings_scale`, `restitution`, `friction`, `vertex_radius`, and all
+      material/tether fields (no implicit defaults for parity scenes).
+    - pak soft-body binding record now carries these fields explicitly, and
+      hydration validates and forwards them into `SoftBodyDesc`.
+    - Jolt soft-body creation/rebuild now applies authored `settings_scale`
+      before derived-constraint recomputation and sets authored collision
+      response (`restitution`, `friction`, `vertex_radius`) on
+      `SoftBodyCreationSettings`.
+    - runtime diagnostics now log hydrated authored scale/response and Jolt
+      topology summary with those authored values.
+  - remaining gap:
+    - deformation authority contract is still COM-proxy only (no per-vertex
+      render deformation pipeline yet).
 - `P1.3` implementation landed and was validated green:
   - `physics.soft_body` now exposes explicit lookup APIs
     `get_exact(node)` and `find_in_ancestors(node)` (matching vehicle lookup

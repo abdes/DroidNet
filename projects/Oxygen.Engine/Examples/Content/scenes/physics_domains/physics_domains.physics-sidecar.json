@@ -221,7 +221,29 @@
                 "collision_mask": 65535
             }
         ],
-        "soft_bodies": [],
+        "soft_bodies": [
+            {
+                "node_index": 19,
+                "jolt_settings_ref": "/.cooked/Physics/Resources/park_soft_body_settings_a.opres",
+                "physx_settings_ref": "/.cooked/Physics/Resources/park_soft_body_settings_physx_a.opres",
+                "cluster_count": 6,
+                "stiffness": 8.0,
+                "damping": 0.08,
+                "edge_compliance": 0.0001,
+                "shear_compliance": 0.0001,
+                "bend_compliance": 0.0002,
+                "tether_mode": "geodesic",
+                "tether_max_distance_multiplier": 1.05,
+                "settings_scale": [
+                    4.8,
+                    4.8,
+                    4.8
+                ],
+                "restitution": 0.2,
+                "friction": 0.6,
+                "vertex_radius": 0.02
+            }
+        ],
         "joints": [
             {
                 "node_index_a": 5,

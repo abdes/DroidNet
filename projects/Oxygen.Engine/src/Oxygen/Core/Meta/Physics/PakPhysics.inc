@@ -30,6 +30,7 @@ OXPHYS_RESOURCE_FORMAT(kJoltShapeBinary, 0)
 OXPHYS_RESOURCE_FORMAT(kJoltConstraintBinary, 1)
 OXPHYS_RESOURCE_FORMAT(kJoltSoftBodySharedSettingsBinary, 2)
 OXPHYS_RESOURCE_FORMAT(kJoltVehicleConstraintBinary, 3)
+OXPHYS_RESOURCE_FORMAT(kPhysXSoftBodySettingsBinary, 4)
 
 #undef OXPHYS_RESOURCE_FORMAT
 

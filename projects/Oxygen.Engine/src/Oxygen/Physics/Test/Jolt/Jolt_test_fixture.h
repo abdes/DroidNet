@@ -16,7 +16,10 @@ namespace oxygen::physics::test::jolt {
 
 class JoltTestFixture : public testing::Test {
 protected:
-  auto SetUp() -> void override { system_result_ = CreatePhysicsSystem(); }
+  auto SetUp() -> void override
+  {
+    system_result_ = CreatePhysicsSystem(GetSelectedBackend());
+  }
 
   [[nodiscard]] auto HasBackend() const noexcept -> bool
   {

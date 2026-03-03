@@ -940,9 +940,13 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadBlobInto(
     std::as_writable_bytes(std::span { record.reserved0 })));
   CHECK_RESULT(reader.ReadInto(record.tether_max_distance_multiplier));
-  CHECK_RESULT(reader.ReadInto(record.settings_resource_index));
+  CHECK_RESULT(reader.ReadInto(record.jolt_settings_resource_index));
+  CHECK_RESULT(reader.ReadInto(record.physx_settings_resource_index));
   CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record.reserved1 })));
+    std::as_writable_bytes(std::span { record.settings_scale })));
+  CHECK_RESULT(reader.ReadInto(record.restitution));
+  CHECK_RESULT(reader.ReadInto(record.friction));
+  CHECK_RESULT(reader.ReadInto(record.vertex_radius));
   return {};
 }
 
@@ -964,6 +968,8 @@ inline auto Load(AnyReader& reader,
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.node_index));
   CHECK_RESULT(reader.ReadInto(record.constraint_resource_index));
+  CHECK_RESULT(reader.ReadInto(record.wheel_table_offset));
+  CHECK_RESULT(reader.ReadInto(record.wheel_count));
   CHECK_RESULT(
     reader.ReadBlobInto(std::as_writable_bytes(std::span { record.reserved })));
   return {};

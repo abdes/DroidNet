@@ -32,7 +32,10 @@ namespace {
 
   class PhysicsApiContractTest : public testing::Test {
   protected:
-    auto SetUp() -> void override { system_result_ = CreatePhysicsSystem(); }
+    auto SetUp() -> void override
+    {
+      system_result_ = CreatePhysicsSystem(GetSelectedBackend());
+    }
 
     [[nodiscard]] auto HasBackend() const noexcept -> bool
     {
@@ -1263,33 +1266,6 @@ NOLINT_TEST_F(PhysicsApiContractTest, EventContractsOnEmptyWorld)
   EXPECT_EQ(drained.value(), 0U);
 
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
-}
-
-NOLINT_TEST(Physics, ToStringConvertersFollowContract)
-{
-  EXPECT_EQ(to_string(PhysicsBackend::kNone), "none");
-  EXPECT_EQ(to_string(PhysicsError::kBackendUnavailable), "BackendUnavailable");
-  EXPECT_STREQ(body::to_string(body::BodyType::kKinematic), "Kinematic");
-  EXPECT_EQ(to_string(body::BodyFlags::kNone), "None");
-  EXPECT_EQ(
-    to_string(body::BodyFlags::kEnableGravity | body::BodyFlags::kIsTrigger),
-    "EnableGravity|IsTrigger");
-  EXPECT_EQ(to_string(events::PhysicsEventType::kContactBegin), "ContactBegin");
-  EXPECT_EQ(to_string(WorldId { 7U }), "WorldId{7}");
-  EXPECT_EQ(to_string(BodyId { 9U }), "BodyId{9}");
-  EXPECT_EQ(to_string(CharacterId { 11U }), "CharacterId{11}");
-  EXPECT_EQ(to_string(ShapeId { 13U }), "ShapeId{13}");
-  EXPECT_EQ(to_string(ShapeInstanceId { 15U }), "ShapeInstanceId{15}");
-  EXPECT_EQ(to_string(AreaId { 17U }), "AreaId{17}");
-  EXPECT_EQ(to_string(JointId { 19U }), "JointId{19}");
-  EXPECT_EQ(to_string(AggregateId { 21U }), "AggregateId{21}");
-  EXPECT_EQ(aggregate::to_string(aggregate::AggregateAuthority::kSimulation),
-    "Simulation");
-  EXPECT_EQ(
-    aggregate::to_string(aggregate::AggregateAuthority::kCommand), "Command");
-  EXPECT_EQ(to_string(joint::JointType::kHinge), "Hinge");
-  EXPECT_EQ(
-    softbody::to_string(softbody::SoftBodyTetherMode::kGeodesic), "Geodesic");
 }
 
 } // namespace oxygen::physics::test

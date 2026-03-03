@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -195,7 +196,8 @@ namespace {
 
   struct SoftBodyBindingSource final {
     phys::SoftBodyBindingRecord record {};
-    std::string settings_ref;
+    std::string jolt_settings_ref;
+    std::string physx_settings_ref;
   };
 
   struct VehicleWheelSource final {
@@ -239,6 +241,25 @@ namespace {
   {
     (void)error;
     out = obj.at(field).get<uint32_t>();
+    return true;
+  }
+
+  auto ReadRequiredFloat(const nlohmann::json& obj, const char* field,
+    float& out, std::string& error) -> bool
+  {
+    (void)error;
+    out = obj.at(field).get<float>();
+    return true;
+  }
+
+  auto ReadRequiredFloat3(const nlohmann::json& obj, const char* field,
+    float (&out)[3], std::string& error) -> bool
+  {
+    (void)error;
+    const auto values = obj.at(field).get<std::array<float, 3>>();
+    out[0] = values[0];
+    out[1] = values[1];
+    out[2] = values[2];
     return true;
   }
 
@@ -516,23 +537,35 @@ namespace {
     if (!ReadRequiredUInt32(binding, "node_index", node_index, error)) {
       return false;
     }
-    if (!ReadRequiredString(binding, "settings_ref", out.settings_ref, error)) {
+    if (!ReadRequiredString(
+          binding, "jolt_settings_ref", out.jolt_settings_ref, error)) {
+      return false;
+    }
+    if (!ReadRequiredString(
+          binding, "physx_settings_ref", out.physx_settings_ref, error)) {
       return false;
     }
     out.record.node_index = node_index;
-    return ReadOptionalUInt32(
+    return ReadRequiredUInt32(
              binding, "cluster_count", out.record.cluster_count, error)
-      && ReadOptionalFloat(binding, "stiffness", out.record.stiffness, error)
-      && ReadOptionalFloat(binding, "damping", out.record.damping, error)
-      && ReadOptionalFloat(
+      && ReadRequiredFloat(binding, "stiffness", out.record.stiffness, error)
+      && ReadRequiredFloat(binding, "damping", out.record.damping, error)
+      && ReadRequiredFloat(
         binding, "edge_compliance", out.record.edge_compliance, error)
-      && ReadOptionalFloat(
+      && ReadRequiredFloat(
         binding, "shear_compliance", out.record.shear_compliance, error)
-      && ReadOptionalFloat(
+      && ReadRequiredFloat(
         binding, "bend_compliance", out.record.bend_compliance, error)
       && ParseTetherMode(binding, out.record.tether_mode, error)
-      && ReadOptionalFloat(binding, "tether_max_distance_multiplier",
-        out.record.tether_max_distance_multiplier, error);
+      && ReadRequiredFloat(binding, "tether_max_distance_multiplier",
+        out.record.tether_max_distance_multiplier, error)
+      && ReadRequiredFloat3(
+        binding, "settings_scale", out.record.settings_scale, error)
+      && ReadRequiredFloat(
+        binding, "restitution", out.record.restitution, error)
+      && ReadRequiredFloat(binding, "friction", out.record.friction, error)
+      && ReadRequiredFloat(
+        binding, "vertex_radius", out.record.vertex_radius, error);
   }
 
   auto ParseJointBinding(const nlohmann::json& binding, JointBindingSource& out,
@@ -927,12 +960,58 @@ namespace {
         continue;
       }
 
-      const auto settings_index = ResolvePhysicsResourceRef(ctx,
-        records[i].settings_ref, base_path + ".settings_ref",
+      const auto is_finite_non_negative = [](const float value) {
+        return std::isfinite(value) && value >= 0.0F;
+      };
+      if (!(std::isfinite(records[i].record.settings_scale[0])
+            && std::isfinite(records[i].record.settings_scale[1])
+            && std::isfinite(records[i].record.settings_scale[2])
+            && records[i].record.settings_scale[0] > 0.0F
+            && records[i].record.settings_scale[1] > 0.0F
+            && records[i].record.settings_scale[2] > 0.0F)) {
+        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+          "physics.sidecar.payload_invalid",
+          "soft_bodies.settings_scale must be finite and strictly positive",
+          base_path + ".settings_scale");
+        continue;
+      }
+
+      if (!is_finite_non_negative(records[i].record.restitution)) {
+        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+          "physics.sidecar.payload_invalid",
+          "soft_bodies.restitution must be finite and >= 0",
+          base_path + ".restitution");
+        continue;
+      }
+      if (!is_finite_non_negative(records[i].record.friction)) {
+        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+          "physics.sidecar.payload_invalid",
+          "soft_bodies.friction must be finite and >= 0",
+          base_path + ".friction");
+        continue;
+      }
+      if (!is_finite_non_negative(records[i].record.vertex_radius)) {
+        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+          "physics.sidecar.payload_invalid",
+          "soft_bodies.vertex_radius must be finite and >= 0",
+          base_path + ".vertex_radius");
+        continue;
+      }
+
+      const auto jolt_settings_index = ResolvePhysicsResourceRef(ctx,
+        records[i].jolt_settings_ref, base_path + ".jolt_settings_ref",
         phys::PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary,
-        "jolt_soft_body_shared_settings_binary", "settings_ref");
-      if (settings_index.has_value()) {
-        records[i].record.settings_resource_index = *settings_index;
+        "jolt_soft_body_shared_settings_binary", "jolt_settings_ref");
+      if (jolt_settings_index.has_value()) {
+        records[i].record.jolt_settings_resource_index = *jolt_settings_index;
+      }
+
+      const auto physx_settings_index = ResolvePhysicsResourceRef(ctx,
+        records[i].physx_settings_ref, base_path + ".physx_settings_ref",
+        phys::PhysicsResourceFormat::kPhysXSoftBodySettingsBinary,
+        "physx_soft_body_settings_binary", "physx_settings_ref");
+      if (physx_settings_index.has_value()) {
+        records[i].record.physx_settings_resource_index = *physx_settings_index;
       }
     }
   }

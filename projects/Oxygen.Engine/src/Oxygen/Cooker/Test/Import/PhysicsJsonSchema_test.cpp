@@ -147,8 +147,20 @@ NOLINT_TEST(PhysicsJsonSchemaTest, PhysicsSidecarSchemaAcceptsCanonicalDocument)
       "soft_bodies": [
         {
           "node_index": 3,
-          "settings_ref": "/.cooked/Physics/Resources/soft_body_settings.opres",
-          "cluster_count": 8
+          "jolt_settings_ref": "/.cooked/Physics/Resources/soft_body_settings_jolt.opres",
+          "physx_settings_ref": "/.cooked/Physics/Resources/soft_body_settings_physx.opres",
+          "cluster_count": 8,
+          "stiffness": 4.0,
+          "damping": 0.08,
+          "edge_compliance": 0.0001,
+          "shear_compliance": 0.0001,
+          "bend_compliance": 0.0002,
+          "tether_mode": "geodesic",
+          "tether_max_distance_multiplier": 1.05,
+          "settings_scale": [1.0, 1.0, 1.0],
+          "restitution": 0.2,
+          "friction": 0.6,
+          "vertex_radius": 0.02
         }
       ],
       "joints": [

@@ -583,6 +583,14 @@ auto RunDumpPhysics(const DumpResourceOptions& opts) -> int
         kJoltSoftBodySharedSettingsBinary:
         format_name = "JoltSoftBodySharedSettingsBinary";
         break;
+      case oxygen::data::pak::physics::PhysicsResourceFormat::
+        kJoltVehicleConstraintBinary:
+        format_name = "JoltVehicleConstraintBinary";
+        break;
+      case oxygen::data::pak::physics::PhysicsResourceFormat::
+        kPhysXSoftBodySettingsBinary:
+        format_name = "PhysXSoftBodySettingsBinary";
+        break;
       default:
         break;
       }

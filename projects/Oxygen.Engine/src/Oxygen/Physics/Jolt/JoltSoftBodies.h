@@ -52,6 +52,10 @@ private:
     uint32_t cluster_count { 0U };
     softbody::SoftBodyMaterialParams material_params {};
     std::vector<uint8_t> settings_blob {};
+    Vec3 settings_scale { 1.0F, 1.0F, 1.0F };
+    float restitution { 0.0F };
+    float friction { 0.2F };
+    float vertex_radius { 0.0F };
     aggregate::AggregateAuthority authority {
       aggregate::AggregateAuthority::kSimulation,
     };

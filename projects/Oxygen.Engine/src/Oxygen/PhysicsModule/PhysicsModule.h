@@ -372,6 +372,9 @@ private:
   std::unordered_map<AggregateId, ResourceHandle> aggregate_to_binding_;
   std::unordered_set<scene::NodeHandle> expected_character_transform_updates_;
   std::unordered_set<scene::NodeHandle> pending_transform_updates_;
+  std::unordered_set<AggregateId> soft_body_sync_logged_;
+  std::unordered_map<AggregateId, Vec3> soft_body_initial_center_of_mass_;
+  std::unordered_set<AggregateId> soft_body_motion_confirmed_logged_;
   std::vector<ScenePhysicsEvent> scene_events_ {};
   SyncDiagnostics diagnostics_ {};
 };

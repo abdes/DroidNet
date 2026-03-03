@@ -12,9 +12,13 @@
 
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Config/PathFinderConfig.h>
+#include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Core/Time/Types.h>
 
 namespace oxygen {
+
+//! Runtime-selected physics backend policy.
+using EnginePhysicsBackend = core::meta::physics::PhysicsBackend;
 
 //! Fixed timestep timing configuration for deterministic simulation
 struct TimingConfig {
@@ -78,6 +82,12 @@ struct EngineConfig {
     //! Enable hash-based content integrity verification during mounts.
     bool verify_content_hashes { false };
   } asset_loader;
+
+  //! Configuration for the Physics module/backend selection.
+  struct PhysicsConfig {
+    //! Backend requested by runtime configuration.
+    EnginePhysicsBackend backend { EnginePhysicsBackend::kJolt };
+  } physics;
 
   //! Configuration for the Scripting module.
   struct ScriptingConfig {

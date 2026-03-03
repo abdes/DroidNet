@@ -203,13 +203,30 @@
             "additionalProperties": false,
             "required": [
                 "node_index",
-                "settings_ref"
+                "jolt_settings_ref",
+                "physx_settings_ref",
+                "cluster_count",
+                "stiffness",
+                "damping",
+                "edge_compliance",
+                "shear_compliance",
+                "bend_compliance",
+                "tether_mode",
+                "tether_max_distance_multiplier",
+                "settings_scale",
+                "restitution",
+                "friction",
+                "vertex_radius"
             ],
             "properties": {
                 "node_index": {
                     "$ref": "#/definitions/node_index"
                 },
-                "settings_ref": {
+                "jolt_settings_ref": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "physx_settings_ref": {
                     "type": "string",
                     "minLength": 1
                 },
@@ -239,6 +256,23 @@
                     ]
                 },
                 "tether_max_distance_multiplier": {
+                    "type": "number"
+                },
+                "settings_scale": {
+                    "type": "array",
+                    "minItems": 3,
+                    "maxItems": 3,
+                    "items": {
+                        "type": "number"
+                    }
+                },
+                "restitution": {
+                    "type": "number"
+                },
+                "friction": {
+                    "type": "number"
+                },
+                "vertex_radius": {
                     "type": "number"
                 }
             }

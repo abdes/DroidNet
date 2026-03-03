@@ -29,7 +29,7 @@ NOLINT_TEST(PhysicsModuleBackendSmokeTest, InjectedBackendRunsBasicLifecycle)
 {
   using Tag = oxygen::engine::internal::EngineTagFactory;
 
-  auto physics_system_result = CreatePhysicsSystem();
+  auto physics_system_result = CreatePhysicsSystem(GetSelectedBackend());
   if (!physics_system_result.has_value()) {
     ASSERT_EQ(physics_system_result.error(), PhysicsError::kBackendUnavailable);
     SUCCEED();

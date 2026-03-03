@@ -150,6 +150,7 @@ set(
   "Meta/Input/ActionTriggers.inc"
   "Meta/Input/ActionValue.inc"
   "Meta/Input/PakFormat.inc"
+  "Meta/Physics/Backend.h"
   "Meta/Physics/PakPhysics.inc"
   "Meta/Physics/PakPhysicsShape.inc"
   "Meta/Scripting/ScriptCompileMode.inc"

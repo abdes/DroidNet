@@ -537,9 +537,10 @@ auto PhysicsModule::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
     return true;
   }
 
-  auto physics_system_result = CreatePhysicsSystem();
+  const auto requested_backend = engine_->GetEngineConfig().physics.backend;
+  auto physics_system_result = CreatePhysicsSystem(requested_backend);
   CHECK_F(physics_system_result.has_value(),
-    "PhysicsModule requires a valid physics system backend.");
+    "PhysicsModule requires available backend '{}'.", requested_backend);
   physics_system_ = std::move(physics_system_result.value());
   CHECK_NOTNULL_F(physics_system_.get());
 
@@ -565,9 +566,11 @@ auto PhysicsModule::OnShutdown() noexcept -> void
 
   UnregisterObservedSceneObserver();
 
-  DestroyAllTrackedBodies();
-  DestroyAllTrackedCharacters();
+  // Teardown contract: aggregate domains (vehicle/articulation/soft-body)
+  // may reference rigid bodies. Always destroy aggregates before bodies.
   DestroyAllTrackedAggregates();
+  DestroyAllTrackedCharacters();
+  DestroyAllTrackedBodies();
 
   [[maybe_unused]] const auto result
     = physics_system_->Worlds().DestroyWorld(world_id_);
@@ -577,6 +580,9 @@ auto PhysicsModule::OnShutdown() noexcept -> void
   engine_ = nullptr;
   pending_transform_updates_.clear();
   expected_character_transform_updates_.clear();
+  soft_body_sync_logged_.clear();
+  soft_body_initial_center_of_mass_.clear();
+  soft_body_motion_confirmed_logged_.clear();
   scene_events_.clear();
   bindings_->Clear();
   character_bindings_->Clear();
@@ -789,6 +795,82 @@ auto PhysicsModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
     diagnostics_.scene_pull_success += 1;
   }
 
+  const auto is_unknown_aggregate = [](const PhysicsError error) {
+    return error == PhysicsError::kInvalidArgument;
+  };
+  for (const auto& [aggregate_id, binding_handle] : aggregate_to_binding_) {
+    CHECK_NOTNULL_F(aggregate_bindings_.get());
+    const auto* binding = aggregate_bindings_->TryGet(binding_handle);
+    if (binding == nullptr) {
+      continue;
+    }
+    if (binding->authority != aggregate::AggregateAuthority::kSimulation) {
+      continue;
+    }
+
+    const auto soft_state_result
+      = physics_system_->SoftBodies().GetState(world_id_, aggregate_id);
+    if (!soft_state_result.has_value()) {
+      if (!is_unknown_aggregate(soft_state_result.error())) {
+        LOG_F(ERROR,
+          "PhysicsModule: soft-body state pull failed "
+          "(aggregate_id={} error={}).",
+          aggregate_id.get(), to_string(soft_state_result.error()));
+      }
+      continue;
+    }
+
+    auto node = scene->GetNode(binding->node_handle);
+    if (!node.has_value() || !node->IsValid()) {
+      diagnostics_.scene_pull_skipped_missing_node += 1;
+      continue;
+    }
+
+    const auto world_rotation
+      = node->GetTransform().GetWorldRotation().value_or(
+        Quat { 1.0F, 0.0F, 0.0F, 0.0F });
+    const auto [local_position, local_rotation] = ToLocalPose(
+      *node, soft_state_result.value().center_of_mass, world_rotation);
+    const auto pos_ok = node->GetTransform().SetLocalPosition(local_position);
+    const auto rot_ok = node->GetTransform().SetLocalRotation(local_rotation);
+    if (!(pos_ok && rot_ok)) {
+      diagnostics_.scene_pull_skipped_missing_node += 1;
+      continue;
+    }
+
+    if (soft_body_sync_logged_.insert(aggregate_id).second) {
+      LOG_F(INFO,
+        "PhysicsModule: synchronized soft-body aggregate to scene node "
+        "(aggregate_id={} center=[{:.3f}, {:.3f}, {:.3f}] sleeping={}).",
+        aggregate_id.get(), soft_state_result.value().center_of_mass.x,
+        soft_state_result.value().center_of_mass.y,
+        soft_state_result.value().center_of_mass.z,
+        soft_state_result.value().sleeping);
+    }
+
+    const auto [initial_it, inserted]
+      = soft_body_initial_center_of_mass_.try_emplace(
+        aggregate_id, soft_state_result.value().center_of_mass);
+    if (!inserted
+      && !soft_body_motion_confirmed_logged_.contains(aggregate_id)) {
+      const auto displacement = glm::length(
+        soft_state_result.value().center_of_mass - initial_it->second);
+      if (displacement > 0.05F) {
+        soft_body_motion_confirmed_logged_.insert(aggregate_id);
+        LOG_F(INFO,
+          "PhysicsModule: soft-body motion confirmed "
+          "(aggregate_id={} displacement={:.4f} center=[{:.3f}, {:.3f}, "
+          "{:.3f}] "
+          "sleeping={}).",
+          aggregate_id.get(), displacement,
+          soft_state_result.value().center_of_mass.x,
+          soft_state_result.value().center_of_mass.y,
+          soft_state_result.value().center_of_mass.z,
+          soft_state_result.value().sleeping);
+      }
+    }
+  }
+
   DrainPhysicsEvents();
   expected_character_transform_updates_.clear();
 
@@ -826,18 +908,18 @@ auto PhysicsModule::OnNodeDestroyed(
   pending_transform_updates_.erase(node_handle);
   expected_character_transform_updates_.erase(node_handle);
 
-  const auto it = node_to_binding_.find(node_handle);
-  if (it == node_to_binding_.end()) {
-  } else {
-    CHECK_NOTNULL_F(bindings_.get());
-    const auto* binding = bindings_->TryGet(it->second);
-    if (binding != nullptr) {
-      const auto body_id = binding->body_id;
-      const auto result
-        = physics_system_->Bodies().DestroyBody(world_id_, body_id);
-      CHECK_F(result.has_value(),
-        "PhysicsModule failed to destroy tracked body on node destruction.");
-      (void)RemoveBinding(it->second);
+  const auto aggregate_it = node_to_aggregate_binding_.find(node_handle);
+  if (aggregate_it != node_to_aggregate_binding_.end()) {
+    CHECK_NOTNULL_F(aggregate_bindings_.get());
+    const auto* aggregate_binding
+      = aggregate_bindings_->TryGet(aggregate_it->second);
+    if (aggregate_binding != nullptr) {
+      const auto aggregate_result = DestroyAggregateByDomain(
+        aggregate_binding->aggregate_id, aggregate_binding->authority);
+      CHECK_F(aggregate_result.has_value(),
+        "PhysicsModule failed to destroy tracked aggregate on node "
+        "destruction.");
+      (void)RemoveAggregateBinding(aggregate_it->second);
     }
   }
 
@@ -858,21 +940,19 @@ auto PhysicsModule::OnNodeDestroyed(
     }
   }
 
-  const auto aggregate_it = node_to_aggregate_binding_.find(node_handle);
-  if (aggregate_it == node_to_aggregate_binding_.end()) {
-    return;
+  const auto it = node_to_binding_.find(node_handle);
+  if (it != node_to_binding_.end()) {
+    CHECK_NOTNULL_F(bindings_.get());
+    const auto* binding = bindings_->TryGet(it->second);
+    if (binding != nullptr) {
+      const auto body_id = binding->body_id;
+      const auto result
+        = physics_system_->Bodies().DestroyBody(world_id_, body_id);
+      CHECK_F(result.has_value(),
+        "PhysicsModule failed to destroy tracked body on node destruction.");
+      (void)RemoveBinding(it->second);
+    }
   }
-  CHECK_NOTNULL_F(aggregate_bindings_.get());
-  const auto* aggregate_binding
-    = aggregate_bindings_->TryGet(aggregate_it->second);
-  if (aggregate_binding == nullptr) {
-    return;
-  }
-  const auto aggregate_result = DestroyAggregateByDomain(
-    aggregate_binding->aggregate_id, aggregate_binding->authority);
-  CHECK_F(aggregate_result.has_value(),
-    "PhysicsModule failed to destroy tracked aggregate on node destruction.");
-  (void)RemoveAggregateBinding(aggregate_it->second);
 }
 
 auto PhysicsModule::SyncSceneObserver(
@@ -893,20 +973,24 @@ auto PhysicsModule::SyncSceneObserver(
     = observed_scene_ != nullptr || !observed_scene_owner_.expired();
   UnregisterObservedSceneObserver();
 
-  if (had_previous_scene && !body_to_binding_.empty()) {
-    DestroyAllTrackedBodies();
+  // Teardown contract: destroy aggregates before body domain state.
+  if (had_previous_scene && !aggregate_to_binding_.empty()) {
+    DestroyAllTrackedAggregates();
   }
   if (had_previous_scene && !character_to_binding_.empty()) {
     DestroyAllTrackedCharacters();
   }
-  if (had_previous_scene && !aggregate_to_binding_.empty()) {
-    DestroyAllTrackedAggregates();
+  if (had_previous_scene && !body_to_binding_.empty()) {
+    DestroyAllTrackedBodies();
   }
 
   EnsureBindingCapacity(EstimateBindingReserve(scene));
   // DestroyAllTrackedBodies() already clears bindings and indices.
   pending_transform_updates_.clear();
   expected_character_transform_updates_.clear();
+  soft_body_sync_logged_.clear();
+  soft_body_initial_center_of_mass_.clear();
+  soft_body_motion_confirmed_logged_.clear();
   observed_scene_ = scene;
   observed_scene_owner_ = (scene != nullptr) ? scene->weak_from_this()
                                              : std::weak_ptr<scene::Scene> {};
@@ -969,6 +1053,9 @@ auto PhysicsModule::RemoveAggregateBinding(const ResourceHandle& binding_handle)
   }
 
   aggregate_to_binding_.erase(binding->aggregate_id);
+  soft_body_sync_logged_.erase(binding->aggregate_id);
+  soft_body_initial_center_of_mass_.erase(binding->aggregate_id);
+  soft_body_motion_confirmed_logged_.erase(binding->aggregate_id);
   node_to_aggregate_binding_.erase(binding->node_handle);
   return aggregate_bindings_->Erase(binding_handle) > 0;
 }

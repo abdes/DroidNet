@@ -8,15 +8,12 @@
 #include <string_view>
 
 #include <Oxygen/Physics/Aggregate/AggregateAuthority.h>
-#include <Oxygen/Physics/Backend.h>
 #include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/CollisionLayers.h>
 #include <Oxygen/Physics/Events/PhysicsEvents.h>
 #include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/Joint/JointDesc.h>
 #include <Oxygen/Physics/PhysicsError.h>
-#include <Oxygen/Physics/Query/Overlap.h>
-#include <Oxygen/Physics/Query/Sweep.h>
 #include <Oxygen/Physics/SoftBody/SoftBodyDesc.h>
 
 auto oxygen::physics::to_string(WorldId value) -> std::string
@@ -67,18 +64,6 @@ auto oxygen::physics::to_string(const CollisionLayer value) -> std::string
 auto oxygen::physics::to_string(const CollisionMask value) -> std::string
 {
   return "CollisionMask{" + std::to_string(value.get()) + "}";
-}
-
-auto oxygen::physics::to_string(PhysicsBackend value) noexcept
-  -> std::string_view
-{
-  switch (value) {
-  case PhysicsBackend::kNone:
-    return "none";
-  case PhysicsBackend::kJolt:
-    return "jolt";
-  }
-  return "__NotSupported__";
 }
 
 auto oxygen::physics::to_string(PhysicsError value) noexcept -> std::string_view

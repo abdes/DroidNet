@@ -36,7 +36,7 @@ in a single, visually interesting scene.
 
 ## Import Domains
 
-1. `physics-resource-descriptor` — `.opres` (hinge joint binary)
+1. `physics-resource-descriptor` — `.opres` (hinge, vehicle, Jolt soft-body settings, PhysX soft-body settings)
 2. `physics-material-descriptor` — `.opmat` (ground, dynamic, bouncy)
 3. `collision-shape-descriptor` — `.ocshape` (box, sphere, cylinder, capsule)
 4. `physics-sidecar` — `.opscene` (bindings across all seven families)
@@ -88,6 +88,7 @@ in a single, visually interesting scene.
 
 - `data/park_hinge_joint_a.jphbin` — Binary payload for hinge constraint
 - `data/park_vehicle_constraint_a.jphbin` — Binary payload for vehicle constraint
+- `data/park_soft_body_settings_a.jphbin` — Binary payload reused by both soft-body settings descriptors (Jolt/PhysX format tags)
 
 ## Run
 
