@@ -72,7 +72,9 @@ private:
 
   observer_ptr<JoltWorld> world_ {};
   mutable std::mutex mutex_ {};
-  uint32_t next_soft_body_id_ { 1U };
+  static constexpr uint32_t kSoftBodyAggregateIdBase { 0x30000000U };
+  static constexpr uint32_t kSoftBodyAggregateIdMax { 0x3FFFFFFFU };
+  uint32_t next_soft_body_id_ { kSoftBodyAggregateIdBase };
   std::unordered_map<AggregateId, SoftBodyState> soft_bodies_ {};
   std::unordered_map<WorldId, size_t> pending_structural_changes_ {};
   std::unordered_map<AggregateId, softbody::SoftBodyMaterialParams>

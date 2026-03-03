@@ -67,7 +67,7 @@ NOLINT_TEST_F(
   EXPECT_TRUE(vehicles
       .SetControlInput(world_id, vehicle_id,
         vehicle::VehicleControlInput {
-          .throttle = 0.65F,
+          .forward = 0.65F,
           .brake = 0.0F,
           .steering = 0.2F,
           .handbrake = 0.0F,
@@ -81,6 +81,7 @@ NOLINT_TEST_F(
   ASSERT_TRUE(state.has_value());
   EXPECT_GT(state.value().forward_speed_mps, 1.0F);
   EXPECT_FALSE(state.value().grounded);
+  EXPECT_TRUE(worlds.Step(world_id, 1.0F / 60.0F, 1, 1.0F / 60.0F).has_value());
 
   const auto flush_create = vehicles.FlushStructuralChanges(world_id);
   ASSERT_TRUE(flush_create.has_value());

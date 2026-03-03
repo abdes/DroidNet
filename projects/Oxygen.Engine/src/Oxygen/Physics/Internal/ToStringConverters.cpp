@@ -111,6 +111,8 @@ auto oxygen::physics::to_string(PhysicsError value) noexcept -> std::string_view
            "contract";
   case PhysicsError::kBackendUnavailable:
     return "BackendUnavailable";
+  case PhysicsError::kResourceExhausted:
+    return "ResourceExhausted";
   }
   return "__NotSupported__";
 }

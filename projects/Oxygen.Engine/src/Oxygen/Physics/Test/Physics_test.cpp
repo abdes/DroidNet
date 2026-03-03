@@ -811,7 +811,7 @@ NOLINT_TEST_F(PhysicsApiContractTest, VehicleLifecycleContractIfSupported)
   EXPECT_TRUE(vehicles
       .SetControlInput(world_id, vehicle_id,
         vehicle::VehicleControlInput {
-          .throttle = 0.5F,
+          .forward = 0.5F,
           .brake = 0.0F,
           .steering = 0.25F,
           .handbrake = 0.0F,

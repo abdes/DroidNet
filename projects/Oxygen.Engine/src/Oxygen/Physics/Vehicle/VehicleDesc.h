@@ -31,11 +31,14 @@ struct VehicleDesc final {
  Contract:
  - Value domains are backend-agnostic normalized ranges.
  - Backends may clamp and map to backend-specific control limits.
+ - `forward` sign convention: positive = accelerate forward,
+   negative = reverse (for auto-transmission backends).
+ - `steering` sign convention: positive = turn right.
 */
 struct VehicleControlInput final {
-  float throttle { 0.0F }; // [0, 1]
+  float forward { 0.0F }; // [-1, 1]  (negative = reverse)
   float brake { 0.0F }; // [0, 1]
-  float steering { 0.0F }; // [-1, 1]
+  float steering { 0.0F }; // [-1, 1]  (positive = right)
   float handbrake { 0.0F }; // [0, 1]
 };
 

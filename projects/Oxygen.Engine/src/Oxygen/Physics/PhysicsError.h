@@ -28,6 +28,7 @@ enum class PhysicsError : uint8_t {
   kShapeCompoundZeroChildren,
   kShapeCompoundChildScaleContractViolation,
   kBackendUnavailable,
+  kResourceExhausted,
 };
 
 OXGN_PHYS_NDAPI auto to_string(PhysicsError value) noexcept -> std::string_view;

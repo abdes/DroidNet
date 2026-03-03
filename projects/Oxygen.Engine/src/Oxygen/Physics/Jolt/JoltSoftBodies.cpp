@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <limits>
+#include <cmath>
 #include <utility>
 #include <vector>
 
@@ -33,12 +33,23 @@ auto SoftBodyUnknown() -> oxygen::ErrValue<oxygen::physics::PhysicsError>
   const oxygen::physics::softbody::SoftBodyMaterialParams& params) noexcept
   -> bool
 {
-  return params.stiffness >= 0.0F && params.damping >= 0.0F
-    && params.edge_compliance >= 0.0F && params.shear_compliance >= 0.0F
-    && params.bend_compliance >= 0.0F
+  // Damping upper bound: Jolt's mLinearDamping is a velocity decay coefficient
+  // (dv/dt = -c*v). Values above ~10 cause numerical instability.
+  constexpr float kMaxDamping = 10.0F;
+  return std::isfinite(params.stiffness) && std::isfinite(params.damping)
+    && std::isfinite(params.edge_compliance)
+    && std::isfinite(params.shear_compliance)
+    && std::isfinite(params.bend_compliance)
+    && std::isfinite(params.tether_max_distance_multiplier)
+    && params.stiffness >= 0.0F && params.damping >= 0.0F
+    && params.damping <= kMaxDamping && params.edge_compliance >= 0.0F
+    && params.shear_compliance >= 0.0F && params.bend_compliance >= 0.0F
     && params.tether_max_distance_multiplier >= 1.0F;
 }
 
+// Clamps cluster_count to valid Jolt grid range [2, 8].
+// Values outside this range are silently clamped. Consider returning an error
+// from CreateSoftBody if the original cluster_count is outside [2, 8].
 [[nodiscard]] auto ToGridSize(const uint32_t cluster_count) noexcept -> uint32_t
 {
   return std::clamp(cluster_count, 2U, 8U);
@@ -66,21 +77,63 @@ auto BuildSharedSettings(const uint32_t cluster_count,
   -> JPH::Ref<JPH::SoftBodySharedSettings>
 {
   const auto grid_size = ToGridSize(cluster_count);
+  // Current runtime backend emits a procedural cube topology.
+  // User-authored topology ingestion is tracked separately.
   auto shared_settings = JPH::SoftBodySharedSettings::sCreateCube(
     grid_size, 0.25F / static_cast<float>(grid_size));
   if (shared_settings == nullptr) {
     return nullptr;
   }
-  const JPH::SoftBodySharedSettings::VertexAttributes vertex_attributes {
-    params.edge_compliance,
-    params.shear_compliance,
-    params.bend_compliance,
-    ToJoltLRAType(params.tether_mode),
-    params.tether_max_distance_multiplier,
-  };
+  // Stiffness in Oxygen is an authored rigidity bias, not gas pressure.
+  // We apply it by lowering compliance values (lower compliance => stiffer).
+  const auto compliance_scale
+    = params.stiffness > 0.0F ? (1.0F / (1.0F + params.stiffness)) : 1.0F;
+  // Use the named constructor to avoid fragility if Jolt ever reorders
+  // the VertexAttributes fields.
+  const JPH::SoftBodySharedSettings::VertexAttributes vertex_attributes(
+    params.edge_compliance * compliance_scale,
+    params.shear_compliance * compliance_scale,
+    params.bend_compliance * compliance_scale,
+    ToJoltLRAType(params.tether_mode), params.tether_max_distance_multiplier);
   shared_settings->CreateConstraints(&vertex_attributes, 1U);
   shared_settings->Optimize();
   return shared_settings;
+}
+
+[[nodiscard]] auto AreMaterialParamsNearlyEqual(
+  const oxygen::physics::softbody::SoftBodyMaterialParams& lhs,
+  const oxygen::physics::softbody::SoftBodyMaterialParams& rhs) noexcept -> bool
+{
+  return oxygen::physics::jolt::IsNearlyEqual(lhs.stiffness, rhs.stiffness)
+    && oxygen::physics::jolt::IsNearlyEqual(lhs.damping, rhs.damping)
+    && oxygen::physics::jolt::IsNearlyEqual(
+      lhs.edge_compliance, rhs.edge_compliance)
+    && oxygen::physics::jolt::IsNearlyEqual(
+      lhs.shear_compliance, rhs.shear_compliance)
+    && oxygen::physics::jolt::IsNearlyEqual(
+      lhs.bend_compliance, rhs.bend_compliance)
+    && lhs.tether_mode == rhs.tether_mode
+    && oxygen::physics::jolt::IsNearlyEqual(
+      lhs.tether_max_distance_multiplier, rhs.tether_max_distance_multiplier);
+}
+
+[[nodiscard]] auto NeedsTopologyRebuild(
+  const oxygen::physics::softbody::SoftBodyMaterialParams& current_params,
+  const oxygen::physics::softbody::SoftBodyMaterialParams& next_params) noexcept
+  -> bool
+{
+  return !oxygen::physics::jolt::IsNearlyEqual(
+           current_params.stiffness, next_params.stiffness)
+    || !oxygen::physics::jolt::IsNearlyEqual(
+      current_params.edge_compliance, next_params.edge_compliance)
+    || !oxygen::physics::jolt::IsNearlyEqual(
+      current_params.shear_compliance, next_params.shear_compliance)
+    || !oxygen::physics::jolt::IsNearlyEqual(
+      current_params.bend_compliance, next_params.bend_compliance)
+    || current_params.tether_mode != next_params.tether_mode
+    || !oxygen::physics::jolt::IsNearlyEqual(
+      current_params.tether_max_distance_multiplier,
+      next_params.tether_max_distance_multiplier);
 }
 
 } // namespace
@@ -103,6 +156,10 @@ auto oxygen::physics::jolt::JoltSoftBodies::CreateSoftBody(
   if (!IsMaterialParamsValid(desc.material_params)) {
     return Err(PhysicsError::kInvalidArgument);
   }
+  if (!IsFiniteTranslation(desc.initial_position)
+    || !IsValidRotation(desc.initial_rotation)) {
+    return Err(PhysicsError::kInvalidArgument);
+  }
   if (desc.anchor_body_id != kInvalidBodyId) {
     if (!IsBodyKnown(world_id, desc.anchor_body_id)) {
       return Err(PhysicsError::kBodyNotFound);
@@ -121,18 +178,18 @@ auto oxygen::physics::jolt::JoltSoftBodies::CreateSoftBody(
     return Err(PhysicsError::kWorldNotFound);
   }
 
-  const Vec3 spawn_position { 0.0F, 0.0F, 0.0F };
-
   auto shared_settings
     = BuildSharedSettings(desc.cluster_count, desc.material_params);
   if (shared_settings == nullptr) {
     return Err(PhysicsError::kBackendInitFailed);
   }
 
+  const auto normalized_rotation = NormalizeRotation(desc.initial_rotation);
   JPH::SoftBodyCreationSettings creation_settings(shared_settings.GetPtr(),
-    ToJoltRVec3(spawn_position), JPH::Quat::sIdentity(), kDynamicObjectLayer);
+    ToJoltRVec3(desc.initial_position), ToJoltQuat(normalized_rotation),
+    kDynamicObjectLayer);
   creation_settings.mLinearDamping = desc.material_params.damping;
-  creation_settings.mPressure = desc.material_params.stiffness;
+  creation_settings.mPressure = 0.0F;
 
   const auto soft_body_jolt_id = body_interface->CreateAndAddSoftBody(
     creation_settings, JPH::EActivation::Activate);
@@ -151,11 +208,11 @@ auto oxygen::physics::jolt::JoltSoftBodies::CreateSoftBody(
   }
 
   std::scoped_lock lock(mutex_);
-  if (next_soft_body_id_ == std::numeric_limits<uint32_t>::max()) {
+  if (next_soft_body_id_ > kSoftBodyAggregateIdMax) {
     (void)world->UnregisterBody(world_id, registered_body_id);
     body_interface->RemoveBody(soft_body_jolt_id);
     body_interface->DestroyBody(soft_body_jolt_id);
-    return Err(PhysicsError::kNotInitialized);
+    return Err(PhysicsError::kResourceExhausted);
   }
 
   const auto soft_body_id = AggregateId { next_soft_body_id_++ };
@@ -175,26 +232,7 @@ auto oxygen::physics::jolt::JoltSoftBodies::CreateSoftBody(
 auto oxygen::physics::jolt::JoltSoftBodies::DestroySoftBody(
   const WorldId world_id, const AggregateId soft_body_id) -> PhysicsResult<void>
 {
-  WorldId owned_world_id = kInvalidWorldId;
-  JPH::BodyID jolt_body_id {};
-  BodyId registered_body_id { kInvalidBodyId };
-  {
-    std::scoped_lock lock(mutex_);
-    const auto it = soft_bodies_.find(soft_body_id);
-    if (it == soft_bodies_.end()) {
-      return SoftBodyUnknown();
-    }
-    owned_world_id = it->second.world_id;
-    if (owned_world_id != world_id) {
-      return Err(PhysicsError::kWorldNotFound);
-    }
-    jolt_body_id = it->second.jolt_body_id;
-    registered_body_id = it->second.registered_body_id;
-    soft_bodies_.erase(it);
-    NoteStructuralChange(owned_world_id);
-  }
-
-  if (!HasWorld(owned_world_id)) {
+  if (!HasWorld(world_id)) {
     return Err(PhysicsError::kWorldNotFound);
   }
 
@@ -202,16 +240,34 @@ auto oxygen::physics::jolt::JoltSoftBodies::DestroySoftBody(
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
   }
-  auto body_interface = world->TryGetBodyInterface(owned_world_id);
+  auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
   }
 
+  std::scoped_lock lock(mutex_);
+  const auto it = soft_bodies_.find(soft_body_id);
+  if (it == soft_bodies_.end()) {
+    return SoftBodyUnknown();
+  }
+  if (it->second.world_id != world_id) {
+    return Err(PhysicsError::kWorldNotFound);
+  }
+
+  const auto jolt_body_id = it->second.jolt_body_id;
+  const auto registered_body_id = it->second.registered_body_id;
+  pending_material_rebuilds_.erase(soft_body_id);
+
   if (body_interface->IsAdded(jolt_body_id)) {
     body_interface->RemoveBody(jolt_body_id);
   }
-  body_interface->DestroyBody(jolt_body_id);
-  (void)world->UnregisterBody(owned_world_id, registered_body_id);
+  if (world->HasBody(world_id, registered_body_id)) {
+    body_interface->DestroyBody(jolt_body_id);
+    (void)world->UnregisterBody(world_id, registered_body_id);
+  }
+
+  soft_bodies_.erase(it);
+  NoteStructuralChange(world_id);
   return PhysicsResult<void>::Ok();
 }
 
@@ -226,44 +282,15 @@ auto oxygen::physics::jolt::JoltSoftBodies::SetMaterialParams(
     return Err(PhysicsError::kInvalidArgument);
   }
 
-  JPH::BodyID jolt_body_id {};
-  bool requires_structural_rebuild = false;
-  bool first_queued_rebuild_for_body = false;
-  softbody::SoftBodyMaterialParams current_params {};
-  {
-    std::scoped_lock lock(mutex_);
-    const auto it = soft_bodies_.find(soft_body_id);
-    if (it == soft_bodies_.end()) {
-      return SoftBodyUnknown();
-    }
-    if (it->second.world_id != world_id) {
-      return Err(PhysicsError::kWorldNotFound);
-    }
-    current_params = it->second.material_params;
-    if (current_params.edge_compliance != params.edge_compliance
-      || current_params.shear_compliance != params.shear_compliance
-      || current_params.bend_compliance != params.bend_compliance
-      || current_params.tether_mode != params.tether_mode
-      || current_params.tether_max_distance_multiplier
-        != params.tether_max_distance_multiplier) {
-      requires_structural_rebuild = true;
-      first_queued_rebuild_for_body
-        = pending_material_rebuilds_.find(soft_body_id)
-        == pending_material_rebuilds_.end();
-      pending_material_rebuilds_.insert_or_assign(soft_body_id, params);
-    }
-    jolt_body_id = it->second.jolt_body_id;
+  auto* world = world_.get();
+  if (world == nullptr) {
+    return Err(PhysicsError::kNotInitialized);
   }
-  if (requires_structural_rebuild) {
-    if (first_queued_rebuild_for_body) {
-      NoteStructuralChange(world_id);
-    }
-    return PhysicsResult<void>::Ok();
+  auto body_interface = world->TryGetBodyInterface(world_id);
+  if (body_interface == nullptr) {
+    return Err(PhysicsError::kWorldNotFound);
   }
-  const auto apply_result = ApplyMaterialParams(world_id, jolt_body_id, params);
-  if (!apply_result.has_value()) {
-    return Err(apply_result.error());
-  }
+
   std::scoped_lock lock(mutex_);
   const auto it = soft_bodies_.find(soft_body_id);
   if (it == soft_bodies_.end()) {
@@ -271,6 +298,26 @@ auto oxygen::physics::jolt::JoltSoftBodies::SetMaterialParams(
   }
   if (it->second.world_id != world_id) {
     return Err(PhysicsError::kWorldNotFound);
+  }
+
+  const auto current_params = it->second.material_params;
+  if (NeedsTopologyRebuild(current_params, params)) {
+    const auto first_queued_rebuild_for_body
+      = pending_material_rebuilds_.find(soft_body_id)
+      == pending_material_rebuilds_.end();
+    pending_material_rebuilds_.insert_or_assign(soft_body_id, params);
+    if (first_queued_rebuild_for_body) {
+      NoteStructuralChange(world_id);
+    }
+    return PhysicsResult<void>::Ok();
+  }
+
+  if (!AreMaterialParamsNearlyEqual(current_params, params)) {
+    const auto apply_result
+      = ApplyMaterialParams(world_id, it->second.jolt_body_id, params);
+    if (!apply_result.has_value()) {
+      return Err(apply_result.error());
+    }
   }
   it->second.material_params = params;
   return PhysicsResult<void>::Ok();
@@ -408,10 +455,10 @@ auto oxygen::physics::jolt::JoltSoftBodies::ApplyMaterialParams(
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
     auto* soft_motion
       = static_cast<JPH::SoftBodyMotionProperties*>(motion_properties);
-    soft_motion->SetPressure(params.stiffness);
+    soft_motion->SetPressure(0.0F);
   }
-
-  body_lock.ReleaseLock();
+  // BodyLockWrite releases via RAII. We intentionally let it release here
+  // so that ActivateBody (threadsafe in Jolt) runs after the write lock.
   body_interface->ActivateBody(soft_body_id);
   return PhysicsResult<void>::Ok();
 }
@@ -424,23 +471,6 @@ auto oxygen::physics::jolt::JoltSoftBodies::RebuildSoftBodyForMaterialParams(
     return Err(PhysicsError::kWorldNotFound);
   }
 
-  JPH::BodyID old_jolt_body_id {};
-  BodyId old_registered_body_id { kInvalidBodyId };
-  uint32_t cluster_count = 0U;
-  {
-    std::scoped_lock lock(mutex_);
-    const auto it = soft_bodies_.find(soft_body_id);
-    if (it == soft_bodies_.end()) {
-      return SoftBodyUnknown();
-    }
-    if (it->second.world_id != world_id) {
-      return Err(PhysicsError::kWorldNotFound);
-    }
-    old_jolt_body_id = it->second.jolt_body_id;
-    old_registered_body_id = it->second.registered_body_id;
-    cluster_count = it->second.cluster_count;
-  }
-
   auto* world = world_.get();
   if (world == nullptr) {
     return Err(PhysicsError::kNotInitialized);
@@ -449,12 +479,29 @@ auto oxygen::physics::jolt::JoltSoftBodies::RebuildSoftBodyForMaterialParams(
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
   }
+
+  std::scoped_lock lock(mutex_);
+  const auto it = soft_bodies_.find(soft_body_id);
+  if (it == soft_bodies_.end()) {
+    return SoftBodyUnknown();
+  }
+  if (it->second.world_id != world_id) {
+    return Err(PhysicsError::kWorldNotFound);
+  }
+
+  const auto old_jolt_body_id = it->second.jolt_body_id;
+  const auto old_registered_body_id = it->second.registered_body_id;
+  const auto cluster_count = it->second.cluster_count;
   if (!body_interface->IsAdded(old_jolt_body_id)) {
     return Err(PhysicsError::kBodyNotFound);
   }
 
   const auto current_position
     = body_interface->GetCenterOfMassPosition(old_jolt_body_id);
+  // Note: if the body was created with mMakeRotationIdentity = true (default),
+  // the rotation baked into vertices is already accounted for and the body's
+  // rotation will be identity. Passing identity here is correct — the rebuilt
+  // body will receive the same baking treatment.
   const auto current_rotation = body_interface->GetRotation(old_jolt_body_id);
   const auto was_active = body_interface->IsActive(old_jolt_body_id);
 
@@ -466,7 +513,7 @@ auto oxygen::physics::jolt::JoltSoftBodies::RebuildSoftBodyForMaterialParams(
   JPH::SoftBodyCreationSettings creation_settings(shared_settings.GetPtr(),
     current_position, current_rotation, kDynamicObjectLayer);
   creation_settings.mLinearDamping = params.damping;
-  creation_settings.mPressure = params.stiffness;
+  creation_settings.mPressure = 0.0F;
 
   const auto new_jolt_body_id = body_interface->CreateAndAddSoftBody(
     creation_settings, JPH::EActivation::DontActivate);
@@ -489,29 +536,18 @@ auto oxygen::physics::jolt::JoltSoftBodies::RebuildSoftBodyForMaterialParams(
   if (body_interface->IsAdded(old_jolt_body_id)) {
     body_interface->RemoveBody(old_jolt_body_id);
   }
-  body_interface->DestroyBody(old_jolt_body_id);
-  (void)world->UnregisterBody(world_id, old_registered_body_id);
+  if (world->HasBody(world_id, old_registered_body_id)) {
+    body_interface->DestroyBody(old_jolt_body_id);
+    (void)world->UnregisterBody(world_id, old_registered_body_id);
+  }
 
   if (was_active) {
     body_interface->ActivateBody(new_jolt_body_id);
   }
 
-  {
-    std::scoped_lock lock(mutex_);
-    const auto it = soft_bodies_.find(soft_body_id);
-    if (it == soft_bodies_.end()) {
-      (void)world->UnregisterBody(world_id, new_registered_body_id);
-      if (body_interface->IsAdded(new_jolt_body_id)) {
-        body_interface->RemoveBody(new_jolt_body_id);
-      }
-      body_interface->DestroyBody(new_jolt_body_id);
-      return SoftBodyUnknown();
-    }
-    it->second.jolt_body_id = new_jolt_body_id;
-    it->second.registered_body_id = new_registered_body_id;
-    it->second.material_params = params;
-  }
-
+  it->second.jolt_body_id = new_jolt_body_id;
+  it->second.registered_body_id = new_registered_body_id;
+  it->second.material_params = params;
   return PhysicsResult<void>::Ok();
 }
 
@@ -522,6 +558,7 @@ auto oxygen::physics::jolt::JoltSoftBodies::FlushPendingMaterialRebuilds(
     pending_for_world {};
   {
     std::scoped_lock lock(mutex_);
+    pending_for_world.reserve(pending_material_rebuilds_.size());
     for (auto it = pending_material_rebuilds_.begin();
       it != pending_material_rebuilds_.end();) {
       const auto state_it = soft_bodies_.find(it->first);
@@ -530,26 +567,28 @@ auto oxygen::physics::jolt::JoltSoftBodies::FlushPendingMaterialRebuilds(
         continue;
       }
       if (state_it->second.world_id == world_id) {
-        pending_for_world.push_back(
-          std::pair<AggregateId, softbody::SoftBodyMaterialParams> {
-            it->first,
-            it->second,
-          });
-        it = pending_material_rebuilds_.erase(it);
-        continue;
+        pending_for_world.push_back(*it);
       }
       ++it;
     }
   }
 
+  size_t applied_count = 0U;
   for (const auto& pending : pending_for_world) {
     const auto rebuild_result = RebuildSoftBodyForMaterialParams(
       world_id, pending.first, pending.second);
     if (!rebuild_result.has_value()) {
       return Err(rebuild_result.error());
     }
+    std::scoped_lock lock(mutex_);
+    const auto queued_it = pending_material_rebuilds_.find(pending.first);
+    if (queued_it != pending_material_rebuilds_.end()
+      && AreMaterialParamsNearlyEqual(queued_it->second, pending.second)) {
+      pending_material_rebuilds_.erase(queued_it);
+      ++applied_count;
+    }
   }
-  return Ok(pending_for_world.size());
+  return Ok(applied_count);
 }
 
 auto oxygen::physics::jolt::JoltSoftBodies::ConsumePendingStructuralChangeCount(

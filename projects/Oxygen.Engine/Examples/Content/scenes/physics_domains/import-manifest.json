@@ -3,10 +3,60 @@
     "output": "F:/projects/DroidNet/projects/Oxygen.Engine/Examples/Content/.cooked",
     "jobs": [
         {
+            "id": "floor.material",
+            "type": "material-descriptor",
+            "source": "../bottle-on-box/floor_default.material.json",
+            "name": "floor_default"
+        },
+        {
+            "id": "cube.material",
+            "type": "material-descriptor",
+            "source": "../bottle-on-box/cube_red.material.json",
+            "name": "cube_red"
+        },
+        {
+            "id": "sphere.material",
+            "type": "material-descriptor",
+            "source": "../bottle-on-box/sphere_blue.material.json",
+            "name": "sphere_blue"
+        },
+        {
+            "id": "floor.geometry",
+            "type": "geometry-descriptor",
+            "source": "../bottle-on-box/floor.geometry.json",
+            "name": "floor",
+            "depends_on": [
+                "floor.material"
+            ]
+        },
+        {
+            "id": "cube.geometry",
+            "type": "geometry-descriptor",
+            "source": "../bottle-on-box/cube.geometry.json",
+            "name": "cube",
+            "depends_on": [
+                "cube.material"
+            ]
+        },
+        {
+            "id": "sphere.geometry",
+            "type": "geometry-descriptor",
+            "source": "../bottle-on-box/sphere.geometry.json",
+            "name": "sphere",
+            "depends_on": [
+                "sphere.material"
+            ]
+        },
+        {
             "id": "scene.physics_domains",
             "type": "scene-descriptor",
             "source": "./physics_domains.scene.json",
-            "name": "physics_domains"
+            "name": "physics_domains",
+            "depends_on": [
+                "floor.geometry",
+                "cube.geometry",
+                "sphere.geometry"
+            ]
         },
         {
             "id": "physics.resource.joint_hinge_a",

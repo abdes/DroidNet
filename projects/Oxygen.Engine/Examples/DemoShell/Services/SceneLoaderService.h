@@ -147,7 +147,8 @@ private:
     const data::PhysicsSceneAsset& physics_asset) -> co::Co<>;
   //! Attach rigid-body bindings; hard-fail on invalid/unsupported data.
   void HydrateRigidBodyBindings(physics::PhysicsModule& physics_module,
-    std::span<const data::pak::physics::RigidBodyBindingRecord> bindings);
+    std::span<const data::pak::physics::RigidBodyBindingRecord> bindings,
+    const std::unordered_set<uint32_t>& ccd_forbidden_node_indices);
   //! Attach character bindings; hard-fail on invalid/unsupported data.
   void HydrateCharacterBindings(physics::PhysicsModule& physics_module,
     std::span<const data::pak::physics::CharacterBindingRecord> bindings);
