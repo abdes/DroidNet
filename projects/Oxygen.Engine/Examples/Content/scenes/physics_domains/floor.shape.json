@@ -4,8 +4,8 @@
     "shape_type": "box",
     "material_ref": "/.cooked/Physics/Materials/ground.opmat",
     "half_extents": [
-        20.0,
-        20.0,
+        60.0,
+        60.0,
         0.5
     ],
     "local_position": [

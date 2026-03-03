@@ -343,7 +343,7 @@ namespace {
   {
     desc.flags = ScriptAssetFlags::kAllowExternalSource;
     const auto external_source_path
-      = script_import::BuildExternalSourcePath(request.source_path);
+      = script_import::BuildExternalSourcePath(request);
     const auto external_path_span
       = std::span<char, sizeof(desc.external_source_path)>(
         desc.external_source_path);

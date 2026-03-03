@@ -373,9 +373,8 @@ namespace {
     return payload;
   }
 
-  auto MakeSidecarPayloadWithParams(
-    std::string_view script_virtual_path, std::string_view params_json)
-    -> std::string
+  auto MakeSidecarPayloadWithParams(std::string_view script_virtual_path,
+    std::string_view params_json) -> std::string
   {
     auto payload = std::string {};
     payload += "{\n";
@@ -657,7 +656,8 @@ namespace {
 
     const auto cooked_root
       = MakeTempCookedRoot("script_import_external_success");
-    const auto source_path = cooked_root / "input" / "external.lua";
+    const auto source_path = cooked_root.parent_path() / "scripts"
+      / "script_import_external_success" / "external.lua";
     WriteTextFile(source_path, "print('hello')");
 
     const auto report = Submit(MakeScriptRequest(
@@ -682,10 +682,48 @@ namespace {
     EXPECT_EQ((desc.flags & ScriptAssetFlags::kAllowExternalSource),
       ScriptAssetFlags::kAllowExternalSource);
 
-    const auto expected_external_path = source_path.filename().generic_string();
+    const auto expected_external_path
+      = std::filesystem::relative(source_path, cooked_root.parent_path())
+          .lexically_normal()
+          .generic_string();
     const auto actual_external_path
       = std::string_view { desc.external_source_path };
     EXPECT_EQ(actual_external_path, expected_external_path);
+  }
+
+  NOLINT_TEST_F(ScriptAssetImportTest,
+    ExternalScriptImportNormalizesRelativeSourcePathAgainstContentRoot)
+  {
+    using data::pak::scripting::ScriptAssetFlags;
+
+    auto test_root = std::filesystem::current_path()
+      / "tmp_script_import_relative_external_path";
+    std::error_code ec;
+    std::filesystem::remove_all(test_root, ec);
+
+    const auto cooked_root = test_root / "Content" / ".cooked";
+    const auto source_path_absolute = test_root / "Content" / "scenes"
+      / "physics_domains" / "relative_source.lua";
+    const auto source_path_relative = std::filesystem::relative(
+      source_path_absolute, std::filesystem::current_path())
+                                        .lexically_normal();
+    WriteTextFile(source_path_absolute, "print('relative')");
+
+    const auto report = Submit(MakeScriptRequest(
+      source_path_relative, cooked_root, ScriptStorageMode::kExternal, false));
+    EXPECT_TRUE(report.success);
+
+    const auto descriptor_path
+      = cooked_root / "Scripts" / "relative_source.oscript";
+    ASSERT_TRUE(std::filesystem::exists(descriptor_path));
+
+    const auto desc = ReadScriptDescriptor(descriptor_path);
+    EXPECT_EQ((desc.flags & ScriptAssetFlags::kAllowExternalSource),
+      ScriptAssetFlags::kAllowExternalSource);
+    EXPECT_EQ(std::string_view { desc.external_source_path },
+      "scenes/physics_domains/relative_source.lua");
+
+    std::filesystem::remove_all(test_root, ec);
   }
 
   NOLINT_TEST_F(
@@ -2360,8 +2398,7 @@ namespace {
       report.diagnostics, "script.sidecar.node_ref_unresolved"));
   }
 
-  NOLINT_TEST_F(
-    ScriptingSidecarImportTest, SidecarParsesAllSupportedParamTypes)
+  NOLINT_TEST_F(ScriptingSidecarImportTest, SidecarParsesAllSupportedParamTypes)
   {
     using data::loose_cooked::FileKind;
     using data::pak::scripting::ScriptParamRecord;
@@ -2473,10 +2510,11 @@ namespace {
     ASSERT_TRUE(scene_asset.has_value());
     ASSERT_TRUE(script_asset.has_value());
 
-    const auto sidecar_source = cooked_root / "input" / "unsupported_param.json";
-    WriteTextFile(sidecar_source, MakeSidecarPayloadWithParams(
-      script_asset->virtual_path,
-      R"([ { "key": "bad", "type": "uint32", "value": 1 } ])"));
+    const auto sidecar_source
+      = cooked_root / "input" / "unsupported_param.json";
+    WriteTextFile(sidecar_source,
+      MakeSidecarPayloadWithParams(script_asset->virtual_path,
+        R"([ { "key": "bad", "type": "uint32", "value": 1 } ])"));
 
     const auto report = Submit(MakeSidecarRequest(
       sidecar_source, cooked_root, scene_asset->virtual_path));
@@ -2485,8 +2523,7 @@ namespace {
       HasDiagnosticCode(report.diagnostics, "script.sidecar.param_invalid"));
   }
 
-  NOLINT_TEST_F(
-    ScriptingSidecarImportTest, SidecarRejectsOutOfRangeInt32Param)
+  NOLINT_TEST_F(ScriptingSidecarImportTest, SidecarRejectsOutOfRangeInt32Param)
   {
     const auto cooked_root
       = MakeTempCookedRoot("script_sidecar_int32_out_of_range");
@@ -2509,9 +2546,9 @@ namespace {
     ASSERT_TRUE(script_asset.has_value());
 
     const auto sidecar_source = cooked_root / "input" / "int32_range.json";
-    WriteTextFile(sidecar_source, MakeSidecarPayloadWithParams(
-      script_asset->virtual_path,
-      R"([ { "key": "bad", "type": "int32", "value": 2147483648 } ])"));
+    WriteTextFile(sidecar_source,
+      MakeSidecarPayloadWithParams(script_asset->virtual_path,
+        R"([ { "key": "bad", "type": "int32", "value": 2147483648 } ])"));
 
     const auto report = Submit(MakeSidecarRequest(
       sidecar_source, cooked_root, scene_asset->virtual_path));
@@ -2544,9 +2581,9 @@ namespace {
     ASSERT_TRUE(script_asset.has_value());
 
     const auto sidecar_source = cooked_root / "input" / "vec_shape.json";
-    WriteTextFile(sidecar_source, MakeSidecarPayloadWithParams(
-      script_asset->virtual_path,
-      R"([ { "key": "bad", "type": "vec3", "value": [1.0, 2.0] } ])"));
+    WriteTextFile(sidecar_source,
+      MakeSidecarPayloadWithParams(script_asset->virtual_path,
+        R"([ { "key": "bad", "type": "vec3", "value": [1.0, 2.0] } ])"));
 
     const auto report = Submit(MakeSidecarRequest(
       sidecar_source, cooked_root, scene_asset->virtual_path));
@@ -2578,8 +2615,9 @@ namespace {
     ASSERT_TRUE(script_asset.has_value());
 
     const auto long_value = std::string(60U, 'x');
-    const auto params_json = std::string(
-      "[ { \"key\": \"name\", \"type\": \"string\", \"value\": \"")
+    const auto params_json
+      = std::string(
+          "[ { \"key\": \"name\", \"type\": \"string\", \"value\": \"")
       + long_value + "\" } ]";
     const auto sidecar_source = cooked_root / "input" / "long_string.json";
     WriteTextFile(sidecar_source,
@@ -2767,9 +2805,9 @@ namespace {
       = ReadAllBytes(cooked_root / scene_asset->descriptor_relpath);
     ASSERT_GE(before_scene_bytes.size(), sizeof(SceneAssetDesc));
 
-    const auto ExtractCoreTables =
-      [](const std::vector<std::byte>& bytes)
-      -> std::optional<std::pair<std::vector<std::byte>, std::vector<std::byte>>> {
+    const auto ExtractCoreTables = [](const std::vector<std::byte>& bytes)
+      -> std::optional<
+        std::pair<std::vector<std::byte>, std::vector<std::byte>>> {
       if (bytes.size() < sizeof(SceneAssetDesc)) {
         return std::nullopt;
       }
@@ -2790,9 +2828,8 @@ namespace {
       auto nodes = std::vector<std::byte> {};
       nodes.resize(static_cast<size_t>(node_size));
       if (!nodes.empty()) {
-        std::memcpy(
-          nodes.data(), bytes.data() + static_cast<size_t>(desc.nodes.offset),
-          nodes.size());
+        std::memcpy(nodes.data(),
+          bytes.data() + static_cast<size_t>(desc.nodes.offset), nodes.size());
       }
 
       auto strings = std::vector<std::byte> {};
@@ -2802,13 +2839,15 @@ namespace {
           bytes.data() + static_cast<size_t>(desc.scene_strings.offset),
           strings.size());
       }
-      return std::make_optional(std::make_pair(std::move(nodes), std::move(strings)));
+      return std::make_optional(
+        std::make_pair(std::move(nodes), std::move(strings)));
     };
 
     const auto core_before = ExtractCoreTables(before_scene_bytes);
     ASSERT_TRUE(core_before.has_value());
 
-    const auto sidecar_source = cooked_root / "input" / "patch_guard_sidecar.json";
+    const auto sidecar_source
+      = cooked_root / "input" / "patch_guard_sidecar.json";
     WriteTextFile(
       sidecar_source, MakeSidecarPayload(script_asset->virtual_path));
     ASSERT_TRUE(Submit(MakeSidecarRequest(sidecar_source, cooked_root,
@@ -2985,9 +3024,9 @@ namespace {
 
     const auto scene_b_slot_start_before = ReadSlotStartForNodeZero(*scene_b);
 
-    WriteTextFile(sidecar_a, MakeSidecarPayloadWithParams(
-      script_asset->virtual_path,
-      R"([
+    WriteTextFile(sidecar_a,
+      MakeSidecarPayloadWithParams(script_asset->virtual_path,
+        R"([
         { "key": "speed", "type": "float", "value": 2.0 },
         { "key": "enabled", "type": "bool", "value": true }
       ])"));
@@ -3015,7 +3054,8 @@ namespace {
     const auto scene_b_bytes
       = ReadAllBytes(cooked_root / scene_b->descriptor_relpath);
     auto scene_b_asset = data::SceneAsset(scene_b->key, scene_b_bytes);
-    const auto components = scene_b_asset.GetComponents<ScriptingComponentRecord>();
+    const auto components
+      = scene_b_asset.GetComponents<ScriptingComponentRecord>();
     const auto component = std::find_if(components.begin(), components.end(),
       [](const auto& candidate) { return candidate.node_index == 0U; });
     ASSERT_NE(component, components.end());

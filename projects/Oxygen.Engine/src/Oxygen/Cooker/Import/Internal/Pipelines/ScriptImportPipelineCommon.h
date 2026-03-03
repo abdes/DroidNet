@@ -11,9 +11,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -52,9 +54,64 @@ inline auto BuildScriptsDataRelPath(const ImportRequest& request) -> std::string
   return request.loose_cooked_layout.ScriptsDataRelPath();
 }
 
-inline auto BuildExternalSourcePath(const std::filesystem::path& source_path)
-  -> std::string
+inline auto HasParentTraversal(const std::filesystem::path& path) -> bool
 {
+  return std::ranges::any_of(
+    path, [](const auto& segment) { return segment == ".."; });
+}
+
+inline auto TryMakeExternalPathRelativeToRoot(
+  const std::filesystem::path& source_path,
+  const std::filesystem::path& source_root) -> std::optional<std::string>
+{
+  const auto relative = source_path.lexically_relative(source_root);
+  if (relative.empty() || relative.is_absolute()
+    || HasParentTraversal(relative)) {
+    return std::nullopt;
+  }
+
+  const auto relative_path = relative.generic_string();
+  if (relative_path.empty() || relative_path == ".") {
+    return std::nullopt;
+  }
+  return relative_path;
+}
+
+inline auto BuildExternalSourcePath(const ImportRequest& request) -> std::string
+{
+  const auto source_path = request.source_path.lexically_normal();
+
+  // External script descriptors are expected to be relative to the runtime
+  // script roots (typically the cooked root parent, e.g. Examples/Content).
+  if (request.cooked_root.has_value()) {
+    const auto source_root = request.cooked_root->parent_path();
+    if (!source_root.empty()) {
+      if (source_path.is_absolute()) {
+        if (const auto relative
+          = TryMakeExternalPathRelativeToRoot(source_path, source_root)) {
+          return *relative;
+        }
+      } else {
+        std::error_code ec;
+        const auto absolute_source
+          = std::filesystem::absolute(source_path, ec).lexically_normal();
+        if (!ec) {
+          if (const auto relative
+            = TryMakeExternalPathRelativeToRoot(absolute_source, source_root)) {
+            return *relative;
+          }
+        }
+      }
+    }
+  }
+
+  if (!source_path.is_absolute() && !HasParentTraversal(source_path)) {
+    const auto relative_path = source_path.generic_string();
+    if (!relative_path.empty() && relative_path != ".") {
+      return relative_path;
+    }
+  }
+
   auto filename = source_path.filename().generic_string();
   if (!filename.empty()) {
     return filename;
