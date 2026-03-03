@@ -28,7 +28,12 @@ enum class VehicleWheelSide : uint8_t {
 
 struct VehicleWheelDesc final {
   BodyId body_id { kInvalidBodyId };
+  //! Axle ordering contract:
+  //! - Lower index = more forward axle in vehicle local forward direction.
+  //! - The leading axle (minimum index) is treated as the steering axle.
   uint16_t axle_index { 0 };
+  //! Side is left/right within an axle role; used for topology validation and
+  //! backend wheel-role mapping.
   VehicleWheelSide side { VehicleWheelSide::kLeft };
 };
 
