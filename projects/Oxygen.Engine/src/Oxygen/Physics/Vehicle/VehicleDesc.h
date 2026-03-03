@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <span>
 
 #include <Oxygen/Physics/Handles.h>
@@ -15,14 +16,26 @@ namespace oxygen::physics::vehicle {
 /*!
  Describes vehicle aggregate creation from existing rigid bodies.
 
- Ownership contract:
- - `chassis_body_id` and `wheel_body_ids` must reference existing bodies in the
-   target world.
- - Vehicle aggregate owns topology/roles, but does not own body lifetime.
+Ownership contract:
+ - `chassis_body_id` and `wheels[].body_id` must reference existing bodies in
+the target world.
+- Vehicle aggregate owns topology/roles, but does not own body lifetime.
 */
+enum class VehicleWheelSide : uint8_t {
+  kLeft = 0,
+  kRight = 1,
+};
+
+struct VehicleWheelDesc final {
+  BodyId body_id { kInvalidBodyId };
+  uint16_t axle_index { 0 };
+  VehicleWheelSide side { VehicleWheelSide::kLeft };
+};
+
 struct VehicleDesc final {
   BodyId chassis_body_id { kInvalidBodyId };
-  std::span<const BodyId> wheel_body_ids {};
+  std::span<const VehicleWheelDesc> wheels {};
+  std::span<const uint8_t> constraint_settings_blob {};
 };
 
 /*!
@@ -39,7 +52,7 @@ struct VehicleControlInput final {
   float forward { 0.0F }; // [-1, 1]  (negative = reverse)
   float brake { 0.0F }; // [0, 1]
   float steering { 0.0F }; // [-1, 1]  (positive = right)
-  float handbrake { 0.0F }; // [0, 1]
+  float hand_brake { 0.0F }; // [0, 1]
 };
 
 /*!

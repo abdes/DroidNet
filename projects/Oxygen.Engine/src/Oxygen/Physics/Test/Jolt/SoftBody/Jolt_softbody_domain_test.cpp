@@ -10,6 +10,7 @@
 
 #include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/Test/Jolt/Jolt_test_fixture.h>
+#include <Oxygen/Physics/Test/TestBlobBuilders.h>
 #include <Oxygen/Physics/World/WorldDesc.h>
 
 namespace oxygen::physics::test::jolt {
@@ -34,6 +35,7 @@ NOLINT_TEST_F(
   ASSERT_TRUE(world.has_value());
   const auto world_id = world.value();
 
+  const auto soft_body_settings_blob = MakeSoftBodySettingsBlob(6U);
   const auto soft_body = soft_bodies.CreateSoftBody(world_id,
     softbody::SoftBodyDesc {
       .anchor_body_id = kInvalidBodyId,
@@ -47,6 +49,7 @@ NOLINT_TEST_F(
         .tether_mode = softbody::SoftBodyTetherMode::kNone,
         .tether_max_distance_multiplier = 1.0F,
       },
+      .settings_blob = soft_body_settings_blob,
     });
   ASSERT_TRUE(soft_body.has_value());
   const auto soft_body_id = soft_body.value();
@@ -79,7 +82,7 @@ NOLINT_TEST_F(
 
   const auto flush_create = soft_bodies.FlushStructuralChanges(world_id);
   ASSERT_TRUE(flush_create.has_value());
-  EXPECT_EQ(flush_create.value(), 1U);
+  EXPECT_EQ(flush_create.value(), 2U);
   const auto flush_none = soft_bodies.FlushStructuralChanges(world_id);
   ASSERT_TRUE(flush_none.has_value());
   EXPECT_EQ(flush_none.value(), 0U);
@@ -120,10 +123,12 @@ NOLINT_TEST_F(JoltSoftBodyDomainTest, AnchorBodyCreateReturnsNotImplemented)
   const auto anchor = bodies.CreateBody(world_id, anchor_desc);
   ASSERT_TRUE(anchor.has_value());
 
+  const auto soft_body_settings_blob = MakeSoftBodySettingsBlob(4U);
   const auto soft_body = soft_bodies.CreateSoftBody(world_id,
     softbody::SoftBodyDesc {
       .anchor_body_id = anchor.value(),
       .cluster_count = 4U,
+      .settings_blob = soft_body_settings_blob,
     });
   ASSERT_TRUE(soft_body.has_error());
   EXPECT_EQ(soft_body.error(), PhysicsError::kNotImplemented);
@@ -146,6 +151,7 @@ NOLINT_TEST_F(
   ASSERT_TRUE(world.has_value());
   const auto world_id = world.value();
 
+  const auto soft_body_settings_blob = MakeSoftBodySettingsBlob(5U);
   const auto soft_body = soft_bodies.CreateSoftBody(world_id,
     softbody::SoftBodyDesc {
       .anchor_body_id = kInvalidBodyId,
@@ -159,6 +165,7 @@ NOLINT_TEST_F(
         .tether_mode = softbody::SoftBodyTetherMode::kNone,
         .tether_max_distance_multiplier = 1.0F,
       },
+      .settings_blob = soft_body_settings_blob,
     });
   ASSERT_TRUE(soft_body.has_value());
   const auto soft_body_id = soft_body.value();
@@ -220,6 +227,7 @@ NOLINT_TEST_F(
   ASSERT_TRUE(world.has_value());
   const auto world_id = world.value();
 
+  const auto soft_body_settings_blob = MakeSoftBodySettingsBlob(5U);
   const auto soft_body = soft_bodies.CreateSoftBody(world_id,
     softbody::SoftBodyDesc {
       .anchor_body_id = kInvalidBodyId,
@@ -233,6 +241,7 @@ NOLINT_TEST_F(
         .tether_mode = softbody::SoftBodyTetherMode::kNone,
         .tether_max_distance_multiplier = 1.0F,
       },
+      .settings_blob = soft_body_settings_blob,
     });
   ASSERT_TRUE(soft_body.has_value());
   const auto soft_body_id = soft_body.value();

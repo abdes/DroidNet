@@ -1,0 +1,11 @@
+{
+    "name": "stack_cube_shape",
+    "virtual_path": "/.cooked/Physics/Shapes/stack_cube.ocshape",
+    "shape_type": "box",
+    "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+    "half_extents": [
+        0.4,
+        0.4,
+        0.4
+    ]
+}

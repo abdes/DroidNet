@@ -10,6 +10,7 @@
 
 #include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/Test/Jolt/Jolt_test_fixture.h>
+#include <Oxygen/Physics/Test/TestBlobBuilders.h>
 #include <Oxygen/Physics/World/WorldDesc.h>
 
 namespace oxygen::physics::test::jolt {
@@ -43,14 +44,25 @@ NOLINT_TEST_F(JoltVehicleBasicTest, CreateAndDestroyVehicleSucceeds)
   ASSERT_TRUE(wheel.has_value());
   ASSERT_TRUE(wheel2.has_value());
 
-  const std::array<BodyId, 2> wheel_ids {
-    wheel.value(),
-    wheel2.value(),
+  const std::array<vehicle::VehicleWheelDesc, 2> wheel_descs {
+    vehicle::VehicleWheelDesc {
+      .body_id = wheel.value(),
+      .axle_index = 0U,
+      .side = vehicle::VehicleWheelSide::kLeft,
+    },
+    vehicle::VehicleWheelDesc {
+      .body_id = wheel2.value(),
+      .axle_index = 0U,
+      .side = vehicle::VehicleWheelSide::kRight,
+    },
   };
+  const auto vehicle_settings_blob
+    = MakeVehicleConstraintSettingsBlob(wheel_descs.size());
   const auto vehicle = vehicles.CreateVehicle(world_id,
     vehicle::VehicleDesc {
       .chassis_body_id = chassis.value(),
-      .wheel_body_ids = wheel_ids,
+      .wheels = wheel_descs,
+      .constraint_settings_blob = vehicle_settings_blob,
     });
   ASSERT_TRUE(vehicle.has_value());
   EXPECT_TRUE(IsValid(vehicle.value()));

@@ -76,6 +76,12 @@ enum class SoftBodyTetherMode : uint8_t {
 };
 #undef OXPHYS_SOFT_BODY_TETHER_MODE
 
+#define OXPHYS_VEHICLE_WHEEL_SIDE(name, value) name = (value),
+enum class VehicleWheelSide : uint8_t {
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
+};
+#undef OXPHYS_VEHICLE_WHEEL_SIDE
+
 #define OXPHYS_AGGREGATE_AUTHORITY(name, value) name = (value),
 enum class AggregateAuthority : uint8_t {
 #include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
@@ -324,7 +330,8 @@ struct SoftBodyBindingRecord {
   SoftBodyTetherMode tether_mode = SoftBodyTetherMode::kNone;
   uint8_t reserved0[3] = {};
   float tether_max_distance_multiplier = 1.0F;
-  uint8_t reserved1[12] = {};
+  core::ResourceIndexT settings_resource_index = core::kNoResourceIndex;
+  uint8_t reserved1[8] = {};
 };
 #pragma pack(pop)
 static_assert(sizeof(SoftBodyBindingRecord) == 48);
@@ -348,10 +355,24 @@ static_assert(sizeof(JointBindingRecord) == 32);
 struct VehicleBindingRecord {
   world::SceneNodeIndexT node_index = 0; //!< Root chassis node
   core::ResourceIndexT constraint_resource_index = core::kNoResourceIndex;
-  uint8_t reserved[24] = {};
+  uint32_t wheel_table_offset = 0; //!< Offset in kVehicleWheel table
+  uint16_t wheel_count = 0;
+  uint8_t reserved[18] = {};
 };
 #pragma pack(pop)
 static_assert(sizeof(VehicleBindingRecord) == 32);
+
+//! Vehicle wheel topology record (16 bytes).
+#pragma pack(push, 1)
+struct VehicleWheelBindingRecord {
+  world::SceneNodeIndexT vehicle_node_index = 0;
+  world::SceneNodeIndexT wheel_node_index = 0;
+  uint16_t axle_index = 0;
+  VehicleWheelSide side = VehicleWheelSide::kLeft;
+  uint8_t reserved[5] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(VehicleWheelBindingRecord) == 16);
 
 //! Aggregate (group) binding record (28 bytes).
 #pragma pack(push, 1)

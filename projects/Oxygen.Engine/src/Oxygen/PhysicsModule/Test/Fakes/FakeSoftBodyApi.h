@@ -27,7 +27,7 @@ public:
     if (world_id != state_->world_id || !state_->world_created) {
       return Err(PhysicsError::kWorldNotFound);
     }
-    if (desc.cluster_count == 0U) {
+    if (desc.cluster_count == 0U || desc.settings_blob.empty()) {
       return Err(PhysicsError::kInvalidArgument);
     }
 

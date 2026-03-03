@@ -36,7 +36,7 @@ struct CharacterState final {
 
 struct VehicleState final {
   BodyId chassis_body_id { kInvalidBodyId };
-  std::vector<BodyId> wheel_body_ids {};
+  std::vector<vehicle::VehicleWheelDesc> wheels {};
   vehicle::VehicleControlInput control_input {};
 };
 

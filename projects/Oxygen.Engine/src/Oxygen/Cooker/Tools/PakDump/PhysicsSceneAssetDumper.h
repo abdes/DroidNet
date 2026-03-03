@@ -97,6 +97,8 @@ class PhysicsSceneAssetDumper final : public AssetDumper {
       std::memcpy(&record, blob.data() + table_offset, sizeof(record));
       PrintUtils::Field("Sample Node Index", record.node_index, 10);
       PrintUtils::Field("Sample Clusters", record.cluster_count, 10);
+      PrintUtils::Field(
+        "Sample Settings Resource", record.settings_resource_index.get(), 10);
       break;
     }
     case PhysicsBindingType::kJoint: {

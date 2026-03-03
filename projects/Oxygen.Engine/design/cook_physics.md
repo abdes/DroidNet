@@ -497,6 +497,7 @@ Soft body:
 | Field | Type | Required | Default |
 | --- | --- | --- | --- |
 | `node_index` | uint32 | yes | none |
+| `settings_ref` | string | yes | none |
 | `cluster_count` | uint32 | no | `0` |
 | `stiffness` | number | no | `0.0` |
 | `damping` | number | no | `0.0` |
@@ -505,6 +506,12 @@ Soft body:
 | `bend_compliance` | number | no | `1.0` |
 | `tether_mode` | enum | no | `none` |
 | `tether_max_distance_multiplier` | number | no | `1.0` |
+
+Soft-body binding validation:
+
+1. `cluster_count` must be greater than zero.
+2. `settings_ref` must resolve to a physics resource with format
+   `jolt_soft_body_shared_settings_binary`.
 
 Joint:
 

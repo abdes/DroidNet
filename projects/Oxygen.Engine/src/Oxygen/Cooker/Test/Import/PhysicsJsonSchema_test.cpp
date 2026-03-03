@@ -147,6 +147,7 @@ NOLINT_TEST(PhysicsJsonSchemaTest, PhysicsSidecarSchemaAcceptsCanonicalDocument)
       "soft_bodies": [
         {
           "node_index": 3,
+          "settings_ref": "/.cooked/Physics/Resources/soft_body_settings.opres",
           "cluster_count": 8
         }
       ],
@@ -160,7 +161,19 @@ NOLINT_TEST(PhysicsJsonSchemaTest, PhysicsSidecarSchemaAcceptsCanonicalDocument)
       "vehicles": [
         {
           "node_index": 4,
-          "constraint_ref": "/.cooked/Physics/Resources/vehicle_chassis.opres"
+          "constraint_ref": "/.cooked/Physics/Resources/vehicle_chassis.opres",
+          "wheels": [
+            {
+              "node_index": 6,
+              "axle_index": 0,
+              "side": "left"
+            },
+            {
+              "node_index": 7,
+              "axle_index": 0,
+              "side": "right"
+            }
+          ]
         }
       ],
       "aggregates": [

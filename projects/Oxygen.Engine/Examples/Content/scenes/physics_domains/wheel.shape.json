@@ -1,0 +1,8 @@
+{
+    "name": "wheel_shape",
+    "virtual_path": "/.cooked/Physics/Shapes/wheel.ocshape",
+    "shape_type": "cylinder",
+    "material_ref": "/.cooked/Physics/Materials/dynamic.opmat",
+    "radius": 0.3,
+    "half_height": 0.15
+}

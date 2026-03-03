@@ -1,0 +1,15 @@
+{
+    "name": "character_teal",
+    "domain": "opaque",
+    "alpha_mode": "opaque",
+    "parameters": {
+        "base_color": [
+            0.15,
+            0.7,
+            0.65,
+            1.0
+        ],
+        "roughness": 0.45,
+        "metalness": 0.1
+    }
+}

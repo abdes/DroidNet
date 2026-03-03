@@ -940,6 +940,7 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadBlobInto(
     std::as_writable_bytes(std::span { record.reserved0 })));
   CHECK_RESULT(reader.ReadInto(record.tether_max_distance_multiplier));
+  CHECK_RESULT(reader.ReadInto(record.settings_resource_index));
   CHECK_RESULT(reader.ReadBlobInto(
     std::as_writable_bytes(std::span { record.reserved1 })));
   return {};

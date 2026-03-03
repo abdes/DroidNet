@@ -1,0 +1,15 @@
+{
+    "name": "wheel_dark",
+    "domain": "opaque",
+    "alpha_mode": "opaque",
+    "parameters": {
+        "base_color": [
+            0.15,
+            0.15,
+            0.15,
+            1.0
+        ],
+        "roughness": 0.7,
+        "metalness": 0.1
+    }
+}

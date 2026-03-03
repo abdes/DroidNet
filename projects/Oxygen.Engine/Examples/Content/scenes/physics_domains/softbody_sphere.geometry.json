@@ -1,0 +1,52 @@
+{
+    "name": "softbody_sphere",
+    "bounds": {
+        "min": [
+            -0.5,
+            -0.5,
+            -0.5
+        ],
+        "max": [
+            0.5,
+            0.5,
+            0.5
+        ]
+    },
+    "lods": [
+        {
+            "name": "softbody_sphere_lod0",
+            "mesh_type": "procedural",
+            "bounds": {
+                "min": [
+                    -0.5,
+                    -0.5,
+                    -0.5
+                ],
+                "max": [
+                    0.5,
+                    0.5,
+                    0.5
+                ]
+            },
+            "procedural": {
+                "generator": "Sphere",
+                "mesh_name": "SoftBodySphere",
+                "params": {
+                    "latitude_segments": 16,
+                    "longitude_segments": 32
+                }
+            },
+            "submeshes": [
+                {
+                    "name": "softbody_surface",
+                    "material_ref": "/.cooked/Materials/softbody_pink.omat",
+                    "views": [
+                        {
+                            "view_ref": "__all__"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

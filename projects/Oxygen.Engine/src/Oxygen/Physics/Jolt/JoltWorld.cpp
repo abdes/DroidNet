@@ -7,10 +7,13 @@
 #include <algorithm>
 #include <cmath>
 #include <deque>
+#include <functional>
 #include <limits>
 #include <mutex>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 #include <Jolt/Jolt.h> // must be first (keep separate)
 
@@ -32,8 +35,13 @@ namespace {
 
 constexpr JPH::ObjectLayer kNonMovingObjectLayer = 0;
 constexpr JPH::ObjectLayer kMovingObjectLayer = 1;
-constexpr JPH::BroadPhaseLayer kNonMovingBroadPhaseLayer { 0 };
-constexpr JPH::BroadPhaseLayer kMovingBroadPhaseLayer { 1 };
+constexpr oxygen::physics::BroadPhaseLayer kNonMovingBroadPhaseLayer = 0U;
+constexpr oxygen::physics::BroadPhaseLayer kMovingBroadPhaseLayer = 1U;
+// Jolt asserts layer_count < cBroadPhaseLayerInvalid (255), so max count is
+// 254.
+constexpr JPH::uint kBroadPhaseLayerCount = static_cast<JPH::uint>(
+  std::numeric_limits<JPH::BroadPhaseLayer::Type>::max() - 1U);
+constexpr uint32_t kCollisionLayerBitCount = sizeof(uint32_t) * 8U;
 constexpr uint32_t kMaxBodies = 65536U;
 constexpr uint32_t kMaxBodyPairs = 65536U;
 constexpr uint32_t kMaxContactConstraints = 10240U;
@@ -41,60 +49,68 @@ constexpr uint32_t kMaxPhysicsJobs = 1024U;
 constexpr uint32_t kMaxPhysicsBarriers = 64U;
 constexpr size_t kTempAllocatorBytes = 10U * 1024U * 1024U;
 
-class BroadPhaseLayerInterfaceImpl final
-  : public JPH::BroadPhaseLayerInterface {
-public:
-  [[nodiscard]] auto GetNumBroadPhaseLayers() const -> JPH::uint override
-  {
-    return 2U;
-  }
-
-  [[nodiscard]] auto GetBroadPhaseLayer(const JPH::ObjectLayer layer) const
-    -> JPH::BroadPhaseLayer override
-  {
-    return layer == kNonMovingObjectLayer ? kNonMovingBroadPhaseLayer
-                                          : kMovingBroadPhaseLayer;
-  }
-
-#if defined(JPH_EXTERNAL_PROFILE) || defined(JPH_PROFILE_ENABLED)
-  [[nodiscard]] auto GetBroadPhaseLayerName(
-    const JPH::BroadPhaseLayer layer) const -> const char* override
-  {
-    if (layer == kNonMovingBroadPhaseLayer) {
-      return "NonMoving";
-    }
-    if (layer == kMovingBroadPhaseLayer) {
-      return "Moving";
-    }
-    return "Unknown";
-  }
-#endif
+struct ObjectLayerMetadata final {
+  oxygen::physics::CollisionLayer collision_layer {
+    oxygen::physics::kCollisionLayerDefault,
+  };
+  oxygen::physics::CollisionMask collision_mask {
+    oxygen::physics::kCollisionMaskAll,
+  };
+  oxygen::physics::BroadPhaseLayer broad_phase_layer {
+    kMovingBroadPhaseLayer,
+  };
+  bool is_non_moving { false };
 };
 
-class ObjectLayerPairFilterImpl final : public JPH::ObjectLayerPairFilter {
-public:
-  [[nodiscard]] auto ShouldCollide(const JPH::ObjectLayer layer1,
-    const JPH::ObjectLayer layer2) const -> bool override
+struct ObjectLayerKey final {
+  bool is_non_moving { false };
+  uint32_t collision_layer { 0U };
+  uint32_t collision_mask { 0U };
+
+  [[nodiscard]] auto operator==(const ObjectLayerKey&) const -> bool = default;
+};
+
+struct ObjectLayerKeyHash final {
+  [[nodiscard]] auto operator()(const ObjectLayerKey& key) const noexcept
+    -> size_t
   {
-    if (layer1 == kNonMovingObjectLayer && layer2 == kNonMovingObjectLayer) {
-      return false;
-    }
-    return true;
+    size_t seed = std::hash<uint32_t> {}(key.collision_layer);
+    seed ^= std::hash<uint32_t> {}(key.collision_mask) + 0x9e3779b9U
+      + (seed << 6U) + (seed >> 2U);
+    seed ^= std::hash<bool> {}(key.is_non_moving) + 0x9e3779b9U + (seed << 6U)
+      + (seed >> 2U);
+    return seed;
   }
 };
 
-class ObjectVsBroadPhaseLayerFilterImpl final
-  : public JPH::ObjectVsBroadPhaseLayerFilter {
-public:
-  [[nodiscard]] auto ShouldCollide(const JPH::ObjectLayer layer1,
-    const JPH::BroadPhaseLayer layer2) const -> bool override
-  {
-    if (layer1 == kNonMovingObjectLayer) {
-      return layer2 == kMovingBroadPhaseLayer;
-    }
-    return true;
+[[nodiscard]] auto IsCollisionLayerBitAddressable(
+  const oxygen::physics::CollisionLayer layer) noexcept -> bool
+{
+  return layer.get() < kCollisionLayerBitCount;
+}
+
+[[nodiscard]] auto CollisionLayerBit(
+  const oxygen::physics::CollisionLayer layer) noexcept -> uint32_t
+{
+  if (!IsCollisionLayerBitAddressable(layer)) {
+    return 0U;
   }
-};
+  return 1U << layer.get();
+}
+
+[[nodiscard]] auto ShouldMaskAllowLayer(
+  const oxygen::physics::CollisionMask mask,
+  const oxygen::physics::CollisionLayer layer) noexcept -> bool
+{
+  const auto layer_bit = CollisionLayerBit(layer);
+  return layer_bit != 0U && (mask.get() & layer_bit) != 0U;
+}
+
+[[nodiscard]] auto IsNonMovingBodyType(
+  const oxygen::physics::body::BodyType body_type) noexcept -> bool
+{
+  return body_type == oxygen::physics::body::BodyType::kStatic;
+}
 
 std::mutex g_jolt_runtime_mutex;
 uint32_t g_jolt_runtime_ref_count = 0U;
@@ -128,6 +144,80 @@ auto ReleaseJoltRuntime() -> void
 } // namespace
 
 struct oxygen::physics::jolt::JoltWorld::WorldState final {
+  class BroadPhaseLayerInterfaceImpl final
+    : public JPH::BroadPhaseLayerInterface {
+  public:
+    explicit BroadPhaseLayerInterfaceImpl(WorldState& world_state)
+      : world_state_(world_state)
+    {
+    }
+
+    [[nodiscard]] auto GetNumBroadPhaseLayers() const -> JPH::uint override
+    {
+      return kBroadPhaseLayerCount;
+    }
+
+    [[nodiscard]] auto GetBroadPhaseLayer(const JPH::ObjectLayer layer) const
+      -> JPH::BroadPhaseLayer override
+    {
+      return JPH::BroadPhaseLayer {
+        world_state_.GetBroadPhaseLayerForObjectLayer(layer),
+      };
+    }
+
+#if defined(JPH_EXTERNAL_PROFILE) || defined(JPH_PROFILE_ENABLED)
+    [[nodiscard]] auto GetBroadPhaseLayerName(
+      const JPH::BroadPhaseLayer layer) const -> const char* override
+    {
+      if (layer.GetValue() == kNonMovingBroadPhaseLayer) {
+        return "NonMoving";
+      }
+      if (layer.GetValue() == kMovingBroadPhaseLayer) {
+        return "Moving";
+      }
+      return "Authored";
+    }
+#endif
+
+  private:
+    WorldState& world_state_;
+  };
+
+  class ObjectLayerPairFilterImpl final : public JPH::ObjectLayerPairFilter {
+  public:
+    explicit ObjectLayerPairFilterImpl(WorldState& world_state)
+      : world_state_(world_state)
+    {
+    }
+
+    [[nodiscard]] auto ShouldCollide(const JPH::ObjectLayer layer1,
+      const JPH::ObjectLayer layer2) const -> bool override
+    {
+      return world_state_.ShouldObjectLayersCollide(layer1, layer2);
+    }
+
+  private:
+    WorldState& world_state_;
+  };
+
+  class ObjectVsBroadPhaseLayerFilterImpl final
+    : public JPH::ObjectVsBroadPhaseLayerFilter {
+  public:
+    explicit ObjectVsBroadPhaseLayerFilterImpl(WorldState& world_state)
+      : world_state_(world_state)
+    {
+    }
+
+    [[nodiscard]] auto ShouldCollide(const JPH::ObjectLayer layer1,
+      const JPH::BroadPhaseLayer layer2) const -> bool override
+    {
+      return world_state_.ShouldObjectVsBroadPhaseLayerCollide(layer1, layer2);
+    }
+
+  private:
+    WorldState& world_state_;
+  };
+
   class ContactListenerImpl final : public JPH::ContactListener {
   public:
     explicit ContactListenerImpl(WorldState& world_state)
@@ -200,23 +290,79 @@ struct oxygen::physics::jolt::JoltWorld::WorldState final {
   WorldState(const world::WorldDesc& desc)
     : temp_allocator(kTempAllocatorBytes)
     , job_system(kMaxPhysicsJobs, kMaxPhysicsBarriers)
+    , collision_filter(desc.collision_filter)
+    , broad_phase_layer_interface(*this)
+    , object_layer_pair_filter(*this)
+    , object_vs_broad_phase_layer_filter(*this)
     , contact_listener(*this)
   {
+    InitializeDefaultObjectLayers();
     physics_system.Init(kMaxBodies, 0U, kMaxBodyPairs, kMaxContactConstraints,
       broad_phase_layer_interface, object_vs_broad_phase_layer_filter,
       object_layer_pair_filter);
     physics_system.SetGravity(ToJoltVec3(desc.gravity));
-    collision_filter = desc.collision_filter;
     physics_system.SetContactListener(&contact_listener);
+  }
+
+  [[nodiscard]] auto ResolveObjectLayer(const body::BodyType body_type,
+    const CollisionLayer collision_layer, const CollisionMask collision_mask)
+    -> PhysicsResult<JPH::ObjectLayer>
+  {
+    if (!IsCollisionLayerBitAddressable(collision_layer)) {
+      return Err(PhysicsError::kInvalidCollisionMask);
+    }
+
+    const auto is_non_moving = IsNonMovingBodyType(body_type);
+    const auto key = ObjectLayerKey {
+      .is_non_moving = is_non_moving,
+      .collision_layer = collision_layer.get(),
+      .collision_mask = collision_mask.get(),
+    };
+
+    std::scoped_lock lock(collision_layer_mutex);
+    const auto existing = object_layers.find(key);
+    if (existing != object_layers.end()) {
+      return Ok(existing->second);
+    }
+
+    constexpr auto kMaxObjectLayerValue
+      = static_cast<size_t>(std::numeric_limits<JPH::ObjectLayer>::max());
+    constexpr auto kObjectLayerCapacity = kMaxObjectLayerValue + 1U;
+    if (object_layer_metadata.size() >= kObjectLayerCapacity) {
+      return Err(PhysicsError::kBackendInitFailed);
+    }
+
+    const auto object_layer
+      = static_cast<JPH::ObjectLayer>(object_layer_metadata.size());
+    object_layer_metadata.push_back(ObjectLayerMetadata {
+      .collision_layer = collision_layer,
+      .collision_mask = collision_mask,
+      .broad_phase_layer
+      = ResolveBroadPhaseLayer(collision_layer, is_non_moving),
+      .is_non_moving = is_non_moving,
+    });
+    object_layers.insert_or_assign(key, object_layer);
+    return Ok(object_layer);
+  }
+
+  [[nodiscard]] auto QueryMaskAllowsObjectLayer(const CollisionMask query_mask,
+    const JPH::ObjectLayer object_layer) const noexcept -> bool
+  {
+    const auto metadata = GetObjectLayerMetadata(object_layer);
+    return ShouldMaskAllowLayer(query_mask, metadata.collision_layer);
   }
 
   JPH::PhysicsSystem physics_system {};
   JPH::TempAllocatorImpl temp_allocator;
   JPH::JobSystemThreadPool job_system;
-  BroadPhaseLayerInterfaceImpl broad_phase_layer_interface {};
-  ObjectLayerPairFilterImpl object_layer_pair_filter {};
-  ObjectVsBroadPhaseLayerFilterImpl object_vs_broad_phase_layer_filter {};
   std::shared_ptr<ICollisionFilter> collision_filter {};
+  mutable std::mutex collision_layer_mutex {};
+  std::vector<ObjectLayerMetadata> object_layer_metadata {};
+  std::unordered_map<ObjectLayerKey, JPH::ObjectLayer, ObjectLayerKeyHash>
+    object_layers {};
+  BroadPhaseLayerInterfaceImpl broad_phase_layer_interface;
+  ObjectLayerPairFilterImpl object_layer_pair_filter;
+  ObjectVsBroadPhaseLayerFilterImpl object_vs_broad_phase_layer_filter;
   std::unordered_set<BodyId> body_ids {};
   mutable std::mutex event_mutex {};
   std::deque<events::PhysicsEvent> pending_events {};
@@ -225,6 +371,132 @@ struct oxygen::physics::jolt::JoltWorld::WorldState final {
   std::unordered_map<JPH::SubShapeIDPair, events::PhysicsEvent>
     active_contact_events {};
   ContactListenerImpl contact_listener;
+
+private:
+  auto InitializeDefaultObjectLayers() -> void
+  {
+    const auto default_collision_layer = kCollisionLayerDefault;
+    const auto default_collision_mask = kCollisionMaskAll;
+
+    object_layer_metadata.clear();
+    object_layers.clear();
+    object_layer_metadata.reserve(8U);
+
+    object_layer_metadata.push_back(ObjectLayerMetadata {
+      .collision_layer = default_collision_layer,
+      .collision_mask = default_collision_mask,
+      .broad_phase_layer
+      = ResolveBroadPhaseLayer(default_collision_layer, true),
+      .is_non_moving = true,
+    });
+    object_layer_metadata.push_back(ObjectLayerMetadata {
+      .collision_layer = default_collision_layer,
+      .collision_mask = default_collision_mask,
+      .broad_phase_layer
+      = ResolveBroadPhaseLayer(default_collision_layer, false),
+      .is_non_moving = false,
+    });
+
+    object_layers.insert_or_assign(
+      ObjectLayerKey {
+        .is_non_moving = true,
+        .collision_layer = default_collision_layer.get(),
+        .collision_mask = default_collision_mask.get(),
+      },
+      kNonMovingObjectLayer);
+    object_layers.insert_or_assign(
+      ObjectLayerKey {
+        .is_non_moving = false,
+        .collision_layer = default_collision_layer.get(),
+        .collision_mask = default_collision_mask.get(),
+      },
+      kMovingObjectLayer);
+  }
+
+  [[nodiscard]] auto ResolveBroadPhaseLayer(
+    const CollisionLayer collision_layer, const bool is_non_moving) const
+    -> BroadPhaseLayer
+  {
+    if (collision_filter != nullptr) {
+      const auto configured_layer
+        = collision_filter->GetBroadPhaseLayer(collision_layer);
+      if (configured_layer < kBroadPhaseLayerCount) {
+        return configured_layer;
+      }
+    }
+    return is_non_moving ? kNonMovingBroadPhaseLayer : kMovingBroadPhaseLayer;
+  }
+
+  [[nodiscard]] auto GetObjectLayerMetadata(
+    const JPH::ObjectLayer object_layer) const -> ObjectLayerMetadata
+  {
+    std::scoped_lock lock(collision_layer_mutex);
+    const auto index = static_cast<size_t>(object_layer);
+    if (index < object_layer_metadata.size()) {
+      return object_layer_metadata[index];
+    }
+
+    return object_layer == kNonMovingObjectLayer
+      ? ObjectLayerMetadata {
+          .collision_layer = kCollisionLayerDefault,
+          .collision_mask = kCollisionMaskAll,
+          .broad_phase_layer = kNonMovingBroadPhaseLayer,
+          .is_non_moving = true,
+        }
+      : ObjectLayerMetadata {
+          .collision_layer = kCollisionLayerDefault,
+          .collision_mask = kCollisionMaskAll,
+          .broad_phase_layer = kMovingBroadPhaseLayer,
+          .is_non_moving = false,
+        };
+  }
+
+  [[nodiscard]] auto GetBroadPhaseLayerForObjectLayer(
+    const JPH::ObjectLayer object_layer) const -> BroadPhaseLayer
+  {
+    return GetObjectLayerMetadata(object_layer).broad_phase_layer;
+  }
+
+  [[nodiscard]] auto ShouldObjectLayersCollide(
+    const JPH::ObjectLayer layer1, const JPH::ObjectLayer layer2) const -> bool
+  {
+    const auto metadata1 = GetObjectLayerMetadata(layer1);
+    const auto metadata2 = GetObjectLayerMetadata(layer2);
+
+    if (!ShouldMaskAllowLayer(
+          metadata1.collision_mask, metadata2.collision_layer)
+      || !ShouldMaskAllowLayer(
+        metadata2.collision_mask, metadata1.collision_layer)) {
+      return false;
+    }
+
+    if (collision_filter != nullptr) {
+      return collision_filter->ShouldCollide(
+        metadata1.collision_layer, metadata2.collision_layer);
+    }
+
+    if (metadata1.is_non_moving && metadata2.is_non_moving) {
+      return false;
+    }
+    return true;
+  }
+
+  [[nodiscard]] auto ShouldObjectVsBroadPhaseLayerCollide(
+    const JPH::ObjectLayer layer1, const JPH::BroadPhaseLayer layer2) const
+    -> bool
+  {
+    const auto metadata = GetObjectLayerMetadata(layer1);
+
+    if (collision_filter != nullptr) {
+      return collision_filter->ShouldCollide(
+        metadata.collision_layer, layer2.GetValue());
+    }
+
+    if (metadata.is_non_moving) {
+      return layer2.GetValue() == kMovingBroadPhaseLayer;
+    }
+    return true;
+  }
 };
 
 oxygen::physics::jolt::JoltWorld::JoltWorld()
@@ -445,6 +717,36 @@ auto oxygen::physics::jolt::JoltWorld::TryGetPhysicsSystem(
     return observer_ptr<const JPH::PhysicsSystem> {};
   }
   return observer_ptr<const JPH::PhysicsSystem> { &world->physics_system };
+}
+
+auto oxygen::physics::jolt::JoltWorld::ResolveBodyObjectLayer(
+  const WorldId world_id, const body::BodyType body_type,
+  const CollisionLayer collision_layer, const CollisionMask collision_mask)
+  -> PhysicsResult<uint16_t>
+{
+  auto world = TryGetWorld(world_id);
+  if (world == nullptr) {
+    return Err(PhysicsError::kWorldNotFound);
+  }
+
+  const auto object_layer_result
+    = world->ResolveObjectLayer(body_type, collision_layer, collision_mask);
+  if (object_layer_result.has_error()) {
+    return Err(object_layer_result.error());
+  }
+  return Ok(static_cast<uint16_t>(object_layer_result.value()));
+}
+
+auto oxygen::physics::jolt::JoltWorld::QueryMaskAllowsObjectLayer(
+  const WorldId world_id, const CollisionMask query_mask,
+  const uint16_t object_layer) const noexcept -> bool
+{
+  const auto world = TryGetWorld(world_id);
+  if (world == nullptr) {
+    return false;
+  }
+  return world->QueryMaskAllowsObjectLayer(
+    query_mask, static_cast<JPH::ObjectLayer>(object_layer));
 }
 
 auto oxygen::physics::jolt::JoltWorld::HasBody(

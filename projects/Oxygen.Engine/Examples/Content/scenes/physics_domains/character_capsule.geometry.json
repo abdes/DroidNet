@@ -1,0 +1,53 @@
+{
+    "name": "character_capsule",
+    "bounds": {
+        "min": [
+            -0.35,
+            -0.35,
+            -0.9
+        ],
+        "max": [
+            0.35,
+            0.35,
+            0.9
+        ]
+    },
+    "lods": [
+        {
+            "name": "character_capsule_lod0",
+            "mesh_type": "procedural",
+            "bounds": {
+                "min": [
+                    -0.35,
+                    -0.35,
+                    -0.9
+                ],
+                "max": [
+                    0.35,
+                    0.35,
+                    0.9
+                ]
+            },
+            "procedural": {
+                "generator": "Cylinder",
+                "mesh_name": "CharacterCapsule",
+                "params": {
+                    "segments": 16,
+                    "height": 1.8,
+                    "radius": 0.35
+                }
+            },
+            "submeshes": [
+                {
+                    "name": "character_surface",
+                    "material_ref": "/.cooked/Materials/character_teal.omat",
+                    "views": [
+                        {
+                            "view_ref": "__all__"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

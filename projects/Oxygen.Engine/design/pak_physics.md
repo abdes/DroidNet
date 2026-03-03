@@ -235,11 +235,16 @@ struct SoftBodyBindingRecord {
   uint8_t tether_mode = 0;                    // kNone, kEuclidean, kGeodesic
   uint8_t reserved0[3] = {};
   float tether_max_distance_multiplier = 1.0f;
-  uint8_t reserved1[12] = {};                 // Pad to 48 bytes
+  ResourceIndexT settings_resource_index = kNoResourceIndex;
+  uint8_t reserved1[8] = {};                  // Pad to 48 bytes
 };
 #pragma pack(pop)
 static_assert(sizeof(SoftBodyBindingRecord) == 48);
 ```
+
+`settings_resource_index` resolves from sidecar `bindings.soft_bodies[].settings_ref`
+and must reference a `PhysicsResourceDesc` with format
+`kJoltSoftBodySharedSettingsBinary`.
 
 **Joints/Constraints Binding:**
 Declares an articulated link or two-body constraint between nodes. Because Jolt constraint properties (motor settings, limits, degrees of freedom) are highly variable and complex, the record points to a serialized `JPH::ConstraintSettings` binary block.

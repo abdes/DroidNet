@@ -11,6 +11,7 @@
 #include <span>
 #include <string_view>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -142,6 +143,15 @@ private:
   auto ResolvePhysicsModule() -> observer_ptr<physics::PhysicsModule>;
   //! Hydrate supported physics bindings from sidecar into runtime scene.
   void HydratePhysicsBindings(const data::PhysicsSceneAsset& physics_asset);
+  //! Begin one hydration window and activate transform-readiness guard.
+  void BeginHydrationWindow();
+  //! End hydration window and invalidate transform-readiness guard.
+  void EndHydrationWindow() noexcept;
+  //! Ensure world transforms are materialized exactly once per hydration
+  //! window.
+  void ResolveHydrationTransforms();
+  //! Read world-space pose for a runtime node after hydration barrier.
+  auto ReadHydrationWorldPose(size_t node_index) const -> std::pair<Vec3, Quat>;
   //! Preload all physics dependency resources required by sidecar hydration.
   auto PreloadPhysicsDependencyResources(
     const data::PhysicsSceneAsset& physics_asset) -> co::Co<>;
@@ -158,8 +168,8 @@ private:
   //! Attach vehicle bindings and register aggregate mappings.
   void HydrateVehicleBindings(physics::PhysicsModule& physics_module,
     std::span<const data::pak::physics::VehicleBindingRecord> bindings,
-    std::span<const data::pak::physics::RigidBodyBindingRecord>
-      rigid_body_bindings);
+    std::span<const data::pak::physics::VehicleWheelBindingRecord>
+      wheel_bindings);
   //! Attach aggregate bindings and register aggregate mappings.
   void HydrateAggregateBindings(physics::PhysicsModule& physics_module,
     std::span<const data::pak::physics::AggregateBindingRecord> bindings,
@@ -245,6 +255,9 @@ private:
   std::vector<data::AssetKey> pinned_geometry_keys_;
 
   std::optional<data::AssetKey> current_physics_context_asset_key_ {};
+  observer_ptr<scene::Scene> runtime_scene_ {};
+  bool hydration_window_active_ { false };
+  bool hydration_transforms_resolved_ { false };
   observer_ptr<AsyncEngine> engine_;
   engine::ModuleManager::Subscription physics_module_subscription_ {};
   observer_ptr<physics::PhysicsModule> physics_module_;

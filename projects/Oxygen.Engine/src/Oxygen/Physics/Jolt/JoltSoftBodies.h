@@ -51,6 +51,7 @@ private:
     BodyId registered_body_id { kInvalidBodyId };
     uint32_t cluster_count { 0U };
     softbody::SoftBodyMaterialParams material_params {};
+    std::vector<uint8_t> settings_blob {};
     aggregate::AggregateAuthority authority {
       aggregate::AggregateAuthority::kSimulation,
     };

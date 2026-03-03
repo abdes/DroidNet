@@ -141,6 +141,13 @@ auto PhysicsSceneAsset::ParseAndValidate() -> void
           "PhysicsSceneAsset: VehicleBindingRecord entry_size mismatch");
       }
       break;
+    case BT::kVehicleWheel:
+      if (entry.table.entry_size
+        != sizeof(pak::physics::VehicleWheelBindingRecord)) {
+        throw std::runtime_error(
+          "PhysicsSceneAsset: VehicleWheelBindingRecord entry_size mismatch");
+      }
+      break;
     case BT::kAggregate:
       if (entry.table.entry_size
         != sizeof(pak::physics::AggregateBindingRecord)) {

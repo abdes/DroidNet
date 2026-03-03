@@ -6,11 +6,15 @@
 
 #include <algorithm>
 #include <cmath>
+#include <span>
+#include <sstream>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include <Jolt/Jolt.h> // Must always be first (keep separate)
 
+#include <Jolt/Core/StreamWrapper.h>
 #include <Jolt/Physics/Body/Body.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Body/BodyLock.h>
@@ -72,13 +76,19 @@ auto SoftBodyUnknown() -> oxygen::ErrValue<oxygen::physics::PhysicsError>
 
 constexpr JPH::ObjectLayer kDynamicObjectLayer = 1;
 
-auto BuildSharedSettings(const uint32_t cluster_count,
+// Prototype-only fallback path. Shipping/runtime-authored content must rely on
+// cooked kJoltSoftBodySharedSettingsBinary payloads.
+#if defined(NDEBUG)
+constexpr bool kEnablePrototypeProceduralSoftBodyFallback = false;
+#else
+constexpr bool kEnablePrototypeProceduralSoftBodyFallback = true;
+#endif
+
+auto BuildPrototypeSharedSettings(const uint32_t cluster_count,
   const oxygen::physics::softbody::SoftBodyMaterialParams& params)
   -> JPH::Ref<JPH::SoftBodySharedSettings>
 {
   const auto grid_size = ToGridSize(cluster_count);
-  // Current runtime backend emits a procedural cube topology.
-  // User-authored topology ingestion is tracked separately.
   auto shared_settings = JPH::SoftBodySharedSettings::sCreateCube(
     grid_size, 0.25F / static_cast<float>(grid_size));
   if (shared_settings == nullptr) {
@@ -97,6 +107,28 @@ auto BuildSharedSettings(const uint32_t cluster_count,
     ToJoltLRAType(params.tether_mode), params.tether_max_distance_multiplier);
   shared_settings->CreateConstraints(&vertex_attributes, 1U);
   shared_settings->Optimize();
+  return shared_settings;
+}
+
+auto RestoreSharedSettingsFromBlob(const std::span<const uint8_t> blob)
+  -> JPH::Ref<JPH::SoftBodySharedSettings>
+{
+  if (blob.empty()) {
+    return nullptr;
+  }
+
+  const std::string serialized(
+    reinterpret_cast<const char*>(blob.data()), blob.size());
+  std::istringstream stream(serialized, std::ios::in | std::ios::binary);
+  JPH::StreamInWrapper wrapped(stream);
+
+  auto shared_settings = JPH::Ref<JPH::SoftBodySharedSettings> {
+    new JPH::SoftBodySharedSettings()
+  };
+  shared_settings->RestoreBinaryState(wrapped);
+  if (wrapped.IsEOF() || wrapped.IsFailed()) {
+    return nullptr;
+  }
   return shared_settings;
 }
 
@@ -153,6 +185,9 @@ auto oxygen::physics::jolt::JoltSoftBodies::CreateSoftBody(
   if (desc.cluster_count == 0U) {
     return Err(PhysicsError::kInvalidArgument);
   }
+  if (desc.settings_blob.empty()) {
+    return Err(PhysicsError::kInvalidArgument);
+  }
   if (!IsMaterialParamsValid(desc.material_params)) {
     return Err(PhysicsError::kInvalidArgument);
   }
@@ -178,10 +213,9 @@ auto oxygen::physics::jolt::JoltSoftBodies::CreateSoftBody(
     return Err(PhysicsError::kWorldNotFound);
   }
 
-  auto shared_settings
-    = BuildSharedSettings(desc.cluster_count, desc.material_params);
+  auto shared_settings = RestoreSharedSettingsFromBlob(desc.settings_blob);
   if (shared_settings == nullptr) {
-    return Err(PhysicsError::kBackendInitFailed);
+    return Err(PhysicsError::kInvalidArgument);
   }
 
   const auto normalized_rotation = NormalizeRotation(desc.initial_rotation);
@@ -223,6 +257,10 @@ auto oxygen::physics::jolt::JoltSoftBodies::CreateSoftBody(
       .registered_body_id = registered_body_id,
       .cluster_count = desc.cluster_count,
       .material_params = desc.material_params,
+      .settings_blob = std::vector<uint8_t> {
+        desc.settings_blob.begin(),
+        desc.settings_blob.end(),
+      },
       .authority = aggregate::AggregateAuthority::kSimulation,
     });
   NoteStructuralChange(world_id);
@@ -492,6 +530,7 @@ auto oxygen::physics::jolt::JoltSoftBodies::RebuildSoftBodyForMaterialParams(
   const auto old_jolt_body_id = it->second.jolt_body_id;
   const auto old_registered_body_id = it->second.registered_body_id;
   const auto cluster_count = it->second.cluster_count;
+  const auto& settings_blob = it->second.settings_blob;
   if (!body_interface->IsAdded(old_jolt_body_id)) {
     return Err(PhysicsError::kBodyNotFound);
   }
@@ -505,9 +544,14 @@ auto oxygen::physics::jolt::JoltSoftBodies::RebuildSoftBodyForMaterialParams(
   const auto current_rotation = body_interface->GetRotation(old_jolt_body_id);
   const auto was_active = body_interface->IsActive(old_jolt_body_id);
 
-  auto shared_settings = BuildSharedSettings(cluster_count, params);
+  auto shared_settings
+    = RestoreSharedSettingsFromBlob(std::span<const uint8_t> { settings_blob });
+  if (shared_settings == nullptr
+    && kEnablePrototypeProceduralSoftBodyFallback) {
+    shared_settings = BuildPrototypeSharedSettings(cluster_count, params);
+  }
   if (shared_settings == nullptr) {
-    return Err(PhysicsError::kBackendInitFailed);
+    return Err(PhysicsError::kInvalidArgument);
   }
 
   JPH::SoftBodyCreationSettings creation_settings(shared_settings.GetPtr(),

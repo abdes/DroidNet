@@ -202,11 +202,16 @@
             "type": "object",
             "additionalProperties": false,
             "required": [
-                "node_index"
+                "node_index",
+                "settings_ref"
             ],
             "properties": {
                 "node_index": {
                     "$ref": "#/definitions/node_index"
+                },
+                "settings_ref": {
+                    "type": "string",
+                    "minLength": 1
                 },
                 "cluster_count": {
                     "$ref": "#/definitions/u32"
@@ -278,7 +283,8 @@
             "additionalProperties": false,
             "required": [
                 "node_index",
-                "constraint_ref"
+                "constraint_ref",
+                "wheels"
             ],
             "properties": {
                 "node_index": {
@@ -287,6 +293,36 @@
                 "constraint_ref": {
                     "type": "string",
                     "minLength": 1
+                },
+                "wheels": {
+                    "type": "array",
+                    "minItems": 2,
+                    "items": {
+                        "$ref": "#/definitions/vehicle_wheel_binding"
+                    }
+                }
+            }
+        },
+        "vehicle_wheel_binding": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "node_index",
+                "axle_index",
+                "side"
+            ],
+            "properties": {
+                "node_index": {
+                    "$ref": "#/definitions/node_index"
+                },
+                "axle_index": {
+                    "$ref": "#/definitions/u16"
+                },
+                "side": {
+                    "enum": [
+                        "left",
+                        "right"
+                    ]
                 }
             }
         },

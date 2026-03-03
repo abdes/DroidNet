@@ -17,6 +17,7 @@
 #include <Jolt/Physics/Collision/CollideShape.h>
 #include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
 #include <Jolt/Physics/Collision/NarrowPhaseQuery.h>
+#include <Jolt/Physics/Collision/ObjectLayer.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/ShapeCast.h>
 
@@ -46,6 +47,32 @@ public:
 
 private:
   std::span<const oxygen::physics::BodyId> ignored_ids_ {};
+};
+
+class QueryCollisionMaskFilter final : public JPH::ObjectLayerFilter {
+public:
+  QueryCollisionMaskFilter(const oxygen::physics::jolt::JoltWorld& world,
+    const oxygen::physics::WorldId world_id,
+    const oxygen::physics::CollisionMask collision_mask)
+    : world_(world)
+    , world_id_(world_id)
+    , collision_mask_(collision_mask)
+  {
+  }
+
+  [[nodiscard]] auto ShouldCollide(const JPH::ObjectLayer in_layer) const
+    -> bool override
+  {
+    return world_.QueryMaskAllowsObjectLayer(
+      world_id_, collision_mask_, static_cast<uint16_t>(in_layer));
+  }
+
+private:
+  const oxygen::physics::jolt::JoltWorld& world_;
+  oxygen::physics::WorldId world_id_ { oxygen::physics::kInvalidWorldId };
+  oxygen::physics::CollisionMask collision_mask_ {
+    oxygen::physics::kCollisionMaskAll,
+  };
 };
 
 auto NormalizeOrFallback(
@@ -85,11 +112,13 @@ auto oxygen::physics::jolt::JoltQueries::Raycast(
   }
 
   IgnoreBodiesFilter body_filter(desc.ignore_bodies);
+  QueryCollisionMaskFilter object_layer_filter(
+    *world, world_id, desc.collision_mask);
   JPH::RayCastResult hit {};
   const auto jolt_hit
     = query->CastRay(JPH::RRayCast(ToJoltRVec3(desc.origin),
                        ToJoltVec3(desc.direction * desc.max_distance)),
-      hit, {}, {}, body_filter);
+      hit, {}, object_layer_filter, body_filter);
   if (!jolt_hit) {
     return Ok(query::OptionalRaycastHit {});
   }
@@ -132,13 +161,15 @@ auto oxygen::physics::jolt::JoltQueries::Sweep(const WorldId world_id,
   }
 
   IgnoreBodiesFilter body_filter(desc.ignore_bodies);
+  QueryCollisionMaskFilter object_layer_filter(
+    *world, world_id, desc.collision_mask);
   JPH::AllHitCollisionCollector<JPH::CastShapeCollector> collector {};
   query->CastShape(
     JPH::RShapeCast(shape_result.value().GetPtr(), JPH::Vec3::sReplicate(1.0F),
       JPH::RMat44::sTranslation(ToJoltRVec3(desc.origin)),
       ToJoltVec3(desc.direction * desc.max_distance)),
-    JPH::ShapeCastSettings {}, JPH::RVec3::sZero(), collector, {}, {},
-    body_filter);
+    JPH::ShapeCastSettings {}, JPH::RVec3::sZero(), collector, {},
+    object_layer_filter, body_filter);
   collector.Sort();
 
   const auto copy_count = std::min(out_hits.size(), collector.mHits.size());
@@ -176,12 +207,14 @@ auto oxygen::physics::jolt::JoltQueries::Overlap(const WorldId world_id,
   }
 
   IgnoreBodiesFilter body_filter(desc.ignore_bodies);
+  QueryCollisionMaskFilter object_layer_filter(
+    *world, world_id, desc.collision_mask);
   JPH::AllHitCollisionCollector<JPH::CollideShapeCollector> collector {};
   query->CollideShape(shape_result.value().GetPtr(),
     JPH::Vec3::sReplicate(1.0F),
     JPH::RMat44::sTranslation(ToJoltRVec3(desc.center)),
-    JPH::CollideShapeSettings {}, JPH::RVec3::sZero(), collector, {}, {},
-    body_filter);
+    JPH::CollideShapeSettings {}, JPH::RVec3::sZero(), collector, {},
+    object_layer_filter, body_filter);
 
   const auto copy_count
     = std::min(out_user_data.size(), collector.mHits.size());

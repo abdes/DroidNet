@@ -1,0 +1,48 @@
+{
+    "name": "stack_cube",
+    "bounds": {
+        "min": [
+            -0.5,
+            -0.5,
+            -0.5
+        ],
+        "max": [
+            0.5,
+            0.5,
+            0.5
+        ]
+    },
+    "lods": [
+        {
+            "name": "stack_cube_lod0",
+            "mesh_type": "procedural",
+            "bounds": {
+                "min": [
+                    -0.5,
+                    -0.5,
+                    -0.5
+                ],
+                "max": [
+                    0.5,
+                    0.5,
+                    0.5
+                ]
+            },
+            "procedural": {
+                "generator": "Cube",
+                "mesh_name": "StackCube"
+            },
+            "submeshes": [
+                {
+                    "name": "stack_surface",
+                    "material_ref": "/.cooked/Materials/stack_yellow.omat",
+                    "views": [
+                        {
+                            "view_ref": "__all__"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,11 @@
+{
+    "name": "ramp_shape",
+    "virtual_path": "/.cooked/Physics/Shapes/ramp.ocshape",
+    "shape_type": "box",
+    "material_ref": "/.cooked/Physics/Materials/ground.opmat",
+    "half_extents": [
+        2.0,
+        3.0,
+        0.15
+    ]
+}

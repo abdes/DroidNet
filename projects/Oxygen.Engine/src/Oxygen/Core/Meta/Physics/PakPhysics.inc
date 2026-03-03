@@ -29,6 +29,7 @@
 OXPHYS_RESOURCE_FORMAT(kJoltShapeBinary, 0)
 OXPHYS_RESOURCE_FORMAT(kJoltConstraintBinary, 1)
 OXPHYS_RESOURCE_FORMAT(kJoltSoftBodySharedSettingsBinary, 2)
+OXPHYS_RESOURCE_FORMAT(kJoltVehicleConstraintBinary, 3)
 
 #undef OXPHYS_RESOURCE_FORMAT
 
@@ -126,6 +127,23 @@ OXPHYS_SOFT_BODY_TETHER_MODE(kGeodesic, 2)
 #undef OXPHYS_SOFT_BODY_TETHER_MODE
 
 // ============================================================================
+// VehicleWheelSide
+// ============================================================================
+// Author-authored wheel side for deterministic axle/steering mapping.
+//
+// Expected consumer macro:
+//   OXPHYS_VEHICLE_WHEEL_SIDE(name, value)
+//
+#ifndef OXPHYS_VEHICLE_WHEEL_SIDE
+#  define OXPHYS_VEHICLE_WHEEL_SIDE(name, value)
+#endif
+
+OXPHYS_VEHICLE_WHEEL_SIDE(kLeft, 0)
+OXPHYS_VEHICLE_WHEEL_SIDE(kRight, 1)
+
+#undef OXPHYS_VEHICLE_WHEEL_SIDE
+
+// ============================================================================
 // AggregateAuthority
 // ============================================================================
 // Determines which system owns the transforms for bodies inside an aggregate.
@@ -167,6 +185,7 @@ OXPHYS_BINDING_TYPE(kCharacter, 0x52484350)   // 'PCHR'
 OXPHYS_BINDING_TYPE(kSoftBody, 0x42534650)    // 'PFSB'
 OXPHYS_BINDING_TYPE(kJoint, 0x544E4A50)       // 'PJNT'
 OXPHYS_BINDING_TYPE(kVehicle, 0x4C485650)     // 'PVHL'
+OXPHYS_BINDING_TYPE(kVehicleWheel, 0x48575650) // 'PVWH'
 OXPHYS_BINDING_TYPE(kAggregate, 0x47474150)   // 'PAGG'
 
 #undef OXPHYS_BINDING_TYPE

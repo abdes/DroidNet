@@ -1,0 +1,7 @@
+{
+    "name": "sphere_bouncy_shape",
+    "virtual_path": "/.cooked/Physics/Shapes/sphere_bouncy.ocshape",
+    "shape_type": "sphere",
+    "material_ref": "/.cooked/Physics/Materials/bouncy.opmat",
+    "radius": 1.0
+}

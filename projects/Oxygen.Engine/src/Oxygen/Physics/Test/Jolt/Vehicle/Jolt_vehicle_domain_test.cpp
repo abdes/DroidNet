@@ -5,11 +5,13 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cmath>
 
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/Test/Jolt/Jolt_test_fixture.h>
+#include <Oxygen/Physics/Test/TestBlobBuilders.h>
 #include <Oxygen/Physics/World/WorldDesc.h>
 
 namespace oxygen::physics::test::jolt {
@@ -48,14 +50,25 @@ NOLINT_TEST_F(
   ASSERT_TRUE(wheel_a.has_value());
   ASSERT_TRUE(wheel_b.has_value());
 
-  const std::array<BodyId, 2> wheel_ids {
-    wheel_a.value(),
-    wheel_b.value(),
+  const std::array<vehicle::VehicleWheelDesc, 2> wheel_descs {
+    vehicle::VehicleWheelDesc {
+      .body_id = wheel_a.value(),
+      .axle_index = 0U,
+      .side = vehicle::VehicleWheelSide::kLeft,
+    },
+    vehicle::VehicleWheelDesc {
+      .body_id = wheel_b.value(),
+      .axle_index = 0U,
+      .side = vehicle::VehicleWheelSide::kRight,
+    },
   };
+  const auto vehicle_settings_blob
+    = MakeVehicleConstraintSettingsBlob(wheel_descs.size());
   const auto vehicle = vehicles.CreateVehicle(world_id,
     vehicle::VehicleDesc {
       .chassis_body_id = chassis.value(),
-      .wheel_body_ids = wheel_ids,
+      .wheels = wheel_descs,
+      .constraint_settings_blob = vehicle_settings_blob,
     });
   ASSERT_TRUE(vehicle.has_value());
   const auto vehicle_id = vehicle.value();
@@ -70,7 +83,7 @@ NOLINT_TEST_F(
           .forward = 0.65F,
           .brake = 0.0F,
           .steering = 0.2F,
-          .handbrake = 0.0F,
+          .hand_brake = 0.0F,
         })
       .has_value());
 
@@ -98,6 +111,114 @@ NOLINT_TEST_F(
   EXPECT_TRUE(bodies.DestroyBody(world_id, wheel_b.value()).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, wheel_a.value()).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, chassis.value()).has_value());
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
+NOLINT_TEST_F(JoltVehicleDomainTest, ProgrammaticControlInputMovesChassis)
+{
+  AssertBackendAvailabilityContract();
+  if (!HasBackend()) {
+    return;
+  }
+
+  auto& vehicles = System().Vehicles();
+  auto& worlds = System().Worlds();
+  auto& bodies = System().Bodies();
+
+  const auto world = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(world.has_value());
+  const auto world_id = world.value();
+
+  body::BodyDesc ground_desc {};
+  ground_desc.type = body::BodyType::kStatic;
+  ground_desc.shape = BoxShape { .extents = Vec3 { 50.0F, 50.0F, 1.0F } };
+  ground_desc.initial_position = Vec3 { 0.0F, 0.0F, -0.5F };
+  const auto ground = bodies.CreateBody(world_id, ground_desc);
+  ASSERT_TRUE(ground.has_value());
+
+  body::BodyDesc chassis_desc {};
+  chassis_desc.type = body::BodyType::kDynamic;
+  chassis_desc.initial_position = Vec3 { 0.0F, 0.0F, 1.0F };
+  const auto chassis = bodies.CreateBody(world_id, chassis_desc);
+  ASSERT_TRUE(chassis.has_value());
+
+  body::BodyDesc wheel_desc {};
+  wheel_desc.type = body::BodyType::kKinematic;
+  wheel_desc.initial_position = Vec3 { -0.8F, 0.8F, 0.5F };
+  const auto wheel_a = bodies.CreateBody(world_id, wheel_desc);
+  wheel_desc.initial_position = Vec3 { 0.8F, 0.8F, 0.5F };
+  const auto wheel_b = bodies.CreateBody(world_id, wheel_desc);
+  ASSERT_TRUE(wheel_a.has_value());
+  ASSERT_TRUE(wheel_b.has_value());
+
+  const std::array<vehicle::VehicleWheelDesc, 2> wheel_descs {
+    vehicle::VehicleWheelDesc {
+      .body_id = wheel_a.value(),
+      .axle_index = 0U,
+      .side = vehicle::VehicleWheelSide::kLeft,
+    },
+    vehicle::VehicleWheelDesc {
+      .body_id = wheel_b.value(),
+      .axle_index = 0U,
+      .side = vehicle::VehicleWheelSide::kRight,
+    },
+  };
+  const auto vehicle_settings_blob
+    = MakeVehicleConstraintSettingsBlob(wheel_descs.size());
+  ASSERT_FALSE(vehicle_settings_blob.empty());
+
+  const auto vehicle = vehicles.CreateVehicle(world_id,
+    vehicle::VehicleDesc {
+      .chassis_body_id = chassis.value(),
+      .wheels = wheel_descs,
+      .constraint_settings_blob = vehicle_settings_blob,
+    });
+  ASSERT_TRUE(vehicle.has_value());
+  const auto vehicle_id = vehicle.value();
+
+  for (int i = 0; i < 15; ++i) {
+    ASSERT_TRUE(
+      worlds.Step(world_id, 1.0F / 60.0F, 1, 1.0F / 60.0F).has_value());
+  }
+  const auto before_position
+    = bodies.GetBodyPosition(world_id, chassis.value());
+  ASSERT_TRUE(before_position.has_value());
+
+  ASSERT_TRUE(vehicles
+      .SetControlInput(world_id, vehicle_id,
+        vehicle::VehicleControlInput {
+          .forward = 1.0F,
+          .brake = 0.0F,
+          .steering = 0.0F,
+          .hand_brake = 0.0F,
+        })
+      .has_value());
+
+  for (int i = 0; i < 120; ++i) {
+    ASSERT_TRUE(
+      worlds.Step(world_id, 1.0F / 60.0F, 1, 1.0F / 60.0F).has_value());
+  }
+
+  const auto after_position = bodies.GetBodyPosition(world_id, chassis.value());
+  ASSERT_TRUE(after_position.has_value());
+  const auto after_velocity
+    = bodies.GetLinearVelocity(world_id, chassis.value());
+  ASSERT_TRUE(after_velocity.has_value());
+
+  const auto delta = after_position.value() - before_position.value();
+  const auto planar_displacement
+    = std::sqrt((delta.x * delta.x) + (delta.y * delta.y));
+
+  EXPECT_GT(planar_displacement, 0.05F);
+  EXPECT_GT(
+    std::fabs(after_velocity.value().x) + std::fabs(after_velocity.value().y),
+    0.05F);
+
+  EXPECT_TRUE(vehicles.DestroyVehicle(world_id, vehicle_id).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, wheel_b.value()).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, wheel_a.value()).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, chassis.value()).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, ground.value()).has_value());
   EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
 }
 
