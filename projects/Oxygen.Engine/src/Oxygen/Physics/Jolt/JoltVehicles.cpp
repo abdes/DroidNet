@@ -25,7 +25,9 @@
 #include <Jolt/Physics/Vehicle/VehicleConstraint.h>
 #include <Jolt/Physics/Vehicle/WheeledVehicleController.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
+#include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Physics/Jolt/Converters.h>
@@ -136,6 +138,16 @@ auto RestoreVehicleConstraintSettings(std::span<const uint8_t> blob)
   return settings;
 }
 
+[[nodiscard]] auto NormalizeOr(
+  const oxygen::Vec3& value, const oxygen::Vec3& fallback) -> oxygen::Vec3
+{
+  const auto len = glm::length(value);
+  if (len <= 1.0e-5F) {
+    return fallback;
+  }
+  return value / len;
+}
+
 [[nodiscard]] auto IsControlInputValid(
   const oxygen::physics::vehicle::VehicleControlInput& input) noexcept -> bool
 {
@@ -237,6 +249,33 @@ auto oxygen::physics::jolt::JoltVehicles::CreateVehicle(const WorldId world_id,
 
   settings->mUp = ToJoltVec3(oxygen::space::move::Up);
   settings->mForward = ToJoltVec3(oxygen::space::move::Forward);
+
+  const auto engine_up
+    = NormalizeOr(oxygen::space::move::Up, oxygen::Vec3 { 0.0F, 0.0F, 1.0F });
+  const auto engine_down = -engine_up;
+  const auto engine_forward = NormalizeOr(
+    oxygen::space::move::Forward, oxygen::Vec3 { 0.0F, -1.0F, 0.0F });
+
+  for (size_t i = 0; i < settings->mWheels.size(); ++i) {
+    auto* const wheel_settings = settings->mWheels[i].GetPtr();
+    if (wheel_settings == nullptr) {
+      return Err(PhysicsError::kInvalidArgument);
+    }
+
+    // Engine contract: Oxygen physics space is Z-up / -Y forward.
+    // Wheel axes are canonicalized here so binary blobs cannot inject a
+    // mismatched basis and silently break traction/contact.
+    wheel_settings->mSuspensionDirection = ToJoltVec3(engine_down);
+    wheel_settings->mSteeringAxis = ToJoltVec3(engine_up);
+    wheel_settings->mWheelUp = ToJoltVec3(engine_up);
+    wheel_settings->mWheelForward = ToJoltVec3(engine_forward);
+    LOG_F(INFO,
+      "JoltVehicles: canonicalized wheel axes to engine basis "
+      "(wheel_index={}, up=[{:.3f},{:.3f},{:.3f}], "
+      "forward=[{:.3f},{:.3f},{:.3f}])",
+      i, engine_up.x, engine_up.y, engine_up.z, engine_forward.x,
+      engine_forward.y, engine_forward.z);
+  }
 
   for (size_t i = 0; i < wheels.size(); ++i) {
     if (settings->mWheels[i] == nullptr) {
