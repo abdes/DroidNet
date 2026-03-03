@@ -1300,6 +1300,7 @@ auto ScriptingModule::RebuildSlotRuntime(const SlotRuntimeKey& key,
   if (state.executable == nullptr) {
     return ErrorResult("slot_binding", "slot has no executable");
   }
+  state.last_known_hash = state.executable->ContentHash();
 
   InitializeInstanceEnvironment(state);
   if (state.instance_env_ref == LUA_NOREF) {
