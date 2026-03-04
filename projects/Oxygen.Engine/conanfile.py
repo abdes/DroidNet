@@ -158,11 +158,6 @@ class OxygenConan(ConanFile):
         except Exception:
             # gtest may not be present in this configuration
             pass
-        try:
-            self.options["catch2"].shared = False
-        except Exception:
-            # catch2 may not be present in this configuration
-            pass
 
         # Enable tinyexr to build with threading and OpenMP support when available
         try:
