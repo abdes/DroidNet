@@ -9,17 +9,6 @@
 
 namespace oxygen::content::import {
 
-auto to_string(AssetKeyPolicy value) -> std::string
-{
-  switch (value) {
-  case AssetKeyPolicy::kDeterministicFromVirtualPath:
-    return "DeterministicFromVirtualPath";
-  case AssetKeyPolicy::kRandom:
-    return "Random";
-  }
-  return "Unknown";
-}
-
 auto to_string(UnitNormalizationPolicy value) -> std::string
 {
   switch (value) {

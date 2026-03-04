@@ -14,7 +14,6 @@
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Uuid.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/IdsBindings.h>
 
@@ -88,7 +87,7 @@ namespace {
 
   auto LuaUuidNew(lua_State* state) -> int
   {
-    PushUuid(state, data::GenerateAssetGuid());
+    PushUuid(state, Uuid::Generate());
     return 1;
   }
 

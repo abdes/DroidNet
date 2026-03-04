@@ -27,7 +27,7 @@
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/AssetKeyUtils.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -472,7 +472,7 @@ NOLINT_TEST(
   const auto submesh_desc
     = ReadStructAt<data::pak::geometry::SubMeshDesc>(descriptor_bytes, offset);
   EXPECT_EQ(submesh_desc.material_asset_key,
-    util::MakeDeterministicAssetKey("/.cooked/Materials/default.omat"));
+    oxygen::data::AssetKey::FromVirtualPath("/.cooked/Materials/default.omat"));
   EXPECT_TRUE(CanParseGeometryDescriptor(descriptor_bytes));
 }
 

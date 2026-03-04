@@ -22,6 +22,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -214,24 +215,11 @@ auto ValidateRelativePath(const std::string_view relpath) -> void
 
 auto ValidateVirtualPath(const std::string_view virtual_path) -> void
 {
-  if (virtual_path.empty()) {
-    throw std::runtime_error("Virtual path must not be empty");
-  }
-  if (virtual_path.contains('\\')) {
-    throw std::runtime_error("Virtual path must use '/' as the separator");
-  }
-  if (virtual_path.front() != '/') {
-    throw std::runtime_error("Virtual path must start with '/'");
-  }
-  if (virtual_path.size() > 1 && virtual_path.back() == '/') {
+  if (const auto error = content::ValidateCanonicalVirtualPath(virtual_path);
+    error.has_value()) {
     throw std::runtime_error(
-      "Virtual path must not end with '/' (except the root)");
+      "Virtual path is not canonical: " + std::string(*error));
   }
-  if (virtual_path.contains("//")) {
-    throw std::runtime_error("Virtual path must not contain '//'");
-  }
-
-  ValidateNoDotSegments(virtual_path, "Virtual path");
 }
 
 auto ValidateFileKind(const FileKind kind) -> void

@@ -13,6 +13,7 @@ namespace {
 
 using oxygen::frame::Slot;
 using oxygen::renderer::testing::GeometryUploaderTest;
+using oxygen::renderer::testing::MakeGeometryAssetKey;
 
 class GeometryUploaderUpdateTest : public GeometryUploaderTest { };
 
@@ -25,7 +26,7 @@ NOLINT_TEST_F(GeometryUploaderUpdateTest,
 
   BeginFrame(Slot { 0 });
   const auto mesh_v1 = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
+  const auto asset_key = MakeGeometryAssetKey("update_dirty_reschedules");
   const oxygen::engine::sceneprep::GeometryRef geometry_v1 {
     .asset_key = asset_key,
     .lod_index = 0U,
@@ -73,12 +74,8 @@ NOLINT_TEST_F(
   BeginFrame(Slot { 0 });
   const auto mesh_a = MakeValidTriangleMesh("MeshA", true);
   const auto mesh_b = MakeValidTriangleMesh("MeshB", true);
-  const oxygen::data::AssetKey asset_key_a {
-    oxygen::data::GenerateAssetGuid()
-  };
-  const oxygen::data::AssetKey asset_key_b {
-    oxygen::data::GenerateAssetGuid()
-  };
+  const auto asset_key_a = MakeGeometryAssetKey("update_debug_assert_a");
+  const auto asset_key_b = MakeGeometryAssetKey("update_debug_assert_b");
   const oxygen::engine::sceneprep::GeometryRef geometry_a {
     .asset_key = asset_key_a,
     .lod_index = 0U,
@@ -108,7 +105,7 @@ NOLINT_TEST_F(GeometryUploaderUpdateTest, UpdateStaleHandleIsRejected)
 
   BeginFrame(Slot { 0 });
   const auto mesh_v1 = MakeValidTriangleMesh("TriV1", true);
-  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
+  const auto asset_key = MakeGeometryAssetKey("update_stale_handle_rejected");
   const oxygen::engine::sceneprep::GeometryRef geometry_v1 {
     .asset_key = asset_key,
     .lod_index = 0U,

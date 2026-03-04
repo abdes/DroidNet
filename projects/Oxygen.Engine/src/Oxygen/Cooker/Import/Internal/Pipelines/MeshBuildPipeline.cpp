@@ -22,7 +22,6 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline_tangents.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/AssetKeyUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -423,14 +422,8 @@ namespace {
   [[nodiscard]] auto ResolveGeometryKey(const ImportRequest& request,
     std::string_view virtual_path) -> data::AssetKey
   {
-    switch (request.options.asset_key_policy) {
-    case AssetKeyPolicy::kRandom:
-      return util::MakeRandomAssetKey();
-    case AssetKeyPolicy::kDeterministicFromVirtualPath:
-      return util::MakeDeterministicAssetKey(virtual_path);
-    }
-
-    return util::MakeDeterministicAssetKey(virtual_path);
+    static_cast<void>(request);
+    return oxygen::data::AssetKey::FromVirtualPath(virtual_path);
   }
 
   auto PopulateVertexDefaults(data::Vertex& vertex) -> void

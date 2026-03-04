@@ -9,6 +9,7 @@
 #include <cstring>
 #include <memory>
 #include <source_location>
+#include <string>
 #include <utility>
 
 #include <glm/gtc/quaternion.hpp>
@@ -79,7 +80,8 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.roughness = d::Unorm16 { 0.6F };
   desc.ambient_occlusion = d::Unorm16 { 1.0F };
   // Leave texture indices invalid (no textures)
-  const d::AssetKey asset_key { d::GenerateAssetGuid() };
+  const d::AssetKey asset_key = d::AssetKey::FromVirtualPath(
+    "/Engine/Examples/InputSystem/Materials/" + std::string(name) + ".omat");
   return std::make_shared<const d::MaterialAsset>(
     asset_key, desc, std::vector<d::ShaderReference> {});
   // NOLINTEND(*-magic-numbers)
@@ -396,7 +398,9 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
       geo_desc.bounding_box_max[2] = bb_max.z;
 
       auto sphere_geo = std::make_shared<oxygen::data::GeometryAsset>(
-        oxygen::data::AssetKey { oxygen::data::GenerateAssetGuid() }, geo_desc,
+        oxygen::data::AssetKey::FromVirtualPath(
+          "/Engine/Examples/InputSystem/Geometry/Sphere.ogeo"),
+        geo_desc,
         std::vector<std::shared_ptr<oxygen::data::Mesh>> { std::move(mesh) });
 
       // Create a node and attach the geometry

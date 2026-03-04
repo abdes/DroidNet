@@ -402,16 +402,6 @@ auto ContentLoaderPanel::DrawImportSettings() -> void
     auto options = vm_->GetImportOptions();
     bool changed = false;
 
-    if (ImGui::TreeNodeEx("Identifiers", ImGuiTreeNodeFlags_DefaultOpen)) {
-      static constexpr std::array kKeyPolicies
-        = { content::import::AssetKeyPolicy::kDeterministicFromVirtualPath,
-            content::import::AssetKeyPolicy::kRandom };
-      if (DrawEnumCombo(
-            "Asset Key Policy", options.asset_key_policy, kKeyPolicies))
-        changed = true;
-      ImGui::TreePop();
-    }
-
     if (ImGui::TreeNodeEx(
           "Content Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
       bool textures = (options.import_content

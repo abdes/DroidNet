@@ -235,14 +235,21 @@ auto WorkDispatcher::EmitGeometryPayload(
 {
   auto& asset_emitter = session_.AssetEmitter();
 
-  const auto emit_start = std::chrono::steady_clock::now();
-  asset_emitter.Emit(cooked.geometry_key, data::AssetType::kGeometry,
-    cooked.virtual_path, cooked.descriptor_relpath,
-    std::vector<std::byte>(
-      finalized_descriptor_bytes.begin(), finalized_descriptor_bytes.end()));
-  const auto emit_end = std::chrono::steady_clock::now();
-  session_.AddEmitDuration(MakeDuration(emit_start, emit_end));
-  return true;
+  try {
+    const auto emit_start = std::chrono::steady_clock::now();
+    asset_emitter.Emit(cooked.geometry_key, data::AssetType::kGeometry,
+      cooked.virtual_path, cooked.descriptor_relpath,
+      std::vector<std::byte>(
+        finalized_descriptor_bytes.begin(), finalized_descriptor_bytes.end()));
+    const auto emit_end = std::chrono::steady_clock::now();
+    session_.AddEmitDuration(MakeDuration(emit_start, emit_end));
+    return true;
+  } catch (const std::exception& ex) {
+    session_.AddDiagnostic(MakeErrorDiagnostic("import.geometry_emit_failed",
+      "Failed to emit geometry descriptor: " + std::string(ex.what()),
+      cooked.virtual_path, cooked.descriptor_relpath));
+    return false;
+  }
 }
 
 auto WorkDispatcher::EmitTexturePayload(TexturePipeline::WorkResult& result)
@@ -409,12 +416,19 @@ auto WorkDispatcher::EmitMaterialPayload(MaterialPipeline::WorkResult result)
 
   auto& cooked = *result.cooked;
   auto& emitter = session_.AssetEmitter();
-  const auto emit_start = std::chrono::steady_clock::now();
-  emitter.Emit(cooked.material_key, data::AssetType::kMaterial,
-    cooked.virtual_path, cooked.descriptor_relpath, cooked.descriptor_bytes);
-  const auto emit_end = std::chrono::steady_clock::now();
-  session_.AddEmitDuration(MakeDuration(emit_start, emit_end));
-  return true;
+  try {
+    const auto emit_start = std::chrono::steady_clock::now();
+    emitter.Emit(cooked.material_key, data::AssetType::kMaterial,
+      cooked.virtual_path, cooked.descriptor_relpath, cooked.descriptor_bytes);
+    const auto emit_end = std::chrono::steady_clock::now();
+    session_.AddEmitDuration(MakeDuration(emit_start, emit_end));
+    return true;
+  } catch (const std::exception& ex) {
+    session_.AddDiagnostic(MakeErrorDiagnostic("import.material_emit_failed",
+      "Failed to emit material descriptor: " + std::string(ex.what()),
+      cooked.virtual_path, cooked.descriptor_relpath));
+    return false;
+  }
 }
 
 auto WorkDispatcher::EmitScenePayload(ScenePipeline::WorkResult result) -> bool
@@ -428,12 +442,19 @@ auto WorkDispatcher::EmitScenePayload(ScenePipeline::WorkResult result) -> bool
 
   auto& cooked = *result.cooked;
   auto& emitter = session_.AssetEmitter();
-  const auto emit_start = std::chrono::steady_clock::now();
-  emitter.Emit(cooked.scene_key, data::AssetType::kScene, cooked.virtual_path,
-    cooked.descriptor_relpath, cooked.descriptor_bytes);
-  const auto emit_end = std::chrono::steady_clock::now();
-  session_.AddEmitDuration(MakeDuration(emit_start, emit_end));
-  return true;
+  try {
+    const auto emit_start = std::chrono::steady_clock::now();
+    emitter.Emit(cooked.scene_key, data::AssetType::kScene, cooked.virtual_path,
+      cooked.descriptor_relpath, cooked.descriptor_bytes);
+    const auto emit_end = std::chrono::steady_clock::now();
+    session_.AddEmitDuration(MakeDuration(emit_start, emit_end));
+    return true;
+  } catch (const std::exception& ex) {
+    session_.AddDiagnostic(MakeErrorDiagnostic("import.scene_emit_failed",
+      "Failed to emit scene descriptor: " + std::string(ex.what()),
+      cooked.virtual_path, cooked.descriptor_relpath));
+    return false;
+  }
 }
 
 auto WorkDispatcher::UpdateMaterialBindings(
@@ -950,18 +971,6 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
   auto resolve_mesh_build_item
     = [&](const MeshBuildPipeline::WorkResult& result)
     -> std::optional<PlanItemId> {
-    if (result.source_key != nullptr) {
-      const auto it = mesh_build_item_ids_by_key.find(result.source_key);
-      if (it != mesh_build_item_ids_by_key.end()) {
-        const auto item_id = it->second;
-        mesh_build_item_ids_by_key.erase(it);
-        if (!result.source_id.empty()) {
-          mesh_build_item_ids_by_source.erase(result.source_id);
-        }
-        return item_id;
-      }
-    }
-
     if (!result.source_id.empty()) {
       const auto it = mesh_build_item_ids_by_source.find(result.source_id);
       if (it != mesh_build_item_ids_by_source.end()) {
@@ -969,6 +978,20 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
         mesh_build_item_ids_by_source.erase(it);
         if (result.source_key != nullptr) {
           mesh_build_item_ids_by_key.erase(result.source_key);
+        }
+        return item_id;
+      }
+    }
+
+    // Source keys can alias across mesh instances that share source geometry.
+    // Prefer source_id (stable per plan item) and only fall back to source_key.
+    if (result.source_key != nullptr) {
+      const auto it = mesh_build_item_ids_by_key.find(result.source_key);
+      if (it != mesh_build_item_ids_by_key.end()) {
+        const auto item_id = it->second;
+        mesh_build_item_ids_by_key.erase(it);
+        if (!result.source_id.empty()) {
+          mesh_build_item_ids_by_source.erase(result.source_id);
         }
         return item_id;
       }

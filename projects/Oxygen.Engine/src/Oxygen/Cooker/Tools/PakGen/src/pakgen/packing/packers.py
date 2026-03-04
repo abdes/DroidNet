@@ -28,6 +28,7 @@ from .constants import (
     RIGID_BODY_BINDING_RECORD_SIZE,
     COLLIDER_BINDING_RECORD_SIZE,
     CHARACTER_BINDING_RECORD_SIZE,
+    SOFT_BODY_BINDING_RECORD_SIZE,
 )
 from .errors import PakError
 from ..utils.io import DataError, read_data_from_spec
@@ -2073,7 +2074,14 @@ def pack_physics_scene_asset_descriptor_and_payload(
     ]
     if soft_body_records:
         blob = b"".join(soft_body_records)
-        tables.append((_PHYSICS_BINDING_SOFT_BODY, len(soft_body_records), 48, blob))
+        tables.append(
+            (
+                _PHYSICS_BINDING_SOFT_BODY,
+                len(soft_body_records),
+                SOFT_BODY_BINDING_RECORD_SIZE,
+                blob,
+            )
+        )
 
     joint_bindings = asset.get("joint_bindings", []) or []
     if not isinstance(joint_bindings, list):
@@ -2298,7 +2306,7 @@ def pack_soft_body_binding_record(
     *,
     node_count: int,
 ) -> bytes:
-    """Pack SoftBodyBindingRecord (48 bytes)."""
+    """Pack SoftBodyBindingRecord (68 bytes)."""
     node_index = int(binding.get("node_index", 0))
     if node_index < 0 or node_index >= node_count:
         raise PakError("E_REF", f"SoftBody node_index out of range: {node_index}")
@@ -2310,15 +2318,37 @@ def pack_soft_body_binding_record(
     bend_comp = float(binding.get("bend_compliance", 1.0))
     tether_mode = int(binding.get("tether_mode", 0))
     tether_max = float(binding.get("tether_max_distance_multiplier", 1.0))
+    jolt_settings_resource_index = int(
+        binding.get("jolt_settings_resource_index", 0xFFFFFFFF)
+    )
+    physx_settings_resource_index = int(
+        binding.get("physx_settings_resource_index", 0xFFFFFFFF)
+    )
+    settings_scale = binding.get("settings_scale", [1.0, 1.0, 1.0])
+    if not isinstance(settings_scale, (list, tuple)) or len(settings_scale) != 3:
+        raise PakError("E_TYPE", "soft_body.settings_scale must be a 3-element list")
+    sx, sy, sz = (float(settings_scale[0]), float(settings_scale[1]), float(settings_scale[2]))
+    restitution = float(binding.get("restitution", 0.0))
+    friction = float(binding.get("friction", 0.2))
+    vertex_radius = float(binding.get("vertex_radius", 0.0))
     reserved0 = b"\x00" * 3
-    reserved1 = b"\x00" * 12
     desc = (
         struct.pack("<IIfffffB", node_index, clusters, stiffness, damping, edge_comp, shear_comp, bend_comp, tether_mode)
         + reserved0
-        + struct.pack("<f", tether_max)
-        + reserved1
+        + struct.pack(
+            "<fII3ffff",
+            tether_max,
+            jolt_settings_resource_index,
+            physx_settings_resource_index,
+            sx,
+            sy,
+            sz,
+            restitution,
+            friction,
+            vertex_radius,
+        )
     )
-    if len(desc) != 48:
+    if len(desc) != SOFT_BODY_BINDING_RECORD_SIZE:
         raise PakError("E_SIZE", f"SoftBodyBindingRecord size mismatch: {len(desc)}")
     return desc
 

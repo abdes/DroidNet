@@ -13,8 +13,8 @@
 using oxygen::data::MaterialAsset;
 namespace {
 
-constexpr auto kDefaultMaterialAssetKey = oxygen::data::AssetKey {
-  oxygen::Uuid { std::array<std::uint8_t, oxygen::Uuid::kSize> {
+constexpr auto kDefaultMaterialAssetKey = oxygen::data::AssetKey::FromBytes(
+  std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {
     0x4d,
     0x41,
     0x54,
@@ -31,11 +31,10 @@ constexpr auto kDefaultMaterialAssetKey = oxygen::data::AssetKey {
     0x5f,
     0x5f,
     0x5f,
-  } }
-};
+  });
 
-constexpr auto kDebugMaterialAssetKey = oxygen::data::AssetKey { oxygen::Uuid {
-  std::array<std::uint8_t, oxygen::Uuid::kSize> {
+constexpr auto kDebugMaterialAssetKey = oxygen::data::AssetKey::FromBytes(
+  std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {
     0x4d,
     0x41,
     0x54,
@@ -52,7 +51,7 @@ constexpr auto kDebugMaterialAssetKey = oxygen::data::AssetKey { oxygen::Uuid {
     0x5f,
     0x5f,
     0x5f,
-  } } };
+  });
 
 } // namespace
 

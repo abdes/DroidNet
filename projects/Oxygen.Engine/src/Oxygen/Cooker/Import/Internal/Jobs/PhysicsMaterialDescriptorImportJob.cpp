@@ -20,10 +20,10 @@
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/PhysicsMaterialDescriptorImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/PhysicsMaterialImportPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/AssetKeyUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 
 namespace oxygen::content::import::detail {
@@ -163,13 +163,8 @@ namespace {
   [[nodiscard]] auto ResolveAssetKey(const ImportRequest& request,
     std::string_view virtual_path) -> data::AssetKey
   {
-    switch (request.options.asset_key_policy) {
-    case AssetKeyPolicy::kRandom:
-      return util::MakeRandomAssetKey();
-    case AssetKeyPolicy::kDeterministicFromVirtualPath:
-      return util::MakeDeterministicAssetKey(virtual_path);
-    }
-    return util::MakeDeterministicAssetKey(virtual_path);
+    static_cast<void>(request);
+    return oxygen::data::AssetKey::FromVirtualPath(virtual_path);
   }
 
 } // namespace

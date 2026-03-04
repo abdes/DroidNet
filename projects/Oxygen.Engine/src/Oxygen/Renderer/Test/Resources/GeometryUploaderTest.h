@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
@@ -28,6 +29,13 @@
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
 namespace oxygen::renderer::testing {
+
+[[nodiscard]] inline auto MakeGeometryAssetKey(std::string_view token)
+  -> data::AssetKey
+{
+  return data::AssetKey::FromVirtualPath(
+    "/Engine/Tests/Renderer/GeometryUploader/" + std::string(token) + ".ogeo");
+}
 
 //! Minimal asset loader fake that supports eviction subscriptions.
 class FakeAssetLoader final : public content::IAssetLoader {

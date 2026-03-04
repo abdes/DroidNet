@@ -37,7 +37,6 @@
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SidecarSceneResolver.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/AssetKeyUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
@@ -46,6 +45,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/MemoryStream.h>
@@ -1609,7 +1609,7 @@ namespace {
     }
 
     const auto sidecar_key
-      = util::MakeDeterministicAssetKey(sidecar_virtual_path);
+      = oxygen::data::AssetKey::FromVirtualPath(sidecar_virtual_path);
     try {
       session.AssetEmitter().Emit(sidecar_key, data::AssetType::kPhysicsScene,
         sidecar_virtual_path, sidecar_relpath,

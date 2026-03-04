@@ -483,20 +483,22 @@ auto FbxImportJob::ExecutePlan(PlannedFbxImport& plan, ImportSession& session)
   -> co::Co<bool>
 {
   bool success = false;
+  std::optional<WorkDispatcher::ProgressReporter> progress;
+  if (ProgressCallback()) {
+    progress = WorkDispatcher::ProgressReporter {
+      .job_id = JobId(),
+      .on_progress = ProgressCallback(),
+      .overall_start = 0.2f,
+      .overall_end = 0.9f,
+    };
+  }
+  // Keep dispatcher alive for the whole nursery lifetime. Locals declared
+  // inside OXCO_WITH_NURSERY can be destroyed before child tasks finish.
+  WorkDispatcher dispatcher(
+    session, ThreadPool(), Concurrency(), StopToken(), std::move(progress));
 
   OXCO_WITH_NURSERY(n)
   {
-    std::optional<WorkDispatcher::ProgressReporter> progress;
-    if (ProgressCallback()) {
-      progress = WorkDispatcher::ProgressReporter {
-        .job_id = JobId(),
-        .on_progress = ProgressCallback(),
-        .overall_start = 0.2f,
-        .overall_end = 0.9f,
-      };
-    }
-    WorkDispatcher dispatcher(
-      session, ThreadPool(), Concurrency(), StopToken(), std::move(progress));
     WorkDispatcher::PlanContext context {
       .planner = plan.planner,
       .payloads = plan.payloads,
@@ -506,10 +508,10 @@ auto FbxImportJob::ExecutePlan(PlannedFbxImport& plan, ImportSession& session)
     };
 
     success = co_await dispatcher.Run(context, n);
-    if (success) {
-      co_return co::kJoin;
-    }
-    co_return co::kCancel;
+    // Always join: WorkDispatcher owns pipeline shutdown/drain and returns once
+    // it has reached a terminal state. Forcing nursery cancellation here can
+    // interrupt in-flight pipeline tasks during teardown.
+    co_return co::kJoin;
   };
 
   co_return success;

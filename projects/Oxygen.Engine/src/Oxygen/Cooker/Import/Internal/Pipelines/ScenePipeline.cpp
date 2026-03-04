@@ -19,9 +19,9 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/AssetKeyUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/MemoryStream.h>
@@ -97,16 +97,10 @@ namespace {
     };
   }
 
-  [[nodiscard]] auto BuildSceneAssetKey(
-    const std::string_view virtual_path, AssetKeyPolicy policy) -> AssetKey
+  [[nodiscard]] auto BuildSceneAssetKey(const std::string_view virtual_path)
+    -> AssetKey
   {
-    switch (policy) {
-    case AssetKeyPolicy::kDeterministicFromVirtualPath:
-      return util::MakeDeterministicAssetKey(virtual_path);
-    case AssetKeyPolicy::kRandom:
-      return util::MakeRandomAssetKey();
-    }
-    return util::MakeDeterministicAssetKey(virtual_path);
+    return oxygen::data::AssetKey::FromVirtualPath(virtual_path);
   }
 
   auto SortSceneComponents(SceneBuild& build) -> void
@@ -522,8 +516,7 @@ auto ScenePipeline::Worker() -> co::Co<>
         const auto scene_name = item.request.GetSceneName();
         const auto virtual_path
           = item.request.loose_cooked_layout.SceneVirtualPath(scene_name);
-        const auto scene_key = BuildSceneAssetKey(
-          virtual_path, item.request.options.asset_key_policy);
+        const auto scene_key = BuildSceneAssetKey(virtual_path);
 
         outcome
           = SerializeScene(scene_name, scene_key, stage_outcome.result.build,
@@ -576,8 +569,7 @@ auto ScenePipeline::Worker() -> co::Co<>
         = item.request.loose_cooked_layout.SceneDescriptorRelPath(scene_name);
 
       result.cooked = CookedScenePayload {
-        .scene_key = BuildSceneAssetKey(
-          virtual_path, item.request.options.asset_key_policy),
+        .scene_key = BuildSceneAssetKey(virtual_path),
         .virtual_path = virtual_path,
         .descriptor_relpath = relpath,
         .descriptor_bytes = std::move(outcome.bytes),

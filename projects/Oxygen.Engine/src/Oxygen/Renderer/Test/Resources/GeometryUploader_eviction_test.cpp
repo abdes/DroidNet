@@ -16,6 +16,7 @@ using oxygen::content::EvictionReason;
 using oxygen::frame::Slot;
 using oxygen::renderer::internal::RendererTagFactory;
 using oxygen::renderer::testing::GeometryUploaderTest;
+using oxygen::renderer::testing::MakeGeometryAssetKey;
 
 class GeometryUploaderEvictionTest : public GeometryUploaderTest { };
 
@@ -28,7 +29,7 @@ NOLINT_TEST_F(GeometryUploaderEvictionTest, AssetEvictionInvalidatesHandles)
   BeginFrame(Slot { 0 });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
+  const auto asset_key = MakeGeometryAssetKey("eviction_invalidates_handles");
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,
@@ -62,7 +63,7 @@ NOLINT_TEST_F(GeometryUploaderEvictionTest, EvictionSuppressesLateCompletion)
   BeginFrame(Slot { 0 });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
+  const auto asset_key = MakeGeometryAssetKey("eviction_suppresses_completion");
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,
@@ -96,7 +97,7 @@ NOLINT_TEST_F(GeometryUploaderEvictionTest, AssetEvictionInvalidatesAllLods)
 
   BeginFrame(Slot { 0 });
 
-  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
+  const auto asset_key = MakeGeometryAssetKey("eviction_invalidates_all_lods");
   const auto mesh_lod0 = MakeValidTriangleMesh("TriLod0", true);
   const auto mesh_lod1 = MakeValidTriangleMesh("TriLod1", true);
 
@@ -141,7 +142,7 @@ NOLINT_TEST_F(GeometryUploaderEvictionTest, EvictionThenReloadPublishes)
   BeginFrame(Slot { 0 });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
+  const auto asset_key = MakeGeometryAssetKey("eviction_then_reload");
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,

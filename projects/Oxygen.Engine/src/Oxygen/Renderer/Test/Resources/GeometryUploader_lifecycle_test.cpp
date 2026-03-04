@@ -13,6 +13,7 @@ namespace {
 
 using oxygen::frame::Slot;
 using oxygen::renderer::testing::GeometryUploaderTest;
+using oxygen::renderer::testing::MakeGeometryAssetKey;
 
 class GeometryUploaderLifecycleTest : public GeometryUploaderTest { };
 
@@ -25,7 +26,7 @@ NOLINT_TEST_F(
   BeginFrame(Slot { 0 });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
+  const auto asset_key = MakeGeometryAssetKey("lifecycle_idempotent_within");
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,
@@ -52,7 +53,7 @@ NOLINT_TEST_F(
   BeginFrame(Slot { 0 });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
+  const auto asset_key = MakeGeometryAssetKey("lifecycle_auto_ensure_once");
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,
@@ -79,7 +80,7 @@ NOLINT_TEST_F(
   auto& uploader = GeoUploader();
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
+  const auto asset_key = MakeGeometryAssetKey("lifecycle_stable_no_reupload");
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <optional>
 #include <string>
@@ -24,6 +25,44 @@ namespace oxygen::scripting::bindings {
 
 namespace {
   using MeshData = std::pair<std::vector<data::Vertex>, std::vector<uint32_t>>;
+
+  auto SanitizeTokenSegment(std::string_view token) -> std::string
+  {
+    auto segment = std::string {};
+    segment.reserve(token.size());
+    for (const auto ch : token) {
+      if (std::isalnum(static_cast<unsigned char>(ch)) != 0 || ch == '_'
+        || ch == '-') {
+        segment.push_back(ch);
+      } else {
+        segment.push_back('_');
+      }
+    }
+    if (segment.empty()) {
+      segment = "unnamed";
+    }
+    return segment;
+  }
+
+  auto MakeProceduralGeometryKey(std::string_view name) -> data::AssetKey
+  {
+    const auto key_path = "/Engine/Scripting/Procedural/Geometry/"
+      + SanitizeTokenSegment(name) + ".ogeo";
+    return data::AssetKey::FromVirtualPath(key_path);
+  }
+
+  auto MakeBaseColorMaterialKey(const float r, const float g, const float b,
+    const float a) -> data::AssetKey
+  {
+    const auto ToChannel = [](const float value) {
+      return static_cast<int>(std::clamp(value, 0.0F, 1.0F) * 255.0F + 0.5F);
+    };
+    const auto key_path = "/Engine/Scripting/Procedural/Materials/BaseColor_"
+      + std::to_string(ToChannel(r)) + "_" + std::to_string(ToChannel(g)) + "_"
+      + std::to_string(ToChannel(b)) + "_" + std::to_string(ToChannel(a))
+      + ".omat";
+    return data::AssetKey::FromVirtualPath(key_path);
+  }
 
   auto ReadOptionalUInt(lua_State* state, const int table_index,
     const char* field, const unsigned int fallback_value) -> unsigned int
@@ -121,7 +160,7 @@ namespace {
     desc.bounding_box_max[1] = bbox_max.y;
     desc.bounding_box_max[2] = bbox_max.z;
 
-    data::AssetKey key { data::GenerateAssetGuid() };
+    const auto key = MakeProceduralGeometryKey(name);
     std::vector<std::shared_ptr<data::Mesh>> lods;
     lods.emplace_back(std::shared_ptr<data::Mesh>(std::move(mesh)));
     return std::make_shared<data::GeometryAsset>(key, desc, std::move(lods));
@@ -257,7 +296,8 @@ namespace {
     desc.roughness = data::Unorm16 { 0.5F }; // NOLINT(*-magic-numbers)
     desc.ambient_occlusion = data::Unorm16 { 1.0F };
 
-    data::AssetKey key { data::GenerateAssetGuid() };
+    const auto key = MakeBaseColorMaterialKey(desc.base_color[0],
+      desc.base_color[1], desc.base_color[2], desc.base_color[3]);
     auto material = std::make_shared<const data::MaterialAsset>(key, desc);
     return PushMaterialAsset(state, std::move(material));
   }

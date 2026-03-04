@@ -37,6 +37,7 @@ using oxygen::graphics::SingleQueueStrategy;
 using oxygen::renderer::internal::RendererTagFactory;
 using oxygen::renderer::resources::GeometryUploader;
 using oxygen::renderer::testing::GeometryUploaderTest;
+using oxygen::renderer::testing::MakeGeometryAssetKey;
 
 [[nodiscard]] auto MakeValidTriangleMesh(std::string_view name, bool indexed)
   -> std::shared_ptr<const oxygen::data::Mesh>
@@ -103,7 +104,7 @@ NOLINT_TEST_F(
   BeginFrame(Slot { 0 });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
+  const auto asset_key = MakeGeometryAssetKey("failures_not_resident_indices");
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,
@@ -172,7 +173,8 @@ NOLINT_TEST(GeometryUploaderFailuresStandaloneTest,
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
 
-  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
+  const auto asset_key
+    = MakeGeometryAssetKey("failures_submission_failure_indices");
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,
@@ -203,7 +205,8 @@ NOLINT_TEST_F(
   BeginFrame(Slot { 0 });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
+  const auto asset_key
+    = MakeGeometryAssetKey("failures_completion_failure_indices");
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,

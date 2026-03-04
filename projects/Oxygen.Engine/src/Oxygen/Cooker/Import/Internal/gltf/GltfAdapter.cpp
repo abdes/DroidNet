@@ -26,12 +26,12 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/AssetKeyUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/cgltf.h>
 #include <Oxygen/Cooker/Import/TextureImportPresets.h>
 #include <Oxygen/Core/Transforms/Decompose.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
 
 namespace oxygen::content::import::adapters {
@@ -860,7 +860,7 @@ namespace {
   [[nodiscard]] auto MakeNodeKey(const std::string_view node_virtual_path)
     -> data::AssetKey
   {
-    return util::MakeDeterministicAssetKey(node_virtual_path);
+    return oxygen::data::AssetKey::FromVirtualPath(node_virtual_path);
   }
 
   [[nodiscard]] auto GltfToOxygenBasis() -> glm::mat4

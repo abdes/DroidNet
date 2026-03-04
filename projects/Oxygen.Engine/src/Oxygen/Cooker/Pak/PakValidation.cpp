@@ -20,6 +20,7 @@
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Pak/PakValidation.h>
 
 namespace {
@@ -110,32 +111,7 @@ auto MakeAssetTypeName(const data::AssetType asset_type) -> std::string
 
 auto IsCanonicalVirtualPath(const std::string_view path) -> bool
 {
-  if (path.empty() || path.front() != '/') {
-    return false;
-  }
-  if (path.find('\\') != std::string_view::npos
-    || path.find("//") != std::string_view::npos) {
-    return false;
-  }
-
-  size_t segment_start = 1;
-  while (segment_start <= path.size()) {
-    const auto slash = path.find('/', segment_start);
-    const auto segment_end
-      = slash == std::string_view::npos ? path.size() : slash;
-    const auto segment
-      = path.substr(segment_start, segment_end - segment_start);
-    if (segment == "." || segment == "..") {
-      return false;
-    }
-
-    if (slash == std::string_view::npos) {
-      break;
-    }
-    segment_start = slash + 1;
-  }
-
-  return true;
+  return oxygen::content::IsCanonicalVirtualPath(path);
 }
 
 auto MakePatchActionSet(

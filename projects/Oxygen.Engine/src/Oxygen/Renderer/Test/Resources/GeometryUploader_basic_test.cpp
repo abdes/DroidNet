@@ -18,6 +18,7 @@ using oxygen::kInvalidShaderVisibleIndex;
 using oxygen::engine::sceneprep::kInvalidGeometryHandle;
 using oxygen::renderer::resources::GeometryUploader;
 using oxygen::renderer::testing::GeometryUploaderTest;
+using oxygen::renderer::testing::MakeGeometryAssetKey;
 
 class GeometryUploaderBasicTest : public GeometryUploaderTest { };
 
@@ -42,7 +43,7 @@ NOLINT_TEST_F(
   BeginFrame(oxygen::frame::Slot { 0 });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
+  const auto asset_key = MakeGeometryAssetKey("basic_valid_handle");
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,
@@ -65,7 +66,7 @@ NOLINT_TEST_F(
   BeginFrame(oxygen::frame::Slot { 0 });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
+  const auto asset_key = MakeGeometryAssetKey("basic_same_identity");
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,
@@ -90,12 +91,8 @@ NOLINT_TEST_F(GeometryUploaderBasicTest,
 
   const auto mesh_a = MakeValidTriangleMesh("TriA", true);
   const auto mesh_b = MakeValidTriangleMesh("TriB", true);
-  const oxygen::data::AssetKey asset_key_a {
-    oxygen::data::GenerateAssetGuid()
-  };
-  const oxygen::data::AssetKey asset_key_b {
-    oxygen::data::GenerateAssetGuid()
-  };
+  const auto asset_key_a = MakeGeometryAssetKey("basic_different_identity_a");
+  const auto asset_key_b = MakeGeometryAssetKey("basic_different_identity_b");
   const oxygen::engine::sceneprep::GeometryRef geometry_a {
     .asset_key = asset_key_a,
     .lod_index = 0U,
@@ -124,7 +121,7 @@ NOLINT_TEST_F(
   BeginFrame(oxygen::frame::Slot { 0 });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
+  const auto asset_key = MakeGeometryAssetKey("basic_criticality_upgrade");
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,
@@ -165,7 +162,7 @@ NOLINT_TEST_F(GeometryUploaderBasicTest,
   BeginFrame(oxygen::frame::Slot { 0 });
 
   const auto mesh = MakeInvalidMesh_NoVertices("Bad");
-  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
+  const auto asset_key = MakeGeometryAssetKey("basic_invalid_mesh");
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,
