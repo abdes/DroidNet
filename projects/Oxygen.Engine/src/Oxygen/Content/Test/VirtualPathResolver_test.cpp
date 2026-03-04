@@ -249,6 +249,52 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyInvalidVirtualPathThrows)
     std::invalid_argument);
 }
 
+//! Test: Resolver accepts canonical paths from the phase-1 spec and rejects
+//! invalid forms.
+/*!
+ Scenario: No mounts are needed; we validate canonical path parsing
+ * behavior.
+*/
+NOLINT_TEST(VirtualPathResolverTest, CanonicalPathValidationMatrixFromSpec)
+{
+  oxygen::content::VirtualPathResolver resolver;
+
+  constexpr auto kValidPaths = std::array<std::string_view, 9> {
+    "/Game/Physics/Materials/Rubber.opmat", "/Game/Physics/Materials/Ice.opmat",
+    "/Game/Physics/Shapes/BoulderConvexHull.ocshape",
+    "/Game/Physics/Vehicles/Wheeled/SportsCar.opscene",
+    "/Game/World/Scenes/Showcase.oscene", "/Game/World/Scenes/Showcase.opscene",
+    "/Engine/Physics/Materials/Default.opmat",
+    "/Pak/DLC01/Game/Physics/Materials/Lava.opmat",
+    "/.cooked/Physics/Materials/Rubber.opmat"
+  };
+
+  for (const auto path : kValidPaths) {
+    EXPECT_NO_THROW({
+      const auto resolved = resolver.ResolveAssetKey(path);
+      EXPECT_FALSE(resolved.has_value());
+    }) << path;
+  }
+
+  constexpr auto kInvalidPaths
+    = std::array<std::string_view, 12> { "/game/Physics/Materials/Rubber.opmat",
+        "Physics/Materials/Rubber.opmat",
+        "/Game/Physics/Materials/Rubber.opmat/",
+        "/Game/Physics//Materials/Rubber.opmat",
+        "/Game/Physics/Materials/../Rubber.opmat",
+        "/Game/Physics/Materials/my rubber.opmat",
+        "/Game/Physics.Materials/Rubber.opmat",
+        "/Game/Physics/Materials/Rubber", "/Game/Physics/Materials/.Rubber",
+        "/Pak/DLC.01/Game/Physics/Materials/Lava.opmat",
+        "/Custom/Physics/Materials/Rubber.opmat", "/Pak" };
+
+  for (const auto path : kInvalidPaths) {
+    EXPECT_THROW(
+      { (void)resolver.ResolveAssetKey(path); }, std::invalid_argument)
+      << path;
+  }
+}
+
 //! Test: Resolver can resolve virtual paths using mounted pak browse index.
 /*!
  Scenario: Creates a `.pak` with an embedded browse index and resolves a known

@@ -5,7 +5,11 @@
 //===----------------------------------------------------------------------===//
 
 // Standard library
+#include <algorithm>
+#include <array>
+#include <string_view>
 #include <unordered_set>
+#include <vector>
 
 // GTest
 #include <Oxygen/Testing/GTest.h>
@@ -14,94 +18,58 @@
 #include <Oxygen/Data/AssetKey.h>
 
 using oxygen::data::AssetKey;
-using oxygen::data::GenerateAssetGuid;
 using oxygen::data::to_string;
 
 namespace {
-//! Basic tests for AssetKey uniqueness, string and hash stability.
+
+//! Basic tests for deterministic AssetKey generation from virtual paths.
 class AssetKeyBasicTest : public testing::Test { };
 
-NOLINT_TEST_F(AssetKeyBasicTest, GenerateDistinct_StableStringHash)
+NOLINT_TEST_F(AssetKeyBasicTest, CanonicalVirtualPathDeterministic)
 {
-  // Arrange
-  constexpr int kKeyCount = 32; // Enough to reduce collision probability
-  std::vector<AssetKey> keys;
-  keys.reserve(kKeyCount);
-  std::unordered_set<std::string> string_reprs; // uniqueness by string
-  std::unordered_set<size_t> hash_values; // uniqueness by hash
-  std::unordered_set<AssetKey> key_set; // relies on operator<=> + hash
+  constexpr auto kPath
+    = std::string_view("/Game/Physics/Materials/Rubber.opmat");
 
-  // Act
-  for (int i = 0; i < kKeyCount; ++i) {
-    AssetKey key { GenerateAssetGuid() };
-    keys.push_back(key);
-    auto s = to_string(key);
+  const auto key0 = AssetKey::FromVirtualPath(kPath);
+  const auto key1 = AssetKey::FromVirtualPath(kPath);
 
-    // Basic shape: 36 chars (8-4-4-4-12) with hyphens at fixed positions.
-    ASSERT_EQ(s.size(), 36u) << "UUID string should be 36 chars";
-    ASSERT_EQ(s[8], '-') << "Hyphen at pos 8";
-    ASSERT_EQ(s[13], '-') << "Hyphen at pos 13";
-    ASSERT_EQ(s[18], '-') << "Hyphen at pos 18";
-    ASSERT_EQ(s[23], '-') << "Hyphen at pos 23";
-
-    string_reprs.insert(s);
-    hash_values.insert(std::hash<AssetKey> {}(key));
-    key_set.insert(key);
-  }
-
-  // Assert
-  EXPECT_EQ(string_reprs.size(), keys.size())
-    << "All generated keys should have distinct string representations.";
-  EXPECT_EQ(hash_values.size(), keys.size())
-    << "All generated keys should have distinct hash values (very low "
-       "collision probability).";
-  EXPECT_EQ(key_set.size(), keys.size())
-    << "All generated keys should be distinct as values.";
-
-  // Stability: recompute string + hash for same keys and ensure unchanged.
-  for (const auto& key : keys) {
-    auto s1 = to_string(key);
-    auto h1 = std::hash<AssetKey> {}(key);
-    auto s2 = to_string(key);
-    auto h2 = std::hash<AssetKey> {}(key);
-    EXPECT_EQ(s1, s2) << "to_string must be deterministic.";
-    EXPECT_EQ(h1, h2) << "hash must be deterministic.";
-  }
+  EXPECT_EQ(key0, key1);
+  EXPECT_EQ(to_string(key0), to_string(key1));
+  EXPECT_EQ(std::hash<AssetKey> {}(key0), std::hash<AssetKey> {}(key1));
 }
 
-//! Tests that AssetKey ordering matches lexical order of their string
-//! representations.
+//! Tests different canonical paths map to different keys.
 class AssetKeyOrderingTest : public testing::Test { };
 
-NOLINT_TEST_F(AssetKeyOrderingTest, LexicalOrderConsistentWithGuid)
+NOLINT_TEST_F(AssetKeyOrderingTest, DifferentCanonicalPathsProduceDistinctKeys)
 {
-  // Arrange
-  constexpr int kKeyCount = 32;
-  std::vector<AssetKey> keys;
-  keys.reserve(kKeyCount);
-  for (int i = 0; i < kKeyCount; ++i) {
-    keys.push_back(AssetKey { GenerateAssetGuid() });
+  constexpr auto kPaths = std::array<std::string_view, 6> {
+    "/Game/Physics/Materials/Rubber.opmat",
+    "/Game/Physics/Materials/Ice.opmat",
+    "/Game/Physics/Shapes/BoulderConvexHull.ocshape",
+    "/Engine/Physics/Materials/Default.opmat",
+    "/Pak/DLC01/Game/Physics/Materials/Lava.opmat",
+    "/.cooked/Physics/Materials/Rubber.opmat",
+  };
+
+  auto keys = std::vector<AssetKey> {};
+  keys.reserve(kPaths.size());
+  for (const auto path : kPaths) {
+    keys.push_back(AssetKey::FromVirtualPath(path));
   }
 
-  // Act: sort by AssetKey ordering
-  std::vector<AssetKey> sorted_keys = keys;
-  std::sort(sorted_keys.begin(), sorted_keys.end());
-
-  // Get string representations in sorted order
-  std::vector<std::string> sorted_strings;
-  for (const auto& k : sorted_keys) {
-    sorted_strings.push_back(to_string(k));
+  auto unique_keys = std::unordered_set<AssetKey> {};
+  auto unique_hashes = std::unordered_set<size_t> {};
+  auto unique_text = std::unordered_set<std::string> {};
+  for (const auto& key : keys) {
+    unique_keys.insert(key);
+    unique_hashes.insert(std::hash<AssetKey> {}(key));
+    unique_text.insert(to_string(key));
   }
 
-  // Copy and sort the string representations lexicographically
-  std::vector<std::string> lex_sorted = sorted_strings;
-  std::sort(lex_sorted.begin(), lex_sorted.end());
-
-  // Assert: the order of string representations matches the order of sorted
-  // AssetKeys
-  EXPECT_EQ(sorted_strings, lex_sorted)
-    << "AssetKey ordering must match lexical order of to_string "
-       "representation.";
+  EXPECT_EQ(unique_keys.size(), keys.size());
+  EXPECT_EQ(unique_hashes.size(), keys.size());
+  EXPECT_EQ(unique_text.size(), keys.size());
 }
 
 } // namespace

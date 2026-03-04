@@ -23,9 +23,9 @@
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptAssetImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptImportPipelineCommon.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/AssetKeyUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -111,15 +111,8 @@ namespace {
     const auto virtual_path
       = request.loose_cooked_layout.ScriptVirtualPath(script_name);
 
-    const auto key = [&]() -> data::AssetKey {
-      switch (request.options.asset_key_policy) {
-      case AssetKeyPolicy::kRandom:
-        return util::MakeRandomAssetKey();
-      case AssetKeyPolicy::kDeterministicFromVirtualPath:
-        return util::MakeDeterministicAssetKey(virtual_path);
-      }
-      return util::MakeDeterministicAssetKey(virtual_path);
-    }();
+    static_cast<void>(request);
+    const auto key = oxygen::data::AssetKey::FromVirtualPath(virtual_path);
 
     auto descriptor = ScriptAssetDesc {};
     descriptor.header.asset_type = static_cast<uint8_t>(AssetType::kScript);

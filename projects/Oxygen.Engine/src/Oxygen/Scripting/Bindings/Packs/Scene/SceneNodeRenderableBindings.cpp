@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cctype>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -33,6 +34,38 @@ namespace oxygen::scripting::bindings {
 
 namespace {
   using MeshData = std::pair<std::vector<data::Vertex>, std::vector<uint32_t>>;
+
+  auto SanitizeTokenSegment(std::string_view token) -> std::string
+  {
+    auto segment = std::string {};
+    segment.reserve(token.size());
+    for (const auto ch : token) {
+      if (std::isalnum(static_cast<unsigned char>(ch)) != 0 || ch == '_'
+        || ch == '-') {
+        segment.push_back(ch);
+      } else {
+        segment.push_back('_');
+      }
+    }
+    if (segment.empty()) {
+      segment = "unnamed";
+    }
+    return segment;
+  }
+
+  auto MakeProceduralGeometryKey(std::string_view token) -> data::AssetKey
+  {
+    const auto key_path = "/Engine/Scripting/Procedural/Geometry/"
+      + SanitizeTokenSegment(token) + ".ogeo";
+    return data::AssetKey::FromVirtualPath(key_path);
+  }
+
+  auto MakeProceduralMaterialKey(std::string_view token) -> data::AssetKey
+  {
+    const auto key_path = "/Engine/Scripting/Procedural/Materials/"
+      + SanitizeTokenSegment(token) + ".omat";
+    return data::AssetKey::FromVirtualPath(key_path);
+  }
 
   auto BuildGeometryAssetFromMeshData(const std::string& token, MeshData data)
     -> std::shared_ptr<const data::GeometryAsset>
@@ -77,7 +110,7 @@ namespace {
     desc.bounding_box_max[1] = bbox_max.y;
     desc.bounding_box_max[2] = bbox_max.z;
 
-    data::AssetKey key { data::GenerateAssetGuid() };
+    const auto key = MakeProceduralGeometryKey(token);
     std::vector<std::shared_ptr<data::Mesh>> lods;
     lods.emplace_back(std::shared_ptr<data::Mesh>(std::move(mesh)));
     return std::make_shared<const data::GeometryAsset>(
@@ -182,8 +215,7 @@ namespace {
     desc.metalness = data::Unorm16 { 0.0F };
     desc.roughness = data::Unorm16 { 0.5F }; // NOLINT(*-magic-numbers)
     desc.ambient_occlusion = data::Unorm16 { 1.0F };
-    data::AssetKey key { data::GenerateAssetGuid() };
-    (void)token;
+    const auto key = MakeProceduralMaterialKey(token);
     return std::make_shared<const data::MaterialAsset>(key, desc);
   }
 

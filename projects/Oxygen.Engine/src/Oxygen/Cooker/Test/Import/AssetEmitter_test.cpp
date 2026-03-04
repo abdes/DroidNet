@@ -30,13 +30,13 @@ namespace {
 //! Create a test AssetKey with a sequential ID.
 auto MakeAssetKey(uint32_t id) -> AssetKey
 {
-  std::array<uint8_t, 16> guid {};
+  std::array<uint8_t, 16> key_bytes {};
   // Put the ID in the first 4 bytes for easy identification
-  guid[0] = static_cast<uint8_t>((id >> 24) & 0xFF);
-  guid[1] = static_cast<uint8_t>((id >> 16) & 0xFF);
-  guid[2] = static_cast<uint8_t>((id >> 8) & 0xFF);
-  guid[3] = static_cast<uint8_t>(id & 0xFF);
-  return AssetKey { guid };
+  key_bytes[0] = static_cast<uint8_t>((id >> 24) & 0xFF);
+  key_bytes[1] = static_cast<uint8_t>((id >> 16) & 0xFF);
+  key_bytes[2] = static_cast<uint8_t>((id >> 8) & 0xFF);
+  key_bytes[3] = static_cast<uint8_t>(id & 0xFF);
+  return AssetKey::FromBytes(key_bytes);
 }
 
 //! Create test descriptor bytes with recognizable content.
@@ -111,7 +111,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitSingleMaterialCreatesFile)
 
   // Act
   co::Run(*loop_, [&]() -> Co<> {
-    emitter.Emit(key, AssetType::kMaterial, "/.cooked/Materials/Wood",
+    emitter.Emit(key, AssetType::kMaterial, "/.cooked/Materials/Wood.omat",
       "Materials/Wood.omat", bytes);
     co_await emitter.Finalize();
   });
@@ -131,15 +131,16 @@ NOLINT_TEST_F(AssetEmitterTest, EmitMultipleAssetsCreatesAllFiles)
   // Act
   co::Run(*loop_, [&]() -> Co<> {
     emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
-      "/.cooked/Materials/Wood", "Materials/Wood.omat",
+      "/.cooked/Materials/Wood.omat", "Materials/Wood.omat",
       MakeDescriptorBytes("wood-material"));
 
     emitter.Emit(MakeAssetKey(2), AssetType::kGeometry,
-      "/.cooked/Geometry/Cube", "Geometry/Cube.ogeo",
+      "/.cooked/Geometry/Cube.ogeo", "Geometry/Cube.ogeo",
       MakeDescriptorBytes("cube-geometry"));
 
-    emitter.Emit(MakeAssetKey(3), AssetType::kScene, "/.cooked/Scenes/Level1",
-      "Scenes/Level1.oscene", MakeDescriptorBytes("level1-scene"));
+    emitter.Emit(MakeAssetKey(3), AssetType::kScene,
+      "/.cooked/Scenes/Level1.oscene", "Scenes/Level1.oscene",
+      MakeDescriptorBytes("level1-scene"));
 
     co_await emitter.Finalize();
   });
@@ -166,7 +167,7 @@ NOLINT_TEST_F(AssetEmitterTest, CountTracksEmittedAssets)
   co::Run(*loop_, [&]() -> Co<> {
     for (uint32_t i = 1; i <= 5; ++i) {
       emitter.Emit(MakeAssetKey(i), AssetType::kMaterial,
-        "/.cooked/Materials/Mat" + std::to_string(i),
+        "/.cooked/Materials/Mat" + std::to_string(i) + ".omat",
         "Materials/Mat" + std::to_string(i) + ".omat",
         MakeDescriptorBytes("mat-" + std::to_string(i)));
       EXPECT_EQ(emitter.Count(), i);
@@ -192,7 +193,7 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsContainsCorrectMetadata)
 
   // Act
   co::Run(*loop_, [&]() -> Co<> {
-    emitter.Emit(key, AssetType::kGeometry, "/.cooked/Geometry/MyMesh",
+    emitter.Emit(key, AssetType::kGeometry, "/.cooked/Geometry/MyMesh.ogeo",
       "Geometry/MyMesh.ogeo", bytes);
     co_await emitter.Finalize();
   });
@@ -203,7 +204,7 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsContainsCorrectMetadata)
 
   EXPECT_EQ(records[0].key, key);
   EXPECT_EQ(records[0].asset_type, AssetType::kGeometry);
-  EXPECT_EQ(records[0].virtual_path, "/.cooked/Geometry/MyMesh");
+  EXPECT_EQ(records[0].virtual_path, "/.cooked/Geometry/MyMesh.ogeo");
   EXPECT_EQ(records[0].descriptor_relpath, "Geometry/MyMesh.ogeo");
   EXPECT_EQ(records[0].descriptor_size, static_cast<uint64_t>(bytes.size()));
 }
@@ -220,9 +221,9 @@ NOLINT_TEST_F(AssetEmitterTest, EmitSameKeyTwiceUpdatesRecordAndOverwrites)
 
   // Act
   co::Run(*loop_, [&]() -> Co<> {
-    emitter.Emit(key, AssetType::kMaterial, "/.cooked/Materials/Wood",
+    emitter.Emit(key, AssetType::kMaterial, "/.cooked/Materials/Wood.omat",
       "Materials/Wood.omat", bytes_v1);
-    emitter.Emit(key, AssetType::kMaterial, "/.cooked/Materials/Wood",
+    emitter.Emit(key, AssetType::kMaterial, "/.cooked/Materials/Wood.omat",
       "Materials/Wood.omat", bytes_v2);
     co_await emitter.Finalize();
   });
@@ -249,11 +250,12 @@ NOLINT_TEST_F(AssetEmitterTest, EmitVirtualPathConflictBetweenKeysThrows)
 
   // Act
   emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
-    "/.cooked/Materials/Shared", "Materials/SharedA.omat", bytes);
+    "/.cooked/Materials/Shared.omat", "Materials/SharedA.omat", bytes);
 
   // Assert
-  EXPECT_THROW(emitter.Emit(MakeAssetKey(2), AssetType::kMaterial,
-                 "/.cooked/Materials/Shared", "Materials/SharedB.omat", bytes),
+  EXPECT_THROW(
+    emitter.Emit(MakeAssetKey(2), AssetType::kMaterial,
+      "/.cooked/Materials/Shared.omat", "Materials/SharedB.omat", bytes),
     std::runtime_error);
 
   bool success = false;
@@ -268,11 +270,11 @@ NOLINT_TEST_F(AssetEmitterTest, EmitDescriptorPathConflictBetweenKeysThrows)
   const auto bytes_a = MakeDescriptorBytes("a");
   const auto bytes_b = MakeDescriptorBytes("b");
 
-  emitter.Emit(MakeAssetKey(1), AssetType::kMaterial, "/.cooked/Materials/A",
-    "Materials/Shared.omat", bytes_a);
+  emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
+    "/.cooked/Materials/A.omat", "Materials/Shared.omat", bytes_a);
 
   EXPECT_THROW(emitter.Emit(MakeAssetKey(2), AssetType::kMaterial,
-                 "/.cooked/Materials/B", "Materials/Shared.omat", bytes_b),
+                 "/.cooked/Materials/B.omat", "Materials/Shared.omat", bytes_b),
     std::runtime_error);
 
   bool success = false;
@@ -289,12 +291,13 @@ NOLINT_TEST_F(
   const auto shared_key = MakeAssetKey(7);
 
   co::Run(*loop_, [&]() -> Co<> {
-    emitter.Emit(shared_key, AssetType::kMaterial, "/.cooked/Materials/A",
+    emitter.Emit(shared_key, AssetType::kMaterial, "/.cooked/Materials/A.omat",
       "Materials/A.omat", MakeDescriptorBytes("a-v1"));
-    emitter.Emit(shared_key, AssetType::kMaterial, "/.cooked/Materials/B",
+    emitter.Emit(shared_key, AssetType::kMaterial, "/.cooked/Materials/B.omat",
       "Materials/B.omat", MakeDescriptorBytes("b-v2"));
-    emitter.Emit(MakeAssetKey(8), AssetType::kMaterial, "/.cooked/Materials/C",
-      "Materials/A.omat", MakeDescriptorBytes("a-v3"));
+    emitter.Emit(MakeAssetKey(8), AssetType::kMaterial,
+      "/.cooked/Materials/C.omat", "Materials/A.omat",
+      MakeDescriptorBytes("a-v3"));
     const auto success = co_await emitter.Finalize();
     EXPECT_TRUE(success);
   });
@@ -315,11 +318,12 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsPreservesEmissionOrder)
 
   // Act
   co::Run(*loop_, [&]() -> Co<> {
-    emitter.Emit(MakeAssetKey(1), AssetType::kMaterial, "/.cooked/Materials/A",
-      "Materials/A.omat", MakeDescriptorBytes("a"));
-    emitter.Emit(MakeAssetKey(2), AssetType::kGeometry, "/.cooked/Geometry/B",
-      "Geometry/B.ogeo", MakeDescriptorBytes("b"));
-    emitter.Emit(MakeAssetKey(3), AssetType::kScene, "/.cooked/Scenes/C",
+    emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
+      "/.cooked/Materials/A.omat", "Materials/A.omat",
+      MakeDescriptorBytes("a"));
+    emitter.Emit(MakeAssetKey(2), AssetType::kGeometry,
+      "/.cooked/Geometry/B.ogeo", "Geometry/B.ogeo", MakeDescriptorBytes("b"));
+    emitter.Emit(MakeAssetKey(3), AssetType::kScene, "/.cooked/Scenes/C.oscene",
       "Scenes/C.oscene", MakeDescriptorBytes("c"));
     co_await emitter.Finalize();
   });
@@ -343,10 +347,10 @@ NOLINT_TEST_F(AssetEmitterTest, FinalizeWaitsForPendingIO)
 
   co::Run(*loop_, [&]() -> Co<> {
     emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
-      "/.cooked/Materials/Mat1", "Materials/Mat1.omat",
+      "/.cooked/Materials/Mat1.omat", "Materials/Mat1.omat",
       MakeDescriptorBytes("content-1"));
     emitter.Emit(MakeAssetKey(2), AssetType::kMaterial,
-      "/.cooked/Materials/Mat2", "Materials/Mat2.omat",
+      "/.cooked/Materials/Mat2.omat", "Materials/Mat2.omat",
       MakeDescriptorBytes("content-2"));
 
     // Act
@@ -386,7 +390,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitAfterFinalizeThrows)
     EXPECT_TRUE(success);
 
     EXPECT_THROW(emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
-                   "/.cooked/Materials/After", "Materials/After.omat",
+                   "/.cooked/Materials/After.omat", "Materials/After.omat",
                    MakeDescriptorBytes("content")),
       std::runtime_error);
   });
@@ -410,7 +414,8 @@ NOLINT_TEST_F(AssetEmitterTest, FinalizeFileContentMatchesEmittedBytes)
   // Act
   co::Run(*loop_, [&]() -> Co<> {
     emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
-      "/.cooked/Materials/Binary", "Materials/Binary.omat", expected_bytes);
+      "/.cooked/Materials/Binary.omat", "Materials/Binary.omat",
+      expected_bytes);
     co_await emitter.Finalize();
   });
 
@@ -433,7 +438,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitCreatesNestedDirectories)
   // Act
   co::Run(*loop_, [&]() -> Co<> {
     emitter.Emit(MakeAssetKey(1), AssetType::kGeometry,
-      "/.cooked/Deep/Nested/Path/Mesh", "Deep/Nested/Path/Mesh.ogeo",
+      "/.cooked/Deep/Nested/Path/Mesh.ogeo", "Deep/Nested/Path/Mesh.ogeo",
       MakeDescriptorBytes("nested-mesh"));
     co_await emitter.Finalize();
   });
@@ -458,7 +463,7 @@ NOLINT_TEST_F(AssetEmitterTest, PendingCountReflectsQueuedWrites)
   bool success = false;
   co::Run(*loop_, [&]() -> Co<> {
     emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
-      "/.cooked/Materials/Mat", "Materials/Mat.omat",
+      "/.cooked/Materials/Mat.omat", "Materials/Mat.omat",
       MakeDescriptorBytes("content"));
     had_pending = emitter.PendingCount() > 0;
 
@@ -480,7 +485,7 @@ NOLINT_TEST_F(AssetEmitterTest, ErrorCountZeroAfterSuccessfulWrites)
   co::Run(*loop_, [&]() -> Co<> {
     for (uint32_t i = 1; i <= 10; ++i) {
       emitter.Emit(MakeAssetKey(i), AssetType::kMaterial,
-        "/.cooked/Materials/Mat" + std::to_string(i),
+        "/.cooked/Materials/Mat" + std::to_string(i) + ".omat",
         "Materials/Mat" + std::to_string(i) + ".omat",
         MakeDescriptorBytes("content-" + std::to_string(i)));
     }
@@ -503,7 +508,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitEmptyBytesCreatesEmptyFile)
   // Act
   co::Run(*loop_, [&]() -> Co<> {
     emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
-      "/.cooked/Materials/Empty", "Materials/Empty.omat", empty_bytes);
+      "/.cooked/Materials/Empty.omat", "Materials/Empty.omat", empty_bytes);
     co_await emitter.Finalize();
   });
 
@@ -528,8 +533,8 @@ NOLINT_TEST_F(AssetEmitterTest, EmitLargeDescriptorWrittenCorrectly)
 
   // Act
   co::Run(*loop_, [&]() -> Co<> {
-    emitter.Emit(MakeAssetKey(1), AssetType::kScene, "/.cooked/Scenes/Large",
-      "Scenes/Large.oscene", large_bytes);
+    emitter.Emit(MakeAssetKey(1), AssetType::kScene,
+      "/.cooked/Scenes/Large.oscene", "Scenes/Large.oscene", large_bytes);
     co_await emitter.Finalize();
   });
 
@@ -554,7 +559,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitRelativePathWithBackslashThrows)
 
   // Act & Assert
   EXPECT_THROW(emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
-                 "/.cooked/Materials/Wood", "Materials\\Wood.omat", bytes),
+                 "/.cooked/Materials/Wood.omat", "Materials\\Wood.omat", bytes),
     std::runtime_error);
 }
 
@@ -567,7 +572,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitRelativePathWithLeadingSlashThrows)
 
   // Act & Assert
   EXPECT_THROW(emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
-                 "/.cooked/Materials/Wood", "/Materials/Wood.omat", bytes),
+                 "/.cooked/Materials/Wood.omat", "/Materials/Wood.omat", bytes),
     std::runtime_error);
 }
 
@@ -579,8 +584,9 @@ NOLINT_TEST_F(AssetEmitterTest, EmitRelativePathWithColonThrows)
   const auto bytes = MakeDescriptorBytes("test");
 
   // Act & Assert
-  EXPECT_THROW(emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
-                 "/.cooked/Materials/Wood", "C:Materials/Wood.omat", bytes),
+  EXPECT_THROW(
+    emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
+      "/.cooked/Materials/Wood.omat", "C:Materials/Wood.omat", bytes),
     std::runtime_error);
 }
 
@@ -593,7 +599,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitRelativePathWithDoubleSlashThrows)
 
   // Act & Assert
   EXPECT_THROW(emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
-                 "/.cooked/Materials/Wood", "Materials//Wood.omat", bytes),
+                 "/.cooked/Materials/Wood.omat", "Materials//Wood.omat", bytes),
     std::runtime_error);
 }
 
@@ -605,8 +611,9 @@ NOLINT_TEST_F(AssetEmitterTest, EmitRelativePathWithDotSegmentThrows)
   const auto bytes = MakeDescriptorBytes("test");
 
   // Act & Assert
-  EXPECT_THROW(emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
-                 "/.cooked/Materials/Wood", "Materials/./Wood.omat", bytes),
+  EXPECT_THROW(
+    emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
+      "/.cooked/Materials/Wood.omat", "Materials/./Wood.omat", bytes),
     std::runtime_error);
 }
 
@@ -618,8 +625,9 @@ NOLINT_TEST_F(AssetEmitterTest, EmitRelativePathWithDotDotSegmentThrows)
   const auto bytes = MakeDescriptorBytes("test");
 
   // Act & Assert
-  EXPECT_THROW(emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
-                 "/.cooked/Materials/Wood", "Materials/../Wood.omat", bytes),
+  EXPECT_THROW(
+    emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
+      "/.cooked/Materials/Wood.omat", "Materials/../Wood.omat", bytes),
     std::runtime_error);
 }
 
@@ -632,7 +640,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitVirtualPathWithoutLeadingSlashThrows)
 
   // Act & Assert
   EXPECT_THROW(emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
-                 ".cooked/Materials/Wood", "Materials/Wood.omat", bytes),
+                 ".cooked/Materials/Wood.omat", "Materials/Wood.omat", bytes),
     std::runtime_error);
 }
 
@@ -644,8 +652,9 @@ NOLINT_TEST_F(AssetEmitterTest, EmitVirtualPathWithBackslashThrows)
   const auto bytes = MakeDescriptorBytes("test");
 
   // Act & Assert
-  EXPECT_THROW(emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
-                 "/.cooked\\Materials\\Wood", "Materials/Wood.omat", bytes),
+  EXPECT_THROW(
+    emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
+      "/.cooked\\Materials\\Wood.omat", "Materials/Wood.omat", bytes),
     std::runtime_error);
 }
 
@@ -658,7 +667,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitVirtualPathWithDoubleSlashThrows)
 
   // Act & Assert
   EXPECT_THROW(emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
-                 "/.cooked//Materials/Wood", "Materials/Wood.omat", bytes),
+                 "/.cooked//Materials/Wood.omat", "Materials/Wood.omat", bytes),
     std::runtime_error);
 }
 
@@ -671,7 +680,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitEmptyRelativePathThrows)
 
   // Act & Assert
   EXPECT_THROW(emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
-                 "/.cooked/Materials/Wood", "", bytes),
+                 "/.cooked/Materials/Wood.omat", "", bytes),
     std::runtime_error);
 }
 
@@ -703,7 +712,7 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsContainsSha256Hash)
   // Act
   co::Run(*loop_, [&]() -> Co<> {
     emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
-      "/.cooked/Materials/Hashed", "Materials/Hashed.omat", bytes);
+      "/.cooked/Materials/Hashed.omat", "Materials/Hashed.omat", bytes);
     co_await emitter.Finalize();
   });
 
@@ -724,7 +733,7 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsSha256DisabledLeavesHashEmpty)
   // Act
   co::Run(*loop_, [&]() -> Co<> {
     emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
-      "/.cooked/Materials/NoHash", "Materials/NoHash.omat", bytes);
+      "/.cooked/Materials/NoHash.omat", "Materials/NoHash.omat", bytes);
     co_await emitter.Finalize();
   });
 
@@ -745,9 +754,9 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsDifferentContentHasDifferentHash)
   // Act
   co::Run(*loop_, [&]() -> Co<> {
     emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
-      "/.cooked/Materials/One", "Materials/One.omat", bytes1);
+      "/.cooked/Materials/One.omat", "Materials/One.omat", bytes1);
     emitter.Emit(MakeAssetKey(2), AssetType::kMaterial,
-      "/.cooked/Materials/Two", "Materials/Two.omat", bytes2);
+      "/.cooked/Materials/Two.omat", "Materials/Two.omat", bytes2);
     co_await emitter.Finalize();
   });
 

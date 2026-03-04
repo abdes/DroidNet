@@ -33,12 +33,12 @@
 #include <Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/AssetKeyUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/MeshType.h>
@@ -210,13 +210,8 @@ namespace {
   auto BuildAssetKey(const ImportRequest& request,
     const std::string_view virtual_path) -> data::AssetKey
   {
-    switch (request.options.asset_key_policy) {
-    case AssetKeyPolicy::kRandom:
-      return util::MakeRandomAssetKey();
-    case AssetKeyPolicy::kDeterministicFromVirtualPath:
-      break;
-    }
-    return util::MakeDeterministicAssetKey(virtual_path);
+    static_cast<void>(request);
+    return oxygen::data::AssetKey::FromVirtualPath(virtual_path);
   }
 
   auto MakeDuration(const std::chrono::steady_clock::time_point start,
@@ -406,16 +401,7 @@ namespace {
         continue;
       }
 
-      if (context.request.options.asset_key_policy == AssetKeyPolicy::kRandom) {
-        AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          "geometry.material.index_resolution_required",
-          "Material reference requires index resolution when asset_key_policy "
-          "is random",
-          std::move(object_path));
-        return std::nullopt;
-      }
-
-      const auto key = util::MakeDeterministicAssetKey(virtual_path);
+      const auto key = oxygen::data::AssetKey::FromVirtualPath(virtual_path);
       context.material_cache.insert_or_assign(std::string(virtual_path), key);
       return key;
     }
@@ -468,15 +454,7 @@ namespace {
         continue;
       }
 
-      if (context.request.options.asset_key_policy == AssetKeyPolicy::kRandom) {
-        AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          "geometry.asset.index_resolution_required",
-          "Asset reference requires index resolution when asset_key_policy is "
-          "random",
-          std::move(object_path));
-        return std::nullopt;
-      }
-      return util::MakeDeterministicAssetKey(virtual_path);
+      return oxygen::data::AssetKey::FromVirtualPath(virtual_path);
     }
 
     AddDiagnostic(context.session, context.request, ImportSeverity::kError,

@@ -14,10 +14,10 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/AssetKeyUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
@@ -288,13 +288,8 @@ namespace {
   [[nodiscard]] auto ResolveMaterialKey(const ImportRequest& request,
     std::string_view virtual_path) -> data::AssetKey
   {
-    switch (request.options.asset_key_policy) {
-    case AssetKeyPolicy::kRandom:
-      return util::MakeRandomAssetKey();
-    case AssetKeyPolicy::kDeterministicFromVirtualPath:
-      return util::MakeDeterministicAssetKey(virtual_path);
-    }
-    return util::MakeDeterministicAssetKey(virtual_path);
+    static_cast<void>(request);
+    return oxygen::data::AssetKey::FromVirtualPath(virtual_path);
   }
 
   [[nodiscard]] auto ResolveMaterialDomain(const data::MaterialDomain domain,

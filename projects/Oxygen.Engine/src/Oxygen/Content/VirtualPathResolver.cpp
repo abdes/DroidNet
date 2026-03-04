@@ -17,54 +17,11 @@
 #include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Content/Internal/PatchResolutionPolicy.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Data/AssetKey.h>
 
 namespace oxygen::content {
-
-namespace {
-
-  auto ValidateVirtualPathOrThrow(std::string_view virtual_path) -> void
-  {
-    if (virtual_path.empty()) {
-      throw std::invalid_argument("Virtual path must not be empty");
-    }
-    if (virtual_path.find('\\') != std::string_view::npos) {
-      throw std::invalid_argument("Virtual path must use '/' as the separator");
-    }
-    if (virtual_path.front() != '/') {
-      throw std::invalid_argument("Virtual path must start with '/'");
-    }
-    if (virtual_path.size() > 1 && virtual_path.back() == '/') {
-      throw std::invalid_argument(
-        "Virtual path must not end with '/' (except the root)");
-    }
-    if (virtual_path.find("//") != std::string_view::npos) {
-      throw std::invalid_argument("Virtual path must not contain '//'");
-    }
-
-    size_t pos = 0;
-    while (pos <= virtual_path.size()) {
-      const auto next = virtual_path.find('/', pos);
-      const auto len = (next == std::string_view::npos)
-        ? (virtual_path.size() - pos)
-        : (next - pos);
-      const auto segment = virtual_path.substr(pos, len);
-      if (segment == ".") {
-        throw std::invalid_argument("Virtual path must not contain '.'");
-      }
-      if (segment == "..") {
-        throw std::invalid_argument("Virtual path must not contain '..'");
-      }
-
-      if (next == std::string_view::npos) {
-        break;
-      }
-      pos = next + 1;
-    }
-  }
-
-} // namespace
 
 struct VirtualPathResolver::Impl final {
   struct LooseCookedMount {
@@ -253,7 +210,12 @@ auto VirtualPathResolver::ClearMounts() -> void { impl_->Clear(); }
 auto VirtualPathResolver::ResolveAssetKey(
   const std::string_view virtual_path) const -> std::optional<data::AssetKey>
 {
-  ValidateVirtualPathOrThrow(virtual_path);
+  if (const auto error = ValidateCanonicalVirtualPath(
+        virtual_path, VirtualPathRuleSet::kSyntaxAndStandardMountRoot);
+    error.has_value()) {
+    throw std::invalid_argument(
+      "Virtual path is not canonical: " + std::string(*error));
+  }
 
   const internal::VirtualPathResolutionCallbacks callbacks {
     .key_resolution = {

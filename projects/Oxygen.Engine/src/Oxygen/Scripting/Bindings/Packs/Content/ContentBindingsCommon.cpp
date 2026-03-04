@@ -11,7 +11,6 @@
 #include <lua.h>
 #include <lualib.h>
 
-#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>
@@ -195,9 +194,6 @@ auto RequireResourceKey(lua_State* state, const int arg_index)
 auto TryParseAssetGuid(const std::string_view text)
   -> std::optional<data::AssetKey>
 {
-  if (const auto parsed = Uuid::FromString(text); parsed) {
-    return data::AssetKey { parsed.value() };
-  }
   if (const auto bytes = ParseCanonicalUuidBytes(text); bytes.has_value()) {
     return data::AssetKey::FromBytes(*bytes);
   }

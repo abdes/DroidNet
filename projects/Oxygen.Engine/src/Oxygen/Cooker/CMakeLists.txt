@@ -215,7 +215,6 @@ set(
   "Import/Internal/TextureCooker.h"
   "Import/Internal/TextureImportRequestBuilder.h"
   "Import/Internal/TextureSourceAssembly_internal.h"
-  "Import/Internal/Utils/AssetKeyUtils.h"
   "Import/Internal/Utils/BufferDescriptorSidecar.h"
   "Import/Internal/Utils/ContentHashUtils.h"
   "Import/Internal/Utils/DescriptorDocument.h"

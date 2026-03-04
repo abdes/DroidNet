@@ -999,6 +999,8 @@ auto ParseBodyIdArray(lua_State* state, const int table_index)
 
 auto ParseBodyIdOrHandle(lua_State* state, const int index) -> physics::BodyId
 {
+  const auto abs_index = lua_absindex(state, index);
+
   const auto raise_type_error = [&]() -> physics::BodyId {
     if (index > 0) {
       luaL_argerror(state, index, "expected BodyId or BodyHandle userdata");
@@ -1008,11 +1010,11 @@ auto ParseBodyIdOrHandle(lua_State* state, const int index) -> physics::BodyId
     return physics::kInvalidBodyId;
   };
 
-  if (lua_isuserdata(state, index) == 0) {
+  if (lua_isuserdata(state, abs_index) == 0) {
     return raise_type_error();
   }
 
-  if (lua_getmetatable(state, index) == 0) {
+  if (lua_getmetatable(state, abs_index) == 0) {
     return raise_type_error();
   }
   const int mt_index = lua_gettop(state);
@@ -1021,7 +1023,7 @@ auto ParseBodyIdOrHandle(lua_State* state, const int index) -> physics::BodyId
   const bool is_body_id = lua_rawequal(state, mt_index, -1) != 0;
   lua_pop(state, 1);
   if (is_body_id) {
-    const auto* id = CheckBodyId(state, index);
+    const auto* id = CheckBodyId(state, abs_index);
     lua_pop(state, 1);
     return id->body_id;
   }
@@ -1030,7 +1032,7 @@ auto ParseBodyIdOrHandle(lua_State* state, const int index) -> physics::BodyId
   const bool is_body_handle = lua_rawequal(state, mt_index, -1) != 0;
   lua_pop(state, 1);
   if (is_body_handle) {
-    const auto* handle = CheckBodyHandle(state, index);
+    const auto* handle = CheckBodyHandle(state, abs_index);
     lua_pop(state, 1);
     return handle->body_id;
   }

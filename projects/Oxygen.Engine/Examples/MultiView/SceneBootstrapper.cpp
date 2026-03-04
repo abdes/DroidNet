@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstring>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -58,7 +59,8 @@ namespace {
     desc.roughness = Unorm16 { 0.5F };
     desc.ambient_occlusion = Unorm16 { 1.0F };
 
-    const AssetKey asset_key { data::GenerateAssetGuid() };
+    const AssetKey asset_key = AssetKey::FromVirtualPath(
+      "/Engine/Examples/MultiView/Materials/" + std::string(name) + ".omat");
     return std::make_shared<const MaterialAsset>(
       asset_key, desc, std::vector<ShaderReference> {});
   }
@@ -170,8 +172,9 @@ auto SceneBootstrapper::EnsureSphere(scene::Scene& scene) -> void
   geo_desc.bounding_box_max[2] = bb_max.z;
 
   auto geom_asset = std::make_shared<data::GeometryAsset>(
-    data::AssetKey { data::GenerateAssetGuid() }, geo_desc,
-    std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh) });
+    data::AssetKey::FromVirtualPath(
+      "/Engine/Examples/MultiView/Geometry/Sphere.ogeo"),
+    geo_desc, std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh) });
 
   sphere_node_ = scene.CreateNode("Sphere");
   sphere_node_.GetRenderable().SetGeometry(std::move(geom_asset));
@@ -230,8 +233,9 @@ auto SceneBootstrapper::EnsureCube(scene::Scene& scene) -> void
   geo_desc.bounding_box_max[2] = bb_max.z;
 
   auto geom_asset = std::make_shared<data::GeometryAsset>(
-    data::AssetKey { data::GenerateAssetGuid() }, geo_desc,
-    std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh) });
+    data::AssetKey::FromVirtualPath(
+      "/Engine/Examples/MultiView/Geometry/Cube.ogeo"),
+    geo_desc, std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh) });
 
   cube_node_ = scene.CreateNode("Cube");
   cube_node_.GetRenderable().SetGeometry(std::move(geom_asset));
@@ -289,8 +293,9 @@ auto SceneBootstrapper::EnsureCylinder(scene::Scene& scene) -> void
   geo_desc.bounding_box_max[2] = bb_max.z;
 
   auto geom_asset = std::make_shared<data::GeometryAsset>(
-    data::AssetKey { data::GenerateAssetGuid() }, geo_desc,
-    std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh) });
+    data::AssetKey::FromVirtualPath(
+      "/Engine/Examples/MultiView/Geometry/Cylinder.ogeo"),
+    geo_desc, std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh) });
 
   cylinder_node_ = scene.CreateNode("Cylinder");
   cylinder_node_.GetRenderable().SetGeometry(std::move(geom_asset));
@@ -357,8 +362,9 @@ auto SceneBootstrapper::EnsureCone(scene::Scene& scene) -> void
   geo_desc.bounding_box_max[2] = bb_max.z;
 
   auto geom_asset = std::make_shared<data::GeometryAsset>(
-    data::AssetKey { data::GenerateAssetGuid() }, geo_desc,
-    std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh) });
+    data::AssetKey::FromVirtualPath(
+      "/Engine/Examples/MultiView/Geometry/Cone.ogeo"),
+    geo_desc, std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh) });
 
   cone_node_ = scene.CreateNode("Cone");
   cone_node_.GetRenderable().SetGeometry(std::move(geom_asset));
@@ -422,8 +428,9 @@ auto SceneBootstrapper::EnsureGroundPlane(scene::Scene& scene) -> void
   geo_desc.bounding_box_max[2] = bb_max.z;
 
   auto geom_asset = std::make_shared<data::GeometryAsset>(
-    data::AssetKey { data::GenerateAssetGuid() }, geo_desc,
-    std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh) });
+    data::AssetKey::FromVirtualPath(
+      "/Engine/Examples/MultiView/Geometry/GroundPlane.ogeo"),
+    geo_desc, std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh) });
 
   ground_plane_node_ = scene.CreateNode("GroundPlane");
   ground_plane_node_.GetRenderable().SetGeometry(std::move(geom_asset));

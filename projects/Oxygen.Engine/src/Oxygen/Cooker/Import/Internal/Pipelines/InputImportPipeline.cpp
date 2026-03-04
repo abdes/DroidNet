@@ -35,11 +35,11 @@
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/AssetKeyUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Input/ActionValue.h>
@@ -306,10 +306,8 @@ namespace {
   [[nodiscard]] auto MakeAssetKey(const ImportRequest& request,
     const std::string_view virtual_path) -> data::AssetKey
   {
-    if (request.options.asset_key_policy == AssetKeyPolicy::kRandom) {
-      return util::MakeRandomAssetKey();
-    }
-    return util::MakeDeterministicAssetKey(virtual_path);
+    static_cast<void>(request);
+    return oxygen::data::AssetKey::FromVirtualPath(virtual_path);
   }
 
   [[nodiscard]] auto CanonicalizeInputSlotName(

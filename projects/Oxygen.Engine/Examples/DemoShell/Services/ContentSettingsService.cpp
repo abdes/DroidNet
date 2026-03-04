@@ -60,7 +60,6 @@ namespace {
   constexpr auto kDumpTopNKey = "content.explorer.dump_top_n";
 
   // Import Options Keys (subset of most important)
-  constexpr auto kAssetKeyPolicyKey = "content.import.asset_key_policy";
   constexpr auto kNodePruningKey = "content.import.node_pruning";
   constexpr auto kImportContentFlagsKey = "content.import.content_flags";
   constexpr auto kWithHashingKey = "content.import.with_hashing";
@@ -163,10 +162,6 @@ auto ContentSettingsService::GetImportOptions() const
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
 
-  if (auto val = settings->GetFloat(kAssetKeyPolicyKey)) {
-    o.asset_key_policy
-      = static_cast<content::import::AssetKeyPolicy>(static_cast<int>(*val));
-  }
   if (auto val = settings->GetFloat(kNodePruningKey)) {
     o.node_pruning
       = static_cast<content::import::NodePruningPolicy>(static_cast<int>(*val));
@@ -196,8 +191,6 @@ auto ContentSettingsService::SetImportOptions(
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
 
-  settings->SetFloat(kAssetKeyPolicyKey,
-    static_cast<float>(static_cast<int>(options.asset_key_policy)));
   settings->SetFloat(kNodePruningKey,
     static_cast<float>(static_cast<int>(options.node_pruning)));
   settings->SetFloat(kImportContentFlagsKey,

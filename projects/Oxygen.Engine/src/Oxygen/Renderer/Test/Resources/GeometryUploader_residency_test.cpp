@@ -15,6 +15,7 @@ namespace {
 using oxygen::kInvalidShaderVisibleIndex;
 using oxygen::frame::Slot;
 using oxygen::renderer::testing::GeometryUploaderTest;
+using oxygen::renderer::testing::MakeGeometryAssetKey;
 
 class GeometryUploaderResidencyTest : public GeometryUploaderTest { };
 
@@ -29,7 +30,7 @@ NOLINT_TEST_F(GeometryUploaderResidencyTest,
   BeginFrame(Slot { 0 });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
+  const auto asset_key = MakeGeometryAssetKey("residency_publish_after_upload");
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,

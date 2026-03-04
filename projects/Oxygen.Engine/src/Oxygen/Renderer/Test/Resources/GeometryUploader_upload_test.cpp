@@ -13,6 +13,7 @@ namespace {
 
 using oxygen::frame::Slot;
 using oxygen::renderer::testing::GeometryUploaderTest;
+using oxygen::renderer::testing::MakeGeometryAssetKey;
 
 class GeometryUploaderUploadTest : public GeometryUploaderTest { };
 
@@ -25,7 +26,7 @@ NOLINT_TEST_F(
   BeginFrame(Slot { 0 });
 
   const auto mesh = MakeValidTriangleMesh("Tri", true);
-  const oxygen::data::AssetKey asset_key { oxygen::data::GenerateAssetGuid() };
+  const auto asset_key = MakeGeometryAssetKey("upload_first_use_schedules");
   const oxygen::engine::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
     .lod_index = 0U,
@@ -48,12 +49,8 @@ NOLINT_TEST_F(
   // Arrange
   auto& uploader = GeoUploader();
 
-  const oxygen::data::AssetKey asset_key_a {
-    oxygen::data::GenerateAssetGuid()
-  };
-  const oxygen::data::AssetKey asset_key_b {
-    oxygen::data::GenerateAssetGuid()
-  };
+  const auto asset_key_a = MakeGeometryAssetKey("upload_indexed");
+  const auto asset_key_b = MakeGeometryAssetKey("upload_non_indexed");
 
   // Act/Assert: indexed mesh
   BeginFrame(Slot { 0 });

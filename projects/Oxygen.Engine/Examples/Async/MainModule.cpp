@@ -109,7 +109,8 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.roughness = d::Unorm16 { 0.9F };
   desc.ambient_occlusion = d::Unorm16 { 1.0F };
   // Leave texture indices at default invalid (no textures)
-  const d::AssetKey asset_key { d::GenerateAssetGuid() };
+  const d::AssetKey asset_key = d::AssetKey::FromVirtualPath(
+    "/Engine/Examples/Async/Materials/" + std::string(name) + ".omat");
   return std::make_shared<const d::MaterialAsset>(
     asset_key, desc, std::vector<d::ShaderReference> {});
   // NOLINTEND(*-magic-numbers)
@@ -183,12 +184,15 @@ auto BuildSphereLodAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
 
   if (kUseSingleLodForTest) {
     return std::make_shared<oxygen::data::GeometryAsset>(
-      oxygen::data::AssetKey { oxygen::data::GenerateAssetGuid() }, geo_desc,
-      std::vector<std::shared_ptr<Mesh>> { std::move(mesh0) });
+      oxygen::data::AssetKey::FromVirtualPath(
+        "/Engine/Examples/Async/Geometry/SphereLod.ogeo"),
+      geo_desc, std::vector<std::shared_ptr<Mesh>> { std::move(mesh0) });
   }
 
   return std::make_shared<oxygen::data::GeometryAsset>(
-    oxygen::data::AssetKey { oxygen::data::GenerateAssetGuid() }, geo_desc,
+    oxygen::data::AssetKey::FromVirtualPath(
+      "/Engine/Examples/Async/Geometry/SphereLod.ogeo"),
+    geo_desc,
     std::vector<std::shared_ptr<Mesh>> { std::move(mesh0), std::move(mesh1) });
 }
 
@@ -270,8 +274,9 @@ auto BuildTwoSubmeshQuadAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
   geo_desc.bounding_box_max[1] = bb_max.y;
   geo_desc.bounding_box_max[2] = bb_max.z;
   return std::make_shared<oxygen::data::GeometryAsset>(
-    oxygen::data::AssetKey { oxygen::data::GenerateAssetGuid() }, geo_desc,
-    std::vector<std::shared_ptr<Mesh>> { std::move(mesh) });
+    oxygen::data::AssetKey::FromVirtualPath(
+      "/Engine/Examples/Async/Geometry/Quad2SM.ogeo"),
+    geo_desc, std::vector<std::shared_ptr<Mesh>> { std::move(mesh) });
   // NOLINTEND(*-magic-numbers)
 }
 
@@ -1061,7 +1066,8 @@ auto MainModule::UpdateSceneMutations(const float delta_time) -> void
         desc.base_color[1] = 0.3F;
         desc.base_color[2] = 1.0F;
         desc.base_color[3] = 1.0F;
-        const data::AssetKey asset_key { data::GenerateAssetGuid() };
+        const data::AssetKey asset_key = data::AssetKey::FromVirtualPath(
+          "/Engine/Examples/Async/Materials/BlueOverride.omat");
         auto blue = std::make_shared<const data::MaterialAsset>(
           asset_key, desc, std::vector<data::ShaderReference> {});
         r.SetMaterialOverride(lod, 1, blue);

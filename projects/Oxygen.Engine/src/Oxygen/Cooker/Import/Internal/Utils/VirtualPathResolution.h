@@ -6,54 +6,20 @@
 
 #pragma once
 
-#include <cstddef>
 #include <filesystem>
 #include <string>
 #include <string_view>
 #include <unordered_set>
 #include <vector>
 
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 
 namespace oxygen::content::import::internal {
 
-inline auto ValidateNoDotSegments(const std::string_view path) -> bool
-{
-  size_t pos = 0;
-  while (pos <= path.size()) {
-    const auto next = path.find('/', pos);
-    const auto len
-      = (next == std::string_view::npos) ? (path.size() - pos) : (next - pos);
-    const auto segment = path.substr(pos, len);
-    if (segment == "." || segment == "..") {
-      return false;
-    }
-    if (next == std::string_view::npos) {
-      break;
-    }
-    pos = next + 1;
-  }
-  return true;
-}
-
 inline auto IsCanonicalVirtualPath(const std::string_view virtual_path) -> bool
 {
-  if (virtual_path.empty()) {
-    return false;
-  }
-  if (virtual_path.front() != '/') {
-    return false;
-  }
-  if (virtual_path.find('\\') != std::string_view::npos) {
-    return false;
-  }
-  if (virtual_path.find("//") != std::string_view::npos) {
-    return false;
-  }
-  if (virtual_path.size() > 1 && virtual_path.back() == '/') {
-    return false;
-  }
-  return ValidateNoDotSegments(virtual_path);
+  return oxygen::content::IsCanonicalVirtualPath(virtual_path);
 }
 
 inline auto NormalizeVirtualMountRoot(std::string mount_root) -> std::string

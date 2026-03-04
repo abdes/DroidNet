@@ -25,31 +25,13 @@
 
 namespace oxygen::content::import {
 
-//! Policy for generating asset keys.
-/*!
- Import pipelines typically want stable keys so repeated imports preserve
- external references and incremental cooks.
-
- Asset identities in Oxygen are GUIDs (see oxygen::data::AssetKey). This policy
- controls how those GUID values are produced.
-*/
-enum class AssetKeyPolicy : uint8_t {
-  //! Generate a deterministic GUID derived from virtual paths (recommended).
-  kDeterministicFromVirtualPath = 0,
-
-  //! Generate a random GUID for each import.
-  kRandom,
-};
-
-//! String representation of enum values in `AssetKeyPolicy`.
-OXGN_COOK_API auto to_string(AssetKeyPolicy value) -> std::string;
-
 //! Policy for converting authored units into Oxygen world units.
 /*!
- Importers must produce cooked content that is consistent across source formats.
+ Importers must produce cooked content that is consistent across source
+ formats.
  This includes consistent treatment of linear units.
-
- Oxygen treats authored linear distances as meters.
+ Oxygen treats
+ authored linear distances as meters.
 
  ### Definitions
 
@@ -386,9 +368,6 @@ struct CoordinateConversionPolicy final {
  belong in the domain's descriptor payload, not here.
 */
 struct ImportOptions final {
-  AssetKeyPolicy asset_key_policy
-    = AssetKeyPolicy::kDeterministicFromVirtualPath;
-
   CoordinateConversionPolicy coordinate = {};
 
   //! Cooperative cancellation token for long-running imports.

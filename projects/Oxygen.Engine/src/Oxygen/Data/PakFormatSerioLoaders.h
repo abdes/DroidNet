@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <array>
 #include <span>
 #include <type_traits>
 
@@ -28,9 +29,10 @@ inline auto Load(AnyReader& reader, data::pak::core::ResourceIndexT& value)
 inline auto Load(AnyReader& reader, data::AssetKey& key) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
-  auto uuid = oxygen::Uuid {};
-  CHECK_RESULT(reader.ReadInto(uuid));
-  key = data::AssetKey { uuid };
+  auto bytes = std::array<uint8_t, data::AssetKey::kSizeBytes> {};
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { bytes })));
+  key = data::AssetKey::FromBytes(bytes);
   return {};
 }
 

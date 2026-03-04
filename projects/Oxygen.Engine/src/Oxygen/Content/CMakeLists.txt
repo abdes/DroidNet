@@ -53,6 +53,7 @@ set(
   "AssetLoader.h"
   "Constants.h"
   "EvictionEvents.h"
+  "VirtualPath.h"
   "VirtualPathResolver.h"
   "LoaderContext.h"
   "LoaderFunctions.h"

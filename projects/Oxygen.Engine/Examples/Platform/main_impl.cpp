@@ -222,20 +222,31 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform)
     co_await n.Start(&Platform::ActivateAsync, std::ref(*platform));
     platform->Run();
 
-    // Start a lightweight frame tick task that calls Platform::OnFrameStart()
-    // each frame. The Platform implementation now requires a per-frame
-    // OnFrameStart() call so that internal window lifecycle and timers are
-    // advanced; without this the window may never close. Run at ~60Hz.
+    // Start a lightweight frame tick task that drives both frame lifecycle
+    // hooks each frame. Window closure is discovered at frame end and applied
+    // at the next frame start, so both hooks must run continuously. Run at
+    // ~60Hz.
     n.Start([platform]() -> oxygen::co::Co<> {
       const auto frame_period = std::chrono::milliseconds(16); // ~60 FPS
       while (oxygen::co::EventLoopTraits<Platform>::IsRunning(*platform)) {
-        // Call OnFrameStart on the platform to advance per-frame state.
+        // Advance per-frame state and process pending closures from the
+        // previous frame.
         try {
           platform->OnFrameStart();
         } catch (const std::exception& e) {
           DLOG_F(WARNING, "Platform::OnFrameStart() threw: {}", e.what());
         } catch (...) {
           DLOG_F(WARNING, "Platform::OnFrameStart() threw unknown exception");
+        }
+
+        // Scan for new close requests that should be processed on the next
+        // frame start.
+        try {
+          platform->OnFrameEnd();
+        } catch (const std::exception& e) {
+          DLOG_F(WARNING, "Platform::OnFrameEnd() threw: {}", e.what());
+        } catch (...) {
+          DLOG_F(WARNING, "Platform::OnFrameEnd() threw unknown exception");
         }
 
         co_await platform->Async().SleepFor(frame_period);
@@ -323,6 +334,7 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform)
             window_weak.lock()->VoteNotToClose();
           } else {
             window_weak.lock()->VoteToClose();
+            break;
           }
         }
       }

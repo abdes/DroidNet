@@ -325,10 +325,10 @@ auto oxygen::physics::jolt::JoltVehicles::CreateVehicle(const WorldId world_id,
   settings->mForward = ToJoltVec3(oxygen::space::move::Forward);
 
   const auto engine_up
-    = NormalizeOr(oxygen::space::move::Up, oxygen::Vec3 { 0.0F, 0.0F, 1.0F });
+    = NormalizeOr(oxygen::space::move::Up, oxygen::space::move::Up);
   const auto engine_down = -engine_up;
-  const auto engine_forward = NormalizeOr(
-    oxygen::space::move::Forward, oxygen::Vec3 { 0.0F, -1.0F, 0.0F });
+  const auto engine_forward
+    = NormalizeOr(oxygen::space::move::Forward, oxygen::space::move::Forward);
   auto steering_axle_index = std::numeric_limits<uint16_t>::max();
   for (const auto& wheel : wheels) {
     steering_axle_index = std::min(steering_axle_index, wheel.axle_index);

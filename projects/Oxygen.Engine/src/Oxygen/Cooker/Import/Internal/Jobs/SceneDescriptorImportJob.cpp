@@ -29,11 +29,11 @@
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/SceneDescriptorImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/AssetKeyUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
 
@@ -209,13 +209,10 @@ namespace {
     std::string_view scene_virtual_path, const uint32_t node_index)
     -> data::AssetKey
   {
-    if (request.options.asset_key_policy == AssetKeyPolicy::kRandom) {
-      return util::MakeRandomAssetKey();
-    }
-
+    static_cast<void>(request);
     const auto key_path = std::string(scene_virtual_path) + "/nodes/"
       + std::to_string(node_index);
-    return util::MakeDeterministicAssetKey(key_path);
+    return oxygen::data::AssetKey::FromVirtualPath(key_path);
   }
 
   auto InferAssetTypeFromRelPath(const std::string_view relpath)
@@ -403,17 +400,9 @@ namespace {
       return std::nullopt;
     }
 
-    if (require_asset_key
-      && context.request.options.asset_key_policy == AssetKeyPolicy::kRandom) {
-      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "scene.descriptor.reference_index_resolution_required",
-        "Reference requires indexed asset metadata when asset_key_policy is "
-        "random",
-        std::move(object_path));
-      return std::nullopt;
-    }
+    static_cast<void>(require_asset_key);
 
-    const auto key = util::MakeDeterministicAssetKey(virtual_path);
+    const auto key = oxygen::data::AssetKey::FromVirtualPath(virtual_path);
     const auto resolved = std::make_pair(key, *inferred_type);
     context.index_cache.insert_or_assign(std::string(virtual_path), resolved);
     return resolved;

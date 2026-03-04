@@ -457,8 +457,9 @@ auto LightScene::BuildQuadGeometry(
 
   std::shared_ptr<oxygen::data::Mesh> mesh_shared = std::move(mesh);
   return std::make_shared<oxygen::data::GeometryAsset>(
-    oxygen::data::AssetKey { oxygen::data::GenerateAssetGuid() }, geo_desc,
-    std::vector<std::shared_ptr<oxygen::data::Mesh>> { mesh_shared });
+    oxygen::data::AssetKey::FromVirtualPath(
+      "/Engine/Examples/LightBench/Geometry/" + std::string(name) + ".ogeo"),
+    geo_desc, std::vector<std::shared_ptr<oxygen::data::Mesh>> { mesh_shared });
 }
 
 auto LightScene::BuildSphereGeometry(
@@ -499,8 +500,9 @@ auto LightScene::BuildSphereGeometry(
 
   std::shared_ptr<oxygen::data::Mesh> mesh_shared = std::move(mesh);
   return std::make_shared<oxygen::data::GeometryAsset>(
-    oxygen::data::AssetKey { oxygen::data::GenerateAssetGuid() }, geo_desc,
-    std::vector<std::shared_ptr<oxygen::data::Mesh>> { mesh_shared });
+    oxygen::data::AssetKey::FromVirtualPath(
+      "/Engine/Examples/LightBench/Geometry/" + std::string(name) + ".ogeo"),
+    geo_desc, std::vector<std::shared_ptr<oxygen::data::Mesh>> { mesh_shared });
 }
 
 auto LightScene::MakeSolidColorMaterial(std::string_view name, const Vec4& rgba,
@@ -529,7 +531,8 @@ auto LightScene::MakeSolidColorMaterial(std::string_view name, const Vec4& rgba,
   desc.metalness = Unorm16 { metalness };
   desc.roughness = Unorm16 { roughness };
   desc.ambient_occlusion = Unorm16 { 1.0F };
-  const AssetKey asset_key { GenerateAssetGuid() };
+  const AssetKey asset_key = AssetKey::FromVirtualPath(
+    "/Engine/Examples/LightBench/Materials/" + std::string(name) + ".omat");
   return std::make_shared<const MaterialAsset>(
     asset_key, desc, std::vector<ShaderReference> {});
 }

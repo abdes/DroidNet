@@ -213,7 +213,12 @@ auto ImportJob::GetNamingService() -> NamingService&
     if (request_.options.naming_strategy) {
       config.strategy = request_.options.naming_strategy;
     } else {
-      config.strategy = std::make_shared<NoOpNamingStrategy>();
+      NormalizeNamingStrategy::Options normalize_options {};
+      // Keep authored naming style, but normalize unsafe characters so emitted
+      // descriptor virtual paths remain canonical.
+      normalize_options.apply_prefixes = false;
+      config.strategy
+        = std::make_shared<NormalizeNamingStrategy>(normalize_options);
     }
     naming_service_ = std::make_unique<NamingService>(std::move(config));
   }

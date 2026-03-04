@@ -440,7 +440,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesInputAssetsFromLooseSource)
     .key = MakeAssetKey(0x51U),
     .asset_type = data::AssetType::kInputAction,
     .descriptor_relpath = "Descriptors/Input/Move.oiact",
-    .virtual_path = "/Content/Input/Move",
+    .virtual_path = "/Content/Input/Move.oiact",
     .descriptor_size = 48U,
     .descriptor_sha = paktest::MakeDigest(0x51U),
   };
@@ -448,7 +448,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesInputAssetsFromLooseSource)
     .key = MakeAssetKey(0x52U),
     .asset_type = data::AssetType::kInputMappingContext,
     .descriptor_relpath = "Descriptors/Input/Gameplay.oimap",
-    .virtual_path = "/Content/Input/Gameplay",
+    .virtual_path = "/Content/Input/Gameplay.oimap",
     .descriptor_size = 64U,
     .descriptor_sha = paktest::MakeDigest(0x52U),
   };
@@ -456,7 +456,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesInputAssetsFromLooseSource)
     .key = MakeAssetKey(0x53U),
     .asset_type = data::AssetType::kScene,
     .descriptor_relpath = "Descriptors/Scenes/Main.oscene",
-    .virtual_path = "/Content/Scenes/Main",
+    .virtual_path = "/Content/Scenes/Main.oscene",
     .descriptor_size = 32U,
     .descriptor_sha = paktest::MakeDigest(0x53U),
   };

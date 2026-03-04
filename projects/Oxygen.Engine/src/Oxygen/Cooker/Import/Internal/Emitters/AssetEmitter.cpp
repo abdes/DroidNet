@@ -10,6 +10,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 
@@ -75,24 +76,12 @@ namespace {
   //! Validate virtual path (e.g., "/.cooked/Materials/Wood").
   auto ValidateVirtualPath(const std::string_view virtual_path) -> void
   {
-    if (virtual_path.empty()) {
-      throw std::runtime_error("Virtual path must not be empty");
-    }
-    if (virtual_path.find('\\') != std::string_view::npos) {
-      throw std::runtime_error("Virtual path must use '/' as the separator");
-    }
-    if (virtual_path.front() != '/') {
-      throw std::runtime_error("Virtual path must start with '/'");
-    }
-    if (virtual_path.size() > 1 && virtual_path.back() == '/') {
+    if (const auto error
+      = oxygen::content::ValidateCanonicalVirtualPath(virtual_path);
+      error.has_value()) {
       throw std::runtime_error(
-        "Virtual path must not end with '/' (except the root)");
+        "Virtual path is not canonical: " + std::string(*error));
     }
-    if (virtual_path.find("//") != std::string_view::npos) {
-      throw std::runtime_error("Virtual path must not contain '//'");
-    }
-
-    ValidateNoDotSegments(virtual_path, "Virtual path");
   }
 
 } // namespace

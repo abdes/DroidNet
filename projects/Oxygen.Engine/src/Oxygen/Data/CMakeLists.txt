@@ -21,6 +21,7 @@ asap_push_module("${META_MODULE_NAME}")
 
 find_package(glm CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
+find_package(xxHash CONFIG REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -91,6 +92,7 @@ set(
 )
 set(
   OXYGEN_DATA_PRIVATE_SOURCES
+  "AssetKey.cpp"
   "BufferResource.cpp"
   "CookedSource.cpp"
   "GeometryAsset.cpp"
@@ -145,6 +147,8 @@ target_link_libraries(
     oxygen::serio
     fmt::fmt-header-only
     glm::glm
+  PRIVATE
+    xxHash::xxhash
 )
 
 # ------------------------------------------------------------------------------

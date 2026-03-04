@@ -226,7 +226,7 @@ For each work item:
       storage_material_name)`
    - `descriptor_relpath = request.loose_cooked_layout.MaterialDescriptorRelPath(
       storage_material_name)`
-   - `material_key` from `AssetKeyPolicy`
+   - `material_key = xxHash3-128(canonical virtual_path)`
 3) Normalize scalar inputs:
    - Apply `roughness_as_glossiness` inversion first
    - Clamp base color and scalar factors to [0, 1]

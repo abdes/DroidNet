@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -950,6 +951,49 @@ auto ScriptingModule::EnsureSceneObservation(
       = scene->RegisterObserver(observer_ptr<scene::ISceneObserver> { this });
     LOG_F(INFO, "scene mutation observer {}",
       subscribed ? "subscribed" : "already subscribed");
+
+    // Observer registration receives only future mutations; seed active slots
+    // from the current scene snapshot so pre-existing ready slots execute on
+    // the next gameplay tick.
+    auto nodes_to_visit = scene->GetRootNodes();
+    while (!nodes_to_visit.empty()) {
+      auto node = std::move(nodes_to_visit.back());
+      nodes_to_visit.pop_back();
+
+      if (!node.IsAlive()) {
+        continue;
+      }
+
+      if (node.HasScripting()) {
+        const auto scripting = node.GetScripting();
+        const auto slots = scripting.Slots();
+        constexpr auto kMaxSlotIndex = (std::numeric_limits<uint32_t>::max)();
+        if (slots.size() > kMaxSlotIndex) {
+          LOG_F(ERROR,
+            "Skipping scripting slot hydration for node {}: slot count {} "
+            "exceeds uint32 range",
+            nostd::to_string(node.GetHandle()), slots.size());
+        } else {
+          for (size_t i = 0; i < slots.size(); ++i) {
+            const auto& slot = slots[i];
+            if (slot.Executable() == nullptr || slot.IsDisabled()) {
+              continue;
+            }
+
+            ActivateSlot(
+              SlotRuntimeKey { .node_handle = node.GetHandle(),
+                .slot_index
+                = scene::ScriptSlotIndex { static_cast<uint32_t>(i) } },
+              slot);
+          }
+        }
+      }
+
+      for (auto child = node.GetFirstChild(); child.has_value();
+        child = child->GetNextSibling()) {
+        nodes_to_visit.push_back(*child);
+      }
+    }
   }
 }
 
