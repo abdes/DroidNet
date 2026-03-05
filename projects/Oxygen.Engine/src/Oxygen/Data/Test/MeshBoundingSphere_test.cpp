@@ -167,25 +167,27 @@ NOLINT_TEST_F(
   const auto vb_view = temp_mesh->Vertices();
   const auto ib_view = temp_mesh->IndexBuffer().AsU32();
 
-  oxygen::data::pak::core::BufferResourceDesc vdesc { .data_offset = 0,
+  oxygen::data::pak::core::BufferResourceDesc vdesc {
+    .data_offset = 0,
     .size_bytes = static_cast<oxygen::data::pak::core::DataBlobSizeT>(
       vb_view.size() * sizeof(Vertex)),
     .usage_flags = static_cast<uint32_t>(
       oxygen::data::BufferResource::UsageFlags::kVertexBuffer),
     .element_stride = sizeof(Vertex),
     .element_format = 0,
-    .reserved = {} };
+  };
   std::vector<uint8_t> vbytes(vb_view.size() * sizeof(Vertex));
   std::memcpy(vbytes.data(), vb_view.data(), vbytes.size());
 
-  oxygen::data::pak::core::BufferResourceDesc idesc { .data_offset = 0,
+  oxygen::data::pak::core::BufferResourceDesc idesc {
+    .data_offset = 0,
     .size_bytes = static_cast<oxygen::data::pak::core::DataBlobSizeT>(
       ib_view.size() * sizeof(uint32_t)),
     .usage_flags = static_cast<uint32_t>(
       oxygen::data::BufferResource::UsageFlags::kIndexBuffer),
     .element_stride = sizeof(uint32_t),
     .element_format = 0,
-    .reserved = {} };
+  };
   std::vector<uint8_t> ibytes(ib_view.size() * sizeof(uint32_t));
   std::memcpy(ibytes.data(), ib_view.data(), ibytes.size());
 

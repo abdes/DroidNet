@@ -37,7 +37,7 @@ struct WriteReservation {
 };
 
 struct TextureTableTraits {
-  using Descriptor = data::pak::render::TextureResourceDesc;
+  using Descriptor = data::pak::core::TextureResourceDesc;
   using Reservation = WriteReservation;
 
   //! Textures use index 0 for the engine fallback texture (1x1 white

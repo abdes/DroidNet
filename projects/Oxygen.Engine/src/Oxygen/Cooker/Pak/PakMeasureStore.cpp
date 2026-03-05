@@ -172,10 +172,10 @@ template <typename Sink>
 auto EmitTextureTablePayload(
   const pak::PakResourceTableSerializationInput& input, Sink& sink) -> bool
 {
-  return EmitResourceTablePayload<render::TextureResourceDesc>(
+  return EmitResourceTablePayload<core::TextureResourceDesc>(
     input,
     [](const pak::PakResourcePlacementPlan& resource,
-      render::TextureResourceDesc& record) -> bool {
+      core::TextureResourceDesc& record) -> bool {
       const auto size_bytes = NarrowTo<uint32_t>(resource.size_bytes);
       const auto alignment = NarrowTo<uint16_t>(resource.alignment);
       if (!size_bytes.has_value() || !alignment.has_value()) {

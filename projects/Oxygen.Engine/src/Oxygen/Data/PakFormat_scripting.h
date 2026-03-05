@@ -66,7 +66,7 @@ enum class ScriptSlotFlags : uint32_t { // NOLINT(*-enum-size)
 OXYGEN_DEFINE_FLAGS_OPERATORS(ScriptSlotFlags)
 OXGN_DATA_NDAPI auto to_string(ScriptSlotFlags value) noexcept -> std::string;
 
-//! Fixed-size script parameter record (128 bytes).
+//! Fixed-size script parameter record.
 #pragma pack(push, 1)
 // NOLINTNEXTLINE(*-type-member-init) - MUST be initialized by users
 struct ScriptParamRecord {
@@ -83,7 +83,7 @@ struct ScriptParamRecord {
 #pragma pack(pop)
 static_assert(sizeof(ScriptParamRecord) == 128);
 
-//! Scripting component slot in a scene (128 bytes).
+//! Scripting component slot in a scene.
 #pragma pack(push, 1)
 // NOLINTNEXTLINE(*-type-member-init) - MUST be initialized by users
 struct ScriptSlotRecord {
@@ -92,12 +92,11 @@ struct ScriptSlotRecord {
   uint32_t params_count = 0; // Number of ScriptParamRecords
   int32_t execution_order = 0; // Lower = earlier.
   ScriptSlotFlags flags = ScriptSlotFlags::kNone;
-  uint8_t reserved[92] = {}; // Padded to 128 bytes
 };
 #pragma pack(pop)
-static_assert(sizeof(ScriptSlotRecord) == 128);
+static_assert(sizeof(ScriptSlotRecord) == 36);
 
-//! Scripting component record for scene component tables (16 bytes).
+//! Scripting component record for scene component tables.
 #pragma pack(push, 1)
 struct ScriptingComponentRecord {
   world::SceneNodeIndexT node_index = 0;
@@ -108,7 +107,7 @@ struct ScriptingComponentRecord {
 #pragma pack(pop)
 static_assert(sizeof(ScriptingComponentRecord) == 16);
 
-//! Script Resource Descriptor (32 bytes).
+//! Script Resource Descriptor.
 #pragma pack(push, 1)
 struct ScriptResourceDesc {
   core::OffsetT data_offset = 0; // Absolute offset to script payload
@@ -117,12 +116,11 @@ struct ScriptResourceDesc {
   ScriptEncoding encoding = ScriptEncoding::kBytecode;
   ScriptCompression compression = ScriptCompression::kNone;
   uint64_t content_hash = 0; // First 8 bytes of SHA256 of payload
-  uint8_t reserved[9] = {}; // Padded to 32 bytes
 };
 #pragma pack(pop)
-static_assert(sizeof(ScriptResourceDesc) == 32);
+static_assert(sizeof(ScriptResourceDesc) == 23);
 
-//! Script Asset Descriptor (256 bytes).
+//! Script Asset Descriptor.
 #pragma pack(push, 1)
 struct ScriptAssetDesc {
   core::AssetHeader header;
@@ -130,10 +128,9 @@ struct ScriptAssetDesc {
   core::ResourceIndexT source_resource_index = core::kNoResourceIndex;
   ScriptAssetFlags flags = ScriptAssetFlags::kNone;
   char external_source_path[120] = {}; // Null-terminated, null-padded
-  uint8_t reserved[29] = {}; // Padded to 256 bytes
 };
 #pragma pack(pop)
-static_assert(sizeof(ScriptAssetDesc) == 256);
+static_assert(sizeof(ScriptAssetDesc) == 211);
 
 } // namespace oxygen::data::pak::scripting
 

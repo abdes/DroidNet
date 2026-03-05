@@ -31,7 +31,7 @@ namespace {
 
   using data::pak::core::kNoResourceIndex;
   using data::pak::core::ResourceIndexT;
-  using data::pak::render::TextureResourceDesc;
+  using data::pak::core::TextureResourceDesc;
 
 #pragma pack(push, 1)
   struct TextureSidecarFile final {

@@ -24,18 +24,6 @@ namespace oxygen::data {
  a first-class asset: it is not named or globally identified, but is referenced
  by index in the buffers resource table from geometry or other assets.
 
- ```text
- offset size name             description
- ------ ---- ---------------- ---------------------------------------------
- 0x00   8    data_offset     Absolute offset to buffer data in PAK file
- 0x08   4    size_bytes       Size of buffer data in bytes
- 0x0C   4    usage_flags      Buffer usage and access flags (bitfield)
- 0x10   4    element_stride   Stride of each element in bytes (1 = raw)
- 0x14   1    element_format   Buffer element format enum value
- 0x15   8    content_hash     First 8 bytes of SHA256 of buffer data
- 0x1D   3    reserved         Reserved for future use (must be 0)
- ```
-
  @see BufferResourceDesc for interpretation of fields.
 */
 class BufferResource : public Object {

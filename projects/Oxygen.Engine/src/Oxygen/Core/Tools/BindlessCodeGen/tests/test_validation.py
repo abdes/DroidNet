@@ -123,16 +123,20 @@ def create_full_example_document():
 
 
 class TestValidationWithActualSchema:
-    """Test validation using the actual Spec.schema.json file."""
+    """Test validation using the actual Bindless.schema.json file."""
 
     @pytest.fixture
     def actual_schema_path(self):
         """Get path to the actual schema file."""
-        # Schema is located at src/Oxygen/Core/Bindless/Spec.schema.json
+        # Resolve using the same discovery logic as production generator.
+        resolved = generator.find_schema(None, generator.__file__)
+        if resolved is not None:
+            return Path(resolved)
+        # Direct repository fallback (current canonical location).
         return (
             Path(__file__).resolve().parents[3]
-            / "Bindless"
-            / "Spec.schema.json"
+            / "Meta"
+            / "Bindless.schema.json"
         )
 
     def test_validate_with_actual_schema_success(self, actual_schema_path):

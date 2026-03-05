@@ -63,35 +63,7 @@ namespace oxygen::data::pak::render {
 //! Material asset descriptor version for current PAK schema.
 [[maybe_unused]] constexpr uint8_t kMaterialAssetVersion = 2;
 
-//! Texture resource table entry (40 bytes)
-/*!
-  @note Texture `format` must be one of the core type `Format` enum values.
-  @note Textures are always aligned to 256 bytes.
-  @note `content_hash` stores the first 8 bytes of the SHA256 of the texture
-  data. Used for fast deduplication during incremental imports without
-  re-reading the data file.
-*/
-#pragma pack(push, 1)
-// NOLINTNEXTLINE(*-type-member-init) - MUST be initialized by users
-struct TextureResourceDesc {
-  core::OffsetT data_offset; // Absolute offset to texture data
-  core::DataBlobSizeT size_bytes; // Size of texture data
-  uint8_t texture_type; // 2D, 3D, Cube, etc. (enum) (defined externally)
-  uint8_t compression_type; // Compression (BC1, BC3, ASTC, etc.) (external)
-  uint32_t width; // Texture width
-  uint32_t height; // Texture height
-  uint16_t depth; // For 3D textures (volume), otherwise 1
-  uint16_t array_layers; // For array textures/cubemap arrays, otherwise 1
-  uint16_t mip_levels; // Number of mip levels
-  uint8_t format; // Texture format enum
-  uint16_t alignment; // 256 for textures
-  uint64_t content_hash = 0; // First 8 bytes of SHA256 of texture data
-  uint8_t reserved[1] = {}; // Reserved for future use
-};
-#pragma pack(pop)
-static_assert(sizeof(TextureResourceDesc) == 40);
-
-//! Shader descriptor (424 bytes)
+//! Shader descriptor
 /*!
   Describes a shader stage for material or pipeline binding. Does not contain
   bytecode; only metadata and lookup information.
@@ -106,8 +78,6 @@ static_assert(sizeof(TextureResourceDesc) == 40);
 #pragma pack(push, 1)
 struct ShaderReferenceDesc {
   uint8_t shader_type = 0; // ShaderType enum value
-  uint8_t reserved0[7] = {};
-
   char source_path[120] = {}; // Null-terminated, null-padded
   char entry_point[32] = {}; // Null-terminated, null-padded
   char defines[256] = {}; // Null-terminated, null-padded (may be empty)
@@ -115,9 +85,9 @@ struct ShaderReferenceDesc {
   uint64_t shader_hash = 0; // Hash of source for validation
 };
 #pragma pack(pop)
-static_assert(sizeof(ShaderReferenceDesc) == 424);
+static_assert(sizeof(ShaderReferenceDesc) == 417);
 
-//! Material asset descriptor (384 bytes) with explicit UV transform and
+//! Material asset descriptor with explicit UV transform and
 //! procedural grid extensions.
 /*!
   This layer replaces the trailing reserved bytes with named UV transform fields
@@ -202,15 +172,13 @@ struct MaterialAssetDesc {
   float grid_axis_color_x[4] = { 0.90F, 0.20F, 0.20F, 1.0F };
   float grid_axis_color_y[4] = { 0.20F, 0.60F, 0.90F, 1.0F };
   float grid_origin_color[4] = { 1.0F, 1.0F, 1.0F, 1.0F };
-
-  uint8_t reserved[35] = {};
 };
 // Followed by:
 // - Array of ShaderReferenceDesc entries in ascending set-bit order of
 //   `shader_stages` (least-significant set bit first). Count is population
 //   count of `shader_stages`.
 #pragma pack(pop)
-static_assert(sizeof(MaterialAssetDesc) == 384);
+static_assert(sizeof(MaterialAssetDesc) == 333);
 
 //=== Texture Payload Structures ===-----------------------------------------//
 
@@ -285,7 +253,7 @@ inline constexpr uint32_t kTexturePayloadMagic = 0x3158544F;
  ### Memory Layout
 
  ```
- TexturePayloadHeader (28 bytes)
+ TexturePayloadHeader
  SubresourceLayout[subresource_count] (12 bytes each)
  [padding to data_offset_bytes]
  Pixel/block data for all subresources

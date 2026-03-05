@@ -2,8 +2,8 @@
   "assets": [
     {
       "alignment": 1,
-      "descriptor_offset": 1280,
-      "descriptor_size": 256,
+      "descriptor_offset": 768,
+      "descriptor_size": 211,
       "key": "33333333333333333333333333333333",
       "name": "AiScript",
       "type": "script",
@@ -12,8 +12,8 @@
     },
     {
       "alignment": 1,
-      "descriptor_offset": 1536,
-      "descriptor_size": 256,
+      "descriptor_offset": 979,
+      "descriptor_size": 211,
       "key": "11111111111111111111111111111111",
       "name": "MoveScript",
       "type": "script",
@@ -22,41 +22,42 @@
     },
     {
       "alignment": 1,
-      "descriptor_offset": 1792,
-      "descriptor_size": 256,
+      "descriptor_offset": 1190,
+      "descriptor_size": 115,
       "key": "22222222222222222222222222222222",
       "name": "ScriptScene",
       "type": "scene",
-      "variable_extra_size": 1112,
+      "variable_extra_size": 1104,
       "warnings": []
     }
   ],
   "browse_index": {
     "entry_count": 3,
-    "offset": 3360,
+    "offset": 2608,
     "padding_before": 0,
-    "size": 128,
+    "size": 124,
     "string_table_size": 32
   },
   "content_version": 0,
   "deterministic": true,
   "directory": {
     "asset_count": 3,
-    "offset": 3168,
-    "padding_before": 8,
+    "offset": 2416,
+    "padding_before": 7,
     "size": 192
   },
-  "file_size": 3744,
+  "file_size": 2988,
   "footer": {
-    "offset": 3488,
+    "offset": 2732,
     "size": 256
   },
   "padding": {
     "by_section": {
-      "assets_region": 224,
-      "directory": 8
+      "assets_region": 4,
+      "directory": 7,
+      "table_script_slot": 11
     },
-    "total": 232
+    "total": 22
   },
   "regions": [
     {
@@ -108,7 +109,7 @@
       "scripts": 2,
       "total": 3
     },
-    "variable_extra_total": 1112
+    "variable_extra_total": 1104
   },
   "tables": [
     {
@@ -134,17 +135,17 @@
     },
     {
       "count": 3,
-      "entry_size": 32,
+      "entry_size": 23,
       "name": "script",
       "offset": 576,
       "padding_before": 0
     },
     {
       "count": 3,
-      "entry_size": 128,
+      "entry_size": 36,
       "name": "script_slot",
-      "offset": 672,
-      "padding_before": 0
+      "offset": 656,
+      "padding_before": 11
     },
     {
       "count": 0,

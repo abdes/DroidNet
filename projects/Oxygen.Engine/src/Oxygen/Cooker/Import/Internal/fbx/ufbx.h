@@ -2570,10 +2570,10 @@ typedef enum ufbx_shader_type UFBX_ENUM_REPR {
   // https://knowledge.autodesk.com/support/3ds-max/learn-explore/caas/CloudHelp/cloudhelp/2021/ENU/3DSMax-Lighting-Shading/files/GUID-18087194-B2A6-43EF-9B80-8FD1736FAE52-htm.html
   UFBX_SHADER_3DS_MAX_PBR_SPEC_GLOSS,
   // 3ds glTF Material
-  // https://help.autodesk.com/view/3DSMAX/2023/ENU/?guid=GUID-7ABFB805-1D9F-417E-9C22-704BFDF160FA
+  // https://help.autodesk.com/view/3DSMAX/2023/ENU/?source_identity=GUID-7ABFB805-1D9F-417E-9C22-704BFDF160FA
   UFBX_SHADER_GLTF_MATERIAL,
   // 3ds OpenPBR Material
-  // https://help.autodesk.com/view/3DSMAX/2025/ENU/?guid=GUID-CD90329C-1E2B-4BBA-9285-3BB46253B9C2
+  // https://help.autodesk.com/view/3DSMAX/2025/ENU/?source_identity=GUID-CD90329C-1E2B-4BBA-9285-3BB46253B9C2
   UFBX_SHADER_OPENPBR_MATERIAL,
   // Stingray ShaderFX shader graph.
   // Contains a serialized `"ShaderGraph"` in `ufbx_props`.

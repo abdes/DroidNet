@@ -31,7 +31,7 @@
    no physical filesystem roots).
 */
 
-namespace oxygen::data::loose_cooked::latest_schema {
+namespace oxygen::data::loose_cooked {
 
 //=== Type Aliases ===--------------------------------------------------------//
 
@@ -76,13 +76,14 @@ OXGN_DATA_NDAPI auto to_string(IndexFlags value) -> std::string;
 
 //=== Index File Format Structures ===---------------------------------------//
 
-//! Fixed-size header at the start of the loose cooked index (256 bytes).
+//! Fixed-size header at the start of the loose cooked index.
 #pragma pack(push, 1)
 struct IndexHeader {
   std::array<char, 8> magic = kHeaderMagic; // NOLINT
   uint16_t version = 1; // Schema version
   uint16_t content_version = 0; // Content version (cook-defined)
   uint32_t flags = 0; // IndexFlags bitset; 0 = legacy/unspecified
+  std::array<uint8_t, 16> source_identity = {};
 
   // -- String table (null-terminated UTF-8 strings) --
   OffsetT string_table_offset = 0;
@@ -98,8 +99,7 @@ struct IndexHeader {
   CountT file_record_count = 0;
   uint32_t file_record_size = 0; // sizeof(FileRecord) for this schema
 
-  std::array<uint8_t, 16> guid = {};
-  uint8_t reserved[176] = {};
+  uint8_t _reserved[176] = {}; // Tail reserve to keep fixed 256-byte header
 };
 #pragma pack(pop)
 static_assert(sizeof(IndexHeader) == 256);
@@ -110,22 +110,18 @@ static_assert(sizeof(IndexHeader) == 256);
 #pragma pack(push, 1)
 struct AssetEntry {
   AssetKey asset_key;
+  uint8_t asset_type = 0; // AssetType enum (loader dispatch)
 
   // Offsets are into the string table.
   uint32_t descriptor_relpath_offset = 0; // e.g. "assets/Materials/Dark.mat"
   uint32_t virtual_path_offset = 0; // e.g. "/Content/Materials/Dark.mat"
 
-  uint8_t asset_type = 0; // AssetType enum (loader dispatch)
-  uint8_t reserved0[3] = {};
-
   // Descriptor integrity (metadata only; validation policy is runtime-defined)
   SizeT descriptor_size = 0;
   uint8_t descriptor_sha256[kSha256Size] = {};
-
-  uint8_t reserved1[8] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(AssetEntry) == 76);
+static_assert(sizeof(AssetEntry) == 65);
 
 //! Kind of a file record.
 enum class FileKind : uint16_t { // NOLINT(*-enum-size)
@@ -146,24 +142,11 @@ enum class FileKind : uint16_t { // NOLINT(*-enum-size)
 #pragma pack(push, 1)
 struct FileRecord {
   FileKind kind = FileKind::kUnknown;
-  uint16_t reserved0 = 0;
-
-  // Offset into string table for the relative path.
-  uint32_t relpath_offset = 0; // e.g. "resources/buffers.table"
-
   SizeT size = 0;
-
-  // NOTE: File-level SHA256 was removed in favor of per-resource content_hash
-  // stored in TextureResourceDesc/BufferResourceDesc. Append-only data files
-  // invalidate whole-file hashes on each append.
-  uint8_t reserved1[48] = {};
+  //! Offset into string table for the relative path.
+  uint32_t relpath_offset = 0; // e.g. "resources/buffers.table"
 };
 #pragma pack(pop)
-static_assert(sizeof(FileRecord) == 64);
+static_assert(sizeof(FileRecord) == 14);
 
-} // namespace oxygen::data::loose_cooked::latest_schema
-
-namespace oxygen::data::loose_cooked {
-//! Default namespace alias for latest version of the PAK format
-using namespace latest_schema;
 } // namespace oxygen::data::loose_cooked

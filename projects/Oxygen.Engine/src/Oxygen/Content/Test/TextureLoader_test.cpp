@@ -35,7 +35,7 @@ protected:
   }
 
   auto WriteDescriptorAndPayload(
-    const oxygen::data::pak::render::TextureResourceDesc& desc,
+    const oxygen::data::pak::core::TextureResourceDesc& desc,
     const std::vector<uint8_t>& payload) -> void
   {
     auto pack_desc = desc_writer_.ScopedAlignment(1);
@@ -80,7 +80,7 @@ protected:
 NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTextureV4PayloadSucceeds)
 {
   using oxygen::content::testing::MakeV4TexturePayload;
-  using oxygen::data::pak::render::TextureResourceDesc;
+  using oxygen::data::pak::core::TextureResourceDesc;
 
   TextureResourceDesc desc {
     .data_offset = 256,
@@ -124,7 +124,7 @@ NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTextureV4PayloadSucceeds)
 NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTextureInvalidFormatIsUnknown)
 {
   using oxygen::content::testing::MakeV4TexturePayload;
-  using oxygen::data::pak::render::TextureResourceDesc;
+  using oxygen::data::pak::core::TextureResourceDesc;
 
   TextureResourceDesc desc {
     .data_offset = 256,
@@ -157,7 +157,7 @@ NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTextureInvalidFormatIsUnknown)
 NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTextureInvalidMagicThrows)
 {
   using oxygen::content::testing::MakeV4TexturePayload;
-  using oxygen::data::pak::render::TextureResourceDesc;
+  using oxygen::data::pak::core::TextureResourceDesc;
 
   TextureResourceDesc desc {
     .data_offset = 256,
@@ -188,7 +188,7 @@ NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTextureInvalidMagicThrows)
 NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTextureInvalidDimensionsThrow)
 {
   using oxygen::content::testing::MakeV4TexturePayload;
-  using oxygen::data::pak::render::TextureResourceDesc;
+  using oxygen::data::pak::core::TextureResourceDesc;
 
   TextureResourceDesc desc {
     .data_offset = 256,
@@ -217,7 +217,7 @@ NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTextureInvalidDimensionsThrow)
 //! Test: truncated payload (smaller than header) throws.
 NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTextureTruncatedPayloadThrows)
 {
-  using oxygen::data::pak::render::TextureResourceDesc;
+  using oxygen::data::pak::core::TextureResourceDesc;
 
   TextureResourceDesc desc {
     .data_offset = 0,

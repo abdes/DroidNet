@@ -60,7 +60,7 @@ namespace {
 auto FillTestGuid(oxygen::data::loose_cooked::IndexHeader& header) -> void
 {
   for (uint8_t i = 0; i < 16; ++i) {
-    header.guid[i] = static_cast<uint8_t>(i + 1);
+    header.source_identity[i] = static_cast<uint8_t>(i + 1);
   }
 }
 

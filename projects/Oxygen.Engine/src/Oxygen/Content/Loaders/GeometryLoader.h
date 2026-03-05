@@ -31,9 +31,6 @@ namespace oxygen::content::loaders {
 
 namespace detail {
 
-  constexpr size_t kMeshInfoSize
-    = sizeof(oxygen::data::pak::geometry::SkinnedMeshInfo);
-
   // Accepts any Result<T> and checks for error, logs and throws if needed
   template <typename ResultT>
   auto CheckResult(const ResultT& result, const char* field_name) -> void
@@ -93,12 +90,16 @@ namespace detail {
       CheckResult(max_result, "m.bounding_box_max");
     }
 
-    constexpr size_t kStandardInfoSize
-      = sizeof(data::pak::geometry::StandardMeshInfo);
-    constexpr size_t kStandardPadding = kMeshInfoSize - kStandardInfoSize;
+    // MeshInfo arms are fixed-width on disk. Consume the reserved tail bytes so
+    // subsequent SubMeshDesc reads start at the correct offset.
+    constexpr size_t kStandardConsumed
+      = sizeof(ResourceIndexT) * 2 + sizeof(float) * 3 * 2;
+    constexpr size_t kStandardTail
+      = sizeof(data::pak::geometry::StandardMeshInfo) - kStandardConsumed;
+    static_assert(kStandardTail == 40);
     auto skip_result
-      = reader.Forward(static_cast<std::streamoff>(kStandardPadding));
-    CheckResult(skip_result, "m.standard.padding");
+      = reader.Forward(static_cast<std::streamoff>(kStandardTail));
+    CheckResult(skip_result, "m.standard.reserved");
 
     if (context.parse_only) {
       return { nullptr, nullptr };
@@ -142,12 +143,14 @@ namespace detail {
     CheckResult(params_size_result, "m.param_blob_size");
     LOG_F(2, "param blob size : {}", info.params_size);
 
-    constexpr size_t kProceduralInfoSize
-      = sizeof(data::pak::geometry::ProceduralMeshInfo);
-    constexpr size_t kProceduralPadding = kMeshInfoSize - kProceduralInfoSize;
+    // Consume reserved tail bytes for the fixed-width ProceduralMeshInfo arm.
+    constexpr size_t kProceduralConsumed = sizeof(uint32_t);
+    constexpr size_t kProceduralTail
+      = sizeof(data::pak::geometry::ProceduralMeshInfo) - kProceduralConsumed;
+    static_assert(kProceduralTail == 68);
     auto skip_result
-      = reader.Forward(static_cast<std::streamoff>(kProceduralPadding));
-    CheckResult(skip_result, "m.procedural.padding");
+      = reader.Forward(static_cast<std::streamoff>(kProceduralTail));
+    CheckResult(skip_result, "m.procedural.reserved");
 
     std::vector<std::byte> param_blob;
     if (info.params_size > 0) {
@@ -526,11 +529,6 @@ inline auto LoadGeometryAsset(LoaderContext context)
 
   // bounding_box_max
   detail::ReadBoundingBox(reader, desc.bounding_box_max, "g.bounding_box_max");
-
-  // reserved: skip forward instead of reading
-  constexpr std::streamoff reserved_size = sizeof(desc.reserved);
-  auto skip_result = reader.Forward(reserved_size);
-  detail::CheckResult(skip_result, "g.reserved (skip)");
 
   // Read LOD meshes
   std::vector<std::shared_ptr<Mesh>> lod_meshes;

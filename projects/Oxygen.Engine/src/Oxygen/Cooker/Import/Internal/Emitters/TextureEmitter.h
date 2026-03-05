@@ -184,7 +184,7 @@ public:
 
   //! Query the table descriptor for a previously emitted texture index.
   OXGN_COOK_NDAPI auto TryGetDescriptor(uint32_t index) const
-    -> std::optional<data::pak::render::TextureResourceDesc>;
+    -> std::optional<data::pak::core::TextureResourceDesc>;
 
   //=== Finalization
   //===-------------------------------------------------------//
@@ -206,7 +206,7 @@ public:
   OXGN_COOK_NDAPI auto Finalize() -> co::Co<bool>;
 
 private:
-  using TextureResourceDesc = data::pak::render::TextureResourceDesc;
+  using TextureResourceDesc = data::pak::core::TextureResourceDesc;
 
   enum class WriteKind : uint8_t {
     kPadding,

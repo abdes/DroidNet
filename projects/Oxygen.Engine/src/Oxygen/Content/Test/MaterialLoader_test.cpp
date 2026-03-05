@@ -38,7 +38,7 @@ auto LoadTestTextureResource(const oxygen::content::LoaderContext& /*context*/)
   -> std::unique_ptr<oxygen::data::TextureResource>
 {
   // Create a minimal TextureResource for testing
-  oxygen::data::pak::render::TextureResourceDesc desc {};
+  oxygen::data::pak::core::TextureResourceDesc desc {};
   std::vector<uint8_t> data {};
   return std::make_unique<oxygen::data::TextureResource>(
     std::move(desc), std::move(data));

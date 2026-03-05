@@ -36,13 +36,13 @@ def test_buffer_sentinel_descriptor_is_zeroed(tmp_path: Path):
     )
 
     assert buffer_table_count == 2, "Should have 2 entries (sentinel + user buffer)"
-    assert buffer_entry_size == 32
+    assert buffer_entry_size == 29
 
     # Read first entry (sentinel)
-    sentinel_bytes = data[buffer_table_offset : buffer_table_offset + 32]
+    sentinel_bytes = data[buffer_table_offset : buffer_table_offset + 29]
     # BufferResourceDesc: data_offset (Q), size_bytes (I), usage_flags (I),
-    # element_stride (I), element_format (B), content_hash (Q), reserved (3B)
-    unpacked_sentinel = struct.unpack("<QIII B Q 3s", sentinel_bytes)
+    # element_stride (I), element_format (B), content_hash (Q)
+    unpacked_sentinel = struct.unpack("<QIII B Q", sentinel_bytes)
 
     # Verify sentinel is all-zero
     assert unpacked_sentinel[0] == 0, "Sentinel data_offset must be 0"
@@ -53,8 +53,8 @@ def test_buffer_sentinel_descriptor_is_zeroed(tmp_path: Path):
     assert unpacked_sentinel[5] == 0, "Sentinel content_hash must be 0"
 
     # Read second entry (user buffer)
-    user_buf_bytes = data[buffer_table_offset + 32 : buffer_table_offset + 64]
-    unpacked_user = struct.unpack("<QIII B Q 3s", user_buf_bytes)
+    user_buf_bytes = data[buffer_table_offset + 29 : buffer_table_offset + 58]
+    unpacked_user = struct.unpack("<QIII B Q", user_buf_bytes)
 
     assert unpacked_user[0] != 0, "User buffer must have a non-zero offset"
     assert unpacked_user[1] == 4, "User buffer size mismatch"

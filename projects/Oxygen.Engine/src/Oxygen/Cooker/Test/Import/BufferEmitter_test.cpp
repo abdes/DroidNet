@@ -90,13 +90,13 @@ auto ReadBinaryFile(const std::filesystem::path& path) -> std::vector<std::byte>
 //! Parse buffer table from binary data.
 /*!
  Deserializes the packed BufferResourceDesc entries from the table file.
- Each entry is 32 bytes as per PAK format specification.
+ Each entry uses the packed BufferResourceDesc size from the current PAK format.
 */
 auto ParseBufferTable(const std::vector<std::byte>& data)
   -> std::vector<PakBufferResourceDesc>
 {
-  static_assert(sizeof(PakBufferResourceDesc) == 32,
-    "BufferResourceDesc must be 32 bytes per PAK format");
+  static_assert(sizeof(PakBufferResourceDesc) == 29,
+    "BufferResourceDesc must be 29 bytes per PAK format");
 
   const auto count = data.size() / sizeof(PakBufferResourceDesc);
   std::vector<PakBufferResourceDesc> table(count);
@@ -529,7 +529,7 @@ NOLINT_TEST_F(BufferEmitterTest, EmitAfterFinalizeThrows)
 
 //=== PAK Format Compliance Tests ===-----------------------------------------//
 
-//! Verify table file has correct packed size (32 bytes per entry).
+//! Verify table file has correct packed size (29 bytes per entry).
 NOLINT_TEST_F(BufferEmitterTest, FinalizeTableFileHasCorrectPackedSize)
 {
   // Arrange
@@ -557,7 +557,7 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeTableFileHasCorrectPackedSize)
 
   const auto table_size = std::filesystem::file_size(table_path);
   EXPECT_EQ(table_size, (kBufferCount + 1) * sizeof(PakBufferResourceDesc));
-  EXPECT_EQ(table_size, (kBufferCount + 1) * 32); // includes sentinel
+  EXPECT_EQ(table_size, (kBufferCount + 1) * 29); // includes sentinel
 }
 
 //! Verify table entries have correctly aligned offsets based on buffer

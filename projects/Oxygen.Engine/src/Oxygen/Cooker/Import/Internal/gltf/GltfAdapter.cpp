@@ -2458,7 +2458,6 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
             .node_index = i,
             .geometry_key = input.geometry_keys[key_index],
             .visible = 1,
-            .reserved = {},
           });
         }
       }
@@ -2483,7 +2482,6 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
           .aspect_ratio = aspect_ratio,
           .near_plane = near_plane,
           .far_plane = far_plane,
-          .reserved = {},
         });
       } else if (cam.type == cgltf_camera_type_orthographic) {
         const auto& ortho = cam.data.orthographic;
@@ -2500,7 +2498,6 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
           .top = half_h,
           .near_plane = near_plane,
           .far_plane = far_plane,
-          .reserved = {},
         });
       } else {
         diagnostics.push_back(MakeWarningDiagnostic("scene.camera.unsupported",

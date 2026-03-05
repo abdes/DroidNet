@@ -47,8 +47,6 @@ inline auto Load(AnyReader& reader, data::pak::core::AssetHeader& header)
   CHECK_RESULT(reader.ReadInto(header.streaming_priority));
   CHECK_RESULT(reader.ReadInto(header.content_hash));
   CHECK_RESULT(reader.ReadInto(header.variant_flags));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { header.reserved })));
   return {};
 }
 
@@ -79,10 +77,10 @@ inline auto Load(AnyReader& reader, data::pak::core::PakHeader& header)
     reader.ReadBlobInto(std::as_writable_bytes(std::span { header.magic })));
   CHECK_RESULT(reader.ReadInto(header.version));
   CHECK_RESULT(reader.ReadInto(header.content_version));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { header.guid })));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { header.reserved })));
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::as_writable_bytes(std::span { header.source_identity })));
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::as_writable_bytes(std::span { header._reserved })));
   return {};
 }
 
@@ -106,8 +104,8 @@ inline auto Load(AnyReader& reader, data::pak::core::PakFooter& footer)
   CHECK_RESULT(reader.ReadInto(footer.physics_resource_table));
   CHECK_RESULT(reader.ReadInto(footer.browse_index_offset));
   CHECK_RESULT(reader.ReadInto(footer.browse_index_size));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { footer.reserved })));
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::as_writable_bytes(std::span { footer._reserved })));
   CHECK_RESULT(reader.ReadInto(footer.pak_crc32));
   CHECK_RESULT(reader.ReadBlobInto(
     std::as_writable_bytes(std::span { footer.footer_magic })));
@@ -125,7 +123,7 @@ inline auto Load(AnyReader& reader, data::pak::core::AssetDirectoryEntry& entry)
   CHECK_RESULT(reader.ReadInto(entry.desc_offset));
   CHECK_RESULT(reader.ReadInto(entry.desc_size));
   CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { entry.reserved })));
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { entry._reserved })));
   return {};
 }
 
@@ -138,7 +136,6 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(header.version));
   CHECK_RESULT(reader.ReadInto(header.entry_count));
   CHECK_RESULT(reader.ReadInto(header.string_table_size));
-  CHECK_RESULT(reader.ReadInto(header.reserved));
   return {};
 }
 
@@ -161,13 +158,12 @@ inline auto Load(AnyReader& reader, data::pak::core::BufferResourceDesc& desc)
   CHECK_RESULT(reader.ReadInto(desc.usage_flags));
   CHECK_RESULT(reader.ReadInto(desc.element_stride));
   CHECK_RESULT(reader.ReadInto(desc.element_format));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { desc.reserved })));
+  CHECK_RESULT(reader.ReadInto(desc.content_hash));
   return {};
 }
 
-inline auto Load(AnyReader& reader,
-  data::pak::render::TextureResourceDesc& desc) -> Result<void>
+inline auto Load(AnyReader& reader, data::pak::core::TextureResourceDesc& desc)
+  -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(desc.data_offset));
@@ -181,8 +177,7 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(desc.mip_levels));
   CHECK_RESULT(reader.ReadInto(desc.format));
   CHECK_RESULT(reader.ReadInto(desc.alignment));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { desc.reserved })));
+  CHECK_RESULT(reader.ReadInto(desc.content_hash));
   return {};
 }
 
@@ -202,8 +197,6 @@ inline auto Load(AnyReader& reader,
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(desc.shader_type));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { desc.reserved0 })));
   CHECK_RESULT(reader.ReadBlobInto(
     std::as_writable_bytes(std::span { desc.source_path })));
   CHECK_RESULT(reader.ReadBlobInto(
@@ -263,8 +256,6 @@ inline auto Load(AnyReader& reader, data::pak::world::RenderableRecord& record)
   CHECK_RESULT(reader.ReadInto(record.node_index));
   CHECK_RESULT(reader.ReadInto(record.geometry_key));
   CHECK_RESULT(reader.ReadInto(record.visible));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { record.reserved })));
 
   return {};
 }
@@ -279,8 +270,6 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.aspect_ratio));
   CHECK_RESULT(reader.ReadInto(record.near_plane));
   CHECK_RESULT(reader.ReadInto(record.far_plane));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { record.reserved })));
 
   return {};
 }
@@ -297,8 +286,6 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.top));
   CHECK_RESULT(reader.ReadInto(record.near_plane));
   CHECK_RESULT(reader.ReadInto(record.far_plane));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { record.reserved })));
 
   return {};
 }
@@ -324,8 +311,6 @@ inline auto Load(AnyReader& reader,
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(hdr.byte_size));
   CHECK_RESULT(reader.ReadInto(hdr.systems_count));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { hdr.reserved })));
   return {};
 }
 
@@ -371,8 +356,6 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(r.multi_scattering_factor));
   CHECK_RESULT(reader.ReadInto(r.sun_disk_enabled));
   CHECK_RESULT(reader.ReadInto(r.aerial_perspective_distance_scale));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { r._reserved })));
 
   return {};
 }
@@ -392,7 +375,6 @@ inline auto Load(AnyReader& reader,
   for (auto& v : r.single_scattering_albedo_rgb) {
     CHECK_RESULT(reader.ReadInto(v));
   }
-  CHECK_RESULT(reader.ReadInto(r._pad0));
   CHECK_RESULT(reader.ReadInto(r.phase_g));
 
   for (auto& v : r.wind_dir_ws) {
@@ -400,8 +382,6 @@ inline auto Load(AnyReader& reader,
   }
   CHECK_RESULT(reader.ReadInto(r.wind_speed_mps));
   CHECK_RESULT(reader.ReadInto(r.shadow_strength));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { r._reserved })));
 
   return {};
 }
@@ -423,9 +403,6 @@ inline auto Load(AnyReader& reader, data::pak::world::FogEnvironmentRecord& r)
     CHECK_RESULT(reader.ReadInto(v));
   }
   CHECK_RESULT(reader.ReadInto(r.anisotropy_g));
-  CHECK_RESULT(reader.ReadInto(r._pad0));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { r._reserved })));
 
   return {};
 }
@@ -447,8 +424,6 @@ inline auto Load(AnyReader& reader,
   }
   CHECK_RESULT(reader.ReadInto(r.diffuse_intensity));
   CHECK_RESULT(reader.ReadInto(r.specular_intensity));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { r._reserved })));
 
   return {};
 }
@@ -472,8 +447,6 @@ inline auto Load(AnyReader& reader,
   for (auto& v : r.tint_rgb) {
     CHECK_RESULT(reader.ReadInto(v));
   }
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { r._reserved })));
 
   return {};
 }
@@ -497,8 +470,6 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(r.saturation));
   CHECK_RESULT(reader.ReadInto(r.contrast));
   CHECK_RESULT(reader.ReadInto(r.vignette_intensity));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { r._reserved })));
 
   return {};
 }
@@ -514,8 +485,6 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(r.normal_bias));
   CHECK_RESULT(reader.ReadInto(r.contact_shadows));
   CHECK_RESULT(reader.ReadInto(r.resolution_hint));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { r.reserved })));
 
   return {};
 }
@@ -533,13 +502,9 @@ inline auto Load(AnyReader& reader, data::pak::world::LightCommonRecord& r)
 
   CHECK_RESULT(reader.ReadInto(r.mobility));
   CHECK_RESULT(reader.ReadInto(r.casts_shadows));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { r.reserved0 })));
 
   CHECK_RESULT(reader.ReadInto(r.shadow));
   CHECK_RESULT(reader.ReadInto(r.exposure_compensation_ev));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { r.reserved1 })));
 
   return {};
 }
@@ -561,8 +526,6 @@ inline auto Load(AnyReader& reader, data::pak::world::DirectionalLightRecord& r)
   }
   CHECK_RESULT(reader.ReadInto(r.distribution_exponent));
   CHECK_RESULT(reader.ReadInto(r.intensity_lux));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { r.reserved })));
 
   return {};
 }
@@ -575,14 +538,10 @@ inline auto Load(AnyReader& reader, data::pak::world::PointLightRecord& r)
   CHECK_RESULT(reader.ReadInto(r.node_index));
   CHECK_RESULT(reader.ReadInto(r.common));
   CHECK_RESULT(reader.ReadInto(r.range));
-  CHECK_RESULT(reader.ReadInto(r.attenuation_model));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { r.reserved0 })));
   CHECK_RESULT(reader.ReadInto(r.decay_exponent));
   CHECK_RESULT(reader.ReadInto(r.source_radius));
   CHECK_RESULT(reader.ReadInto(r.luminous_flux_lm));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { r.reserved1 })));
+  CHECK_RESULT(reader.ReadInto(r.attenuation_model));
 
   return {};
 }
@@ -595,16 +554,12 @@ inline auto Load(AnyReader& reader, data::pak::world::SpotLightRecord& r)
   CHECK_RESULT(reader.ReadInto(r.node_index));
   CHECK_RESULT(reader.ReadInto(r.common));
   CHECK_RESULT(reader.ReadInto(r.range));
-  CHECK_RESULT(reader.ReadInto(r.attenuation_model));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { r.reserved0 })));
   CHECK_RESULT(reader.ReadInto(r.decay_exponent));
   CHECK_RESULT(reader.ReadInto(r.inner_cone_angle_radians));
   CHECK_RESULT(reader.ReadInto(r.outer_cone_angle_radians));
   CHECK_RESULT(reader.ReadInto(r.source_radius));
   CHECK_RESULT(reader.ReadInto(r.luminous_flux_lm));
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { r.reserved1 })));
+  CHECK_RESULT(reader.ReadInto(r.attenuation_model));
 
   return {};
 }
@@ -639,8 +594,6 @@ inline auto Load(AnyReader& reader,
   for (auto& v : record.bias) {
     CHECK_RESULT(reader.ReadInto(v));
   }
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { record.reserved })));
 
   return {};
 }
@@ -652,7 +605,6 @@ inline auto Load(AnyReader& reader,
 
   CHECK_RESULT(reader.ReadInto(record.type));
   CHECK_RESULT(reader.ReadInto(record.behavior));
-  CHECK_RESULT(reader.ReadInto(record.reserved0));
   CHECK_RESULT(reader.ReadInto(record.flags));
   CHECK_RESULT(reader.ReadInto(record.actuation_threshold));
   CHECK_RESULT(reader.ReadInto(record.linked_action_asset_key));
@@ -664,8 +616,6 @@ inline auto Load(AnyReader& reader,
   for (auto& v : record.uparams) {
     CHECK_RESULT(reader.ReadInto(v));
   }
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record.reserved1 })));
 
   return {};
 }
@@ -786,8 +736,6 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.format));
   CHECK_RESULT(reader.ReadBlobInto(
     std::as_writable_bytes(std::span { record.content_hash })));
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record._reserved })));
   return {};
 }
 
@@ -802,8 +750,6 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.density));
   CHECK_RESULT(reader.ReadInto(record.combine_mode_friction));
   CHECK_RESULT(reader.ReadInto(record.combine_mode_restitution));
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record._reserved })));
   return {};
 }
 
@@ -813,8 +759,6 @@ inline auto Load(AnyReader& reader,
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.resource_index));
   CHECK_RESULT(reader.ReadInto(record.payload_type));
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record._reserved })));
   return {};
 }
 
@@ -848,8 +792,6 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.material_asset_key));
   CHECK_RESULT(reader.ReadInto(record.shape_params));
   CHECK_RESULT(reader.ReadInto(record.cooked_shape_ref));
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record._reserved })));
   return {};
 }
 
@@ -873,8 +815,6 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.component_table_directory_offset));
   CHECK_RESULT(reader.ReadBlobInto(
     std::as_writable_bytes(std::span { record.target_scene_content_hash })));
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record._reserved })));
   return {};
 }
 
@@ -950,8 +890,6 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.max_angular_velocity));
   CHECK_RESULT(reader.ReadInto(record.allowed_dof_flags));
   CHECK_RESULT(reader.ReadInto(record.backend_scalars));
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record._reserved })));
   return {};
 }
 
@@ -964,8 +902,6 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.material_asset_key));
   CHECK_RESULT(reader.ReadInto(record.collision_layer));
   CHECK_RESULT(reader.ReadInto(record.collision_mask));
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record._reserved })));
   return {};
 }
 
@@ -986,8 +922,6 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.collision_mask));
   CHECK_RESULT(reader.ReadInto(record.inner_shape_asset_key));
   CHECK_RESULT(reader.ReadInto(record.backend_scalars));
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record._reserved })));
   return {};
 }
 
@@ -1016,8 +950,6 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.tether_mode));
   CHECK_RESULT(reader.ReadInto(record.topology_format));
   CHECK_RESULT(reader.ReadInto(record.self_collision));
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record._reserved })));
   return {};
 }
 
@@ -1029,8 +961,6 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.node_index_b));
   CHECK_RESULT(reader.ReadInto(record.constraint_resource_index));
   CHECK_RESULT(reader.ReadInto(record.backend_scalars));
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record._reserved })));
   return {};
 }
 
@@ -1042,8 +972,6 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.constraint_resource_index));
   CHECK_RESULT(reader.ReadInto(record.wheel_slice_offset));
   CHECK_RESULT(reader.ReadInto(record.wheel_slice_count));
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record._reserved })));
   return {};
 }
 
@@ -1055,8 +983,6 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.max_bodies));
   CHECK_RESULT(reader.ReadInto(record.filter_overlap));
   CHECK_RESULT(reader.ReadInto(record.authority));
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record._reserved })));
   return {};
 }
 
@@ -1069,8 +995,6 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.axle_index));
   CHECK_RESULT(reader.ReadInto(record.side));
   CHECK_RESULT(reader.ReadInto(record.backend_scalars));
-  CHECK_RESULT(reader.ReadBlobInto(
-    std::as_writable_bytes(std::span { record._reserved })));
   return {};
 }
 

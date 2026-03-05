@@ -17,6 +17,9 @@ from .constants import (
     MATERIAL_DESC_SIZE,
     GEOMETRY_DESC_SIZE,
     SCENE_DESC_SIZE,
+    SCRIPT_DESC_SIZE,
+    INPUT_ACTION_DESC_SIZE,
+    INPUT_MAPPING_CONTEXT_DESC_SIZE,
     MESH_DESC_SIZE,
     SUBMESH_DESC_SIZE,
     MESH_VIEW_DESC_SIZE,
@@ -24,11 +27,19 @@ from .constants import (
     FOOTER_SIZE,
     SHADER_REF_DESC_SIZE,
     SCENE_ASSET_VERSION_CURRENT,
+    PHYSICS_RESOURCE_DESC_SIZE,
+    PHYSICS_MATERIAL_ASSET_DESC_SIZE,
     COLLISION_SHAPE_ASSET_DESC_SIZE,
+    PHYSICS_SCENE_DESC_SIZE,
     RIGID_BODY_BINDING_RECORD_SIZE,
     COLLIDER_BINDING_RECORD_SIZE,
     CHARACTER_BINDING_RECORD_SIZE,
     SOFT_BODY_BINDING_RECORD_SIZE,
+    JOINT_BINDING_RECORD_SIZE,
+    VEHICLE_BINDING_RECORD_SIZE,
+    VEHICLE_WHEEL_BINDING_RECORD_SIZE,
+    AGGREGATE_BINDING_RECORD_SIZE,
+    SCRIPT_SLOT_RECORD_SIZE,
 )
 from .errors import PakError
 from ..utils.io import DataError, read_data_from_spec
@@ -223,9 +234,8 @@ def pack_script_slot_record(
     out = (
         script_asset_key
         + struct.pack("<QIiI", int(params_array_offset), int(params_count), int(execution_order), int(flags))
-        + b"\x00" * 92
     )
-    if len(out) != 128:
+    if len(out) != SCRIPT_SLOT_RECORD_SIZE:
         raise PakError("E_SIZE", f"ScriptSlotRecord size mismatch: {len(out)}")
     return out
 
@@ -263,9 +273,8 @@ def _pack_light_shadow_settings_record(shadow: Dict[str, Any] | None) -> bytes:
     out = (
         struct.pack("<ffI", bias, normal_bias, int(contact_shadows))
         + struct.pack("<B", int(resolution_hint))
-        + b"\x00" * 3
     )
-    if len(out) != 16:
+    if len(out) != 13:
         raise PakError(
             "E_SIZE", f"LightShadowSettingsRecord size mismatch: {len(out)}"
         )
@@ -284,12 +293,10 @@ def _pack_light_common_record(light: Dict[str, Any]) -> bytes:
     out = (
         struct.pack("<I3f", int(affects_world), cr, cg, cb)
         + struct.pack("<BB", int(mobility), int(casts_shadows))
-        + b"\x00" * 2
         + shadow
         + struct.pack("<f", exposure_comp)
-        + b"\x00" * 4
     )
-    if len(out) != 44:
+    if len(out) != 35:
         raise PakError("E_SIZE", f"LightCommonRecord size mismatch: {len(out)}")
     return out
 
@@ -340,9 +347,8 @@ def _pack_directional_light_record(
         + struct.pack("<4f", *cascade_distances)
         + struct.pack("<f", distribution)
         + struct.pack("<f", intensity_lux)
-        + b"\x00" * 8
     )
-    if len(out) != 96:
+    if len(out) != 79:
         raise PakError(
             "E_SIZE", f"DirectionalLightRecord size mismatch: {len(out)}"
         )
@@ -373,14 +379,12 @@ def _pack_point_light_record(
         struct.pack("<I", int(node_index))
         + common
         + struct.pack("<f", rng)
-        + struct.pack("<B", int(attenuation_model))
-        + b"\x00" * 3
         + struct.pack("<f", decay)
         + struct.pack("<f", source_radius)
         + struct.pack("<f", luminous_flux_lm)
-        + b"\x00" * 12
+        + struct.pack("<B", int(attenuation_model))
     )
-    if len(out) != 80:
+    if len(out) != 56:
         raise PakError("E_SIZE", f"PointLightRecord size mismatch: {len(out)}")
     return out
 
@@ -409,16 +413,14 @@ def _pack_spot_light_record(light: Dict[str, Any], *, node_count: int) -> bytes:
         struct.pack("<I", int(node_index))
         + common
         + struct.pack("<f", rng)
-        + struct.pack("<B", int(attenuation_model))
-        + b"\x00" * 3
         + struct.pack("<f", decay)
         + struct.pack("<f", inner)
         + struct.pack("<f", outer)
         + struct.pack("<f", source_radius)
         + struct.pack("<f", luminous_flux_lm)
-        + b"\x00" * 12
+        + struct.pack("<B", int(attenuation_model))
     )
-    if len(out) != 88:
+    if len(out) != 64:
         raise PakError("E_SIZE", f"SpotLightRecord size mismatch: {len(out)}")
     return out
 
@@ -447,7 +449,7 @@ def _pack_sky_atmosphere_environment_record(spec: Dict[str, Any]) -> bytes:
     sun_disk_enabled = _u32_bool(spec.get("sun_disk_enabled"), 1)
     aerial_scale = _f(spec.get("aerial_perspective_distance_scale"), 1.0)
 
-    record_size = 112
+    record_size = 96
     out = (
         _pack_env_record_header(_ENV_SYSTEM_SKY_ATMOSPHERE, record_size)
         + struct.pack("<I", int(enabled))
@@ -463,7 +465,6 @@ def _pack_sky_atmosphere_environment_record(spec: Dict[str, Any]) -> bytes:
         + struct.pack("<f", multi_scattering)
         + struct.pack("<I", int(sun_disk_enabled))
         + struct.pack("<f", aerial_scale)
-        + b"\x00" * 16
     )
     if len(out) != record_size:
         raise PakError(
@@ -488,19 +489,17 @@ def _pack_volumetric_clouds_environment_record(spec: Dict[str, Any]) -> bytes:
     wind_speed = _f(spec.get("wind_speed_mps"), 10.0)
     shadow_strength = _f(spec.get("shadow_strength"), 0.8)
 
-    record_size = 84
+    record_size = 64
     out = (
         _pack_env_record_header(_ENV_SYSTEM_VOLUMETRIC_CLOUDS, record_size)
         + struct.pack("<I", int(enabled))
         + struct.pack("<ff", base_altitude, thickness)
         + struct.pack("<ff", coverage, extinction_sigma_t_per_m)
         + struct.pack("<3f", *albedo)
-        + struct.pack("<f", 0.0)
         + struct.pack("<f", phase_g)
         + struct.pack("<3f", *wind_dir)
         + struct.pack("<f", wind_speed)
         + struct.pack("<f", shadow_strength)
-        + b"\x00" * 16
     )
     if len(out) != record_size:
         raise PakError(
@@ -519,7 +518,7 @@ def _pack_sky_light_environment_record(spec: Dict[str, Any]) -> bytes:
     diffuse = _f(spec.get("diffuse_intensity"), 1.0)
     specular = _f(spec.get("specular_intensity"), 1.0)
 
-    record_size = 72
+    record_size = 56
     out = (
         _pack_env_record_header(_ENV_SYSTEM_SKY_LIGHT, record_size)
         + struct.pack("<I", int(enabled))
@@ -529,7 +528,6 @@ def _pack_sky_light_environment_record(spec: Dict[str, Any]) -> bytes:
         + struct.pack("<3f", *tint)
         + struct.pack("<f", diffuse)
         + struct.pack("<f", specular)
-        + b"\x00" * 16
     )
     if len(out) != record_size:
         raise PakError(
@@ -549,7 +547,7 @@ def _pack_sky_sphere_environment_record(spec: Dict[str, Any]) -> bytes:
     rotation = _f(spec.get("rotation_radians"), 0.0)
     tint = _vec3(spec.get("tint_rgb", [1.0, 1.0, 1.0]), [1.0, 1.0, 1.0])
 
-    record_size = 80
+    record_size = 64
     out = (
         _pack_env_record_header(_ENV_SYSTEM_SKY_SPHERE, record_size)
         + struct.pack("<I", int(enabled))
@@ -559,7 +557,6 @@ def _pack_sky_sphere_environment_record(spec: Dict[str, Any]) -> bytes:
         + struct.pack("<f", intensity)
         + struct.pack("<f", rotation)
         + struct.pack("<3f", *tint)
-        + b"\x00" * 16
     )
     if len(out) != record_size:
         raise PakError(
@@ -583,7 +580,7 @@ def _pack_post_process_volume_environment_record(spec: Dict[str, Any]) -> bytes:
     contrast = _f(spec.get("contrast"), 1.0)
     vignette = _f(spec.get("vignette_intensity"), 0.0)
 
-    record_size = 76
+    record_size = 60
     out = (
         _pack_env_record_header(_ENV_SYSTEM_POST_PROCESS_VOLUME, record_size)
         + struct.pack("<I", int(enabled))
@@ -592,7 +589,6 @@ def _pack_post_process_volume_environment_record(spec: Dict[str, Any]) -> bytes:
         + struct.pack("<ffff", ae_min, ae_max, ae_up, ae_down)
         + struct.pack("<ff", bloom_intensity, bloom_threshold)
         + struct.pack("<fff", saturation, contrast, vignette)
-        + b"\x00" * 16
     )
     if len(out) != record_size:
         raise PakError(
@@ -616,7 +612,7 @@ def _pack_fog_environment_record(spec: Dict[str, Any]) -> bytes:
     )
     anisotropy_g = _f(spec.get("anisotropy_g"), 0.0)
 
-    record_size = 72
+    record_size = 52
     out = (
         _pack_env_record_header(_ENV_SYSTEM_FOG, record_size)
         + struct.pack("<I", int(enabled))
@@ -628,8 +624,6 @@ def _pack_fog_environment_record(spec: Dict[str, Any]) -> bytes:
         + struct.pack("<f", max_opacity)
         + struct.pack("<3f", *albedo)
         + struct.pack("<f", anisotropy_g)
-        + struct.pack("<f", 0.0)
-        + b"\x00" * 16
     )
     if len(out) != record_size:
         raise PakError(
@@ -672,11 +666,9 @@ def _pack_scene_environment_block(scene: Dict[str, Any]) -> bytes:
 
     records.sort(key=lambda b: struct.unpack_from("<I", b, 0)[0])
     systems_count = len(records)
-    byte_size = 16 + sum(len(r) for r in records)
-    header = struct.pack(
-        "<II8s", int(byte_size), int(systems_count), b"\x00" * 8
-    )
-    if len(header) != 16:
+    byte_size = 8 + sum(len(r) for r in records)
+    header = struct.pack("<II", int(byte_size), int(systems_count))
+    if len(header) != 8:
         raise PakError(
             "E_SIZE",
             f"SceneEnvironmentBlockHeader size mismatch: {len(header)}",
@@ -837,14 +829,12 @@ def _pack_renderable_record(
 
     visible = renderable.get("visible", 1)
     visible_u32 = 1 if bool(visible) else 0
-    reserved = b"\x00" * 12
     out = (
         struct.pack("<I", int(node_index))
         + geometry_key
         + struct.pack("<I", int(visible_u32))
-        + reserved
     )
-    if len(out) != 36:
+    if len(out) != 24:
         raise PakError("E_SIZE", f"RenderableRecord size mismatch: {len(out)}")
     return out
 
@@ -866,14 +856,11 @@ def _pack_perspective_camera_record(
     aspect_ratio = float(camera.get("aspect_ratio", 1.777778))
     near_plane = float(camera.get("near_plane", 0.1))
     far_plane = float(camera.get("far_plane", 1000.0))
-    reserved = b"\x00" * 12
-
     out = (
         struct.pack("<I", int(node_index))
         + struct.pack("<4f", fov_y, aspect_ratio, near_plane, far_plane)
-        + reserved
     )
-    if len(out) != 32:
+    if len(out) != 20:
         raise PakError(
             "E_SIZE", f"PerspectiveCameraRecord size mismatch: {len(out)}"
         )
@@ -899,14 +886,11 @@ def _pack_orthographic_camera_record(
     top = float(camera.get("top", 10.0))
     near_plane = float(camera.get("near_plane", -100.0))
     far_plane = float(camera.get("far_plane", 100.0))
-    reserved = b"\x00" * 12
-
     out = (
         struct.pack("<I", int(node_index))
         + struct.pack("<6f", left, right, bottom, top, near_plane, far_plane)
-        + reserved
     )
-    if len(out) != 40:
+    if len(out) != 28:
         raise PakError(
             "E_SIZE", f"OrthographicCameraRecord size mismatch: {len(out)}"
         )
@@ -921,7 +905,7 @@ def pack_scene_asset_descriptor_and_payload(
     script_name_to_key: Dict[str, bytes] | None = None,
     scripting_slot_base_index: int = 0,
 ) -> Tuple[bytes, bytes, List[Dict[str, Any]]]:
-    """Pack SceneAssetDesc (256 bytes) plus trailing payload.
+    """Pack SceneAssetDesc plus trailing payload.
 
     Payload layout (offsets are relative to descriptor start):
     - NodeRecord[]
@@ -1028,7 +1012,7 @@ def pack_scene_asset_descriptor_and_payload(
             (
                 _COMPONENT_TYPE_RENDERABLE,
                 len(renderables),
-                36,
+                24,
                 renderable_records,
             )
         )
@@ -1037,7 +1021,7 @@ def pack_scene_asset_descriptor_and_payload(
             (
                 _COMPONENT_TYPE_PERSPECTIVE_CAMERA,
                 len(cameras),
-                32,
+                20,
                 camera_records,
             )
         )
@@ -1046,7 +1030,7 @@ def pack_scene_asset_descriptor_and_payload(
             (
                 _COMPONENT_TYPE_ORTHOGRAPHIC_CAMERA,
                 len(ortho_cameras),
-                40,
+                28,
                 ortho_camera_records,
             )
         )
@@ -1055,7 +1039,7 @@ def pack_scene_asset_descriptor_and_payload(
             (
                 _COMPONENT_TYPE_DIRECTIONAL_LIGHT,
                 len(directional_lights),
-                96,
+                79,
                 directional_light_records,
             )
         )
@@ -1064,7 +1048,7 @@ def pack_scene_asset_descriptor_and_payload(
             (
                 _COMPONENT_TYPE_POINT_LIGHT,
                 len(point_lights),
-                80,
+                56,
                 point_light_records,
             )
         )
@@ -1073,7 +1057,7 @@ def pack_scene_asset_descriptor_and_payload(
             (
                 _COMPONENT_TYPE_SPOT_LIGHT,
                 len(spot_lights),
-                88,
+                64,
                 spot_light_records,
             )
         )
@@ -1182,14 +1166,7 @@ def pack_scene_asset_descriptor_and_payload(
     dir_off = struct.pack("<Q", int(component_table_directory_offset))
     dir_count = struct.pack("<I", int(component_table_count))
 
-    desc = (
-        header
-        + nodes_table
-        + scene_strings
-        + dir_off
-        + dir_count
-        + b"\x00" * 125
-    )
+    desc = header + nodes_table + scene_strings + dir_off + dir_count
     if len(desc) != SCENE_DESC_SIZE:
         raise PakError(
             "E_SIZE",
@@ -1327,7 +1304,7 @@ def pack_material_asset_descriptor(
     header_builder,
     shader_refs_builder=None,
 ) -> bytes:
-    """Pack fixed 384-byte MaterialAssetDesc (no trailing shader refs).
+    """Pack fixed MaterialAssetDesc (no trailing shader refs).
 
     Shader reference entries (ShaderReferenceDesc) are emitted separately as a
     variable-length blob immediately following the fixed descriptor. The
@@ -1438,7 +1415,6 @@ def pack_material_asset_descriptor(
         )
 
     # Match oxygen::data::pak::render::MaterialAssetDesc exactly (see PakFormat.h).
-    reserved = b"\x00" * 35
     desc = (
         header
         + struct.pack("<B", material_domain)
@@ -1531,7 +1507,6 @@ def pack_material_asset_descriptor(
     desc += struct.pack("<4f", *[float(x) for x in grid_axis_color_x])
     desc += struct.pack("<4f", *[float(x) for x in grid_axis_color_y])
     desc += struct.pack("<4f", *[float(x) for x in grid_origin_color])
-    desc += reserved
     if len(desc) != MATERIAL_DESC_SIZE:
         raise PakError(
             "E_SIZE",
@@ -1547,12 +1522,11 @@ def pack_shader_reference_entries(
 
     Each reference structure mirrors ShaderReferenceDesc in PakFormat.h (v2):
     - shader_type: 1 byte (ShaderType enum value)
-    - reserved0: 7 bytes
     - source_path: 120 bytes (UTF-8, null padded)
     - entry_point: 32 bytes (UTF-8, null padded)
     - defines: 256 bytes (UTF-8, null padded)
     - shader_hash: 8 bytes (uint64)
-    Total = 424 bytes.
+    Total = 417 bytes.
     """
     # Assign stages from the shader_stages bitfield in ascending set-bit order.
     stages: List[int] = [i for i in range(32) if (shader_stages & (1 << i))]
@@ -1587,10 +1561,8 @@ def pack_shader_reference_entries(
         def_bytes = def_raw + b"\x00" * (256 - len(def_raw))
 
         shader_hash = int(ref.get("shader_hash", 0)) & 0xFFFFFFFFFFFFFFFF
-        reserved0 = b"\x00" * 7
         entry = (
             struct.pack("<B", stage)
-            + reserved0
             + src_bytes
             + ep_bytes
             + def_bytes
@@ -1621,11 +1593,10 @@ def pack_buffer_resource_descriptor(
         + struct.pack("<I", element_stride)
         + struct.pack("<B", element_format)
         + struct.pack("<Q", content_hash)
-        + b"\x00" * 3
     )
-    if len(desc) != 32:
+    if len(desc) != 29:
         raise PakError(
-            "E_SIZE", f"Buffer descriptor size mismatch: {len(desc)} != 32"
+            "E_SIZE", f"Buffer descriptor size mismatch: {len(desc)} != 29"
         )
     return desc
 
@@ -1633,7 +1604,7 @@ def pack_buffer_resource_descriptor(
 def pack_texture_resource_descriptor(
     resource_spec: Dict[str, Any], data_offset: int, data_size: int
 ) -> bytes:
-    # Match legacy layout (see PackGen/packers.py + PakFormat.h TextureResourceDesc)
+    # Match current PakFormat_core::TextureResourceDesc layout.
     texture_type = resource_spec.get("texture_type", 0)
     compression_type = resource_spec.get("compression_type", 0)
     width = resource_spec.get("width", 0)
@@ -1655,11 +1626,10 @@ def pack_texture_resource_descriptor(
         + struct.pack("<HHB", array_layers, mip_levels, format_val)
         + struct.pack("<H", alignment)
         + struct.pack("<Q", content_hash)
-        + b"\x00"
     )
-    if len(desc) != 40:
+    if len(desc) != 39:
         raise PakError(
-            "E_SIZE", f"Texture descriptor size mismatch: {len(desc)} != 40"
+            "E_SIZE", f"Texture descriptor size mismatch: {len(desc)} != 39"
         )
     return desc
 
@@ -1692,9 +1662,8 @@ def pack_physics_resource_descriptor(
         + struct.pack("<I", data_size)
         + struct.pack("<B", fmt)
         + content_hash
-        + (b"\x00" * 3)
     )
-    if len(desc) != 48:
+    if len(desc) != PHYSICS_RESOURCE_DESC_SIZE:
         raise PakError("E_SIZE", f"PhysicsResourceDesc size mismatch: {len(desc)}")
     return desc
 
@@ -1704,7 +1673,7 @@ def pack_physics_material_asset_descriptor(
     *,
     header_builder,
 ) -> bytes:
-    """Pack PhysicsMaterialAssetDesc (128 bytes)."""
+    """Pack PhysicsMaterialAssetDesc."""
     header = header_builder(asset)
     static_friction = float(asset.get("static_friction", 0.5))
     dynamic_friction = float(asset.get("dynamic_friction", 0.5))
@@ -1712,7 +1681,6 @@ def pack_physics_material_asset_descriptor(
     density = float(asset.get("density", 1000.0))
     combine_friction = int(asset.get("combine_mode_friction", 0))
     combine_restitution = int(asset.get("combine_mode_restitution", 0))
-    reserved = b"\x00" * 15
     desc = (
         header
         + struct.pack(
@@ -1724,9 +1692,8 @@ def pack_physics_material_asset_descriptor(
             combine_friction,
             combine_restitution,
         )
-        + reserved
     )
-    if len(desc) != 128:
+    if len(desc) != PHYSICS_MATERIAL_ASSET_DESC_SIZE:
         raise PakError("E_SIZE", f"PhysicsMaterialAssetDesc size mismatch: {len(desc)}")
     return desc
 
@@ -1878,8 +1845,8 @@ def pack_collision_shape_asset_descriptor(
         + struct.pack("<Q", collision_target_layers)
         + material_asset_key
         + bytes(shape_params_blob)
-        + struct.pack("<IB3x", cooked_index, payload_type & 0xFF)
-        + b"\x00" * 8
+        + struct.pack("<I", cooked_index)
+        + struct.pack("<B", payload_type & 0xFF)
     )
     if len(desc) != COLLISION_SHAPE_ASSET_DESC_SIZE:
         raise PakError("E_SIZE", f"CollisionShapeAssetDesc size mismatch: {len(desc)}")
@@ -1894,7 +1861,7 @@ def pack_physics_scene_asset_descriptor_and_payload(
     physics_material_name_to_asset_key: Dict[str, bytes] | None = None,
     physics_resource_name_to_index: Dict[str, int] | None = None,
 ) -> tuple[bytes, bytes]:
-    """Pack PhysicsSceneAssetDesc (256 bytes) and physics binding payload."""
+    """Pack PhysicsSceneAssetDesc and physics binding payload."""
 
     shape_name_to_asset_key = shape_name_to_asset_key or {}
     physics_material_name_to_asset_key = (
@@ -2136,7 +2103,14 @@ def pack_physics_scene_asset_descriptor_and_payload(
         )
     if joint_records:
         blob = b"".join(joint_records)
-        tables.append((_PHYSICS_BINDING_JOINT, len(joint_records), 32, blob))
+        tables.append(
+            (
+                _PHYSICS_BINDING_JOINT,
+                len(joint_records),
+                JOINT_BINDING_RECORD_SIZE,
+                blob,
+            )
+        )
 
     vehicle_bindings = asset.get("vehicle_bindings", []) or []
     if not isinstance(vehicle_bindings, list):
@@ -2165,7 +2139,14 @@ def pack_physics_scene_asset_descriptor_and_payload(
         )
     if vehicle_records:
         blob = b"".join(vehicle_records)
-        tables.append((_PHYSICS_BINDING_VEHICLE, len(vehicle_records), 32, blob))
+        tables.append(
+            (
+                _PHYSICS_BINDING_VEHICLE,
+                len(vehicle_records),
+                VEHICLE_BINDING_RECORD_SIZE,
+                blob,
+            )
+        )
 
     aggregate_bindings = asset.get("aggregate_bindings", []) or []
     if not isinstance(aggregate_bindings, list):
@@ -2177,7 +2158,14 @@ def pack_physics_scene_asset_descriptor_and_payload(
     ]
     if aggregate_records:
         blob = b"".join(aggregate_records)
-        tables.append((_PHYSICS_BINDING_AGGREGATE, len(aggregate_records), 28, blob))
+        tables.append(
+            (
+                _PHYSICS_BINDING_AGGREGATE,
+                len(aggregate_records),
+                AGGREGATE_BINDING_RECORD_SIZE,
+                blob,
+            )
+        )
 
     tables.sort(key=lambda item: item[0])
     table_count = len(tables)
@@ -2185,7 +2173,7 @@ def pack_physics_scene_asset_descriptor_and_payload(
     payload = b""
     directory_offset = 0
     if tables:
-        directory_offset = 256
+        directory_offset = PHYSICS_SCENE_DESC_SIZE
         table_cursor = directory_offset + (20 * table_count)
         directory_entries: list[bytes] = []
         table_blobs: list[bytes] = []
@@ -2202,6 +2190,30 @@ def pack_physics_scene_asset_descriptor_and_payload(
     target_scene_key = _pack_asset_key_bytes(
         asset.get("target_scene_key"), "target_scene_key"
     )
+    target_scene_content_hash_raw = asset.get("target_scene_content_hash", 0)
+    if isinstance(target_scene_content_hash_raw, (bytes, bytearray)):
+        target_scene_content_hash = bytes(target_scene_content_hash_raw)
+        if len(target_scene_content_hash) != 32:
+            raise PakError(
+                "E_SIZE", "target_scene_content_hash bytes must be 32 bytes"
+            )
+    elif isinstance(target_scene_content_hash_raw, str):
+        cleaned = target_scene_content_hash_raw.strip()
+        if cleaned.startswith("0x") or cleaned.startswith("0X"):
+            cleaned = cleaned[2:]
+        if len(cleaned) != 64:
+            raise PakError(
+                "E_SIZE", "target_scene_content_hash hex must be 64 characters"
+            )
+        try:
+            target_scene_content_hash = bytes.fromhex(cleaned)
+        except ValueError as exc:
+            raise PakError(
+                "E_TYPE", "target_scene_content_hash hex is invalid"
+            ) from exc
+    else:
+        hash_prefix = int(target_scene_content_hash_raw) & 0xFFFFFFFFFFFFFFFF
+        target_scene_content_hash = struct.pack("<Q", hash_prefix) + (b"\x00" * 24)
     desc = (
         header
         + target_scene_key
@@ -2211,9 +2223,9 @@ def pack_physics_scene_asset_descriptor_and_payload(
             table_count,
             directory_offset,
         )
-        + b"\x00" * 129
+        + target_scene_content_hash
     )
-    if len(desc) != 256:
+    if len(desc) != PHYSICS_SCENE_DESC_SIZE:
         raise PakError("E_SIZE", f"PhysicsSceneAssetDesc size mismatch: {len(desc)}")
     return desc, payload
 
@@ -2296,7 +2308,6 @@ def pack_rigid_body_binding_record(
                 max_contact_impulse,
                 contact_report_threshold,
             )
-    reserved = b"\x00" * 6
     shape_key_bytes = _pack_asset_key_bytes(shape_asset_key, "shape_asset_key")
     material_key_bytes = _pack_asset_key_bytes(
         material_asset_key, "material_asset_key"
@@ -2333,7 +2344,6 @@ def pack_rigid_body_binding_record(
             allowed_dof_flags,
         )
         + backend_bytes
-        + reserved
     )
     if len(desc) != RIGID_BODY_BINDING_RECORD_SIZE:
         raise PakError("E_SIZE", f"RigidBodyBindingRecord size mismatch: {len(desc)}")
@@ -2353,7 +2363,6 @@ def pack_collider_binding_record(
         raise PakError("E_REF", f"Collider node_index out of range: {node_index}")
     layer = int(binding.get("collision_layer", 0))
     mask = int(binding.get("collision_mask", 0xFFFFFFFF))
-    reserved = b"\x00" * 14
     shape_key_bytes = _pack_asset_key_bytes(shape_asset_key, "shape_asset_key")
     material_key_bytes = _pack_asset_key_bytes(
         material_asset_key, "material_asset_key"
@@ -2363,7 +2372,6 @@ def pack_collider_binding_record(
         + shape_key_bytes
         + material_key_bytes
         + struct.pack("<HI", layer, mask)
-        + reserved
     )
     if len(desc) != COLLIDER_BINDING_RECORD_SIZE:
         raise PakError("E_SIZE", f"ColliderBindingRecord size mismatch: {len(desc)}")
@@ -2416,7 +2424,6 @@ def pack_character_binding_record(
         elif target == "physx":
             contact_offset = float(backend.get("contact_offset", 0.0))
             backend_bytes = struct.pack("<f", contact_offset) + (b"\x00" * 8)
-    reserved = b"\x00" * 14
     shape_key_bytes = _pack_asset_key_bytes(shape_asset_key, "shape_asset_key")
     desc = (
         struct.pack("<I", node_index)
@@ -2435,7 +2442,6 @@ def pack_character_binding_record(
         )
         + inner_shape_asset_key
         + backend_bytes
-        + reserved
     )
     if len(desc) != CHARACTER_BINDING_RECORD_SIZE:
         raise PakError("E_SIZE", f"CharacterBindingRecord size mismatch: {len(desc)}")
@@ -2507,7 +2513,6 @@ def pack_soft_body_binding_record(
     else:
         tether_mode = int(tether_mode_value)
     self_collision = 1 if bool(binding.get("self_collision", False)) else 0
-    reserved_tail = b"\x00" * 13
     desc = (
         struct.pack(
             "<Iffffffffff",
@@ -2534,7 +2539,6 @@ def pack_soft_body_binding_record(
         )
         + backend_bytes
         + struct.pack("<BBB", tether_mode & 0xFF, topology_format, self_collision)
-        + reserved_tail
     )
     if len(desc) != SOFT_BODY_BINDING_RECORD_SIZE:
         raise PakError("E_SIZE", f"SoftBodyBindingRecord size mismatch: {len(desc)}")
@@ -2547,7 +2551,7 @@ def pack_joint_binding_record(
     *,
     node_count: int,
 ) -> bytes:
-    """Pack JointBindingRecord (32 bytes)."""
+    """Pack JointBindingRecord."""
     node_a = int(binding.get("node_index_a", 0))
     node_b_raw = binding.get("node_index_b", 0)
     if node_b_raw is None or (
@@ -2580,13 +2584,11 @@ def pack_joint_binding_record(
                 inv_inertia_scale0,
                 inv_inertia_scale1,
             )
-    reserved = b"\x00" * 4
     desc = (
         struct.pack("<III", node_a, node_b, constraint_index)
         + backend_bytes
-        + reserved
     )
-    if len(desc) != 32:
+    if len(desc) != JOINT_BINDING_RECORD_SIZE:
         raise PakError("E_SIZE", f"JointBindingRecord size mismatch: {len(desc)}")
     return desc
 
@@ -2597,13 +2599,12 @@ def pack_vehicle_binding_record(
     *,
     node_count: int,
 ) -> bytes:
-    """Pack VehicleBindingRecord (32 bytes)."""
+    """Pack VehicleBindingRecord."""
     node_index = int(binding.get("node_index", 0))
     if node_index < 0 or node_index >= node_count:
         raise PakError("E_REF", f"Vehicle node_index out of range: {node_index}")
     wheel_slice_offset = int(binding.get("wheel_slice_offset", 0))
     wheel_slice_count = int(binding.get("wheel_slice_count", 0))
-    reserved = b"\x00" * 18
     desc = (
         struct.pack(
             "<IIIH",
@@ -2612,9 +2613,8 @@ def pack_vehicle_binding_record(
             wheel_slice_offset,
             wheel_slice_count,
         )
-        + reserved
     )
-    if len(desc) != 32:
+    if len(desc) != VEHICLE_BINDING_RECORD_SIZE:
         raise PakError("E_SIZE", f"VehicleBindingRecord size mismatch: {len(desc)}")
     return desc
 
@@ -2624,19 +2624,17 @@ def pack_aggregate_binding_record(
     *,
     node_count: int,
 ) -> bytes:
-    """Pack AggregateBindingRecord (28 bytes)."""
+    """Pack AggregateBindingRecord."""
     node_index = int(binding.get("node_index", 0))
     if node_index < 0 or node_index >= node_count:
         raise PakError("E_REF", f"Aggregate node_index out of range: {node_index}")
     max_bodies = int(binding.get("max_bodies", 0))
     filter_overlap = 1 if bool(binding.get("filter_overlap", True)) else 0
     authority = int(binding.get("authority", 0))
-    reserved = b"\x00" * 15
     desc = (
         struct.pack("<IIIB", node_index, max_bodies, filter_overlap, authority)
-        + reserved
     )
-    if len(desc) != 28:
+    if len(desc) != AGGREGATE_BINDING_RECORD_SIZE:
         raise PakError("E_SIZE", f"AggregateBindingRecord size mismatch: {len(desc)}")
     return desc
 
@@ -2690,11 +2688,10 @@ def pack_script_resource_descriptor(
         + struct.pack("<B", encoding)
         + struct.pack("<B", compression)
         + struct.pack("<Q", content_hash)
-        + b"\x00" * 9
     )
-    if len(desc) != 32:
+    if len(desc) != 23:
         raise PakError(
-            "E_SIZE", f"Script descriptor size mismatch: {len(desc)} != 32"
+            "E_SIZE", f"Script descriptor size mismatch: {len(desc)} != 23"
         )
     return desc
 
@@ -2740,9 +2737,8 @@ def pack_script_asset_descriptor(
             "<III", bytecode_resource_index, source_resource_index, flags
         )
         + external_source_path_bytes
-        + b"\x00" * 29
     )
-    if len(desc) != 256:
+    if len(desc) != SCRIPT_DESC_SIZE:
         raise PakError("E_SIZE", f"Script asset descriptor size mismatch: {len(desc)}")
     return desc
 
@@ -2780,11 +2776,9 @@ def pack_input_action_asset_descriptor(
     desc = (
         header
         + struct.pack("<B", int(value_type))
-        + b"\x00" * 3
         + struct.pack("<I", flags & 0xFFFFFFFF)
-        + b"\x00" * 153
     )
-    if len(desc) != 256:
+    if len(desc) != INPUT_ACTION_DESC_SIZE:
         raise PakError("E_SIZE", f"InputActionAssetDesc size mismatch: {len(desc)}")
     return desc
 
@@ -2975,7 +2969,6 @@ def pack_input_mapping_context_asset_descriptor_and_payload(
             trigger_records.append(
                 struct.pack("<B", trigger_type)
                 + struct.pack("<B", trigger_behavior)
-                + struct.pack("<H", 0)
                 + struct.pack("<I", trigger_flags)
                 + struct.pack("<f", threshold)
                 + linked_action_key
@@ -2983,7 +2976,6 @@ def pack_input_mapping_context_asset_descriptor_and_payload(
                 + struct.pack("<I", aux_count)
                 + struct.pack("<5f", *fparams5)
                 + struct.pack("<5I", *uparams5)
-                + b"\x00" * 20
             )
             trigger_count += 1
 
@@ -2995,7 +2987,6 @@ def pack_input_mapping_context_asset_descriptor_and_payload(
             + struct.pack("<I", map_flags)
             + struct.pack("<2f", float(scale[0]), float(scale[1]))
             + struct.pack("<2f", float(bias[0]), float(bias[1]))
-            + b"\x00" * 16
         )
 
     mappings_blob = b"".join(mapping_records)
@@ -3004,32 +2995,33 @@ def pack_input_mapping_context_asset_descriptor_and_payload(
     strings_blob = bytes(strings)
 
     for rec in mapping_records:
-        if len(rec) != 64:
+        if len(rec) != 48:
             raise PakError("E_SIZE", f"InputActionMappingRecord size mismatch: {len(rec)}")
     for rec in trigger_records:
-        if len(rec) != 96:
+        if len(rec) != 74:
             raise PakError("E_SIZE", f"InputTriggerRecord size mismatch: {len(rec)}")
     for rec in aux_records:
         if len(rec) != 32:
             raise PakError("E_SIZE", f"InputTriggerAuxRecord size mismatch: {len(rec)}")
 
-    mappings_offset = 256
+    mappings_offset = INPUT_MAPPING_CONTEXT_DESC_SIZE
     triggers_offset = mappings_offset + len(mappings_blob)
     aux_offset = triggers_offset + len(triggers_blob)
     strings_offset = aux_offset + len(aux_blob)
     payload = mappings_blob + triggers_blob + aux_blob + strings_blob
 
     context_flags = int(asset.get("flags", 0) or 0) & 0xFFFFFFFF
+    default_priority = int(asset.get("default_priority", 0) or 0)
     desc = (
         header
         + struct.pack("<I", context_flags)
-        + struct.pack("<QII", mappings_offset, len(mapping_records), 64)
-        + struct.pack("<QII", triggers_offset, len(trigger_records), 96)
+        + struct.pack("<i", default_priority)
+        + struct.pack("<QII", mappings_offset, len(mapping_records), 48)
+        + struct.pack("<QII", triggers_offset, len(trigger_records), 74)
         + struct.pack("<QII", aux_offset, len(aux_records), 32)
         + struct.pack("<QII", strings_offset, len(strings_blob), 1)
-        + b"\x00" * 93
     )
-    if len(desc) != 256:
+    if len(desc) != INPUT_MAPPING_CONTEXT_DESC_SIZE:
         raise PakError(
             "E_SIZE",
             f"InputMappingContextAssetDesc size mismatch: {len(desc)}",
@@ -3260,7 +3252,7 @@ def pack_geometry_asset_descriptor(
         lod_bounds = [_collect_lod_bounds(lod) for lod in lods]
         bb_min, bb_max = _merge_bounds(lod_bounds)
     header = header_builder(asset)
-    # header (95) + lod_count(4) + bb_min(12) + bb_max(12) = 123, need 256 -> 133 bytes reserved
+    # header + lod_count + bb_min + bb_max; reserve any remaining descriptor bytes.
     reserved_len = GEOMETRY_DESC_SIZE - (len(header) + 4 + 12 + 12)
     if reserved_len < 0:
         raise PakError(

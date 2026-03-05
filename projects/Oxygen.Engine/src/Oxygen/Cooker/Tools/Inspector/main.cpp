@@ -502,7 +502,7 @@ auto RunDumpTextures(const DumpResourceOptions& opts) -> int
 
     const auto table_path = cooked_root / *relpath;
     auto entries
-      = LoadPackedTable<oxygen::data::pak::render::TextureResourceDesc>(
+      = LoadPackedTable<oxygen::data::pak::core::TextureResourceDesc>(
         table_path);
 
     std::cout << "Dumping " << entries.size() << " textures in: '"

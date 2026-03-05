@@ -27,13 +27,14 @@ NOLINT_TEST_F(BufferResourceDeathTest, IndexBufferSizeNotAligned_Throws)
 #if !defined(NDEBUG)
   // Arrange
   // Crafted descriptor: size_bytes=3, element_stride=4 (invalid alignment)
-  oxygen::data::pak::core::BufferResourceDesc bad_desc = { .data_offset = 0,
+  oxygen::data::pak::core::BufferResourceDesc bad_desc = {
+    .data_offset = 0,
     .size_bytes = 3, // not divisible by 4
     .usage_flags
     = static_cast<uint32_t>(BufferResource::UsageFlags::kIndexBuffer),
     .element_stride = sizeof(std::uint32_t),
     .element_format = 0, // raw/structured (unknown format)
-    .reserved = {} };
+  };
   std::vector<uint8_t> data(3, 0xCD);
 
   // Act
@@ -52,13 +53,14 @@ NOLINT_TEST_F(BufferResourceDeathTest, FormattedBufferNonzeroStride_Throws)
 {
 #if !defined(NDEBUG)
   // Arrange
-  oxygen::data::pak::core::BufferResourceDesc bad_desc = { .data_offset = 0,
+  oxygen::data::pak::core::BufferResourceDesc bad_desc = {
+    .data_offset = 0,
     .size_bytes = 16,
     .usage_flags
     = static_cast<uint32_t>(BufferResource::UsageFlags::kVertexBuffer),
     .element_stride = 4, // INVALID: must be 0 for formatted
     .element_format = 1, // formatted (not 0)
-    .reserved = {} };
+  };
   std::vector<uint8_t> data(16, 0xAB);
 
   // Act & Assert
@@ -74,13 +76,14 @@ NOLINT_TEST_F(BufferResourceDeathTest, StructuredBufferZeroStride_Throws)
 {
 #if !defined(NDEBUG)
   // Arrange
-  oxygen::data::pak::core::BufferResourceDesc bad_desc = { .data_offset = 0,
+  oxygen::data::pak::core::BufferResourceDesc bad_desc = {
+    .data_offset = 0,
     .size_bytes = 16,
     .usage_flags
     = static_cast<uint32_t>(BufferResource::UsageFlags::kVertexBuffer),
     .element_stride = 0, // INVALID: stride cannot be zero for structured
     .element_format = 0, // structured
-    .reserved = {} };
+  };
   std::vector<uint8_t> data(16, 0xAB);
 
   // Act & Assert
@@ -110,7 +113,7 @@ NOLINT_TEST_F(BufferResourceBasicTest, ClassificationVariants_Correct)
     = static_cast<uint32_t>(BufferResource::UsageFlags::kStorageBuffer),
     .element_stride = 0, // ignored for formatted
     .element_format = static_cast<std::uint8_t>(oxygen::Format::kRGBA32Float),
-    .reserved = {},
+
   };
   std::vector<uint8_t> formatted_bytes(16, 0xAB);
 
@@ -122,7 +125,7 @@ NOLINT_TEST_F(BufferResourceBasicTest, ClassificationVariants_Correct)
     = static_cast<uint32_t>(BufferResource::UsageFlags::kStorageBuffer),
     .element_stride = 12,
     .element_format = 0, // kUnknown
-    .reserved = {},
+
   };
   std::vector<uint8_t> structured_bytes(24, 0xCD);
 
@@ -134,7 +137,7 @@ NOLINT_TEST_F(BufferResourceBasicTest, ClassificationVariants_Correct)
     = static_cast<uint32_t>(BufferResource::UsageFlags::kStorageBuffer),
     .element_stride = 1,
     .element_format = 0, // kUnknown
-    .reserved = {},
+
   };
   std::vector<uint8_t> raw_bytes(8, 0xEF);
 
@@ -172,7 +175,7 @@ NOLINT_TEST_F(BufferResourceDataOffsetTest, DataOffsetPreserved)
     = static_cast<uint32_t>(BufferResource::UsageFlags::kIndirectBuffer),
     .element_stride = 1,
     .element_format = 0,
-    .reserved = {},
+
   };
   std::vector<uint8_t> bytes(4, 0x22);
 
@@ -198,7 +201,7 @@ NOLINT_TEST_F(BufferResourceDataSizeTest, DataSizeMatchesDescriptor)
     = static_cast<uint32_t>(BufferResource::UsageFlags::kStorageBuffer),
     .element_stride = 16,
     .element_format = 0,
-    .reserved = {},
+
   };
   std::vector<uint8_t> bytes(48, 0x11);
 
@@ -227,7 +230,7 @@ NOLINT_TEST_F(BufferResourceMoveTest, MoveConstructor_TransfersOwnership)
     = static_cast<uint32_t>(BufferResource::UsageFlags::kVertexBuffer),
     .element_stride = 1,
     .element_format = 0,
-    .reserved = {},
+
   };
   std::vector<uint8_t> bytes(32, 0x5A);
 

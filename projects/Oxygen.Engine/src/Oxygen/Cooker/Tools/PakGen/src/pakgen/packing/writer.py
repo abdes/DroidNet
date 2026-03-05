@@ -29,6 +29,8 @@ from .constants import (
     DATA_ALIGNMENT,
     TABLE_ALIGNMENT,
     FOOTER_SIZE,
+    ASSET_HEADER_SIZE,
+    SCRIPT_SLOT_RECORD_SIZE,
 )
 from .packers import (
     pack_header,
@@ -278,6 +280,10 @@ def _write_script_slot_table_from_plan(
         if slot_records:
             raise RuntimeError("Plan missing script_slot table but slots were generated")
         return (0, 0, 0)
+    if tplan.entry_size != SCRIPT_SLOT_RECORD_SIZE:
+        raise RuntimeError(
+            f"Script slot table entry size mismatch: plan={tplan.entry_size} expected={SCRIPT_SLOT_RECORD_SIZE}"
+        )
     _pad_to(f, tplan.offset)
     if len(slot_records) != tplan.count:
         raise RuntimeError(
@@ -324,14 +330,13 @@ def _write_assets_and_directory_from_plan(
             + struct.pack("<B", streaming_priority)
             + struct.pack("<Q", content_hash)
             + struct.pack("<I", variant_flags)
-            + b"\x00" * 16
         )
-        if len(header) != 95:  # pragma: no cover - defensive
+        if len(header) != ASSET_HEADER_SIZE:  # pragma: no cover - defensive
             raise RuntimeError("Asset header size mismatch")
         return header
 
     # Retained parameter for legacy API; shader reference records are now
-    # always packed explicitly after the fixed 256-byte descriptor using
+    # always packed explicitly after the fixed descriptor using
     # pack_shader_reference_entries(), so this builder is a no-op.
     def shader_refs_builder(_shader_refs):  # noqa: D401 - simple
         return b""
@@ -793,9 +798,8 @@ def write_pak(
                     + struct.pack("<B", streaming_priority)
                     + struct.pack("<Q", content_hash)
                     + struct.pack("<I", variant_flags)
-                    + b"\x00" * 16
                 )
-                if len(header) != 95:
+                if len(header) != ASSET_HEADER_SIZE:
                     raise RuntimeError("Asset header size mismatch")
                 return header
 

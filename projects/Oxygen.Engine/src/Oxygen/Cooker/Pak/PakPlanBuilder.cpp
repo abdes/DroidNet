@@ -384,9 +384,9 @@ auto MakeSkeletonTables() -> std::vector<pak::PakTablePlan>
       .offset = 0,
       .size_bytes = 0,
       .count = 0,
-      .entry_size = static_cast<uint32_t>(sizeof(render::TextureResourceDesc)),
+      .entry_size = static_cast<uint32_t>(sizeof(core::TextureResourceDesc)),
       .expected_entry_size
-      = static_cast<uint32_t>(sizeof(render::TextureResourceDesc)),
+      = static_cast<uint32_t>(sizeof(core::TextureResourceDesc)),
       .alignment = kTableAlignment,
       .index_zero_required = false,
       .index_zero_present = false,
@@ -1046,7 +1046,7 @@ auto CollectSourceData(PlanningState& state) -> void
           AddTransitiveInputDigest(source_contribution,
             static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
           AccumulateTableCountFromFile(file_path, file_size,
-            sizeof(render::TextureResourceDesc),
+            sizeof(core::TextureResourceDesc),
             source_contribution.table_counts.texture_count, diagnostics,
             "pak.plan.texture_table_size_invalid");
           break;

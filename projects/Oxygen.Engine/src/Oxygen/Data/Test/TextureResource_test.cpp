@@ -60,7 +60,7 @@ namespace {
 //! 35).
 NOLINT_TEST(TextureResourceBasicTest, AccessorsReturnDescriptorValues)
 {
-  using oxygen::data::pak::render::TextureResourceDesc;
+  using oxygen::data::pak::core::TextureResourceDesc;
   TextureResourceDesc desc {
     .data_offset = 4096,
     .size_bytes = 0,
@@ -73,7 +73,7 @@ NOLINT_TEST(TextureResourceBasicTest, AccessorsReturnDescriptorValues)
     .mip_levels = 5,
     .format = static_cast<std::uint8_t>(oxygen::Format::kRGBA8UNorm),
     .alignment = 256,
-    .reserved = {},
+
   };
   auto payload = MakeValidPayload(desc.array_layers, desc.mip_levels,
     /*bytes_per_subresource=*/4u, desc.content_hash);
@@ -104,7 +104,7 @@ class TextureResourceValidationTest : public testing::Test { };
 //! Move semantics transfer ownership of data buffer (additional coverage).
 NOLINT_TEST_F(TextureResourceValidationTest, MoveConstructor_TransfersOwnership)
 {
-  using oxygen::data::pak::render::TextureResourceDesc;
+  using oxygen::data::pak::core::TextureResourceDesc;
   TextureResourceDesc desc {
     .data_offset = 1024,
     .size_bytes = 0,
@@ -117,7 +117,7 @@ NOLINT_TEST_F(TextureResourceValidationTest, MoveConstructor_TransfersOwnership)
     .mip_levels = 1,
     .format = static_cast<std::uint8_t>(oxygen::Format::kRGBA8UNorm),
     .alignment = 256,
-    .reserved = {},
+
   };
   auto payload = MakeValidPayload(desc.array_layers, desc.mip_levels,
     /*bytes_per_subresource=*/8u, desc.content_hash);
@@ -138,7 +138,7 @@ NOLINT_TEST_F(TextureResourceValidationTest, MoveConstructor_TransfersOwnership)
 //! Invalid descriptor: zero width must throw.
 NOLINT_TEST_F(TextureResourceValidationTest, InvalidDescriptor_ZeroWidth_Throws)
 {
-  using oxygen::data::pak::render::TextureResourceDesc;
+  using oxygen::data::pak::core::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
     .size_bytes = 0,
@@ -151,7 +151,7 @@ NOLINT_TEST_F(TextureResourceValidationTest, InvalidDescriptor_ZeroWidth_Throws)
     .mip_levels = 1,
     .format = static_cast<std::uint8_t>(oxygen::Format::kRGBA8UNorm),
     .alignment = 256,
-    .reserved = {},
+
   };
   auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
     /*bytes_per_subresource=*/4u, bad.content_hash);
@@ -168,7 +168,7 @@ NOLINT_TEST_F(TextureResourceValidationTest, InvalidDescriptor_ZeroWidth_Throws)
 NOLINT_TEST_F(
   TextureResourceValidationTest, InvalidDescriptor_ZeroHeight_Throws)
 {
-  using oxygen::data::pak::render::TextureResourceDesc;
+  using oxygen::data::pak::core::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
     .size_bytes = 0,
@@ -181,7 +181,7 @@ NOLINT_TEST_F(
     .mip_levels = 1,
     .format = static_cast<std::uint8_t>(oxygen::Format::kRGBA8UNorm),
     .alignment = 256,
-    .reserved = {},
+
   };
 
   auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
@@ -199,7 +199,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   TextureResourceValidationTest, InvalidDescriptor_ZeroDepth3D_Throws)
 {
-  using oxygen::data::pak::render::TextureResourceDesc;
+  using oxygen::data::pak::core::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
     .size_bytes = 0,
@@ -212,7 +212,7 @@ NOLINT_TEST_F(
     .mip_levels = 1,
     .format = static_cast<std::uint8_t>(oxygen::Format::kRGBA8UNorm),
     .alignment = 256,
-    .reserved = {},
+
   };
 
   auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
@@ -230,7 +230,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   TextureResourceValidationTest, InvalidDescriptor_ZeroMipLevels_Throws)
 {
-  using oxygen::data::pak::render::TextureResourceDesc;
+  using oxygen::data::pak::core::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
     .size_bytes = 0,
@@ -243,7 +243,7 @@ NOLINT_TEST_F(
     .mip_levels = 0, // invalid
     .format = static_cast<std::uint8_t>(oxygen::Format::kRGBA8UNorm),
     .alignment = 256,
-    .reserved = {},
+
   };
 
   auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
@@ -262,7 +262,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   TextureResourceValidationTest, InvalidDescriptor_ExcessiveMipLevels_Throws)
 {
-  using oxygen::data::pak::render::TextureResourceDesc;
+  using oxygen::data::pak::core::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
     .size_bytes = 0,
@@ -276,7 +276,7 @@ NOLINT_TEST_F(
                      // log2(8)=3 +1=4
     .format = static_cast<std::uint8_t>(oxygen::Format::kRGBA8UNorm),
     .alignment = 256,
-    .reserved = {},
+
   };
 
   auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
@@ -294,7 +294,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   TextureResourceValidationTest, InvalidDescriptor_ZeroArrayLayers_Throws)
 {
-  using oxygen::data::pak::render::TextureResourceDesc;
+  using oxygen::data::pak::core::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
     .size_bytes = 0,
@@ -308,7 +308,7 @@ NOLINT_TEST_F(
     .mip_levels = 1,
     .format = static_cast<std::uint8_t>(oxygen::Format::kRGBA8UNorm),
     .alignment = 256,
-    .reserved = {},
+
   };
 
   auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
@@ -326,7 +326,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   TextureResourceValidationTest, InvalidDescriptor_DataSizeMismatch_Throws)
 {
-  using oxygen::data::pak::render::TextureResourceDesc;
+  using oxygen::data::pak::core::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
     .size_bytes = 0,
@@ -339,7 +339,7 @@ NOLINT_TEST_F(
     .mip_levels = 1,
     .format = static_cast<std::uint8_t>(oxygen::Format::kRGBA8UNorm),
     .alignment = 256,
-    .reserved = {},
+
   };
 
   auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
@@ -357,7 +357,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   TextureResourceValidationTest, InvalidDescriptor_WrongAlignment_Throws)
 {
-  using oxygen::data::pak::render::TextureResourceDesc;
+  using oxygen::data::pak::core::TextureResourceDesc;
   TextureResourceDesc bad {
     .data_offset = 0,
     .size_bytes = 0,
@@ -370,7 +370,7 @@ NOLINT_TEST_F(
     .mip_levels = 1,
     .format = static_cast<std::uint8_t>(oxygen::Format::kRGBA8UNorm),
     .alignment = 128, // invalid per spec
-    .reserved = {},
+
   };
 
   auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
@@ -388,7 +388,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   TextureResourceValidationTest, Resiliency_InvalidEnums_MapToUnknownNoThrow)
 {
-  using oxygen::data::pak::render::TextureResourceDesc;
+  using oxygen::data::pak::core::TextureResourceDesc;
   TextureResourceDesc weird {
     .data_offset = 0,
     .size_bytes = 0,
@@ -401,7 +401,7 @@ NOLINT_TEST_F(
     .mip_levels = 1,
     .format = 255, // out of range
     .alignment = 256,
-    .reserved = {},
+
   };
 
   auto payload = MakeValidPayload(weird.array_layers, weird.mip_levels,

@@ -68,7 +68,7 @@ using oxygen::content::testing::LooseCookedLayout;
 auto FillTestGuid(oxygen::data::loose_cooked::IndexHeader& header) -> void
 {
   for (uint8_t i = 0; i < 16; ++i) {
-    header.guid[i] = static_cast<uint8_t>(i + 1);
+    header.source_identity[i] = static_cast<uint8_t>(i + 1);
   }
 }
 
@@ -121,8 +121,8 @@ auto WriteLooseCookedMaterialWithTexture(
   using oxygen::data::loose_cooked::FileKind;
   using oxygen::data::loose_cooked::FileRecord;
   using oxygen::data::loose_cooked::IndexHeader;
+  using oxygen::data::pak::core::TextureResourceDesc;
   using oxygen::data::pak::render::MaterialAssetDesc;
-  using oxygen::data::pak::render::TextureResourceDesc;
 
   const LooseCookedLayout layout {};
 

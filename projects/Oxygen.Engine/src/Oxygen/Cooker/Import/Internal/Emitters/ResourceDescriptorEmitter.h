@@ -53,7 +53,7 @@ public:
   //! Emit a texture resource descriptor file and return its relative path.
   OXGN_COOK_NDAPI auto EmitTexture(std::string_view name_hint,
     std::string_view stable_id, data::pak::core::ResourceIndexT resource_index,
-    const data::pak::render::TextureResourceDesc& descriptor) -> std::string;
+    const data::pak::core::TextureResourceDesc& descriptor) -> std::string;
 
   //! Emit a buffer resource descriptor file and return its relative path.
   OXGN_COOK_NDAPI auto EmitBuffer(std::string_view name_hint,

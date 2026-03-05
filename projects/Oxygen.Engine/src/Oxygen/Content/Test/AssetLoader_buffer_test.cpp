@@ -227,7 +227,7 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
   constexpr uint32_t kPixelBytes = 287;
   constexpr std::byte kFill = std::byte { 0x99 };
 
-  oxygen::data::pak::render::TextureResourceDesc desc {};
+  oxygen::data::pak::core::TextureResourceDesc desc {};
   desc.data_offset = static_cast<uint64_t>(kDataOffset);
   desc.texture_type = 3; // TextureType::kTexture2D
   desc.compression_type = 0;

@@ -287,7 +287,7 @@ NOLINT_TEST_F(PakPatchPlannerTest,
     FileSpec {
       .kind = lc::FileKind::kTexturesTable,
       .relpath = "Resources/textures.table",
-      .payload = std::vector<std::byte>(sizeof(render::TextureResourceDesc)),
+      .payload = std::vector<std::byte>(sizeof(core::TextureResourceDesc)),
     },
     FileSpec {
       .kind = lc::FileKind::kTexturesData,
@@ -431,7 +431,7 @@ NOLINT_TEST_F(PakPatchPlannerTest, PatchModeUsesPatchLocalResourcesAndClosure)
     FileSpec {
       .kind = lc::FileKind::kTexturesTable,
       .relpath = "Resources/textures.table",
-      .payload = std::vector<std::byte>(sizeof(render::TextureResourceDesc)),
+      .payload = std::vector<std::byte>(sizeof(core::TextureResourceDesc)),
     },
     FileSpec {
       .kind = lc::FileKind::kTexturesData,

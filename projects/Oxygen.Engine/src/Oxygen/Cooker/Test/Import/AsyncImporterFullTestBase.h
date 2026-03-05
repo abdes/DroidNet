@@ -33,7 +33,7 @@ using content::lc::Inspection;
 using data::AssetType;
 using data::ComponentType;
 using data::loose_cooked::FileKind;
-using data::pak::render::TextureResourceDesc;
+using data::pak::core::TextureResourceDesc;
 using data::pak::world::RenderableRecord;
 using data::pak::world::SceneAssetDesc;
 using data::pak::world::SceneComponentTableDesc;

@@ -16,7 +16,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int
 
   [[maybe_unused]] const auto assets = inspection.Assets();
   [[maybe_unused]] const auto files = inspection.Files();
-  [[maybe_unused]] const auto guid = inspection.Guid();
+  [[maybe_unused]] const auto source_identity = inspection.Guid();
 
   using ValidateRootFn = auto (*)(const std::filesystem::path&)->void;
   volatile ValidateRootFn validate_root = &oxygen::content::lc::ValidateRoot;
