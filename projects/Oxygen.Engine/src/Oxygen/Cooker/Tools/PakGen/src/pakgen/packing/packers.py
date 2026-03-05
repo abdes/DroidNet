@@ -1667,17 +1667,34 @@ def pack_texture_resource_descriptor(
 def pack_physics_resource_descriptor(
     resource_spec: Dict[str, Any], data_offset: int, data_size: int
 ) -> bytes:
-    """Pack PhysicsResourceDesc (24 bytes)."""
+    """Pack PhysicsResourceDesc (48 bytes)."""
     fmt = int(resource_spec.get("format", 0))
-    content_hash = int(resource_spec.get("content_hash", 0)) & 0xFFFFFFFFFFFFFFFF
+    content_hash_raw = resource_spec.get("content_hash", 0)
+    if isinstance(content_hash_raw, (bytes, bytearray)):
+        content_hash = bytes(content_hash_raw)
+        if len(content_hash) != 32:
+            raise PakError("E_SIZE", "Physics content_hash bytes must be 32 bytes")
+    elif isinstance(content_hash_raw, str):
+        cleaned = content_hash_raw.strip()
+        if cleaned.startswith("0x") or cleaned.startswith("0X"):
+            cleaned = cleaned[2:]
+        if len(cleaned) != 64:
+            raise PakError("E_SIZE", "Physics content_hash hex must be 64 characters")
+        try:
+            content_hash = bytes.fromhex(cleaned)
+        except ValueError as exc:
+            raise PakError("E_TYPE", "Physics content_hash hex is invalid") from exc
+    else:
+        hash_prefix = int(content_hash_raw) & 0xFFFFFFFFFFFFFFFF
+        content_hash = struct.pack("<Q", hash_prefix) + (b"\x00" * 24)
     desc = (
         struct.pack("<Q", data_offset)
         + struct.pack("<I", data_size)
         + struct.pack("<B", fmt)
-        + b"\x00" * 3
-        + struct.pack("<Q", content_hash)
+        + content_hash
+        + (b"\x00" * 3)
     )
-    if len(desc) != 24:
+    if len(desc) != 48:
         raise PakError("E_SIZE", f"PhysicsResourceDesc size mismatch: {len(desc)}")
     return desc
 
@@ -1689,15 +1706,24 @@ def pack_physics_material_asset_descriptor(
 ) -> bytes:
     """Pack PhysicsMaterialAssetDesc (128 bytes)."""
     header = header_builder(asset)
-    friction = float(asset.get("friction", 0.5))
+    static_friction = float(asset.get("static_friction", 0.5))
+    dynamic_friction = float(asset.get("dynamic_friction", 0.5))
     restitution = float(asset.get("restitution", 0.0))
     density = float(asset.get("density", 1000.0))
     combine_friction = int(asset.get("combine_mode_friction", 0))
     combine_restitution = int(asset.get("combine_mode_restitution", 0))
-    reserved = b"\x00" * 19
+    reserved = b"\x00" * 15
     desc = (
         header
-        + struct.pack("<fffBB", friction, restitution, density, combine_friction, combine_restitution)
+        + struct.pack(
+            "<ffffBB",
+            static_friction,
+            dynamic_friction,
+            restitution,
+            density,
+            combine_friction,
+            combine_restitution,
+        )
         + reserved
     )
     if len(desc) != 128:
@@ -2213,7 +2239,64 @@ def pack_rigid_body_binding_record(
     gravity_factor = float(binding.get("gravity_factor", 1.0))
     activation = 1 if bool(binding.get("initial_activation", True)) else 0
     is_sensor = 1 if bool(binding.get("is_sensor", False)) else 0
-    reserved = b"\x00" * 20
+    com_override = binding.get("center_of_mass_override", [0.0, 0.0, 0.0])
+    inertia_override = binding.get("inertia_tensor_override", [0.0, 0.0, 0.0])
+    if not isinstance(com_override, (list, tuple)) or len(com_override) != 3:
+        raise PakError(
+            "E_TYPE", "rigid_body.center_of_mass_override must be a 3-element list"
+        )
+    if not isinstance(inertia_override, (list, tuple)) or len(inertia_override) != 3:
+        raise PakError(
+            "E_TYPE", "rigid_body.inertia_tensor_override must be a 3-element list"
+        )
+    com_x, com_y, com_z = float(com_override[0]), float(com_override[1]), float(
+        com_override[2]
+    )
+    inertia_x, inertia_y, inertia_z = (
+        float(inertia_override[0]),
+        float(inertia_override[1]),
+        float(inertia_override[2]),
+    )
+    has_com_override = 1 if "center_of_mass_override" in binding else 0
+    has_inertia_override = 1 if "inertia_tensor_override" in binding else 0
+    max_linear_velocity = float(binding.get("max_linear_velocity", 0.0))
+    max_angular_velocity = float(binding.get("max_angular_velocity", 0.0))
+    allowed_dof_flags = 0
+    allowed_dof = binding.get("allowed_dof", {})
+    if isinstance(allowed_dof, dict):
+        if bool(allowed_dof.get("translate_x", False)):
+            allowed_dof_flags |= 1 << 0
+        if bool(allowed_dof.get("translate_y", False)):
+            allowed_dof_flags |= 1 << 1
+        if bool(allowed_dof.get("translate_z", False)):
+            allowed_dof_flags |= 1 << 2
+        if bool(allowed_dof.get("rotate_x", False)):
+            allowed_dof_flags |= 1 << 3
+        if bool(allowed_dof.get("rotate_y", False)):
+            allowed_dof_flags |= 1 << 4
+        if bool(allowed_dof.get("rotate_z", False)):
+            allowed_dof_flags |= 1 << 5
+    backend_bytes = b"\x00" * 10
+    backend = binding.get("backend", {})
+    if isinstance(backend, dict):
+        target = str(backend.get("target", "")).strip().lower()
+        if target == "jolt":
+            num_velocity_steps = int(backend.get("num_velocity_steps_override", 0)) & 0xFF
+            num_position_steps = int(backend.get("num_position_steps_override", 0)) & 0xFF
+            backend_bytes = struct.pack("<BB", num_velocity_steps, num_position_steps) + (b"\x00" * 8)
+        elif target == "physx":
+            min_velocity_iters = int(backend.get("min_velocity_iters", 0)) & 0xFF
+            min_position_iters = int(backend.get("min_position_iters", 0)) & 0xFF
+            max_contact_impulse = float(backend.get("max_contact_impulse", 0.0))
+            contact_report_threshold = float(backend.get("contact_report_threshold", 0.0))
+            backend_bytes = struct.pack(
+                "<BBff",
+                min_velocity_iters,
+                min_position_iters,
+                max_contact_impulse,
+                contact_report_threshold,
+            )
+    reserved = b"\x00" * 6
     shape_key_bytes = _pack_asset_key_bytes(shape_asset_key, "shape_asset_key")
     material_key_bytes = _pack_asset_key_bytes(
         material_asset_key, "material_asset_key"
@@ -2235,6 +2318,21 @@ def pack_rigid_body_binding_record(
         )
         + shape_key_bytes
         + material_key_bytes
+        + struct.pack(
+            "<3fI3fIffI",
+            com_x,
+            com_y,
+            com_z,
+            has_com_override,
+            inertia_x,
+            inertia_y,
+            inertia_z,
+            has_inertia_override,
+            max_linear_velocity,
+            max_angular_velocity,
+            allowed_dof_flags,
+        )
+        + backend_bytes
         + reserved
     )
     if len(desc) != RIGID_BODY_BINDING_RECORD_SIZE:
@@ -2285,15 +2383,58 @@ def pack_character_binding_record(
     mass = float(binding.get("mass", 80.0))
     max_slope = float(binding.get("max_slope_angle", 0.7854))
     step_height = float(binding.get("step_height", 0.3))
+    step_down = float(binding.get("step_down_distance", 0.0))
     max_strength = float(binding.get("max_strength", 100.0))
+    skin_width = float(binding.get("skin_width", 0.0))
+    predictive_contact_distance = float(
+        binding.get("predictive_contact_distance", 0.0)
+    )
     layer = int(binding.get("collision_layer", 0))
     mask = int(binding.get("collision_mask", 0xFFFFFFFF))
-    reserved = b"\x00" * 18
+    inner_shape_asset_key = _pack_asset_key_bytes(
+        binding.get("inner_shape_asset_key", b"\x00" * 16),
+        "inner_shape_asset_key",
+    )
+    backend_bytes = b"\x00" * 12
+    backend = binding.get("backend", {})
+    if isinstance(backend, dict):
+        target = str(backend.get("target", "")).strip().lower()
+        if target == "jolt":
+            penetration_recovery_speed = float(
+                backend.get("penetration_recovery_speed", 0.0)
+            )
+            max_num_hits = int(backend.get("max_num_hits", 0))
+            hit_reduction_cos_max_angle = float(
+                backend.get("hit_reduction_cos_max_angle", 0.0)
+            )
+            backend_bytes = struct.pack(
+                "<fIf",
+                penetration_recovery_speed,
+                max_num_hits,
+                hit_reduction_cos_max_angle,
+            )
+        elif target == "physx":
+            contact_offset = float(backend.get("contact_offset", 0.0))
+            backend_bytes = struct.pack("<f", contact_offset) + (b"\x00" * 8)
+    reserved = b"\x00" * 14
     shape_key_bytes = _pack_asset_key_bytes(shape_asset_key, "shape_asset_key")
     desc = (
         struct.pack("<I", node_index)
         + shape_key_bytes
-        + struct.pack("<ffffHI", mass, max_slope, step_height, max_strength, layer, mask)
+        + struct.pack(
+            "<fffffffHI",
+            mass,
+            max_slope,
+            step_height,
+            step_down,
+            max_strength,
+            skin_width,
+            predictive_contact_distance,
+            layer,
+            mask,
+        )
+        + inner_shape_asset_key
+        + backend_bytes
         + reserved
     )
     if len(desc) != CHARACTER_BINDING_RECORD_SIZE:
@@ -2306,47 +2447,94 @@ def pack_soft_body_binding_record(
     *,
     node_count: int,
 ) -> bytes:
-    """Pack SoftBodyBindingRecord (68 bytes)."""
+    """Pack SoftBodyBindingRecord."""
     node_index = int(binding.get("node_index", 0))
     if node_index < 0 or node_index >= node_count:
         raise PakError("E_REF", f"SoftBody node_index out of range: {node_index}")
-    clusters = int(binding.get("cluster_count", 0))
-    stiffness = float(binding.get("stiffness", 0.0))
-    damping = float(binding.get("damping", 0.0))
     edge_comp = float(binding.get("edge_compliance", 0.0))
     shear_comp = float(binding.get("shear_compliance", 0.0))
     bend_comp = float(binding.get("bend_compliance", 1.0))
-    tether_mode = int(binding.get("tether_mode", 0))
-    tether_max = float(binding.get("tether_max_distance_multiplier", 1.0))
-    jolt_settings_resource_index = int(
-        binding.get("jolt_settings_resource_index", 0xFFFFFFFF)
-    )
-    physx_settings_resource_index = int(
-        binding.get("physx_settings_resource_index", 0xFFFFFFFF)
-    )
-    settings_scale = binding.get("settings_scale", [1.0, 1.0, 1.0])
-    if not isinstance(settings_scale, (list, tuple)) or len(settings_scale) != 3:
-        raise PakError("E_TYPE", "soft_body.settings_scale must be a 3-element list")
-    sx, sy, sz = (float(settings_scale[0]), float(settings_scale[1]), float(settings_scale[2]))
+    volume_comp = float(binding.get("volume_compliance", 0.0))
+    pressure_coeff = float(binding.get("pressure_coefficient", 0.0))
+    global_damping = float(binding.get("global_damping", 0.0))
     restitution = float(binding.get("restitution", 0.0))
     friction = float(binding.get("friction", 0.2))
     vertex_radius = float(binding.get("vertex_radius", 0.0))
-    reserved0 = b"\x00" * 3
+    tether_max = float(binding.get("tether_max_distance_multiplier", 1.0))
+    solver_iteration_count = int(binding.get("solver_iteration_count", 0))
+    topology_resource_index = int(binding.get("topology_resource_index", 0xFFFFFFFF))
+    pinned_vertices = binding.get("pinned_vertices", [])
+    kinematic_vertices = binding.get("kinematic_vertices", [])
+    pinned_vertex_count = len(pinned_vertices) if isinstance(pinned_vertices, list) else 0
+    kinematic_vertex_count = (
+        len(kinematic_vertices) if isinstance(kinematic_vertices, list) else 0
+    )
+    pinned_vertex_byte_offset = int(binding.get("pinned_vertex_byte_offset", 0))
+    kinematic_vertex_byte_offset = int(binding.get("kinematic_vertex_byte_offset", 0))
+    backend_bytes = b"\x00" * 12
+    topology_format = int(binding.get("topology_format", 2)) & 0xFF
+    backend = binding.get("backend", {})
+    if isinstance(backend, dict):
+        target = str(backend.get("target", "")).strip().lower()
+        if target == "jolt":
+            num_velocity_steps = int(backend.get("velocity_iteration_count", 0))
+            num_position_steps = solver_iteration_count
+            gravity_factor = float(backend.get("gravity_factor", 1.0))
+            backend_bytes = struct.pack(
+                "<IIf",
+                num_velocity_steps,
+                num_position_steps,
+                gravity_factor,
+            )
+            topology_format = 2
+        elif target == "physx":
+            youngs_modulus = float(backend.get("youngs_modulus", 0.0))
+            poissons = float(backend.get("poisson_ratio", 0.0))
+            dynamic_friction = float(backend.get("dynamic_friction", 0.0))
+            backend_bytes = struct.pack(
+                "<fff",
+                youngs_modulus,
+                poissons,
+                dynamic_friction,
+            )
+            topology_format = 4
+    tether_mode_value = binding.get("tether_mode", 0)
+    if isinstance(tether_mode_value, str):
+        tether_mode_key = tether_mode_value.strip().lower()
+        tether_mode = {"none": 0, "euclidean": 1, "geodesic": 2}.get(
+            tether_mode_key, 0
+        )
+    else:
+        tether_mode = int(tether_mode_value)
+    self_collision = 1 if bool(binding.get("self_collision", False)) else 0
+    reserved_tail = b"\x00" * 13
     desc = (
-        struct.pack("<IIfffffB", node_index, clusters, stiffness, damping, edge_comp, shear_comp, bend_comp, tether_mode)
-        + reserved0
-        + struct.pack(
-            "<fII3ffff",
-            tether_max,
-            jolt_settings_resource_index,
-            physx_settings_resource_index,
-            sx,
-            sy,
-            sz,
+        struct.pack(
+            "<Iffffffffff",
+            node_index,
+            edge_comp,
+            shear_comp,
+            bend_comp,
+            volume_comp,
+            pressure_coeff,
+            global_damping,
             restitution,
             friction,
             vertex_radius,
+            tether_max,
         )
+        + struct.pack(
+            "<IIIIII",
+            solver_iteration_count,
+            topology_resource_index,
+            pinned_vertex_count,
+            pinned_vertex_byte_offset,
+            kinematic_vertex_count,
+            kinematic_vertex_byte_offset,
+        )
+        + backend_bytes
+        + struct.pack("<BBB", tether_mode & 0xFF, topology_format, self_collision)
+        + reserved_tail
     )
     if len(desc) != SOFT_BODY_BINDING_RECORD_SIZE:
         raise PakError("E_SIZE", f"SoftBodyBindingRecord size mismatch: {len(desc)}")
@@ -2361,14 +2549,41 @@ def pack_joint_binding_record(
 ) -> bytes:
     """Pack JointBindingRecord (32 bytes)."""
     node_a = int(binding.get("node_index_a", 0))
-    node_b = int(binding.get("node_index_b", 0))
+    node_b_raw = binding.get("node_index_b", 0)
+    if node_b_raw is None or (
+        isinstance(node_b_raw, str) and node_b_raw.strip().lower() == "world"
+    ):
+        node_b = 0xFFFFFFFF
+    else:
+        node_b = int(node_b_raw)
     if node_a < 0 or node_a >= node_count:
         raise PakError("E_REF", f"Joint node_index_a out of range: {node_a}")
-    if node_b != 0 and (node_b < 0 or node_b >= node_count):
+    if node_b != 0xFFFFFFFF and (node_b < 0 or node_b >= node_count):
         raise PakError("E_REF", f"Joint node_index_b out of range: {node_b}")
-    reserved = b"\x00" * 20
+    backend_bytes = b"\x00" * 16
+    backend = binding.get("backend", {})
+    if isinstance(backend, dict):
+        target = str(backend.get("target", "")).strip().lower()
+        if target == "jolt":
+            num_velocity_steps = int(backend.get("num_velocity_steps_override", 0)) & 0xFF
+            num_position_steps = int(backend.get("num_position_steps_override", 0)) & 0xFF
+            backend_bytes = struct.pack("<BB", num_velocity_steps, num_position_steps) + (b"\x00" * 14)
+        elif target == "physx":
+            inv_mass_scale0 = float(backend.get("inv_mass_scale0", 0.0))
+            inv_mass_scale1 = float(backend.get("inv_mass_scale1", 0.0))
+            inv_inertia_scale0 = float(backend.get("inv_inertia_scale0", 0.0))
+            inv_inertia_scale1 = float(backend.get("inv_inertia_scale1", 0.0))
+            backend_bytes = struct.pack(
+                "<ffff",
+                inv_mass_scale0,
+                inv_mass_scale1,
+                inv_inertia_scale0,
+                inv_inertia_scale1,
+            )
+    reserved = b"\x00" * 4
     desc = (
         struct.pack("<III", node_a, node_b, constraint_index)
+        + backend_bytes
         + reserved
     )
     if len(desc) != 32:
@@ -2386,9 +2601,17 @@ def pack_vehicle_binding_record(
     node_index = int(binding.get("node_index", 0))
     if node_index < 0 or node_index >= node_count:
         raise PakError("E_REF", f"Vehicle node_index out of range: {node_index}")
-    reserved = b"\x00" * 24
+    wheel_slice_offset = int(binding.get("wheel_slice_offset", 0))
+    wheel_slice_count = int(binding.get("wheel_slice_count", 0))
+    reserved = b"\x00" * 18
     desc = (
-        struct.pack("<II", node_index, constraint_index)
+        struct.pack(
+            "<IIIH",
+            node_index,
+            constraint_index,
+            wheel_slice_offset,
+            wheel_slice_count,
+        )
         + reserved
     )
     if len(desc) != 32:

@@ -1,7 +1,8 @@
 {
     "name": "ground",
     "virtual_path": "/.cooked/Physics/Materials/ground.opmat",
-    "friction": 0.9,
+    "static_friction": 0.9,
+    "dynamic_friction": 0.9,
     "restitution": 0.05,
     "density": 1800.0,
     "combine_mode_friction": "max",

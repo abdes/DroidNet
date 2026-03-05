@@ -256,8 +256,13 @@ auto PhysicsMaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   util::TruncateAndNullTerminate(
     descriptor.header.name, sizeof(descriptor.header.name), material_name);
 
-  if (descriptor_doc.contains("friction")) {
-    descriptor.friction = descriptor_doc.at("friction").get<float>();
+  if (descriptor_doc.contains("static_friction")) {
+    descriptor.static_friction
+      = descriptor_doc.at("static_friction").get<float>();
+  }
+  if (descriptor_doc.contains("dynamic_friction")) {
+    descriptor.dynamic_friction
+      = descriptor_doc.at("dynamic_friction").get<float>();
   }
   if (descriptor_doc.contains("restitution")) {
     descriptor.restitution = descriptor_doc.at("restitution").get<float>();

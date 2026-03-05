@@ -64,7 +64,7 @@ def test_v7_footer_reports_physics_region_and_table(tmp_path: Path):
     assert physics_region["size"] > 0
     # sentinel + authored entry
     assert physics_table["count"] == 2
-    assert physics_table["entry_size"] == 24
+    assert physics_table["entry_size"] == 48
 
     asset_types = {e["asset_type"] for e in info.get("directory_entries", [])}
     assert 7 in asset_types

@@ -96,14 +96,13 @@ class PhysicsSceneAssetDumper final : public AssetDumper {
       SoftBodyBindingRecord record {};
       std::memcpy(&record, blob.data() + table_offset, sizeof(record));
       PrintUtils::Field("Sample Node Index", record.node_index, 10);
-      PrintUtils::Field("Sample Clusters", record.cluster_count, 10);
-      PrintUtils::Field("Sample Jolt Settings Resource",
-        record.jolt_settings_resource_index.get(), 10);
-      PrintUtils::Field("Sample PhysX Settings Resource",
-        record.physx_settings_resource_index.get(), 10);
-      PrintUtils::Field("Sample Scale X", record.settings_scale[0], 10);
-      PrintUtils::Field("Sample Scale Y", record.settings_scale[1], 10);
-      PrintUtils::Field("Sample Scale Z", record.settings_scale[2], 10);
+      PrintUtils::Field(
+        "Sample Topology Resource", record.topology_resource_index.get(), 10);
+      PrintUtils::Field("Sample Topology Format",
+        static_cast<uint32_t>(record.topology_format), 10);
+      PrintUtils::Field(
+        "Sample Solver Iterations", record.solver_iteration_count, 10);
+      PrintUtils::Field("Sample Global Damping", record.global_damping, 10);
       PrintUtils::Field("Sample Restitution", record.restitution, 10);
       PrintUtils::Field("Sample Friction", record.friction, 10);
       break;
@@ -119,8 +118,10 @@ class PhysicsSceneAssetDumper final : public AssetDumper {
       VehicleBindingRecord record {};
       std::memcpy(&record, blob.data() + table_offset, sizeof(record));
       PrintUtils::Field("Sample Node Index", record.node_index, 10);
-      PrintUtils::Field("Sample Wheel Offset", record.wheel_table_offset, 10);
-      PrintUtils::Field("Sample Wheel Count", record.wheel_count, 10);
+      PrintUtils::Field(
+        "Sample Wheel Slice Offset", record.wheel_slice_offset, 10);
+      PrintUtils::Field(
+        "Sample Wheel Slice Count", record.wheel_slice_count, 10);
       break;
     }
     case PhysicsBindingType::kAggregate: {

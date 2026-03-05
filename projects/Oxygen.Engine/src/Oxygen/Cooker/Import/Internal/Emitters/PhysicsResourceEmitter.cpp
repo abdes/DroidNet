@@ -6,7 +6,9 @@
 
 #include <Oxygen/Cooker/Import/Internal/Emitters/PhysicsResourceEmitter.h>
 
+#include <array>
 #include <cstddef>
+#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <span>
@@ -35,23 +37,34 @@ namespace {
     return hash;
   }
 
+  auto AppendHashSlotHex(std::string& out, const uint64_t hash64) -> void
+  {
+    auto slot = std::array<uint8_t, 32> {};
+    std::memcpy(slot.data(), &hash64, sizeof(hash64));
+
+    constexpr auto kHex = "0123456789abcdef";
+    for (const auto byte : slot) {
+      out.push_back(kHex[(byte >> 4U) & 0x0FU]);
+      out.push_back(kHex[byte & 0x0FU]);
+    }
+  }
+
   [[nodiscard]] auto ComputePhysicsIdentity(
     const CookedPhysicsResourcePayload& cooked) -> std::string
   {
     auto identity = std::string {};
-    identity.reserve(96);
+    identity.reserve(160);
     identity.append("phys:");
     identity.append("f=");
     identity.append(std::to_string(static_cast<uint32_t>(cooked.format)));
     identity.append(";n=");
     identity.append(std::to_string(cooked.data.size()));
-    if (cooked.content_hash != 0ULL) {
-      identity.append(";h=");
-      identity.append(std::to_string(cooked.content_hash));
-      return identity;
-    }
-    identity.append(";fp=");
-    identity.append(std::to_string(ComputeFastFingerprint(cooked.data)));
+
+    const auto hash64 = (cooked.content_hash != 0ULL)
+      ? cooked.content_hash
+      : ComputeFastFingerprint(cooked.data);
+    identity.append(";h=");
+    AppendHashSlotHex(identity, hash64);
     return identity;
   }
 
@@ -237,9 +250,10 @@ auto PhysicsResourceEmitter::MakeTableEntry(
   entry.size_bytes
     = static_cast<data::pak::core::DataBlobSizeT>(cooked.data.size());
   entry.format = cooked.format;
-  entry.content_hash = (cooked.content_hash != 0ULL)
+  const auto hash64 = (cooked.content_hash != 0ULL)
     ? cooked.content_hash
     : ComputeFastFingerprint(cooked.data);
+  std::memcpy(entry.content_hash, &hash64, sizeof(hash64));
   return entry;
 }
 

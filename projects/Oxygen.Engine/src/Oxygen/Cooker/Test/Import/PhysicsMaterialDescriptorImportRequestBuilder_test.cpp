@@ -65,7 +65,8 @@ NOLINT_TEST(PhysicsMaterialDescriptorImportRequestBuilderTest,
       "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-material-descriptor.schema.json",
       "name": "ground",
       "content_hashing": false,
-      "friction": 0.95,
+      "static_friction": 0.95,
+      "dynamic_friction": 0.70,
       "restitution": 0.05,
       "density": 1800.0,
       "combine_mode_friction": "max",
@@ -104,7 +105,7 @@ NOLINT_TEST(PhysicsMaterialDescriptorImportRequestBuilderTest,
   WriteTextFile(descriptor_path,
     R"({
       "name": "Bad",
-      "friction": 0.9,
+      "static_friction": 0.9,
       "unexpected": true
     })");
 

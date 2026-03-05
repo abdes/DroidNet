@@ -16,7 +16,11 @@
         "virtual_path": {
             "$ref": "#/definitions/canonical_opmat_path"
         },
-        "friction": {
+        "static_friction": {
+            "type": "number",
+            "minimum": 0.0
+        },
+        "dynamic_friction": {
             "type": "number",
             "minimum": 0.0
         },

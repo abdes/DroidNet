@@ -224,57 +224,80 @@
         "soft_bodies": [
             {
                 "node_index": 19,
-                "jolt_settings_ref": "/.cooked/Physics/Resources/park_soft_body_settings_a.opres",
-                "physx_settings_ref": "/.cooked/Physics/Resources/park_soft_body_settings_physx_a.opres",
-                "cluster_count": 6,
-                "stiffness": 8.0,
-                "damping": 0.08,
+                "source_mesh_ref": "/.cooked/Geometry/softbody_sphere.ogeo",
+                "global_damping": 0.08,
                 "edge_compliance": 0.0001,
                 "shear_compliance": 0.0001,
                 "bend_compliance": 0.0002,
+                "volume_compliance": 0.0002,
+                "pressure_coefficient": 0.0,
+                "solver_iteration_count": 8,
+                "self_collision": false,
+                "pinned_vertices": [],
+                "kinematic_vertices": [],
                 "tether_mode": "geodesic",
                 "tether_max_distance_multiplier": 1.05,
-                "settings_scale": [
-                    4.8,
-                    4.8,
-                    4.8
-                ],
                 "restitution": 0.2,
                 "friction": 0.6,
-                "vertex_radius": 0.02
+                "vertex_radius": 0.02,
+                "backend": {
+                    "target": "jolt",
+                    "velocity_iteration_count": 8,
+                    "lra_stiffness_fraction": 1.0,
+                    "skinned_constraint_enable": false
+                }
             }
         ],
         "joints": [
             {
                 "node_index_a": 5,
                 "node_index_b": 6,
-                "constraint_ref": "/.cooked/Physics/Resources/park_hinge_joint_a.opres"
+                "backend": {
+                    "target": "jolt",
+                    "num_velocity_steps_override": 0,
+                    "num_position_steps_override": 0
+                }
             }
         ],
         "vehicles": [
             {
                 "node_index": 12,
-                "constraint_ref": "/.cooked/Physics/Resources/park_vehicle_constraint_a.opres",
                 "wheels": [
                     {
                         "node_index": 14,
                         "axle_index": 0,
-                        "side": "left"
+                        "side": "left",
+                        "backend": {
+                            "target": "jolt",
+                            "wheel_castor": 0.0
+                        }
                     },
                     {
                         "node_index": 15,
                         "axle_index": 0,
-                        "side": "right"
+                        "side": "right",
+                        "backend": {
+                            "target": "jolt",
+                            "wheel_castor": 0.0
+                        }
                     },
                     {
                         "node_index": 16,
                         "axle_index": 1,
-                        "side": "left"
+                        "side": "left",
+                        "backend": {
+                            "target": "jolt",
+                            "wheel_castor": 0.0
+                        }
                     },
                     {
                         "node_index": 17,
                         "axle_index": 1,
-                        "side": "right"
+                        "side": "right",
+                        "backend": {
+                            "target": "jolt",
+                            "wheel_castor": 0.0
+                        }
                     }
                 ]
             }

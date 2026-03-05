@@ -156,11 +156,12 @@ Schema:
 
 Fields map to:
 
-1. `friction`
-2. `restitution`
-3. `density`
-4. `combine_mode_friction`
-5. `combine_mode_restitution`
+1. `static_friction`
+2. `dynamic_friction`
+3. `restitution`
+4. `density`
+5. `combine_mode_friction`
+6. `combine_mode_restitution`
 
 Artifacts:
 
@@ -242,7 +243,8 @@ Example `physics-material-descriptor`:
 {
   "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-material-descriptor.schema.json",
   "name": "ground",
-  "friction": 0.95,
+  "static_friction": 0.95,
+  "dynamic_friction": 0.9,
   "restitution": 0.05,
   "density": 1800.0,
   "combine_mode_friction": "max",
@@ -393,7 +395,8 @@ Repository-backed examples:
 | `$schema` | string | no | none | valid URI/path | schema self-ref |
 | `name` | string | conditional | source stem | non-empty | Required when `virtual_path` omitted |
 | `virtual_path` | string | no | derived from `name` | canonical virtual path | Optional explicit output path |
-| `friction` | number | no | `0.5` | `>= 0` | `PhysicsMaterialAssetDesc::friction` |
+| `static_friction` | number | no | `0.5` | `>= 0` | `PhysicsMaterialAssetDesc::static_friction` |
+| `dynamic_friction` | number | no | `0.5` | `>= 0` | `PhysicsMaterialAssetDesc::dynamic_friction` |
 | `restitution` | number | no | `0.0` | `>= 0` | `PhysicsMaterialAssetDesc::restitution` |
 | `density` | number | no | `1000.0` | `> 0` | `PhysicsMaterialAssetDesc::density` |
 | `combine_mode_friction` | enum | no | `average` | enum value | `combine_mode_friction` |

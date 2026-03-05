@@ -1,6 +1,0 @@
-{
-    "name": "park_vehicle_constraint_a",
-    "format": "jolt_vehicle_constraint_binary",
-    "source": "./data/park_vehicle_constraint_a.jphbin",
-    "virtual_path": "/.cooked/Physics/Resources/park_vehicle_constraint_a.opres"
-}

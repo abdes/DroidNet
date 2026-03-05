@@ -154,11 +154,11 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadAllBindingTypesSucceeds)
 
   pak7::SoftBodyBindingRecord soft {};
   soft.node_index = 14;
-  soft.cluster_count = 9;
-  soft.jolt_settings_resource_index
+  soft.solver_iteration_count = 9;
+  soft.topology_resource_index
     = oxygen::data::pak::core::ResourceIndexT { 42U };
-  soft.physx_settings_resource_index
-    = oxygen::data::pak::core::ResourceIndexT { 42U };
+  soft.topology_format
+    = pak7::PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary;
 
   pak7::JointBindingRecord joint {};
   joint.node_index_a = 15;
@@ -238,11 +238,11 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadAllBindingTypesSucceeds)
   EXPECT_EQ(
     asset->GetBindings<pak7::SoftBodyBindingRecord>()[0].node_index, 14U);
   EXPECT_EQ(asset->GetBindings<pak7::SoftBodyBindingRecord>()[0]
-              .jolt_settings_resource_index,
+              .topology_resource_index,
     oxygen::data::pak::core::ResourceIndexT { 42U });
-  EXPECT_EQ(asset->GetBindings<pak7::SoftBodyBindingRecord>()[0]
-              .physx_settings_resource_index,
-    oxygen::data::pak::core::ResourceIndexT { 42U });
+  EXPECT_EQ(
+    asset->GetBindings<pak7::SoftBodyBindingRecord>()[0].topology_format,
+    pak7::PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary);
   EXPECT_EQ(
     asset->GetBindings<pak7::JointBindingRecord>()[0].node_index_a, 15U);
   EXPECT_EQ(

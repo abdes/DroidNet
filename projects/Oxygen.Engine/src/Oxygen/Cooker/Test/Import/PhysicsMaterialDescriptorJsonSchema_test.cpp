@@ -118,7 +118,8 @@ NOLINT_TEST(PhysicsMaterialDescriptorJsonSchemaTest, AcceptsCanonicalDocument)
   const auto doc = json::parse(R"({
     "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-material-descriptor.schema.json",
     "name": "ground",
-    "friction": 0.95,
+    "static_friction": 0.95,
+    "dynamic_friction": 0.70,
     "restitution": 0.05,
     "density": 1800.0,
     "combine_mode_friction": "max",
@@ -139,7 +140,7 @@ NOLINT_TEST(PhysicsMaterialDescriptorJsonSchemaTest, RejectsUnknownFields)
 
   const auto doc = json::parse(R"({
     "name": "ground",
-    "friction": 0.95,
+    "static_friction": 0.95,
     "unknown_setting": true
   })");
 
