@@ -9,7 +9,7 @@ scripts:
     language: luau
     encoding: source
     compression: none
-    file: scene_proc_cubes_script.lua
+    file: proc_cubes.lua
 
 assets:
   - type: script
