@@ -84,7 +84,7 @@ set(
   "ComponentPoolRegistry.h"
   "Named.h"
   "Object.h"
-  "ObjectMetadata.h"
+  "ObjectMetaData.h"
   "Typed.h"
   "TypedObject.h"
   "TypeSystem.h"
@@ -93,7 +93,7 @@ set(
   OXYGEN_COMPOSITION_PRIVATE_SOURCES
   "Composition.cpp"
   "Object.cpp"
-  "ObjectMetadata.cpp"
+  "ObjectMetaData.cpp"
   "TypeSystem.cpp"
   "cs_init.cpp"
   "ComponentPoolRegistry.cpp"
