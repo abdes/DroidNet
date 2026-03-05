@@ -160,6 +160,11 @@ $conanBaseArgs = @(
     "--build=$Build",
     "--deployer-folder=$DeployerFolder",
     "--deployer-package=$DeployerPackage",
+    # NOTE: CMakeConfigDeps is required for multi-config generators (Ninja Multi-Config, Visual Studio).
+    # Conan only generates Debug/Release packages, but multi-config generators (especially Ninja)
+    # may request other configurations (RelWithDebInfo, MinSizeRel, etc.). CMakeDeps cannot map
+    # these gracefully; only CMakeConfigDeps handles this scenario without breaking builds.
+    # This flag is marked "will_break_next" (experimental), so monitor Conan releases for changes.
     "-c", "tools.cmake.cmakedeps:new=will_break_next",
     # Force binary isolation in the Conan cache so that ASan and non-ASan
     # dependencies are treated as different packages and don't pollute each other.
