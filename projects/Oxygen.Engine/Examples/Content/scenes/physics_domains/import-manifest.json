@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "output": "F:/projects/DroidNet/projects/Oxygen.Engine/Examples/Content/.cooked",
+    "output": "H:/projects/DroidNet/projects/Oxygen.Engine/Examples/Content/.cooked",
     "jobs": [
         {
             "id": "floor.material",
