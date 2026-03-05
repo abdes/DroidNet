@@ -5,7 +5,7 @@ zero-shim: no legacy identity, schema, cooker, loader, or runtime fallback paths
 may remain once all phases are complete.
 
 Status: `in_progress` until every phase exit gate has code + docs + validation evidence.
-Phase status summary: **Phase 1 complete**; Phases 2-8 pending.
+Phase status summary: **Phase 1 complete**; Phases 2-9 pending.
 
 ## Phase 1 Progress Snapshot (2026-03-04)
 
@@ -92,13 +92,14 @@ Design alignment note:
 | `physics.md` design area | Mandatory migration outcome | Phase |
 | --- | --- | --- |
 | Asset identity (canonical virtual path + deterministic `AssetKey`) | Canonical path contract enforced, resolver-driven keys, UUID path removed | 1 |
-| Cross-artifact references + versioning contracts V-1/V-2/V-3 | Cross-unit references use `AssetKey`; positional indices only within regeneration units | 2, 4, 6 |
-| Integrity (SHA-256 only for artifacts) | All cooked descriptor/resource integrity fields upgraded to 32-byte SHA-256 | 2, 4 |
-| L2 artifact taxonomy and struct contract | Fixed-layout descriptors, trailing-array policy, backend scalar unions, strict ABI asserts | 3 |
-| Side-table emission registry (rows 1-14) | Sidecar + physics table/data physical emission matches documented locations | 4 |
-| Loose Cooking and PAK Builder contracts | Loose index authority, incremental-safe updates, PAK relocation without recook | 4, 5 |
-| L3 hydration order and runtime handle policy | Identity guard, dependency-order hydration, backend-specific restore, session-scoped handles | 6 |
-| Zero-tolerance cleanup | Legacy/random-key/JSON fallback/index misuse removed | 7 |
+| L1 schema field completeness and L2 struct field inventory | Every schema property traceable to design; struct fields named and typed per spec; SHA-256 hash slots correctly sized; backend scalar union stubs and trailing-array navigation fields present | 2 |
+| Cross-artifact references + versioning contracts V-1/V-2/V-3 | Cross-unit references use `AssetKey`; positional indices only within regeneration units | 3, 5, 7 |
+| Integrity (SHA-256 only for artifacts) | All cooked descriptor/resource integrity fields upgraded to 32-byte SHA-256 | 2, 3 |
+| L2 artifact taxonomy and ABI finalization | Fixed-layout descriptors, trailing-array policy, finalized backend scalar unions, strict ABI asserts, golden-file tests | 4 |
+| Side-table emission registry (rows 1-14) | Sidecar + physics table/data physical emission matches documented locations | 5 |
+| Loose Cooking and PAK Builder contracts | Loose index authority, incremental-safe updates, PAK relocation without recook | 5, 6 |
+| L3 hydration order and runtime handle policy | Identity guard, dependency-order hydration, backend-specific restore, session-scoped handles | 7 |
+| Zero-tolerance cleanup | Legacy/random-key/JSON fallback/index misuse removed | 8 |
 
 ## Phase 1 - Identity Foundation and Canonical Path Enforcement
 
@@ -122,7 +123,172 @@ Phase 1 exit gate:
 - [x] Resolver priority/tombstone behavior has deterministic tests.
 - [x] `AssetKey` creation API is constrained so canonical-path/resolver identity cannot be bypassed in production identity flows.
 
-## Phase 2 - Reference and Integrity Contract Migration (Cross-Cutting)
+## Phase 2 - L1 Schema Completeness and L2 Struct Field Alignment
+
+Goal: establish a verified, zero-gap correspondence between the L1 JSON schemas and
+the `PakFormat_physics.h` struct field inventory relative to the full specification
+in `physics.md`. No cooker or loader implementation is modified; this phase ensures
+the schema and struct vocabulary is complete and correct before any downstream phase
+attempts to read or write these fields.
+
+**L1 JSON schema gaps to close:**
+
+- [ ] `oxygen.physics-material-descriptor.schema.json`: split the single `friction`
+  property into `static_friction` and `dynamic_friction` — the design specifies each
+  independently at L1.
+- [ ] `oxygen.collision-shape-descriptor.schema.json`: add a `children` array property
+  for compound shapes; each child entry must carry `shape_type`, the full set of
+  inline analytic params (`radius`, `half_height`, `half_extents`, `normal`,
+  `distance`, `boundary_mode`, `limits_min`, `limits_max`, `payload_ref`), and a
+  local transform (`local_position`, `local_rotation`, `local_scale`). Add an
+  `allOf` conditional requiring `children` (minItems: 1) when
+  `shape_type == "compound"`.
+- [ ] `oxygen.physics-sidecar.schema.json` — `rigid_body_binding`: add optional
+  properties `center_of_mass_override` (vec3), `inertia_tensor_override` (vec3
+  diagonal), `max_linear_velocity` (number ≥ 0), `max_angular_velocity` (number ≥ 0),
+  `allowed_dof` (object with per-axis boolean flags `translate_x/y/z`,
+  `rotate_x/y/z`); add a `backend` discriminated sub-object (discriminant `target`:
+  `"jolt"` or `"physx"`) carrying per-backend scalars from the design table (Jolt:
+  `num_velocity_steps_override`, `num_position_steps_override`; PhysX:
+  `min_velocity_iters`, `min_position_iters`, `max_contact_impulse`,
+  `contact_report_threshold`).
+- [ ] `oxygen.physics-sidecar.schema.json` — `character_binding`: add optional
+  properties `step_down_distance`, `skin_width`, `predictive_contact_distance`
+  (numbers), `inner_shape_ref` (canonical_ocshape_path); add a `backend`
+  discriminated sub-object (Jolt: `penetration_recovery_speed`, `max_num_hits`,
+  `hit_reduction_cos_max_angle`; PhysX: `contact_offset`).
+- [ ] `oxygen.physics-sidecar.schema.json` — `soft_body_binding`: remove `stiffness`
+  (no design backing); rename `damping` → `global_damping`; replace
+  `jolt_settings_ref` / `physx_settings_ref` with `source_mesh_ref` (canonical
+  path to the L1 geometry source); remove `cluster_count` and `settings_scale`
+  unless design backing is confirmed; add missing properties `volume_compliance`,
+  `pressure_coefficient`, `solver_iteration_count`, `self_collision` (boolean),
+  `collision_mesh_ref` (optional canonical path), `pinned_vertices` (array of
+  non-negative integers), `kinematic_vertices` (array of non-negative integers);
+  add a `backend` discriminated sub-object (Jolt: `velocity_iteration_count`,
+  `lra_stiffness_fraction`, `skinned_constraint_enable`; PhysX FEM:
+  `youngs_modulus`, `poisson_ratio`, `stabilization_velocity_threshold`).
+- [ ] `oxygen.physics-sidecar.schema.json` — `vehicle_wheel_binding`: add an optional
+  `backend` discriminated sub-object (Jolt: `wheel_castor`; PhysX: none).
+- [ ] `oxygen.physics-resource-descriptor.schema.json`: add missing PhysX format tags
+  to the `resource_format` enum: `physx_convex_mesh_binary`,
+  `physx_triangle_mesh_binary`, `physx_height_field_binary`,
+  `physx_constraint_binary`, `physx_vehicle_settings_binary`.
+
+**L2 binary struct field gaps to close (`PakFormat_physics.h`):**
+
+- [ ] `PhysicsResourceDesc`: upgrade `uint64_t content_hash` (8 bytes) to
+  `uint8_t content_hash[32]` (32-byte SHA-256 slot). Update `static_assert`.
+- [ ] `PhysicsMaterialAssetDesc`: rename `float friction` to `float static_friction`
+  and add `float dynamic_friction`; adjust reserved padding to maintain or explicitly
+  declare the new struct size. Update `static_assert`.
+- [ ] `PhysicsSceneAssetDesc`: carve `uint8_t target_scene_content_hash[32]` out of
+  the existing reserved block (32-byte SHA-256 slot for the paired `.oscene`
+  staleness check). Update `static_assert`.
+- [ ] `ShapeParams::CompoundParams`: replace `uint32_t reserved_u32` with
+  `uint32_t child_count` and add `uint32_t child_byte_offset` (self-relative byte
+  offset to the trailing child descriptor array per the trailing-array policy in
+  `physics.md`).
+- [ ] `RigidBodyBindingRecord`: add `float com_override[3]`, `uint32_t has_com_override`,
+  `float inertia_override[3]`, `uint32_t has_inertia_override`,
+  `float max_linear_velocity`, `float max_angular_velocity`,
+  `uint32_t allowed_dof_flags`; add `RigidBodyBackendScalars backend_scalars` union.
+  Define `RigidBodyBackendScalars` (Jolt: `uint8_t num_velocity_steps_override`,
+  `uint8_t num_position_steps_override`; PhysX: `uint8_t min_velocity_iters`,
+  `uint8_t min_position_iters`, `float max_contact_impulse`,
+  `float contact_report_threshold`). Update `static_assert`.
+- [ ] `CharacterBindingRecord`: add `float step_down_distance`, `float skin_width`,
+  `float predictive_contact_distance`, `AssetKey inner_shape_asset_key`; add
+  `CharacterBackendScalars backend_scalars` union. Define `CharacterBackendScalars`
+  (Jolt: `float penetration_recovery_speed`, `uint32_t max_num_hits`,
+  `float hit_reduction_cos_max_angle`; PhysX: `float contact_offset`). Update
+  `static_assert`.
+- [ ] `SoftBodyBindingRecord`: replace `jolt_settings_resource_index` +
+  `physx_settings_resource_index` with `core::ResourceIndexT topology_resource_index`
+  + `PhysicsResourceFormat topology_format`; remove `uint32_t cluster_count` and
+  `float stiffness` (no design backing); rename `float damping` →
+  `float global_damping`; add trailing array navigation:
+  `uint32_t pinned_vertex_count`, `uint32_t pinned_vertex_byte_offset`,
+  `uint32_t kinematic_vertex_count`, `uint32_t kinematic_vertex_byte_offset`; add
+  `SoftBodyBackendScalars backend_scalars` union. Define `SoftBodyBackendScalars`
+  (Jolt: `uint32_t num_velocity_steps`, `uint32_t num_position_steps`,
+  `float gravity_factor`; PhysX FEM: `float youngs_modulus`, `float poissons`,
+  `float dynamic_friction`). Update `static_assert`.
+- [ ] `JointBindingRecord`: add `JointBackendScalars backend_scalars` union drawn from
+  the reserved block. Define `JointBackendScalars` (Jolt:
+  `uint8_t num_velocity_steps_override`, `uint8_t num_position_steps_override`;
+  PhysX: `float inv_mass_scale0`, `float inv_mass_scale1`, `float inv_inertia_scale0`,
+  `float inv_inertia_scale1`). Update `static_assert`.
+- [ ] `VehicleBindingRecord`: rename `wheel_table_offset` → `wheel_slice_offset` and
+  `wheel_count` → `wheel_slice_count` to match design vocabulary; update all
+  read/write call sites.
+- [ ] `VehicleWheelBindingRecord`: add `VehicleWheelBackendScalars backend_scalars`
+  union from the reserved block. Define `VehicleWheelBackendScalars` (Jolt:
+  `float wheel_castor`; PhysX: reserved to matching size). Update `static_assert`.
+- [ ] **Packing discipline audit across all physics structs**: review every
+  `reserved` byte array in every struct and union in `PakFormat_physics.h` against
+  the following rules, removing or replacing any that do not satisfy them:
+  - A `reserved` field is permitted **only** if it falls into one of these three
+    categories:
+    1. **Explicit union tail padding** — fills the remaining bytes of a backend
+       scalar union arm to bring it to the exact size of the largest arm, ensuring
+       all alternatives within the `#pragma pack(push,1)` union are the same size.
+    2. **Strict alignment requirement** — a subsequent named field mandates an
+       alignment that cannot be satisfied without padding, and there is no
+       reordering of members that would eliminate it.
+    3. **Fixed-size array record** — the struct is a fixed-size record in a flat
+       binary array and the padding bytes bring the total to the required power-of-two
+       or explicitly documented ABI size.
+  - Any `reserved` field that exists only because a prior version left space
+    "for future use" without a concrete alignment or sizing justification must be
+    removed. The freed space must be consumed by the named fields added in this
+    phase; if no new fields are needed, the struct must shrink and its `static_assert`
+    must be updated accordingly.
+  - Within `#pragma pack(push,1)` structs, implicit compiler padding does not
+    exist; every byte is explicit. Explicit `reserved` arrays that duplicate what
+    would be implicit padding in a non-packed struct are therefore unnecessary and
+    must be removed.
+  - All retained padding/reserved fields must carry an inline comment stating which of
+    the three permitted categories justifies their presence.
+  - **Naming convention** for retained fields:
+    - `_pad0`, `_pad1`, … (sequential suffix) for interior alignment padding between
+      named members.
+    - `_reserved` (no numeric suffix) for the single trailing field that fills the
+      tail of a fixed-size struct or the tail of a union arm to match the largest arm.
+      Only one `_reserved` field is permitted per struct or union arm; if multiple
+      tail-padding fields would be required, consolidate them into one array.
+  - Existing `reserved` fields that do not follow this convention must be renamed;
+    any that survive the category audit must be renamed in the same change set.
+
+Phase 2 exit gate:
+
+- [ ] Every JSON schema property is traceable to a named field in `physics.md` for its
+  asset class; any property absent from the design is either removed or documented in
+  a deviation note appended to this plan.
+- [ ] Every `PakFormat_physics.h` struct field name, type, and unit matches the design
+  vocabulary exactly per the L1 Authoring and L2 records sections of `physics.md`.
+- [ ] All five backend scalar union types (`RigidBodyBackendScalars`,
+  `CharacterBackendScalars`, `SoftBodyBackendScalars`, `JointBackendScalars`,
+  `VehicleWheelBackendScalars`) are defined with the correct field names from the
+  design table and are embedded in their respective binding records.
+- [ ] All trailing array navigation field pairs (`count` + `byte_offset`) mandated by
+  `physics.md` are present: compound shape child array in `ShapeParams::CompoundParams`
+  and soft-body pinned/kinematic vertex arrays in `SoftBodyBindingRecord`.
+- [ ] SHA-256 hash slots are 32 bytes (`uint8_t[32]`) in all affected structs:
+  `PhysicsResourceDesc::content_hash` and `PhysicsSceneAssetDesc::target_scene_content_hash`.
+- [ ] Build validation: all affected headers and translation units compile without error;
+  all `static_assert` size assertions are updated to reflect new struct sizes.
+- [ ] Audit: `rg` confirms legacy field names are absent from production source and
+  schema files (`friction` (singular) in material descriptor, `wheel_table_offset`,
+  `jolt_settings_resource_index`, `cluster_count` in soft body, etc.).
+- [ ] Packing audit: every `reserved` field remaining in `PakFormat_physics.h` has
+  an inline comment citing its category (union tail pad, strict alignment, or
+  fixed-size record); `rg -n 'reserved' src/Oxygen/Data/PakFormat_physics.h`
+  returns no hit without such a comment, confirmed by manual review.
+- [ ] L1→L2 field-mapping checklist: a table mapping every schema property to the
+  corresponding struct field is appended to this plan for each record type modified.
+
+## Phase 3 - Reference and Integrity Contract Migration (Cross-Cutting)
 
 - [ ] Enforce reference contracts across data/model/tooling code:
 - [ ] Virtual path and `AssetKey` references carry no generation/version stamp (V-1).
@@ -131,7 +297,9 @@ Phase 1 exit gate:
 - [ ] Eliminate container-level ordinal coupling:
 - [ ] Physics resource descriptor table and container asset catalog are `AssetKey` keyed.
 - [ ] Incremental loose recook updates one asset without invalidating unrelated indices.
-- [ ] Upgrade artifact integrity fields to SHA-256 (32 bytes) where currently narrower:
+- [ ] Upgrade artifact integrity fields to SHA-256 (32 bytes) where currently narrower
+  (hash slot sizes established in Phase 2; this phase ensures correct population and
+  verification at cook time):
 - [ ] `AssetHeader::content_hash`.
 - [ ] `PhysicsResourceDesc` integrity hash.
 - [ ] Loose index `AssetEntry` descriptor integrity hash.
@@ -139,39 +307,46 @@ Phase 1 exit gate:
 - [ ] Remove prohibited asset-integrity algorithms (CRC variants, MD5/SHA-1, non-crypto hash misuse).
 - [ ] Keep CRC32 limited to whole-container (PAK file-level checksum) only.
 
-Phase 2 exit gate:
+Phase 3 exit gate:
 
 - [ ] No cross-unit positional reference path remains in code or serialized layout.
 - [ ] All asset-integrity fields are 32-byte SHA-256 and covered by tests.
 - [ ] Algorithm usage audit proves prohibited hashes are not used for asset integrity.
 
-## Phase 3 - L2 Schema and ABI Update (`PakFormat_physics.h` and Related Formats)
+## Phase 4 - L2 ABI Finalization (`PakFormat_physics.h` and Related Formats)
 
-- [ ] Implement/finalize backend scalar unions per binding record type:
-- [ ] `RigidBodyBackendScalars`, `CharacterBackendScalars`, `SoftBodyBackendScalars`, `JointBackendScalars`, `VehicleWheelBackendScalars`.
-- [ ] Reconcile soft-body backend scalar fields with final spec values before code freeze.
-- [ ] Implement trailing-array descriptor contracts:
-- [ ] `CompoundShapeChildDesc` trailing array.
-- [ ] `SoftBodyBindingRecord` pinned and kinematic vertex trailing arrays (`count + self-relative byte_offset` pairs).
-- [ ] Ensure vehicle wheels use shared side-table slice (`wheel_slice_offset`, `wheel_slice_count`) and not trailing array.
-- [ ] Update fixed-layout descriptors/binding records to match design:
+- [ ] Lock backend scalar union binary layouts (union definitions established in Phase 2):
+- [ ] Apply packing discipline to all five union types — `RigidBodyBackendScalars`,
+  `CharacterBackendScalars`, `SoftBodyBackendScalars`, `JointBackendScalars`,
+  `VehicleWheelBackendScalars` — with explicit `reserved` bytes and stable member ordering.
+- [ ] Finalize trailing-array element struct definitions and serialization contracts:
+- [ ] Define `CompoundShapeChildDesc` fixed-size element struct (shape type, inline
+  analytic params, local transform offset/rotation/scale); verify compound shape
+  trailing-array self-relative offset navigation.
+- [ ] Verify `SoftBodyBindingRecord` pinned and kinematic vertex trailing-array
+  self-relative offset navigation (navigation fields established in Phase 2).
+- [ ] Verify vehicle wheel side-table slice contract (field names aligned in Phase 2)
+  with a struct layout test.
+- [ ] Apply explicit packing discipline to all fixed-layout descriptors and binding
+  records updated in Phase 2:
 - [ ] `CollisionShapeAssetDesc`, `PhysicsMaterialAssetDesc`, `PhysicsSceneAssetDesc`, `PhysicsComponentTableDesc`, `PhysicsResourceDesc`.
 - [ ] `RigidBodyBindingRecord`, `ColliderBindingRecord`, `CharacterBindingRecord`, `SoftBodyBindingRecord`, `JointBindingRecord`, `VehicleBindingRecord`, `VehicleWheelBindingRecord`, `AggregateBindingRecord`.
-- [ ] Apply explicit packing discipline:
 - [ ] Stable member ordering, explicit `reserved` bytes, 16-byte multiple sizing where required.
 - [ ] Full `static_assert` coverage for size/offset invariants and trailing-array navigation fields.
 
-Phase 3 exit gate:
+Phase 4 exit gate:
 
-- [ ] Binary layout asserts pass for every touched descriptor/record.
-- [ ] Golden-file serialization/deserialization tests validate offsets, counts, and padding.
-- [ ] Updated schema documentation reflects final struct field names and sizes.
+- [ ] Binary layout asserts pass for every touched descriptor/record, including size,
+  per-field offset, and backend scalar union size assertions.
+- [ ] Golden-file serialization/deserialization tests validate offsets, counts, and
+  padding for compound shapes, soft-body records, and each sidecar binding record type.
+- [ ] Struct documentation reflects finalized field offsets and sizes aligned with the design.
 
-## Phase 4 - Cooker and Loose Layout Emission (`Cooker/Import/Internal`)
+## Phase 5 - Cooker and Loose Layout Emission (`Cooker/Import/Internal`)
 
 - [ ] Implement/update cook pipelines for all physics artifact classes:
 - [ ] Enforce schema-first validation for all L1 physics source payloads (manual checks only for non-schema constraints).
-- [ ] Maintain an explicit L1->L2 field-mapping checklist for rigid body, collider, character, soft body, joint, vehicle, vehicle wheel, and aggregate records.
+- [ ] Apply the L1→L2 field-mapping checklist (established in Phase 2) to verify cooker translation for rigid body, collider, character, soft body, joint, vehicle, vehicle wheel, and aggregate records.
 - [ ] Physics materials (`.opmat`) fixed descriptor emission with SHA-256 patching.
 - [ ] Collision shapes (`.ocshape`) analytic vs backend-cooked split, including compound child trailing array emission.
 - [ ] Physics sidecar (`.opscene`) with full component-table directory emission.
@@ -188,13 +363,13 @@ Phase 3 exit gate:
 - [ ] Re-cooking one asset updates only affected descriptor/blob/index records.
 - [ ] No container-wide ordinal drift dependency.
 
-Phase 4 exit gate:
+Phase 5 exit gate:
 
 - [ ] End-to-end cooker tests cover analytic shape, non-analytic shape, joint blob, soft-body blob, vehicle blob paths.
 - [ ] Complex-scene fixture validates component directory + wheel table + trailing arrays.
 - [ ] Incremental recook test proves unaffected assets remain stable.
 
-## Phase 5 - PAK Builder and Packaging Relocation
+## Phase 6 - PAK Builder and Packaging Relocation
 
 - [ ] Ensure PAK builder consumes cooked loose layout without recooking:
 - [ ] Reads index as source of truth for assets/file records.
@@ -203,13 +378,13 @@ Phase 4 exit gate:
 - [ ] Produces self-contained mountable bundle with catalog/directory structures.
 - [ ] Validate behavior across base + patch PAK layering for resolver priority expectations.
 
-Phase 5 exit gate:
+Phase 6 exit gate:
 
 - [ ] Loose->PAK roundtrip tests confirm byte-for-byte payload preservation (except expected relocated offsets).
 - [ ] Runtime can load both loose and PAK outputs with identical physics behavior.
 - [ ] PAK build path contains no cooker logic.
 
-## Phase 6 - Runtime Hydration and Simulation Contract (L3)
+## Phase 7 - Runtime Hydration and Simulation Contract (L3)
 
 - [ ] Integrate physics module into engine frame orchestration (fixed simulation + transform propagation phases).
 - [ ] Implement strict sidecar staleness guard before hydration:
@@ -224,13 +399,13 @@ Phase 5 exit gate:
 - [ ] Mid-session invalidation behavior follows backend/owner-responsibility contract.
 - [ ] Implement simulation-to-scene sync for body and vehicle wheel transforms.
 
-Phase 6 exit gate:
+Phase 7 exit gate:
 
 - [ ] Hydration tests cover every component table type and both backends (where available).
 - [ ] Mismatch guard tests hard-fail invalid sidecars.
 - [ ] Session teardown invalidates all handles; sync path verified under object removal scenarios.
 
-## Phase 7 - Zero-Tolerance Cleanup and Legacy Removal
+## Phase 8 - Zero-Tolerance Cleanup and Legacy Removal
 
 - [ ] Remove legacy/duplicate pipelines that bypass binary descriptors.
 - [ ] Remove runtime fallback parsing of L1 JSON for physics instantiation.
@@ -238,13 +413,13 @@ Phase 6 exit gate:
 - [ ] Remove deprecated handle wrappers that contradict current runtime-handle policy.
 - [ ] Remove compatibility code paths that keep old schema alive in production.
 
-Phase 7 exit gate:
+Phase 8 exit gate:
 
 - [ ] Search-based audit confirms no deprecated APIs/symbols remain.
 - [ ] Loader/cooker only accept finalized schema paths.
 - [ ] Migration notes document intentional breaking changes and no-shim policy.
 
-## Phase 8 - Final Validation and Release Gate
+## Phase 9 - Final Validation and Release Gate
 
 - [ ] Build validation:
 - [ ] Full project build with required toolchain flags (including `/GR-` and C++23 expectations where applicable).
