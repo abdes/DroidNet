@@ -117,22 +117,23 @@ struct PhysicsResourceDesc {
   core::OffsetT data_offset = 0; //!< Absolute offset to cooked physics data
   core::DataBlobSizeT size_bytes = 0; //!< Size in bytes
   PhysicsResourceFormat format = PhysicsResourceFormat::kJoltShapeBinary;
-  uint8_t reserved[3] = {};
-  uint64_t content_hash = 0; //!< First 8 bytes of SHA256
+  uint8_t content_hash[32] = {}; //!< Full SHA-256 of payload bytes
+  uint8_t _reserved[3] = {}; //!< Fixed-size record tail padding
 };
 #pragma pack(pop)
-static_assert(sizeof(PhysicsResourceDesc) == 24);
+static_assert(sizeof(PhysicsResourceDesc) == 48);
 
 //! Physics surface properties asset.
 #pragma pack(push, 1)
 struct PhysicsMaterialAssetDesc {
   core::AssetHeader header;
-  float friction = 0.5F;
+  float static_friction = 0.5F;
+  float dynamic_friction = 0.5F;
   float restitution = 0.0F;
   float density = 1000.0F; //!< kg/m^3
   PhysicsCombineMode combine_mode_friction = PhysicsCombineMode::kAverage;
   PhysicsCombineMode combine_mode_restitution = PhysicsCombineMode::kAverage;
-  uint8_t reserved[19] = {};
+  uint8_t _reserved[15] = {}; //!< Fixed-size record tail padding
 };
 #pragma pack(pop)
 static_assert(sizeof(PhysicsMaterialAssetDesc) == 128);
@@ -142,63 +143,64 @@ static_assert(sizeof(PhysicsMaterialAssetDesc) == 128);
 struct CookedShapePayloadRef {
   core::ResourceIndexT resource_index = kInvalidShapePayloadRefIndex;
   ShapePayloadType payload_type = kInvalidShapePayloadType;
-  uint8_t reserved[3] = {};
+  uint8_t _reserved[3] = {}; //!< Fixed-size record tail padding
 };
 #pragma pack(pop)
 static_assert(sizeof(CookedShapePayloadRef) == 8);
 static_assert(offsetof(CookedShapePayloadRef, resource_index) == 0);
 static_assert(offsetof(CookedShapePayloadRef, payload_type) == 4);
-static_assert(offsetof(CookedShapePayloadRef, reserved) == 5);
+static_assert(offsetof(CookedShapePayloadRef, _reserved) == 5);
 
 // Fixed tagged-union payload for per-shape params (80 bytes).
 #pragma pack(push, 1)
 union ShapeParams {
   struct SphereParams {
     float radius = 0.0F;
-    float reserved[19] = {};
+    float _reserved[19] = {}; //!< Union arm tail padding
   } sphere;
   struct CapsuleParams {
     float radius = 0.0F;
     float half_height = 0.0F;
-    float reserved[18] = {};
+    float _reserved[18] = {}; //!< Union arm tail padding
   } capsule;
   struct BoxParams {
     float half_extents[3] = { 0.0F, 0.0F, 0.0F };
-    float reserved[17] = {};
+    float _reserved[17] = {}; //!< Union arm tail padding
   } box;
   struct CylinderParams {
     float radius = 0.0F;
     float half_height = 0.0F;
-    float reserved[18] = {};
+    float _reserved[18] = {}; //!< Union arm tail padding
   } cylinder;
   struct ConeParams {
     float radius = 0.0F;
     float half_height = 0.0F;
-    float reserved[18] = {};
+    float _reserved[18] = {}; //!< Union arm tail padding
   } cone;
   struct ConvexHullParams {
-    float reserved[20] = {};
+    float _reserved[20] = {}; //!< Union arm tail padding
   } convex_hull;
   struct TriangleMeshParams {
-    float reserved[20] = {};
+    float _reserved[20] = {}; //!< Union arm tail padding
   } triangle_mesh;
   struct HeightFieldParams {
-    float reserved[20] = {};
+    float _reserved[20] = {}; //!< Union arm tail padding
   } height_field;
   struct PlaneParams {
     float normal[3] = { 0.0F, 0.0F, 0.0F };
     float distance = 0.0F;
-    float reserved[16] = {};
+    float _reserved[16] = {}; //!< Union arm tail padding
   } plane;
   struct WorldBoundaryParams {
     WorldBoundaryMode boundary_mode = WorldBoundaryMode::kInvalid;
     float limits_min[3] = { 0.0F, 0.0F, 0.0F };
     float limits_max[3] = { 0.0F, 0.0F, 0.0F };
-    float reserved[13] = {};
+    float _reserved[13] = {}; //!< Union arm tail padding
   } world_boundary;
   struct CompoundParams {
-    uint32_t reserved_u32 = 0;
-    float reserved[19] = {};
+    uint32_t child_count = 0;
+    uint32_t child_byte_offset = 0; //!< Self-relative offset to child records
+    float _reserved[18] = {}; //!< Union arm tail padding
   } compound;
   float raw[20] = {};
 };
@@ -219,7 +221,7 @@ struct CollisionShapeAssetDesc {
   AssetKey material_asset_key = kInvalidPhysicsMaterialAssetKey;
   ShapeParams shape_params {};
   CookedShapePayloadRef cooked_shape_ref {};
-  uint8_t reserved[8] = {};
+  uint8_t _reserved[8] = {}; //!< Fixed-size record tail padding
 };
 #pragma pack(pop)
 static_assert(sizeof(CollisionShapeAssetDesc) == 268);
@@ -256,12 +258,101 @@ struct PhysicsSceneAssetDesc {
   uint32_t component_table_count = 0;
   core::OffsetT component_table_directory_offset
     = 0; //!< Offset to PhysicsComponentTableDesc[]
-  uint8_t reserved[129] = {};
+  uint8_t target_scene_content_hash[32]
+    = {}; //!< SHA-256 of paired .oscene payload
+  uint8_t _reserved[97] = {}; //!< Fixed-size record tail padding
 };
 #pragma pack(pop)
 static_assert(sizeof(PhysicsSceneAssetDesc) == 256);
 
-//! Rigid body binding record (64 bytes).
+//! Backend-specific scalar fields for rigid-body bindings.
+#pragma pack(push, 1)
+union RigidBodyBackendScalars {
+  struct JoltScalars {
+    uint8_t num_velocity_steps_override = 0;
+    uint8_t num_position_steps_override = 0;
+    uint8_t _reserved[8] = {}; //!< Category 1: explicit union arm tail padding
+  } jolt;
+  struct PhysXScalars {
+    uint8_t min_velocity_iters = 0;
+    uint8_t min_position_iters = 0;
+    float max_contact_impulse = 0.0F;
+    float contact_report_threshold = 0.0F;
+  } physx;
+  uint8_t raw[10] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(RigidBodyBackendScalars) == 10);
+
+//! Backend-specific scalar fields for character bindings.
+#pragma pack(push, 1)
+union CharacterBackendScalars {
+  struct JoltScalars {
+    float penetration_recovery_speed = 0.0F;
+    uint32_t max_num_hits = 0;
+    float hit_reduction_cos_max_angle = 0.0F;
+  } jolt;
+  struct PhysXScalars {
+    float contact_offset = 0.0F;
+    uint8_t _reserved[8] = {}; //!< Category 1: explicit union arm tail padding
+  } physx;
+  uint8_t raw[12] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(CharacterBackendScalars) == 12);
+
+//! Backend-specific scalar fields for soft-body bindings.
+#pragma pack(push, 1)
+union SoftBodyBackendScalars {
+  struct JoltScalars {
+    uint32_t num_velocity_steps = 0;
+    uint32_t num_position_steps = 0;
+    float gravity_factor = 1.0F;
+  } jolt;
+  struct PhysXFemScalars {
+    float youngs_modulus = 0.0F;
+    float poissons = 0.0F;
+    float dynamic_friction = 0.0F;
+  } physx;
+  uint8_t raw[12] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(SoftBodyBackendScalars) == 12);
+
+//! Backend-specific scalar fields for joint bindings.
+#pragma pack(push, 1)
+union JointBackendScalars {
+  struct JoltScalars {
+    uint8_t num_velocity_steps_override = 0;
+    uint8_t num_position_steps_override = 0;
+    uint8_t _reserved[14] = {}; //!< Category 1: explicit union arm tail padding
+  } jolt;
+  struct PhysXScalars {
+    float inv_mass_scale0 = 0.0F;
+    float inv_mass_scale1 = 0.0F;
+    float inv_inertia_scale0 = 0.0F;
+    float inv_inertia_scale1 = 0.0F;
+  } physx;
+  uint8_t raw[16] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(JointBackendScalars) == 16);
+
+//! Backend-specific scalar fields for vehicle-wheel bindings.
+#pragma pack(push, 1)
+union VehicleWheelBackendScalars {
+  struct JoltScalars {
+    float wheel_castor = 0.0F;
+  } jolt;
+  struct PhysXScalars {
+    uint8_t _reserved[4] = {}; //!< Category 1: explicit union arm tail padding
+  } physx;
+  uint8_t raw[4] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(VehicleWheelBackendScalars) == 4);
+
+//! Rigid body binding record.
 #pragma pack(push, 1)
 struct RigidBodyBindingRecord {
   world::SceneNodeIndexT node_index = 0;
@@ -283,10 +374,19 @@ struct RigidBodyBindingRecord {
   AssetKey material_asset_key
     = kInvalidPhysicsMaterialAssetKey; //!< PhysicsMaterialAssetDesc
 
-  uint8_t reserved[20] = {};
+  float com_override[3] = { 0.0F, 0.0F, 0.0F };
+  uint32_t has_com_override = 0; //!< Boolean
+  float inertia_override[3] = { 0.0F, 0.0F, 0.0F };
+  uint32_t has_inertia_override = 0; //!< Boolean
+  float max_linear_velocity = 0.0F;
+  float max_angular_velocity = 0.0F;
+  uint32_t allowed_dof_flags = 0;
+  RigidBodyBackendScalars backend_scalars {};
+
+  uint8_t _reserved[6] = {}; //!< Fixed-size record tail padding
 };
 #pragma pack(pop)
-static_assert(sizeof(RigidBodyBindingRecord) == 88);
+static_assert(sizeof(RigidBodyBindingRecord) == 128);
 
 //! Collider-only binding record (32 bytes) — static trigger/sensor shape.
 #pragma pack(push, 1)
@@ -296,12 +396,12 @@ struct ColliderBindingRecord {
   AssetKey material_asset_key = kInvalidPhysicsMaterialAssetKey;
   uint16_t collision_layer = 0;
   uint32_t collision_mask = 0xFFFFFFFF;
-  uint8_t reserved[14] = {};
+  uint8_t _reserved[14] = {}; //!< Fixed-size record tail padding
 };
 #pragma pack(pop)
 static_assert(sizeof(ColliderBindingRecord) == 56);
 
-//! Character controller binding record (48 bytes).
+//! Character controller binding record.
 #pragma pack(push, 1)
 struct CharacterBindingRecord {
   world::SceneNodeIndexT node_index = 0;
@@ -309,36 +409,48 @@ struct CharacterBindingRecord {
   float mass = 80.0F;
   float max_slope_angle = 0.7854F; //!< ~45 deg in radians
   float step_height = 0.3F;
+  float step_down_distance = 0.0F;
   float max_strength = 100.0F;
+  float skin_width = 0.0F;
+  float predictive_contact_distance = 0.0F;
   uint16_t collision_layer = 0;
   uint32_t collision_mask = 0xFFFFFFFF;
-  uint8_t reserved[18] = {};
+  AssetKey inner_shape_asset_key = kInvalidCollisionShapeAssetKey;
+  CharacterBackendScalars backend_scalars {};
+  uint8_t _reserved[14] = {}; //!< Fixed-size record tail padding
 };
 #pragma pack(pop)
-static_assert(sizeof(CharacterBindingRecord) == 60);
+static_assert(sizeof(CharacterBindingRecord) == 96);
 
-//! Soft body binding record (68 bytes).
+//! Soft body binding record.
 #pragma pack(push, 1)
 struct SoftBodyBindingRecord {
   world::SceneNodeIndexT node_index = 0;
-  uint32_t cluster_count = 0;
-  float stiffness = 0.0F;
-  float damping = 0.0F;
   float edge_compliance = 0.0F;
   float shear_compliance = 0.0F;
   float bend_compliance = 1.0F;
-  SoftBodyTetherMode tether_mode = SoftBodyTetherMode::kNone;
-  uint8_t reserved0[3] = {};
-  float tether_max_distance_multiplier = 1.0F;
-  core::ResourceIndexT jolt_settings_resource_index = core::kNoResourceIndex;
-  core::ResourceIndexT physx_settings_resource_index = core::kNoResourceIndex;
-  float settings_scale[3] = { 1.0F, 1.0F, 1.0F };
+  float volume_compliance = 0.0F;
+  float pressure_coefficient = 0.0F;
+  float global_damping = 0.0F;
   float restitution = 0.0F;
   float friction = 0.2F;
   float vertex_radius = 0.0F;
+  float tether_max_distance_multiplier = 1.0F;
+  uint32_t solver_iteration_count = 0;
+  core::ResourceIndexT topology_resource_index = core::kNoResourceIndex;
+  uint32_t pinned_vertex_count = 0;
+  uint32_t pinned_vertex_byte_offset = 0; //!< Self-relative offset
+  uint32_t kinematic_vertex_count = 0;
+  uint32_t kinematic_vertex_byte_offset = 0; //!< Self-relative offset
+  SoftBodyBackendScalars backend_scalars {};
+  SoftBodyTetherMode tether_mode = SoftBodyTetherMode::kNone;
+  PhysicsResourceFormat topology_format
+    = PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary;
+  uint8_t self_collision = 0; //!< Boolean
+  uint8_t _reserved[13] = {}; //!< Fixed-size record tail padding
 };
 #pragma pack(pop)
-static_assert(sizeof(SoftBodyBindingRecord) == 68);
+static_assert(sizeof(SoftBodyBindingRecord) == 96);
 
 //! Joint binding record (32 bytes). The joint blob is stored as a
 //! kJoltConstraintBinary entry in the physics_resource_table.
@@ -349,7 +461,8 @@ struct JointBindingRecord {
     = kWorldAttachmentNodeIndex; //!< Body B (`kWorldAttachmentNodeIndex` =
                                  //!< world attachment)
   core::ResourceIndexT constraint_resource_index = core::kNoResourceIndex;
-  uint8_t reserved[20] = {};
+  JointBackendScalars backend_scalars {};
+  uint8_t _reserved[4] = {}; //!< Fixed-size record tail padding
 };
 #pragma pack(pop)
 static_assert(sizeof(JointBindingRecord) == 32);
@@ -359,9 +472,9 @@ static_assert(sizeof(JointBindingRecord) == 32);
 struct VehicleBindingRecord {
   world::SceneNodeIndexT node_index = 0; //!< Root chassis node
   core::ResourceIndexT constraint_resource_index = core::kNoResourceIndex;
-  uint32_t wheel_table_offset = 0; //!< Offset in kVehicleWheel table
-  uint16_t wheel_count = 0;
-  uint8_t reserved[18] = {};
+  uint32_t wheel_slice_offset = 0; //!< Offset in kVehicleWheel table
+  uint16_t wheel_slice_count = 0;
+  uint8_t _reserved[18] = {}; //!< Fixed-size record tail padding
 };
 #pragma pack(pop)
 static_assert(sizeof(VehicleBindingRecord) == 32);
@@ -373,7 +486,8 @@ struct VehicleWheelBindingRecord {
   world::SceneNodeIndexT wheel_node_index = 0;
   uint16_t axle_index = 0;
   VehicleWheelSide side = VehicleWheelSide::kLeft;
-  uint8_t reserved[5] = {};
+  VehicleWheelBackendScalars backend_scalars {};
+  uint8_t _reserved[1] = {}; //!< Fixed-size record tail padding
 };
 #pragma pack(pop)
 static_assert(sizeof(VehicleWheelBindingRecord) == 16);
@@ -385,7 +499,7 @@ struct AggregateBindingRecord {
   uint32_t max_bodies = 0; //!< Pre-allocation size
   uint32_t filter_overlap = 1; //!< Boolean: disable self-collision?
   AggregateAuthority authority = AggregateAuthority::kSimulation;
-  uint8_t reserved[15] = {};
+  uint8_t _reserved[15] = {}; //!< Fixed-size record tail padding
 };
 #pragma pack(pop)
 static_assert(sizeof(AggregateBindingRecord) == 28);

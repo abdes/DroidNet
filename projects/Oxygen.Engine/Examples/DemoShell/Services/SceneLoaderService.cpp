@@ -1224,7 +1224,10 @@ void SceneLoaderService::HydrateColliderBindings(
       if (!shape_desc.material_asset_key.IsNil()) {
         const auto material_desc = ResolvePhysicsMaterialAsset(
           shape_desc.material_asset_key, "collider", record.node_index);
-        desc.friction = (std::max)(0.0F, material_desc.friction);
+        const auto effective_friction
+          = (std::max)(material_desc.static_friction,
+            material_desc.dynamic_friction);
+        desc.friction = (std::max)(0.0F, effective_friction);
         desc.restitution = (std::max)(0.0F, material_desc.restitution);
       }
     }
@@ -1336,7 +1339,10 @@ void SceneLoaderService::HydrateRigidBodyBindings(
       if (!shape_desc.material_asset_key.IsNil()) {
         const auto material_desc = ResolvePhysicsMaterialAsset(
           shape_desc.material_asset_key, "rigid-body", record.node_index);
-        desc.friction = (std::max)(0.0F, material_desc.friction);
+        const auto effective_friction
+          = (std::max)(material_desc.static_friction,
+            material_desc.dynamic_friction);
+        desc.friction = (std::max)(0.0F, effective_friction);
         desc.restitution = (std::max)(0.0F, material_desc.restitution);
         if (record.mass <= 0.0F
           && desc.type != physics::body::BodyType::kStatic) {
@@ -1458,11 +1464,6 @@ void SceneLoaderService::HydrateSoftBodyBindings(
         std::string("soft-body node_index out of range: ")
         + std::to_string(record.node_index));
     }
-    if (record.cluster_count == 0U) {
-      throw std::runtime_error(
-        std::string("soft-body cluster_count must be > 0 (node_index=")
-        + std::to_string(record.node_index) + ")");
-    }
     const auto backend = engine_->GetEngineConfig().physics.backend;
     const auto use_jolt_settings = backend == EnginePhysicsBackend::kJolt;
     const auto use_physx_settings = backend == EnginePhysicsBackend::kPhysX;
@@ -1472,17 +1473,14 @@ void SceneLoaderService::HydrateSoftBodyBindings(
         + std::to_string(static_cast<uint32_t>(backend)));
     }
 
-    if (record.jolt_settings_resource_index == data::pak::core::kNoResourceIndex
-      || record.physx_settings_resource_index
-        == data::pak::core::kNoResourceIndex) {
+    if (record.topology_resource_index == data::pak::core::kNoResourceIndex) {
       throw std::runtime_error(
-        std::string("soft-body requires both jolt/physx settings resources ")
+        std::string("soft-body topology_resource_index is missing ")
         + "(node_index=" + std::to_string(record.node_index) + ")");
     }
 
-    const auto selected_settings_resource_index = use_jolt_settings
-      ? record.jolt_settings_resource_index
-      : record.physx_settings_resource_index;
+    const auto selected_settings_resource_index
+      = record.topology_resource_index;
     const auto expected_settings_format = use_jolt_settings
       ? data::pak::physics::PhysicsResourceFormat::
           kJoltSoftBodySharedSettingsBinary
@@ -1491,6 +1489,14 @@ void SceneLoaderService::HydrateSoftBodyBindings(
       ? "jolt_soft_body_shared_settings_binary"
       : "physx_soft_body_settings_binary";
     const auto selected_backend_name = use_jolt_settings ? "jolt" : "physx";
+    if (record.topology_format != expected_settings_format) {
+      throw std::runtime_error(
+        std::string("soft-body topology_format does not match active backend ")
+        + "(node_index=" + std::to_string(record.node_index)
+        + " topology_format="
+        + std::to_string(static_cast<uint32_t>(record.topology_format))
+        + " backend=" + selected_backend_name + ")");
+    }
 
     const auto validate_non_negative_finite
       = [&](const float value, const std::string_view field) {
@@ -1500,30 +1506,30 @@ void SceneLoaderService::HydrateSoftBodyBindings(
               + std::to_string(record.node_index) + ")");
           }
         };
-    validate_non_negative_finite(record.stiffness, "stiffness");
-    validate_non_negative_finite(record.damping, "damping");
     validate_non_negative_finite(record.edge_compliance, "edge_compliance");
     validate_non_negative_finite(record.shear_compliance, "shear_compliance");
     validate_non_negative_finite(record.bend_compliance, "bend_compliance");
-    if (!std::isfinite(record.tether_max_distance_multiplier)
-      || record.tether_max_distance_multiplier < 1.0F) {
+    validate_non_negative_finite(record.volume_compliance, "volume_compliance");
+    validate_non_negative_finite(record.global_damping, "global_damping");
+    if (!std::isfinite(record.pressure_coefficient)) {
       throw std::runtime_error(
         std::string(
-          "soft-body tether_max_distance_multiplier must be finite and >= 1 "
+          "soft-body pressure_coefficient must be finite (node_index=")
+        + std::to_string(record.node_index) + ")");
+    }
+    if (!std::isfinite(record.tether_max_distance_multiplier)
+      || record.tether_max_distance_multiplier < 0.0F) {
+      throw std::runtime_error(
+        std::string(
+          "soft-body tether_max_distance_multiplier must be finite and >= 0 "
           "(node_index=")
         + std::to_string(record.node_index) + ")");
     }
-    const auto validate_positive_finite
-      = [&](const float value, const std::string_view field) {
-          if (!std::isfinite(value) || value <= 0.0F) {
-            throw std::runtime_error(std::string("soft-body ")
-              + std::string(field) + " must be finite and > 0 (node_index="
-              + std::to_string(record.node_index) + ")");
-          }
-        };
-    validate_positive_finite(record.settings_scale[0], "settings_scale[0]");
-    validate_positive_finite(record.settings_scale[1], "settings_scale[1]");
-    validate_positive_finite(record.settings_scale[2], "settings_scale[2]");
+    if (record.solver_iteration_count == 0U) {
+      throw std::runtime_error(
+        std::string("soft-body solver_iteration_count must be > 0 (node_index=")
+        + std::to_string(record.node_index) + ")");
+    }
     validate_non_negative_finite(record.restitution, "restitution");
     validate_non_negative_finite(record.friction, "friction");
     validate_non_negative_finite(record.vertex_radius, "vertex_radius");
@@ -1566,9 +1572,9 @@ void SceneLoaderService::HydrateSoftBodyBindings(
     }
 
     auto desc = physics::softbody::SoftBodyDesc {};
-    desc.cluster_count = record.cluster_count;
-    desc.material_params.stiffness = record.stiffness;
-    desc.material_params.damping = record.damping;
+    desc.cluster_count = std::clamp(record.solver_iteration_count, 2U, 8U);
+    desc.material_params.stiffness = 0.0F;
+    desc.material_params.damping = record.global_damping;
     desc.material_params.edge_compliance = record.edge_compliance;
     desc.material_params.shear_compliance = record.shear_compliance;
     desc.material_params.bend_compliance = record.bend_compliance;
@@ -1576,8 +1582,7 @@ void SceneLoaderService::HydrateSoftBodyBindings(
       = ToRuntimeSoftBodyTetherMode(record.tether_mode);
     desc.material_params.tether_max_distance_multiplier
       = record.tether_max_distance_multiplier;
-    desc.settings_scale = oxygen::Vec3 { record.settings_scale[0],
-      record.settings_scale[1], record.settings_scale[2] };
+    desc.settings_scale = oxygen::Vec3 { 1.0F, 1.0F, 1.0F };
     desc.restitution = record.restitution;
     desc.friction = record.friction;
     desc.vertex_radius = record.vertex_radius;
@@ -1646,15 +1651,14 @@ void SceneLoaderService::HydrateSoftBodyBindings(
     const auto node_name = node.GetName();
     LOG_F(INFO,
       "SceneLoader: hydrated soft body binding (node_index={} node='{}' "
-      "aggregate_id={} backend={} selected_settings_resource_index={} "
-      "jolt_settings_resource_index={} physx_settings_resource_index={} "
-      "scale=[{:.3f},{:.3f},{:.3f}] restitution={:.3f} friction={:.3f} "
-      "vertex_radius={:.3f}).",
+      "aggregate_id={} backend={} topology_resource_index={} "
+      "topology_format={} solver_iteration_count={} self_collision={} "
+      "restitution={:.3f} friction={:.3f} vertex_radius={:.3f}).",
       record.node_index, node_name.c_str(), soft_body_id.get(),
       selected_backend_name, selected_settings_resource_index.get(),
-      record.jolt_settings_resource_index.get(),
-      record.physx_settings_resource_index.get(), record.settings_scale[0],
-      record.settings_scale[1], record.settings_scale[2], record.restitution,
+      static_cast<uint32_t>(record.topology_format),
+      record.solver_iteration_count,
+      static_cast<uint32_t>(record.self_collision), record.restitution,
       record.friction, record.vertex_radius);
   }
 }
@@ -1750,26 +1754,40 @@ void SceneLoaderService::HydrateVehicleBindings(
     }
     const auto chassis_position = chassis_position_result.value();
 
+    const auto wheel_slice_offset
+      = static_cast<size_t>(record.wheel_slice_offset);
+    const auto wheel_slice_count
+      = static_cast<size_t>(record.wheel_slice_count);
+    if (wheel_slice_count < 2U) {
+      throw std::runtime_error(
+        std::string("vehicle wheel_slice_count must be at least two ")
+        + "(node_index=" + std::to_string(record.node_index)
+        + " wheel_slice_count=" + std::to_string(wheel_slice_count) + ")");
+    }
+    if (wheel_slice_offset > wheel_bindings.size()
+      || (wheel_bindings.size() - wheel_slice_offset) < wheel_slice_count) {
+      throw std::runtime_error(
+        std::string("vehicle wheel slice is out of range ")
+        + "(node_index=" + std::to_string(record.node_index)
+        + " wheel_slice_offset=" + std::to_string(wheel_slice_offset)
+        + " wheel_slice_count=" + std::to_string(wheel_slice_count)
+        + " wheel_table_size=" + std::to_string(wheel_bindings.size()) + ")");
+    }
+
     auto wheel_records_for_vehicle
       = std::vector<data::pak::physics::VehicleWheelBindingRecord> {};
-    wheel_records_for_vehicle.reserve(record.wheel_count);
-    for (const auto& wheel_binding : wheel_bindings) {
-      if (wheel_binding.vehicle_node_index == record.node_index) {
-        wheel_records_for_vehicle.push_back(wheel_binding);
+    wheel_records_for_vehicle.reserve(wheel_slice_count);
+    for (size_t i = 0; i < wheel_slice_count; ++i) {
+      const auto& wheel_binding = wheel_bindings[wheel_slice_offset + i];
+      if (wheel_binding.vehicle_node_index != record.node_index) {
+        throw std::runtime_error(
+          std::string("vehicle wheel slice references mismatched chassis node ")
+          + "(node_index=" + std::to_string(record.node_index)
+          + " wheel_table_index=" + std::to_string(wheel_slice_offset + i)
+          + " wheel_vehicle_node_index="
+          + std::to_string(wheel_binding.vehicle_node_index) + ")");
       }
-    }
-    if (wheel_records_for_vehicle.size()
-      != static_cast<size_t>(record.wheel_count)) {
-      throw std::runtime_error(
-        std::string("vehicle wheel_count does not match wheel table entries ")
-        + "(node_index=" + std::to_string(record.node_index)
-        + " declared=" + std::to_string(record.wheel_count) + " resolved="
-        + std::to_string(wheel_records_for_vehicle.size()) + ")");
-    }
-    if (wheel_records_for_vehicle.size() < 2U) {
-      throw std::runtime_error(
-        std::string("vehicle requires at least two wheel entries ")
-        + "(node_index=" + std::to_string(record.node_index) + ")");
+      wheel_records_for_vehicle.push_back(wheel_binding);
     }
 
     auto wheel_desc_storage
@@ -2290,8 +2308,7 @@ auto SceneLoaderService::PreloadPhysicsDependencyResources(
   }
   for (const auto& record :
     physics_asset.GetBindings<data::pak::physics::SoftBodyBindingRecord>()) {
-    collect_constraint_resource_index(record.jolt_settings_resource_index);
-    collect_constraint_resource_index(record.physx_settings_resource_index);
+    collect_constraint_resource_index(record.topology_resource_index);
   }
 
   for (const auto resource_index_raw : payload_indices) {

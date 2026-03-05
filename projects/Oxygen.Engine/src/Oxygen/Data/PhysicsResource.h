@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 #include <span>
 #include <vector>
 
@@ -48,7 +49,14 @@ public:
   [[nodiscard]] auto GetFormat() const noexcept { return desc_.format; }
   [[nodiscard]] auto GetContentHash() const noexcept -> uint64_t
   {
-    return desc_.content_hash;
+    uint64_t hash_prefix = 0;
+    std::memcpy(&hash_prefix, desc_.content_hash, sizeof(hash_prefix));
+    return hash_prefix;
+  }
+  [[nodiscard]] auto GetContentHashBytes() const noexcept
+    -> std::span<const uint8_t, 32>
+  {
+    return std::span<const uint8_t, 32> { desc_.content_hash };
   }
 
   [[nodiscard]] auto GetData() const noexcept -> std::span<const uint8_t>

@@ -7,11 +7,14 @@ audios: []
 
 physics:
   - name: "shape_blob"
-    format: 1
+    format: 0
     data_hex: "01020304"
   - name: "constraint_blob"
     format: 1
     data_hex: "05060708"
+  - name: "soft_body_topology"
+    format: 2
+    data_hex: "090a0b0c"
 
 assets:
   - name: "scene_root"
@@ -64,12 +67,25 @@ assets:
         max_strength: 120.0
     soft_body_bindings:
       - node_index: 1
-        cluster_count: 4
-        stiffness: 0.5
-        damping: 0.2
         edge_compliance: 0.1
         shear_compliance: 0.1
         bend_compliance: 0.8
+        volume_compliance: 0.5
+        pressure_coefficient: 0.0
+        global_damping: 0.2
+        tether_mode: "geodesic"
+        tether_max_distance_multiplier: 1.05
+        restitution: 0.2
+        friction: 0.6
+        vertex_radius: 0.02
+        solver_iteration_count: 4
+        topology_resource_index: 3
+        self_collision: false
+        pinned_vertices: []
+        kinematic_vertices: []
+        backend:
+          target: "jolt"
+          velocity_iteration_count: 4
     joint_bindings:
       - node_index_a: 0
         node_index_b: 1

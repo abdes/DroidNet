@@ -188,30 +188,6 @@
             ]
         },
         {
-            "id": "physics.resource.joint_hinge_a",
-            "type": "physics-resource-descriptor",
-            "source": "./park_hinge_joint_a.physics-resource.json",
-            "name": "park_hinge_joint_a"
-        },
-        {
-            "id": "physics.resource.vehicle_constraint_a",
-            "type": "physics-resource-descriptor",
-            "source": "./park_vehicle_constraint_a.physics-resource.json",
-            "name": "park_vehicle_constraint_a"
-        },
-        {
-            "id": "physics.resource.soft_body_settings_a",
-            "type": "physics-resource-descriptor",
-            "source": "./park_soft_body_settings_a.physics-resource.json",
-            "name": "park_soft_body_settings_a"
-        },
-        {
-            "id": "physics.resource.soft_body_settings_physx_a",
-            "type": "physics-resource-descriptor",
-            "source": "./park_soft_body_settings_physx_a.physics-resource.json",
-            "name": "park_soft_body_settings_physx_a"
-        },
-        {
             "id": "physics.material.ground",
             "type": "physics-material-descriptor",
             "source": "./ground.physics-material.json",
@@ -318,10 +294,6 @@
             "target_scene_virtual_path": "/.cooked/Scenes/physics_domains.oscene",
             "depends_on": [
                 "scene.physics_domains",
-                "physics.resource.joint_hinge_a",
-                "physics.resource.vehicle_constraint_a",
-                "physics.resource.soft_body_settings_a",
-                "physics.resource.soft_body_settings_physx_a",
                 "physics.shape.floor",
                 "physics.shape.actor",
                 "physics.shape.chassis",

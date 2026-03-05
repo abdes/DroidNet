@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -143,6 +144,38 @@ NOLINT_TEST(PhysicsResourceDescriptorJsonSchemaTest, AcceptsPhysXSoftBodyFormat)
 
   auto errors = std::string {};
   EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
+}
+
+NOLINT_TEST(
+  PhysicsResourceDescriptorJsonSchemaTest, AcceptsAdditionalPhysXFormats)
+{
+  const auto repo_root = FindRepoRoot();
+  ASSERT_FALSE(repo_root.empty());
+  const auto schema = LoadJsonFile(SchemaFile(repo_root));
+  ASSERT_TRUE(schema.has_value());
+
+  constexpr auto kFormats = std::array {
+    "physx_convex_mesh_binary",
+    "physx_triangle_mesh_binary",
+    "physx_height_field_binary",
+    "physx_constraint_binary",
+    "physx_vehicle_settings_binary",
+  };
+
+  for (const auto* format : kFormats) {
+    const auto doc = json::parse(std::string(R"({
+      "name": "physx_variant",
+      "source": "Examples/Content/physics/bin/physx_variant.bin",
+      "format": ")")
+      + format + R"(",
+      "virtual_path": "/.cooked/Physics/Resources/physx_variant.opres"
+    })");
+
+    auto errors = std::string {};
+    EXPECT_TRUE(ValidateSchema(*schema, doc, errors))
+      << "format=" << format << "\n"
+      << errors;
+  }
 }
 
 NOLINT_TEST(PhysicsResourceDescriptorJsonSchemaTest, RejectsUnknownFields)

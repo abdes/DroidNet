@@ -54,7 +54,8 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
     R"({
       "name": "ground",
       "content_hashing": false,
-      "friction": 0.95,
+      "static_friction": 0.95,
+      "dynamic_friction": 0.70,
       "restitution": 0.05,
       "density": 1500.0,
       "combine_mode_friction": "max",
@@ -118,7 +119,8 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
   WriteTextFile(descriptor_path,
     R"({
       "name": "ground",
-      "friction": 0.95,
+      "static_friction": 0.95,
+      "dynamic_friction": 0.70,
       "restitution": 0.05,
       "density": 1500.0,
       "virtual_path": "/.cooked/Physics/Materials/ground.opmat"
@@ -195,7 +197,7 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
   WriteTextFile(descriptor_path,
     R"({
       "name": "bad",
-      "friction": 0.8,
+      "static_friction": 0.8,
       "unexpected": true
     })");
 

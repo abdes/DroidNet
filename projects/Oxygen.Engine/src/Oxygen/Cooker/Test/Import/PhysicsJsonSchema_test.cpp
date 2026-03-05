@@ -128,7 +128,26 @@ NOLINT_TEST(PhysicsJsonSchemaTest, PhysicsSidecarSchemaAcceptsCanonicalDocument)
           "shape_ref": "/.cooked/Physics/Shapes/test_shape.ocshape",
           "material_ref": "/.cooked/Physics/Materials/default.opmat",
           "body_type": "dynamic",
-          "motion_quality": "discrete"
+          "motion_quality": "discrete",
+          "center_of_mass_override": [0.0, 0.1, 0.0],
+          "inertia_tensor_override": [1.0, 1.1, 1.2],
+          "max_linear_velocity": 20.0,
+          "max_angular_velocity": 10.0,
+          "allowed_dof": {
+            "translate_x": true,
+            "translate_y": false,
+            "translate_z": true,
+            "rotate_x": true,
+            "rotate_y": false,
+            "rotate_z": true
+          },
+          "backend": {
+            "target": "physx",
+            "min_velocity_iters": 4,
+            "min_position_iters": 1,
+            "max_contact_impulse": 1000.0,
+            "contact_report_threshold": 3.5
+          }
         }
       ],
       "colliders": [
@@ -141,33 +160,57 @@ NOLINT_TEST(PhysicsJsonSchemaTest, PhysicsSidecarSchemaAcceptsCanonicalDocument)
       "characters": [
         {
           "node_index": 2,
-          "shape_ref": "/.cooked/Physics/Shapes/test_shape.ocshape"
+          "shape_ref": "/.cooked/Physics/Shapes/test_shape.ocshape",
+          "step_down_distance": 0.2,
+          "skin_width": 0.02,
+          "predictive_contact_distance": 0.04,
+          "inner_shape_ref": "/.cooked/Physics/Shapes/test_inner.ocshape",
+          "backend": {
+            "target": "jolt",
+            "penetration_recovery_speed": 0.5,
+            "max_num_hits": 16,
+            "hit_reduction_cos_max_angle": 0.9
+          }
         }
       ],
       "soft_bodies": [
         {
           "node_index": 3,
-          "jolt_settings_ref": "/.cooked/Physics/Resources/soft_body_settings_jolt.opres",
-          "physx_settings_ref": "/.cooked/Physics/Resources/soft_body_settings_physx.opres",
-          "cluster_count": 8,
-          "stiffness": 4.0,
-          "damping": 0.08,
+          "source_mesh_ref": "/.cooked/Geometry/softbody_sphere.ogeo",
+          "collision_mesh_ref": "/.cooked/Geometry/softbody_collision.ogeo",
           "edge_compliance": 0.0001,
           "shear_compliance": 0.0001,
           "bend_compliance": 0.0002,
+          "volume_compliance": 0.0002,
+          "pressure_coefficient": 0.0,
           "tether_mode": "geodesic",
           "tether_max_distance_multiplier": 1.05,
-          "settings_scale": [1.0, 1.0, 1.0],
+          "global_damping": 0.08,
           "restitution": 0.2,
           "friction": 0.6,
-          "vertex_radius": 0.02
+          "vertex_radius": 0.02,
+          "solver_iteration_count": 8,
+          "self_collision": false,
+          "pinned_vertices": [0, 4],
+          "kinematic_vertices": [1],
+          "backend": {
+            "target": "physx",
+            "youngs_modulus": 100000.0,
+            "poisson_ratio": 0.3,
+            "dynamic_friction": 0.5
+          }
         }
       ],
       "joints": [
         {
           "node_index_a": 0,
           "node_index_b": 1,
-          "constraint_ref": "/.cooked/Physics/Resources/joint_5.opres"
+          "constraint_ref": "/.cooked/Physics/Resources/joint_5.opres",
+          "backend": {
+            "target": "jolt",
+            "num_velocity_steps_override": 4,
+            "num_position_steps_override": 2
+          }
         }
       ],
       "vehicles": [
@@ -178,12 +221,19 @@ NOLINT_TEST(PhysicsJsonSchemaTest, PhysicsSidecarSchemaAcceptsCanonicalDocument)
             {
               "node_index": 6,
               "axle_index": 0,
-              "side": "left"
+              "side": "left",
+              "backend": {
+                "target": "jolt",
+                "wheel_castor": 0.01
+              }
             },
             {
               "node_index": 7,
               "axle_index": 0,
-              "side": "right"
+              "side": "right",
+              "backend": {
+                "target": "physx"
+              }
             }
           ]
         }
@@ -306,6 +356,15 @@ NOLINT_TEST(PhysicsJsonSchemaTest, PhysicsSidecarSchemaRejectsLegacyFieldNames)
           "node_index_a": 0,
           "node_index_b": 1,
           "constraint_resource_index": 1
+        }
+      ],
+      "soft_bodies": [
+        {
+          "node_index": 3,
+          "jolt_settings_ref": "/.cooked/Physics/Resources/soft_body_settings_jolt.opres",
+          "cluster_count": 8,
+          "stiffness": 4.0,
+          "damping": 0.08
         }
       ]
     }

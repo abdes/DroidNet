@@ -79,12 +79,13 @@ Stores surface interaction properties decoupled from visual materials.
 #pragma pack(push, 1)
 struct PhysicsMaterialAssetDesc {
   AssetHeader header;
-  float friction = 0.5f;
+  float static_friction = 0.5f;
+  float dynamic_friction = 0.5f;
   float restitution = 0.0f;
   float density = 1000.0f;                    // kg/m^3
   PhysicsCombineMode combine_mode_friction = PhysicsCombineMode::kAverage;
   PhysicsCombineMode combine_mode_restitution = PhysicsCombineMode::kAverage;
-  uint8_t reserved[19] = {};                  // Pad to 128 bytes total
+  uint8_t reserved[15] = {};                  // Pad to 128 bytes total
 };
 #pragma pack(pop)
 static_assert(sizeof(PhysicsMaterialAssetDesc) == 128);

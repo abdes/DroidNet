@@ -1,6 +1,0 @@
-{
-    "name": "park_soft_body_settings_physx_a",
-    "format": "physx_soft_body_settings_binary",
-    "source": "./data/park_soft_body_settings_a.jphbin",
-    "virtual_path": "/.cooked/Physics/Resources/park_soft_body_settings_physx_a.opres"
-}

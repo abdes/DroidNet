@@ -107,7 +107,8 @@ namespace {
       = ImportRequest::PhysicsMaterialDescriptorPayload {
           .normalized_descriptor_json = R"({
             "name": "ground",
-            "friction": 0.95,
+            "static_friction": 0.95,
+            "dynamic_friction": 0.65,
             "restitution": 0.05,
             "density": 1700.0,
             "combine_mode_friction": "max",
@@ -144,7 +145,8 @@ namespace {
     const auto desc = ReadPhysicsMaterialDesc(bytes);
     EXPECT_EQ(desc.header.asset_type,
       static_cast<uint8_t>(data::AssetType::kPhysicsMaterial));
-    EXPECT_EQ(desc.friction, 0.95F);
+    EXPECT_EQ(desc.static_friction, 0.95F);
+    EXPECT_EQ(desc.dynamic_friction, 0.65F);
     EXPECT_EQ(desc.restitution, 0.05F);
     EXPECT_EQ(desc.density, 1700.0F);
     EXPECT_EQ(
@@ -167,7 +169,7 @@ namespace {
       = ImportRequest::PhysicsMaterialDescriptorPayload {
           .normalized_descriptor_json = R"({
             "name": "bad_material",
-            "friction": 0.5,
+            "static_friction": 0.5,
             "unexpected": true
           })",
         };

@@ -192,4 +192,57 @@ NOLINT_TEST(
   EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
 }
 
+NOLINT_TEST(
+  CollisionShapeDescriptorJsonSchemaTest, AcceptsCompoundShapeWithChildren)
+{
+  const auto repo_root = FindRepoRoot();
+  ASSERT_FALSE(repo_root.empty());
+  const auto schema = LoadJsonFile(SchemaFile(repo_root));
+  ASSERT_TRUE(schema.has_value());
+
+  const auto doc = json::parse(R"({
+    "name": "compound_shape",
+    "shape_type": "compound",
+    "material_ref": "/.cooked/Physics/Materials/steel.opmat",
+    "children": [
+      {
+        "shape_type": "sphere",
+        "radius": 0.4,
+        "local_position": [0.0, 0.0, 0.0],
+        "local_rotation": [0.0, 0.0, 0.0, 1.0],
+        "local_scale": [1.0, 1.0, 1.0]
+      },
+      {
+        "shape_type": "convex_hull",
+        "payload_ref": "/.cooked/Physics/Resources/child_hull.opres",
+        "local_position": [0.7, 0.0, 0.0],
+        "local_rotation": [0.0, 0.0, 0.0, 1.0],
+        "local_scale": [1.0, 1.0, 1.0]
+      }
+    ]
+  })");
+
+  auto errors = std::string {};
+  EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
+}
+
+NOLINT_TEST(
+  CollisionShapeDescriptorJsonSchemaTest, RejectsCompoundShapeWithoutChildren)
+{
+  const auto repo_root = FindRepoRoot();
+  ASSERT_FALSE(repo_root.empty());
+  const auto schema = LoadJsonFile(SchemaFile(repo_root));
+  ASSERT_TRUE(schema.has_value());
+
+  const auto doc = json::parse(R"({
+    "name": "compound_shape",
+    "shape_type": "compound",
+    "material_ref": "/.cooked/Physics/Materials/steel.opmat",
+    "payload_ref": "/.cooked/Physics/Resources/legacy_compound_payload.opres"
+  })");
+
+  auto errors = std::string {};
+  EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
+}
+
 } // namespace

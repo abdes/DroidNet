@@ -51,7 +51,8 @@ public:
     asset_dump_helpers::PrintAssetHeaderFields(mat.header, 4);
 
     std::cout << "    --- Physics Material Fields ---\n";
-    PrintUtils::Field("Friction", mat.friction, 8);
+    PrintUtils::Field("Static Friction", mat.static_friction, 8);
+    PrintUtils::Field("Dynamic Friction", mat.dynamic_friction, 8);
     PrintUtils::Field("Restitution", mat.restitution, 8);
     PrintUtils::Field("Density", mat.density, 8);
     PrintUtils::Field(

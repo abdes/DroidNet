@@ -192,28 +192,32 @@ namespace {
   struct CharacterBindingSource final {
     phys::CharacterBindingRecord record {};
     std::string shape_ref;
+    std::optional<std::string> inner_shape_ref;
   };
 
   struct SoftBodyBindingSource final {
     phys::SoftBodyBindingRecord record {};
-    std::string jolt_settings_ref;
-    std::string physx_settings_ref;
+    std::string source_mesh_ref;
+    std::optional<std::string> collision_mesh_ref;
+    std::vector<uint32_t> pinned_vertices;
+    std::vector<uint32_t> kinematic_vertices;
   };
 
   struct VehicleWheelSource final {
     uint32_t node_index { 0 };
     uint16_t axle_index { 0 };
     phys::VehicleWheelSide side { phys::VehicleWheelSide::kLeft };
+    phys::VehicleWheelBackendScalars backend_scalars {};
   };
 
   struct JointBindingSource final {
     phys::JointBindingRecord record {};
-    std::string constraint_ref;
+    std::optional<std::string> constraint_ref;
   };
 
   struct VehicleBindingSource final {
     phys::VehicleBindingRecord record {};
-    std::string constraint_ref;
+    std::optional<std::string> constraint_ref;
     std::vector<VehicleWheelSource> wheels;
   };
 
@@ -260,6 +264,19 @@ namespace {
     out[0] = values[0];
     out[1] = values[1];
     out[2] = values[2];
+    return true;
+  }
+
+  auto ReadRequiredUInt32Array(const nlohmann::json& obj, const char* field,
+    std::vector<uint32_t>& out, std::string& error) -> bool
+  {
+    (void)error;
+    const auto& values = obj.at(field);
+    out.clear();
+    out.reserve(values.size());
+    for (const auto& value : values) {
+      out.push_back(value.get<uint32_t>());
+    }
     return true;
   }
 
@@ -319,6 +336,21 @@ namespace {
     return true;
   }
 
+  auto ReadOptionalUInt8(const nlohmann::json& obj, const char* field,
+    uint8_t& out, std::string& error) -> bool
+  {
+    if (!obj.contains(field)) {
+      return true;
+    }
+    const auto raw = obj.at(field).get<uint32_t>();
+    if (raw > (std::numeric_limits<uint8_t>::max)()) {
+      error = std::string("Field '") + field + "' exceeds uint8 range";
+      return false;
+    }
+    out = static_cast<uint8_t>(raw);
+    return true;
+  }
+
   auto ReadOptionalFloat(const nlohmann::json& obj, const char* field,
     float& out, std::string& error) -> bool
   {
@@ -338,6 +370,32 @@ namespace {
       return true;
     }
     out = obj.at(field).get<bool>();
+    return true;
+  }
+
+  auto ReadOptionalString(const nlohmann::json& obj, const char* field,
+    std::optional<std::string>& out, std::string& error) -> bool
+  {
+    (void)error;
+    if (!obj.contains(field)) {
+      return true;
+    }
+    out = obj.at(field).get<std::string>();
+    return true;
+  }
+
+  auto ReadOptionalFloat3(const nlohmann::json& obj, const char* field,
+    float (&out)[3], uint32_t& has_override, std::string& error) -> bool
+  {
+    (void)error;
+    if (!obj.contains(field)) {
+      return true;
+    }
+    const auto values = obj.at(field).get<std::array<float, 3>>();
+    out[0] = values[0];
+    out[1] = values[1];
+    out[2] = values[2];
+    has_override = 1U;
     return true;
   }
 
@@ -441,6 +499,174 @@ namespace {
     return false;
   }
 
+  auto ParseAllowedDofFlags(
+    const nlohmann::json& obj, uint32_t& out, std::string& error) -> bool
+  {
+    (void)error;
+    if (!obj.contains("allowed_dof")) {
+      return true;
+    }
+    const auto& dof = obj.at("allowed_dof");
+    constexpr uint32_t kTranslateXBit = 1U << 0U;
+    constexpr uint32_t kTranslateYBit = 1U << 1U;
+    constexpr uint32_t kTranslateZBit = 1U << 2U;
+    constexpr uint32_t kRotateXBit = 1U << 3U;
+    constexpr uint32_t kRotateYBit = 1U << 4U;
+    constexpr uint32_t kRotateZBit = 1U << 5U;
+    out = 0U;
+    if (dof.value("translate_x", false)) {
+      out |= kTranslateXBit;
+    }
+    if (dof.value("translate_y", false)) {
+      out |= kTranslateYBit;
+    }
+    if (dof.value("translate_z", false)) {
+      out |= kTranslateZBit;
+    }
+    if (dof.value("rotate_x", false)) {
+      out |= kRotateXBit;
+    }
+    if (dof.value("rotate_y", false)) {
+      out |= kRotateYBit;
+    }
+    if (dof.value("rotate_z", false)) {
+      out |= kRotateZBit;
+    }
+    return true;
+  }
+
+  auto ParseRigidBodyBackend(const nlohmann::json& obj,
+    phys::RigidBodyBindingRecord& out, std::string& error) -> bool
+  {
+    if (!obj.contains("backend")) {
+      return true;
+    }
+    const auto& backend = obj.at("backend");
+    const auto target = backend.at("target").get<std::string>();
+    if (target == "jolt") {
+      return ReadOptionalUInt8(backend, "num_velocity_steps_override",
+               out.backend_scalars.jolt.num_velocity_steps_override, error)
+        && ReadOptionalUInt8(backend, "num_position_steps_override",
+          out.backend_scalars.jolt.num_position_steps_override, error);
+    }
+    if (target == "physx") {
+      return ReadOptionalUInt8(backend, "min_velocity_iters",
+               out.backend_scalars.physx.min_velocity_iters, error)
+        && ReadOptionalUInt8(backend, "min_position_iters",
+          out.backend_scalars.physx.min_position_iters, error)
+        && ReadOptionalFloat(backend, "max_contact_impulse",
+          out.backend_scalars.physx.max_contact_impulse, error)
+        && ReadOptionalFloat(backend, "contact_report_threshold",
+          out.backend_scalars.physx.contact_report_threshold, error);
+    }
+    error = "Field 'backend.target' has unsupported value";
+    return false;
+  }
+
+  auto ParseCharacterBackend(const nlohmann::json& obj,
+    phys::CharacterBindingRecord& out, std::string& error) -> bool
+  {
+    if (!obj.contains("backend")) {
+      return true;
+    }
+    const auto& backend = obj.at("backend");
+    const auto target = backend.at("target").get<std::string>();
+    if (target == "jolt") {
+      return ReadOptionalFloat(backend, "penetration_recovery_speed",
+               out.backend_scalars.jolt.penetration_recovery_speed, error)
+        && ReadOptionalUInt32(
+          backend, "max_num_hits", out.backend_scalars.jolt.max_num_hits, error)
+        && ReadOptionalFloat(backend, "hit_reduction_cos_max_angle",
+          out.backend_scalars.jolt.hit_reduction_cos_max_angle, error);
+    }
+    if (target == "physx") {
+      return ReadOptionalFloat(backend, "contact_offset",
+        out.backend_scalars.physx.contact_offset, error);
+    }
+    error = "Field 'backend.target' has unsupported value";
+    return false;
+  }
+
+  auto ParseSoftBodyBackend(const nlohmann::json& obj,
+    phys::SoftBodyBindingRecord& out, std::string& error) -> bool
+  {
+    if (!obj.contains("backend")) {
+      return true;
+    }
+    const auto& backend = obj.at("backend");
+    const auto target = backend.at("target").get<std::string>();
+    if (target == "jolt") {
+      out.topology_format
+        = phys::PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary;
+      if (!ReadOptionalUInt32(backend, "velocity_iteration_count",
+            out.backend_scalars.jolt.num_velocity_steps, error)) {
+        return false;
+      }
+      out.backend_scalars.jolt.num_position_steps = out.solver_iteration_count;
+      out.backend_scalars.jolt.gravity_factor = 1.0F;
+      return true;
+    }
+    if (target == "physx") {
+      out.topology_format
+        = phys::PhysicsResourceFormat::kPhysXSoftBodySettingsBinary;
+      return ReadOptionalFloat(backend, "youngs_modulus",
+               out.backend_scalars.physx.youngs_modulus, error)
+        && ReadOptionalFloat(
+          backend, "poisson_ratio", out.backend_scalars.physx.poissons, error)
+        && ReadOptionalFloat(backend, "dynamic_friction",
+          out.backend_scalars.physx.dynamic_friction, error);
+    }
+    error = "Field 'backend.target' has unsupported value";
+    return false;
+  }
+
+  auto ParseJointBackend(const nlohmann::json& obj,
+    phys::JointBindingRecord& out, std::string& error) -> bool
+  {
+    if (!obj.contains("backend")) {
+      return true;
+    }
+    const auto& backend = obj.at("backend");
+    const auto target = backend.at("target").get<std::string>();
+    if (target == "jolt") {
+      return ReadOptionalUInt8(backend, "num_velocity_steps_override",
+               out.backend_scalars.jolt.num_velocity_steps_override, error)
+        && ReadOptionalUInt8(backend, "num_position_steps_override",
+          out.backend_scalars.jolt.num_position_steps_override, error);
+    }
+    if (target == "physx") {
+      return ReadOptionalFloat(backend, "inv_mass_scale0",
+               out.backend_scalars.physx.inv_mass_scale0, error)
+        && ReadOptionalFloat(backend, "inv_mass_scale1",
+          out.backend_scalars.physx.inv_mass_scale1, error)
+        && ReadOptionalFloat(backend, "inv_inertia_scale0",
+          out.backend_scalars.physx.inv_inertia_scale0, error)
+        && ReadOptionalFloat(backend, "inv_inertia_scale1",
+          out.backend_scalars.physx.inv_inertia_scale1, error);
+    }
+    error = "Field 'backend.target' has unsupported value";
+    return false;
+  }
+
+  auto ParseVehicleWheelBackend(const nlohmann::json& obj,
+    phys::VehicleWheelBackendScalars& out, std::string& error) -> bool
+  {
+    if (!obj.contains("backend")) {
+      return true;
+    }
+    const auto& backend = obj.at("backend");
+    const auto target = backend.at("target").get<std::string>();
+    if (target == "jolt") {
+      return ReadOptionalFloat(
+        backend, "wheel_castor", out.jolt.wheel_castor, error);
+    }
+    if (target == "physx") {
+      return true;
+    }
+    error = "Field 'backend.target' has unsupported value";
+    return false;
+  }
+
   auto ParseRigidBodyBinding(const nlohmann::json& binding,
     RigidBodyBindingSource& out, std::string& error) -> bool
   {
@@ -468,7 +694,17 @@ namespace {
       || !ReadOptionalFloat(
         binding, "angular_damping", out.record.angular_damping, error)
       || !ReadOptionalFloat(
-        binding, "gravity_factor", out.record.gravity_factor, error)) {
+        binding, "gravity_factor", out.record.gravity_factor, error)
+      || !ReadOptionalFloat3(binding, "center_of_mass_override",
+        out.record.com_override, out.record.has_com_override, error)
+      || !ReadOptionalFloat3(binding, "inertia_tensor_override",
+        out.record.inertia_override, out.record.has_inertia_override, error)
+      || !ReadOptionalFloat(
+        binding, "max_linear_velocity", out.record.max_linear_velocity, error)
+      || !ReadOptionalFloat(
+        binding, "max_angular_velocity", out.record.max_angular_velocity, error)
+      || !ParseAllowedDofFlags(binding, out.record.allowed_dof_flags, error)
+      || !ParseRigidBodyBackend(binding, out.record, error)) {
       return false;
     }
 
@@ -523,11 +759,19 @@ namespace {
       && ReadOptionalFloat(
         binding, "step_height", out.record.step_height, error)
       && ReadOptionalFloat(
+        binding, "step_down_distance", out.record.step_down_distance, error)
+      && ReadOptionalFloat(
         binding, "max_strength", out.record.max_strength, error)
+      && ReadOptionalFloat(binding, "skin_width", out.record.skin_width, error)
+      && ReadOptionalFloat(binding, "predictive_contact_distance",
+        out.record.predictive_contact_distance, error)
       && ReadOptionalUInt16(
         binding, "collision_layer", out.record.collision_layer, error)
       && ReadOptionalUInt32(
-        binding, "collision_mask", out.record.collision_mask, error);
+        binding, "collision_mask", out.record.collision_mask, error)
+      && ReadOptionalString(
+        binding, "inner_shape_ref", out.inner_shape_ref, error)
+      && ParseCharacterBackend(binding, out.record, error);
   }
 
   auto ParseSoftBodyBinding(const nlohmann::json& binding,
@@ -538,34 +782,45 @@ namespace {
       return false;
     }
     if (!ReadRequiredString(
-          binding, "jolt_settings_ref", out.jolt_settings_ref, error)) {
-      return false;
-    }
-    if (!ReadRequiredString(
-          binding, "physx_settings_ref", out.physx_settings_ref, error)) {
+          binding, "source_mesh_ref", out.source_mesh_ref, error)) {
       return false;
     }
     out.record.node_index = node_index;
-    return ReadRequiredUInt32(
-             binding, "cluster_count", out.record.cluster_count, error)
-      && ReadRequiredFloat(binding, "stiffness", out.record.stiffness, error)
-      && ReadRequiredFloat(binding, "damping", out.record.damping, error)
+    auto self_collision = false;
+    if (!ReadOptionalBool(binding, "self_collision", self_collision, error)) {
+      return false;
+    }
+    out.record.self_collision = self_collision ? 1U : 0U;
+
+    return ReadOptionalString(
+             binding, "collision_mesh_ref", out.collision_mesh_ref, error)
       && ReadRequiredFloat(
         binding, "edge_compliance", out.record.edge_compliance, error)
       && ReadRequiredFloat(
         binding, "shear_compliance", out.record.shear_compliance, error)
       && ReadRequiredFloat(
         binding, "bend_compliance", out.record.bend_compliance, error)
+      && ReadRequiredFloat(
+        binding, "volume_compliance", out.record.volume_compliance, error)
+      && ReadRequiredFloat(
+        binding, "pressure_coefficient", out.record.pressure_coefficient, error)
       && ParseTetherMode(binding, out.record.tether_mode, error)
       && ReadRequiredFloat(binding, "tether_max_distance_multiplier",
         out.record.tether_max_distance_multiplier, error)
-      && ReadRequiredFloat3(
-        binding, "settings_scale", out.record.settings_scale, error)
+      && ReadRequiredFloat(
+        binding, "global_damping", out.record.global_damping, error)
       && ReadRequiredFloat(
         binding, "restitution", out.record.restitution, error)
       && ReadRequiredFloat(binding, "friction", out.record.friction, error)
+      && ReadRequiredUInt32(binding, "solver_iteration_count",
+        out.record.solver_iteration_count, error)
       && ReadRequiredFloat(
-        binding, "vertex_radius", out.record.vertex_radius, error);
+        binding, "vertex_radius", out.record.vertex_radius, error)
+      && ReadRequiredUInt32Array(
+        binding, "pinned_vertices", out.pinned_vertices, error)
+      && ReadRequiredUInt32Array(
+        binding, "kinematic_vertices", out.kinematic_vertices, error)
+      && ParseSoftBodyBackend(binding, out.record, error);
   }
 
   auto ParseJointBinding(const nlohmann::json& binding, JointBindingSource& out,
@@ -575,13 +830,13 @@ namespace {
     uint32_t node_index_b = 0;
     if (!ReadRequiredUInt32(binding, "node_index_a", node_index_a, error)
       || !ReadJointNodeIndexB(binding, node_index_b, error)
-      || !ReadRequiredString(
+      || !ReadOptionalString(
         binding, "constraint_ref", out.constraint_ref, error)) {
       return false;
     }
     out.record.node_index_a = node_index_a;
     out.record.node_index_b = node_index_b;
-    return true;
+    return ParseJointBackend(binding, out.record, error);
   }
 
   auto ParseVehicleBinding(const nlohmann::json& binding,
@@ -589,7 +844,7 @@ namespace {
   {
     uint32_t node_index = 0;
     if (!ReadRequiredUInt32(binding, "node_index", node_index, error)
-      || !ReadRequiredString(
+      || !ReadOptionalString(
         binding, "constraint_ref", out.constraint_ref, error)) {
       return false;
     }
@@ -606,7 +861,9 @@ namespace {
       if (!ReadRequiredUInt32(wheel, "node_index", wheel_node_index, error)
         || !ReadRequiredUInt32(wheel, "axle_index", axle_index_u32, error)
         || axle_index_u32 > (std::numeric_limits<uint16_t>::max)()
-        || !ParseWheelSide(wheel, wheel_source.side, error)) {
+        || !ParseWheelSide(wheel, wheel_source.side, error)
+        || !ParseVehicleWheelBackend(
+          wheel, wheel_source.backend_scalars, error)) {
         if (axle_index_u32 > (std::numeric_limits<uint16_t>::max)()) {
           error = "Field 'axle_index' exceeds uint16 range";
         }
@@ -928,6 +1185,28 @@ namespace {
     }
   }
 
+  auto ResolveCharacterBindings(std::vector<CharacterBindingSource>& bindings,
+    BindingValidationContext& ctx) -> void
+  {
+    ResolveShapeOnlyBindings(bindings, "characters", ctx);
+    for (size_t i = 0; i < bindings.size(); ++i) {
+      auto& binding = bindings[i];
+      if (!binding.inner_shape_ref.has_value()) {
+        continue;
+      }
+      const auto base_path
+        = std::string("bindings.characters[") + std::to_string(i) + "]";
+      const auto inner_shape_key
+        = ResolveAssetKeyForVirtualPath(ctx, *binding.inner_shape_ref,
+          base_path + ".inner_shape_ref", data::AssetType::kCollisionShape,
+          "physics.sidecar.inner_shape_ref_unresolved",
+          "physics.sidecar.inner_shape_ref_not_collision_shape");
+      if (inner_shape_key.has_value()) {
+        binding.record.inner_shape_asset_key = *inner_shape_key;
+      }
+    }
+  }
+
   template <typename RecordT, typename NodeIndexFn>
   auto ValidateNodeBindings(const std::vector<RecordT>& records,
     std::string_view category, NodeIndexFn&& node_index_of,
@@ -952,27 +1231,57 @@ namespace {
         continue;
       }
 
-      if (records[i].record.cluster_count == 0U) {
-        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-          "physics.sidecar.payload_invalid",
-          "soft_bodies.cluster_count must be greater than zero",
-          base_path + ".cluster_count");
-        continue;
-      }
-
       const auto is_finite_non_negative = [](const float value) {
         return std::isfinite(value) && value >= 0.0F;
       };
-      if (!(std::isfinite(records[i].record.settings_scale[0])
-            && std::isfinite(records[i].record.settings_scale[1])
-            && std::isfinite(records[i].record.settings_scale[2])
-            && records[i].record.settings_scale[0] > 0.0F
-            && records[i].record.settings_scale[1] > 0.0F
-            && records[i].record.settings_scale[2] > 0.0F)) {
+      if (!is_finite_non_negative(records[i].record.edge_compliance)) {
         AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
-          "soft_bodies.settings_scale must be finite and strictly positive",
-          base_path + ".settings_scale");
+          "soft_bodies.edge_compliance must be finite and >= 0",
+          base_path + ".edge_compliance");
+        continue;
+      }
+      if (!is_finite_non_negative(records[i].record.shear_compliance)) {
+        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+          "physics.sidecar.payload_invalid",
+          "soft_bodies.shear_compliance must be finite and >= 0",
+          base_path + ".shear_compliance");
+        continue;
+      }
+      if (!is_finite_non_negative(records[i].record.bend_compliance)) {
+        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+          "physics.sidecar.payload_invalid",
+          "soft_bodies.bend_compliance must be finite and >= 0",
+          base_path + ".bend_compliance");
+        continue;
+      }
+      if (!is_finite_non_negative(records[i].record.volume_compliance)) {
+        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+          "physics.sidecar.payload_invalid",
+          "soft_bodies.volume_compliance must be finite and >= 0",
+          base_path + ".volume_compliance");
+        continue;
+      }
+      if (!std::isfinite(records[i].record.pressure_coefficient)) {
+        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+          "physics.sidecar.payload_invalid",
+          "soft_bodies.pressure_coefficient must be finite",
+          base_path + ".pressure_coefficient");
+        continue;
+      }
+      if (!is_finite_non_negative(
+            records[i].record.tether_max_distance_multiplier)) {
+        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+          "physics.sidecar.payload_invalid",
+          "soft_bodies.tether_max_distance_multiplier must be finite and >= 0",
+          base_path + ".tether_max_distance_multiplier");
+        continue;
+      }
+      if (!is_finite_non_negative(records[i].record.global_damping)) {
+        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+          "physics.sidecar.payload_invalid",
+          "soft_bodies.global_damping must be finite and >= 0",
+          base_path + ".global_damping");
         continue;
       }
 
@@ -997,21 +1306,45 @@ namespace {
           base_path + ".vertex_radius");
         continue;
       }
-
-      const auto jolt_settings_index = ResolvePhysicsResourceRef(ctx,
-        records[i].jolt_settings_ref, base_path + ".jolt_settings_ref",
-        phys::PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary,
-        "jolt_soft_body_shared_settings_binary", "jolt_settings_ref");
-      if (jolt_settings_index.has_value()) {
-        records[i].record.jolt_settings_resource_index = *jolt_settings_index;
+      if (records[i].record.solver_iteration_count == 0U) {
+        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+          "physics.sidecar.payload_invalid",
+          "soft_bodies.solver_iteration_count must be greater than zero",
+          base_path + ".solver_iteration_count");
+        continue;
+      }
+      if (records[i].pinned_vertices.size()
+        > static_cast<size_t>((std::numeric_limits<uint32_t>::max)())) {
+        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+          "physics.sidecar.payload_invalid",
+          "soft_bodies.pinned_vertices exceeds uint32 range",
+          base_path + ".pinned_vertices");
+        continue;
+      }
+      if (records[i].kinematic_vertices.size()
+        > static_cast<size_t>((std::numeric_limits<uint32_t>::max)())) {
+        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+          "physics.sidecar.payload_invalid",
+          "soft_bodies.kinematic_vertices exceeds uint32 range",
+          base_path + ".kinematic_vertices");
+        continue;
       }
 
-      const auto physx_settings_index = ResolvePhysicsResourceRef(ctx,
-        records[i].physx_settings_ref, base_path + ".physx_settings_ref",
-        phys::PhysicsResourceFormat::kPhysXSoftBodySettingsBinary,
-        "physx_soft_body_settings_binary", "physx_settings_ref");
-      if (physx_settings_index.has_value()) {
-        records[i].record.physx_settings_resource_index = *physx_settings_index;
+      records[i].record.pinned_vertex_count
+        = static_cast<uint32_t>(records[i].pinned_vertices.size());
+      records[i].record.kinematic_vertex_count
+        = static_cast<uint32_t>(records[i].kinematic_vertices.size());
+
+      (void)ResolveAssetKeyForVirtualPath(ctx, records[i].source_mesh_ref,
+        base_path + ".source_mesh_ref", data::AssetType::kGeometry,
+        "physics.sidecar.source_mesh_ref_unresolved",
+        "physics.sidecar.source_mesh_ref_not_geometry");
+
+      if (records[i].collision_mesh_ref.has_value()) {
+        (void)ResolveAssetKeyForVirtualPath(ctx, *records[i].collision_mesh_ref,
+          base_path + ".collision_mesh_ref", data::AssetType::kGeometry,
+          "physics.sidecar.collision_mesh_ref_unresolved",
+          "physics.sidecar.collision_mesh_ref_not_geometry");
       }
     }
   }
@@ -1162,12 +1495,14 @@ namespace {
         continue;
       }
 
-      const auto constraint_index = ResolvePhysicsResourceRef(ctx,
-        records[i].constraint_ref, base_path + ".constraint_ref",
-        phys::PhysicsResourceFormat::kJoltConstraintBinary,
-        "jolt_constraint_binary", "constraint_ref");
-      if (constraint_index.has_value()) {
-        records[i].record.constraint_resource_index = *constraint_index;
+      if (records[i].constraint_ref.has_value()) {
+        const auto constraint_index = ResolvePhysicsResourceRef(ctx,
+          *records[i].constraint_ref, base_path + ".constraint_ref",
+          phys::PhysicsResourceFormat::kJoltConstraintBinary,
+          "jolt_constraint_binary", "constraint_ref");
+        if (constraint_index.has_value()) {
+          records[i].record.constraint_resource_index = *constraint_index;
+        }
       }
     }
   }
@@ -1185,12 +1520,14 @@ namespace {
         continue;
       }
 
-      const auto constraint_index = ResolvePhysicsResourceRef(ctx,
-        records[i].constraint_ref, base_path + ".constraint_ref",
-        phys::PhysicsResourceFormat::kJoltVehicleConstraintBinary,
-        "jolt_vehicle_constraint_binary", "constraint_ref");
-      if (constraint_index.has_value()) {
-        records[i].record.constraint_resource_index = *constraint_index;
+      if (records[i].constraint_ref.has_value()) {
+        const auto constraint_index = ResolvePhysicsResourceRef(ctx,
+          *records[i].constraint_ref, base_path + ".constraint_ref",
+          phys::PhysicsResourceFormat::kJoltVehicleConstraintBinary,
+          "jolt_vehicle_constraint_binary", "constraint_ref");
+        if (constraint_index.has_value()) {
+          records[i].record.constraint_resource_index = *constraint_index;
+        }
       }
 
       if (records[i].wheels.size() < 2U) {
@@ -1204,7 +1541,7 @@ namespace {
       auto wheel_roles
         = std::unordered_set<uint32_t> {}; // packed (axle << 16) | side
       const auto wheel_offset = wheel_records.size();
-      auto wheel_count = uint16_t { 0 };
+      auto slice_count = uint16_t { 0 };
       for (size_t w = 0; w < records[i].wheels.size(); ++w) {
         const auto wheel_path
           = base_path + ".wheels[" + std::to_string(w) + "]";
@@ -1236,7 +1573,7 @@ namespace {
             wheel_path);
           continue;
         }
-        if (wheel_count == (std::numeric_limits<uint16_t>::max)()) {
+        if (slice_count == (std::numeric_limits<uint16_t>::max)()) {
           AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
             "physics.sidecar.payload_invalid",
             "Vehicle wheel count exceeds uint16 range", wheel_path);
@@ -1248,11 +1585,12 @@ namespace {
           .wheel_node_index = wheel.node_index,
           .axle_index = wheel.axle_index,
           .side = wheel.side,
+          .backend_scalars = wheel.backend_scalars,
         });
-        wheel_count = static_cast<uint16_t>(wheel_count + 1U);
+        slice_count = static_cast<uint16_t>(slice_count + 1U);
       }
 
-      if (wheel_count < 2U) {
+      if (slice_count < 2U) {
         AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "Vehicle wheel bindings must resolve to at least two valid wheels",
@@ -1269,9 +1607,9 @@ namespace {
         continue;
       }
 
-      records[i].record.wheel_table_offset
+      records[i].record.wheel_slice_offset
         = static_cast<uint32_t>(wheel_offset);
-      records[i].record.wheel_count = wheel_count;
+      records[i].record.wheel_slice_count = slice_count;
     }
   }
 
@@ -1290,6 +1628,7 @@ namespace {
   struct TableBlob final {
     phys::PhysicsBindingType binding_type = phys::PhysicsBindingType::kUnknown;
     uint32_t entry_size = 0;
+    uint32_t record_count = 0;
     std::vector<std::byte> bytes;
   };
 
@@ -1304,6 +1643,7 @@ namespace {
     auto blob = TableBlob {
       .binding_type = binding_type,
       .entry_size = static_cast<uint32_t>(sizeof(RecordT)),
+      .record_count = static_cast<uint32_t>(records.size()),
       .bytes = {},
     };
     blob.bytes.resize(records.size() * sizeof(RecordT));
@@ -1321,6 +1661,73 @@ namespace {
       table.has_value()) {
       tables.push_back(*table);
     }
+  }
+
+  auto MakeSoftBodyTableBlob(const std::vector<SoftBodyBindingSource>& records)
+    -> std::optional<TableBlob>
+  {
+    if (records.empty()) {
+      return std::nullopt;
+    }
+
+    auto blob = TableBlob {
+      .binding_type = phys::PhysicsBindingType::kSoftBody,
+      .entry_size = static_cast<uint32_t>(sizeof(phys::SoftBodyBindingRecord)),
+      .record_count = static_cast<uint32_t>(records.size()),
+      .bytes = {},
+    };
+
+    for (const auto& source : records) {
+      auto record = source.record;
+      auto trailing_cursor = static_cast<uint64_t>(sizeof(record));
+
+      const auto pinned_size_bytes
+        = static_cast<uint64_t>(source.pinned_vertices.size())
+        * sizeof(uint32_t);
+      const auto kinematic_size_bytes
+        = static_cast<uint64_t>(source.kinematic_vertices.size())
+        * sizeof(uint32_t);
+      if (source.pinned_vertices.empty()) {
+        record.pinned_vertex_byte_offset = 0U;
+      } else if (trailing_cursor > (std::numeric_limits<uint32_t>::max)()) {
+        return std::nullopt;
+      } else {
+        record.pinned_vertex_byte_offset
+          = static_cast<uint32_t>(trailing_cursor);
+        trailing_cursor += pinned_size_bytes;
+      }
+
+      if (source.kinematic_vertices.empty()) {
+        record.kinematic_vertex_byte_offset = 0U;
+      } else if (trailing_cursor > (std::numeric_limits<uint32_t>::max)()) {
+        return std::nullopt;
+      } else {
+        record.kinematic_vertex_byte_offset
+          = static_cast<uint32_t>(trailing_cursor);
+        trailing_cursor += kinematic_size_bytes;
+      }
+
+      const auto fixed_size = sizeof(record);
+      const auto previous_size = blob.bytes.size();
+      blob.bytes.resize(
+        previous_size + fixed_size + pinned_size_bytes + kinematic_size_bytes);
+
+      std::memcpy(blob.bytes.data() + previous_size, &record, fixed_size);
+      auto write_cursor = previous_size + fixed_size;
+      if (pinned_size_bytes > 0U) {
+        std::memcpy(blob.bytes.data() + write_cursor,
+          source.pinned_vertices.data(),
+          static_cast<size_t>(pinned_size_bytes));
+        write_cursor += static_cast<size_t>(pinned_size_bytes);
+      }
+      if (kinematic_size_bytes > 0U) {
+        std::memcpy(blob.bytes.data() + write_cursor,
+          source.kinematic_vertices.data(),
+          static_cast<size_t>(kinematic_size_bytes));
+      }
+    }
+
+    return blob;
   }
 
   auto SerializePhysicsSceneAsset(const SidecarResolvedSceneState& scene_state,
@@ -1356,14 +1763,19 @@ namespace {
           * sizeof(phys::PhysicsComponentTableDesc);
 
     for (const auto& table : tables) {
-      if ((table.bytes.size() % table.entry_size) != 0U) {
-        error = "Physics table payload is not entry-size aligned";
+      if (table.record_count == 0U) {
+        error = "Physics table has zero records";
         return std::nullopt;
       }
-      const auto record_count = static_cast<uint64_t>(table.bytes.size())
-        / static_cast<uint64_t>(table.entry_size);
-      if (record_count > (std::numeric_limits<uint32_t>::max)()) {
-        error = "Physics table record count overflow";
+      const auto min_table_size = static_cast<uint64_t>(table.record_count)
+        * static_cast<uint64_t>(table.entry_size);
+      if (table.binding_type != phys::PhysicsBindingType::kSoftBody) {
+        if (table.bytes.size() != min_table_size) {
+          error = "Physics table payload size mismatch";
+          return std::nullopt;
+        }
+      } else if (static_cast<uint64_t>(table.bytes.size()) < min_table_size) {
+        error = "Soft-body table payload is truncated";
         return std::nullopt;
       }
       if (cursor > (std::numeric_limits<data::pak::core::OffsetT>::max)()) {
@@ -1374,7 +1786,7 @@ namespace {
         .binding_type = table.binding_type,
         .table = data::pak::core::ResourceTable {
           .offset = static_cast<data::pak::core::OffsetT>(cursor),
-          .count = static_cast<uint32_t>(record_count),
+          .count = table.record_count,
           .entry_size = table.entry_size,
         },
       });
@@ -1503,7 +1915,7 @@ namespace {
       parsed.rigid_bodies, "rigid_bodies", validation_ctx);
     ResolveShapeAndMaterialBindings(
       parsed.colliders, "colliders", validation_ctx);
-    ResolveShapeOnlyBindings(parsed.characters, "characters", validation_ctx);
+    ResolveCharacterBindings(parsed.characters, validation_ctx);
     ResolveSoftBodyBindings(parsed.soft_bodies, validation_ctx);
     ResolveJointBindings(parsed.joints, validation_ctx);
     ResolveVehicleBindings(
@@ -1524,8 +1936,7 @@ namespace {
       = ExtractRecordVector(parsed.colliders, &ColliderBindingSource::record);
     auto character_records
       = ExtractRecordVector(parsed.characters, &CharacterBindingSource::record);
-    auto soft_body_records
-      = ExtractRecordVector(parsed.soft_bodies, &SoftBodyBindingSource::record);
+    auto soft_body_records = parsed.soft_bodies;
     auto joint_records
       = ExtractRecordVector(parsed.joints, &JointBindingSource::record);
     auto vehicle_records
@@ -1546,10 +1957,13 @@ namespace {
       character_records, [](const auto& lhs, const auto& rhs) {
         return lhs.node_index < rhs.node_index;
       });
-    SortAndAppendTable(tables, phys::PhysicsBindingType::kSoftBody,
-      soft_body_records, [](const auto& lhs, const auto& rhs) {
-        return lhs.node_index < rhs.node_index;
-      });
+    std::ranges::sort(soft_body_records, [](const auto& lhs, const auto& rhs) {
+      return lhs.record.node_index < rhs.record.node_index;
+    });
+    if (const auto soft_body_table = MakeSoftBodyTableBlob(soft_body_records);
+      soft_body_table.has_value()) {
+      tables.push_back(*soft_body_table);
+    }
     SortAndAppendTable(tables, phys::PhysicsBindingType::kJoint, joint_records,
       [](const auto& lhs, const auto& rhs) {
         if (lhs.node_index_a != rhs.node_index_a) {

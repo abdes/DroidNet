@@ -650,16 +650,19 @@ is used internally:
           fraction of edge stiffness, used when tether mode is Geodesic.
         - *Skinned constraint enable flag* — whether Jolt's skinned rigging
           constraints (bone-driven vertex targets) are active.
-      - **PhysX FEM only:**
+      - **PhysX FEM only** (`PxFEMSoftBodyMaterial` properties):
         - *Young's modulus* (Pa) — elastic stiffness of the FEM material;
           replaces the XPBD compliance model with a physically-based continuum
-          constitutive law. Has no equivalent in XPBD engines.
+          constitutive law. Has no equivalent in XPBD engines. L2 field name:
+          `youngs_modulus`; PhysX setter: `setYoungsModulus()`.
         - *Poisson's ratio* (0–0.5) — lateral-to-axial strain ratio
           controlling volume preservation in the FEM material; complements
-          Young's modulus. No equivalent in XPBD.
-        - *Stabilization velocity threshold* (m/s) — below this speed the
-          particle velocity is zeroed to prevent drift; PhysX-specific
-          stabilization mechanism.
+          Young's modulus. No equivalent in XPBD. L1 JSON field name:
+          `poisson_ratio`; L2 struct field name: `poissons` (mirrors
+          `PxFEMSoftBodyMaterial::setPoissons()` exactly).
+        - *Dynamic friction* — friction coefficient applied when the soft body
+          contacts rigid geometry. L2 field name: `dynamic_friction`; PhysX
+          setter: `setDynamicFriction()`.
   - **Aggregates (groups / islands).** Each definition carries:
     - *Root node reference* — scene node whose subtree defines group
       membership.
@@ -969,8 +972,8 @@ as `Physics/Shapes/sphere.ocshape`. No external physics resource blob is
 allocated, so its `cooked_shape_ref` remains invalid (`kNoResourceIndex`).
 
 *Physics material:*
-The cooker writes a `PhysicsMaterialAssetDesc` with `friction = 0.8`,
-`restitution = 0.7`, `combine_mode_friction = kMaximum`, and
+The cooker writes a `PhysicsMaterialAssetDesc` with `static_friction = 0.8`,
+`dynamic_friction = 0.75`, `restitution = 0.7`, `combine_mode_friction = kMaximum`, and
 `combine_mode_restitution = kMaximum`. This is 128 bytes, fixed layout, no
 binary stream needed. It is emitted as `Physics/Materials/rubber.opmat`.
 

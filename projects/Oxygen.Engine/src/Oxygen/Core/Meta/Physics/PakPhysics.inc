@@ -31,6 +31,11 @@ OXPHYS_RESOURCE_FORMAT(kJoltConstraintBinary, 1)
 OXPHYS_RESOURCE_FORMAT(kJoltSoftBodySharedSettingsBinary, 2)
 OXPHYS_RESOURCE_FORMAT(kJoltVehicleConstraintBinary, 3)
 OXPHYS_RESOURCE_FORMAT(kPhysXSoftBodySettingsBinary, 4)
+OXPHYS_RESOURCE_FORMAT(kPhysXConvexMeshBinary, 5)
+OXPHYS_RESOURCE_FORMAT(kPhysXTriangleMeshBinary, 6)
+OXPHYS_RESOURCE_FORMAT(kPhysXHeightFieldBinary, 7)
+OXPHYS_RESOURCE_FORMAT(kPhysXConstraintBinary, 8)
+OXPHYS_RESOURCE_FORMAT(kPhysXVehicleSettingsBinary, 9)
 
 #undef OXPHYS_RESOURCE_FORMAT
 

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
@@ -150,16 +151,21 @@ struct PhysicsTableTraits {
     -> std::string
   {
     std::string signature;
-    signature.reserve(96);
+    signature.reserve(160);
 
     signature.append("phys:");
     signature.append("f=");
     signature.append(std::to_string(static_cast<uint32_t>(desc.format)));
     signature.append(";n=");
     signature.append(std::to_string(desc.size_bytes));
-    if (desc.content_hash != 0U) {
+    if (std::any_of(std::begin(desc.content_hash), std::end(desc.content_hash),
+          [](const uint8_t byte) { return byte != 0U; })) {
       signature.append(";h=");
-      signature.append(std::to_string(desc.content_hash));
+      constexpr auto kHex = "0123456789abcdef";
+      for (const auto byte : desc.content_hash) {
+        signature.push_back(kHex[(byte >> 4U) & 0x0FU]);
+        signature.push_back(kHex[byte & 0x0FU]);
+      }
     }
     return signature;
   }

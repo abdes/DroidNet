@@ -119,6 +119,21 @@ namespace {
     if (value == "physx_soft_body_settings_binary") {
       return PhysicsResourceFormat::kPhysXSoftBodySettingsBinary;
     }
+    if (value == "physx_convex_mesh_binary") {
+      return PhysicsResourceFormat::kPhysXConvexMeshBinary;
+    }
+    if (value == "physx_triangle_mesh_binary") {
+      return PhysicsResourceFormat::kPhysXTriangleMeshBinary;
+    }
+    if (value == "physx_height_field_binary") {
+      return PhysicsResourceFormat::kPhysXHeightFieldBinary;
+    }
+    if (value == "physx_constraint_binary") {
+      return PhysicsResourceFormat::kPhysXConstraintBinary;
+    }
+    if (value == "physx_vehicle_settings_binary") {
+      return PhysicsResourceFormat::kPhysXVehicleSettingsBinary;
+    }
     DCHECK_F(
       false, "Unsupported physics resource format after schema validation");
     return PhysicsResourceFormat::kJoltShapeBinary;
@@ -262,7 +277,8 @@ namespace {
     const data::pak::physics::PhysicsResourceDesc& rhs) -> bool
   {
     return lhs.format == rhs.format && lhs.size_bytes == rhs.size_bytes
-      && lhs.content_hash == rhs.content_hash;
+      && std::equal(std::begin(lhs.content_hash), std::end(lhs.content_hash),
+        std::begin(rhs.content_hash));
   }
 
   auto ValidateExistingSidecarIfPresent(const std::filesystem::path& full_path,

@@ -692,10 +692,8 @@ NOLINT_TEST_F(AssetLoaderSceneTest, LoadAssetSceneWithPhysicsSidecarLoadsV7)
           oxygen::data::pak::core::kNoResourceIndex);
       }
       if (!soft_bodies.empty()) {
-        EXPECT_NE(soft_bodies[0].jolt_settings_resource_index,
-          oxygen::data::pak::core::kNoResourceIndex);
-        EXPECT_NE(soft_bodies[0].physx_settings_resource_index,
-          oxygen::data::pak::core::kNoResourceIndex);
+        EXPECT_GT(soft_bodies[0].solver_iteration_count, 0U);
+        EXPECT_NE(static_cast<uint32_t>(soft_bodies[0].topology_format), 0U);
       }
       if (!vehicles.empty()) {
         EXPECT_NE(vehicles[0].constraint_resource_index,

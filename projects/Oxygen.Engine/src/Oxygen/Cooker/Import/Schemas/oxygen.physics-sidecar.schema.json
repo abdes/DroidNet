@@ -66,6 +66,11 @@
             "minimum": 0,
             "maximum": 4294967295
         },
+        "u8": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+        },
         "u16": {
             "type": "integer",
             "minimum": 0,
@@ -75,6 +80,309 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 4294967295
+        },
+        "non_negative_int": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "vec3": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+                "type": "number"
+            }
+        },
+        "canonical_ocshape_path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.ocshape$"
+        },
+        "canonical_opmat_path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.opmat$"
+        },
+        "canonical_opres_path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.opres$"
+        },
+        "canonical_ogeo_path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.ogeo$"
+        },
+        "rigid_body_allowed_dof": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "translate_x": {
+                    "type": "boolean"
+                },
+                "translate_y": {
+                    "type": "boolean"
+                },
+                "translate_z": {
+                    "type": "boolean"
+                },
+                "rotate_x": {
+                    "type": "boolean"
+                },
+                "rotate_y": {
+                    "type": "boolean"
+                },
+                "rotate_z": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "rigid_body_backend": {
+            "oneOf": [
+                {
+                    "$ref": "#/definitions/rigid_body_backend_jolt"
+                },
+                {
+                    "$ref": "#/definitions/rigid_body_backend_physx"
+                }
+            ]
+        },
+        "rigid_body_backend_jolt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "target"
+            ],
+            "properties": {
+                "target": {
+                    "const": "jolt"
+                },
+                "num_velocity_steps_override": {
+                    "$ref": "#/definitions/u8"
+                },
+                "num_position_steps_override": {
+                    "$ref": "#/definitions/u8"
+                }
+            }
+        },
+        "rigid_body_backend_physx": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "target"
+            ],
+            "properties": {
+                "target": {
+                    "const": "physx"
+                },
+                "min_velocity_iters": {
+                    "$ref": "#/definitions/u8"
+                },
+                "min_position_iters": {
+                    "$ref": "#/definitions/u8"
+                },
+                "max_contact_impulse": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "contact_report_threshold": {
+                    "type": "number",
+                    "minimum": 0.0
+                }
+            }
+        },
+        "character_backend": {
+            "oneOf": [
+                {
+                    "$ref": "#/definitions/character_backend_jolt"
+                },
+                {
+                    "$ref": "#/definitions/character_backend_physx"
+                }
+            ]
+        },
+        "character_backend_jolt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "target"
+            ],
+            "properties": {
+                "target": {
+                    "const": "jolt"
+                },
+                "penetration_recovery_speed": {
+                    "type": "number"
+                },
+                "max_num_hits": {
+                    "$ref": "#/definitions/u32"
+                },
+                "hit_reduction_cos_max_angle": {
+                    "type": "number"
+                }
+            }
+        },
+        "character_backend_physx": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "target"
+            ],
+            "properties": {
+                "target": {
+                    "const": "physx"
+                },
+                "contact_offset": {
+                    "type": "number",
+                    "minimum": 0.0
+                }
+            }
+        },
+        "soft_body_backend": {
+            "oneOf": [
+                {
+                    "$ref": "#/definitions/soft_body_backend_jolt"
+                },
+                {
+                    "$ref": "#/definitions/soft_body_backend_physx"
+                }
+            ]
+        },
+        "soft_body_backend_jolt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "target"
+            ],
+            "properties": {
+                "target": {
+                    "const": "jolt"
+                },
+                "velocity_iteration_count": {
+                    "$ref": "#/definitions/u32"
+                },
+                "lra_stiffness_fraction": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "skinned_constraint_enable": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "soft_body_backend_physx": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "target"
+            ],
+            "properties": {
+                "target": {
+                    "const": "physx"
+                },
+                "youngs_modulus": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "poisson_ratio": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 0.5
+                },
+                "dynamic_friction": {
+                    "type": "number",
+                    "minimum": 0.0
+                }
+            }
+        },
+        "joint_backend": {
+            "oneOf": [
+                {
+                    "$ref": "#/definitions/joint_backend_jolt"
+                },
+                {
+                    "$ref": "#/definitions/joint_backend_physx"
+                }
+            ]
+        },
+        "joint_backend_jolt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "target"
+            ],
+            "properties": {
+                "target": {
+                    "const": "jolt"
+                },
+                "num_velocity_steps_override": {
+                    "$ref": "#/definitions/u8"
+                },
+                "num_position_steps_override": {
+                    "$ref": "#/definitions/u8"
+                }
+            }
+        },
+        "joint_backend_physx": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "target"
+            ],
+            "properties": {
+                "target": {
+                    "const": "physx"
+                },
+                "inv_mass_scale0": {
+                    "type": "number"
+                },
+                "inv_mass_scale1": {
+                    "type": "number"
+                },
+                "inv_inertia_scale0": {
+                    "type": "number"
+                },
+                "inv_inertia_scale1": {
+                    "type": "number"
+                }
+            }
+        },
+        "vehicle_wheel_backend": {
+            "oneOf": [
+                {
+                    "$ref": "#/definitions/vehicle_wheel_backend_jolt"
+                },
+                {
+                    "$ref": "#/definitions/vehicle_wheel_backend_physx"
+                }
+            ]
+        },
+        "vehicle_wheel_backend_jolt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "target"
+            ],
+            "properties": {
+                "target": {
+                    "const": "jolt"
+                },
+                "wheel_castor": {
+                    "type": "number"
+                }
+            }
+        },
+        "vehicle_wheel_backend_physx": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "target"
+            ],
+            "properties": {
+                "target": {
+                    "const": "physx"
+                }
+            }
         },
         "rigid_body_binding": {
             "type": "object",
@@ -89,12 +397,10 @@
                     "$ref": "#/definitions/node_index"
                 },
                 "shape_ref": {
-                    "type": "string",
-                    "minLength": 1
+                    "$ref": "#/definitions/canonical_ocshape_path"
                 },
                 "material_ref": {
-                    "type": "string",
-                    "minLength": 1
+                    "$ref": "#/definitions/canonical_opmat_path"
                 },
                 "body_type": {
                     "enum": [
@@ -132,6 +438,26 @@
                 },
                 "is_sensor": {
                     "type": "boolean"
+                },
+                "center_of_mass_override": {
+                    "$ref": "#/definitions/vec3"
+                },
+                "inertia_tensor_override": {
+                    "$ref": "#/definitions/vec3"
+                },
+                "max_linear_velocity": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "max_angular_velocity": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "allowed_dof": {
+                    "$ref": "#/definitions/rigid_body_allowed_dof"
+                },
+                "backend": {
+                    "$ref": "#/definitions/rigid_body_backend"
                 }
             }
         },
@@ -148,12 +474,10 @@
                     "$ref": "#/definitions/node_index"
                 },
                 "shape_ref": {
-                    "type": "string",
-                    "minLength": 1
+                    "$ref": "#/definitions/canonical_ocshape_path"
                 },
                 "material_ref": {
-                    "type": "string",
-                    "minLength": 1
+                    "$ref": "#/definitions/canonical_opmat_path"
                 },
                 "collision_layer": {
                     "$ref": "#/definitions/u16"
@@ -175,8 +499,7 @@
                     "$ref": "#/definitions/node_index"
                 },
                 "shape_ref": {
-                    "type": "string",
-                    "minLength": 1
+                    "$ref": "#/definitions/canonical_ocshape_path"
                 },
                 "mass": {
                     "type": "number"
@@ -187,14 +510,31 @@
                 "step_height": {
                     "type": "number"
                 },
+                "step_down_distance": {
+                    "type": "number"
+                },
                 "max_strength": {
                     "type": "number"
+                },
+                "skin_width": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "predictive_contact_distance": {
+                    "type": "number",
+                    "minimum": 0.0
                 },
                 "collision_layer": {
                     "$ref": "#/definitions/u16"
                 },
                 "collision_mask": {
                     "$ref": "#/definitions/u32"
+                },
+                "inner_shape_ref": {
+                    "$ref": "#/definitions/canonical_ocshape_path"
+                },
+                "backend": {
+                    "$ref": "#/definitions/character_backend"
                 }
             }
         },
@@ -203,49 +543,51 @@
             "additionalProperties": false,
             "required": [
                 "node_index",
-                "jolt_settings_ref",
-                "physx_settings_ref",
-                "cluster_count",
-                "stiffness",
-                "damping",
+                "source_mesh_ref",
                 "edge_compliance",
                 "shear_compliance",
                 "bend_compliance",
+                "volume_compliance",
+                "pressure_coefficient",
                 "tether_mode",
                 "tether_max_distance_multiplier",
-                "settings_scale",
+                "global_damping",
                 "restitution",
                 "friction",
-                "vertex_radius"
+                "vertex_radius",
+                "solver_iteration_count",
+                "self_collision",
+                "pinned_vertices",
+                "kinematic_vertices",
+                "backend"
             ],
             "properties": {
                 "node_index": {
                     "$ref": "#/definitions/node_index"
                 },
-                "jolt_settings_ref": {
-                    "type": "string",
-                    "minLength": 1
+                "source_mesh_ref": {
+                    "$ref": "#/definitions/canonical_ogeo_path"
                 },
-                "physx_settings_ref": {
-                    "type": "string",
-                    "minLength": 1
-                },
-                "cluster_count": {
-                    "$ref": "#/definitions/u32"
-                },
-                "stiffness": {
-                    "type": "number"
-                },
-                "damping": {
-                    "type": "number"
+                "collision_mesh_ref": {
+                    "$ref": "#/definitions/canonical_ogeo_path"
                 },
                 "edge_compliance": {
-                    "type": "number"
+                    "type": "number",
+                    "minimum": 0.0
                 },
                 "shear_compliance": {
-                    "type": "number"
+                    "type": "number",
+                    "minimum": 0.0
                 },
                 "bend_compliance": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "volume_compliance": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "pressure_coefficient": {
                     "type": "number"
                 },
                 "tether_mode": {
@@ -256,24 +598,47 @@
                     ]
                 },
                 "tether_max_distance_multiplier": {
-                    "type": "number"
+                    "type": "number",
+                    "minimum": 0.0
                 },
-                "settings_scale": {
-                    "type": "array",
-                    "minItems": 3,
-                    "maxItems": 3,
-                    "items": {
-                        "type": "number"
-                    }
+                "global_damping": {
+                    "type": "number",
+                    "minimum": 0.0
                 },
                 "restitution": {
-                    "type": "number"
+                    "type": "number",
+                    "minimum": 0.0
                 },
                 "friction": {
-                    "type": "number"
+                    "type": "number",
+                    "minimum": 0.0
                 },
                 "vertex_radius": {
-                    "type": "number"
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "solver_iteration_count": {
+                    "$ref": "#/definitions/u32"
+                },
+                "self_collision": {
+                    "type": "boolean"
+                },
+                "pinned_vertices": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/non_negative_int"
+                    },
+                    "uniqueItems": true
+                },
+                "kinematic_vertices": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/non_negative_int"
+                    },
+                    "uniqueItems": true
+                },
+                "backend": {
+                    "$ref": "#/definitions/soft_body_backend"
                 }
             }
         },
@@ -282,8 +647,7 @@
             "additionalProperties": false,
             "required": [
                 "node_index_a",
-                "node_index_b",
-                "constraint_ref"
+                "node_index_b"
             ],
             "properties": {
                 "node_index_a": {
@@ -307,8 +671,10 @@
                     "description": "Body B node index, or null/\"world\" to attach constraint to world."
                 },
                 "constraint_ref": {
-                    "type": "string",
-                    "minLength": 1
+                    "$ref": "#/definitions/canonical_opres_path"
+                },
+                "backend": {
+                    "$ref": "#/definitions/joint_backend"
                 }
             }
         },
@@ -317,7 +683,6 @@
             "additionalProperties": false,
             "required": [
                 "node_index",
-                "constraint_ref",
                 "wheels"
             ],
             "properties": {
@@ -325,8 +690,7 @@
                     "$ref": "#/definitions/node_index"
                 },
                 "constraint_ref": {
-                    "type": "string",
-                    "minLength": 1
+                    "$ref": "#/definitions/canonical_opres_path"
                 },
                 "wheels": {
                     "type": "array",
@@ -357,6 +721,9 @@
                         "left",
                         "right"
                     ]
+                },
+                "backend": {
+                    "$ref": "#/definitions/vehicle_wheel_backend"
                 }
             }
         },

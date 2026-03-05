@@ -204,7 +204,8 @@ namespace {
       = ImportRequest::PhysicsMaterialDescriptorPayload {
           .normalized_descriptor_json = R"({
             "name": "ground",
-            "friction": 0.95,
+            "static_friction": 0.95,
+            "dynamic_friction": 0.70,
             "restitution": 0.05,
             "density": 1800.0,
             "virtual_path": "/.cooked/Physics/Materials/ground.opmat"

@@ -41,7 +41,12 @@
                 "jolt_constraint_binary",
                 "jolt_soft_body_shared_settings_binary",
                 "jolt_vehicle_constraint_binary",
-                "physx_soft_body_settings_binary"
+                "physx_soft_body_settings_binary",
+                "physx_convex_mesh_binary",
+                "physx_triangle_mesh_binary",
+                "physx_height_field_binary",
+                "physx_constraint_binary",
+                "physx_vehicle_settings_binary"
             ]
         },
         "canonical_opres_path": {

@@ -150,6 +150,19 @@ auto ToHex64(const uint64_t value) -> std::string
   return ss.str();
 }
 
+auto ToHexBytes(const std::span<const uint8_t> bytes) -> std::string
+{
+  static constexpr char kHex[] = "0123456789abcdef";
+  auto out = std::string {};
+  out.reserve(2 + bytes.size() * 2);
+  out.append("0x");
+  for (const auto byte : bytes) {
+    out.push_back(kHex[(byte >> 4U) & 0x0FU]);
+    out.push_back(kHex[byte & 0x0FU]);
+  }
+  return out;
+}
+
 auto FindFileRelPath(const oxygen::content::lc::Inspection& inspection,
   const FileKind kind) -> std::optional<std::string>
 {
@@ -563,9 +576,11 @@ auto RunDumpPhysics(const DumpResourceOptions& opts) -> int
               << table_path.string() << "'\n\n";
 
     std::cout
-      << "Idx  Offset              Size       Format                    Hash\n";
+      << "Idx  Offset              Size       Format                    "
+         "SHA256\n";
     std::cout << "---- ------------------- ---------- "
-                 "------------------------- ----------------\n";
+                 "------------------------- ---------------------------------"
+                 "----------------\n";
 
     for (size_t i = 0; i < entries.size(); ++i) {
       const auto& e = entries[i];
@@ -588,6 +603,26 @@ auto RunDumpPhysics(const DumpResourceOptions& opts) -> int
         format_name = "JoltVehicleConstraintBinary";
         break;
       case oxygen::data::pak::physics::PhysicsResourceFormat::
+        kPhysXConvexMeshBinary:
+        format_name = "PhysXConvexMeshBinary";
+        break;
+      case oxygen::data::pak::physics::PhysicsResourceFormat::
+        kPhysXTriangleMeshBinary:
+        format_name = "PhysXTriangleMeshBinary";
+        break;
+      case oxygen::data::pak::physics::PhysicsResourceFormat::
+        kPhysXHeightFieldBinary:
+        format_name = "PhysXHeightFieldBinary";
+        break;
+      case oxygen::data::pak::physics::PhysicsResourceFormat::
+        kPhysXConstraintBinary:
+        format_name = "PhysXConstraintBinary";
+        break;
+      case oxygen::data::pak::physics::PhysicsResourceFormat::
+        kPhysXVehicleSettingsBinary:
+        format_name = "PhysXVehicleSettingsBinary";
+        break;
+      case oxygen::data::pak::physics::PhysicsResourceFormat::
         kPhysXSoftBodySettingsBinary:
         format_name = "PhysXSoftBodySettingsBinary";
         break;
@@ -600,7 +635,8 @@ auto RunDumpPhysics(const DumpResourceOptions& opts) -> int
       std::cout << std::left << std::setw(19) << ToHex64(e.data_offset) << " ";
       std::cout << std::right << std::setw(10) << e.size_bytes << " ";
       std::cout << std::left << std::setw(25) << format_name << " ";
-      std::cout << std::left << std::setw(16) << ToHex64(e.content_hash)
+      std::cout << std::left << std::setw(66)
+                << ToHexBytes(std::span<const uint8_t, 32>(e.content_hash))
                 << "\n";
     }
 
@@ -919,7 +955,8 @@ auto RunDumpPhysicsAssets(const DumpPhysicsAssetsOptions& opts) -> int
         std::cout << "  name='"
                   << ReadFixedString(
                        desc->header.name, sizeof(desc->header.name))
-                  << "' friction=" << desc->friction
+                  << "' static_friction=" << desc->static_friction
+                  << " dynamic_friction=" << desc->dynamic_friction
                   << " restitution=" << desc->restitution
                   << " density=" << desc->density << "\n";
         continue;

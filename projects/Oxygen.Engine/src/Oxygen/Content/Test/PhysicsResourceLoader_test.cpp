@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstring>
+
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Content/LoaderFunctions.h>
@@ -32,7 +34,10 @@ NOLINT_TEST_F(
   desc.size_bytes = 96;
   desc.format
     = oxygen::data::pak::physics::PhysicsResourceFormat::kJoltShapeBinary;
-  desc.content_hash = 0x1122334455667788ULL;
+  {
+    constexpr auto kHashPrefix = 0x1122334455667788ULL;
+    std::memcpy(desc.content_hash, &kHashPrefix, sizeof(kHashPrefix));
+  }
   WriteDescriptorAndData(desc, 0x7A);
 
   const auto resource = LoadPhysicsResource(MakeContext());
@@ -69,7 +74,6 @@ NOLINT_TEST_F(
   desc.size_bytes = 8;
   desc.format
     = oxygen::data::pak::physics::PhysicsResourceFormat::kJoltShapeBinary;
-  desc.content_hash = 0;
 
   auto packed_desc = desc_writer_.ScopedAlignment(1);
   const auto desc_bytes = std::span<const std::byte>(

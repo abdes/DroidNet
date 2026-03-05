@@ -270,7 +270,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     R"({
       "name": "shared_a",
       "virtual_path": "/.cooked/Physics/Materials/shared.opmat",
-      "friction": 0.8,
+      "static_friction": 0.8,
+      "dynamic_friction": 0.8,
       "restitution": 0.1,
       "density": 1.0
     })");
@@ -278,7 +279,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     R"({
       "name": "shared_b",
       "virtual_path": "/.cooked/Physics/Materials/shared.opmat",
-      "friction": 0.7,
+      "static_friction": 0.7,
+      "dynamic_friction": 0.7,
       "restitution": 0.2,
       "density": 1.0
     })");
@@ -340,7 +342,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     R"({
       "name": "shared_a",
       "virtual_path": "/.cooked/Physics/Materials/shared.opmat",
-      "friction": 0.8,
+      "static_friction": 0.8,
+      "dynamic_friction": 0.8,
       "restitution": 0.1,
       "density": 1.0
     })");
@@ -348,7 +351,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     R"({
       "name": "shared_b",
       "virtual_path": "/.cooked/Physics/Materials/shared.opmat",
-      "friction": 0.7,
+      "static_friction": 0.7,
+      "dynamic_friction": 0.7,
       "restitution": 0.2,
       "density": 1.0
     })");
@@ -356,7 +360,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     R"({
       "name": "base",
       "virtual_path": "/.cooked/Physics/Materials/base.opmat",
-      "friction": 0.5,
+      "static_friction": 0.5,
+      "dynamic_friction": 0.5,
       "restitution": 0.1,
       "density": 1.0
     })");
@@ -452,7 +457,8 @@ NOLINT_TEST_F(
     R"({
       "name": "mat_a",
       "virtual_path": "/.cooked/Physics/Materials/mat_a.opmat",
-      "friction": 0.5,
+      "static_friction": 0.5,
+      "dynamic_friction": 0.5,
       "restitution": 0.1,
       "density": 1.0
     })");
@@ -460,7 +466,8 @@ NOLINT_TEST_F(
     R"({
       "name": "mat_b",
       "virtual_path": "/.cooked/Physics/Materials/mat_b.opmat",
-      "friction": 0.5,
+      "static_friction": 0.5,
+      "dynamic_friction": 0.5,
       "restitution": 0.1,
       "density": 1.0
     })");
@@ -589,7 +596,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     R"({
       "name": "mat",
       "virtual_path": "/.cooked/Physics/Materials/mat.opmat",
-      "friction": 0.6,
+      "static_friction": 0.6,
+      "dynamic_friction": 0.6,
       "restitution": 0.1,
       "density": 1.0
     })");
@@ -631,7 +639,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     R"({
       "name": "mat_a",
       "virtual_path": "/.cooked/Physics/Materials/mat_a.opmat",
-      "friction": 0.6,
+      "static_friction": 0.6,
+      "dynamic_friction": 0.6,
       "restitution": 0.1,
       "density": 1.0
     })");
@@ -639,7 +648,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     R"({
       "name": "mat_b",
       "virtual_path": "/.cooked/Physics/Materials/mat_b.opmat",
-      "friction": 0.7,
+      "static_friction": 0.7,
+      "dynamic_friction": 0.7,
       "restitution": 0.2,
       "density": 1.0
     })");
