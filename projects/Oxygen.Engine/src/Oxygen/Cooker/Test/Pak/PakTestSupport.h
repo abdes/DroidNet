@@ -57,7 +57,21 @@ protected:
     std::filesystem::create_directories(root_);
   }
 
-  void TearDown() override { std::filesystem::remove_all(root_); }
+  void TearDown() override
+  {
+    if (!IsSafeTempDeletionTarget(root_)) {
+      ADD_FAILURE() << "Refusing to delete unsafe temp directory: "
+                    << root_.string();
+      return;
+    }
+
+    auto ec = std::error_code {};
+    std::filesystem::remove_all(root_, ec);
+    if (ec) {
+      ADD_FAILURE() << "Failed to delete temp directory '" << root_.string()
+                    << "': " << ec.message();
+    }
+  }
 
   [[nodiscard]] auto Root() const -> const std::filesystem::path&
   {
@@ -70,6 +84,52 @@ protected:
   }
 
 private:
+  [[nodiscard]] static auto IsUnderBaseDir(const std::filesystem::path& path,
+    const std::filesystem::path& base) -> bool
+  {
+    auto path_it = path.begin();
+    auto base_it = base.begin();
+    for (; base_it != base.end(); ++base_it, ++path_it) {
+      if (path_it == path.end() || *path_it != *base_it) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  [[nodiscard]] static auto IsSafeTempDeletionTarget(
+    const std::filesystem::path& candidate) -> bool
+  {
+    if (candidate.empty() || !candidate.is_absolute()) {
+      return false;
+    }
+
+    auto ec = std::error_code {};
+    const auto canonical_candidate
+      = std::filesystem::weakly_canonical(candidate, ec);
+    if (ec || canonical_candidate.empty()
+      || !canonical_candidate.is_absolute()) {
+      return false;
+    }
+
+    const auto expected_base = std::filesystem::weakly_canonical(
+      std::filesystem::temp_directory_path() / "oxygen_pak_tests", ec);
+    if (ec || expected_base.empty() || !expected_base.is_absolute()) {
+      return false;
+    }
+
+    if (!std::filesystem::exists(canonical_candidate, ec) || ec
+      || !std::filesystem::is_directory(canonical_candidate, ec) || ec) {
+      return false;
+    }
+
+    if (canonical_candidate == expected_base) {
+      return false;
+    }
+
+    return IsUnderBaseDir(canonical_candidate, expected_base);
+  }
+
   std::filesystem::path root_ {};
 };
 
