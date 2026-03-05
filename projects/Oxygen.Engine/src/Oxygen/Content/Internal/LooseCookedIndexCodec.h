@@ -24,6 +24,8 @@ inline auto Load(AnyReader& reader, data::loose_cooked::IndexHeader& header)
   CHECK_RESULT(reader.ReadInto(header.version));
   CHECK_RESULT(reader.ReadInto(header.content_version));
   CHECK_RESULT(reader.ReadInto(header.flags));
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::as_writable_bytes(std::span { header.source_identity })));
 
   CHECK_RESULT(reader.ReadInto(header.string_table_offset));
   CHECK_RESULT(reader.ReadInto(header.string_table_size));
@@ -36,10 +38,7 @@ inline auto Load(AnyReader& reader, data::loose_cooked::IndexHeader& header)
   CHECK_RESULT(reader.ReadInto(header.file_record_count));
   CHECK_RESULT(reader.ReadInto(header.file_record_size));
 
-  CHECK_RESULT(
-    reader.ReadBlobInto(std::as_writable_bytes(std::span { header.guid })));
-
-  CHECK_RESULT(reader.Forward(std::size(header.reserved)));
+  CHECK_RESULT(reader.Forward(std::size(header._reserved)));
   return {};
 }
 
@@ -49,14 +48,12 @@ inline auto Load(AnyReader& reader, data::loose_cooked::AssetEntry& entry)
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(entry.asset_key));
+  CHECK_RESULT(reader.ReadInto(entry.asset_type));
   CHECK_RESULT(reader.ReadInto(entry.descriptor_relpath_offset));
   CHECK_RESULT(reader.ReadInto(entry.virtual_path_offset));
-  CHECK_RESULT(reader.ReadInto(entry.asset_type));
-  CHECK_RESULT(reader.Forward(std::size(entry.reserved0)));
   CHECK_RESULT(reader.ReadInto(entry.descriptor_size));
   CHECK_RESULT(reader.ReadBlobInto(
     std::as_writable_bytes(std::span { entry.descriptor_sha256 })));
-  CHECK_RESULT(reader.Forward(std::size(entry.reserved1)));
   return {};
 }
 
@@ -85,10 +82,8 @@ inline auto Load(AnyReader& reader, data::loose_cooked::FileRecord& record)
   default:
     return ::oxygen::Err(std::errc::invalid_argument);
   }
-  CHECK_RESULT(reader.ReadInto(record.reserved0));
-  CHECK_RESULT(reader.ReadInto(record.relpath_offset));
   CHECK_RESULT(reader.ReadInto(record.size));
-  CHECK_RESULT(reader.Forward(std::size(record.reserved1)));
+  CHECK_RESULT(reader.ReadInto(record.relpath_offset));
   return {};
 }
 

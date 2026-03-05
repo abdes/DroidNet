@@ -1008,6 +1008,7 @@ def compute_pak_plan(
         DATA_ALIGNMENT,
         TABLE_ALIGNMENT,
         RESOURCE_ENTRY_SIZES,
+        ASSET_HEADER_SIZE,
         MATERIAL_DESC_SIZE,
         GEOMETRY_DESC_SIZE,
         SCRIPT_DESC_SIZE,
@@ -1019,6 +1020,7 @@ def compute_pak_plan(
         SUBMESH_DESC_SIZE,
         MESH_VIEW_DESC_SIZE,
         SHADER_REF_DESC_SIZE,
+        SCRIPT_SLOT_RECORD_SIZE,
         SCENE_ASSET_VERSION_CURRENT,
         PHYSICS_MATERIAL_ASSET_DESC_SIZE,
         COLLISION_SHAPE_ASSET_DESC_SIZE,
@@ -1293,7 +1295,7 @@ def compute_pak_plan(
             cursor, TABLE_ALIGNMENT, "table_script_slot"
         )
         cursor = aligned_cursor
-        table_size = script_slot_count * 128
+        table_size = script_slot_count * SCRIPT_SLOT_RECORD_SIZE
         table_offset = cursor
         cursor += table_size
         tables.append(
@@ -1301,7 +1303,7 @@ def compute_pak_plan(
                 name="script_slot",
                 offset=table_offset,
                 count=script_slot_count,
-                entry_size=128,
+                entry_size=SCRIPT_SLOT_RECORD_SIZE,
                 padding_before=pad_before,
             )
         )
@@ -1596,7 +1598,7 @@ def compute_pak_plan(
         ctx_for_pack.setdefault("type", "input_mapping_context")
         _, payload = pack_input_mapping_context_asset_descriptor_and_payload(
             ctx_for_pack,
-            header_builder=lambda _a: b"\x00" * 95,
+            header_builder=lambda _a: b"\x00" * ASSET_HEADER_SIZE,
             action_name_to_key=action_name_to_key,
         )
 
@@ -1651,7 +1653,7 @@ def compute_pak_plan(
         scene_for_pack.setdefault("version", SCENE_ASSET_VERSION_CURRENT)
         _, payload, _slot_infos = pack_scene_asset_descriptor_and_payload(
             scene_for_pack,
-            header_builder=lambda _a: b"\x00" * 95,
+            header_builder=lambda _a: b"\x00" * ASSET_HEADER_SIZE,
             geometry_name_to_key=geometry_name_to_key,
             script_name_to_key=script_name_to_key,
             scripting_slot_base_index=0,
@@ -1775,7 +1777,7 @@ def compute_pak_plan(
         sidecar_for_pack.setdefault("type", "physics_scene")
         _, payload = pack_physics_scene_asset_descriptor_and_payload(
             sidecar_for_pack,
-            header_builder=lambda _a: b"\x00" * 95,
+            header_builder=lambda _a: b"\x00" * ASSET_HEADER_SIZE,
             shape_name_to_asset_key=collision_shape_name_to_asset_key,
             physics_material_name_to_asset_key=physics_material_name_to_asset_key,
             physics_resource_name_to_index=physics_resource_name_to_index,

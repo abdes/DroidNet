@@ -247,8 +247,8 @@ private:
   if (!file_entries.empty()) {
     header.flags |= static_cast<uint32_t>(lc::kHasFileRecords);
   }
-  for (size_t i = 0; i < std::size(header.guid); ++i) {
-    header.guid[i]
+  for (size_t i = 0; i < std::size(header.source_identity); ++i) {
+    header.source_identity[i]
       = static_cast<uint8_t>(guid_seed + static_cast<uint8_t>(i + 1U));
   }
   header.string_table_offset = sizeof(lc::IndexHeader);

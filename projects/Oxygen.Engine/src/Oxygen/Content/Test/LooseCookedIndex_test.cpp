@@ -33,7 +33,7 @@ protected:
 auto FillTestGuid(oxygen::data::loose_cooked::IndexHeader& header) -> void
 {
   for (uint8_t i = 0; i < 16; ++i) {
-    header.guid[i] = static_cast<uint8_t>(i + 1);
+    header.source_identity[i] = static_cast<uint8_t>(i + 1);
   }
 }
 
@@ -802,7 +802,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootTableWithoutDataThrows)
   using oxygen::data::pak::render::MaterialAssetDesc;
 
   const LooseCookedLayout layout {};
-  using oxygen::data::pak::render::TextureResourceDesc;
+  using oxygen::data::pak::core::TextureResourceDesc;
 
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
@@ -1214,7 +1214,7 @@ NOLINT_TEST_F(
   using oxygen::data::loose_cooked::FileKind;
   using oxygen::data::loose_cooked::FileRecord;
   using oxygen::data::loose_cooked::IndexHeader;
-  using oxygen::data::pak::render::TextureResourceDesc;
+  using oxygen::data::pak::core::TextureResourceDesc;
 
   const LooseCookedLayout layout {};
 
@@ -1270,7 +1270,6 @@ NOLINT_TEST_F(
   table_record.kind = FileKind::kTexturesTable;
   table_record.relpath_offset = off_table;
   table_record.size = sizeof(TextureResourceDesc) * 2;
-  std::ranges::fill(table_record.reserved1, static_cast<uint8_t>(0xAB));
 
   FileRecord data_record {};
   data_record.kind = FileKind::kTexturesData;

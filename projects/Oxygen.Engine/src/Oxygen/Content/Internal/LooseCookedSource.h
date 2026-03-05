@@ -569,7 +569,7 @@ private:
     }
 
     constexpr uint64_t kEntrySize
-      = sizeof(data::pak::render::TextureResourceDesc);
+      = sizeof(data::pak::core::TextureResourceDesc);
     if (kEntrySize == 0 || (size % kEntrySize) != 0) {
       throw std::runtime_error(
         "Invalid textures.table size: " + textures_table_path_->string());

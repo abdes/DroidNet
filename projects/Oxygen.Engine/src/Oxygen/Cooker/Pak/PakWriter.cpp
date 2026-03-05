@@ -383,7 +383,7 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
       header.version = core::kPakVersion;
       header.content_version = header_plan.content_version;
       const auto source_key = data::as_bytes(header_plan.source_key);
-      std::ranges::transform(source_key, std::begin(header.guid),
+      std::ranges::transform(source_key, std::begin(header.source_identity),
         [](const auto byte) { return std::to_integer<uint8_t>(byte); });
       const auto header_bytes = std::as_bytes(std::span(&header, size_t { 1 }));
       (void)WriteRawBytes(state, header_bytes, "pak.write.stream_write_failed",

@@ -136,7 +136,6 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
     desc.uv_offset[1] = 0.0f;
     desc.uv_rotation_radians = 0.0f;
     desc.uv_set = 0;
-    std::ranges::fill(desc.reserved, uint8_t { 0 });
 
     // No shader references initially - renderer will provide appropriate
     // shaders

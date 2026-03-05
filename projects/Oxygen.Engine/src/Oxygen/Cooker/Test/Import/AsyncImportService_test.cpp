@@ -353,6 +353,7 @@ NOLINT_TEST_F(
   request.source_path = "unrecognized.asset";
   request.cooked_root = std::filesystem::temp_directory_path()
     / "oxygen_physics_routing_submit_test";
+  std::filesystem::remove_all(*request.cooked_root);
   std::filesystem::create_directories(*request.cooked_root);
   request.physics = PhysicsImportSettings {
     .target_scene_virtual_path = "/Scenes/MissingScene.oscene",
@@ -392,6 +393,7 @@ NOLINT_TEST_F(AsyncImportServiceSubmitTest,
   request.source_path = "unrecognized.asset";
   request.cooked_root = std::filesystem::temp_directory_path()
     / "oxygen_material_descriptor_routing_submit_test";
+  std::filesystem::remove_all(*request.cooked_root);
   std::filesystem::create_directories(*request.cooked_root);
   request.material_descriptor = ImportRequest::MaterialDescriptorPayload {
     .normalized_descriptor_json
@@ -430,6 +432,7 @@ NOLINT_TEST_F(AsyncImportServiceSubmitTest,
   request.source_path = "unrecognized.asset";
   request.cooked_root = std::filesystem::temp_directory_path()
     / "oxygen_material_descriptor_schema_submit_test";
+  std::filesystem::remove_all(*request.cooked_root);
   std::filesystem::create_directories(*request.cooked_root);
   request.material_descriptor = ImportRequest::MaterialDescriptorPayload {
     .normalized_descriptor_json
@@ -467,6 +470,7 @@ NOLINT_TEST_F(
   request.source_path = "unrecognized.asset";
   request.cooked_root = std::filesystem::temp_directory_path()
     / "oxygen_buffer_container_routing_submit_test";
+  std::filesystem::remove_all(*request.cooked_root);
   std::filesystem::create_directories(*request.cooked_root);
   request.buffer_container = ImportRequest::BufferContainerPayload {
     .normalized_descriptor_json
@@ -506,6 +510,7 @@ NOLINT_TEST_F(
   request.source_path = "unrecognized.asset";
   request.cooked_root = std::filesystem::temp_directory_path()
     / "oxygen_scene_descriptor_routing_submit_test";
+  std::filesystem::remove_all(*request.cooked_root);
   std::filesystem::create_directories(*request.cooked_root);
   request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
     .normalized_descriptor_json

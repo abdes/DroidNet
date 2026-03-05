@@ -41,8 +41,8 @@ namespace {
 #pragma pack(pop)
 
   using TextureSidecarFile
-    = SidecarDescriptorFile<data::pak::render::TextureResourceDesc, 'O', 'T',
-      'E', 'X'>;
+    = SidecarDescriptorFile<data::pak::core::TextureResourceDesc, 'O', 'T', 'E',
+      'X'>;
 
   static_assert(std::is_trivially_copyable_v<TextureSidecarFile>);
 
@@ -173,7 +173,7 @@ ResourceDescriptorEmitter::ResourceDescriptorEmitter(
 auto ResourceDescriptorEmitter::EmitTexture(std::string_view name_hint,
   std::string_view stable_id,
   const data::pak::core::ResourceIndexT resource_index,
-  const data::pak::render::TextureResourceDesc& descriptor) -> std::string
+  const data::pak::core::TextureResourceDesc& descriptor) -> std::string
 {
   TextureSidecarFile file {};
   file.resource_index = resource_index;

@@ -39,19 +39,19 @@ namespace oxygen::data::pak::core {
 
 using ResourceIndexT = oxygen::ResourceIndexT;
 
-//! Offset type for file positions (8 bytes)
+//! Offset type for file positions
 using OffsetT = uint64_t;
 
 // Resource index type/constants are sourced from Core metadata catalog.
 #include <Oxygen/Core/Meta/Data/ResourceIndex.inc>
 
-//! Data blob size type (4 bytes)
+//! Data blob size type
 using DataBlobSizeT = uint32_t;
 
-//! Offset type for slices into embedded string tables (4 bytes)
+//! Offset type for slices into embedded string tables
 using StringTableOffsetT = uint32_t;
 
-//! Size type for slices into embedded string tables (4 bytes)
+//! Size type for slices into embedded string tables
 using StringTableSizeT = uint32_t;
 
 //=== Constants ===-----------------------------------------------------------//
@@ -80,7 +80,7 @@ constexpr uint16_t kPakVersion = 7;
 
 //=== PAK File Format Structures ===------------------------------------------//
 
-//! Fixed-size header at the start of the PAK file (256 bytes)
+//! Fixed-size header at the start of the PAK file
 /*!
  The header contains metadata about the PAK file format version, content
  version, and reserved space for future extensions. It is always located at the
@@ -90,15 +90,17 @@ constexpr uint16_t kPakVersion = 7;
 struct PakHeader {
   char magic[8] = { 'O', 'X', 'P', 'A', 'K', 0, 0, 0 };
   uint16_t version = kPakVersion; // Format version (must be v7)
-  uint16_t content_version = 0; // Content version
-  std::array<uint8_t, 16> guid = {}; // Unique identifier for this PAK
-  // Reserved for future use
-  uint8_t reserved[228] = {};
+  uint16_t content_version = 0;
+  //! Unique identifier for this PAK
+  std::array<uint8_t, 16> source_identity = {};
+
+  // Tail reserve to keep fixed 256-byte header contract.
+  uint8_t _reserved[228] = {};
 };
 #pragma pack(pop)
 static_assert(sizeof(PakHeader) == 256);
 
-//! Resource region offset/size descriptor (16 bytes).
+//! Resource region offset/size descriptor.
 /*!
  A regions is a contiguous block of data within the PAK file, containing blobs
  of a specific type (e.g., textures, buffers, audio). All resource data blobs
@@ -115,7 +117,7 @@ struct ResourceRegion {
 #pragma pack(pop)
 static_assert(sizeof(ResourceRegion) == 16);
 
-//! Resource table (16 bytes).
+//! Resource table.
 /*!
  Resource tables connect resource IDs (ResourceIndexT) to **absolute** offsets
  (that should be within the corresponding typed region's [offset, offset+size).
@@ -179,8 +181,8 @@ struct PakFooter {
   OffsetT browse_index_offset = 0;
   uint64_t browse_index_size = 0;
 
-  // Reserved for future use
-  uint8_t reserved[28] = {};
+  // Tail reserve to keep fixed 256-byte footer contract.
+  uint8_t _reserved[28] = {}; // Tail reserve to keep fixed 256-byte footer size
 
   // -- CRC32 Integrity --
   // CRC32 covers the *entire* file, including the footer and footer magic
@@ -197,7 +199,7 @@ struct PakFooter {
 #pragma pack(pop)
 static_assert(sizeof(PakFooter) == 256);
 
-//! Asset directory entry (64 bytes).
+//! Asset directory entry.
 /*!
  The directory is an array of `AssetDirectoryEntry` structs, one for each asset
  in the PAK file. It is located at the offset specified in the PakFooter.
@@ -214,13 +216,13 @@ struct AssetDirectoryEntry {
   OffsetT desc_offset = 0; // Absolute offset of the asset descriptor
   uint32_t desc_size = 0; // Size of asset descriptor (for sanity check)
 
-  // Reserved for future use
-  uint8_t reserved[27] = {}; // Padding to 64 bytes
+  // Tail reserve to keep fixed 64-byte directory record size.
+  uint8_t _reserved[27] = {}; // Tail reserve to keep fixed 64-byte entry size
 };
 #pragma pack(pop)
 static_assert(sizeof(AssetDirectoryEntry) == 64);
 
-//! Embedded browse index header (24 bytes).
+//! Embedded browse index header.
 /*!
  Provides a mapping from canonical virtual paths to AssetKeys for editor and
  tooling use. The browse index is not required for runtime loading.
@@ -239,12 +241,11 @@ struct PakBrowseIndexHeader {
   uint32_t version = 1;
   uint32_t entry_count = 0;
   StringTableSizeT string_table_size = 0;
-  uint32_t reserved = 0;
 };
 #pragma pack(pop)
-static_assert(sizeof(PakBrowseIndexHeader) == 24);
+static_assert(sizeof(PakBrowseIndexHeader) == 20);
 
-//! Embedded browse index entry (24 bytes).
+//! Embedded browse index entry.
 /*!
  Each entry maps one AssetKey to a virtual path, stored as a slice in the
  string table.
@@ -258,7 +259,7 @@ struct PakBrowseIndexEntry {
 #pragma pack(pop)
 static_assert(sizeof(PakBrowseIndexEntry) == 24);
 
-//! Buffer resource table entry (32 bytes)
+//! Buffer resource table entry
 /*!
   Describes a buffer resource in the asset pak. Buffer data can be raw bytes,
   typed with a specific format, or structured with a specific element stride.
@@ -300,9 +301,6 @@ static_assert(sizeof(PakBrowseIndexEntry) == 24);
 
   @note `content_hash` stores the first 8 bytes of the SHA256 of the buffer
   data. Used for fast deduplication during incremental imports.
-
-  @note The `reserved` field is for future expansion and must be
-  zero-initialized.
 */
 #pragma pack(push, 1)
 struct BufferResourceDesc {
@@ -312,12 +310,38 @@ struct BufferResourceDesc {
   uint32_t element_stride = 0; //!< 1 for raw buffers, 0 when unused
   uint8_t element_format = 0; //!< Format enum value (0 = raw or structured)
   uint64_t content_hash = 0; //!< First 8 bytes of SHA256 of buffer data
-  uint8_t reserved[3] = {}; //!< Reserved for future use (must be zero)
 };
 #pragma pack(pop)
-static_assert(sizeof(BufferResourceDesc) == 32);
+static_assert(sizeof(BufferResourceDesc) == 29);
 
-//! Asset header - Per-Asset Metadata (95 bytes on disk, packed).
+//! Texture resource table entry
+/*!
+  @note Texture `format` must be one of the core type `Format` enum values.
+  @note Textures are always aligned to 256 bytes.
+  @note `content_hash` stores the first 8 bytes of the SHA256 of the texture
+  data. Used for fast deduplication during incremental imports without
+  re-reading the data file.
+*/
+#pragma pack(push, 1)
+// NOLINTNEXTLINE(*-type-member-init) - MUST be initialized by users
+struct TextureResourceDesc {
+  core::OffsetT data_offset; // Absolute offset to texture data
+  core::DataBlobSizeT size_bytes; // Size of texture data
+  uint8_t texture_type; // 2D, 3D, Cube, etc. (enum) (defined externally)
+  uint8_t compression_type; // Compression (BC1, BC3, ASTC, etc.) (external)
+  uint32_t width; // Texture width
+  uint32_t height; // Texture height
+  uint16_t depth; // For 3D textures (volume), otherwise 1
+  uint16_t array_layers; // For array textures/cubemap arrays, otherwise 1
+  uint16_t mip_levels; // Number of mip levels
+  uint8_t format; // Texture format enum
+  uint16_t alignment; // 256 for textures
+  uint64_t content_hash = 0; // First 8 bytes of SHA256 of texture data
+};
+#pragma pack(pop)
+static_assert(sizeof(TextureResourceDesc) == 39);
+
+//! Asset header.
 /*!
  Always the first field in every asset descriptor. Contains metadata about the
  asset, such as its type, name, version, streaming priority, content hash, and
@@ -337,17 +361,14 @@ static_assert(sizeof(BufferResourceDesc) == 32);
 #pragma pack(push, 1)
 struct AssetHeader {
   uint8_t asset_type = 0; // Redundant with directory for debugging
-  char name[kMaxNameSize] = {}; // Asset name for debugging/tools (64 bytes)
+  char name[kMaxNameSize] = {}; // Asset name for debugging/tools
   uint8_t version = 0; // Asset format version (up to 256 versions)
   uint8_t streaming_priority = 0; // Loading priority: 0=highest, 255=lowest
   uint64_t content_hash = 0; // Content integrity hash
   uint32_t variant_flags = 0; // Project-defined (not interpreted by engine)
-
-  // Reserved for future use
-  uint8_t reserved[16] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(AssetHeader) == 95);
+static_assert(sizeof(AssetHeader) == 79);
 
 } // namespace oxygen::data::pak::core
 

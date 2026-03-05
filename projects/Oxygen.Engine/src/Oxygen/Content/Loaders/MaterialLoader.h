@@ -267,11 +267,6 @@ inline auto LoadMaterialAsset(LoaderContext context)
       grid_origin_color_result, "MaterialAssetDesc.grid_origin_color");
   }
 
-  for (auto& i : desc.reserved) {
-    auto reserved_result = reader.ReadInto<uint8_t>(i);
-    check_result(reserved_result, "MaterialAssetDesc.reserved");
-  }
-
   LOG_F(2, "material domain   : {}", desc.material_domain);
   LOG_F(2, "flags             : 0x{:08X}", desc.flags);
   LOG_F(2, "shader stages     : 0x{:08X}", desc.shader_stages);

@@ -15,7 +15,7 @@ namespace oxygen::content::lc {
 struct Inspection::Impl {
   std::vector<AssetEntry> assets;
   std::vector<FileEntry> files;
-  data::SourceKey guid = {};
+  data::SourceKey source_identity = {};
 };
 
 Inspection::Inspection()
@@ -40,7 +40,7 @@ auto Inspection::LoadFromFile(const std::filesystem::path& index_path) -> void
 
   impl_->assets.clear();
   impl_->files.clear();
-  impl_->guid = index.Guid();
+  impl_->source_identity = index.Guid();
 
   for (const auto& key : index.GetAllAssetKeys()) {
     AssetEntry out;
@@ -101,7 +101,7 @@ auto Inspection::Files() const noexcept -> std::span<const FileEntry>
 
 auto Inspection::Guid() const noexcept -> data::SourceKey
 {
-  return impl_->guid;
+  return impl_->source_identity;
 }
 
 } // namespace oxygen::content::lc

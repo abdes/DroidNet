@@ -37,7 +37,7 @@ inline auto LoadTextureResource(LoaderContext context)
   DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
   auto& reader = *context.desc_reader;
 
-  using data::pak::render::TextureResourceDesc;
+  using data::pak::core::TextureResourceDesc;
 
   auto check_result = [](auto&& result, const char* field) {
     if (!result) {

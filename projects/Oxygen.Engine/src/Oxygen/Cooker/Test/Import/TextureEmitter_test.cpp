@@ -38,7 +38,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 
-using PakTextureResourceDesc = oxygen::data::pak::render::TextureResourceDesc;
+using PakTextureResourceDesc = oxygen::data::pak::core::TextureResourceDesc;
 namespace import = oxygen::content::import;
 namespace co = oxygen::co;
 

@@ -67,8 +67,8 @@ NOLINT_TEST_F(InspectionTest, LoadFromRootValidPopulatesCorrectly)
   EXPECT_EQ(files[0].relpath, "Resources/buffers.table");
   EXPECT_EQ(files[0].size, 100);
 
-  const auto guid = inspection.Guid();
-  const auto guid_bytes = nostd::as_bytes(guid);
+  const auto source_identity = inspection.Guid();
+  const auto guid_bytes = nostd::as_bytes(source_identity);
   EXPECT_EQ(std::to_integer<uint8_t>(guid_bytes[0]), 1);
   EXPECT_EQ(std::to_integer<uint8_t>(guid_bytes[15]), 16);
 }

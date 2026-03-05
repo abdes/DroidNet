@@ -59,8 +59,8 @@ auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
 
   // The runtime loader rejects indexes with an all-zero GUID.
   // For these tests we only need a valid (non-zero) value.
-  for (size_t i = 0; i < sizeof(header.guid); ++i) {
-    header.guid[i] = static_cast<uint8_t>(i + 1);
+  for (size_t i = 0; i < sizeof(header.source_identity); ++i) {
+    header.source_identity[i] = static_cast<uint8_t>(i + 1);
   }
 
   header.string_table_offset = sizeof(IndexHeader);

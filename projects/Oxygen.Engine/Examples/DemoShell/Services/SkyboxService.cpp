@@ -176,9 +176,9 @@ auto SkyboxService::StartLoadSkybox(const std::string& file_path,
   const auto& payload = cooked_result->payload;
 
   // Build PAK descriptor
-  using data::pak::render::TextureResourceDesc;
-  TextureResourceDesc pak_desc {};
-  pak_desc.data_offset = sizeof(TextureResourceDesc);
+  using PakTextureResourceDesc = data::pak::core::TextureResourceDesc;
+  PakTextureResourceDesc pak_desc {};
+  pak_desc.data_offset = sizeof(PakTextureResourceDesc);
   pak_desc.size_bytes
     = static_cast<data::pak::core::DataBlobSizeT>(payload.payload.size());
   pak_desc.texture_type = static_cast<std::uint8_t>(payload.desc.texture_type);
@@ -195,9 +195,9 @@ auto SkyboxService::StartLoadSkybox(const std::string& file_path,
   const auto resource_key = asset_loader_->MintSyntheticTextureKey();
 
   auto packed = std::make_shared<std::vector<std::uint8_t>>();
-  packed->resize(sizeof(TextureResourceDesc) + payload.payload.size());
-  std::memcpy(packed->data(), &pak_desc, sizeof(TextureResourceDesc));
-  std::memcpy(packed->data() + sizeof(TextureResourceDesc),
+  packed->resize(sizeof(PakTextureResourceDesc) + payload.payload.size());
+  std::memcpy(packed->data(), &pak_desc, sizeof(PakTextureResourceDesc));
+  std::memcpy(packed->data() + sizeof(PakTextureResourceDesc),
     payload.payload.data(), payload.payload.size());
 
   asset_loader_->StartLoadTexture(

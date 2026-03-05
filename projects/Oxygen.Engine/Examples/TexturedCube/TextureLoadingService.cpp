@@ -47,7 +47,7 @@ using oxygen::content::import::ProgressEvent;
 using oxygen::content::import::TextureIntent;
 using oxygen::content::lc::Inspection;
 using oxygen::data::loose_cooked::FileKind;
-using oxygen::data::pak::render::TextureResourceDesc;
+using PakTextureResourceDesc = oxygen::data::pak::core::TextureResourceDesc;
 
 auto IsHdrPath(const std::filesystem::path& path) -> bool
 {
@@ -430,7 +430,8 @@ auto TextureLoadingService::RefreshCookedTextureEntries(
     }
 
     size_t prev_size = texture_table_.size();
-    texture_table_ = LoadPackedTable<TextureResourceDesc>(textures_table_path_);
+    texture_table_
+      = LoadPackedTable<PakTextureResourceDesc>(textures_table_path_);
     if (texture_table_.size() != prev_size) {
       LOG_F(INFO, "TextureLoadingService: Table size changed from {} to {}",
         prev_size, texture_table_.size());
@@ -705,12 +706,12 @@ auto TextureLoadingService::StartLoadCookedTexture(
   }
 
   desc.data_offset = static_cast<oxygen::data::pak::core::OffsetT>(
-    sizeof(TextureResourceDesc));
+    sizeof(PakTextureResourceDesc));
 
   auto packed = std::make_shared<std::vector<std::uint8_t>>();
-  packed->resize(sizeof(TextureResourceDesc) + payload.size());
-  std::memcpy(packed->data(), &desc, sizeof(TextureResourceDesc));
-  std::memcpy(packed->data() + sizeof(TextureResourceDesc), payload.data(),
+  packed->resize(sizeof(PakTextureResourceDesc) + payload.size());
+  std::memcpy(packed->data(), &desc, sizeof(PakTextureResourceDesc));
+  std::memcpy(packed->data() + sizeof(PakTextureResourceDesc), payload.data(),
     payload.size());
 
   const auto resource_key = asset_loader_->MintSyntheticTextureKey();

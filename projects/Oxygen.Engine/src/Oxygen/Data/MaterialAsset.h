@@ -34,31 +34,6 @@ namespace oxygen::data {
  This is a direct, binary-compatible wrapper for the PAK format, providing
  access to all fields and metadata for rendering and asset management.
 
- ### Binary Encoding (PAK v7, 256 bytes)
-
- ```text
- offset size   name                  description
- ------ ------ --------------------- -------------------------------------------
- 0x00   96     header                AssetHeader (type, name, version, etc.)
- 0x5F   1      material_domain       Material domain (enum)
- 0x60   4      flags                 Bitfield for material options
- 0x64   4      shader_stages         Bitfield for used shader stages
- 0x68   16     base_color            RGBA fallback color (float[4])
- 0x78   4      normal_scale          Normal map scale (float)
- 0x7C   2      metalness             Metalness scalar (UNorm16)
- 0x7E   2      roughness             Roughness scalar (UNorm16)
- 0x80   2      ambient_occlusion     AO scalar (UNorm16)
- 0x82   4      base_color_texture    Index into TextureResourceTable
- 0x86   4      normal_texture        Index into TextureResourceTable
- 0x8A   4      metallic_texture      Index into TextureResourceTable
- 0x8E   4      roughness_texture     Index into TextureResourceTable
- 0x92   4      ambient_occlusion_tex Index into TextureResourceTable
- 0x96   28     tier2_textures        Tier 1/2 texture indices (7 slots)
- 0xB2   46     tier2_params          Tier 1/2 scalar params (UNorm16 + F16)
- 0xD8   40     reserved              Reserved for future expansion
- 0x100 ...     shader references     Array ShaderReference
- ```
-
  @note The shader indices array immediately follows the descriptor and is sized
  by the number of set bits in `shader_stages`.
 

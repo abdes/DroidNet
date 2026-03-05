@@ -342,8 +342,8 @@ auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
 
-  for (size_t i = 0; i < sizeof(header.guid); ++i) {
-    header.guid[i] = static_cast<uint8_t>(guid_seed + i);
+  for (size_t i = 0; i < sizeof(header.source_identity); ++i) {
+    header.source_identity[i] = static_cast<uint8_t>(guid_seed + i);
   }
 
   header.string_table_offset = sizeof(IndexHeader);

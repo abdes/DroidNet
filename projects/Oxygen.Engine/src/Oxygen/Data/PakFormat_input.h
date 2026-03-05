@@ -79,12 +79,10 @@ static_assert(sizeof(InputDataTable) == 16);
 struct InputActionAssetDesc {
   core::AssetHeader header;
   uint8_t value_type = 0;
-  uint8_t reserved0[3] = {};
   InputActionAssetFlags flags = InputActionAssetFlags::kNone;
-  uint8_t reserved1[153] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(InputActionAssetDesc) == 256);
+static_assert(sizeof(InputActionAssetDesc) == 84);
 
 #pragma pack(push, 1)
 struct InputMappingContextAssetDesc {
@@ -95,10 +93,9 @@ struct InputMappingContextAssetDesc {
   InputDataTable triggers = {};
   InputDataTable trigger_aux = {};
   InputDataTable strings = {};
-  uint8_t reserved[89] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(InputMappingContextAssetDesc) == 256);
+static_assert(sizeof(InputMappingContextAssetDesc) == 151);
 
 #pragma pack(push, 1)
 struct InputActionMappingRecord {
@@ -109,16 +106,14 @@ struct InputActionMappingRecord {
   InputMappingFlags flags = InputMappingFlags::kNone;
   float scale[2] = { 1.0F, 1.0F };
   float bias[2] = { 0.0F, 0.0F };
-  uint8_t reserved[16] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(InputActionMappingRecord) == 64);
+static_assert(sizeof(InputActionMappingRecord) == 48);
 
 #pragma pack(push, 1)
 struct InputTriggerRecord {
   InputTriggerType type = InputTriggerType::kPressed;
   InputTriggerBehavior behavior = InputTriggerBehavior::kImplicit;
-  uint16_t reserved0 = 0;
   uint32_t flags = 0;
   float actuation_threshold = 0.5F;
   AssetKey linked_action_asset_key = {};
@@ -126,10 +121,9 @@ struct InputTriggerRecord {
   uint32_t aux_count = 0;
   float fparams[5] = {};
   uint32_t uparams[5] = {};
-  uint8_t reserved1[20] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(InputTriggerRecord) == 96);
+static_assert(sizeof(InputTriggerRecord) == 74);
 
 #pragma pack(push, 1)
 struct InputTriggerAuxRecord {

@@ -708,19 +708,6 @@ private:
   This is a direct, binary-compatible wrapper for the PAK format, providing
   access to all fields and metadata for rendering and asset management.
 
-  ### Binary Encoding (PAK v7, 256 bytes)
-
-  ```text
-  offset size   name                description
-  ------ ------ ------------------- -----------------------------------------
-  0x00   96     header              AssetHeader (type, name, version, etc.)
-  0x60   4      lod_count           Number of LODs (must be >= 1)
-  0x64   12     bounding_box_min    AABB min (float[3])
-  0x70   12     bounding_box_max    AABB max (float[3])
-  0x7C   133    reserved            Reserved/padding to 256 bytes
-  0x100 ...     mesh descs          Array MeshDesc[lod_count]
-  ```
-
   @note The mesh LOD array immediately follows the descriptor and is sized
   by `lod_count`.
 

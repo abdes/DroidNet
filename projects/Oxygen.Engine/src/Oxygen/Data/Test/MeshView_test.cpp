@@ -384,26 +384,28 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_WidenedIterationMatches)
   std::vector<std::uint16_t> u16_indices { 0, 1, 2, 2, 3, 0 };
 
   // Vertex buffer desc (structured: stride = sizeof(Vertex), format=0)
-  pak::core::BufferResourceDesc vertex_desc { .data_offset = 0,
+  pak::core::BufferResourceDesc vertex_desc {
+    .data_offset = 0,
     .size_bytes
     = static_cast<pak::core::DataBlobSizeT>(vertices.size() * sizeof(Vertex)),
     .usage_flags = 0x01, // VertexBuffer
     .element_stride = sizeof(Vertex),
     .element_format = 0,
-    .reserved = {} };
+  };
   std::vector<uint8_t> vertex_bytes(vertices.size() * sizeof(Vertex));
   std::memcpy(vertex_bytes.data(), vertices.data(), vertex_bytes.size());
   auto vbuf
     = std::make_shared<BufferResource>(vertex_desc, std::move(vertex_bytes));
 
   // Index buffer desc: element_format = kR16UInt, stride inferred by format
-  pak::core::BufferResourceDesc index_desc { .data_offset = 0,
+  pak::core::BufferResourceDesc index_desc {
+    .data_offset = 0,
     .size_bytes = static_cast<pak::core::DataBlobSizeT>(
       u16_indices.size() * sizeof(uint16_t)),
     .usage_flags = 0x02, // IndexBuffer
     .element_stride = 0, // unused because format specifies size
     .element_format = static_cast<uint8_t>(oxygen::Format::kR16UInt),
-    .reserved = {} };
+  };
   std::vector<uint8_t> index_bytes(u16_indices.size() * sizeof(uint16_t));
   std::memcpy(index_bytes.data(), u16_indices.data(), index_bytes.size());
   auto ibuf
@@ -454,7 +456,7 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_IndexTypeCached)
     .usage_flags = 0x01,
     .element_stride = sizeof(Vertex),
     .element_format = 0,
-    .reserved = {},
+
   };
   std::vector<uint8_t> vbytes(vertices.size() * sizeof(Vertex));
   std::memcpy(vbytes.data(), vertices.data(), vbytes.size());
@@ -466,7 +468,7 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, SixteenBitIndices_IndexTypeCached)
     .usage_flags = 0x02,
     .element_stride = 0,
     .element_format = static_cast<uint8_t>(oxygen::Format::kR16UInt),
-    .reserved = {},
+
   };
   std::vector<uint8_t> ibytes(indices16.size() * sizeof(uint16_t));
   std::memcpy(ibytes.data(), indices16.data(), ibytes.size());
@@ -508,7 +510,7 @@ NOLINT_TEST_F(MeshViewBasicTest, VertexOnlyMesh_IndexBufferEmpty)
     .usage_flags = 0x01,
     .element_stride = sizeof(Vertex),
     .element_format = 0,
-    .reserved = {},
+
   };
   std::vector<uint8_t> vbytes(vertices.size() * sizeof(Vertex));
   std::memcpy(vbytes.data(), vertices.data(), vbytes.size());
@@ -550,7 +552,7 @@ NOLINT_TEST(MeshBasicTest, VertexOnlyMesh_IsIndexedFalse)
     .usage_flags = 0x01,
     .element_stride = sizeof(Vertex),
     .element_format = 0,
-    .reserved = {},
+
   };
   std::vector<uint8_t> vbytes(vertices.size() * sizeof(Vertex));
   std::memcpy(vbytes.data(), vertices.data(), vbytes.size());
@@ -610,7 +612,7 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, IndexBufferView_NoCopySizeMatches)
     .usage_flags = 0x01,
     .element_stride = sizeof(Vertex),
     .element_format = 0,
-    .reserved = {},
+
   };
   std::vector<uint8_t> vbytes(vertices.size() * sizeof(Vertex));
   std::memcpy(vbytes.data(), vertices.data(), vbytes.size());
@@ -622,7 +624,7 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, IndexBufferView_NoCopySizeMatches)
     .usage_flags = 0x02,
     .element_stride = sizeof(uint32_t),
     .element_format = 0,
-    .reserved = {},
+
   };
   std::vector<uint8_t> ibytes(indices.size() * sizeof(uint32_t));
   std::memcpy(ibytes.data(), indices.data(), ibytes.size());

@@ -600,7 +600,7 @@ private:
 
     try {
       const auto header = ReadIndexHeaderOrThrow(index_path);
-      existing_guid_ = data::SourceKey::FromBytes(header.guid);
+      existing_guid_ = data::SourceKey::FromBytes(header.source_identity);
       existing_content_version_ = header.content_version;
 
       const auto index
@@ -824,7 +824,7 @@ private:
     header.file_record_size = sizeof(FileRecord);
 
     const auto guid_bytes = data::as_bytes(source_key);
-    std::ranges::transform(guid_bytes, std::begin(header.guid),
+    std::ranges::transform(guid_bytes, std::begin(header.source_identity),
       [](const auto byte) { return std::to_integer<uint8_t>(byte); });
 
     serio::FileStream stream(index_path, std::ios::out | std::ios::trunc);

@@ -20,7 +20,7 @@ OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4315)
 */
 namespace oxygen::data::pak::audio {
 
-//! Audio resource table entry (32 bytes).
+//! Audio resource table entry.
 #pragma pack(push, 1)
 struct AudioResourceDesc {
   core::OffsetT data_offset; // Absolute offset to audio data
@@ -31,8 +31,8 @@ struct AudioResourceDesc {
   uint16_t bits_per_sample; // Bits per sample
   uint16_t alignment; // Required alignment
 
-  // Reserved for future use
-  uint8_t reserved[4];
+  // Tail reserve to keep fixed-size 32-byte record contract.
+  uint8_t _reserved[4] = {}; // Tail reserve to keep fixed 32-byte record size
 };
 #pragma pack(pop)
 static_assert(sizeof(AudioResourceDesc) == 32);

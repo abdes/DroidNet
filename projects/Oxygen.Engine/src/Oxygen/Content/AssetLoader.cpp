@@ -846,7 +846,8 @@ auto AssetLoader::MountPakFile(const std::filesystem::path& path) -> uint16_t
     const auto source_key = new_source->GetSourceKey();
     if (source_key.IsNil()) {
       LOG_F(WARNING,
-        "Mounted PAK has zero SourceKey (PakHeader.guid); cache aliasing risk: "
+        "Mounted PAK has zero SourceKey (PakHeader.source_identity); cache "
+        "aliasing risk: "
         "path={}",
         normalized.string());
     }
@@ -939,7 +940,8 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
     const auto source_key = new_source->GetSourceKey();
     if (source_key.IsNil()) {
       LOG_F(WARNING,
-        "Mounted loose cooked root has zero SourceKey (IndexHeader.guid); "
+        "Mounted loose cooked root has zero SourceKey "
+        "(IndexHeader.source_identity); "
         "cache aliasing risk: root={}",
         normalized.string());
     }

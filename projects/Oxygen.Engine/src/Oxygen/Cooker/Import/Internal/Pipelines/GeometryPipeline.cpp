@@ -269,22 +269,24 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
           "Failed to write submesh descriptor", "", ""));
         co_return std::nullopt;
       }
-    }
 
-    for (uint32_t view = 0; view < mesh_desc.mesh_view_count; ++view) {
-      data::pak::geometry::MeshViewDesc view_desc {};
-      if (!read_pod(view_desc)) {
-        diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
-          "Failed to read mesh view descriptor", "", ""));
-        co_return std::nullopt;
-      }
+      // MeshView records are serialized immediately after each SubMesh record.
+      // Preserve that interleaving order during finalize/patch.
+      for (uint32_t view = 0; view < submesh_desc.mesh_view_count; ++view) {
+        data::pak::geometry::MeshViewDesc view_desc {};
+        if (!read_pod(view_desc)) {
+          diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
+            "Failed to read mesh view descriptor", "", ""));
+          co_return std::nullopt;
+        }
 
-      if (!writer.WriteBlob(
-            std::as_bytes(std::span<const data::pak::geometry::MeshViewDesc, 1>(
-              &view_desc, 1)))) {
-        diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
-          "Failed to write mesh view descriptor", "", ""));
-        co_return std::nullopt;
+        if (!writer.WriteBlob(std::as_bytes(
+              std::span<const data::pak::geometry::MeshViewDesc, 1>(
+                &view_desc, 1)))) {
+          diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
+            "Failed to write mesh view descriptor", "", ""));
+          co_return std::nullopt;
+        }
       }
     }
   }

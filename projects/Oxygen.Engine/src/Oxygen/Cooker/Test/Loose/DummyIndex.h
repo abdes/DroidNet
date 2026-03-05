@@ -44,7 +44,7 @@ inline auto CreateDummyIndex(
   strings.push_back('\0');
 
   IndexHeader header {};
-  std::ranges::iota(header.guid, static_cast<uint8_t>(1));
+  std::ranges::iota(header.source_identity, static_cast<uint8_t>(1));
   header.version = version;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths

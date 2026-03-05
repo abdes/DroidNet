@@ -2620,7 +2620,6 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
           .node_index = i,
           .geometry_key = it->second,
           .visible = 1,
-          .reserved = {},
         });
       }
     }
@@ -2643,7 +2642,6 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
           .aspect_ratio = cam.aspect_ratio,
           .near_plane = near_plane,
           .far_plane = far_plane,
-          .reserved = {},
         });
       } else if (cam.projection_mode == UFBX_PROJECTION_MODE_ORTHOGRAPHIC) {
         float near_plane = std::abs(cam.near_plane);
@@ -2663,7 +2661,6 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
           .top = half_h,
           .near_plane = near_plane,
           .far_plane = far_plane,
-          .reserved = {},
         });
       } else {
         diagnostics.push_back(MakeWarningDiagnostic("scene.camera.unsupported",

@@ -142,8 +142,8 @@ NOLINT_TEST_F(PakDomainValidationTest, RejectsTableEntrySizeMismatch)
   auto& table = data.tables.front();
   table.table_name = "texture_table";
   table.count = 1U;
-  table.expected_entry_size
-    = static_cast<uint32_t>(sizeof(render::TextureResourceDesc));
+  table.expected_entry_size = static_cast<uint32_t>(
+    sizeof(oxygen::data::pak::core::TextureResourceDesc));
   table.entry_size = table.expected_entry_size + 1U;
   table.size_bytes = table.entry_size;
   table.alignment = 1U;

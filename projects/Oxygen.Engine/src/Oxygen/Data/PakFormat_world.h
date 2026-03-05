@@ -42,7 +42,7 @@ using SceneNodeIndexT = uint32_t;
 //! Index type for scene component tables.
 using SceneComponentIndexT = uint32_t;
 
-//! Scene data table descriptor (16 bytes).
+//! Scene data table descriptor.
 /*!
  Describes a packed array of records inside a scene descriptor.
 
@@ -63,7 +63,7 @@ using SceneNodeTable = SceneDataTable;
 //! Scene component table descriptor (alias).
 using SceneComponentTable = SceneDataTable;
 
-//! Scene string table descriptor (8 bytes).
+//! Scene string table descriptor.
 /*!
  Describes the packed scene string table blob.
  Offsets are relative to the start of the scene descriptor payload.
@@ -76,7 +76,7 @@ struct SceneStringTable {
 #pragma pack(pop)
 static_assert(sizeof(SceneStringTable) == 8);
 
-//! Scene asset descriptor (256 bytes)
+//! Scene asset descriptor
 /*!
  Describes a scene (level) asset. As with all asset descriptors in this file,
  `AssetHeader` is the first field.
@@ -114,11 +114,9 @@ struct SceneAssetDesc {
   // Points to an array of `SceneComponentTableDesc` entries.
   core::OffsetT component_table_directory_offset = 0;
   uint32_t component_table_count = 0;
-
-  uint8_t reserved[125] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(SceneAssetDesc) == 256);
+static_assert(sizeof(SceneAssetDesc) == 115);
 
 //! Scene component table directory entry.
 /*!
@@ -140,7 +138,7 @@ static_assert(sizeof(SceneComponentTableDesc) == 20);
 
 #pragma pack(push, 1)
 
-//! Node record used by the cooked scene descriptor (68 bytes).
+//! Node record used by the cooked scene descriptor.
 /*!
   Describes a single node in the scene hierarchy. Nodes are stored in a flat
   array in the `SceneAssetDesc`.
@@ -177,7 +175,7 @@ static_assert(sizeof(NodeRecord) == 68);
 
 #pragma pack(push, 1)
 
-//! Renderable component record (36 bytes).
+//! Renderable component record.
 /*!
   Attaches a geometry asset to a scene node.
 
@@ -192,14 +190,13 @@ struct RenderableRecord {
   SceneNodeIndexT node_index = 0; // Index of the owner node
   AssetKey geometry_key; // Geometry asset to render
   uint32_t visible = 1; // Visibility flag (boolean)
-  uint8_t reserved[12] = {}; // Reserved for future use (e.g. LOD bias)
 };
 #pragma pack(pop)
-static_assert(sizeof(RenderableRecord) == 36);
+static_assert(sizeof(RenderableRecord) == 24);
 
 #pragma pack(push, 1)
 
-//! Perspective camera component record (32 bytes).
+//! Perspective camera component record.
 /*!
   Attaches a perspective camera to a scene node.
 
@@ -213,14 +210,13 @@ struct PerspectiveCameraRecord {
   float aspect_ratio = 1.777778F; // Width / Height (default 16:9)
   float near_plane = 0.1F; // Distance to near clipping plane
   float far_plane = 1000.0F; // Distance to far clipping plane
-  uint8_t reserved[12] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(PerspectiveCameraRecord) == 32);
+static_assert(sizeof(PerspectiveCameraRecord) == 20);
 
 #pragma pack(push, 1)
 
-//! Orthographic camera component record (40 bytes).
+//! Orthographic camera component record.
 /*!
   Attaches an orthographic camera to a scene node.
 
@@ -235,10 +231,9 @@ struct OrthographicCameraRecord {
   float top = 10.0F;
   float near_plane = -100.0F;
   float far_plane = 100.0F;
-  uint8_t reserved[12] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(OrthographicCameraRecord) == 40);
+static_assert(sizeof(OrthographicCameraRecord) == 28);
 
 //=== Scene: Lights and Environment -----------------------------------------//
 
@@ -265,10 +260,9 @@ enum class EnvironmentComponentType : uint32_t { // NOLINT(*-enum-size)
 struct SceneEnvironmentBlockHeader {
   uint32_t byte_size = 0;
   uint32_t systems_count = 0;
-  uint8_t reserved[8] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(SceneEnvironmentBlockHeader) == 16);
+static_assert(sizeof(SceneEnvironmentBlockHeader) == 8);
 
 //! Header for a single environment-system record in the trailing block.
 /*!
@@ -315,11 +309,9 @@ struct SkyAtmosphereEnvironmentRecord {
   uint32_t sun_disk_enabled = 1;
 
   float aerial_perspective_distance_scale = 1.0F;
-
-  uint8_t _reserved[16] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(SkyAtmosphereEnvironmentRecord) == 112);
+static_assert(sizeof(SkyAtmosphereEnvironmentRecord) == 96);
 
 //! Packed VolumetricClouds environment record.
 #pragma pack(push, 1)
@@ -339,18 +331,15 @@ struct VolumetricCloudsEnvironmentRecord {
   float extinction_sigma_t_per_m = 1.0e-3F;
 
   float single_scattering_albedo_rgb[3] = { 0.9F, 0.9F, 0.9F };
-  float _pad0 = 0.0F;
   float phase_g = 0.6F;
 
   float wind_dir_ws[3] = { 1.0F, 0.0F, 0.0F };
   float wind_speed_mps = 10.0F;
 
   float shadow_strength = 0.8F;
-
-  uint8_t _reserved[16] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(VolumetricCloudsEnvironmentRecord) == 84);
+static_assert(sizeof(VolumetricCloudsEnvironmentRecord) == 64);
 
 //! Packed Fog environment record.
 #pragma pack(push, 1)
@@ -370,12 +359,9 @@ struct FogEnvironmentRecord {
   float max_opacity = 1.0F;
   float single_scattering_albedo_rgb[3] = { 1.0F, 1.0F, 1.0F };
   float anisotropy_g = 0.0F;
-  float _pad0 = 0.0F;
-
-  uint8_t _reserved[16] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(FogEnvironmentRecord) == 72);
+static_assert(sizeof(FogEnvironmentRecord) == 52);
 
 //! Packed SkyLight (IBL) environment record.
 #pragma pack(push, 1)
@@ -396,11 +382,9 @@ struct SkyLightEnvironmentRecord {
 
   float diffuse_intensity = 1.0F;
   float specular_intensity = 1.0F;
-
-  uint8_t _reserved[16] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(SkyLightEnvironmentRecord) == 72);
+static_assert(sizeof(SkyLightEnvironmentRecord) == 56);
 
 //! Packed SkySphere environment record.
 #pragma pack(push, 1)
@@ -420,11 +404,9 @@ struct SkySphereEnvironmentRecord {
   float intensity = 1.0F;
   float rotation_radians = 0.0F;
   float tint_rgb[3] = { 1.0F, 1.0F, 1.0F };
-
-  uint8_t _reserved[16] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(SkySphereEnvironmentRecord) == 80);
+static_assert(sizeof(SkySphereEnvironmentRecord) == 64);
 
 //! Packed PostProcessVolume environment record.
 #pragma pack(push, 1)
@@ -452,11 +434,9 @@ struct PostProcessVolumeEnvironmentRecord {
   float saturation = 1.0F;
   float contrast = 1.0F;
   float vignette_intensity = 0.0F;
-
-  uint8_t _reserved[16] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(PostProcessVolumeEnvironmentRecord) == 76);
+static_assert(sizeof(PostProcessVolumeEnvironmentRecord) == 60);
 
 //! Common shadow settings packed into light component records.
 #pragma pack(push, 1)
@@ -465,10 +445,9 @@ struct LightShadowSettingsRecord {
   float normal_bias = 0.0F;
   uint32_t contact_shadows = 0;
   uint8_t resolution_hint = 1; // ShadowResolutionHint
-  uint8_t reserved[3] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(LightShadowSettingsRecord) == 16);
+static_assert(sizeof(LightShadowSettingsRecord) == 13);
 
 //! Common authored properties shared by all light records.
 /*!
@@ -485,14 +464,12 @@ struct LightCommonRecord {
 
   uint8_t mobility = 0; // LightMobility
   uint8_t casts_shadows = 0;
-  uint8_t reserved0[2] = {};
 
   LightShadowSettingsRecord shadow = {};
   float exposure_compensation_ev = 0.0F;
-  uint8_t reserved1[4] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(LightCommonRecord) == 44);
+static_assert(sizeof(LightCommonRecord) == 35);
 
 //! Packed directional light component record.
 /*!
@@ -513,10 +490,9 @@ struct DirectionalLightRecord {
   float distribution_exponent = 1.0F;
 
   float intensity_lux = 100000.0F; //!< Illuminance in lux (lm/m²)
-  uint8_t reserved[8] = {}; // Original 8 bytes preserved
 };
 #pragma pack(pop)
-static_assert(sizeof(DirectionalLightRecord) == 96);
+static_assert(sizeof(DirectionalLightRecord) == 79);
 
 //! Packed point light component record.
 /*!
@@ -528,15 +504,13 @@ struct PointLightRecord {
   world::SceneNodeIndexT node_index = 0;
   LightCommonRecord common = {};
   float range = 10.0F;
-  uint8_t attenuation_model = 0; // AttenuationModel
-  uint8_t reserved0[3] = {};
   float decay_exponent = 2.0F;
   float source_radius = 0.0F;
   float luminous_flux_lm = 800.0F; //!< Luminous flux in lumens (lm)
-  uint8_t reserved1[12] = {}; // Original 12 bytes preserved
+  uint8_t attenuation_model = 0; // AttenuationModel
 };
 #pragma pack(pop)
-static_assert(sizeof(PointLightRecord) == 80);
+static_assert(sizeof(PointLightRecord) == 56);
 
 //! Packed spot light component record.
 /*!
@@ -548,17 +522,15 @@ struct SpotLightRecord {
   world::SceneNodeIndexT node_index = 0;
   LightCommonRecord common = {};
   float range = 10.0F;
-  uint8_t attenuation_model = 0; // AttenuationModel
-  uint8_t reserved0[3] = {};
   float decay_exponent = 2.0F;
   float inner_cone_angle_radians = 0.4F;
   float outer_cone_angle_radians = 0.6F;
   float source_radius = 0.0F;
   float luminous_flux_lm = 800.0F; //!< Luminous flux in lumens (lm)
-  uint8_t reserved1[12] = {}; // Original 12 bytes preserved
+  uint8_t attenuation_model = 0; // AttenuationModel
 };
 #pragma pack(pop)
-static_assert(sizeof(SpotLightRecord) == 88);
+static_assert(sizeof(SpotLightRecord) == 64);
 
 } // namespace oxygen::data::pak::world
 

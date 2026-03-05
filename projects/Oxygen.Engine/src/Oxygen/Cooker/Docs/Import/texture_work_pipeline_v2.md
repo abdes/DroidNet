@@ -402,7 +402,7 @@ Subresource data (layer-major order)
 ### `textures.table` Entry (Emitter Conversion)
 
 `TextureEmitter::Emit()` converts `CookedTexturePayload` into
-`data::pak::render::TextureResourceDesc` using its internal descriptor conversion:
+`data::pak::core::TextureResourceDesc` using its internal descriptor conversion:
 
 - `compression_type = 7` for BC7, `0` otherwise
 - `alignment = policy.AlignRowPitchBytes(1)` (256 for D3D12, 1 for tight)

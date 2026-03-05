@@ -96,13 +96,14 @@ def build_browse_index_payload(
     entry_count = len(normalized)
     string_table_size = len(string_table)
 
+    # core::PakBrowseIndexHeader = magic[8] + version(u32) + entry_count(u32)
+    # + string_table_size(u32)
     header = struct.pack(
-        "<8sIIII",
+        "<8sIII",
         _BIX_MAGIC,
         _BIX_VERSION,
         entry_count,
         string_table_size,
-        0,
     )
 
     payload = header + entry_records + string_table

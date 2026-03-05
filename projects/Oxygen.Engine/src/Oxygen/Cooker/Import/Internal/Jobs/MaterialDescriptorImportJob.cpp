@@ -76,7 +76,7 @@ namespace {
     uint16_t reserved = 0;
     data::pak::core::ResourceIndexT resource_index
       = data::pak::core::kNoResourceIndex;
-    data::pak::render::TextureResourceDesc descriptor {};
+    data::pak::core::TextureResourceDesc descriptor {};
   };
 #pragma pack(pop)
 

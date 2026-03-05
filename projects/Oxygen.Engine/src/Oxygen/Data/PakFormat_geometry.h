@@ -23,7 +23,7 @@ namespace oxygen::data::pak::geometry {
 //! Geometry asset descriptor version for current PAK schema.
 [[maybe_unused]] constexpr uint8_t kGeometryAssetVersion = 1;
 
-//! Geometry asset descriptor (256 bytes)
+//! Geometry asset descriptor
 /*!
   Describes a geometry asset, with one or more levels of detail (LODs) for
   efficient rendering. This structure provides the metadata and bounding
@@ -54,28 +54,26 @@ struct GeometryAssetDesc {
   uint32_t lod_count = 0; // Number of LODs (must be >= 1)
   float bounding_box_min[3] = {}; // AABB min coordinates
   float bounding_box_max[3] = {}; // AABB max coordinates
-
-  // Reserved for future use
-  uint8_t reserved[133] = {};
 };
 // Followed by: MeshDesc meshes[lod_count];
 #pragma pack(pop)
-static_assert(sizeof(GeometryAssetDesc) == 256);
+static_assert(sizeof(GeometryAssetDesc) == 107);
 
 //! Fields for a standard (static) mesh
 /*! Boundaries are required and must be pre-computed by tooling. All-zero
   bounds are valid and must not be interpreted as "missing". */
 #pragma pack(push, 1)
 struct StandardMeshInfo {
-  core::ResourceIndexT vertex_buffer
-    = core::kNoResourceIndex; //!< Reference to vertex buffer
-  core::ResourceIndexT index_buffer
-    = core::kNoResourceIndex; //!< Reference to index buffer
+  //!< Reference to vertex buffer
+  core::ResourceIndexT vertex_buffer = core::kNoResourceIndex;
+  //!< Reference to index buffer
+  core::ResourceIndexT index_buffer = core::kNoResourceIndex;
   float bounding_box_min[3] = {}; //!< AABB min coordinates
   float bounding_box_max[3] = {}; //!< AABB max coordinates
+  uint8_t _reserved[40] = {}; //!< Union arm tail padding to 72 bytes
 };
 #pragma pack(pop)
-static_assert(sizeof(StandardMeshInfo) == 32);
+static_assert(sizeof(StandardMeshInfo) == 72);
 
 //! Fields for a skinned mesh
 /*! Stores references to the vertex and index buffers plus skinning buffers.
@@ -83,22 +81,26 @@ static_assert(sizeof(StandardMeshInfo) == 32);
   valid and must not be interpreted as "missing". */
 #pragma pack(push, 1)
 struct SkinnedMeshInfo {
-  core::ResourceIndexT vertex_buffer
-    = core::kNoResourceIndex; //!< Reference to vertex buffer
-  core::ResourceIndexT index_buffer
-    = core::kNoResourceIndex; //!< Reference to index buffer
-  core::ResourceIndexT joint_index_buffer
-    = core::kNoResourceIndex; //!< Joint indices buffer
-  core::ResourceIndexT joint_weight_buffer
-    = core::kNoResourceIndex; //!< Joint weights buffer
-  core::ResourceIndexT inverse_bind_buffer
-    = core::kNoResourceIndex; //!< Inverse bind matrices buffer
-  core::ResourceIndexT joint_remap_buffer
-    = core::kNoResourceIndex; //!< Mesh-to-skeleton remap buffer
-  AssetKey skeleton_asset_key = {}; //!< Skeleton asset reference - TODO: future
-  uint16_t joint_count = 0; //!< Number of joints referenced by this mesh
-  uint16_t influences_per_vertex = 0; //!< Influences per vertex (1..8)
-  uint32_t flags = 0; //!< Skinning flags (LBS/DQS, normalization)
+  //!< Reference to vertex buffer
+  core::ResourceIndexT vertex_buffer = core::kNoResourceIndex;
+  //!< Reference to index buffer
+  core::ResourceIndexT index_buffer = core::kNoResourceIndex;
+  //!< Joint indices buffer
+  core::ResourceIndexT joint_index_buffer = core::kNoResourceIndex;
+  //!< Joint weights buffer
+  core::ResourceIndexT joint_weight_buffer = core::kNoResourceIndex;
+  //!< Inverse bind matrices buffer
+  core::ResourceIndexT inverse_bind_buffer = core::kNoResourceIndex;
+  //!< Mesh-to-skeleton remap buffer
+  core::ResourceIndexT joint_remap_buffer = core::kNoResourceIndex;
+  //!< Skeleton asset reference - TODO: future
+  AssetKey skeleton_asset_key = {};
+  //!< Number of joints referenced by this mesh
+  uint16_t joint_count = 0;
+  //!< Influences per vertex (1..8)
+  uint16_t influences_per_vertex = 0;
+  //!< Skinning flags (LBS/DQS, normalization)
+  uint32_t flags = 0;
   float bounding_box_min[3] = {}; //!< AABB min coordinates
   float bounding_box_max[3] = {}; //!< AABB max coordinates
 };
@@ -109,9 +111,10 @@ static_assert(sizeof(SkinnedMeshInfo) == 72);
 #pragma pack(push, 1)
 struct ProceduralMeshInfo {
   uint32_t params_size = 0; //!< Size of procedural parameter blob (bytes)
+  uint8_t _reserved[68] = {}; //!< Union arm tail padding to 72 bytes
 };
 #pragma pack(pop)
-static_assert(sizeof(ProceduralMeshInfo) == 4);
+static_assert(sizeof(ProceduralMeshInfo) == 72);
 
 //! Mesh descriptor (104 bytes + SubMesh table)
 /*!
@@ -210,7 +213,7 @@ struct SubMeshDesc {
 #pragma pack(pop)
 static_assert(sizeof(SubMeshDesc) == 108);
 
-//! Mesh view descriptor (16 bytes)
+//! Mesh view descriptor
 /*!
   Describes a contiguous range of indices and vertices within a mesh, used for
   rendering a portion of geometry (e.g., a primitive group or section).
@@ -224,7 +227,7 @@ static_assert(sizeof(SubMeshDesc) == 108);
 */
 #pragma pack(push, 1)
 struct MeshViewDesc {
-  //! Buffer index type for mesh views (4 bytes)
+  //! Buffer index type for mesh views
   using BufferIndexT = core::DataBlobSizeT;
 
   BufferIndexT first_index = 0; // Start index in index buffer

@@ -28,44 +28,6 @@ namespace oxygen::data {
  a first-class asset: it is not named or globally identified, but is referenced
  by index in the textures resource table from materials or geometry.
 
- ### Resource Descriptor Encoding (PAK v7, 40 bytes)
-
- ```text
- offset size name             description
- ------ ---- ---------------- ---------------------------------------------
- 0x00   8    data_offset      Absolute offset to texture data in PAK file
- 0x08   4    size_bytes        Size of cooked texture payload in bytes
- 0x0C   1    texture_type     Texture type/dimension (enum)
- 0x0D   1    compression_type Compression type (enum)
- 0x0E   4    width            Texture width in pixels
- 0x12   4    height           Texture height in pixels
- 0x16   2    depth            Texture depth (3D/volume), otherwise 1
- 0x18   2    array_layers     Array/cubemap layers, otherwise 1
- 0x1A   2    mip_levels       Number of mipmap levels
- 0x1C   1    format           Texture format enum value
- 0x1D   2    alignment        Required alignment (default 256)
- 0x1F   8    content_hash     First 8 bytes of SHA256 of pixel/block data
- 0x27   1    reserved         Reserved for future use (must be 0)
- ```
-
- ### Texture Payload Encoding (PAK v7)
-
- `data_offset` points at a cooked texture payload stored in the textures
- resource data blob. Payloads are **v4-only** and start with a
- `pak::render::TexturePayloadHeader` (magic `pak::render::kTexturePayloadMagic`,
- "OTX1").
-
- ```text
- offset size name
- ------ ---- -----------------------------
- 0x00   28   TexturePayloadHeader
- 0x1C   ...  SubresourceLayout[subresource_count]
- ...    ...  Padding up to data_offset_bytes
- ...    ...  Pixel\/block data region
- ```
-
- `subresource_count` is expected to be `array_layers * mip_levels`.
-
  @note `GetPayload()` returns the full payload (header + layouts + data).
  @note `GetData()` returns only the pixel\/block data region.
 
@@ -76,7 +38,7 @@ class TextureResource : public oxygen::Object {
 
 public:
   //! Type alias for the descriptor type used by this resource.
-  using DescT = pak::render::TextureResourceDesc;
+  using DescT = pak::core::TextureResourceDesc;
 
   /*! Constructs a TextureResource with descriptor and exclusive payload
       ownership.
@@ -84,7 +46,7 @@ public:
       @param data Cooked texture payload buffer (ownership transferred).
   */
   TextureResource(
-    pak::render::TextureResourceDesc desc, std::vector<uint8_t> data)
+    pak::core::TextureResourceDesc desc, std::vector<uint8_t> data)
     : desc_(std::move(desc))
     , payload_(std::move(data))
   {
@@ -207,7 +169,7 @@ public:
   }
 
 private:
-  pak::render::TextureResourceDesc desc_ {};
+  pak::core::TextureResourceDesc desc_ {};
   pak::render::TexturePayloadHeader payload_header_ {};
   std::vector<pak::render::SubresourceLayout> subresource_layouts_ {};
   std::vector<uint8_t> payload_;

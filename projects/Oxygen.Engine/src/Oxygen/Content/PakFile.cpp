@@ -162,10 +162,11 @@ auto ReadPakHeader(oxygen::serio::FileStream<>& stream) -> PakHeader
   }
 
   const auto header = header_result.value();
-  const auto source_key = oxygen::data::SourceKey::FromBytes(header.guid);
+  const auto source_key
+    = oxygen::data::SourceKey::FromBytes(header.source_identity);
   LOG_F(INFO, "format version  : {}", header.version);
   LOG_F(INFO, "content version : {}", header.content_version);
-  LOG_F(INFO, "pak guid        : {}", source_key);
+  LOG_F(INFO, "pak source_identity        : {}", source_key);
 
   if (!std::ranges::equal(
         std::span { header.magic }, oxygen::data::pak::core::kPakHeaderMagic)) {
@@ -599,7 +600,7 @@ auto PakFile::ContentVersion() const noexcept -> uint16_t
 
 auto PakFile::Guid() const noexcept -> data::SourceKey
 {
-  return data::SourceKey::FromBytes(header_.guid);
+  return data::SourceKey::FromBytes(header_.source_identity);
 }
 
 /*!

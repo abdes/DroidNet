@@ -424,11 +424,10 @@ auto oxygen::data::pak::input::to_string(
   return result;
 }
 
-auto oxygen::data::loose_cooked::latest_schema::to_string(
-  const oxygen::data::loose_cooked::latest_schema::IndexFlags value)
-  -> std::string
+auto oxygen::data::loose_cooked::to_string(
+  const oxygen::data::loose_cooked::IndexFlags value) -> std::string
 {
-  using Flags = oxygen::data::loose_cooked::latest_schema::IndexFlags;
+  using Flags = oxygen::data::loose_cooked::IndexFlags;
 
   if (value == static_cast<Flags>(0)) {
     return "None";

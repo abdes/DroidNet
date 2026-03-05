@@ -212,7 +212,8 @@ TEST_F(PakFileTest, ResourceTablesPresence)
 {
   PakConfig config;
   constexpr uint32_t kBufferCount = 10;
-  constexpr uint32_t kBufferEntrySize = 32;
+  constexpr uint32_t kBufferEntrySize
+    = sizeof(oxygen::data::pak::core::BufferResourceDesc);
   config.footer.buffer_table.count = kBufferCount;
   config.footer.buffer_table.entry_size = kBufferEntrySize;
   config.footer.texture_table.count = 0; // No textures

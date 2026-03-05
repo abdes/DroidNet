@@ -280,7 +280,7 @@ auto ValidateHeaderFlags(const IndexHeader& header) -> void
 auto ValidateGuid(const IndexHeader& header) -> void
 {
   bool all_zeros = true;
-  for (const auto b : header.guid) {
+  for (const auto b : header.source_identity) {
     if (b != 0) {
       all_zeros = false;
       break;
@@ -397,7 +397,8 @@ auto LooseCookedIndexImpl::LoadAndValidateHeader(IndexLoadContext& context)
 
 auto LooseCookedIndexImpl::ReadStringTable(IndexLoadContext& context) -> void
 {
-  context.index->guid_ = data::SourceKey::FromBytes(context.header.guid);
+  context.index->guid_
+    = data::SourceKey::FromBytes(context.header.source_identity);
   context.index->string_storage_.resize(context.header.string_table_size);
   if (auto res = context.reader->Seek(context.header.string_table_offset);
     !res) {

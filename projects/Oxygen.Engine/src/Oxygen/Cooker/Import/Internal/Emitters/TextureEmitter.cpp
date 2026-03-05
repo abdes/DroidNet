@@ -89,7 +89,7 @@ namespace {
   }
 
   [[nodiscard]] auto MakeTextureSignature(const CookedTexturePayload& cooked,
-    const data::pak::render::TextureResourceDesc& desc,
+    const data::pak::core::TextureResourceDesc& desc,
     const std::string_view signature_salt) -> std::string
   {
     static_cast<void>(signature_salt);
