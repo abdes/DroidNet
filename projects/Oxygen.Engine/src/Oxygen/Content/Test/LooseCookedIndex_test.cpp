@@ -447,6 +447,70 @@ NOLINT_TEST_F(
     { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
 }
 
+//! Test: Virtual paths accept custom mount roots
+/*!
+ Scenario: Writes an index with a virtual path under `/Custom`.
+ Verifies that mounting succeeds.
+*/
+NOLINT_TEST_F(
+  LooseCookedIndexTest, AddLooseCookedRootVirtualPathCustomMountSucceeds)
+{
+  using oxygen::data::loose_cooked::AssetEntry;
+  using oxygen::data::loose_cooked::FileRecord;
+  using oxygen::data::loose_cooked::IndexHeader;
+
+  // Arrange
+  const auto cooked_root = temp_dir_ / "loose_cooked_root";
+  std::filesystem::create_directories(cooked_root);
+  const auto index_path = cooked_root / "container.index.bin";
+  // The asset entry references this descriptor path.
+  std::ofstream { cooked_root / "A.bin", std::ios::binary };
+
+  std::string strings;
+  strings.push_back('\0');
+  const auto off_desc = static_cast<uint32_t>(strings.size());
+  strings += "A.bin";
+  strings.push_back('\0');
+  const auto off_vpath = static_cast<uint32_t>(strings.size());
+  strings += "/Custom/A.bin";
+  strings.push_back('\0');
+
+  IndexHeader header {};
+  FillTestGuid(header);
+  header.version = 1;
+  header.content_version = 0;
+  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
+    | oxygen::data::loose_cooked::kHasFileRecords;
+  header.string_table_offset = sizeof(IndexHeader);
+  header.string_table_size = static_cast<uint64_t>(strings.size());
+  header.asset_entries_offset
+    = header.string_table_offset + header.string_table_size;
+  header.asset_count = 1;
+  header.asset_entry_size = sizeof(AssetEntry);
+  header.file_records_offset
+    = header.asset_entries_offset + sizeof(AssetEntry) * header.asset_count;
+  header.file_record_count = 0;
+  header.file_record_size = sizeof(FileRecord);
+
+  oxygen::data::AssetKey key {};
+  AssetEntry entry {};
+  entry.asset_key = key;
+  entry.descriptor_relpath_offset = off_desc;
+  entry.virtual_path_offset = off_vpath;
+  entry.asset_type = 0;
+  entry.descriptor_size = 0;
+
+  {
+    std::ofstream out(index_path, std::ios::binary);
+    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
+    out.write(reinterpret_cast<const char*>(&entry), sizeof(entry));
+  }
+
+  // Act & Assert
+  EXPECT_NO_THROW({ asset_loader_->AddLooseCookedRoot(cooked_root); });
+}
+
 //! Test: Descriptor relpaths must not contain '\\'
 /*!
  Scenario: Writes an index with a descriptor relpath using Windows-style

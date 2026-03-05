@@ -671,6 +671,25 @@ NOLINT_TEST_F(AssetEmitterTest, EmitVirtualPathWithDoubleSlashThrows)
     std::runtime_error);
 }
 
+//! Verify virtual path with custom mount root is accepted.
+NOLINT_TEST_F(AssetEmitterTest, EmitVirtualPathWithCustomMountRootAccepted)
+{
+  // Arrange
+  AssetEmitter emitter(*writer_, Layout(), test_dir_);
+  const auto bytes = MakeDescriptorBytes("test");
+
+  // Act
+  EXPECT_NO_THROW(emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
+    "/Custom/Materials/Wood.omat", "Materials/Wood.omat", bytes));
+
+  bool success = false;
+  co::Run(*loop_, [&]() -> Co<> { success = co_await emitter.Finalize(); });
+
+  // Assert
+  EXPECT_TRUE(success);
+  EXPECT_EQ(ReadFileAsString(test_dir_ / "Materials" / "Wood.omat"), "test");
+}
+
 //! Verify empty relative path is rejected.
 NOLINT_TEST_F(AssetEmitterTest, EmitEmptyRelativePathThrows)
 {

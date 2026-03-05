@@ -120,8 +120,9 @@ namespace {
 
   auto ValidateVirtualPath(const std::string_view virtual_path) -> void
   {
-    if (const auto error
-      = oxygen::content::ValidateCanonicalVirtualPath(virtual_path);
+    if (const auto error = oxygen::content::ValidateCanonicalVirtualPath(
+          virtual_path,
+          oxygen::content::VirtualPathRuleSet::kSyntaxAndStandardMountRoot);
       error.has_value()) {
       throw std::runtime_error(
         "Virtual path is not canonical: " + std::string(*error));

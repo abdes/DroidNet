@@ -216,7 +216,7 @@ NOLINT_TEST_F(PakPlanBuilderTest,
     .key = MakeAssetKey(kAssetSeed),
     .asset_type = data::AssetType::kMaterial,
     .descriptor_relpath = "A.desc",
-    .virtual_path = "/Content/Asset.win",
+    .virtual_path = "/Game/Asset.win",
     .descriptor_size = kDescriptorSize,
     .descriptor_sha = {},
   };
@@ -226,7 +226,7 @@ NOLINT_TEST_F(PakPlanBuilderTest,
     .key = MakeAssetKey(kAssetSeed),
     .asset_type = data::AssetType::kScene,
     .descriptor_relpath = "Z.desc",
-    .virtual_path = "/Content/Asset.win",
+    .virtual_path = "/Game/Asset.win",
     .descriptor_size = kDescriptorSize,
     .descriptor_sha = {},
   };
@@ -314,7 +314,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesAllLiveAssetsAndResources)
     .key = MakeAssetKey(0x10U),
     .asset_type = data::AssetType::kMaterial,
     .descriptor_relpath = "materials/mat.desc",
-    .virtual_path = "/Content/Materials/Main.mat",
+    .virtual_path = "/Game/Materials/Main.mat",
     .descriptor_size = kDescriptorSizeA,
     .descriptor_sha = {},
   };
@@ -324,7 +324,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesAllLiveAssetsAndResources)
     .key = MakeAssetKey(0x20U),
     .asset_type = data::AssetType::kScript,
     .descriptor_relpath = "scripts/logic.desc",
-    .virtual_path = "/Content/Scripts/Logic.script",
+    .virtual_path = "/Game/Scripts/Logic.script",
     .descriptor_size = kDescriptorSizeB,
     .descriptor_sha = {},
   };
@@ -440,7 +440,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesInputAssetsFromLooseSource)
     .key = MakeAssetKey(0x51U),
     .asset_type = data::AssetType::kInputAction,
     .descriptor_relpath = "Descriptors/Input/Move.oiact",
-    .virtual_path = "/Content/Input/Move.oiact",
+    .virtual_path = "/Game/Input/Move.oiact",
     .descriptor_size = 48U,
     .descriptor_sha = paktest::MakeDigest(0x51U),
   };
@@ -448,7 +448,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesInputAssetsFromLooseSource)
     .key = MakeAssetKey(0x52U),
     .asset_type = data::AssetType::kInputMappingContext,
     .descriptor_relpath = "Descriptors/Input/Gameplay.oimap",
-    .virtual_path = "/Content/Input/Gameplay.oimap",
+    .virtual_path = "/Game/Input/Gameplay.oimap",
     .descriptor_size = 64U,
     .descriptor_sha = paktest::MakeDigest(0x52U),
   };
@@ -456,7 +456,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesInputAssetsFromLooseSource)
     .key = MakeAssetKey(0x53U),
     .asset_type = data::AssetType::kScene,
     .descriptor_relpath = "Descriptors/Scenes/Main.oscene",
-    .virtual_path = "/Content/Scenes/Main.oscene",
+    .virtual_path = "/Game/Scenes/Main.oscene",
     .descriptor_size = 32U,
     .descriptor_sha = paktest::MakeDigest(0x53U),
   };
@@ -541,7 +541,7 @@ NOLINT_TEST_F(
     .key = MakeAssetKey(0x33U),
     .asset_type = data::AssetType::kScene,
     .descriptor_relpath = "scene.desc",
-    .virtual_path = "/Content/Scene.main",
+    .virtual_path = "/Game/Scene.main",
     .descriptor_size = kDescriptorSize,
     .descriptor_sha = {},
   };
@@ -628,7 +628,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, ScriptSlotOutOfBoundsIsRejected)
     .key = MakeAssetKey(0x35U),
     .asset_type = data::AssetType::kScene,
     .descriptor_relpath = "scene.desc",
-    .virtual_path = "/Content/Scene.invalid",
+    .virtual_path = "/Game/Scene.invalid",
     .descriptor_size = kDescriptorSize,
     .descriptor_sha = {},
   };
@@ -698,7 +698,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, IndexZeroPolicyAppliedForResourceTables)
     .key = MakeAssetKey(0x55U),
     .asset_type = data::AssetType::kScript,
     .descriptor_relpath = "script.desc",
-    .virtual_path = "/Content/Script.main",
+    .virtual_path = "/Game/Script.main",
     .descriptor_size = kDescriptorSize,
     .descriptor_sha = {},
   };
@@ -787,7 +787,7 @@ NOLINT_TEST_F(
     .key = MakeAssetKey(0x61U),
     .asset_type = data::AssetType::kMaterial,
     .descriptor_relpath = "a.desc",
-    .virtual_path = "/Content/Browse/B.asset",
+    .virtual_path = "/Game/Browse/B.asset",
     .descriptor_size = kDescriptorSize,
     .descriptor_sha = {},
   };
@@ -797,7 +797,7 @@ NOLINT_TEST_F(
     .key = MakeAssetKey(0x62U),
     .asset_type = data::AssetType::kScript,
     .descriptor_relpath = "b.desc",
-    .virtual_path = "/Content/Browse/A.asset",
+    .virtual_path = "/Game/Browse/A.asset",
     .descriptor_size = kDescriptorSize,
     .descriptor_sha = {},
   };

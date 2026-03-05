@@ -23,9 +23,9 @@ and the machine key world.
 /<MountRoot>[/<MountRoot2>]/<Domain>/<Category>/[<Subcategory>/]<AssetName>.<TypeSuffix>
 ```
 
-More precisely, the first one or two segments form the **mount root** — the
-identifier of the source that owns this asset. The remaining segments are the
-**asset path within the source**. The full string (mount root + asset path) is
+More precisely, the first segment is the **mount root** — the identifier of the
+source namespace that owns this asset. The remaining segments are the **asset
+path within the source**. The full string (mount root + asset path) is
 what is hashed to produce the `AssetKey`; the mount root is therefore part of
 the identity, not just a routing hint.
 
@@ -52,15 +52,17 @@ of all consuming systems undefined.
   be applied silently.
 
 **Mount roots.** A mount root is a short identifier registered with the
-`VirtualPathResolver` that maps to a physical content source. Oxygen defines
-the following standard mount roots:
+`VirtualPathResolver` that maps to a physical content source namespace.
+Mount roots are not limited to a fixed allowlist: any valid identifier is
+accepted, plus the special core token `/.cooked`.
 
 | Mount root | Source type | Example |
 | --- | --- | --- |
 | `/Engine` | Built-in engine assets (shipped with the engine binary, read-only) | `/Engine/Physics/Materials/Default.opmat` |
 | `/Game` | Project-specific game assets (the primary authoring namespace) | `/Game/Physics/Materials/Rubber.opmat` |
 | `/.cooked` | Active loose cooked output root (`container.index.bin`); used by the editor and cooker tools during development | `/.cooked/Physics/Materials/Rubber.opmat` |
-| `/Pak/<name>` | Named PAK file mount (production and DLC); `<name>` is the PAK's declared mount identifier | `/Pak/DLC01/Game/Physics/Materials/Lava.opmat` |
+| `/Pak` | Conventional PAK namespace root; teams often place a package/mount identifier in the next segment | `/Pak/DLC01/Game/Physics/Materials/Lava.opmat` |
+| `/Custom` | User-defined root identifier | `/Custom/Physics/Materials/Rubber.opmat` |
 
 Resolution priority: patch PAKs beat base PAKs, base PAKs beat loose cooked
 roots, loose cooked roots beat engine built-ins. When multiple sources map
@@ -92,7 +94,7 @@ different `AssetKey` values, even if their content is identical.
 
 | Segment | Convention | Examples |
 | --- | --- | --- |
-| `MountRoot` | Defined by the mount registry; see mount-roots table above | `/Engine`, `/Game`, `/.cooked` |
+| `MountRoot` | Identifier `[A-Za-z_][A-Za-z0-9_-]*` or the special token `.cooked` | `/Engine`, `/Game`, `/.cooked`, `/Custom`, `/game` |
 | `Domain` | **PascalCase**, one word, broad functional area that owns the asset class | `Physics`, `Rendering`, `Audio`, `Animation`, `World`, `UI` |
 | `Category` | **PascalCase**, one or two words, logical sub-grouping within the domain | `Materials`, `Shapes`, `Joints`, `Vehicles`, `SoftBodies`, `Characters`, `Scenes` |
 | `Subcategory` | **PascalCase**, optional, for large categories | `Wheeled`, `Tracked`, `Ragdolls` |
@@ -128,12 +130,15 @@ convention. The following suffixes are defined by `LooseCookedLayout`:
 /Game/World/Scenes/Showcase.opscene
 /Engine/Physics/Materials/Default.opmat
 /.cooked/Physics/Materials/Rubber.opmat
+/Custom/Physics/Materials/Rubber.opmat
+/game/Physics/Materials/Rubber.opmat
+/Pak/DLC01/Game/Physics/Materials/Lava.opmat
 ```
 
 **Examples of invalid canonical virtual paths and the violated rule:**
 
 ```text
-/game/Physics/Materials/Rubber.opmat   (lowercase mount root — case violation)
+/9game/Physics/Materials/Rubber.opmat  (mount root must be a valid identifier)
 Physics/Materials/Rubber.opmat         (no leading slash — not absolute)
 /Game/Physics/Materials/Rubber.opmat/  (trailing slash — prohibited)
 /Game/Physics//Materials/Rubber.opmat  (empty segment — double slash)
@@ -141,6 +146,7 @@ Physics/Materials/Rubber.opmat         (no leading slash — not absolute)
 /Game/Physics/Materials/my rubber.opmat (space — prohibited character)
 /Game/Physics.Materials/Rubber.opmat   (dot in non-leaf segment — prohibited)
 /Game/Physics/Materials/Rubber         (no type suffix — ambiguous asset class)
+/Pak/DLC.01/Game/Physics/Materials/Lava.opmat (dot in non-leaf segment — prohibited)
 ```
 
 > **Implementation status (2026-03-04):** Phase 1 identity migration is now in

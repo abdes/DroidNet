@@ -215,7 +215,9 @@ auto ValidateRelativePath(const std::string_view relpath) -> void
 
 auto ValidateVirtualPath(const std::string_view virtual_path) -> void
 {
-  if (const auto error = content::ValidateCanonicalVirtualPath(virtual_path);
+  if (const auto error = content::ValidateCanonicalVirtualPath(
+        virtual_path,
+        content::VirtualPathRuleSet::kSyntaxAndStandardMountRoot);
     error.has_value()) {
     throw std::runtime_error(
       "Virtual path is not canonical: " + std::string(*error));

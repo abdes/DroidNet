@@ -205,7 +205,7 @@ NOLINT_TEST_F(
     .key = paktest::MakeAssetKey(kAssetSeed),
     .asset_type = data::AssetType::kMaterial,
     .descriptor_relpath = "asset.desc",
-    .virtual_path = "/Content/Materials/SingleAsset.mat",
+    .virtual_path = "/Game/Materials/SingleAsset.mat",
     .descriptor_size = static_cast<uint64_t>(descriptor.size()),
     .descriptor_sha = {},
   };

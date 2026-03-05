@@ -22,6 +22,11 @@ constexpr std::size_t kMaxCanonicalVirtualPathBytes = 512;
 
 namespace detail {
 
+  [[nodiscard]] constexpr auto IsAsciiAlpha(const char c) noexcept -> bool
+  {
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+  }
+
   [[nodiscard]] constexpr auto IsAsciiAlphaNumeric(const char c) noexcept
     -> bool
   {
@@ -45,6 +50,30 @@ namespace detail {
       }
     }
     return count;
+  }
+
+  [[nodiscard]] constexpr auto IsValidMountRootIdentifier(
+    const std::string_view segment) noexcept -> bool
+  {
+    // Core engine mount root token.
+    if (segment == ".cooked") {
+      return true;
+    }
+    if (segment.empty()) {
+      return false;
+    }
+
+    const auto first = segment.front();
+    if (!(IsAsciiAlpha(first) || first == '_')) {
+      return false;
+    }
+
+    for (const auto c : segment.substr(1)) {
+      if (!(IsAsciiAlphaNumeric(c) || c == '_' || c == '-')) {
+        return false;
+      }
+    }
+    return true;
   }
 
 } // namespace detail
@@ -71,7 +100,6 @@ namespace detail {
   }
 
   auto first_segment = std::string_view {};
-  auto second_segment = std::string_view {};
   auto segment_index = std::size_t { 0 };
 
   auto pos = std::size_t { 1 };
@@ -92,8 +120,6 @@ namespace detail {
 
     if (segment_index == 1) {
       first_segment = segment;
-    } else if (segment_index == 2) {
-      second_segment = segment;
     }
 
     for (const auto c : segment) {
@@ -125,22 +151,10 @@ namespace detail {
   }
 
   if (rules == VirtualPathRuleSet::kSyntaxAndStandardMountRoot) {
-    if (first_segment == "Engine" || first_segment == "Game"
-      || first_segment == ".cooked") {
-      return std::nullopt;
+    if (!detail::IsValidMountRootIdentifier(first_segment)) {
+      return "mount root must be a valid identifier";
     }
-
-    if (first_segment == "Pak") {
-      if (second_segment.empty()) {
-        return "pak mount root must be '/Pak/<name>'";
-      }
-      if (second_segment.find('.') != std::string_view::npos) {
-        return "pak mount name must not contain '.'";
-      }
-      return std::nullopt;
-    }
-
-    return "unsupported mount root";
+    return std::nullopt;
   }
 
   return std::nullopt;

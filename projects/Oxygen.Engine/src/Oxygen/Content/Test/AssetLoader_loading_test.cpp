@@ -526,13 +526,13 @@ auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
   strings += action_rel_desc.generic_string();
   strings.push_back('\0');
   const auto action_off_vpath = static_cast<uint32_t>(strings.size());
-  strings += std::string("/Content/") + action_rel_desc.generic_string();
+  strings += std::string("/Game/") + action_rel_desc.generic_string();
   strings.push_back('\0');
   const auto context_off_desc = static_cast<uint32_t>(strings.size());
   strings += context_rel_desc.generic_string();
   strings.push_back('\0');
   const auto context_off_vpath = static_cast<uint32_t>(strings.size());
-  strings += std::string("/Content/") + context_rel_desc.generic_string();
+  strings += std::string("/Game/") + context_rel_desc.generic_string();
   strings.push_back('\0');
 
   IndexHeader header {};

@@ -125,7 +125,8 @@ TEST_F(LooseCookedSourceTest, ConstructorDescriptorMissingThrows)
     LooseCookedTestWriter writer(CookedRoot());
     const std::vector<std::byte> data { std::byte { 0 } };
     writer.WriteAssetDescriptor(
-      MakeAssetKey(1U), AssetType::kMaterial, "/test.omat", "test.omat", data);
+      MakeAssetKey(1U), AssetType::kMaterial, "/Content/test.omat",
+      "test.omat", data);
     (void)writer.Finish();
   }
 
@@ -142,7 +143,8 @@ TEST_F(LooseCookedSourceTest, ConstructorDescriptorSha256MismatchThrows)
     writer.SetComputeSha256(true); // Tell writer to generate a real hash
     const std::vector<std::byte> data { std::byte { 0 } };
     writer.WriteAssetDescriptor(
-      MakeAssetKey(1U), AssetType::kMaterial, "/test.omat", "test.omat", data);
+      MakeAssetKey(1U), AssetType::kMaterial, "/Content/test.omat",
+      "test.omat", data);
     (void)writer.Finish();
   }
 
