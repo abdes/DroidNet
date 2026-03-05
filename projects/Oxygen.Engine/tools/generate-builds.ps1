@@ -206,3 +206,5 @@ if ($LASTEXITCODE -ne 0) { Write-Host "VS configuration failed" -ForegroundColor
 Write-Host "`n=== Success ===" -ForegroundColor Green
 Write-Host "Ninja Folder:  $ninjaBuildDir/"
 Write-Host "VS Folder:     $vsBuildDir/"
+
+Write-Host "`nRuntime dependency PATH is resolved per build configuration by CMake custom commands and tools/cli/oxyrun.ps1." -ForegroundColor Gray

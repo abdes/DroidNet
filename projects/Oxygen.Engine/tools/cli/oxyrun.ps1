@@ -119,6 +119,23 @@ Do not pass -Config when using -Sanitized. Omit -Config (default is Debug).
 
 $buildRoot = Get-StandardBuildRoot -Sanitized:$Sanitized
 
+function Set-ConfigRuntimePath([string]$BuildConfig, [switch]$SanitizedBuild) {
+    $deployConfig = if ($SanitizedBuild) { "Asan" } else { $BuildConfig }
+    $runtimeBinPath = Join-Path (Join-Path (Join-Path (Get-Location) "out/install") $deployConfig) "bin"
+
+    if (-not (Test-Path $runtimeBinPath)) {
+        Write-LogWarn "Runtime dependency path not found for config '$deployConfig': $(Format-CompactPath $runtimeBinPath)"
+        return
+    }
+
+    $resolvedRuntimeBinPath = (Resolve-Path $runtimeBinPath).Path
+    $sessionPathEntries = @($env:PATH -split ';' | Where-Object { $_.Trim() })
+    if ($sessionPathEntries -notcontains $resolvedRuntimeBinPath) {
+        $env:PATH = "$resolvedRuntimeBinPath;$env:PATH"
+        Write-LogVerbose "Prepended runtime PATH: $(Format-CompactPath $resolvedRuntimeBinPath)"
+    }
+}
+
 # Resolve target name using fuzzy matching
 $resolvedTarget = Resolve-TargetName $Target $buildRoot
 if (-not $resolvedTarget) {
@@ -172,8 +189,12 @@ if ($found -and $found.Count -gt 1) {
 # Handle dry-run execution display (shared between build and no-build scenarios)
 if ($DryRun) {
     Write-LogInfo "Running target: $resolvedTarget"
+    $dryRunDeployConfig = if ($Sanitized) { "Asan" } else { $Config }
+    $dryRunRuntimePath = Join-Path (Join-Path (Join-Path (Get-Location) "out/install") $dryRunDeployConfig) "bin"
     Write-Host ""
     Write-Host "Dry Run Mode - Would Execute:" -ForegroundColor Magenta
+    Write-Host "  Runtime PATH:" -NoNewline -ForegroundColor DarkGray
+    Write-Host " $(Format-CompactPath $dryRunRuntimePath)" -ForegroundColor White
     Write-Host "  Executable: " -NoNewline -ForegroundColor DarkGray
     Write-Host "$(Format-CompactPath (Join-Path $buildRoot "bin/$Config/$resolvedTarget.exe"))" -ForegroundColor White
     Write-Host "  Arguments:  " -NoNewline -ForegroundColor DarkGray
@@ -231,6 +252,7 @@ if ($RemainingArgs) {
 }
 
 Write-LogAction "Running: $(Format-CompactPath $artifact) $($forward -join ' ')"
+Set-ConfigRuntimePath -BuildConfig $Config -SanitizedBuild:$Sanitized
 try {
     & $artifact @forward
     $ec = $LASTEXITCODE
