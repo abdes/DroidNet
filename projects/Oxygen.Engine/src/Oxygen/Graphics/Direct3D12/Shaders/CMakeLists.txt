@@ -30,11 +30,17 @@ endif()
 set(_OXYGEN_DEPLOY_CONFIG "$<IF:$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>,Asan,$<CONFIG>>")
 set(_OXYGEN_DEPLOY_BIN_DIR "$<SHELL_PATH:${CMAKE_SOURCE_DIR}/out/install/${_OXYGEN_DEPLOY_CONFIG}/bin>")
 if(WIN32)
-  set(_OXYGEN_PATH_SEP ";")
+  # Visual Studio custom build commands are sensitive to ';' list splitting.
+  # Use CMake's env modifier to prepend the runtime DLL folder safely.
+  set(_OXYGEN_SHADERBAKE_ENV_ARGS
+    --modify
+    "PATH=path_list_prepend:${_OXYGEN_DEPLOY_BIN_DIR}"
+  )
 else()
-  set(_OXYGEN_PATH_SEP ":")
+  set(_OXYGEN_SHADERBAKE_ENV_ARGS
+    "PATH=${_OXYGEN_DEPLOY_BIN_DIR}:$ENV{PATH}"
+  )
 endif()
-set(_OXYGEN_SHADERBAKE_PATH "PATH=${_OXYGEN_DEPLOY_BIN_DIR}${_OXYGEN_PATH_SEP}$ENV{PATH}")
 
 # Convert to native paths for the custom command to ensure robustness in Visual Studio/cmd.exe
 file(TO_NATIVE_PATH "${CMAKE_SOURCE_DIR}/bin/Oxygen" _OXYGEN_BIN_DIR)
@@ -47,7 +53,7 @@ add_custom_command(
   COMMAND
     "${CMAKE_COMMAND}" -E make_directory "${_OXYGEN_BIN_DIR}"
   COMMAND
-    "${CMAKE_COMMAND}" -E env "${_OXYGEN_SHADERBAKE_PATH}"
+    "${CMAKE_COMMAND}" -E env ${_OXYGEN_SHADERBAKE_ENV_ARGS}
     "$<TARGET_FILE:${OXYGEN_D3D12_SHADERBAKE_TARGET}>" --workspace-root
     "${_WORKSPACE_ROOT_NATIVE}" --out "${_SHADER_LIBRARY_OUTPUT_NATIVE}"
   WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
