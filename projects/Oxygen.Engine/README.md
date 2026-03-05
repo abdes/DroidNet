@@ -25,11 +25,79 @@ On this Microsoft site you find the downloads.
 
 ## Shader Compilation Setup
 
-[text](https://github.com/Devaniti/GetDXC)
+### DXC (Direct3D Shader Compiler) Installation
 
-## Dev Setup
+The engine requires the **DirectX Shader Compiler (DXC)** for shader compilation at build time.
 
-### PowerShell
+#### Obtaining DXC
+
+Download the latest DXC release from the [GetDXC](https://github.com/Devaniti/GetDXC) repository:
+
+```powershell
+# Using PowerShell to download and extract DXC
+$DXCFolder = "packages\DXC"
+& .\GetDXC.ps1 $DXCFolder
+```
+
+This installs DXC to `packages/DXC/` with the following structure:
+
+- `bin/{arch}/` (dxcompiler.dll, dxil.dll, dxc.exe)
+- `lib/{arch}/` (dxcompiler.lib, dxil.lib - import libraries)
+- `inc/` (DXC header files)
+
+### ShaderBake.exe Build-Time DLL Resolution
+
+**ShaderBake.exe** is a build tool that compiles HLSL shaders at build time. It depends on DXC runtime DLLs and other Conan-deployed dependencies.
+
+#### Config-Scoped Runtime PATH
+
+Conan-deployed runtime DLLs live under `out/install/<Config>/bin` (or `out/install/Asan/bin` for ASan builds).
+
+PATH handling is now **config-scoped**:
+
+1. `generate-builds.ps1` does **not** modify user or session PATH.
+2. The shader bake CMake custom command sets PATH per active CMake config before invoking `ShaderBake.exe`.
+3. `tools/cli/oxyrun.ps1` sets process-local PATH based on `-Config` (or `-Sanitized` -> `Asan`) before running the executable.
+
+This avoids global PATH pollution and ensures each build/run uses the correct deployment directory.
+
+#### Troubleshooting DLL Resolution Issues
+
+If you encounter build failures with ShaderBake.exe stating that DLLs are missing:
+
+1. **Check Session PATH** (inside the active process):
+
+   ```powershell
+   $env:PATH -split ';' | Select-String "out/install"
+   ```
+
+2. **Verify DXC Installation**: Confirm that `packages/DXC/bin/{arch}/dxcompiler.dll` and `packages/DXC/bin/{arch}/dxil.dll` exist.
+
+   ```powershell
+   # Check on 64-bit (x64) systems:
+   Test-Path "packages\DXC\bin\x64\dxcompiler.dll"
+   Test-Path "packages\DXC\bin\x64\dxil.dll"
+   ```
+
+3. **Verify Conan Deployment**: Check that the Conan deployment directories contain the required DLLs:
+
+   ```powershell
+   Get-ChildItem "out\install\Debug\bin\*.dll" | Select-Object Name
+   ```
+
+4. **Regenerate Build Configuration**: If DLLs are missing from deployment, re-run Conan install:
+
+   ```powershell
+   .\tools\generate-builds.ps1 profiles/windows-msvc.ini
+   ```
+
+5. **Clean and Rebuild**:
+
+   ```powershell
+   # Remove build artifacts and reconfigure
+   Remove-Item -Recurse out/build-ninja -Force
+   .\tools\generate-builds.ps1 profiles/windows-msvc.ini
+   ```
 
 $env:VIRTUAL_ENV_DISABLE_PROMPT = 1
 oh-my-posh init pwsh --config E:\dev\ohmyposh-config.json | Out-String | Invoke-Expression
@@ -143,6 +211,7 @@ without requiring per-dependency options.
 
 CLI tools (oxybuild / oxyrun)
 -----------------------------
+
 - Use `tools\oxybuild.ps1` and `tools\oxyrun.ps1` to build and run targets with convenient, preset-based workflows.
 - Important: these CLI helpers **do not** run Conan automatically. Initialize build roots with `tools\generate-builds.ps1` (or `tools\generate-builds.bat`).
 - Build-root conventions:
@@ -154,6 +223,7 @@ CLI tools (oxybuild / oxyrun)
   - When `-Sanitized` is used, the CLI will prefer `*-asan` configure and build presets (e.g., `windows-asan`).
 
 Examples:
+
 ```powershell
 # Initialize build roots (ASan)
 .\tools\generate-builds.ps1 profiles/windows-msvc-asan.ini
