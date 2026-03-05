@@ -85,9 +85,11 @@ assets:
   - type: input_mapping_context
     name: RotateRuntimeInputContext
     asset_key: "94444444444444444444444444444444"
+    # InputMappingContextFlags: kAutoLoad(1) | kAutoActivate(2)
+    flags: 3
     mappings:
       - action_asset: RotateSpeedUpAction
-        slot_name: "Keyboard.PgUp"
+        slot_name: "PageUp"
         scale: [1.0, 0.0]
         bias: [0.0, 0.0]
         triggers:
@@ -96,7 +98,7 @@ assets:
             fparams: [0.08]
             uparams: [1, 0]
       - action_asset: RotateSpeedDownAction
-        slot_name: "Keyboard.PgDn"
+        slot_name: "PageDown"
         scale: [1.0, 0.0]
         bias: [0.0, 0.0]
         triggers:
@@ -105,35 +107,35 @@ assets:
             fparams: [0.08]
             uparams: [1, 0]
       - action_asset: RotateStopAction
-        slot_name: "Keyboard.End"
+        slot_name: "End"
         scale: [1.0, 0.0]
         bias: [0.0, 0.0]
         triggers:
           - type: pressed
             behavior: implicit
       - action_asset: RotateInvertAction
-        slot_name: "Keyboard.Home"
+        slot_name: "Home"
         scale: [1.0, 0.0]
         bias: [0.0, 0.0]
         triggers:
           - type: pressed
             behavior: implicit
       - action_asset: CycleShapeAction
-        slot_name: "Keyboard.Insert"
+        slot_name: "Insert"
         scale: [1.0, 0.0]
         bias: [0.0, 0.0]
         triggers:
           - type: pressed
             behavior: implicit
       - action_asset: SpawnOrbAction
-        slot_name: "Keyboard.Delete"
+        slot_name: "Delete"
         scale: [1.0, 0.0]
         bias: [0.0, 0.0]
         triggers:
           - type: pressed
             behavior: implicit
       - action_asset: PulseScaleAction
-        slot_name: "Keyboard.Space"
+        slot_name: "Space"
         scale: [1.0, 0.0]
         bias: [0.0, 0.0]
         triggers:
