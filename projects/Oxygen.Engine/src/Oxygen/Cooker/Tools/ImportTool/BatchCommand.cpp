@@ -440,8 +440,6 @@ namespace {
       CollectSidecarRefField(*bindings_doc, "colliders", "shape_ref", refs);
       CollectSidecarRefField(*bindings_doc, "colliders", "material_ref", refs);
       CollectSidecarRefField(*bindings_doc, "characters", "shape_ref", refs);
-      CollectSidecarRefField(*bindings_doc, "joints", "constraint_ref", refs);
-      CollectSidecarRefField(*bindings_doc, "vehicles", "constraint_ref", refs);
 
       return true;
     } catch (const std::exception& ex) {

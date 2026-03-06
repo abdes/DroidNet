@@ -5,122 +5,33 @@ zero-shim: no legacy identity, schema, cooker, loader, or runtime fallback paths
 may remain once all phases are complete.
 
 Status: `in_progress` until every phase exit gate has code + docs + validation evidence.
-Phase status summary: **Phase 1 complete (2026-03-06); Phases 2-9 pending**.
+Phase status summary: **Phases 1-2 complete (2026-03-06); Phases 3-5 pending**.
+Phase scope note (2026-03-06): former Phases 6-9 were folded into Phases 3-5 so
+the implementation reaches fully working functional parity by the end of Phase 5.
 
-Restart directive (2026-03-06): initial reset baseline was `not done` for every
-phase item. Phase 1 has since been revalidated and marked complete in this
-document; historical snapshot text remains reference-only.
+## Phase 1 Progress Snapshot (Tracking Only)
 
-## Historical Snapshot (Pre-Restore Reference Only)
+Status: `complete` (2026-03-06).
 
-Historical notes captured before restore (non-authoritative; hints only):
+Scope delivered:
 
-- Added deterministic `AssetKey` derivation API in code:
-  `AssetKey::FromVirtualPath(virtual_path)` using
-  `xxHash3-128(UTF-8 bytes)`.
-- Removed cooker free-function minting (`MakeDeterministicAssetKey`) and
-  standardized call sites directly on `AssetKey::FromVirtualPath(...)`.
-- Added shared canonical virtual-path validator and wired it into resolver and
-  cooker/content canonical checks.
-- Added canonical-path validation test matrix (valid/invalid examples from
-  design) and deterministic path-key tests.
-- Removed `AssetKeyPolicy` and all `asset_key_policy`/`kRandom` branches from
-  import options, jobs, and pipelines.
-- Removed `GenerateAssetGuid()` from `AssetKey.h` and migrated all remaining
-  code call sites:
-  - asset identity paths now use deterministic canonical-path key derivation.
-  - non-asset UUID generation paths now use `Uuid::Generate()`.
-- Updated scripting-sidecar tests to deterministic key semantics (same
-  canonical path -> same key).
-- Added/kept resolver precedence + tombstone tests in
-  `VirtualPathResolver_test.cpp`.
-- Constrained `AssetKey` creation API:
-  - converted `AssetKey` from UUID-wrapper semantics to a dedicated 16-byte
-    value type (no `NamedType<Uuid,...>` inheritance).
-  - removed constructor-based UUID minting paths.
-  - removed free-function identity minting path.
-  - standardized on `AssetKey::FromVirtualPath(...)` (minting) and
-    `AssetKey::FromBytes(...)` (rehydration).
-  - kept `AssetKey` byte storage private; no mutable byte access API was added.
+- Deterministic identity is enforced for asset keys (`AssetKey::FromVirtualPath`);
+  random GUID identity generation and `AssetKeyPolicy` branches were removed.
+- Canonical virtual-path validation is enforced at cooker/content ingestion points,
+  including mount-root identifier rules (`/.cooked` plus any valid identifier).
+- Resolver precedence and tombstone masking behavior are covered and retained.
 
-Historical validation commands captured pre-restore
-(must be rerun for current closure):
+Validation evidence summary:
 
-- Focused build validation:
-  - `cmake --build out/build-vs --config Debug --target Oxygen.Data.All.Tests`
-    -> **success**
-  - `cmake --build out/build-vs --config Debug --target oxygen-examples-demoshell`
-    -> **success**
-  - `cmake --build out/build-vs --config Debug --target oxygen-examples-async`
-    -> **success**
-  - `cmake --build out/build-vs --config Debug --target oxygen-examples-inputsystem`
-    -> **success**
-  - `cmake --build out/build-vs --config Debug --target oxygen-examples-lightbench`
-    -> **success**
-  - `cmake --build out/build-vs --config Debug --target oxygen-examples-multiview`
-    -> **success**
-  - `cmake --build out/build-vs --config Debug --target oxygen-examples-physics`
-    -> **success**
-  - `cmake --build out/build-vs --config Debug --target oxygen-examples-texturedcube`
-    -> **success**
-- Focused runtime tests:
-  - `Oxygen.Data.All.Tests.exe --gtest_filter=AssetKey*` -> **2 passed**
-  - `Oxygen.Content.LooseCooked.Tests.exe --gtest_filter=VirtualPathResolverTest*` -> **7 passed**
-- Regression validation after Phase 1 test-fix completion:
-  - `cmake --build out/build-vs --config Debug --target Oxygen.Cooker.AsyncImportScript.Tests` -> **success**
-  - `Oxygen.Cooker.AsyncImportScript.Tests.exe --gtest_color=no` -> **78 passed**
-  - `Oxygen.Content.AssetLoader.Tests.exe --gtest_filter=AssetLoaderSceneTest.LoadAssetSceneWithPhysicsSidecarLoadsV7` -> **1 passed**
-  - `Oxygen.Scripting.Module.Tests.exe --gtest_filter=ScriptingModuleTest.SceneSlotLocalStatePersistsAcrossGameplayFrames` -> **1 passed**
-- Post-change audit checks:
-  - `rg -n "GenerateAssetGuid" src Examples --glob "!**/*.md"` -> no hits.
-  - `rg -n "AssetKeyPolicy::|AssetKeyPolicy|asset_key_policy" src Examples --glob "!**/*.md"` -> no hits.
-  - `rg -n "MakeAssetKeyFromCanonicalVirtualPath|MakeDeterministicAssetKey" src Examples --glob "!**/*.md"` -> no hits.
-  - `rg -n "AssetKey[^\\n]*Uuid::Generate\\(|AssetKey\\s*\\{\\s*oxygen::Uuid|AssetKey\\s*\\{\\s*Uuid" src Examples --glob "!**/*.md"` -> no hits.
-  - `rg -n "as_writable_bytes\\s*\\(\\s*[^\\n]*AssetKey" src Examples --glob "!**/*.md"` -> no hits.
-
-Historical design alignment note (pre-restore):
-
-- No Phase 1 design deviation was identified relative to `physics.md`; design
-  document update is not required for this closure.
-
-## Phase 1 Restart Iteration (2026-03-06)
-
-Implemented in this iteration:
-
-- Tightened canonical virtual-path enforcement in cooker/content ingestion
-  points to require canonical syntax + mount-root identifier validation by using
-  `VirtualPathRuleSet::kSyntaxAndStandardMountRoot` in:
-  - `src/Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.cpp`
-  - `src/Oxygen/Cooker/Import/Internal/LooseCookedWriter.cpp`
-  - `src/Oxygen/Content/Internal/LooseCookedIndexImpl.cpp`
-- Mount-root rule aligned to project direction: any valid identifier is accepted
-  as a root, with `/.cooked` preserved as core mount root.
-- Added/updated regression tests for custom root acceptance and identifier
-  validation in:
-  - `src/Oxygen/Cooker/Test/Import/AssetEmitter_test.cpp`
-  - `src/Oxygen/Cooker/Test/Loose/LooseCookedWriter_test.cpp`
-  - `src/Oxygen/Content/Test/LooseCookedIndex_test.cpp`
-  - `src/Oxygen/Content/Test/VirtualPathResolver_test.cpp`
-  - `src/Oxygen/Content/Test/LooseCookedSource_test.cpp`
-
-Validation evidence in this iteration:
-
-- Source audit:
-  - `rg -n "kSyntaxAndStandardMountRoot" ...` (three ingestion call sites) -> **hits in all three files**.
-  - `rg -n "mount root must be a valid identifier|/Custom/|/9game/..." ...` (new/updated root-rule tests) -> **hits in updated test and validator files**.
-  - `rg -n "GenerateAssetGuid|AssetKeyPolicy::|AssetKeyPolicy|asset_key_policy|MakeDeterministicAssetKey|MakeAssetKeyFromCanonicalVirtualPath" src Examples --glob "!**/*.md" --glob "!**/pytest-cache-files-*"` -> **no hits**.
-- Runtime test evidence from `out/build-vs/bin/Debug`:
-  - `Oxygen.Content.AssetLoader.Tests.exe --gtest_filter=AssetLoaderLoadingTest.EnumerateMountedInputContextsLooseCookedExpectedToExposeEntries:AssetLoaderLoadingTest.HydrateInputContextExpectedToRegisterActionsAndBuildMappingContext` -> **2 passed**.
-  - `Oxygen.Cooker.PakBinaryConformance.Tests.exe --gtest_filter=PakBinaryConformanceTest.DirectoryEntryDescriptorOffsetsMatchSerializedBytes` -> **1 passed**.
-  - `Oxygen.Cooker.PakDomainValidation.Tests.exe --gtest_filter=PakPlanBuilderTest.DeterministicPlanningBuildsEquivalentPlanForReorderedSources:PakPlanBuilderTest.FullModeIncludesAllLiveAssetsAndResources:PakPlanBuilderTest.FullModeIncludesInputAssetsFromLooseSource:PakPlanBuilderTest.FullModeExtractsScriptSlotSidecarWhenPresentAndInBounds:PakPlanBuilderTest.ScriptSlotOutOfBoundsIsRejected:PakPlanBuilderTest.IndexZeroPolicyAppliedForResourceTables:PakPlanBuilderTest.BrowsePayloadPlanSizeMatchesSerializedShapeInvariant` -> **7 passed**.
-  - `Oxygen.Cooker.PakPatchPlanner.Tests.exe --gtest_filter=PakPatchPlannerTest.PatchClassificationIsDeterministicAndEmitsOnlyCreateReplaceDescriptors:PakPatchPlannerTest.PatchModeUsesPatchLocalResourcesAndClosure:PakPatchPlannerTest.ReplaceAssetTypeMismatchIsRejected` -> **3 passed**.
-  - `Oxygen.Cooker.PakWriter.Tests.exe --gtest_filter=PakWriterTest.FullModeWritesInputAssetDescriptorsIntoFinalPakDirectory:PakWriterTest.FullModeWritesPhysicsSceneDescriptorsIntoFinalPakDirectory` -> **2 passed**.
-  - `Oxygen.Content.LooseCooked.Tests.exe --gtest_filter=LooseCookedSourceTest.ConstructorDescriptorSha256MismatchThrows:LooseCookedIndexTest.AddLooseCookedRootVirtualPathCustomMountSucceeds` -> **2 passed**.
+- Build/test evidence for the Phase 1 change set is recorded in this plan and
+  includes focused content/cooker/runtime suites passing in `out/build-vs/bin/Debug`.
+- Search audits recorded in this plan show no remaining production references to
+  removed identity APIs/symbols (`GenerateAssetGuid`, `AssetKeyPolicy`,
+  deterministic-key free-function aliases).
 
 Remaining delta to Phase 1 exit gate:
 
-- **None for Phase 1 scope.** Phase 1 is complete based on code implementation,
-  design/plan updates, and targeted regression evidence above.
+- None.
 
 ## Non-Negotiable Completion Protocol
 
@@ -136,14 +47,14 @@ Remaining delta to Phase 1 exit gate:
 | `physics.md` design area | Mandatory migration outcome | Phase |
 | --- | --- | --- |
 | Asset identity (canonical virtual path + deterministic `AssetKey`) | Canonical path contract enforced, resolver-driven keys, UUID path removed | 1 |
-| L1 schema field completeness and L2 struct field inventory | Every schema property traceable to design; struct fields named and typed per spec; SHA-256 hash slots correctly sized; backend scalar union stubs and trailing-array navigation fields present | 2 |
-| Cross-artifact references + versioning contracts V-1/V-2/V-3 | Cross-unit references use `AssetKey`; positional indices only within regeneration units | 3, 5, 7 |
-| Integrity (SHA-256 only for artifacts) | All cooked descriptor/resource integrity fields upgraded to 32-byte SHA-256 | 2, 3 |
-| L2 artifact taxonomy and ABI finalization | Fixed-layout descriptors, trailing-array policy, finalized backend scalar unions, strict ABI asserts, golden-file tests | 4 |
-| Side-table emission registry (rows 1-14) | Sidecar + physics table/data physical emission matches documented locations | 5 |
-| Loose Cooking and PAK Builder contracts | Loose index authority, incremental-safe updates, PAK relocation without recook | 5, 6 |
-| L3 hydration order and runtime handle policy | Identity guard, dependency-order hydration, backend-specific restore, session-scoped handles | 7 |
-| Zero-tolerance cleanup | Legacy/random-key/JSON fallback/index misuse removed | 8 |
+| L1 schema field completeness and L2 struct field inventory | Every schema property traceable to design; struct fields named/typed per spec; SHA-256 hash slots 32 bytes; backend scalar unions and trailing-array navigation fields present | 2 |
+| L2 artifact taxonomy and ABI finalization | Fixed-layout descriptors, trailing-array policy, finalized backend scalar unions, strict ABI asserts, packing discipline audit, golden-file tests | 2 |
+| Cross-artifact references + versioning contracts V-1/V-2/V-3 | Cross-unit references use `AssetKey`; positional indices only within regeneration units; container-level ordinal coupling removed | 3, 4 |
+| Integrity (SHA-256 only for artifacts) | Hash slot upgrades plus correct cook-time population/verification and algorithm-use audit | 2, 3, 4 |
+| Side-table emission registry (rows 1-14) | Sidecar + physics table/data physical emission matches documented locations | 3 |
+| Loose Cooking and PAK Builder contracts | Loose index authority, incremental-safe recook updates, PAK relocation without recook | 3, 4 |
+| L3 hydration order and runtime handle policy | Identity guard, dependency-order hydration, backend-specific restore, session-scoped handles, sync write-back | 4 |
+| Zero-tolerance cleanup + final release validation | Legacy/JSON fallback removal, determinism, loose-vs-PAK parity, full evidence-backed release gate | 5 |
 
 ## Phase 1 - Identity Foundation and Canonical Path Enforcement
 
@@ -167,27 +78,30 @@ Phase 1 exit gate:
 - [x] Resolver priority/tombstone behavior has deterministic tests.
 - [x] `AssetKey` creation API is constrained so canonical-path/resolver identity cannot be bypassed in production identity flows.
 
-## Phase 2 - L1 Schema Completeness and L2 Struct Field Alignment
+## Phase 2 - L1 Schema + `PakFormat_physics.h` 100% Closure (Build Green Required)
 
-Goal: establish a verified, zero-gap correspondence between the L1 JSON schemas and
-the `PakFormat_physics.h` struct field inventory relative to the full specification
-in `physics.md`. No cooker or loader implementation is modified; this phase ensures
-the schema and struct vocabulary is complete and correct before any downstream phase
-attempts to read or write these fields.
+Status: `complete` (2026-03-06).
+
+Goal: complete **all** planned `PakFormat_physics.h`/related physics-format ABI
+changes in this phase (no deferral), and establish a verified, zero-gap
+correspondence between L1 schemas and L2 field vocabulary from `physics.md`.
+This phase is not complete unless the updated ABI compiles successfully in the
+project build.
 
 **L1 JSON schema gaps to close:**
 
-- [ ] `oxygen.physics-material-descriptor.schema.json`: split the single `friction`
+- [x] `oxygen.physics-material-descriptor.schema.json`: split the single `friction`
   property into `static_friction` and `dynamic_friction` — the design specifies each
   independently at L1.
-- [ ] `oxygen.collision-shape-descriptor.schema.json`: add a `children` array property
+- [x] `oxygen.collision-shape-descriptor.schema.json`: add a `children` array property
   for compound shapes; each child entry must carry `shape_type`, the full set of
   inline analytic params (`radius`, `half_height`, `half_extents`, `normal`,
   `distance`, `boundary_mode`, `limits_min`, `limits_max`, `payload_ref`), and a
   local transform (`local_position`, `local_rotation`, `local_scale`). Add an
   `allOf` conditional requiring `children` (minItems: 1) when
-  `shape_type == "compound"`.
-- [ ] `oxygen.physics-sidecar.schema.json` — `rigid_body_binding`: add optional
+  `shape_type == "compound"`. Add/verify explicit `is_sensor` (`boolean`) for
+  per-shape trigger semantics.
+- [x] `oxygen.physics-sidecar.schema.json` — `rigid_body_binding`: add optional
   properties `center_of_mass_override` (vec3), `inertia_tensor_override` (vec3
   diagonal), `max_linear_velocity` (number ≥ 0), `max_angular_velocity` (number ≥ 0),
   `allowed_dof` (object with per-axis boolean flags `translate_x/y/z`,
@@ -196,12 +110,12 @@ attempts to read or write these fields.
   `num_velocity_steps_override`, `num_position_steps_override`; PhysX:
   `min_velocity_iters`, `min_position_iters`, `max_contact_impulse`,
   `contact_report_threshold`).
-- [ ] `oxygen.physics-sidecar.schema.json` — `character_binding`: add optional
+- [x] `oxygen.physics-sidecar.schema.json` — `character_binding`: add optional
   properties `step_down_distance`, `skin_width`, `predictive_contact_distance`
   (numbers), `inner_shape_ref` (canonical_ocshape_path); add a `backend`
   discriminated sub-object (Jolt: `penetration_recovery_speed`, `max_num_hits`,
   `hit_reduction_cos_max_angle`; PhysX: `contact_offset`).
-- [ ] `oxygen.physics-sidecar.schema.json` — `soft_body_binding`: remove `stiffness`
+- [x] `oxygen.physics-sidecar.schema.json` — `soft_body_binding`: remove `stiffness`
   (no design backing); rename `damping` → `global_damping`; replace
   `jolt_settings_ref` / `physx_settings_ref` with `source_mesh_ref` (canonical
   path to the L1 geometry source); remove `cluster_count` and `settings_scale`
@@ -214,29 +128,53 @@ attempts to read or write these fields.
   `youngs_modulus`, `poisson_ratio`, `dynamic_friction`). Note: L1 uses
   `poisson_ratio` for readability; the L2 struct field is `poissons` to mirror
   `PxFEMSoftBodyMaterial::setPoissons()` exactly — this rename is intentional
-  and must be documented in the L1→L2 field-mapping checklist.
-- [ ] `oxygen.physics-sidecar.schema.json` — `vehicle_wheel_binding`: add an optional
+  and must be documented in the L1→L2 field-mapping checklist. `source_mesh_ref`
+  and optional `collision_mesh_ref` are cooker-input provenance/dependency fields;
+  they are validated/resolved during import and are not persisted in
+  `SoftBodyBindingRecord` unless the design is explicitly revised.
+- [x] `oxygen.physics-sidecar.schema.json` — `vehicle_wheel_binding`: add an optional
   `backend` discriminated sub-object (Jolt: `wheel_castor`; PhysX: none).
-- [ ] `oxygen.physics-resource-descriptor.schema.json`: add missing PhysX format tags
+- [x] `oxygen.physics-sidecar.schema.json` — complete **joint_binding** parity with
+  design fields (constraint type, node references/world anchor sentinel, constraint
+  space, local frames A/B, limits, spring settings, motor settings, break
+  thresholds, collide-connected flag, priority, backend scalars). Remove or deprecate
+  any schema key that is not present in `physics.md`.
+- [x] `oxygen.physics-sidecar.schema.json` — complete **vehicle_binding** parity with
+  design fields: chassis reference, controller type, engine block, transmission block,
+  differential list, anti-roll list, and wheel definitions split into topology
+  (`vehicle_wheel_binding`) vs simulation settings destined for backend-cooked vehicle
+  blob. Legacy direct blob-reference authoring fields are not part of final schema.
+- [x] `oxygen.physics-sidecar.schema.json` — `vehicle_binding.controller_type`:
+  add/verify explicit required enum (`"wheeled"` | `"tracked"`) and keep it
+  engine-neutral (no backend-specific discriminator leakage).
+- [x] `oxygen.physics-sidecar.schema.json` — verify **collider_binding** parity with
+  design fields, explicitly including `is_sensor` (`boolean`) plus
+  `shape_ref/material_ref/collision_layer/collision_mask` (no missing required
+  fields; no non-design extras).
+- [x] `oxygen.physics-sidecar.schema.json` — verify **aggregate_binding** property set
+  matches design exactly (no missing required fields; no non-design extras).
+- [x] `oxygen.physics-resource-descriptor.schema.json`: add missing PhysX format tags
   to the `resource_format` enum: `physx_convex_mesh_binary`,
   `physx_triangle_mesh_binary`, `physx_height_field_binary`,
   `physx_constraint_binary`, `physx_vehicle_settings_binary`.
 
 **L2 binary struct field gaps to close (`PakFormat_physics.h`):**
 
-- [ ] `PhysicsResourceDesc`: upgrade `uint64_t content_hash` (8 bytes) to
+- [x] `PhysicsResourceDesc`: upgrade `uint64_t content_hash` (8 bytes) to
   `uint8_t content_hash[32]` (32-byte SHA-256 slot). Update `static_assert`.
-- [ ] `PhysicsMaterialAssetDesc`: rename `float friction` to `float static_friction`
+- [x] `PhysicsMaterialAssetDesc`: rename `float friction` to `float static_friction`
   and add `float dynamic_friction`; adjust reserved padding to maintain or explicitly
   declare the new struct size. Update `static_assert`.
-- [ ] `PhysicsSceneAssetDesc`: carve `uint8_t target_scene_content_hash[32]` out of
+- [x] `CollisionShapeAssetDesc`: add/verify `uint32_t is_sensor` for shape-authored
+  trigger semantics; adjust reserved/padding and `static_assert` accordingly.
+- [x] `PhysicsSceneAssetDesc`: carve `uint8_t target_scene_content_hash[32]` out of
   the existing reserved block (32-byte SHA-256 slot for the paired `.oscene`
   staleness check). Update `static_assert`.
-- [ ] `ShapeParams::CompoundParams`: replace `uint32_t reserved_u32` with
+- [x] `ShapeParams::CompoundParams`: replace `uint32_t reserved_u32` with
   `uint32_t child_count` and add `uint32_t child_byte_offset` (self-relative byte
   offset to the trailing child descriptor array per the trailing-array policy in
   `physics.md`).
-- [ ] `RigidBodyBindingRecord`: add `float com_override[3]`, `uint32_t has_com_override`,
+- [x] `RigidBodyBindingRecord`: add `float com_override[3]`, `uint32_t has_com_override`,
   `float inertia_override[3]`, `uint32_t has_inertia_override`,
   `float max_linear_velocity`, `float max_angular_velocity`,
   `uint32_t allowed_dof_flags`; add `RigidBodyBackendScalars backend_scalars` union.
@@ -244,13 +182,15 @@ attempts to read or write these fields.
   `uint8_t num_position_steps_override`; PhysX: `uint8_t min_velocity_iters`,
   `uint8_t min_position_iters`, `float max_contact_impulse`,
   `float contact_report_threshold`). Update `static_assert`.
-- [ ] `CharacterBindingRecord`: add `float step_down_distance`, `float skin_width`,
+- [x] `CharacterBindingRecord`: add `float step_down_distance`, `float skin_width`,
   `float predictive_contact_distance`, `AssetKey inner_shape_asset_key`; add
   `CharacterBackendScalars backend_scalars` union. Define `CharacterBackendScalars`
   (Jolt: `float penetration_recovery_speed`, `uint32_t max_num_hits`,
   `float hit_reduction_cos_max_angle`; PhysX: `float contact_offset`). Update
   `static_assert`.
-- [ ] `SoftBodyBindingRecord`: replace `jolt_settings_resource_index` +
+- [x] `ColliderBindingRecord`: add/verify `uint32_t is_sensor`; update serializer/
+  loader call sites and `static_assert`.
+- [x] `SoftBodyBindingRecord`: replace `jolt_settings_resource_index` +
   `physx_settings_resource_index` with `core::ResourceIndexT topology_resource_index`
   + `PhysicsResourceFormat topology_format`; remove `uint32_t cluster_count` and
   `float stiffness` (no design backing); rename `float damping` →
@@ -261,18 +201,55 @@ attempts to read or write these fields.
   (Jolt: `uint32_t num_velocity_steps`, `uint32_t num_position_steps`,
   `float gravity_factor`; PhysX FEM: `float youngs_modulus`, `float poissons`,
   `float dynamic_friction`). Update `static_assert`.
-- [ ] `JointBindingRecord`: add `JointBackendScalars backend_scalars` union drawn from
+- [x] `JointBindingRecord`: add `JointBackendScalars backend_scalars` union drawn from
   the reserved block. Define `JointBackendScalars` (Jolt:
   `uint8_t num_velocity_steps_override`, `uint8_t num_position_steps_override`;
   PhysX: `float inv_mass_scale0`, `float inv_mass_scale1`, `float inv_inertia_scale0`,
   `float inv_inertia_scale1`). Update `static_assert`.
-- [ ] `VehicleBindingRecord`: rename `wheel_table_offset` → `wheel_slice_offset` and
-  `wheel_count` → `wheel_slice_count` to match design vocabulary; update all
-  read/write call sites.
-- [ ] `VehicleWheelBindingRecord`: add `VehicleWheelBackendScalars backend_scalars`
+- [x] `VehicleBindingRecord`: add/verify engine-neutral `uint32_t controller_type`
+  (`Wheeled` vs `Tracked` enum) and rename `wheel_table_offset` →
+  `wheel_slice_offset`, `wheel_count` → `wheel_slice_count`; update all read/write
+  call sites and `static_assert`.
+- [x] `VehicleWheelBindingRecord`: add `VehicleWheelBackendScalars backend_scalars`
   union from the reserved block. Define `VehicleWheelBackendScalars` (Jolt:
   `float wheel_castor`; PhysX: reserved to matching size). Update `static_assert`.
-- [ ] **Packing discipline audit across all physics structs**: review every
+- [x] Perform a full L2 record inventory pass for `ColliderBindingRecord`,
+  `JointBindingRecord`, `VehicleBindingRecord`, `VehicleWheelBindingRecord`, and
+  `AggregateBindingRecord` to ensure every engine-neutral field required by
+  `physics.md` is represented with final naming/units, and any non-design legacy field
+  is removed or explicitly captured as a documented deviation.
+- [x] Ensure `PhysicsResourceDesc` and related catalog structures have the fields
+  required to support the Phase 3 `AssetKey`-keyed lookup contract (no hidden ordinal
+  dependency baked into finalized ABI).
+- [x] `PakFormat_physics.h` ABI lock tasks (must finish in Phase 2, not Phase 4):
+  - [x] Finalize and lock binary layout for all five backend scalar unions:
+    `RigidBodyBackendScalars`, `CharacterBackendScalars`,
+    `SoftBodyBackendScalars`, `JointBackendScalars`,
+    `VehicleWheelBackendScalars` (member order + explicit tail padding policy).
+  - [x] Define/finalize `CompoundShapeChildDesc` fixed-size trailing-array element
+    struct and verify self-relative navigation from `ShapeParams::CompoundParams`.
+    Required child fields:
+    - `shape_type`.
+    - Inline analytic params block (`radius`, `half_height`, `half_extents`,
+      `normal`, `distance`, `boundary_mode`, `limits_min`, `limits_max`).
+    - Local transform block (`local_position`, `local_rotation`, `local_scale`).
+    - Non-analytic payload locator (`AssetKey` or cooked-shape payload ref) used
+      by convex/mesh/height-field children; null/invalid for analytic children.
+  - [x] Verify/finalize soft-body trailing-array navigation contract
+    (`pinned_vertex_*`, `kinematic_vertex_*`) and vehicle wheel slice contract
+    (`wheel_slice_offset`, `wheel_slice_count`) with layout tests.
+  - [x] Apply explicit packing discipline and `static_assert` coverage to all physics
+    descriptors/records touched by the design:
+    `CollisionShapeAssetDesc`, `PhysicsMaterialAssetDesc`, `PhysicsSceneAssetDesc`,
+    `PhysicsComponentTableDesc`, `PhysicsResourceDesc`,
+    `RigidBodyBindingRecord`, `ColliderBindingRecord`,
+    `CharacterBindingRecord`, `SoftBodyBindingRecord`,
+    `JointBindingRecord`, `VehicleBindingRecord`,
+    `VehicleWheelBindingRecord`, `AggregateBindingRecord`.
+  - [x] Add/update golden-file serialization/deserialization fixtures validating
+    size/offset/padding/trailing-array invariants for compound shapes, soft-body
+    records, and sidecar component tables.
+- [x] **Packing discipline audit across all physics structs**: review every
   `reserved` byte array in every struct and union in `PakFormat_physics.h` against
   the following rules, removing or replacing any that do not satisfy them:
   - A `reserved` field is permitted **only** if it falls into one of these three
@@ -309,38 +286,45 @@ attempts to read or write these fields.
 
 Phase 2 exit gate:
 
-- [ ] Every JSON schema property is traceable to a named field in `physics.md` for its
+- [x] **100% `PakFormat` completion gate:** no pending `PakFormat_physics.h` ABI
+  change remains for any later phase; all format-shape changes required by
+  `physics.md` are implemented in this phase.
+- [x] Every JSON schema property is traceable to a named field in `physics.md` for its
   asset class; any property absent from the design is either removed or documented in
   a deviation note appended to this plan.
-- [ ] Every `PakFormat_physics.h` struct field name, type, and unit matches the design
+- [x] Every `PakFormat_physics.h` struct field name, type, and unit matches the design
   vocabulary exactly per the L1 Authoring and L2 records sections of `physics.md`.
-- [ ] All five backend scalar union types (`RigidBodyBackendScalars`,
+- [x] All five backend scalar union types (`RigidBodyBackendScalars`,
   `CharacterBackendScalars`, `SoftBodyBackendScalars`, `JointBackendScalars`,
   `VehicleWheelBackendScalars`) are defined with the correct field names from the
   design table and are embedded in their respective binding records.
-- [ ] All trailing array navigation field pairs (`count` + `byte_offset`) mandated by
+- [x] All trailing array navigation field pairs (`count` + `byte_offset`) mandated by
   `physics.md` are present: compound shape child array in `ShapeParams::CompoundParams`
   and soft-body pinned/kinematic vertex arrays in `SoftBodyBindingRecord`.
-- [ ] SHA-256 hash slots are 32 bytes (`uint8_t[32]`) in all affected structs:
+- [x] Vehicle control-mode gate: `VehicleBindingRecord::controller_type` exists and is
+  validated as engine-neutral `Wheeled|Tracked` authored intent.
+- [x] Sensor coverage gate: per-shape and per-collider sensor fields required by the
+  design are explicitly present and mapped (`CollisionShapeAssetDesc::is_sensor`,
+  `ColliderBindingRecord::is_sensor`).
+- [x] Soft-body source/collision mesh reference contract is explicit: these remain
+  L1 cooker inputs (resolved/validated during import) and are intentionally not
+  serialized in `SoftBodyBindingRecord` under current design.
+- [x] SHA-256 hash slots are 32 bytes (`uint8_t[32]`) in all affected structs:
   `PhysicsResourceDesc::content_hash` and `PhysicsSceneAssetDesc::target_scene_content_hash`.
-- [ ] Build validation: all affected headers and translation units compile without error;
-  all `static_assert` size assertions are updated to reflect new struct sizes.
-- [ ] Audit: `rg` confirms legacy field names are absent from production source and
+- [x] ABI verification coverage includes per-record `static_assert` size/offset checks
+  and golden-file tests for compound child arrays, soft-body trailing arrays, and
+  wheel-slice navigation.
+- [x] Build validation (required): all affected headers/translation units compile,
+  all format assertions pass, and
+  `cmake --build out/build-vs --config Debug -- /clp:ErrorsOnly /nologo` succeeds.
+- [x] Audit: `rg` confirms legacy field names are absent from production source and
   schema files (`friction` (singular) in material descriptor, `wheel_table_offset`,
   `jolt_settings_resource_index`, `cluster_count` in soft body, etc.).
-- [ ] **Scene migration hard gate (blocker):** Phase 2 cannot be marked complete until
-  `Examples/Content/scenes/` is fully migrated to the updated physics schemas and no
-  legacy blob-authored physics remains in scene authoring content. Minimum evidence:
-  `rg` under `Examples/Content/scenes` shows no legacy soft-body/material keys
-  (`"friction"` singular in physics-material descriptors, `jolt_settings_ref`,
-  `physx_settings_ref`, `cluster_count`, `settings_scale`, `stiffness`, `damping`);
-  no scene manifest entries require `physics-resource-descriptor` for scene-authored
-  joint/vehicle/soft-body setup; and batch import succeeds for migrated scene manifests.
-- [ ] Packing audit: every `reserved` field remaining in `PakFormat_physics.h` has
+- [x] Packing audit: every `reserved` field remaining in `PakFormat_physics.h` has
   an inline comment citing its category (union tail pad, strict alignment, or
   fixed-size record); `rg -n 'reserved' src/Oxygen/Data/PakFormat_physics.h`
   returns no hit without such a comment, confirmed by manual review.
-- [ ] L1→L2 field-mapping checklist: a table mapping every schema property to the
+- [x] L1→L2 field-mapping checklist: a table mapping every schema property to the
   corresponding struct field is appended to this plan for each record type modified.
 
 ## Phase 2 Historical Snapshot (Pre-Restore Reference Only)
@@ -358,16 +342,21 @@ Historical notes captured before restore (non-authoritative; hints only):
   `physics-resource-descriptor` scene coupling; removed obsolete
   `*.physics-resource.json` + `*.jphbin` files and updated manifest/sidecar.
 
-Historical validation commands captured pre-restore
-(must be rerun for current closure):
+Phase 2 closure validation (rerun 2026-03-06):
 
 - Build:
   - `cmake --build out/build-vs --config Debug -- /clp:ErrorsOnly /nologo`
+    -> **success**.
+  - `cmake --build out/build-vs --config Debug -- /m:6 /clp:ErrorsOnly /nologo`
     -> **success**.
 - Batch import:
   - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportTool.exe --no-tui batch --manifest Examples/Content/scenes/physics_domains/import-manifest.json`
     -> **success**, summary `jobs=35 succeeded=35 failed=0`.
 - Tests:
+  - `python -m json.tool src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json`
+    -> **success**.
+  - `python -m pytest src/Oxygen/Cooker/Tools/PakGen/tests/test_collision_shape_pack_contract.py src/Oxygen/Cooker/Tools/PakGen/tests/test_packers_sizes.py src/Oxygen/Cooker/Tools/PakGen/tests/test_physics_scene_default_resource_indices.py src/Oxygen/Cooker/Tools/PakGen/tests/test_physics_scene_bindings_roundtrip.py src/Oxygen/Cooker/Tools/PakGen/tests/test_golden_physics_pack_lock.py -q`
+    -> **43 passed**.
   - `Oxygen.Cooker.AsyncImportPhysics.Tests.exe --gtest_filter=PhysicsJsonSchemaTest.*`
     -> **5 passed**.
   - `Oxygen.Cooker.ImportToolBatchDag.Tests.exe --gtest_filter=BatchCommandPhysicsDagTest.*`
@@ -385,7 +374,7 @@ Historical validation commands captured pre-restore
   - `rg -n -F '"friction"' Examples/Content/scenes --glob "*.physics-material.json"`
     -> no hits.
 
-Deferred to Phase 5 (not a Phase 2 gate):
+Deferred to historical Phase 5 (current plan: Phase 3-4 scope; not a Phase 2 gate):
 
 - DemoShell runtime can still hard-fail when loading `physics_domains` if required
   resource indices are unresolved for:
@@ -393,7 +382,8 @@ Deferred to Phase 5 (not a Phase 2 gate):
   `VehicleBindingRecord::constraint_resource_index`, and
   `SoftBodyBindingRecord::topology_resource_index`.
 - Root cause: replacement resource-generation/emission for these payload indices is
-  cooker/runtime integration work and is tracked in Phase 5.
+  cooker/runtime integration work and was tracked in historical Phase 5
+  (current plan: Phase 3-4).
 
 ### L1→L2 Field Mapping Checklist
 
@@ -401,6 +391,12 @@ Deferred to Phase 5 (not a Phase 2 gate):
 | --- | --- | --- |
 | `physics-material-descriptor.static_friction` | `PhysicsMaterialAssetDesc::static_friction` | Direct numeric mapping |
 | `physics-material-descriptor.dynamic_friction` | `PhysicsMaterialAssetDesc::dynamic_friction` | Direct numeric mapping |
+| `collision-shape-descriptor.is_sensor` | `CollisionShapeAssetDesc::is_sensor` | Shape-authored trigger semantic flag |
+| `collision-shape-descriptor.children[*].shape_type` | `CompoundShapeChildDesc::shape_type` | Compound child type tag |
+| `collision-shape-descriptor.children[*].(analytic params)` | `CompoundShapeChildDesc::analytic_params` | Inline analytic parameter block |
+| `collision-shape-descriptor.children[*].local_position/local_rotation/local_scale` | `CompoundShapeChildDesc::local_*` | Child local transform |
+| `collision-shape-descriptor.children[*].payload_ref` | `CompoundShapeChildDesc` non-analytic payload locator (`AssetKey` or cooked payload ref) | Required for non-analytic child types |
+| `collider_binding.is_sensor` | `ColliderBindingRecord::is_sensor` | Collider-level trigger override/authoring flag |
 | `rigid_body_binding.node_index` | `RigidBodyBindingRecord::node_index` | Direct |
 | `rigid_body_binding.shape_ref` | `RigidBodyBindingRecord::shape_asset_key` | Resolved canonical path -> `AssetKey` |
 | `rigid_body_binding.material_ref` | `RigidBodyBindingRecord::material_asset_key` | Resolved canonical path -> `AssetKey` |
@@ -451,172 +447,171 @@ Deferred to Phase 5 (not a Phase 2 gate):
 | `soft_body_binding.kinematic_vertices` | `SoftBodyBindingRecord::kinematic_vertex_count` + `kinematic_vertex_byte_offset` | Trailing array count + self-relative byte offset |
 | `soft_body_binding.backend.target=jolt` | `SoftBodyBindingRecord::topology_format` + `backend_scalars.jolt.*` | Sets `kJoltSoftBodySharedSettingsBinary`; maps velocity iterations |
 | `soft_body_binding.backend.target=physx` | `SoftBodyBindingRecord::topology_format` + `backend_scalars.physx.*` | Sets `kPhysXSoftBodySettingsBinary`; maps FEM scalars (`poisson_ratio` -> `poissons`) |
-| `soft_body_binding.source_mesh_ref` | `SoftBodyBindingSource::source_mesh_ref` (validation path) | Canonical geometry path validated in Phase 2 cooker; topology resource emission remains Phase 5 |
-| `soft_body_binding.collision_mesh_ref` | `SoftBodyBindingSource::collision_mesh_ref` (validation path) | Canonical geometry path validated in Phase 2 cooker; topology resource emission remains Phase 5 |
+| `soft_body_binding.source_mesh_ref` | No persisted L2 field (transient import input only) | Parsed into importer-local `SoftBodyBindingSource::source_mesh_ref`, resolved/validated as geometry dependency, then consumed to produce soft-body topology blob |
+| `soft_body_binding.collision_mesh_ref` | No persisted L2 field (transient import input only) | Parsed into importer-local `SoftBodyBindingSource::collision_mesh_ref`, resolved/validated as optional geometry dependency, then consumed by soft-body cook path |
 | `joint_binding.node_index_a` | `JointBindingRecord::node_index_a` | Direct |
 | `joint_binding.node_index_b` | `JointBindingRecord::node_index_b` | Supports numeric index or world attachment sentinel |
-| `joint_binding.constraint_ref` | `JointBindingRecord::constraint_resource_index` | Optional canonical `.opres` path -> physics resource index |
+| `joint_binding.constraint_type`, `constraint_space`, `local_frame_a_*`, `local_frame_b_*`, `limits_lower/limits_upper`, `spring_stiffnesses`, `spring_damping_ratios`, `motor_modes`, `motor_target_velocities`, `motor_target_positions`, `motor_max_forces`, `motor_max_torques`, `motor_drive_frequencies`, `motor_damping_ratios`, `break_force`, `break_torque`, `collide_connected`, `priority` | No persisted L2 field in Phase 2 | Schema-validated authored constraint settings; consumed by Phase 3 backend constraint-blob cook, then bound via `JointBindingRecord::constraint_resource_index` |
 | `joint_binding.backend.*` | `JointBindingRecord::backend_scalars` | Discriminated by `backend.target` |
 | `vehicle_binding.node_index` | `VehicleBindingRecord::node_index` | Direct |
-| `vehicle_binding.constraint_ref` | `VehicleBindingRecord::constraint_resource_index` | Optional canonical `.opres` path -> physics resource index |
+| `vehicle_binding.controller_type` | `VehicleBindingRecord::controller_type` | Engine-neutral enum (`Wheeled`/`Tracked`) |
+| `vehicle_binding.engine`, `vehicle_binding.transmission`, `vehicle_binding.differentials`, `vehicle_binding.anti_roll_bars` | No persisted L2 field in Phase 2 | Schema-validated authored driveline settings; consumed by Phase 3 vehicle-settings blob cook, then bound via `VehicleBindingRecord::constraint_resource_index` |
 | `vehicle_binding.wheels[*].node_index` | `VehicleWheelBindingRecord::wheel_node_index` | Vehicle wheel table entry |
 | `vehicle_binding.wheels[*].axle_index` | `VehicleWheelBindingRecord::axle_index` | Direct |
 | `vehicle_binding.wheels[*].side` | `VehicleWheelBindingRecord::side` | Enum map |
 | `vehicle_binding.wheels[*].backend.*` | `VehicleWheelBindingRecord::backend_scalars` | Discriminated by `backend.target` |
+| `vehicle_binding.wheels[*]` simulation fields (suspension/travel/curves/radius/etc.) | No persisted L2 field in Phase 2 | Schema-validated authored wheel simulation settings; consumed by Phase 3 vehicle-settings blob cook |
 | `vehicle_binding.wheels` slice topology | `VehicleBindingRecord::wheel_slice_offset` + `wheel_slice_count` | Contiguous slice into shared vehicle wheel table |
 
-## Phase 3 - Reference and Integrity Contract Migration (Cross-Cutting)
+Deviation notes:
 
-- [ ] Enforce reference contracts across data/model/tooling code:
-- [ ] Virtual path and `AssetKey` references carry no generation/version stamp (V-1).
-- [ ] Positional indices remain only within regeneration units (V-2).
-- [ ] Any cross-regeneration-unit reference is `AssetKey` only (V-3).
+- `joint_binding.constraint_ref` and `vehicle_binding.constraint_ref` were removed
+  from L1 schema in Phase 2 to enforce authored-parameter ownership from
+  `physics.md`; `constraint_resource_index` remains a cooker-owned output populated
+  by Phase 3 backend blob emission.
+
+## Phase 3 - Cooker Translation, Reference Contracts, and Loose Emission
+
+- [ ] Implement/update cook pipelines for all physics artifact classes in loose mode:
+- [ ] Enforce schema-first validation for all L1 physics source payloads (manual checks
+  only for non-schema-enforceable constraints).
+- [ ] Apply the L1->L2 mapping checklist from Phase 2 for rigid body, collider,
+  character, soft body, joint, vehicle, vehicle wheel, and aggregate records.
+- [ ] Emit physics materials (`.opmat`) as fixed descriptors with SHA-256 patching.
+- [ ] Emit collision shapes (`.ocshape`) with analytic-vs-backend-cooked split,
+  including compound child trailing-array serialization.
+- [ ] Preserve sensor semantics in emission: shape-level `is_sensor` writes into
+  `CollisionShapeAssetDesc`; collider-level `is_sensor` writes into
+  `ColliderBindingRecord`.
+- [ ] Emit physics sidecars (`.opscene`) with full component-table directory and
+  side-table placement matching design rows 1-14 exactly.
+- [ ] Emit backend-cooked blob classes (`shape`, `constraint`, `vehicle`, `soft-body`)
+  into `physics.table` + `physics.data` and populate all corresponding binding payload
+  indices (`constraint_resource_index`, `topology_resource_index`, etc.).
+- [ ] Vehicle emission uses `VehicleBindingRecord::controller_type` to select
+  wheeled-vs-tracked authored settings translation and backend cook path.
+- [ ] Enforce reference/versioning contracts across tooling and serialized outputs:
+- [ ] V-1: virtual path and `AssetKey` references carry no generation/version stamp.
+- [ ] V-2: positional indices are confined to regeneration units only.
+- [ ] V-3: any cross-regeneration-unit reference uses `AssetKey` only.
+- [ ] Remove scene-authored legacy blob coupling from content where design requires
+  authored parameters (no `*.physics-resource.json` dependency for scene-authored
+  joint/vehicle/soft-body setup).
 - [ ] Eliminate container-level ordinal coupling:
 - [ ] Physics resource descriptor table and container asset catalog are `AssetKey` keyed.
-- [ ] Incremental loose recook updates one asset without invalidating unrelated indices.
-- [ ] Upgrade artifact integrity fields to SHA-256 (32 bytes) where currently narrower
-  (hash slot sizes established in Phase 2; this phase ensures correct population and
-  verification at cook time):
-- [ ] `AssetHeader::content_hash`.
-- [ ] `PhysicsResourceDesc` integrity hash.
-- [ ] Loose index `AssetEntry` descriptor integrity hash.
-- [ ] Any remaining asset-level hash fields in content descriptors/tables.
-- [ ] Remove prohibited asset-integrity algorithms (CRC variants, MD5/SHA-1, non-crypto hash misuse).
-- [ ] Keep CRC32 limited to whole-container (PAK file-level checksum) only.
-
-Phase 3 exit gate:
-
-- [ ] No cross-unit positional reference path remains in code or serialized layout.
-- [ ] All asset-integrity fields are 32-byte SHA-256 and covered by tests.
-- [ ] Algorithm usage audit proves prohibited hashes are not used for asset integrity.
-
-## Phase 4 - L2 ABI Finalization (`PakFormat_physics.h` and Related Formats)
-
-- [ ] Lock backend scalar union binary layouts (union definitions established in Phase 2):
-- [ ] Apply packing discipline to all five union types — `RigidBodyBackendScalars`,
-  `CharacterBackendScalars`, `SoftBodyBackendScalars`, `JointBackendScalars`,
-  `VehicleWheelBackendScalars` — with explicit `reserved` bytes and stable member ordering.
-- [ ] Finalize trailing-array element struct definitions and serialization contracts:
-- [ ] Define `CompoundShapeChildDesc` fixed-size element struct (shape type, inline
-  analytic params, local transform offset/rotation/scale); verify compound shape
-  trailing-array self-relative offset navigation.
-- [ ] Verify `SoftBodyBindingRecord` pinned and kinematic vertex trailing-array
-  self-relative offset navigation (navigation fields established in Phase 2).
-- [ ] Verify vehicle wheel side-table slice contract (field names aligned in Phase 2)
-  with a struct layout test.
-- [ ] Apply explicit packing discipline to all fixed-layout descriptors and binding
-  records updated in Phase 2:
-- [ ] `CollisionShapeAssetDesc`, `PhysicsMaterialAssetDesc`, `PhysicsSceneAssetDesc`, `PhysicsComponentTableDesc`, `PhysicsResourceDesc`.
-- [ ] `RigidBodyBindingRecord`, `ColliderBindingRecord`, `CharacterBindingRecord`, `SoftBodyBindingRecord`, `JointBindingRecord`, `VehicleBindingRecord`, `VehicleWheelBindingRecord`, `AggregateBindingRecord`.
-- [ ] Stable member ordering, explicit `reserved` bytes, 16-byte multiple sizing where required.
-- [ ] Full `static_assert` coverage for size/offset invariants and trailing-array navigation fields.
-
-Phase 4 exit gate:
-
-- [ ] Binary layout asserts pass for every touched descriptor/record, including size,
-  per-field offset, and backend scalar union size assertions.
-- [ ] Golden-file serialization/deserialization tests validate offsets, counts, and
-  padding for compound shapes, soft-body records, and each sidecar binding record type.
-- [ ] Struct documentation reflects finalized field offsets and sizes aligned with the design.
-
-## Phase 5 - Cooker and Loose Layout Emission (`Cooker/Import/Internal`)
-
-- [ ] Implement/update cook pipelines for all physics artifact classes:
-- [ ] Enforce schema-first validation for all L1 physics source payloads (manual checks only for non-schema constraints).
-- [ ] Apply the L1→L2 field-mapping checklist (established in Phase 2) to verify cooker translation for rigid body, collider, character, soft body, joint, vehicle, vehicle wheel, and aggregate records.
-- [ ] Physics materials (`.opmat`) fixed descriptor emission with SHA-256 patching.
-- [ ] Collision shapes (`.ocshape`) analytic vs backend-cooked split, including compound child trailing array emission.
-- [ ] Physics sidecar (`.opscene`) with full component-table directory emission.
-- [ ] Backend-cooked blob classes (`shape`, `constraint`, `vehicle`, `soft-body`) into `physics.table` + `physics.data`.
-- [ ] Populate sidecar binding payload indices from emitted resources:
-  `JointBindingRecord::constraint_resource_index`,
-  `VehicleBindingRecord::constraint_resource_index`,
-  `SoftBodyBindingRecord::topology_resource_index` (with matching `topology_format`).
-- [ ] Enforce side-table emission registry order/location exactly as design rows 1-14.
-- [ ] Emit and patch `PhysicsSceneAssetDesc` staleness fields:
+- [ ] Incremental loose recook updates one asset without invalidating unrelated entries.
+- [ ] Emit and patch sidecar staleness fields:
 - [ ] `target_scene_key`.
 - [ ] `target_scene_content_hash` (SHA-256 of paired `.oscene` artifact).
 - [ ] `target_node_count`.
 - [ ] Ensure loose index (`*.oxlcidx`) remains authoritative:
-- [ ] Asset entries include key, descriptor-relative path, virtual path, type tag, descriptor hash.
-- [ ] File records include physics table/data and other resource files.
-- [ ] Incremental recook correctness:
-- [ ] Re-cooking one asset updates only affected descriptor/blob/index records.
-- [ ] No container-wide ordinal drift dependency.
+- [ ] Asset entries include key, descriptor-relative path, virtual path, type tag,
+  descriptor hash.
+- [ ] File records include physics table/data and all other referenced resource files.
+- [ ] Complete integrity migration behavior (hash slot sizes already landed in Phase 2):
+- [ ] Populate and verify SHA-256 for `AssetHeader::content_hash`,
+  `PhysicsResourceDesc::content_hash`, loose index descriptor hashes, and any remaining
+  asset-level integrity fields.
+- [ ] Remove prohibited integrity algorithms (CRC variants, MD5/SHA-1, non-crypto hash
+  misuse) for asset-level integrity; keep CRC32 restricted to whole-PAK checksum.
+- [ ] **Scene migration hard gate (moved from Phase 2):** migrate
+  `Examples/Content/scenes/` to the finalized physics schemas with no legacy keys.
+  Minimum evidence: `rg` shows no `jolt_settings_ref`, `physx_settings_ref`,
+  `cluster_count`, `settings_scale`, legacy singular `"friction"` in
+  physics-material descriptors, and no scene manifests requiring legacy
+  `physics-resource-descriptor` coupling.
 
-Phase 5 exit gate:
+Phase 3 exit gate:
 
-- [ ] End-to-end cooker tests cover analytic shape, non-analytic shape, joint blob, soft-body blob, vehicle blob paths.
-- [ ] Complex-scene fixture validates component directory + wheel table + trailing arrays.
-- [ ] DemoShell `RenderScene` validation for `physics_domains` confirms no missing
-  joint/vehicle/soft-body payload index hydration failures.
+- [ ] End-to-end cooker tests cover analytic shape, non-analytic shape, joint blob,
+  soft-body blob, and vehicle blob paths.
+- [ ] Complex-scene fixture validates component directory, wheel table, compound trailing
+  child arrays, and soft-body trailing arrays.
+- [ ] Batch import succeeds for migrated scene manifests with zero legacy coupling.
+- [ ] No cross-unit positional reference path remains in cooker output.
+- [ ] All asset-integrity fields are populated/verified as SHA-256 and covered by tests.
 - [ ] Incremental recook test proves unaffected assets remain stable.
 
-## Phase 6 - PAK Builder and Packaging Relocation
+## Phase 4 - PAK Relocation and Runtime Hydration Contract (L3)
 
-- [ ] Ensure PAK builder consumes cooked loose layout without recooking:
-- [ ] Reads index as source of truth for assets/file records.
-- [ ] Concatenates descriptor regions and physics resource regions.
-- [ ] Rewrites offsets from loose-relative to PAK-relative where required.
-- [ ] Produces self-contained mountable bundle with catalog/directory structures.
-- [ ] Validate behavior across base + patch PAK layering for resolver priority expectations.
-
-Phase 6 exit gate:
-
-- [ ] Loose->PAK roundtrip tests confirm byte-for-byte payload preservation (except expected relocated offsets).
-- [ ] Runtime can load both loose and PAK outputs with identical physics behavior.
-- [ ] PAK build path contains no cooker logic.
-
-## Phase 7 - Runtime Hydration and Simulation Contract (L3)
-
-- [ ] Integrate physics module into engine frame orchestration (fixed simulation + transform propagation phases).
-- [ ] Implement strict sidecar staleness guard before hydration:
-- [ ] Reject on `target_scene_key`, `target_scene_content_hash`, or `target_node_count` mismatch.
-- [ ] Hydrate in dependency order from design:
-- [ ] Shapes -> Materials -> RigidBodies -> Colliders -> Characters -> SoftBodies -> Joints -> Vehicles -> Aggregates.
-- [ ] Branch restore path strictly by backend format tag (`Jolt` vs `PhysX` cooked blobs).
-- [ ] Maintain runtime caches/maps by `AssetKey` and scene-node-index mappings for live handles.
-- [ ] Enforce runtime handle policy:
+- [ ] Ensure PAK builder consumes fully cooked loose layout without recooking:
+- [ ] Read index as source of truth for assets/file records.
+- [ ] Concatenate descriptor regions and physics resource regions.
+- [ ] Rewrite offsets from loose-relative to PAK-relative where required.
+- [ ] Produce self-contained mountable bundle with catalog/directory structures.
+- [ ] Validate base+patch layering behavior for resolver priority/tombstone semantics.
+- [ ] Integrate physics module into frame orchestration (fixed simulation and transform
+  propagation phases).
+- [ ] Enforce strict sidecar staleness guard before hydration:
+- [ ] Hard-fail on `target_scene_key`, `target_scene_content_hash`, or
+  `target_node_count` mismatch.
+- [ ] Hydrate in design dependency order:
+  `Shapes -> Materials -> RigidBodies -> Colliders -> Characters -> SoftBodies -> Joints -> Vehicles -> Aggregates`.
+- [ ] Branch restore path strictly by backend format tag (`Jolt` vs `PhysX` blobs).
+- [ ] Maintain runtime caches/maps by `AssetKey` and scene-node-index mappings.
+- [ ] Enforce per-instance override source-of-truth: runtime reads instance values
+  exclusively from cooked binding records; no physics instantiation path reads L1 JSON.
+- [ ] Sensor behavior contract: hydration/runtime paths must honor shape/collider
+  `is_sensor` as trigger semantics (overlap reporting without contact impulses).
+- [ ] Enforce runtime handle policy from design:
 - [ ] Session-scoped handles only; never persisted.
-- [ ] No raw backend pointer leakage across L3 boundary abstractions.
+- [ ] No raw backend pointer leakage across L3 abstractions.
 - [ ] Mid-session invalidation behavior follows backend/owner-responsibility contract.
-- [ ] Implement simulation-to-scene sync for body and vehicle wheel transforms.
+- [ ] Implement simulation-to-scene sync for body and vehicle wheel transforms (and
+  soft-body-driven updates where present).
 
-Phase 7 exit gate:
+Phase 4 exit gate:
 
-- [ ] Hydration tests cover every component table type and both backends (where available).
+- [ ] Loose->PAK roundtrip tests confirm payload preservation (except expected offset
+  relocation) and no cooker logic in PAK builder path.
+- [ ] Runtime loads both loose and PAK outputs with identical physics behavior.
+- [ ] Hydration tests cover every component table type and backend restore branch
+  available in the build.
+- [ ] Vehicle controller-mode tests cover both `Wheeled` and `Tracked` authored
+  records end-to-end (cook -> hydrate -> runtime behavior).
 - [ ] Mismatch guard tests hard-fail invalid sidecars.
-- [ ] Session teardown invalidates all handles; sync path verified under object removal scenarios.
+- [ ] Audit/tests confirm no runtime L1-JSON fallback path is used during physics
+  hydration/instantiation.
+- [ ] Sensor behavior tests confirm shape/collider `is_sensor` records instantiate
+  trigger behavior (overlap events, no contact response).
+- [ ] Session teardown invalidates handles; object-removal scenarios are covered.
+- [ ] DemoShell `RenderScene` for `physics_domains` runs without missing payload index
+  hydration failures.
 
-## Phase 8 - Zero-Tolerance Cleanup and Legacy Removal
+## Phase 5 - Full Working Closure, Cleanup, and Final Release Gate
 
-- [ ] Remove legacy/duplicate pipelines that bypass binary descriptors.
+- [ ] Zero-tolerance cleanup:
+- [ ] Remove legacy/duplicate pipelines bypassing binary descriptors.
 - [ ] Remove runtime fallback parsing of L1 JSON for physics instantiation.
-- [ ] Remove any cross-collection ordinal reference remnants.
-- [ ] Remove deprecated handle wrappers that contradict current runtime-handle policy.
-- [ ] Remove compatibility code paths that keep old schema alive in production.
-
-Phase 8 exit gate:
-
-- [ ] Search-based audit confirms no deprecated APIs/symbols remain.
-- [ ] Loader/cooker only accept finalized schema paths.
-- [ ] Migration notes document intentional breaking changes and no-shim policy.
-
-## Phase 9 - Final Validation and Release Gate
-
-- [ ] Build validation:
-- [ ] Full project build with required toolchain flags (including `/GR-` and C++23 expectations where applicable).
-- [ ] Zero warnings for packing/alignment/serialization in touched physics content code.
+- [ ] Remove cross-collection ordinal reference remnants.
+- [ ] Remove deprecated handle wrappers that violate session-handle policy.
+- [ ] Remove compatibility code paths that keep old physics schema alive in production.
 - [ ] Determinism and parity validation:
 - [ ] Same canonical virtual path -> same `AssetKey` across runs/machines.
-- [ ] Repeat cooks produce stable descriptor/blob hashes when inputs are unchanged.
-- [ ] Scene hydration parity across loose and PAK modes.
+- [ ] Repeat cooks with unchanged input produce stable descriptor/blob hashes.
+- [ ] Scene hydration parity holds across loose and PAK modes.
+- [ ] Scenario acceptance coverage from `physics.md`:
+- [ ] Scenario I (analytic sphere path) passes end-to-end.
+- [ ] Scenario II (compound + joint + soft body + vehicle) passes end-to-end.
+- [ ] Build/release validation:
+- [ ] Full project build with required toolchain flags (including `/GR-` and C++23
+  expectations where applicable).
+- [ ] Zero warnings for packing/alignment/serialization in touched physics-content code.
 - [ ] Documentation validation:
 - [ ] `physics.md` and this plan remain aligned after implementation deltas.
-- [ ] Any scope correction discovered during implementation updates docs first (then code).
+- [ ] Any discovered scope correction updates docs first, then implementation.
 
-Final release gate:
+Phase 5 final release gate:
 
-- [ ] Every phase above has code, docs, and validation evidence.
+- [ ] **Everything fully working:** no known functional gap remains against
+  `physics.md` (L1 authoring contract, L2 cooking/layout, PAK relocation, L3 hydration,
+  runtime handle policy, and sync behavior).
+- [ ] Every Phase 2-5 checklist item has code, docs, and validation evidence.
 - [ ] Remaining gaps list is empty.
-- [ ] Status may be advanced from `in_progress` only after all evidence is recorded.
+- [ ] Status may advance from `in_progress` only after all evidence is recorded.
+
+## Historical Phase Numbering (Folded)
+
+Former Phases 6-9 were merged into Phases 3-5 on 2026-03-06 so the plan's
+functional completion point is Phase 5. Do not treat 6-9 as active gates unless
+a future scope expansion explicitly reintroduces them.

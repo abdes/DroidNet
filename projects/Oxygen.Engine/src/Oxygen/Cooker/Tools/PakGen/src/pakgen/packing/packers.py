@@ -1706,26 +1706,116 @@ def pack_collision_shape_asset_descriptor(
     physics_material_name_to_asset_key: Dict[str, bytes] | None = None,
 ) -> bytes:
     """Pack CollisionShapeAssetDesc."""
+    shape_type_lookup = {
+        "invalid": 0,
+        "sphere": 1,
+        "capsule": 2,
+        "box": 3,
+        "cylinder": 4,
+        "cone": 5,
+        "convex_hull": 6,
+        "triangle_mesh": 7,
+        "height_field": 8,
+        "plane": 9,
+        "world_boundary": 10,
+        "compound": 11,
+    }
+
+    boundary_mode_lookup = {
+        "invalid": 0,
+        "aabb_clamp": 1,
+        "plane_set": 2,
+    }
+
+    def _parse_shape_type(value: Any, *, field_name: str) -> int:
+        if isinstance(value, str):
+            return shape_type_lookup.get(value.strip().lower(), 0)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            raise PakError("E_TYPE", f"{field_name} must be a shape type string/int")
+
+    def _parse_boundary_mode(value: Any) -> int:
+        if isinstance(value, str):
+            return boundary_mode_lookup.get(value.strip().lower(), 0)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            raise PakError("E_TYPE", "boundary_mode must be a string/int")
+
+    def _pack_compound_child(child: Dict[str, Any]) -> bytes:
+        if not isinstance(child, dict):
+            raise PakError("E_TYPE", "compound child entry must be an object")
+        child_shape_type = _parse_shape_type(
+            child.get("shape_type", 0), field_name="children[].shape_type"
+        )
+        radius = float(child.get("radius", 0.0))
+        half_height = float(child.get("half_height", 0.0))
+        half_extents = _vec3(child.get("half_extents"), [0.0, 0.0, 0.0])
+        normal = _vec3(child.get("normal"), [0.0, 0.0, 0.0])
+        distance = float(child.get("distance", 0.0))
+        boundary_mode = _parse_boundary_mode(child.get("boundary_mode", 0))
+        limits_min = _vec3(child.get("limits_min"), [0.0, 0.0, 0.0])
+        limits_max = _vec3(child.get("limits_max"), [0.0, 0.0, 0.0])
+        local_position = _vec3(child.get("local_position"), [0.0, 0.0, 0.0])
+        local_rotation = child.get("local_rotation", [0.0, 0.0, 0.0, 1.0])
+        if not isinstance(local_rotation, (list, tuple)) or len(local_rotation) != 4:
+            raise PakError(
+                "E_TYPE", "children[].local_rotation must be a 4-element list"
+            )
+        local_rotation = [
+            float(local_rotation[0]),
+            float(local_rotation[1]),
+            float(local_rotation[2]),
+            float(local_rotation[3]),
+        ]
+        local_scale = _vec3(child.get("local_scale"), [1.0, 1.0, 1.0])
+        payload_asset_key = b"\x00" * 16
+        if "payload_asset_key" in child:
+            payload_asset_key = _pack_asset_key_bytes(
+                child.get("payload_asset_key"), "children[].payload_asset_key"
+            )
+        elif "payload_ref" in child:
+            payload_asset_key = _pack_asset_key_bytes(
+                child.get("payload_ref"), "children[].payload_ref"
+            )
+
+        return struct.pack(
+            "<Iff3f3ffI3f3f3f4f3f16s4x",
+            child_shape_type & 0xFFFFFFFF,
+            radius,
+            half_height,
+            half_extents[0],
+            half_extents[1],
+            half_extents[2],
+            normal[0],
+            normal[1],
+            normal[2],
+            distance,
+            boundary_mode & 0xFFFFFFFF,
+            limits_min[0],
+            limits_min[1],
+            limits_min[2],
+            limits_max[0],
+            limits_max[1],
+            limits_max[2],
+            local_position[0],
+            local_position[1],
+            local_position[2],
+            local_rotation[0],
+            local_rotation[1],
+            local_rotation[2],
+            local_rotation[3],
+            local_scale[0],
+            local_scale[1],
+            local_scale[2],
+            payload_asset_key,
+        )
+
     header = header_builder(asset)
     physics_material_name_to_asset_key = physics_material_name_to_asset_key or {}
     shape_type_raw = asset.get("shape_type", 0)
-    if isinstance(shape_type_raw, str):
-        shape_type = {
-            "invalid": 0,
-            "sphere": 1,
-            "capsule": 2,
-            "box": 3,
-            "cylinder": 4,
-            "cone": 5,
-            "convex_hull": 6,
-            "triangle_mesh": 7,
-            "height_field": 8,
-            "plane": 9,
-            "world_boundary": 10,
-            "compound": 11,
-        }.get(shape_type_raw.strip().lower(), 0)
-    else:
-        shape_type = int(shape_type_raw)
+    shape_type = _parse_shape_type(shape_type_raw, field_name="shape_type")
 
     local_position = _vec3(asset.get("local_position"), [0.0, 0.0, 0.0])
     local_rotation_raw = asset.get("local_rotation", [0.0, 0.0, 0.0, 1.0])
@@ -1793,19 +1883,30 @@ def pack_collision_shape_asset_descriptor(
         struct.pack_into("<3ff", shape_params_blob, 0, normal[0], normal[1], normal[2], distance)
     elif shape_type == 10:  # world boundary
         boundary_mode_raw = params.get("boundary_mode", asset.get("boundary_mode", 0))
-        if isinstance(boundary_mode_raw, str):
-            boundary_mode = {
-                "invalid": 0,
-                "aabb_clamp": 1,
-                "plane_set": 2,
-            }.get(boundary_mode_raw.strip().lower(), 0)
-        else:
-            boundary_mode = int(boundary_mode_raw)
+        boundary_mode = _parse_boundary_mode(boundary_mode_raw)
         limits_min = _vec3(params.get("limits_min", asset.get("limits_min")), [0.0, 0.0, 0.0])
         limits_max = _vec3(params.get("limits_max", asset.get("limits_max")), [0.0, 0.0, 0.0])
         struct.pack_into("<I3f3f", shape_params_blob, 0, boundary_mode, *limits_min, *limits_max)
+    elif shape_type == 11:  # compound
+        children = asset.get("children", [])
+        if children is None:
+            children = []
+        if not isinstance(children, list):
+            raise PakError("E_TYPE", "children must be a list for compound shapes")
+        child_records = b"".join(_pack_compound_child(child) for child in children)
+        child_count = len(children)
+        child_offset = COLLISION_SHAPE_ASSET_DESC_SIZE if child_count > 0 else 0
+        struct.pack_into(
+            "<II",
+            shape_params_blob,
+            0,
+            child_count & 0xFFFFFFFF,
+            child_offset & 0xFFFFFFFF,
+        )
+    else:
+        child_records = b""
 
-    payload_backed_shape_types = {5, 6, 7, 8, 11}
+    payload_backed_shape_types = {5, 6, 7, 8}
     cooked_ref = asset.get("cooked_shape_ref")
     cooked_ref = cooked_ref if isinstance(cooked_ref, dict) else {}
     default_cooked_index = (
@@ -1821,7 +1922,6 @@ def pack_collision_shape_asset_descriptor(
             6: 1,   # convex hull -> convex
             7: 2,   # triangle mesh -> mesh
             8: 3,   # height field
-            11: 4,  # compound
         }.get(shape_type, 0)
     elif isinstance(payload_type_raw, str):
         payload_type = {
@@ -1829,12 +1929,11 @@ def pack_collision_shape_asset_descriptor(
             "convex": 1,
             "mesh": 2,
             "height_field": 3,
-            "compound": 4,
         }.get(payload_type_raw.strip().lower(), 0)
     else:
         payload_type = int(payload_type_raw)
 
-    desc = (
+    fixed_desc = (
         header
         + struct.pack("<B", shape_type & 0xFF)
         + struct.pack("<3f", *local_position)
@@ -1848,8 +1947,12 @@ def pack_collision_shape_asset_descriptor(
         + struct.pack("<I", cooked_index)
         + struct.pack("<B", payload_type & 0xFF)
     )
-    if len(desc) != COLLISION_SHAPE_ASSET_DESC_SIZE:
-        raise PakError("E_SIZE", f"CollisionShapeAssetDesc size mismatch: {len(desc)}")
+    if len(fixed_desc) != COLLISION_SHAPE_ASSET_DESC_SIZE:
+        raise PakError("E_SIZE", f"CollisionShapeAssetDesc size mismatch: {len(fixed_desc)}")
+    if shape_type == 11:
+        desc = fixed_desc + child_records
+    else:
+        desc = fixed_desc
     return desc
 
 
@@ -2363,6 +2466,7 @@ def pack_collider_binding_record(
         raise PakError("E_REF", f"Collider node_index out of range: {node_index}")
     layer = int(binding.get("collision_layer", 0))
     mask = int(binding.get("collision_mask", 0xFFFFFFFF))
+    is_sensor = 1 if bool(binding.get("is_sensor", False)) else 0
     shape_key_bytes = _pack_asset_key_bytes(shape_asset_key, "shape_asset_key")
     material_key_bytes = _pack_asset_key_bytes(
         material_asset_key, "material_asset_key"
@@ -2371,7 +2475,7 @@ def pack_collider_binding_record(
         struct.pack("<I", node_index)
         + shape_key_bytes
         + material_key_bytes
-        + struct.pack("<HI", layer, mask)
+        + struct.pack("<HII", layer, mask, is_sensor)
     )
     if len(desc) != COLLIDER_BINDING_RECORD_SIZE:
         raise PakError("E_SIZE", f"ColliderBindingRecord size mismatch: {len(desc)}")
@@ -2603,13 +2707,22 @@ def pack_vehicle_binding_record(
     node_index = int(binding.get("node_index", 0))
     if node_index < 0 or node_index >= node_count:
         raise PakError("E_REF", f"Vehicle node_index out of range: {node_index}")
+    controller_type_raw = binding.get("controller_type", 0)
+    if isinstance(controller_type_raw, str):
+        controller_type = {
+            "wheeled": 0,
+            "tracked": 1,
+        }.get(controller_type_raw.strip().lower(), 0)
+    else:
+        controller_type = int(controller_type_raw)
     wheel_slice_offset = int(binding.get("wheel_slice_offset", 0))
     wheel_slice_count = int(binding.get("wheel_slice_count", 0))
     desc = (
         struct.pack(
-            "<IIIH",
+            "<IIIII",
             node_index,
             constraint_index,
+            controller_type,
             wheel_slice_offset,
             wheel_slice_count,
         )

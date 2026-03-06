@@ -154,7 +154,8 @@ NOLINT_TEST(PhysicsJsonSchemaTest, PhysicsSidecarSchemaAcceptsCanonicalDocument)
         {
           "node_index": 1,
           "shape_ref": "/.cooked/Physics/Shapes/test_shape.ocshape",
-          "material_ref": "/.cooked/Physics/Materials/default.opmat"
+          "material_ref": "/.cooked/Physics/Materials/default.opmat",
+          "is_sensor": true
         }
       ],
       "characters": [
@@ -205,7 +206,27 @@ NOLINT_TEST(PhysicsJsonSchemaTest, PhysicsSidecarSchemaAcceptsCanonicalDocument)
         {
           "node_index_a": 0,
           "node_index_b": 1,
-          "constraint_ref": "/.cooked/Physics/Resources/joint_5.opres",
+          "constraint_type": "six_dof",
+          "constraint_space": "local",
+          "local_frame_a_position": [0.0, 0.5, 0.0],
+          "local_frame_a_rotation": [0.0, 0.0, 0.0, 1.0],
+          "local_frame_b_position": [0.0, -0.5, 0.0],
+          "local_frame_b_rotation": [0.0, 0.0, 0.0, 1.0],
+          "limits_lower": [-0.1, -0.2, -0.3, -0.4, -0.5, -0.6],
+          "limits_upper": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+          "spring_stiffnesses": [10.0, 10.0, 10.0, 5.0, 5.0, 5.0],
+          "spring_damping_ratios": [0.7, 0.7, 0.7, 0.6, 0.6, 0.6],
+          "motor_modes": ["off", "velocity", "position", "off", "off", "off"],
+          "motor_target_velocities": [0.0, 1.0, 2.0, 0.0, 0.0, 0.0],
+          "motor_target_positions": [0.0, 0.1, 0.2, 0.0, 0.0, 0.0],
+          "motor_max_forces": [20.0, 20.0, 20.0, 10.0, 10.0, 10.0],
+          "motor_max_torques": [5.0, 5.0, 5.0, 2.5, 2.5, 2.5],
+          "motor_drive_frequencies": [3.0, 3.0, 3.0, 2.0, 2.0, 2.0],
+          "motor_damping_ratios": [0.9, 0.9, 0.9, 0.8, 0.8, 0.8],
+          "break_force": 1000.0,
+          "break_torque": 250.0,
+          "collide_connected": false,
+          "priority": 3,
           "backend": {
             "target": "jolt",
             "num_velocity_steps_override": 4,
@@ -216,7 +237,7 @@ NOLINT_TEST(PhysicsJsonSchemaTest, PhysicsSidecarSchemaAcceptsCanonicalDocument)
       "vehicles": [
         {
           "node_index": 4,
-          "constraint_ref": "/.cooked/Physics/Resources/vehicle_chassis.opres",
+          "controller_type": "wheeled",
           "wheels": [
             {
               "node_index": 6,
@@ -292,13 +313,11 @@ NOLINT_TEST(
       "joints": [
         {
           "node_index_a": 0,
-          "node_index_b": null,
-          "constraint_ref": "/.cooked/Physics/Resources/joint_world_a.opres"
+          "node_index_b": null
         },
         {
           "node_index_a": 2,
-          "node_index_b": "world",
-          "constraint_ref": "/.cooked/Physics/Resources/joint_world_b.opres"
+          "node_index_b": "world"
         }
       ]
     }
@@ -355,7 +374,15 @@ NOLINT_TEST(PhysicsJsonSchemaTest, PhysicsSidecarSchemaRejectsLegacyFieldNames)
         {
           "node_index_a": 0,
           "node_index_b": 1,
-          "constraint_resource_index": 1
+          "spring_stiffness": 10.0,
+          "spring_damping_ratio": 0.5,
+          "motor_mode": "velocity",
+          "motor_target_velocity": 1.0,
+          "motor_target_position": 0.0,
+          "motor_max_force": 25.0,
+          "motor_max_torque": 5.0,
+          "motor_drive_frequency": 4.0,
+          "motor_damping_ratio": 0.9
         }
       ],
       "soft_bodies": [

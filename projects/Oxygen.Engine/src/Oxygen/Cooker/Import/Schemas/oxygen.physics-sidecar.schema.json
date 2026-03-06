@@ -93,6 +93,36 @@
                 "type": "number"
             }
         },
+        "vec4": {
+            "type": "array",
+            "minItems": 4,
+            "maxItems": 4,
+            "items": {
+                "type": "number"
+            }
+        },
+        "vec6": {
+            "type": "array",
+            "minItems": 6,
+            "maxItems": 6,
+            "items": {
+                "type": "number"
+            }
+        },
+        "curve_point_2d": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+                "type": "number"
+            }
+        },
+        "curve_2d": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/curve_point_2d"
+            }
+        },
         "canonical_ocshape_path": {
             "type": "string",
             "minLength": 1,
@@ -484,6 +514,9 @@
                 },
                 "collision_mask": {
                     "$ref": "#/definitions/u32"
+                },
+                "is_sensor": {
+                    "type": "boolean"
                 }
             }
         },
@@ -670,8 +703,90 @@
                     ],
                     "description": "Body B node index, or null/\"world\" to attach constraint to world."
                 },
-                "constraint_ref": {
-                    "$ref": "#/definitions/canonical_opres_path"
+                "constraint_type": {
+                    "enum": [
+                        "fixed",
+                        "point",
+                        "hinge",
+                        "slider",
+                        "distance",
+                        "cone",
+                        "six_dof"
+                    ]
+                },
+                "constraint_space": {
+                    "enum": [
+                        "world",
+                        "local"
+                    ]
+                },
+                "local_frame_a_position": {
+                    "$ref": "#/definitions/vec3"
+                },
+                "local_frame_a_rotation": {
+                    "$ref": "#/definitions/vec4"
+                },
+                "local_frame_b_position": {
+                    "$ref": "#/definitions/vec3"
+                },
+                "local_frame_b_rotation": {
+                    "$ref": "#/definitions/vec4"
+                },
+                "limits_lower": {
+                    "$ref": "#/definitions/vec6"
+                },
+                "limits_upper": {
+                    "$ref": "#/definitions/vec6"
+                },
+                "spring_stiffnesses": {
+                    "$ref": "#/definitions/vec6"
+                },
+                "spring_damping_ratios": {
+                    "$ref": "#/definitions/vec6"
+                },
+                "motor_modes": {
+                    "type": "array",
+                    "minItems": 6,
+                    "maxItems": 6,
+                    "items": {
+                        "enum": [
+                            "off",
+                            "velocity",
+                            "position"
+                        ]
+                    }
+                },
+                "motor_target_velocities": {
+                    "$ref": "#/definitions/vec6"
+                },
+                "motor_target_positions": {
+                    "$ref": "#/definitions/vec6"
+                },
+                "motor_max_forces": {
+                    "$ref": "#/definitions/vec6"
+                },
+                "motor_max_torques": {
+                    "$ref": "#/definitions/vec6"
+                },
+                "motor_drive_frequencies": {
+                    "$ref": "#/definitions/vec6"
+                },
+                "motor_damping_ratios": {
+                    "$ref": "#/definitions/vec6"
+                },
+                "break_force": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "break_torque": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "collide_connected": {
+                    "type": "boolean"
+                },
+                "priority": {
+                    "$ref": "#/definitions/u32"
                 },
                 "backend": {
                     "$ref": "#/definitions/joint_backend"
@@ -683,14 +798,140 @@
             "additionalProperties": false,
             "required": [
                 "node_index",
+                "controller_type",
                 "wheels"
             ],
             "properties": {
                 "node_index": {
                     "$ref": "#/definitions/node_index"
                 },
-                "constraint_ref": {
-                    "$ref": "#/definitions/canonical_opres_path"
+                "controller_type": {
+                    "enum": [
+                        "wheeled",
+                        "tracked"
+                    ]
+                },
+                "engine": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "max_torque": {
+                            "type": "number",
+                            "minimum": 0.0
+                        },
+                        "rpm_min": {
+                            "type": "number",
+                            "minimum": 0.0
+                        },
+                        "rpm_max": {
+                            "type": "number",
+                            "minimum": 0.0
+                        },
+                        "torque_curve": {
+                            "$ref": "#/definitions/curve_2d"
+                        },
+                        "inertia": {
+                            "type": "number",
+                            "minimum": 0.0
+                        }
+                    }
+                },
+                "transmission": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "forward_gear_ratios": {
+                            "type": "array",
+                            "items": {
+                                "type": "number"
+                            }
+                        },
+                        "reverse_gear_ratios": {
+                            "type": "array",
+                            "items": {
+                                "type": "number"
+                            }
+                        },
+                        "final_drive_ratio": {
+                            "type": "number"
+                        },
+                        "clutch_strength": {
+                            "type": "number",
+                            "minimum": 0.0
+                        },
+                        "shift_up_rpm": {
+                            "type": "number",
+                            "minimum": 0.0
+                        },
+                        "shift_down_rpm": {
+                            "type": "number",
+                            "minimum": 0.0
+                        },
+                        "clutch_engagement_time": {
+                            "type": "number",
+                            "minimum": 0.0
+                        },
+                        "shift_mode": {
+                            "enum": [
+                                "auto",
+                                "manual"
+                            ]
+                        }
+                    }
+                },
+                "differentials": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                            "left_wheel_index",
+                            "right_wheel_index"
+                        ],
+                        "properties": {
+                            "left_wheel_index": {
+                                "$ref": "#/definitions/non_negative_int"
+                            },
+                            "right_wheel_index": {
+                                "$ref": "#/definitions/non_negative_int"
+                            },
+                            "differential_ratio": {
+                                "type": "number"
+                            },
+                            "torque_split": {
+                                "type": "number"
+                            },
+                            "limited_slip_ratio": {
+                                "type": "number"
+                            },
+                            "engine_torque_ratio": {
+                                "type": "number"
+                            }
+                        }
+                    }
+                },
+                "anti_roll_bars": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                            "left_wheel_index",
+                            "right_wheel_index"
+                        ],
+                        "properties": {
+                            "left_wheel_index": {
+                                "$ref": "#/definitions/non_negative_int"
+                            },
+                            "right_wheel_index": {
+                                "$ref": "#/definitions/non_negative_int"
+                            },
+                            "stiffness": {
+                                "type": "number",
+                                "minimum": 0.0
+                            }
+                        }
+                    }
                 },
                 "wheels": {
                     "type": "array",
@@ -721,6 +962,64 @@
                         "left",
                         "right"
                     ]
+                },
+                "suspension_attachment_point": {
+                    "$ref": "#/definitions/vec3"
+                },
+                "suspension_direction": {
+                    "$ref": "#/definitions/vec3"
+                },
+                "suspension_rest_length": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "suspension_preload_length": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "suspension_spring_stiffness": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "suspension_spring_damping": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "max_suspension_force": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "radius": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "width": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "rotational_inertia": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "steering_axis": {
+                    "$ref": "#/definitions/vec3"
+                },
+                "max_steering_angle": {
+                    "type": "number"
+                },
+                "max_brake_torque": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "max_hand_brake_torque": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "longitudinal_friction_curve": {
+                    "$ref": "#/definitions/curve_2d"
+                },
+                "lateral_friction_curve": {
+                    "$ref": "#/definitions/curve_2d"
                 },
                 "backend": {
                     "$ref": "#/definitions/vehicle_wheel_backend"
