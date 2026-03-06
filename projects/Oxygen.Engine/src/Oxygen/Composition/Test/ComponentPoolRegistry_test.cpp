@@ -7,7 +7,6 @@
 #include <Oxygen/Composition/ComponentPoolRegistry.h>
 
 #include <atomic>
-#include <chrono>
 #include <thread>
 #include <vector>
 
@@ -59,7 +58,9 @@ public:
   }
 
 private:
-  int x_, y_, z_;
+  int x_ { 0 };
+  int y_ { 0 };
+  int z_ { 0 };
 };
 
 //! Test pooled component without custom pool size
@@ -97,8 +98,8 @@ public:
   auto GetCounter() const noexcept -> int { return counter_; }
 
 private:
-  double mass_;
-  int counter_; // Changed from std::atomic<int> to regular int
+  double mass_ { 1.0 };
+  int counter_ { 0 }; // Changed from std::atomic<int> to regular int
 };
 
 //! Test pooled component with custom expected pool size
@@ -118,7 +119,7 @@ public:
   void SetValue(int value) noexcept { value_ = value; }
 
 private:
-  int value_;
+  int value_ { 42 };
 };
 
 //=== Test Fixtures ===-------------------------------------------------------//
@@ -138,7 +139,7 @@ protected:
   void TearDown() override
   {
     // Clean up after each test to prevent state leakage
-    registry_->ForceClearAllPools();
+    oxygen::ComponentPoolRegistry::ForceClearAllPools();
   }
 
   oxygen::ComponentPoolRegistry* registry_;
@@ -339,12 +340,15 @@ NOLINT_TEST_F(
         // Allocate component
         auto handle = pool.Allocate(static_cast<double>(i * 100 + j));
 
-        // Access and modify component
-        if (auto* component = pool.Get(handle)) {
-          component->IncrementCounter();
-          if (component->GetCounter() == 1) {
-            successful_operations.fetch_add(1);
-          }
+        // Get the component to ensure it exists and the handle is valid.
+        // Note: We cannot safely *dereference* the returned pointer to modify
+        // component state concurrently here because another thread's
+        // Deallocate() could trigger a swap-and-pop reallocation inside the
+        // dense set (invalidating this component's memory address) as soon as
+        // pool.Get() releases its read lock. This is explicitly stated in the
+        // ComponentPool API contract.
+        if (pool.Get(handle) != nullptr) {
+          successful_operations.fetch_add(1);
         }
 
         // Deallocate component
@@ -381,8 +385,7 @@ NOLINT_TEST_F(
         auto& pool = oxygen::ComponentPoolRegistry::GetComponentPool<
           TestTransformComponent>();
         auto handle = pool.Allocate(i, i + 1, i + 2);
-        if (auto* component = pool.Get(handle)) {
-          component->SetPosition(i * 10, i * 10 + 1, i * 10 + 2);
+        if (pool.Get(handle) != nullptr) {
           successful_operations.fetch_add(1);
         }
         pool.Deallocate(handle);
@@ -391,8 +394,7 @@ NOLINT_TEST_F(
         auto& pool = oxygen::ComponentPoolRegistry::GetComponentPool<
           TestRenderComponent>();
         auto handle = pool.Allocate("thread_" + std::to_string(i));
-        if (auto* component = pool.Get(handle)) {
-          component->SetName("modified_" + std::to_string(i));
+        if (pool.Get(handle) != nullptr) {
           successful_operations.fetch_add(1);
         }
         pool.Deallocate(handle);
@@ -401,8 +403,7 @@ NOLINT_TEST_F(
         auto& pool = oxygen::ComponentPoolRegistry::GetComponentPool<
           TestPhysicsComponent>();
         auto handle = pool.Allocate(static_cast<double>(i));
-        if (auto* component = pool.Get(handle)) {
-          component->IncrementCounter();
+        if (pool.Get(handle) != nullptr) {
           successful_operations.fetch_add(1);
         }
         pool.Deallocate(handle);
