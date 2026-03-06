@@ -184,7 +184,8 @@ auto PhysicsResourceImportPipeline::Worker() -> co::Co<>
 auto PhysicsResourceImportPipeline::ComputeContentHash(WorkItem& item)
   -> co::Co<std::optional<ImportDiagnostic>>
 {
-  if (!config_.with_content_hashing || item.cooked.content_hash != 0) {
+  if (!config_.with_content_hashing
+    || !util::IsZeroContentSha256(item.cooked.content_hash)) {
     co_return std::nullopt;
   }
   if (IsStopRequested(item.stop_token)) {
@@ -198,14 +199,15 @@ auto PhysicsResourceImportPipeline::ComputeContentHash(WorkItem& item)
     [bytes, stop_token = item.stop_token, source_id](
       co::ThreadPool::CancelToken canceled) noexcept {
       if (IsStopRequested(stop_token) || canceled) {
-        return uint64_t { 0 };
+        return base::Sha256Digest {};
       }
-      const auto hash = util::ComputeContentHash(bytes);
-      DLOG_F(2, "hashed {} -> {:#x}", source_id, hash);
+      const auto hash = util::ComputeContentSha256(bytes);
+      DLOG_F(2, "hashed {} -> sha256", source_id);
       return hash;
     });
 
-  if (!IsStopRequested(item.stop_token) && content_hash != 0) {
+  if (!IsStopRequested(item.stop_token)
+    && !util::IsZeroContentSha256(content_hash)) {
     item.cooked.content_hash = content_hash;
   }
   co_return std::nullopt;

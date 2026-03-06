@@ -461,7 +461,7 @@ auto PhysicsResourceDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       .data = std::move(source_bytes_result.value()),
       .format = format,
       .alignment = 16,
-      .content_hash = 0,
+      .content_hash = {},
     },
     .on_started = {},
     .on_finished = {},

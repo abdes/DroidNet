@@ -19,38 +19,34 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 
 namespace oxygen::content::import {
 
 namespace {
 
-  [[nodiscard]] auto ComputeFastFingerprint(
-    const std::span<const std::byte> bytes) -> uint64_t
+  auto AppendHashSlotHex(std::string& out, const base::Sha256Digest& digest)
+    -> void
   {
-    constexpr uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
-    constexpr uint64_t kFnvPrime = 1099511628211ULL;
-    auto hash = kFnvOffsetBasis;
-    for (const auto b : bytes) {
-      hash ^= static_cast<uint64_t>(std::to_integer<uint8_t>(b));
-      hash *= kFnvPrime;
-    }
-    return hash;
-  }
-
-  auto AppendHashSlotHex(std::string& out, const uint64_t hash64) -> void
-  {
-    auto slot = std::array<uint8_t, 32> {};
-    std::memcpy(slot.data(), &hash64, sizeof(hash64));
-
     constexpr auto kHex = "0123456789abcdef";
-    for (const auto byte : slot) {
+    for (const auto byte : digest) {
       out.push_back(kHex[(byte >> 4U) & 0x0FU]);
       out.push_back(kHex[byte & 0x0FU]);
     }
   }
 
+  [[nodiscard]] auto ComputeEffectiveHash(
+    const CookedPhysicsResourcePayload& cooked) -> base::Sha256Digest
+  {
+    if (!util::IsZeroContentSha256(cooked.content_hash)) {
+      return cooked.content_hash;
+    }
+    return util::ComputeContentSha256(cooked.data);
+  }
+
   [[nodiscard]] auto ComputePhysicsIdentity(
-    const CookedPhysicsResourcePayload& cooked) -> std::string
+    const CookedPhysicsResourcePayload& cooked, const base::Sha256Digest& hash)
+    -> std::string
   {
     auto identity = std::string {};
     identity.reserve(160);
@@ -59,21 +55,17 @@ namespace {
     identity.append(std::to_string(static_cast<uint32_t>(cooked.format)));
     identity.append(";n=");
     identity.append(std::to_string(cooked.data.size()));
-
-    const auto hash64 = (cooked.content_hash != 0ULL)
-      ? cooked.content_hash
-      : ComputeFastFingerprint(cooked.data);
     identity.append(";h=");
-    AppendHashSlotHex(identity, hash64);
+    AppendHashSlotHex(identity, hash);
     return identity;
   }
 
   [[nodiscard]] auto MakePhysicsSignature(
-    const CookedPhysicsResourcePayload& cooked, std::string_view signature_salt)
-    -> std::string
+    const CookedPhysicsResourcePayload& cooked, const base::Sha256Digest& hash,
+    std::string_view signature_salt) -> std::string
   {
     static_cast<void>(signature_salt);
-    return ComputePhysicsIdentity(cooked);
+    return ComputePhysicsIdentity(cooked, hash);
   }
 
 } // namespace
@@ -113,10 +105,14 @@ auto PhysicsResourceEmitter::Emit(CookedPhysicsResourcePayload cooked,
     throw std::runtime_error("PhysicsResourceEmitter is finalized");
   }
 
-  const auto identity = ComputePhysicsIdentity(cooked);
+  const auto hash_missing = util::IsZeroContentSha256(cooked.content_hash);
+  const auto effective_hash = ComputeEffectiveHash(cooked);
+  cooked.content_hash = effective_hash;
+
+  const auto identity = ComputePhysicsIdentity(cooked, effective_hash);
   DCHECK_F(!identity.empty(), "physics identity must not be empty");
 
-  if (cooked.content_hash == 0ULL && !signature_salt.empty()) {
+  if (hash_missing && !signature_salt.empty()) {
     const auto key = std::string(signature_salt);
     if (const auto it = identity_by_key_.find(key);
       it != identity_by_key_.end() && it->second != identity) {
@@ -155,7 +151,8 @@ auto PhysicsResourceEmitter::Emit(CookedPhysicsResourcePayload cooked,
     }
   }
 
-  const auto signature = MakePhysicsSignature(cooked, signature_salt);
+  const auto signature
+    = MakePhysicsSignature(cooked, effective_hash, signature_salt);
   DCHECK_F(!signature.empty(), "physics signature must not be empty");
 
   const auto resource_alignment = cooked.alignment > 0 ? cooked.alignment : 16;
@@ -167,7 +164,7 @@ auto PhysicsResourceEmitter::Emit(CookedPhysicsResourcePayload cooked,
   });
 
   if (!acquire.is_new) {
-    if (cooked.content_hash == 0ULL && !signature_salt.empty()) {
+    if (hash_missing && !signature_salt.empty()) {
       const auto key = std::string(signature_salt);
       identity_by_key_[key] = identity;
       index_by_key_[key] = acquire.index;
@@ -189,7 +186,7 @@ auto PhysicsResourceEmitter::Emit(CookedPhysicsResourcePayload cooked,
   QueueDataWrite(
     WriteKind::kPayload, acquire.index, reserved.aligned_offset, payload);
 
-  if (cooked.content_hash == 0ULL && !signature_salt.empty()) {
+  if (hash_missing && !signature_salt.empty()) {
     const auto key = std::string(signature_salt);
     identity_by_key_[key] = identity;
     index_by_key_[key] = acquire.index;
@@ -250,10 +247,9 @@ auto PhysicsResourceEmitter::MakeTableEntry(
   entry.size_bytes
     = static_cast<data::pak::core::DataBlobSizeT>(cooked.data.size());
   entry.format = cooked.format;
-  const auto hash64 = (cooked.content_hash != 0ULL)
-    ? cooked.content_hash
-    : ComputeFastFingerprint(cooked.data);
-  std::memcpy(entry.content_hash, &hash64, sizeof(hash64));
+  static_assert(sizeof(entry.content_hash) == sizeof(cooked.content_hash));
+  std::memcpy(
+    entry.content_hash, cooked.content_hash.data(), sizeof(entry.content_hash));
   return entry;
 }
 

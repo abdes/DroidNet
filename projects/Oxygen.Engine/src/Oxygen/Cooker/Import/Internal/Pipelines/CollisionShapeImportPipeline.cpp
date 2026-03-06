@@ -39,9 +39,18 @@ namespace {
   }
 
   [[nodiscard]] auto SerializeDescriptor(
-    const data::pak::physics::CollisionShapeAssetDesc& descriptor)
+    data::pak::physics::CollisionShapeAssetDesc descriptor,
+    const std::vector<data::pak::physics::CompoundShapeChildDesc>& children)
     -> std::vector<std::byte>
   {
+    using data::pak::physics::ShapeType;
+    if (descriptor.shape_type == ShapeType::kCompound) {
+      descriptor.shape_params.compound.child_count
+        = static_cast<uint32_t>(children.size());
+      descriptor.shape_params.compound.child_byte_offset
+        = children.empty() ? 0U : static_cast<uint32_t>(sizeof(descriptor));
+    }
+
     auto stream = serio::MemoryStream {};
     auto writer = serio::Writer(stream);
     [[maybe_unused]] const auto pack = writer.ScopedAlignment(1);
@@ -50,6 +59,12 @@ namespace {
         &descriptor, 1)));
     DCHECK_F(
       write.has_value(), "Collision shape descriptor serialization failed");
+    if (descriptor.shape_type == ShapeType::kCompound && !children.empty()) {
+      [[maybe_unused]] const auto child_write
+        = writer.WriteBlob(std::as_bytes(std::span(children)));
+      DCHECK_F(child_write.has_value(),
+        "Collision shape compound children serialization failed");
+    }
     const auto bytes = stream.Data();
     return std::vector<std::byte>(bytes.begin(), bytes.end());
   }
@@ -183,7 +198,8 @@ auto CollisionShapeImportPipeline::Worker() -> co::Co<>
     }
 
     const auto cook_start = std::chrono::steady_clock::now();
-    auto descriptor_bytes = SerializeDescriptor(item.descriptor);
+    auto descriptor_bytes
+      = SerializeDescriptor(item.descriptor, item.compound_children);
     if (config_.with_content_hashing) {
       const auto content_hash
         = co_await ComputeContentHash(descriptor_bytes, item.stop_token);

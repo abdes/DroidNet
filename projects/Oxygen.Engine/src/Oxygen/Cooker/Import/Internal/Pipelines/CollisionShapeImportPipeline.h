@@ -44,6 +44,7 @@ public:
   struct WorkItem final {
     std::string source_id;
     data::pak::physics::CollisionShapeAssetDesc descriptor {};
+    std::vector<data::pak::physics::CompoundShapeChildDesc> compound_children;
     std::function<void()> on_started;
     std::function<void()> on_finished;
     std::stop_token stop_token;

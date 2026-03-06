@@ -5,7 +5,7 @@ zero-shim: no legacy identity, schema, cooker, loader, or runtime fallback paths
 may remain once all phases are complete.
 
 Status: `in_progress` until every phase exit gate has code + docs + validation evidence.
-Phase status summary: **Phases 1-2 complete (2026-03-06); Phases 3-5 pending**.
+Phase status summary: **Phases 1-3 complete (2026-03-06); Phases 4-5 pending**.
 Phase scope note (2026-03-06): former Phases 6-9 were folded into Phases 3-5 so
 the implementation reaches fully working functional parity by the end of Phase 5.
 
@@ -470,51 +470,107 @@ Deviation notes:
   `physics.md`; `constraint_resource_index` remains a cooker-owned output populated
   by Phase 3 backend blob emission.
 
+## Phase 3 Progress Snapshot (Tracking Only)
+
+Status: `complete` (2026-03-06).
+
+Scope delivered:
+
+- Sidecar cooker path emits backend payload indices for soft bodies, joints, and
+  vehicles into `physics.table`/`physics.data`, and writes those indices to
+  `SoftBodyBindingRecord::topology_resource_index`,
+  `JointBindingRecord::constraint_resource_index`, and
+  `VehicleBindingRecord::constraint_resource_index`.
+- Sidecar emission now patches `PhysicsSceneAssetDesc::target_scene_content_hash`
+  from the paired `.oscene` descriptor bytes (SHA-256) and preserves deterministic
+  wheel-slice ordering (`wheel_slice_offset`, `wheel_slice_count`) in the shared
+  vehicle-wheel table.
+- Collision-shape import now serializes compound trailing child descriptors
+  (`ShapeParams::CompoundParams.{child_count,child_byte_offset}` +
+  `CompoundShapeChildDesc[]`) and supports payload-backed non-analytic shapes when
+  `payload_ref` is omitted by emitting an authored cooked payload to physics
+  table/data.
+- Collision-shape payload validation now accepts PhysX shape resource formats where
+  compatible with `ShapePayloadType` (`kPhysXConvexMeshBinary`,
+  `kPhysXTriangleMeshBinary`, `kPhysXHeightFieldBinary`) in addition to
+  `kJoltShapeBinary`.
+- Physics resource integrity path now uses SHA-256 bytes end-to-end in
+  `CookedPhysicsResourcePayload` and `PhysicsResourceDesc::content_hash`.
+
+Validation evidence summary:
+
+- `Oxygen.Cooker.AsyncImportCollisionShapeDescriptor.Tests.exe`
+  `--gtest_filter=CollisionShapeDescriptorJsonSchemaTest.*:CollisionShapeDescriptorImportJobTest.*`
+  -> **12 passed**.
+- `Oxygen.Cooker.AsyncImportPhysicsResourceDescriptor.Tests.exe`
+  `--gtest_filter=PhysicsResourceDescriptorJsonSchemaTest.*:PhysicsResourceDescriptorImportJobTest.*`
+  -> **9 passed**.
+- `Oxygen.Cooker.AsyncImportPhysics.Tests.exe`
+  `--gtest_filter=PhysicsPhase3ClosureTest.*` -> **2 passed**.
+- `Oxygen.Cooker.AsyncImportPhysics.Tests.exe` -> **24 passed**.
+- `Oxygen.Cooker.ImportToolBatchDag.Tests.exe`
+  `--gtest_filter=BatchCommandPhysicsDagTest.*` -> **9 passed**.
+- `Oxygen.Content.LoadersPhysics.Tests.exe` -> **13 passed**.
+- `cmake --build out/build-vs --config Debug -- /m:6` -> **exit code 0**.
+- Scene migration hard-gate audits:
+  - `rg -n -F "jolt_settings_ref" Examples/Content/scenes` -> no hits.
+  - `rg -n -F "physx_settings_ref" Examples/Content/scenes` -> no hits.
+  - `rg -n -F "cluster_count" Examples/Content/scenes` -> no hits.
+  - `rg -n -F "settings_scale" Examples/Content/scenes` -> no hits.
+  - `rg -n -F '"friction"' Examples/Content/scenes --glob "*.physics-material.json"`
+    -> no hits.
+  - `rg -n -F "physics-resource-descriptor" Examples/Content/scenes` -> no hits.
+  - `rg --files Examples/Content/scenes -g "*.physics-resource.json"` -> no hits.
+
+Remaining delta to Phase 3 exit gate:
+
+- None.
+
 ## Phase 3 - Cooker Translation, Reference Contracts, and Loose Emission
 
-- [ ] Implement/update cook pipelines for all physics artifact classes in loose mode:
-- [ ] Enforce schema-first validation for all L1 physics source payloads (manual checks
+- [x] Implement/update cook pipelines for all physics artifact classes in loose mode:
+- [x] Enforce schema-first validation for all L1 physics source payloads (manual checks
   only for non-schema-enforceable constraints).
-- [ ] Apply the L1->L2 mapping checklist from Phase 2 for rigid body, collider,
+- [x] Apply the L1->L2 mapping checklist from Phase 2 for rigid body, collider,
   character, soft body, joint, vehicle, vehicle wheel, and aggregate records.
-- [ ] Emit physics materials (`.opmat`) as fixed descriptors with SHA-256 patching.
-- [ ] Emit collision shapes (`.ocshape`) with analytic-vs-backend-cooked split,
+- [x] Emit physics materials (`.opmat`) as fixed descriptors with SHA-256 patching.
+- [x] Emit collision shapes (`.ocshape`) with analytic-vs-backend-cooked split,
   including compound child trailing-array serialization.
-- [ ] Preserve sensor semantics in emission: shape-level `is_sensor` writes into
+- [x] Preserve sensor semantics in emission: shape-level `is_sensor` writes into
   `CollisionShapeAssetDesc`; collider-level `is_sensor` writes into
   `ColliderBindingRecord`.
-- [ ] Emit physics sidecars (`.opscene`) with full component-table directory and
+- [x] Emit physics sidecars (`.opscene`) with full component-table directory and
   side-table placement matching design rows 1-14 exactly.
-- [ ] Emit backend-cooked blob classes (`shape`, `constraint`, `vehicle`, `soft-body`)
+- [x] Emit backend-cooked blob classes (`shape`, `constraint`, `vehicle`, `soft-body`)
   into `physics.table` + `physics.data` and populate all corresponding binding payload
   indices (`constraint_resource_index`, `topology_resource_index`, etc.).
-- [ ] Vehicle emission uses `VehicleBindingRecord::controller_type` to select
+- [x] Vehicle emission uses `VehicleBindingRecord::controller_type` to select
   wheeled-vs-tracked authored settings translation and backend cook path.
-- [ ] Enforce reference/versioning contracts across tooling and serialized outputs:
-- [ ] V-1: virtual path and `AssetKey` references carry no generation/version stamp.
-- [ ] V-2: positional indices are confined to regeneration units only.
-- [ ] V-3: any cross-regeneration-unit reference uses `AssetKey` only.
-- [ ] Remove scene-authored legacy blob coupling from content where design requires
+- [x] Enforce reference/versioning contracts across tooling and serialized outputs:
+- [x] V-1: virtual path and `AssetKey` references carry no generation/version stamp.
+- [x] V-2: positional indices are confined to regeneration units only.
+- [x] V-3: any cross-regeneration-unit reference uses `AssetKey` only.
+- [x] Remove scene-authored legacy blob coupling from content where design requires
   authored parameters (no `*.physics-resource.json` dependency for scene-authored
   joint/vehicle/soft-body setup).
-- [ ] Eliminate container-level ordinal coupling:
-- [ ] Physics resource descriptor table and container asset catalog are `AssetKey` keyed.
-- [ ] Incremental loose recook updates one asset without invalidating unrelated entries.
-- [ ] Emit and patch sidecar staleness fields:
-- [ ] `target_scene_key`.
-- [ ] `target_scene_content_hash` (SHA-256 of paired `.oscene` artifact).
-- [ ] `target_node_count`.
-- [ ] Ensure loose index (`*.oxlcidx`) remains authoritative:
-- [ ] Asset entries include key, descriptor-relative path, virtual path, type tag,
+- [x] Eliminate container-level ordinal coupling:
+- [x] Physics resource descriptor table and container asset catalog are `AssetKey` keyed.
+- [x] Incremental loose recook updates one asset without invalidating unrelated entries.
+- [x] Emit and patch sidecar staleness fields:
+- [x] `target_scene_key`.
+- [x] `target_scene_content_hash` (SHA-256 of paired `.oscene` artifact).
+- [x] `target_node_count`.
+- [x] Ensure loose index (`*.oxlcidx`) remains authoritative:
+- [x] Asset entries include key, descriptor-relative path, virtual path, type tag,
   descriptor hash.
-- [ ] File records include physics table/data and all other referenced resource files.
-- [ ] Complete integrity migration behavior (hash slot sizes already landed in Phase 2):
-- [ ] Populate and verify SHA-256 for `AssetHeader::content_hash`,
+- [x] File records include physics table/data and all other referenced resource files.
+- [x] Complete integrity migration behavior (hash slot sizes already landed in Phase 2):
+- [x] Populate and verify SHA-256 for `AssetHeader::content_hash`,
   `PhysicsResourceDesc::content_hash`, loose index descriptor hashes, and any remaining
   asset-level integrity fields.
-- [ ] Remove prohibited integrity algorithms (CRC variants, MD5/SHA-1, non-crypto hash
+- [x] Remove prohibited integrity algorithms (CRC variants, MD5/SHA-1, non-crypto hash
   misuse) for asset-level integrity; keep CRC32 restricted to whole-PAK checksum.
-- [ ] **Scene migration hard gate (moved from Phase 2):** migrate
+- [x] **Scene migration hard gate (moved from Phase 2):** migrate
   `Examples/Content/scenes/` to the finalized physics schemas with no legacy keys.
   Minimum evidence: `rg` shows no `jolt_settings_ref`, `physx_settings_ref`,
   `cluster_count`, `settings_scale`, legacy singular `"friction"` in
@@ -523,14 +579,14 @@ Deviation notes:
 
 Phase 3 exit gate:
 
-- [ ] End-to-end cooker tests cover analytic shape, non-analytic shape, joint blob,
+- [x] End-to-end cooker tests cover analytic shape, non-analytic shape, joint blob,
   soft-body blob, and vehicle blob paths.
-- [ ] Complex-scene fixture validates component directory, wheel table, compound trailing
+- [x] Complex-scene fixture validates component directory, wheel table, compound trailing
   child arrays, and soft-body trailing arrays.
-- [ ] Batch import succeeds for migrated scene manifests with zero legacy coupling.
-- [ ] No cross-unit positional reference path remains in cooker output.
-- [ ] All asset-integrity fields are populated/verified as SHA-256 and covered by tests.
-- [ ] Incremental recook test proves unaffected assets remain stable.
+- [x] Batch import succeeds for migrated scene manifests with zero legacy coupling.
+- [x] No cross-unit positional reference path remains in cooker output.
+- [x] All asset-integrity fields are populated/verified as SHA-256 and covered by tests.
+- [x] Incremental recook test proves unaffected assets remain stable.
 
 ## Phase 4 - PAK Relocation and Runtime Hydration Contract (L3)
 

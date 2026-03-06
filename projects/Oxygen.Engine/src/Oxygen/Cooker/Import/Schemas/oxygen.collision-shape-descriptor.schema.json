@@ -367,28 +367,6 @@
                             ]
                         }
                     }
-                },
-                {
-                    "if": {
-                        "properties": {
-                            "shape_type": {
-                                "enum": [
-                                    "convex_hull",
-                                    "triangle_mesh",
-                                    "height_field",
-                                    "compound"
-                                ]
-                            }
-                        },
-                        "required": [
-                            "shape_type"
-                        ]
-                    },
-                    "then": {
-                        "required": [
-                            "payload_ref"
-                        ]
-                    }
                 }
             ]
         }
@@ -574,27 +552,6 @@
                         "payload_ref"
                     ]
                 }
-            }
-        },
-        {
-            "if": {
-                "properties": {
-                    "shape_type": {
-                        "enum": [
-                            "convex_hull",
-                            "triangle_mesh",
-                            "height_field"
-                        ]
-                    }
-                },
-                "required": [
-                    "shape_type"
-                ]
-            },
-            "then": {
-                "required": [
-                    "payload_ref"
-                ]
             }
         }
     ]
