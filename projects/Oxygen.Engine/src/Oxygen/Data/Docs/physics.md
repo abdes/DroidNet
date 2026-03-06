@@ -298,6 +298,10 @@ Examples of correctly structured cross-unit references:
 - A sidecar binding record references a shape asset via its `AssetKey`. The
   scene node index within the same binding record is a within-unit reference
   (the sidecar and its scene are one regeneration unit) and needs no key.
+- A non-analytic collision shape (convex hull / triangle mesh / height field)
+  emits its cooked payload in the same cook pass as the `CollisionShapeAssetDesc`;
+  top-level authored external payload indirection to `.opres` descriptors
+  is not permitted because it recreates cross-collection ordinal coupling.
 - A constraint blob references its two body-attachment scene nodes via the
   sidecar's within-unit scene node indices. If the constraint needs to filter
   contacts by sub-shape, that filtering is done at L3 runtime using live

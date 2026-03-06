@@ -96,7 +96,7 @@ project build.
 - [x] `oxygen.collision-shape-descriptor.schema.json`: add a `children` array property
   for compound shapes; each child entry must carry `shape_type`, the full set of
   inline analytic params (`radius`, `half_height`, `half_extents`, `normal`,
-  `distance`, `boundary_mode`, `limits_min`, `limits_max`, `payload_ref`), and a
+  `distance`, `boundary_mode`, `limits_min`, `limits_max`), and a
   local transform (`local_position`, `local_rotation`, `local_scale`). Add an
   `allOf` conditional requiring `children` (minItems: 1) when
   `shape_type == "compound"`. Add/verify explicit `is_sensor` (`boolean`) for
@@ -395,7 +395,7 @@ Deferred to historical Phase 5 (current plan: Phase 3-4 scope; not a Phase 2 gat
 | `collision-shape-descriptor.children[*].shape_type` | `CompoundShapeChildDesc::shape_type` | Compound child type tag |
 | `collision-shape-descriptor.children[*].(analytic params)` | `CompoundShapeChildDesc::analytic_params` | Inline analytic parameter block |
 | `collision-shape-descriptor.children[*].local_position/local_rotation/local_scale` | `CompoundShapeChildDesc::local_*` | Child local transform |
-| `collision-shape-descriptor.children[*].payload_ref` | `CompoundShapeChildDesc` non-analytic payload locator (`AssetKey` or cooked payload ref) | Required for non-analytic child types |
+| `collision-shape-descriptor.children[*]` non-analytic payload locator | Removed from schema/import contract | Compound children are analytic-only; no external payload locator field |
 | `collider_binding.is_sensor` | `ColliderBindingRecord::is_sensor` | Collider-level trigger override/authoring flag |
 | `rigid_body_binding.node_index` | `RigidBodyBindingRecord::node_index` | Direct |
 | `rigid_body_binding.shape_ref` | `RigidBodyBindingRecord::shape_asset_key` | Resolved canonical path -> `AssetKey` |
@@ -487,13 +487,9 @@ Scope delivered:
   vehicle-wheel table.
 - Collision-shape import now serializes compound trailing child descriptors
   (`ShapeParams::CompoundParams.{child_count,child_byte_offset}` +
-  `CompoundShapeChildDesc[]`) and supports payload-backed non-analytic shapes when
-  `payload_ref` is omitted by emitting an authored cooked payload to physics
-  table/data.
-- Collision-shape payload validation now accepts PhysX shape resource formats where
-  compatible with `ShapePayloadType` (`kPhysXConvexMeshBinary`,
-  `kPhysXTriangleMeshBinary`, `kPhysXHeightFieldBinary`) in addition to
-  `kJoltShapeBinary`.
+  `CompoundShapeChildDesc[]`) and enforces analytic-only compound children.
+- Non-analytic top-level collision shapes emit cooked payloads inline through the
+  active cooker path; external descriptor indirection fields are not accepted.
 - Physics resource integrity path now uses SHA-256 bytes end-to-end in
   `CookedPhysicsResourcePayload` and `PhysicsResourceDesc::content_hash`.
 
@@ -693,7 +689,7 @@ Remaining delta to Phase 4 exit gate:
 
 - [x] Remove legacy/duplicate pipelines bypassing binary descriptors.
 - [x] Remove runtime fallback parsing of L1 JSON for physics instantiation.
-- [ ] Remove cross-collection ordinal reference remnants.
+- [x] Remove cross-collection ordinal reference remnants.
 - [ ] Remove deprecated handle wrappers that violate session-handle policy.
 - [ ] Remove compatibility code paths that keep old physics schema alive in production.
 - [ ] Same canonical virtual path -> same `AssetKey` across runs/machines.
@@ -728,6 +724,23 @@ Task 2 closure evidence (2026-03-07):
   strict binary-state decode only.
 - Validation:
   - `Oxygen.Physics.Jolt.Tests.exe --gtest_filter="*BlobContract*"` -> **4 passed** (`joint/soft-body/vehicle` non-cooked payload rejection contract intact).
+
+Task 3 closure evidence (2026-03-07):
+
+- Removed cross-collection ordinal external payload-field
+  `-> .opres -> resource_index` ingestion for top-level collision-shape descriptors:
+  schema now rejects this external payload field, and collision-shape cooking
+  always emits its own cooked payload for non-analytic shapes.
+- Removed dead ordinal relpath canonicalization remnants in cooker internals:
+  deleted `ResourceTableRegistry::TryRegisterPhysicsCanonicalDescriptorRelPath`
+  and the associated `resource_index -> relpath` map state.
+- Removed unused physics resource descriptor sidecar utility + dead emitter API
+  paths that serialized `.opres` sidecars from resource indices.
+- Validation:
+  - `cmake --build out/build-vs --config Debug --target oxygen-cooker Oxygen.Cooker.AsyncImportCollisionShapeDescriptor.Tests -- /m:6` -> **success**.
+  - `Oxygen.Cooker.AsyncImportCollisionShapeDescriptor.Tests.exe` -> **19 passed**
+    (includes top-level unknown-field rejection and inline cooked-payload
+    path coverage).
 
 Phase 5 final release gate:
 

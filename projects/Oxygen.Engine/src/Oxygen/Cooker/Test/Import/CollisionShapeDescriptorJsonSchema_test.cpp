@@ -132,9 +132,9 @@ NOLINT_TEST(
   EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
 }
 
-//! Verifies canonical payload-backed collision-shape descriptors are accepted.
+//! Verifies unknown top-level external payload fields are rejected.
 NOLINT_TEST(
-  CollisionShapeDescriptorJsonSchemaTest, AcceptsCanonicalPayloadBackedDocument)
+  CollisionShapeDescriptorJsonSchemaTest, RejectsTopLevelUnknownFieldDocument)
 {
   const auto repo_root = FindRepoRoot();
   ASSERT_FALSE(repo_root.empty());
@@ -145,16 +145,16 @@ NOLINT_TEST(
     "name": "hull_shape",
     "shape_type": "convex_hull",
     "material_ref": "/.cooked/Physics/Materials/steel.opmat",
-    "payload_ref": "/.cooked/Physics/Resources/hull.opres"
+    "unexpected_field": "/.cooked/Physics/Resources/hull.opres"
   })");
 
   auto errors = std::string {};
-  EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
+  EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
 }
 
-//! Verifies payload-backed shape types may omit payload_ref in Phase 3.
+//! Verifies non-analytic shape descriptors are valid without extra payload fields.
 NOLINT_TEST(CollisionShapeDescriptorJsonSchemaTest,
-  AcceptsPayloadBackedShapeWithoutPayloadRef)
+  AcceptsPayloadBackedShapeWithoutUnknownField)
 {
   const auto repo_root = FindRepoRoot();
   ASSERT_FALSE(repo_root.empty());
@@ -171,9 +171,9 @@ NOLINT_TEST(CollisionShapeDescriptorJsonSchemaTest,
   EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
 }
 
-//! Verifies primitive shape types reject payload references.
-NOLINT_TEST(
-  CollisionShapeDescriptorJsonSchemaTest, RejectsPayloadRefForPrimitiveShape)
+//! Verifies unknown payload fields are rejected for primitive shape descriptors.
+NOLINT_TEST(CollisionShapeDescriptorJsonSchemaTest,
+  RejectsUnknownPayloadFieldForPrimitiveShape)
 {
   const auto repo_root = FindRepoRoot();
   ASSERT_FALSE(repo_root.empty());
@@ -185,7 +185,7 @@ NOLINT_TEST(
     "shape_type": "sphere",
     "material_ref": "/.cooked/Physics/Materials/steel.opmat",
     "radius": 1.0,
-    "payload_ref": "/.cooked/Physics/Resources/not_allowed.opres"
+    "unexpected_field": "/.cooked/Physics/Resources/not_allowed.opres"
   })");
 
   auto errors = std::string {};
@@ -213,8 +213,8 @@ NOLINT_TEST(
         "local_scale": [1.0, 1.0, 1.0]
       },
       {
-        "shape_type": "convex_hull",
-        "payload_ref": "/.cooked/Physics/Resources/child_hull.opres",
+        "shape_type": "box",
+        "half_extents": [0.2, 0.3, 0.4],
         "local_position": [0.7, 0.0, 0.0],
         "local_rotation": [0.0, 0.0, 0.0, 1.0],
         "local_scale": [1.0, 1.0, 1.0]
@@ -237,8 +237,7 @@ NOLINT_TEST(
   const auto doc = json::parse(R"({
     "name": "compound_shape",
     "shape_type": "compound",
-    "material_ref": "/.cooked/Physics/Materials/steel.opmat",
-    "payload_ref": "/.cooked/Physics/Resources/legacy_compound_payload.opres"
+    "material_ref": "/.cooked/Physics/Materials/steel.opmat"
   })");
 
   auto errors = std::string {};

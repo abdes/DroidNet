@@ -343,13 +343,6 @@ namespace {
             .object_path = "material_ref",
           });
         }
-        if (descriptor_doc.contains("payload_ref")
-          && descriptor_doc.at("payload_ref").is_string()) {
-          refs.push_back(PhysicsDependencyRef {
-            .virtual_path = descriptor_doc.at("payload_ref").get<std::string>(),
-            .object_path = "payload_ref",
-          });
-        }
         return true;
       }
 
