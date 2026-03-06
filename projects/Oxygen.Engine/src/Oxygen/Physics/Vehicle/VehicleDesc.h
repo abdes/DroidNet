@@ -26,6 +26,11 @@ enum class VehicleWheelSide : uint8_t {
   kRight = 1,
 };
 
+enum class VehicleControllerType : uint8_t {
+  kWheeled = 0,
+  kTracked = 1,
+};
+
 struct VehicleWheelDesc final {
   BodyId body_id { kInvalidBodyId };
   //! Axle ordering contract:
@@ -41,6 +46,7 @@ struct VehicleDesc final {
   BodyId chassis_body_id { kInvalidBodyId };
   std::span<const VehicleWheelDesc> wheels {};
   std::span<const uint8_t> constraint_settings_blob {};
+  VehicleControllerType controller_type { VehicleControllerType::kWheeled };
 };
 
 /*!

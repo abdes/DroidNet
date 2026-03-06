@@ -102,6 +102,13 @@ public:
     return desc_.target_node_count;
   }
 
+  //! Returns the expected SHA-256 of the paired scene descriptor payload.
+  [[nodiscard]] auto GetTargetSceneContentHash() const noexcept
+    -> std::span<const uint8_t, 32>
+  {
+    return std::span<const uint8_t, 32> { desc_.target_scene_content_hash };
+  }
+
   //=== Binding Table Access ===----------------------------------------------//
 
   //! Returns a view of all binding records of the specified physics type.

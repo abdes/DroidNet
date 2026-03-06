@@ -24,10 +24,23 @@ namespace oxygen::data {
 OXGN_DATA_NDAPI auto MakeCubeMeshAsset()
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
 
+//! Creates a unit cube surface with welded vertices and configurable
+//! subdivisions per face edge.
+OXGN_DATA_NDAPI auto MakeSubdividedCubeMeshAsset(unsigned int segments = 6)
+  -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
+
 //! Creates a new Mesh representing a UV sphere centered at the origin.
 OXGN_DATA_NDAPI auto MakeSphereMeshAsset(
   unsigned int latitude_segments = 16, unsigned int longitude_segments = 32)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
+
+//! Creates a new geodesic/icosphere mesh centered at the origin.
+OXGN_DATA_NDAPI auto MakeIcoSphereMeshAsset(unsigned int subdivision_level = 2)
+  -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
+
+//! Alias of MakeIcoSphereMeshAsset for authoring/runtime readability.
+OXGN_DATA_NDAPI auto MakeGeodesicSphereMeshAsset(unsigned int subdivision_level
+  = 2) -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
 
 //! Creates a new Mesh representing a flat plane in the XZ plane.
 OXGN_DATA_NDAPI auto MakePlaneMeshAsset(

@@ -178,6 +178,8 @@ NOLINT_TEST(PhysicsJsonSchemaTest, PhysicsSidecarSchemaAcceptsCanonicalDocument)
         {
           "node_index": 3,
           "source_mesh_ref": "/.cooked/Geometry/softbody_sphere.ogeo",
+          "collision_layer": 2,
+          "collision_mask": 65535,
           "collision_mesh_ref": "/.cooked/Geometry/softbody_collision.ogeo",
           "edge_compliance": 0.0001,
           "shear_compliance": 0.0001,
@@ -392,6 +394,49 @@ NOLINT_TEST(PhysicsJsonSchemaTest, PhysicsSidecarSchemaRejectsLegacyFieldNames)
           "cluster_count": 8,
           "stiffness": 4.0,
           "damping": 0.08
+        }
+      ]
+    }
+  })");
+
+  auto errors = std::string {};
+  EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
+}
+
+NOLINT_TEST(PhysicsJsonSchemaTest,
+  PhysicsSidecarSchemaRejectsSoftBodyMissingCollisionFilterFields)
+{
+  const auto repo_root = FindRepoRoot();
+  ASSERT_FALSE(repo_root.empty());
+
+  const auto schema
+    = LoadJsonFile(SchemaFile(repo_root, "oxygen.physics-sidecar.schema.json"));
+  ASSERT_TRUE(schema.has_value());
+
+  const auto doc = json::parse(R"({
+    "bindings": {
+      "soft_bodies": [
+        {
+          "node_index": 3,
+          "source_mesh_ref": "/.cooked/Geometry/softbody_sphere.ogeo",
+          "edge_compliance": 0.0001,
+          "shear_compliance": 0.0001,
+          "bend_compliance": 0.0002,
+          "volume_compliance": 0.0002,
+          "pressure_coefficient": 0.0,
+          "tether_mode": "geodesic",
+          "tether_max_distance_multiplier": 1.05,
+          "global_damping": 0.08,
+          "restitution": 0.2,
+          "friction": 0.6,
+          "vertex_radius": 0.02,
+          "solver_iteration_count": 8,
+          "self_collision": false,
+          "pinned_vertices": [],
+          "kinematic_vertices": [],
+          "backend": {
+            "target": "jolt"
+          }
         }
       ]
     }

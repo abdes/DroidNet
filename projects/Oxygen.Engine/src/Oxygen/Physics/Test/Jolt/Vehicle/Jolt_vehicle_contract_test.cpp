@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <vector>
 
 #include <Oxygen/Testing/GTest.h>
 
@@ -234,6 +235,78 @@ NOLINT_TEST_F(JoltVehicleContractTest, CreateVehicleAcceptsOddWheelTopology)
   EXPECT_TRUE(worlds.Step(world_id, 1.0F / 60.0F, 1, 1.0F / 60.0F).has_value());
 
   EXPECT_TRUE(vehicles.DestroyVehicle(world_id, vehicle.value()).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, wheel_c.value()).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, wheel_b.value()).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, wheel_a.value()).has_value());
+  EXPECT_TRUE(bodies.DestroyBody(world_id, chassis.value()).has_value());
+  EXPECT_TRUE(worlds.DestroyWorld(world_id).has_value());
+}
+
+NOLINT_TEST_F(JoltVehicleContractTest, CreateVehicleAcceptsTrackedController)
+{
+  AssertBackendAvailabilityContract();
+  if (!HasBackend()) {
+    return;
+  }
+
+  auto& vehicles = System().Vehicles();
+  auto& worlds = System().Worlds();
+  auto& bodies = System().Bodies();
+
+  const auto world = worlds.CreateWorld(world::WorldDesc {});
+  ASSERT_TRUE(world.has_value());
+  const auto world_id = world.value();
+
+  body::BodyDesc body_desc {};
+  body_desc.type = body::BodyType::kDynamic;
+  const auto chassis = bodies.CreateBody(world_id, body_desc);
+  const auto wheel_a = bodies.CreateBody(world_id, body_desc);
+  const auto wheel_b = bodies.CreateBody(world_id, body_desc);
+  const auto wheel_c = bodies.CreateBody(world_id, body_desc);
+  const auto wheel_d = bodies.CreateBody(world_id, body_desc);
+  ASSERT_TRUE(chassis.has_value());
+  ASSERT_TRUE(wheel_a.has_value());
+  ASSERT_TRUE(wheel_b.has_value());
+  ASSERT_TRUE(wheel_c.has_value());
+  ASSERT_TRUE(wheel_d.has_value());
+
+  const std::array<vehicle::VehicleWheelDesc, 4> wheel_descs {
+    vehicle::VehicleWheelDesc {
+      .body_id = wheel_a.value(),
+      .axle_index = 0U,
+      .side = vehicle::VehicleWheelSide::kLeft,
+    },
+    vehicle::VehicleWheelDesc {
+      .body_id = wheel_b.value(),
+      .axle_index = 0U,
+      .side = vehicle::VehicleWheelSide::kRight,
+    },
+    vehicle::VehicleWheelDesc {
+      .body_id = wheel_c.value(),
+      .axle_index = 1U,
+      .side = vehicle::VehicleWheelSide::kLeft,
+    },
+    vehicle::VehicleWheelDesc {
+      .body_id = wheel_d.value(),
+      .axle_index = 1U,
+      .side = vehicle::VehicleWheelSide::kRight,
+    },
+  };
+  const auto tracked_settings_blob
+    = MakeVehicleConstraintSettingsBlob(wheel_descs.size(), true);
+  ASSERT_FALSE(tracked_settings_blob.empty());
+  const auto vehicle = vehicles.CreateVehicle(world_id,
+    vehicle::VehicleDesc {
+      .chassis_body_id = chassis.value(),
+      .wheels = wheel_descs,
+      .constraint_settings_blob = tracked_settings_blob,
+      .controller_type = vehicle::VehicleControllerType::kTracked,
+    });
+  ASSERT_TRUE(vehicle.has_value());
+
+  EXPECT_TRUE(vehicles.DestroyVehicle(world_id, vehicle.value()).has_value());
+
+  EXPECT_TRUE(bodies.DestroyBody(world_id, wheel_d.value()).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, wheel_c.value()).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, wheel_b.value()).has_value());
   EXPECT_TRUE(bodies.DestroyBody(world_id, wheel_a.value()).has_value());

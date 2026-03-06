@@ -1564,6 +1564,46 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, ConsumeSceneEventsDrainsBuffer)
   EXPECT_EQ(third[0].type, events::PhysicsEventType::kContactEnd);
 }
 
+NOLINT_TEST_F(PhysicsModuleSyncTest,
+  SceneMutationMapsAggregateNodeFromEventUserDataWhenBodyMappingIsMissing)
+{
+  auto soft_node = scene_->CreateNode("soft-event-node");
+  ASSERT_TRUE(soft_node.IsValid());
+  RunGameplay();
+  scene_->Update();
+
+  const std::array<uint8_t, 1> soft_body_blob { 1U };
+  auto soft_body_desc = softbody::SoftBodyDesc {};
+  soft_body_desc.cluster_count = 2U;
+  soft_body_desc.settings_blob = std::span<const uint8_t> {
+    soft_body_blob.data(),
+    soft_body_blob.size(),
+  };
+  const auto created_soft_body = module_->SoftBodies().CreateSoftBody(
+    module_->GetWorldId(), soft_body_desc);
+  ASSERT_TRUE(created_soft_body.has_value());
+  const auto aggregate_id = created_soft_body.value();
+  module_->RegisterNodeAggregateMapping(soft_node.GetHandle(), aggregate_id,
+    aggregate::AggregateAuthority::kSimulation);
+
+  FakeState().pending_events = {
+    events::PhysicsEvent {
+      .type = events::PhysicsEventType::kTriggerBegin,
+      .body_a = BodyId { 777U },
+      .body_b = BodyId { 888U },
+      .user_data_a = static_cast<uint64_t>(aggregate_id.get()),
+      .user_data_b = 0U,
+    },
+  };
+
+  RunSceneMutation();
+  const auto scene_events = module_->ConsumeSceneEvents();
+  ASSERT_EQ(scene_events.size(), 1U);
+  ASSERT_TRUE(scene_events[0].node_a.has_value());
+  EXPECT_EQ(scene_events[0].node_a.value(), soft_node.GetHandle());
+  EXPECT_FALSE(scene_events[0].node_b.has_value());
+}
+
 #if !defined(NDEBUG)
 NOLINT_TEST_F(PhysicsModuleSyncTest, OnGameplayWrongPhase_Death)
 {

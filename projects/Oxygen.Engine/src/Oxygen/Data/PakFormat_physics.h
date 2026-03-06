@@ -524,6 +524,8 @@ struct SoftBodyBindingRecord {
   float vertex_radius = 0.0F;
   float tether_max_distance_multiplier = 1.0F;
   uint32_t solver_iteration_count = 0;
+  uint16_t collision_layer = 0;
+  uint32_t collision_mask = 0xFFFFFFFF;
   core::ResourceIndexT topology_resource_index = core::kNoResourceIndex;
   uint32_t pinned_vertex_count = 0;
   uint32_t pinned_vertex_byte_offset = 0; //!< Self-relative offset
@@ -536,7 +538,9 @@ struct SoftBodyBindingRecord {
   uint8_t self_collision = 0; //!< Boolean
 };
 #pragma pack(pop)
-static_assert(sizeof(SoftBodyBindingRecord) == 83);
+static_assert(sizeof(SoftBodyBindingRecord) == 89);
+static_assert(offsetof(SoftBodyBindingRecord, topology_resource_index)
+  == offsetof(SoftBodyBindingRecord, collision_mask) + sizeof(uint32_t));
 static_assert(offsetof(SoftBodyBindingRecord, pinned_vertex_count)
   == offsetof(SoftBodyBindingRecord, topology_resource_index)
     + sizeof(core::ResourceIndexT));

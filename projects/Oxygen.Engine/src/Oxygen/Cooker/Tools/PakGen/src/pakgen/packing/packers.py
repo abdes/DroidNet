@@ -2572,6 +2572,8 @@ def pack_soft_body_binding_record(
     vertex_radius = float(binding.get("vertex_radius", 0.0))
     tether_max = float(binding.get("tether_max_distance_multiplier", 1.0))
     solver_iteration_count = int(binding.get("solver_iteration_count", 0))
+    collision_layer = int(binding.get("collision_layer", 0))
+    collision_mask = int(binding.get("collision_mask", 0xFFFFFFFF))
     topology_resource_index = int(binding.get("topology_resource_index", 0xFFFFFFFF))
     pinned_vertices = binding.get("pinned_vertices", [])
     kinematic_vertices = binding.get("kinematic_vertices", [])
@@ -2633,8 +2635,10 @@ def pack_soft_body_binding_record(
             tether_max,
         )
         + struct.pack(
-            "<IIIIII",
+            "<IHIIIIII",
             solver_iteration_count,
+            collision_layer,
+            collision_mask,
             topology_resource_index,
             pinned_vertex_count,
             pinned_vertex_byte_offset,

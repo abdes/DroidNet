@@ -47,6 +47,9 @@ private:
     WorldId world_id { kInvalidWorldId };
     BodyId chassis_body_id { kInvalidBodyId };
     vehicle::VehicleControlInput control_input {};
+    vehicle::VehicleControllerType controller_type {
+      vehicle::VehicleControllerType::kWheeled,
+    };
     aggregate::AggregateAuthority authority {
       aggregate::AggregateAuthority::kCommand,
     };

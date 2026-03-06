@@ -830,7 +830,9 @@ is used internally:
     soft-body asset: vertex positions and inverse masses, edge/dihedral/volume/
     tether constraint graphs, and the material table. This is the OUTPUT of the
     backend topology-optimization pass, not the raw authoring parameters.
-    - Jolt: `SoftBodySharedSettings` binary after `Optimize()`.
+    - Jolt: `SoftBodySharedSettings` binary after `Optimize()` and derived-state
+      recomputation (edge lengths, bend constants, volume constraints, and rest
+      volume).
     - PhysX: FEM tetrahedral simulation mesh + collision tetrahedral mesh.
 
   **Side-table emission registry.** Every auxiliary ordered structure in the
@@ -879,8 +881,12 @@ is used internally:
     - **Characters** — restore shape, construct backend character controller
       with kinematic body + capsule sweep; store mapping.
     - **Soft bodies** — hand the backend settings blob to the backend restore
-      API; create the soft body at the scene node's world transform; store
-      mapping.
+      API; create the soft body at the scene node's world transform using the
+      binding-record collision filter (`collision_layer`, `collision_mask`);
+      store mapping. Runtime does not synthesize or clamp authored soft-body
+      constraints: invalid cooked settings (for example, pressure-enabled
+      settings with zero rest volume or volumetric constraints below the
+      stability floor) hard-fail hydration.
     - **Joints** — restore the backend constraint blob; look up body handle A
       and body handle B (or world anchor) from the node-index mapping; add
       the instantiated constraint to the simulation.
@@ -1147,11 +1153,14 @@ The cooker derives a particle graph from the 20×20 mesh (400 particles, edge
 and dihedral-bend constraints).
 
 - **Jolt** — `SoftBodySharedSettings::Optimize()` → blob tagged
-  `kJoltSoftBodyBinary` written to `Physics/Resources/physics.data`.
+  `kJoltSoftBodySharedSettingsBinary` written to
+  `Physics/Resources/physics.data`.
 - **PhysX** — FEM tetrahedral mesh processed and serialized → blob tagged
-  `kPhysXSoftBodyBinary`.
+  `kPhysXSoftBodySettingsBinary`.
 
 The soft-body binding record's fixed header in the sidecar has
+`collision_layer` and `collision_mask` fields (required, no implicit default),
+plus
 `pinned_vertex_count = 8` and
 `pinned_vertex_byte_offset = sizeof(SoftBodyBindingRecord)`. The 8 indices
 `[0, 20, 40, 60, 80, 100, 120, 140]` are written as a `uint32[]` trailing
@@ -1191,7 +1200,9 @@ stores `wheel_slice_offset` (index of the first of these 4 entries) and
 - **Flag**: soft-body blob loaded by `AssetKey`, passed to the backend restore
   API. Hydrator reads `pinned_vertex_count = 8`, follows
   `pinned_vertex_byte_offset` to the trailing array, passes the 8 indices to
-  the backend to zero their inverse masses. Soft body added to the simulation.
+  the backend to zero their inverse masses, and applies
+  `collision_layer/collision_mask` from the same binding record before
+  insertion into the simulation. Soft body added to the simulation.
 - **Car**: vehicle blob loaded by `AssetKey`, passed to the backend vehicle
   restore API. Hydrator reads `(wheel_slice_offset, wheel_slice_count)` from
   the binding record, slices the wheel table, binds each wheel's scene node to

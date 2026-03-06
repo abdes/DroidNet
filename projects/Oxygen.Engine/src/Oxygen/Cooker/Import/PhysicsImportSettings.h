@@ -8,6 +8,8 @@
 
 #include <string>
 
+#include <Oxygen/Core/Meta/Physics/Backend.h>
+
 namespace oxygen::content::import {
 
 //! Runtime settings for physics sidecar import requests.
@@ -67,6 +69,10 @@ struct PhysicsSidecarImportSettings final {
 
   //! Content hashing request (normalized by `EffectiveContentHashingEnabled`).
   bool with_content_hashing { true };
+
+  //! Target physics backend for sidecar resource cooking.
+  core::meta::physics::PhysicsBackend physics_backend
+    = core::meta::physics::PhysicsBackend::kJolt;
 };
 
 } // namespace oxygen::content::import

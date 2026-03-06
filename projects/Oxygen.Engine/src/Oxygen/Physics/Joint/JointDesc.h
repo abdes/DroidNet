@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
 #include <string_view>
 
 #include <Oxygen/Core/Constants.h>
@@ -29,6 +30,7 @@ struct JointDesc final {
   JointType type { JointType::kFixed };
   BodyId body_a { kInvalidBodyId };
   BodyId body_b { kInvalidBodyId };
+  std::span<const uint8_t> constraint_settings_blob {};
   Vec3 anchor_a { 0.0F, 0.0F, 0.0F };
   Vec3 anchor_b { 0.0F, 0.0F, 0.0F };
   bool collide_connected { false };

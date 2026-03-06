@@ -346,8 +346,10 @@ target_sources(
     ${OXYGEN_COOKER_HEADERS}
   PUBLIC
     FILE_SET HEADERS
-    BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES ${OXYGEN_COOKER_HEADERS}
+      BASE_DIRS
+        "${OXYGEN_SOURCE_DIR}"
+      FILES
+        ${OXYGEN_COOKER_HEADERS}
 )
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})
@@ -383,6 +385,7 @@ target_link_libraries(
     oxygen::data
     oxygen::content
   PRIVATE
+    oxygen::physics
     glm::glm
     spng::spng_static
     tinyexr::tinyexr

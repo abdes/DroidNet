@@ -738,6 +738,14 @@
                 "content_hashing": {
                     "type": "boolean"
                 },
+                "physics_backend": {
+                    "type": "string",
+                    "enum": [
+                        "jolt",
+                        "physx",
+                        "none"
+                    ]
+                },
                 "target_scene_virtual_path": {
                     "type": "string"
                 }

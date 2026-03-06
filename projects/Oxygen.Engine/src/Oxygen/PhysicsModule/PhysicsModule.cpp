@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <limits>
 #include <vector>
 
 #include <glm/geometric.hpp>
@@ -1208,12 +1209,42 @@ auto PhysicsModule::DrainPhysicsEvents() -> void
   const auto drained_count = std::min(drain_result.value(), raw_events.size());
   diagnostics_.event_drain_count += drained_count;
   scene_events_.reserve(scene_events_.size() + drained_count);
+  const auto resolve_scene_node_for_event
+    = [this](const BodyId body_id,
+        const uint64_t user_data) -> std::optional<scene::NodeHandle> {
+    if (const auto body_node = GetNodeForBodyId(body_id);
+      body_node.has_value()) {
+      return body_node;
+    }
+    if (user_data == 0U
+      || user_data
+        > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) {
+      return std::nullopt;
+    }
+    return GetNodeForAggregateId(
+      AggregateId { static_cast<uint32_t>(user_data) });
+  };
   for (size_t i = 0; i < drained_count; ++i) {
     const auto& raw_event = raw_events[i];
+    if (raw_event.type == events::PhysicsEventType::kTriggerBegin) {
+      LOG_F(INFO,
+        "PhysicsModule: trigger activated (body_a={} body_b={} user_data_a={} "
+        "user_data_b={}).",
+        raw_event.body_a.get(), raw_event.body_b.get(), raw_event.user_data_a,
+        raw_event.user_data_b);
+    } else if (raw_event.type == events::PhysicsEventType::kTriggerEnd) {
+      LOG_F(INFO,
+        "PhysicsModule: trigger deactivated (body_a={} body_b={} "
+        "user_data_a={} user_data_b={}).",
+        raw_event.body_a.get(), raw_event.body_b.get(), raw_event.user_data_a,
+        raw_event.user_data_b);
+    }
     scene_events_.push_back(ScenePhysicsEvent {
       .type = raw_event.type,
-      .node_a = GetNodeForBodyId(raw_event.body_a),
-      .node_b = GetNodeForBodyId(raw_event.body_b),
+      .node_a
+      = resolve_scene_node_for_event(raw_event.body_a, raw_event.user_data_a),
+      .node_b
+      = resolve_scene_node_for_event(raw_event.body_b, raw_event.user_data_b),
       .raw_event = raw_event,
     });
   }

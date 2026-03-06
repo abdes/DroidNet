@@ -1063,6 +1063,125 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobTest,
+  ProceduralGeodesicSphereImportsAndRemainsLoaderCompatible)
+{
+  const auto root = MakeTempCookedRoot("procedural_geodesic_loader_compatible");
+  const auto source_dir = root / "Sources";
+  const auto cooked_root = root / ".cooked";
+  const auto descriptor_path = source_dir / "geodesic.procedural.geometry.json";
+
+  std::filesystem::create_directories(cooked_root / "Materials");
+  WriteTextFile(cooked_root / "Materials" / "default.omat", "placeholder");
+
+  const auto descriptor_doc = json {
+    { "name", "ProceduralGeodesicSphere" },
+    { "bounds", MakeBounds() },
+    { "lods",
+      json::array({
+        json {
+          { "name", "LOD0" },
+          { "mesh_type", "procedural" },
+          { "bounds", MakeBounds() },
+          { "procedural",
+            {
+              { "generator", "GeodesicSphere" },
+              { "mesh_name", "SoftBall" },
+              { "params", { { "subdivision_level", 2 } } },
+            } },
+          { "submeshes",
+            json::array({
+              json {
+                { "material_ref", "/.cooked/Materials/default.omat" },
+                { "views",
+                  json::array({ json { { "view_ref", "__all__" } } }) },
+              },
+            }) },
+        },
+      }) },
+  };
+  WriteTextFile(descriptor_path, descriptor_doc.dump(2));
+
+  auto service = AsyncImportService(AsyncImportService::Config {
+    .thread_pool_size = 2U,
+  });
+  [[maybe_unused]] auto stop_service
+    = oxygen::Finally([&service]() { service.Stop(); });
+
+  const auto report = SubmitAndWait(
+    service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
+  EXPECT_TRUE(report.success) << DiagnosticSummary(report.diagnostics);
+  EXPECT_EQ(report.geometry_written, 1U)
+    << DiagnosticSummary(report.diagnostics);
+
+  const auto geometry_relpath = FindOutputByExtension(report, ".ogeo");
+  ASSERT_TRUE(geometry_relpath.has_value());
+
+  const auto descriptor_bytes
+    = ReadBinaryFile(cooked_root / std::filesystem::path(*geometry_relpath));
+  EXPECT_TRUE(CanParseGeometryDescriptor(descriptor_bytes));
+}
+
+NOLINT_TEST(GeometryDescriptorImportJobTest,
+  ProceduralSubdividedCubeImportsAndRemainsLoaderCompatible)
+{
+  const auto root = MakeTempCookedRoot("procedural_subdivided_cube_loader");
+  const auto source_dir = root / "Sources";
+  const auto cooked_root = root / ".cooked";
+  const auto descriptor_path
+    = source_dir / "subdivided_cube.procedural.geometry.json";
+
+  std::filesystem::create_directories(cooked_root / "Materials");
+  WriteTextFile(cooked_root / "Materials" / "default.omat", "placeholder");
+
+  const auto descriptor_doc = json {
+    { "name", "ProceduralSubdividedCube" },
+    { "bounds", MakeBounds() },
+    { "lods",
+      json::array({
+        json {
+          { "name", "LOD0" },
+          { "mesh_type", "procedural" },
+          { "bounds", MakeBounds() },
+          { "procedural",
+            {
+              { "generator", "SubdividedCube" },
+              { "mesh_name", "JellyCube" },
+              { "params", { { "segments", 8 } } },
+            } },
+          { "submeshes",
+            json::array({
+              json {
+                { "material_ref", "/.cooked/Materials/default.omat" },
+                { "views",
+                  json::array({ json { { "view_ref", "__all__" } } }) },
+              },
+            }) },
+        },
+      }) },
+  };
+  WriteTextFile(descriptor_path, descriptor_doc.dump(2));
+
+  auto service = AsyncImportService(AsyncImportService::Config {
+    .thread_pool_size = 2U,
+  });
+  [[maybe_unused]] auto stop_service
+    = oxygen::Finally([&service]() { service.Stop(); });
+
+  const auto report = SubmitAndWait(
+    service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
+  EXPECT_TRUE(report.success) << DiagnosticSummary(report.diagnostics);
+  EXPECT_EQ(report.geometry_written, 1U)
+    << DiagnosticSummary(report.diagnostics);
+
+  const auto geometry_relpath = FindOutputByExtension(report, ".ogeo");
+  ASSERT_TRUE(geometry_relpath.has_value());
+
+  const auto descriptor_bytes
+    = ReadBinaryFile(cooked_root / std::filesystem::path(*geometry_relpath));
+  EXPECT_TRUE(CanParseGeometryDescriptor(descriptor_bytes));
+}
+
+NOLINT_TEST(GeometryDescriptorImportJobTest,
   SkinnedDescriptorWithLocalBuffersImportsSuccessfully)
 {
   const auto root = MakeTempCookedRoot("skinned_local_buffers_success");

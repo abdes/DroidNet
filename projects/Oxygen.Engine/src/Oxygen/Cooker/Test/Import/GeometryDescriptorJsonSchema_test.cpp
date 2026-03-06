@@ -144,6 +144,78 @@ NOLINT_TEST(GeometryDescriptorJsonSchemaTest, AcceptsCanonicalDocument)
   EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
 }
 
+NOLINT_TEST(GeometryDescriptorJsonSchemaTest, AcceptsGeodesicSphereProcedural)
+{
+  const auto repo_root = FindRepoRoot();
+  ASSERT_FALSE(repo_root.empty());
+  const auto schema = LoadJsonFile(SchemaFile(repo_root));
+  ASSERT_TRUE(schema.has_value());
+
+  const auto doc = json::parse(R"({
+    "name": "ProcIcoSphere",
+    "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
+    "lods": [
+      {
+        "name": "LOD0",
+        "mesh_type": "procedural",
+        "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
+        "procedural": {
+          "generator": "GeodesicSphere",
+          "mesh_name": "BallGeo",
+          "params": {
+            "subdivision_level": 2
+          }
+        },
+        "submeshes": [
+          {
+            "material_ref": "/.cooked/Materials/default.omat",
+            "views": [ { "view_ref": "__all__" } ]
+          }
+        ]
+      }
+    ]
+  })");
+
+  auto errors = std::string {};
+  EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
+}
+
+NOLINT_TEST(GeometryDescriptorJsonSchemaTest, AcceptsSubdividedCubeProcedural)
+{
+  const auto repo_root = FindRepoRoot();
+  ASSERT_FALSE(repo_root.empty());
+  const auto schema = LoadJsonFile(SchemaFile(repo_root));
+  ASSERT_TRUE(schema.has_value());
+
+  const auto doc = json::parse(R"({
+    "name": "ProcJellyCube",
+    "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
+    "lods": [
+      {
+        "name": "LOD0",
+        "mesh_type": "procedural",
+        "bounds": { "min": [-0.5, -0.5, -0.5], "max": [0.5, 0.5, 0.5] },
+        "procedural": {
+          "generator": "SubdividedCube",
+          "mesh_name": "JellyCube",
+          "params": {
+            "segments": 8
+          }
+        },
+        "submeshes": [
+          {
+            "material_ref": "/.cooked/Materials/default.omat",
+            "views": [ { "view_ref": "__all__" } ]
+          }
+        ]
+      }
+    ]
+  })");
+
+  auto errors = std::string {};
+  EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
+}
+
 NOLINT_TEST(GeometryDescriptorJsonSchemaTest, RejectsUnknownNestedFields)
 {
   const auto repo_root = FindRepoRoot();

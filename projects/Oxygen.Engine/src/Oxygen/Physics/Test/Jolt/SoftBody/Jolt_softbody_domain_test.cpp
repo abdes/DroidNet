@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <cmath>
+#include <vector>
 
 #include <Oxygen/Testing/GTest.h>
 

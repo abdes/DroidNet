@@ -12,6 +12,7 @@
 #include <string_view>
 
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Physics/CollisionLayers.h>
 #include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/api_export.h>
 
@@ -37,6 +38,10 @@ struct SoftBodyMaterialParams final {
   float edge_compliance { 0.0F };
   float shear_compliance { 0.0F };
   float bend_compliance { std::numeric_limits<float>::max() };
+  //! Volumetric compliance for tetra constraints in volumetric bodies.
+  float volume_compliance { 0.0F };
+  //! Authoring pressure term used by runtime pressure solver.
+  float pressure_coefficient { 0.0F };
   SoftBodyTetherMode tether_mode { SoftBodyTetherMode::kNone };
   float tether_max_distance_multiplier { 1.0F };
 };
@@ -62,10 +67,17 @@ struct SoftBodyDesc final {
   std::span<const uint8_t> settings_blob {};
   //! Per-axis authored scale applied to shared-settings vertices at runtime.
   Vec3 settings_scale { 1.0F, 1.0F, 1.0F };
+  //! Collision filtering authored at sidecar level.
+  CollisionLayer collision_layer { kCollisionLayerDefault };
+  CollisionMask collision_mask { kCollisionMaskAll };
   //! Collision response authored at sidecar level.
   float restitution { 0.0F };
   float friction { 0.2F };
   float vertex_radius { 0.0F };
+  //! Solver iterations per simulation step (backend-mapped as applicable).
+  uint32_t solver_iteration_count { 5U };
+  //! Per-soft-body gravity multiplier for backend runtimes that support it.
+  float gravity_factor { 1.0F };
 };
 
 /*!

@@ -67,8 +67,8 @@ public:
   [[nodiscard]] auto TryGetPhysicsSystem(WorldId world_id) const noexcept
     -> observer_ptr<const JPH::PhysicsSystem>;
   auto ResolveBodyObjectLayer(WorldId world_id, body::BodyType body_type,
-    CollisionLayer collision_layer, CollisionMask collision_mask)
-    -> PhysicsResult<uint16_t>;
+    CollisionLayer collision_layer, CollisionMask collision_mask,
+    bool is_sensor) -> PhysicsResult<uint16_t>;
   [[nodiscard]] auto QueryMaskAllowsObjectLayer(WorldId world_id,
     CollisionMask query_mask, uint16_t object_layer) const noexcept -> bool;
 

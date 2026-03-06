@@ -45,6 +45,12 @@
             "name": "softbody_pink"
         },
         {
+            "id": "softbody_jelly.material",
+            "type": "material-descriptor",
+            "source": "./softbody_jelly.material.json",
+            "name": "softbody_jelly"
+        },
+        {
             "id": "character.material",
             "type": "material-descriptor",
             "source": "./character_teal.material.json",
@@ -129,6 +135,15 @@
             ]
         },
         {
+            "id": "softbody_cube.geometry",
+            "type": "geometry-descriptor",
+            "source": "./softbody_cube.geometry.json",
+            "name": "softbody_cube",
+            "depends_on": [
+                "softbody_jelly.material"
+            ]
+        },
+        {
             "id": "stack_cube.geometry",
             "type": "geometry-descriptor",
             "source": "./stack_cube.geometry.json",
@@ -151,6 +166,7 @@
                 "ramp.geometry",
                 "character_capsule.geometry",
                 "softbody_sphere.geometry",
+                "softbody_cube.geometry",
                 "stack_cube.geometry"
             ]
         },

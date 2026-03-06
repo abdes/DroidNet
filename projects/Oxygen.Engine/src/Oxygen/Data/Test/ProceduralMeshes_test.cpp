@@ -45,6 +45,29 @@ NOLINT_TEST_F(ProceduralMeshTest, ValidInvalidInput)
     { 8, 8, true, "typical valid" },
   };
 
+  struct IcoSphereCase {
+    int subdivisions;
+    bool valid;
+    const char* note;
+  } icosphere_cases[] = {
+    { 0, true, "base icosahedron" },
+    { 2, true, "default-like detail" },
+    { 8, true, "maximum supported detail" },
+    { 9, false, "beyond supported limit" },
+  };
+
+  struct SubdividedCubeCase {
+    int segments;
+    bool valid;
+    const char* note;
+  } subdivided_cube_cases[] = {
+    { 0, false, "segments must be >= 1" },
+    { 1, true, "minimum valid resolution" },
+    { 6, true, "default-like detail" },
+    { 64, true, "maximum supported detail" },
+    { 65, false, "beyond supported limit" },
+  };
+
   struct PlaneCase {
     int x;
     int z;
@@ -116,6 +139,15 @@ NOLINT_TEST_F(ProceduralMeshTest, ValidInvalidInput)
     EXPECT_EQ(has, c.valid)
       << "Sphere(" << c.lat << "," << c.lon << ") " << c.note;
   }
+  for (const auto& c : icosphere_cases) {
+    const bool has = MakeIcoSphereMeshAsset(c.subdivisions).has_value();
+    EXPECT_EQ(has, c.valid) << "IcoSphere(" << c.subdivisions << ") " << c.note;
+  }
+  for (const auto& c : subdivided_cube_cases) {
+    const bool has = MakeSubdividedCubeMeshAsset(c.segments).has_value();
+    EXPECT_EQ(has, c.valid)
+      << "SubdividedCube(" << c.segments << ") " << c.note;
+  }
   for (const auto& c : plane_cases) {
     const bool has = MakePlaneMeshAsset(c.x, c.z, c.size).has_value();
     EXPECT_EQ(has, c.valid)
@@ -168,13 +200,16 @@ NOLINT_TEST_F(ProceduralMeshTest, MeshValidity)
 
   // Factories with params
   const auto sphere = MakeSphereMeshAsset(8, 8);
+  const auto icosphere = MakeIcoSphereMeshAsset(2);
+  const auto subdivided_cube = MakeSubdividedCubeMeshAsset(6);
   const auto plane = MakePlaneMeshAsset(2, 2, 1.0f);
   const auto cylinder = MakeCylinderMeshAsset(8, 1.0f, 0.5f);
   const auto cone = MakeConeMeshAsset(8, 1.0f, 0.5f);
   const auto torus = MakeTorusMeshAsset(8, 8, 1.0f, 0.25f);
   const auto quad = MakeQuadMeshAsset(1.0f, 1.0f);
   std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> assets[]
-    = { sphere, plane, cylinder, cone, torus, quad };
+    = { sphere, icosphere, subdivided_cube, plane, cylinder, cone, torus,
+        quad };
 
   // Act & Assert
   for (const auto& f : factories) {
@@ -236,6 +271,48 @@ NOLINT_TEST_F(ProceduralMeshTest, SphereMinimumValidSegments)
     << "(3,3) should be the minimum valid sphere";
 }
 
+//! Verifies icosphere topology growth follows expected refinement factors.
+NOLINT_TEST_F(ProceduralMeshTest, IcoSphereSubdivisionGrowth)
+{
+  using oxygen::data::MakeIcoSphereMeshAsset;
+
+  const auto sub0 = MakeIcoSphereMeshAsset(0);
+  const auto sub1 = MakeIcoSphereMeshAsset(1);
+  const auto sub2 = MakeIcoSphereMeshAsset(2);
+  ASSERT_TRUE(sub0.has_value());
+  ASSERT_TRUE(sub1.has_value());
+  ASSERT_TRUE(sub2.has_value());
+
+  EXPECT_EQ(sub0->first.size(), 12U);
+  EXPECT_EQ(sub0->second.size(), 60U);
+  EXPECT_EQ(sub1->first.size(), 42U);
+  EXPECT_EQ(sub1->second.size(), 240U);
+  EXPECT_EQ(sub2->first.size(), 162U);
+  EXPECT_EQ(sub2->second.size(), 960U);
+}
+
+//! Verifies subdivided-cube topology growth follows expected formulas.
+NOLINT_TEST_F(ProceduralMeshTest, SubdividedCubeResolutionGrowth)
+{
+  using oxygen::data::MakeSubdividedCubeMeshAsset;
+
+  const auto seg1 = MakeSubdividedCubeMeshAsset(1);
+  const auto seg2 = MakeSubdividedCubeMeshAsset(2);
+  const auto seg4 = MakeSubdividedCubeMeshAsset(4);
+  ASSERT_TRUE(seg1.has_value());
+  ASSERT_TRUE(seg2.has_value());
+  ASSERT_TRUE(seg4.has_value());
+
+  EXPECT_EQ(seg1->first.size(), 8U);
+  EXPECT_EQ(seg1->second.size(), 36U);
+
+  EXPECT_EQ(seg2->first.size(), 26U);
+  EXPECT_EQ(seg2->second.size(), 144U);
+
+  EXPECT_EQ(seg4->first.size(), 98U);
+  EXPECT_EQ(seg4->second.size(), 576U);
+}
+
 //! Boundary tests for plane minimum resolution and size parameter.
 //! Verifies documented constraints: x_segments>=1, z_segments>=1, size>0.
 NOLINT_TEST_F(ProceduralMeshTest, PlaneMinimumResolution)
@@ -291,7 +368,9 @@ NOLINT_TEST_F(ProceduralMeshTest, PerMeshType)
     size_t min_indices;
   } types[] = {
     { "Cube", MakeCubeMeshAsset(), 24, 36 },
+    { "SubdividedCube", MakeSubdividedCubeMeshAsset(6), 218, 1296 },
     { "Sphere", MakeSphereMeshAsset(8, 8), 81, 384 },
+    { "IcoSphere", MakeIcoSphereMeshAsset(2), 162, 960 },
     { "Plane", MakePlaneMeshAsset(2, 2, 1.0f), 9, 24 },
     { "Cylinder", MakeCylinderMeshAsset(8, 1.0f, 0.5f), 18, 72 },
     { "Cone", MakeConeMeshAsset(8, 1.0f, 0.5f), 11, 48 },
@@ -326,7 +405,9 @@ NOLINT_TEST_F(ProceduralMeshTest, ShapesTopologyValid)
     std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> asset;
   } assets[] = {
     { "Cube", MakeCubeMeshAsset() },
+    { "SubdividedCube", MakeSubdividedCubeMeshAsset(6) },
     { "Sphere", MakeSphereMeshAsset(8, 8) },
+    { "IcoSphere", MakeIcoSphereMeshAsset(2) },
     { "Plane", MakePlaneMeshAsset(2, 2, 1.0f) },
     { "Cylinder", MakeCylinderMeshAsset(8, 1.0f, 0.5f) },
     { "Cone", MakeConeMeshAsset(8, 1.0f, 0.5f) },
@@ -356,6 +437,8 @@ NOLINT_TEST_F(ProceduralMeshTest, ShapesNormalsAndUVsValid)
   // Arrange
   using namespace oxygen::data;
   auto sphere = MakeSphereMeshAsset(8, 8);
+  auto icosphere = MakeIcoSphereMeshAsset(2);
+  auto subdivided_cube = MakeSubdividedCubeMeshAsset(6);
   auto plane = MakePlaneMeshAsset(2, 2, 1.0f);
   auto cylinder = MakeCylinderMeshAsset(8, 1.0f, 0.5f);
   auto cone = MakeConeMeshAsset(8, 1.0f, 0.5f);
@@ -363,6 +446,8 @@ NOLINT_TEST_F(ProceduralMeshTest, ShapesNormalsAndUVsValid)
   std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> shapes[]
     = {
         sphere,
+        icosphere,
+        subdivided_cube,
         plane,
         cylinder,
         cone,

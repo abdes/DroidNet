@@ -129,6 +129,7 @@ auto BuildPhysicsSidecarRequest(const PhysicsSidecarImportSettings& settings,
     .target_scene_virtual_path = settings.target_scene_virtual_path,
     .inline_bindings_json = std::move(normalized_inline_bindings),
   };
+  request->options.physics.backend = settings.physics_backend;
   return request;
 }
 

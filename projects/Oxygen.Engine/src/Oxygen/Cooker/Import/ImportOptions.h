@@ -19,6 +19,7 @@
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Cooker/api_export.h>
+#include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -423,6 +424,14 @@ struct ImportOptions final {
   //! Collision policy for dedup identity-key conflicts in import emitters.
   DedupCollisionPolicy dedup_collision_policy
     = DedupCollisionPolicy::kWarnKeepFirst;
+
+  //! Physics backend target for sidecar backend-cooked resources.
+  struct PhysicsTuning final {
+    core::meta::physics::PhysicsBackend backend
+      = core::meta::physics::PhysicsBackend::kJolt;
+  };
+
+  PhysicsTuning physics {};
 
   //! Scripting import tuning carried through the shared ImportRequest model.
   /*!
