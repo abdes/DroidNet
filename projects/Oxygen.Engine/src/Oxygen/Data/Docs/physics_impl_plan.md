@@ -692,7 +692,7 @@ Remaining delta to Phase 4 exit gate:
 - [x] Remove cross-collection ordinal reference remnants.
 - [x] Remove deprecated handle wrappers that violate session-handle policy.
 - [x] Remove compatibility code paths that keep old physics schema alive in production.
-- [ ] Same canonical virtual path -> same `AssetKey` across runs/machines.
+- [x] Same canonical virtual path -> same `AssetKey` across runs/machines.
 - [ ] Repeat cooks with unchanged input produce stable descriptor/blob hashes.
 - [ ] Scene hydration parity holds across loose and PAK modes.
 - [ ] Scenario I (analytic sphere path) passes end-to-end.
@@ -777,6 +777,16 @@ Task 5 closure evidence (2026-03-07):
   - `cmake --build out/build-vs --config Debug --target Oxygen.Cooker.AsyncImportPhysics.Tests Oxygen.Cooker.ImportToolBatchDag.Tests -- /m:6` -> **success**.
   - `out/build-vs/bin/Debug/Oxygen.Cooker.AsyncImportPhysics.Tests.exe` -> **27 passed**.
   - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportToolBatchDag.Tests.exe` -> **10 passed**.
+
+Task 6 closure evidence (2026-03-07):
+
+- Added `AssetKey` deterministic golden-vector coverage for canonical virtual
+  paths to lock byte/text identity output across runs/machines and detect any
+  accidental hash/encoding drift.
+- Validation:
+  - `cmake --build out/build-vs --config Debug --target Oxygen.Data.All.Tests -- /m:6` -> **success**.
+  - `out/build-vs/bin/Debug/Oxygen.Data.All.Tests.exe --gtest_filter=AssetKey*` -> **3 passed**.
+  - `out/build-vs/bin/Debug/Oxygen.Data.All.Tests.exe` -> **112 passed**.
 
 Phase 5 final release gate:
 
