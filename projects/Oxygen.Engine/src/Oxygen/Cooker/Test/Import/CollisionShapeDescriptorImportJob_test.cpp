@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -52,18 +51,6 @@ namespace {
 
   using nlohmann::json;
   namespace phys = data::pak::physics;
-  constexpr uint16_t kPhysicsResourceSidecarVersion = 1;
-
-#pragma pack(push, 1)
-  struct PhysicsResourceSidecarFile final {
-    char magic[4] = { 'O', 'P', 'R', 'S' };
-    uint16_t version = kPhysicsResourceSidecarVersion;
-    uint16_t reserved = 0;
-    data::pak::core::ResourceIndexT resource_index
-      = data::pak::core::kNoResourceIndex;
-    data::pak::physics::PhysicsResourceDesc descriptor {};
-  };
-#pragma pack(pop)
 
   auto HasDiagnosticCode(const std::vector<ImportDiagnostic>& diagnostics,
     const std::string_view code) -> bool
@@ -84,17 +71,6 @@ namespace {
     std::filesystem::remove_all(root, ec);
     std::filesystem::create_directories(root);
     return root;
-  }
-
-  auto WriteBytesFile(
-    const std::filesystem::path& path, std::span<const std::byte> bytes) -> void
-  {
-    std::filesystem::create_directories(path.parent_path());
-    auto out = std::ofstream(path, std::ios::binary | std::ios::trunc);
-    ASSERT_TRUE(out.is_open());
-    out.write(reinterpret_cast<const char*>(bytes.data()),
-      static_cast<std::streamsize>(bytes.size()));
-    ASSERT_TRUE(out.good());
   }
 
   auto ReadBinaryFile(const std::filesystem::path& path)
@@ -141,32 +117,6 @@ namespace {
     auto child = phys::CompoundShapeChildDesc {};
     std::memcpy(&child, bytes.data() + offset, sizeof(child));
     return child;
-  }
-
-  auto ReadPhysicsResourceSidecar(const std::vector<std::byte>& bytes)
-    -> std::optional<PhysicsResourceSidecarFile>
-  {
-    if (bytes.size() < sizeof(PhysicsResourceSidecarFile)) {
-      return std::nullopt;
-    }
-
-    auto stream = serio::ReadOnlyMemoryStream(
-      std::span<const std::byte>(bytes.data(), bytes.size()));
-    auto reader = serio::Reader(stream);
-    auto file = PhysicsResourceSidecarFile {};
-    [[maybe_unused]] const auto pack = reader.ScopedAlignment(1);
-    const auto read_result = reader.ReadBlobInto(std::as_writable_bytes(
-      std::span<PhysicsResourceSidecarFile, 1>(&file, 1)));
-    if (!read_result.has_value()) {
-      return std::nullopt;
-    }
-    if (std::memcmp(file.magic, "OPRS", 4) != 0) {
-      return std::nullopt;
-    }
-    if (file.version != kPhysicsResourceSidecarVersion) {
-      return std::nullopt;
-    }
-    return file;
   }
 
   auto SubmitAndWait(AsyncImportService& service, ImportRequest request)
@@ -223,24 +173,6 @@ namespace {
           })",
         };
     return request;
-  }
-
-  auto WritePhysicsResourceSidecar(const std::filesystem::path& cooked_root,
-    const phys::PhysicsResourceFormat format,
-    const data::pak::core::ResourceIndexT resource_index) -> void
-  {
-    auto sidecar = PhysicsResourceSidecarFile {};
-    sidecar.resource_index = resource_index;
-    sidecar.descriptor.format = format;
-    sidecar.descriptor.size_bytes = 0;
-    std::fill(std::begin(sidecar.descriptor.content_hash),
-      std::end(sidecar.descriptor.content_hash), uint8_t { 0 });
-
-    auto bytes = std::array<std::byte, sizeof(PhysicsResourceSidecarFile)> {};
-    std::memcpy(bytes.data(), &sidecar, sizeof(sidecar));
-    WriteBytesFile(cooked_root
-        / std::filesystem::path("Physics/Resources/shape_payload.opres"),
-      std::span<const std::byte>(bytes));
   }
 
   auto MakeCollisionShapeRequest(const std::filesystem::path& source_root,
@@ -314,10 +246,11 @@ namespace {
     EXPECT_EQ(descriptor->shape_params.box.half_extents[2], 25.0F);
   }
 
-  NOLINT_TEST(CollisionShapeDescriptorImportJobTest,
-    PayloadBackedShapeResolvesOpresAndEmitsPayloadRef)
+  NOLINT_TEST(
+    CollisionShapeDescriptorImportJobTest, TopLevelUnknownFieldRejectedBySchema)
   {
-    const auto cooked_root = MakeTempCookedRoot("payload_shape_success");
+    const auto cooked_root
+      = MakeTempCookedRoot("unknown_field_rejected");
     const auto source_root = cooked_root.parent_path() / "source_data";
 
     auto service = AsyncImportService(AsyncImportService::Config {
@@ -326,58 +259,30 @@ namespace {
     [[maybe_unused]] auto stop_service
       = oxygen::Finally([&service]() { service.Stop(); });
 
-    WritePhysicsResourceSidecar(cooked_root,
-      phys::PhysicsResourceFormat::kJoltShapeBinary,
-      data::pak::core::ResourceIndexT { 7 });
-
     const auto material_report
       = SubmitAndWait(service, MakeMaterialRequest(source_root, cooked_root));
     ASSERT_TRUE(material_report.success);
-
-    constexpr auto kPayloadSidecarRelPath
-      = std::string_view { "Physics/Resources/shape_payload.opres" };
-    const auto payload_sidecar_path
-      = cooked_root / std::filesystem::path { kPayloadSidecarRelPath };
-    ASSERT_TRUE(std::filesystem::exists(payload_sidecar_path));
-    const auto payload_sidecar_bytes = ReadBinaryFile(payload_sidecar_path);
-    const auto parsed_sidecar
-      = ReadPhysicsResourceSidecar(payload_sidecar_bytes);
-    ASSERT_TRUE(parsed_sidecar.has_value());
-    EXPECT_EQ(parsed_sidecar->descriptor.format,
-      phys::PhysicsResourceFormat::kJoltShapeBinary);
 
     const auto shape_descriptor = json {
       { "name", "convex_hull_shape" },
       { "shape_type", "convex_hull" },
       { "material_ref", "/.cooked/Physics/Materials/ground.opmat" },
-      { "payload_ref", "/.cooked/Physics/Resources/shape_payload.opres" },
+      { "unexpected_field", "/.cooked/Physics/Resources/shape_payload.opres" },
       { "virtual_path", "/.cooked/Physics/Shapes/hull.ocshape" },
     };
 
     const auto report = SubmitAndWait(service,
       MakeCollisionShapeRequest(source_root, cooked_root, shape_descriptor));
-    EXPECT_TRUE(report.success);
-
-    constexpr auto kShapeRelPath
-      = std::string_view { "Physics/Shapes/hull.ocshape" };
-    const auto shape_path
-      = cooked_root / std::filesystem::path { kShapeRelPath };
-    ASSERT_TRUE(std::filesystem::exists(shape_path));
-    const auto bytes = ReadBinaryFile(shape_path);
-    const auto descriptor = ReadCollisionShapeAssetDesc(bytes);
-    ASSERT_TRUE(descriptor.has_value());
-    EXPECT_EQ(descriptor->shape_type, phys::ShapeType::kConvexHull);
-    EXPECT_EQ(descriptor->cooked_shape_ref.payload_type,
-      phys::ShapePayloadType::kConvex);
-    EXPECT_EQ(descriptor->cooked_shape_ref.resource_index,
-      parsed_sidecar->resource_index);
+    EXPECT_FALSE(report.success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      report.diagnostics, "physics.shape.schema_validation_failed"));
   }
 
   NOLINT_TEST(CollisionShapeDescriptorImportJobTest,
-    PayloadBackedShapeWithoutPayloadRefEmitsInlineCookedPayload)
+    PayloadBackedShapeEmitsInlineCookedPayload)
   {
     const auto cooked_root
-      = MakeTempCookedRoot("payload_shape_without_payload_ref");
+      = MakeTempCookedRoot("payload_shape_inline_emission");
     const auto source_root = cooked_root.parent_path() / "source_data";
 
     auto service = AsyncImportService(AsyncImportService::Config {
@@ -495,7 +400,7 @@ namespace {
   }
 
   NOLINT_TEST(CollisionShapeDescriptorImportJobTest,
-    CompoundNonAnalyticChildWithoutPayloadRefFailsValidation)
+    CompoundNonAnalyticChildRejectedBySchema)
   {
     const auto cooked_root
       = MakeTempCookedRoot("compound_child_payload_missing");
@@ -529,42 +434,7 @@ namespace {
       MakeCollisionShapeRequest(source_root, cooked_root, shape_descriptor));
     EXPECT_FALSE(report.success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "physics.shape.compound_child_payload_required"));
-  }
-
-  NOLINT_TEST(CollisionShapeDescriptorImportJobTest,
-    PayloadRefWithConstraintFormatFailsWithHelpfulDiagnostic)
-  {
-    const auto cooked_root = MakeTempCookedRoot("payload_format_mismatch");
-    const auto source_root = cooked_root.parent_path() / "source_data";
-
-    auto service = AsyncImportService(AsyncImportService::Config {
-      .thread_pool_size = 2U,
-    });
-    [[maybe_unused]] auto stop_service
-      = oxygen::Finally([&service]() { service.Stop(); });
-
-    WritePhysicsResourceSidecar(cooked_root,
-      phys::PhysicsResourceFormat::kJoltConstraintBinary,
-      data::pak::core::ResourceIndexT { 9 });
-
-    const auto material_report
-      = SubmitAndWait(service, MakeMaterialRequest(source_root, cooked_root));
-    ASSERT_TRUE(material_report.success);
-
-    const auto shape_descriptor = json {
-      { "name", "bad_hull" },
-      { "shape_type", "convex_hull" },
-      { "material_ref", "/.cooked/Physics/Materials/ground.opmat" },
-      { "payload_ref", "/.cooked/Physics/Resources/shape_payload.opres" },
-      { "virtual_path", "/.cooked/Physics/Shapes/bad_hull.ocshape" },
-    };
-
-    const auto report = SubmitAndWait(service,
-      MakeCollisionShapeRequest(source_root, cooked_root, shape_descriptor));
-    EXPECT_FALSE(report.success);
-    EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "physics.shape.payload_ref_format_mismatch"));
+      report.diagnostics, "physics.shape.schema_validation_failed"));
   }
 
 } // namespace

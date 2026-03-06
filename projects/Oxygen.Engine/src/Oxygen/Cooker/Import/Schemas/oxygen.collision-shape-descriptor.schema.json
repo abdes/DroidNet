@@ -26,9 +26,6 @@
         "material_ref": {
             "$ref": "#/definitions/canonical_opmat_path"
         },
-        "payload_ref": {
-            "$ref": "#/definitions/canonical_opres_path"
-        },
         "local_position": {
             "$ref": "#/definitions/vec3"
         },
@@ -99,6 +96,17 @@
                 "compound"
             ]
         },
+        "compound_child_shape_type": {
+            "enum": [
+                "sphere",
+                "capsule",
+                "box",
+                "cylinder",
+                "cone",
+                "plane",
+                "world_boundary"
+            ]
+        },
         "world_boundary_mode": {
             "enum": [
                 "aabb_clamp",
@@ -143,11 +151,6 @@
             "minLength": 1,
             "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.opmat$"
         },
-        "canonical_opres_path": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.opres$"
-        },
         "compound_children": {
             "type": "array",
             "minItems": 1,
@@ -166,7 +169,7 @@
             ],
             "properties": {
                 "shape_type": {
-                    "$ref": "#/definitions/shape_type"
+                    "$ref": "#/definitions/compound_child_shape_type"
                 },
                 "radius": {
                     "type": "number",
@@ -194,9 +197,6 @@
                 "limits_max": {
                     "$ref": "#/definitions/vec3"
                 },
-                "payload_ref": {
-                    "$ref": "#/definitions/canonical_opres_path"
-                },
                 "local_position": {
                     "$ref": "#/definitions/vec3"
                 },
@@ -222,12 +222,7 @@
                     "then": {
                         "required": [
                             "radius"
-                        ],
-                        "not": {
-                            "required": [
-                                "payload_ref"
-                            ]
-                        }
+                        ]
                     }
                 },
                 {
@@ -245,12 +240,7 @@
                         "required": [
                             "radius",
                             "half_height"
-                        ],
-                        "not": {
-                            "required": [
-                                "payload_ref"
-                            ]
-                        }
+                        ]
                     }
                 },
                 {
@@ -267,12 +257,7 @@
                     "then": {
                         "required": [
                             "half_extents"
-                        ],
-                        "not": {
-                            "required": [
-                                "payload_ref"
-                            ]
-                        }
+                        ]
                     }
                 },
                 {
@@ -290,12 +275,7 @@
                         "required": [
                             "radius",
                             "half_height"
-                        ],
-                        "not": {
-                            "required": [
-                                "payload_ref"
-                            ]
-                        }
+                        ]
                     }
                 },
                 {
@@ -313,12 +293,7 @@
                         "required": [
                             "radius",
                             "half_height"
-                        ],
-                        "not": {
-                            "required": [
-                                "payload_ref"
-                            ]
-                        }
+                        ]
                     }
                 },
                 {
@@ -336,12 +311,7 @@
                         "required": [
                             "normal",
                             "distance"
-                        ],
-                        "not": {
-                            "required": [
-                                "payload_ref"
-                            ]
-                        }
+                        ]
                     }
                 },
                 {
@@ -360,12 +330,7 @@
                             "boundary_mode",
                             "limits_min",
                             "limits_max"
-                        ],
-                        "not": {
-                            "required": [
-                                "payload_ref"
-                            ]
-                        }
+                        ]
                     }
                 }
             ]
@@ -386,12 +351,7 @@
             "then": {
                 "required": [
                     "radius"
-                ],
-                "not": {
-                    "required": [
-                        "payload_ref"
-                    ]
-                }
+                ]
             }
         },
         {
@@ -409,12 +369,7 @@
                 "required": [
                     "radius",
                     "half_height"
-                ],
-                "not": {
-                    "required": [
-                        "payload_ref"
-                    ]
-                }
+                ]
             }
         },
         {
@@ -431,12 +386,7 @@
             "then": {
                 "required": [
                     "half_extents"
-                ],
-                "not": {
-                    "required": [
-                        "payload_ref"
-                    ]
-                }
+                ]
             }
         },
         {
@@ -454,12 +404,7 @@
                 "required": [
                     "radius",
                     "half_height"
-                ],
-                "not": {
-                    "required": [
-                        "payload_ref"
-                    ]
-                }
+                ]
             }
         },
         {
@@ -477,12 +422,7 @@
                 "required": [
                     "radius",
                     "half_height"
-                ],
-                "not": {
-                    "required": [
-                        "payload_ref"
-                    ]
-                }
+                ]
             }
         },
         {
@@ -500,12 +440,7 @@
                 "required": [
                     "normal",
                     "distance"
-                ],
-                "not": {
-                    "required": [
-                        "payload_ref"
-                    ]
-                }
+                ]
             }
         },
         {
@@ -524,12 +459,7 @@
                     "boundary_mode",
                     "limits_min",
                     "limits_max"
-                ],
-                "not": {
-                    "required": [
-                        "payload_ref"
-                    ]
-                }
+                ]
             }
         },
         {
@@ -546,12 +476,7 @@
             "then": {
                 "required": [
                     "children"
-                ],
-                "not": {
-                    "required": [
-                        "payload_ref"
-                    ]
-                }
+                ]
             }
         }
     ]

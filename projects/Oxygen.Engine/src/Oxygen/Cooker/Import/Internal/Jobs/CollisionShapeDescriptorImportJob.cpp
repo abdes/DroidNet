@@ -32,7 +32,6 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/CollisionShapeImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/PhysicsResourceDescriptorSidecar.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
@@ -196,46 +195,6 @@ namespace {
       return std::nullopt;
     }
     return std::nullopt;
-  }
-
-  [[nodiscard]] auto PayloadTypeName(const phys::ShapePayloadType payload_type)
-    -> const char*
-  {
-    switch (payload_type) {
-    case phys::ShapePayloadType::kConvex:
-      return "convex";
-    case phys::ShapePayloadType::kMesh:
-      return "mesh";
-    case phys::ShapePayloadType::kHeightField:
-      return "height_field";
-    case phys::ShapePayloadType::kCompound:
-      return "compound";
-    case phys::ShapePayloadType::kInvalid:
-      return "invalid";
-    }
-    return "invalid";
-  }
-
-  [[nodiscard]] auto IsFormatCompatibleWithPayloadType(
-    const phys::PhysicsResourceFormat format,
-    const phys::ShapePayloadType payload_type) -> bool
-  {
-    switch (payload_type) {
-    case phys::ShapePayloadType::kConvex:
-      return format == phys::PhysicsResourceFormat::kJoltShapeBinary
-        || format == phys::PhysicsResourceFormat::kPhysXConvexMeshBinary;
-    case phys::ShapePayloadType::kMesh:
-      return format == phys::PhysicsResourceFormat::kJoltShapeBinary
-        || format == phys::PhysicsResourceFormat::kPhysXTriangleMeshBinary;
-    case phys::ShapePayloadType::kHeightField:
-      return format == phys::PhysicsResourceFormat::kJoltShapeBinary
-        || format == phys::PhysicsResourceFormat::kPhysXHeightFieldBinary;
-    case phys::ShapePayloadType::kCompound:
-      return format == phys::PhysicsResourceFormat::kJoltShapeBinary;
-    case phys::ShapePayloadType::kInvalid:
-      return false;
-    }
-    return false;
   }
 
   [[nodiscard]] auto NormalizeRelPath(std::string relpath) -> std::string
@@ -458,99 +417,6 @@ namespace {
 
     out_material_key = *resolved_key;
     return true;
-  }
-
-  auto ResolvePhysicsPayload(ImportSession& session,
-    const ImportRequest& request,
-    const std::vector<MountedInspectionContext>& contexts,
-    const std::string_view payload_ref,
-    const phys::ShapePayloadType payload_type)
-    -> co::Co<std::optional<PayloadResolution>>
-  {
-    if (!internal::IsCanonicalVirtualPath(payload_ref)) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.shape.payload_ref_invalid", "payload_ref must be canonical",
-        "payload_ref");
-      co_return std::nullopt;
-    }
-
-    auto relpath = std::string {};
-    if (!internal::TryVirtualPathToRelPath(request, payload_ref, relpath)) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.shape.payload_ref_unmounted",
-        "payload_ref is outside mounted cooked roots", "payload_ref");
-      co_return std::nullopt;
-    }
-    relpath = NormalizeRelPath(std::move(relpath));
-
-    const auto primary_file
-      = session.CookedRoot() / std::filesystem::path(relpath);
-    if (!std::filesystem::exists(primary_file)) {
-      auto found_elsewhere = false;
-      for (const auto& context : contexts) {
-        if (context.is_primary) {
-          continue;
-        }
-        const auto candidate
-          = context.cooked_root / std::filesystem::path(relpath);
-        if (std::filesystem::exists(candidate)) {
-          found_elsewhere = true;
-          break;
-        }
-      }
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        found_elsewhere ? "physics.shape.reference_source_mismatch"
-                        : "physics.shape.payload_ref_unresolved",
-        found_elsewhere
-          ? "Resolved payload_ref is not in the target source domain"
-          : "Resolved payload_ref was not found: " + std::string(payload_ref),
-        "payload_ref");
-      co_return std::nullopt;
-    }
-
-    if (session.FileReader() == nullptr) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.shape.reader_unavailable",
-        "Async file reader is not available");
-      co_return std::nullopt;
-    }
-
-    const auto load_start = std::chrono::steady_clock::now();
-    auto read_result = co_await session.FileReader()->ReadFile(primary_file);
-    session.AddSourceLoadDuration(
-      MakeDuration(load_start, std::chrono::steady_clock::now()));
-    if (!read_result.has_value()) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.shape.payload_ref_read_failed",
-        "Failed reading payload_ref sidecar: " + read_result.error().ToString(),
-        "payload_ref");
-      co_return std::nullopt;
-    }
-
-    auto parsed = internal::ParsedPhysicsResourceDescriptorSidecar {};
-    auto parse_error = std::string {};
-    if (!internal::ParsePhysicsResourceDescriptorSidecar(
-          read_result.value(), parsed, parse_error)) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.shape.payload_ref_parse_failed",
-        "Failed parsing payload_ref sidecar: " + parse_error, "payload_ref");
-      co_return std::nullopt;
-    }
-
-    if (!IsFormatCompatibleWithPayloadType(
-          parsed.descriptor.format, payload_type)) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.shape.payload_ref_format_mismatch",
-        "payload_ref format is incompatible with shape payload type '"
-          + std::string(PayloadTypeName(payload_type)) + "'",
-        "payload_ref");
-      co_return std::nullopt;
-    }
-
-    co_return PayloadResolution {
-      .resource_index = parsed.resource_index,
-      .payload_type = payload_type,
-    };
   }
 
 #pragma pack(push, 1)
@@ -822,12 +688,15 @@ namespace {
         }
         break;
       }
+      case phys::ShapeType::kInvalid:
       case phys::ShapeType::kConvexHull:
       case phys::ShapeType::kTriangleMesh:
       case phys::ShapeType::kHeightField:
-      case phys::ShapeType::kInvalid:
       case phys::ShapeType::kCompound:
-        break;
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "physics.shape.compound_child_invalid",
+          "Compound children must use analytic shape types only", child_path);
+        return false;
       }
     } catch (const std::exception& ex) {
       AddDiagnostic(session, request, ImportSeverity::kError,
@@ -836,25 +705,6 @@ namespace {
           + std::string(ex.what()),
         child_path);
       return false;
-    }
-
-    if (const auto payload_type = PayloadTypeForShapeType(child_type);
-      payload_type.has_value()) {
-      if (!child_doc.contains("payload_ref")) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "physics.shape.compound_child_payload_required",
-          "Compound non-analytic child requires payload_ref", child_path);
-        return false;
-      }
-      const auto payload_ref = child_doc.at("payload_ref").get<std::string>();
-      if (!internal::IsCanonicalVirtualPath(payload_ref)) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "physics.shape.payload_ref_invalid", "payload_ref must be canonical",
-          child_path + ".payload_ref");
-        return false;
-      }
-      out_child.payload_asset_key
-        = data::AssetKey::FromVirtualPath(payload_ref);
     }
 
     return true;
@@ -1062,19 +912,11 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   if (const auto payload_type = PayloadTypeForShapeType(shape_type);
     payload_type.has_value()) {
-    auto payload = std::optional<PayloadResolution> {};
-    if (descriptor_doc.contains("payload_ref")) {
-      const auto payload_ref
-        = descriptor_doc.at("payload_ref").get<std::string>();
-      payload = co_await ResolvePhysicsPayload(
-        session, Request(), contexts, payload_ref, *payload_type);
-    } else {
-      payload = EmitAuthoredShapePayload(session, Request(),
-        target->virtual_path, descriptor_doc, shape_type, *payload_type);
-    }
+    const auto payload = EmitAuthoredShapePayload(session, Request(),
+      target->virtual_path, descriptor_doc, shape_type, *payload_type);
     if (!payload.has_value()) {
-      ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
-        "Collision shape payload emission/resolution failed");
+      ReportPhaseProgress(
+        ImportPhase::kFailed, 1.0F, "Collision shape payload emission failed");
       co_return co_await FinalizeWithTelemetry(session);
     }
 
