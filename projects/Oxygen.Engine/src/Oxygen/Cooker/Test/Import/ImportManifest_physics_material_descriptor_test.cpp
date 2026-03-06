@@ -132,15 +132,15 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
       "output": "C:/tmp/physics-material-cooked",
       "jobs": [
         {
-          "id": "physics.resource.ground_payload",
-          "type": "physics-resource-descriptor",
-          "source": "Physics/ground.resource.json"
+          "id": "buffers.shared",
+          "type": "buffer-container",
+          "source": "Buffers/shared.buffers.json"
         },
         {
           "id": "physics.material.ground",
           "type": "physics-material-descriptor",
           "source": "Physics/ground.material.json",
-          "depends_on": ["physics.resource.ground_payload"]
+          "depends_on": ["buffers.shared"]
         }
       ]
     })");
@@ -152,7 +152,7 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
   ASSERT_EQ(manifest->jobs.size(), 2U);
   EXPECT_EQ(manifest->jobs[1].id, "physics.material.ground");
   ASSERT_EQ(manifest->jobs[1].depends_on.size(), 1U);
-  EXPECT_EQ(manifest->jobs[1].depends_on[0], "physics.resource.ground_payload");
+  EXPECT_EQ(manifest->jobs[1].depends_on[0], "buffers.shared");
 
   auto request_errors = std::ostringstream {};
   const auto request = manifest->jobs[1].BuildRequest(request_errors);
@@ -160,8 +160,7 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
   ASSERT_TRUE(request->orchestration.has_value());
   EXPECT_EQ(request->orchestration->job_id, "physics.material.ground");
   ASSERT_EQ(request->orchestration->depends_on.size(), 1U);
-  EXPECT_EQ(
-    request->orchestration->depends_on[0], "physics.resource.ground_payload");
+  EXPECT_EQ(request->orchestration->depends_on[0], "buffers.shared");
 }
 
 NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
@@ -224,6 +223,29 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
   EXPECT_FALSE(request.has_value());
   EXPECT_TRUE(request_errors.str().find(
                 "physics.material.descriptor.schema_validation_failed")
+    != std::string::npos);
+}
+
+NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
+  RejectsLegacyPhysicsResourceDescriptorJobType)
+{
+  const auto manifest_path = MakeManifestPath("rejects_legacy_job_type");
+  WriteTextFile(manifest_path,
+    R"({
+      "version": 1,
+      "jobs": [
+        {
+          "type": "physics-resource-descriptor",
+          "source": "Physics/legacy.resource.json"
+        }
+      ]
+    })");
+
+  auto errors = std::ostringstream {};
+  const auto manifest
+    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  EXPECT_FALSE(manifest.has_value());
+  EXPECT_TRUE(errors.str().find("manifest schema validation failed")
     != std::string::npos);
 }
 

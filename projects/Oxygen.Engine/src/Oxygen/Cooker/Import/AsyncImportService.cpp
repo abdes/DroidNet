@@ -49,7 +49,6 @@
 #include <Oxygen/Cooker/Import/Internal/Jobs/InputImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/PhysicsMaterialDescriptorImportJob.h>
-#include <Oxygen/Cooker/Import/Internal/Jobs/PhysicsResourceDescriptorImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/PhysicsSidecarImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/SceneDescriptorImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/ScriptAssetImportJob.h>
@@ -100,15 +99,6 @@ namespace {
     const auto name_part = file_name.empty() ? "source" : file_name;
     return std::string("material-descriptor:") + nostd::to_string(job_id) + ":"
       + name_part;
-  }
-
-  [[nodiscard]] auto MakePhysicsResourceDescriptorJobName(
-    ImportJobId job_id, const std::filesystem::path& source_path) -> std::string
-  {
-    const auto file_name = source_path.filename().string();
-    const auto name_part = file_name.empty() ? "source" : file_name;
-    return std::string("physics-resource-descriptor:")
-      + nostd::to_string(job_id) + ":" + name_part;
   }
 
   [[nodiscard]] auto MakePhysicsMaterialDescriptorJobName(
@@ -497,8 +487,6 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   const bool is_buffer_container_request = request.buffer_container.has_value();
   const bool is_material_descriptor_request
     = request.material_descriptor.has_value();
-  const bool is_physics_resource_descriptor_request
-    = request.physics_resource_descriptor.has_value();
   const bool is_physics_material_descriptor_request
     = request.physics_material_descriptor.has_value();
   const bool is_collision_shape_descriptor_request
@@ -518,7 +506,6 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
     if (!is_scripting_request && !is_input_request
       && !is_physics_sidecar_request && !is_buffer_container_request
       && !is_material_descriptor_request
-      && !is_physics_resource_descriptor_request
       && !is_physics_material_descriptor_request
       && !is_collision_shape_descriptor_request
       && !is_geometry_descriptor_request && !is_scene_descriptor_request) {
@@ -527,7 +514,6 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
     if (!is_scripting_request && !is_input_request
       && !is_physics_sidecar_request && !is_buffer_container_request
       && !is_material_descriptor_request
-      && !is_physics_resource_descriptor_request
       && !is_physics_material_descriptor_request
       && !is_collision_shape_descriptor_request
       && !is_geometry_descriptor_request && !is_scene_descriptor_request
@@ -571,9 +557,6 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   } else if (is_material_descriptor_request) {
     default_job_name
       = MakeMaterialDescriptorJobName(job_id, request.source_path);
-  } else if (is_physics_resource_descriptor_request) {
-    default_job_name
-      = MakePhysicsResourceDescriptorJobName(job_id, request.source_path);
   } else if (is_physics_material_descriptor_request) {
     default_job_name
       = MakePhysicsMaterialDescriptorJobName(job_id, request.source_path);
@@ -630,9 +613,6 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
     job = std::make_shared<detail::BufferContainerImportJob>(std::move(params));
   } else if (is_material_descriptor_request) {
     job = std::make_shared<detail::MaterialDescriptorImportJob>(
-      std::move(params));
-  } else if (is_physics_resource_descriptor_request) {
-    job = std::make_shared<detail::PhysicsResourceDescriptorImportJob>(
       std::move(params));
   } else if (is_physics_material_descriptor_request) {
     job = std::make_shared<detail::PhysicsMaterialDescriptorImportJob>(

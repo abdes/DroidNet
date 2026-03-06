@@ -65,15 +65,6 @@ struct ImportRequest final {
     std::string normalized_descriptor_json;
   };
 
-  //! Physics resource-descriptor request payload.
-  /*!
-   Presence indicates this request must be handled by the
-   * physics-resource-descriptor domain.
-  */
-  struct PhysicsResourceDescriptorPayload final {
-    std::string normalized_descriptor_json;
-  };
-
   //! Physics material-descriptor request payload.
   /*!
    Presence indicates this request must be handled by the
@@ -216,14 +207,6 @@ struct ImportRequest final {
    domain rather than format-based import routing.
   */
   std::optional<MaterialDescriptorPayload> material_descriptor;
-
-  //! Optional physics resource-descriptor request payload.
-  /*!
-   Presence indicates this request must be handled by the
-   * physics-resource-descriptor domain rather than format-based import
-   routing.
-  */
-  std::optional<PhysicsResourceDescriptorPayload> physics_resource_descriptor;
 
   //! Optional physics material-descriptor request payload.
   /*!

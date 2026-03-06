@@ -187,28 +187,6 @@
                     "if": {
                         "properties": {
                             "type": {
-                                "const": "physics-resource-descriptor"
-                            }
-                        }
-                    },
-                    "then": {
-                        "propertyNames": {
-                            "enum": [
-                                "id",
-                                "depends_on",
-                                "type",
-                                "source",
-                                "output",
-                                "name",
-                                "content_hashing"
-                            ]
-                        }
-                    }
-                },
-                {
-                    "if": {
-                        "properties": {
-                            "type": {
                                 "const": "physics-material-descriptor"
                             }
                         }
@@ -428,9 +406,6 @@
                 },
                 "material_descriptor": {
                     "$ref": "#/definitions/material_descriptor_settings"
-                },
-                "physics_resource_descriptor": {
-                    "$ref": "#/definitions/physics_resource_descriptor_settings"
                 },
                 "physics_material_descriptor": {
                     "$ref": "#/definitions/physics_material_descriptor_settings"
@@ -788,21 +763,6 @@
             },
             "additionalProperties": false
         },
-        "physics_resource_descriptor_settings": {
-            "type": "object",
-            "properties": {
-                "output": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "content_hashing": {
-                    "type": "boolean"
-                }
-            },
-            "additionalProperties": false
-        },
         "physics_material_descriptor_settings": {
             "type": "object",
             "properties": {
@@ -887,7 +847,6 @@
                         "texture-descriptor",
                         "buffer-container",
                         "material-descriptor",
-                        "physics-resource-descriptor",
                         "physics-material-descriptor",
                         "collision-shape-descriptor",
                         "geometry-descriptor",

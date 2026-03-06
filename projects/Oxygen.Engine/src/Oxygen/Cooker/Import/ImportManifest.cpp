@@ -22,7 +22,6 @@
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/PhysicsImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/PhysicsMaterialDescriptorImportRequestBuilder.h>
-#include <Oxygen/Cooker/Import/PhysicsResourceDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/SceneDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/ScriptImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportRequestBuilder.h>
@@ -822,27 +821,6 @@ namespace {
       obj, "content_hashing", settings.with_content_hashing, errors);
   }
 
-  auto ApplyCommonPhysicsResourceDescriptorOverrides(const json& obj,
-    PhysicsResourceDescriptorImportSettings& settings, std::ostream& errors)
-    -> bool
-  {
-    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
-      return false;
-    }
-    return true;
-  }
-
-  auto ApplyPhysicsResourceDescriptorOverrides(const json& obj,
-    PhysicsResourceDescriptorImportSettings& settings, std::ostream& errors)
-    -> bool
-  {
-    return ReadBoolField(
-      obj, "content_hashing", settings.with_content_hashing, errors);
-  }
-
   auto ApplyCommonPhysicsMaterialDescriptorOverrides(const json& obj,
     PhysicsMaterialDescriptorImportSettings& settings, std::ostream& errors)
     -> bool
@@ -1026,8 +1004,6 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     manifest.defaults.input.cooked_root = manifest_output_root;
     manifest.defaults.buffer_container.cooked_root = manifest_output_root;
     manifest.defaults.material_descriptor.cooked_root = manifest_output_root;
-    manifest.defaults.physics_resource_descriptor.cooked_root
-      = manifest_output_root;
     manifest.defaults.physics_material_descriptor.cooked_root
       = manifest_output_root;
     manifest.defaults.collision_shape_descriptor.cooked_root
@@ -1190,23 +1166,6 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
       }
     }
 
-    if (defaults.contains("physics_resource_descriptor")) {
-      const auto& resource_defaults = defaults["physics_resource_descriptor"];
-      if (!resource_defaults.is_object()) {
-        error_stream
-          << "ERROR: defaults.physics_resource_descriptor must be an object\n";
-        return std::nullopt;
-      }
-      if (!ApplyCommonPhysicsResourceDescriptorOverrides(resource_defaults,
-            manifest.defaults.physics_resource_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyPhysicsResourceDescriptorOverrides(resource_defaults,
-            manifest.defaults.physics_resource_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-    }
-
     if (defaults.contains("physics_material_descriptor")) {
       const auto& material_defaults = defaults["physics_material_descriptor"];
       if (!material_defaults.is_object()) {
@@ -1313,8 +1272,6 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     manifest_job.input = manifest.defaults.input;
     manifest_job.buffer_container = manifest.defaults.buffer_container;
     manifest_job.material_descriptor = manifest.defaults.material_descriptor;
-    manifest_job.physics_resource_descriptor
-      = manifest.defaults.physics_resource_descriptor;
     manifest_job.physics_material_descriptor
       = manifest.defaults.physics_material_descriptor;
     manifest_job.collision_shape_descriptor
@@ -1454,8 +1411,6 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
         = manifest_job.texture.source_path;
       manifest_job.material_descriptor.descriptor_path
         = manifest_job.texture.source_path;
-      manifest_job.physics_resource_descriptor.descriptor_path
-        = manifest_job.texture.source_path;
       manifest_job.physics_material_descriptor.descriptor_path
         = manifest_job.texture.source_path;
       manifest_job.collision_shape_descriptor.descriptor_path
@@ -1473,7 +1428,6 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
       manifest_job.physics_sidecar.source_path.clear();
       manifest_job.buffer_container.descriptor_path.clear();
       manifest_job.material_descriptor.descriptor_path.clear();
-      manifest_job.physics_resource_descriptor.descriptor_path.clear();
       manifest_job.physics_material_descriptor.descriptor_path.clear();
       manifest_job.collision_shape_descriptor.descriptor_path.clear();
       manifest_job.geometry_descriptor.descriptor_path.clear();
@@ -1521,10 +1475,6 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
           job, manifest_job.material_descriptor, error_stream)) {
       return std::nullopt;
     }
-    if (!ApplyCommonPhysicsResourceDescriptorOverrides(
-          job, manifest_job.physics_resource_descriptor, error_stream)) {
-      return std::nullopt;
-    }
     if (!ApplyCommonPhysicsMaterialDescriptorOverrides(
           job, manifest_job.physics_material_descriptor, error_stream)) {
       return std::nullopt;
@@ -1570,10 +1520,6 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
     if (!ApplyMaterialDescriptorOverrides(
           job, manifest_job.material_descriptor, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ApplyPhysicsResourceDescriptorOverrides(
-          job, manifest_job.physics_resource_descriptor, error_stream)) {
       return std::nullopt;
     }
     if (!ApplyPhysicsMaterialDescriptorOverrides(
@@ -1650,10 +1596,6 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream) const
   if (job_type == "material-descriptor") {
     return AttachOrchestration(internal::BuildMaterialDescriptorRequest(
       material_descriptor, error_stream));
-  }
-  if (job_type == "physics-resource-descriptor") {
-    return AttachOrchestration(internal::BuildPhysicsResourceDescriptorRequest(
-      physics_resource_descriptor, error_stream));
   }
   if (job_type == "physics-material-descriptor") {
     return AttachOrchestration(internal::BuildPhysicsMaterialDescriptorRequest(
