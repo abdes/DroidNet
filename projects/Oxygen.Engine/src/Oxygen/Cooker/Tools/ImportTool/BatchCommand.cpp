@@ -375,21 +375,22 @@ namespace {
         }
       }
 
-      const auto* bindings_doc = &doc;
-      if (doc.contains("bindings")) {
-        if (!doc.at("bindings").is_object()) {
-          error = "physics-sidecar 'bindings' must be an object";
-          return false;
-        }
-        bindings_doc = &doc.at("bindings");
+      if (!doc.contains("bindings")) {
+        error = "physics-sidecar document must contain top-level 'bindings'";
+        return false;
       }
+      if (!doc.at("bindings").is_object()) {
+        error = "physics-sidecar 'bindings' must be an object";
+        return false;
+      }
+      const auto& bindings_doc = doc.at("bindings");
 
-      CollectSidecarRefField(*bindings_doc, "rigid_bodies", "shape_ref", refs);
+      CollectSidecarRefField(bindings_doc, "rigid_bodies", "shape_ref", refs);
       CollectSidecarRefField(
-        *bindings_doc, "rigid_bodies", "material_ref", refs);
-      CollectSidecarRefField(*bindings_doc, "colliders", "shape_ref", refs);
-      CollectSidecarRefField(*bindings_doc, "colliders", "material_ref", refs);
-      CollectSidecarRefField(*bindings_doc, "characters", "shape_ref", refs);
+        bindings_doc, "rigid_bodies", "material_ref", refs);
+      CollectSidecarRefField(bindings_doc, "colliders", "shape_ref", refs);
+      CollectSidecarRefField(bindings_doc, "colliders", "material_ref", refs);
+      CollectSidecarRefField(bindings_doc, "characters", "shape_ref", refs);
 
       return true;
     } catch (const std::exception& ex) {

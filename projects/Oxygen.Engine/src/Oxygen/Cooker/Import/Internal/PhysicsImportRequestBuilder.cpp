@@ -35,20 +35,18 @@ namespace {
       return false;
     }
 
-    json sidecar_doc {};
-    if (parsed.contains("bindings")) {
-      if (!parsed["bindings"].is_object()) {
-        error_stream << "ERROR: inline_bindings_json field 'bindings' must be "
-                        "an object\n";
-        return false;
-      }
-      sidecar_doc = std::move(parsed);
-    } else {
-      sidecar_doc = json::object();
-      sidecar_doc["bindings"] = std::move(parsed);
+    if (!parsed.contains("bindings")) {
+      error_stream << "ERROR: inline_bindings_json must contain a top-level "
+                      "'bindings' object\n";
+      return false;
+    }
+    if (!parsed["bindings"].is_object()) {
+      error_stream << "ERROR: inline_bindings_json field 'bindings' must be "
+                      "an object\n";
+      return false;
     }
 
-    normalized_payload = sidecar_doc.dump();
+    normalized_payload = parsed.dump();
     return true;
   }
 

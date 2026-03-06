@@ -521,7 +521,9 @@ is used internally:
         to Locked, Limited (with range), or Free; motors and springs per
         axis; the superset from which all others can be derived.
     - *Body A* and *Body B* scene node references (B may be `kWorldAnchor`
-      for a fixed-world attachment).
+      for a fixed-world attachment). In L1 sidecar JSON this world anchor is
+      authored as `node_index_b: "world"` (the `null` form is not part of the
+      contract).
     - *Constraint space* — World (anchor frames in world space) or Local
       (anchor frames in each body's local space; preferred for stability).
     - *Local frame A* — position and orientation of the constraint anchor
@@ -971,6 +973,8 @@ The editor serializes the result to three L1 source files:
 - `bouncing_sphere.scene.json` — the scene graph (node hierarchy, world
   transforms, mesh references). This is the primary scene file.
 - `bouncing_sphere.physics-sidecar.json` — the physics binding records,
+  authored as a canonical sidecar JSON object with mandatory top-level
+  `bindings` object,
   paired 1:1 with the scene file by matching basename. Contains the rigid
   body record for the sphere node.
 - `rubber.physics-material.json` — the material definition.

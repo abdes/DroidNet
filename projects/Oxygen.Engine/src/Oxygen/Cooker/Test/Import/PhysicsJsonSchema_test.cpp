@@ -301,7 +301,32 @@ NOLINT_TEST(PhysicsJsonSchemaTest, PhysicsSidecarSchemaRejectsUnknownFields)
 }
 
 NOLINT_TEST(
-  PhysicsJsonSchemaTest, PhysicsSidecarSchemaAcceptsJointWorldAttachmentForms)
+  PhysicsJsonSchemaTest, PhysicsSidecarSchemaAcceptsJointWorldAttachmentToken)
+{
+  const auto repo_root = FindRepoRoot();
+  ASSERT_FALSE(repo_root.empty());
+
+  const auto schema
+    = LoadJsonFile(SchemaFile(repo_root, "oxygen.physics-sidecar.schema.json"));
+  ASSERT_TRUE(schema.has_value());
+
+  const auto doc = json::parse(R"({
+    "bindings": {
+      "joints": [
+        {
+          "node_index_a": 2,
+          "node_index_b": "world"
+        }
+      ]
+    }
+  })");
+
+  auto errors = std::string {};
+  EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
+}
+
+NOLINT_TEST(
+  PhysicsJsonSchemaTest, PhysicsSidecarSchemaRejectsJointWorldAttachmentNull)
 {
   const auto repo_root = FindRepoRoot();
   ASSERT_FALSE(repo_root.empty());
@@ -316,17 +341,13 @@ NOLINT_TEST(
         {
           "node_index_a": 0,
           "node_index_b": null
-        },
-        {
-          "node_index_a": 2,
-          "node_index_b": "world"
         }
       ]
     }
   })");
 
   auto errors = std::string {};
-  EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
+  EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
 }
 
 NOLINT_TEST(PhysicsJsonSchemaTest,

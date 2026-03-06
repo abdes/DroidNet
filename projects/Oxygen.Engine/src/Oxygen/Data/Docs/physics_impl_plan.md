@@ -691,7 +691,7 @@ Remaining delta to Phase 4 exit gate:
 - [x] Remove runtime fallback parsing of L1 JSON for physics instantiation.
 - [x] Remove cross-collection ordinal reference remnants.
 - [x] Remove deprecated handle wrappers that violate session-handle policy.
-- [ ] Remove compatibility code paths that keep old physics schema alive in production.
+- [x] Remove compatibility code paths that keep old physics schema alive in production.
 - [ ] Same canonical virtual path -> same `AssetKey` across runs/machines.
 - [ ] Repeat cooks with unchanged input produce stable descriptor/blob hashes.
 - [ ] Scene hydration parity holds across loose and PAK modes.
@@ -756,6 +756,27 @@ Task 4 closure evidence (2026-03-07):
   - `cmake --build out/build-vs --config Debug --target oxygen-examples-renderscene oxygen-examples-physics -- /m:6` -> **success**.
   - `out/build-vs/bin/Debug/Oxygen.PhysicsModule.Sync.Tests.exe` -> **58 passed**.
   - `out/build-vs/bin/Debug/Oxygen.Scripting.Bindings.Tests.exe` -> **89 passed**.
+
+Task 5 closure evidence (2026-03-07):
+
+- Removed physics-sidecar compatibility acceptance for non-canonical joint
+  world-attachment form:
+  `joint_binding.node_index_b` now accepts only `uint32` or `"world"`; JSON
+  `null` is rejected in schema and parser diagnostics.
+- Removed physics-sidecar inline payload compatibility normalization in request
+  building:
+  `BuildPhysicsSidecarRequest` now requires inline payloads to be canonical
+  sidecar documents with top-level `bindings`; bare bindings objects are
+  rejected with an explicit error.
+- Removed batch DAG dependency-inference compatibility path that treated a
+  bare JSON object as sidecar bindings when `bindings` was absent; inference
+  now hard-fails with explicit diagnostics when canonical shape is violated.
+- Updated physics-sidecar CLI/help documentation to advertise only canonical
+  inline payload shape.
+- Validation:
+  - `cmake --build out/build-vs --config Debug --target Oxygen.Cooker.AsyncImportPhysics.Tests Oxygen.Cooker.ImportToolBatchDag.Tests -- /m:6` -> **success**.
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.AsyncImportPhysics.Tests.exe` -> **27 passed**.
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportToolBatchDag.Tests.exe` -> **10 passed**.
 
 Phase 5 final release gate:
 

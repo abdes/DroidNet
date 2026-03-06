@@ -42,7 +42,7 @@ auto PhysicsSidecarCommand::BuildCommand() -> std::shared_ptr<clap::Command>
   auto bindings_inline
     = Option::WithKey("bindings-inline")
         .About("Inline physics sidecar bindings JSON payload "
-               "({ \"bindings\": { ... } } or bare bindings object)")
+               "({ \"bindings\": { ... } })")
         .Long("bindings-inline")
         .WithValue<std::string>()
         .StoreTo(&options_.inline_bindings_json)

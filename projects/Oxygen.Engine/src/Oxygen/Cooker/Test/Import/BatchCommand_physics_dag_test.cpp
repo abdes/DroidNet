@@ -550,6 +550,41 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     messages.find("physics.manifest.dependency_cycle"), std::string::npos);
 }
 
+NOLINT_TEST_F(BatchCommandPhysicsDagTest,
+  PhysicsSidecarSourceWithoutTopLevelBindingsIsRejectedDuringInference)
+{
+  const auto root = MakeScenarioDir("physics_sidecar_missing_bindings_root");
+  const auto cooked_root = root / ".cooked";
+  const auto manifest_path = root / "import-manifest.json";
+  const auto sidecar_source
+    = root / "Scenes" / "missing_bindings.physics-sidecar.json";
+
+  WriteTextFile(sidecar_source, R"({"rigid_bodies": []})");
+
+  WriteTextFile(manifest_path,
+    std::string { R"({
+      "version": 1,
+      "output": ")" }
+      + cooked_root.generic_string() + R"(",
+      "jobs": [
+        {
+          "id": "physics.sidecar.main",
+          "type": "physics-sidecar",
+          "source": "Scenes/missing_bindings.physics-sidecar.json",
+          "target_scene_virtual_path": "/.cooked/Scenes/level.oscene"
+        }
+      ]
+    })");
+
+  const auto result = RunBatch(manifest_path);
+  EXPECT_FALSE(result.has_value());
+
+  const auto messages = Messages();
+  EXPECT_NE(messages.find("physics.manifest.dependency_inference_failed"),
+    std::string::npos);
+  EXPECT_NE(messages.find("top-level 'bindings'"), std::string::npos);
+}
+
 NOLINT_TEST_F(BatchCommandPhysicsDagTest, NonPhysicsCycleStillUsesLegacyCode)
 {
   const auto root = MakeScenarioDir("input_dep_cycle");

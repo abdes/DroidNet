@@ -700,16 +700,13 @@
                             "$ref": "#/definitions/node_index"
                         },
                         {
-                            "type": "null"
-                        },
-                        {
                             "type": "string",
                             "enum": [
                                 "world"
                             ]
                         }
                     ],
-                    "description": "Body B node index, or null/\"world\" to attach constraint to world."
+                    "description": "Body B node index, or \"world\" to attach constraint to world."
                 },
                 "constraint_type": {
                     "enum": [

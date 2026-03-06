@@ -276,9 +276,8 @@ Input modes (exactly one required):
 - positional `source` (JSON sidecar file), or
 - `--bindings-inline '<json>'`
 
-`--bindings-inline` accepts either:
-- a JSON object with `bindings` object (`{ "bindings": { ... } }`)
-- or a bare bindings object (`{ "rigid_bodies": [...], ... }`)
+`--bindings-inline` accepts only a canonical sidecar object with a top-level
+`bindings` object (`{ "bindings": { ... } }`).
 
 Required:
 - `--target-scene-virtual-path <canonical-virtual-path>`

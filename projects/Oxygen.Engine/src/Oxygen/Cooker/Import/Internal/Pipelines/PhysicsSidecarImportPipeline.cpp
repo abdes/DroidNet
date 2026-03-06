@@ -326,10 +326,6 @@ namespace {
       return false;
     }
     const auto& value = obj.at("node_index_b");
-    if (value.is_null()) {
-      out = phys::kWorldAttachmentNodeIndex;
-      return true;
-    }
     if (value.is_string()) {
       const auto token = value.get<std::string>();
       if (token == "world") {
@@ -348,7 +344,7 @@ namespace {
       out = static_cast<uint32_t>(raw);
       return true;
     }
-    error = "node_index_b must be uint32, null, or \"world\"";
+    error = "node_index_b must be uint32 or \"world\"";
     return false;
   }
 
