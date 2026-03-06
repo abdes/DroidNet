@@ -44,7 +44,10 @@ NOLINT_TEST(LoadAssetHeaderBasic, ReturnsCorrectHeader)
   }
   header->version = 42;
   header->streaming_priority = 7;
-  header->content_hash = 0x123456789ABCDEF0ULL;
+  constexpr uint64_t kExpectedHashPrefix = 0x123456789ABCDEF0ULL;
+  std::memset(header->content_hash.data(), 0, header->content_hash.size());
+  std::memcpy(header->content_hash.data(), &kExpectedHashPrefix,
+    sizeof(kExpectedHashPrefix));
   header->variant_flags = 0xAABBCCDD;
 
   MemoryStream stream(std::span<std::byte>(buffer.data(), buffer.size()));
@@ -59,7 +62,9 @@ NOLINT_TEST(LoadAssetHeaderBasic, ReturnsCorrectHeader)
   EXPECT_TRUE(std::string_view(result.name).starts_with("TestAsset"));
   EXPECT_EQ(result.version, 42);
   EXPECT_EQ(result.streaming_priority, 7);
-  EXPECT_EQ(result.content_hash, 0x123456789ABCDEF0ULL);
+  uint64_t hash_prefix = 0;
+  std::memcpy(&hash_prefix, result.content_hash.data(), sizeof(hash_prefix));
+  EXPECT_EQ(hash_prefix, kExpectedHashPrefix);
   EXPECT_EQ(result.variant_flags, 0xAABBCCDDU);
 }
 

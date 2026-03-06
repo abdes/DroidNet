@@ -181,7 +181,7 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
   serio::Writer writer(output_stream);
   const auto pack_writer = writer.ScopedAlignment(1);
 
-  asset_desc.header.content_hash = 0;
+  asset_desc.header.content_hash = {};
   if (!writer.WriteBlob(std::as_bytes(
         std::span<const data::pak::geometry::GeometryAssetDesc, 1>(
           &asset_desc, 1)))) {
@@ -329,12 +329,12 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
          output_bytes.size())](co::ThreadPool::CancelToken canceled) noexcept {
         DLOG_F(1, "Compute content hash");
         if (canceled) {
-          return uint64_t { 0 };
+          return data::pak::core::ContentHashDigest {};
         }
-        return util::ComputeContentHash(bytes);
+        return util::ComputeContentSha256(bytes);
       });
 
-    if (hash != 0) {
+    if (!base::IsAllZero(hash)) {
       asset_desc.header.content_hash = hash;
       serio::MemoryStream patch_stream(
         std::span(output_bytes.data(), output_bytes.size()));

@@ -74,8 +74,8 @@ public:
     return GetHeader().streaming_priority;
   }
 
-  //! Returns the content integrity hash.
-  auto GetContentHash() const noexcept -> uint64_t
+  //! Returns the content integrity hash (full SHA-256 digest).
+  auto GetContentHash() const noexcept -> const pak::core::ContentHashDigest&
   {
     return GetHeader().content_hash;
   }

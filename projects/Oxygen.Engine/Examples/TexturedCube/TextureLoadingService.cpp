@@ -49,6 +49,14 @@ using oxygen::content::lc::Inspection;
 using oxygen::data::loose_cooked::FileKind;
 using PakTextureResourceDesc = oxygen::data::pak::core::TextureResourceDesc;
 
+auto ContentHashPrefix(const oxygen::data::pak::core::ContentHashDigest& hash)
+  -> uint64_t
+{
+  uint64_t prefix = 0;
+  std::memcpy(&prefix, hash.data(), sizeof(prefix));
+  return prefix;
+}
+
 auto IsHdrPath(const std::filesystem::path& path) -> bool
 {
   std::string ext = path.extension().string();
@@ -465,7 +473,8 @@ auto TextureLoadingService::RefreshCookedTextureEntries(
       if (file) {
         if (file.read(reinterpret_cast<char*>(&header), sizeof(header))) {
           header_read = true;
-          hash_to_name[header.content_hash] = asset.virtual_path;
+          const auto hash_prefix = ContentHashPrefix(header.content_hash);
+          hash_to_name[hash_prefix] = asset.virtual_path;
         }
       }
 
@@ -483,8 +492,9 @@ auto TextureLoadingService::RefreshCookedTextureEntries(
           LOG_F(INFO,
             "TextureLoadingService: Promoting pending metadata for '{}' (hash: "
             "{:x}) via Asset Index",
-            key, header.content_hash);
-          texture_metadata_[header.content_hash] = std::move(meta);
+            key, ContentHashPrefix(header.content_hash));
+          texture_metadata_[ContentHashPrefix(header.content_hash)]
+            = std::move(meta);
           pending_metadata_.erase(key);
           promoted = true;
         }

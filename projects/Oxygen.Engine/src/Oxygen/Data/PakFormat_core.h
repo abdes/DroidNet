@@ -14,6 +14,7 @@
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -53,6 +54,9 @@ using StringTableOffsetT = uint32_t;
 
 //! Size type for slices into embedded string tables
 using StringTableSizeT = uint32_t;
+
+//! Canonical per-artifact integrity digest type (SHA-256).
+using ContentHashDigest = oxygen::base::Sha256Digest;
 
 //=== Constants ===-----------------------------------------------------------//
 
@@ -353,9 +357,13 @@ static_assert(sizeof(TextureResourceDesc) == 39);
    assets should be loaded. Lower values indicate higher priority.
  - The `asset_type` field is redundant with the directory entry, but is
    necessary for debugging and sanity checks.
- - The `content_hash` field is used to verify the integrity of the asset data.
- - The `variant_flags` field is a project-defined bitfield that can be used to
-   store additional metadata about the asset, such as its intended use or
+ - The `content_hash` field is the full SHA-256 digest used to verify cooked
+
+ artifact integrity.
+ - The `variant_flags` field is a project-defined bitfield
+ that can be used to
+   store additional metadata about the asset, such as its
+ intended use or
    compatibility with specific features.
 */
 #pragma pack(push, 1)
@@ -364,11 +372,11 @@ struct AssetHeader {
   char name[kMaxNameSize] = {}; // Asset name for debugging/tools
   uint8_t version = 0; // Asset format version (up to 256 versions)
   uint8_t streaming_priority = 0; // Loading priority: 0=highest, 255=lowest
-  uint64_t content_hash = 0; // Content integrity hash
+  ContentHashDigest content_hash = {}; // Full SHA-256 content integrity hash
   uint32_t variant_flags = 0; // Project-defined (not interpreted by engine)
 };
 #pragma pack(pop)
-static_assert(sizeof(AssetHeader) == 79);
+static_assert(sizeof(AssetHeader) == 103);
 
 } // namespace oxygen::data::pak::core
 

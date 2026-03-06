@@ -18,6 +18,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Data/AssetType.h>
@@ -608,7 +609,7 @@ NOLINT_TEST_F(
   const auto& bytes = *finalized;
   const auto asset_desc
     = ReadStructAt<data::pak::geometry::GeometryAssetDesc>(bytes, 0);
-  EXPECT_NE(asset_desc.header.content_hash, 0u);
+  EXPECT_FALSE(base::IsAllZero(asset_desc.header.content_hash));
 
   size_t offset = sizeof(data::pak::geometry::GeometryAssetDesc);
   const auto mesh_desc

@@ -88,7 +88,7 @@ private:
   [[nodiscard]] auto Worker() -> co::Co<>;
   [[nodiscard]] auto ComputeContentHash(
     std::vector<std::byte>& descriptor_bytes, std::stop_token stop_token)
-    -> co::Co<std::optional<uint64_t>>;
+    -> co::Co<std::optional<data::pak::core::ContentHashDigest>>;
   auto ReportCancelled(WorkItem item) -> co::Co<>;
 
   co::ThreadPool& thread_pool_;

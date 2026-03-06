@@ -4,6 +4,7 @@ import struct
 from pathlib import Path
 
 from pakgen.api import BuildOptions, build_pak, inspect_pak
+from pakgen.packing.constants import ASSET_HEADER_SIZE
 
 
 def _read_script_slot_records(
@@ -45,10 +46,13 @@ def _read_script_asset_desc(
     data = pak_path.read_bytes()
     desc = data[desc_offset : desc_offset + 256]
     name = desc[1:65].split(b"\x00", 1)[0].decode("utf-8", errors="strict")
-    bytecode_index, source_index, flags = struct.unpack_from("<III", desc, 95)
-    external = (
-        desc[107:227].split(b"\x00", 1)[0].decode("utf-8", errors="strict")
+    payload_offset = ASSET_HEADER_SIZE
+    bytecode_index, source_index, flags = struct.unpack_from(
+        "<III", desc, payload_offset
     )
+    external = desc[payload_offset + 12 : payload_offset + 132].split(
+        b"\x00", 1
+    )[0].decode("utf-8", errors="strict")
     return (name, bytecode_index, source_index, flags, external)
 
 

@@ -526,8 +526,8 @@ namespace {
     return std::vector(data.begin(), data.end());
   }
 
-  auto PatchContentHash(
-    std::vector<std::byte>& bytes, const uint64_t content_hash) -> void
+  auto PatchContentHash(std::vector<std::byte>& bytes,
+    const data::pak::core::ContentHashDigest& content_hash) -> void
   {
     constexpr size_t kOffset
       = offsetof(data::pak::render::MaterialAssetDesc, header)
@@ -540,18 +540,18 @@ namespace {
 
   [[nodiscard]] auto ComputeContentHashOnThreadPool(co::ThreadPool& thread_pool,
     std::span<const std::byte> bytes, std::stop_token stop_token)
-    -> co::Co<std::optional<uint64_t>>
+    -> co::Co<std::optional<data::pak::core::ContentHashDigest>>
   {
     const auto hash = co_await thread_pool.Run(
       [bytes, stop_token](co::ThreadPool::CancelToken canceled) noexcept {
         DLOG_F(1, "Compute content hash");
         if (stop_token.stop_requested() || canceled) {
-          return uint64_t { 0 };
+          return data::pak::core::ContentHashDigest {};
         }
-        return util::ComputeContentHash(bytes);
+        return util::ComputeContentSha256(bytes);
       });
 
-    if (stop_token.stop_requested() || hash == 0) {
+    if (stop_token.stop_requested() || base::IsAllZero(hash)) {
       co_return std::nullopt;
     }
 

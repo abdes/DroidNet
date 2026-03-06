@@ -116,7 +116,7 @@ struct SceneAssetDesc {
   uint32_t component_table_count = 0;
 };
 #pragma pack(pop)
-static_assert(sizeof(SceneAssetDesc) == 115);
+static_assert(sizeof(SceneAssetDesc) == 139);
 
 //! Scene component table directory entry.
 /*!

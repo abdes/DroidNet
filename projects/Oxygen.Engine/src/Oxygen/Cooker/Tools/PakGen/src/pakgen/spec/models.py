@@ -73,7 +73,8 @@ class MaterialAsset:
     shader_references: List[ShaderReference] = field(default_factory=list)
     version: int = 1
     streaming_priority: int = 0
-    content_hash: int = 0
+    # AssetHeader content hash (32-byte SHA-256 digest).
+    content_hash: bytes = b""
     variant_flags: int = 0
     alignment: int = 1
     uv_scale: List[float] = field(default_factory=lambda: [1.0, 1.0])
@@ -162,7 +163,8 @@ class GeometryAsset:
     alignment: int = 1
     version: int = 1
     streaming_priority: int = 0
-    content_hash: int = 0
+    # AssetHeader content hash (32-byte SHA-256 digest).
+    content_hash: bytes = b""
     variant_flags: int = 0
 
 
@@ -176,7 +178,8 @@ class InputActionAsset:
     alignment: int = 1
     version: int = 1
     streaming_priority: int = 0
-    content_hash: int = 0
+    # AssetHeader content hash (32-byte SHA-256 digest).
+    content_hash: bytes = b""
     variant_flags: int = 0
 
 
@@ -189,7 +192,8 @@ class InputMappingContextAsset:
     alignment: int = 1
     version: int = 1
     streaming_priority: int = 0
-    content_hash: int = 0
+    # AssetHeader content hash (32-byte SHA-256 digest).
+    content_hash: bytes = b""
     variant_flags: int = 0
 
 

@@ -185,8 +185,8 @@ namespace {
     return value;
   }
 
-  auto PatchContentHash(std::vector<std::byte>& bytes, const uint64_t hash)
-    -> void
+  auto PatchContentHash(std::vector<std::byte>& bytes,
+    const data::pak::core::ContentHashDigest& hash) -> void
   {
     constexpr auto kOffset
       = offsetof(data::pak::core::AssetHeader, content_hash);
@@ -3324,7 +3324,7 @@ namespace {
     const auto stream_data = stream.Data();
     auto bytes = std::vector<std::byte>(stream_data.begin(), stream_data.end());
     if (hashing_enabled) {
-      PatchContentHash(bytes, util::ComputeContentHash(bytes));
+      PatchContentHash(bytes, util::ComputeContentSha256(bytes));
     }
     return bytes;
   }

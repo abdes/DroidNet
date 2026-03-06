@@ -26,8 +26,8 @@ namespace {
     return token.stop_possible() && token.stop_requested();
   }
 
-  auto PatchContentHash(
-    std::vector<std::byte>& bytes, const uint64_t content_hash) -> void
+  auto PatchContentHash(std::vector<std::byte>& bytes,
+    const data::pak::core::ContentHashDigest& content_hash) -> void
   {
     constexpr auto kOffset
       = offsetof(data::pak::physics::PhysicsMaterialAssetDesc, header)
@@ -215,7 +215,7 @@ auto PhysicsMaterialImportPipeline::Worker() -> co::Co<>
 
 auto PhysicsMaterialImportPipeline::ComputeContentHash(
   std::vector<std::byte>& descriptor_bytes, const std::stop_token stop_token)
-  -> co::Co<std::optional<uint64_t>>
+  -> co::Co<std::optional<data::pak::core::ContentHashDigest>>
 {
   if (IsStopRequested(stop_token)) {
     co_return std::nullopt;
@@ -226,12 +226,12 @@ auto PhysicsMaterialImportPipeline::ComputeContentHash(
   const auto content_hash = co_await thread_pool_.Run(
     [bytes, stop_token](co::ThreadPool::CancelToken canceled) noexcept {
       if (IsStopRequested(stop_token) || canceled) {
-        return uint64_t { 0 };
+        return data::pak::core::ContentHashDigest {};
       }
-      return util::ComputeContentHash(bytes);
+      return util::ComputeContentSha256(bytes);
     });
 
-  if (IsStopRequested(stop_token) || content_hash == 0) {
+  if (IsStopRequested(stop_token) || base::IsAllZero(content_hash)) {
     co_return std::nullopt;
   }
   co_return content_hash;

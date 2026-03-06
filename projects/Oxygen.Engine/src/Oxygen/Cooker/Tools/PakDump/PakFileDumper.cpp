@@ -109,6 +109,18 @@ template <typename T> auto ToHexString(T value) -> std::string
   return oss.str();
 }
 
+auto ToHexString(const oxygen::data::pak::core::ContentHashDigest& value)
+  -> std::string
+{
+  std::ostringstream oss;
+  oss << "0x";
+  for (const auto byte : value) {
+    oss << std::setw(2) << std::setfill('0') << std::hex
+        << static_cast<unsigned>(byte);
+  }
+  return oss.str();
+}
+
 namespace {
 
 auto ReadPakFooter(const std::filesystem::path& pak_path)
