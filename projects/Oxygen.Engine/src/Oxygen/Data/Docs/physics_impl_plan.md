@@ -692,7 +692,7 @@ Remaining delta to Phase 4 exit gate:
 ## Phase 5 - Full Working Closure, Cleanup, and Final Release Gate
 
 - [x] Remove legacy/duplicate pipelines bypassing binary descriptors.
-- [ ] Remove runtime fallback parsing of L1 JSON for physics instantiation.
+- [x] Remove runtime fallback parsing of L1 JSON for physics instantiation.
 - [ ] Remove cross-collection ordinal reference remnants.
 - [ ] Remove deprecated handle wrappers that violate session-handle policy.
 - [ ] Remove compatibility code paths that keep old physics schema alive in production.
@@ -718,6 +718,16 @@ Task 1 closure evidence (2026-03-07):
   - `Oxygen.Cooker.AsyncImportCollisionShapeDescriptor.Tests.exe` -> **20 passed**.
   - `Oxygen.Cooker.AsyncImportPhysicsMaterialDescriptor.Tests.exe` -> **14 passed** (includes legacy-job-type rejection test).
   - `Oxygen.Cooker.ImportToolBatchDag.Tests.exe` -> **9 passed**.
+
+Task 2 closure evidence (2026-03-07):
+
+- Runtime hydration/physics instantiation contains no L1-JSON parse path:
+  `rg -n "nlohmann::json|json::parse" src/Oxygen/Physics src/Oxygen/PhysicsModule Examples/DemoShell/Services/SceneLoaderService.cpp -g"*.cpp" -g"*.h"` -> **no matches**.
+- Removed vehicle legacy-envelope special-case in runtime restore path:
+  `JoltVehicles` no longer carries `OPHB` blob magic branching; restore is
+  strict binary-state decode only.
+- Validation:
+  - `Oxygen.Physics.Jolt.Tests.exe --gtest_filter="*BlobContract*"` -> **4 passed** (`joint/soft-body/vehicle` non-cooked payload rejection contract intact).
 
 Phase 5 final release gate:
 
