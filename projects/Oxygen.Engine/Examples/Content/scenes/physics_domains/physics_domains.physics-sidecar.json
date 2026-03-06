@@ -262,6 +262,7 @@
         "vehicles": [
             {
                 "node_index": 12,
+                "controller_type": "wheeled",
                 "wheels": [
                     {
                         "node_index": 14,

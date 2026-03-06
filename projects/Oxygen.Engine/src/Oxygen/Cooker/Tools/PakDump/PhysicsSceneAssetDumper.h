@@ -82,6 +82,7 @@ class PhysicsSceneAssetDumper final : public AssetDumper {
       PrintUtils::Field("Sample Node Index", record.node_index, 10);
       PrintUtils::Field("Sample Shape Key",
         oxygen::data::to_string(record.shape_asset_key), 10);
+      PrintUtils::Field("Sample Is Sensor", record.is_sensor, 10);
       break;
     }
     case PhysicsBindingType::kCharacter: {
@@ -118,6 +119,8 @@ class PhysicsSceneAssetDumper final : public AssetDumper {
       VehicleBindingRecord record {};
       std::memcpy(&record, blob.data() + table_offset, sizeof(record));
       PrintUtils::Field("Sample Node Index", record.node_index, 10);
+      PrintUtils::Field("Sample Controller Type",
+        static_cast<uint32_t>(record.controller_type), 10);
       PrintUtils::Field(
         "Sample Wheel Slice Offset", record.wheel_slice_offset, 10);
       PrintUtils::Field(

@@ -16,7 +16,7 @@ def _pack(asset, *, resource_index=17):
         resource_index=resource_index,
         header_builder=_header_builder,
     )
-    assert len(desc) == COLLISION_SHAPE_ASSET_DESC_SIZE
+    assert len(desc) >= COLLISION_SHAPE_ASSET_DESC_SIZE
     return desc
 
 
@@ -55,11 +55,11 @@ def _bytes(buf, off, size):
 )
 def test_shape_type_string_mapping(shape_name, expected):
     desc = _pack({"shape_type": shape_name})
-    assert desc[95] == expected
+    assert desc[ASSET_HEADER_SIZE] == expected
 
 
 def test_shape_params_union_offsets_are_stable():
-    shape_params_offset = 172
+    shape_params_offset = ASSET_HEADER_SIZE + 1 + 12 + 16 + 12 + 4 + 8 + 8 + 16
 
     sphere = _pack({"shape_type": "sphere", "shape_params": {"radius": 1.25}})
     assert _f32(sphere, shape_params_offset + 0) == pytest.approx(1.25)
@@ -142,27 +142,29 @@ def test_common_shape_fields_offsets():
             "shape_params": {"half_extents": [7.0, 8.0, 9.0]},
         }
     )
-    assert _f32(desc, 96) == pytest.approx(1.0)
-    assert _f32(desc, 100) == pytest.approx(2.0)
-    assert _f32(desc, 104) == pytest.approx(3.0)
-    assert _f32(desc, 108) == pytest.approx(0.1)
-    assert _f32(desc, 112) == pytest.approx(0.2)
-    assert _f32(desc, 116) == pytest.approx(0.3)
-    assert _f32(desc, 120) == pytest.approx(0.4)
-    assert _f32(desc, 124) == pytest.approx(4.0)
-    assert _f32(desc, 128) == pytest.approx(5.0)
-    assert _f32(desc, 132) == pytest.approx(6.0)
-    assert _u32(desc, 136) == 1
-    assert _u64(desc, 140) == 0x0123456789ABCDEF
-    assert _u64(desc, 148) == 0xFEDCBA9876543210
-    assert _bytes(desc, 156, 16) == bytes.fromhex(material_asset_key)
-    assert _f32(desc, 172) == pytest.approx(7.0)
-    assert _f32(desc, 176) == pytest.approx(8.0)
-    assert _f32(desc, 180) == pytest.approx(9.0)
+    base = ASSET_HEADER_SIZE
+    assert _f32(desc, base + 1) == pytest.approx(1.0)
+    assert _f32(desc, base + 5) == pytest.approx(2.0)
+    assert _f32(desc, base + 9) == pytest.approx(3.0)
+    assert _f32(desc, base + 13) == pytest.approx(0.1)
+    assert _f32(desc, base + 17) == pytest.approx(0.2)
+    assert _f32(desc, base + 21) == pytest.approx(0.3)
+    assert _f32(desc, base + 25) == pytest.approx(0.4)
+    assert _f32(desc, base + 29) == pytest.approx(4.0)
+    assert _f32(desc, base + 33) == pytest.approx(5.0)
+    assert _f32(desc, base + 37) == pytest.approx(6.0)
+    assert _u32(desc, base + 41) == 1
+    assert _u64(desc, base + 45) == 0x0123456789ABCDEF
+    assert _u64(desc, base + 53) == 0xFEDCBA9876543210
+    assert _bytes(desc, base + 61, 16) == bytes.fromhex(material_asset_key)
+    assert _f32(desc, base + 77) == pytest.approx(7.0)
+    assert _f32(desc, base + 81) == pytest.approx(8.0)
+    assert _f32(desc, base + 85) == pytest.approx(9.0)
 
 
 def test_cooked_shape_ref_defaults_match_shape_type():
-    cooked_ref_offset = 252
+    shape_params_offset = ASSET_HEADER_SIZE + 1 + 12 + 16 + 12 + 4 + 8 + 8 + 16
+    cooked_ref_offset = shape_params_offset + 80
 
     # Non-payload-backed shape defaults to invalid cooked ref.
     box = _pack({"shape_type": "box"}, resource_index=99)
@@ -187,8 +189,8 @@ def test_cooked_shape_ref_defaults_match_shape_type():
     assert height[cooked_ref_offset + 4] == 3
 
     compound = _pack({"shape_type": "compound"}, resource_index=99)
-    assert _u32(compound, cooked_ref_offset + 0) == 99
-    assert compound[cooked_ref_offset + 4] == 4
+    assert _u32(compound, cooked_ref_offset + 0) == 0
+    assert compound[cooked_ref_offset + 4] == 0
 
 
 @pytest.mark.parametrize(
@@ -205,20 +207,22 @@ def test_cooked_shape_ref_defaults_match_shape_type():
         ("height_field", 55, 3),
         ("plane", 0, 0),
         ("world_boundary", 0, 0),
-        ("compound", 55, 4),
+        ("compound", 0, 0),
     ],
 )
 def test_all_shape_types_default_cooked_shape_ref_contract(
     shape_name, expected_index, expected_payload_type
 ):
-    cooked_ref_offset = 252
+    shape_params_offset = ASSET_HEADER_SIZE + 1 + 12 + 16 + 12 + 4 + 8 + 8 + 16
+    cooked_ref_offset = shape_params_offset + 80
     desc = _pack({"shape_type": shape_name}, resource_index=55)
     assert _u32(desc, cooked_ref_offset + 0) == expected_index
     assert desc[cooked_ref_offset + 4] == expected_payload_type
 
 
 def test_cooked_shape_ref_allows_explicit_override():
-    cooked_ref_offset = 252
+    shape_params_offset = ASSET_HEADER_SIZE + 1 + 12 + 16 + 12 + 4 + 8 + 8 + 16
+    cooked_ref_offset = shape_params_offset + 80
     desc = _pack(
         {
             "shape_type": "triangle_mesh",
@@ -232,4 +236,53 @@ def test_cooked_shape_ref_allows_explicit_override():
 
 def test_legacy_shape_category_is_not_used_as_shape_type():
     desc = _pack({"shape_category": 3})
-    assert desc[95] == 0
+    assert desc[ASSET_HEADER_SIZE] == 0
+
+
+def test_compound_children_are_serialized_as_trailing_array():
+    desc = _pack(
+        {
+            "shape_type": "compound",
+            "children": [
+                {
+                    "shape_type": "sphere",
+                    "radius": 0.5,
+                    "local_position": [1.0, 2.0, 3.0],
+                    "local_rotation": [0.0, 0.0, 0.0, 1.0],
+                    "local_scale": [1.0, 1.0, 1.0],
+                },
+                {
+                    "shape_type": "convex_hull",
+                    "payload_ref": "00112233445566778899aabbccddeeff",
+                    "local_position": [4.0, 5.0, 6.0],
+                    "local_rotation": [0.0, 0.0, 0.0, 1.0],
+                    "local_scale": [0.9, 0.9, 0.9],
+                },
+            ],
+        }
+    )
+    assert len(desc) == COLLISION_SHAPE_ASSET_DESC_SIZE + 2 * 128
+
+    shape_params_offset = ASSET_HEADER_SIZE + 1 + 12 + 16 + 12 + 4 + 8 + 8 + 16
+    child_count = _u32(desc, shape_params_offset + 0)
+    child_byte_offset = _u32(desc, shape_params_offset + 4)
+    assert child_count == 2
+    assert child_byte_offset == COLLISION_SHAPE_ASSET_DESC_SIZE
+
+    child0 = desc[child_byte_offset : child_byte_offset + 128]
+    child1 = desc[child_byte_offset + 128 : child_byte_offset + 256]
+
+    assert _u32(child0, 0) == 1  # sphere
+    assert _f32(child0, 4) == pytest.approx(0.5)
+    assert _f32(child0, 68) == pytest.approx(1.0)
+    assert _f32(child0, 72) == pytest.approx(2.0)
+    assert _f32(child0, 76) == pytest.approx(3.0)
+    assert _bytes(child0, 108, 16) == b"\x00" * 16
+
+    assert _u32(child1, 0) == 6  # convex_hull
+    assert _f32(child1, 68) == pytest.approx(4.0)
+    assert _f32(child1, 72) == pytest.approx(5.0)
+    assert _f32(child1, 76) == pytest.approx(6.0)
+    assert _bytes(child1, 108, 16) == bytes.fromhex(
+        "00112233445566778899aabbccddeeff"
+    )

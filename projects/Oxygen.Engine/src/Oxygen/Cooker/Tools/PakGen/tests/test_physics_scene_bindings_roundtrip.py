@@ -7,7 +7,11 @@ from pathlib import Path
 import pytest
 
 from pakgen.api import BuildOptions, build_pak, inspect_pak, validate_pak
-from pakgen.packing.constants import PHYSICS_BINDING_ENTRY_SIZES
+from pakgen.packing.constants import ASSET_HEADER_SIZE, PHYSICS_BINDING_ENTRY_SIZES
+
+
+_TARGET_NODE_COUNT_OFFSET = ASSET_HEADER_SIZE + 16
+_DIRECTORY_OFFSET_OFFSET = _TARGET_NODE_COUNT_OFFSET + 8
 
 
 def _find_pakdump_exe() -> Path | None:
@@ -69,7 +73,7 @@ def _extract_physics_scene_desc(data: bytes) -> bytes:
 
 def _parse_physics_tables(desc: bytes) -> tuple[int, int, list[dict[str, int]]]:
     target_node_count, table_count, directory_offset = struct.unpack_from(
-        "<IIQ", desc, 111
+        "<IIQ", desc, _TARGET_NODE_COUNT_OFFSET
     )
     tables: list[dict[str, int]] = []
     for i in range(table_count):
@@ -92,7 +96,7 @@ def _parse_physics_tables(desc: bytes) -> tuple[int, int, list[dict[str, int]]]:
 def _validate_physics_scene_descriptor(desc: bytes) -> list[str]:
     issues: list[str] = []
     target_node_count, table_count, directory_offset = struct.unpack_from(
-        "<IIQ", desc, 111
+        "<IIQ", desc, _TARGET_NODE_COUNT_OFFSET
     )
     if target_node_count < 0:
         issues.append("negative target_node_count")
@@ -214,10 +218,10 @@ def test_physics_scene_negative_structural_cases(tmp_path: Path):
         bytes(desc)
     )
     assert table_count >= 2
-    directory_offset = struct.unpack_from("<Q", desc, 119)[0]
+    directory_offset = struct.unpack_from("<Q", desc, _DIRECTORY_OFFSET_OFFSET)[0]
 
     bad_dir = bytearray(desc)
-    struct.pack_into("<Q", bad_dir, 119, desc_size + 8)
+    struct.pack_into("<Q", bad_dir, _DIRECTORY_OFFSET_OFFSET, desc_size + 8)
     assert any(
         "directory out of bounds" in i
         for i in _validate_physics_scene_descriptor(bytes(bad_dir))

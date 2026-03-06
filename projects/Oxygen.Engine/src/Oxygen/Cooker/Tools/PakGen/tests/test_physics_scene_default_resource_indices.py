@@ -3,6 +3,7 @@ from __future__ import annotations
 import struct
 
 from pakgen.packing.packers import pack_physics_scene_asset_descriptor_and_payload
+from pakgen.packing.constants import ASSET_HEADER_SIZE, PHYSICS_SCENE_DESC_SIZE
 
 
 _PHYSICS_BINDING_RIGID_BODY = 0x59485052  # 'RPHY'
@@ -14,7 +15,7 @@ _NO_RESOURCE_INDEX = 0
 
 
 def _header_builder(_asset: dict[str, object]) -> bytes:
-    return b"\x00" * 95
+    return b"\x00" * ASSET_HEADER_SIZE
 
 
 def test_physics_scene_omitted_resource_indices_default_to_no_resource_index() -> None:
@@ -44,10 +45,11 @@ def test_physics_scene_omitted_resource_indices_default_to_no_resource_index() -
     )
     blob = desc + payload
 
-    table_count = struct.unpack_from("<I", blob, 111 + 4)[0]
-    directory_offset = struct.unpack_from("<Q", blob, 111 + 8)[0]
+    target_node_count_offset = ASSET_HEADER_SIZE + 16
+    table_count = struct.unpack_from("<I", blob, target_node_count_offset + 4)[0]
+    directory_offset = struct.unpack_from("<Q", blob, target_node_count_offset + 8)[0]
     assert table_count == 5
-    assert directory_offset == 256
+    assert directory_offset == PHYSICS_SCENE_DESC_SIZE
 
     table_offsets: dict[int, int] = {}
     for i in range(table_count):

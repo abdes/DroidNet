@@ -13,7 +13,6 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
-#include <fstream>
 #include <limits>
 #include <optional>
 #include <span>
@@ -40,7 +39,6 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/PhysicsResourceDescriptorSidecar.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
@@ -160,12 +158,6 @@ namespace {
     return value;
   }
 
-  [[nodiscard]] auto NormalizeRelPath(std::string relpath) -> std::string
-  {
-    std::replace(relpath.begin(), relpath.end(), '\\', '/');
-    return relpath;
-  }
-
   auto PatchContentHash(std::vector<std::byte>& bytes, const uint64_t hash)
     -> void
   {
@@ -212,12 +204,10 @@ namespace {
 
   struct JointBindingSource final {
     phys::JointBindingRecord record {};
-    std::optional<std::string> constraint_ref;
   };
 
   struct VehicleBindingSource final {
     phys::VehicleBindingRecord record {};
-    std::optional<std::string> constraint_ref;
     std::vector<VehicleWheelSource> wheels;
   };
 
@@ -480,6 +470,26 @@ namespace {
     return false;
   }
 
+  auto ParseVehicleControllerType(const nlohmann::json& obj,
+    phys::VehicleControllerType& out, std::string& error) -> bool
+  {
+    if (!obj.contains("controller_type")) {
+      error = "Field 'controller_type' is required";
+      return false;
+    }
+    const auto value = obj.at("controller_type").get<std::string>();
+    if (value == "wheeled") {
+      out = phys::VehicleControllerType::kWheeled;
+      return true;
+    }
+    if (value == "tracked") {
+      out = phys::VehicleControllerType::kTracked;
+      return true;
+    }
+    error = "Field 'controller_type' has unsupported value";
+    return false;
+  }
+
   auto ParseAggregateAuthority(const nlohmann::json& obj,
     phys::AggregateAuthority& out, std::string& error) -> bool
   {
@@ -735,10 +745,16 @@ namespace {
     }
 
     out.record.node_index = node_index;
-    return ReadOptionalUInt16(
-             binding, "collision_layer", out.record.collision_layer, error)
-      && ReadOptionalUInt32(
-        binding, "collision_mask", out.record.collision_mask, error);
+    auto is_sensor = false;
+    if (!ReadOptionalUInt16(
+          binding, "collision_layer", out.record.collision_layer, error)
+      || !ReadOptionalUInt32(
+        binding, "collision_mask", out.record.collision_mask, error)
+      || !ReadOptionalBool(binding, "is_sensor", is_sensor, error)) {
+      return false;
+    }
+    out.record.is_sensor = is_sensor ? 1U : 0U;
+    return true;
   }
 
   auto ParseCharacterBinding(const nlohmann::json& binding,
@@ -829,9 +845,7 @@ namespace {
     uint32_t node_index_a = 0;
     uint32_t node_index_b = 0;
     if (!ReadRequiredUInt32(binding, "node_index_a", node_index_a, error)
-      || !ReadJointNodeIndexB(binding, node_index_b, error)
-      || !ReadOptionalString(
-        binding, "constraint_ref", out.constraint_ref, error)) {
+      || !ReadJointNodeIndexB(binding, node_index_b, error)) {
       return false;
     }
     out.record.node_index_a = node_index_a;
@@ -844,8 +858,8 @@ namespace {
   {
     uint32_t node_index = 0;
     if (!ReadRequiredUInt32(binding, "node_index", node_index, error)
-      || !ReadOptionalString(
-        binding, "constraint_ref", out.constraint_ref, error)) {
+      || !ParseVehicleControllerType(
+        binding, out.record.controller_type, error)) {
       return false;
     }
     out.record.node_index = node_index;
@@ -1048,12 +1062,6 @@ namespace {
     const std::filesystem::path& target_cooked_root;
     uint32_t node_count = 0;
   };
-
-  auto ResolvePhysicsResourceRef(BindingValidationContext& ctx,
-    std::string_view reference_path, std::string_view object_path,
-    phys::PhysicsResourceFormat expected_format,
-    std::string_view expected_format_name, std::string_view diagnostic_prefix)
-    -> std::optional<data::pak::core::ResourceIndexT>;
 
   auto ResolveAssetKeyForVirtualPath(BindingValidationContext& ctx,
     std::string_view virtual_path, std::string_view object_path,
@@ -1349,136 +1357,6 @@ namespace {
     }
   }
 
-  [[nodiscard]] auto ReadBinaryFile(const std::filesystem::path& path)
-    -> std::optional<std::vector<std::byte>>
-  {
-    auto in = std::ifstream(path, std::ios::binary | std::ios::ate);
-    if (!in.is_open()) {
-      return std::nullopt;
-    }
-
-    const auto end = in.tellg();
-    if (end < 0) {
-      return std::nullopt;
-    }
-
-    const auto size = static_cast<size_t>(end);
-    in.seekg(0, std::ios::beg);
-    auto bytes = std::vector<std::byte>(size);
-    if (size > 0U) {
-      in.read(reinterpret_cast<char*>(bytes.data()),
-        static_cast<std::streamsize>(size));
-      if (!in.good()) {
-        return std::nullopt;
-      }
-    }
-    return bytes;
-  }
-
-  auto ResolvePhysicsResourceRef(BindingValidationContext& ctx,
-    std::string_view reference_path, std::string_view object_path,
-    const phys::PhysicsResourceFormat expected_format,
-    std::string_view expected_format_name, std::string_view diagnostic_prefix)
-    -> std::optional<data::pak::core::ResourceIndexT>
-  {
-    if (!internal::IsCanonicalVirtualPath(reference_path)) {
-      AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-        std::string("physics.sidecar.") + std::string(diagnostic_prefix)
-          + "_invalid",
-        std::string(diagnostic_prefix) + " must be canonical",
-        std::string(object_path));
-      return std::nullopt;
-    }
-
-    auto relpath = std::string {};
-    if (!internal::TryVirtualPathToRelPath(
-          ctx.request, reference_path, relpath)) {
-      AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-        std::string("physics.sidecar.") + std::string(diagnostic_prefix)
-          + "_unmounted",
-        std::string(diagnostic_prefix) + " is outside mounted cooked roots",
-        std::string(object_path));
-      return std::nullopt;
-    }
-    relpath = NormalizeRelPath(std::move(relpath));
-
-    const auto target_file
-      = ctx.target_cooked_root / std::filesystem::path(relpath);
-    if (!std::filesystem::exists(target_file)) {
-      auto found_elsewhere = false;
-      for (const auto& mounted : ctx.cooked_contexts) {
-        if (mounted.cooked_root == ctx.target_cooked_root) {
-          continue;
-        }
-        const auto candidate
-          = mounted.cooked_root / std::filesystem::path(relpath);
-        if (std::filesystem::exists(candidate)) {
-          found_elsewhere = true;
-          break;
-        }
-      }
-
-      AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-        found_elsewhere ? "physics.sidecar.reference_source_mismatch"
-                        : std::string("physics.sidecar.")
-            + std::string(diagnostic_prefix) + "_unresolved",
-        found_elsewhere
-          ? std::string("Resolved ") + std::string(diagnostic_prefix)
-            + " is not in the target source domain"
-          : std::string("Resolved ") + std::string(diagnostic_prefix)
-            + " was not found: " + std::string(reference_path),
-        std::string(object_path));
-      return std::nullopt;
-    }
-
-    const auto sidecar_bytes = ReadBinaryFile(target_file);
-    if (!sidecar_bytes.has_value()) {
-      AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-        std::string("physics.sidecar.") + std::string(diagnostic_prefix)
-          + "_read_failed",
-        std::string("Failed reading ") + std::string(diagnostic_prefix)
-          + " sidecar: " + target_file.string(),
-        std::string(object_path));
-      return std::nullopt;
-    }
-
-    auto parsed = internal::ParsedPhysicsResourceDescriptorSidecar {};
-    auto parse_error = std::string {};
-    if (!internal::ParsePhysicsResourceDescriptorSidecar(
-          *sidecar_bytes, parsed, parse_error)) {
-      AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-        std::string("physics.sidecar.") + std::string(diagnostic_prefix)
-          + "_parse_failed",
-        std::string("Failed parsing ") + std::string(diagnostic_prefix)
-          + " sidecar: " + parse_error,
-        std::string(object_path));
-      return std::nullopt;
-    }
-
-    if (parsed.descriptor.format != expected_format) {
-      AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-        std::string("physics.sidecar.") + std::string(diagnostic_prefix)
-          + "_format_mismatch",
-        std::string(diagnostic_prefix)
-          + " must reference a physics resource with format '"
-          + std::string(expected_format_name) + "'",
-        std::string(object_path));
-      return std::nullopt;
-    }
-
-    if (parsed.resource_index == data::pak::core::kNoResourceIndex) {
-      AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
-        std::string("physics.sidecar.") + std::string(diagnostic_prefix)
-          + "_unresolved",
-        std::string(diagnostic_prefix)
-          + " sidecar references invalid resource index zero",
-        std::string(object_path));
-      return std::nullopt;
-    }
-
-    return parsed.resource_index;
-  }
-
   auto ResolveJointBindings(std::vector<JointBindingSource>& records,
     BindingValidationContext& ctx) -> void
   {
@@ -1493,16 +1371,6 @@ namespace {
           ctx.session, ctx.request, base_path + ".node_index_b");
       if (!(node_a_ok && node_b_ok)) {
         continue;
-      }
-
-      if (records[i].constraint_ref.has_value()) {
-        const auto constraint_index = ResolvePhysicsResourceRef(ctx,
-          *records[i].constraint_ref, base_path + ".constraint_ref",
-          phys::PhysicsResourceFormat::kJoltConstraintBinary,
-          "jolt_constraint_binary", "constraint_ref");
-        if (constraint_index.has_value()) {
-          records[i].record.constraint_resource_index = *constraint_index;
-        }
       }
     }
   }
@@ -1520,16 +1388,6 @@ namespace {
         continue;
       }
 
-      if (records[i].constraint_ref.has_value()) {
-        const auto constraint_index = ResolvePhysicsResourceRef(ctx,
-          *records[i].constraint_ref, base_path + ".constraint_ref",
-          phys::PhysicsResourceFormat::kJoltVehicleConstraintBinary,
-          "jolt_vehicle_constraint_binary", "constraint_ref");
-        if (constraint_index.has_value()) {
-          records[i].record.constraint_resource_index = *constraint_index;
-        }
-      }
-
       if (records[i].wheels.size() < 2U) {
         AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
@@ -1541,7 +1399,7 @@ namespace {
       auto wheel_roles
         = std::unordered_set<uint32_t> {}; // packed (axle << 16) | side
       const auto wheel_offset = wheel_records.size();
-      auto slice_count = uint16_t { 0 };
+      auto slice_count = uint32_t { 0 };
       for (size_t w = 0; w < records[i].wheels.size(); ++w) {
         const auto wheel_path
           = base_path + ".wheels[" + std::to_string(w) + "]";
@@ -1573,10 +1431,10 @@ namespace {
             wheel_path);
           continue;
         }
-        if (slice_count == (std::numeric_limits<uint16_t>::max)()) {
+        if (slice_count == (std::numeric_limits<uint32_t>::max)()) {
           AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
             "physics.sidecar.payload_invalid",
-            "Vehicle wheel count exceeds uint16 range", wheel_path);
+            "Vehicle wheel count exceeds uint32 range", wheel_path);
           continue;
         }
 
@@ -1587,7 +1445,7 @@ namespace {
           .side = wheel.side,
           .backend_scalars = wheel.backend_scalars,
         });
-        slice_count = static_cast<uint16_t>(slice_count + 1U);
+        slice_count += 1U;
       }
 
       if (slice_count < 2U) {

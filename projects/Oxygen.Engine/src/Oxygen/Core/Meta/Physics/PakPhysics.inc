@@ -133,6 +133,23 @@ OXPHYS_SOFT_BODY_TETHER_MODE(kGeodesic, 2)
 #undef OXPHYS_SOFT_BODY_TETHER_MODE
 
 // ============================================================================
+// VehicleControllerType
+// ============================================================================
+// Author-authored high-level vehicle controller intent.
+//
+// Expected consumer macro:
+//   OXPHYS_VEHICLE_CONTROLLER_TYPE(name, value)
+//
+#ifndef OXPHYS_VEHICLE_CONTROLLER_TYPE
+#  define OXPHYS_VEHICLE_CONTROLLER_TYPE(name, value)
+#endif
+
+OXPHYS_VEHICLE_CONTROLLER_TYPE(kWheeled, 0)
+OXPHYS_VEHICLE_CONTROLLER_TYPE(kTracked, 1)
+
+#undef OXPHYS_VEHICLE_CONTROLLER_TYPE
+
+// ============================================================================
 // VehicleWheelSide
 // ============================================================================
 // Author-authored wheel side for deterministic axle/steering mapping.
