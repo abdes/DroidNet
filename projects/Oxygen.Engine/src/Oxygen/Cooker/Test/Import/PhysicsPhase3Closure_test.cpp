@@ -17,6 +17,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -27,6 +28,8 @@
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Core/Meta/Physics/Backend.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/PakFormat.h>
 
 namespace oxygen::content::import::test {
@@ -364,6 +367,8 @@ namespace {
               json {
                 { "node_index", 2U },
                 { "source_mesh_ref", kGeometryVirtualPath },
+                { "collision_layer", 2U },
+                { "collision_mask", 0xFFFFFFFFU },
                 { "edge_compliance", 0.0002F },
                 { "shear_compliance", 0.0003F },
                 { "bend_compliance", 0.0004F },
@@ -493,13 +498,151 @@ namespace {
     const std::string_view virtual_path, const std::string_view relpath) -> void
   {
     const auto key = data::AssetKey::FromVirtualPath(virtual_path);
-    const auto descriptor_bytes = std::array<std::byte, 4> { std::byte { 0x47 },
-      std::byte { 0x45 }, std::byte { 0x4f }, std::byte { 0x21 } };
+    namespace core = data::pak::core;
+    namespace geometry = data::pak::geometry;
+
+    struct VertexPosition final {
+      float x;
+      float y;
+      float z;
+    };
+    static_assert(sizeof(VertexPosition) == sizeof(float) * 3U);
+
+    const auto vertices = std::array<VertexPosition, 7> {
+      VertexPosition { 0.0F, 0.15F, 0.0F },
+      VertexPosition { -0.12F, -0.10F, -0.12F },
+      VertexPosition { 0.12F, -0.10F, -0.12F },
+      VertexPosition { 0.0F, -0.10F, 0.14F },
+      VertexPosition { -0.06F, 0.02F, 0.08F },
+      VertexPosition { 0.06F, 0.02F, 0.08F },
+      VertexPosition { 0.0F, -0.02F, -0.04F },
+    };
+    const auto indices = std::array<uint32_t, 12> {
+      0U,
+      1U,
+      2U, // top
+      0U,
+      2U,
+      3U, // side
+      0U,
+      3U,
+      1U, // side
+      1U,
+      3U,
+      2U, // base
+    };
+
+    auto descriptor = geometry::GeometryAssetDesc {};
+    descriptor.header.asset_type
+      = static_cast<uint8_t>(data::AssetType::kGeometry);
+    descriptor.header.version = geometry::kGeometryAssetVersion;
+    std::memcpy(descriptor.header.name, "cloth", 5U);
+    descriptor.lod_count = 1U;
+    descriptor.bounding_box_min[0] = -0.12F;
+    descriptor.bounding_box_min[1] = -0.10F;
+    descriptor.bounding_box_min[2] = -0.12F;
+    descriptor.bounding_box_max[0] = 0.12F;
+    descriptor.bounding_box_max[1] = 0.15F;
+    descriptor.bounding_box_max[2] = 0.14F;
+
+    auto mesh = geometry::MeshDesc {};
+    std::memcpy(mesh.name, "cloth_lod0", 10U);
+    mesh.mesh_type = static_cast<uint8_t>(data::MeshType::kStandard);
+    mesh.submesh_count = 1U;
+    mesh.mesh_view_count = 1U;
+    mesh.info.standard.vertex_buffer = core::ResourceIndexT { 1U };
+    mesh.info.standard.index_buffer = core::ResourceIndexT { 2U };
+    mesh.info.standard.bounding_box_min[0] = descriptor.bounding_box_min[0];
+    mesh.info.standard.bounding_box_min[1] = descriptor.bounding_box_min[1];
+    mesh.info.standard.bounding_box_min[2] = descriptor.bounding_box_min[2];
+    mesh.info.standard.bounding_box_max[0] = descriptor.bounding_box_max[0];
+    mesh.info.standard.bounding_box_max[1] = descriptor.bounding_box_max[1];
+    mesh.info.standard.bounding_box_max[2] = descriptor.bounding_box_max[2];
+
+    auto submesh = geometry::SubMeshDesc {};
+    std::memcpy(submesh.name, "cloth_submesh", 13U);
+    submesh.mesh_view_count = 1U;
+    submesh.bounding_box_min[0] = descriptor.bounding_box_min[0];
+    submesh.bounding_box_min[1] = descriptor.bounding_box_min[1];
+    submesh.bounding_box_min[2] = descriptor.bounding_box_min[2];
+    submesh.bounding_box_max[0] = descriptor.bounding_box_max[0];
+    submesh.bounding_box_max[1] = descriptor.bounding_box_max[1];
+    submesh.bounding_box_max[2] = descriptor.bounding_box_max[2];
+
+    auto view = geometry::MeshViewDesc {};
+    view.first_index = 0U;
+    view.index_count = static_cast<uint32_t>(indices.size());
+    view.first_vertex = 0U;
+    view.vertex_count = static_cast<uint32_t>(vertices.size());
+
+    auto descriptor_bytes = std::vector<std::byte> {};
+    descriptor_bytes.reserve(
+      sizeof(descriptor) + sizeof(mesh) + sizeof(submesh) + sizeof(view));
+    const auto append_pod = [&descriptor_bytes]<typename T>(const T& pod) {
+      static_assert(std::is_trivially_copyable_v<T>);
+      const auto* bytes = reinterpret_cast<const std::byte*>(&pod);
+      descriptor_bytes.insert(descriptor_bytes.end(), bytes, bytes + sizeof(T));
+    };
+    append_pod(descriptor);
+    append_pod(mesh);
+    append_pod(submesh);
+    append_pod(view);
+
+    auto table_entries = std::array<core::BufferResourceDesc, 3> {};
+    table_entries[1].data_offset = 0U;
+    table_entries[1].size_bytes
+      = static_cast<uint32_t>(vertices.size() * sizeof(VertexPosition));
+    table_entries[1].usage_flags = 0x01U;
+    table_entries[1].element_stride = sizeof(VertexPosition);
+    table_entries[1].element_format = static_cast<uint8_t>(Format::kUnknown);
+
+    table_entries[2].data_offset = table_entries[1].size_bytes;
+    table_entries[2].size_bytes
+      = static_cast<uint32_t>(indices.size() * sizeof(uint32_t));
+    table_entries[2].usage_flags = 0x02U;
+    table_entries[2].element_stride = 0U;
+    table_entries[2].element_format = static_cast<uint8_t>(Format::kR32UInt);
+
+    auto buffer_data = std::vector<std::byte> {};
+    buffer_data.reserve(static_cast<size_t>(table_entries[1].size_bytes)
+      + static_cast<size_t>(table_entries[2].size_bytes));
+    const auto* vertex_bytes
+      = reinterpret_cast<const std::byte*>(vertices.data());
+    buffer_data.insert(buffer_data.end(), vertex_bytes,
+      vertex_bytes + table_entries[1].size_bytes);
+    const auto* index_bytes
+      = reinterpret_cast<const std::byte*>(indices.data());
+    buffer_data.insert(buffer_data.end(), index_bytes,
+      index_bytes + table_entries[2].size_bytes);
+
+    auto table_bytes = std::vector<std::byte> {};
+    table_bytes.reserve(sizeof(table_entries));
+    const auto* table_raw
+      = reinterpret_cast<const std::byte*>(table_entries.data());
+    table_bytes.insert(
+      table_bytes.end(), table_raw, table_raw + sizeof(table_entries));
 
     auto writer = LooseCookedWriter(cooked_root);
     writer.WriteAssetDescriptor(key, data::AssetType::kGeometry, virtual_path,
       relpath, std::span<const std::byte>(descriptor_bytes));
     (void)writer.Finish();
+
+    const auto layout = LooseCookedLayout {};
+    const auto table_path
+      = cooked_root / std::filesystem::path(layout.BuffersTableRelPath());
+    const auto data_path
+      = cooked_root / std::filesystem::path(layout.BuffersDataRelPath());
+    std::filesystem::create_directories(table_path.parent_path());
+    {
+      auto out = std::ofstream(table_path, std::ios::binary | std::ios::trunc);
+      out.write(reinterpret_cast<const char*>(table_bytes.data()),
+        static_cast<std::streamsize>(table_bytes.size()));
+    }
+    {
+      auto out = std::ofstream(data_path, std::ios::binary | std::ios::trunc);
+      out.write(reinterpret_cast<const char*>(buffer_data.data()),
+        static_cast<std::streamsize>(buffer_data.size()));
+    }
   }
 
 } // namespace
@@ -603,6 +746,8 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   const auto soft_record = ReadStructAt<phys::SoftBodyBindingRecord>(
     sidecar_bytes, soft_record_offset);
   ASSERT_TRUE(soft_record.has_value());
+  EXPECT_EQ(soft_record->collision_layer, 2U);
+  EXPECT_EQ(soft_record->collision_mask, 0xFFFFFFFFU);
   EXPECT_EQ(soft_record->pinned_vertex_count, 3U);
   EXPECT_EQ(soft_record->kinematic_vertex_count, 2U);
   EXPECT_EQ(soft_record->pinned_vertex_byte_offset,
@@ -675,6 +820,28 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
     phys::PhysicsResourceFormat::kJoltConstraintBinary);
   EXPECT_EQ(physics_table[vehicle_index].format,
     phys::PhysicsResourceFormat::kJoltVehicleConstraintBinary);
+
+  const auto physics_data = ReadBinaryFile(
+    cooked_root / std::filesystem::path("Physics/Resources/physics.data"));
+  ASSERT_FALSE(physics_data.empty());
+  const auto is_legacy_authored_magic
+    = [&](const phys::PhysicsResourceDesc& resource) -> bool {
+    if (resource.size_bytes < 4U) {
+      return false;
+    }
+    const auto offset = static_cast<size_t>(resource.data_offset);
+    const auto size = static_cast<size_t>(resource.size_bytes);
+    if (offset > physics_data.size() || physics_data.size() - offset < size) {
+      return false;
+    }
+    return physics_data[offset + 0U] == std::byte { 'O' }
+    && physics_data[offset + 1U] == std::byte { 'P' }
+    && physics_data[offset + 2U] == std::byte { 'H' }
+    && physics_data[offset + 3U] == std::byte { 'B' };
+  };
+  EXPECT_FALSE(is_legacy_authored_magic(physics_table[soft_index]));
+  EXPECT_FALSE(is_legacy_authored_magic(physics_table[joint_index]));
+  EXPECT_FALSE(is_legacy_authored_magic(physics_table[vehicle_index]));
 
   service.Stop();
 }
@@ -785,6 +952,40 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
     = std::ranges::count_if(after_inspection.Assets(),
       [&](const auto& asset) { return asset.key == sidecar_key; });
   EXPECT_EQ(sidecar_entry_count, 1);
+
+  service.Stop();
+}
+
+NOLINT_TEST(PhysicsPhase3ClosureTest,
+  SidecarCookFailsWhenBindingBackendDoesNotMatchRequestedImportBackend)
+{
+  auto service = AsyncImportService(AsyncImportService::Config {
+    .thread_pool_size = 2U,
+  });
+  const auto cooked_root = MakeTempCookedRoot("backend_mismatch_hard_fail");
+
+  RegisterStubGeometryAsset(
+    cooked_root, kGeometryVirtualPath, "Geometry/cloth.ogeo");
+
+  ASSERT_TRUE(SubmitAndWait(
+    service, MakeSceneDescriptorRequest(cooked_root, kSceneName, 10U))
+      .success);
+  ASSERT_TRUE(
+    SubmitAndWait(service, MakePhysicsMaterialRequest(cooked_root)).success);
+  ASSERT_TRUE(
+    SubmitAndWait(service, MakeCompoundShapeRequest(cooked_root)).success);
+
+  auto request = MakePhysicsSidecarRequest(cooked_root, kSceneVirtualPath,
+    BuildComplexSidecarBindings({ 0U, 2U, 4U }, { 1U, 3U }));
+  request.options.physics.backend = core::meta::physics::PhysicsBackend::kPhysX;
+  const auto report = SubmitAndWait(service, std::move(request));
+  EXPECT_FALSE(report.success);
+
+  const auto has_backend_mismatch
+    = std::ranges::any_of(report.diagnostics, [](const auto& diagnostic) {
+        return diagnostic.code == "physics.sidecar.backend_mismatch";
+      });
+  EXPECT_TRUE(has_backend_mismatch);
 
   service.Stop();
 }

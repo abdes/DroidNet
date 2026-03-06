@@ -978,6 +978,8 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.vertex_radius));
   CHECK_RESULT(reader.ReadInto(record.tether_max_distance_multiplier));
   CHECK_RESULT(reader.ReadInto(record.solver_iteration_count));
+  CHECK_RESULT(reader.ReadInto(record.collision_layer));
+  CHECK_RESULT(reader.ReadInto(record.collision_mask));
   CHECK_RESULT(reader.ReadInto(record.topology_resource_index));
   CHECK_RESULT(reader.ReadInto(record.pinned_vertex_count));
   CHECK_RESULT(reader.ReadInto(record.pinned_vertex_byte_offset));

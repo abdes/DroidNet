@@ -237,7 +237,8 @@ namespace {
     return key == "id" || key == "depends_on" || key == "type"
       || key == "source" || key == "bindings"
       || key == "target_scene_virtual_path" || key == "output" || key == "name"
-      || key == "verbose" || key == "content_hashing";
+      || key == "verbose" || key == "content_hashing"
+      || key == "physics_backend";
   }
 
   auto ReportEarlyJobKeyWhitelistViolations(
@@ -583,6 +584,23 @@ namespace {
     if (!ReadStringField(obj, "target_scene_virtual_path",
           settings.target_scene_virtual_path, errors)) {
       return false;
+    }
+    auto backend_text = std::string {};
+    if (!ReadStringField(obj, "physics_backend", backend_text, errors)) {
+      return false;
+    }
+    if (!backend_text.empty()) {
+      if (backend_text == "jolt") {
+        settings.physics_backend = core::meta::physics::PhysicsBackend::kJolt;
+      } else if (backend_text == "physx") {
+        settings.physics_backend = core::meta::physics::PhysicsBackend::kPhysX;
+      } else if (backend_text == "none") {
+        settings.physics_backend = core::meta::physics::PhysicsBackend::kNone;
+      } else {
+        errors << "ERROR: 'physics_backend' must be one of "
+                  "'jolt'|'physx'|'none'\n";
+        return false;
+      }
     }
     return true;
   }

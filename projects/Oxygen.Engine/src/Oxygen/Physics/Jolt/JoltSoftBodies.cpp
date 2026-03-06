@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <span>
 #include <sstream>
 #include <string>
@@ -24,10 +25,14 @@
 #include <Jolt/Physics/SoftBody/SoftBodySharedSettings.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/Jolt/Converters.h>
 #include <Oxygen/Physics/Jolt/JoltSoftBodies.h>
 
 namespace {
+
+constexpr float kMinVolumeCompliance = 1.0e-6F;
+constexpr double kMinAbsSurfaceRestVolume = 1.0e-8;
 
 auto SoftBodyUnknown() -> oxygen::ErrValue<oxygen::physics::PhysicsError>
 {
@@ -45,10 +50,13 @@ auto SoftBodyUnknown() -> oxygen::ErrValue<oxygen::physics::PhysicsError>
     && std::isfinite(params.edge_compliance)
     && std::isfinite(params.shear_compliance)
     && std::isfinite(params.bend_compliance)
+    && std::isfinite(params.volume_compliance)
+    && std::isfinite(params.pressure_coefficient)
     && std::isfinite(params.tether_max_distance_multiplier)
     && params.stiffness >= 0.0F && params.damping >= 0.0F
     && params.damping <= kMaxDamping && params.edge_compliance >= 0.0F
     && params.shear_compliance >= 0.0F && params.bend_compliance >= 0.0F
+    && params.volume_compliance >= 0.0F && params.pressure_coefficient >= 0.0F
     && params.tether_max_distance_multiplier >= 1.0F;
 }
 
@@ -66,65 +74,6 @@ auto SoftBodyUnknown() -> oxygen::ErrValue<oxygen::physics::PhysicsError>
   return std::isfinite(restitution) && restitution >= 0.0F
     && std::isfinite(friction) && friction >= 0.0F
     && std::isfinite(vertex_radius) && vertex_radius >= 0.0F;
-}
-
-// Clamps cluster_count to valid Jolt grid range [2, 8].
-// Values outside this range are silently clamped. Consider returning an error
-// from CreateSoftBody if the original cluster_count is outside [2, 8].
-[[nodiscard]] auto ToGridSize(const uint32_t cluster_count) noexcept -> uint32_t
-{
-  return std::clamp(cluster_count, 2U, 8U);
-}
-
-[[nodiscard]] auto ToJoltLRAType(
-  const oxygen::physics::softbody::SoftBodyTetherMode mode) noexcept
-  -> JPH::SoftBodySharedSettings::ELRAType
-{
-  switch (mode) {
-  case oxygen::physics::softbody::SoftBodyTetherMode::kNone:
-    return JPH::SoftBodySharedSettings::ELRAType::None;
-  case oxygen::physics::softbody::SoftBodyTetherMode::kEuclidean:
-    return JPH::SoftBodySharedSettings::ELRAType::EuclideanDistance;
-  case oxygen::physics::softbody::SoftBodyTetherMode::kGeodesic:
-    return JPH::SoftBodySharedSettings::ELRAType::GeodesicDistance;
-  }
-  return JPH::SoftBodySharedSettings::ELRAType::None;
-}
-
-constexpr JPH::ObjectLayer kDynamicObjectLayer = 1;
-
-// Prototype-only fallback path. Shipping/runtime-authored content must rely on
-// cooked kJoltSoftBodySharedSettingsBinary payloads.
-#if defined(NDEBUG)
-constexpr bool kEnablePrototypeProceduralSoftBodyFallback = false;
-#else
-constexpr bool kEnablePrototypeProceduralSoftBodyFallback = true;
-#endif
-
-auto BuildPrototypeSharedSettings(const uint32_t cluster_count,
-  const oxygen::physics::softbody::SoftBodyMaterialParams& params)
-  -> JPH::Ref<JPH::SoftBodySharedSettings>
-{
-  const auto grid_size = ToGridSize(cluster_count);
-  auto shared_settings = JPH::SoftBodySharedSettings::sCreateCube(
-    grid_size, 0.25F / static_cast<float>(grid_size));
-  if (shared_settings == nullptr) {
-    return nullptr;
-  }
-  // Stiffness in Oxygen is an authored rigidity bias, not gas pressure.
-  // We apply it by lowering compliance values (lower compliance => stiffer).
-  const auto compliance_scale
-    = params.stiffness > 0.0F ? (1.0F / (1.0F + params.stiffness)) : 1.0F;
-  // Use the named constructor to avoid fragility if Jolt ever reorders
-  // the VertexAttributes fields.
-  const JPH::SoftBodySharedSettings::VertexAttributes vertex_attributes(
-    params.edge_compliance * compliance_scale,
-    params.shear_compliance * compliance_scale,
-    params.bend_compliance * compliance_scale,
-    ToJoltLRAType(params.tether_mode), params.tether_max_distance_multiplier);
-  shared_settings->CreateConstraints(&vertex_attributes, 1U);
-  shared_settings->Optimize();
-  return shared_settings;
 }
 
 auto RestoreSharedSettingsFromBlob(const std::span<const uint8_t> blob)
@@ -228,8 +177,11 @@ auto RestoreSharedSettingsFromBlob(const std::span<const uint8_t> blob)
         return false;
       }
     }
-    if (!std::isfinite(volume.mCompliance) || volume.mCompliance < 0.0F) {
-      reason = "volume compliance invalid at volume=" + std::to_string(i);
+    if (!std::isfinite(volume.mCompliance)
+      || volume.mCompliance < kMinVolumeCompliance) {
+      reason = "volume compliance invalid at volume=" + std::to_string(i)
+        + " (must be finite and >= " + std::to_string(kMinVolumeCompliance)
+        + ")";
       return false;
     }
     if (!std::isfinite(volume.mSixRestVolume)
@@ -251,6 +203,47 @@ auto RecomputeDerivedConstraintState(JPH::SoftBodySharedSettings& settings,
   settings.CalculateLRALengths(params.tether_max_distance_multiplier);
 }
 
+[[nodiscard]] auto ComputeSignedSurfaceVolume(
+  const JPH::SoftBodySharedSettings& settings) noexcept -> double
+{
+  double signed_six_volume = 0.0;
+  for (const auto& face : settings.mFaces) {
+    const auto& p0 = settings.mVertices[face.mVertex[0]].mPosition;
+    const auto& p1 = settings.mVertices[face.mVertex[1]].mPosition;
+    const auto& p2 = settings.mVertices[face.mVertex[2]].mPosition;
+    signed_six_volume += static_cast<double>(p0.x)
+        * (static_cast<double>(p1.y) * static_cast<double>(p2.z)
+          - static_cast<double>(p1.z) * static_cast<double>(p2.y))
+      + static_cast<double>(p0.y)
+        * (static_cast<double>(p1.z) * static_cast<double>(p2.x)
+          - static_cast<double>(p1.x) * static_cast<double>(p2.z))
+      + static_cast<double>(p0.z)
+        * (static_cast<double>(p1.x) * static_cast<double>(p2.y)
+          - static_cast<double>(p1.y) * static_cast<double>(p2.x));
+  }
+  return signed_six_volume / 6.0;
+}
+
+auto ValidatePressureRestVolume(const JPH::SoftBodySharedSettings& settings,
+  const oxygen::physics::softbody::SoftBodyMaterialParams& params,
+  std::string& reason) -> bool
+{
+  if (params.pressure_coefficient <= 0.0F) {
+    return true;
+  }
+  if (settings.mFaces.empty()) {
+    reason = "pressure_coefficient > 0 requires non-empty soft-body faces";
+    return false;
+  }
+  const auto signed_volume = ComputeSignedSurfaceVolume(settings);
+  if (!std::isfinite(signed_volume)
+    || std::abs(signed_volume) < kMinAbsSurfaceRestVolume) {
+    reason = "pressure_coefficient > 0 requires non-zero finite rest volume";
+    return false;
+  }
+  return true;
+}
+
 auto ApplySettingsScale(JPH::SoftBodySharedSettings& settings,
   const oxygen::Vec3& settings_scale) -> void
 {
@@ -261,42 +254,9 @@ auto ApplySettingsScale(JPH::SoftBodySharedSettings& settings,
   }
 }
 
-auto ApplyRuntimeConstraintSafetyPolicy(
-  JPH::SoftBodySharedSettings& settings, std::string& policy_note) -> bool
-{
-  // Engine safety contract:
-  // Zero-compliance volume constraints are numerically fragile under
-  // high-energy contact and can overflow the XPBD volume solve path.
-  // Clamp to a small positive floor at load/rebuild time.
-  constexpr float kMinVolumeCompliance = 1.0e-6F;
-
-  size_t adjusted_volume_constraints = 0U;
-  for (size_t i = 0; i < settings.mVolumeConstraints.size(); ++i) {
-    auto& volume = settings.mVolumeConstraints[i];
-    if (!std::isfinite(volume.mCompliance) || volume.mCompliance < 0.0F) {
-      policy_note = "volume compliance invalid at volume=" + std::to_string(i);
-      return false;
-    }
-    if (volume.mCompliance < kMinVolumeCompliance) {
-      volume.mCompliance = kMinVolumeCompliance;
-      ++adjusted_volume_constraints;
-    }
-  }
-
-  if (adjusted_volume_constraints > 0U) {
-    policy_note = "clamped volume compliance for "
-      + std::to_string(adjusted_volume_constraints)
-      + " constraints to stability floor";
-  } else {
-    policy_note.clear();
-  }
-  return true;
-}
-
 auto PrepareSharedSettingsForRuntime(JPH::SoftBodySharedSettings& settings,
   const oxygen::physics::softbody::SoftBodyMaterialParams& params,
-  const oxygen::Vec3& settings_scale, std::string& error_reason,
-  std::string& policy_note) -> bool
+  const oxygen::Vec3& settings_scale, std::string& error_reason) -> bool
 {
   if (!IsSettingsScaleValid(settings_scale)) {
     error_reason = "settings_scale must be finite and > 0";
@@ -309,8 +269,7 @@ auto PrepareSharedSettingsForRuntime(JPH::SoftBodySharedSettings& settings,
 
   ApplySettingsScale(settings, settings_scale);
   RecomputeDerivedConstraintState(settings, params);
-  if (!ApplyRuntimeConstraintSafetyPolicy(settings, policy_note)) {
-    error_reason = policy_note;
+  if (!ValidatePressureRestVolume(settings, params, error_reason)) {
     return false;
   }
 
@@ -330,15 +289,9 @@ auto PrepareSharedSettingsForRuntime(JPH::SoftBodySharedSettings& settings,
 
 [[nodiscard]] auto ResolveRuntimePressure(
   const oxygen::physics::softbody::SoftBodyMaterialParams& params,
-  const bool has_volume_constraints) noexcept -> float
+  const bool /*has_volume_constraints*/) noexcept -> float
 {
-  // For volumetric bodies (with tetra volume constraints), keep pressure at 0
-  // and let constraints preserve volume. For surface shells, use authored
-  // stiffness as a pressure proxy to avoid full collapse.
-  if (has_volume_constraints) {
-    return 0.0F;
-  }
-  return std::max(params.stiffness, 0.0F);
+  return std::max(params.pressure_coefficient, 0.0F);
 }
 
 struct SettingsBounds final {
@@ -380,6 +333,10 @@ struct SettingsBounds final {
       lhs.shear_compliance, rhs.shear_compliance)
     && oxygen::physics::jolt::IsNearlyEqual(
       lhs.bend_compliance, rhs.bend_compliance)
+    && oxygen::physics::jolt::IsNearlyEqual(
+      lhs.volume_compliance, rhs.volume_compliance)
+    && oxygen::physics::jolt::IsNearlyEqual(
+      lhs.pressure_coefficient, rhs.pressure_coefficient)
     && lhs.tether_mode == rhs.tether_mode
     && oxygen::physics::jolt::IsNearlyEqual(
       lhs.tether_max_distance_multiplier, rhs.tether_max_distance_multiplier);
@@ -398,6 +355,8 @@ struct SettingsBounds final {
       current_params.shear_compliance, next_params.shear_compliance)
     || !oxygen::physics::jolt::IsNearlyEqual(
       current_params.bend_compliance, next_params.bend_compliance)
+    || !oxygen::physics::jolt::IsNearlyEqual(
+      current_params.volume_compliance, next_params.volume_compliance)
     || current_params.tether_mode != next_params.tether_mode
     || !oxygen::physics::jolt::IsNearlyEqual(
       current_params.tether_max_distance_multiplier,
@@ -432,6 +391,10 @@ auto oxygen::physics::jolt::JoltSoftBodies::CreateSoftBody(
       desc.restitution, desc.friction, desc.vertex_radius)) {
     return Err(PhysicsError::kInvalidArgument);
   }
+  if (desc.solver_iteration_count == 0U
+    || !std::isfinite(desc.gravity_factor)) {
+    return Err(PhysicsError::kInvalidArgument);
+  }
   if (!IsFiniteTranslation(desc.initial_position)
     || !IsValidRotation(desc.initial_rotation)) {
     return Err(PhysicsError::kInvalidArgument);
@@ -454,40 +417,22 @@ auto oxygen::physics::jolt::JoltSoftBodies::CreateSoftBody(
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
   }
+  const auto object_layer_result = world->ResolveBodyObjectLayer(world_id,
+    body::BodyType::kDynamic, desc.collision_layer, desc.collision_mask, false);
+  if (object_layer_result.has_error()) {
+    return Err(object_layer_result.error());
+  }
 
   auto shared_settings = RestoreSharedSettingsFromBlob(desc.settings_blob);
   std::string validation_error {};
-  std::string policy_note {};
   if (shared_settings != nullptr
     && !PrepareSharedSettingsForRuntime(*shared_settings, desc.material_params,
-      desc.settings_scale, validation_error, policy_note)) {
+      desc.settings_scale, validation_error)) {
     LOG_F(ERROR,
       "JoltSoftBodies: invalid shared settings blob for create "
       "(cluster_count={}, reason='{}').",
       desc.cluster_count, validation_error);
     shared_settings = nullptr;
-  }
-  if (shared_settings != nullptr && !policy_note.empty()) {
-    LOG_F(WARNING,
-      "JoltSoftBodies: create-time runtime safety policy applied "
-      "(cluster_count={}, detail='{}').",
-      desc.cluster_count, policy_note);
-  }
-  if (shared_settings == nullptr
-    && kEnablePrototypeProceduralSoftBodyFallback) {
-    shared_settings
-      = BuildPrototypeSharedSettings(desc.cluster_count, desc.material_params);
-    if (shared_settings != nullptr
-      && !PrepareSharedSettingsForRuntime(*shared_settings,
-        desc.material_params, desc.settings_scale, validation_error,
-        policy_note)) {
-      shared_settings = nullptr;
-    }
-    if (shared_settings != nullptr) {
-      LOG_F(WARNING,
-        "JoltSoftBodies: falling back to procedural shared settings for "
-        "create due to invalid/unsupported blob payload.");
-    }
   }
   if (shared_settings == nullptr) {
     return Err(PhysicsError::kInvalidArgument);
@@ -500,6 +445,7 @@ auto oxygen::physics::jolt::JoltSoftBodies::CreateSoftBody(
   LOG_F(INFO,
     "JoltSoftBodies: create topology summary (cluster_count={} vertices={} "
     "faces={} edges={} volumes={} lra={} pressure={:.4f} "
+    "solver_iterations={} gravity_factor={:.3f} "
     "scale=[{:.3f},{:.3f},{:.3f}] restitution={:.3f} friction={:.3f} "
     "vertex_radius={:.3f} "
     "bounds_min=[{:.3f},{:.3f},{:.3f}] bounds_max=[{:.3f},{:.3f},{:.3f}]).",
@@ -507,9 +453,10 @@ auto oxygen::physics::jolt::JoltSoftBodies::CreateSoftBody(
     shared_settings->mFaces.size(), shared_settings->mEdgeConstraints.size(),
     shared_settings->mVolumeConstraints.size(),
     shared_settings->mLRAConstraints.size(), runtime_pressure,
-    desc.settings_scale.x, desc.settings_scale.y, desc.settings_scale.z,
-    desc.restitution, desc.friction, desc.vertex_radius, bounds.min.x,
-    bounds.min.y, bounds.min.z, bounds.max.x, bounds.max.y, bounds.max.z);
+    desc.solver_iteration_count, desc.gravity_factor, desc.settings_scale.x,
+    desc.settings_scale.y, desc.settings_scale.z, desc.restitution,
+    desc.friction, desc.vertex_radius, bounds.min.x, bounds.min.y, bounds.min.z,
+    bounds.max.x, bounds.max.y, bounds.max.z);
   if (!has_volume_constraints && runtime_pressure <= 0.0F) {
     LOG_F(WARNING,
       "JoltSoftBodies: non-volumetric soft body has zero pressure; collapse "
@@ -519,11 +466,13 @@ auto oxygen::physics::jolt::JoltSoftBodies::CreateSoftBody(
   const auto normalized_rotation = NormalizeRotation(desc.initial_rotation);
   JPH::SoftBodyCreationSettings creation_settings(shared_settings.GetPtr(),
     ToJoltRVec3(desc.initial_position), ToJoltQuat(normalized_rotation),
-    kDynamicObjectLayer);
+    static_cast<JPH::ObjectLayer>(object_layer_result.value()));
   creation_settings.mLinearDamping = desc.material_params.damping;
+  creation_settings.mNumIterations = desc.solver_iteration_count;
   creation_settings.mPressure = runtime_pressure;
   creation_settings.mRestitution = desc.restitution;
   creation_settings.mFriction = desc.friction;
+  creation_settings.mGravityFactor = desc.gravity_factor;
   creation_settings.mVertexRadius = desc.vertex_radius;
 
   const auto soft_body_jolt_id = body_interface->CreateAndAddSoftBody(
@@ -551,6 +500,8 @@ auto oxygen::physics::jolt::JoltSoftBodies::CreateSoftBody(
   }
 
   const auto soft_body_id = AggregateId { next_soft_body_id_++ };
+  body_interface->SetUserData(
+    soft_body_jolt_id, static_cast<uint64_t>(soft_body_id.get()));
   soft_bodies_.emplace(soft_body_id,
     SoftBodyState {
       .world_id = world_id,
@@ -563,9 +514,13 @@ auto oxygen::physics::jolt::JoltSoftBodies::CreateSoftBody(
         desc.settings_blob.end(),
       },
       .settings_scale = desc.settings_scale,
+      .collision_layer = desc.collision_layer,
+      .collision_mask = desc.collision_mask,
       .restitution = desc.restitution,
       .friction = desc.friction,
       .vertex_radius = desc.vertex_radius,
+      .solver_iteration_count = desc.solver_iteration_count,
+      .gravity_factor = desc.gravity_factor,
       .authority = aggregate::AggregateAuthority::kSimulation,
     });
   LOG_F(INFO,
@@ -853,11 +808,14 @@ auto oxygen::physics::jolt::JoltSoftBodies::RebuildSoftBodyForMaterialParams(
 
   const auto old_jolt_body_id = it->second.jolt_body_id;
   const auto old_registered_body_id = it->second.registered_body_id;
-  const auto cluster_count = it->second.cluster_count;
   const auto settings_scale = it->second.settings_scale;
+  const auto collision_layer = it->second.collision_layer;
+  const auto collision_mask = it->second.collision_mask;
   const auto restitution = it->second.restitution;
   const auto friction = it->second.friction;
   const auto vertex_radius = it->second.vertex_radius;
+  const auto solver_iteration_count = it->second.solver_iteration_count;
+  const auto gravity_factor = it->second.gravity_factor;
   const auto& settings_blob = it->second.settings_blob;
   if (!body_interface->IsAdded(old_jolt_body_id)) {
     return Err(PhysicsError::kBodyNotFound);
@@ -875,33 +833,22 @@ auto oxygen::physics::jolt::JoltSoftBodies::RebuildSoftBodyForMaterialParams(
   auto shared_settings
     = RestoreSharedSettingsFromBlob(std::span<const uint8_t> { settings_blob });
   std::string validation_error {};
-  std::string policy_note {};
   if (shared_settings != nullptr
-    && !PrepareSharedSettingsForRuntime(*shared_settings, params,
-      settings_scale, validation_error, policy_note)) {
+    && !PrepareSharedSettingsForRuntime(
+      *shared_settings, params, settings_scale, validation_error)) {
     LOG_F(ERROR,
       "JoltSoftBodies: invalid shared settings blob for rebuild "
       "(aggregate_id={}, reason='{}').",
       soft_body_id.get(), validation_error);
     shared_settings = nullptr;
   }
-  if (shared_settings != nullptr && !policy_note.empty()) {
-    LOG_F(WARNING,
-      "JoltSoftBodies: rebuild-time runtime safety policy applied "
-      "(aggregate_id={}, detail='{}').",
-      soft_body_id.get(), policy_note);
-  }
-  if (shared_settings == nullptr
-    && kEnablePrototypeProceduralSoftBodyFallback) {
-    shared_settings = BuildPrototypeSharedSettings(cluster_count, params);
-    if (shared_settings != nullptr
-      && !PrepareSharedSettingsForRuntime(*shared_settings, params,
-        settings_scale, validation_error, policy_note)) {
-      shared_settings = nullptr;
-    }
-  }
   if (shared_settings == nullptr) {
     return Err(PhysicsError::kInvalidArgument);
+  }
+  const auto object_layer_result = world->ResolveBodyObjectLayer(
+    world_id, body::BodyType::kDynamic, collision_layer, collision_mask, false);
+  if (object_layer_result.has_error()) {
+    return Err(object_layer_result.error());
   }
 
   const auto has_volume_constraints = HasVolumeConstraints(*shared_settings);
@@ -911,16 +858,17 @@ auto oxygen::physics::jolt::JoltSoftBodies::RebuildSoftBodyForMaterialParams(
   LOG_F(INFO,
     "JoltSoftBodies: rebuild topology summary (aggregate_id={} vertices={} "
     "faces={} edges={} volumes={} lra={} pressure={:.4f} "
+    "solver_iterations={} gravity_factor={:.3f} "
     "scale=[{:.3f},{:.3f},{:.3f}] restitution={:.3f} friction={:.3f} "
     "vertex_radius={:.3f} "
     "bounds_min=[{:.3f},{:.3f},{:.3f}] bounds_max=[{:.3f},{:.3f},{:.3f}]).",
     soft_body_id.get(), shared_settings->mVertices.size(),
     shared_settings->mFaces.size(), shared_settings->mEdgeConstraints.size(),
     shared_settings->mVolumeConstraints.size(),
-    shared_settings->mLRAConstraints.size(), runtime_pressure, settings_scale.x,
-    settings_scale.y, settings_scale.z, restitution, friction, vertex_radius,
-    bounds.min.x, bounds.min.y, bounds.min.z, bounds.max.x, bounds.max.y,
-    bounds.max.z);
+    shared_settings->mLRAConstraints.size(), runtime_pressure,
+    solver_iteration_count, gravity_factor, settings_scale.x, settings_scale.y,
+    settings_scale.z, restitution, friction, vertex_radius, bounds.min.x,
+    bounds.min.y, bounds.min.z, bounds.max.x, bounds.max.y, bounds.max.z);
   if (!has_volume_constraints && runtime_pressure <= 0.0F) {
     LOG_F(WARNING,
       "JoltSoftBodies: rebuild produced non-volumetric soft body with zero "
@@ -928,11 +876,14 @@ auto oxygen::physics::jolt::JoltSoftBodies::RebuildSoftBodyForMaterialParams(
   }
 
   JPH::SoftBodyCreationSettings creation_settings(shared_settings.GetPtr(),
-    current_position, current_rotation, kDynamicObjectLayer);
+    current_position, current_rotation,
+    static_cast<JPH::ObjectLayer>(object_layer_result.value()));
   creation_settings.mLinearDamping = params.damping;
+  creation_settings.mNumIterations = solver_iteration_count;
   creation_settings.mPressure = runtime_pressure;
   creation_settings.mRestitution = restitution;
   creation_settings.mFriction = friction;
+  creation_settings.mGravityFactor = gravity_factor;
   creation_settings.mVertexRadius = vertex_radius;
 
   const auto new_jolt_body_id = body_interface->CreateAndAddSoftBody(
@@ -943,6 +894,8 @@ auto oxygen::physics::jolt::JoltSoftBodies::RebuildSoftBodyForMaterialParams(
 
   const auto new_registered_body_id
     = BodyId { new_jolt_body_id.GetIndexAndSequenceNumber() };
+  body_interface->SetUserData(
+    new_jolt_body_id, static_cast<uint64_t>(soft_body_id.get()));
   const auto register_result
     = world->RegisterBody(world_id, new_registered_body_id);
   if (!register_result.has_value()) {

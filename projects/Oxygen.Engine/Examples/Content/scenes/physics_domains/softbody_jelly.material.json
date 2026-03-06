@@ -1,0 +1,26 @@
+{
+    "name": "softbody_jelly",
+    "domain": "alpha_blended",
+    "alpha_mode": "blended",
+    "parameters": {
+        "base_color": [
+            0.45,
+            0.95,
+            0.75,
+            0.38
+        ],
+        "roughness": 0.08,
+        "metalness": 0.0,
+        "ior": 1.33,
+        "specular_factor": 1.0,
+        "transmission_factor": 0.92,
+        "thickness_factor": 0.55,
+        "attenuation_color": [
+            0.62,
+            1.0,
+            0.86
+        ],
+        "attenuation_distance": 0.75,
+        "double_sided": true
+    }
+}

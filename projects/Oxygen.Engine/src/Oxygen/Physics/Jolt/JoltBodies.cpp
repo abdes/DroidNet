@@ -77,16 +77,17 @@ auto oxygen::physics::jolt::JoltBodies::CreateBody(
     return Err(transformed_shape_result.error());
   }
   const auto motion_type = ToMotionType(desc.type);
+  const auto is_sensor
+    = (desc.flags & body::BodyFlags::kIsTrigger) != body::BodyFlags::kNone;
   const auto object_layer_result = world->ResolveBodyObjectLayer(
-    world_id, desc.type, desc.collision_layer, desc.collision_mask);
+    world_id, desc.type, desc.collision_layer, desc.collision_mask, is_sensor);
   if (object_layer_result.has_error()) {
     return Err(object_layer_result.error());
   }
   JPH::BodyCreationSettings settings(transformed_shape_result.value(),
     ToJoltRVec3(desc.initial_position), ToJoltQuat(normalized_initial_rotation),
     motion_type, static_cast<JPH::ObjectLayer>(object_layer_result.value()));
-  settings.mIsSensor
-    = (desc.flags & body::BodyFlags::kIsTrigger) != body::BodyFlags::kNone;
+  settings.mIsSensor = is_sensor;
   settings.mGravityFactor
     = (desc.flags & body::BodyFlags::kEnableGravity) != body::BodyFlags::kNone
     ? desc.gravity_factor

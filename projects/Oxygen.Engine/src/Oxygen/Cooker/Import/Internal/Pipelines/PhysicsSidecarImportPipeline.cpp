@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Jolt/Jolt.h> // Must always be first (keep separate)
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -13,9 +15,12 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <limits>
+#include <mutex>
 #include <optional>
 #include <span>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -26,6 +31,20 @@
 
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
+
+#include <Jolt/Core/Memory.h>
+#include <Jolt/Core/StreamWrapper.h>
+#include <Jolt/Physics/Constraints/ConeConstraint.h>
+#include <Jolt/Physics/Constraints/DistanceConstraint.h>
+#include <Jolt/Physics/Constraints/FixedConstraint.h>
+#include <Jolt/Physics/Constraints/HingeConstraint.h>
+#include <Jolt/Physics/Constraints/PointConstraint.h>
+#include <Jolt/Physics/Constraints/SixDOFConstraint.h>
+#include <Jolt/Physics/Constraints/SliderConstraint.h>
+#include <Jolt/Physics/SoftBody/SoftBodySharedSettings.h>
+#include <Jolt/Physics/Vehicle/TrackedVehicleController.h>
+#include <Jolt/Physics/Vehicle/VehicleConstraint.h>
+#include <Jolt/Physics/Vehicle/WheeledVehicleController.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Sha256.h>
@@ -45,9 +64,14 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Meta/Physics/Backend.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 
@@ -56,6 +80,7 @@ namespace {
 
   namespace phys = data::pak::physics;
   namespace lc = oxygen::content::lc;
+  using PhysicsBackend = core::meta::physics::PhysicsBackend;
   using SidecarCookedInspectionContext = detail::CookedInspectionContext;
   using SidecarResolvedSceneState = detail::ResolvedSceneState;
 
@@ -192,16 +217,13 @@ namespace {
   struct SoftBodyBindingSource final {
     phys::SoftBodyBindingRecord record {};
     std::string source_mesh_ref;
+    data::AssetKey source_mesh_asset_key {};
+    std::string source_mesh_descriptor_relpath;
     std::optional<std::string> collision_mesh_ref;
     std::vector<uint32_t> pinned_vertices;
     std::vector<uint32_t> kinematic_vertices;
+    bool backend_explicit { false };
     nlohmann::json authored_binding;
-  };
-
-  enum class BackendTargetTag : uint8_t {
-    kUnspecified = 0,
-    kJolt = 1,
-    kPhysX = 2,
   };
 
   struct VehicleWheelSource final {
@@ -209,13 +231,14 @@ namespace {
     uint16_t axle_index { 0 };
     phys::VehicleWheelSide side { phys::VehicleWheelSide::kLeft };
     phys::VehicleWheelBackendScalars backend_scalars {};
-    BackendTargetTag backend_target { BackendTargetTag::kUnspecified };
+    PhysicsBackend backend_target { PhysicsBackend::kNone };
   };
 
   struct JointBindingSource final {
     phys::JointBindingRecord record {};
     phys::PhysicsResourceFormat constraint_format
       = phys::PhysicsResourceFormat::kJoltConstraintBinary;
+    bool backend_explicit { false };
     nlohmann::json authored_binding;
   };
 
@@ -224,6 +247,7 @@ namespace {
     std::vector<VehicleWheelSource> wheels;
     phys::PhysicsResourceFormat constraint_format
       = phys::PhysicsResourceFormat::kJoltVehicleConstraintBinary;
+    bool backend_explicit { false };
     nlohmann::json authored_binding;
   };
 
@@ -251,6 +275,14 @@ namespace {
   {
     (void)error;
     out = obj.at(field).get<uint32_t>();
+    return true;
+  }
+
+  auto ReadRequiredUInt16(const nlohmann::json& obj, const char* field,
+    uint16_t& out, std::string& error) -> bool
+  {
+    (void)error;
+    out = obj.at(field).get<uint16_t>();
     return true;
   }
 
@@ -561,6 +593,121 @@ namespace {
     return true;
   }
 
+  auto ParseBackendTargetString(
+    const std::string_view value, PhysicsBackend& out) -> bool
+  {
+    if (value == "jolt") {
+      out = PhysicsBackend::kJolt;
+      return true;
+    }
+    if (value == "physx") {
+      out = PhysicsBackend::kPhysX;
+      return true;
+    }
+    return false;
+  }
+
+  [[nodiscard]] auto ParseBackendTargetField(
+    const nlohmann::json& backend, PhysicsBackend& out) -> bool
+  {
+    const auto target = backend.at("target").get<std::string>();
+    return ParseBackendTargetString(target, out);
+  }
+
+  [[nodiscard]] auto SoftBodyFormatForBackend(const PhysicsBackend backend)
+    -> std::optional<phys::PhysicsResourceFormat>
+  {
+    switch (backend) {
+    case PhysicsBackend::kJolt:
+      return phys::PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary;
+    case PhysicsBackend::kPhysX:
+      return phys::PhysicsResourceFormat::kPhysXSoftBodySettingsBinary;
+    case PhysicsBackend::kNone:
+      return std::nullopt;
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] auto JointFormatForBackend(const PhysicsBackend backend)
+    -> std::optional<phys::PhysicsResourceFormat>
+  {
+    switch (backend) {
+    case PhysicsBackend::kJolt:
+      return phys::PhysicsResourceFormat::kJoltConstraintBinary;
+    case PhysicsBackend::kPhysX:
+      return phys::PhysicsResourceFormat::kPhysXConstraintBinary;
+    case PhysicsBackend::kNone:
+      return std::nullopt;
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] auto VehicleFormatForBackend(const PhysicsBackend backend)
+    -> std::optional<phys::PhysicsResourceFormat>
+  {
+    switch (backend) {
+    case PhysicsBackend::kJolt:
+      return phys::PhysicsResourceFormat::kJoltVehicleConstraintBinary;
+    case PhysicsBackend::kPhysX:
+      return phys::PhysicsResourceFormat::kPhysXVehicleSettingsBinary;
+    case PhysicsBackend::kNone:
+      return std::nullopt;
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] auto BackendName(const PhysicsBackend backend) -> const char*
+  {
+    switch (backend) {
+    case PhysicsBackend::kJolt:
+      return "jolt";
+    case PhysicsBackend::kPhysX:
+      return "physx";
+    case PhysicsBackend::kNone:
+      return "none";
+    }
+    return "unknown";
+  }
+
+  [[nodiscard]] auto BackendForSoftBodyFormat(
+    const phys::PhysicsResourceFormat format) -> std::optional<PhysicsBackend>
+  {
+    switch (format) {
+    case phys::PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary:
+      return PhysicsBackend::kJolt;
+    case phys::PhysicsResourceFormat::kPhysXSoftBodySettingsBinary:
+      return PhysicsBackend::kPhysX;
+    default:
+      return std::nullopt;
+    }
+  }
+
+  [[nodiscard]] auto BackendForJointFormat(
+    const phys::PhysicsResourceFormat format) -> std::optional<PhysicsBackend>
+  {
+    switch (format) {
+    case phys::PhysicsResourceFormat::kJoltConstraintBinary:
+      return PhysicsBackend::kJolt;
+    case phys::PhysicsResourceFormat::kPhysXConstraintBinary:
+      return PhysicsBackend::kPhysX;
+    default:
+      return std::nullopt;
+    }
+  }
+
+  [[nodiscard]] auto BackendForVehicleFormat(
+    const phys::PhysicsResourceFormat format) -> std::optional<PhysicsBackend>
+  {
+    switch (format) {
+    case phys::PhysicsResourceFormat::kJoltVehicleConstraintBinary:
+      return PhysicsBackend::kJolt;
+    case phys::PhysicsResourceFormat::kPhysXVehicleSettingsBinary:
+      return PhysicsBackend::kPhysX;
+    default:
+      return std::nullopt;
+    }
+  }
+
   auto ParseRigidBodyBackend(const nlohmann::json& obj,
     phys::RigidBodyBindingRecord& out, std::string& error) -> bool
   {
@@ -568,14 +715,18 @@ namespace {
       return true;
     }
     const auto& backend = obj.at("backend");
-    const auto target = backend.at("target").get<std::string>();
-    if (target == "jolt") {
+    auto target = PhysicsBackend::kNone;
+    if (!ParseBackendTargetField(backend, target)) {
+      error = "Field 'backend.target' has unsupported value";
+      return false;
+    }
+    if (target == PhysicsBackend::kJolt) {
       return ReadOptionalUInt8(backend, "num_velocity_steps_override",
                out.backend_scalars.jolt.num_velocity_steps_override, error)
         && ReadOptionalUInt8(backend, "num_position_steps_override",
           out.backend_scalars.jolt.num_position_steps_override, error);
     }
-    if (target == "physx") {
+    if (target == PhysicsBackend::kPhysX) {
       return ReadOptionalUInt8(backend, "min_velocity_iters",
                out.backend_scalars.physx.min_velocity_iters, error)
         && ReadOptionalUInt8(backend, "min_position_iters",
@@ -585,7 +736,6 @@ namespace {
         && ReadOptionalFloat(backend, "contact_report_threshold",
           out.backend_scalars.physx.contact_report_threshold, error);
     }
-    error = "Field 'backend.target' has unsupported value";
     return false;
   }
 
@@ -596,8 +746,12 @@ namespace {
       return true;
     }
     const auto& backend = obj.at("backend");
-    const auto target = backend.at("target").get<std::string>();
-    if (target == "jolt") {
+    auto target = PhysicsBackend::kNone;
+    if (!ParseBackendTargetField(backend, target)) {
+      error = "Field 'backend.target' has unsupported value";
+      return false;
+    }
+    if (target == PhysicsBackend::kJolt) {
       return ReadOptionalFloat(backend, "penetration_recovery_speed",
                out.backend_scalars.jolt.penetration_recovery_speed, error)
         && ReadOptionalUInt32(
@@ -605,11 +759,10 @@ namespace {
         && ReadOptionalFloat(backend, "hit_reduction_cos_max_angle",
           out.backend_scalars.jolt.hit_reduction_cos_max_angle, error);
     }
-    if (target == "physx") {
+    if (target == PhysicsBackend::kPhysX) {
       return ReadOptionalFloat(backend, "contact_offset",
         out.backend_scalars.physx.contact_offset, error);
     }
-    error = "Field 'backend.target' has unsupported value";
     return false;
   }
 
@@ -620,8 +773,12 @@ namespace {
       return true;
     }
     const auto& backend = obj.at("backend");
-    const auto target = backend.at("target").get<std::string>();
-    if (target == "jolt") {
+    auto target = PhysicsBackend::kNone;
+    if (!ParseBackendTargetField(backend, target)) {
+      error = "Field 'backend.target' has unsupported value";
+      return false;
+    }
+    if (target == PhysicsBackend::kJolt) {
       out.topology_format
         = phys::PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary;
       if (!ReadOptionalUInt32(backend, "velocity_iteration_count",
@@ -632,7 +789,7 @@ namespace {
       out.backend_scalars.jolt.gravity_factor = 1.0F;
       return true;
     }
-    if (target == "physx") {
+    if (target == PhysicsBackend::kPhysX) {
       out.topology_format
         = phys::PhysicsResourceFormat::kPhysXSoftBodySettingsBinary;
       return ReadOptionalFloat(backend, "youngs_modulus",
@@ -642,7 +799,6 @@ namespace {
         && ReadOptionalFloat(backend, "dynamic_friction",
           out.backend_scalars.physx.dynamic_friction, error);
     }
-    error = "Field 'backend.target' has unsupported value";
     return false;
   }
 
@@ -653,14 +809,18 @@ namespace {
       return true;
     }
     const auto& backend = obj.at("backend");
-    const auto target = backend.at("target").get<std::string>();
-    if (target == "jolt") {
+    auto target = PhysicsBackend::kNone;
+    if (!ParseBackendTargetField(backend, target)) {
+      error = "Field 'backend.target' has unsupported value";
+      return false;
+    }
+    if (target == PhysicsBackend::kJolt) {
       return ReadOptionalUInt8(backend, "num_velocity_steps_override",
                out.backend_scalars.jolt.num_velocity_steps_override, error)
         && ReadOptionalUInt8(backend, "num_position_steps_override",
           out.backend_scalars.jolt.num_position_steps_override, error);
     }
-    if (target == "physx") {
+    if (target == PhysicsBackend::kPhysX) {
       return ReadOptionalFloat(backend, "inv_mass_scale0",
                out.backend_scalars.physx.inv_mass_scale0, error)
         && ReadOptionalFloat(backend, "inv_mass_scale1",
@@ -670,30 +830,29 @@ namespace {
         && ReadOptionalFloat(backend, "inv_inertia_scale1",
           out.backend_scalars.physx.inv_inertia_scale1, error);
     }
-    error = "Field 'backend.target' has unsupported value";
     return false;
   }
 
   auto ParseVehicleWheelBackend(const nlohmann::json& obj,
-    phys::VehicleWheelBackendScalars& out, BackendTargetTag& out_target,
+    phys::VehicleWheelBackendScalars& out, PhysicsBackend& out_target,
     std::string& error) -> bool
   {
-    out_target = BackendTargetTag::kUnspecified;
+    out_target = PhysicsBackend::kNone;
     if (!obj.contains("backend")) {
       return true;
     }
     const auto& backend = obj.at("backend");
-    const auto target = backend.at("target").get<std::string>();
-    if (target == "jolt") {
-      out_target = BackendTargetTag::kJolt;
+    if (!ParseBackendTargetField(backend, out_target)) {
+      error = "Field 'backend.target' has unsupported value";
+      return false;
+    }
+    if (out_target == PhysicsBackend::kJolt) {
       return ReadOptionalFloat(
         backend, "wheel_castor", out.jolt.wheel_castor, error);
     }
-    if (target == "physx") {
-      out_target = BackendTargetTag::kPhysX;
+    if (out_target == PhysicsBackend::kPhysX) {
       return true;
     }
-    error = "Field 'backend.target' has unsupported value";
     return false;
   }
 
@@ -822,6 +981,7 @@ namespace {
       return false;
     }
     out.record.node_index = node_index;
+    out.backend_explicit = binding.contains("backend");
     auto self_collision = false;
     if (!ReadOptionalBool(binding, "self_collision", self_collision, error)) {
       return false;
@@ -831,6 +991,10 @@ namespace {
 
     return ReadOptionalString(
              binding, "collision_mesh_ref", out.collision_mesh_ref, error)
+      && ReadRequiredUInt16(
+        binding, "collision_layer", out.record.collision_layer, error)
+      && ReadRequiredUInt32(
+        binding, "collision_mask", out.record.collision_mask, error)
       && ReadRequiredFloat(
         binding, "edge_compliance", out.record.edge_compliance, error)
       && ReadRequiredFloat(
@@ -874,10 +1038,15 @@ namespace {
     if (!ParseJointBackend(binding, out.record, error)) {
       return false;
     }
+    out.backend_explicit = binding.contains("backend");
     out.constraint_format = phys::PhysicsResourceFormat::kJoltConstraintBinary;
     if (binding.contains("backend")) {
-      const auto target = binding.at("backend").at("target").get<std::string>();
-      if (target == "physx") {
+      auto target = PhysicsBackend::kNone;
+      if (!ParseBackendTargetField(binding.at("backend"), target)) {
+        error = "Field 'backend.target' has unsupported value";
+        return false;
+      }
+      if (target == PhysicsBackend::kPhysX) {
         out.constraint_format
           = phys::PhysicsResourceFormat::kPhysXConstraintBinary;
       }
@@ -897,6 +1066,7 @@ namespace {
     }
     out.record.node_index = node_index;
     out.authored_binding = binding;
+    out.backend_explicit = false;
 
     const auto& wheels = binding.at("wheels");
     out.wheels.clear();
@@ -919,6 +1089,8 @@ namespace {
       }
       wheel_source.node_index = wheel_node_index;
       wheel_source.axle_index = static_cast<uint16_t>(axle_index_u32);
+      out.backend_explicit = out.backend_explicit
+        || wheel_source.backend_target != PhysicsBackend::kNone;
       out.wheels.push_back(wheel_source);
     }
     return true;
@@ -1073,16 +1245,25 @@ namespace {
     return parsed;
   }
 
-  using AssetTypeMap = std::unordered_map<data::AssetKey, data::AssetType>;
+  struct ResolvedAssetRecord final {
+    data::AssetType type = data::AssetType::kUnknown;
+    std::string descriptor_relpath;
+  };
 
-  auto BuildAssetTypeMap(const lc::Inspection& inspection) -> AssetTypeMap
+  using AssetRecordMap
+    = std::unordered_map<data::AssetKey, ResolvedAssetRecord>;
+
+  auto BuildAssetRecordMap(const lc::Inspection& inspection) -> AssetRecordMap
   {
-    auto out = AssetTypeMap {};
+    auto out = AssetRecordMap {};
     const auto assets = inspection.Assets();
     out.reserve(assets.size());
     for (const auto& asset : assets) {
-      out.insert_or_assign(
-        asset.key, static_cast<data::AssetType>(asset.asset_type));
+      out.insert_or_assign(asset.key,
+        ResolvedAssetRecord {
+          .type = static_cast<data::AssetType>(asset.asset_type),
+          .descriptor_relpath = asset.descriptor_relpath,
+        });
     }
     return out;
   }
@@ -1092,7 +1273,7 @@ namespace {
     const ImportRequest& request;
     content::VirtualPathResolver& resolver;
     std::span<const SidecarCookedInspectionContext> cooked_contexts;
-    const AssetTypeMap& target_asset_types;
+    const AssetRecordMap& target_assets;
     const std::filesystem::path& target_cooked_root;
     uint32_t node_count = 0;
   };
@@ -1121,8 +1302,8 @@ namespace {
       return std::nullopt;
     }
 
-    const auto target_it = ctx.target_asset_types.find(*resolved_key);
-    if (target_it == ctx.target_asset_types.end()) {
+    const auto target_it = ctx.target_assets.find(*resolved_key);
+    if (target_it == ctx.target_assets.end()) {
       bool found_in_other_source = false;
       for (const auto& context : ctx.cooked_contexts) {
         for (const auto& asset : context.inspection.Assets()) {
@@ -1147,7 +1328,7 @@ namespace {
       return std::nullopt;
     }
 
-    if (target_it->second != expected_type) {
+    if (target_it->second.type != expected_type) {
       AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
         std::string(wrong_type_code),
         "Resolved reference has unexpected asset type",
@@ -1263,8 +1444,20 @@ namespace {
   }
 
   auto ResolveSoftBodyBindings(std::vector<SoftBodyBindingSource>& records,
-    BindingValidationContext& ctx) -> void
+    const PhysicsBackend requested_backend, BindingValidationContext& ctx)
+    -> void
   {
+    const auto expected_format_opt
+      = SoftBodyFormatForBackend(requested_backend);
+    if (!expected_format_opt.has_value()) {
+      AddDiagnostic(ctx.session, ctx.request, ImportSeverity::kError,
+        "physics.sidecar.backend_unsupported",
+        "Requested physics backend is not supported for soft-body topology "
+        "cooking: "
+          + std::string(BackendName(requested_backend)));
+      return;
+    }
+
     for (size_t i = 0; i < records.size(); ++i) {
       const auto base_path
         = std::string("bindings.soft_bodies[") + std::to_string(i) + "]";
@@ -1377,23 +1570,72 @@ namespace {
       records[i].record.kinematic_vertex_count
         = static_cast<uint32_t>(records[i].kinematic_vertices.size());
 
-      (void)ResolveAssetKeyForVirtualPath(ctx, records[i].source_mesh_ref,
-        base_path + ".source_mesh_ref", data::AssetType::kGeometry,
-        "physics.sidecar.source_mesh_ref_unresolved",
-        "physics.sidecar.source_mesh_ref_not_geometry");
+      const auto source_mesh_key
+        = ResolveAssetKeyForVirtualPath(ctx, records[i].source_mesh_ref,
+          base_path + ".source_mesh_ref", data::AssetType::kGeometry,
+          "physics.sidecar.source_mesh_ref_unresolved",
+          "physics.sidecar.source_mesh_ref_not_geometry");
+      if (!source_mesh_key.has_value()) {
+        continue;
+      }
+      records[i].source_mesh_asset_key = *source_mesh_key;
+      const auto source_mesh_entry = ctx.target_assets.find(*source_mesh_key);
+      if (source_mesh_entry == ctx.target_assets.end()
+        || source_mesh_entry->second.descriptor_relpath.empty()) {
+        AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+          "physics.sidecar.source_mesh_ref_unresolved",
+          "Resolved source mesh has no descriptor path in target cooked root",
+          base_path + ".source_mesh_ref");
+        continue;
+      }
+      records[i].source_mesh_descriptor_relpath
+        = source_mesh_entry->second.descriptor_relpath;
 
       if (records[i].collision_mesh_ref.has_value()) {
         (void)ResolveAssetKeyForVirtualPath(ctx, *records[i].collision_mesh_ref,
           base_path + ".collision_mesh_ref", data::AssetType::kGeometry,
           "physics.sidecar.collision_mesh_ref_unresolved",
           "physics.sidecar.collision_mesh_ref_not_geometry");
+        if (requested_backend == PhysicsBackend::kJolt) {
+          AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+            "physics.sidecar.payload_invalid",
+            "soft_bodies.collision_mesh_ref is not supported for jolt backend",
+            base_path + ".collision_mesh_ref");
+          continue;
+        }
       }
+
+      if (records[i].backend_explicit) {
+        const auto authored_backend
+          = BackendForSoftBodyFormat(records[i].record.topology_format);
+        if (!authored_backend.has_value()
+          || *authored_backend != requested_backend) {
+          AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+            "physics.sidecar.backend_mismatch",
+            "soft-body backend.target must match requested import backend "
+              + std::string(BackendName(requested_backend)),
+            base_path + ".backend.target");
+          continue;
+        }
+      }
+      records[i].record.topology_format = *expected_format_opt;
     }
   }
 
   auto ResolveJointBindings(std::vector<JointBindingSource>& records,
-    BindingValidationContext& ctx) -> void
+    const PhysicsBackend requested_backend, BindingValidationContext& ctx)
+    -> void
   {
+    const auto expected_format_opt = JointFormatForBackend(requested_backend);
+    if (!expected_format_opt.has_value()) {
+      AddDiagnostic(ctx.session, ctx.request, ImportSeverity::kError,
+        "physics.sidecar.backend_unsupported",
+        "Requested physics backend is not supported for joint constraint "
+        "cooking: "
+          + std::string(BackendName(requested_backend)));
+      return;
+    }
+
     for (size_t i = 0; i < records.size(); ++i) {
       const auto base_path
         = std::string("bindings.joints[") + std::to_string(i) + "]";
@@ -1406,13 +1648,39 @@ namespace {
       if (!(node_a_ok && node_b_ok)) {
         continue;
       }
+
+      if (records[i].backend_explicit) {
+        const auto authored_backend
+          = BackendForJointFormat(records[i].constraint_format);
+        if (!authored_backend.has_value()
+          || *authored_backend != requested_backend) {
+          AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+            "physics.sidecar.backend_mismatch",
+            "joint backend.target must match requested import backend "
+              + std::string(BackendName(requested_backend)),
+            base_path + ".backend.target");
+          continue;
+        }
+      }
+      records[i].constraint_format = *expected_format_opt;
     }
   }
 
   auto ResolveVehicleBindings(std::vector<VehicleBindingSource>& records,
     std::vector<phys::VehicleWheelBindingRecord>& wheel_records,
-    BindingValidationContext& ctx) -> void
+    const PhysicsBackend requested_backend, BindingValidationContext& ctx)
+    -> void
   {
+    const auto expected_format_opt = VehicleFormatForBackend(requested_backend);
+    if (!expected_format_opt.has_value()) {
+      AddDiagnostic(ctx.session, ctx.request, ImportSeverity::kError,
+        "physics.sidecar.backend_unsupported",
+        "Requested physics backend is not supported for vehicle constraint "
+        "cooking: "
+          + std::string(BackendName(requested_backend)));
+      return;
+    }
+
     wheel_records.clear();
     for (size_t i = 0; i < records.size(); ++i) {
       const auto base_path
@@ -1432,7 +1700,6 @@ namespace {
       auto wheel_nodes = std::unordered_set<uint32_t> {};
       auto wheel_roles
         = std::unordered_set<uint32_t> {}; // packed (axle << 16) | side
-      auto backend_target = BackendTargetTag::kUnspecified;
       const auto wheel_offset = wheel_records.size();
       auto slice_count = uint32_t { 0 };
       for (size_t w = 0; w < records[i].wheels.size(); ++w) {
@@ -1472,17 +1739,14 @@ namespace {
             "Vehicle wheel count exceeds uint32 range", wheel_path);
           continue;
         }
-        if (wheel.backend_target != BackendTargetTag::kUnspecified) {
-          if (backend_target == BackendTargetTag::kUnspecified) {
-            backend_target = wheel.backend_target;
-          } else if (backend_target != wheel.backend_target) {
-            AddDiagnosticAtPath(ctx.session, ctx.request,
-              ImportSeverity::kError, "physics.sidecar.payload_invalid",
-              "Vehicle wheel backend.target values must be consistent across a "
-              "single vehicle",
-              wheel_path + ".backend.target");
-            continue;
-          }
+        if (wheel.backend_target != PhysicsBackend::kNone
+          && wheel.backend_target != requested_backend) {
+          AddDiagnosticAtPath(ctx.session, ctx.request, ImportSeverity::kError,
+            "physics.sidecar.backend_mismatch",
+            "vehicle wheel backend.target must match requested import backend "
+              + std::string(BackendName(requested_backend)),
+            wheel_path + ".backend.target");
+          continue;
         }
 
         wheel_records.push_back(phys::VehicleWheelBindingRecord {
@@ -1515,54 +1779,1209 @@ namespace {
       records[i].record.wheel_slice_offset
         = static_cast<uint32_t>(wheel_offset);
       records[i].record.wheel_slice_count = slice_count;
-      records[i].constraint_format
-        = (backend_target == BackendTargetTag::kPhysX)
-        ? phys::PhysicsResourceFormat::kPhysXVehicleSettingsBinary
-        : phys::PhysicsResourceFormat::kJoltVehicleConstraintBinary;
+      records[i].constraint_format = *expected_format_opt;
     }
   }
 
-#pragma pack(push, 1)
-  struct AuthoredPhysicsBlobHeader final {
-    char magic[4] = { 'O', 'P', 'H', 'B' };
-    uint8_t version = 1U;
-    uint8_t kind = 0U;
-    uint8_t flavor = 0U;
-    uint8_t reserved = 0U;
-    uint32_t payload_size = 0U;
-  };
-#pragma pack(pop)
+  auto ResolveRequestedPhysicsBackend(const ImportRequest& request)
+    -> PhysicsBackend
+  {
+    return request.options.physics.backend;
+  }
 
-  static_assert(sizeof(AuthoredPhysicsBlobHeader) == 12);
+  auto EnsureJoltAllocatorReady() -> void
+  {
+    static std::once_flag once {};
+    std::call_once(once, [] { JPH::RegisterDefaultAllocator(); });
+  }
 
-  enum class AuthoredPhysicsBlobKind : uint8_t {
-    kJoint = 1,
-    kVehicle = 2,
-    kSoftBody = 3,
-  };
+  [[nodiscard]] auto JsonFloatOr(
+    const nlohmann::json& obj, const char* key, const float fallback) -> float
+  {
+    if (!obj.contains(key)) {
+      return fallback;
+    }
+    return obj.at(key).get<float>();
+  }
 
-  auto SerializeAuthoredPhysicsBlob(const AuthoredPhysicsBlobKind kind,
-    const uint8_t flavor, const nlohmann::json& authored_binding,
+  [[nodiscard]] auto JsonBoolOr(
+    const nlohmann::json& obj, const char* key, const bool fallback) -> bool
+  {
+    if (!obj.contains(key)) {
+      return fallback;
+    }
+    return obj.at(key).get<bool>();
+  }
+
+  [[nodiscard]] auto JsonVec3Or(const nlohmann::json& obj, const char* key,
+    const JPH::Vec3& fallback) -> JPH::Vec3
+  {
+    if (!obj.contains(key)) {
+      return fallback;
+    }
+    const auto values = obj.at(key).get<std::array<float, 3>>();
+    return JPH::Vec3(values[0], values[1], values[2]);
+  }
+
+  auto ApplyCurve2DToLinearCurve(
+    const nlohmann::json& points, JPH::LinearCurve& out_curve) -> bool
+  {
+    if (!points.is_array()) {
+      return false;
+    }
+    out_curve.Clear();
+    out_curve.Reserve(static_cast<JPH::uint>(points.size()));
+    for (const auto& point : points) {
+      if (!point.is_array() || point.size() != 2U) {
+        return false;
+      }
+      out_curve.AddPoint(point[0].get<float>(), point[1].get<float>());
+    }
+    out_curve.Sort();
+    return true;
+  }
+
+  auto SerializeJoltConstraintSettings(const JPH::ConstraintSettings& settings,
     std::vector<std::byte>& out_bytes) -> bool
   {
-    const auto payload = authored_binding.dump();
-    if (payload.size() > (std::numeric_limits<uint32_t>::max)()) {
+    auto stream = std::ostringstream(std::ios::out | std::ios::binary);
+    auto wrapped = JPH::StreamOutWrapper(stream);
+    settings.SaveBinaryState(wrapped);
+    if (wrapped.IsFailed()) {
+      return false;
+    }
+    const auto blob = stream.str();
+    out_bytes.assign(reinterpret_cast<const std::byte*>(blob.data()),
+      reinterpret_cast<const std::byte*>(blob.data()) + blob.size());
+    return true;
+  }
+
+  auto SerializeJoltVehicleSettings(
+    const JPH::VehicleConstraintSettings& settings,
+    std::vector<std::byte>& out_bytes) -> bool
+  {
+    auto stream = std::ostringstream(std::ios::out | std::ios::binary);
+    auto wrapped = JPH::StreamOutWrapper(stream);
+    settings.SaveBinaryState(wrapped);
+    if (wrapped.IsFailed()) {
+      return false;
+    }
+    const auto blob = stream.str();
+    out_bytes.assign(reinterpret_cast<const std::byte*>(blob.data()),
+      reinterpret_cast<const std::byte*>(blob.data()) + blob.size());
+    return true;
+  }
+
+  auto SerializeJoltSoftBodySettings(
+    const JPH::SoftBodySharedSettings& settings, std::vector<std::byte>& out)
+    -> bool
+  {
+    auto stream = std::ostringstream(std::ios::out | std::ios::binary);
+    auto wrapped = JPH::StreamOutWrapper(stream);
+    settings.SaveBinaryState(wrapped);
+    if (wrapped.IsFailed()) {
+      return false;
+    }
+    const auto blob = stream.str();
+    out.assign(reinterpret_cast<const std::byte*>(blob.data()),
+      reinterpret_cast<const std::byte*>(blob.data()) + blob.size());
+    return true;
+  }
+
+  [[nodiscard]] auto ToJoltConstraintSpace(
+    const nlohmann::json& authored_binding) -> JPH::EConstraintSpace
+  {
+    if (authored_binding.contains("constraint_space")
+      && authored_binding.at("constraint_space").get<std::string>()
+        == "local") {
+      return JPH::EConstraintSpace::LocalToBodyCOM;
+    }
+    return JPH::EConstraintSpace::WorldSpace;
+  }
+
+  auto ParseJoltJointType(
+    const nlohmann::json& authored_binding, std::string& out_type) -> void
+  {
+    out_type = authored_binding.contains("constraint_type")
+      ? authored_binding.at("constraint_type").get<std::string>()
+      : std::string("fixed");
+  }
+
+  auto CookJoltJointBlob(const JointBindingSource& source,
+    std::vector<std::byte>& out_blob, std::string& error) -> bool
+  {
+    EnsureJoltAllocatorReady();
+    const auto& authored = source.authored_binding;
+    const auto space = ToJoltConstraintSpace(authored);
+    const auto point_a
+      = JsonVec3Or(authored, "local_frame_a_position", JPH::Vec3::sZero());
+    const auto point_b
+      = JsonVec3Or(authored, "local_frame_b_position", JPH::Vec3::sZero());
+
+    auto type = std::string {};
+    ParseJoltJointType(authored, type);
+    if (type == "fixed") {
+      auto settings = JPH::FixedConstraintSettings {};
+      settings.mSpace = space;
+      settings.mAutoDetectPoint = false;
+      settings.mPoint1 = JPH::RVec3(point_a);
+      settings.mPoint2 = JPH::RVec3(point_b);
+      settings.mNumVelocityStepsOverride
+        = source.record.backend_scalars.jolt.num_velocity_steps_override;
+      settings.mNumPositionStepsOverride
+        = source.record.backend_scalars.jolt.num_position_steps_override;
+      return SerializeJoltConstraintSettings(settings, out_blob);
+    }
+    if (type == "point") {
+      auto settings = JPH::PointConstraintSettings {};
+      settings.mSpace = space;
+      settings.mPoint1 = JPH::RVec3(point_a);
+      settings.mPoint2 = JPH::RVec3(point_b);
+      settings.mNumVelocityStepsOverride
+        = source.record.backend_scalars.jolt.num_velocity_steps_override;
+      settings.mNumPositionStepsOverride
+        = source.record.backend_scalars.jolt.num_position_steps_override;
+      return SerializeJoltConstraintSettings(settings, out_blob);
+    }
+    if (type == "distance") {
+      auto settings = JPH::DistanceConstraintSettings {};
+      settings.mSpace = space;
+      settings.mPoint1 = JPH::RVec3(point_a);
+      settings.mPoint2 = JPH::RVec3(point_b);
+      settings.mNumVelocityStepsOverride
+        = source.record.backend_scalars.jolt.num_velocity_steps_override;
+      settings.mNumPositionStepsOverride
+        = source.record.backend_scalars.jolt.num_position_steps_override;
+      if (authored.contains("limits_lower")) {
+        const auto limits
+          = authored.at("limits_lower").get<std::array<float, 6>>();
+        settings.mMinDistance = limits[0];
+      }
+      if (authored.contains("limits_upper")) {
+        const auto limits
+          = authored.at("limits_upper").get<std::array<float, 6>>();
+        settings.mMaxDistance = limits[0];
+      }
+      return SerializeJoltConstraintSettings(settings, out_blob);
+    }
+    if (type == "hinge") {
+      auto settings = JPH::HingeConstraintSettings {};
+      settings.mSpace = space;
+      settings.mPoint1 = JPH::RVec3(point_a);
+      settings.mPoint2 = JPH::RVec3(point_b);
+      settings.mNumVelocityStepsOverride
+        = source.record.backend_scalars.jolt.num_velocity_steps_override;
+      settings.mNumPositionStepsOverride
+        = source.record.backend_scalars.jolt.num_position_steps_override;
+      return SerializeJoltConstraintSettings(settings, out_blob);
+    }
+    if (type == "slider") {
+      auto settings = JPH::SliderConstraintSettings {};
+      settings.mSpace = space;
+      settings.mAutoDetectPoint = false;
+      settings.mPoint1 = JPH::RVec3(point_a);
+      settings.mPoint2 = JPH::RVec3(point_b);
+      settings.mNumVelocityStepsOverride
+        = source.record.backend_scalars.jolt.num_velocity_steps_override;
+      settings.mNumPositionStepsOverride
+        = source.record.backend_scalars.jolt.num_position_steps_override;
+      return SerializeJoltConstraintSettings(settings, out_blob);
+    }
+    if (type == "cone") {
+      auto settings = JPH::ConeConstraintSettings {};
+      settings.mSpace = space;
+      settings.mPoint1 = JPH::RVec3(point_a);
+      settings.mPoint2 = JPH::RVec3(point_b);
+      settings.mNumVelocityStepsOverride
+        = source.record.backend_scalars.jolt.num_velocity_steps_override;
+      settings.mNumPositionStepsOverride
+        = source.record.backend_scalars.jolt.num_position_steps_override;
+      if (authored.contains("limits_upper")) {
+        const auto limits
+          = authored.at("limits_upper").get<std::array<float, 6>>();
+        settings.mHalfConeAngle = std::max(0.0F, limits[3]);
+      }
+      return SerializeJoltConstraintSettings(settings, out_blob);
+    }
+    if (type == "six_dof") {
+      auto settings = JPH::SixDOFConstraintSettings {};
+      settings.mSpace = space;
+      settings.mPosition1 = JPH::RVec3(point_a);
+      settings.mPosition2 = JPH::RVec3(point_b);
+      settings.mNumVelocityStepsOverride
+        = source.record.backend_scalars.jolt.num_velocity_steps_override;
+      settings.mNumPositionStepsOverride
+        = source.record.backend_scalars.jolt.num_position_steps_override;
+      if (authored.contains("limits_lower")
+        && authored.contains("limits_upper")) {
+        const auto lower
+          = authored.at("limits_lower").get<std::array<float, 6>>();
+        const auto upper
+          = authored.at("limits_upper").get<std::array<float, 6>>();
+        for (int axis = 0; axis < JPH::SixDOFConstraintSettings::EAxis::Num;
+          ++axis) {
+          settings.SetLimitedAxis(
+            static_cast<JPH::SixDOFConstraintSettings::EAxis>(axis),
+            lower[axis], upper[axis]);
+        }
+      }
+      return SerializeJoltConstraintSettings(settings, out_blob);
+    }
+
+    error = "unsupported joint constraint_type '" + type + "'";
+    return false;
+  }
+
+  auto ToJoltLraType(const phys::SoftBodyTetherMode tether_mode)
+    -> JPH::SoftBodySharedSettings::ELRAType
+  {
+    switch (tether_mode) {
+    case phys::SoftBodyTetherMode::kEuclidean:
+      return JPH::SoftBodySharedSettings::ELRAType::EuclideanDistance;
+    case phys::SoftBodyTetherMode::kGeodesic:
+      return JPH::SoftBodySharedSettings::ELRAType::GeodesicDistance;
+    case phys::SoftBodyTetherMode::kNone:
+      return JPH::SoftBodySharedSettings::ELRAType::None;
+    }
+    return JPH::SoftBodySharedSettings::ELRAType::None;
+  }
+
+  struct SoftBodySurfaceMesh final {
+    std::vector<JPH::Float3> vertices;
+    std::vector<JPH::SoftBodySharedSettings::Face> faces;
+  };
+
+  struct SoftBodyGeometryTopologyInput final {
+    enum class Kind : uint8_t {
+      kStandard,
+      kProcedural,
+    };
+
+    Kind kind = Kind::kStandard;
+    data::pak::core::ResourceIndexT vertex_buffer
+      = data::pak::core::kNoResourceIndex;
+    data::pak::core::ResourceIndexT index_buffer
+      = data::pak::core::kNoResourceIndex;
+    std::string procedural_name;
+    std::vector<std::byte> procedural_params;
+    std::vector<data::pak::geometry::MeshViewDesc> mesh_views;
+  };
+
+  struct LoadedBufferResources final {
+    std::vector<data::pak::core::BufferResourceDesc> table;
+    std::vector<std::byte> data;
+  };
+
+  auto ReadBinaryFile(const std::filesystem::path& path,
+    std::vector<std::byte>& out, std::string& error) -> bool
+  {
+    auto in = std::ifstream(path, std::ios::binary | std::ios::ate);
+    if (!in.is_open()) {
+      error = "failed opening file '" + path.string() + "'";
+      return false;
+    }
+    const auto end = in.tellg();
+    if (end < 0) {
+      error = "failed reading file size for '" + path.string() + "'";
+      return false;
+    }
+    out.resize(static_cast<size_t>(end));
+    in.seekg(0, std::ios::beg);
+    if (!out.empty()) {
+      in.read(reinterpret_cast<char*>(out.data()),
+        static_cast<std::streamsize>(out.size()));
+      if (!(in.good() || in.eof())) {
+        error = "failed reading file bytes from '" + path.string() + "'";
+        return false;
+      }
+    }
+    return true;
+  }
+
+  template <typename T>
+  auto ReadPodAt(std::span<const std::byte> bytes, const size_t offset, T& out)
+    -> bool
+  {
+    static_assert(std::is_trivially_copyable_v<T>);
+    if (offset > bytes.size() || bytes.size() - offset < sizeof(T)) {
+      return false;
+    }
+    std::memcpy(&out, bytes.data() + offset, sizeof(T));
+    return true;
+  }
+
+  [[nodiscard]] auto DecodeFixedName(const char* raw_name) -> std::string
+  {
+    auto length = size_t { 0 };
+    while (length < data::pak::core::kMaxNameSize && raw_name[length] != '\0') {
+      ++length;
+    }
+    return std::string(raw_name, length);
+  }
+
+  auto ParseGeometryTopologyInput(std::span<const std::byte> descriptor_bytes,
+    SoftBodyGeometryTopologyInput& out, std::string& error) -> bool
+  {
+    using data::MeshType;
+    using data::pak::geometry::GeometryAssetDesc;
+    using data::pak::geometry::MeshDesc;
+    using data::pak::geometry::MeshViewDesc;
+    using data::pak::geometry::SubMeshDesc;
+
+    auto asset_desc = GeometryAssetDesc {};
+    if (!ReadPodAt(descriptor_bytes, 0U, asset_desc)) {
+      error = "geometry descriptor is too small for GeometryAssetDesc";
+      return false;
+    }
+    if (asset_desc.lod_count == 0U) {
+      error = "geometry descriptor has lod_count=0";
       return false;
     }
 
-    auto header = AuthoredPhysicsBlobHeader {};
-    header.kind = static_cast<uint8_t>(kind);
-    header.flavor = flavor;
-    header.payload_size = static_cast<uint32_t>(payload.size());
+    auto offset = sizeof(GeometryAssetDesc);
+    auto mesh_desc = MeshDesc {};
+    if (!ReadPodAt(descriptor_bytes, offset, mesh_desc)) {
+      error = "geometry descriptor is too small for MeshDesc";
+      return false;
+    }
+    offset += sizeof(MeshDesc);
 
-    out_bytes.clear();
-    out_bytes.resize(sizeof(header) + payload.size());
-    std::memcpy(out_bytes.data(), &header, sizeof(header));
-    if (!payload.empty()) {
-      std::memcpy(
-        out_bytes.data() + sizeof(header), payload.data(), payload.size());
+    const auto mesh_type = static_cast<MeshType>(mesh_desc.mesh_type);
+    if (mesh_type == MeshType::kStandard) {
+      out.kind = SoftBodyGeometryTopologyInput::Kind::kStandard;
+      out.vertex_buffer = mesh_desc.info.standard.vertex_buffer;
+      out.index_buffer = mesh_desc.info.standard.index_buffer;
+    } else if (mesh_type == MeshType::kProcedural) {
+      out.kind = SoftBodyGeometryTopologyInput::Kind::kProcedural;
+      out.procedural_name = DecodeFixedName(mesh_desc.name);
+      const auto params_size
+        = static_cast<size_t>(mesh_desc.info.procedural.params_size);
+      if (offset > descriptor_bytes.size()
+        || descriptor_bytes.size() - offset < params_size) {
+        error = "geometry descriptor procedural params exceed descriptor size";
+        return false;
+      }
+      out.procedural_params.assign(descriptor_bytes.begin() + offset,
+        descriptor_bytes.begin() + offset + params_size);
+      offset += params_size;
+    } else {
+      error = "soft-body source mesh must be standard or procedural geometry";
+      return false;
+    }
+
+    out.mesh_views.clear();
+    for (uint32_t submesh_index = 0; submesh_index < mesh_desc.submesh_count;
+      ++submesh_index) {
+      auto submesh_desc = SubMeshDesc {};
+      if (!ReadPodAt(descriptor_bytes, offset, submesh_desc)) {
+        error = "geometry descriptor submesh table exceeds descriptor size";
+        return false;
+      }
+      offset += sizeof(SubMeshDesc);
+
+      for (uint32_t view_index = 0; view_index < submesh_desc.mesh_view_count;
+        ++view_index) {
+        auto view_desc = MeshViewDesc {};
+        if (!ReadPodAt(descriptor_bytes, offset, view_desc)) {
+          error = "geometry descriptor mesh view table exceeds descriptor size";
+          return false;
+        }
+        offset += sizeof(MeshViewDesc);
+        out.mesh_views.push_back(view_desc);
+      }
+    }
+
+    if (out.mesh_views.empty()) {
+      error = "soft-body source mesh has no mesh views";
+      return false;
     }
     return true;
+  }
+
+  auto LoadBufferResources(const std::filesystem::path& cooked_root,
+    const LooseCookedLayout& layout, LoadedBufferResources& out,
+    std::string& error) -> bool
+  {
+    auto table_bytes = std::vector<std::byte> {};
+    auto data_bytes = std::vector<std::byte> {};
+    const auto table_path
+      = cooked_root / std::filesystem::path(layout.BuffersTableRelPath());
+    const auto data_path
+      = cooked_root / std::filesystem::path(layout.BuffersDataRelPath());
+    if (!ReadBinaryFile(table_path, table_bytes, error)) {
+      return false;
+    }
+    if (!ReadBinaryFile(data_path, data_bytes, error)) {
+      return false;
+    }
+
+    if (table_bytes.size() % sizeof(data::pak::core::BufferResourceDesc)
+      != 0U) {
+      error = "buffers table has invalid size";
+      return false;
+    }
+
+    out.table.resize(
+      table_bytes.size() / sizeof(data::pak::core::BufferResourceDesc));
+    if (!table_bytes.empty()) {
+      std::memcpy(out.table.data(), table_bytes.data(), table_bytes.size());
+    }
+    out.data = std::move(data_bytes);
+    return true;
+  }
+
+  auto ReadBufferPayload(const LoadedBufferResources& resources,
+    const data::pak::core::ResourceIndexT index,
+    data::pak::core::BufferResourceDesc& descriptor,
+    std::span<const std::byte>& payload, std::string& error) -> bool
+  {
+    if (index == data::pak::core::kNoResourceIndex) {
+      error = "geometry references kNoResourceIndex buffer";
+      return false;
+    }
+    const auto table_index = static_cast<size_t>(static_cast<uint32_t>(index));
+    if (table_index >= resources.table.size()) {
+      error = "geometry references out-of-range buffer resource index";
+      return false;
+    }
+
+    descriptor = resources.table[table_index];
+    const auto offset = static_cast<size_t>(descriptor.data_offset);
+    const auto size = static_cast<size_t>(descriptor.size_bytes);
+    if (offset > resources.data.size()
+      || resources.data.size() - offset < size) {
+      error = "buffer payload range exceeds buffers.data size";
+      return false;
+    }
+
+    payload = std::span<const std::byte>(resources.data.data() + offset, size);
+    return true;
+  }
+
+  auto DecodeVertexPositions(
+    const data::pak::core::BufferResourceDesc& descriptor,
+    const std::span<const std::byte> payload,
+    std::vector<JPH::Float3>& vertices, std::string& error) -> bool
+  {
+    if (descriptor.element_format != static_cast<uint8_t>(Format::kUnknown)) {
+      error = "vertex buffer must be structured (element_format=unknown)";
+      return false;
+    }
+    if (descriptor.element_stride < sizeof(float) * 3U) {
+      error = "vertex buffer element_stride is too small for position xyz";
+      return false;
+    }
+    const auto stride = static_cast<size_t>(descriptor.element_stride);
+    if (payload.size() % stride != 0U) {
+      error = "vertex buffer payload size is not aligned to element_stride";
+      return false;
+    }
+
+    const auto count = payload.size() / stride;
+    vertices.clear();
+    vertices.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+      auto x = 0.0F;
+      auto y = 0.0F;
+      auto z = 0.0F;
+      const auto* record = payload.data() + i * stride;
+      std::memcpy(&x, record + 0U * sizeof(float), sizeof(float));
+      std::memcpy(&y, record + 1U * sizeof(float), sizeof(float));
+      std::memcpy(&z, record + 2U * sizeof(float), sizeof(float));
+      if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
+        error = "vertex buffer contains non-finite positions";
+        return false;
+      }
+      vertices.emplace_back(x, y, z);
+    }
+
+    if (vertices.empty()) {
+      error = "vertex buffer payload is empty";
+      return false;
+    }
+    return true;
+  }
+
+  auto DecodeIndexBuffer(const data::pak::core::BufferResourceDesc& descriptor,
+    const std::span<const std::byte> payload, std::vector<uint32_t>& indices,
+    std::string& error) -> bool
+  {
+    size_t element_size = 0U;
+    const auto element_format = static_cast<Format>(descriptor.element_format);
+    if (element_format == Format::kR32UInt) {
+      element_size = sizeof(uint32_t);
+    } else if (element_format == Format::kR16UInt) {
+      element_size = sizeof(uint16_t);
+    } else if (element_format == Format::kUnknown
+      && (descriptor.element_stride == sizeof(uint32_t)
+        || descriptor.element_stride == sizeof(uint16_t))) {
+      element_size = static_cast<size_t>(descriptor.element_stride);
+    } else {
+      error = "index buffer must be uint16 or uint32";
+      return false;
+    }
+
+    if (payload.size() % element_size != 0U) {
+      error = "index buffer payload size is not aligned to element size";
+      return false;
+    }
+
+    const auto count = payload.size() / element_size;
+    indices.clear();
+    indices.reserve(count);
+    if (element_size == sizeof(uint32_t)) {
+      for (size_t i = 0; i < count; ++i) {
+        auto value = uint32_t { 0 };
+        std::memcpy(
+          &value, payload.data() + i * sizeof(uint32_t), sizeof(uint32_t));
+        indices.push_back(value);
+      }
+    } else {
+      for (size_t i = 0; i < count; ++i) {
+        auto value = uint16_t { 0 };
+        std::memcpy(
+          &value, payload.data() + i * sizeof(uint16_t), sizeof(uint16_t));
+        indices.push_back(static_cast<uint32_t>(value));
+      }
+    }
+
+    if (indices.empty()) {
+      error = "index buffer payload is empty";
+      return false;
+    }
+    return true;
+  }
+
+  [[nodiscard]] auto IsFiniteFloat3Cook(const JPH::Float3& value) noexcept
+    -> bool
+  {
+    return std::isfinite(value.x) && std::isfinite(value.y)
+      && std::isfinite(value.z);
+  }
+
+  [[nodiscard]] auto EdgeLengthSquared(
+    const JPH::Float3& a, const JPH::Float3& b) noexcept -> float
+  {
+    const auto dx = a.x - b.x;
+    const auto dy = a.y - b.y;
+    const auto dz = a.z - b.z;
+    return dx * dx + dy * dy + dz * dz;
+  }
+
+  [[nodiscard]] auto TriangleDoubleAreaSquared(const JPH::Float3& a,
+    const JPH::Float3& b, const JPH::Float3& c) noexcept -> float
+  {
+    const auto abx = b.x - a.x;
+    const auto aby = b.y - a.y;
+    const auto abz = b.z - a.z;
+    const auto acx = c.x - a.x;
+    const auto acy = c.y - a.y;
+    const auto acz = c.z - a.z;
+    const auto cx = aby * acz - abz * acy;
+    const auto cy = abz * acx - abx * acz;
+    const auto cz = abx * acy - aby * acx;
+    return cx * cx + cy * cy + cz * cz;
+  }
+
+  auto BuildFacesFromMeshViews(const std::vector<uint32_t>& indices,
+    std::span<const data::pak::geometry::MeshViewDesc> mesh_views,
+    std::span<const JPH::Float3> vertices,
+    std::vector<JPH::SoftBodySharedSettings::Face>& faces, std::string& error)
+    -> bool
+  {
+    if (vertices.empty()) {
+      error = "mesh has no vertices";
+      return false;
+    }
+    auto bounds_min = vertices.front();
+    auto bounds_max = vertices.front();
+    for (const auto& v : vertices) {
+      if (!IsFiniteFloat3Cook(v)) {
+        error = "mesh contains non-finite vertex positions";
+        return false;
+      }
+      bounds_min.x = std::min(bounds_min.x, v.x);
+      bounds_min.y = std::min(bounds_min.y, v.y);
+      bounds_min.z = std::min(bounds_min.z, v.z);
+      bounds_max.x = std::max(bounds_max.x, v.x);
+      bounds_max.y = std::max(bounds_max.y, v.y);
+      bounds_max.z = std::max(bounds_max.z, v.z);
+    }
+
+    const auto max_extent = std::max({ bounds_max.x - bounds_min.x,
+      bounds_max.y - bounds_min.y, bounds_max.z - bounds_min.z });
+    const auto min_edge_length = std::max(max_extent * 1.0e-6F, 1.0e-8F);
+    const auto min_edge_length_sq = min_edge_length * min_edge_length;
+    const auto min_area2_sq = min_edge_length_sq * min_edge_length_sq;
+    const auto vertex_count = vertices.size();
+
+    faces.clear();
+    auto rejected_degenerate_faces = size_t { 0 };
+    for (const auto& view : mesh_views) {
+      const auto first_index = static_cast<size_t>(view.first_index);
+      const auto index_count = static_cast<size_t>(view.index_count);
+      const auto first_vertex = static_cast<uint32_t>(view.first_vertex);
+      const auto view_vertex_count = static_cast<uint32_t>(view.vertex_count);
+
+      if (index_count == 0U) {
+        continue;
+      }
+      if (index_count % 3U != 0U) {
+        error = "mesh view index_count is not divisible by 3";
+        return false;
+      }
+      if (first_index > indices.size()
+        || indices.size() - first_index < index_count) {
+        error = "mesh view index span exceeds decoded index buffer";
+        return false;
+      }
+      if (first_vertex > vertex_count
+        || static_cast<size_t>(first_vertex) + view_vertex_count
+          > vertex_count) {
+        error = "mesh view vertex span exceeds decoded vertex buffer";
+        return false;
+      }
+
+      for (size_t i = 0; i < index_count; i += 3U) {
+        const auto local0 = indices[first_index + i + 0U];
+        const auto local1 = indices[first_index + i + 1U];
+        const auto local2 = indices[first_index + i + 2U];
+
+        if (local0 >= view_vertex_count || local1 >= view_vertex_count
+          || local2 >= view_vertex_count) {
+          error = "mesh view contains index outside its vertex range";
+          return false;
+        }
+
+        const auto v0 = first_vertex + local0;
+        const auto v1 = first_vertex + local1;
+        const auto v2 = first_vertex + local2;
+        if (v0 >= vertex_count || v1 >= vertex_count || v2 >= vertex_count) {
+          error = "mesh view index resolves outside decoded vertex buffer";
+          return false;
+        }
+
+        const auto& p0 = vertices[v0];
+        const auto& p1 = vertices[v1];
+        const auto& p2 = vertices[v2];
+        const auto e01 = EdgeLengthSquared(p0, p1);
+        const auto e12 = EdgeLengthSquared(p1, p2);
+        const auto e20 = EdgeLengthSquared(p2, p0);
+        if (e01 <= min_edge_length_sq || e12 <= min_edge_length_sq
+          || e20 <= min_edge_length_sq
+          || TriangleDoubleAreaSquared(p0, p1, p2) <= min_area2_sq) {
+          ++rejected_degenerate_faces;
+          continue;
+        }
+
+        faces.emplace_back(v0, v1, v2, 0U);
+      }
+    }
+
+    if (faces.empty()) {
+      if (rejected_degenerate_faces > 0U) {
+        error = "mesh yielded only degenerate triangles after sanitation";
+      } else {
+        error = "mesh did not yield any triangle faces";
+      }
+      return false;
+    }
+    if (rejected_degenerate_faces > 0U) {
+      DLOG_F(1,
+        "Soft-body source mesh sanitation dropped {} degenerate triangles",
+        rejected_degenerate_faces);
+    }
+    return true;
+  }
+
+  auto BuildSurfaceMeshFromProcedural(
+    const SoftBodyGeometryTopologyInput& topology, SoftBodySurfaceMesh& out,
+    std::string& error) -> bool
+  {
+    const auto generated = data::GenerateMeshBuffers(topology.procedural_name,
+      std::span<const std::byte>(
+        topology.procedural_params.data(), topology.procedural_params.size()));
+    if (!generated.has_value()) {
+      error = "failed generating procedural geometry source mesh";
+      return false;
+    }
+
+    const auto& source_vertices = generated->first;
+    const auto& source_indices = generated->second;
+    out.vertices.clear();
+    out.vertices.reserve(source_vertices.size());
+    for (const auto& v : source_vertices) {
+      out.vertices.emplace_back(v.position.x, v.position.y, v.position.z);
+    }
+
+    if (!BuildFacesFromMeshViews(source_indices, topology.mesh_views,
+          out.vertices, out.faces, error)) {
+      return false;
+    }
+    return true;
+  }
+
+  auto BuildSurfaceMeshFromStandard(
+    const SoftBodyGeometryTopologyInput& topology,
+    const std::filesystem::path& cooked_root, const LooseCookedLayout& layout,
+    SoftBodySurfaceMesh& out, std::string& error) -> bool
+  {
+    auto resources = LoadedBufferResources {};
+    if (!LoadBufferResources(cooked_root, layout, resources, error)) {
+      return false;
+    }
+
+    auto vertex_descriptor = data::pak::core::BufferResourceDesc {};
+    auto index_descriptor = data::pak::core::BufferResourceDesc {};
+    auto vertex_payload = std::span<const std::byte> {};
+    auto index_payload = std::span<const std::byte> {};
+
+    if (!ReadBufferPayload(resources, topology.vertex_buffer, vertex_descriptor,
+          vertex_payload, error)) {
+      return false;
+    }
+    if (!ReadBufferPayload(resources, topology.index_buffer, index_descriptor,
+          index_payload, error)) {
+      return false;
+    }
+
+    auto decoded_indices = std::vector<uint32_t> {};
+    if (!DecodeVertexPositions(
+          vertex_descriptor, vertex_payload, out.vertices, error)) {
+      return false;
+    }
+    if (!DecodeIndexBuffer(
+          index_descriptor, index_payload, decoded_indices, error)) {
+      return false;
+    }
+    if (!BuildFacesFromMeshViews(decoded_indices, topology.mesh_views,
+          out.vertices, out.faces, error)) {
+      return false;
+    }
+    return true;
+  }
+
+  auto BuildSoftBodySurfaceMesh(const SoftBodyBindingSource& source,
+    const std::filesystem::path& target_cooked_root,
+    const LooseCookedLayout& layout, SoftBodySurfaceMesh& out,
+    std::string& error) -> bool
+  {
+    if (source.source_mesh_descriptor_relpath.empty()) {
+      error = "soft-body source mesh descriptor path is unresolved";
+      return false;
+    }
+
+    const auto descriptor_path = target_cooked_root
+      / std::filesystem::path(source.source_mesh_descriptor_relpath);
+    auto descriptor_bytes = std::vector<std::byte> {};
+    if (!ReadBinaryFile(descriptor_path, descriptor_bytes, error)) {
+      return false;
+    }
+
+    auto topology = SoftBodyGeometryTopologyInput {};
+    if (!ParseGeometryTopologyInput(descriptor_bytes, topology, error)) {
+      return false;
+    }
+
+    switch (topology.kind) {
+    case SoftBodyGeometryTopologyInput::Kind::kStandard:
+      return BuildSurfaceMeshFromStandard(
+        topology, target_cooked_root, layout, out, error);
+    case SoftBodyGeometryTopologyInput::Kind::kProcedural:
+      return BuildSurfaceMeshFromProcedural(topology, out, error);
+    }
+
+    error = "soft-body source mesh kind is unsupported";
+    return false;
+  }
+
+  constexpr float kMinCookedVolumeCompliance = 1.0e-6F;
+  constexpr double kMinAbsCookedSurfaceRestVolume = 1.0e-8;
+
+  [[nodiscard]] auto ComputeSignedSurfaceVolume(
+    const JPH::SoftBodySharedSettings& settings) noexcept -> double
+  {
+    double signed_six_volume = 0.0;
+    for (const auto& face : settings.mFaces) {
+      const auto& p0 = settings.mVertices[face.mVertex[0]].mPosition;
+      const auto& p1 = settings.mVertices[face.mVertex[1]].mPosition;
+      const auto& p2 = settings.mVertices[face.mVertex[2]].mPosition;
+      signed_six_volume += static_cast<double>(p0.x)
+          * (static_cast<double>(p1.y) * static_cast<double>(p2.z)
+            - static_cast<double>(p1.z) * static_cast<double>(p2.y))
+        + static_cast<double>(p0.y)
+          * (static_cast<double>(p1.z) * static_cast<double>(p2.x)
+            - static_cast<double>(p1.x) * static_cast<double>(p2.z))
+        + static_cast<double>(p0.z)
+          * (static_cast<double>(p1.x) * static_cast<double>(p2.y)
+            - static_cast<double>(p1.y) * static_cast<double>(p2.x));
+    }
+    return signed_six_volume / 6.0;
+  }
+
+  auto ValidateCookedSoftBodySettings(
+    const JPH::SoftBodySharedSettings& settings,
+    const float pressure_coefficient, std::string& error) -> bool
+  {
+    for (size_t i = 0; i < settings.mVolumeConstraints.size(); ++i) {
+      const auto& volume = settings.mVolumeConstraints[i];
+      if (!std::isfinite(volume.mCompliance)
+        || volume.mCompliance < kMinCookedVolumeCompliance) {
+        error = "volume_compliance must be finite and >= "
+          + std::to_string(kMinCookedVolumeCompliance)
+          + " for volumetric soft-body constraints";
+        return false;
+      }
+    }
+
+    if (pressure_coefficient > 0.0F) {
+      if (settings.mFaces.empty()) {
+        error = "pressure_coefficient > 0 requires a non-empty closed surface";
+        return false;
+      }
+      const auto signed_volume = ComputeSignedSurfaceVolume(settings);
+      if (!std::isfinite(signed_volume)
+        || std::abs(signed_volume) < kMinAbsCookedSurfaceRestVolume) {
+        error = "pressure_coefficient > 0 requires finite non-zero rest volume";
+        return false;
+      }
+    }
+    return true;
+  }
+
+  auto CookJoltSoftBodyBlob(const SoftBodyBindingSource& source,
+    const std::filesystem::path& target_cooked_root,
+    const LooseCookedLayout& layout, std::vector<std::byte>& out_blob,
+    std::string& error) -> bool
+  {
+    EnsureJoltAllocatorReady();
+
+    auto surface_mesh = SoftBodySurfaceMesh {};
+    if (!BuildSoftBodySurfaceMesh(
+          source, target_cooked_root, layout, surface_mesh, error)) {
+      return false;
+    }
+
+    auto shared_settings = JPH::Ref<JPH::SoftBodySharedSettings> {
+      new JPH::SoftBodySharedSettings()
+    };
+    if (shared_settings == nullptr) {
+      error = "failed to allocate Jolt soft-body shared settings";
+      return false;
+    }
+    shared_settings->mVertices.reserve(surface_mesh.vertices.size());
+    for (const auto& v : surface_mesh.vertices) {
+      shared_settings->mVertices.emplace_back(
+        v, JPH::Float3(0.0F, 0.0F, 0.0F), 1.0F);
+    }
+    shared_settings->mFaces.clear();
+    shared_settings->mFaces.reserve(
+      static_cast<JPH::uint>(surface_mesh.faces.size()));
+    for (const auto& face : surface_mesh.faces) {
+      shared_settings->mFaces.push_back(face);
+    }
+
+    const auto attrs = JPH::SoftBodySharedSettings::VertexAttributes(
+      source.record.edge_compliance, source.record.shear_compliance,
+      source.record.bend_compliance, ToJoltLraType(source.record.tether_mode),
+      source.record.tether_max_distance_multiplier);
+    shared_settings->CreateConstraints(&attrs, 1U);
+
+    for (auto& volume : shared_settings->mVolumeConstraints) {
+      volume.mCompliance = source.record.volume_compliance;
+    }
+
+    const auto vertex_count
+      = static_cast<uint32_t>(shared_settings->mVertices.size());
+    for (const auto vertex_index : source.pinned_vertices) {
+      if (vertex_index >= vertex_count) {
+        error = "pinned_vertices contains out-of-range vertex index";
+        return false;
+      }
+      shared_settings->mVertices[vertex_index].mInvMass = 0.0F;
+    }
+    for (const auto vertex_index : source.kinematic_vertices) {
+      if (vertex_index >= vertex_count) {
+        error = "kinematic_vertices contains out-of-range vertex index";
+        return false;
+      }
+      shared_settings->mVertices[vertex_index].mInvMass = 0.0F;
+    }
+
+    shared_settings->CalculateEdgeLengths();
+    shared_settings->CalculateBendConstraintConstants();
+    shared_settings->CalculateVolumeConstraintVolumes();
+    shared_settings->CalculateLRALengths(
+      source.record.tether_max_distance_multiplier);
+    if (!ValidateCookedSoftBodySettings(
+          *shared_settings, source.record.pressure_coefficient, error)) {
+      return false;
+    }
+    shared_settings->Optimize();
+    return SerializeJoltSoftBodySettings(*shared_settings, out_blob);
+  }
+
+  auto ApplyVehicleEngineSettings(
+    const nlohmann::json& authored, JPH::VehicleEngineSettings& out) -> bool
+  {
+    if (!authored.contains("engine")) {
+      return true;
+    }
+    const auto& engine = authored.at("engine");
+    out.mMaxTorque = JsonFloatOr(engine, "max_torque", out.mMaxTorque);
+    out.mMinRPM = JsonFloatOr(engine, "rpm_min", out.mMinRPM);
+    out.mMaxRPM = JsonFloatOr(engine, "rpm_max", out.mMaxRPM);
+    out.mInertia = JsonFloatOr(engine, "inertia", out.mInertia);
+    if (engine.contains("torque_curve")) {
+      return ApplyCurve2DToLinearCurve(
+        engine.at("torque_curve"), out.mNormalizedTorque);
+    }
+    return true;
+  }
+
+  auto ApplyVehicleTransmissionSettings(const nlohmann::json& authored,
+    JPH::VehicleTransmissionSettings& out) -> bool
+  {
+    if (!authored.contains("transmission")) {
+      return true;
+    }
+    const auto& transmission = authored.at("transmission");
+    if (transmission.contains("shift_mode")) {
+      const auto mode = transmission.at("shift_mode").get<std::string>();
+      out.mMode = mode == "manual" ? JPH::ETransmissionMode::Manual
+                                   : JPH::ETransmissionMode::Auto;
+    }
+    if (transmission.contains("forward_gear_ratios")) {
+      out.mGearRatios.clear();
+      for (const auto ratio : transmission.at("forward_gear_ratios")) {
+        out.mGearRatios.push_back(ratio.get<float>());
+      }
+    }
+    if (transmission.contains("reverse_gear_ratios")) {
+      out.mReverseGearRatios.clear();
+      for (const auto ratio : transmission.at("reverse_gear_ratios")) {
+        out.mReverseGearRatios.push_back(ratio.get<float>());
+      }
+    }
+    out.mClutchStrength
+      = JsonFloatOr(transmission, "clutch_strength", out.mClutchStrength);
+    out.mShiftUpRPM
+      = JsonFloatOr(transmission, "shift_up_rpm", out.mShiftUpRPM);
+    out.mShiftDownRPM
+      = JsonFloatOr(transmission, "shift_down_rpm", out.mShiftDownRPM);
+    out.mClutchReleaseTime = JsonFloatOr(
+      transmission, "clutch_engagement_time", out.mClutchReleaseTime);
+    return true;
+  }
+
+  auto CookJoltVehicleBlob(const VehicleBindingSource& source,
+    std::vector<std::byte>& out_blob, std::string& error) -> bool
+  {
+    EnsureJoltAllocatorReady();
+    const auto wheel_count = source.wheels.size();
+    if (wheel_count < 2U) {
+      error = "vehicle must resolve at least two wheels before blob cooking";
+      return false;
+    }
+
+    auto settings = JPH::VehicleConstraintSettings {};
+    settings.mUp
+      = JPH::Vec3(space::move::Up.x, space::move::Up.y, space::move::Up.z);
+    settings.mForward = JPH::Vec3(
+      space::move::Forward.x, space::move::Forward.y, space::move::Forward.z);
+
+    const auto& authored = source.authored_binding;
+    const auto& authored_wheels = authored.at("wheels");
+    if (!authored_wheels.is_array() || authored_wheels.size() != wheel_count) {
+      error
+        = "vehicle wheels authored payload does not match resolved wheel table";
+      return false;
+    }
+
+    const auto tracked
+      = source.record.controller_type == phys::VehicleControllerType::kTracked;
+    for (size_t i = 0; i < wheel_count; ++i) {
+      const auto& authored_wheel = authored_wheels[i];
+      if (tracked) {
+        auto wheel
+          = JPH::Ref<JPH::WheelSettingsTV> { new JPH::WheelSettingsTV() };
+        wheel->mRadius = JsonFloatOr(authored_wheel, "radius", wheel->mRadius);
+        wheel->mWidth = JsonFloatOr(authored_wheel, "width", wheel->mWidth);
+        settings.mWheels.push_back(
+          JPH::Ref<JPH::WheelSettings> { wheel.GetPtr() });
+      } else {
+        auto wheel
+          = JPH::Ref<JPH::WheelSettingsWV> { new JPH::WheelSettingsWV() };
+        wheel->mRadius = JsonFloatOr(authored_wheel, "radius", wheel->mRadius);
+        wheel->mWidth = JsonFloatOr(authored_wheel, "width", wheel->mWidth);
+        wheel->mInertia
+          = JsonFloatOr(authored_wheel, "rotational_inertia", wheel->mInertia);
+        wheel->mMaxSteerAngle = JsonFloatOr(
+          authored_wheel, "max_steering_angle", wheel->mMaxSteerAngle);
+        wheel->mMaxBrakeTorque = JsonFloatOr(
+          authored_wheel, "max_brake_torque", wheel->mMaxBrakeTorque);
+        wheel->mMaxHandBrakeTorque = JsonFloatOr(
+          authored_wheel, "max_hand_brake_torque", wheel->mMaxHandBrakeTorque);
+        if (authored_wheel.contains("longitudinal_friction_curve")
+          && !ApplyCurve2DToLinearCurve(
+            authored_wheel.at("longitudinal_friction_curve"),
+            wheel->mLongitudinalFriction)) {
+          error = "invalid wheel longitudinal_friction_curve payload";
+          return false;
+        }
+        if (authored_wheel.contains("lateral_friction_curve")
+          && !ApplyCurve2DToLinearCurve(
+            authored_wheel.at("lateral_friction_curve"),
+            wheel->mLateralFriction)) {
+          error = "invalid wheel lateral_friction_curve payload";
+          return false;
+        }
+        settings.mWheels.push_back(
+          JPH::Ref<JPH::WheelSettings> { wheel.GetPtr() });
+      }
+    }
+
+    if (tracked) {
+      auto controller = JPH::Ref<JPH::TrackedVehicleControllerSettings> {
+        new JPH::TrackedVehicleControllerSettings()
+      };
+      if (!ApplyVehicleEngineSettings(authored, controller->mEngine)
+        || !ApplyVehicleTransmissionSettings(
+          authored, controller->mTransmission)) {
+        error = "invalid tracked vehicle engine/transmission settings";
+        return false;
+      }
+
+      auto left = std::vector<uint32_t> {};
+      auto right = std::vector<uint32_t> {};
+      left.reserve(wheel_count);
+      right.reserve(wheel_count);
+      for (size_t i = 0; i < wheel_count; ++i) {
+        if (source.wheels[i].side == phys::VehicleWheelSide::kLeft) {
+          left.push_back(static_cast<uint32_t>(i));
+        } else {
+          right.push_back(static_cast<uint32_t>(i));
+        }
+      }
+      if (left.empty() || right.empty()) {
+        error = "tracked vehicle must provide left and right wheel groups";
+        return false;
+      }
+      auto& left_track
+        = controller->mTracks[static_cast<int>(JPH::ETrackSide::Left)];
+      left_track.mDrivenWheel = left.front();
+      left_track.mWheels.clear();
+      left_track.mWheels.reserve(static_cast<JPH::uint>(left.size()));
+      for (const auto wheel_index : left) {
+        left_track.mWheels.push_back(static_cast<JPH::uint>(wheel_index));
+      }
+      auto& right_track
+        = controller->mTracks[static_cast<int>(JPH::ETrackSide::Right)];
+      right_track.mDrivenWheel = right.front();
+      right_track.mWheels.clear();
+      right_track.mWheels.reserve(static_cast<JPH::uint>(right.size()));
+      for (const auto wheel_index : right) {
+        right_track.mWheels.push_back(static_cast<JPH::uint>(wheel_index));
+      }
+      settings.mController = controller;
+    } else {
+      auto controller = JPH::Ref<JPH::WheeledVehicleControllerSettings> {
+        new JPH::WheeledVehicleControllerSettings()
+      };
+      if (!ApplyVehicleEngineSettings(authored, controller->mEngine)
+        || !ApplyVehicleTransmissionSettings(
+          authored, controller->mTransmission)) {
+        error = "invalid wheeled vehicle engine/transmission settings";
+        return false;
+      }
+
+      if (authored.contains("differentials")) {
+        controller->mDifferentials.clear();
+        for (const auto& differential : authored.at("differentials")) {
+          auto out = JPH::VehicleDifferentialSettings {};
+          out.mLeftWheel = differential.at("left_wheel_index").get<int>();
+          out.mRightWheel = differential.at("right_wheel_index").get<int>();
+          out.mDifferentialRatio = JsonFloatOr(
+            differential, "differential_ratio", out.mDifferentialRatio);
+          out.mLeftRightSplit
+            = JsonFloatOr(differential, "torque_split", out.mLeftRightSplit);
+          out.mLimitedSlipRatio = JsonFloatOr(
+            differential, "limited_slip_ratio", out.mLimitedSlipRatio);
+          out.mEngineTorqueRatio = JsonFloatOr(
+            differential, "engine_torque_ratio", out.mEngineTorqueRatio);
+          controller->mDifferentials.push_back(out);
+        }
+      } else if (wheel_count >= 2U) {
+        auto differential = JPH::VehicleDifferentialSettings {};
+        differential.mLeftWheel = 0;
+        differential.mRightWheel = 1;
+        differential.mEngineTorqueRatio = 1.0F;
+        controller->mDifferentials.push_back(differential);
+      }
+
+      settings.mController = controller;
+    }
+
+    if (authored.contains("anti_roll_bars")) {
+      settings.mAntiRollBars.clear();
+      for (const auto& anti_roll : authored.at("anti_roll_bars")) {
+        auto out = JPH::VehicleAntiRollBar {};
+        out.mLeftWheel = anti_roll.at("left_wheel_index").get<int>();
+        out.mRightWheel = anti_roll.at("right_wheel_index").get<int>();
+        out.mStiffness = JsonFloatOr(anti_roll, "stiffness", out.mStiffness);
+        settings.mAntiRollBars.push_back(out);
+      }
+    }
+
+    return SerializeJoltVehicleSettings(settings, out_blob);
+  }
+
+  auto CookSoftBodyTopologyBlob(const SoftBodyBindingSource& source,
+    const std::filesystem::path& target_cooked_root,
+    const LooseCookedLayout& layout, std::vector<std::byte>& out_blob,
+    std::string& error) -> bool
+  {
+    switch (source.record.topology_format) {
+    case phys::PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary:
+      return CookJoltSoftBodyBlob(
+        source, target_cooked_root, layout, out_blob, error);
+    case phys::PhysicsResourceFormat::kPhysXSoftBodySettingsBinary:
+      error = "physx soft-body cooking is not implemented";
+      return false;
+    default:
+      error = "soft-body topology format does not match any supported backend";
+      return false;
+    }
+  }
+
+  auto CookJointConstraintBlob(const JointBindingSource& source,
+    std::vector<std::byte>& out_blob, std::string& error) -> bool
+  {
+    switch (source.constraint_format) {
+    case phys::PhysicsResourceFormat::kJoltConstraintBinary:
+      return CookJoltJointBlob(source, out_blob, error);
+    case phys::PhysicsResourceFormat::kPhysXConstraintBinary:
+      error = "physx joint constraint cooking is not implemented";
+      return false;
+    default:
+      error = "joint constraint format does not match any supported backend";
+      return false;
+    }
+  }
+
+  auto CookVehicleConstraintBlob(const VehicleBindingSource& source,
+    std::vector<std::byte>& out_blob, std::string& error) -> bool
+  {
+    switch (source.constraint_format) {
+    case phys::PhysicsResourceFormat::kJoltVehicleConstraintBinary:
+      return CookJoltVehicleBlob(source, out_blob, error);
+    case phys::PhysicsResourceFormat::kPhysXVehicleSettingsBinary:
+      error = "physx vehicle settings cooking is not implemented";
+      return false;
+    default:
+      error = "vehicle constraint format does not match any supported backend";
+      return false;
+    }
   }
 
   auto BuildCookedPhysicsPayload(const std::vector<std::byte>& blob_bytes,
@@ -1604,18 +3023,24 @@ namespace {
 
   auto EmitSoftBodyTopologyResources(
     std::vector<SoftBodyBindingSource>& records, ImportSession& session,
-    const ImportRequest& request) -> bool
+    const ImportRequest& request,
+    const std::filesystem::path& target_cooked_root,
+    const LooseCookedLayout& layout) -> bool
   {
     const auto with_hashing
       = EffectiveContentHashingEnabled(request.options.with_content_hashing);
     for (size_t i = 0; i < records.size(); ++i) {
       auto blob_bytes = std::vector<std::byte> {};
-      if (!SerializeAuthoredPhysicsBlob(AuthoredPhysicsBlobKind::kSoftBody,
-            static_cast<uint8_t>(records[i].record.tether_mode),
-            records[i].authored_binding, blob_bytes)) {
+      auto cook_error = std::string {};
+      if (!CookSoftBodyTopologyBlob(
+            records[i], target_cooked_root, layout, blob_bytes, cook_error)) {
+        LOG_F(ERROR,
+          "PhysicsSidecarImportPipeline: soft-body topology cooking failed "
+          "(source_mesh_ref='{}' reason='{}')",
+          records[i].source_mesh_ref, cook_error);
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           "physics.sidecar.resource_serialize_failed",
-          "Soft-body authored binding exceeds supported blob size",
+          "Failed to cook soft-body topology resource: " + cook_error,
           "bindings.soft_bodies[" + std::to_string(i) + "]");
         continue;
       }
@@ -1636,13 +3061,11 @@ namespace {
       = EffectiveContentHashingEnabled(request.options.with_content_hashing);
     for (size_t i = 0; i < records.size(); ++i) {
       auto blob_bytes = std::vector<std::byte> {};
-      if (!SerializeAuthoredPhysicsBlob(AuthoredPhysicsBlobKind::kJoint,
-            static_cast<uint8_t>(records[i].record.node_index_b
-              == phys::kWorldAttachmentNodeIndex),
-            records[i].authored_binding, blob_bytes)) {
+      auto cook_error = std::string {};
+      if (!CookJointConstraintBlob(records[i], blob_bytes, cook_error)) {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           "physics.sidecar.resource_serialize_failed",
-          "Joint authored binding exceeds supported blob size",
+          "Failed to cook joint constraint resource: " + cook_error,
           "bindings.joints[" + std::to_string(i) + "]");
         continue;
       }
@@ -1664,12 +3087,11 @@ namespace {
       = EffectiveContentHashingEnabled(request.options.with_content_hashing);
     for (size_t i = 0; i < records.size(); ++i) {
       auto blob_bytes = std::vector<std::byte> {};
-      if (!SerializeAuthoredPhysicsBlob(AuthoredPhysicsBlobKind::kVehicle,
-            static_cast<uint8_t>(records[i].record.controller_type),
-            records[i].authored_binding, blob_bytes)) {
+      auto cook_error = std::string {};
+      if (!CookVehicleConstraintBlob(records[i], blob_bytes, cook_error)) {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           "physics.sidecar.resource_serialize_failed",
-          "Vehicle authored binding exceeds supported blob size",
+          "Failed to cook vehicle constraint resource: " + cook_error,
           "bindings.vehicles[" + std::to_string(i) + "]");
         continue;
       }
@@ -1684,9 +3106,12 @@ namespace {
   }
 
   auto EmitBackendCookedBindingResources(PhysicsSidecarDocument& parsed,
-    ImportSession& session, const ImportRequest& request) -> bool
+    ImportSession& session, const ImportRequest& request,
+    const std::filesystem::path& target_cooked_root,
+    const LooseCookedLayout& layout) -> bool
   {
-    return EmitSoftBodyTopologyResources(parsed.soft_bodies, session, request)
+    return EmitSoftBodyTopologyResources(
+             parsed.soft_bodies, session, request, target_cooked_root, layout)
       && EmitJointConstraintResources(parsed.joints, session, request)
       && EmitVehicleConstraintResources(parsed.vehicles, session, request);
   }
@@ -1987,10 +3412,16 @@ namespace {
       return false;
     }
 
-    const auto target_asset_types
-      = BuildAssetTypeMap(target_context->inspection);
+    const auto target_assets = BuildAssetRecordMap(target_context->inspection);
+    const auto requested_backend = ResolveRequestedPhysicsBackend(request);
+    if (requested_backend == PhysicsBackend::kNone) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "physics.sidecar.backend_unsupported",
+        "Requested physics backend 'none' is not valid for sidecar cooking");
+      return false;
+    }
     auto validation_ctx = BindingValidationContext { session, request, resolver,
-      cooked_contexts, target_asset_types, target_context->cooked_root,
+      cooked_contexts, target_assets, target_context->cooked_root,
       resolved_scene_state.node_count };
 
     ResolveShapeAndMaterialBindings(
@@ -1998,17 +3429,19 @@ namespace {
     ResolveShapeAndMaterialBindings(
       parsed.colliders, "colliders", validation_ctx);
     ResolveCharacterBindings(parsed.characters, validation_ctx);
-    ResolveSoftBodyBindings(parsed.soft_bodies, validation_ctx);
-    ResolveJointBindings(parsed.joints, validation_ctx);
-    ResolveVehicleBindings(
-      parsed.vehicles, parsed.vehicle_wheels, validation_ctx);
+    ResolveSoftBodyBindings(
+      parsed.soft_bodies, requested_backend, validation_ctx);
+    ResolveJointBindings(parsed.joints, requested_backend, validation_ctx);
+    ResolveVehicleBindings(parsed.vehicles, parsed.vehicle_wheels,
+      requested_backend, validation_ctx);
     ValidateNodeBindings(
       parsed.aggregates, "aggregates",
       [](const auto& record) { return record.node_index; }, validation_ctx);
     if (session.HasErrors()) {
       return false;
     }
-    return EmitBackendCookedBindingResources(parsed, session, request);
+    return EmitBackendCookedBindingResources(parsed, session, request,
+      target_context->cooked_root, request.loose_cooked_layout);
   }
 
   auto BuildPhysicsSidecarTables(const PhysicsSidecarDocument& parsed)

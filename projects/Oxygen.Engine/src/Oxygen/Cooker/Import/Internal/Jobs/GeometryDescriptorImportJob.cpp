@@ -518,6 +518,10 @@ namespace {
     if (generator == "Sphere") {
       ok = write_u32("latitude_segments", params, 16U)
         && write_u32("longitude_segments", params, 32U);
+    } else if (generator == "SubdividedCube") {
+      ok = write_u32("segments", params, 6U);
+    } else if (generator == "IcoSphere" || generator == "GeodesicSphere") {
+      ok = write_u32("subdivision_level", params, 2U);
     } else if (generator == "Plane") {
       ok = write_u32("x_segments", params, 1U)
         && write_u32("z_segments", params, 1U)

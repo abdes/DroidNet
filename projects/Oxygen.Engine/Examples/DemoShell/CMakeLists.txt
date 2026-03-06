@@ -169,8 +169,10 @@ target_sources(
     ${OXYGEN_DEMOSHELL_HEADERS}
   PUBLIC
     FILE_SET HEADERS
-    BASE_DIRS ${OXYGEN_EXAMPLES_SOURCE_DIR}
-    FILES ${OXYGEN_DEMOSHELL_HEADERS}
+      BASE_DIRS
+        ${OXYGEN_EXAMPLES_SOURCE_DIR}
+      FILES
+        ${OXYGEN_DEMOSHELL_HEADERS}
 )
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})
@@ -214,6 +216,10 @@ target_link_libraries(
     fmt::fmt-header-only
     nlohmann_json::nlohmann_json
 )
+
+if(OXYGEN_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Test")
+  add_subdirectory("Test")
+endif()
 
 # ------------------------------------------------------------------------------
 # Deployment instructions

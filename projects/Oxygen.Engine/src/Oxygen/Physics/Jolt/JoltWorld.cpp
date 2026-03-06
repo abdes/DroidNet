@@ -26,6 +26,8 @@
 #include <Jolt/Physics/Collision/ContactListener.h>
 #include <Jolt/Physics/EPhysicsUpdateError.h>
 #include <Jolt/Physics/PhysicsSystem.h>
+#include <Jolt/Physics/SoftBody/SoftBodyContactListener.h>
+#include <Jolt/Physics/SoftBody/SoftBodyManifold.h>
 #include <Jolt/Physics/Vehicle/VehicleConstraint.h>
 #include <Jolt/RegisterTypes.h>
 
@@ -125,10 +127,12 @@ struct ObjectLayerMetadata final {
     kMovingBroadPhaseLayer,
   };
   bool is_non_moving { false };
+  bool is_sensor { false };
 };
 
 struct ObjectLayerKey final {
   bool is_non_moving { false };
+  bool is_sensor { false };
   uint32_t collision_layer { 0U };
   uint32_t collision_mask { 0U };
 
@@ -143,6 +147,31 @@ struct ObjectLayerKeyHash final {
     seed ^= std::hash<uint32_t> {}(key.collision_mask) + 0x9e3779b9U
       + (seed << 6U) + (seed >> 2U);
     seed ^= std::hash<bool> {}(key.is_non_moving) + 0x9e3779b9U + (seed << 6U)
+      + (seed >> 2U);
+    seed ^= std::hash<bool> {}(key.is_sensor) + 0x9e3779b9U + (seed << 6U)
+      + (seed >> 2U);
+    return seed;
+  }
+};
+
+struct SoftBodyContactKey final {
+  oxygen::physics::BodyId soft_body_id { oxygen::physics::kInvalidBodyId };
+  oxygen::physics::BodyId other_body_id { oxygen::physics::kInvalidBodyId };
+  bool is_sensor { false };
+
+  [[nodiscard]] auto operator==(const SoftBodyContactKey&) const noexcept
+    -> bool
+    = default;
+};
+
+struct SoftBodyContactKeyHash final {
+  [[nodiscard]] auto operator()(const SoftBodyContactKey& key) const noexcept
+    -> size_t
+  {
+    size_t seed = std::hash<uint32_t> {}(key.soft_body_id.get());
+    seed ^= std::hash<uint32_t> {}(key.other_body_id.get()) + 0x9e3779b9U
+      + (seed << 6U) + (seed >> 2U);
+    seed ^= std::hash<bool> {}(key.is_sensor) + 0x9e3779b9U + (seed << 6U)
       + (seed >> 2U);
     return seed;
   }
@@ -352,6 +381,151 @@ struct oxygen::physics::jolt::JoltWorld::WorldState final {
     WorldState& world_state_;
   };
 
+  class SoftBodyContactListenerImpl final
+    : public JPH::SoftBodyContactListener {
+  public:
+    explicit SoftBodyContactListenerImpl(WorldState& world_state)
+      : world_state_(world_state)
+    {
+    }
+
+    auto OnSoftBodyContactValidate(const JPH::Body& /*inSoftBody*/,
+      const JPH::Body& inOtherBody, JPH::SoftBodyContactSettings& ioSettings)
+      -> JPH::SoftBodyValidateResult override
+    {
+      const auto metadata
+        = world_state_.GetObjectLayerMetadata(inOtherBody.GetObjectLayer());
+      // Jolt may reuse ioSettings across contact pairs in a step. Always write
+      // every field so previous-pair state cannot leak into this pair.
+      ioSettings.mInvMassScale1 = 1.0F;
+      ioSettings.mInvMassScale2 = 1.0F;
+      ioSettings.mInvInertiaScale2 = 1.0F;
+      ioSettings.mIsSensor = metadata.is_sensor;
+      return JPH::SoftBodyValidateResult::AcceptContact;
+    }
+
+    auto OnSoftBodyContactAdded(const JPH::Body& inSoftBody,
+      const JPH::SoftBodyManifold& inManifold) -> void override
+    {
+      const auto soft_body_id
+        = BodyId { inSoftBody.GetID().GetIndexAndSequenceNumber() };
+      const auto soft_body_user_data = inSoftBody.GetUserData();
+
+      auto rigid_contacts = std::unordered_set<BodyId> {};
+      for (const auto& vertex : inManifold.GetVertices()) {
+        if (!inManifold.HasContact(vertex)) {
+          continue;
+        }
+        const auto other_jolt_body_id = inManifold.GetContactBodyID(vertex);
+        if (other_jolt_body_id.IsInvalid()) {
+          continue;
+        }
+        const auto other_body_id
+          = BodyId { other_jolt_body_id.GetIndexAndSequenceNumber() };
+        if (!rigid_contacts.insert(other_body_id).second) {
+          continue;
+        }
+
+        auto event = events::PhysicsEvent {};
+        event.type = events::PhysicsEventType::kContactBegin;
+        event.body_a = soft_body_id;
+        event.body_b = other_body_id;
+        event.user_data_a = soft_body_user_data;
+        event.user_data_b = static_cast<uint64_t>(other_body_id.get());
+        event.contact_normal
+          = ToOxygenVec3(inManifold.GetContactNormal(vertex));
+        event.contact_position = Vec3 { 0.0F, 0.0F, 0.0F };
+        event.penetration_depth = 0.0F;
+        event.applied_impulse = Vec3 { 0.0F, 0.0F, 0.0F };
+
+        world_state_.RecordSoftBodyContact(
+          SoftBodyContactKey {
+            .soft_body_id = soft_body_id,
+            .other_body_id = other_body_id,
+            .is_sensor = false,
+          },
+          event);
+      }
+
+      auto sensor_contacts = std::unordered_set<BodyId> {};
+      for (JPH::uint i = 0; i < inManifold.GetNumSensorContacts(); ++i) {
+        const auto sensor_jolt_body_id = inManifold.GetSensorContactBodyID(i);
+        if (sensor_jolt_body_id.IsInvalid()) {
+          continue;
+        }
+        const auto sensor_body_id
+          = BodyId { sensor_jolt_body_id.GetIndexAndSequenceNumber() };
+        if (!sensor_contacts.insert(sensor_body_id).second) {
+          continue;
+        }
+
+        auto event = events::PhysicsEvent {};
+        event.type = events::PhysicsEventType::kTriggerBegin;
+        event.body_a = soft_body_id;
+        event.body_b = sensor_body_id;
+        event.user_data_a = soft_body_user_data;
+        event.user_data_b = static_cast<uint64_t>(sensor_body_id.get());
+        event.contact_normal = Vec3 { 0.0F, 0.0F, 0.0F };
+        event.contact_position = Vec3 { 0.0F, 0.0F, 0.0F };
+        event.penetration_depth = 0.0F;
+        event.applied_impulse = Vec3 { 0.0F, 0.0F, 0.0F };
+
+        world_state_.RecordSoftBodyContact(
+          SoftBodyContactKey {
+            .soft_body_id = soft_body_id,
+            .other_body_id = sensor_body_id,
+            .is_sensor = true,
+          },
+          event);
+      }
+    }
+
+  private:
+    WorldState& world_state_;
+  };
+
+  auto BeginSoftBodyContactStep() -> void
+  {
+    std::scoped_lock lock(event_mutex);
+    soft_body_contacts_seen_this_step.clear();
+  }
+
+  auto RecordSoftBodyContact(
+    const SoftBodyContactKey& key, const events::PhysicsEvent& event) -> void
+  {
+    std::scoped_lock lock(event_mutex);
+    soft_body_contacts_seen_this_step.insert(key);
+    if (active_soft_body_contact_events.contains(key)) {
+      return;
+    }
+    pending_events.push_back(event);
+    active_soft_body_contact_events.insert_or_assign(key, event);
+  }
+
+  auto FinalizeSoftBodyContactStep() -> void
+  {
+    std::scoped_lock lock(event_mutex);
+    for (auto it = active_soft_body_contact_events.begin();
+      it != active_soft_body_contact_events.end();) {
+      if (soft_body_contacts_seen_this_step.contains(it->first)) {
+        ++it;
+        continue;
+      }
+
+      auto removed = it->second;
+      removed.type = it->first.is_sensor
+        ? events::PhysicsEventType::kTriggerEnd
+        : events::PhysicsEventType::kContactEnd;
+      removed.contact_normal = Vec3 { 0.0F, 0.0F, 0.0F };
+      removed.contact_position = Vec3 { 0.0F, 0.0F, 0.0F };
+      removed.penetration_depth = 0.0F;
+      removed.applied_impulse = Vec3 { 0.0F, 0.0F, 0.0F };
+      pending_events.push_back(removed);
+      it = active_soft_body_contact_events.erase(it);
+    }
+    soft_body_contacts_seen_this_step.clear();
+  }
+
   WorldState(const world::WorldDesc& desc)
     : temp_allocator(kTempAllocatorBytes)
     , job_system(kMaxPhysicsJobs, kMaxPhysicsBarriers)
@@ -360,6 +534,7 @@ struct oxygen::physics::jolt::JoltWorld::WorldState final {
     , object_layer_pair_filter(*this)
     , object_vs_broad_phase_layer_filter(*this)
     , contact_listener(*this)
+    , soft_body_contact_listener(*this)
   {
     InitializeDefaultObjectLayers();
     physics_system.Init(kMaxBodies, 0U, kMaxBodyPairs, kMaxContactConstraints,
@@ -367,11 +542,12 @@ struct oxygen::physics::jolt::JoltWorld::WorldState final {
       object_layer_pair_filter);
     physics_system.SetGravity(ToJoltVec3(desc.gravity));
     physics_system.SetContactListener(&contact_listener);
+    physics_system.SetSoftBodyContactListener(&soft_body_contact_listener);
   }
 
   [[nodiscard]] auto ResolveObjectLayer(const body::BodyType body_type,
-    const CollisionLayer collision_layer, const CollisionMask collision_mask)
-    -> PhysicsResult<JPH::ObjectLayer>
+    const CollisionLayer collision_layer, const CollisionMask collision_mask,
+    const bool is_sensor) -> PhysicsResult<JPH::ObjectLayer>
   {
     if (!IsCollisionLayerBitAddressable(collision_layer)) {
       return Err(PhysicsError::kInvalidCollisionMask);
@@ -380,6 +556,7 @@ struct oxygen::physics::jolt::JoltWorld::WorldState final {
     const auto is_non_moving = IsNonMovingBodyType(body_type);
     const auto key = ObjectLayerKey {
       .is_non_moving = is_non_moving,
+      .is_sensor = is_sensor,
       .collision_layer = collision_layer.get(),
       .collision_mask = collision_mask.get(),
     };
@@ -405,6 +582,7 @@ struct oxygen::physics::jolt::JoltWorld::WorldState final {
       .broad_phase_layer
       = ResolveBroadPhaseLayer(collision_layer, is_non_moving),
       .is_non_moving = is_non_moving,
+      .is_sensor = is_sensor,
     });
     object_layers.insert_or_assign(key, object_layer);
     return Ok(object_layer);
@@ -435,7 +613,13 @@ struct oxygen::physics::jolt::JoltWorld::WorldState final {
   mutable JPH::BodyIDVector temp_active_body_ids {};
   std::unordered_map<JPH::SubShapeIDPair, events::PhysicsEvent>
     active_contact_events {};
+  std::unordered_map<SoftBodyContactKey, events::PhysicsEvent,
+    SoftBodyContactKeyHash>
+    active_soft_body_contact_events {};
+  std::unordered_set<SoftBodyContactKey, SoftBodyContactKeyHash>
+    soft_body_contacts_seen_this_step {};
   ContactListenerImpl contact_listener;
+  SoftBodyContactListenerImpl soft_body_contact_listener;
 
 private:
   auto InitializeDefaultObjectLayers() -> void
@@ -453,6 +637,7 @@ private:
       .broad_phase_layer
       = ResolveBroadPhaseLayer(default_collision_layer, true),
       .is_non_moving = true,
+      .is_sensor = false,
     });
     object_layer_metadata.push_back(ObjectLayerMetadata {
       .collision_layer = default_collision_layer,
@@ -460,11 +645,13 @@ private:
       .broad_phase_layer
       = ResolveBroadPhaseLayer(default_collision_layer, false),
       .is_non_moving = false,
+      .is_sensor = false,
     });
 
     object_layers.insert_or_assign(
       ObjectLayerKey {
         .is_non_moving = true,
+        .is_sensor = false,
         .collision_layer = default_collision_layer.get(),
         .collision_mask = default_collision_mask.get(),
       },
@@ -472,6 +659,7 @@ private:
     object_layers.insert_or_assign(
       ObjectLayerKey {
         .is_non_moving = false,
+        .is_sensor = false,
         .collision_layer = default_collision_layer.get(),
         .collision_mask = default_collision_mask.get(),
       },
@@ -507,12 +695,14 @@ private:
           .collision_mask = kCollisionMaskAll,
           .broad_phase_layer = kNonMovingBroadPhaseLayer,
           .is_non_moving = true,
+          .is_sensor = false,
         }
       : ObjectLayerMetadata {
           .collision_layer = kCollisionLayerDefault,
           .collision_mask = kCollisionMaskAll,
           .broad_phase_layer = kMovingBroadPhaseLayer,
           .is_non_moving = false,
+          .is_sensor = false,
         };
   }
 
@@ -627,6 +817,7 @@ auto oxygen::physics::jolt::JoltWorld::Step(const WorldId world_id,
   const auto required_sub_steps = static_cast<int>(std::ceil(delta_time
     / std::max(fixed_dt_seconds, std::numeric_limits<float>::epsilon())));
   const auto collision_steps = std::clamp(required_sub_steps, 1, max_sub_steps);
+  world->BeginSoftBodyContactStep();
   simulation_step_in_progress_.store(true, std::memory_order_release);
   const auto update_error = world->physics_system.Update(
     delta_time, collision_steps, &world->temp_allocator, &world->job_system);
@@ -634,6 +825,7 @@ auto oxygen::physics::jolt::JoltWorld::Step(const WorldId world_id,
   if (update_error != JPH::EPhysicsUpdateError::None) {
     return Err(PhysicsError::kBackendInitFailed);
   }
+  world->FinalizeSoftBodyContactStep();
   return PhysicsResult<void>::Ok();
 }
 
@@ -798,16 +990,16 @@ auto oxygen::physics::jolt::JoltWorld::TryGetPhysicsSystem(
 
 auto oxygen::physics::jolt::JoltWorld::ResolveBodyObjectLayer(
   const WorldId world_id, const body::BodyType body_type,
-  const CollisionLayer collision_layer, const CollisionMask collision_mask)
-  -> PhysicsResult<uint16_t>
+  const CollisionLayer collision_layer, const CollisionMask collision_mask,
+  const bool is_sensor) -> PhysicsResult<uint16_t>
 {
   auto world = TryGetWorld(world_id);
   if (world == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
   }
 
-  const auto object_layer_result
-    = world->ResolveObjectLayer(body_type, collision_layer, collision_mask);
+  const auto object_layer_result = world->ResolveObjectLayer(
+    body_type, collision_layer, collision_mask, is_sensor);
   if (object_layer_result.has_error()) {
     return Err(object_layer_result.error());
   }

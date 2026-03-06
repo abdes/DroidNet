@@ -24,7 +24,9 @@
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Body/BodyLock.h>
 #include <Jolt/Physics/Collision/ObjectLayer.h>
+#include <Jolt/Physics/Constraints/Constraint.h>
 #include <Jolt/Physics/PhysicsSystem.h>
+#include <Jolt/Physics/Vehicle/TrackedVehicleController.h>
 #include <Jolt/Physics/Vehicle/VehicleCollisionTester.h>
 #include <Jolt/Physics/Vehicle/VehicleConstraint.h>
 #include <Jolt/Physics/Vehicle/WheeledVehicleController.h>
@@ -44,10 +46,27 @@ auto VehicleUnknown() -> oxygen::ErrValue<oxygen::physics::PhysicsError>
   return oxygen::Err(oxygen::physics::PhysicsError::kInvalidArgument);
 }
 
-auto RestoreVehicleConstraintSettings(std::span<const uint8_t> blob)
+[[nodiscard]] auto HasLegacyBlobMagic(const std::span<const uint8_t> blob)
+  -> bool
+{
+  return blob.size() >= 4U && blob[0] == 'O' && blob[1] == 'P' && blob[2] == 'H'
+    && blob[3] == 'B';
+}
+
+auto RestoreVehicleConstraintSettings(std::span<const uint8_t> blob,
+  const oxygen::physics::vehicle::VehicleControllerType controller_type)
   -> JPH::Ref<JPH::VehicleConstraintSettings>
 {
   if (blob.empty()) {
+    return nullptr;
+  }
+  if (controller_type
+      != oxygen::physics::vehicle::VehicleControllerType::kWheeled
+    && controller_type
+      != oxygen::physics::vehicle::VehicleControllerType::kTracked) {
+    return nullptr;
+  }
+  if (HasLegacyBlobMagic(blob)) {
     return nullptr;
   }
 
@@ -55,12 +74,13 @@ auto RestoreVehicleConstraintSettings(std::span<const uint8_t> blob)
     reinterpret_cast<const char*>(blob.data()), blob.size());
   std::istringstream stream(serialized, std::ios::in | std::ios::binary);
   JPH::StreamInWrapper wrapped(stream);
-
   auto settings = JPH::Ref<JPH::VehicleConstraintSettings> {
     new JPH::VehicleConstraintSettings()
   };
+  if (settings == nullptr) {
+    return nullptr;
+  }
 
-  // ConstraintSettings base payload.
   uint32_t settings_hash = 0U;
   wrapped.Read(settings_hash);
   if (wrapped.IsEOF() || wrapped.IsFailed()
@@ -76,7 +96,6 @@ auto RestoreVehicleConstraintSettings(std::span<const uint8_t> blob)
     return nullptr;
   }
 
-  // VehicleConstraintSettings payload.
   wrapped.Read(settings->mUp);
   wrapped.Read(settings->mForward);
   wrapped.Read(settings->mMaxPitchRollAngle);
@@ -84,40 +103,51 @@ auto RestoreVehicleConstraintSettings(std::span<const uint8_t> blob)
     return nullptr;
   }
 
-  uint32_t num_anti_rollbars = 0U;
-  wrapped.Read(num_anti_rollbars);
-  if (wrapped.IsEOF() || wrapped.IsFailed()) {
+  uint32_t anti_roll_count = 0U;
+  wrapped.Read(anti_roll_count);
+  if (wrapped.IsEOF() || wrapped.IsFailed() || anti_roll_count > 64U) {
     return nullptr;
   }
-  settings->mAntiRollBars.resize(num_anti_rollbars);
-  for (auto& anti_roll_bar : settings->mAntiRollBars) {
-    anti_roll_bar.RestoreBinaryState(wrapped);
+  settings->mAntiRollBars.resize(anti_roll_count);
+  for (auto& anti_roll : settings->mAntiRollBars) {
+    anti_roll.RestoreBinaryState(wrapped);
     if (wrapped.IsEOF() || wrapped.IsFailed()) {
       return nullptr;
     }
   }
 
-  uint32_t num_wheels = 0U;
-  wrapped.Read(num_wheels);
-  if (wrapped.IsEOF() || wrapped.IsFailed()) {
+  uint32_t wheel_count = 0U;
+  wrapped.Read(wheel_count);
+  if (wrapped.IsEOF() || wrapped.IsFailed() || wheel_count == 0U
+    || wheel_count > 64U) {
     return nullptr;
   }
-  settings->mWheels.resize(num_wheels);
-
-  for (uint32_t i = 0U; i < num_wheels; ++i) {
-    auto wheel_settings
-      = JPH::Ref<JPH::WheelSettingsWV> { new JPH::WheelSettingsWV() };
-    auto* const wheel_ptr = wheel_settings.GetPtr();
-    if (wheel_ptr == nullptr) {
-      return nullptr;
+  settings->mWheels.resize(wheel_count);
+  for (uint32_t i = 0U; i < wheel_count; ++i) {
+    if (controller_type
+      == oxygen::physics::vehicle::VehicleControllerType::kTracked) {
+      auto wheel
+        = JPH::Ref<JPH::WheelSettingsTV> { new JPH::WheelSettingsTV() };
+      if (wheel == nullptr) {
+        return nullptr;
+      }
+      wheel->RestoreBinaryState(wrapped);
+      if (wrapped.IsEOF() || wrapped.IsFailed()) {
+        return nullptr;
+      }
+      settings->mWheels[i] = JPH::Ref<JPH::WheelSettings> { wheel.GetPtr() };
+    } else {
+      auto wheel
+        = JPH::Ref<JPH::WheelSettingsWV> { new JPH::WheelSettingsWV() };
+      if (wheel == nullptr) {
+        return nullptr;
+      }
+      wheel->RestoreBinaryState(wrapped);
+      if (wrapped.IsEOF() || wrapped.IsFailed()) {
+        return nullptr;
+      }
+      settings->mWheels[i] = JPH::Ref<JPH::WheelSettings> { wheel.GetPtr() };
     }
-
-    auto* const wheel_base = static_cast<JPH::WheelSettings*>(wheel_ptr);
-    wheel_base->RestoreBinaryState(wrapped);
-    if (wrapped.IsEOF() || wrapped.IsFailed()) {
-      return nullptr;
-    }
-    settings->mWheels[i] = wheel_ptr;
   }
 
   uint32_t controller_hash = 0U;
@@ -126,18 +156,40 @@ auto RestoreVehicleConstraintSettings(std::span<const uint8_t> blob)
     return nullptr;
   }
 
-  auto wheeled_controller = JPH::Ref<JPH::WheeledVehicleControllerSettings> {
-    new JPH::WheeledVehicleControllerSettings()
-  };
-  if (wheeled_controller == nullptr
-    || controller_hash != wheeled_controller->GetRTTI()->GetHash()) {
+  if (controller_type
+    == oxygen::physics::vehicle::VehicleControllerType::kTracked) {
+    auto controller = JPH::Ref<JPH::TrackedVehicleControllerSettings> {
+      new JPH::TrackedVehicleControllerSettings()
+    };
+    if (controller == nullptr
+      || controller_hash != controller->GetRTTI()->GetHash()) {
+      return nullptr;
+    }
+    controller->RestoreBinaryState(wrapped);
+    if (wrapped.IsEOF() || wrapped.IsFailed()) {
+      return nullptr;
+    }
+    settings->mController = controller;
+  } else {
+    auto controller = JPH::Ref<JPH::WheeledVehicleControllerSettings> {
+      new JPH::WheeledVehicleControllerSettings()
+    };
+    if (controller == nullptr
+      || controller_hash != controller->GetRTTI()->GetHash()) {
+      return nullptr;
+    }
+    controller->RestoreBinaryState(wrapped);
+    if (wrapped.IsEOF() || wrapped.IsFailed()) {
+      return nullptr;
+    }
+    settings->mController = controller;
+  }
+
+  char trailing = 0;
+  stream.read(&trailing, 1);
+  if (stream.gcount() != 0) {
     return nullptr;
   }
-  wheeled_controller->RestoreBinaryState(wrapped);
-  if (wrapped.IsEOF() || wrapped.IsFailed()) {
-    return nullptr;
-  }
-  settings->mController = wheeled_controller;
 
   return settings;
 }
@@ -249,7 +301,15 @@ auto oxygen::physics::jolt::JoltVehicles::CreateVehicle(const WorldId world_id,
   if (desc.wheels.size() < 2U) {
     return Err(PhysicsError::kInvalidArgument);
   }
+  if (desc.controller_type == vehicle::VehicleControllerType::kTracked
+    && desc.wheels.size() < 4U) {
+    return Err(PhysicsError::kInvalidArgument);
+  }
   if (desc.constraint_settings_blob.empty()) {
+    return Err(PhysicsError::kInvalidArgument);
+  }
+  if (desc.controller_type != vehicle::VehicleControllerType::kWheeled
+    && desc.controller_type != vehicle::VehicleControllerType::kTracked) {
     return Err(PhysicsError::kInvalidArgument);
   }
 
@@ -305,22 +365,41 @@ auto oxygen::physics::jolt::JoltVehicles::CreateVehicle(const WorldId world_id,
   const auto chassis_rotation
     = ToOxygenQuat(body_interface->GetRotation(chassis_jolt_id));
   const auto inv_chassis_rotation = glm::inverse(chassis_rotation);
-
-  auto settings
-    = RestoreVehicleConstraintSettings(desc.constraint_settings_blob);
+  auto settings = RestoreVehicleConstraintSettings(
+    desc.constraint_settings_blob, desc.controller_type);
   if (settings == nullptr) {
+    LOG_F(ERROR,
+      "JoltVehicles: failed to materialize vehicle constraint settings "
+      "(controller_type={} blob_size={} wheels={}).",
+      static_cast<uint32_t>(desc.controller_type),
+      desc.constraint_settings_blob.size(), wheels.size());
     return Err(PhysicsError::kInvalidArgument);
   }
   if (settings->mWheels.size() != wheels.size()) {
+    LOG_F(ERROR,
+      "JoltVehicles: wheel count mismatch between settings ({}) and "
+      "attachments ({}) while creating vehicle.",
+      settings->mWheels.size(), wheels.size());
     return Err(PhysicsError::kInvalidArgument);
   }
-  if (settings->mController == nullptr
-    || JPH::DynamicCast<JPH::WheeledVehicleControllerSettings>(
-         settings->mController.GetPtr())
+  if (settings->mController == nullptr) {
+    LOG_F(ERROR,
+      "JoltVehicles: vehicle controller settings are missing for "
+      "controller_type={}.",
+      static_cast<uint32_t>(desc.controller_type));
+    return Err(PhysicsError::kInvalidArgument);
+  }
+  if (desc.controller_type == vehicle::VehicleControllerType::kWheeled) {
+    if (JPH::DynamicCast<JPH::WheeledVehicleControllerSettings>(
+          settings->mController.GetPtr())
       == nullptr) {
+      return Err(PhysicsError::kInvalidArgument);
+    }
+  } else if (JPH::DynamicCast<JPH::TrackedVehicleControllerSettings>(
+               settings->mController.GetPtr())
+    == nullptr) {
     return Err(PhysicsError::kInvalidArgument);
   }
-
   settings->mUp = ToJoltVec3(oxygen::space::move::Up);
   settings->mForward = ToJoltVec3(oxygen::space::move::Forward);
 
@@ -348,25 +427,35 @@ auto oxygen::physics::jolt::JoltVehicles::CreateVehicle(const WorldId world_id,
     wheel_settings->mWheelUp = ToJoltVec3(engine_up);
     wheel_settings->mWheelForward = ToJoltVec3(engine_forward);
 
-    auto* const wheel_wv
-      = JPH::DynamicCast<JPH::WheelSettingsWV>(wheel_settings);
-    if (wheel_wv == nullptr) {
-      return Err(PhysicsError::kInvalidArgument);
+    auto steer_enabled = false;
+    if (desc.controller_type == vehicle::VehicleControllerType::kWheeled) {
+      auto* const wheel_wv
+        = JPH::DynamicCast<JPH::WheelSettingsWV>(wheel_settings);
+      if (wheel_wv == nullptr) {
+        return Err(PhysicsError::kInvalidArgument);
+      }
+
+      // Steering contract: only the leading axle (lowest axle_index) steers.
+      // Other axles are constrained to zero steering angle.
+      if (wheels[i].axle_index != steering_axle_index) {
+        wheel_wv->mMaxSteerAngle = 0.0F;
+      }
+      steer_enabled = wheel_wv->mMaxSteerAngle > 0.0F;
+    } else {
+      auto* const wheel_tv
+        = JPH::DynamicCast<JPH::WheelSettingsTV>(wheel_settings);
+      if (wheel_tv == nullptr) {
+        return Err(PhysicsError::kInvalidArgument);
+      }
     }
 
-    // Steering contract: only the leading axle (lowest axle_index) steers.
-    // Other axles are constrained to zero steering angle.
-    if (wheels[i].axle_index != steering_axle_index) {
-      wheel_wv->mMaxSteerAngle = 0.0F;
-    }
-
-    const auto steer_enabled = wheel_wv->mMaxSteerAngle > 0.0F;
     LOG_F(INFO,
       "JoltVehicles: canonicalized wheel axes to engine basis "
-      "(wheel_index={}, axle_index={}, steer_enabled={}, "
+      "(wheel_index={}, axle_index={}, steer_enabled={}, controller_type={}, "
       "up=[{:.3f},{:.3f},{:.3f}], "
       "forward=[{:.3f},{:.3f},{:.3f}])",
-      i, wheels[i].axle_index, steer_enabled, engine_up.x, engine_up.y,
+      i, wheels[i].axle_index, steer_enabled,
+      static_cast<uint32_t>(desc.controller_type), engine_up.x, engine_up.y,
       engine_up.z, engine_forward.x, engine_forward.y, engine_forward.z);
   }
 
@@ -423,6 +512,7 @@ auto oxygen::physics::jolt::JoltVehicles::CreateVehicle(const WorldId world_id,
     VehicleState {
       .world_id = world_id,
       .chassis_body_id = desc.chassis_body_id,
+      .controller_type = desc.controller_type,
       .authority = aggregate::AggregateAuthority::kCommand,
     });
   NoteStructuralChange(world_id);
@@ -499,6 +589,7 @@ auto oxygen::physics::jolt::JoltVehicles::SetControlInput(
   const auto simulation_lock = world->LockSimulationApi();
 
   BodyId chassis_body_id = kInvalidBodyId;
+  auto controller_type = vehicle::VehicleControllerType::kWheeled;
   JPH::Ref<JPH::VehicleConstraint> constraint {};
   {
     std::scoped_lock lock(mutex_);
@@ -517,6 +608,7 @@ auto oxygen::physics::jolt::JoltVehicles::SetControlInput(
     }
     it->second.control_input = input;
     chassis_body_id = it->second.chassis_body_id;
+    controller_type = it->second.controller_type;
     constraint = runtime_it->second.constraint;
   }
 
@@ -524,15 +616,41 @@ auto oxygen::physics::jolt::JoltVehicles::SetControlInput(
   // be called concurrently with PhysicsSystem::Update(). Callers must
   // ensure this method is invoked outside of the physics step window
   // (typically before Step() on the game thread).
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-  auto* controller
-    = static_cast<JPH::WheeledVehicleController*>(constraint->GetController());
-  JPH_ASSERT(controller != nullptr);
-  if (controller == nullptr) {
+  auto* const controller_base = constraint->GetController();
+  if (controller_base == nullptr) {
     return Err(PhysicsError::kBackendInitFailed);
   }
-  controller->SetDriverInput(
-    input.forward, input.steering, input.brake, input.hand_brake);
+  if (controller_type == vehicle::VehicleControllerType::kWheeled) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+    auto* const wheeled_controller
+      = static_cast<JPH::WheeledVehicleController*>(controller_base);
+    if (wheeled_controller == nullptr) {
+      return Err(PhysicsError::kBackendInitFailed);
+    }
+    wheeled_controller->SetDriverInput(
+      input.forward, input.steering, input.brake, input.hand_brake);
+  } else if (controller_type == vehicle::VehicleControllerType::kTracked) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+    auto* const tracked_controller
+      = static_cast<JPH::TrackedVehicleController*>(controller_base);
+    if (tracked_controller == nullptr) {
+      return Err(PhysicsError::kBackendInitFailed);
+    }
+    constexpr float kMinTrackRatio = 0.05F;
+    const auto steering = std::clamp(input.steering, -1.0F, 1.0F);
+    auto left_ratio = 1.0F;
+    auto right_ratio = 1.0F;
+    if (steering > 0.0F) {
+      left_ratio = std::max(kMinTrackRatio, 1.0F - steering);
+    } else if (steering < 0.0F) {
+      right_ratio = std::max(kMinTrackRatio, 1.0F + steering);
+    }
+    const auto brake = std::clamp(input.brake + input.hand_brake, 0.0F, 1.0F);
+    tracked_controller->SetDriverInput(
+      input.forward, left_ratio, right_ratio, brake);
+  } else {
+    return Err(PhysicsError::kBackendInitFailed);
+  }
 
   auto body_interface = world->TryGetBodyInterface(world_id);
   if (body_interface == nullptr) {

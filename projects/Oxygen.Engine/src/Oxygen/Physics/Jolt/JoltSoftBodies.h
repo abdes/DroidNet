@@ -53,9 +53,13 @@ private:
     softbody::SoftBodyMaterialParams material_params {};
     std::vector<uint8_t> settings_blob {};
     Vec3 settings_scale { 1.0F, 1.0F, 1.0F };
+    CollisionLayer collision_layer { kCollisionLayerDefault };
+    CollisionMask collision_mask { kCollisionMaskAll };
     float restitution { 0.0F };
     float friction { 0.2F };
     float vertex_radius { 0.0F };
+    uint32_t solver_iteration_count { 5U };
+    float gravity_factor { 1.0F };
     aggregate::AggregateAuthority authority {
       aggregate::AggregateAuthority::kSimulation,
     };

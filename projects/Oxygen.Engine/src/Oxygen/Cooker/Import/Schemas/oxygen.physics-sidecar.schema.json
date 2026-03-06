@@ -577,6 +577,8 @@
             "required": [
                 "node_index",
                 "source_mesh_ref",
+                "collision_layer",
+                "collision_mask",
                 "edge_compliance",
                 "shear_compliance",
                 "bend_compliance",
@@ -600,6 +602,12 @@
                 },
                 "source_mesh_ref": {
                     "$ref": "#/definitions/canonical_ogeo_path"
+                },
+                "collision_layer": {
+                    "$ref": "#/definitions/u16"
+                },
+                "collision_mask": {
+                    "$ref": "#/definitions/u32"
                 },
                 "collision_mesh_ref": {
                     "$ref": "#/definitions/canonical_ogeo_path"

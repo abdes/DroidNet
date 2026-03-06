@@ -112,9 +112,11 @@ set(
   "Procedural/Cone.cpp"
   "Procedural/Cube.cpp"
   "Procedural/Cylinder.cpp"
+  "Procedural/IcoSphere.cpp"
   "Procedural/Plane.cpp"
   "Procedural/Quad.cpp"
   "Procedural/Sphere.cpp"
+  "Procedural/SubdividedCube.cpp"
   "Procedural/Torus.cpp"
 )
 
@@ -125,8 +127,10 @@ target_sources(
     ${OXYGEN_DATA_HEADERS}
   PUBLIC
     FILE_SET HEADERS
-    BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES ${OXYGEN_DATA_HEADERS}
+      BASE_DIRS
+        "${OXYGEN_SOURCE_DIR}"
+      FILES
+        ${OXYGEN_DATA_HEADERS}
 )
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})

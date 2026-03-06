@@ -416,6 +416,27 @@
                     1.0
                 ]
             }
+        },
+        {
+            "name": "SoftBodyCube",
+            "parent": 0,
+            "flags": {
+                "visible": true,
+                "casts_shadows": true
+            },
+            "transform": {
+                "translation": [
+                    1.25,
+                    8.0,
+                    4.0
+                ],
+                "rotation": [
+                    0.2588,
+                    0.0,
+                    0.0,
+                    0.9659
+                ]
+            }
         }
     ],
     "renderables": [
@@ -482,6 +503,10 @@
         {
             "node": 19,
             "geometry_ref": "/.cooked/Geometry/softbody_sphere.ogeo"
+        },
+        {
+            "node": 22,
+            "geometry_ref": "/.cooked/Geometry/softbody_cube.ogeo"
         }
     ],
     "cameras": {

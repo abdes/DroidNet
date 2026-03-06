@@ -5,13 +5,19 @@
 //===----------------------------------------------------------------------===//
 
 #include <limits>
+#include <span>
+#include <sstream>
+#include <string>
 #include <unordered_set>
 
 #include <Jolt/Jolt.h> // Must always be first (keep separate)
 
 #include <array>
 
+#include <Jolt/Core/RTTI.h>
+#include <Jolt/Core/StreamWrapper.h>
 #include <Jolt/Physics/Body/BodyLockMulti.h>
+#include <Jolt/Physics/Constraints/Constraint.h>
 #include <Jolt/Physics/Constraints/DistanceConstraint.h>
 #include <Jolt/Physics/Constraints/FixedConstraint.h>
 #include <Jolt/Physics/Constraints/HingeConstraint.h>
@@ -93,6 +99,31 @@ auto MakeConstraint(const oxygen::physics::joint::JointDesc& desc,
   return {};
 }
 
+auto RestoreTwoBodyConstraintSettings(std::span<const uint8_t> blob)
+  -> JPH::Ref<JPH::TwoBodyConstraintSettings>
+{
+  if (blob.empty()) {
+    return nullptr;
+  }
+
+  const std::string serialized(
+    reinterpret_cast<const char*>(blob.data()), blob.size());
+  std::istringstream stream(serialized, std::ios::in | std::ios::binary);
+  JPH::StreamInWrapper wrapped(stream);
+  auto restored = JPH::ConstraintSettings::sRestoreFromBinaryState(wrapped);
+  if (wrapped.IsFailed() || !restored.IsValid()) {
+    return nullptr;
+  }
+
+  const auto& restored_settings = restored.Get();
+  auto* two_body_settings
+    = JPH::DynamicCast<JPH::TwoBodyConstraintSettings>(restored_settings);
+  if (two_body_settings == nullptr) {
+    return nullptr;
+  }
+  return JPH::Ref<JPH::TwoBodyConstraintSettings> { two_body_settings };
+}
+
 } // namespace
 
 oxygen::physics::jolt::JoltJoints::JoltJoints(JoltWorld& world)
@@ -164,7 +195,17 @@ auto oxygen::physics::jolt::JoltJoints::CreateJoint(const WorldId world_id,
     return Err(PhysicsError::kBodyNotFound);
   }
 
-  const auto constraint = MakeConstraint(desc, *body_a, *body_b);
+  auto constraint = JPH::Ref<JPH::TwoBodyConstraint> {};
+  if (!desc.constraint_settings_blob.empty()) {
+    auto settings
+      = RestoreTwoBodyConstraintSettings(desc.constraint_settings_blob);
+    if (settings == nullptr) {
+      return Err(PhysicsError::kInvalidArgument);
+    }
+    constraint = settings->Create(*body_a, *body_b);
+  } else {
+    constraint = MakeConstraint(desc, *body_a, *body_b);
+  }
   if (constraint == nullptr) {
     return Err(PhysicsError::kBackendInitFailed);
   }

@@ -138,6 +138,12 @@ public:
     return desc_.header;
   }
 
+  //! Returns the raw descriptor payload bytes for integrity checks.
+  [[nodiscard]] auto GetRawData() const noexcept -> std::span<const std::byte>
+  {
+    return data_;
+  }
+
   //=== Node Access ===-------------------------------------------------------//
 
   //! Returns a view of all nodes in the scene.

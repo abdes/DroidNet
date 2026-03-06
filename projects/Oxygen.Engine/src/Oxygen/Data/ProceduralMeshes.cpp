@@ -73,6 +73,70 @@ auto HandleSphereMesh(std::span<const std::byte> param_blob)
   return std::apply(oxygen::data::MakeSphereMeshAsset, defaults);
 }
 
+auto HandleIcoSphereMesh(std::span<const std::byte> param_blob)
+  -> std::optional<MeshDataPair>
+{
+  using oxygen::serio::MemoryStream;
+  using oxygen::serio::Reader;
+  auto defaults = std::make_tuple(2U);
+  if (!param_blob.empty()) {
+    MemoryStream stream(std::span<std::byte>(
+      const_cast<std::byte*>(param_blob.data()), param_blob.size()));
+    Reader<MemoryStream> reader(stream);
+    bool exhausted = false;
+    [&]<std::size_t... Is>(std::index_sequence<Is...>) {
+      (void(std::initializer_list<int> { (
+         [&] {
+           if (exhausted) {
+             return;
+           }
+           using T = std::tuple_element_t<Is, decltype(defaults)>;
+           auto val = reader.Read<T>();
+           if (val) {
+             std::get<Is>(defaults) = val.value();
+           } else {
+             exhausted = true;
+           }
+         }(),
+         0)... }),
+        0);
+    }(std::make_index_sequence<std::tuple_size_v<decltype(defaults)>> {});
+  }
+  return std::apply(oxygen::data::MakeIcoSphereMeshAsset, defaults);
+}
+
+auto HandleSubdividedCubeMesh(std::span<const std::byte> param_blob)
+  -> std::optional<MeshDataPair>
+{
+  using oxygen::serio::MemoryStream;
+  using oxygen::serio::Reader;
+  auto defaults = std::make_tuple(6U);
+  if (!param_blob.empty()) {
+    MemoryStream stream(std::span<std::byte>(
+      const_cast<std::byte*>(param_blob.data()), param_blob.size()));
+    Reader<MemoryStream> reader(stream);
+    bool exhausted = false;
+    [&]<std::size_t... Is>(std::index_sequence<Is...>) {
+      (void(std::initializer_list<int> { (
+         [&] {
+           if (exhausted) {
+             return;
+           }
+           using T = std::tuple_element_t<Is, decltype(defaults)>;
+           auto val = reader.Read<T>();
+           if (val) {
+             std::get<Is>(defaults) = val.value();
+           } else {
+             exhausted = true;
+           }
+         }(),
+         0)... }),
+        0);
+    }(std::make_index_sequence<std::tuple_size_v<decltype(defaults)>> {});
+  }
+  return std::apply(oxygen::data::MakeSubdividedCubeMeshAsset, defaults);
+}
+
 auto HandlePlaneMesh(std::span<const std::byte> param_blob)
   -> std::optional<MeshDataPair>
 {
@@ -243,10 +307,14 @@ auto InvokeGenerator(std::string_view generator_id,
 
   if (generator_id == "Cube") {
     mesh_data = oxygen::data::MakeCubeMeshAsset();
+  } else if (generator_id == "SubdividedCube") {
+    mesh_data = HandleSubdividedCubeMesh(param_blob);
   } else if (generator_id == "ArrowGizmo") {
     mesh_data = oxygen::data::MakeArrowGizmoMeshAsset();
   } else if (generator_id == "Sphere") {
     mesh_data = HandleSphereMesh(param_blob);
+  } else if (generator_id == "IcoSphere" || generator_id == "GeodesicSphere") {
+    mesh_data = HandleIcoSphereMesh(param_blob);
   } else if (generator_id == "Plane") {
     mesh_data = HandlePlaneMesh(param_blob);
   } else if (generator_id == "Cylinder") {
@@ -326,10 +394,14 @@ auto oxygen::data::GenerateMeshBuffers(std::string_view full_name,
 
   if (generator_id == "Cube") {
     mesh_data = MakeCubeMeshAsset();
+  } else if (generator_id == "SubdividedCube") {
+    mesh_data = HandleSubdividedCubeMesh(param_blob);
   } else if (generator_id == "ArrowGizmo") {
     mesh_data = MakeArrowGizmoMeshAsset();
   } else if (generator_id == "Sphere") {
     mesh_data = HandleSphereMesh(param_blob);
+  } else if (generator_id == "IcoSphere" || generator_id == "GeodesicSphere") {
+    mesh_data = HandleIcoSphereMesh(param_blob);
   } else if (generator_id == "Plane") {
     mesh_data = HandlePlaneMesh(param_blob);
   } else if (generator_id == "Cylinder") {

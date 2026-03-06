@@ -1,5 +1,5 @@
 {
-    "name": "softbody_sphere",
+    "name": "softbody_cube",
     "bounds": {
         "min": [
             -0.5,
@@ -14,7 +14,7 @@
     },
     "lods": [
         {
-            "name": "softbody_sphere_lod0",
+            "name": "softbody_cube_lod0",
             "mesh_type": "procedural",
             "bounds": {
                 "min": [
@@ -29,16 +29,16 @@
                 ]
             },
             "procedural": {
-                "generator": "GeodesicSphere",
-                "mesh_name": "SoftBodySphere",
+                "generator": "SubdividedCube",
+                "mesh_name": "SoftBodyCube",
                 "params": {
-                    "subdivision_level": 2
+                    "segments": 8
                 }
             },
             "submeshes": [
                 {
-                    "name": "softbody_surface",
-                    "material_ref": "/.cooked/Materials/softbody_pink.omat",
+                    "name": "softbody_cube_surface",
+                    "material_ref": "/.cooked/Materials/softbody_jelly.omat",
                     "views": [
                         {
                             "view_ref": "__all__"

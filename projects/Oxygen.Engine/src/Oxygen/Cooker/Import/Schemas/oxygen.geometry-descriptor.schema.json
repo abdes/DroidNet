@@ -393,6 +393,28 @@
                 }
             }
         },
+        "geodesic_sphere_params": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "subdivision_level": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 8
+                }
+            }
+        },
+        "subdivided_cube_params": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "segments": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 64
+                }
+            }
+        },
         "plane_params": {
             "type": "object",
             "additionalProperties": false,
@@ -491,8 +513,11 @@
                     "type": "string",
                     "enum": [
                         "Cube",
+                        "SubdividedCube",
                         "ArrowGizmo",
                         "Sphere",
+                        "IcoSphere",
+                        "GeodesicSphere",
                         "Plane",
                         "Cylinder",
                         "Cone",
@@ -569,6 +594,63 @@
                         "properties": {
                             "params": {
                                 "$ref": "#/definitions/plane_params"
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "generator": {
+                                "const": "SubdividedCube"
+                            }
+                        },
+                        "required": [
+                            "generator"
+                        ]
+                    },
+                    "then": {
+                        "properties": {
+                            "params": {
+                                "$ref": "#/definitions/subdivided_cube_params"
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "generator": {
+                                "const": "IcoSphere"
+                            }
+                        },
+                        "required": [
+                            "generator"
+                        ]
+                    },
+                    "then": {
+                        "properties": {
+                            "params": {
+                                "$ref": "#/definitions/geodesic_sphere_params"
+                            }
+                        }
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "generator": {
+                                "const": "GeodesicSphere"
+                            }
+                        },
+                        "required": [
+                            "generator"
+                        ]
+                    },
+                    "then": {
+                        "properties": {
+                            "params": {
+                                "$ref": "#/definitions/geodesic_sphere_params"
                             }
                         }
                     }
