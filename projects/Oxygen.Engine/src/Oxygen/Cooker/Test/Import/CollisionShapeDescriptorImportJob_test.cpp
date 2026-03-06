@@ -132,6 +132,17 @@ namespace {
     return descriptor.value();
   }
 
+  auto ReadCompoundChildDesc(const std::vector<std::byte>& bytes,
+    const size_t offset) -> std::optional<phys::CompoundShapeChildDesc>
+  {
+    if (offset + sizeof(phys::CompoundShapeChildDesc) > bytes.size()) {
+      return std::nullopt;
+    }
+    auto child = phys::CompoundShapeChildDesc {};
+    std::memcpy(&child, bytes.data() + offset, sizeof(child));
+    return child;
+  }
+
   auto ReadPhysicsResourceSidecar(const std::vector<std::byte>& bytes)
     -> std::optional<PhysicsResourceSidecarFile>
   {
@@ -382,6 +393,165 @@ namespace {
       phys::ShapePayloadType::kConvex);
     EXPECT_EQ(descriptor->cooked_shape_ref.resource_index,
       parsed_sidecar->resource_index);
+  }
+
+  NOLINT_TEST(CollisionShapeDescriptorImportJobTest,
+    PayloadBackedShapeWithoutPayloadRefEmitsInlineCookedPayload)
+  {
+    const auto cooked_root
+      = MakeTempCookedRoot("payload_shape_without_payload_ref");
+    const auto source_root = cooked_root.parent_path() / "source_data";
+
+    auto service = AsyncImportService(AsyncImportService::Config {
+      .thread_pool_size = 2U,
+    });
+    [[maybe_unused]] auto stop_service
+      = oxygen::Finally([&service]() { service.Stop(); });
+
+    const auto material_report
+      = SubmitAndWait(service, MakeMaterialRequest(source_root, cooked_root));
+    ASSERT_TRUE(material_report.success);
+
+    const auto shape_descriptor = json {
+      { "name", "convex_hull_inline_payload" },
+      { "shape_type", "convex_hull" },
+      { "material_ref", "/.cooked/Physics/Materials/ground.opmat" },
+      { "virtual_path", "/.cooked/Physics/Shapes/hull_inline.ocshape" },
+    };
+
+    const auto report = SubmitAndWait(service,
+      MakeCollisionShapeRequest(source_root, cooked_root, shape_descriptor));
+    EXPECT_TRUE(report.success);
+
+    constexpr auto kShapeRelPath
+      = std::string_view { "Physics/Shapes/hull_inline.ocshape" };
+    const auto shape_path
+      = cooked_root / std::filesystem::path { kShapeRelPath };
+    ASSERT_TRUE(std::filesystem::exists(shape_path));
+    const auto bytes = ReadBinaryFile(shape_path);
+    const auto descriptor = ReadCollisionShapeAssetDesc(bytes);
+    ASSERT_TRUE(descriptor.has_value());
+    EXPECT_EQ(descriptor->shape_type, phys::ShapeType::kConvexHull);
+    EXPECT_EQ(descriptor->cooked_shape_ref.payload_type,
+      phys::ShapePayloadType::kConvex);
+    EXPECT_NE(descriptor->cooked_shape_ref.resource_index,
+      data::pak::core::kNoResourceIndex);
+    EXPECT_TRUE(std::filesystem::exists(
+      cooked_root / std::filesystem::path("Physics/Resources/physics.table")));
+    EXPECT_TRUE(std::filesystem::exists(
+      cooked_root / std::filesystem::path("Physics/Resources/physics.data")));
+  }
+
+  NOLINT_TEST(CollisionShapeDescriptorImportJobTest,
+    CompoundShapeSerializesTrailingChildDescriptors)
+  {
+    const auto cooked_root = MakeTempCookedRoot("compound_children");
+    const auto source_root = cooked_root.parent_path() / "source_data";
+
+    auto service = AsyncImportService(AsyncImportService::Config {
+      .thread_pool_size = 2U,
+    });
+    [[maybe_unused]] auto stop_service
+      = oxygen::Finally([&service]() { service.Stop(); });
+
+    const auto material_report
+      = SubmitAndWait(service, MakeMaterialRequest(source_root, cooked_root));
+    ASSERT_TRUE(material_report.success);
+
+    const auto shape_descriptor = json {
+      { "name", "compound_shape" },
+      { "shape_type", "compound" },
+      { "material_ref", "/.cooked/Physics/Materials/ground.opmat" },
+      { "virtual_path", "/.cooked/Physics/Shapes/compound_shape.ocshape" },
+      { "children",
+        json::array({
+          json {
+            { "shape_type", "sphere" },
+            { "radius", 0.5F },
+            { "local_position", json::array({ 1.0F, 2.0F, 3.0F }) },
+            { "local_rotation", json::array({ 0.0F, 0.0F, 0.0F, 1.0F }) },
+            { "local_scale", json::array({ 1.0F, 1.0F, 1.0F }) },
+          },
+          json {
+            { "shape_type", "box" },
+            { "half_extents", json::array({ 0.25F, 0.5F, 0.75F }) },
+            { "local_position", json::array({ -1.0F, 0.0F, 2.0F }) },
+            { "local_rotation", json::array({ 0.0F, 0.0F, 0.0F, 1.0F }) },
+            { "local_scale", json::array({ 0.9F, 0.9F, 0.9F }) },
+          },
+        }) },
+    };
+
+    const auto report = SubmitAndWait(service,
+      MakeCollisionShapeRequest(source_root, cooked_root, shape_descriptor));
+    EXPECT_TRUE(report.success);
+
+    const auto shape_path = cooked_root
+      / std::filesystem::path("Physics/Shapes/compound_shape.ocshape");
+    ASSERT_TRUE(std::filesystem::exists(shape_path));
+    const auto bytes = ReadBinaryFile(shape_path);
+    const auto descriptor = ReadCollisionShapeAssetDesc(bytes);
+    ASSERT_TRUE(descriptor.has_value());
+    ASSERT_EQ(descriptor->shape_type, phys::ShapeType::kCompound);
+    EXPECT_EQ(descriptor->shape_params.compound.child_count, 2U);
+    EXPECT_EQ(descriptor->shape_params.compound.child_byte_offset,
+      static_cast<uint32_t>(sizeof(phys::CollisionShapeAssetDesc)));
+
+    const auto child_base = static_cast<size_t>(
+      descriptor->shape_params.compound.child_byte_offset);
+    const auto child0 = ReadCompoundChildDesc(bytes, child_base);
+    const auto child1 = ReadCompoundChildDesc(
+      bytes, child_base + sizeof(phys::CompoundShapeChildDesc));
+    ASSERT_TRUE(child0.has_value());
+    ASSERT_TRUE(child1.has_value());
+    EXPECT_EQ(
+      child0->shape_type, static_cast<uint32_t>(phys::ShapeType::kSphere));
+    EXPECT_FLOAT_EQ(child0->radius, 0.5F);
+    EXPECT_FLOAT_EQ(child0->local_position[0], 1.0F);
+    EXPECT_FLOAT_EQ(child0->local_position[1], 2.0F);
+    EXPECT_FLOAT_EQ(child0->local_position[2], 3.0F);
+    EXPECT_EQ(child1->shape_type, static_cast<uint32_t>(phys::ShapeType::kBox));
+    EXPECT_FLOAT_EQ(child1->half_extents[0], 0.25F);
+    EXPECT_FLOAT_EQ(child1->half_extents[1], 0.5F);
+    EXPECT_FLOAT_EQ(child1->half_extents[2], 0.75F);
+  }
+
+  NOLINT_TEST(CollisionShapeDescriptorImportJobTest,
+    CompoundNonAnalyticChildWithoutPayloadRefFailsValidation)
+  {
+    const auto cooked_root
+      = MakeTempCookedRoot("compound_child_payload_missing");
+    const auto source_root = cooked_root.parent_path() / "source_data";
+
+    auto service = AsyncImportService(AsyncImportService::Config {
+      .thread_pool_size = 2U,
+    });
+    [[maybe_unused]] auto stop_service
+      = oxygen::Finally([&service]() { service.Stop(); });
+
+    const auto material_report
+      = SubmitAndWait(service, MakeMaterialRequest(source_root, cooked_root));
+    ASSERT_TRUE(material_report.success);
+
+    const auto shape_descriptor = json {
+      { "name", "bad_compound_child_payload" },
+      { "shape_type", "compound" },
+      { "material_ref", "/.cooked/Physics/Materials/ground.opmat" },
+      { "virtual_path", "/.cooked/Physics/Shapes/bad_compound.ocshape" },
+      { "children",
+        json::array({ json {
+          { "shape_type", "convex_hull" },
+          { "local_position", json::array({ 0.0F, 0.0F, 0.0F }) },
+          { "local_rotation", json::array({ 0.0F, 0.0F, 0.0F, 1.0F }) },
+          { "local_scale", json::array({ 1.0F, 1.0F, 1.0F }) },
+        } }) },
+    };
+
+    const auto report = SubmitAndWait(service,
+      MakeCollisionShapeRequest(source_root, cooked_root, shape_descriptor));
+    EXPECT_FALSE(report.success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      report.diagnostics, "physics.shape.compound_child_payload_required"));
   }
 
   NOLINT_TEST(CollisionShapeDescriptorImportJobTest,

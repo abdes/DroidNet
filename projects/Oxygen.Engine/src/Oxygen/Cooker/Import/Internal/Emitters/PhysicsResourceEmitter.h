@@ -19,6 +19,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
@@ -38,7 +39,7 @@ struct CookedPhysicsResourcePayload final {
   data::pak::physics::PhysicsResourceFormat format
     = data::pak::physics::PhysicsResourceFormat::kJoltShapeBinary;
   uint64_t alignment = 16;
-  uint64_t content_hash = 0;
+  base::Sha256Digest content_hash = {};
 };
 
 //! Emits cooked physics resources to `physics.data` and `physics.table`.

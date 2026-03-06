@@ -28,10 +28,12 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/Emitters/PhysicsResourceEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.h>
@@ -193,6 +195,13 @@ namespace {
     std::optional<std::string> collision_mesh_ref;
     std::vector<uint32_t> pinned_vertices;
     std::vector<uint32_t> kinematic_vertices;
+    nlohmann::json authored_binding;
+  };
+
+  enum class BackendTargetTag : uint8_t {
+    kUnspecified = 0,
+    kJolt = 1,
+    kPhysX = 2,
   };
 
   struct VehicleWheelSource final {
@@ -200,15 +209,22 @@ namespace {
     uint16_t axle_index { 0 };
     phys::VehicleWheelSide side { phys::VehicleWheelSide::kLeft };
     phys::VehicleWheelBackendScalars backend_scalars {};
+    BackendTargetTag backend_target { BackendTargetTag::kUnspecified };
   };
 
   struct JointBindingSource final {
     phys::JointBindingRecord record {};
+    phys::PhysicsResourceFormat constraint_format
+      = phys::PhysicsResourceFormat::kJoltConstraintBinary;
+    nlohmann::json authored_binding;
   };
 
   struct VehicleBindingSource final {
     phys::VehicleBindingRecord record {};
     std::vector<VehicleWheelSource> wheels;
+    phys::PhysicsResourceFormat constraint_format
+      = phys::PhysicsResourceFormat::kJoltVehicleConstraintBinary;
+    nlohmann::json authored_binding;
   };
 
   struct PhysicsSidecarDocument final {
@@ -659,18 +675,22 @@ namespace {
   }
 
   auto ParseVehicleWheelBackend(const nlohmann::json& obj,
-    phys::VehicleWheelBackendScalars& out, std::string& error) -> bool
+    phys::VehicleWheelBackendScalars& out, BackendTargetTag& out_target,
+    std::string& error) -> bool
   {
+    out_target = BackendTargetTag::kUnspecified;
     if (!obj.contains("backend")) {
       return true;
     }
     const auto& backend = obj.at("backend");
     const auto target = backend.at("target").get<std::string>();
     if (target == "jolt") {
+      out_target = BackendTargetTag::kJolt;
       return ReadOptionalFloat(
         backend, "wheel_castor", out.jolt.wheel_castor, error);
     }
     if (target == "physx") {
+      out_target = BackendTargetTag::kPhysX;
       return true;
     }
     error = "Field 'backend.target' has unsupported value";
@@ -807,6 +827,7 @@ namespace {
       return false;
     }
     out.record.self_collision = self_collision ? 1U : 0U;
+    out.authored_binding = binding;
 
     return ReadOptionalString(
              binding, "collision_mesh_ref", out.collision_mesh_ref, error)
@@ -850,7 +871,19 @@ namespace {
     }
     out.record.node_index_a = node_index_a;
     out.record.node_index_b = node_index_b;
-    return ParseJointBackend(binding, out.record, error);
+    if (!ParseJointBackend(binding, out.record, error)) {
+      return false;
+    }
+    out.constraint_format = phys::PhysicsResourceFormat::kJoltConstraintBinary;
+    if (binding.contains("backend")) {
+      const auto target = binding.at("backend").at("target").get<std::string>();
+      if (target == "physx") {
+        out.constraint_format
+          = phys::PhysicsResourceFormat::kPhysXConstraintBinary;
+      }
+    }
+    out.authored_binding = binding;
+    return true;
   }
 
   auto ParseVehicleBinding(const nlohmann::json& binding,
@@ -863,6 +896,7 @@ namespace {
       return false;
     }
     out.record.node_index = node_index;
+    out.authored_binding = binding;
 
     const auto& wheels = binding.at("wheels");
     out.wheels.clear();
@@ -876,8 +910,8 @@ namespace {
         || !ReadRequiredUInt32(wheel, "axle_index", axle_index_u32, error)
         || axle_index_u32 > (std::numeric_limits<uint16_t>::max)()
         || !ParseWheelSide(wheel, wheel_source.side, error)
-        || !ParseVehicleWheelBackend(
-          wheel, wheel_source.backend_scalars, error)) {
+        || !ParseVehicleWheelBackend(wheel, wheel_source.backend_scalars,
+          wheel_source.backend_target, error)) {
         if (axle_index_u32 > (std::numeric_limits<uint16_t>::max)()) {
           error = "Field 'axle_index' exceeds uint16 range";
         }
@@ -1398,6 +1432,7 @@ namespace {
       auto wheel_nodes = std::unordered_set<uint32_t> {};
       auto wheel_roles
         = std::unordered_set<uint32_t> {}; // packed (axle << 16) | side
+      auto backend_target = BackendTargetTag::kUnspecified;
       const auto wheel_offset = wheel_records.size();
       auto slice_count = uint32_t { 0 };
       for (size_t w = 0; w < records[i].wheels.size(); ++w) {
@@ -1437,6 +1472,18 @@ namespace {
             "Vehicle wheel count exceeds uint32 range", wheel_path);
           continue;
         }
+        if (wheel.backend_target != BackendTargetTag::kUnspecified) {
+          if (backend_target == BackendTargetTag::kUnspecified) {
+            backend_target = wheel.backend_target;
+          } else if (backend_target != wheel.backend_target) {
+            AddDiagnosticAtPath(ctx.session, ctx.request,
+              ImportSeverity::kError, "physics.sidecar.payload_invalid",
+              "Vehicle wheel backend.target values must be consistent across a "
+              "single vehicle",
+              wheel_path + ".backend.target");
+            continue;
+          }
+        }
 
         wheel_records.push_back(phys::VehicleWheelBindingRecord {
           .vehicle_node_index = records[i].record.node_index,
@@ -1468,7 +1515,180 @@ namespace {
       records[i].record.wheel_slice_offset
         = static_cast<uint32_t>(wheel_offset);
       records[i].record.wheel_slice_count = slice_count;
+      records[i].constraint_format
+        = (backend_target == BackendTargetTag::kPhysX)
+        ? phys::PhysicsResourceFormat::kPhysXVehicleSettingsBinary
+        : phys::PhysicsResourceFormat::kJoltVehicleConstraintBinary;
     }
+  }
+
+#pragma pack(push, 1)
+  struct AuthoredPhysicsBlobHeader final {
+    char magic[4] = { 'O', 'P', 'H', 'B' };
+    uint8_t version = 1U;
+    uint8_t kind = 0U;
+    uint8_t flavor = 0U;
+    uint8_t reserved = 0U;
+    uint32_t payload_size = 0U;
+  };
+#pragma pack(pop)
+
+  static_assert(sizeof(AuthoredPhysicsBlobHeader) == 12);
+
+  enum class AuthoredPhysicsBlobKind : uint8_t {
+    kJoint = 1,
+    kVehicle = 2,
+    kSoftBody = 3,
+  };
+
+  auto SerializeAuthoredPhysicsBlob(const AuthoredPhysicsBlobKind kind,
+    const uint8_t flavor, const nlohmann::json& authored_binding,
+    std::vector<std::byte>& out_bytes) -> bool
+  {
+    const auto payload = authored_binding.dump();
+    if (payload.size() > (std::numeric_limits<uint32_t>::max)()) {
+      return false;
+    }
+
+    auto header = AuthoredPhysicsBlobHeader {};
+    header.kind = static_cast<uint8_t>(kind);
+    header.flavor = flavor;
+    header.payload_size = static_cast<uint32_t>(payload.size());
+
+    out_bytes.clear();
+    out_bytes.resize(sizeof(header) + payload.size());
+    std::memcpy(out_bytes.data(), &header, sizeof(header));
+    if (!payload.empty()) {
+      std::memcpy(
+        out_bytes.data() + sizeof(header), payload.data(), payload.size());
+    }
+    return true;
+  }
+
+  auto BuildCookedPhysicsPayload(const std::vector<std::byte>& blob_bytes,
+    const phys::PhysicsResourceFormat format, const bool with_hashing)
+    -> CookedPhysicsResourcePayload
+  {
+    auto payload = CookedPhysicsResourcePayload {};
+    payload.data.assign(blob_bytes.begin(), blob_bytes.end());
+    payload.format = format;
+    payload.alignment = 16;
+    if (with_hashing) {
+      payload.content_hash = util::ComputeContentSha256(payload.data);
+    }
+    return payload;
+  }
+
+  auto EmitBindingBlob(ImportSession& session, const ImportRequest& request,
+    const std::string_view object_path,
+    const std::vector<std::byte>& blob_bytes,
+    const phys::PhysicsResourceFormat format, const bool with_hashing,
+    data::pak::core::ResourceIndexT& out_index) -> bool
+  {
+    try {
+      const auto source
+        = request.source_path.string() + "#" + std::string(object_path);
+      const auto emitted = session.PhysicsResourceEmitter().Emit(
+        BuildCookedPhysicsPayload(blob_bytes, format, with_hashing), source);
+      out_index = data::pak::core::ResourceIndexT { emitted };
+      return true;
+    } catch (const std::exception& ex) {
+      AddDiagnosticAtPath(session, request, ImportSeverity::kError,
+        "physics.sidecar.resource_emit_failed",
+        "Failed emitting backend-cooked physics payload: "
+          + std::string(ex.what()),
+        std::string(object_path));
+      return false;
+    }
+  }
+
+  auto EmitSoftBodyTopologyResources(
+    std::vector<SoftBodyBindingSource>& records, ImportSession& session,
+    const ImportRequest& request) -> bool
+  {
+    const auto with_hashing
+      = EffectiveContentHashingEnabled(request.options.with_content_hashing);
+    for (size_t i = 0; i < records.size(); ++i) {
+      auto blob_bytes = std::vector<std::byte> {};
+      if (!SerializeAuthoredPhysicsBlob(AuthoredPhysicsBlobKind::kSoftBody,
+            static_cast<uint8_t>(records[i].record.tether_mode),
+            records[i].authored_binding, blob_bytes)) {
+        AddDiagnosticAtPath(session, request, ImportSeverity::kError,
+          "physics.sidecar.resource_serialize_failed",
+          "Soft-body authored binding exceeds supported blob size",
+          "bindings.soft_bodies[" + std::to_string(i) + "]");
+        continue;
+      }
+      if (!EmitBindingBlob(session, request,
+            "bindings.soft_bodies[" + std::to_string(i) + "]", blob_bytes,
+            records[i].record.topology_format, with_hashing,
+            records[i].record.topology_resource_index)) {
+        continue;
+      }
+    }
+    return !session.HasErrors();
+  }
+
+  auto EmitJointConstraintResources(std::vector<JointBindingSource>& records,
+    ImportSession& session, const ImportRequest& request) -> bool
+  {
+    const auto with_hashing
+      = EffectiveContentHashingEnabled(request.options.with_content_hashing);
+    for (size_t i = 0; i < records.size(); ++i) {
+      auto blob_bytes = std::vector<std::byte> {};
+      if (!SerializeAuthoredPhysicsBlob(AuthoredPhysicsBlobKind::kJoint,
+            static_cast<uint8_t>(records[i].record.node_index_b
+              == phys::kWorldAttachmentNodeIndex),
+            records[i].authored_binding, blob_bytes)) {
+        AddDiagnosticAtPath(session, request, ImportSeverity::kError,
+          "physics.sidecar.resource_serialize_failed",
+          "Joint authored binding exceeds supported blob size",
+          "bindings.joints[" + std::to_string(i) + "]");
+        continue;
+      }
+      if (!EmitBindingBlob(session, request,
+            "bindings.joints[" + std::to_string(i) + "]", blob_bytes,
+            records[i].constraint_format, with_hashing,
+            records[i].record.constraint_resource_index)) {
+        continue;
+      }
+    }
+    return !session.HasErrors();
+  }
+
+  auto EmitVehicleConstraintResources(
+    std::vector<VehicleBindingSource>& records, ImportSession& session,
+    const ImportRequest& request) -> bool
+  {
+    const auto with_hashing
+      = EffectiveContentHashingEnabled(request.options.with_content_hashing);
+    for (size_t i = 0; i < records.size(); ++i) {
+      auto blob_bytes = std::vector<std::byte> {};
+      if (!SerializeAuthoredPhysicsBlob(AuthoredPhysicsBlobKind::kVehicle,
+            static_cast<uint8_t>(records[i].record.controller_type),
+            records[i].authored_binding, blob_bytes)) {
+        AddDiagnosticAtPath(session, request, ImportSeverity::kError,
+          "physics.sidecar.resource_serialize_failed",
+          "Vehicle authored binding exceeds supported blob size",
+          "bindings.vehicles[" + std::to_string(i) + "]");
+        continue;
+      }
+      if (!EmitBindingBlob(session, request,
+            "bindings.vehicles[" + std::to_string(i) + "]", blob_bytes,
+            records[i].constraint_format, with_hashing,
+            records[i].record.constraint_resource_index)) {
+        continue;
+      }
+    }
+    return !session.HasErrors();
+  }
+
+  auto EmitBackendCookedBindingResources(PhysicsSidecarDocument& parsed,
+    ImportSession& session, const ImportRequest& request) -> bool
+  {
+    return EmitSoftBodyTopologyResources(parsed.soft_bodies, session, request)
+      && EmitJointConstraintResources(parsed.joints, session, request)
+      && EmitVehicleConstraintResources(parsed.vehicles, session, request);
   }
 
   template <typename SourceT, typename RecordT>
@@ -1607,6 +1827,10 @@ namespace {
       desc.header.name, sizeof(desc.header.name), sidecar_name);
     desc.target_scene_key = scene_state.scene_key;
     desc.target_node_count = scene_state.node_count;
+    const auto scene_hash
+      = base::ComputeSha256(scene_state.source_scene_descriptor);
+    std::copy_n(scene_hash.begin(), std::size(desc.target_scene_content_hash),
+      std::begin(desc.target_scene_content_hash));
     desc.component_table_count = static_cast<uint32_t>(tables.size());
     desc.component_table_directory_offset = tables.empty()
       ? 0U
@@ -1781,8 +2005,10 @@ namespace {
     ValidateNodeBindings(
       parsed.aggregates, "aggregates",
       [](const auto& record) { return record.node_index; }, validation_ctx);
-
-    return !session.HasErrors();
+    if (session.HasErrors()) {
+      return false;
+    }
+    return EmitBackendCookedBindingResources(parsed, session, request);
   }
 
   auto BuildPhysicsSidecarTables(const PhysicsSidecarDocument& parsed)
@@ -1797,9 +2023,45 @@ namespace {
     auto soft_body_records = parsed.soft_bodies;
     auto joint_records
       = ExtractRecordVector(parsed.joints, &JointBindingSource::record);
-    auto vehicle_records
-      = ExtractRecordVector(parsed.vehicles, &VehicleBindingSource::record);
-    auto wheel_records = parsed.vehicle_wheels;
+    auto vehicle_sources = parsed.vehicles;
+    std::ranges::sort(vehicle_sources, [](const auto& lhs, const auto& rhs) {
+      return lhs.record.node_index < rhs.record.node_index;
+    });
+    auto vehicle_records = std::vector<phys::VehicleBindingRecord> {};
+    auto wheel_records = std::vector<phys::VehicleWheelBindingRecord> {};
+    vehicle_records.reserve(vehicle_sources.size());
+    for (const auto& source : vehicle_sources) {
+      auto record = source.record;
+      if (wheel_records.size()
+        > static_cast<size_t>((std::numeric_limits<uint32_t>::max)())) {
+        continue;
+      }
+
+      auto sorted_wheels = source.wheels;
+      std::ranges::sort(sorted_wheels, [](const auto& lhs, const auto& rhs) {
+        if (lhs.axle_index != rhs.axle_index) {
+          return lhs.axle_index < rhs.axle_index;
+        }
+        if (lhs.side != rhs.side) {
+          return static_cast<uint32_t>(lhs.side)
+            < static_cast<uint32_t>(rhs.side);
+        }
+        return lhs.node_index < rhs.node_index;
+      });
+
+      record.wheel_slice_offset = static_cast<uint32_t>(wheel_records.size());
+      record.wheel_slice_count = static_cast<uint32_t>(sorted_wheels.size());
+      for (const auto& wheel : sorted_wheels) {
+        wheel_records.push_back(phys::VehicleWheelBindingRecord {
+          .vehicle_node_index = record.node_index,
+          .wheel_node_index = wheel.node_index,
+          .axle_index = wheel.axle_index,
+          .side = wheel.side,
+          .backend_scalars = wheel.backend_scalars,
+        });
+      }
+      vehicle_records.push_back(record);
+    }
     auto aggregate_records = parsed.aggregates;
 
     auto tables = std::vector<TableBlob> {};
@@ -1833,20 +2095,11 @@ namespace {
       vehicle_records, [](const auto& lhs, const auto& rhs) {
         return lhs.node_index < rhs.node_index;
       });
-    SortAndAppendTable(tables, phys::PhysicsBindingType::kVehicleWheel,
-      wheel_records, [](const auto& lhs, const auto& rhs) {
-        if (lhs.vehicle_node_index != rhs.vehicle_node_index) {
-          return lhs.vehicle_node_index < rhs.vehicle_node_index;
-        }
-        if (lhs.axle_index != rhs.axle_index) {
-          return lhs.axle_index < rhs.axle_index;
-        }
-        if (lhs.side != rhs.side) {
-          return static_cast<uint32_t>(lhs.side)
-            < static_cast<uint32_t>(rhs.side);
-        }
-        return lhs.wheel_node_index < rhs.wheel_node_index;
-      });
+    if (const auto wheel_table
+      = MakeTableBlob(phys::PhysicsBindingType::kVehicleWheel, wheel_records);
+      wheel_table.has_value()) {
+      tables.push_back(*wheel_table);
+    }
     SortAndAppendTable(tables, phys::PhysicsBindingType::kAggregate,
       aggregate_records, [](const auto& lhs, const auto& rhs) {
         return lhs.node_index < rhs.node_index;

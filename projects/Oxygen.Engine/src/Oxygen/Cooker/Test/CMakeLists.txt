@@ -73,6 +73,7 @@ m_gtest_program(
   AsyncImportPhysics
   SOURCES
     "Import/ImportManifest_physics_sidecar_test.cpp"
+    "Import/PhysicsPhase3Closure_test.cpp"
     "Import/PhysicsImportJob_test.cpp"
     "Import/PhysicsImportPipeline_test.cpp"
     "Import/PhysicsImportRequestBuilder_test.cpp"

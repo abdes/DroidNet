@@ -7,8 +7,10 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstring>
 #include <exception>
 #include <filesystem>
+#include <limits>
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -23,10 +25,12 @@
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/Emitters/PhysicsResourceEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/CollisionShapeDescriptorImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/CollisionShapeImportPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/PhysicsResourceDescriptorSidecar.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
@@ -180,8 +184,6 @@ namespace {
       return phys::ShapePayloadType::kMesh;
     case phys::ShapeType::kHeightField:
       return phys::ShapePayloadType::kHeightField;
-    case phys::ShapeType::kCompound:
-      return phys::ShapePayloadType::kCompound;
     case phys::ShapeType::kInvalid:
     case phys::ShapeType::kSphere:
     case phys::ShapeType::kCapsule:
@@ -190,9 +192,50 @@ namespace {
     case phys::ShapeType::kCone:
     case phys::ShapeType::kPlane:
     case phys::ShapeType::kWorldBoundary:
+    case phys::ShapeType::kCompound:
       return std::nullopt;
     }
     return std::nullopt;
+  }
+
+  [[nodiscard]] auto PayloadTypeName(const phys::ShapePayloadType payload_type)
+    -> const char*
+  {
+    switch (payload_type) {
+    case phys::ShapePayloadType::kConvex:
+      return "convex";
+    case phys::ShapePayloadType::kMesh:
+      return "mesh";
+    case phys::ShapePayloadType::kHeightField:
+      return "height_field";
+    case phys::ShapePayloadType::kCompound:
+      return "compound";
+    case phys::ShapePayloadType::kInvalid:
+      return "invalid";
+    }
+    return "invalid";
+  }
+
+  [[nodiscard]] auto IsFormatCompatibleWithPayloadType(
+    const phys::PhysicsResourceFormat format,
+    const phys::ShapePayloadType payload_type) -> bool
+  {
+    switch (payload_type) {
+    case phys::ShapePayloadType::kConvex:
+      return format == phys::PhysicsResourceFormat::kJoltShapeBinary
+        || format == phys::PhysicsResourceFormat::kPhysXConvexMeshBinary;
+    case phys::ShapePayloadType::kMesh:
+      return format == phys::PhysicsResourceFormat::kJoltShapeBinary
+        || format == phys::PhysicsResourceFormat::kPhysXTriangleMeshBinary;
+    case phys::ShapePayloadType::kHeightField:
+      return format == phys::PhysicsResourceFormat::kJoltShapeBinary
+        || format == phys::PhysicsResourceFormat::kPhysXHeightFieldBinary;
+    case phys::ShapePayloadType::kCompound:
+      return format == phys::PhysicsResourceFormat::kJoltShapeBinary;
+    case phys::ShapePayloadType::kInvalid:
+      return false;
+    }
+    return false;
   }
 
   [[nodiscard]] auto NormalizeRelPath(std::string relpath) -> std::string
@@ -494,12 +537,12 @@ namespace {
       co_return std::nullopt;
     }
 
-    if (parsed.descriptor.format
-      != phys::PhysicsResourceFormat::kJoltShapeBinary) {
+    if (!IsFormatCompatibleWithPayloadType(
+          parsed.descriptor.format, payload_type)) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "physics.shape.payload_ref_format_mismatch",
-        "payload_ref must reference a physics resource with format "
-        "'jolt_shape_binary'",
+        "payload_ref format is incompatible with shape payload type '"
+          + std::string(PayloadTypeName(payload_type)) + "'",
         "payload_ref");
       co_return std::nullopt;
     }
@@ -508,6 +551,81 @@ namespace {
       .resource_index = parsed.resource_index,
       .payload_type = payload_type,
     };
+  }
+
+#pragma pack(push, 1)
+  struct AuthoredShapeBlobHeader final {
+    char magic[4] = { 'O', 'P', 'S', 'B' };
+    uint8_t version = 1U;
+    uint8_t shape_type = 0U;
+    uint8_t payload_type = 0U;
+    uint8_t reserved = 0U;
+    uint32_t payload_size = 0U;
+  };
+#pragma pack(pop)
+  static_assert(sizeof(AuthoredShapeBlobHeader) == 12);
+
+  auto SerializeAuthoredShapeBlob(const json& descriptor_doc,
+    const phys::ShapeType shape_type, const phys::ShapePayloadType payload_type,
+    std::vector<std::byte>& out_bytes) -> bool
+  {
+    const auto payload = descriptor_doc.dump();
+    if (payload.size() > (std::numeric_limits<uint32_t>::max)()) {
+      return false;
+    }
+
+    auto header = AuthoredShapeBlobHeader {};
+    header.shape_type = static_cast<uint8_t>(shape_type);
+    header.payload_type = static_cast<uint8_t>(payload_type);
+    header.payload_size = static_cast<uint32_t>(payload.size());
+
+    out_bytes.clear();
+    out_bytes.resize(sizeof(header) + payload.size());
+    std::memcpy(out_bytes.data(), &header, sizeof(header));
+    if (!payload.empty()) {
+      std::memcpy(
+        out_bytes.data() + sizeof(header), payload.data(), payload.size());
+    }
+    return true;
+  }
+
+  auto EmitAuthoredShapePayload(ImportSession& session,
+    const ImportRequest& request, const std::string_view source_id,
+    const json& descriptor_doc, const phys::ShapeType shape_type,
+    const phys::ShapePayloadType payload_type)
+    -> std::optional<PayloadResolution>
+  {
+    auto blob_bytes = std::vector<std::byte> {};
+    if (!SerializeAuthoredShapeBlob(
+          descriptor_doc, shape_type, payload_type, blob_bytes)) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "physics.shape.payload_emit_failed",
+        "Authored non-analytic shape payload exceeds supported blob size");
+      return std::nullopt;
+    }
+
+    auto cooked = CookedPhysicsResourcePayload {};
+    cooked.data.assign(blob_bytes.begin(), blob_bytes.end());
+    cooked.format = phys::PhysicsResourceFormat::kJoltShapeBinary;
+    cooked.alignment = 16;
+    if (EffectiveContentHashingEnabled(request.options.with_content_hashing)) {
+      cooked.content_hash = util::ComputeContentSha256(cooked.data);
+    }
+
+    try {
+      const auto emitted_index
+        = session.PhysicsResourceEmitter().Emit(std::move(cooked), source_id);
+      return PayloadResolution {
+        .resource_index = data::pak::core::ResourceIndexT { emitted_index },
+        .payload_type = payload_type,
+      };
+    } catch (const std::exception& ex) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "physics.shape.payload_emit_failed",
+        "Failed emitting non-analytic shape payload: "
+          + std::string(ex.what()));
+      return std::nullopt;
+    }
   }
 
   auto CopyVec3(const json& doc, const std::string_view field, float (&out)[3])
@@ -611,6 +729,158 @@ namespace {
     }
 
     return true;
+  }
+
+  auto ParseCompoundChild(const json& child_doc, const std::string& child_path,
+    ImportSession& session, const ImportRequest& request,
+    phys::CompoundShapeChildDesc& out_child) -> bool
+  {
+    auto child_error = std::optional<std::string> {};
+    auto child_type = phys::ShapeType::kInvalid;
+    try {
+      child_type
+        = ParseShapeType(child_doc.at("shape_type").get<std::string>());
+      out_child.shape_type = static_cast<uint32_t>(child_type);
+      out_child.local_position[0]
+        = child_doc.at("local_position").at(0).get<float>();
+      out_child.local_position[1]
+        = child_doc.at("local_position").at(1).get<float>();
+      out_child.local_position[2]
+        = child_doc.at("local_position").at(2).get<float>();
+      out_child.local_rotation[0]
+        = child_doc.at("local_rotation").at(0).get<float>();
+      out_child.local_rotation[1]
+        = child_doc.at("local_rotation").at(1).get<float>();
+      out_child.local_rotation[2]
+        = child_doc.at("local_rotation").at(2).get<float>();
+      out_child.local_rotation[3]
+        = child_doc.at("local_rotation").at(3).get<float>();
+      out_child.local_scale[0] = child_doc.at("local_scale").at(0).get<float>();
+      out_child.local_scale[1] = child_doc.at("local_scale").at(1).get<float>();
+      out_child.local_scale[2] = child_doc.at("local_scale").at(2).get<float>();
+    } catch (const std::exception& ex) {
+      child_error = ex.what();
+    }
+    if (child_error.has_value()) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "physics.shape.schema_contract_mismatch",
+        "Compound child extraction failed after schema validation: "
+          + *child_error,
+        child_path);
+      return false;
+    }
+
+    if (child_type == phys::ShapeType::kCompound) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "physics.shape.compound_child_invalid",
+        "Nested compound child shapes are not supported", child_path);
+      return false;
+    }
+
+    try {
+      switch (child_type) {
+      case phys::ShapeType::kSphere:
+        out_child.radius = child_doc.at("radius").get<float>();
+        break;
+      case phys::ShapeType::kCapsule:
+      case phys::ShapeType::kCylinder:
+      case phys::ShapeType::kCone:
+        out_child.radius = child_doc.at("radius").get<float>();
+        out_child.half_height = child_doc.at("half_height").get<float>();
+        break;
+      case phys::ShapeType::kBox:
+        out_child.half_extents[0]
+          = child_doc.at("half_extents").at(0).get<float>();
+        out_child.half_extents[1]
+          = child_doc.at("half_extents").at(1).get<float>();
+        out_child.half_extents[2]
+          = child_doc.at("half_extents").at(2).get<float>();
+        break;
+      case phys::ShapeType::kPlane:
+        out_child.normal[0] = child_doc.at("normal").at(0).get<float>();
+        out_child.normal[1] = child_doc.at("normal").at(1).get<float>();
+        out_child.normal[2] = child_doc.at("normal").at(2).get<float>();
+        out_child.distance = child_doc.at("distance").get<float>();
+        break;
+      case phys::ShapeType::kWorldBoundary: {
+        out_child.boundary_mode = ParseWorldBoundaryMode(
+          child_doc.at("boundary_mode").get<std::string>());
+        out_child.limits_min[0] = child_doc.at("limits_min").at(0).get<float>();
+        out_child.limits_min[1] = child_doc.at("limits_min").at(1).get<float>();
+        out_child.limits_min[2] = child_doc.at("limits_min").at(2).get<float>();
+        out_child.limits_max[0] = child_doc.at("limits_max").at(0).get<float>();
+        out_child.limits_max[1] = child_doc.at("limits_max").at(1).get<float>();
+        out_child.limits_max[2] = child_doc.at("limits_max").at(2).get<float>();
+        if (out_child.limits_min[0] > out_child.limits_max[0]
+          || out_child.limits_min[1] > out_child.limits_max[1]
+          || out_child.limits_min[2] > out_child.limits_max[2]) {
+          AddDiagnostic(session, request, ImportSeverity::kError,
+            "physics.shape.world_boundary_limits_invalid",
+            "Compound child limits_min must be <= limits_max for each axis",
+            child_path + ".limits_min");
+          return false;
+        }
+        break;
+      }
+      case phys::ShapeType::kConvexHull:
+      case phys::ShapeType::kTriangleMesh:
+      case phys::ShapeType::kHeightField:
+      case phys::ShapeType::kInvalid:
+      case phys::ShapeType::kCompound:
+        break;
+      }
+    } catch (const std::exception& ex) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "physics.shape.schema_contract_mismatch",
+        "Compound child parameter extraction failed after schema validation: "
+          + std::string(ex.what()),
+        child_path);
+      return false;
+    }
+
+    if (const auto payload_type = PayloadTypeForShapeType(child_type);
+      payload_type.has_value()) {
+      if (!child_doc.contains("payload_ref")) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "physics.shape.compound_child_payload_required",
+          "Compound non-analytic child requires payload_ref", child_path);
+        return false;
+      }
+      const auto payload_ref = child_doc.at("payload_ref").get<std::string>();
+      if (!internal::IsCanonicalVirtualPath(payload_ref)) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "physics.shape.payload_ref_invalid", "payload_ref must be canonical",
+          child_path + ".payload_ref");
+        return false;
+      }
+      out_child.payload_asset_key
+        = data::AssetKey::FromVirtualPath(payload_ref);
+    }
+
+    return true;
+  }
+
+  auto ParseCompoundChildren(const json& descriptor_doc, ImportSession& session,
+    const ImportRequest& request,
+    std::vector<phys::CompoundShapeChildDesc>& out_children) -> bool
+  {
+    out_children.clear();
+    if (!descriptor_doc.contains("children")) {
+      return true;
+    }
+
+    const auto& children = descriptor_doc.at("children");
+    out_children.reserve(children.size());
+    for (size_t i = 0; i < children.size(); ++i) {
+      const auto child_path = "children[" + std::to_string(i) + "]";
+      auto child_desc = phys::CompoundShapeChildDesc {};
+      if (!ParseCompoundChild(
+            children[i], child_path, session, request, child_desc)) {
+        continue;
+      }
+      out_children.push_back(child_desc);
+    }
+    return !session.HasErrors();
   }
 
 } // namespace
@@ -770,6 +1040,15 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return co_await FinalizeWithTelemetry(session);
   }
 
+  auto compound_children = std::vector<phys::CompoundShapeChildDesc> {};
+  if (shape_type == phys::ShapeType::kCompound
+    && !ParseCompoundChildren(
+      descriptor_doc, session, Request(), compound_children)) {
+    ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
+      "Collision shape compound child parsing failed");
+    co_return co_await FinalizeWithTelemetry(session);
+  }
+
   auto material_key = data::AssetKey {};
   const auto material_ref
     = descriptor_doc.at("material_ref").get<std::string>();
@@ -783,13 +1062,19 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   if (const auto payload_type = PayloadTypeForShapeType(shape_type);
     payload_type.has_value()) {
-    const auto payload_ref
-      = descriptor_doc.at("payload_ref").get<std::string>();
-    const auto payload = co_await ResolvePhysicsPayload(
-      session, Request(), contexts, payload_ref, *payload_type);
+    auto payload = std::optional<PayloadResolution> {};
+    if (descriptor_doc.contains("payload_ref")) {
+      const auto payload_ref
+        = descriptor_doc.at("payload_ref").get<std::string>();
+      payload = co_await ResolvePhysicsPayload(
+        session, Request(), contexts, payload_ref, *payload_type);
+    } else {
+      payload = EmitAuthoredShapePayload(session, Request(),
+        target->virtual_path, descriptor_doc, shape_type, *payload_type);
+    }
     if (!payload.has_value()) {
       ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
-        "Collision shape payload_ref resolution failed");
+        "Collision shape payload emission/resolution failed");
       co_return co_await FinalizeWithTelemetry(session);
     }
 
@@ -809,6 +1094,7 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto item = CollisionShapeImportPipeline::WorkItem {
     .source_id = target->virtual_path,
     .descriptor = descriptor,
+    .compound_children = std::move(compound_children),
     .on_started = {},
     .on_finished = {},
     .stop_token = StopToken(),

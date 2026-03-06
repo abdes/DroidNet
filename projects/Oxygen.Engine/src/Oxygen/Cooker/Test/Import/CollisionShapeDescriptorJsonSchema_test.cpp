@@ -152,9 +152,9 @@ NOLINT_TEST(
   EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
 }
 
-//! Verifies payload-backed shape types require an explicit payload reference.
+//! Verifies payload-backed shape types may omit payload_ref in Phase 3.
 NOLINT_TEST(CollisionShapeDescriptorJsonSchemaTest,
-  RejectsPayloadBackedShapeWithoutPayloadRef)
+  AcceptsPayloadBackedShapeWithoutPayloadRef)
 {
   const auto repo_root = FindRepoRoot();
   ASSERT_FALSE(repo_root.empty());
@@ -168,7 +168,7 @@ NOLINT_TEST(CollisionShapeDescriptorJsonSchemaTest,
   })");
 
   auto errors = std::string {};
-  EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
+  EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
 }
 
 //! Verifies primitive shape types reject payload references.
