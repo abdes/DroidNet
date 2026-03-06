@@ -46,13 +46,6 @@ auto VehicleUnknown() -> oxygen::ErrValue<oxygen::physics::PhysicsError>
   return oxygen::Err(oxygen::physics::PhysicsError::kInvalidArgument);
 }
 
-[[nodiscard]] auto HasLegacyBlobMagic(const std::span<const uint8_t> blob)
-  -> bool
-{
-  return blob.size() >= 4U && blob[0] == 'O' && blob[1] == 'P' && blob[2] == 'H'
-    && blob[3] == 'B';
-}
-
 auto RestoreVehicleConstraintSettings(std::span<const uint8_t> blob,
   const oxygen::physics::vehicle::VehicleControllerType controller_type)
   -> JPH::Ref<JPH::VehicleConstraintSettings>
@@ -64,9 +57,6 @@ auto RestoreVehicleConstraintSettings(std::span<const uint8_t> blob,
       != oxygen::physics::vehicle::VehicleControllerType::kWheeled
     && controller_type
       != oxygen::physics::vehicle::VehicleControllerType::kTracked) {
-    return nullptr;
-  }
-  if (HasLegacyBlobMagic(blob)) {
     return nullptr;
   }
 
