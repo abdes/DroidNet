@@ -98,6 +98,19 @@ project(
     CXX
 )
 
+# Work around an MSBuild parallel project-reference failure mode observed with
+# /m>1 (returns exit code 1 with no compiler/linker errors). Keep top-level
+# parallelism enabled, but force referenced projects to build sequentially.
+if(CMAKE_GENERATOR MATCHES "^Visual Studio")
+  if(NOT CMAKE_VS_GLOBALS MATCHES "(^|;)BuildInParallel=")
+    if(CMAKE_VS_GLOBALS)
+      set(CMAKE_VS_GLOBALS "${CMAKE_VS_GLOBALS};BuildInParallel=false")
+    else()
+      set(CMAKE_VS_GLOBALS "BuildInParallel=false")
+    endif()
+  endif()
+endif()
+
 # The default build type provided by CMake is to include no compiler flags for
 # optimization. For some projects you may want to set a default build type so
 # that you do not have to remember to set it.
