@@ -82,7 +82,7 @@ struct InputActionAssetDesc {
   InputActionAssetFlags flags = InputActionAssetFlags::kNone;
 };
 #pragma pack(pop)
-static_assert(sizeof(InputActionAssetDesc) == 84);
+static_assert(sizeof(InputActionAssetDesc) == 108);
 
 #pragma pack(push, 1)
 struct InputMappingContextAssetDesc {
@@ -95,7 +95,7 @@ struct InputMappingContextAssetDesc {
   InputDataTable strings = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(InputMappingContextAssetDesc) == 151);
+static_assert(sizeof(InputMappingContextAssetDesc) == 175);
 
 #pragma pack(push, 1)
 struct InputActionMappingRecord {

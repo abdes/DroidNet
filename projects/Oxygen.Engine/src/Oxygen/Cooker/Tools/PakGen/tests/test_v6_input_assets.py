@@ -5,6 +5,7 @@ import struct
 from pathlib import Path
 
 from pakgen.api import BuildOptions, build_pak, inspect_pak, plan_dry_run
+from pakgen.packing.constants import ASSET_HEADER_SIZE
 
 
 def _spec_with_input_assets() -> dict:
@@ -119,20 +120,23 @@ def test_v6_input_mapping_layout(tmp_path: Path):  # noqa: N802
 
     accel_key = bytes.fromhex("11" * 16)
 
-    # InputMappingContextAssetDesc: header(95), flags(4), then 4 InputDataTable entries.
+    # InputMappingContextAssetDesc: header, flags(4), then 4 InputDataTable entries.
     imc_desc_off = imc_entry["desc_offset"]
     imc_desc = data[imc_desc_off : imc_desc_off + 256]
     assert len(imc_desc) == 256
 
+    base = ASSET_HEADER_SIZE + 4
     mappings_offset, mappings_count, mappings_entry_size = struct.unpack_from(
-        "<QII", imc_desc, 99
+        "<QII", imc_desc, base + 0
     )
     triggers_offset, triggers_count, triggers_entry_size = struct.unpack_from(
-        "<QII", imc_desc, 115
+        "<QII", imc_desc, base + 16
     )
-    aux_offset, aux_count, aux_entry_size = struct.unpack_from("<QII", imc_desc, 131)
+    aux_offset, aux_count, aux_entry_size = struct.unpack_from(
+        "<QII", imc_desc, base + 32
+    )
     strings_offset, strings_size, strings_entry_size = struct.unpack_from(
-        "<QII", imc_desc, 147
+        "<QII", imc_desc, base + 48
     )
 
     assert mappings_count == 2

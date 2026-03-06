@@ -24,6 +24,7 @@ import struct
 import zlib
 
 from .packing.constants import (
+    ASSET_HEADER_SIZE,
     MESH_DESC_SIZE,
     SUBMESH_DESC_SIZE,
     MESH_VIEW_DESC_SIZE,
@@ -134,9 +135,9 @@ def _read_file_bytes(path: str | Path) -> bytes:
 
 def _parse_asset_header(desc: bytes) -> Dict[str, Any]:
     # AssetHeader layout (writer.header_builder):
-    # type(1) + name(64) + version(1) + streaming_priority(1) + content_hash(8)
-    # + variant_flags(4) + reserved(16) = 95 bytes
-    if len(desc) < 95:
+    # type(1) + name(64) + version(1) + streaming_priority(1) + content_hash(32)
+    # + variant_flags(4) = 103 bytes
+    if len(desc) < ASSET_HEADER_SIZE:
         return {"valid": False}
     asset_type = desc[0]
     raw_name = desc[1:65]
@@ -144,8 +145,8 @@ def _parse_asset_header(desc: bytes) -> Dict[str, Any]:
     name = raw_name.split(b"\x00", 1)[0].decode("utf-8", "ignore")
     version = desc[65]
     streaming_priority = desc[66]
-    content_hash = struct.unpack_from("<Q", desc, 67)[0]
-    variant_flags = struct.unpack_from("<I", desc, 75)[0]
+    content_hash = desc[67:99].hex()
+    variant_flags = struct.unpack_from("<I", desc, 99)[0]
     return {
         "valid": True,
         "asset_type": asset_type,
@@ -159,13 +160,13 @@ def _parse_asset_header(desc: bytes) -> Dict[str, Any]:
 
 def _parse_material_descriptor(desc: bytes) -> Dict[str, Any]:
     # See pack_material_asset_descriptor for layout. Require 256 bytes.
-    if len(desc) < 95 + 35:  # up to start of texture indices
+    if len(desc) < ASSET_HEADER_SIZE + 35:  # up to start of texture indices
         return {"valid": False}
     header = _parse_asset_header(desc)
     if not header.get("valid"):
         return {"valid": False}
-    # Offsets relative to start (after 95 header bytes)
-    base = 95
+    # Offsets relative to start (after AssetHeader).
+    base = ASSET_HEADER_SIZE
     material_domain = desc[base]
     flags = struct.unpack_from("<I", desc, base + 1)[0]
     shader_stages = struct.unpack_from("<I", desc, base + 5)[0]
@@ -194,12 +195,12 @@ def _parse_material_descriptor(desc: bytes) -> Dict[str, Any]:
 
 
 def _parse_geometry_descriptor(desc: bytes) -> Dict[str, Any]:
-    if len(desc) < 95 + 4:
+    if len(desc) < ASSET_HEADER_SIZE + 4:
         return {"valid": False}
     header = _parse_asset_header(desc)
     if not header.get("valid"):
         return {"valid": False}
-    lod_count = struct.unpack_from("<I", desc, 95)[0]
+    lod_count = struct.unpack_from("<I", desc, ASSET_HEADER_SIZE)[0]
     return {**header, "lod_count": lod_count, "valid": True}
 
 

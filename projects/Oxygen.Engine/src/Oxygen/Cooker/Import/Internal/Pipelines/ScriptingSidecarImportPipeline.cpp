@@ -680,7 +680,7 @@ namespace {
       out.resize(sizeof(world::SceneAssetDesc));
 
       auto desc = source_desc_;
-      desc.header.content_hash = 0;
+      desc.header.content_hash = {};
       desc.nodes.offset = sizeof(world::SceneAssetDesc);
       const auto scene_strings_offset
         = uint64_t { desc.nodes.offset } + node_table_size_;
@@ -1379,7 +1379,7 @@ namespace {
     }
 
     if (EffectiveContentHashingEnabled(request.options.with_content_hashing)) {
-      const auto hash = util::ComputeContentHash(patched_scene_bytes);
+      const auto hash = util::ComputeContentSha256(patched_scene_bytes);
       constexpr auto kContentHashOffset
         = offsetof(data::pak::core::AssetHeader, content_hash);
       std::memcpy(

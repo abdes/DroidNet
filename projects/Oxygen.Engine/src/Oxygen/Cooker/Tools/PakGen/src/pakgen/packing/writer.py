@@ -29,12 +29,12 @@ from .constants import (
     DATA_ALIGNMENT,
     TABLE_ALIGNMENT,
     FOOTER_SIZE,
-    ASSET_HEADER_SIZE,
     SCRIPT_SLOT_RECORD_SIZE,
 )
 from .packers import (
     pack_header,
     pack_footer,
+    pack_asset_header,
     pack_buffer_resource_descriptor,
     pack_texture_resource_descriptor,
     pack_audio_resource_descriptor,
@@ -315,25 +315,7 @@ def _write_assets_and_directory_from_plan(
 
     # Builders mirror legacy writer; kept local for clarity.
     def header_builder(asset_dict):
-        name = asset_dict.get("name", "")
-        type_name = asset_dict.get("type")
-        asset_type = ASSET_TYPE_MAP.get(type_name, 0)
-        version = asset_dict.get("version", 1)
-        streaming_priority = asset_dict.get("streaming_priority", 0)
-        content_hash = asset_dict.get("content_hash", 0)
-        variant_flags = asset_dict.get("variant_flags", 0)
-        name_bytes = pack_name_string(name, 64)
-        header = (
-            struct.pack("<B", asset_type)
-            + name_bytes
-            + struct.pack("<B", version)
-            + struct.pack("<B", streaming_priority)
-            + struct.pack("<Q", content_hash)
-            + struct.pack("<I", variant_flags)
-        )
-        if len(header) != ASSET_HEADER_SIZE:  # pragma: no cover - defensive
-            raise RuntimeError("Asset header size mismatch")
-        return header
+        return pack_asset_header(asset_dict)
 
     # Retained parameter for legacy API; shader reference records are now
     # always packed explicitly after the fixed descriptor using
@@ -780,28 +762,8 @@ def write_pak(
                 f, build_plan, pak_plan, data_offsets
             )
 
-            from .constants import ASSET_TYPE_MAP  # local import
-
             def header_builder(asset_dict):
-                name = asset_dict.get("name", "")
-                type_name = asset_dict.get("type")
-                asset_type = ASSET_TYPE_MAP.get(type_name, 0)
-                version = asset_dict.get("version", 1)
-                streaming_priority = asset_dict.get("streaming_priority", 0)
-                content_hash = asset_dict.get("content_hash", 0)
-                variant_flags = asset_dict.get("variant_flags", 0)
-                name_bytes = pack_name_string(name, 64)
-                header = (
-                    struct.pack("<B", asset_type)
-                    + name_bytes
-                    + struct.pack("<B", version)
-                    + struct.pack("<B", streaming_priority)
-                    + struct.pack("<Q", content_hash)
-                    + struct.pack("<I", variant_flags)
-                )
-                if len(header) != ASSET_HEADER_SIZE:
-                    raise RuntimeError("Asset header size mismatch")
-                return header
+                return pack_asset_header(asset_dict)
 
             geometry_name_to_key: dict[str, bytes] = {}
             for geom_spec, asset_key, _atype, _align in build_plan.assets.geometry_assets:

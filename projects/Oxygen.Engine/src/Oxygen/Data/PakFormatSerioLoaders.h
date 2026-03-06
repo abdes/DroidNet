@@ -45,7 +45,8 @@ inline auto Load(AnyReader& reader, data::pak::core::AssetHeader& header)
     reader.ReadBlobInto(std::as_writable_bytes(std::span { header.name })));
   CHECK_RESULT(reader.ReadInto(header.version));
   CHECK_RESULT(reader.ReadInto(header.streaming_priority));
-  CHECK_RESULT(reader.ReadInto(header.content_hash));
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::as_writable_bytes(std::span { header.content_hash })));
   CHECK_RESULT(reader.ReadInto(header.variant_flags));
   return {};
 }

@@ -130,7 +130,7 @@ struct ScriptAssetDesc {
   char external_source_path[120] = {}; // Null-terminated, null-padded
 };
 #pragma pack(pop)
-static_assert(sizeof(ScriptAssetDesc) == 211);
+static_assert(sizeof(ScriptAssetDesc) == 235);
 
 } // namespace oxygen::data::pak::scripting
 

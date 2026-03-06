@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cstddef>
 #include <span>
@@ -143,9 +144,10 @@ auto ZeroContentHash(std::vector<std::byte> bytes) -> std::vector<std::byte>
   constexpr size_t kOffset
     = offsetof(data::pak::render::MaterialAssetDesc, header)
     + offsetof(data::pak::core::AssetHeader, content_hash);
-  if (bytes.size() >= kOffset + sizeof(uint64_t)) {
-    uint64_t zero = 0;
-    std::memcpy(bytes.data() + kOffset, &zero, sizeof(zero));
+  constexpr size_t kHashSize = sizeof(data::pak::core::ContentHashDigest);
+  if (bytes.size() >= kOffset + kHashSize) {
+    std::array<std::byte, kHashSize> zeros {};
+    std::memcpy(bytes.data() + kOffset, zeros.data(), zeros.size());
   }
   return bytes;
 }
@@ -209,7 +211,7 @@ NOLINT_TEST_F(
 
   const auto desc = ReadMaterialDesc(result.cooked->descriptor_bytes);
   auto zeroed = ZeroContentHash(result.cooked->descriptor_bytes);
-  const auto expected_hash = util::ComputeContentHash(
+  const auto expected_hash = util::ComputeContentSha256(
     std::span<const std::byte>(zeroed.data(), zeroed.size()));
 
   EXPECT_EQ(desc.header.content_hash, expected_hash);

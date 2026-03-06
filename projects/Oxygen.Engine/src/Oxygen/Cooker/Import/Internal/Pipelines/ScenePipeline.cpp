@@ -153,7 +153,7 @@ namespace {
     util::TruncateAndNullTerminate(
       desc.header.name, sizeof(desc.header.name), scene_name);
     desc.header.version = data::pak::world::kSceneAssetVersion;
-    desc.header.content_hash = 0;
+    desc.header.content_hash = {};
     desc.nodes.offset = sizeof(SceneAssetDesc);
     desc.nodes.count = static_cast<uint32_t>(build.nodes.size());
     desc.nodes.entry_size = sizeof(NodeRecord);
@@ -332,8 +332,8 @@ namespace {
     return outcome;
   }
 
-  auto PatchContentHash(
-    std::vector<std::byte>& bytes, const uint64_t content_hash) -> void
+  auto PatchContentHash(std::vector<std::byte>& bytes,
+    const data::pak::core::ContentHashDigest& content_hash) -> void
   {
     constexpr auto kOffset
       = offsetof(data::pak::core::AssetHeader, content_hash);
@@ -536,16 +536,16 @@ auto ScenePipeline::Worker() -> co::Co<>
     if (outcome.success && config_.with_content_hashing) {
       auto hash = co_await thread_pool_.Run(
         [bytes = std::span<const std::byte>(outcome.bytes),
-          stop_token = item.stop_token](
-          co::ThreadPool::CancelToken canceled) -> uint64_t {
+          stop_token = item.stop_token](co::ThreadPool::CancelToken canceled)
+          -> data::pak::core::ContentHashDigest {
           DLOG_F(1, "Compute content hash");
           if (stop_token.stop_requested() || canceled) {
-            return uint64_t { 0 };
+            return {};
           }
-          return util::ComputeContentHash(bytes);
+          return util::ComputeContentSha256(bytes);
         });
 
-      if (hash != 0) {
+      if (!base::IsAllZero(hash)) {
         PatchContentHash(outcome.bytes, hash);
       }
     }

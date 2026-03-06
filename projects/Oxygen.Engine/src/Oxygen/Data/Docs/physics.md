@@ -797,7 +797,7 @@ is used internally:
     count and byte offset.
   - **Physics material descriptor** — one record per material asset (static
     friction, dynamic friction, restitution, density, friction and restitution
-    combine modes). Padded to a power-of-two size.
+    combine modes).
   - **Sidecar binding tables** — one asset per scene, paired 1:1 with its
     scene asset. A typed component-table directory where each entry locates a
     flat array of fixed-size binding records. Engine-neutral fields per record

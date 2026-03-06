@@ -3,7 +3,7 @@
     {
       "alignment": 1,
       "descriptor_offset": 768,
-      "descriptor_size": 211,
+      "descriptor_size": 235,
       "key": "33333333333333333333333333333333",
       "name": "AiScript",
       "type": "script",
@@ -12,8 +12,8 @@
     },
     {
       "alignment": 1,
-      "descriptor_offset": 979,
-      "descriptor_size": 211,
+      "descriptor_offset": 1003,
+      "descriptor_size": 235,
       "key": "11111111111111111111111111111111",
       "name": "MoveScript",
       "type": "script",
@@ -22,8 +22,8 @@
     },
     {
       "alignment": 1,
-      "descriptor_offset": 1190,
-      "descriptor_size": 115,
+      "descriptor_offset": 1238,
+      "descriptor_size": 139,
       "key": "22222222222222222222222222222222",
       "name": "ScriptScene",
       "type": "scene",
@@ -33,7 +33,7 @@
   ],
   "browse_index": {
     "entry_count": 3,
-    "offset": 2608,
+    "offset": 2688,
     "padding_before": 0,
     "size": 124,
     "string_table_size": 32
@@ -42,22 +42,22 @@
   "deterministic": true,
   "directory": {
     "asset_count": 3,
-    "offset": 2416,
-    "padding_before": 7,
+    "offset": 2496,
+    "padding_before": 15,
     "size": 192
   },
-  "file_size": 2988,
+  "file_size": 3068,
   "footer": {
-    "offset": 2732,
+    "offset": 2812,
     "size": 256
   },
   "padding": {
     "by_section": {
       "assets_region": 4,
-      "directory": 7,
+      "directory": 15,
       "table_script_slot": 11
     },
-    "total": 22
+    "total": 30
   },
   "regions": [
     {

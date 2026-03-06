@@ -185,7 +185,7 @@ auto WriteLooseCookedMaterialWithTexture(
   material_desc.header.version
     = oxygen::data::pak::render::kMaterialAssetVersion;
   material_desc.header.streaming_priority = 0;
-  material_desc.header.content_hash = 0;
+  material_desc.header.content_hash = {};
   material_desc.header.variant_flags = 0;
 
   material_desc.material_domain = 0;

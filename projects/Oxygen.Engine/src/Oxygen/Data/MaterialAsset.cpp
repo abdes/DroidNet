@@ -95,7 +95,7 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
     desc.header.name[copy_len] = '\0';
     desc.header.version = pak::render::kMaterialAssetVersion;
     desc.header.streaming_priority = 255; // Lowest priority
-    desc.header.content_hash = 0; // No specific content hash
+    desc.header.content_hash = {}; // No specific content hash
     desc.header.variant_flags = 0;
 
     // Material properties

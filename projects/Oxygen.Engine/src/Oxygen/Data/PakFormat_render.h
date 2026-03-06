@@ -178,7 +178,7 @@ struct MaterialAssetDesc {
 //   `shader_stages` (least-significant set bit first). Count is population
 //   count of `shader_stages`.
 #pragma pack(pop)
-static_assert(sizeof(MaterialAssetDesc) == 333);
+static_assert(sizeof(MaterialAssetDesc) == 357);
 
 //=== Texture Payload Structures ===-----------------------------------------//
 

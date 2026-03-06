@@ -57,7 +57,7 @@ struct GeometryAssetDesc {
 };
 // Followed by: MeshDesc meshes[lod_count];
 #pragma pack(pop)
-static_assert(sizeof(GeometryAssetDesc) == 107);
+static_assert(sizeof(GeometryAssetDesc) == 131);
 
 //! Fields for a standard (static) mesh
 /*! Boundaries are required and must be pre-computed by tooling. All-zero

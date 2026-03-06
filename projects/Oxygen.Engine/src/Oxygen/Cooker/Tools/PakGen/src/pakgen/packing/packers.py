@@ -14,6 +14,7 @@ from .constants import (
     FOOTER_MAGIC,
     ASSET_HEADER_SIZE,
     ASSET_KEY_SIZE,
+    ASSET_TYPE_MAP,
     MATERIAL_DESC_SIZE,
     GEOMETRY_DESC_SIZE,
     SCENE_DESC_SIZE,
@@ -47,6 +48,7 @@ from ..utils.io import DataError, read_data_from_spec
 __all__ = [
     "pack_header",
     "pack_footer",
+    "pack_asset_header",
     "pack_script_param_record",
     "pack_directory_entry",
     "pack_material_asset_descriptor",
@@ -116,6 +118,60 @@ def _c_string_bytes(value: str, max_bytes_without_nul: int, field: str) -> bytes
             f"{field} exceeds {max_bytes_without_nul} UTF-8 bytes",
         )
     return encoded + b"\x00" + (b"\x00" * (max_bytes_without_nul - len(encoded)))
+
+
+def _normalize_sha256_digest(value: Any, *, field: str) -> bytes:
+    if isinstance(value, (bytes, bytearray)):
+        digest = bytes(value)
+        if len(digest) != 32:
+            raise PakError("E_SIZE", f"{field} bytes must be 32 bytes")
+        return digest
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if cleaned.startswith("0x") or cleaned.startswith("0X"):
+            cleaned = cleaned[2:]
+        if len(cleaned) != 64:
+            raise PakError("E_SIZE", f"{field} hex must be 64 characters")
+        try:
+            return bytes.fromhex(cleaned)
+        except ValueError as exc:
+            raise PakError("E_TYPE", f"{field} hex is invalid") from exc
+    if isinstance(value, int):
+        # Integer form is interpreted as legacy low 64-bit prefix.
+        return struct.pack("<Q", value & 0xFFFFFFFFFFFFFFFF) + (b"\x00" * 24)
+    if value is None:
+        return b"\x00" * 32
+    raise PakError(
+        "E_TYPE",
+        f"{field} must be 32-byte bytes or 64-char hex string",
+    )
+
+
+def pack_asset_header(asset_dict: Dict[str, Any]) -> bytes:
+    name = asset_dict.get("name", "")
+    type_name = asset_dict.get("type")
+    asset_type = ASSET_TYPE_MAP.get(type_name, 0)
+    version = asset_dict.get("version", 1)
+    streaming_priority = asset_dict.get("streaming_priority", 0)
+    content_hash = _normalize_sha256_digest(
+        asset_dict.get("content_hash", 0), field="AssetHeader.content_hash"
+    )
+    variant_flags = asset_dict.get("variant_flags", 0)
+    name_bytes = pack_name_string(name, 64)
+    header = (
+        struct.pack("<B", asset_type)
+        + name_bytes
+        + struct.pack("<B", version)
+        + struct.pack("<B", streaming_priority)
+        + content_hash
+        + struct.pack("<I", variant_flags)
+    )
+    if len(header) != ASSET_HEADER_SIZE:
+        raise PakError(
+            "E_SIZE",
+            f"AssetHeader size mismatch: expected {ASSET_HEADER_SIZE} got {len(header)}",
+        )
+    return header
 
 
 def _pack_script_param_payload(param_type: int, value: Any) -> bytes:

@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <iomanip>
 #include <iostream>
 #include <optional>
 #include <sstream>
@@ -54,6 +55,18 @@ template <typename T>
 {
   std::ostringstream oss;
   oss << "0x" << std::hex << value;
+  return oss.str();
+}
+
+[[nodiscard]] inline auto ToHexString(
+  const oxygen::data::pak::core::ContentHashDigest& value) -> std::string
+{
+  std::ostringstream oss;
+  oss << "0x";
+  for (const auto byte : value) {
+    oss << std::setw(2) << std::setfill('0') << std::hex
+        << static_cast<unsigned>(byte);
+  }
   return oss.str();
 }
 
