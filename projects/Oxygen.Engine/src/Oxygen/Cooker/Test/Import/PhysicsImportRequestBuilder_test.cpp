@@ -80,7 +80,7 @@ NOLINT_TEST(
 }
 
 NOLINT_TEST(PhysicsImportRequestBuilderTest,
-  BuildPhysicsSidecarRequestAcceptsInlineBindingsObjectPayload)
+  BuildPhysicsSidecarRequestRejectsInlineBindingsObjectPayload)
 {
   auto settings = MakeValidSourceSettings();
   settings.source_path.clear();
@@ -90,11 +90,9 @@ NOLINT_TEST(PhysicsImportRequestBuilderTest,
 
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value()) << errors.str();
-  EXPECT_TRUE(errors.str().empty());
-  ASSERT_TRUE(request->physics.has_value());
-  EXPECT_TRUE(request->physics->inline_bindings_json.find("\"bindings\"")
-    != std::string::npos);
+  EXPECT_FALSE(request.has_value());
+  EXPECT_TRUE(
+    errors.str().find("top-level 'bindings' object") != std::string::npos);
 }
 
 NOLINT_TEST(PhysicsImportRequestBuilderTest,
