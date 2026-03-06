@@ -1278,8 +1278,8 @@ void SceneLoaderService::HydrateJointBindings(
 
     physics::joint::JointDesc desc {};
     desc.type = physics::joint::JointType::kFixed;
-    desc.body_a = body_a->GetBodyId();
-    desc.body_b = body_b->GetBodyId();
+    desc.body_a = *body_a;
+    desc.body_b = *body_b;
     desc.constraint_settings_blob = constraint_blob;
 
     const auto created = physics_module.Joints().CreateJoint(world_id, desc);
@@ -1359,7 +1359,7 @@ void SceneLoaderService::HydrateColliderBindings(
     LOG_F(INFO,
       "SceneLoader: provisioned trigger collider (node_index={} body_id={} "
       "shape_key={} collision_layer={} collision_mask={} is_sensor={}).",
-      record.node_index, attached->GetBodyId().get(),
+      record.node_index, attached->get(),
       data::to_string(record.shape_asset_key), record.collision_layer,
       record.collision_mask, record.is_sensor);
   }
@@ -1899,7 +1899,7 @@ void SceneLoaderService::HydrateVehicleBindings(
         + "(node_index=" + std::to_string(record.node_index) + ")");
     }
     const auto chassis_body_type
-      = physics_module.GetBodyTypeForBodyId(chassis_body->GetBodyId());
+      = physics_module.GetBodyTypeForBodyId(*chassis_body);
     if (!chassis_body_type.has_value()
       || *chassis_body_type != physics::body::BodyType::kDynamic) {
       throw std::runtime_error(
@@ -1907,8 +1907,7 @@ void SceneLoaderService::HydrateVehicleBindings(
         + "(node_index=" + std::to_string(record.node_index) + ")");
     }
     const auto chassis_position_result
-      = physics_module.Bodies().GetBodyPosition(
-        world_id, chassis_body->GetBodyId());
+      = physics_module.Bodies().GetBodyPosition(world_id, *chassis_body);
     if (!chassis_position_result.has_value()
       || !IsFiniteVec3(chassis_position_result.value())) {
       throw std::runtime_error(
@@ -1987,14 +1986,14 @@ void SceneLoaderService::HydrateVehicleBindings(
           + "(chassis_node_index=" + std::to_string(record.node_index)
           + " wheel_node_index=" + std::to_string(wheel_node_index_u32) + ")");
       }
-      if (wheel_body->GetBodyId() == chassis_body->GetBodyId()) {
+      if (*wheel_body == *chassis_body) {
         throw std::runtime_error(
           std::string("vehicle wheel must not resolve to chassis body ")
           + "(chassis_node_index=" + std::to_string(record.node_index)
           + " wheel_node_index=" + std::to_string(wheel_node_index_u32) + ")");
       }
       const auto wheel_body_type
-        = physics_module.GetBodyTypeForBodyId(wheel_body->GetBodyId());
+        = physics_module.GetBodyTypeForBodyId(*wheel_body);
       if (!wheel_body_type.has_value()
         || (*wheel_body_type != physics::body::BodyType::kDynamic
           && *wheel_body_type != physics::body::BodyType::kKinematic)) {
@@ -2004,15 +2003,14 @@ void SceneLoaderService::HydrateVehicleBindings(
           + " wheel_node_index=" + std::to_string(wheel_node_index_u32) + ")");
       }
       const auto wheel_position_result
-        = physics_module.Bodies().GetBodyPosition(
-          world_id, wheel_body->GetBodyId());
+        = physics_module.Bodies().GetBodyPosition(world_id, *wheel_body);
       if (!wheel_position_result.has_value()
         || !IsFiniteVec3(wheel_position_result.value())) {
         throw std::runtime_error(
           std::string("vehicle wheel pose could not be resolved ")
           + "(chassis_node_index=" + std::to_string(record.node_index)
           + " wheel_node_index=" + std::to_string(wheel_node_index_u32)
-          + " body_id=" + physics::to_string(wheel_body->GetBodyId()) + ")");
+          + " body_id=" + physics::to_string(*wheel_body) + ")");
       }
       const auto wheel_position = wheel_position_result.value();
       const auto wheel_offset = wheel_position - chassis_position;
@@ -2033,15 +2031,15 @@ void SceneLoaderService::HydrateVehicleBindings(
             + std::to_string(wheel_node_index_u32) + ")");
         }
       }
-      if (!distinct_wheel_ids.insert(wheel_body->GetBodyId()).second) {
+      if (!distinct_wheel_ids.insert(*wheel_body).second) {
         throw std::runtime_error(
           std::string("vehicle wheel topology contains duplicate wheel body ")
           + "(chassis_node_index=" + std::to_string(record.node_index)
           + " wheel_node_index=" + std::to_string(wheel_node_index_u32)
-          + " body_id=" + physics::to_string(wheel_body->GetBodyId()) + ")");
+          + " body_id=" + physics::to_string(*wheel_body) + ")");
       }
       wheel_desc_storage.push_back(physics::vehicle::VehicleWheelDesc {
-        .body_id = wheel_body->GetBodyId(),
+        .body_id = *wheel_body,
         .axle_index = wheel_binding.axle_index,
         .side = ToRuntimeVehicleWheelSide(wheel_binding.side),
       });
@@ -2056,7 +2054,7 @@ void SceneLoaderService::HydrateVehicleBindings(
     }
 
     auto vehicle_desc = physics::vehicle::VehicleDesc {
-      .chassis_body_id = chassis_body->GetBodyId(),
+      .chassis_body_id = *chassis_body,
       .wheels
       = std::span<const physics::vehicle::VehicleWheelDesc>(wheel_desc_storage),
       .constraint_settings_blob = constraint_resource->GetData(),
@@ -2177,7 +2175,7 @@ void SceneLoaderService::HydrateAggregateBindings(
           + " member_node_index=" + std::to_string(member_node_index_u32)
           + ")");
       }
-      member_body_ids.push_back(rigid_body->GetBodyId());
+      member_body_ids.push_back(*rigid_body);
     }
 
     std::ranges::sort(member_body_ids);

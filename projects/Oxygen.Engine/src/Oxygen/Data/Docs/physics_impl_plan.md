@@ -690,7 +690,7 @@ Remaining delta to Phase 4 exit gate:
 - [x] Remove legacy/duplicate pipelines bypassing binary descriptors.
 - [x] Remove runtime fallback parsing of L1 JSON for physics instantiation.
 - [x] Remove cross-collection ordinal reference remnants.
-- [ ] Remove deprecated handle wrappers that violate session-handle policy.
+- [x] Remove deprecated handle wrappers that violate session-handle policy.
 - [ ] Remove compatibility code paths that keep old physics schema alive in production.
 - [ ] Same canonical virtual path -> same `AssetKey` across runs/machines.
 - [ ] Repeat cooks with unchanged input produce stable descriptor/blob hashes.
@@ -741,6 +741,21 @@ Task 3 closure evidence (2026-03-07):
   - `Oxygen.Cooker.AsyncImportCollisionShapeDescriptor.Tests.exe` -> **19 passed**
     (includes top-level unknown-field rejection and inline cooked-payload
     path coverage).
+
+Task 4 closure evidence (2026-03-07):
+
+- Removed deprecated `ScenePhysics` facade wrappers (`RigidBodyFacade`,
+  `CharacterFacade`) and migrated runtime API surface to handle-only contracts:
+  `BodyId`/`CharacterId` returns plus explicit
+  `ScenePhysics::MoveCharacter(...)`.
+- Updated all in-tree call sites to the handle-only API:
+  PhysicsModule tests, scripting physics bindings, DemoShell scene loader, and
+  Physics example runtime module.
+- Validation:
+  - `cmake --build out/build-vs --config Debug --target Oxygen.PhysicsModule.Sync.Tests Oxygen.Scripting.Bindings.Tests -- /m:6` -> **success**.
+  - `cmake --build out/build-vs --config Debug --target oxygen-examples-renderscene oxygen-examples-physics -- /m:6` -> **success**.
+  - `out/build-vs/bin/Debug/Oxygen.PhysicsModule.Sync.Tests.exe` -> **58 passed**.
+  - `out/build-vs/bin/Debug/Oxygen.Scripting.Bindings.Tests.exe` -> **89 passed**.
 
 Phase 5 final release gate:
 

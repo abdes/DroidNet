@@ -99,7 +99,7 @@ NOLINT_TEST_F(
     observer_ptr<PhysicsModule> { module_.get() }, node,
     character::CharacterDesc {});
   ASSERT_TRUE(character.has_value());
-  EXPECT_NE(character->GetCharacterId(), kInvalidCharacterId);
+  EXPECT_NE(*character, kInvalidCharacterId);
   EXPECT_EQ(FakeState().character_create_calls, 1U);
 }
 
@@ -181,12 +181,12 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, CharacterNodeTransformWriteAfterMove_Death)
     observer_ptr<PhysicsModule> { module_.get() }, node.GetHandle());
   ASSERT_TRUE(character.has_value());
 
-  ASSERT_TRUE(character
-      ->Move(
-        character::CharacterMoveInput {
-          .desired_velocity = Vec3 { 1.0F, 0.0F, 0.0F },
-        },
-        1.0F)
+  ASSERT_TRUE(ScenePhysics::MoveCharacter(
+    observer_ptr<PhysicsModule> { module_.get() }, *character,
+    character::CharacterMoveInput {
+      .desired_velocity = Vec3 { 1.0F, 0.0F, 0.0F },
+    },
+    1.0F)
       .has_value());
   scene_->Update();
   scene_->SyncObservers();
@@ -198,7 +198,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, CharacterNodeTransformWriteAfterMove_Death)
 }
 #endif
 
-NOLINT_TEST_F(PhysicsModuleSyncTest, GetCharacterReturnsFacadeForAttachedNode)
+NOLINT_TEST_F(PhysicsModuleSyncTest, GetCharacterReturnsHandleForAttachedNode)
 {
   auto node = scene_->CreateNode("character-get");
   ASSERT_TRUE(node.IsValid());
@@ -213,13 +213,13 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, GetCharacterReturnsFacadeForAttachedNode)
   const auto queried = ScenePhysics::GetCharacter(
     observer_ptr<PhysicsModule> { module_.get() }, node.GetHandle());
   ASSERT_TRUE(queried.has_value());
-  EXPECT_EQ(queried->GetNode(), node.GetHandle());
-  EXPECT_EQ(queried->GetCharacterId(), attached->GetCharacterId());
+  EXPECT_EQ(*queried, *attached);
 
-  const auto move
-    = queried->Move(character::CharacterMoveInput { .desired_velocity
-                      = Vec3 { 1.0F, 2.0F, 3.0F } },
-      1.0F / 60.0F);
+  const auto move = ScenePhysics::MoveCharacter(
+    observer_ptr<PhysicsModule> { module_.get() }, *queried,
+    character::CharacterMoveInput {
+      .desired_velocity = Vec3 { 1.0F, 2.0F, 3.0F } },
+    1.0F / 60.0F);
   ASSERT_TRUE(move.has_value());
   EXPECT_EQ(FakeState().character_move_calls, 1U);
 }
@@ -239,7 +239,8 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, CharacterMoveUpdatesRootNodeTransform)
     observer_ptr<PhysicsModule> { module_.get() }, node.GetHandle());
   ASSERT_TRUE(character.has_value());
 
-  const auto move = character->Move(
+  const auto move = ScenePhysics::MoveCharacter(
+    observer_ptr<PhysicsModule> { module_.get() }, *character,
     character::CharacterMoveInput {
       .desired_velocity = Vec3 { 2.0F, 0.0F, -1.0F },
     },
@@ -271,7 +272,8 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, CharacterMoveWithParentUsesWorldToLocal)
     observer_ptr<PhysicsModule> { module_.get() }, child.GetHandle());
   ASSERT_TRUE(character.has_value());
 
-  const auto move = character->Move(
+  const auto move = ScenePhysics::MoveCharacter(
+    observer_ptr<PhysicsModule> { module_.get() }, *character,
     character::CharacterMoveInput {
       .desired_velocity = Vec3 { 6.0F, 0.0F, 0.0F },
     },
@@ -305,7 +307,8 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, CharacterMoveWithDirtyParentUsesLocalChain)
 
   ASSERT_TRUE(parent.GetTransform().SetLocalPosition({ 5.0F, 0.0F, 0.0F }));
 
-  const auto move = character->Move(
+  const auto move = ScenePhysics::MoveCharacter(
+    observer_ptr<PhysicsModule> { module_.get() }, *character,
     character::CharacterMoveInput {
       .desired_velocity = Vec3 { 4.0F, 0.0F, 0.0F },
     },
@@ -332,12 +335,12 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, CharacterMoveThenSyncObserversIsStable)
     observer_ptr<PhysicsModule> { module_.get() }, node.GetHandle());
   ASSERT_TRUE(character.has_value());
 
-  ASSERT_TRUE(character
-      ->Move(
-        character::CharacterMoveInput {
-          .desired_velocity = Vec3 { 1.0F, 0.0F, 0.0F },
-        },
-        1.0F)
+  ASSERT_TRUE(ScenePhysics::MoveCharacter(
+    observer_ptr<PhysicsModule> { module_.get() }, *character,
+    character::CharacterMoveInput {
+      .desired_velocity = Vec3 { 1.0F, 0.0F, 0.0F },
+    },
+    1.0F)
       .has_value());
   scene_->Update();
   scene_->SyncObservers();
@@ -629,7 +632,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, GameplayPushesOnlyKinematicBodies)
   RunGameplay();
 
   EXPECT_EQ(FakeState().move_kinematic_calls, 1U);
-  EXPECT_EQ(FakeState().last_moved_body, body->GetBodyId());
+  EXPECT_EQ(FakeState().last_moved_body, *body);
   ExpectVec3Eq(FakeState().last_moved_position, Vec3(7.0F, 2.0F, -3.0F));
   const auto stats = module_->GetSyncDiagnostics();
   EXPECT_EQ(stats.gameplay_push_success, 1U);
@@ -690,7 +693,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, SceneMutationPullsDynamicBodiesToRootLocal)
 
   FakeState().active_transforms = {
     system::ActiveBodyTransform {
-      .body_id = body->GetBodyId(),
+      .body_id = *body,
       .position = Vec3 { 11.0F, -2.0F, 5.0F },
       .rotation = Quat { 1.0F, 0.0F, 0.0F, 0.0F },
     },
@@ -726,7 +729,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest,
 
   FakeState().active_transforms = {
     system::ActiveBodyTransform {
-      .body_id = body->GetBodyId(),
+      .body_id = *body,
       .position = Vec3 { 13.0F, 1.0F, 0.0F },
       .rotation = Quat { 1.0F, 0.0F, 0.0F, 0.0F },
     },
@@ -1303,7 +1306,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, DynamicConflictSameFrameDynamicWins)
 
   FakeState().active_transforms = {
     system::ActiveBodyTransform {
-      .body_id = body->GetBodyId(),
+      .body_id = *body,
       .position = Vec3 { 9.0F, 8.0F, 7.0F },
       .rotation = Quat { 1.0F, 0.0F, 0.0F, 0.0F },
     },
@@ -1329,7 +1332,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, SceneMutationDoesNotPullKinematicBody)
 
   FakeState().active_transforms = {
     system::ActiveBodyTransform {
-      .body_id = body->GetBodyId(),
+      .body_id = *body,
       .position = Vec3 { 100.0F, 200.0F, 300.0F },
       .rotation = Quat { 1.0F, 0.0F, 0.0F, 0.0F },
     },
@@ -1354,7 +1357,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, SceneMutationDoesNotPullStaticBody)
 
   FakeState().active_transforms = {
     system::ActiveBodyTransform {
-      .body_id = body->GetBodyId(),
+      .body_id = *body,
       .position = Vec3 { -10.0F, -20.0F, -30.0F },
       .rotation = Quat { 1.0F, 0.0F, 0.0F, 0.0F },
     },
@@ -1384,7 +1387,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, ParentScaleZeroComponentDoesNotProduceNaN)
 
   FakeState().active_transforms = {
     system::ActiveBodyTransform {
-      .body_id = body->GetBodyId(),
+      .body_id = *body,
       .position = Vec3 { 10.0F, 5.0F, 2.0F },
       .rotation = Quat { 1.0F, 0.0F, 0.0F, 0.0F },
     },
@@ -1416,7 +1419,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, ParentRotationConvertsWorldToLocal)
 
   FakeState().active_transforms = {
     system::ActiveBodyTransform {
-      .body_id = body->GetBodyId(),
+      .body_id = *body,
       .position = Vec3 { 0.0F, 1.0F, 0.0F },
       .rotation = rot90z,
     },
@@ -1451,7 +1454,7 @@ NOLINT_TEST_F(
 
   FakeState().active_transforms = {
     system::ActiveBodyTransform {
-      .body_id = body->GetBodyId(),
+      .body_id = *body,
       .position = Vec3 { 9.0F, 0.0F, 0.0F },
       .rotation = Quat { 1.0F, 0.0F, 0.0F, 0.0F },
     },
@@ -1481,7 +1484,7 @@ NOLINT_TEST_F(
 
   FakeState().active_transforms = {
     system::ActiveBodyTransform {
-      .body_id = body->GetBodyId(),
+      .body_id = *body,
       .position = Vec3 { 8.0F, 0.0F, 0.0F },
       .rotation = Quat { 1.0F, 0.0F, 0.0F, 0.0F },
     },
@@ -1507,8 +1510,8 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, SceneMutationDrainsAndMapsPhysicsEvents)
   FakeState().pending_events = {
     events::PhysicsEvent {
       .type = events::PhysicsEventType::kContactBegin,
-      .body_a = body_a->GetBodyId(),
-      .body_b = body_b->GetBodyId(),
+      .body_a = *body_a,
+      .body_b = *body_b,
     },
   };
 
@@ -1540,8 +1543,8 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, ConsumeSceneEventsDrainsBuffer)
   FakeState().pending_events = {
     events::PhysicsEvent {
       .type = events::PhysicsEventType::kContactBegin,
-      .body_a = body_a->GetBodyId(),
-      .body_b = body_b->GetBodyId(),
+      .body_a = *body_a,
+      .body_b = *body_b,
     },
   };
 
@@ -1554,8 +1557,8 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, ConsumeSceneEventsDrainsBuffer)
   FakeState().pending_events = {
     events::PhysicsEvent {
       .type = events::PhysicsEventType::kContactEnd,
-      .body_a = body_a->GetBodyId(),
-      .body_b = body_b->GetBodyId(),
+      .body_a = *body_a,
+      .body_b = *body_b,
     },
   };
   RunSceneMutation();

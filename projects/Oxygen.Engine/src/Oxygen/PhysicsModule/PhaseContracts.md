@@ -26,7 +26,7 @@ Defines module-level phase behavior for rigid, character, and aggregate-ready do
 1. Rigid `kStatic`: scene authored placement only; no dynamic pull.
 2. Rigid `kKinematic`: scene command authority, pushed in `kGameplay`.
 3. Rigid `kDynamic`: physics simulation authority, pulled in `kSceneMutation`.
-4. Character: command-authoritative via `ScenePhysics::CharacterFacade::Move`.
+4. Character: command-authoritative via `ScenePhysics::MoveCharacter`.
 5. Aggregate domains:
 - Articulation: simulation-authoritative by default.
 - Vehicle: command-authoritative control input + simulation integration.

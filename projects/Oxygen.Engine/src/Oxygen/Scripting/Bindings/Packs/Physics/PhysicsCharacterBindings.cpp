@@ -188,8 +188,7 @@ namespace {
       return 1;
     }
 
-    return PushCharacterHandle(
-      state, *world_id_opt, character->GetCharacterId());
+    return PushCharacterHandle(state, *world_id_opt, *character);
   }
 
   auto LuaCharacterGet(lua_State* state) -> int
@@ -217,8 +216,7 @@ namespace {
       return 1;
     }
 
-    return PushCharacterHandle(
-      state, *world_id_opt, character->GetCharacterId());
+    return PushCharacterHandle(state, *world_id_opt, *character);
   }
 
   auto LuaCharacterHandleGetId(lua_State* state) -> int
@@ -276,20 +274,9 @@ namespace {
       .desired_velocity = velocity,
       .jump_pressed = jump_pressed,
     };
-    const auto node_handle
-      = physics_module->GetNodeForCharacterId(handle->character_id);
-    if (!node_handle.has_value()) {
-      lua_pushnil(state);
-      return 1;
-    }
-    const auto character = physics::ScenePhysics::GetCharacter(
-      observer_ptr<physics::PhysicsModule> { physics_module }, *node_handle);
-    if (!character.has_value()) {
-      lua_pushnil(state);
-      return 1;
-    }
-
-    const auto result = character->Move(input, dt);
+    const auto result = physics::ScenePhysics::MoveCharacter(
+      observer_ptr<physics::PhysicsModule> { physics_module },
+      handle->character_id, input, dt);
     if (!result.has_value()) {
       lua_pushnil(state);
       return 1;

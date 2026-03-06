@@ -37,33 +37,8 @@ namespace {
 
 } // namespace
 
-auto ScenePhysics::CharacterFacade::Move(
-  const character::CharacterMoveInput& input, float delta_time) const
-  -> PhysicsResult<character::CharacterMoveResult>
-{
-  if (character_api_ == nullptr) {
-    return Err(PhysicsError::kNotInitialized);
-  }
-  auto result = character_api_->MoveCharacter(
-    world_id_, character_id_, input, delta_time);
-  if (!result.has_value()) {
-    return result;
-  }
-  if (physics_module_ != nullptr) {
-    const auto& state = result.value().state;
-    const auto scene_tag = internal::ScenePhysicsTagFactory::Get();
-    [[maybe_unused]] const auto synced = physics_module_->ApplyWorldPoseToNode(
-      scene_tag, node_, state.position, state.rotation);
-    DCHECK_F(synced,
-      "Character authority contract violated: character move result "
-      "must map back to a valid observed scene node.");
-  }
-  return result;
-}
-
 auto ScenePhysics::AttachRigidBody(observer_ptr<PhysicsModule> physics_module,
-  scene::SceneNode& node, const body::BodyDesc& desc)
-  -> std::optional<RigidBodyFacade>
+  scene::SceneNode& node, const body::BodyDesc& desc) -> std::optional<BodyId>
 {
   const auto result = AttachRigidBodyDetailed(physics_module, node, desc);
   if (!result.has_value()) {
@@ -76,7 +51,7 @@ auto ScenePhysics::AttachRigidBody(observer_ptr<PhysicsModule> physics_module,
 
 auto ScenePhysics::AttachRigidBodyDetailed(
   observer_ptr<PhysicsModule> physics_module, scene::SceneNode& node,
-  const body::BodyDesc& desc) -> PhysicsResult<RigidBodyFacade>
+  const body::BodyDesc& desc) -> PhysicsResult<BodyId>
 {
   if (!physics_module || !node.IsValid()) {
     return Err(PhysicsError::kInvalidArgument);
@@ -124,12 +99,11 @@ auto ScenePhysics::AttachRigidBodyDetailed(
   physics_module->RegisterNodeBodyMapping(
     scene_tag, node.GetHandle(), body_id, desc.type);
 
-  return PhysicsResult<RigidBodyFacade>::Ok(RigidBodyFacade(node.GetHandle(),
-    world_id, body_id, observer_ptr<system::IBodyApi> { &body_api }));
+  return PhysicsResult<BodyId>::Ok(body_id);
 }
 
 auto ScenePhysics::GetRigidBody(observer_ptr<PhysicsModule> physics_module,
-  const scene::NodeHandle& node) -> std::optional<RigidBodyFacade>
+  const scene::NodeHandle& node) -> std::optional<BodyId>
 {
   if (!physics_module || !node.IsValid()) {
     return std::nullopt;
@@ -141,13 +115,12 @@ auto ScenePhysics::GetRigidBody(observer_ptr<PhysicsModule> physics_module,
     return std::nullopt;
   }
 
-  return RigidBodyFacade(node, physics_module->GetWorldId(), body_id,
-    observer_ptr<system::IBodyApi> { &physics_module->Bodies() });
+  return body_id;
 }
 
 auto ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> physics_module,
   scene::SceneNode& node, const character::CharacterDesc& desc)
-  -> std::optional<CharacterFacade>
+  -> std::optional<CharacterId>
 {
   const auto result = AttachCharacterDetailed(physics_module, node, desc);
   if (!result.has_value()) {
@@ -160,7 +133,7 @@ auto ScenePhysics::AttachCharacter(observer_ptr<PhysicsModule> physics_module,
 
 auto ScenePhysics::AttachCharacterDetailed(
   observer_ptr<PhysicsModule> physics_module, scene::SceneNode& node,
-  const character::CharacterDesc& desc) -> PhysicsResult<CharacterFacade>
+  const character::CharacterDesc& desc) -> PhysicsResult<CharacterId>
 {
   if (!physics_module || !node.IsValid()) {
     return Err(PhysicsError::kInvalidArgument);
@@ -206,13 +179,11 @@ auto ScenePhysics::AttachCharacterDetailed(
   const CharacterId character_id = result.value();
   physics_module->RegisterNodeCharacterMapping(
     scene_tag, node.GetHandle(), character_id);
-  return PhysicsResult<CharacterFacade>::Ok(
-    CharacterFacade(node.GetHandle(), world_id, character_id,
-      observer_ptr<system::ICharacterApi> { &character_api }, physics_module));
+  return PhysicsResult<CharacterId>::Ok(character_id);
 }
 
 auto ScenePhysics::GetCharacter(observer_ptr<PhysicsModule> physics_module,
-  const scene::NodeHandle& node) -> std::optional<CharacterFacade>
+  const scene::NodeHandle& node) -> std::optional<CharacterId>
 {
   if (!physics_module || !node.IsValid()) {
     return std::nullopt;
@@ -225,9 +196,44 @@ auto ScenePhysics::GetCharacter(observer_ptr<PhysicsModule> physics_module,
     return std::nullopt;
   }
 
-  return CharacterFacade(node, physics_module->GetWorldId(), character_id,
-    observer_ptr<system::ICharacterApi> { &physics_module->Characters() },
-    physics_module);
+  return character_id;
+}
+
+auto ScenePhysics::MoveCharacter(observer_ptr<PhysicsModule> physics_module,
+  const CharacterId character_id, const character::CharacterMoveInput& input,
+  const float delta_time) -> PhysicsResult<character::CharacterMoveResult>
+{
+  if (physics_module == nullptr || !IsValid(character_id)) {
+    return Err(PhysicsError::kInvalidArgument);
+  }
+
+  const auto world_id = physics_module->GetWorldId();
+  if (world_id == kInvalidWorldId) {
+    return Err(PhysicsError::kNotInitialized);
+  }
+
+  auto result = physics_module->Characters().MoveCharacter(
+    world_id, character_id, input, delta_time);
+  if (!result.has_value()) {
+    return result;
+  }
+
+  const auto node = physics_module->GetNodeForCharacterId(character_id);
+  DCHECK_F(node.has_value(),
+    "Character authority contract violated: character move result "
+    "must map back to a valid observed scene node.");
+  if (!node.has_value()) {
+    return result;
+  }
+
+  const auto& state = result.value().state;
+  const auto scene_tag = internal::ScenePhysicsTagFactory::Get();
+  [[maybe_unused]] const auto synced = physics_module->ApplyWorldPoseToNode(
+    scene_tag, *node, state.position, state.rotation);
+  DCHECK_F(synced,
+    "Character authority contract violated: character move result "
+    "must map back to a valid observed scene node.");
+  return result;
 }
 
 auto ScenePhysics::CastRay(observer_ptr<PhysicsModule> physics_module,

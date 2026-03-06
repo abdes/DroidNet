@@ -105,17 +105,14 @@ namespace internal {
  pulled from physics in `kSceneMutation`.
  - Character controllers are
  command-authoritative:
-   `ScenePhysics::CharacterFacade::Move` drives
+
+ `ScenePhysics::MoveCharacter` drives
  character motion intent.
-   Successful move results are converted from world to
- local and applied to the
-   scene node through this module.
-   After character
- attachment, scene-authored transform writes on that node are
-   contract
- violations (debug-asserted) and are never enqueued into the
-   rigid-body push
- path.
+   Successful
+ move results are converted from world to local and applied to the scene node
+ through this module. After character attachment, scene-authored transform
+ writes on that node are contract violations (debug-asserted) and are never
+ enqueued into the rigid-body push path.
  - A scene node can be managed by exactly one motion authority source:
 
  either

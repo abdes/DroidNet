@@ -886,7 +886,8 @@ auto PhysicsModule::OnTransformChanged(
   }
   DCHECK_F(!node_to_character_binding_.contains(node_handle),
     "Character authority contract violated: scene transform writes on "
-    "character-managed nodes are not allowed. Use CharacterFacade::Move.");
+    "character-managed nodes are not allowed. Use "
+    "ScenePhysics::MoveCharacter.");
   if (node_to_character_binding_.contains(node_handle)) {
     return;
   }
