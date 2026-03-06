@@ -99,8 +99,8 @@ NOLINT_TEST_F(PhysicsModuleStressTest, EventDrainChurnOverManyFrames)
     FakeState().pending_events = {
       events::PhysicsEvent {
         .type = type,
-        .body_a = body_a->GetBodyId(),
-        .body_b = body_b->GetBodyId(),
+        .body_a = *body_a,
+        .body_b = *body_b,
       },
     };
 

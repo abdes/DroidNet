@@ -387,6 +387,12 @@ is used internally:
 - A handle must never be used to identify an asset for loading or persistence.
   Asset identity is always `AssetKey`. Handles are for in-simulation access
   only.
+- Scene-facing runtime attachment/query APIs are handle-only:
+  `ScenePhysics::AttachRigidBody` / `GetRigidBody` return `BodyId`,
+  `ScenePhysics::AttachCharacter` / `GetCharacter` return `CharacterId`, and
+  character motion intent is submitted via
+  `ScenePhysics::MoveCharacter(CharacterId, ...)`. No facade-style wrapper
+  objects are part of the runtime handle contract.
 
 ---
 

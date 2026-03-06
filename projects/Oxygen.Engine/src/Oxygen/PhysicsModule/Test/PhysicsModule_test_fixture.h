@@ -86,8 +86,8 @@ protected:
       core::PhaseId::kFixedSimulation, &PhysicsModule::OnFixedSimulation);
   }
 
-  [[nodiscard]] auto AttachBody(scene::SceneNode& node,
-    const body::BodyType type) -> std::optional<RigidBodyFacade>
+  [[nodiscard]] auto AttachBody(
+    scene::SceneNode& node, const body::BodyType type) -> std::optional<BodyId>
   {
     RunGameplay();
     scene_->Update();

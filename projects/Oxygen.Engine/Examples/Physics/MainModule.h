@@ -143,9 +143,8 @@ private:
   auto SpawnRenderableNode(std::string_view name,
     const std::shared_ptr<data::GeometryAsset>& geometry, const Vec3& position,
     const glm::quat& rotation, const Vec3& scale) -> scene::SceneNode;
-  auto AttachRigidBody(
-    scene::SceneNode& node, const physics::body::BodyDesc& desc)
-    -> std::optional<physics::RigidBodyFacade>;
+  auto AttachRigidBody(scene::SceneNode& node,
+    const physics::body::BodyDesc& desc) -> std::optional<physics::BodyId>;
 
   ActiveScene active_scene_;
   scene::SceneNode main_camera_ {};
@@ -166,7 +165,7 @@ private:
   std::shared_ptr<data::GeometryAsset> player_sphere_geometry_;
 
   scene::SceneNode player_node_ {};
-  std::optional<physics::RigidBodyFacade> player_body_ {};
+  std::optional<physics::BodyId> player_body_ {};
   std::vector<scene::SceneNode> static_nodes_ {};
   std::vector<DynamicObstacleState> dynamic_obstacles_ {};
   std::vector<FlipperState> flippers_ {};

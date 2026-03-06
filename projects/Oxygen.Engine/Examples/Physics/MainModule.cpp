@@ -371,7 +371,7 @@ auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
       auto* module = ResolvePhysicsModule().get();
       if (module != nullptr) {
         const auto world_id = module->GetWorldId();
-        const auto body_id = player_body_->GetBodyId();
+        const auto body_id = *player_body_;
         if (nudge_left_action_ && nudge_left_action_->WasTriggeredThisFrame()) {
           constexpr float kNudgeVelocityDelta = 6.0F;
           const auto current_velocity
@@ -414,8 +414,8 @@ auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
       auto* module = ResolvePhysicsModule().get();
       if (module != nullptr) {
         const auto world_id = module->GetWorldId();
-        const auto player_pos = module->Bodies().GetBodyPosition(
-          world_id, player_body_->GetBodyId());
+        const auto player_pos
+          = module->Bodies().GetBodyPosition(world_id, *player_body_);
         if (player_pos.has_value()) {
           const auto& pos = player_pos.value();
           if (previous_player_world_position_ && dt > 0.0F) {
@@ -567,9 +567,8 @@ auto MainModule::SpawnRenderableNode(std::string_view name,
   return node;
 }
 
-auto MainModule::AttachRigidBody(
-  scene::SceneNode& node, const physics::body::BodyDesc& desc)
-  -> std::optional<physics::RigidBodyFacade>
+auto MainModule::AttachRigidBody(scene::SceneNode& node,
+  const physics::body::BodyDesc& desc) -> std::optional<physics::BodyId>
 {
   auto* module = ResolvePhysicsModule().get();
   if (module == nullptr) {
@@ -828,7 +827,7 @@ auto MainModule::InitializePhysicsScenario() -> bool
       LOG_F(ERROR, "Physics: failed to attach dynamic obstacle body");
       return false;
     }
-    obstacle.body_id = attached->GetBodyId();
+    obstacle.body_id = *attached;
   }
 
   for (auto& flipper : flippers_) {
@@ -848,7 +847,7 @@ auto MainModule::InitializePhysicsScenario() -> bool
       LOG_F(ERROR, "Physics: failed to attach flipper body");
       return false;
     }
-    flipper.body_id = attached->GetBodyId();
+    flipper.body_id = *attached;
   }
 
   physics_ready_ = true;
@@ -939,8 +938,8 @@ auto MainModule::ResetGameplayState() -> bool
     auto tf = player_node_.GetTransform();
     tf.SetLocalPosition(player_spawn_position_);
     tf.SetLocalRotation(player_spawn_rotation_);
-    reset_body_state(player_body_->GetBodyId(), player_spawn_position_,
-      player_spawn_rotation_);
+    reset_body_state(
+      *player_body_, player_spawn_position_, player_spawn_rotation_);
   }
 
   for (auto& obstacle : dynamic_obstacles_) {
@@ -993,7 +992,7 @@ void MainModule::LaunchSphere()
   const Vec3 launch_direction
     = glm::normalize(MakeXRotationQuat(kRampPitchRad) * space::move::Back);
   const auto set_velocity_result = module->Bodies().SetLinearVelocity(
-    world_id, player_body_->GetBodyId(), launch_direction * launch_impulse_);
+    world_id, *player_body_, launch_direction * launch_impulse_);
   if (!set_velocity_result.has_value()) {
     LOG_F(ERROR, "Physics: launch failed to set player velocity");
     return;
@@ -1014,7 +1013,7 @@ void MainModule::UpdateFlippers(const float dt_seconds)
     if (module != nullptr) {
       const auto world_id = module->GetWorldId();
       const auto player_pos_result
-        = module->Bodies().GetBodyPosition(world_id, player_body_->GetBodyId());
+        = module->Bodies().GetBodyPosition(world_id, *player_body_);
       if (player_pos_result.has_value()) {
         player_pos = player_pos_result.value();
       }

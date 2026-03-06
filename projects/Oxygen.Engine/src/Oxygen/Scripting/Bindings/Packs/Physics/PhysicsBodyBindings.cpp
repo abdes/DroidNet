@@ -309,8 +309,8 @@ namespace {
     }
 
     const auto body_type
-      = ResolveBodyTypeForHandle(*physics_module, body->GetBodyId(), desc.type);
-    return PushBodyHandle(state, *world_id_opt, body->GetBodyId(), body_type);
+      = ResolveBodyTypeForHandle(*physics_module, *body, desc.type);
+    return PushBodyHandle(state, *world_id_opt, *body, body_type);
   }
 
   auto LuaBodyGet(lua_State* state) -> int
@@ -340,8 +340,8 @@ namespace {
     }
 
     const auto body_type = ResolveBodyTypeForHandle(
-      *physics_module, body->GetBodyId(), physics::body::BodyType::kStatic);
-    return PushBodyHandle(state, *world_id_opt, body->GetBodyId(), body_type);
+      *physics_module, *body, physics::body::BodyType::kStatic);
+    return PushBodyHandle(state, *world_id_opt, *body, body_type);
   }
 
   auto LuaBodyHandleGetId(lua_State* state) -> int

@@ -48,7 +48,7 @@ Scripts must not contradict these authority rules:
 | `static` | Scene-authored placement only | Read pose; no force/velocity writes |
 | `kinematic` | Scene command authority | Write pose/velocity/force in `gameplay` |
 | `dynamic` | Physics simulation authority | Force/impulse/velocity in `gameplay`; pose is read-only |
-| Character | Command-authoritative (`CharacterFacade::Move`) | Provide movement intent in `gameplay` |
+| Character | Command-authoritative (`ScenePhysics::MoveCharacter`) | Provide movement intent in `gameplay` |
 
 ### 2.3 Scene Bridge Is the Primary Integration Surface
 
@@ -256,7 +256,7 @@ The same automatic node-transform injection applies to `character.attach` via
 | --- | --- | --- | --- |
 | `:is_valid()` | any | `bool` | `IsValid(character_id_)` |
 | `:get_id()` | any | `CharacterId userdata` | — |
-| `:move(velocity, jump, dt)` | `gameplay` | `MoveResult table \| nil` | `CharacterFacade::Move` |
+| `:move(velocity, jump, dt)` | `gameplay` | `MoveResult table \| nil` | `ScenePhysics::MoveCharacter` |
 | `:to_string()` | any | `string` | `__tostring` |
 
 **`move` input:** `velocity` is a `vec3` (desired velocity in world space);
