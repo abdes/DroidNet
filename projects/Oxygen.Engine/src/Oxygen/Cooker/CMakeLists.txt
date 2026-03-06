@@ -78,8 +78,6 @@ oxygen_embed_json_schemas(
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input-action.schema.json"
     kPhysicsSidecarSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-sidecar.schema.json"
-    kPhysicsResourceDescriptorSchema
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-resource-descriptor.schema.json"
     kPhysicsMaterialDescriptorSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-material-descriptor.schema.json"
     kCollisionShapeDescriptorSchema
@@ -116,8 +114,6 @@ set(
   "Import/PhysicsMaterialDescriptorImportSettings.h"
   "Import/PhysicsImportRequestBuilder.h"
   "Import/PhysicsImportSettings.h"
-  "Import/PhysicsResourceDescriptorImportRequestBuilder.h"
-  "Import/PhysicsResourceDescriptorImportSettings.h"
   "Import/Naming.h"
   "Import/ScriptImportRequestBuilder.h"
   "Import/ScriptImportSettings.h"
@@ -183,7 +179,6 @@ set(
   "Import/Internal/Jobs/InputImportJob.h"
   "Import/Internal/Jobs/MaterialDescriptorImportJob.h"
   "Import/Internal/Jobs/PhysicsMaterialDescriptorImportJob.h"
-  "Import/Internal/Jobs/PhysicsResourceDescriptorImportJob.h"
   "Import/Internal/Jobs/PhysicsSidecarImportJob.h"
   "Import/Internal/Jobs/SceneDescriptorImportJob.h"
   "Import/Internal/Jobs/ScriptAssetImportJob.h"
@@ -270,7 +265,6 @@ set(
   "Import/Internal/MaterialDescriptorImportRequestBuilder.cpp"
   "Import/Internal/PhysicsMaterialDescriptorImportRequestBuilder.cpp"
   "Import/Internal/PhysicsImportRequestBuilder.cpp"
-  "Import/Internal/PhysicsResourceDescriptorImportRequestBuilder.cpp"
   "Import/Internal/SceneDescriptorImportRequestBuilder.cpp"
   "Import/Internal/Jobs/AudioImportJob.cpp"
   "Import/Internal/Jobs/FbxImportJob.cpp"
@@ -281,7 +275,6 @@ set(
   "Import/Internal/Jobs/CollisionShapeDescriptorImportJob.cpp"
   "Import/Internal/Jobs/MaterialDescriptorImportJob.cpp"
   "Import/Internal/Jobs/PhysicsMaterialDescriptorImportJob.cpp"
-  "Import/Internal/Jobs/PhysicsResourceDescriptorImportJob.cpp"
   "Import/Internal/Jobs/PhysicsSidecarImportJob.cpp"
   "Import/Internal/Jobs/SceneDescriptorImportJob.cpp"
   "Import/Internal/Jobs/ScriptAssetImportJob.cpp"
@@ -425,7 +418,6 @@ if(${META_PROJECT_ID}_INSTALL)
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input-action.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-sidecar.schema.json"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-resource-descriptor.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-material-descriptor.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.collision-shape-descriptor.schema.json"
   )

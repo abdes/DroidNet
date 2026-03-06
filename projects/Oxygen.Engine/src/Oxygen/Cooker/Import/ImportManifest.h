@@ -21,7 +21,6 @@
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/Import/PhysicsMaterialDescriptorImportSettings.h>
-#include <Oxygen/Cooker/Import/PhysicsResourceDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/SceneDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Import/ScriptImportSettings.h>
@@ -42,7 +41,6 @@ struct ImportManifestJob {
   InputImportSettings input;
   BufferContainerImportSettings buffer_container;
   MaterialDescriptorImportSettings material_descriptor;
-  PhysicsResourceDescriptorImportSettings physics_resource_descriptor;
   PhysicsMaterialDescriptorImportSettings physics_material_descriptor;
   CollisionShapeDescriptorImportSettings collision_shape_descriptor;
   GeometryDescriptorImportSettings geometry_descriptor;
@@ -65,7 +63,6 @@ struct ImportManifestDefaults {
   InputImportSettings input;
   BufferContainerImportSettings buffer_container;
   MaterialDescriptorImportSettings material_descriptor;
-  PhysicsResourceDescriptorImportSettings physics_resource_descriptor;
   PhysicsMaterialDescriptorImportSettings physics_material_descriptor;
   CollisionShapeDescriptorImportSettings collision_shape_descriptor;
   GeometryDescriptorImportSettings geometry_descriptor;

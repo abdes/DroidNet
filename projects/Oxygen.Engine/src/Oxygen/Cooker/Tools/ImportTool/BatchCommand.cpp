@@ -84,8 +84,7 @@ namespace {
 
   auto IsPhysicsDomainJobType(const std::string_view job_type) -> bool
   {
-    return job_type == "physics-resource-descriptor"
-      || job_type == "physics-material-descriptor"
+    return job_type == "physics-material-descriptor"
       || job_type == "collision-shape-descriptor"
       || job_type == "physics-sidecar";
   }
@@ -159,48 +158,6 @@ namespace {
       return false;
     }
     return true;
-  }
-
-  auto ResolvePhysicsResourceProducedVirtualPath(const PreparedJob& job,
-    std::string& virtual_path, std::string& error) -> bool
-  {
-    try {
-      if (!job.request.physics_resource_descriptor.has_value()) {
-        error = "Missing request.physics_resource_descriptor payload";
-        return false;
-      }
-
-      auto descriptor_doc = nlohmann::json {};
-      if (!ParseJsonObject(
-            job.request.physics_resource_descriptor->normalized_descriptor_json,
-            "physics-resource-descriptor", descriptor_doc, error)) {
-        return false;
-      }
-
-      if (descriptor_doc.contains("virtual_path")) {
-        virtual_path = descriptor_doc.at("virtual_path").get<std::string>();
-        return true;
-      }
-
-      auto name = std::string {};
-      if (job.request.job_name.has_value() && !job.request.job_name->empty()) {
-        name = *job.request.job_name;
-      } else if (descriptor_doc.contains("name")) {
-        name = descriptor_doc.at("name").get<std::string>();
-      } else {
-        name = job.request.source_path.stem().string();
-      }
-      if (name.empty()) {
-        name = "physics_resource";
-      }
-      virtual_path
-        = job.request.loose_cooked_layout.PhysicsResourceVirtualPath(name);
-      return true;
-    } catch (const std::exception& ex) {
-      error = fmt::format(
-        "physics-resource-descriptor output inference failed: {}", ex.what());
-      return false;
-    }
   }
 
   auto ResolvePhysicsMaterialProducedVirtualPath(const PreparedJob& job,
@@ -456,14 +413,6 @@ namespace {
     produced_virtual_path.reset();
 
     auto virtual_path = std::string {};
-    if (job.job_type == "physics-resource-descriptor") {
-      if (!ResolvePhysicsResourceProducedVirtualPath(
-            job, virtual_path, error)) {
-        return false;
-      }
-      produced_virtual_path = std::move(virtual_path);
-      return true;
-    }
     if (job.job_type == "physics-material-descriptor") {
       if (!ResolvePhysicsMaterialProducedVirtualPath(
             job, virtual_path, error)) {
@@ -779,9 +728,6 @@ namespace {
 
   auto ResolveReportJobType(const ImportRequest& request) -> std::string
   {
-    if (request.physics_resource_descriptor.has_value()) {
-      return "physics-resource-descriptor";
-    }
     if (request.physics_material_descriptor.has_value()) {
       return "physics-material-descriptor";
     }
@@ -1095,7 +1041,6 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
   for (const auto& job : manifest->jobs) {
     if (job.job_type != "texture" && job.job_type != "texture-descriptor"
       && job.job_type != "material-descriptor"
-      && job.job_type != "physics-resource-descriptor"
       && job.job_type != "physics-material-descriptor"
       && job.job_type != "collision-shape-descriptor"
       && job.job_type != "buffer-container"

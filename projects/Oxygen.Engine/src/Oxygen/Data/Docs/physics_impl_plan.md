@@ -192,7 +192,7 @@ project build.
   loader call sites and `static_assert`.
 - [x] `SoftBodyBindingRecord`: replace `jolt_settings_resource_index` +
   `physx_settings_resource_index` with `core::ResourceIndexT topology_resource_index`
-  + `PhysicsResourceFormat topology_format`; remove `uint32_t cluster_count` and
+  and `PhysicsResourceFormat topology_format`; remove `uint32_t cluster_count` and
   `float stiffness` (no design backing); rename `float damping` →
   `float global_damping`; add trailing array navigation:
   `uint32_t pinned_vertex_count`, `uint32_t pinned_vertex_byte_offset`,
@@ -691,26 +691,33 @@ Remaining delta to Phase 4 exit gate:
 
 ## Phase 5 - Full Working Closure, Cleanup, and Final Release Gate
 
-- [ ] Zero-tolerance cleanup:
-- [ ] Remove legacy/duplicate pipelines bypassing binary descriptors.
+- [x] Remove legacy/duplicate pipelines bypassing binary descriptors.
 - [ ] Remove runtime fallback parsing of L1 JSON for physics instantiation.
 - [ ] Remove cross-collection ordinal reference remnants.
 - [ ] Remove deprecated handle wrappers that violate session-handle policy.
 - [ ] Remove compatibility code paths that keep old physics schema alive in production.
-- [ ] Determinism and parity validation:
 - [ ] Same canonical virtual path -> same `AssetKey` across runs/machines.
 - [ ] Repeat cooks with unchanged input produce stable descriptor/blob hashes.
 - [ ] Scene hydration parity holds across loose and PAK modes.
-- [ ] Scenario acceptance coverage from `physics.md`:
 - [ ] Scenario I (analytic sphere path) passes end-to-end.
 - [ ] Scenario II (compound + joint + soft body + vehicle) passes end-to-end.
-- [ ] Build/release validation:
-- [ ] Full project build with required toolchain flags (including `/GR-` and C++23
-  expectations where applicable).
 - [ ] Zero warnings for packing/alignment/serialization in touched physics-content code.
-- [ ] Documentation validation:
 - [ ] `physics.md` and this plan remain aligned after implementation deltas.
 - [ ] Any discovered scope correction updates docs first, then implementation.
+
+Task 1 closure evidence (2026-03-07):
+
+- Removed and deleted legacy `physics-resource-descriptor` ingestion:
+  schema file, request/settings/builders, async import job, and dedicated tests.
+- Removed manifest/import-tool routing and schema acceptance for
+  `physics-resource-descriptor` job type.
+- Updated collision-shape payload-ref tests to seed `.opres` sidecars directly
+  (no legacy import pipeline dependency).
+- Validation:
+  - `cmake --build out/build-vs --config Debug --target oxygen-cooker Oxygen.Cooker.AsyncImportCollisionShapeDescriptor.Tests Oxygen.Cooker.AsyncImportPhysicsMaterialDescriptor.Tests Oxygen.Cooker.ImportToolBatchDag.Tests -- /m:6` -> **success**.
+  - `Oxygen.Cooker.AsyncImportCollisionShapeDescriptor.Tests.exe` -> **20 passed**.
+  - `Oxygen.Cooker.AsyncImportPhysicsMaterialDescriptor.Tests.exe` -> **14 passed** (includes legacy-job-type rejection test).
+  - `Oxygen.Cooker.ImportToolBatchDag.Tests.exe` -> **9 passed**.
 
 Phase 5 final release gate:
 

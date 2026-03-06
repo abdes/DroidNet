@@ -225,27 +225,22 @@ namespace {
     return request;
   }
 
-  auto MakePhysicsResourceRequest(const std::filesystem::path& source_root,
-    const std::filesystem::path& cooked_root,
-    const std::filesystem::path& payload_path, const std::string_view format)
-    -> ImportRequest
+  auto WritePhysicsResourceSidecar(const std::filesystem::path& cooked_root,
+    const phys::PhysicsResourceFormat format,
+    const data::pak::core::ResourceIndexT resource_index) -> void
   {
-    auto descriptor = json {
-      { "name", "shape_payload" },
-      { "source", payload_path.generic_string() },
-      { "format", format },
-      { "virtual_path", "/.cooked/Physics/Resources/shape_payload.opres" },
-    };
+    auto sidecar = PhysicsResourceSidecarFile {};
+    sidecar.resource_index = resource_index;
+    sidecar.descriptor.format = format;
+    sidecar.descriptor.size_bytes = 0;
+    std::fill(std::begin(sidecar.descriptor.content_hash),
+      std::end(sidecar.descriptor.content_hash), uint8_t { 0 });
 
-    auto request = ImportRequest {};
-    request.source_path = source_root / "shape_payload.resource.json";
-    request.cooked_root = cooked_root;
-    request.loose_cooked_layout.virtual_mount_root = "/.cooked";
-    request.physics_resource_descriptor
-      = ImportRequest::PhysicsResourceDescriptorPayload {
-          .normalized_descriptor_json = descriptor.dump(),
-        };
-    return request;
+    auto bytes = std::array<std::byte, sizeof(PhysicsResourceSidecarFile)> {};
+    std::memcpy(bytes.data(), &sidecar, sizeof(sidecar));
+    WriteBytesFile(cooked_root
+        / std::filesystem::path("Physics/Resources/shape_payload.opres"),
+      std::span<const std::byte>(bytes));
   }
 
   auto MakeCollisionShapeRequest(const std::filesystem::path& source_root,
@@ -324,22 +319,6 @@ namespace {
   {
     const auto cooked_root = MakeTempCookedRoot("payload_shape_success");
     const auto source_root = cooked_root.parent_path() / "source_data";
-    const auto payload_path = source_root / "shape_payload.jphbin";
-    const auto payload = std::array<std::byte, 12> {
-      std::byte { 0x11 },
-      std::byte { 0x22 },
-      std::byte { 0x33 },
-      std::byte { 0x44 },
-      std::byte { 0x55 },
-      std::byte { 0x66 },
-      std::byte { 0x77 },
-      std::byte { 0x88 },
-      std::byte { 0x99 },
-      std::byte { 0xAA },
-      std::byte { 0xBB },
-      std::byte { 0xCC },
-    };
-    WriteBytesFile(payload_path, std::span<const std::byte>(payload));
 
     auto service = AsyncImportService(AsyncImportService::Config {
       .thread_pool_size = 2U,
@@ -347,10 +326,9 @@ namespace {
     [[maybe_unused]] auto stop_service
       = oxygen::Finally([&service]() { service.Stop(); });
 
-    const auto resource_report = SubmitAndWait(service,
-      MakePhysicsResourceRequest(
-        source_root, cooked_root, payload_path, "jolt_shape_binary"));
-    ASSERT_TRUE(resource_report.success);
+    WritePhysicsResourceSidecar(cooked_root,
+      phys::PhysicsResourceFormat::kJoltShapeBinary,
+      data::pak::core::ResourceIndexT { 7 });
 
     const auto material_report
       = SubmitAndWait(service, MakeMaterialRequest(source_root, cooked_root));
@@ -559,18 +537,6 @@ namespace {
   {
     const auto cooked_root = MakeTempCookedRoot("payload_format_mismatch");
     const auto source_root = cooked_root.parent_path() / "source_data";
-    const auto payload_path = source_root / "constraint_payload.jphbin";
-    const auto payload = std::array<std::byte, 8> {
-      std::byte { 0x01 },
-      std::byte { 0x02 },
-      std::byte { 0x03 },
-      std::byte { 0x04 },
-      std::byte { 0x05 },
-      std::byte { 0x06 },
-      std::byte { 0x07 },
-      std::byte { 0x08 },
-    };
-    WriteBytesFile(payload_path, std::span<const std::byte>(payload));
 
     auto service = AsyncImportService(AsyncImportService::Config {
       .thread_pool_size = 2U,
@@ -578,10 +544,9 @@ namespace {
     [[maybe_unused]] auto stop_service
       = oxygen::Finally([&service]() { service.Stop(); });
 
-    const auto resource_report = SubmitAndWait(service,
-      MakePhysicsResourceRequest(
-        source_root, cooked_root, payload_path, "jolt_constraint_binary"));
-    ASSERT_TRUE(resource_report.success);
+    WritePhysicsResourceSidecar(cooked_root,
+      phys::PhysicsResourceFormat::kJoltConstraintBinary,
+      data::pak::core::ResourceIndexT { 9 });
 
     const auto material_report
       = SubmitAndWait(service, MakeMaterialRequest(source_root, cooked_root));
