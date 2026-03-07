@@ -16,9 +16,16 @@
 #include <filesystem>
 #include <fstream>
 #include <span>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#if defined(_WIN32)
+#  include <Windows.h>
+#elif defined(__unix__) || defined(__APPLE__)
+#  include <unistd.h>
+#endif
 
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -46,14 +53,27 @@ struct FileSpec final {
   std::vector<std::byte> payload;
 };
 
+[[nodiscard]] inline auto CurrentProcessIdForTests() -> uint64_t
+{
+#if defined(_WIN32)
+  return static_cast<uint64_t>(::GetCurrentProcessId());
+#elif defined(__unix__) || defined(__APPLE__)
+  return static_cast<uint64_t>(::getpid());
+#else
+  return 0U;
+#endif
+}
+
 class TempDirFixture : public testing::Test {
 protected:
   void SetUp() override
   {
     static auto counter = std::atomic_uint64_t { 0U };
     const auto id = ++counter;
+    auto leaf = std::ostringstream {};
+    leaf << "pid-" << CurrentProcessIdForTests() << "-case-" << id;
     root_ = std::filesystem::temp_directory_path() / "oxygen_pak_tests"
-      / std::to_string(id);
+      / leaf.str();
     std::filesystem::create_directories(root_);
   }
 

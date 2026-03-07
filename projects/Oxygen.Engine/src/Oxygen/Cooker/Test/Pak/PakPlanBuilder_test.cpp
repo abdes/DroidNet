@@ -191,6 +191,23 @@ auto ExpectPlansEquivalent(const pak::PakPlan& lhs, const pak::PakPlan& rhs)
   }
 }
 
+auto ExpectCatalogsEquivalent(
+  const data::PakCatalog& lhs, const data::PakCatalog& rhs) -> void
+{
+  EXPECT_EQ(lhs.source_key, rhs.source_key);
+  EXPECT_EQ(lhs.content_version, rhs.content_version);
+  EXPECT_EQ(lhs.catalog_digest, rhs.catalog_digest);
+  ASSERT_EQ(lhs.entries.size(), rhs.entries.size());
+  for (size_t i = 0; i < lhs.entries.size(); ++i) {
+    EXPECT_EQ(lhs.entries[i].asset_key, rhs.entries[i].asset_key);
+    EXPECT_EQ(lhs.entries[i].asset_type, rhs.entries[i].asset_type);
+    EXPECT_EQ(
+      lhs.entries[i].descriptor_digest, rhs.entries[i].descriptor_digest);
+    EXPECT_EQ(lhs.entries[i].transitive_resource_digest,
+      rhs.entries[i].transitive_resource_digest);
+  }
+}
+
 class PakPlanBuilderTest : public paktest::TempDirFixture { };
 
 NOLINT_TEST_F(PakPlanBuilderTest,
@@ -287,10 +304,16 @@ NOLINT_TEST_F(PakPlanBuilderTest,
   ASSERT_TRUE(result_b.plan.has_value());
 
   ExpectPlansEquivalent(*result_a.plan, *result_b.plan);
+  ExpectCatalogsEquivalent(result_a.output_catalog, result_b.output_catalog);
 
   const auto assets = result_a.plan->Assets();
   ASSERT_EQ(assets.size(), 1U);
   EXPECT_EQ(assets[0].asset_type, data::AssetType::kScene);
+  ASSERT_EQ(result_a.output_catalog.entries.size(), 1U);
+  EXPECT_EQ(
+    result_a.output_catalog.entries[0].asset_key, MakeAssetKey(kAssetSeed));
+  EXPECT_EQ(
+    result_a.output_catalog.entries[0].asset_type, data::AssetType::kScene);
 }
 
 NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesAllLiveAssetsAndResources)
