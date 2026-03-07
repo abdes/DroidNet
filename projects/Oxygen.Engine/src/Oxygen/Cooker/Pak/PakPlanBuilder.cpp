@@ -657,6 +657,56 @@ auto ToCatalogEntry(const AggregatedAsset& asset) -> data::PakCatalogEntry
   };
 }
 
+auto ComputeCatalogDigest(const data::SourceKey& source_key,
+  const uint16_t content_version,
+  std::span<const data::PakCatalogEntry> entries) -> oxygen::base::Sha256Digest
+{
+  auto hasher = oxygen::base::Sha256 {};
+
+  const auto version_bytes = std::array<std::byte, sizeof(content_version)> {
+    std::byte(static_cast<uint8_t>(content_version & 0xFFU)),
+    std::byte(static_cast<uint8_t>((content_version >> 8U) & 0xFFU)),
+  };
+  hasher.Update(
+    std::span<const std::byte>(version_bytes.data(), version_bytes.size()));
+  hasher.Update(data::as_bytes(source_key));
+
+  for (const auto& entry : entries) {
+    hasher.Update(data::as_bytes(entry.asset_key));
+    const auto asset_type_byte = std::array<std::byte, 1> { std::byte(
+      static_cast<uint8_t>(entry.asset_type)) };
+    hasher.Update(std::span<const std::byte>(
+      asset_type_byte.data(), asset_type_byte.size()));
+    hasher.Update(std::as_bytes(std::span(entry.descriptor_digest)));
+    hasher.Update(std::as_bytes(std::span(entry.transitive_resource_digest)));
+  }
+
+  return hasher.Finalize();
+}
+
+auto BuildOutputCatalog(const pak::PakBuildRequest& request,
+  std::span<const AggregatedAsset> assets) -> data::PakCatalog
+{
+  auto entries = std::vector<data::PakCatalogEntry> {};
+  entries.reserve(assets.size());
+  for (const auto& asset : assets) {
+    entries.push_back(ToCatalogEntry(asset));
+  }
+
+  std::ranges::sort(entries,
+    [](const data::PakCatalogEntry& lhs, const data::PakCatalogEntry& rhs) {
+      return lhs.asset_key < rhs.asset_key;
+    });
+
+  return data::PakCatalog {
+    .source_key = request.source_key,
+    .content_version = request.content_version,
+    .catalog_digest = ComputeCatalogDigest(
+      request.source_key, request.content_version, entries),
+    .entries = std::move(entries),
+  };
+}
+
 struct PlanningState final {
   explicit PlanningState(const pak::PakBuildRequest& request_in)
     : request(oxygen::observer_ptr<const pak::PakBuildRequest> {
@@ -2062,6 +2112,8 @@ auto ValidateAndFinalizeResult(PlanningState& state) -> void
     return;
   }
 
+  state.output.output_catalog
+    = BuildOutputCatalog(*state.request, state.assets);
   state.output.plan = pak::PakPlan(std::move(state.data_plan));
   state.output.summary.assets_processed
     = static_cast<uint32_t>(state.output.plan->Assets().size());
@@ -2102,7 +2154,6 @@ namespace oxygen::content::pak {
 
 auto PakPlanBuilder::Build(const PakBuildRequest& request) const -> BuildResult
 {
-  const auto start = std::chrono::steady_clock::now();
   PlanningState state(request);
 
   RunStage(state, "ValidatePlanningRequest",
@@ -2150,10 +2201,6 @@ auto PakPlanBuilder::Build(const PakBuildRequest& request) const -> BuildResult
   RunStage(state, "ValidateFinalizeInvariants",
     "pak.plan.stage.finalize_invariants_exception",
     [&state]() { ValidateFinalizeInvariants(state); });
-
-  state.output.planning_duration
-    = std::chrono::duration_cast<std::chrono::microseconds>(
-      std::chrono::steady_clock::now() - start);
 
   return state.output;
 }

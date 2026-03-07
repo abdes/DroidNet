@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <string_view>
 
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
 
 #include "PakTestSupport.h"
@@ -161,7 +162,248 @@ NOLINT_TEST_F(
     HasDiagnosticCode(result, "pak.write.phase3_writer_unavailable"));
   EXPECT_GT(result.file_size, 0U);
   EXPECT_TRUE(result.pak_crc32 != 0U);
+  EXPECT_EQ(result.output_catalog.source_key, request.source_key);
+  EXPECT_EQ(result.output_catalog.content_version, request.content_version);
+  EXPECT_TRUE(result.output_catalog.entries.empty());
+  EXPECT_NE(
+    result.output_catalog.catalog_digest, data::PakCatalog {}.catalog_digest);
+  EXPECT_FALSE(result.patch_manifest.has_value());
   EXPECT_TRUE(result.telemetry.total_duration.has_value());
+  EXPECT_TRUE(result.telemetry.planning_duration.has_value());
+  EXPECT_TRUE(result.telemetry.writing_duration.has_value());
+  EXPECT_FALSE(result.telemetry.manifest_duration.has_value());
+}
+
+NOLINT_TEST_F(PakBuilderApiContractTestFixture,
+  FullBuildWithManifestPopulatesPatchManifestAndManifestTelemetry)
+{
+  using pak::BuildMode;
+  using pak::PakBuilder;
+  using pak::PakBuildOptions;
+  using pak::PakBuildRequest;
+
+  const PakBuildRequest request {
+    .mode = BuildMode::kFull,
+    .sources = {},
+    .output_pak_path = Path("full_manifest_output.pak"),
+    .output_manifest_path = Path("full_manifest_output.manifest.json"),
+    .content_version = 1,
+    .source_key = MakeNonZeroSourceKey(),
+    .base_catalogs = {},
+    .patch_compat = {},
+    .options = PakBuildOptions {
+      .deterministic = true,
+      .embed_browse_index = false,
+      .emit_manifest_in_full = true,
+      .compute_crc32 = true,
+      .fail_on_warnings = false,
+    },
+  };
+
+  PakBuilder builder;
+  const auto result_or_error = builder.Build(request);
+
+  ASSERT_TRUE(result_or_error.has_value());
+  const auto& result = result_or_error.value();
+  EXPECT_EQ(result.summary.diagnostics_error, 0U);
+  EXPECT_TRUE(result.patch_manifest.has_value());
+  EXPECT_TRUE(result.telemetry.manifest_duration.has_value());
+}
+
+NOLINT_TEST_F(PakBuilderApiContractTestFixture,
+  FullBuildPopulatesOutputCatalogForEmittedAssets)
+{
+  using data::CookedSource;
+  using data::CookedSourceKind;
+  using pak::BuildMode;
+  using pak::PakBuilder;
+  using pak::PakBuildRequest;
+
+  const auto source = Root() / "full_catalog_source";
+  const auto asset = paktest::AssetSpec {
+    .key = MakeAssetKey(static_cast<uint8_t>(0x41U)),
+    .asset_type = data::AssetType::kMaterial,
+    .descriptor_relpath = "Descriptors/material.desc",
+    .virtual_path = "/Game/Materials/Main.omat",
+    .descriptor_size = 32U,
+    .descriptor_sha = paktest::MakeDigest(static_cast<uint8_t>(0x61U)),
+  };
+  const auto descriptor_bytes
+    = std::vector<std::byte>(static_cast<size_t>(asset.descriptor_size));
+  ASSERT_TRUE(paktest::WriteLooseIndex(source,
+    std::span<const paktest::AssetSpec>(&asset, 1U),
+    std::span<const paktest::FileSpec> {}, static_cast<uint8_t>(0x31U)));
+  ASSERT_TRUE(paktest::WriteFileBytes(source / asset.descriptor_relpath,
+    std::span<const std::byte>(
+      descriptor_bytes.data(), descriptor_bytes.size())));
+
+  const PakBuildRequest request {
+    .mode = BuildMode::kFull,
+    .sources = { CookedSource {
+      .kind = CookedSourceKind::kLooseCooked, .path = source } },
+    .output_pak_path = Path("full_catalog_output.pak"),
+    .output_manifest_path = {},
+    .content_version = 7,
+    .source_key = MakeNonZeroSourceKey(),
+    .base_catalogs = {},
+    .patch_compat = {},
+    .options = {},
+  };
+
+  PakBuilder builder;
+  const auto result_or_error = builder.Build(request);
+
+  ASSERT_TRUE(result_or_error.has_value());
+  const auto& result = result_or_error.value();
+  EXPECT_EQ(result.summary.diagnostics_error, 0U);
+  ASSERT_EQ(result.output_catalog.entries.size(), 1U);
+  EXPECT_EQ(result.output_catalog.source_key, request.source_key);
+  EXPECT_EQ(result.output_catalog.content_version, request.content_version);
+  EXPECT_EQ(result.output_catalog.entries[0].asset_key, asset.key);
+  EXPECT_EQ(result.output_catalog.entries[0].asset_type, asset.asset_type);
+  EXPECT_EQ(
+    result.output_catalog.entries[0].descriptor_digest, asset.descriptor_sha);
+  const auto expected_transitive_digest
+    = oxygen::base::ComputeSha256(std::span<const std::byte> {});
+  EXPECT_EQ(result.output_catalog.entries[0].transitive_resource_digest,
+    expected_transitive_digest);
+  EXPECT_NE(
+    result.output_catalog.catalog_digest, data::PakCatalog {}.catalog_digest);
+}
+
+NOLINT_TEST_F(PakBuilderApiContractTestFixture,
+  PatchBuildPopulatesOutputCatalogForEmittedPatchAssets)
+{
+  using data::CookedSource;
+  using data::CookedSourceKind;
+  using pak::BuildMode;
+  using pak::PakBuilder;
+  using pak::PakBuildRequest;
+
+  const auto source = Root() / "patch_catalog_source";
+  const auto asset_key = MakeAssetKey(static_cast<uint8_t>(0x51U));
+  const auto asset = paktest::AssetSpec {
+    .key = asset_key,
+    .asset_type = data::AssetType::kMaterial,
+    .descriptor_relpath = "Descriptors/material.desc",
+    .virtual_path = "/Game/Materials/Patch.omat",
+    .descriptor_size = 24U,
+    .descriptor_sha = paktest::MakeDigest(static_cast<uint8_t>(0x71U)),
+  };
+  const auto descriptor_bytes
+    = std::vector<std::byte>(static_cast<size_t>(asset.descriptor_size));
+  ASSERT_TRUE(paktest::WriteLooseIndex(source,
+    std::span<const paktest::AssetSpec>(&asset, 1U),
+    std::span<const paktest::FileSpec> {}, static_cast<uint8_t>(0x41U)));
+  ASSERT_TRUE(paktest::WriteFileBytes(source / asset.descriptor_relpath,
+    std::span<const std::byte>(
+      descriptor_bytes.data(), descriptor_bytes.size())));
+
+  data::PakCatalog base_catalog {};
+  base_catalog.source_key = MakeSourceKey(static_cast<uint8_t>(0x21U));
+  base_catalog.content_version = 5U;
+  base_catalog.entries = {
+    data::PakCatalogEntry {
+      .asset_key = asset_key,
+      .asset_type = data::AssetType::kMaterial,
+      .descriptor_digest = paktest::MakeDigest(static_cast<uint8_t>(0x11U)),
+      .transitive_resource_digest
+      = paktest::MakeDigest(static_cast<uint8_t>(0x11U)),
+    },
+  };
+
+  const PakBuildRequest request {
+    .mode = BuildMode::kPatch,
+    .sources = { CookedSource {
+      .kind = CookedSourceKind::kLooseCooked, .path = source } },
+    .output_pak_path = Path("patch_catalog_output.pak"),
+    .output_manifest_path = Path("patch_catalog_output.manifest"),
+    .content_version = 5U,
+    .source_key = MakeNonZeroSourceKey(),
+    .base_catalogs = { base_catalog },
+    .patch_compat = {},
+    .options = {},
+  };
+
+  PakBuilder builder;
+  const auto result_or_error = builder.Build(request);
+
+  ASSERT_TRUE(result_or_error.has_value());
+  const auto& result = result_or_error.value();
+  EXPECT_EQ(result.summary.diagnostics_error, 0U);
+  EXPECT_EQ(result.summary.patch_replaced, 1U);
+  ASSERT_EQ(result.output_catalog.entries.size(), 1U);
+  EXPECT_EQ(result.output_catalog.source_key, request.source_key);
+  EXPECT_EQ(result.output_catalog.content_version, request.content_version);
+  EXPECT_EQ(result.output_catalog.entries[0].asset_key, asset.key);
+  EXPECT_EQ(result.output_catalog.entries[0].asset_type, asset.asset_type);
+  EXPECT_EQ(
+    result.output_catalog.entries[0].descriptor_digest, asset.descriptor_sha);
+  const auto expected_transitive_digest
+    = oxygen::base::ComputeSha256(std::span<const std::byte> {});
+  EXPECT_EQ(result.output_catalog.entries[0].transitive_resource_digest,
+    expected_transitive_digest);
+  EXPECT_NE(
+    result.output_catalog.catalog_digest, data::PakCatalog {}.catalog_digest);
+  EXPECT_TRUE(result.patch_manifest.has_value());
+  EXPECT_TRUE(result.telemetry.manifest_duration.has_value());
+}
+
+NOLINT_TEST_F(PakBuilderApiContractTestFixture,
+  FailOnWarningsEscalatesPlannerWarningToErrorDiagnostic)
+{
+  using data::CookedSource;
+  using data::CookedSourceKind;
+  using pak::BuildMode;
+  using pak::PakBuilder;
+  using pak::PakBuildRequest;
+
+  const auto base_pak_path = Path("warning_source_base.pak");
+  const PakBuildRequest seed_request {
+    .mode = BuildMode::kFull,
+    .sources = {},
+    .output_pak_path = base_pak_path,
+    .output_manifest_path = {},
+    .content_version = 1,
+    .source_key = MakeNonZeroSourceKey(),
+    .base_catalogs = {},
+    .patch_compat = {},
+    .options = {},
+  };
+
+  PakBuilder builder;
+  const auto seed_result_or_error = builder.Build(seed_request);
+  ASSERT_TRUE(seed_result_or_error.has_value());
+  ASSERT_EQ(seed_result_or_error.value().summary.diagnostics_error, 0U);
+
+  const PakBuildRequest request {
+    .mode = BuildMode::kFull,
+    .sources
+    = { CookedSource { .kind = CookedSourceKind::kPak, .path = base_pak_path } },
+    .output_pak_path = Path("warning_escalated_output.pak"),
+    .output_manifest_path = {},
+    .content_version = 1,
+    .source_key = MakeNonZeroSourceKey(),
+    .base_catalogs = {},
+    .patch_compat = {},
+    .options = {
+      .deterministic = true,
+      .embed_browse_index = false,
+      .emit_manifest_in_full = false,
+      .compute_crc32 = true,
+      .fail_on_warnings = true,
+    },
+  };
+
+  const auto result_or_error = builder.Build(request);
+  ASSERT_TRUE(result_or_error.has_value());
+  const auto& result = result_or_error.value();
+
+  EXPECT_GT(result.summary.diagnostics_warning, 0U);
+  EXPECT_GT(result.summary.diagnostics_error, 0U);
+  EXPECT_TRUE(
+    HasDiagnosticCode(result, "pak.plan.pak_source_regions_projected"));
+  EXPECT_TRUE(HasDiagnosticCode(result, "pak.request.fail_on_warnings"));
   EXPECT_TRUE(result.telemetry.planning_duration.has_value());
   EXPECT_TRUE(result.telemetry.writing_duration.has_value());
 }

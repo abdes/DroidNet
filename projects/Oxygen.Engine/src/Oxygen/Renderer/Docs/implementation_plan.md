@@ -2,12 +2,12 @@
 
 Living roadmap for achieving feature completeness of the Oxygen Renderer.
 
-**Last Updated**: January 10, 2026
+**Last Updated**: March 7, 2026
 
 Cross‑References: [bindless_conventions.md](bindless_conventions.md) |
 [scene_prep.md](scene_prep.md) | [shader-system.md](shader-system.md) |
 [passes/design-overview.md](passes/design-overview.md) |
-[lighting_overview.md](lighting_overview.md) |
+[lighting_overview.md](lighting_overview.md) | [shadows.md](shadows.md) |
 [override_slots.md](override_slots.md)
 
 Legend: `[ ]` pending | `[~]` in progress | `[x]` done
@@ -215,13 +215,13 @@ Supports both tile-based (2D) and clustered (3D) configurations.
        - Add checkbox to visualize LUT (render LUT as overlay quad)
      - Add RenderDoc markers in compute pass for easy capture
 
-  - [x] Bullet-proof designated sun pipeline:
+  - [~] Bullet-proof designated sun pipeline:
     - [x] Select canonical sun on CPU: prefer `DirectionalLight::IsSunLight()` flagged light; if multiple, pick highest intensity; fallback to first directional if none flagged.
     - [x] Surface sun direction/intensity into environment data: add fields to **dynamic** payload (C++/HLSL) for sun direction (toward sun) and luminance scale, and fill them per view during ScenePrep/renderer update.
     - [x] Update `LightManager` outputs to publish the chosen sun (index or baked direction) so ScenePrep can populate environment dynamic data without shader-side heuristics.
     - [x] Consume the authoritative sun in shaders: remove “first directional light” fallback in `ForwardMesh_PS`/sky/fog paths and read the dynamic payload sun fields; keep a final hardcoded direction only if no sun is available.
-    - [x] Add validation hooks: debug overlay/ImGui showing the selected sun id, direction, and intensity, and a renderdoc-friendly marker to confirm binding.
-- [ ] SkyLight capture path: support `kCapturedScene` by rendering sky/background into cubemap, convolving diffuse and specular prefilter, caching BRDF LUT; fall back to `kInvalidDescriptorSlot` when unavailable.
+    - [ ] Add validation hooks: debug overlay/ImGui showing the selected sun id, direction, and intensity, and a renderdoc-friendly marker to confirm binding.
+- [x] SkyLight capture path: support `kCapturedScene` by rendering sky/background into cubemap, convolving diffuse and specular prefilter, caching BRDF LUT; fall back to `kInvalidDescriptorSlot` when unavailable.
 - [x] BRDF LUT asset/binding: generate BRDF integration LUT at runtime
   (RG16F, Hammersley GGX) via `BrdfLutManager`, bind slot into
   `sky_light.brdf_lut_slot` through `EnvironmentStaticDataManager`; shaders
@@ -229,8 +229,15 @@ Supports both tile-based (2D) and clustered (3D) configurations.
   async; while pending, GetOrCreateLut returns an invalid slot so consumers
   must keep the analytic fallback path.
 - [ ] Volumetric clouds: consume `GpuVolumetricCloudParams` to raymarch low-res cloud color/transmittance (temporal reprojection), composite into sky before transparents, optional shadow mask for sun light.
-- [ ] PostProcessVolume runtime: honor `GpuPostProcessParams` (tone mapper, bloom, exposure mode/min/max/speeds, saturation/contrast/vignette); implement luminance reduction + temporal adaptation driving `EnvironmentDynamicData.exposure`; wire bloom/tonemap once PostProcessPass (Phase 6) lands.
-- [ ] Tooling + demos: hydrate environment systems in sample scenes (`SceneEnvironment` creation + SkySphere/SkyLight/PostProcessVolume defaults), ensure cubemap assets packaged and bindless slots visible in ImGui debug, add toggles to enable/disable sky/fog/exposure paths for validation.
+- [x] Post-process pass foundation: `GpuPostProcessParams`, `AutoExposurePass`, and `ToneMapPass` exist in the renderer/pipeline.
+- [x] PostProcessVolume authoring path: `DemoShell` creates/binds `SceneEnvironment` + `PostProcessVolume`, persists authored exposure settings, and applies them to both the active scene and pipeline runtime.
+- [ ] PostProcessVolume renderer runtime:
+  - [ ] Remove the `EnvironmentStaticDataManager` testing bypass so scene-authored `PostProcessVolume` data actually populates `EnvironmentStaticData.post_process` at runtime.
+  - [ ] Make renderer-owned post-process config per view derive from the scene-authored `PostProcessVolume` contract instead of relying on `DemoShell` pipeline setters as the only live path for exposure/tonemap/auto-exposure settings.
+  - [ ] Keep the exposure runtime contract explicit and code-accurate: use the prepared manual exposure seed plus `AutoExposurePass` output consumed by `ToneMapPass`; do not rely on a nonexistent `EnvironmentDynamicData.exposure` field.
+  - [ ] Wire authored bloom/compositing parameters into real renderer behavior: consume `bloom_intensity`, `bloom_threshold`, `saturation`, `contrast`, and `vignette_intensity` in passes/shaders instead of only storing them in `GpuPostProcessParams`.
+- [x] Tooling + demos: sample apps hydrate environment systems through `DemoShell` (`SceneEnvironment` creation + SkySphere/SkyLight/PostProcessVolume defaults) and expose validation toggles for sky/fog/exposure paths.
+- [ ] Tooling + demos: ensure cubemap assets packaged for validation flows and expose cubemap/bindless slots in ImGui debug.
 
 ---
 
@@ -374,16 +381,19 @@ Add fullscreen post-processing with bloom to make emissive materials shine.
 
 ### 6.1 PostProcessPass Implementation
 
-- [ ] Create `PostProcessPass` class in `src/Oxygen/Renderer/Passes/`
-- [ ] Create `PostProcess.hlsl` fullscreen triangle shader
-- [ ] Tone mapping: ACES filmic or Reinhard
+- [x] Create tone-mapping pass and shader: `ToneMapPass` +
+      `Compositing/ToneMap_PS.hlsl`
+- [x] Create auto-exposure compute path: `AutoExposurePass` +
+      `Compositing/AutoExposure_Histogram_CS.hlsl` and
+      `Compositing/AutoExposure_Average_CS.hlsl`
+- [ ] Create unified `PostProcessPass` class in `src/Oxygen/Renderer/Passes/`
 
 ### 6.2 Bloom Effect
 
 - [ ] Implement brightness threshold extraction pass
 - [ ] Implement separable Gaussian blur (downsample → blur → upsample chain)
 - [ ] Composite bloom with tone-mapped color
-- [ ] Expose bloom intensity/threshold in `GpuPostProcessParams`
+- [x] Expose bloom intensity/threshold in `GpuPostProcessParams`
 
 ---
 
@@ -393,34 +403,64 @@ Enable correct alpha blending with back-to-front ordering.
 
 ### 7.1 Depth-Based Sort Key
 
-- [ ] Add `camera_distance` to `RenderItemData` during extraction
+- [x] Add view-relative transparent sort distance to `RenderItemData` during
+      extraction (`sort_distance2`)
 - [ ] Implement 64-bit sort key: `(depth << 32) | (material << 16) | mesh`
 
 ### 7.2 Transparent Partition Sorting
 
-- [ ] Sort transparent partition by descending camera distance
-- [ ] Update `PreparedSceneFrame` to expose sorted draw range
+- [x] Sort transparent partition by descending camera distance
+- [x] Update `PreparedSceneFrame` to expose sorted draw range
 
 ---
 
-## Phase 8 – Shadow Mapping (Directional)
+## Phase 8 – Shadow System
 
-Add basic shadow support for the primary directional light.
+Design authority for all shadow architecture, renderer contracts, resource
+layouts, and phased rollout ordering lives in [shadows.md](shadows.md). This
+plan section tracks execution work only.
 
-### 8.1 Shadow Map Resources
+### 8.1 Foundations
 
-- [ ] Create shadow map texture (2048×2048 depth)
-- [ ] Allocate SRV slot in bindless heap
+- [ ] Add renderer-owned shadow runtime services per `shadows.md`
+- [x] Add baseline shadow metadata/contracts and bindless plumbing:
+      `DirectionalLightShadows`, per-light shadow indices/flags, and
+      `SceneConstants.bindless_directional_shadows_slot`
+- [ ] Extend GPU shadow metadata/contracts and bindless slots to match the
+      final shadow system design
+- [x] Carry `cast_shadows` / `receive_shadows` through ScenePrep item data
+- [ ] Add shadow-caster draw classification and pass routing through ScenePrep,
+      `PreparedSceneFrame`, and draw emission
+- [ ] Add renderer debug/telemetry hooks required by the shadow system design
 
-### 8.2 ShadowPass Implementation
+### 8.2 Directional Shadow Path
 
-- [ ] Create `ShadowPass` class: depth-only from light perspective
-- [ ] Compute light-space view/projection matrices
+- [ ] Implement directional shadow resource allocation and lifecycle management
+- [ ] Implement cascaded directional shadow pass scheduling and rendering
+- [ ] Compute and publish stable directional cascade transforms and sampling
+      metadata
+- [ ] Integrate directional shadow evaluation into forward opaque and
+      transparent lighting paths
 
-### 8.3 Shader Integration
+### 8.3 Local Light Shadow Path
 
-- [ ] Add shadow sampling to `ForwardDirectLighting.hlsli`
-- [ ] PCF filtering (2×2 or 3×3)
+- [ ] Implement spot-light shadow allocation, rendering, and sampling
+- [ ] Implement point-light shadow allocation, rendering, and sampling
+- [ ] Add mixed-mobility cache and invalidation flow for local light shadows
+
+### 8.4 Contact Shadow Refinement
+
+- [ ] Implement contact shadow mask generation and composition per authored
+      light settings
+- [ ] Integrate contact shadow evaluation into receiver lighting
+
+### 8.5 Validation and Hardening
+
+- [ ] Add automated coverage for shadow extraction, scheduling, GPU data
+      packing, and sampling invariants
+- [ ] Add visual debug modes and validation scenes for cascade, atlas/array,
+      bias, and receiver diagnostics
+- [ ] Profile and tune quality tiers, budgets, and invalidation behavior
 
 ---
 
@@ -463,7 +503,7 @@ Add clear coat layer for automotive paint, wet surfaces, lacquered wood.
 
 ### 10.2 MaterialAsset & MaterialBinder
 
-- [ ] Add clearcoat getters to `MaterialAsset`
+- [x] Add clearcoat getters to `MaterialAsset`
 - [ ] Update `SerializeMaterialConstants()` to populate clearcoat fields
 
 ### 10.3 Shader Implementation
@@ -488,7 +528,8 @@ Improve GPU memory efficiency.
 
 ### 11.3 Metrics
 
-- [ ] Debug counters: allocations, evictions, peak usage
+- [x] Add per-subsystem allocation/eviction diagnostics in resource/upload code
+- [ ] Add unified renderer debug counters: allocations, evictions, peak usage
 
 ---
 
@@ -585,8 +626,6 @@ Continuous improvements, not milestones:
 **Rendering Features**:
 
 - Order-independent transparency (per-pixel linked lists, weighted blended)
-- Cascade shadow maps
-- Point/spot light shadows
 - Screen-space reflections
 - Ambient occlusion (SSAO/GTAO)
 
@@ -630,6 +669,9 @@ Continuous improvements, not milestones:
 
 ## Revision History
 
+- **March 7, 2026**: Moved shadow design/specification out of
+  `implementation_plan.md` into `shadows.md`. Rewrote Phase 8 as execution-only
+  tracking aligned with the dedicated shadow design document.
 - **January 10, 2026**: Added Phase 12 – Volumetric Fog. Removed previous
   per-mesh fog implementation (was redundant with Aerial Perspective and only
   affected mesh surfaces). New phase covers froxel-based volumetric fog with

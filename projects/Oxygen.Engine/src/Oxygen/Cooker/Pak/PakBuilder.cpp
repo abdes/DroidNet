@@ -133,9 +133,13 @@ auto PakBuilder::Build(const PakBuildRequest& request) noexcept
   }
 
   PakPlanBuilder plan_builder;
+  const auto planning_start = std::chrono::steady_clock::now();
   auto plan_result = plan_builder.Build(request);
 
-  result.telemetry.planning_duration = plan_result.planning_duration;
+  result.output_catalog = plan_result.output_catalog;
+  result.telemetry.planning_duration
+    = std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::steady_clock::now() - planning_start);
   result.summary.assets_processed = plan_result.summary.assets_processed;
   result.summary.resources_processed = plan_result.summary.resources_processed;
   result.summary.patch_created = plan_result.summary.patch_created;

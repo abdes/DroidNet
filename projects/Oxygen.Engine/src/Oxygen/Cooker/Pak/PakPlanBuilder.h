@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <chrono>
 #include <optional>
 #include <vector>
 
@@ -14,6 +13,7 @@
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/api_export.h>
+#include <Oxygen/Data/PakCatalog.h>
 
 namespace oxygen::content::pak {
 
@@ -21,12 +21,13 @@ class PakPlanBuilder final {
 public:
   struct BuildResult {
     std::optional<PakPlan> plan;
+    data::PakCatalog output_catalog {};
     std::vector<PakDiagnostic> diagnostics;
     PakBuildSummary summary {};
-    std::optional<std::chrono::microseconds> planning_duration;
   };
 
-  OXGN_COOK_NDAPI auto Build(const PakBuildRequest& request) const -> BuildResult;
+  OXGN_COOK_NDAPI auto Build(const PakBuildRequest& request) const
+    -> BuildResult;
 };
 
 } // namespace oxygen::content::pak
