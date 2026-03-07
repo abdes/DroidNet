@@ -57,8 +57,7 @@ auto ClonePlanData(const pak::PakPlan& plan) -> pak::PakPlan::Data
     plan.PatchActions().begin(), plan.PatchActions().end());
   out.patch_closure.assign(
     plan.PatchClosure().begin(), plan.PatchClosure().end());
-  out.script_param_ranges.assign(
-    plan.ScriptParamRanges().begin(), plan.ScriptParamRanges().end());
+  out.script_slots.assign(plan.ScriptSlots().begin(), plan.ScriptSlots().end());
   out.script_param_record_count = plan.ScriptParamRecordCount();
   out.planned_file_size = plan.PlannedFileSize();
   return out;
@@ -162,11 +161,15 @@ NOLINT_TEST_F(PakDomainValidationTest, RejectsOverlappingScriptParamRanges)
   auto baseline = MakeBaselinePlan();
   auto data = ClonePlanData(baseline.plan);
   data.script_param_record_count = kScriptParamRecordCount;
-  data.script_param_ranges = {
-    pak::PakScriptParamRangePlan {
-      .slot_index = 0U, .params_array_offset = 0U, .params_count = 3U },
-    pak::PakScriptParamRangePlan {
-      .slot_index = 1U, .params_array_offset = 2U, .params_count = 2U },
+  data.script_slots = {
+    pak::PakScriptSlotPlan { .slot_index = 0U,
+      .script_asset_key = paktest::MakeAssetKey(0x60U),
+      .params_array_index = 0U,
+      .params_count = 3U },
+    pak::PakScriptSlotPlan { .slot_index = 1U,
+      .script_asset_key = paktest::MakeAssetKey(0x61U),
+      .params_array_index = 2U,
+      .params_count = 2U },
   };
 
   const auto policy = pak::DerivePakPlanPolicy(baseline.request);

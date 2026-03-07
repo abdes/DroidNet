@@ -169,8 +169,10 @@ namespace {
       .size_bytes = aligned_pitch,
     };
 
-    const std::array white_pixel { std::byte { 0xFF }, std::byte { 0xFF },
+    auto row_data = std::vector<std::byte>(aligned_pitch, std::byte { 0 });
+    constexpr std::array white_pixel { std::byte { 0xFF }, std::byte { 0xFF },
       std::byte { 0xFF }, std::byte { 0xFF } };
+    std::ranges::copy(white_pixel, row_data.begin());
 
     serio::MemoryStream stream;
     serio::Writer writer(stream);
@@ -193,7 +195,8 @@ namespace {
         "payload_padding");
     }
 
-    CheckResult(writer.WriteBlob(std::span<const std::byte>(white_pixel)),
+    CheckResult(writer.WriteBlob(
+                  std::span<const std::byte>(row_data.data(), row_data.size())),
       "payload_pixel");
 
     const auto payload_bytes = stream.Data();

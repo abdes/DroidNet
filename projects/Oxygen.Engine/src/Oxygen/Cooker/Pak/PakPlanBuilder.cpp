@@ -86,9 +86,12 @@ struct PendingResource {
   std::string resource_kind;
   uint64_t size_bytes = 0;
   uint64_t source_offset = 0;
+  uint64_t descriptor_source_offset = 0;
+  uint64_t descriptor_size = 0;
   uint32_t alignment = kRegionAlignment;
   size_t source_order = 0;
   std::filesystem::path path;
+  std::filesystem::path descriptor_path;
 };
 
 struct TableCounts {
@@ -102,7 +105,7 @@ struct TableCounts {
 
 struct SourceContribution final {
   TableCounts table_counts {};
-  std::vector<pak::PakScriptParamRangePlan> local_script_param_ranges;
+  std::vector<pak::PakScriptSlotPlan> local_script_slots;
   uint32_t script_param_record_count = 0;
   std::vector<std::pair<uint16_t, oxygen::base::Sha256Digest>>
     transitive_inputs;
@@ -268,10 +271,144 @@ auto MeasureFileSize(const std::filesystem::path& path,
   return size;
 }
 
-auto ReadScriptSlotRangesFromTable(
-  const std::filesystem::path& scripts_table_path,
+struct LooseCookedFileInfo final {
+  std::filesystem::path path;
+  uint64_t size = 0;
+};
+
+struct LooseCookedResourceFiles final {
+  std::optional<LooseCookedFileInfo> buffers_table;
+  std::optional<LooseCookedFileInfo> buffers_data;
+  std::optional<LooseCookedFileInfo> textures_table;
+  std::optional<LooseCookedFileInfo> textures_data;
+  std::optional<LooseCookedFileInfo> scripts_table;
+  std::optional<LooseCookedFileInfo> scripts_data;
+  std::optional<LooseCookedFileInfo> script_bindings_table;
+  std::optional<LooseCookedFileInfo> script_bindings_data;
+  std::optional<LooseCookedFileInfo> physics_table;
+  std::optional<LooseCookedFileInfo> physics_data;
+};
+
+template <typename Record>
+auto ReadFixedRecordFile(const std::filesystem::path& path,
+  std::vector<Record>& records, std::vector<pak::PakDiagnostic>& diagnostics,
+  const std::string_view size_invalid_code, const std::string_view read_code,
+  const std::string_view too_large_code, const std::string_view label) -> bool
+{
+  const auto size_opt = MeasureFileSize(path, diagnostics);
+  if (!size_opt.has_value()) {
+    return false;
+  }
+
+  constexpr auto kRecordSize = uint64_t { sizeof(Record) };
+  if (kRecordSize == 0U || (*size_opt % kRecordSize) != 0U) {
+    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+      pak::PakBuildPhase::kPlanning, size_invalid_code,
+      std::string(label) + " size is not divisible by record size.", path);
+    return false;
+  }
+
+  const auto record_count = *size_opt / kRecordSize;
+  if (record_count
+    > static_cast<uint64_t>((std::numeric_limits<size_t>::max)())) {
+    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+      pak::PakBuildPhase::kPlanning, too_large_code,
+      std::string(label) + " record count exceeds size_t bounds.", path);
+    return false;
+  }
+
+  serio::FileStream<> stream(path, std::ios::in);
+  serio::Reader<serio::FileStream<>> reader(stream);
+  auto align_guard = reader.ScopedAlignment(1);
+  (void)align_guard;
+
+  const auto blob_result = reader.ReadBlob(static_cast<size_t>(*size_opt));
+  if (!blob_result) {
+    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+      pak::PakBuildPhase::kPlanning, read_code,
+      std::string("Failed to read ") + std::string(label) + " content.", path);
+    return false;
+  }
+
+  const auto blob = std::span<const std::byte>(*blob_result);
+  records.resize(static_cast<size_t>(record_count));
+  for (size_t i = 0; i < records.size(); ++i) {
+    std::memcpy(std::addressof(records[i]),
+      blob.subspan(i * sizeof(Record), sizeof(Record)).data(), sizeof(Record));
+  }
+
+  return true;
+}
+
+template <typename Record, typename ConfigureFn>
+auto AppendLooseCookedResourcesFromTable(
+  const std::filesystem::path& table_path,
+  const std::filesystem::path& data_path, const uint64_t data_size,
+  const std::string_view region_name, const std::string_view resource_kind,
+  const size_t source_order, std::vector<PendingResource>& pending_resources,
+  std::vector<pak::PakDiagnostic>& diagnostics,
+  const std::string_view table_name, ConfigureFn&& configure) -> uint32_t
+{
+  auto records = std::vector<Record> {};
+  if (!ReadFixedRecordFile<Record>(table_path, records, diagnostics,
+        std::string("pak.plan.")
+          .append(std::string(table_name))
+          .append("_size_invalid"),
+        std::string("pak.plan.")
+          .append(std::string(table_name))
+          .append("_read_failed"),
+        std::string("pak.plan.")
+          .append(std::string(table_name))
+          .append("_too_large"),
+        table_name)) {
+    return 0;
+  }
+
+  for (size_t i = 0; i < records.size(); ++i) {
+    auto pending = PendingResource {
+      .region_name = std::string(region_name),
+      .resource_kind = std::string(resource_kind),
+      .size_bytes = static_cast<uint64_t>(records[i].size_bytes),
+      .source_offset = static_cast<uint64_t>(records[i].data_offset),
+      .descriptor_source_offset = static_cast<uint64_t>(i * sizeof(Record)),
+      .descriptor_size = sizeof(Record),
+      .alignment = kRegionAlignment,
+      .source_order = source_order,
+      .path = data_path,
+      .descriptor_path = table_path,
+    };
+
+    if (!configure(records[i], pending)) {
+      continue;
+    }
+
+    uint64_t resource_end = 0;
+    if (!SafeAdd(pending.source_offset, pending.size_bytes, resource_end)
+      || resource_end > data_size) {
+      AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+        pak::PakBuildPhase::kPlanning, "pak.plan.resource_slice_out_of_bounds",
+        std::string(table_name)
+          + " record range exceeds its backing data file bounds.",
+        table_path);
+      continue;
+    }
+
+    pending_resources.push_back(std::move(pending));
+  }
+
+  if (records.size() > kMaxCountAsUint64) {
+    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+      pak::PakBuildPhase::kPlanning, "pak.plan.resource_record_count_overflow",
+      std::string(table_name) + " record count overflowed uint32 bounds.",
+      table_path);
+    return 0;
+  }
+  return static_cast<uint32_t>(records.size());
+}
+
+auto ReadScriptSlotsFromTable(const std::filesystem::path& scripts_table_path,
   const ScriptSlotReadContext& context,
-  std::vector<pak::PakScriptParamRangePlan>& ranges,
+  std::vector<pak::PakScriptSlotPlan>& slots,
   std::vector<pak::PakDiagnostic>& diagnostics) -> uint32_t
 {
   const auto size_opt = MeasureFileSize(scripts_table_path, diagnostics);
@@ -366,10 +503,13 @@ auto ReadScriptSlotRangesFromTable(
       continue;
     }
 
-    ranges.push_back(pak::PakScriptParamRangePlan {
+    slots.push_back(pak::PakScriptSlotPlan {
       .slot_index = static_cast<uint32_t>(slot_index64),
-      .params_array_offset = static_cast<uint32_t>(global_params_array_offset),
+      .script_asset_key = record.script_asset_key,
+      .params_array_index = static_cast<uint32_t>(global_params_array_offset),
       .params_count = record.params_count,
+      .execution_order = record.execution_order,
+      .flags = record.flags,
     });
   }
 
@@ -494,7 +634,7 @@ auto MakeSkeletonPlan(const pak::PakBuildRequest& request) -> pak::PakPlan::Data
   };
 
   data_plan.script_param_record_count = 0;
-  data_plan.script_param_ranges = {};
+  data_plan.script_slots = {};
   data_plan.patch_closure = {};
   data_plan.planned_file_size
     = footer_offset + static_cast<uint64_t>(sizeof(core::PakFooter));
@@ -585,6 +725,19 @@ auto RegionOrder(const std::string_view region_name) -> int
     return 4;
   }
   return kUnknownRegionOrder;
+}
+
+auto ResourceOrderWithinRegion(const PendingResource& resource) -> int
+{
+  if (resource.region_name == "script_region") {
+    if (resource.resource_kind == "script_param") {
+      return 0;
+    }
+    if (resource.resource_kind == "script") {
+      return 1;
+    }
+  }
+  return 0;
 }
 
 auto AccumulateTableCountFromFile(const std::filesystem::path& table_path,
@@ -727,7 +880,7 @@ struct PlanningState final {
   std::unordered_map<size_t, SourceContribution> source_contributions;
   std::vector<size_t> included_source_orders;
   std::vector<size_t> planned_resource_source_orders;
-  std::vector<pak::PakScriptParamRangePlan> script_param_ranges;
+  std::vector<pak::PakScriptSlotPlan> script_slots;
   std::unordered_map<std::string, data::AssetKey> browse_map;
   TableCounts table_counts {};
   uint32_t script_param_record_count = 0;
@@ -970,11 +1123,7 @@ auto CollectSourceData(PlanningState& state) -> void
           return lhs.relpath < rhs.relpath;
         });
 
-      struct ScriptBindingsTableInput final {
-        std::filesystem::path path;
-      };
-
-      auto script_bindings_tables = std::vector<ScriptBindingsTableInput> {};
+      auto resource_files = LooseCookedResourceFiles {};
       uint32_t source_script_param_record_count = 0;
 
       for (const auto& file_entry : source_files) {
@@ -993,54 +1142,26 @@ auto CollectSourceData(PlanningState& state) -> void
         case data::loose_cooked::FileKind::kTexturesData:
           AddTransitiveInputDigest(source_contribution,
             static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
-          state.pending_resources.push_back(PendingResource {
-            .region_name = "texture_region",
-            .resource_kind = "texture",
-            .size_bytes = file_size,
-            .source_offset = 0U,
-            .alignment = kRegionAlignment,
-            .source_order = source_order,
-            .path = file_path,
-          });
+          resource_files.textures_data
+            = LooseCookedFileInfo { .path = file_path, .size = file_size };
           break;
         case data::loose_cooked::FileKind::kBuffersData:
           AddTransitiveInputDigest(source_contribution,
             static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
-          state.pending_resources.push_back(PendingResource {
-            .region_name = "buffer_region",
-            .resource_kind = "buffer",
-            .size_bytes = file_size,
-            .source_offset = 0U,
-            .alignment = kRegionAlignment,
-            .source_order = source_order,
-            .path = file_path,
-          });
+          resource_files.buffers_data
+            = LooseCookedFileInfo { .path = file_path, .size = file_size };
           break;
         case data::loose_cooked::FileKind::kScriptsData:
           AddTransitiveInputDigest(source_contribution,
             static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
-          state.pending_resources.push_back(PendingResource {
-            .region_name = "script_region",
-            .resource_kind = "script",
-            .size_bytes = file_size,
-            .source_offset = 0U,
-            .alignment = kRegionAlignment,
-            .source_order = source_order,
-            .path = file_path,
-          });
+          resource_files.scripts_data
+            = LooseCookedFileInfo { .path = file_path, .size = file_size };
           break;
         case data::loose_cooked::FileKind::kScriptBindingsData:
           AddTransitiveInputDigest(source_contribution,
             static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
-          state.pending_resources.push_back(PendingResource {
-            .region_name = "script_region",
-            .resource_kind = "script",
-            .size_bytes = file_size,
-            .source_offset = 0U,
-            .alignment = kRegionAlignment,
-            .source_order = source_order,
-            .path = file_path,
-          });
+          resource_files.script_bindings_data
+            = LooseCookedFileInfo { .path = file_path, .size = file_size };
           if ((file_size % sizeof(script::ScriptParamRecord)) != 0U) {
             AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
               PakBuildPhase::kPlanning,
@@ -1082,19 +1203,14 @@ auto CollectSourceData(PlanningState& state) -> void
         case data::loose_cooked::FileKind::kPhysicsData:
           AddTransitiveInputDigest(source_contribution,
             static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
-          state.pending_resources.push_back(PendingResource {
-            .region_name = "physics_region",
-            .resource_kind = "physics",
-            .size_bytes = file_size,
-            .source_offset = 0U,
-            .alignment = kRegionAlignment,
-            .source_order = source_order,
-            .path = file_path,
-          });
+          resource_files.physics_data
+            = LooseCookedFileInfo { .path = file_path, .size = file_size };
           break;
         case data::loose_cooked::FileKind::kTexturesTable:
           AddTransitiveInputDigest(source_contribution,
             static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
+          resource_files.textures_table
+            = LooseCookedFileInfo { .path = file_path, .size = file_size };
           AccumulateTableCountFromFile(file_path, file_size,
             sizeof(core::TextureResourceDesc),
             source_contribution.table_counts.texture_count, diagnostics,
@@ -1103,6 +1219,8 @@ auto CollectSourceData(PlanningState& state) -> void
         case data::loose_cooked::FileKind::kBuffersTable:
           AddTransitiveInputDigest(source_contribution,
             static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
+          resource_files.buffers_table
+            = LooseCookedFileInfo { .path = file_path, .size = file_size };
           AccumulateTableCountFromFile(file_path, file_size,
             sizeof(core::BufferResourceDesc),
             source_contribution.table_counts.buffer_count, diagnostics,
@@ -1111,6 +1229,8 @@ auto CollectSourceData(PlanningState& state) -> void
         case data::loose_cooked::FileKind::kPhysicsTable:
           AddTransitiveInputDigest(source_contribution,
             static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
+          resource_files.physics_table
+            = LooseCookedFileInfo { .path = file_path, .size = file_size };
           AccumulateTableCountFromFile(file_path, file_size,
             sizeof(physics::PhysicsResourceDesc),
             source_contribution.table_counts.physics_count, diagnostics,
@@ -1119,6 +1239,8 @@ auto CollectSourceData(PlanningState& state) -> void
         case data::loose_cooked::FileKind::kScriptsTable:
           AddTransitiveInputDigest(source_contribution,
             static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
+          resource_files.scripts_table
+            = LooseCookedFileInfo { .path = file_path, .size = file_size };
           AccumulateTableCountFromFile(file_path, file_size,
             sizeof(script::ScriptResourceDesc),
             source_contribution.table_counts.script_resource_count, diagnostics,
@@ -1127,46 +1249,109 @@ auto CollectSourceData(PlanningState& state) -> void
         case data::loose_cooked::FileKind::kScriptBindingsTable:
           AddTransitiveInputDigest(source_contribution,
             static_cast<uint16_t>(file_entry.kind), file_path, diagnostics);
-          script_bindings_tables.push_back(ScriptBindingsTableInput {
-            .path = file_path,
-          });
+          resource_files.script_bindings_table
+            = LooseCookedFileInfo { .path = file_path, .size = file_size };
           break;
         case data::loose_cooked::FileKind::kUnknown:
           break;
         }
       }
 
-      for (const auto& script_bindings_table : script_bindings_tables) {
+      if (resource_files.textures_table.has_value()
+        && resource_files.textures_data.has_value()) {
+        AppendLooseCookedResourcesFromTable<core::TextureResourceDesc>(
+          resource_files.textures_table->path,
+          resource_files.textures_data->path,
+          resource_files.textures_data->size, "texture_region", "texture",
+          source_order, state.pending_resources, diagnostics, "texture_table",
+          [](const core::TextureResourceDesc& record,
+            PendingResource& pending) -> bool {
+            pending.alignment
+              = record.alignment == 0U ? kRegionAlignment : record.alignment;
+            return true;
+          });
+      }
+
+      if (resource_files.buffers_table.has_value()
+        && resource_files.buffers_data.has_value()) {
+        AppendLooseCookedResourcesFromTable<core::BufferResourceDesc>(
+          resource_files.buffers_table->path, resource_files.buffers_data->path,
+          resource_files.buffers_data->size, "buffer_region", "buffer",
+          source_order, state.pending_resources, diagnostics, "buffer_table",
+          [](const core::BufferResourceDesc&, PendingResource&) -> bool {
+            return true;
+          });
+      }
+
+      if (resource_files.scripts_table.has_value()
+        && resource_files.scripts_data.has_value()) {
+        AppendLooseCookedResourcesFromTable<script::ScriptResourceDesc>(
+          resource_files.scripts_table->path, resource_files.scripts_data->path,
+          resource_files.scripts_data->size, "script_region", "script",
+          source_order, state.pending_resources, diagnostics,
+          "script_resource_table",
+          [](const script::ScriptResourceDesc&, PendingResource&) -> bool {
+            return true;
+          });
+      }
+
+      if (resource_files.script_bindings_data.has_value()) {
+        state.pending_resources.push_back(PendingResource {
+          .region_name = "script_region",
+          .resource_kind = "script_param",
+          .size_bytes = resource_files.script_bindings_data->size,
+          .source_offset = 0U,
+          .descriptor_source_offset = 0U,
+          .descriptor_size = 0U,
+          .alignment = 1U,
+          .source_order = source_order,
+          .path = resource_files.script_bindings_data->path,
+          .descriptor_path = {},
+        });
+      }
+
+      if (resource_files.physics_table.has_value()
+        && resource_files.physics_data.has_value()) {
+        AppendLooseCookedResourcesFromTable<physics::PhysicsResourceDesc>(
+          resource_files.physics_table->path, resource_files.physics_data->path,
+          resource_files.physics_data->size, "physics_region", "physics",
+          source_order, state.pending_resources, diagnostics,
+          "physics_resource_table",
+          [](const physics::PhysicsResourceDesc&, PendingResource&) -> bool {
+            return true;
+          });
+      }
+
+      if (resource_files.script_bindings_table.has_value()) {
         if (source_contribution.table_counts.script_slot_count
           > kMaxCountAsUint64) {
           AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
             PakBuildPhase::kPlanning, "pak.plan.script_slot_index_overflow",
             "Combined script slot count overflowed uint32.",
-            script_bindings_table.path);
-          continue;
+            resource_files.script_bindings_table->path);
+        } else {
+          const auto slot_context = ScriptSlotReadContext {
+            .slot_index_base = static_cast<uint32_t>(
+              source_contribution.table_counts.script_slot_count),
+            .params_array_index_base = 0U,
+            .source_params_record_count = source_script_param_record_count,
+          };
+          const auto parsed_slots = ReadScriptSlotsFromTable(
+            resource_files.script_bindings_table->path, slot_context,
+            source_contribution.local_script_slots, diagnostics);
+          uint64_t script_slot_count_sum = 0;
+          if (!SafeAdd(source_contribution.table_counts.script_slot_count,
+                parsed_slots, script_slot_count_sum)
+            || script_slot_count_sum > kMaxCountAsUint64) {
+            AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+              PakBuildPhase::kPlanning, "pak.plan.script_slot_index_overflow",
+              "Combined script slot count overflowed uint32.",
+              resource_files.script_bindings_table->path);
+          } else {
+            source_contribution.table_counts.script_slot_count
+              = script_slot_count_sum;
+          }
         }
-
-        const auto slot_context = ScriptSlotReadContext {
-          .slot_index_base = static_cast<uint32_t>(
-            source_contribution.table_counts.script_slot_count),
-          .params_array_index_base = 0U,
-          .source_params_record_count = source_script_param_record_count,
-        };
-        const auto parsed_slots = ReadScriptSlotRangesFromTable(
-          script_bindings_table.path, slot_context,
-          source_contribution.local_script_param_ranges, diagnostics);
-        uint64_t script_slot_count_sum = 0;
-        if (!SafeAdd(source_contribution.table_counts.script_slot_count,
-              parsed_slots, script_slot_count_sum)
-          || script_slot_count_sum > kMaxCountAsUint64) {
-          AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-            PakBuildPhase::kPlanning, "pak.plan.script_slot_index_overflow",
-            "Combined script slot count overflowed uint32.",
-            script_bindings_table.path);
-          continue;
-        }
-        source_contribution.table_counts.script_slot_count
-          = script_slot_count_sum;
       }
 
       source_contribution.script_param_record_count
@@ -1466,7 +1651,7 @@ auto RebuildPatchLocalContributions(PlanningState& state) -> void
     });
 
   state.table_counts = {};
-  state.script_param_ranges.clear();
+  state.script_slots.clear();
   state.script_param_record_count = 0;
 
   uint64_t slot_index_base = 0;
@@ -1514,9 +1699,9 @@ auto RebuildPatchLocalContributions(PlanningState& state) -> void
       state.table_counts.physics_count, "pak.plan.table_count_overflow.physics",
       "Patch-local physics table count overflowed uint32 range.");
 
-    for (const auto& local_range : contribution.local_script_param_ranges) {
+    for (const auto& local_slot : contribution.local_script_slots) {
       uint64_t global_slot_index = 0;
-      if (!SafeAdd(slot_index_base, local_range.slot_index, global_slot_index)
+      if (!SafeAdd(slot_index_base, local_slot.slot_index, global_slot_index)
         || global_slot_index > kMaxCountAsUint64) {
         AddDiagnostic(state.output.diagnostics, PakDiagnosticSeverity::kError,
           PakBuildPhase::kPlanning, "pak.plan.script_slot_index_overflow",
@@ -1526,7 +1711,7 @@ auto RebuildPatchLocalContributions(PlanningState& state) -> void
 
       uint64_t global_param_offset = 0;
       if (!SafeAdd(state.script_param_record_count,
-            local_range.params_array_offset, global_param_offset)
+            local_slot.params_array_index, global_param_offset)
         || global_param_offset > kMaxCountAsUint64) {
         AddDiagnostic(state.output.diagnostics, PakDiagnosticSeverity::kError,
           PakBuildPhase::kPlanning, "pak.plan.script_params_offset_overflow",
@@ -1534,10 +1719,13 @@ auto RebuildPatchLocalContributions(PlanningState& state) -> void
         continue;
       }
 
-      state.script_param_ranges.push_back(pak::PakScriptParamRangePlan {
+      state.script_slots.push_back(pak::PakScriptSlotPlan {
         .slot_index = static_cast<uint32_t>(global_slot_index),
-        .params_array_offset = static_cast<uint32_t>(global_param_offset),
-        .params_count = local_range.params_count,
+        .script_asset_key = local_slot.script_asset_key,
+        .params_array_index = static_cast<uint32_t>(global_param_offset),
+        .params_count = local_slot.params_count,
+        .execution_order = local_slot.execution_order,
+        .flags = local_slot.flags,
       });
     }
 
@@ -1691,15 +1879,14 @@ auto FinalizeScriptAndTables(PlanningState& state) -> void
 
   auto& diagnostics = state.output.diagnostics;
 
-  std::ranges::sort(state.script_param_ranges,
-    [](const pak::PakScriptParamRangePlan& lhs,
-      const pak::PakScriptParamRangePlan& rhs) {
+  std::ranges::sort(state.script_slots,
+    [](const pak::PakScriptSlotPlan& lhs, const pak::PakScriptSlotPlan& rhs) {
       return lhs.slot_index < rhs.slot_index;
     });
 
-  for (const auto& range : state.script_param_ranges) {
+  for (const auto& slot : state.script_slots) {
     uint64_t end = 0;
-    if (!SafeAdd(range.params_array_offset, range.params_count, end)
+    if (!SafeAdd(slot.params_array_index, slot.params_count, end)
       || end > kMaxCountAsUint64) {
       AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
         PakBuildPhase::kPlanning, "pak.plan.script_param_count_overflow",
@@ -1715,7 +1902,7 @@ auto FinalizeScriptAndTables(PlanningState& state) -> void
   }
 
   state.data_plan.script_param_record_count = state.script_param_record_count;
-  state.data_plan.script_param_ranges = std::move(state.script_param_ranges);
+  state.data_plan.script_slots = std::move(state.script_slots);
 
   SetTableCount(state.data_plan.tables, "texture_table",
     state.table_counts.texture_count, diagnostics);
@@ -1734,11 +1921,10 @@ auto FinalizeScriptAndTables(PlanningState& state) -> void
 
 auto ValidateScriptAndTableInvariants(PlanningState& state) -> void
 {
-  const auto ranges = std::span<const pak::PakScriptParamRangePlan>(
-    state.data_plan.script_param_ranges.data(),
-    state.data_plan.script_param_ranges.size());
-  for (size_t i = 1; i < ranges.size(); ++i) {
-    const auto sorted = ranges[i - 1].slot_index <= ranges[i].slot_index;
+  const auto slots = std::span<const pak::PakScriptSlotPlan>(
+    state.data_plan.script_slots.data(), state.data_plan.script_slots.size());
+  for (size_t i = 1; i < slots.size(); ++i) {
+    const auto sorted = slots[i - 1].slot_index <= slots[i].slot_index;
     EnforceStageInvariant(state, sorted,
       "pak.plan.stage.script.slot_ranges_unsorted",
       "Script param ranges are not sorted by slot_index.");
@@ -1759,6 +1945,11 @@ auto PlanFileLayout(PlanningState& state) -> void
       if (lhs_order != rhs_order) {
         return lhs_order < rhs_order;
       }
+      const auto lhs_resource_order = ResourceOrderWithinRegion(lhs);
+      const auto rhs_resource_order = ResourceOrderWithinRegion(rhs);
+      if (lhs_resource_order != rhs_resource_order) {
+        return lhs_resource_order < rhs_resource_order;
+      }
       if (lhs.source_order != rhs.source_order) {
         return lhs.source_order < rhs.source_order;
       }
@@ -1769,6 +1960,7 @@ auto PlanFileLayout(PlanningState& state) -> void
   state.data_plan.regions.clear();
   state.data_plan.resources.clear();
   state.data_plan.resource_payload_sources.clear();
+  state.data_plan.resource_descriptor_sources.clear();
   state.planned_resource_source_orders.clear();
   const std::array<std::string_view, 5> region_names = { "texture_region",
     "buffer_region", "audio_region", "script_region", "physics_region" };
@@ -1798,6 +1990,12 @@ auto PlanFileLayout(PlanningState& state) -> void
           .source_path = resource.path,
           .source_offset = resource.source_offset,
           .size_bytes = resource.size_bytes,
+        });
+      state.data_plan.resource_descriptor_sources.push_back(
+        pak::PakPayloadSourceSlicePlan {
+          .source_path = resource.descriptor_path,
+          .source_offset = resource.descriptor_source_offset,
+          .size_bytes = resource.descriptor_size,
         });
       state.planned_resource_source_orders.push_back(resource.source_order);
       cursor += resource.size_bytes;
@@ -1998,6 +2196,13 @@ auto ValidateLayoutInvariants(PlanningState& state) -> void
   EnforceStageInvariant(state, resource_source_count_matches,
     "pak.plan.stage.layout.resource_source_count_mismatch",
     "Resource payload source slice count must match planned resources.");
+
+  const auto resource_descriptor_count_matches
+    = state.data_plan.resource_descriptor_sources.size()
+    == state.data_plan.resources.size();
+  EnforceStageInvariant(state, resource_descriptor_count_matches,
+    "pak.plan.stage.layout.resource_descriptor_source_count_mismatch",
+    "Resource descriptor source slice count must match planned resources.");
 
   const auto asset_source_count_matches
     = state.data_plan.asset_payload_sources.size()

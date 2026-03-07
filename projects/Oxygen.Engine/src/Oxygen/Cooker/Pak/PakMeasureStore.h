@@ -24,7 +24,8 @@ struct PakResourceTableSerializationInput final {
 
 struct PakScriptSlotTableSerializationInput final {
   uint32_t entry_count = 0;
-  std::span<const PakScriptParamRangePlan> ranges {};
+  std::span<const PakScriptSlotPlan> slots {};
+  uint64_t params_base_offset = 0;
 };
 
 OXGN_COOK_NDAPI auto MeasurePayloadSourceSlice(

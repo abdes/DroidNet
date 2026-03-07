@@ -86,6 +86,8 @@ Design consequence:
 - Loading persisted pak catalog sidecars for patch mode.
 - Persisting output catalog sidecars for both build modes.
 - Persisting manifest outputs through the existing native manifest writer path.
+- Staged sealing of loose-cooked external script assets into embedded-source
+  script assets before PAK build publication.
 - Emitting a structured build report file for automation when requested.
 - Deterministic console diagnostics and stable exit codes.
 - Safe output staging/publish semantics for final artifacts.
@@ -142,7 +144,49 @@ Tool code must not duplicate:
 - manifest generation,
 - digest computation already owned by pak domain code.
 
-### 5.2 Domain Ownership First
+### 5.2 PAK Script Sealing
+
+PakTool owns one staged content transform before invoking `PakBuilder`:
+
+- loose-cooked script assets that still require runtime external source files
+  must be sealed into embedded-source script assets for the staged build input.
+
+This transform is intentionally narrow:
+
+- `ImportTool` remains unchanged.
+- Loose-cooked authoring workflows may still emit script assets with
+  `kAllowExternalSource`.
+- PakTool must not mutate the source cooked root.
+- Runtime loading for mounted PAKs remains embedded-only; PakTool must not
+  expand the runtime contract to support external script resolution from PAKs.
+
+Sealing rules:
+
+- if a script asset already has embedded source and/or bytecode, preserve those
+  embedded payloads.
+- if a script asset advertises `kAllowExternalSource` and lacks embedded
+  source, resolve the external source file and append it to staged
+  `scripts.table` / `scripts.data`.
+- never compile during pak build.
+- never invent bytecode when the cooked content did not already provide it.
+- final staged PAK inputs must not retain `kAllowExternalSource`.
+
+Path resolution rules:
+
+- stored external script paths are resolved relative to the loose-cooked root
+  parent, matching importer normalization semantics.
+- relative paths must be normalized before opening.
+- normalized paths that escape the loose-cooked root parent must be rejected.
+- failed resolution is a hard pak-build error and must identify the script
+  descriptor path, stored external path, and resolved filesystem path when
+  available.
+
+Planning consequence:
+
+- patch planning, catalog generation, and manifests must observe the sealed
+  staged content, not the raw loose-cooked descriptor form.
+
+### 5.3 Domain Ownership First
 
 Artifact contracts belong where their semantics belong:
 
@@ -154,7 +198,7 @@ Artifact contracts belong where their semantics belong:
 This split keeps domain artifacts reusable without turning the tool into a
 general-purpose library.
 
-### 5.3 Schema-Backed Persistence
+### 5.4 Schema-Backed Persistence
 
 Every new persisted JSON artifact introduced here must have:
 
@@ -164,7 +208,7 @@ Every new persisted JSON artifact introduced here must have:
 - install/deployment wiring,
 - tests for valid and invalid payloads.
 
-### 5.4 Deterministic Behavior
+### 5.5 Deterministic Behavior
 
 When `PakBuildOptions::deterministic` is enabled, the tool must preserve:
 
@@ -173,15 +217,24 @@ When `PakBuildOptions::deterministic` is enabled, the tool must preserve:
 - deterministic diagnostics ordering,
 - deterministic publish behavior and filenames.
 
-### 5.5 Safe Artifact Publication
+### 5.6 Safe Artifact Publication
 
 The tool must stage output artifacts before publishing them to their final
 paths. This applies to:
 
 - output pak,
 - output catalog,
-- output manifest,
-- optional diagnostics/build report.
+- output manifest.
+
+For loose-cooked inputs, PakTool may also allocate staged source roots used
+only for content sealing during the current build. Those staged source roots
+are ephemeral tool-owned inputs and must not be published as authoritative
+artifacts.
+
+The diagnostics/build report is different: it describes the publication outcome
+of the authoritative artifacts above. Because of that, it must be emitted only
+after the publish result is known rather than being part of the same
+transactional publish set.
 
 Release-grade consequence:
 
@@ -190,7 +243,9 @@ Release-grade consequence:
 - the final publish step must happen only after the build result is known,
 - failed builds must not publish catalog/manifest artifacts as authoritative
   final outputs,
-- best-effort cleanup of temporary files is required.
+- the optional diagnostics/build report is written last, after publication
+  outcome is known,
+- best-effort cleanup of temporary files and staged source roots is required.
 
 If the current native builder contracts cannot support staging cleanly, that is
 a contract gap and must be addressed before the tool is called complete.
@@ -207,6 +262,7 @@ The intended module split is:
   - CLI
   - request assembly
   - filesystem validation
+  - staged script sealing for loose-cooked sources
   - artifact staging/publish orchestration
   - console writer/report writer
   - process exit code mapping
@@ -225,6 +281,7 @@ The tool layer is expected to gain:
 
 - CLI builder / command handlers
 - staged output path resolver
+- staged loose-cooked script sealer
 - build report writer
 - console/report formatting helpers
 
@@ -440,13 +497,18 @@ Required flow:
 
 1. Resolve final requested artifact paths.
 2. Create temporary sibling paths in the same destination directories.
-3. Invoke `PakBuilder` using staged pak/manifest paths.
-4. Persist staged catalog/report outputs.
-5. If the build result contains errors, do not publish catalog/manifest as final
+3. Prepare staged loose-cooked source roots when script sealing is required.
+4. Invoke `PakBuilder` using staged pak/manifest paths and sealed staged source
+   roots when present.
+5. Persist the staged catalog output.
+6. If the build result contains errors, do not publish catalog/manifest as final
    authoritative outputs.
-6. If publication succeeds, replace or publish final targets in a deterministic
+7. If publication succeeds, replace or publish final targets in a deterministic
    order.
-7. Best-effort delete staged files after success or failure.
+8. Emit the optional diagnostics/build report after publication outcome is
+   known.
+9. Best-effort delete staged files and staged source roots after success or
+   failure.
 
 Release blocker:
 
@@ -466,10 +528,6 @@ The tool needs these message categories:
 - `Error`
 - `Report`
 - `Progress`
-
-Shared console abstractions may be extracted if the reuse is clean. The tool
-must not inherit unrelated runtime dependencies from other tools just to obtain
-message formatting.
 
 ### 10.2 Human Output
 
@@ -493,6 +551,17 @@ Progress should be phase-oriented and map onto existing pak phases:
 - writing
 - manifest
 - finalize
+
+### 10.4 Developer Logging
+
+Developer-facing logs are separate from the CLI stdout/stderr contract.
+
+- Console output remains the user-facing process surface.
+- PakTool should emit troubleshooting logs through the engine logging system.
+- Important lifecycle events log at `INFO`.
+- Builder/tool warnings log at `WARNING`.
+- Builder/tool errors log at `ERROR`.
+- Logging must not replace, suppress, or redefine the documented CLI feedback.
 
 The `finalize` phase is tool-owned and covers sidecar persistence and staged
 artifact publication.

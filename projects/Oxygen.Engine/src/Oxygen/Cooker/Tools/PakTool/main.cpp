@@ -4,35 +4,29 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <exception>
 #include <iostream>
 
-#include <Oxygen/Clap/Command.h>
-#include <Oxygen/Clap/CommandLineContext.h>
-
-#include <Oxygen/Cooker/Tools/PakTool/CliBuilder.h>
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Tools/PakTool/App.h>
 
 auto main(int argc, char** argv) -> int
 {
-  try {
-    const auto cli = oxygen::content::pak::tool::BuildCli();
-    const auto context = cli->Parse(argc, const_cast<const char**>(argv));
+  loguru::g_preamble_date = false;
+  loguru::g_preamble_file = true;
+  loguru::g_preamble_verbose = false;
+  loguru::g_preamble_time = true;
+  loguru::g_preamble_uptime = false;
+  loguru::g_preamble_thread = true;
+  loguru::g_preamble_header = false;
+  loguru::g_global_verbosity = loguru::Verbosity_OFF;
 
-    const auto command_path = context.active_command->PathAsString();
-    if (command_path == oxygen::clap::Command::VERSION
-      || command_path == oxygen::clap::Command::HELP
-      || context.ovm.HasOption(oxygen::clap::Command::HELP)) {
-      return 0;
-    }
+  loguru::init(argc, const_cast<const char**>(argv));
+  loguru::set_thread_name("main");
 
-    std::cerr << "ERROR: command implementation pending: " << command_path
-              << "\n";
-    return 1;
-  } catch (const std::exception& ex) {
-    std::cerr << "ERROR: " << ex.what() << "\n";
-    return 1;
-  } catch (...) {
-    std::cerr << "ERROR: unknown exception\n";
-    return 1;
-  }
+  auto prep_fs
+    = oxygen::content::pak::tool::RealRequestPreparationFileSystem {};
+  auto artifact_fs = oxygen::content::pak::tool::RealArtifactFileSystem {};
+  return oxygen::content::pak::tool::RunPakToolApp(
+    std::span<char*>(argv, static_cast<size_t>(argc)), std::cout, std::cerr,
+    prep_fs, artifact_fs);
 }

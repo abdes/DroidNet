@@ -33,12 +33,22 @@ include(JsonSchemaHelpers)
 
 add_executable(
   ${META_MODULE_TARGET}
+  "App.cpp"
+  "App.h"
   "ArtifactPublication.cpp"
   "ArtifactPublication.h"
   "BuildReportJson.cpp"
   "BuildReportJson.h"
   "CliBuilder.cpp"
   "CliBuilder.h"
+  "CommandExecution.cpp"
+  "CommandExecution.h"
+  "PakToolOptions.h"
+  "RequestPreparation.cpp"
+  "RequestPreparation.h"
+  "RequestSnapshot.h"
+  "ScriptSealing.cpp"
+  "ScriptSealing.h"
   "main.cpp"
 )
 

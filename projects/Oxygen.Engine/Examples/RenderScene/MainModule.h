@@ -105,6 +105,7 @@ private:
   auto ReleaseCurrentSceneAsset(const char* reason) -> void;
 
   auto ClearSceneRuntime(const char* reason) -> void;
+  auto StageFallbackScene() -> void;
 
   struct SceneLoadRequest {
     data::AssetKey key {};

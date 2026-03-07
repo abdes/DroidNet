@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <exception>
 #include <filesystem>
 #include <limits>
@@ -26,6 +27,8 @@
 #include <Oxygen/Cooker/Pak/PakWriter.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_physics.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Writer.h>
 
@@ -33,6 +36,8 @@ namespace {
 namespace core = oxygen::data::pak::core;
 namespace data = oxygen::data;
 namespace pak = oxygen::content::pak;
+namespace physics = oxygen::data::pak::physics;
+namespace script = oxygen::data::pak::scripting;
 namespace serio = oxygen::serio;
 
 constexpr auto kZeroWriteChunkSize = size_t { 64U * 1024U };
@@ -203,36 +208,119 @@ auto FindTable(const std::span<const pak::PakTablePlan> tables,
   return *it;
 }
 
+template <typename T> auto NarrowTo(const uint64_t value) -> std::optional<T>
+{
+  if (value > static_cast<uint64_t>((std::numeric_limits<T>::max)())) {
+    return std::nullopt;
+  }
+  return static_cast<T>(value);
+}
+
 auto BuildResourceIndexMap(
   const std::span<const pak::PakResourcePlacementPlan> resources)
-  -> std::unordered_map<std::string, std::vector<pak::PakResourcePlacementPlan>>
+  -> std::unordered_map<std::string, std::vector<size_t>>
 {
-  auto by_kind = std::unordered_map<std::string,
-    std::vector<pak::PakResourcePlacementPlan>> {};
-  for (const auto& resource : resources) {
-    by_kind[resource.resource_kind].push_back(resource);
+  auto by_kind = std::unordered_map<std::string, std::vector<size_t>> {};
+  for (size_t i = 0; i < resources.size(); ++i) {
+    by_kind[resources[i].resource_kind].push_back(i);
   }
   for (auto& [_, kind_resources] : by_kind) {
-    std::ranges::sort(kind_resources,
-      [](const pak::PakResourcePlacementPlan& lhs,
-        const pak::PakResourcePlacementPlan& rhs) {
-        return lhs.resource_index < rhs.resource_index;
+    std::ranges::sort(
+      kind_resources, [&resources](const size_t lhs, const size_t rhs) {
+        return resources[lhs].resource_index < resources[rhs].resource_index;
       });
   }
   return by_kind;
 }
 
-auto FindResourcesByKind(const std::unordered_map<std::string,
-                           std::vector<pak::PakResourcePlacementPlan>>& by_kind,
-  const std::string_view resource_kind)
-  -> std::span<const pak::PakResourcePlacementPlan>
+auto FindResourceIndicesByKind(
+  const std::unordered_map<std::string, std::vector<size_t>>& by_kind,
+  const std::string_view resource_kind) -> std::span<const size_t>
 {
   const auto it = by_kind.find(std::string(resource_kind));
   if (it == by_kind.end()) {
     return {};
   }
-  return std::span<const pak::PakResourcePlacementPlan>(
-    it->second.data(), it->second.size());
+  return std::span<const size_t>(it->second.data(), it->second.size());
+}
+
+template <typename Record>
+auto LoadRecordFromSource(
+  const pak::PakPayloadSourceSlicePlan& source, Record& record) -> bool
+{
+  if (source.source_path.empty() || source.size_bytes != sizeof(Record)) {
+    return false;
+  }
+
+  auto payload = std::vector<std::byte> {};
+  if (!StorePayloadSourceSlice(source, payload)
+    || payload.size() != sizeof(Record)) {
+    return false;
+  }
+
+  std::memcpy(std::addressof(record), payload.data(), sizeof(Record));
+  return true;
+}
+
+template <typename Record, typename PatchFn>
+auto BuildPatchedResourceTablePayload(const uint32_t entry_count,
+  const std::span<const size_t> resource_indices,
+  const std::span<const pak::PakResourcePlacementPlan> resources,
+  const std::span<const pak::PakPayloadSourceSlicePlan> descriptor_sources,
+  PatchFn&& patch_record, std::vector<std::byte>& payload) -> bool
+{
+  const auto entry_count64 = static_cast<uint64_t>(entry_count);
+  const auto payload_size64 = entry_count64 * sizeof(Record);
+  if (payload_size64
+    > static_cast<uint64_t>((std::numeric_limits<size_t>::max)())) {
+    payload.clear();
+    return false;
+  }
+
+  payload.assign(static_cast<size_t>(payload_size64), std::byte { 0 });
+  size_t resource_cursor = 0;
+  for (uint32_t index = 0; index < entry_count; ++index) {
+    if (resource_cursor >= resource_indices.size()) {
+      continue;
+    }
+
+    const auto resource_pos = resource_indices[resource_cursor];
+    const auto& resource = resources[resource_pos];
+    if (resource.resource_index < index) {
+      return false;
+    }
+    if (resource.resource_index > index) {
+      continue;
+    }
+
+    auto record = Record {};
+    if (!LoadRecordFromSource(descriptor_sources[resource_pos], record)
+      || !patch_record(resource, record)) {
+      return false;
+    }
+
+    std::memcpy(payload.data() + (static_cast<size_t>(index) * sizeof(Record)),
+      std::addressof(record), sizeof(Record));
+    ++resource_cursor;
+  }
+
+  return resource_cursor == resource_indices.size();
+}
+
+auto FindScriptParamBaseOffset(
+  const std::span<const pak::PakResourcePlacementPlan> resources)
+  -> std::optional<uint64_t>
+{
+  std::optional<uint64_t> base_offset;
+  for (const auto& resource : resources) {
+    if (resource.resource_kind != "script_param") {
+      continue;
+    }
+    if (!base_offset.has_value() || resource.offset < *base_offset) {
+      base_offset = resource.offset;
+    }
+  }
+  return base_offset;
 }
 
 auto BuildFooter(WriterState& state) -> std::optional<core::PakFooter>
@@ -345,6 +433,11 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
     AddDiagnostic(state, PakDiagnosticSeverity::kError,
       "pak.write.resource_source_count_mismatch",
       "Resource payload source slice count must match planned resources.");
+  }
+  if (plan.ResourceDescriptorSources().size() != plan.Resources().size()) {
+    AddDiagnostic(state, PakDiagnosticSeverity::kError,
+      "pak.write.resource_descriptor_source_count_mismatch",
+      "Resource descriptor source slice count must match planned resources.");
   }
   if (plan.AssetPayloadSources().size() != plan.Assets().size()) {
     AddDiagnostic(state, PakDiagnosticSeverity::kError,
@@ -471,8 +564,11 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
   if (!HasWriterErrors(state)) {
     EmitPhaseMarker(state, "pak.write.phase_begin", "Write resource tables.");
     const auto resources_by_kind = BuildResourceIndexMap(plan.Resources());
+    const auto resources = plan.Resources();
+    const auto descriptor_sources = plan.ResourceDescriptorSources();
     const auto write_table
-      = [&state, &resources_by_kind](const pak::PakTablePlan& table) -> bool {
+      = [&state, &resources_by_kind, resources, descriptor_sources](
+          const pak::PakTablePlan& table) -> bool {
       if (!MoveCursorToOffset(state, table.offset, table.table_name)) {
         return false;
       }
@@ -481,41 +577,97 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
       auto store_ok = false;
 
       if (table.table_name == "texture_table") {
-        const auto input = pak::PakResourceTableSerializationInput {
-          .entry_count = table.count,
-          .resources = FindResourcesByKind(resources_by_kind, "texture"),
-        };
-        store_ok = StoreTextureTablePayload(input, payload);
+        store_ok = BuildPatchedResourceTablePayload<core::TextureResourceDesc>(
+          table.count, FindResourceIndicesByKind(resources_by_kind, "texture"),
+          resources, descriptor_sources,
+          [](const pak::PakResourcePlacementPlan& resource,
+            core::TextureResourceDesc& record) -> bool {
+            const auto size_bytes = NarrowTo<uint32_t>(resource.size_bytes);
+            const auto alignment = NarrowTo<uint16_t>(resource.alignment);
+            if (!size_bytes.has_value() || !alignment.has_value()) {
+              return false;
+            }
+            record.data_offset = resource.offset;
+            record.size_bytes = *size_bytes;
+            record.alignment = *alignment;
+            return true;
+          },
+          payload);
       } else if (table.table_name == "buffer_table") {
-        const auto input = pak::PakResourceTableSerializationInput {
-          .entry_count = table.count,
-          .resources = FindResourcesByKind(resources_by_kind, "buffer"),
-        };
-        store_ok = StoreBufferTablePayload(input, payload);
+        store_ok = BuildPatchedResourceTablePayload<core::BufferResourceDesc>(
+          table.count, FindResourceIndicesByKind(resources_by_kind, "buffer"),
+          resources, descriptor_sources,
+          [](const pak::PakResourcePlacementPlan& resource,
+            core::BufferResourceDesc& record) -> bool {
+            const auto size_bytes = NarrowTo<uint32_t>(resource.size_bytes);
+            if (!size_bytes.has_value()) {
+              return false;
+            }
+            record.data_offset = resource.offset;
+            record.size_bytes = *size_bytes;
+            return true;
+          },
+          payload);
       } else if (table.table_name == "audio_table") {
+        auto audio_resources = std::vector<pak::PakResourcePlacementPlan> {};
+        for (const auto resource_index :
+          FindResourceIndicesByKind(resources_by_kind, "audio")) {
+          audio_resources.push_back(resources[resource_index]);
+        }
         const auto input = pak::PakResourceTableSerializationInput {
           .entry_count = table.count,
-          .resources = FindResourcesByKind(resources_by_kind, "audio"),
+          .resources = std::span<const pak::PakResourcePlacementPlan>(
+            audio_resources.data(), audio_resources.size()),
         };
         store_ok = StoreAudioTablePayload(input, payload);
       } else if (table.table_name == "script_resource_table") {
-        const auto input = pak::PakResourceTableSerializationInput {
-          .entry_count = table.count,
-          .resources = FindResourcesByKind(resources_by_kind, "script"),
-        };
-        store_ok = StoreScriptResourceTablePayload(input, payload);
+        store_ok = BuildPatchedResourceTablePayload<script::ScriptResourceDesc>(
+          table.count, FindResourceIndicesByKind(resources_by_kind, "script"),
+          resources, descriptor_sources,
+          [](const pak::PakResourcePlacementPlan& resource,
+            script::ScriptResourceDesc& record) -> bool {
+            const auto size_bytes = NarrowTo<uint32_t>(resource.size_bytes);
+            if (!size_bytes.has_value()) {
+              return false;
+            }
+            record.data_offset = resource.offset;
+            record.size_bytes = *size_bytes;
+            return true;
+          },
+          payload);
       } else if (table.table_name == "script_slot_table") {
+        const auto script_param_base_offset
+          = FindScriptParamBaseOffset(resources);
+        if (table.count > 0U && !script_param_base_offset.has_value()) {
+          AddDiagnostic(state, PakDiagnosticSeverity::kError,
+            "pak.write.script_param_region_missing",
+            "script_slot_table requires script_param data in script_region.",
+            "script_param", table.table_name);
+          return false;
+        }
         const auto input = pak::PakScriptSlotTableSerializationInput {
           .entry_count = table.count,
-          .ranges = state.plan->ScriptParamRanges(),
+          .slots = state.plan->ScriptSlots(),
+          .params_base_offset = script_param_base_offset.value_or(0U),
         };
         store_ok = StoreScriptSlotTablePayload(input, payload);
       } else if (table.table_name == "physics_resource_table") {
-        const auto input = pak::PakResourceTableSerializationInput {
-          .entry_count = table.count,
-          .resources = FindResourcesByKind(resources_by_kind, "physics"),
-        };
-        store_ok = StorePhysicsTablePayload(input, payload);
+        store_ok
+          = BuildPatchedResourceTablePayload<physics::PhysicsResourceDesc>(
+            table.count,
+            FindResourceIndicesByKind(resources_by_kind, "physics"), resources,
+            descriptor_sources,
+            [](const pak::PakResourcePlacementPlan& resource,
+              physics::PhysicsResourceDesc& record) -> bool {
+              const auto size_bytes = NarrowTo<uint32_t>(resource.size_bytes);
+              if (!size_bytes.has_value()) {
+                return false;
+              }
+              record.data_offset = resource.offset;
+              record.size_bytes = *size_bytes;
+              return true;
+            },
+            payload);
       } else {
         AddDiagnostic(state, PakDiagnosticSeverity::kError,
           "pak.write.unknown_table_name",

@@ -685,10 +685,10 @@ auto ValidateScriptParamRanges(ValidationState& state) -> void
   using Phase = pak::PakBuildPhase;
 
   std::vector<RangeRecord> script_ranges;
-  script_ranges.reserve(state.plan->ScriptParamRanges().size());
-  for (const auto& range : state.plan->ScriptParamRanges()) {
+  script_ranges.reserve(state.plan->ScriptSlots().size());
+  for (const auto& slot : state.plan->ScriptSlots()) {
     uint64_t end = 0;
-    if (!SafeAdd(range.params_array_offset, range.params_count, end)) {
+    if (!SafeAdd(slot.params_array_index, slot.params_count, end)) {
       AddDiagnostic(state.output.diagnostics, Severity::kError,
         Phase::kPlanning, "pak.plan.script_param_overflow",
         "Script param range overflow.", std::nullopt, {}, "script_slot_table");
@@ -703,9 +703,9 @@ auto ValidateScriptParamRanges(ValidationState& state) -> void
     }
 
     script_ranges.push_back(RangeRecord {
-      .start = range.params_array_offset,
+      .start = slot.params_array_index,
       .end = end,
-      .label = std::to_string(range.slot_index),
+      .label = std::to_string(slot.slot_index),
     });
   }
 

@@ -1719,11 +1719,14 @@ NOLINT_TEST_F(PakWriterTest, ScriptSlotSerializerInvariantViolationFailsWriting)
       .entry_size = kPhysicsEntrySize,
     }),
   };
-  plan_data.script_param_ranges = {
-    pak::PakScriptParamRangePlan {
+  plan_data.script_slots = {
+    pak::PakScriptSlotPlan {
       .slot_index = 2U,
-      .params_array_offset = 0U,
+      .script_asset_key = paktest::MakeAssetKey(0x55U),
+      .params_array_index = 0U,
       .params_count = 1U,
+      .execution_order = 7,
+      .flags = oxygen::data::pak::scripting::ScriptSlotFlags::kNone,
     },
   };
   plan_data.directory = pak::PakDirectoryPlan {
