@@ -326,18 +326,6 @@ target_link_libraries(
 )
 
 m_gtest_program(
-  PakBuildReportSchema
-  SOURCES
-    "Pak/PakBuildReportJsonSchema_test.cpp"
-)
-target_link_libraries(
-  Oxygen.Cooker.PakBuildReportSchema.Tests
-  PRIVATE
-    nlohmann_json::nlohmann_json
-    nlohmann_json_schema_validator
-)
-
-m_gtest_program(
   PakCatalogIo
   SOURCES
     "Pak/PakCatalogIo_test.cpp"

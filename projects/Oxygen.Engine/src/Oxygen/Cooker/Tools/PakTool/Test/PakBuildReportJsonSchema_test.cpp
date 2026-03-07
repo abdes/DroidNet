@@ -116,7 +116,7 @@ NOLINT_TEST(PakBuildReportJsonSchemaTest, AcceptsCanonicalPatchReportDocument)
   ASSERT_TRUE(schema.has_value());
 
   const auto doc = json::parse(R"({
-    "$schema": "./src/Oxygen/Cooker/Tools/PakTool/Schemas/oxygen.pak-build-report.schema.json",
+    "$schema": "https://oxygen-engine.dev/schemas/oxygen.pak-build-report.schema.json",
     "schema_version": 1,
     "tool_name": "Oxygen.Cooker.PakTool",
     "tool_version": "0.1.0",

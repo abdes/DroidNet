@@ -390,6 +390,9 @@ Canonical contract:
 
 - Schema file:
   `src/Oxygen/Cooker/Tools/PakTool/Schemas/oxygen.pak-build-report.schema.json`
+- The report schema is tool-local and must be embedded into the
+  `Oxygen.Cooker.PakTool` target itself. It must not be embedded into the pak
+  domain module.
 - Emitted only when `--diagnostics-file` is specified
 - Serialization: deterministic JSON via `nlohmann::ordered_json`
 

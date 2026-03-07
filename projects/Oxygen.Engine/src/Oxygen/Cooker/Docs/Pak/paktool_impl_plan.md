@@ -301,7 +301,7 @@ Evidence:
 - Added report schema:
   `src/Oxygen/Cooker/Tools/PakTool/Schemas/oxygen.pak-build-report.schema.json`
 - Added schema validation tests:
-  `src/Oxygen/Cooker/Test/Pak/PakBuildReportJsonSchema_test.cpp`
+  `src/Oxygen/Cooker/Tools/PakTool/Test/PakBuildReportJsonSchema_test.cpp`
 - Added test target wiring:
   `src/Oxygen/Cooker/Test/CMakeLists.txt`
 - Validation executed:
@@ -315,7 +315,7 @@ Exit gate:
 
 ### Task 3.2: Implement Staged Output Publication
 
-Status: `pending`
+Status: `completed`
 
 Required work:
 
@@ -339,13 +339,26 @@ Validation:
   - publish failure path
   - no misleading final sidecars after failure
 
+Evidence:
+
+- Added tool-local publication helper:
+  `src/Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h`
+  `src/Oxygen/Cooker/Tools/PakTool/ArtifactPublication.cpp`
+- Added publication tests:
+  `src/Oxygen/Cooker/Tools/PakTool/Test/PakToolArtifactPublication_test.cpp`
+- Added test target wiring:
+  `src/Oxygen/Cooker/Test/CMakeLists.txt`
+- Validation executed:
+  - `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakToolPublication.Tests --config Debug -- /m:6`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolPublication.Tests.exe`
+
 Exit gate:
 
 - Artifact publication is operationally safe for CI/release workflows.
 
 ### Task 3.3: Implement Structured Build Report Writer
 
-Status: `pending`
+Status: `completed`
 
 Required work:
 
@@ -362,6 +375,19 @@ Validation:
 - Unit/integration tests verify report creation, schema conformance, and
   deterministic content.
 
+Evidence:
+
+- Added tool-local report writer:
+  `src/Oxygen/Cooker/Tools/PakTool/BuildReportJson.h`
+  `src/Oxygen/Cooker/Tools/PakTool/BuildReportJson.cpp`
+- Added report writer tests:
+  `src/Oxygen/Cooker/Tools/PakTool/Test/PakToolBuildReportJson_test.cpp`
+- Added test target wiring:
+  `src/Oxygen/Cooker/Test/CMakeLists.txt`
+- Validation executed:
+  - `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakToolReport.Tests --config Debug -- /m:6`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolReport.Tests.exe`
+
 Exit gate:
 
 - CI can consume one stable report artifact for each tool run.
@@ -373,7 +399,7 @@ contracts.
 
 ### Task 4.1: Add Tool Target And CMake Wiring
 
-Status: `pending`
+Status: `completed`
 
 Required work:
 
@@ -381,10 +407,34 @@ Required work:
 - Add subdirectory wiring under `src/Oxygen/Cooker/Tools/CMakeLists.txt`.
 - Add executable target, version define, dependencies, and install rules using
   existing Oxygen tool conventions.
+- Embed the tool-local build report schema into the `PakTool` target itself.
 
 Validation:
 
 - The tool target builds successfully in the normal build graph.
+
+Implementation notes:
+
+- `src/Oxygen/Cooker/Tools/PakTool/CMakeLists.txt` now follows the same
+  section ordering and formatting style as the other cooker tools.
+- The tool-local build report schema is now embedded into the
+  `Oxygen.Cooker.PakTool` target itself via `oxygen_embed_json_schemas(...)`.
+- The tool-local report schema is installed from the tool module, not from the
+  pak domain module.
+- `PakTool` tests now live under `src/Oxygen/Cooker/Tools/PakTool/Test` and
+  are declared from the tool module instead of the pak-domain test tree.
+- The emitted report `$schema` reference now points at the canonical Oxygen
+  schema identifier rather than a source-tree-relative path.
+
+Validation evidence:
+
+- Built in `out/build-vs` with `/m:6`:
+  - `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakTool Oxygen.Cooker.PakBuildReportSchema.Tests Oxygen.Cooker.PakToolPublication.Tests Oxygen.Cooker.PakToolReport.Tests --config Debug -- /m:6`
+- Executed:
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe --help`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakBuildReportSchema.Tests.exe`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolPublication.Tests.exe`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolReport.Tests.exe`
 
 Exit gate:
 
@@ -617,8 +667,13 @@ Validation executed in this review iteration:
 - `out/build-vs/bin/Debug/Oxygen.Cooker.PakCatalogSchema.Tests.exe`
 - `out/build-vs/bin/Debug/Oxygen.Cooker.PakCatalogIo.Tests.exe`
 - `out/build-vs/bin/Debug/Oxygen.Cooker.PakDomainValidation.Tests.exe`
+- `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakTool Oxygen.Cooker.PakBuildReportSchema.Tests Oxygen.Cooker.PakToolPublication.Tests Oxygen.Cooker.PakToolReport.Tests --config Debug -- /m:6`
+- `out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe --help`
+- `out/build-vs/bin/Debug/Oxygen.Cooker.PakBuildReportSchema.Tests.exe`
+- `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolPublication.Tests.exe`
+- `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolReport.Tests.exe`
 
 Remaining validation delta:
 
-- Tool-level CLI/integration/report tests
+- Tool-level CLI parsing, request-assembly, and end-to-end integration tests
 - Manual end-to-end runs with `PakDump`
