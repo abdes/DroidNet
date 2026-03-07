@@ -68,6 +68,13 @@ namespace {
     return ComputePhysicsIdentity(cooked, hash);
   }
 
+  [[nodiscard]] auto MakePhysicsResourceAssetKey(std::string_view signature)
+    -> data::AssetKey
+  {
+    return data::AssetKey::FromVirtualPath(
+      std::string("physics.resource://") + std::string(signature));
+  }
+
 } // namespace
 
 PhysicsResourceEmitter::PhysicsResourceEmitter(IAsyncFileWriter& file_writer,
@@ -99,7 +106,7 @@ PhysicsResourceEmitter::~PhysicsResourceEmitter()
 }
 
 auto PhysicsResourceEmitter::Emit(CookedPhysicsResourcePayload cooked,
-  std::string_view signature_salt) -> uint32_t
+  std::string_view signature_salt) -> EmittedPhysicsResourceRef
 {
   if (finalize_started_.load(std::memory_order_acquire)) {
     throw std::runtime_error("PhysicsResourceEmitter is finalized");
@@ -146,7 +153,14 @@ auto PhysicsResourceEmitter::Emit(CookedPhysicsResourcePayload cooked,
         throw std::runtime_error("physics resource dedup collision");
       }
       if (config_.collision_policy == DedupCollisionPolicy::kWarnKeepFirst) {
-        return existing_index;
+        const auto existing_desc
+          = table_aggregator_.TryGetDescriptor(existing_index);
+        return EmittedPhysicsResourceRef {
+          .resource_index = existing_index,
+          .resource_asset_key = existing_desc.has_value()
+            ? existing_desc->resource_asset_key
+            : data::pak::physics::kInvalidPhysicsResourceAssetKey,
+        };
       }
     }
   }
@@ -154,12 +168,14 @@ auto PhysicsResourceEmitter::Emit(CookedPhysicsResourcePayload cooked,
   const auto signature
     = MakePhysicsSignature(cooked, effective_hash, signature_salt);
   DCHECK_F(!signature.empty(), "physics signature must not be empty");
+  const auto resource_asset_key = MakePhysicsResourceAssetKey(signature);
 
   const auto resource_alignment = cooked.alignment > 0 ? cooked.alignment : 16;
   const auto acquire = table_aggregator_.AcquireOrInsert(signature, [&]() {
     const auto reserved = table_aggregator_.ReserveDataRange(
       resource_alignment, cooked.data.size());
-    auto desc = MakeTableEntry(cooked, reserved.aligned_offset);
+    auto desc
+      = MakeTableEntry(cooked, reserved.aligned_offset, resource_asset_key);
     return std::make_pair(desc, reserved);
   });
 
@@ -169,7 +185,10 @@ auto PhysicsResourceEmitter::Emit(CookedPhysicsResourcePayload cooked,
       identity_by_key_[key] = identity;
       index_by_key_[key] = acquire.index;
     }
-    return acquire.index;
+    return EmittedPhysicsResourceRef {
+      .resource_index = acquire.index,
+      .resource_asset_key = resource_asset_key,
+    };
   }
 
   emitted_count_.fetch_add(1, std::memory_order_acq_rel);
@@ -192,7 +211,10 @@ auto PhysicsResourceEmitter::Emit(CookedPhysicsResourcePayload cooked,
     index_by_key_[key] = acquire.index;
   }
 
-  return acquire.index;
+  return EmittedPhysicsResourceRef {
+    .resource_index = acquire.index,
+    .resource_asset_key = resource_asset_key,
+  };
 }
 
 auto PhysicsResourceEmitter::Count() const noexcept -> uint32_t
@@ -239,7 +261,8 @@ auto PhysicsResourceEmitter::Finalize() -> co::Co<bool>
 }
 
 auto PhysicsResourceEmitter::MakeTableEntry(
-  const CookedPhysicsResourcePayload& cooked, const uint64_t data_offset)
+  const CookedPhysicsResourcePayload& cooked, const uint64_t data_offset,
+  const data::AssetKey& resource_asset_key)
   -> data::pak::physics::PhysicsResourceDesc
 {
   auto entry = data::pak::physics::PhysicsResourceDesc {};
@@ -247,6 +270,7 @@ auto PhysicsResourceEmitter::MakeTableEntry(
   entry.size_bytes
     = static_cast<data::pak::core::DataBlobSizeT>(cooked.data.size());
   entry.format = cooked.format;
+  entry.resource_asset_key = resource_asset_key;
   static_assert(sizeof(entry.content_hash) == sizeof(cooked.content_hash));
   std::memcpy(
     entry.content_hash, cooked.content_hash.data(), sizeof(entry.content_hash));

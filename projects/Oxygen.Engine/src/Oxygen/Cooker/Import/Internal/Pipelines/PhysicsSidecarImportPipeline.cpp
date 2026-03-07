@@ -2998,14 +2998,14 @@ namespace {
     const std::string_view object_path,
     const std::vector<std::byte>& blob_bytes,
     const phys::PhysicsResourceFormat format, const bool with_hashing,
-    data::pak::core::ResourceIndexT& out_index) -> bool
+    data::AssetKey& out_asset_key) -> bool
   {
     try {
       const auto source
         = request.source_path.string() + "#" + std::string(object_path);
       const auto emitted = session.PhysicsResourceEmitter().Emit(
         BuildCookedPhysicsPayload(blob_bytes, format, with_hashing), source);
-      out_index = data::pak::core::ResourceIndexT { emitted };
+      out_asset_key = emitted.resource_asset_key;
       return true;
     } catch (const std::exception& ex) {
       AddDiagnosticAtPath(session, request, ImportSeverity::kError,
@@ -3043,7 +3043,7 @@ namespace {
       if (!EmitBindingBlob(session, request,
             "bindings.soft_bodies[" + std::to_string(i) + "]", blob_bytes,
             records[i].record.topology_format, with_hashing,
-            records[i].record.topology_resource_index)) {
+            records[i].record.topology_asset_key)) {
         continue;
       }
     }
@@ -3068,7 +3068,7 @@ namespace {
       if (!EmitBindingBlob(session, request,
             "bindings.joints[" + std::to_string(i) + "]", blob_bytes,
             records[i].constraint_format, with_hashing,
-            records[i].record.constraint_resource_index)) {
+            records[i].record.constraint_asset_key)) {
         continue;
       }
     }
@@ -3094,7 +3094,7 @@ namespace {
       if (!EmitBindingBlob(session, request,
             "bindings.vehicles[" + std::to_string(i) + "]", blob_bytes,
             records[i].constraint_format, with_hashing,
-            records[i].record.constraint_resource_index)) {
+            records[i].record.constraint_asset_key)) {
         continue;
       }
     }

@@ -1678,14 +1678,17 @@ def compute_pak_plan(
 
     physics_material_name_to_asset_key: Dict[str, bytes] = {}
     collision_shape_name_to_asset_key: Dict[str, bytes] = {}
-    physics_resource_name_to_index: Dict[str, int] = {}
+    physics_resource_name_to_asset_key: Dict[str, bytes] = {}
+    from .packers import pack_physics_resource_descriptor
+
     physics_descs = build_plan.resources.desc_fields.get("physics", [])
-    for index, resource_spec in enumerate(physics_descs):
+    for resource_spec in physics_descs:
         if not isinstance(resource_spec, dict):
             continue
         name = resource_spec.get("name")
         if isinstance(name, str):
-            physics_resource_name_to_index[name] = index
+            desc_probe = pack_physics_resource_descriptor(resource_spec, 0, 0)
+            physics_resource_name_to_asset_key[name] = bytes(desc_probe[13:29])
 
     for pm in physics_materials:
         cursor_aligned, _pad_pm = align(cursor, 1, "asset_physics_material")
@@ -1780,7 +1783,7 @@ def compute_pak_plan(
             header_builder=lambda _a: b"\x00" * ASSET_HEADER_SIZE,
             shape_name_to_asset_key=collision_shape_name_to_asset_key,
             physics_material_name_to_asset_key=physics_material_name_to_asset_key,
-            physics_resource_name_to_index=physics_resource_name_to_index,
+            physics_resource_name_to_asset_key=physics_resource_name_to_asset_key,
         )
         assets.append(
             AssetPlan(

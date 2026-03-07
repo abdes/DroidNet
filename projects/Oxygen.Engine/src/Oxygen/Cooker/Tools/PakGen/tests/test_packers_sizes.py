@@ -109,7 +109,7 @@ def test_physics_material_descriptor_size():
 def test_collision_shape_descriptor_size():
     desc = pack_collision_shape_asset_descriptor(
         {},
-        resource_index=0,
+        resource_asset_key=b"\x00" * 16,
         header_builder=_header_builder,
     )
     assert len(desc) == COLLISION_SHAPE_ASSET_DESC_SIZE
@@ -145,10 +145,14 @@ def test_physics_binding_record_sizes():
         shape_asset_key=b"\x00" * 16,
         node_count=1,
     )
-    soft = pack_soft_body_binding_record({}, node_count=1)
-    joint = pack_joint_binding_record({}, constraint_index=0, node_count=1)
+    soft = pack_soft_body_binding_record(
+        {}, topology_asset_key=b"\x00" * 16, node_count=1
+    )
+    joint = pack_joint_binding_record(
+        {}, constraint_asset_key=b"\x00" * 16, node_count=1
+    )
     vehicle = pack_vehicle_binding_record(
-        {}, constraint_index=0, node_count=1
+        {}, constraint_asset_key=b"\x00" * 16, node_count=1
     )
     aggregate = pack_aggregate_binding_record({}, node_count=1)
     assert len(rigid) == RIGID_BODY_BINDING_RECORD_SIZE

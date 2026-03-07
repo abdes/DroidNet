@@ -190,9 +190,9 @@ project build.
   `static_assert`.
 - [x] `ColliderBindingRecord`: add/verify `uint32_t is_sensor`; update serializer/
   loader call sites and `static_assert`.
-- [x] `SoftBodyBindingRecord`: replace `jolt_settings_resource_index` +
-  `physx_settings_resource_index` with `core::ResourceIndexT topology_resource_index`
-  and `PhysicsResourceFormat topology_format`; remove `uint32_t cluster_count` and
+- [x] `SoftBodyBindingRecord`: replace backend-specific settings references with
+  `AssetKey topology_asset_key` and `PhysicsResourceFormat topology_format`; remove
+  `uint32_t cluster_count` and
   `float stiffness` (no design backing); rename `float damping` →
   `float global_damping`; add trailing array navigation:
   `uint32_t pinned_vertex_count`, `uint32_t pinned_vertex_byte_offset`,
@@ -319,7 +319,7 @@ Phase 2 exit gate:
   `cmake --build out/build-vs --config Debug -- /clp:ErrorsOnly /nologo` succeeds.
 - [x] Audit: `rg` confirms legacy field names are absent from production source and
   schema files (`friction` (singular) in material descriptor, `wheel_table_offset`,
-  `jolt_settings_resource_index`, `cluster_count` in soft body, etc.).
+  legacy soft-body settings refs, `cluster_count` in soft body, etc.).
 - [x] Packing audit: every `reserved` field remaining in `PakFormat_physics.h` has
   an inline comment citing its category (union tail pad, strict alignment, or
   fixed-size record); `rg -n 'reserved' src/Oxygen/Data/PakFormat_physics.h`
@@ -336,7 +336,7 @@ Historical notes captured before restore (non-authoritative; hints only):
 - Updated sidecar schema and importer parsing for rigid/character/soft/joint/wheel
   backend scalar fields and Phase 2 soft-body record vocabulary.
 - Updated runtime hydration call sites to compile against renamed records
-  (`topology_resource_index`, `topology_format`, `wheel_slice_offset`,
+  (`topology_asset_key`, `topology_format`, `wheel_slice_offset`,
   `wheel_slice_count`).
 - Migrated `Examples/Content/scenes/physics_domains` off legacy
   `physics-resource-descriptor` scene coupling; removed obsolete
@@ -377,11 +377,12 @@ Phase 2 closure validation (rerun 2026-03-06):
 Deferred to historical Phase 5 (current plan: Phase 3-4 scope; not a Phase 2 gate):
 
 - DemoShell runtime can still hard-fail when loading `physics_domains` if required
-  resource indices are unresolved for:
-  `JointBindingRecord::constraint_resource_index`,
-  `VehicleBindingRecord::constraint_resource_index`, and
-  `SoftBodyBindingRecord::topology_resource_index`.
-- Root cause: replacement resource-generation/emission for these payload indices is
+  physics resource asset keys are unresolved for:
+  `JointBindingRecord::constraint_asset_key`,
+  `VehicleBindingRecord::constraint_asset_key`, and
+  `SoftBodyBindingRecord::topology_asset_key`.
+- Root cause: replacement resource-generation/emission for these payload
+  asset-key references is
   cooker/runtime integration work and was tracked in historical Phase 5
   (current plan: Phase 3-4).
 
@@ -451,11 +452,11 @@ Deferred to historical Phase 5 (current plan: Phase 3-4 scope; not a Phase 2 gat
 | `soft_body_binding.collision_mesh_ref` | No persisted L2 field (transient import input only) | Parsed into importer-local `SoftBodyBindingSource::collision_mesh_ref`, resolved/validated as optional geometry dependency, then consumed by soft-body cook path |
 | `joint_binding.node_index_a` | `JointBindingRecord::node_index_a` | Direct |
 | `joint_binding.node_index_b` | `JointBindingRecord::node_index_b` | Supports numeric index or world attachment sentinel |
-| `joint_binding.constraint_type`, `constraint_space`, `local_frame_a_*`, `local_frame_b_*`, `limits_lower/limits_upper`, `spring_stiffnesses`, `spring_damping_ratios`, `motor_modes`, `motor_target_velocities`, `motor_target_positions`, `motor_max_forces`, `motor_max_torques`, `motor_drive_frequencies`, `motor_damping_ratios`, `break_force`, `break_torque`, `collide_connected`, `priority` | No persisted L2 field in Phase 2 | Schema-validated authored constraint settings; consumed by Phase 3 backend constraint-blob cook, then bound via `JointBindingRecord::constraint_resource_index` |
+| `joint_binding.constraint_type`, `constraint_space`, `local_frame_a_*`, `local_frame_b_*`, `limits_lower/limits_upper`, `spring_stiffnesses`, `spring_damping_ratios`, `motor_modes`, `motor_target_velocities`, `motor_target_positions`, `motor_max_forces`, `motor_max_torques`, `motor_drive_frequencies`, `motor_damping_ratios`, `break_force`, `break_torque`, `collide_connected`, `priority` | No persisted L2 field in Phase 2 | Schema-validated authored constraint settings; consumed by Phase 3 backend constraint-blob cook, then bound via `JointBindingRecord::constraint_asset_key` |
 | `joint_binding.backend.*` | `JointBindingRecord::backend_scalars` | Discriminated by `backend.target` |
 | `vehicle_binding.node_index` | `VehicleBindingRecord::node_index` | Direct |
 | `vehicle_binding.controller_type` | `VehicleBindingRecord::controller_type` | Engine-neutral enum (`Wheeled`/`Tracked`) |
-| `vehicle_binding.engine`, `vehicle_binding.transmission`, `vehicle_binding.differentials`, `vehicle_binding.anti_roll_bars` | No persisted L2 field in Phase 2 | Schema-validated authored driveline settings; consumed by Phase 3 vehicle-settings blob cook, then bound via `VehicleBindingRecord::constraint_resource_index` |
+| `vehicle_binding.engine`, `vehicle_binding.transmission`, `vehicle_binding.differentials`, `vehicle_binding.anti_roll_bars` | No persisted L2 field in Phase 2 | Schema-validated authored driveline settings; consumed by Phase 3 vehicle-settings blob cook, then bound via `VehicleBindingRecord::constraint_asset_key` |
 | `vehicle_binding.wheels[*].node_index` | `VehicleWheelBindingRecord::wheel_node_index` | Vehicle wheel table entry |
 | `vehicle_binding.wheels[*].axle_index` | `VehicleWheelBindingRecord::axle_index` | Direct |
 | `vehicle_binding.wheels[*].side` | `VehicleWheelBindingRecord::side` | Enum map |
@@ -467,7 +468,7 @@ Deviation notes:
 
 - `joint_binding.constraint_ref` and `vehicle_binding.constraint_ref` were removed
   from L1 schema in Phase 2 to enforce authored-parameter ownership from
-  `physics.md`; `constraint_resource_index` remains a cooker-owned output populated
+  `physics.md`; `constraint_asset_key` remains a cooker-owned output populated
   by Phase 3 backend blob emission.
 
 ## Phase 3 Progress Snapshot (Tracking Only)
@@ -476,11 +477,11 @@ Status: `in_progress` (2026-03-06).
 
 Scope delivered:
 
-- Sidecar cooker path emits backend payload indices for soft bodies, joints, and
-  vehicles into `physics.table`/`physics.data`, and writes those indices to
-  `SoftBodyBindingRecord::topology_resource_index`,
-  `JointBindingRecord::constraint_resource_index`, and
-  `VehicleBindingRecord::constraint_resource_index`.
+- Sidecar cooker path emits backend payload entries for soft bodies, joints, and
+  vehicles into `physics.table`/`physics.data`, and writes their asset keys to
+  `SoftBodyBindingRecord::topology_asset_key`,
+  `JointBindingRecord::constraint_asset_key`, and
+  `VehicleBindingRecord::constraint_asset_key`.
 - Sidecar emission now patches `PhysicsSceneAssetDesc::target_scene_content_hash`
   from the paired `.oscene` descriptor bytes (SHA-256) and preserves deterministic
   wheel-slice ordering (`wheel_slice_offset`, `wheel_slice_count`) in the shared
@@ -539,7 +540,7 @@ Remaining delta to Phase 3 exit gate:
   side-table placement matching design rows 1-14 exactly.
 - [x] Emit backend-cooked blob classes (`shape`, `constraint`, `vehicle`, `soft-body`)
   into `physics.table` + `physics.data` and populate all corresponding binding payload
-  indices (`constraint_resource_index`, `topology_resource_index`, etc.).
+  asset keys (`constraint_asset_key`, `topology_asset_key`, etc.).
 - [x] Vehicle emission uses `VehicleBindingRecord::controller_type` to select
   wheeled-vs-tracked authored settings translation and backend cook path.
 - [x] Enforce reference/versioning contracts across tooling and serialized outputs:
@@ -728,12 +729,12 @@ Task 2 closure evidence (2026-03-07):
 Task 3 closure evidence (2026-03-07):
 
 - Removed cross-collection ordinal external payload-field
-  `-> .opres -> resource_index` ingestion for top-level collision-shape descriptors:
+  ingestion for top-level collision-shape descriptors:
   schema now rejects this external payload field, and collision-shape cooking
   always emits its own cooked payload for non-analytic shapes.
 - Removed dead ordinal relpath canonicalization remnants in cooker internals:
   deleted `ResourceTableRegistry::TryRegisterPhysicsCanonicalDescriptorRelPath`
-  and the associated `resource_index -> relpath` map state.
+  and the associated ordinal-to-relpath map state.
 - Removed unused physics resource descriptor sidecar utility + dead emitter API
   paths that serialized `.opres` sidecars from resource indices.
 - Validation:

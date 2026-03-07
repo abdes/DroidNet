@@ -71,8 +71,8 @@ public:
     PrintUtils::Field("Target Layers", shape.collision_target_layers, 8);
     PrintUtils::Field(
       "Material Key", oxygen::data::to_string(shape.material_asset_key), 8);
-    PrintUtils::Field(
-      "Cooked Ref Index", shape.cooked_shape_ref.resource_index, 8);
+    PrintUtils::Field("Cooked Ref Asset Key",
+      oxygen::data::to_string(shape.cooked_shape_ref.payload_asset_key), 8);
     PrintUtils::Field("Cooked Ref Type",
       static_cast<uint32_t>(shape.cooked_shape_ref.payload_type), 8);
     std::cout << "\n";

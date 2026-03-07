@@ -42,6 +42,11 @@ struct CookedPhysicsResourcePayload final {
   base::Sha256Digest content_hash = {};
 };
 
+struct EmittedPhysicsResourceRef final {
+  uint32_t resource_index = 0;
+  data::AssetKey resource_asset_key = {};
+};
+
 //! Emits cooked physics resources to `physics.data` and `physics.table`.
 class PhysicsResourceEmitter final {
 public:
@@ -65,7 +70,7 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(PhysicsResourceEmitter)
 
   OXGN_COOK_NDAPI auto Emit(CookedPhysicsResourcePayload cooked,
-    std::string_view signature_salt) -> uint32_t;
+    std::string_view signature_salt) -> EmittedPhysicsResourceRef;
 
   OXGN_COOK_NDAPI auto Count() const noexcept -> uint32_t;
   OXGN_COOK_NDAPI auto PendingCount() const noexcept -> size_t;
@@ -84,7 +89,8 @@ private:
   };
 
   auto MakeTableEntry(const CookedPhysicsResourcePayload& cooked,
-    uint64_t data_offset) -> data::pak::physics::PhysicsResourceDesc;
+    uint64_t data_offset, const data::AssetKey& resource_asset_key)
+    -> data::pak::physics::PhysicsResourceDesc;
   auto QueueDataWrite(WriteKind kind, std::optional<uint32_t> index,
     uint64_t offset, std::shared_ptr<std::vector<std::byte>> data) -> void;
   auto OnWriteComplete(WriteKind kind, std::optional<uint32_t> index,

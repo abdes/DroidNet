@@ -11,14 +11,14 @@ _PHYSICS_BINDING_COLLIDER = 0x4C4F4350  # 'PCOL'
 _PHYSICS_BINDING_CHARACTER = 0x52484350  # 'PCHR'
 _PHYSICS_BINDING_JOINT = 0x544E4A50  # 'PJNT'
 _PHYSICS_BINDING_VEHICLE = 0x4C485650  # 'PVHL'
-_NO_RESOURCE_INDEX = 0
+_NIL_ASSET_KEY = b"\x00" * 16
 
 
 def _header_builder(_asset: dict[str, object]) -> bytes:
     return b"\x00" * ASSET_HEADER_SIZE
 
 
-def test_physics_scene_omitted_resource_indices_default_to_no_resource_index() -> None:
+def test_physics_scene_omitted_resource_asset_keys_default_to_nil_key() -> None:
     asset = {
         "type": "physics_scene",
         "target_scene_key": "00000000000000000000000000000000",
@@ -41,7 +41,7 @@ def test_physics_scene_omitted_resource_indices_default_to_no_resource_index() -
         header_builder=_header_builder,
         shape_name_to_asset_key={},
         physics_material_name_to_asset_key={},
-        physics_resource_name_to_index={},
+        physics_resource_name_to_asset_key={},
     )
     blob = desc + payload
 
@@ -69,13 +69,13 @@ def test_physics_scene_omitted_resource_indices_default_to_no_resource_index() -
     collider_shape_key = blob[collider_off + 4 : collider_off + 20]
     collider_material_key = blob[collider_off + 20 : collider_off + 36]
     character_shape_key = blob[character_off + 4 : character_off + 20]
-    joint_constraint = struct.unpack_from("<I", blob, joint_off + 8)[0]
-    vehicle_constraint = struct.unpack_from("<I", blob, vehicle_off + 4)[0]
+    joint_constraint_key = blob[joint_off + 8 : joint_off + 24]
+    vehicle_constraint_key = blob[vehicle_off + 4 : vehicle_off + 20]
 
     assert rigid_shape_key == b"\x00" * 16
     assert rigid_material_key == b"\x00" * 16
     assert collider_shape_key == b"\x00" * 16
     assert collider_material_key == b"\x00" * 16
     assert character_shape_key == b"\x00" * 16
-    assert joint_constraint == _NO_RESOURCE_INDEX
-    assert vehicle_constraint == _NO_RESOURCE_INDEX
+    assert joint_constraint_key == _NIL_ASSET_KEY
+    assert vehicle_constraint_key == _NIL_ASSET_KEY

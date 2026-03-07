@@ -60,8 +60,7 @@ namespace {
   };
 
   struct PayloadResolution final {
-    data::pak::core::ResourceIndexT resource_index
-      = data::pak::core::kNoResourceIndex;
+    data::AssetKey payload_asset_key = {};
     phys::ShapePayloadType payload_type = phys::ShapePayloadType::kInvalid;
   };
 
@@ -479,10 +478,10 @@ namespace {
     }
 
     try {
-      const auto emitted_index
+      const auto emitted
         = session.PhysicsResourceEmitter().Emit(std::move(cooked), source_id);
       return PayloadResolution {
-        .resource_index = data::pak::core::ResourceIndexT { emitted_index },
+        .payload_asset_key = emitted.resource_asset_key,
         .payload_type = payload_type,
       };
     } catch (const std::exception& ex) {
@@ -920,7 +919,7 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       co_return co_await FinalizeWithTelemetry(session);
     }
 
-    descriptor.cooked_shape_ref.resource_index = payload->resource_index;
+    descriptor.cooked_shape_ref.payload_asset_key = payload->payload_asset_key;
     descriptor.cooked_shape_ref.payload_type = payload->payload_type;
   }
 

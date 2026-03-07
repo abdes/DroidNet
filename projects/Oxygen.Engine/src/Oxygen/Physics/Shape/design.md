@@ -37,8 +37,9 @@ partial-scope substitutions are non-compliant, and will be rejected!
    by explicit shape/capability data.
 6. API and content contracts should be stable across demos; demos author data,
    they do not redefine core physics shape semantics.
-7. Resource-index sentinel contract: `kNoResourceIndex` is assumed to be `0`.
-   This is a hard cross-module invariant.
+7. Asset-key sentinel contract: an all-zero `AssetKey` is the invalid/null
+   value for shape payload/material references. This is a hard cross-module
+   invariant.
 
 ## Shape Vocabulary
 
@@ -54,13 +55,13 @@ Storage semantics used below:
 | `Capsule` | Primary character-friendly shape; stable for movement/contacts. | ✓ | params: `radius`, `half_height` | |
 | `Box` | Core primitive shape. | ✓ | params: `half_extents` | |
 | `Cylinder` | Convex-hull backed where no native cylinder exists. | ✓ | params: `radius`, `half_height` | |
-| `Cone` | Convex-hull backed where no native cone exists. | | `physics_resource_index` -> cooked convex blob | required: convex entry + blob |
-| `ConvexHull` | Cooked/validated convex collision shape. | | `physics_resource_index` -> cooked convex blob | required: convex entry + blob |
-| `TriangleMesh` | Cooked mesh collision shape; typically static/kinematic usage. | | `physics_resource_index` -> cooked mesh blob | required: mesh entry + blob |
-| `HeightField` | Terrain collision representation. | | `physics_resource_index` -> cooked heightfield blob | required: heightfield entry + blob |
+| `Cone` | Convex-hull backed where no native cone exists. | | `physics_resource_asset_key` -> cooked convex blob | required: convex entry + blob |
+| `ConvexHull` | Cooked/validated convex collision shape. | | `physics_resource_asset_key` -> cooked convex blob | required: convex entry + blob |
+| `TriangleMesh` | Cooked mesh collision shape; typically static/kinematic usage. | | `physics_resource_asset_key` -> cooked mesh blob | required: mesh entry + blob |
+| `HeightField` | Terrain collision representation. | | `physics_resource_asset_key` -> cooked heightfield blob | required: heightfield entry + blob |
 | `Plane` | Infinite mathematical plane collider. | ✓ | params: `normal`, `distance` | |
 | `WorldBoundary` | Engine boundary concept, distinct from `Plane`. | ✓ | params: `boundary_mode`, `limits` | |
-| `Compound` | Collection of child shapes with per-child local transforms authored at cook input level; runtime consumes a cooked compound shape blob. | | `physics_resource_index` -> cooked compound blob | required: compound entry + blob |
+| `Compound` | Collection of child shapes with per-child local transforms authored at cook input level; runtime consumes a cooked compound shape blob. | | `physics_resource_asset_key` -> cooked compound blob | required: compound entry + blob |
 
 ## Required Shape Capabilities
 
@@ -91,7 +92,7 @@ Representation terms used below:
 | --- | --- | --- | --- |
 | Trigger/sensor | Overlap/event detection without physical contact response (no impulses). | `is_sensor: bool` on runtime shape/collider (`false` = response-enabled, `true` = sensor-only). | `ShapeDescriptor.is_sensor: uint32_t` (`0` = false, non-zero = true; writer emits normalized `0` or `1`) |
 | Collision filtering (`layer`, `mask`) | Restricts interactions to intended gameplay domains and reduces unnecessary broadphase/narrowphase work. | `collision_own_layer: uint64_t` (exactly one bit set) and `collision_target_layers: uint64_t`. | `ShapeDescriptor.collision_own_layer: uint64_t` (exactly one bit set) and `ShapeDescriptor.collision_target_layers: uint64_t` (bit mask). |
-| Physics material assignment | Friction/restitution behavior and combine policy. | Material handle bound at shape/collider creation. | `ShapeDescriptor.material_ref` |
+| Physics material assignment | Friction/restitution behavior and combine policy. | Material handle bound at shape/collider creation. | `ShapeDescriptor.material_asset_key` |
 
 ### Required `ShapeDescriptor` fields
 
@@ -104,7 +105,7 @@ Representation terms used below:
 | `is_sensor` | `uint32_t` bool | Required for all shapes (`0`/`1` normalized by writer). |
 | `collision_own_layer` | `uint64_t` | Required for all shapes; exactly one bit set. |
 | `collision_target_layers` | `uint64_t` | Required for all shapes; bit mask. |
-| `material_ref` | resource reference | Required for all shapes (fallback/default material allowed by policy). |
+| `material_asset_key` | `AssetKey` | Required for all shapes (fallback/default material allowed by policy). |
 | `shape_params` | shape-specific struct | Required for descriptor-only shapes. |
 | `cooked_shape_ref` | `CookedShapePayloadRef` | Single-descriptor field. Used only for payload-backed shapes; for descriptor-only shapes it MUST be set to invalid/null sentinel and is ignored by runtime. |
 
@@ -278,8 +279,7 @@ Pak data must define explicit serialized types for:
 - `ShapePayloadType` (`kConvex`, `kMesh`, `kHeightField`, `kCompound`).
 - `CookedShapePayloadRef` (`payload_type` + payload resource reference, with
   invalid sentinel support).
-- `PhysicsMaterialRef` (serialized material reference type for shape material
-  assignment).
+- `AssetKey` (serialized asset-key reference type for shape material assignment).
 - `ShapeDescriptor` (single canonical serialized descriptor for all shapes).
 
 Enum and constant source-of-truth contract:
@@ -291,39 +291,35 @@ Enum and constant source-of-truth contract:
   non-compliant.
 - Required Core metadata catalog files:
   - `src/Oxygen/Core/Meta/Physics/PakPhysicsShape.inc`
-  - `src/Oxygen/Core/Meta/Data/ResourceIndex.inc`
 - Required shared catalogs include:
   - `ShapeType`
   - `ShapePayloadType`
   - `WorldBoundaryMode`
   - Any serialized sentinel/flag constants required by `ShapeDescriptor`
     validation.
-- `ResourceIndex.inc` owns the `ResourceIndexT` type.
-- `PakPhysicsShape.inc` must enforce `static_assert(kNoResourceIndex == 0)`.
+- `PakPhysicsShape.inc` owns the shape payload/material sentinel constants
+  consumed by serialized shape descriptors.
 
 Required serialized sentinel/flag constants:
 
-- `kInvalidShapePayloadRefIndex` (`ResourceIndexT`) = `kNoResourceIndex`
+- `kInvalidPhysicsResourceAssetKey` (`AssetKey`) = all-zero bytes
 - `kInvalidShapePayloadType` (`ShapePayloadType`) = `0`
-- `kInvalidPhysicsMaterialRef` (`PhysicsMaterialRef`) = `kNoResourceIndex`
+- `kInvalidPhysicsMaterialAssetKey` (`AssetKey`) = all-zero bytes
 
 Constant declaration rule:
 
-- In `PakPhysicsShape.inc`, invalid shape/material resource sentinels must be
-  declared using shared constants (for example `kNoResourceIndex`), not numeric
-  literals.
+- In `PakPhysicsShape.inc`, invalid shape/material sentinels must be declared
+  as all-zero `AssetKey` constants (not numeric literals).
 - `kShapeIsSensorFalse` (`uint32_t`) = `0`
 - `kShapeIsSensorTrue` (`uint32_t`) = `1`
 
-`PhysicsMaterialRef` serialized contract:
+`material_asset_key` serialized contract:
 
-- Type: `PhysicsMaterialRef = ResourceIndexT`.
+- Type: `AssetKey` (16 bytes).
 - Value must reference `PhysicsMaterialAssetDesc`.
-- `kInvalidPhysicsMaterialRef` means "no material assigned" and is
-  `kNoResourceIndex`.
+- `kInvalidPhysicsMaterialAssetKey` means "no material assigned" and is the
+  all-zero key.
 - No mandatory fallback material slot is required by this shape spec.
-- `PhysicsMaterialAssetDesc` table index `0` must exist and be an all-zero
-  sentinel material record (not an auto-resolved fallback material).
 
 ### Enum Numeric Value Contract
 
@@ -377,17 +373,16 @@ byte sizes are fixed.
 
 | Type | Size (bytes) |
 | --- | --- |
-| `CookedShapePayloadRef` | `8` |
+| `CookedShapePayloadRef` | `17` |
 | `ShapeParams` | `80` |
-| `ShapeDescriptor` | `256` |
+| `ShapeDescriptor` | `277` |
 
 `CookedShapePayloadRef` layout:
 
 | Field | Type | Bytes |
 | --- | --- | --- |
-| `resource_index` | `ResourceIndexT` | `4` |
+| `payload_asset_key` | `AssetKey` | `16` |
 | `payload_type` | `ShapePayloadType` | `1` |
-| `reserved` | `uint8_t[3]` | `3` |
 
 `ShapeDescriptor` field order:
 
@@ -401,10 +396,9 @@ byte sizes are fixed.
 | `is_sensor` | `uint32_t` | `4` |
 | `collision_own_layer` | `uint64_t` | `8` |
 | `collision_target_layers` | `uint64_t` | `8` |
-| `material_ref` | `PhysicsMaterialRef` | `4` |
+| `material_asset_key` | `AssetKey` | `16` |
 | `shape_params` | `ShapeParams` | `80` |
-| `cooked_shape_ref` | `CookedShapePayloadRef` | `8` |
-| `reserved` | `uint8_t[8]` | `8` |
+| `cooked_shape_ref` | `CookedShapePayloadRef` | `17` |
 
 ### `ShapeParams` Tagged Union Contract
 
@@ -458,7 +452,7 @@ Pak serialization must store `ShapeDescriptor` with these required fields:
 - `is_sensor`
 - `collision_own_layer`
 - `collision_target_layers`
-- `material_ref`
+- `material_asset_key`
 - `shape_params`
 - `cooked_shape_ref`
 

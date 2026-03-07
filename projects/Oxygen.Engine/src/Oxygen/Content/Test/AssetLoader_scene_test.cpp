@@ -688,16 +688,14 @@ NOLINT_TEST_F(AssetLoaderSceneTest, LoadAssetSceneWithPhysicsSidecarLoadsV7)
         EXPECT_FALSE(rigid[0].material_asset_key.IsNil());
       }
       if (!joints.empty()) {
-        EXPECT_NE(joints[0].constraint_resource_index,
-          oxygen::data::pak::core::kNoResourceIndex);
+        EXPECT_FALSE(joints[0].constraint_asset_key.IsNil());
       }
       if (!soft_bodies.empty()) {
         EXPECT_GT(soft_bodies[0].solver_iteration_count, 0U);
         EXPECT_NE(static_cast<uint32_t>(soft_bodies[0].topology_format), 0U);
       }
       if (!vehicles.empty()) {
-        EXPECT_NE(vehicles[0].constraint_resource_index,
-          oxygen::data::pak::core::kNoResourceIndex);
+        EXPECT_FALSE(vehicles[0].constraint_asset_key.IsNil());
       }
 
       loader.Stop();
