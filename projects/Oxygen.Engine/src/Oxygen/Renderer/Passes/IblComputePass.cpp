@@ -97,7 +97,7 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
         = env_manager->GetSkySphereCubemapSlot(view_id);
       const auto env_static_srv
         = env_manager->GetSrvIndex(Context().current_view.view_id);
-      LOG_F(WARNING,
+      DLOG_F(1,
         "no environment cubemap source slot (frame_slot={}, frame_seq={}, "
         "sky_light={}, sky_sphere={}, env_srv={}, explicit_source_valid={}, "
         "explicit_source={}); IBL output will be black",

@@ -1194,16 +1194,8 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
       const auto env_update_begin = std::chrono::steady_clock::now();
       auto atmo_lut_manager = render_context_->current_view.atmo_lut_manager;
       if (!allow_atmosphere) {
-        per_view_atmo_luts_.erase(view_id);
-        last_atmo_generation_.erase(view_id);
         if (env_static_manager_) {
           env_static_manager_->EraseViewState(view_id);
-        }
-        if (sky_capture_pass_) {
-          sky_capture_pass_->EraseViewState(view_id);
-        }
-        if (ibl_manager_) {
-          ibl_manager_->EraseViewState(view_id);
         }
       } else if (sky_atmo_lut_compute_pass_ && atmo_lut_manager) {
         const auto swap_count_before = atmo_lut_manager->GetSwapCount();
@@ -1750,7 +1742,7 @@ auto Renderer::PrepareAndWireSceneConstantsForView(ViewId view_id,
 
     static bool logged_gpu_debug_slots = false;
     if (!logged_gpu_debug_slots) {
-      LOG_F(WARNING,
+      DLOG_F(1,
         "Renderer: bindless GPU debug slots set (line_srv={}, counter_uav={})",
         gpu_debug_manager_->GetLineBufferSrvIndex(),
         gpu_debug_manager_->GetCounterBufferUavIndex());
@@ -1786,10 +1778,9 @@ auto Renderer::PrepareAndWireSceneConstantsForView(ViewId view_id,
   render_context.current_view.atmo_lut_manager = atmo_enabled
     ? GetOrCreateSkyAtmosphereLutManagerForView(view_id)
     : nullptr;
-  if (!atmo_enabled) {
-    per_view_atmo_luts_.erase(view_id);
-    last_atmo_generation_.erase(view_id);
-  }
+  // Preserve per-view atmosphere resources across active scene transitions.
+  // RenderScene stages fallback/no-atmosphere scenes while switching, and
+  // tearing down live LUT resources here can invalidate in-flight GPU work.
 
   if (env_static_manager_) {
     if (allow_atmosphere) {
@@ -2194,9 +2185,6 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
                 }
               }
             }
-          } else {
-            per_view_atmo_luts_.erase(view_id);
-            last_atmo_generation_.erase(view_id);
           }
         }
       }
