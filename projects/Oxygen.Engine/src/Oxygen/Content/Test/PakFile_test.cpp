@@ -55,6 +55,8 @@ protected:
       std::ranges::copy(header_magic, std::ranges::begin(header.magic));
       // I'll use the default format version for the tests.
       header.version = data::pak::core::kCurrentPakFormatVersion;
+      header.source_identity = { 0x41U, 0x42U, 0x43U, 0x44U, 0x45U, 0x46U,
+        0x77U, 0x48U, 0x89U, 0x4AU, 0x4BU, 0x4CU, 0x4DU, 0x4EU, 0x4FU, 0x50U };
 
       const std::span<const char> footer_magic(
         data::pak::core::kPakFooterMagic);

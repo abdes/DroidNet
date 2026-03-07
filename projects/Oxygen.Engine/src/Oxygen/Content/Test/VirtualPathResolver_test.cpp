@@ -62,6 +62,10 @@ auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
   for (size_t i = 0; i < sizeof(header.source_identity); ++i) {
     header.source_identity[i] = static_cast<uint8_t>(i + 1);
   }
+  header.source_identity[6]
+    = static_cast<uint8_t>((header.source_identity[6] & 0x0FU) | 0x70U);
+  header.source_identity[8]
+    = static_cast<uint8_t>((header.source_identity[8] & 0x3FU) | 0x80U);
 
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
@@ -104,6 +108,13 @@ auto WriteSingleAssetPakWithBrowseIndex(const std::filesystem::path& pak_path,
   using oxygen::data::pak::core::PakHeader;
 
   PakHeader header {};
+  for (size_t i = 0; i < sizeof(header.source_identity); ++i) {
+    header.source_identity[i] = static_cast<uint8_t>(i + 1);
+  }
+  header.source_identity[6]
+    = static_cast<uint8_t>((header.source_identity[6] & 0x0FU) | 0x70U);
+  header.source_identity[8]
+    = static_cast<uint8_t>((header.source_identity[8] & 0x3FU) | 0x80U);
 
   std::string strings;
   const auto off_vpath = static_cast<uint32_t>(strings.size());
@@ -278,16 +289,16 @@ NOLINT_TEST(VirtualPathResolverTest, CanonicalPathValidationMatrixFromSpec)
     }) << path;
   }
 
-  constexpr auto kInvalidPaths
-    = std::array<std::string_view, 11> { "/9game/Physics/Materials/Rubber.opmat",
-        "Physics/Materials/Rubber.opmat",
-        "/Game/Physics/Materials/Rubber.opmat/",
-        "/Game/Physics//Materials/Rubber.opmat",
-        "/Game/Physics/Materials/../Rubber.opmat",
-        "/Game/Physics/Materials/my rubber.opmat",
-        "/Game/Physics.Materials/Rubber.opmat",
-        "/Game/Physics/Materials/Rubber", "/Game/Physics/Materials/.Rubber",
-        "/Pak/DLC.01/Game/Physics/Materials/Lava.opmat", "/Pak" };
+  constexpr auto kInvalidPaths = std::array<std::string_view, 11> {
+    "/9game/Physics/Materials/Rubber.opmat", "Physics/Materials/Rubber.opmat",
+    "/Game/Physics/Materials/Rubber.opmat/",
+    "/Game/Physics//Materials/Rubber.opmat",
+    "/Game/Physics/Materials/../Rubber.opmat",
+    "/Game/Physics/Materials/my rubber.opmat",
+    "/Game/Physics.Materials/Rubber.opmat", "/Game/Physics/Materials/Rubber",
+    "/Game/Physics/Materials/.Rubber",
+    "/Pak/DLC.01/Game/Physics/Materials/Lava.opmat", "/Pak"
+  };
 
   for (const auto path : kInvalidPaths) {
     EXPECT_THROW(

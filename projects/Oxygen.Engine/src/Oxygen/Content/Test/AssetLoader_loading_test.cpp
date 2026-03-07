@@ -70,6 +70,10 @@ auto FillTestGuid(oxygen::data::loose_cooked::IndexHeader& header) -> void
   for (uint8_t i = 0; i < 16; ++i) {
     header.source_identity[i] = static_cast<uint8_t>(i + 1);
   }
+  header.source_identity[6]
+    = static_cast<uint8_t>((header.source_identity[6] & 0x0FU) | 0x70U);
+  header.source_identity[8]
+    = static_cast<uint8_t>((header.source_identity[8] & 0x3FU) | 0x80U);
 }
 
 auto NormalizePath(const std::filesystem::path& path) -> std::filesystem::path

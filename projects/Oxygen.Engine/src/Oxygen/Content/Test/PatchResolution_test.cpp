@@ -49,8 +49,12 @@ auto MakeAssetKey(const uint8_t seed) -> data::AssetKey
 auto MakeSourceKey(const uint8_t seed) -> data::SourceKey
 {
   auto bytes = std::array<std::uint8_t, data::SourceKey::kSizeBytes> {};
-  bytes[0] = seed;
-  return data::SourceKey::FromBytes(bytes);
+  for (auto i = size_t { 0U }; i < bytes.size(); ++i) {
+    bytes[i] = static_cast<uint8_t>(seed + static_cast<uint8_t>(i));
+  }
+  bytes[6] = static_cast<uint8_t>((bytes[6] & 0x0FU) | 0x70U);
+  bytes[8] = static_cast<uint8_t>((bytes[8] & 0x3FU) | 0x80U);
+  return data::SourceKey::FromBytes(bytes).value();
 }
 
 auto MakeCatalogDigest(const uint8_t seed) -> std::array<uint8_t, 32>
@@ -345,6 +349,10 @@ auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
   for (size_t i = 0; i < sizeof(header.source_identity); ++i) {
     header.source_identity[i] = static_cast<uint8_t>(guid_seed + i);
   }
+  header.source_identity[6]
+    = static_cast<uint8_t>((header.source_identity[6] & 0x0FU) | 0x70U);
+  header.source_identity[8]
+    = static_cast<uint8_t>((header.source_identity[8] & 0x3FU) | 0x80U);
 
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
@@ -381,6 +389,13 @@ auto WriteSingleAssetPakWithBrowseIndex(const std::filesystem::path& pak_path,
   using oxygen::data::pak::core::PakHeader;
 
   PakHeader header {};
+  for (size_t i = 0; i < sizeof(header.source_identity); ++i) {
+    header.source_identity[i] = static_cast<uint8_t>(kBaseGuidSeed + i);
+  }
+  header.source_identity[6]
+    = static_cast<uint8_t>((header.source_identity[6] & 0x0FU) | 0x70U);
+  header.source_identity[8]
+    = static_cast<uint8_t>((header.source_identity[8] & 0x3FU) | 0x80U);
 
   std::string strings;
   const auto off_vpath = static_cast<uint32_t>(strings.size());

@@ -163,9 +163,12 @@ private:
 [[nodiscard]] inline auto MakeSourceKey(const uint8_t seed) -> data::SourceKey
 {
   auto bytes = std::array<uint8_t, data::SourceKey::kSizeBytes> {};
-  bytes.fill(0U);
-  bytes[0] = seed;
-  return data::SourceKey::FromBytes(bytes);
+  for (auto i = size_t { 0U }; i < bytes.size(); ++i) {
+    bytes[i] = static_cast<uint8_t>(seed + static_cast<uint8_t>(i));
+  }
+  bytes[6] = static_cast<uint8_t>((bytes[6] & 0x0FU) | 0x70U);
+  bytes[8] = static_cast<uint8_t>((bytes[8] & 0x3FU) | 0x80U);
+  return data::SourceKey::FromBytes(bytes).value();
 }
 
 [[nodiscard]] inline auto MakeDigest(const uint8_t seed)
@@ -271,6 +274,10 @@ private:
     header.source_identity[i]
       = static_cast<uint8_t>(guid_seed + static_cast<uint8_t>(i + 1U));
   }
+  header.source_identity[6]
+    = static_cast<uint8_t>((header.source_identity[6] & 0x0FU) | 0x70U);
+  header.source_identity[8]
+    = static_cast<uint8_t>((header.source_identity[8] & 0x3FU) | 0x80U);
   header.string_table_offset = sizeof(lc::IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
   header.asset_entries_offset

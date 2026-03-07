@@ -72,6 +72,14 @@ constexpr auto HasCanonicalHyphens(const std::string_view str) noexcept -> bool
     [str](const auto position) { return str[position] == '-'; });
 }
 
+constexpr auto HasOnlyLowercaseHexDigits(const std::string_view str) noexcept
+  -> bool
+{
+  return std::ranges::all_of(str, [](const char c) noexcept {
+    return c == '-' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+  });
+}
+
 } // namespace
 
 namespace oxygen {
@@ -144,6 +152,17 @@ auto Uuid::Generate() -> Uuid
   return Uuid { bytes };
 }
 
+auto Uuid::FromBytes(const std::array<std::uint8_t, kSize>& bytes)
+  -> Result<Uuid>
+{
+  const auto candidate = Uuid { bytes };
+  if (!candidate.IsValidV7()) {
+    return Result<Uuid>::Err(std::errc::invalid_argument);
+  }
+
+  return Result<Uuid>::Ok(candidate);
+}
+
 /*!
  Parses and validates a canonical UUIDv7 string.
 
@@ -163,19 +182,10 @@ auto Uuid::Generate() -> Uuid
 */
 auto Uuid::FromString(const std::string_view str) -> Result<Uuid>
 {
-  constexpr auto kVersionByteIndex = std::size_t { 6U };
-  constexpr auto kVariantByteIndex = std::size_t { 8U };
   constexpr auto kInvalidNibble = uint8_t { 0xFFU };
 
-  constexpr auto is_version7 = [](const uint8_t version_byte) noexcept -> bool {
-    return static_cast<uint8_t>(version_byte >> 4U) == 7U;
-  };
-  constexpr auto is_rfc4122_variant
-    = [](const uint8_t variant_byte) noexcept -> bool {
-    return (variant_byte & 0xC0U) == 0x80U;
-  };
-
-  if (str.size() != kCanonicalStringSize || !HasCanonicalHyphens(str)) {
+  if (str.size() != kCanonicalStringSize || !HasCanonicalHyphens(str)
+    || !HasOnlyLowercaseHexDigits(str)) {
     return Result<Uuid>::Err(std::errc::invalid_argument);
   }
 
@@ -206,12 +216,11 @@ auto Uuid::FromString(const std::string_view str) -> Result<Uuid>
     i += 2U;
   }
 
-  if (byte_index != bytes.size() || !is_version7(bytes[kVersionByteIndex])
-    || !is_rfc4122_variant(bytes[kVariantByteIndex])) {
+  if (byte_index != bytes.size()) {
     return Result<Uuid>::Err(std::errc::invalid_argument);
   }
 
-  return Result<Uuid>::Ok(Uuid { bytes });
+  return FromBytes(bytes);
 }
 
 /*!

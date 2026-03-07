@@ -139,7 +139,7 @@ workflows.
 
 ### Task 2.1: Add Pak Catalog Schema
 
-Status: `pending`
+Status: `completed`
 
 Required work:
 
@@ -153,11 +153,51 @@ Required work:
 - Wire the schema into CMake embedding/install rules alongside other cooker
   schemas.
 
+Implementation notes:
+
+- Added the canonical pak catalog schema at
+  `src/Oxygen/Cooker/Pak/Schemas/oxygen.pak-catalog.schema.json`.
+- The schema now fixes canonical JSON encodings for:
+  - `source_key` as lowercase UUIDv7 text and `asset_key` as canonical
+    lowercase asset-key text
+  - `asset_type` as the authoritative Oxygen asset-type string set:
+    `Material`, `Geometry`, `Scene`, `Script`, `InputAction`,
+    `InputMappingContext`, `PhysicsMaterial`, `CollisionShape`,
+    `PhysicsScene`
+  - digest fields as 64-character lowercase hex strings
+- Cooker CMake now:
+  - embeds the pak catalog schema into generated
+    `Pak/Internal/PakCatalog_schema.h`
+  - installs the schema alongside the existing cooker schema set
+- Added focused schema tests covering canonical acceptance and representative
+  invalid payload rejection.
+
+Corrected scope:
+
+- `SourceKey` is authoritative as RFC 9562 UUIDv7 end to end.
+- The schema contract is now closed over canonical lowercase UUIDv7
+  `source_key` text rather than generic lowercase UUID text.
+
 Validation:
 
 - Schema file exists in source control.
 - CMake embeds and installs the schema.
 - Example valid and invalid payloads are covered by tests.
+
+Validation evidence:
+
+- Built in `out/build-vs` with `/m:6`:
+  - `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakCatalogSchema.Tests --config Debug -- /m:6`
+- Verified generated embedded schema header:
+  - `out/build-vs/generated/Oxygen/Cooker/Pak/Internal/PakCatalog_schema.h`
+- Executed:
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakCatalogSchema.Tests.exe`
+- Installed the project data component:
+  - `cmake --install 'out/build-vs' --config Debug --component Oxygen_data`
+- Verified published schema path:
+  - `out/install/Debug/schemas/oxygen.pak-catalog.schema.json`
+- Re-ran the schema test after tightening `source_key` to canonical UUIDv7:
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakCatalogSchema.Tests.exe`
 
 Exit gate:
 
@@ -165,7 +205,7 @@ Exit gate:
 
 ### Task 2.2: Implement `PakCatalogIo`
 
-Status: `pending`
+Status: `completed`
 
 Required work:
 
@@ -175,6 +215,21 @@ Required work:
   - parse JSON into `data::PakCatalog`
   - validate required fields and field formats
   - preserve deterministic ordering through `ordered_json`
+- Expand scope to close the shared runtime contract gap discovered during pak
+  implementation:
+  - add shared `Uuid` validation/parsing helpers for canonical UUIDv7 text and
+    raw bytes
+  - update `SourceKey` comments and construction helpers to enforce UUIDv7-only
+    semantics without pak-local duplication
+  - enforce UUIDv7 validation on runtime binary ingress paths for pak headers
+    and loose cooked indexes
+  - enforce UUIDv7 validation on cooker/build request ingress paths before
+    persisted artifacts are written
+- Use native parsing contracts for:
+  - `SourceKey` as canonical lowercase UUIDv7 text matching the runtime
+    contract
+  - `AssetKey` as canonical asset-key text via shared data-domain parsing, not
+    pak-local parsing
 
 Validation:
 
@@ -184,6 +239,31 @@ Validation:
   - duplicate entry rejection
   - invalid field format rejection
   - deterministic byte-for-byte output
+- Shared tests cover:
+  - UUIDv7 byte validation
+  - UUIDv7 string parsing rejection for non-v7 values
+  - runtime rejection of invalid source identities in pak and loose cooked
+    headers
+
+Validation evidence:
+
+- Built in `out/build-vs` with `/m:6`:
+  - `cmake --build 'out/build-vs' --target Oxygen.Base.Uuid.Tests Oxygen.Serio.SerioFullCycle.Tests Oxygen.Content.AssetLoader.Tests Oxygen.Content.PakFile.Tests Oxygen.Content.LooseCooked.Tests Oxygen.Cooker.LooseCooked.Tests Oxygen.Cooker.PakCatalogIo.Tests Oxygen.Cooker.PakDomainValidation.Tests --config Debug -- /m:6`
+- Executed:
+  - `out/build-vs/bin/Debug/Oxygen.Base.Uuid.Tests.exe`
+  - `out/build-vs/bin/Debug/Oxygen.Serio.SerioFullCycle.Tests.exe`
+  - `out/build-vs/bin/Debug/Oxygen.Content.PakFile.Tests.exe`
+  - `out/build-vs/bin/Debug/Oxygen.Content.LooseCooked.Tests.exe`
+  - `out/build-vs/bin/Debug/Oxygen.Content.AssetLoader.Tests.exe`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.LooseCooked.Tests.exe`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakCatalogIo.Tests.exe`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakDomainValidation.Tests.exe`
+- Additional implementation evidence:
+  - Serio UUID deserialization now validates bytes through `Uuid::FromBytes`
+    instead of mutating an already-constructed `Uuid`
+  - content test PAK generation normalizes emitted header `source_identity` to
+    deterministic UUIDv7 bytes and repairs CRC before runtime validation
+  - shared loose-cooked and pak test fixtures now emit UUIDv7 source identities
 
 Exit gate:
 
@@ -499,11 +579,9 @@ Exit gate:
 
 Release blockers:
 
-1. `PakBuildResult::output_catalog` is not yet guaranteed/populated.
-2. The canonical catalog schema and IO helpers do not yet exist.
-3. The tool target does not yet exist.
-4. Staged publication behavior does not yet exist.
-5. Tool-level validation evidence does not yet exist.
+1. The tool target does not yet exist.
+2. Staged publication behavior does not yet exist.
+3. Tool-level validation evidence does not yet exist.
 
 Non-blocking follow-ups after release:
 
@@ -517,12 +595,18 @@ Implementation status: `in_progress`
 
 Validation executed in this review iteration:
 
-- `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakDomainValidation.Tests Oxygen.Cooker.PakE2E.Tests --config Debug -- /m:6`
+- `cmake --build 'out/build-vs' --target Oxygen.Base.Uuid.Tests Oxygen.Serio.SerioFullCycle.Tests Oxygen.Content.AssetLoader.Tests Oxygen.Content.PakFile.Tests Oxygen.Content.LooseCooked.Tests Oxygen.Cooker.LooseCooked.Tests Oxygen.Cooker.PakCatalogSchema.Tests Oxygen.Cooker.PakCatalogIo.Tests Oxygen.Cooker.PakDomainValidation.Tests --config Debug -- /m:6`
+- `out/build-vs/bin/Debug/Oxygen.Base.Uuid.Tests.exe`
+- `out/build-vs/bin/Debug/Oxygen.Serio.SerioFullCycle.Tests.exe`
+- `out/build-vs/bin/Debug/Oxygen.Content.PakFile.Tests.exe`
+- `out/build-vs/bin/Debug/Oxygen.Content.LooseCooked.Tests.exe`
+- `out/build-vs/bin/Debug/Oxygen.Content.AssetLoader.Tests.exe`
+- `out/build-vs/bin/Debug/Oxygen.Cooker.LooseCooked.Tests.exe`
+- `out/build-vs/bin/Debug/Oxygen.Cooker.PakCatalogSchema.Tests.exe`
+- `out/build-vs/bin/Debug/Oxygen.Cooker.PakCatalogIo.Tests.exe`
 - `out/build-vs/bin/Debug/Oxygen.Cooker.PakDomainValidation.Tests.exe`
-- `out/build-vs/bin/Debug/Oxygen.Cooker.PakE2E.Tests.exe`
 
 Remaining validation delta:
 
-- Catalog schema/IO tests
 - Tool-level CLI/integration/report tests
 - Manual end-to-end runs with `PakDump`

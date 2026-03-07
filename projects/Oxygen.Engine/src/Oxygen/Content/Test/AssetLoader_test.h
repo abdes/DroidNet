@@ -28,17 +28,19 @@ protected:
   std::unique_ptr<AssetLoader> asset_loader_;
 };
 
-//! Advanced loading test cases fixture, using real PAK files
+//! Advanced loading test cases fixture, using real PAK files.
 /*!
- Uses the generate_pak.py tool to create test PAK files from YAML specs.
- This provides realistic testing without complex mocking infrastructure.
+ Creates test PAK files from YAML specs through the shared content-test
+ * helper.
+ This provides realistic coverage without complex mocking
+ * infrastructure.
 */
 class AssetLoaderLoadingTest : public AssetLoaderBasicTest {
 protected:
   //! Get path to test data directory
   [[nodiscard]] static auto GetTestDataDir() -> std::filesystem::path;
 
-  //! Generate a PAK file from YAML spec using generate_pak.py
+  //! Generate a PAK file from a YAML spec.
   auto GeneratePakFile(const std::string& spec_name) -> std::filesystem::path;
 
   //! Create a simple test asset key

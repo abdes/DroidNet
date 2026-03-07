@@ -6,6 +6,8 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <array>
+
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -197,6 +199,44 @@ NOLINT_TEST(SerioFullCycle, SerializeDeserializeUuidRoundTrip)
 
   ASSERT_TRUE(reader.ReadInto(decoded));
   EXPECT_EQ(decoded, source);
+}
+
+NOLINT_TEST(SerioFullCycle, DeserializeUuidRejectsNonV7Bytes)
+{
+  using oxygen::Uuid;
+  using oxygen::serio::MemoryStream;
+  using oxygen::serio::Reader;
+  using oxygen::serio::Writer;
+
+  constexpr auto kInvalidUuidBytes = std::array<uint8_t, Uuid::kSize> {
+    0x01U,
+    0x23U,
+    0x45U,
+    0x67U,
+    0x89U,
+    0xABU,
+    0x6CU,
+    0xDEU,
+    0x8FU,
+    0xEDU,
+    0xBAU,
+    0x98U,
+    0x76U,
+    0x54U,
+    0x32U,
+    0x10U,
+  };
+
+  auto stream = MemoryStream {};
+  auto writer = Writer<MemoryStream> { stream };
+  ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span { kInvalidUuidBytes })));
+  ASSERT_TRUE(writer.Flush());
+
+  ASSERT_TRUE(stream.Seek(0));
+  auto reader = Reader<MemoryStream> { stream };
+  auto decoded = Uuid {};
+
+  EXPECT_FALSE(reader.ReadInto(decoded));
 }
 
 } // namespace

@@ -45,6 +45,10 @@ inline auto CreateDummyIndex(
 
   IndexHeader header {};
   std::ranges::iota(header.source_identity, static_cast<uint8_t>(1));
+  header.source_identity[6]
+    = static_cast<uint8_t>((header.source_identity[6] & 0x0FU) | 0x70U);
+  header.source_identity[8]
+    = static_cast<uint8_t>((header.source_identity[8] & 0x3FU) | 0x80U);
   header.version = version;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths

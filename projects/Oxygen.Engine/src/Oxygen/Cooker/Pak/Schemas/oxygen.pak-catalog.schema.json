@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Oxygen Pak Catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "source_key": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "content_version": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535
+    },
+    "catalog_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "asset_key": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "asset_type": {
+            "type": "string",
+            "enum": [
+              "Material",
+              "Geometry",
+              "Scene",
+              "Script",
+              "InputAction",
+              "InputMappingContext",
+              "PhysicsMaterial",
+              "CollisionShape",
+              "PhysicsScene"
+            ]
+          },
+          "descriptor_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "transitive_resource_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "asset_key",
+          "asset_type",
+          "descriptor_digest",
+          "transitive_resource_digest"
+        ]
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "source_key",
+    "content_version",
+    "catalog_digest",
+    "entries"
+  ]
+}

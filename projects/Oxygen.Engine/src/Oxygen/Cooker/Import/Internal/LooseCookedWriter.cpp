@@ -120,9 +120,9 @@ namespace {
 
   auto ValidateVirtualPath(const std::string_view virtual_path) -> void
   {
-    if (const auto error = oxygen::content::ValidateCanonicalVirtualPath(
-          virtual_path,
-          oxygen::content::VirtualPathRuleSet::kSyntaxAndStandardMountRoot);
+    if (const auto error
+      = oxygen::content::ValidateCanonicalVirtualPath(virtual_path,
+        oxygen::content::VirtualPathRuleSet::kSyntaxAndStandardMountRoot);
       error.has_value()) {
       throw std::runtime_error(
         "Virtual path is not canonical: " + std::string(*error));
@@ -601,7 +601,13 @@ private:
 
     try {
       const auto header = ReadIndexHeaderOrThrow(index_path);
-      existing_guid_ = data::SourceKey::FromBytes(header.source_identity);
+      const auto existing_guid
+        = data::SourceKey::FromBytes(header.source_identity);
+      if (!existing_guid.has_value()) {
+        throw std::runtime_error(
+          "Existing loose cooked index has invalid non-v7 source identity");
+      }
+      existing_guid_ = existing_guid.value();
       existing_content_version_ = header.content_version;
 
       const auto index
@@ -711,11 +717,7 @@ private:
       return *existing_guid_;
     }
 
-    auto guid = Uuid::Generate();
-    if (guid.IsNil()) {
-      guid.data()[0] = 1;
-    }
-    return data::SourceKey { guid };
+    return data::SourceKey { Uuid::Generate() };
   }
 
   [[nodiscard]] auto ResolveContentVersion_() const -> uint16_t

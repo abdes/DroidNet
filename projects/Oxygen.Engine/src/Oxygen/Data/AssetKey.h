@@ -19,6 +19,7 @@
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Hash.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Data/api_export.h>
 
 namespace oxygen::data {
@@ -49,6 +50,10 @@ public:
   {
     return AssetKey(bytes);
   }
+
+  //! Parses canonical lowercase AssetKey text (`8-4-4-4-12`).
+  OXGN_DATA_NDAPI static auto FromString(std::string_view text)
+    -> Result<AssetKey>;
 
   //! Computes a deterministic AssetKey from a canonical virtual path.
   OXGN_DATA_NDAPI static auto FromVirtualPath(std::string_view virtual_path)

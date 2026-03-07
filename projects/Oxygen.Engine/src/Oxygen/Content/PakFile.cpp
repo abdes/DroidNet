@@ -134,6 +134,7 @@ auto OpenFileStream(const std::filesystem::path& path)
 
 struct ParsedPakMetadata final {
   PakHeader header {};
+  oxygen::data::SourceKey source_key {};
   PakFooter footer {};
   std::vector<AssetDirectoryEntry> directory {}; // NOLINT
   std::unordered_map<AssetKey, size_t> key_to_index {}; // NOLINT
@@ -144,7 +145,8 @@ struct ParsedBrowseIndex final {
   std::unordered_map<std::string_view, AssetKey> vpath_to_key {}; // NOLINT
 };
 
-auto ReadPakHeader(oxygen::serio::FileStream<>& stream) -> PakHeader
+auto ReadPakHeader(oxygen::serio::FileStream<>& stream,
+  oxygen::data::SourceKey& source_key_out) -> PakHeader
 {
   LOG_SCOPE_FUNCTION(INFO);
 
@@ -162,11 +164,17 @@ auto ReadPakHeader(oxygen::serio::FileStream<>& stream) -> PakHeader
   }
 
   const auto header = header_result.value();
-  const auto source_key
+  const auto source_key_result
     = oxygen::data::SourceKey::FromBytes(header.source_identity);
+  if (!source_key_result.has_value()) {
+    LOG_F(
+      ERROR, "Invalid pak source_identity: expected canonical UUIDv7 bytes");
+    throw std::runtime_error("Invalid pak file source identity");
+  }
+  source_key_out = source_key_result.value();
   LOG_F(INFO, "format version  : {}", header.version);
   LOG_F(INFO, "content version : {}", header.content_version);
-  LOG_F(INFO, "pak source_identity        : {}", source_key);
+  LOG_F(INFO, "pak source_identity        : {}", source_key_out);
 
   if (!std::ranges::equal(
         std::span { header.magic }, oxygen::data::pak::core::kPakHeaderMagic)) {
@@ -261,7 +269,7 @@ auto ReadPakDirectory(oxygen::serio::FileStream<>& stream,
 auto LoadPakMetadata(oxygen::serio::FileStream<>& stream) -> ParsedPakMetadata
 {
   ParsedPakMetadata metadata {};
-  metadata.header = ReadPakHeader(stream);
+  metadata.header = ReadPakHeader(stream, metadata.source_key);
   metadata.footer = ReadPakFooter(stream);
   ReadPakDirectory(
     stream, metadata.footer, metadata.directory, metadata.key_to_index);
@@ -438,6 +446,7 @@ PakFile::PakFile(const std::filesystem::path& path)
 
   const auto metadata = LoadPakMetadata(*meta_stream_);
   header_ = metadata.header;
+  source_key_ = metadata.source_key;
   footer_ = metadata.footer;
   directory_ = metadata.directory;
   key_to_index_ = metadata.key_to_index;
@@ -598,10 +607,7 @@ auto PakFile::ContentVersion() const noexcept -> uint16_t
   return header_.content_version;
 }
 
-auto PakFile::Guid() const noexcept -> data::SourceKey
-{
-  return data::SourceKey::FromBytes(header_.source_identity);
-}
+auto PakFile::Guid() const noexcept -> data::SourceKey { return source_key_; }
 
 /*!
   Returns a Reader positioned at the start of the buffer data region.

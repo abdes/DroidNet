@@ -84,6 +84,18 @@ oxygen_embed_json_schemas(
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.collision-shape-descriptor.schema.json"
 )
 
+oxygen_embed_json_schemas(
+  TARGET ${META_MODULE_TARGET}
+  OUTPUT_HEADER
+    "${CMAKE_BINARY_DIR}/generated/Oxygen/Cooker/Pak/Internal/PakCatalog_schema.h"
+  NAMESPACE "oxygen::content::pak"
+  INCLUDE_BASE_DIR "${CMAKE_BINARY_DIR}/generated"
+  CHUNK_SIZE 8192
+  SCHEMAS
+    kPakCatalogSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Pak/Schemas/oxygen.pak-catalog.schema.json"
+)
+
 set(
   OXYGEN_COOKER_HEADERS
   "api_export.h"
@@ -142,6 +154,7 @@ set(
   "Pak/PakBuildRequest.h"
   "Pak/PakBuildResult.h"
   "Pak/PakBuildReport.h"
+  "Pak/PakCatalogIo.h"
 )
 
 set(
@@ -325,6 +338,7 @@ set(
   "Pak/PakValidation.cpp"
   "Pak/PakWriter.cpp"
   "Pak/PakManifestWriter.cpp"
+  "Pak/PakCatalogIo.cpp"
   "Pak/PakBuilder.cpp"
   "Pak/PakBuildToString.cpp"
   ${OXYGEN_COOKER_PRIVATE_HEADERS}
@@ -418,6 +432,7 @@ if(${META_PROJECT_ID}_INSTALL)
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-sidecar.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-material-descriptor.schema.json"
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.collision-shape-descriptor.schema.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Pak/Schemas/oxygen.pak-catalog.schema.json"
   )
   foreach(_schema_file IN LISTS _oxygen_cooker_schema_files)
     if(NOT EXISTS "${_schema_file}")

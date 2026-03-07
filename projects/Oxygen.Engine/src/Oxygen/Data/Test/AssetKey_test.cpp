@@ -101,4 +101,25 @@ NOLINT_TEST_F(AssetKeyBasicTest, CanonicalVirtualPathGoldenVectorsAreStable)
   }
 }
 
+NOLINT_TEST_F(AssetKeyBasicTest, FromStringParsesCanonicalLowercaseText)
+{
+  constexpr auto kText
+    = std::string_view { "5793612a-1c25-ca81-a7a2-8e696378559e" };
+
+  const auto parsed = AssetKey::FromString(kText);
+
+  ASSERT_TRUE(parsed.has_value());
+  EXPECT_EQ(to_string(parsed.value()), kText);
+}
+
+NOLINT_TEST_F(AssetKeyBasicTest, FromStringRejectsUppercaseText)
+{
+  constexpr auto kText
+    = std::string_view { "5793612A-1C25-CA81-A7A2-8E696378559E" };
+
+  const auto parsed = AssetKey::FromString(kText);
+
+  EXPECT_FALSE(parsed.has_value());
+}
+
 } // namespace
