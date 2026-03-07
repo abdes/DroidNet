@@ -125,7 +125,7 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
     co_return;
   }
 
-  LOG_F(INFO,
+  DLOG_F(2,
     "regenerating IBL (frame_slot={}, frame_seq={}, env_srv={}, source={})",
     Context().frame_slot.get(), Context().frame_sequence.get(),
     env_manager->GetSrvIndex(view_id).get(), source_slot.get());
@@ -182,7 +182,7 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
   }
 
   const auto final_outputs = ibl_manager->QueryOutputsFor(view_id, source_slot);
-  LOG_F(INFO, "IBL generated (source={}, irr_srv={}, pref_srv={})",
+  DLOG_F(2, "IBL generated (source={}, irr_srv={}, pref_srv={})",
     source_slot.get(), final_outputs.irradiance.get(),
     final_outputs.prefilter.get());
 

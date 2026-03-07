@@ -147,7 +147,8 @@ auto IblManager::EnsureViewResourcesCreated(const ViewId view_id) -> bool
   }
 
   state.resources_created = true;
-  LOG_F(INFO, "IblManager: Created per-view resources (view={}, Err={}, Pref={})",
+  DLOG_F(2,
+    "IblManager: Created per-view resources (view={}, Err={}, Pref={})",
     view_id.get(), config_.irradiance_size, config_.prefilter_size);
   return true;
 }
