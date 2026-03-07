@@ -1,0 +1,17 @@
+{
+  "name": "MatCubeB",
+  "domain": "masked",
+  "alpha_mode": "masked",
+  "parameters": {
+    "base_color": [
+      1.0,
+      0.35,
+      0.25,
+      1.0
+    ],
+    "metalness": 0.5,
+    "roughness": 0.18,
+    "ambient_occlusion": 1.0,
+    "alpha_cutoff": 0.5
+  }
+}

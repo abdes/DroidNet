@@ -1,0 +1,48 @@
+{
+  "name": "GeoEmissiveBlue",
+  "bounds": {
+    "min": [
+      -0.5,
+      -0.5,
+      -0.5
+    ],
+    "max": [
+      0.5,
+      0.5,
+      0.5
+    ]
+  },
+  "lods": [
+    {
+      "name": "GeoEmissiveBlue_lod0",
+      "mesh_type": "procedural",
+      "bounds": {
+        "min": [
+          -0.5,
+          -0.5,
+          -0.5
+        ],
+        "max": [
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "procedural": {
+        "generator": "Cube",
+        "mesh_name": "GeoEmissiveBlue"
+      },
+      "submeshes": [
+        {
+          "name": "GeoEmissiveBlue_surface",
+          "material_ref": "/.cooked/Materials/MatEmissiveBlue.omat",
+          "views": [
+            {
+              "view_ref": "__all__"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "name": "GeoReference",
+  "bounds": {
+    "min": [
+      -0.5,
+      -0.5,
+      -0.5
+    ],
+    "max": [
+      0.5,
+      0.5,
+      0.5
+    ]
+  },
+  "lods": [
+    {
+      "name": "GeoReference_lod0",
+      "mesh_type": "procedural",
+      "bounds": {
+        "min": [
+          -0.5,
+          -0.5,
+          -0.5
+        ],
+        "max": [
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "procedural": {
+        "generator": "Cube",
+        "mesh_name": "GeoReference"
+      },
+      "submeshes": [
+        {
+          "name": "GeoReference_surface",
+          "material_ref": "/.cooked/Materials/MatReference.omat",
+          "views": [
+            {
+              "view_ref": "__all__"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

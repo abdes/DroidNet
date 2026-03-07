@@ -1,0 +1,21 @@
+{
+  "name": "MatEmissiveRed",
+  "domain": "opaque",
+  "alpha_mode": "opaque",
+  "parameters": {
+    "base_color": [
+      0.1,
+      0.02,
+      0.02,
+      1.0
+    ],
+    "metalness": 0.0,
+    "roughness": 0.8,
+    "ambient_occlusion": 1.0,
+    "emissive_factor": [
+      300.0,
+      8.0,
+      4.0
+    ]
+  }
+}

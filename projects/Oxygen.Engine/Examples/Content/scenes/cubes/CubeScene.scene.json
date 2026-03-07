@@ -1,0 +1,366 @@
+{
+  "name": "CubeScene",
+  "nodes": [
+    {
+      "name": "Root"
+    },
+    {
+      "name": "Cube",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "CubeB",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          2.0,
+          0.0,
+          -1.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          0.8,
+          0.8,
+          0.8
+        ]
+      }
+    },
+    {
+      "name": "CubeC",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          -2.0,
+          0.0,
+          -1.5
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.25,
+          0.6,
+          1.25
+        ]
+      }
+    },
+    {
+      "name": "MainCamera",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          0.0,
+          -15.0,
+          0.0
+        ],
+        "rotation": [
+          -0.70710678,
+          0.0,
+          0.0,
+          0.70710678
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "Sun",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          0.0,
+          5.0,
+          8.0
+        ],
+        "rotation": [
+          0.5,
+          0.0,
+          0.0,
+          0.8660254
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "FillLight",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          1.5,
+          1.2,
+          2.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "SpotRig",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          -1.5,
+          2.0,
+          2.5
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "SideSpotX",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          2.75,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          -0.70710678,
+          0.70710678
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "SidePointX",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          1.5,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "CubeD",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          2.0,
+          0.0,
+          -2.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          0.9,
+          0.9,
+          0.9
+        ]
+      }
+    }
+  ],
+  "renderables": [
+    {
+      "node": 1,
+      "geometry_ref": "/.cooked/Geometry/GeoCube.ogeo",
+      "visible": true
+    },
+    {
+      "node": 2,
+      "geometry_ref": "/.cooked/Geometry/GeoCubeB.ogeo",
+      "visible": true
+    },
+    {
+      "node": 3,
+      "geometry_ref": "/.cooked/Geometry/GeoCubeC.ogeo",
+      "visible": true
+    },
+    {
+      "node": 10,
+      "geometry_ref": "/.cooked/Geometry/GeoCubeD.ogeo",
+      "visible": true
+    }
+  ],
+  "cameras": {
+    "perspective": [
+      {
+        "node": 4,
+        "fov_y": 0.785398,
+        "aspect_ratio": 1.777778,
+        "near_plane": 0.1,
+        "far_plane": 100.0
+      }
+    ]
+  },
+  "lights": {
+    "directional": [
+      {
+        "node": 5,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [
+            1.0,
+            0.98,
+            0.92
+          ],
+          "mobility": 0,
+          "casts_shadows": true
+        },
+        "angular_size_radians": 0.004675,
+        "environment_contribution": true,
+        "is_sun_light": true,
+        "intensity_lux": 150000.0
+      }
+    ],
+    "point": [
+      {
+        "node": 6,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [
+            1.0,
+            0.35,
+            0.25
+          ],
+          "casts_shadows": false
+        },
+        "range": 8.0,
+        "attenuation_model": 0,
+        "decay_exponent": 2.0,
+        "source_radius": 0.05,
+        "luminous_flux_lm": 1200.0
+      },
+      {
+        "node": 9,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "casts_shadows": false
+        },
+        "range": 3.0,
+        "attenuation_model": 0,
+        "decay_exponent": 2.0,
+        "source_radius": 0.02,
+        "luminous_flux_lm": 1200.0
+      }
+    ],
+    "spot": [
+      {
+        "node": 7,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [
+            0.25,
+            0.6,
+            1.0
+          ],
+          "casts_shadows": false
+        },
+        "range": 12.0,
+        "attenuation_model": 0,
+        "decay_exponent": 2.0,
+        "inner_cone_angle_radians": 0.25,
+        "outer_cone_angle_radians": 0.45,
+        "source_radius": 0.02,
+        "luminous_flux_lm": 3000.0
+      },
+      {
+        "node": 8,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "casts_shadows": false
+        },
+        "range": 6.0,
+        "attenuation_model": 0,
+        "decay_exponent": 2.0,
+        "inner_cone_angle_radians": 0.18,
+        "outer_cone_angle_radians": 0.3,
+        "source_radius": 0.02,
+        "luminous_flux_lm": 3000.0
+      }
+    ]
+  },
+  "references": {
+    "materials": [
+      "/.cooked/Materials/MatCube.omat",
+      "/.cooked/Materials/MatCubeB.omat",
+      "/.cooked/Materials/MatCubeC.omat",
+      "/.cooked/Materials/MatCubeD.omat"
+    ]
+  }
+}

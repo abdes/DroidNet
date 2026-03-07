@@ -1,0 +1,22 @@
+{
+  "name": "MatEmissiveMasked",
+  "domain": "masked",
+  "alpha_mode": "masked",
+  "parameters": {
+    "base_color": [
+      1.0,
+      0.8,
+      0.2,
+      1.0
+    ],
+    "metalness": 0.0,
+    "roughness": 0.5,
+    "ambient_occlusion": 1.0,
+    "emissive_factor": [
+      160.0,
+      80.0,
+      16.0
+    ],
+    "alpha_cutoff": 0.5
+  }
+}

@@ -1,0 +1,215 @@
+{
+  "name": "EmissiveScene",
+  "nodes": [
+    {
+      "name": "Root"
+    },
+    {
+      "name": "EmissiveRed",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          -3.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "EmissiveGreen",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "EmissiveBlue",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "EmissiveTextured",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          3.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "EmissiveMasked",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          -1.0,
+          0.0,
+          -2.5
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.2,
+          1.2,
+          1.2
+        ]
+      }
+    },
+    {
+      "name": "Reference",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          1.0,
+          0.0,
+          -2.5
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.2,
+          1.2,
+          1.2
+        ]
+      }
+    },
+    {
+      "name": "MainCamera",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          0.0,
+          2.0,
+          8.0
+        ],
+        "rotation": [
+          -0.1,
+          0.0,
+          0.0,
+          0.995
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "renderables": [
+    {
+      "node": 1,
+      "geometry_ref": "/.cooked/Geometry/GeoEmissiveRed.ogeo",
+      "visible": true
+    },
+    {
+      "node": 2,
+      "geometry_ref": "/.cooked/Geometry/GeoEmissiveGreen.ogeo",
+      "visible": true
+    },
+    {
+      "node": 3,
+      "geometry_ref": "/.cooked/Geometry/GeoEmissiveBlue.ogeo",
+      "visible": true
+    },
+    {
+      "node": 4,
+      "geometry_ref": "/.cooked/Geometry/GeoEmissiveTextured.ogeo",
+      "visible": true
+    },
+    {
+      "node": 5,
+      "geometry_ref": "/.cooked/Geometry/GeoEmissiveMasked.ogeo",
+      "visible": true
+    },
+    {
+      "node": 6,
+      "geometry_ref": "/.cooked/Geometry/GeoReference.ogeo",
+      "visible": true
+    }
+  ],
+  "cameras": {
+    "perspective": [
+      {
+        "node": 7,
+        "fov_y": 0.785398,
+        "aspect_ratio": 1.777778,
+        "near_plane": 0.1,
+        "far_plane": 100.0
+      }
+    ]
+  },
+  "references": {
+    "materials": [
+      "/.cooked/Materials/MatEmissiveBlue.omat",
+      "/.cooked/Materials/MatEmissiveGreen.omat",
+      "/.cooked/Materials/MatEmissiveMasked.omat",
+      "/.cooked/Materials/MatEmissiveRed.omat",
+      "/.cooked/Materials/MatEmissiveTextured.omat",
+      "/.cooked/Materials/MatReference.omat"
+    ]
+  }
+}

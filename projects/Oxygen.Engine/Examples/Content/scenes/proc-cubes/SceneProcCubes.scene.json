@@ -1,0 +1,93 @@
+{
+  "name": "SceneProcCubes",
+  "nodes": [
+    {
+      "name": "Root"
+    },
+    {
+      "name": "ProcHost",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "CameraRig",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "cameras": {
+    "perspective": [
+      {
+        "node": 2,
+        "fov_y": 0.785398,
+        "aspect_ratio": 1.777778,
+        "near_plane": 0.1,
+        "far_plane": 100.0
+      }
+    ]
+  },
+  "lights": {
+    "directional": [
+      {
+        "node": 0,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "mobility": 0,
+          "casts_shadows": true
+        },
+        "angular_size_radians": 0.004675,
+        "environment_contribution": true,
+        "is_sun_light": true,
+        "intensity_lux": 12000.0
+      }
+    ]
+  },
+  "references": {
+    "materials": [
+      "/.cooked/Materials/ProcCubeAccentMat.omat",
+      "/.cooked/Materials/ProcCubeBaseMat.omat"
+    ],
+    "scripts": [
+      "/.cooked/Scripts/proc_cubes.oscript"
+    ]
+  }
+}

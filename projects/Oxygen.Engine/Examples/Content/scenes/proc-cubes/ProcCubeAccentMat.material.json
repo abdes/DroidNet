@@ -1,0 +1,16 @@
+{
+  "name": "ProcCubeAccentMat",
+  "domain": "opaque",
+  "alpha_mode": "opaque",
+  "parameters": {
+    "base_color": [
+      0.8,
+      0.3,
+      0.2,
+      1.0
+    ],
+    "metalness": 0.0,
+    "roughness": 0.4,
+    "ambient_occlusion": 1.0
+  }
+}

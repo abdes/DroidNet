@@ -1,0 +1,176 @@
+{
+  "actions": [
+    {
+      "name": "RotateSpeedUpAction",
+      "type": "axis1d",
+      "consumes_input": true
+    },
+    {
+      "name": "RotateSpeedDownAction",
+      "type": "axis1d",
+      "consumes_input": true
+    },
+    {
+      "name": "RotateStopAction",
+      "type": "bool",
+      "consumes_input": true
+    },
+    {
+      "name": "RotateInvertAction",
+      "type": "bool",
+      "consumes_input": true
+    },
+    {
+      "name": "CycleShapeAction",
+      "type": "bool",
+      "consumes_input": true
+    },
+    {
+      "name": "SpawnOrbAction",
+      "type": "bool",
+      "consumes_input": true
+    },
+    {
+      "name": "PulseScaleAction",
+      "type": "bool",
+      "consumes_input": true
+    }
+  ],
+  "contexts": [
+    {
+      "name": "RotateRuntimeInputContext",
+      "auto_load": true,
+      "auto_activate": true,
+      "mappings": [
+        {
+          "action": "RotateSpeedUpAction",
+          "slot": "PageUp",
+          "scale": [
+            1.0,
+            0.0
+          ],
+          "bias": [
+            0.0,
+            0.0
+          ],
+          "triggers": [
+            {
+              "type": "pulse",
+              "behavior": "implicit",
+              "interval": 0.08
+            }
+          ]
+        },
+        {
+          "action": "RotateSpeedDownAction",
+          "slot": "PageDown",
+          "scale": [
+            1.0,
+            0.0
+          ],
+          "bias": [
+            0.0,
+            0.0
+          ],
+          "triggers": [
+            {
+              "type": "pulse",
+              "behavior": "implicit",
+              "interval": 0.08
+            }
+          ]
+        },
+        {
+          "action": "RotateStopAction",
+          "slot": "End",
+          "scale": [
+            1.0,
+            0.0
+          ],
+          "bias": [
+            0.0,
+            0.0
+          ],
+          "triggers": [
+            {
+              "type": "pressed",
+              "behavior": "implicit"
+            }
+          ]
+        },
+        {
+          "action": "RotateInvertAction",
+          "slot": "Home",
+          "scale": [
+            1.0,
+            0.0
+          ],
+          "bias": [
+            0.0,
+            0.0
+          ],
+          "triggers": [
+            {
+              "type": "pressed",
+              "behavior": "implicit"
+            }
+          ]
+        },
+        {
+          "action": "CycleShapeAction",
+          "slot": "Insert",
+          "scale": [
+            1.0,
+            0.0
+          ],
+          "bias": [
+            0.0,
+            0.0
+          ],
+          "triggers": [
+            {
+              "type": "pressed",
+              "behavior": "implicit"
+            }
+          ]
+        },
+        {
+          "action": "SpawnOrbAction",
+          "slot": "Delete",
+          "scale": [
+            1.0,
+            0.0
+          ],
+          "bias": [
+            0.0,
+            0.0
+          ],
+          "triggers": [
+            {
+              "type": "pressed",
+              "behavior": "implicit"
+            }
+          ]
+        },
+        {
+          "action": "PulseScaleAction",
+          "slot": "Space",
+          "scale": [
+            1.0,
+            0.0
+          ],
+          "bias": [
+            0.0,
+            0.0
+          ],
+          "triggers": [
+            {
+              "type": "pressed",
+              "behavior": "implicit"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

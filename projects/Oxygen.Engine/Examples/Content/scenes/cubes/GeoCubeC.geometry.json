@@ -1,0 +1,48 @@
+{
+  "name": "GeoCubeC",
+  "bounds": {
+    "min": [
+      -0.5,
+      -0.5,
+      -0.5
+    ],
+    "max": [
+      0.5,
+      0.5,
+      0.5
+    ]
+  },
+  "lods": [
+    {
+      "name": "GeoCubeC_lod0",
+      "mesh_type": "procedural",
+      "bounds": {
+        "min": [
+          -0.5,
+          -0.5,
+          -0.5
+        ],
+        "max": [
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      "procedural": {
+        "generator": "Cube",
+        "mesh_name": "GeoCubeC"
+      },
+      "submeshes": [
+        {
+          "name": "GeoCubeC_surface",
+          "material_ref": "/.cooked/Materials/MatCubeC.omat",
+          "views": [
+            {
+              "view_ref": "__all__"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

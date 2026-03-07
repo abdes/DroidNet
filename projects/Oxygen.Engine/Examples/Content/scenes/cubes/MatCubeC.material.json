@@ -1,0 +1,16 @@
+{
+  "name": "MatCubeC",
+  "domain": "alpha_blended",
+  "alpha_mode": "blended",
+  "parameters": {
+    "base_color": [
+      0.25,
+      0.6,
+      1.0,
+      0.35
+    ],
+    "metalness": 0.2,
+    "roughness": 0.7,
+    "ambient_occlusion": 1.0
+  }
+}

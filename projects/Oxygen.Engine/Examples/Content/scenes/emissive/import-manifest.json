@@ -1,0 +1,124 @@
+{
+  "version": 1,
+  "max_in_flight_jobs": 1,
+  "output": "H:/projects/DroidNet/projects/Oxygen.Engine/Examples/Content/.cooked",
+  "jobs": [
+    {
+      "id": "material.MatEmissiveRed",
+      "type": "material-descriptor",
+      "source": "./MatEmissiveRed.material.json",
+      "name": "MatEmissiveRed",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatEmissiveGreen",
+      "type": "material-descriptor",
+      "source": "./MatEmissiveGreen.material.json",
+      "name": "MatEmissiveGreen",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatEmissiveBlue",
+      "type": "material-descriptor",
+      "source": "./MatEmissiveBlue.material.json",
+      "name": "MatEmissiveBlue",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatEmissiveTextured",
+      "type": "material-descriptor",
+      "source": "./MatEmissiveTextured.material.json",
+      "name": "MatEmissiveTextured",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatEmissiveMasked",
+      "type": "material-descriptor",
+      "source": "./MatEmissiveMasked.material.json",
+      "name": "MatEmissiveMasked",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatReference",
+      "type": "material-descriptor",
+      "source": "./MatReference.material.json",
+      "name": "MatReference",
+      "content_hashing": true
+    },
+    {
+      "id": "geometry.GeoEmissiveRed",
+      "type": "geometry-descriptor",
+      "source": "./GeoEmissiveRed.geometry.json",
+      "name": "GeoEmissiveRed",
+      "content_hashing": true,
+      "depends_on": [
+        "material.MatEmissiveRed"
+      ]
+    },
+    {
+      "id": "geometry.GeoEmissiveGreen",
+      "type": "geometry-descriptor",
+      "source": "./GeoEmissiveGreen.geometry.json",
+      "name": "GeoEmissiveGreen",
+      "content_hashing": true,
+      "depends_on": [
+        "material.MatEmissiveGreen"
+      ]
+    },
+    {
+      "id": "geometry.GeoEmissiveBlue",
+      "type": "geometry-descriptor",
+      "source": "./GeoEmissiveBlue.geometry.json",
+      "name": "GeoEmissiveBlue",
+      "content_hashing": true,
+      "depends_on": [
+        "material.MatEmissiveBlue"
+      ]
+    },
+    {
+      "id": "geometry.GeoEmissiveTextured",
+      "type": "geometry-descriptor",
+      "source": "./GeoEmissiveTextured.geometry.json",
+      "name": "GeoEmissiveTextured",
+      "content_hashing": true,
+      "depends_on": [
+        "material.MatEmissiveTextured"
+      ]
+    },
+    {
+      "id": "geometry.GeoEmissiveMasked",
+      "type": "geometry-descriptor",
+      "source": "./GeoEmissiveMasked.geometry.json",
+      "name": "GeoEmissiveMasked",
+      "content_hashing": true,
+      "depends_on": [
+        "material.MatEmissiveMasked"
+      ]
+    },
+    {
+      "id": "geometry.GeoReference",
+      "type": "geometry-descriptor",
+      "source": "./GeoReference.geometry.json",
+      "name": "GeoReference",
+      "content_hashing": true,
+      "depends_on": [
+        "material.MatReference"
+      ]
+    },
+    {
+      "id": "scene.EmissiveScene",
+      "type": "scene-descriptor",
+      "source": "./EmissiveScene.scene.json",
+      "name": "EmissiveScene",
+      "content_hashing": true,
+      "depends_on": [
+        "geometry.GeoEmissiveRed",
+        "geometry.GeoEmissiveGreen",
+        "geometry.GeoEmissiveBlue",
+        "geometry.GeoEmissiveTextured",
+        "geometry.GeoEmissiveMasked",
+        "geometry.GeoReference"
+      ]
+    }
+  ]
+}
