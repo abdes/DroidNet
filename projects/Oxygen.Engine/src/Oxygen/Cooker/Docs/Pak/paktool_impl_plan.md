@@ -276,7 +276,7 @@ release-grade tool.
 
 ### Task 3.1: Add Build Report Schema
 
-Status: `pending`
+Status: `completed`
 
 Required work:
 
@@ -295,6 +295,18 @@ Validation:
 
 - Schema file exists in source control.
 - Valid and invalid report payloads are covered by tests.
+
+Evidence:
+
+- Added report schema:
+  `src/Oxygen/Cooker/Tools/PakTool/Schemas/oxygen.pak-build-report.schema.json`
+- Added schema validation tests:
+  `src/Oxygen/Cooker/Test/Pak/PakBuildReportJsonSchema_test.cpp`
+- Added test target wiring:
+  `src/Oxygen/Cooker/Test/CMakeLists.txt`
+- Validation executed:
+  - `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakBuildReportSchema.Tests --config Debug -- /m:6`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakBuildReportSchema.Tests.exe`
 
 Exit gate:
 
