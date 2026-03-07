@@ -277,6 +277,7 @@ private:
   std::filesystem::path file_path_; // Path to the PAK file
 
   data::pak::core::PakHeader header_ {};
+  data::SourceKey source_key_ {};
   data::pak::core::PakFooter footer_ {};
 
   //! Stream for reading the PAK file metadata (header, footer, directory,

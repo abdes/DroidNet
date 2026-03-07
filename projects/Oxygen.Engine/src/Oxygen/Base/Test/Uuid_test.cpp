@@ -83,8 +83,8 @@ NOLINT_TEST_F(UuidV7Test, DefaultConstructorCreatesNilUuid)
   }
 }
 
-//! Validates array-based constructor preserves all byte values exactly.
-NOLINT_TEST_F(UuidV7Test, ArrayConstructorPreservesBytes)
+//! Validates canonical UUIDv7 bytes parse successfully.
+NOLINT_TEST_F(UuidV7Test, FromBytesParsesCanonicalV7Bytes)
 {
   using oxygen::Uuid;
 
@@ -94,8 +94,9 @@ NOLINT_TEST_F(UuidV7Test, ArrayConstructorPreservesBytes)
     0x32U, 0x10U };
 
   // Act
-  const auto uuid = Uuid { input };
-  const auto bytes = oxygen::as_bytes(uuid);
+  const auto parsed = Uuid::FromBytes(input);
+  ASSERT_TRUE(parsed.has_value());
+  const auto bytes = oxygen::as_bytes(parsed.value());
   auto expected = std::array<std::byte, Uuid::kSize> {};
   std::ranges::transform(
     input, expected.begin(), [](const uint8_t value) -> std::byte {
@@ -106,26 +107,21 @@ NOLINT_TEST_F(UuidV7Test, ArrayConstructorPreservesBytes)
   EXPECT_TRUE(std::ranges::equal(bytes, expected));
 }
 
-//! Validates span-based constructor supports one-byte element spans.
-NOLINT_TEST_F(UuidV7Test, SpanConstructorPreservesBytes)
+//! Validates byte ingress rejects non-v7 payloads.
+NOLINT_TEST_F(UuidV7Test, FromBytesRejectsNonV7Payload)
 {
   using oxygen::Uuid;
 
   // Arrange
-  constexpr auto input
-    = std::array<std::byte, Uuid::kSize> { std::byte { 0x01U },
-        std::byte { 0x23U }, std::byte { 0x45U }, std::byte { 0x67U },
-        std::byte { 0x89U }, std::byte { 0xABU }, std::byte { 0x7CU },
-        std::byte { 0xDEU }, std::byte { 0x8FU }, std::byte { 0xEDU },
-        std::byte { 0xBAU }, std::byte { 0x98U }, std::byte { 0x76U },
-        std::byte { 0x54U }, std::byte { 0x32U }, std::byte { 0x10U } };
+  constexpr auto input = std::array<uint8_t, Uuid::kSize> { 0x01U, 0x23U, 0x45U,
+    0x67U, 0x89U, 0xABU, 0x6CU, 0xDEU, 0x8FU, 0xEDU, 0xBAU, 0x98U, 0x76U, 0x54U,
+    0x32U, 0x10U };
 
   // Act
-  const auto uuid = Uuid { std::span<const std::byte, Uuid::kSize>(input) };
-  const auto bytes = oxygen::as_bytes(uuid);
+  const auto parsed = Uuid::FromBytes(input);
 
   // Assert
-  EXPECT_TRUE(std::ranges::equal(bytes, input));
+  EXPECT_FALSE(parsed.has_value());
 }
 
 //! Validates generated UUIDs always set RFC 9562 version 7 and RFC variant
@@ -152,7 +148,7 @@ NOLINT_TEST_F(UuidV7Test, ToStringProducesCanonicalLowercaseFormat)
   using oxygen::to_string;
 
   // Arrange
-  const auto parsed = ParseV7(CanonicalV7UppercaseString());
+  const auto parsed = ParseV7(CanonicalV7String());
   ASSERT_TRUE(parsed.has_value());
   const auto uuid = parsed.value();
 
@@ -187,8 +183,8 @@ NOLINT_TEST_F(UuidV7Test, FromStringParsesCanonicalLowercaseV7)
   EXPECT_EQ(parsed.value().ToString(), text);
 }
 
-//! Validates canonical uppercase v7 string parsing and canonical normalization.
-NOLINT_TEST_F(UuidV7Test, FromStringParsesCanonicalUppercaseV7)
+//! Validates parser rejects uppercase because canonical text is lowercase-only.
+NOLINT_TEST_F(UuidV7Test, FromStringRejectsUppercaseText)
 {
   using oxygen::Uuid;
 
@@ -199,9 +195,7 @@ NOLINT_TEST_F(UuidV7Test, FromStringParsesCanonicalUppercaseV7)
   const auto parsed = Uuid::FromString(uppercase);
 
   // Assert
-  ASSERT_TRUE(parsed.has_value());
-  EXPECT_EQ(parsed.value().Version(), 7U);
-  EXPECT_EQ(parsed.value().ToString(), CanonicalV7String());
+  EXPECT_FALSE(parsed.has_value());
 }
 
 //! Validates parser rejects malformed length inputs.
@@ -483,7 +477,7 @@ NOLINT_TEST_F(UuidV7Test, HashAndFormatterAreConsistent)
 
   // Arrange
   const auto parsed = ParseV7(CanonicalV7String());
-  const auto same_parsed = ParseV7(CanonicalV7UppercaseString());
+  const auto same_parsed = ParseV7(CanonicalV7String());
   ASSERT_TRUE(parsed.has_value());
   ASSERT_TRUE(same_parsed.has_value());
   const auto uuid = parsed.value();

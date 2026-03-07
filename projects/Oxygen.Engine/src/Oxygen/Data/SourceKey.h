@@ -12,10 +12,12 @@
 #include <functional>
 #include <span>
 #include <string>
+#include <string_view>
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Data/api_export.h>
 
@@ -23,9 +25,11 @@ namespace oxygen::data {
 
 //! Unique identifier for a content source (PAK file or loose cooked folder).
 /*!
- A 128-bit GUID that uniquely identifies a content source. This is used to
- ensure that resources are correctly scoped and cached even when content sources
- are mounted/unmounted or reordered.
+ A `SourceKey` is a non-nil RFC 9562 UUIDv7 that uniquely identifies a
+ * content
+ source. Runtime and cooker ingress paths must reject non-v7 source
+ * identities
+ rather than materializing weak or tool-local stand-ins.
 */
 struct SourceKey : public NamedType<Uuid, struct SourceKeyTag,
                      // clang-format off
@@ -44,22 +48,30 @@ struct SourceKey : public NamedType<Uuid, struct SourceKeyTag,
 
   using Base::Base;
 
-  constexpr explicit SourceKey(
-    const std::array<std::uint8_t, kSizeBytes>& bytes) noexcept
-    : Base(Uuid { bytes })
-  {
-  }
-
   [[nodiscard]] constexpr auto IsNil() const noexcept -> bool
   {
     return get().IsNil();
   }
 
-  //! Create a SourceKey from a C-style byte array.
+  //! Create a SourceKey from canonical UUIDv7 bytes.
   static auto FromBytes(const std::array<std::uint8_t, kSizeBytes>& bytes)
-    -> SourceKey
+    -> Result<SourceKey>
   {
-    return SourceKey { Uuid { bytes } };
+    const auto parsed = Uuid::FromBytes(bytes);
+    if (!parsed.has_value()) {
+      return Result<SourceKey>::Err(parsed.error());
+    }
+    return Result<SourceKey>::Ok(SourceKey { parsed.value() });
+  }
+
+  //! Create a SourceKey from canonical lowercase UUIDv7 text.
+  static auto FromString(const std::string_view text) -> Result<SourceKey>
+  {
+    const auto parsed = Uuid::FromString(text);
+    if (!parsed.has_value()) {
+      return Result<SourceKey>::Err(parsed.error());
+    }
+    return Result<SourceKey>::Ok(SourceKey { parsed.value() });
   }
 };
 
@@ -74,13 +86,6 @@ struct SourceKey : public NamedType<Uuid, struct SourceKeyTag,
   -> std::span<const std::byte, SourceKey::kSizeBytes>
 {
   return nostd::as_bytes(key.get());
-}
-
-//! Writable byte span view for binary serialization.
-[[nodiscard]] inline auto as_writable_bytes(SourceKey& key) noexcept
-  -> std::span<std::byte, SourceKey::kSizeBytes>
-{
-  return nostd::as_writable_bytes(key.get());
 }
 
 } // namespace oxygen::data

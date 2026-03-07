@@ -216,8 +216,7 @@ auto ValidateRelativePath(const std::string_view relpath) -> void
 auto ValidateVirtualPath(const std::string_view virtual_path) -> void
 {
   if (const auto error = content::ValidateCanonicalVirtualPath(
-        virtual_path,
-        content::VirtualPathRuleSet::kSyntaxAndStandardMountRoot);
+        virtual_path, content::VirtualPathRuleSet::kSyntaxAndStandardMountRoot);
     error.has_value()) {
     throw std::runtime_error(
       "Virtual path is not canonical: " + std::string(*error));
@@ -279,18 +278,20 @@ auto ValidateHeaderFlags(const IndexHeader& header) -> void
   }
 }
 
+auto ParseSourceKeyOrThrow(const std::array<uint8_t, 16>& source_identity,
+  const char* error_message) -> data::SourceKey
+{
+  const auto source_key = data::SourceKey::FromBytes(source_identity);
+  if (!source_key.has_value()) {
+    throw std::runtime_error(error_message);
+  }
+  return source_key.value();
+}
+
 auto ValidateGuid(const IndexHeader& header) -> void
 {
-  bool all_zeros = true;
-  for (const auto b : header.source_identity) {
-    if (b != 0) {
-      all_zeros = false;
-      break;
-    }
-  }
-  if (all_zeros) {
-    throw std::runtime_error("Loose cooked index must have a non-zero GUID");
-  }
+  (void)ParseSourceKeyOrThrow(header.source_identity,
+    "Loose cooked index must have a non-zero UUIDv7 source identity");
 }
 
 } // namespace
@@ -399,8 +400,8 @@ auto LooseCookedIndexImpl::LoadAndValidateHeader(IndexLoadContext& context)
 
 auto LooseCookedIndexImpl::ReadStringTable(IndexLoadContext& context) -> void
 {
-  context.index->guid_
-    = data::SourceKey::FromBytes(context.header.source_identity);
+  context.index->guid_ = ParseSourceKeyOrThrow(context.header.source_identity,
+    "Loose cooked index must have a non-zero UUIDv7 source identity");
   context.index->string_storage_.resize(context.header.string_table_size);
   if (auto res = context.reader->Seek(context.header.string_table_offset);
     !res) {

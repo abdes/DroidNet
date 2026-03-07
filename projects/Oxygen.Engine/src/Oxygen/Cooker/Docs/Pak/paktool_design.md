@@ -259,8 +259,8 @@ CLI option design rule:
 - `--content-version <u16>` required
   Maps to `PakBuildRequest::content_version`.
 - `--source-key <uuid>` required
-  Parsed through `Uuid::FromString`; persisted in canonical lowercase UUID
-  format.
+  Parsed through `Uuid::FromString`; must be canonical lowercase UUIDv7 text
+  and is persisted in canonical lowercase UUIDv7 format.
 - `--non-deterministic`
   Sets `PakBuildOptions::deterministic = false`.
 - `--embed-browse-index`
@@ -366,7 +366,7 @@ Minimum payload:
 
 Canonical encodings:
 
-- `source_key`: canonical lowercase UUID text
+- `source_key`: canonical lowercase RFC 9562 UUIDv7 text
 - `asset_key`: canonical text from `data::to_string(AssetKey)`
 - digest fields: lowercase hex
 - `asset_type`: canonical string from `data::to_string(AssetType)`
@@ -376,6 +376,8 @@ Behavioral requirements:
 - catalog write/read helpers must live in pak-domain code, for example
   `PakCatalogIo`,
 - patch mode accepts only this canonical catalog format,
+- `source_key` round-trips must enforce the native `SourceKey` runtime
+  contract and reject non-v7 values on both text and binary ingress paths,
 - schema-invalid catalogs fail fast before build execution,
 - catalog serialization ordering must be deterministic.
 

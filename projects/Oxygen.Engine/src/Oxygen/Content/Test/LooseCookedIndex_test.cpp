@@ -35,6 +35,10 @@ auto FillTestGuid(oxygen::data::loose_cooked::IndexHeader& header) -> void
   for (uint8_t i = 0; i < 16; ++i) {
     header.source_identity[i] = static_cast<uint8_t>(i + 1);
   }
+  header.source_identity[6]
+    = static_cast<uint8_t>((header.source_identity[6] & 0x0FU) | 0x70U);
+  header.source_identity[8]
+    = static_cast<uint8_t>((header.source_identity[8] & 0x3FU) | 0x80U);
 }
 
 //! Test: Descriptor SHA-256 verification uses the standard digest
@@ -450,7 +454,8 @@ NOLINT_TEST_F(
 //! Test: Virtual paths accept custom mount roots
 /*!
  Scenario: Writes an index with a virtual path under `/Custom`.
- Verifies that mounting succeeds.
+ Verifies
+ * that mounting succeeds.
 */
 NOLINT_TEST_F(
   LooseCookedIndexTest, AddLooseCookedRootVirtualPathCustomMountSucceeds)

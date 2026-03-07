@@ -7,6 +7,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cstddef>
 #include <span>
@@ -348,21 +349,36 @@ inline auto Load(AnyReader& reader, std::string& value) noexcept -> Result<void>
   return {};
 }
 
-//! Deserializes a UUID as its raw 16-byte canonical binary payload.
+//! Deserializes and validates a UUIDv7 from its raw 16-byte canonical payload.
 /*!
- Reads exactly 16 bytes and stores them in UUID canonical byte order.
- Serialization is byte-stable and does not apply endian conversion.
+ Reads exactly 16 bytes in UUID canonical byte order, then validates the
+
+ * payload through `Uuid::FromBytes`. Serialization is byte-stable and does not
+
+ * apply endian conversion.
 
  @param reader Reader to deserialize from.
- @param value UUID output value.
+ @param
+ * value UUID output value.
  @return Result of the read operation.
 
- @see Store(AnyWriter&, const Uuid&)
+ @see
+ * Store(AnyWriter&, const Uuid&)
 */
 inline auto Load(AnyReader& reader, Uuid& value) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
-  return reader.ReadBlobInto(oxygen::as_writable_bytes(value));
+  auto bytes = std::array<std::uint8_t, Uuid::kSize> {};
+  CHECK_RESULT(
+    reader.ReadBlobInto(std::as_writable_bytes(std::span { bytes })));
+
+  const auto parsed = Uuid::FromBytes(bytes);
+  if (!parsed.has_value()) {
+    return ::oxygen::Err(parsed.error());
+  }
+
+  value = parsed.value();
+  return {};
 }
 
 //! Deserializes a std::vector from the stream.

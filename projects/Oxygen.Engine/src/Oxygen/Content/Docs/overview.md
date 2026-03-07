@@ -115,16 +115,20 @@ Every mounted cooked source has a **stable, globally-unique identity** that is
 derived from its container/header GUID and represented in code as
 `data::SourceKey`.
 
-- **PAK sources**: `data::pak::core::PakHeader.guid` (16 bytes) is the source GUID.
-  Runtime derives `data::SourceKey` from these bytes.
-- **Loose cooked roots**: `data::IndexHeader.guid` (16 bytes, in
+- **PAK sources**: `data::pak::core::PakHeader.source_identity` (16 bytes) is
+  the source GUID. Runtime derives `data::SourceKey` from these bytes.
+- **Loose cooked roots**: `data::IndexHeader.source_identity` (16 bytes, in
   `container.index.bin`) is the source GUID. Runtime derives `data::SourceKey`
   from these bytes.
 
 Contract:
 
+- Source GUIDs MUST encode a valid **RFC 9562 UUIDv7** value.
 - Source GUIDs MUST be **non-zero**.
 - Source GUIDs MUST be **globally unique** across all mounted sources.
+- Text forms of `SourceKey` MUST use canonical lowercase UUID text.
+- Binary ingress paths MUST reject header/index source GUID bytes that are not
+  valid UUIDv7 values.
 
 Rationale: the loader and caches must treat two different cooked sources as
 different even if their internal indices overlap. If two mounts share the same

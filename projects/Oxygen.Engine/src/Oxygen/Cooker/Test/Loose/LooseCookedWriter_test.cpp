@@ -54,7 +54,9 @@ namespace {
     for (uint8_t i = 0; i < 16; ++i) {
       bytes[i] = static_cast<uint8_t>(seed + i);
     }
-    return SourceKey(bytes);
+    bytes[6] = static_cast<uint8_t>((bytes[6] & 0x0FU) | 0x70U);
+    bytes[8] = static_cast<uint8_t>((bytes[8] & 0x3FU) | 0x80U);
+    return SourceKey::FromBytes(bytes).value();
   }
 
   auto MakeTestAssetKey(const uint8_t seed) -> AssetKey

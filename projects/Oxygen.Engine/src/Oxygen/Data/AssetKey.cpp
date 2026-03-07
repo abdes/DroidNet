@@ -10,12 +10,38 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 
 #include <xxhash.h>
 
 #include <Oxygen/Data/AssetKey.h>
 
 namespace oxygen::data {
+
+namespace {
+
+  constexpr auto kCanonicalTextLength = std::size_t { 36U };
+
+  constexpr auto ParseHexNibble(const char c) noexcept -> uint8_t
+  {
+    constexpr auto kInvalidNibble = uint8_t { 0xFFU };
+    if (c >= '0' && c <= '9') {
+      return static_cast<uint8_t>(c - '0');
+    }
+    if (c >= 'a' && c <= 'f') {
+      return static_cast<uint8_t>(c - 'a' + 10);
+    }
+    return kInvalidNibble;
+  }
+
+  constexpr auto HasCanonicalHyphens(const std::string_view str) noexcept
+    -> bool
+  {
+    return str.size() == kCanonicalTextLength && str[8] == '-' && str[13] == '-'
+      && str[18] == '-' && str[23] == '-';
+  }
+
+} // namespace
 
 auto AssetKey::FromVirtualPath(const std::string_view virtual_path) -> AssetKey
 {
@@ -29,6 +55,44 @@ auto AssetKey::FromVirtualPath(const std::string_view virtual_path) -> AssetKey
   auto key_bytes = std::array<std::uint8_t, AssetKey::kSizeBytes> {};
   std::copy_n(canonical.digest, key_bytes.size(), key_bytes.begin());
   return FromBytes(key_bytes);
+}
+
+auto AssetKey::FromString(const std::string_view text) -> Result<AssetKey>
+{
+  constexpr auto kInvalidNibble = uint8_t { 0xFFU };
+
+  if (!HasCanonicalHyphens(text)) {
+    return Result<AssetKey>::Err(std::errc::invalid_argument);
+  }
+
+  auto bytes = ByteArray {};
+  auto byte_index = std::size_t { 0U };
+
+  for (auto i = std::size_t { 0U }; i < text.size();) {
+    if (text[i] == '-') {
+      ++i;
+      continue;
+    }
+    if ((i + 1U) >= text.size() || text[i + 1U] == '-') {
+      return Result<AssetKey>::Err(std::errc::invalid_argument);
+    }
+
+    const auto high = ParseHexNibble(text[i]);
+    const auto low = ParseHexNibble(text[i + 1U]);
+    if (high == kInvalidNibble || low == kInvalidNibble) {
+      return Result<AssetKey>::Err(std::errc::invalid_argument);
+    }
+
+    bytes.at(byte_index) = static_cast<uint8_t>((high << 4U) | low);
+    ++byte_index;
+    i += 2U;
+  }
+
+  if (byte_index != bytes.size()) {
+    return Result<AssetKey>::Err(std::errc::invalid_argument);
+  }
+
+  return Result<AssetKey>::Ok(FromBytes(bytes));
 }
 
 auto to_string(const AssetKey& value) -> std::string

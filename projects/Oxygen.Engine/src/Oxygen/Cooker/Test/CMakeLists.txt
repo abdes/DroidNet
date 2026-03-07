@@ -317,6 +317,27 @@ m_gtest_program(PakPatchPlanner SOURCES "Pak/PakPatchPlanner_test.cpp")
 
 m_gtest_program(PakWriter SOURCES "Pak/PakWriter_test.cpp")
 
+m_gtest_program(PakCatalogSchema SOURCES "Pak/PakCatalogJsonSchema_test.cpp")
+target_link_libraries(
+  Oxygen.Cooker.PakCatalogSchema.Tests
+  PRIVATE
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
+)
+
+m_gtest_program(
+  PakCatalogIo
+  SOURCES
+    "Pak/PakCatalogIo_test.cpp"
+    "Pak/PakTestSupport.h"
+)
+target_link_libraries(
+  Oxygen.Cooker.PakCatalogIo.Tests
+  PRIVATE
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
+)
+
 m_gtest_program(
   PakE2E
   SOURCES

@@ -26,14 +26,18 @@ namespace oxygen {
 
 //! Represents a 128-bit UUID value constrained to RFC 9562 version 7.
 /*!
- The type stores UUID bytes in canonical RFC byte order and is intentionally
+ The type stores UUID bytes in canonical RFC byte order and is
+intentionally
  lightweight for hashing, ordering, and binary serialization.
 
 ### Key Features
 
-- **UUIDv7-first**: Public generation and parsing paths target v7 semantics.
+- **UUIDv7-only ingress**: Public generation and validated parsing paths reject
+
+non-v7 values.
 - **Value semantics**: Trivially copyable, fixed-size storage.
-- **Container-friendly**: Supports ordering and hash specializations.
+-
+**Container-friendly**: Supports ordering and hash specializations.
 
  @see to_string(const Uuid&), as_bytes(const Uuid&)
 */
@@ -57,42 +61,23 @@ public:
   //! Constructs a nil UUID (all bytes set to zero).
   constexpr Uuid() noexcept = default;
 
-  //! Constructs a UUID from an exact 16-byte array.
-  constexpr explicit Uuid(const std::array<std::uint8_t, kSize>& bytes) noexcept
-    : bytes_(bytes)
-  {
-  }
-
   ~Uuid() noexcept = default;
 
   OXYGEN_DEFAULT_COPYABLE(Uuid)
   OXYGEN_DEFAULT_MOVABLE(Uuid)
 
-  //! Constructs a UUID from any 16-byte span of one-byte elements.
-  template <typename T>
-    requires(sizeof(T) == 1)
-  constexpr explicit Uuid(std::span<const T, kSize> bytes) noexcept
-  {
-    auto out = bytes_.begin();
-    for (const auto& b : bytes) {
-      *out++ = static_cast<std::uint8_t>(b);
-    }
-  }
-
   //! Generates a new RFC 9562 UUIDv7 value.
   OXGN_BASE_NDAPI static auto Generate() -> Uuid;
+
+  //! Parses and validates canonical UUIDv7 bytes.
+  OXGN_BASE_NDAPI static auto FromBytes(
+    const std::array<std::uint8_t, kSize>& bytes) -> Result<Uuid>;
 
   //! Parses a canonical v7 UUID text representation.
   OXGN_BASE_NDAPI static auto FromString(std::string_view str) -> Result<Uuid>;
 
   //! Returns the canonical lower-case UUID string (`8-4-4-4-12`).
   OXGN_BASE_NDAPI auto ToString() const -> std::string;
-
-  //! Returns mutable access to the underlying 16-byte UUID storage.
-  [[nodiscard]] constexpr auto data() noexcept -> std::uint8_t*
-  {
-    return bytes_.data();
-  }
 
   //! Returns read-only access to the underlying 16-byte UUID storage.
   [[nodiscard]] constexpr auto data() const noexcept -> const std::uint8_t*
@@ -106,14 +91,8 @@ public:
     return kSize;
   }
 
-  //! Returns an iterator to the first byte.
-  [[nodiscard]] constexpr auto begin() noexcept { return bytes_.begin(); }
-
   //! Returns a const iterator to the first byte.
   [[nodiscard]] constexpr auto begin() const noexcept { return bytes_.begin(); }
-
-  //! Returns an iterator one past the last byte.
-  [[nodiscard]] constexpr auto end() noexcept { return bytes_.end(); }
 
   //! Returns a const iterator one past the last byte.
   [[nodiscard]] constexpr auto end() const noexcept { return bytes_.end(); }
@@ -125,6 +104,25 @@ public:
     constexpr auto kVersionShift = uint8_t { 4U };
     return static_cast<std::uint8_t>(
       bytes_[kVersionByteIndex] >> kVersionShift);
+  }
+
+  //! Returns true when the UUID encodes RFC 9562 version 7.
+  [[nodiscard]] constexpr auto IsVersion7() const noexcept -> bool
+  {
+    return Version() == 7U;
+  }
+
+  //! Returns true when the UUID encodes the RFC 4122 variant bits.
+  [[nodiscard]] constexpr auto HasRfc4122Variant() const noexcept -> bool
+  {
+    constexpr auto kVariantByteIndex = std::size_t { 8U };
+    return (bytes_[kVariantByteIndex] & 0xC0U) == 0x80U;
+  }
+
+  //! Returns true when the UUID is a non-nil RFC 9562 UUIDv7 value.
+  [[nodiscard]] constexpr auto IsValidV7() const noexcept -> bool
+  {
+    return !IsNil() && IsVersion7() && HasRfc4122Variant();
   }
 
   //! Returns true when all UUID bytes are zero.
@@ -143,6 +141,23 @@ public:
     = default;
 
 private:
+  //! Constructs a UUID from already-validated canonical bytes.
+  constexpr explicit Uuid(const std::array<std::uint8_t, kSize>& bytes) noexcept
+    : bytes_(bytes)
+  {
+  }
+
+  //! Constructs a UUID from already-validated one-byte elements.
+  template <typename T>
+    requires(sizeof(T) == 1)
+  constexpr explicit Uuid(std::span<const T, kSize> bytes) noexcept
+  {
+    auto out = bytes_.begin();
+    for (const auto& b : bytes) {
+      *out++ = static_cast<std::uint8_t>(b);
+    }
+  }
+
   std::array<std::uint8_t, kSize> bytes_ {};
 };
 
@@ -172,14 +187,6 @@ OXGN_BASE_NDAPI auto to_string(const Uuid& uuid) -> std::string;
 {
   return std::as_bytes(
     std::span<const Uuid::value_type, Uuid::kSize>(uuid.data(), uuid.size()));
-}
-
-//! Returns a writable byte span view of UUID storage.
-[[nodiscard]] inline auto as_writable_bytes(Uuid& uuid) noexcept
-  -> std::span<std::byte, Uuid::kSize>
-{
-  return std::as_writable_bytes(
-    std::span<Uuid::value_type, Uuid::kSize>(uuid.data(), uuid.size()));
 }
 
 } // namespace oxygen
