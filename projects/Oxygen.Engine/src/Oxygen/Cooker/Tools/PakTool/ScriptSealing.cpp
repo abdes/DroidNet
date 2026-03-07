@@ -35,6 +35,8 @@ namespace oxygen::content::pak::tool {
 
 namespace {
 
+  constexpr auto kSealedSourcesDirName = "oxygen_paktool_sealed_sources";
+
   using data::AssetType;
   using data::pak::core::DataBlobSizeT;
   using data::pak::core::OffsetT;
@@ -202,7 +204,15 @@ namespace {
       return std::nullopt;
     }
 
-    const auto root_parent = cooked_root.parent_path().lexically_normal();
+    std::error_code ec;
+    const auto normalized_root = cooked_root.is_absolute()
+      ? cooked_root.lexically_normal()
+      : std::filesystem::absolute(cooked_root, ec).lexically_normal();
+    if (ec) {
+      return std::nullopt;
+    }
+
+    const auto root_parent = normalized_root.parent_path().lexically_normal();
     if (root_parent.empty()) {
       return std::nullopt;
     }
@@ -224,6 +234,25 @@ namespace {
     return resolved;
   }
 
+  [[nodiscard]] auto NormalizeLooseCookedRoot(const std::filesystem::path& root)
+    -> std::optional<std::filesystem::path>
+  {
+    if (root.empty()) {
+      return std::nullopt;
+    }
+
+    if (root.is_absolute()) {
+      return root.lexically_normal();
+    }
+
+    std::error_code ec;
+    const auto absolute_root = std::filesystem::absolute(root, ec);
+    if (ec) {
+      return std::nullopt;
+    }
+    return absolute_root.lexically_normal();
+  }
+
   [[nodiscard]] auto MakeStagedLooseRoot(
     const std::filesystem::path& original_root,
     const std::filesystem::path& staging_parent, const size_t source_index)
@@ -243,7 +272,7 @@ namespace {
       }
     }
 
-    return staging_parent / "oxygen_paktool_sealed_sources"
+    return staging_parent / kSealedSourcesDirName
       / (name + "-source-" + std::to_string(source_index) + "-case-"
         + std::to_string(id));
   }
@@ -604,9 +633,21 @@ namespace {
     const std::filesystem::path& staging_parent, const size_t source_index)
     -> Result<SealedLooseSourceResult, ScriptSealingError>
   {
+    const auto normalized_root = NormalizeLooseCookedRoot(source.path);
+    if (!normalized_root.has_value()) {
+      return Result<SealedLooseSourceResult, ScriptSealingError>::Err(
+        ScriptSealingError {
+          .error_code = "paktool.script_seal.loose_source_path_invalid",
+          .error_message
+          = "Loose-cooked source root could not be normalized to an absolute "
+            "path.",
+          .source_path = source.path,
+        });
+    }
+
     auto inspection = lc::Inspection {};
     try {
-      inspection.LoadFromRoot(source.path);
+      inspection.LoadFromRoot(*normalized_root);
     } catch (const std::exception& ex) {
       return Result<SealedLooseSourceResult, ScriptSealingError>::Err(
         ScriptSealingError {
@@ -621,15 +662,15 @@ namespace {
       if (static_cast<AssetType>(asset.asset_type) != AssetType::kScript) {
         continue;
       }
-      const auto context = ReadScriptAssetContext(source.path, asset);
+      const auto context = ReadScriptAssetContext(*normalized_root, asset);
       if (!context.has_value()) {
         return Result<SealedLooseSourceResult, ScriptSealingError>::Err(
           ScriptSealingError {
             .error_code = "paktool.script_seal.script_descriptor_invalid",
             .error_message = "Failed to parse loose-cooked script descriptor.",
             .source_path = source.path,
-            .descriptor_path
-            = source.path / std::filesystem::path(asset.descriptor_relpath),
+            .descriptor_path = *normalized_root
+              / std::filesystem::path(asset.descriptor_relpath),
           });
       }
 
@@ -649,8 +690,8 @@ namespace {
     }
 
     const auto staged_root
-      = MakeStagedLooseRoot(source.path, staging_parent, source_index);
-    if (const auto ec = CopyCookedRoot(source.path, staged_root); ec) {
+      = MakeStagedLooseRoot(*normalized_root, staging_parent, source_index);
+    if (const auto ec = CopyCookedRoot(*normalized_root, staged_root); ec) {
       return Result<SealedLooseSourceResult, ScriptSealingError>::Err(
         ScriptSealingError {
           .error_code = "paktool.script_seal.staging_copy_failed",
@@ -685,7 +726,7 @@ namespace {
         continue;
       }
       const auto sealed = RewriteStagedScriptDescriptor(
-        source.path, staged_root, asset, *tables);
+        *normalized_root, staged_root, asset, *tables);
       if (!sealed.has_value()) {
         cleanup_staged_root();
         return Result<SealedLooseSourceResult, ScriptSealingError>::Err(
@@ -777,9 +818,17 @@ auto SealLooseCookedSourcesForPakBuild(
 auto CleanupStagedLooseRoots(
   std::span<const std::filesystem::path> staged_loose_roots) -> void
 {
+  auto staging_parents = std::vector<std::filesystem::path> {};
+  staging_parents.reserve(staged_loose_roots.size());
+
   for (const auto& staged_root : staged_loose_roots) {
     if (staged_root.empty()) {
       continue;
+    }
+
+    const auto parent = staged_root.parent_path();
+    if (!parent.empty() && parent.filename() == kSealedSourcesDirName) {
+      staging_parents.push_back(parent);
     }
 
     auto ec = std::error_code {};
@@ -790,6 +839,24 @@ auto CleanupStagedLooseRoots(
     } else {
       LOG_F(
         INFO, "PakTool cleaned staged loose root '{}'", staged_root.string());
+    }
+  }
+
+  std::ranges::sort(staging_parents);
+  staging_parents.erase(
+    std::unique(staging_parents.begin(), staging_parents.end()),
+    staging_parents.end());
+
+  for (const auto& parent : staging_parents) {
+    auto ec = std::error_code {};
+    const auto removed = std::filesystem::remove(parent, ec);
+    if (ec) {
+      LOG_F(WARNING,
+        "PakTool failed to remove sealed-sources staging directory '{}' [{}]",
+        parent.string(), ec.message());
+    } else if (removed) {
+      LOG_F(INFO, "PakTool removed sealed-sources staging directory '{}'",
+        parent.string());
     }
   }
 }

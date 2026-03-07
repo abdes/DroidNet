@@ -733,6 +733,42 @@ namespace {
     std::filesystem::remove_all(test_root, ec);
   }
 
+  NOLINT_TEST_F(ScriptAssetImportTest,
+    ExternalScriptImportNormalizesRelativeCookedRootAgainstContentRoot)
+  {
+    using data::pak::scripting::ScriptAssetFlags;
+
+    auto test_root = std::filesystem::current_path()
+      / "tmp_script_import_relative_cooked_root";
+    std::error_code ec;
+    std::filesystem::remove_all(test_root, ec);
+
+    const auto cooked_root_absolute = test_root / "Content" / ".cooked";
+    const auto cooked_root_relative
+      = (std::filesystem::path { "tmp_script_import_relative_cooked_root" }
+        / "Content" / ".cooked")
+          .lexically_normal();
+    const auto source_path_absolute = test_root / "Content" / "scenes"
+      / "multi-script" / "relative_cooked_root.lua";
+    WriteTextFile(source_path_absolute, "print('relative cooked root')");
+
+    const auto report = Submit(MakeScriptRequest(source_path_absolute,
+      cooked_root_relative, ScriptStorageMode::kExternal, false));
+    EXPECT_TRUE(report.success);
+
+    const auto descriptor_path
+      = cooked_root_absolute / "Scripts" / "relative_cooked_root.oscript";
+    ASSERT_TRUE(std::filesystem::exists(descriptor_path));
+
+    const auto desc = ReadScriptDescriptor(descriptor_path);
+    EXPECT_EQ((desc.flags & ScriptAssetFlags::kAllowExternalSource),
+      ScriptAssetFlags::kAllowExternalSource);
+    EXPECT_EQ(std::string_view { desc.external_source_path },
+      "scenes/multi-script/relative_cooked_root.lua");
+
+    std::filesystem::remove_all(test_root, ec);
+  }
+
   NOLINT_TEST_F(
     ScriptAssetImportTest, CompileEnabledFailsWhenCompilerUnavailable)
   {
