@@ -180,14 +180,16 @@ auto ExpectPlansEquivalent(const pak::PakPlan& lhs, const pak::PakPlan& rhs)
   EXPECT_EQ(lhs.Footer().crc32_field_absolute_offset,
     rhs.Footer().crc32_field_absolute_offset);
 
-  const auto lhs_ranges = lhs.ScriptParamRanges();
-  const auto rhs_ranges = rhs.ScriptParamRanges();
-  ASSERT_EQ(lhs_ranges.size(), rhs_ranges.size());
-  for (size_t i = 0; i < lhs_ranges.size(); ++i) {
-    EXPECT_EQ(lhs_ranges[i].slot_index, rhs_ranges[i].slot_index);
-    EXPECT_EQ(
-      lhs_ranges[i].params_array_offset, rhs_ranges[i].params_array_offset);
-    EXPECT_EQ(lhs_ranges[i].params_count, rhs_ranges[i].params_count);
+  const auto lhs_slots = lhs.ScriptSlots();
+  const auto rhs_slots = rhs.ScriptSlots();
+  ASSERT_EQ(lhs_slots.size(), rhs_slots.size());
+  for (size_t i = 0; i < lhs_slots.size(); ++i) {
+    EXPECT_EQ(lhs_slots[i].slot_index, rhs_slots[i].slot_index);
+    EXPECT_EQ(lhs_slots[i].script_asset_key, rhs_slots[i].script_asset_key);
+    EXPECT_EQ(lhs_slots[i].params_array_index, rhs_slots[i].params_array_index);
+    EXPECT_EQ(lhs_slots[i].params_count, rhs_slots[i].params_count);
+    EXPECT_EQ(lhs_slots[i].execution_order, rhs_slots[i].execution_order);
+    EXPECT_EQ(lhs_slots[i].flags, rhs_slots[i].flags);
   }
 }
 
@@ -445,7 +447,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesAllLiveAssetsAndResources)
   EXPECT_EQ(script_slot_table->count, 0U);
   EXPECT_EQ(physics_table->count, 1U);
   EXPECT_EQ(result.plan->ScriptParamRecordCount(), 0U);
-  EXPECT_TRUE(result.plan->ScriptParamRanges().empty());
+  EXPECT_TRUE(result.plan->ScriptSlots().empty());
 }
 
 NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesInputAssetsFromLooseSource)
@@ -626,11 +628,12 @@ NOLINT_TEST_F(
   EXPECT_EQ(script_resource_table->count, 0U);
   EXPECT_EQ(result.plan->ScriptParamRecordCount(), kParamRecordCount);
 
-  const auto ranges = result.plan->ScriptParamRanges();
-  ASSERT_EQ(ranges.size(), 1U);
-  EXPECT_EQ(ranges[0].slot_index, 0U);
-  EXPECT_EQ(ranges[0].params_array_offset, kParamsOffsetRecords);
-  EXPECT_EQ(ranges[0].params_count, kParamsCount);
+  const auto slots = result.plan->ScriptSlots();
+  ASSERT_EQ(slots.size(), 1U);
+  EXPECT_EQ(slots[0].slot_index, 0U);
+  EXPECT_EQ(slots[0].script_asset_key, MakeAssetKey(0x44U));
+  EXPECT_EQ(slots[0].params_array_index, kParamsOffsetRecords);
+  EXPECT_EQ(slots[0].params_count, kParamsCount);
 }
 
 NOLINT_TEST_F(PakPlanBuilderTest, ScriptSlotOutOfBoundsIsRejected)

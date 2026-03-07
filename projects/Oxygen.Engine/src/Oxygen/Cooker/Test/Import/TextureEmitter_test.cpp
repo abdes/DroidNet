@@ -35,6 +35,7 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 
@@ -498,8 +499,22 @@ NOLINT_TEST_F(TextureEmitterTest, FinalizeWithoutUserTexturesWritesFallback)
     EXPECT_EQ(table.at(0).data_offset, 0U);
     EXPECT_GT(table.at(0).size_bytes, 0U);
 
-    const auto data_file_size = std::filesystem::file_size(data_path);
+    const auto data_bytes = ReadBinaryFile(data_path);
+    const auto data_file_size = data_bytes.size();
     EXPECT_EQ(data_file_size, table.at(0).size_bytes);
+
+    std::vector<uint8_t> payload(data_bytes.size());
+    std::transform(data_bytes.begin(), data_bytes.end(), payload.begin(),
+      [](const std::byte value) {
+        return static_cast<uint8_t>(std::to_integer<uint8_t>(value));
+      });
+
+    oxygen::data::TextureResource fallback_resource(table.at(0), payload);
+    EXPECT_EQ(fallback_resource.GetPayload().size(), table.at(0).size_bytes);
+    EXPECT_EQ(fallback_resource.GetPayloadHeader().total_payload_size,
+      table.at(0).size_bytes);
+    EXPECT_EQ(fallback_resource.GetData().size(),
+      fallback_resource.GetSubresourceLayouts().front().size_bytes);
   });
 }
 

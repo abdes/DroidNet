@@ -103,6 +103,7 @@ struct DemoShellConfig {
   std::function<void(std::size_t)> on_dump_texture_memory;
   std::function<std::optional<data::AssetKey>()> get_last_released_scene_key;
   std::function<void()> on_force_trim;
+  std::function<void()> on_clear_mounts;
   std::function<void(const std::filesystem::path&)> on_pak_mounted;
   std::function<void(const std::filesystem::path&)> on_loose_index_loaded;
 

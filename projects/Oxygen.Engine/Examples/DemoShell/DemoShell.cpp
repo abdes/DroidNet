@@ -228,6 +228,9 @@ auto DemoShell::CompleteInitialization() -> bool
     if (impl_->config.on_force_trim) {
       impl_->content_vm->SetOnForceTrim(impl_->config.on_force_trim);
     }
+    if (impl_->config.on_clear_mounts) {
+      impl_->content_vm->SetOnClearMounts(impl_->config.on_clear_mounts);
+    }
     if (impl_->config.on_pak_mounted) {
       impl_->content_vm->SetOnPakMounted(impl_->config.on_pak_mounted);
     }

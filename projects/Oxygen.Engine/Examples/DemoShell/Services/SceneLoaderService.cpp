@@ -2770,6 +2770,10 @@ void SceneLoaderService::AttachScripting(const data::SceneAsset& asset)
 
     for (const auto& slot_record : slot_records) {
       if (slot_record.script_asset_key == data::AssetKey {}) {
+        LOG_F(WARNING,
+          "skipping hydrated script slot with empty script asset key "
+          "(node_index={})",
+          node_index);
         continue;
       }
 

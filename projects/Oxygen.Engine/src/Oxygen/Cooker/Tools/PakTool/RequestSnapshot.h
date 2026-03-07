@@ -6,14 +6,16 @@
 
 #pragma once
 
-#include <memory>
+#include <filesystem>
+#include <vector>
 
-#include <Oxygen/Clap/Cli.h>
-#include <Oxygen/Cooker/Tools/PakTool/PakToolOptions.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 
 namespace oxygen::content::pak::tool {
 
-[[nodiscard]] auto BuildCli(PakToolCliOptions& options)
-  -> std::unique_ptr<oxygen::clap::Cli>;
+struct PakToolRequestSnapshot {
+  pak::PakBuildRequest request;
+  std::vector<std::filesystem::path> base_catalog_paths;
+};
 
 } // namespace oxygen::content::pak::tool

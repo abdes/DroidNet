@@ -566,6 +566,11 @@ auto ContentVm::SetOnIndexLoaded(
   on_index_loaded_ = std::move(callback);
 }
 
+auto ContentVm::SetOnClearMounts(std::function<void()> callback) -> void
+{
+  on_clear_mounts_ = std::move(callback);
+}
+
 auto ContentVm::MountPak(const std::filesystem::path& path) -> void
 {
   const auto normalized = runtime::NormalizePath(path);
@@ -612,15 +617,24 @@ auto ContentVm::LoadIndex(const std::filesystem::path& path) -> void
 
 auto ContentVm::UnloadAllLibrary() -> void
 {
-  std::lock_guard lock(data_mutex_);
-  loaded_paks_.clear();
-  loaded_indices_.clear();
-  scenes_map_.clear();
-  available_scenes_.clear();
+  {
+    std::lock_guard lock(data_mutex_);
+    loaded_paks_.clear();
+    loaded_indices_.clear();
+    scenes_map_.clear();
+    available_scenes_.clear();
+  }
+
   if (settings_) {
     settings_->SetMountedPakPaths({});
     settings_->SetMountedIndexPaths({});
     settings_->SetActiveSceneSelection(std::nullopt);
+  }
+
+  if (on_clear_mounts_) {
+    on_clear_mounts_();
+  } else if (asset_loader_) {
+    asset_loader_->ClearMounts();
   }
 }
 

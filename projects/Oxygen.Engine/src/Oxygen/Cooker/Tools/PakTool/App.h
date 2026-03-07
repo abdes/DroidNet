@@ -6,14 +6,16 @@
 
 #pragma once
 
-#include <memory>
+#include <iosfwd>
+#include <span>
 
-#include <Oxygen/Clap/Cli.h>
-#include <Oxygen/Cooker/Tools/PakTool/PakToolOptions.h>
+#include <Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h>
+#include <Oxygen/Cooker/Tools/PakTool/RequestPreparation.h>
 
 namespace oxygen::content::pak::tool {
 
-[[nodiscard]] auto BuildCli(PakToolCliOptions& options)
-  -> std::unique_ptr<oxygen::clap::Cli>;
+[[nodiscard]] auto RunPakToolApp(std::span<char*> argv, std::ostream& out,
+  std::ostream& err, IRequestPreparationFileSystem& prep_fs,
+  IArtifactFileSystem& artifact_fs) -> int;
 
 } // namespace oxygen::content::pak::tool

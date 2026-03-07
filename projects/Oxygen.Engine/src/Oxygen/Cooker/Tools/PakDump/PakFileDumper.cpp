@@ -384,7 +384,7 @@ public:
             Field("Content Hash",
               ToHexString(texture_resource->GetContentHash()), 8);
             if (ctx.verbose) {
-              PrintV4TexturePayloadSummary(texture_resource->GetData(), 8);
+              PrintV4TexturePayloadSummary(texture_resource->GetPayload(), 8);
             }
             if (ctx.show_resource_data) {
               PrintResourceData(

@@ -69,6 +69,12 @@ auto PakPlan::ResourcePayloadSources() const noexcept
   return data_.resource_payload_sources;
 }
 
+auto PakPlan::ResourceDescriptorSources() const noexcept
+  -> std::span<const PakPayloadSourceSlicePlan>
+{
+  return data_.resource_descriptor_sources;
+}
+
 auto PakPlan::Directory() const noexcept -> const PakDirectoryPlan&
 {
   return data_.directory;
@@ -96,10 +102,9 @@ auto PakPlan::PatchClosure() const noexcept
   return data_.patch_closure;
 }
 
-auto PakPlan::ScriptParamRanges() const noexcept
-  -> std::span<const PakScriptParamRangePlan>
+auto PakPlan::ScriptSlots() const noexcept -> std::span<const PakScriptSlotPlan>
 {
-  return data_.script_param_ranges;
+  return data_.script_slots;
 }
 
 auto PakPlan::ScriptParamRecordCount() const noexcept -> uint32_t

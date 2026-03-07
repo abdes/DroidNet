@@ -15,15 +15,11 @@
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakBuildResult.h>
 #include <Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h>
+#include <Oxygen/Cooker/Tools/PakTool/RequestSnapshot.h>
 
 namespace oxygen::content::pak::tool {
 
 using nlohmann::ordered_json;
-
-struct PakToolRequestSnapshot {
-  pak::PakBuildRequest request;
-  std::vector<std::filesystem::path> base_catalog_paths;
-};
 
 struct PakToolBuildReportInput {
   std::string tool_version;

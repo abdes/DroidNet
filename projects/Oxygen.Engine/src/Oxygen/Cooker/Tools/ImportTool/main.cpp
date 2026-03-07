@@ -734,28 +734,31 @@ auto main(int argc, char** argv) -> int
       = oxygen::observer_ptr<IMessageWriter>(writer_owner.get());
 
     const auto command_path = context.active_command->PathAsString();
+    const bool is_meta_command = IsMetaCommand(command_path, context);
     auto* active_command = FindCommand(command_path, commands);
 
-    bool options_valid
-      = ApplyServiceConfigOverrides(context, global_options, service_config,
-        exit_code, thread_pool_size_set, concurrency_override_set);
-
-    batch_command.SetServiceConfigOverrides(
-      &service_config, concurrency_override_set);
-
+    bool options_valid = true;
     std::unique_ptr<AsyncImportService> service_owner;
     std::optional<std::jthread> stop_watcher;
-    if (IsMetaCommand(command_path, context)) {
+
+    if (is_meta_command) {
       exit_code = 0;
-    } else if (options_valid) {
-      if (active_command == nullptr) {
+    } else {
+      options_valid
+        = ApplyServiceConfigOverrides(context, global_options, service_config,
+          exit_code, thread_pool_size_set, concurrency_override_set);
+
+      batch_command.SetServiceConfigOverrides(
+        &service_config, concurrency_override_set);
+
+      if (options_valid && active_command == nullptr) {
         std::cerr << "ERROR: Unknown command\n";
         exit_code = 1;
         options_valid = false;
       }
     }
 
-    if (options_valid) {
+    if (options_valid && !is_meta_command) {
       service_owner = CreateImportService(*active_command, service_config,
         thread_pool_size_set, concurrency_override_set, exit_code,
         options_valid);

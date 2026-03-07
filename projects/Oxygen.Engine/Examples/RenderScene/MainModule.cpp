@@ -47,6 +47,7 @@ namespace oxygen::examples::render_scene {
 
 namespace {
   constexpr std::string_view kLooseCookedIndexFileName = "container.index.bin";
+  constexpr size_t kSceneInitialCapacity = 10000; // FIXME hack
 
   auto TryGetLastWriteTime(const std::filesystem::path& path)
     -> std::optional<std::filesystem::file_time_type>
@@ -266,6 +267,11 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
       .action = PendingSourceAction::kTrimCache,
     });
   };
+  shell_config.on_clear_mounts = [this]() {
+    pending_source_requests_.push_back(PendingSourceRequest {
+      .action = PendingSourceAction::kClear,
+    });
+  };
   shell_config.on_pak_mounted = [this](const std::filesystem::path& path) {
     pending_source_requests_.push_back(PendingSourceRequest {
       .action = PendingSourceAction::kMountPak,
@@ -331,6 +337,7 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
     scene_loader_.reset();
     active_scene_load_key_.reset();
     shell.SetScene(nullptr);
+    StageFallbackScene();
     pending_scene_clear_ = false;
   }
 
@@ -365,9 +372,6 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
-  constexpr size_t kSceneInitialCapacity = 10000; // FIXME hack
-  // this size needs to be made consistent with the pooled components capacity
-
   DCHECK_NOTNULL_F(context);
   auto& shell = GetShell();
 
@@ -832,20 +836,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   }
 
   if (!active_scene_.IsValid() && !shell.HasStagedScene()) {
-    LOG_F(INFO, "RenderScene: Staging fallback default scene");
-    shell.StageScene(
-      std::make_unique<scene::Scene>("RenderScene", kSceneInitialCapacity));
-    auto staged_scene = shell.GetStagedScene();
-    CHECK_NOTNULL_F(staged_scene.get(),
-      "fallback staged scene must be available after StageScene");
-    auto camera_node = staged_scene->CreateNode("MainCamera");
-    auto camera = std::make_unique<scene::PerspectiveCamera>();
-    const bool attached = camera_node.AttachCamera(std::move(camera));
-    CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
-    auto tf = camera_node.GetTransform();
-    tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
-    tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
-    shell.SetStagedMainCamera(std::move(camera_node));
+    StageFallbackScene();
   }
 
   co_await Base::OnSceneMutation(context);
@@ -918,6 +909,29 @@ auto MainModule::ClearSceneRuntime(const char* /*reason*/) -> void
   pending_physics_sidecar_.reset();
   active_scene_load_key_.reset();
   shell.SetScene(nullptr);
+}
+
+auto MainModule::StageFallbackScene() -> void
+{
+  auto& shell = GetShell();
+  if (shell.HasStagedScene()) {
+    return;
+  }
+
+  LOG_F(INFO, "RenderScene: Staging fallback default scene");
+  shell.StageScene(
+    std::make_unique<scene::Scene>("RenderScene", kSceneInitialCapacity));
+  auto staged_scene = shell.GetStagedScene();
+  CHECK_NOTNULL_F(staged_scene.get(),
+    "fallback staged scene must be available after StageScene");
+  auto camera_node = staged_scene->CreateNode("MainCamera");
+  auto camera = std::make_unique<scene::PerspectiveCamera>();
+  const bool attached = camera_node.AttachCamera(std::move(camera));
+  CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
+  auto tf = camera_node.GetTransform();
+  tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
+  tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
+  shell.SetStagedMainCamera(std::move(camera_node));
 }
 
 auto MainModule::ClearBackbufferReferences() -> void

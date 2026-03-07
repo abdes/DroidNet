@@ -112,6 +112,7 @@ public:
     std::function<void(const std::filesystem::path&)> callback) -> void;
   auto SetOnIndexLoaded(
     std::function<void(const std::filesystem::path&)> callback) -> void;
+  auto SetOnClearMounts(std::function<void()> callback) -> void;
 
   auto MountPak(const std::filesystem::path& path) -> void;
   auto LoadIndex(const std::filesystem::path& path) -> void;
@@ -276,6 +277,7 @@ private:
   //! Callbacks to update engine state
   std::function<void(const std::filesystem::path&)> on_pak_mounted_;
   std::function<void(const std::filesystem::path&)> on_index_loaded_;
+  std::function<void()> on_clear_mounts_;
   std::function<void(const SceneEntry&)> on_scene_load_requested_;
   std::function<void()> on_scene_load_cancel_requested_;
   std::function<void()> on_force_trim_;

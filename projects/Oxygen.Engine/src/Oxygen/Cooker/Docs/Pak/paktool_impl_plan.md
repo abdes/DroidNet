@@ -303,7 +303,7 @@ Evidence:
 - Added schema validation tests:
   `src/Oxygen/Cooker/Tools/PakTool/Test/PakBuildReportJsonSchema_test.cpp`
 - Added test target wiring:
-  `src/Oxygen/Cooker/Test/CMakeLists.txt`
+  `src/Oxygen/Cooker/Tools/PakTool/Test/CMakeLists.txt`
 - Validation executed:
   - `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakBuildReportSchema.Tests --config Debug -- /m:6`
   - `out/build-vs/bin/Debug/Oxygen.Cooker.PakBuildReportSchema.Tests.exe`
@@ -323,7 +323,6 @@ Required work:
   - pak output
   - manifest output
   - catalog output
-  - optional diagnostics report
 - Ensure publish/finalize logic:
   - creates parent directories when allowed,
   - promotes staged artifacts only after build completion,
@@ -347,7 +346,7 @@ Evidence:
 - Added publication tests:
   `src/Oxygen/Cooker/Tools/PakTool/Test/PakToolArtifactPublication_test.cpp`
 - Added test target wiring:
-  `src/Oxygen/Cooker/Test/CMakeLists.txt`
+  `src/Oxygen/Cooker/Tools/PakTool/Test/CMakeLists.txt`
 - Validation executed:
   - `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakToolPublication.Tests --config Debug -- /m:6`
   - `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolPublication.Tests.exe`
@@ -365,7 +364,7 @@ Required work:
 - Implement `--diagnostics-file` report emission using deterministic JSON.
 - Include artifact publication details:
   - final paths
-  - staged paths as needed for debugging
+  - staged paths for authoritative artifacts as needed for debugging
   - pak size / crc
   - catalog digest
   - manifest emission state
@@ -383,7 +382,7 @@ Evidence:
 - Added report writer tests:
   `src/Oxygen/Cooker/Tools/PakTool/Test/PakToolBuildReportJson_test.cpp`
 - Added test target wiring:
-  `src/Oxygen/Cooker/Test/CMakeLists.txt`
+  `src/Oxygen/Cooker/Tools/PakTool/Test/CMakeLists.txt`
 - Validation executed:
   - `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakToolReport.Tests --config Debug -- /m:6`
   - `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolReport.Tests.exe`
@@ -396,6 +395,14 @@ Exit gate:
 
 Objective: add the standalone native CLI and map it directly onto corrected pak
 contracts.
+
+Corrected execution scope:
+
+- The authoritative staged publication set is `pak`, `catalog`, and optional
+  `manifest`.
+- The optional diagnostics/build report is emitted after publication outcome is
+  known because it reports that outcome; it is not part of the same
+  transactional publish set.
 
 ### Task 4.1: Add Tool Target And CMake Wiring
 
@@ -442,7 +449,7 @@ Exit gate:
 
 ### Task 4.2: Implement CLI Parsing
 
-Status: `pending`
+Status: `completed`
 
 Required work:
 
@@ -461,23 +468,89 @@ Validation:
 
 - CLI parsing tests cover valid and invalid argument combinations.
 
+Implementation notes:
+
+- Added typed tool-local CLI state in
+  `src/Oxygen/Cooker/Tools/PakTool/PakToolOptions.h` so later request assembly
+  consumes structured parser output instead of scraping raw parser state.
+- Repeatable source options now preserve the authoritative CLI source order in a
+  single `std::vector<data::CookedSource>` rather than splitting loose and pak
+  inputs into separate arrays.
+- `src/Oxygen/Cooker/Tools/PakTool/CliBuilder.cpp` now defines the full
+  approved command surface for `build` and `patch`, including:
+  - shared tool options
+  - shared request options
+  - full-build manifest opt-in
+  - patch-only base catalog and compatibility relaxation flags
+- Added dedicated parser coverage in
+  `src/Oxygen/Cooker/Tools/PakTool/Test/PakToolCli_test.cpp` for:
+  - full-build parsing with repeatable sources and shared flags
+  - patch parsing with repeatable base catalogs and relaxation flags
+  - missing required option rejection
+  - patch-only option rejection on `build`
+
+Validation evidence:
+
+- Built in `out/build-vs` with `/m:6`:
+  - `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakTool Oxygen.Cooker.PakToolCli.Tests --config Debug -- /m:6`
+- Executed:
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolCli.Tests.exe`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe build --help`
+
 Exit gate:
 
 - Every required `PakBuildRequest` field can be expressed from the CLI.
 
 ### Task 4.3: Implement Request Assembly And Input Validation
 
-Status: `pending`
+Status: `completed`
 
 Required work:
 
 - Convert CLI options into `PakBuildRequest`.
-- Parse `--source-key` using `Uuid::FromString` and normalize to canonical text
-  in reports.
+- Parse `--source-key` through the runtime-owned UUIDv7 path and normalize to
+  canonical text in reports.
 - Load base catalogs using `PakCatalogIo`.
 - Validate source and output filesystem preconditions before invoking the
   builder.
 - Allocate staged output paths.
+
+Implementation notes:
+
+- Added tool-local request assembly helpers in:
+  - `src/Oxygen/Cooker/Tools/PakTool/RequestPreparation.h`
+  - `src/Oxygen/Cooker/Tools/PakTool/RequestPreparation.cpp`
+- Added a reusable request snapshot contract in:
+  - `src/Oxygen/Cooker/Tools/PakTool/RequestSnapshot.h`
+- `PreparePakToolRequest(...)` now:
+  - validates ordered cooked source inputs against their declared kind
+  - validates final artifact file paths and creates required parent
+    directories before the builder runs
+  - parses `source_key` via `data::SourceKey::FromString`, which delegates to
+    the shared `Uuid::FromString` UUIDv7 parser
+  - loads patch base catalogs through `PakCatalogIo::Read`
+  - allocates staged builder-facing output paths through
+    `MakeArtifactPublicationPlan(...)`
+  - maps patch compatibility relaxation flags into the authoritative
+    `PakBuildRequest::patch_compat` contract
+  - preserves ordered source inputs in both the builder request and the
+    report-side request snapshot
+
+Validation evidence:
+
+- Built in `out/build-vs` with `/m:6`:
+  - `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakTool Oxygen.Cooker.PakToolCli.Tests Oxygen.Cooker.PakToolRequestPreparation.Tests --config Debug -- /m:6`
+- Executed:
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolCli.Tests.exe`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolRequestPreparation.Tests.exe`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe build --help`
+- Added/verified coverage for:
+  - full-build request assembly with preserved ordered source inputs
+  - invalid UUIDv7 source-key rejection
+  - missing source path rejection
+  - invalid base catalog rejection
+  - patch request assembly from multiple base catalogs
+  - output parent directory creation failure
 
 Validation:
 
@@ -494,15 +567,46 @@ Exit gate:
 
 ### Task 4.4: Invoke Builder And Persist Artifacts
 
-Status: `pending`
+Status: `in_progress`
 
 Required work:
 
+- Seal loose-cooked external script assets into staged embedded-source script
+  assets before invoking `PakBuilder`.
 - Call `PakBuilder::Build` with staged builder-facing output paths.
 - Persist `result.output_catalog` through `PakCatalogIo`.
 - Publish manifest only when requested/emitted.
-- Emit the structured build report when requested.
+- Emit the structured build report when requested after publication outcome is
+  known.
 - Finalize/publish staged artifacts in deterministic order.
+
+Implementation notes:
+
+- Corrected scope:
+  - `PakTool` cannot assume loose-cooked inputs are already PAK-sealed.
+  - For loose-cooked script assets, PakTool must stage a narrow sealing pass
+    that rewrites `kAllowExternalSource` descriptors into embedded-source
+    staged descriptors without mutating the input cooked root.
+  - The sealing pass must preserve existing embedded source/bytecode payloads,
+    must never compile, and must never invent bytecode.
+  - Patch planning and catalog generation must observe the sealed staged roots,
+    not the raw loose-cooked descriptor form.
+- Added the tool-local execution seam in:
+  - `src/Oxygen/Cooker/Tools/PakTool/CommandExecution.h`
+  - `src/Oxygen/Cooker/Tools/PakTool/CommandExecution.cpp`
+- `main.cpp` now dispatches `build` and `patch` through
+  `ExecutePakToolCommand(...)` instead of stopping at parse-only behavior.
+- The execution flow now:
+  - prepares a staged `PakBuildRequest`
+  - must prepare staged sealed loose-cooked roots when script sealing is
+    required
+  - invokes `PakBuilder`
+  - persists the staged canonical catalog through `PakCatalogIo::Write`
+  - publishes staged `pak` / `catalog` / optional `manifest` deterministically
+  - suppresses authoritative final catalog/manifest outputs on build failure
+  - emits the optional diagnostics report after publication outcome is known
+- Integrated end-to-end coverage now lives in:
+  - `src/Oxygen/Cooker/Tools/PakTool/Test/PakToolCommandExecution_test.cpp`
 
 Validation:
 
@@ -510,15 +614,37 @@ Validation:
   - full build -> pak + catalog
   - full build with manifest -> pak + catalog + manifest
   - patch build -> pak + catalog + manifest
+  - external-source loose-cooked script assets are sealed into embedded-source
+    staged inputs before packaging
   - failed build -> no authoritative final catalog/manifest sidecars
+
+Validation evidence:
+
+- Built in `out/build-vs` with `/m:6`:
+  - `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakTool Oxygen.Cooker.PakToolExecution.Tests --config Debug -- /m:6`
+- Executed:
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolExecution.Tests.exe`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe build --help`
+- Added/verified coverage for:
+  - full build publishing `pak` + catalog + optional report
+  - full build with manifest publishing `pak` + catalog + manifest
+  - patch build publishing `pak` + catalog + manifest
+  - build-failure suppression of authoritative final catalog/manifest sidecars
+
+Validation gap:
+
+- Staged script sealing for loose-cooked external script assets is not yet
+  implemented or validated in the current evidence above.
 
 Exit gate:
 
-- `PakTool` produces the required artifact set safely for both modes.
+- `PakTool` produces the required artifact set safely for both modes and seals
+  loose-cooked external script assets into embedded-source staged inputs before
+  packaging.
 
 ### Task 4.5: Exit Status And Console Reporting
 
-Status: `pending`
+Status: `completed`
 
 Required work:
 
@@ -526,6 +652,33 @@ Required work:
 - Emit deterministic diagnostics with phase and code.
 - Honor `--quiet` and `--no-color`.
 - Report explicit publication outcome in addition to build outcome.
+
+Implementation notes:
+
+- Added the tool-local app/console seam in:
+  - `src/Oxygen/Cooker/Tools/PakTool/App.h`
+  - `src/Oxygen/Cooker/Tools/PakTool/App.cpp`
+- `main.cpp` now delegates to `RunPakToolApp(...)`, which owns:
+  - CLI parse error mapping to exit code `1`
+  - preparation failure mapping to exit code `2`
+  - build-diagnostic failure mapping to exit code `3`
+  - publish/report/unhandled runtime failure mapping to exit code `4`
+- The tool-local console writer now emits deterministic:
+  - command/input summaries
+  - warning/error diagnostics with phase and code
+  - summary counters
+  - timing summaries
+  - explicit publication outcome
+  - final result/exit-status lines
+- Developer-facing troubleshooting logs are emitted separately through the
+  engine logging system:
+  - lifecycle events at `INFO`
+  - warnings at `WARNING`
+  - errors at `ERROR`
+- `--quiet` now suppresses non-error output and `--no-color` removes ANSI
+  color sequences from the tool-local message surface.
+- Added app-level process-contract coverage in:
+  - `src/Oxygen/Cooker/Tools/PakTool/Test/PakToolApp_test.cpp`
 
 Validation:
 
@@ -536,45 +689,34 @@ Validation:
   - warnings with and without `--fail-on-warnings`
   - publish failures
 
+Validation evidence:
+
+- Reconfigured `out/build-vs` after the new app/test targets were added:
+  - `cmake -S . -B 'out/build-vs'`
+- Built in `out/build-vs` with `/m:6`:
+  - `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakTool Oxygen.Cooker.PakToolApp.Tests Oxygen.Cooker.PakToolExecution.Tests --config Debug -- /m:6`
+- Executed:
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolApp.Tests.exe`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolExecution.Tests.exe`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe build --help`
+- Added/verified coverage for:
+  - parse failure exit/status reporting
+  - preparation/input failure exit/status reporting
+  - warning-only success behavior
+  - warning escalation to build failure via `--fail-on-warnings`
+  - `--quiet` suppression of non-error console output
+  - `--no-color` removal of ANSI sequences
+  - publish failure exit/status reporting
+
 Exit gate:
 
 - CI can treat process exit status plus report JSON as authoritative.
 
-## Phase 5. Optional Shared Console Abstractions
-
-Objective: reuse shared tooling only when it improves clarity without dragging
-in unrelated runtime/UI dependencies.
-
-### Task 5.1: Decide Message Writer Reuse Strategy
-
-Status: `pending`
-
-Required work:
-
-- Evaluate whether the current message-writer abstraction should be:
-  - extracted into `Cooker/Tools/Common`, or
-  - reimplemented minimally in `PakTool`
-- Keep any shared extraction narrow and dependency-clean.
-
-Validation:
-
-- The chosen abstraction compiles cleanly for the consuming tool(s) without
-  forcing unrelated TUI/runtime dependencies into `PakTool`.
-
-Exit gate:
-
-- Console/report writing code is maintainable and not duplicated gratuitously.
-
-Note:
-
-- This is not a blocker if a minimal tool-local writer is the cleaner solution
-  for this release.
-
-## Phase 6. Verification And Documentation
+## Phase 5. Verification And Documentation
 
 Objective: close the release gate with recorded evidence.
 
-### Task 6.1: Automated Validation
+### Task 5.1: Automated Validation
 
 Status: `pending`
 
@@ -594,9 +736,9 @@ Exit gate:
 
 - No completion claim without executed automated validation.
 
-### Task 6.2: Manual End-To-End Validation
+### Task 5.2: Manual End-To-End Validation
 
-Status: `pending`
+Status: `completed`
 
 Required work:
 
@@ -614,11 +756,154 @@ Validation evidence required:
 - Confirmation that `PakDump` inspection passed without format anomalies.
 - Confirmation that failure-path publish semantics behaved as designed.
 
+Evidence recorded so far:
+
+- Scenario 1: isolated full-build validation using `Examples/Content/scenes/cubes`.
+- Isolated validation workspace:
+  `out/build-vs/manual/paktool-validation/cubes-full`
+- Exact commands used:
+  - `Examples/Content/cook_scenes.ps1 -Scene cubes -NoTUI -ToolPath 'H:/projects/DroidNet/projects/Oxygen.Engine/out/build-vs/bin/Debug/Oxygen.Cooker.ImportTool.exe'`
+    This was first used only to confirm the scene imports cleanly from the repo
+    tree.
+  - Isolated import setup:
+    - copied `Examples/Content/scenes/cubes/*` to
+      `out/build-vs/manual/paktool-validation/cubes-full/scene`
+    - rewrote the copied `import-manifest.json` output field to
+      `H:/projects/DroidNet/projects/Oxygen.Engine/out/build-vs/manual/paktool-validation/cubes-full/cooked`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportTool.exe batch --manifest out/build-vs/manual/paktool-validation/cubes-full/scene/import-manifest.json --no-tui`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe build --no-color --diagnostics-file out/build-vs/manual/paktool-validation/cubes-full/cubes-full.diagnostics.json --loose-source out/build-vs/manual/paktool-validation/cubes-full/cooked --out out/build-vs/manual/paktool-validation/cubes-full/cubes-full.pak --catalog-out out/build-vs/manual/paktool-validation/cubes-full/cubes-full.catalog.json --manifest-out out/build-vs/manual/paktool-validation/cubes-full/cubes-full.manifest.json --content-version 1 --source-key 01234567-89ab-7def-8123-456789abcdef`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakDump.exe out/build-vs/manual/paktool-validation/cubes-full/cubes-full.pak`
+- Resulting artifact paths:
+  - `out/build-vs/manual/paktool-validation/cubes-full/cooked/container.index.bin`
+  - `out/build-vs/manual/paktool-validation/cubes-full/cubes-full.pak`
+  - `out/build-vs/manual/paktool-validation/cubes-full/cubes-full.catalog.json`
+  - `out/build-vs/manual/paktool-validation/cubes-full/cubes-full.manifest.json`
+  - `out/build-vs/manual/paktool-validation/cubes-full/cubes-full.diagnostics.json`
+- Observed results:
+  - isolated import succeeded with exit code `0`
+  - isolated cooked output contained `13` filesystem entries including
+    `container.index.bin`
+  - full pak build succeeded with exit code `0`
+  - published artifacts were present for `pak`, `catalog`, `manifest`, and
+    `diagnostics`
+  - resulting pak size was `9008` bytes
+  - catalog digest was
+    `15e7eda4b21511b60eb3c8368f9654aa935a8f0f93eda65437eb3a4451855df6`
+- `PakDump` inspection passed without format anomalies:
+  - exit code `0`
+  - footer magic reported `OK`
+  - footer asset count `9`
+  - directory asset count `9`
+  - CRC32 reported as `0xd4e81145`
+- Scenario 2: isolated patch-build validation using a modified `cubes` scene and
+  the published full-build catalog as the base input.
+- Isolated validation workspaces:
+  - `out/build-vs/manual/paktool-validation/cubes-patch-1`
+  - `out/build-vs/manual/paktool-validation/cubes-patch-2`
+- Exact commands used:
+  - copied `Examples/Content/scenes/cubes/*` to
+    `out/build-vs/manual/paktool-validation/cubes-patch-1/scene`
+  - rewrote the copied `import-manifest.json` output field to
+    `H:/projects/DroidNet/projects/Oxygen.Engine/out/build-vs/manual/paktool-validation/cubes-patch-1/cooked`
+  - modified `MatCube.material.json` to change `base_color` and `roughness`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportTool.exe batch --manifest out/build-vs/manual/paktool-validation/cubes-patch-1/scene/import-manifest.json --no-tui`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe patch --no-color --diagnostics-file out/build-vs/manual/paktool-validation/cubes-patch-1/cubes-patch-1.diagnostics.json --loose-source out/build-vs/manual/paktool-validation/cubes-patch-1/cooked --base-catalog out/build-vs/manual/paktool-validation/cubes-full/cubes-full.catalog.json --out out/build-vs/manual/paktool-validation/cubes-patch-1/cubes-patch-1.pak --catalog-out out/build-vs/manual/paktool-validation/cubes-patch-1/cubes-patch-1.catalog.json --manifest-out out/build-vs/manual/paktool-validation/cubes-patch-1/cubes-patch-1.manifest.json --content-version 1 --source-key 01234567-89ab-7def-8123-456789abcdef`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakDump.exe out/build-vs/manual/paktool-validation/cubes-patch-1/cubes-patch-1.pak`
+  - copied `out/build-vs/manual/paktool-validation/cubes-patch-1/scene/*` to
+    `out/build-vs/manual/paktool-validation/cubes-patch-2/scene`
+  - rewrote the copied `import-manifest.json` output field to
+    `H:/projects/DroidNet/projects/Oxygen.Engine/out/build-vs/manual/paktool-validation/cubes-patch-2/cooked`
+  - modified `MatCubeB.material.json` to change `base_color` and `roughness`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportTool.exe batch --manifest out/build-vs/manual/paktool-validation/cubes-patch-2/scene/import-manifest.json --no-tui`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe patch --no-color --diagnostics-file out/build-vs/manual/paktool-validation/cubes-patch-2/cubes-patch-2.diagnostics.json --loose-source out/build-vs/manual/paktool-validation/cubes-patch-2/cooked --base-catalog out/build-vs/manual/paktool-validation/cubes-patch-1/cubes-patch-1.catalog.json --out out/build-vs/manual/paktool-validation/cubes-patch-2/cubes-patch-2.pak --catalog-out out/build-vs/manual/paktool-validation/cubes-patch-2/cubes-patch-2.catalog.json --manifest-out out/build-vs/manual/paktool-validation/cubes-patch-2/cubes-patch-2.manifest.json --content-version 1 --source-key 01234567-89ab-7def-8123-456789abcdef`
+- Resulting artifact paths:
+  - `out/build-vs/manual/paktool-validation/cubes-patch-1/cooked/container.index.bin`
+  - `out/build-vs/manual/paktool-validation/cubes-patch-1/cubes-patch-1.pak`
+  - `out/build-vs/manual/paktool-validation/cubes-patch-1/cubes-patch-1.catalog.json`
+  - `out/build-vs/manual/paktool-validation/cubes-patch-1/cubes-patch-1.manifest.json`
+  - `out/build-vs/manual/paktool-validation/cubes-patch-1/cubes-patch-1.diagnostics.json`
+  - `out/build-vs/manual/paktool-validation/cubes-patch-2/cooked/container.index.bin`
+  - `out/build-vs/manual/paktool-validation/cubes-patch-2/cubes-patch-2.pak`
+  - `out/build-vs/manual/paktool-validation/cubes-patch-2/cubes-patch-2.catalog.json`
+  - `out/build-vs/manual/paktool-validation/cubes-patch-2/cubes-patch-2.manifest.json`
+  - `out/build-vs/manual/paktool-validation/cubes-patch-2/cubes-patch-2.diagnostics.json`
+- Observed results:
+  - both isolated patch import runs succeeded with exit code `0`
+  - both isolated cooked outputs contained `13` filesystem entries including
+    `container.index.bin`
+  - first patch build succeeded with exit code `0`
+  - first patch published `pak`, `catalog`, `manifest`, and `diagnostics`
+    outputs
+  - first patch pak size was `1776` bytes
+  - first patch summary was `patch_replaced=1`, `patch_unchanged=8`
+  - `PakDump` inspection of the first patch pak passed with:
+    - exit code `0`
+    - footer magic `OK`
+    - footer asset count `1`
+    - directory asset count `1`
+    - CRC32 `0x78c59261`
+  - second patch build succeeded with exit code `0` using
+    `cubes-patch-1.catalog.json` as the sole `--base-catalog` input
+  - second patch published `pak`, `catalog`, `manifest`, and `diagnostics`
+    outputs
+  - second patch pak size was `7744` bytes
+  - second patch summary was `patch_created=8`, `patch_unchanged=1`
+- Catalog and manifest reuse confirmation:
+  - `cubes-patch-1.catalog.json` was accepted as a valid `--base-catalog`
+    input by a subsequent `PakTool patch` run
+  - `cubes-patch-1.manifest.json` recorded the full-build catalog digest as its
+    required base catalog digest:
+    `15e7eda4b21511b60eb3c8368f9654aa935a8f0f93eda65437eb3a4451855df6`
+  - `cubes-patch-2.manifest.json` recorded the first patch catalog digest as
+    its required base catalog digest:
+    `793512d9fbeaec463f1b9dea858acc5253de284d7bac7862cd95c615b239aa16`
+- `cubes-patch-2.catalog.json` was emitted successfully with catalog digest:
+    `afdebe5424dc72a3484896a3c61708b2fb011b0cfa6640ab3b584c30e2e8540f`
+- Scenario 3: failure-path publication validation after successful request
+  preparation.
+- Isolated validation workspace:
+  `out/build-vs/manual/paktool-validation/cubes-failure`
+- Exact command used:
+  - pre-created stale final outputs:
+    - `out/build-vs/manual/paktool-validation/cubes-failure/warning_fail.pak`
+      with content `pak-old`
+    - `out/build-vs/manual/paktool-validation/cubes-failure/warning_fail.catalog.json`
+      with content `catalog-old`
+    - `out/build-vs/manual/paktool-validation/cubes-failure/warning_fail.manifest.json`
+      with content `manifest-old`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe build --no-color --diagnostics-file out/build-vs/manual/paktool-validation/cubes-failure/warning_fail.report.json --pak-source out/build-vs/manual/paktool-validation/cubes-full/cubes-full.pak --out out/build-vs/manual/paktool-validation/cubes-failure/warning_fail.pak --catalog-out out/build-vs/manual/paktool-validation/cubes-failure/warning_fail.catalog.json --manifest-out out/build-vs/manual/paktool-validation/cubes-failure/warning_fail.manifest.json --content-version 1 --source-key 01234567-89ab-7def-8123-456789abcdef --fail-on-warnings`
+- Observed results:
+  - command exited with code `3`
+  - builder warning emitted:
+    `pak.plan.pak_source_regions_projected`
+  - build-failure error emitted:
+    `pak.request.fail_on_warnings`
+  - stale final pak remained in place with original content `pak-old`
+  - stale final catalog was removed and not replaced
+  - stale final manifest was removed and not replaced
+  - diagnostics report was still written
+  - console publication summary reported:
+    `pak=skipped catalog=suppressed manifest=suppressed report=written`
+  - diagnostics report recorded:
+    - `artifacts.pak.published = false`
+    - `artifacts.catalog.published = false`
+    - `artifacts.manifest.requested = true`
+    - `artifacts.manifest.published = false`
+
+Manual validation conclusion:
+
+- Full build publication path is verified.
+- Patch build publication path is verified.
+- Published catalog outputs are reusable as subsequent patch base inputs.
+- Published manifests capture the expected base catalog compatibility envelope.
+- Failure-path publish semantics behave as designed: authoritative final
+  catalog/manifest outputs are not published on build failure.
+
 Exit gate:
 
 - Manual validation evidence is captured in task/PR notes.
 
-### Task 6.3: Documentation Completion
+### Task 5.3: Documentation Completion
 
 Status: `pending`
 
@@ -641,9 +926,8 @@ Exit gate:
 
 Release blockers:
 
-1. The tool target does not yet exist.
-2. Staged publication behavior does not yet exist.
-3. Tool-level validation evidence does not yet exist.
+1. Manual end-to-end tool validation evidence does not yet exist.
+2. Final documentation completion work remains pending.
 
 Non-blocking follow-ups after release:
 
@@ -669,11 +953,19 @@ Validation executed in this review iteration:
 - `out/build-vs/bin/Debug/Oxygen.Cooker.PakDomainValidation.Tests.exe`
 - `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakTool Oxygen.Cooker.PakBuildReportSchema.Tests Oxygen.Cooker.PakToolPublication.Tests Oxygen.Cooker.PakToolReport.Tests --config Debug -- /m:6`
 - `out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe --help`
+- `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakTool Oxygen.Cooker.PakToolCli.Tests --config Debug -- /m:6`
+- `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolCli.Tests.exe`
+- `out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe build --help`
+- `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakTool Oxygen.Cooker.PakToolCli.Tests Oxygen.Cooker.PakToolRequestPreparation.Tests --config Debug -- /m:6`
+- `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolRequestPreparation.Tests.exe`
+- `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakTool Oxygen.Cooker.PakToolExecution.Tests --config Debug -- /m:6`
+- `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolExecution.Tests.exe`
+- `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakTool Oxygen.Cooker.PakToolApp.Tests Oxygen.Cooker.PakToolExecution.Tests --config Debug -- /m:6`
+- `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolApp.Tests.exe`
 - `out/build-vs/bin/Debug/Oxygen.Cooker.PakBuildReportSchema.Tests.exe`
 - `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolPublication.Tests.exe`
 - `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolReport.Tests.exe`
 
 Remaining validation delta:
 
-- Tool-level CLI parsing, request-assembly, and end-to-end integration tests
 - Manual end-to-end runs with `PakDump`
