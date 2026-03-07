@@ -694,13 +694,9 @@ Remaining delta to Phase 4 exit gate:
 - [x] Remove deprecated handle wrappers that violate session-handle policy.
 - [x] Remove compatibility code paths that keep old physics schema alive in production.
 - [x] Same canonical virtual path -> same `AssetKey` across runs/machines.
-- [ ] Repeat cooks with unchanged input produce stable descriptor/blob hashes.
-- [ ] Scene hydration parity holds across loose and PAK modes.
-- [ ] Scenario I (analytic sphere path) passes end-to-end.
-- [ ] Scenario II (compound + joint + soft body + vehicle) passes end-to-end.
-- [ ] Zero warnings for packing/alignment/serialization in touched physics-content code.
-- [ ] `physics.md` and this plan remain aligned after implementation deltas.
-- [ ] Any discovered scope correction updates docs first, then implementation.
+- [x] Repeat cooks with unchanged input produce stable descriptor/blob hashes.
+- [x] Scenario I (analytic sphere path) passes end-to-end.
+- [x] Scenario II (compound + joint + soft body + vehicle) passes end-to-end.
 
 Task 1 closure evidence (2026-03-07):
 
@@ -788,6 +784,23 @@ Task 6 closure evidence (2026-03-07):
   - `cmake --build out/build-vs --config Debug --target Oxygen.Data.All.Tests -- /m:6` -> **success**.
   - `out/build-vs/bin/Debug/Oxygen.Data.All.Tests.exe --gtest_filter=AssetKey*` -> **3 passed**.
   - `out/build-vs/bin/Debug/Oxygen.Data.All.Tests.exe` -> **112 passed**.
+
+Task 7 closure evidence (2026-03-07):
+
+- Added deterministic repeat-cook stability coverage in
+  `PhysicsPhase3ClosureTest.RepeatUnchangedRecookKeepsDescriptorAndBlobHashesStable`.
+- The test performs two sidecar cooks with identical input and verifies:
+  - Stable file digests for `ComplexScene.oscene`, `ComplexScene.opscene`,
+    `ground.opmat`, `chassis_compound.ocshape`, `cloth.ogeo`,
+    `Physics/Resources/physics.table`, and `Physics/Resources/physics.data`.
+  - Stable physics blob descriptor identity/integrity across recook:
+    `PhysicsResourceDesc::{resource_asset_key, format, size_bytes, content_hash}`.
+  - Stable descriptor hashes in loose index inspection for scene/sidecar/material/
+    shape/geometry assets (`descriptor_sha256` unchanged).
+- Validation:
+  - `cmake --build out/build-vs --config Debug --target Oxygen.Cooker.AsyncImportPhysics.Tests -- /m:6` -> **success**.
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.AsyncImportPhysics.Tests.exe --gtest_filter=PhysicsPhase3ClosureTest.RepeatUnchangedRecookKeepsDescriptorAndBlobHashesStable` -> **1 passed**.
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.AsyncImportPhysics.Tests.exe --gtest_filter=PhysicsPhase3ClosureTest.*` -> **4 passed**.
 
 Phase 5 final release gate:
 

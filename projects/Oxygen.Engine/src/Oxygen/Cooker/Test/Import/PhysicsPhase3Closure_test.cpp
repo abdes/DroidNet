@@ -965,6 +965,140 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
 }
 
 NOLINT_TEST(PhysicsPhase3ClosureTest,
+  RepeatUnchangedRecookKeepsDescriptorAndBlobHashesStable)
+{
+  auto service = AsyncImportService(AsyncImportService::Config {
+    .thread_pool_size = 2U,
+  });
+  const auto cooked_root = MakeTempCookedRoot("repeat_recook_hash_stability");
+
+  RegisterStubGeometryAsset(
+    cooked_root, kGeometryVirtualPath, "Geometry/cloth.ogeo");
+
+  ASSERT_TRUE(SubmitAndWait(
+    service, MakeSceneDescriptorRequest(cooked_root, kSceneName, 10U))
+      .success);
+  ASSERT_TRUE(
+    SubmitAndWait(service, MakePhysicsMaterialRequest(cooked_root)).success);
+  ASSERT_TRUE(
+    SubmitAndWait(service, MakeCompoundShapeRequest(cooked_root)).success);
+
+  const auto bindings = BuildComplexSidecarBindings({ 0U, 2U, 4U }, { 1U, 3U });
+  ASSERT_TRUE(SubmitAndWait(service,
+    MakePhysicsSidecarRequest(cooked_root, kSceneVirtualPath, bindings))
+      .success);
+
+  const auto scene_path
+    = cooked_root / std::filesystem::path("Scenes/ComplexScene.oscene");
+  const auto sidecar_path
+    = cooked_root / std::filesystem::path("Scenes/ComplexScene.opscene");
+  const auto material_path
+    = cooked_root / std::filesystem::path("Physics/Materials/ground.opmat");
+  const auto shape_path = cooked_root
+    / std::filesystem::path("Physics/Shapes/chassis_compound.ocshape");
+  const auto geometry_path
+    = cooked_root / std::filesystem::path("Geometry/cloth.ogeo");
+  const auto physics_table_path
+    = cooked_root / std::filesystem::path("Physics/Resources/physics.table");
+  const auto physics_data_path
+    = cooked_root / std::filesystem::path("Physics/Resources/physics.data");
+
+  const auto scene_digest_before = ComputeFileDigest(scene_path);
+  const auto sidecar_digest_before = ComputeFileDigest(sidecar_path);
+  const auto material_digest_before = ComputeFileDigest(material_path);
+  const auto shape_digest_before = ComputeFileDigest(shape_path);
+  const auto geometry_digest_before = ComputeFileDigest(geometry_path);
+  const auto physics_table_digest_before
+    = ComputeFileDigest(physics_table_path);
+  const auto physics_data_digest_before = ComputeFileDigest(physics_data_path);
+  const auto physics_table_before
+    = ParsePhysicsResourceTable(physics_table_path);
+  ASSERT_FALSE(physics_table_before.empty());
+
+  auto before_inspection = lc::Inspection {};
+  before_inspection.LoadFromRoot(cooked_root);
+  const auto scene_asset_before = FindInspectionAsset(
+    before_inspection, data::AssetKey::FromVirtualPath(kSceneVirtualPath));
+  const auto sidecar_asset_before = FindInspectionAsset(
+    before_inspection, data::AssetKey::FromVirtualPath(kSidecarVirtualPath));
+  const auto material_asset_before = FindInspectionAsset(
+    before_inspection, data::AssetKey::FromVirtualPath(kMaterialVirtualPath));
+  const auto shape_asset_before = FindInspectionAsset(
+    before_inspection, data::AssetKey::FromVirtualPath(kShapeVirtualPath));
+  const auto geometry_asset_before = FindInspectionAsset(
+    before_inspection, data::AssetKey::FromVirtualPath(kGeometryVirtualPath));
+  ASSERT_TRUE(scene_asset_before.has_value());
+  ASSERT_TRUE(sidecar_asset_before.has_value());
+  ASSERT_TRUE(material_asset_before.has_value());
+  ASSERT_TRUE(shape_asset_before.has_value());
+  ASSERT_TRUE(geometry_asset_before.has_value());
+
+  ASSERT_TRUE(SubmitAndWait(service,
+    MakePhysicsSidecarRequest(cooked_root, kSceneVirtualPath, bindings))
+      .success);
+
+  const auto scene_digest_after = ComputeFileDigest(scene_path);
+  const auto sidecar_digest_after = ComputeFileDigest(sidecar_path);
+  const auto material_digest_after = ComputeFileDigest(material_path);
+  const auto shape_digest_after = ComputeFileDigest(shape_path);
+  const auto geometry_digest_after = ComputeFileDigest(geometry_path);
+  const auto physics_table_digest_after = ComputeFileDigest(physics_table_path);
+  const auto physics_data_digest_after = ComputeFileDigest(physics_data_path);
+  const auto physics_table_after
+    = ParsePhysicsResourceTable(physics_table_path);
+  ASSERT_EQ(physics_table_before.size(), physics_table_after.size());
+
+  EXPECT_EQ(scene_digest_before, scene_digest_after);
+  EXPECT_EQ(sidecar_digest_before, sidecar_digest_after);
+  EXPECT_EQ(material_digest_before, material_digest_after);
+  EXPECT_EQ(shape_digest_before, shape_digest_after);
+  EXPECT_EQ(geometry_digest_before, geometry_digest_after);
+  EXPECT_EQ(physics_table_digest_before, physics_table_digest_after);
+  EXPECT_EQ(physics_data_digest_before, physics_data_digest_after);
+
+  for (size_t i = 0; i < physics_table_before.size(); ++i) {
+    const auto& before = physics_table_before[i];
+    const auto& after = physics_table_after[i];
+    EXPECT_EQ(before.resource_asset_key, after.resource_asset_key);
+    EXPECT_EQ(before.format, after.format);
+    EXPECT_EQ(before.size_bytes, after.size_bytes);
+    EXPECT_TRUE(std::equal(std::begin(before.content_hash),
+      std::end(before.content_hash), std::begin(after.content_hash)));
+  }
+
+  auto after_inspection = lc::Inspection {};
+  after_inspection.LoadFromRoot(cooked_root);
+  const auto scene_asset_after = FindInspectionAsset(
+    after_inspection, data::AssetKey::FromVirtualPath(kSceneVirtualPath));
+  const auto sidecar_asset_after = FindInspectionAsset(
+    after_inspection, data::AssetKey::FromVirtualPath(kSidecarVirtualPath));
+  const auto material_asset_after = FindInspectionAsset(
+    after_inspection, data::AssetKey::FromVirtualPath(kMaterialVirtualPath));
+  const auto shape_asset_after = FindInspectionAsset(
+    after_inspection, data::AssetKey::FromVirtualPath(kShapeVirtualPath));
+  const auto geometry_asset_after = FindInspectionAsset(
+    after_inspection, data::AssetKey::FromVirtualPath(kGeometryVirtualPath));
+  ASSERT_TRUE(scene_asset_after.has_value());
+  ASSERT_TRUE(sidecar_asset_after.has_value());
+  ASSERT_TRUE(material_asset_after.has_value());
+  ASSERT_TRUE(shape_asset_after.has_value());
+  ASSERT_TRUE(geometry_asset_after.has_value());
+
+  EXPECT_EQ(scene_asset_before->descriptor_sha256,
+    scene_asset_after->descriptor_sha256);
+  EXPECT_EQ(sidecar_asset_before->descriptor_sha256,
+    sidecar_asset_after->descriptor_sha256);
+  EXPECT_EQ(material_asset_before->descriptor_sha256,
+    material_asset_after->descriptor_sha256);
+  EXPECT_EQ(shape_asset_before->descriptor_sha256,
+    shape_asset_after->descriptor_sha256);
+  EXPECT_EQ(geometry_asset_before->descriptor_sha256,
+    geometry_asset_after->descriptor_sha256);
+
+  service.Stop();
+}
+
+NOLINT_TEST(PhysicsPhase3ClosureTest,
   SidecarCookFailsWhenBindingBackendDoesNotMatchRequestedImportBackend)
 {
   auto service = AsyncImportService(AsyncImportService::Config {
