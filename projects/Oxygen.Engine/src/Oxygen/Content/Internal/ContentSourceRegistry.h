@@ -12,6 +12,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
@@ -32,9 +33,16 @@ public:
   };
 
   struct MountResult final {
+    struct SourceKeyConflict final {
+      data::SourceKey source_key {};
+      uint16_t existing_source_id { 0 };
+      std::string existing_mount_identity {};
+    };
+
     MountAction action { MountAction::kMounted };
     uint16_t source_id { 0 };
     size_t source_index { 0 };
+    std::optional<SourceKeyConflict> source_key_conflict {};
   };
 
   auto MountPak(std::filesystem::path normalized_path,
