@@ -830,7 +830,7 @@ auto EnvironmentStaticDataManager::PopulateIbl(EnvironmentStaticData& next)
     : 0ULL;
   if (captured_scene_source && capture_to_ibl_content_lag > 1ULL
     && capture_gen != last_warned_capture_stale_ibl_generation_) {
-    LOG_F(ERROR,
+    DLOG_F(1,
       "captured-scene skylight using stale IBL "
       "(view={}, capture_gen={}, ibl_gen={}, ibl_src_ver={}, lag={}, "
       "source_slot={})",
@@ -986,7 +986,7 @@ auto EnvironmentStaticDataManager::RefreshCoherentSnapshotState() -> void
     || (incoherent_frame_count_ % kPeriodicBlockedLogFrames) == 0;
   if (should_warn
     && last_incoherent_logged_sequence_ != last_update_frame_sequence_) {
-    LOG_F(WARNING,
+    DLOG_F(1,
       "coherence gate blocking publish "
       "(view={}, frame_seq={}, blocked_frames={}, capture_gen={}, ibl_gen={}, "
       "ibl_src_ver={}, fallback={})",
