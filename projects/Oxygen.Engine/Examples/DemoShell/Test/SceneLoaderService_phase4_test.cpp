@@ -325,6 +325,13 @@ namespace {
     {
       return std::nullopt;
     }
+    [[nodiscard]] auto MakePhysicsResourceKeyForAsset(
+      const data::AssetKey& /*context_asset_key*/,
+      const data::AssetKey& /*resource_asset_key*/) const noexcept
+      -> std::optional<content::ResourceKey> override
+    {
+      return std::nullopt;
+    }
     [[nodiscard]] auto ReadCollisionShapeAssetDescForAsset(
       const data::AssetKey& /*context_asset_key*/,
       const data::AssetKey& /*shape_asset_key*/) const

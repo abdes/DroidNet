@@ -897,8 +897,7 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
   -> physics::CollisionShape
 {
   const auto ensure_no_cooked_ref = [&]() {
-    if (shape_desc.cooked_shape_ref.resource_index
-        != data::pak::core::kNoResourceIndex
+    if (!shape_desc.cooked_shape_ref.payload_asset_key.IsNil()
       || shape_desc.cooked_shape_ref.payload_type
         != data::pak::physics::kInvalidShapePayloadType) {
       throw std::runtime_error(
@@ -1111,9 +1110,10 @@ auto SceneLoaderService::ResolveCookedShapePayload(
       + std::to_string(node_index) + ")");
   }
   const auto& cooked_ref = shape_desc.cooked_shape_ref;
-  if (cooked_ref.resource_index == data::pak::core::kNoResourceIndex) {
+  if (cooked_ref.payload_asset_key.IsNil()) {
     throw std::runtime_error(
-      std::string("OXY-SHAPE-004: missing cooked_shape_ref.resource_index in ")
+      std::string(
+        "OXY-SHAPE-004: missing cooked_shape_ref.payload_asset_key in ")
       + std::string(binding_kind)
       + " binding (node_index=" + std::to_string(node_index) + ")");
   }
@@ -1128,13 +1128,13 @@ auto SceneLoaderService::ResolveCookedShapePayload(
   }
 
   const auto resource_key_opt = loader_.MakePhysicsResourceKeyForAsset(
-    *current_physics_context_asset_key_, cooked_ref.resource_index);
+    *current_physics_context_asset_key_, cooked_ref.payload_asset_key);
   if (!resource_key_opt.has_value()) {
     throw std::runtime_error(
       std::string("OXY-SHAPE-007: failed to resolve physics resource key in ")
       + std::string(binding_kind) + " binding (node_index="
-      + std::to_string(node_index) + " resource_index="
-      + std::to_string(cooked_ref.resource_index.get()) + ")");
+      + std::to_string(node_index) + " payload_asset_key="
+      + data::to_string(cooked_ref.payload_asset_key) + ")");
   }
 
   auto resource = loader_.GetPhysicsResource(*resource_key_opt);
@@ -1142,8 +1142,8 @@ auto SceneLoaderService::ResolveCookedShapePayload(
     throw std::runtime_error(
       std::string("OXY-SHAPE-007: physics payload resource not loaded in ")
       + std::string(binding_kind) + " binding (node_index="
-      + std::to_string(node_index) + " resource_index="
-      + std::to_string(cooked_ref.resource_index.get()) + ")");
+      + std::to_string(node_index) + " payload_asset_key="
+      + data::to_string(cooked_ref.payload_asset_key) + ")");
   }
 
   const auto backend = ResolveActiveBackend(engine_, "shape payload hydration");
@@ -1162,8 +1162,8 @@ auto SceneLoaderService::ResolveCookedShapePayload(
     throw std::runtime_error(
       std::string("OXY-SHAPE-007: unsupported physics resource format in ")
       + std::string(binding_kind) + " binding (node_index="
-      + std::to_string(node_index) + " resource_index="
-      + std::to_string(cooked_ref.resource_index.get()) + " format="
+      + std::to_string(node_index) + " payload_asset_key="
+      + data::to_string(cooked_ref.payload_asset_key) + " format="
       + std::to_string(static_cast<uint32_t>(resource->GetFormat())) + ")");
   }
 
@@ -1214,15 +1214,15 @@ void SceneLoaderService::HydrateJointBindings(
         + std::to_string(record.node_index_b));
     }
     auto constraint_blob = std::span<const uint8_t> {};
-    if (record.constraint_resource_index != data::pak::core::kNoResourceIndex) {
+    if (!record.constraint_asset_key.IsNil()) {
       const auto resource_key_opt = loader_.MakePhysicsResourceKeyForAsset(
-        *current_physics_context_asset_key_, record.constraint_resource_index);
+        *current_physics_context_asset_key_, record.constraint_asset_key);
       if (!resource_key_opt.has_value()) {
         throw std::runtime_error(
-          std::string("joint constraint_resource_index could not be resolved ")
+          std::string("joint constraint_asset_key could not be resolved ")
           + "(node_index_a=" + std::to_string(record.node_index_a)
-          + " node_index_b=" + std::to_string(record.node_index_b) + " index="
-          + std::to_string(record.constraint_resource_index.get()) + ")");
+          + " node_index_b=" + std::to_string(record.node_index_b)
+          + " asset_key=" + data::to_string(record.constraint_asset_key) + ")");
       }
       const auto constraint_resource
         = loader_.GetPhysicsResource(*resource_key_opt);
@@ -1230,16 +1230,17 @@ void SceneLoaderService::HydrateJointBindings(
         throw std::runtime_error(
           std::string("joint constraint resource is not loaded ")
           + "(node_index_a=" + std::to_string(record.node_index_a)
-          + " node_index_b=" + std::to_string(record.node_index_b) + " index="
-          + std::to_string(record.constraint_resource_index.get()) + ")");
+          + " node_index_b=" + std::to_string(record.node_index_b)
+          + " asset_key=" + data::to_string(record.constraint_asset_key) + ")");
       }
       if (constraint_resource->GetFormat() != *expected_constraint_format) {
         throw std::runtime_error(
           std::string("joint constraint resource format is not ")
           + std::to_string(static_cast<uint32_t>(*expected_constraint_format))
           + " (node_index_a=" + std::to_string(record.node_index_a)
-          + " node_index_b=" + std::to_string(record.node_index_b) + " index="
-          + std::to_string(record.constraint_resource_index.get()) + " format="
+          + " node_index_b=" + std::to_string(record.node_index_b)
+          + " asset_key=" + data::to_string(record.constraint_asset_key)
+          + " format="
           + std::to_string(
             static_cast<uint32_t>(constraint_resource->GetFormat()))
           + ")");
@@ -1248,13 +1249,13 @@ void SceneLoaderService::HydrateJointBindings(
         throw std::runtime_error(
           std::string("joint constraint resource payload is empty ")
           + "(node_index_a=" + std::to_string(record.node_index_a)
-          + " node_index_b=" + std::to_string(record.node_index_b) + " index="
-          + std::to_string(record.constraint_resource_index.get()) + ")");
+          + " node_index_b=" + std::to_string(record.node_index_b)
+          + " asset_key=" + data::to_string(record.constraint_asset_key) + ")");
       }
       constraint_blob = constraint_resource->GetData();
     } else {
       throw std::runtime_error(
-        std::string("joint constraint_resource_index is missing ")
+        std::string("joint constraint_asset_key is missing ")
         + "(node_index_a=" + std::to_string(record.node_index_a)
         + " node_index_b=" + std::to_string(record.node_index_b) + ")");
     }
@@ -1496,8 +1497,8 @@ void SceneLoaderService::HydrateRigidBodyBindings(
           + std::to_string(record.node_index) + " shape_asset_key="
           + data::to_string(record.shape_asset_key) + " shape_type="
           + std::to_string(static_cast<uint32_t>(shape_desc.shape_type))
-          + " cooked_ref_index="
-          + std::to_string(shape_desc.cooked_shape_ref.resource_index.get())
+          + " cooked_ref_asset_key="
+          + data::to_string(shape_desc.cooked_shape_ref.payload_asset_key)
           + " cooked_ref_payload_type="
           + std::to_string(
             static_cast<uint32_t>(shape_desc.cooked_shape_ref.payload_type))
@@ -1596,14 +1597,13 @@ void SceneLoaderService::HydrateSoftBodyBindings(
         + std::to_string(static_cast<uint32_t>(backend)));
     }
 
-    if (record.topology_resource_index == data::pak::core::kNoResourceIndex) {
+    if (record.topology_asset_key.IsNil()) {
       throw std::runtime_error(
-        std::string("soft-body topology_resource_index is missing ")
+        std::string("soft-body topology_asset_key is missing ")
         + "(node_index=" + std::to_string(record.node_index) + ")");
     }
 
-    const auto selected_settings_resource_index
-      = record.topology_resource_index;
+    const auto selected_settings_asset_key = record.topology_asset_key;
     const auto expected_settings_format = use_jolt_settings
       ? data::pak::physics::PhysicsResourceFormat::
           kJoltSoftBodySharedSettingsBinary
@@ -1674,13 +1674,13 @@ void SceneLoaderService::HydrateSoftBodyBindings(
 
     const auto settings_resource_key_opt
       = loader_.MakePhysicsResourceKeyForAsset(
-        *current_physics_context_asset_key_, selected_settings_resource_index);
+        *current_physics_context_asset_key_, selected_settings_asset_key);
     if (!settings_resource_key_opt.has_value()) {
       throw std::runtime_error(
-        std::string("soft-body selected settings resource index could not be "
+        std::string("soft-body selected settings resource key could not be "
                     "resolved ")
         + "(node_index=" + std::to_string(record.node_index)
-        + " index=" + std::to_string(selected_settings_resource_index.get())
+        + " asset_key=" + data::to_string(selected_settings_asset_key)
         + " backend=" + selected_backend_name + ")");
     }
     const auto settings_resource
@@ -1689,15 +1689,15 @@ void SceneLoaderService::HydrateSoftBodyBindings(
       throw std::runtime_error(
         std::string("soft-body settings resource is not loaded ")
         + "(node_index=" + std::to_string(record.node_index)
-        + " index=" + std::to_string(selected_settings_resource_index.get())
+        + " asset_key=" + data::to_string(selected_settings_asset_key)
         + " backend=" + selected_backend_name + ")");
     }
     if (settings_resource->GetFormat() != expected_settings_format) {
       throw std::runtime_error(
         std::string("soft-body settings resource format is not ")
         + expected_settings_format_name
-        + " (node_index=" + std::to_string(record.node_index) + " index="
-        + std::to_string(selected_settings_resource_index.get()) + " format="
+        + " (node_index=" + std::to_string(record.node_index) + " asset_key="
+        + data::to_string(selected_settings_asset_key) + " format="
         + std::to_string(static_cast<uint32_t>(settings_resource->GetFormat()))
         + " backend=" + selected_backend_name + ")");
     }
@@ -1705,7 +1705,7 @@ void SceneLoaderService::HydrateSoftBodyBindings(
       throw std::runtime_error(
         std::string("soft-body settings resource payload is empty ")
         + "(node_index=" + std::to_string(record.node_index)
-        + " index=" + std::to_string(selected_settings_resource_index.get())
+        + " asset_key=" + data::to_string(selected_settings_asset_key)
         + " backend=" + selected_backend_name + ")");
     }
 
@@ -1797,12 +1797,12 @@ void SceneLoaderService::HydrateSoftBodyBindings(
     const auto node_name = node.GetName();
     LOG_F(INFO,
       "SceneLoader: hydrated soft body binding (node_index={} node='{}' "
-      "aggregate_id={} backend={} topology_resource_index={} "
+      "aggregate_id={} backend={} topology_asset_key={} "
       "topology_format={} solver_iteration_count={} self_collision={} "
       "restitution={:.3f} friction={:.3f} vertex_radius={:.3f} "
       "settings_scale=[{:.3f},{:.3f},{:.3f}]).",
       record.node_index, node_name.c_str(), soft_body_id.get(),
-      selected_backend_name, selected_settings_resource_index.get(),
+      selected_backend_name, data::to_string(selected_settings_asset_key),
       static_cast<uint32_t>(record.topology_format),
       record.solver_iteration_count,
       static_cast<uint32_t>(record.self_collision), record.restitution,
@@ -1851,34 +1851,34 @@ void SceneLoaderService::HydrateVehicleBindings(
         + " controller_type="
         + std::to_string(static_cast<uint32_t>(record.controller_type)) + ")");
     }
-    if (record.constraint_resource_index == data::pak::core::kNoResourceIndex) {
+    if (record.constraint_asset_key.IsNil()) {
       throw std::runtime_error(
-        std::string("vehicle constraint_resource_index is missing for ")
+        std::string("vehicle constraint_asset_key is missing for ")
         + "node_index=" + std::to_string(record.node_index));
     }
 
     const auto resource_key_opt = loader_.MakePhysicsResourceKeyForAsset(
-      *current_physics_context_asset_key_, record.constraint_resource_index);
+      *current_physics_context_asset_key_, record.constraint_asset_key);
     if (!resource_key_opt.has_value()) {
       throw std::runtime_error(
-        std::string("vehicle constraint_resource_index could not be resolved ")
-        + "(node_index=" + std::to_string(record.node_index) + " index="
-        + std::to_string(record.constraint_resource_index.get()) + ")");
+        std::string("vehicle constraint_asset_key could not be resolved ")
+        + "(node_index=" + std::to_string(record.node_index)
+        + " asset_key=" + data::to_string(record.constraint_asset_key) + ")");
     }
     const auto constraint_resource
       = loader_.GetPhysicsResource(*resource_key_opt);
     if (!constraint_resource) {
       throw std::runtime_error(
         std::string("vehicle constraint resource is not loaded ")
-        + "(node_index=" + std::to_string(record.node_index) + " index="
-        + std::to_string(record.constraint_resource_index.get()) + ")");
+        + "(node_index=" + std::to_string(record.node_index)
+        + " asset_key=" + data::to_string(record.constraint_asset_key) + ")");
     }
     if (constraint_resource->GetFormat() != *expected_constraint_format) {
       throw std::runtime_error(
         std::string("vehicle constraint resource format is not ")
         + std::to_string(static_cast<uint32_t>(*expected_constraint_format))
-        + " (node_index=" + std::to_string(record.node_index) + " index="
-        + std::to_string(record.constraint_resource_index.get()) + " format="
+        + " (node_index=" + std::to_string(record.node_index) + " asset_key="
+        + data::to_string(record.constraint_asset_key) + " format="
         + std::to_string(
           static_cast<uint32_t>(constraint_resource->GetFormat()))
         + ")");
@@ -1886,8 +1886,8 @@ void SceneLoaderService::HydrateVehicleBindings(
     if (constraint_resource->GetData().empty()) {
       throw std::runtime_error(
         std::string("vehicle constraint resource payload is empty ")
-        + "(node_index=" + std::to_string(record.node_index) + " index="
-        + std::to_string(record.constraint_resource_index.get()) + ")");
+        + "(node_index=" + std::to_string(record.node_index)
+        + " asset_key=" + data::to_string(record.constraint_asset_key) + ")");
     }
 
     const auto chassis_body = physics::ScenePhysics::GetRigidBody(
@@ -2427,23 +2427,21 @@ auto SceneLoaderService::PreloadPhysicsDependencyResources(
 {
   const auto context_asset_key = physics_asset.GetAssetKey();
 
-  std::unordered_set<uint32_t> payload_indices {};
+  std::unordered_set<data::AssetKey> payload_asset_keys {};
   auto collect_payload_ref = [&](const data::AssetKey& shape_asset_key,
                                const std::string_view binding_kind,
                                const uint32_t node_index) {
     const auto shape_desc
       = ResolveCollisionShapeAsset(shape_asset_key, binding_kind, node_index);
-    if (shape_desc.cooked_shape_ref.resource_index
-      != data::pak::core::kNoResourceIndex) {
-      payload_indices.insert(shape_desc.cooked_shape_ref.resource_index.get());
+    if (!shape_desc.cooked_shape_ref.payload_asset_key.IsNil()) {
+      payload_asset_keys.insert(shape_desc.cooked_shape_ref.payload_asset_key);
     }
   };
-  auto collect_constraint_resource_index
-    = [&](const data::pak::core::ResourceIndexT resource_index) {
-        if (resource_index != data::pak::core::kNoResourceIndex) {
-          payload_indices.insert(resource_index.get());
-        }
-      };
+  auto collect_constraint_asset_key = [&](const data::AssetKey& asset_key) {
+    if (!asset_key.IsNil()) {
+      payload_asset_keys.insert(asset_key);
+    }
+  };
 
   for (const auto& record :
     physics_asset.GetBindings<data::pak::physics::RigidBodyBindingRecord>()) {
@@ -2460,34 +2458,32 @@ auto SceneLoaderService::PreloadPhysicsDependencyResources(
   }
   for (const auto& record :
     physics_asset.GetBindings<data::pak::physics::JointBindingRecord>()) {
-    collect_constraint_resource_index(record.constraint_resource_index);
+    collect_constraint_asset_key(record.constraint_asset_key);
   }
   for (const auto& record :
     physics_asset.GetBindings<data::pak::physics::VehicleBindingRecord>()) {
-    collect_constraint_resource_index(record.constraint_resource_index);
+    collect_constraint_asset_key(record.constraint_asset_key);
   }
   for (const auto& record :
     physics_asset.GetBindings<data::pak::physics::SoftBodyBindingRecord>()) {
-    collect_constraint_resource_index(record.topology_resource_index);
+    collect_constraint_asset_key(record.topology_asset_key);
   }
 
-  for (const auto resource_index_raw : payload_indices) {
-    const auto resource_index
-      = data::pak::core::ResourceIndexT { resource_index_raw };
+  for (const auto& payload_asset_key : payload_asset_keys) {
     const auto resource_key_opt = loader_.MakePhysicsResourceKeyForAsset(
-      context_asset_key, resource_index);
+      context_asset_key, payload_asset_key);
     if (!resource_key_opt.has_value()) {
       throw std::runtime_error(
         std::string(
           "OXY-SHAPE-007: failed to resolve physics resource key for ")
-        + std::to_string(resource_index_raw));
+        + data::to_string(payload_asset_key));
     }
     auto payload = co_await loader_.LoadPhysicsResourceAsync(*resource_key_opt);
     if (!payload) {
       throw std::runtime_error(
         std::string(
           "OXY-SHAPE-007: failed to preload physics payload resource ")
-        + std::to_string(resource_index_raw));
+        + data::to_string(payload_asset_key));
     }
   }
 }

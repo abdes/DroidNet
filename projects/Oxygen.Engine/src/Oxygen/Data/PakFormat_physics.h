@@ -9,7 +9,7 @@
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Data/PakFormat_world.h>
 
-// packed structs intentionally embed unaligned NamedType ResourceIndexT fields
+// packed structs intentionally embed unaligned strong-typed fields
 OXYGEN_DIAGNOSTIC_PUSH
 OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4315)
 // NOLINTBEGIN(*-avoid-c-arrays,*-magic-numbers)
@@ -104,12 +104,11 @@ enum class PhysicsBindingType : uint32_t {
 [[maybe_unused]] constexpr uint8_t kPhysicsMaterialAssetVersion = 1;
 [[maybe_unused]] constexpr uint8_t kCollisionShapeAssetVersion = 1;
 [[maybe_unused]] constexpr uint8_t kPhysicsSceneAssetVersion = 1;
-[[maybe_unused]] constexpr core::ResourceIndexT kInvalidShapePayloadRefIndex
-  = core::kNoResourceIndex;
 [[maybe_unused]] constexpr ShapePayloadType kInvalidShapePayloadType
   = ShapePayloadType::kInvalid;
 [[maybe_unused]] constexpr AssetKey kInvalidPhysicsMaterialAssetKey = {};
 [[maybe_unused]] constexpr AssetKey kInvalidCollisionShapeAssetKey = {};
+[[maybe_unused]] constexpr AssetKey kInvalidPhysicsResourceAssetKey = {};
 [[maybe_unused]] constexpr uint32_t kShapeIsSensorFalse = 0U;
 [[maybe_unused]] constexpr uint32_t kShapeIsSensorTrue = 1U;
 [[maybe_unused]] constexpr world::SceneNodeIndexT kWorldAttachmentNodeIndex
@@ -123,14 +122,16 @@ struct PhysicsResourceDesc {
   core::OffsetT data_offset = 0; //!< Absolute offset to cooked physics data
   core::DataBlobSizeT size_bytes = 0; //!< Size in bytes
   PhysicsResourceFormat format = PhysicsResourceFormat::kJoltShapeBinary;
+  AssetKey resource_asset_key = kInvalidPhysicsResourceAssetKey;
   uint8_t content_hash[32] = {}; //!< Full SHA-256 of payload bytes
 };
 #pragma pack(pop)
-static_assert(sizeof(PhysicsResourceDesc) == 45);
+static_assert(sizeof(PhysicsResourceDesc) == 61);
 static_assert(offsetof(PhysicsResourceDesc, data_offset) == 0);
 static_assert(offsetof(PhysicsResourceDesc, size_bytes) == 8);
 static_assert(offsetof(PhysicsResourceDesc, format) == 12);
-static_assert(offsetof(PhysicsResourceDesc, content_hash) == 13);
+static_assert(offsetof(PhysicsResourceDesc, resource_asset_key) == 13);
+static_assert(offsetof(PhysicsResourceDesc, content_hash) == 29);
 
 //! Physics surface properties asset.
 #pragma pack(push, 1)
@@ -158,13 +159,13 @@ static_assert(offsetof(PhysicsMaterialAssetDesc, combine_mode_restitution)
 // Cooked payload ref.
 #pragma pack(push, 1)
 struct CookedShapePayloadRef {
-  core::ResourceIndexT resource_index = kInvalidShapePayloadRefIndex;
+  AssetKey payload_asset_key = kInvalidPhysicsResourceAssetKey;
   ShapePayloadType payload_type = kInvalidShapePayloadType;
 };
 #pragma pack(pop)
-static_assert(sizeof(CookedShapePayloadRef) == 5);
-static_assert(offsetof(CookedShapePayloadRef, resource_index) == 0);
-static_assert(offsetof(CookedShapePayloadRef, payload_type) == 4);
+static_assert(sizeof(CookedShapePayloadRef) == 17);
+static_assert(offsetof(CookedShapePayloadRef, payload_asset_key) == 0);
+static_assert(offsetof(CookedShapePayloadRef, payload_type) == 16);
 
 // Fixed tagged-union payload for per-shape params.
 #pragma pack(push, 1)
@@ -267,7 +268,7 @@ struct CollisionShapeAssetDesc {
   CookedShapePayloadRef cooked_shape_ref {};
 };
 #pragma pack(pop)
-static_assert(sizeof(CollisionShapeAssetDesc) == 265);
+static_assert(sizeof(CollisionShapeAssetDesc) == 277);
 static_assert(
   offsetof(CollisionShapeAssetDesc, shape_type) == sizeof(core::AssetHeader));
 static_assert(offsetof(CollisionShapeAssetDesc, is_sensor)
@@ -526,7 +527,7 @@ struct SoftBodyBindingRecord {
   uint32_t solver_iteration_count = 0;
   uint16_t collision_layer = 0;
   uint32_t collision_mask = 0xFFFFFFFF;
-  core::ResourceIndexT topology_resource_index = core::kNoResourceIndex;
+  AssetKey topology_asset_key = kInvalidPhysicsResourceAssetKey;
   uint32_t pinned_vertex_count = 0;
   uint32_t pinned_vertex_byte_offset = 0; //!< Self-relative offset
   uint32_t kinematic_vertex_count = 0;
@@ -538,12 +539,11 @@ struct SoftBodyBindingRecord {
   uint8_t self_collision = 0; //!< Boolean
 };
 #pragma pack(pop)
-static_assert(sizeof(SoftBodyBindingRecord) == 89);
-static_assert(offsetof(SoftBodyBindingRecord, topology_resource_index)
+static_assert(sizeof(SoftBodyBindingRecord) == 101);
+static_assert(offsetof(SoftBodyBindingRecord, topology_asset_key)
   == offsetof(SoftBodyBindingRecord, collision_mask) + sizeof(uint32_t));
 static_assert(offsetof(SoftBodyBindingRecord, pinned_vertex_count)
-  == offsetof(SoftBodyBindingRecord, topology_resource_index)
-    + sizeof(core::ResourceIndexT));
+  == offsetof(SoftBodyBindingRecord, topology_asset_key) + sizeof(AssetKey));
 static_assert(offsetof(SoftBodyBindingRecord, backend_scalars)
   == offsetof(SoftBodyBindingRecord, kinematic_vertex_byte_offset)
     + sizeof(uint32_t));
@@ -557,28 +557,28 @@ static_assert(offsetof(SoftBodyBindingRecord, self_collision)
 struct JointBindingRecord {
   world::SceneNodeIndexT node_index_a = 0;
   world::SceneNodeIndexT node_index_b = kWorldAttachmentNodeIndex;
-  core::ResourceIndexT constraint_resource_index = core::kNoResourceIndex;
+  AssetKey constraint_asset_key = kInvalidPhysicsResourceAssetKey;
   JointBackendScalars backend_scalars {};
 };
 #pragma pack(pop)
-static_assert(sizeof(JointBindingRecord) == 28);
-static_assert(offsetof(JointBindingRecord, constraint_resource_index) == 8);
-static_assert(offsetof(JointBindingRecord, backend_scalars) == 12);
+static_assert(sizeof(JointBindingRecord) == 40);
+static_assert(offsetof(JointBindingRecord, constraint_asset_key) == 8);
+static_assert(offsetof(JointBindingRecord, backend_scalars) == 24);
 
 //! Vehicle binding record. Full config is in the constraint blob.
 #pragma pack(push, 1)
 struct VehicleBindingRecord {
   world::SceneNodeIndexT node_index = 0; //!< Root chassis node
-  core::ResourceIndexT constraint_resource_index = core::kNoResourceIndex;
+  AssetKey constraint_asset_key = kInvalidPhysicsResourceAssetKey;
   VehicleControllerType controller_type = VehicleControllerType::kWheeled;
   uint32_t wheel_slice_offset = 0; //!< Offset in kVehicleWheel table
   uint32_t wheel_slice_count = 0;
 };
 #pragma pack(pop)
-static_assert(sizeof(VehicleBindingRecord) == 20);
-static_assert(offsetof(VehicleBindingRecord, controller_type) == 8);
-static_assert(offsetof(VehicleBindingRecord, wheel_slice_offset) == 12);
-static_assert(offsetof(VehicleBindingRecord, wheel_slice_count) == 16);
+static_assert(sizeof(VehicleBindingRecord) == 32);
+static_assert(offsetof(VehicleBindingRecord, controller_type) == 20);
+static_assert(offsetof(VehicleBindingRecord, wheel_slice_offset) == 24);
+static_assert(offsetof(VehicleBindingRecord, wheel_slice_count) == 28);
 
 //! Vehicle wheel topology record.
 #pragma pack(push, 1)

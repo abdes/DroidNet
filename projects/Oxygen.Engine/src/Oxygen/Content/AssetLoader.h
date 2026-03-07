@@ -932,6 +932,10 @@ public:
     const data::AssetKey& context_asset_key,
     data::pak::core::ResourceIndexT resource_index) const noexcept
     -> std::optional<ResourceKey> override;
+  [[nodiscard]] OXGN_CNTT_API auto MakePhysicsResourceKeyForAsset(
+    const data::AssetKey& context_asset_key,
+    const data::AssetKey& resource_asset_key) const noexcept
+    -> std::optional<ResourceKey> override;
   [[nodiscard]] OXGN_CNTT_API auto ReadCollisionShapeAssetDescForAsset(
     const data::AssetKey& context_asset_key,
     const data::AssetKey& shape_asset_key) const

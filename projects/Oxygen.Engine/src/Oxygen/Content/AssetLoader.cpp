@@ -3958,6 +3958,40 @@ auto AssetLoader::MakePhysicsResourceKeyForAsset(
     context_asset_key, resource_index, callbacks);
 }
 
+auto AssetLoader::MakePhysicsResourceKeyForAsset(
+  const data::AssetKey& context_asset_key,
+  const data::AssetKey& resource_asset_key) const noexcept
+  -> std::optional<ResourceKey>
+{
+  const internal::PhysicsQueryService::Callbacks callbacks {
+    .resolve_source_id_for_asset
+    = [this](
+        const data::AssetKey& key) { return ResolveSourceIdForAsset(key); },
+    .resolve_source_for_id
+    = [this](
+        const uint16_t source_id) { return ResolveSourceForId(source_id); },
+    .resolve_source_id_for_source_key
+    = [this](const data::SourceKey key) -> std::optional<uint16_t> {
+      for (size_t i = 0; i < impl_->source_registry.Sources().size(); ++i) {
+        const auto& source = impl_->source_registry.Sources()[i];
+        if (source && source->GetSourceKey() == key) {
+          return impl_->source_registry.SourceIds()[i];
+        }
+      }
+      return std::nullopt;
+    },
+    .make_physics_resource_key =
+      [this](
+        const uint16_t source_id, const data::pak::core::ResourceIndexT index) {
+        const auto resource_type_index = static_cast<uint16_t>(
+          IndexOf<data::PhysicsResource, ResourceTypeList>::value);
+        return PackResourceKey(source_id, resource_type_index, index);
+      },
+  };
+  return physics_query_service_->MakePhysicsResourceKeyForAsset(
+    context_asset_key, resource_asset_key, callbacks);
+}
+
 auto AssetLoader::ReadCollisionShapeAssetDescForAsset(
   const data::AssetKey& context_asset_key,
   const data::AssetKey& shape_asset_key) const

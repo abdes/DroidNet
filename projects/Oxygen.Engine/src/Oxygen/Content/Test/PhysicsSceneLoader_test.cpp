@@ -155,8 +155,11 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadAllBindingTypesSucceeds)
   pak7::SoftBodyBindingRecord soft {};
   soft.node_index = 14;
   soft.solver_iteration_count = 9;
-  soft.topology_resource_index
-    = oxygen::data::pak::core::ResourceIndexT { 42U };
+  auto topology_asset_key_bytes = std::array<oxygen::data::AssetKey::value_type,
+    oxygen::data::AssetKey::kSizeBytes> {};
+  topology_asset_key_bytes[0] = 42U;
+  soft.topology_asset_key
+    = oxygen::data::AssetKey::FromBytes(topology_asset_key_bytes);
   soft.topology_format
     = pak7::PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary;
 
@@ -237,9 +240,9 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest, LoadAllBindingTypesSucceeds)
     asset->GetBindings<pak7::CharacterBindingRecord>()[0].node_index, 13U);
   EXPECT_EQ(
     asset->GetBindings<pak7::SoftBodyBindingRecord>()[0].node_index, 14U);
-  EXPECT_EQ(asset->GetBindings<pak7::SoftBodyBindingRecord>()[0]
-              .topology_resource_index,
-    oxygen::data::pak::core::ResourceIndexT { 42U });
+  EXPECT_EQ(
+    asset->GetBindings<pak7::SoftBodyBindingRecord>()[0].topology_asset_key,
+    soft.topology_asset_key);
   EXPECT_EQ(
     asset->GetBindings<pak7::SoftBodyBindingRecord>()[0].topology_format,
     pak7::PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary);

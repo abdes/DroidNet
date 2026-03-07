@@ -404,15 +404,19 @@ def _write_assets_and_directory_from_plan(
 
     physics_material_name_to_asset_key: dict[str, bytes] = {}
     collision_shape_name_to_asset_key: dict[str, bytes] = {}
-    physics_resource_name_to_index: dict[str, int] = {}
+    physics_resource_name_to_asset_key: dict[str, bytes] = {}
 
     physics_descs = build.resources.desc_fields.get("physics", [])
-    for resource_index, resource_spec in enumerate(physics_descs):
+    for resource_spec in physics_descs:
         if not isinstance(resource_spec, dict):
             continue
         resource_name = resource_spec.get("name")
-        if isinstance(resource_name, str):
-            physics_resource_name_to_index[resource_name] = resource_index
+        if not isinstance(resource_name, str):
+            continue
+        desc_probe = pack_physics_resource_descriptor(resource_spec, 0, 0)
+        physics_resource_name_to_asset_key[resource_name] = bytes(
+            desc_probe[13:29]
+        )
 
     for pm_spec in build.assets.physics_material_assets:
         if not isinstance(pm_spec, dict):
@@ -601,11 +605,15 @@ def _write_assets_and_directory_from_plan(
         elif asset_plan.asset_type == "collision_shape":
             cs_idx = idx - material_count - geometry_count - script_count - input_action_count - input_mapping_context_count - scene_count - physics_material_count
             cs_spec, key, _atype, _align = build.assets.collision_shape_assets[cs_idx]
-            # collision shapes may need a physics resource index if they are mesh-based
-            res_idx = build.resources.index_map.get("physics", {}).get(cs_spec.get("resource_name", ""), 0)
+            resource_name = cs_spec.get("resource_name", "") if isinstance(cs_spec, dict) else ""
+            res_key = (
+                physics_resource_name_to_asset_key.get(resource_name, b"\x00" * 16)
+                if isinstance(resource_name, str)
+                else b"\x00" * 16
+            )
             desc = pack_collision_shape_asset_descriptor(
                 cs_spec,
-                resource_index=res_idx,
+                resource_asset_key=res_key,
                 header_builder=header_builder,
                 physics_material_name_to_asset_key=physics_material_name_to_asset_key,
             )
@@ -624,7 +632,7 @@ def _write_assets_and_directory_from_plan(
                 header_builder=header_builder,
                 shape_name_to_asset_key=collision_shape_name_to_asset_key,
                 physics_material_name_to_asset_key=physics_material_name_to_asset_key,
-                physics_resource_name_to_index=physics_resource_name_to_index,
+                physics_resource_name_to_asset_key=physics_resource_name_to_asset_key,
             )
             f.write(desc)
             if payload:

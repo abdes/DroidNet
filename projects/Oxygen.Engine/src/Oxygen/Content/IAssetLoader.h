@@ -429,6 +429,13 @@ public:
     data::pak::core::ResourceIndexT resource_index) const noexcept
     -> std::optional<ResourceKey>
     = 0;
+  //! Build physics resource key from a loaded asset's source and resource
+  //! asset key.
+  [[nodiscard]] virtual auto MakePhysicsResourceKeyForAsset(
+    const data::AssetKey& context_asset_key,
+    const data::AssetKey& resource_asset_key) const noexcept
+    -> std::optional<ResourceKey>
+    = 0;
   //! Read a collision shape descriptor by asset key in the context asset's
   //! source.
   [[nodiscard]] virtual auto ReadCollisionShapeAssetDescForAsset(

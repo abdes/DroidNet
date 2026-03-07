@@ -10,10 +10,10 @@ def _header_builder(_):
     return b"\x00" * ASSET_HEADER_SIZE
 
 
-def _pack(asset, *, resource_index=17):
+def _pack(asset, *, resource_asset_key=b"\x00" * 16):
     desc = pack_collision_shape_asset_descriptor(
         asset,
-        resource_index=resource_index,
+        resource_asset_key=resource_asset_key,
         header_builder=_header_builder,
     )
     assert len(desc) >= COLLISION_SHAPE_ASSET_DESC_SIZE
@@ -165,59 +165,65 @@ def test_common_shape_fields_offsets():
 def test_cooked_shape_ref_defaults_match_shape_type():
     shape_params_offset = ASSET_HEADER_SIZE + 1 + 12 + 16 + 12 + 4 + 8 + 8 + 16
     cooked_ref_offset = shape_params_offset + 80
+    payload_asset_key = bytes.fromhex("00112233445566778899aabbccddeeff")
 
     # Non-payload-backed shape defaults to invalid cooked ref.
-    box = _pack({"shape_type": "box"}, resource_index=99)
-    assert _u32(box, cooked_ref_offset + 0) == 0
-    assert box[cooked_ref_offset + 4] == 0
+    box = _pack({"shape_type": "box"}, resource_asset_key=payload_asset_key)
+    assert _bytes(box, cooked_ref_offset + 0, 16) == b"\x00" * 16
+    assert box[cooked_ref_offset + 16] == 0
 
-    # Payload-backed shape defaults to provided resource index and payload type.
-    cone = _pack({"shape_type": "cone"}, resource_index=99)
-    assert _u32(cone, cooked_ref_offset + 0) == 99
-    assert cone[cooked_ref_offset + 4] == 1
+    # Payload-backed shape defaults to provided payload asset key and payload type.
+    cone = _pack({"shape_type": "cone"}, resource_asset_key=payload_asset_key)
+    assert _bytes(cone, cooked_ref_offset + 0, 16) == payload_asset_key
+    assert cone[cooked_ref_offset + 16] == 1
 
-    hull = _pack({"shape_type": "convex_hull"}, resource_index=99)
-    assert _u32(hull, cooked_ref_offset + 0) == 99
-    assert hull[cooked_ref_offset + 4] == 1
+    hull = _pack({"shape_type": "convex_hull"}, resource_asset_key=payload_asset_key)
+    assert _bytes(hull, cooked_ref_offset + 0, 16) == payload_asset_key
+    assert hull[cooked_ref_offset + 16] == 1
 
-    mesh = _pack({"shape_type": "triangle_mesh"}, resource_index=99)
-    assert _u32(mesh, cooked_ref_offset + 0) == 99
-    assert mesh[cooked_ref_offset + 4] == 2
+    mesh = _pack({"shape_type": "triangle_mesh"}, resource_asset_key=payload_asset_key)
+    assert _bytes(mesh, cooked_ref_offset + 0, 16) == payload_asset_key
+    assert mesh[cooked_ref_offset + 16] == 2
 
-    height = _pack({"shape_type": "height_field"}, resource_index=99)
-    assert _u32(height, cooked_ref_offset + 0) == 99
-    assert height[cooked_ref_offset + 4] == 3
+    height = _pack({"shape_type": "height_field"}, resource_asset_key=payload_asset_key)
+    assert _bytes(height, cooked_ref_offset + 0, 16) == payload_asset_key
+    assert height[cooked_ref_offset + 16] == 3
 
-    compound = _pack({"shape_type": "compound"}, resource_index=99)
-    assert _u32(compound, cooked_ref_offset + 0) == 0
-    assert compound[cooked_ref_offset + 4] == 0
+    compound = _pack({"shape_type": "compound"}, resource_asset_key=payload_asset_key)
+    assert _bytes(compound, cooked_ref_offset + 0, 16) == payload_asset_key
+    assert compound[cooked_ref_offset + 16] == 4
 
 
 @pytest.mark.parametrize(
-    ("shape_name", "expected_index", "expected_payload_type"),
+    ("shape_name", "expected_has_payload_key", "expected_payload_type"),
     [
-        ("invalid", 0, 0),
-        ("sphere", 0, 0),
-        ("capsule", 0, 0),
-        ("box", 0, 0),
-        ("cylinder", 0, 0),
-        ("cone", 55, 1),
-        ("convex_hull", 55, 1),
-        ("triangle_mesh", 55, 2),
-        ("height_field", 55, 3),
-        ("plane", 0, 0),
-        ("world_boundary", 0, 0),
-        ("compound", 0, 0),
+        ("invalid", False, 0),
+        ("sphere", False, 0),
+        ("capsule", False, 0),
+        ("box", False, 0),
+        ("cylinder", False, 0),
+        ("cone", True, 1),
+        ("convex_hull", True, 1),
+        ("triangle_mesh", True, 2),
+        ("height_field", True, 3),
+        ("plane", False, 0),
+        ("world_boundary", False, 0),
+        ("compound", True, 4),
     ],
 )
 def test_all_shape_types_default_cooked_shape_ref_contract(
-    shape_name, expected_index, expected_payload_type
+    shape_name, expected_has_payload_key, expected_payload_type
 ):
     shape_params_offset = ASSET_HEADER_SIZE + 1 + 12 + 16 + 12 + 4 + 8 + 8 + 16
     cooked_ref_offset = shape_params_offset + 80
-    desc = _pack({"shape_type": shape_name}, resource_index=55)
-    assert _u32(desc, cooked_ref_offset + 0) == expected_index
-    assert desc[cooked_ref_offset + 4] == expected_payload_type
+    payload_asset_key = bytes.fromhex("11223344556677889900aabbccddeeff")
+    desc = _pack({"shape_type": shape_name}, resource_asset_key=payload_asset_key)
+    actual_payload_key = _bytes(desc, cooked_ref_offset + 0, 16)
+    if expected_has_payload_key:
+        assert actual_payload_key == payload_asset_key
+    else:
+        assert actual_payload_key == b"\x00" * 16
+    assert desc[cooked_ref_offset + 16] == expected_payload_type
 
 
 def test_cooked_shape_ref_allows_explicit_override():
@@ -226,12 +232,17 @@ def test_cooked_shape_ref_allows_explicit_override():
     desc = _pack(
         {
             "shape_type": "triangle_mesh",
-            "cooked_shape_ref": {"resource_index": 1234, "payload_type": "mesh"},
+            "cooked_shape_ref": {
+                "payload_asset_key": "00112233445566778899aabbccddeeff",
+                "payload_type": "mesh",
+            },
         },
-        resource_index=99,
+        resource_asset_key=bytes.fromhex("deadbeefdeadbeefdeadbeefdeadbeef"),
     )
-    assert _u32(desc, cooked_ref_offset + 0) == 1234
-    assert desc[cooked_ref_offset + 4] == 2
+    assert _bytes(desc, cooked_ref_offset + 0, 16) == bytes.fromhex(
+        "00112233445566778899aabbccddeeff"
+    )
+    assert desc[cooked_ref_offset + 16] == 2
 
 
 def test_legacy_shape_category_is_not_used_as_shape_type():

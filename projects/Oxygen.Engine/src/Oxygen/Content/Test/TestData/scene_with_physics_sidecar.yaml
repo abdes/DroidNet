@@ -91,7 +91,7 @@ assets:
         friction: 0.6
         vertex_radius: 0.02
         solver_iteration_count: 4
-        topology_resource_index: 3
+        topology_resource: "soft_body_topology"
         self_collision: false
         pinned_vertices: []
         kinematic_vertices: []

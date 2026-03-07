@@ -185,6 +185,17 @@ namespace {
       bytes, 0, count, sizeof(phys::PhysicsResourceDesc));
   }
 
+  auto FindPhysicsResourceByAssetKey(
+    const std::vector<phys::PhysicsResourceDesc>& table,
+    const data::AssetKey& asset_key) -> const phys::PhysicsResourceDesc*
+  {
+    const auto it = std::find_if(
+      table.begin(), table.end(), [&](const phys::PhysicsResourceDesc& desc) {
+        return desc.resource_asset_key == asset_key;
+      });
+    return it != table.end() ? &(*it) : nullptr;
+  }
+
   auto FindInspectionAsset(const lc::Inspection& inspection,
     const data::AssetKey& key) -> std::optional<lc::Inspection::AssetEntry>
   {
@@ -764,22 +775,19 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
     soft_record->kinematic_vertex_count);
   EXPECT_EQ(pinned_vertices, (std::vector<uint32_t> { 0U, 2U, 4U }));
   EXPECT_EQ(kinematic_vertices, (std::vector<uint32_t> { 1U, 3U }));
-  EXPECT_NE(
-    soft_record->topology_resource_index, data::pak::core::kNoResourceIndex);
+  EXPECT_FALSE(soft_record->topology_asset_key.IsNil());
 
   const auto joint_record = ReadStructAt<phys::JointBindingRecord>(
     sidecar_bytes, static_cast<size_t>(joint_table->table.offset));
   ASSERT_TRUE(joint_record.has_value());
-  EXPECT_NE(
-    joint_record->constraint_resource_index, data::pak::core::kNoResourceIndex);
+  EXPECT_FALSE(joint_record->constraint_asset_key.IsNil());
 
   const auto vehicle_record = ReadStructAt<phys::VehicleBindingRecord>(
     sidecar_bytes, static_cast<size_t>(vehicle_table->table.offset));
   ASSERT_TRUE(vehicle_record.has_value());
   EXPECT_EQ(vehicle_record->wheel_slice_offset, 0U);
   EXPECT_EQ(vehicle_record->wheel_slice_count, 4U);
-  EXPECT_NE(vehicle_record->constraint_resource_index,
-    data::pak::core::kNoResourceIndex);
+  EXPECT_FALSE(vehicle_record->constraint_asset_key.IsNil());
 
   const auto wheel_records = ReadStructArrayAt<phys::VehicleWheelBindingRecord>(
     sidecar_bytes, static_cast<size_t>(wheel_table->table.offset),
@@ -805,20 +813,20 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   const auto physics_table = ParsePhysicsResourceTable(
     cooked_root / std::filesystem::path("Physics/Resources/physics.table"));
   ASSERT_FALSE(physics_table.empty());
-  const auto soft_index
-    = static_cast<uint32_t>(soft_record->topology_resource_index);
-  const auto joint_index
-    = static_cast<uint32_t>(joint_record->constraint_resource_index);
-  const auto vehicle_index
-    = static_cast<uint32_t>(vehicle_record->constraint_resource_index);
-  ASSERT_LT(soft_index, physics_table.size());
-  ASSERT_LT(joint_index, physics_table.size());
-  ASSERT_LT(vehicle_index, physics_table.size());
-  EXPECT_EQ(physics_table[soft_index].format,
+  const auto* soft_resource = FindPhysicsResourceByAssetKey(
+    physics_table, soft_record->topology_asset_key);
+  const auto* joint_resource = FindPhysicsResourceByAssetKey(
+    physics_table, joint_record->constraint_asset_key);
+  const auto* vehicle_resource = FindPhysicsResourceByAssetKey(
+    physics_table, vehicle_record->constraint_asset_key);
+  ASSERT_NE(soft_resource, nullptr);
+  ASSERT_NE(joint_resource, nullptr);
+  ASSERT_NE(vehicle_resource, nullptr);
+  EXPECT_EQ(soft_resource->format,
     phys::PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary);
-  EXPECT_EQ(physics_table[joint_index].format,
-    phys::PhysicsResourceFormat::kJoltConstraintBinary);
-  EXPECT_EQ(physics_table[vehicle_index].format,
+  EXPECT_EQ(
+    joint_resource->format, phys::PhysicsResourceFormat::kJoltConstraintBinary);
+  EXPECT_EQ(vehicle_resource->format,
     phys::PhysicsResourceFormat::kJoltVehicleConstraintBinary);
 
   const auto physics_data = ReadBinaryFile(
@@ -839,9 +847,9 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
     && physics_data[offset + 2U] == std::byte { 'H' }
     && physics_data[offset + 3U] == std::byte { 'B' };
   };
-  EXPECT_FALSE(is_legacy_authored_magic(physics_table[soft_index]));
-  EXPECT_FALSE(is_legacy_authored_magic(physics_table[joint_index]));
-  EXPECT_FALSE(is_legacy_authored_magic(physics_table[vehicle_index]));
+  EXPECT_FALSE(is_legacy_authored_magic(*soft_resource));
+  EXPECT_FALSE(is_legacy_authored_magic(*joint_resource));
+  EXPECT_FALSE(is_legacy_authored_magic(*vehicle_resource));
 
   service.Stop();
 }

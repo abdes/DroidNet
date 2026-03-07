@@ -249,8 +249,7 @@ namespace {
   NOLINT_TEST(
     CollisionShapeDescriptorImportJobTest, TopLevelUnknownFieldRejectedBySchema)
   {
-    const auto cooked_root
-      = MakeTempCookedRoot("unknown_field_rejected");
+    const auto cooked_root = MakeTempCookedRoot("unknown_field_rejected");
     const auto source_root = cooked_root.parent_path() / "source_data";
 
     auto service = AsyncImportService(AsyncImportService::Config {
@@ -317,8 +316,7 @@ namespace {
     EXPECT_EQ(descriptor->shape_type, phys::ShapeType::kConvexHull);
     EXPECT_EQ(descriptor->cooked_shape_ref.payload_type,
       phys::ShapePayloadType::kConvex);
-    EXPECT_NE(descriptor->cooked_shape_ref.resource_index,
-      data::pak::core::kNoResourceIndex);
+    EXPECT_FALSE(descriptor->cooked_shape_ref.payload_asset_key.IsNil());
     EXPECT_TRUE(std::filesystem::exists(
       cooked_root / std::filesystem::path("Physics/Resources/physics.table")));
     EXPECT_TRUE(std::filesystem::exists(

@@ -97,8 +97,8 @@ class PhysicsSceneAssetDumper final : public AssetDumper {
       SoftBodyBindingRecord record {};
       std::memcpy(&record, blob.data() + table_offset, sizeof(record));
       PrintUtils::Field("Sample Node Index", record.node_index, 10);
-      PrintUtils::Field(
-        "Sample Topology Resource", record.topology_resource_index.get(), 10);
+      PrintUtils::Field("Sample Topology Asset Key",
+        oxygen::data::to_string(record.topology_asset_key), 10);
       PrintUtils::Field("Sample Topology Format",
         static_cast<uint32_t>(record.topology_format), 10);
       PrintUtils::Field(

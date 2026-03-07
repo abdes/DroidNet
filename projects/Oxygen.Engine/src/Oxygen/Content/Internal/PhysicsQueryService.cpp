@@ -38,6 +38,56 @@ auto PhysicsQueryService::MakePhysicsResourceKeyForAsset(
   return callbacks.make_physics_resource_key(*source_id, resource_index);
 }
 
+auto PhysicsQueryService::MakePhysicsResourceKeyForAsset(
+  const data::AssetKey& context_asset_key,
+  const data::AssetKey& resource_asset_key,
+  const Callbacks& callbacks) const noexcept -> std::optional<ResourceKey>
+{
+  if (resource_asset_key.IsNil()) {
+    return std::nullopt;
+  }
+  const auto source_id
+    = callbacks.resolve_source_id_for_asset(context_asset_key);
+  if (!source_id.has_value()) {
+    return std::nullopt;
+  }
+  const auto* source = callbacks.resolve_source_for_id(*source_id);
+  if (source == nullptr) {
+    return std::nullopt;
+  }
+  const auto* physics_table = source->GetPhysicsTable();
+  if (physics_table == nullptr) {
+    return std::nullopt;
+  }
+  auto table_reader = source->CreatePhysicsTableReader();
+  if (!table_reader) {
+    return std::nullopt;
+  }
+
+  const auto table_size = static_cast<uint32_t>(physics_table->Size());
+  for (uint32_t i = 0; i < table_size; ++i) {
+    const auto resource_index = data::pak::core::ResourceIndexT { i };
+    const auto entry_offset = physics_table->GetResourceOffset(resource_index);
+    if (!entry_offset.has_value()) {
+      continue;
+    }
+    if (auto seek_result = table_reader->Seek(*entry_offset); !seek_result) {
+      continue;
+    }
+    auto blob
+      = table_reader->ReadBlob(sizeof(data::pak::physics::PhysicsResourceDesc));
+    if (!blob) {
+      continue;
+    }
+    data::pak::physics::PhysicsResourceDesc desc {};
+    std::memcpy(&desc, blob->data(), sizeof(desc));
+    if (desc.resource_asset_key == resource_asset_key) {
+      return callbacks.make_physics_resource_key(*source_id, resource_index);
+    }
+  }
+  return std::nullopt;
+}
+
 auto PhysicsQueryService::ReadCollisionShapeAssetDescForAsset(
   const data::AssetKey& context_asset_key,
   const data::AssetKey& shape_asset_key, const Callbacks& callbacks) const

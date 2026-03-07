@@ -735,6 +735,7 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.data_offset));
   CHECK_RESULT(reader.ReadInto(record.size_bytes));
   CHECK_RESULT(reader.ReadInto(record.format));
+  CHECK_RESULT(reader.ReadInto(record.resource_asset_key));
   CHECK_RESULT(reader.ReadBlobInto(
     std::as_writable_bytes(std::span { record.content_hash })));
   return {};
@@ -758,7 +759,7 @@ inline auto Load(AnyReader& reader,
   data::pak::physics::CookedShapePayloadRef& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
-  CHECK_RESULT(reader.ReadInto(record.resource_index));
+  CHECK_RESULT(reader.ReadInto(record.payload_asset_key));
   CHECK_RESULT(reader.ReadInto(record.payload_type));
   return {};
 }
@@ -981,7 +982,7 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.solver_iteration_count));
   CHECK_RESULT(reader.ReadInto(record.collision_layer));
   CHECK_RESULT(reader.ReadInto(record.collision_mask));
-  CHECK_RESULT(reader.ReadInto(record.topology_resource_index));
+  CHECK_RESULT(reader.ReadInto(record.topology_asset_key));
   CHECK_RESULT(reader.ReadInto(record.pinned_vertex_count));
   CHECK_RESULT(reader.ReadInto(record.pinned_vertex_byte_offset));
   CHECK_RESULT(reader.ReadInto(record.kinematic_vertex_count));
@@ -999,7 +1000,7 @@ inline auto Load(AnyReader& reader,
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.node_index_a));
   CHECK_RESULT(reader.ReadInto(record.node_index_b));
-  CHECK_RESULT(reader.ReadInto(record.constraint_resource_index));
+  CHECK_RESULT(reader.ReadInto(record.constraint_asset_key));
   CHECK_RESULT(reader.ReadInto(record.backend_scalars));
   return {};
 }
@@ -1009,7 +1010,7 @@ inline auto Load(AnyReader& reader,
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.node_index));
-  CHECK_RESULT(reader.ReadInto(record.constraint_resource_index));
+  CHECK_RESULT(reader.ReadInto(record.constraint_asset_key));
   CHECK_RESULT(reader.ReadInto(record.controller_type));
   CHECK_RESULT(reader.ReadInto(record.wheel_slice_offset));
   CHECK_RESULT(reader.ReadInto(record.wheel_slice_count));

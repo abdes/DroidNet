@@ -5,6 +5,7 @@ All functions are side-effect free and validate sizes.
 
 from __future__ import annotations
 
+import hashlib
 import struct
 from pathlib import Path
 from typing import Any, Dict, Sequence, List, Callable, Tuple
@@ -275,6 +276,13 @@ def _pack_asset_key_bytes(value: Any, field: str) -> bytes:
         except ValueError as exc:
             raise PakError("E_TYPE", f"{field} is not valid hex") from exc
     raise PakError("E_TYPE", f"{field} must be bytes or hex string")
+
+
+def _derive_physics_resource_asset_key(name: str) -> bytes:
+    if not isinstance(name, str) or not name:
+        raise PakError("E_TYPE", "physics resource name must be a non-empty string")
+    digest = hashlib.sha256(name.encode("utf-8")).digest()
+    return digest[:ASSET_KEY_SIZE]
 
 
 def pack_script_slot_record(
@@ -1693,8 +1701,21 @@ def pack_texture_resource_descriptor(
 def pack_physics_resource_descriptor(
     resource_spec: Dict[str, Any], data_offset: int, data_size: int
 ) -> bytes:
-    """Pack PhysicsResourceDesc (48 bytes)."""
+    """Pack PhysicsResourceDesc."""
     fmt = int(resource_spec.get("format", 0))
+    resource_asset_key_value = resource_spec.get("resource_asset_key")
+    if resource_asset_key_value is None:
+        resource_asset_key_value = resource_spec.get("asset_key")
+    if resource_asset_key_value is None:
+        resource_name = resource_spec.get("name")
+        if isinstance(resource_name, str) and resource_name:
+            resource_asset_key = _derive_physics_resource_asset_key(resource_name)
+        else:
+            resource_asset_key = b"\x00" * ASSET_KEY_SIZE
+    else:
+        resource_asset_key = _pack_asset_key_bytes(
+            resource_asset_key_value, "resource_asset_key"
+        )
     content_hash_raw = resource_spec.get("content_hash", 0)
     if isinstance(content_hash_raw, (bytes, bytearray)):
         content_hash = bytes(content_hash_raw)
@@ -1717,6 +1738,7 @@ def pack_physics_resource_descriptor(
         struct.pack("<Q", data_offset)
         + struct.pack("<I", data_size)
         + struct.pack("<B", fmt)
+        + resource_asset_key
         + content_hash
     )
     if len(desc) != PHYSICS_RESOURCE_DESC_SIZE:
@@ -1756,7 +1778,7 @@ def pack_physics_material_asset_descriptor(
 
 def pack_collision_shape_asset_descriptor(
     asset: Dict[str, Any],
-    resource_index: int,
+    resource_asset_key: bytes,
     *,
     header_builder,
     physics_material_name_to_asset_key: Dict[str, bytes] | None = None,
@@ -1962,15 +1984,20 @@ def pack_collision_shape_asset_descriptor(
     else:
         child_records = b""
 
-    payload_backed_shape_types = {5, 6, 7, 8}
+    payload_backed_shape_types = {5, 6, 7, 8, 11}
     cooked_ref = asset.get("cooked_shape_ref")
     cooked_ref = cooked_ref if isinstance(cooked_ref, dict) else {}
-    default_cooked_index = (
-        int(asset.get("physics_resource_index", resource_index))
+    default_cooked_asset_key = (
+        _pack_asset_key_bytes(resource_asset_key, "resource_asset_key")
         if shape_type in payload_backed_shape_types
-        else 0
+        else b"\x00" * ASSET_KEY_SIZE
     )
-    cooked_index = int(cooked_ref.get("resource_index", default_cooked_index)) & 0xFFFFFFFF
+    payload_asset_key = default_cooked_asset_key
+    payload_asset_key_raw = cooked_ref.get("payload_asset_key")
+    if payload_asset_key_raw is not None:
+        payload_asset_key = _pack_asset_key_bytes(
+            payload_asset_key_raw, "cooked_shape_ref.payload_asset_key"
+        )
     payload_type_raw = cooked_ref.get("payload_type")
     if payload_type_raw is None:
         payload_type = {
@@ -1978,6 +2005,7 @@ def pack_collision_shape_asset_descriptor(
             6: 1,   # convex hull -> convex
             7: 2,   # triangle mesh -> mesh
             8: 3,   # height field
+            11: 4,  # compound
         }.get(shape_type, 0)
     elif isinstance(payload_type_raw, str):
         payload_type = {
@@ -2000,7 +2028,7 @@ def pack_collision_shape_asset_descriptor(
         + struct.pack("<Q", collision_target_layers)
         + material_asset_key
         + bytes(shape_params_blob)
-        + struct.pack("<I", cooked_index)
+        + payload_asset_key
         + struct.pack("<B", payload_type & 0xFF)
     )
     if len(fixed_desc) != COLLISION_SHAPE_ASSET_DESC_SIZE:
@@ -2018,7 +2046,7 @@ def pack_physics_scene_asset_descriptor_and_payload(
     header_builder,
     shape_name_to_asset_key: Dict[str, bytes] | None = None,
     physics_material_name_to_asset_key: Dict[str, bytes] | None = None,
-    physics_resource_name_to_index: Dict[str, int] | None = None,
+    physics_resource_name_to_asset_key: Dict[str, bytes] | None = None,
 ) -> tuple[bytes, bytes]:
     """Pack PhysicsSceneAssetDesc and physics binding payload."""
 
@@ -2026,8 +2054,7 @@ def pack_physics_scene_asset_descriptor_and_payload(
     physics_material_name_to_asset_key = (
         physics_material_name_to_asset_key or {}
     )
-    physics_resource_name_to_index = physics_resource_name_to_index or {}
-    no_resource_index = 0
+    physics_resource_name_to_asset_key = physics_resource_name_to_asset_key or {}
     no_asset_key = b"\x00" * 16
 
     def _resolve_asset_key(
@@ -2059,31 +2086,6 @@ def pack_physics_scene_asset_descriptor_and_payload(
                 return _pack_asset_key_bytes(value, field)
             raise PakError("E_TYPE", f"{field_name} name must be a string")
         return default_key
-
-    def _resolve_index(
-        binding: Dict[str, Any],
-        *,
-        index_fields: Sequence[str],
-        name_fields: Sequence[str],
-        name_to_index: Dict[str, int],
-        field_name: str,
-        default_index: int,
-    ) -> int:
-        for field in index_fields:
-            if field in binding:
-                return int(binding.get(field, 0))
-        for field in name_fields:
-            value = binding.get(field)
-            if value is None:
-                continue
-            if not isinstance(value, str):
-                raise PakError("E_TYPE", f"{field_name} name must be a string")
-            if value not in name_to_index:
-                raise PakError(
-                    "E_REF", f"{field_name} '{value}' not found in authored assets"
-                )
-            return int(name_to_index[value])
-        return int(default_index)
 
     target_node_count = int(asset.get("target_node_count", 0))
     if target_node_count < 0:
@@ -2219,11 +2221,25 @@ def pack_physics_scene_asset_descriptor_and_payload(
     soft_body_bindings = asset.get("soft_body_bindings", []) or []
     if not isinstance(soft_body_bindings, list):
         raise PakError("E_TYPE", "physics_scene.soft_body_bindings must be a list")
-    soft_body_records = [
-        pack_soft_body_binding_record(binding, node_count=target_node_count)
-        for binding in soft_body_bindings
-        if isinstance(binding, dict)
-    ]
+    soft_body_records: list[bytes] = []
+    for binding in soft_body_bindings:
+        if not isinstance(binding, dict):
+            continue
+        topology_asset_key = _resolve_asset_key(
+            binding,
+            key_fields=("topology_asset_key",),
+            name_fields=("topology_resource", "topology_resource_name"),
+            name_to_key=physics_resource_name_to_asset_key,
+            field_name="soft_body.topology_resource",
+            default_key=no_asset_key,
+        )
+        soft_body_records.append(
+            pack_soft_body_binding_record(
+                binding,
+                topology_asset_key=topology_asset_key,
+                node_count=target_node_count,
+            )
+        )
     if soft_body_records:
         blob = b"".join(soft_body_records)
         tables.append(
@@ -2242,21 +2258,21 @@ def pack_physics_scene_asset_descriptor_and_payload(
     for binding in joint_bindings:
         if not isinstance(binding, dict):
             continue
-        constraint_index = _resolve_index(
+        constraint_asset_key = _resolve_asset_key(
             binding,
-            index_fields=("constraint_resource_index", "constraint_index"),
+            key_fields=("constraint_asset_key",),
             name_fields=(
                 "constraint_resource",
                 "constraint_resource_name",
             ),
-            name_to_index=physics_resource_name_to_index,
+            name_to_key=physics_resource_name_to_asset_key,
             field_name="joint.constraint_resource",
-            default_index=no_resource_index,
+            default_key=no_asset_key,
         )
         joint_records.append(
             pack_joint_binding_record(
                 binding,
-                constraint_index,
+                constraint_asset_key,
                 node_count=target_node_count,
             )
         )
@@ -2278,21 +2294,21 @@ def pack_physics_scene_asset_descriptor_and_payload(
     for binding in vehicle_bindings:
         if not isinstance(binding, dict):
             continue
-        constraint_index = _resolve_index(
+        constraint_asset_key = _resolve_asset_key(
             binding,
-            index_fields=("constraint_resource_index", "constraint_index"),
+            key_fields=("constraint_asset_key",),
             name_fields=(
                 "constraint_resource",
                 "constraint_resource_name",
             ),
-            name_to_index=physics_resource_name_to_index,
+            name_to_key=physics_resource_name_to_asset_key,
             field_name="vehicle.constraint_resource",
-            default_index=no_resource_index,
+            default_key=no_asset_key,
         )
         vehicle_records.append(
             pack_vehicle_binding_record(
                 binding,
-                constraint_index,
+                constraint_asset_key,
                 node_count=target_node_count,
             )
         )
@@ -2610,6 +2626,7 @@ def pack_character_binding_record(
 
 def pack_soft_body_binding_record(
     binding: Dict[str, Any],
+    topology_asset_key: bytes,
     *,
     node_count: int,
 ) -> bytes:
@@ -2630,7 +2647,9 @@ def pack_soft_body_binding_record(
     solver_iteration_count = int(binding.get("solver_iteration_count", 0))
     collision_layer = int(binding.get("collision_layer", 0))
     collision_mask = int(binding.get("collision_mask", 0xFFFFFFFF))
-    topology_resource_index = int(binding.get("topology_resource_index", 0xFFFFFFFF))
+    topology_asset_key_bytes = _pack_asset_key_bytes(
+        topology_asset_key, "topology_asset_key"
+    )
     pinned_vertices = binding.get("pinned_vertices", [])
     kinematic_vertices = binding.get("kinematic_vertices", [])
     pinned_vertex_count = len(pinned_vertices) if isinstance(pinned_vertices, list) else 0
@@ -2691,11 +2710,11 @@ def pack_soft_body_binding_record(
             tether_max,
         )
         + struct.pack(
-            "<IHIIIIII",
+            "<IHI16sIIII",
             solver_iteration_count,
             collision_layer,
             collision_mask,
-            topology_resource_index,
+            topology_asset_key_bytes,
             pinned_vertex_count,
             pinned_vertex_byte_offset,
             kinematic_vertex_count,
@@ -2711,7 +2730,7 @@ def pack_soft_body_binding_record(
 
 def pack_joint_binding_record(
     binding: Dict[str, Any],
-    constraint_index: int,
+    constraint_asset_key: bytes,
     *,
     node_count: int,
 ) -> bytes:
@@ -2728,6 +2747,9 @@ def pack_joint_binding_record(
         raise PakError("E_REF", f"Joint node_index_a out of range: {node_a}")
     if node_b != 0xFFFFFFFF and (node_b < 0 or node_b >= node_count):
         raise PakError("E_REF", f"Joint node_index_b out of range: {node_b}")
+    constraint_asset_key_bytes = _pack_asset_key_bytes(
+        constraint_asset_key, "constraint_asset_key"
+    )
     backend_bytes = b"\x00" * 16
     backend = binding.get("backend", {})
     if isinstance(backend, dict):
@@ -2749,7 +2771,8 @@ def pack_joint_binding_record(
                 inv_inertia_scale1,
             )
     desc = (
-        struct.pack("<III", node_a, node_b, constraint_index)
+        struct.pack("<II", node_a, node_b)
+        + constraint_asset_key_bytes
         + backend_bytes
     )
     if len(desc) != JOINT_BINDING_RECORD_SIZE:
@@ -2759,7 +2782,7 @@ def pack_joint_binding_record(
 
 def pack_vehicle_binding_record(
     binding: Dict[str, Any],
-    constraint_index: int,
+    constraint_asset_key: bytes,
     *,
     node_count: int,
 ) -> bytes:
@@ -2777,11 +2800,14 @@ def pack_vehicle_binding_record(
         controller_type = int(controller_type_raw)
     wheel_slice_offset = int(binding.get("wheel_slice_offset", 0))
     wheel_slice_count = int(binding.get("wheel_slice_count", 0))
+    constraint_asset_key_bytes = _pack_asset_key_bytes(
+        constraint_asset_key, "constraint_asset_key"
+    )
     desc = (
         struct.pack(
-            "<IIIII",
+            "<I16sIII",
             node_index,
-            constraint_index,
+            constraint_asset_key_bytes,
             controller_type,
             wheel_slice_offset,
             wheel_slice_count,
