@@ -7,4 +7,5 @@
 add_subdirectory("ImportTool")
 add_subdirectory("PakDump")
 add_subdirectory("Inspector")
+add_subdirectory("PakTool")
 add_subdirectory("PakGen")
