@@ -1,0 +1,508 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Oxygen Pak Build Report",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "tool_name": {
+      "type": "string",
+      "const": "Oxygen.Cooker.PakTool"
+    },
+    "tool_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "command": {
+      "type": "string",
+      "enum": [
+        "build",
+        "patch"
+      ]
+    },
+    "command_line": {
+      "type": "string",
+      "minLength": 1
+    },
+    "request": {
+      "$ref": "#/definitions/request"
+    },
+    "artifacts": {
+      "$ref": "#/definitions/artifacts"
+    },
+    "summary": {
+      "$ref": "#/definitions/summary"
+    },
+    "telemetry": {
+      "$ref": "#/definitions/telemetry"
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/diagnostic"
+      }
+    },
+    "exit_code": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4
+    },
+    "success": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema_version",
+    "tool_name",
+    "tool_version",
+    "command",
+    "command_line",
+    "request",
+    "artifacts",
+    "summary",
+    "telemetry",
+    "diagnostics",
+    "exit_code",
+    "success"
+  ],
+  "definitions": {
+    "canonical_uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "uuid_v7": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "sha256_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "path_or_null": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "duration_ms_or_null": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "publishable_artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "final_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "staged_path": {
+          "$ref": "#/definitions/path_or_null"
+        },
+        "published": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "final_path",
+        "staged_path",
+        "published"
+      ]
+    },
+    "request_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "loose_cooked",
+            "pak"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kind",
+        "path"
+      ]
+    },
+    "request_options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "deterministic": {
+          "type": "boolean"
+        },
+        "embed_browse_index": {
+          "type": "boolean"
+        },
+        "compute_crc32": {
+          "type": "boolean"
+        },
+        "fail_on_warnings": {
+          "type": "boolean"
+        },
+        "emit_manifest_in_full": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "deterministic",
+        "embed_browse_index",
+        "compute_crc32",
+        "fail_on_warnings",
+        "emit_manifest_in_full"
+      ]
+    },
+    "patch_compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "require_exact_base_set": {
+          "type": "boolean"
+        },
+        "require_content_version_match": {
+          "type": "boolean"
+        },
+        "require_base_source_key_match": {
+          "type": "boolean"
+        },
+        "require_catalog_digest_match": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "require_exact_base_set",
+        "require_content_version_match",
+        "require_base_source_key_match",
+        "require_catalog_digest_match"
+      ]
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "full",
+            "patch"
+          ]
+        },
+        "source_key": {
+          "$ref": "#/definitions/uuid_v7"
+        },
+        "content_version": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/request_source"
+          }
+        },
+        "base_catalogs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "options": {
+          "$ref": "#/definitions/request_options"
+        },
+        "patch_compatibility": {
+          "$ref": "#/definitions/patch_compatibility"
+        }
+      },
+      "required": [
+        "mode",
+        "source_key",
+        "content_version",
+        "sources",
+        "base_catalogs",
+        "options",
+        "patch_compatibility"
+      ]
+    },
+    "pak_artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "final_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "staged_path": {
+          "$ref": "#/definitions/path_or_null"
+        },
+        "published": {
+          "type": "boolean"
+        },
+        "size_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "crc32": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 4294967295
+        }
+      },
+      "required": [
+        "final_path",
+        "staged_path",
+        "published",
+        "size_bytes",
+        "crc32"
+      ]
+    },
+    "catalog_artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "final_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "staged_path": {
+          "$ref": "#/definitions/path_or_null"
+        },
+        "published": {
+          "type": "boolean"
+        },
+        "catalog_digest": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "final_path",
+        "staged_path",
+        "published",
+        "catalog_digest"
+      ]
+    },
+    "manifest_artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requested": {
+          "type": "boolean"
+        },
+        "emitted": {
+          "type": "boolean"
+        },
+        "final_path": {
+          "$ref": "#/definitions/path_or_null"
+        },
+        "staged_path": {
+          "$ref": "#/definitions/path_or_null"
+        },
+        "published": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "requested",
+        "emitted",
+        "final_path",
+        "staged_path",
+        "published"
+      ]
+    },
+    "report_artifact": {
+      "$ref": "#/definitions/publishable_artifact"
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pak": {
+          "$ref": "#/definitions/pak_artifact"
+        },
+        "catalog": {
+          "$ref": "#/definitions/catalog_artifact"
+        },
+        "manifest": {
+          "$ref": "#/definitions/manifest_artifact"
+        },
+        "report": {
+          "$ref": "#/definitions/report_artifact"
+        }
+      },
+      "required": [
+        "pak",
+        "catalog",
+        "manifest",
+        "report"
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "diagnostics_info": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "diagnostics_warning": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "diagnostics_error": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "assets_processed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "resources_processed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "patch_created": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "patch_replaced": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "patch_deleted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "patch_unchanged": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "crc_computed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "diagnostics_info",
+        "diagnostics_warning",
+        "diagnostics_error",
+        "assets_processed",
+        "resources_processed",
+        "patch_created",
+        "patch_replaced",
+        "patch_deleted",
+        "patch_unchanged",
+        "crc_computed"
+      ]
+    },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "time_ms_planning": {
+          "$ref": "#/definitions/duration_ms_or_null"
+        },
+        "time_ms_writing": {
+          "$ref": "#/definitions/duration_ms_or_null"
+        },
+        "time_ms_manifest": {
+          "$ref": "#/definitions/duration_ms_or_null"
+        },
+        "time_ms_publish": {
+          "$ref": "#/definitions/duration_ms_or_null"
+        },
+        "time_ms_total": {
+          "$ref": "#/definitions/duration_ms_or_null"
+        }
+      },
+      "required": [
+        "time_ms_planning",
+        "time_ms_writing",
+        "time_ms_manifest",
+        "time_ms_publish",
+        "time_ms_total"
+      ]
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "severity": {
+          "type": "string",
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ]
+        },
+        "phase": {
+          "type": "string",
+          "enum": [
+            "request_validation",
+            "planning",
+            "writing",
+            "manifest",
+            "finalize"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "asset_key": {
+          "$ref": "#/definitions/canonical_uuid"
+        },
+        "resource_kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "table_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "severity",
+        "phase",
+        "code",
+        "message"
+      ]
+    }
+  }
+}
