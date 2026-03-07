@@ -838,12 +838,12 @@ auto AssetLoader::MountPakFile(const std::filesystem::path& path) -> uint16_t
 
   auto new_source = std::make_unique<internal::PakFileSource>(
     normalized, verify_content_hashes_);
+  const auto source_key = new_source->GetSourceKey();
   const bool was_already_mounted
     = std::ranges::find(impl_->source_registry.PakPaths(), normalized)
     != impl_->source_registry.PakPaths().end();
 #if !defined(NDEBUG)
   {
-    const auto source_key = new_source->GetSourceKey();
     if (source_key.IsNil()) {
       LOG_F(WARNING,
         "Mounted PAK has zero SourceKey (PakHeader.source_identity); cache "
@@ -851,20 +851,22 @@ auto AssetLoader::MountPakFile(const std::filesystem::path& path) -> uint16_t
         "path={}",
         normalized.string());
     }
-    for (const auto& existing : impl_->source_registry.Sources()) {
-      if (existing && existing->GetSourceKey() == source_key) {
-        LOG_F(WARNING,
-          "Mounted PAK shares SourceKey with an existing source; cache "
-          "aliasing risk: source_key={} new_path={}",
-          source_key, normalized.string());
-        break;
-      }
-    }
   }
 #endif
 
   const auto mount_result
     = impl_->source_registry.MountPak(normalized, std::move(new_source));
+#if !defined(NDEBUG)
+  if (mount_result.source_key_conflict.has_value()) {
+    const auto& conflict = *mount_result.source_key_conflict;
+    LOG_F(WARNING,
+      "Mounted PAK shares SourceKey with a different mounted source; cache "
+      "aliasing risk: source_key={} new_path={} existing_source_id={} "
+      "existing_path={}",
+      conflict.source_key, normalized.string(), conflict.existing_source_id,
+      conflict.existing_mount_identity);
+  }
+#endif
   if (mount_result.action
       == internal::ContentSourceRegistry::MountAction::kRefreshed
     || was_already_mounted) {
@@ -908,6 +910,7 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
 
   auto new_source = std::make_unique<internal::LooseCookedSource>(
     normalized, verify_content_hashes_);
+  const auto source_key = new_source->GetSourceKey();
 
   auto clear_content_caches = [this]() {
     // Refreshing a mounted loose root is a destructive cache operation.
@@ -937,7 +940,6 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
       [&](const auto& s) { return s && s->DebugName() == normalized_s; });
 #if !defined(NDEBUG)
   {
-    const auto source_key = new_source->GetSourceKey();
     if (source_key.IsNil()) {
       LOG_F(WARNING,
         "Mounted loose cooked root has zero SourceKey "
@@ -945,20 +947,22 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
         "cache aliasing risk: root={}",
         normalized.string());
     }
-    for (const auto& existing : impl_->source_registry.Sources()) {
-      if (existing && existing->GetSourceKey() == source_key) {
-        LOG_F(WARNING,
-          "Mounted loose cooked root shares SourceKey with an existing source; "
-          "cache aliasing risk: source_key={} new_root={}",
-          source_key, normalized.string());
-        break;
-      }
-    }
   }
 #endif
 
   const auto mount_result
     = impl_->source_registry.MountLoose(normalized_s, std::move(new_source));
+#if !defined(NDEBUG)
+  if (mount_result.source_key_conflict.has_value()) {
+    const auto& conflict = *mount_result.source_key_conflict;
+    LOG_F(WARNING,
+      "Mounted loose cooked root shares SourceKey with a different mounted "
+      "source; cache aliasing risk: source_key={} new_root={} "
+      "existing_source_id={} existing_mount={}",
+      conflict.source_key, normalized.string(), conflict.existing_source_id,
+      conflict.existing_mount_identity);
+  }
+#endif
   if (mount_result.action
       == internal::ContentSourceRegistry::MountAction::kRefreshed
     || was_already_mounted) {

@@ -11,9 +11,42 @@
 
 namespace oxygen::content::internal {
 
+namespace {
+
+auto FindSourceKeyConflict(const std::vector<std::unique_ptr<IContentSource>>& sources,
+  const std::vector<uint16_t>& source_ids, const data::SourceKey source_key,
+  const std::string_view mount_identity) -> std::optional<ContentSourceRegistry::MountResult::SourceKeyConflict>
+{
+  if (source_key.IsNil()) {
+    return std::nullopt;
+  }
+
+  for (size_t source_index = 0; source_index < sources.size(); ++source_index) {
+    const auto& existing = sources[source_index];
+    if (!existing || existing->GetSourceKey() != source_key) {
+      continue;
+    }
+    if (existing->DebugName() == mount_identity) {
+      continue;
+    }
+    return ContentSourceRegistry::MountResult::SourceKeyConflict {
+      .source_key = source_key,
+      .existing_source_id = source_ids.at(source_index),
+      .existing_mount_identity = std::string(existing->DebugName()),
+    };
+  }
+
+  return std::nullopt;
+}
+
+} // namespace
+
 auto ContentSourceRegistry::MountPak(std::filesystem::path normalized_path,
   std::unique_ptr<IContentSource> source) -> MountResult
 {
+  const auto normalized_debug_name = normalized_path.string();
+  const auto source_key = source ? source->GetSourceKey() : data::SourceKey {};
+
   if (const auto it = std::ranges::find(pak_paths_, normalized_path);
     it != pak_paths_.end()) {
     const auto source_id
@@ -25,6 +58,8 @@ auto ContentSourceRegistry::MountPak(std::filesystem::path normalized_path,
       .action = MountAction::kRefreshed,
       .source_id = source_id,
       .source_index = source_index,
+      .source_key_conflict = FindSourceKeyConflict(
+        sources_, source_ids_, source_key, normalized_debug_name),
     };
   }
 
@@ -42,12 +77,16 @@ auto ContentSourceRegistry::MountPak(std::filesystem::path normalized_path,
     .action = MountAction::kMounted,
     .source_id = source_id,
     .source_index = sources_.size() - 1,
+    .source_key_conflict = FindSourceKeyConflict(
+      sources_, source_ids_, source_key, normalized_debug_name),
   };
 }
 
 auto ContentSourceRegistry::MountLoose(std::string_view normalized_debug_name,
   std::unique_ptr<IContentSource> source) -> MountResult
 {
+  const auto source_key = source ? source->GetSourceKey() : data::SourceKey {};
+
   for (size_t source_index = 0; source_index < sources_.size();
     ++source_index) {
     if (!sources_[source_index]) {
@@ -64,6 +103,8 @@ auto ContentSourceRegistry::MountLoose(std::string_view normalized_debug_name,
         .action = MountAction::kRefreshed,
         .source_id = source_id,
         .source_index = source_index,
+        .source_key_conflict = FindSourceKeyConflict(
+          sources_, source_ids_, source_key, normalized_debug_name),
       };
     }
   }
@@ -81,6 +122,8 @@ auto ContentSourceRegistry::MountLoose(std::string_view normalized_debug_name,
     .action = MountAction::kMounted,
     .source_id = source_id,
     .source_index = sources_.size() - 1,
+    .source_key_conflict = FindSourceKeyConflict(
+      sources_, source_ids_, source_key, normalized_debug_name),
   };
 }
 
