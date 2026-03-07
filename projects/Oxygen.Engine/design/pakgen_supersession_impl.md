@@ -758,3 +758,40 @@ Initial entries:
 6. Remaining delta to phase exit gate:
    - run and pass new scene-descriptor suites externally/CI
    - validate end-to-end mixed-domain manifest DAG scenario with scene-descriptor dependencies
+
+1. Date: 2026-03-07
+2. Phase: P8 (examples loose-cooked migration probe)
+3. Files changed:
+   - `Examples/Content/scenes/cubes/import-manifest.json`
+   - `Examples/Content/scenes/cubes/*.material.json`
+   - `Examples/Content/scenes/cubes/*.geometry.json`
+   - `Examples/Content/scenes/cubes/CubeScene.scene.json`
+   - `Examples/Content/scenes/emissive/import-manifest.json`
+   - `Examples/Content/scenes/emissive/*.material.json`
+   - `Examples/Content/scenes/emissive/*.geometry.json`
+   - `Examples/Content/scenes/emissive/EmissiveScene.scene.json`
+   - `Examples/Content/scenes/instancing/import-manifest.json`
+   - `Examples/Content/scenes/instancing/MatInstanced.material.json`
+   - `Examples/Content/scenes/instancing/GeoCube.geometry.json`
+   - `Examples/Content/scenes/instancing/InstancingTestScene.scene.json`
+   - `Examples/Content/scenes/multi-script/import-manifest.json`
+   - `Examples/Content/scenes/multi-script/ShowcaseExternalMat.material.json`
+   - `Examples/Content/scenes/multi-script/ShowcaseOrbMat.material.json`
+   - `Examples/Content/scenes/multi-script/multi_script_scene.input.json`
+   - `Examples/Content/scenes/multi-script/multi_script_scene.scene.json`
+   - `Examples/Content/scenes/proc-cubes/import-manifest.json`
+   - `Examples/Content/scenes/proc-cubes/ProcCubeBaseMat.material.json`
+   - `Examples/Content/scenes/proc-cubes/ProcCubeAccentMat.material.json`
+   - `Examples/Content/scenes/proc-cubes/SceneProcCubes.scene.json`
+   - `design/pakgen_supersession_impl.md`
+4. Tests run:
+   - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportTool.exe --no-tui batch --manifest Examples/Content/scenes/cubes/import-manifest.json` (pass, jobs=9/9)
+   - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportTool.exe --no-tui batch --manifest Examples/Content/scenes/emissive/import-manifest.json` (pass, jobs=13/13)
+   - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportTool.exe --no-tui batch --manifest Examples/Content/scenes/instancing/import-manifest.json` (pass, jobs=3/3)
+   - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportTool.exe --no-tui batch --manifest Examples/Content/scenes/multi-script/import-manifest.json` (pass, jobs=7/7)
+   - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportTool.exe --no-tui batch --manifest Examples/Content/scenes/proc-cubes/import-manifest.json` (pass, jobs=5/5)
+   - `out/build-vs/bin/Debug/Oxygen.Cooker.Inspector.exe validate Examples/Content/.cooked` (pass)
+5. Result: migrated all remaining legacy YAML scenes under `Examples/Content/scenes` (`cubes`, `emissive`, `instancing`, `multi-script`, `proc-cubes`) to descriptor/manifest-based loose-cooked imports, including script-sidecar/input conversion and explicit instancing node expansion for the former `generate` directive.
+6. Remaining delta to phase exit gate:
+   - wire these upgraded scene flows into official examples/docs entrypoints (current `Examples/Content/make_pak.py` remains PakGen-only)
+   - complete C++ PakBuilder first-class workflow/documentation closure and phase-level CI proof for P8

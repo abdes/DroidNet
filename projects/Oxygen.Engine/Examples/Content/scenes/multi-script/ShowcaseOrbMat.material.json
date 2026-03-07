@@ -1,0 +1,16 @@
+{
+  "name": "ShowcaseOrbMat",
+  "domain": "opaque",
+  "alpha_mode": "opaque",
+  "parameters": {
+    "base_color": [
+      0.2,
+      0.35,
+      0.75,
+      0.6
+    ],
+    "metalness": 0.0,
+    "roughness": 0.55,
+    "ambient_occlusion": 1.0
+  }
+}

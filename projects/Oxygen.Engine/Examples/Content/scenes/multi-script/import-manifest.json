@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "max_in_flight_jobs": 1,
+  "output": "H:/projects/DroidNet/projects/Oxygen.Engine/Examples/Content/.cooked",
+  "jobs": [
+    {
+      "id": "material.ShowcaseExternalMat",
+      "type": "material-descriptor",
+      "source": "./ShowcaseExternalMat.material.json",
+      "name": "ShowcaseExternalMat",
+      "content_hashing": true
+    },
+    {
+      "id": "material.ShowcaseOrbMat",
+      "type": "material-descriptor",
+      "source": "./ShowcaseOrbMat.material.json",
+      "name": "ShowcaseOrbMat",
+      "content_hashing": true
+    },
+    {
+      "id": "script.OrbitShapesScript",
+      "type": "script",
+      "source": "./orbit-shapes.lua",
+      "name": "OrbitShapesScript",
+      "compile": false,
+      "script_storage": "external",
+      "content_hashing": true
+    },
+    {
+      "id": "script.TimeOfDayScript",
+      "type": "script",
+      "source": "./day-night.lua",
+      "name": "TimeOfDayScript",
+      "compile": false,
+      "script_storage": "external",
+      "content_hashing": true
+    },
+    {
+      "id": "input.multi_script_scene",
+      "type": "input",
+      "source": "./multi_script_scene.input.json"
+    },
+    {
+      "id": "scene.multi_script_scene",
+      "type": "scene-descriptor",
+      "source": "./multi_script_scene.scene.json",
+      "name": "multi_script_scene",
+      "content_hashing": true,
+      "depends_on": [
+        "material.ShowcaseExternalMat",
+        "material.ShowcaseOrbMat",
+        "script.OrbitShapesScript",
+        "script.TimeOfDayScript",
+        "input.multi_script_scene"
+      ]
+    },
+    {
+      "id": "script-sidecar.multi_script_scene",
+      "type": "script-sidecar",
+      "name": "multi_script_scene_script_sidecar",
+      "target_scene_virtual_path": "/.cooked/Scenes/multi_script_scene.oscene",
+      "content_hashing": true,
+      "depends_on": [
+        "scene.multi_script_scene",
+        "script.OrbitShapesScript",
+        "script.TimeOfDayScript",
+        "input.multi_script_scene"
+      ],
+      "bindings": [
+        {
+          "node_index": 1,
+          "slot_id": "OrbitShapesScript",
+          "script_virtual_path": "/.cooked/Scripts/orbit-shapes.oscript",
+          "execution_order": 0,
+          "params": [
+            {
+              "key": "speed",
+              "type": "float",
+              "value": 1.6
+            },
+            {
+              "key": "bounce_amplitude",
+              "type": "float",
+              "value": 0.45
+            },
+            {
+              "key": "host_material_guid",
+              "type": "string",
+              "value": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+            },
+            {
+              "key": "orb_material_guid",
+              "type": "string",
+              "value": "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
+            }
+          ]
+        },
+        {
+          "node_index": 4,
+          "slot_id": "TimeOfDayScript",
+          "script_virtual_path": "/.cooked/Scripts/day-night.oscript",
+          "execution_order": 1,
+          "params": [
+            {
+              "key": "day_duration_seconds",
+              "type": "float",
+              "value": 60.0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

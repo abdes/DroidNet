@@ -1,0 +1,150 @@
+{
+  "name": "multi_script_scene",
+  "nodes": [
+    {
+      "name": "Root"
+    },
+    {
+      "name": "ScriptedCube",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "MainCamera",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          0.0,
+          -10.0,
+          0.0
+        ],
+        "rotation": [
+          -0.70710678,
+          0.0,
+          0.0,
+          0.70710678
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "Sun",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          0.0,
+          5.0,
+          8.0
+        ],
+        "rotation": [
+          0.5,
+          0.0,
+          0.0,
+          0.8660254
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "TimeOfDayController",
+      "parent": 0,
+      "transform": {
+        "translation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "cameras": {
+    "perspective": [
+      {
+        "node": 2,
+        "fov_y": 0.785398,
+        "aspect_ratio": 1.777778,
+        "near_plane": 0.1,
+        "far_plane": 100.0
+      }
+    ]
+  },
+  "lights": {
+    "directional": [
+      {
+        "node": 3,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [
+            1.0,
+            0.98,
+            0.92
+          ],
+          "mobility": 0,
+          "casts_shadows": true
+        },
+        "angular_size_radians": 0.004675,
+        "environment_contribution": true,
+        "is_sun_light": true,
+        "intensity_lux": 120000.0
+      }
+    ]
+  },
+  "references": {
+    "materials": [
+      "/.cooked/Materials/ShowcaseExternalMat.omat",
+      "/.cooked/Materials/ShowcaseOrbMat.omat"
+    ],
+    "scripts": [
+      "/.cooked/Scripts/orbit-shapes.oscript",
+      "/.cooked/Scripts/day-night.oscript"
+    ],
+    "input_actions": [
+      "/.cooked/Input/CycleShapeAction.oiact",
+      "/.cooked/Input/PulseScaleAction.oiact",
+      "/.cooked/Input/RotateInvertAction.oiact",
+      "/.cooked/Input/RotateSpeedDownAction.oiact",
+      "/.cooked/Input/RotateSpeedUpAction.oiact",
+      "/.cooked/Input/RotateStopAction.oiact",
+      "/.cooked/Input/SpawnOrbAction.oiact"
+    ],
+    "input_mapping_contexts": [
+      "/.cooked/Input/RotateRuntimeInputContext.oimap"
+    ]
+  }
+}

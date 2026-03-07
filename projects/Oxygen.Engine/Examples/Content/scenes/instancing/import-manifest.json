@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "max_in_flight_jobs": 1,
+  "output": "H:/projects/DroidNet/projects/Oxygen.Engine/Examples/Content/.cooked",
+  "jobs": [
+    {
+      "id": "material.MatInstanced",
+      "type": "material-descriptor",
+      "source": "./MatInstanced.material.json",
+      "name": "MatInstanced",
+      "content_hashing": true
+    },
+    {
+      "id": "geometry.GeoCube",
+      "type": "geometry-descriptor",
+      "source": "./GeoCube.geometry.json",
+      "name": "GeoCube",
+      "content_hashing": true,
+      "depends_on": [
+        "material.MatInstanced"
+      ]
+    },
+    {
+      "id": "scene.InstancingTestScene",
+      "type": "scene-descriptor",
+      "source": "./InstancingTestScene.scene.json",
+      "name": "InstancingTestScene",
+      "content_hashing": true,
+      "depends_on": [
+        "geometry.GeoCube"
+      ]
+    }
+  ]
+}

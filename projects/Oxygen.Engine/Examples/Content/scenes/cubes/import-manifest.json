@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "max_in_flight_jobs": 1,
+  "output": "H:/projects/DroidNet/projects/Oxygen.Engine/Examples/Content/.cooked",
+  "jobs": [
+    {
+      "id": "material.MatCube",
+      "type": "material-descriptor",
+      "source": "./MatCube.material.json",
+      "name": "MatCube",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatCubeB",
+      "type": "material-descriptor",
+      "source": "./MatCubeB.material.json",
+      "name": "MatCubeB",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatCubeC",
+      "type": "material-descriptor",
+      "source": "./MatCubeC.material.json",
+      "name": "MatCubeC",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatCubeD",
+      "type": "material-descriptor",
+      "source": "./MatCubeD.material.json",
+      "name": "MatCubeD",
+      "content_hashing": true
+    },
+    {
+      "id": "geometry.GeoCube",
+      "type": "geometry-descriptor",
+      "source": "./GeoCube.geometry.json",
+      "name": "GeoCube",
+      "content_hashing": true,
+      "depends_on": [
+        "material.MatCube"
+      ]
+    },
+    {
+      "id": "geometry.GeoCubeB",
+      "type": "geometry-descriptor",
+      "source": "./GeoCubeB.geometry.json",
+      "name": "GeoCubeB",
+      "content_hashing": true,
+      "depends_on": [
+        "material.MatCubeB"
+      ]
+    },
+    {
+      "id": "geometry.GeoCubeC",
+      "type": "geometry-descriptor",
+      "source": "./GeoCubeC.geometry.json",
+      "name": "GeoCubeC",
+      "content_hashing": true,
+      "depends_on": [
+        "material.MatCubeC"
+      ]
+    },
+    {
+      "id": "geometry.GeoCubeD",
+      "type": "geometry-descriptor",
+      "source": "./GeoCubeD.geometry.json",
+      "name": "GeoCubeD",
+      "content_hashing": true,
+      "depends_on": [
+        "material.MatCubeD"
+      ]
+    },
+    {
+      "id": "scene.CubeScene",
+      "type": "scene-descriptor",
+      "source": "./CubeScene.scene.json",
+      "name": "CubeScene",
+      "content_hashing": true,
+      "depends_on": [
+        "geometry.GeoCube",
+        "geometry.GeoCubeB",
+        "geometry.GeoCubeC",
+        "geometry.GeoCubeD"
+      ]
+    }
+  ]
+}
