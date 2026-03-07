@@ -141,6 +141,7 @@ NOLINT_TEST_F(PakToolScriptSealingTest,
   ASSERT_EQ(sealed->build_request.sources.size(), 1U);
 
   const auto& staged_root = sealed->build_request.sources[0].path;
+  const auto staged_parent = staged_root.parent_path();
   EXPECT_NE(staged_root, cooked_root);
   EXPECT_TRUE(std::filesystem::exists(staged_root / "container.index.bin"));
 
@@ -189,6 +190,7 @@ NOLINT_TEST_F(PakToolScriptSealingTest,
 
   CleanupStagedLooseRoots(sealed->staged_loose_roots);
   EXPECT_FALSE(std::filesystem::exists(staged_root));
+  EXPECT_FALSE(std::filesystem::exists(staged_parent));
 }
 
 } // namespace

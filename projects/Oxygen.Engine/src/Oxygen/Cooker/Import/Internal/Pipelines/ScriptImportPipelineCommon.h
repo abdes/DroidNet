@@ -77,6 +77,25 @@ inline auto TryMakeExternalPathRelativeToRoot(
   return relative_path;
 }
 
+inline auto NormalizeForPathComparison(const std::filesystem::path& path)
+  -> std::optional<std::filesystem::path>
+{
+  if (path.empty()) {
+    return std::nullopt;
+  }
+
+  if (path.is_absolute()) {
+    return path.lexically_normal();
+  }
+
+  std::error_code ec;
+  auto absolute_path = std::filesystem::absolute(path, ec);
+  if (ec) {
+    return std::nullopt;
+  }
+  return absolute_path.lexically_normal();
+}
+
 inline auto BuildExternalSourcePath(const ImportRequest& request) -> std::string
 {
   const auto source_path = request.source_path.lexically_normal();
@@ -84,22 +103,15 @@ inline auto BuildExternalSourcePath(const ImportRequest& request) -> std::string
   // External script descriptors are expected to be relative to the runtime
   // script roots (typically the cooked root parent, e.g. Examples/Content).
   if (request.cooked_root.has_value()) {
-    const auto source_root = request.cooked_root->parent_path();
-    if (!source_root.empty()) {
-      if (source_path.is_absolute()) {
-        if (const auto relative
-          = TryMakeExternalPathRelativeToRoot(source_path, source_root)) {
+    const auto normalized_root
+      = NormalizeForPathComparison(*request.cooked_root);
+    const auto normalized_source = NormalizeForPathComparison(source_path);
+    if (normalized_root.has_value() && normalized_source.has_value()) {
+      const auto source_root = normalized_root->parent_path();
+      if (!source_root.empty()) {
+        if (const auto relative = TryMakeExternalPathRelativeToRoot(
+              *normalized_source, source_root)) {
           return *relative;
-        }
-      } else {
-        std::error_code ec;
-        const auto absolute_source
-          = std::filesystem::absolute(source_path, ec).lexically_normal();
-        if (!ec) {
-          if (const auto relative
-            = TryMakeExternalPathRelativeToRoot(absolute_source, source_root)) {
-            return *relative;
-          }
         }
       }
     }
