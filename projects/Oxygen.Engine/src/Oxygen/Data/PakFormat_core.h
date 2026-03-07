@@ -332,6 +332,7 @@ struct TextureResourceDesc {
   core::OffsetT data_offset; // Absolute offset to texture data
   core::DataBlobSizeT size_bytes; // Size of texture data
   uint8_t texture_type; // 2D, 3D, Cube, etc. (enum) (defined externally)
+  // TODO: Add compression type enum, avoiding enum proliferation if possible
   uint8_t compression_type; // Compression (BC1, BC3, ASTC, etc.) (external)
   uint32_t width; // Texture width
   uint32_t height; // Texture height
