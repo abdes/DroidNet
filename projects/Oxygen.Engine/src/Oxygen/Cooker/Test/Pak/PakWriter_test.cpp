@@ -1002,6 +1002,17 @@ NOLINT_TEST_F(PakWriterTest, MissingResourceSourceFileEmitsStoreDiagnostic)
       .size_bytes = kTexturePayloadSize,
     },
   };
+  const auto descriptor_source_path = Root() / "missing_texture_descriptor.bin";
+  const auto descriptor_bytes = std::vector<std::byte>(
+    sizeof(core::TextureResourceDesc), std::byte { 0 });
+  ASSERT_TRUE(WriteAllBytesToFile(descriptor_source_path, descriptor_bytes));
+  plan_data.resource_descriptor_sources = {
+    pak::PakPayloadSourceSlicePlan {
+      .source_path = descriptor_source_path,
+      .source_offset = 0U,
+      .size_bytes = sizeof(core::TextureResourceDesc),
+    },
+  };
   plan_data.tables = MakeCanonicalTables(CanonicalTableSpec {
     .texture_table_offset = kTextureTableOffset,
     .texture_count = 1U,
@@ -1267,12 +1278,17 @@ NOLINT_TEST_F(PakWriterTest, StoresResourceAndDescriptorPayloadBytesFromSources)
   constexpr auto kDescriptorPayloadStart = uint8_t { 161U };
 
   const auto texture_source_path = Root() / "texture_payload.bin";
+  const auto texture_descriptor_path = Root() / "texture_descriptor.bin";
   const auto descriptor_source_path = Root() / "descriptor_payload.bin";
   const auto texture_payload = MakePatternBytes(
     kTexturePayloadStart, static_cast<size_t>(kTexturePayloadSize));
+  const auto texture_descriptor = std::vector<std::byte>(
+    sizeof(core::TextureResourceDesc), std::byte { 0 });
   const auto descriptor_payload = MakePatternBytes(
     kDescriptorPayloadStart, static_cast<size_t>(kAssetDescriptorSize));
   ASSERT_TRUE(WriteAllBytesToFile(texture_source_path, texture_payload));
+  ASSERT_TRUE(
+    WriteAllBytesToFile(texture_descriptor_path, texture_descriptor));
   ASSERT_TRUE(WriteAllBytesToFile(descriptor_source_path, descriptor_payload));
 
   const auto asset_key = MakeAssetKey(static_cast<uint8_t>(0x3D));
@@ -1326,6 +1342,13 @@ NOLINT_TEST_F(PakWriterTest, StoresResourceAndDescriptorPayloadBytesFromSources)
       .source_path = texture_source_path,
       .source_offset = 0U,
       .size_bytes = kTexturePayloadSize,
+    },
+  };
+  plan_data.resource_descriptor_sources = {
+    pak::PakPayloadSourceSlicePlan {
+      .source_path = texture_descriptor_path,
+      .source_offset = 0U,
+      .size_bytes = sizeof(core::TextureResourceDesc),
     },
   };
   plan_data.tables = {
@@ -1507,6 +1530,17 @@ NOLINT_TEST_F(PakWriterTest, WriterZeroFillsPlannedPaddingAndTrailingGaps)
       .source_path = resource_source_path,
       .source_offset = 0U,
       .size_bytes = kTextureDataSize,
+    },
+  };
+  const auto descriptor_source_path = Root() / "writer_zero_fill_texture_desc.bin";
+  const auto descriptor_bytes = std::vector<std::byte>(
+    sizeof(core::TextureResourceDesc), std::byte { 0 });
+  ASSERT_TRUE(WriteAllBytesToFile(descriptor_source_path, descriptor_bytes));
+  plan_data.resource_descriptor_sources = {
+    pak::PakPayloadSourceSlicePlan {
+      .source_path = descriptor_source_path,
+      .source_offset = 0U,
+      .size_bytes = sizeof(core::TextureResourceDesc),
     },
   };
   plan_data.tables = {
@@ -1724,7 +1758,7 @@ NOLINT_TEST_F(PakWriterTest, ScriptSlotSerializerInvariantViolationFailsWriting)
       .slot_index = 2U,
       .script_asset_key = paktest::MakeAssetKey(0x55U),
       .params_array_index = 0U,
-      .params_count = 1U,
+      .params_count = 0U,
       .execution_order = 7,
       .flags = oxygen::data::pak::scripting::ScriptSlotFlags::kNone,
     },

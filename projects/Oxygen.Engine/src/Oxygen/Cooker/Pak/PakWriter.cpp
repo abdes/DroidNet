@@ -323,6 +323,14 @@ auto FindScriptParamBaseOffset(
   return base_offset;
 }
 
+auto ScriptSlotsRequireParamRegion(
+  const std::span<const pak::PakScriptSlotPlan> slots) -> bool
+{
+  return std::ranges::any_of(slots, [](const pak::PakScriptSlotPlan& slot) {
+    return slot.params_count > 0U;
+  });
+}
+
 auto BuildFooter(WriterState& state) -> std::optional<core::PakFooter>
 {
   auto footer = core::PakFooter {};
@@ -638,7 +646,8 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
       } else if (table.table_name == "script_slot_table") {
         const auto script_param_base_offset
           = FindScriptParamBaseOffset(resources);
-        if (table.count > 0U && !script_param_base_offset.has_value()) {
+        if (ScriptSlotsRequireParamRegion(state.plan->ScriptSlots())
+          && !script_param_base_offset.has_value()) {
           AddDiagnostic(state, PakDiagnosticSeverity::kError,
             "pak.write.script_param_region_missing",
             "script_slot_table requires script_param data in script_region.",
