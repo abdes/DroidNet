@@ -142,7 +142,7 @@ auto SkyCapturePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
       last_logged_skip_gen_by_view[u_view_id] = gen;
       const auto env_manager
         = Context().GetRenderer().GetEnvironmentStaticDataManager();
-      LOG_F(INFO,
+      DLOG_F(2,
         "SkyCapturePass: skipping (already captured) (view={} frame_slot={} "
         "frame_seq={} env_srv={} slot={} gen={})",
         u_view_id, Context().frame_slot.get(), Context().frame_sequence.get(),
@@ -154,7 +154,7 @@ auto SkyCapturePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   const auto env_manager
     = Context().GetRenderer().GetEnvironmentStaticDataManager();
-  LOG_F(INFO,
+  DLOG_F(2,
     "SkyCapturePass: capture begin (view={} frame_slot={} frame_seq={} "
     "env_srv={} res={} slot={})",
     view_id.get(), Context().frame_slot.get(), Context().frame_sequence.get(),
@@ -276,7 +276,7 @@ auto SkyCapturePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   state.is_captured = true;
   ++state.capture_generation;
 
-  LOG_F(INFO, "SkyCapturePass: capture done (view={}, slot={} gen={})",
+  DLOG_F(2, "SkyCapturePass: capture done (view={}, slot={} gen={})",
     view_id.get(), state.captured_cubemap_srv.get(), state.capture_generation);
   co_return;
 }

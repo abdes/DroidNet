@@ -604,7 +604,7 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
   [[maybe_unused]] const auto env_static_srv
     = env_static_manager ? env_static_manager->GetSrvIndex(view_id).get() : 0U;
 
-  DLOG_SCOPE_F(INFO, "Atmosphere LUT generation");
+  DLOG_SCOPE_F(2, "Atmosphere LUT generation");
   DLOG_F(1, "view : {}", view_id.get());
   DLOG_F(1, "frame_slot : {}", Context().frame_slot.get());
   DLOG_F(1, "frame_seq : {}", Context().frame_sequence.get());
@@ -673,7 +673,7 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
 
   //=== Dispatch 1: Transmittance LUT ===-------------------------------------//
   {
-    LOG_SCOPE_F(INFO, "Transmittance LUT");
+    DLOG_SCOPE_F(2, "Transmittance LUT");
     constants.output_uav_index = transmittance_uav;
     constants.output_extent = transmittance_extent;
 
@@ -684,7 +684,7 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
 
   //=== Dispatch 2: MultiScat LUT ===-----------------------------------------//
   {
-    LOG_SCOPE_F(INFO, "MultiScat LUT");
+    DLOG_SCOPE_F(2, "MultiScat LUT");
     constants.output_uav_index = multi_scat_uav;
     constants.output_extent = multi_scat_extent;
     constants.transmittance_srv_index = transmittance_srv;
@@ -697,7 +697,7 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
 
   //=== Dispatch 3: Sky Irradiance LUT ===------------------------------------//
   {
-    LOG_SCOPE_F(INFO, "Sky Irradiance LUT");
+    DLOG_SCOPE_F(2, "Sky Irradiance LUT");
     constants.output_uav_index = sky_irradiance_uav;
     constants.output_extent = sky_irradiance_extent;
     constants.multi_scat_srv_index = multi_scat_srv;
@@ -709,7 +709,7 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
 
   //=== Dispatch 4: Sky-View LUT ===------------------------------------------//
   {
-    LOG_SCOPE_F(INFO, "Sky-View LUT");
+    DLOG_SCOPE_F(2, "Sky-View LUT");
     constants.output_uav_index = sky_view_uav;
     constants.output_extent = sky_view_extent;
     constants.sky_irradiance_srv_index = sky_irradiance_srv;
@@ -723,7 +723,7 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
 
   //=== Dispatch 5: Camera Volume LUT ===-------------------------------------//
   {
-    LOG_SCOPE_F(INFO, "Camera Volume LUT");
+    DLOG_SCOPE_F(2, "Camera Volume LUT");
     constexpr float kDefaultMaxDistanceKm = 128.0F;
     constants.output_uav_index = camera_volume_uav;
     constants.output_extent = camera_volume_extent;
@@ -743,7 +743,7 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
   // computed LUTs while next frame's compute writes to previous front buffer
   manager->SwapBuffers();
 
-  LOG_F(INFO, "SkyAtmoLUT: regen complete (view={}, gen={}, front={}, swap={})",
+  DLOG_F(2, "SkyAtmoLUT: regen complete (view={}, gen={}, front={}, swap={})",
     view_id.get(), generation, manager->GetFrontBufferIndex(),
     manager->GetSwapCount());
 

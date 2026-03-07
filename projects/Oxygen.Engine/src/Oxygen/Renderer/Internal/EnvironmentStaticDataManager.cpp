@@ -423,7 +423,7 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
           ? last_capture_generation_ - last_observed_ibl_source_content_version_
           : 0ULL;
         if (lag > 1ULL) {
-          LOG_F(WARNING,
+          DLOG_F(1,
             "atmosphere updated but SkyLight IBL is stale "
             "(ibl_gen={}, capture_gen={}, lag={}, view={})",
             next_sl.ibl_generation, last_capture_generation_, lag,
@@ -435,7 +435,7 @@ auto EnvironmentStaticDataManager::BuildFromSceneEnvironment(
     cpu_snapshot_ = next;
     MarkAllSlotsDirty();
 
-    LOG_F(INFO, "snapshot updated (id={} -> {}, slot={}, srv={})", old_id,
+    DLOG_F(2, "snapshot updated (id={} -> {}, slot={}, srv={})", old_id,
       snapshot_id_, u_slot, srv_index_.get());
   }
 }
@@ -703,7 +703,7 @@ auto EnvironmentStaticDataManager::PopulateSkyCapture(
     const auto capture_gen
       = sky_capture_provider_->GetCaptureGeneration(active_view_id_);
     if (capture_gen != last_capture_generation_) {
-      LOG_F(INFO, "sky capture generation changed ({} -> {})",
+      DLOG_F(2, "sky capture generation changed ({} -> {})",
         last_capture_generation_, capture_gen);
       last_capture_generation_ = capture_gen;
       MarkAllSlotsDirty();
@@ -796,7 +796,7 @@ auto EnvironmentStaticDataManager::PopulateIbl(EnvironmentStaticData& next)
     }
     if (captured_scene_source
       && capture_gen != last_warned_capture_outputs_not_ready_generation_) {
-      LOG_F(WARNING,
+      DLOG_F(1,
         "captured-scene skylight IBL outputs not ready "
         "(view={}, capture_gen={}, source_slot={}, prev_ibl_gen={})",
         active_view_id_.get(), capture_gen, source_slot.get(),
@@ -1077,7 +1077,7 @@ auto EnvironmentStaticDataManager::UploadIfNeeded() -> void
     &snapshot_to_upload, sizeof(EnvironmentStaticData));
   slot_uploaded_id_[slot_index] = snapshot_id_;
 
-  LOG_F(INFO,
+  DLOG_F(2,
     "uploaded snapshot (slot={}, srv={}, snapshot_id={}, prev_uploaded={}, "
     "frame_slot={}, frame_seq={}, coherent={}, fallback={})",
     slot_index, srv_index_.get(), snapshot_id_, prev_uploaded_id,
