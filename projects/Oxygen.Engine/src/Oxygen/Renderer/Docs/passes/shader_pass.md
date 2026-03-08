@@ -108,7 +108,7 @@ buffers via bindless indices.
 | ----- | ----------- | -------------- |
 | **Compile-Time** | 4 PSO descriptors | `CreatePipelineStateDesc()` builds all variants with distinct shader defines + rasterizer states |
 | **Runtime** | Per-partition selection | CPU inspects `PassMask` flags, selects variant, calls `SetPipelineState()` once per partition |
-| **Per-Draw** | Material properties | GPU fetches `MaterialConstants` via `g_DrawIndex`, samples textures dynamically (base color, normal, metalness, roughness, AO, opacity) |
+| **Per-Draw** | Material properties | GPU fetches `MaterialShadingConstants` via `g_DrawIndex`, samples textures dynamically (base color, normal, metalness, roughness, AO, opacity) |
 | **Per-Frame** | Lighting data | GPU accesses lighting/environment/view-color resources through `ViewFrameBindings` and system-owned frame bindings |
 
 ### Shader-Level Variation

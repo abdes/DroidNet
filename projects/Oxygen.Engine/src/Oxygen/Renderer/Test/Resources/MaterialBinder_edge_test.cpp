@@ -165,7 +165,7 @@ NOLINT_TEST_F(MaterialBinderEdgeTest, NoTexturesSkipsTextureBinder)
   const auto constants
     = MatBinder()
         // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-        .GetMaterialConstants()[static_cast<std::size_t>(h.get())];
+        .GetMaterialShadingConstants()[static_cast<std::size_t>(h.get())];
 
   const auto u_invalid = oxygen::kInvalidShaderVisibleIndex;
   EXPECT_EQ(constants.base_color_texture_index, u_invalid);

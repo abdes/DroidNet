@@ -60,7 +60,7 @@ struct PreparedSceneFrame {
   oxygen::ShaderVisibleIndex bindless_normals_slot {
     oxygen::kInvalidShaderVisibleIndex
   };
-  oxygen::ShaderVisibleIndex bindless_materials_slot {
+  oxygen::ShaderVisibleIndex bindless_material_shading_slot {
     oxygen::kInvalidShaderVisibleIndex
   };
   oxygen::ShaderVisibleIndex bindless_draw_metadata_slot {

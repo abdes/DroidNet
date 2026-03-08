@@ -20,9 +20,9 @@ Interns mesh identities `(AssetKey, lod_index)` and manages GPU vertex/index buf
 
 ### MaterialBinder
 
-Stores per-material GPU constants (`MaterialConstants`) in a structured buffer with stable `MaterialHandle` indirection. Dirty-tracking uploads only changed elements per frame. Texture references use opaque `content::ResourceKey` resolved to bindless SRV indices via `IResourceBinder`.
+Stores per-material GPU constants (`MaterialShadingConstants`) in a structured buffer with stable `MaterialHandle` indirection. Dirty-tracking uploads only changed elements per frame. Texture references use opaque `content::ResourceKey` resolved to bindless SRV indices via `IResourceBinder`.
 
-**Frame contract:** `OnFrameStart()` → `GetOrAllocate()`/`Update()` → `EnsureFrameResources()` → `GetMaterialsSrvIndex()`.
+**Frame contract:** `OnFrameStart()` → `GetOrAllocate()`/`Update()` → `EnsureFrameResources()` → `GetMaterialShadingSrvIndex()`.
 
 **Threading:** Not thread-safe; all calls from renderer thread.
 

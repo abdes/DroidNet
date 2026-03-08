@@ -17,7 +17,8 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/ScenePrep/Handles.h>
-#include <Oxygen/Renderer/Types/MaterialConstants.h>
+#include <Oxygen/Renderer/Types/MaterialShadingConstants.h>
+#include <Oxygen/Renderer/Types/ProceduralGridMaterialConstants.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::renderer::resources {
@@ -50,11 +51,13 @@ class IResourceBinder;
 
 //! Manages GPU material constants and bindless access.
 /*!
- MaterialBinder stores a per-material snapshot (`engine::MaterialConstants`) in
- a GPU buffer and exposes a stable, shader-visible indirection via
- `engine::sceneprep::MaterialHandle`.
+ MaterialBinder stores a per-material snapshot
 
- Material constants reference textures by *bindless SRV indices* obtained from
+ (`engine::MaterialShadingConstants`) in a GPU buffer and exposes a stable,
+
+ shader-visible indirection via `engine::sceneprep::MaterialHandle`.
+ Material
+ constants reference textures by *bindless SRV indices* obtained from
  `IResourceBinder`, so the renderer never stores raw author indices.
 
  ### Primary behaviors
@@ -66,8 +69,9 @@ class IResourceBinder;
    schedule Nexus slot release/reclaim.
  - **Dirty tracking**: material constants are tracked as dirty per-frame and
    only dirty elements are uploaded during `EnsureFrameResources()`.
- - **Bindless SRV**: `GetMaterialsSrvIndex()` returns the SRV index for the
-   material constants buffer once frame resources are ensured.
+ - **Bindless SRV**: `GetMaterialShadingSrvIndex()` returns the SRV index for
+
+ the core material shading buffer once frame resources are ensured.
 
  ### Lifecycle (concise)
 
@@ -75,7 +79,7 @@ class IResourceBinder;
     processes queued material eviction events.
  2. `GetOrAllocate()` / `Update()` mutate CPU-side constants and mark dirty.
  3. `EnsureFrameResources()` schedules uploads for dirty elements.
- 4. `GetMaterialsSrvIndex()` returns the bindless SRV for rendering.
+ 4. `GetMaterialShadingSrvIndex()` returns the bindless SRV for rendering.
 
  @note Texture bindings are resolved via opaque `content::ResourceKey`s held by
    `engine::sceneprep::MaterialRef`; no locator/path assumptions leak into the
@@ -109,8 +113,9 @@ public:
     renderer::RendererTag, oxygen::frame::Slot slot) -> void;
 
   //! Ensures all material GPU resources are prepared for the current frame.
-  //! MUST be called after OnFrameStart() and before any GetMaterialsSrvIndex()
-  //! calls. Safe to call multiple times per frame - internally optimized.
+  //! MUST be called after OnFrameStart() and before any
+  //! GetMaterialShadingSrvIndex() calls. Safe to call multiple times per frame
+  //! - internally optimized.
   OXGN_RNDR_API auto EnsureFrameResources() -> void;
 
   OXGN_RNDR_API auto GetOrAllocate(
@@ -145,11 +150,20 @@ public:
   //! Safe to call before `EnsureFrameResources()`; SRV capacity is ensured
   //! lazily, while material payload uploads still happen via
   //! `EnsureFrameResources()`.
-  OXGN_RNDR_NDAPI auto GetMaterialsSrvIndex() const -> ShaderVisibleIndex;
+  OXGN_RNDR_NDAPI auto GetMaterialShadingSrvIndex() const -> ShaderVisibleIndex;
+
+  //! Returns the bindless descriptor heap index for the procedural-grid
+  //! material extension SRV table.
+  OXGN_RNDR_NDAPI auto GetProceduralGridMaterialsSrvIndex() const
+    -> ShaderVisibleIndex;
 
   //! Get read-only access to all material constants.
-  OXGN_RNDR_NDAPI auto GetMaterialConstants() const noexcept
-    -> std::span<const oxygen::engine::MaterialConstants>;
+  OXGN_RNDR_NDAPI auto GetMaterialShadingConstants() const noexcept
+    -> std::span<const oxygen::engine::MaterialShadingConstants>;
+
+  //! Get read-only access to all procedural-grid material constants.
+  OXGN_RNDR_NDAPI auto GetProceduralGridMaterialConstants() const noexcept
+    -> std::span<const oxygen::engine::ProceduralGridMaterialConstants>;
 
   //! Overrides UV scale/offset for an existing material instance.
   /*!

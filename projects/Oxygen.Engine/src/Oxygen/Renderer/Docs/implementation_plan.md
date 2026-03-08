@@ -31,7 +31,7 @@ Renderer core is functional with a minimal Forward+ foundation:
   `ShaderRequest` with material-derived defines. PSO cached by full request hash.
 - **Lighting**: `LightManager` extracts scene lights; GPU buffers uploaded via
   transient buffers; shaders loop all lights per pixel (**no culling**)
-- **Materials**: Runtime `MaterialConstants` (96 bytes) with 6 texture slots
+- **Materials**: Runtime `MaterialShadingConstants` with bindless texture slots
   (base color, normal, metallic, roughness, AO, emissive). GGX specular +
   Lambert diffuse + emissive. Alpha test, UV transform, ORM packed detection.
   **PAK has full PBR**: clearcoat, transmission, sheen, specular, IOR —
@@ -529,15 +529,15 @@ Enable skeletal animation for characters and creatures.
 
 Add clear coat layer for automotive paint, wet surfaces, lacquered wood.
 
-### 10.1 MaterialConstants Extension
+### 10.1 MaterialShadingConstants Extension
 
 - [ ] Add `clearcoat_factor`, `clearcoat_roughness`, texture indices
-- [ ] Update HLSL `MaterialConstants.hlsli` to match
+- [ ] Update HLSL `MaterialShadingConstants.hlsli` to match
 
 ### 10.2 MaterialAsset & MaterialBinder
 
 - [x] Add clearcoat getters to `MaterialAsset`
-- [ ] Update `SerializeMaterialConstants()` to populate clearcoat fields
+- [ ] Update `SerializeMaterialShadingConstants()` to populate clearcoat fields
 
 ### 10.3 Shader Implementation
 

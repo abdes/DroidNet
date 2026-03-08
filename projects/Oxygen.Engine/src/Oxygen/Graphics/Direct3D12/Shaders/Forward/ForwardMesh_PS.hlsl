@@ -16,7 +16,7 @@
 #include "Renderer/DirectionalLightBasic.hlsli"
 #include "Renderer/PositionalLightData.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
-#include "Renderer/MaterialConstants.hlsli"
+#include "Renderer/MaterialShadingConstants.hlsli"
 #include "Renderer/Vertex.hlsli"
 
 #include "MaterialFlags.hlsli"
@@ -60,11 +60,11 @@ float4 PS(VSOutput input) : SV_Target0 {
 #ifdef ALPHA_TEST
     const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
     if (draw_bindings.draw_metadata_slot != K_INVALID_BINDLESS_INDEX
-        && draw_bindings.material_constants_slot != K_INVALID_BINDLESS_INDEX) {
+        && draw_bindings.material_shading_constants_slot != K_INVALID_BINDLESS_INDEX) {
         StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[draw_bindings.draw_metadata_slot];
         DrawMetadata meta = draw_meta_buffer[g_DrawIndex];
-        StructuredBuffer<MaterialConstants> materials = ResourceDescriptorHeap[draw_bindings.material_constants_slot];
-        MaterialConstants mat = materials[meta.material_handle];
+        StructuredBuffer<MaterialShadingConstants> materials = ResourceDescriptorHeap[draw_bindings.material_shading_constants_slot];
+        MaterialShadingConstants mat = materials[meta.material_handle];
         if ((mat.flags & MATERIAL_FLAG_ALPHA_TEST) != 0u) {
             const float2 uv = ApplyMaterialUv(input.uv, mat);
             float alpha = mat.base_color.a;

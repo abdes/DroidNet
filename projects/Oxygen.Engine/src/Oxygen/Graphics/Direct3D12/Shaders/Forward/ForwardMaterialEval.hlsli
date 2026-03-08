@@ -9,7 +9,8 @@
 
 #include "Renderer/DrawHelpers.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
-#include "Renderer/MaterialConstants.hlsli"
+#include "Renderer/MaterialShadingConstants.hlsli"
+#include "Renderer/ProceduralGridMaterialConstants.hlsli"
 #include "MaterialFlags.hlsli"
 #include "Forward/ForwardPbr.hlsli"
 
@@ -48,7 +49,8 @@ static inline float AxisLineMask(float value, float thickness)
     return saturate(1.0 - smoothstep(half_width, half_width + aa, abs(value)));
 }
 
-static inline float4 EvaluateProceduralGrid(MaterialConstants mat,
+static inline float4 EvaluateProceduralGrid(
+    ProceduralGridMaterialConstants mat,
     float3 world_pos,
     float3 world_normal)
 {
@@ -129,12 +131,12 @@ MaterialSurface EvaluateMaterialSurface(
 
     const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
     if (draw_bindings.draw_metadata_slot != K_INVALID_BINDLESS_INDEX &&
-        draw_bindings.material_constants_slot != K_INVALID_BINDLESS_INDEX) {
+        draw_bindings.material_shading_constants_slot != K_INVALID_BINDLESS_INDEX) {
         StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[draw_bindings.draw_metadata_slot];
         DrawMetadata meta = draw_meta_buffer[draw_index];
 
-        StructuredBuffer<MaterialConstants> materials = ResourceDescriptorHeap[draw_bindings.material_constants_slot];
-        MaterialConstants mat = materials[meta.material_handle];
+        StructuredBuffer<MaterialShadingConstants> materials = ResourceDescriptorHeap[draw_bindings.material_shading_constants_slot];
+        MaterialShadingConstants mat = materials[meta.material_handle];
 
         s.base_rgb  = mat.base_color.rgb;
         s.base_a    = mat.base_color.a;
@@ -142,7 +144,7 @@ MaterialSurface EvaluateMaterialSurface(
         s.roughness = saturate(mat.roughness);
         s.ao        = saturate(mat.ambient_occlusion);
 
-        // UV convention (see ApplyMaterialUv in Renderer/MaterialConstants.hlsli):
+        // UV convention (see ApplyMaterialUv in Renderer/MaterialShadingConstants.hlsli):
         // scale -> rotation (radians, CCW around origin) -> offset.
         const float2 uv = ApplyMaterialUv(uv0, mat);
 
@@ -289,9 +291,15 @@ MaterialSurface EvaluateMaterialSurface(
             s.emissive *= emissive_sample;
         }
 
-        if ((mat.flags & MATERIAL_FLAG_PROCEDURAL_GRID) != 0u) {
+        if ((mat.flags & MATERIAL_FLAG_PROCEDURAL_GRID) != 0u
+            && draw_bindings.procedural_grid_material_constants_slot
+                != K_INVALID_BINDLESS_INDEX) {
+            StructuredBuffer<ProceduralGridMaterialConstants> procedural_grid_materials =
+                ResourceDescriptorHeap[draw_bindings.procedural_grid_material_constants_slot];
+            const ProceduralGridMaterialConstants grid_mat =
+                procedural_grid_materials[meta.material_handle];
             const float4 grid_color = EvaluateProceduralGrid(
-                mat, world_pos, world_normal);
+                grid_mat, world_pos, world_normal);
             s.base_rgb = lerp(s.base_rgb, grid_color.rgb, grid_color.a);
             s.base_a = max(s.base_a, grid_color.a);
             // Keep grid visible regardless of lighting/shadowing.

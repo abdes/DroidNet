@@ -181,7 +181,7 @@ Fallback/error policy:
 
 MaterialUploader (Uploader)
 
-- CPU: build/dedupe MaterialConstants array; compute MaterialAsset* → index map.
+- CPU: build/dedupe MaterialShadingConstants array; compute MaterialAsset* → index map.
 - GPU: upload material constants; ensure texture residency (bindless handles
   ready).
 - Output: state.material_cache updated (constants array, index map); textures

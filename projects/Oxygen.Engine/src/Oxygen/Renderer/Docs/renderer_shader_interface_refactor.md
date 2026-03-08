@@ -1,6 +1,6 @@
 # Renderer-Shader Interface Refactor Plan
 
-Status: `phase_1_completed` / `phase_2_in_progress`
+Status: `phase_1_completed` / `phase_6_completed`
 
 Purpose: define the refactor required to make renderer-shader interfaces clean,
 explicit, modular, and future-ready before any new shadow-system work lands.
@@ -33,11 +33,11 @@ Legend: `[ ]` pending | `[~]` in progress | `[x]` completed
 
 - [x] Phase 0: Freeze the authoritative interface inventory
 - [x] Phase 1: Re-establish one authoritative root ABI
-- [~] Phase 2: Replace `SceneConstants` with `ViewConstants`
-- [ ] Phase 3: Introduce `ViewFrameBindings` and re-home system routing
-- [ ] Phase 4: Extract lighting interfaces cleanly
-- [ ] Phase 5: Extract environment interfaces cleanly
-- [ ] Phase 6: Clean draw/material contracts
+- [x] Phase 2: Replace `SceneConstants` with `ViewConstants`
+- [x] Phase 3: Introduce `ViewFrameBindings` and re-home system routing
+- [x] Phase 4: Extract lighting interfaces cleanly
+- [x] Phase 5: Extract environment interfaces cleanly
+- [x] Phase 6: Clean draw/material contracts
 - [ ] Phase 7: Introduce shadow-ready and ray-tracing-ready system slots
 - [ ] Phase 8: Documentation and validation hardening
 
@@ -228,10 +228,10 @@ Impact:
 - Lighting code depends on environment naming for data that is not
   environment-owned.
 
-### 2.6 `MaterialConstants` mixes pass/system-specific data into the material ABI
+### 2.6 `MaterialShadingConstants` mixes pass/system-specific data into the material ABI
 
-Current `MaterialConstants` in
-`src/Oxygen/Renderer/Types/MaterialConstants.h` includes:
+The previous `MaterialConstants` type, now
+`src/Oxygen/Renderer/Types/MaterialShadingConstants.h`, included:
 
 - core PBR material data
 - UV transform data
@@ -574,7 +574,7 @@ selection record.
 
 It remains generic and future-proof by indirection, not by direct expansion.
 
-### `MaterialConstants`
+### `MaterialShadingConstants`
 
 The current material ABI should be split.
 
@@ -652,7 +652,7 @@ The table below captures the intended structural replacements.
 | cluster-grid slots in `EnvironmentDynamicData` | `LightingFrameBindings` / `LightCullingViewData` | Move |
 | synthetic sun in `EnvironmentDynamicData` | `LightingFrameBindings` / `LightingViewData` | Move |
 | exposure in `SceneConstants` | `ViewColorData` | Move |
-| grid debug fields in `MaterialConstants` | pass/debug payloads | Remove from material ABI |
+| grid debug fields in `MaterialShadingConstants` | pass/debug payloads | Remove from material ABI |
 
 ## 7. Target Data Flow
 
@@ -953,7 +953,7 @@ Deliverables:
 
 - Introduce `DrawFrameBindings`.
 - Keep `DrawMetadata` fixed and generic.
-- Split `MaterialConstants` into `MaterialShadingConstants` and
+- Split the old `MaterialConstants` ABI into `MaterialShadingConstants` and
   pass/debug-specific payloads.
 
 Exit criteria:
@@ -967,6 +967,31 @@ Execution note:
 - The first material cleanup wave should stop after non-material/debug payloads
   are removed from the core ABI.
 - Do not expand this phase into a full shading-model redesign.
+
+Current status:
+
+- `DrawFrameBindings` is live and now routes a dedicated
+  `procedural_grid_material_constants_slot`.
+- The core material ABI, draw slot, binder API, and shader includes now use
+  `MaterialShadingConstants` / `material_shading_constants_slot` instead of the
+  old `MaterialConstants` naming.
+- Core `MaterialShadingConstants` no longer carry procedural-grid payload
+  fields.
+- Procedural-grid material state is published through a separate
+  `ProceduralGridMaterialConstants` table keyed by the same material handle.
+
+Validation record:
+
+- Renderer build passed:
+  `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:6 /p:Configuration=Debug /nologo`
+- Shader build/bake passed:
+  `msbuild out/build-vs/src/Oxygen/Graphics/Direct3D12/Shaders/oxygen-graphics-direct3d12_shaders.vcxproj /m:6 /p:Configuration=Debug /nologo`
+- Engine build passed:
+  `msbuild out/build-vs/src/Oxygen/Engine/oxygen-engine.vcxproj /m:6 /p:Configuration=Debug /nologo`
+- Material binder test target build passed:
+  `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.MaterialBinder.Tests.vcxproj /m:6 /p:Configuration=Debug /nologo`
+- Focused runtime tests passed:
+  `Oxygen.Renderer.MaterialBinder.Tests.exe --gtest_filter=MaterialBinderBindingTest.SerializeMaterialShadingConstantsCopiesUv:MaterialBinderBindingTest.ProceduralGridConstantsUseSeparateMaterialExtensionTable`
 
 ## 8.8 Phase 7: Introduce shadow-ready and ray-tracing-ready system slots
 

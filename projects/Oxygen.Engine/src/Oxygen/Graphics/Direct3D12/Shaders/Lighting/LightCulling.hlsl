@@ -23,7 +23,7 @@
 
 #include "Renderer/ViewConstants.hlsli"
 #include "Renderer/DrawMetadata.hlsli" // Required by BindlessHelpers.hlsl.
-#include "Renderer/MaterialConstants.hlsli" // Required by BindlessHelpers.hlsl.
+#include "Renderer/MaterialShadingConstants.hlsli" // Required by BindlessHelpers.hlsl.
 #include "Renderer/PositionalLightData.hlsli"
 
 #define BX_VERTEX_TYPE uint4

@@ -338,7 +338,7 @@ Descriptor slots are captured at different stages:
 * `bindless_draw_metadata_slot`: DrawMetadata structured buffer
 * `bindless_worlds_slot`: World transformation matrices
 * `bindless_normals_slot`: Normal transformation matrices
-* `bindless_materials_slot`: Material constant data
+* `bindless_material_shading_slot`: Material shading data
 * `bindless_instance_data_slot`: Per-draw instance metadata buffer
 
 **Per-View Routed System Slots** (published after view preparation):

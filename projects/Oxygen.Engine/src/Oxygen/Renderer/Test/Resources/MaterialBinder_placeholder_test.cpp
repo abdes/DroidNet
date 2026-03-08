@@ -13,7 +13,7 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/ScenePrep/MaterialRef.h>
-#include <Oxygen/Renderer/Types/MaterialConstants.h>
+#include <Oxygen/Renderer/Types/MaterialShadingConstants.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
 #include <Oxygen/Renderer/Test/Resources/MaterialBinderTest.h>
@@ -83,7 +83,7 @@ NOLINT_TEST_F(
     = TexBinder().GetOrAllocate(base_color_key);
   const auto expected_normal_srv = TexBinder().GetOrAllocate(normal_key);
 
-  const auto all_constants = MatBinder().GetMaterialConstants();
+  const auto all_constants = MatBinder().GetMaterialShadingConstants();
   ASSERT_LT(
     static_cast<std::size_t>(material_handle.get()), all_constants.size());
   const auto& constants
@@ -128,7 +128,7 @@ NOLINT_TEST_F(MaterialBinderPlaceholderTest, RepointingAcrossFrames)
   const auto expectedBase = TexBinder().GetOrAllocate(base_color_key);
   const auto expectedNormal = TexBinder().GetOrAllocate(normal_key);
 
-  const auto all_constants = MatBinder().GetMaterialConstants();
+  const auto all_constants = MatBinder().GetMaterialShadingConstants();
   ASSERT_LT(static_cast<std::size_t>(h.get()), all_constants.size());
   // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
   const auto& constants = all_constants[static_cast<std::size_t>(h.get())];
@@ -162,7 +162,8 @@ NOLINT_TEST_F(MaterialBinderPlaceholderTest, PartialResourceAvailability)
 
   const auto constants
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-    = MatBinder().GetMaterialConstants()[static_cast<std::size_t>(h.get())];
+    = MatBinder()
+        .GetMaterialShadingConstants()[static_cast<std::size_t>(h.get())];
   EXPECT_EQ(constants.base_color_texture_index, baseSrv);
   // Normal texture not allocated yet — expect not equal to baseSrv (placeholder
   // or zero)

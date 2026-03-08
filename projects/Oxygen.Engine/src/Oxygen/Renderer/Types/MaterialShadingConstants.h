@@ -17,13 +17,23 @@
 
 namespace oxygen::engine {
 
-//! Per-material (draw-scope) constants snapshot.
+//! Per-material shading constants snapshot.
 /*!
- @note Layout mirrors HLSL cbuffer MaterialConstants (b2, space0).
- @note Opacity is implicitly sampled from the alpha channel of the base color
-       texture (glTF convention).
+ Core material ABI for general shading data. Specialized material
+ * extensions
+ such as procedural-grid parameters live in separate tables keyed
+ * by the same
+ material handle.
+
+ @note Layout mirrors HLSL
+ * `MaterialShadingConstants` in
+ `Renderer/MaterialShadingConstants.hlsli`.
+
+ * @note Opacity is implicitly sampled from the alpha channel of the base color
+
+ * texture (glTF convention).
 */
-struct alignas(packing::kShaderDataFieldAlignment) MaterialConstants {
+struct alignas(packing::kShaderDataFieldAlignment) MaterialShadingConstants {
   // Register 0
   glm::vec4 base_color { 1.0F, 1.0F, 1.0F, 1.0F };
 
@@ -60,37 +70,13 @@ struct alignas(packing::kShaderDataFieldAlignment) MaterialConstants {
   uint32_t uv_set { 0U };
   uint32_t _pad0 { 0U };
   uint32_t _pad1 { 0U };
-
-  // Register 7
-  glm::vec2 grid_spacing { 0.0F, 0.0F };
-  uint32_t grid_major_every { 0U };
-  float grid_line_thickness { 0.0F };
-
-  // Register 8
-  float grid_major_thickness { 0.0F };
-  float grid_axis_thickness { 0.0F };
-  float grid_fade_start { 0.0F };
-  float grid_fade_end { 0.0F };
-
-  // Register 9
-  glm::vec4 grid_minor_color { 0.0F, 0.0F, 0.0F, 0.0F };
-
-  // Register 10
-  glm::vec4 grid_major_color { 0.0F, 0.0F, 0.0F, 0.0F };
-
-  // Register 11
-  glm::vec4 grid_axis_color_x { 0.0F, 0.0F, 0.0F, 0.0F };
-
-  // Register 12
-  glm::vec4 grid_axis_color_y { 0.0F, 0.0F, 0.0F, 0.0F };
-
-  // Register 13
-  glm::vec4 grid_origin_color { 0.0F, 0.0F, 0.0F, 0.0F };
 };
 static_assert(sizeof(ShaderVisibleIndex) == sizeof(uint32_t));
 static_assert(
-  sizeof(MaterialConstants) % packing::kShaderDataFieldAlignment == 0);
-static_assert(sizeof(MaterialConstants) <= packing::kRootConstantsMaxSize);
-static_assert(sizeof(MaterialConstants) == 224); // NOLINT(*-magic-numbers)
+  sizeof(MaterialShadingConstants) % packing::kShaderDataFieldAlignment == 0);
+static_assert(
+  sizeof(MaterialShadingConstants) <= packing::kRootConstantsMaxSize);
+static_assert(
+  sizeof(MaterialShadingConstants) == 112); // NOLINT(*-magic-numbers)
 
 } // namespace oxygen::engine

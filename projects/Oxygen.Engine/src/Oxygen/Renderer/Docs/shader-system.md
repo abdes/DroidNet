@@ -72,7 +72,8 @@ All contracts below are authoritative and must be mirrored exactly.
 - `src/Oxygen/Renderer/Types/ViewColorData.h` (`ViewColorData`, size = 16 bytes)
 - `src/Oxygen/Renderer/Types/DebugFrameBindings.h` (`DebugFrameBindings`, size = 16 bytes)
 - `src/Oxygen/Renderer/Types/DrawMetadata.h` (`DrawMetadata`, size = 64 bytes)
-- `src/Oxygen/Renderer/Types/MaterialConstants.h` (`MaterialConstants`, size = 80 bytes)
+- `src/Oxygen/Renderer/Types/MaterialShadingConstants.h` (`MaterialShadingConstants`, size = 112 bytes)
+- `src/Oxygen/Renderer/Types/ProceduralGridMaterialConstants.h` (`ProceduralGridMaterialConstants`, size = 112 bytes)
 
 ### 2.1 Sentinel values
 
@@ -217,7 +218,8 @@ Current contents:
 - `draw_metadata_slot`
 - `transforms_slot`
 - `normal_matrices_slot`
-- `material_constants_slot`
+- `material_shading_constants_slot`
+- `procedural_grid_material_constants_slot`
 - `instance_data_slot`
 
 Current migration rule:
@@ -302,8 +304,12 @@ asserted in debug shaders):**
   `BX_IN_GLOBAL_SRV(transforms_slot)`.
 - `DrawFrameBindings.normal_matrices_slot` MUST be a **GLOBAL_SRV** index:
   `BX_IN_GLOBAL_SRV(normal_matrices_slot)`.
-- `DrawFrameBindings.material_constants_slot` MUST be a **MATERIALS** index:
-  `BX_IN_MATERIALS(material_constants_slot)`.
+- `DrawFrameBindings.material_shading_constants_slot` MUST be a
+  **MATERIALS** index:
+  `BX_IN_MATERIALS(material_shading_constants_slot)`.
+- `DrawFrameBindings.procedural_grid_material_constants_slot` MUST be a
+  **MATERIALS** index:
+  `BX_IN_MATERIALS(procedural_grid_material_constants_slot)`.
 - `DrawFrameBindings.instance_data_slot` MUST be a **GLOBAL_SRV** index:
   `BX_IN_GLOBAL_SRV(instance_data_slot)`.
 
@@ -319,7 +325,7 @@ asserted in debug shaders):**
 2. **Pass-local resources** (depth SRV, output UAVs, light lists, transient buffers) → put their heap indices in *PassConstants*.
 3. **Large and rapidly evolving view data** (previous-frame matrices, jitter, exposure, shadow data, clustered grid parameters) → put in system-owned frame bindings routed through `ViewFrameBindings`, or in pass-owned payloads when the data is strictly pass-local.
 4. **Per-draw data** → stays in `DrawMetadata` and is selected by `g_DrawIndex`.
-5. **Per-material data** → stays in `MaterialConstants` and textures/samplers are validated with `BX_IN_TEXTURES()` / `BX_IN_SAMPLERS()`.
+5. **Per-material data** → stays in `MaterialShadingConstants` and textures/samplers are validated with `BX_IN_TEXTURES()` / `BX_IN_SAMPLERS()`.
 
 **Normative fetch patterns (SM 6.6):**
 
@@ -361,7 +367,7 @@ struct DrawMetadata
 **Notes:**
 
 - `vertex_buffer_index` / `index_buffer_index` are `ShaderVisibleIndex` on the CPU, but ABI is 32-bit unsigned.
-- `material_handle` is a stable handle to a *resolved material snapshot* stored in the `MaterialConstants` table; value `0` selects the engine fallback material.
+- `material_handle` is a stable handle to a *resolved material snapshot* stored in the `MaterialShadingConstants` table; value `0` selects the engine fallback material.
 - `instance_metadata_buffer_index` / `instance_metadata_offset` are reserved for per-draw “extras” indirection (see §2.3.1).
 
 **Future-proofing rule (normative):**
@@ -375,7 +381,7 @@ Oxygen must support both (a) authored material libraries and (b) open-world scal
 
 **Final ownership rules (normative):**
 
-1. **UV transform (`uv_scale`, `uv_offset`) is a material parameter** and lives in `MaterialConstants`.
+1. **UV transform (`uv_scale`, `uv_offset`) is a material parameter** and lives in `MaterialShadingConstants`.
    - Authoring tools and engines (UE, Godot, DCC exports) treat UV tiling/offset as a material/shader parameter.
    - This keeps batching stable and avoids per-draw data bloat.
 
@@ -393,7 +399,7 @@ Oxygen must support both (a) authored material libraries and (b) open-world scal
 ```hlsl
 struct PerDrawOverrides
 {
-  float4 base_color_tint; // multiply with MaterialConstants.base_color; default (1,1,1,1)
+  float4 base_color_tint; // multiply with MaterialShadingConstants.base_color; default (1,1,1,1)
 };
 ```
 
@@ -425,7 +431,7 @@ float4 FetchBaseColorTint(in DrawMetadata meta)
 }
 
 // Example usage at shading time:
-// MaterialConstants m = material_buf[meta.material_handle];
+// MaterialShadingConstants m = material_buf[meta.material_handle];
 // float4 tint = FetchBaseColorTint(meta);
 // float4 shaded_base_color = m.base_color * tint;
 ```
@@ -433,18 +439,20 @@ float4 FetchBaseColorTint(in DrawMetadata meta)
 **UV override policy (final):**
 
 - Per-draw UV overrides are not part of this renderer contract.
-- UV transform comes from `MaterialConstants` only.
+- UV transform comes from `MaterialShadingConstants` only.
 
-### 2.4 MaterialConstants (StructuredBuffer, 80-byte stride)
+### 2.4 MaterialShadingConstants (StructuredBuffer, 112-byte stride)
 
 **HLSL contract include:** defined in §5.
 
-**ABI (must match `sizeof(MaterialConstants) == 80`):**
+**ABI (must match `sizeof(MaterialShadingConstants) == 112`):**
 
 ```hlsl
-struct MaterialConstants
+struct MaterialShadingConstants
 {
   float4 base_color;
+  float3 emissive_factor;
+  uint   flags;
   float  metalness;
   float  roughness;
   float  normal_scale;
@@ -454,9 +462,13 @@ struct MaterialConstants
   uint   metallic_texture_index;
   uint   roughness_texture_index;
   uint   ambient_occlusion_texture_index;
-  uint   flags;
+  uint   emissive_texture_index;
+  float  alpha_cutoff;
+  uint   _pad2;
   float2 uv_scale;
   float2 uv_offset;
+  float  uv_rotation_radians;
+  uint   uv_set;
   uint   _pad0;
   uint   _pad1;
 };
@@ -464,11 +476,15 @@ struct MaterialConstants
 
 **Binding semantics:**
 
-- `MaterialConstants` is provided as a *structured buffer SRV*.
+- `MaterialShadingConstants` is provided as a *structured buffer SRV*.
 - The bindless descriptor heap index for that SRV is
-  `DrawFrameBindings.material_constants_slot`.
+  `DrawFrameBindings.material_shading_constants_slot`.
 - Shaders fetch a material snapshot via `material_handle` (from `DrawMetadata`) as the element index.
 - Material “instances” are represented by additional resolved snapshots (additional elements) in this table; shaders do not require a separate instance concept.
+- Procedural-grid parameters are not part of this core ABI. They live in a
+  separate `ProceduralGridMaterialConstants` table indexed by the same
+  `material_handle` and routed through
+  `DrawFrameBindings.procedural_grid_material_constants_slot`.
 
 **UV transform (required, not demo):**
 
@@ -937,7 +953,7 @@ Shader compilation MUST set these include roots:
 
 - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/ViewConstants.hlsli`
 - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/DrawMetadata.hlsli`
-- `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/MaterialConstants.hlsli`
+- `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/MaterialShadingConstants.hlsli`
 
 **Direct3D12 module entry shaders (final layout):**
 
@@ -960,7 +976,7 @@ Shader compilation MUST set these include roots:
    The canonical include strings are:
    - `#include "Renderer/ViewConstants.hlsli"`
    - `#include "Renderer/DrawMetadata.hlsli"`
-   - `#include "Renderer/MaterialConstants.hlsli"`
+   - `#include "Renderer/MaterialShadingConstants.hlsli"`
    - `#include "Core/Bindless/BindlessHelpers.hlsl"`
 
 ## 6) Light culling rewrite contract (Forward+ readiness)

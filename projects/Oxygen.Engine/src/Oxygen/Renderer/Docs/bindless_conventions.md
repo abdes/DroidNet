@@ -191,12 +191,14 @@ layout (`ViewConstants::GpuData`) is currently 256 bytes and includes:
 
 **MaterialBinder** (Renderer resource) manages materials via ScenePrep:
 
-- **Per-material constants**: Each material asset maps to a `MaterialConstants` structure.
+- **Per-material constants**: Each material asset maps to a core `MaterialShadingConstants` structure.
+- **Per-material procedural-grid extension**: Optional grid parameters live in
+  `ProceduralGridMaterialConstants`, keyed by the same material handle.
 - **Deduplication**: Materials with identical shader constants reuse the same GPU slot (content-based hashing).
 - **Upload**: Batched via `MaterialUploadFinalizer` during finalization.
 - **Bindless access**: Material indices stored in `DrawMetadata.material_handle`;
   shaders resolve `DrawFrameBindings` and read via
-  `DrawFrameBindings.material_constants_slot`.
+  `DrawFrameBindings.material_shading_constants_slot`.
 - **Texture residency**: `TextureBinder` ensures textures are resident and provides bindless texture SRV indices.
 
 **Pass usage:**
@@ -210,7 +212,8 @@ layout (`ViewConstants::GpuData`) is currently 256 bytes and includes:
 | Buffer | Purpose | Upload frequency | Root binding / Access |
 | -- | -- | -- | -- |
 | ViewConstants | Current per-view invariants and routing slots | Once per view (dirty) | CBV b1 space0 |
-| MaterialConstants | Material snapshot(s) | 0 or 1+ per frame (opt.) | Structured SRV via bindless table (slot in `DrawFrameBindings`) |
+| MaterialShadingConstants | Core material shading snapshot(s) | 0 or 1+ per frame (opt.) | Structured SRV via bindless table (slot in `DrawFrameBindings`) |
+| ProceduralGridMaterialConstants | Procedural-grid material extension rows | 0 or 1+ per frame (opt.) | Structured SRV via bindless table (slot in `DrawFrameBindings`) |
 | DrawMetadata | Per-draw indices and config (vertex/index, flags, etc.) | Once per frame (dirty) | Structured SRV via bindless table (slot in `DrawFrameBindings`) |
 | WorldTransforms (float4x4) | Per-draw world matrices | Once per frame (dirty) | Structured SRV via bindless table (slot in `DrawFrameBindings`) |
 
@@ -275,7 +278,8 @@ slots published in `DrawFrameBindings`):
   - `draw_metadata_slot`
   - `transforms_slot`
   - `normal_matrices_slot`
-  - `material_constants_slot`
+  - `material_shading_constants_slot`
+  - `procedural_grid_material_constants_slot`
   - `instance_data_slot`
 - **Access**: Via `ViewFrameBindings.draw_frame_slot`, usually through
   `LoadResolvedDrawFrameBindings()`.
@@ -297,12 +301,19 @@ slots published in `DrawFrameBindings`):
 - **Access**: Via `DrawFrameBindings.transforms_slot` using index from
   DrawMetadata or directly from `g_DrawIndex`.
 
-### MaterialConstants Buffer
+### MaterialShadingConstants Buffer
 
 - **One entry per unique material** (uploaded by `MaterialUploadFinalizer`).
 - **Contents**: Per-material shader constants (color, roughness, metallic, etc.).
-- **Access**: Via `DrawFrameBindings.material_constants_slot` using
+- **Access**: Via `DrawFrameBindings.material_shading_constants_slot` using
   material index from DrawMetadata.
+
+### ProceduralGridMaterialConstants Buffer
+
+- **One entry per material handle** (uploaded alongside material constants).
+- **Contents**: Procedural-grid extension parameters only.
+- **Access**: Via `DrawFrameBindings.procedural_grid_material_constants_slot`
+  using the same material index from DrawMetadata.
 
 **Frame Update Protocol:**
 
@@ -325,8 +336,8 @@ slots published in `DrawFrameBindings`):
    float4x4 world = g_Worlds[dm.transform_index];
 
    // Get material constants
-   StructuredBuffer<MaterialConstants> g_Materials = ResourceDescriptorHeap[draw.material_constants_slot];
-   MaterialConstants mat = g_Materials[dm.material_handle];
+   StructuredBuffer<MaterialShadingConstants> g_Materials = ResourceDescriptorHeap[draw.material_shading_constants_slot];
+   MaterialShadingConstants mat = g_Materials[dm.material_handle];
    ```
 
 **Multi-draw support:**
