@@ -673,6 +673,44 @@ auto ContentVm::RestorePersistedLibraryState() -> void
 
 auto ContentVm::PersistLibraryState() -> void { PersistMountedSources(); }
 
+auto ContentVm::PrunePersistedMountedSource(
+  const SceneSourceKind source_kind, const std::filesystem::path& path) -> void
+{
+  if (!settings_ || path.empty()) {
+    return;
+  }
+
+  const auto normalized_target = NormalizePathForKey(path);
+  auto remove_matching_path = [&normalized_target](
+                               std::vector<std::filesystem::path>& paths)
+    -> bool {
+    const auto original_size = paths.size();
+    std::erase_if(paths, [&normalized_target](const std::filesystem::path& entry) {
+      return NormalizePathForKey(entry) == normalized_target;
+    });
+    return paths.size() != original_size;
+  };
+
+  auto removed = false;
+  if (source_kind == SceneSourceKind::kPak) {
+    auto pak_paths = settings_->GetMountedPakPaths();
+    removed = remove_matching_path(pak_paths);
+    if (removed) {
+      settings_->SetMountedPakPaths(pak_paths);
+    }
+  } else {
+    auto index_paths = settings_->GetMountedIndexPaths();
+    removed = remove_matching_path(index_paths);
+    if (removed) {
+      settings_->SetMountedIndexPaths(index_paths);
+    }
+  }
+
+  if (removed) {
+    PruneActiveSceneSelectionForSource(source_kind, path);
+  }
+}
+
 auto ContentVm::GetDiscoveredPaks() const
   -> const std::vector<std::filesystem::path>&
 {
@@ -782,6 +820,32 @@ auto ContentVm::PersistActiveSceneSelection(const SceneEntry& entry) -> void
     .source_path = entry.source.path,
     .source_is_pak = entry.source.kind == SceneSourceKind::kPak,
   });
+}
+
+auto ContentVm::PruneActiveSceneSelectionForSource(
+  const SceneSourceKind source_kind, const std::filesystem::path& path) -> void
+{
+  if (!settings_ || path.empty()) {
+    return;
+  }
+
+  const auto selection = settings_->GetActiveSceneSelection();
+  if (!selection.has_value()) {
+    return;
+  }
+
+  const auto matches_kind
+    = selection->source_is_pak == (source_kind == SceneSourceKind::kPak);
+  if (!matches_kind) {
+    return;
+  }
+
+  if (NormalizePathForKey(selection->source_path) != NormalizePathForKey(path)) {
+    return;
+  }
+
+  settings_->SetActiveSceneSelection(std::nullopt);
+  pending_scene_selection_restore_.reset();
 }
 
 auto ContentVm::TryResolvePendingSceneSelection() -> void

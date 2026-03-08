@@ -414,117 +414,143 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
           asset_loader->TrimCache();
           refresh_library = true;
         } else if (action == PendingSourceAction::kMountPak) {
-          auto normalized = runtime::NormalizePath(path);
-          const auto already_mounted = IsMountedPak(*asset_loader, normalized);
-          const auto write_time = TryGetLastWriteTime(normalized);
+          const auto normalized = runtime::NormalizePath(path);
+          try {
+            const auto already_mounted = IsMountedPak(*asset_loader, normalized);
+            const auto write_time = TryGetLastWriteTime(normalized);
 
-          if (already_mounted) {
-            const auto known_time_it
-              = mounted_pak_write_times_.find(normalized);
-            const bool has_known_time
-              = known_time_it != mounted_pak_write_times_.end();
-            const bool file_changed = has_known_time && write_time.has_value()
-              && known_time_it->second != *write_time;
+            if (already_mounted) {
+              const auto known_time_it
+                = mounted_pak_write_times_.find(normalized);
+              const bool has_known_time
+                = known_time_it != mounted_pak_write_times_.end();
+              const bool file_changed = has_known_time && write_time.has_value()
+                && known_time_it->second != *write_time;
 
-            if (file_changed) {
-              LOG_F(INFO,
-                "RenderScene: PAK source '{}' changed on disk; refreshing "
-                "mounted source",
-                normalized.string());
+              if (file_changed) {
+                LOG_F(INFO,
+                  "RenderScene: PAK source '{}' changed on disk; refreshing "
+                  "mounted source",
+                  normalized.string());
+                asset_loader->AddPakFile(normalized);
+                co_await HydrateMountedInputContextsForSource(
+                  static_cast<content::AssetLoader&>(*asset_loader),
+                  app_.input_system,
+                  content::IAssetLoader::ContentSourceKind::kPak, normalized);
+                mounted_pak_write_times_.insert_or_assign(
+                  normalized, *write_time);
+                refresh_library = true;
+              } else {
+                LOG_F(INFO,
+                  "RenderScene: PAK source '{}' already mounted and unchanged; "
+                  "preserving cache",
+                  normalized.string());
+                if (write_time.has_value() && !has_known_time) {
+                  mounted_pak_write_times_.insert_or_assign(
+                    normalized, *write_time);
+                }
+              }
+            } else {
               asset_loader->AddPakFile(normalized);
               co_await HydrateMountedInputContextsForSource(
                 static_cast<content::AssetLoader&>(*asset_loader),
                 app_.input_system,
                 content::IAssetLoader::ContentSourceKind::kPak, normalized);
-              mounted_pak_write_times_.insert_or_assign(
-                normalized, *write_time);
-              refresh_library = true;
-            } else {
-              LOG_F(INFO,
-                "RenderScene: PAK source '{}' already mounted and unchanged; "
-                "preserving cache",
-                normalized.string());
-              if (write_time.has_value() && !has_known_time) {
+              if (write_time.has_value()) {
                 mounted_pak_write_times_.insert_or_assign(
                   normalized, *write_time);
               }
+              refresh_library = true;
             }
-          } else {
-            asset_loader->AddPakFile(normalized);
-            co_await HydrateMountedInputContextsForSource(
-              static_cast<content::AssetLoader&>(*asset_loader),
-              app_.input_system, content::IAssetLoader::ContentSourceKind::kPak,
-              normalized);
-            if (write_time.has_value()) {
-              mounted_pak_write_times_.insert_or_assign(
-                normalized, *write_time);
+          } catch (const std::exception& ex) {
+            LOG_F(ERROR,
+              "RenderScene: Failed to restore/mount persisted PAK source '{}': "
+              "{}. Removing persisted entry.",
+              normalized.string(), ex.what());
+            mounted_pak_write_times_.erase(normalized);
+            if (const auto vm = shell.GetContentVm()) {
+              vm->PrunePersistedMountedSource(
+                ui::SceneSourceKind::kPak, normalized);
             }
             refresh_library = true;
           }
         } else if (action == PendingSourceAction::kMountIndex) {
           const auto root = path.parent_path();
           const auto normalized = runtime::NormalizePath(root);
-          const auto already_mounted
-            = IsMountedLooseRoot(*asset_loader, normalized);
-          const auto write_time
-            = TryGetLastWriteTime(LooseIndexPathForRoot(normalized));
+          const auto normalized_index = LooseIndexPathForRoot(normalized);
+          try {
+            const auto already_mounted
+              = IsMountedLooseRoot(*asset_loader, normalized);
+            const auto write_time = TryGetLastWriteTime(normalized_index);
 
-          if (already_mounted) {
-            const auto known_time_it
-              = mounted_loose_index_write_times_.find(normalized);
-            const bool has_known_time
-              = known_time_it != mounted_loose_index_write_times_.end();
-            const bool file_changed = has_known_time && write_time.has_value()
-              && known_time_it->second != *write_time;
+            if (already_mounted) {
+              const auto known_time_it
+                = mounted_loose_index_write_times_.find(normalized);
+              const bool has_known_time
+                = known_time_it != mounted_loose_index_write_times_.end();
+              const bool file_changed = has_known_time && write_time.has_value()
+                && known_time_it->second != *write_time;
 
-            if (file_changed) {
-              LOG_F(INFO,
-                "RenderScene: Loose cooked index '{}' changed on disk; "
-                "refreshing mounted source",
-                LooseIndexPathForRoot(normalized).string());
-              asset_loader->AddLooseCookedRoot(normalized);
-              co_await HydrateMountedInputContextsForSource(
-                static_cast<content::AssetLoader&>(*asset_loader),
-                app_.input_system,
-                content::IAssetLoader::ContentSourceKind::kLooseCooked,
-                normalized);
-              mounted_loose_index_write_times_.insert_or_assign(
-                normalized, *write_time);
-              refresh_library = true;
-            } else if (!has_known_time && write_time.has_value()) {
-              LOG_F(INFO,
-                "RenderScene: Loose cooked root '{}' mounted with unknown "
-                "index timestamp; refreshing once to bind latest index",
-                normalized.string());
-              asset_loader->AddLooseCookedRoot(normalized);
-              co_await HydrateMountedInputContextsForSource(
-                static_cast<content::AssetLoader&>(*asset_loader),
-                app_.input_system,
-                content::IAssetLoader::ContentSourceKind::kLooseCooked,
-                normalized);
-              mounted_loose_index_write_times_.insert_or_assign(
-                normalized, *write_time);
-              refresh_library = true;
+              if (file_changed) {
+                LOG_F(INFO,
+                  "RenderScene: Loose cooked index '{}' changed on disk; "
+                  "refreshing mounted source",
+                  normalized_index.string());
+                asset_loader->AddLooseCookedRoot(normalized);
+                co_await HydrateMountedInputContextsForSource(
+                  static_cast<content::AssetLoader&>(*asset_loader),
+                  app_.input_system,
+                  content::IAssetLoader::ContentSourceKind::kLooseCooked,
+                  normalized);
+                mounted_loose_index_write_times_.insert_or_assign(
+                  normalized, *write_time);
+                refresh_library = true;
+              } else if (!has_known_time && write_time.has_value()) {
+                LOG_F(INFO,
+                  "RenderScene: Loose cooked root '{}' mounted with unknown "
+                  "index timestamp; refreshing once to bind latest index",
+                  normalized.string());
+                asset_loader->AddLooseCookedRoot(normalized);
+                co_await HydrateMountedInputContextsForSource(
+                  static_cast<content::AssetLoader&>(*asset_loader),
+                  app_.input_system,
+                  content::IAssetLoader::ContentSourceKind::kLooseCooked,
+                  normalized);
+                mounted_loose_index_write_times_.insert_or_assign(
+                  normalized, *write_time);
+                refresh_library = true;
+              } else {
+                LOG_F(INFO,
+                  "RenderScene: Loose cooked root '{}' already mounted and "
+                  "unchanged; preserving cache",
+                  normalized.string());
+                if (write_time.has_value() && !has_known_time) {
+                  mounted_loose_index_write_times_.insert_or_assign(
+                    normalized, *write_time);
+                }
+              }
             } else {
-              LOG_F(INFO,
-                "RenderScene: Loose cooked root '{}' already mounted and "
-                "unchanged; preserving cache",
-                normalized.string());
-              if (write_time.has_value() && !has_known_time) {
+              asset_loader->AddLooseCookedRoot(normalized);
+              co_await HydrateMountedInputContextsForSource(
+                static_cast<content::AssetLoader&>(*asset_loader),
+                app_.input_system,
+                content::IAssetLoader::ContentSourceKind::kLooseCooked,
+                normalized);
+              if (write_time.has_value()) {
                 mounted_loose_index_write_times_.insert_or_assign(
                   normalized, *write_time);
               }
+              refresh_library = true;
             }
-          } else {
-            asset_loader->AddLooseCookedRoot(normalized);
-            co_await HydrateMountedInputContextsForSource(
-              static_cast<content::AssetLoader&>(*asset_loader),
-              app_.input_system,
-              content::IAssetLoader::ContentSourceKind::kLooseCooked,
-              normalized);
-            if (write_time.has_value()) {
-              mounted_loose_index_write_times_.insert_or_assign(
-                normalized, *write_time);
+          } catch (const std::exception& ex) {
+            LOG_F(ERROR,
+              "RenderScene: Failed to restore/mount persisted loose cooked "
+              "source '{}': {}. Removing persisted entry.",
+              normalized_index.string(), ex.what());
+            mounted_loose_index_write_times_.erase(normalized);
+            if (const auto vm = shell.GetContentVm()) {
+              vm->PrunePersistedMountedSource(
+                ui::SceneSourceKind::kLooseIndex, normalized_index);
             }
             refresh_library = true;
           }

@@ -119,6 +119,8 @@ public:
   auto UnloadAllLibrary() -> void;
   auto RestorePersistedLibraryState() -> void;
   auto PersistLibraryState() -> void;
+  auto PrunePersistedMountedSource(
+    SceneSourceKind source_kind, const std::filesystem::path& path) -> void;
 
   [[nodiscard]] auto GetDiscoveredPaks() const
     -> const std::vector<std::filesystem::path>&;
@@ -242,6 +244,8 @@ private:
     std::vector<SceneEntry>& out) -> void;
   auto PersistMountedSources() -> void;
   auto PersistActiveSceneSelection(const SceneEntry& entry) -> void;
+  auto PruneActiveSceneSelectionForSource(
+    SceneSourceKind source_kind, const std::filesystem::path& path) -> void;
   auto TryResolvePendingSceneSelection() -> void;
 
   enum class BrowseMode {
