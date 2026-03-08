@@ -45,6 +45,7 @@ struct AssetSpec final {
   std::string virtual_path;
   uint64_t descriptor_size = 0U;
   std::array<uint8_t, lc::kSha256Size> descriptor_sha {};
+  std::vector<std::byte> descriptor_payload;
 };
 
 struct FileSpec final {
@@ -231,6 +232,16 @@ private:
   auto asset_entries = std::vector<lc::AssetEntry> {};
   asset_entries.reserve(assets.size());
   for (const auto& asset : assets) {
+    auto descriptor_bytes = asset.descriptor_payload;
+    if (descriptor_bytes.empty()) {
+      descriptor_bytes.resize(static_cast<size_t>(asset.descriptor_size));
+    }
+    if (!WriteFileBytes(root / asset.descriptor_relpath,
+          std::span<const std::byte>(
+            descriptor_bytes.data(), descriptor_bytes.size()))) {
+      return false;
+    }
+
     const auto descriptor_offset = static_cast<uint32_t>(strings.size());
     strings += asset.descriptor_relpath;
     strings.push_back('\0');

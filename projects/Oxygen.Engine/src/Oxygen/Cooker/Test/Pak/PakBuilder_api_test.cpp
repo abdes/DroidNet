@@ -263,8 +263,7 @@ NOLINT_TEST_F(PakBuilderApiContractTestFixture,
   EXPECT_EQ(result.output_catalog.entries[0].asset_type, asset.asset_type);
   EXPECT_EQ(
     result.output_catalog.entries[0].descriptor_digest, asset.descriptor_sha);
-  const auto expected_transitive_digest
-    = oxygen::base::ComputeSha256(std::span<const std::byte> {});
+  const auto expected_transitive_digest = asset.descriptor_sha;
   EXPECT_EQ(result.output_catalog.entries[0].transitive_resource_digest,
     expected_transitive_digest);
   EXPECT_NE(
@@ -339,8 +338,7 @@ NOLINT_TEST_F(PakBuilderApiContractTestFixture,
   EXPECT_EQ(result.output_catalog.entries[0].asset_type, asset.asset_type);
   EXPECT_EQ(
     result.output_catalog.entries[0].descriptor_digest, asset.descriptor_sha);
-  const auto expected_transitive_digest
-    = oxygen::base::ComputeSha256(std::span<const std::byte> {});
+  const auto expected_transitive_digest = asset.descriptor_sha;
   EXPECT_EQ(result.output_catalog.entries[0].transitive_resource_digest,
     expected_transitive_digest);
   EXPECT_NE(
