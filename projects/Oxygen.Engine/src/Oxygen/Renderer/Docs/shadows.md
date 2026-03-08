@@ -28,22 +28,42 @@ now present in code:
 - `LightManager` collects authored directional shadow intent as
   `DirectionalShadowCandidate` records instead of owning live shadow metadata
   uploads.
-- `ShadowManager` owns shared shadow publication for the current slice and
+- `ShadowManager` is now the top-level shadow scheduler/coordinator and
+  delegates conventional raster publication/planning to
+  `ConventionalShadowBackend`.
+- Shared shadow publication for the conventional directional path now
   publishes:
   - `ShadowInstanceMetadata`
   - `DirectionalShadowMetadata`
+- The shading-facing and raster-planning contracts are now explicit:
+  - `ShadowFramePublication`
+  - `RasterShadowRenderPlan`
 - `ShadowFrameBindings` now routes those published buffers through
   `ViewFrameBindings.shadow_frame_slot`.
 - ScenePrep/draw finalization now publishes explicit shadow-caster pass routing
   through `PassMask::kShadowCaster` for currently supported caster domains.
+- Main-view visibility is now separate from shadow-caster routing through
+  `PassMask::kMainViewVisible`, so offscreen shadow casters survive ScenePrep
+  without leaking into main-view shading/depth paths.
+- `ConventionalShadowRasterPass` now consumes backend-neutral raster jobs
+  instead of reaching into a directional-only published view blob.
+- Forward shading now dispatches from shared `ShadowInstanceMetadata` and then
+  resolves the conventional directional payload inside shadow helpers.
+- Conventional shadow publication invalidates from shadow-relevant view,
+  candidate, and caster inputs rather than `ViewId` alone.
+- Focused automated coverage now exists for:
+  - shading publication plus raster-plan publication
+  - synthetic-sun publication
+  - invalidation when shadow inputs change within a frame
+  - shadow-only casters staying out of main-view partitions
 
 This does not mean the conventional directional path is complete. The current
 implementation status is:
 
-- Shared shadow-product publication: in progress
-- Shadow-caster draw classification: in progress
-- Conventional directional shadow rendering: in progress, but still prototype-
-  quality and below the required engine-grade bar
+- Shared shadow-product publication: done for the conventional directional path
+- Shadow-caster draw classification: done for the conventional directional path
+- Conventional directional shadow rendering: done for conventional CSM
+- Multi-technique architecture remediation: done for conventional raster
 - Family-selection policy: not started
 - Virtual shadow-map backend: not started
 
@@ -423,7 +443,7 @@ The final implementation is organized around renderer-owned services.
   shadow-map resources
 - `VirtualShadowMapBackend`: page allocation, residency, invalidation, and
   metadata publishing for virtualized shadow products
-- `DirectionalShadowPass`
+- `ConventionalShadowRasterPass` consuming backend-neutral raster shadow jobs
 - `LocalShadowPass` for spot and point products, or separate spot/point pass
   classes if backend details require it
 - `VirtualShadowUpdatePass` or equivalent page-update passes
@@ -431,6 +451,83 @@ The final implementation is organized around renderer-owned services.
 
 The final class split may vary, but the responsibilities above must stay
 centralized rather than leaking into unrelated passes.
+
+### 6.2 Pass and backend remediation requirements
+
+The current conventional directional path is allowed to ship as the first
+working slice, but it is not the final pass/backend shape for a multi-technique
+shadow system. Before adding spot, point, or virtual shadow implementations,
+the renderer must remove the directional-only architectural seams listed below.
+
+Required end state:
+
+- `ShadowManager` remains the top-level scheduler/publisher, but it must stop
+  owning backend-specific rendering logic directly.
+- Conventional raster shadow rendering must consume a backend-neutral raster
+  shadow render plan rather than a directional-only published blob.
+- Virtual shadow rendering must use separate page-update / residency passes,
+  not branches inside the conventional raster shadow pass.
+- Shader evaluation must dispatch from shared `ShadowInstanceMetadata`, then
+  resolve family/domain-specific payloads behind that contract.
+- Per-view shadow publication, backend render planning, and debug/introspection
+  data must be separate structures with separate lifetimes.
+
+The required remediation work is:
+
+1. Split shadow publication from render planning.
+   - Replace the current grab-all published view state with:
+     - `ShadowFramePublication`: bindless slots and shared per-view GPU-facing
+       publication only
+     - `RasterShadowRenderPlan`: conventional raster jobs for directional,
+       spot, and point products
+     - backend-private state for caching/residency/debug as needed
+   - `ConventionalShadowRasterPass` must not depend on a publication blob that
+     also owns shading-facing SRV metadata.
+
+2. Introduce explicit backend seams.
+   - `ShadowManager` coordinates backends; it does not absorb all
+     conventional/virtual implementation details in one file.
+   - At minimum, the implementation must split conventional raster work from
+     virtual-shadow work behind backend-owned planning/publication steps.
+   - Spot, point, and virtual support must not be added by extending a single
+     directional-only `if implementation_kind == ...` path.
+
+3. Generalize the raster shadow pass contract.
+   - The reusable asset is `DepthPrePass` infrastructure and partition-aware
+     depth-only draw submission.
+   - The non-reusable part is the current directional-only pass contract.
+   - The final conventional raster pass must consume generic raster jobs:
+     target resource/view, view constants snapshot, pass mask/domain policy,
+     and payload reference.
+   - Directional, spot, and point conventional jobs may share that pass if the
+     raster contract stays generic. If they cannot, they still must be
+     separate backend-owned passes, not directional branches added everywhere.
+
+4. Move shader dispatch to the shared shadow-product contract.
+   - Forward/transparent lighting must consume `ShadowInstanceMetadata` first.
+   - Domain/family dispatch belongs in shadow helpers, not in light-specific
+     shading code.
+   - Directional payload lookup may remain one backend path internally, but it
+     must be reached through the shared product contract so later techniques do
+     not require a lighting-contract rewrite.
+
+5. Strengthen invalidation and caching contracts.
+   - Caching keyed only by `ViewId` is not sufficient for the final system.
+   - Published shadow state must be invalidated by shadow-relevant input
+     changes, including light candidates, synthetic-sun inputs, quality tier,
+     backend selection, and backend-owned residency/allocation state.
+   - The invalidation contract must be explicit and testable.
+
+6. Add architecture-focused coverage before new techniques land.
+   - shadow-only casters survive ScenePrep and render into shadow passes
+   - main-view-only passes skip shadow-only draws
+   - shadow publication/shader dispatch uses shared product metadata
+   - invalidation occurs when shadow inputs or backend state change
+   - backend selection/fallback does not require lighting-path changes
+
+This remediation is not optional cleanup. It is the prerequisite that keeps
+conventional, virtual, and future hybrid shadow techniques from collapsing into
+directional-only special cases.
 
 ## 7. Conventional Shadow Maps
 
@@ -800,7 +897,39 @@ all later phases.
 - Expand directional multi-light scheduling through the same shared metadata and
   implementation-selection model
 
-### 15.3 Phase 3: Virtual shadow-map foundations
+### 15.3 Phase 3: Multi-technique architecture remediation
+
+- Split shading publication from backend render planning:
+  - `ShadowFramePublication`
+  - conventional raster render plan
+  - backend-private residency/cache state
+- Introduce explicit backend-owned conventional and virtual planning/execution
+  seams under `ShadowManager`
+- Replace the directional-only conventional pass contract with a generic raster
+  shadow render-plan contract that reuses `DepthPrePass` infrastructure without
+  baking directional-only assumptions into the pass interface
+- Move shader evaluation to shared `ShadowInstanceMetadata`-driven dispatch so
+  directional payload lookup is one implementation detail, not the public
+  shading contract
+- Replace `ViewId`-only shadow publication caching with explicit
+  shadow-input/backend-state invalidation
+- Add focused automated coverage for shadow-only casters, generic shadow
+  product dispatch, and invalidation seams
+
+Implementation status, March 9, 2026:
+
+- Complete for the current conventional raster path.
+- Live code now uses:
+  - `ConventionalShadowBackend`
+  - `ShadowFramePublication`
+  - `RasterShadowRenderPlan`
+  - `ConventionalShadowRasterPass`
+- Forward lighting dispatch now starts from `ShadowInstanceMetadata`.
+- Conventional shadow publication now invalidates from shadow-relevant input
+  hashes rather than `ViewId` alone.
+- Focused automated coverage exists for the implemented remediation seams.
+
+### 15.4 Phase 4: Virtual shadow-map foundations
 
 - Add `VirtualShadowMapBackend`
 - Add virtual page-pool, page-table, residency, and telemetry resources
@@ -809,34 +938,34 @@ all later phases.
 - Extend shader sampling helpers to support virtual-family dispatch without
   adding a parallel shading path
 
-### 15.4 Phase 4: Directional virtual shadow maps
+### 15.5 Phase 5: Directional virtual shadow maps
 
 - Add directional virtual coverage selection, residency, rendering, sampling,
   invalidation, and tooling
 - Preserve the same directional shadow-product identity and shared metadata
   contract used by the conventional path
 
-### 15.5 Phase 5: Spot-light shadows on shared contracts
+### 15.6 Phase 6: Spot-light shadows on shared contracts
 
 - Add spot shadow allocation, rendering, sampling, invalidation, and tooling on
   the existing local-shadow contracts
 - Ship conventional spot shadowing first unless virtual spot shadowing is ready
   on the same contract
 
-### 15.6 Phase 6: Point-light shadows on shared contracts
+### 15.7 Phase 7: Point-light shadows on shared contracts
 
 - Add point shadow allocation, rendering, sampling, invalidation, and tooling
   on the existing local-shadow contracts
 - Ship conventional point shadowing first unless virtual point shadowing is
   ready on the same contract
 
-### 15.7 Phase 7: Local virtual shadows and contact refinement
+### 15.8 Phase 8: Local virtual shadows and contact refinement
 
 - Expand the virtual family to spot and point products
 - Add per-view contact refinement generation and composition for lights that
   author `contact_shadows`
 
-### 15.8 Phase 8: Hardening and optimization
+### 15.9 Phase 9: Hardening and optimization
 
 - Tune budgets, fallback policy, residency, and invalidation
 - Improve allocation reuse and cache behavior across both families

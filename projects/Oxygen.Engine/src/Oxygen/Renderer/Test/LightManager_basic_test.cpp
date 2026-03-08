@@ -324,10 +324,10 @@ NOLINT_TEST_F(LightManagerTest,
   EXPECT_NE(manager.GetPositionalLightsSrvIndex(), kInvalidShaderVisibleIndex);
 }
 
-//! ShadowManager publishes shared shadow products for shadow-casting
-//! directionals.
-NOLINT_TEST_F(
-  LightManagerTest, ShadowManagerPublishForView_DirectionalProductsArePublished)
+//! ShadowManager publishes shading-facing shadow data and a backend-neutral
+//! raster render plan for shadow-casting directionals.
+NOLINT_TEST_F(LightManagerTest,
+  ShadowManagerPublishForView_DirectionalPublicationAndRasterPlanArePublished)
 {
   auto& manager = Manager();
   manager.OnFrameStart(
@@ -364,14 +364,23 @@ NOLINT_TEST_F(
 
   const auto published = shadow_manager->PublishForView(
     oxygen::ViewId { 7 }, view_constants, manager);
+  const auto* introspection
+    = shadow_manager->TryGetViewIntrospection(oxygen::ViewId { 7 });
+  const auto* raster_plan
+    = shadow_manager->TryGetRasterRenderPlan(oxygen::ViewId { 7 });
 
   ASSERT_NE(published.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(
     published.directional_shadow_metadata_srv, kInvalidShaderVisibleIndex);
-  ASSERT_EQ(published.shadow_instances.size(), 1U);
-  ASSERT_EQ(published.directional_metadata.size(), 1U);
+  ASSERT_NE(introspection, nullptr);
+  ASSERT_NE(raster_plan, nullptr);
+  ASSERT_EQ(introspection->shadow_instances.size(), 1U);
+  ASSERT_EQ(introspection->directional_metadata.size(), 1U);
+  ASSERT_EQ(introspection->raster_jobs.size(), 4U);
+  ASSERT_EQ(raster_plan->jobs.size(), 4U);
+  ASSERT_NE(raster_plan->depth_texture, nullptr);
 
-  const auto& instance = published.shadow_instances[0];
+  const auto& instance = introspection->shadow_instances[0];
   EXPECT_EQ(instance.light_index, 0U);
   EXPECT_EQ(instance.payload_index, 0U);
   EXPECT_EQ(instance.domain, 0U);
@@ -380,13 +389,15 @@ NOLINT_TEST_F(
   EXPECT_NE(instance.flags & (1U << 1), 0U);
   EXPECT_NE(instance.flags & (1U << 2), 0U);
 
-  const auto& metadata = published.directional_metadata[0];
+  const auto& metadata = introspection->directional_metadata[0];
   EXPECT_EQ(metadata.shadow_instance_index, 0U);
   EXPECT_EQ(metadata.implementation_kind, 1U);
   EXPECT_FLOAT_EQ(metadata.distribution_exponent, 2.0F);
   EXPECT_EQ(metadata.cascade_count, 4U);
   EXPECT_FLOAT_EQ(metadata.cascade_distances[0], 8.0F);
   EXPECT_FLOAT_EQ(metadata.cascade_distances[3], 160.0F);
+  EXPECT_EQ(introspection->raster_jobs[0].payload_index, 0U);
+  EXPECT_EQ(introspection->raster_jobs[3].target_array_slice, 3U);
   EXPECT_EQ(published.sun_shadow_index, 0U);
 }
 
@@ -426,18 +437,73 @@ NOLINT_TEST_F(LightManagerTest,
   };
 
   const auto published = shadow_manager->PublishForView(
-    oxygen::ViewId { 8 }, view_constants, manager, &synthetic_sun);
+    oxygen::ViewId { 8 }, view_constants, manager, {}, &synthetic_sun);
+  const auto* introspection
+    = shadow_manager->TryGetViewIntrospection(oxygen::ViewId { 8 });
 
   ASSERT_NE(published.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(
     published.directional_shadow_metadata_srv, kInvalidShaderVisibleIndex);
-  ASSERT_EQ(published.shadow_instances.size(), 1U);
-  ASSERT_EQ(published.directional_metadata.size(), 1U);
+  ASSERT_NE(introspection, nullptr);
+  ASSERT_EQ(introspection->shadow_instances.size(), 1U);
+  ASSERT_EQ(introspection->directional_metadata.size(), 1U);
   EXPECT_EQ(published.sun_shadow_index, 0U);
 
-  const auto& instance = published.shadow_instances[0];
+  const auto& instance = introspection->shadow_instances[0];
   EXPECT_EQ(instance.light_index, 0xFFFFFFFFU);
   EXPECT_NE(instance.flags & (1U << 2), 0U);
+}
+
+//! Shadow publication is reused for identical inputs and invalidated when
+//! shadow-relevant inputs change within the same frame.
+NOLINT_TEST_F(
+  LightManagerTest, ShadowManagerPublishForView_InvalidatesWhenViewInputsChange)
+{
+  auto& manager = Manager();
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  auto node = CreateNode("dir", /*visible=*/true, /*casts_shadows=*/true);
+  auto impl = node.GetImpl();
+  ASSERT_TRUE(impl.has_value());
+  impl->get().AddComponent<oxygen::scene::DirectionalLight>();
+  auto& light = impl->get().GetComponent<oxygen::scene::DirectionalLight>();
+  light.Common().casts_shadows = true;
+  UpdateTransforms(node);
+
+  manager.CollectFromNode(impl->get());
+  manager.EnsureFrameResources();
+
+  auto shadow_manager = CreateShadowManager();
+  ASSERT_NE(shadow_manager, nullptr);
+  shadow_manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  ViewConstants view_constants;
+  view_constants
+    .SetProjectionMatrix(
+      glm::perspectiveRH_ZO(glm::radians(45.0F), 16.0F / 9.0F, 0.1F, 200.0F))
+    .SetCameraPosition(glm::vec3(0.0F, -6.0F, 3.0F));
+  view_constants.SetFrameSequenceNumber(
+    SequenceNumber { 1 }, ViewConstants::kRenderer);
+  view_constants.SetFrameSlot(Slot { 0 }, ViewConstants::kRenderer);
+
+  const auto first = shadow_manager->PublishForView(
+    oxygen::ViewId { 9 }, view_constants, manager);
+  const auto second = shadow_manager->PublishForView(
+    oxygen::ViewId { 9 }, view_constants, manager);
+  EXPECT_EQ(
+    first.shadow_instance_metadata_srv, second.shadow_instance_metadata_srv);
+  EXPECT_EQ(first.directional_shadow_metadata_srv,
+    second.directional_shadow_metadata_srv);
+
+  view_constants.SetCameraPosition(glm::vec3(0.0F, -8.0F, 3.0F));
+  const auto third = shadow_manager->PublishForView(
+    oxygen::ViewId { 9 }, view_constants, manager);
+  EXPECT_NE(
+    first.shadow_instance_metadata_srv, third.shadow_instance_metadata_srv);
+  EXPECT_NE(first.directional_shadow_metadata_srv,
+    third.directional_shadow_metadata_srv);
 }
 
 } // namespace

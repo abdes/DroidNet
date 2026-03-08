@@ -136,7 +136,7 @@ float3 AccumulateDirectionalLights(
         if (NdotL > 0.0) {
             // Compute atmospheric transmittance specifically for the sun
             float3 sun_transmittance = ComputeSunTransmittance(world_pos, atmo, L);
-            const float shadow_visibility = ComputeDirectionalShadowVisibility(
+            const float shadow_visibility = ComputeShadowVisibility(
                 sun_shadow_index, world_pos, N, L);
 
             const float3 H = SafeNormalize(V + L);
@@ -203,7 +203,7 @@ float3 AccumulateDirectionalLights(
             if (is_sun || env_contribution) {
                 transmittance = ComputeSunTransmittance(world_pos, atmo, L);
             }
-            const float shadow_visibility = ComputeDirectionalShadowVisibility(
+            const float shadow_visibility = ComputeShadowVisibility(
                 dl.shadow_index, world_pos, N, L);
 
             const float3 H = SafeNormalize(V + L);

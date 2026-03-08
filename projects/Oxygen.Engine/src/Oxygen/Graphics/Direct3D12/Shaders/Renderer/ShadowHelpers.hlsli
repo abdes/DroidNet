@@ -9,6 +9,7 @@
 
 #include "Renderer/DirectionalShadowMetadata.hlsli"
 #include "Renderer/ShadowFrameBindings.hlsli"
+#include "Renderer/ShadowInstanceMetadata.hlsli"
 #include "Renderer/ViewConstants.hlsli"
 #include "Renderer/ViewFrameBindings.hlsli"
 
@@ -254,16 +255,12 @@ static inline float SampleDirectionalShadowCascadeVisibility(
 #endif
 }
 
-static inline float ComputeDirectionalShadowVisibility(
-    uint shadow_index,
+static inline float ComputeConventionalDirectionalShadowVisibility(
+    uint payload_index,
     float3 world_pos,
     float3 normal_ws,
     float3 light_dir_ws)
 {
-    if (shadow_index == K_INVALID_BINDLESS_INDEX) {
-        return 1.0;
-    }
-
     const ShadowFrameBindings shadow_bindings = LoadResolvedShadowFrameBindings();
     if (shadow_bindings.directional_shadow_metadata_slot == K_INVALID_BINDLESS_INDEX
         || !BX_IN_GLOBAL_SRV(shadow_bindings.directional_shadow_metadata_slot)
@@ -277,11 +274,11 @@ static inline float ComputeDirectionalShadowVisibility(
     uint metadata_count = 0u;
     uint metadata_stride = 0u;
     metadata_buffer.GetDimensions(metadata_count, metadata_stride);
-    if (shadow_index >= metadata_count) {
+    if (payload_index >= metadata_count) {
         return 1.0;
     }
 
-    const DirectionalShadowMetadata metadata = metadata_buffer[shadow_index];
+    const DirectionalShadowMetadata metadata = metadata_buffer[payload_index];
     if (metadata.implementation_kind != 1u || metadata.cascade_count == 0u) {
         return 1.0;
     }
@@ -343,6 +340,45 @@ static inline float ComputeDirectionalShadowVisibility(
         metadata, shadow_texture, cascade_index + 1u, world_pos, normal_ws, light_dir_ws);
     const float blend_t = saturate((view_depth - blend_start) / max(blend_band, 1.0e-4));
     return lerp(visibility, next_visibility, blend_t);
+}
+
+static inline float ComputeShadowVisibility(
+    uint shadow_index,
+    float3 world_pos,
+    float3 normal_ws,
+    float3 light_dir_ws)
+{
+    if (shadow_index == K_INVALID_BINDLESS_INDEX) {
+        return 1.0;
+    }
+
+    const ShadowFrameBindings shadow_bindings = LoadResolvedShadowFrameBindings();
+    if (shadow_bindings.shadow_instance_metadata_slot == K_INVALID_BINDLESS_INDEX
+        || !BX_IN_GLOBAL_SRV(shadow_bindings.shadow_instance_metadata_slot)) {
+        return 1.0;
+    }
+
+    StructuredBuffer<ShadowInstanceMetadata> shadow_instances =
+        ResourceDescriptorHeap[shadow_bindings.shadow_instance_metadata_slot];
+    uint instance_count = 0u;
+    uint instance_stride = 0u;
+    shadow_instances.GetDimensions(instance_count, instance_stride);
+    if (shadow_index >= instance_count) {
+        return 1.0;
+    }
+
+    const ShadowInstanceMetadata shadow_instance = shadow_instances[shadow_index];
+    if ((shadow_instance.flags & SHADOW_PRODUCT_FLAG_VALID) == 0u) {
+        return 1.0;
+    }
+
+    if (shadow_instance.domain == SHADOW_DOMAIN_DIRECTIONAL
+        && shadow_instance.implementation_kind == SHADOW_IMPLEMENTATION_CONVENTIONAL) {
+        return ComputeConventionalDirectionalShadowVisibility(
+            shadow_instance.payload_index, world_pos, normal_ws, light_dir_ws);
+    }
+
+    return 1.0;
 }
 
 #endif // OXYGEN_D3D12_SHADERS_RENDERER_SHADOWHELPERS_HLSLI

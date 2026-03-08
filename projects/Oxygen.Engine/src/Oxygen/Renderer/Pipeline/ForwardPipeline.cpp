@@ -27,8 +27,8 @@
 #include <Oxygen/Renderer/ImGui/ImGuiPass.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Passes/AutoExposurePass.h>
+#include <Oxygen/Renderer/Passes/ConventionalShadowRasterPass.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
-#include <Oxygen/Renderer/Passes/DirectionalShadowPass.h>
 #include <Oxygen/Renderer/Passes/GpuDebugClearPass.h>
 #include <Oxygen/Renderer/Passes/GpuDebugDrawPass.h>
 #include <Oxygen/Renderer/Passes/GroundGridPass.h>
@@ -184,8 +184,8 @@ private:
 
   // Pass configs
   std::shared_ptr<engine::DepthPrePassConfig> depth_pass_config;
-  std::shared_ptr<engine::DirectionalShadowPass::Config>
-    directional_shadow_pass_config;
+  std::shared_ptr<engine::ConventionalShadowRasterPass::Config>
+    shadow_raster_pass_config;
   std::shared_ptr<engine::ShaderPassConfig> shader_pass_config;
   std::shared_ptr<engine::WireframePassConfig> wireframe_pass_config;
   std::shared_ptr<engine::SkyPassConfig> sky_pass_config;
@@ -197,7 +197,7 @@ private:
 
   // Pass instances
   std::shared_ptr<engine::DepthPrePass> depth_pass;
-  std::shared_ptr<engine::DirectionalShadowPass> directional_shadow_pass;
+  std::shared_ptr<engine::ConventionalShadowRasterPass> shadow_raster_pass;
   std::shared_ptr<engine::ShaderPass> shader_pass;
   std::shared_ptr<engine::WireframePass> wireframe_pass;
   std::shared_ptr<engine::SkyPass> sky_pass;
@@ -389,8 +389,8 @@ void ForwardPipeline::Impl::ConfigurePassTargets(
   if (depth_pass_config) {
     depth_pass_config->depth_texture = ctx.depth_texture;
   }
-  if (directional_shadow_pass_config) {
-    directional_shadow_pass_config->depth_texture.reset();
+  if (shadow_raster_pass_config) {
+    shadow_raster_pass_config->depth_texture.reset();
   }
   if (shader_pass_config) {
     shader_pass_config->color_texture = ctx.view->GetHdrTexture();
@@ -483,19 +483,19 @@ auto ForwardPipeline::Impl::RunScenePasses(
   -> co::Co<>
 {
   if (depth_pass && ctx.depth_texture) {
-    if (directional_shadow_pass && directional_shadow_pass_config) {
+    if (shadow_raster_pass && shadow_raster_pass_config) {
       if (const auto shadow_manager = rc.GetRenderer().GetShadowManager()) {
-        directional_shadow_pass_config->depth_texture
-          = shadow_manager->GetDirectionalShadowTexture();
+        shadow_raster_pass_config->depth_texture
+          = shadow_manager->GetConventionalShadowDepthTexture();
       }
     }
 
-    if (directional_shadow_pass && directional_shadow_pass_config
-      && directional_shadow_pass_config->depth_texture) {
-      co_await directional_shadow_pass->PrepareResources(rc, rec);
-      co_await directional_shadow_pass->Execute(rc, rec);
-      rc.RegisterPass<engine::DirectionalShadowPass>(
-        directional_shadow_pass.get());
+    if (shadow_raster_pass && shadow_raster_pass_config
+      && shadow_raster_pass_config->depth_texture) {
+      co_await shadow_raster_pass->PrepareResources(rc, rec);
+      co_await shadow_raster_pass->Execute(rc, rec);
+      rc.RegisterPass<engine::ConventionalShadowRasterPass>(
+        shadow_raster_pass.get());
     }
 
     co_await depth_pass->PrepareResources(rc, rec);
@@ -809,8 +809,8 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
   namespace p = engine;
 
   depth_pass_config = std::make_shared<p::DepthPrePassConfig>();
-  directional_shadow_pass_config
-    = std::make_shared<p::DirectionalShadowPass::Config>();
+  shadow_raster_pass_config
+    = std::make_shared<p::ConventionalShadowRasterPass::Config>();
   shader_pass_config = std::make_shared<p::ShaderPassConfig>();
   wireframe_pass_config = std::make_shared<p::WireframePassConfig>();
   sky_pass_config = std::make_shared<p::SkyPassConfig>();
@@ -821,8 +821,8 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
   auto_exposure_config = std::make_shared<p::AutoExposurePassConfig>();
 
   depth_pass = std::make_shared<p::DepthPrePass>(depth_pass_config);
-  directional_shadow_pass = std::make_shared<p::DirectionalShadowPass>(
-    directional_shadow_pass_config);
+  shadow_raster_pass = std::make_shared<p::ConventionalShadowRasterPass>(
+    shadow_raster_pass_config);
   shader_pass = std::make_shared<p::ShaderPass>(shader_pass_config);
   wireframe_pass = std::make_shared<p::WireframePass>(wireframe_pass_config);
   sky_pass = std::make_shared<p::SkyPass>(sky_pass_config);
@@ -1128,8 +1128,8 @@ void ForwardPipeline::Impl::ClearBackbufferReferences() const
   if (depth_pass_config) {
     depth_pass_config->depth_texture.reset();
   }
-  if (directional_shadow_pass_config) {
-    directional_shadow_pass_config->depth_texture.reset();
+  if (shadow_raster_pass_config) {
+    shadow_raster_pass_config->depth_texture.reset();
   }
   if (shader_pass_config) {
     shader_pass_config->color_texture.reset();

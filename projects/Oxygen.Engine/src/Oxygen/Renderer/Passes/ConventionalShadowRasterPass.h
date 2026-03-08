@@ -8,29 +8,31 @@
 
 #include <cstdint>
 #include <memory>
-#include <span>
+#include <vector>
 
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
+#include <Oxygen/Renderer/Types/RasterShadowRenderPlan.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
 
 namespace oxygen::engine {
 
-//! Conventional directional shadow-map rendering pass.
+//! Conventional raster shadow-map rendering pass.
 /*!
  Reuses the existing depth-only draw path and partition-aware depth PSOs, but
- renders into the shadow system's directional `Texture2DArray` slices using the
- light-view `ViewConstants` snapshots published by `ShadowManager`.
+ consumes a generic raster shadow render plan instead of directional-only pass
+ data.
 */
-class DirectionalShadowPass : public DepthPrePass {
+class ConventionalShadowRasterPass : public DepthPrePass {
 public:
   using Config = DepthPrePassConfig;
 
-  OXGN_RNDR_API explicit DirectionalShadowPass(std::shared_ptr<Config> config);
-  ~DirectionalShadowPass() override;
+  OXGN_RNDR_API explicit ConventionalShadowRasterPass(
+    std::shared_ptr<Config> config);
+  ~ConventionalShadowRasterPass() override;
 
-  OXYGEN_DEFAULT_COPYABLE(DirectionalShadowPass)
-  OXYGEN_DEFAULT_MOVABLE(DirectionalShadowPass)
+  OXYGEN_DEFAULT_COPYABLE(ConventionalShadowRasterPass)
+  OXYGEN_DEFAULT_MOVABLE(ConventionalShadowRasterPass)
 
 protected:
   auto DoPrepareResources(graphics::CommandRecorder& recorder)
@@ -41,18 +43,18 @@ protected:
     -> graphics::RasterizerStateDesc override;
 
 private:
-  auto EnsureShadowViewConstantsCapacity(std::uint32_t required_snapshots)
+  auto EnsureShadowViewConstantsCapacity(std::uint32_t required_jobs) -> void;
+  auto UploadJobViewConstants(std::span<const renderer::RasterShadowJob> jobs)
     -> void;
-  auto UploadShadowViewConstants(
-    std::span<const ViewConstants::GpuData> snapshots) -> void;
-  auto BindCascadeViewConstants(graphics::CommandRecorder& recorder,
-    std::uint32_t cascade_index) const -> void;
-  auto PrepareCascadeDepthStencilView(graphics::Texture& depth_texture,
-    std::uint32_t array_slice) const -> graphics::NativeView;
+  auto BindJobViewConstants(
+    graphics::CommandRecorder& recorder, std::uint32_t job_index) const -> void;
+  auto PrepareJobDepthStencilView(graphics::Texture& depth_texture,
+    const renderer::RasterShadowJob& job) const -> graphics::NativeView;
 
   std::shared_ptr<graphics::Buffer> shadow_view_constants_buffer_;
   void* shadow_view_constants_mapped_ptr_ { nullptr };
   std::uint32_t shadow_view_constants_capacity_ { 0U };
+  std::vector<ViewConstants::GpuData> job_view_constants_upload_;
 };
 
 } // namespace oxygen::engine
