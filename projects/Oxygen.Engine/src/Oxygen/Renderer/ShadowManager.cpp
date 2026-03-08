@@ -524,9 +524,12 @@ auto ShadowManager::BuildDirectionalViewState(const ViewId view_id,
   const glm::mat4 view_matrix = camera_view_constants.view_matrix;
   const glm::mat4 projection_matrix = camera_view_constants.projection_matrix;
   const glm::mat4 inv_view_proj = glm::inverse(projection_matrix * view_matrix);
+  const glm::mat4 inv_proj = glm::inverse(projection_matrix);
 
   std::array<glm::vec3, 4> near_corners {};
   std::array<glm::vec3, 4> far_corners {};
+  std::array<glm::vec3, 4> view_near_corners {};
+  std::array<glm::vec3, 4> view_far_corners {};
   constexpr std::array<glm::vec2, 4> clip_corners {
     glm::vec2(-1.0F, -1.0F),
     glm::vec2(1.0F, -1.0F),
@@ -538,16 +541,20 @@ auto ShadowManager::BuildDirectionalViewState(const ViewId view_id,
       = TransformPoint(inv_view_proj, glm::vec3(clip_corners[i], 0.0F));
     far_corners[i]
       = TransformPoint(inv_view_proj, glm::vec3(clip_corners[i], 1.0F));
+    view_near_corners[i]
+      = TransformPoint(inv_proj, glm::vec3(clip_corners[i], 0.0F));
+    view_far_corners[i]
+      = TransformPoint(inv_proj, glm::vec3(clip_corners[i], 1.0F));
   }
 
   float near_depth = 0.0F;
   float far_depth = 0.0F;
-  for (std::size_t i = 0; i < near_corners.size(); ++i) {
-    near_depth += ViewSpaceDepth(view_matrix, near_corners[i]);
-    far_depth += ViewSpaceDepth(view_matrix, far_corners[i]);
+  for (std::size_t i = 0; i < view_near_corners.size(); ++i) {
+    near_depth += std::max(0.0F, -view_near_corners[i].z);
+    far_depth += std::max(0.0F, -view_far_corners[i].z);
   }
-  near_depth /= static_cast<float>(near_corners.size());
-  far_depth /= static_cast<float>(far_corners.size());
+  near_depth /= static_cast<float>(view_near_corners.size());
+  far_depth /= static_cast<float>(view_far_corners.size());
   if (far_depth <= near_depth + kMinCascadeSpan) {
     LOG_F(WARNING,
       "ShadowManager: invalid camera depth span for view {} "
@@ -616,67 +623,63 @@ auto ShadowManager::BuildDirectionalViewState(const ViewId view_id,
         = std::clamp((end_depth - near_depth) / depth_range, 0.0F, 1.0F);
 
       std::array<glm::vec3, 8> slice_corners {};
+      std::array<glm::vec3, 8> view_slice_corners {};
       for (std::size_t corner = 0; corner < near_corners.size(); ++corner) {
         slice_corners[corner]
           = glm::mix(near_corners[corner], far_corners[corner], t0);
         slice_corners[corner + near_corners.size()]
           = glm::mix(near_corners[corner], far_corners[corner], t1);
+        view_slice_corners[corner]
+          = glm::mix(view_near_corners[corner], view_far_corners[corner], t0);
+        view_slice_corners[corner + near_corners.size()]
+          = glm::mix(view_near_corners[corner], view_far_corners[corner], t1);
       }
 
-      float min_x = (std::numeric_limits<float>::max)();
-      float max_x = (std::numeric_limits<float>::lowest)();
-      float min_y = (std::numeric_limits<float>::max)();
-      float max_y = (std::numeric_limits<float>::lowest)();
-      float min_z_rot = (std::numeric_limits<float>::max)();
-      float max_z_rot = (std::numeric_limits<float>::lowest)();
-      for (const auto& corner : slice_corners) {
-        const glm::vec3 light_space_rot
-          = glm::vec3(light_rotation * glm::vec4(corner, 1.0F));
-        min_x = std::min(min_x, light_space_rot.x);
-        max_x = std::max(max_x, light_space_rot.x);
-        min_y = std::min(min_y, light_space_rot.y);
-        max_y = std::max(max_y, light_space_rot.y);
-        min_z_rot = std::min(min_z_rot, light_space_rot.z);
-        max_z_rot = std::max(max_z_rot, light_space_rot.z);
+      glm::vec3 slice_center_ws(0.0F);
+      glm::vec3 view_slice_center(0.0F);
+      for (std::size_t i = 0; i < slice_corners.size(); ++i) {
+        slice_center_ws += slice_corners[i];
+        view_slice_center += view_slice_corners[i];
+      }
+      slice_center_ws /= static_cast<float>(slice_corners.size());
+      view_slice_center /= static_cast<float>(view_slice_corners.size());
+
+      float sphere_radius = 0.0F;
+      for (const auto& corner : view_slice_corners) {
+        sphere_radius
+          = std::max(sphere_radius, glm::length(corner - view_slice_center));
       }
 
-      const float base_half_extent_x = std::max((max_x - min_x) * 0.5F, 1.0F);
-      const float base_half_extent_y = std::max((max_y - min_y) * 0.5F, 1.0F);
+      const float base_half_extent
+        = std::max(std::ceil(sphere_radius * 16.0F) * (1.0F / 16.0F), 1.0F);
       const float padded_half_extent_x = ComputePaddedHalfExtent(
-        base_half_extent_x, directional_shadow_resolution_);
+        base_half_extent, directional_shadow_resolution_);
       const float padded_half_extent_y = ComputePaddedHalfExtent(
-        base_half_extent_y, directional_shadow_resolution_);
-      const glm::vec3 slice_center_ls {
-        (min_x + max_x) * 0.5F,
-        (min_y + max_y) * 0.5F,
-        (min_z_rot + max_z_rot) * 0.5F,
-      };
+        base_half_extent, directional_shadow_resolution_);
+      glm::vec3 slice_center_ls
+        = glm::vec3(light_rotation * glm::vec4(slice_center_ws, 1.0F));
+
       const glm::vec3 snapped_center_ls
         = SnapLightSpaceCenter(slice_center_ls, padded_half_extent_x,
           padded_half_extent_y, directional_shadow_resolution_);
       const glm::vec3 snapped_center_ws
         = glm::vec3(inv_light_rotation * glm::vec4(snapped_center_ls, 1.0F));
 
-      const float pullback_extent
-        = std::max(std::max(padded_half_extent_x, padded_half_extent_y),
-          (max_z_rot - min_z_rot) * 0.5F);
+      const float pullback_extent = std::max(
+        std::max(padded_half_extent_x, padded_half_extent_y), sphere_radius);
 
       // Place the orthographic shadow camera toward the light source, looking
-      // back at the texel-snapped cascade center. XY coverage is now a tighter
-      // texel-snapped rectangle rather than the earlier square sphere fit.
+      // back at the texel-snapped cascade center. Use a sphere-wrapped XY fit
+      // so cascade coverage stays stable as the camera rotates.
       const glm::vec3 light_eye = snapped_center_ws
         + light_dir_to_light * (pullback_extent + kLightPullbackPadding);
       const glm::mat4 light_view
         = glm::lookAtRH(light_eye, snapped_center_ws, world_up);
 
-      float min_depth = (std::numeric_limits<float>::max)();
-      float max_depth = (std::numeric_limits<float>::lowest)();
-      for (const auto& corner : slice_corners) {
-        const glm::vec3 light_space
-          = glm::vec3(light_view * glm::vec4(corner, 1.0F));
-        min_depth = std::min(min_depth, light_space.z);
-        max_depth = std::max(max_depth, light_space.z);
-      }
+      float max_depth
+        = -(pullback_extent + kLightPullbackPadding) + sphere_radius;
+      float min_depth
+        = -(pullback_extent + kLightPullbackPadding) - sphere_radius;
 
       const float ortho_half_extent_x = padded_half_extent_x;
       const float ortho_half_extent_y = padded_half_extent_y;

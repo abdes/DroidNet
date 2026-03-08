@@ -116,6 +116,15 @@ auto ApplyShadowCasterPassRouting(oxygen::engine::PassMask mask,
   return mask;
 }
 
+auto ApplyMainViewPassRouting(oxygen::engine::PassMask mask,
+  const bool main_view_visible) -> oxygen::engine::PassMask
+{
+  if (main_view_visible) {
+    mask.Set(oxygen::engine::PassMaskBit::kMainViewVisible);
+  }
+  return mask;
+}
+
 } // namespace
 
 namespace oxygen::renderer::resources {
@@ -269,9 +278,11 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
     dm.transform_index = u_handle;
     dm.instance_metadata_buffer_index = 0;
     dm.instance_metadata_offset = 0;
-    dm.flags = ApplyShadowCasterPassRouting(
-      ClassifyMaterialPassMask(item.material.resolved_asset.get()),
-      item.cast_shadows);
+    dm.flags = ApplyMainViewPassRouting(
+      ApplyShadowCasterPassRouting(
+        ClassifyMaterialPassMask(item.material.resolved_asset.get()),
+        item.cast_shadows),
+      item.main_view_visible);
     DCHECK_F(handle != oxygen::engine::sceneprep::kInvalidTransformHandle,
       "Invalid transform handle while emitting");
     DCHECK_F(!dm.flags.IsEmpty(), "flags cannot be empty after assignment");

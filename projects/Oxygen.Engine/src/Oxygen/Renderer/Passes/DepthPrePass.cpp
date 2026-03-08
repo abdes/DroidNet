@@ -355,6 +355,9 @@ auto DepthPrePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   uint32_t draw_errors = 0;
 
   for (const auto& pr : psf->partitions) {
+    if (!pr.pass_mask.IsSet(oxygen::engine::PassMaskBit::kMainViewVisible)) {
+      continue;
+    }
     if (!pr.pass_mask.IsSet(oxygen::engine::PassMaskBit::kOpaque)
       && !pr.pass_mask.IsSet(oxygen::engine::PassMaskBit::kMasked)) {
       continue;

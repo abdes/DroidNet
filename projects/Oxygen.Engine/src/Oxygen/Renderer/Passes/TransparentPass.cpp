@@ -170,6 +170,9 @@ auto TransparentPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   for (uint32_t draw_index = 0; draw_index < record_count; ++draw_index) {
     const auto& md = records[draw_index];
+    if (!md.flags.IsSet(oxygen::engine::PassMaskBit::kMainViewVisible)) {
+      continue;
+    }
     if (!md.flags.IsSet(oxygen::engine::PassMaskBit::kTransparent)) {
       continue;
     }

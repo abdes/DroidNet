@@ -524,28 +524,50 @@ Execution note, March 9, 2026:
   5x5 tent-weighted PCF footprint and the cascade guard band is expanded to
   match that kernel, specifically to move edge quality away from the current
   prototype-grade aliasing.
-- The tenth hardening slice is now in code: directional cascades no longer use
-  the earlier square sphere-fit baseline for XY coverage. They use a tighter
-  texel-snapped rectangular fit with matching guard/snap padding so effective
-  cascade utilization improves without abandoning stability altogether.
+- The tenth hardening slice was an attempted directional utilization
+  improvement that moved cascades to a tighter texel-snapped rectangular XY
+  fit. That slice is no longer considered valid for production CSM quality
+  because it made orthographic coverage breathe with camera angle in large
+  scenes such as Sponza.
 - The eleventh hardening slice is now in code: the non-authored directional
   split fallback no longer uses the earlier simple power curve. It uses a
   practical linear/logarithmic split blend, while preserving authored cascade
   distances when content provides them explicitly.
-- The twelfth hardening slice is now in code: directional cascade handoff and
-  filtering are no longer treated as a single fixed blur policy. The shader
-  path now prefers the tightest valid cascade coverage, uses much narrower
-  texel-aware blend bands, and keeps near-cascade filtering tighter than far-
-  cascade filtering instead of washing out all cascades equally.
-- The thirteenth hardening slice is now in code: the renderer owns an explicit
+- The twelfth hardening slice partially landed the right filtering direction
+  (narrower texel-aware blend bands and tighter near-cascade filtering), but
+  one part of that slice was architecturally wrong for production stability:
+  arbitrary "first valid cascade coverage" selection caused pixels to jump
+  between cascades as camera angle changed.
+- The thirteenth hardening slice is now in code: ScenePrep no longer makes
+  main-view visibility the sole gateway for directional shadow submission.
+  Offscreen shadow casters are emitted through the existing draw-metadata path
+  as shadow-only records, main-view-visible draws are marked explicitly, and
+  main color/depth/wireframe passes ignore shadow-only records while
+  `DirectionalShadowPass` continues to consume `kShadowCaster` partitions.
+- The fourteenth hardening slice is now in code: the renderer owns an explicit
   shadow quality tier contract. Conventional directional resolution is no
   longer limited to authored `ShadowResolutionHint` alone; tier policy can now
   promote the active dominant directional shadow product to a higher runtime
   resolution when the shadow budget allows it.
+- The fifteenth hardening slice is now in code: conventional directional
+  cascades use a texel-snapped sphere-wrapped XY fit again, while keeping the
+  later quality work on filtering, depth tightening, split policy, and tiered
+  resolution. This restores the stability requirement that large scenes need
+  when the camera changes distance or view angle.
+- The sixteenth hardening slice is now in code: directional shading is back to
+  stable interval-based cascade selection, with only local neighbor fallback
+  when a projection is genuinely invalid and neighbor-only blend at cascade
+  handoff. This removes view-angle-dependent cascade hopping from the earlier
+  first-valid search while preserving continuity where adjacent cascades overlap.
+- The seventeenth hardening slice is now in code: conventional directional
+  shadows no longer stack raster slope-scaled bias on top of the existing
+  receiver-side slope-aware normal/light-direction bias. The active policy now
+  keeps constant raster depth bias and receiver-side bias, avoiding the
+  previous double-bias interaction that could detach contact shadows.
 - The remaining gap is not polish. It is the difference between a prototype CSM
   and a professional one:
-  - significantly better effective cascade utilization than the current stable
-    rectangular fit baseline
+  - better effective cascade utilization than the current stable sphere-fit
+    baseline without reintroducing view-angle instability
   - materially better filtering than the current widened PCF kernel
   - finished combined raster/receiver bias tuning
   - stronger cascade continuity, validation, and debug coverage

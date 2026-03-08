@@ -42,6 +42,7 @@ struct RenderItemData {
   // Rendering flags
   bool cast_shadows = true;
   bool receive_shadows = true;
+  bool main_view_visible = true;
 
   // Optional future extensions
   // std::uint32_t render_layer = 0;

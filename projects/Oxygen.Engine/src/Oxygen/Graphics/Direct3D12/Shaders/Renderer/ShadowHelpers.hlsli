@@ -77,27 +77,6 @@ static inline DirectionalShadowProjection ProjectDirectionalShadowCascade(
     return projection;
 }
 
-static inline uint SelectDirectionalShadowCascadeByCoverage(
-    DirectionalShadowMetadata metadata,
-    float3 world_pos,
-    uint interval_index)
-{
-    const uint cascade_count = max(1u, metadata.cascade_count);
-    [unroll]
-    for (uint i = 0; i < OXYGEN_MAX_SHADOW_CASCADES; ++i) {
-        if (i >= cascade_count) {
-            break;
-        }
-        const DirectionalShadowProjection projection =
-            ProjectDirectionalShadowCascade(metadata, i, world_pos);
-        if (projection.valid) {
-            return i;
-        }
-    }
-
-    return min(interval_index, cascade_count - 1u);
-}
-
 static inline float ComputeDirectionalCascadeBlendBand(
     DirectionalShadowMetadata metadata,
     uint cascade_index)
@@ -312,12 +291,37 @@ static inline float ComputeDirectionalShadowVisibility(
 
     const float view_depth = max(0.0, -mul(view_matrix, float4(world_pos, 1.0)).z);
     const uint interval_index = SelectDirectionalShadowCascade(metadata, view_depth);
-    const uint cascade_index = SelectDirectionalShadowCascadeByCoverage(
-        metadata, world_pos, interval_index);
+    const uint cascade_count = max(1u, metadata.cascade_count);
+
+    uint cascade_index = min(interval_index, cascade_count - 1u);
+    DirectionalShadowProjection cascade_projection =
+        ProjectDirectionalShadowCascade(metadata, cascade_index, world_pos);
+    if (!cascade_projection.valid) {
+        if (cascade_index + 1u < cascade_count) {
+            const DirectionalShadowProjection next_projection =
+                ProjectDirectionalShadowCascade(metadata, cascade_index + 1u, world_pos);
+            if (next_projection.valid) {
+                cascade_index += 1u;
+                cascade_projection = next_projection;
+            }
+        }
+        if (!cascade_projection.valid && cascade_index > 0u) {
+            const DirectionalShadowProjection prev_projection =
+                ProjectDirectionalShadowCascade(metadata, cascade_index - 1u, world_pos);
+            if (prev_projection.valid) {
+                cascade_index -= 1u;
+                cascade_projection = prev_projection;
+            }
+        }
+    }
+
+    if (!cascade_projection.valid) {
+        return 1.0;
+    }
+
     const float visibility = SampleDirectionalShadowCascadeVisibility(
         metadata, shadow_texture, cascade_index, world_pos, normal_ws, light_dir_ws);
 
-    const uint cascade_count = max(1u, metadata.cascade_count);
     if (cascade_index + 1u >= cascade_count || cascade_index != interval_index) {
         return visibility;
     }

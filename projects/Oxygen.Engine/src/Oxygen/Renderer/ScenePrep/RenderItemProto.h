@@ -232,10 +232,19 @@ public:
   {
     visible_submeshes_ = std::move(indices);
   }
+  void SetShadowOnlySubmeshes(std::vector<uint32_t> indices) noexcept
+  {
+    shadow_only_submeshes_ = std::move(indices);
+  }
   [[nodiscard]] auto VisibleSubmeshes() const noexcept
     -> std::span<const uint32_t>
   {
     return visible_submeshes_;
+  }
+  [[nodiscard]] auto ShadowOnlySubmeshes() const noexcept
+    -> std::span<const uint32_t>
+  {
+    return shadow_only_submeshes_;
   }
   void SetVisible() noexcept { visibility_flag_ = true; }
   [[nodiscard]] auto IsVisible() const noexcept -> bool
@@ -244,7 +253,8 @@ public:
   }
   [[nodiscard]] auto IsCulled() const noexcept -> bool
   {
-    return !visibility_flag_ || visible_submeshes_.empty();
+    return !visibility_flag_
+      || (visible_submeshes_.empty() && shadow_only_submeshes_.empty());
   }
 
   void SetCastShadows(bool cast) noexcept { cast_shadows = cast; }
@@ -331,6 +341,8 @@ private:
 
   // Dense list of indices of visible submeshes in the resolved parent mesh.
   std::vector<uint32_t> visible_submeshes_;
+  // Dense list of submeshes retained only for shadow rendering.
+  std::vector<uint32_t> shadow_only_submeshes_;
 
   // Internal stuff
   const scn::SceneNodeImpl* node_ { nullptr };

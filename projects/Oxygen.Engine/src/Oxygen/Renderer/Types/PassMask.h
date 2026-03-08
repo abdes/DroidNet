@@ -29,9 +29,14 @@ namespace oxygen::engine {
  kOpaque       : Depth-writing opaque surfaces.
   - kMasked       :
  Depth-writing alpha-tested (cutout) surfaces.
-  - kTransparent  : Alpha blended
+ - kTransparent  : Alpha blended
+
  surfaces (depth read, no depth write).
+  - kMainViewVisible :
+
+ Main-view-visible draw participation.
   - kShadowCaster : Participates in
+
  shadow-caster submission.
  Reserved (not yet produced):
   - kAdditive     : Additive/emissive order-dependent.
@@ -50,6 +55,7 @@ enum class PassMaskBit : uint32_t { // NOLINT(*-enum-size)
   kDecal = OXYGEN_FLAG(7),
   kUi = OXYGEN_FLAG(8),
   kShadowCaster = OXYGEN_FLAG(9),
+  kMainViewVisible = OXYGEN_FLAG(10),
 };
 
 OXYGEN_DEFINE_FLAGS_OPERATORS(PassMaskBit)
@@ -142,7 +148,7 @@ inline auto to_string(PassMask mask) -> std::string
     PassMaskBit flag;
     std::string_view name;
   };
-  static constexpr std::array<Entry, 9> kTable = { {
+  static constexpr std::array<Entry, 10> kTable = { {
     { .flag = PassMaskBit::kDoubleSided, .name = "DoubleSided" },
     { .flag = PassMaskBit::kOpaque, .name = "Opaque" },
     { .flag = PassMaskBit::kMasked, .name = "Masked" },
@@ -152,6 +158,7 @@ inline auto to_string(PassMask mask) -> std::string
     { .flag = PassMaskBit::kDecal, .name = "Decal" },
     { .flag = PassMaskBit::kUi, .name = "UI" },
     { .flag = PassMaskBit::kShadowCaster, .name = "ShadowCaster" },
+    { .flag = PassMaskBit::kMainViewVisible, .name = "MainViewVisible" },
   } };
   std::string out;
   for (const auto& e : kTable) {
