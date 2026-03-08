@@ -14,7 +14,8 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/ScenePrep/MaterialRef.h>
-#include <Oxygen/Renderer/Types/MaterialConstants.h>
+#include <Oxygen/Renderer/Types/MaterialShadingConstants.h>
+#include <Oxygen/Renderer/Types/ProceduralGridMaterialConstants.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
 #include <Oxygen/Renderer/Test/Resources/MaterialBinderTest.h>
@@ -75,11 +76,46 @@ using oxygen::renderer::testing::MaterialBinderTest;
     std::vector { base_color_key, normal_key });
 }
 
+[[nodiscard]] auto MakeProceduralGridMaterial(ResourceKey base_color_key)
+  -> std::shared_ptr<const oxygen::data::MaterialAsset>
+{
+  using oxygen::data::pak::render::MaterialAssetDesc;
+
+  MaterialAssetDesc desc {};
+  desc.flags |= oxygen::data::pak::render::kMaterialFlag_ProceduralGrid;
+  desc.base_color[0] = 0.8F;
+  desc.base_color[1] = 0.7F;
+  desc.base_color[2] = 0.6F;
+  desc.base_color[3] = 1.0F;
+  desc.grid_spacing[0] = 2.5F;
+  desc.grid_spacing[1] = 4.0F;
+  desc.grid_major_every = 8U;
+  desc.grid_line_thickness = 0.2F;
+  desc.grid_major_thickness = 0.45F;
+  desc.grid_axis_thickness = 0.8F;
+  desc.grid_fade_start = 10.0F;
+  desc.grid_fade_end = 40.0F;
+  desc.grid_minor_color[0] = 0.1F;
+  desc.grid_minor_color[1] = 0.2F;
+  desc.grid_minor_color[2] = 0.3F;
+  desc.grid_minor_color[3] = 0.4F;
+  desc.grid_major_color[0] = 0.5F;
+  desc.grid_major_color[1] = 0.6F;
+  desc.grid_major_color[2] = 0.7F;
+  desc.grid_major_color[3] = 0.8F;
+
+  return std::make_shared<oxygen::data::MaterialAsset>(
+    oxygen::data::AssetKey {}, desc,
+    std::vector<oxygen::data::ShaderReference> {},
+    std::vector { base_color_key });
+}
+
 class MaterialBinderBindingTest : public MaterialBinderTest { };
 
-//! MaterialConstants must store bindless SRV indices, not raw author indices.
+//! MaterialShadingConstants must store bindless SRV indices, not raw author
+//! indices.
 NOLINT_TEST_F(MaterialBinderBindingTest,
-  SerializeMaterialConstantsUsesTextureBinderSrvIndices)
+  SerializeMaterialShadingConstantsUsesTextureBinderSrvIndices)
 {
   constexpr ResourceKey base_color_key { 2001U };
   constexpr ResourceKey normal_key { 2002U };
@@ -107,7 +143,7 @@ NOLINT_TEST_F(MaterialBinderBindingTest,
     = TexBinder().GetOrAllocate(base_color_key);
   const auto expected_normal_srv = TexBinder().GetOrAllocate(normal_key);
 
-  const auto all_constants = MatBinder().GetMaterialConstants();
+  const auto all_constants = MatBinder().GetMaterialShadingConstants();
   ASSERT_LT(
     static_cast<std::size_t>(material_handle.get()), all_constants.size());
   const auto& constants
@@ -121,8 +157,9 @@ NOLINT_TEST_F(MaterialBinderBindingTest,
   EXPECT_NE(constants.normal_texture_index, kRawNormalIndex);
 }
 
-//! MaterialConstants must reflect the material UV transform fields.
-NOLINT_TEST_F(MaterialBinderBindingTest, SerializeMaterialConstantsCopiesUv)
+//! MaterialShadingConstants must reflect the material UV transform fields.
+NOLINT_TEST_F(
+  MaterialBinderBindingTest, SerializeMaterialShadingConstantsCopiesUv)
 {
   constexpr ResourceKey base_color_key { 22101U };
   constexpr ResourceKey normal_key { 22102U };
@@ -145,7 +182,7 @@ NOLINT_TEST_F(MaterialBinderBindingTest, SerializeMaterialConstantsCopiesUv)
   ASSERT_TRUE(MatBinder().IsHandleValid(handle));
 
   // Assert
-  const auto all_constants = MatBinder().GetMaterialConstants();
+  const auto all_constants = MatBinder().GetMaterialShadingConstants();
   ASSERT_LT(static_cast<std::size_t>(handle.get()), all_constants.size());
   const auto& constants
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
@@ -183,7 +220,7 @@ NOLINT_TEST_F(MaterialBinderBindingTest, MissingResourceFallback)
   const auto h = MatBinder().GetOrAllocate(ref);
   ASSERT_TRUE(MatBinder().IsHandleValid(h));
 
-  const auto all_constants = MatBinder().GetMaterialConstants();
+  const auto all_constants = MatBinder().GetMaterialShadingConstants();
   ASSERT_LT(static_cast<std::size_t>(h.get()), all_constants.size());
 }
 
@@ -219,7 +256,7 @@ NOLINT_TEST_F(MaterialBinderBindingTest, SharedSrvIndicesForSameResource)
   const auto expectedBaseSrv = TexBinder().GetOrAllocate(base_color_key);
   const auto expectedNormalSrv = TexBinder().GetOrAllocate(normal_key);
 
-  const auto all_constants = MatBinder().GetMaterialConstants();
+  const auto all_constants = MatBinder().GetMaterialShadingConstants();
   ASSERT_LT(static_cast<std::size_t>(handleA.get()), all_constants.size());
   ASSERT_LT(static_cast<std::size_t>(handleB.get()), all_constants.size());
 
@@ -266,7 +303,7 @@ NOLINT_TEST_F(MaterialBinderBindingTest, BindlessIndexStabilityWithinFrame)
 
   // MaterialBinder should expose the same placeholder index within frame.
   MatBinder().EnsureFrameResources();
-  const auto all_constants = MatBinder().GetMaterialConstants();
+  const auto all_constants = MatBinder().GetMaterialShadingConstants();
   // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
   const auto& constants0 = all_constants[static_cast<std::size_t>(h.get())];
   EXPECT_EQ(constants0.base_color_texture_index, placeholder_base);
@@ -278,7 +315,7 @@ NOLINT_TEST_F(MaterialBinderBindingTest, BindlessIndexStabilityWithinFrame)
   EXPECT_EQ(placeholder_base, real_base);
 
   // Material constants must still report the same bindless index.
-  const auto all_constants_after = MatBinder().GetMaterialConstants();
+  const auto all_constants_after = MatBinder().GetMaterialShadingConstants();
   const auto& constants1
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     = all_constants_after[static_cast<std::size_t>(h.get())];
@@ -330,7 +367,7 @@ NOLINT_TEST_F(MaterialBinderBindingTest, PlaceholderReferenceCounting)
   const auto expected_base = TexBinder().GetOrAllocate(base_color_key);
   const auto expected_normal = TexBinder().GetOrAllocate(normal_key);
 
-  const auto all_constants = MatBinder().GetMaterialConstants();
+  const auto all_constants = MatBinder().GetMaterialShadingConstants();
   ASSERT_LT(static_cast<std::size_t>(h.get()), all_constants.size());
   // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
   const auto& constants = all_constants[static_cast<std::size_t>(h.get())];
@@ -343,9 +380,9 @@ NOLINT_TEST_F(MaterialBinderBindingTest, PlaceholderReferenceCounting)
   EXPECT_EQ(after, mid);
 }
 
-//! Material constants must never equal raw authoring indices.
-NOLINT_TEST_F(
-  MaterialBinderBindingTest, MaterialConstantsDoNotExposeRawAuthorIndices)
+//! Material shading constants must never equal raw authoring indices.
+NOLINT_TEST_F(MaterialBinderBindingTest,
+  MaterialShadingConstantsDoNotExposeRawAuthorIndices)
 {
   constexpr ResourceKey base_color_key { 9001U };
   constexpr ResourceKey normal_key { 9002U };
@@ -368,13 +405,53 @@ NOLINT_TEST_F(
   const auto handle = MatBinder().GetOrAllocate(ref);
   ASSERT_TRUE(MatBinder().IsHandleValid(handle));
 
-  const auto all_constants = MatBinder().GetMaterialConstants();
+  const auto all_constants = MatBinder().GetMaterialShadingConstants();
   ASSERT_LT(static_cast<std::size_t>(handle.get()), all_constants.size());
   // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
   const auto& constants = all_constants[static_cast<std::size_t>(handle.get())];
 
   EXPECT_NE(constants.base_color_texture_index, kRawBase);
   EXPECT_NE(constants.normal_texture_index, kRawNormal);
+}
+
+NOLINT_TEST_F(MaterialBinderBindingTest,
+  ProceduralGridConstantsUseSeparateMaterialExtensionTable)
+{
+  constexpr ResourceKey base_color_key { 9401U };
+
+  Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+  MatBinder().OnFrameStart(
+    oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+
+  oxygen::engine::sceneprep::MaterialRef ref;
+  ref.resolved_asset = MakeProceduralGridMaterial(base_color_key);
+  ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+  ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
+
+  const auto handle = MatBinder().GetOrAllocate(ref);
+  ASSERT_TRUE(MatBinder().IsHandleValid(handle));
+
+  const auto all_material_constants = MatBinder().GetMaterialShadingConstants();
+  const auto all_grid_constants
+    = MatBinder().GetProceduralGridMaterialConstants();
+  ASSERT_LT(
+    static_cast<std::size_t>(handle.get()), all_material_constants.size());
+  ASSERT_LT(static_cast<std::size_t>(handle.get()), all_grid_constants.size());
+
+  const auto& material_constants
+    = all_material_constants[static_cast<std::size_t>(handle.get())];
+  const auto& grid_constants
+    = all_grid_constants[static_cast<std::size_t>(handle.get())];
+
+  EXPECT_NE(MatBinder().GetProceduralGridMaterialsSrvIndex(),
+    oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_FLOAT_EQ(material_constants.base_color.x, 0.8F);
+  EXPECT_FLOAT_EQ(grid_constants.grid_spacing.x, 2.5F);
+  EXPECT_FLOAT_EQ(grid_constants.grid_spacing.y, 4.0F);
+  EXPECT_EQ(grid_constants.grid_major_every, 8U);
+  EXPECT_FLOAT_EQ(grid_constants.grid_minor_color.w, 0.4F);
 }
 
 //! Cache hits must not re-invoke the texture binder.

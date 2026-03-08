@@ -4,16 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#ifndef OXYGEN_D3D12_SHADERS_RENDERER_MATERIALCONSTANTS_HLSLI
-#define OXYGEN_D3D12_SHADERS_RENDERER_MATERIALCONSTANTS_HLSLI
+#ifndef OXYGEN_D3D12_SHADERS_RENDERER_MATERIALSHADINGCONSTANTS_HLSLI
+#define OXYGEN_D3D12_SHADERS_RENDERER_MATERIALSHADINGCONSTANTS_HLSLI
 
 // TODO: Add support for Tier 1/2 glTF material capabilities.
 // This requires expanding the ABI and adding support for the following missing features:
 // - Textures: specular, sheen_color, clearcoat, clearcoat_normal, transmission, thickness
 // - Scalars: ior, specular_factor, sheen_color_factor, clearcoat_factor, clearcoat_roughness,
 //            transmission_factor, thickness_factor, attenuation_color, attenuation_distance
-// ABI: must match sizeof(oxygen::engine::MaterialConstants) == 224
-struct MaterialConstants
+// ABI: must match sizeof(oxygen::engine::MaterialShadingConstants) == 112
+struct MaterialShadingConstants
 {
     // Register 0
     float4 base_color;
@@ -50,31 +50,6 @@ struct MaterialConstants
     uint _pad0;
     uint _pad1;
 
-    // Register 7
-    float2 grid_spacing;
-    uint grid_major_every;
-    float grid_line_thickness;
-
-    // Register 8
-    float grid_major_thickness;
-    float grid_axis_thickness;
-    float grid_fade_start;
-    float grid_fade_end;
-
-    // Register 9
-    float4 grid_minor_color;
-
-    // Register 10
-    float4 grid_major_color;
-
-    // Register 11
-    float4 grid_axis_color_x;
-
-    // Register 12
-    float4 grid_axis_color_y;
-
-    // Register 13
-    float4 grid_origin_color;
 };
 
 // UV convention:
@@ -82,7 +57,7 @@ struct MaterialConstants
 // - Transform order is: scale -> rotation -> offset.
 // - uv_set selects the source UV set (0 = TEXCOORD0). Other sets require
 //   vertex data support; currently only uv0 is available.
-float2 ApplyMaterialUv(float2 uv0, MaterialConstants mat)
+float2 ApplyMaterialUv(float2 uv0, MaterialShadingConstants mat)
 {
     float2 uv = uv0;
     // TODO: Support selecting alternate UV sets when available.
@@ -100,4 +75,4 @@ float2 ApplyMaterialUv(float2 uv0, MaterialConstants mat)
     return uv;
 }
 
-#endif  // OXYGEN_D3D12_SHADERS_RENDERER_MATERIALCONSTANTS_HLSLI
+#endif  // OXYGEN_D3D12_SHADERS_RENDERER_MATERIALSHADINGCONSTANTS_HLSLI

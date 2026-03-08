@@ -154,7 +154,7 @@ NOLINT_TEST_F(
   const auto constantsA
     = MatBinder()
         // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-        .GetMaterialConstants()[static_cast<std::size_t>(handleA.get())];
+        .GetMaterialShadingConstants()[static_cast<std::size_t>(handleA.get())];
 
   // Case B: new slot, allocate material first, then textures
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
@@ -176,7 +176,7 @@ NOLINT_TEST_F(
   const auto constantsB
     = MatBinder()
         // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-        .GetMaterialConstants()[static_cast<std::size_t>(handleB.get())];
+        .GetMaterialShadingConstants()[static_cast<std::size_t>(handleB.get())];
 
   EXPECT_EQ(
     constantsA.base_color_texture_index, constantsB.base_color_texture_index);
@@ -208,11 +208,13 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, EnsureFrameResourcesIdempotent)
   MatBinder().EnsureFrameResources();
   const auto constantsA
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-    = MatBinder().GetMaterialConstants()[static_cast<std::size_t>(h.get())];
+    = MatBinder()
+        .GetMaterialShadingConstants()[static_cast<std::size_t>(h.get())];
   MatBinder().EnsureFrameResources();
   const auto constantsB
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-    = MatBinder().GetMaterialConstants()[static_cast<std::size_t>(h.get())];
+    = MatBinder()
+        .GetMaterialShadingConstants()[static_cast<std::size_t>(h.get())];
 
   EXPECT_EQ(
     constantsA.base_color_texture_index, constantsB.base_color_texture_index);
@@ -243,7 +245,8 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, UpdateMaterialInPlace)
 
   const auto before
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-    = MatBinder().GetMaterialConstants()[static_cast<std::size_t>(h.get())];
+    = MatBinder()
+        .GetMaterialShadingConstants()[static_cast<std::size_t>(h.get())];
 
   // New material uses different texture keys
   const ResourceKey new_base { 63011U };
@@ -253,7 +256,8 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, UpdateMaterialInPlace)
   MatBinder().Update(h, b);
   const auto after
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-    = MatBinder().GetMaterialConstants()[static_cast<std::size_t>(h.get())];
+    = MatBinder()
+        .GetMaterialShadingConstants()[static_cast<std::size_t>(h.get())];
 
   EXPECT_NE(before.base_color_texture_index, after.base_color_texture_index);
   EXPECT_NE(before.normal_texture_index, after.normal_texture_index);
@@ -371,7 +375,7 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, UpdateDoesNotChangeCanonicalHandle)
 
   // hb remains valid and now points at A constants (duplicate content handle).
   ASSERT_TRUE(MatBinder().IsHandleValid(hb));
-  const auto all = MatBinder().GetMaterialConstants();
+  const auto all = MatBinder().GetMaterialShadingConstants();
   // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
   const auto ca = all[static_cast<std::size_t>(ha.get())];
   // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)

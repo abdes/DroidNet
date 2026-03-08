@@ -57,7 +57,7 @@ These are authoritative in the current renderer:
   frame sequence/slot, time, draw-system bindless slots, instance-data slot,
   and `bindless_view_frame_bindings_slot`.
 - DrawMetadata structured buffer (per-draw records; dense indexed access).
-- MaterialConstants structured buffer (per-material data, bindless texture
+- MaterialShadingConstants structured buffer (per-material data, bindless texture
   indices).
 
 ## 3. Bindless binding contract
@@ -239,7 +239,7 @@ these subsystems, including instance data if instancing was generated.
 
 ### 8.2 MaterialBinder
 
-- Stores MaterialConstants in AtlasBuffer (device-local structured buffer).
+- Stores MaterialShadingConstants in AtlasBuffer (device-local structured buffer).
 - Deduplicates materials by content hash; dirty tracking controls uploads.
 - Resolves texture indices via TextureBinder.
 

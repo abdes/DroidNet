@@ -482,12 +482,12 @@ Validation Expectations:
 
 ### Material Override Timing (Phase 1)
 
-* Per-frame material snapshot is provided via
-  `Renderer::SetMaterialConstants(...)` before `ExecuteRenderGraph`.
-* Passes that use material shading (e.g., ShaderPass) will see the last snapshot
-  set that frame.
-* Future phases move toward per-item material resolution at packet build time;
-  the Phase 1 snapshot is a temporary global override.
+* Scene prep resolves per-material shading snapshots through `MaterialBinder`
+  before `ExecuteRenderGraph`.
+* Passes that use material shading (e.g., `ShaderPass`) fetch those resolved
+  rows through `DrawFrameBindings.material_shading_constants_slot`.
+* Per-item material resolution is no longer a temporary global override; it is
+  part of the live draw/material contract.
 
 ## 🗂 Revision History
 

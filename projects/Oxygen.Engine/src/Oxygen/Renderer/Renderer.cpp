@@ -88,7 +88,7 @@
 #include <Oxygen/Renderer/Types/EnvironmentStaticData.h>
 #include <Oxygen/Renderer/Types/EnvironmentViewData.h>
 #include <Oxygen/Renderer/Types/LightingFrameBindings.h>
-#include <Oxygen/Renderer/Types/MaterialConstants.h>
+#include <Oxygen/Renderer/Types/MaterialShadingConstants.h>
 #include <Oxygen/Renderer/Types/SyntheticSunData.h>
 #include <Oxygen/Renderer/Types/ViewColorData.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
@@ -341,7 +341,7 @@ auto RendererTagFactory::Get() noexcept -> RendererTag
 using oxygen::Graphics;
 using oxygen::data::Mesh;
 using oxygen::data::detail::IndexType;
-using oxygen::engine::MaterialConstants;
+using oxygen::engine::MaterialShadingConstants;
 using oxygen::engine::Renderer;
 using oxygen::graphics::Buffer;
 using oxygen::graphics::BufferDesc;
@@ -1825,7 +1825,8 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
     if (draw_frame_bindings_publisher_) {
       DLOG_F(3, "   worlds: {}", prepared.bindless_worlds_slot);
       DLOG_F(3, "  normals: {}", prepared.bindless_normals_slot);
-      DLOG_F(3, "materials: {}", prepared.bindless_materials_slot);
+      DLOG_F(
+        3, "material shading: {}", prepared.bindless_material_shading_slot);
       DLOG_F(3, " metadata: {}", prepared.bindless_draw_metadata_slot);
       DLOG_F(3, " instance: {}", prepared.bindless_instance_data_slot);
 
@@ -1835,8 +1836,14 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
         .transforms_slot = BindlessWorldsSlot(prepared.bindless_worlds_slot),
         .normal_matrices_slot
         = BindlessNormalsSlot(prepared.bindless_normals_slot),
-        .material_constants_slot
-        = BindlessMaterialConstantsSlot(prepared.bindless_materials_slot),
+        .material_shading_constants_slot = BindlessMaterialShadingConstantsSlot(
+          prepared.bindless_material_shading_slot),
+        .procedural_grid_material_constants_slot
+        = BindlessProceduralGridMaterialConstantsSlot(
+          scene_prep_state_->GetMaterialBinder()
+            ? scene_prep_state_->GetMaterialBinder()
+                ->GetProceduralGridMaterialsSrvIndex()
+            : kInvalidShaderVisibleIndex),
         .instance_data_slot
         = BindlessInstanceDataSlot(prepared.bindless_instance_data_slot),
       };
@@ -2186,8 +2193,8 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
         DLOG_F(3, "captured normals: {}", prepared_frame.bindless_normals_slot);
       }
       if (const auto materials = scene_prep_state_->GetMaterialBinder()) {
-        prepared_frame.bindless_materials_slot
-          = materials->GetMaterialsSrvIndex();
+        prepared_frame.bindless_material_shading_slot
+          = materials->GetMaterialShadingSrvIndex();
       }
       if (auto emitter = scene_prep_state_->GetDrawMetadataEmitter()) {
         prepared_frame.bindless_draw_metadata_slot

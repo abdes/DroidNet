@@ -115,7 +115,7 @@ namespace internal {
   class IblManager;
 } // namesapce internal
 
-struct MaterialConstants;
+struct MaterialShadingConstants;
 
 //! Renderer: backend-agnostic, manages mesh-to-GPU resource mapping and
 //! eviction.

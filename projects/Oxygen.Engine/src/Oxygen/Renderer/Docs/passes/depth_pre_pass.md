@@ -98,7 +98,7 @@ bindless indices.
 | ----- | ----------- | -------------- |
 | **Compile-Time** | 4 PSO descriptors | `CreatePipelineStateDesc()` builds all variants with distinct shader defines + rasterizer states |
 | **Runtime** | Per-partition selection | CPU inspects `PassMask` flags, selects variant, calls `SetPipelineState()` once per partition |
-| **Per-Draw** | Material properties | GPU fetches `MaterialConstants` via `g_DrawIndex`, evaluates flags dynamically (alpha test on/off, texture sampling) |
+| **Per-Draw** | Material properties | GPU fetches `MaterialShadingConstants` via `g_DrawIndex`, evaluates flags dynamically (alpha test on/off, texture sampling) |
 
 ### Shader-Level Variation
 

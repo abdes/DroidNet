@@ -119,7 +119,7 @@ The SRV index returned by `GetOrAllocate()` must never change for a given textur
 
 **Called By**:
 
-- `MaterialBinder` during material compilation/update (producing `MaterialConstants`)
+- `MaterialBinder` during material compilation/update (producing `MaterialShadingConstants`)
 
 **Lifecycle**:
 
@@ -340,7 +340,7 @@ shader-usable bindless indices.
 
 - Material compilation/update must resolve each texture slot by calling
   `TextureBinder::GetOrAllocate(content::ResourceKey)`.
-- The compiled `MaterialConstants` must contain only shader-usable values:
+- The compiled `MaterialShadingConstants` must contain only shader-usable values:
   stable SRV indices and scalar constants.
 
 ### Invariants
@@ -348,7 +348,7 @@ shader-usable bindless indices.
 - `MakeMaterialKey()` hashes authored data (resource table indices and scalar
   parameters), never SRV indices, to preserve material-handle stability across
   runs and independent of descriptor allocation order.
-- `MaterialConstants` never stores `pak::ResourceIndexT` and never stores
+- `MaterialShadingConstants` never stores `pak::ResourceIndexT` and never stores
   `content::ResourceKey`.
 
 ## Forward Compatibility: Instanced Rendering (Directive)
@@ -361,7 +361,7 @@ This design remains valid for instancing if the renderer follows the rules below
 - Texture identity is `content::ResourceKey`. It is the only input accepted for general runtime texture binding.
 - `TextureBinder` calls must occur during **material compilation/update** (CPU preparation), not during per-instance
   draw submission.
-- Instance data must reference a **material table row** (or handle) that points to a `MaterialConstants` payload
+- Instance data must reference a **material table row** (or handle) that points to a `MaterialShadingConstants` payload
   containing shader-visible SRV indices.
 
 ### Material vs MaterialInstance
@@ -369,9 +369,9 @@ This design remains valid for instancing if the renderer follows the rules below
 - A **material** (prototype) owns the authored texture identities (`content::ResourceKey` per slot) and scalar
   parameters.
 - A **material instance** is a runtime variant that may override scalars and/or texture identities.
-- Each unique material state (prototype or instance override set) must compile to exactly one `MaterialConstants` entry
+- Each unique material state (prototype or instance override set) must compile to exactly one `MaterialShadingConstants` entry
   (a single table row).
-- The compiled `MaterialConstants` must contain only shader-usable values: SRV indices + scalar constants. It must not
+- The compiled `MaterialShadingConstants` must contain only shader-usable values: SRV indices + scalar constants. It must not
   contain resource indices or `ResourceKey` values.
 
 ### Why This Avoids a Rewrite

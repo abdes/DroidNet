@@ -38,7 +38,9 @@ namespace oxygen::engine {
 OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(BindlessDrawMetadataSlot);
 OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(BindlessWorldsSlot);
 OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(BindlessNormalsSlot);
-OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(BindlessMaterialConstantsSlot);
+OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(BindlessMaterialShadingConstantsSlot);
+OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(
+  BindlessProceduralGridMaterialConstantsSlot);
 OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(BindlessInstanceDataSlot);
 
 #undef OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE
@@ -48,9 +50,11 @@ struct alignas(packing::kShaderDataFieldAlignment) DrawFrameBindings {
   BindlessDrawMetadataSlot draw_metadata_slot {};
   BindlessWorldsSlot transforms_slot {};
   BindlessNormalsSlot normal_matrices_slot {};
-  BindlessMaterialConstantsSlot material_constants_slot {};
+  BindlessMaterialShadingConstantsSlot material_shading_constants_slot {};
+  BindlessProceduralGridMaterialConstantsSlot
+    procedural_grid_material_constants_slot {};
   BindlessInstanceDataSlot instance_data_slot {};
-  std::array<std::uint32_t, 3> _pad_to_16 {};
+  std::array<std::uint32_t, 2> _pad_to_16 {};
 };
 
 static_assert(sizeof(DrawFrameBindings) == 32);

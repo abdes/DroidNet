@@ -8,7 +8,7 @@
 #include "Forward/ForwardPbr.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
-#include "Renderer/MaterialConstants.hlsli"
+#include "Renderer/MaterialShadingConstants.hlsli"
 #include "Renderer/ViewConstants.hlsli"
 
 #define BX_VERTEX_TYPE uint4

@@ -43,7 +43,7 @@
 //   // Before including this file, you can override the following to match your structs:
 //   // #define BX_VERTEX_TYPE    MyVertex
 //   // #define BX_INDEX_TYPE     uint
-//   // #define BX_MATERIAL_TYPE  MyMaterialConstants
+//   // #define BX_MATERIAL_TYPE  MyMaterialShadingConstants
 //   // #include "BindlessHelpers.hlsl"
 //
 // Classic typed arrays (non-SM 6.6)
@@ -77,7 +77,7 @@ static inline bool BX_IsValid(uint idx) { return idx != K_INVALID_BINDLESS_INDEX
 #define BX_INDEX_TYPE uint
 #endif
 #ifndef BX_MATERIAL_TYPE
-#define BX_MATERIAL_TYPE MaterialConstants
+#define BX_MATERIAL_TYPE MaterialShadingConstants
 #endif
 
 // ----------------------------------------------------------------------------
@@ -153,7 +153,7 @@ static inline float4x4 BX_LoadInstanceWorldMatrix(uint transformsSlot,
     return BX_LoadWorldMatrix(transformsSlot, transformIndex);
 }
 
-// Load a material constants record from a materials buffer slot
+// Load a material shading record from a materials buffer slot
 static inline BX_MATERIAL_TYPE BX_LoadMaterial(uint materialsSlot, uint materialIndex)
 {
     StructuredBuffer<BX_MATERIAL_TYPE> mats = ResourceDescriptorHeap[materialsSlot];

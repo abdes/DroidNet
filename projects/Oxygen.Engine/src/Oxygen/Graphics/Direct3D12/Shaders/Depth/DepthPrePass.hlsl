@@ -17,7 +17,7 @@
 #include "Renderer/ViewConstants.hlsli"
 #include "Renderer/DrawHelpers.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
-#include "Renderer/MaterialConstants.hlsli"
+#include "Renderer/MaterialShadingConstants.hlsli"
 
 #include "Depth/DepthPrePassConstants.hlsli"
 
@@ -110,15 +110,15 @@ void PS(VS_OUTPUT_DEPTH input)
 #ifdef ALPHA_TEST
     const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
     if (!BX_IsValidSlot(draw_bindings.draw_metadata_slot) ||
-        !BX_IsValidSlot(draw_bindings.material_constants_slot)) {
+        !BX_IsValidSlot(draw_bindings.material_shading_constants_slot)) {
         return;
     }
 
     StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[draw_bindings.draw_metadata_slot];
     const DrawMetadata meta = draw_meta_buffer[g_DrawIndex];
 
-    StructuredBuffer<MaterialConstants> materials = ResourceDescriptorHeap[draw_bindings.material_constants_slot];
-    const MaterialConstants mat = materials[meta.material_handle];
+    StructuredBuffer<MaterialShadingConstants> materials = ResourceDescriptorHeap[draw_bindings.material_shading_constants_slot];
+    const MaterialShadingConstants mat = materials[meta.material_handle];
 
     const bool alpha_test_enabled = (mat.flags & MATERIAL_FLAG_ALPHA_TEST) != 0u;
     if (!alpha_test_enabled) {

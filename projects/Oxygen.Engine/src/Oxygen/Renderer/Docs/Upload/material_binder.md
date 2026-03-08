@@ -4,7 +4,7 @@
 
 MaterialBinder is the renderer-facing component that owns GPU-resident material
 constants and exposes stable bindless access to them. It transforms authored
-material data into shader-ready `MaterialConstants`, resolves texture bindings
+material data into shader-ready `MaterialShadingConstants`, resolves texture bindings
 via TextureBinder, and uploads only the changes each frame.
 
 ## Scope and Non-Goals
@@ -41,7 +41,7 @@ via TextureBinder, and uploads only the changes each frame.
 
 ### 3) Texture binding semantics
 
-- MaterialConstants store shader-visible SRV indices, never ResourceKey or
+- MaterialShadingConstants store shader-visible SRV indices, never ResourceKey or
  authored table indices.
 - `kInvalidShaderVisibleIndex` means “do not sample” in shaders; sampling must
  branch to scalar defaults.
@@ -60,7 +60,7 @@ via TextureBinder, and uploads only the changes each frame.
  identity, and marks the entry dirty when content changes.
 - `EnsureFrameResources()` uploads only dirty entries and publishes the SRV
  index for the material buffer once ready.
-- `GetMaterialsSrvIndex()` returns the SRV index for the material constants
+- `GetMaterialShadingSrvIndex()` returns the SRV index for the material shading
  buffer and is valid only after a successful EnsureFrameResources pass.
 
 ### Atlas buffer behavior

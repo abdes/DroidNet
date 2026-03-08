@@ -11,7 +11,7 @@
 #include "Renderer/DrawHelpers.hlsli"
 #include "Renderer/ViewColorHelpers.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
-#include "Renderer/MaterialConstants.hlsli"
+#include "Renderer/MaterialShadingConstants.hlsli"
 #include "MaterialFlags.hlsli"
 
 // Define vertex structure to satisfy BindlessHelpers.hlsl defaults.
@@ -54,14 +54,14 @@ float4 PS(VSOutput input) : SV_Target0 {
 #ifdef ALPHA_TEST
     const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
     if (draw_bindings.draw_metadata_slot != K_INVALID_BINDLESS_INDEX
-        && draw_bindings.material_constants_slot != K_INVALID_BINDLESS_INDEX) {
+        && draw_bindings.material_shading_constants_slot != K_INVALID_BINDLESS_INDEX) {
         StructuredBuffer<DrawMetadata> draw_meta_buffer =
             ResourceDescriptorHeap[draw_bindings.draw_metadata_slot];
         DrawMetadata meta = draw_meta_buffer[g_DrawIndex];
 
-        StructuredBuffer<MaterialConstants> materials =
-            ResourceDescriptorHeap[draw_bindings.material_constants_slot];
-        MaterialConstants mat = materials[meta.material_handle];
+        StructuredBuffer<MaterialShadingConstants> materials =
+            ResourceDescriptorHeap[draw_bindings.material_shading_constants_slot];
+        MaterialShadingConstants mat = materials[meta.material_handle];
 
         const bool alpha_test_enabled =
             (mat.flags & MATERIAL_FLAG_ALPHA_TEST) != 0u;

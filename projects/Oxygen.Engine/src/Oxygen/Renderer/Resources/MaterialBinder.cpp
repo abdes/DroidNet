@@ -29,7 +29,8 @@
 #include <Oxygen/Renderer/Resources/IResourceBinder.h>
 #include <Oxygen/Renderer/Resources/MaterialBinder.h>
 #include <Oxygen/Renderer/ScenePrep/MaterialRef.h>
-#include <Oxygen/Renderer/Types/MaterialConstants.h>
+#include <Oxygen/Renderer/Types/MaterialShadingConstants.h>
+#include <Oxygen/Renderer/Types/ProceduralGridMaterialConstants.h>
 #include <Oxygen/Renderer/Upload/AtlasBuffer.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
@@ -205,13 +206,13 @@ auto MakeMaterialKey(
   return static_cast<std::uint64_t>(seed);
 }
 
-//! Serialize MaterialAsset data into MaterialConstants format.
-auto SerializeMaterialConstants(
+//! Serialize MaterialAsset data into MaterialShadingConstants format.
+auto SerializeMaterialShadingConstants(
   const oxygen::engine::sceneprep::MaterialRef& material,
   oxygen::renderer::resources::IResourceBinder& texture_binder) noexcept
-  -> oxygen::engine::MaterialConstants
+  -> oxygen::engine::MaterialShadingConstants
 {
-  oxygen::engine::MaterialConstants constants;
+  oxygen::engine::MaterialShadingConstants constants;
 
   // Copy base color
   const auto base_color = material.resolved_asset->GetBaseColor();
@@ -316,41 +317,6 @@ auto SerializeMaterialConstants(
     = material.resolved_asset->GetUvRotationRadians();
   constants.uv_set = material.resolved_asset->GetUvSet();
 
-  if (material.resolved_asset->HasProceduralGrid()) {
-    const auto grid_spacing = material.resolved_asset->GetGridSpacing();
-    constants.grid_spacing = { grid_spacing[0], grid_spacing[1] };
-    constants.grid_major_every = material.resolved_asset->GetGridMajorEvery();
-    constants.grid_line_thickness
-      = material.resolved_asset->GetGridLineThickness();
-    constants.grid_major_thickness
-      = material.resolved_asset->GetGridMajorThickness();
-    constants.grid_axis_thickness
-      = material.resolved_asset->GetGridAxisThickness();
-    constants.grid_fade_start = material.resolved_asset->GetGridFadeStart();
-    constants.grid_fade_end = material.resolved_asset->GetGridFadeEnd();
-
-    const auto grid_minor_color = material.resolved_asset->GetGridMinorColor();
-    constants.grid_minor_color = { grid_minor_color[0], grid_minor_color[1],
-      grid_minor_color[2], grid_minor_color[3] };
-
-    const auto grid_major_color = material.resolved_asset->GetGridMajorColor();
-    constants.grid_major_color = { grid_major_color[0], grid_major_color[1],
-      grid_major_color[2], grid_major_color[3] };
-
-    const auto grid_axis_color_x = material.resolved_asset->GetGridAxisColorX();
-    constants.grid_axis_color_x = { grid_axis_color_x[0], grid_axis_color_x[1],
-      grid_axis_color_x[2], grid_axis_color_x[3] };
-
-    const auto grid_axis_color_y = material.resolved_asset->GetGridAxisColorY();
-    constants.grid_axis_color_y = { grid_axis_color_y[0], grid_axis_color_y[1],
-      grid_axis_color_y[2], grid_axis_color_y[3] };
-
-    const auto grid_origin_color
-      = material.resolved_asset->GetGridOriginColor();
-    constants.grid_origin_color = { grid_origin_color[0], grid_origin_color[1],
-      grid_origin_color[2], grid_origin_color[3] };
-  }
-
   // Emissive: factor and texture for self-illumination / glow.
   const auto emissive_factor = material.resolved_asset->GetEmissiveFactor();
   constants.emissive_factor
@@ -358,6 +324,51 @@ auto SerializeMaterialConstants(
   constants.emissive_texture_index
     = ResolveTextureIndex(material.resolved_asset->GetEmissiveTextureKey(),
       material.resolved_asset->GetEmissiveTexture());
+
+  return constants;
+}
+
+auto SerializeProceduralGridMaterialConstants(
+  const oxygen::engine::sceneprep::MaterialRef& material) noexcept
+  -> oxygen::engine::ProceduralGridMaterialConstants
+{
+  oxygen::engine::ProceduralGridMaterialConstants constants;
+
+  if (!material.resolved_asset->HasProceduralGrid()) {
+    return constants;
+  }
+
+  const auto grid_spacing = material.resolved_asset->GetGridSpacing();
+  constants.grid_spacing = { grid_spacing[0], grid_spacing[1] };
+  constants.grid_major_every = material.resolved_asset->GetGridMajorEvery();
+  constants.grid_line_thickness
+    = material.resolved_asset->GetGridLineThickness();
+  constants.grid_major_thickness
+    = material.resolved_asset->GetGridMajorThickness();
+  constants.grid_axis_thickness
+    = material.resolved_asset->GetGridAxisThickness();
+  constants.grid_fade_start = material.resolved_asset->GetGridFadeStart();
+  constants.grid_fade_end = material.resolved_asset->GetGridFadeEnd();
+
+  const auto grid_minor_color = material.resolved_asset->GetGridMinorColor();
+  constants.grid_minor_color = { grid_minor_color[0], grid_minor_color[1],
+    grid_minor_color[2], grid_minor_color[3] };
+
+  const auto grid_major_color = material.resolved_asset->GetGridMajorColor();
+  constants.grid_major_color = { grid_major_color[0], grid_major_color[1],
+    grid_major_color[2], grid_major_color[3] };
+
+  const auto grid_axis_color_x = material.resolved_asset->GetGridAxisColorX();
+  constants.grid_axis_color_x = { grid_axis_color_x[0], grid_axis_color_x[1],
+    grid_axis_color_x[2], grid_axis_color_x[3] };
+
+  const auto grid_axis_color_y = material.resolved_asset->GetGridAxisColorY();
+  constants.grid_axis_color_y = { grid_axis_color_y[0], grid_axis_color_y[1],
+    grid_axis_color_y[2], grid_axis_color_y[3] };
+
+  const auto grid_origin_color = material.resolved_asset->GetGridOriginColor();
+  constants.grid_origin_color = { grid_origin_color[0], grid_origin_color[1],
+    grid_origin_color[2], grid_origin_color[3] };
 
   return constants;
 }
@@ -388,14 +399,18 @@ public:
     std::shared_ptr<const data::MaterialAsset> material) -> void;
   [[nodiscard]] auto IsHandleValid(
     engine::sceneprep::MaterialHandle handle) const -> bool;
-  [[nodiscard]] auto GetMaterialConstants() const noexcept
-    -> std::span<const engine::MaterialConstants>;
+  [[nodiscard]] auto GetMaterialShadingConstants() const noexcept
+    -> std::span<const engine::MaterialShadingConstants>;
+  [[nodiscard]] auto GetProceduralGridMaterialConstants() const noexcept
+    -> std::span<const engine::ProceduralGridMaterialConstants>;
   [[nodiscard]] auto GetDirtyIndices() const noexcept
     -> std::span<const std::uint32_t>;
   auto EnsureFrameResources() -> void;
   auto OverrideUvTransform(const data::MaterialAsset& material,
     glm::vec2 uv_scale, glm::vec2 uv_offset) -> bool;
-  [[nodiscard]] auto GetMaterialsSrvIndex() const -> ShaderVisibleIndex;
+  [[nodiscard]] auto GetMaterialShadingSrvIndex() const -> ShaderVisibleIndex;
+  [[nodiscard]] auto GetProceduralGridMaterialsSrvIndex() const
+    -> ShaderVisibleIndex;
 
 private:
   using ReuseStrategy = nexus::FrameDrivenIndexReuse<bindless::HeapIndex>;
@@ -437,7 +452,9 @@ private:
   std::unordered_map<const data::MaterialAsset*, std::uint32_t>
     material_ptr_to_index_;
   std::vector<std::shared_ptr<const data::MaterialAsset>> materials_;
-  std::vector<engine::MaterialConstants> material_constants_;
+  std::vector<engine::MaterialShadingConstants> material_shading_constants_;
+  std::vector<engine::ProceduralGridMaterialConstants>
+    procedural_grid_material_constants_;
   std::vector<std::uint64_t> material_keys_;
   std::vector<std::uint32_t> material_handle_generations_;
   std::vector<std::uint32_t> dirty_epoch_;
@@ -467,7 +484,9 @@ private:
 
   // Atlas-based material storage
   std::unique_ptr<AtlasBuffer> materials_atlas_;
+  std::unique_ptr<AtlasBuffer> procedural_grid_materials_atlas_;
   std::vector<AtlasBuffer::ElementRef> material_refs_;
+  std::vector<AtlasBuffer::ElementRef> procedural_grid_material_refs_;
 
   // Current frame slot for atlas element retirement
   frame::Slot current_frame_slot_ { frame::kInvalidSlot };
@@ -521,10 +540,16 @@ auto MaterialBinder::IsHandleValid(
   return impl_->IsHandleValid(handle);
 }
 
-auto MaterialBinder::GetMaterialConstants() const noexcept
-  -> std::span<const engine::MaterialConstants>
+auto MaterialBinder::GetMaterialShadingConstants() const noexcept
+  -> std::span<const engine::MaterialShadingConstants>
 {
-  return impl_->GetMaterialConstants();
+  return impl_->GetMaterialShadingConstants();
+}
+
+auto MaterialBinder::GetProceduralGridMaterialConstants() const noexcept
+  -> std::span<const engine::ProceduralGridMaterialConstants>
+{
+  return impl_->GetProceduralGridMaterialConstants();
 }
 
 auto MaterialBinder::EnsureFrameResources() -> void
@@ -532,9 +557,15 @@ auto MaterialBinder::EnsureFrameResources() -> void
   impl_->EnsureFrameResources();
 }
 
-auto MaterialBinder::GetMaterialsSrvIndex() const -> ShaderVisibleIndex
+auto MaterialBinder::GetMaterialShadingSrvIndex() const -> ShaderVisibleIndex
 {
-  return impl_->GetMaterialsSrvIndex();
+  return impl_->GetMaterialShadingSrvIndex();
+}
+
+auto MaterialBinder::GetProceduralGridMaterialsSrvIndex() const
+  -> ShaderVisibleIndex
+{
+  return impl_->GetProceduralGridMaterialsSrvIndex();
 }
 
 //=== MaterialBinder::Impl Implementation ==================================//
@@ -565,9 +596,14 @@ MaterialBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
   CHECK_NOTNULL_F(asset_loader_, "IAssetLoader cannot be null");
 
   materials_atlas_ = std::make_unique<AtlasBuffer>(gfx_,
-    static_cast<std::uint32_t>(sizeof(engine::MaterialConstants)),
-    "MaterialConstantsAtlas");
+    static_cast<std::uint32_t>(sizeof(engine::MaterialShadingConstants)),
+    "MaterialShadingConstantsAtlas");
   CHECK_NOTNULL_F(materials_atlas_, "Failed to create material atlas buffer");
+  procedural_grid_materials_atlas_ = std::make_unique<AtlasBuffer>(gfx_,
+    static_cast<std::uint32_t>(sizeof(engine::ProceduralGridMaterialConstants)),
+    "ProceduralGridMaterialConstantsAtlas");
+  CHECK_NOTNULL_F(procedural_grid_materials_atlas_,
+    "Failed to create procedural-grid material atlas buffer");
 
   callback_gate_ = std::make_shared<CallbackGate>();
   CHECK_NOTNULL_F(callback_gate_, "Failed to create callback gate");
@@ -638,6 +674,16 @@ MaterialBinder::Impl::~Impl()
     LOG_F(INFO, "next index        : {}", ms.next_index);
     LOG_F(INFO, "free list size    : {}", ms.free_list_size);
   }
+  if (procedural_grid_materials_atlas_) {
+    const auto ms = procedural_grid_materials_atlas_->GetStats();
+    LOG_SCOPE_F(INFO, "Procedural Grid Materials Atlas Buffer");
+    LOG_F(INFO, "ensure calls      : {}", ms.ensure_calls);
+    LOG_F(INFO, "allocations       : {}", ms.allocations);
+    LOG_F(INFO, "releases          : {}", ms.releases);
+    LOG_F(INFO, "capacity elements : {}", ms.capacity_elements);
+    LOG_F(INFO, "next index        : {}", ms.next_index);
+    LOG_F(INFO, "free list size    : {}", ms.free_list_size);
+  }
 }
 
 auto MaterialBinder::Impl::OnFrameStart(
@@ -659,6 +705,9 @@ auto MaterialBinder::Impl::OnFrameStart(
 
   if (materials_atlas_) {
     materials_atlas_->OnFrameStart(slot);
+  }
+  if (procedural_grid_materials_atlas_) {
+    procedural_grid_materials_atlas_->OnFrameStart(slot);
   }
   ProcessEvictions();
 
@@ -720,10 +769,18 @@ auto MaterialBinder::Impl::IsHandleValid(
   return FindIndexByHandle(handle).has_value();
 }
 
-auto MaterialBinder::Impl::GetMaterialConstants() const noexcept
-  -> std::span<const engine::MaterialConstants>
+auto MaterialBinder::Impl::GetMaterialShadingConstants() const noexcept
+  -> std::span<const engine::MaterialShadingConstants>
 {
-  return { material_constants_.data(), material_constants_.size() };
+  return { material_shading_constants_.data(),
+    material_shading_constants_.size() };
+}
+
+auto MaterialBinder::Impl::GetProceduralGridMaterialConstants() const noexcept
+  -> std::span<const engine::ProceduralGridMaterialConstants>
+{
+  return { procedural_grid_material_constants_.data(),
+    procedural_grid_material_constants_.size() };
 }
 
 auto MaterialBinder::Impl::GetDirtyIndices() const noexcept
@@ -749,7 +806,8 @@ auto MaterialBinder::Impl::MarkDirty(const std::uint32_t index) -> void
 
 auto MaterialBinder::Impl::MarkAllDirty() -> void
 {
-  const auto count = static_cast<std::uint32_t>(material_constants_.size());
+  const auto count
+    = static_cast<std::uint32_t>(material_shading_constants_.size());
   for (std::uint32_t i = 0U; i < count; ++i) {
     MarkDirty(i);
   }
@@ -770,6 +828,19 @@ auto MaterialBinder::Impl::EnsureAtlasCapacityOrLog(
   // created/resized, previously uploaded material constants are no longer
   // guaranteed to be present in GPU memory, so force a full re-upload.
   if (*result != engine::upload::EnsureBufferResult::kUnchanged) {
+    MarkAllDirty();
+  }
+
+  DCHECK_NOTNULL_F(
+    procedural_grid_materials_atlas_.get(), "Grid atlas not initialized");
+  const auto grid_result
+    = procedural_grid_materials_atlas_->EnsureCapacity(desired_count, 0.5F);
+  if (!grid_result) {
+    LOG_F(ERROR, "Failed to ensure procedural-grid material atlas capacity: {}",
+      grid_result.error().message());
+    return false;
+  }
+  if (*grid_result != engine::upload::EnsureBufferResult::kUnchanged) {
     MarkAllDirty();
   }
 
@@ -892,8 +963,10 @@ auto MaterialBinder::Impl::GetOrAllocate(
           || needs_refresh(cached_asset.GetClearcoatNormalTextureKey())
           || needs_refresh(cached_asset.GetTransmissionTextureKey())
           || needs_refresh(cached_asset.GetThicknessTextureKey())) {
-          material_constants_[idx]
-            = SerializeMaterialConstants(material, *texture_binder_);
+          material_shading_constants_[idx]
+            = SerializeMaterialShadingConstants(material, *texture_binder_);
+          procedural_grid_material_constants_[idx]
+            = SerializeProceduralGridMaterialConstants(material);
           MarkDirty(idx);
         }
       }
@@ -909,7 +982,10 @@ auto MaterialBinder::Impl::GetOrAllocate(
     index = free_indices_->back().get();
     free_indices_->pop_back();
   }
-  const auto constants = SerializeMaterialConstants(material, *texture_binder_);
+  const auto constants
+    = SerializeMaterialShadingConstants(material, *texture_binder_);
+  const auto procedural_grid_constants
+    = SerializeProceduralGridMaterialConstants(material);
 
   // Ensure atlas has capacity before allocating the element ref.
   if (!EnsureAtlasCapacityOrLog(index + 1U)) {
@@ -919,6 +995,12 @@ auto MaterialBinder::Impl::GetOrAllocate(
   auto ref = materials_atlas_->Allocate(1);
   if (!ref.has_value()) {
     LOG_F(ERROR, "Failed to allocate material atlas element");
+    return engine::sceneprep::kInvalidMaterialHandle;
+  }
+  auto grid_ref = procedural_grid_materials_atlas_->Allocate(1);
+  if (!grid_ref.has_value()) {
+    LOG_F(ERROR, "Failed to allocate procedural-grid material atlas element");
+    materials_atlas_->Release(*ref, current_frame_slot_);
     return engine::sceneprep::kInvalidMaterialHandle;
   }
 
@@ -932,8 +1014,11 @@ auto MaterialBinder::Impl::GetOrAllocate(
 
   if (materials_.size() <= index) {
     materials_.resize(static_cast<std::size_t>(index) + 1U);
-    material_constants_.resize(static_cast<std::size_t>(index) + 1U);
+    material_shading_constants_.resize(static_cast<std::size_t>(index) + 1U);
+    procedural_grid_material_constants_.resize(
+      static_cast<std::size_t>(index) + 1U);
     material_refs_.resize(static_cast<std::size_t>(index) + 1U);
+    procedural_grid_material_refs_.resize(static_cast<std::size_t>(index) + 1U);
   }
   if (material_handle_generations_.size() <= index) {
     material_handle_generations_.resize(
@@ -942,8 +1027,10 @@ auto MaterialBinder::Impl::GetOrAllocate(
 
   // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
   materials_[index] = material.resolved_asset;
-  material_constants_[index] = constants;
+  material_shading_constants_[index] = constants;
+  procedural_grid_material_constants_[index] = procedural_grid_constants;
   material_refs_[index] = *ref;
+  procedural_grid_material_refs_[index] = *grid_ref;
   material_handle_generations_[index] = handle.GenerationValue().get();
   // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
   material_ptr_to_index_[material.resolved_asset.get()] = index;
@@ -990,7 +1077,9 @@ auto MaterialBinder::Impl::Update(
   };
   const auto new_key = MakeMaterialKey(mat_ref);
   const auto new_constants
-    = SerializeMaterialConstants(mat_ref, *texture_binder_);
+    = SerializeMaterialShadingConstants(mat_ref, *texture_binder_);
+  const auto new_procedural_grid_constants
+    = SerializeProceduralGridMaterialConstants(mat_ref);
 
   const auto* old_ptr = materials_[index].get();
   if (old_ptr != nullptr && old_ptr != material.get()) {
@@ -999,7 +1088,8 @@ auto MaterialBinder::Impl::Update(
   materials_[index] = std::move(material);
   material_ptr_to_index_[materials_[index].get()] = index;
 
-  material_constants_[index] = new_constants;
+  material_shading_constants_[index] = new_constants;
+  procedural_grid_material_constants_[index] = new_procedural_grid_constants;
   UpdateKeyMappingForIndex(index, new_key);
   MarkDirty(index);
   // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
@@ -1059,6 +1149,14 @@ auto MaterialBinder::Impl::ProcessEvictions() -> void
         // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
         material_refs_[entry_index] = AtlasBuffer::ElementRef {};
       }
+      if (entry_index < procedural_grid_material_refs_.size()) {
+        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+        procedural_grid_materials_atlas_->Release(
+          procedural_grid_material_refs_[entry_index], current_frame_slot_);
+        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+        procedural_grid_material_refs_[entry_index]
+          = AtlasBuffer::ElementRef {};
+      }
 
       if (entry_index < material_handle_generations_.size()) {
         // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
@@ -1077,9 +1175,15 @@ auto MaterialBinder::Impl::ProcessEvictions() -> void
 
       // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
       materials_[entry_index].reset();
-      if (entry_index < material_constants_.size()) {
+      if (entry_index < material_shading_constants_.size()) {
         // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-        material_constants_[entry_index] = engine::MaterialConstants {};
+        material_shading_constants_[entry_index]
+          = engine::MaterialShadingConstants {};
+      }
+      if (entry_index < procedural_grid_material_constants_.size()) {
+        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+        procedural_grid_material_constants_[entry_index]
+          = engine::ProceduralGridMaterialConstants {};
       }
       if (entry_index < dirty_epoch_.size()) {
         // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
@@ -1135,12 +1239,12 @@ auto MaterialBinder::Impl::OverrideUvTransform(
   }
 
   const auto index = it->second;
-  if (index >= material_constants_.size()) {
+  if (index >= material_shading_constants_.size()) {
     return false;
   }
 
   // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-  auto& constants = material_constants_[index];
+  auto& constants = material_shading_constants_[index];
   constants.uv_scale = uv_scale;
   constants.uv_offset = uv_offset;
   MarkDirty(index);
@@ -1173,11 +1277,16 @@ auto MaterialBinder::Impl::EnsureFrameResources() -> void
   }
 
   std::vector<engine::upload::UploadRequest> requests;
-  requests.reserve(dirty_indices_.size());
+  requests.reserve(dirty_indices_.size() * 2U);
 
-  const auto stride = sizeof(engine::MaterialConstants);
+  const auto material_shading_stride = sizeof(engine::MaterialShadingConstants);
+  const auto procedural_grid_stride
+    = sizeof(engine::ProceduralGridMaterialConstants);
   for (const auto index : dirty_indices_) {
-    if (index >= material_refs_.size() || index >= material_constants_.size()) {
+    if (index >= material_refs_.size()
+      || index >= material_shading_constants_.size()
+      || index >= procedural_grid_material_refs_.size()
+      || index >= procedural_grid_material_constants_.size()) {
       LOG_F(ERROR, "MaterialBinder: dirty index out of range: {}", index);
       continue;
     }
@@ -1186,7 +1295,8 @@ auto MaterialBinder::Impl::EnsureFrameResources() -> void
     // stores the SRV index that was current at allocation time, which can
     // become stale across resizes. Use index-based descriptors to avoid SRV
     // mismatches when reuploading.
-    auto desc = materials_atlas_->MakeUploadDescForIndex(index, stride);
+    auto desc = materials_atlas_->MakeUploadDescForIndex(
+      index, material_shading_stride);
     if (!desc.has_value()) {
       LOG_F(ERROR, "Failed to create upload descriptor for material {}", index);
       continue;
@@ -1194,15 +1304,36 @@ auto MaterialBinder::Impl::EnsureFrameResources() -> void
 
     engine::upload::UploadRequest req;
     req.kind = engine::upload::UploadKind::kBuffer;
-    req.debug_name = "MaterialConstants";
+    req.debug_name = "MaterialShadingConstants";
     req.desc = *desc;
     req.data = engine::upload::UploadDataView {
       // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-      std::as_bytes(
-        std::span<engine::MaterialConstants>(&material_constants_[index], 1))
-        .first(stride)
+      std::as_bytes(std::span<engine::MaterialShadingConstants>(
+                      &material_shading_constants_[index], 1))
+        .first(material_shading_stride)
     };
     requests.push_back(std::move(req));
+
+    auto grid_desc = procedural_grid_materials_atlas_->MakeUploadDescForIndex(
+      index, procedural_grid_stride);
+    if (!grid_desc.has_value()) {
+      LOG_F(ERROR,
+        "Failed to create upload descriptor for procedural-grid material {}",
+        index);
+      continue;
+    }
+
+    engine::upload::UploadRequest grid_req;
+    grid_req.kind = engine::upload::UploadKind::kBuffer;
+    grid_req.debug_name = "ProceduralGridMaterialConstants";
+    grid_req.desc = *grid_desc;
+    grid_req.data = engine::upload::UploadDataView {
+      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+      std::as_bytes(std::span<engine::ProceduralGridMaterialConstants>(
+                      &procedural_grid_material_constants_[index], 1))
+        .first(procedural_grid_stride)
+    };
+    requests.push_back(std::move(grid_req));
   }
 
   if (requests.empty()) {
@@ -1231,7 +1362,8 @@ auto MaterialBinder::Impl::EnsureFrameResources() -> void
   uploaded_this_frame_ = true;
 }
 
-auto MaterialBinder::Impl::GetMaterialsSrvIndex() const -> ShaderVisibleIndex
+auto MaterialBinder::Impl::GetMaterialShadingSrvIndex() const
+  -> ShaderVisibleIndex
 {
   DCHECK_NOTNULL_F(materials_atlas_.get(), "Atlas not initialized");
   if (materials_atlas_->GetBinding().srv == kInvalidShaderVisibleIndex) {
@@ -1245,6 +1377,27 @@ auto MaterialBinder::Impl::GetMaterialsSrvIndex() const -> ShaderVisibleIndex
     }
   }
   return materials_atlas_->GetBinding().srv;
+}
+
+auto MaterialBinder::Impl::GetProceduralGridMaterialsSrvIndex() const
+  -> ShaderVisibleIndex
+{
+  DCHECK_NOTNULL_F(
+    procedural_grid_materials_atlas_.get(), "Grid atlas not initialized");
+  if (procedural_grid_materials_atlas_->GetBinding().srv
+    == kInvalidShaderVisibleIndex) {
+    const auto desired = std::max<std::uint32_t>(
+      1U, static_cast<std::uint32_t>(materials_.size()));
+    const auto result
+      = procedural_grid_materials_atlas_->EnsureCapacity(desired, 0.5F);
+    if (!result) {
+      LOG_F(ERROR,
+        "Failed to ensure procedural-grid material atlas capacity for SRV: {}",
+        result.error().message());
+      return kInvalidShaderVisibleIndex;
+    }
+  }
+  return procedural_grid_materials_atlas_->GetBinding().srv;
 }
 
 } // namespace oxygen::renderer::resources

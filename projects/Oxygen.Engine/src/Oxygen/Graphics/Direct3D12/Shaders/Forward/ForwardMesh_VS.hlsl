@@ -17,7 +17,7 @@
 #include "Renderer/ViewConstants.hlsli"
 #include "Renderer/DrawHelpers.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
-#include "Renderer/MaterialConstants.hlsli"
+#include "Renderer/MaterialShadingConstants.hlsli"
 #include "Renderer/Vertex.hlsli"
 
 #include "Core/Bindless/BindlessHelpers.hlsl"
