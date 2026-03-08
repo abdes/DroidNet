@@ -24,6 +24,7 @@ struct DirectionalShadowMetadata
     uint resource_index;
 
     float cascade_distances[OXYGEN_MAX_SHADOW_CASCADES];
+    float cascade_world_texel_size[OXYGEN_MAX_SHADOW_CASCADES];
     float4x4 cascade_view_proj[OXYGEN_MAX_SHADOW_CASCADES];
 };
 

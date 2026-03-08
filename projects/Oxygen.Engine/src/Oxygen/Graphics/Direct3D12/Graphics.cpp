@@ -136,8 +136,10 @@ protected:
       _ = allocator_->Reserve(ResourceViewType::kSampler,
         DescriptorVisibility::kShaderVisible, oxygen::bindless::Count { 1 });
 
-      // Ensure a default sampler exists for bindless texture sampling.
-      // The current shaders use SamplerDescriptorHeap[0].
+      // Ensure stable default samplers exist for bindless sampling.
+      // Current contracts:
+      // - SamplerDescriptorHeap[0] = default linear wrap sampler
+      // - SamplerDescriptorHeap[1] = shadow comparison sampler
       if (!default_sampler_.IsValid()) {
         default_sampler_ = allocator_->Allocate(
           ResourceViewType::kSampler, DescriptorVisibility::kShaderVisible);
@@ -166,6 +168,33 @@ protected:
             default_sampler_.GetBindlessHandle().get());
         }
       }
+
+      if (!shadow_comparison_sampler_.IsValid()) {
+        shadow_comparison_sampler_ = allocator_->Allocate(
+          ResourceViewType::kSampler, DescriptorVisibility::kShaderVisible);
+        if (shadow_comparison_sampler_.IsValid()) {
+          D3D12_SAMPLER_DESC sampler_desc {};
+          sampler_desc.Filter
+            = D3D12_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT;
+          sampler_desc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+          sampler_desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+          sampler_desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+          sampler_desc.MipLODBias = 0.0f;
+          sampler_desc.MaxAnisotropy = 1;
+          sampler_desc.ComparisonFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+          sampler_desc.BorderColor[0] = 1.0f;
+          sampler_desc.BorderColor[1] = 1.0f;
+          sampler_desc.BorderColor[2] = 1.0f;
+          sampler_desc.BorderColor[3] = 1.0f;
+          sampler_desc.MinLOD = 0.0f;
+          sampler_desc.MaxLOD = D3D12_FLOAT32_MAX;
+
+          device->CreateSampler(&sampler_desc,
+            allocator_->GetCpuHandle(shadow_comparison_sampler_));
+          DLOG_F(2, "Shadow comparison sampler created at bindless index {}",
+            shadow_comparison_sampler_.GetBindlessHandle().get());
+        }
+      }
     } catch (const std::exception& ex) {
       LOG_F(WARNING, "Failed to eagerly create shader-visible heaps: {}",
         ex.what());
@@ -175,6 +204,7 @@ protected:
 private:
   std::unique_ptr<oxygen::graphics::d3d12::DescriptorAllocator> allocator_ {};
   oxygen::graphics::DescriptorHandle default_sampler_ {};
+  oxygen::graphics::DescriptorHandle shadow_comparison_sampler_ {};
 };
 
 } // namespace

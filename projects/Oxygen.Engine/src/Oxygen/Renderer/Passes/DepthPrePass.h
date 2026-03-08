@@ -140,6 +140,8 @@ protected:
   auto CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc override;
   auto NeedRebuildPipelineState() const -> bool override;
   virtual auto UsesFramebufferDepthAttachment() const -> bool;
+  virtual auto BuildRasterizerStateDesc(graphics::CullMode cull_mode) const
+    -> graphics::RasterizerStateDesc;
 
   // Helper methods for Execute()
   virtual auto PrepareDepthStencilView(

@@ -441,6 +441,7 @@ private:
     const std::unordered_set<ViewId>& active_views) -> void;
 
   std::weak_ptr<Graphics> gfx_weak_; // New AsyncEngine path
+  RendererConfig config_ {};
 
   // Managed draw item container removed (AoS path deprecated).
 
@@ -563,6 +564,7 @@ private:
   struct PerViewStorage {
     std::vector<std::byte> draw_metadata_storage;
     std::vector<PreparedSceneFrame::PartitionRange> partition_storage;
+    std::vector<glm::vec4> shadow_caster_bounds_storage;
     std::vector<float> world_matrix_storage;
     std::vector<float> normal_matrix_storage;
   };

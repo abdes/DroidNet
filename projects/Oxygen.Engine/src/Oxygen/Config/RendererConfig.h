@@ -13,6 +13,13 @@
 
 namespace oxygen {
 
+enum class ShadowQualityTier : std::uint8_t {
+  kLow,
+  kMedium,
+  kHigh,
+  kUltra,
+};
+
 struct RendererConfig {
   //! Immutable configuration for path resolution.
   PathFinderConfig path_finder_config;
@@ -25,6 +32,12 @@ struct RendererConfig {
   //! Maximum number of simultaneously prepared views the renderer keeps alive
   //! before evicting the least-recently-used entry. Default keeps legacy 8.
   std::size_t max_active_views { kDefaultMaxActiveViews };
+
+  //! Renderer-owned shadow quality policy.
+  //!
+  //! This is not authored scene state. It selects runtime shadow budgets and
+  //! quality behavior within the renderer.
+  ShadowQualityTier shadow_quality_tier { ShadowQualityTier::kHigh };
 
 private:
   static constexpr std::size_t kDefaultMaxActiveViews = 8;

@@ -37,11 +37,13 @@ struct alignas(16) DirectionalShadowMetadata {
   std::uint32_t resource_index { 0U };
 
   std::array<float, oxygen::scene::kMaxShadowCascades> cascade_distances {};
+  std::array<float, oxygen::scene::kMaxShadowCascades>
+    cascade_world_texel_size {};
   std::array<glm::mat4, oxygen::scene::kMaxShadowCascades> cascade_view_proj {};
 };
 static_assert(sizeof(DirectionalShadowMetadata) % 16 == 0,
   "DirectionalShadowMetadata size must be 16-byte aligned");
-static_assert(sizeof(DirectionalShadowMetadata) == 304,
+static_assert(sizeof(DirectionalShadowMetadata) == 320,
   "DirectionalShadowMetadata size must match HLSL packing");
 
 } // namespace oxygen::engine

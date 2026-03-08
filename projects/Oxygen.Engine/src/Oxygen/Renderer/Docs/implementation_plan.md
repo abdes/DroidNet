@@ -464,7 +464,7 @@ Execution note, March 8, 2026:
 
 - [ ] Implement directional shadow resource allocation and lifecycle management
 - [ ] Implement cascaded directional shadow pass scheduling and rendering
-- [ ] Replace bootstrap cascade fitting with stable texel-snapped cascade
+- [~] Replace bootstrap cascade fitting with stable texel-snapped cascade
       coverage and tighter light-space depth fitting
 - [ ] Publish directional metadata needed for cascade blend bands and
       kernel-aware sampling
@@ -482,9 +482,75 @@ Execution note, March 8, 2026:
 
 Execution note, March 9, 2026:
 
-- The current directional path is functional but still bootstrap-quality.
-- It renders visible conventional directional shadows, but it is not yet at the
-  engine-grade quality bar required by `shadows.md`.
+- The current conventional directional implementation is still prototype-
+  quality. It is useful for wiring and validation, but it does not yet meet
+  the professional/engine-grade visual bar required by `shadows.md`.
+- Previous hardening slices improved correctness and reduced the largest
+  artifacts, but they are not sufficient to call this a production CSM.
+- The first hardening slice is now in code: conventional directional cascades
+  use texel-snapped stable XY coverage based on a stable enclosing sphere
+  rather than refitting orthographic XY bounds directly from per-frame light-
+  space min/max corners.
+- The second hardening slice is now in code: the forward shadow sampler blends
+  across directional cascade boundaries instead of hard-switching at split
+  distances, reducing visible receiver stripes on large surfaces.
+- The third hardening slice is now in code: `DirectionalShadowPass` owns an
+  explicit raster depth-bias policy through the existing depth-pass PSO path,
+  adding slope-scaled raster bias for conventional directional shadow rendering
+  instead of relying entirely on shader-side receiver bias.
+- The fourth hardening slice is now in code: directional shadow metadata
+  publishes per-cascade world-units-per-texel, and the forward shadow sampler
+  derives a renderer-controlled receiver bias from that footprint so default
+  directional/synthetic-sun shadows are not forced to rely on zero authored
+  bias values.
+- The fifth hardening slice is now in code: conventional directional shadows
+  use a dedicated bindless comparison sampler as the normal path, with the old
+  manual depth-tap PCF retained only as an explicit shader fallback.
+- The sixth hardening slice is now in code: conventional directional cascades
+  expand orthographic coverage by a small kernel-aware texel guard band and use
+  white-border comparison sampling so edge taps remain deterministic instead of
+  clamping into shadowed texels at the edge of the cascade.
+- The seventh hardening slice is now in code: the renderer publishes current-
+  view shadow-caster bounding spheres into `PreparedSceneFrame`, and
+  `ShadowManager` uses them to tighten directional cascade depth range only
+  for casters that overlap the cascade footprint instead of padding depth from
+  receiver slice corners alone.
+- The eighth hardening slice is now in code: the conventional comparison-
+  sampled path no longer relies on the hardware 2x2 footprint alone; it uses
+  an explicit 3x3 tent-weighted comparison PCF filter for noticeably less
+  jagged directional shadow edges while retaining the manual depth-load path
+  only as the explicit compatibility fallback.
+- The ninth hardening slice is now in code: the comparison path uses a wider
+  5x5 tent-weighted PCF footprint and the cascade guard band is expanded to
+  match that kernel, specifically to move edge quality away from the current
+  prototype-grade aliasing.
+- The tenth hardening slice is now in code: directional cascades no longer use
+  the earlier square sphere-fit baseline for XY coverage. They use a tighter
+  texel-snapped rectangular fit with matching guard/snap padding so effective
+  cascade utilization improves without abandoning stability altogether.
+- The eleventh hardening slice is now in code: the non-authored directional
+  split fallback no longer uses the earlier simple power curve. It uses a
+  practical linear/logarithmic split blend, while preserving authored cascade
+  distances when content provides them explicitly.
+- The twelfth hardening slice is now in code: directional cascade handoff and
+  filtering are no longer treated as a single fixed blur policy. The shader
+  path now prefers the tightest valid cascade coverage, uses much narrower
+  texel-aware blend bands, and keeps near-cascade filtering tighter than far-
+  cascade filtering instead of washing out all cascades equally.
+- The thirteenth hardening slice is now in code: the renderer owns an explicit
+  shadow quality tier contract. Conventional directional resolution is no
+  longer limited to authored `ShadowResolutionHint` alone; tier policy can now
+  promote the active dominant directional shadow product to a higher runtime
+  resolution when the shadow budget allows it.
+- The remaining gap is not polish. It is the difference between a prototype CSM
+  and a professional one:
+  - significantly better effective cascade utilization than the current stable
+    rectangular fit baseline
+  - materially better filtering than the current widened PCF kernel
+  - finished combined raster/receiver bias tuning
+  - stronger cascade continuity, validation, and debug coverage
+- Until those land, this implementation must be treated as `in_progress` and
+  below production quality.
 - The remaining work in this section is specifically about raising the
   conventional directional implementation to stable, production-grade cascaded
   shadow maps before virtual shadow work proceeds.

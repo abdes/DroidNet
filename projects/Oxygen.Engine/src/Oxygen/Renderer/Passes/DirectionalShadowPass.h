@@ -37,6 +37,8 @@ protected:
     -> co::Co<> override;
   auto DoExecute(graphics::CommandRecorder& recorder) -> co::Co<> override;
   auto UsesFramebufferDepthAttachment() const -> bool override;
+  auto BuildRasterizerStateDesc(graphics::CullMode cull_mode) const
+    -> graphics::RasterizerStateDesc override;
 
 private:
   auto EnsureShadowViewConstantsCapacity(std::uint32_t required_snapshots)

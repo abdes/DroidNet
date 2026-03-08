@@ -42,7 +42,8 @@ implementation status is:
 
 - Shared shadow-product publication: in progress
 - Shadow-caster draw classification: in progress
-- Conventional directional shadow rendering: not started
+- Conventional directional shadow rendering: in progress, but still prototype-
+  quality and below the required engine-grade bar
 - Family-selection policy: not started
 - Virtual shadow-map backend: not started
 
@@ -469,9 +470,17 @@ Engine-grade acceptance criteria for the conventional directional path are:
   and limit acne/peter-panning pressure.
 - Support cascade blend bands explicitly in shader sampling and metadata.
   Hard cascade transitions are not acceptable as the final conventional path.
+- Cascade handoff must preserve effective resolution. When independently fit
+  cascades do not align perfectly, the shader path must be able to use the
+  tightest valid cascade coverage instead of blindly preferring a coarser split
+  selected only by view depth.
 - Account for PCF kernel footprint in cascade coverage. Conventional cascade
   projections and addressing must preserve a padded border so filter taps do not
   bleed outside the intended cascade coverage.
+- Cascade blend widths must be controlled as part of shadow quality policy.
+  Wide fixed percentage blend bands that wash out near-cascade detail are not
+  acceptable as the final conventional path; blend widths must stay narrow and
+  scale with actual cascade texel footprint / continuity needs.
 - Use a renderer-controlled raster depth-bias policy for shadow rendering,
   including slope-scaled depth bias and clamp where supported. Shader-side
   receiver bias augments this; it does not replace proper shadow-pass raster
@@ -609,6 +618,8 @@ engine-grade implementation:
 - comparison sampling in the default path
 - explicit kernel-aware padding/border behavior
 - cascade blend support
+- cascade-aware filter policy so near-cascade detail is not blurred to match
+  far-cascade needs
 - quality-tier-controlled kernel growth without changing metadata contracts
 - deterministic fallback to manual comparison taps only when the backend path
   cannot support the preferred comparison-sampling implementation
@@ -655,6 +666,8 @@ resource families.
 Quality tiers are renderer policy, not scene-authoring changes.
 
 - Authored `ShadowResolutionHint` influences allocation selection within a tier.
+- Renderer-owned shadow quality tier may promote or cap conventional runtime
+  allocation independently of authored scene data.
 - Tier policy controls:
   - Preferred implementation family per light domain
   - Directional cascade count for conventional directional shadows
@@ -668,6 +681,10 @@ Quality tiers are renderer policy, not scene-authoring changes.
   - Contact shadow quality
 - Tier changes must invalidate and rebuild affected shadow resources through the
   normal invalidation path.
+- For conventional directional shadows, tier policy may promote a single
+  dominant directional product to a higher resolution level when the current
+  runtime shadow budget can afford it, instead of forcing all scenes to rely on
+  authored resolution hints alone.
 
 ## 12. ScenePrep and Draw Submission Requirements
 

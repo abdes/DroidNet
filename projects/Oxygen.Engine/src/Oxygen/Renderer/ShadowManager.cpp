@@ -34,8 +34,10 @@ namespace {
 
 constexpr std::uint32_t kInvalidShadowResourceIndex = 0xFFFFFFFFU;
 constexpr float kMinCascadeSpan = 0.1F;
-constexpr float kShadowDepthPadding = 64.0F;
 constexpr float kLightPullbackPadding = 32.0F;
+constexpr float kMinShadowDepthPadding = 8.0F;
+constexpr float kDirectionalShadowKernelPaddingTexels = 3.0F;
+constexpr float kDirectionalShadowSnapPaddingTexels = 1.0F;
 
 [[nodiscard]] auto BuildShadowProductFlags(const std::uint32_t light_flags)
   -> std::uint32_t
@@ -87,6 +89,42 @@ constexpr float kLightPullbackPadding = 32.0F;
   }
 }
 
+[[nodiscard]] auto ApplyDirectionalShadowQualityTier(
+  const std::uint32_t authored_resolution,
+  const oxygen::ShadowQualityTier quality_tier,
+  const std::size_t directional_candidate_count) -> std::uint32_t
+{
+  const bool single_dominant_directional = directional_candidate_count <= 1U;
+  std::uint32_t preferred_min_resolution = authored_resolution;
+  std::uint32_t max_resolution = authored_resolution;
+
+  switch (quality_tier) {
+  case oxygen::ShadowQualityTier::kLow:
+    preferred_min_resolution = 1024U;
+    max_resolution = 1024U;
+    break;
+  case oxygen::ShadowQualityTier::kMedium:
+    preferred_min_resolution = 2048U;
+    max_resolution = 2048U;
+    break;
+  case oxygen::ShadowQualityTier::kHigh:
+    preferred_min_resolution = single_dominant_directional ? 3072U : 2048U;
+    max_resolution = 3072U;
+    break;
+  case oxygen::ShadowQualityTier::kUltra:
+    preferred_min_resolution = single_dominant_directional ? 4096U : 3072U;
+    max_resolution = 4096U;
+    break;
+  default:
+    preferred_min_resolution = 2048U;
+    max_resolution = 2048U;
+    break;
+  }
+
+  return std::clamp(std::max(authored_resolution, preferred_min_resolution),
+    1024U, max_resolution);
+}
+
 [[nodiscard]] auto TransformPoint(
   const glm::mat4& matrix, const glm::vec3& point) -> glm::vec3
 {
@@ -100,6 +138,92 @@ constexpr float kLightPullbackPadding = 32.0F;
   const glm::mat4& view_matrix, const glm::vec3& point) -> float
 {
   return std::max(0.0F, -(view_matrix * glm::vec4(point, 1.0F)).z);
+}
+
+[[nodiscard]] auto BuildDirectionalLightRotation(
+  const glm::vec3& light_dir_to_surface, const glm::vec3& up) -> glm::mat4
+{
+  return glm::lookAtRH(glm::vec3(0.0F), light_dir_to_surface, up);
+}
+
+[[nodiscard]] auto SnapLightSpaceCenter(const glm::vec3& center_ls,
+  const float half_extent_x, const float half_extent_y,
+  const std::uint32_t resolution) -> glm::vec3
+{
+  if (half_extent_x <= 0.0F || half_extent_y <= 0.0F || resolution == 0U) {
+    return center_ls;
+  }
+
+  const float world_units_per_texel_x
+    = (2.0F * half_extent_x) / static_cast<float>(resolution);
+  const float world_units_per_texel_y
+    = (2.0F * half_extent_y) / static_cast<float>(resolution);
+  if (world_units_per_texel_x <= 0.0F || world_units_per_texel_y <= 0.0F) {
+    return center_ls;
+  }
+
+  glm::vec3 snapped = center_ls;
+  snapped.x = std::floor(center_ls.x / world_units_per_texel_x)
+    * world_units_per_texel_x;
+  snapped.y = std::floor(center_ls.y / world_units_per_texel_y)
+    * world_units_per_texel_y;
+  return snapped;
+}
+
+[[nodiscard]] auto ComputePaddedHalfExtent(
+  const float base_extent, const std::uint32_t resolution) -> float
+{
+  if (base_extent <= 0.0F || resolution == 0U) {
+    return base_extent;
+  }
+
+  const float total_guard_texels = 2.0F
+    * (kDirectionalShadowKernelPaddingTexels
+      + kDirectionalShadowSnapPaddingTexels);
+  const float usable_texels
+    = std::max(1.0F, static_cast<float>(resolution) - total_guard_texels);
+  return base_extent * (static_cast<float>(resolution) / usable_texels);
+}
+
+[[nodiscard]] auto MapDistributionExponentToPracticalLambda(
+  const float distribution_exponent) -> float
+{
+  if (distribution_exponent <= 1.0F) {
+    return 0.0F;
+  }
+
+  // Preserve the existing authored control direction: larger values emphasize
+  // nearer cascades more strongly. The practical split lambda stays bounded to
+  // [0, 1) while remaining monotonic as the authored exponent grows.
+  return std::clamp(
+    1.0F - (1.0F / std::max(distribution_exponent, 1.0F)), 0.0F, 0.95F);
+}
+
+auto TightenDepthRangeWithShadowCasters(
+  const std::span<const glm::vec4> shadow_caster_bounds,
+  const glm::mat4& light_view, const float ortho_half_extent_x,
+  const float ortho_half_extent_y, float& min_depth, float& max_depth) -> bool
+{
+  bool tightened = false;
+  for (const auto& sphere : shadow_caster_bounds) {
+    const float radius = sphere.w;
+    if (radius <= 0.0F) {
+      continue;
+    }
+
+    const glm::vec3 center_ls
+      = glm::vec3(light_view * glm::vec4(glm::vec3(sphere), 1.0F));
+    if (std::abs(center_ls.x) > ortho_half_extent_x + radius
+      || std::abs(center_ls.y) > ortho_half_extent_y + radius) {
+      continue;
+    }
+
+    min_depth = std::min(min_depth, center_ls.z - radius);
+    max_depth = std::max(max_depth, center_ls.z + radius);
+    tightened = true;
+  }
+
+  return tightened;
 }
 
 [[nodiscard]] auto ResolveCascadeEndDepth(
@@ -116,10 +240,17 @@ constexpr float kLightPullbackPadding = 32.0F;
 
   const float normalized_split = static_cast<float>(cascade_index + 1U)
     / static_cast<float>(cascade_count);
-  const float distributed_split = std::pow(
-    normalized_split, std::max(0.001F, candidate.distribution_exponent));
+  const float stabilized_near_depth = std::max(near_depth, 0.001F);
+  const float stabilized_far_depth
+    = std::max(far_depth, stabilized_near_depth + kMinCascadeSpan);
+  const float linear_split
+    = glm::mix(stabilized_near_depth, stabilized_far_depth, normalized_split);
+  const float logarithmic_split = stabilized_near_depth
+    * std::pow(stabilized_far_depth / stabilized_near_depth, normalized_split);
+  const float practical_lambda
+    = MapDistributionExponentToPracticalLambda(candidate.distribution_exponent);
   const float generated_end
-    = near_depth + (far_depth - near_depth) * distributed_split;
+    = glm::mix(linear_split, logarithmic_split, practical_lambda);
   return std::max(
     prev_depth + kMinCascadeSpan, std::min(generated_end, far_depth));
 }
@@ -130,10 +261,12 @@ namespace oxygen::renderer {
 
 ShadowManager::ShadowManager(const observer_ptr<Graphics> gfx,
   const observer_ptr<ProviderT> provider,
-  const observer_ptr<CoordinatorT> inline_transfers)
+  const observer_ptr<CoordinatorT> inline_transfers,
+  const oxygen::ShadowQualityTier quality_tier)
   : gfx_(gfx)
   , staging_provider_(provider)
   , inline_transfers_(inline_transfers)
+  , shadow_quality_tier_(quality_tier)
   , shadow_instance_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(engine::ShadowInstanceMetadata)),
       inline_transfers_, "ShadowManager.ShadowInstanceMetadata")
@@ -158,6 +291,7 @@ auto ShadowManager::OnFrameStart(RendererTag /*tag*/,
 
 auto ShadowManager::PublishForView(const ViewId view_id,
   const engine::ViewConstants& view_constants, const LightManager& lights,
+  const std::span<const glm::vec4> shadow_caster_bounds,
   const SyntheticSunShadowInput* synthetic_sun_shadow) -> PublishedViewData
 {
   if (const auto* cached = TryGetPublishedViewData(view_id)) {
@@ -195,7 +329,8 @@ auto ShadowManager::PublishForView(const ViewId view_id,
   }
   const auto resource_config = BuildDirectionalResourceConfig(candidates);
   EnsureDirectionalResources(resource_config);
-  BuildDirectionalViewState(view_id, view_constants, candidates, state);
+  BuildDirectionalViewState(
+    view_id, view_constants, candidates, shadow_caster_bounds, state);
 
   if (!candidates.empty() && state.shadow_instances.empty()) {
     LOG_F(WARNING,
@@ -263,8 +398,10 @@ auto ShadowManager::BuildDirectionalResourceConfig(
   for (const auto& candidate : candidates) {
     config.required_layers += std::max(
       1U, std::min(candidate.cascade_count, oxygen::scene::kMaxShadowCascades));
-    config.resolution = std::max(
-      config.resolution, ShadowResolutionFromHint(candidate.resolution_hint));
+    config.resolution = std::max(config.resolution,
+      ApplyDirectionalShadowQualityTier(
+        ShadowResolutionFromHint(candidate.resolution_hint),
+        shadow_quality_tier_, candidates.size()));
   }
   return config;
 }
@@ -376,6 +513,7 @@ auto ShadowManager::ReleaseDirectionalResources() -> void
 auto ShadowManager::BuildDirectionalViewState(const ViewId view_id,
   const engine::ViewConstants& view_constants,
   const std::span<const engine::DirectionalShadowCandidate> candidates,
+  const std::span<const glm::vec4> shadow_caster_bounds,
   PublishedViewState& state) -> void
 {
   if (candidates.empty() || !directional_shadow_texture_) {
@@ -462,6 +600,9 @@ auto ShadowManager::BuildDirectionalViewState(const ViewId view_id,
         > 0.95F
       ? glm::vec3(1.0F, 0.0F, 0.0F)
       : glm::vec3(0.0F, 0.0F, 1.0F);
+    const glm::mat4 light_rotation
+      = BuildDirectionalLightRotation(light_dir_to_surface, world_up);
+    const glm::mat4 inv_light_rotation = glm::inverse(light_rotation);
 
     for (std::uint32_t cascade_index = 0; cascade_index < cascade_count;
       ++cascade_index) {
@@ -482,47 +623,90 @@ auto ShadowManager::BuildDirectionalViewState(const ViewId view_id,
           = glm::mix(near_corners[corner], far_corners[corner], t1);
       }
 
-      glm::vec3 slice_center { 0.0F };
+      float min_x = (std::numeric_limits<float>::max)();
+      float max_x = (std::numeric_limits<float>::lowest)();
+      float min_y = (std::numeric_limits<float>::max)();
+      float max_y = (std::numeric_limits<float>::lowest)();
+      float min_z_rot = (std::numeric_limits<float>::max)();
+      float max_z_rot = (std::numeric_limits<float>::lowest)();
       for (const auto& corner : slice_corners) {
-        slice_center += corner;
+        const glm::vec3 light_space_rot
+          = glm::vec3(light_rotation * glm::vec4(corner, 1.0F));
+        min_x = std::min(min_x, light_space_rot.x);
+        max_x = std::max(max_x, light_space_rot.x);
+        min_y = std::min(min_y, light_space_rot.y);
+        max_y = std::max(max_y, light_space_rot.y);
+        min_z_rot = std::min(min_z_rot, light_space_rot.z);
+        max_z_rot = std::max(max_z_rot, light_space_rot.z);
       }
-      slice_center /= static_cast<float>(slice_corners.size());
 
-      float radius = 0.0F;
-      for (const auto& corner : slice_corners) {
-        radius = std::max(radius, glm::length(corner - slice_center));
-      }
+      const float base_half_extent_x = std::max((max_x - min_x) * 0.5F, 1.0F);
+      const float base_half_extent_y = std::max((max_y - min_y) * 0.5F, 1.0F);
+      const float padded_half_extent_x = ComputePaddedHalfExtent(
+        base_half_extent_x, directional_shadow_resolution_);
+      const float padded_half_extent_y = ComputePaddedHalfExtent(
+        base_half_extent_y, directional_shadow_resolution_);
+      const glm::vec3 slice_center_ls {
+        (min_x + max_x) * 0.5F,
+        (min_y + max_y) * 0.5F,
+        (min_z_rot + max_z_rot) * 0.5F,
+      };
+      const glm::vec3 snapped_center_ls
+        = SnapLightSpaceCenter(slice_center_ls, padded_half_extent_x,
+          padded_half_extent_y, directional_shadow_resolution_);
+      const glm::vec3 snapped_center_ws
+        = glm::vec3(inv_light_rotation * glm::vec4(snapped_center_ls, 1.0F));
+
+      const float pullback_extent
+        = std::max(std::max(padded_half_extent_x, padded_half_extent_y),
+          (max_z_rot - min_z_rot) * 0.5F);
 
       // Place the orthographic shadow camera toward the light source, looking
-      // back at the cascade slice center. Using the opposite sign here flips
-      // the light-space depth direction and projects shadows onto caster-facing
-      // surfaces instead of downstream receivers.
-      const glm::vec3 light_eye
-        = slice_center + light_dir_to_light * (radius + kLightPullbackPadding);
+      // back at the texel-snapped cascade center. XY coverage is now a tighter
+      // texel-snapped rectangle rather than the earlier square sphere fit.
+      const glm::vec3 light_eye = snapped_center_ws
+        + light_dir_to_light * (pullback_extent + kLightPullbackPadding);
       const glm::mat4 light_view
-        = glm::lookAtRH(light_eye, slice_center, world_up);
+        = glm::lookAtRH(light_eye, snapped_center_ws, world_up);
 
-      glm::vec3 min_corner { (std::numeric_limits<float>::max)() };
-      glm::vec3 max_corner { (std::numeric_limits<float>::lowest)() };
+      float min_depth = (std::numeric_limits<float>::max)();
+      float max_depth = (std::numeric_limits<float>::lowest)();
       for (const auto& corner : slice_corners) {
         const glm::vec3 light_space
           = glm::vec3(light_view * glm::vec4(corner, 1.0F));
-        min_corner = glm::min(min_corner, light_space);
-        max_corner = glm::max(max_corner, light_space);
+        min_depth = std::min(min_depth, light_space.z);
+        max_depth = std::max(max_depth, light_space.z);
       }
 
-      const float left = min_corner.x;
-      const float right = std::max(max_corner.x, left + 1.0F);
-      const float bottom = min_corner.y;
-      const float top = std::max(max_corner.y, bottom + 1.0F);
-      const float near_plane
-        = std::max(0.1F, -max_corner.z - kShadowDepthPadding);
+      const float ortho_half_extent_x = padded_half_extent_x;
+      const float ortho_half_extent_y = padded_half_extent_y;
+      const bool has_shadow_caster_depths
+        = TightenDepthRangeWithShadowCasters(shadow_caster_bounds, light_view,
+          ortho_half_extent_x, ortho_half_extent_y, min_depth, max_depth);
+      if (!has_shadow_caster_depths) {
+        // Keep the receiver slice bounds as the safety fallback until a later
+        // invalidation/cache phase can carry richer caster coverage metadata.
+      }
+      const float world_units_per_texel_x = (2.0F * ortho_half_extent_x)
+        / std::max(1.0F, static_cast<float>(directional_shadow_resolution_));
+      const float world_units_per_texel_y = (2.0F * ortho_half_extent_y)
+        / std::max(1.0F, static_cast<float>(directional_shadow_resolution_));
+      const float world_units_per_texel
+        = std::max(world_units_per_texel_x, world_units_per_texel_y);
+      const float left = -ortho_half_extent_x;
+      const float right = ortho_half_extent_x;
+      const float bottom = -ortho_half_extent_y;
+      const float top = ortho_half_extent_y;
+      const float depth_padding = std::max(kMinShadowDepthPadding,
+        std::max(ortho_half_extent_x, ortho_half_extent_y) * 0.1F);
+      const float near_plane = std::max(0.1F, -max_depth - depth_padding);
       const float far_plane
-        = std::max(near_plane + 1.0F, -min_corner.z + kShadowDepthPadding);
+        = std::max(near_plane + 1.0F, -min_depth + depth_padding);
       const glm::mat4 light_proj
         = glm::orthoRH_ZO(left, right, bottom, top, near_plane, far_plane);
 
       metadata.cascade_distances[cascade_index] = end_depth;
+      metadata.cascade_world_texel_size[cascade_index] = world_units_per_texel;
       metadata.cascade_view_proj[cascade_index] = light_proj * light_view;
 
       engine::ViewConstants cascade_view_constants = view_constants;

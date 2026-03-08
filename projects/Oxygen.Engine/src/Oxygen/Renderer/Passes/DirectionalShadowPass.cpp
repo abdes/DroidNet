@@ -26,6 +26,14 @@
 
 namespace oxygen::engine {
 
+namespace {
+
+  constexpr float kDirectionalShadowRasterDepthBias = 1500.0F;
+  constexpr float kDirectionalShadowRasterSlopeBias = 2.0F;
+  constexpr float kDirectionalShadowRasterDepthBiasClamp = 0.0F;
+
+} // namespace
+
 DirectionalShadowPass::DirectionalShadowPass(std::shared_ptr<Config> config)
   : DepthPrePass(std::move(config))
 {
@@ -74,6 +82,16 @@ auto DirectionalShadowPass::DoPrepareResources(
 auto DirectionalShadowPass::UsesFramebufferDepthAttachment() const -> bool
 {
   return false;
+}
+
+auto DirectionalShadowPass::BuildRasterizerStateDesc(
+  const graphics::CullMode cull_mode) const -> graphics::RasterizerStateDesc
+{
+  auto desc = DepthPrePass::BuildRasterizerStateDesc(cull_mode);
+  desc.depth_bias = kDirectionalShadowRasterDepthBias;
+  desc.depth_bias_clamp = kDirectionalShadowRasterDepthBiasClamp;
+  desc.slope_scaled_depth_bias = kDirectionalShadowRasterSlopeBias;
+  return desc;
 }
 
 auto DirectionalShadowPass::DoExecute(graphics::CommandRecorder& recorder)
