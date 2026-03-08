@@ -93,7 +93,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     float2 ndc = uv * 2.0 - 1.0;
     ndc.y = -ndc.y;
 
-    // Get camera position and view direction from scene constants
+    // Get camera position and view direction from ViewConstants
     float3 camera_pos_ws = camera_position;
     float4x4 inv_proj = pass_constants.inv_projection_matrix;
     float4x4 inv_view = pass_constants.inv_view_matrix;

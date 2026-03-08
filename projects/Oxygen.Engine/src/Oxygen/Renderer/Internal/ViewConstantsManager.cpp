@@ -66,7 +66,7 @@ auto ViewConstantsManager::GetOrCreateBuffer(ViewId view_id) -> BufferInfo
 
   auto buffer = gfx_->CreateBuffer(desc);
   if (!buffer) {
-    LOG_F(ERROR, "Failed to create scene constants buffer for view {} slot {}",
+    LOG_F(ERROR, "Failed to create ViewConstants buffer for view {} slot {}",
       view_id.get(), current_slot_);
     return {};
   }
@@ -76,7 +76,7 @@ auto ViewConstantsManager::GetOrCreateBuffer(ViewId view_id) -> BufferInfo
   // Persistently map the buffer
   void* mapped_ptr = buffer->Map();
   if (!mapped_ptr) {
-    LOG_F(ERROR, "Failed to map scene constants buffer for view {} slot {}",
+    LOG_F(ERROR, "Failed to map ViewConstants buffer for view {} slot {}",
       view_id.get(), current_slot_);
     return {};
   }

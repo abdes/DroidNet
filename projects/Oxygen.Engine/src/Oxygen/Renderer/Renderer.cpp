@@ -524,7 +524,8 @@ auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
       std::move(mat_binder), std::move(emitter), std::move(light_manager));
     texture_binder_ = std::move(texture_binder);
 
-    // Initialize scene constants manager for per-view, per-slot Upload heap
+    // Initialize the ViewConstants manager for per-view, per-slot upload-heap
+    // storage.
     // buffers.
     view_const_manager_ = std::make_unique<internal::ViewConstantsManager>(
       observer_ptr { gfx.get() },
@@ -550,6 +551,10 @@ auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
       internal::PerViewStructuredPublisher<LightingFrameBindings>>(
       observer_ptr { gfx.get() }, *inline_staging_provider_,
       observer_ptr { inline_transfers_.get() }, "LightingFrameBindings");
+    shadow_frame_bindings_publisher_ = std::make_unique<
+      internal::PerViewStructuredPublisher<ShadowFrameBindings>>(
+      observer_ptr { gfx.get() }, *inline_staging_provider_,
+      observer_ptr { inline_transfers_.get() }, "ShadowFrameBindings");
     environment_view_data_publisher_ = std::make_unique<
       internal::PerViewStructuredPublisher<EnvironmentViewData>>(
       observer_ptr { gfx.get() }, *inline_staging_provider_,
@@ -769,6 +774,7 @@ auto Renderer::OnShutdown() noexcept -> void
   view_color_data_publisher_.reset();
   debug_frame_bindings_publisher_.reset();
   lighting_frame_bindings_publisher_.reset();
+  shadow_frame_bindings_publisher_.reset();
   environment_view_data_publisher_.reset();
   environment_frame_bindings_publisher_.reset();
   view_const_manager_.reset();
@@ -1201,7 +1207,7 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
       const bool is_scene_view = view_ctx.metadata.is_scene_view;
 
       // --- STEP 1: Wire all constants and context data ---
-      // Scene views require prepared scene data and per-view scene constants.
+      // Scene views require prepared scene data and per-view ViewConstants.
       // Overlay views (e.g. ImGui) do not depend on ScenePrep output.
       if (is_scene_view) {
         // This MUST happen before any scene pass (SkyCapture, IBL, or Graph)
@@ -1874,18 +1880,14 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
 
     if (lighting_frame_bindings_publisher_) {
       auto directional_lights_slot = kInvalidShaderVisibleIndex;
-      auto directional_shadows_slot = kInvalidShaderVisibleIndex;
       auto positional_lights_slot = kInvalidShaderVisibleIndex;
       if (const auto light_manager = scene_prep_state_->GetLightManager()) {
         directional_lights_slot = light_manager->GetDirectionalLightsSrvIndex();
-        directional_shadows_slot
-          = light_manager->GetDirectionalShadowsSrvIndex();
         positional_lights_slot = light_manager->GetPositionalLightsSrvIndex();
       }
 
       const LightingFrameBindings lighting_bindings {
         .directional_lights_slot = directional_lights_slot,
-        .directional_shadows_slot = directional_shadows_slot,
         .positional_lights_slot = positional_lights_slot,
         .light_culling = runtime_state.light_culling,
         .sun = runtime_state.sun,
@@ -1893,6 +1895,20 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
       view_bindings.lighting_frame_slot
         = lighting_frame_bindings_publisher_->Publish(
           view_id, lighting_bindings);
+    }
+
+    if (shadow_frame_bindings_publisher_) {
+      auto directional_shadow_metadata_slot = kInvalidShaderVisibleIndex;
+      if (const auto light_manager = scene_prep_state_->GetLightManager()) {
+        directional_shadow_metadata_slot
+          = light_manager->GetDirectionalShadowMetadataSrvIndex();
+      }
+
+      const ShadowFrameBindings shadow_bindings {
+        .directional_shadow_metadata_slot = directional_shadow_metadata_slot,
+      };
+      view_bindings.shadow_frame_slot
+        = shadow_frame_bindings_publisher_->Publish(view_id, shadow_bindings);
     }
 
     if (environment_frame_bindings_publisher_) {
@@ -1929,7 +1945,7 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
   auto buffer_info = view_const_manager_->WriteViewConstants(
     view_id, &snapshot, sizeof(ViewConstants::GpuData));
   if (!buffer_info.buffer) {
-    LOG_F(ERROR, "Failed to write scene constants for view {}", view_id);
+    LOG_F(ERROR, "Failed to write ViewConstants for view {}", view_id);
     return false;
   }
 
@@ -2379,7 +2395,7 @@ auto Renderer::PublishPreparedFrameSpans(
 
 auto Renderer::UpdateViewConstantsFromView(const ResolvedView& view) -> void
 {
-  // Update scene constants from the provided view snapshot
+  // Update ViewConstants from the provided view snapshot.
   view_const_cpu_.SetViewMatrix(view.ViewMatrix())
     .SetProjectionMatrix(view.ProjectionMatrix())
     .SetCameraPosition(view.CameraPosition());
@@ -2416,7 +2432,7 @@ auto Renderer::OnFrameStart(observer_ptr<FrameContext> context) -> void
   // slot BEFORE any uploaders start allocating from them.
   inline_transfers_->OnFrameStart(tag, frame_slot);
   uploader_->OnFrameStart(tag, frame_slot);
-  // then uploaders and scene constants manager
+  // then uploaders and the ViewConstants manager
   texture_binder_->OnFrameStart();
   view_const_manager_->OnFrameStart(frame_slot);
   view_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
@@ -2424,6 +2440,7 @@ auto Renderer::OnFrameStart(observer_ptr<FrameContext> context) -> void
   view_color_data_publisher_->OnFrameStart(frame_sequence, frame_slot);
   debug_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
   lighting_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
+  shadow_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
   environment_view_data_publisher_->OnFrameStart(frame_sequence, frame_slot);
   if (environment_frame_bindings_publisher_) {
     environment_frame_bindings_publisher_->OnFrameStart(

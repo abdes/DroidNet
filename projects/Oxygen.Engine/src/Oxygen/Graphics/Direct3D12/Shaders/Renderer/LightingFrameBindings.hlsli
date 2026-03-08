@@ -14,9 +14,9 @@
 struct LightingFrameBindings
 {
     uint directional_lights_slot;
-    uint directional_shadows_slot;
     uint positional_lights_slot;
     uint _pad0;
+    uint _pad1;
     LightCullingConfig light_culling;
     SyntheticSunData sun;
 };
@@ -25,9 +25,9 @@ static LightingFrameBindings LoadLightingFrameBindings(uint slot)
 {
     LightingFrameBindings invalid_bindings;
     invalid_bindings.directional_lights_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.directional_shadows_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.positional_lights_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings._pad0 = 0u;
+    invalid_bindings._pad1 = 0u;
     invalid_bindings.light_culling.bindless_cluster_grid_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.light_culling.bindless_cluster_index_list_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.light_culling.cluster_dim_x = 0u;

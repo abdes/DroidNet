@@ -17,7 +17,7 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Types/DirectionalLightBasic.h>
-#include <Oxygen/Renderer/Types/DirectionalLightShadows.h>
+#include <Oxygen/Renderer/Types/DirectionalShadowMetadata.h>
 #include <Oxygen/Renderer/Types/PositionalLightData.h>
 #include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -36,7 +36,7 @@ namespace oxygen::renderer {
  GPU-ready arrays:
 
  - `DirectionalLightBasic[]`
- - `DirectionalLightShadows[]`
+ - `DirectionalShadowMetadata[]`
  - `PositionalLightData[]` (point + spot)
 
  The manager uses `engine::upload::TransientStructuredBuffer` to allocate
@@ -94,8 +94,8 @@ public:
   OXGN_RNDR_NDAPI auto GetDirectionalLightsSrvIndex() const
     -> ShaderVisibleIndex;
 
-  //! Shader-visible SRV index for directional shadow payloads.
-  OXGN_RNDR_NDAPI auto GetDirectionalShadowsSrvIndex() const
+  //! Shader-visible SRV index for directional shadow metadata.
+  OXGN_RNDR_NDAPI auto GetDirectionalShadowMetadataSrvIndex() const
     -> ShaderVisibleIndex;
 
   //! Shader-visible SRV index for positional (point/spot) light data.
@@ -106,9 +106,9 @@ public:
   OXGN_RNDR_NDAPI auto GetDirectionalLights() const noexcept
     -> std::span<const engine::DirectionalLightBasic>;
 
-  //! Read-only access to collected directional light shadow data.
-  OXGN_RNDR_NDAPI auto GetDirectionalShadows() const noexcept
-    -> std::span<const engine::DirectionalLightShadows>;
+  //! Read-only access to collected directional shadow metadata.
+  OXGN_RNDR_NDAPI auto GetDirectionalShadowMetadata() const noexcept
+    -> std::span<const engine::DirectionalShadowMetadata>;
 
   //! Read-only access to collected positional light data.
   OXGN_RNDR_NDAPI auto GetPositionalLights() const noexcept
@@ -121,15 +121,17 @@ private:
 
   using BufferT = engine::upload::TransientStructuredBuffer;
   BufferT directional_basic_buffer_;
-  BufferT directional_shadows_buffer_;
+  BufferT directional_shadow_metadata_buffer_;
   BufferT positional_buffer_;
 
   ShaderVisibleIndex directional_basic_srv_ { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex directional_shadows_srv_ { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex directional_shadow_metadata_srv_ {
+    kInvalidShaderVisibleIndex
+  };
   ShaderVisibleIndex positional_srv_ { kInvalidShaderVisibleIndex };
 
   std::vector<engine::DirectionalLightBasic> dir_basic_;
-  std::vector<engine::DirectionalLightShadows> dir_shadows_;
+  std::vector<engine::DirectionalShadowMetadata> directional_shadow_metadata_;
   std::vector<engine::PositionalLightData> positional_;
 
   bool uploaded_this_frame_ { false };

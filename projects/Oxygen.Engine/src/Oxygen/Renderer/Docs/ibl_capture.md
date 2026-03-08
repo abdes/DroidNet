@@ -847,7 +847,7 @@ Implementation strategy:
 - Add a lightweight `ProbeRenderContext` that reuses the existing passes but:
   - uses its own pass registry storage
   - uses a special `PreparedSceneFrame` for the probe camera
-  - binds the same scene constants buffer
+  - binds the same `ViewConstants` buffer
 
 Output:
 

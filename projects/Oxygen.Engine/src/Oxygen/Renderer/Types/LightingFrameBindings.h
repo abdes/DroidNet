@@ -18,9 +18,9 @@ namespace oxygen::engine {
 //! Bindless lighting-system routing payload for a single view.
 struct alignas(packing::kShaderDataFieldAlignment) LightingFrameBindings {
   ShaderVisibleIndex directional_lights_slot { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex directional_shadows_slot { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex positional_lights_slot { kInvalidShaderVisibleIndex };
   std::uint32_t _pad0 { 0 };
+  std::uint32_t _pad1 { 0 };
   LightCullingConfig light_culling {};
   SyntheticSunData sun {};
 };

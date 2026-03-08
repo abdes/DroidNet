@@ -1,6 +1,6 @@
 # Renderer-Shader Interface Refactor Plan
 
-Status: `phase_1_completed` / `phase_6_completed`
+Status: `phase_1_completed` / `phase_8_completed`
 
 Purpose: define the refactor required to make renderer-shader interfaces clean,
 explicit, modular, and future-ready before any new shadow-system work lands.
@@ -38,8 +38,8 @@ Legend: `[ ]` pending | `[~]` in progress | `[x]` completed
 - [x] Phase 4: Extract lighting interfaces cleanly
 - [x] Phase 5: Extract environment interfaces cleanly
 - [x] Phase 6: Clean draw/material contracts
-- [ ] Phase 7: Introduce shadow-ready and ray-tracing-ready system slots
-- [ ] Phase 8: Documentation and validation hardening
+- [x] Phase 7: Introduce shadow-ready and ray-tracing-ready system slots
+- [x] Phase 8: Documentation and validation hardening
 
 ### 0.1 Phase 0 Exit Record
 
@@ -995,6 +995,20 @@ Validation record:
 
 ## 8.8 Phase 7: Introduce shadow-ready and ray-tracing-ready system slots
 
+Status:
+
+- Completed on March 8, 2026.
+- First implementation slice completed on March 8, 2026:
+  - `LightingFrameBindings` no longer owns directional shadow metadata
+  - `ShadowFrameBindings` now exists as a real C++/HLSL contract routed by
+    `ViewFrameBindings.shadow_frame_slot`
+  - renderer now publishes directional shadow metadata through
+    `ShadowFrameBindings.directional_shadow_metadata_slot`
+  - `DirectionalLightShadows` is being replaced in live code by the neutral
+    `DirectionalShadowMetadata` contract
+  - `LightManager` now publishes `DirectionalShadowMetadata[]` instead of the
+    old technique-shaped type
+
 Deliverables:
 
 - Add `ShadowFrameBindings` to `ViewFrameBindings`.
@@ -1014,7 +1028,35 @@ Exit criteria:
 - The renderer interface is ready for future shadow and RT systems without
   another root/ownership redesign.
 
+Validation record:
+
+- Renderer build passed:
+  `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:6 /p:Configuration=Debug /nologo`
+- Shader build/bake passed:
+  `msbuild out/build-vs/src/Oxygen/Graphics/Direct3D12/Shaders/oxygen-graphics-direct3d12_shaders.vcxproj /m:6 /p:Configuration=Debug /nologo`
+- Engine build passed:
+  `msbuild out/build-vs/src/Oxygen/Engine/oxygen-engine.vcxproj /m:6 /p:Configuration=Debug /nologo`
+- LightManager test target build passed:
+  `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:6 /p:Configuration=Debug /nologo`
+- LightManager runtime tests passed:
+  `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
+
 ## 8.9 Phase 8: Documentation and validation hardening
+
+Status:
+
+- Completed on March 8, 2026.
+- Final implementation slices completed on March 8, 2026:
+  - current live-contract docs were updated to reflect shadow ownership through
+    `ViewFrameBindings.shadow_frame_slot` and `ShadowFrameBindings`
+  - the renderer README was corrected to describe the live 4-root-parameter ABI
+    and `ViewConstants` terminology instead of stale `SceneConstants` guidance
+  - current bindless guidance now explicitly lists the shadow system as a live
+    migrated `ViewFrameBindings` consumer
+  - shader reflection validation no longer accepts removed legacy `b3` /
+    `EnvironmentDynamicData` bindings
+  - remaining stale `scene constants` terminology was drained from the current
+    renderer/shader comments and live-contract docs touched in this phase
 
 Deliverables:
 
@@ -1036,6 +1078,23 @@ Exit criteria:
 - Docs match code.
 - Reflection validation matches code.
 - Static and runtime validation catch future drift early.
+
+Validation record:
+
+- Renderer build passed:
+  `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:6 /p:Configuration=Debug /nologo`
+- Engine build passed:
+  `msbuild out/build-vs/src/Oxygen/Engine/oxygen-engine.vcxproj /m:6 /p:Configuration=Debug /nologo`
+- Shader build/bake passed:
+  `msbuild out/build-vs/src/Oxygen/Graphics/Direct3D12/Shaders/oxygen-graphics-direct3d12_shaders.vcxproj /m:6 /p:Configuration=Debug /nologo`
+- LightManager test target build passed:
+  `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:6 /p:Configuration=Debug /nologo`
+- LightManager runtime tests passed:
+  `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
+- Validation note:
+  - an initial attempt to launch overlapping MSBuild targets produced transient
+    `.tlog` contention in shared intermediates; rerunning the same targets
+    sequentially succeeded cleanly with no source changes
 
 Execution note:
 
@@ -1130,7 +1189,7 @@ Evidence:
   - renderer build succeeded
   - engine build succeeded
   - shader bake succeeded for 148 modules
+  - LightManager test target build succeeded
+  - LightManager runtime tests passed
   - DX12 debug-layer shutdown validation for Phase 1 was confirmed clean
-- Remaining gap:
-  - Phase 2 is still in progress until the final `ViewConstants` shrink is
-    complete and the remaining live-contract doc stragglers are drained
+- Remaining gap: none

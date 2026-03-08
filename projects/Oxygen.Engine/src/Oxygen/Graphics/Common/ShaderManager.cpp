@@ -46,7 +46,6 @@ inline constexpr uint8_t kExpectedShaderModelMinor = 6;
 // DXC reflects cbuffer sizes using HLSL packing rules which differ from C++.
 // The C++ GpuData struct is padded to 256 bytes to match the HLSL cbuffer ABI.
 inline constexpr uint32_t kExpectedViewConstantsByteSize = 256;
-inline constexpr uint32_t kExpectedEnvironmentDynamicDataByteSize = 160U;
 // Note: DXC reports constant buffer sizes rounded up to 16-byte alignment.
 // RootConstants is modeled as a 2x32-bit root constant range, but is declared
 // as a cbuffer in HLSL; reflection reports 16 bytes for two uints.
@@ -256,7 +255,6 @@ auto ValidateBindingsOrThrow(const oxygen::graphics::ShaderRequest& request,
 {
   bool saw_b1 = false;
   bool saw_b2 = false;
-  bool saw_b3 = false;
 
   for (const auto& r : resources) {
     if (r.bind_kind != OxrfBindKind::kCbv) {
@@ -297,29 +295,14 @@ auto ValidateBindingsOrThrow(const oxygen::graphics::ShaderRequest& request,
       continue;
     }
 
-    if (r.bind_point == 3U) {
-      saw_b3 = true;
-
-      if (r.name != "EnvironmentDynamicData") {
-        throw std::runtime_error("b3 must bind EnvironmentDynamicData");
-      }
-      if (r.byte_size != kExpectedEnvironmentDynamicDataByteSize) {
-        throw std::runtime_error(fmt::format(
-          "EnvironmentDynamicData byte_size mismatch (expected {}, got {})",
-          kExpectedEnvironmentDynamicDataByteSize, r.byte_size));
-      }
-      continue;
-    }
-
     throw std::runtime_error(
-      "only CBV bindings b1, b2, and b3 are allowed (space0)");
+      "only CBV bindings b1 and b2 are allowed (space0)");
   }
 
   // Note: Some stages may not reference the constant buffers.
   // We keep this permissive and only gate on disallowed bindings.
   (void)saw_b1;
   (void)saw_b2;
-  (void)saw_b3;
   (void)request;
 }
 

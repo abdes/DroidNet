@@ -32,7 +32,7 @@ lifecycle](Docs/render_pass_lifecycle.md).
 | GPU resource objects & views | ResourceRegistry | Allocation, view caching, no implicit eviction |
 | Frame orchestration, descriptor allocators | RenderController | Backend specific, provides CommandRecorder(s) |
 | Mesh → GPU buffers, eviction | Renderer | Lazy creation + LRU policy (pluggable) |
-| Per-frame shared data | RenderContext | Frame constants, draw lists, scene/material constant buffers |
+| Per-frame shared data | RenderContext | View constants, prepared view state, pass registry, render targets |
 | Pass logic | RenderPass subclasses | DepthPrePass, ShaderPass (more later) |
 | Pass registry (typed) | RenderContext | Fixed compile-time list (`KnownPassTypes`) |
 
@@ -46,8 +46,8 @@ Implemented today:
 
 * DepthPrePass – depth-only population (+ required for later light / visibility
   stages).
-* ShaderPass – color shading pass (forward style) using scene & (optional)
-  material constants.
+* ShaderPass – color shading pass (forward style) using `ViewConstants`,
+  `ViewFrameBindings`, and draw/material routing through `DrawFrameBindings`.
 
 Design docs: [DepthPrePass](Docs/passes/depth_pre_pass.md),
 [ShaderPass](Docs/passes/shader_pass.md). Both inherit the common [render pass
@@ -69,12 +69,20 @@ only. See [rendergraph patterns](Docs/render_graph_patterns.md).
 
 ## 6. Bindless & Root Signature Conventions
 
-Root binding order (enum `RenderPass::RootBindings`): 0 – Bindless SRV table
-(indices / structured buffers) 1 – Scene constants (CBV, b1 space0) 2 – Material
-constants (CBV, b2 space0 – only present in passes that need it)
+The live generated root ABI has four stable root parameters:
 
-DepthPrePass currently uses only (0,1). ShaderPass uses (0,1,2). Details &
-future extension guidance: [bindless conventions](Docs/bindless_conventions.md).
+1. Bindless SRV table
+2. Sampler table
+3. `ViewConstants` at `b1, space0`
+4. `RootConstants` at `b2, space0`
+
+Extensible renderer data no longer rides through extra root CBVs. Shaders
+resolve `ViewFrameBindings` from `ViewConstants.bindless_view_frame_bindings_slot`
+and then route to draw, lighting, environment, view-color, shadow, debug,
+history, and ray-tracing system payloads as needed.
+
+Details and current binding expectations:
+[bindless conventions](Docs/bindless_conventions.md).
 
 ## 7. Data Flow & Pass IO Summary
 
@@ -438,7 +446,7 @@ private:
 //----------------------------------------------------------------------------//
 oxygen::co::Co<> MyForwardPlus(RenderContext& ctx, PassGraph& graph) {
     co_await std::move(PassBuilder("DepthPrePass"))
-        .Reads("SceneConstants")
+        .Reads("ViewConstants")
         .Writes("DepthTexture")
         .Execute([](RenderContext& ctx){
             std::cout << "  [DepthPrePass] building depth buffer\n";
@@ -455,7 +463,7 @@ oxygen::co::Co<> MyForwardPlus(RenderContext& ctx, PassGraph& graph) {
         }).co_await(graph);
 
     co_await std::move(PassBuilder("OpaquePass"))
-        .Reads("SceneConstants")
+        .Reads("ViewConstants")
         .Reads("LightGrid")
         .Writes("GBuffer")
         .Execute([](RenderContext& ctx){

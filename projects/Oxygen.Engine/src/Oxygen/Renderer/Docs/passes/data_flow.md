@@ -160,8 +160,8 @@ graph LR
 2. **Transform Upload**: Upload world & normal matrices as structured buffers
 3. **Material Upload**: Upload material constant buffers (if needed)
 4. **Light Upload** (frame phase only): Upload `DirectionalLightBasic[]`,
-   `DirectionalLightShadows[]`, and `PositionalLightData[]` to GPU structured
-   buffers via `LightManager::EnsureFrameResources()`
+   `DirectionalShadowMetadata[]`, and `PositionalLightData[]` to GPU
+   structured buffers via `LightManager::EnsureFrameResources()`
 5. **DrawMetadata Emit**: Generate per-draw GPU metadata (indices, flags)
 6. **Sort & Partition**: Sort draws by pass/material/depth; build partition map
 7. **DrawMetadata Upload**: Upload sorted metadata to GPU structured buffer

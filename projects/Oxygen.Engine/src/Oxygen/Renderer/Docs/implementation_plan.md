@@ -426,7 +426,7 @@ plan section tracks execution work only.
 
 - [ ] Add renderer-owned shadow runtime services per `shadows.md`
 - [x] Add baseline shadow metadata/contracts and bindless plumbing:
-      `DirectionalLightShadows`, per-light shadow indices/flags, and the first
+      `DirectionalShadowMetadata`, per-light shadow indices/flags, and the first
       shadow-routing publication path through `ViewFrameBindings`
 - [ ] Generalize the baseline metadata into family-independent shadow-product
       records and implementation-selection plumbing

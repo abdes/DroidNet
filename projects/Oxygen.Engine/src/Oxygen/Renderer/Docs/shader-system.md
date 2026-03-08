@@ -71,6 +71,8 @@ All contracts below are authoritative and must be mirrored exactly.
 - `src/Oxygen/Renderer/Types/EnvironmentViewData.h` (`EnvironmentViewData`, size = 64 bytes)
 - `src/Oxygen/Renderer/Types/ViewColorData.h` (`ViewColorData`, size = 16 bytes)
 - `src/Oxygen/Renderer/Types/DebugFrameBindings.h` (`DebugFrameBindings`, size = 16 bytes)
+- `src/Oxygen/Renderer/Types/ShadowFrameBindings.h` (`ShadowFrameBindings`, size = 16 bytes)
+- `src/Oxygen/Renderer/Types/DirectionalShadowMetadata.h` (`DirectionalShadowMetadata`, size = 288 bytes)
 - `src/Oxygen/Renderer/Types/DrawMetadata.h` (`DrawMetadata`, size = 64 bytes)
 - `src/Oxygen/Renderer/Types/MaterialShadingConstants.h` (`MaterialShadingConstants`, size = 112 bytes)
 - `src/Oxygen/Renderer/Types/ProceduralGridMaterialConstants.h` (`ProceduralGridMaterialConstants`, size = 112 bytes)
@@ -181,7 +183,6 @@ view-local lighting state.
 Current contents:
 
 - `directional_lights_slot`
-- `directional_shadows_slot`
 - `positional_lights_slot`
 - `light_culling`
 - `sun`
@@ -193,7 +194,24 @@ Current migration rule:
 - no direct lighting slots remain in `ViewConstants`
 - canonical sun ownership is lighting-owned through `SyntheticSunData`
 
-### 2.2.3 EnvironmentFrameBindings (shared environment routing contract)
+### 2.2.3 ShadowFrameBindings (shared shadow routing contract)
+
+`ShadowFrameBindings` routes shadow-system per-view resources.
+
+Current contents:
+
+- `directional_shadow_metadata_slot`
+
+Current migration rule:
+
+- shaders should prefer `ShadowFrameBindings` through
+  `ViewFrameBindings.shadow_frame_slot`
+- directional shadow metadata no longer rides through
+  `LightingFrameBindings`
+- this phase publishes only neutral directional shadow metadata; broader
+  shadow-product routing remains future shadow-system work
+
+### 2.2.4 EnvironmentFrameBindings (shared environment routing contract)
 
 `EnvironmentFrameBindings` routes environment-owned per-view resources.
 
@@ -209,7 +227,7 @@ Current migration rule:
   `ViewFrameBindings.environment_frame_slot`
 - no direct environment slot remains in `ViewConstants`
 
-### 2.2.4 DrawFrameBindings (shared draw routing contract)
+### 2.2.5 DrawFrameBindings (shared draw routing contract)
 
 `DrawFrameBindings` routes draw-system per-view structured-buffer slots.
 
@@ -228,7 +246,7 @@ Current migration rule:
   `ViewFrameBindings.draw_frame_slot`
 - no direct draw/material/transform/instance slots remain in `ViewConstants`
 
-### 2.2.5 EnvironmentViewData (shared environment view-data contract)
+### 2.2.6 EnvironmentViewData (shared environment view-data contract)
 
 `EnvironmentViewData` routes environment-owned per-view atmosphere context.
 
@@ -245,7 +263,7 @@ Current migration rule:
 - shaders should prefer `EnvironmentViewData` through
   `EnvironmentFrameBindings.environment_view_slot`
 
-### 2.2.6 ViewColorData (shared view color/presentation contract)
+### 2.2.7 ViewColorData (shared view color/presentation contract)
 
 `ViewColorData` is the first non-debug shared view payload routed through
 `ViewFrameBindings`.
@@ -259,7 +277,7 @@ Current migration rule:
 - shaders should prefer `ViewColorData.exposure` through
   `ViewFrameBindings.view_color_frame_slot`
 
-### 2.2.7 DebugFrameBindings (shared debug routing contract)
+### 2.2.8 DebugFrameBindings (shared debug routing contract)
 
 `DebugFrameBindings` routes debug-system resources that are consumed across
 graphics and compute passes.
@@ -276,7 +294,7 @@ Current migration rule:
   `ViewFrameBindings.debug_frame_slot`
 - no direct debug slots remain in `ViewConstants`
 
-### 2.2.8 ViewConstants boundary rules (future-proofing)
+### 2.2.9 ViewConstants boundary rules (future-proofing)
 
 `ViewConstants` is intentionally small and stable: it contains **view
 invariants** plus **global heap indices** that route shaders to extensible

@@ -41,6 +41,7 @@
 #include <Oxygen/Renderer/Types/EnvironmentViewData.h>
 #include <Oxygen/Renderer/Types/LightCullingConfig.h>
 #include <Oxygen/Renderer/Types/LightingFrameBindings.h>
+#include <Oxygen/Renderer/Types/ShadowFrameBindings.h>
 #include <Oxygen/Renderer/Types/SyntheticSunData.h>
 #include <Oxygen/Renderer/Types/ViewColorData.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
@@ -394,7 +395,7 @@ private:
     const FrameContext& frame_context, bool run_frame_phase = true,
     bool single_view_mode = false) -> std::size_t;
 
-  //! Update scene constants from resolved view matrices & camera state.
+  //! Update `ViewConstants` from resolved view matrices and camera state.
   auto UpdateViewConstantsFromView(const ResolvedView& view) -> void;
 
   //! Publish spans into PreparedSceneFrame using TransformUploader and
@@ -439,8 +440,8 @@ private:
 
   // Managed draw item container removed (AoS path deprecated).
 
-  // Scene constants management - uses dedicated slot-aware manager for root CBV
-  // binding
+  // ViewConstants management - uses a dedicated slot-aware manager for root CBV
+  // binding.
   ViewConstants view_const_cpu_;
   std::unique_ptr<internal::ViewConstantsManager> view_const_manager_;
   std::unique_ptr<internal::PerViewStructuredPublisher<ViewFrameBindings>>
@@ -453,6 +454,8 @@ private:
     debug_frame_bindings_publisher_;
   std::unique_ptr<internal::PerViewStructuredPublisher<LightingFrameBindings>>
     lighting_frame_bindings_publisher_;
+  std::unique_ptr<internal::PerViewStructuredPublisher<ShadowFrameBindings>>
+    shadow_frame_bindings_publisher_;
   std::unique_ptr<internal::PerViewStructuredPublisher<EnvironmentViewData>>
     environment_view_data_publisher_;
   std::unique_ptr<

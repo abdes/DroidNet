@@ -6,7 +6,7 @@ Describes `RenderContext` structure and the fixed compile-time pass registry
 ## Purpose
 
 Provide per-frame shared data (frame counters, draw lists, pointer to
-scene/material constant buffers) and O(1) typed access to previously executed
+view constants, prepared view state, and O(1) typed access to previously executed
 passes.
 
 ## Compile-Time Pass List
@@ -36,7 +36,7 @@ downstream passes must tolerate a null pointer if a dependency was skipped
 ## Renderer Interaction
 
 `Renderer::PreExecute` sets internal pointers (`renderer`, `render_controller`),
-validates required buffers (scene constants), and leaves draw list spans
+validates required buffers (`ViewConstants`), and leaves draw list spans
 provided by caller intact. `PostExecute` clears pass registry and nulls
 pointers.
 

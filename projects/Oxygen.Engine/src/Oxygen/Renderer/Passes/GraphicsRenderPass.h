@@ -25,8 +25,10 @@ namespace oxygen::engine {
 
  The base class handles:
  - Pipeline state caching and rebuilding
- - Setting the graphics pipeline before DoExecute()
- - Binding indices buffer and scene constants
+ - Setting the
+ graphics pipeline before DoExecute()
+ - Binding indices buffer and
+ `ViewConstants`
  - Pass constants index binding
 
  ### Derived Class Responsibilities
@@ -49,7 +51,7 @@ public:
   OXYGEN_DEFAULT_MOVABLE(GraphicsRenderPass)
 
 protected:
-  //! Construct with optional ViewConstants binding.
+  //! Construct with optional `ViewConstants` binding.
   OXGN_RNDR_API explicit GraphicsRenderPass(
     std::string_view name, bool require_view_constants = true);
 
