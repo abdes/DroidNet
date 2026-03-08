@@ -23,6 +23,7 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
@@ -330,6 +331,19 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
         }
       }
     );
+
+    if (context.ovm.HasOption("fps")) {
+      (void)app.engine->GetConsole().SetCVarFromText({
+        .name = "ngin.target_fps",
+        .text = std::to_string(target_fps),
+      });
+    }
+    if (context.ovm.HasOption("hot-reload")) {
+      (void)app.engine->GetConsole().SetCVarFromText({
+        .name = "ngin.scripting.hot_reload",
+        .text = hot_reload ? "true" : "false",
+      });
+    }
 
     const auto rc = co::Run(app, AsyncMain(app, frames));
 

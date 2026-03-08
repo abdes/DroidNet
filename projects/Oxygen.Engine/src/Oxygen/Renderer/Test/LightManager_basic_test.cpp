@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include <glm/ext/matrix_clip_space.hpp>
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 
@@ -18,7 +19,9 @@
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/RendererTag.h>
+#include <Oxygen/Renderer/ShadowManager.h>
 #include <Oxygen/Renderer/Test/Fakes/Graphics.h>
+#include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
@@ -40,6 +43,7 @@ namespace {
 using oxygen::kInvalidShaderVisibleIndex;
 using oxygen::observer_ptr;
 using oxygen::engine::DirectionalLightFlags;
+using oxygen::engine::ViewConstants;
 using oxygen::engine::upload::DefaultUploadPolicy;
 using oxygen::engine::upload::InlineTransfersCoordinator;
 using oxygen::engine::upload::StagingProvider;
@@ -48,6 +52,7 @@ using oxygen::frame::SequenceNumber;
 using oxygen::frame::Slot;
 using oxygen::graphics::SingleQueueStrategy;
 using oxygen::renderer::LightManager;
+using oxygen::renderer::ShadowManager;
 using oxygen::renderer::internal::RendererTagFactory;
 using oxygen::renderer::testing::FakeGraphics;
 using oxygen::scene::Scene;
@@ -84,6 +89,13 @@ protected:
   }
 
   [[nodiscard]] auto Manager() const -> LightManager& { return *manager_; }
+  [[nodiscard]] auto CreateShadowManager() const
+    -> std::unique_ptr<ShadowManager>
+  {
+    return std::make_unique<ShadowManager>(observer_ptr { gfx_.get() },
+      observer_ptr { staging_provider_.get() },
+      observer_ptr { inline_transfers_.get() });
+  }
 
   [[nodiscard]] auto CreateNode(const std::string& name, const bool visible,
     const bool casts_shadows) const -> SceneNode
@@ -266,9 +278,8 @@ NOLINT_TEST_F(LightManagerTest, EnsureFrameResources_NoLightsKeepsSrvInvalid)
 
   // Assert
   EXPECT_EQ(manager.GetDirectionalLightsSrvIndex(), kInvalidShaderVisibleIndex);
-  EXPECT_EQ(
-    manager.GetDirectionalShadowMetadataSrvIndex(), kInvalidShaderVisibleIndex);
   EXPECT_EQ(manager.GetPositionalLightsSrvIndex(), kInvalidShaderVisibleIndex);
+  EXPECT_TRUE(manager.GetDirectionalShadowCandidates().empty());
 }
 
 //! Collecting lights and ensuring frame resources yields valid SRV indices.
@@ -284,6 +295,11 @@ NOLINT_TEST_F(LightManagerTest,
   auto dir_impl = dir_node.GetImpl();
   ASSERT_TRUE(dir_impl.has_value());
   dir_impl->get().AddComponent<oxygen::scene::DirectionalLight>();
+  dir_impl->get()
+    .GetComponent<oxygen::scene::DirectionalLight>()
+    .Common()
+    .casts_shadows
+    = true;
   UpdateTransforms(dir_node);
 
   auto point_node
@@ -301,13 +317,127 @@ NOLINT_TEST_F(LightManagerTest,
 
   // Assert
   EXPECT_EQ(manager.GetDirectionalLights().size(), 1);
-  EXPECT_EQ(manager.GetDirectionalShadowMetadata().size(), 1);
+  EXPECT_EQ(manager.GetDirectionalShadowCandidates().size(), 1);
   EXPECT_EQ(manager.GetPositionalLights().size(), 1);
 
   EXPECT_NE(manager.GetDirectionalLightsSrvIndex(), kInvalidShaderVisibleIndex);
-  EXPECT_NE(
-    manager.GetDirectionalShadowMetadataSrvIndex(), kInvalidShaderVisibleIndex);
   EXPECT_NE(manager.GetPositionalLightsSrvIndex(), kInvalidShaderVisibleIndex);
+}
+
+//! ShadowManager publishes shared shadow products for shadow-casting
+//! directionals.
+NOLINT_TEST_F(
+  LightManagerTest, ShadowManagerPublishForView_DirectionalProductsArePublished)
+{
+  auto& manager = Manager();
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  auto node = CreateNode("dir", /*visible=*/true, /*casts_shadows=*/true);
+  auto impl = node.GetImpl();
+  ASSERT_TRUE(impl.has_value());
+  impl->get().AddComponent<oxygen::scene::DirectionalLight>();
+  auto& light = impl->get().GetComponent<oxygen::scene::DirectionalLight>();
+  light.Common().casts_shadows = true;
+  light.Common().shadow.contact_shadows = true;
+  light.SetIsSunLight(true);
+  light.CascadedShadows().distribution_exponent = 2.0F;
+  light.CascadedShadows().cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F };
+  UpdateTransforms(node);
+
+  manager.CollectFromNode(impl->get());
+  manager.EnsureFrameResources();
+
+  auto shadow_manager = CreateShadowManager();
+  ASSERT_NE(shadow_manager, nullptr);
+  shadow_manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  ViewConstants view_constants;
+  view_constants
+    .SetProjectionMatrix(
+      glm::perspectiveRH_ZO(glm::radians(45.0F), 16.0F / 9.0F, 0.1F, 200.0F))
+    .SetCameraPosition(glm::vec3(0.0F, -6.0F, 3.0F));
+  view_constants.SetFrameSequenceNumber(
+    SequenceNumber { 1 }, ViewConstants::kRenderer);
+  view_constants.SetFrameSlot(Slot { 0 }, ViewConstants::kRenderer);
+
+  const auto published = shadow_manager->PublishForView(
+    oxygen::ViewId { 7 }, view_constants, manager);
+
+  ASSERT_NE(published.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(
+    published.directional_shadow_metadata_srv, kInvalidShaderVisibleIndex);
+  ASSERT_EQ(published.shadow_instances.size(), 1U);
+  ASSERT_EQ(published.directional_metadata.size(), 1U);
+
+  const auto& instance = published.shadow_instances[0];
+  EXPECT_EQ(instance.light_index, 0U);
+  EXPECT_EQ(instance.payload_index, 0U);
+  EXPECT_EQ(instance.domain, 0U);
+  EXPECT_EQ(instance.implementation_kind, 1U);
+  EXPECT_NE(instance.flags & (1U << 0), 0U);
+  EXPECT_NE(instance.flags & (1U << 1), 0U);
+  EXPECT_NE(instance.flags & (1U << 2), 0U);
+
+  const auto& metadata = published.directional_metadata[0];
+  EXPECT_EQ(metadata.shadow_instance_index, 0U);
+  EXPECT_EQ(metadata.implementation_kind, 1U);
+  EXPECT_FLOAT_EQ(metadata.distribution_exponent, 2.0F);
+  EXPECT_EQ(metadata.cascade_count, 4U);
+  EXPECT_FLOAT_EQ(metadata.cascade_distances[0], 8.0F);
+  EXPECT_FLOAT_EQ(metadata.cascade_distances[3], 160.0F);
+  EXPECT_EQ(published.sun_shadow_index, 0U);
+}
+
+//! ShadowManager can publish a shadowed synthetic sun without a scene
+//! directional light.
+NOLINT_TEST_F(LightManagerTest,
+  ShadowManagerPublishForView_SyntheticSunPublishesSunShadowIndex)
+{
+  auto& manager = Manager();
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  auto shadow_manager = CreateShadowManager();
+  ASSERT_NE(shadow_manager, nullptr);
+  shadow_manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  ViewConstants view_constants;
+  view_constants
+    .SetProjectionMatrix(
+      glm::perspectiveRH_ZO(glm::radians(45.0F), 16.0F / 9.0F, 0.1F, 200.0F))
+    .SetCameraPosition(glm::vec3(0.0F, -6.0F, 3.0F));
+  view_constants.SetFrameSequenceNumber(
+    SequenceNumber { 1 }, ViewConstants::kRenderer);
+  view_constants.SetFrameSlot(Slot { 0 }, ViewConstants::kRenderer);
+
+  const ShadowManager::SyntheticSunShadowInput synthetic_sun {
+    .enabled = true,
+    .direction_ws = glm::vec3(0.0F, 0.0F, -1.0F),
+    .bias = 0.0F,
+    .normal_bias = 0.0F,
+    .resolution_hint
+    = static_cast<std::uint32_t>(oxygen::scene::ShadowResolutionHint::kMedium),
+    .cascade_count = 4U,
+    .distribution_exponent = 1.0F,
+    .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
+  };
+
+  const auto published = shadow_manager->PublishForView(
+    oxygen::ViewId { 8 }, view_constants, manager, &synthetic_sun);
+
+  ASSERT_NE(published.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(
+    published.directional_shadow_metadata_srv, kInvalidShaderVisibleIndex);
+  ASSERT_EQ(published.shadow_instances.size(), 1U);
+  ASSERT_EQ(published.directional_metadata.size(), 1U);
+  EXPECT_EQ(published.sun_shadow_index, 0U);
+
+  const auto& instance = published.shadow_instances[0];
+  EXPECT_EQ(instance.light_index, 0xFFFFFFFFU);
+  EXPECT_NE(instance.flags & (1U << 2), 0U);
 }
 
 } // namespace

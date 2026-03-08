@@ -7,6 +7,7 @@
 #include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/EnvironmentViewHelpers.hlsli"
 #include "Renderer/LightingHelpers.hlsli"
+#include "Renderer/ShadowHelpers.hlsli"
 #include "Common/Lighting.hlsli"
 #include "Common/Geometry.hlsli"
 #include "Atmosphere/AtmosphereSampling.hlsli"
@@ -109,6 +110,18 @@ float3 AccumulateDirectionalLights(
 {
     float3 direct = float3(0.0, 0.0, 0.0);
     const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
+    const ShadowFrameBindings shadow_bindings = LoadResolvedShadowFrameBindings();
+    const uint sun_shadow_index = shadow_bindings.sun_shadow_index;
+    StructuredBuffer<DirectionalLightBasic> dir_lights;
+    uint dir_count = 0;
+    uint dir_stride = 0;
+    const bool has_directional_buffer =
+        lighting.directional_lights_slot != K_INVALID_BINDLESS_INDEX
+        && BX_IN_GLOBAL_SRV(lighting.directional_lights_slot);
+    if (has_directional_buffer) {
+        dir_lights = ResourceDescriptorHeap[lighting.directional_lights_slot];
+        dir_lights.GetDimensions(dir_count, dir_stride);
+    }
 
     // Render the Sun separately using the resolved lighting-frame data.
     bool sun_rendered = false;
@@ -123,6 +136,8 @@ float3 AccumulateDirectionalLights(
         if (NdotL > 0.0) {
             // Compute atmospheric transmittance specifically for the sun
             float3 sun_transmittance = ComputeSunTransmittance(world_pos, atmo, L);
+            const float shadow_visibility = ComputeDirectionalShadowVisibility(
+                sun_shadow_index, world_pos, N, L);
 
             const float3 H = SafeNormalize(V + L);
             const float  NdotH = saturate(dot(N, H));
@@ -143,20 +158,13 @@ float3 AccumulateDirectionalLights(
 
             const float irradiance = LuxToIrradiance(sun_illuminance);
             const float radiance = irradiance * (1.0 / kPi);
-            direct += (diffuse + specular) * sun_color * sun_transmittance * radiance * NdotL;
+            direct += (diffuse + specular) * sun_color * sun_transmittance
+                * radiance * NdotL * shadow_visibility;
         }
         sun_rendered = true;
     }
 
-    if (lighting.directional_lights_slot != K_INVALID_BINDLESS_INDEX
-        && BX_IN_GLOBAL_SRV(lighting.directional_lights_slot)) {
-        StructuredBuffer<DirectionalLightBasic> dir_lights =
-            ResourceDescriptorHeap[lighting.directional_lights_slot];
-
-        uint dir_count = 0;
-        uint dir_stride = 0;
-        dir_lights.GetDimensions(dir_count, dir_stride);
-
+    if (has_directional_buffer) {
         const uint dir_limit = min(dir_count, MAX_DIRECTIONAL_LIGHTS);
         for (uint i = 0; i < dir_limit; ++i) {
             const DirectionalLightBasic dl = dir_lights[i];
@@ -195,6 +203,8 @@ float3 AccumulateDirectionalLights(
             if (is_sun || env_contribution) {
                 transmittance = ComputeSunTransmittance(world_pos, atmo, L);
             }
+            const float shadow_visibility = ComputeDirectionalShadowVisibility(
+                dl.shadow_index, world_pos, N, L);
 
             const float3 H = SafeNormalize(V + L);
             const float  NdotH = saturate(dot(N, H));
@@ -215,7 +225,8 @@ float3 AccumulateDirectionalLights(
 
             const float irradiance = LuxToIrradiance(light_intensity);
             const float radiance = irradiance * (1.0 / kPi);
-            direct += (diffuse + specular) * light_color * transmittance * radiance * NdotL;
+            direct += (diffuse + specular) * light_color * transmittance
+                * radiance * NdotL * shadow_visibility;
         }
     }
 

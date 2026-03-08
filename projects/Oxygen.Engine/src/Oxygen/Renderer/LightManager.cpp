@@ -121,9 +121,6 @@ LightManager::LightManager(const observer_ptr<Graphics> gfx,
   , directional_basic_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(engine::DirectionalLightBasic)),
       inline_transfers_, "LightManager.DirectionalBasic")
-  , directional_shadow_metadata_buffer_(gfx_, *staging_provider_,
-      static_cast<std::uint32_t>(sizeof(engine::DirectionalShadowMetadata)),
-      inline_transfers_, "LightManager.DirectionalShadowMetadata")
   , positional_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(engine::PositionalLightData)),
       inline_transfers_, "LightManager.Positional")
@@ -171,11 +168,9 @@ auto LightManager::OnFrameStart(RendererTag /*tag*/,
   lights_emitted_count_ = 0ULL;
 
   directional_basic_buffer_.OnFrameStart(sequence, slot);
-  directional_shadow_metadata_buffer_.OnFrameStart(sequence, slot);
   positional_buffer_.OnFrameStart(sequence, slot);
 
   directional_basic_srv_ = kInvalidShaderVisibleIndex;
-  directional_shadow_metadata_srv_ = kInvalidShaderVisibleIndex;
   positional_srv_ = kInvalidShaderVisibleIndex;
 
   uploaded_this_frame_ = false;
@@ -185,7 +180,7 @@ auto LightManager::OnFrameStart(RendererTag /*tag*/,
 auto LightManager::Clear() noexcept -> void
 {
   dir_basic_.clear();
-  directional_shadow_metadata_.clear();
+  directional_shadow_candidates_.clear();
   positional_.clear();
 }
 
@@ -221,25 +216,30 @@ auto LightManager::CollectFromNode(const scene::SceneNodeImpl& node) -> void
     out.direction_ws = ComputeDirectionWs(transform);
     out.angular_size_radians = light.GetAngularSizeRadians();
     out.shadow_index = effective_casts_shadows
-      ? static_cast<std::uint32_t>(directional_shadow_metadata_.size())
+      ? static_cast<std::uint32_t>(directional_shadow_candidates_.size())
       : kInvalidShadowIndex;
     out.flags = PackDirectionalFlags(common, effective_casts_shadows,
       light.GetEnvironmentContribution(), light.IsSunLight());
 
     dir_basic_.push_back(out);
 
-    engine::DirectionalShadowMetadata shadows {};
-    shadows.cascade_count = light.CascadedShadows().cascade_count;
-    shadows.distribution_exponent
-      = light.CascadedShadows().distribution_exponent;
-    shadows.cascade_distances = light.CascadedShadows().cascade_distances;
-
-    // Placeholder matrices; shadow pass will populate later.
-    for (auto& m : shadows.cascade_view_proj) {
-      m = glm::mat4 { 1.0F };
+    if (effective_casts_shadows) {
+      directional_shadow_candidates_.push_back(
+        engine::DirectionalShadowCandidate {
+          .light_index = static_cast<std::uint32_t>(dir_basic_.size() - 1U),
+          .light_flags = out.flags,
+          .mobility = static_cast<std::uint32_t>(common.mobility),
+          .resolution_hint
+          = static_cast<std::uint32_t>(common.shadow.resolution_hint),
+          .direction_ws = out.direction_ws,
+          .bias = common.shadow.bias,
+          .normal_bias = common.shadow.normal_bias,
+          .cascade_count = light.CascadedShadows().cascade_count,
+          .distribution_exponent
+          = light.CascadedShadows().distribution_exponent,
+          .cascade_distances = light.CascadedShadows().cascade_distances,
+        });
     }
-
-    directional_shadow_metadata_.push_back(shadows);
 
     ++lights_emitted_count_;
     ++total_lights_emitted_count_;
@@ -357,18 +357,6 @@ auto LightManager::EnsureFrameResources() -> void
         dir_basic_.size() * sizeof(engine::DirectionalLightBasic));
       directional_basic_srv_ = alloc.srv;
     }
-
-    auto cold_res = directional_shadow_metadata_buffer_.Allocate(count);
-    if (!cold_res) {
-      LOG_F(ERROR, "Failed to allocate directional shadow metadata buffer: {}",
-        cold_res.error().message());
-    } else {
-      const auto& alloc = *cold_res;
-      std::memcpy(alloc.mapped_ptr, directional_shadow_metadata_.data(),
-        directional_shadow_metadata_.size()
-          * sizeof(engine::DirectionalShadowMetadata));
-      directional_shadow_metadata_srv_ = alloc.srv;
-    }
   }
 
   if (!positional_.empty()) {
@@ -400,16 +388,6 @@ auto LightManager::GetDirectionalLightsSrvIndex() const -> ShaderVisibleIndex
   return directional_basic_srv_;
 }
 
-auto LightManager::GetDirectionalShadowMetadataSrvIndex() const
-  -> ShaderVisibleIndex
-{
-  if (directional_shadow_metadata_srv_ == kInvalidShaderVisibleIndex) {
-    // NOLINTNEXTLINE(*-pro-type-const-cast)
-    const_cast<LightManager*>(this)->EnsureFrameResources();
-  }
-  return directional_shadow_metadata_srv_;
-}
-
 auto LightManager::GetPositionalLightsSrvIndex() const -> ShaderVisibleIndex
 {
   if (positional_srv_ == kInvalidShaderVisibleIndex) {
@@ -425,10 +403,10 @@ auto LightManager::GetDirectionalLights() const noexcept
   return dir_basic_;
 }
 
-auto LightManager::GetDirectionalShadowMetadata() const noexcept
-  -> std::span<const engine::DirectionalShadowMetadata>
+auto LightManager::GetDirectionalShadowCandidates() const noexcept
+  -> std::span<const engine::DirectionalShadowCandidate>
 {
-  return directional_shadow_metadata_;
+  return directional_shadow_candidates_;
 }
 
 auto LightManager::GetPositionalLights() const noexcept

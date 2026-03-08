@@ -16,10 +16,16 @@ namespace oxygen::engine {
 
 //! Bindless shadow-system routing payload for a single view.
 struct alignas(packing::kShaderDataFieldAlignment) ShadowFrameBindings {
+  ShaderVisibleIndex shadow_instance_metadata_slot {
+    kInvalidShaderVisibleIndex
+  };
   ShaderVisibleIndex directional_shadow_metadata_slot {
     kInvalidShaderVisibleIndex
   };
-  std::array<std::uint32_t, 3> _pad_to_16 {};
+  ShaderVisibleIndex directional_shadow_texture_slot {
+    kInvalidShaderVisibleIndex
+  };
+  std::uint32_t sun_shadow_index { 0xFFFFFFFFU };
 };
 
 static_assert(sizeof(ShadowFrameBindings) == 16);

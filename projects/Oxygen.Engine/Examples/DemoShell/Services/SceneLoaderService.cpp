@@ -124,6 +124,35 @@ namespace {
     return glm::quat_cast(look_matrix);
   }
 
+  auto DecodeNodeFlags(const data::pak::world::NodeRecord& node)
+    -> scene::SceneNode::Flags
+  {
+    using data::pak::world::kSceneNodeFlag_CastsShadows;
+    using data::pak::world::kSceneNodeFlag_IgnoreParentTransform;
+    using data::pak::world::kSceneNodeFlag_RayCastingSelectable;
+    using data::pak::world::kSceneNodeFlag_ReceivesShadows;
+    using data::pak::world::kSceneNodeFlag_Static;
+    using data::pak::world::kSceneNodeFlag_Visible;
+    using scene::SceneFlag;
+    using scene::SceneNodeFlags;
+
+    scene::SceneNode::Flags flags {};
+    const auto apply = [&](const SceneNodeFlags flag, const uint32_t mask) {
+      flags = flags.SetFlag(flag,
+        SceneFlag {}.SetEffectiveValueBit((node.node_flags & mask) != 0U));
+    };
+
+    apply(SceneNodeFlags::kVisible, kSceneNodeFlag_Visible);
+    apply(SceneNodeFlags::kStatic, kSceneNodeFlag_Static);
+    apply(SceneNodeFlags::kCastsShadows, kSceneNodeFlag_CastsShadows);
+    apply(SceneNodeFlags::kReceivesShadows, kSceneNodeFlag_ReceivesShadows);
+    apply(SceneNodeFlags::kRayCastingSelectable,
+      kSceneNodeFlag_RayCastingSelectable);
+    apply(SceneNodeFlags::kIgnoreParentTransform,
+      kSceneNodeFlag_IgnoreParentTransform);
+    return flags;
+  }
+
   auto IsNearlyEqual(const float lhs, const float rhs) noexcept -> bool
   {
     return std::abs(lhs - rhs) <= 1e-5F;
@@ -2546,7 +2575,7 @@ void SceneLoaderService::InstantiateNodes(
     const NodeRecord& node = nodes[i];
     const std::string name = MakeNodeName(asset.GetNodeName(node), i);
 
-    auto n = scene.CreateNode(name);
+    auto n = scene.CreateNode(name, DecodeNodeFlags(node));
     auto tf = n.GetTransform();
     tf.SetLocalPosition(
       glm::vec3(node.translation[0], node.translation[1], node.translation[2]));

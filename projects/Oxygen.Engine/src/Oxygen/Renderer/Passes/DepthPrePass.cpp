@@ -250,13 +250,20 @@ auto DepthPrePass::NeedRebuildPipelineState() const -> bool
   // trigger rebuilds based on fill-mode differences in user config.
   return false; // No need to rebuild
 }
+
+auto DepthPrePass::UsesFramebufferDepthAttachment() const -> bool
+{
+  return true;
+}
+
 auto DepthPrePass::GetDepthTexture() const -> const Texture&
 {
   const Texture* depth_texture { nullptr };
   if (config_ && config_->depth_texture) {
     depth_texture = config_->depth_texture.get();
   }
-  const auto* fb = GetFramebuffer();
+  const auto* fb
+    = UsesFramebufferDepthAttachment() ? GetFramebuffer() : nullptr;
   if (fb && fb->GetDescriptor().depth_attachment.IsValid()) {
     const auto* fb_depth_texture
       = fb->GetDescriptor().depth_attachment.texture.get();
@@ -342,18 +349,7 @@ auto DepthPrePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
       continue;
     }
 
-    const bool is_masked
-      = pr.pass_mask.IsSet(oxygen::engine::PassMaskBit::kMasked);
-    const bool is_double_sided
-      = pr.pass_mask.IsSet(oxygen::engine::PassMaskBit::kDoubleSided);
-
-    const auto& pso_desc = [&]() -> const graphics::GraphicsPipelineDesc& {
-      if (is_masked) {
-        return is_double_sided ? *pso_masked_double_ : *pso_masked_single_;
-      }
-      return is_double_sided ? *pso_opaque_double_ : *pso_opaque_single_;
-    }();
-
+    const auto& pso_desc = SelectPipelineStateForPartition(pr.pass_mask);
     recorder.SetPipelineState(pso_desc);
 
     EmitDrawRange(recorder, records, pr.begin, pr.end, emitted_count,
@@ -471,6 +467,24 @@ auto DepthPrePass::SetupViewPortAndScissors(
     .bottom = static_cast<int32_t>(height),
   };
   command_recorder.SetScissors(scissors);
+}
+
+auto DepthPrePass::SelectPipelineStateForPartition(
+  const PassMask& pass_mask) const -> const graphics::GraphicsPipelineDesc&
+{
+  const bool is_masked = pass_mask.IsSet(oxygen::engine::PassMaskBit::kMasked);
+  const bool is_double_sided
+    = pass_mask.IsSet(oxygen::engine::PassMaskBit::kDoubleSided);
+
+  DCHECK_F(pso_opaque_single_.has_value());
+  DCHECK_F(pso_opaque_double_.has_value());
+  DCHECK_F(pso_masked_single_.has_value());
+  DCHECK_F(pso_masked_double_.has_value());
+
+  if (is_masked) {
+    return is_double_sided ? *pso_masked_double_ : *pso_masked_single_;
+  }
+  return is_double_sided ? *pso_opaque_double_ : *pso_opaque_single_;
 }
 
 auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc

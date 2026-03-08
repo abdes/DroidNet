@@ -18,6 +18,7 @@
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Renderer/Passes/GraphicsRenderPass.h>
+#include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::graphics {
@@ -138,6 +139,20 @@ protected:
   auto ValidateConfig() -> void override;
   auto CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc override;
   auto NeedRebuildPipelineState() const -> bool override;
+  virtual auto UsesFramebufferDepthAttachment() const -> bool;
+
+  // Helper methods for Execute()
+  virtual auto PrepareDepthStencilView(
+    const graphics::Texture& depth_texture_ref) -> graphics::NativeView;
+  virtual auto ClearDepthStencilView(
+    graphics::CommandRecorder& command_recorder,
+    const graphics::NativeView& dsv_handle) const -> void;
+  virtual auto SetupRenderTargets(graphics::CommandRecorder& command_recorder,
+    const graphics::NativeView& dsv) const -> void;
+  virtual auto SetupViewPortAndScissors(
+    graphics::CommandRecorder& command_recorder) const -> void;
+  [[nodiscard]] auto SelectPipelineStateForPartition(
+    const PassMask& pass_mask) const -> const graphics::GraphicsPipelineDesc&;
 
 private:
   //! List of mesh or draw call identifiers to render in the pre-pass.
@@ -152,17 +167,6 @@ private:
   //! Provides const access to the framebuffer specified in the configuration,
   //! if any.
   [[nodiscard]] auto GetFramebuffer() const -> const graphics::Framebuffer*;
-
-  // Helper methods for Execute()
-  virtual auto PrepareDepthStencilView(
-    const graphics::Texture& depth_texture_ref) -> graphics::NativeView;
-  virtual auto ClearDepthStencilView(
-    graphics::CommandRecorder& command_recorder,
-    const graphics::NativeView& dsv_handle) const -> void;
-  virtual auto SetupRenderTargets(graphics::CommandRecorder& command_recorder,
-    const graphics::NativeView& dsv) const -> void;
-  virtual auto SetupViewPortAndScissors(
-    graphics::CommandRecorder& command_recorder) const -> void;
 
   // Draw submission uses base RenderPass::IssueDrawCalls (SoA path).
   // NOTE: DepthPrePass supplies a predicate excluding

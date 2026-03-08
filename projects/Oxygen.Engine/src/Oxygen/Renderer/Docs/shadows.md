@@ -19,6 +19,33 @@ If a shadow capability is ever narrowed, removed, or otherwise changed in
 scope, record that decision in the section that owns the capability. Do not add
 blanket "non-goals" or catch-all exclusion sections.
 
+## Implementation Status
+
+Current execution status for this design lives in
+[implementation_plan.md](implementation_plan.md). The first Phase 1 slice is
+now present in code:
+
+- `LightManager` collects authored directional shadow intent as
+  `DirectionalShadowCandidate` records instead of owning live shadow metadata
+  uploads.
+- `ShadowManager` owns shared shadow publication for the current slice and
+  publishes:
+  - `ShadowInstanceMetadata`
+  - `DirectionalShadowMetadata`
+- `ShadowFrameBindings` now routes those published buffers through
+  `ViewFrameBindings.shadow_frame_slot`.
+- ScenePrep/draw finalization now publishes explicit shadow-caster pass routing
+  through `PassMask::kShadowCaster` for currently supported caster domains.
+
+This does not mean the conventional directional path is complete. The current
+implementation status is:
+
+- Shared shadow-product publication: in progress
+- Shadow-caster draw classification: in progress
+- Conventional directional shadow rendering: not started
+- Family-selection policy: not started
+- Virtual shadow-map backend: not started
+
 ## 1. Design Rules
 
 - One authored shadow model, multiple runtime implementations. Delivery phases
@@ -118,6 +145,11 @@ authoring.
 - View configuration and per-view relevance
 - Debug overrides that force or disable specific families
 - Deterministic budget caps and residency limits
+- Synthetic primary-sun shadow policy when the effective sun is authored
+  through `scene::environment::Sun` rather than a scene directional light.
+  Until the `Sun` component grows explicit shadow-tuning knobs, the renderer
+  must use the canonical directional-light defaults for cascade count,
+  split distribution, bias, and resolution hint.
 
 ## 4. Runtime Contracts
 
@@ -135,6 +167,13 @@ are true.
 `LightManager` remains the authoritative collector for light-facing GPU data.
 Its shadow payloads evolve to the final metadata contract rather than being
 replaced by a second shadow-specific light collector.
+
+Synthetic sun shadowing is renderer-owned shadow input, not a fake scene light.
+When the effective sun is `SunSource::kSynthetic` and `Sun::CastsShadows()`
+is true, the renderer must provide a synthetic directional shadow input to
+`ShadowManager` on the same shared shadow-product contract. The resolved sun's
+shadow index is published through `ShadowFrameBindings`, not through lighting
+buffers.
 
 ### 4.2 Caster eligibility
 
@@ -418,6 +457,39 @@ selected.
 - A shadowed directional light owns a contiguous set of cascade layers or an
   equivalent stable addressing block.
 
+Engine-grade acceptance criteria for the conventional directional path are:
+
+- Use stable cascade fitting, not only naive per-frame min/max fitting. The
+  renderer must derive a stable cascade bound, convert that bound to
+  world-units-per-texel, and snap orthographic coverage in texel increments so
+  camera motion does not produce crawl or shimmer.
+- Fit light-space near/far depth as tightly as practical for the active
+  receiver/caster region. Large fixed padding is acceptable only as a temporary
+  bootstrap; the final path must reduce wasted depth range to preserve precision
+  and limit acne/peter-panning pressure.
+- Support cascade blend bands explicitly in shader sampling and metadata.
+  Hard cascade transitions are not acceptable as the final conventional path.
+- Account for PCF kernel footprint in cascade coverage. Conventional cascade
+  projections and addressing must preserve a padded border so filter taps do not
+  bleed outside the intended cascade coverage.
+- Use a renderer-controlled raster depth-bias policy for shadow rendering,
+  including slope-scaled depth bias and clamp where supported. Shader-side
+  receiver bias augments this; it does not replace proper shadow-pass raster
+  bias.
+- Use authored normal bias and constant bias as inputs to the final receiver
+  bias calculation, but do not rely on shader-only biasing as the sole acne
+  mitigation strategy.
+- Sampling must use comparison-based filtering in the normal path when the
+  backend supports it. Manual `Load()`-based depth taps are an acceptable
+  bootstrap or compatibility fallback, not the target engine-grade path.
+- Outside-shadow coverage behavior must be deterministic. Border handling,
+  out-of-range UV behavior, and cascade edge handling must be defined so
+  filtering does not create edge streaks or undefined reads.
+- Shadow-caster raster state must follow explicit material-domain policy.
+  Conventional directional shadows default to standard back-face culling unless
+  a material/domain policy requires otherwise; front-face-only hacks are not an
+  acceptable general solution.
+
 ### 7.2 Spot-light shadowing
 
 Spot lights use a single projective shadow map per active shadowed light when
@@ -531,6 +603,16 @@ The baseline runtime filter is depth comparison plus PCF.
 - The shared metadata contract must remain compatible with wider kernels and
   future filter upgrades without replacing the shadow resource model.
 
+For the conventional directional path, "baseline PCF" still means an
+engine-grade implementation:
+
+- comparison sampling in the default path
+- explicit kernel-aware padding/border behavior
+- cascade blend support
+- quality-tier-controlled kernel growth without changing metadata contracts
+- deterministic fallback to manual comparison taps only when the backend path
+  cannot support the preferred comparison-sampling implementation
+
 Family-specific notes:
 
 - Conventional shadow maps use direct depth comparison against pooled map
@@ -544,9 +626,23 @@ Bias is authored and runtime-augmented.
 
 - Use authored constant bias and normal bias from `ShadowSettings`.
 - Add renderer-controlled slope-scaled depth bias in the shadow raster path.
+- Add raster depth-bias clamp where the backend exposes it and where testing
+  shows it improves stability.
 - Bias is evaluated per light type, implementation family, and quality tier.
 - Debug tooling must expose effective bias values so acne and peter-panning can
   be diagnosed from live captures.
+
+For conventional directional shadows, the final bias stack is:
+
+- raster depth bias in the shadow pass
+- slope-scaled raster depth bias in the shadow pass
+- optional raster bias clamp
+- receiver-side normal bias
+- receiver-side constant/light-direction bias
+
+The final conventional path must tune these as a combined policy. It must not
+ship with shader-only biasing or with a single hardcoded constant used as the
+primary acne mitigation mechanism.
 
 ### 10.3 Softness evolution
 
@@ -624,6 +720,13 @@ The final shadow system requires dedicated debug support.
   virtual-family fallback decisions
 - Emit render markers for each shadow pass, each virtual page-update stage, and
   each shadow resource update
+- Emit runtime logs at the shadow ownership boundaries so "no shadows visible"
+  can be diagnosed without a GPU capture. At minimum, logs must report:
+  - whether a view produced any shadow products
+  - whether directional shadow resources were allocated or reused
+  - whether `ShadowFrameBindings` published valid metadata/texture slots
+  - whether the shadow pass executed and emitted any shadow-caster draws
+  - why the shadow path skipped work for a view when it does
 
 Automated coverage should include:
 
@@ -656,6 +759,15 @@ all later phases.
 
 - Complete directional budgeting, cascade blending, stabilization hardening, and
   tier policy
+- Replace bootstrap manual depth-tap sampling with the engine-grade
+  comparison-sampling path, keeping manual comparison taps only as an explicit
+  compatibility fallback when required
+- Replace bootstrap loose cascade fitting with stable texel-snapped coverage and
+  tighter light-space depth fitting suitable for production directional shadows
+- Add kernel-aware cascade padding/border handling so wider PCF kernels remain
+  correct at cascade edges
+- Finalize combined raster/receiver bias policy for directional shadows with
+  debug visibility of effective values
 - Add mixed-mobility caching and invalidation for conventional directional
   products where policy allows it
 - Expand directional multi-light scheduling through the same shared metadata and
