@@ -127,8 +127,8 @@
   },
   "references": {
     "materials": [
-      "/.cooked/Materials/ShowcaseExternalMat.omat",
-      "/.cooked/Materials/ShowcaseOrbMat.omat"
+      "/.cooked/Materials/ScriptedCubeMat.omat",
+      "/.cooked/Materials/CompanionOrbMat.omat"
     ],
     "scripts": [
       "/.cooked/Scripts/orbit-shapes.oscript",

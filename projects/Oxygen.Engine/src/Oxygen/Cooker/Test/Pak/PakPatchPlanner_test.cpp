@@ -10,6 +10,8 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <limits>
 #include <span>
 #include <string>
 #include <string_view>
@@ -56,6 +58,88 @@ auto MakeDigest(const uint8_t seed) -> base::Sha256Digest
   return digest;
 }
 
+auto ToLooseSha(const base::Sha256Digest& digest)
+  -> std::array<uint8_t, lc::kSha256Size>
+{
+  auto out = std::array<uint8_t, lc::kSha256Size> {};
+  std::ranges::copy(digest, out.begin());
+  return out;
+}
+
+auto BuildMaterialDescriptor(const std::string_view name,
+  const uint32_t texture_index) -> std::vector<std::byte>
+{
+  auto desc = render::MaterialAssetDesc {};
+  desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kMaterial);
+  desc.header.version = render::kMaterialAssetVersion;
+  const auto max_name_bytes = sizeof(desc.header.name) - 1U;
+  const auto name_bytes = std::min(name.size(), max_name_bytes);
+  std::memcpy(desc.header.name, name.data(), name_bytes);
+  desc.header.name[name_bytes] = '\0';
+  desc.base_color_texture = core::ResourceIndexT { texture_index };
+
+  auto bytes = std::vector<std::byte>(sizeof(desc));
+  std::memcpy(bytes.data(), std::addressof(desc), sizeof(desc));
+  return bytes;
+}
+
+auto BuildTextureRecord(const uint64_t data_offset, const uint32_t size_bytes)
+  -> core::TextureResourceDesc
+{
+  auto record = core::TextureResourceDesc {};
+  record.data_offset = data_offset;
+  record.size_bytes = size_bytes;
+  record.texture_type = 1U;
+  record.compression_type = 0U;
+  record.width = 1U;
+  record.height = 1U;
+  record.depth = 1U;
+  record.array_layers = 1U;
+  record.mip_levels = 1U;
+  record.format = 0U;
+  record.alignment = 256U;
+  return record;
+}
+
+auto AggregateTaggedDigests(
+  std::span<const std::pair<uint16_t, base::Sha256Digest>> inputs)
+  -> base::Sha256Digest
+{
+  if (inputs.empty()) {
+    return base::ComputeSha256(std::span<const std::byte> {});
+  }
+
+  auto sorted = std::vector<std::pair<uint16_t, base::Sha256Digest>>(
+    inputs.begin(), inputs.end());
+  std::ranges::sort(sorted, [](const auto& lhs, const auto& rhs) {
+    if (lhs.first != rhs.first) {
+      return lhs.first < rhs.first;
+    }
+    return lhs.second < rhs.second;
+  });
+
+  auto hasher = base::Sha256 {};
+  for (const auto& [kind, digest] : sorted) {
+    hasher.Update(std::as_bytes(std::span(&kind, 1)));
+    hasher.Update(std::as_bytes(std::span(digest)));
+  }
+  return hasher.Finalize();
+}
+
+auto ComputeNormalizedTextureDigest(const core::TextureResourceDesc& record,
+  std::span<const std::byte> payload) -> base::Sha256Digest
+{
+  auto normalized = record;
+  normalized.data_offset = 0U;
+
+  auto hasher = base::Sha256 {};
+  hasher.Update(std::as_bytes(std::span(&normalized, 1)));
+  if (!payload.empty()) {
+    hasher.Update(payload);
+  }
+  return hasher.Finalize();
+}
+
 auto EmptyDigest() -> base::Sha256Digest
 {
   static const auto kEmptyDigest
@@ -72,6 +156,21 @@ auto HasDiagnosticCode(std::span<const pak::PakDiagnostic> diagnostics,
   const std::string_view code) -> bool
 {
   return paktest::HasDiagnosticCode(diagnostics, code);
+}
+
+auto DiagnosticSummary(std::span<const pak::PakDiagnostic> diagnostics)
+  -> std::string
+{
+  auto text = std::string {};
+  for (const auto& diagnostic : diagnostics) {
+    if (!text.empty()) {
+      text += " | ";
+    }
+    text += diagnostic.code;
+    text += ": ";
+    text += diagnostic.message;
+  }
+  return text;
 }
 
 auto FindAction(const pak::PakPlan& plan, const data::AssetKey& key)
@@ -236,6 +335,7 @@ NOLINT_TEST_F(PakPatchPlannerTest,
   constexpr auto kDeleteAssetSeed = uint8_t { 0x13U };
   constexpr auto kCreateDescriptorSeed = uint8_t { 0x31U };
   constexpr auto kReplaceDescriptorSeed = uint8_t { 0x32U };
+  constexpr auto kBaseReplaceDescriptorSeed = uint8_t { 0x52U };
   constexpr auto kUnchangedDescriptorSeed = uint8_t { 0x33U };
   constexpr auto kDeleteDescriptorSeed = uint8_t { 0x44U };
   constexpr auto kTexturePayloadBytes = size_t { 19U };
@@ -319,9 +419,11 @@ NOLINT_TEST_F(PakPatchPlannerTest,
 
   const auto base_entries = std::array<data::PakCatalogEntry, 3> {
     MakeCatalogEntry(replace_key, data::AssetType::kMaterial,
-      MakeDigest(kReplaceDescriptorSeed), EmptyDigest()),
+      MakeDigest(kBaseReplaceDescriptorSeed),
+      MakeDigest(kBaseReplaceDescriptorSeed)),
     MakeCatalogEntry(unchanged_key, data::AssetType::kScene,
-      MakeDigest(kUnchangedDescriptorSeed), EmptyDigest()),
+      MakeDigest(kUnchangedDescriptorSeed),
+      MakeDigest(kUnchangedDescriptorSeed)),
     MakeCatalogEntry(delete_key, data::AssetType::kScript,
       MakeDigest(kDeleteDescriptorSeed), EmptyDigest()),
   };
@@ -395,6 +497,7 @@ NOLINT_TEST_F(PakPatchPlannerTest, PatchModeUsesPatchLocalResourcesAndClosure)
   constexpr auto kReplaceAssetSeed = uint8_t { 0x21U };
   constexpr auto kUnchangedAssetSeed = uint8_t { 0x22U };
   constexpr auto kReplaceDescriptorSeed = uint8_t { 0x71U };
+  constexpr auto kBaseReplaceDescriptorSeed = uint8_t { 0x73U };
   constexpr auto kUnchangedDescriptorSeed = uint8_t { 0x72U };
   constexpr auto kReplaceTexturePayloadBytes = size_t { 23U };
   constexpr auto kUnchangedBufferPayloadBytes = size_t { 29U };
@@ -461,13 +564,13 @@ NOLINT_TEST_F(PakPatchPlannerTest, PatchModeUsesPatchLocalResourcesAndClosure)
     std::span<const FileSpec>(unchanged_files.data(), unchanged_files.size()),
     kUnchangedGuidSeed));
 
-  const auto unchanged_transitive = ComputeTransitiveDigestFromFiles(
-    std::span<const FileSpec>(unchanged_files.data(), unchanged_files.size()));
   const auto base_entries = std::array<data::PakCatalogEntry, 2> {
     MakeCatalogEntry(replace_key, data::AssetType::kMaterial,
-      MakeDigest(kReplaceDescriptorSeed), EmptyDigest()),
+      MakeDigest(kBaseReplaceDescriptorSeed),
+      MakeDigest(kBaseReplaceDescriptorSeed)),
     MakeCatalogEntry(unchanged_key, data::AssetType::kMaterial,
-      MakeDigest(kUnchangedDescriptorSeed), unchanged_transitive),
+      MakeDigest(kUnchangedDescriptorSeed),
+      MakeDigest(kUnchangedDescriptorSeed)),
   };
   const auto base_catalog
     = MakeBaseCatalog(std::span<const data::PakCatalogEntry>(
@@ -558,6 +661,177 @@ NOLINT_TEST_F(PakPatchPlannerTest, ReplaceAssetTypeMismatchIsRejected)
   EXPECT_FALSE(result.plan.has_value());
   EXPECT_TRUE(
     HasDiagnosticCode(result.diagnostics, "pak.plan.replace_type_mismatch"));
+}
+
+NOLINT_TEST_F(PakPatchPlannerTest,
+  PatchModeOnlyReplacesChangedAssetWithinSingleLooseCookedSource)
+{
+  using data::CookedSource;
+  using data::CookedSourceKind;
+
+  const auto patch_source = Root() / "single_source_patch";
+
+  const auto asset_a_key = MakeAssetKey(0x61U);
+  const auto asset_b_key = MakeAssetKey(0x62U);
+
+  const auto material_a_bytes = BuildMaterialDescriptor("MatA", 1U);
+  const auto material_b_bytes = BuildMaterialDescriptor("MatB", 2U);
+
+  const auto material_a_sha
+    = ToLooseSha(base::ComputeSha256(std::span<const std::byte>(
+      material_a_bytes.data(), material_a_bytes.size())));
+  const auto material_b_sha
+    = ToLooseSha(base::ComputeSha256(std::span<const std::byte>(
+      material_b_bytes.data(), material_b_bytes.size())));
+
+  const auto texture_fallback_payload
+    = std::vector<std::byte>(8U, std::byte { 0x01 });
+  const auto texture_a_payload = std::vector<std::byte>(8U, std::byte { 0x11 });
+  const auto texture_b_payload_base
+    = std::vector<std::byte>(8U, std::byte { 0x22 });
+  auto texture_b_payload_patch = std::vector<std::byte>(8U, std::byte { 0x22 });
+  texture_b_payload_patch[0] = std::byte { 0x33 };
+
+  const auto texture_record_fallback = BuildTextureRecord(
+    0U, static_cast<uint32_t>(texture_fallback_payload.size()));
+  const auto texture_record_a
+    = BuildTextureRecord(texture_fallback_payload.size(),
+      static_cast<uint32_t>(texture_a_payload.size()));
+  const auto texture_record_b = BuildTextureRecord(
+    texture_fallback_payload.size() + texture_a_payload.size(),
+    static_cast<uint32_t>(texture_b_payload_base.size()));
+
+  auto textures_table_bytes
+    = std::vector<std::byte>(3U * sizeof(core::TextureResourceDesc));
+  std::memcpy(textures_table_bytes.data(), &texture_record_fallback,
+    sizeof(texture_record_fallback));
+  std::memcpy(textures_table_bytes.data() + sizeof(texture_record_fallback),
+    &texture_record_a, sizeof(texture_record_a));
+  std::memcpy(textures_table_bytes.data() + sizeof(texture_record_fallback)
+      + sizeof(texture_record_a),
+    &texture_record_b, sizeof(texture_record_b));
+
+  auto textures_data_base = texture_fallback_payload;
+  textures_data_base.insert(textures_data_base.end(), texture_a_payload.begin(),
+    texture_a_payload.end());
+  textures_data_base.insert(textures_data_base.end(),
+    texture_b_payload_base.begin(), texture_b_payload_base.end());
+
+  auto textures_data_patch = texture_fallback_payload;
+  textures_data_patch.insert(textures_data_patch.end(),
+    texture_a_payload.begin(), texture_a_payload.end());
+  textures_data_patch.insert(textures_data_patch.end(),
+    texture_b_payload_patch.begin(), texture_b_payload_patch.end());
+
+  const auto assets = std::array<AssetSpec, 2> {
+    AssetSpec {
+      .key = asset_a_key,
+      .asset_type = data::AssetType::kMaterial,
+      .descriptor_relpath = "Materials/MatA.omat",
+      .virtual_path = "/Game/MatA.omat",
+      .descriptor_size = material_a_bytes.size(),
+      .descriptor_sha = material_a_sha,
+      .descriptor_payload = material_a_bytes,
+    },
+    AssetSpec {
+      .key = asset_b_key,
+      .asset_type = data::AssetType::kMaterial,
+      .descriptor_relpath = "Materials/MatB.omat",
+      .virtual_path = "/Game/MatB.omat",
+      .descriptor_size = material_b_bytes.size(),
+      .descriptor_sha = material_b_sha,
+      .descriptor_payload = material_b_bytes,
+    },
+  };
+
+  const auto base_files = std::array<FileSpec, 2> {
+    FileSpec {
+      .kind = lc::FileKind::kTexturesTable,
+      .relpath = "Resources/textures.table",
+      .payload = textures_table_bytes,
+    },
+    FileSpec {
+      .kind = lc::FileKind::kTexturesData,
+      .relpath = "Resources/textures.data",
+      .payload = textures_data_base,
+    },
+  };
+  const auto patch_files = std::array<FileSpec, 2> {
+    FileSpec {
+      .kind = lc::FileKind::kTexturesTable,
+      .relpath = "Resources/textures.table",
+      .payload = textures_table_bytes,
+    },
+    FileSpec {
+      .kind = lc::FileKind::kTexturesData,
+      .relpath = "Resources/textures.data",
+      .payload = textures_data_patch,
+    },
+  };
+
+  ASSERT_TRUE(paktest::WriteLooseIndex(patch_source,
+    std::span<const AssetSpec>(assets.data(), assets.size()),
+    std::span<const FileSpec>(patch_files.data(), patch_files.size()), 0x92U));
+  const auto asset_a_transitive = AggregateTaggedDigests(
+    std::array<std::pair<uint16_t, base::Sha256Digest>, 1> {
+      std::pair<uint16_t, base::Sha256Digest> { 0x0001U,
+        ComputeNormalizedTextureDigest(texture_record_a,
+          std::span<const std::byte>(
+            texture_a_payload.data(), texture_a_payload.size())) },
+    });
+  const auto asset_b_base_transitive = AggregateTaggedDigests(
+    std::array<std::pair<uint16_t, base::Sha256Digest>, 1> {
+      std::pair<uint16_t, base::Sha256Digest> { 0x0001U,
+        ComputeNormalizedTextureDigest(texture_record_b,
+          std::span<const std::byte>(
+            texture_b_payload_base.data(), texture_b_payload_base.size())) },
+    });
+  const auto base_entries = std::array<data::PakCatalogEntry, 2> {
+    MakeCatalogEntry(asset_a_key, data::AssetType::kMaterial,
+      base::ComputeSha256(std::span<const std::byte>(
+        material_a_bytes.data(), material_a_bytes.size())),
+      asset_a_transitive),
+    MakeCatalogEntry(asset_b_key, data::AssetType::kMaterial,
+      base::ComputeSha256(std::span<const std::byte>(
+        material_b_bytes.data(), material_b_bytes.size())),
+      asset_b_base_transitive),
+  };
+  const auto base_catalog
+    = MakeBaseCatalog(std::span<const data::PakCatalogEntry>(
+      base_entries.data(), base_entries.size()));
+
+  const auto builder = pak::PakPlanBuilder {};
+  const auto patch_request = MakePatchRequest(Root() / "single_patch.pak",
+    { CookedSource {
+      .kind = CookedSourceKind::kLooseCooked, .path = patch_source } },
+    std::span<const data::PakCatalog>(&base_catalog, 1U));
+
+  const auto patch_result = builder.Build(patch_request);
+  ASSERT_FALSE(HasError(patch_result.diagnostics))
+    << DiagnosticSummary(patch_result.diagnostics);
+  ASSERT_TRUE(patch_result.plan.has_value());
+
+  const auto* action_a = FindAction(*patch_result.plan, asset_a_key);
+  const auto* action_b = FindAction(*patch_result.plan, asset_b_key);
+  ASSERT_NE(action_a, nullptr);
+  ASSERT_NE(action_b, nullptr);
+  EXPECT_EQ(action_a->action, pak::PakPatchAction::kUnchanged);
+  EXPECT_EQ(action_b->action, pak::PakPatchAction::kReplace);
+
+  EXPECT_FALSE(ContainsAsset(*patch_result.plan, asset_a_key));
+  EXPECT_TRUE(ContainsAsset(*patch_result.plan, asset_b_key));
+  ASSERT_EQ(patch_result.plan->Resources().size(), 1U);
+  EXPECT_EQ(patch_result.plan->Resources()[0].resource_kind, "texture");
+
+  const auto closure = patch_result.plan->PatchClosure();
+  ASSERT_EQ(closure.size(), 1U);
+  EXPECT_EQ(closure[0].asset_key, asset_b_key);
+  EXPECT_EQ(closure[0].resource_kind, "texture");
+
+  EXPECT_EQ(patch_result.summary.patch_created, 0U);
+  EXPECT_EQ(patch_result.summary.patch_replaced, 1U);
+  EXPECT_EQ(patch_result.summary.patch_deleted, 0U);
+  EXPECT_EQ(patch_result.summary.patch_unchanged, 1U);
 }
 
 } // namespace

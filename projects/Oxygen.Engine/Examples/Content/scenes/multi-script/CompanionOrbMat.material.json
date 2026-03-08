@@ -1,16 +1,16 @@
 {
-  "name": "ShowcaseExternalMat",
+  "name": "CompanionOrbMat",
   "domain": "opaque",
   "alpha_mode": "opaque",
   "parameters": {
     "base_color": [
-      0.2,
-      0.45,
-      0.15,
+      0.12,
+      0.58,
+      0.95,
       1.0
     ],
     "metalness": 0.0,
-    "roughness": 0.25,
+    "roughness": 0.08,
     "ambient_occlusion": 1.0
   }
 }

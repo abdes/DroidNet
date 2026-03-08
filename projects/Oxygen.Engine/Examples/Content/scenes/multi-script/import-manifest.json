@@ -4,17 +4,17 @@
   "output": "H:/projects/DroidNet/projects/Oxygen.Engine/Examples/Content/.cooked",
   "jobs": [
     {
-      "id": "material.ShowcaseExternalMat",
+      "id": "material.ScriptedCubeMat",
       "type": "material-descriptor",
-      "source": "./ShowcaseExternalMat.material.json",
-      "name": "ShowcaseExternalMat",
+      "source": "./ScriptedCubeMat.material.json",
+      "name": "ScriptedCubeMat",
       "content_hashing": true
     },
     {
-      "id": "material.ShowcaseOrbMat",
+      "id": "material.CompanionOrbMat",
       "type": "material-descriptor",
-      "source": "./ShowcaseOrbMat.material.json",
-      "name": "ShowcaseOrbMat",
+      "source": "./CompanionOrbMat.material.json",
+      "name": "CompanionOrbMat",
       "content_hashing": true
     },
     {
@@ -47,8 +47,8 @@
       "name": "multi_script_scene",
       "content_hashing": true,
       "depends_on": [
-        "material.ShowcaseExternalMat",
-        "material.ShowcaseOrbMat",
+        "material.ScriptedCubeMat",
+        "material.CompanionOrbMat",
         "script.OrbitShapesScript",
         "script.TimeOfDayScript",
         "input.multi_script_scene"
@@ -86,12 +86,12 @@
             {
               "key": "host_material_guid",
               "type": "string",
-              "value": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+              "value": "478af52e-7d2a-747c-3e84-44b1c11411c3"
             },
             {
               "key": "orb_material_guid",
               "type": "string",
-              "value": "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
+              "value": "a19a3dc5-3733-2d36-2bb5-db375e5e5aef"
             }
           ]
         },

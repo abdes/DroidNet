@@ -718,7 +718,7 @@ Objective: close the release gate with recorded evidence.
 
 ### Task 5.1: Automated Validation
 
-Status: `pending`
+Status: `completed`
 
 Required work:
 
@@ -735,6 +735,27 @@ Validation evidence required:
 Exit gate:
 
 - No completion claim without executed automated validation.
+
+Evidence:
+
+- Validation executed:
+  - `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakPatchPlanner.Tests Oxygen.Cooker.PakDomainValidation.Tests Oxygen.Cooker.PakE2E.Tests Oxygen.Cooker.PakCatalogIo.Tests Oxygen.Cooker.PakToolRequestPreparation.Tests Oxygen.Cooker.PakToolExecution.Tests Oxygen.Cooker.PakToolApp.Tests Oxygen.Cooker.PakTool Oxygen.Cooker.PakDump --config Debug -- /m:6`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakPatchPlanner.Tests.exe`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakDomainValidation.Tests.exe`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakE2E.Tests.exe`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakCatalogIo.Tests.exe`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolRequestPreparation.Tests.exe`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolExecution.Tests.exe`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolApp.Tests.exe`
+- Additional implementation evidence:
+  - `PakPlanBuilder` now ignores `kNoResourceIndex` while deriving per-asset
+    transitive resource ownership for texture, buffer, and script references.
+  - Patch-local resource filtering now drops unowned resources of a kind once
+    explicit per-asset ownership exists for that source/kind, preventing
+    unchanged fallback/shared rows from leaking into narrow patches.
+  - Patch-planner regression coverage now includes a single-source
+    changed-resource scenario that proves only the changed asset/resource is
+    emitted.
 
 ### Task 5.2: Manual End-To-End Validation
 
@@ -889,19 +910,68 @@ Evidence recorded so far:
     - `artifacts.catalog.published = false`
     - `artifacts.manifest.requested = true`
     - `artifacts.manifest.published = false`
+- Scenario 4: repo-scale patch validation using `Examples/Content` and a fresh
+  fixed-planner base catalog rebuilt from the original `multi-script` scene.
+- Validation workspaces:
+  - `out/build-vs/manual/pak-patch-validation/base-content`
+  - `out/build-vs/manual/pak-patch-validation/base-pak`
+  - `out/build-vs/manual/pak-patch-validation`
+- Exact commands used:
+  - copied `Examples/Content/*` to
+    `out/build-vs/manual/pak-patch-validation/base-content`
+  - restored the original `multi-script` authoring files from `HEAD` into the
+    copied scene root:
+    - `ShowcaseExternalMat.material.json`
+    - `ShowcaseOrbMat.material.json`
+    - `import-manifest.json`
+    - `multi_script_scene.scene.json`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.ImportTool.exe batch --no-color --no-tui -o out/build-vs/manual/pak-patch-validation/base-content/.cooked -m out/build-vs/manual/pak-patch-validation/base-content/scenes/multi-script/import-manifest.json --root out/build-vs/manual/pak-patch-validation/base-content/scenes/multi-script --report out/build-vs/manual/pak-patch-validation/base-content/.cooked/multi-script-base.report.json`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe build --no-color --loose-source out/build-vs/manual/pak-patch-validation/base-content/.cooked --out out/build-vs/manual/pak-patch-validation/base-pak/all-base-fixed.pak --catalog-out out/build-vs/manual/pak-patch-validation/base-pak/all-base-fixed.catalog.json --manifest-out out/build-vs/manual/pak-patch-validation/base-pak/all-base-fixed.manifest.json --content-version 1 --source-key 018f8f8f-1234-7abc-8def-0123456789ab`
+  - `out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe patch --no-color --diagnostics-file out/build-vs/manual/pak-patch-validation/all-patch-fixed.report.json --loose-source Examples/Content/.cooked --out out/build-vs/manual/pak-patch-validation/all-patch-fixed.pak --catalog-out out/build-vs/manual/pak-patch-validation/all-patch-fixed.catalog.json --content-version 1 --source-key 018f8f8f-1234-7abc-8def-0123456789ab --base-catalog out/build-vs/manual/pak-patch-validation/base-pak/all-base-fixed.catalog.json --manifest-out out/build-vs/manual/pak-patch-validation/all-patch-fixed.manifest.json`
+  - copied validated artifacts to:
+    - `Examples/Content/pak/all-base-fixed.pak`
+    - `Examples/Content/pak/all-base-fixed.catalog.json`
+    - `Examples/Content/pak/all-base-fixed.manifest.json`
+    - `Examples/Content/pak/all-patch-fixed.pak`
+    - `Examples/Content/pak/all-patch-fixed.catalog.json`
+    - `Examples/Content/pak/all-patch-fixed.manifest.json`
+    - `Examples/Content/pak/all-patch-fixed.report.json`
+- Resulting artifact paths:
+  - `out/build-vs/manual/pak-patch-validation/base-pak/all-base-fixed.pak`
+  - `out/build-vs/manual/pak-patch-validation/base-pak/all-base-fixed.catalog.json`
+  - `out/build-vs/manual/pak-patch-validation/base-pak/all-base-fixed.manifest.json`
+  - `out/build-vs/manual/pak-patch-validation/all-patch-fixed.pak`
+  - `out/build-vs/manual/pak-patch-validation/all-patch-fixed.catalog.json`
+  - `out/build-vs/manual/pak-patch-validation/all-patch-fixed.manifest.json`
+  - `out/build-vs/manual/pak-patch-validation/all-patch-fixed.report.json`
+- Observed results:
+  - base rebuild succeeded with exit code `0`
+  - rebuilt base full pak summary was `assets=103`, `resources=26`
+  - repo-scale patch build succeeded with exit code `0`
+  - repo-scale patch summary was `patch_created=0`, `patch_replaced=1`,
+    `patch_deleted=2`, `patch_unchanged=100`
+  - emitted patch payload stayed narrow: `assets=1`, `resources=7`
+  - the earlier near-full patch degeneration was confirmed to be caused by the
+    stale pre-fix base catalog semantics; diffing against the fresh fixed base
+    catalog produced the expected localized patch behavior
 
 Manual validation conclusion:
 
 - Full build publication path is verified.
-- Patch build publication path is verified.
-- Published catalog outputs are reusable as subsequent patch base inputs.
+- Isolated patch-build validation for the `cubes` scenario is verified.
+- Repo-scale patch validation is verified when both the base catalog and patch
+  build are produced under the fixed planner semantics.
+- Published catalog outputs are reusable as subsequent patch base inputs when
+  patch classification remains narrow.
 - Published manifests capture the expected base catalog compatibility envelope.
 - Failure-path publish semantics behave as designed: authoritative final
   catalog/manifest outputs are not published on build failure.
 
 Exit gate:
 
-- Manual validation evidence is captured in task/PR notes.
+- Manual validation evidence is captured in task/PR notes, including at least
+  one repo-scale patch flow that proves localized authoring changes do not
+  collapse into source-wide replacement.
 
 ### Task 5.3: Documentation Completion
 
@@ -926,8 +996,7 @@ Exit gate:
 
 Release blockers:
 
-1. Manual end-to-end tool validation evidence does not yet exist.
-2. Final documentation completion work remains pending.
+1. Final documentation completion work remains pending.
 
 Non-blocking follow-ups after release:
 
@@ -968,4 +1037,6 @@ Validation executed in this review iteration:
 
 Remaining validation delta:
 
-- Manual end-to-end runs with `PakDump`
+- Repo-scale patch validation after fixing `PakPlanBuilder` transitive resource
+  digest classification for loose cooked sources
+- Final documentation completion
