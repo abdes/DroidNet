@@ -19,10 +19,11 @@
 
 namespace oxygen::engine::internal {
 
-//! Manages per-view, per-frame-slot scene constants buffers for root CBV
+//! Manages per-view, per-frame-slot `ViewConstants` buffers for root CBV
 //! binding.
 /*!
- This class provides a simple, dedicated solution for scene constants upload:
+ This class provides a simple, dedicated solution for `ViewConstants`
+ upload:
 
  - **Upload Heap**: Buffers are CPU-visible (Upload heap), persistently mapped.
  - **No GPU Copy**: Data is written directly by CPU, read by GPU over PCIe.

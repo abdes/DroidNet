@@ -267,7 +267,7 @@ NOLINT_TEST_F(LightManagerTest, EnsureFrameResources_NoLightsKeepsSrvInvalid)
   // Assert
   EXPECT_EQ(manager.GetDirectionalLightsSrvIndex(), kInvalidShaderVisibleIndex);
   EXPECT_EQ(
-    manager.GetDirectionalShadowsSrvIndex(), kInvalidShaderVisibleIndex);
+    manager.GetDirectionalShadowMetadataSrvIndex(), kInvalidShaderVisibleIndex);
   EXPECT_EQ(manager.GetPositionalLightsSrvIndex(), kInvalidShaderVisibleIndex);
 }
 
@@ -301,12 +301,12 @@ NOLINT_TEST_F(LightManagerTest,
 
   // Assert
   EXPECT_EQ(manager.GetDirectionalLights().size(), 1);
-  EXPECT_EQ(manager.GetDirectionalShadows().size(), 1);
+  EXPECT_EQ(manager.GetDirectionalShadowMetadata().size(), 1);
   EXPECT_EQ(manager.GetPositionalLights().size(), 1);
 
   EXPECT_NE(manager.GetDirectionalLightsSrvIndex(), kInvalidShaderVisibleIndex);
   EXPECT_NE(
-    manager.GetDirectionalShadowsSrvIndex(), kInvalidShaderVisibleIndex);
+    manager.GetDirectionalShadowMetadataSrvIndex(), kInvalidShaderVisibleIndex);
   EXPECT_NE(manager.GetPositionalLightsSrvIndex(), kInvalidShaderVisibleIndex);
 }
 

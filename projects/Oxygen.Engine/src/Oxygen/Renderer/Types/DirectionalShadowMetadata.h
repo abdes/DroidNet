@@ -15,15 +15,17 @@
 
 namespace oxygen::engine {
 
-//! GPU-facing "cold" directional light shadow payload.
-/*!\brief Layout mirrors HLSL struct `DirectionalLightShadows`.
+//! GPU-facing directional shadow metadata payload.
+/*!\brief Layout mirrors HLSL struct `DirectionalShadowMetadata`.
 
-This type is designed for `StructuredBuffer<DirectionalLightShadows>` uploads.
-It contains per-cascade view-projection matrices for cascaded shadow mapping.
+This type is designed for `StructuredBuffer<DirectionalShadowMetadata>`
+uploads. It contains directional shadow metadata, currently matching the
+conventional cascaded-shadow-map path without baking that implementation name
+into the engine contract.
 
 @note The cascade count is fixed by `oxygen::scene::kMaxShadowCascades`.
 */
-struct alignas(16) DirectionalLightShadows {
+struct alignas(16) DirectionalShadowMetadata {
   uint32_t cascade_count { oxygen::scene::kMaxShadowCascades };
   float distribution_exponent { 1.0F };
   float _pad0 { 0.0F };
@@ -32,9 +34,9 @@ struct alignas(16) DirectionalLightShadows {
   std::array<float, oxygen::scene::kMaxShadowCascades> cascade_distances {};
   std::array<glm::mat4, oxygen::scene::kMaxShadowCascades> cascade_view_proj {};
 };
-static_assert(sizeof(DirectionalLightShadows) % 16 == 0,
-  "DirectionalLightShadows size must be 16-byte aligned");
-static_assert(sizeof(DirectionalLightShadows) == 288,
-  "DirectionalLightShadows size must match HLSL packing");
+static_assert(sizeof(DirectionalShadowMetadata) % 16 == 0,
+  "DirectionalShadowMetadata size must be 16-byte aligned");
+static_assert(sizeof(DirectionalShadowMetadata) == 288,
+  "DirectionalShadowMetadata size must match HLSL packing");
 
 } // namespace oxygen::engine

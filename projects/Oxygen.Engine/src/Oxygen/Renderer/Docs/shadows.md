@@ -314,10 +314,10 @@ shadow-owned `ShadowFrameBindings` contract according to lifetime.
 
 ### 5.5 Metadata evolution
 
-The existing `DirectionalLightShadows` and positional light payloads are the
-starting point for the final contract. They must be extended in place toward a
-shared family-independent shadow-product model rather than replaced by
-temporary conventional-only structures.
+The existing directional shadow metadata and positional light payloads are the
+starting point for the final contract. They must evolve toward a shared
+family-independent shadow-product model rather than being wrapped in temporary
+conventional-only structures.
 
 Shared shadow metadata must cover:
 

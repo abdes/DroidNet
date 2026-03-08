@@ -164,7 +164,7 @@ namespace {
     if (!ctx.view_constants) {
       LOG_F(WARNING,
         "SkyAtmosphereLutComputePass: sanity check failed (view={}) missing "
-        "scene constants",
+        "ViewConstants",
         view_id.get());
       ok = false;
     }

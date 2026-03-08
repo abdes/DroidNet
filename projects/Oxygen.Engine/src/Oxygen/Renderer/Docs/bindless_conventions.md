@@ -256,6 +256,8 @@ Current status:
   environment-owned per-view view data.
 - `view color` is now a live migrated system slot and routes `ViewColorData`
   for shared exposure.
+- `shadow` is now a live migrated system slot and routes
+  `ShadowFrameBindings` for directional shadow metadata ownership.
 - Remaining system slots may still be invalid placeholders until the
   corresponding system contracts are migrated.
 - The legacy direct environment/light/debug/exposure slots were removed from

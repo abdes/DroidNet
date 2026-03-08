@@ -121,9 +121,9 @@ LightManager::LightManager(const observer_ptr<Graphics> gfx,
   , directional_basic_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(engine::DirectionalLightBasic)),
       inline_transfers_, "LightManager.DirectionalBasic")
-  , directional_shadows_buffer_(gfx_, *staging_provider_,
-      static_cast<std::uint32_t>(sizeof(engine::DirectionalLightShadows)),
-      inline_transfers_, "LightManager.DirectionalShadows")
+  , directional_shadow_metadata_buffer_(gfx_, *staging_provider_,
+      static_cast<std::uint32_t>(sizeof(engine::DirectionalShadowMetadata)),
+      inline_transfers_, "LightManager.DirectionalShadowMetadata")
   , positional_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(engine::PositionalLightData)),
       inline_transfers_, "LightManager.Positional")
@@ -171,11 +171,11 @@ auto LightManager::OnFrameStart(RendererTag /*tag*/,
   lights_emitted_count_ = 0ULL;
 
   directional_basic_buffer_.OnFrameStart(sequence, slot);
-  directional_shadows_buffer_.OnFrameStart(sequence, slot);
+  directional_shadow_metadata_buffer_.OnFrameStart(sequence, slot);
   positional_buffer_.OnFrameStart(sequence, slot);
 
   directional_basic_srv_ = kInvalidShaderVisibleIndex;
-  directional_shadows_srv_ = kInvalidShaderVisibleIndex;
+  directional_shadow_metadata_srv_ = kInvalidShaderVisibleIndex;
   positional_srv_ = kInvalidShaderVisibleIndex;
 
   uploaded_this_frame_ = false;
@@ -185,7 +185,7 @@ auto LightManager::OnFrameStart(RendererTag /*tag*/,
 auto LightManager::Clear() noexcept -> void
 {
   dir_basic_.clear();
-  dir_shadows_.clear();
+  directional_shadow_metadata_.clear();
   positional_.clear();
 }
 
@@ -221,14 +221,14 @@ auto LightManager::CollectFromNode(const scene::SceneNodeImpl& node) -> void
     out.direction_ws = ComputeDirectionWs(transform);
     out.angular_size_radians = light.GetAngularSizeRadians();
     out.shadow_index = effective_casts_shadows
-      ? static_cast<std::uint32_t>(dir_shadows_.size())
+      ? static_cast<std::uint32_t>(directional_shadow_metadata_.size())
       : kInvalidShadowIndex;
     out.flags = PackDirectionalFlags(common, effective_casts_shadows,
       light.GetEnvironmentContribution(), light.IsSunLight());
 
     dir_basic_.push_back(out);
 
-    engine::DirectionalLightShadows shadows {};
+    engine::DirectionalShadowMetadata shadows {};
     shadows.cascade_count = light.CascadedShadows().cascade_count;
     shadows.distribution_exponent
       = light.CascadedShadows().distribution_exponent;
@@ -239,7 +239,7 @@ auto LightManager::CollectFromNode(const scene::SceneNodeImpl& node) -> void
       m = glm::mat4 { 1.0F };
     }
 
-    dir_shadows_.push_back(shadows);
+    directional_shadow_metadata_.push_back(shadows);
 
     ++lights_emitted_count_;
     ++total_lights_emitted_count_;
@@ -358,15 +358,16 @@ auto LightManager::EnsureFrameResources() -> void
       directional_basic_srv_ = alloc.srv;
     }
 
-    auto cold_res = directional_shadows_buffer_.Allocate(count);
+    auto cold_res = directional_shadow_metadata_buffer_.Allocate(count);
     if (!cold_res) {
-      LOG_F(ERROR, "Failed to allocate directional shadows buffer: {}",
+      LOG_F(ERROR, "Failed to allocate directional shadow metadata buffer: {}",
         cold_res.error().message());
     } else {
       const auto& alloc = *cold_res;
-      std::memcpy(alloc.mapped_ptr, dir_shadows_.data(),
-        dir_shadows_.size() * sizeof(engine::DirectionalLightShadows));
-      directional_shadows_srv_ = alloc.srv;
+      std::memcpy(alloc.mapped_ptr, directional_shadow_metadata_.data(),
+        directional_shadow_metadata_.size()
+          * sizeof(engine::DirectionalShadowMetadata));
+      directional_shadow_metadata_srv_ = alloc.srv;
     }
   }
 
@@ -399,13 +400,14 @@ auto LightManager::GetDirectionalLightsSrvIndex() const -> ShaderVisibleIndex
   return directional_basic_srv_;
 }
 
-auto LightManager::GetDirectionalShadowsSrvIndex() const -> ShaderVisibleIndex
+auto LightManager::GetDirectionalShadowMetadataSrvIndex() const
+  -> ShaderVisibleIndex
 {
-  if (directional_shadows_srv_ == kInvalidShaderVisibleIndex) {
+  if (directional_shadow_metadata_srv_ == kInvalidShaderVisibleIndex) {
     // NOLINTNEXTLINE(*-pro-type-const-cast)
     const_cast<LightManager*>(this)->EnsureFrameResources();
   }
-  return directional_shadows_srv_;
+  return directional_shadow_metadata_srv_;
 }
 
 auto LightManager::GetPositionalLightsSrvIndex() const -> ShaderVisibleIndex
@@ -423,10 +425,10 @@ auto LightManager::GetDirectionalLights() const noexcept
   return dir_basic_;
 }
 
-auto LightManager::GetDirectionalShadows() const noexcept
-  -> std::span<const engine::DirectionalLightShadows>
+auto LightManager::GetDirectionalShadowMetadata() const noexcept
+  -> std::span<const engine::DirectionalShadowMetadata>
 {
-  return dir_shadows_;
+  return directional_shadow_metadata_;
 }
 
 auto LightManager::GetPositionalLights() const noexcept
