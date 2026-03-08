@@ -26,6 +26,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/cgltf.h>
@@ -2434,8 +2435,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     rec.node_id = MakeNodeKey(std::string(virtual_path) + "/" + name);
     rec.scene_name_offset = AppendString(build.strings, name);
     rec.parent_index = node.parent_index;
-    rec.node_flags
-      = node.visible ? data::pak::world::kSceneNodeFlag_Visible : 0;
+    rec.node_flags = detail::BuildImportedNodeFlags(
+      node.visible, node.has_renderable, node.has_light);
     rec.translation[0] = translation.x;
     rec.translation[1] = translation.y;
     rec.translation[2] = translation.z;

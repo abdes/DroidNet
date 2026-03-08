@@ -34,6 +34,7 @@ using data::AssetType;
 using data::ComponentType;
 using data::loose_cooked::FileKind;
 using data::pak::core::TextureResourceDesc;
+using data::pak::world::NodeRecord;
 using data::pak::world::RenderableRecord;
 using data::pak::world::SceneAssetDesc;
 using data::pak::world::SceneComponentTableDesc;
@@ -61,6 +62,13 @@ protected:
     std::optional<size_t> scenes;
     std::optional<size_t> nodes_min;
     std::optional<size_t> texture_files;
+  };
+
+  struct SceneReadback {
+    SceneAssetDesc desc {};
+    std::vector<NodeRecord> nodes;
+    std::vector<SceneComponentTableDesc> component_entries;
+    std::vector<RenderableRecord> renderables;
   };
 
   [[nodiscard]] auto TestModelsDirFromFile() -> std::filesystem::path
@@ -160,6 +168,9 @@ protected:
 
   [[nodiscard]] static auto CountAssetsOfType(
     const Inspection& inspection, const AssetType type) -> size_t;
+
+  [[nodiscard]] static auto LoadSceneReadback(const ImportReport& report)
+    -> SceneReadback;
 
   static auto ValidateSceneOutputs(
     const ImportReport& report, const ExpectedSceneOutputs& expected) -> void;

@@ -16,6 +16,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Data/PakFormat_world.h>
 
 #include "AsyncImporterFullTestBase.h"
 
@@ -26,6 +27,7 @@ using oxygen::content::import::ImportRequest;
 using oxygen::content::import::LooseCookedLayout;
 using oxygen::content::import::NormalizeNamingStrategy;
 using oxygen::content::import::test::AsyncImporterFullTestBase;
+namespace world = oxygen::data::pak::world;
 
 class AsyncFbxImporterFullTest : public AsyncImporterFullTestBase { };
 
@@ -79,6 +81,15 @@ NOLINT_TEST_F(AsyncFbxImporterFullTest, AsyncBackendImportsFullDinoScene)
     .texture_files = kExpectedTextureFiles,
   };
   ValidateSceneOutputs(run_result.report, expected);
+
+  const auto scene = LoadSceneReadback(run_result.report);
+  ASSERT_FALSE(scene.renderables.empty());
+  for (const auto& renderable : scene.renderables) {
+    ASSERT_LT(renderable.node_index, scene.nodes.size());
+    const auto node_flags = scene.nodes[renderable.node_index].node_flags;
+    EXPECT_NE(node_flags & world::kSceneNodeFlag_CastsShadows, 0U);
+    EXPECT_NE(node_flags & world::kSceneNodeFlag_ReceivesShadows, 0U);
+  }
 
   GTEST_LOG_(INFO) << "Cooked root: " << run_result.report.cooked_root.string();
 }
