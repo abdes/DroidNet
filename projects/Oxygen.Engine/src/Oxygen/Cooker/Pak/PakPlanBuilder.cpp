@@ -1034,6 +1034,150 @@ auto ReadLooseDescriptorBytes(
     "Failed to read asset descriptor bytes.");
 }
 
+auto RewriteSceneScriptingComponentRanges(
+  std::vector<std::byte>& descriptor_bytes,
+  const std::unordered_map<uint32_t, uint32_t>& rewritten_slot_indices,
+  std::vector<pak::PakDiagnostic>& diagnostics,
+  const std::filesystem::path& descriptor_path) -> bool
+{
+  if (descriptor_bytes.size() < sizeof(world::SceneAssetDesc)) {
+    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+      pak::PakBuildPhase::kPlanning,
+      "pak.plan.patch_scene_descriptor_invalid",
+      "Patched scene descriptor is invalid or too small for scripting rewrite.",
+      descriptor_path);
+    return false;
+  }
+
+  auto header = core::AssetHeader {};
+  std::memcpy(std::addressof(header), descriptor_bytes.data(), sizeof(header));
+  if (header.asset_type != static_cast<uint8_t>(data::AssetType::kScene)
+    || header.version != world::kSceneAssetVersion) {
+    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+      pak::PakBuildPhase::kPlanning,
+      "pak.plan.patch_scene_descriptor_invalid",
+      "Patched scene descriptor header is invalid for scripting rewrite.",
+      descriptor_path);
+    return false;
+  }
+
+  auto scene_desc = world::SceneAssetDesc {};
+  std::memcpy(
+    std::addressof(scene_desc), descriptor_bytes.data(), sizeof(scene_desc));
+
+  const auto directory_offset = scene_desc.component_table_directory_offset;
+  const auto directory_count = scene_desc.component_table_count;
+  const auto directory_size
+    = static_cast<uint64_t>(directory_count)
+    * sizeof(world::SceneComponentTableDesc);
+  if (directory_offset > descriptor_bytes.size()
+    || directory_size > descriptor_bytes.size() - directory_offset) {
+    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+      pak::PakBuildPhase::kPlanning,
+      "pak.plan.patch_scene_component_directory_invalid",
+      "Patched scene component table directory is out of bounds.",
+      descriptor_path);
+    return false;
+  }
+
+  auto rewrote_any = false;
+  for (uint32_t i = 0; i < directory_count; ++i) {
+    const auto entry_offset = static_cast<size_t>(directory_offset)
+      + (static_cast<size_t>(i) * sizeof(world::SceneComponentTableDesc));
+    auto entry = world::SceneComponentTableDesc {};
+    std::memcpy(std::addressof(entry),
+      descriptor_bytes.data() + entry_offset, sizeof(entry));
+
+    if (entry.component_type
+      != static_cast<uint32_t>(data::ComponentType::kScripting)) {
+      continue;
+    }
+    if (entry.table.entry_size != sizeof(script::ScriptingComponentRecord)) {
+      AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+        pak::PakBuildPhase::kPlanning,
+        "pak.plan.patch_scene_scripting_entry_size_invalid",
+        "Patched scene scripting component entry_size does not match the "
+        "packed scripting record size.",
+        descriptor_path);
+      return false;
+    }
+
+    const auto table_offset = entry.table.offset;
+    const auto table_size = static_cast<uint64_t>(entry.table.count)
+      * sizeof(script::ScriptingComponentRecord);
+    if (table_offset > descriptor_bytes.size()
+      || table_size > descriptor_bytes.size() - table_offset) {
+      AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+        pak::PakBuildPhase::kPlanning,
+        "pak.plan.patch_scene_scripting_table_invalid",
+        "Patched scene scripting component table is out of bounds.",
+        descriptor_path);
+      return false;
+    }
+
+    for (uint32_t record_index = 0; record_index < entry.table.count;
+         ++record_index) {
+      const auto record_offset = static_cast<size_t>(table_offset)
+        + (static_cast<size_t>(record_index)
+          * sizeof(script::ScriptingComponentRecord));
+      auto record = script::ScriptingComponentRecord {};
+      std::memcpy(std::addressof(record),
+        descriptor_bytes.data() + record_offset, sizeof(record));
+
+      if (record.slot_count == 0U) {
+        continue;
+      }
+
+      const auto first_rewrite
+        = rewritten_slot_indices.find(record.slot_start_index);
+      if (first_rewrite == rewritten_slot_indices.end()) {
+        AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+          pak::PakBuildPhase::kPlanning,
+          "pak.plan.patch_scene_slot_rewrite_missing",
+          "Patched scene scripting component references a source slot that "
+          "was not remapped into the emitted patch slot table.",
+          descriptor_path);
+        return false;
+      }
+
+      const auto rewritten_start = first_rewrite->second;
+      for (uint32_t delta = 1; delta < record.slot_count; ++delta) {
+        const auto original_slot_index = record.slot_start_index + delta;
+        const auto rewritten_it
+          = rewritten_slot_indices.find(original_slot_index);
+        if (rewritten_it == rewritten_slot_indices.end()
+          || rewritten_it->second != rewritten_start + delta) {
+          AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+            pak::PakBuildPhase::kPlanning,
+            "pak.plan.patch_scene_slot_rewrite_noncontiguous",
+            "Patched scene scripting slots do not remap to a contiguous patch "
+            "slot range.",
+            descriptor_path);
+          return false;
+        }
+      }
+
+      record.slot_start_index = rewritten_start;
+      std::memcpy(
+        descriptor_bytes.data() + record_offset, std::addressof(record),
+        sizeof(record));
+      rewrote_any = true;
+    }
+  }
+
+  if (!rewrote_any) {
+    AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+      pak::PakBuildPhase::kPlanning,
+      "pak.plan.patch_scene_slot_rewrite_not_applied",
+      "Patched scene descriptor expected a scripting slot remap but no "
+      "scripting component records were rewritten.",
+      descriptor_path);
+    return false;
+  }
+
+  return true;
+}
+
 auto IsValidDescriptorHeader(std::span<const std::byte> bytes,
   const data::AssetType expected_type, const uint8_t expected_version) -> bool
 {
@@ -1159,6 +1303,8 @@ struct PlanningState final {
   std::vector<pak::PakScriptSlotPlan> script_slots;
   std::vector<OwnedScriptSlotSource> owned_script_slots;
   std::unordered_set<size_t> source_orders_with_owned_script_slots;
+  std::unordered_map<data::AssetKey, std::vector<std::byte>>
+    rewritten_asset_payloads;
   std::unordered_map<std::string, data::AssetKey> browse_map;
   TableCounts table_counts {};
   uint32_t script_param_record_count = 0;
@@ -2538,6 +2684,86 @@ auto FinalizeScriptAndTables(PlanningState& state) -> void
   ApplyIndexZeroPolicy(state.data_plan.tables);
 }
 
+auto RewritePatchOwnedSceneDescriptors(PlanningState& state) -> void
+{
+  if (state.policy.mode != pak::PakPlanMode::kPatch
+    || state.owned_script_slots.empty()) {
+    return;
+  }
+
+  auto emitted_asset_keys = std::unordered_set<data::AssetKey> {};
+  emitted_asset_keys.reserve(state.assets.size());
+  for (const auto& asset : state.assets) {
+    emitted_asset_keys.insert(asset.key);
+  }
+
+  auto owned_slots = std::vector<OwnedScriptSlotSource> {};
+  owned_slots.reserve(state.owned_script_slots.size());
+  for (const auto& slot : state.owned_script_slots) {
+    if (emitted_asset_keys.contains(slot.asset_key)) {
+      owned_slots.push_back(slot);
+    }
+  }
+  if (owned_slots.empty()) {
+    return;
+  }
+
+  std::ranges::sort(owned_slots,
+    [](const OwnedScriptSlotSource& lhs, const OwnedScriptSlotSource& rhs) {
+      if (lhs.source_order != rhs.source_order) {
+        return lhs.source_order < rhs.source_order;
+      }
+      if (lhs.asset_key != rhs.asset_key) {
+        return lhs.asset_key < rhs.asset_key;
+      }
+      return lhs.source_slot_index < rhs.source_slot_index;
+    });
+
+  auto rewritten_slot_indices
+    = std::unordered_map<data::AssetKey, std::unordered_map<uint32_t, uint32_t>> {};
+  auto next_slot_index = uint32_t { 0U };
+  for (const auto& owned_slot : owned_slots) {
+    rewritten_slot_indices[owned_slot.asset_key].emplace(
+      owned_slot.source_slot_index, next_slot_index++);
+  }
+
+  for (auto& asset : state.assets) {
+    if (asset.asset_type != data::AssetType::kScene) {
+      continue;
+    }
+
+    const auto rewritten_it = rewritten_slot_indices.find(asset.key);
+    if (rewritten_it == rewritten_slot_indices.end()) {
+      continue;
+    }
+
+    auto descriptor_bytes
+      = ReadLooseDescriptorBytes(asset, state.output.diagnostics);
+    if (!descriptor_bytes.has_value()) {
+      AddDiagnostic(state.output.diagnostics, pak::PakDiagnosticSeverity::kError,
+        pak::PakBuildPhase::kPlanning,
+        "pak.plan.patch_scene_descriptor_read_failed",
+        "Failed to read scene descriptor bytes for patch-local script slot "
+        "rewrite.",
+        asset.descriptor_path);
+      continue;
+    }
+
+    if (!RewriteSceneScriptingComponentRanges(*descriptor_bytes,
+          rewritten_it->second, state.output.diagnostics,
+          asset.descriptor_path)) {
+      continue;
+    }
+
+    asset.descriptor_digest = oxygen::base::ComputeSha256(
+      std::span<const std::byte>(
+        descriptor_bytes->data(), descriptor_bytes->size()));
+    asset.descriptor_source_offset = 0U;
+    asset.descriptor_size = descriptor_bytes->size();
+    state.rewritten_asset_payloads[asset.key] = std::move(*descriptor_bytes);
+  }
+}
+
 auto ValidateScriptAndTableInvariants(PlanningState& state) -> void
 {
   const auto slots = std::span<const pak::PakScriptSlotPlan>(
@@ -2666,12 +2892,19 @@ auto PlanFileLayout(PlanningState& state) -> void
       .alignment = kAssetAlignment,
       .reserved_bytes_zeroed = true,
     });
-    state.data_plan.asset_payload_sources.push_back(
-      pak::PakPayloadSourceSlicePlan {
-        .source_path = asset.descriptor_path,
-        .source_offset = asset.descriptor_source_offset,
-        .size_bytes = asset.descriptor_size,
-      });
+    auto payload_source = pak::PakPayloadSourceSlicePlan {
+      .source_path = asset.descriptor_path,
+      .source_offset = asset.descriptor_source_offset,
+      .size_bytes = asset.descriptor_size,
+    };
+    if (const auto rewritten_it
+      = state.rewritten_asset_payloads.find(asset.key);
+      rewritten_it != state.rewritten_asset_payloads.end()) {
+      payload_source.source_offset = 0U;
+      payload_source.size_bytes = rewritten_it->second.size();
+      payload_source.inline_bytes = rewritten_it->second;
+    }
+    state.data_plan.asset_payload_sources.push_back(std::move(payload_source));
     state.data_plan.directory.entries.push_back(
       pak::PakAssetDirectoryEntryPlan {
         .asset_key = asset.key,
@@ -3037,6 +3270,9 @@ auto PakPlanBuilder::Build(const PakBuildRequest& request) const -> BuildResult
   RunStage(state, "FinalizeScriptAndTables",
     "pak.plan.stage.script_tables_exception",
     [&state]() { FinalizeScriptAndTables(state); });
+  RunStage(state, "RewritePatchOwnedSceneDescriptors",
+    "pak.plan.stage.patch_scene_rewrite_exception",
+    [&state]() { RewritePatchOwnedSceneDescriptors(state); });
   RunStage(state, "ValidateScriptAndTableInvariants",
     "pak.plan.stage.script_tables_invariants_exception",
     [&state]() { ValidateScriptAndTableInvariants(state); });

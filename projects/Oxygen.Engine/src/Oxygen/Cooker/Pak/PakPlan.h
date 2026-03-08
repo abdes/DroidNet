@@ -135,6 +135,7 @@ struct PakPayloadSourceSlicePlan {
   std::filesystem::path source_path;
   uint64_t source_offset = 0;
   uint64_t size_bytes = 0;
+  std::vector<std::byte> inline_bytes;
 };
 
 class PakPlan final {

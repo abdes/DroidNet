@@ -19,10 +19,13 @@
 #include <vector>
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Pak/PakMeasureStore.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Data/PakFormat_world.h>
 
 #include "PakTestSupport.h"
 
@@ -34,6 +37,8 @@ namespace pak = oxygen::content::pak;
 namespace paktest = oxygen::content::pak::test;
 namespace core = oxygen::data::pak::core;
 namespace render = oxygen::data::pak::render;
+namespace script = oxygen::data::pak::scripting;
+namespace world = oxygen::data::pak::world;
 
 constexpr auto kDigestPrimaryByteIndex = size_t { 0U };
 
@@ -145,6 +150,100 @@ auto EmptyDigest() -> base::Sha256Digest
   static const auto kEmptyDigest
     = base::ComputeSha256(std::span<const std::byte> {});
   return kEmptyDigest;
+}
+
+auto BuildSceneDescriptorWithScriptingSlots(
+  const std::string_view name, const uint32_t first_slot,
+  const uint32_t second_slot) -> std::vector<std::byte>
+{
+  auto desc = world::SceneAssetDesc {};
+  desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
+  desc.header.version = world::kSceneAssetVersion;
+  const auto max_name_bytes = sizeof(desc.header.name) - 1U;
+  const auto name_bytes = std::min(name.size(), max_name_bytes);
+  std::memcpy(desc.header.name, name.data(), name_bytes);
+  desc.header.name[name_bytes] = '\0';
+
+  const auto nodes_offset = static_cast<uint64_t>(sizeof(world::SceneAssetDesc));
+  desc.nodes.offset = nodes_offset;
+  desc.nodes.count = 1U;
+  desc.nodes.entry_size = sizeof(world::NodeRecord);
+
+  const auto strings_offset
+    = nodes_offset + sizeof(world::NodeRecord);
+  desc.scene_strings.offset = static_cast<uint32_t>(strings_offset);
+  desc.scene_strings.size = 1U;
+
+  const auto component_dir_offset
+    = strings_offset + desc.scene_strings.size;
+  desc.component_table_directory_offset = component_dir_offset;
+  desc.component_table_count = 1U;
+
+  auto node = world::NodeRecord {};
+  node.parent_index = 0U;
+  node.node_flags = world::kSceneNodeFlag_Visible;
+
+  auto component = world::SceneComponentTableDesc {};
+  component.component_type
+    = static_cast<uint32_t>(data::ComponentType::kScripting);
+  component.table.offset
+    = component_dir_offset + sizeof(world::SceneComponentTableDesc);
+  component.table.count = 2U;
+  component.table.entry_size = sizeof(script::ScriptingComponentRecord);
+
+  auto slot_a = script::ScriptingComponentRecord {};
+  slot_a.node_index = 0U;
+  slot_a.slot_start_index = first_slot;
+  slot_a.slot_count = 1U;
+
+  auto slot_b = script::ScriptingComponentRecord {};
+  slot_b.node_index = 0U;
+  slot_b.slot_start_index = second_slot;
+  slot_b.slot_count = 1U;
+
+  auto env = world::SceneEnvironmentBlockHeader {};
+  env.byte_size = sizeof(world::SceneEnvironmentBlockHeader);
+  env.systems_count = 0U;
+
+  auto bytes = std::vector<std::byte> {};
+  bytes.resize(sizeof(desc) + sizeof(node) + desc.scene_strings.size
+    + sizeof(component) + sizeof(slot_a) + sizeof(slot_b) + sizeof(env));
+
+  auto* cursor = bytes.data();
+  std::memcpy(cursor, std::addressof(desc), sizeof(desc));
+  cursor += sizeof(desc);
+  std::memcpy(cursor, std::addressof(node), sizeof(node));
+  cursor += sizeof(node);
+  *cursor++ = std::byte { 0 };
+  std::memcpy(cursor, std::addressof(component), sizeof(component));
+  cursor += sizeof(component);
+  std::memcpy(cursor, std::addressof(slot_a), sizeof(slot_a));
+  cursor += sizeof(slot_a);
+  std::memcpy(cursor, std::addressof(slot_b), sizeof(slot_b));
+  cursor += sizeof(slot_b);
+  std::memcpy(cursor, std::addressof(env), sizeof(env));
+  return bytes;
+}
+
+auto ReadScriptingComponentSlots(std::span<const std::byte> bytes)
+  -> std::vector<script::ScriptingComponentRecord>
+{
+  auto desc = world::SceneAssetDesc {};
+  std::memcpy(std::addressof(desc), bytes.data(), sizeof(desc));
+  auto entry = world::SceneComponentTableDesc {};
+  std::memcpy(std::addressof(entry),
+    bytes.data() + static_cast<size_t>(desc.component_table_directory_offset),
+    sizeof(entry));
+
+  auto records = std::vector<script::ScriptingComponentRecord> {};
+  records.resize(entry.table.count);
+  for (size_t i = 0; i < records.size(); ++i) {
+    const auto offset = static_cast<size_t>(entry.table.offset)
+      + (i * sizeof(script::ScriptingComponentRecord));
+    std::memcpy(std::addressof(records[i]), bytes.data() + offset,
+      sizeof(script::ScriptingComponentRecord));
+  }
+  return records;
 }
 
 auto HasError(std::span<const pak::PakDiagnostic> diagnostics) -> bool
@@ -832,6 +931,88 @@ NOLINT_TEST_F(PakPatchPlannerTest,
   EXPECT_EQ(patch_result.summary.patch_replaced, 1U);
   EXPECT_EQ(patch_result.summary.patch_deleted, 0U);
   EXPECT_EQ(patch_result.summary.patch_unchanged, 1U);
+}
+
+NOLINT_TEST_F(PakPatchPlannerTest,
+  PatchModeRewritesSceneScriptingSlotRangesToPatchLocalTable)
+{
+  using data::CookedSource;
+  using data::CookedSourceKind;
+
+  const auto patch_source = Root() / "patch_scene_source";
+  const auto scene_key = MakeAssetKey(0x31U);
+  const auto script_a = MakeAssetKey(0x41U);
+  const auto script_b = MakeAssetKey(0x42U);
+
+  auto scene_bytes
+    = BuildSceneDescriptorWithScriptingSlots("PatchScene", 6U, 7U);
+  const auto scene_sha = ToLooseSha(base::ComputeSha256(
+    std::span<const std::byte>(scene_bytes.data(), scene_bytes.size())));
+
+  auto slot_records = std::array<script::ScriptSlotRecord, 8> {};
+  slot_records[6].script_asset_key = script_a;
+  slot_records[7].script_asset_key = script_b;
+  auto slot_bytes = std::vector<std::byte>(sizeof(slot_records));
+  std::memcpy(slot_bytes.data(), slot_records.data(), sizeof(slot_records));
+
+  const auto assets = std::array<AssetSpec, 1> {
+    AssetSpec {
+      .key = scene_key,
+      .asset_type = data::AssetType::kScene,
+      .descriptor_relpath = "Scenes/PatchScene.oscene",
+      .virtual_path = "/Game/PatchScene.oscene",
+      .descriptor_size = scene_bytes.size(),
+      .descriptor_sha = scene_sha,
+      .descriptor_payload = scene_bytes,
+    },
+  };
+  const auto files = std::array<FileSpec, 2> {
+    FileSpec {
+      .kind = lc::FileKind::kScriptBindingsTable,
+      .relpath = "Resources/script-bindings.table",
+      .payload = slot_bytes,
+    },
+    FileSpec {
+      .kind = lc::FileKind::kScriptBindingsData,
+      .relpath = "Resources/script-bindings.data",
+      .payload = {},
+    },
+  };
+  ASSERT_TRUE(paktest::WriteLooseIndex(patch_source,
+    std::span<const AssetSpec>(assets.data(), assets.size()),
+    std::span<const FileSpec>(files.data(), files.size()), 0x83U));
+
+  const auto base_catalog = MakeBaseCatalog(
+    std::span<const data::PakCatalogEntry> {});
+  const auto request = MakePatchRequest(Root() / "scene_patch.pak",
+    { CookedSource {
+      .kind = CookedSourceKind::kLooseCooked, .path = patch_source } },
+    std::span<const data::PakCatalog>(&base_catalog, 1U));
+
+  const auto result = pak::PakPlanBuilder {}.Build(request);
+  ASSERT_FALSE(HasError(result.diagnostics))
+    << DiagnosticSummary(result.diagnostics);
+  ASSERT_TRUE(result.plan.has_value());
+
+  const auto assets_plan = result.plan->Assets();
+  const auto sources = result.plan->AssetPayloadSources();
+  ASSERT_EQ(assets_plan.size(), 1U);
+  ASSERT_EQ(sources.size(), 1U);
+  ASSERT_EQ(assets_plan[0].asset_key, scene_key);
+
+  auto stored_bytes = std::vector<std::byte> {};
+  ASSERT_TRUE(pak::StorePayloadSourceSlice(sources[0], stored_bytes));
+
+  const auto rewritten_slots = ReadScriptingComponentSlots(
+    std::span<const std::byte>(stored_bytes.data(), stored_bytes.size()));
+  ASSERT_EQ(rewritten_slots.size(), 2U);
+  EXPECT_EQ(rewritten_slots[0].slot_start_index, 0U);
+  EXPECT_EQ(rewritten_slots[0].slot_count, 1U);
+  EXPECT_EQ(rewritten_slots[1].slot_start_index, 1U);
+  EXPECT_EQ(rewritten_slots[1].slot_count, 1U);
+  ASSERT_EQ(result.plan->ScriptSlots().size(), 2U);
+  EXPECT_EQ(result.plan->ScriptSlots()[0].slot_index, 0U);
+  EXPECT_EQ(result.plan->ScriptSlots()[1].slot_index, 1U);
 }
 
 } // namespace

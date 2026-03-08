@@ -4369,14 +4369,8 @@ auto AssetLoader::HashAssetKey(const data::AssetKey& key) -> uint64_t
 auto AssetLoader::HashAssetKey(
   const data::AssetKey& key, uint16_t source_id) const -> uint64_t
 {
-  const auto source_it
-    = impl_->source_registry.SourceIdToIndex().find(source_id);
-  if (source_it == impl_->source_registry.SourceIdToIndex().end()) {
-    return HashAssetKey(key);
-  }
-  const auto& source = *impl_->source_registry.Sources()[source_it->second];
   size_t seed = 0;
-  oxygen::HashCombine(seed, source.GetSourceKey());
+  oxygen::HashCombine(seed, source_id);
   oxygen::HashCombine(seed, key);
   return static_cast<uint64_t>(seed);
 }
