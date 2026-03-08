@@ -29,7 +29,9 @@ namespace oxygen::engine {
 namespace {
 
   constexpr float kDirectionalShadowRasterDepthBias = 1500.0F;
-  constexpr float kDirectionalShadowRasterSlopeBias = 2.0F;
+  // Keep constant raster bias, but avoid compounding it with the shader-side
+  // slope-aware receiver bias for conventional directional CSM.
+  constexpr float kDirectionalShadowRasterSlopeBias = 0.0F;
   constexpr float kDirectionalShadowRasterDepthBiasClamp = 0.0F;
 
 } // namespace

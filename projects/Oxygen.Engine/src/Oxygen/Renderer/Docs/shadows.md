@@ -463,7 +463,10 @@ Engine-grade acceptance criteria for the conventional directional path are:
 - Use stable cascade fitting, not only naive per-frame min/max fitting. The
   renderer must derive a stable cascade bound, convert that bound to
   world-units-per-texel, and snap orthographic coverage in texel increments so
-  camera motion does not produce crawl or shimmer.
+  camera motion does not produce crawl or shimmer. For the conventional
+  directional path, a sphere-wrapped stable fit (or an equivalent stability-
+  preserving strategy) is preferred over aggressive per-frame rectangular crop
+  fitting that causes view-angle-dependent breathing.
 - Fit light-space near/far depth as tightly as practical for the active
   receiver/caster region. Large fixed padding is acceptable only as a temporary
   bootstrap; the final path must reduce wasted depth range to preserve precision
@@ -471,9 +474,11 @@ Engine-grade acceptance criteria for the conventional directional path are:
 - Support cascade blend bands explicitly in shader sampling and metadata.
   Hard cascade transitions are not acceptable as the final conventional path.
 - Cascade handoff must preserve effective resolution. When independently fit
-  cascades do not align perfectly, the shader path must be able to use the
-  tightest valid cascade coverage instead of blindly preferring a coarser split
-  selected only by view depth.
+  cascades do not align perfectly, the shader path may use local neighbor
+  fallback or neighbor blending to preserve continuity, but it must not perform
+  arbitrary "first valid cascade" searches that make pixels hop between splits
+  as camera angle changes. Interval-based selection remains the stability
+  baseline for conventional CSM.
 - Account for PCF kernel footprint in cascade coverage. Conventional cascade
   projections and addressing must preserve a padded border so filter taps do not
   bleed outside the intended cascade coverage.
@@ -481,10 +486,11 @@ Engine-grade acceptance criteria for the conventional directional path are:
   Wide fixed percentage blend bands that wash out near-cascade detail are not
   acceptable as the final conventional path; blend widths must stay narrow and
   scale with actual cascade texel footprint / continuity needs.
-- Use a renderer-controlled raster depth-bias policy for shadow rendering,
-  including slope-scaled depth bias and clamp where supported. Shader-side
-  receiver bias augments this; it does not replace proper shadow-pass raster
-  bias.
+- Use a renderer-controlled raster depth-bias policy for shadow rendering.
+  For the current conventional directional path, keep constant raster depth
+  bias enabled but do not stack additional raster slope-scaled bias on top of
+  the receiver-side slope-aware normal/light-direction bias. Shader-side
+  receiver bias augments the shadow-pass raster bias; it does not replace it.
 - Use authored normal bias and constant bias as inputs to the final receiver
   bias calculation, but do not rely on shader-only biasing as the sole acne
   mitigation strategy.
@@ -636,17 +642,21 @@ Family-specific notes:
 Bias is authored and runtime-augmented.
 
 - Use authored constant bias and normal bias from `ShadowSettings`.
-- Add renderer-controlled slope-scaled depth bias in the shadow raster path.
+- Keep renderer-controlled raster depth bias in the shadow raster path.
 - Add raster depth-bias clamp where the backend exposes it and where testing
   shows it improves stability.
 - Bias is evaluated per light type, implementation family, and quality tier.
 - Debug tooling must expose effective bias values so acne and peter-panning can
   be diagnosed from live captures.
 
-For conventional directional shadows, the final bias stack is:
+For the current conventional directional path, do not enable raster
+slope-scaled depth bias while the receiver path already applies slope-aware
+normal/light-direction bias. That combination over-biases contact regions and
+promotes detached shadows.
+
+For the current conventional directional shadow path, the bias stack is:
 
 - raster depth bias in the shadow pass
-- slope-scaled raster depth bias in the shadow pass
 - optional raster bias clamp
 - receiver-side normal bias
 - receiver-side constant/light-direction bias

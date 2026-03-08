@@ -201,7 +201,9 @@ inline auto SubMeshVisibilityFilter(const ScenePrepContext& ctx,
   // Fast path: single pass, cached facade, reserve upper bound, push visible
   const auto& rend = item.Renderable();
   std::vector<uint32_t> visible_submeshes;
+  std::vector<uint32_t> shadow_only_submeshes;
   visible_submeshes.reserve(submeshes.size());
+  shadow_only_submeshes.reserve(submeshes.size());
 
   // Culling strategy note (current and intended direction):
   // - Current implementation is CPU frustum culling per submesh using
@@ -263,12 +265,16 @@ inline auto SubMeshVisibilityFilter(const ScenePrepContext& ctx,
       }
     }
     if (!in_frustum) {
+      if (item.CastsShadows()) {
+        shadow_only_submeshes.emplace_back(i);
+      }
       continue;
     }
 
     visible_submeshes.emplace_back(i);
   }
   item.SetVisibleSubmeshes(std::move(visible_submeshes));
+  item.SetShadowOnlySubmeshes(std::move(shadow_only_submeshes));
 }
 static_assert(RenderItemDataExtractor<decltype(SubMeshVisibilityFilter)>);
 
@@ -302,7 +308,8 @@ inline auto EmitPerVisibleSubmesh(const ScenePrepContext& ctx,
   CHECK_NOTNULL_F(state.GetMaterialBinder());
 
   const auto& visible_submeshes = item.VisibleSubmeshes();
-  if (visible_submeshes.empty()) {
+  const auto& shadow_only_submeshes = item.ShadowOnlySubmeshes();
+  if (visible_submeshes.empty() && shadow_only_submeshes.empty()) {
     return; // Nothing to do if no submeshes are visible
   }
 
@@ -318,7 +325,8 @@ inline auto EmitPerVisibleSubmesh(const ScenePrepContext& ctx,
     sort_distance2 = glm::dot(d, d);
   }
 
-  for (auto index : visible_submeshes) {
+  const auto emit_submesh
+    = [&](const uint32_t index, const bool main_view_visible) -> void {
     struct ResolvedMaterial {
       std::shared_ptr<const data::MaterialAsset> resolved;
       oxygen::data::AssetKey source_key {};
@@ -373,7 +381,15 @@ inline auto EmitPerVisibleSubmesh(const ScenePrepContext& ctx,
       .transform_handle = item.GetTransformHandle(),
       .cast_shadows = item.CastsShadows(),
       .receive_shadows = item.ReceivesShadows(),
+      .main_view_visible = main_view_visible,
     });
+  };
+
+  for (auto index : visible_submeshes) {
+    emit_submesh(index, true);
+  }
+  for (auto index : shadow_only_submeshes) {
+    emit_submesh(index, false);
   }
 }
 static_assert(RenderItemDataExtractor<decltype(EmitPerVisibleSubmesh)>);
