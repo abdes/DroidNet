@@ -12,6 +12,19 @@
 #include "Renderer/ViewConstants.hlsli"
 #include "Renderer/ViewFrameBindings.hlsli"
 
+#ifndef OXYGEN_SHADOW_USE_MANUAL_COMPARE_FALLBACK
+#define OXYGEN_SHADOW_USE_MANUAL_COMPARE_FALLBACK 0
+#endif
+
+static const uint kShadowComparisonSamplerIndex = 1u;
+
+struct DirectionalShadowProjection
+{
+    float2 uv;
+    float receiver_depth;
+    bool valid;
+};
+
 static inline ShadowFrameBindings LoadResolvedShadowFrameBindings()
 {
     const ViewFrameBindings view_bindings =
@@ -34,6 +47,83 @@ static inline uint SelectDirectionalShadowCascade(
         }
     }
     return cascade_count - 1u;
+}
+
+static inline DirectionalShadowProjection ProjectDirectionalShadowCascade(
+    DirectionalShadowMetadata metadata,
+    uint cascade_index,
+    float3 world_pos)
+{
+    DirectionalShadowProjection projection;
+    projection.uv = 0.0.xx;
+    projection.receiver_depth = 1.0;
+    projection.valid = false;
+
+    const float4 shadow_clip =
+        mul(metadata.cascade_view_proj[cascade_index], float4(world_pos, 1.0));
+    if (abs(shadow_clip.w) <= 1.0e-6) {
+        return projection;
+    }
+
+    const float3 shadow_ndc = shadow_clip.xyz / shadow_clip.w;
+    projection.uv = float2(
+        shadow_ndc.x * 0.5 + 0.5,
+        shadow_ndc.y * -0.5 + 0.5);
+    projection.receiver_depth = shadow_ndc.z;
+    projection.valid =
+        projection.uv.x >= 0.0 && projection.uv.x <= 1.0
+        && projection.uv.y >= 0.0 && projection.uv.y <= 1.0
+        && projection.receiver_depth > 0.0 && projection.receiver_depth < 1.0;
+    return projection;
+}
+
+static inline uint SelectDirectionalShadowCascadeByCoverage(
+    DirectionalShadowMetadata metadata,
+    float3 world_pos,
+    uint interval_index)
+{
+    const uint cascade_count = max(1u, metadata.cascade_count);
+    [unroll]
+    for (uint i = 0; i < OXYGEN_MAX_SHADOW_CASCADES; ++i) {
+        if (i >= cascade_count) {
+            break;
+        }
+        const DirectionalShadowProjection projection =
+            ProjectDirectionalShadowCascade(metadata, i, world_pos);
+        if (projection.valid) {
+            return i;
+        }
+    }
+
+    return min(interval_index, cascade_count - 1u);
+}
+
+static inline float ComputeDirectionalCascadeBlendBand(
+    DirectionalShadowMetadata metadata,
+    uint cascade_index)
+{
+    const float cascade_end = metadata.cascade_distances[cascade_index];
+    const float cascade_begin = cascade_index > 0u
+        ? metadata.cascade_distances[cascade_index - 1u]
+        : 0.0;
+    const float cascade_span = max(cascade_end - cascade_begin, 0.001);
+    const float cascade_texel_world =
+        max(metadata.cascade_world_texel_size[cascade_index], 1.0e-4);
+    const float texel_band = cascade_texel_world * 12.0;
+    const float proportional_band = cascade_span * 0.03;
+    return min(proportional_band, max(texel_band, 0.05));
+}
+
+static inline uint SelectDirectionalShadowFilterRadiusTexels(
+    DirectionalShadowMetadata metadata,
+    uint cascade_index)
+{
+    const float base_texel_world =
+        max(metadata.cascade_world_texel_size[0], 1.0e-4);
+    const float cascade_texel_world =
+        max(metadata.cascade_world_texel_size[cascade_index], base_texel_world);
+    const float texel_ratio = cascade_texel_world / base_texel_world;
+    return texel_ratio > 2.5 ? 2u : 1u;
 }
 
 static inline float SampleDirectionalShadowPcf3x3(
@@ -66,6 +156,123 @@ static inline float SampleDirectionalShadowPcf3x3(
     }
 
     return visibility * (1.0 / 9.0);
+}
+
+static inline float SampleDirectionalShadowComparisonTent3x3(
+    Texture2DArray<float> shadow_texture,
+    float2 uv,
+    float receiver_depth,
+    uint layer)
+{
+    uint width = 0u;
+    uint height = 0u;
+    uint layers = 0u;
+    shadow_texture.GetDimensions(width, height, layers);
+    if (width == 0u || height == 0u || layer >= layers) {
+        return 1.0;
+    }
+
+    SamplerComparisonState shadow_sampler =
+        SamplerDescriptorHeap[kShadowComparisonSamplerIndex];
+    const float2 texel_size = 1.0 / float2(width, height);
+
+    static const float kKernelWeights[3] = { 1.0, 2.0, 1.0 };
+
+    float visibility = 0.0;
+    float total_weight = 0.0;
+    [unroll]
+    for (int y = -1; y <= 1; ++y) {
+        [unroll]
+        for (int x = -1; x <= 1; ++x) {
+            const float weight = kKernelWeights[x + 1] * kKernelWeights[y + 1];
+            const float2 sample_uv = uv + float2((float)x, (float)y) * texel_size;
+            visibility += weight * shadow_texture.SampleCmpLevelZero(
+                shadow_sampler, float3(sample_uv, (float)layer), receiver_depth);
+            total_weight += weight;
+        }
+    }
+
+    return visibility / max(total_weight, 1.0);
+}
+
+static inline float SampleDirectionalShadowComparisonTent5x5(
+    Texture2DArray<float> shadow_texture,
+    float2 uv,
+    float receiver_depth,
+    uint layer)
+{
+    uint width = 0u;
+    uint height = 0u;
+    uint layers = 0u;
+    shadow_texture.GetDimensions(width, height, layers);
+    if (width == 0u || height == 0u || layer >= layers) {
+        return 1.0;
+    }
+
+    SamplerComparisonState shadow_sampler =
+        SamplerDescriptorHeap[kShadowComparisonSamplerIndex];
+    const float2 texel_size = 1.0 / float2(width, height);
+
+    static const float kKernelWeights[5] = { 1.0, 4.0, 6.0, 4.0, 1.0 };
+
+    float visibility = 0.0;
+    float total_weight = 0.0;
+    [unroll]
+    for (int y = -2; y <= 2; ++y) {
+        [unroll]
+        for (int x = -2; x <= 2; ++x) {
+            const float weight = kKernelWeights[x + 2] * kKernelWeights[y + 2];
+            const float2 sample_uv = uv + float2((float)x, (float)y) * texel_size;
+            visibility += weight * shadow_texture.SampleCmpLevelZero(
+                shadow_sampler, float3(sample_uv, (float)layer), receiver_depth);
+            total_weight += weight;
+        }
+    }
+
+    return visibility / max(total_weight, 1.0);
+}
+
+static inline float SampleDirectionalShadowCascadeVisibility(
+    DirectionalShadowMetadata metadata,
+    Texture2DArray<float> shadow_texture,
+    uint cascade_index,
+    float3 world_pos,
+    float3 normal_ws,
+    float3 light_dir_ws)
+{
+    const float texel_world = max(metadata.cascade_world_texel_size[cascade_index], 0.0);
+    const uint filter_radius_texels =
+        SelectDirectionalShadowFilterRadiusTexels(metadata, cascade_index);
+    const float ndotl = saturate(dot(normal_ws, light_dir_ws));
+    const float slope_factor = 1.0 - ndotl;
+    const float filter_bias_scale = filter_radius_texels <= 1u ? 0.85 : 1.0;
+    const float renderer_normal_bias = texel_world
+        * lerp(0.55, 1.5, slope_factor) * filter_bias_scale;
+    const float renderer_constant_bias = texel_world
+        * lerp(0.03, 0.18, slope_factor) * filter_bias_scale;
+    const float normal_bias = metadata.normal_bias + renderer_normal_bias;
+    const float constant_bias = metadata.constant_bias + renderer_constant_bias;
+
+    const float3 biased_world_pos
+        = world_pos + normal_ws * normal_bias + light_dir_ws * constant_bias;
+    const DirectionalShadowProjection projection =
+        ProjectDirectionalShadowCascade(metadata, cascade_index, biased_world_pos);
+    if (!projection.valid) {
+        return 1.0;
+    }
+
+    const uint layer = metadata.resource_index + cascade_index;
+#if OXYGEN_SHADOW_USE_MANUAL_COMPARE_FALLBACK
+    return SampleDirectionalShadowPcf3x3(
+        shadow_texture, projection.uv, projection.receiver_depth, layer);
+#else
+    if (filter_radius_texels <= 1u) {
+        return SampleDirectionalShadowComparisonTent3x3(
+            shadow_texture, projection.uv, projection.receiver_depth, layer);
+    }
+    return SampleDirectionalShadowComparisonTent5x5(
+        shadow_texture, projection.uv, projection.receiver_depth, layer);
+#endif
 }
 
 static inline float ComputeDirectionalShadowVisibility(
@@ -104,28 +311,34 @@ static inline float ComputeDirectionalShadowVisibility(
         ResourceDescriptorHeap[shadow_bindings.directional_shadow_texture_slot];
 
     const float view_depth = max(0.0, -mul(view_matrix, float4(world_pos, 1.0)).z);
-    const uint cascade_index = SelectDirectionalShadowCascade(metadata, view_depth);
-    const float3 biased_world_pos
-        = world_pos + normal_ws * metadata.normal_bias + light_dir_ws * metadata.constant_bias;
-    const float4 shadow_clip
-        = mul(metadata.cascade_view_proj[cascade_index], float4(biased_world_pos, 1.0));
-    if (abs(shadow_clip.w) <= 1.0e-6) {
-        return 1.0;
+    const uint interval_index = SelectDirectionalShadowCascade(metadata, view_depth);
+    const uint cascade_index = SelectDirectionalShadowCascadeByCoverage(
+        metadata, world_pos, interval_index);
+    const float visibility = SampleDirectionalShadowCascadeVisibility(
+        metadata, shadow_texture, cascade_index, world_pos, normal_ws, light_dir_ws);
+
+    const uint cascade_count = max(1u, metadata.cascade_count);
+    if (cascade_index + 1u >= cascade_count || cascade_index != interval_index) {
+        return visibility;
     }
 
-    const float3 shadow_ndc = shadow_clip.xyz / shadow_clip.w;
-    const float2 uv = float2(
-        shadow_ndc.x * 0.5 + 0.5,
-        shadow_ndc.y * -0.5 + 0.5);
-    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-        return 1.0;
-    }
-    if (shadow_ndc.z <= 0.0 || shadow_ndc.z >= 1.0) {
-        return 1.0;
+    const float cascade_end = metadata.cascade_distances[cascade_index];
+    const float blend_band = ComputeDirectionalCascadeBlendBand(metadata, cascade_index);
+    const float blend_start = cascade_end - blend_band;
+    if (view_depth <= blend_start) {
+        return visibility;
     }
 
-    const uint layer = metadata.resource_index + cascade_index;
-    return SampleDirectionalShadowPcf3x3(shadow_texture, uv, shadow_ndc.z, layer);
+    const DirectionalShadowProjection next_projection = ProjectDirectionalShadowCascade(
+        metadata, cascade_index + 1u, world_pos);
+    if (!next_projection.valid) {
+        return visibility;
+    }
+
+    const float next_visibility = SampleDirectionalShadowCascadeVisibility(
+        metadata, shadow_texture, cascade_index + 1u, world_pos, normal_ws, light_dir_ws);
+    const float blend_t = saturate((view_depth - blend_start) / max(blend_band, 1.0e-4));
+    return lerp(visibility, next_visibility, blend_t);
 }
 
 #endif // OXYGEN_D3D12_SHADERS_RENDERER_SHADOWHELPERS_HLSLI

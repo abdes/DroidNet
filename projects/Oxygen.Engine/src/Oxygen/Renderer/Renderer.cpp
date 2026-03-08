@@ -394,6 +394,7 @@ using oxygen::graphics::SingleQueueStrategy;
 
 Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
   : gfx_weak_(std::move(graphics))
+  , config_(config)
   , scene_prep_(std::make_unique<sceneprep::ScenePrepPipelineImpl<
         decltype(sceneprep::CreateBasicCollectionConfig()),
         decltype(sceneprep::CreateStandardFinalizationConfig())>>(
@@ -407,13 +408,13 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
   auto gfx = gfx_weak_.lock();
 
   // Require a non-empty upload queue key in the renderer configuration.
-  CHECK_F(!config.upload_queue_key.empty(),
+  CHECK_F(!config_.upload_queue_key.empty(),
     "RendererConfig.upload_queue_key must not be empty");
 
   // Build upload policy and honour configured upload queue from Renderer
   // configuration.
   auto policy = upload::DefaultUploadPolicy();
-  policy.upload_queue_key = graphics::QueueKey { config.upload_queue_key };
+  policy.upload_queue_key = graphics::QueueKey { config_.upload_queue_key };
 
   uploader_ = std::make_unique<upload::UploadCoordinator>(
     observer_ptr { gfx.get() }, policy);
@@ -564,7 +565,7 @@ auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
     shadow_manager_
       = std::make_unique<renderer::ShadowManager>(observer_ptr { gfx.get() },
         observer_ptr { inline_staging_provider_.get() },
-        observer_ptr { inline_transfers_.get() });
+        observer_ptr { inline_transfers_.get() }, config_.shadow_quality_tier);
 
     // Initialize the ViewConstants manager for per-view, per-slot upload-heap
     // storage.
@@ -1951,10 +1952,14 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
       auto directional_shadow_metadata_slot = kInvalidShaderVisibleIndex;
       auto sun_shadow_index = 0xFFFFFFFFU;
       if (const auto light_manager = scene_prep_state_->GetLightManager()) {
+        const auto prepared_it = prepared_frames_.find(view_id);
+        const auto shadow_caster_bounds = prepared_it != prepared_frames_.end()
+          ? prepared_it->second.shadow_caster_bounding_spheres
+          : std::span<const glm::vec4> {};
         const auto synthetic_sun_shadow
           = BuildSyntheticSunShadowInput(render_context, runtime_state.sun);
         const auto shadow_view = shadow_manager_->PublishForView(view_id,
-          view_constants, *light_manager,
+          view_constants, *light_manager, shadow_caster_bounds,
           synthetic_sun_shadow ? &*synthetic_sun_shadow : nullptr);
         shadow_instance_metadata_slot
           = shadow_view.shadow_instance_metadata_srv;
@@ -2467,6 +2472,22 @@ auto Renderer::PublishPreparedFrameSpans(
     prepared_frame.draw_metadata_bytes = {};
     prepared_frame.partitions = {};
   }
+
+  storage.shadow_caster_bounds_storage.clear();
+  if (scene_prep_state_ != nullptr) {
+    const auto items = scene_prep_state_->CollectedItems();
+    storage.shadow_caster_bounds_storage.reserve(items.size());
+    for (const auto& item : items) {
+      if (!item.cast_shadows || item.world_bounding_sphere.w <= 0.0F) {
+        continue;
+      }
+      storage.shadow_caster_bounds_storage.push_back(
+        item.world_bounding_sphere);
+    }
+  }
+  prepared_frame.shadow_caster_bounding_spheres
+    = std::span<const glm::vec4>(storage.shadow_caster_bounds_storage.data(),
+      storage.shadow_caster_bounds_storage.size());
 }
 
 auto Renderer::UpdateViewConstantsFromView(const ResolvedView& view) -> void

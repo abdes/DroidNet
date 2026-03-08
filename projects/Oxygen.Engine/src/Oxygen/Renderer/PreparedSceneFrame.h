@@ -10,6 +10,8 @@
 #include <span>
 #include <vector>
 
+#include <glm/vec4.hpp>
+
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 
@@ -51,6 +53,8 @@ struct PreparedSceneFrame {
     uint32_t end = 0; // exclusive end draw index
   };
   std::span<const PartitionRange> partitions; // published ranges (may be empty)
+  std::span<const glm::vec4>
+    shadow_caster_bounding_spheres; // xyz=center, w=radius
 
   // Bindless SRV indices captured at ScenePrep finalization time
   // These must be captured immediately after Finalize to ensure consistency

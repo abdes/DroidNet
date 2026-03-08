@@ -13,9 +13,11 @@
 #include <vector>
 
 #include <glm/mat4x4.hpp>
+#include <glm/vec4.hpp>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
@@ -80,7 +82,8 @@ public:
 
   OXGN_RNDR_API ShadowManager(observer_ptr<Graphics> gfx,
     observer_ptr<ProviderT> provider,
-    observer_ptr<CoordinatorT> inline_transfers);
+    observer_ptr<CoordinatorT> inline_transfers,
+    oxygen::ShadowQualityTier quality_tier = oxygen::ShadowQualityTier::kHigh);
 
   OXYGEN_MAKE_NON_COPYABLE(ShadowManager)
   OXYGEN_MAKE_NON_MOVABLE(ShadowManager)
@@ -92,6 +95,7 @@ public:
 
   OXGN_RNDR_API auto PublishForView(ViewId view_id,
     const engine::ViewConstants& view_constants, const LightManager& lights,
+    std::span<const glm::vec4> shadow_caster_bounds = {},
     const SyntheticSunShadowInput* synthetic_sun_shadow = nullptr)
     -> PublishedViewData;
   OXGN_RNDR_API auto SetPublishedViewFrameBindingsSlot(
@@ -118,6 +122,9 @@ private:
   observer_ptr<Graphics> gfx_;
   observer_ptr<ProviderT> staging_provider_;
   observer_ptr<CoordinatorT> inline_transfers_;
+  oxygen::ShadowQualityTier shadow_quality_tier_ {
+    oxygen::ShadowQualityTier::kHigh
+  };
 
   using BufferT = engine::upload::TransientStructuredBuffer;
   BufferT shadow_instance_buffer_;
@@ -142,7 +149,8 @@ private:
   OXGN_RNDR_API auto BuildDirectionalViewState(ViewId view_id,
     const engine::ViewConstants& view_constants,
     std::span<const engine::DirectionalShadowCandidate> candidates,
-    PublishedViewState& state) -> void;
+    std::span<const glm::vec4> shadow_caster_bounds, PublishedViewState& state)
+    -> void;
 
   OXGN_RNDR_API auto PublishShadowInstances(
     std::span<const engine::ShadowInstanceMetadata> instances)

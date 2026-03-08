@@ -256,6 +256,17 @@ auto DepthPrePass::UsesFramebufferDepthAttachment() const -> bool
   return true;
 }
 
+auto DepthPrePass::BuildRasterizerStateDesc(
+  const graphics::CullMode cull_mode) const -> graphics::RasterizerStateDesc
+{
+  return graphics::RasterizerStateDesc {
+    .fill_mode = graphics::FillMode::kSolid,
+    .cull_mode = cull_mode,
+    .front_counter_clockwise = true,
+    .multisample_enable = false,
+  };
+}
+
 auto DepthPrePass::GetDepthTexture() const -> const Texture&
 {
   const Texture* depth_texture { nullptr };
@@ -495,7 +506,6 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   using graphics::DepthStencilStateDesc;
   using graphics::DescriptorTableBinding;
   using graphics::DirectBufferBinding;
-  using graphics::FillMode;
   using graphics::FramebufferLayoutDesc;
   using graphics::PrimitiveType;
   using graphics::PushConstantsBinding;
@@ -504,16 +514,6 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   using graphics::RootBindingItem;
   using graphics::ShaderRequest;
   using graphics::ShaderStageFlags;
-
-  // Note: ignoring user-configured fill_mode for the depth pass.
-  const auto MakeRasterDesc = [](CullMode cull_mode) -> RasterizerStateDesc {
-    return RasterizerStateDesc {
-      .fill_mode = oxygen::graphics::FillMode::kSolid,
-      .cull_mode = cull_mode,
-      .front_counter_clockwise = true,
-      .multisample_enable = false,
-    };
-  };
 
   constexpr DepthStencilStateDesc ds_desc {
     .depth_test_enable = true, // Enable depth testing
@@ -554,7 +554,7 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
         .defines = defines,
       })
       .SetPrimitiveTopology(PrimitiveType::kTriangleList)
-      .SetRasterizerState(MakeRasterDesc(cull_mode))
+      .SetRasterizerState(BuildRasterizerStateDesc(cull_mode))
       .SetDepthStencilState(ds_desc)
       .SetBlendState({})
       .SetFramebufferLayout(fb_layout_desc)

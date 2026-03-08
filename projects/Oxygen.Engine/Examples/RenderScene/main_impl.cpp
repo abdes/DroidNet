@@ -112,6 +112,7 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
 
     oxygen::RendererConfig renderer_config {
       .upload_queue_key = app.queue_strategy.KeyFor(QueueRole::kTransfer).get(),
+      .shadow_quality_tier = oxygen::ShadowQualityTier::kUltra,
     };
     auto renderer_unique
       = std::make_unique<engine::Renderer>(app.gfx_weak, renderer_config);
