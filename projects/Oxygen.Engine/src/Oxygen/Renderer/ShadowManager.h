@@ -6,30 +6,25 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <span>
-#include <unordered_map>
-#include <vector>
 
-#include <glm/mat4x4.hpp>
 #include <glm/vec4.hpp>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
-#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/RendererTag.h>
-#include <Oxygen/Renderer/Types/DirectionalShadowMetadata.h>
-#include <Oxygen/Renderer/Types/ShadowInstanceMetadata.h>
+#include <Oxygen/Renderer/Types/RasterShadowRenderPlan.h>
+#include <Oxygen/Renderer/Types/ShadowFramePublication.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
-#include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::engine::upload {
@@ -38,13 +33,11 @@ class StagingProvider;
 }
 
 namespace oxygen::renderer {
+namespace internal {
+  class ConventionalShadowBackend;
+}
 
-//! Renderer-owned shadow-product scheduler and metadata publisher.
-/*!
- Phase 1 starts with directional conventional shadow products only. The class
- owns shadow-product publication so LightManager remains a light collector,
- not a shadow runtime.
-*/
+//! Renderer-owned shadow-product scheduler and backend coordinator.
 class ShadowManager {
 public:
   struct SyntheticSunShadowInput {
@@ -57,24 +50,6 @@ public:
     std::uint32_t cascade_count { scene::kMaxShadowCascades };
     float distribution_exponent { 1.0F };
     std::array<float, scene::kMaxShadowCascades> cascade_distances {};
-  };
-
-  struct PublishedViewData {
-    ShaderVisibleIndex shadow_instance_metadata_srv {
-      kInvalidShaderVisibleIndex
-    };
-    ShaderVisibleIndex directional_shadow_metadata_srv {
-      kInvalidShaderVisibleIndex
-    };
-    ShaderVisibleIndex directional_shadow_texture_srv {
-      kInvalidShaderVisibleIndex
-    };
-
-    std::span<const engine::ShadowInstanceMetadata> shadow_instances {};
-    std::span<const engine::DirectionalShadowMetadata> directional_metadata {};
-    std::span<const engine::ViewConstants::GpuData>
-      directional_view_constants {};
-    std::uint32_t sun_shadow_index { 0xFFFFFFFFU };
   };
 
   using ProviderT = engine::upload::StagingProvider;
@@ -97,28 +72,21 @@ public:
     const engine::ViewConstants& view_constants, const LightManager& lights,
     std::span<const glm::vec4> shadow_caster_bounds = {},
     const SyntheticSunShadowInput* synthetic_sun_shadow = nullptr)
-    -> PublishedViewData;
+    -> ShadowFramePublication;
   OXGN_RNDR_API auto SetPublishedViewFrameBindingsSlot(
     ViewId view_id, engine::BindlessViewFrameBindingsSlot slot) -> void;
 
-  OXGN_RNDR_NDAPI auto TryGetPublishedViewData(ViewId view_id) const noexcept
-    -> const PublishedViewData*;
-  OXGN_RNDR_NDAPI auto GetDirectionalShadowTexture() const noexcept
+  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetFramePublication(
+    ViewId view_id) const noexcept -> const ShadowFramePublication*;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetRasterRenderPlan(
+    ViewId view_id) const noexcept -> const RasterShadowRenderPlan*;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetViewIntrospection(
+    ViewId view_id) const noexcept -> const ShadowViewIntrospection*;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto
+  GetConventionalShadowDepthTexture() const noexcept
     -> const std::shared_ptr<graphics::Texture>&;
 
 private:
-  struct DirectionalShadowResourceConfig {
-    std::uint32_t resolution { 0U };
-    std::uint32_t required_layers { 0U };
-  };
-
-  struct PublishedViewState {
-    std::vector<engine::ShadowInstanceMetadata> shadow_instances;
-    std::vector<engine::DirectionalShadowMetadata> directional_metadata;
-    std::vector<engine::ViewConstants::GpuData> directional_view_constants;
-    PublishedViewData published {};
-  };
-
   observer_ptr<Graphics> gfx_;
   observer_ptr<ProviderT> staging_provider_;
   observer_ptr<CoordinatorT> inline_transfers_;
@@ -126,38 +94,7 @@ private:
     oxygen::ShadowQualityTier::kHigh
   };
 
-  using BufferT = engine::upload::TransientStructuredBuffer;
-  BufferT shadow_instance_buffer_;
-  BufferT directional_shadow_metadata_buffer_;
-
-  std::shared_ptr<graphics::Texture> directional_shadow_texture_;
-  graphics::NativeView directional_shadow_texture_srv_view_ {};
-  ShaderVisibleIndex directional_shadow_texture_srv_ {
-    kInvalidShaderVisibleIndex
-  };
-  std::uint32_t directional_shadow_resolution_ { 0U };
-  std::uint32_t directional_shadow_capacity_layers_ { 0U };
-
-  std::unordered_map<ViewId, PublishedViewState> published_views_;
-
-  OXGN_RNDR_API auto BuildDirectionalResourceConfig(
-    std::span<const engine::DirectionalShadowCandidate> candidates) const
-    -> DirectionalShadowResourceConfig;
-  OXGN_RNDR_API auto EnsureDirectionalResources(
-    const DirectionalShadowResourceConfig& config) -> void;
-  OXGN_RNDR_API auto ReleaseDirectionalResources() -> void;
-  OXGN_RNDR_API auto BuildDirectionalViewState(ViewId view_id,
-    const engine::ViewConstants& view_constants,
-    std::span<const engine::DirectionalShadowCandidate> candidates,
-    std::span<const glm::vec4> shadow_caster_bounds, PublishedViewState& state)
-    -> void;
-
-  OXGN_RNDR_API auto PublishShadowInstances(
-    std::span<const engine::ShadowInstanceMetadata> instances)
-    -> ShaderVisibleIndex;
-  OXGN_RNDR_API auto PublishDirectionalMetadata(
-    std::span<const engine::DirectionalShadowMetadata> metadata)
-    -> ShaderVisibleIndex;
+  std::unique_ptr<internal::ConventionalShadowBackend> conventional_backend_;
 };
 
 } // namespace oxygen::renderer

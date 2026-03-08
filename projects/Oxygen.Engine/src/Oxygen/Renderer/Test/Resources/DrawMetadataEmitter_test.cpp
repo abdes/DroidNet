@@ -314,4 +314,61 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
   EXPECT_TRUE(partitions[1].pass_mask.IsSet(PassMaskBit::kShadowCaster));
 }
 
+NOLINT_TEST_F(DrawMetadataEmitterTest,
+  EmitDrawMetadata_ShadowOnlyDrawsStayOutOfMainViewPartitions)
+{
+  const auto geometry
+    = MakeSimpleGeometryRef("DrawMetadataEmitter.ShadowOnlyRouting");
+
+  BeginFrame(SequenceNumber { 1U }, Slot { 0U });
+  const auto geo_handle = GeoUploader().GetOrAllocate(geometry);
+  GeoUploader().EnsureFrameResources();
+
+  BeginFrame(SequenceNumber { 2U }, Slot { 1U });
+  const auto indices = GeoUploader().GetShaderVisibleIndices(geo_handle);
+  ASSERT_NE(indices.vertex_srv_index, oxygen::kInvalidShaderVisibleIndex);
+  ASSERT_NE(indices.index_srv_index, oxygen::kInvalidShaderVisibleIndex);
+
+  oxygen::engine::sceneprep::RenderItemData main_view_item {};
+  main_view_item.geometry = geometry;
+  main_view_item.submesh_index = 0U;
+  main_view_item.transform_handle = oxygen::engine::sceneprep::TransformHandle {
+    oxygen::engine::sceneprep::TransformHandle::Index { 21U },
+    oxygen::engine::sceneprep::TransformHandle::Generation { 1U },
+  };
+  main_view_item.cast_shadows = true;
+  main_view_item.main_view_visible = true;
+
+  oxygen::engine::sceneprep::RenderItemData shadow_only_item = main_view_item;
+  shadow_only_item.transform_handle
+    = oxygen::engine::sceneprep::TransformHandle {
+        oxygen::engine::sceneprep::TransformHandle::Index { 22U },
+        oxygen::engine::sceneprep::TransformHandle::Generation { 1U },
+      };
+  shadow_only_item.main_view_visible = false;
+
+  Emitter().EmitDrawMetadata(main_view_item);
+  Emitter().EmitDrawMetadata(shadow_only_item);
+  Emitter().SortAndPartition();
+
+  const auto bytes = Emitter().GetDrawMetadataBytes();
+  ASSERT_EQ(bytes.size(), 2U * sizeof(oxygen::engine::DrawMetadata));
+
+  const auto* draws
+    = reinterpret_cast<const oxygen::engine::DrawMetadata*>(bytes.data());
+  ASSERT_NE(draws, nullptr);
+
+  EXPECT_FALSE(draws[0].flags.IsSet(PassMaskBit::kMainViewVisible));
+  EXPECT_TRUE(draws[0].flags.IsSet(PassMaskBit::kShadowCaster));
+  EXPECT_TRUE(draws[1].flags.IsSet(PassMaskBit::kMainViewVisible));
+  EXPECT_TRUE(draws[1].flags.IsSet(PassMaskBit::kShadowCaster));
+
+  const auto partitions = Emitter().GetPartitions();
+  ASSERT_EQ(partitions.size(), 2U);
+  EXPECT_FALSE(partitions[0].pass_mask.IsSet(PassMaskBit::kMainViewVisible));
+  EXPECT_TRUE(partitions[0].pass_mask.IsSet(PassMaskBit::kShadowCaster));
+  EXPECT_TRUE(partitions[1].pass_mask.IsSet(PassMaskBit::kMainViewVisible));
+  EXPECT_TRUE(partitions[1].pass_mask.IsSet(PassMaskBit::kShadowCaster));
+}
+
 } // namespace

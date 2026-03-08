@@ -18,7 +18,7 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
-#include <Oxygen/Renderer/Passes/DirectionalShadowPass.h>
+#include <Oxygen/Renderer/Passes/ConventionalShadowRasterPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/ShadowManager.h>
@@ -29,19 +29,18 @@ namespace oxygen::engine {
 namespace {
 
   constexpr float kDirectionalShadowRasterDepthBias = 1500.0F;
-  // Keep constant raster bias, but avoid compounding it with the shader-side
-  // slope-aware receiver bias for conventional directional CSM.
   constexpr float kDirectionalShadowRasterSlopeBias = 0.0F;
   constexpr float kDirectionalShadowRasterDepthBiasClamp = 0.0F;
 
 } // namespace
 
-DirectionalShadowPass::DirectionalShadowPass(std::shared_ptr<Config> config)
+ConventionalShadowRasterPass::ConventionalShadowRasterPass(
+  std::shared_ptr<Config> config)
   : DepthPrePass(std::move(config))
 {
 }
 
-DirectionalShadowPass::~DirectionalShadowPass()
+ConventionalShadowRasterPass::~ConventionalShadowRasterPass()
 {
   if (shadow_view_constants_buffer_ && shadow_view_constants_mapped_ptr_) {
     shadow_view_constants_buffer_->UnMap();
@@ -51,7 +50,7 @@ DirectionalShadowPass::~DirectionalShadowPass()
   shadow_view_constants_capacity_ = 0U;
 }
 
-auto DirectionalShadowPass::DoPrepareResources(
+auto ConventionalShadowRasterPass::DoPrepareResources(
   graphics::CommandRecorder& recorder) -> co::Co<>
 {
   auto& depth_texture = GetDepthTexture();
@@ -67,26 +66,26 @@ auto DirectionalShadowPass::DoPrepareResources(
     co_return;
   }
 
-  const auto* shadow_view
-    = shadow_manager->TryGetPublishedViewData(Context().current_view.view_id);
-  if (shadow_view == nullptr
-    || shadow_view->directional_view_constants.empty()) {
+  const auto* raster_plan
+    = shadow_manager->TryGetRasterRenderPlan(Context().current_view.view_id);
+  if (raster_plan == nullptr || raster_plan->jobs.empty()) {
     co_return;
   }
 
   EnsureShadowViewConstantsCapacity(
-    static_cast<std::uint32_t>(shadow_view->directional_view_constants.size()));
-  UploadShadowViewConstants(shadow_view->directional_view_constants);
+    static_cast<std::uint32_t>(raster_plan->jobs.size()));
+  UploadJobViewConstants(raster_plan->jobs);
 
   co_return;
 }
 
-auto DirectionalShadowPass::UsesFramebufferDepthAttachment() const -> bool
+auto ConventionalShadowRasterPass::UsesFramebufferDepthAttachment() const
+  -> bool
 {
   return false;
 }
 
-auto DirectionalShadowPass::BuildRasterizerStateDesc(
+auto ConventionalShadowRasterPass::BuildRasterizerStateDesc(
   const graphics::CullMode cull_mode) const -> graphics::RasterizerStateDesc
 {
   auto desc = DepthPrePass::BuildRasterizerStateDesc(cull_mode);
@@ -96,27 +95,28 @@ auto DirectionalShadowPass::BuildRasterizerStateDesc(
   return desc;
 }
 
-auto DirectionalShadowPass::DoExecute(graphics::CommandRecorder& recorder)
-  -> co::Co<>
+auto ConventionalShadowRasterPass::DoExecute(
+  graphics::CommandRecorder& recorder) -> co::Co<>
 {
   const auto shadow_manager = Context().GetRenderer().GetShadowManager();
   if (!shadow_manager) {
-    LOG_F(INFO, "DirectionalShadowPass: skipped for view {} (no ShadowManager)",
+    LOG_F(INFO,
+      "ConventionalShadowRasterPass: skipped for view {} (no ShadowManager)",
       Context().current_view.view_id.get());
     Context().RegisterPass(this);
     co_return;
   }
 
-  const auto* shadow_view
-    = shadow_manager->TryGetPublishedViewData(Context().current_view.view_id);
-  if (shadow_view == nullptr || shadow_view->directional_metadata.empty()
-    || shadow_view->directional_view_constants.empty()) {
+  const auto* raster_plan
+    = shadow_manager->TryGetRasterRenderPlan(Context().current_view.view_id);
+  if (raster_plan == nullptr || raster_plan->jobs.empty()
+    || raster_plan->depth_texture == nullptr) {
     LOG_F(INFO,
-      "DirectionalShadowPass: skipped for view {} "
-      "(published={} directional={} snapshots={})",
-      Context().current_view.view_id.get(), shadow_view != nullptr,
-      shadow_view ? shadow_view->directional_metadata.size() : 0U,
-      shadow_view ? shadow_view->directional_view_constants.size() : 0U);
+      "ConventionalShadowRasterPass: skipped for view {} "
+      "(published={} jobs={} depth_texture={})",
+      Context().current_view.view_id.get(), raster_plan != nullptr,
+      raster_plan ? raster_plan->jobs.size() : 0U,
+      raster_plan && raster_plan->depth_texture != nullptr);
     Context().RegisterPass(this);
     co_return;
   }
@@ -125,7 +125,7 @@ auto DirectionalShadowPass::DoExecute(graphics::CommandRecorder& recorder)
   if (!psf || !psf->IsValid() || psf->draw_metadata_bytes.empty()
     || psf->partitions.empty()) {
     LOG_F(INFO,
-      "DirectionalShadowPass: skipped for view {} "
+      "ConventionalShadowRasterPass: skipped for view {} "
       "(prepared={} valid={} draw_bytes={} partitions={})",
       Context().current_view.view_id.get(), psf != nullptr,
       psf ? psf->IsValid() : false, psf ? psf->draw_metadata_bytes.size() : 0U,
@@ -142,34 +142,29 @@ auto DirectionalShadowPass::DoExecute(graphics::CommandRecorder& recorder)
   std::uint32_t emitted_count = 0U;
   std::uint32_t skipped_invalid = 0U;
   std::uint32_t draw_errors = 0U;
-  std::uint32_t cascade_snapshot_index = 0U;
 
-  for (const auto& directional_metadata : shadow_view->directional_metadata) {
-    for (std::uint32_t cascade_index = 0U;
-      cascade_index < directional_metadata.cascade_count;
-      ++cascade_index, ++cascade_snapshot_index) {
-      const auto layer = directional_metadata.resource_index + cascade_index;
-      const auto dsv = PrepareCascadeDepthStencilView(depth_texture, layer);
+  for (std::uint32_t job_index = 0U; job_index < raster_plan->jobs.size();
+    ++job_index) {
+    const auto& job = raster_plan->jobs[job_index];
+    const auto dsv = PrepareJobDepthStencilView(depth_texture, job);
 
-      recorder.SetRenderTargets({}, dsv);
-      ClearDepthStencilView(recorder, dsv);
+    recorder.SetRenderTargets({}, dsv);
+    ClearDepthStencilView(recorder, dsv);
 
-      for (const auto& pr : psf->partitions) {
-        if (!pr.pass_mask.IsSet(PassMaskBit::kShadowCaster)) {
-          continue;
-        }
-        if (!pr.pass_mask.IsSet(PassMaskBit::kOpaque)
-          && !pr.pass_mask.IsSet(PassMaskBit::kMasked)) {
-          continue;
-        }
-
-        recorder.SetPipelineState(
-          SelectPipelineStateForPartition(pr.pass_mask));
-        RebindCommonRootParameters(recorder);
-        BindCascadeViewConstants(recorder, cascade_snapshot_index);
-        EmitDrawRange(recorder, records, pr.begin, pr.end, emitted_count,
-          skipped_invalid, draw_errors);
+    for (const auto& pr : psf->partitions) {
+      if (!pr.pass_mask.IsSet(PassMaskBit::kShadowCaster)) {
+        continue;
       }
+      if (!pr.pass_mask.IsSet(PassMaskBit::kOpaque)
+        && !pr.pass_mask.IsSet(PassMaskBit::kMasked)) {
+        continue;
+      }
+
+      recorder.SetPipelineState(SelectPipelineStateForPartition(pr.pass_mask));
+      RebindCommonRootParameters(recorder);
+      BindJobViewConstants(recorder, job_index);
+      EmitDrawRange(recorder, records, pr.begin, pr.end, emitted_count,
+        skipped_invalid, draw_errors);
     }
   }
 
@@ -177,29 +172,22 @@ auto DirectionalShadowPass::DoExecute(graphics::CommandRecorder& recorder)
     depth_texture, graphics::ResourceStates::kShaderResource);
   recorder.FlushBarriers();
 
-  std::uint32_t total_cascades = 0U;
-  for (const auto& directional_metadata : shadow_view->directional_metadata) {
-    total_cascades += directional_metadata.cascade_count;
-  }
-
   if (emitted_count == 0U) {
     LOG_F(WARNING,
-      "DirectionalShadowPass: view {} produced no shadow-caster draws "
-      "(directional_products={} cascades={} skipped_invalid={} errors={})",
-      Context().current_view.view_id.get(),
-      shadow_view->directional_metadata.size(), total_cascades, skipped_invalid,
-      draw_errors);
+      "ConventionalShadowRasterPass: view {} produced no shadow-caster draws "
+      "(jobs={} skipped_invalid={} errors={})",
+      Context().current_view.view_id.get(), raster_plan->jobs.size(),
+      skipped_invalid, draw_errors);
   }
 
   Context().RegisterPass(this);
   co_return;
 }
 
-auto DirectionalShadowPass::EnsureShadowViewConstantsCapacity(
-  const std::uint32_t required_snapshots) -> void
+auto ConventionalShadowRasterPass::EnsureShadowViewConstantsCapacity(
+  const std::uint32_t required_jobs) -> void
 {
-  if (required_snapshots == 0U
-    || required_snapshots <= shadow_view_constants_capacity_) {
+  if (required_jobs == 0U || required_jobs <= shadow_view_constants_capacity_) {
     return;
   }
 
@@ -209,7 +197,7 @@ auto DirectionalShadowPass::EnsureShadowViewConstantsCapacity(
   }
   shadow_view_constants_buffer_.reset();
 
-  shadow_view_constants_capacity_ = required_snapshots;
+  shadow_view_constants_capacity_ = required_jobs;
   const auto total_bytes
     = static_cast<std::uint64_t>(sizeof(ViewConstants::GpuData))
     * static_cast<std::uint64_t>(frame::kFramesInFlight.get())
@@ -219,14 +207,15 @@ auto DirectionalShadowPass::EnsureShadowViewConstantsCapacity(
     .size_bytes = total_bytes,
     .usage = graphics::BufferUsage::kConstant,
     .memory = graphics::BufferMemory::kUpload,
-    .debug_name = "DirectionalShadowPass.ViewConstants",
+    .debug_name = "ConventionalShadowRasterPass.ViewConstants",
   };
 
   shadow_view_constants_buffer_ = Context().GetGraphics().CreateBuffer(desc);
   if (!shadow_view_constants_buffer_) {
     shadow_view_constants_capacity_ = 0U;
     throw std::runtime_error(
-      "DirectionalShadowPass: failed to create shadow view constants buffer");
+      "ConventionalShadowRasterPass: failed to create shadow view constants "
+      "buffer");
   }
 
   shadow_view_constants_buffer_->SetName(desc.debug_name);
@@ -236,61 +225,74 @@ auto DirectionalShadowPass::EnsureShadowViewConstantsCapacity(
     shadow_view_constants_buffer_.reset();
     shadow_view_constants_capacity_ = 0U;
     throw std::runtime_error(
-      "DirectionalShadowPass: failed to map shadow view constants buffer");
+      "ConventionalShadowRasterPass: failed to map shadow view constants "
+      "buffer");
   }
 }
 
-auto DirectionalShadowPass::UploadShadowViewConstants(
-  const std::span<const ViewConstants::GpuData> snapshots) -> void
+auto ConventionalShadowRasterPass::UploadJobViewConstants(
+  const std::span<const renderer::RasterShadowJob> jobs) -> void
 {
-  if (snapshots.empty()) {
+  if (jobs.empty()) {
     return;
   }
   if (!shadow_view_constants_buffer_
     || shadow_view_constants_mapped_ptr_ == nullptr) {
-    throw std::runtime_error(
-      "DirectionalShadowPass: shadow view constants buffer is not initialized");
+    throw std::runtime_error("ConventionalShadowRasterPass: shadow view "
+                             "constants buffer is not initialized");
   }
   if (Context().frame_slot == frame::kInvalidSlot) {
-    throw std::runtime_error("DirectionalShadowPass: invalid frame slot for "
-                             "shadow view constants upload");
+    throw std::runtime_error("ConventionalShadowRasterPass: invalid frame slot "
+                             "for shadow view constants upload");
+  }
+
+  job_view_constants_upload_.resize(jobs.size());
+  for (std::size_t i = 0; i < jobs.size(); ++i) {
+    job_view_constants_upload_[i] = jobs[i].view_constants;
   }
 
   const auto base_index = static_cast<std::uint64_t>(Context().frame_slot.get())
     * static_cast<std::uint64_t>(shadow_view_constants_capacity_);
   auto* dst = static_cast<std::byte*>(shadow_view_constants_mapped_ptr_)
     + base_index * sizeof(ViewConstants::GpuData);
-  std::memcpy(dst, snapshots.data(), snapshots.size_bytes());
+  std::memcpy(dst, job_view_constants_upload_.data(),
+    job_view_constants_upload_.size() * sizeof(ViewConstants::GpuData));
 }
 
-auto DirectionalShadowPass::BindCascadeViewConstants(
-  graphics::CommandRecorder& recorder, const std::uint32_t cascade_index) const
+auto ConventionalShadowRasterPass::BindJobViewConstants(
+  graphics::CommandRecorder& recorder, const std::uint32_t job_index) const
   -> void
 {
   if (!shadow_view_constants_buffer_
     || Context().frame_slot == frame::kInvalidSlot) {
-    throw std::runtime_error(
-      "DirectionalShadowPass: shadow view constants buffer is not available");
+    throw std::runtime_error("ConventionalShadowRasterPass: shadow view "
+                             "constants buffer is not available");
   }
-  if (cascade_index >= shadow_view_constants_capacity_) {
-    throw std::out_of_range("DirectionalShadowPass: cascade index exceeds "
+  if (job_index >= shadow_view_constants_capacity_) {
+    throw std::out_of_range("ConventionalShadowRasterPass: job index exceeds "
                             "shadow view constants capacity");
   }
 
   const auto slot_offset
     = static_cast<std::uint64_t>(Context().frame_slot.get())
       * static_cast<std::uint64_t>(shadow_view_constants_capacity_)
-    + cascade_index;
+    + job_index;
   const auto byte_offset = slot_offset * sizeof(ViewConstants::GpuData);
   recorder.SetGraphicsRootConstantBufferView(
     static_cast<std::uint32_t>(binding::RootParam::kViewConstants),
     shadow_view_constants_buffer_->GetGPUVirtualAddress() + byte_offset);
 }
 
-auto DirectionalShadowPass::PrepareCascadeDepthStencilView(
-  graphics::Texture& depth_texture, const std::uint32_t array_slice) const
+auto ConventionalShadowRasterPass::PrepareJobDepthStencilView(
+  graphics::Texture& depth_texture, const renderer::RasterShadowJob& job) const
   -> graphics::NativeView
 {
+  if (job.target_kind
+    != renderer::RasterShadowTargetKind::kTexture2DArraySlice) {
+    throw std::runtime_error(
+      "ConventionalShadowRasterPass: unsupported raster shadow target kind");
+  }
+
   auto& graphics = Context().GetGraphics();
   auto& registry = graphics.GetResourceRegistry();
   auto& allocator = graphics.GetDescriptorAllocator();
@@ -303,7 +305,7 @@ auto DirectionalShadowPass::PrepareCascadeDepthStencilView(
     .sub_resources = {
       .base_mip_level = 0U,
       .num_mip_levels = 1U,
-      .base_array_slice = array_slice,
+      .base_array_slice = job.target_array_slice,
       .num_array_slices = 1U,
     },
     .is_read_only_dsv = false,
@@ -319,14 +321,14 @@ auto DirectionalShadowPass::PrepareCascadeDepthStencilView(
       graphics::DescriptorVisibility::kCpuOnly);
   if (!dsv_desc_handle.IsValid()) {
     throw std::runtime_error(
-      "DirectionalShadowPass: failed to allocate cascade DSV descriptor");
+      "ConventionalShadowRasterPass: failed to allocate shadow DSV descriptor");
   }
 
   const auto dsv = registry.RegisterView(
     depth_texture, std::move(dsv_desc_handle), dsv_view_desc);
   if (!dsv->IsValid()) {
     throw std::runtime_error(
-      "DirectionalShadowPass: failed to register cascade DSV view");
+      "ConventionalShadowRasterPass: failed to register shadow DSV view");
   }
   return dsv;
 }

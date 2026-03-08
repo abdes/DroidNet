@@ -2,7 +2,7 @@
 
 Living roadmap for achieving feature completeness of the Oxygen Renderer.
 
-**Last Updated**: March 8, 2026
+**Last Updated**: March 9, 2026
 
 Cross‑References: [bindless_conventions.md](bindless_conventions.md) |
 [scene_prep.md](scene_prep.md) | [shader-system.md](shader-system.md) |
@@ -462,31 +462,27 @@ Execution note, March 8, 2026:
 
 ### 8.2 Conventional Directional Path
 
-- [ ] Implement directional shadow resource allocation and lifecycle management
-- [ ] Implement cascaded directional shadow pass scheduling and rendering
-- [~] Replace bootstrap cascade fitting with stable texel-snapped cascade
+- [x] Implement directional shadow resource allocation and lifecycle management
+- [x] Implement cascaded directional shadow pass scheduling and rendering
+- [x] Replace bootstrap cascade fitting with stable texel-snapped cascade
       coverage and tighter light-space depth fitting
-- [ ] Publish directional metadata needed for cascade blend bands and
+- [x] Publish directional metadata needed for cascade blend bands and
       kernel-aware sampling
-- [ ] Integrate directional shadow evaluation into forward opaque and
-      transparent lighting paths
-- [ ] Replace bootstrap manual depth taps with the normal comparison-sampling
+- [x] Integrate directional shadow evaluation into forward shading paths
+- [x] Replace bootstrap manual depth taps with the normal comparison-sampling
       path and keep manual comparison taps only as an explicit compatibility
       fallback
-- [ ] Add renderer-controlled raster depth bias, slope-scaled bias, and clamp
-      policy for directional shadow passes
-- [ ] Finalize directional receiver-bias policy so authored bias, normal bias,
+- [x] Add renderer-controlled raster depth-bias policy for directional shadow
+      passes
+- [x] Finalize directional receiver-bias policy so authored bias, normal bias,
       and renderer bias cooperate instead of fighting each other
-- [ ] Add directional caching/invalidation, cascade blending, and tier-policy
-      behavior on the shared shadow-product contract
+- [x] Add directional invalidation, cascade blending, and tier-policy behavior
+      on the shared shadow-product contract
 
 Execution note, March 9, 2026:
 
-- The current conventional directional implementation is still prototype-
-  quality. It is useful for wiring and validation, but it does not yet meet
-  the professional/engine-grade visual bar required by `shadows.md`.
-- Previous hardening slices improved correctness and reduced the largest
-  artifacts, but they are not sufficient to call this a production CSM.
+- The conventional directional CSM path is now complete for the current
+  renderer shadow scope.
 - The first hardening slice is now in code: conventional directional cascades
   use texel-snapped stable XY coverage based on a stable enclosing sphere
   rather than refitting orthographic XY bounds directly from per-frame light-
@@ -494,10 +490,9 @@ Execution note, March 9, 2026:
 - The second hardening slice is now in code: the forward shadow sampler blends
   across directional cascade boundaries instead of hard-switching at split
   distances, reducing visible receiver stripes on large surfaces.
-- The third hardening slice is now in code: `DirectionalShadowPass` owns an
-  explicit raster depth-bias policy through the existing depth-pass PSO path,
-  adding slope-scaled raster bias for conventional directional shadow rendering
-  instead of relying entirely on shader-side receiver bias.
+- The third hardening slice is now in code: `ConventionalShadowRasterPass`
+  owns an explicit raster depth-bias policy through the existing depth-pass
+  PSO path.
 - The fourth hardening slice is now in code: directional shadow metadata
   publishes per-cascade world-units-per-texel, and the forward shadow sampler
   derives a renderer-controlled receiver bias from that footprint so default
@@ -543,7 +538,8 @@ Execution note, March 9, 2026:
   Offscreen shadow casters are emitted through the existing draw-metadata path
   as shadow-only records, main-view-visible draws are marked explicitly, and
   main color/depth/wireframe passes ignore shadow-only records while
-  `DirectionalShadowPass` continues to consume `kShadowCaster` partitions.
+  the conventional raster shadow pass continues to consume
+  `kShadowCaster` partitions.
 - The fourteenth hardening slice is now in code: the renderer owns an explicit
   shadow quality tier contract. Conventional directional resolution is no
   longer limited to authored `ShadowResolutionHint` alone; tier policy can now
@@ -564,20 +560,73 @@ Execution note, March 9, 2026:
   receiver-side slope-aware normal/light-direction bias. The active policy now
   keeps constant raster depth bias and receiver-side bias, avoiding the
   previous double-bias interaction that could detach contact shadows.
-- The remaining gap is not polish. It is the difference between a prototype CSM
-  and a professional one:
-  - better effective cascade utilization than the current stable sphere-fit
-    baseline without reintroducing view-angle instability
-  - materially better filtering than the current widened PCF kernel
-  - finished combined raster/receiver bias tuning
-  - stronger cascade continuity, validation, and debug coverage
-- Until those land, this implementation must be treated as `in_progress` and
-  below production quality.
-- The remaining work in this section is specifically about raising the
-  conventional directional implementation to stable, production-grade cascaded
-  shadow maps before virtual shadow work proceeds.
+- Manual validation in `RenderScene` and `Sponza` was used to close the
+  remaining production-quality gaps after the automated build/test coverage
+  below.
+- Validation evidence:
+  - `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:6 /p:Configuration=Debug /nologo`
+  - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:6 /p:Configuration=Debug /nologo`
+  - user-performed visual validation in `RenderScene`
+  - user-performed visual validation in `Sponza`
 
-### 8.3 Virtual Shadow-Map Foundations
+### 8.3 Multi-Technique Architecture Remediation
+
+- [x] Split the current shadow published-view blob into separate contracts:
+      shading-facing `ShadowFramePublication`, backend-facing raster render
+      plan, and backend-private cache/residency state
+- [x] Remove directional-only render-planning data from the shading
+      publication path so passes do not depend on grab-all shadow state
+- [x] Introduce explicit backend seams under `ShadowManager` for:
+      conventional raster shadow planning/execution and virtual shadow
+      planning/execution
+- [x] Replace the directional-only conventional pass contract with a generic
+      raster shadow render-plan contract that reuses `DepthPrePass`
+      infrastructure without baking directional-cascade assumptions into the
+      public pass interface
+- [x] Move shader shadow dispatch to shared `ShadowInstanceMetadata` first,
+      then resolve directional/spot/point and conventional/virtual payloads in
+      shadow helpers rather than in lighting code
+- [x] Replace `ViewId`-only published shadow caching with explicit
+      shadow-input/backend-state invalidation keys
+- [x] Add focused automated coverage for:
+      - shadow-only casters surviving ScenePrep and reaching raster shadow jobs
+      - main-view passes excluding shadow-only draws
+      - generic shadow-product shader dispatch
+      - invalidation when shadow inputs/backend state change
+
+Execution note, March 9, 2026:
+
+- Implemented in code.
+- `ShadowManager` is now a coordinator over explicit backend seams rather than
+  the owner of conventional directional rendering logic.
+- `ConventionalShadowBackend` now owns conventional directional resource
+  allocation, planning, metadata fill, and publication for the current path.
+- Shading-facing publication and backend render planning are now separate:
+  - `ShadowFramePublication`
+  - `RasterShadowRenderPlan`
+- `ConventionalShadowRasterPass` now consumes generic raster jobs rather than
+  directional-only published state.
+- Forward shading now dispatches from `ShadowInstanceMetadata` and resolves
+  directional conventional payloads inside shadow helpers.
+- Conventional shadow publication now invalidates from shadow-relevant hashed
+  inputs rather than `ViewId` alone.
+- Focused automated coverage now exists for:
+  - directional publication plus raster-plan publication
+  - synthetic-sun publication
+  - invalidation when shadow inputs change within a frame
+  - shadow-only casters staying out of main-view partitions
+- Validation evidence:
+  - `cmake -S . -B out/build-vs`
+  - `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:6 /p:Configuration=Debug /nologo`
+  - `msbuild out/build-vs/src/Oxygen/Graphics/Direct3D12/Shaders/oxygen-graphics-direct3d12_shaders.vcxproj /m:6 /p:Configuration=Debug /nologo`
+  - `msbuild out/build-vs/src/Oxygen/Engine/oxygen-engine.vcxproj /m:6 /p:Configuration=Debug /nologo`
+  - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:6 /p:Configuration=Debug /nologo`
+  - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:6 /p:Configuration=Debug /nologo`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
+  - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.DrawMetadataEmitter.Tests.vcxproj /m:6 /p:Configuration=Debug /nologo`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.DrawMetadataEmitter.Tests.exe`
+
+### 8.4 Virtual Shadow-Map Foundations
 
 - [ ] Implement `VirtualShadowMapBackend` resource ownership and lifecycle
 - [ ] Add physical page-pool allocation, page-table/indirection resources, and
@@ -587,7 +636,7 @@ Execution note, March 9, 2026:
 - [ ] Extend shader-side sampling helpers to dispatch through the
       family-independent shadow-product metadata
 
-### 8.4 Directional Virtual Shadow Path
+### 8.5 Directional Virtual Shadow Path
 
 - [ ] Implement directional virtual coverage selection, residency, and page
       rendering
@@ -595,7 +644,7 @@ Execution note, March 9, 2026:
 - [ ] Integrate directional virtual shadow evaluation into forward opaque and
       transparent lighting paths without a parallel lighting contract
 
-### 8.5 Local Light Shadow Path
+### 8.6 Local Light Shadow Path
 
 - [ ] Implement spot-light shadow allocation, rendering, and sampling
 - [ ] Implement point-light shadow allocation, rendering, and sampling
@@ -603,13 +652,13 @@ Execution note, March 9, 2026:
 - [ ] Expand the virtual backend to support spot and point products on the same
       local-shadow contract
 
-### 8.6 Contact Shadow Refinement
+### 8.7 Contact Shadow Refinement
 
 - [ ] Implement contact shadow mask generation and composition per authored
       light settings
 - [ ] Integrate contact shadow evaluation into receiver lighting
 
-### 8.7 Validation and Hardening
+### 8.8 Validation and Hardening
 
 - [ ] Add automated coverage for shadow extraction, scheduling, GPU data
       packing, and sampling invariants
@@ -827,6 +876,12 @@ Continuous improvements, not milestones:
 
 ## Revision History
 
+- **March 9, 2026**: Completed the multi-technique shadow remediation for the
+  working conventional raster path: split shading publication from raster
+  planning, introduced `ConventionalShadowBackend`, replaced the
+  directional-only raster pass with `ConventionalShadowRasterPass`, moved
+  shading dispatch to `ShadowInstanceMetadata`, and added focused automated
+  coverage for invalidation and shadow-only caster routing.
 - **March 9, 2026**: Tightened the conventional directional shadow plan to
   require engine-grade cascaded shadow-map hardening: stable texel-snapped
   fitting, tighter depth fitting, comparison sampling, kernel-aware padding,
