@@ -424,33 +424,70 @@ plan section tracks execution work only.
 
 ### 8.1 Shared Foundations
 
-- [ ] Add renderer-owned shadow runtime services per `shadows.md`
+- [~] Add renderer-owned shadow runtime services per `shadows.md`
 - [x] Add baseline shadow metadata/contracts and bindless plumbing:
       `DirectionalShadowMetadata`, per-light shadow indices/flags, and the first
       shadow-routing publication path through `ViewFrameBindings`
-- [ ] Generalize the baseline metadata into family-independent shadow-product
+- [~] Generalize the baseline metadata into family-independent shadow-product
       records and implementation-selection plumbing
 - [ ] Extend GPU shadow metadata/contracts and bindless slots to match the
       final shadow system design, including family-specific resources for
       conventional and virtual backends
 - [x] Carry `cast_shadows` / `receive_shadows` through ScenePrep item data
-- [ ] Add shadow-caster draw classification and pass routing through ScenePrep,
+- [x] Add shadow-caster draw classification and pass routing through ScenePrep,
       `PreparedSceneFrame`, and draw emission
 - [ ] Add deterministic family-selection policy inputs (tier, capability,
       budget, debug override) without introducing scene-authored implementation
       flags
 - [ ] Add renderer debug/telemetry hooks required by the shadow system design
 
+Execution note, March 8, 2026:
+
+- `ShadowManager` now exists as the renderer-owned shadow runtime entry point.
+- `LightManager` no longer owns uploaded directional shadow metadata; it emits
+  `DirectionalShadowCandidate` intent records.
+- Shared shadow-product publication now uploads `ShadowInstanceMetadata` and
+  directional payloads through `ShadowFrameBindings`.
+- Synthetic sun shadowing now feeds `ShadowManager` directly when the effective
+  sun is `SunSource::kSynthetic` and `Sun::CastsShadows()` is true. The
+  resolved sun's shadow lookup is published through
+  `ShadowFrameBindings.sun_shadow_index` instead of requiring a scene-backed
+  directional light record.
+- ScenePrep finalization now publishes explicit shadow-caster participation
+  through `PassMask::kShadowCaster`, keeping shadow submission in the existing
+  draw metadata and partitioning path.
+- The current slice stops at metadata publication and validation. No
+  directional shadow map allocation, rendering, or family-selection policy is
+  marked complete yet.
+
 ### 8.2 Conventional Directional Path
 
 - [ ] Implement directional shadow resource allocation and lifecycle management
 - [ ] Implement cascaded directional shadow pass scheduling and rendering
-- [ ] Compute and publish stable directional cascade transforms and sampling
-      metadata
+- [ ] Replace bootstrap cascade fitting with stable texel-snapped cascade
+      coverage and tighter light-space depth fitting
+- [ ] Publish directional metadata needed for cascade blend bands and
+      kernel-aware sampling
 - [ ] Integrate directional shadow evaluation into forward opaque and
       transparent lighting paths
+- [ ] Replace bootstrap manual depth taps with the normal comparison-sampling
+      path and keep manual comparison taps only as an explicit compatibility
+      fallback
+- [ ] Add renderer-controlled raster depth bias, slope-scaled bias, and clamp
+      policy for directional shadow passes
+- [ ] Finalize directional receiver-bias policy so authored bias, normal bias,
+      and renderer bias cooperate instead of fighting each other
 - [ ] Add directional caching/invalidation, cascade blending, and tier-policy
       behavior on the shared shadow-product contract
+
+Execution note, March 9, 2026:
+
+- The current directional path is functional but still bootstrap-quality.
+- It renders visible conventional directional shadows, but it is not yet at the
+  engine-grade quality bar required by `shadows.md`.
+- The remaining work in this section is specifically about raising the
+  conventional directional implementation to stable, production-grade cascaded
+  shadow maps before virtual shadow work proceeds.
 
 ### 8.3 Virtual Shadow-Map Foundations
 
@@ -702,6 +739,13 @@ Continuous improvements, not milestones:
 
 ## Revision History
 
+- **March 9, 2026**: Tightened the conventional directional shadow plan to
+  require engine-grade cascaded shadow-map hardening: stable texel-snapped
+  fitting, tighter depth fitting, comparison sampling, kernel-aware padding,
+  and combined raster/receiver bias policy before virtual-shadow expansion.
+- **March 8, 2026**: Added required shadow runtime diagnostics to the shadow
+  design so publication, resource allocation/reuse, binding publication, and
+  shadow-pass draw emission are observable without a GPU capture.
 - **March 8, 2026**: Expanded the shadow design and execution plan to support
   multiple runtime implementation families under one shared shadow-product
   contract, including virtual shadow maps as a first-class target.

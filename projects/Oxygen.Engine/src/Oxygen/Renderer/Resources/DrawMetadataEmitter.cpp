@@ -100,6 +100,22 @@ auto ClassifyMaterialPassMask(const oxygen::data::MaterialAsset* mat)
   return mask;
 }
 
+auto ApplyShadowCasterPassRouting(oxygen::engine::PassMask mask,
+  const bool cast_shadows) -> oxygen::engine::PassMask
+{
+  if (!cast_shadows) {
+    return mask;
+  }
+
+  const bool supports_shadow_casting
+    = mask.IsSet(oxygen::engine::PassMaskBit::kOpaque)
+    || mask.IsSet(oxygen::engine::PassMaskBit::kMasked);
+  if (supports_shadow_casting) {
+    mask.Set(oxygen::engine::PassMaskBit::kShadowCaster);
+  }
+  return mask;
+}
+
 } // namespace
 
 namespace oxygen::renderer::resources {
@@ -253,7 +269,9 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
     dm.transform_index = u_handle;
     dm.instance_metadata_buffer_index = 0;
     dm.instance_metadata_offset = 0;
-    dm.flags = ClassifyMaterialPassMask(item.material.resolved_asset.get());
+    dm.flags = ApplyShadowCasterPassRouting(
+      ClassifyMaterialPassMask(item.material.resolved_asset.get()),
+      item.cast_shadows);
     DCHECK_F(handle != oxygen::engine::sceneprep::kInvalidTransformHandle,
       "Invalid transform handle while emitting");
     DCHECK_F(!dm.flags.IsEmpty(), "flags cannot be empty after assignment");
@@ -388,11 +406,6 @@ auto DrawMetadataEmitter::BuildSortingAndPartitions() -> void
   const auto t_sort_end = std::chrono::high_resolution_clock::now();
   last_sort_time_ = std::chrono::duration_cast<std::chrono::microseconds>(
     t_sort_end - t_sort_begin);
-  DLOG_F(2,
-    "BuildSortingAndPartitions: pre=0x{:016X} post=0x{:016X} draws={} "
-    "partitions={} keys_bytes={} sort_time_us={}",
-    last_pre_sort_hash_, last_order_hash_, Cpu().size(), partitions_.size(),
-    keys_.size() * sizeof(SortingKey), last_sort_time_.count());
   ++sort_calls_count_;
   peak_draws_
     = (std::max)(peak_draws_, static_cast<std::uint32_t>(Cpu().size()));

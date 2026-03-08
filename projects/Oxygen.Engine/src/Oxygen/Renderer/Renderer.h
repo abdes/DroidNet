@@ -103,6 +103,7 @@ namespace sceneprep {
 
 namespace oxygen::renderer {
 class LightManager;
+class ShadowManager;
 } // namespace oxygen::renderer
 
 namespace oxygen::renderer::resources {
@@ -314,6 +315,9 @@ public:
   OXGN_RNDR_NDAPI auto GetLightManager() const noexcept
     -> observer_ptr<renderer::LightManager>;
 
+  OXGN_RNDR_NDAPI auto GetShadowManager() const noexcept
+    -> observer_ptr<renderer::ShadowManager>;
+
   OXGN_RNDR_NDAPI auto GetSkyAtmosphereLutManagerForView(
     ViewId view_id) const noexcept
     -> observer_ptr<internal::SkyAtmosphereLutManager>;
@@ -454,6 +458,7 @@ private:
     debug_frame_bindings_publisher_;
   std::unique_ptr<internal::PerViewStructuredPublisher<LightingFrameBindings>>
     lighting_frame_bindings_publisher_;
+  std::unique_ptr<renderer::ShadowManager> shadow_manager_;
   std::unique_ptr<internal::PerViewStructuredPublisher<ShadowFrameBindings>>
     shadow_frame_bindings_publisher_;
   std::unique_ptr<internal::PerViewStructuredPublisher<EnvironmentViewData>>

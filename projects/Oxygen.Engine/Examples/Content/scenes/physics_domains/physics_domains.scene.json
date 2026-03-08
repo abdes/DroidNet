@@ -214,7 +214,8 @@
             "parent": 0,
             "flags": {
                 "visible": true,
-                "casts_shadows": true
+                "casts_shadows": true,
+                "receives_shadows": true
             },
             "transform": {
                 "translation": [
@@ -259,7 +260,8 @@
             "parent": 12,
             "flags": {
                 "visible": true,
-                "casts_shadows": true
+                "casts_shadows": true,
+                "receives_shadows": true
             },
             "transform": {
                 "translation": [
@@ -280,7 +282,8 @@
             "parent": 12,
             "flags": {
                 "visible": true,
-                "casts_shadows": true
+                "casts_shadows": true,
+                "receives_shadows": true
             },
             "transform": {
                 "translation": [
@@ -301,7 +304,8 @@
             "parent": 12,
             "flags": {
                 "visible": true,
-                "casts_shadows": true
+                "casts_shadows": true,
+                "receives_shadows": true
             },
             "transform": {
                 "translation": [
@@ -322,7 +326,8 @@
             "parent": 12,
             "flags": {
                 "visible": true,
-                "casts_shadows": true
+                "casts_shadows": true,
+                "receives_shadows": true
             },
             "transform": {
                 "translation": [
@@ -357,7 +362,8 @@
             "parent": 0,
             "flags": {
                 "visible": true,
-                "casts_shadows": true
+                "casts_shadows": true,
+                "receives_shadows": true
             },
             "transform": {
                 "translation": [
@@ -371,7 +377,8 @@
             "name": "sun_light_node",
             "parent": 0,
             "flags": {
-                "visible": true
+                "visible": true,
+                "casts_shadows": true
             },
             "transform": {
                 "translation": [
@@ -380,8 +387,8 @@
                     50.0
                 ],
                 "rotation": [
-                    0.3827,
-                    0.0,
+                    0.2706,
+                    -0.2706,
                     0.0,
                     0.9239
                 ],
@@ -400,15 +407,15 @@
             },
             "transform": {
                 "translation": [
-                    8.0,
-                    -14.0,
-                    10.0
+                    10.0,
+                    -16.0,
+                    9.5
                 ],
                 "rotation": [
-                    0.2706,
+                    0.3007,
                     0.0,
                     0.0,
-                    0.9627
+                    0.9537
                 ],
                 "scale": [
                     1.0,
@@ -422,7 +429,8 @@
             "parent": 0,
             "flags": {
                 "visible": true,
-                "casts_shadows": true
+                "casts_shadows": true,
+                "receives_shadows": true
             },
             "transform": {
                 "translation": [
@@ -530,18 +538,19 @@
                         0.98,
                         0.95
                     ],
+                    "affects_world": true,
                     "casts_shadows": true,
                     "mobility": 0,
                     "exposure_compensation_ev": 0.0
                 },
-                "intensity_lux": 100000.0,
+                "intensity_lux": 120000.0,
                 "angular_size_radians": 0.00931,
                 "is_sun_light": true,
-                "cascade_count": 3,
+                "cascade_count": 4,
                 "cascade_distances": [
-                    10.0,
-                    30.0,
-                    70.0,
+                    12.0,
+                    32.0,
+                    80.0,
                     200.0
                 ]
             }

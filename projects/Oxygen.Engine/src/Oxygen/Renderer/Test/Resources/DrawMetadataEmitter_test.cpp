@@ -49,6 +49,7 @@ auto RendererTagFactory::Get() noexcept -> RendererTag
 namespace {
 
 using oxygen::observer_ptr;
+using oxygen::engine::PassMaskBit;
 using oxygen::engine::upload::DefaultUploadPolicy;
 using oxygen::engine::upload::InlineTransfersCoordinator;
 using oxygen::engine::upload::StagingProvider;
@@ -257,6 +258,60 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
   // order.
   EXPECT_EQ(draws[0].first_index, 0U);
   EXPECT_EQ(draws[1].first_index, 3U);
+}
+
+NOLINT_TEST_F(DrawMetadataEmitterTest,
+  EmitDrawMetadata_ShadowCasterRoutingFollowsRenderItemShadowFlag)
+{
+  const auto geometry
+    = MakeSimpleGeometryRef("DrawMetadataEmitter.ShadowCasterRouting");
+
+  BeginFrame(SequenceNumber { 1U }, Slot { 0U });
+  const auto geo_handle = GeoUploader().GetOrAllocate(geometry);
+  GeoUploader().EnsureFrameResources();
+
+  BeginFrame(SequenceNumber { 2U }, Slot { 1U });
+  const auto indices = GeoUploader().GetShaderVisibleIndices(geo_handle);
+  ASSERT_NE(indices.vertex_srv_index, oxygen::kInvalidShaderVisibleIndex);
+  ASSERT_NE(indices.index_srv_index, oxygen::kInvalidShaderVisibleIndex);
+
+  oxygen::engine::sceneprep::RenderItemData shadowed_item {};
+  shadowed_item.geometry = geometry;
+  shadowed_item.submesh_index = 0U;
+  shadowed_item.transform_handle = oxygen::engine::sceneprep::TransformHandle {
+    oxygen::engine::sceneprep::TransformHandle::Index { 11U },
+    oxygen::engine::sceneprep::TransformHandle::Generation { 1U },
+  };
+  shadowed_item.cast_shadows = true;
+
+  oxygen::engine::sceneprep::RenderItemData unshadowed_item = shadowed_item;
+  unshadowed_item.transform_handle
+    = oxygen::engine::sceneprep::TransformHandle {
+        oxygen::engine::sceneprep::TransformHandle::Index { 12U },
+        oxygen::engine::sceneprep::TransformHandle::Generation { 1U },
+      };
+  unshadowed_item.cast_shadows = false;
+
+  Emitter().EmitDrawMetadata(shadowed_item);
+  Emitter().EmitDrawMetadata(unshadowed_item);
+  Emitter().SortAndPartition();
+
+  const auto bytes = Emitter().GetDrawMetadataBytes();
+  ASSERT_EQ(bytes.size(), 2U * sizeof(oxygen::engine::DrawMetadata));
+
+  const auto* draws
+    = reinterpret_cast<const oxygen::engine::DrawMetadata*>(bytes.data());
+  ASSERT_NE(draws, nullptr);
+
+  EXPECT_FALSE(draws[0].flags.IsSet(PassMaskBit::kShadowCaster));
+  EXPECT_TRUE(draws[1].flags.IsSet(PassMaskBit::kShadowCaster));
+  EXPECT_TRUE(draws[0].flags.IsSet(PassMaskBit::kOpaque));
+  EXPECT_TRUE(draws[1].flags.IsSet(PassMaskBit::kOpaque));
+
+  const auto partitions = Emitter().GetPartitions();
+  ASSERT_EQ(partitions.size(), 2U);
+  EXPECT_FALSE(partitions[0].pass_mask.IsSet(PassMaskBit::kShadowCaster));
+  EXPECT_TRUE(partitions[1].pass_mask.IsSet(PassMaskBit::kShadowCaster));
 }
 
 } // namespace

@@ -13,10 +13,15 @@
 
 struct DirectionalShadowMetadata
 {
+    uint shadow_instance_index;
+    uint implementation_kind;
+    float constant_bias;
+    float normal_bias;
+
     uint cascade_count;
+    uint flags;
     float distribution_exponent;
-    float _pad0;
-    float _pad1;
+    uint resource_index;
 
     float cascade_distances[OXYGEN_MAX_SHADOW_CASCADES];
     float4x4 cascade_view_proj[OXYGEN_MAX_SHADOW_CASCADES];

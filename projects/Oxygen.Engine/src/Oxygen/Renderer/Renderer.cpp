@@ -81,6 +81,7 @@
 #include <Oxygen/Renderer/ScenePrep/FinalizationConfig.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
+#include <Oxygen/Renderer/ShadowManager.h>
 #include <Oxygen/Renderer/Types/CompositingTask.h>
 #include <Oxygen/Renderer/Types/DebugFrameBindings.h>
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
@@ -115,6 +116,43 @@ constexpr std::string_view kCommandRendererDumpStats = "rndr.dump_stats";
 constexpr int64_t kDefaultTextureDumpTopN = 20;
 constexpr int64_t kMinTextureDumpTopN = 1;
 constexpr int64_t kMaxTextureDumpTopN = 500;
+
+auto BuildSyntheticSunShadowInput(
+  const oxygen::engine::RenderContext& render_context,
+  const oxygen::engine::SyntheticSunData& resolved_sun)
+  -> std::optional<oxygen::renderer::ShadowManager::SyntheticSunShadowInput>
+{
+  const auto scene = render_context.GetScene();
+  if (!scene || resolved_sun.enabled == 0U) {
+    return std::nullopt;
+  }
+
+  const auto environment = scene->GetEnvironment();
+  if (!environment) {
+    return std::nullopt;
+  }
+
+  const auto sun = environment->TryGetSystem<oxygen::scene::environment::Sun>();
+  if (!sun || !sun->IsEnabled()
+    || sun->GetSunSource() != oxygen::scene::environment::SunSource::kSynthetic
+    || !sun->CastsShadows()) {
+    return std::nullopt;
+  }
+
+  return oxygen::renderer::ShadowManager::SyntheticSunShadowInput {
+    .enabled = true,
+    .direction_ws = -resolved_sun.GetDirection(),
+    .bias = oxygen::scene::CommonLightProperties {}.shadow.bias,
+    .normal_bias = oxygen::scene::CommonLightProperties {}.shadow.normal_bias,
+    .resolution_hint = static_cast<std::uint32_t>(
+      oxygen::scene::CommonLightProperties {}.shadow.resolution_hint),
+    .cascade_count = oxygen::scene::CascadedShadowSettings {}.cascade_count,
+    .distribution_exponent
+    = oxygen::scene::CascadedShadowSettings {}.distribution_exponent,
+    .cascade_distances
+    = oxygen::scene::CascadedShadowSettings {}.cascade_distances,
+  };
+}
 
 auto ParseTextureDumpTopN(std::string_view value) -> std::optional<int64_t>
 {
@@ -523,6 +561,10 @@ auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
       std::move(geom_uploader), std::move(xform_uploader),
       std::move(mat_binder), std::move(emitter), std::move(light_manager));
     texture_binder_ = std::move(texture_binder);
+    shadow_manager_
+      = std::make_unique<renderer::ShadowManager>(observer_ptr { gfx.get() },
+        observer_ptr { inline_staging_provider_.get() },
+        observer_ptr { inline_transfers_.get() });
 
     // Initialize the ViewConstants manager for per-view, per-slot upload-heap
     // storage.
@@ -774,6 +816,7 @@ auto Renderer::OnShutdown() noexcept -> void
   view_color_data_publisher_.reset();
   debug_frame_bindings_publisher_.reset();
   lighting_frame_bindings_publisher_.reset();
+  shadow_manager_.reset();
   shadow_frame_bindings_publisher_.reset();
   environment_view_data_publisher_.reset();
   environment_frame_bindings_publisher_.reset();
@@ -821,6 +864,12 @@ auto Renderer::GetLightManager() const noexcept
     return nullptr;
   }
   return scene_prep_state_->GetLightManager();
+}
+
+auto Renderer::GetShadowManager() const noexcept
+  -> observer_ptr<renderer::ShadowManager>
+{
+  return observer_ptr { shadow_manager_.get() };
 }
 
 auto Renderer::GetSkyAtmosphereLutManagerForView(
@@ -1897,18 +1946,41 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
           view_id, lighting_bindings);
     }
 
-    if (shadow_frame_bindings_publisher_) {
+    if (shadow_frame_bindings_publisher_ && shadow_manager_) {
+      auto shadow_instance_metadata_slot = kInvalidShaderVisibleIndex;
       auto directional_shadow_metadata_slot = kInvalidShaderVisibleIndex;
+      auto sun_shadow_index = 0xFFFFFFFFU;
       if (const auto light_manager = scene_prep_state_->GetLightManager()) {
+        const auto synthetic_sun_shadow
+          = BuildSyntheticSunShadowInput(render_context, runtime_state.sun);
+        const auto shadow_view = shadow_manager_->PublishForView(view_id,
+          view_constants, *light_manager,
+          synthetic_sun_shadow ? &*synthetic_sun_shadow : nullptr);
+        shadow_instance_metadata_slot
+          = shadow_view.shadow_instance_metadata_srv;
         directional_shadow_metadata_slot
-          = light_manager->GetDirectionalShadowMetadataSrvIndex();
-      }
+          = shadow_view.directional_shadow_metadata_srv;
+        const auto directional_shadow_texture_slot
+          = shadow_view.directional_shadow_texture_srv;
+        sun_shadow_index = shadow_view.sun_shadow_index;
 
-      const ShadowFrameBindings shadow_bindings {
-        .directional_shadow_metadata_slot = directional_shadow_metadata_slot,
-      };
-      view_bindings.shadow_frame_slot
-        = shadow_frame_bindings_publisher_->Publish(view_id, shadow_bindings);
+        const ShadowFrameBindings shadow_bindings {
+          .shadow_instance_metadata_slot = shadow_instance_metadata_slot,
+          .directional_shadow_metadata_slot = directional_shadow_metadata_slot,
+          .directional_shadow_texture_slot = directional_shadow_texture_slot,
+          .sun_shadow_index = sun_shadow_index,
+        };
+        view_bindings.shadow_frame_slot
+          = shadow_frame_bindings_publisher_->Publish(view_id, shadow_bindings);
+      } else {
+        const ShadowFrameBindings shadow_bindings {};
+        view_bindings.shadow_frame_slot
+          = shadow_frame_bindings_publisher_->Publish(view_id, shadow_bindings);
+        LOG_F(WARNING,
+          "Renderer: view {} published empty shadow bindings because "
+          "LightManager is unavailable",
+          view_id.get());
+      }
     }
 
     if (environment_frame_bindings_publisher_) {
@@ -1929,6 +2001,10 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
 
     const auto view_bindings_slot
       = view_frame_bindings_publisher_->Publish(view_id, view_bindings);
+    if (shadow_manager_) {
+      shadow_manager_->SetPublishedViewFrameBindingsSlot(
+        view_id, BindlessViewFrameBindingsSlot(view_bindings_slot));
+    }
     view_constants.SetBindlessViewFrameBindingsSlot(
       BindlessViewFrameBindingsSlot(view_bindings_slot),
       ViewConstants::kRenderer);
@@ -2440,6 +2516,9 @@ auto Renderer::OnFrameStart(observer_ptr<FrameContext> context) -> void
   view_color_data_publisher_->OnFrameStart(frame_sequence, frame_slot);
   debug_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
   lighting_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
+  if (shadow_manager_) {
+    shadow_manager_->OnFrameStart(tag, frame_sequence, frame_slot);
+  }
   shadow_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
   environment_view_data_publisher_->OnFrameStart(frame_sequence, frame_slot);
   if (environment_frame_bindings_publisher_) {

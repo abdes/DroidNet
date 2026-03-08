@@ -11,7 +11,6 @@
 #include <string>
 #include <string_view>
 
-
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Base/NoStd.h>
@@ -26,10 +25,14 @@ namespace oxygen::engine {
 
  Active bits:
   - kDoubleSided  : Disable backface culling for this draw.
-  - kOpaque       : Depth-writing opaque surfaces.
-  - kMasked       : Depth-writing alpha-tested (cutout) surfaces.
-  - kTransparent  : Alpha blended surfaces (depth read, no depth write).
-
+  -
+ kOpaque       : Depth-writing opaque surfaces.
+  - kMasked       :
+ Depth-writing alpha-tested (cutout) surfaces.
+  - kTransparent  : Alpha blended
+ surfaces (depth read, no depth write).
+  - kShadowCaster : Participates in
+ shadow-caster submission.
  Reserved (not yet produced):
   - kAdditive     : Additive/emissive order-dependent.
   - kTransmission : Refraction / glass / subsurface.
@@ -46,6 +49,7 @@ enum class PassMaskBit : uint32_t { // NOLINT(*-enum-size)
   kTransmission = OXYGEN_FLAG(6),
   kDecal = OXYGEN_FLAG(7),
   kUi = OXYGEN_FLAG(8),
+  kShadowCaster = OXYGEN_FLAG(9),
 };
 
 OXYGEN_DEFINE_FLAGS_OPERATORS(PassMaskBit)
@@ -138,7 +142,7 @@ inline auto to_string(PassMask mask) -> std::string
     PassMaskBit flag;
     std::string_view name;
   };
-  static constexpr std::array<Entry, 8> kTable = { {
+  static constexpr std::array<Entry, 9> kTable = { {
     { .flag = PassMaskBit::kDoubleSided, .name = "DoubleSided" },
     { .flag = PassMaskBit::kOpaque, .name = "Opaque" },
     { .flag = PassMaskBit::kMasked, .name = "Masked" },
@@ -147,6 +151,7 @@ inline auto to_string(PassMask mask) -> std::string
     { .flag = PassMaskBit::kTransmission, .name = "Transmission" },
     { .flag = PassMaskBit::kDecal, .name = "Decal" },
     { .flag = PassMaskBit::kUi, .name = "UI" },
+    { .flag = PassMaskBit::kShadowCaster, .name = "ShadowCaster" },
   } };
   std::string out;
   for (const auto& e : kTable) {
