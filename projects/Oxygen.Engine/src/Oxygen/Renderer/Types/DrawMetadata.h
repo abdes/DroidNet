@@ -22,12 +22,14 @@ namespace oxygen::engine {
  ### Usage Notes
 
  - Populated on the CPU and uploaded to a structured buffer SRV.
- - Shaders read entries via a dynamic bindless slot provided in
-   SceneConstants (see bindless_draw_metadata_slot).
- - The slot value may change per frame; do not assume a fixed slot.
+ - Shaders read entries via the draw-system routing payload
+ `DrawFrameBindings`
+ (see `DrawFrameBindings.draw_metadata_slot`).
+ - The slot value may change per
+ frame; do not assume a fixed slot.
 
  @see RenderableBinding
- @see SceneConstants
+ @see ViewConstants
 */
 struct DrawMetadata {
   // --- Geometry buffers ---

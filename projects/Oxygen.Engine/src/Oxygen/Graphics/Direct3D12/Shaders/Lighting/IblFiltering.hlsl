@@ -9,7 +9,7 @@
 #include "Renderer/DrawMetadata.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/MaterialConstants.hlsli"
-#include "Renderer/SceneConstants.hlsli"
+#include "Renderer/ViewConstants.hlsli"
 
 #define BX_VERTEX_TYPE uint4
 #include "Core/Bindless/BindlessHelpers.hlsl"

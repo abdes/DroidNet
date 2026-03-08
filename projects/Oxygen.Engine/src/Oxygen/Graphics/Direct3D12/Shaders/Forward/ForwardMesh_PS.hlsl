@@ -7,7 +7,8 @@
 //! @file ForwardMesh_PS.hlsl
 //! @brief Pixel shader for Forward+ physically based rendering.
 
-#include "Renderer/SceneConstants.hlsli"
+#include "Renderer/ViewConstants.hlsli"
+#include "Renderer/DrawHelpers.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/LightingHelpers.hlsli"
 #include "Renderer/ViewColorHelpers.hlsli"
@@ -57,10 +58,12 @@ float4 PS(VSOutput input) : SV_Target0 {
     SamplerState linear_sampler = SamplerDescriptorHeap[0];
 
 #ifdef ALPHA_TEST
-    if (bindless_draw_metadata_slot != K_INVALID_BINDLESS_INDEX && bindless_material_constants_slot != K_INVALID_BINDLESS_INDEX) {
-        StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[bindless_draw_metadata_slot];
+    const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
+    if (draw_bindings.draw_metadata_slot != K_INVALID_BINDLESS_INDEX
+        && draw_bindings.material_constants_slot != K_INVALID_BINDLESS_INDEX) {
+        StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[draw_bindings.draw_metadata_slot];
         DrawMetadata meta = draw_meta_buffer[g_DrawIndex];
-        StructuredBuffer<MaterialConstants> materials = ResourceDescriptorHeap[bindless_material_constants_slot];
+        StructuredBuffer<MaterialConstants> materials = ResourceDescriptorHeap[draw_bindings.material_constants_slot];
         MaterialConstants mat = materials[meta.material_handle];
         if ((mat.flags & MATERIAL_FLAG_ALPHA_TEST) != 0u) {
             const float2 uv = ApplyMaterialUv(input.uv, mat);

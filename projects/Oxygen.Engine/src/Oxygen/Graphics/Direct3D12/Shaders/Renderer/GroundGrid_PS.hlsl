@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Core/Bindless/Generated.BindlessLayout.hlsl"
-#include "Renderer/SceneConstants.hlsli"
+#include "Renderer/ViewConstants.hlsli"
 #include "Renderer/ViewColorHelpers.hlsli"
 #include "Common/Math.hlsli"
 
@@ -174,13 +174,13 @@ float4 PS(GroundGridPSInput input) : SV_TARGET
     // We need to reconstruct "true" NDC depth.
     // This is tricky because we don't have the original ViewProj here easily
     // without precision issues if we re-multiply.
-    // However, we can construct the position in Clip Space using the SceneConstants ViewProj?
-    // SceneConstants ViewProj usually works fine for depth checks.
+    // However, we can construct the position in Clip Space using the ViewConstants ViewProj?
+    // ViewConstants ViewProj usually works fine for depth checks.
     // But we are calculating 'pos_rel'.
     // pos_abs = camera_position + pos_rel.
     // This addition is precision-lossy for XY, but Z is usually fine.
 
-    // Standard depth test using SceneConstants logic
+    // Standard depth test using ViewConstants logic
     const float3 pos_abs_approx = camera_position + pos_rel;
     const float4 clip_pos = mul(projection_matrix, mul(view_matrix, float4(pos_abs_approx, 1.0)));
     const float ndc_depth = clip_pos.z / clip_pos.w;

@@ -10,7 +10,7 @@
 #include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/EnvironmentViewHelpers.hlsli"
 #include "Renderer/LightingHelpers.hlsli"
-#include "Renderer/SceneConstants.hlsli"
+#include "Renderer/ViewConstants.hlsli"
 #include "Atmosphere/AtmosphereSampling.hlsli"
 
 //! Samples a cubemap using the view direction with optional rotation.

@@ -91,7 +91,7 @@ The probe system must integrate with the existing bindless ABI:
 
 | Binding | Slot | Content |
 |---------|------|---------|
-| Root CBV | `b1` | `SceneConstants` (contains `bindless_view_frame_bindings_slot`) |
+| Root CBV | `b1` | `ViewConstants` (contains `bindless_view_frame_bindings_slot`) |
 | Root constants | `b2` | `RootConstants` |
 | Bindless SRV | via `ViewFrameBindings.environment_frame_slot -> EnvironmentFrameBindings.environment_static_slot` | `EnvironmentStaticData` (extended with probe fields) |
 | Bindless SRV | via `bindless_reflection_probes_slot` | `ProbeGpu[]` structured buffer |

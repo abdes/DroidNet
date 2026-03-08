@@ -2,10 +2,10 @@
 
 ## Application Layer Types (Active Objects & Data)
 
-- **View**: View configuration (viewport, scissor, jitter, flags) - without camera matrices
-- **ResolvedView**: Complete view with camera matrices - contains View + resolved camera transforms (view/proj matrices, frustum)
-- **ViewMetadata**: Descriptive data defining view semantics (purpose tag, target surfaces, rendering flags, hidden flag)
-- **ViewResolver**: Application-provided callback `ResolvedView(ViewId)` that resolves ViewId to ResolvedView with current camera transforms. **Note**: This is the appropriate place to apply sub-pixel jitter (TAA) to the projection matrix.
+- **View**: View configuration (viewport, scissor, jitter, flags) without camera matrices
+- **ResolvedView**: Complete view with camera matrices and derived camera/frustum data
+- **ViewMetadata**: Descriptive data defining view semantics (`name`, `purpose`, `is_scene_view`, `with_atmosphere`)
+- **ViewResolver**: Application-provided callback `ResolvedView(const ViewContext&)` that resolves a registered view to a `ResolvedView` with current camera transforms. This is the right place to apply sub-pixel jitter (TAA) to the projection matrix.
 
 ## FrameContext Types (Engine Layer - Registration & Frame Setup)
 
@@ -14,28 +14,31 @@
 
 ## Renderer Layer Types (Per-View Rendering Domain)
 
-- **ViewOutput**: Renderer-produced output from a completed view render (framebuffer with color/depth attachments)
+- **ViewOutput**: Per-view framebuffer state produced and/or tracked during rendering and later consumed by compositing/presentation
 
 ## RenderContext Data (Renderer Layer - Per-View State Values)
 
-**New multi-view data to add to RenderContext:**
+**Live multi-view data in `RenderContext`:**
 
-- **ViewSpecific (struct)**: Inner struct containing all view-specific iteration state
-  - `view_id`: ViewId of the active view being rendered
-  - `resolved_view`: `observer_ptr<const ResolvedView>` to ResolvedView snapshot (non-owning, application-owned, guaranteed alive)
-  - `prepared_scene`: `observer_ptr<const PreparedScene>` to per-view scene prep results (draw metadata, transforms, partitions)
-- **current_view**: Single `ViewSpecific` instance for active view state
-- **view_outputs**: Map of ViewId to `shared_ptr<Framebuffer>` for completed view renders awaiting compositing
+- **ViewSpecific (struct)**: Inner struct containing the active per-view iteration state
+  - `view_id`: `ViewId` of the active view being rendered
+  - `resolved_view`: `observer_ptr<const ResolvedView>` to the resolved per-view snapshot
+  - `prepared_frame`: `observer_ptr<const PreparedSceneFrame>` to per-view scene-prep results
+  - `atmo_lut_manager`: `observer_ptr<SkyAtmosphereLutManager>` for view-local atmosphere LUT state
+- **current_view**: Single `ViewSpecific` instance for the currently executing view
+- **view_outputs**: Map of `ViewId` to `observer_ptr<Framebuffer>` for completed per-view outputs captured during the frame
 
-**Design Rationale**: Application owns View and guarantees lifetime during render phase. Renderer uses `observer_ptr` (non-owning) to reference View. No shared_ptr needed. ViewSpecific struct prevents clutter by grouping all view-specific state in one place, making clear separation from frame-wide state.
+**Other live renderer-owned fields used by passes:**
 
-**Existing RenderContext data (removed or relocated):**
+- **pass_target**: Current render target for the active pass/view
+- **view_constants**: Root-CBV buffer containing `ViewConstants`
+- **material_constants**: Optional root-CBV buffer used by passes that still require a dedicated material CBV
+- **frame_slot** / **frame_sequence**: Frame lifecycle state used for transient allocations
+- **pass_enable_flags**: Pass enable/disable flags shared across views
 
-- **framebuffer**: Current render target for active view (set per-view during iteration)
-- **scene_constants**: Scene-wide constant buffer (camera matrices updated per-view)
-- **material_constants**: Material constant buffer (shared across views)
-- **prepared_frame**: REMOVED - replaced by `ViewSpecific.prepared_scene` (now per-view, not per-frame)
-- **pass_enable_flags**: Pass enable/disable flags (shared across views)
+**Current architectural note**: `ViewConstants` is now the per-view root CBV and only carries view invariants plus the top-level `bindless_view_frame_bindings_slot`. System-owned data is routed through `ViewFrameBindings` and then into contracts such as `DrawFrameBindings`, `LightingFrameBindings`, and `EnvironmentFrameBindings`. This document previously referred to `scene_constants`; that is stale.
+
+**Design Rationale**: The application/frame system owns view registration and resolved-view lifetime for the frame. The renderer keeps non-owning pointers in `current_view`, and keeps renderer-owned GPU bindings (`view_constants`, `pass_target`, outputs) at the top level. Grouping the view-local state inside `ViewSpecific` keeps multi-view iteration explicit and avoids reintroducing a misleading single-view top-level `prepared_frame`.
 
 ## RenderGraph and Pass Config (Application & Renderer Layers)
 
@@ -65,20 +68,20 @@
 ## Implementation status
 
 | Type | Layer | Status | Location | Notes |
-|------|-------|--------|----------|-------|
+| ---- | ----- | ------ | -------- | ----- |
 | **View** | Application | ✅ Implemented | `src/Oxygen/Core/Types/View.h` | Lightweight view configuration (no matrices); viewport, scissor, jitter |
 | **ResolvedView** | Application | ✅ Implemented | `src/Oxygen/Core/Types/ResolvedView.h` | Immutable view snapshot with matrices, frustum and derived data |
-| **ViewMetadata** | Application | ✅ Implemented | `src/Oxygen/Core/FrameContext.h` | Has tag, present_policy, target_surfaces, viewport, scissor, flags |
-| **ViewResolver** | Application | ✅ Implemented | `src/Oxygen/Core/Types/ViewResolver.h` | Alias `using ViewResolver = std::function<ResolvedView(const ViewId&)>` |
+| **ViewMetadata** | Application | ✅ Implemented | `src/Oxygen/Core/FrameContext.h` | Live fields are `name`, `purpose`, `is_scene_view`, and `with_atmosphere` |
+| **ViewResolver** | Application | ✅ Implemented | `src/Oxygen/Core/Types/ViewResolver.h` | Alias `using ViewResolver = std::function<ResolvedView(const ViewContext&)>` |
 | **ViewId** | FrameContext | ✅ Implemented | `src/Oxygen/Core/Types/View.h` | Strongly typed using NamedType pattern |
 | **SurfaceId** | FrameContext | ✅ Implemented | `src/Oxygen/Core/FrameContext.h` | Strongly typed using NamedType pattern |
-| **ViewOutput** | Renderer | Partial | `src/Oxygen/Core/FrameContext.h` | `ViewContext::output` and `FrameContext::SetViewOutput` exist, but Renderer does not yet populate outputs; examples/app modules call `SetViewOutput` manually |
-| **ViewSpecific struct** | RenderContext | ❌ Missing | N/A | Inner struct for view-specific state (view_id, observer_ptr to resolved_view, retained_items) |
-| **current_view** | RenderContext | ❌ Missing | N/A | Single ViewSpecific instance for active view state |
-| **view_outputs** | RenderContext | ❌ Missing | N/A | Map of ViewId to framebuffers not present in RenderContext |
+| **ViewOutput** | Renderer / FrameContext | Partial | `src/Oxygen/Core/FrameContext.h`, `src/Oxygen/Renderer/RenderContext.h` | `ViewContext` now carries `render_target` and `composite_source`; renderer also tracks per-view outputs in `RenderContext::view_outputs` during execution |
+| **ViewSpecific struct** | RenderContext | ✅ Implemented | `src/Oxygen/Renderer/RenderContext.h` | Live per-view state: `view_id`, `resolved_view`, `prepared_frame`, `atmo_lut_manager` |
+| **current_view** | RenderContext | ✅ Implemented | `src/Oxygen/Renderer/RenderContext.h` | Active view iteration state for the currently executing view |
+| **view_outputs** | RenderContext | ✅ Implemented | `src/Oxygen/Renderer/RenderContext.h` | Renderer-owned map of `ViewId` to completed per-view framebuffers |
 
 ---
 
-**Document Status**: Draft
-**Last Updated**: 2025-12-03
+**Document Status**: Updated to current renderer contracts
+**Last Updated**: 2026-03-08
 **Part of**: Multi-View Rendering Design Series

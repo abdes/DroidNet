@@ -49,18 +49,18 @@ public:
   OXYGEN_DEFAULT_MOVABLE(GraphicsRenderPass)
 
 protected:
-  //! Construct with optional SceneConstants binding.
+  //! Construct with optional ViewConstants binding.
   OXGN_RNDR_API explicit GraphicsRenderPass(
-    std::string_view name, bool require_scene_constants = true);
+    std::string_view name, bool require_view_constants = true);
 
   [[nodiscard]] auto LastBuiltPsoDesc() const -> const auto&
   {
     return last_built_pso_desc_;
   }
 
-  [[nodiscard]] auto RequiresSceneConstants() const noexcept -> bool
+  [[nodiscard]] auto RequiresViewConstants() const noexcept -> bool
   {
-    return require_scene_constants_;
+    return require_view_constants_;
   }
 
   //=== RenderPass Interface (implemented by GraphicsRenderPass) ===---------//
@@ -111,12 +111,12 @@ protected:
 private:
   auto BindPassConstantsIndexConstant(graphics::CommandRecorder& recorder,
     ShaderVisibleIndex pass_constants_index) const -> void;
-  auto BindSceneConstantsBuffer(graphics::CommandRecorder& recorder) const
+  auto BindViewConstantsBuffer(graphics::CommandRecorder& recorder) const
     -> void;
   auto BindIndicesBuffer(graphics::CommandRecorder& recorder) const -> void;
 
   std::optional<graphics::GraphicsPipelineDesc> last_built_pso_desc_;
-  bool require_scene_constants_ { true };
+  bool require_view_constants_ { true };
 };
 
 } // namespace oxygen::engine

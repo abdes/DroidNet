@@ -32,7 +32,7 @@ must match framebuffer's depth attachment when both exist.
 * **Depth/Stencil**: Test enabled (`kLessOrEqual`), write enabled, stencil off
 * **Rasterizer**: Solid fill, front-face CCW
 * **Framebuffer Layout**: Depth-only (no color targets)
-* **Root Signature**: Bindless table (t0-unbounded) + SceneConstants (b1) +
+* **Root Signature**: Bindless table (t0-unbounded) + ViewConstants (b1) +
   RootConstants (b2)
 
 ### Execution Model
@@ -133,7 +133,7 @@ bindless indices.
 **Input Dependencies**:
 
 * `PreparedSceneFrame`: Per-view culled geometry with sorted partitions
-* `RenderContext::scene_constants`: Bindless descriptor slots for draw
+* `RenderContext::view_constants`: Bindless descriptor slots for draw
   metadata, transforms, materials
 * `depth_texture` (config): Target depth buffer
 

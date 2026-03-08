@@ -292,7 +292,7 @@ struct RenderContext {
 
     std::shared_ptr<Renderer> renderer;
     std::shared_ptr<Framebuffer> framebuffer;
-    std::shared_ptr<Buffer> scene_constants;
+    std::shared_ptr<Buffer> view_constants;
     std::vector<const RenderItem*> opaque_draw_list;
     std::vector<const RenderItem*> transparent_draw_list;
     std::vector<Light> light_list;
@@ -316,7 +316,7 @@ co::Co<> ForwardPlusRenderGraph(RenderContext& ctx) {
     depth_pre_pass_config->draw_list = ctx.opaque_draw_list;
     depth_pre_pass_config->depth_texture = ctx.framebuffer->GetDepthTexture();
     depth_pre_pass_config->framebuffer = ctx.framebuffer;
-    depth_pre_pass_config->scene_constants = ctx.scene_constants;
+    depth_pre_pass_config->view_constants = ctx.view_constants;
     depth_pre_pass_config->debug_name = "DepthPrePass";
     auto depth_pre_pass = std::make_unique<DepthPrePass>(ctx.renderer, depth_pre_pass_config);
     co_await depth_pre_pass->PrepareResources(*ctx.command_recorder);
@@ -326,7 +326,7 @@ co::Co<> ForwardPlusRenderGraph(RenderContext& ctx) {
     // Light culling pass: create/configure, execute, register
     auto light_culling_config = std::make_shared<LightCullingPassConfig>();
     light_culling_config->depth_buffer = depth_pre_pass_config->depth_texture;
-    light_culling_config->scene_constants = ctx.scene_constants;
+    light_culling_config->view_constants = ctx.view_constants;
     light_culling_config->light_list = ctx.light_list;
     auto light_culling_pass = std::make_unique<LightCullingPass>(ctx.renderer, light_culling_config);
     co_await light_culling_pass->PrepareResources(*ctx.command_recorder);
@@ -337,7 +337,7 @@ co::Co<> ForwardPlusRenderGraph(RenderContext& ctx) {
     auto opaque_config = std::make_shared<OpaquePassConfig>();
     opaque_config->light_lists = light_culling_pass->GetLightLists();
     opaque_config->depth_buffer = depth_pre_pass_config->depth_texture;
-    opaque_config->scene_constants = ctx.scene_constants;
+    opaque_config->view_constants = ctx.view_constants;
     opaque_config->draw_list = ctx.opaque_draw_list;
     auto opaque_pass = std::make_unique<OpaquePass>(ctx.renderer, opaque_config);
     co_await opaque_pass->PrepareResources(*ctx.command_recorder);

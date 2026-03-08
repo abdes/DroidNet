@@ -7,6 +7,7 @@
 #ifndef OXYGEN_PASSES_FORWARD_FORWARDMATERIALEVAL_HLSLI
 #define OXYGEN_PASSES_FORWARD_FORWARDMATERIALEVAL_HLSLI
 
+#include "Renderer/DrawHelpers.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
 #include "Renderer/MaterialConstants.hlsli"
 #include "MaterialFlags.hlsli"
@@ -126,12 +127,13 @@ MaterialSurface EvaluateMaterialSurface(
     }
     s.V = SafeNormalize(camera_position - world_pos);
 
-    if (bindless_draw_metadata_slot != K_INVALID_BINDLESS_INDEX &&
-        bindless_material_constants_slot != K_INVALID_BINDLESS_INDEX) {
-        StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[bindless_draw_metadata_slot];
+    const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
+    if (draw_bindings.draw_metadata_slot != K_INVALID_BINDLESS_INDEX &&
+        draw_bindings.material_constants_slot != K_INVALID_BINDLESS_INDEX) {
+        StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[draw_bindings.draw_metadata_slot];
         DrawMetadata meta = draw_meta_buffer[draw_index];
 
-        StructuredBuffer<MaterialConstants> materials = ResourceDescriptorHeap[bindless_material_constants_slot];
+        StructuredBuffer<MaterialConstants> materials = ResourceDescriptorHeap[draw_bindings.material_constants_slot];
         MaterialConstants mat = materials[meta.material_handle];
 
         s.base_rgb  = mat.base_color.rgb;

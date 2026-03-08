@@ -306,7 +306,7 @@ The renderer publishes bindless slots for:
 The exact slots are published through `ViewFrameBindings` into a
 shadow-owned `ShadowFrameBindings` contract according to lifetime.
 
-- `SceneConstants` exposes only `bindless_view_frame_bindings_slot`.
+- `ViewConstants` exposes only `bindless_view_frame_bindings_slot`.
 - Shadow-owned frame-global and view-local routing both live behind
   `ViewFrameBindings.shadow_frame_slot`.
 - Family-specific slots that are not active in a frame publish invalid

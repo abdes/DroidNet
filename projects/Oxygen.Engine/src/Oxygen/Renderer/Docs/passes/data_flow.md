@@ -169,7 +169,7 @@ graph LR
 
 Output: `PreparedSceneFrame` — immutable, view-specific snapshot containing
 spans over finalized data and bindless descriptor indices.
-all views are prepared, the renderer populates `SceneConstants` with
+all views are prepared, the renderer populates `ViewConstants` with
 bindless descriptor slots:
 
 * **Application-Owned Fields**: View/projection matrices, camera position (set
@@ -184,8 +184,8 @@ bindless descriptor slots:
 * **Per-View**: Transform and DrawMetadata slots — vary per view due to
   view-specific culling
 
-The populated `SceneConstants` structure is uploaded to a GPU constant buffer
-(register `b1`) and referenced by `RenderContext::scene_constants`. Shaders
+The populated `ViewConstants` structure is uploaded to a GPU constant buffer
+(register `b1`) and referenced by `RenderContext::view_constants`. Shaders
 access this buffer to retrieve descriptor slots and view parameters.
 
 ## Phase 3: Rendering (OnRender)
@@ -229,9 +229,9 @@ graph TB
 
 | Pass | Inputs | Outputs |
 | ---- | ------ | ------- |
-| **DepthPrePass** | `PreparedSceneFrame` (opaque/masked draws); `scene_constants`; Depth texture | Populated depth buffer |
-| **ShaderPass** | `PreparedSceneFrame` (opaque/masked draws), `scene_constants`, Depth texture (read-only), Color texture | Rendered color buffer |
-| **TransparentPass** | `PreparedSceneFrame` (transparent draws), `scene_constants`, Depth texture (read-only), Color texture | Blended transparent geometry |
+| **DepthPrePass** | `PreparedSceneFrame` (opaque/masked draws); `view_constants`; Depth texture | Populated depth buffer |
+| **ShaderPass** | `PreparedSceneFrame` (opaque/masked draws), `view_constants`, Depth texture (read-only), Color texture | Rendered color buffer |
+| **TransparentPass** | `PreparedSceneFrame` (transparent draws), `view_constants`, Depth texture (read-only), Color texture | Blended transparent geometry |
 
 ### 3.3 Render Graph Execution Model
 
@@ -249,7 +249,7 @@ co_await pass->Execute(context, recorder);
 
 * `Context().framebuffer`: Render target configuration
 * `Context().current_view.prepared_frame`: Draw data spans
-* `Context().scene_constants`: Bindless descriptor slots
+* `Context().view_constants`: Bindless descriptor slots
 * Pass config: Explicit texture overrides (e.g., `ShaderPassConfig::color_texture`)
 * `Context().GetPass<T>()`: Type-safe query for other registered passes
 
@@ -309,7 +309,7 @@ indirection:
 
 **Shader Contract**: Vertex shaders receive draw index via root constant
 (`SV_InstanceID`). Shaders fetch `DrawMetadata` from bindless structured buffer
-(slot provided in `SceneConstants`), then use metadata indices to access
+(slot provided in `ViewConstants`), then use metadata indices to access
 geometry, transforms, and materials through additional bindless descriptors.
 
 This indirection enables GPU-driven rendering and minimizes CPU→GPU
@@ -333,25 +333,27 @@ resources provided via `RenderContext` or pass configuration.
 All draw data is accessed via **bindless descriptors** (unbounded SRV arrays).
 Descriptor slots are captured at different stages:
 
-**Per-View Slots** (captured in `PreparedSceneFrame` after finalization):
+**Per-View Draw Slots** (captured in `PreparedSceneFrame` after finalization):
 
 * `bindless_draw_metadata_slot`: DrawMetadata structured buffer
 * `bindless_worlds_slot`: World transformation matrices
 * `bindless_normals_slot`: Normal transformation matrices
 * `bindless_materials_slot`: Material constant data
+* `bindless_instance_data_slot`: Per-draw instance metadata buffer
 
 **Per-View Routed System Slots** (published after view preparation):
 
+* `ViewFrameBindings.draw_frame_slot`: `DrawFrameBindings`
 * `ViewFrameBindings.lighting_frame_slot`: `LightingFrameBindings`
 * `ViewFrameBindings.environment_frame_slot`: `EnvironmentFrameBindings`
 * `ViewFrameBindings.view_color_frame_slot`: `ViewColorData`
 * `ViewFrameBindings.debug_frame_slot`: `DebugFrameBindings`
 
-**Shader Access Pattern**: Draw-system slots and the top-level
-`bindless_view_frame_bindings_slot` are propagated into `SceneConstants`
-constant buffer (register `b1`). Shaders use these slot indices to access
-resources dynamically from the global descriptor heap, enabling resource
-indirection without pipeline rebinds.
+**Shader Access Pattern**: `ViewConstants` carries only the top-level
+`bindless_view_frame_bindings_slot` in the root CBV. Shaders resolve
+`ViewFrameBindings`, then `DrawFrameBindings`, and use those slot indices to
+access draw resources dynamically from the global descriptor heap without
+pipeline rebinds.
 
 ## Frame Execution Timeline
 
@@ -371,7 +373,7 @@ sequenceDiagram
         ScenePrep-->>Renderer: RenderItemData in ScenePrepState
         Renderer->>ScenePrep: Finalize()
         ScenePrep-->>Renderer: PreparedSceneFrame + SRV indices
-        Renderer->>Renderer: Populate SceneConstants
+        Renderer->>Renderer: Populate ViewConstants
     end
 
     Note over Renderer: OnRender Phase

@@ -35,20 +35,20 @@ namespace oxygen::engine::internal {
  Usage:
  1. Call OnFrameStart(slot) at frame start.
  2. Call GetOrCreateBuffer(view_id) to get buffer for current slot + view.
- 3. Write SceneConstants to returned mapped pointer.
+ 3. Write ViewConstants to returned mapped pointer.
  4. Bind buffer's GPU virtual address as root CBV in render pass.
 */
-class SceneConstantsManager {
+class ViewConstantsManager {
 public:
   struct BufferInfo {
     std::shared_ptr<graphics::Buffer> buffer;
     void* mapped_ptr { nullptr };
   };
 
-  OXGN_RNDR_API SceneConstantsManager(
+  OXGN_RNDR_API ViewConstantsManager(
     observer_ptr<Graphics> gfx, std::uint32_t buffer_size);
 
-  OXGN_RNDR_API ~SceneConstantsManager();
+  OXGN_RNDR_API ~ViewConstantsManager();
 
   //! Set active frame slot for upcoming allocations.
   OXGN_RNDR_API auto OnFrameStart(frame::Slot slot) -> void;
@@ -56,11 +56,11 @@ public:
   //! Get or create buffer for current slot + view_id.
   OXGN_RNDR_API auto GetOrCreateBuffer(ViewId view_id) -> BufferInfo;
 
-  //! Write provided SceneConstants snapshot into the per-slot per-view buffer.
+  //! Write provided ViewConstants snapshot into the per-slot per-view buffer.
   /*! Returns BufferInfo for convenience; logs and returns an empty BufferInfo
       on failure. This centralizes mapping/copying logic so callers don't need
       to perform raw memcpy operations. */
-  OXGN_RNDR_API auto WriteSceneConstants(
+  OXGN_RNDR_API auto WriteViewConstants(
     ViewId view_id, const void* snapshot, std::size_t size_bytes) -> BufferInfo;
 
   //! Get current frame slot.

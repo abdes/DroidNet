@@ -270,15 +270,15 @@ auto SkyPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 {
   LOG_SCOPE_FUNCTION(2);
 
-  // Bind SceneConstants (b1) so shader can load EnvironmentStaticData
+  // Bind ViewConstants (b1) so shader can load EnvironmentStaticData
   // correctly.
-  if (Context().scene_constants == nullptr) {
-    LOG_F(ERROR, "SkyPass: SceneConstants not bound; skipping draw");
+  if (Context().view_constants == nullptr) {
+    LOG_F(ERROR, "SkyPass: ViewConstants not bound; skipping draw");
     co_return;
   }
   recorder.SetGraphicsRootConstantBufferView(
-    static_cast<uint32_t>(binding::RootParam::kSceneConstants),
-    Context().scene_constants->GetGPUVirtualAddress());
+    static_cast<uint32_t>(binding::RootParam::kViewConstants),
+    Context().view_constants->GetGPUVirtualAddress());
 
   SetupViewPortAndScissors(recorder);
   SetupRenderTargets(recorder);

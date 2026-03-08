@@ -10,7 +10,7 @@
 //! Computes world-space view direction for cubemap sampling in pixel shader.
 
 #include "Renderer/FullscreenTriangle.hlsli"
-#include "Renderer/SceneConstants.hlsli"
+#include "Renderer/ViewConstants.hlsli"
 
 //! Vertex shader output for sky rendering.
 struct SkyVSOutput

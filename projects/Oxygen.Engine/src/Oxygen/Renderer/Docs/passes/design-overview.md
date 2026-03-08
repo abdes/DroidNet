@@ -136,7 +136,7 @@ All passes share a common root signature layout for bindless resource access:
 | Slot | Type | Content |
 | --- | --- | --- |
 | t0 | SRV | Unbounded descriptor table (all textures/buffers) |
-| b1 | CBV | SceneConstants (view invariants, draw-routing slots, `bindless_view_frame_bindings_slot`) |
+| b1 | CBV | ViewConstants (view invariants, draw-routing slots, `bindless_view_frame_bindings_slot`) |
 | b2 | Root Constants | Draw index + pass-constants index |
 
 This architecture eliminates per-draw descriptor binding overhead and enables

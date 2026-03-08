@@ -1,6 +1,6 @@
 # Renderer-Shader Interface Refactor Plan
 
-Status: `phase_0_completed` / `in_progress`
+Status: `phase_1_completed` / `phase_2_in_progress`
 
 Purpose: define the refactor required to make renderer-shader interfaces clean,
 explicit, modular, and future-ready before any new shadow-system work lands.
@@ -32,8 +32,8 @@ Cross-references:
 Legend: `[ ]` pending | `[~]` in progress | `[x]` completed
 
 - [x] Phase 0: Freeze the authoritative interface inventory
-- [~] Phase 1: Re-establish one authoritative root ABI
-- [ ] Phase 2: Replace `SceneConstants` with `ViewConstants`
+- [x] Phase 1: Re-establish one authoritative root ABI
+- [~] Phase 2: Replace `SceneConstants` with `ViewConstants`
 - [ ] Phase 3: Introduce `ViewFrameBindings` and re-home system routing
 - [ ] Phase 4: Extract lighting interfaces cleanly
 - [ ] Phase 5: Extract environment interfaces cleanly
@@ -824,6 +824,31 @@ Execution note:
 
 ## 8.3 Phase 2: Replace `SceneConstants` with `ViewConstants`
 
+Status:
+
+- In progress.
+- First implementation slice completed on March 8, 2026:
+  - `SceneConstants` was renamed to `ViewConstants` in the live C++ and HLSL
+    contracts
+  - the generated root-signature source of truth now publishes
+    `binding::RootParam::kViewConstants`
+  - `RenderContext.view_constants`, pass binding helpers, and renderer wiring
+    were renamed to `view_constants`, `BindViewConstantsBuffer()`, and
+    `PrepareAndWireViewConstantsForView()`
+  - shader reflection validation now requires `ViewConstants` at `b1, space0`
+  - the current authoritative ABI docs now describe `ViewConstants`, not
+    `SceneConstants`
+- Second implementation slice completed on March 8, 2026:
+  - `DrawFrameBindings` now exists as a real C++/HLSL contract
+  - renderer publishes per-view draw routing through
+    `ViewFrameBindings.draw_frame_slot`
+  - draw/material/transform/instance shader reads now resolve through
+    `DrawFrameBindings` instead of direct slots in `ViewConstants`
+  - `ViewConstants` was shrunk again and now carries only view invariants plus
+    `bindless_view_frame_bindings_slot`
+  - current authoritative ABI docs now describe draw routing through
+    `ViewFrameBindings` and `DrawFrameBindings`
+
 Deliverables:
 
 - Rename `SceneConstants` to `ViewConstants`.
@@ -837,6 +862,15 @@ Exit criteria:
 
 - `ViewConstants` is small, stable, and system-neutral.
 - No system publishes resource-specific slots directly into the root CBV.
+
+Remaining Phase 2 work:
+
+- tighten the remaining non-authoritative docs and notes that still use
+  `SceneConstants` terminology where they describe the live contract
+- remove or rename any remaining stale comments/notes that still imply
+  draw-routing ownership in `ViewConstants`
+- confirm there are no remaining live shader/pass consumers that bypass
+  `ViewFrameBindings` for draw routing before closing Phase 2
 
 ## 8.4 Phase 3: Introduce `ViewFrameBindings` and re-home system routing
 
@@ -1055,14 +1089,23 @@ explicitly revisited:
 9. Add placeholder shadow/history/ray-tracing slots to `ViewFrameBindings`
    early.
 
-## 12. Current Turn Status
+## 12. Current Status
 
-This document is a design/refactor plan only.
+This document now tracks an active refactor, not just a proposed design.
 
 Evidence:
 
-- Files changed: this document
-- Tests run: none
-- Validation performed: codebase analysis and document consistency review only
-- Remaining gap: implementation has not started; ABI/code/docs are still in the
-  pre-refactor state
+- Files changed: this document plus the live renderer/shader contracts and
+  supporting docs referenced in the Phase 1 and Phase 2 status records
+- Tests run:
+  - `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:6 /p:Configuration=Debug /nologo`
+  - `msbuild out/build-vs/src/Oxygen/Engine/oxygen-engine.vcxproj /m:6 /p:Configuration=Debug /nologo`
+  - `msbuild out/build-vs/src/Oxygen/Graphics/Direct3D12/Shaders/oxygen-graphics-direct3d12_shaders.vcxproj /m:6 /p:Configuration=Debug /nologo`
+- Validation performed:
+  - renderer build succeeded
+  - engine build succeeded
+  - shader bake succeeded for 148 modules
+  - DX12 debug-layer shutdown validation for Phase 1 was confirmed clean
+- Remaining gap:
+  - Phase 2 is still in progress until the final `ViewConstants` shrink is
+    complete and the remaining live-contract doc stragglers are drained

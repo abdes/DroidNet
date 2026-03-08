@@ -55,12 +55,12 @@ class ISkyCaptureProvider;
  ### Frames In Flight
  The underlying GPU buffer contains one element per frame slot
  (frame::kFramesInFlight). Shaders index into the buffer using
- SceneConstants.frame_slot.
 
- To stay safe with multiple frames in flight, the manager only writes the
- element corresponding to the *current* frame slot. When the snapshot changes,
- the manager marks all slots as needing upload; each slot is refreshed the next
- time it becomes current.
+ ViewConstants.frame_slot.
+ To stay safe with multiple frames in flight, the
+ manager only writes the element corresponding to the *current* frame slot. When
+ the snapshot changes, the manager marks all slots as needing upload; each slot
+ is refreshed the next time it becomes current.
 
  ### Usage & Threading
  This class is single-owner and not thread-safe: all public methods must be
@@ -161,10 +161,9 @@ public:
       : 1.0F;
   }
 
-  [[nodiscard]] auto IsSkyLightCapturedSceneSource(ViewId view_id) const noexcept
-    -> bool;
-  [[nodiscard]] auto IsSkyLightCapturedSceneSource() const noexcept -> bool
-  ;
+  [[nodiscard]] auto IsSkyLightCapturedSceneSource(
+    ViewId view_id) const noexcept -> bool;
+  [[nodiscard]] auto IsSkyLightCapturedSceneSource() const noexcept -> bool;
 
   //! Returns the current SkySphere cubemap slot.
   [[nodiscard]] auto GetSkySphereCubemapSlot(ViewId view_id) const noexcept

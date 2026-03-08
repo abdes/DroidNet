@@ -21,7 +21,7 @@ This document defines the detailed implementation plan for integrating scene-aut
 
 - Bindless-only shader resource access via the global descriptor heap.
 - Root bindings (current ABI):
-  - `SceneConstants` at root CBV `b1`, containing only view invariants,
+  - `ViewConstants` at root CBV `b1`, containing only view invariants,
     draw-routing slots, and `bindless_view_frame_bindings_slot`.
   - `RootConstants` at `b2`; there is no dedicated environment root CBV in the
     live ABI.
@@ -91,7 +91,7 @@ Environment systems are authored as components under `SceneEnvironment`:
 **Status**: Completed
 
 - Implemented a single renderer-owned `EnvironmentStaticDataManager` that builds a canonical CPU snapshot from `SceneEnvironment` and guarantees deterministic defaults with per-system `enabled = 0/1` gating.
-- Allocated and maintained a GPU structured buffer containing one `EnvironmentStaticData` element per `frame::Slot`; shaders index it using `SceneConstants.frame_slot`.
+- Allocated and maintained a GPU structured buffer containing one `EnvironmentStaticData` element per `frame::Slot`; shaders index it using `ViewConstants.frame_slot`.
 - Used dirty-only tracking (no monotonic versioning): when the canonical snapshot changes, the manager refreshes the current slot’s element and ensures frames-in-flight safety via the per-slot layout.
 - Published the bindless SRV slot into `EnvironmentFrameBindings` each frame.
 

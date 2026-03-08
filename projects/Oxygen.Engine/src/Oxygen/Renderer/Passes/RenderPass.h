@@ -112,7 +112,7 @@ protected:
   /*!
    This produces root bindings that match the bindless engine root signature
    generated from Bindless.yaml. Both graphics and compute pipelines must use
-   the same layout so that shader ABI requirements (e.g., SceneConstants at
+   the same layout so that shader ABI requirements (e.g., ViewConstants at
    b1, RootConstants at b2) are satisfied.
   */
   OXGN_RNDR_NDAPI static auto BuildRootBindings()

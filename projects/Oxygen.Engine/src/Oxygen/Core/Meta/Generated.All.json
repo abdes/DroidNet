@@ -2,22 +2,22 @@
   "source": "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml",
   "source_version": "1.1.0",
   "tool_version": "1.2.2",
-  "generated": "2026-03-08 16:55:45",
+  "generated": "2026-03-08 17:33:12",
   "schema_version": "1.0.1",
   "defaults": {
     "invalid_index": 4294967295
   },
   "domains": [
     {
-      "id": "scene",
-      "name": "Scene",
+      "id": "view",
+      "name": "View",
       "kind": "CBV",
       "register": "b1",
       "heap_index": 0,
       "root_table": "BindlessSRVTable",
       "domain_base": 0,
       "capacity": 1,
-      "comment": "Scene constants CBV"
+      "comment": "View constants CBV"
     },
     {
       "id": "srv_global",
@@ -113,8 +113,8 @@
     }
   },
   "mappings": {
-    "scene": {
-      "domain": "scene",
+    "view": {
+      "domain": "view",
       "heap": "CBV_SRV_UAV:cpu",
       "local_base": 0
     },
@@ -140,9 +140,9 @@
     }
   },
   "symbols": {
-    "SceneConstantsSlot": {
-      "domain": "scene",
-      "comment": "CBV scene slot (b1)"
+    "ViewConstantsSlot": {
+      "domain": "view",
+      "comment": "CBV view slot (b1)"
     },
     "kInvalidBindlessIndex": {
       "value": "invalid_index",
@@ -192,7 +192,7 @@
     },
     {
       "type": "cbv",
-      "name": "SceneConstants",
+      "name": "ViewConstants",
       "index": 2,
       "visibility": [
         "ALL"

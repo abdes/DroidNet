@@ -31,7 +31,7 @@ ImGui is a deliberate exception: it is rendered through the upstream DX12 backen
 | --- | ---: | --- | --- | --- |
 | Bindless SRV table | 0 | Descriptor table | `t0, space0, unbounded` | Present for RS compatibility and legacy declarations. Access is via SM 6.6 `ResourceDescriptorHeap[]`. |
 | Sampler table | 1 | Descriptor table | `s0, space0, 256` | Sampler heap; also accessed via SM 6.6 `SamplerDescriptorHeap[]` when enabled. |
-| SceneConstants | 2 | Root CBV | `b1, space0` | Direct GPUVA root CBV. Layout is fixed (see §2). |
+| ViewConstants | 2 | Root CBV | `b1, space0` | Direct GPUVA root CBV. Layout is fixed (see §2). |
 | Root constants | 3 | Root constants | `b2, space0` | Two 32-bit constants (see §1.2). |
 
 ### 1.2 Root constants layout (register b2, space0)
@@ -64,7 +64,7 @@ All contracts below are authoritative and must be mirrored exactly.
 
 **C++ source of truth:**
 
-- `src/Oxygen/Renderer/Types/SceneConstants.h` (`SceneConstants::GpuData`, size = 256 bytes)
+- `src/Oxygen/Renderer/Types/ViewConstants.h` (`ViewConstants::GpuData`, size = 256 bytes)
 - `src/Oxygen/Renderer/Types/ViewFrameBindings.h` (`ViewFrameBindings`, size = 48 bytes, transitional replacement routing contract)
 - `src/Oxygen/Renderer/Types/LightingFrameBindings.h` (`LightingFrameBindings`, size = 112 bytes)
 - `src/Oxygen/Renderer/Types/EnvironmentFrameBindings.h` (`EnvironmentFrameBindings`, size = 16 bytes)
@@ -94,18 +94,18 @@ HLSL uses `K_INVALID_BINDLESS_INDEX` as the only invalid bindless sentinel.
 
 **Important distinction (C++):**
 
-- SceneConstants contains *descriptor slot integers* validated via `oxygen::engine::kInvalidDescriptorSlot` (and the wrapper types in `SceneConstants.h`).
+- ViewConstants contains *descriptor slot integers* validated via `oxygen::engine::kInvalidDescriptorSlot` (and the wrapper types in `ViewConstants.h`).
 - RootConstants contain *shader-visible indices* typed as `oxygen::ShaderVisibleIndex` and validated via `oxygen::kInvalidShaderVisibleIndex`.
 
-### 2.2 SceneConstants (CBV b1, space0)
+### 2.2 ViewConstants (CBV b1, space0)
 
 **HLSL contract include:** defined in §5.
 
 **ABI:**
 
 ```hlsl
-// Mirrors oxygen::engine::SceneConstants::GpuData (sizeof = 256)
-cbuffer SceneConstants : register(b1, space0)
+// Mirrors oxygen::engine::ViewConstants::GpuData (sizeof = 256)
+cbuffer ViewConstants : register(b1, space0)
 {
   uint64_t frame_seq_num;
   uint frame_slot;
@@ -115,29 +115,24 @@ cbuffer SceneConstants : register(b1, space0)
   float3 camera_position;
   float _pad0;
 
-  uint bindless_draw_metadata_slot;
-  uint bindless_transforms_slot;
-  uint bindless_normal_matrices_slot;
-  uint bindless_material_constants_slot;
-
-  uint bindless_instance_data_slot;
   uint bindless_view_frame_bindings_slot;
   uint _pad1;
   uint _pad2;
+  uint _pad3;
 
   float4 _pad_to_256_1;
   float4 _pad_to_256_2;
   float4 _pad_to_256_3;
   float4 _pad_to_256_4;
+  float4 _pad_to_256_5;
 };
 ```
 
 **Binding semantics:**
 
-- The `bindless_*_slot` fields are *shader-visible descriptor heap indices*.
-- The draw/material/transform slots point to SRV descriptors for structured
-  buffers obtained via `ResourceDescriptorHeap[slot]`.
-- `bindless_view_frame_bindings_slot` points to the top-level per-view routing
+- `bindless_view_frame_bindings_slot` is a *shader-visible descriptor heap
+  index*.
+- It points to the top-level per-view routing
   payload for system-owned frame bindings.
 - The renderer must set these per view during scene preparation. Shaders must
   tolerate the invalid sentinel.
@@ -150,7 +145,7 @@ for the refactor.
 Current publication path:
 
 - renderer publishes one `ViewFrameBindings` structured-buffer element per view
-- its SRV slot is stored in `SceneConstants.bindless_view_frame_bindings_slot`
+- its SRV slot is stored in `ViewConstants.bindless_view_frame_bindings_slot`
 - the payload currently carries only top-level system slots
 
 Current fields:
@@ -167,6 +162,7 @@ Current fields:
 
 Current migration rule:
 
+- `draw_frame_slot` is live and routes `DrawFrameBindings`
 - `lighting_frame_slot` is live and routes `LightingFrameBindings`
 - `debug_frame_slot` is live and routes `DebugFrameBindings`
 - `environment_frame_slot` is live and routes `EnvironmentFrameBindings`
@@ -174,7 +170,7 @@ Current migration rule:
 - remaining slots may be invalid placeholders until the corresponding system
   contracts are migrated
 - new routing growth should prefer `ViewFrameBindings` over expanding
-  `SceneConstants`
+  `ViewConstants`
 
 ### 2.2.2 LightingFrameBindings (shared lighting routing contract)
 
@@ -193,7 +189,7 @@ Current migration rule:
 
 - shaders should prefer `LightingFrameBindings` through
   `ViewFrameBindings.lighting_frame_slot`
-- no direct lighting slots remain in `SceneConstants`
+- no direct lighting slots remain in `ViewConstants`
 - canonical sun ownership is lighting-owned through `SyntheticSunData`
 
 ### 2.2.3 EnvironmentFrameBindings (shared environment routing contract)
@@ -210,9 +206,27 @@ Current migration rule:
 - shaders should prefer `EnvironmentFrameBindings.environment_static_slot` and
   `EnvironmentFrameBindings.environment_view_slot` through
   `ViewFrameBindings.environment_frame_slot`
-- no direct environment slot remains in `SceneConstants`
+- no direct environment slot remains in `ViewConstants`
 
-### 2.2.4 EnvironmentViewData (shared environment view-data contract)
+### 2.2.4 DrawFrameBindings (shared draw routing contract)
+
+`DrawFrameBindings` routes draw-system per-view structured-buffer slots.
+
+Current contents:
+
+- `draw_metadata_slot`
+- `transforms_slot`
+- `normal_matrices_slot`
+- `material_constants_slot`
+- `instance_data_slot`
+
+Current migration rule:
+
+- shaders should prefer `DrawFrameBindings` through
+  `ViewFrameBindings.draw_frame_slot`
+- no direct draw/material/transform/instance slots remain in `ViewConstants`
+
+### 2.2.5 EnvironmentViewData (shared environment view-data contract)
 
 `EnvironmentViewData` routes environment-owned per-view atmosphere context.
 
@@ -229,7 +243,7 @@ Current migration rule:
 - shaders should prefer `EnvironmentViewData` through
   `EnvironmentFrameBindings.environment_view_slot`
 
-### 2.2.5 ViewColorData (shared view color/presentation contract)
+### 2.2.6 ViewColorData (shared view color/presentation contract)
 
 `ViewColorData` is the first non-debug shared view payload routed through
 `ViewFrameBindings`.
@@ -243,7 +257,7 @@ Current migration rule:
 - shaders should prefer `ViewColorData.exposure` through
   `ViewFrameBindings.view_color_frame_slot`
 
-### 2.2.6 DebugFrameBindings (shared debug routing contract)
+### 2.2.7 DebugFrameBindings (shared debug routing contract)
 
 `DebugFrameBindings` routes debug-system resources that are consumed across
 graphics and compute passes.
@@ -258,11 +272,13 @@ Current migration rule:
 
 - shaders should prefer `DebugFrameBindings` through
   `ViewFrameBindings.debug_frame_slot`
-- no direct debug slots remain in `SceneConstants`
+- no direct debug slots remain in `ViewConstants`
 
-### 2.2.7 SceneConstants boundary rules (future-proofing)
+### 2.2.8 ViewConstants boundary rules (future-proofing)
 
-`SceneConstants` is intentionally small and stable: it contains **view invariants** plus **global heap indices** that route shaders to extensible data. It must not become a “feature bucket”.
+`ViewConstants` is intentionally small and stable: it contains **view
+invariants** plus **global heap indices** that route shaders to extensible
+data. It must not become a “feature bucket”.
 
 **Generated bindless tooling (required in shaders):**
 
@@ -275,20 +291,29 @@ Bindless tooling is sourced from the Core module and included as specified in §
   - `BX_IN_TEXTURES(idx)` / `BX_TRY_TEXTURES(idx)`
   - `BX_IN_SAMPLERS(idx)` / `BX_TRY_SAMPLERS(idx)`
 
-**Heap domain rules for the `SceneConstants` slots (must be enforced by the renderer and asserted in debug shaders):**
+**Heap domain rules for the routing slots (must be enforced by the renderer and
+asserted in debug shaders):**
 
-- `bindless_draw_metadata_slot` MUST be a **GLOBAL_SRV** index: `BX_IN_GLOBAL_SRV(bindless_draw_metadata_slot)`.
-- `bindless_transforms_slot` MUST be a **GLOBAL_SRV** index: `BX_IN_GLOBAL_SRV(bindless_transforms_slot)`.
-- `bindless_normal_matrices_slot` MUST be a **GLOBAL_SRV** index: `BX_IN_GLOBAL_SRV(bindless_normal_matrices_slot)`.
-- `bindless_material_constants_slot` MUST be a **MATERIALS** index: `BX_IN_MATERIALS(bindless_material_constants_slot)`.
+- `bindless_view_frame_bindings_slot` MUST be a **GLOBAL_SRV** index:
+  `BX_IN_GLOBAL_SRV(bindless_view_frame_bindings_slot)`.
+- `DrawFrameBindings.draw_metadata_slot` MUST be a **GLOBAL_SRV** index:
+  `BX_IN_GLOBAL_SRV(draw_metadata_slot)`.
+- `DrawFrameBindings.transforms_slot` MUST be a **GLOBAL_SRV** index:
+  `BX_IN_GLOBAL_SRV(transforms_slot)`.
+- `DrawFrameBindings.normal_matrices_slot` MUST be a **GLOBAL_SRV** index:
+  `BX_IN_GLOBAL_SRV(normal_matrices_slot)`.
+- `DrawFrameBindings.material_constants_slot` MUST be a **MATERIALS** index:
+  `BX_IN_MATERIALS(material_constants_slot)`.
+- `DrawFrameBindings.instance_data_slot` MUST be a **GLOBAL_SRV** index:
+  `BX_IN_GLOBAL_SRV(instance_data_slot)`.
 
-**What stays in `SceneConstants` (and only these categories):**
+**What stays in `ViewConstants` (and only these categories):**
 
 - View transforms and camera: `view_matrix`, `projection_matrix`, `camera_position`.
 - Frame identity/time: `frame_slot`, `frame_seq_num`, `time_seconds`.
-- Indirection indices (the four bindless slots above).
+- The top-level routing index: `bindless_view_frame_bindings_slot`.
 
-**What must NOT go in `SceneConstants` (move it elsewhere):**
+**What must NOT go in `ViewConstants` (move it elsewhere):**
 
 1. **Pass-specific configuration and toggles** (debug views, quality/perf switches, technique selection) → put in *PassConstants* (see §1.2 via `g_PassConstantsIndex`).
 2. **Pass-local resources** (depth SRV, output UAVs, light lists, transient buffers) → put their heap indices in *PassConstants*.
@@ -299,7 +324,9 @@ Bindless tooling is sourced from the Core module and included as specified in §
 **Normative fetch patterns (SM 6.6):**
 
 - Draw metadata:
-  - Validate slot with `BX_IN_GLOBAL_SRV(slot)`; if invalid, treat as absent.
+  - Resolve `ViewFrameBindings`, then `DrawFrameBindings`.
+  - Validate `draw_metadata_slot` with `BX_IN_GLOBAL_SRV(slot)`; if invalid,
+    treat as absent.
   - Fetch via `StructuredBuffer<DrawMetadata> buf = ResourceDescriptorHeap[slot]; meta = buf[g_DrawIndex];`
 - Pass constants:
   - Treat `g_PassConstantsIndex` as a heap index; validate with `BX_IN_GLOBAL_SRV(g_PassConstantsIndex)`.
@@ -438,7 +465,8 @@ struct MaterialConstants
 **Binding semantics:**
 
 - `MaterialConstants` is provided as a *structured buffer SRV*.
-- The bindless descriptor heap index for that SRV is `SceneConstants.bindless_material_constants_slot`.
+- The bindless descriptor heap index for that SRV is
+  `DrawFrameBindings.material_constants_slot`.
 - Shaders fetch a material snapshot via `material_handle` (from `DrawMetadata`) as the element index.
 - Material “instances” are represented by additional resolved snapshots (additional elements) in this table; shaders do not require a separate instance concept.
 
@@ -852,7 +880,7 @@ The build pipeline produces reflection from DXC for every module in
    - When `stage != CS`, all `numthreads_*` are `0`.
 3. The only register-bound constant buffers are the engine contracts:
 
-   - `SceneConstants` at `b1, space0` with `byte_size == 256`.
+   - `ViewConstants` at `b1, space0` with `byte_size == 256`.
 
    - `RootConstants` at `b2, space0` with `byte_size == 16` (DXC reports HLSL
     `cbuffer` sizes rounded up to 16-byte alignment; payload is still two
@@ -907,7 +935,7 @@ Shader compilation MUST set these include roots:
 
 **Direct3D12 module renderer contracts (must exist):**
 
-- `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/SceneConstants.hlsli`
+- `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/ViewConstants.hlsli`
 - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/DrawMetadata.hlsli`
 - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/MaterialConstants.hlsli`
 
@@ -930,7 +958,7 @@ Shader compilation MUST set these include roots:
   names. No implicit `main`.
 3. Include strings inside Direct3D12 shaders MUST NOT repeat the project name.
    The canonical include strings are:
-   - `#include "Renderer/SceneConstants.hlsli"`
+   - `#include "Renderer/ViewConstants.hlsli"`
    - `#include "Renderer/DrawMetadata.hlsli"`
    - `#include "Renderer/MaterialConstants.hlsli"`
    - `#include "Core/Bindless/BindlessHelpers.hlsl"`
@@ -941,6 +969,6 @@ Shader compilation MUST set these include roots:
 
 **Mandatory ABI rules:**
 
-- Must include the SceneConstants contract include (see §5.4) and bind `SceneConstants` at `b1, space0`.
+- Must include the ViewConstants contract include (see §5.4) and bind `ViewConstants` at `b1, space0`.
 - Must use `g_PassConstantsIndex` to fetch its pass constants CBV from `ResourceDescriptorHeap`.
-- Must not declare an alternative SceneConstants and must not declare its own bindless indexing scheme.
+- Must not declare an alternative ViewConstants and must not declare its own bindless indexing scheme.

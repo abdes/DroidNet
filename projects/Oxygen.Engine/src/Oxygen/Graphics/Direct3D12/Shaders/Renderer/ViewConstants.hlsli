@@ -4,11 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#ifndef OXYGEN_D3D12_SHADERS_RENDERER_SCENECONSTANTS_HLSLI
-#define OXYGEN_D3D12_SHADERS_RENDERER_SCENECONSTANTS_HLSLI
+#ifndef OXYGEN_D3D12_SHADERS_RENDERER_VIEWCONSTANTS_HLSLI
+#define OXYGEN_D3D12_SHADERS_RENDERER_VIEWCONSTANTS_HLSLI
 
-// Mirrors oxygen::engine::SceneConstants::GpuData (sizeof = 256)
-cbuffer SceneConstants : register(b1, space0)
+// Mirrors oxygen::engine::ViewConstants::GpuData (sizeof = 256)
+cbuffer ViewConstants : register(b1, space0)
 {
     uint64_t frame_seq_num;
     uint frame_slot;
@@ -18,20 +18,16 @@ cbuffer SceneConstants : register(b1, space0)
     float3 camera_position;
     float _pad0;
 
-    uint bindless_draw_metadata_slot;
-    uint bindless_transforms_slot;
-    uint bindless_normal_matrices_slot;
-    uint bindless_material_constants_slot;
-
-    uint bindless_instance_data_slot;
     uint bindless_view_frame_bindings_slot;
     uint _pad1;
     uint _pad2;
+    uint _pad3;
 
     float4 _pad_to_256_1;
     float4 _pad_to_256_2;
     float4 _pad_to_256_3;
     float4 _pad_to_256_4;
+    float4 _pad_to_256_5;
 };
 
-#endif  // OXYGEN_D3D12_SHADERS_RENDERER_SCENECONSTANTS_HLSLI
+#endif  // OXYGEN_D3D12_SHADERS_RENDERER_VIEWCONSTANTS_HLSLI

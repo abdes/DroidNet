@@ -4,24 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#ifndef OXYGEN_D3D12_SHADERS_RENDERER_VIEWCOLORHELPERS_HLSLI
-#define OXYGEN_D3D12_SHADERS_RENDERER_VIEWCOLORHELPERS_HLSLI
+#ifndef OXYGEN_D3D12_SHADERS_RENDERER_DRAWHELPERS_HLSLI
+#define OXYGEN_D3D12_SHADERS_RENDERER_DRAWHELPERS_HLSLI
 
+#include "Renderer/DrawFrameBindings.hlsli"
 #include "Renderer/ViewConstants.hlsli"
-#include "Renderer/ViewColorData.hlsli"
 #include "Renderer/ViewFrameBindings.hlsli"
 
-static inline float GetExposure()
+static inline DrawFrameBindings LoadResolvedDrawFrameBindings()
 {
     const ViewFrameBindings view_bindings =
         LoadViewFrameBindings(bindless_view_frame_bindings_slot);
-    if (view_bindings.view_color_frame_slot != K_INVALID_BINDLESS_INDEX) {
-        const ViewColorData view_color =
-            LoadViewColorData(view_bindings.view_color_frame_slot);
-        return max(view_color.exposure, 0.0f);
-    }
-
-    return 1.0f;
+    return LoadDrawFrameBindings(view_bindings.draw_frame_slot);
 }
 
-#endif // OXYGEN_D3D12_SHADERS_RENDERER_VIEWCOLORHELPERS_HLSLI
+#endif // OXYGEN_D3D12_SHADERS_RENDERER_DRAWHELPERS_HLSLI

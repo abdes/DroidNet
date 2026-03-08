@@ -10,7 +10,7 @@
 // Source-Version: 1.1.0
 // Schema-Version: 1.0.1
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2026-03-08 16:55:45
+// Generated: 2026-03-08 17:33:12
 
 #pragma once
 
@@ -26,7 +26,7 @@ namespace oxygen::engine::binding {
 enum class RootParam : uint32_t {
   kBindlessSrvTable = 0,
   kSamplerTable = 1,
-  kSceneConstants = 2,
+  kViewConstants = 2,
   kRootConstants = 3,
   kCount = 4,
 };
@@ -39,8 +39,8 @@ enum class RootParam : uint32_t {
 static constexpr uint32_t kRootConstantsConstantsCount = 2U;
 
 // Register/space bindings (for validation or RS construction)
-static constexpr uint32_t kSceneConstantsRegister = 1u; // 'b1'
-static constexpr uint32_t kSceneConstantsSpace = 0u; // 'space0'
+static constexpr uint32_t kViewConstantsRegister = 1u; // 'b1'
+static constexpr uint32_t kViewConstantsSpace = 0u; // 'space0'
 static constexpr uint32_t kRootConstantsRegister = 2u; // 'b2'
 static constexpr uint32_t kRootConstantsSpace = 0u; // 'space0'
 
