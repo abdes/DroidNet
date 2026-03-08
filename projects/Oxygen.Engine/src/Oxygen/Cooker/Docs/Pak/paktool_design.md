@@ -185,6 +185,11 @@ Planning consequence:
 
 - patch planning, catalog generation, and manifests must observe the sealed
   staged content, not the raw loose-cooked descriptor form.
+- mounted PAK runtime resolution remains patch-stack based:
+  - the last mounted source wins for subsequent asset loads
+  - cache identity for explicitly resolved assets must use mounted-instance
+    identity, not `SourceKey` alone, so mounting a patch after the base source
+    has already been used still reloads patched content correctly
 
 ### 5.3 Domain Ownership First
 
@@ -393,6 +398,41 @@ Before the builder runs, the tool must:
 
 Warnings do not change the exit code unless `--fail-on-warnings` causes the
 native builder to emit an error diagnostic.
+
+### 7.7 Canonical Command Examples
+
+Full build from a loose-cooked root:
+
+```text
+Oxygen.Cooker.PakTool build ^
+  --loose-source Examples/Content/.cooked ^
+  --out Examples/Content/pak/all-base.pak ^
+  --catalog-out Examples/Content/pak/all-base.catalog.json ^
+  --manifest-out Examples/Content/pak/all-base.manifest.json ^
+  --content-version 1 ^
+  --source-key 018f8f8f-1234-7abc-8def-0123456789ab
+```
+
+Patch build against a previously published base catalog:
+
+```text
+Oxygen.Cooker.PakTool patch ^
+  --loose-source Examples/Content/.cooked ^
+  --base-catalog Examples/Content/pak/all-base.catalog.json ^
+  --out Examples/Content/pak/all-patch-1.pak ^
+  --catalog-out Examples/Content/pak/all-patch-1.catalog.json ^
+  --manifest-out Examples/Content/pak/all-patch-1.manifest.json ^
+  --content-version 1 ^
+  --source-key 018f8f8f-1234-7abc-8def-0123456789ab
+```
+
+Behavioral note:
+
+- when both the base pak and patch pak are mounted, later mounts take
+  precedence for subsequent loads
+- mounting a patch after a base scene has already been loaded must still allow
+  the next load of that scene to resolve patched content rather than reusing a
+  stale base-cache entry
 
 ## 8. Persisted Artifact Contracts
 
@@ -652,6 +692,9 @@ Before the task can be called complete:
 4. Verify the emitted catalog and manifest are reusable by subsequent patch
    runs.
 5. Verify failed runs do not publish misleading final sidecars.
+6. Verify mounted patch precedence works both when all sources are mounted
+   before load and when a patch is mounted after the base content has already
+   been loaded once.
 
 ## 13. Release Gates
 
@@ -667,6 +710,8 @@ The release is ready only when all of the following are true:
 8. Automated coverage exists for CLI parsing, catalog IO, report IO, and
    end-to-end behavior.
 9. Manual validation with `PakDump` has been executed and recorded.
+10. Patch precedence remains correct for live runtime mounting after initial
+    base-content loads.
 
 ## 14. Deferred Follow-Ups
 

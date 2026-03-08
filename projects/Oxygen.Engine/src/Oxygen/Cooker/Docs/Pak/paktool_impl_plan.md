@@ -13,15 +13,16 @@ Status convention:
 - `completed`: implementation exists, docs are aligned, and validation evidence
   is recorded.
 
-Current overall status: `in_progress`
+Current overall status: `completed`
 
 Rationale:
 
-- The native pak builder pipeline exists.
+- The native pak builder pipeline is complete and tool-consumable.
 - The standalone tool target, catalog sidecar IO contract, staged publication
-  flow, and tool-level validation are not complete.
-- Validation evidence for the tool does not yet exist in this review
-  iteration.
+  flow, script sealing pass, and tool-level validation are implemented.
+- Automated and manual validation evidence now exists for full builds, patch
+  builds, failure-path publication semantics, repo-scale patch classification,
+  and live patch mounting after initial scene load.
 
 ## Phase 1. Close Native Pak Contract Gaps
 
@@ -975,18 +976,43 @@ Exit gate:
 
 ### Task 5.3: Documentation Completion
 
-Status: `pending`
+Status: `completed`
 
 Required work:
 
 - Keep `paktool_design.md` and `paktool_impl_plan.md` aligned with the final
   implementation.
-- Add `PakTool` README/help examples after implementation.
+- Add a professional `PakTool` README and canonical command examples to the
+  shipped pak docs.
 - Document any approved deferrals explicitly.
 
 Validation:
 
 - No mismatch remains between docs and shipped command/options/artifacts.
+
+Validation evidence:
+
+- Updated `paktool_design.md` to reflect the shipped script-sealing contract,
+  developer logging boundary, patch/live-mount behavior, and canonical
+  `build` / `patch` command examples.
+- Added `src/Oxygen/Cooker/Tools/PakTool/README.md` covering:
+  - purpose and capabilities
+  - command surface and published artifacts
+  - script-sealing behavior
+  - patch precedence/runtime behavior
+  - canonical build/patch/report examples
+  - exit codes and schema references
+- Updated `paktool_impl_plan.md` to remove stale in-progress language, close
+  the remaining documentation task, and record the final runtime validation
+  outcome for mounting a patch after the base content has already been loaded.
+- Final end-to-end runtime validation after the AssetLoader cache-key fix:
+  - mounting both base and patch before scene load succeeds
+  - mounting base, loading a scene, then mounting patch and reloading the same
+    scene now resolves patched content correctly
+  - the fix was validated by rebuilding in `out/build-vs` with `/m:6`:
+    - `cmake --build out/build-vs --target oxygen-content Oxygen.Content.PatchResolution.Tests Oxygen.Content.AssetLoader.Tests oxygen-examples-renderscene oxygen-examples-demoshell --config Debug -- /m:6`
+    - `out/build-vs/bin/Debug/Oxygen.Content.PatchResolution.Tests.exe`
+    - `out/build-vs/bin/Debug/Oxygen.Content.AssetLoader.Tests.exe`
 
 Exit gate:
 
@@ -996,7 +1022,7 @@ Exit gate:
 
 Release blockers:
 
-1. Final documentation completion work remains pending.
+- None.
 
 Non-blocking follow-ups after release:
 
@@ -1006,7 +1032,7 @@ Non-blocking follow-ups after release:
 
 ## Validation Status
 
-Implementation status: `in_progress`
+Implementation status: `completed`
 
 Validation executed in this review iteration:
 
@@ -1034,9 +1060,10 @@ Validation executed in this review iteration:
 - `out/build-vs/bin/Debug/Oxygen.Cooker.PakBuildReportSchema.Tests.exe`
 - `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolPublication.Tests.exe`
 - `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolReport.Tests.exe`
+- `cmake --build out/build-vs --target oxygen-content Oxygen.Content.PatchResolution.Tests Oxygen.Content.AssetLoader.Tests oxygen-examples-renderscene oxygen-examples-demoshell --config Debug -- /m:6`
+- `out/build-vs/bin/Debug/Oxygen.Content.PatchResolution.Tests.exe`
+- `out/build-vs/bin/Debug/Oxygen.Content.AssetLoader.Tests.exe`
 
 Remaining validation delta:
 
-- Repo-scale patch validation after fixing `PakPlanBuilder` transitive resource
-  digest classification for loose cooked sources
-- Final documentation completion
+- None.
