@@ -37,10 +37,10 @@ auto ComputeRenderPass::OnExecute(CommandRecorder& recorder) -> void
   recorder.SetPipelineState(*last_built_pso_desc_);
 
   // Bind common resources expected by the engine root signature.
-  DCHECK_NOTNULL_F(Context().scene_constants);
+  DCHECK_NOTNULL_F(Context().view_constants);
   recorder.SetComputeRootConstantBufferView(
-    static_cast<uint32_t>(binding::RootParam::kSceneConstants),
-    Context().scene_constants->GetGPUVirtualAddress());
+    static_cast<uint32_t>(binding::RootParam::kViewConstants),
+    Context().view_constants->GetGPUVirtualAddress());
 
   // Root constants at b2, space0.
   // - DWORD0: g_DrawIndex (unused for compute)

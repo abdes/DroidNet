@@ -44,8 +44,8 @@ inline constexpr uint8_t kExpectedShaderModelMajor = 6;
 inline constexpr uint8_t kExpectedShaderModelMinor = 6;
 
 // DXC reflects cbuffer sizes using HLSL packing rules which differ from C++.
-// The C++ GpuData struct is 208 bytes, but HLSL cbuffer packing yields 256.
-inline constexpr uint32_t kExpectedSceneConstantsByteSize = 256;
+// The C++ GpuData struct is padded to 256 bytes to match the HLSL cbuffer ABI.
+inline constexpr uint32_t kExpectedViewConstantsByteSize = 256;
 inline constexpr uint32_t kExpectedEnvironmentDynamicDataByteSize = 160U;
 // Note: DXC reports constant buffer sizes rounded up to 16-byte alignment.
 // RootConstants is modeled as a 2x32-bit root constant range, but is declared
@@ -273,13 +273,13 @@ auto ValidateBindingsOrThrow(const oxygen::graphics::ShaderRequest& request,
     if (r.bind_point == 1U) {
       saw_b1 = true;
 
-      if (r.name != "SceneConstants") {
-        throw std::runtime_error("b1 must bind SceneConstants");
+      if (r.name != "ViewConstants") {
+        throw std::runtime_error("b1 must bind ViewConstants");
       }
-      if (r.byte_size != kExpectedSceneConstantsByteSize) {
+      if (r.byte_size != kExpectedViewConstantsByteSize) {
         throw std::runtime_error(
-          fmt::format("SceneConstants byte_size mismatch (expected {}, got {})",
-            kExpectedSceneConstantsByteSize, r.byte_size));
+          fmt::format("ViewConstants byte_size mismatch (expected {}, got {})",
+            kExpectedViewConstantsByteSize, r.byte_size));
       }
       continue;
     }

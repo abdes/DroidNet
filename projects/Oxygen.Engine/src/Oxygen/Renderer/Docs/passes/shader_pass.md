@@ -33,9 +33,9 @@ depth is used read-only (depth test enabled, depth write disabled).
   **disabled** (depth already populated by DepthPrePass), stencil off
 * **Blend State**: Disabled (opaque rendering)
 * **Framebuffer Layout**: Single color target + optional depth (read-only)
-* **Root Signature**: Bindless table (t0-unbounded) + SceneConstants (b1) +
+* **Root Signature**: Bindless table (t0-unbounded) + ViewConstants (b1) +
   RootConstants (b2). Lighting/environment/view-color/debug data are reached
-  through `SceneConstants.bindless_view_frame_bindings_slot`.
+  through `ViewConstants.bindless_view_frame_bindings_slot`.
 
 **Variable Properties**:
 
@@ -161,7 +161,7 @@ buffers via bindless indices.
 **Inputs**:
 
 * `PreparedSceneFrame`: Per-view culled geometry with sorted partitions
-* `RenderContext::scene_constants`: Bindless descriptor slots for geometry,
+* `RenderContext::view_constants`: Bindless descriptor slots for geometry,
   materials, instance data, and `ViewFrameBindings`
 * `RenderContext::framebuffer`: Optional depth attachment (read-only DSV)
 * `color_texture`: Target color buffer (from config or framebuffer)

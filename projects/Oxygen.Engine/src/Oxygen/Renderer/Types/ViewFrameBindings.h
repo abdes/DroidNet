@@ -17,8 +17,7 @@ namespace oxygen::engine {
 
 //! Top-level bindless system routing payload for a single view.
 /*!
- Published as a structured buffer element and referenced from SceneConstants as
- a transitional bridge toward the final ViewConstants/ViewFrameBindings model.
+ Published as a structured buffer element and referenced from ViewConstants.
  Each field is a shader-visible slot for a system-owned frame payload.
 */
 struct alignas(16) ViewFrameBindings {

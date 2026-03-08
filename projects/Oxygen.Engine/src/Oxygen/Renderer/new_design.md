@@ -169,7 +169,7 @@ Render passes (current examples):
 
 - DepthPrePass, ShaderPass, TransparentPass. Additional passes (e.g., Forward/Deferred/Post) can be added following the same pattern.
 
-Input: `RenderContext` with `prepared_frame` (SoA views), `scene_constants`, optional `material_constants`.
+Input: `RenderContext` with `prepared_frame` (SoA views), `view_constants`, optional `material_constants`.
 Output: Rendered surfaces; passes mark presentable surfaces in `FrameContext`.
 
 Dependencies: `RenderContext` pass registry and `Graphics::ResourceRegistry`.
@@ -277,7 +277,7 @@ Renderer (Main thread - collects parallel worker results):
   -> Integrates all parallel results and updates internal buffers
   -> Prepares finalized arrays for command recording:
      * RenderContext.prepared_frame points to updated renderer data
-     * Updates scene_constants buffer with new camera/lighting data
+     * Updates view_constants buffer with new camera/lighting data
      * Updates material_constants buffer with material properties
      * Prepares bindless handle mappings and descriptor tables
 Result: Renderer has arrays ready for kFrameGraph/kCommandRecord. Note: snapshots are only published in kSnapshot.
@@ -300,7 +300,7 @@ Result: Pass set ready for coroutine execution (aligned with current code)
 Parallel Command Recording:
   -> RenderGraph executor launches pass batches
   -> Each pass accesses RenderContext.prepared_frame directly
-  -> Passes use RenderContext.scene_constants and material_constants
+  -> Passes use RenderContext.view_constants and material_constants
   -> PassExecutor functions record GPU commands via TaskExecutionContext
   -> Commands recorded to per-thread command lists
   -> GPU commands submitted to graphics system
@@ -420,7 +420,7 @@ struct RenderContext {
   float frame_time = 0.0f;                        // Set by Engine Core
 
   // Set by Resources module - GPU constant buffers
-  std::shared_ptr<const graphics::Buffer> scene_constants;
+  std::shared_ptr<const graphics::Buffer> view_constants;
   std::shared_ptr<const graphics::Buffer> material_constants;
 
   // Set by ResourceCoordinator - points to current frame's prepared data
@@ -437,7 +437,7 @@ struct RenderContext {
 1. **Engine Core** sets timing information (`frame_index`, `frame_time`)
 2. **ResourceCoordinator** sets `prepared_frame` pointer to current frame data
 3. **MaterialBinder** uploads and sets `material_constants` buffer
-4. **SceneConstantsUploader** sets `scene_constants` buffer (camera, lighting)
+4. **ViewConstantsUploader** sets `view_constants` buffer (camera, lighting)
 5. **Each render pass** registers itself via `RegisterPass()` for dependencies
 6. **Dependent passes** access previous passes via `GetPass<PassType>()`
 
@@ -580,7 +580,7 @@ start
 note right
 **RenderContext - Big Container:**
 • PreparedSceneFrame (observer_ptr with spans)
-• scene_constants: Buffer
+• view_constants: Buffer
 • material_constants: Buffer
 • framebuffer, pass registry, etc.
 

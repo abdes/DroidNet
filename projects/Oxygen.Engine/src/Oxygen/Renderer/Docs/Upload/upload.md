@@ -30,7 +30,7 @@ is driven by TextureBinder and material binding.
 ### 2.1 Alignment and layout rules
 
 GPU-facing structs must have stable binary layout across C++ and shaders.
-Current implementation uses explicit alignment in key structs (SceneConstants
+Current implementation uses explicit alignment in key structs (ViewConstants
 GPU snapshot and per-draw metadata). Rules remain:
 
 - 16-byte alignment for vector-heavy structs and GPU buffers.
@@ -46,14 +46,14 @@ against shader reflection.
 Keep type names explicit and consistent across CPU and shader usage:
 
 - `*Handle` or `*Index` for bindless indices or indirections.
-- `*Slot` for SceneConstants fields that hold bindless indices.
+- `*Slot` for ViewConstants fields that hold bindless indices.
 - `*View` for transient views of resources (descriptor or registry view).
 
 ### 2.3 Current GPU-facing structs
 
 These are authoritative in the current renderer:
 
-- SceneConstants GPU snapshot (per-frame CBV): view/projection, camera,
+- ViewConstants GPU snapshot (per-frame CBV): view/projection, camera,
   frame sequence/slot, time, draw-system bindless slots, instance-data slot,
   and `bindless_view_frame_bindings_slot`.
 - DrawMetadata structured buffer (per-draw records; dense indexed access).
@@ -69,12 +69,12 @@ passes. Current root parameters (order is significant):
 
 1. Bindless SRV table: t0, space0 (unbounded SRV table)
 2. Bindless sampler table: s0, space0
-3. SceneConstants CBV: b1, space0 (direct root CBV)
+3. ViewConstants CBV: b1, space0 (direct root CBV)
 4. Root constants: b2, space0 (2×32-bit values)
    - DWORD0: draw index (per-draw index into DrawMetadata)
    - DWORD1: pass-constants index (per-pass payload, typically bindless)
 5. No dedicated environment root CBV in the live ABI; system-owned view data is
-   routed through `SceneConstants.bindless_view_frame_bindings_slot`
+   routed through `ViewConstants.bindless_view_frame_bindings_slot`
 
 All passes use the same root signature for simplicity, even if some bindings
 are unused in a pass. The RenderPass base class and command recorder bind the
@@ -160,9 +160,9 @@ Future:
 
 Current layout (as generated):
 
-- SceneConstants CBV: b1, space0 (root CBV)
+- ViewConstants CBV: b1, space0 (root CBV)
 - `ViewFrameBindings` structured SRV, reached through
-  `SceneConstants.bindless_view_frame_bindings_slot`
+  `ViewConstants.bindless_view_frame_bindings_slot`
 - Unified SRV table: t0, space0 (unbounded), domains include global, materials,
   textures
 - Sampler table: s0, space0
@@ -175,7 +175,7 @@ Current layout (as generated):
 - Samplers: sampler table
 
 This structure enables stable bindings while allowing per-frame slot updates
-through SceneConstants and other root parameters.
+through ViewConstants and other root parameters.
 
 ## 6. ScenePrep finalization
 
@@ -188,7 +188,7 @@ Finalization order (current implementation):
 5. Sort & partition draws (DrawMetadataEmitter)
 6. Upload draw metadata (DrawMetadataEmitter)
 
-SceneConstants is then updated with the bindless SRV indices produced by
+ViewConstants is then updated with the bindless SRV indices produced by
 these subsystems, including instance data if instancing was generated.
 
 ## 7. Upload system
@@ -263,16 +263,16 @@ these subsystems, including instance data if instancing was generated.
 - Uploads draw metadata into a transient structured buffer each frame.
 - Supports GPU instancing with a separate instance data buffer.
 
-## 9. SceneConstants contract
+## 9. ViewConstants contract
 
-SceneConstants is the per-frame CBV bound at b1. It provides:
+ViewConstants is the per-frame CBV bound at b1. It provides:
 
 - View/projection matrices and camera position.
 - Frame slot and sequence number, plus time in seconds.
 - Bindless slots for draw metadata, transforms, normal matrices, material
   constants, instance data, and `ViewFrameBindings`.
 
-SceneConstants uses a monotonic version and only rebuilds GPU snapshots on
+ViewConstants uses a monotonic version and only rebuilds GPU snapshots on
 change to avoid unnecessary uploads.
 
 ## 10. Caching, residency, and eviction
@@ -327,7 +327,7 @@ Implemented:
 
 - Generated bindless layout and root signature metadata.
 - Direct indexing flags in D3D12 root signatures.
-- Shared root signature across passes (SRV table, sampler table, SceneConstants,
+- Shared root signature across passes (SRV table, sampler table, ViewConstants,
   root constants).
 - Upload module with staging, coalescing, fence-based tracking, coroutine
   support, and inline-transfer retirement.
@@ -353,7 +353,7 @@ ScenePrep output consistency.
 
 ## 14. Extensibility
 
-- Keep `SceneConstants` small and stable.
+- Keep `ViewConstants` small and stable.
 - Prefer new system-owned frame bindings and bindless buffers over new root
-  parameters or new responsibilities in `SceneConstants`.
+  parameters or new responsibilities in `ViewConstants`.
 - Keep Bindless.yaml as the single source of truth for binding layout.

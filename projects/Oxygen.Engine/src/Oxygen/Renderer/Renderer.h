@@ -36,13 +36,14 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Types/CompositingTask.h>
 #include <Oxygen/Renderer/Types/DebugFrameBindings.h>
+#include <Oxygen/Renderer/Types/DrawFrameBindings.h>
 #include <Oxygen/Renderer/Types/EnvironmentFrameBindings.h>
 #include <Oxygen/Renderer/Types/EnvironmentViewData.h>
 #include <Oxygen/Renderer/Types/LightCullingConfig.h>
 #include <Oxygen/Renderer/Types/LightingFrameBindings.h>
-#include <Oxygen/Renderer/Types/SceneConstants.h>
 #include <Oxygen/Renderer/Types/SyntheticSunData.h>
 #include <Oxygen/Renderer/Types/ViewColorData.h>
+#include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/Types/ViewFrameBindings.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -81,7 +82,7 @@ class CompositingPass;
 struct CompositingPassConfig;
 namespace internal {
   class EnvironmentStaticDataManager;
-  class SceneConstantsManager;
+  class ViewConstantsManager;
   class BrdfLutManager;
   class SkyAtmosphereLutManager;
   class GpuDebugManager;
@@ -394,7 +395,7 @@ private:
     bool single_view_mode = false) -> std::size_t;
 
   //! Update scene constants from resolved view matrices & camera state.
-  auto UpdateSceneConstantsFromView(const ResolvedView& view) -> void;
+  auto UpdateViewConstantsFromView(const ResolvedView& view) -> void;
 
   //! Publish spans into PreparedSceneFrame using TransformUploader and
   //! DrawMetadataEmitter data. The spans are non-owning and must refer to
@@ -405,7 +406,7 @@ private:
 
   //! Wires updated buffers into the provided render context for the frame.
   auto WireContext(RenderContext& context,
-    const std::shared_ptr<graphics::Buffer>& scene_consts) -> void;
+    const std::shared_ptr<graphics::Buffer>& view_constants) -> void;
 
   // Helper extractions for OnRender to keep the main coroutine body concise.
   auto AcquireRecorderForView(ViewId view_id, Graphics& gfx)
@@ -415,7 +416,7 @@ private:
     ViewId view_id, graphics::CommandRecorder& recorder,
     RenderContext& render_context) -> bool;
 
-  auto PrepareAndWireSceneConstantsForView(ViewId view_id,
+  auto PrepareAndWireViewConstantsForView(ViewId view_id,
     const FrameContext& frame_context, RenderContext& render_context) -> bool;
   auto RepublishCurrentViewBindings(const RenderContext& render_context)
     -> bool;
@@ -440,10 +441,12 @@ private:
 
   // Scene constants management - uses dedicated slot-aware manager for root CBV
   // binding
-  SceneConstants scene_const_cpu_;
-  std::unique_ptr<internal::SceneConstantsManager> scene_const_manager_;
+  ViewConstants view_const_cpu_;
+  std::unique_ptr<internal::ViewConstantsManager> view_const_manager_;
   std::unique_ptr<internal::PerViewStructuredPublisher<ViewFrameBindings>>
     view_frame_bindings_publisher_;
+  std::unique_ptr<internal::PerViewStructuredPublisher<DrawFrameBindings>>
+    draw_frame_bindings_publisher_;
   std::unique_ptr<internal::PerViewStructuredPublisher<ViewColorData>>
     view_color_data_publisher_;
   std::unique_ptr<internal::PerViewStructuredPublisher<DebugFrameBindings>>

@@ -9,12 +9,13 @@
 // - The entire heap is mapped to a single descriptor table covering t0-unbounded, space0.
 // - Resources are intermixed in the heap (structured indirection + geometry buffers).
 // - DrawMetadata structured buffer occupies a dynamic heap slot; its slot
-//   is published each frame via SceneConstants.bindless_draw_meta_data_slot.
+//   is published each frame via DrawFrameBindings.
 // - Uses ResourceDescriptorHeap for direct heap access with proper type casting.
 // - The root signature uses one table (t0-unbounded, space0) + direct CBVs.
 //   See MainModule.cpp and CommandRecorder.cpp for details.
 
-#include "Renderer/SceneConstants.hlsli"
+#include "Renderer/ViewConstants.hlsli"
+#include "Renderer/DrawHelpers.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
 #include "Renderer/MaterialConstants.hlsli"
 
@@ -63,10 +64,9 @@ struct VS_OUTPUT_DEPTH {
 // matrices. CPU now provides normal matrices as float4x4 (inverse-transpose of
 // world upper 3x3) allowing direct StructuredBuffer<float4x4> consumption.
 // Recommended steps for future integration:
-//   1. Introduce `uint bindless_normal_matrices_slot;` in SceneConstants after
-//      existing dynamic slots (update C++ side packing & padding comments).
+//   1. Read `DrawFrameBindings.normal_matrices_slot` from DrawFrameBindings.
 //   2. Fetch: `StructuredBuffer<float4x4> normals =
-//         ResourceDescriptorHeap[bindless_normal_matrices_slot];`
+//         ResourceDescriptorHeap[draw_bindings.normal_matrices_slot];`
 //   3. Derive normal3x3: `(float3x3)normals[meta.transform_index];`
 //   4. Use for any operations needing correct normal orientation (e.g., alpha
 //      test using normal mapped geometry or conservative depth adjustments).
@@ -81,9 +81,10 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
     VS_OUTPUT_DEPTH output;
     output.position = float4(0, 0, 0, 1);
     output.uv = float2(0, 0);
+    const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
 
     DrawMetadata meta;
-    if (!BX_LoadDrawMetadata(bindless_draw_metadata_slot, g_DrawIndex, meta)) {
+    if (!BX_LoadDrawMetadata(draw_bindings.draw_metadata_slot, g_DrawIndex, meta)) {
         return output;
     }
 
@@ -93,7 +94,7 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
 
     // Use per-instance transform (handles GPU instancing automatically)
     const float4x4 world_matrix = BX_LoadInstanceWorldMatrix(
-        bindless_transforms_slot, bindless_instance_data_slot, meta, instanceID);
+        draw_bindings.transforms_slot, draw_bindings.instance_data_slot, meta, instanceID);
     const float4 world_pos = mul(world_matrix, float4(v.position, 1.0f));
     const float4 view_pos = mul(view_matrix, world_pos);
     output.position = mul(projection_matrix, view_pos);
@@ -107,15 +108,16 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
 void PS(VS_OUTPUT_DEPTH input)
 {
 #ifdef ALPHA_TEST
-    if (!BX_IsValidSlot(bindless_draw_metadata_slot) ||
-        !BX_IsValidSlot(bindless_material_constants_slot)) {
+    const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
+    if (!BX_IsValidSlot(draw_bindings.draw_metadata_slot) ||
+        !BX_IsValidSlot(draw_bindings.material_constants_slot)) {
         return;
     }
 
-    StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[bindless_draw_metadata_slot];
+    StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[draw_bindings.draw_metadata_slot];
     const DrawMetadata meta = draw_meta_buffer[g_DrawIndex];
 
-    StructuredBuffer<MaterialConstants> materials = ResourceDescriptorHeap[bindless_material_constants_slot];
+    StructuredBuffer<MaterialConstants> materials = ResourceDescriptorHeap[draw_bindings.material_constants_slot];
     const MaterialConstants mat = materials[meta.material_handle];
 
     const bool alpha_test_enabled = (mat.flags & MATERIAL_FLAG_ALPHA_TEST) != 0u;

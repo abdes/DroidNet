@@ -161,7 +161,7 @@ namespace {
         view_id.get());
       ok = false;
     }
-    if (!ctx.scene_constants) {
+    if (!ctx.view_constants) {
       LOG_F(WARNING,
         "SkyAtmosphereLutComputePass: sanity check failed (view={}) missing "
         "scene constants",
@@ -603,11 +603,11 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
   DLOG_F(1, "env_srv : {}", env_static_srv);
   DLOG_F(1, "gen : {}", generation);
 
-  DCHECK_NOTNULL_F(Context().scene_constants);
+  DCHECK_NOTNULL_F(Context().view_constants);
 
-  const auto scene_const_addr
-    = Context().scene_constants->GetGPUVirtualAddress();
-  DLOG_F(1, "scene_const_addr : 0x{:x}", scene_const_addr);
+  const auto view_constants_addr
+    = Context().view_constants->GetGPUVirtualAddress();
+  DLOG_F(1, "view_constants_addr : 0x{:x}", view_constants_addr);
 
   // Helper for safe constant updates using spans
   auto update_constants
@@ -636,7 +636,7 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
 
         recorder.SetPipelineState(pso);
         recorder.SetComputeRootConstantBufferView(
-          static_cast<uint32_t>(b::kSceneConstants), scene_const_addr);
+          static_cast<uint32_t>(b::kViewConstants), view_constants_addr);
 
         recorder.SetComputeRoot32BitConstant(
           static_cast<uint32_t>(b::kRootConstants), 0U, 0);

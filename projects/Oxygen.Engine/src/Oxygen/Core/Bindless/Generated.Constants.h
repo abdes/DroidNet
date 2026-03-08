@@ -9,7 +9,7 @@
 // Source-Version: 1.1.0
 // Schema-Version: 1.0.1
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2026-03-08 16:55:45
+// Generated: 2026-03-08 17:33:12
 
 #pragma once
 
@@ -21,10 +21,10 @@ namespace oxygen {
 static constexpr uint32_t kInvalidBindlessIndex = 0XFFFFFFFFU;
 
 namespace engine::binding {
-  // Scene constants CBV
+  // View constants CBV
 
-  static constexpr uint32_t kSceneDomainBase = 0U;
-  static constexpr uint32_t kSceneCapacity = 1U;
+  static constexpr uint32_t kViewDomainBase = 0U;
+  static constexpr uint32_t kViewCapacity = 1U;
 
   // Unified global bindless table
 

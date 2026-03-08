@@ -28,7 +28,7 @@
 #include "Renderer/EnvironmentViewHelpers.hlsli"
 #include "Renderer/LightingHelpers.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
-#include "Renderer/SceneConstants.hlsli"
+#include "Renderer/ViewConstants.hlsli"
 #include "Atmosphere/AtmosphereMedium.hlsli"
 #include "Atmosphere/AtmospherePhase.hlsli"
 #include "Common/Math.hlsli"

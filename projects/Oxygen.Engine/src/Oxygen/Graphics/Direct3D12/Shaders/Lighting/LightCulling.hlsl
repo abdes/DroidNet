@@ -15,13 +15,13 @@
 // C++ code selects the appropriate PSO based on ClusterConfig::depth_slices.
 //
 // === Bindless-only Discipline (final) ===
-// - SceneConstants is bound as a root CBV at b1, space0 (authoritative include).
+// - ViewConstants is bound as a root CBV at b1, space0 (authoritative include).
 // - RootConstants is bound at b2, space0 (fixed ABI).
 // - All SRVs/UAVs are accessed via SM 6.6 descriptor heaps using heap indices
 //   stored in pass constants.
 // - This shader declares zero register-bound SRVs/UAVs/samplers.
 
-#include "Renderer/SceneConstants.hlsli"
+#include "Renderer/ViewConstants.hlsli"
 #include "Renderer/DrawMetadata.hlsli" // Required by BindlessHelpers.hlsl.
 #include "Renderer/MaterialConstants.hlsli" // Required by BindlessHelpers.hlsl.
 #include "Renderer/PositionalLightData.hlsli"

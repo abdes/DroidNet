@@ -9,7 +9,7 @@
 // Source-Version: 1.1.0
 // Schema-Version: 1.0.1
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2026-03-08 16:55:45
+// Generated: 2026-03-08 17:33:12
 
 #ifndef OXYGEN_BINDLESS_LAYOUT_HLSL
 #define OXYGEN_BINDLESS_LAYOUT_HLSL
@@ -31,10 +31,10 @@ static inline uint BX_TryUseGlobalIndexInDomain(uint idx, uint base, uint capaci
 #endif
 }
 
-// Scene constants CBV
+// View constants CBV
 
-static const uint K_SCENE_DOMAIN_BASE = 0;
-static const uint K_SCENE_CAPACITY = 1;
+static const uint K_VIEW_DOMAIN_BASE = 0;
+static const uint K_VIEW_CAPACITY = 1;
 
 // Unified global bindless table
 
@@ -59,10 +59,10 @@ static const uint K_SAMPLERS_CAPACITY = 256;
 #define BX_IN(TAG, IDX)       BX_IsInDomain((IDX), BX_DOMAIN_BASE(TAG), BX_DOMAIN_CAP(TAG))
 #define BX_TRY(TAG, IDX)      BX_TryUseGlobalIndexInDomain((IDX), BX_DOMAIN_BASE(TAG), BX_DOMAIN_CAP(TAG))
 
-#define BX_DOMAIN_SCENE_BASE K_SCENE_DOMAIN_BASE
-#define BX_DOMAIN_SCENE_CAPACITY K_SCENE_CAPACITY
-#define BX_IN_SCENE(IDX)  BX_IsInDomain((IDX), BX_DOMAIN_SCENE_BASE, BX_DOMAIN_SCENE_CAPACITY)
-#define BX_TRY_SCENE(IDX) BX_TryUseGlobalIndexInDomain((IDX), BX_DOMAIN_SCENE_BASE, BX_DOMAIN_SCENE_CAPACITY)
+#define BX_DOMAIN_VIEW_BASE K_VIEW_DOMAIN_BASE
+#define BX_DOMAIN_VIEW_CAPACITY K_VIEW_CAPACITY
+#define BX_IN_VIEW(IDX)  BX_IsInDomain((IDX), BX_DOMAIN_VIEW_BASE, BX_DOMAIN_VIEW_CAPACITY)
+#define BX_TRY_VIEW(IDX) BX_TryUseGlobalIndexInDomain((IDX), BX_DOMAIN_VIEW_BASE, BX_DOMAIN_VIEW_CAPACITY)
 
 #define BX_DOMAIN_GLOBAL_SRV_BASE K_GLOBAL_SRV_DOMAIN_BASE
 #define BX_DOMAIN_GLOBAL_SRV_CAPACITY K_GLOBAL_SRV_CAPACITY

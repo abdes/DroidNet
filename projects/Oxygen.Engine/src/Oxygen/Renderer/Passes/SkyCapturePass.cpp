@@ -161,19 +161,19 @@ auto SkyCapturePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     config_->resolution, state.captured_cubemap_srv.get());
 
   // SkyCapture shaders resolve EnvironmentStaticData through ViewFrameBindings
-  // and EnvironmentFrameBindings. Bind SceneConstants explicitly to provide the
+  // and EnvironmentFrameBindings. Bind ViewConstants explicitly to provide the
   // per-view routing slot.
-  if (Context().scene_constants == nullptr) {
+  if (Context().view_constants == nullptr) {
     LOG_F(ERROR,
-      "SkyCapturePass: missing SceneConstants (view={} frame_slot={} "
+      "SkyCapturePass: missing ViewConstants (view={} frame_slot={} "
       "frame_seq={})",
       view_id.get(), Context().frame_slot.get(),
       Context().frame_sequence.get());
     co_return;
   }
   recorder.SetGraphicsRootConstantBufferView(
-    static_cast<uint32_t>(binding::RootParam::kSceneConstants),
-    Context().scene_constants->GetGPUVirtualAddress());
+    static_cast<uint32_t>(binding::RootParam::kViewConstants),
+    Context().view_constants->GetGPUVirtualAddress());
 
   SetupViewPortAndScissors(recorder);
 

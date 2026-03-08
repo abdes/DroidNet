@@ -7,7 +7,7 @@
 #ifndef OXYGEN_D3D12_SHADERS_RENDERER_GPUDEBUG_HLSLI
 #define OXYGEN_D3D12_SHADERS_RENDERER_GPUDEBUG_HLSLI
 
-#include "Renderer/SceneConstants.hlsli"
+#include "Renderer/ViewConstants.hlsli"
 #include "Renderer/ViewFrameBindings.hlsli"
 #include "Renderer/DebugFrameBindings.hlsli"
 

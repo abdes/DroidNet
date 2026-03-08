@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "SceneConstantsManager.h"
+#include "ViewConstantsManager.h"
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Renderer/Types/SceneConstants.h>
+#include <Oxygen/Renderer/Types/ViewConstants.h>
 
 namespace oxygen::engine::internal {
 
@@ -15,14 +15,14 @@ using graphics::BufferDesc;
 using graphics::BufferMemory;
 using graphics::BufferUsage;
 
-SceneConstantsManager::SceneConstantsManager(
+ViewConstantsManager::ViewConstantsManager(
   observer_ptr<Graphics> gfx, std::uint32_t buffer_size)
   : gfx_(gfx)
   , buffer_size_(buffer_size)
 {
 }
 
-SceneConstantsManager::~SceneConstantsManager()
+ViewConstantsManager::~ViewConstantsManager()
 {
   // Unmap all buffers
   for (auto& [key, info] : buffers_) {
@@ -34,16 +34,16 @@ SceneConstantsManager::~SceneConstantsManager()
   buffers_.clear();
 }
 
-auto SceneConstantsManager::OnFrameStart(frame::Slot slot) -> void
+auto ViewConstantsManager::OnFrameStart(frame::Slot slot) -> void
 {
   current_slot_ = slot;
 }
 
-auto SceneConstantsManager::GetOrCreateBuffer(ViewId view_id) -> BufferInfo
+auto ViewConstantsManager::GetOrCreateBuffer(ViewId view_id) -> BufferInfo
 {
   if (current_slot_ == frame::kInvalidSlot) {
     LOG_F(ERROR,
-      "SceneConstantsManager::GetOrCreateBuffer called without valid frame "
+      "ViewConstantsManager::GetOrCreateBuffer called without valid frame "
       "slot");
     return {};
   }
@@ -60,8 +60,8 @@ auto SceneConstantsManager::GetOrCreateBuffer(ViewId view_id) -> BufferInfo
     .size_bytes = buffer_size_,
     .usage = BufferUsage::kConstant,
     .memory = BufferMemory::kUpload,
-    .debug_name = "SceneConstants_View" + std::to_string(view_id.get())
-      + "_Slot" + std::to_string(current_slot_),
+    .debug_name = "ViewConstants_View" + std::to_string(view_id.get()) + "_Slot"
+      + std::to_string(current_slot_),
   };
 
   auto buffer = gfx_->CreateBuffer(desc);
@@ -85,20 +85,20 @@ auto SceneConstantsManager::GetOrCreateBuffer(ViewId view_id) -> BufferInfo
   buffers_[key] = info;
 
   LOG_F(1,
-    "SceneConstantsManager: Created buffer for view {} slot {} (size={} "
+    "ViewConstantsManager: Created buffer for view {} slot {} (size={} "
     "bytes)",
     view_id.get(), current_slot_, buffer_size_);
 
   return info;
 }
 
-auto SceneConstantsManager::WriteSceneConstants(
+auto ViewConstantsManager::WriteViewConstants(
   ViewId view_id, const void* snapshot, std::size_t size_bytes) -> BufferInfo
 {
   auto info = GetOrCreateBuffer(view_id);
   if (!info.buffer || !info.mapped_ptr) {
     LOG_F(ERROR,
-      "SceneConstantsManager::WriteSceneConstants failed for view {} - no "
+      "ViewConstantsManager::WriteViewConstants failed for view {} - no "
       "buffer",
       view_id.get());
     return {};
@@ -106,7 +106,7 @@ auto SceneConstantsManager::WriteSceneConstants(
 
   if (size_bytes > buffer_size_) {
     LOG_F(ERROR,
-      "SceneConstantsManager::WriteSceneConstants snapshot size ({}) exceeds "
+      "ViewConstantsManager::WriteViewConstants snapshot size ({}) exceeds "
       "configured buffer size ({})",
       size_bytes, buffer_size_);
     return {};

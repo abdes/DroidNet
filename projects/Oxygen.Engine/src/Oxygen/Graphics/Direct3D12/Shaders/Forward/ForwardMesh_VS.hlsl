@@ -14,7 +14,8 @@
 //! - Normal matrix transforms for correct lighting
 //! - Per-instance transform lookups for instanced rendering
 
-#include "Renderer/SceneConstants.hlsli"
+#include "Renderer/ViewConstants.hlsli"
+#include "Renderer/DrawHelpers.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
 #include "Renderer/MaterialConstants.hlsli"
 #include "Renderer/Vertex.hlsli"
@@ -42,9 +43,10 @@ struct VSOutput {
 [shader("vertex")]
 VSOutput VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) {
     VSOutput output;
+    const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
 
     // Access per-draw metadata buffer through dynamic slot; skip if unavailable.
-    if (bindless_draw_metadata_slot == K_INVALID_BINDLESS_INDEX) {
+    if (draw_bindings.draw_metadata_slot == K_INVALID_BINDLESS_INDEX) {
         // Fallback: no geometry; output origin.
         output.position = float4(0,0,0,1);
         output.color = float3(1,0,1); // debug magenta
@@ -55,7 +57,7 @@ VSOutput VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) {
         output.world_bitangent = float3(0,1,0);
         return output;
     }
-    StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[bindless_draw_metadata_slot];
+    StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[draw_bindings.draw_metadata_slot];
     // Select per-draw entry using the draw index provided via root constant
     DrawMetadata meta = draw_meta_buffer[g_DrawIndex];
 
@@ -80,15 +82,15 @@ VSOutput VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) {
     // For instanced draws (instance_count > 1), fetch transform index from instance data buffer.
     // For single-instance draws, use transform_index directly from DrawMetadata.
     uint transform_index = meta.transform_index;
-    if (meta.instance_count > 1 && bindless_instance_data_slot != K_INVALID_BINDLESS_INDEX) {
-        StructuredBuffer<uint> instance_data = ResourceDescriptorHeap[bindless_instance_data_slot];
+    if (meta.instance_count > 1 && draw_bindings.instance_data_slot != K_INVALID_BINDLESS_INDEX) {
+        StructuredBuffer<uint> instance_data = ResourceDescriptorHeap[draw_bindings.instance_data_slot];
         transform_index = instance_data[meta.instance_metadata_offset + instanceID];
     }
 
     // Fetch per-draw world matrix and apply world, view, and projection transforms
     float4x4 world_matrix;
-    if (bindless_transforms_slot != 0xFFFFFFFFu) {
-        StructuredBuffer<float4x4> worlds = ResourceDescriptorHeap[bindless_transforms_slot];
+    if (draw_bindings.transforms_slot != 0xFFFFFFFFu) {
+        StructuredBuffer<float4x4> worlds = ResourceDescriptorHeap[draw_bindings.transforms_slot];
         // Use per-instance transform index
         world_matrix = worlds[transform_index];
     } else {
@@ -100,8 +102,8 @@ VSOutput VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) {
     float4 world_pos = mul(world_matrix, float4(vertex.position, 1.0));
     // Compute world-space normal: prefer uploaded normal matrices if available
     float3x3 normal_mat;
-    if (bindless_normal_matrices_slot != 0xFFFFFFFFu) {
-        StructuredBuffer<float4x4> normals = ResourceDescriptorHeap[bindless_normal_matrices_slot];
+    if (draw_bindings.normal_matrices_slot != 0xFFFFFFFFu) {
+        StructuredBuffer<float4x4> normals = ResourceDescriptorHeap[draw_bindings.normal_matrices_slot];
         normal_mat = (float3x3)normals[transform_index];
     } else {
         normal_mat = (float3x3)world_matrix;

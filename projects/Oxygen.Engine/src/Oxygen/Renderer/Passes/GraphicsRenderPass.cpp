@@ -14,9 +14,9 @@ using oxygen::engine::GraphicsRenderPass;
 using oxygen::graphics::CommandRecorder;
 
 GraphicsRenderPass::GraphicsRenderPass(
-  const std::string_view name, bool require_scene_constants)
+  const std::string_view name, bool require_view_constants)
   : RenderPass(name)
-  , require_scene_constants_(require_scene_constants)
+  , require_view_constants_(require_view_constants)
 {
 }
 
@@ -39,8 +39,8 @@ auto GraphicsRenderPass::OnExecute(CommandRecorder& recorder) -> void
 
   // Bind common resources
   BindIndicesBuffer(recorder);
-  if (require_scene_constants_) {
-    BindSceneConstantsBuffer(recorder);
+  if (require_view_constants_) {
+    BindViewConstantsBuffer(recorder);
   }
   BindPassConstantsIndexConstant(recorder, GetPassConstantsIndex());
 
@@ -56,21 +56,21 @@ auto GraphicsRenderPass::DoSetupPipeline(CommandRecorder& /*recorder*/) -> void
 auto GraphicsRenderPass::RebindCommonRootParameters(
   CommandRecorder& recorder) const -> void
 {
-  if (require_scene_constants_) {
-    BindSceneConstantsBuffer(recorder);
+  if (require_view_constants_) {
+    BindViewConstantsBuffer(recorder);
   }
   BindPassConstantsIndexConstant(recorder, GetPassConstantsIndex());
 }
 
-auto GraphicsRenderPass::BindSceneConstantsBuffer(
+auto GraphicsRenderPass::BindViewConstantsBuffer(
   CommandRecorder& recorder) const -> void
 {
-  DCHECK_NOTNULL_F(Context().scene_constants);
+  DCHECK_NOTNULL_F(Context().view_constants);
   DCHECK_F(last_built_pso_desc_.has_value());
 
   recorder.SetGraphicsRootConstantBufferView(
-    static_cast<uint32_t>(binding::RootParam::kSceneConstants),
-    Context().scene_constants->GetGPUVirtualAddress());
+    static_cast<uint32_t>(binding::RootParam::kViewConstants),
+    Context().view_constants->GetGPUVirtualAddress());
 }
 
 auto GraphicsRenderPass::BindIndicesBuffer(CommandRecorder& /*recorder*/) const

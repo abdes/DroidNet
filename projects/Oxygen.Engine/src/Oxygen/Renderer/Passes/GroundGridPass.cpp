@@ -240,13 +240,13 @@ auto GroundGridPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     co_return;
   }
 
-  if (Context().scene_constants == nullptr) {
-    LOG_F(ERROR, "GroundGridPass: SceneConstants not bound; skipping draw");
+  if (Context().view_constants == nullptr) {
+    LOG_F(ERROR, "GroundGridPass: ViewConstants not bound; skipping draw");
     co_return;
   }
   recorder.SetGraphicsRootConstantBufferView(
-    static_cast<uint32_t>(binding::RootParam::kSceneConstants),
-    Context().scene_constants->GetGPUVirtualAddress());
+    static_cast<uint32_t>(binding::RootParam::kViewConstants),
+    Context().view_constants->GetGPUVirtualAddress());
 
   SetupViewPortAndScissors(recorder);
   SetupRenderTargets(recorder);

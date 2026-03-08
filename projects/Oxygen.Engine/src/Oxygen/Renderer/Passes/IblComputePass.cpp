@@ -147,7 +147,7 @@ auto IblComputePass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
     co_return;
   }
 
-  DCHECK_NOTNULL_F(Context().scene_constants);
+  DCHECK_NOTNULL_F(Context().view_constants);
 
   // Intensity is applied at shading time via EnvironmentStaticData (e.g.
   // `env_data.sky_light.radiance_scale`). Keep the filtered IBL maps in the
@@ -359,8 +359,8 @@ auto IblComputePass::DispatchIrradiance(graphics::CommandRecorder& recorder,
 
   recorder.SetPipelineState(*irradiance_pso_desc_);
   recorder.SetComputeRootConstantBufferView(
-    static_cast<uint32_t>(binding::RootParam::kSceneConstants),
-    Context().scene_constants->GetGPUVirtualAddress());
+    static_cast<uint32_t>(binding::RootParam::kViewConstants),
+    Context().view_constants->GetGPUVirtualAddress());
   recorder.SetComputeRoot32BitConstant(
     static_cast<uint32_t>(binding::RootParam::kRootConstants), constants_index,
     0);
@@ -409,8 +409,8 @@ auto IblComputePass::DispatchPrefilter(graphics::CommandRecorder& recorder,
 
   recorder.SetPipelineState(*prefilter_pso_desc_);
   recorder.SetComputeRootConstantBufferView(
-    static_cast<uint32_t>(binding::RootParam::kSceneConstants),
-    Context().scene_constants->GetGPUVirtualAddress());
+    static_cast<uint32_t>(binding::RootParam::kViewConstants),
+    Context().view_constants->GetGPUVirtualAddress());
   recorder.SetComputeRoot32BitConstant(
     static_cast<uint32_t>(binding::RootParam::kRootConstants), 0U, 0);
   recorder.SetComputeRoot32BitConstant(

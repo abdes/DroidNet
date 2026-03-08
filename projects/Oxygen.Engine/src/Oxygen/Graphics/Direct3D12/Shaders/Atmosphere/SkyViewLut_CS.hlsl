@@ -23,13 +23,13 @@
 //!
 //! === Bindless Discipline ===
 //! - All resources accessed via SM 6.6 descriptor heaps
-//! - SceneConstants at b1, RootConstants at b2
+//! - ViewConstants at b1, RootConstants at b2
 
 #include "Core/Bindless/Generated.BindlessLayout.hlsl"
 #include "Renderer/EnvironmentStaticData.hlsli"
 #include "Renderer/EnvironmentViewHelpers.hlsli"
 #include "Renderer/LightingHelpers.hlsli"
-#include "Renderer/SceneConstants.hlsli"
+#include "Renderer/ViewConstants.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
 #include "Atmosphere/AtmosphereMedium.hlsli"
 #include "Atmosphere/AtmospherePhase.hlsli"

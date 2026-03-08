@@ -9,7 +9,7 @@
 
 #include "Core/Bindless/Generated.BindlessLayout.hlsl"
 #include "Renderer/EnvironmentFrameBindings.hlsli"
-#include "Renderer/SceneConstants.hlsli"
+#include "Renderer/ViewConstants.hlsli"
 #include "Renderer/EnvironmentStaticData.hlsli"
 #include "Renderer/ViewFrameBindings.hlsli"
 

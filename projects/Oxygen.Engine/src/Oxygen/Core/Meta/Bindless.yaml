@@ -24,15 +24,15 @@ defaults:
   invalid_index: 4294967295
 
 domains:
-  - id: scene
-    name: "Scene"
+  - id: view
+    name: "View"
     kind: CBV
     register: b1
     heap_index: 0
     root_table: BindlessSRVTable
     domain_base: 0
     capacity: 1
-    comment: "Scene constants CBV"
+    comment: "View constants CBV"
 
   - id: srv_global
     name: "GlobalSRV"
@@ -76,9 +76,9 @@ domains:
     capacity: 256
 
 symbols:
-  SceneConstantsSlot:
-    domain: scene
-    comment: "CBV scene slot (b1)"
+  ViewConstantsSlot:
+    domain: view
+    comment: "CBV view slot (b1)"
   kInvalidBindlessIndex:
     value: invalid_index
     comment: "invalid sentinel (0xFFFFFFFF)"
@@ -149,7 +149,7 @@ heaps:
 # Domains that back descriptor tables and are visible to shaders map to the
 # shader-visible heaps; other domains (or root CBVs) map to cpu-only heaps.
 mappings:
-  - domain: scene
+  - domain: view
     heap: "CBV_SRV_UAV:cpu"
     local_base: 0
 
@@ -195,7 +195,7 @@ root_signature:
         num_descriptors: 256
 
   - type: cbv
-    name: "SceneConstants"
+    name: "ViewConstants"
     index: 2
     visibility: ALL
     shader_register: b1

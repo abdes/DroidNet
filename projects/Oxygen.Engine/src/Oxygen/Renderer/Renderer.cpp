@@ -59,9 +59,9 @@
 #include <Oxygen/Renderer/Internal/GpuDebugManager.h>
 #include <Oxygen/Renderer/Internal/IblManager.h>
 #include <Oxygen/Renderer/Internal/PerViewStructuredPublisher.h>
-#include <Oxygen/Renderer/Internal/SceneConstantsManager.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Internal/SunResolver.h>
+#include <Oxygen/Renderer/Internal/ViewConstantsManager.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/CompositingPass.h>
 #include <Oxygen/Renderer/Passes/IblComputePass.h>
@@ -89,9 +89,9 @@
 #include <Oxygen/Renderer/Types/EnvironmentViewData.h>
 #include <Oxygen/Renderer/Types/LightingFrameBindings.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
-#include <Oxygen/Renderer/Types/SceneConstants.h>
 #include <Oxygen/Renderer/Types/SyntheticSunData.h>
 #include <Oxygen/Renderer/Types/ViewColorData.h>
+#include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/Types/ViewFrameBindings.h>
 #include <Oxygen/Renderer/Upload/Errors.h>
 #include <Oxygen/Renderer/Upload/InlineTransfersCoordinator.h>
@@ -526,14 +526,18 @@ auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
 
     // Initialize scene constants manager for per-view, per-slot Upload heap
     // buffers.
-    scene_const_manager_ = std::make_unique<internal::SceneConstantsManager>(
+    view_const_manager_ = std::make_unique<internal::ViewConstantsManager>(
       observer_ptr { gfx.get() },
-      static_cast<std::uint32_t>(sizeof(SceneConstants::GpuData)));
+      static_cast<std::uint32_t>(sizeof(ViewConstants::GpuData)));
 
     view_frame_bindings_publisher_ = std::make_unique<
       internal::PerViewStructuredPublisher<ViewFrameBindings>>(
       observer_ptr { gfx.get() }, *inline_staging_provider_,
       observer_ptr { inline_transfers_.get() }, "ViewFrameBindings");
+    draw_frame_bindings_publisher_ = std::make_unique<
+      internal::PerViewStructuredPublisher<DrawFrameBindings>>(
+      observer_ptr { gfx.get() }, *inline_staging_provider_,
+      observer_ptr { inline_transfers_.get() }, "DrawFrameBindings");
     view_color_data_publisher_
       = std::make_unique<internal::PerViewStructuredPublisher<ViewColorData>>(
         observer_ptr { gfx.get() }, *inline_staging_provider_,
@@ -761,12 +765,13 @@ auto Renderer::OnShutdown() noexcept -> void
   brdf_lut_manager_.reset();
 
   view_frame_bindings_publisher_.reset();
+  draw_frame_bindings_publisher_.reset();
   view_color_data_publisher_.reset();
   debug_frame_bindings_publisher_.reset();
   lighting_frame_bindings_publisher_.reset();
   environment_view_data_publisher_.reset();
   environment_frame_bindings_publisher_.reset();
-  scene_const_manager_.reset();
+  view_const_manager_.reset();
   render_context_pool_.reset();
 
   inline_transfers_.reset();
@@ -1023,7 +1028,7 @@ auto Renderer::OnPreRender(observer_ptr<FrameContext> context) -> co::Co<>
   prepared_frames_.clear();
   per_view_storage_.clear();
 
-  // EnvStatic is now updated per view in PrepareAndWireSceneConstantsForView.
+  // EnvStatic is now updated per view in PrepareAndWireViewConstantsForView.
 
   // Iterate all views registered in FrameContext and prepare each one
   auto views_range = context->GetViews();
@@ -1097,39 +1102,6 @@ auto Renderer::OnPreRender(observer_ptr<FrameContext> context) -> co::Co<>
     sceneprep_last_frame_view_count_
       = static_cast<std::uint32_t>(frame_view_count);
     sceneprep_last_frame_scene_view_count_ = 0;
-  }
-
-  LOG_SCOPE_F(2, "Populating renderer-level scene constants");
-
-  if (const auto transforms = scene_prep_state_->GetTransformUploader()) {
-    const auto worlds_srv = transforms->GetWorldsSrvIndex();
-    const auto normals_srv = transforms->GetNormalsSrvIndex();
-    DLOG_F(3, "Worlds: {}", worlds_srv);
-    DLOG_F(3, "Normals: {}", normals_srv);
-    scene_const_cpu_.SetBindlessWorldsSlot(
-      BindlessWorldsSlot(worlds_srv), SceneConstants::kRenderer);
-    scene_const_cpu_.SetBindlessNormalMatricesSlot(
-      BindlessNormalsSlot(normals_srv), SceneConstants::kRenderer);
-  }
-
-  if (const auto materials = scene_prep_state_->GetMaterialBinder()) {
-    const auto materials_srv = materials->GetMaterialsSrvIndex();
-    DLOG_F(3, "Materials: {}", materials_srv);
-    scene_const_cpu_.SetBindlessMaterialConstantsSlot(
-      BindlessMaterialConstantsSlot(materials_srv), SceneConstants::kRenderer);
-  }
-
-  if (auto emitter = scene_prep_state_->GetDrawMetadataEmitter()) {
-    const auto draw_metadata_srv = emitter->GetDrawMetadataSrvIndex();
-    DLOG_F(3, "Draw Metadata: {}", draw_metadata_srv);
-    scene_const_cpu_.SetBindlessDrawMetadataSlot(
-      BindlessDrawMetadataSlot(draw_metadata_srv), SceneConstants::kRenderer);
-
-    // Set instance data slot for GPU instancing
-    const auto instance_data_srv = emitter->GetInstanceDataSrvIndex();
-    DLOG_F(3, "Instance Data: {}", instance_data_srv);
-    scene_const_cpu_.SetBindlessInstanceDataSlot(
-      BindlessInstanceDataSlot(instance_data_srv), SceneConstants::kRenderer);
   }
 
   co_return;
@@ -1234,7 +1206,7 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
       if (is_scene_view) {
         // This MUST happen before any scene pass (SkyCapture, IBL, or Graph)
         // runs.
-        if (!PrepareAndWireSceneConstantsForView(
+        if (!PrepareAndWireViewConstantsForView(
               view_id, *context, *render_context_)) {
           // Failure already logged inside helper; mark the view failed and
           // skip this view's render graph.
@@ -1669,11 +1641,11 @@ auto Renderer::DrainPendingViewCleanup(std::string_view reason) -> void
 // DrawMetadataEmitter via ScenePrepState
 
 auto Renderer::WireContext(RenderContext& render_context,
-  const std::shared_ptr<graphics::Buffer>& scene_consts) -> void
+  const std::shared_ptr<graphics::Buffer>& view_constants) -> void
 {
   DLOG_SCOPE_FUNCTION(3);
 
-  render_context.scene_constants = scene_consts;
+  render_context.view_constants = view_constants;
   render_context.frame_slot = frame_slot_;
   render_context.frame_sequence = frame_seq_num;
   render_context.delta_time = last_frame_dt_seconds_;
@@ -1749,7 +1721,7 @@ auto Renderer::SetupFramebufferForView(const FrameContext& frame_context,
   return true;
 }
 
-auto Renderer::PrepareAndWireSceneConstantsForView(ViewId view_id,
+auto Renderer::PrepareAndWireViewConstantsForView(ViewId view_id,
   const FrameContext& frame_context, RenderContext& render_context) -> bool
 {
   DLOG_SCOPE_FUNCTION(3);
@@ -1823,28 +1795,7 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
     ? runtime_it->second
     : PerViewRuntimeState {};
 
-  SceneConstants view_scene_consts = scene_const_cpu_;
-  DLOG_F(3, "   worlds: {}", prepared.bindless_worlds_slot);
-  DLOG_F(3, "  normals: {}", prepared.bindless_normals_slot);
-  DLOG_F(3, "materials: {}", prepared.bindless_materials_slot);
-  DLOG_F(3, " metadata: {}", prepared.bindless_draw_metadata_slot);
-  DLOG_F(3, " instance: {}", prepared.bindless_instance_data_slot);
-
-  view_scene_consts.SetBindlessWorldsSlot(
-    BindlessWorldsSlot(prepared.bindless_worlds_slot),
-    SceneConstants::kRenderer);
-  view_scene_consts.SetBindlessNormalMatricesSlot(
-    BindlessNormalsSlot(prepared.bindless_normals_slot),
-    SceneConstants::kRenderer);
-  view_scene_consts.SetBindlessMaterialConstantsSlot(
-    BindlessMaterialConstantsSlot(prepared.bindless_materials_slot),
-    SceneConstants::kRenderer);
-  view_scene_consts.SetBindlessDrawMetadataSlot(
-    BindlessDrawMetadataSlot(prepared.bindless_draw_metadata_slot),
-    SceneConstants::kRenderer);
-  view_scene_consts.SetBindlessInstanceDataSlot(
-    BindlessInstanceDataSlot(prepared.bindless_instance_data_slot),
-    SceneConstants::kRenderer);
+  ViewConstants view_constants = view_const_cpu_;
 
   if (gpu_debug_manager_) {
     static bool logged_gpu_debug_slots = false;
@@ -1857,12 +1808,12 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
     }
   }
 
-  view_scene_consts.SetViewMatrix(resolved.ViewMatrix())
+  view_constants.SetViewMatrix(resolved.ViewMatrix())
     .SetProjectionMatrix(resolved.ProjectionMatrix())
     .SetCameraPosition(resolved.CameraPosition())
-    .SetFrameSlot(render_context.frame_slot, SceneConstants::kRenderer)
+    .SetFrameSlot(render_context.frame_slot, ViewConstants::kRenderer)
     .SetFrameSequenceNumber(
-      render_context.frame_sequence, SceneConstants::kRenderer);
+      render_context.frame_sequence, ViewConstants::kRenderer);
 
   const auto environment_static_slot = env_static_manager_
     ? env_static_manager_->GetSrvIndex(view_id)
@@ -1870,6 +1821,28 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
 
   if (view_frame_bindings_publisher_) {
     ViewFrameBindings view_bindings {};
+
+    if (draw_frame_bindings_publisher_) {
+      DLOG_F(3, "   worlds: {}", prepared.bindless_worlds_slot);
+      DLOG_F(3, "  normals: {}", prepared.bindless_normals_slot);
+      DLOG_F(3, "materials: {}", prepared.bindless_materials_slot);
+      DLOG_F(3, " metadata: {}", prepared.bindless_draw_metadata_slot);
+      DLOG_F(3, " instance: {}", prepared.bindless_instance_data_slot);
+
+      const DrawFrameBindings draw_bindings {
+        .draw_metadata_slot
+        = BindlessDrawMetadataSlot(prepared.bindless_draw_metadata_slot),
+        .transforms_slot = BindlessWorldsSlot(prepared.bindless_worlds_slot),
+        .normal_matrices_slot
+        = BindlessNormalsSlot(prepared.bindless_normals_slot),
+        .material_constants_slot
+        = BindlessMaterialConstantsSlot(prepared.bindless_materials_slot),
+        .instance_data_slot
+        = BindlessInstanceDataSlot(prepared.bindless_instance_data_slot),
+      };
+      view_bindings.draw_frame_slot
+        = draw_frame_bindings_publisher_->Publish(view_id, draw_bindings);
+    }
 
     if (view_color_data_publisher_) {
       const ViewColorData view_color_data {
@@ -1933,21 +1906,21 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
 
     const auto view_bindings_slot
       = view_frame_bindings_publisher_->Publish(view_id, view_bindings);
-    view_scene_consts.SetBindlessViewFrameBindingsSlot(
+    view_constants.SetBindlessViewFrameBindingsSlot(
       BindlessViewFrameBindingsSlot(view_bindings_slot),
-      SceneConstants::kRenderer);
+      ViewConstants::kRenderer);
   }
 
-  const auto& snapshot = view_scene_consts.GetSnapshot();
+  const auto& snapshot = view_constants.GetSnapshot();
   if (snapshot.frame_slot != render_context.frame_slot.get()) {
     LOG_F(ERROR,
-      "Renderer: SceneConstants frame_slot mismatch (view={} snapshot={} "
+      "Renderer: ViewConstants frame_slot mismatch (view={} snapshot={} "
       "expected={})",
       view_id.get(), snapshot.frame_slot, render_context.frame_slot.get());
   }
 
-  auto buffer_info = scene_const_manager_->WriteSceneConstants(
-    view_id, &snapshot, sizeof(SceneConstants::GpuData));
+  auto buffer_info = view_const_manager_->WriteViewConstants(
+    view_id, &snapshot, sizeof(ViewConstants::GpuData));
   if (!buffer_info.buffer) {
     LOG_F(ERROR, "Failed to write scene constants for view {}", view_id);
     return false;
@@ -2337,7 +2310,7 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
   }
 
   PublishPreparedFrameSpans(view_id, prepared_frame);
-  UpdateSceneConstantsFromView(view);
+  UpdateViewConstantsFromView(view);
 
   const auto draw_count
     = prepared_frame.draw_metadata_bytes.size() / sizeof(DrawMetadata);
@@ -2397,10 +2370,10 @@ auto Renderer::PublishPreparedFrameSpans(
   }
 }
 
-auto Renderer::UpdateSceneConstantsFromView(const ResolvedView& view) -> void
+auto Renderer::UpdateViewConstantsFromView(const ResolvedView& view) -> void
 {
   // Update scene constants from the provided view snapshot
-  scene_const_cpu_.SetViewMatrix(view.ViewMatrix())
+  view_const_cpu_.SetViewMatrix(view.ViewMatrix())
     .SetProjectionMatrix(view.ProjectionMatrix())
     .SetCameraPosition(view.CameraPosition());
 }
@@ -2438,8 +2411,9 @@ auto Renderer::OnFrameStart(observer_ptr<FrameContext> context) -> void
   uploader_->OnFrameStart(tag, frame_slot);
   // then uploaders and scene constants manager
   texture_binder_->OnFrameStart();
-  scene_const_manager_->OnFrameStart(frame_slot);
+  view_const_manager_->OnFrameStart(frame_slot);
   view_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
+  draw_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
   view_color_data_publisher_->OnFrameStart(frame_sequence, frame_slot);
   debug_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
   lighting_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);

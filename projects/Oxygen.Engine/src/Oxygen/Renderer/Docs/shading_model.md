@@ -7,13 +7,13 @@ Model
 
 - Diffuse: Lambert, `diffuse = albedo * max(dot(N, L), 0)`
 - Specular (optional): Blinn-Phong with `specPower` from material or a default
-- Ambient: constant ambient term from SceneConstants
+- Ambient: constant ambient term from ViewConstants
 
 Inputs
 
 - Normal: from vertex normal (if present) or a face-normal fallback
 - Light(s):
-  - Phase 5B: one directional light via SceneConstants
+  - Phase 5B: one directional light via ViewConstants
   - Phase 5C: multiple lights via bindless `g_Lights` buffer (loop with cap)
 
 Spaces & Conventions

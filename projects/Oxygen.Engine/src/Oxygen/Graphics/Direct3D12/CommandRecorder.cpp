@@ -242,7 +242,7 @@ namespace {
 // Bindless root signature layout indices must match Generated.RootSignature.h
 // Root Param 0: Single unbounded SRV descriptor table (t0, space0)
 // Root Param 1: Sampler descriptor table (s0, space0)
-// Root Param 2: SceneConstants CBV (b1, space0)
+// Root Param 2: ViewConstants CBV (b1, space0)
 // Root Param 3: DrawIndex root constants (b2, space0)
 constexpr UINT kRootIndex_UnboundedSRV_Table
   = static_cast<UINT>(oxygen::engine::binding::RootParam::kBindlessSrvTable);

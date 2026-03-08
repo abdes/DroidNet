@@ -19,9 +19,9 @@ Legend: `[ ]` pending | `[~]` in progress | `[x]` done
 Renderer core is functional with a minimal Forward+ foundation:
 
 - **Bindless architecture**: SM 6.6 `ResourceDescriptorHeap[]` indexing, stable
-  root signature (t0 unbounded SRV, s0 sampler table, b1 SceneConstants CBV,
+  root signature (t0 unbounded SRV, s0 sampler table, b1 ViewConstants CBV,
   b2 root constants) with system-owned view data routed through
-  `SceneConstants.bindless_view_frame_bindings_slot`
+  `ViewConstants.bindless_view_frame_bindings_slot`
 - **ScenePrep pipeline**: Two-phase Collection → Finalization with CPU frustum
   culling and per-view `PreparedSceneFrame`
 - **Render passes**: `DepthPrePass`, `ShaderPass`, `TransparentPass` with 4 PSO

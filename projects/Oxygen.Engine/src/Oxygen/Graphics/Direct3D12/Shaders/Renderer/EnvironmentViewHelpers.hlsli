@@ -8,7 +8,7 @@
 #define OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTVIEWHELPERS_HLSLI
 
 #include "Renderer/EnvironmentFrameBindings.hlsli"
-#include "Renderer/SceneConstants.hlsli"
+#include "Renderer/ViewConstants.hlsli"
 #include "Renderer/EnvironmentViewData.hlsli"
 #include "Renderer/ViewFrameBindings.hlsli"
 

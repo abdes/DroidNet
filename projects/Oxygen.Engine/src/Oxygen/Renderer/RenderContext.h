@@ -121,7 +121,7 @@ struct RenderContext {
 
    @note This field is mandatory.
   */
-  std::shared_ptr<const graphics::Buffer> scene_constants;
+  std::shared_ptr<const graphics::Buffer> view_constants;
 
   //! Manages GPU debug resources (line buffer and counters).
   observer_ptr<internal::GpuDebugManager> gpu_debug_manager;
@@ -267,7 +267,7 @@ private:
    repopulate them each frame as needed):
    - Clears the pass pointer registry.
    - Resets the renderer and graphics pointers to null.
-  - Clears scene_constants and material_constants (renderer-owned snapshots).
+  - Clears view_constants and material_constants (renderer-owned snapshots).
    - Does NOT touch persistent configuration fields the application may add
      in the future (only engine-injected per-frame pointers are cleared).
   */
@@ -278,7 +278,7 @@ private:
     }
     renderer_.reset(nullptr);
     graphics_.reset(nullptr);
-    scene_constants.reset();
+    view_constants.reset();
     material_constants.reset();
     pass_target.reset(nullptr);
     // Reset per-view transient state and clear cached per-view outputs
