@@ -2,6 +2,16 @@
 
 Date: 2026-01-04
 
+Current authority note:
+
+- Current implementation ABI authority is the generated root signature plus the
+  live C++/HLSL contracts in code.
+- Target post-refactor architecture authority is
+  [renderer_shader_interface_refactor.md](renderer_shader_interface_refactor.md).
+- Phase 1 now routes environment, lighting, debug, and view-color data through
+  `ViewFrameBindings`. There is no dedicated `b3` environment root CBV in the
+  live ABI.
+
 ## 1) Authoritative binding & root signature contract (D3D12)
 
 This is the bindless root signature contract that all engine-owned passes share.
@@ -22,7 +32,7 @@ ImGui is a deliberate exception: it is rendered through the upstream DX12 backen
 | Bindless SRV table | 0 | Descriptor table | `t0, space0, unbounded` | Present for RS compatibility and legacy declarations. Access is via SM 6.6 `ResourceDescriptorHeap[]`. |
 | Sampler table | 1 | Descriptor table | `s0, space0, 256` | Sampler heap; also accessed via SM 6.6 `SamplerDescriptorHeap[]` when enabled. |
 | SceneConstants | 2 | Root CBV | `b1, space0` | Direct GPUVA root CBV. Layout is fixed (see §2). |
-| Root constants | 3 | Root constants | `b2, space0` | **Final:** two 32-bit constants (see §1.2). (Rename generated enum entry from `kDrawIndex` → `kRootConstants`.) |
+| Root constants | 3 | Root constants | `b2, space0` | Two 32-bit constants (see §1.2). |
 
 ### 1.2 Root constants layout (register b2, space0)
 
@@ -54,7 +64,13 @@ All contracts below are authoritative and must be mirrored exactly.
 
 **C++ source of truth:**
 
-- `src/Oxygen/Renderer/Types/SceneConstants.h` (`SceneConstants::GpuData`, size = 176 bytes)
+- `src/Oxygen/Renderer/Types/SceneConstants.h` (`SceneConstants::GpuData`, size = 256 bytes)
+- `src/Oxygen/Renderer/Types/ViewFrameBindings.h` (`ViewFrameBindings`, size = 48 bytes, transitional replacement routing contract)
+- `src/Oxygen/Renderer/Types/LightingFrameBindings.h` (`LightingFrameBindings`, size = 112 bytes)
+- `src/Oxygen/Renderer/Types/EnvironmentFrameBindings.h` (`EnvironmentFrameBindings`, size = 16 bytes)
+- `src/Oxygen/Renderer/Types/EnvironmentViewData.h` (`EnvironmentViewData`, size = 64 bytes)
+- `src/Oxygen/Renderer/Types/ViewColorData.h` (`ViewColorData`, size = 16 bytes)
+- `src/Oxygen/Renderer/Types/DebugFrameBindings.h` (`DebugFrameBindings`, size = 16 bytes)
 - `src/Oxygen/Renderer/Types/DrawMetadata.h` (`DrawMetadata`, size = 64 bytes)
 - `src/Oxygen/Renderer/Types/MaterialConstants.h` (`MaterialConstants`, size = 80 bytes)
 
@@ -88,30 +104,163 @@ HLSL uses `K_INVALID_BINDLESS_INDEX` as the only invalid bindless sentinel.
 **ABI:**
 
 ```hlsl
-// Mirrors oxygen::engine::SceneConstants::GpuData (sizeof = 176)
+// Mirrors oxygen::engine::SceneConstants::GpuData (sizeof = 256)
 cbuffer SceneConstants : register(b1, space0)
 {
+  uint64_t frame_seq_num;
+  uint frame_slot;
+  float time_seconds;
   float4x4 view_matrix;
   float4x4 projection_matrix;
-  float3   camera_position;
-  uint     frame_slot;
-  uint64_t frame_seq_num;
-  float    time_seconds;
-  uint     _pad0;
-  uint     bindless_draw_metadata_slot;
-  uint     bindless_transforms_slot;
-  uint     bindless_normal_matrices_slot;
-  uint     bindless_material_constants_slot;
+  float3 camera_position;
+  float _pad0;
+
+  uint bindless_draw_metadata_slot;
+  uint bindless_transforms_slot;
+  uint bindless_normal_matrices_slot;
+  uint bindless_material_constants_slot;
+
+  uint bindless_instance_data_slot;
+  uint bindless_view_frame_bindings_slot;
+  uint _pad1;
+  uint _pad2;
+
+  float4 _pad_to_256_1;
+  float4 _pad_to_256_2;
+  float4 _pad_to_256_3;
+  float4 _pad_to_256_4;
 };
 ```
 
 **Binding semantics:**
 
-- The four `bindless_*_slot` fields are *shader-visible descriptor heap indices*.
-- They point to SRV descriptors for structured buffers, obtained via `ResourceDescriptorHeap[slot]`.
-- The renderer must set these per view during scene preparation. Shaders must tolerate the invalid sentinel.
+- The `bindless_*_slot` fields are *shader-visible descriptor heap indices*.
+- The draw/material/transform slots point to SRV descriptors for structured
+  buffers obtained via `ResourceDescriptorHeap[slot]`.
+- `bindless_view_frame_bindings_slot` points to the top-level per-view routing
+  payload for system-owned frame bindings.
+- The renderer must set these per view during scene preparation. Shaders must
+  tolerate the invalid sentinel.
 
-### 2.2.1 SceneConstants boundary rules (future-proofing)
+### 2.2.1 ViewFrameBindings (transitional replacement routing contract)
+
+`ViewFrameBindings` is the first published top-level replacement routing payload
+for the refactor.
+
+Current publication path:
+
+- renderer publishes one `ViewFrameBindings` structured-buffer element per view
+- its SRV slot is stored in `SceneConstants.bindless_view_frame_bindings_slot`
+- the payload currently carries only top-level system slots
+
+Current fields:
+
+- `draw_frame_slot`
+- `lighting_frame_slot`
+- `environment_frame_slot`
+- `view_color_frame_slot`
+- `shadow_frame_slot`
+- `post_process_frame_slot`
+- `debug_frame_slot`
+- `history_frame_slot`
+- `ray_tracing_frame_slot`
+
+Current migration rule:
+
+- `lighting_frame_slot` is live and routes `LightingFrameBindings`
+- `debug_frame_slot` is live and routes `DebugFrameBindings`
+- `environment_frame_slot` is live and routes `EnvironmentFrameBindings`
+- `view_color_frame_slot` is live and routes `ViewColorData`
+- remaining slots may be invalid placeholders until the corresponding system
+  contracts are migrated
+- new routing growth should prefer `ViewFrameBindings` over expanding
+  `SceneConstants`
+
+### 2.2.2 LightingFrameBindings (shared lighting routing contract)
+
+`LightingFrameBindings` routes lighting-owned per-view resources and resolved
+view-local lighting state.
+
+Current contents:
+
+- `directional_lights_slot`
+- `directional_shadows_slot`
+- `positional_lights_slot`
+- `light_culling`
+- `sun`
+
+Current migration rule:
+
+- shaders should prefer `LightingFrameBindings` through
+  `ViewFrameBindings.lighting_frame_slot`
+- no direct lighting slots remain in `SceneConstants`
+- canonical sun ownership is lighting-owned through `SyntheticSunData`
+
+### 2.2.3 EnvironmentFrameBindings (shared environment routing contract)
+
+`EnvironmentFrameBindings` routes environment-owned per-view resources.
+
+Current contents:
+
+- `environment_static_slot`
+- `environment_view_slot`
+
+Current migration rule:
+
+- shaders should prefer `EnvironmentFrameBindings.environment_static_slot` and
+  `EnvironmentFrameBindings.environment_view_slot` through
+  `ViewFrameBindings.environment_frame_slot`
+- no direct environment slot remains in `SceneConstants`
+
+### 2.2.4 EnvironmentViewData (shared environment view-data contract)
+
+`EnvironmentViewData` routes environment-owned per-view atmosphere context.
+
+Current contents:
+
+- atmosphere flags
+- sky-view slice
+- planet-to-sun cosine
+- aerial perspective distance/scattering controls
+- planet center/up plus camera altitude
+
+Current migration rule:
+
+- shaders should prefer `EnvironmentViewData` through
+  `EnvironmentFrameBindings.environment_view_slot`
+
+### 2.2.5 ViewColorData (shared view color/presentation contract)
+
+`ViewColorData` is the first non-debug shared view payload routed through
+`ViewFrameBindings`.
+
+Current contents:
+
+- `exposure`
+
+Current migration rule:
+
+- shaders should prefer `ViewColorData.exposure` through
+  `ViewFrameBindings.view_color_frame_slot`
+
+### 2.2.6 DebugFrameBindings (shared debug routing contract)
+
+`DebugFrameBindings` routes debug-system resources that are consumed across
+graphics and compute passes.
+
+Current contents:
+
+- `line_buffer_srv_slot`
+- `line_buffer_uav_slot`
+- `counter_buffer_uav_slot`
+
+Current migration rule:
+
+- shaders should prefer `DebugFrameBindings` through
+  `ViewFrameBindings.debug_frame_slot`
+- no direct debug slots remain in `SceneConstants`
+
+### 2.2.7 SceneConstants boundary rules (future-proofing)
 
 `SceneConstants` is intentionally small and stable: it contains **view invariants** plus **global heap indices** that route shaders to extensible data. It must not become a “feature bucket”.
 
@@ -143,7 +292,7 @@ Bindless tooling is sourced from the Core module and included as specified in §
 
 1. **Pass-specific configuration and toggles** (debug views, quality/perf switches, technique selection) → put in *PassConstants* (see §1.2 via `g_PassConstantsIndex`).
 2. **Pass-local resources** (depth SRV, output UAVs, light lists, transient buffers) → put their heap indices in *PassConstants*.
-3. **Large and rapidly evolving view data** (previous-frame matrices, jitter, exposure, shadow cascades, clustered grid parameters) → put in *ViewExtras* buffers referenced by indices stored in *PassConstants*.
+3. **Large and rapidly evolving view data** (previous-frame matrices, jitter, exposure, shadow data, clustered grid parameters) → put in system-owned frame bindings routed through `ViewFrameBindings`, or in pass-owned payloads when the data is strictly pass-local.
 4. **Per-draw data** → stays in `DrawMetadata` and is selected by `g_DrawIndex`.
 5. **Per-material data** → stays in `MaterialConstants` and textures/samplers are validated with `BX_IN_TEXTURES()` / `BX_IN_SAMPLERS()`.
 
@@ -703,12 +852,11 @@ The build pipeline produces reflection from DXC for every module in
    - When `stage != CS`, all `numthreads_*` are `0`.
 3. The only register-bound constant buffers are the engine contracts:
 
-   - `SceneConstants` at `b1, space0` with `byte_size == 176`.
+   - `SceneConstants` at `b1, space0` with `byte_size == 256`.
 
    - `RootConstants` at `b2, space0` with `byte_size == 16` (DXC reports HLSL
     `cbuffer` sizes rounded up to 16-byte alignment; payload is still two
     32-bit root constants).
-
 4. There are zero additional register-bound CBVs.
 5. There are zero register-bound SRVs.
 6. There are zero register-bound UAVs.

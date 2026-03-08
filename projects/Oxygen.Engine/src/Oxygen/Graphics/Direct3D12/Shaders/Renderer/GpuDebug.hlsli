@@ -8,6 +8,8 @@
 #define OXYGEN_D3D12_SHADERS_RENDERER_GPUDEBUG_HLSLI
 
 #include "Renderer/SceneConstants.hlsli"
+#include "Renderer/ViewFrameBindings.hlsli"
+#include "Renderer/DebugFrameBindings.hlsli"
 
 struct GpuDebugLine
 {
@@ -21,13 +23,21 @@ struct GpuDebugLine
 
 void AddGpuDebugLine(GpuDebugLine debugLine)
 {
-    if (bindless_gpu_debug_line_slot == 0 || bindless_gpu_debug_counter_slot == 0)
+    const ViewFrameBindings view_bindings =
+        LoadViewFrameBindings(bindless_view_frame_bindings_slot);
+    const DebugFrameBindings debug_bindings =
+        LoadDebugFrameBindings(view_bindings.debug_frame_slot);
+
+    if (debug_bindings.line_buffer_uav_slot == K_INVALID_BINDLESS_INDEX
+        || debug_bindings.counter_buffer_uav_slot == K_INVALID_BINDLESS_INDEX)
     {
         return;
     }
 
-    RWStructuredBuffer<GpuDebugLine> gpuDebugLineBuffer = ResourceDescriptorHeap[bindless_gpu_debug_line_slot];
-    RWByteAddressBuffer gpuDebugLineCounterBuffer = ResourceDescriptorHeap[bindless_gpu_debug_counter_slot];
+    RWStructuredBuffer<GpuDebugLine> gpuDebugLineBuffer =
+        ResourceDescriptorHeap[debug_bindings.line_buffer_uav_slot];
+    RWByteAddressBuffer gpuDebugLineCounterBuffer =
+        ResourceDescriptorHeap[debug_bindings.counter_buffer_uav_slot];
 
     uint newNodeSlot;
     // The counter for InstanceCount is at byte offset 4 of the indirect args buffer

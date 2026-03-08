@@ -39,7 +39,6 @@ class Renderer;
 class RenderPass;
 
 namespace internal {
-  class EnvironmentDynamicDataManager;
   class GpuDebugManager;
   class SkyAtmosphereLutManager;
 }
@@ -123,13 +122,6 @@ struct RenderContext {
    @note This field is mandatory.
   */
   std::shared_ptr<const graphics::Buffer> scene_constants;
-
-  //! Per-view environment dynamic data manager.
-  /*!
-    Supports root CBV binding at b3. Shaders query cluster indices and other
-    high-frequency environment fields from this buffer.
-  */
-  observer_ptr<internal::EnvironmentDynamicDataManager> env_dynamic_manager;
 
   //! Manages GPU debug resources (line buffer and counters).
   observer_ptr<internal::GpuDebugManager> gpu_debug_manager;

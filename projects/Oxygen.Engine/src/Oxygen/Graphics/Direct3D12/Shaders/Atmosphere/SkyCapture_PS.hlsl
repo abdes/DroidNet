@@ -17,7 +17,7 @@ struct SkyCapturePSInput
 float4 PS(SkyCapturePSInput input) : SV_TARGET
 {
     EnvironmentStaticData env_data;
-    if (!LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data))
+    if (!LoadEnvironmentStaticData(env_data))
     {
         return float4(0.0, 0.0, 0.0, 1.0);
     }

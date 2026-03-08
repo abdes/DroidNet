@@ -21,7 +21,6 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-#include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
 #include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
@@ -76,18 +75,6 @@ auto TransparentPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 auto TransparentPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 {
   LOG_SCOPE_FUNCTION(2);
-
-  // Bind EnvironmentDynamicData for Forward+ lighting and exposure
-  if (const auto manager = Context().env_dynamic_manager) {
-    const auto view_id = Context().current_view.view_id;
-    manager->UpdateIfNeeded(view_id);
-    if (const auto env_addr = manager->GetGpuVirtualAddress(view_id);
-      env_addr != 0) {
-      recorder.SetGraphicsRootConstantBufferView(
-        static_cast<uint32_t>(binding::RootParam::kEnvironmentDynamicData),
-        env_addr);
-    }
-  }
 
   // Minimal RT binding path identical to ShaderPass helper logic (inline to
   // avoid duplication until a shared helper is extracted).

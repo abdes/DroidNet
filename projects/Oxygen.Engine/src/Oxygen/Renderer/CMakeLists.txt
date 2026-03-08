@@ -95,10 +95,13 @@ set(
   "Types/CompositingTask.h"
   "Types/DirectionalLightBasic.h"
   "Types/DirectionalLightShadows.h"
+  "Types/DebugFrameBindings.h"
   "Types/DrawIndex.h"
   "Types/DrawMetadata.h"
-  "Types/EnvironmentDynamicData.h"
+  "Types/EnvironmentFrameBindings.h"
   "Types/EnvironmentStaticData.h"
+  "Types/EnvironmentViewData.h"
+  "Types/LightingFrameBindings.h"
   "Types/LightCullingConfig.h"
   "Types/MaterialConstants.h"
   "Types/MaterialPermutations.h"
@@ -106,6 +109,9 @@ set(
   "Types/PositionalLightData.h"
   "Types/SceneConstants.h"
   "Types/ShaderDebugMode.h"
+  "Types/SyntheticSunData.h"
+  "Types/ViewColorData.h"
+  "Types/ViewFrameBindings.h"
   "Upload/Errors.h"
 )
 set(
@@ -115,8 +121,6 @@ set(
   "Internal/BlueNoiseData.h"
   "Internal/BrdfLutManager.cpp"
   "Internal/BrdfLutManager.h"
-  "Internal/EnvironmentDynamicDataManager.cpp"
-  "Internal/EnvironmentDynamicDataManager.h"
   "Internal/EnvironmentStaticDataManager.cpp"
   "Internal/EnvironmentStaticDataManager.h"
   "Internal/GpuDebugManager.cpp"
@@ -127,6 +131,7 @@ set(
   "Internal/IIblProvider.h"
   "Internal/ISkyAtmosphereLutProvider.h"
   "Internal/ISkyCaptureProvider.h"
+  "Internal/PerViewStructuredPublisher.h"
   "Internal/RenderScope.h"
   "Internal/SceneConstantsManager.cpp"
   "Internal/SceneConstantsManager.h"
@@ -221,8 +226,10 @@ target_sources(
     ${OXYGEN_RENDERER_HEADERS}
   PUBLIC
     FILE_SET HEADERS
-    BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES ${OXYGEN_RENDERER_HEADERS}
+      BASE_DIRS
+        "${OXYGEN_SOURCE_DIR}"
+      FILES
+        ${OXYGEN_RENDERER_HEADERS}
 )
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})

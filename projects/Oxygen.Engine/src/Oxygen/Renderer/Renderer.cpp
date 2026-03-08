@@ -55,10 +55,10 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/Internal/BrdfLutManager.h>
-#include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
 #include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
 #include <Oxygen/Renderer/Internal/GpuDebugManager.h>
 #include <Oxygen/Renderer/Internal/IblManager.h>
+#include <Oxygen/Renderer/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Renderer/Internal/SceneConstantsManager.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Internal/SunResolver.h>
@@ -82,11 +82,18 @@
 #include <Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Renderer/Types/CompositingTask.h>
+#include <Oxygen/Renderer/Types/DebugFrameBindings.h>
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
-#include <Oxygen/Renderer/Types/EnvironmentDynamicData.h>
+#include <Oxygen/Renderer/Types/EnvironmentFrameBindings.h>
 #include <Oxygen/Renderer/Types/EnvironmentStaticData.h>
+#include <Oxygen/Renderer/Types/EnvironmentViewData.h>
+#include <Oxygen/Renderer/Types/LightingFrameBindings.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
+#include <Oxygen/Renderer/Types/SyntheticSunData.h>
+#include <Oxygen/Renderer/Types/ViewColorData.h>
+#include <Oxygen/Renderer/Types/ViewFrameBindings.h>
+#include <Oxygen/Renderer/Upload/Errors.h>
 #include <Oxygen/Renderer/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
@@ -393,18 +400,8 @@ Renderer::~Renderer()
   const auto stats = GetStats();
   LogRendererPerformanceStats(stats, loguru::Verbosity_INFO);
 
-  sky_capture_pass_.reset();
-  sky_atmo_lut_compute_pass_.reset();
-  ibl_compute_pass_.reset();
-  env_dynamic_manager_.reset();
-  brdf_lut_manager_.reset();
-  env_static_manager_.reset();
-  scene_const_manager_.reset();
-  scene_prep_state_.reset();
-  uploader_.reset();
-  upload_staging_provider_.reset();
-  inline_transfers_.reset();
-  inline_staging_provider_.reset();
+  OnShutdown();
+  scene_prep_.reset();
 }
 
 auto Renderer::GetStats() const noexcept -> Stats
@@ -533,11 +530,30 @@ auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
       observer_ptr { gfx.get() },
       static_cast<std::uint32_t>(sizeof(SceneConstants::GpuData)));
 
-    // Initialize environment dynamic data manager for b3 CBV (cluster slots,
-    // exposure, etc.).
-    env_dynamic_manager_
-      = std::make_unique<internal::EnvironmentDynamicDataManager>(
-        observer_ptr { gfx.get() });
+    view_frame_bindings_publisher_ = std::make_unique<
+      internal::PerViewStructuredPublisher<ViewFrameBindings>>(
+      observer_ptr { gfx.get() }, *inline_staging_provider_,
+      observer_ptr { inline_transfers_.get() }, "ViewFrameBindings");
+    view_color_data_publisher_
+      = std::make_unique<internal::PerViewStructuredPublisher<ViewColorData>>(
+        observer_ptr { gfx.get() }, *inline_staging_provider_,
+        observer_ptr { inline_transfers_.get() }, "ViewColorData");
+    debug_frame_bindings_publisher_ = std::make_unique<
+      internal::PerViewStructuredPublisher<DebugFrameBindings>>(
+      observer_ptr { gfx.get() }, *inline_staging_provider_,
+      observer_ptr { inline_transfers_.get() }, "DebugFrameBindings");
+    lighting_frame_bindings_publisher_ = std::make_unique<
+      internal::PerViewStructuredPublisher<LightingFrameBindings>>(
+      observer_ptr { gfx.get() }, *inline_staging_provider_,
+      observer_ptr { inline_transfers_.get() }, "LightingFrameBindings");
+    environment_view_data_publisher_ = std::make_unique<
+      internal::PerViewStructuredPublisher<EnvironmentViewData>>(
+      observer_ptr { gfx.get() }, *inline_staging_provider_,
+      observer_ptr { inline_transfers_.get() }, "EnvironmentViewData");
+    environment_frame_bindings_publisher_ = std::make_unique<
+      internal::PerViewStructuredPublisher<EnvironmentFrameBindings>>(
+      observer_ptr { gfx.get() }, *inline_staging_provider_,
+      observer_ptr { inline_transfers_.get() }, "EnvironmentFrameBindings");
 
     // Precompute and bind BRDF integration LUTs (bindless SRV slot provider).
     brdf_lut_manager_ = std::make_unique<internal::BrdfLutManager>(
@@ -688,7 +704,27 @@ auto Renderer::ApplyConsoleCVars(
 
 auto Renderer::OnShutdown() noexcept -> void
 {
+  if (uploader_) {
+    if (const auto shutdown_result = uploader_->Shutdown();
+      !shutdown_result.has_value()) {
+      LOG_F(WARNING, "Renderer::OnShutdown upload drain failed: {}",
+        make_error_code(shutdown_result.error()).message());
+    }
+  }
+
   console_ = nullptr;
+  asset_loader_ = nullptr;
+  render_context_ = nullptr;
+
+  {
+    std::unique_lock registration_lock(view_registration_mutex_);
+    render_graphs_.clear();
+  }
+
+  {
+    std::unique_lock state_lock(view_state_mutex_);
+    view_ready_states_.clear();
+  }
 
   {
     std::lock_guard lock(composition_mutex_);
@@ -696,8 +732,51 @@ auto Renderer::OnShutdown() noexcept -> void
     composition_surface_.reset();
   }
 
+  {
+    std::lock_guard lock(pending_cleanup_mutex_);
+    pending_cleanup_.clear();
+  }
+
+  prepared_frames_.clear();
+  resolved_views_.clear();
+  per_view_storage_.clear();
+  per_view_runtime_state_.clear();
+  per_view_atmo_luts_.clear();
+  last_atmo_generation_.clear();
+  last_seen_view_frame_seq_.clear();
+
+  sky_capture_pass_.reset();
+  sky_capture_pass_config_.reset();
+  sky_atmo_lut_compute_pass_.reset();
+  sky_atmo_lut_compute_pass_config_.reset();
+  ibl_compute_pass_.reset();
   compositing_pass_.reset();
   compositing_pass_config_.reset();
+
+  texture_binder_.reset();
+  gpu_debug_manager_.reset();
+  scene_prep_state_.reset();
+  env_static_manager_.reset();
+  ibl_manager_.reset();
+  brdf_lut_manager_.reset();
+
+  view_frame_bindings_publisher_.reset();
+  view_color_data_publisher_.reset();
+  debug_frame_bindings_publisher_.reset();
+  lighting_frame_bindings_publisher_.reset();
+  environment_view_data_publisher_.reset();
+  environment_frame_bindings_publisher_.reset();
+  scene_const_manager_.reset();
+  render_context_pool_.reset();
+
+  inline_transfers_.reset();
+  upload_staging_provider_.reset();
+  inline_staging_provider_.reset();
+  uploader_.reset();
+
+  if (auto gfx = gfx_weak_.lock()) {
+    gfx->GetDeferredReclaimer().OnRendererShutdown();
+  }
 }
 
 auto Renderer::GetGraphics() -> std::shared_ptr<Graphics>
@@ -1051,24 +1130,6 @@ auto Renderer::OnPreRender(observer_ptr<FrameContext> context) -> co::Co<>
     DLOG_F(3, "Instance Data: {}", instance_data_srv);
     scene_const_cpu_.SetBindlessInstanceDataSlot(
       BindlessInstanceDataSlot(instance_data_srv), SceneConstants::kRenderer);
-  }
-
-  if (auto light_manager = scene_prep_state_->GetLightManager()) {
-    const auto dir_srv = light_manager->GetDirectionalLightsSrvIndex();
-    const auto dir_shadows_srv = light_manager->GetDirectionalShadowsSrvIndex();
-    const auto pos_srv = light_manager->GetPositionalLightsSrvIndex();
-
-    DLOG_F(3, "Directional Lights: {}", dir_srv);
-    DLOG_F(3, "Directional Shadows: {}", dir_shadows_srv);
-    DLOG_F(3, "Positional Lights: {}", pos_srv);
-
-    scene_const_cpu_.SetBindlessDirectionalLightsSlot(
-      BindlessDirectionalLightsSlot(dir_srv), SceneConstants::kRenderer);
-    scene_const_cpu_.SetBindlessDirectionalShadowsSlot(
-      BindlessDirectionalShadowsSlot(dir_shadows_srv),
-      SceneConstants::kRenderer);
-    scene_const_cpu_.SetBindlessPositionalLightsSlot(
-      BindlessPositionalLightsSlot(pos_srv), SceneConstants::kRenderer);
   }
 
   co_return;
@@ -1704,61 +1765,6 @@ auto Renderer::PrepareAndWireSceneConstantsForView(ViewId view_id,
     return false;
   }
 
-  // Create a per-view scene constants snapshot based on the last frame-level
-  // scene_const_cpu_ and per-view SRV indices captured during RunScenePrep.
-  SceneConstants view_scene_consts = scene_const_cpu_;
-  const auto& prepared = prepared_it->second;
-  DLOG_F(3, "   worlds: {}", prepared.bindless_worlds_slot);
-  DLOG_F(3, "  normals: {}", prepared.bindless_normals_slot);
-  DLOG_F(3, "materials: {}", prepared.bindless_materials_slot);
-  DLOG_F(3, " metadata: {}", prepared.bindless_draw_metadata_slot);
-  DLOG_F(3, " instance: {}", prepared.bindless_instance_data_slot);
-
-  view_scene_consts.SetBindlessWorldsSlot(
-    BindlessWorldsSlot(prepared.bindless_worlds_slot),
-    SceneConstants::kRenderer);
-  view_scene_consts.SetBindlessNormalMatricesSlot(
-    BindlessNormalsSlot(prepared.bindless_normals_slot),
-    SceneConstants::kRenderer);
-  view_scene_consts.SetBindlessMaterialConstantsSlot(
-    BindlessMaterialConstantsSlot(prepared.bindless_materials_slot),
-    SceneConstants::kRenderer);
-  view_scene_consts.SetBindlessDrawMetadataSlot(
-    BindlessDrawMetadataSlot(prepared.bindless_draw_metadata_slot),
-    SceneConstants::kRenderer);
-  view_scene_consts.SetBindlessInstanceDataSlot(
-    BindlessInstanceDataSlot(prepared.bindless_instance_data_slot),
-    SceneConstants::kRenderer);
-
-  if (gpu_debug_manager_) {
-    view_scene_consts.SetBindlessGpuDebugLineSlot(
-      BindlessGpuDebugLineSlot(
-        ShaderVisibleIndex(gpu_debug_manager_->GetLineBufferSrvIndex())),
-      SceneConstants::kRenderer);
-    view_scene_consts.SetBindlessGpuDebugCounterSlot(
-      BindlessGpuDebugCounterSlot(
-        ShaderVisibleIndex(gpu_debug_manager_->GetCounterBufferUavIndex())),
-      SceneConstants::kRenderer);
-
-    static bool logged_gpu_debug_slots = false;
-    if (!logged_gpu_debug_slots) {
-      DLOG_F(1,
-        "Renderer: bindless GPU debug slots set (line_srv={}, counter_uav={})",
-        gpu_debug_manager_->GetLineBufferSrvIndex(),
-        gpu_debug_manager_->GetCounterBufferUavIndex());
-      logged_gpu_debug_slots = true;
-    }
-  }
-
-  const auto& proj_matrix = resolved_it->second.ProjectionMatrix();
-  view_scene_consts.SetViewMatrix(resolved_it->second.ViewMatrix())
-    .SetProjectionMatrix(proj_matrix)
-    .SetCameraPosition(resolved_it->second.CameraPosition())
-    .SetExposure(prepared.exposure, SceneConstants::kRenderer)
-    .SetFrameSlot(frame_context.GetFrameSlot(), SceneConstants::kRenderer)
-    .SetFrameSequenceNumber(
-      frame_context.GetFrameSequenceNumber(), SceneConstants::kRenderer);
-
   // Populate render_context.current_view before EnvStatic update.
   render_context.current_view.view_id = view_id;
   render_context.current_view.resolved_view.reset(&resolved_it->second);
@@ -1786,42 +1792,158 @@ auto Renderer::PrepareAndWireSceneConstantsForView(ViewId view_id,
     if (allow_atmosphere) {
       auto tag = oxygen::renderer::internal::RendererTagFactory::Get();
       env_static_manager_->UpdateIfNeeded(tag, render_context, view_id);
-      const auto expected_env_srv = env_static_manager_->GetSrvIndex(view_id);
-      view_scene_consts.SetBindlessEnvironmentStaticSlot(
-        BindlessEnvironmentStaticSlot(expected_env_srv),
-        SceneConstants::kRenderer);
     } else {
       env_static_manager_->EraseViewState(view_id);
-      view_scene_consts.SetBindlessEnvironmentStaticSlot(
-        BindlessEnvironmentStaticSlot(kInvalidShaderVisibleIndex),
-        SceneConstants::kRenderer);
+    }
+  }
+  return RepublishCurrentViewBindings(render_context);
+}
+
+auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
+  -> bool
+{
+  const auto view_id = render_context.current_view.view_id;
+  if (view_id == ViewId {}) {
+    LOG_F(ERROR, "Renderer: cannot republish bindings for invalid view id");
+    return false;
+  }
+  if (!render_context.current_view.resolved_view
+    || !render_context.current_view.prepared_frame) {
+    LOG_F(ERROR,
+      "Renderer: cannot republish bindings for view {} without current view "
+      "state",
+      view_id.get());
+    return false;
+  }
+
+  const auto& resolved = *render_context.current_view.resolved_view;
+  const auto& prepared = *render_context.current_view.prepared_frame;
+  const auto runtime_it = per_view_runtime_state_.find(view_id);
+  const auto runtime_state = runtime_it != per_view_runtime_state_.end()
+    ? runtime_it->second
+    : PerViewRuntimeState {};
+
+  SceneConstants view_scene_consts = scene_const_cpu_;
+  DLOG_F(3, "   worlds: {}", prepared.bindless_worlds_slot);
+  DLOG_F(3, "  normals: {}", prepared.bindless_normals_slot);
+  DLOG_F(3, "materials: {}", prepared.bindless_materials_slot);
+  DLOG_F(3, " metadata: {}", prepared.bindless_draw_metadata_slot);
+  DLOG_F(3, " instance: {}", prepared.bindless_instance_data_slot);
+
+  view_scene_consts.SetBindlessWorldsSlot(
+    BindlessWorldsSlot(prepared.bindless_worlds_slot),
+    SceneConstants::kRenderer);
+  view_scene_consts.SetBindlessNormalMatricesSlot(
+    BindlessNormalsSlot(prepared.bindless_normals_slot),
+    SceneConstants::kRenderer);
+  view_scene_consts.SetBindlessMaterialConstantsSlot(
+    BindlessMaterialConstantsSlot(prepared.bindless_materials_slot),
+    SceneConstants::kRenderer);
+  view_scene_consts.SetBindlessDrawMetadataSlot(
+    BindlessDrawMetadataSlot(prepared.bindless_draw_metadata_slot),
+    SceneConstants::kRenderer);
+  view_scene_consts.SetBindlessInstanceDataSlot(
+    BindlessInstanceDataSlot(prepared.bindless_instance_data_slot),
+    SceneConstants::kRenderer);
+
+  if (gpu_debug_manager_) {
+    static bool logged_gpu_debug_slots = false;
+    if (!logged_gpu_debug_slots) {
+      DLOG_F(1,
+        "Renderer: bindless GPU debug slots set (line_srv={}, counter_uav={})",
+        gpu_debug_manager_->GetLineBufferSrvIndex(),
+        gpu_debug_manager_->GetCounterBufferUavIndex());
+      logged_gpu_debug_slots = true;
     }
   }
 
-  // Write constants into per-view mapped buffer
-  const auto& snapshot = view_scene_consts.GetSnapshot();
+  view_scene_consts.SetViewMatrix(resolved.ViewMatrix())
+    .SetProjectionMatrix(resolved.ProjectionMatrix())
+    .SetCameraPosition(resolved.CameraPosition())
+    .SetFrameSlot(render_context.frame_slot, SceneConstants::kRenderer)
+    .SetFrameSequenceNumber(
+      render_context.frame_sequence, SceneConstants::kRenderer);
 
-  if (snapshot.frame_slot != frame_context.GetFrameSlot().get()) {
+  const auto environment_static_slot = env_static_manager_
+    ? env_static_manager_->GetSrvIndex(view_id)
+    : kInvalidShaderVisibleIndex;
+
+  if (view_frame_bindings_publisher_) {
+    ViewFrameBindings view_bindings {};
+
+    if (view_color_data_publisher_) {
+      const ViewColorData view_color_data {
+        .exposure = prepared.exposure,
+      };
+      view_bindings.view_color_frame_slot
+        = view_color_data_publisher_->Publish(view_id, view_color_data);
+    }
+
+    if (gpu_debug_manager_ && debug_frame_bindings_publisher_) {
+      const DebugFrameBindings debug_bindings {
+        .line_buffer_srv_slot
+        = ShaderVisibleIndex(gpu_debug_manager_->GetLineBufferSrvIndex()),
+        .line_buffer_uav_slot
+        = ShaderVisibleIndex(gpu_debug_manager_->GetLineBufferUavIndex()),
+        .counter_buffer_uav_slot
+        = ShaderVisibleIndex(gpu_debug_manager_->GetCounterBufferUavIndex()),
+      };
+      view_bindings.debug_frame_slot
+        = debug_frame_bindings_publisher_->Publish(view_id, debug_bindings);
+    }
+
+    if (lighting_frame_bindings_publisher_) {
+      auto directional_lights_slot = kInvalidShaderVisibleIndex;
+      auto directional_shadows_slot = kInvalidShaderVisibleIndex;
+      auto positional_lights_slot = kInvalidShaderVisibleIndex;
+      if (const auto light_manager = scene_prep_state_->GetLightManager()) {
+        directional_lights_slot = light_manager->GetDirectionalLightsSrvIndex();
+        directional_shadows_slot
+          = light_manager->GetDirectionalShadowsSrvIndex();
+        positional_lights_slot = light_manager->GetPositionalLightsSrvIndex();
+      }
+
+      const LightingFrameBindings lighting_bindings {
+        .directional_lights_slot = directional_lights_slot,
+        .directional_shadows_slot = directional_shadows_slot,
+        .positional_lights_slot = positional_lights_slot,
+        .light_culling = runtime_state.light_culling,
+        .sun = runtime_state.sun,
+      };
+      view_bindings.lighting_frame_slot
+        = lighting_frame_bindings_publisher_->Publish(
+          view_id, lighting_bindings);
+    }
+
+    if (environment_frame_bindings_publisher_) {
+      auto environment_view_slot = kInvalidShaderVisibleIndex;
+      if (environment_view_data_publisher_) {
+        environment_view_slot = environment_view_data_publisher_->Publish(
+          view_id, runtime_state.environment_view);
+      }
+
+      const EnvironmentFrameBindings environment_bindings {
+        .environment_static_slot = environment_static_slot,
+        .environment_view_slot = environment_view_slot,
+      };
+      view_bindings.environment_frame_slot
+        = environment_frame_bindings_publisher_->Publish(
+          view_id, environment_bindings);
+    }
+
+    const auto view_bindings_slot
+      = view_frame_bindings_publisher_->Publish(view_id, view_bindings);
+    view_scene_consts.SetBindlessViewFrameBindingsSlot(
+      BindlessViewFrameBindingsSlot(view_bindings_slot),
+      SceneConstants::kRenderer);
+  }
+
+  const auto& snapshot = view_scene_consts.GetSnapshot();
+  if (snapshot.frame_slot != render_context.frame_slot.get()) {
     LOG_F(ERROR,
       "Renderer: SceneConstants frame_slot mismatch (view={} snapshot={} "
       "expected={})",
-      view_id.get(), snapshot.frame_slot, frame_context.GetFrameSlot().get());
-  }
-
-  if (env_static_manager_ && allow_atmosphere) {
-    const auto expected_env_srv = env_static_manager_->GetSrvIndex(view_id);
-    const auto bound_env_srv = snapshot.env_static_bslot.value;
-    if (!bound_env_srv.IsValid()) {
-      LOG_F(ERROR,
-        "Renderer: SceneConstants EnvStatic SRV invalid (view={} "
-        "expected_srv={})",
-        view_id.get(), expected_env_srv.get());
-    } else if (bound_env_srv != expected_env_srv) {
-      LOG_F(ERROR,
-        "Renderer: SceneConstants EnvStatic SRV mismatch (view={} bound={} "
-        "expected={})",
-        view_id.get(), bound_env_srv.get(), expected_env_srv.get());
-    }
+      view_id.get(), snapshot.frame_slot, render_context.frame_slot.get());
   }
 
   auto buffer_info = scene_const_manager_->WriteSceneConstants(
@@ -1831,10 +1953,29 @@ auto Renderer::PrepareAndWireSceneConstantsForView(ViewId view_id,
     return false;
   }
 
-  WireContext(render_context, buffer_info.buffer);
-  render_context.env_dynamic_manager.reset(env_dynamic_manager_.get());
-
+  // Render passes only see a const RenderContext; rewiring the authoritative
+  // scene-constants buffer remains a renderer-owned operation.
+  WireContext(const_cast<RenderContext&>(render_context), buffer_info.buffer);
   return true;
+}
+
+auto Renderer::UpdateCurrentViewLightCullingConfig(
+  const RenderContext& render_context, const LightCullingConfig& config) -> void
+{
+  const auto view_id = render_context.current_view.view_id;
+  if (view_id == ViewId {}) {
+    LOG_F(ERROR,
+      "Renderer: cannot update clustered-lighting state for invalid view id");
+    return;
+  }
+
+  per_view_runtime_state_[view_id].light_culling = config;
+  if (!RepublishCurrentViewBindings(render_context)) {
+    LOG_F(ERROR,
+      "Renderer: failed to republish current-view bindings after light "
+      "culling update for view {}",
+      view_id.get());
+  }
 }
 
 auto Renderer::UpdateViewExposure(ViewId view_id, const scene::Scene& scene,
@@ -2082,108 +2223,110 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
           = emitter->GetInstanceDataSrvIndex();
       }
 
-      if (env_dynamic_manager_) {
-        const oxygen::observer_ptr<renderer::LightManager> light_mgr
-          = scene_prep_state_->GetLightManager();
-        if (light_mgr) {
-          const auto dir_lights = light_mgr->GetDirectionalLights();
-          const SyntheticSunData scene_sun
-            = internal::ResolveSunForView(scene, dir_lights);
+      auto& runtime_state = per_view_runtime_state_[view_id];
+      runtime_state = PerViewRuntimeState {};
 
-          std::size_t sun_tagged_count = 0;
-          std::size_t env_contrib_count = 0;
-          for (const auto& dl : dir_lights) {
-            const auto flags = static_cast<DirectionalLightFlags>(dl.flags);
-            if ((flags & DirectionalLightFlags::kSunLight)
-              != DirectionalLightFlags::kNone) {
-              ++sun_tagged_count;
-            }
-            if ((flags & DirectionalLightFlags::kEnvironmentContribution)
-              != DirectionalLightFlags::kNone) {
-              ++env_contrib_count;
-            }
+      const oxygen::observer_ptr<renderer::LightManager> light_mgr
+        = scene_prep_state_->GetLightManager();
+      if (light_mgr) {
+        const auto dir_lights = light_mgr->GetDirectionalLights();
+        runtime_state.sun = internal::ResolveSunForView(scene, dir_lights);
+
+        std::size_t sun_tagged_count = 0;
+        std::size_t env_contrib_count = 0;
+        for (const auto& dl : dir_lights) {
+          const auto flags = static_cast<DirectionalLightFlags>(dl.flags);
+          if ((flags & DirectionalLightFlags::kSunLight)
+            != DirectionalLightFlags::kNone) {
+            ++sun_tagged_count;
           }
-
-          if (scene_sun.enabled == 0U
-            && (sun_tagged_count > 0 || env_contrib_count > 0)) {
-            LOG_F(WARNING,
-              "Renderer: resolved sun is disabled but directional light set "
-              "contains sun/environment contributors "
-              "(view={} total={} sun_tagged={} env_contrib={})",
-              nostd::to_string(view_id), dir_lights.size(), sun_tagged_count,
-              env_contrib_count);
+          if ((flags & DirectionalLightFlags::kEnvironmentContribution)
+            != DirectionalLightFlags::kNone) {
+            ++env_contrib_count;
           }
+        }
 
-          env_dynamic_manager_->SetSunState(view_id, scene_sun);
-          prepared_frame.exposure
-            = UpdateViewExposure(view_id, scene, scene_sun);
+        if (runtime_state.sun.enabled == 0U
+          && (sun_tagged_count > 0 || env_contrib_count > 0)) {
+          LOG_F(WARNING,
+            "Renderer: resolved sun is disabled but directional light set "
+            "contains sun/environment contributors "
+            "(view={} total={} sun_tagged={} env_contrib={})",
+            nostd::to_string(view_id), dir_lights.size(), sun_tagged_count,
+            env_contrib_count);
+        }
+      }
 
-          // Populate SkyAtmosphere per-view context. Defaults stay conservative
-          // until LUT precompute is wired; analytic fallback stays enabled.
-          float aerial_distance_scale = 1.0F;
-          float aerial_scattering_strength = 1.0F;
-          // Planet center positioned below Z=0 ground plane so camera at Z>=0
-          // is on/above surface. Default radius places center at Z=-6360km.
-          float planet_radius_m = 6'360'000.0F;
-          glm::vec3 planet_center_ws { 0.0F, 0.0F, -planet_radius_m };
-          glm::vec3 planet_up_ws { 0.0F, 0.0F, 1.0F };
-          float camera_altitude_m = 0.0F;
-          float sky_view_lut_slice = 0.0F;
-          float planet_to_sun_cos_zenith = 0.0F;
+      prepared_frame.exposure
+        = UpdateViewExposure(view_id, scene, runtime_state.sun);
 
-          namespace env = scene::environment;
+      // Populate SkyAtmosphere per-view context. Defaults stay conservative
+      // until LUT precompute is wired; analytic fallback stays enabled.
+      float aerial_distance_scale = 1.0F;
+      float aerial_scattering_strength = 1.0F;
+      // Planet center positioned below Z=0 ground plane so camera at Z>=0
+      // is on/above surface. Default radius places center at Z=-6360km.
+      float planet_radius_m = 6'360'000.0F;
+      glm::vec3 planet_center_ws { 0.0F, 0.0F, -planet_radius_m };
+      glm::vec3 planet_up_ws { 0.0F, 0.0F, 1.0F };
+      float camera_altitude_m = 0.0F;
+      float sky_view_lut_slice = 0.0F;
+      float planet_to_sun_cos_zenith = 0.0F;
 
-          if (auto env = scene.GetEnvironment()) {
-            if (const auto atmo = env->TryGetSystem<env::SkyAtmosphere>();
-              atmo && atmo->IsEnabled()) {
-              aerial_distance_scale = atmo->GetAerialPerspectiveDistanceScale();
-              aerial_scattering_strength = atmo->GetAerialScatteringStrength();
-              planet_radius_m = atmo->GetPlanetRadiusMeters();
+      namespace env = scene::environment;
 
-              // Update planet center to keep Z=0 as ground level.
-              planet_center_ws = glm::vec3(0.0F, 0.0F, -planet_radius_m);
+      if (auto env = scene.GetEnvironment()) {
+        if (const auto atmo = env->TryGetSystem<env::SkyAtmosphere>();
+          atmo && atmo->IsEnabled()) {
+          aerial_distance_scale = atmo->GetAerialPerspectiveDistanceScale();
+          aerial_scattering_strength = atmo->GetAerialScatteringStrength();
+          planet_radius_m = atmo->GetPlanetRadiusMeters();
 
-              // LUT availability is checked later when merging with debug
-              // flags. The debug UI controls whether aerial perspective is
-              // enabled.
-              const auto camera_pos = view.CameraPosition();
-              camera_altitude_m = glm::max(
-                glm::length(camera_pos - planet_center_ws) - planet_radius_m,
-                0.0F);
-              // Use scene sun's cos_zenith for atmosphere.
-              planet_to_sun_cos_zenith
-                = (scene_sun.enabled != 0U) ? scene_sun.cos_zenith : 0.0F;
-            }
-          }
+          // Update planet center to keep Z=0 as ground level.
+          planet_center_ws = glm::vec3(0.0F, 0.0F, -planet_radius_m);
 
-          env_dynamic_manager_->SetAtmosphereScattering(
-            view_id, aerial_distance_scale, aerial_scattering_strength);
-          // Note: planet_radius_m is in EnvironmentStaticData, not passed here.
-          env_dynamic_manager_->SetAtmosphereFrameContext(view_id,
-            planet_center_ws, planet_up_ws, camera_altitude_m,
-            sky_view_lut_slice, planet_to_sun_cos_zenith);
+          // LUT availability is checked later when merging with debug
+          // flags. The debug UI controls whether aerial perspective is
+          // enabled.
+          const auto camera_pos = view.CameraPosition();
+          camera_altitude_m = glm::max(
+            glm::length(camera_pos - planet_center_ws) - planet_radius_m, 0.0F);
+          planet_to_sun_cos_zenith = (runtime_state.sun.enabled != 0U)
+            ? runtime_state.sun.cos_zenith
+            : 0.0F;
+        }
+      }
 
-          const bool allow_atmosphere
-            = frame_context.GetViewContext(view_id).metadata.with_atmosphere;
-          bool atmo_enabled = false;
-          if (const auto scene_env = scene.GetEnvironment();
-            allow_atmosphere && scene_env) {
-            if (const auto atmo = scene_env->TryGetSystem<env::SkyAtmosphere>();
-              atmo && atmo->IsEnabled()) {
-              atmo_enabled = true;
-            }
-          }
-          if (atmo_enabled) {
-            if (const auto lut_mgr
-              = GetOrCreateSkyAtmosphereLutManagerForView(view_id)) {
-              lut_mgr->UpdateSunState(scene_sun);
-              if (const auto scene_env = scene.GetEnvironment()) {
-                if (const auto params = BuildSkyAtmosphereParamsFromEnvironment(
-                      *scene_env, *lut_mgr);
-                  params.has_value()) {
-                  lut_mgr->UpdateParameters(*params);
-                }
-              }
+      runtime_state.environment_view = EnvironmentViewData {
+        .flags = 0U,
+        .sky_view_lut_slice = sky_view_lut_slice,
+        .planet_to_sun_cos_zenith = planet_to_sun_cos_zenith,
+        .aerial_perspective_distance_scale = aerial_distance_scale,
+        .aerial_scattering_strength = aerial_scattering_strength,
+        .planet_center_ws_pad = glm::vec4(planet_center_ws, 0.0F),
+        .planet_up_ws_camera_altitude_m
+        = glm::vec4(planet_up_ws, camera_altitude_m),
+      };
+
+      const bool allow_atmosphere
+        = frame_context.GetViewContext(view_id).metadata.with_atmosphere;
+      bool atmo_enabled = false;
+      if (const auto scene_env = scene.GetEnvironment();
+        allow_atmosphere && scene_env) {
+        if (const auto atmo = scene_env->TryGetSystem<env::SkyAtmosphere>();
+          atmo && atmo->IsEnabled()) {
+          atmo_enabled = true;
+        }
+      }
+      if (atmo_enabled) {
+        if (const auto lut_mgr
+          = GetOrCreateSkyAtmosphereLutManagerForView(view_id)) {
+          lut_mgr->UpdateSunState(runtime_state.sun);
+          if (const auto scene_env = scene.GetEnvironment()) {
+            if (const auto params
+              = BuildSkyAtmosphereParamsFromEnvironment(*scene_env, *lut_mgr);
+              params.has_value()) {
+              lut_mgr->UpdateParameters(*params);
             }
           }
         }
@@ -2267,6 +2410,7 @@ auto Renderer::OnFrameStart(observer_ptr<FrameContext> context) -> void
   DLOG_SCOPE_FUNCTION(2);
 
   resolved_views_.clear();
+  per_view_runtime_state_.clear();
 
   {
     std::lock_guard lock(composition_mutex_);
@@ -2295,7 +2439,15 @@ auto Renderer::OnFrameStart(observer_ptr<FrameContext> context) -> void
   // then uploaders and scene constants manager
   texture_binder_->OnFrameStart();
   scene_const_manager_->OnFrameStart(frame_slot);
-  env_dynamic_manager_->OnFrameStart(frame_slot);
+  view_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
+  view_color_data_publisher_->OnFrameStart(frame_sequence, frame_slot);
+  debug_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
+  lighting_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
+  environment_view_data_publisher_->OnFrameStart(frame_sequence, frame_slot);
+  if (environment_frame_bindings_publisher_) {
+    environment_frame_bindings_publisher_->OnFrameStart(
+      frame_sequence, frame_slot);
+  }
   if (env_static_manager_) {
     env_static_manager_->OnFrameStart(tag, frame_slot);
     env_static_manager_->SetBlueNoiseEnabled(atmosphere_blue_noise_enabled_);

@@ -23,11 +23,12 @@
 //!
 //! === Bindless Discipline ===
 //! - All resources accessed via SM 6.6 descriptor heaps
-//! - SceneConstants at b1, RootConstants at b2, EnvironmentDynamicData at b3
+//! - SceneConstants at b1, RootConstants at b2
 
 #include "Core/Bindless/Generated.BindlessLayout.hlsl"
 #include "Renderer/EnvironmentStaticData.hlsli"
-#include "Renderer/EnvironmentDynamicData.hlsli"
+#include "Renderer/EnvironmentViewHelpers.hlsli"
+#include "Renderer/LightingHelpers.hlsli"
 #include "Renderer/SceneConstants.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
 #include "Atmosphere/AtmosphereMedium.hlsli"
@@ -218,7 +219,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
     // Load environment static data for atmosphere parameters
     EnvironmentStaticData env_data;
-    if (!LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data))
+    if (!LoadEnvironmentStaticData(env_data))
     {
         // Fallback: write neutral sky
         RWTexture2DArray<float4> output = ResourceDescriptorHeap[pass_constants.output_uav_index];

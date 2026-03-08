@@ -5,7 +5,8 @@
 #include "Renderer/PositionalLightData.hlsli"
 #include "Forward/ForwardPbr.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
-#include "Renderer/EnvironmentDynamicData.hlsli"
+#include "Renderer/EnvironmentViewHelpers.hlsli"
+#include "Renderer/LightingHelpers.hlsli"
 #include "Common/Lighting.hlsli"
 #include "Common/Geometry.hlsli"
 #include "Atmosphere/AtmosphereSampling.hlsli"
@@ -107,8 +108,9 @@ float3 AccumulateDirectionalLights(
     float  roughness)
 {
     float3 direct = float3(0.0, 0.0, 0.0);
+    const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
 
-    // Render the Sun separately using the resolved EnvironmentDynamicData.sun
+    // Render the Sun separately using the resolved lighting-frame data.
     bool sun_rendered = false;
     if (HasSunLight()) {
         const float3 sun_dir_ws = GetSunDirectionWS();
@@ -146,10 +148,10 @@ float3 AccumulateDirectionalLights(
         sun_rendered = true;
     }
 
-    if (bindless_directional_lights_slot != K_INVALID_BINDLESS_INDEX
-        && BX_IN_GLOBAL_SRV(bindless_directional_lights_slot)) {
+    if (lighting.directional_lights_slot != K_INVALID_BINDLESS_INDEX
+        && BX_IN_GLOBAL_SRV(lighting.directional_lights_slot)) {
         StructuredBuffer<DirectionalLightBasic> dir_lights =
-            ResourceDescriptorHeap[bindless_directional_lights_slot];
+            ResourceDescriptorHeap[lighting.directional_lights_slot];
 
         uint dir_count = 0;
         uint dir_stride = 0;
@@ -232,10 +234,12 @@ float3 AccumulatePositionalLights(
 {
     float3 direct = float3(0.0, 0.0, 0.0);
 
-    if (bindless_positional_lights_slot != K_INVALID_BINDLESS_INDEX
-        && BX_IN_GLOBAL_SRV(bindless_positional_lights_slot)) {
+    const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
+
+    if (lighting.positional_lights_slot != K_INVALID_BINDLESS_INDEX
+        && BX_IN_GLOBAL_SRV(lighting.positional_lights_slot)) {
         StructuredBuffer<PositionalLightData> pos_lights =
-            ResourceDescriptorHeap[bindless_positional_lights_slot];
+            ResourceDescriptorHeap[lighting.positional_lights_slot];
 
         uint pos_count = 0;
         uint pos_stride = 0;
@@ -338,12 +342,13 @@ float3 AccumulatePositionalLightsClustered(
     float  metalness,
     float  roughness)
 {
-    const uint cluster_grid_slot = EnvironmentDynamicData.light_culling.bindless_cluster_grid_slot;
-    const uint light_list_slot = EnvironmentDynamicData.light_culling.bindless_cluster_index_list_slot;
+    const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
+    const uint cluster_grid_slot = lighting.light_culling.bindless_cluster_grid_slot;
+    const uint light_list_slot = lighting.light_culling.bindless_cluster_index_list_slot;
 
     const bool has_cluster_data = (cluster_grid_slot != K_INVALID_BINDLESS_INDEX)
                                && (light_list_slot != K_INVALID_BINDLESS_INDEX)
-                               && (EnvironmentDynamicData.light_culling.cluster_dim_x > 0);
+                               && (lighting.light_culling.cluster_dim_x > 0);
 
     if (!has_cluster_data) {
         return AccumulatePositionalLights(world_pos, N, V, NdotV, F0, base_rgb, metalness, roughness);
@@ -354,9 +359,9 @@ float3 AccumulatePositionalLightsClustered(
 
     if (cluster_info.light_count == 0) return 0.0.xxx;
 
-    if (bindless_positional_lights_slot == K_INVALID_BINDLESS_INDEX) return 0.0.xxx;
+    if (lighting.positional_lights_slot == K_INVALID_BINDLESS_INDEX) return 0.0.xxx;
 
-    StructuredBuffer<PositionalLightData> pos_lights = ResourceDescriptorHeap[bindless_positional_lights_slot];
+    StructuredBuffer<PositionalLightData> pos_lights = ResourceDescriptorHeap[lighting.positional_lights_slot];
     float3 direct = 0.0.xxx;
 
     for (uint i = 0; i < cluster_info.light_count; ++i) {

@@ -31,7 +31,6 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Nexus/TimelineGatedSlotReuse.h>
-#include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
@@ -111,7 +110,7 @@ struct LightCullingPass::Impl {
   ShaderVisibleIndex cluster_grid_uav { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex light_index_list_uav { kInvalidShaderVisibleIndex };
 
-  // SRV indices (for pixel shader read via EnvironmentDynamicData)
+  // SRV indices (published through LightingFrameBindings for shading)
   ShaderVisibleIndex cluster_grid_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex light_index_list_srv { kInvalidShaderVisibleIndex };
 
@@ -672,25 +671,21 @@ auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     = cluster_cfg.ComputeZScale(effective_z_near, effective_z_far);
   const float z_bias = cluster_cfg.ComputeZBias();
 
-  if (auto manager = Context().env_dynamic_manager) {
-    const auto view_id = Context().current_view.view_id;
+  LightCullingConfig cull_data = cluster_cfg;
+  cull_data.bindless_cluster_grid_slot
+    = ClusterGridSlot { impl_->cluster_grid_srv };
+  cull_data.bindless_cluster_index_list_slot
+    = ClusterIndexListSlot { impl_->light_index_list_srv };
+  cull_data.cluster_dim_x = impl_->grid_dims.x;
+  cull_data.cluster_dim_y = impl_->grid_dims.y;
+  cull_data.cluster_dim_z = impl_->grid_dims.z;
+  cull_data.z_near = effective_z_near;
+  cull_data.z_far = effective_z_far;
+  cull_data.z_scale = z_scale;
+  cull_data.z_bias = z_bias;
 
-    LightCullingConfig cull_data = cluster_cfg;
-    cull_data.bindless_cluster_grid_slot
-      = ClusterGridSlot { impl_->cluster_grid_srv };
-    cull_data.bindless_cluster_index_list_slot
-      = ClusterIndexListSlot { impl_->light_index_list_srv };
-    cull_data.cluster_dim_x = impl_->grid_dims.x;
-    cull_data.cluster_dim_y = impl_->grid_dims.y;
-    cull_data.cluster_dim_z = impl_->grid_dims.z;
-    cull_data.z_near = effective_z_near;
-    cull_data.z_far = effective_z_far;
-    cull_data.z_scale = z_scale;
-    cull_data.z_bias = z_bias;
-
-    manager->SetLightCullingConfig(view_id, cull_data);
-    manager->UpdateIfNeeded(view_id);
-  }
+  Context().GetRenderer().UpdateCurrentViewLightCullingConfig(
+    Context(), cull_data);
 
   if (impl_->cluster_grid_uav == kInvalidShaderVisibleIndex
     || impl_->light_index_list_uav == kInvalidShaderVisibleIndex) {

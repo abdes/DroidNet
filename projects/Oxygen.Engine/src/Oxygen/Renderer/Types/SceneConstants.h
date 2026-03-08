@@ -47,13 +47,8 @@ OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(BindlessDrawMetadataSlot)
 OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(BindlessWorldsSlot)
 OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(BindlessNormalsSlot)
 OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(BindlessMaterialConstantsSlot)
-OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(BindlessEnvironmentStaticSlot)
-OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(BindlessDirectionalLightsSlot)
-OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(BindlessDirectionalShadowsSlot)
-OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(BindlessPositionalLightsSlot)
 OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(BindlessInstanceDataSlot)
-OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(BindlessGpuDebugLineSlot)
-OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(BindlessGpuDebugCounterSlot)
+OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(BindlessViewFrameBindingsSlot)
 
 #undef OXYGEN_DEFINE_BINDLESS_SLOT_TYPE
 
@@ -124,7 +119,7 @@ public:
 
     // Aligned at 16 bytes here
     glm::vec3 camera_position { 0.0F, 0.0F, 0.0F };
-    float exposure { 1.0F };
+    float _pad0 { 0.0F };
 
     // Aligned at 16 bytes here
     BindlessDrawMetadataSlot draw_metadata_bslot;
@@ -133,21 +128,16 @@ public:
     BindlessMaterialConstantsSlot material_constants_bslot;
 
     // Aligned at 16 bytes here
-    BindlessEnvironmentStaticSlot env_static_bslot;
-    BindlessDirectionalLightsSlot directional_lights_bslot;
-    BindlessDirectionalShadowsSlot directional_shadows_bslot;
-    BindlessPositionalLightsSlot positional_lights_bslot;
-
-    // Aligned at 16 bytes here
     BindlessInstanceDataSlot instance_data_bslot;
-    BindlessGpuDebugLineSlot gpu_debug_line_bslot;
-    BindlessGpuDebugCounterSlot gpu_debug_counter_bslot;
-    uint32_t _pad_to_16 { 0 }; // padding to 16-byte alignment
+    BindlessViewFrameBindingsSlot view_frame_bindings_bslot;
+    std::uint32_t _pad1 { 0 };
+    std::uint32_t _pad2 { 0 };
 
     // padding to 256-byte alignment
     glm::vec4 _pad_to_256_1 { 0.0F };
     glm::vec4 _pad_to_256_2 { 0.0F };
     glm::vec4 _pad_to_256_3 { 0.0F };
+    glm::vec4 _pad_to_256_4 { 0.0F };
   };
   // clang-format off
   static_assert(sizeof(GpuData) <= packing::kRootConstantsMaxSize);
@@ -155,7 +145,6 @@ public:
   static_assert(offsetof(GpuData, projection_matrix) % packing::kShaderDataFieldAlignment == 0);
   static_assert(offsetof(GpuData, camera_position) % packing::kShaderDataFieldAlignment == 0);
   static_assert(offsetof(GpuData, draw_metadata_bslot) % packing::kShaderDataFieldAlignment == 0);
-  static_assert(offsetof(GpuData, env_static_bslot) % packing::kShaderDataFieldAlignment == 0);
   static_assert(offsetof(GpuData, instance_data_bslot) % packing::kShaderDataFieldAlignment == 0);
   // clang-format on
 
@@ -184,9 +173,6 @@ public:
   OXGN_RNDR_API auto SetFrameSequenceNumber(
     frame::SequenceNumber seq, RendererTag) noexcept -> SceneConstants&;
 
-  OXGN_RNDR_API auto SetExposure(float exposure, RendererTag) noexcept
-    -> SceneConstants&;
-
   OXGN_RNDR_API auto SetBindlessDrawMetadataSlot(
     BindlessDrawMetadataSlot slot, RendererTag) noexcept -> SceneConstants&;
 
@@ -200,27 +186,11 @@ public:
     BindlessMaterialConstantsSlot slot, RendererTag) noexcept
     -> SceneConstants&;
 
-  OXGN_RNDR_API auto SetBindlessEnvironmentStaticSlot(
-    BindlessEnvironmentStaticSlot slot, RendererTag) noexcept
-    -> SceneConstants&;
-
-  OXGN_RNDR_API auto SetBindlessDirectionalLightsSlot(
-    BindlessDirectionalLightsSlot slot, RendererTag) noexcept
-    -> SceneConstants&;
-
-  OXGN_RNDR_API auto SetBindlessDirectionalShadowsSlot(
-    BindlessDirectionalShadowsSlot slot, RendererTag) noexcept
-    -> SceneConstants&;
-
-  OXGN_RNDR_API auto SetBindlessPositionalLightsSlot(
-    BindlessPositionalLightsSlot slot, RendererTag) noexcept -> SceneConstants&;
-
   OXGN_RNDR_API auto SetBindlessInstanceDataSlot(
     BindlessInstanceDataSlot slot, RendererTag) noexcept -> SceneConstants&;
-  OXGN_RNDR_API auto SetBindlessGpuDebugLineSlot(
-    BindlessGpuDebugLineSlot slot, RendererTag) noexcept -> SceneConstants&;
-  OXGN_RNDR_API auto SetBindlessGpuDebugCounterSlot(
-    BindlessGpuDebugCounterSlot slot, RendererTag) noexcept -> SceneConstants&;
+  OXGN_RNDR_API auto SetBindlessViewFrameBindingsSlot(
+    BindlessViewFrameBindingsSlot slot, RendererTag) noexcept
+    -> SceneConstants&;
 
   // Getters use GetXXX to avoid conflicts with strong types
   [[nodiscard]] auto GetViewMatrix() const noexcept { return view_matrix_; }
@@ -241,11 +211,6 @@ public:
     return frame_slot_;
   }
 
-  [[nodiscard]] constexpr auto GetExposure() const noexcept
-  {
-    return exposure_;
-  }
-
   [[nodiscard]] constexpr auto GetBindlessDrawMetadataSlot() const noexcept
   {
     return draw_metadata_bslot_;
@@ -261,40 +226,14 @@ public:
     return normal_matrices_bslot_;
   }
 
-  [[nodiscard]] constexpr auto GetBindlessEnvironmentStaticSlot() const noexcept
-  {
-    return env_static_bslot_;
-  }
-
-  [[nodiscard]] constexpr auto GetBindlessDirectionalLightsSlot() const noexcept
-  {
-    return directional_lights_bslot_;
-  }
-
-  [[nodiscard]] constexpr auto
-  GetBindlessDirectionalShadowsSlot() const noexcept
-  {
-    return directional_shadows_bslot_;
-  }
-
-  [[nodiscard]] constexpr auto GetBindlessPositionalLightsSlot() const noexcept
-  {
-    return positional_lights_bslot_;
-  }
-
   [[nodiscard]] constexpr auto GetBindlessInstanceDataSlot() const noexcept
   {
     return instance_data_bslot_;
   }
 
-  [[nodiscard]] constexpr auto GetBindlessGpuDebugLineSlot() const noexcept
+  [[nodiscard]] constexpr auto GetBindlessViewFrameBindingsSlot() const noexcept
   {
-    return gpu_debug_line_bslot_;
-  }
-
-  [[nodiscard]] constexpr auto GetBindlessGpuDebugCounterSlot() const noexcept
-  {
-    return gpu_debug_counter_bslot_;
+    return view_frame_bindings_bslot_;
   }
 
   // Monotonic version counter; incremented on any mutation.
@@ -314,18 +253,12 @@ private:
       .view_matrix = view_matrix_,
       .projection_matrix = projection_matrix_,
       .camera_position = camera_position_,
-      .exposure = exposure_,
       .draw_metadata_bslot = draw_metadata_bslot_,
       .transforms_bslot = transforms_bslot_,
       .normal_matrices_bslot = normal_matrices_bslot_,
       .material_constants_bslot = material_constants_bslot_,
-      .env_static_bslot = env_static_bslot_,
-      .directional_lights_bslot = directional_lights_bslot_,
-      .directional_shadows_bslot = directional_shadows_bslot_,
-      .positional_lights_bslot = positional_lights_bslot_,
       .instance_data_bslot = instance_data_bslot_,
-      .gpu_debug_line_bslot = gpu_debug_line_bslot_,
-      .gpu_debug_counter_bslot = gpu_debug_counter_bslot_,
+      .view_frame_bindings_bslot = view_frame_bindings_bslot_,
     };
   }
 
@@ -338,19 +271,12 @@ private:
   float time_seconds_ { 0.0F };
   frame::Slot frame_slot_;
   frame::SequenceNumber frame_seq_num_;
-  float exposure_ { 1.0F };
   BindlessDrawMetadataSlot draw_metadata_bslot_;
   BindlessWorldsSlot transforms_bslot_;
   BindlessNormalsSlot normal_matrices_bslot_;
   BindlessMaterialConstantsSlot material_constants_bslot_;
-
-  BindlessEnvironmentStaticSlot env_static_bslot_;
-  BindlessDirectionalLightsSlot directional_lights_bslot_;
-  BindlessDirectionalShadowsSlot directional_shadows_bslot_;
-  BindlessPositionalLightsSlot positional_lights_bslot_;
   BindlessInstanceDataSlot instance_data_bslot_;
-  BindlessGpuDebugLineSlot gpu_debug_line_bslot_;
-  BindlessGpuDebugCounterSlot gpu_debug_counter_bslot_;
+  BindlessViewFrameBindingsSlot view_frame_bindings_bslot_;
 
   // Versioning + cache
   MonotonicVersion version_ { 0 };

@@ -9,6 +9,8 @@
 
 #include "Renderer/SceneConstants.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
+#include "Renderer/LightingHelpers.hlsli"
+#include "Renderer/ViewColorHelpers.hlsli"
 #include "Atmosphere/AerialPerspective.hlsli"
 #include "Renderer/DirectionalLightBasic.hlsli"
 #include "Renderer/PositionalLightData.hlsli"
@@ -83,7 +85,7 @@ float4 PS(VSOutput input) : SV_Target0 {
 
     // Load environment data early for sun transmittance attenuation
     EnvironmentStaticData env_data;
-    const bool has_env_data = LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data);
+    const bool has_env_data = LoadEnvironmentStaticData(env_data);
 
     // Pass atmosphere params for sun transmittance (zero-initialized if no env data)
     GpuSkyAtmosphereParams atmo;
@@ -144,7 +146,7 @@ float4 PS(VSOutput input) : SV_Target0 {
         + (ibl_spec_term + ibl_diffuse * base_rgb * (1.0f - surf.metalness))
         + surf.emissive;
 
-    if (LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data)) {
+    if (LoadEnvironmentStaticData(env_data)) {
         float3 s_dir = normalize(GetSunDirectionWS());
         if (!HasSunLight()) {
             s_dir = float3(0.5, 0.707, 0.5);

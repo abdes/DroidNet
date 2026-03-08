@@ -6,6 +6,7 @@
 
 #include "Core/Bindless/Generated.BindlessLayout.hlsl"
 #include "Renderer/SceneConstants.hlsli"
+#include "Renderer/ViewColorHelpers.hlsli"
 #include "Common/Math.hlsli"
 
 struct GroundGridPSInput
@@ -134,7 +135,7 @@ float4 PS(GroundGridPSInput input) : SV_TARGET
     const float fade_power = pass.fade_power;
     const float horizon_boost = pass.horizon_boost;
 
-    float exposure_mul = max(exposure, EPSILON_SMALL);
+    float exposure_mul = max(GetExposure(), EPSILON_SMALL);
     if (pass.exposure_srv_index != K_INVALID_BINDLESS_INDEX) {
         ByteAddressBuffer exposure_buf = ResourceDescriptorHeap[pass.exposure_srv_index];
         exposure_mul = max(asfloat(exposure_buf.Load(4)), EPSILON_SMALL);

@@ -142,7 +142,7 @@ float4 PS(SkyPSInput input) : SV_TARGET
 {
     // Load environment static data.
     EnvironmentStaticData env_data;
-    if (!LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data)) {
+    if (!LoadEnvironmentStaticData(env_data)) {
         return float4(0.0f, 0.0f, 0.0f, 1.0f);
     }
 

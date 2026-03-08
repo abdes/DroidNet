@@ -9,7 +9,7 @@
 #include <span>
 
 #include <Oxygen/Renderer/Types/DirectionalLightBasic.h>
-#include <Oxygen/Renderer/Types/EnvironmentDynamicData.h>
+#include <Oxygen/Renderer/Types/SyntheticSunData.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::scene {

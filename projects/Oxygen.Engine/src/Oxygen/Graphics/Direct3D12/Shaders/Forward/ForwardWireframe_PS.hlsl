@@ -8,7 +8,7 @@
 //! @brief Unlit wireframe pixel shader (constant color).
 
 #include "Renderer/SceneConstants.hlsli"
-#include "Renderer/EnvironmentHelpers.hlsli"
+#include "Renderer/ViewColorHelpers.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
 #include "Renderer/MaterialConstants.hlsli"
 #include "MaterialFlags.hlsli"

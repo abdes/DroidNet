@@ -5,14 +5,21 @@
 //===----------------------------------------------------------------------===//
 
 #include "Renderer/SceneConstants.hlsli"
+#include "Renderer/ViewFrameBindings.hlsli"
+#include "Renderer/DebugFrameBindings.hlsli"
 
 [shader("compute")]
 [numthreads(1, 1, 1)]
 void CS(uint3 position : SV_DispatchThreadID)
 {
-    if (bindless_gpu_debug_counter_slot == 0) return;
+    const ViewFrameBindings view_bindings =
+        LoadViewFrameBindings(bindless_view_frame_bindings_slot);
+    const DebugFrameBindings debug_bindings =
+        LoadDebugFrameBindings(view_bindings.debug_frame_slot);
+    if (debug_bindings.counter_buffer_uav_slot == K_INVALID_BINDLESS_INDEX) return;
 
-    RWByteAddressBuffer counterBuffer = ResourceDescriptorHeap[bindless_gpu_debug_counter_slot];
+    RWByteAddressBuffer counterBuffer =
+        ResourceDescriptorHeap[debug_bindings.counter_buffer_uav_slot];
 
     // D3D12_DRAW_ARGUMENTS:
     // UINT VertexCountPerInstance; -> Offset 0

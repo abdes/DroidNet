@@ -83,16 +83,6 @@ auto SceneConstants::SetFrameSequenceNumber(const frame::SequenceNumber seq,
   return *this;
 }
 
-auto SceneConstants::SetExposure(
-  const float exposure, RendererTag /*tag*/) noexcept -> SceneConstants&
-{
-  if (std::abs(exposure_ - exposure) > glm::epsilon<float>()) {
-    exposure_ = exposure;
-    version_ = version_.Next();
-  }
-  return *this;
-}
-
 auto SceneConstants::SetBindlessDrawMetadataSlot(
   const BindlessDrawMetadataSlot slot, RendererTag /*tag*/) noexcept
   -> SceneConstants&
@@ -136,50 +126,6 @@ auto SceneConstants::SetBindlessMaterialConstantsSlot(
   return *this;
 }
 
-auto SceneConstants::SetBindlessEnvironmentStaticSlot(
-  const BindlessEnvironmentStaticSlot slot, RendererTag /*tag*/) noexcept
-  -> SceneConstants&
-{
-  if (env_static_bslot_ != slot) {
-    env_static_bslot_ = slot;
-    version_ = version_.Next();
-  }
-  return *this;
-}
-
-auto SceneConstants::SetBindlessDirectionalLightsSlot(
-  const BindlessDirectionalLightsSlot slot, RendererTag /*tag*/) noexcept
-  -> SceneConstants&
-{
-  if (directional_lights_bslot_ != slot) {
-    directional_lights_bslot_ = slot;
-    version_ = version_.Next();
-  }
-  return *this;
-}
-
-auto SceneConstants::SetBindlessDirectionalShadowsSlot(
-  const BindlessDirectionalShadowsSlot slot, RendererTag /*tag*/) noexcept
-  -> SceneConstants&
-{
-  if (directional_shadows_bslot_ != slot) {
-    directional_shadows_bslot_ = slot;
-    version_ = version_.Next();
-  }
-  return *this;
-}
-
-auto SceneConstants::SetBindlessPositionalLightsSlot(
-  const BindlessPositionalLightsSlot slot, RendererTag /*tag*/) noexcept
-  -> SceneConstants&
-{
-  if (positional_lights_bslot_ != slot) {
-    positional_lights_bslot_ = slot;
-    version_ = version_.Next();
-  }
-  return *this;
-}
-
 auto SceneConstants::SetBindlessInstanceDataSlot(
   const BindlessInstanceDataSlot slot, RendererTag /*tag*/) noexcept
   -> SceneConstants&
@@ -191,23 +137,12 @@ auto SceneConstants::SetBindlessInstanceDataSlot(
   return *this;
 }
 
-auto SceneConstants::SetBindlessGpuDebugLineSlot(
-  const BindlessGpuDebugLineSlot slot, RendererTag /*tag*/) noexcept
+auto SceneConstants::SetBindlessViewFrameBindingsSlot(
+  const BindlessViewFrameBindingsSlot slot, RendererTag /*tag*/) noexcept
   -> SceneConstants&
 {
-  if (gpu_debug_line_bslot_ != slot) {
-    gpu_debug_line_bslot_ = slot;
-    version_ = version_.Next();
-  }
-  return *this;
-}
-
-auto SceneConstants::SetBindlessGpuDebugCounterSlot(
-  const BindlessGpuDebugCounterSlot slot, RendererTag /*tag*/) noexcept
-  -> SceneConstants&
-{
-  if (gpu_debug_counter_bslot_ != slot) {
-    gpu_debug_counter_bslot_ = slot;
+  if (view_frame_bindings_bslot_ != slot) {
+    view_frame_bindings_bslot_ = slot;
     version_ = version_.Next();
   }
   return *this;

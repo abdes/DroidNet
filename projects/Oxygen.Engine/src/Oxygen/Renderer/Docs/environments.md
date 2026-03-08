@@ -21,9 +21,18 @@ This document defines the detailed implementation plan for integrating scene-aut
 
 - Bindless-only shader resource access via the global descriptor heap.
 - Root bindings (current ABI):
-  -`SceneConstants` at root CBV `b1` and it contains `bindless_env_static_slot`.
-  -`EnvironmentDynamicData` at root CBV `b3`.
-- Environment “static” parameters are consumed in shaders as a structured payload (`EnvironmentStaticData`) addressed through `SceneConstants.bindless_env_static_slot`.
+  - `SceneConstants` at root CBV `b1`, containing only view invariants,
+    draw-routing slots, and `bindless_view_frame_bindings_slot`.
+  - `RootConstants` at `b2`; there is no dedicated environment root CBV in the
+    live ABI.
+- Environment “static” parameters are consumed in shaders as a structured
+  payload (`EnvironmentStaticData`) addressed through
+  `ViewFrameBindings.environment_frame_slot ->
+  EnvironmentFrameBindings.environment_static_slot`.
+- Environment-owned per-view atmosphere state is consumed as
+  `EnvironmentViewData` addressed through
+  `ViewFrameBindings.environment_frame_slot ->
+  EnvironmentFrameBindings.environment_view_slot`.
 - Shaders must guard against invalid bindless indices using the engine-provided bindless sentinel (`kInvalidShaderVisibleIndex` / `kInvalidBindlessIndex`) and apply any required domain validation conventions.
 
 ### Enable/Disable Convention (Decision)
@@ -49,13 +58,19 @@ Environment systems are authored as components under `SceneEnvironment`:
 
 ### GPU-Facing Payloads
 
-- **Hot / per-frame (root CBV b3)**: `EnvironmentDynamicData`
-  -Clustered lighting wiring (cluster grid + index list) and Z-binning params.
-	-Exposure (a single scalar used by forward shading).
+- **Per-view routed snapshot**: `EnvironmentFrameBindings`
+  - Owns the environment system entry points for the current view.
+  - Publishes `environment_static_slot` and `environment_view_slot`.
 
-- **Cold / per-frame snapshot (bindless SRV via SceneConstants)**: `EnvironmentStaticData`
+- **Static / scene-authored snapshot**: `EnvironmentStaticData`
   -Fog / sky / atmosphere / clouds / post-process settings.
   -Designed for shader consumption as a single structured blob.
+
+- **Environment-owned per-view state**: `EnvironmentViewData`
+  - Atmosphere view parameters and controls derived from the active view.
+
+- **Shared cross-system view color state**: `ViewColorData`
+  - Currently carries exposure.
 
 ## Plan
 
@@ -63,8 +78,10 @@ Environment systems are authored as components under `SceneEnvironment`:
 
 **Status**: Completed
 
-- Locked CPU/HLSL parity for `EnvironmentDynamicData` (root CBV `b3`) and `EnvironmentStaticData` (bindless SRV via `SceneConstants.bindless_env_static_slot`).
-- Removed `white point` from the dynamic payload; dynamic exposure is a single scalar `EnvironmentDynamicData.exposure`.
+- Locked CPU/HLSL parity for `EnvironmentStaticData`,
+  `EnvironmentFrameBindings`, and `EnvironmentViewData`.
+- Removed `white point` from the environment view path; exposure is now a
+  shared `ViewColorData` payload routed through `ViewFrameBindings`.
 - Enforced explicit `enabled` (0/1) gating for environment systems; enums represent behavior/mode only.
 - Standardized authored exposure compensation naming to `exposure_compensation`.
 - Updated struct packing and compile-time size/alignment checks; rebuilt and verified shader compilation.
@@ -76,7 +93,7 @@ Environment systems are authored as components under `SceneEnvironment`:
 - Implemented a single renderer-owned `EnvironmentStaticDataManager` that builds a canonical CPU snapshot from `SceneEnvironment` and guarantees deterministic defaults with per-system `enabled = 0/1` gating.
 - Allocated and maintained a GPU structured buffer containing one `EnvironmentStaticData` element per `frame::Slot`; shaders index it using `SceneConstants.frame_slot`.
 - Used dirty-only tracking (no monotonic versioning): when the canonical snapshot changes, the manager refreshes the current slot’s element and ensures frames-in-flight safety via the per-slot layout.
-- Published the bindless SRV slot into `SceneConstants.bindless_env_static_slot` through the renderer-only setter (`RendererTag`) each frame.
+- Published the bindless SRV slot into `EnvironmentFrameBindings` each frame.
 
 ### Task 2 — HLSL Access Helpers + Validation Gates
 
@@ -84,14 +101,19 @@ Environment systems are authored as components under `SceneEnvironment`:
 
 - Created `EnvironmentHelpers.hlsli` as the canonical access path for environment data.
 - Implemented `LoadEnvironmentStaticData` with mandatory bindless index validation and domain guards.
-- Standardized `EnvironmentDynamicData` as a global root CBV (b3) and provided helpers for common environment queries.
-- Refactored forward shaders to use these helpers, ensuring safe and consistent data consumption.
+- Added `EnvironmentViewHelpers.hlsli` as the canonical access path for
+  environment-owned per-view atmosphere data.
+- Refactored forward shaders to use these helpers, ensuring safe and
+  consistent data consumption.
 
-### Task 3 — Wire Exposure into EnvironmentDynamicData (MVP)
+### Task 3 — Wire Exposure into ViewColorData (MVP)
 
 **Status**: Completed
 
-- Implemented per-view exposure resolution in the `Renderer`, applying exposure compensation from `PostProcessVolume` ($2^{EV}$) and wiring the resolved scalar into the global dynamic CBV (b3) for consumption by forward shaders.
+- Implemented per-view exposure resolution in the `Renderer`, applying
+  exposure compensation from `PostProcessVolume` ($2^{EV}$) and wiring the
+  resolved scalar into shared `ViewColorData` for consumption by forward
+  shaders.
 
 ### Task 4 — Atmospheric Foundation (Sky + Fog Integration)
 
@@ -121,7 +143,8 @@ Implement a robust, extensible foundation that integrates sky rendering and dist
   - Update `EnvironmentStaticDataManager` to resolve hydrated `data::TextureAsset` pointers from the scene into bindless SRV indices using the `TextureBinder`.
   - Ensure `EnvironmentStaticData.sky_cubemap_index` is correctly populated.
 - **Shaders**: Implement `SkySphere_VS.hlsl` (vertex-less triangle) and `SkySphere_PS.hlsl`.
-- **Exposure**: Apply `EnvironmentDynamicData.exposure` to ensure the sky is physically matched with scene lighting.
+- **Exposure**: Apply `ViewColorData.exposure` to ensure the sky is physically
+  matched with scene lighting.
 
 **4.3: Forward Integration**
 

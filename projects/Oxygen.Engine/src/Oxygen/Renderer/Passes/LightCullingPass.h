@@ -65,7 +65,7 @@ struct RenderContext;
   }
   ```
 
-  @see LightCullingConfig, EnvironmentDynamicData, override_slots.md
+  @see LightCullingConfig, LightingFrameBindings, override_slots.md
  */
 struct LightCullingPassConfig {
   //! Cluster configuration. Defaults to Clustered Forward.
@@ -145,9 +145,10 @@ public:
 
   //! Shader-visible SRV index for the cluster grid buffer.
   /*!
-   The cluster grid contains `uint2(light_offset, light_count)` per cluster.
-   Use `EnvironmentDynamicData.light_culling.bindless_cluster_grid_slot` to pass
-   to shaders.
+   The cluster grid contains `uint2(light_offset, light_count)` per
+   * cluster.
+   Publish it through
+   * `LightingFrameBindings.light_culling.bindless_cluster_grid_slot`.
   */
   OXGN_RNDR_NDAPI auto GetClusterGridSrvIndex() const noexcept
     -> ShaderVisibleIndex;
@@ -155,9 +156,11 @@ public:
   //! Shader-visible SRV index for the light index list buffer.
   /*!
    Contains packed light indices referenced by the cluster grid offsets.
-   Use `EnvironmentDynamicData.light_culling.bindless_cluster_index_list_slot`
-   to pass to shaders.
-  */
+
+   * Publish it through
+
+   * `LightingFrameBindings.light_culling.bindless_cluster_index_list_slot`.
+ */
   OXGN_RNDR_NDAPI auto GetLightIndexListSrvIndex() const noexcept
     -> ShaderVisibleIndex;
 

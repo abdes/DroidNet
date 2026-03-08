@@ -17,12 +17,13 @@
 //!
 //! === Bindless Discipline ===
 //! - All resources accessed via SM 6.6 descriptor heaps
-//! - SceneConstants at b1, RootConstants at b2, EnvironmentDynamicData at b3
+//! - SceneConstants at b1, RootConstants at b2
 
 #include "Core/Bindless/Generated.BindlessLayout.hlsl"
 #include "Renderer/EnvironmentStaticData.hlsli"
-#include "Renderer/EnvironmentDynamicData.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
+#include "Renderer/EnvironmentViewHelpers.hlsli"
+#include "Renderer/LightingHelpers.hlsli"
 #include "Renderer/SceneConstants.hlsli"
 #include "Atmosphere/AtmosphereMedium.hlsli"
 #include "Atmosphere/AtmospherePhase.hlsli"
@@ -74,7 +75,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     }
 
     EnvironmentStaticData env_data;
-    if (!LoadEnvironmentStaticData(bindless_env_static_slot, frame_slot, env_data))
+    if (!LoadEnvironmentStaticData(env_data))
     {
         RWTexture3D<float4> output = ResourceDescriptorHeap[pass_constants.output_uav_index];
         output[dispatch_thread_id] = float4(0.0, 0.0, 0.0, 0.0);
@@ -103,8 +104,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     float3 view_dir_vs = normalize(view_pos.xyz);
     float3 view_dir_ws = normalize(mul((float3x3)inv_view, view_dir_vs));
 
-    // Sun direction (world space).
-    // Use the designated/override sun from EnvironmentDynamicData to preserve azimuth.
+    // Sun direction (world space) from the lighting frame contract.
     float3 sun_dir = normalize(GetSunDirectionWS());
 
     // Sun radiance proxy (linear RGB).
