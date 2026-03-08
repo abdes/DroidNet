@@ -69,6 +69,17 @@ auto ReadFileBytes(const std::filesystem::path& path) -> std::vector<std::byte>
   return bytes;
 }
 
+auto ReadFileText(const std::filesystem::path& path) -> std::string
+{
+  auto stream = std::ifstream(path, std::ios::binary);
+  if (!stream.is_open()) {
+    return {};
+  }
+
+  return std::string(
+    std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
+}
+
 class PakManifestTest : public paktest::TempDirFixture {
 protected:
   auto MakeBaseCatalog(std::span<const data::PakCatalogEntry> entries) const
@@ -227,6 +238,11 @@ NOLINT_TEST_F(
     request.patch_compat.require_base_source_key_match);
   EXPECT_EQ(manifest.compatibility_policy_snapshot.require_catalog_digest_match,
     request.patch_compat.require_catalog_digest_match);
+
+  const auto manifest_text = ReadFileText(request.output_manifest_path);
+  EXPECT_NE(manifest_text.find("\n  \"created\": []"), std::string::npos);
+  EXPECT_NE(manifest_text.find("\n  \"compatibility_envelope\": {"),
+    std::string::npos);
 }
 
 NOLINT_TEST_F(PakManifestTest, PatchModeFailsWhenManifestCannotBeWritten)

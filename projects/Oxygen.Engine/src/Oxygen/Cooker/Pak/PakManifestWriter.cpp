@@ -20,6 +20,8 @@
 #include <utility>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Pak/PakManifestWriter.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -29,6 +31,7 @@ namespace {
 namespace base = oxygen::base;
 namespace data = oxygen::data;
 namespace pak = oxygen::content::pak;
+using nlohmann::ordered_json;
 
 constexpr auto kDiffBasisIdentifier
   = std::string_view { "descriptor_plus_transitive_resources_v1" };
@@ -80,66 +83,6 @@ auto ToHex(const std::span<const uint8_t> bytes) -> std::string
     out.push_back(kHexDigits.at(byte & kLowNibbleMask));
   }
   return out;
-}
-
-auto AppendJsonEscapedString(std::string& out, const std::string_view text)
-  -> void
-{
-  out.push_back('"');
-  for (const auto ch : text) {
-    switch (ch) {
-    case '\\':
-      out += "\\\\";
-      break;
-    case '"':
-      out += "\\\"";
-      break;
-    case '\n':
-      out += "\\n";
-      break;
-    case '\r':
-      out += "\\r";
-      break;
-    case '\t':
-      out += "\\t";
-      break;
-    default:
-      out.push_back(ch);
-      break;
-    }
-  }
-  out.push_back('"');
-}
-
-auto AppendJsonStringArray(
-  std::string& out, const std::span<const std::string> values) -> void
-{
-  out.push_back('[');
-  auto first = true;
-  for (const auto& value : values) {
-    if (!first) {
-      out.push_back(',');
-    }
-    AppendJsonEscapedString(out, value);
-    first = false;
-  }
-  out.push_back(']');
-}
-
-template <typename T>
-auto AppendJsonIntegerArray(std::string& out, const std::span<const T> values)
-  -> void
-{
-  out.push_back('[');
-  auto first = true;
-  for (const auto& value : values) {
-    if (!first) {
-      out.push_back(',');
-    }
-    out += std::to_string(value);
-    first = false;
-  }
-  out.push_back(']');
 }
 
 auto SortAndUniqueSourceKeys(std::vector<data::SourceKey>& values) -> void
@@ -383,122 +326,78 @@ auto ComputePatchPakDigest(const std::filesystem::path& pak_path,
 
 auto SerializeManifestToJson(const data::PatchManifest& manifest) -> std::string
 {
-  auto out = std::string {};
-  out.reserve(4096);
-
-  auto created = std::vector<std::string> {};
-  created.reserve(manifest.created.size());
+  auto created = ordered_json::array();
   for (const auto& key : manifest.created) {
     created.push_back(data::to_string(key));
   }
 
-  auto replaced = std::vector<std::string> {};
-  replaced.reserve(manifest.replaced.size());
+  auto replaced = ordered_json::array();
   for (const auto& key : manifest.replaced) {
     replaced.push_back(data::to_string(key));
   }
 
-  auto deleted = std::vector<std::string> {};
-  deleted.reserve(manifest.deleted.size());
+  auto deleted = ordered_json::array();
   for (const auto& key : manifest.deleted) {
     deleted.push_back(data::to_string(key));
   }
 
-  auto required_base_source_keys = std::vector<std::string> {};
-  required_base_source_keys.reserve(
-    manifest.compatibility_envelope.required_base_source_keys.size());
+  auto required_base_source_keys = ordered_json::array();
   for (const auto& source_key :
     manifest.compatibility_envelope.required_base_source_keys) {
     required_base_source_keys.push_back(data::to_string(source_key));
   }
 
-  auto required_base_catalog_digests = std::vector<std::string> {};
-  required_base_catalog_digests.reserve(
-    manifest.compatibility_envelope.required_base_catalog_digests.size());
+  auto required_base_catalog_digests = ordered_json::array();
   for (const auto& digest :
     manifest.compatibility_envelope.required_base_catalog_digests) {
     required_base_catalog_digests.push_back(ToHex(std::span { digest }));
   }
 
-  out += '{';
-
-  out += "\"created\":";
-  AppendJsonStringArray(out, created);
-  out += ',';
-
-  out += "\"replaced\":";
-  AppendJsonStringArray(out, replaced);
-  out += ',';
-
-  out += "\"deleted\":";
-  AppendJsonStringArray(out, deleted);
-  out += ',';
-
-  out += "\"compatibility_envelope\":{";
-  out += "\"required_base_source_keys\":";
-  AppendJsonStringArray(out, required_base_source_keys);
-  out += ',';
-  out += "\"required_base_content_versions\":";
-  AppendJsonIntegerArray(out,
-    std::span<const uint16_t>(
-      manifest.compatibility_envelope.required_base_content_versions.data(),
-      manifest.compatibility_envelope.required_base_content_versions.size()));
-  out += ',';
-  out += "\"required_base_catalog_digests\":";
-  AppendJsonStringArray(out, required_base_catalog_digests);
-  out += ',';
-  out += "\"patch_content_version\":";
-  out += std::to_string(manifest.compatibility_envelope.patch_content_version);
-  out += "},";
-
-  out += "\"compatibility_policy_snapshot\":{";
-  out += "\"require_exact_base_set\":";
-  out += manifest.compatibility_policy_snapshot.require_exact_base_set
-    ? "true"
-    : "false";
-  out += ',';
-  out += "\"require_content_version_match\":";
-  out += manifest.compatibility_policy_snapshot.require_content_version_match
-    ? "true"
-    : "false";
-  out += ',';
-  out += "\"require_base_source_key_match\":";
-  out += manifest.compatibility_policy_snapshot.require_base_source_key_match
-    ? "true"
-    : "false";
-  out += ',';
-  out += "\"require_catalog_digest_match\":";
-  out += manifest.compatibility_policy_snapshot.require_catalog_digest_match
-    ? "true"
-    : "false";
-  out += "},";
-
-  out += "\"diff_basis_identifier\":";
-  AppendJsonEscapedString(out, manifest.diff_basis_identifier);
-  out += ',';
-
-  out += "\"patch_source_key\":";
-  AppendJsonEscapedString(out, data::to_string(manifest.patch_source_key));
-  out += ',';
-
-  out += "\"patch_pak_digest\":";
-  if (manifest.patch_pak_digest.has_value()) {
-    AppendJsonEscapedString(
-      out, ToHex(std::span { *manifest.patch_pak_digest }));
-  } else {
-    out += "null";
-  }
-  out += ',';
-
-  out += "\"patch_pak_crc32\":";
-  if (manifest.patch_pak_crc32.has_value()) {
-    out += std::to_string(*manifest.patch_pak_crc32);
-  } else {
-    out += "null";
+  auto required_base_content_versions = ordered_json::array();
+  for (const auto version :
+    manifest.compatibility_envelope.required_base_content_versions) {
+    required_base_content_versions.push_back(version);
   }
 
-  out += '}';
-  return out;
+  auto document = ordered_json {
+    { "created", std::move(created) },
+    { "replaced", std::move(replaced) },
+    { "deleted", std::move(deleted) },
+    { "compatibility_envelope",
+      ordered_json {
+        { "required_base_source_keys",
+          std::move(required_base_source_keys) },
+        { "required_base_content_versions",
+          std::move(required_base_content_versions) },
+        { "required_base_catalog_digests",
+          std::move(required_base_catalog_digests) },
+        { "patch_content_version",
+          manifest.compatibility_envelope.patch_content_version },
+      } },
+    { "compatibility_policy_snapshot",
+      ordered_json {
+        { "require_exact_base_set",
+          manifest.compatibility_policy_snapshot.require_exact_base_set },
+        { "require_content_version_match",
+          manifest.compatibility_policy_snapshot.require_content_version_match },
+        { "require_base_source_key_match",
+          manifest.compatibility_policy_snapshot.require_base_source_key_match },
+        { "require_catalog_digest_match",
+          manifest.compatibility_policy_snapshot.require_catalog_digest_match },
+      } },
+    { "diff_basis_identifier", manifest.diff_basis_identifier },
+    { "patch_source_key", data::to_string(manifest.patch_source_key) },
+    { "patch_pak_digest",
+      manifest.patch_pak_digest.has_value()
+        ? ordered_json(ToHex(std::span { *manifest.patch_pak_digest }))
+        : ordered_json(nullptr) },
+    { "patch_pak_crc32",
+      manifest.patch_pak_crc32.has_value()
+        ? ordered_json(*manifest.patch_pak_crc32)
+        : ordered_json(nullptr) },
+  };
+
+  return document.dump(2);
 }
 
 auto WriteManifestFile(const std::filesystem::path& output_path,
