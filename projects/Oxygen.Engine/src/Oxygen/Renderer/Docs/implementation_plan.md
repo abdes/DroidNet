@@ -2,7 +2,7 @@
 
 Living roadmap for achieving feature completeness of the Oxygen Renderer.
 
-**Last Updated**: March 7, 2026
+**Last Updated**: March 8, 2026
 
 Cross‑References: [bindless_conventions.md](bindless_conventions.md) |
 [scene_prep.md](scene_prep.md) | [shader-system.md](shader-system.md) |
@@ -20,7 +20,8 @@ Renderer core is functional with a minimal Forward+ foundation:
 
 - **Bindless architecture**: SM 6.6 `ResourceDescriptorHeap[]` indexing, stable
   root signature (t0 unbounded SRV, s0 sampler table, b1 SceneConstants CBV,
-  b2 root constants, b3 EnvironmentDynamicData CBV)
+  b2 root constants) with system-owned view data routed through
+  `SceneConstants.bindless_view_frame_bindings_slot`
 - **ScenePrep pipeline**: Two-phase Collection → Finalization with CPU frustum
   culling and per-view `PreparedSceneFrame`
 - **Render passes**: `DepthPrePass`, `ShaderPass`, `TransparentPass` with 4 PSO
@@ -55,9 +56,8 @@ Supports both tile-based (2D) and clustered (3D) configurations.
 - [x] Define `ClusterConfig` struct: grid dimensions, tile size, near/far,
       Z-binning scale/bias, presets for TileBased() and Clustered()
       → `src/Oxygen/Renderer/Types/ClusterConfig.h`
-- [x] Extend `EnvironmentDynamicData` (b3 CBV) with cluster config fields:
-      `tile_size_px`, `z_near`, `z_far`, `z_scale`, `z_bias`
-      → C++: `Types/EnvironmentDynamicData.h`, HLSL: `EnvironmentDynamicData.hlsli`
+- [x] Establish lighting-owned cluster config publication through
+      `LightingFrameBindings.light_culling`
 - [x] Create cluster grid and light index list as transient structured buffers
       → Managed by `LightCullingPass` using `TransientStructuredBuffer`
 
@@ -95,12 +95,11 @@ Supports both tile-based (2D) and clustered (3D) configurations.
   - Upload services obtained from `RenderContext.GetRenderer()` during execution
   - Called after DepthPrePass in render graph coroutine
   - PSO selection: use `CLUSTERED=0` or `CLUSTERED=1` based on config
-- [x] Populate `EnvironmentDynamicData` with cluster buffer slots:
-  - Created `EnvironmentDynamicDataManager` for per-view CBV buffer management
-  - `Renderer::PrepareEnvironmentDynamicData()` populates cluster slots from
-    `LightCullingPass::GetClusterGridSrvIndex()` and
-    `LightCullingPass::GetLightIndexListSrvIndex()`
-  - Copies `ClusterConfig` fields to matching CBV members
+- [x] Populate lighting-owned cluster bindings:
+  - `Renderer` publishes `LightingFrameBindings` per view
+  - `LightingFrameBindings.light_culling` receives cluster slots from
+    `LightCullingPass`
+  - cluster config fields are carried in the lighting-owned contract
 - [x] Update `ForwardMesh.hlsl` to call `AccumulatePositionalLightsClustered()`:
   - Computes linear depth from world position and camera
   - Uses SV_POSITION for screen coordinates
@@ -113,9 +112,12 @@ Supports both tile-based (2D) and clustered (3D) configurations.
 
 ### 1.5 Environment Systems Integration [~]
 
-- [x] GPU plumbing: `EnvironmentStaticDataManager` builds bindless SRV from `SceneEnvironment`, resolves cubemap `ResourceKey` via `TextureBinder`, uploads per-frame slots, publishes `SceneConstants.bindless_env_static_slot`; `EnvironmentDynamicData` (b3) kept in sync with HLSL and per-view exposure via `Renderer::UpdateViewExposure()`.
+- [x] GPU plumbing: `EnvironmentStaticDataManager` builds bindless SRV from
+  `SceneEnvironment`, resolves cubemap `ResourceKey` via `TextureBinder`,
+  uploads per-frame slots, and now routes the result through
+  `EnvironmentFrameBindings` / `ViewFrameBindings`.
 - [x] Baseline render hooks: `SkyPass` fullscreen triangle after ShaderPass (depth-read, no clear); `SkySphere_PS/VS` consume `EnvironmentStaticData`; `ForwardMesh_PS` applies analytic fog via `AtmosphereHelpers.hlsli` with fallback sun dir when no directional light is bound.
-- [x] SkyLight IBL in forward shading: sample sky cubemap for diffuse (lowest mip) and roughness-mapped specular, apply tint/intensity/diffuse/specular gains, add exposure from `EnvironmentDynamicData`.
+- [x] SkyLight IBL in forward shading: sample sky cubemap for diffuse (lowest mip) and roughness-mapped specular, apply tint/intensity/diffuse/specular gains, add exposure from `ViewColorData`.
 - [x] Sky exposure: `SkySphere_PS` multiplies sky color by exposure.
 - [x] Specular IBL BRDF approx: apply split-sum approximation (no LUT) to specular IBL in `ForwardMesh_PS` and metalness-masked diffuse IBL.
 - [~] SkyAtmosphere real implementation (end-to-end):
@@ -148,7 +150,7 @@ Supports both tile-based (2D) and clustered (3D) configurations.
      - Performs single-scattering raymarch with transmittance LUT sampling
      - Output: RGBA16F (inscattered radiance RGB, transmittance A)
      - UV parameterization: `u = azimuth / 2π`, `v = (cos_zenith + 1) / 2`
-     - Requires sun direction from `EnvironmentDynamicData`
+     - Requires sun direction from `LightingFrameBindings.sun`
 
   4) [x] **Create `SkyAtmosphereLutComputePass`**
      - Location: `src/Oxygen/Renderer/Passes/SkyAtmosphereLutComputePass.h/.cpp`
@@ -178,7 +180,7 @@ Supports both tile-based (2D) and clustered (3D) configurations.
        - Check if `transmittance_lut_slot != K_INVALID_BINDLESS_INDEX`
        - If valid: sample sky-view LUT + sun disk
        - If invalid: keep current gradient fallback
-     - Apply exposure from `EnvironmentDynamicData`
+     - Apply exposure from `ViewColorData`
 
   3) [x] **Add RenderGraph integration**
      - In `Examples/Common/RenderGraph.h/.cpp`:
@@ -210,7 +212,7 @@ Supports both tile-based (2D) and clustered (3D) configurations.
   1) [ ] **Add ImGui debug overlay**
      - In example ImGui code (e.g., `MainModule.cpp`):
        - Show LUT validity, resolution, dirty state
-       - Show sun direction/illuminance from `EnvironmentDynamicData`
+       - Show sun direction/illuminance from `LightingFrameBindings.sun`
        - Add checkbox to force analytic fallback (sets `atmosphere_flags` bit)
        - Add checkbox to visualize LUT (render LUT as overlay quad)
      - Add RenderDoc markers in compute pass for easy capture
@@ -420,20 +422,26 @@ Design authority for all shadow architecture, renderer contracts, resource
 layouts, and phased rollout ordering lives in [shadows.md](shadows.md). This
 plan section tracks execution work only.
 
-### 8.1 Foundations
+### 8.1 Shared Foundations
 
 - [ ] Add renderer-owned shadow runtime services per `shadows.md`
 - [x] Add baseline shadow metadata/contracts and bindless plumbing:
-      `DirectionalLightShadows`, per-light shadow indices/flags, and
-      `SceneConstants.bindless_directional_shadows_slot`
+      `DirectionalLightShadows`, per-light shadow indices/flags, and the first
+      shadow-routing publication path through `ViewFrameBindings`
+- [ ] Generalize the baseline metadata into family-independent shadow-product
+      records and implementation-selection plumbing
 - [ ] Extend GPU shadow metadata/contracts and bindless slots to match the
-      final shadow system design
+      final shadow system design, including family-specific resources for
+      conventional and virtual backends
 - [x] Carry `cast_shadows` / `receive_shadows` through ScenePrep item data
 - [ ] Add shadow-caster draw classification and pass routing through ScenePrep,
       `PreparedSceneFrame`, and draw emission
+- [ ] Add deterministic family-selection policy inputs (tier, capability,
+      budget, debug override) without introducing scene-authored implementation
+      flags
 - [ ] Add renderer debug/telemetry hooks required by the shadow system design
 
-### 8.2 Directional Shadow Path
+### 8.2 Conventional Directional Path
 
 - [ ] Implement directional shadow resource allocation and lifecycle management
 - [ ] Implement cascaded directional shadow pass scheduling and rendering
@@ -441,26 +449,51 @@ plan section tracks execution work only.
       metadata
 - [ ] Integrate directional shadow evaluation into forward opaque and
       transparent lighting paths
+- [ ] Add directional caching/invalidation, cascade blending, and tier-policy
+      behavior on the shared shadow-product contract
 
-### 8.3 Local Light Shadow Path
+### 8.3 Virtual Shadow-Map Foundations
+
+- [ ] Implement `VirtualShadowMapBackend` resource ownership and lifecycle
+- [ ] Add physical page-pool allocation, page-table/indirection resources, and
+      residency/update buffers
+- [ ] Implement virtual shadow request generation, deterministic residency
+      policy, and fallback bookkeeping
+- [ ] Extend shader-side sampling helpers to dispatch through the
+      family-independent shadow-product metadata
+
+### 8.4 Directional Virtual Shadow Path
+
+- [ ] Implement directional virtual coverage selection, residency, and page
+      rendering
+- [ ] Publish directional virtual addressing metadata and debug views
+- [ ] Integrate directional virtual shadow evaluation into forward opaque and
+      transparent lighting paths without a parallel lighting contract
+
+### 8.5 Local Light Shadow Path
 
 - [ ] Implement spot-light shadow allocation, rendering, and sampling
 - [ ] Implement point-light shadow allocation, rendering, and sampling
 - [ ] Add mixed-mobility cache and invalidation flow for local light shadows
+- [ ] Expand the virtual backend to support spot and point products on the same
+      local-shadow contract
 
-### 8.4 Contact Shadow Refinement
+### 8.6 Contact Shadow Refinement
 
 - [ ] Implement contact shadow mask generation and composition per authored
       light settings
 - [ ] Integrate contact shadow evaluation into receiver lighting
 
-### 8.5 Validation and Hardening
+### 8.7 Validation and Hardening
 
 - [ ] Add automated coverage for shadow extraction, scheduling, GPU data
       packing, and sampling invariants
-- [ ] Add visual debug modes and validation scenes for cascade, atlas/array,
-      bias, and receiver diagnostics
-- [ ] Profile and tune quality tiers, budgets, and invalidation behavior
+- [ ] Add automated coverage for virtual residency, page-table, and fallback
+      invariants
+- [ ] Add visual debug modes and validation scenes for cascade, virtual
+      coverage, atlas/array, bias, and receiver diagnostics
+- [ ] Profile and tune quality tiers, budgets, family-selection policy, and
+      invalidation behavior
 
 ---
 
@@ -669,6 +702,9 @@ Continuous improvements, not milestones:
 
 ## Revision History
 
+- **March 8, 2026**: Expanded the shadow design and execution plan to support
+  multiple runtime implementation families under one shared shadow-product
+  contract, including virtual shadow maps as a first-class target.
 - **March 7, 2026**: Moved shadow design/specification out of
   `implementation_plan.md` into `shadows.md`. Rewrote Phase 8 as execution-only
   tracking aligned with the dedicated shadow design document.

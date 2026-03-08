@@ -24,7 +24,6 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
-#include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/SkyPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
@@ -280,17 +279,6 @@ auto SkyPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   recorder.SetGraphicsRootConstantBufferView(
     static_cast<uint32_t>(binding::RootParam::kSceneConstants),
     Context().scene_constants->GetGPUVirtualAddress());
-
-  if (const auto manager = Context().env_dynamic_manager) {
-    const auto view_id = Context().current_view.view_id;
-    manager->UpdateIfNeeded(view_id);
-    if (const auto env_addr = manager->GetGpuVirtualAddress(view_id);
-      env_addr != 0) {
-      recorder.SetGraphicsRootConstantBufferView(
-        static_cast<uint32_t>(binding::RootParam::kEnvironmentDynamicData),
-        env_addr);
-    }
-  }
 
   SetupViewPortAndScissors(recorder);
   SetupRenderTargets(recorder);

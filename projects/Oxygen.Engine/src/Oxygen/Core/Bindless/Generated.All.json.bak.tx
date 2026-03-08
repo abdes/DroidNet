@@ -1,0 +1,216 @@
+{
+  "source": "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml",
+  "source_version": "1.1.0",
+  "tool_version": "1.2.2",
+  "generated": "2026-03-08 17:18:39",
+  "schema_version": "1.0.1",
+  "defaults": {
+    "invalid_index": 4294967295
+  },
+  "domains": [
+    {
+      "id": "scene",
+      "name": "Scene",
+      "kind": "CBV",
+      "register": "b1",
+      "heap_index": 0,
+      "root_table": "BindlessSRVTable",
+      "domain_base": 0,
+      "capacity": 1,
+      "comment": "Scene constants CBV"
+    },
+    {
+      "id": "srv_global",
+      "name": "GlobalSRV",
+      "kind": "SRV",
+      "register": "t0",
+      "space": "space0",
+      "root_table": "BindlessSRVTable",
+      "domain_base": 1,
+      "capacity": 2048,
+      "comment": "Unified global bindless table"
+    },
+    {
+      "id": "materials",
+      "name": "Materials",
+      "kind": "SRV",
+      "domain_base": 2049,
+      "capacity": 3047,
+      "register": "t1",
+      "space": "space0",
+      "root_table": "BindlessSRVTable",
+      "comment": "Unified bindless table domains"
+    },
+    {
+      "id": "textures",
+      "name": "Textures",
+      "kind": "SRV",
+      "domain_base": 5096,
+      "capacity": 65536,
+      "register": "t2",
+      "space": "space0",
+      "root_table": "BindlessSRVTable"
+    },
+    {
+      "id": "samplers",
+      "name": "Samplers",
+      "kind": "SAMPLER",
+      "register": "s0",
+      "space": "space0",
+      "root_table": "SamplerTable",
+      "domain_base": 0,
+      "capacity": 256
+    }
+  ],
+  "heaps": {
+    "CBV_SRV_UAV:cpu": {
+      "id": "CBV_SRV_UAV:cpu",
+      "type": "CBV_SRV_UAV",
+      "shader_visible": false,
+      "capacity": 1000000,
+      "base_index": 0,
+      "allow_growth": false
+    },
+    "CBV_SRV_UAV:gpu": {
+      "id": "CBV_SRV_UAV:gpu",
+      "type": "CBV_SRV_UAV",
+      "shader_visible": true,
+      "capacity": 1000000,
+      "base_index": 1000000,
+      "allow_growth": false
+    },
+    "SAMPLER:cpu": {
+      "id": "SAMPLER:cpu",
+      "type": "SAMPLER",
+      "shader_visible": false,
+      "capacity": 2048,
+      "base_index": 2000000,
+      "allow_growth": false
+    },
+    "SAMPLER:gpu": {
+      "id": "SAMPLER:gpu",
+      "type": "SAMPLER",
+      "shader_visible": true,
+      "capacity": 2048,
+      "base_index": 2002048,
+      "allow_growth": false
+    },
+    "RTV:cpu": {
+      "id": "RTV:cpu",
+      "type": "RTV",
+      "shader_visible": false,
+      "capacity": 1024,
+      "base_index": 2004096,
+      "allow_growth": false
+    },
+    "DSV:cpu": {
+      "id": "DSV:cpu",
+      "type": "DSV",
+      "shader_visible": false,
+      "capacity": 1024,
+      "base_index": 2005120,
+      "allow_growth": false
+    }
+  },
+  "mappings": {
+    "scene": {
+      "domain": "scene",
+      "heap": "CBV_SRV_UAV:cpu",
+      "local_base": 0
+    },
+    "srv_global": {
+      "domain": "srv_global",
+      "heap": "CBV_SRV_UAV:gpu",
+      "local_base": 1
+    },
+    "materials": {
+      "domain": "materials",
+      "heap": "CBV_SRV_UAV:gpu",
+      "local_base": 2049
+    },
+    "textures": {
+      "domain": "textures",
+      "heap": "CBV_SRV_UAV:gpu",
+      "local_base": 5096
+    },
+    "samplers": {
+      "domain": "samplers",
+      "heap": "SAMPLER:gpu",
+      "local_base": 0
+    }
+  },
+  "symbols": {
+    "SceneConstantsSlot": {
+      "domain": "scene",
+      "comment": "CBV scene slot (b1)"
+    },
+    "kInvalidBindlessIndex": {
+      "value": "invalid_index",
+      "comment": "invalid sentinel (0xFFFFFFFF)"
+    }
+  },
+  "root_signature": [
+    {
+      "type": "descriptor_table",
+      "name": "BindlessSRVTable",
+      "index": 0,
+      "visibility": [
+        "ALL"
+      ],
+      "ranges": [
+        {
+          "range_type": "SRV",
+          "domain": [
+            "srv_global",
+            "materials",
+            "textures"
+          ],
+          "base_shader_register": "t0",
+          "register_space": "space0",
+          "num_descriptors": "unbounded"
+        }
+      ]
+    },
+    {
+      "type": "descriptor_table",
+      "name": "SamplerTable",
+      "index": 1,
+      "visibility": [
+        "ALL"
+      ],
+      "ranges": [
+        {
+          "range_type": "SAMPLER",
+          "domain": [
+            "samplers"
+          ],
+          "base_shader_register": "s0",
+          "register_space": "space0",
+          "num_descriptors": 256
+        }
+      ]
+    },
+    {
+      "type": "cbv",
+      "name": "SceneConstants",
+      "index": 2,
+      "visibility": [
+        "ALL"
+      ],
+      "shader_register": "b1",
+      "register_space": "space0"
+    },
+    {
+      "type": "root_constants",
+      "name": "RootConstants",
+      "index": 3,
+      "visibility": [
+        "ALL"
+      ],
+      "shader_register": "b2",
+      "register_space": "space0",
+      "num_32bit_values": 2,
+      "comment": "Root constants at b2, space0 (2x32-bit).\n- DWORD0: g_DrawIndex (per-draw index into DrawMetadata).\n- DWORD1: g_PassConstantsIndex (per-pass payload; typically a bindless\n  index for pass-level constants).\n"
+    }
+  ]
+}

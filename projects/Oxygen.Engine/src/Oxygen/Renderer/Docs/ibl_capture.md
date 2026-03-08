@@ -91,9 +91,9 @@ The probe system must integrate with the existing bindless ABI:
 
 | Binding | Slot | Content |
 |---------|------|---------|
-| Root CBV | `b1` | `SceneConstants` (contains `bindless_env_static_slot`) |
-| Root CBV | `b3` | `EnvironmentDynamicData` |
-| Bindless SRV | via `bindless_env_static_slot` | `EnvironmentStaticData` (extended with probe fields) |
+| Root CBV | `b1` | `SceneConstants` (contains `bindless_view_frame_bindings_slot`) |
+| Root constants | `b2` | `RootConstants` |
+| Bindless SRV | via `ViewFrameBindings.environment_frame_slot -> EnvironmentFrameBindings.environment_static_slot` | `EnvironmentStaticData` (extended with probe fields) |
 | Bindless SRV | via `bindless_reflection_probes_slot` | `ProbeGpu[]` structured buffer |
 
 All probe cubemaps, irradiance maps, prefilter maps, and parallax resources are accessed via **bindless SRV indices** stored in `ProbeGpu`.
@@ -583,7 +583,8 @@ Add probe-related fields to `EnvironmentStaticData`:
 
 Rationale:
 
-- Keeps the root ABI unchanged (still accessed via `bindless_env_static_slot`).
+- Keeps the root ABI unchanged and routes probe data through
+  `EnvironmentFrameBindings.environment_static_slot`.
 - Allows forward shaders to access probe list safely and deterministically.
 
 ### 9.3 Shader Selection + Parallax Correction

@@ -620,10 +620,10 @@ void Renderer::ConfigureLightCulling(const Scene& scene) {
 
 **GPU Resources Produced**:
 
-| Resource | Slot in EnvironmentDynamicData | Description |
-| -------- | ------------------------------ | ----------- |
-| Cluster Grid | `bindless_cluster_grid_slot` | `uint2(offset, count)` per cluster |
-| Light Index List | `bindless_cluster_index_list_slot` | Packed light indices |
+| Resource | Slot in LightingFrameBindings.light_culling | Description |
+| -------- | ------------------------------------------- | ----------- |
+| Cluster Grid | `cluster_grid_srv_slot` | `uint2(offset, count)` per cluster |
+| Light Index List | `light_index_list_srv_slot` | Packed light indices |
 
 Shaders access these via `ClusterLookup.hlsli` utilities.
 

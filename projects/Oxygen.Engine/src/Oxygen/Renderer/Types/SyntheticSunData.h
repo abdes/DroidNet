@@ -12,33 +12,14 @@
 #include <cstddef>
 #include <cstdint>
 
+#include <glm/geometric.hpp>
 #include <glm/vec4.hpp>
 
 #include <Oxygen/Core/Types/Atmosphere.h>
-#include <Oxygen/Renderer/Types/LightCullingConfig.h>
-#include <Oxygen/Renderer/Types/SceneConstants.h>
 
 namespace oxygen::engine {
 
-//! Atmospheric scattering and planet context data.
-struct AtmosphereData {
-  static constexpr size_t kSize = 64;
-
-  uint32_t flags { 0U };
-  float sky_view_lut_slice { 0.0F };
-  float planet_to_sun_cos_zenith { 0.0F };
-  float aerial_perspective_distance_scale {
-    atmos::kDefaultAerialPerspectiveDistanceScale
-  };
-  float aerial_scattering_strength { atmos::kDefaultAerialScatteringStrength };
-  std::array<uint32_t, 3> _pad { 0, 0, 0 }; // Padding to align vec4 members
-  glm::vec4 planet_center_ws_pad { 0.0F, 0.0F, -atmos::kDefaultPlanetRadiusM,
-    0.0F };
-  glm::vec4 planet_up_ws_camera_altitude_m { atmos::kDefaultPlanetUp, 0.0F };
-};
-static_assert(sizeof(AtmosphereData) == AtmosphereData::kSize);
-
-//! Primary directional light (Sun) state for atmospheric effects.
+//! Primary directional light (Sun) state for atmospheric and lighting effects.
 struct SyntheticSunData {
   static constexpr size_t kSize = 48;
 
@@ -49,8 +30,6 @@ struct SyntheticSunData {
     atmos::kDefaultSunIlluminanceLx };
   glm::vec4 color_rgb_intensity { atmos::kDefaultSunColorRgb,
     atmos::kDefaultSunIlluminanceLx };
-
-  //=== Utilities ===---------------------------------------------------------//
 
   [[nodiscard]] static auto FromDirectionAndLight(const glm::vec3& direction,
     const glm::vec3& color, float illuminance_lx, bool is_enabled = true)
@@ -118,7 +97,6 @@ struct SyntheticSunData {
 };
 static_assert(sizeof(SyntheticSunData) == SyntheticSunData::kSize);
 
-//! Disabled/invalid sun state constant.
 inline constexpr SyntheticSunData kNoSun = [] {
   SyntheticSunData s;
   s.enabled = 0U;
@@ -126,45 +104,5 @@ inline constexpr SyntheticSunData kNoSun = [] {
   s.color_rgb_intensity.w = 0.0F;
   return s;
 }();
-
-/**
-//! EnvironmentDynamicData holds per-frame, per-view dynamic environment state
-//! such as light culling configuration, atmosphere context, and sun state.
-//! It is updated every frame and bound to the GPU as a Root Constant Buffer
-//! View (CBV).
-
- @warning This struct must remain 16-byte aligned for D3D12 root CBV bindings.
- @see LightCullingConfig, LightCullingPass
-*/
-struct alignas(packing::kShaderDataFieldAlignment) EnvironmentDynamicData {
-  LightCullingConfig light_culling;
-  AtmosphereData atmosphere;
-  SyntheticSunData sun;
-};
-
-namespace layout {
-  inline constexpr size_t kEnvironmentDynamicDataSize = 160;
-  inline constexpr size_t kClusterDimXOffset
-    = offsetof(EnvironmentDynamicData, light_culling.cluster_dim_x);
-  inline constexpr size_t kSunDirectionBlockOffset
-    = offsetof(EnvironmentDynamicData, sun.direction_ws_illuminance);
-} // namespace layout
-
-static_assert(
-  alignof(EnvironmentDynamicData) == packing::kShaderDataFieldAlignment,
-  "EnvironmentDynamicData must stay aligned for root CBV");
-static_assert(
-  sizeof(EnvironmentDynamicData) % packing::kShaderDataFieldAlignment == 0,
-  "EnvironmentDynamicData size must be aligned");
-static_assert(
-  sizeof(EnvironmentDynamicData) == layout::kEnvironmentDynamicDataSize,
-  "EnvironmentDynamicData size must match HLSL cbuffer packing");
-
-static_assert(offsetof(EnvironmentDynamicData, light_culling.cluster_dim_x)
-    == layout::kClusterDimXOffset,
-  "EnvironmentDynamicData layout mismatch: cluster_dim_x offset");
-static_assert(offsetof(EnvironmentDynamicData, sun.direction_ws_illuminance)
-    == layout::kSunDirectionBlockOffset,
-  "EnvironmentDynamicData layout mismatch: sun block offset");
 
 } // namespace oxygen::engine

@@ -110,6 +110,9 @@ EnvironmentStaticDataManager::~EnvironmentStaticDataManager()
   for (auto& [_, state] : view_states_) {
     if (state.buffer != nullptr) {
       if (registry.Contains(*state.buffer)) {
+        if (state.srv_view.get().IsValid()) {
+          registry.UnRegisterView(*state.buffer, state.srv_view);
+        }
         registry.UnRegisterResource(*state.buffer);
       }
       if (state.mapped_ptr != nullptr) {
@@ -373,6 +376,9 @@ auto EnvironmentStaticDataManager::EraseViewState(const ViewId view_id) -> void
     if (state.buffer != nullptr) {
       auto& registry = gfx_->GetResourceRegistry();
       if (registry.Contains(*state.buffer)) {
+        if (state.srv_view.get().IsValid()) {
+          registry.UnRegisterView(*state.buffer, state.srv_view);
+        }
         registry.UnRegisterResource(*state.buffer);
       }
       if (state.mapped_ptr != nullptr) {

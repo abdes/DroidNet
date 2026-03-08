@@ -20,7 +20,7 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Renderer/Internal/ISkyAtmosphereLutProvider.h>
-#include <Oxygen/Renderer/Types/EnvironmentDynamicData.h>
+#include <Oxygen/Renderer/Types/SyntheticSunData.h>
 #include <Oxygen/Renderer/Upload/Types.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -321,7 +321,8 @@ public:
   }
 
   //! Returns a monotonic content token that advances after a front-buffer swap.
-  [[nodiscard]] auto GetContentVersion() const noexcept -> std::uint64_t override
+  [[nodiscard]] auto GetContentVersion() const noexcept
+    -> std::uint64_t override
   {
     return static_cast<std::uint64_t>(GetSwapCount());
   }

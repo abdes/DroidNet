@@ -340,14 +340,15 @@ Descriptor slots are captured at different stages:
 * `bindless_normals_slot`: Normal transformation matrices
 * `bindless_materials_slot`: Material constant data
 
-**Frame-Global Slots** (captured from `LightManager` after frame-phase
-finalization):
+**Per-View Routed System Slots** (published after view preparation):
 
-* `bindless_directional_lights_slot`: Directional light array
-* `bindless_directional_shadows_slot`: Directional shadow data
-* `bindless_positional_lights_slot`: Point/spot light array
+* `ViewFrameBindings.lighting_frame_slot`: `LightingFrameBindings`
+* `ViewFrameBindings.environment_frame_slot`: `EnvironmentFrameBindings`
+* `ViewFrameBindings.view_color_frame_slot`: `ViewColorData`
+* `ViewFrameBindings.debug_frame_slot`: `DebugFrameBindings`
 
-**Shader Access Pattern**: All slots are propagated into `SceneConstants`
+**Shader Access Pattern**: Draw-system slots and the top-level
+`bindless_view_frame_bindings_slot` are propagated into `SceneConstants`
 constant buffer (register `b1`). Shaders use these slot indices to access
 resources dynamically from the global descriptor heap, enabling resource
 indirection without pipeline rebinds.

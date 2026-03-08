@@ -21,7 +21,6 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
-#include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
 #include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
@@ -231,18 +230,6 @@ auto ShaderPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
 auto ShaderPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 {
   LOG_SCOPE_FUNCTION(2);
-
-  // Bind EnvironmentDynamicData for Forward+ lighting and exposure
-  if (const auto manager = Context().env_dynamic_manager) {
-    const auto view_id = Context().current_view.view_id;
-    manager->UpdateIfNeeded(view_id);
-    if (const auto env_addr = manager->GetGpuVirtualAddress(view_id);
-      env_addr != 0) {
-      recorder.SetGraphicsRootConstantBufferView(
-        static_cast<uint32_t>(binding::RootParam::kEnvironmentDynamicData),
-        env_addr);
-    }
-  }
 
   SetupViewPortAndScissors(recorder);
   SetupRenderTargets(recorder);

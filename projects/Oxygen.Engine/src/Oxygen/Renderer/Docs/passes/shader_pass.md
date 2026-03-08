@@ -34,7 +34,8 @@ depth is used read-only (depth test enabled, depth write disabled).
 * **Blend State**: Disabled (opaque rendering)
 * **Framebuffer Layout**: Single color target + optional depth (read-only)
 * **Root Signature**: Bindless table (t0-unbounded) + SceneConstants (b1) +
-  RootConstants (b2) + EnvironmentDynamicData (b3)
+  RootConstants (b2). Lighting/environment/view-color/debug data are reached
+  through `SceneConstants.bindless_view_frame_bindings_slot`.
 
 **Variable Properties**:
 
@@ -108,7 +109,7 @@ buffers via bindless indices.
 | **Compile-Time** | 4 PSO descriptors | `CreatePipelineStateDesc()` builds all variants with distinct shader defines + rasterizer states |
 | **Runtime** | Per-partition selection | CPU inspects `PassMask` flags, selects variant, calls `SetPipelineState()` once per partition |
 | **Per-Draw** | Material properties | GPU fetches `MaterialConstants` via `g_DrawIndex`, samples textures dynamically (base color, normal, metalness, roughness, AO, opacity) |
-| **Per-Frame** | Lighting data | GPU accesses directional/positional light arrays via bindless slots in SceneConstants |
+| **Per-Frame** | Lighting data | GPU accesses lighting/environment/view-color resources through `ViewFrameBindings` and system-owned frame bindings |
 
 ### Shader-Level Variation
 
@@ -133,10 +134,10 @@ buffers via bindless indices.
 
 **Lighting Accumulation** (both PS variants):
 
-* **Directional Lights**: Iterate `DirectionalLightBasic` array (slot:
-  `bindless_directional_lights_slot`)
-* **Positional Lights**: Iterate `PositionalLightData` array (slot:
-  `bindless_positional_lights_slot`)
+* **Directional Lights**: Iterate `DirectionalLightBasic` array published
+  through `ViewFrameBindings.lighting_frame_slot -> LightingFrameBindings.directional_lights_slot`
+* **Positional Lights**: Iterate `PositionalLightData` array published through
+  `ViewFrameBindings.lighting_frame_slot -> LightingFrameBindings.positional_lights_slot`
 * **Lighting Model**: GGX specular (Cook-Torrance BRDF) + Lambert diffuse
 
 **PBR Surface Model**:
@@ -161,14 +162,15 @@ buffers via bindless indices.
 
 * `PreparedSceneFrame`: Per-view culled geometry with sorted partitions
 * `RenderContext::scene_constants`: Bindless descriptor slots for geometry,
-  materials, lights
+  materials, instance data, and `ViewFrameBindings`
 * `RenderContext::framebuffer`: Optional depth attachment (read-only DSV)
 * `color_texture`: Target color buffer (from config or framebuffer)
-* **Lighting Data** (frame-global):
-  * Directional lights (`bindless_directional_lights_slot`)
-  * Positional lights (`bindless_positional_lights_slot`)
-* **Environment Data** (b3 CBV):
-  * Camera position, exposure, ambient settings
+* **Lighting Data** (per-view routed):
+  * `ViewFrameBindings.lighting_frame_slot` → `LightingFrameBindings`
+* **Environment Data** (per-view routed):
+  * `ViewFrameBindings.environment_frame_slot` → `EnvironmentFrameBindings`
+* **View Color Data**:
+  * `ViewFrameBindings.view_color_frame_slot` → `ViewColorData.exposure`
 
 **Outputs**:
 

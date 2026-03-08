@@ -5,6 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "Renderer/SceneConstants.hlsli"
+#include "Renderer/ViewFrameBindings.hlsli"
+#include "Renderer/DebugFrameBindings.hlsli"
 
 // Root constants b2 (shared root param index with engine)
 //   g_DrawIndex          : per-draw payload
@@ -43,7 +45,13 @@ VertexOutput VS(
 {
     VertexOutput output;
 
-    StructuredBuffer<GpuDebugLine> gpuDebugLineBuffer = ResourceDescriptorHeap[bindless_gpu_debug_line_slot];
+    const ViewFrameBindings view_bindings =
+        LoadViewFrameBindings(bindless_view_frame_bindings_slot);
+    const DebugFrameBindings debug_bindings =
+        LoadDebugFrameBindings(view_bindings.debug_frame_slot);
+
+    StructuredBuffer<GpuDebugLine> gpuDebugLineBuffer =
+        ResourceDescriptorHeap[debug_bindings.line_buffer_srv_slot];
     GpuDebugLine debugLine = gpuDebugLineBuffer[instanceID];
 
     StructuredBuffer<GpuDebugDrawPassConstants> pass_buffer = ResourceDescriptorHeap[g_PassConstantsIndex];

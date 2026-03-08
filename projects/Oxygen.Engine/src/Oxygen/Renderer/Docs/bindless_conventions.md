@@ -3,6 +3,15 @@
 This document captures the root binding layout and per-pass expectations in the
 current bindless renderer implementation.
 
+Target architecture note:
+
+- This document describes the current implementation ABI.
+- The target post-refactor architecture is defined in
+  [renderer_shader_interface_refactor.md](renderer_shader_interface_refactor.md).
+- Phase 1 now routes environment, lighting, debug, and view-color data through
+  `ViewFrameBindings`. There is no dedicated `b3` environment root CBV in the
+  live ABI.
+
 ## Root bindings
 
 The common root binding order is defined by the generated enum
@@ -13,25 +22,25 @@ enum class RootParam : uint32_t {
   kBindlessSrvTable = 0,   // descriptor table (SRVs) t0, space0
   kSamplerTable = 1,       // descriptor table (Samplers) s0, space0
   kSceneConstants = 2,     // direct CBV b1, space0
-  kDrawIndex = 3,          // 32-bit root constant for draw index (b2, space0)
+  kRootConstants = 3,      // two 32-bit root constants at b2, space0
   kCount = 4,
 };
 ```
 
 ## Current pass usage
 
-All render passes use the complete root signature for consistency and simplicity:
+All engine-owned render passes use the complete generated root signature for
+consistency and simplicity:
 
-| Pass | kBindlessSrvTable | kSamplerTable | kSceneConstants | kDrawIndex |
+| Pass family | kBindlessSrvTable | kSamplerTable | kSceneConstants | kRootConstants |
 | -- | -- | -- | -- | -- |
-| DepthPrePass | Yes | Yes | Yes | Yes |
-| ShaderPass | Yes | Yes | Yes | Yes |
-| TransparentPass | Yes | Yes | Yes | Yes |
+| Graphics passes | Yes | Yes | Yes | Yes |
+| Compute passes | Yes | Yes | Yes | Yes |
 
 **Notes:**
 
 - All passes bind the same root signature (no per-pass customization).
-- Passes may not use all bindings (e.g., DepthPrePass doesn't use material constants), but the root signature is shared.
+- Passes may not use all bindings, but the root signature is shared.
 - This design simplifies PSO creation and descriptor management.
 
 ## Multi-draw item support
@@ -66,7 +75,7 @@ cbuffer DrawIndexConstant : register(b2, space0) {
 // Usage pattern in shader (illustrative):
 //  - Get SRV slot for per-draw metadata from SceneConstants
 //  - Read metadata for current draw using g_DrawIndex
-//StructuredBuffer<DrawMetadata> draw_meta = ResourceDescriptorHeap[Scene.bindless_indices_slot];
+//StructuredBuffer<DrawMetadata> draw_meta = ResourceDescriptorHeap[Scene.bindless_draw_metadata_slot];
 //DrawMetadata dm = draw_meta[g_DrawIndex];
 ```
 
@@ -80,8 +89,12 @@ approach for passing per-draw data.
 Descriptor tables for bindless SRVs (structured buffers for per-draw metadata,
 world transforms, material constants, vertex/index SRVs, etc.) are resident and
 managed by backend systems (`RenderController` + descriptor allocator). Passes
-set the pipeline state (establishes root signature), then bind `SceneConstants`
-as a direct root CBV. All other resources are accessed via the bindless table.
+set the pipeline state (establishes root signature), then bind:
+
+- `SceneConstants` as a direct root CBV at `b1`
+- `RootConstants` at `b2`
+
+All other extensible resources are accessed via the bindless table.
 
 ## Mesh vertex/index SRV lifecycle
 
@@ -138,23 +151,25 @@ The modern bindless rendering pipeline integrates tightly with the ScenePrep sys
 
 ## SceneConstants (CBV b1, space0)
 
-`SceneConstants` is a per-frame snapshot (view + timing + dynamic bindless slots) uploaded once per frame.
-Defined in [Types/SceneConstants.h](../../Types/SceneConstants.h), the GPU layout (`SceneConstants::GpuData`) includes:
+`SceneConstants` is the current per-view root CBV snapshot uploaded once per
+view. Defined in [Types/SceneConstants.h](../../Types/SceneConstants.h), the
+GPU layout (`SceneConstants::GpuData`) is currently 256 bytes and includes:
 
 **Core Fields:**
 
+- frame sequence / frame slot / time
 - view_matrix: Camera view matrix (4x4)
 - projection_matrix: Camera projection matrix (4x4)
 - camera_position: World-space camera position (vec3)
-- time_seconds: Elapsed time since engine start (float)
-- frame_index: Current frame counter (uint32)
 
 **Bindless Slot References:**
 
-- bindless_worlds_slot: SRV slot for world transforms buffer (float4x4 per draw)
-- bindless_normals_slot: SRV slot for normal transform matrices (inverse-transpose)
-- bindless_materials_slot: SRV slot for material constants buffer
+- bindless_transforms_slot: SRV slot for world transforms buffer (float4x4 per draw)
+- bindless_normal_matrices_slot: SRV slot for normal transform matrices (inverse-transpose)
+- bindless_material_constants_slot: SRV slot for material constants buffer
 - bindless_draw_metadata_slot: SRV slot for draw metadata buffer
+- bindless_instance_data_slot
+- bindless_view_frame_bindings_slot
 
 **Upload Timing:**
 
@@ -165,8 +180,12 @@ Defined in [Types/SceneConstants.h](../../Types/SceneConstants.h), the GPU layou
 **Lifetime:**
 
 - Struct is 16-byte aligned for GPU efficiency.
+- Struct is padded to 256 bytes for root-CBV safety and ABI stability.
 - Renderer asserts `RenderContext.scene_constants` is null before wiring and clears it in `RenderContext::Reset()` at frame end.
-- All bindless slots are set during `ScenePrepPipeline::Finalize()` after uploading the respective buffers.
+- Draw-system bindless slots are set during `ScenePrepPipeline::Finalize()`
+  after uploading the respective buffers.
+- System-owned frame bindings are published per view during
+  `Renderer::PrepareAndWireSceneConstantsForView()`.
 
 ## Material constants and texture binding
 
@@ -175,7 +194,7 @@ Defined in [Types/SceneConstants.h](../../Types/SceneConstants.h), the GPU layou
 - **Per-material constants**: Each material asset maps to a `MaterialConstants` structure.
 - **Deduplication**: Materials with identical shader constants reuse the same GPU slot (content-based hashing).
 - **Upload**: Batched via `MaterialUploadFinalizer` during finalization.
-- **Bindless access**: Material indices stored in `DrawMetadata.material_slot`; shaders read via `SceneConstants.bindless_materials_slot`.
+- **Bindless access**: Material indices stored in `DrawMetadata.material_handle`; shaders read via `SceneConstants.bindless_material_constants_slot`.
 - **Texture residency**: `TextureBinder` ensures textures are resident and provides bindless texture SRV indices.
 
 **Pass usage:**
@@ -188,7 +207,7 @@ Defined in [Types/SceneConstants.h](../../Types/SceneConstants.h), the GPU layou
 
 | Buffer | Purpose | Upload frequency | Root binding / Access |
 | -- | -- | -- | -- |
-| SceneConstants | View, timing, dynamic bindless slots | Once per frame (dirty) | CBV b1 space0 |
+| SceneConstants | Current per-view invariants and routing slots | Once per view (dirty) | CBV b1 space0 |
 | MaterialConstants | Material snapshot(s) | 0 or 1+ per frame (opt.) | Structured SRV via bindless table (slot in SC) |
 | DrawMetadata | Per-draw indices and config (vertex/index, flags, etc.) | Once per frame (dirty) | Structured SRV via bindless table (slot in SC) |
 | WorldTransforms (float4x4) | Per-draw world matrices | Once per frame (dirty) | Structured SRV via bindless table (slot in SC) |
@@ -199,6 +218,44 @@ Notes:
 - `0xFFFFFFFFu` (kInvalidDescriptorSlot) means “not available this frame”.
 - Upload is deferred to `PreExecute` and performed only when data
   exists/changes.
+
+## ViewFrameBindings
+
+`ViewFrameBindings` is now published as a bindless structured-buffer payload and
+its SRV slot is carried in `SceneConstants.bindless_view_frame_bindings_slot`.
+
+Current status:
+
+- It is the first replacement routing contract toward the final interface
+  model.
+- The payload currently contains top-level system slots only:
+  - draw
+  - lighting
+  - environment
+  - view color
+  - shadow
+  - post-process
+  - debug
+  - history
+  - ray tracing
+- `debug` is now a live migrated system slot and routes `DebugFrameBindings`.
+- `lighting` is now a live migrated system slot and routes
+  `LightingFrameBindings` for light arrays, canonical sun, and clustered-light
+  state.
+- `environment` is now a live migrated system slot and routes
+  `EnvironmentFrameBindings` for both static environment resources and
+  environment-owned per-view view data.
+- `view color` is now a live migrated system slot and routes `ViewColorData`
+  for shared exposure.
+- Remaining system slots may still be invalid placeholders until the
+  corresponding system contracts are migrated.
+- The legacy direct environment/light/debug/exposure slots were removed from
+  `SceneConstants` in the live ABI.
+
+Practical rule:
+
+- New interface work should prefer routing through `ViewFrameBindings` rather
+  than adding new responsibilities to `SceneConstants`.
 
 ## Per-draw structured buffers and access patterns
 
@@ -218,13 +275,13 @@ ScenePrep finalizers produce three key structured buffers (all dynamic, with slo
 
 - **One float4x4 per draw** (uploaded by `TransformUploadFinalizer`).
 - **Contents**: Deduplicated world transformation matrices with automatic normal matrix computation.
-- **Access**: Via `SceneConstants.bindless_worlds_slot` using index from DrawMetadata or directly from `g_DrawIndex`.
+- **Access**: Via `SceneConstants.bindless_transforms_slot` using index from DrawMetadata or directly from `g_DrawIndex`.
 
 ### MaterialConstants Buffer
 
 - **One entry per unique material** (uploaded by `MaterialUploadFinalizer`).
 - **Contents**: Per-material shader constants (color, roughness, metallic, etc.).
-- **Access**: Via `SceneConstants.bindless_materials_slot` using material index from DrawMetadata.
+- **Access**: Via `SceneConstants.bindless_material_constants_slot` using material index from DrawMetadata.
 
 **Frame Update Protocol:**
 
@@ -240,11 +297,11 @@ ScenePrep finalizers produce three key structured buffers (all dynamic, with slo
    DrawMetadata dm = g_DrawMetadata[g_DrawIndex];
 
    // Get world transform
-   StructuredBuffer<float4x4> g_Worlds = ResourceDescriptorHeap[Scene.bindless_worlds_slot];
+   StructuredBuffer<float4x4> g_Worlds = ResourceDescriptorHeap[Scene.bindless_transforms_slot];
    float4x4 world = g_Worlds[dm.transform_index];
 
    // Get material constants
-   StructuredBuffer<MaterialConstants> g_Materials = ResourceDescriptorHeap[Scene.bindless_materials_slot];
+   StructuredBuffer<MaterialConstants> g_Materials = ResourceDescriptorHeap[Scene.bindless_material_constants_slot];
    MaterialConstants mat = g_Materials[dm.material_index];
    ```
 
@@ -258,19 +315,24 @@ ScenePrep finalizers produce three key structured buffers (all dynamic, with slo
 
 **Minimize root signature churn:**
 
-- All passes share the same root signature (4 root parameters).
-- Avoid per-pass root signature variants; use dynamic slots in `SceneConstants` instead.
-- If new data is needed, extend `SceneConstants` or add to bindless buffers.
+- All passes share the same generated root signature (currently 4 root
+  parameters).
+- Avoid per-pass root signature variants.
+- New interface work should follow
+  [renderer_shader_interface_refactor.md](renderer_shader_interface_refactor.md),
+  not further expand `SceneConstants`.
 
 **Layered descriptor management:**
 
 - **Root parameters**: Stable across all passes; defined in `Generated.RootSignature.h`.
 - **Bindless tables**: Assigned dynamically per frame; slots published via `SceneConstants`.
-- **Draw index**: Only dynamic per-draw state; set via `BindDrawIndexConstant()`.
+- **Root constants**: `g_DrawIndex` is set per draw; `g_PassConstantsIndex` is
+  set per pass.
 
 **For future extensions:**
 
-- Additional per-pass data (e.g., light lists, shadow maps) should be added to bindless buffers or new structured buffers (with slots in `SceneConstants`), not new root parameters.
+- Additional per-pass or per-system data should not be added as new root
+  parameters.
 - If adding new root parameters, append them to maintain index stability for existing code.
 - Consider separating geometry / material / sampler spaces only if shader conventions require it (unlikely in modern bindless).
 

@@ -22,7 +22,8 @@
 #define OXYGEN_D3D12_SHADERS_ATMOSPHERE_AERIAL_PERSPECTIVE_HLSLI
 
 #include "Renderer/EnvironmentStaticData.hlsli"
-#include "Renderer/EnvironmentDynamicData.hlsli"
+#include "Renderer/EnvironmentViewHelpers.hlsli"
+#include "Renderer/LightingHelpers.hlsli"
 #include "Renderer/SceneConstants.hlsli"
 #include "Atmosphere/AtmosphereSampling.hlsli"
 #include "Atmosphere/AtmospherePhase.hlsli"
@@ -53,10 +54,10 @@ float4 SampleCameraVolumeLut(
         return float4(0.0, 0.0, 0.0, 0.0);
     }
 
-    // User controls from EnvironmentDynamicData.
+    // User controls from resolved environment view data.
     // Note: the camera-volume LUT itself is generated at a fixed max distance;
     // this scale remaps view distance to the LUT slice distribution.
-    float distance_scale = max(EnvironmentDynamicData.atmosphere.aerial_perspective_distance_scale, 0.0);
+    float distance_scale = max(GetAerialPerspectiveDistanceScale(), 0.0);
 
     // Effective path length with user scaling.
     float effective_distance = view_distance * distance_scale;
@@ -135,8 +136,8 @@ AerialPerspectiveResult ComputeAerialPerspectiveLut(
     result.inscatter = float3(0.0, 0.0, 0.0);
     result.transmittance = float3(1.0, 1.0, 1.0);
 
-    // User controls from EnvironmentDynamicData
-    float scattering_strength = max(EnvironmentDynamicData.atmosphere.aerial_scattering_strength, 0.0);
+    // User controls from resolved environment view data.
+    float scattering_strength = max(GetAerialScatteringStrength(), 0.0);
 
     // Early out if disabled via strength
     if (scattering_strength < 0.0001)
@@ -149,7 +150,7 @@ AerialPerspectiveResult ComputeAerialPerspectiveLut(
     // Note: the LUT sampler clamps slice >= 0.5, so we mirror the weight logic here.
     const float AP_SLICE_COUNT = (float)kAerialPerspectiveSliceCount;
     const float AP_KM_PER_SLICE = kAerialPerspectiveKmPerSlice;
-    float distance_scale = max(EnvironmentDynamicData.atmosphere.aerial_perspective_distance_scale, 0.0);
+    float distance_scale = max(GetAerialPerspectiveDistanceScale(), 0.0);
     float view_distance_km = (view_distance * distance_scale) / 1000.0;
     float slice = clamp(view_distance_km / AP_KM_PER_SLICE, 0.0, AP_SLICE_COUNT);
     float weight = (slice < 0.5) ? saturate(slice * 2.0) : 1.0;

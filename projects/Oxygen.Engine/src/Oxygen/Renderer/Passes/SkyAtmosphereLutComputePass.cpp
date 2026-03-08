@@ -30,7 +30,6 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
-#include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
 #include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Passes/SkyAtmosphereLutComputePass.h>
@@ -95,12 +94,12 @@ namespace {
     glm::mat4 inv_view_matrix { 1.0F };
 
     // --- 16-byte boundary (x3) ---
-    // Padding to reach kShaderDataSizeAlignment (256 bytes)
+    // Padding to reach kConstantBufferAlignment (256 bytes)
     static constexpr uint32_t kFinalPaddingSize = 12;
     std::array<uint32_t, kFinalPaddingSize> _final_padding {};
   };
   static_assert(
-    sizeof(AtmospherePassConstants) == packing::kShaderDataSizeAlignment);
+    sizeof(AtmospherePassConstants) == packing::kConstantBufferAlignment);
 
   // Number of passes (LUTs) to generate
   constexpr uint32_t kNumAtmospherePasses = 5;
@@ -166,13 +165,6 @@ namespace {
       LOG_F(WARNING,
         "SkyAtmosphereLutComputePass: sanity check failed (view={}) missing "
         "scene constants",
-        view_id.get());
-      ok = false;
-    }
-    if (!ctx.env_dynamic_manager) {
-      LOG_F(WARNING,
-        "SkyAtmosphereLutComputePass: sanity check failed (view={}) missing "
-        "env dynamic manager",
         view_id.get());
       ok = false;
     }
@@ -612,16 +604,10 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
   DLOG_F(1, "gen : {}", generation);
 
   DCHECK_NOTNULL_F(Context().scene_constants);
-  DCHECK_NOTNULL_F(Context().env_dynamic_manager);
 
   const auto scene_const_addr
     = Context().scene_constants->GetGPUVirtualAddress();
-  const auto env_manager = Context().env_dynamic_manager;
-  env_manager->UpdateIfNeeded(view_id);
-  const auto env_dynamic_addr = env_manager->GetGpuVirtualAddress(view_id);
-  DCHECK_NE_F(env_dynamic_addr, 0);
   DLOG_F(1, "scene_const_addr : 0x{:x}", scene_const_addr);
-  DLOG_F(1, "env_dynamic_addr : 0x{:x}", env_dynamic_addr);
 
   // Helper for safe constant updates using spans
   auto update_constants
@@ -651,8 +637,6 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
         recorder.SetPipelineState(pso);
         recorder.SetComputeRootConstantBufferView(
           static_cast<uint32_t>(b::kSceneConstants), scene_const_addr);
-        recorder.SetComputeRootConstantBufferView(
-          static_cast<uint32_t>(b::kEnvironmentDynamicData), env_dynamic_addr);
 
         recorder.SetComputeRoot32BitConstant(
           static_cast<uint32_t>(b::kRootConstants), 0U, 0);

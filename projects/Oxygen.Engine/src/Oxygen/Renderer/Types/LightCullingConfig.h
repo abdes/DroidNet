@@ -64,7 +64,7 @@ OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(ClusterIndexListSlot)
  | `rndr_cluster_depth`   | uint32_t | Number of depth slices (1-64)        |
  | `rndr_cluster_tile_px` | uint32_t | Tile size in pixels (8, 16, 32)      |
 
- @see LightCullingPass, EnvironmentDynamicData
+ @see LightCullingPass, LightingFrameBindings
 */
 struct LightCullingConfig {
   static constexpr size_t kSize = 48;

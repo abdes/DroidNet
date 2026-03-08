@@ -8,24 +8,33 @@
 #define OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTHELPERS_HLSLI
 
 #include "Core/Bindless/Generated.BindlessLayout.hlsl"
+#include "Renderer/EnvironmentFrameBindings.hlsli"
 #include "Renderer/SceneConstants.hlsli"
 #include "Renderer/EnvironmentStaticData.hlsli"
-#include "Renderer/EnvironmentDynamicData.hlsli"
-#include "Lighting/ClusterLookup.hlsli"
+#include "Renderer/ViewFrameBindings.hlsli"
 
 /**
- * Loads the EnvironmentStaticData from the global ResourceDescriptorHeap using the provided slot.
+ * Loads the EnvironmentStaticData for the current view.
  *
  * This is the canonical path for all environment-aware shaders to fetch static environment parameters
  * like sky, atmosphere, fog, and post-process settings.
  *
- * @param bindless_slot The SRV index from SceneConstants.bindless_env_static_slot.
- * @param frame_slot The current frame slot index from SceneConstants.frame_slot.
  * @param[out] out_data The loaded environment data.
- * @return True if the slot is valid and data was loaded; false otherwise.
+ * @return True if the current view resolved an environment static slot and data was loaded; false otherwise.
  */
-static inline bool LoadEnvironmentStaticData(uint bindless_slot, uint frame_slot, out EnvironmentStaticData out_data)
+static inline bool LoadEnvironmentStaticData(out EnvironmentStaticData out_data)
 {
+    const ViewFrameBindings view_bindings =
+        LoadViewFrameBindings(bindless_view_frame_bindings_slot);
+    if (view_bindings.environment_frame_slot == K_INVALID_BINDLESS_INDEX) {
+        out_data = (EnvironmentStaticData)0;
+        return false;
+    }
+
+    const EnvironmentFrameBindings environment_bindings =
+        LoadEnvironmentFrameBindings(view_bindings.environment_frame_slot);
+    const uint bindless_slot = environment_bindings.environment_static_slot;
+
     if (bindless_slot != K_INVALID_BINDLESS_INDEX && BX_IN_GLOBAL_SRV(bindless_slot))
     {
         // Access via global ResourceDescriptorHeap (pure bindless)
@@ -36,52 +45,6 @@ static inline bool LoadEnvironmentStaticData(uint bindless_slot, uint frame_slot
 
     out_data = (EnvironmentStaticData)0;
     return false;
-}
-
-/**
- * Helper to fetch the current exposure from the dynamic environment data.
- *
- * @return The resolved exposure value for the current view.
- */
-static inline float GetExposure()
-{
-    return max(exposure, 0.0f);
-}
-
-/**
- * Computes the cluster index for the current pixel using the global environment dynamic data.
- *
- * @param screen_pos Pixel coordinates (SV_Position.xy).
- * @param linear_depth View-space linear depth.
- * @return The linear cluster index into the cluster grid.
- */
-static inline uint GetClusterIndex(float2 screen_pos, float linear_depth)
-{
-    const uint3 cluster_dims = uint3(EnvironmentDynamicData.light_culling.cluster_dim_x,
-                                     EnvironmentDynamicData.light_culling.cluster_dim_y,
-                                     EnvironmentDynamicData.light_culling.cluster_dim_z);
-    const float2 screen_dims = float2(EnvironmentDynamicData.light_culling.cluster_dim_x * EnvironmentDynamicData.light_culling.tile_size_px,
-                                      EnvironmentDynamicData.light_culling.cluster_dim_y * EnvironmentDynamicData.light_culling.tile_size_px);
-
-    return ComputeClusterIndex(
-        screen_pos,
-        linear_depth,
-        screen_dims,
-        cluster_dims,
-        EnvironmentDynamicData.light_culling.tile_size_px,
-        EnvironmentDynamicData.light_culling.z_near,
-        EnvironmentDynamicData.light_culling.z_scale,
-        EnvironmentDynamicData.light_culling.z_bias);
-}
-
-/**
- * Returns the cluster grid dimensions from the dynamic environment data.
- */
-static inline uint3 GetClusterDimensions()
-{
-    return uint3(EnvironmentDynamicData.light_culling.cluster_dim_x,
-                 EnvironmentDynamicData.light_culling.cluster_dim_y,
-                 EnvironmentDynamicData.light_culling.cluster_dim_z);
 }
 
 /**

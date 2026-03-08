@@ -54,8 +54,8 @@ Keep type names explicit and consistent across CPU and shader usage:
 These are authoritative in the current renderer:
 
 - SceneConstants GPU snapshot (per-frame CBV): view/projection, camera,
-  frame sequence/slot, time, and bindless slots for draw metadata, transforms,
-  normals, materials, environment data, lights, shadows, and instance data.
+  frame sequence/slot, time, draw-system bindless slots, instance-data slot,
+  and `bindless_view_frame_bindings_slot`.
 - DrawMetadata structured buffer (per-draw records; dense indexed access).
 - MaterialConstants structured buffer (per-material data, bindless texture
   indices).
@@ -73,7 +73,8 @@ passes. Current root parameters (order is significant):
 4. Root constants: b2, space0 (2×32-bit values)
    - DWORD0: draw index (per-draw index into DrawMetadata)
    - DWORD1: pass-constants index (per-pass payload, typically bindless)
-5. EnvironmentDynamicData CBV: b3, space0 (per-frame environment data)
+5. No dedicated environment root CBV in the live ABI; system-owned view data is
+   routed through `SceneConstants.bindless_view_frame_bindings_slot`
 
 All passes use the same root signature for simplicity, even if some bindings
 are unused in a pass. The RenderPass base class and command recorder bind the
@@ -160,7 +161,8 @@ Future:
 Current layout (as generated):
 
 - SceneConstants CBV: b1, space0 (root CBV)
-- EnvironmentDynamicData CBV: b3, space0 (root CBV)
+- `ViewFrameBindings` structured SRV, reached through
+  `SceneConstants.bindless_view_frame_bindings_slot`
 - Unified SRV table: t0, space0 (unbounded), domains include global, materials,
   textures
 - Sampler table: s0, space0
@@ -268,8 +270,7 @@ SceneConstants is the per-frame CBV bound at b1. It provides:
 - View/projection matrices and camera position.
 - Frame slot and sequence number, plus time in seconds.
 - Bindless slots for draw metadata, transforms, normal matrices, material
-  constants, environment data, directional lights, directional shadows,
-  positional lights, and instance data.
+  constants, instance data, and `ViewFrameBindings`.
 
 SceneConstants uses a monotonic version and only rebuilds GPU snapshots on
 change to avoid unnecessary uploads.
@@ -327,7 +328,7 @@ Implemented:
 - Generated bindless layout and root signature metadata.
 - Direct indexing flags in D3D12 root signatures.
 - Shared root signature across passes (SRV table, sampler table, SceneConstants,
-  root constants, EnvironmentDynamicData).
+  root constants).
 - Upload module with staging, coalescing, fence-based tracking, coroutine
   support, and inline-transfer retirement.
 - TextureBinder stable SRV indices with descriptor repointing.
@@ -352,7 +353,7 @@ ScenePrep output consistency.
 
 ## 14. Extensibility
 
-- Extend SceneConstants or per-draw buffers to add new data without changing
-  root signatures.
-- Prefer new bindless buffers and slots over new root parameters.
+- Keep `SceneConstants` small and stable.
+- Prefer new system-owned frame bindings and bindless buffers over new root
+  parameters or new responsibilities in `SceneConstants`.
 - Keep Bindless.yaml as the single source of truth for binding layout.

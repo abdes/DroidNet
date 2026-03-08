@@ -7,8 +7,9 @@
 #ifndef OXYGEN_D3D12_SHADERS_ATMOSPHERE_SKY_COLOR_HLSLI
 #define OXYGEN_D3D12_SHADERS_ATMOSPHERE_SKY_COLOR_HLSLI
 
-#include "Renderer/EnvironmentDynamicData.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
+#include "Renderer/EnvironmentViewHelpers.hlsli"
+#include "Renderer/LightingHelpers.hlsli"
 #include "Renderer/SceneConstants.hlsli"
 #include "Atmosphere/AtmosphereSampling.hlsli"
 

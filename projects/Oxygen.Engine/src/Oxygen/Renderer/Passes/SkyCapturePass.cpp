@@ -26,7 +26,6 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
-#include <Oxygen/Renderer/Internal/EnvironmentDynamicDataManager.h>
 #include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
@@ -161,9 +160,9 @@ auto SkyCapturePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     env_manager ? env_manager->GetSrvIndex(view_id).get() : 0U,
     config_->resolution, state.captured_cubemap_srv.get());
 
-  // SkyCapture shaders load EnvironmentStaticData using SceneConstants
-  // (bindless_env_static_slot + frame_slot). Bind it explicitly to avoid any
-  // root-CBV leakage from previous passes.
+  // SkyCapture shaders resolve EnvironmentStaticData through ViewFrameBindings
+  // and EnvironmentFrameBindings. Bind SceneConstants explicitly to provide the
+  // per-view routing slot.
   if (Context().scene_constants == nullptr) {
     LOG_F(ERROR,
       "SkyCapturePass: missing SceneConstants (view={} frame_slot={} "
@@ -175,18 +174,6 @@ auto SkyCapturePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   recorder.SetGraphicsRootConstantBufferView(
     static_cast<uint32_t>(binding::RootParam::kSceneConstants),
     Context().scene_constants->GetGPUVirtualAddress());
-
-  // Bind EnvironmentDynamicData for exposure and other dynamic data.
-  if (const auto manager = Context().env_dynamic_manager) {
-    const auto env_view_id = Context().current_view.view_id;
-    manager->UpdateIfNeeded(env_view_id);
-    if (const auto env_addr = manager->GetGpuVirtualAddress(env_view_id);
-      env_addr != 0) {
-      recorder.SetGraphicsRootConstantBufferView(
-        static_cast<uint32_t>(binding::RootParam::kEnvironmentDynamicData),
-        env_addr);
-    }
-  }
 
   SetupViewPortAndScissors(recorder);
 

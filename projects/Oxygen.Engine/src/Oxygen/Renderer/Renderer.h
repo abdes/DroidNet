@@ -31,11 +31,19 @@
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Renderer/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Types/CompositingTask.h>
-#include <Oxygen/Renderer/Types/EnvironmentDynamicData.h>
+#include <Oxygen/Renderer/Types/DebugFrameBindings.h>
+#include <Oxygen/Renderer/Types/EnvironmentFrameBindings.h>
+#include <Oxygen/Renderer/Types/EnvironmentViewData.h>
+#include <Oxygen/Renderer/Types/LightCullingConfig.h>
+#include <Oxygen/Renderer/Types/LightingFrameBindings.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
+#include <Oxygen/Renderer/Types/SyntheticSunData.h>
+#include <Oxygen/Renderer/Types/ViewColorData.h>
+#include <Oxygen/Renderer/Types/ViewFrameBindings.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen {
@@ -72,7 +80,6 @@ struct SkyAtmosphereLutComputePassConfig;
 class CompositingPass;
 struct CompositingPassConfig;
 namespace internal {
-  class EnvironmentDynamicDataManager;
   class EnvironmentStaticDataManager;
   class SceneConstantsManager;
   class BrdfLutManager;
@@ -326,6 +333,12 @@ public:
   OXGN_RNDR_NDAPI auto GetIblComputePass() const noexcept
     -> observer_ptr<IblComputePass>;
 
+  //! Update clustered-lighting state for the active view and republish the
+  //! current view's shader-facing bindings.
+  OXGN_RNDR_API auto UpdateCurrentViewLightCullingConfig(
+    const RenderContext& render_context, const LightCullingConfig& config)
+    -> void;
+
   //=== Debug Overrides ===---------------------------------------------------//
 
   //! Force an IBL regeneration on the next frame.
@@ -361,6 +374,12 @@ public:
     glm::vec2 uv_offset) -> bool;
 
 private:
+  struct PerViewRuntimeState {
+    LightCullingConfig light_culling {};
+    SyntheticSunData sun { kNoSun };
+    EnvironmentViewData environment_view {};
+  };
+
   //! Build frame data for a specific view (scene prep, culling, draw list).
   /*!\n    Internal method called by OnPreRender for each registered view.
     @param view The resolved view containing camera and projection data
@@ -398,6 +417,8 @@ private:
 
   auto PrepareAndWireSceneConstantsForView(ViewId view_id,
     const FrameContext& frame_context, RenderContext& render_context) -> bool;
+  auto RepublishCurrentViewBindings(const RenderContext& render_context)
+    -> bool;
 
   //! Resolves exposure for the view (manual and auto).
   auto UpdateViewExposure(ViewId view_id, const scene::Scene& scene,
@@ -421,9 +442,20 @@ private:
   // binding
   SceneConstants scene_const_cpu_;
   std::unique_ptr<internal::SceneConstantsManager> scene_const_manager_;
-
-  // Environment dynamic data manager for root CBV at b3 (cluster slots, etc.)
-  std::unique_ptr<internal::EnvironmentDynamicDataManager> env_dynamic_manager_;
+  std::unique_ptr<internal::PerViewStructuredPublisher<ViewFrameBindings>>
+    view_frame_bindings_publisher_;
+  std::unique_ptr<internal::PerViewStructuredPublisher<ViewColorData>>
+    view_color_data_publisher_;
+  std::unique_ptr<internal::PerViewStructuredPublisher<DebugFrameBindings>>
+    debug_frame_bindings_publisher_;
+  std::unique_ptr<internal::PerViewStructuredPublisher<LightingFrameBindings>>
+    lighting_frame_bindings_publisher_;
+  std::unique_ptr<internal::PerViewStructuredPublisher<EnvironmentViewData>>
+    environment_view_data_publisher_;
+  std::unique_ptr<
+    internal::PerViewStructuredPublisher<EnvironmentFrameBindings>>
+    environment_frame_bindings_publisher_;
+  std::unordered_map<ViewId, PerViewRuntimeState> per_view_runtime_state_;
 
   // Manages pre-integrated BRDF lookup tables for IBL.
   std::unique_ptr<internal::BrdfLutManager> brdf_lut_manager_;

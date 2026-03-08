@@ -136,9 +136,8 @@ All passes share a common root signature layout for bindless resource access:
 | Slot | Type | Content |
 | --- | --- | --- |
 | t0 | SRV | Unbounded descriptor table (all textures/buffers) |
-| b1 | CBV | SceneConstants (camera matrices, light counts) |
-| b2 | Root Constants | DrawMetadata offset |
-| b3 | CBV | EnvironmentDynamicData (sky, fog parameters) |
+| b1 | CBV | SceneConstants (view invariants, draw-routing slots, `bindless_view_frame_bindings_slot`) |
+| b2 | Root Constants | Draw index + pass-constants index |
 
 This architecture eliminates per-draw descriptor binding overhead and enables
 GPU-driven rendering patterns.
@@ -189,8 +188,9 @@ min/max depth bounds, and produce a per-tile light index buffer consumed by
 
 ### Shadow Mapping
 
-Dedicated shadow passes will render depth from each shadow-casting light's
-perspective, producing shadow map atlases consumed during forward shading.
+Dedicated shadow backends/passes will render depth for each shadow-casting
+light product, publishing either conventional pooled shadow maps or virtual
+shadow-map residency/page data consumed during forward shading.
 
 ### Environment System Integration
 
@@ -203,8 +203,9 @@ The SceneEnvironment system will provide:
 - **VolumetricClouds** — Volumetric cloud rendering
 - **PostProcessVolume** — Per-volume post-processing overrides
 
-These components will integrate with the forward shading pass through the
-existing `EnvironmentDynamicData` constant buffer.
+These components integrate with the forward shading pass through
+`ViewFrameBindings` and system-owned frame bindings, not a dedicated
+environment root constant buffer.
 
 ## See Also
 
