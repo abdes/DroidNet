@@ -246,7 +246,12 @@ target_link_libraries(
 
 m_gtest_program(AsyncImportGeometry SOURCES "Import/GeometryPipeline_test.cpp")
 
-m_gtest_program(AsyncImportScene SOURCES "Import/ScenePipeline_test.cpp")
+m_gtest_program(
+  AsyncImportScene
+  SOURCES
+    "Import/ScenePipeline_test.cpp"
+    "Import/SceneNodeImportDefaults_test.cpp"
+)
 
 m_gtest_program(AsyncImportMaterials SOURCES "Import/MaterialPipeline_test.cpp")
 

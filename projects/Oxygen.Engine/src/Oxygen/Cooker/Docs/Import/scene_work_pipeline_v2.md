@@ -301,6 +301,12 @@ Adapter responsibilities (the adapter's `BuildSceneStage` must do these):
   metadata; re-normalize rotations after conversion.
 - Apply `NodePruningPolicy` and preserve world transforms when reparenting.
 - Populate node flags from source metadata and import overrides.
+  Imported-scene default policy:
+  renderable nodes default to `casts_shadows + receives_shadows`, light-only
+  nodes default node-level `casts_shadows`, and empty helper nodes stay neutral.
+  Where the source format exposes authored light shadow intent, the adapter must
+  preserve it in the light component record instead of replacing it with a
+  blanket default.
 - Attach components (renderables/cameras/lights) and populate component
   records with `node_index` referring to the node table.
 - Ensure the string table begins with a leading NUL byte.

@@ -40,6 +40,103 @@ auto AsyncImporterFullTestBase::CountAssetsOfType(
     }));
 }
 
+auto AsyncImporterFullTestBase::LoadSceneReadback(const ImportReport& report)
+  -> SceneReadback
+{
+  Inspection inspection;
+  inspection.LoadFromRoot(report.cooked_root);
+
+  const auto scene_entry = FindAssetOfType(inspection, AssetType::kScene);
+  EXPECT_TRUE(scene_entry.has_value());
+  if (!scene_entry.has_value()) {
+    return {};
+  }
+
+  const auto scene_path = report.cooked_root
+    / std::filesystem::path(scene_entry->descriptor_relpath);
+
+  FileStream<> scene_stream(scene_path, std::ios::in);
+  Reader<FileStream<>> scene_reader(scene_stream);
+  auto packed = scene_reader.ScopedAlignment(1);
+
+  const auto base_pos_res = scene_reader.Position();
+  EXPECT_TRUE(base_pos_res);
+  if (!base_pos_res) {
+    return {};
+  }
+  const auto base_pos = *base_pos_res;
+
+  SceneReadback readback {};
+  auto scene_desc_result = scene_reader.ReadBlobInto(
+    std::as_writable_bytes(std::span<SceneAssetDesc, 1>(&readback.desc, 1)));
+  EXPECT_TRUE(scene_desc_result);
+  if (!scene_desc_result) {
+    return {};
+  }
+
+  if (readback.desc.nodes.count > 0U) {
+    readback.nodes.resize(readback.desc.nodes.count);
+    const auto seek_nodes = scene_reader.Seek(
+      base_pos + static_cast<size_t>(readback.desc.nodes.offset));
+    EXPECT_TRUE(seek_nodes);
+    if (!seek_nodes) {
+      return {};
+    }
+
+    auto nodes_result = scene_reader.ReadBlobInto(std::as_writable_bytes(
+      std::span<NodeRecord>(readback.nodes.data(), readback.nodes.size())));
+    EXPECT_TRUE(nodes_result);
+    if (!nodes_result) {
+      return {};
+    }
+  }
+
+  if (readback.desc.component_table_count > 0U) {
+    readback.component_entries.resize(readback.desc.component_table_count);
+    const auto seek_dir = scene_reader.Seek(base_pos
+      + static_cast<size_t>(readback.desc.component_table_directory_offset));
+    EXPECT_TRUE(seek_dir);
+    if (!seek_dir) {
+      return {};
+    }
+
+    auto entries_result = scene_reader.ReadBlobInto(
+      std::as_writable_bytes(std::span<SceneComponentTableDesc>(
+        readback.component_entries.data(), readback.component_entries.size())));
+    EXPECT_TRUE(entries_result);
+    if (!entries_result) {
+      return {};
+    }
+
+    const auto renderables_it = std::find_if(readback.component_entries.begin(),
+      readback.component_entries.end(),
+      [](const SceneComponentTableDesc& entry) {
+        return static_cast<ComponentType>(entry.component_type)
+          == ComponentType::kRenderable;
+      });
+    if (renderables_it != readback.component_entries.end()
+      && renderables_it->table.count > 0U) {
+      readback.renderables.resize(renderables_it->table.count);
+      const auto seek_renderables = scene_reader.Seek(
+        base_pos + static_cast<size_t>(renderables_it->table.offset));
+      EXPECT_TRUE(seek_renderables);
+      if (!seek_renderables) {
+        return {};
+      }
+
+      auto renderables_result = scene_reader.ReadBlobInto(
+        std::as_writable_bytes(std::span<RenderableRecord>(
+          readback.renderables.data(), readback.renderables.size())));
+      EXPECT_TRUE(renderables_result);
+      if (!renderables_result) {
+        return {};
+      }
+    }
+  }
+
+  return readback;
+}
+
 auto AsyncImporterFullTestBase::ValidateSceneOutputs(
   const ImportReport& report, const ExpectedSceneOutputs& expected) -> void
 {

@@ -217,6 +217,7 @@ set(
   "Import/Internal/Pipelines/TexturePipeline.h"
   "Import/Internal/ResourceTableAggregator.h"
   "Import/Internal/ResourceTableRegistry.h"
+  "Import/Internal/SceneNodeImportDefaults.h"
   "Import/Internal/SceneImportRequestBuilder.h"
   "Import/Internal/SidecarSceneResolver.h"
   "Import/Internal/stb/stb_image.h"
