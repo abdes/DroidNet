@@ -40,27 +40,7 @@
       "mappings": [
         {
           "action": "VehicleForwardAction",
-          "slot": "W",
-          "triggers": [
-            {
-              "type": "down",
-              "behavior": "implicit"
-            }
-          ]
-        },
-        {
-          "action": "VehicleForwardAction",
           "slot": "Up",
-          "triggers": [
-            {
-              "type": "down",
-              "behavior": "implicit"
-            }
-          ]
-        },
-        {
-          "action": "VehicleReverseAction",
-          "slot": "S",
           "triggers": [
             {
               "type": "down",
@@ -80,27 +60,7 @@
         },
         {
           "action": "VehicleSteerLeftAction",
-          "slot": "A",
-          "triggers": [
-            {
-              "type": "down",
-              "behavior": "implicit"
-            }
-          ]
-        },
-        {
-          "action": "VehicleSteerLeftAction",
           "slot": "Left",
-          "triggers": [
-            {
-              "type": "down",
-              "behavior": "implicit"
-            }
-          ]
-        },
-        {
-          "action": "VehicleSteerRightAction",
-          "slot": "D",
           "triggers": [
             {
               "type": "down",
