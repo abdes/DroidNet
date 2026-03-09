@@ -7,9 +7,11 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <unordered_map>
 
 #include <glm/vec4.hpp>
 
@@ -24,7 +26,9 @@
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Types/RasterShadowRenderPlan.h>
 #include <Oxygen/Renderer/Types/ShadowFramePublication.h>
+#include <Oxygen/Renderer/Types/ShadowInstanceMetadata.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
+#include <Oxygen/Renderer/Types/VirtualShadowRenderPlan.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::engine::upload {
@@ -35,6 +39,7 @@ class StagingProvider;
 namespace oxygen::renderer {
 namespace internal {
   class ConventionalShadowBackend;
+  class VirtualShadowMapBackend;
 }
 
 //! Renderer-owned shadow-product scheduler and backend coordinator.
@@ -58,7 +63,9 @@ public:
   OXGN_RNDR_API ShadowManager(observer_ptr<Graphics> gfx,
     observer_ptr<ProviderT> provider,
     observer_ptr<CoordinatorT> inline_transfers,
-    oxygen::ShadowQualityTier quality_tier = oxygen::ShadowQualityTier::kHigh);
+    oxygen::ShadowQualityTier quality_tier = oxygen::ShadowQualityTier::kHigh,
+    oxygen::DirectionalShadowImplementationPolicy directional_policy
+    = oxygen::DirectionalShadowImplementationPolicy::kConventionalOnly);
 
   OXYGEN_MAKE_NON_COPYABLE(ShadowManager)
   OXYGEN_MAKE_NON_MOVABLE(ShadowManager)
@@ -71,8 +78,11 @@ public:
   OXGN_RNDR_API auto PublishForView(ViewId view_id,
     const engine::ViewConstants& view_constants, const LightManager& lights,
     std::span<const glm::vec4> shadow_caster_bounds = {},
-    const SyntheticSunShadowInput* synthetic_sun_shadow = nullptr)
+    std::span<const glm::vec4> visible_receiver_bounds = {},
+    const SyntheticSunShadowInput* synthetic_sun_shadow = nullptr,
+    std::chrono::milliseconds gpu_budget = std::chrono::milliseconds(16))
     -> ShadowFramePublication;
+  OXGN_RNDR_API auto MarkVirtualRenderPlanExecuted(ViewId view_id) -> void;
   OXGN_RNDR_API auto SetPublishedViewFrameBindingsSlot(
     ViewId view_id, engine::BindlessViewFrameBindingsSlot slot) -> void;
 
@@ -80,10 +90,17 @@ public:
     ViewId view_id) const noexcept -> const ShadowFramePublication*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetRasterRenderPlan(
     ViewId view_id) const noexcept -> const RasterShadowRenderPlan*;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetVirtualRenderPlan(
+    ViewId view_id) const noexcept -> const VirtualShadowRenderPlan*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetViewIntrospection(
     ViewId view_id) const noexcept -> const ShadowViewIntrospection*;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetVirtualViewIntrospection(
+    ViewId view_id) const noexcept -> const VirtualShadowViewIntrospection*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto
   GetConventionalShadowDepthTexture() const noexcept
+    -> const std::shared_ptr<graphics::Texture>&;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto
+  GetVirtualShadowDepthTexture() const noexcept
     -> const std::shared_ptr<graphics::Texture>&;
 
 private:
@@ -93,8 +110,14 @@ private:
   oxygen::ShadowQualityTier shadow_quality_tier_ {
     oxygen::ShadowQualityTier::kHigh
   };
+  oxygen::DirectionalShadowImplementationPolicy directional_policy_ {
+    oxygen::DirectionalShadowImplementationPolicy::kConventionalOnly
+  };
+  std::unordered_map<std::uint64_t, engine::ShadowImplementationKind>
+    last_view_directional_implementation_;
 
   std::unique_ptr<internal::ConventionalShadowBackend> conventional_backend_;
+  std::unique_ptr<internal::VirtualShadowMapBackend> virtual_backend_;
 };
 
 } // namespace oxygen::renderer

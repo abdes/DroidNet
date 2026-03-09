@@ -201,6 +201,20 @@ public:
     -> void
     = 0;
 
+  //! Clears one or more rectangles within a depth-stencil view.
+  /*!
+   Default implementation ignores \p rects and falls back to clearing the
+   * full
+   view. Backends that support partial clears should override this.
+
+
+   * \param rects Rectangles, in texture space, to clear. Empty means full
+   * view.
+   */
+  OXGN_GFX_API virtual auto ClearDepthStencilView(const Texture& texture,
+    const NativeView& dsv, ClearFlags clear_flags, float depth, uint8_t stencil,
+    std::span<const oxygen::Scissors> rects) -> void;
+
   //! Clears color and depth/stencil (DSV) attachments of the specified
   //! framebuffer.
   /*!

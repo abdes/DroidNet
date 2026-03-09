@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cstdint>
 #include <filesystem>
 #include <source_location>
@@ -113,6 +114,7 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
     oxygen::RendererConfig renderer_config {
       .upload_queue_key = app.queue_strategy.KeyFor(QueueRole::kTransfer).get(),
       .shadow_quality_tier = oxygen::ShadowQualityTier::kUltra,
+      .directional_shadow_policy = app.directional_shadow_policy,
     };
     auto renderer_unique
       = std::make_unique<engine::Renderer>(app.gfx_weak, renderer_config);
@@ -179,6 +181,31 @@ auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames)
 
 } // namespace
 
+namespace {
+
+auto ParseDirectionalShadowPolicy(std::string value)
+  -> oxygen::DirectionalShadowImplementationPolicy
+{
+  std::ranges::transform(value, value.begin(),
+    [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+  if (value == "conventional" || value == "conventional-only") {
+    return oxygen::DirectionalShadowImplementationPolicy::kConventionalOnly;
+  }
+  if (value == "prefer-virtual" || value == "virtual") {
+    return oxygen::DirectionalShadowImplementationPolicy::kPreferVirtual;
+  }
+  if (value == "virtual-only") {
+    return oxygen::DirectionalShadowImplementationPolicy::kVirtualOnly;
+  }
+
+  throw std::runtime_error(
+    "Invalid value for --directional-shadows. "
+    "Expected one of: conventional, prefer-virtual, virtual-only");
+}
+
+} // namespace
+
 extern "C" auto MainImpl(std::span<const char*> args) -> void
 {
   using namespace oxygen::clap; // NOLINT
@@ -191,6 +218,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
   bool enable_vsync = true;
   bool verify_hashes = false;
   bool hot_reload = true;
+  std::string directional_shadows = "conventional";
   oxygen::examples::DemoAppContext app {};
   app.headless = false;
 
@@ -248,6 +276,16 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
         .UserFriendlyName("hot-reload")
         .StoreTo(&hot_reload)
         .Build());
+    default_command.WithOption(Option::WithKey("directional-shadows")
+        .About("Directional shadow backend policy: conventional, "
+               "prefer-virtual, or virtual-only. The current VSM slice is "
+               "opt-in and not the default for large scenes.")
+        .Long("directional-shadows")
+        .WithValue<std::string>()
+        .DefaultValue(std::string("conventional"))
+        .UserFriendlyName("policy")
+        .StoreTo(&directional_shadows)
+        .Build());
 
     auto cli = CliBuilder()
                  .ProgramName("render-scene")
@@ -272,8 +310,11 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     LOG_F(INFO, "Parsed fullscreen option = {}", app.fullscreen);
     LOG_F(INFO, "Parsed vsync option = {}", enable_vsync);
     LOG_F(INFO, "Parsed verify-hashes option = {}", verify_hashes);
+    LOG_F(INFO, "Parsed directional-shadows option = {}", directional_shadows);
     LOG_F(INFO, "Starting async engine engine for {} frames (target {} fps)",
       frames, target_fps);
+    app.directional_shadow_policy
+      = ParseDirectionalShadowPolicy(directional_shadows);
 
     // Create the platform
     app.platform = std::make_shared<Platform>(PlatformConfig {

@@ -27,6 +27,15 @@ struct ShadowFramePublication {
   ShaderVisibleIndex directional_shadow_texture_srv {
     kInvalidShaderVisibleIndex
   };
+  ShaderVisibleIndex virtual_shadow_page_table_srv {
+    kInvalidShaderVisibleIndex
+  };
+  ShaderVisibleIndex virtual_shadow_physical_pool_srv {
+    kInvalidShaderVisibleIndex
+  };
+  ShaderVisibleIndex virtual_directional_shadow_metadata_srv {
+    kInvalidShaderVisibleIndex
+  };
   std::uint32_t sun_shadow_index { 0xFFFFFFFFU };
 };
 

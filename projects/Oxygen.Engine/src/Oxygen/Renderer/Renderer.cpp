@@ -565,7 +565,8 @@ auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
     shadow_manager_
       = std::make_unique<renderer::ShadowManager>(observer_ptr { gfx.get() },
         observer_ptr { inline_staging_provider_.get() },
-        observer_ptr { inline_transfers_.get() }, config_.shadow_quality_tier);
+        observer_ptr { inline_transfers_.get() }, config_.shadow_quality_tier,
+        config_.directional_shadow_policy);
 
     // Initialize the ViewConstants manager for per-view, per-slot upload-heap
     // storage.
@@ -1950,29 +1951,50 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
     if (shadow_frame_bindings_publisher_ && shadow_manager_) {
       auto shadow_instance_metadata_slot = kInvalidShaderVisibleIndex;
       auto directional_shadow_metadata_slot = kInvalidShaderVisibleIndex;
+      auto virtual_shadow_page_table_slot = kInvalidShaderVisibleIndex;
+      auto virtual_shadow_physical_pool_slot = kInvalidShaderVisibleIndex;
+      auto virtual_directional_shadow_metadata_slot
+        = kInvalidShaderVisibleIndex;
       auto sun_shadow_index = 0xFFFFFFFFU;
       if (const auto light_manager = scene_prep_state_->GetLightManager()) {
         const auto prepared_it = prepared_frames_.find(view_id);
         const auto shadow_caster_bounds = prepared_it != prepared_frames_.end()
           ? prepared_it->second.shadow_caster_bounding_spheres
           : std::span<const glm::vec4> {};
+        const auto visible_receiver_bounds
+          = prepared_it != prepared_frames_.end()
+          ? prepared_it->second.visible_receiver_bounding_spheres
+          : std::span<const glm::vec4> {};
         const auto synthetic_sun_shadow
           = BuildSyntheticSunShadowInput(render_context, runtime_state.sun);
-        const auto shadow_view = shadow_manager_->PublishForView(view_id,
-          view_constants, *light_manager, shadow_caster_bounds,
-          synthetic_sun_shadow ? &*synthetic_sun_shadow : nullptr);
+        const auto shadow_view
+          = shadow_manager_->PublishForView(view_id, view_constants,
+            *light_manager, shadow_caster_bounds, visible_receiver_bounds,
+            synthetic_sun_shadow ? &*synthetic_sun_shadow : nullptr,
+            frame_budget_stats_.gpu_budget);
         shadow_instance_metadata_slot
           = shadow_view.shadow_instance_metadata_srv;
         directional_shadow_metadata_slot
           = shadow_view.directional_shadow_metadata_srv;
         const auto directional_shadow_texture_slot
           = shadow_view.directional_shadow_texture_srv;
+        virtual_shadow_page_table_slot
+          = shadow_view.virtual_shadow_page_table_srv;
+        virtual_shadow_physical_pool_slot
+          = shadow_view.virtual_shadow_physical_pool_srv;
+        virtual_directional_shadow_metadata_slot
+          = shadow_view.virtual_directional_shadow_metadata_srv;
         sun_shadow_index = shadow_view.sun_shadow_index;
 
         const ShadowFrameBindings shadow_bindings {
           .shadow_instance_metadata_slot = shadow_instance_metadata_slot,
           .directional_shadow_metadata_slot = directional_shadow_metadata_slot,
           .directional_shadow_texture_slot = directional_shadow_texture_slot,
+          .virtual_shadow_page_table_slot = virtual_shadow_page_table_slot,
+          .virtual_shadow_physical_pool_slot
+          = virtual_shadow_physical_pool_slot,
+          .virtual_directional_shadow_metadata_slot
+          = virtual_directional_shadow_metadata_slot,
           .sun_shadow_index = sun_shadow_index,
         };
         view_bindings.shadow_frame_slot
@@ -2474,20 +2496,31 @@ auto Renderer::PublishPreparedFrameSpans(
   }
 
   storage.shadow_caster_bounds_storage.clear();
+  storage.visible_receiver_bounds_storage.clear();
   if (scene_prep_state_ != nullptr) {
     const auto items = scene_prep_state_->CollectedItems();
     storage.shadow_caster_bounds_storage.reserve(items.size());
+    storage.visible_receiver_bounds_storage.reserve(items.size());
     for (const auto& item : items) {
       if (!item.cast_shadows || item.world_bounding_sphere.w <= 0.0F) {
+      } else {
+        storage.shadow_caster_bounds_storage.push_back(
+          item.world_bounding_sphere);
+      }
+      if (!item.main_view_visible || !item.receive_shadows
+        || item.world_bounding_sphere.w <= 0.0F) {
         continue;
       }
-      storage.shadow_caster_bounds_storage.push_back(
+      storage.visible_receiver_bounds_storage.push_back(
         item.world_bounding_sphere);
     }
   }
   prepared_frame.shadow_caster_bounding_spheres
     = std::span<const glm::vec4>(storage.shadow_caster_bounds_storage.data(),
       storage.shadow_caster_bounds_storage.size());
+  prepared_frame.visible_receiver_bounding_spheres
+    = std::span<const glm::vec4>(storage.visible_receiver_bounds_storage.data(),
+      storage.visible_receiver_bounds_storage.size());
 }
 
 auto Renderer::UpdateViewConstantsFromView(const ResolvedView& view) -> void
@@ -2520,6 +2553,13 @@ auto Renderer::OnFrameStart(observer_ptr<FrameContext> context) -> void
   auto tag = oxygen::renderer::internal::RendererTagFactory::Get();
   auto frame_slot = context->GetFrameSlot();
   auto frame_sequence = context->GetFrameSequenceNumber();
+  frame_budget_stats_ = context->GetBudgetStats();
+  if (frame_budget_stats_.cpu_budget.count() <= 0) {
+    frame_budget_stats_.cpu_budget = std::chrono::milliseconds(16);
+  }
+  if (frame_budget_stats_.gpu_budget.count() <= 0) {
+    frame_budget_stats_.gpu_budget = std::chrono::milliseconds(16);
+  }
 
   // Store frame lifecycle state for RenderContext propagation
   frame_slot_ = frame_slot;

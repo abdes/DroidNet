@@ -20,6 +20,12 @@ enum class ShadowQualityTier : std::uint8_t {
   kUltra,
 };
 
+enum class DirectionalShadowImplementationPolicy : std::uint8_t {
+  kConventionalOnly,
+  kPreferVirtual,
+  kVirtualOnly,
+};
+
 struct RendererConfig {
   //! Immutable configuration for path resolution.
   PathFinderConfig path_finder_config;
@@ -38,6 +44,15 @@ struct RendererConfig {
   //! This is not authored scene state. It selects runtime shadow budgets and
   //! quality behavior within the renderer.
   ShadowQualityTier shadow_quality_tier { ShadowQualityTier::kHigh };
+
+  //! Renderer-owned directional shadow family policy.
+  //!
+  //! This is not authored scene state. It selects whether the renderer should
+  //! keep using the conventional directional path or prefer the virtual
+  //! backend when that backend is available for the current view.
+  DirectionalShadowImplementationPolicy directional_shadow_policy {
+    DirectionalShadowImplementationPolicy::kConventionalOnly
+  };
 
 private:
   static constexpr std::size_t kDefaultMaxActiveViews = 8;

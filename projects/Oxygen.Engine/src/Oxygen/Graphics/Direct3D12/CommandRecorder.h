@@ -110,6 +110,9 @@ public:
    */
   auto ClearDepthStencilView(const Texture& texture, const NativeView& dsv,
     ClearFlags clear_flags, float depth, uint8_t stencil) -> void override;
+  auto ClearDepthStencilView(const Texture& texture, const NativeView& dsv,
+    ClearFlags clear_flags, float depth, uint8_t stencil,
+    std::span<const oxygen::Scissors> rects) -> void override;
 
   auto CopyBuffer(
     // ReSharper disable once CppRedundantQualifier

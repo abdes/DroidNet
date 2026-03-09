@@ -55,6 +55,8 @@ struct PreparedSceneFrame {
   std::span<const PartitionRange> partitions; // published ranges (may be empty)
   std::span<const glm::vec4>
     shadow_caster_bounding_spheres; // xyz=center, w=radius
+  std::span<const glm::vec4>
+    visible_receiver_bounding_spheres; // xyz=center, w=radius
 
   // Bindless SRV indices captured at ScenePrep finalization time
   // These must be captured immediately after Finalize to ensure consistency

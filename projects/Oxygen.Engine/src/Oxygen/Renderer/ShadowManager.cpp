@@ -8,21 +8,66 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Renderer/Internal/ConventionalShadowBackend.h>
+#include <Oxygen/Renderer/Internal/VirtualShadowMapBackend.h>
 #include <Oxygen/Renderer/ShadowManager.h>
 #include <Oxygen/Scene/Light/LightCommon.h>
 
 namespace oxygen::renderer {
 
+namespace {
+
+  auto RecordDirectionalImplementation(
+    std::unordered_map<std::uint64_t, engine::ShadowImplementationKind>&
+      history,
+    const ViewId view_id, const engine::ShadowImplementationKind implementation,
+    const std::uint32_t candidate_count) -> void
+  {
+    const std::uint64_t key = view_id.get();
+    const auto it = history.find(key);
+    if (it != history.end() && it->second == implementation) {
+      return;
+    }
+
+    history[key] = implementation;
+    switch (implementation) {
+    case engine::ShadowImplementationKind::kVirtual:
+      LOG_F(INFO,
+        "ShadowManager: view {} is using virtual directional shadows "
+        "(eligible_candidates={})",
+        key, candidate_count);
+      break;
+    case engine::ShadowImplementationKind::kConventional:
+      LOG_F(INFO,
+        "ShadowManager: view {} is using conventional directional shadows "
+        "(eligible_candidates={})",
+        key, candidate_count);
+      break;
+    default:
+      LOG_F(INFO,
+        "ShadowManager: view {} has no active directional shadow backend "
+        "(eligible_candidates={})",
+        key, candidate_count);
+      break;
+    }
+  }
+
+} // namespace
+
 ShadowManager::ShadowManager(const observer_ptr<Graphics> gfx,
   const observer_ptr<ProviderT> provider,
   const observer_ptr<CoordinatorT> inline_transfers,
-  const oxygen::ShadowQualityTier quality_tier)
+  const oxygen::ShadowQualityTier quality_tier,
+  const oxygen::DirectionalShadowImplementationPolicy directional_policy)
   : gfx_(gfx)
   , staging_provider_(provider)
   , inline_transfers_(inline_transfers)
   , shadow_quality_tier_(quality_tier)
+  , directional_policy_(directional_policy)
   , conventional_backend_(std::make_unique<internal::ConventionalShadowBackend>(
       gfx_, staging_provider_, inline_transfers_, shadow_quality_tier_))
+  , virtual_backend_(
+      std::make_unique<internal::VirtualShadowMapBackend>(gfx_.get(),
+        staging_provider_.get(), inline_transfers_.get(), shadow_quality_tier_))
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   DCHECK_NOTNULL_F(staging_provider_, "expecting valid staging provider");
@@ -37,12 +82,17 @@ auto ShadowManager::OnFrameStart(RendererTag tag,
   if (conventional_backend_) {
     conventional_backend_->OnFrameStart(tag, sequence, slot);
   }
+  if (virtual_backend_) {
+    virtual_backend_->OnFrameStart(tag, sequence, slot);
+  }
 }
 
 auto ShadowManager::PublishForView(const ViewId view_id,
   const engine::ViewConstants& view_constants, const LightManager& lights,
   const std::span<const glm::vec4> shadow_caster_bounds,
-  const SyntheticSunShadowInput* synthetic_sun_shadow) -> ShadowFramePublication
+  const std::span<const glm::vec4> visible_receiver_bounds,
+  const SyntheticSunShadowInput* synthetic_sun_shadow,
+  const std::chrono::milliseconds gpu_budget) -> ShadowFramePublication
 {
   std::vector<engine::DirectionalShadowCandidate> candidates_storage;
   const auto light_candidates = lights.GetDirectionalShadowCandidates();
@@ -66,15 +116,78 @@ auto ShadowManager::PublishForView(const ViewId view_id,
     });
   }
 
+  const bool virtual_eligible = virtual_backend_ != nullptr
+    && candidates_storage.size() == 1U
+    && directional_policy_
+      != oxygen::DirectionalShadowImplementationPolicy::kConventionalOnly;
+
+  if (virtual_eligible) {
+    const auto publication = virtual_backend_->PublishView(view_id,
+      view_constants, candidates_storage, shadow_caster_bounds,
+      visible_receiver_bounds, gpu_budget,
+      directional_policy_
+        != oxygen::DirectionalShadowImplementationPolicy::kVirtualOnly);
+    if (publication.shadow_instance_metadata_srv
+      != kInvalidShaderVisibleIndex) {
+      RecordDirectionalImplementation(last_view_directional_implementation_,
+        view_id, engine::ShadowImplementationKind::kVirtual,
+        static_cast<std::uint32_t>(candidates_storage.size()));
+      return publication;
+    }
+    if (directional_policy_
+      == oxygen::DirectionalShadowImplementationPolicy::kVirtualOnly) {
+      LOG_F(WARNING,
+        "ShadowManager: virtual-only directional policy could not publish "
+        "virtual directional shadows for view {}",
+        view_id.get());
+      RecordDirectionalImplementation(last_view_directional_implementation_,
+        view_id, engine::ShadowImplementationKind::kNone,
+        static_cast<std::uint32_t>(candidates_storage.size()));
+      return {};
+    }
+  } else if (directional_policy_
+    == oxygen::DirectionalShadowImplementationPolicy::kVirtualOnly) {
+    if (!candidates_storage.empty()) {
+      LOG_F(WARNING,
+        "ShadowManager: virtual-only directional policy could not activate "
+        "for view {} (eligible_candidates={})",
+        view_id.get(), candidates_storage.size());
+    }
+    RecordDirectionalImplementation(last_view_directional_implementation_,
+      view_id, engine::ShadowImplementationKind::kNone,
+      static_cast<std::uint32_t>(candidates_storage.size()));
+    return {};
+  }
+
   if (!conventional_backend_) {
     LOG_F(WARNING,
       "ShadowManager: no conventional backend is available for view {}",
       view_id.get());
+    RecordDirectionalImplementation(last_view_directional_implementation_,
+      view_id, engine::ShadowImplementationKind::kNone,
+      static_cast<std::uint32_t>(candidates_storage.size()));
     return {};
   }
 
-  return conventional_backend_->PublishView(
+  const auto publication = conventional_backend_->PublishView(
     view_id, view_constants, candidates_storage, shadow_caster_bounds);
+  if (publication.shadow_instance_metadata_srv != kInvalidShaderVisibleIndex) {
+    RecordDirectionalImplementation(last_view_directional_implementation_,
+      view_id, engine::ShadowImplementationKind::kConventional,
+      static_cast<std::uint32_t>(candidates_storage.size()));
+  } else {
+    RecordDirectionalImplementation(last_view_directional_implementation_,
+      view_id, engine::ShadowImplementationKind::kNone,
+      static_cast<std::uint32_t>(candidates_storage.size()));
+  }
+  return publication;
+}
+
+auto ShadowManager::MarkVirtualRenderPlanExecuted(const ViewId view_id) -> void
+{
+  if (virtual_backend_) {
+    virtual_backend_->MarkRendered(view_id);
+  }
 }
 
 auto ShadowManager::SetPublishedViewFrameBindingsSlot(const ViewId view_id,
@@ -83,11 +196,21 @@ auto ShadowManager::SetPublishedViewFrameBindingsSlot(const ViewId view_id,
   if (conventional_backend_) {
     conventional_backend_->SetPublishedViewFrameBindingsSlot(view_id, slot);
   }
+  if (virtual_backend_) {
+    virtual_backend_->SetPublishedViewFrameBindingsSlot(view_id, slot);
+  }
 }
 
 auto ShadowManager::TryGetFramePublication(const ViewId view_id) const noexcept
   -> const ShadowFramePublication*
 {
+  if (virtual_backend_) {
+    if (const auto* publication
+      = virtual_backend_->TryGetFramePublication(view_id);
+      publication != nullptr) {
+      return publication;
+    }
+  }
   return conventional_backend_
     ? conventional_backend_->TryGetFramePublication(view_id)
     : nullptr;
@@ -101,6 +224,13 @@ auto ShadowManager::TryGetRasterRenderPlan(const ViewId view_id) const noexcept
     : nullptr;
 }
 
+auto ShadowManager::TryGetVirtualRenderPlan(const ViewId view_id) const noexcept
+  -> const VirtualShadowRenderPlan*
+{
+  return virtual_backend_ ? virtual_backend_->TryGetRenderPlan(view_id)
+                          : nullptr;
+}
+
 auto ShadowManager::TryGetViewIntrospection(const ViewId view_id) const noexcept
   -> const ShadowViewIntrospection*
 {
@@ -109,11 +239,29 @@ auto ShadowManager::TryGetViewIntrospection(const ViewId view_id) const noexcept
     : nullptr;
 }
 
+auto ShadowManager::TryGetVirtualViewIntrospection(
+  const ViewId view_id) const noexcept -> const VirtualShadowViewIntrospection*
+{
+  return virtual_backend_ ? virtual_backend_->TryGetViewIntrospection(view_id)
+                          : nullptr;
+}
+
 auto ShadowManager::GetConventionalShadowDepthTexture() const noexcept
   -> const std::shared_ptr<graphics::Texture>&
 {
   if (conventional_backend_) {
     return conventional_backend_->GetDirectionalShadowTexture();
+  }
+
+  static const std::shared_ptr<graphics::Texture> kNullTexture {};
+  return kNullTexture;
+}
+
+auto ShadowManager::GetVirtualShadowDepthTexture() const noexcept
+  -> const std::shared_ptr<graphics::Texture>&
+{
+  if (virtual_backend_) {
+    return virtual_backend_->GetPhysicalPoolTexture();
   }
 
   static const std::shared_ptr<graphics::Texture> kNullTexture {};

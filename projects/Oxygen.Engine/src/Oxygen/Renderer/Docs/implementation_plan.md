@@ -8,6 +8,7 @@ Cross‑References: [bindless_conventions.md](bindless_conventions.md) |
 [scene_prep.md](scene_prep.md) | [shader-system.md](shader-system.md) |
 [passes/design-overview.md](passes/design-overview.md) |
 [lighting_overview.md](lighting_overview.md) | [shadows.md](shadows.md) |
+[virtual_shadow_map_backend.md](virtual_shadow_map_backend.md) |
 [override_slots.md](override_slots.md)
 
 Legend: `[ ]` pending | `[~]` in progress | `[x]` done
@@ -628,21 +629,143 @@ Execution note, March 9, 2026:
 
 ### 8.4 Virtual Shadow-Map Foundations
 
-- [ ] Implement `VirtualShadowMapBackend` resource ownership and lifecycle
-- [ ] Add physical page-pool allocation, page-table/indirection resources, and
-      residency/update buffers
-- [ ] Implement virtual shadow request generation, deterministic residency
-      policy, and fallback bookkeeping
-- [ ] Extend shader-side sampling helpers to dispatch through the
+- [x] Implement `VirtualShadowMapBackend` resource ownership and lifecycle
+- [x] Add the first virtual page-pool allocation, page-table/indirection
+      resources, and shading publication for directional products
+- [ ] Implement sparse virtual shadow request generation, deterministic
+      residency policy, and fallback bookkeeping
+- [x] Extend shader-side sampling helpers to dispatch through the
       family-independent shadow-product metadata
+
+Execution note, March 9, 2026:
+
+- The concrete backend spec for this phase now lives in
+  [virtual_shadow_map_backend.md](virtual_shadow_map_backend.md).
+- The locked first implementation shape is:
+  - directional virtual shadow maps first
+  - light-space clipmaps
+  - atlas-backed physical page pool
+  - budget-bounded CPU-visible-receiver-driven page selection for the current
+    visual-validation slice
+  - that slice activates only when the view resolves to exactly one active
+    directional shadow product; multi-directional views remain conventional
+  - virtual rasterization remains scheduled after main depth pre-pass so the
+    later receiver-driven sparse request path does not move again
+  - shared shading dispatch rooted in `ShadowInstanceMetadata`
+- Live code now includes:
+  - `VirtualShadowMapBackend`
+  - `VirtualShadowPageRasterPass`
+  - directional virtual metadata publication through `ShadowFrameBindings`
+  - renderer policy plumbing for conventional vs virtual directional selection
+  - engine-budget-aware VSM density control: the first slice now consumes
+    `FrameContext::BudgetStats.gpu_budget` and caps fixed clipmap density from
+    the active frame budget instead of treating the quality tier as an
+    unconditional runtime commitment
+  - deterministic budget fallback for `prefer-virtual`: when the estimated
+    fixed-residency clipmap work exceeds the current GPU frame budget, runtime
+    selection falls back to conventional directional shadows instead of forcing
+    the experimental VSM path to stall the frame
+  - CPU-visible-receiver-driven virtual page selection: the current slice now
+    uses `PreparedSceneFrame.visible_receiver_bounding_spheres` to request
+    per-clip pages from actual visible shadow receivers
+  - deterministic per-clip prioritization under the current page budget:
+    visible-receiver page requests are ranked by clip level, receiver overlap,
+    and proximity to the camera-relative clip center before raster jobs are
+    emitted
+  - centered resident-window fallback only when receiver-driven selection does
+    not request any pages
+  - cross-frame resident-page reuse for snapped-identical virtual plans:
+    unchanged page tables and clip metadata keep their resident pages, reuse
+    physical page allocations, and skip redundant page rerasterization
+  - resident-page reuse is now content-safe: light/caster input changes force
+    rerasterization even when snapped clip metadata and page requests remain
+    unchanged
+  - virtual pages now remain pending until the raster pass marks them rendered,
+    preventing same-frame republish from clearing the only raster jobs before
+    any virtual shadow content exists
+  - publishing the final `ViewFrameBindings` slot now patches the pending
+    virtual raster jobs consumed by the page-raster pass, not only the cached
+    source job list
+  - the virtual page raster pass now clears only the page rectangles being
+    rerasterized instead of clearing the full physical atlas every frame, so
+    resident-page reuse does not silently wipe valid shadow contents
+  - released virtual pages return their physical tiles to the backend free
+    list instead of pinning the initial working set forever
+  - shader-side invalid-page fallback to coarser clip levels so partially
+    resident virtual coverage remains continuous instead of dropping to fully
+    lit when the finer clip page is absent
+  - virtual comparison PCF clamped to page interiors so the first slice does
+    not bleed across unrelated atlas pages
+  - virtual pages now rasterize with page-local guard texels and sample only
+    the logical page interior, so PCF can consume valid page-local border data
+    instead of exposing visible seams at page boundaries
+  - virtual bias/filter sizing now derives from the logical interior texel size
+    after page guard reservation, not the full physical page resolution, so
+    large flat receivers do not retain projected striping from under-biased
+    virtual texels
+  - virtual page ownership stays on the un-biased receiver position, while
+    local in-page sampling and depth comparison follow the biased receiver
+    position so normal-offset bias can move the sample footprint without
+    destabilizing virtual addressing
+  - virtual comparison-PCF now applies receiver-plane depth bias per tap so
+    large-kernel filtering does not reuse one receiver depth for every sample
+  - virtual comparison-PCF now resolves neighboring taps through the virtual
+    page table instead of clamping the full kernel inside the center page, so
+    page-row/column boundaries can be filtered across page ownership changes
+  - virtual page rasterization now uses a clamped hardware slope-scaled depth
+    bias instead of a zero-slope rasterizer state, so the virtual path no
+    longer relies on receiver-side bias alone to fight regular self-shadow
+    moire on broad planes
+  - virtual page-local sampling now flips `y` to match the rendered atlas tile
+    orientation under D3D/Oxygen conventions
+  - virtual clip selection now blends from a fine clip level into its next
+    coarser neighbor near the outer clip boundary instead of hard-switching
+    across nested clipmap regions
+  - runtime now logs one backend-selection line when a view switches between
+    virtual, conventional, or no directional shadow backend so VSM activation
+    can be verified without per-frame spam
+- Sparse receiver-driven request generation, deduplication, and eviction remain
+  explicitly pending after that first slice.
+- The current request model is CPU-visible-receiver driven from ScenePrep
+  bounds, not yet the final downsampled depth/feedback-driven sparse request
+  pass described in the backend specification.
+- The first slice is still not default-safe for heavy scenes like Sponza.
+  Requests are now bounded and cross-frame reusable, but the path still lacks
+  the final depth/feedback-driven request generator, deduplication, dirty-page
+  tracking, and eviction. Until that sparse residency path lands,
+  demo/runtime validation must keep VSM opt-in rather than the default
+  directional path, and `prefer-virtual` must remain allowed to fall back to
+  conventional under current-frame GPU budget pressure.
+- Validation evidence for the first slice:
+  - `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:6 /p:Configuration=Debug /nologo`
+  - `msbuild out/build-vs/src/Oxygen/Engine/oxygen-engine.vcxproj /m:6 /p:Configuration=Debug /nologo`
+  - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:6 /p:Configuration=Debug /nologo`
+  - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:6 /p:Configuration=Debug /nologo`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
+  - current focused coverage includes:
+    - visible-receiver-driven virtual page selection
+    - resident-page reuse for identical virtual plans
+    - rerasterization when caster inputs change under identical snapped plans
+  - the first parallel validation attempt hit the known MSBuild shared-PDB
+    race in dependent projects; sequential reruns passed with no source
+    changes
+- Default demo policy was corrected back to conventional directional shadows.
+  `RenderScene` now exposes VSM through `--directional-shadows=prefer-virtual`
+  or `--directional-shadows=virtual-only`.
+- Status remains `in_progress` until visual validation confirms the first VSM
+  slice is rendering correctly.
 
 ### 8.5 Directional Virtual Shadow Path
 
-- [ ] Implement directional virtual coverage selection, residency, and page
-      rendering
-- [ ] Publish directional virtual addressing metadata and debug views
-- [ ] Integrate directional virtual shadow evaluation into forward opaque and
-      transparent lighting paths without a parallel lighting contract
+- [~] Implement initial directional virtual coverage selection, bounded
+      receiver-driven residency, and page rendering
+- [~] Publish directional virtual addressing metadata and first-pass debug
+      introspection
+- [~] Integrate directional virtual shadow evaluation into forward lighting
+      without a parallel lighting contract
+- [ ] Add sparse receiver-driven requests, deduplication, and residency
+      updates
+- [ ] Add directional virtual invalidation and debug tooling hardening
 
 ### 8.6 Local Light Shadow Path
 

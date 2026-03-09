@@ -15,6 +15,14 @@ using oxygen::graphics::Buffer;
 using oxygen::graphics::CommandRecorder;
 using oxygen::graphics::Texture;
 
+auto CommandRecorder::ClearDepthStencilView(const Texture& texture,
+  const NativeView& dsv, const ClearFlags clear_flags, const float depth,
+  const uint8_t stencil, const std::span<const oxygen::Scissors> /*rects*/)
+  -> void
+{
+  ClearDepthStencilView(texture, dsv, clear_flags, depth, stencil);
+}
+
 CommandRecorder::CommandRecorder(std::shared_ptr<CommandList> command_list,
   observer_ptr<CommandQueue> target_queue)
   : command_list_(std::move(command_list))

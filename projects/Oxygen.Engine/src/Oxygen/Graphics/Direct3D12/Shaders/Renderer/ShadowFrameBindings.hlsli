@@ -14,7 +14,11 @@ struct ShadowFrameBindings
     uint shadow_instance_metadata_slot;
     uint directional_shadow_metadata_slot;
     uint directional_shadow_texture_slot;
+    uint virtual_shadow_page_table_slot;
+    uint virtual_shadow_physical_pool_slot;
+    uint virtual_directional_shadow_metadata_slot;
     uint sun_shadow_index;
+    uint _reserved0;
 };
 
 static ShadowFrameBindings LoadShadowFrameBindings(uint slot)
@@ -23,7 +27,11 @@ static ShadowFrameBindings LoadShadowFrameBindings(uint slot)
     invalid_bindings.shadow_instance_metadata_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.directional_shadow_metadata_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.directional_shadow_texture_slot = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.virtual_shadow_page_table_slot = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.virtual_shadow_physical_pool_slot = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.virtual_directional_shadow_metadata_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.sun_shadow_index = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings._reserved0 = 0u;
 
     if (slot == K_INVALID_BINDLESS_INDEX || !BX_IN_GLOBAL_SRV(slot)) {
         return invalid_bindings;
