@@ -38,6 +38,7 @@
 #include <Oxygen/Renderer/Passes/ToneMapPass.h>
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowPageRasterPass.h>
+#include <Oxygen/Renderer/Passes/VirtualShadowRequestPass.h>
 #include <Oxygen/Renderer/Passes/WireframePass.h>
 #include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
 #include <Oxygen/Renderer/Pipeline/Internal/CompositionPlanner.h>
@@ -189,6 +190,8 @@ private:
     shadow_raster_pass_config;
   std::shared_ptr<engine::VirtualShadowPageRasterPass::Config>
     virtual_shadow_raster_pass_config;
+  std::shared_ptr<engine::VirtualShadowRequestPass::Config>
+    virtual_shadow_request_pass_config;
   std::shared_ptr<engine::ShaderPassConfig> shader_pass_config;
   std::shared_ptr<engine::WireframePassConfig> wireframe_pass_config;
   std::shared_ptr<engine::SkyPassConfig> sky_pass_config;
@@ -203,6 +206,8 @@ private:
   std::shared_ptr<engine::ConventionalShadowRasterPass> shadow_raster_pass;
   std::shared_ptr<engine::VirtualShadowPageRasterPass>
     virtual_shadow_raster_pass;
+  std::shared_ptr<engine::VirtualShadowRequestPass>
+    virtual_shadow_request_pass;
   std::shared_ptr<engine::ShaderPass> shader_pass;
   std::shared_ptr<engine::WireframePass> wireframe_pass;
   std::shared_ptr<engine::SkyPass> sky_pass;
@@ -521,6 +526,13 @@ auto ForwardPipeline::Impl::RunScenePasses(
       rc.RegisterPass<engine::VirtualShadowPageRasterPass>(
         virtual_shadow_raster_pass.get());
     }
+
+    if (virtual_shadow_request_pass) {
+      co_await virtual_shadow_request_pass->PrepareResources(rc, rec);
+      co_await virtual_shadow_request_pass->Execute(rc, rec);
+      rc.RegisterPass<engine::VirtualShadowRequestPass>(
+        virtual_shadow_request_pass.get());
+    }
   }
 
   // Sky must run after DepthPrePass so it can depth-test against the
@@ -833,6 +845,8 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
     = std::make_shared<p::ConventionalShadowRasterPass::Config>();
   virtual_shadow_raster_pass_config
     = std::make_shared<p::VirtualShadowPageRasterPass::Config>();
+  virtual_shadow_request_pass_config
+    = std::make_shared<p::VirtualShadowRequestPass::Config>();
   shader_pass_config = std::make_shared<p::ShaderPassConfig>();
   wireframe_pass_config = std::make_shared<p::WireframePassConfig>();
   sky_pass_config = std::make_shared<p::SkyPassConfig>();
@@ -855,6 +869,8 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
 
   auto gfx = engine->GetGraphics().lock();
   auto gfx_ptr = observer_ptr { gfx.get() };
+  virtual_shadow_request_pass = std::make_shared<p::VirtualShadowRequestPass>(
+    gfx_ptr, virtual_shadow_request_pass_config);
   light_culling_pass
     = std::make_shared<p::LightCullingPass>(gfx_ptr, light_culling_pass_config);
   tone_map_pass = std::make_shared<p::ToneMapPass>(tone_map_pass_config);

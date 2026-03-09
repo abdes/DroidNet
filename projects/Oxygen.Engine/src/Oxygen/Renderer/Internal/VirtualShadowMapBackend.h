@@ -25,6 +25,7 @@
 #include <Oxygen/Renderer/Types/DirectionalShadowCandidate.h>
 #include <Oxygen/Renderer/Types/ShadowFramePublication.h>
 #include <Oxygen/Renderer/Types/ShadowInstanceMetadata.h>
+#include <Oxygen/Renderer/Types/VirtualShadowRequestFeedback.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/Types/VirtualShadowRenderPlan.h>
 #include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
@@ -62,6 +63,9 @@ public:
   OXGN_RNDR_API auto MarkRendered(ViewId view_id) -> void;
   OXGN_RNDR_API auto SetPublishedViewFrameBindingsSlot(
     ViewId view_id, engine::BindlessViewFrameBindingsSlot slot) -> void;
+  OXGN_RNDR_API auto SubmitRequestFeedback(
+    ViewId view_id, VirtualShadowRequestFeedback feedback) -> void;
+  OXGN_RNDR_API auto ClearRequestFeedback(ViewId view_id) -> void;
 
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetFramePublication(
     ViewId view_id) const noexcept -> const ShadowFramePublication*;
@@ -77,7 +81,8 @@ private:
     std::uint32_t page_size_texels { 0U };
     std::uint32_t pages_per_clip_axis { 0U };
     std::uint32_t clip_level_count { 0U };
-    std::uint32_t total_pages { 0U };
+    std::uint32_t virtual_page_count { 0U };
+    std::uint32_t physical_tile_capacity { 0U };
     std::uint32_t atlas_tiles_per_axis { 0U };
     std::uint32_t atlas_resolution { 0U };
   };
@@ -126,6 +131,10 @@ private:
     VirtualShadowViewIntrospection introspection {};
   };
 
+  struct PendingRequestFeedback {
+    VirtualShadowRequestFeedback feedback {};
+  };
+
   ::oxygen::Graphics* gfx_ { nullptr };
   ::oxygen::engine::upload::StagingProvider* staging_provider_ { nullptr };
   ::oxygen::engine::upload::InlineTransfersCoordinator* inline_transfers_ {
@@ -148,6 +157,7 @@ private:
   std::vector<PhysicalTileAddress> free_physical_tiles_;
 
   std::unordered_map<ViewId, ViewCacheEntry> view_cache_;
+  std::unordered_map<ViewId, PendingRequestFeedback> request_feedback_;
 
   OXGN_RNDR_API auto BuildPublicationKey(
     const engine::ViewConstants& view_constants,

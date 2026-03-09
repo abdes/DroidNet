@@ -108,6 +108,26 @@ Rationale:
 These values remain quality-tier configurable, but the page addressing contract
 assumes a fixed page interior size within a run.
 
+Current runtime note:
+
+- the live implementation no longer hard clamps physical page size to `256`
+  texels
+- page size is now capped by both quality tier and atlas budget, so sparse
+  page grids can retain more authored directional resolution without allowing
+  the physical atlas to grow without bound
+- ultra quality now grants a larger physical atlas budget at 16 ms frame
+  budgets so fine virtual pages can carry more texels before residency becomes
+  the limiting factor
+- the live implementation now also decouples virtual address-space density from
+  physical residency capacity:
+  - higher tiers use more virtual clip levels and denser page grids than the
+    initial validation slice
+  - the physical atlas is budget-bounded and no longer sized as if every
+    virtual page had to be resident simultaneously
+  - when virtual clip count exceeds authored conventional cascade count, the
+    extra clip boundaries are generated from the practical split policy instead
+    of indexing past authored cascade distances
+
 ### 3.3 Coverage selection
 
 For each directional virtual product:
@@ -311,6 +331,8 @@ Current intermediate behavior:
 - `VirtualShadowMapBackend` computes one camera-relative clipmap grid per level
 - visible receiver bounds from `PreparedSceneFrame` are projected into that
   grid to request pages per clip level
+- explicit one-shot per-view request feedback can override that CPU request
+  source when the renderer provides compatible clip/page coordinates
 - requested pages are prioritized by clip level, receiver overlap, and
   proximity to the camera-relative clip center under the current page budget
 - the shader-visible page table is populated only for the selected resident
@@ -331,10 +353,10 @@ This preserves the final top-level renderer/shader contracts:
 
 What remains in progress after that slice:
 
-- downsampled depth/feedback-driven sparse page requests
-- GPU-side request deduplication
-- partial page updates
-- deterministic eviction under residency pressure
+- live residency resolve/update still happens on the CPU after feedback
+  readback; there is not yet a GPU-side residency resolve/update pass
+- partial page updates beyond the current bounded raster planning
+- deterministic eviction under residency pressure at the full final model
 
 The first slice is deliberately not presented as a complete sparse-residency
 implementation.
@@ -386,8 +408,19 @@ Recommended initial sparse-residency method:
 - a compact pass then scans requested bits into a linear request list
 
 This is deterministic and avoids append-buffer duplicates exploding under dense
-geometry. It is the next step after the fixed-residency visual-validation
-slice, not part of that initial slice.
+geometry.
+
+Current live note:
+
+- `VirtualShadowRequestPass` now performs the first real runtime request
+  generation step after `DepthPrePass`
+- it writes a GPU deduplicated request-bit mask and copies it into a
+  per-frame-slot readback buffer
+- on safe slot reuse, the CPU decodes that mask and submits one-shot request
+  feedback to `VirtualShadowMapBackend`
+- until the first safe feedback arrives for a view, or if no compatible
+  feedback is available, the backend falls back to the existing CPU
+  visible-receiver request path
 
 ## 8. Residency and Invalidation
 
@@ -563,8 +596,12 @@ Current runtime note:
   path and fall back to conventional directional shadows when the estimated
   virtual work exceeds the current frame GPU budget
 - page requests are currently generated from
-  `PreparedSceneFrame.visible_receiver_bounding_spheres`, prioritized per clip,
-  and clamped by the current frame budget
+  runtime depth feedback when available; otherwise they fall back to
+  `PreparedSceneFrame.visible_receiver_bounding_spheres`, are prioritized per
+  clip, and are clamped by the current frame budget
+- `VirtualShadowRequestPass` is now the live runtime producer for that feedback
+  path; it runs after `DepthPrePass`, scans the main depth buffer, and submits
+  one-shot request feedback through a slot-safe readback path
 - a deterministic centered resident window is only used as fallback when the
   receiver-driven selection requests no pages
 - snapped-identical clip metadata and page tables reuse resident physical pages
@@ -649,6 +686,27 @@ Only after the above is stable:
   directional products
 - then expand to spot/point virtual products
 
+### 13.1 Next Milestone
+
+The next implementation milestone is:
+
+`Directional VSM Production Candidate`
+
+This milestone is complete only when:
+
+- depth/feedback-driven request generation is live
+- request deduplication and budgeted page scheduling are live
+- residency reuse/invalidation/eviction are deterministic and content-safe
+- `virtual-only` is stable under camera rotation/translation in validation
+  scenes including Sponza
+- directional VSM edge quality is no longer visibly below the conventional
+  directional path in normal validation scenes
+- the backend exposes the required debug surfaces for request, residency,
+  fallback, and budget diagnosis
+
+This is the correct next bar before any expansion to local-light virtual
+shadows.
+
 Implementation status, March 9, 2026:
 
 - `in_progress`
@@ -672,6 +730,12 @@ Implementation status, March 9, 2026:
     is invalid
   - page-interior clamped comparison filtering so atlas neighbors do not bleed
     into the current validation slice
+  - `VirtualShadowRequestPass`, which now scans the main depth buffer after
+    `DepthPrePass`, writes a deduplicated GPU request-bit mask, and submits
+    one-shot request feedback to `VirtualShadowMapBackend` through a slot-safe
+    readback seam
+  - CPU visible-receiver request planning as fallback when compatible request
+    feedback is not yet available for a view
 - Validation evidence:
   - `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:6 /p:Configuration=Debug /nologo`
   - `msbuild out/build-vs/src/Oxygen/Graphics/Direct3D12/Shaders/oxygen-graphics-direct3d12_shaders.vcxproj /m:6 /p:Configuration=Debug /nologo`
@@ -681,7 +745,8 @@ Implementation status, March 9, 2026:
   - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
 - Remaining gap:
   - visual validation
-  - final depth/feedback-driven request generation and deduplication
+  - final GPU residency-resolve/update after the new depth/feedback-driven
+    request producer
   - dirty-page tracking and eviction
   - invalidation/debug tooling hardening
   - default-scene viability for large content; until the final sparse

@@ -75,6 +75,7 @@ set(
   "Passes/ToneMapPass.h"
   "Passes/TransparentPass.h"
   "Passes/VirtualShadowPageRasterPass.h"
+  "Passes/VirtualShadowRequestPass.h"
   "Passes/WireframePass.h"
   "Pipeline/CompositionView.h"
   "Pipeline/ForwardPipeline.h"
@@ -123,6 +124,7 @@ set(
   "Types/SyntheticSunData.h"
   "Types/ViewColorData.h"
   "Types/ViewFrameBindings.h"
+  "Types/VirtualShadowRequestFeedback.h"
   "Types/VirtualShadowRenderPlan.h"
   "Upload/Errors.h"
 )
@@ -177,6 +179,7 @@ set(
   "Passes/ToneMapPass.cpp"
   "Passes/TransparentPass.cpp"
   "Passes/VirtualShadowPageRasterPass.cpp"
+  "Passes/VirtualShadowRequestPass.cpp"
   "Passes/WireframePass.cpp"
   "Pipeline/ForwardPipeline.cpp"
   "Pipeline/Internal/CompositionPlanner.cpp"

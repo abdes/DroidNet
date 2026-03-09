@@ -737,6 +737,10 @@ Family-specific notes:
   resources.
 - Virtual shadow maps use depth comparison after resolving physical-page and
   page-table indirection.
+- Virtual directional shadows should also scale physical page size from quality
+  tier and atlas budget. Sparse page grids should preserve more authored fine
+  resolution when affordable, instead of flattening all quality tiers to one
+  small physical page size.
 
 ### 10.2 Bias policy
 
@@ -773,6 +777,15 @@ primary acne mitigation mechanism.
 The system is designed so baseline PCF can later evolve into larger kernels or
 penumbra-aware filtering without reauthoring light data or replacing the shadow
 resource families.
+
+For the current virtual directional runtime, quality no longer assumes a
+physical atlas sized for full residency of every virtual page:
+
+- higher tiers use more virtual clip levels and denser page grids
+- the physical pool stays budget-bounded and relies on sparse residency instead
+  of mirroring the full virtual address space
+- ultra virtual directional shadows now allow a larger physical atlas so fine
+  pages are no longer capped by the previous `4096` atlas limit
 
 ## 11. Quality Tiers and Policy
 
@@ -955,8 +968,11 @@ Implementation status, March 9, 2026:
 - retained clean virtual pages are cache-only and are no longer left mapped in
   the current frame page table, to avoid stale fine-page coverage causing
   view-angle instability
+- A runtime depth-driven request producer now exists, but it still feeds the
+  backend through a slot-safe one-frame readback seam and the final GPU
+  residency-resolve/update path is still missing.
 - Because that first slice is still missing the final feedback-driven sparse
-  residency path, it is not the default-safe path for heavy scenes.
+  residency/update path, it is not the default-safe path for heavy scenes.
   Large-scene demos/runtime configurations must keep conventional directional
   shadows as the default until sparse VSM residency is implemented.
 
@@ -1000,16 +1016,25 @@ Implementation status, March 9, 2026:
     receivers inherit page-row striping from address drift
   - shader fallback from invalid fine virtual pages to valid coarser clip
     levels so partially resident windows remain continuous
+  - `VirtualShadowRequestPass`, which now scans main depth after
+    `DepthPrePass`, writes a deduplicated GPU request-bit mask, and submits
+    one-shot per-view request feedback back into `ShadowManager` on safe frame
+    slot reuse
+  - CPU visible-receiver request planning now acts as fallback when that
+    feedback is not yet available, rather than being the only runtime request
+    source
 - Validation evidence:
   - `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:6 /p:Configuration=Debug /nologo`
+  - `msbuild out/build-vs/src/Oxygen/Graphics/Direct3D12/Shaders/oxygen-graphics-direct3d12_shaders.vcxproj /m:6 /p:Configuration=Debug /nologo`
   - `msbuild out/build-vs/src/Oxygen/Engine/oxygen-engine.vcxproj /m:6 /p:Configuration=Debug /nologo`
   - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:6 /p:Configuration=Debug /nologo`
   - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:6 /p:Configuration=Debug /nologo`
   - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
 - Remaining gap to exit this first slice:
   - visual validation in `RenderScene`
-  - final depth/feedback-driven sparse receiver requests, deduplication, and
-    eviction
+  - final GPU residency-resolve/update after the new depth/feedback-driven
+    request producer
+  - broader request/update deduplication and eviction hardening
   - broader directional virtual invalidation/debug tooling
   - large-scene viability in `virtual-only`, which remains intentionally harsh
     until sparse residency exists
@@ -1020,6 +1045,18 @@ Implementation status, March 9, 2026:
   invalidation, and tooling
 - Preserve the same directional shadow-product identity and shared metadata
   contract used by the conventional path
+
+Next real milestone:
+
+- `Directional VSM Production Candidate`
+  - feedback/depth-driven request generation with no steady-state dependency on
+    CPU visible-receiver fallback
+  - request deduplication and budgeted page scheduling in the live residency
+    path
+  - deterministic content-safe residency / invalidation / eviction
+  - stable `virtual-only` behavior in validation scenes
+  - edge quality no longer materially below conventional directional shadows
+  - required VSM debug/validation surfaces in place
 
 ### 15.6 Phase 6: Spot-light shadows on shared contracts
 
