@@ -750,15 +750,17 @@ Bias is authored and runtime-augmented.
 - Debug tooling must expose effective bias values so acne and peter-panning can
   be diagnosed from live captures.
 
-For the current conventional directional path, do not enable raster
-slope-scaled depth bias while the receiver path already applies slope-aware
-normal/light-direction bias. That combination over-biases contact regions and
-promotes detached shadows.
+For the current conventional directional path, keep a small, tightly clamped
+raster slope-scaled depth bias enabled alongside the receiver-side
+slope-aware normal/light-direction bias. The problem is not the existence of
+both terms; the problem is leaving raster slope bias at zero and forcing the
+receiver path to carry all slope handling, or letting raster slope bias grow
+uncontrolled and detach contact shadows.
 
 For the current conventional directional shadow path, the bias stack is:
 
 - raster depth bias in the shadow pass
-- optional raster bias clamp
+- raster slope-scaled bias with a tight clamp
 - receiver-side normal bias
 - receiver-side constant/light-direction bias
 

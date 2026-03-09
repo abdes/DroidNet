@@ -556,11 +556,15 @@ Execution note, March 9, 2026:
   when a projection is genuinely invalid and neighbor-only blend at cascade
   handoff. This removes view-angle-dependent cascade hopping from the earlier
   first-valid search while preserving continuity where adjacent cascades overlap.
-- The seventeenth hardening slice is now in code: conventional directional
-  shadows no longer stack raster slope-scaled bias on top of the existing
-  receiver-side slope-aware normal/light-direction bias. The active policy now
-  keeps constant raster depth bias and receiver-side bias, avoiding the
-  previous double-bias interaction that could detach contact shadows.
+- The seventeenth hardening slice originally disabled conventional raster
+  slope-scaled bias to avoid double-bias detachment. That status was too
+  aggressive and is now superseded.
+- The eighteenth hardening slice is now in code: conventional directional
+  shadows keep constant raster depth bias, add a small tightly clamped raster
+  slope-scaled bias, and retain the receiver-side slope-aware
+  normal/light-direction bias. This matches the same layered bias policy now
+  proven necessary in the virtual path, without reopening detached contact
+  shadows.
 - Manual validation in `RenderScene` and `Sponza` was used to close the
   remaining production-quality gaps after the automated build/test coverage
   below.
