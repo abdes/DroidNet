@@ -933,6 +933,8 @@ Implementation status, March 9, 2026:
 - Forward lighting dispatch now starts from `ShadowInstanceMetadata`.
 - Conventional shadow publication now invalidates from shadow-relevant input
   hashes rather than `ViewId` alone.
+  - this now includes prepared shadow-caster content, not only coarse caster
+    bounds
 - Focused automated coverage exists for the implemented remediation seams.
 
 ### 15.4 Phase 4: Virtual shadow-map foundations
@@ -946,8 +948,13 @@ Implementation status, March 9, 2026:
 - First runnable slice for visual validation uses a clipmap-backed virtual
   address space with bounded receiver-driven page requests while preserving the
   final backend/resource/shader contracts
-- Sparse receiver-driven requests, deduplication, and eviction remain
-  explicitly `in_progress` after that first slice
+- Sparse receiver-driven requests are in place, and clean unrequested pages
+  now remain resident until deterministic tile eviction is required; full
+  deduplication, dirty-page tracking, and the final eviction model remain
+  explicitly `in_progress`
+- retained clean virtual pages are cache-only and are no longer left mapped in
+  the current frame page table, to avoid stale fine-page coverage causing
+  view-angle instability
 - Because that first slice is still missing the final feedback-driven sparse
   residency path, it is not the default-safe path for heavy scenes.
   Large-scene demos/runtime configurations must keep conventional directional
@@ -978,6 +985,9 @@ Implementation status, March 9, 2026:
   - content-safe invalidation for resident-page reuse: light/caster input
     changes now rerasterize requested virtual pages even when snapped clip
     metadata stays unchanged
+  - virtual reuse invalidation now includes prepared shadow-caster content so
+    moving or rotating casters invalidate even when coarse caster bounds stay
+    similar
   - allocated virtual pages are not considered valid until the virtual page
     raster pass completes; same-frame republishes preserve pending raster work
     instead of dropping the only page-render jobs

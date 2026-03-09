@@ -615,6 +615,9 @@ Execution note, March 9, 2026:
   directional conventional payloads inside shadow helpers.
 - Conventional shadow publication now invalidates from shadow-relevant hashed
   inputs rather than `ViewId` alone.
+  - this now includes a prepared shadow-caster content hash derived from
+    shadow-caster draw metadata plus world transforms, not only coarse caster
+    bounds
 - Focused automated coverage now exists for:
   - directional publication plus raster-plan publication
   - synthetic-sun publication
@@ -684,6 +687,9 @@ Execution note, March 9, 2026:
   - resident-page reuse is now content-safe: light/caster input changes force
     rerasterization even when snapped clip metadata and page requests remain
     unchanged
+  - VSM reuse invalidation now includes a prepared shadow-caster content hash
+    so moving/rotating casters that keep similar coarse bounds do not leave
+    stale virtual shadows behind
   - virtual pages now remain pending until the raster pass marks them rendered,
     preventing same-frame republish from clearing the only raster jobs before
     any virtual shadow content exists
@@ -720,6 +726,18 @@ Execution note, March 9, 2026:
     bias instead of a zero-slope rasterizer state, so the virtual path no
     longer relies on receiver-side bias alone to fight regular self-shadow
     moire on broad planes
+  - resident virtual pages now carry explicit residency state
+    (`PendingRender` / `ResidentClean`) plus `last_touched_frame`, and the
+    live introspection surface publishes resident/clean/pending page counts
+    instead of treating residency as one opaque validity boolean
+  - clean unrequested virtual pages now stay resident across publishes and are
+    only evicted when a new request needs their physical tile; current
+    eviction ordering is deterministic per view: unrequested pages only,
+    coarser clip first, then oldest `last_touched_frame`, then stable page
+    index
+  - retained clean pages are now cache-only; they no longer stay mapped in the
+    current frame page table, and introspection publishes `mapped_page_count`
+    separately from total resident pages
   - virtual page-local sampling now flips `y` to match the rendered atlas tile
     orientation under D3D/Oxygen conventions
   - virtual clip selection now blends from a fine clip level into its next
@@ -728,15 +746,17 @@ Execution note, March 9, 2026:
   - runtime now logs one backend-selection line when a view switches between
     virtual, conventional, or no directional shadow backend so VSM activation
     can be verified without per-frame spam
-- Sparse receiver-driven request generation, deduplication, and eviction remain
-  explicitly pending after that first slice.
+- Sparse receiver-driven request generation is in place, but deduplication,
+  dirty-page tracking, and full eviction policy remain explicitly pending
+  after that first slice.
 - The current request model is CPU-visible-receiver driven from ScenePrep
   bounds, not yet the final downsampled depth/feedback-driven sparse request
   pass described in the backend specification.
 - The first slice is still not default-safe for heavy scenes like Sponza.
   Requests are now bounded and cross-frame reusable, but the path still lacks
-  the final depth/feedback-driven request generator, deduplication, dirty-page
-  tracking, and eviction. Until that sparse residency path lands,
+  the final depth/feedback-driven request generator, deduplication,
+  dirty-page tracking, and full eviction model. Until that sparse residency
+  path lands,
   demo/runtime validation must keep VSM opt-in rather than the default
   directional path, and `prefer-virtual` must remain allowed to fall back to
   conventional under current-frame GPU budget pressure.

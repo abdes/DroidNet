@@ -15,6 +15,13 @@
 
 namespace oxygen::renderer {
 
+enum class VirtualPageResidencyState : std::uint8_t {
+  kUnmapped = 0U,
+  kResidentClean = 1U,
+  kResidentDirty = 2U,
+  kPendingRender = 3U,
+};
+
 struct VirtualShadowRasterJob {
   std::uint32_t shadow_instance_index { 0xFFFFFFFFU };
   std::uint32_t payload_index { 0xFFFFFFFFU };
@@ -36,6 +43,11 @@ struct VirtualShadowViewIntrospection {
   std::span<const engine::DirectionalVirtualShadowMetadata>
     directional_virtual_metadata {};
   std::span<const VirtualShadowRasterJob> virtual_raster_jobs {};
+  std::uint32_t mapped_page_count { 0U };
+  std::uint32_t resident_page_count { 0U };
+  std::uint32_t clean_page_count { 0U };
+  std::uint32_t dirty_page_count { 0U };
+  std::uint32_t pending_page_count { 0U };
 };
 
 } // namespace oxygen::renderer

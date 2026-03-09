@@ -80,7 +80,8 @@ public:
     std::span<const glm::vec4> shadow_caster_bounds = {},
     std::span<const glm::vec4> visible_receiver_bounds = {},
     const SyntheticSunShadowInput* synthetic_sun_shadow = nullptr,
-    std::chrono::milliseconds gpu_budget = std::chrono::milliseconds(16))
+    std::chrono::milliseconds gpu_budget = std::chrono::milliseconds(16),
+    std::uint64_t shadow_caster_content_hash = 0U)
     -> ShadowFramePublication;
   OXGN_RNDR_API auto MarkVirtualRenderPlanExecuted(ViewId view_id) -> void;
   OXGN_RNDR_API auto SetPublishedViewFrameBindingsSlot(

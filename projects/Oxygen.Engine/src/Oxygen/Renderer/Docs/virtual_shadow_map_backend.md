@@ -339,6 +339,20 @@ What remains in progress after that slice:
 The first slice is deliberately not presented as a complete sparse-residency
 implementation.
 
+Current backend note:
+
+- runtime now tracks explicit resident-page state (`PendingRender` and
+  `ResidentClean`) plus `last_touched_frame`; this replaces the old single
+  validity boolean and gives the backend the right ownership surface for later
+  dirty-page and eviction work
+- clean unrequested pages now remain resident across publishes and are evicted
+  only when a new request needs their tile; current eviction ordering is
+  deterministic per view: unrequested pages only, coarser clip first, then
+  oldest `last_touched_frame`, then stable page index
+- retained clean pages are cache-only and must not remain mapped in the current
+  frame page table; active mapped coverage is now tracked separately from total
+  resident pages
+
 The sparse request generator is receiver-driven.
 
 Inputs:
@@ -558,6 +572,9 @@ Current runtime note:
 - resident-page reuse is only content-valid when directional shadow inputs and
   caster inputs are unchanged; otherwise the backend reuses physical tiles but
   rerasterizes the requested pages
+- caster-input equality must not rely on coarse bounds alone; the live runtime
+  invalidation key also includes a prepared shadow-caster content hash derived
+  from shadow-caster draw metadata and world transforms
 - allocated physical tiles are not treated as valid shadow contents until the
   virtual page-raster pass completes; same-frame republishes preserve pending
   raster jobs instead of incorrectly clearing them

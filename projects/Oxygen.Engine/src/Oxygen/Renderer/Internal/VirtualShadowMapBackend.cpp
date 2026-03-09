@@ -234,6 +234,7 @@ VirtualShadowMapBackend::~VirtualShadowMapBackend() { ReleasePhysicalPool(); }
 auto VirtualShadowMapBackend::OnFrameStart(RendererTag /*tag*/,
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
+  frame_sequence_ = sequence;
   shadow_instance_buffer_.OnFrameStart(sequence, slot);
   directional_virtual_metadata_buffer_.OnFrameStart(sequence, slot);
   virtual_page_table_buffer_.OnFrameStart(sequence, slot);
@@ -245,7 +246,8 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
     directional_candidates,
   const std::span<const glm::vec4> shadow_caster_bounds,
   const std::span<const glm::vec4> visible_receiver_bounds,
-  const std::chrono::milliseconds gpu_budget, const bool allow_budget_fallback)
+  const std::chrono::milliseconds gpu_budget, const bool allow_budget_fallback,
+  const std::uint64_t shadow_caster_content_hash)
   -> ShadowFramePublication
 {
   if (directional_candidates.size() != 1U) {
@@ -260,7 +262,7 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
   }
 
   const auto key = BuildPublicationKey(view_constants, directional_candidates,
-    shadow_caster_bounds, visible_receiver_bounds);
+    shadow_caster_bounds, visible_receiver_bounds, shadow_caster_content_hash);
 
   ViewCacheEntry state {};
   state.key = key;
@@ -330,7 +332,9 @@ auto VirtualShadowMapBackend::MarkRendered(const ViewId view_id) -> void
     if (const auto resident_it
       = it->second.resident_pages.find(global_page_index);
       resident_it != it->second.resident_pages.end()) {
-      resident_it->second.contents_valid = true;
+      resident_it->second.state
+        = renderer::VirtualPageResidencyState::kResidentClean;
+      resident_it->second.last_touched_frame = frame_sequence_;
     }
   }
   it->second.pending_raster_jobs.clear();
@@ -387,7 +391,8 @@ auto VirtualShadowMapBackend::BuildPublicationKey(
   const std::span<const engine::DirectionalShadowCandidate>
     directional_candidates,
   const std::span<const glm::vec4> shadow_caster_bounds,
-  const std::span<const glm::vec4> visible_receiver_bounds) const
+  const std::span<const glm::vec4> visible_receiver_bounds,
+  const std::uint64_t shadow_caster_content_hash) const
   -> PublicationKey
 {
   using namespace shadow_detail;
@@ -405,6 +410,7 @@ auto VirtualShadowMapBackend::BuildPublicationKey(
   key.candidate_hash = HashSpan(directional_candidates);
   key.caster_hash = HashSpan(shadow_caster_bounds);
   key.receiver_hash = HashSpan(visible_receiver_bounds);
+  key.shadow_content_hash = shadow_caster_content_hash;
   return key;
 }
 
@@ -420,6 +426,29 @@ auto VirtualShadowMapBackend::RefreshViewExports(ViewCacheEntry& state) const
   state.introspection.directional_virtual_metadata
     = state.directional_virtual_metadata;
   state.introspection.virtual_raster_jobs = state.raster_jobs;
+  state.introspection.mapped_page_count = static_cast<std::uint32_t>(
+    std::count_if(state.page_table_entries.begin(), state.page_table_entries.end(),
+      [](const std::uint32_t entry) { return entry != 0U; }));
+  state.introspection.resident_page_count = static_cast<std::uint32_t>(
+    state.resident_pages.size());
+  state.introspection.clean_page_count = 0U;
+  state.introspection.dirty_page_count = 0U;
+  state.introspection.pending_page_count = 0U;
+  for (const auto& [_, resident_page] : state.resident_pages) {
+    switch (resident_page.state) {
+    case renderer::VirtualPageResidencyState::kResidentClean:
+      ++state.introspection.clean_page_count;
+      break;
+    case renderer::VirtualPageResidencyState::kResidentDirty:
+      ++state.introspection.dirty_page_count;
+      break;
+    case renderer::VirtualPageResidencyState::kPendingRender:
+      ++state.introspection.pending_page_count;
+      break;
+    case renderer::VirtualPageResidencyState::kUnmapped:
+      break;
+    }
+  }
 }
 
 auto VirtualShadowMapBackend::CanReuseResidentPages(
@@ -427,7 +456,8 @@ auto VirtualShadowMapBackend::CanReuseResidentPages(
   -> bool
 {
   if (previous.key.candidate_hash != current.key.candidate_hash
-    || previous.key.caster_hash != current.key.caster_hash) {
+    || previous.key.caster_hash != current.key.caster_hash
+    || previous.key.shadow_content_hash != current.key.shadow_content_hash) {
     return false;
   }
 
@@ -610,6 +640,64 @@ auto VirtualShadowMapBackend::AllocatePhysicalTile()
 
   auto tile = free_physical_tiles_.back();
   free_physical_tiles_.pop_back();
+  return tile;
+}
+
+auto VirtualShadowMapBackend::AcquirePhysicalTile(
+  ViewCacheEntry& state, const std::uint32_t pages_per_level)
+  -> std::optional<PhysicalTileAddress>
+{
+  if (const auto free_tile = AllocatePhysicalTile(); free_tile.has_value()) {
+    return free_tile;
+  }
+
+  auto eviction_it = state.resident_pages.end();
+  std::uint32_t eviction_page_index = 0U;
+  for (auto it = state.resident_pages.begin(); it != state.resident_pages.end();
+    ++it) {
+    if (it->second.last_requested_frame == frame_sequence_) {
+      continue;
+    }
+
+    if (eviction_it == state.resident_pages.end()) {
+      eviction_it = it;
+      eviction_page_index = it->first;
+      continue;
+    }
+
+    const auto current_clip_level = it->first / pages_per_level;
+    const auto best_clip_level = eviction_page_index / pages_per_level;
+    if (current_clip_level != best_clip_level) {
+      if (current_clip_level > best_clip_level) {
+        eviction_it = it;
+        eviction_page_index = it->first;
+      }
+      continue;
+    }
+
+    if (it->second.last_touched_frame != eviction_it->second.last_touched_frame) {
+      if (it->second.last_touched_frame < eviction_it->second.last_touched_frame) {
+        eviction_it = it;
+        eviction_page_index = it->first;
+      }
+      continue;
+    }
+
+    if (it->first < eviction_page_index) {
+      eviction_it = it;
+      eviction_page_index = it->first;
+    }
+  }
+
+  if (eviction_it == state.resident_pages.end()) {
+    return std::nullopt;
+  }
+
+  const auto tile = eviction_it->second.tile;
+  if (eviction_page_index < state.page_table_entries.size()) {
+    state.page_table_entries[eviction_page_index] = 0U;
+  }
+  state.resident_pages.erase(eviction_it);
   return tile;
 }
 
@@ -1002,7 +1090,8 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   reusable_clip_contents.fill(false);
   const bool shadow_contents_unchanged = previous_state != nullptr
     && previous_state->key.candidate_hash == state.key.candidate_hash
-    && previous_state->key.caster_hash == state.key.caster_hash;
+    && previous_state->key.caster_hash == state.key.caster_hash
+    && previous_state->key.shadow_content_hash == state.key.shadow_content_hash;
   if (shadow_contents_unchanged
     && previous_state->directional_virtual_metadata.size() == 1U) {
     const auto& previous_metadata
@@ -1040,6 +1129,15 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
 
     for (const auto& [virtual_page_index, resident_page] :
       previous_state->resident_pages) {
+      const auto clip_index = virtual_page_index / pages_per_level;
+      const bool retain_clean_page = !requested_pages.contains(virtual_page_index)
+        && clip_index < clip_level_count && resident_page.ContentsValid()
+        && shadow_contents_unchanged && reusable_clip_contents[clip_index];
+      if (retain_clean_page) {
+        state.resident_pages.insert_or_assign(virtual_page_index, resident_page);
+        continue;
+      }
+
       if (!requested_pages.contains(virtual_page_index)) {
         ReleasePhysicalTile(resident_page.tile);
       }
@@ -1076,25 +1174,37 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
             = previous_state->resident_pages.find(global_page_index);
             previous_resident_it != previous_state->resident_pages.end()) {
             resident_page = previous_resident_it->second;
-            needs_raster = !resident_page.contents_valid
+            needs_raster = !resident_page.ContentsValid()
               || !reusable_clip_contents[clip_index];
           } else {
-            const auto allocated_tile = AllocatePhysicalTile();
+            const auto allocated_tile
+              = AcquirePhysicalTile(state, pages_per_level);
             if (!allocated_tile.has_value()) {
               continue;
             }
             resident_page.tile = *allocated_tile;
-            resident_page.contents_valid = false;
+            resident_page.state
+              = renderer::VirtualPageResidencyState::kPendingRender;
+            resident_page.last_touched_frame = frame_sequence_;
+            resident_page.last_requested_frame = frame_sequence_;
           }
         } else {
-          const auto allocated_tile = AllocatePhysicalTile();
+          const auto allocated_tile
+            = AcquirePhysicalTile(state, pages_per_level);
           if (!allocated_tile.has_value()) {
             continue;
           }
           resident_page.tile = *allocated_tile;
-          resident_page.contents_valid = false;
+          resident_page.state
+            = renderer::VirtualPageResidencyState::kPendingRender;
+          resident_page.last_touched_frame = frame_sequence_;
+          resident_page.last_requested_frame = frame_sequence_;
         }
-        resident_page.contents_valid = !needs_raster;
+        resident_page.state = needs_raster
+          ? renderer::VirtualPageResidencyState::kPendingRender
+          : renderer::VirtualPageResidencyState::kResidentClean;
+        resident_page.last_touched_frame = frame_sequence_;
+        resident_page.last_requested_frame = frame_sequence_;
         state.resident_pages.insert_or_assign(global_page_index, resident_page);
         state.page_table_entries[global_page_index] = PackPageTableEntry(
           resident_page.tile.tile_x, resident_page.tile.tile_y);
