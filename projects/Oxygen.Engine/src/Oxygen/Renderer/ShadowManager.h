@@ -27,6 +27,7 @@
 #include <Oxygen/Renderer/Types/RasterShadowRenderPlan.h>
 #include <Oxygen/Renderer/Types/ShadowFramePublication.h>
 #include <Oxygen/Renderer/Types/ShadowInstanceMetadata.h>
+#include <Oxygen/Renderer/Types/VirtualShadowRequestFeedback.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/Types/VirtualShadowRenderPlan.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -86,6 +87,9 @@ public:
   OXGN_RNDR_API auto MarkVirtualRenderPlanExecuted(ViewId view_id) -> void;
   OXGN_RNDR_API auto SetPublishedViewFrameBindingsSlot(
     ViewId view_id, engine::BindlessViewFrameBindingsSlot slot) -> void;
+  OXGN_RNDR_API auto SubmitVirtualRequestFeedback(
+    ViewId view_id, VirtualShadowRequestFeedback feedback) -> void;
+  OXGN_RNDR_API auto ClearVirtualRequestFeedback(ViewId view_id) -> void;
 
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetFramePublication(
     ViewId view_id) const noexcept -> const ShadowFramePublication*;

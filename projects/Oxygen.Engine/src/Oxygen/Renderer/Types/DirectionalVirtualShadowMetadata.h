@@ -14,7 +14,7 @@
 
 namespace oxygen::engine {
 
-inline constexpr std::uint32_t kMaxVirtualDirectionalClipLevels = 4U;
+inline constexpr std::uint32_t kMaxVirtualDirectionalClipLevels = 6U;
 
 struct alignas(16) DirectionalVirtualClipMetadata {
   glm::vec4 origin_page_scale { 0.0F, 0.0F, 1.0F,
@@ -42,7 +42,7 @@ struct alignas(16) DirectionalVirtualShadowMetadata {
   glm::mat4 light_view { 1.0F };
 };
 
-static_assert(sizeof(DirectionalVirtualShadowMetadata) == 224U,
+static_assert(sizeof(DirectionalVirtualShadowMetadata) == 288U,
   "DirectionalVirtualShadowMetadata size must match HLSL packing");
 static_assert(sizeof(DirectionalVirtualShadowMetadata) % 16U == 0U,
   "DirectionalVirtualShadowMetadata size must be 16-byte aligned");

@@ -740,23 +740,42 @@ Execution note, March 9, 2026:
     separately from total resident pages
   - virtual page-local sampling now flips `y` to match the rendered atlas tile
     orientation under D3D/Oxygen conventions
+  - virtual physical page size is now atlas-budget-aware instead of hard
+    clamped to `256`, so sparse clip grids can preserve more of the authored
+    directional resolution when the atlas budget allows it
+  - ultra-tier virtual shadows now use a larger physical atlas budget at
+    16 ms frame budgets so fine virtual pages can exceed the old
+    `256`-texel page cap
+  - the virtual directional runtime now uses a denser address space than
+    before, while keeping the physical pool separately budget-bounded:
+    - ultra-tier virtual shadows use `6` clip levels instead of inheriting the
+      conventional `4`-cascade shape
+    - the physical page pool is no longer sized as if every virtual page had
+      to be resident simultaneously
   - virtual clip selection now blends from a fine clip level into its next
     coarser neighbor near the outer clip boundary instead of hard-switching
     across nested clipmap regions
   - runtime now logs one backend-selection line when a view switches between
     virtual, conventional, or no directional shadow backend so VSM activation
     can be verified without per-frame spam
-- Sparse receiver-driven request generation is in place, but deduplication,
-  dirty-page tracking, and full eviction policy remain explicitly pending
-  after that first slice.
-- The current request model is CPU-visible-receiver driven from ScenePrep
-  bounds, not yet the final downsampled depth/feedback-driven sparse request
-  pass described in the backend specification.
+- Sparse receiver-driven request generation is partially in place, but full
+  residency resolve, dirty-page tracking, and the final eviction policy remain
+  explicitly pending after this slice.
+- A runtime depth-driven request producer is now live:
+  - `VirtualShadowRequestPass` runs after `DepthPrePass`
+  - it writes a deduplicated request-bit mask on the GPU from main-depth
+    receiver samples and current directional virtual metadata
+  - it copies that bit mask into a per-frame-slot readback buffer
+  - on safe slot reuse, the CPU decodes and submits one-shot per-view request
+    feedback to `ShadowManager`
+- The current request model therefore uses:
+  - live depth-driven request feedback after the first safe frame-slot latency
+  - CPU visible-receiver bounds only as fallback when compatible feedback is
+    not yet available
 - The first slice is still not default-safe for heavy scenes like Sponza.
   Requests are now bounded and cross-frame reusable, but the path still lacks
-  the final depth/feedback-driven request generator, deduplication,
-  dirty-page tracking, and full eviction model. Until that sparse residency
-  path lands,
+  the final GPU residency-resolve/update pass, dirty-page tracking, and full
+  eviction model. Until that sparse residency path lands,
   demo/runtime validation must keep VSM opt-in rather than the default
   directional path, and `prefer-virtual` must remain allowed to fall back to
   conventional under current-frame GPU budget pressure.
@@ -768,6 +787,8 @@ Execution note, March 9, 2026:
   - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
   - current focused coverage includes:
     - visible-receiver-driven virtual page selection
+    - one-shot virtual request feedback consumption
+    - one-shot feedback fallback back to CPU visible-receiver requests
     - resident-page reuse for identical virtual plans
     - rerasterization when caster inputs change under identical snapped plans
   - the first parallel validation attempt hit the known MSBuild shared-PDB
@@ -787,9 +808,44 @@ Execution note, March 9, 2026:
       introspection
 - [~] Integrate directional virtual shadow evaluation into forward lighting
       without a parallel lighting contract
-- [ ] Add sparse receiver-driven requests, deduplication, and residency
+- [~] Add sparse receiver-driven requests, deduplication, and residency
       updates
 - [ ] Add directional virtual invalidation and debug tooling hardening
+
+Directional VSM Milestone: `Directional VSM Production Candidate`
+
+This is the next milestone worthy of being treated as a real delivery gate.
+It is reached only when all of the following are true:
+
+- request generation is feedback/depth-driven with no steady-state dependency
+  on CPU visible-receiver fallback
+- request deduplication and per-frame budgeted page scheduling are active end
+  to end in the live residency path
+- resident-page reuse, invalidation, and eviction are deterministic and
+  content-safe under moving/rotating casters
+- `virtual-only` is visually stable in `RenderScene` and Sponza under camera
+  translation/rotation
+- edge quality is brought to parity-targeting territory with the current
+  conventional directional path, rather than remaining a visibly inferior
+  baseline
+- the required debug surfaces exist for:
+  - requested pages
+  - mapped/resident pages
+  - coarse fallback usage
+  - budget pressure / page-update counts
+- focused automated coverage exists for:
+  - feedback-driven request generation
+  - request deduplication
+  - content-hash invalidation
+  - deterministic eviction ordering
+  - invalid-page/coarse-fallback behavior
+
+Until that milestone is reached:
+
+- VSM remains `in_progress`
+- conventional directional CSM remains the default-safe directional path
+- `prefer-virtual` may still fall back
+- `virtual-only` remains a validation mode, not a final shipping default
 
 ### 8.6 Local Light Shadow Path
 

@@ -204,6 +204,21 @@ auto ShadowManager::SetPublishedViewFrameBindingsSlot(const ViewId view_id,
   }
 }
 
+auto ShadowManager::SubmitVirtualRequestFeedback(
+  const ViewId view_id, VirtualShadowRequestFeedback feedback) -> void
+{
+  if (virtual_backend_) {
+    virtual_backend_->SubmitRequestFeedback(view_id, std::move(feedback));
+  }
+}
+
+auto ShadowManager::ClearVirtualRequestFeedback(const ViewId view_id) -> void
+{
+  if (virtual_backend_) {
+    virtual_backend_->ClearRequestFeedback(view_id);
+  }
+}
+
 auto ShadowManager::TryGetFramePublication(const ViewId view_id) const noexcept
   -> const ShadowFramePublication*
 {
