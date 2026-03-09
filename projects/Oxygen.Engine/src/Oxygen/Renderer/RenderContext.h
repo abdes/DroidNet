@@ -72,6 +72,7 @@ template <typename T> struct PassIndexOf<T, PassTypeList<>> {
 // Forward declare the know pass classes here.
 class DepthPrePass;
 class ConventionalShadowRasterPass;
+class VirtualShadowPageRasterPass;
 class LightCullingPass;
 class ShaderPass;
 class SkyPass;
@@ -91,7 +92,7 @@ class GroundGridPass;
 using KnownPassTypes = PassTypeList<DepthPrePass, LightCullingPass, ShaderPass,
   SkyPass, SkyCapturePass, TransparentPass, WireframePass, AutoExposurePass,
   GpuDebugClearPass, GpuDebugDrawPass, GroundGridPass,
-  ConventionalShadowRasterPass>;
+  ConventionalShadowRasterPass, VirtualShadowPageRasterPass>;
 
 //! The number of known pass types, used for static array sizing and sanity
 //! checks.

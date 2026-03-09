@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <memory>
 
 #include <glm/ext/matrix_clip_space.hpp>
@@ -89,12 +90,15 @@ protected:
   }
 
   [[nodiscard]] auto Manager() const -> LightManager& { return *manager_; }
-  [[nodiscard]] auto CreateShadowManager() const
+  [[nodiscard]] auto CreateShadowManager(
+    const oxygen::DirectionalShadowImplementationPolicy directional_policy
+    = oxygen::DirectionalShadowImplementationPolicy::kConventionalOnly) const
     -> std::unique_ptr<ShadowManager>
   {
     return std::make_unique<ShadowManager>(observer_ptr { gfx_.get() },
       observer_ptr { staging_provider_.get() },
-      observer_ptr { inline_transfers_.get() });
+      observer_ptr { inline_transfers_.get() },
+      oxygen::ShadowQualityTier::kHigh, directional_policy);
   }
 
   [[nodiscard]] auto CreateNode(const std::string& name, const bool visible,
@@ -437,7 +441,7 @@ NOLINT_TEST_F(LightManagerTest,
   };
 
   const auto published = shadow_manager->PublishForView(
-    oxygen::ViewId { 8 }, view_constants, manager, {}, &synthetic_sun);
+    oxygen::ViewId { 8 }, view_constants, manager, {}, {}, &synthetic_sun);
   const auto* introspection
     = shadow_manager->TryGetViewIntrospection(oxygen::ViewId { 8 });
 
@@ -452,6 +456,401 @@ NOLINT_TEST_F(LightManagerTest,
   const auto& instance = introspection->shadow_instances[0];
   EXPECT_EQ(instance.light_index, 0xFFFFFFFFU);
   EXPECT_NE(instance.flags & (1U << 2), 0U);
+}
+
+//! Virtual shadow planning is driven by visible receiver demand instead of a
+//! centered resident window.
+NOLINT_TEST_F(LightManagerTest,
+  ShadowManagerPublishForView_VirtualPlanUsesVisibleReceiverBounds)
+{
+  auto& manager = Manager();
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  auto shadow_manager = CreateShadowManager(
+    oxygen::DirectionalShadowImplementationPolicy::kPreferVirtual);
+  ASSERT_NE(shadow_manager, nullptr);
+  shadow_manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  ViewConstants view_constants;
+  view_constants
+    .SetProjectionMatrix(
+      glm::perspectiveRH_ZO(glm::radians(45.0F), 16.0F / 9.0F, 0.1F, 200.0F))
+    .SetCameraPosition(glm::vec3(0.0F, -6.0F, 3.0F));
+  view_constants.SetFrameSequenceNumber(
+    SequenceNumber { 1 }, ViewConstants::kRenderer);
+  view_constants.SetFrameSlot(Slot { 0 }, ViewConstants::kRenderer);
+
+  const ShadowManager::SyntheticSunShadowInput synthetic_sun {
+    .enabled = true,
+    .direction_ws = glm::normalize(glm::vec3(0.35F, -0.45F, -1.0F)),
+    .bias = 0.0F,
+    .normal_bias = 0.0F,
+    .resolution_hint
+    = static_cast<std::uint32_t>(oxygen::scene::ShadowResolutionHint::kMedium),
+    .cascade_count = 4U,
+    .distribution_exponent = 1.0F,
+    .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
+  };
+  const std::array<glm::vec4, 1> shadow_casters {
+    glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
+  };
+  const std::array<glm::vec4, 1> visible_receivers {
+    glm::vec4(0.0F, 0.0F, 0.0F, 0.05F),
+  };
+
+  const auto published = shadow_manager->PublishForView(oxygen::ViewId { 10 },
+    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
+    std::chrono::milliseconds(16));
+  const auto* virtual_plan
+    = shadow_manager->TryGetVirtualRenderPlan(oxygen::ViewId { 10 });
+  const auto* virtual_introspection
+    = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 10 });
+
+  ASSERT_NE(published.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(published.virtual_directional_shadow_metadata_srv,
+    kInvalidShaderVisibleIndex);
+  ASSERT_NE(
+    published.virtual_shadow_page_table_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(
+    published.virtual_shadow_physical_pool_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(virtual_plan, nullptr);
+  ASSERT_NE(virtual_introspection, nullptr);
+  EXPECT_EQ(virtual_plan->jobs.size(), 4U);
+  EXPECT_EQ(virtual_introspection->virtual_raster_jobs.size(), 4U);
+}
+
+//! Virtual shadow publication keeps resident pages and skips rerasterization
+//! when the snapped virtual plan is unchanged.
+NOLINT_TEST_F(LightManagerTest,
+  ShadowManagerPublishForView_VirtualPlanReusesResidentPagesForIdenticalInputs)
+{
+  auto& manager = Manager();
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  auto shadow_manager = CreateShadowManager(
+    oxygen::DirectionalShadowImplementationPolicy::kPreferVirtual);
+  ASSERT_NE(shadow_manager, nullptr);
+  shadow_manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  ViewConstants view_constants;
+  view_constants
+    .SetProjectionMatrix(
+      glm::perspectiveRH_ZO(glm::radians(45.0F), 16.0F / 9.0F, 0.1F, 200.0F))
+    .SetCameraPosition(glm::vec3(0.0F, -6.0F, 3.0F));
+  view_constants.SetFrameSequenceNumber(
+    SequenceNumber { 1 }, ViewConstants::kRenderer);
+  view_constants.SetFrameSlot(Slot { 0 }, ViewConstants::kRenderer);
+
+  const ShadowManager::SyntheticSunShadowInput synthetic_sun {
+    .enabled = true,
+    .direction_ws = glm::normalize(glm::vec3(0.35F, -0.45F, -1.0F)),
+    .bias = 0.0F,
+    .normal_bias = 0.0F,
+    .resolution_hint
+    = static_cast<std::uint32_t>(oxygen::scene::ShadowResolutionHint::kMedium),
+    .cascade_count = 4U,
+    .distribution_exponent = 1.0F,
+    .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
+  };
+  const std::array<glm::vec4, 1> shadow_casters {
+    glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
+  };
+  const std::array<glm::vec4, 1> visible_receivers {
+    glm::vec4(0.0F, 0.0F, 0.0F, 0.05F),
+  };
+
+  const auto first = shadow_manager->PublishForView(oxygen::ViewId { 11 },
+    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
+    std::chrono::milliseconds(16));
+  const auto* first_virtual_plan
+    = shadow_manager->TryGetVirtualRenderPlan(oxygen::ViewId { 11 });
+  const auto* first_virtual_introspection
+    = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 11 });
+
+  ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(first_virtual_plan, nullptr);
+  ASSERT_NE(first_virtual_introspection, nullptr);
+  ASSERT_EQ(first_virtual_plan->jobs.size(), 4U);
+  ASSERT_EQ(first_virtual_introspection->virtual_raster_jobs.size(), 4U);
+
+  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 11 });
+
+  const auto second = shadow_manager->PublishForView(oxygen::ViewId { 11 },
+    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
+    std::chrono::milliseconds(16));
+  const auto* second_virtual_plan
+    = shadow_manager->TryGetVirtualRenderPlan(oxygen::ViewId { 11 });
+  const auto* second_virtual_introspection
+    = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 11 });
+
+  ASSERT_NE(second.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(second_virtual_plan, nullptr);
+  ASSERT_NE(second_virtual_introspection, nullptr);
+  EXPECT_EQ(second_virtual_plan->jobs.size(), 0U);
+  EXPECT_EQ(second_virtual_introspection->virtual_raster_jobs.size(), 0U);
+  EXPECT_EQ(second.virtual_shadow_physical_pool_srv,
+    first.virtual_shadow_physical_pool_srv);
+}
+
+//! Virtual pages remain pending until the raster pass executes, so same-frame
+//! republishes must not discard the initial virtual raster work.
+NOLINT_TEST_F(LightManagerTest,
+  ShadowManagerPublishForView_VirtualPlanKeepsPendingRasterJobsUntilExecuted)
+{
+  auto& manager = Manager();
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  auto shadow_manager = CreateShadowManager(
+    oxygen::DirectionalShadowImplementationPolicy::kVirtualOnly);
+  ASSERT_NE(shadow_manager, nullptr);
+  shadow_manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  ViewConstants view_constants;
+  view_constants
+    .SetProjectionMatrix(
+      glm::perspectiveRH_ZO(glm::radians(45.0F), 16.0F / 9.0F, 0.1F, 200.0F))
+    .SetCameraPosition(glm::vec3(0.0F, -6.0F, 3.0F));
+  view_constants.SetFrameSequenceNumber(
+    SequenceNumber { 1 }, ViewConstants::kRenderer);
+  view_constants.SetFrameSlot(Slot { 0 }, ViewConstants::kRenderer);
+
+  const ShadowManager::SyntheticSunShadowInput synthetic_sun {
+    .enabled = true,
+    .direction_ws = glm::normalize(glm::vec3(0.35F, -0.45F, -1.0F)),
+    .bias = 0.0F,
+    .normal_bias = 0.0F,
+    .resolution_hint
+    = static_cast<std::uint32_t>(oxygen::scene::ShadowResolutionHint::kMedium),
+    .cascade_count = 4U,
+    .distribution_exponent = 1.0F,
+    .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
+  };
+  const std::array<glm::vec4, 1> shadow_casters {
+    glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
+  };
+  const std::array<glm::vec4, 1> visible_receivers {
+    glm::vec4(0.0F, 0.0F, 0.0F, 0.05F),
+  };
+
+  const auto first = shadow_manager->PublishForView(oxygen::ViewId { 13 },
+    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
+    std::chrono::milliseconds(16));
+  const auto* first_virtual_plan
+    = shadow_manager->TryGetVirtualRenderPlan(oxygen::ViewId { 13 });
+
+  ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(first_virtual_plan, nullptr);
+  ASSERT_EQ(first_virtual_plan->jobs.size(), 4U);
+
+  const auto second = shadow_manager->PublishForView(oxygen::ViewId { 13 },
+    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
+    std::chrono::milliseconds(16));
+  const auto* second_virtual_plan
+    = shadow_manager->TryGetVirtualRenderPlan(oxygen::ViewId { 13 });
+
+  ASSERT_NE(second.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(second_virtual_plan, nullptr);
+  EXPECT_EQ(second_virtual_plan->jobs.size(), 4U);
+}
+
+//! Patching the published view-frame slot must update the jobs the virtual
+//! raster pass will actually consume, not only the cached source job list.
+NOLINT_TEST_F(LightManagerTest,
+  ShadowManagerPublishForView_VirtualPlanPatchesPendingJobsWithViewFrameSlot)
+{
+  auto& manager = Manager();
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  auto shadow_manager = CreateShadowManager(
+    oxygen::DirectionalShadowImplementationPolicy::kVirtualOnly);
+  ASSERT_NE(shadow_manager, nullptr);
+  shadow_manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  ViewConstants view_constants;
+  view_constants
+    .SetProjectionMatrix(
+      glm::perspectiveRH_ZO(glm::radians(45.0F), 16.0F / 9.0F, 0.1F, 200.0F))
+    .SetCameraPosition(glm::vec3(0.0F, -6.0F, 3.0F));
+  view_constants.SetFrameSequenceNumber(
+    SequenceNumber { 1 }, ViewConstants::kRenderer);
+  view_constants.SetFrameSlot(Slot { 0 }, ViewConstants::kRenderer);
+
+  const ShadowManager::SyntheticSunShadowInput synthetic_sun {
+    .enabled = true,
+    .direction_ws = glm::normalize(glm::vec3(0.35F, -0.45F, -1.0F)),
+    .bias = 0.0F,
+    .normal_bias = 0.0F,
+    .resolution_hint
+    = static_cast<std::uint32_t>(oxygen::scene::ShadowResolutionHint::kMedium),
+    .cascade_count = 4U,
+    .distribution_exponent = 1.0F,
+    .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
+  };
+  const std::array<glm::vec4, 1> shadow_casters {
+    glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
+  };
+  const std::array<glm::vec4, 1> visible_receivers {
+    glm::vec4(0.0F, 0.0F, 0.0F, 0.05F),
+  };
+
+  const auto published = shadow_manager->PublishForView(oxygen::ViewId { 15 },
+    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
+    std::chrono::milliseconds(16));
+  ASSERT_NE(published.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+
+  constexpr auto kExpectedSlot = oxygen::engine::BindlessViewFrameBindingsSlot {
+    oxygen::ShaderVisibleIndex { 42U }
+  };
+  shadow_manager->SetPublishedViewFrameBindingsSlot(
+    oxygen::ViewId { 15 }, kExpectedSlot);
+
+  const auto* virtual_plan
+    = shadow_manager->TryGetVirtualRenderPlan(oxygen::ViewId { 15 });
+  ASSERT_NE(virtual_plan, nullptr);
+  ASSERT_FALSE(virtual_plan->jobs.empty());
+  for (const auto& job : virtual_plan->jobs) {
+    EXPECT_EQ(job.view_constants.view_frame_bindings_bslot, kExpectedSlot);
+  }
+}
+
+//! Virtual page reuse must invalidate shadow contents when caster inputs
+//! change, even if the snapped clip metadata and requested pages stay the same.
+NOLINT_TEST_F(LightManagerTest,
+  ShadowManagerPublishForView_VirtualPlanRerasterizesWhenCasterInputsChange)
+{
+  auto& manager = Manager();
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  auto shadow_manager = CreateShadowManager(
+    oxygen::DirectionalShadowImplementationPolicy::kPreferVirtual);
+  ASSERT_NE(shadow_manager, nullptr);
+  shadow_manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  ViewConstants view_constants;
+  view_constants
+    .SetProjectionMatrix(
+      glm::perspectiveRH_ZO(glm::radians(45.0F), 16.0F / 9.0F, 0.1F, 200.0F))
+    .SetCameraPosition(glm::vec3(0.0F, -6.0F, 3.0F));
+  view_constants.SetFrameSequenceNumber(
+    SequenceNumber { 1 }, ViewConstants::kRenderer);
+  view_constants.SetFrameSlot(Slot { 0 }, ViewConstants::kRenderer);
+
+  const ShadowManager::SyntheticSunShadowInput synthetic_sun {
+    .enabled = true,
+    .direction_ws = glm::normalize(glm::vec3(0.35F, -0.45F, -1.0F)),
+    .bias = 0.0F,
+    .normal_bias = 0.0F,
+    .resolution_hint
+    = static_cast<std::uint32_t>(oxygen::scene::ShadowResolutionHint::kMedium),
+    .cascade_count = 4U,
+    .distribution_exponent = 1.0F,
+    .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
+  };
+  const std::array<glm::vec4, 1> initial_shadow_casters {
+    glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
+  };
+  const std::array<glm::vec4, 1> updated_shadow_casters {
+    glm::vec4(0.0F, 0.0F, 0.5F, 0.8F),
+  };
+  const std::array<glm::vec4, 1> visible_receivers {
+    glm::vec4(0.0F, 0.0F, 0.0F, 0.05F),
+  };
+
+  const auto first = shadow_manager->PublishForView(oxygen::ViewId { 12 },
+    view_constants, manager, initial_shadow_casters, visible_receivers,
+    &synthetic_sun, std::chrono::milliseconds(16));
+  const auto* first_virtual_plan
+    = shadow_manager->TryGetVirtualRenderPlan(oxygen::ViewId { 12 });
+
+  ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(first_virtual_plan, nullptr);
+  ASSERT_EQ(first_virtual_plan->jobs.size(), 4U);
+
+  const auto second = shadow_manager->PublishForView(oxygen::ViewId { 12 },
+    view_constants, manager, updated_shadow_casters, visible_receivers,
+    &synthetic_sun, std::chrono::milliseconds(16));
+  const auto* second_virtual_plan
+    = shadow_manager->TryGetVirtualRenderPlan(oxygen::ViewId { 12 });
+  const auto* second_virtual_introspection
+    = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 12 });
+
+  ASSERT_NE(second.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(second_virtual_plan, nullptr);
+  ASSERT_NE(second_virtual_introspection, nullptr);
+  EXPECT_EQ(second_virtual_plan->jobs.size(), 4U);
+  EXPECT_EQ(second_virtual_introspection->virtual_raster_jobs.size(), 4U);
+  EXPECT_EQ(second.virtual_shadow_physical_pool_srv,
+    first.virtual_shadow_physical_pool_srv);
+}
+
+//! Physical-pool growth must not reuse iterators into the cleared per-view
+//! cache.
+NOLINT_TEST_F(LightManagerTest,
+  ShadowManagerPublishForView_VirtualPlanSurvivesPhysicalPoolRecreation)
+{
+  auto& manager = Manager();
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  auto shadow_manager = CreateShadowManager(
+    oxygen::DirectionalShadowImplementationPolicy::kVirtualOnly);
+  ASSERT_NE(shadow_manager, nullptr);
+  shadow_manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  ViewConstants view_constants;
+  view_constants
+    .SetProjectionMatrix(
+      glm::perspectiveRH_ZO(glm::radians(45.0F), 16.0F / 9.0F, 0.1F, 200.0F))
+    .SetCameraPosition(glm::vec3(0.0F, -6.0F, 3.0F));
+  view_constants.SetFrameSequenceNumber(
+    SequenceNumber { 1 }, ViewConstants::kRenderer);
+  view_constants.SetFrameSlot(Slot { 0 }, ViewConstants::kRenderer);
+
+  const ShadowManager::SyntheticSunShadowInput synthetic_sun {
+    .enabled = true,
+    .direction_ws = glm::normalize(glm::vec3(0.35F, -0.45F, -1.0F)),
+    .bias = 0.0F,
+    .normal_bias = 0.0F,
+    .resolution_hint
+    = static_cast<std::uint32_t>(oxygen::scene::ShadowResolutionHint::kMedium),
+    .cascade_count = 4U,
+    .distribution_exponent = 1.0F,
+    .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
+  };
+  const std::array<glm::vec4, 1> shadow_casters {
+    glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
+  };
+  const std::array<glm::vec4, 1> visible_receivers {
+    glm::vec4(0.0F, 0.0F, 0.0F, 0.05F),
+  };
+
+  const auto first = shadow_manager->PublishForView(oxygen::ViewId { 14 },
+    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
+    std::chrono::milliseconds(16));
+  ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+
+  const auto second = shadow_manager->PublishForView(oxygen::ViewId { 14 },
+    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
+    std::chrono::milliseconds(33));
+  const auto* second_virtual_plan
+    = shadow_manager->TryGetVirtualRenderPlan(oxygen::ViewId { 14 });
+
+  ASSERT_NE(second.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(
+    second.virtual_shadow_physical_pool_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(second_virtual_plan, nullptr);
+  EXPECT_FALSE(second_virtual_plan->jobs.empty());
 }
 
 //! Shadow publication is reused for identical inputs and invalidated when

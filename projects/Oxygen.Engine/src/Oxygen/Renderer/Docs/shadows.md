@@ -6,7 +6,8 @@ implementation work lands on stable engine contracts from the first iteration.
 Cross-references: [lighting_overview.md](lighting_overview.md) |
 [passes/data_flow.md](passes/data_flow.md) |
 [passes/design-overview.md](passes/design-overview.md) |
-[implementation_plan.md](implementation_plan.md)
+[implementation_plan.md](implementation_plan.md) |
+[virtual_shadow_map_backend.md](virtual_shadow_map_backend.md)
 
 Scene-authored shadow properties and light invariants remain owned by:
 
@@ -639,6 +640,9 @@ geometry, and higher effective texel density.
 - Reuse the same authored light inputs and shared shader contracts used by the
   conventional family
 
+Concrete backend-level decisions for the first production virtual implementation
+are specified in [virtual_shadow_map_backend.md](virtual_shadow_map_backend.md).
+
 ### 8.2 Directional virtual shadowing
 
 Directional lights use virtualized multi-range coverage when the virtual family
@@ -937,6 +941,66 @@ Implementation status, March 9, 2026:
   families
 - Extend shader sampling helpers to support virtual-family dispatch without
   adding a parallel shading path
+- First runnable slice for visual validation uses a clipmap-backed virtual
+  address space with bounded receiver-driven page requests while preserving the
+  final backend/resource/shader contracts
+- Sparse receiver-driven requests, deduplication, and eviction remain
+  explicitly `in_progress` after that first slice
+- Because that first slice is still missing the final feedback-driven sparse
+  residency path, it is not the default-safe path for heavy scenes.
+  Large-scene demos/runtime configurations must keep conventional directional
+  shadows as the default until sparse VSM residency is implemented.
+
+Implementation status, March 9, 2026:
+
+- `in_progress`
+- Live code now includes:
+  - `VirtualShadowMapBackend`
+  - `VirtualShadowPageRasterPass`
+  - directional virtual metadata publication through `ShadowFrameBindings`
+  - renderer policy plumbing for conventional versus virtual directional
+    selection
+  - engine-budget-aware VSM safety gating: the current slice consumes
+    `FrameContext::BudgetStats.gpu_budget`, caps fixed clipmap density from the
+    current frame budget, and allows `prefer-virtual` to fall back
+    deterministically to conventional directional shadows when the projected
+    fixed-residency work is too expensive
+  - budget-bounded receiver-driven page selection from
+    `PreparedSceneFrame.visible_receiver_bounding_spheres`, replacing the
+    earlier centered-window-only approximation
+  - centered-window fallback only when receiver-driven selection requests no
+    virtual pages for the view
+  - deterministic per-clip prioritization and cross-frame resident-page reuse
+    for snapped-identical virtual plans, including physical tile reuse and
+    partial rerasterization
+  - content-safe invalidation for resident-page reuse: light/caster input
+    changes now rerasterize requested virtual pages even when snapped clip
+    metadata stays unchanged
+  - allocated virtual pages are not considered valid until the virtual page
+    raster pass completes; same-frame republishes preserve pending raster work
+    instead of dropping the only page-render jobs
+  - the virtual page raster pass must preserve resident physical pages across
+    frames by clearing only the pages it rerasterizes, not the entire atlas
+  - virtual page raster and sampling must use page-local filter guard texels;
+    page seams are not acceptable and cannot be papered over with post filtering
+  - virtual receiver bias must not perturb virtual page lookup or local page
+    UV selection; bias affects the depth comparison only, otherwise large flat
+    receivers inherit page-row striping from address drift
+  - shader fallback from invalid fine virtual pages to valid coarser clip
+    levels so partially resident windows remain continuous
+- Validation evidence:
+  - `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:6 /p:Configuration=Debug /nologo`
+  - `msbuild out/build-vs/src/Oxygen/Engine/oxygen-engine.vcxproj /m:6 /p:Configuration=Debug /nologo`
+  - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:6 /p:Configuration=Debug /nologo`
+  - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:6 /p:Configuration=Debug /nologo`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
+- Remaining gap to exit this first slice:
+  - visual validation in `RenderScene`
+  - final depth/feedback-driven sparse receiver requests, deduplication, and
+    eviction
+  - broader directional virtual invalidation/debug tooling
+  - large-scene viability in `virtual-only`, which remains intentionally harsh
+    until sparse residency exists
 
 ### 15.5 Phase 5: Directional virtual shadow maps
 

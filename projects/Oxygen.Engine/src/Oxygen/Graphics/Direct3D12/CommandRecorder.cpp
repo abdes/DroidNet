@@ -962,6 +962,48 @@ auto CommandRecorder::ClearDepthStencilView(const graphics::Texture& texture,
   );
 }
 
+auto CommandRecorder::ClearDepthStencilView(const graphics::Texture& texture,
+  const NativeView& dsv, const ClearFlags clear_flags, const float depth,
+  const uint8_t stencil, const std::span<const oxygen::Scissors> rects) -> void
+{
+  if (rects.empty()) {
+    ClearDepthStencilView(texture, dsv, clear_flags, depth, stencil);
+    return;
+  }
+
+  const auto& command_list_impl = GetConcreteCommandList();
+  auto* d3d12_command_list = command_list_impl.GetCommandList();
+  DCHECK_NOTNULL_F(d3d12_command_list);
+
+  const auto& depth_tex_desc = texture.GetDescriptor();
+  const auto format_info = GetFormatInfo(depth_tex_desc.format);
+  const float clear_depth
+    = (depth_tex_desc.use_clear_value && format_info.has_depth)
+    ? depth_tex_desc.clear_value.r
+    : depth;
+  const uint8_t clear_stencil
+    = (depth_tex_desc.use_clear_value && format_info.has_stencil)
+    ? static_cast<uint8_t>(depth_tex_desc.clear_value.g)
+    : stencil;
+
+  std::vector<D3D12_RECT> d3d_rects;
+  d3d_rects.reserve(rects.size());
+  for (const auto& rect : rects) {
+    d3d_rects.push_back(D3D12_RECT {
+      .left = rect.left,
+      .top = rect.top,
+      .right = rect.right,
+      .bottom = rect.bottom,
+    });
+  }
+
+  const auto d3d12_clear_flags = detail::ConvertClearFlags(clear_flags);
+  const D3D12_CPU_DESCRIPTOR_HANDLE dsv_handle { .ptr = dsv->AsInteger() };
+  d3d12_command_list->ClearDepthStencilView(dsv_handle, d3d12_clear_flags,
+    clear_depth, clear_stencil, static_cast<UINT>(d3d_rects.size()),
+    d3d_rects.data());
+}
+
 auto CommandRecorder::SetRenderTargets(
   const std::span<NativeView> rtvs, const std::optional<NativeView> dsv) -> void
 {

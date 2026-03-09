@@ -217,6 +217,12 @@ public:
     float /*depth*/, uint8_t /*stencil*/) -> void override
   {
   }
+  auto ClearDepthStencilView(const Texture& /*texture*/,
+    const graphics::NativeView& /*dsv*/, graphics::ClearFlags /*clear_flags*/,
+    float /*depth*/, uint8_t /*stencil*/,
+    std::span<const oxygen::Scissors> /*rects*/) -> void override
+  {
+  }
   auto ClearFramebuffer(const graphics::Framebuffer& /*framebuffer*/,
     std::optional<std::vector<std::optional<graphics::Color>>>
     /*color_clear_values*/,

@@ -507,6 +507,7 @@ private:
 
   // Frame slot from FrameContext (stored during OnFrameStart for RenderContext)
   frame::Slot frame_slot_ { frame::kInvalidSlot };
+  FrameContext::BudgetStats frame_budget_stats_ {};
 
   // Upload coordinator: manages buffer/texture uploads and completion.
   std::unique_ptr<upload::UploadCoordinator> uploader_;
@@ -565,6 +566,7 @@ private:
     std::vector<std::byte> draw_metadata_storage;
     std::vector<PreparedSceneFrame::PartitionRange> partition_storage;
     std::vector<glm::vec4> shadow_caster_bounds_storage;
+    std::vector<glm::vec4> visible_receiver_bounds_storage;
     std::vector<float> world_matrix_storage;
     std::vector<float> normal_matrix_storage;
   };

@@ -10,6 +10,7 @@
 #include <memory>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 
 namespace oxygen {
@@ -38,6 +39,9 @@ class DemoAppContext {
 public:
   bool headless { false };
   bool fullscreen { false };
+  DirectionalShadowImplementationPolicy directional_shadow_policy {
+    DirectionalShadowImplementationPolicy::kConventionalOnly
+  };
 
   // Graphics queues setup shared across subsystems.
   graphics::SharedTransferQueueStrategy queue_strategy;

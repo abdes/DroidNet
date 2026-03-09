@@ -109,6 +109,7 @@ public:
   MOCK_METHOD(void, BindIndexBuffer, (const oxygen::graphics::Buffer&, oxygen::Format), (override));
   MOCK_METHOD(void, BindFrameBuffer, (const oxygen::graphics::Framebuffer&), (override));
   MOCK_METHOD(void, ClearDepthStencilView, (const oxygen::graphics::Texture&, const oxygen::graphics::NativeView&, oxygen::graphics::ClearFlags, float, std::uint8_t), (override));
+  MOCK_METHOD(void, ClearDepthStencilView, (const oxygen::graphics::Texture&, const oxygen::graphics::NativeView&, oxygen::graphics::ClearFlags, float, std::uint8_t, std::span<const oxygen::Scissors>), (override));
   MOCK_METHOD(void, ClearFramebuffer, (const oxygen::graphics::Framebuffer&, std::optional<std::vector<std::optional<oxygen::graphics::Color>>>, std::optional<float>, std::optional<std::uint8_t>), (override));
   MOCK_METHOD(void, CopyBuffer, (oxygen::graphics::Buffer&, std::size_t, const oxygen::graphics::Buffer&, std::size_t, std::size_t), (override));
   MOCK_METHOD(void, CopyBufferToTexture, (const oxygen::graphics::Buffer&, const oxygen::graphics::TextureUploadRegion&, oxygen::graphics::Texture&), (override));
