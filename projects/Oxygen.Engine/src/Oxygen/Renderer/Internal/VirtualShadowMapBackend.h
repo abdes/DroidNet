@@ -56,7 +56,8 @@ public:
     std::span<const engine::DirectionalShadowCandidate> directional_candidates,
     std::span<const glm::vec4> shadow_caster_bounds,
     std::span<const glm::vec4> visible_receiver_bounds,
-    std::chrono::milliseconds gpu_budget, bool allow_budget_fallback = true)
+    std::chrono::milliseconds gpu_budget, bool allow_budget_fallback = true,
+    std::uint64_t shadow_caster_content_hash = 0U)
     -> ShadowFramePublication;
   OXGN_RNDR_API auto MarkRendered(ViewId view_id) -> void;
   OXGN_RNDR_API auto SetPublishedViewFrameBindingsSlot(
@@ -86,6 +87,7 @@ private:
     std::uint64_t candidate_hash { 0U };
     std::uint64_t caster_hash { 0U };
     std::uint64_t receiver_hash { 0U };
+    std::uint64_t shadow_content_hash { 0U };
 
     [[nodiscard]] auto operator==(const PublicationKey&) const noexcept -> bool
       = default;
@@ -98,7 +100,16 @@ private:
 
   struct ResidentVirtualPage {
     PhysicalTileAddress tile {};
-    bool contents_valid { false };
+    renderer::VirtualPageResidencyState state {
+      renderer::VirtualPageResidencyState::kUnmapped
+    };
+    frame::SequenceNumber last_touched_frame { 0U };
+    frame::SequenceNumber last_requested_frame { 0U };
+
+    [[nodiscard]] auto ContentsValid() const noexcept -> bool
+    {
+      return state == renderer::VirtualPageResidencyState::kResidentClean;
+    }
   };
 
   struct ViewCacheEntry {
@@ -123,6 +134,7 @@ private:
   ::oxygen::ShadowQualityTier shadow_quality_tier_ {
     ::oxygen::ShadowQualityTier::kHigh
   };
+  frame::SequenceNumber frame_sequence_ { 0U };
 
   using BufferT = engine::upload::TransientStructuredBuffer;
   BufferT shadow_instance_buffer_;
@@ -141,7 +153,8 @@ private:
     const engine::ViewConstants& view_constants,
     std::span<const engine::DirectionalShadowCandidate> directional_candidates,
     std::span<const glm::vec4> shadow_caster_bounds,
-    std::span<const glm::vec4> visible_receiver_bounds) const -> PublicationKey;
+    std::span<const glm::vec4> visible_receiver_bounds,
+    std::uint64_t shadow_caster_content_hash) const -> PublicationKey;
   OXGN_RNDR_API auto RefreshViewExports(ViewCacheEntry& state) const -> void;
   [[nodiscard]] OXGN_RNDR_NDAPI auto CanReuseResidentPages(
     const ViewCacheEntry& previous,
@@ -153,6 +166,9 @@ private:
     -> void;
   OXGN_RNDR_API auto ReleasePhysicalPool() -> void;
   OXGN_RNDR_API auto AllocatePhysicalTile()
+    -> std::optional<PhysicalTileAddress>;
+  OXGN_RNDR_API auto AcquirePhysicalTile(
+    ViewCacheEntry& state, std::uint32_t pages_per_level)
     -> std::optional<PhysicalTileAddress>;
   OXGN_RNDR_API auto ReleasePhysicalTile(PhysicalTileAddress tile) -> void;
   OXGN_RNDR_API auto BuildDirectionalVirtualViewState(ViewId view_id,

@@ -311,11 +311,13 @@ auto ConventionalShadowBackend::PublishView(const ViewId view_id,
   const engine::ViewConstants& view_constants,
   const std::span<const engine::DirectionalShadowCandidate>
     directional_candidates,
-  const std::span<const glm::vec4> shadow_caster_bounds)
+  const std::span<const glm::vec4> shadow_caster_bounds,
+  const std::uint64_t shadow_caster_content_hash)
   -> ShadowFramePublication
 {
   const auto key = BuildPublicationKey(
-    view_constants, directional_candidates, shadow_caster_bounds);
+    view_constants, directional_candidates, shadow_caster_bounds,
+    shadow_caster_content_hash);
   if (const auto it = view_cache_.find(view_id);
     it != view_cache_.end() && it->second.key == key) {
     return it->second.frame_publication;
@@ -413,7 +415,8 @@ auto ConventionalShadowBackend::BuildPublicationKey(
   const engine::ViewConstants& view_constants,
   const std::span<const engine::DirectionalShadowCandidate>
     directional_candidates,
-  const std::span<const glm::vec4> shadow_caster_bounds) const -> PublicationKey
+  const std::span<const glm::vec4> shadow_caster_bounds,
+  const std::uint64_t shadow_caster_content_hash) const -> PublicationKey
 {
   PublicationKey key {};
   const auto view_hash_start
@@ -428,6 +431,7 @@ auto ConventionalShadowBackend::BuildPublicationKey(
     = HashBytes(&camera_position, sizeof(camera_position), key.view_hash);
   key.candidate_hash = HashSpan(directional_candidates);
   key.caster_hash = HashSpan(shadow_caster_bounds);
+  key.shadow_content_hash = shadow_caster_content_hash;
   return key;
 }
 

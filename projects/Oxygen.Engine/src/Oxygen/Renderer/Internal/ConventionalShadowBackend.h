@@ -57,7 +57,8 @@ public:
   OXGN_RNDR_API auto PublishView(ViewId view_id,
     const engine::ViewConstants& view_constants,
     std::span<const engine::DirectionalShadowCandidate> directional_candidates,
-    std::span<const glm::vec4> shadow_caster_bounds) -> ShadowFramePublication;
+    std::span<const glm::vec4> shadow_caster_bounds,
+    std::uint64_t shadow_caster_content_hash = 0U) -> ShadowFramePublication;
   OXGN_RNDR_API auto SetPublishedViewFrameBindingsSlot(
     ViewId view_id, engine::BindlessViewFrameBindingsSlot slot) -> void;
 
@@ -81,6 +82,7 @@ private:
     std::uint64_t view_hash { 0U };
     std::uint64_t candidate_hash { 0U };
     std::uint64_t caster_hash { 0U };
+    std::uint64_t shadow_content_hash { 0U };
 
     [[nodiscard]] auto operator==(const PublicationKey&) const noexcept -> bool
       = default;
@@ -120,7 +122,8 @@ private:
   OXGN_RNDR_API auto BuildPublicationKey(
     const engine::ViewConstants& view_constants,
     std::span<const engine::DirectionalShadowCandidate> directional_candidates,
-    std::span<const glm::vec4> shadow_caster_bounds) const -> PublicationKey;
+    std::span<const glm::vec4> shadow_caster_bounds,
+    std::uint64_t shadow_caster_content_hash) const -> PublicationKey;
   OXGN_RNDR_API auto RefreshViewExports(ViewCacheEntry& state) const -> void;
   OXGN_RNDR_API auto BuildDirectionalResourceConfig(
     std::span<const engine::DirectionalShadowCandidate> candidates) const

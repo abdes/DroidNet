@@ -92,7 +92,8 @@ auto ShadowManager::PublishForView(const ViewId view_id,
   const std::span<const glm::vec4> shadow_caster_bounds,
   const std::span<const glm::vec4> visible_receiver_bounds,
   const SyntheticSunShadowInput* synthetic_sun_shadow,
-  const std::chrono::milliseconds gpu_budget) -> ShadowFramePublication
+  const std::chrono::milliseconds gpu_budget,
+  const std::uint64_t shadow_caster_content_hash) -> ShadowFramePublication
 {
   std::vector<engine::DirectionalShadowCandidate> candidates_storage;
   const auto light_candidates = lights.GetDirectionalShadowCandidates();
@@ -126,7 +127,8 @@ auto ShadowManager::PublishForView(const ViewId view_id,
       view_constants, candidates_storage, shadow_caster_bounds,
       visible_receiver_bounds, gpu_budget,
       directional_policy_
-        != oxygen::DirectionalShadowImplementationPolicy::kVirtualOnly);
+        != oxygen::DirectionalShadowImplementationPolicy::kVirtualOnly,
+      shadow_caster_content_hash);
     if (publication.shadow_instance_metadata_srv
       != kInvalidShaderVisibleIndex) {
       RecordDirectionalImplementation(last_view_directional_implementation_,
@@ -170,7 +172,8 @@ auto ShadowManager::PublishForView(const ViewId view_id,
   }
 
   const auto publication = conventional_backend_->PublishView(
-    view_id, view_constants, candidates_storage, shadow_caster_bounds);
+    view_id, view_constants, candidates_storage, shadow_caster_bounds,
+    shadow_caster_content_hash);
   if (publication.shadow_instance_metadata_srv != kInvalidShaderVisibleIndex) {
     RecordDirectionalImplementation(last_view_directional_implementation_,
       view_id, engine::ShadowImplementationKind::kConventional,

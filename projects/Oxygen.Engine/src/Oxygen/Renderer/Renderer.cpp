@@ -181,6 +181,60 @@ auto ParseVerbosity(std::string_view value) -> std::optional<int>
   return parsed;
 }
 
+constexpr std::uint64_t kFnvOffsetBasis = 1469598103934665603ULL;
+constexpr std::uint64_t kFnvPrime = 1099511628211ULL;
+
+auto HashBytes(const void* data, const std::size_t size,
+  std::uint64_t hash = kFnvOffsetBasis) -> std::uint64_t
+{
+  const auto* bytes = static_cast<const std::byte*>(data);
+  for (std::size_t i = 0; i < size; ++i) {
+    hash ^= static_cast<std::uint64_t>(bytes[i]);
+    hash *= kFnvPrime;
+  }
+  return hash;
+}
+
+auto HashPreparedShadowCasterContent(
+  const oxygen::engine::PreparedSceneFrame& prepared_frame) -> std::uint64_t
+{
+  if (prepared_frame.draw_metadata_bytes.empty() || prepared_frame.partitions.empty()
+    || prepared_frame.world_matrices.empty()) {
+    return 0U;
+  }
+
+  const auto* draws = reinterpret_cast<const oxygen::engine::DrawMetadata*>(
+    prepared_frame.draw_metadata_bytes.data());
+  const auto draw_count
+    = prepared_frame.draw_metadata_bytes.size() / sizeof(oxygen::engine::DrawMetadata);
+  const auto matrix_count = prepared_frame.world_matrices.size() / 16U;
+
+  std::uint64_t hash = kFnvOffsetBasis;
+  std::uint32_t hashed_draws = 0U;
+  for (const auto& partition : prepared_frame.partitions) {
+    if (!partition.pass_mask.IsSet(oxygen::engine::PassMaskBit::kShadowCaster)) {
+      continue;
+    }
+    for (std::uint32_t draw_index = partition.begin;
+      draw_index < partition.end && draw_index < draw_count; ++draw_index) {
+      const auto& draw = draws[draw_index];
+      if (!draw.flags.IsSet(oxygen::engine::PassMaskBit::kShadowCaster)) {
+        continue;
+      }
+      hash = HashBytes(&draw, sizeof(draw), hash);
+      if (draw.transform_index < matrix_count) {
+        const auto* matrix = prepared_frame.world_matrices.data()
+          + static_cast<std::size_t>(draw.transform_index) * 16U;
+        hash = HashBytes(matrix, sizeof(float) * 16U, hash);
+      }
+      ++hashed_draws;
+    }
+  }
+
+  hash = HashBytes(&hashed_draws, sizeof(hashed_draws), hash);
+  return hash;
+}
+
 auto FormatRendererLastFrameStats(
   const oxygen::engine::Renderer::LastFrameStats& last_frame) -> std::string
 {
@@ -1967,11 +2021,13 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
           : std::span<const glm::vec4> {};
         const auto synthetic_sun_shadow
           = BuildSyntheticSunShadowInput(render_context, runtime_state.sun);
+        const auto shadow_caster_content_hash
+          = HashPreparedShadowCasterContent(prepared);
         const auto shadow_view
           = shadow_manager_->PublishForView(view_id, view_constants,
             *light_manager, shadow_caster_bounds, visible_receiver_bounds,
             synthetic_sun_shadow ? &*synthetic_sun_shadow : nullptr,
-            frame_budget_stats_.gpu_budget);
+            frame_budget_stats_.gpu_budget, shadow_caster_content_hash);
         shadow_instance_metadata_slot
           = shadow_view.shadow_instance_metadata_srv;
         directional_shadow_metadata_slot
