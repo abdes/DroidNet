@@ -29,8 +29,11 @@ namespace oxygen::engine {
 namespace {
 
   constexpr float kDirectionalShadowRasterDepthBias = 1500.0F;
-  constexpr float kDirectionalShadowRasterSlopeBias = 0.0F;
-  constexpr float kDirectionalShadowRasterDepthBiasClamp = 0.0F;
+  // Conventional CSM should keep the same layered bias policy as the hardened
+  // virtual path: constant raster bias, a small clamped slope term, and the
+  // existing receiver-side normal/constant bias in shader space.
+  constexpr float kDirectionalShadowRasterSlopeBias = 2.0F;
+  constexpr float kDirectionalShadowRasterDepthBiasClamp = 0.0025F;
 
 } // namespace
 
