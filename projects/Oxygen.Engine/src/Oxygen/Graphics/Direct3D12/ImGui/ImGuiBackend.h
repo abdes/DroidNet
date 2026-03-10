@@ -6,16 +6,23 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
+#include <optional>
+#include <string>
 #include <string_view>
+#include <unordered_map>
 
 #include <d3d12.h>
 #include <wrl/client.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/imgui_impl_dx12.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
@@ -55,6 +62,9 @@ public:
   OXGN_D3D12_API auto Shutdown() -> void override;
   OXGN_D3D12_API auto NewFrame() -> void override;
   OXGN_D3D12_API auto Render(CommandRecorder& recorder) -> void override;
+  [[nodiscard]] OXGN_D3D12_API auto RegisterOrUpdateTexture(
+    std::string_view key, const std::shared_ptr<graphics::Texture>& texture)
+    -> std::uintptr_t override;
 
   auto GetImGuiContext() -> ImGuiContext* override { return imgui_context_; }
 
@@ -67,7 +77,17 @@ public:
   OXGN_D3D12_API auto RecreateDeviceObjects() -> void override;
 
 private:
+  struct RegisteredTexture {
+    std::shared_ptr<graphics::Texture> texture;
+    graphics::DescriptorHandle source_srv_handle {};
+    graphics::NativeView source_srv_view {};
+    D3D12_CPU_DESCRIPTOR_HANDLE imgui_cpu_handle {};
+    D3D12_GPU_DESCRIPTOR_HANDLE imgui_gpu_handle {};
+    UINT descriptor_index { 0 };
+  };
+
   ImGuiContext* imgui_context_ { nullptr };
+  std::weak_ptr<oxygen::Graphics> graphics_weak_;
 
   // ImGui D3D12 backend state
   std::unique_ptr<ImGui_ImplDX12_InitInfo> init_info_;
@@ -96,6 +116,12 @@ private:
   observer_ptr<oxygen::graphics::detail::DeferredReclaimer> reclaimer_ {
     nullptr
   };
+  std::unordered_map<std::string, RegisteredTexture> registered_textures_ {};
+
+  [[nodiscard]] auto AllocatePersistentDescriptorSlot()
+    -> std::optional<UINT>;
+  [[nodiscard]] auto MakeSrvDescription(
+    const graphics::Texture& texture) const -> graphics::TextureViewDescription;
 };
 
 } // namespace oxygen::graphics::d3d12

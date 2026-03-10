@@ -17,7 +17,8 @@ struct VirtualShadowRequestFeedback {
   frame::SequenceNumber source_frame_sequence { 0U };
   std::uint32_t pages_per_axis { 0U };
   std::uint32_t clip_level_count { 0U };
-  std::vector<std::uint32_t> requested_page_indices {};
+  std::uint64_t directional_address_space_hash { 0U };
+  std::vector<std::uint64_t> requested_resident_keys {};
 };
 
 } // namespace oxygen::renderer

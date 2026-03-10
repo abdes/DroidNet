@@ -174,6 +174,10 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .path="Lighting/VirtualShadowRequest.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
+  ShaderFileSpec {
+    .path="Renderer/VirtualShadowAtlasDebug.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
   // Sky atmosphere LUT compute shaders (no permutations)
   ShaderFileSpec {
     .path="Atmosphere/TransmittanceLut_CS.hlsl",
@@ -285,6 +289,7 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - DepthPrePass: 4 (2 entries x 2 permutations)
 // - LightCulling: 2 (1 entry x 2 permutations)
 // - VirtualShadowRequest: 1 entry
+// - VirtualShadowAtlasDebug: 1 entry
 // - TransmittanceLut_CS: 1 entry
 // - SkyViewLut_CS: 1 entry
 // - MultiScatLut_CS: 1 entry
@@ -301,6 +306,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ToneMap: 2 entries
 // - AutoExposure_Histogram_CS: 1 entry
 // - AutoExposure_Average_CS: 1 entry
-// Total: 133
+// Total: 134
 
 } // namespace oxygen::graphics::d3d12

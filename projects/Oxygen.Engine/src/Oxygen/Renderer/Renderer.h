@@ -340,7 +340,7 @@ public:
     -> observer_ptr<IblComputePass>;
 
   //! Update clustered-lighting state for the active view and republish the
-  //! current view's shader-facing bindings.
+  //! current view's lighting routing without rebuilding shadow publications.
   OXGN_RNDR_API auto UpdateCurrentViewLightCullingConfig(
     const RenderContext& render_context, const LightCullingConfig& config)
     -> void;
@@ -380,10 +380,17 @@ public:
     glm::vec2 uv_offset) -> bool;
 
 private:
+  enum class ViewBindingRepublishMode : std::uint8_t {
+    kFull,
+    kLightingOnly,
+  };
+
   struct PerViewRuntimeState {
     LightCullingConfig light_culling {};
     SyntheticSunData sun { kNoSun };
     EnvironmentViewData environment_view {};
+    ViewFrameBindings published_view_bindings {};
+    bool has_published_view_bindings { false };
   };
 
   //! Build frame data for a specific view (scene prep, culling, draw list).
@@ -423,8 +430,8 @@ private:
 
   auto PrepareAndWireViewConstantsForView(ViewId view_id,
     const FrameContext& frame_context, RenderContext& render_context) -> bool;
-  auto RepublishCurrentViewBindings(const RenderContext& render_context)
-    -> bool;
+  auto RepublishCurrentViewBindings(const RenderContext& render_context,
+    ViewBindingRepublishMode mode = ViewBindingRepublishMode::kFull) -> bool;
 
   //! Resolves exposure for the view (manual and auto).
   auto UpdateViewExposure(ViewId view_id, const scene::Scene& scene,

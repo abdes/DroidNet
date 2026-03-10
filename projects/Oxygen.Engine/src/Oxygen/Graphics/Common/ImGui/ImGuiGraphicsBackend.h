@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string_view>
 
@@ -18,6 +19,7 @@ namespace oxygen {
 class Graphics;
 namespace graphics {
   class CommandRecorder;
+  class Texture;
 } // namespace graphics
 } // namespace oxygen
 
@@ -71,6 +73,14 @@ public:
   /*! @note Adding a default no-op keeps this change backward compatible for
       any existing backend implementations. */
   virtual auto RecreateDeviceObjects() -> void { /* no-op */ };
+
+  //! Register or update an ImGui-visible SRV for a texture and return the
+  //! backend-specific texture identifier.
+  [[nodiscard]] virtual auto RegisterOrUpdateTexture(std::string_view /*key*/,
+    const std::shared_ptr<graphics::Texture>& /*texture*/) -> std::uintptr_t
+  {
+    return 0U;
+  }
 };
 
 } // namespace oxygen::graphics::imgui

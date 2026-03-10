@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string_view>
 
@@ -22,6 +23,9 @@ struct ImDrawData;
 
 namespace oxygen {
 class IAsyncEngine;
+namespace graphics {
+  class Texture;
+}
 namespace platform::imgui {
   class ImGuiSdl3Backend;
 }
@@ -100,6 +104,9 @@ public:
   //! Request that the graphics backend re-create any device-local ImGui
   //! objects (called after swapchain/surface reconfiguration).
   OXGN_RNDR_API auto RecreateDeviceObjects() -> void;
+
+  [[nodiscard]] OXGN_RNDR_API auto RegisterTexture(std::string_view key,
+    const std::shared_ptr<graphics::Texture>& texture) const -> std::uintptr_t;
 
   auto IsWitinFrameScope() const noexcept { return frame_started_; }
 

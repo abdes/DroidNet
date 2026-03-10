@@ -20,6 +20,7 @@
 
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Renderer/Types/DirectionalVirtualShadowMetadata.h>
 #include <Oxygen/Renderer/Types/DirectionalLightBasic.h>
 #include <Oxygen/Renderer/Types/ShadowInstanceMetadata.h>
 #include <Oxygen/Scene/Light/LightCommon.h>
@@ -28,6 +29,12 @@ namespace oxygen::renderer::internal::shadow_detail {
 
 inline constexpr std::uint64_t kFnvOffsetBasis = 1469598103934665603ULL;
 inline constexpr std::uint64_t kFnvPrime = 1099511628211ULL;
+inline constexpr float kDirectionalCacheFloatTolerance = 1.0e-5F;
+inline constexpr std::uint32_t kVirtualResidentPageCoordBits = 28U;
+inline constexpr std::uint64_t kVirtualResidentPageCoordMask
+  = (1ULL << kVirtualResidentPageCoordBits) - 1ULL;
+inline constexpr std::uint32_t kVirtualResidentPageCoordSignBit
+  = 1U << (kVirtualResidentPageCoordBits - 1U);
 
 [[nodiscard]] inline auto HashBytes(const void* data, const std::size_t size,
   std::uint64_t hash = kFnvOffsetBasis) -> std::uint64_t
@@ -50,6 +57,153 @@ template <typename T>
     hash = HashBytes(values.data(), values.size_bytes(), hash);
   }
   return hash;
+}
+
+[[nodiscard]] inline auto EncodeVirtualResidentPageCoord(
+  const std::int32_t value) -> std::uint64_t
+{
+  return static_cast<std::uint64_t>(static_cast<std::uint32_t>(value))
+    & kVirtualResidentPageCoordMask;
+}
+
+[[nodiscard]] inline auto DecodeVirtualResidentPageCoord(
+  const std::uint64_t encoded) -> std::int32_t
+{
+  auto value = static_cast<std::uint32_t>(
+    encoded & kVirtualResidentPageCoordMask);
+  if ((value & kVirtualResidentPageCoordSignBit) != 0U) {
+    value |= static_cast<std::uint32_t>(~kVirtualResidentPageCoordMask);
+  }
+  return static_cast<std::int32_t>(value);
+}
+
+[[nodiscard]] inline auto PackVirtualResidentPageKey(
+  const std::uint32_t clip_level, const std::int32_t grid_x,
+  const std::int32_t grid_y) -> std::uint64_t
+{
+  return (static_cast<std::uint64_t>(clip_level) << 56ULL)
+    | (EncodeVirtualResidentPageCoord(grid_x) << 28ULL)
+    | EncodeVirtualResidentPageCoord(grid_y);
+}
+
+[[nodiscard]] inline auto VirtualResidentPageKeyClipLevel(
+  const std::uint64_t key) -> std::uint32_t
+{
+  return static_cast<std::uint32_t>(key >> 56ULL);
+}
+
+[[nodiscard]] inline auto VirtualResidentPageKeyGridX(
+  const std::uint64_t key) -> std::int32_t
+{
+  return DecodeVirtualResidentPageCoord(key >> 28ULL);
+}
+
+[[nodiscard]] inline auto VirtualResidentPageKeyGridY(
+  const std::uint64_t key) -> std::int32_t
+{
+  return DecodeVirtualResidentPageCoord(key);
+}
+
+[[nodiscard]] inline auto DirectionalCacheFloatEqual(
+  const float lhs, const float rhs) -> bool
+{
+  return std::abs(lhs - rhs) <= kDirectionalCacheFloatTolerance;
+}
+
+[[nodiscard]] inline auto QuantizeDirectionalCacheFloat(const float value)
+  -> std::int64_t
+{
+  constexpr double kDirectionalCacheFloatScale = 100000.0;
+  return static_cast<std::int64_t>(
+    std::llround(static_cast<double>(value) * kDirectionalCacheFloatScale));
+}
+
+[[nodiscard]] inline auto DirectionalCacheMat4Equal(
+  const glm::mat4& lhs, const glm::mat4& rhs) -> bool
+{
+  for (std::uint32_t column = 0U; column < 4U; ++column) {
+    for (std::uint32_t row = 0U; row < 4U; ++row) {
+      if (!DirectionalCacheFloatEqual(lhs[column][row], rhs[column][row])) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+[[nodiscard]] inline auto BuildDirectionalAddressSpaceComparableLightView(
+  glm::mat4 light_view) -> glm::mat4
+{
+  // Directional page identity depends on the XY lattice orientation and
+  // translation. Light-space Z translation can move without changing which
+  // virtual pages cover the same world-space XY regions.
+  light_view[3][2] = 0.0F;
+  return light_view;
+}
+
+[[nodiscard]] inline auto ResolveDirectionalVirtualClipGridCoord(
+  const float clip_origin, const float page_world_size) -> std::int32_t
+{
+  const auto stabilized_page_world_size = std::max(
+    static_cast<double>(page_world_size), static_cast<double>(1.0e-4F));
+  const auto grid_coord = std::llround(
+    static_cast<double>(clip_origin) / stabilized_page_world_size);
+  return static_cast<std::int32_t>(grid_coord);
+}
+
+[[nodiscard]] inline auto ResolveDirectionalVirtualClipGridOriginX(
+  const oxygen::engine::DirectionalVirtualShadowMetadata& metadata,
+  const std::uint32_t clip_index) -> std::int32_t
+{
+  const auto& clip = metadata.clip_metadata[clip_index];
+  return ResolveDirectionalVirtualClipGridCoord(
+    clip.origin_page_scale.x, clip.origin_page_scale.z);
+}
+
+[[nodiscard]] inline auto ResolveDirectionalVirtualClipGridOriginY(
+  const oxygen::engine::DirectionalVirtualShadowMetadata& metadata,
+  const std::uint32_t clip_index) -> std::int32_t
+{
+  const auto& clip = metadata.clip_metadata[clip_index];
+  return ResolveDirectionalVirtualClipGridCoord(
+    clip.origin_page_scale.y, clip.origin_page_scale.z);
+}
+
+[[nodiscard]] inline auto HashDirectionalVirtualFeedbackAddressSpace(
+  const oxygen::engine::DirectionalVirtualShadowMetadata& metadata)
+  -> std::uint64_t
+{
+  std::uint64_t hash = HashBytes(
+    &metadata.clip_level_count, sizeof(metadata.clip_level_count));
+  hash = HashBytes(&metadata.pages_per_axis, sizeof(metadata.pages_per_axis),
+    hash);
+  const auto lattice_light_view
+    = BuildDirectionalAddressSpaceComparableLightView(metadata.light_view);
+  for (std::uint32_t column = 0U; column < 4U; ++column) {
+    for (std::uint32_t row = 0U; row < 4U; ++row) {
+      const auto quantized
+        = QuantizeDirectionalCacheFloat(lattice_light_view[column][row]);
+      hash = HashBytes(&quantized, sizeof(quantized), hash);
+    }
+  }
+
+  const auto clip_level_count = std::min(metadata.clip_level_count,
+    oxygen::engine::kMaxVirtualDirectionalClipLevels);
+  for (std::uint32_t clip_index = 0U; clip_index < clip_level_count;
+    ++clip_index) {
+    const auto& clip = metadata.clip_metadata[clip_index];
+    const auto page_world_size
+      = QuantizeDirectionalCacheFloat(clip.origin_page_scale.z);
+    hash = HashBytes(&page_world_size, sizeof(page_world_size), hash);
+  }
+  return hash;
+}
+
+[[nodiscard]] inline auto HashDirectionalVirtualFeedbackLattice(
+  const oxygen::engine::DirectionalVirtualShadowMetadata& metadata)
+  -> std::uint64_t
+{
+  return HashDirectionalVirtualFeedbackAddressSpace(metadata);
 }
 
 [[nodiscard]] inline auto BuildShadowProductFlags(

@@ -26,6 +26,7 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Renderer/Internal/ShadowBackendCommon.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowRequestPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
@@ -34,6 +35,8 @@
 #include <Oxygen/Renderer/Types/VirtualShadowRequestFeedback.h>
 
 namespace oxygen::engine {
+
+using namespace oxygen::renderer::internal::shadow_detail;
 
 namespace {
 
@@ -90,6 +93,9 @@ auto VirtualShadowRequestPass::DoPrepareResources(
   active_request_word_count_ = 0U;
   active_pages_per_axis_ = 0U;
   active_clip_level_count_ = 0U;
+  active_directional_address_space_hash = 0U;
+  active_clip_grid_origin_x_.fill(0);
+  active_clip_grid_origin_y_.fill(0);
   active_view_id_ = {};
 
   if (Context().frame_slot == frame::kInvalidSlot) {
@@ -188,6 +194,26 @@ auto VirtualShadowRequestPass::DoPrepareResources(
   active_request_word_count_ = request_word_count;
   active_pages_per_axis_ = metadata.pages_per_axis;
   active_clip_level_count_ = metadata.clip_level_count;
+  active_directional_address_space_hash
+    = HashDirectionalVirtualFeedbackAddressSpace(metadata);
+  const auto active_clip_count = std::min(metadata.clip_level_count,
+    kMaxSupportedClipLevels);
+  for (std::uint32_t clip_index = 0U; clip_index < active_clip_count;
+    ++clip_index) {
+    active_clip_grid_origin_x_[clip_index]
+      = ResolveDirectionalVirtualClipGridOriginX(metadata, clip_index);
+    active_clip_grid_origin_y_[clip_index]
+      = ResolveDirectionalVirtualClipGridOriginY(metadata, clip_index);
+  }
+
+  LOG_F(INFO,
+    "VirtualShadowRequestPass: frame={} slot={} view={} prepared dispatch "
+    "(words={} pages_per_axis={} clips={} address_hash=0x{:x} depth={}x{})",
+    Context().frame_sequence.get(), Context().frame_slot.get(),
+    Context().current_view.view_id.get(), active_request_word_count_,
+    active_pages_per_axis_, active_clip_level_count_,
+    active_directional_address_space_hash,
+    pass_constants.screen_dimensions.x, pass_constants.screen_dimensions.y);
 
   co_return;
 }
@@ -227,7 +253,18 @@ auto VirtualShadowRequestPass::DoExecute(graphics::CommandRecorder& recorder)
   readback.source_frame_sequence = Context().frame_sequence;
   readback.pages_per_axis = active_pages_per_axis_;
   readback.clip_level_count = active_clip_level_count_;
+  readback.directional_address_space_hash
+    = active_directional_address_space_hash;
+  readback.clip_grid_origin_x = active_clip_grid_origin_x_;
+  readback.clip_grid_origin_y = active_clip_grid_origin_y_;
   readback.request_word_count = active_request_word_count_;
+
+  LOG_F(INFO,
+    "VirtualShadowRequestPass: frame={} slot={} view={} dispatched request "
+    "pass (groups={}x{} words={})",
+    Context().frame_sequence.get(), Context().frame_slot.get(),
+    active_view_id_.get(), group_count_x, group_count_y,
+    active_request_word_count_);
 
   co_return;
 }
@@ -512,6 +549,9 @@ auto VirtualShadowRequestPass::ProcessCompletedFeedback(const frame::Slot slot)
   feedback.source_frame_sequence = readback.source_frame_sequence;
   feedback.pages_per_axis = readback.pages_per_axis;
   feedback.clip_level_count = readback.clip_level_count;
+  feedback.directional_address_space_hash
+    = readback.directional_address_space_hash;
+  const auto pages_per_level = readback.pages_per_axis * readback.pages_per_axis;
 
   const auto max_words = std::min<std::uint32_t>(readback.request_word_count,
     static_cast<std::uint32_t>(kMaxRequestWordCount));
@@ -521,35 +561,45 @@ auto VirtualShadowRequestPass::ProcessCompletedFeedback(const frame::Slot slot)
       const auto bit_index = static_cast<std::uint32_t>(std::countr_zero(word));
       const auto page_index = word_index * 32U + bit_index;
       if (page_index < total_pages) {
-        feedback.requested_page_indices.push_back(page_index);
+        const auto clip_index = page_index / pages_per_level;
+        const auto local_page_index = page_index % pages_per_level;
+        const auto page_y = local_page_index / readback.pages_per_axis;
+        const auto page_x = local_page_index % readback.pages_per_axis;
+        const auto resident_key = PackVirtualResidentPageKey(clip_index,
+          readback.clip_grid_origin_x[clip_index]
+            + static_cast<std::int32_t>(page_x),
+          readback.clip_grid_origin_y[clip_index]
+            + static_cast<std::int32_t>(page_y));
+        feedback.requested_resident_keys.push_back(resident_key);
       }
       word &= (word - 1U);
     }
   }
 
-  if (!feedback.requested_page_indices.empty()) {
+  if (!feedback.requested_resident_keys.empty()) {
     auto& log_state = feedback_log_states_[readback.view_id.get()];
-    if (log_state.last_feedback_count
-      != feedback.requested_page_indices.size()) {
-      LOG_F(INFO,
-        "VirtualShadowRequestPass: view {} submitted {} requested virtual "
-        "page(s) from feedback",
-        readback.view_id.get(), feedback.requested_page_indices.size());
-      log_state.last_feedback_count
-        = static_cast<std::uint32_t>(feedback.requested_page_indices.size());
-    }
+    LOG_F(INFO,
+      "VirtualShadowRequestPass: frame={} slot={} view={} completed feedback "
+      "(source_frame={} requested_pages={} address_hash=0x{:x})",
+      Context().frame_sequence.get(), slot.get(), readback.view_id.get(),
+      feedback.source_frame_sequence.get(),
+      feedback.requested_resident_keys.size(),
+      feedback.directional_address_space_hash);
+    log_state.last_feedback_count
+      = static_cast<std::uint32_t>(feedback.requested_resident_keys.size());
     log_state.had_pending_feedback = true;
     shadow_manager->SubmitVirtualRequestFeedback(
       readback.view_id, std::move(feedback));
   } else {
     auto& log_state = feedback_log_states_[readback.view_id.get()];
-    if (log_state.had_pending_feedback || log_state.last_feedback_count != 0U) {
-      LOG_F(INFO,
-        "VirtualShadowRequestPass: view {} cleared virtual request feedback",
-        readback.view_id.get());
-      log_state.last_feedback_count = 0U;
-      log_state.had_pending_feedback = false;
-    }
+    LOG_F(INFO,
+      "VirtualShadowRequestPass: frame={} slot={} view={} completed feedback "
+      "(source_frame={} requested_pages=0 address_hash=0x{:x})",
+      Context().frame_sequence.get(), slot.get(), readback.view_id.get(),
+      readback.source_frame_sequence.get(),
+      readback.directional_address_space_hash);
+    log_state.last_feedback_count = 0U;
+    log_state.had_pending_feedback = false;
     shadow_manager->ClearVirtualRequestFeedback(readback.view_id);
   }
   readback.pending_feedback = false;

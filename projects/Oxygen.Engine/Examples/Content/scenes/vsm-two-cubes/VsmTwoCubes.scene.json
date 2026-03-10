@@ -1,0 +1,205 @@
+{
+  "name": "VsmTwoCubes",
+  "nodes": [
+    {
+      "name": "Root",
+      "flags": {
+        "visible": true,
+        "static": true
+      }
+    },
+    {
+      "name": "Floor",
+      "parent": 0,
+      "flags": {
+        "visible": true,
+        "static": true,
+        "casts_shadows": false,
+        "receives_shadows": true
+      },
+      "transform": {
+        "translation": [
+          0.0,
+          0.0,
+          -0.6
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          8.0,
+          8.0,
+          0.2
+        ]
+      }
+    },
+    {
+      "name": "CubeShort",
+      "parent": 0,
+      "flags": {
+        "visible": true,
+        "static": true,
+        "casts_shadows": true,
+        "receives_shadows": true
+      },
+      "transform": {
+        "translation": [
+          -0.75,
+          0.0,
+          0.5
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "CubeTall",
+      "parent": 0,
+      "flags": {
+        "visible": true,
+        "static": true,
+        "casts_shadows": true,
+        "receives_shadows": true
+      },
+      "transform": {
+        "translation": [
+          0.85,
+          0.25,
+          1.5
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          3.0
+        ]
+      }
+    },
+    {
+      "name": "Sun",
+      "parent": 0,
+      "flags": {
+        "visible": true,
+        "casts_shadows": true
+      },
+      "transform": {
+        "translation": [
+          0.0,
+          0.0,
+          50.0
+        ],
+        "rotation": [
+          0.38268343,
+          0.0,
+          0.0,
+          0.92387953
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "name": "MainCamera",
+      "parent": 0,
+      "flags": {
+        "visible": true
+      },
+      "transform": {
+        "translation": [
+          0.0,
+          8.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "renderables": [
+    {
+      "geometry_ref": "/.cooked/Geometry/cube.ogeo",
+      "node": 1,
+      "visible": true
+    },
+    {
+      "geometry_ref": "/.cooked/Geometry/cube.ogeo",
+      "node": 2,
+      "visible": true
+    },
+    {
+      "geometry_ref": "/.cooked/Geometry/cube.ogeo",
+      "node": 3,
+      "visible": true
+    }
+  ],
+  "cameras": {
+    "perspective": [
+      {
+        "node": 5,
+        "fov_y": 0.785398,
+        "aspect_ratio": 1.777778,
+        "near_plane": 0.1,
+        "far_plane": 100.0
+      }
+    ]
+  },
+  "lights": {
+    "directional": [
+      {
+        "node": 4,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [
+            1.0,
+            0.98,
+            0.92
+          ],
+          "mobility": 0,
+          "casts_shadows": true,
+          "shadow": {
+            "bias": 0.0005,
+            "normal_bias": 0.5
+          }
+        },
+        "angular_size_radians": 0.004675,
+        "environment_contribution": true,
+        "is_sun_light": true,
+        "intensity_lux": 110000.0
+      }
+    ]
+  },
+  "references": {
+    "materials": [
+      "/.cooked/Materials/cube_red.omat"
+    ]
+  }
+}
