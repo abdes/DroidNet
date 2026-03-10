@@ -103,6 +103,7 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/Sun.h>
+#include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Scene/Scene.h>
 
 namespace {
@@ -138,6 +139,9 @@ auto BuildSyntheticSunShadowInput(
     || !sun->CastsShadows()) {
     return std::nullopt;
   }
+  const auto shadow_cascades
+    = oxygen::scene::CanonicalizeCascadedShadowSettings(
+      oxygen::scene::CascadedShadowSettings {});
 
   return oxygen::renderer::ShadowManager::SyntheticSunShadowInput {
     .enabled = true,
@@ -146,11 +150,9 @@ auto BuildSyntheticSunShadowInput(
     .normal_bias = oxygen::scene::CommonLightProperties {}.shadow.normal_bias,
     .resolution_hint = static_cast<std::uint32_t>(
       oxygen::scene::CommonLightProperties {}.shadow.resolution_hint),
-    .cascade_count = oxygen::scene::CascadedShadowSettings {}.cascade_count,
-    .distribution_exponent
-    = oxygen::scene::CascadedShadowSettings {}.distribution_exponent,
-    .cascade_distances
-    = oxygen::scene::CascadedShadowSettings {}.cascade_distances,
+    .cascade_count = shadow_cascades.cascade_count,
+    .distribution_exponent = shadow_cascades.distribution_exponent,
+    .cascade_distances = shadow_cascades.cascade_distances,
   };
 }
 
@@ -198,21 +200,23 @@ auto HashBytes(const void* data, const std::size_t size,
 auto HashPreparedShadowCasterContent(
   const oxygen::engine::PreparedSceneFrame& prepared_frame) -> std::uint64_t
 {
-  if (prepared_frame.draw_metadata_bytes.empty() || prepared_frame.partitions.empty()
+  if (prepared_frame.draw_metadata_bytes.empty()
+    || prepared_frame.partitions.empty()
     || prepared_frame.world_matrices.empty()) {
     return 0U;
   }
 
   const auto* draws = reinterpret_cast<const oxygen::engine::DrawMetadata*>(
     prepared_frame.draw_metadata_bytes.data());
-  const auto draw_count
-    = prepared_frame.draw_metadata_bytes.size() / sizeof(oxygen::engine::DrawMetadata);
+  const auto draw_count = prepared_frame.draw_metadata_bytes.size()
+    / sizeof(oxygen::engine::DrawMetadata);
   const auto matrix_count = prepared_frame.world_matrices.size() / 16U;
 
   std::uint64_t hash = kFnvOffsetBasis;
   std::uint32_t hashed_draws = 0U;
   for (const auto& partition : prepared_frame.partitions) {
-    if (!partition.pass_mask.IsSet(oxygen::engine::PassMaskBit::kShadowCaster)) {
+    if (!partition.pass_mask.IsSet(
+          oxygen::engine::PassMaskBit::kShadowCaster)) {
       continue;
     }
     for (std::uint32_t draw_index = partition.begin;

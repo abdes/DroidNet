@@ -37,22 +37,22 @@ namespace oxygen::engine {
 
 namespace {
 
-struct alignas(packing::kShaderDataFieldAlignment)
-  VirtualShadowRequestPassConstants {
-  ShaderVisibleIndex depth_texture_index { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex request_words_uav_index { kInvalidShaderVisibleIndex };
-  std::uint32_t request_word_count { 0U };
-  std::uint32_t _pad0 { 0U };
+  struct alignas(packing::kShaderDataFieldAlignment)
+    VirtualShadowRequestPassConstants {
+    ShaderVisibleIndex depth_texture_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex request_words_uav_index { kInvalidShaderVisibleIndex };
+    std::uint32_t request_word_count { 0U };
+    std::uint32_t _pad0 { 0U };
 
-  glm::uvec2 screen_dimensions { 0U, 0U };
-  std::uint32_t _pad1 { 0U };
-  std::uint32_t _pad2 { 0U };
+    glm::uvec2 screen_dimensions { 0U, 0U };
+    std::uint32_t _pad1 { 0U };
+    std::uint32_t _pad2 { 0U };
 
-  glm::mat4 inv_view_projection_matrix { 1.0F };
-};
-static_assert(sizeof(VirtualShadowRequestPassConstants)
-  % packing::kShaderDataFieldAlignment
-  == 0U);
+    glm::mat4 inv_view_projection_matrix { 1.0F };
+  };
+  static_assert(sizeof(VirtualShadowRequestPassConstants)
+      % packing::kShaderDataFieldAlignment
+    == 0U);
 
 } // namespace
 
@@ -105,8 +105,8 @@ auto VirtualShadowRequestPass::DoPrepareResources(
     co_return;
   }
 
-  const auto* virtual_view
-    = shadow_manager->TryGetVirtualViewIntrospection(Context().current_view.view_id);
+  const auto* virtual_view = shadow_manager->TryGetVirtualViewIntrospection(
+    Context().current_view.view_id);
   if (virtual_view == nullptr
     || virtual_view->directional_virtual_metadata.empty()) {
     co_return;
@@ -119,8 +119,7 @@ auto VirtualShadowRequestPass::DoPrepareResources(
 
   const auto total_pages = metadata.clip_level_count * metadata.pages_per_axis
     * metadata.pages_per_axis;
-  const auto request_word_count
-    = (std::max(1U, total_pages) + 31U) / 32U;
+  const auto request_word_count = (std::max(1U, total_pages) + 31U) / 32U;
   if (request_word_count > kMaxRequestWordCount) {
     LOG_F(WARNING,
       "VirtualShadowRequestPass: skipping view {} because request buffer "
@@ -148,13 +147,13 @@ auto VirtualShadowRequestPass::DoPrepareResources(
     .depth_texture_index = depth_texture_srv,
     .request_words_uav_index = request_words_uav_,
     .request_word_count = request_word_count,
-    .screen_dimensions
-    = glm::uvec2(depth_texture.GetDescriptor().width,
+    .screen_dimensions = glm::uvec2(depth_texture.GetDescriptor().width,
       depth_texture.GetDescriptor().height),
     .inv_view_projection_matrix
     = Context().current_view.resolved_view->InverseViewProjection(),
   };
-  std::memcpy(pass_constants_mapped_ptr_, &pass_constants, sizeof(pass_constants));
+  std::memcpy(
+    pass_constants_mapped_ptr_, &pass_constants, sizeof(pass_constants));
   SetPassConstantsIndex(pass_constants_index_);
 
   if (!recorder.IsResourceTracked(*clear_upload_buffer_)) {
@@ -294,9 +293,9 @@ auto VirtualShadowRequestPass::EnsureRequestBuffers() -> void
     }
     registry.Register(request_words_buffer_);
 
-    auto uav_handle = allocator.Allocate(
-      graphics::ResourceViewType::kStructuredBuffer_UAV,
-      graphics::DescriptorVisibility::kShaderVisible);
+    auto uav_handle
+      = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_UAV,
+        graphics::DescriptorVisibility::kShaderVisible);
     if (!uav_handle.IsValid()) {
       throw std::runtime_error(
         "VirtualShadowRequestPass: failed to allocate request UAV");
@@ -308,7 +307,8 @@ auto VirtualShadowRequestPass::EnsureRequestBuffers() -> void
     uav_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
     uav_desc.range = { 0U, kBufferSize };
     uav_desc.stride = sizeof(std::uint32_t);
-    registry.RegisterView(*request_words_buffer_, std::move(uav_handle), uav_desc);
+    registry.RegisterView(
+      *request_words_buffer_, std::move(uav_handle), uav_desc);
   }
 
   if (!clear_upload_buffer_) {
@@ -328,7 +328,8 @@ auto VirtualShadowRequestPass::EnsureRequestBuffers() -> void
       throw std::runtime_error(
         "VirtualShadowRequestPass: failed to map clear upload buffer");
     }
-    std::memset(clear_upload_mapped_ptr_, 0, static_cast<std::size_t>(desc.size_bytes));
+    std::memset(
+      clear_upload_mapped_ptr_, 0, static_cast<std::size_t>(desc.size_bytes));
   }
 }
 
@@ -366,16 +367,16 @@ auto VirtualShadowRequestPass::EnsurePassConstantsBuffer() -> void
   cbv_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
   cbv_desc.range = { 0U, desc.size_bytes };
 
-  auto cbv_handle = allocator.Allocate(
-    graphics::ResourceViewType::kConstantBuffer,
-    graphics::DescriptorVisibility::kShaderVisible);
+  auto cbv_handle
+    = allocator.Allocate(graphics::ResourceViewType::kConstantBuffer,
+      graphics::DescriptorVisibility::kShaderVisible);
   if (!cbv_handle.IsValid()) {
     throw std::runtime_error(
       "VirtualShadowRequestPass: failed to allocate constants CBV");
   }
   pass_constants_index_ = allocator.GetShaderVisibleIndex(cbv_handle);
-  pass_constants_cbv_
-    = registry.RegisterView(*pass_constants_buffer_, std::move(cbv_handle), cbv_desc);
+  pass_constants_cbv_ = registry.RegisterView(
+    *pass_constants_buffer_, std::move(cbv_handle), cbv_desc);
 }
 
 auto VirtualShadowRequestPass::EnsureReadbackBuffer(const frame::Slot slot)
@@ -397,13 +398,14 @@ auto VirtualShadowRequestPass::EnsureReadbackBuffer(const frame::Slot slot)
     throw std::runtime_error(
       "VirtualShadowRequestPass: failed to create readback buffer");
   }
-  readback.mapped_words = static_cast<std::uint32_t*>(
-    readback.buffer->Map(0U, desc.size_bytes));
+  readback.mapped_words
+    = static_cast<std::uint32_t*>(readback.buffer->Map(0U, desc.size_bytes));
   if (readback.mapped_words == nullptr) {
     throw std::runtime_error(
       "VirtualShadowRequestPass: failed to map readback buffer");
   }
-  std::memset(readback.mapped_words, 0, static_cast<std::size_t>(desc.size_bytes));
+  std::memset(
+    readback.mapped_words, 0, static_cast<std::size_t>(desc.size_bytes));
 }
 
 auto VirtualShadowRequestPass::EnsureDepthTextureSrv(
@@ -452,15 +454,16 @@ auto VirtualShadowRequestPass::EnsureDepthTextureSrv(
   }
 
   auto register_new_srv = [&]() -> ShaderVisibleIndex {
-    auto srv_handle = allocator.Allocate(
-      graphics::ResourceViewType::kTexture_SRV,
-      graphics::DescriptorVisibility::kShaderVisible);
+    auto srv_handle
+      = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
+        graphics::DescriptorVisibility::kShaderVisible);
     if (!srv_handle.IsValid()) {
       return kInvalidShaderVisibleIndex;
     }
     depth_texture_srv_ = allocator.GetShaderVisibleIndex(srv_handle);
-    auto native_view = registry.RegisterView(
-      const_cast<graphics::Texture&>(depth_tex), std::move(srv_handle), srv_desc);
+    auto native_view
+      = registry.RegisterView(const_cast<graphics::Texture&>(depth_tex),
+        std::move(srv_handle), srv_desc);
     if (!native_view->IsValid()) {
       depth_texture_srv_ = kInvalidShaderVisibleIndex;
       owns_depth_texture_srv_ = false;
@@ -475,9 +478,9 @@ auto VirtualShadowRequestPass::EnsureDepthTextureSrv(
     return register_new_srv();
   }
 
-  const auto updated = registry.UpdateView(
-    const_cast<graphics::Texture&>(depth_tex),
-    bindless::HeapIndex { depth_texture_srv_.get() }, srv_desc);
+  const auto updated
+    = registry.UpdateView(const_cast<graphics::Texture&>(depth_tex),
+      bindless::HeapIndex { depth_texture_srv_.get() }, srv_desc);
   if (!updated) {
     depth_texture_srv_ = kInvalidShaderVisibleIndex;
     depth_texture_owner_ = nullptr;
@@ -525,8 +528,28 @@ auto VirtualShadowRequestPass::ProcessCompletedFeedback(const frame::Slot slot)
   }
 
   if (!feedback.requested_page_indices.empty()) {
-    shadow_manager->SubmitVirtualRequestFeedback(readback.view_id, std::move(feedback));
+    auto& log_state = feedback_log_states_[readback.view_id.get()];
+    if (log_state.last_feedback_count
+      != feedback.requested_page_indices.size()) {
+      LOG_F(INFO,
+        "VirtualShadowRequestPass: view {} submitted {} requested virtual "
+        "page(s) from feedback",
+        readback.view_id.get(), feedback.requested_page_indices.size());
+      log_state.last_feedback_count
+        = static_cast<std::uint32_t>(feedback.requested_page_indices.size());
+    }
+    log_state.had_pending_feedback = true;
+    shadow_manager->SubmitVirtualRequestFeedback(
+      readback.view_id, std::move(feedback));
   } else {
+    auto& log_state = feedback_log_states_[readback.view_id.get()];
+    if (log_state.had_pending_feedback || log_state.last_feedback_count != 0U) {
+      LOG_F(INFO,
+        "VirtualShadowRequestPass: view {} cleared virtual request feedback",
+        readback.view_id.get());
+      log_state.last_feedback_count = 0U;
+      log_state.had_pending_feedback = false;
+    }
     shadow_manager->ClearVirtualRequestFeedback(readback.view_id);
   }
   readback.pending_feedback = false;

@@ -33,7 +33,7 @@
                 "mesh_name": "CharacterCapsule",
                 "params": {
                     "segments": 16,
-                    "height": 1.8,
+                    "height": 2.0,
                     "radius": 0.35
                 }
             },

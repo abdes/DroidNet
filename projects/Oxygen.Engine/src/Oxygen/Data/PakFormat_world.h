@@ -486,7 +486,7 @@ struct DirectionalLightRecord {
   uint32_t is_sun_light = 0;
 
   uint32_t cascade_count = 4;
-  float cascade_distances[4] = { 0.0F, 0.0F, 0.0F, 0.0F };
+  float cascade_distances[4] = { 8.0F, 24.0F, 64.0F, 160.0F };
   float distribution_exponent = 1.0F;
 
   float intensity_lux = 100000.0F; //!< Illuminance in lux (lm/m²)

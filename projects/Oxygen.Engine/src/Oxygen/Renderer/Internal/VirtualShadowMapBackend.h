@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <unordered_map>
 #include <vector>
@@ -25,9 +26,9 @@
 #include <Oxygen/Renderer/Types/DirectionalShadowCandidate.h>
 #include <Oxygen/Renderer/Types/ShadowFramePublication.h>
 #include <Oxygen/Renderer/Types/ShadowInstanceMetadata.h>
-#include <Oxygen/Renderer/Types/VirtualShadowRequestFeedback.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/Types/VirtualShadowRenderPlan.h>
+#include <Oxygen/Renderer/Types/VirtualShadowRequestFeedback.h>
 #include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 
 namespace oxygen::engine::upload {
@@ -58,8 +59,7 @@ public:
     std::span<const glm::vec4> shadow_caster_bounds,
     std::span<const glm::vec4> visible_receiver_bounds,
     std::chrono::milliseconds gpu_budget, bool allow_budget_fallback = true,
-    std::uint64_t shadow_caster_content_hash = 0U)
-    -> ShadowFramePublication;
+    std::uint64_t shadow_caster_content_hash = 0U) -> ShadowFramePublication;
   OXGN_RNDR_API auto MarkRendered(ViewId view_id) -> void;
   OXGN_RNDR_API auto SetPublishedViewFrameBindingsSlot(
     ViewId view_id, engine::BindlessViewFrameBindingsSlot slot) -> void;
@@ -79,7 +79,7 @@ public:
 private:
   struct PhysicalPoolConfig {
     std::uint32_t page_size_texels { 0U };
-    std::uint32_t pages_per_clip_axis { 0U };
+    std::uint32_t virtual_pages_per_clip_axis { 0U };
     std::uint32_t clip_level_count { 0U };
     std::uint32_t virtual_page_count { 0U };
     std::uint32_t physical_tile_capacity { 0U };
@@ -91,7 +91,6 @@ private:
     std::uint64_t view_hash { 0U };
     std::uint64_t candidate_hash { 0U };
     std::uint64_t caster_hash { 0U };
-    std::uint64_t receiver_hash { 0U };
     std::uint64_t shadow_content_hash { 0U };
 
     [[nodiscard]] auto operator==(const PublicationKey&) const noexcept -> bool
@@ -125,7 +124,7 @@ private:
     std::vector<std::uint32_t> page_table_entries;
     std::vector<VirtualShadowRasterJob> raster_jobs;
     std::vector<VirtualShadowRasterJob> pending_raster_jobs;
-    std::unordered_map<std::uint32_t, ResidentVirtualPage> resident_pages;
+    std::unordered_map<std::uint64_t, ResidentVirtualPage> resident_pages;
     ShadowFramePublication frame_publication {};
     VirtualShadowRenderPlan render_plan {};
     VirtualShadowViewIntrospection introspection {};
@@ -159,11 +158,19 @@ private:
   std::unordered_map<ViewId, ViewCacheEntry> view_cache_;
   std::unordered_map<ViewId, PendingRequestFeedback> request_feedback_;
 
+  struct ViewPublishLogState {
+    std::uint32_t last_selected_page_count { 0U };
+    std::uint32_t last_pending_job_count { 0U };
+    std::uint32_t last_raster_job_count { 0U };
+    bool last_used_feedback { false };
+    bool initialized { false };
+  };
+  std::unordered_map<ViewId, ViewPublishLogState> publish_log_states_;
+
   OXGN_RNDR_API auto BuildPublicationKey(
     const engine::ViewConstants& view_constants,
     std::span<const engine::DirectionalShadowCandidate> directional_candidates,
     std::span<const glm::vec4> shadow_caster_bounds,
-    std::span<const glm::vec4> visible_receiver_bounds,
     std::uint64_t shadow_caster_content_hash) const -> PublicationKey;
   OXGN_RNDR_API auto RefreshViewExports(ViewCacheEntry& state) const -> void;
   [[nodiscard]] OXGN_RNDR_NDAPI auto CanReuseResidentPages(
@@ -171,23 +178,24 @@ private:
     const ViewCacheEntry& current) const noexcept -> bool;
   OXGN_RNDR_API auto BuildPhysicalPoolConfig(
     const engine::DirectionalShadowCandidate& candidate,
-    std::chrono::milliseconds gpu_budget) const -> PhysicalPoolConfig;
+    std::chrono::milliseconds gpu_budget, std::size_t shadow_caster_count) const
+    -> PhysicalPoolConfig;
   OXGN_RNDR_API auto EnsurePhysicalPool(const PhysicalPoolConfig& config)
     -> void;
   OXGN_RNDR_API auto ReleasePhysicalPool() -> void;
   OXGN_RNDR_API auto AllocatePhysicalTile()
     -> std::optional<PhysicalTileAddress>;
-  OXGN_RNDR_API auto AcquirePhysicalTile(
-    ViewCacheEntry& state, std::uint32_t pages_per_level)
-    -> std::optional<PhysicalTileAddress>;
+  OXGN_RNDR_API auto AcquirePhysicalTile(ViewCacheEntry& state,
+    std::uint32_t pages_per_level) -> std::optional<PhysicalTileAddress>;
   OXGN_RNDR_API auto ReleasePhysicalTile(PhysicalTileAddress tile) -> void;
   OXGN_RNDR_API auto BuildDirectionalVirtualViewState(ViewId view_id,
     const engine::ViewConstants& view_constants,
     const engine::DirectionalShadowCandidate& candidate,
     std::span<const glm::vec4> shadow_caster_bounds,
     std::span<const glm::vec4> visible_receiver_bounds,
-    std::uint32_t max_rendered_pages, const ViewCacheEntry* previous_state,
-    ViewCacheEntry& state) -> void;
+    const ViewCacheEntry* previous_state, ViewCacheEntry& state) -> void;
+  OXGN_RNDR_API auto LogPublishTransition(
+    ViewId view_id, const ViewCacheEntry& state) -> void;
 
   OXGN_RNDR_API auto PublishShadowInstances(
     std::span<const engine::ShadowInstanceMetadata> instances)

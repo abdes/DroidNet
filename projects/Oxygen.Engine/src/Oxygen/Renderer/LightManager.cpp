@@ -209,6 +209,8 @@ auto LightManager::CollectFromNode(const scene::SceneNodeImpl& node) -> void
 
     const bool effective_casts_shadows
       = common.casts_shadows && IsNodeShadowEligible(node);
+    const auto csm = oxygen::scene::CanonicalizeCascadedShadowSettings(
+      light.CascadedShadows());
 
     engine::DirectionalLightBasic out {};
     out.color_rgb = common.color_rgb;
@@ -234,10 +236,9 @@ auto LightManager::CollectFromNode(const scene::SceneNodeImpl& node) -> void
           .direction_ws = out.direction_ws,
           .bias = common.shadow.bias,
           .normal_bias = common.shadow.normal_bias,
-          .cascade_count = light.CascadedShadows().cascade_count,
-          .distribution_exponent
-          = light.CascadedShadows().distribution_exponent,
-          .cascade_distances = light.CascadedShadows().cascade_distances,
+          .cascade_count = csm.cascade_count,
+          .distribution_exponent = csm.distribution_exponent,
+          .cascade_distances = csm.cascade_distances,
         });
     }
 
