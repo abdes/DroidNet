@@ -58,6 +58,15 @@ protected:
   auto NeedRebuildPipelineState() const -> bool override;
 
 private:
+  static constexpr std::uint32_t kDispatchGroupSize = 8U;
+  static constexpr std::uint32_t kMaxSupportedPagesPerAxis = 64U;
+  static constexpr std::uint32_t kMaxSupportedClipLevels = 12U;
+  static constexpr std::uint32_t kMaxSupportedPageCount
+    = kMaxSupportedPagesPerAxis * kMaxSupportedPagesPerAxis
+    * kMaxSupportedClipLevels;
+  static constexpr std::uint32_t kMaxRequestWordCount
+    = (kMaxSupportedPageCount + 31U) / 32U;
+
   struct SlotReadbackState {
     std::shared_ptr<graphics::Buffer> buffer;
     std::uint32_t* mapped_words { nullptr };
@@ -65,6 +74,9 @@ private:
     ViewId view_id {};
     std::uint32_t pages_per_axis { 0U };
     std::uint32_t clip_level_count { 0U };
+    std::uint64_t directional_address_space_hash { 0U };
+    std::array<std::int32_t, kMaxSupportedClipLevels> clip_grid_origin_x {};
+    std::array<std::int32_t, kMaxSupportedClipLevels> clip_grid_origin_y {};
     std::uint32_t request_word_count { 0U };
     bool pending_feedback { false };
   };
@@ -93,6 +105,11 @@ private:
   std::uint32_t active_request_word_count_ { 0U };
   std::uint32_t active_pages_per_axis_ { 0U };
   std::uint32_t active_clip_level_count_ { 0U };
+  std::uint64_t active_directional_address_space_hash { 0U };
+  std::array<std::int32_t, kMaxSupportedClipLevels> active_clip_grid_origin_x_ {
+  };
+  std::array<std::int32_t, kMaxSupportedClipLevels> active_clip_grid_origin_y_ {
+  };
   bool active_dispatch_ { false };
 
   struct FeedbackLogState {
@@ -100,15 +117,6 @@ private:
     bool had_pending_feedback { false };
   };
   std::unordered_map<std::uint64_t, FeedbackLogState> feedback_log_states_;
-
-  static constexpr std::uint32_t kDispatchGroupSize = 8U;
-  static constexpr std::uint32_t kMaxSupportedPagesPerAxis = 64U;
-  static constexpr std::uint32_t kMaxSupportedClipLevels = 12U;
-  static constexpr std::uint32_t kMaxSupportedPageCount
-    = kMaxSupportedPagesPerAxis * kMaxSupportedPagesPerAxis
-    * kMaxSupportedClipLevels;
-  static constexpr std::uint32_t kMaxRequestWordCount
-    = (kMaxSupportedPageCount + 31U) / 32U;
 
   OXGN_RNDR_API auto EnsureRequestBuffers() -> void;
   OXGN_RNDR_API auto EnsurePassConstantsBuffer() -> void;

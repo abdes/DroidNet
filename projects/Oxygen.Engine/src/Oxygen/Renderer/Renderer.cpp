@@ -212,8 +212,8 @@ auto HashPreparedShadowCasterContent(
     / sizeof(oxygen::engine::DrawMetadata);
   const auto matrix_count = prepared_frame.world_matrices.size() / 16U;
 
-  std::uint64_t hash = kFnvOffsetBasis;
-  std::uint32_t hashed_draws = 0U;
+  std::vector<std::uint64_t> draw_hashes {};
+  draw_hashes.reserve(draw_count);
   for (const auto& partition : prepared_frame.partitions) {
     if (!partition.pass_mask.IsSet(
           oxygen::engine::PassMaskBit::kShadowCaster)) {
@@ -225,17 +225,26 @@ auto HashPreparedShadowCasterContent(
       if (!draw.flags.IsSet(oxygen::engine::PassMaskBit::kShadowCaster)) {
         continue;
       }
-      hash = HashBytes(&draw, sizeof(draw), hash);
+      auto draw_hash = HashBytes(&draw, sizeof(draw));
       if (draw.transform_index < matrix_count) {
         const auto* matrix = prepared_frame.world_matrices.data()
           + static_cast<std::size_t>(draw.transform_index) * 16U;
-        hash = HashBytes(matrix, sizeof(float) * 16U, hash);
+        draw_hash = HashBytes(matrix, sizeof(float) * 16U, draw_hash);
       }
-      ++hashed_draws;
+      draw_hashes.push_back(draw_hash);
     }
   }
 
+  if (draw_hashes.empty()) {
+    return 0U;
+  }
+
+  std::ranges::sort(draw_hashes);
+  std::uint64_t hash = kFnvOffsetBasis;
+  const auto hashed_draws = static_cast<std::uint32_t>(draw_hashes.size());
   hash = HashBytes(&hashed_draws, sizeof(hashed_draws), hash);
+  hash = HashBytes(
+    draw_hashes.data(), draw_hashes.size() * sizeof(draw_hashes.front()), hash);
   return hash;
 }
 
@@ -1883,10 +1892,12 @@ auto Renderer::PrepareAndWireViewConstantsForView(ViewId view_id,
       env_static_manager_->EraseViewState(view_id);
     }
   }
-  return RepublishCurrentViewBindings(render_context);
+  return RepublishCurrentViewBindings(
+    render_context, ViewBindingRepublishMode::kFull);
 }
 
-auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
+auto Renderer::RepublishCurrentViewBindings(
+  const RenderContext& render_context, const ViewBindingRepublishMode mode)
   -> bool
 {
   const auto view_id = render_context.current_view.view_id;
@@ -1905,10 +1916,10 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
 
   const auto& resolved = *render_context.current_view.resolved_view;
   const auto& prepared = *render_context.current_view.prepared_frame;
-  const auto runtime_it = per_view_runtime_state_.find(view_id);
-  const auto runtime_state = runtime_it != per_view_runtime_state_.end()
-    ? runtime_it->second
-    : PerViewRuntimeState {};
+  auto& runtime_state = per_view_runtime_state_[view_id];
+  const bool lighting_only = mode == ViewBindingRepublishMode::kLightingOnly;
+  const bool can_reuse_cached_view_bindings
+    = lighting_only && runtime_state.has_published_view_bindings;
 
   ViewConstants view_constants = view_const_cpu_;
 
@@ -1935,9 +1946,11 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
     : kInvalidShaderVisibleIndex;
 
   if (view_frame_bindings_publisher_) {
-    ViewFrameBindings view_bindings {};
+    ViewFrameBindings view_bindings = can_reuse_cached_view_bindings
+      ? runtime_state.published_view_bindings
+      : ViewFrameBindings {};
 
-    if (draw_frame_bindings_publisher_) {
+    if (!can_reuse_cached_view_bindings && draw_frame_bindings_publisher_) {
       DLOG_F(3, "   worlds: {}", prepared.bindless_worlds_slot);
       DLOG_F(3, "  normals: {}", prepared.bindless_normals_slot);
       DLOG_F(
@@ -1966,7 +1979,7 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
         = draw_frame_bindings_publisher_->Publish(view_id, draw_bindings);
     }
 
-    if (view_color_data_publisher_) {
+    if (!can_reuse_cached_view_bindings && view_color_data_publisher_) {
       const ViewColorData view_color_data {
         .exposure = prepared.exposure,
       };
@@ -1974,7 +1987,8 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
         = view_color_data_publisher_->Publish(view_id, view_color_data);
     }
 
-    if (gpu_debug_manager_ && debug_frame_bindings_publisher_) {
+    if (!can_reuse_cached_view_bindings && gpu_debug_manager_
+      && debug_frame_bindings_publisher_) {
       const DebugFrameBindings debug_bindings {
         .line_buffer_srv_slot
         = ShaderVisibleIndex(gpu_debug_manager_->GetLineBufferSrvIndex()),
@@ -2006,7 +2020,8 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
           view_id, lighting_bindings);
     }
 
-    if (shadow_frame_bindings_publisher_ && shadow_manager_) {
+    if (!can_reuse_cached_view_bindings && shadow_frame_bindings_publisher_
+      && shadow_manager_) {
       auto shadow_instance_metadata_slot = kInvalidShaderVisibleIndex;
       auto directional_shadow_metadata_slot = kInvalidShaderVisibleIndex;
       auto virtual_shadow_page_table_slot = kInvalidShaderVisibleIndex;
@@ -2070,7 +2085,7 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
       }
     }
 
-    if (environment_frame_bindings_publisher_) {
+    if (!can_reuse_cached_view_bindings && environment_frame_bindings_publisher_) {
       auto environment_view_slot = kInvalidShaderVisibleIndex;
       if (environment_view_data_publisher_) {
         environment_view_slot = environment_view_data_publisher_->Publish(
@@ -2092,6 +2107,16 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context)
       shadow_manager_->SetPublishedViewFrameBindingsSlot(
         view_id, BindlessViewFrameBindingsSlot(view_bindings_slot));
     }
+    runtime_state.published_view_bindings = view_bindings;
+    runtime_state.has_published_view_bindings = true;
+    LOG_F(INFO,
+      "Renderer: frame={} view={} republish mode={} cached_view_bindings={} "
+      "view_frame_slot={} shadow_frame_slot={} lighting_frame_slot={}",
+      render_context.frame_sequence.get(), view_id.get(),
+      lighting_only ? "lighting-only" : "full",
+      can_reuse_cached_view_bindings, view_bindings_slot,
+      view_bindings.shadow_frame_slot.get(),
+      view_bindings.lighting_frame_slot.get());
     view_constants.SetBindlessViewFrameBindingsSlot(
       BindlessViewFrameBindingsSlot(view_bindings_slot),
       ViewConstants::kRenderer);
@@ -2129,7 +2154,8 @@ auto Renderer::UpdateCurrentViewLightCullingConfig(
   }
 
   per_view_runtime_state_[view_id].light_culling = config;
-  if (!RepublishCurrentViewBindings(render_context)) {
+  if (!RepublishCurrentViewBindings(
+        render_context, ViewBindingRepublishMode::kLightingOnly)) {
     LOG_F(ERROR,
       "Renderer: failed to republish current-view bindings after light "
       "culling update for view {}",
@@ -2557,11 +2583,55 @@ auto Renderer::PublishPreparedFrameSpans(
 
   storage.shadow_caster_bounds_storage.clear();
   storage.visible_receiver_bounds_storage.clear();
+  std::size_t collected_item_count = 0U;
+  std::size_t zero_radius_item_count = 0U;
+  std::size_t cast_shadow_item_count = 0U;
+  std::size_t receive_shadow_item_count = 0U;
+  std::size_t main_view_visible_item_count = 0U;
   if (scene_prep_state_ != nullptr) {
     const auto items = scene_prep_state_->CollectedItems();
+    collected_item_count = items.size();
     storage.shadow_caster_bounds_storage.reserve(items.size());
     storage.visible_receiver_bounds_storage.reserve(items.size());
+    std::size_t zero_radius_log_count = 0U;
     for (const auto& item : items) {
+      if (item.world_bounding_sphere.w <= 0.0F) {
+        ++zero_radius_item_count;
+        if (zero_radius_log_count < 4U) {
+          const auto mesh_sphere = item.geometry.mesh != nullptr
+            ? item.geometry.mesh->BoundingSphere()
+            : glm::vec4 { 0.0F, 0.0F, 0.0F, 0.0F };
+          const auto mesh_bounds_min = item.geometry.mesh != nullptr
+            ? item.geometry.mesh->BoundingBoxMin()
+            : glm::vec3 { 0.0F, 0.0F, 0.0F };
+          const auto mesh_bounds_max = item.geometry.mesh != nullptr
+            ? item.geometry.mesh->BoundingBoxMax()
+            : glm::vec3 { 0.0F, 0.0F, 0.0F };
+          LOG_F(INFO,
+            "Renderer: view={} zero-radius item asset={} lod={} cast={} "
+            "receive={} visible={} world_sphere=({}, {}, {}, {}) "
+            "mesh_sphere=({}, {}, {}, {}) "
+            "mesh_bbox_min=({}, {}, {}) mesh_bbox_max=({}, {}, {})",
+            view_id.get(), oxygen::data::to_string(item.geometry.asset_key),
+            item.geometry.lod_index, item.cast_shadows, item.receive_shadows,
+            item.main_view_visible, item.world_bounding_sphere.x,
+            item.world_bounding_sphere.y, item.world_bounding_sphere.z,
+            item.world_bounding_sphere.w, mesh_sphere.x, mesh_sphere.y,
+            mesh_sphere.z, mesh_sphere.w, mesh_bounds_min.x, mesh_bounds_min.y,
+            mesh_bounds_min.z, mesh_bounds_max.x, mesh_bounds_max.y,
+            mesh_bounds_max.z);
+          ++zero_radius_log_count;
+        }
+      }
+      if (item.cast_shadows) {
+        ++cast_shadow_item_count;
+      }
+      if (item.receive_shadows) {
+        ++receive_shadow_item_count;
+      }
+      if (item.main_view_visible) {
+        ++main_view_visible_item_count;
+      }
       if (!item.cast_shadows || item.world_bounding_sphere.w <= 0.0F) {
       } else {
         storage.shadow_caster_bounds_storage.push_back(
@@ -2581,6 +2651,17 @@ auto Renderer::PublishPreparedFrameSpans(
   prepared_frame.visible_receiver_bounding_spheres
     = std::span<const glm::vec4>(storage.visible_receiver_bounds_storage.data(),
       storage.visible_receiver_bounds_storage.size());
+
+  LOG_F(INFO,
+    "Renderer: view={} prepared shadow bounds collected={} retained={} "
+    "cast_items={} receive_items={} visible_items={} zero_radius={} "
+    "caster_bounds={} receiver_bounds={}",
+    view_id.get(), collected_item_count,
+    scene_prep_state_ != nullptr ? scene_prep_state_->RetainedCount() : 0U,
+    cast_shadow_item_count, receive_shadow_item_count,
+    main_view_visible_item_count, zero_radius_item_count,
+    storage.shadow_caster_bounds_storage.size(),
+    storage.visible_receiver_bounds_storage.size());
 }
 
 auto Renderer::UpdateViewConstantsFromView(const ResolvedView& view) -> void

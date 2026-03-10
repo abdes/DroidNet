@@ -16,6 +16,9 @@
 
 namespace oxygen {
 class IAsyncEngine;
+namespace graphics {
+  class Texture;
+}
 } // namespace oxygen
 
 namespace oxygen::renderer {
@@ -112,6 +115,9 @@ public:
     -> void override;
   auto UpdateLightCullingPassConfig(
     const engine::LightCullingPassConfig& config) -> void override;
+
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetVirtualShadowAtlasDebugTexture() const
+    noexcept -> const std::shared_ptr<graphics::Texture>&;
 
 private:
   class Impl;

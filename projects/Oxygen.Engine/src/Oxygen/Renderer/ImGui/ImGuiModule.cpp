@@ -303,6 +303,15 @@ auto ImGuiModule::RecreateDeviceObjects() -> void
   }
 }
 
+auto ImGuiModule::RegisterTexture(std::string_view key,
+  const std::shared_ptr<graphics::Texture>& texture) const -> std::uintptr_t
+{
+  if (!graphics_backend_ || !texture) {
+    return 0U;
+  }
+  return graphics_backend_->RegisterOrUpdateTexture(key, texture);
+}
+
 auto ImGuiModule::OnFrameEnd(observer_ptr<engine::FrameContext> /*context*/)
   -> void
 {

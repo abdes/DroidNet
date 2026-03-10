@@ -8,6 +8,10 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
@@ -41,6 +45,7 @@ auto D3D12ImGuiGraphicsBackend::Init(std::weak_ptr<oxygen::Graphics> gfx_weak)
   -> void
 {
   DCHECK_F(!gfx_weak.expired());
+  graphics_weak_ = gfx_weak;
 
   // Cast to D3D12 graphics to access D3D12-specific functionality
   // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
@@ -178,6 +183,7 @@ auto D3D12ImGuiGraphicsBackend::Shutdown() -> void
       init_info_.reset();
       imgui_srv_heap_.Reset();
       next_descriptor_index_ = 0;
+      registered_textures_.clear();
     } else {
       // No reclaimer available — fall back to immediate shutdown to avoid
       // leaking resources.
@@ -194,6 +200,7 @@ auto D3D12ImGuiGraphicsBackend::Shutdown() -> void
     }
   }
 
+  registered_textures_.clear();
   if (imgui_context_) {
     ImGui::DestroyContext(imgui_context_);
     imgui_context_ = nullptr;
@@ -202,6 +209,7 @@ auto D3D12ImGuiGraphicsBackend::Shutdown() -> void
   imgui_srv_heap_.Reset();
   init_info_.reset();
   next_descriptor_index_ = 0;
+  graphics_weak_.reset();
 }
 
 /*!
@@ -265,6 +273,70 @@ auto D3D12ImGuiGraphicsBackend::Render(graphics::CommandRecorder& recorder)
 
   // Delegate to the official ImGui D3D12 backend
   ImGui_ImplDX12_RenderDrawData(current_draw_data, command_list);
+}
+
+auto D3D12ImGuiGraphicsBackend::RegisterOrUpdateTexture(
+  const std::string_view key,
+  const std::shared_ptr<graphics::Texture>& texture) -> std::uintptr_t
+{
+  if (!initialized_ || !texture || !init_info_ || imgui_srv_heap_ == nullptr) {
+    return 0U;
+  }
+
+  const auto gfx = graphics_weak_.lock();
+  if (!gfx) {
+    return 0U;
+  }
+
+  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
+  auto* d3d_gfx = static_cast<Graphics*>(gfx.get());
+  auto& allocator_base = const_cast<graphics::DescriptorAllocator&>(
+    d3d_gfx->GetDescriptorAllocator());
+  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
+  auto& allocator = static_cast<DescriptorAllocator&>(allocator_base);
+
+  auto& entry = registered_textures_[std::string(key)];
+  if (!entry.texture) {
+    const auto slot = AllocatePersistentDescriptorSlot();
+    if (!slot.has_value()) {
+      return 0U;
+    }
+
+    entry.descriptor_index = *slot;
+    entry.imgui_cpu_handle = imgui_srv_heap_->GetCPUDescriptorHandleForHeapStart();
+    entry.imgui_cpu_handle.ptr
+      += static_cast<SIZE_T>(*slot) * imgui_descriptor_increment_;
+    entry.imgui_gpu_handle = imgui_srv_heap_->GetGPUDescriptorHandleForHeapStart();
+    entry.imgui_gpu_handle.ptr
+      += static_cast<UINT64>(*slot) * imgui_descriptor_increment_;
+  }
+
+  if (entry.texture.get() != texture.get()) {
+    entry.source_srv_handle = {};
+    entry.source_srv_view = {};
+
+    auto source_srv_handle
+      = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
+        graphics::DescriptorVisibility::kShaderVisible);
+    if (!source_srv_handle.IsValid()) {
+      return 0U;
+    }
+
+    const auto srv_desc = MakeSrvDescription(*texture);
+    const auto source_srv_view = texture->GetNativeView(source_srv_handle, srv_desc);
+    if (!source_srv_view->IsValid()) {
+      return 0U;
+    }
+
+    entry.texture = texture;
+    entry.source_srv_handle = std::move(source_srv_handle);
+    entry.source_srv_view = source_srv_view;
+  }
+
+  init_info_->Device->CopyDescriptorsSimple(1, entry.imgui_cpu_handle,
+    allocator.GetCpuHandle(entry.source_srv_handle),
+    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+  return static_cast<std::uintptr_t>(entry.imgui_gpu_handle.ptr);
 }
 
 auto D3D12ImGuiGraphicsBackend::RecreateDeviceObjects() -> void
@@ -355,4 +427,42 @@ auto D3D12ImGuiGraphicsBackend::SrvDescriptorFreeCallback(
   D3D12_GPU_DESCRIPTOR_HANDLE /*gpu_handle*/) -> void
 {
   // No-op: simple linear allocator, no reuse currently
+}
+
+auto D3D12ImGuiGraphicsBackend::AllocatePersistentDescriptorSlot()
+  -> std::optional<UINT>
+{
+  if (next_descriptor_index_ >= 64) {
+    LOG_F(ERROR, "ImGui descriptor heap exhausted");
+    return std::nullopt;
+  }
+  return next_descriptor_index_++;
+}
+
+auto D3D12ImGuiGraphicsBackend::MakeSrvDescription(
+  const graphics::Texture& texture) const -> graphics::TextureViewDescription
+{
+  const auto& desc = texture.GetDescriptor();
+  auto format = desc.format;
+  switch (desc.format) {
+  case Format::kDepth32:
+  case Format::kDepth32Stencil8:
+  case Format::kDepth24Stencil8:
+    format = Format::kR32Float;
+    break;
+  case Format::kDepth16:
+    format = Format::kR16UNorm;
+    break;
+  default:
+    break;
+  }
+
+  return graphics::TextureViewDescription {
+    .view_type = graphics::ResourceViewType::kTexture_SRV,
+    .visibility = graphics::DescriptorVisibility::kShaderVisible,
+    .format = format,
+    .dimension = desc.texture_type,
+    .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
+    .is_read_only_dsv = false,
+  };
 }

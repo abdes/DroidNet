@@ -117,14 +117,56 @@ private:
   };
 
   struct ViewCacheEntry {
+    enum class RequestFeedbackDecision : std::uint8_t {
+      kNoFeedback,
+      kEmptyFeedback,
+      kDimensionMismatch,
+      kAddressSpaceMismatch,
+      kSameFrame,
+      kStale,
+      kAccepted,
+    };
+
+    struct PublishDiagnostics {
+      RequestFeedbackDecision feedback_decision {
+        RequestFeedbackDecision::kNoFeedback
+      };
+      std::uint32_t feedback_key_count { 0U };
+      std::uint64_t feedback_age_frames { 0U };
+      bool address_space_compatible { false };
+      bool global_dirty_resident_contents { false };
+      std::uint32_t shadow_caster_bound_count { 0U };
+      std::uint32_t visible_receiver_bound_count { 0U };
+      std::uint32_t clip_level_count { 0U };
+      std::uint32_t coarse_backbone_begin { 0U };
+      std::uint32_t selected_page_count { 0U };
+      std::uint32_t coarse_backbone_pages { 0U };
+      std::uint32_t feedback_requested_pages { 0U };
+      std::uint32_t feedback_refinement_pages { 0U };
+      std::uint32_t receiver_bootstrap_pages { 0U };
+      std::uint32_t previous_resident_pages { 0U };
+      std::uint32_t carried_resident_pages { 0U };
+      std::uint32_t released_resident_pages { 0U };
+      std::uint32_t dirty_resident_page_count { 0U };
+      std::uint32_t marked_dirty_pages { 0U };
+      std::uint32_t reused_requested_pages { 0U };
+      std::uint32_t allocated_pages { 0U };
+      std::uint32_t evicted_pages { 0U };
+      std::uint32_t allocation_failures { 0U };
+      std::uint32_t rerasterized_pages { 0U };
+      bool resident_reuse_gate_open { false };
+    };
+
     PublicationKey key {};
     std::vector<engine::ShadowInstanceMetadata> shadow_instances;
     std::vector<engine::DirectionalVirtualShadowMetadata>
       directional_virtual_metadata;
+    std::vector<glm::vec4> shadow_caster_bounds;
     std::vector<std::uint32_t> page_table_entries;
     std::vector<VirtualShadowRasterJob> raster_jobs;
     std::vector<VirtualShadowRasterJob> pending_raster_jobs;
     std::unordered_map<std::uint64_t, ResidentVirtualPage> resident_pages;
+    PublishDiagnostics publish_diagnostics {};
     ShadowFramePublication frame_publication {};
     VirtualShadowRenderPlan render_plan {};
     VirtualShadowViewIntrospection introspection {};
@@ -186,7 +228,8 @@ private:
   OXGN_RNDR_API auto AllocatePhysicalTile()
     -> std::optional<PhysicalTileAddress>;
   OXGN_RNDR_API auto AcquirePhysicalTile(ViewCacheEntry& state,
-    std::uint32_t pages_per_level) -> std::optional<PhysicalTileAddress>;
+    std::uint32_t pages_per_level, std::uint32_t& evicted_page_count)
+    -> std::optional<PhysicalTileAddress>;
   OXGN_RNDR_API auto ReleasePhysicalTile(PhysicalTileAddress tile) -> void;
   OXGN_RNDR_API auto BuildDirectionalVirtualViewState(ViewId view_id,
     const engine::ViewConstants& view_constants,

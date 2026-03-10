@@ -341,6 +341,17 @@ struct LightCullingPass::Impl {
       .is_read_only_dsv = false,
     };
 
+    // Recover an already-registered SRV first. This is the normal resize-safe
+    // path used by other passes when local pass state is stale but the global
+    // registry still owns the descriptor slot.
+    if (const auto existing_index
+      = registry.FindShaderVisibleIndex(depth_tex, srv_desc);
+      existing_index.has_value()) {
+      depth_texture_srv = *existing_index;
+      depth_texture_owner = &depth_tex;
+      return depth_texture_srv;
+    }
+
     if (depth_texture_srv.IsValid() && depth_texture_owner == &depth_tex
       && registry.Contains(depth_tex, srv_desc)) {
       return depth_texture_srv;

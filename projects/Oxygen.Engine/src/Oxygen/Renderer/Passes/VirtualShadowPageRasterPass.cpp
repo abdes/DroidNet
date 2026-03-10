@@ -136,6 +136,13 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
       "job(s)",
       Context().current_view.view_id.get(), render_plan->jobs.size());
   }
+  LOG_F(INFO,
+    "VirtualShadowPageRasterPass: frame={} view={} executing {} virtual job(s) "
+    "(page_size={} atlas={}x{})",
+    Context().frame_sequence.get(), Context().current_view.view_id.get(),
+    render_plan->jobs.size(), render_plan->page_size_texels,
+    render_plan->page_size_texels * render_plan->atlas_tiles_per_axis,
+    render_plan->page_size_texels * render_plan->atlas_tiles_per_axis);
 
   const auto psf = Context().current_view.prepared_frame;
   if (!psf || !psf->IsValid() || psf->draw_metadata_bytes.empty()
@@ -223,12 +230,13 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
     if (!log_state.saw_nonzero_draw_live_frame) {
       log_state.saw_nonzero_draw_live_frame = true;
       log_state.saw_zero_draw_live_frame = false;
-      LOG_F(INFO,
-        "VirtualShadowPageRasterPass: view {} emitted {} shadow-caster draw(s) "
-        "for {} virtual page job(s)",
-        Context().current_view.view_id.get(), emitted_count,
-        render_plan->jobs.size());
     }
+    LOG_F(INFO,
+      "VirtualShadowPageRasterPass: frame={} view={} emitted {} "
+      "shadow-caster draw(s) for {} virtual page job(s) "
+      "(skipped_invalid={} errors={})",
+      Context().frame_sequence.get(), Context().current_view.view_id.get(),
+      emitted_count, render_plan->jobs.size(), skipped_invalid, draw_errors);
     shadow_manager->MarkVirtualRenderPlanExecuted(
       Context().current_view.view_id);
   }

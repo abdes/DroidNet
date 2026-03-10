@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <stdexcept>
 #include <utility>
@@ -241,6 +242,34 @@ static inline auto TransformPoint(
   return glm::vec3(m * glm::vec4(p, 1.0f));
 }
 
+static inline auto SphereFromBounds(
+  const glm::vec3& bounds_min, const glm::vec3& bounds_max) noexcept
+  -> glm::vec4
+{
+  const auto center = 0.5f * (bounds_min + bounds_max);
+  const auto radius = 0.5f * glm::length(bounds_max - bounds_min);
+  return { center.x, center.y, center.z, radius };
+}
+
+static inline auto IsFiniteVec3(const glm::vec3& v) noexcept -> bool
+{
+  return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+}
+
+static inline auto IsUsableBounds(
+  const glm::vec3& bounds_min, const glm::vec3& bounds_max) noexcept -> bool
+{
+  return IsFiniteVec3(bounds_min) && IsFiniteVec3(bounds_max)
+    && bounds_max.x >= bounds_min.x && bounds_max.y >= bounds_min.y
+    && bounds_max.z >= bounds_min.z;
+}
+
+static inline auto IsUsableSphere(const glm::vec4& sphere) noexcept -> bool
+{
+  return std::isfinite(sphere.x) && std::isfinite(sphere.y)
+    && std::isfinite(sphere.z) && std::isfinite(sphere.w) && sphere.w > 0.0f;
+}
+
 void RenderableComponent::RecomputeWorldBoundingSphere() const noexcept
 {
   world_bounding_sphere_ = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -257,15 +286,28 @@ void RenderableComponent::RecomputeWorldBoundingSphere() const noexcept
   if (lod_opt.has_value()) {
     const auto clamped = (std::min<std::size_t>)(*lod_opt, lod_count - 1);
     const auto& mesh_ptr = geometry_asset_->MeshAt(clamped);
-    if (mesh_ptr)
+    if (mesh_ptr) {
       local_sphere = mesh_ptr->BoundingSphere();
-  } else {
-    // Fallback to asset-level AABB -> sphere approximation
-    const auto bb_min = geometry_asset_->BoundingBoxMin();
-    const auto bb_max = geometry_asset_->BoundingBoxMax();
-    const auto center = 0.5f * (bb_min + bb_max);
-    const auto radius = 0.5f * glm::length(bb_max - bb_min);
-    local_sphere = { center.x, center.y, center.z, radius };
+      if (!IsUsableSphere(local_sphere)) {
+        const auto mesh_bounds_min = mesh_ptr->BoundingBoxMin();
+        const auto mesh_bounds_max = mesh_ptr->BoundingBoxMax();
+        if (IsUsableBounds(mesh_bounds_min, mesh_bounds_max)) {
+          local_sphere = SphereFromBounds(mesh_bounds_min, mesh_bounds_max);
+        }
+      }
+    }
+  }
+
+  if (!IsUsableSphere(local_sphere)) {
+    const auto asset_bounds_min = geometry_asset_->BoundingBoxMin();
+    const auto asset_bounds_max = geometry_asset_->BoundingBoxMax();
+    if (IsUsableBounds(asset_bounds_min, asset_bounds_max)) {
+      local_sphere = SphereFromBounds(asset_bounds_min, asset_bounds_max);
+    }
+  }
+
+  if (!IsUsableSphere(local_sphere)) {
+    return;
   }
 
   // Transform sphere: center by full transform, radius by max-scale

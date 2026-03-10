@@ -37,6 +37,7 @@
 #include <Oxygen/Renderer/Passes/SkyPass.h>
 #include <Oxygen/Renderer/Passes/ToneMapPass.h>
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
+#include <Oxygen/Renderer/Passes/VirtualShadowAtlasDebugPass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowPageRasterPass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowRequestPass.h>
 #include <Oxygen/Renderer/Passes/WireframePass.h>
@@ -123,6 +124,8 @@ public:
   void SetAutoExposureMeteringMode(engine::MeteringMode mode);
   void ResetAutoExposure(float initial_ev);
   void SetGamma(float gamma);
+  [[nodiscard]] auto GetVirtualShadowAtlasDebugTexture() const noexcept
+    -> const std::shared_ptr<graphics::Texture>&;
 
   void ClearBackbufferReferences() const;
 
@@ -190,6 +193,8 @@ private:
     shadow_raster_pass_config;
   std::shared_ptr<engine::VirtualShadowPageRasterPass::Config>
     virtual_shadow_raster_pass_config;
+  std::shared_ptr<engine::VirtualShadowAtlasDebugPass::Config>
+    virtual_shadow_atlas_debug_pass_config;
   std::shared_ptr<engine::VirtualShadowRequestPass::Config>
     virtual_shadow_request_pass_config;
   std::shared_ptr<engine::ShaderPassConfig> shader_pass_config;
@@ -206,6 +211,8 @@ private:
   std::shared_ptr<engine::ConventionalShadowRasterPass> shadow_raster_pass;
   std::shared_ptr<engine::VirtualShadowPageRasterPass>
     virtual_shadow_raster_pass;
+  std::shared_ptr<engine::VirtualShadowAtlasDebugPass>
+    virtual_shadow_atlas_debug_pass;
   std::shared_ptr<engine::VirtualShadowRequestPass>
     virtual_shadow_request_pass;
   std::shared_ptr<engine::ShaderPass> shader_pass;
@@ -527,6 +534,11 @@ auto ForwardPipeline::Impl::RunScenePasses(
         virtual_shadow_raster_pass.get());
     }
 
+    if (virtual_shadow_atlas_debug_pass) {
+      co_await virtual_shadow_atlas_debug_pass->PrepareResources(rc, rec);
+      co_await virtual_shadow_atlas_debug_pass->Execute(rc, rec);
+    }
+
     if (virtual_shadow_request_pass) {
       co_await virtual_shadow_request_pass->PrepareResources(rc, rec);
       co_await virtual_shadow_request_pass->Execute(rc, rec);
@@ -845,6 +857,8 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
     = std::make_shared<p::ConventionalShadowRasterPass::Config>();
   virtual_shadow_raster_pass_config
     = std::make_shared<p::VirtualShadowPageRasterPass::Config>();
+  virtual_shadow_atlas_debug_pass_config
+    = std::make_shared<p::VirtualShadowAtlasDebugPass::Config>();
   virtual_shadow_request_pass_config
     = std::make_shared<p::VirtualShadowRequestPass::Config>();
   shader_pass_config = std::make_shared<p::ShaderPassConfig>();
@@ -869,6 +883,9 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
 
   auto gfx = engine->GetGraphics().lock();
   auto gfx_ptr = observer_ptr { gfx.get() };
+  virtual_shadow_atlas_debug_pass
+    = std::make_shared<p::VirtualShadowAtlasDebugPass>(
+      gfx_ptr, virtual_shadow_atlas_debug_pass_config);
   virtual_shadow_request_pass = std::make_shared<p::VirtualShadowRequestPass>(
     gfx_ptr, virtual_shadow_request_pass_config);
   light_culling_pass
@@ -1207,6 +1224,16 @@ auto ForwardPipeline::Impl::GetImGuiPass() const
   return imgui_pass;
 }
 
+auto ForwardPipeline::Impl::GetVirtualShadowAtlasDebugTexture() const noexcept
+  -> const std::shared_ptr<graphics::Texture>&
+{
+  static const auto kEmptyTexture = std::shared_ptr<graphics::Texture> {};
+  if (!virtual_shadow_atlas_debug_pass) {
+    return kEmptyTexture;
+  }
+  return virtual_shadow_atlas_debug_pass->GetOutputTexture();
+}
+
 ForwardPipeline::ForwardPipeline(observer_ptr<IAsyncEngine> engine) noexcept
   : impl_(std::make_unique<Impl>(engine))
 {
@@ -1405,6 +1432,12 @@ auto ForwardPipeline::UpdateLightCullingPassConfig(
   const engine::LightCullingPassConfig& config) -> void
 {
   impl_->UpdateLightCullingPassConfig(config);
+}
+
+auto ForwardPipeline::GetVirtualShadowAtlasDebugTexture() const noexcept
+  -> const std::shared_ptr<graphics::Texture>&
+{
+  return impl_->GetVirtualShadowAtlasDebugTexture();
 }
 
 } // namespace oxygen::renderer

@@ -745,9 +745,112 @@ This milestone is complete only when:
 This is the correct next bar before any expansion to local-light virtual
 shadows.
 
-Implementation status, March 9, 2026:
+Implementation status, March 10, 2026:
 
 - `in_progress`
+- Review correction, March 10, 2026:
+  - the earlier cache/invalidation close-out was too optimistic
+  - CPU-side resident-key, reuse, eviction, and spatial invalidation work is
+    still present in code, but the directional runtime is not yet at the
+    intended stability/performance bar because:
+    - request generation and shading still disagree on which directional clip
+      should be sampled for a given receiver footprint
+    - feedback-driven fine demand is still expanded into one rectangular region
+      per clip, which over-selects pages in dense scenes
+  - until those two runtime gaps are corrected and visually revalidated, this
+    slice must remain treated as `in_progress`
+- Update, March 10, 2026 follow-up:
+  - directional lighting now starts from the same footprint-selected clip
+    family that the request pass selects, with optional finer-clip blending and
+    coarser fallback only when needed
+  - feedback-driven fine demand now stays sparse per page with bounded local
+    dilation instead of inflating into one rectangular region per clip
+  - automated validation is green again in `build-vs`, but overall status stays
+    `in_progress` until visual validation confirms the runtime behavior in
+    `RenderScene`/Sponza
+- Update, March 10, 2026 debug instrumentation correction:
+  - the temporary shader-side page-line debug path has been removed again
+  - directional VSM shading is back on the normal visibility path instead of
+    forcing no-op visibility
+  - request-footprint fixes remain in code, but the active runtime debug
+    surface is now the floating `RenderScene` atlas inspector rather than GPU
+    lines in the shading path
+  - overall status remains `in_progress` until the atlas window is visible in
+    scene and validated against static-scene captures
+- Update, March 10, 2026 atlas inspector correction:
+  - the line-overlay approach above did not provide a trustworthy enough view
+    of physical page residency/churn for the remaining runtime failures
+  - the active debug scope is now a floating `RenderScene` ImGui window backed
+    by a compute-generated `RGBA8` texture derived from the physical VSM atlas
+  - the atlas-debug compute pass must run after virtual shadow page raster so
+    the inspector reflects the same physical pool contents used by the current
+    frame
+  - the D3D12 ImGui backend must expose that texture through its dedicated
+    shader-visible heap rather than assuming the engine bindless SRV heap can
+    be passed directly as `ImTextureID`
+  - overall status remains `in_progress` until the atlas window is visible in
+    `RenderScene` and confirmed against a static-scene capture
+- Update, March 10, 2026 line-debug removal follow-up:
+  - the temporary shader-side page-line debug path is fully removed from the
+    active directional VSM shaders
+  - `RenderScene` now builds again with the floating atlas-inspector hookup via
+    the concrete `ForwardPipeline` and the D3D12 ImGui texture-registration
+    bridge
+  - current `build-vs` validation:
+    - shader target build passed
+    - `Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*` -> `22/22 passed`
+    - `Oxygen.Renderer.LightManager.Tests.exe` -> `34/34 passed`
+  - runtime visual validation of the atlas window is still pending, so overall
+    status remains `in_progress`
+- Update, March 10, 2026 cache-churn correction:
+  - atlas-inspector captures showed that static-scene camera motion was still
+    recreating too much of the physical pool
+  - one VSM-local cause was order-sensitive invalidation: the backend hashed
+    and pairwise compared `shadow_caster_bounds` in collected-item order, which
+    can change when camera motion reclassifies submeshes between main-view and
+    shadow-only participation
+  - one renderer-level cause was order-sensitive coarse content hashing:
+    `HashPreparedShadowCasterContent` hashed shadow-caster draws in view-sorted
+    order, so camera motion changed the content hash even when caster content
+    did not
+  - both paths are now canonicalized in code; overall status remains
+    `in_progress` until `RenderScene` confirms bounded atlas churn under
+    static-scene camera movement
+- Update, March 10, 2026 feedback/cache scope correction:
+  - runtime atlas captures showed that the earlier feedback realignment was
+    still insufficient for directional camera motion
+  - feedback is still stored as local page indices plus an origin-sensitive
+    directional lattice hash, so page-aligned clip-origin shifts can discard
+    still-reusable fine-page demand
+  - when feedback is dropped, the fine-clip bootstrap path still merges all
+    visible receiver bounds into one clip-wide rectangle, which can saturate
+    the atlas and evict useful clean pages even in a static scene
+  - the corrective implementation scope is now:
+    - store feedback as absolute resident-page keys
+    - match feedback on directional address space, not clip origin
+    - keep current-frame bootstrap sparse per receiver
+  - status remains `in_progress` until that path is implemented and validated
+    in `build-vs`
+- Update, March 10, 2026 resident-key feedback and sparse bootstrap
+  correction:
+  - `VirtualShadowRequestPass` now converts GPU request bits into absolute
+    resident-page keys using the clip-grid origins from the metadata snapshot
+    that produced the request mask
+  - request-feedback compatibility now keys off directional address space
+    instead of clip origin, so page-aligned clip-origin motion keeps reusable
+    fine-page demand alive
+  - fine current-frame bootstrap now marks per-receiver regions directly
+    instead of merging all visible receivers into one dense clip rectangle
+  - new LightManager regressions now cover:
+    - resident-key reuse across clip-origin motion
+    - sparse bootstrap preservation with a gap between far-apart receivers
+  - `build-vs` validation evidence:
+    - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+    - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*` -> `25/25 passed`
+    - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe` -> `37/37 passed`
+    - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - overall feature status remains `in_progress` until `RenderScene` confirms
+    the atlas/shadow behavior during live camera motion
 - The current runnable slice is now in code:
   - backend resource ownership
   - directional virtual metadata publication
@@ -758,10 +861,22 @@ Implementation status, March 9, 2026:
     - fixed virtual clipmap density per quality tier
     - fixed physical atlas capacity per quality tier
     - no active frame-budget density capping or budget-driven backend fallback
-  - cross-frame resident physical-page reuse and partial rerasterization for
-    snapped-identical plans
-  - content-safe invalidation for resident-page reuse when light or caster
-    inputs change under otherwise identical snapped virtual plans
+  - resident-page identity now uses a snapped light-space lattice key, backed
+    by a bounded physical atlas pool
+  - clean resident-page promotion and deterministic eviction now operate on the
+    same canonical resident-page key used by selection and residency tracking
+  - page-aligned directional clipmap motion reuses overlapping resident pages
+    instead of rerasterizing the entire requested working set
+  - request feedback now carries absolute resident-page keys, not local page
+    indices tied to clip origin
+  - spatial dirty-page invalidation marks only overlapping resident pages dirty
+    for moved casters, with conservative whole-product fallback when bound
+    pairing is not possible
+  - directional lighting now uses the same footprint-selected clip family as
+    request generation instead of always starting from the finest containing
+    clip
+  - feedback-driven fine-page refinement now stays sparse per page with bounded
+    local dilation instead of clip-wide rectangular inflation
   - shader-side fallback to coarser valid clip levels when a finer virtual page
     is invalid
   - page-interior clamped comparison filtering so atlas neighbors do not bleed
@@ -770,23 +885,51 @@ Implementation status, March 9, 2026:
     `DepthPrePass`, writes a deduplicated GPU request-bit mask, and submits
     bounded-lifetime request feedback to `VirtualShadowMapBackend` through a
     slot-safe readback seam
-  - CPU visible-receiver request planning only as bootstrap when compatible
-    request feedback is not yet available for a view
-  - full contiguous-region planning with coarse-backbone-first mapping order,
-    so valid coarser fallback coverage is present by construction
+  - CPU visible-receiver request planning now marks per-receiver sparse regions
+    as the current-frame bootstrap path instead of merging the whole receiver
+    set into one dense clip region
+  - coarse-backbone-first mapping order so valid coarser fallback coverage is
+    present by construction
+- Cache/invalidation realignment, March 10, 2026:
+  - canonical resident-page keys now drive request selection, `MarkRendered`,
+    eviction, and raster-job tracking
+  - content reuse now tolerates page-aligned clip-origin motion, light-space Z
+    drift, and depth-bias-only changes while preserving correct rerasterization
+    on depth-scale or XY lattice changes
+  - directional feedback compatibility now tracks the clipmap lattice instead
+    of only frame age and page-table layout
+  - invalidation now dirties overlapping resident pages from changed caster
+    bounds instead of flushing the whole product in the common movement case
+- Remaining runtime correction scope, March 10, 2026:
+  - directional shading must use the same footprint-selected clip policy as
+    feedback generation instead of always starting from the finest containing
+    clip
+  - fine feedback consumption must stay sparse; one clip-wide bounding box per
+    clip is not acceptable for complex scenes
+  - renderer mid-frame binding updates must not republish virtual shadow
+    resources after `VirtualShadowPageRasterPass` has already executed; the
+    clustered-lighting update path must preserve the active shadow binding and
+    only refresh lighting routing
 - Validation evidence:
-  - `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:6 /p:Configuration=Debug /nologo`
   - `msbuild out/build-vs/src/Oxygen/Graphics/Direct3D12/Shaders/oxygen-graphics-direct3d12_shaders.vcxproj /m:6 /p:Configuration=Debug /nologo`
-  - `msbuild out/build-vs/src/Oxygen/Engine/oxygen-engine.vcxproj /m:6 /p:Configuration=Debug /nologo`
-  - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:6 /p:Configuration=Debug /nologo`
   - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:6 /p:Configuration=Debug /nologo`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*`
   - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
+  - Result: shader target built successfully
+  - Result: `22` passing VSM-focused tests
+  - Result: `34` passing tests in the full `LightManager` functional suite
 - Remaining gap:
   - visual validation
+  - confirm camera-rotation stability and moving-caster behavior in
+    `RenderScene`/Sponza
   - final GPU residency-resolve/update after the new depth/feedback-driven
     request producer
-  - dirty-page tracking and eviction
   - invalidation/debug tooling hardening
+  - static/dynamic cache separation for large scenes; current invalidation is
+    spatial for movable bounds but still monolithic with respect to mixed
+    mobility content
+  - conservative global invalidation fallback when caster bound count/order
+    changes and pages cannot be paired spatially
   - default-scene viability for large content; until the final sparse
     residency path exists, the current validation slice must remain opt-in in
     demos and runtime policy

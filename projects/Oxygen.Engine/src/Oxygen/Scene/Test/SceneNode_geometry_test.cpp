@@ -7,6 +7,7 @@
 #include "./SceneNode_test.h"
 
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Types/ActiveMesh.h>
@@ -306,6 +307,68 @@ NOLINT_TEST_F(SceneNodeGeometryTest, GetActiveMesh_TwoLods_DefaultsToLod0)
   ASSERT_TRUE(active_opt.has_value());
   EXPECT_EQ(active_opt->lod, 0u);
   EXPECT_EQ(active_opt->mesh, geometry->MeshAt(0));
+}
+
+NOLINT_TEST_F(
+  SceneNodeGeometryTest, WorldBoundingSphere_FallsBackToAssetBoundsWhenMeshSphereIsZero)
+{
+  using oxygen::data::AssetKey;
+  using oxygen::data::GeometryAsset;
+  using oxygen::data::MaterialAsset;
+  using oxygen::data::MeshBuilder;
+  using oxygen::data::Vertex;
+  using oxygen::data::pak::geometry::GeometryAssetDesc;
+
+  auto node = scene_->CreateNode("Node");
+  auto renderable = node.GetRenderable();
+
+  std::vector<Vertex> vertices {
+    { .position = { -1.0f, -1.0f, -1.0f } },
+    { .position = { 1.0f, -1.0f, -1.0f } },
+    { .position = { 1.0f, 1.0f, -1.0f } },
+    { .position = { -1.0f, 1.0f, -1.0f } },
+    { .position = { -1.0f, -1.0f, 1.0f } },
+    { .position = { 1.0f, -1.0f, 1.0f } },
+    { .position = { 1.0f, 1.0f, 1.0f } },
+    { .position = { -1.0f, 1.0f, 1.0f } },
+  };
+  std::vector<std::uint32_t> indices { 0, 1, 2, 2, 3, 0 };
+
+  MeshBuilder builder;
+  builder.WithVertices(vertices)
+    .WithIndices(indices)
+    .BeginSubMesh("Cube", MaterialAsset::CreateDefault())
+    .WithMeshView({ .first_index = 0,
+      .index_count = static_cast<uint32_t>(indices.size()),
+      .first_vertex = 0,
+      .vertex_count = static_cast<uint32_t>(vertices.size()) })
+    .EndSubMesh();
+  auto mesh = builder.Build();
+  ASSERT_NE(mesh, nullptr);
+  EXPECT_FLOAT_EQ(mesh->BoundingSphere().w, 0.0f);
+
+  GeometryAssetDesc desc {};
+  desc.lod_count = 1;
+  desc.bounding_box_min[0] = -1.0f;
+  desc.bounding_box_min[1] = -1.0f;
+  desc.bounding_box_min[2] = -1.0f;
+  desc.bounding_box_max[0] = 1.0f;
+  desc.bounding_box_max[1] = 1.0f;
+  desc.bounding_box_max[2] = 1.0f;
+
+  std::vector<std::shared_ptr<oxygen::data::Mesh>> lods;
+  lods.push_back(std::shared_ptr<oxygen::data::Mesh>(std::move(mesh)));
+  auto geometry = std::make_shared<GeometryAsset>(
+    AssetKey {}, std::move(desc), std::move(lods));
+
+  renderable.SetGeometry(geometry);
+
+  const auto sphere = renderable.GetWorldBoundingSphere();
+  EXPECT_GT(sphere.w, 0.0f);
+  EXPECT_NEAR(sphere.x, 0.0f, 1e-5f);
+  EXPECT_NEAR(sphere.y, 0.0f, 1e-5f);
+  EXPECT_NEAR(sphere.z, 0.0f, 1e-5f);
+  EXPECT_NEAR(sphere.w, std::sqrt(3.0f), 1e-5f);
 }
 
 } // namespace

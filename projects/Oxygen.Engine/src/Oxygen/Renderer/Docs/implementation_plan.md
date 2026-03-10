@@ -2,7 +2,7 @@
 
 Living roadmap for achieving feature completeness of the Oxygen Renderer.
 
-**Last Updated**: March 9, 2026
+**Last Updated**: March 10, 2026
 
 Cross‑References: [bindless_conventions.md](bindless_conventions.md) |
 [scene_prep.md](scene_prep.md) | [shader-system.md](shader-system.md) |
@@ -879,6 +879,284 @@ Until that milestone is reached:
 - conventional directional CSM remains the default-safe directional path
 - `prefer-virtual` may still fall back
 - `virtual-only` remains a validation mode, not a final shipping default
+
+#### Directional Cache Realignment Plan (March 10, 2026)
+
+Review correction: the current directional VSM slice is still functional, but
+it is not yet meeting the intended resident-page reuse/invalidation bar. The
+next implementation work must proceed in the following order so VSM keeps
+working while cache semantics are realigned.
+
+Update, March 10, 2026: corrected back to `in_progress`. The CPU-side
+cache/invalidation work landed in code and passed the `build-vs` LightManager
+suite, but runtime directional VSM still has two unresolved design gaps:
+request generation and lighting do not agree on the directional clip chain,
+and feedback-driven fine-page demand is still inflated into coarse per-clip
+rectangles. Those gaps can manifest as angle-dependent quality collapse,
+over-selection in dense scenes, and unstable dynamic-shadow updates. The
+remaining conservative fallback is still that invalidation escalates to
+whole-product when caster count/order changes and bounds cannot be paired
+spatially.
+
+Update, March 10, 2026 follow-up: the two runtime gaps above are now addressed
+in code and covered by `build-vs` automation, but the overall directional VSM
+slice remains `in_progress` until `RenderScene`/Sponza visual validation
+confirms stable shadows under camera rotation and dynamic-object motion.
+
+Update, March 10, 2026 debug pass correction: the temporary directional
+page-line instrumentation is no longer the active VSM path. The shader-side
+GPU debug rectangles and forced no-op visibility have been removed again, and
+directional VSM sampling is back on the normal visibility path while atlas
+inspection moves to the floating `RenderScene` ImGui window described below.
+Status remains `in_progress` until the atlas inspector is live and validated in
+scene.
+
+Update, March 10, 2026 debug pass follow-up: the initial rectangle
+reconstruction used the forward light-view XY rows instead of the inverse-basis
+XY columns, which sheared the page footprints across the world. The debug path
+now reconstructs world-space corners from the rigid inverse XY basis, but
+overall status remains `in_progress` until the scene overlay confirms sane
+page footprints and the underlying selection issue is isolated.
+
+Update, March 10, 2026 request-footprint follow-up: the GPU request pass no
+longer estimates directional receiver footprint from only right/down depth
+neighbors. It now evaluates left/right and up/down candidates and keeps the
+shorter valid delta on each axis, which is intended to stop camera-rotation
+from inflating page demand at object silhouettes. This is validated by shader
+rebuild plus `build-vs` LightManager automation, but runtime status remains
+`in_progress` until the overlay confirms the red/orange object-edge halos
+actually recede in scene.
+
+Update, March 10, 2026 debug overlay follow-up: the request-pass rectangle
+experiments are now superseded by the atlas-inspector path. They are kept only
+as historical investigation notes and are not the active runtime debug model.
+
+Update, March 10, 2026 debug overlay plane correction: the temporary attempt to
+draw request rectangles on the camera-aligned light-space Z plane was wrong for
+runtime inspection because it placed the overlay at the camera depth. The VSM
+request-pass rectangle projection experiments were not the right debug model for
+“pages as actually used by shading.” The overlay is being moved back to the
+directional shading path so it is emitted from the real sampled clip/page at
+the real receiver light-space depth, with a page-center gate to keep the view
+readable. Status remains `in_progress` pending runtime confirmation.
+
+Update, March 10, 2026 debug overlay stability follow-up: the request-pass
+overlay no longer colors a page by whichever pixel first wins the atomic page
+request, and it no longer reconstructs page corners from that pixel's
+light-space depth. Debug page colors are now derived only from stable page
+properties (clip level and residency), and rectangles are drawn on a stable
+light-space debug plane. This removes per-frame GPU scheduling noise from the
+overlay so remaining changes should reflect real paging churn rather than debug
+artifacts.
+
+Update, March 10, 2026 atlas inspector correction: the line-based page overlay
+experiments were not sufficient for diagnosing the remaining directional paging
+instability in scene, and treating them as the mainstream debug path was a
+scope mistake. The active debug direction is now a floating `RenderScene` ImGui
+window that displays a compute-generated `RGBA8` visualization of the physical
+VSM atlas itself. The work must:
+- dispatch a dedicated atlas-debug compute shader after virtual shadow raster
+  has produced the current physical pool contents
+- expose the resulting debug texture through the existing ImGui D3D12 backend
+  without adding side-panel shell UI or unrelated CVars
+- keep status `in_progress` until the floating atlas window is visible in
+  `RenderScene` and shows stable per-frame atlas state for a static scene
+
+Update, March 10, 2026 line-debug removal follow-up: the shader-side page-line
+debug path is now fully removed from the active directional VSM shaders, the
+floating `RenderScene` atlas-inspector path builds again, and current
+automation remains green in `build-vs`. Validation evidence:
+- `msbuild out/build-vs/src/Oxygen/Graphics/Direct3D12/Shaders/oxygen-graphics-direct3d12_shaders.vcxproj /m:6 /p:Configuration=Debug /nologo`
+- `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+- `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:1 /p:Configuration=Debug /nologo`
+- `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*`
+- `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
+- source verification: no remaining `GpuDebug`/page-line helper references in
+  `ShadowHelpers.hlsli` or `VirtualShadowRequest.hlsl`
+- status remains `in_progress` until the atlas window is visually confirmed in
+  runtime
+
+Update, March 10, 2026 cache-churn correction: the atlas-inspector runtime
+showed that static-scene camera motion was still blowing the directional VSM
+cache. Two order-sensitive invalidation sources were identified and corrected:
+- the VSM backend now canonicalizes the shadow-caster bounds set before
+  hashing, storing, and pairwise dirty-page comparison, so visibility-driven
+  item reorder no longer looks like a different caster set
+- `Renderer::HashPreparedShadowCasterContent` now hashes the shadow-caster draw
+  set in canonical order instead of view-sorted draw order, so camera motion no
+  longer poisons the coarse content hash for static scenes
+- validation remains required in `RenderScene`; overall status stays
+  `in_progress` until the atlas inspector shows bounded churn for static-scene
+  camera movement
+
+Update, March 10, 2026 resize-path correction: window resize exposed a stale
+depth-SRV recovery bug in `LightCullingPass`, where a failed `UpdateView()`
+path immediately tried to `RegisterView()` again and hit the registry's
+duplicate-view abort. The pass now follows the same resize-safe recovery pattern
+as other texture-SRV users by first recovering an existing SRV index from
+`ResourceRegistry` before allocating or re-registering. Runtime status remains
+`in_progress` until `RenderScene` resize is revalidated manually.
+
+Update, March 10, 2026 feedback/cache scope correction: atlas-inspector runtime
+validation showed that the earlier request-feedback realignment was incomplete.
+The current implementation still stores feedback as local page indices keyed by
+an origin-sensitive directional lattice hash, so ordinary camera motion can
+invalidate reusable fine-page demand even when the resident cache key remains
+stable. When that happens, the CPU bootstrap path still merges all visible
+receiver bounds into one dense rectangle per fine clip, which can saturate the
+atlas and evict useful clean pages during motion. The request-feedback/cache
+scope is therefore still `in_progress` until the following are corrected in
+code and validated in `build-vs`:
+- request feedback must carry absolute resident-page identity instead of local
+  page indices tied to clip origin
+- feedback compatibility must be keyed to directional address space
+  (light-basis plus per-clip page world size), not clip origin
+- current-frame fine-page bootstrap must stay sparse per receiver instead of
+  merging the whole receiver set into one clip rectangle
+- cache preservation under repeated camera strafing must be covered by
+  functional/integration tests before status can move forward
+
+Update, March 10, 2026 resident-key feedback and sparse bootstrap correction:
+the request-feedback/cache correction is now implemented in code and validated
+in `build-vs`.
+- `VirtualShadowRequestPass` now translates GPU request bits into absolute
+  resident-page keys using the clip-grid origins from the metadata snapshot
+  that produced the request mask
+- feedback compatibility now matches directional address space only:
+  light-basis orientation and per-clip page world size must match, while
+  page-aligned clip-origin motion no longer invalidates reusable fine-page
+  demand
+- the fine-clip bootstrap path now marks per-receiver regions directly instead
+  of merging the whole receiver set into one clip rectangle
+- new LightManager regressions cover both resident-key reuse across clip-origin
+  motion and sparse current-frame bootstrap behavior
+- validation evidence:
+  - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
+  - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - result: `25/25` VSM-focused LightManager tests passed
+  - result: `37/37` LightManager/default tests passed
+  - result: `RenderScene` rebuilt successfully against the updated backend
+- overall status remains `in_progress` until runtime atlas/shadow behavior is
+  visually confirmed in `RenderScene`
+
+Update, March 10, 2026 renderer timing correction:
+runtime troubleshooting in `virtual-only` mode exposed a renderer-side timing
+bug outside the cache/invalidation slice. `LightCullingPass` was calling
+`Renderer::UpdateCurrentViewLightCullingConfig()`, which republished the entire
+current-view binding block and re-entered `ShadowManager::PublishForView()` after
+`VirtualShadowPageRasterPass` had already run. That could replace the live
+virtual shadow binding set with a fresh publication immediately before
+`ShaderPass`, even though no new virtual pages had been rasterized for that
+second publication. The corrected scope is:
+- keep the current shadow binding publication stable for the rest of the frame
+  once the VSM raster phase has run
+- allow mid-frame light-culling updates to republish only the lighting routing
+  payload while reusing the already-published draw/environment/view-color/debug
+  and shadow slots for the active view
+- keep overall feature status `in_progress` until `RenderScene` confirms that
+  virtual-only shading no longer loses shadows in the simple two-cube scene
+  and the atlas no longer goes effectively blank after the clustered-lighting
+  republish path runs
+
+1. [x] Canonicalize directional resident-page identity and completion state
+   - introduce one shared helper for packing/unpacking the resident key
+     `(clip_level, snapped_grid_x, snapped_grid_y)`
+   - use that helper in request selection, resident-page lookup,
+     `MarkRendered`, eviction, and introspection
+   - keep the current shader-visible page-table format unchanged so shading
+     remains stable while CPU-side cache bookkeeping is corrected
+   - exit gate: identical-input publish promotes pages to `ResidentClean` and
+     clean-page reuse tests pass again
+
+2. [x] Preserve reuse across page-aligned directional clipmap motion
+   - separate page-address stability from page-content validity
+   - allow clean resident pages to be remapped when clip origins move by whole
+     page increments but the light basis and page world coverage are unchanged
+   - keep the fallback conservative: rerasterize on light-view, depth-range,
+     page-size, or physical layout changes
+   - exit gate: camera movement across clip snap thresholds retains overlapping
+     pages instead of rerasterizing the full working set
+
+3. [x] Realign request feedback with directional resident-page identity
+   - replace local-page-index feedback with absolute resident-page keys
+     `(clip_level, grid_x, grid_y)` so fine-page demand survives clip-origin
+     motion
+   - key feedback compatibility to directional address space only:
+     light-basis orientation and per-clip page world size must match, while
+     page-aligned origin shifts must not invalidate reusable feedback
+   - consume translated resident-key feedback as sparse current demand, not as
+     a local-page set tied to the previous clip origin
+   - exit gate: feedback remains reusable across page-aligned camera motion and
+     only drops when the directional address space truly changes
+
+4. [x] Replace whole-product invalidation with spatial dirty-page invalidation
+   - keep the coarse global content hash only as a conservative fallback
+   - transform changed caster bounds into light space and mark only overlapping
+     resident pages dirty
+   - do not invalidate shadow-depth cache contents for sampling-only changes
+     such as constant/normal bias
+   - exit gate: moved casters rerasterize only overlapping requested pages and
+     unrelated clean pages stay resident
+
+5. [x] Fix deterministic eviction against the canonical resident key
+   - evict only unrequested pages
+   - order eviction by clip priority, then `last_touched_frame`, then stable
+     resident key
+   - remove the current dense-page-index assumptions from eviction bookkeeping
+   - exit gate: eviction tests are deterministic and resident-key truncation
+     warnings are gone
+
+6. [x] Revalidate the CPU-side cache/invalidation slice in `build-vs` only
+   - update renderer tests for identical reuse, clean-page retention across
+     receiver shifts, clipmap-snap reuse, feedback invalidation on lattice
+     change, and spatial invalidation
+   - rebuild and run only against `out/build-vs`
+   - validation evidence:
+     - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:6 /p:Configuration=Debug /nologo`
+     - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*`
+     - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
+   - keep `virtual-only` opt-in until `RenderScene` and Sponza visual
+     validation confirm stable camera translation/rotation
+
+7. [x] Keep current-frame fine-page bootstrap sparse and view-correct
+   - remove the current “one merged receiver rectangle per clip” bootstrap path
+     for fine directional clips
+   - mark per-receiver fine-page regions directly, with small bounded guard
+     growth, so current-frame demand stays sparse even before delayed feedback
+     converges
+   - preserve deduplication through the selected-page bitset so overlapping
+     receivers do not explode the page count
+   - exit gate: repeated camera strafing over the same static scene preserves a
+     mostly stable atlas instead of re-requesting a dense clip rectangle
+
+8. [ ] Realign directional request generation with shading clip selection
+   - use the same footprint-driven directional clip selection policy in the
+     lighting path that the request pass uses to generate demand
+   - stop starting virtual directional shading from the finest containing clip
+     when that clip is not the intended shading footprint
+   - preserve bounded fallback by walking to coarser valid clips only when the
+     footprint-selected clip is unmapped
+   - implemented in code on March 10, 2026 and covered by shader compilation
+     plus `build-vs` LightManager regression tests
+   - remaining delta: visual validation in `RenderScene`/Sponza under camera
+     rotation and moving casters
+   - exit gate: camera rotation at fixed translation no longer causes
+     angle-dependent stripe artifacts or runaway fine-page demand
+
+8. [ ] Replace rectangular feedback inflation with sparse fine-page refinement
+   - stop collapsing all feedback pages in a clip into one bounding region
+   - retain sparse page demand, then apply only a bounded local guard/dilation
+     around requested pages
+   - keep the current coarse backbone and mapped-page grace behavior so
+     fallback coverage remains stable
+   - implemented in code on March 10, 2026 and covered by a new sparse-page
+     integration regression in `LightManager_basic_test.cpp`
+   - remaining delta: visual validation in complex scenes with scattered
+     visible demand
+   - exit gate: dense/complex scenes do not explode fine-page selection simply
+     because visible demand is spatially scattered
 
 ### 8.6 Local Light Shadow Path
 
