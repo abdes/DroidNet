@@ -171,7 +171,9 @@ authoring.
   through `scene::environment::Sun` rather than a scene directional light.
   Until the `Sun` component grows explicit shadow-tuning knobs, the renderer
   must use the canonical directional-light defaults for cascade count,
-  split distribution, bias, and resolution hint.
+  split distribution, bias, and resolution hint. The current canonical split
+  distances are `8 / 24 / 64 / 160` world units with
+  `distribution_exponent = 1.0`.
 
 ## 4. Runtime Contracts
 
@@ -196,6 +198,10 @@ is true, the renderer must provide a synthetic directional shadow input to
 `ShadowManager` on the same shared shadow-product contract. The resolved sun's
 shadow index is published through `ShadowFrameBindings`, not through lighting
 buffers.
+For the current single-source directional VSM slice, that synthetic sun owns
+the virtual directional slot when it is active; scene directional lights
+tagged as sun do not disqualify VSM, but additional non-sun shadowed
+directionals still require conventional fallback.
 
 ### 4.2 Caster eligibility
 
@@ -671,6 +677,9 @@ virtual family is selected.
 - Local virtual products obey the same mobility, invalidation, and deterministic
   budgeting rules as conventional products.
 
+*Future Evolution (Hierarchical Page Tables):*
+While flat clipmap grids work well for directional lights, mapping omnidirectional point lights or wide-FOV spot lights onto flat grids scales poorly. SOTA local-light virtual shadows typically require a Sparse Quadtree or Octree page-table structure. The shared virtual addressing metadata must accommodate a transition from flat "Array-of-Grid-Levels" to a unified hierarchical traversal structure for production local VSMs.
+
 ### 8.4 Page residency and rendering
 
 Virtual shadow rendering is page-driven rather than full-allocation-driven.
@@ -786,6 +795,9 @@ physical atlas sized for full residency of every virtual page:
   of mirroring the full virtual address space
 - ultra virtual directional shadows now allow a larger physical atlas so fine
   pages are no longer capped by the previous `4096` atlas limit
+
+*Future Evolution (Stochastic / SMRT Filtering):*
+Massive hardware Comparison-PCF kernels scale poorly and often look unnaturally uniform. Modern SOTA engines use Temporal Stochastic Filtering (e.g., Shadow Map Ray Tracing / SMRT), tracing jittered rays into the VSM hierarchy per pixel, resolved by a screenspace denoiser. Because the system is bindless and metadata-driven (`ShadowInstanceMetadata`), this filter evolution can be cleanly slotted into the shader sampling path without breaking the frontend light definitions.
 
 ## 11. Quality Tiers and Policy
 
@@ -985,16 +997,14 @@ Implementation status, March 9, 2026:
   - directional virtual metadata publication through `ShadowFrameBindings`
   - renderer policy plumbing for conventional versus virtual directional
     selection
-  - engine-budget-aware VSM safety gating: the current slice consumes
-    `FrameContext::BudgetStats.gpu_budget`, caps fixed clipmap density from the
-    current frame budget, and allows `prefer-virtual` to fall back
-    deterministically to conventional directional shadows when the projected
-    fixed-residency work is too expensive
-  - budget-bounded receiver-driven page selection from
-    `PreparedSceneFrame.visible_receiver_bounding_spheres`, replacing the
-    earlier centered-window-only approximation
-  - centered-window fallback only when receiver-driven selection requests no
-    virtual pages for the view
+  - correctness-first directional VSM runtime:
+    - fixed virtual clipmap density per quality tier
+    - fixed physical atlas capacity per quality tier
+    - no frame-budget density capping or budget-driven backend fallback in the
+      active VSM path
+  - contiguous-region receiver-driven refinement from request feedback or
+    bootstrap visible receiver bounds, replacing the earlier centered-window
+    and sparse page-winner approximations
   - deterministic per-clip prioritization and cross-frame resident-page reuse
     for snapped-identical virtual plans, including physical tile reuse and
     partial rerasterization
@@ -1018,11 +1028,47 @@ Implementation status, March 9, 2026:
     levels so partially resident windows remain continuous
   - `VirtualShadowRequestPass`, which now scans main depth after
     `DepthPrePass`, writes a deduplicated GPU request-bit mask, and submits
-    one-shot per-view request feedback back into `ShadowManager` on safe frame
-    slot reuse
-  - CPU visible-receiver request planning now acts as fallback when that
-    feedback is not yet available, rather than being the only runtime request
-    source
+    bounded-lifetime per-view request feedback back into `ShadowManager` on
+    safe frame slot reuse
+  - corrected directional VSM algorithm:
+    - depth feedback is the only steady-state fine request source
+    - a mandatory coarse clipmap backbone must cover the visible frustum
+      footprint every frame
+    - missing fine pages must degrade to valid coarser clip coverage by
+      construction
+    - CPU visible-receiver request planning is not part of the steady-state
+      path because mixing request sources makes correctness and troubleshooting
+      ambiguous
+    - virtual pages-per-axis must stay fixed and dense per quality tier;
+      oversubscription must be handled by residency selection, not by shrinking
+      the virtual address space itself
+    - directional VSM clipmaps must use a stable exponential ladder:
+      - the base page world size is quantized to a power-of-two step
+      - each clip level doubles page world size and coverage
+      - the implementation must not rely on a short cascade-like ladder built
+        directly from view-dependent split extents
+    - request generation remains footprint-driven:
+      - choose the coarsest containing clip whose logical texel size still
+        matches the receiver footprint
+      - request that clip, optionally one finer clip near the threshold, and
+        all containing coarser clips for guaranteed fallback
+    - shading is not footprint-driven:
+      - sample the finest available containing clip first
+      - if the fine page is invalid, fall back coherently to coarser clips
+  - the feedback-driven request path now applies a bounded page guard band so
+    fine virtual coverage does not disappear exactly at the camera frustum edge
+  - feedback-driven requests now build stable per-clip requested regions
+    instead of reacting directly to sparse per-page hits
+  - oversubscribed feedback uses tighter guard dilation plus current
+    mapped-page pinning, while non-oversubscribed feedback keeps a wider guard
+    band for continuity
+  - under request pressure, the virtual planner now pins currently mapped
+    requested pages first
+  - requested coverage now resolves into stable contiguous per-clip feedback
+    regions instead of sparse page-by-page winners
+  - coarse backbone clips are mapped first, then fine refinement clips, so
+    valid coarser fallback coverage exists by construction when physical tile
+    capacity is exhausted
 - Validation evidence:
   - `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:6 /p:Configuration=Debug /nologo`
   - `msbuild out/build-vs/src/Oxygen/Graphics/Direct3D12/Shaders/oxygen-graphics-direct3d12_shaders.vcxproj /m:6 /p:Configuration=Debug /nologo`
@@ -1051,7 +1097,7 @@ Next real milestone:
 - `Directional VSM Production Candidate`
   - feedback/depth-driven request generation with no steady-state dependency on
     CPU visible-receiver fallback
-  - request deduplication and budgeted page scheduling in the live residency
+  - request deduplication and deterministic residency scheduling in the live
     path
   - deterministic content-safe residency / invalidation / eviction
   - stable `virtual-only` behavior in validation scenes
@@ -1082,6 +1128,8 @@ Next real milestone:
 
 - Tune budgets, fallback policy, residency, and invalidation
 - Improve allocation reuse and cache behavior across both families
+- Implement Static vs. Dynamic caching split to reduce page update cost under dense dynamic loads
+- Implement Compute Rasterization path for small-triangle virtual page updates
 - Expand automated coverage and stress validation
 
 Each phase extends the final system. No phase introduces a disposable

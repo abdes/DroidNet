@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <unordered_set>
 
@@ -35,6 +36,11 @@ constexpr float kLightPullbackPadding = 64.0F;
 constexpr float kMinShadowDepthPadding = 16.0F;
 constexpr std::uint32_t kPageTableValidBit = (1U << 28U);
 constexpr std::uint32_t kVirtualShadowMaxFilterGuardTexels = 2U;
+constexpr std::int32_t kFeedbackRequestGuardRadius = 2;
+constexpr std::uint64_t kMaxRequestFeedbackAgeFrames
+  = oxygen::frame::kFramesInFlight.get() + 1U;
+constexpr std::uint32_t kDirectionalCoarseBackboneClipCount = 3U;
+constexpr std::uint32_t kCoarseBackboneGuardPages = 1U;
 
 [[nodiscard]] auto MapDistributionExponentToPracticalLambda(
   const float distribution_exponent) -> float
@@ -55,10 +61,9 @@ constexpr std::uint32_t kVirtualShadowMaxFilterGuardTexels = 2U;
   const auto clip_count = std::max(1U,
     std::min(candidate.cascade_count,
       oxygen::engine::kMaxVirtualDirectionalClipLevels));
-  const float authored_end
-    = clip_index < candidate.cascade_distances.size()
-      ? candidate.cascade_distances[clip_index]
-      : 0.0F;
+  const float authored_end = clip_index < candidate.cascade_distances.size()
+    ? candidate.cascade_distances[clip_index]
+    : 0.0F;
   if (clip_index < candidate.cascade_count
     && authored_end > prev_depth + kMinClipSpan) {
     return std::min(authored_end, far_depth);
@@ -86,32 +91,16 @@ constexpr std::uint32_t kVirtualShadowMaxFilterGuardTexels = 2U;
 {
   switch (quality_tier) {
   case oxygen::ShadowQualityTier::kLow:
-    return 6U;
+    return 24U;
   case oxygen::ShadowQualityTier::kMedium:
-    return 8U;
+    return 32U;
   case oxygen::ShadowQualityTier::kHigh:
-    return 12U;
+    return 48U;
   case oxygen::ShadowQualityTier::kUltra:
-    return 16U;
+    return 64U;
   default:
-    return 8U;
+    return 32U;
   }
-}
-
-[[nodiscard]] auto ResolveBudgetPagesPerAxisCap(
-  const std::chrono::milliseconds gpu_budget) -> std::uint32_t
-{
-  const auto ms = gpu_budget.count();
-  if (ms <= 16) {
-    return 10U;
-  }
-  if (ms <= 25) {
-    return 12U;
-  }
-  if (ms <= 33) {
-    return 14U;
-  }
-  return 16U;
 }
 
 [[nodiscard]] auto ResolveVirtualClipLevelCount(
@@ -121,34 +110,38 @@ constexpr std::uint32_t kVirtualShadowMaxFilterGuardTexels = 2U;
   const auto authored = std::max(1U, authored_cascade_count);
   switch (quality_tier) {
   case oxygen::ShadowQualityTier::kLow:
-    return std::min(authored, 4U);
-  case oxygen::ShadowQualityTier::kMedium:
-    return std::max(authored, 4U);
-  case oxygen::ShadowQualityTier::kHigh:
-    return std::max(authored, 5U);
-  case oxygen::ShadowQualityTier::kUltra:
     return std::max(authored, 6U);
+  case oxygen::ShadowQualityTier::kMedium:
+    return std::max(authored, 8U);
+  case oxygen::ShadowQualityTier::kHigh:
+    return std::max(authored, 10U);
+  case oxygen::ShadowQualityTier::kUltra:
+    return std::max(authored, 12U);
   default:
-    return std::max(authored, 4U);
+    return std::max(authored, 8U);
   }
 }
 
-[[nodiscard]] auto ResolveMaxVirtualAtlasResolution(
-  const oxygen::ShadowQualityTier quality_tier,
-  const std::chrono::milliseconds gpu_budget) -> std::uint32_t
+[[nodiscard]] auto QuantizeUpToPowerOfTwo(const float value) -> float
 {
-  const auto ms = gpu_budget.count();
+  const float stabilized = std::max(value, 1.0e-4F);
+  return std::exp2(std::ceil(std::log2(stabilized)));
+}
+
+[[nodiscard]] auto ResolveMaxVirtualAtlasResolution(
+  const oxygen::ShadowQualityTier quality_tier) -> std::uint32_t
+{
   switch (quality_tier) {
   case oxygen::ShadowQualityTier::kLow:
-    return 2048U;
-  case oxygen::ShadowQualityTier::kMedium:
-    return 3072U;
-  case oxygen::ShadowQualityTier::kHigh:
-    return ms <= 16 ? 4096U : 5120U;
-  case oxygen::ShadowQualityTier::kUltra:
-    return ms <= 16 ? 6144U : 8192U;
-  default:
     return 4096U;
+  case oxygen::ShadowQualityTier::kMedium:
+    return 6144U;
+  case oxygen::ShadowQualityTier::kHigh:
+    return 8192U;
+  case oxygen::ShadowQualityTier::kUltra:
+    return 12288U;
+  default:
+    return 6144U;
   }
 }
 
@@ -170,88 +163,20 @@ constexpr std::uint32_t kVirtualShadowMaxFilterGuardTexels = 2U;
 }
 
 [[nodiscard]] auto ResolvePhysicalTileCapacity(
-  const oxygen::ShadowQualityTier quality_tier,
-  const std::chrono::milliseconds gpu_budget) -> std::uint32_t
+  const oxygen::ShadowQualityTier quality_tier) -> std::uint32_t
 {
-  const auto ms = gpu_budget.count();
   switch (quality_tier) {
   case oxygen::ShadowQualityTier::kLow:
-    return ms <= 16 ? 64U : 96U;
+    return 256U;
   case oxygen::ShadowQualityTier::kMedium:
-    return ms <= 16 ? 96U : 144U;
+    return 512U;
   case oxygen::ShadowQualityTier::kHigh:
-    return ms <= 16 ? 144U : 256U;
+    return 1024U;
   case oxygen::ShadowQualityTier::kUltra:
-    return ms <= 16 ? 256U : 384U;
+    return 1536U;
   default:
-    return 128U;
+    return 512U;
   }
-}
-
-[[nodiscard]] auto ResolveMaxFullResidencyWorkUnits(
-  const std::chrono::milliseconds gpu_budget) -> std::uint64_t
-{
-  const auto ms = gpu_budget.count();
-  if (ms <= 10) {
-    return 8'000ULL;
-  }
-  if (ms <= 16) {
-    return 16'000ULL;
-  }
-  if (ms <= 25) {
-    return 28'000ULL;
-  }
-  if (ms <= 33) {
-    return 48'000ULL;
-  }
-  return 96'000ULL;
-}
-
-[[nodiscard]] auto EstimateFullResidencyWorkUnits(
-  const std::uint32_t total_pages, const std::size_t shadow_caster_count)
-  -> std::uint64_t
-{
-  const auto casters = static_cast<std::uint64_t>(
-    std::clamp<std::size_t>(shadow_caster_count, 1U, 4096U));
-  return static_cast<std::uint64_t>(total_pages) * casters;
-}
-
-[[nodiscard]] auto ResolveMaxRenderedPages(
-  const std::chrono::milliseconds gpu_budget,
-  const std::size_t shadow_caster_count) -> std::uint32_t
-{
-  const auto casters = static_cast<std::uint64_t>(
-    std::clamp<std::size_t>(shadow_caster_count, 1U, 4096U));
-  const auto budget_work_units = ResolveMaxFullResidencyWorkUnits(gpu_budget);
-  return static_cast<std::uint32_t>(
-    std::max<std::uint64_t>(1ULL, budget_work_units / casters));
-}
-
-[[nodiscard]] auto ResolveMinUsefulRenderedPages(
-  const std::uint32_t clip_level_count) -> std::uint32_t
-{
-  return std::max(clip_level_count, clip_level_count * 4U);
-}
-
-[[nodiscard]] auto ResolveCenteredResidentWindowPagesPerAxis(
-  const std::uint32_t pages_per_axis, const std::uint32_t clip_level_count,
-  const std::uint32_t max_rendered_pages) -> std::uint32_t
-{
-  if (pages_per_axis == 0U || clip_level_count == 0U) {
-    return 0U;
-  }
-
-  if (max_rendered_pages
-    >= clip_level_count * pages_per_axis * pages_per_axis) {
-    return pages_per_axis;
-  }
-
-  const float pages_per_clip
-    = static_cast<float>(std::max(1U, max_rendered_pages))
-    / static_cast<float>(clip_level_count);
-  const auto resident_pages = static_cast<std::uint32_t>(
-    std::floor(std::sqrt(std::max(pages_per_clip, 1.0F))));
-  return std::clamp(resident_pages, 1U, pages_per_axis);
 }
 
 [[nodiscard]] auto SelectDirectionalVirtualFilterRadiusTexels(
@@ -325,8 +250,7 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
   const std::span<const glm::vec4> shadow_caster_bounds,
   const std::span<const glm::vec4> visible_receiver_bounds,
   const std::chrono::milliseconds gpu_budget, const bool allow_budget_fallback,
-  const std::uint64_t shadow_caster_content_hash)
-  -> ShadowFramePublication
+  const std::uint64_t shadow_caster_content_hash) -> ShadowFramePublication
 {
   if (directional_candidates.size() != 1U) {
     if (!directional_candidates.empty()) {
@@ -339,31 +263,22 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
     return {};
   }
 
+  (void)gpu_budget;
+  (void)allow_budget_fallback;
+
   const auto key = BuildPublicationKey(view_constants, directional_candidates,
-    shadow_caster_bounds, visible_receiver_bounds, shadow_caster_content_hash);
+    shadow_caster_bounds, shadow_caster_content_hash);
 
   ViewCacheEntry state {};
   state.key = key;
 
-  const auto pool_config
-    = BuildPhysicalPoolConfig(directional_candidates.front(), gpu_budget);
-  const auto max_rendered_pages
-    = ResolveMaxRenderedPages(gpu_budget, shadow_caster_bounds.size());
-  const auto estimated_work_units = EstimateFullResidencyWorkUnits(
-    std::min(pool_config.virtual_page_count, max_rendered_pages),
-    shadow_caster_bounds.size());
-  if (allow_budget_fallback
-    && estimated_work_units > ResolveMaxFullResidencyWorkUnits(gpu_budget)) {
-    if (max_rendered_pages
-      < ResolveMinUsefulRenderedPages(pool_config.clip_level_count)) {
-      return {};
-    }
-  }
+  const auto pool_config = BuildPhysicalPoolConfig(
+    directional_candidates.front(), gpu_budget, shadow_caster_bounds.size());
   EnsurePhysicalPool(pool_config);
   const auto previous_it = view_cache_.find(view_id);
   BuildDirectionalVirtualViewState(view_id, view_constants,
     directional_candidates.front(), shadow_caster_bounds,
-    visible_receiver_bounds, max_rendered_pages,
+    visible_receiver_bounds,
     previous_it != view_cache_.end() ? &previous_it->second : nullptr, state);
   state.pending_raster_jobs = state.raster_jobs;
 
@@ -393,6 +308,7 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
   DCHECK_F(inserted || it != view_cache_.end(),
     "VirtualShadowMapBackend failed to publish view state");
   RefreshViewExports(it->second);
+  LogPublishTransition(view_id, it->second);
   return it->second.frame_publication;
 }
 
@@ -403,8 +319,8 @@ auto VirtualShadowMapBackend::MarkRendered(const ViewId view_id) -> void
     return;
   }
 
-  const auto pages_per_level = physical_pool_config_.pages_per_clip_axis
-    * physical_pool_config_.pages_per_clip_axis;
+  const auto pages_per_level = physical_pool_config_.virtual_pages_per_clip_axis
+    * physical_pool_config_.virtual_pages_per_clip_axis;
   for (const auto& job : it->second.pending_raster_jobs) {
     const auto global_page_index
       = job.clip_level * pages_per_level + job.page_index;
@@ -484,9 +400,7 @@ auto VirtualShadowMapBackend::BuildPublicationKey(
   const std::span<const engine::DirectionalShadowCandidate>
     directional_candidates,
   const std::span<const glm::vec4> shadow_caster_bounds,
-  const std::span<const glm::vec4> visible_receiver_bounds,
-  const std::uint64_t shadow_caster_content_hash) const
-  -> PublicationKey
+  const std::uint64_t shadow_caster_content_hash) const -> PublicationKey
 {
   using namespace shadow_detail;
   PublicationKey key {};
@@ -502,7 +416,6 @@ auto VirtualShadowMapBackend::BuildPublicationKey(
     = HashBytes(&camera_position, sizeof(camera_position), key.view_hash);
   key.candidate_hash = HashSpan(directional_candidates);
   key.caster_hash = HashSpan(shadow_caster_bounds);
-  key.receiver_hash = HashSpan(visible_receiver_bounds);
   key.shadow_content_hash = shadow_caster_content_hash;
   return key;
 }
@@ -519,11 +432,13 @@ auto VirtualShadowMapBackend::RefreshViewExports(ViewCacheEntry& state) const
   state.introspection.directional_virtual_metadata
     = state.directional_virtual_metadata;
   state.introspection.virtual_raster_jobs = state.raster_jobs;
-  state.introspection.mapped_page_count = static_cast<std::uint32_t>(
-    std::count_if(state.page_table_entries.begin(), state.page_table_entries.end(),
+  state.introspection.page_table_entries = state.page_table_entries;
+  state.introspection.mapped_page_count
+    = static_cast<std::uint32_t>(std::count_if(state.page_table_entries.begin(),
+      state.page_table_entries.end(),
       [](const std::uint32_t entry) { return entry != 0U; }));
-  state.introspection.resident_page_count = static_cast<std::uint32_t>(
-    state.resident_pages.size());
+  state.introspection.resident_page_count
+    = static_cast<std::uint32_t>(state.resident_pages.size());
   state.introspection.clean_page_count = 0U;
   state.introspection.dirty_page_count = 0U;
   state.introspection.pending_page_count = 0U;
@@ -581,35 +496,38 @@ auto VirtualShadowMapBackend::CanReuseResidentPages(
 
 auto VirtualShadowMapBackend::BuildPhysicalPoolConfig(
   const engine::DirectionalShadowCandidate& candidate,
-  const std::chrono::milliseconds gpu_budget) const -> PhysicalPoolConfig
+  const std::chrono::milliseconds gpu_budget,
+  const std::size_t shadow_caster_count) const -> PhysicalPoolConfig
 {
   using namespace shadow_detail;
+  (void)gpu_budget;
+  (void)shadow_caster_count;
 
   PhysicalPoolConfig config {};
   config.clip_level_count = std::clamp(
     ResolveVirtualClipLevelCount(shadow_quality_tier_, candidate.cascade_count),
     1U, engine::kMaxVirtualDirectionalClipLevels);
-  config.pages_per_clip_axis
-    = std::min(ResolvePagesPerAxis(shadow_quality_tier_),
-      ResolveBudgetPagesPerAxisCap(gpu_budget));
-  config.virtual_page_count = config.clip_level_count * config.pages_per_clip_axis
-    * config.pages_per_clip_axis;
+  const auto requested_pages_per_axis
+    = ResolvePagesPerAxis(shadow_quality_tier_);
+  config.virtual_pages_per_clip_axis = requested_pages_per_axis;
+  config.virtual_page_count = config.clip_level_count
+    * config.virtual_pages_per_clip_axis * config.virtual_pages_per_clip_axis;
   config.physical_tile_capacity = std::min(config.virtual_page_count,
-    ResolvePhysicalTileCapacity(shadow_quality_tier_, gpu_budget));
-  config.atlas_tiles_per_axis = static_cast<std::uint32_t>(std::ceil(
-    std::sqrt(static_cast<float>(std::max(1U, config.physical_tile_capacity)))));
+    ResolvePhysicalTileCapacity(shadow_quality_tier_));
+  config.atlas_tiles_per_axis = static_cast<std::uint32_t>(std::ceil(std::sqrt(
+    static_cast<float>(std::max(1U, config.physical_tile_capacity)))));
 
   const auto authored_resolution = ApplyDirectionalShadowQualityTier(
     ShadowResolutionFromHint(candidate.resolution_hint), shadow_quality_tier_,
     1U);
   const auto authored_page_size
-    = authored_resolution / std::max(1U, config.pages_per_clip_axis);
+    = authored_resolution / std::max(1U, config.virtual_pages_per_clip_axis);
   const auto atlas_limited_page_size = std::max(128U,
-    ResolveMaxVirtualAtlasResolution(shadow_quality_tier_, gpu_budget)
+    ResolveMaxVirtualAtlasResolution(shadow_quality_tier_)
       / std::max(1U, config.atlas_tiles_per_axis));
-  const auto max_page_size = std::min(
-    ResolveMaxVirtualPageSizeTexels(shadow_quality_tier_),
-    atlas_limited_page_size);
+  const auto max_page_size
+    = std::min(ResolveMaxVirtualPageSizeTexels(shadow_quality_tier_),
+      atlas_limited_page_size);
   config.page_size_texels
     = std::clamp(authored_page_size, 128U, std::max(128U, max_page_size));
   config.atlas_resolution
@@ -627,7 +545,8 @@ auto VirtualShadowMapBackend::EnsurePhysicalPool(
 
   const bool needs_recreate = !physical_pool_texture_
     || config.page_size_texels != physical_pool_config_.page_size_texels
-    || config.pages_per_clip_axis != physical_pool_config_.pages_per_clip_axis
+    || config.virtual_pages_per_clip_axis
+      != physical_pool_config_.virtual_pages_per_clip_axis
     || config.clip_level_count != physical_pool_config_.clip_level_count
     || config.atlas_resolution > physical_pool_config_.atlas_resolution;
   if (!needs_recreate) {
@@ -692,11 +611,11 @@ auto VirtualShadowMapBackend::EnsurePhysicalPool(
   std::uint32_t allocated_tiles = 0U;
   for (std::uint32_t tile_y = 0U;
     tile_y < physical_pool_config_.atlas_tiles_per_axis
-      && allocated_tiles < physical_pool_config_.physical_tile_capacity;
+    && allocated_tiles < physical_pool_config_.physical_tile_capacity;
     ++tile_y) {
     for (std::uint32_t tile_x = 0U;
       tile_x < physical_pool_config_.atlas_tiles_per_axis
-        && allocated_tiles < physical_pool_config_.physical_tile_capacity;
+      && allocated_tiles < physical_pool_config_.physical_tile_capacity;
       ++tile_x) {
       free_physical_tiles_.push_back(PhysicalTileAddress {
         .tile_x = static_cast<std::uint16_t>(tile_x),
@@ -714,7 +633,7 @@ auto VirtualShadowMapBackend::EnsurePhysicalPool(
     physical_pool_config_.atlas_resolution,
     physical_pool_config_.atlas_resolution,
     physical_pool_config_.page_size_texels,
-    physical_pool_config_.pages_per_clip_axis,
+    physical_pool_config_.virtual_pages_per_clip_axis,
     physical_pool_config_.clip_level_count,
     physical_pool_config_.physical_tile_capacity,
     physical_pool_config_.virtual_page_count, physical_pool_srv_.get());
@@ -755,9 +674,8 @@ auto VirtualShadowMapBackend::AllocatePhysicalTile()
   return tile;
 }
 
-auto VirtualShadowMapBackend::AcquirePhysicalTile(
-  ViewCacheEntry& state, const std::uint32_t pages_per_level)
-  -> std::optional<PhysicalTileAddress>
+auto VirtualShadowMapBackend::AcquirePhysicalTile(ViewCacheEntry& state,
+  const std::uint32_t pages_per_level) -> std::optional<PhysicalTileAddress>
 {
   if (const auto free_tile = AllocatePhysicalTile(); free_tile.has_value()) {
     return free_tile;
@@ -787,8 +705,10 @@ auto VirtualShadowMapBackend::AcquirePhysicalTile(
       continue;
     }
 
-    if (it->second.last_touched_frame != eviction_it->second.last_touched_frame) {
-      if (it->second.last_touched_frame < eviction_it->second.last_touched_frame) {
+    if (it->second.last_touched_frame
+      != eviction_it->second.last_touched_frame) {
+      if (it->second.last_touched_frame
+        < eviction_it->second.last_touched_frame) {
         eviction_it = it;
         eviction_page_index = it->first;
       }
@@ -824,8 +744,7 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   const engine::DirectionalShadowCandidate& candidate,
   const std::span<const glm::vec4> shadow_caster_bounds,
   const std::span<const glm::vec4> visible_receiver_bounds,
-  const std::uint32_t max_rendered_pages, const ViewCacheEntry* previous_state,
-  ViewCacheEntry& state) -> void
+  const ViewCacheEntry* previous_state, ViewCacheEntry& state) -> void
 {
   using namespace shadow_detail;
 
@@ -836,6 +755,7 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   const auto camera_view_constants = view_constants.GetSnapshot();
   const glm::mat4 view_matrix = camera_view_constants.view_matrix;
   const glm::mat4 projection_matrix = camera_view_constants.projection_matrix;
+  const glm::mat4 inv_view = glm::inverse(view_matrix);
   const glm::mat4 inv_proj = glm::inverse(projection_matrix);
 
   std::array<glm::vec3, 4> view_near_corners {};
@@ -865,12 +785,8 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
 
   const std::uint32_t clip_level_count = physical_pool_config_.clip_level_count;
   const std::uint32_t pages_per_axis
-    = physical_pool_config_.pages_per_clip_axis;
+    = physical_pool_config_.virtual_pages_per_clip_axis;
   const std::uint32_t pages_per_level = pages_per_axis * pages_per_axis;
-  const std::uint32_t fallback_resident_pages_per_axis
-    = ResolveCenteredResidentWindowPagesPerAxis(
-      pages_per_axis, clip_level_count, max_rendered_pages);
-
   const glm::vec3 light_dir_to_surface
     = NormalizeOrFallback(candidate.direction_ws, glm::vec3(0.0F, -1.0F, 0.0F));
   const glm::vec3 light_dir_to_light = -light_dir_to_surface;
@@ -887,27 +803,48 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
     clip_page_world {};
   std::array<float, engine::kMaxVirtualDirectionalClipLevels> clip_origin_x {};
   std::array<float, engine::kMaxVirtualDirectionalClipLevels> clip_origin_y {};
-  std::array<float, engine::kMaxVirtualDirectionalClipLevels> camera_page_x {};
-  std::array<float, engine::kMaxVirtualDirectionalClipLevels> camera_page_y {};
 
-  float prev_depth = std::max(near_depth, 0.0F);
+  const float authored_first_clip_end = ResolveClipEndDepth(
+    candidate, 0U, std::max(near_depth, 0.0F), near_depth, far_depth);
+  const float first_clip_half_extent_floor = far_depth
+    / std::exp2(static_cast<float>(std::max(clip_level_count, 1U) - 1U));
+  const float desired_first_half_extent
+    = std::max(std::max(authored_first_clip_end, first_clip_half_extent_floor),
+      kMinClipSpan);
+  const float desired_base_page_world = (2.0F * desired_first_half_extent)
+    / std::max(1.0F, static_cast<float>(pages_per_axis));
+  const float base_page_world = QuantizeUpToPowerOfTwo(desired_base_page_world);
+  const float base_half_extent = base_page_world
+    * std::max(1.0F, static_cast<float>(pages_per_axis)) * 0.5F;
+
   float largest_half_extent = 0.0F;
   for (std::uint32_t clip_index = 0U; clip_index < clip_level_count;
     ++clip_index) {
-    const float clip_end_depth = ResolveClipEndDepth(
-      candidate, clip_index, prev_depth, near_depth, far_depth);
-    const float half_extent = std::max(clip_end_depth, kMinClipSpan);
+    const float scale = std::exp2(static_cast<float>(clip_index));
+    const float half_extent = base_half_extent * scale;
     clip_half_extents[clip_index] = half_extent;
-    clip_page_world[clip_index] = (2.0F * half_extent)
-      / std::max(1.0F, static_cast<float>(pages_per_axis));
+    clip_page_world[clip_index] = base_page_world * scale;
     largest_half_extent = std::max(largest_half_extent, half_extent);
-    prev_depth = clip_end_depth;
   }
 
-  const glm::vec3 light_eye = camera_position
-    + light_dir_to_light * (largest_half_extent + kLightPullbackPadding);
+  const glm::mat4 rot_view = glm::lookAtRH(
+    glm::vec3(0.0F), glm::vec3(0.0F) + light_dir_to_surface, world_up);
+  const glm::vec3 cam_rot_ls
+    = glm::vec3(rot_view * glm::vec4(camera_position, 1.0F));
+
+  const float snap_size = clip_page_world[clip_level_count - 1U];
+  const float snapped_x = std::floor(cam_rot_ls.x / snap_size) * snap_size;
+  const float snapped_y = std::floor(cam_rot_ls.y / snap_size) * snap_size;
+
+  const glm::vec3 light_eye_ls = glm::vec3(snapped_x, snapped_y,
+    cam_rot_ls.z + largest_half_extent + kLightPullbackPadding);
+
+  const glm::mat4 inv_rot_view = glm::inverse(rot_view);
+  const glm::vec3 light_eye
+    = glm::vec3(inv_rot_view * glm::vec4(light_eye_ls, 1.0F));
+
   const glm::mat4 light_view
-    = glm::lookAtRH(light_eye, camera_position, world_up);
+    = glm::lookAtRH(light_eye, light_eye + light_dir_to_surface, world_up);
   const glm::vec3 camera_ls
     = glm::vec3(light_view * glm::vec4(camera_position, 1.0F));
 
@@ -969,10 +906,6 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
     clip_origin_y[clip_index]
       = std::floor((camera_ls.y - half_extent) / page_world_size)
       * page_world_size;
-    camera_page_x[clip_index]
-      = (camera_ls.x - clip_origin_x[clip_index]) / page_world_size;
-    camera_page_y[clip_index]
-      = (camera_ls.y - clip_origin_y[clip_index]) / page_world_size;
     metadata.clip_metadata[clip_index].origin_page_scale
       = glm::vec4(clip_origin_x[clip_index], clip_origin_y[clip_index],
         page_world_size, depth_scale);
@@ -980,8 +913,15 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
       = glm::vec4(depth_bias, 0.0F, 0.0F, 0.0F);
   }
 
-  std::vector<std::uint16_t> receiver_hits(state.page_table_entries.size(), 0U);
+  struct ClipSelectedRegion {
+    bool valid { false };
+    std::uint32_t min_x { 0U };
+    std::uint32_t max_x { 0U };
+    std::uint32_t min_y { 0U };
+    std::uint32_t max_y { 0U };
+  };
   std::vector<std::uint8_t> selected_pages(state.page_table_entries.size(), 0U);
+  std::uint32_t selected_page_count = 0U;
   const auto mark_selected_page
     = [&](const std::uint32_t clip_index, const std::uint32_t page_x,
         const std::uint32_t page_y) -> bool {
@@ -997,246 +937,245 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
       || selected_pages[global_page_index] != 0U) {
       return false;
     }
+
     selected_pages[global_page_index] = 1U;
+    ++selected_page_count;
     return true;
   };
 
+  const auto count_region_pages
+    = [](const ClipSelectedRegion& region) -> std::uint32_t {
+    if (!region.valid) {
+      return 0U;
+    }
+    return (region.max_x - region.min_x + 1U)
+      * (region.max_y - region.min_y + 1U);
+  };
+
+  const auto mark_region
+    = [&](const std::uint32_t clip_index, const ClipSelectedRegion& region) {
+        if (!region.valid) {
+          return 0U;
+        }
+
+        std::uint32_t added = 0U;
+        for (std::uint32_t page_y = region.min_y; page_y <= region.max_y;
+          ++page_y) {
+          for (std::uint32_t page_x = region.min_x; page_x <= region.max_x;
+            ++page_x) {
+            if (mark_selected_page(clip_index, page_x, page_y)) {
+              ++added;
+            }
+          }
+        }
+        return added;
+      };
+
+  std::array<glm::vec3, 8> frustum_light_space_points {};
+  for (std::size_t i = 0U; i < clip_corners.size(); ++i) {
+    const auto near_world = TransformPoint(inv_view, view_near_corners[i]);
+    const auto far_world = TransformPoint(inv_view, view_far_corners[i]);
+    frustum_light_space_points[i]
+      = glm::vec3(light_view * glm::vec4(near_world, 1.0F));
+    frustum_light_space_points[i + clip_corners.size()]
+      = glm::vec3(light_view * glm::vec4(far_world, 1.0F));
+  }
+
+  std::vector<ClipSelectedRegion> frustum_regions(clip_level_count);
+  for (std::uint32_t clip_index = 0U; clip_index < clip_level_count;
+    ++clip_index) {
+    float min_page_x = std::numeric_limits<float>::max();
+    float max_page_x = std::numeric_limits<float>::lowest();
+    float min_page_y = std::numeric_limits<float>::max();
+    float max_page_y = std::numeric_limits<float>::lowest();
+
+    for (const auto& point_ls : frustum_light_space_points) {
+      const float page_x = (point_ls.x - clip_origin_x[clip_index])
+        / clip_page_world[clip_index];
+      const float page_y = (point_ls.y - clip_origin_y[clip_index])
+        / clip_page_world[clip_index];
+      min_page_x = std::min(min_page_x, page_x);
+      max_page_x = std::max(max_page_x, page_x);
+      min_page_y = std::min(min_page_y, page_y);
+      max_page_y = std::max(max_page_y, page_y);
+    }
+
+    if (max_page_x < 0.0F || max_page_y < 0.0F
+      || min_page_x >= static_cast<float>(pages_per_axis)
+      || min_page_y >= static_cast<float>(pages_per_axis)) {
+      continue;
+    }
+
+    auto& region = frustum_regions[clip_index];
+    region.valid = true;
+    region.min_x
+      = static_cast<std::uint32_t>(std::max(0.0F, std::floor(min_page_x)));
+    region.max_x = static_cast<std::uint32_t>(
+      std::min(static_cast<float>(pages_per_axis - 1U),
+        std::max(0.0F, std::ceil(max_page_x) - 1.0F)));
+    region.min_y
+      = static_cast<std::uint32_t>(std::max(0.0F, std::floor(min_page_y)));
+    region.max_y = static_cast<std::uint32_t>(
+      std::min(static_cast<float>(pages_per_axis - 1U),
+        std::max(0.0F, std::ceil(max_page_y) - 1.0F)));
+  }
+
+  const std::uint32_t coarse_backbone_begin
+    = clip_level_count > kDirectionalCoarseBackboneClipCount
+    ? clip_level_count - kDirectionalCoarseBackboneClipCount
+    : 0U;
   const auto feedback_it = request_feedback_.find(view_id);
   const auto use_request_feedback = feedback_it != request_feedback_.end()
     && !feedback_it->second.feedback.requested_page_indices.empty()
     && feedback_it->second.feedback.pages_per_axis == pages_per_axis
-    && feedback_it->second.feedback.clip_level_count == clip_level_count;
+    && feedback_it->second.feedback.clip_level_count == clip_level_count
+    // Feedback is produced after virtual page raster in the current frame.
+    // Consuming same-frame feedback here would rebuild the page table after the
+    // raster pass ran, so shading would sample pages that have not been
+    // rendered yet. Only consume feedback from an earlier frame.
+    && frame_sequence_ > feedback_it->second.feedback.source_frame_sequence
+    && (frame_sequence_ - feedback_it->second.feedback.source_frame_sequence)
+         .get()
+      <= kMaxRequestFeedbackAgeFrames;
+  std::uint32_t coarse_backbone_pages = 0U;
+  std::uint32_t feedback_requested_pages = 0U;
+  std::uint32_t feedback_refinement_pages = 0U;
 
-  if (use_request_feedback) {
-    for (const auto global_page_index :
-      feedback_it->second.feedback.requested_page_indices) {
-      if (global_page_index >= receiver_hits.size()) {
-        continue;
+  for (std::uint32_t clip_index = coarse_backbone_begin;
+    clip_index < clip_level_count; ++clip_index) {
+    auto& region = frustum_regions[clip_index];
+    if (!region.valid) {
+      continue;
+    }
+    region.min_x = region.min_x > kCoarseBackboneGuardPages
+      ? region.min_x - kCoarseBackboneGuardPages
+      : 0U;
+    region.min_y = region.min_y > kCoarseBackboneGuardPages
+      ? region.min_y - kCoarseBackboneGuardPages
+      : 0U;
+    region.max_x
+      = std::min(pages_per_axis - 1U, region.max_x + kCoarseBackboneGuardPages);
+    region.max_y
+      = std::min(pages_per_axis - 1U, region.max_y + kCoarseBackboneGuardPages);
+  }
+
+  for (std::uint32_t clip_index = clip_level_count;
+    clip_index-- > coarse_backbone_begin;) {
+    const auto& region = frustum_regions[clip_index];
+    if (!region.valid) {
+      continue;
+    }
+
+    coarse_backbone_pages += mark_region(clip_index, region);
+  }
+
+  feedback_requested_pages = 0U;
+  feedback_refinement_pages = 0U;
+  if (use_request_feedback || !visible_receiver_bounds.empty()) {
+    std::vector<ClipSelectedRegion> refinement_regions(coarse_backbone_begin);
+
+    if (use_request_feedback) {
+      for (const auto global_page_index :
+        feedback_it->second.feedback.requested_page_indices) {
+        if (global_page_index >= selected_pages.size()) {
+          continue;
+        }
+
+        const auto clip_index = global_page_index / pages_per_level;
+        if (clip_index >= coarse_backbone_begin) {
+          continue;
+        }
+        const auto local_page_index = global_page_index % pages_per_level;
+        const auto page_y = local_page_index / pages_per_axis;
+        const auto page_x = local_page_index % pages_per_axis;
+
+        auto& region = refinement_regions[clip_index];
+        if (!region.valid) {
+          region.valid = true;
+          region.min_x = page_x;
+          region.max_x = page_x;
+          region.min_y = page_y;
+          region.max_y = page_y;
+        } else {
+          region.min_x = std::min(region.min_x, page_x);
+          region.max_x = std::max(region.max_x, page_x);
+          region.min_y = std::min(region.min_y, page_y);
+          region.max_y = std::max(region.max_y, page_y);
+        }
+        ++feedback_requested_pages;
       }
+    } else {
+      for (const auto& receiver_bound : visible_receiver_bounds) {
+        const glm::vec3 receiver_center_ls
+          = glm::vec3(light_view * glm::vec4(glm::vec3(receiver_bound), 1.0F));
+        const float receiver_radius = std::max(0.0F, receiver_bound.w);
 
-      receiver_hits[global_page_index] = 0xFFFFU;
-      const auto clip_index = global_page_index / pages_per_level;
-      const auto local_page_index = global_page_index % pages_per_level;
-      const auto page_y = local_page_index / pages_per_axis;
-      const auto page_x = local_page_index % pages_per_axis;
-
-      for (std::int32_t dy = -1; dy <= 1; ++dy) {
-        for (std::int32_t dx = -1; dx <= 1; ++dx) {
-          const auto nx = static_cast<std::int32_t>(page_x) + dx;
-          const auto ny = static_cast<std::int32_t>(page_y) + dy;
-          if (nx < 0 || ny < 0
-            || nx >= static_cast<std::int32_t>(pages_per_axis)
-            || ny >= static_cast<std::int32_t>(pages_per_axis)) {
+        for (std::uint32_t clip_index = 0U; clip_index < coarse_backbone_begin;
+          ++clip_index) {
+          const float min_page_x = (receiver_center_ls.x - receiver_radius
+                                     - clip_origin_x[clip_index])
+            / clip_page_world[clip_index];
+          const float max_page_x = (receiver_center_ls.x + receiver_radius
+                                     - clip_origin_x[clip_index])
+            / clip_page_world[clip_index];
+          const float min_page_y = (receiver_center_ls.y - receiver_radius
+                                     - clip_origin_y[clip_index])
+            / clip_page_world[clip_index];
+          const float max_page_y = (receiver_center_ls.y + receiver_radius
+                                     - clip_origin_y[clip_index])
+            / clip_page_world[clip_index];
+          if (max_page_x < 0.0F || max_page_y < 0.0F
+            || min_page_x >= static_cast<float>(pages_per_axis)
+            || min_page_y >= static_cast<float>(pages_per_axis)) {
             continue;
           }
 
-          const auto neighbor_index
-            = static_cast<std::size_t>(clip_index)
-                * static_cast<std::size_t>(pages_per_level)
-              + static_cast<std::size_t>(
-                static_cast<std::uint32_t>(ny) * pages_per_axis
-                + static_cast<std::uint32_t>(nx));
-          if (receiver_hits[neighbor_index] == 0U) {
-            receiver_hits[neighbor_index] = 1U;
+          auto& region = refinement_regions[clip_index];
+          const auto clamped_min_x = static_cast<std::uint32_t>(
+            std::max(0.0F, std::floor(min_page_x)));
+          const auto clamped_max_x = static_cast<std::uint32_t>(
+            std::min(static_cast<float>(pages_per_axis - 1U),
+              std::max(0.0F, std::ceil(max_page_x) - 1.0F)));
+          const auto clamped_min_y = static_cast<std::uint32_t>(
+            std::max(0.0F, std::floor(min_page_y)));
+          const auto clamped_max_y = static_cast<std::uint32_t>(
+            std::min(static_cast<float>(pages_per_axis - 1U),
+              std::max(0.0F, std::ceil(max_page_y) - 1.0F)));
+          if (!region.valid) {
+            region.valid = true;
+            region.min_x = clamped_min_x;
+            region.max_x = clamped_max_x;
+            region.min_y = clamped_min_y;
+            region.max_y = clamped_max_y;
+          } else {
+            region.min_x = std::min(region.min_x, clamped_min_x);
+            region.max_x = std::max(region.max_x, clamped_max_x);
+            region.min_y = std::min(region.min_y, clamped_min_y);
+            region.max_y = std::max(region.max_y, clamped_max_y);
           }
         }
       }
     }
-  } else {
-    for (const auto& receiver : visible_receiver_bounds) {
-      if (receiver.w <= 0.0F) {
+
+    const auto refinement_guard_radius = static_cast<std::uint32_t>(
+      use_request_feedback ? kFeedbackRequestGuardRadius : 1U);
+    for (std::uint32_t clip_index = 0U; clip_index < coarse_backbone_begin;
+      ++clip_index) {
+      auto& region = refinement_regions[clip_index];
+      if (!region.valid) {
         continue;
       }
-
-      const glm::vec3 receiver_center_ls = glm::vec3(
-        light_view * glm::vec4(receiver.x, receiver.y, receiver.z, 1.0F));
-      const float radius = receiver.w;
-
-      for (std::uint32_t clip_index = 0U; clip_index < clip_level_count;
-        ++clip_index) {
-        const float page_world_size = clip_page_world[clip_index];
-        const float min_page_x
-          = (receiver_center_ls.x - radius - clip_origin_x[clip_index])
-          / page_world_size;
-        const float max_page_x
-          = (receiver_center_ls.x + radius - clip_origin_x[clip_index])
-          / page_world_size;
-        const float min_page_y
-          = (receiver_center_ls.y - radius - clip_origin_y[clip_index])
-          / page_world_size;
-        const float max_page_y
-          = (receiver_center_ls.y + radius - clip_origin_y[clip_index])
-          / page_world_size;
-
-        if (max_page_x < 0.0F || max_page_y < 0.0F
-          || min_page_x >= static_cast<float>(pages_per_axis)
-          || min_page_y >= static_cast<float>(pages_per_axis)) {
-          continue;
-        }
-
-        const auto begin_x
-          = static_cast<std::uint32_t>(std::max(0.0F, std::floor(min_page_x)));
-        const auto end_x = static_cast<std::uint32_t>(std::min(
-          static_cast<float>(pages_per_axis - 1U), std::floor(max_page_x)));
-        const auto begin_y
-          = static_cast<std::uint32_t>(std::max(0.0F, std::floor(min_page_y)));
-        const auto end_y = static_cast<std::uint32_t>(std::min(
-          static_cast<float>(pages_per_axis - 1U), std::floor(max_page_y)));
-
-        for (std::uint32_t page_y = begin_y; page_y <= end_y; ++page_y) {
-          for (std::uint32_t page_x = begin_x; page_x <= end_x; ++page_x) {
-            const auto global_page_index = static_cast<std::size_t>(clip_index)
-                * static_cast<std::size_t>(pages_per_level)
-              + static_cast<std::size_t>(page_y * pages_per_axis + page_x);
-            receiver_hits[global_page_index]
-              = static_cast<std::uint16_t>(std::min(
-                static_cast<std::uint32_t>(receiver_hits[global_page_index])
-                  + 1U,
-                0xFFFFU));
-          }
-        }
-      }
-    }
-  }
-
-  struct RequestedPageCandidate {
-    std::uint32_t clip_index { 0U };
-    std::uint32_t page_x { 0U };
-    std::uint32_t page_y { 0U };
-    std::uint32_t local_page_index { 0U };
-    std::uint16_t hit_count { 0U };
-    float distance2_to_camera { 0.0F };
-  };
-
-  std::vector<std::vector<RequestedPageCandidate>> per_clip_candidates(
-    clip_level_count);
-  for (std::uint32_t clip_index = 0U; clip_index < clip_level_count;
-    ++clip_index) {
-    auto& clip_candidates = per_clip_candidates[clip_index];
-    clip_candidates.reserve(pages_per_level);
-    for (std::uint32_t page_y = 0U; page_y < pages_per_axis; ++page_y) {
-      for (std::uint32_t page_x = 0U; page_x < pages_per_axis; ++page_x) {
-        const std::uint32_t local_page_index = page_y * pages_per_axis + page_x;
-        const auto global_page_index = static_cast<std::size_t>(clip_index)
-            * static_cast<std::size_t>(pages_per_level)
-          + local_page_index;
-        if (receiver_hits[global_page_index] == 0U) {
-          continue;
-        }
-
-        const float page_center_x = static_cast<float>(page_x) + 0.5F;
-        const float page_center_y = static_cast<float>(page_y) + 0.5F;
-        const float dx = page_center_x - camera_page_x[clip_index];
-        const float dy = page_center_y - camera_page_y[clip_index];
-        clip_candidates.push_back(RequestedPageCandidate {
-          .clip_index = clip_index,
-          .page_x = page_x,
-          .page_y = page_y,
-          .local_page_index = local_page_index,
-          .hit_count = receiver_hits[global_page_index],
-          .distance2_to_camera = dx * dx + dy * dy,
-        });
-      }
-    }
-
-    std::sort(clip_candidates.begin(), clip_candidates.end(),
-      [](const RequestedPageCandidate& lhs, const RequestedPageCandidate& rhs) {
-        if (lhs.hit_count != rhs.hit_count) {
-          return lhs.hit_count > rhs.hit_count;
-        }
-        if (lhs.distance2_to_camera != rhs.distance2_to_camera) {
-          return lhs.distance2_to_camera < rhs.distance2_to_camera;
-        }
-        return lhs.local_page_index < rhs.local_page_index;
-      });
-  }
-
-  std::uint32_t pages_remaining = std::max(1U,
-    std::min(std::min(max_rendered_pages, physical_pool_config_.physical_tile_capacity),
-      static_cast<std::uint32_t>(selected_pages.size())));
-  for (std::uint32_t clip_index = 0U;
-    clip_index < clip_level_count && pages_remaining > 0U; ++clip_index) {
-    const auto& clip_candidates = per_clip_candidates[clip_index];
-    if (clip_candidates.empty()) {
-      continue;
-    }
-    if (mark_selected_page(clip_index, clip_candidates.front().page_x,
-          clip_candidates.front().page_y)) {
-      --pages_remaining;
-    }
-  }
-
-  while (pages_remaining > 0U) {
-    const RequestedPageCandidate* best_candidate = nullptr;
-    for (std::uint32_t clip_index = 0U; clip_index < clip_level_count;
-      ++clip_index) {
-      const auto& clip_candidates = per_clip_candidates[clip_index];
-      for (const auto& candidate_page : clip_candidates) {
-        const auto global_page_index
-          = static_cast<std::size_t>(candidate_page.clip_index)
-            * static_cast<std::size_t>(pages_per_level)
-          + static_cast<std::size_t>(candidate_page.local_page_index);
-        if (selected_pages[global_page_index] != 0U) {
-          continue;
-        }
-        if (best_candidate == nullptr
-          || candidate_page.clip_index < best_candidate->clip_index
-          || (candidate_page.clip_index == best_candidate->clip_index
-            && (candidate_page.hit_count > best_candidate->hit_count
-              || (candidate_page.hit_count == best_candidate->hit_count
-                && candidate_page.distance2_to_camera
-                  < best_candidate->distance2_to_camera)))) {
-          best_candidate = &candidate_page;
-        }
-        break;
-      }
-    }
-
-    if (best_candidate == nullptr) {
-      break;
-    }
-
-    if (!mark_selected_page(best_candidate->clip_index, best_candidate->page_x,
-          best_candidate->page_y)) {
-      break;
-    }
-    --pages_remaining;
-  }
-
-  if (std::none_of(selected_pages.begin(), selected_pages.end(),
-        [](const std::uint8_t value) { return value != 0U; })) {
-    pages_remaining = std::max(1U,
-      std::min(
-        std::min(max_rendered_pages, physical_pool_config_.physical_tile_capacity),
-        static_cast<std::uint32_t>(selected_pages.size())));
-    for (std::uint32_t clip_index = 0U; clip_index < clip_level_count;
-      ++clip_index) {
-      if (pages_remaining == 0U) {
-        break;
-      }
-      const std::uint32_t resident_origin_x
-        = (pages_per_axis - fallback_resident_pages_per_axis) / 2U;
-      const std::uint32_t resident_origin_y
-        = (pages_per_axis - fallback_resident_pages_per_axis) / 2U;
-      const std::uint32_t resident_end_x
-        = resident_origin_x + fallback_resident_pages_per_axis;
-      const std::uint32_t resident_end_y
-        = resident_origin_y + fallback_resident_pages_per_axis;
-      for (std::uint32_t page_y = resident_origin_y; page_y < resident_end_y;
-        ++page_y) {
-        if (pages_remaining == 0U) {
-          break;
-        }
-        for (std::uint32_t page_x = resident_origin_x; page_x < resident_end_x;
-          ++page_x) {
-          if (pages_remaining == 0U) {
-            break;
-          }
-          if (mark_selected_page(clip_index, page_x, page_y)) {
-            --pages_remaining;
-          }
-        }
-      }
+      region.min_x = region.min_x > refinement_guard_radius
+        ? region.min_x - refinement_guard_radius
+        : 0U;
+      region.min_y = region.min_y > refinement_guard_radius
+        ? region.min_y - refinement_guard_radius
+        : 0U;
+      region.max_x
+        = std::min(pages_per_axis - 1U, region.max_x + refinement_guard_radius);
+      region.max_y
+        = std::min(pages_per_axis - 1U, region.max_y + refinement_guard_radius);
+      feedback_refinement_pages += mark_region(clip_index, region);
     }
   }
 
@@ -1270,67 +1209,133 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   }
 
   if (previous_state != nullptr) {
-    const std::unordered_set<std::uint32_t> requested_pages = [&]() {
-      std::unordered_set<std::uint32_t> requested;
+    std::uint32_t released_stale_pages = 0U;
+    std::uint32_t retained_clean_pages = 0U;
+    const std::unordered_set<std::uint64_t> requested_pages = [&]() {
+      std::unordered_set<std::uint64_t> requested;
       requested.reserve(selected_pages.size());
-      for (std::uint32_t global_page_index = 0U;
-        global_page_index < selected_pages.size(); ++global_page_index) {
-        if (selected_pages[global_page_index] != 0U) {
-          requested.insert(global_page_index);
+      for (std::uint32_t clip_index = 0U; clip_index < clip_level_count;
+        ++clip_index) {
+        const float page_world_size = clip_page_world[clip_index];
+        const float origin_x = clip_origin_x[clip_index];
+        const float origin_y = clip_origin_y[clip_index];
+        const auto grid_offset_x
+          = static_cast<std::int32_t>(std::round(origin_x / page_world_size));
+        const auto grid_offset_y
+          = static_cast<std::int32_t>(std::round(origin_y / page_world_size));
+        for (std::uint32_t page_y = 0U; page_y < pages_per_axis; ++page_y) {
+          for (std::uint32_t page_x = 0U; page_x < pages_per_axis; ++page_x) {
+            const std::uint32_t local_page_index
+              = page_y * pages_per_axis + page_x;
+            const std::uint32_t global_page_index
+              = clip_index * pages_per_level + local_page_index;
+            if (selected_pages[global_page_index] != 0U) {
+              const std::uint64_t resident_key
+                = (static_cast<std::uint64_t>(clip_index) << 56ULL)
+                | ((static_cast<std::uint64_t>(static_cast<std::uint32_t>(
+                      grid_offset_x + static_cast<std::int32_t>(page_x)))
+                     & 0x0FFFFFFFULL)
+                  << 28ULL)
+                | (static_cast<std::uint64_t>(static_cast<std::uint32_t>(
+                     grid_offset_y + static_cast<std::int32_t>(page_y)))
+                  & 0x0FFFFFFFULL);
+              requested.insert(resident_key);
+            }
+          }
         }
       }
       return requested;
     }();
 
-    for (const auto& [virtual_page_index, resident_page] :
+    for (const auto& [resident_key, resident_page] :
       previous_state->resident_pages) {
-      const auto clip_index = virtual_page_index / pages_per_level;
-      const bool retain_clean_page = !requested_pages.contains(virtual_page_index)
+      const auto clip_index = static_cast<std::uint32_t>(resident_key >> 56ULL);
+      const bool retain_clean_page = !requested_pages.contains(resident_key)
         && clip_index < clip_level_count && resident_page.ContentsValid()
         && shadow_contents_unchanged && reusable_clip_contents[clip_index];
       if (retain_clean_page) {
-        state.resident_pages.insert_or_assign(virtual_page_index, resident_page);
+        state.resident_pages.insert_or_assign(resident_key, resident_page);
+        ++retained_clean_pages;
         continue;
       }
 
-      if (!requested_pages.contains(virtual_page_index)) {
+      if (!requested_pages.contains(resident_key)) {
         ReleasePhysicalTile(resident_page.tile);
+        ++released_stale_pages;
       }
     }
+
+    (void)retained_clean_pages;
+    (void)released_stale_pages;
   }
 
-  for (std::uint32_t clip_index = 0U; clip_index < clip_level_count;
-    ++clip_index) {
-    const float page_world_size = clip_page_world[clip_index];
-    const float origin_x = clip_origin_x[clip_index];
-    const float origin_y = clip_origin_y[clip_index];
-    const std::uint32_t filter_guard_texels
-      = std::min(kVirtualShadowMaxFilterGuardTexels,
-        SelectDirectionalVirtualFilterRadiusTexels(
-          clip_page_world[0], clip_page_world[clip_index]));
-    const float interior_texels = std::max(1.0F,
-      static_cast<float>(physical_pool_config_.page_size_texels)
-        - 2.0F * static_cast<float>(filter_guard_texels));
-    const float page_guard_world = static_cast<float>(filter_guard_texels)
-      * (page_world_size / interior_texels);
+  std::uint32_t reused_requested_pages = 0U;
+  std::uint32_t allocated_pages = 0U;
+  std::uint32_t rerasterized_pages = 0U;
+  const auto process_clip_range_desc = [&](const std::uint32_t begin_clip,
+                                         const std::uint32_t end_clip) {
+    for (std::uint32_t clip_index = end_clip; clip_index-- > begin_clip;) {
+      const float page_world_size = clip_page_world[clip_index];
+      const float origin_x = clip_origin_x[clip_index];
+      const float origin_y = clip_origin_y[clip_index];
+      const std::uint32_t filter_guard_texels
+        = std::min(kVirtualShadowMaxFilterGuardTexels,
+          SelectDirectionalVirtualFilterRadiusTexels(
+            clip_page_world[0], clip_page_world[clip_index]));
+      const float interior_texels = std::max(1.0F,
+        static_cast<float>(physical_pool_config_.page_size_texels)
+          - 2.0F * static_cast<float>(filter_guard_texels));
+      const float page_guard_world = static_cast<float>(filter_guard_texels)
+        * (page_world_size / interior_texels);
 
-    for (std::uint32_t page_y = 0U; page_y < pages_per_axis; ++page_y) {
-      for (std::uint32_t page_x = 0U; page_x < pages_per_axis; ++page_x) {
-        const std::uint32_t local_page_index = page_y * pages_per_axis + page_x;
-        const std::uint32_t global_page_index
-          = clip_index * pages_per_level + local_page_index;
-        if (selected_pages[global_page_index] == 0U) {
-          continue;
-        }
-        bool needs_raster = true;
-        ResidentVirtualPage resident_page {};
-        if (previous_state != nullptr) {
-          if (const auto previous_resident_it
-            = previous_state->resident_pages.find(global_page_index);
-            previous_resident_it != previous_state->resident_pages.end()) {
-            resident_page = previous_resident_it->second;
-            needs_raster = !resident_page.ContentsValid()
-              || !reusable_clip_contents[clip_index];
+      const auto grid_offset_x
+        = static_cast<std::int32_t>(std::round(origin_x / page_world_size));
+      const auto grid_offset_y
+        = static_cast<std::int32_t>(std::round(origin_y / page_world_size));
+
+      for (std::uint32_t page_y = 0U; page_y < pages_per_axis; ++page_y) {
+        for (std::uint32_t page_x = 0U; page_x < pages_per_axis; ++page_x) {
+          const std::uint32_t local_page_index
+            = page_y * pages_per_axis + page_x;
+          const std::uint32_t global_page_index
+            = clip_index * pages_per_level + local_page_index;
+          if (selected_pages[global_page_index] == 0U) {
+            continue;
+          }
+
+          const std::uint64_t resident_key
+            = (static_cast<std::uint64_t>(clip_index) << 56ULL)
+            | ((static_cast<std::uint64_t>(static_cast<std::uint32_t>(
+                  grid_offset_x + static_cast<std::int32_t>(page_x)))
+                 & 0x0FFFFFFFULL)
+              << 28ULL)
+            | (static_cast<std::uint64_t>(static_cast<std::uint32_t>(
+                 grid_offset_y + static_cast<std::int32_t>(page_y)))
+              & 0x0FFFFFFFULL);
+
+          bool needs_raster = true;
+          ResidentVirtualPage resident_page {};
+          if (previous_state != nullptr) {
+            if (const auto previous_resident_it
+              = previous_state->resident_pages.find(resident_key);
+              previous_resident_it != previous_state->resident_pages.end()) {
+              resident_page = previous_resident_it->second;
+              needs_raster = !resident_page.ContentsValid()
+                || !reusable_clip_contents[clip_index];
+              ++reused_requested_pages;
+            } else {
+              const auto allocated_tile
+                = AcquirePhysicalTile(state, pages_per_level);
+              if (!allocated_tile.has_value()) {
+                continue;
+              }
+              resident_page.tile = *allocated_tile;
+              resident_page.state
+                = renderer::VirtualPageResidencyState::kPendingRender;
+              resident_page.last_touched_frame = frame_sequence_;
+              resident_page.last_requested_frame = frame_sequence_;
+              ++allocated_pages;
+            }
           } else {
             const auto allocated_tile
               = AcquirePhysicalTile(state, pages_per_level);
@@ -1342,66 +1347,63 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
               = renderer::VirtualPageResidencyState::kPendingRender;
             resident_page.last_touched_frame = frame_sequence_;
             resident_page.last_requested_frame = frame_sequence_;
+            ++allocated_pages;
           }
-        } else {
-          const auto allocated_tile
-            = AcquirePhysicalTile(state, pages_per_level);
-          if (!allocated_tile.has_value()) {
-            continue;
-          }
-          resident_page.tile = *allocated_tile;
-          resident_page.state
-            = renderer::VirtualPageResidencyState::kPendingRender;
+          resident_page.state = needs_raster
+            ? renderer::VirtualPageResidencyState::kPendingRender
+            : renderer::VirtualPageResidencyState::kResidentClean;
           resident_page.last_touched_frame = frame_sequence_;
           resident_page.last_requested_frame = frame_sequence_;
-        }
-        resident_page.state = needs_raster
-          ? renderer::VirtualPageResidencyState::kPendingRender
-          : renderer::VirtualPageResidencyState::kResidentClean;
-        resident_page.last_touched_frame = frame_sequence_;
-        resident_page.last_requested_frame = frame_sequence_;
-        state.resident_pages.insert_or_assign(global_page_index, resident_page);
-        state.page_table_entries[global_page_index] = PackPageTableEntry(
-          resident_page.tile.tile_x, resident_page.tile.tile_y);
+          state.resident_pages.insert_or_assign(resident_key, resident_page);
+          state.page_table_entries[global_page_index] = PackPageTableEntry(
+            resident_page.tile.tile_x, resident_page.tile.tile_y);
 
-        const float logical_left
-          = origin_x + static_cast<float>(page_x) * page_world_size;
-        const float logical_right = logical_left + page_world_size;
-        const float bottom
-          = origin_y + static_cast<float>(page_y) * page_world_size;
-        const float top = bottom + page_world_size;
-        const float left = logical_left - page_guard_world;
-        const float right = logical_right + page_guard_world;
-        const float guarded_bottom = bottom - page_guard_world;
-        const float guarded_top = top + page_guard_world;
-        const glm::mat4 light_proj = glm::orthoRH_ZO(
-          left, right, guarded_bottom, guarded_top, near_plane, far_plane);
+          const float logical_left
+            = origin_x + static_cast<float>(page_x) * page_world_size;
+          const float logical_right = logical_left + page_world_size;
+          const float bottom
+            = origin_y + static_cast<float>(page_y) * page_world_size;
+          const float top = bottom + page_world_size;
+          const float left = logical_left - page_guard_world;
+          const float right = logical_right + page_guard_world;
+          const float guarded_bottom = bottom - page_guard_world;
+          const float guarded_top = top + page_guard_world;
+          const glm::mat4 light_proj = glm::orthoRH_ZO(
+            left, right, guarded_bottom, guarded_top, near_plane, far_plane);
 
-        engine::ViewConstants page_view_constants = view_constants;
-        page_view_constants.SetViewMatrix(light_view)
-          .SetProjectionMatrix(light_proj)
-          .SetCameraPosition(light_eye);
+          engine::ViewConstants page_view_constants = view_constants;
+          page_view_constants.SetViewMatrix(light_view)
+            .SetProjectionMatrix(light_proj)
+            .SetCameraPosition(light_eye);
 
-        if (needs_raster) {
-          state.raster_jobs.push_back(VirtualShadowRasterJob {
-            .shadow_instance_index = 0U,
-            .payload_index = 0U,
-            .clip_level = clip_index,
-            .page_index = local_page_index,
-            .atlas_tile_x = resident_page.tile.tile_x,
-            .atlas_tile_y = resident_page.tile.tile_y,
-            .view_constants = page_view_constants.GetSnapshot(),
-          });
+          if (needs_raster) {
+            ++rerasterized_pages;
+            state.raster_jobs.push_back(VirtualShadowRasterJob {
+              .shadow_instance_index = 0U,
+              .payload_index = 0U,
+              .clip_level = clip_index,
+              .page_index = local_page_index,
+              .atlas_tile_x = resident_page.tile.tile_x,
+              .atlas_tile_y = resident_page.tile.tile_y,
+              .view_constants = page_view_constants.GetSnapshot(),
+            });
+          }
         }
       }
     }
-  }
+  };
+  process_clip_range_desc(coarse_backbone_begin, clip_level_count);
+  process_clip_range_desc(0U, coarse_backbone_begin);
+
+  (void)selected_page_count;
+  (void)coarse_backbone_pages;
+  (void)feedback_requested_pages;
+  (void)feedback_refinement_pages;
+  (void)reused_requested_pages;
+  (void)allocated_pages;
+  (void)rerasterized_pages;
 
   state.directional_virtual_metadata.push_back(metadata);
-
-  if (use_request_feedback) {
-    request_feedback_.erase(view_id);
-  }
 }
 
 auto VirtualShadowMapBackend::PublishShadowInstances(
@@ -1479,6 +1481,58 @@ auto VirtualShadowMapBackend::PublishPageTable(
       entries.size() * sizeof(std::uint32_t));
   }
   return allocation.srv;
+}
+
+auto VirtualShadowMapBackend::LogPublishTransition(
+  const ViewId view_id, const ViewCacheEntry& state) -> void
+{
+  auto& log_state = publish_log_states_[view_id];
+  const bool used_request_feedback = request_feedback_.contains(view_id);
+  const auto selected_page_count = state.introspection.mapped_page_count;
+  const auto pending_job_count
+    = static_cast<std::uint32_t>(state.pending_raster_jobs.size());
+  const auto raster_job_count
+    = static_cast<std::uint32_t>(state.raster_jobs.size());
+
+  if (!log_state.initialized
+    || log_state.last_used_feedback != used_request_feedback) {
+    LOG_F(INFO,
+      "VirtualShadowMapBackend: view {} is using {} request source "
+      "(selected_pages={} pending_jobs={} raster_jobs={} mapped_pages={} "
+      "resident_pages={})",
+      view_id.get(), used_request_feedback ? "feedback" : "bootstrap",
+      selected_page_count, pending_job_count, raster_job_count,
+      state.introspection.mapped_page_count,
+      state.introspection.resident_page_count);
+  }
+
+  if (!log_state.initialized
+    || log_state.last_selected_page_count == 0U && selected_page_count != 0U
+    || log_state.last_selected_page_count != 0U && selected_page_count == 0U) {
+    LOG_F(INFO,
+      "VirtualShadowMapBackend: view {} selected {} virtual page(s) "
+      "(mapped_pages={} resident_pages={})",
+      view_id.get(), selected_page_count, state.introspection.mapped_page_count,
+      state.introspection.resident_page_count);
+  }
+
+  if (!log_state.initialized
+    || log_state.last_pending_job_count == 0U && pending_job_count != 0U
+    || log_state.last_pending_job_count != 0U && pending_job_count == 0U) {
+    LOG_F(INFO,
+      "VirtualShadowMapBackend: view {} {} {} pending virtual raster job(s) "
+      "(raster_jobs={} mapped_pages={} resident_pages={})",
+      view_id.get(), pending_job_count == 0U ? "has" : "queued",
+      pending_job_count, raster_job_count,
+      state.introspection.mapped_page_count,
+      state.introspection.resident_page_count);
+  }
+
+  log_state.last_selected_page_count = selected_page_count;
+  log_state.last_pending_job_count = pending_job_count;
+  log_state.last_raster_job_count = raster_job_count;
+  log_state.last_used_feedback = used_request_feedback;
+  log_state.initialized = true;
 }
 
 } // namespace oxygen::renderer::internal

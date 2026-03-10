@@ -43,6 +43,7 @@ struct VirtualShadowViewIntrospection {
   std::span<const engine::DirectionalVirtualShadowMetadata>
     directional_virtual_metadata {};
   std::span<const VirtualShadowRasterJob> virtual_raster_jobs {};
+  std::span<const std::uint32_t> page_table_entries {};
   std::uint32_t mapped_page_count { 0U };
   std::uint32_t resident_page_count { 0U };
   std::uint32_t clean_page_count { 0U };

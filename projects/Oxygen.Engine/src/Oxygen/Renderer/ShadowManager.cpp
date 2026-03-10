@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <optional>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
@@ -15,6 +17,37 @@
 namespace oxygen::renderer {
 
 namespace {
+
+  auto BuildSyntheticSunCandidate(
+    const ShadowManager::SyntheticSunShadowInput& synthetic_sun_shadow)
+    -> engine::DirectionalShadowCandidate
+  {
+    return engine::DirectionalShadowCandidate {
+      .light_index = 0xFFFFFFFFU,
+      .light_flags
+      = static_cast<std::uint32_t>(engine::DirectionalLightFlags::kAffectsWorld
+        | engine::DirectionalLightFlags::kCastsShadows
+        | engine::DirectionalLightFlags::kSunLight
+        | engine::DirectionalLightFlags::kEnvironmentContribution),
+      .mobility = static_cast<std::uint32_t>(scene::LightMobility::kRealtime),
+      .resolution_hint = synthetic_sun_shadow.resolution_hint,
+      .direction_ws = synthetic_sun_shadow.direction_ws,
+      .bias = synthetic_sun_shadow.bias,
+      .normal_bias = synthetic_sun_shadow.normal_bias,
+      .cascade_count = synthetic_sun_shadow.cascade_count,
+      .distribution_exponent = synthetic_sun_shadow.distribution_exponent,
+      .cascade_distances = synthetic_sun_shadow.cascade_distances,
+    };
+  }
+
+  auto IsSceneSunShadowCandidate(
+    const engine::DirectionalShadowCandidate& candidate) -> bool
+  {
+    const auto flags
+      = static_cast<engine::DirectionalLightFlags>(candidate.light_flags);
+    return (flags & engine::DirectionalLightFlags::kSunLight)
+      != engine::DirectionalLightFlags::kNone;
+  }
 
   auto RecordDirectionalImplementation(
     std::unordered_map<std::uint64_t, engine::ShadowImplementationKind>&
@@ -98,33 +131,38 @@ auto ShadowManager::PublishForView(const ViewId view_id,
   std::vector<engine::DirectionalShadowCandidate> candidates_storage;
   const auto light_candidates = lights.GetDirectionalShadowCandidates();
   candidates_storage.assign(light_candidates.begin(), light_candidates.end());
+
+  std::optional<engine::DirectionalShadowCandidate> synthetic_sun_candidate;
   if (synthetic_sun_shadow != nullptr && synthetic_sun_shadow->enabled) {
-    candidates_storage.push_back(engine::DirectionalShadowCandidate {
-      .light_index = 0xFFFFFFFFU,
-      .light_flags
-      = static_cast<std::uint32_t>(engine::DirectionalLightFlags::kAffectsWorld
-        | engine::DirectionalLightFlags::kCastsShadows
-        | engine::DirectionalLightFlags::kSunLight
-        | engine::DirectionalLightFlags::kEnvironmentContribution),
-      .mobility = static_cast<std::uint32_t>(scene::LightMobility::kRealtime),
-      .resolution_hint = synthetic_sun_shadow->resolution_hint,
-      .direction_ws = synthetic_sun_shadow->direction_ws,
-      .bias = synthetic_sun_shadow->bias,
-      .normal_bias = synthetic_sun_shadow->normal_bias,
-      .cascade_count = synthetic_sun_shadow->cascade_count,
-      .distribution_exponent = synthetic_sun_shadow->distribution_exponent,
-      .cascade_distances = synthetic_sun_shadow->cascade_distances,
-    });
+    synthetic_sun_candidate = BuildSyntheticSunCandidate(*synthetic_sun_shadow);
+    candidates_storage.push_back(*synthetic_sun_candidate);
+  }
+
+  std::vector<engine::DirectionalShadowCandidate> virtual_candidates;
+  if (synthetic_sun_candidate.has_value()) {
+    const bool has_non_sun_scene_candidates
+      = std::any_of(light_candidates.begin(), light_candidates.end(),
+        [](const engine::DirectionalShadowCandidate& candidate) {
+          return !IsSceneSunShadowCandidate(candidate);
+        });
+    if (!has_non_sun_scene_candidates) {
+      // The current directional VSM slice can publish exactly one shadowed
+      // directional source. When the resolved sun is synthetic, the sun path
+      // owns that slot and any scene-backed sun light is skipped by shading.
+      virtual_candidates.push_back(*synthetic_sun_candidate);
+    }
+  } else if (light_candidates.size() == 1U) {
+    virtual_candidates.push_back(light_candidates.front());
   }
 
   const bool virtual_eligible = virtual_backend_ != nullptr
-    && candidates_storage.size() == 1U
+    && virtual_candidates.size() == 1U
     && directional_policy_
       != oxygen::DirectionalShadowImplementationPolicy::kConventionalOnly;
 
   if (virtual_eligible) {
     const auto publication = virtual_backend_->PublishView(view_id,
-      view_constants, candidates_storage, shadow_caster_bounds,
+      view_constants, virtual_candidates, shadow_caster_bounds,
       visible_receiver_bounds, gpu_budget,
       directional_policy_
         != oxygen::DirectionalShadowImplementationPolicy::kVirtualOnly,
@@ -133,7 +171,7 @@ auto ShadowManager::PublishForView(const ViewId view_id,
       != kInvalidShaderVisibleIndex) {
       RecordDirectionalImplementation(last_view_directional_implementation_,
         view_id, engine::ShadowImplementationKind::kVirtual,
-        static_cast<std::uint32_t>(candidates_storage.size()));
+        static_cast<std::uint32_t>(virtual_candidates.size()));
       return publication;
     }
     if (directional_policy_
@@ -144,7 +182,7 @@ auto ShadowManager::PublishForView(const ViewId view_id,
         view_id.get());
       RecordDirectionalImplementation(last_view_directional_implementation_,
         view_id, engine::ShadowImplementationKind::kNone,
-        static_cast<std::uint32_t>(candidates_storage.size()));
+        static_cast<std::uint32_t>(virtual_candidates.size()));
       return {};
     }
   } else if (directional_policy_
@@ -153,11 +191,11 @@ auto ShadowManager::PublishForView(const ViewId view_id,
       LOG_F(WARNING,
         "ShadowManager: virtual-only directional policy could not activate "
         "for view {} (eligible_candidates={})",
-        view_id.get(), candidates_storage.size());
+        view_id.get(), virtual_candidates.size());
     }
     RecordDirectionalImplementation(last_view_directional_implementation_,
       view_id, engine::ShadowImplementationKind::kNone,
-      static_cast<std::uint32_t>(candidates_storage.size()));
+      static_cast<std::uint32_t>(virtual_candidates.size()));
     return {};
   }
 
@@ -171,9 +209,9 @@ auto ShadowManager::PublishForView(const ViewId view_id,
     return {};
   }
 
-  const auto publication = conventional_backend_->PublishView(
-    view_id, view_constants, candidates_storage, shadow_caster_bounds,
-    shadow_caster_content_hash);
+  const auto publication
+    = conventional_backend_->PublishView(view_id, view_constants,
+      candidates_storage, shadow_caster_bounds, shadow_caster_content_hash);
   if (publication.shadow_instance_metadata_srv != kInvalidShaderVisibleIndex) {
     RecordDirectionalImplementation(last_view_directional_implementation_,
       view_id, engine::ShadowImplementationKind::kConventional,

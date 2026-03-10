@@ -6,7 +6,9 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 #include <Oxygen/Graphics/Common/NativeObject.h>
@@ -51,6 +53,14 @@ private:
   void* shadow_view_constants_mapped_ptr_ { nullptr };
   std::uint32_t shadow_view_constants_capacity_ { 0U };
   std::vector<ViewConstants::GpuData> job_view_constants_upload_;
+
+  struct ViewLogState {
+    bool saw_live_prepared_frame { false };
+    bool saw_live_plan_jobs { false };
+    bool saw_zero_draw_live_frame { false };
+    bool saw_nonzero_draw_live_frame { false };
+  };
+  std::unordered_map<std::uint64_t, ViewLogState> view_log_states_;
 };
 
 } // namespace oxygen::engine

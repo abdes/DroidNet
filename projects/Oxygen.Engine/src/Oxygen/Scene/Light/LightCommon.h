@@ -6,7 +6,9 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 
 #include <Oxygen/Core/Constants.h>
@@ -69,12 +71,42 @@ struct CommonLightProperties {
 };
 
 inline constexpr std::uint32_t kMaxShadowCascades = 4U;
+inline constexpr std::array<float, kMaxShadowCascades>
+  kDefaultDirectionalCascadeDistances { 8.0F, 24.0F, 64.0F, 160.0F };
 
 //! Cascaded shadow map (CSM) configuration for directional lights.
 struct CascadedShadowSettings {
   std::uint32_t cascade_count = kMaxShadowCascades;
-  std::array<float, kMaxShadowCascades> cascade_distances {};
+  std::array<float, kMaxShadowCascades> cascade_distances
+    = kDefaultDirectionalCascadeDistances;
   float distribution_exponent = 1.0F;
 };
+
+[[nodiscard]] inline auto CanonicalizeCascadedShadowSettings(
+  CascadedShadowSettings settings) noexcept -> CascadedShadowSettings
+{
+  settings.cascade_count
+    = std::clamp(settings.cascade_count, 1U, kMaxShadowCascades);
+
+  bool has_valid_distances = true;
+  float previous_distance = 0.0F;
+  for (std::uint32_t i = 0U; i < settings.cascade_count; ++i) {
+    const float distance = settings.cascade_distances[i];
+    if (!std::isfinite(distance) || distance <= previous_distance) {
+      has_valid_distances = false;
+      break;
+    }
+    previous_distance = distance;
+  }
+  if (!has_valid_distances) {
+    settings.cascade_distances = kDefaultDirectionalCascadeDistances;
+  }
+
+  if (!std::isfinite(settings.distribution_exponent)
+    || settings.distribution_exponent <= 0.0F) {
+    settings.distribution_exponent = 1.0F;
+  }
+  return settings;
+}
 
 } // namespace oxygen::scene

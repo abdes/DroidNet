@@ -7,8 +7,10 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -84,7 +86,8 @@ private:
   const graphics::Texture* depth_texture_owner_ { nullptr };
   bool owns_depth_texture_srv_ { false };
 
-  std::array<SlotReadbackState, frame::kFramesInFlight.get()> slot_readbacks_ {};
+  std::array<SlotReadbackState, frame::kFramesInFlight.get()>
+    slot_readbacks_ {};
 
   ViewId active_view_id_ {};
   std::uint32_t active_request_word_count_ { 0U };
@@ -92,9 +95,15 @@ private:
   std::uint32_t active_clip_level_count_ { 0U };
   bool active_dispatch_ { false };
 
+  struct FeedbackLogState {
+    std::uint32_t last_feedback_count { 0U };
+    bool had_pending_feedback { false };
+  };
+  std::unordered_map<std::uint64_t, FeedbackLogState> feedback_log_states_;
+
   static constexpr std::uint32_t kDispatchGroupSize = 8U;
-  static constexpr std::uint32_t kMaxSupportedPagesPerAxis = 16U;
-  static constexpr std::uint32_t kMaxSupportedClipLevels = 6U;
+  static constexpr std::uint32_t kMaxSupportedPagesPerAxis = 64U;
+  static constexpr std::uint32_t kMaxSupportedClipLevels = 12U;
   static constexpr std::uint32_t kMaxSupportedPageCount
     = kMaxSupportedPagesPerAxis * kMaxSupportedPagesPerAxis
     * kMaxSupportedClipLevels;

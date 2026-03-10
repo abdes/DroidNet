@@ -115,8 +115,26 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
     = shadow_manager->TryGetVirtualRenderPlan(Context().current_view.view_id);
   if (render_plan == nullptr || render_plan->jobs.empty()
     || render_plan->depth_texture == nullptr) {
+    auto& log_state = view_log_states_[Context().current_view.view_id.get()];
+    if (render_plan != nullptr && render_plan->depth_texture != nullptr
+      && log_state.saw_live_plan_jobs) {
+      log_state.saw_live_plan_jobs = false;
+      LOG_F(INFO,
+        "VirtualShadowPageRasterPass: view {} has no pending virtual raster "
+        "jobs anymore",
+        Context().current_view.view_id.get());
+    }
     Context().RegisterPass(this);
     co_return;
+  }
+
+  auto& log_state = view_log_states_[Context().current_view.view_id.get()];
+  if (!log_state.saw_live_plan_jobs) {
+    log_state.saw_live_plan_jobs = true;
+    LOG_F(INFO,
+      "VirtualShadowPageRasterPass: view {} has {} pending virtual raster "
+      "job(s)",
+      Context().current_view.view_id.get(), render_plan->jobs.size());
   }
 
   const auto psf = Context().current_view.prepared_frame;
@@ -130,6 +148,14 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
       psf ? psf->partitions.size() : 0U);
     Context().RegisterPass(this);
     co_return;
+  }
+  if (!log_state.saw_live_prepared_frame) {
+    log_state.saw_live_prepared_frame = true;
+    LOG_F(INFO,
+      "VirtualShadowPageRasterPass: view {} has a live prepared frame "
+      "(draw_bytes={} partitions={})",
+      Context().current_view.view_id.get(), psf->draw_metadata_bytes.size(),
+      psf->partitions.size());
   }
 
   auto& depth_texture = const_cast<graphics::Texture&>(GetDepthTexture());
@@ -184,13 +210,28 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
   recorder.FlushBarriers();
 
   if (emitted_count == 0U) {
+    if (!log_state.saw_zero_draw_live_frame) {
+      log_state.saw_zero_draw_live_frame = true;
+      log_state.saw_nonzero_draw_live_frame = false;
+    }
     LOG_F(WARNING,
       "VirtualShadowPageRasterPass: view {} produced no shadow-caster draws "
       "(jobs={} skipped_invalid={} errors={})",
       Context().current_view.view_id.get(), render_plan->jobs.size(),
       skipped_invalid, draw_errors);
+  } else {
+    if (!log_state.saw_nonzero_draw_live_frame) {
+      log_state.saw_nonzero_draw_live_frame = true;
+      log_state.saw_zero_draw_live_frame = false;
+      LOG_F(INFO,
+        "VirtualShadowPageRasterPass: view {} emitted {} shadow-caster draw(s) "
+        "for {} virtual page job(s)",
+        Context().current_view.view_id.get(), emitted_count,
+        render_plan->jobs.size());
+    }
+    shadow_manager->MarkVirtualRenderPlanExecuted(
+      Context().current_view.view_id);
   }
-  shadow_manager->MarkVirtualRenderPlanExecuted(Context().current_view.view_id);
 
   Context().RegisterPass(this);
   co_return;

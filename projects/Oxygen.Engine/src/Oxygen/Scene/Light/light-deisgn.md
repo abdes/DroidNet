@@ -286,6 +286,11 @@ as the scene’s sun.
 
 - Cascaded shadow settings on `DirectionalLight` are the authoritative source
   for CSM configuration.
+- The canonical default split contract is non-zero:
+  `8 / 24 / 64 / 160` world units with `distribution_exponent = 1.0`.
+- Renderer/runtime ingestion must canonicalize legacy or invalid split arrays
+  (for example all-zero distances from older cooked data) back to that default
+  contract before building directional shadow products.
 - Final shadow eligibility still requires:
   - node flag `kCastsShadows == true`, and
   - `DirectionalLight.casts_shadows == true`.

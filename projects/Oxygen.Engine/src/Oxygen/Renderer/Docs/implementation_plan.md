@@ -453,7 +453,11 @@ Execution note, March 8, 2026:
   sun is `SunSource::kSynthetic` and `Sun::CastsShadows()` is true. The
   resolved sun's shadow lookup is published through
   `ShadowFrameBindings.sun_shadow_index` instead of requiring a scene-backed
-  directional light record.
+  directional light record. For the current single-source directional VSM
+  slice, the synthetic sun owns that slot and scene sun-tagged directionals do
+  not disqualify virtual publication. The canonical directional split defaults
+  are now explicit and non-zero: `8 / 24 / 64 / 160` with
+  `distribution_exponent = 1.0`.
 - ScenePrep finalization now publishes explicit shadow-caster participation
   through `PassMask::kShadowCaster`, keeping shadow submission in the existing
   draw metadata and partitioning path.
@@ -652,8 +656,8 @@ Execution note, March 9, 2026:
   - directional virtual shadow maps first
   - light-space clipmaps
   - atlas-backed physical page pool
-  - budget-bounded CPU-visible-receiver-driven page selection for the current
-    visual-validation slice
+  - correctness-first residency for the current visual-validation slice:
+    no frame-budgeted page selection in the active path
   - that slice activates only when the view resolves to exactly one active
     directional shadow product; multi-directional views remain conventional
   - virtual rasterization remains scheduled after main depth pre-pass so the
@@ -664,23 +668,35 @@ Execution note, March 9, 2026:
   - `VirtualShadowPageRasterPass`
   - directional virtual metadata publication through `ShadowFrameBindings`
   - renderer policy plumbing for conventional vs virtual directional selection
-  - engine-budget-aware VSM density control: the first slice now consumes
-    `FrameContext::BudgetStats.gpu_budget` and caps fixed clipmap density from
-    the active frame budget instead of treating the quality tier as an
-    unconditional runtime commitment
-  - deterministic budget fallback for `prefer-virtual`: when the estimated
-    fixed-residency clipmap work exceeds the current GPU frame budget, runtime
-    selection falls back to conventional directional shadows instead of forcing
-    the experimental VSM path to stall the frame
-  - CPU-visible-receiver-driven virtual page selection: the current slice now
-    uses `PreparedSceneFrame.visible_receiver_bounding_spheres` to request
-    per-clip pages from actual visible shadow receivers
-  - deterministic per-clip prioritization under the current page budget:
-    visible-receiver page requests are ranked by clip level, receiver overlap,
-    and proximity to the camera-relative clip center before raster jobs are
-    emitted
-  - centered resident-window fallback only when receiver-driven selection does
-    not request any pages
+  - correctness-first directional VSM configuration:
+    - virtual clipmap density is fixed per quality tier
+    - physical atlas capacity is fixed per quality tier
+    - the active runtime path no longer applies frame-budget density caps or
+      budget-driven backend fallback inside VSM
+  - mandatory coarse clipmap backbone selection from the visible frustum
+    footprint every frame; this is the only bootstrap path before compatible
+    depth feedback arrives
+  - feedback-driven fine refinement is the only steady-state request source;
+    CPU receiver-bounds refinement is no longer part of the live algorithm
+  - virtual address-space density is now fully decoupled from physical/update
+    capacity:
+    - the virtual clipmap grid stays dense and stable per quality tier
+    - residency/update capacity is a separate physical-atlas limit
+    - the active runtime no longer shrinks the virtual page grid to fit the
+      current page budget, which had been producing giant unstable shadow wedges
+  - directional VSM clipmaps now use a stable exponential ladder:
+    - the base page world size is quantized to a power-of-two step
+    - each clip level doubles page world size and coverage
+    - the runtime no longer rebuilds a coarse six-level cascade-like ladder
+      from view-dependent extents
+  - directional VSM request generation remains footprint-driven:
+    - request generation chooses the coarsest containing clip whose logical
+      texel size still matches the receiver footprint
+    - it requests that clip, optionally one finer clip near the threshold, and
+      all containing coarser clips
+  - directional VSM shading is not footprint-driven:
+    - shading samples the finest available containing clip first
+    - invalid pages fall back coherently to coarser clips
   - cross-frame resident-page reuse for snapped-identical virtual plans:
     unchanged page tables and clip metadata keep their resident pages, reuse
     physical page allocations, and skip redundant page rerasterization
@@ -713,10 +729,10 @@ Execution note, March 9, 2026:
     after page guard reservation, not the full physical page resolution, so
     large flat receivers do not retain projected striping from under-biased
     virtual texels
-  - virtual page ownership stays on the un-biased receiver position, while
-    local in-page sampling and depth comparison follow the biased receiver
-    position so normal-offset bias can move the sample footprint without
-    destabilizing virtual addressing
+  - virtual page ownership and the full in-page PCF footprint now stay on the
+    un-biased receiver position; only the comparison depth follows the biased
+    receiver so shadow bias cannot translate the sampled shadow laterally away
+    from the caster base
   - virtual comparison-PCF now applies receiver-plane depth bias per tap so
     large-kernel filtering does not reuse one receiver depth for every sample
   - virtual comparison-PCF now resolves neighboring taps through the virtual
@@ -740,12 +756,10 @@ Execution note, March 9, 2026:
     separately from total resident pages
   - virtual page-local sampling now flips `y` to match the rendered atlas tile
     orientation under D3D/Oxygen conventions
-  - virtual physical page size is now atlas-budget-aware instead of hard
-    clamped to `256`, so sparse clip grids can preserve more of the authored
-    directional resolution when the atlas budget allows it
-  - ultra-tier virtual shadows now use a larger physical atlas budget at
-    16 ms frame budgets so fine virtual pages can exceed the old
-    `256`-texel page cap
+  - virtual physical page size is fixed from quality tier and physical atlas
+    capacity, not frame budget
+  - ultra-tier virtual shadows now use a larger fixed physical atlas and page
+    size so fine virtual pages can exceed the old `256`-texel page cap
   - the virtual directional runtime now uses a denser address space than
     before, while keeping the physical pool separately budget-bounded:
     - ultra-tier virtual shadows use `6` clip levels instead of inheriting the
@@ -766,29 +780,48 @@ Execution note, March 9, 2026:
   - it writes a deduplicated request-bit mask on the GPU from main-depth
     receiver samples and current directional virtual metadata
   - it copies that bit mask into a per-frame-slot readback buffer
-  - on safe slot reuse, the CPU decodes and submits one-shot per-view request
+  - on safe slot reuse, the CPU decodes and submits per-view request
     feedback to `ShadowManager`
 - The current request model therefore uses:
   - live depth-driven request feedback after the first safe frame-slot latency
-  - CPU visible-receiver bounds only as fallback when compatible feedback is
-    not yet available
+  - compatible feedback as the only steady-state fine request source
+  - a mandatory coarse clipmap backbone over the visible frustum footprint
+    every frame
+  - directional VSM no longer chooses the first containing clip in either
+    shading or request generation; clip selection is now driven by projected
+    light-space receiver footprint so far views do not force fine-clip page
+    selection across the entire visible scene
+  - feedback-driven requests now apply a bounded page guard band so fine
+    virtual coverage does not disappear exactly at the camera frustum edge
+  - feedback-driven requests now build stable per-clip requested regions
+    instead of reacting directly to sparse per-page hits
+  - oversubscribed feedback uses smaller guard dilation plus current mapped-page
+    pinning, while non-oversubscribed feedback keeps the broader guard band for
+    continuity
+  - mapped-page hysteresis under request pressure, so currently mapped
+    requested pages are pinned first
+  - requested virtual coverage now resolves into stable contiguous per-clip
+    feedback regions instead of sparse page-by-page winners
+  - coarser backbone clips are mapped first, then fine refinement clips, so
+    valid fallback coverage exists by construction when physical tile capacity
+    is exhausted
 - The first slice is still not default-safe for heavy scenes like Sponza.
   Requests are now bounded and cross-frame reusable, but the path still lacks
   the final GPU residency-resolve/update pass, dirty-page tracking, and full
   eviction model. Until that sparse residency path lands,
   demo/runtime validation must keep VSM opt-in rather than the default
-  directional path, and `prefer-virtual` must remain allowed to fall back to
-  conventional under current-frame GPU budget pressure.
+  directional path. Budgeted VSM page/update policy is deferred until after
+  correctness and quality are closed.
 - Validation evidence for the first slice:
   - `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:6 /p:Configuration=Debug /nologo`
   - `msbuild out/build-vs/src/Oxygen/Engine/oxygen-engine.vcxproj /m:6 /p:Configuration=Debug /nologo`
   - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:6 /p:Configuration=Debug /nologo`
   - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:6 /p:Configuration=Debug /nologo`
   - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
-  - current focused coverage includes:
-    - visible-receiver-driven virtual page selection
-    - one-shot virtual request feedback consumption
-    - one-shot feedback fallback back to CPU visible-receiver requests
+- current focused coverage includes:
+    - depth-feedback-driven virtual page selection
+    - compatible request feedback reuse within a bounded freshness window
+    - bounded bootstrap behavior before the first compatible feedback arrives
     - resident-page reuse for identical virtual plans
     - rerasterization when caster inputs change under identical snapped plans
   - the first parallel validation attempt hit the known MSBuild shared-PDB

@@ -21,6 +21,10 @@ shadow-map family in Oxygen.
 Locked decisions:
 
 - Initial shipping virtual backend scope is **directional lights only**.
+- The current runtime slice publishes **one effective directional VSM source
+  per view**; a synthetic sun takes that slot ahead of scene sun-tagged
+  directionals, while additional non-sun shadowed directionals stay on the
+  conventional path.
 - Directional virtual coverage uses **camera-relative light-space clipmaps**.
 - Virtual pages are backed by a **shared physical atlas pool**, not by one
   `Texture2DArray` layer per page.
@@ -112,21 +116,36 @@ Current runtime note:
 
 - the live implementation no longer hard clamps physical page size to `256`
   texels
-- page size is now capped by both quality tier and atlas budget, so sparse
-  page grids can retain more authored directional resolution without allowing
-  the physical atlas to grow without bound
-- ultra quality now grants a larger physical atlas budget at 16 ms frame
-  budgets so fine virtual pages can carry more texels before residency becomes
-  the limiting factor
+- the active runtime is now correctness-first:
+  - virtual page-grid density is fixed per quality tier
+  - physical atlas capacity is fixed per quality tier
+  - frame-budget-shaped page selection is deferred until after correctness and
+    quality are closed
 - the live implementation now also decouples virtual address-space density from
   physical residency capacity:
   - higher tiers use more virtual clip levels and denser page grids than the
     initial validation slice
-  - the physical atlas is budget-bounded and no longer sized as if every
+  - the physical atlas is capacity-bounded and no longer sized as if every
     virtual page had to be resident simultaneously
   - when virtual clip count exceeds authored conventional cascade count, the
     extra clip boundaries are generated from the practical split policy instead
     of indexing past authored cascade distances
+- directional VSM clipmap coverage now follows a stable exponential ladder:
+  - the base page world size is quantized to a power-of-two step
+  - each clip level doubles page world size and clip coverage
+  - the ladder is no longer regenerated from a coarse cascade-like set of
+    per-view extents, because that produced large visible quality wedges and
+    unstable far-distance refinement
+- request generation is footprint-driven:
+  - the request producer chooses the coarsest containing clip whose logical
+    texel size still matches the receiver footprint
+  - it requests that clip, optionally one finer clip near the threshold, and
+    all containing coarser clips for guaranteed fallback
+- shading is not footprint-driven:
+  - shading samples the finest available containing clip first
+  - if that page is invalid, it falls back coherently to coarser clips
+  - clip-boundary blending remains between the active fine clip and the next
+    coarser clip
 
 ### 3.3 Coverage selection
 
@@ -322,19 +341,28 @@ placement.
 
 ### 7.1 Receiver-driven requests
 
-The final sparse VSM path is receiver-driven. The current implementation now
-starts from visible receiver demand on the CPU, but it is still an intermediate
-slice rather than the final depth/feedback-driven sparse request path.
+The final sparse VSM path is receiver-driven. The live implementation is still
+an intermediate slice, but the corrected algorithm is now fixed:
+
+- depth/feedback-driven fine-page refinement is the only steady-state request
+  source
+- a mandatory coarse clipmap backbone covers the visible frustum footprint
+  every frame
+- fine-page misses must degrade to valid coarser clip coverage by
+  construction, not by heuristic luck
+- mixed CPU receiver-bounds requests are not part of the steady-state
+  algorithm because they make correctness and troubleshooting ambiguous
 
 Current intermediate behavior:
 
 - `VirtualShadowMapBackend` computes one camera-relative clipmap grid per level
-- visible receiver bounds from `PreparedSceneFrame` are projected into that
-  grid to request pages per clip level
-- explicit one-shot per-view request feedback can override that CPU request
-  source when the renderer provides compatible clip/page coordinates
-- requested pages are prioritized by clip level, receiver overlap, and
-  proximity to the camera-relative clip center under the current page budget
+- the visible frustum footprint is projected into clip pages to build the
+  mandatory coarse clip backbone
+- per-view depth feedback refines finer clip pages on top of that backbone
+- requested pages are resolved into contiguous per-clip regions
+- coarse backbone coverage is mapped first, then fine refinement coverage
+- when physical tile capacity is exhausted, the planner must still preserve
+  valid coarse clip coverage before spending tiles on fine refinement
 - the shader-visible page table is populated only for the selected resident
   pages
 - snapped-identical page tables and clip metadata reuse resident pages across
@@ -416,11 +444,21 @@ Current live note:
   generation step after `DepthPrePass`
 - it writes a GPU deduplicated request-bit mask and copies it into a
   per-frame-slot readback buffer
-- on safe slot reuse, the CPU decodes that mask and submits one-shot request
+- on safe slot reuse, the CPU decodes that mask and submits per-view request
   feedback to `VirtualShadowMapBackend`
-- until the first safe feedback arrives for a view, or if no compatible
-  feedback is available, the backend falls back to the existing CPU
-  visible-receiver request path
+- compatible feedback is the only steady-state fine request source
+- feedback-driven requests now carry a bounded page guard band so fine virtual
+  coverage does not disappear exactly at the camera frustum edge
+- feedback-driven requests now build stable per-clip requested regions instead
+  of feeding sparse per-page hits directly into selection
+- the planner must combine those regions with a mandatory coarse clip backbone
+  so oversubscription cannot leave fine pages without valid coarser fallback
+- virtual pages-per-axis stays fixed per quality tier; correctness is preserved
+  by deterministic physical-tile selection, not by shrinking the virtual
+  address space under pressure
+- until the first safe feedback arrives for a view, the runtime uses the same
+  coarse-backbone algorithm without fine refinement instead of switching to a
+  second request source
 
 ## 8. Residency and Invalidation
 
@@ -476,6 +514,9 @@ The backend should invalidate conservatively but spatially:
 - dirty volumes are transformed into light space
 - overlapping clip levels/pages are marked dirty
 
+*Future Evolution (Static/Dynamic Separation):*
+While the initial implementation invalidates pages entirely when overlapping dirty volumes, future production hardening for dense scenes should decouple static and dynamic geometry caches. This avoids massively rerasterizing static background geometry when a dynamic caster moves through a page. The invalidation model must eventually track static vs. dynamic page state and composite dynamic geometry into long-lived static cache pages.
+
 Do not invalidate the whole product unless:
 
 - light basis changes fundamentally
@@ -500,6 +541,9 @@ A virtual raster job minimally needs:
 
 This implies a future `RasterShadowTargetKind::kAtlasRect` in addition to the
 current array-slice target kind.
+
+*Future Evolution (Compute Rasterization):*
+Virtual page rendering is uniquely punishing to hardware fixed-function rasterizers due to the high density of small triangles falling into small (e.g., 128x128) page viewports. The virtual raster job model and pass design must remain flexible enough to eventually accept a compute-shader software rasterization backend for small triangles, which is standard in SOTA virtual shadow map implementations.
 
 ### 9.2 Page projection
 
@@ -577,33 +621,21 @@ Initial directional virtual defaults:
 | High | 6 | 64 x 64 | 128 | 2 atlas layers |
 | Ultra | 6 | 64 x 64 | 128 | 4 atlas layers |
 
-Per-frame update budgets are also tier-owned:
-
-- max newly allocated pages
-- max dirty-page rerenders
-- max total page renders
-
-The first implementation should keep these budgets explicit in
-`RendererConfig`.
+Per-frame update budgets are intentionally not part of the current correctness
+path. The active implementation uses fixed quality-tier resources and a
+deterministic selection order rather than frame-budgeted density scaling.
 
 Current runtime note:
 
-- the current validation slice is bounded and partially sparse, but not yet the
-  final feedback-driven sparse VSM path
-- it already consumes the engine-derived GPU frame budget
-  (`FrameContext::BudgetStats.gpu_budget`) to cap clipmap density
-- in `prefer-virtual`, the backend may deterministically decline the virtual
-  path and fall back to conventional directional shadows when the estimated
-  virtual work exceeds the current frame GPU budget
-- page requests are currently generated from
-  runtime depth feedback when available; otherwise they fall back to
-  `PreparedSceneFrame.visible_receiver_bounding_spheres`, are prioritized per
-  clip, and are clamped by the current frame budget
+- the current validation slice is bounded by fixed quality-tier resources, but
+  not by frame-budget density capping or budget-driven backend fallback
+- page requests are generated from runtime depth feedback when available;
+  otherwise bootstrap coverage comes only from the mandatory coarse clip
+  backbone and visible receiver bounds used to build contiguous refinement
+  regions before the first safe feedback arrives
 - `VirtualShadowRequestPass` is now the live runtime producer for that feedback
   path; it runs after `DepthPrePass`, scans the main depth buffer, and submits
-  one-shot request feedback through a slot-safe readback path
-- a deterministic centered resident window is only used as fallback when the
-  receiver-driven selection requests no pages
+  bounded-lifetime request feedback through a slot-safe readback path
 - snapped-identical clip metadata and page tables reuse resident physical pages
   across frames and skip redundant page rerasterization
 - resident-page reuse is only content-valid when directional shadow inputs and
@@ -626,10 +658,10 @@ Current runtime note:
   after guard reservation; using the full physical page resolution
   underestimates virtual texel scale and leaves projected striping on large
   flat receivers
-- virtual page ownership must stay on the un-biased receiver position, while
-  local in-page sampling and depth comparison use the biased receiver position
-  so normal-offset bias can move the sample footprint without destabilizing
-  virtual addressing
+- virtual page ownership and the full in-page filter footprint must stay on
+  the un-biased receiver position; only the depth comparison uses the biased
+  receiver position, so bias cannot translate the sampled shadow laterally
+  away from the caster base
 - virtual comparison-PCF must apply receiver-plane depth bias per tap; reusing
   one receiver depth for the whole kernel reintroduces regular self-shadow
   striping on sloped receivers
@@ -641,6 +673,12 @@ Current runtime note:
   slope-scaled depth bias; leaving the rasterizer slope term at zero pushes
   all acne prevention onto receiver-side bias and allows regular moire bands
   to survive on broad receivers and caster faces
+- requested coverage resolves into contiguous per-clip regions:
+  - coarse backbone clips are mapped first every frame
+  - fine refinement regions from feedback or bootstrap bounds are mapped after
+    that in coarse-to-fine order
+  - this keeps valid coarse fallback coverage alive even when fine refinement
+    cannot map every requested page
 - invalid fine pages currently fall back to the next valid coarser clip in
   shading so bounded residency remains visually coherent
 - `virtual-only` remains the strict validation mode and does not use the
@@ -695,7 +733,7 @@ The next implementation milestone is:
 This milestone is complete only when:
 
 - depth/feedback-driven request generation is live
-- request deduplication and budgeted page scheduling are live
+- request deduplication and deterministic page scheduling are live
 - residency reuse/invalidation/eviction are deterministic and content-safe
 - `virtual-only` is stable under camera rotation/translation in validation
   scenes including Sponza
@@ -716,12 +754,10 @@ Implementation status, March 9, 2026:
   - virtual page raster pass
   - shader dispatch through `ShadowInstanceMetadata`
   - renderer family-selection policy for directional shadows
-  - frame-budget-aware clipmap density capping and deterministic
-    `prefer-virtual` fallback to conventional when the current GPU frame budget
-    cannot afford the requested virtual work
-  - budget-bounded CPU-visible-receiver-driven page requests
-  - deterministic centered resident-window fallback when receiver-driven page
-    selection requests nothing
+  - correctness-first directional VSM runtime:
+    - fixed virtual clipmap density per quality tier
+    - fixed physical atlas capacity per quality tier
+    - no active frame-budget density capping or budget-driven backend fallback
   - cross-frame resident physical-page reuse and partial rerasterization for
     snapped-identical plans
   - content-safe invalidation for resident-page reuse when light or caster
@@ -732,10 +768,12 @@ Implementation status, March 9, 2026:
     into the current validation slice
   - `VirtualShadowRequestPass`, which now scans the main depth buffer after
     `DepthPrePass`, writes a deduplicated GPU request-bit mask, and submits
-    one-shot request feedback to `VirtualShadowMapBackend` through a slot-safe
-    readback seam
-  - CPU visible-receiver request planning as fallback when compatible request
-    feedback is not yet available for a view
+    bounded-lifetime request feedback to `VirtualShadowMapBackend` through a
+    slot-safe readback seam
+  - CPU visible-receiver request planning only as bootstrap when compatible
+    request feedback is not yet available for a view
+  - full contiguous-region planning with coarse-backbone-first mapping order,
+    so valid coarser fallback coverage is present by construction
 - Validation evidence:
   - `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:6 /p:Configuration=Debug /nologo`
   - `msbuild out/build-vs/src/Oxygen/Graphics/Direct3D12/Shaders/oxygen-graphics-direct3d12_shaders.vcxproj /m:6 /p:Configuration=Debug /nologo`
@@ -756,12 +794,129 @@ Implementation status, March 9, 2026:
 ## 14. References
 
 - Microsoft, *Cascaded Shadow Maps*:
-  https://learn.microsoft.com/en-us/windows/win32/dxtecharts/cascaded-shadow-maps
+  <https://learn.microsoft.com/en-us/windows/win32/dxtecharts/cascaded-shadow-maps>
 - Microsoft, *Common Techniques to Improve Shadow Depth Maps*:
-  https://learn.microsoft.com/en-us/windows/win32/dxtecharts/common-techniques-to-improve-shadow-depth-maps
+  <https://learn.microsoft.com/en-us/windows/win32/dxtecharts/common-techniques-to-improve-shadow-depth-maps>
 - GPU Gems 3, Chapter 10, *Parallel-Split Shadow Maps on Programmable GPUs*:
-  https://developer.nvidia.com/gpugems/gpugems3/part-ii-light-and-shadows/chapter-10-parallel-split-shadow-maps-programmable-gpus
+  <https://developer.nvidia.com/gpugems/gpugems3/part-ii-light-and-shadows/chapter-10-parallel-split-shadow-maps-programmable-gpus>
 - NVIDIA, *Cascaded Shadow Maps* sample notes:
-  https://developer.download.nvidia.com/SDK/10.5/opengl/src/cascaded_shadow_maps/doc/cascaded_shadow_maps.pdf
+  <https://developer.download.nvidia.com/SDK/10.5/opengl/src/cascaded_shadow_maps/doc/cascaded_shadow_maps.pdf>
 - Epic Games, *Virtual Shadow Maps in Unreal Engine*:
-  https://dev.epicgames.com/documentation/unreal-engine/virtual-shadow-maps-in-unreal-engine
+  <https://dev.epicgames.com/documentation/unreal-engine/virtual-shadow-maps-in-unreal-engine>
+
+## Optimization
+
+The short answer is: real engines keep VSM under control by making shadow work
+sparse, cached, and visibility-driven. They do not render a full giant shadow
+map every frame. They render only the pages that visible pixels actually need,
+keep those pages around across frames, aggressively cull geometry that cannot
+affect those pages, and separate the “render/update shadow data” cost from the
+“sample/filter shadows on screen” cost. That is the core reason VSMs are
+practical in shipping engines.
+
+How the cost is bounded
+
+- The virtual shadow map is huge in address space, but only a small subset gets
+  physical backing. UE’s public docs describe 16k virtual maps split into
+  128x128 pages, allocated from screen- visible need, not from total scene
+  extent.
+- For directional lights, engines use clipmaps instead of one monolithic map. In
+  UE’s docs, the default directional clipmap span is levels 6 through 22,
+  roughly from 64 cm out to about 40 km around the camera.
+- For local lights, mip chains and cube faces keep resolution proportional to
+  what is actually projected on screen.
+- The many-lights Chalmers work uses the same general idea: estimate needed
+  resolution from visible receivers, project receiver bounds onto cube maps, and
+  back only the touched virtual tiles. Their stated goal is bounded memory
+  footprint, roughly proportional to the minimum shadow samples actually needed.
+
+What runs on CPU vs GPU
+
+- In practice, the heavy VSM loop is GPU-first. This is an inference from Epic’s
+  docs plus the Chalmers papers.
+- GPU side: page marking from visible samples/depth, page-mask tests, HZB/page
+  culling, Nanite shadow rasterization, and final shadow projection/filtering.
+- CPU side: pass setup, scene/light state changes, invalidation bookkeeping,
+  mobility decisions, and legacy-style per-light draw submission for non-Nanite
+  content.
+- That split matters because UE explicitly shows RenderVirtualShadowMaps(Nanite)
+  as a batched path, while non-Nanite rendering still behaves more like classic
+  per-light shadow rendering and is therefore much more expensive.
+
+How engines keep it fast
+
+- Cache pages between frames. This is the biggest win. Smooth camera motion is
+  usually cheap; moving lights, moving casters, WPO/PDO, skeletal deformation,
+  and bad bounds are what explode cost.
+- Split static and dynamic caching. UE’s separate static caching avoids
+  redrawing expensive static terrain/buildings when only dynamic actors changed.
+- Cull against required pages, not just against light frusta. UE exposes stats
+  for page-mask culling, HZB culling, frustum culling, etc. The Chalmers work
+  similarly uses clustered receiver bounds plus a hierarchy over batches to
+  avoid drawing geometry into unused shadow regions.
+- Batch where possible. UE’s one-pass projection batches many local lights into
+  a clustered shading path instead of paying a separate filtered projection pass
+  per small light.
+- Keep memory bounded with a physical page pool. UE exposes this directly via
+  r.Shadow.Virtual.MaxPhysicalPages; overflow causes corruption/artifacts.
+
+The two independent performance buckets
+
+- Shadow Depths: cost to update/render shadow pages. This is dominated by page
+  count, invalidations, and how much geometry is drawn into those pages.
+- Shadow Projection: cost to sample/filter shadows during lighting. UE states
+  this depends on total shadow samples across the screen, not on page count or
+  cache state.
+- This split is crucial because different knobs fix different problems. If depth
+  is bad, reduce page creation/update. If projection is bad, reduce
+  lights-per-pixel and filtering work.
+
+The knobs that matter in real production
+
+- Resolution pressure: r.Shadow.Virtual.ResolutionLodBiasDirectional
+  r.Shadow.Virtual.ResolutionLodBiasLocal
+  r.Shadow.Virtual.ResolutionLodBiasDirectionalMoving
+  r.Shadow.Virtual.ResolutionLodBiasLocalMoving
+- Cache/invalidation pressure: avoid moving shadow-casting lights, limit
+  WPO/PDO, keep bounds tight, use static/dynamic separation, switch distant
+  foliage/material LODs away from deformation.
+- Non-Nanite pressure: r.Shadow.RadiusThreshold far-distance fallback to
+  Distance Field Shadows for non-Nanite disable distant shadow casting or rely
+  on contact shadows where acceptable
+- Coarse-page pressure: r.Shadow.Virtual.MarkCoarsePagesLocal
+  r.Shadow.Virtual.MarkCoarsePagesDirectional r.Shadow.Virtual.FirstCoarseLevel
+  r.Shadow.Virtual.LastCoarseLevel
+  r.Shadow.Virtual.NonNanite.IncludeInCoarsePages 0
+- Many-light projection pressure: r.UseClusteredDeferredShading 1
+  r.Shadow.Virtual.OnePassProjection 1
+  r.Shadow.Virtual.OnePassProjection.MaxLightsPerPixel
+- Soft-shadow sampling pressure: reduce light Source Radius / Source Angle first
+  then tune r.Shadow.Virtual.SMRT.SamplesPerRayLocal and
+  r.Shadow.Virtual.SMRT.SamplesPerRayDirectional
+- Memory pressure: r.Shadow.Virtual.MaxPhysicalPages
+
+What teams actually do
+
+- Convert as much shadow-casting geometry as possible to the engine’s efficient
+  path (Nanite in UE).
+- Treat deformation as a budgeted feature, not a default.
+- Keep important big casters static and stable.
+- Swap distant nonessential shadows to cheaper methods.
+- Be very careful with many overlapping large local lights.
+- Profile with VSM-specific stats and visualizations, not just total GPU time.
+
+So the real production answer is not “VSM is fast because it is virtual.” It is
+fast only when the engine enforces four disciplines at once: sparse allocation,
+cache reuse, aggressive culling, and separate tuning of shadow-update cost
+versus shadow-sampling cost.
+
+Sources:
+
+- Epic UE 5.7 docs: <https://dev.epicgames.com/documentation/en-us/unreal-engine/virtual-shadow-maps-in-unreal-engine>
+
+- Chalmers I3D paper: <https://www.cse.chalmers.se/~uffe/ClusteredWithShadows.pdf>
+- Chalmers SIGGRAPH talk notes:
+  <https://www.cse.chalmers.se/~uffe/ClusteredWithShadowsSiggraphTalk2014.pdf>
+- Chalmers TVCG paper:
+  <https://www.cse.chalmers.se/~d00sint/more_efficient/clustered_shadows_tvcg.pdf>
+- Chalmers thesis: <https://publications.lib.chalmers.se/records/fulltext/192172/192172.pdf>

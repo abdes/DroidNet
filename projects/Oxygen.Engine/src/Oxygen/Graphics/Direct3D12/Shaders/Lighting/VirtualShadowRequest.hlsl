@@ -32,6 +32,54 @@ struct VirtualShadowRequestPassConstants
     float4x4 inv_view_projection_matrix;
 };
 
+static float ComputeDirectionalVirtualFootprintBlendToFinerRequest(
+    DirectionalVirtualShadowMetadata metadata,
+    uint clip_index,
+    float desired_world_footprint)
+{
+    if (clip_index == 0u || clip_index >= metadata.clip_level_count) {
+        return 0.0;
+    }
+
+    const uint current_filter_radius_texels =
+        SelectDirectionalVirtualFilterRadiusTexels(metadata, clip_index);
+    const uint finer_filter_radius_texels =
+        SelectDirectionalVirtualFilterRadiusTexels(metadata, clip_index - 1u);
+    const float current_texel_world =
+        ComputeDirectionalVirtualLogicalTexelWorld(
+            metadata, clip_index, current_filter_radius_texels);
+    const float finer_texel_world =
+        ComputeDirectionalVirtualLogicalTexelWorld(
+            metadata, clip_index - 1u, finer_filter_radius_texels);
+    const float enter_finer_footprint = current_texel_world * 1.25;
+    const float exit_finer_footprint =
+        max(current_texel_world, finer_texel_world + 1.0e-5);
+    if (enter_finer_footprint <= exit_finer_footprint) {
+        return 0.0;
+    }
+
+    return saturate(
+        (enter_finer_footprint - desired_world_footprint)
+        / max(enter_finer_footprint - exit_finer_footprint, 1.0e-4));
+}
+
+static float3 ReconstructWorldPosition(
+    VirtualShadowRequestPassConstants pass_constants,
+    uint2 pixel_xy,
+    float depth)
+{
+    const float2 pixel_center =
+        (float2(pixel_xy) + float2(0.5, 0.5))
+        / max(float2(pass_constants.screen_dimensions), float2(1.0, 1.0));
+    float2 ndc = pixel_center * 2.0 - 1.0;
+    ndc.y = -ndc.y;
+
+    const float4 world_pos_h = mul(
+        pass_constants.inv_view_projection_matrix,
+        float4(ndc, depth, 1.0));
+    return world_pos_h.xyz / max(abs(world_pos_h.w), 1.0e-6);
+}
+
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
@@ -83,39 +131,73 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         return;
     }
 
-    const float2 pixel_center =
-        (float2(dispatch_thread_id.xy) + float2(0.5, 0.5))
-        / max(float2(pass_constants.screen_dimensions), float2(1.0, 1.0));
-    float2 ndc = pixel_center * 2.0 - 1.0;
-    ndc.y = -ndc.y;
-
-    const float4 world_pos_h = mul(
-        pass_constants.inv_view_projection_matrix,
-        float4(ndc, depth, 1.0));
-    if (abs(world_pos_h.w) <= 1.0e-6) {
-        return;
-    }
-
-    const float3 world_pos = world_pos_h.xyz / world_pos_h.w;
+    const float3 world_pos =
+        ReconstructWorldPosition(pass_constants, dispatch_thread_id.xy, depth);
     const float3 light_view_pos = mul(metadata.light_view, float4(world_pos, 1.0)).xyz;
+    const uint2 right_xy = uint2(
+        min(dispatch_thread_id.x + 1u, pass_constants.screen_dimensions.x - 1u),
+        dispatch_thread_id.y);
+    const uint2 down_xy = uint2(
+        dispatch_thread_id.x,
+        min(dispatch_thread_id.y + 1u, pass_constants.screen_dimensions.y - 1u));
+    const float right_depth = depth_texture.Load(int3(right_xy, 0));
+    const float down_depth = depth_texture.Load(int3(down_xy, 0));
+    const float3 right_world_pos = right_depth < 1.0f
+        ? ReconstructWorldPosition(pass_constants, right_xy, right_depth)
+        : world_pos;
+    const float3 down_world_pos = down_depth < 1.0f
+        ? ReconstructWorldPosition(pass_constants, down_xy, down_depth)
+        : world_pos;
+    const float2 light_view_dx =
+        mul(metadata.light_view, float4(right_world_pos, 1.0)).xy - light_view_pos.xy;
+    const float2 light_view_dy =
+        mul(metadata.light_view, float4(down_world_pos, 1.0)).xy - light_view_pos.xy;
+    const float desired_world_footprint = max(
+        max(length(light_view_dx), length(light_view_dy)),
+        1.0e-4);
 
     uint clip_index = 0u;
     float2 page_coord = 0.0.xx;
-    if (!SelectDirectionalVirtualClip(
-            metadata, light_view_pos.xy, clip_index, page_coord)) {
+    if (!SelectDirectionalVirtualClipForFootprint(
+            metadata,
+            light_view_pos.xy,
+            desired_world_footprint,
+            clip_index,
+            page_coord)) {
         return;
     }
 
-    const uint page_x = min((uint)page_coord.x, metadata.pages_per_axis - 1u);
-    const uint page_y = min((uint)page_coord.y, metadata.pages_per_axis - 1u);
+    const float prefetch_finer =
+        ComputeDirectionalVirtualFootprintBlendToFinerRequest(
+            metadata, clip_index, desired_world_footprint);
+
     const uint pages_per_level = metadata.pages_per_axis * metadata.pages_per_axis;
-    const uint page_index =
-        clip_index * pages_per_level + page_y * metadata.pages_per_axis + page_x;
-    const uint word_index = page_index / 32u;
-    if (word_index >= pass_constants.request_word_count) {
-        return;
+    uint request_begin_clip = clip_index;
+    if (prefetch_finer > 0.0f && clip_index > 0u) {
+        request_begin_clip = clip_index - 1u;
     }
+    [loop]
+    for (uint request_clip = request_begin_clip;
+         request_clip < metadata.clip_level_count;
+         ++request_clip) {
+        float2 request_page_coord = 0.0.xx;
+        if (!ProjectDirectionalVirtualClip(
+                metadata, request_clip, light_view_pos.xy, request_page_coord)) {
+            continue;
+        }
 
-    const uint bit_mask = 1u << (page_index % 32u);
-    InterlockedOr(request_words[word_index], bit_mask);
+        const uint page_x =
+            min((uint)request_page_coord.x, metadata.pages_per_axis - 1u);
+        const uint page_y =
+            min((uint)request_page_coord.y, metadata.pages_per_axis - 1u);
+        const uint page_index =
+            request_clip * pages_per_level + page_y * metadata.pages_per_axis + page_x;
+        const uint word_index = page_index / 32u;
+        if (word_index >= pass_constants.request_word_count) {
+            continue;
+        }
+
+        const uint bit_mask = 1u << (page_index % 32u);
+        InterlockedOr(request_words[word_index], bit_mask);
+    }
 }
