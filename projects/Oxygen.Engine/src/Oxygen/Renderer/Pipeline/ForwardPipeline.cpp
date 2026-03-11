@@ -40,6 +40,7 @@
 #include <Oxygen/Renderer/Passes/VirtualShadowAtlasDebugPass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowPageRasterPass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowRequestPass.h>
+#include <Oxygen/Renderer/Passes/VirtualShadowResolvePass.h>
 #include <Oxygen/Renderer/Passes/WireframePass.h>
 #include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
 #include <Oxygen/Renderer/Pipeline/Internal/CompositionPlanner.h>
@@ -195,6 +196,8 @@ private:
     virtual_shadow_raster_pass_config;
   std::shared_ptr<engine::VirtualShadowAtlasDebugPass::Config>
     virtual_shadow_atlas_debug_pass_config;
+  std::shared_ptr<engine::VirtualShadowResolvePass::Config>
+    virtual_shadow_resolve_pass_config;
   std::shared_ptr<engine::VirtualShadowRequestPass::Config>
     virtual_shadow_request_pass_config;
   std::shared_ptr<engine::ShaderPassConfig> shader_pass_config;
@@ -213,8 +216,8 @@ private:
     virtual_shadow_raster_pass;
   std::shared_ptr<engine::VirtualShadowAtlasDebugPass>
     virtual_shadow_atlas_debug_pass;
-  std::shared_ptr<engine::VirtualShadowRequestPass>
-    virtual_shadow_request_pass;
+  std::shared_ptr<engine::VirtualShadowResolvePass> virtual_shadow_resolve_pass;
+  std::shared_ptr<engine::VirtualShadowRequestPass> virtual_shadow_request_pass;
   std::shared_ptr<engine::ShaderPass> shader_pass;
   std::shared_ptr<engine::WireframePass> wireframe_pass;
   std::shared_ptr<engine::SkyPass> sky_pass;
@@ -519,6 +522,20 @@ auto ForwardPipeline::Impl::RunScenePasses(
     co_await depth_pass->Execute(rc, rec);
     rc.RegisterPass<engine::DepthPrePass>(depth_pass.get());
 
+    if (virtual_shadow_request_pass) {
+      co_await virtual_shadow_request_pass->PrepareResources(rc, rec);
+      co_await virtual_shadow_request_pass->Execute(rc, rec);
+      rc.RegisterPass<engine::VirtualShadowRequestPass>(
+        virtual_shadow_request_pass.get());
+    }
+
+    if (virtual_shadow_resolve_pass) {
+      co_await virtual_shadow_resolve_pass->PrepareResources(rc, rec);
+      co_await virtual_shadow_resolve_pass->Execute(rc, rec);
+      rc.RegisterPass<engine::VirtualShadowResolvePass>(
+        virtual_shadow_resolve_pass.get());
+    }
+
     if (virtual_shadow_raster_pass && virtual_shadow_raster_pass_config) {
       if (const auto shadow_manager = rc.GetRenderer().GetShadowManager()) {
         virtual_shadow_raster_pass_config->depth_texture
@@ -537,13 +554,6 @@ auto ForwardPipeline::Impl::RunScenePasses(
     if (virtual_shadow_atlas_debug_pass) {
       co_await virtual_shadow_atlas_debug_pass->PrepareResources(rc, rec);
       co_await virtual_shadow_atlas_debug_pass->Execute(rc, rec);
-    }
-
-    if (virtual_shadow_request_pass) {
-      co_await virtual_shadow_request_pass->PrepareResources(rc, rec);
-      co_await virtual_shadow_request_pass->Execute(rc, rec);
-      rc.RegisterPass<engine::VirtualShadowRequestPass>(
-        virtual_shadow_request_pass.get());
     }
   }
 
@@ -859,6 +869,8 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
     = std::make_shared<p::VirtualShadowPageRasterPass::Config>();
   virtual_shadow_atlas_debug_pass_config
     = std::make_shared<p::VirtualShadowAtlasDebugPass::Config>();
+  virtual_shadow_resolve_pass_config
+    = std::make_shared<p::VirtualShadowResolvePass::Config>();
   virtual_shadow_request_pass_config
     = std::make_shared<p::VirtualShadowRequestPass::Config>();
   shader_pass_config = std::make_shared<p::ShaderPassConfig>();
@@ -886,6 +898,8 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
   virtual_shadow_atlas_debug_pass
     = std::make_shared<p::VirtualShadowAtlasDebugPass>(
       gfx_ptr, virtual_shadow_atlas_debug_pass_config);
+  virtual_shadow_resolve_pass = std::make_shared<p::VirtualShadowResolvePass>(
+    gfx_ptr, virtual_shadow_resolve_pass_config);
   virtual_shadow_request_pass = std::make_shared<p::VirtualShadowRequestPass>(
     gfx_ptr, virtual_shadow_request_pass_config);
   light_culling_pass
