@@ -1390,12 +1390,27 @@ Continuous improvements, not milestones:
 
 ## Revision History
 
+- **March 11, 2026**: Added focused non-regression coverage for the
+  directional VSM snap-boundary dropout fix. The LightManager VSM suite now
+  includes:
+  - `LightManagerTest.ShadowManagerPublishForView_VirtualFeedbackAddressSpaceTracksSnappedXYTranslationButIgnoresZPullback`
+  - `LightManagerTest.ShadowManagerPublishForView_VirtualIncompatibleFeedbackRebootsReceiverBootstrap`
+  Validation evidence:
+  `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`,
+  `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPublishForView_VirtualFeedbackAddressSpaceTracksSnappedXYTranslationButIgnoresZPullback`,
+  and
+  `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPublishForView_VirtualIncompatibleFeedbackRebootsReceiverBootstrap`
+  all passed. Status remains `in_progress`: the broader
+  `*ShadowManagerPublishForView_Virtual*` slice still contains stale failures
+  that were not reconciled in this change.
 - **March 11, 2026**: Implemented the first runtime realignment for the
   directional VSM churn diagnosed from low-fps `RenderScene` logs. The
-  directional address-space comparator now ignores all light-view translation,
-  which stops camera-driven XY snapping from being treated as a brand-new
-  address space, and the coarse fallback backbone now clamps its frustum depth
-  span to the visible receiver depth range when receiver bounds are available.
+  directional address-space comparator now preserves snapped XY light-view
+  translation and ignores only Z pull-back padding, which stops stale
+  feedback from surviving across a camera-driven lattice shift while still
+  allowing reuse along the light ray. The coarse fallback backbone now clamps
+  its frustum depth span to the visible receiver depth range when receiver
+  bounds are available.
   Validation evidence:
   `Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*`
   passed `29/29`, the full `Oxygen.Renderer.LightManager.Tests.exe` run passed
@@ -1409,9 +1424,10 @@ Continuous improvements, not milestones:
   low-fps `RenderScene` log analysis. The atlas-inspector state split was
   necessary, but not sufficient: runtime evidence showed two deeper faults in
   the directional VSM cache/request path. First, the directional
-  address-space/feedback comparator still included XY light-view translation, so
-  camera motion could flip `address_space_compatible=false` and release all
-  resident pages even when the absolute page lattice remained valid. Second, the
+  address-space/feedback comparator was still zeroing XY light-view
+  translation, so camera motion across a snap boundary could keep
+  `address_space_compatible=true` even after the absolute page lattice had
+  changed. Second, the
   coarse fallback backbone was derived from the full camera frustum out to the
   projection far plane, which caused a tiny scene to request thousands of
   coarse pages and keep every resident tile marked as used. Status remains
