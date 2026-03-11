@@ -231,6 +231,29 @@ auto ShadowManager::MarkVirtualRenderPlanExecuted(const ViewId view_id) -> void
   }
 }
 
+auto ShadowManager::ResolveVirtualCurrentFrame(const ViewId view_id) -> void
+{
+  if (virtual_backend_) {
+    virtual_backend_->ResolveCurrentFrame(view_id);
+  }
+}
+
+auto ShadowManager::PrepareVirtualResolvedRasterPages(const ViewId view_id)
+  -> void
+{
+  if (virtual_backend_) {
+    virtual_backend_->PrepareResolvedRasterPages(view_id);
+  }
+}
+
+auto ShadowManager::PrepareVirtualPageTableResources(
+  const ViewId view_id, graphics::CommandRecorder& recorder) -> void
+{
+  if (virtual_backend_) {
+    virtual_backend_->PreparePageTableResources(view_id, recorder);
+  }
+}
+
 auto ShadowManager::SetPublishedViewFrameBindingsSlot(const ViewId view_id,
   const engine::BindlessViewFrameBindingsSlot slot) -> void
 {
@@ -254,6 +277,23 @@ auto ShadowManager::ClearVirtualRequestFeedback(const ViewId view_id) -> void
 {
   if (virtual_backend_) {
     virtual_backend_->ClearRequestFeedback(view_id);
+  }
+}
+
+auto ShadowManager::SubmitVirtualResolvedRasterSchedule(
+  const ViewId view_id, VirtualShadowResolvedRasterSchedule schedule) -> void
+{
+  if (virtual_backend_) {
+    virtual_backend_->SubmitResolvedRasterSchedule(
+      view_id, std::move(schedule));
+  }
+}
+
+auto ShadowManager::ClearVirtualResolvedRasterSchedule(const ViewId view_id)
+  -> void
+{
+  if (virtual_backend_) {
+    virtual_backend_->ClearResolvedRasterSchedule(view_id);
   }
 }
 
@@ -300,6 +340,15 @@ auto ShadowManager::TryGetVirtualViewIntrospection(
 {
   return virtual_backend_ ? virtual_backend_->TryGetViewIntrospection(view_id)
                           : nullptr;
+}
+
+auto ShadowManager::TryGetVirtualDirectionalMetadata(
+  const ViewId view_id) const noexcept
+  -> const engine::DirectionalVirtualShadowMetadata*
+{
+  return virtual_backend_
+    ? virtual_backend_->TryGetDirectionalVirtualMetadata(view_id)
+    : nullptr;
 }
 
 auto ShadowManager::GetConventionalShadowDepthTexture() const noexcept

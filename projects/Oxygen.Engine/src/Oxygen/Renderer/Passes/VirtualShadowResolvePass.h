@@ -7,7 +7,7 @@
 #pragma once
 
 #include <array>
-#include <cstdint>
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -25,8 +25,7 @@
 
 namespace oxygen::graphics {
 class CommandRecorder;
-class Texture;
-} // namespace oxygen::graphics
+}
 
 namespace oxygen {
 class Graphics;
@@ -34,40 +33,20 @@ class Graphics;
 
 namespace oxygen::engine {
 
-struct VirtualShadowRequestPassConfig {
-  std::string debug_name { "VirtualShadowRequestPass" };
+struct VirtualShadowResolvePassConfig {
+  std::string debug_name { "VirtualShadowResolvePass" };
 };
 
-class VirtualShadowRequestPass : public ComputeRenderPass {
+class VirtualShadowResolvePass : public ComputeRenderPass {
 public:
-  using Config = VirtualShadowRequestPassConfig;
+  using Config = VirtualShadowResolvePassConfig;
 
-  OXGN_RNDR_API VirtualShadowRequestPass(
+  OXGN_RNDR_API VirtualShadowResolvePass(
     observer_ptr<Graphics> gfx, std::shared_ptr<Config> config);
-  OXGN_RNDR_API ~VirtualShadowRequestPass() override;
+  OXGN_RNDR_API ~VirtualShadowResolvePass() override;
 
-  OXYGEN_MAKE_NON_COPYABLE(VirtualShadowRequestPass)
-  OXYGEN_DEFAULT_MOVABLE(VirtualShadowRequestPass)
-
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetRequestWordsBuffer() const noexcept
-    -> const std::shared_ptr<graphics::Buffer>&
-  {
-    return request_words_buffer_;
-  }
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetRequestWordsSrv() const noexcept
-    -> ShaderVisibleIndex
-  {
-    return request_words_srv_;
-  }
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetActiveRequestWordCount() const noexcept
-    -> std::uint32_t
-  {
-    return active_request_word_count_;
-  }
-  [[nodiscard]] OXGN_RNDR_NDAPI auto HasActiveDispatch() const noexcept -> bool
-  {
-    return active_dispatch_;
-  }
+  OXYGEN_MAKE_NON_COPYABLE(VirtualShadowResolvePass)
+  OXYGEN_DEFAULT_MOVABLE(VirtualShadowResolvePass)
 
 protected:
   auto DoPrepareResources(graphics::CommandRecorder& recorder)
@@ -78,18 +57,35 @@ protected:
   auto NeedRebuildPipelineState() const -> bool override;
 
 private:
-  static constexpr std::uint32_t kDispatchGroupSize = 8U;
+  static constexpr std::uint32_t kDispatchGroupSize = 64U;
   static constexpr std::uint32_t kMaxSupportedPagesPerAxis = 64U;
   static constexpr std::uint32_t kMaxSupportedClipLevels = 12U;
   static constexpr std::uint32_t kMaxSupportedPageCount
     = kMaxSupportedPagesPerAxis * kMaxSupportedPagesPerAxis
     * kMaxSupportedClipLevels;
-  static constexpr std::uint32_t kMaxRequestWordCount
-    = (kMaxSupportedPageCount + 31U) / 32U;
+
+  struct alignas(16) ScheduleEntry {
+    std::uint32_t global_page_index { 0U };
+    std::uint32_t packed_entry { 0U };
+    std::uint32_t atlas_tile_x { 0U };
+    std::uint32_t atlas_tile_y { 0U };
+  };
+
+  struct ViewScheduleResources {
+    std::shared_ptr<graphics::Buffer> schedule_buffer;
+    ShaderVisibleIndex schedule_srv { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex schedule_uav { kInvalidShaderVisibleIndex };
+
+    std::shared_ptr<graphics::Buffer> count_buffer;
+    ShaderVisibleIndex count_srv { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex count_uav { kInvalidShaderVisibleIndex };
+
+    std::uint32_t entry_capacity { 0U };
+  };
 
   struct SlotReadbackState {
     std::shared_ptr<graphics::Buffer> buffer;
-    std::uint32_t* mapped_words { nullptr };
+    std::byte* mapped_bytes { nullptr };
     frame::SequenceNumber source_frame_sequence { 0U };
     ViewId view_id {};
     std::uint32_t pages_per_axis { 0U };
@@ -97,54 +93,44 @@ private:
     std::uint64_t directional_address_space_hash { 0U };
     std::array<std::int32_t, kMaxSupportedClipLevels> clip_grid_origin_x {};
     std::array<std::int32_t, kMaxSupportedClipLevels> clip_grid_origin_y {};
-    std::uint32_t request_word_count { 0U };
-    bool pending_feedback { false };
+    std::uint32_t schedule_capacity { 0U };
+    bool pending_schedule { false };
   };
 
   observer_ptr<Graphics> gfx_;
   std::shared_ptr<Config> config_;
-
-  std::shared_ptr<graphics::Buffer> request_words_buffer_;
-  ShaderVisibleIndex request_words_srv_ { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex request_words_uav_ { kInvalidShaderVisibleIndex };
-  std::shared_ptr<graphics::Buffer> clear_upload_buffer_;
-  void* clear_upload_mapped_ptr_ { nullptr };
 
   std::shared_ptr<graphics::Buffer> pass_constants_buffer_;
   graphics::NativeView pass_constants_cbv_ {};
   ShaderVisibleIndex pass_constants_index_ { kInvalidShaderVisibleIndex };
   void* pass_constants_mapped_ptr_ { nullptr };
 
-  ShaderVisibleIndex depth_texture_srv_ { kInvalidShaderVisibleIndex };
-  const graphics::Texture* depth_texture_owner_ { nullptr };
-  bool owns_depth_texture_srv_ { false };
+  std::shared_ptr<graphics::Buffer> clear_count_upload_buffer_;
+  void* clear_count_upload_mapped_ptr_ { nullptr };
 
+  std::unordered_map<ViewId, ViewScheduleResources> view_schedule_resources_;
   std::array<SlotReadbackState, frame::kFramesInFlight.get()>
     slot_readbacks_ {};
 
   ViewId active_view_id_ {};
   std::uint32_t active_request_word_count_ { 0U };
+  std::uint32_t active_dispatch_group_count_ { 0U };
   std::uint32_t active_pages_per_axis_ { 0U };
   std::uint32_t active_clip_level_count_ { 0U };
-  std::uint64_t active_directional_address_space_hash { 0U };
+  std::uint64_t active_directional_address_space_hash_ { 0U };
   std::array<std::int32_t, kMaxSupportedClipLevels>
     active_clip_grid_origin_x_ {};
   std::array<std::int32_t, kMaxSupportedClipLevels>
     active_clip_grid_origin_y_ {};
+  std::uint32_t active_schedule_capacity_ { 0U };
   bool active_dispatch_ { false };
 
-  struct FeedbackLogState {
-    std::uint32_t last_feedback_count { 0U };
-    bool had_pending_feedback { false };
-  };
-  std::unordered_map<std::uint64_t, FeedbackLogState> feedback_log_states_;
-
-  OXGN_RNDR_API auto EnsureRequestBuffers() -> void;
   OXGN_RNDR_API auto EnsurePassConstantsBuffer() -> void;
+  OXGN_RNDR_API auto EnsureClearCountUploadBuffer() -> void;
   OXGN_RNDR_API auto EnsureReadbackBuffer(frame::Slot slot) -> void;
-  OXGN_RNDR_API auto EnsureDepthTextureSrv(const graphics::Texture& depth_tex)
-    -> ShaderVisibleIndex;
-  OXGN_RNDR_API auto ProcessCompletedFeedback(frame::Slot slot) -> void;
+  OXGN_RNDR_API auto ProcessCompletedSchedule(frame::Slot slot) -> void;
+  OXGN_RNDR_API auto EnsureViewScheduleResources(ViewId view_id,
+    std::uint32_t required_entry_capacity) -> ViewScheduleResources*;
 };
 
 } // namespace oxygen::engine

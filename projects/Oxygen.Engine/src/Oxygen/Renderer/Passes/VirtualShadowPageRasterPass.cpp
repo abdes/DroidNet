@@ -73,13 +73,13 @@ auto VirtualShadowPageRasterPass::DoPrepareResources(
 
   const auto* render_plan
     = shadow_manager->TryGetVirtualRenderPlan(Context().current_view.view_id);
-  if (render_plan == nullptr || render_plan->jobs.empty()) {
+  if (render_plan == nullptr || render_plan->resolved_pages.empty()) {
     co_return;
   }
 
   EnsureShadowViewConstantsCapacity(
-    static_cast<std::uint32_t>(render_plan->jobs.size()));
-  UploadJobViewConstants(render_plan->jobs);
+    static_cast<std::uint32_t>(render_plan->resolved_pages.size()));
+  UploadResolvedPageViewConstants(render_plan->resolved_pages);
 
   co_return;
 }
@@ -113,15 +113,15 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
 
   const auto* render_plan
     = shadow_manager->TryGetVirtualRenderPlan(Context().current_view.view_id);
-  if (render_plan == nullptr || render_plan->jobs.empty()
+  if (render_plan == nullptr || render_plan->resolved_pages.empty()
     || render_plan->depth_texture == nullptr) {
     auto& log_state = view_log_states_[Context().current_view.view_id.get()];
     if (render_plan != nullptr && render_plan->depth_texture != nullptr
       && log_state.saw_live_plan_jobs) {
       log_state.saw_live_plan_jobs = false;
       LOG_F(INFO,
-        "VirtualShadowPageRasterPass: view {} has no pending virtual raster "
-        "jobs anymore",
+        "VirtualShadowPageRasterPass: view {} has no resolved virtual raster "
+        "pages anymore",
         Context().current_view.view_id.get());
     }
     Context().RegisterPass(this);
@@ -132,27 +132,29 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
   if (!log_state.saw_live_plan_jobs) {
     log_state.saw_live_plan_jobs = true;
     LOG_F(INFO,
-      "VirtualShadowPageRasterPass: view {} has {} pending virtual raster "
-      "job(s)",
-      Context().current_view.view_id.get(), render_plan->jobs.size());
+      "VirtualShadowPageRasterPass: view {} has {} resolved virtual raster "
+      "page(s)",
+      Context().current_view.view_id.get(), render_plan->resolved_pages.size());
   }
   LOG_F(INFO,
-    "VirtualShadowPageRasterPass: frame={} view={} executing {} virtual job(s) "
+    "VirtualShadowPageRasterPass: frame={} view={} executing {} resolved "
+    "virtual page(s) "
     "(page_size={} atlas={}x{})",
     Context().frame_sequence.get(), Context().current_view.view_id.get(),
-    render_plan->jobs.size(), render_plan->page_size_texels,
+    render_plan->resolved_pages.size(), render_plan->page_size_texels,
     render_plan->page_size_texels * render_plan->atlas_tiles_per_axis,
     render_plan->page_size_texels * render_plan->atlas_tiles_per_axis);
 
   const auto psf = Context().current_view.prepared_frame;
   if (!psf || !psf->IsValid() || psf->draw_metadata_bytes.empty()
     || psf->partitions.empty()) {
-    LOG_F(ERROR, // VSM GLITCH TRACKING
-      "VSM_GLITCH: VirtualShadowPageRasterPass: skipped for view {} "
-      "(prepared={} valid={} draw_bytes={} partitions={}) while having {} pending jobs!",
+    LOG_F(ERROR,
+      "VirtualShadowPageRasterPass: skipped for view {} "
+      "(prepared={} valid={} draw_bytes={} partitions={}) while having {} "
+      "resolved raster pages!",
       Context().current_view.view_id.get(), psf != nullptr,
       psf ? psf->IsValid() : false, psf ? psf->draw_metadata_bytes.size() : 0U,
-      psf ? psf->partitions.size() : 0U, render_plan->jobs.size());
+      psf ? psf->partitions.size() : 0U, render_plan->resolved_pages.size());
     Context().RegisterPass(this);
     co_return;
   }
@@ -176,15 +178,15 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
   std::uint32_t skipped_invalid = 0U;
   std::uint32_t draw_errors = 0U;
 
-  for (std::uint32_t job_index = 0U; job_index < render_plan->jobs.size();
-    ++job_index) {
-    const auto& job = render_plan->jobs[job_index];
-    SetJobViewportAndScissors(recorder, *render_plan, job);
+  for (std::uint32_t page_index = 0U;
+    page_index < render_plan->resolved_pages.size(); ++page_index) {
+    const auto& page = render_plan->resolved_pages[page_index];
+    SetResolvedPageViewportAndScissors(recorder, *render_plan, page);
     recorder.SetRenderTargets({}, dsv);
     const auto left = static_cast<std::int32_t>(
-      job.atlas_tile_x * render_plan->page_size_texels);
+      page.atlas_tile_x * render_plan->page_size_texels);
     const auto top = static_cast<std::int32_t>(
-      job.atlas_tile_y * render_plan->page_size_texels);
+      page.atlas_tile_y * render_plan->page_size_texels);
     const auto size = static_cast<std::int32_t>(render_plan->page_size_texels);
     const Scissors clear_rect {
       .left = left,
@@ -206,7 +208,7 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
 
       recorder.SetPipelineState(SelectPipelineStateForPartition(pr.pass_mask));
       RebindCommonRootParameters(recorder);
-      BindJobViewConstants(recorder, job_index);
+      BindResolvedPageViewConstants(recorder, page_index);
       EmitDrawRange(recorder, records, pr.begin, pr.end, emitted_count,
         skipped_invalid, draw_errors);
     }
@@ -221,10 +223,10 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
       log_state.saw_zero_draw_live_frame = true;
       log_state.saw_nonzero_draw_live_frame = false;
     }
-    LOG_F(ERROR, // VSM GLITCH TRACKING
-      "VSM_GLITCH: VirtualShadowPageRasterPass: view {} produced no shadow-caster draws "
-      "(jobs={} skipped_invalid={} errors={})",
-      Context().current_view.view_id.get(), render_plan->jobs.size(),
+    LOG_F(ERROR,
+      "VirtualShadowPageRasterPass: view {} produced no shadow-caster draws "
+      "(resolved_pages={} skipped_invalid={} errors={})",
+      Context().current_view.view_id.get(), render_plan->resolved_pages.size(),
       skipped_invalid, draw_errors);
   } else {
     if (!log_state.saw_nonzero_draw_live_frame) {
@@ -233,10 +235,11 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
     }
     LOG_F(INFO,
       "VirtualShadowPageRasterPass: frame={} view={} emitted {} "
-      "shadow-caster draw(s) for {} virtual page job(s) "
+      "shadow-caster draw(s) for {} resolved virtual page(s) "
       "(skipped_invalid={} errors={})",
       Context().frame_sequence.get(), Context().current_view.view_id.get(),
-      emitted_count, render_plan->jobs.size(), skipped_invalid, draw_errors);
+      emitted_count, render_plan->resolved_pages.size(), skipped_invalid,
+      draw_errors);
     shadow_manager->MarkVirtualRenderPlanExecuted(
       Context().current_view.view_id);
   }
@@ -291,9 +294,10 @@ auto VirtualShadowPageRasterPass::PrepareFullAtlasDepthStencilView(
 }
 
 auto VirtualShadowPageRasterPass::EnsureShadowViewConstantsCapacity(
-  const std::uint32_t required_jobs) -> void
+  const std::uint32_t required_pages) -> void
 {
-  if (required_jobs == 0U || required_jobs <= shadow_view_constants_capacity_) {
+  if (required_pages == 0U
+    || required_pages <= shadow_view_constants_capacity_) {
     return;
   }
 
@@ -303,7 +307,7 @@ auto VirtualShadowPageRasterPass::EnsureShadowViewConstantsCapacity(
   }
   shadow_view_constants_buffer_.reset();
 
-  shadow_view_constants_capacity_ = required_jobs;
+  shadow_view_constants_capacity_ = required_pages;
   const auto total_bytes
     = static_cast<std::uint64_t>(sizeof(ViewConstants::GpuData))
     * static_cast<std::uint64_t>(frame::kFramesInFlight.get())
@@ -336,10 +340,11 @@ auto VirtualShadowPageRasterPass::EnsureShadowViewConstantsCapacity(
   }
 }
 
-auto VirtualShadowPageRasterPass::UploadJobViewConstants(
-  const std::span<const renderer::VirtualShadowRasterJob> jobs) -> void
+auto VirtualShadowPageRasterPass::UploadResolvedPageViewConstants(
+  const std::span<const renderer::VirtualShadowResolvedRasterPage> pages)
+  -> void
 {
-  if (jobs.empty()) {
+  if (pages.empty()) {
     return;
   }
   if (!shadow_view_constants_buffer_
@@ -352,21 +357,22 @@ auto VirtualShadowPageRasterPass::UploadJobViewConstants(
                              "for shadow view constants upload");
   }
 
-  job_view_constants_upload_.resize(jobs.size());
-  for (std::size_t i = 0; i < jobs.size(); ++i) {
-    job_view_constants_upload_[i] = jobs[i].view_constants;
+  resolved_page_view_constants_upload_.resize(pages.size());
+  for (std::size_t i = 0; i < pages.size(); ++i) {
+    resolved_page_view_constants_upload_[i] = pages[i].view_constants;
   }
 
   const auto base_index = static_cast<std::uint64_t>(Context().frame_slot.get())
     * static_cast<std::uint64_t>(shadow_view_constants_capacity_);
   auto* dst = static_cast<std::byte*>(shadow_view_constants_mapped_ptr_)
     + base_index * sizeof(ViewConstants::GpuData);
-  std::memcpy(dst, job_view_constants_upload_.data(),
-    job_view_constants_upload_.size() * sizeof(ViewConstants::GpuData));
+  std::memcpy(dst, resolved_page_view_constants_upload_.data(),
+    resolved_page_view_constants_upload_.size()
+      * sizeof(ViewConstants::GpuData));
 }
 
-auto VirtualShadowPageRasterPass::BindJobViewConstants(
-  graphics::CommandRecorder& recorder, const std::uint32_t job_index) const
+auto VirtualShadowPageRasterPass::BindResolvedPageViewConstants(
+  graphics::CommandRecorder& recorder, const std::uint32_t page_index) const
   -> void
 {
   if (!shadow_view_constants_buffer_
@@ -374,30 +380,30 @@ auto VirtualShadowPageRasterPass::BindJobViewConstants(
     throw std::runtime_error("VirtualShadowPageRasterPass: shadow view "
                              "constants buffer is not available");
   }
-  if (job_index >= shadow_view_constants_capacity_) {
-    throw std::out_of_range("VirtualShadowPageRasterPass: job index exceeds "
+  if (page_index >= shadow_view_constants_capacity_) {
+    throw std::out_of_range("VirtualShadowPageRasterPass: page index exceeds "
                             "shadow view constants capacity");
   }
 
   const auto slot_offset
     = static_cast<std::uint64_t>(Context().frame_slot.get())
       * static_cast<std::uint64_t>(shadow_view_constants_capacity_)
-    + job_index;
+    + page_index;
   const auto byte_offset = slot_offset * sizeof(ViewConstants::GpuData);
   recorder.SetGraphicsRootConstantBufferView(
     static_cast<std::uint32_t>(binding::RootParam::kViewConstants),
     shadow_view_constants_buffer_->GetGPUVirtualAddress() + byte_offset);
 }
 
-auto VirtualShadowPageRasterPass::SetJobViewportAndScissors(
+auto VirtualShadowPageRasterPass::SetResolvedPageViewportAndScissors(
   graphics::CommandRecorder& recorder,
   const renderer::VirtualShadowRenderPlan& render_plan,
-  const renderer::VirtualShadowRasterJob& job) const -> void
+  const renderer::VirtualShadowResolvedRasterPage& page) const -> void
 {
   const float left
-    = static_cast<float>(job.atlas_tile_x) * render_plan.page_size_texels;
+    = static_cast<float>(page.atlas_tile_x) * render_plan.page_size_texels;
   const float top
-    = static_cast<float>(job.atlas_tile_y) * render_plan.page_size_texels;
+    = static_cast<float>(page.atlas_tile_y) * render_plan.page_size_texels;
   const float size = static_cast<float>(render_plan.page_size_texels);
 
   recorder.SetViewport(ViewPort {

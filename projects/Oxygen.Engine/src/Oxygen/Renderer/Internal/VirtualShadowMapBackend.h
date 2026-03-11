@@ -6,14 +6,18 @@
 
 #pragma once
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <span>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
+#include <glm/mat4x4.hpp>
+#include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
 #include <Oxygen/Config/RendererConfig.h>
@@ -29,11 +33,16 @@
 #include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/Types/VirtualShadowRenderPlan.h>
 #include <Oxygen/Renderer/Types/VirtualShadowRequestFeedback.h>
+#include <Oxygen/Renderer/Types/VirtualShadowResolvedRasterSchedule.h>
 #include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 
 namespace oxygen::engine::upload {
 class InlineTransfersCoordinator;
 class StagingProvider;
+}
+
+namespace oxygen::graphics {
+class CommandRecorder;
 }
 
 namespace oxygen::renderer::internal {
@@ -60,12 +69,19 @@ public:
     std::span<const glm::vec4> visible_receiver_bounds,
     std::chrono::milliseconds gpu_budget, bool allow_budget_fallback = true,
     std::uint64_t shadow_caster_content_hash = 0U) -> ShadowFramePublication;
+  OXGN_RNDR_API auto ResolveCurrentFrame(ViewId view_id) -> void;
   OXGN_RNDR_API auto MarkRendered(ViewId view_id) -> void;
+  OXGN_RNDR_API auto PrepareResolvedRasterPages(ViewId view_id) -> void;
+  OXGN_RNDR_API auto PreparePageTableResources(
+    ViewId view_id, graphics::CommandRecorder& recorder) -> void;
   OXGN_RNDR_API auto SetPublishedViewFrameBindingsSlot(
     ViewId view_id, engine::BindlessViewFrameBindingsSlot slot) -> void;
   OXGN_RNDR_API auto SubmitRequestFeedback(
     ViewId view_id, VirtualShadowRequestFeedback feedback) -> void;
   OXGN_RNDR_API auto ClearRequestFeedback(ViewId view_id) -> void;
+  OXGN_RNDR_API auto SubmitResolvedRasterSchedule(
+    ViewId view_id, VirtualShadowResolvedRasterSchedule schedule) -> void;
+  OXGN_RNDR_API auto ClearResolvedRasterSchedule(ViewId view_id) -> void;
 
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetFramePublication(
     ViewId view_id) const noexcept -> const ShadowFramePublication*;
@@ -73,6 +89,9 @@ public:
     ViewId view_id) const noexcept -> const VirtualShadowRenderPlan*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetViewIntrospection(
     ViewId view_id) const noexcept -> const VirtualShadowViewIntrospection*;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetDirectionalVirtualMetadata(
+    ViewId view_id) const noexcept
+    -> const engine::DirectionalVirtualShadowMetadata*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto GetPhysicalPoolTexture() const noexcept
     -> const std::shared_ptr<graphics::Texture>&;
 
@@ -125,6 +144,48 @@ private:
   };
 
   struct ViewCacheEntry {
+    struct PendingResidentReuseGateSnapshot {
+      bool valid { false };
+      bool previous_pending_raster_jobs_empty { false };
+      PublicationKey key {};
+      std::vector<engine::DirectionalVirtualShadowMetadata>
+        directional_virtual_metadata {};
+      std::vector<std::uint32_t> page_table_entries {};
+    };
+
+    struct PendingResidencyResolve {
+      bool valid { false };
+      bool dirty { false };
+      std::uint32_t clip_level_count { 0U };
+      std::uint32_t pages_per_axis { 0U };
+      std::uint32_t pages_per_level { 0U };
+      engine::ViewConstants view_constants {};
+      glm::mat4 light_view { 1.0F };
+      glm::vec3 light_eye { 0.0F, 0.0F, 0.0F };
+      float near_plane { 0.0F };
+      float far_plane { 0.0F };
+      std::array<float, engine::kMaxVirtualDirectionalClipLevels>
+        clip_page_world {};
+      std::array<float, engine::kMaxVirtualDirectionalClipLevels>
+        clip_origin_x {};
+      std::array<float, engine::kMaxVirtualDirectionalClipLevels>
+        clip_origin_y {};
+      std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
+        clip_grid_origin_x {};
+      std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
+        clip_grid_origin_y {};
+      std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
+        reusable_clip_contents {};
+      bool address_space_compatible { false };
+      bool global_dirty_resident_contents { false };
+      std::vector<std::uint8_t> selected_pages {};
+      std::unordered_map<std::uint64_t, ResidentVirtualPage>
+        previous_resident_pages {};
+      std::vector<glm::vec4> previous_shadow_caster_bounds {};
+      std::unordered_set<std::uint64_t> dirty_resident_pages {};
+      PendingResidentReuseGateSnapshot resident_reuse_snapshot {};
+    };
+
     enum class RequestFeedbackDecision : std::uint8_t {
       kNoFeedback,
       kEmptyFeedback,
@@ -154,6 +215,10 @@ private:
       std::uint32_t receiver_bootstrap_pages { 0U };
       std::uint32_t current_frame_reinforcement_pages { 0U };
       std::uint64_t current_frame_reinforcement_reference_frame { 0U };
+      std::uint32_t resolved_schedule_pages { 0U };
+      std::uint32_t resolved_schedule_pruned_jobs { 0U };
+      std::uint64_t resolved_schedule_age_frames { 0U };
+      bool used_resolved_raster_schedule { false };
       std::uint32_t previous_resident_pages { 0U };
       std::uint32_t carried_resident_pages { 0U };
       std::uint32_t released_resident_pages { 0U };
@@ -175,9 +240,18 @@ private:
     std::vector<glm::vec4> shadow_caster_bounds;
     std::vector<std::uint32_t> page_table_entries;
     std::vector<std::uint32_t> atlas_tile_debug_states;
+    std::vector<renderer::VirtualShadowResolveResidentPageEntry>
+      resolve_resident_page_entries;
+    std::vector<renderer::VirtualShadowResolvedRasterPage>
+      resolved_raster_pages;
+    bool resolved_raster_pages_dirty { true };
+    PendingResidencyResolve pending_residency_resolve {};
     std::vector<VirtualShadowRasterJob> raster_jobs;
     std::vector<VirtualShadowRasterJob> pending_raster_jobs;
     std::unordered_map<std::uint64_t, ResidentVirtualPage> resident_pages;
+    renderer::VirtualShadowResolveStats resolve_stats {};
+    std::uint32_t page_table_upload_entry_count { 0U };
+    bool page_table_upload_pending { false };
     PublishDiagnostics publish_diagnostics {};
     ShadowFramePublication frame_publication {};
     VirtualShadowRenderPlan render_plan {};
@@ -202,7 +276,34 @@ private:
   using BufferT = engine::upload::TransientStructuredBuffer;
   BufferT shadow_instance_buffer_;
   BufferT directional_virtual_metadata_buffer_;
-  BufferT virtual_page_table_buffer_;
+
+  struct ViewPageTableResources {
+    std::shared_ptr<graphics::Buffer> gpu_buffer;
+    std::shared_ptr<graphics::Buffer> upload_buffer;
+    std::uint32_t* mapped_upload { nullptr };
+    ShaderVisibleIndex srv { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex uav { kInvalidShaderVisibleIndex };
+    std::uint32_t entry_capacity { 0U };
+  };
+
+  struct ViewResolveResources {
+    std::shared_ptr<graphics::Buffer> resident_pages_gpu_buffer;
+    std::shared_ptr<graphics::Buffer> resident_pages_upload_buffer;
+    renderer::VirtualShadowResolveResidentPageEntry*
+      mapped_resident_pages_upload { nullptr };
+    ShaderVisibleIndex resident_pages_srv { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex resident_pages_uav { kInvalidShaderVisibleIndex };
+    std::uint32_t resident_page_capacity { 0U };
+    std::uint32_t resident_page_upload_count { 0U };
+    bool resident_page_upload_pending { false };
+
+    std::shared_ptr<graphics::Buffer> stats_gpu_buffer;
+    std::shared_ptr<graphics::Buffer> stats_upload_buffer;
+    renderer::VirtualShadowResolveStats* mapped_stats_upload { nullptr };
+    ShaderVisibleIndex stats_srv { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex stats_uav { kInvalidShaderVisibleIndex };
+    bool stats_upload_pending { false };
+  };
 
   std::shared_ptr<graphics::Texture> physical_pool_texture_;
   graphics::NativeView physical_pool_srv_view_ {};
@@ -211,7 +312,11 @@ private:
   std::vector<PhysicalTileAddress> free_physical_tiles_;
 
   std::unordered_map<ViewId, ViewCacheEntry> view_cache_;
+  std::unordered_map<ViewId, ViewPageTableResources> view_page_table_resources_;
+  std::unordered_map<ViewId, ViewResolveResources> view_resolve_resources_;
   std::unordered_map<ViewId, PendingRequestFeedback> request_feedback_;
+  std::unordered_map<ViewId, VirtualShadowResolvedRasterSchedule>
+    resolved_raster_schedules_;
 
   struct ViewPublishLogState {
     std::uint32_t last_selected_page_count { 0U };
@@ -227,11 +332,18 @@ private:
     std::span<const engine::DirectionalShadowCandidate> directional_candidates,
     std::span<const glm::vec4> shadow_caster_bounds,
     std::uint64_t shadow_caster_content_hash) const -> PublicationKey;
-  OXGN_RNDR_API auto RefreshViewExports(ViewCacheEntry& state) const -> void;
+  OXGN_RNDR_API auto RebuildResolveStateSnapshot(ViewCacheEntry& state) const
+    -> void;
+  OXGN_RNDR_API auto ResolvePendingPageResidency(ViewId view_id) -> void;
+  OXGN_RNDR_API auto RefreshViewExports(
+    ViewId view_id, ViewCacheEntry& state) const -> void;
   OXGN_RNDR_API auto RefreshAtlasTileDebugStates(ViewCacheEntry& state) const
     -> void;
   [[nodiscard]] OXGN_RNDR_NDAPI auto CanReuseResidentPages(
     const ViewCacheEntry& previous,
+    const ViewCacheEntry& current) const noexcept -> bool;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto CanReuseResidentPages(
+    const ViewCacheEntry::PendingResidentReuseGateSnapshot& previous,
     const ViewCacheEntry& current) const noexcept -> bool;
   OXGN_RNDR_API auto BuildPhysicalPoolConfig(
     const engine::DirectionalShadowCandidate& candidate,
@@ -261,8 +373,19 @@ private:
   OXGN_RNDR_API auto PublishDirectionalVirtualMetadata(
     std::span<const engine::DirectionalVirtualShadowMetadata> metadata)
     -> ShaderVisibleIndex;
-  OXGN_RNDR_API auto PublishPageTable(std::span<const std::uint32_t> entries)
-    -> ShaderVisibleIndex;
+  // Bridge hook until the dedicated resolve pass lands: keep persistent GPU
+  // page-table and backend-private resolve-state resources synchronized at the
+  // point where virtual raster still consumes CPU-authored jobs.
+  OXGN_RNDR_API auto EnsureViewPageTableResources(ViewId view_id,
+    std::uint32_t required_entry_count) -> ViewPageTableResources*;
+  OXGN_RNDR_API auto StagePageTableUpload(ViewId view_id,
+    std::span<const std::uint32_t> entries) -> ShaderVisibleIndex;
+  OXGN_RNDR_API auto EnsurePageTablePublication(
+    ViewId view_id, std::uint32_t required_entry_count) -> ShaderVisibleIndex;
+  OXGN_RNDR_API auto EnsureViewResolveResources(ViewId view_id,
+    std::uint32_t required_entry_count) -> ViewResolveResources*;
+  OXGN_RNDR_API auto StageResolveStateUpload(
+    ViewId view_id, const ViewCacheEntry& state) -> void;
 };
 
 } // namespace oxygen::renderer::internal

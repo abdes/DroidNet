@@ -104,6 +104,13 @@ auto VirtualShadowRequestPass::DoPrepareResources(
 
   ProcessCompletedFeedback(Context().frame_slot);
 
+  const auto* prepared_frame = Context().current_view.prepared_frame.get();
+  if (prepared_frame == nullptr || !prepared_frame->IsValid()
+    || prepared_frame->draw_metadata_bytes.empty()
+    || prepared_frame->partitions.empty()) {
+    co_return;
+  }
+
   const auto* depth_pass = Context().GetPass<DepthPrePass>();
   const auto shadow_manager = Context().GetRenderer().GetShadowManager();
   if (depth_pass == nullptr || shadow_manager == nullptr
@@ -111,20 +118,18 @@ auto VirtualShadowRequestPass::DoPrepareResources(
     co_return;
   }
 
-  const auto* virtual_view = shadow_manager->TryGetVirtualViewIntrospection(
+  const auto* metadata = shadow_manager->TryGetVirtualDirectionalMetadata(
     Context().current_view.view_id);
-  if (virtual_view == nullptr
-    || virtual_view->directional_virtual_metadata.empty()) {
+  if (metadata == nullptr) {
     co_return;
   }
 
-  const auto& metadata = virtual_view->directional_virtual_metadata.front();
-  if (metadata.clip_level_count == 0U || metadata.pages_per_axis == 0U) {
+  if (metadata->clip_level_count == 0U || metadata->pages_per_axis == 0U) {
     co_return;
   }
 
-  const auto total_pages = metadata.clip_level_count * metadata.pages_per_axis
-    * metadata.pages_per_axis;
+  const auto total_pages = metadata->clip_level_count * metadata->pages_per_axis
+    * metadata->pages_per_axis;
   const auto request_word_count = (std::max(1U, total_pages) + 31U) / 32U;
   if (request_word_count > kMaxRequestWordCount) {
     LOG_F(WARNING,
@@ -191,18 +196,18 @@ auto VirtualShadowRequestPass::DoPrepareResources(
   active_dispatch_ = true;
   active_view_id_ = Context().current_view.view_id;
   active_request_word_count_ = request_word_count;
-  active_pages_per_axis_ = metadata.pages_per_axis;
-  active_clip_level_count_ = metadata.clip_level_count;
+  active_pages_per_axis_ = metadata->pages_per_axis;
+  active_clip_level_count_ = metadata->clip_level_count;
   active_directional_address_space_hash
-    = HashDirectionalVirtualFeedbackAddressSpace(metadata);
+    = HashDirectionalVirtualFeedbackAddressSpace(*metadata);
   const auto active_clip_count
-    = std::min(metadata.clip_level_count, kMaxSupportedClipLevels);
+    = std::min(metadata->clip_level_count, kMaxSupportedClipLevels);
   for (std::uint32_t clip_index = 0U; clip_index < active_clip_count;
     ++clip_index) {
     active_clip_grid_origin_x_[clip_index]
-      = ResolveDirectionalVirtualClipGridOriginX(metadata, clip_index);
+      = ResolveDirectionalVirtualClipGridOriginX(*metadata, clip_index);
     active_clip_grid_origin_y_[clip_index]
-      = ResolveDirectionalVirtualClipGridOriginY(metadata, clip_index);
+      = ResolveDirectionalVirtualClipGridOriginY(*metadata, clip_index);
   }
 
   LOG_F(INFO,
@@ -305,7 +310,8 @@ auto VirtualShadowRequestPass::NeedRebuildPipelineState() const -> bool
 auto VirtualShadowRequestPass::EnsureRequestBuffers() -> void
 {
   if (request_words_buffer_ && clear_upload_buffer_
-    && clear_upload_mapped_ptr_ != nullptr && request_words_uav_.IsValid()) {
+    && clear_upload_mapped_ptr_ != nullptr && request_words_uav_.IsValid()
+    && request_words_srv_.IsValid()) {
     return;
   }
 
@@ -345,6 +351,23 @@ auto VirtualShadowRequestPass::EnsureRequestBuffers() -> void
     uav_desc.stride = sizeof(std::uint32_t);
     registry.RegisterView(
       *request_words_buffer_, std::move(uav_handle), uav_desc);
+
+    auto srv_handle
+      = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_SRV,
+        graphics::DescriptorVisibility::kShaderVisible);
+    if (!srv_handle.IsValid()) {
+      throw std::runtime_error(
+        "VirtualShadowRequestPass: failed to allocate request SRV");
+    }
+    request_words_srv_ = allocator.GetShaderVisibleIndex(srv_handle);
+
+    graphics::BufferViewDescription srv_desc;
+    srv_desc.view_type = graphics::ResourceViewType::kStructuredBuffer_SRV;
+    srv_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
+    srv_desc.range = { 0U, kBufferSize };
+    srv_desc.stride = sizeof(std::uint32_t);
+    registry.RegisterView(
+      *request_words_buffer_, std::move(srv_handle), srv_desc);
   }
 
   if (!clear_upload_buffer_) {

@@ -24,17 +24,23 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/RendererTag.h>
+#include <Oxygen/Renderer/Types/DirectionalVirtualShadowMetadata.h>
 #include <Oxygen/Renderer/Types/RasterShadowRenderPlan.h>
 #include <Oxygen/Renderer/Types/ShadowFramePublication.h>
 #include <Oxygen/Renderer/Types/ShadowInstanceMetadata.h>
-#include <Oxygen/Renderer/Types/VirtualShadowRequestFeedback.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/Types/VirtualShadowRenderPlan.h>
+#include <Oxygen/Renderer/Types/VirtualShadowRequestFeedback.h>
+#include <Oxygen/Renderer/Types/VirtualShadowResolvedRasterSchedule.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::engine::upload {
 class InlineTransfersCoordinator;
 class StagingProvider;
+}
+
+namespace oxygen::graphics {
+class CommandRecorder;
 }
 
 namespace oxygen::renderer {
@@ -82,14 +88,20 @@ public:
     std::span<const glm::vec4> visible_receiver_bounds = {},
     const SyntheticSunShadowInput* synthetic_sun_shadow = nullptr,
     std::chrono::milliseconds gpu_budget = std::chrono::milliseconds(16),
-    std::uint64_t shadow_caster_content_hash = 0U)
-    -> ShadowFramePublication;
+    std::uint64_t shadow_caster_content_hash = 0U) -> ShadowFramePublication;
+  OXGN_RNDR_API auto ResolveVirtualCurrentFrame(ViewId view_id) -> void;
   OXGN_RNDR_API auto MarkVirtualRenderPlanExecuted(ViewId view_id) -> void;
+  OXGN_RNDR_API auto PrepareVirtualResolvedRasterPages(ViewId view_id) -> void;
+  OXGN_RNDR_API auto PrepareVirtualPageTableResources(
+    ViewId view_id, graphics::CommandRecorder& recorder) -> void;
   OXGN_RNDR_API auto SetPublishedViewFrameBindingsSlot(
     ViewId view_id, engine::BindlessViewFrameBindingsSlot slot) -> void;
   OXGN_RNDR_API auto SubmitVirtualRequestFeedback(
     ViewId view_id, VirtualShadowRequestFeedback feedback) -> void;
   OXGN_RNDR_API auto ClearVirtualRequestFeedback(ViewId view_id) -> void;
+  OXGN_RNDR_API auto SubmitVirtualResolvedRasterSchedule(
+    ViewId view_id, VirtualShadowResolvedRasterSchedule schedule) -> void;
+  OXGN_RNDR_API auto ClearVirtualResolvedRasterSchedule(ViewId view_id) -> void;
 
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetFramePublication(
     ViewId view_id) const noexcept -> const ShadowFramePublication*;
@@ -101,6 +113,9 @@ public:
     ViewId view_id) const noexcept -> const ShadowViewIntrospection*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetVirtualViewIntrospection(
     ViewId view_id) const noexcept -> const VirtualShadowViewIntrospection*;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetVirtualDirectionalMetadata(
+    ViewId view_id) const noexcept
+    -> const engine::DirectionalVirtualShadowMetadata*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto
   GetConventionalShadowDepthTexture() const noexcept
     -> const std::shared_ptr<graphics::Texture>&;

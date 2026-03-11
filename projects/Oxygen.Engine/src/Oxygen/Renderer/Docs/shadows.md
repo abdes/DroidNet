@@ -1082,26 +1082,134 @@ Implementation status, March 9, 2026:
   - spatial dirty-page invalidation now projects previous caster bounds
     through the previous frame `light_view`, so old resident-page keys are
     dirtied in the lattice that actually owns them after a snapped shift
+  - shader-visible directional VSM page tables now live in a persistent
+    per-view GPU buffer with a stable bindless slot across republishes, and
+    valid mapped entries carry the documented `requested this frame` bit
+  - backend-private directional VSM resolve-state now mirrors resident pages
+    and resolve counters into persistent per-view GPU buffers with stable
+    bindless slots, giving the upcoming GPU resolve pass one deterministic
+    residency snapshot surface instead of ad-hoc CPU map iteration
+  - March 12 regression fix: the resolve-owned page-table rebuild now stages
+    rebuilt entries back into the persistent per-view upload buffer before the
+    GPU copy; without that step the atlas could update while scene shading
+    still sampled an all-zero page table and produced no shadows
+  - March 12 step-4 bridge slice: `VirtualShadowResolvePass` now explicitly
+    owns the current-frame CPU residency / allocation / page-table preparation
+    before pass-time upload and raster consumption; `PreparePageTableResources`
+    no longer recomputes that state on demand
+  - March 12 step-4 cleanup slice: `MarkRendered` is now post-raster
+    bookkeeping only and no longer backdoor-resolves current-frame
+    allocation/page-table state; the atlas-debug cached-vs-reused regression
+    now explicitly resolves the first frame before marking it rendered
+  - March 12 startup gating slice: the request and resolve passes now skip
+    startup / transition frames until the current scene view has live prepared
+    draw metadata and non-empty partitions, so resolved virtual pages are no
+    longer published before the scene can actually raster shadow casters
+  - March 12 step-4 completion slice: publish-time VSM view-state
+    construction now only snapshots the authoritative prior resident state,
+    and the explicit resolve stage owns current-frame carry, dirty marking,
+    release, allocation, eviction, and page-table mutation; unresolved
+    republishes retain that authoritative snapshot until resolve applies it
+  - March 12 step-5 hardening slice: budget-pressure eviction now prefers
+    invalid resident pages before unrelated clean cached pages, and focused
+    coverage proves that a still-visible caster's excluded clean page survives
+    moved-caster pressure without reraster; this closes the frozen step-5
+    invalidation/regression gate while overall directional VSM stays
+    `in_progress` pending step-6 live validation
   - focused automated coverage now exists for the snap-boundary regression:
     - directional feedback address-space identity changes on snapped XY
       light-view translation but ignores pure Z pull-back padding
     - incompatible feedback is rejected and re-enters `receiver_bootstrap`
       instead of silently skipping both sparse refinement and fallback seeding
+  - focused automated coverage now exists for the bridge resolve-state slice:
+    - the staged resident-page snapshot is deterministic and tracks resident /
+      pending state transitions after `MarkRendered`
+    - the resolve resident-page and resolve-stats buffers keep stable per-view
+      bindless slots across republishes
+    - page-table resource preparation does not emit the page-table-sized GPU
+      copy before the explicit resolve stage runs, and uploads the resolved
+      current-frame page table contents into the persistent upload buffer after
+      that stage before pass-time copy
+  - a live `VirtualShadowResolvePass` now runs between the request and raster
+    passes, compacts currently mapped requested pages into persistent per-view
+    GPU schedule buffers, and readbacks a CPU-visible
+    `VirtualShadowResolvedRasterSchedule` bridge surface
+  - design correction on March 12, 2026: that bridge schedule is currently
+    observational only because it enumerates already-mapped requested pages
+    from the current page table; it does not yet own current-frame fine-page
+    allocation/raster scheduling and therefore must not prune CPU-authored
+    pending jobs
+  - focused automated coverage now exists for the resolve-to-raster bridge:
+    - compatible resolved schedules are accepted as bridge telemetry without
+      suppressing CPU-authored pending raster jobs
+    - incompatible resolved schedules are rejected instead of influencing
+      raster scheduling against stale address-space identity
 - Validation evidence:
-  - `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:6 /p:Configuration=Debug /nologo`
-  - `msbuild out/build-vs/src/Oxygen/Graphics/Direct3D12/Shaders/oxygen-graphics-direct3d12_shaders.vcxproj /m:6 /p:Configuration=Debug /nologo`
-  - `msbuild out/build-vs/src/Oxygen/Engine/oxygen-engine.vcxproj /m:6 /p:Configuration=Debug /nologo`
-  - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:6 /p:Configuration=Debug /nologo`
-  - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:6 /p:Configuration=Debug /nologo`
-  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
   - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*`
   - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPublishForView_VirtualFeedbackAddressSpaceTracksSnappedXYTranslationButIgnoresZPullback`
   - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPublishForView_VirtualIncompatibleFeedbackRebootsReceiverBootstrap`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPublishForView_VirtualPageTablePublicationUsesStablePerViewGpuBuffer`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPublishForView_VirtualPageTableMarksMappedPagesRequestedThisFrame`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPublishForView_VirtualResolveStateSnapshotTracksResidentPagesDeterministically`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPublishForView_VirtualResolveStateUsesStablePerViewGpuBuffers`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPublishForView_VirtualResolveStagePublishesResolvedPageContract`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPrepareVirtualPageTableResources_UploadsResolvedEntries`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPublishForView_VirtualResolvedScheduleDoesNotSuppressCpuPendingJobsYet`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPublishForView_VirtualResolvedScheduleRejectsIncompatibleAddressSpace`
+  - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - `out/build-vs/bin/Debug/Oxygen.Examples.RenderScene.exe --frames 8 --fps 100 --directional-shadows virtual-only`
+  - `out/build-vs/bin/Debug/Oxygen.Examples.RenderScene.exe --frames 40 --fps 100 --directional-shadows virtual-only`
+  - the 40-frame `RenderScene` capture exited cleanly and showed the live
+    resolve pass producing compact schedules (`scheduled_pages=91`) once
+    request feedback stabilized; later manual camera-motion testing showed that
+    using that bridge payload to prune fine CPU jobs was not safe yet, so the
+    prune path remains disabled until resolve owns raster scheduling
+  - the short 8-frame `RenderScene` recheck after the explicit resolve-stage
+    ownership slice exited with code `0` and showed the resolve pass preparing
+    / dispatching before virtual page raster consumed resolved pages
+  - March 12 hardening slice evidence:
+    - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPublishForView_VirtualTryGetDoesNotAutoResolveCurrentFrame`
+    - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*:*ShadowManagerPrepareVirtualPageTableResources_UploadsResolvedEntries`
+    - `out/build-vs/bin/Debug/Oxygen.Examples.RenderScene.exe --frames 8 --fps 100 --directional-shadows virtual-only`
+  - March 12 resolve-ownership slice evidence:
+    - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:1 /p:Configuration=Debug /nologo`
+    - `out/build-vs/bin/Debug/Oxygen.Examples.RenderScene.exe --frames 8 --fps 100 --directional-shadows virtual-only`
+  - March 12 resolve-cleanup slice evidence:
+    - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPublishForView_VirtualMarkRenderedDoesNotAutoResolveCurrentFrame`
+    - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPublishForView_VirtualAtlasDebugSeparatesCachedFromReused`
+    - `out/build-vs/bin/Debug/Oxygen.Examples.RenderScene.exe --frames 8 --fps 100 --directional-shadows virtual-only`
+  - March 12 startup-gating slice evidence:
+    - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*:*ShadowManagerPrepareVirtualPageTableResources_UploadsResolvedEntries`
+    - `out/build-vs/bin/Debug/Oxygen.Examples.RenderScene.exe --frames 8 --fps 100 --directional-shadows virtual-only`
+  - March 12 step-4 completion slice evidence:
+    - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPublishForView_VirtualUnresolvedRepublishRetainsAuthoritativeResidentSnapshot`
+    - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*:*ShadowManagerPrepareVirtualPageTableResources_UploadsResolvedEntries`
+    - `out/build-vs/bin/Debug/Oxygen.Examples.RenderScene.exe --frames 8 --fps 100 --directional-shadows virtual-only`
+  - March 12 step-5 hardening slice evidence:
+    - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPublishForView_VirtualBudgetPressureEvictsDirtyPagesBeforeCleanCachedPages`
+    - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*:*ShadowManagerPrepareVirtualPageTableResources_UploadsResolvedEntries`
+    - `out/build-vs/bin/Debug/Oxygen.Examples.RenderScene.exe --frames 8 --fps 100 --directional-shadows virtual-only`
+  - the focused virtual LightManager slice is now green at `44/44`
+  - resolve now owns pass-time page-table upload preparation for every virtual
+    frame, and the virtual raster / atlas-debug passes now consume published
+    exports without re-running current-frame resolve themselves
+  - the short 8-frame smoke no longer emitted the old `VSM_GLITCH` marker and
+    no longer showed startup frames where virtual page raster had resolved
+    pages while prepared draw metadata was empty; the first live resolve
+    dispatch now begins once `draw_bytes` and `partitions` are populated
 - Remaining gap to exit this first slice:
   - visual validation in `RenderScene`
-  - final GPU residency-resolve/update after the new depth/feedback-driven
-    request producer
-  - broader request/update deduplication and eviction hardening
+  - a GPU resolve/update pass after the depth/feedback-driven request
+    producer; the explicit resolve stage now owns current-frame CPU carry /
+    allocate / evict / page-table mutation, but the allocator still runs on
+    the CPU
+  - a single authoritative resolve-to-raster contract; the live resolve pass
+    now materializes the current-frame resolved-page raster contract from
+    backend-private pending jobs before raster, while the readback bridge
+    schedule remains telemetry only and the final GPU-owned resolve/update
+    path is still missing
+  - broader request/update deduplication and deterministic eviction hardening
   - broader directional virtual invalidation/debug tooling
   - large-scene viability in `virtual-only`, which remains intentionally harsh
     until sparse residency exists
@@ -1118,8 +1226,8 @@ Next real milestone:
 - `Directional VSM Production Candidate`
   - feedback/depth-driven request generation with no steady-state dependency on
     CPU visible-receiver fallback
-  - request deduplication and deterministic residency scheduling in the live
-    path
+  - request deduplication, residency updates, and raster-page scheduling are
+    driven from one authoritative resolve path in the live runtime
   - deterministic content-safe residency / invalidation / eviction
   - stable `virtual-only` behavior in validation scenes
   - edge quality no longer materially below conventional directional shadows

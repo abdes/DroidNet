@@ -76,6 +76,7 @@ set(
   "Passes/TransparentPass.h"
   "Passes/VirtualShadowAtlasDebugPass.h"
   "Passes/VirtualShadowPageRasterPass.h"
+  "Passes/VirtualShadowResolvePass.h"
   "Passes/VirtualShadowRequestPass.h"
   "Passes/WireframePass.h"
   "Pipeline/CompositionView.h"
@@ -126,6 +127,7 @@ set(
   "Types/ViewColorData.h"
   "Types/ViewFrameBindings.h"
   "Types/VirtualShadowRequestFeedback.h"
+  "Types/VirtualShadowResolvedRasterSchedule.h"
   "Types/VirtualShadowRenderPlan.h"
   "Upload/Errors.h"
 )
@@ -181,6 +183,7 @@ set(
   "Passes/TransparentPass.cpp"
   "Passes/VirtualShadowAtlasDebugPass.cpp"
   "Passes/VirtualShadowPageRasterPass.cpp"
+  "Passes/VirtualShadowResolvePass.cpp"
   "Passes/VirtualShadowRequestPass.cpp"
   "Passes/WireframePass.cpp"
   "Pipeline/ForwardPipeline.cpp"
