@@ -739,14 +739,50 @@ auto VirtualShadowMapBackend::CanReuseResidentPages(
     return false;
   }
 
-  const bool metadata_equal = previous.directional_virtual_metadata.empty()
-    || std::memcmp(previous.directional_virtual_metadata.data(),
-         current.directional_virtual_metadata.data(),
-         previous.directional_virtual_metadata.size()
-           * sizeof(engine::DirectionalVirtualShadowMetadata))
-      == 0;
-  if (!metadata_equal) {
-    return false;
+  // Compare metadata element-wise: exact match for integer fields,
+  // tolerance-based for floats that may experience FP non-determinism
+  // across recomputation with identical inputs (e.g. light_view built
+  // from the same snapped camera position via two lookAtRH calls).
+  for (std::size_t i = 0U; i < previous.directional_virtual_metadata.size();
+    ++i) {
+    const auto& prev = previous.directional_virtual_metadata[i];
+    const auto& curr = current.directional_virtual_metadata[i];
+    if (prev.shadow_instance_index != curr.shadow_instance_index
+      || prev.flags != curr.flags
+      || prev.clip_level_count != curr.clip_level_count
+      || prev.pages_per_axis != curr.pages_per_axis
+      || prev.page_size_texels != curr.page_size_texels
+      || prev.page_table_offset != curr.page_table_offset) {
+      return false;
+    }
+    if (!shadow_detail::DirectionalCacheFloatEqual(
+          prev.constant_bias, curr.constant_bias)
+      || !shadow_detail::DirectionalCacheFloatEqual(
+        prev.normal_bias, curr.normal_bias)) {
+      return false;
+    }
+    if (!shadow_detail::DirectionalCacheMat4Equal(
+          prev.light_view, curr.light_view)) {
+      return false;
+    }
+    const auto clip_count = std::min(prev.clip_level_count,
+      engine::kMaxVirtualDirectionalClipLevels);
+    for (std::uint32_t c = 0U; c < clip_count; ++c) {
+      const auto& pc = prev.clip_metadata[c];
+      const auto& cc = curr.clip_metadata[c];
+      if (!shadow_detail::DirectionalCacheFloatEqual(
+            pc.origin_page_scale.x, cc.origin_page_scale.x)
+        || !shadow_detail::DirectionalCacheFloatEqual(
+          pc.origin_page_scale.y, cc.origin_page_scale.y)
+        || !shadow_detail::DirectionalCacheFloatEqual(
+          pc.origin_page_scale.z, cc.origin_page_scale.z)
+        || !shadow_detail::DirectionalCacheFloatEqual(
+          pc.origin_page_scale.w, cc.origin_page_scale.w)
+        || !shadow_detail::DirectionalCacheFloatEqual(
+          pc.bias_reserved.x, cc.bias_reserved.x)) {
+        return false;
+      }
+    }
   }
 
   const bool page_table_equal = previous.page_table_entries.empty()
@@ -1826,8 +1862,13 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
           }
 
           found_spatial_delta = true;
-          AppendDirtyResidentKeysForBound(previous_bound, light_view,
-            clip_page_world, clip_level_count, dirty_resident_pages);
+          // Previous bound must be projected with the previous frame's
+          // light_view so the generated lattice keys match the keys stored in
+          // the resident page map. Using the current light_view would produce
+          // wrong grid coordinates when the light eye has shifted.
+          AppendDirtyResidentKeysForBound(previous_bound,
+            previous_metadata.light_view, clip_page_world, clip_level_count,
+            dirty_resident_pages);
           AppendDirtyResidentKeysForBound(current_bound, light_view,
             clip_page_world, clip_level_count, dirty_resident_pages);
         }

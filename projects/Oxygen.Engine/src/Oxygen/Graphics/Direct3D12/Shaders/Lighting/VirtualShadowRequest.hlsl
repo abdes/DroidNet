@@ -191,14 +191,21 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             metadata, clip_index, desired_world_footprint);
 
     const uint pages_per_level = metadata.pages_per_axis * metadata.pages_per_axis;
-    uint request_begin_clip = clip_index;
+
+    // Only request the selected clip and optionally one finer prefetch clip.
+    // The coarse backbone clips are already covered by the C++ backend's
+    // frustum-based selection, so requesting them here inflates the feedback
+    // key set and causes eviction cascades in the physical tile pool.
+    uint request_clips[2];
+    uint num_request_clips = 0u;
     if (prefetch_finer > 0.0f && clip_index > 0u) {
-        request_begin_clip = clip_index - 1u;
+        request_clips[num_request_clips++] = clip_index - 1u;
     }
+    request_clips[num_request_clips++] = clip_index;
+
     [loop]
-    for (uint request_clip = request_begin_clip;
-         request_clip < metadata.clip_level_count;
-         ++request_clip) {
+    for (uint i = 0u; i < num_request_clips; ++i) {
+        const uint request_clip = request_clips[i];
         float2 request_page_coord = 0.0.xx;
         if (!ProjectDirectionalVirtualClip(
                 metadata, request_clip, light_view_pos.xy, request_page_coord)) {

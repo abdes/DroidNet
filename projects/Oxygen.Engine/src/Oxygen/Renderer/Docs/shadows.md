@@ -1050,8 +1050,11 @@ Implementation status, March 9, 2026:
     - request generation remains footprint-driven:
       - choose the coarsest containing clip whose logical texel size still
         matches the receiver footprint
-      - request that clip, optionally one finer clip near the threshold, and
-        all containing coarser clips for guaranteed fallback
+      - request that clip plus an optional finer prefetch clip near the
+        threshold
+      - keep guaranteed coarser fallback in the backend-owned coarse clip
+        backbone instead of redundantly emitting every coarser clip into
+        feedback
     - shading is not footprint-driven:
       - sample the finest available containing clip first
       - if the fine page is invalid, fall back coherently to coarser clips
@@ -1069,6 +1072,16 @@ Implementation status, March 9, 2026:
   - coarse backbone clips are mapped first, then fine refinement clips, so
     valid coarser fallback coverage exists by construction when physical tile
     capacity is exhausted
+  - directional address-space compatibility now preserves snapped XY
+    light-view translation and zeros only Z pull-back padding, so a grid-snap
+    lattice shift invalidates stale feedback/resident mappings on the snap
+    frame instead of silently accepting out-of-bounds keys
+  - a snap-boundary miss now forces a clean `receiver_bootstrap` fallback on
+    that frame instead of allowing several frames of missing shadows while
+    stale feedback is rejected against the new `clip_grid_origin`
+  - spatial dirty-page invalidation now projects previous caster bounds
+    through the previous frame `light_view`, so old resident-page keys are
+    dirtied in the lattice that actually owns them after a snapped shift
 - Validation evidence:
   - `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:6 /p:Configuration=Debug /nologo`
   - `msbuild out/build-vs/src/Oxygen/Graphics/Direct3D12/Shaders/oxygen-graphics-direct3d12_shaders.vcxproj /m:6 /p:Configuration=Debug /nologo`
@@ -1078,6 +1091,8 @@ Implementation status, March 9, 2026:
   - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
 - Remaining gap to exit this first slice:
   - visual validation in `RenderScene`
+  - focused validation evidence for the March 11, 2026 directional
+    snap-boundary dropout fix
   - final GPU residency-resolve/update after the new depth/feedback-driven
     request producer
   - broader request/update deduplication and eviction hardening

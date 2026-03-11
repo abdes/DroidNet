@@ -135,11 +135,13 @@ template <typename T>
   glm::mat4 light_view) -> glm::mat4
 {
   // Directional page identity is defined by the clip lattice orientation and
-  // page scale. The per-clip origins already capture where the snapped lattice
-  // sits in light-space XY, so including light-view translation here makes
-  // camera motion look like an address-space change and wipes the cache.
-  light_view[3][0] = 0.0F;
-  light_view[3][1] = 0.0F;
+  // page scale. The grid itself jumps by snap_size when the light eye snaps,
+  // which shifts all absolute logical keys. We MUST preserve XY translation
+  // so this jump correctly invalidates the cache, rather than falsely
+  // accepting severely shifted feedback keys.
+  // Z translation represents the light pull-back padding and changes smoothly;
+  // it does not shift the XY grid, so we can safely zero it to allow reuse
+  // when caster bounds expand/shrink along the light ray.
   light_view[3][2] = 0.0F;
   return light_view;
 }
