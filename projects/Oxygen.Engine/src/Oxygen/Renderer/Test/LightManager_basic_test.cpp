@@ -2013,10 +2013,11 @@ NOLINT_TEST_F(LightManagerTest,
   EXPECT_EQ(second_virtual_introspection->page_table_entries[0], 0U);
 }
 
-//! Resident-key feedback must survive page-aligned clip-origin motion when the
-//! requested world page is still inside the current fine clip window.
+//! Incompatible request feedback must be rejected and the backend must fall
+//! back to current-frame receiver bootstrap instead of silently skipping both
+//! feedback refinement and bootstrap seeding.
 NOLINT_TEST_F(LightManagerTest,
-  ShadowManagerPublishForView_VirtualFeedbackReusesResidentKeysAcrossClipOriginShift)
+  ShadowManagerPublishForView_VirtualIncompatibleFeedbackRebootsReceiverBootstrap)
 {
   auto& manager = Manager();
   manager.OnFrameStart(
@@ -2051,43 +2052,48 @@ NOLINT_TEST_F(LightManagerTest,
   const std::array<glm::vec4, 1> shadow_casters {
     glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
   };
+  const std::array<glm::vec4, 1> visible_receivers {
+    glm::vec4(0.0F, 0.0F, 0.0F, 0.08F),
+  };
 
-  const auto layout = ResolveVirtualFeedbackLayout(*shadow_manager, manager,
-    view_constants, oxygen::ViewId { 132 }, shadow_casters, synthetic_sun);
-  ASSERT_GT(layout.pages_per_axis, 4U);
-  const std::uint32_t requested_page
-    = 2U * layout.pages_per_axis + 2U;
-  const auto requested_resident_keys = RequestedResidentKeys(
-    layout, std::span<const std::uint32_t> { &requested_page, 1U });
-  ASSERT_EQ(requested_resident_keys.size(), 1U);
-
-  const auto* bootstrap_introspection
+  const auto first = shadow_manager->PublishForView(oxygen::ViewId { 132 },
+    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
+    std::chrono::milliseconds(16));
+  const auto* first_virtual_introspection
     = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 132 });
-  ASSERT_NE(bootstrap_introspection, nullptr);
-  ASSERT_FALSE(bootstrap_introspection->directional_virtual_metadata.empty());
+  ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(first_virtual_introspection, nullptr);
+  ASSERT_FALSE(first_virtual_introspection->directional_virtual_metadata.empty());
+  ASSERT_GT(first_virtual_introspection->receiver_bootstrap_page_count, 0U);
 
-  const auto& bootstrap_metadata
-    = bootstrap_introspection->directional_virtual_metadata.front();
-  const auto inverse_light_view = glm::inverse(bootstrap_metadata.light_view);
-  const float fine_page_world
-    = bootstrap_metadata.clip_metadata[0].origin_page_scale.z;
-  const glm::vec3 world_origin
-    = glm::vec3(inverse_light_view * glm::vec4(0.0F, 0.0F, 0.0F, 1.0F));
-  const glm::vec3 world_shift_x = glm::vec3(
-    inverse_light_view * glm::vec4(fine_page_world, 0.0F, 0.0F, 1.0F))
-    - world_origin;
+  const auto first_layout = BuildVirtualFeedbackLayout(
+    first_virtual_introspection->directional_virtual_metadata.front());
+  ASSERT_GT(first_layout.pages_per_axis, 0U);
+  std::optional<std::uint32_t> requested_page {};
+  for (std::uint32_t page_index = 0U;
+    page_index < first_layout.pages_per_level; ++page_index) {
+    if (page_index >= first_virtual_introspection->page_table_entries.size()) {
+      break;
+    }
+    if (first_virtual_introspection->page_table_entries[page_index] != 0U) {
+      requested_page = page_index;
+      break;
+    }
+  }
+  ASSERT_TRUE(requested_page.has_value());
 
   shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 132 });
+  auto incompatible_feedback = MakeVirtualRequestFeedback(
+    first_layout, SequenceNumber { 1 }, { *requested_page });
+  ++incompatible_feedback.directional_address_space_hash;
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 132 },
-    MakeVirtualRequestFeedback(layout, SequenceNumber { 1 }, { requested_page }));
+    incompatible_feedback);
 
-  view_constants.SetCameraPosition(
-    view_constants.GetCameraPosition() + world_shift_x);
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
 
   const auto second = shadow_manager->PublishForView(oxygen::ViewId { 132 },
-    view_constants, manager, shadow_casters, {}, &synthetic_sun,
+    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
     std::chrono::milliseconds(16));
   const auto* second_virtual_introspection
     = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 132 });
@@ -2095,24 +2101,18 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(second.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(second_virtual_introspection, nullptr);
   ASSERT_FALSE(second_virtual_introspection->directional_virtual_metadata.empty());
-
-  const auto second_layout = BuildVirtualFeedbackLayout(
-    second_virtual_introspection->directional_virtual_metadata.front());
-  const auto translated_page_index = LocalPageIndexForResidentKey(
-    second_layout, requested_resident_keys.front());
-  ASSERT_TRUE(translated_page_index.has_value());
-  ASSERT_LT(*translated_page_index,
-    second_virtual_introspection->page_table_entries.size());
-  EXPECT_NE(second_virtual_introspection->page_table_entries[*translated_page_index],
+  EXPECT_FALSE(second_virtual_introspection->used_request_feedback);
+  EXPECT_EQ(second_virtual_introspection->feedback_requested_page_count, 0U);
+  EXPECT_EQ(second_virtual_introspection->feedback_refinement_page_count, 0U);
+  EXPECT_GT(second_virtual_introspection->receiver_bootstrap_page_count, 0U);
+  EXPECT_EQ(second_virtual_introspection->current_frame_reinforcement_page_count,
     0U);
 }
 
-//! Directional feedback/address-space identity must ignore light-view
-//! translation. The clip origins already encode the snapped XY lattice
-//! location; including translation here turns camera motion into a false
-//! address-space mismatch.
+//! Directional feedback/address-space identity must track snapped XY light-view
+//! translation, but it should still ignore pure Z pull-back padding changes.
 NOLINT_TEST_F(LightManagerTest,
-  ShadowManagerPublishForView_VirtualFeedbackAddressSpaceIgnoresLightViewTranslation)
+  ShadowManagerPublishForView_VirtualFeedbackAddressSpaceTracksSnappedXYTranslationButIgnoresZPullback)
 {
   auto& manager = Manager();
   manager.OnFrameStart(
@@ -2163,33 +2163,41 @@ NOLINT_TEST_F(LightManagerTest,
 
   const auto& first_metadata
     = first_virtual_introspection->directional_virtual_metadata.front();
-  auto translated_metadata = first_metadata;
-  translated_metadata.light_view[3][0] += 17.0F;
-  translated_metadata.light_view[3][1] -= 9.0F;
-  translated_metadata.light_view[3][2] += 5.0F;
-  for (std::uint32_t clip_index = 0U;
-    clip_index < translated_metadata.clip_level_count; ++clip_index) {
-    const float page_world
-      = translated_metadata.clip_metadata[clip_index].origin_page_scale.z;
-    translated_metadata.clip_metadata[clip_index].origin_page_scale.x
-      += 3.0F * page_world;
-    translated_metadata.clip_metadata[clip_index].origin_page_scale.y
-      -= 2.0F * page_world;
-  }
+  auto xy_translated_metadata = first_metadata;
+  xy_translated_metadata.light_view[3][0] += 17.0F;
+  xy_translated_metadata.light_view[3][1] -= 9.0F;
+
+  auto z_translated_metadata = first_metadata;
+  z_translated_metadata.light_view[3][2] += 5.0F;
 
   const auto first_hash
     = oxygen::renderer::internal::shadow_detail::
       HashDirectionalVirtualFeedbackAddressSpace(first_metadata);
-  const auto translated_hash
+  const auto xy_translated_hash
     = oxygen::renderer::internal::shadow_detail::
-      HashDirectionalVirtualFeedbackAddressSpace(translated_metadata);
-  EXPECT_EQ(first_hash, translated_hash);
-  EXPECT_TRUE(oxygen::renderer::internal::shadow_detail::DirectionalCacheMat4Equal(
-    oxygen::renderer::internal::shadow_detail::
-      BuildDirectionalAddressSpaceComparableLightView(first_metadata.light_view),
-    oxygen::renderer::internal::shadow_detail::
-      BuildDirectionalAddressSpaceComparableLightView(
-        translated_metadata.light_view)));
+      HashDirectionalVirtualFeedbackAddressSpace(xy_translated_metadata);
+  const auto z_translated_hash
+    = oxygen::renderer::internal::shadow_detail::
+      HashDirectionalVirtualFeedbackAddressSpace(z_translated_metadata);
+
+  EXPECT_NE(first_hash, xy_translated_hash);
+  EXPECT_EQ(first_hash, z_translated_hash);
+  EXPECT_FALSE(
+    oxygen::renderer::internal::shadow_detail::DirectionalCacheMat4Equal(
+      oxygen::renderer::internal::shadow_detail::
+        BuildDirectionalAddressSpaceComparableLightView(
+          first_metadata.light_view),
+      oxygen::renderer::internal::shadow_detail::
+        BuildDirectionalAddressSpaceComparableLightView(
+          xy_translated_metadata.light_view)));
+  EXPECT_TRUE(
+    oxygen::renderer::internal::shadow_detail::DirectionalCacheMat4Equal(
+      oxygen::renderer::internal::shadow_detail::
+        BuildDirectionalAddressSpaceComparableLightView(
+          first_metadata.light_view),
+      oxygen::renderer::internal::shadow_detail::
+        BuildDirectionalAddressSpaceComparableLightView(
+          z_translated_metadata.light_view)));
 }
 
 //! Directional page contents must rerasterize when the light-space depth basis

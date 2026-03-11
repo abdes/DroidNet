@@ -1082,6 +1082,11 @@ Implementation status, March 9, 2026:
   - spatial dirty-page invalidation now projects previous caster bounds
     through the previous frame `light_view`, so old resident-page keys are
     dirtied in the lattice that actually owns them after a snapped shift
+  - focused automated coverage now exists for the snap-boundary regression:
+    - directional feedback address-space identity changes on snapped XY
+      light-view translation but ignores pure Z pull-back padding
+    - incompatible feedback is rejected and re-enters `receiver_bootstrap`
+      instead of silently skipping both sparse refinement and fallback seeding
 - Validation evidence:
   - `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:6 /p:Configuration=Debug /nologo`
   - `msbuild out/build-vs/src/Oxygen/Graphics/Direct3D12/Shaders/oxygen-graphics-direct3d12_shaders.vcxproj /m:6 /p:Configuration=Debug /nologo`
@@ -1089,10 +1094,11 @@ Implementation status, March 9, 2026:
   - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:6 /p:Configuration=Debug /nologo`
   - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:6 /p:Configuration=Debug /nologo`
   - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
+  - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPublishForView_VirtualFeedbackAddressSpaceTracksSnappedXYTranslationButIgnoresZPullback`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPublishForView_VirtualIncompatibleFeedbackRebootsReceiverBootstrap`
 - Remaining gap to exit this first slice:
   - visual validation in `RenderScene`
-  - focused validation evidence for the March 11, 2026 directional
-    snap-boundary dropout fix
   - final GPU residency-resolve/update after the new depth/feedback-driven
     request producer
   - broader request/update deduplication and eviction hardening

@@ -1354,7 +1354,18 @@ Update, March 11, 2026 directional snap-boundary dropout fix:
 - spatial dirty-page invalidation now projects previous caster bounds through
   the previous frame `light_view`, so resident keys generated for the old
   bound line up with the lattice that actually owns those pages
+- focused non-regression coverage now exists for this fault:
+  - `LightManagerTest.ShadowManagerPublishForView_VirtualFeedbackAddressSpaceTracksSnappedXYTranslationButIgnoresZPullback`
+    proves snapped XY light-view translation changes directional feedback
+    address-space identity while pure Z pull-back does not
+  - `LightManagerTest.ShadowManagerPublishForView_VirtualIncompatibleFeedbackRebootsReceiverBootstrap`
+    proves incompatible feedback is rejected and re-enters
+    `receiver_bootstrap` instead of silently skipping both refinement and
+    fallback seeding
 - overall status remains `in_progress` in this document:
   - the code change is present in the last commit
-  - validation evidence for this exact regression has not yet been recorded
-    here
+  - broader directional VSM work is still unfinished
+  - validation evidence for this exact regression is now:
+    - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+    - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPublishForView_VirtualFeedbackAddressSpaceTracksSnappedXYTranslationButIgnoresZPullback`
+    - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPublishForView_VirtualIncompatibleFeedbackRebootsReceiverBootstrap`
