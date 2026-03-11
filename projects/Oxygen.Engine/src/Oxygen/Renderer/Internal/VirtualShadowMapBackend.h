@@ -116,6 +116,14 @@ private:
     }
   };
 
+  struct AbsoluteClipPageRegion {
+    bool valid { false };
+    std::int32_t min_x { 0 };
+    std::int32_t max_x { 0 };
+    std::int32_t min_y { 0 };
+    std::int32_t max_y { 0 };
+  };
+
   struct ViewCacheEntry {
     enum class RequestFeedbackDecision : std::uint8_t {
       kNoFeedback,
@@ -144,6 +152,8 @@ private:
       std::uint32_t feedback_requested_pages { 0U };
       std::uint32_t feedback_refinement_pages { 0U };
       std::uint32_t receiver_bootstrap_pages { 0U };
+      std::uint32_t current_frame_reinforcement_pages { 0U };
+      std::uint64_t current_frame_reinforcement_reference_frame { 0U };
       std::uint32_t previous_resident_pages { 0U };
       std::uint32_t carried_resident_pages { 0U };
       std::uint32_t released_resident_pages { 0U };
@@ -161,8 +171,10 @@ private:
     std::vector<engine::ShadowInstanceMetadata> shadow_instances;
     std::vector<engine::DirectionalVirtualShadowMetadata>
       directional_virtual_metadata;
+    std::vector<AbsoluteClipPageRegion> absolute_frustum_regions;
     std::vector<glm::vec4> shadow_caster_bounds;
     std::vector<std::uint32_t> page_table_entries;
+    std::vector<std::uint32_t> atlas_tile_debug_states;
     std::vector<VirtualShadowRasterJob> raster_jobs;
     std::vector<VirtualShadowRasterJob> pending_raster_jobs;
     std::unordered_map<std::uint64_t, ResidentVirtualPage> resident_pages;
@@ -174,6 +186,7 @@ private:
 
   struct PendingRequestFeedback {
     VirtualShadowRequestFeedback feedback {};
+    std::vector<AbsoluteClipPageRegion> source_absolute_frustum_regions {};
   };
 
   ::oxygen::Graphics* gfx_ { nullptr };
@@ -215,6 +228,8 @@ private:
     std::span<const glm::vec4> shadow_caster_bounds,
     std::uint64_t shadow_caster_content_hash) const -> PublicationKey;
   OXGN_RNDR_API auto RefreshViewExports(ViewCacheEntry& state) const -> void;
+  OXGN_RNDR_API auto RefreshAtlasTileDebugStates(ViewCacheEntry& state) const
+    -> void;
   [[nodiscard]] OXGN_RNDR_NDAPI auto CanReuseResidentPages(
     const ViewCacheEntry& previous,
     const ViewCacheEntry& current) const noexcept -> bool;

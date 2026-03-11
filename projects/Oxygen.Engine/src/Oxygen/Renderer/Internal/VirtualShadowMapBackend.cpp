@@ -41,6 +41,9 @@ constexpr std::uint64_t kMaxRequestFeedbackAgeFrames
   = oxygen::frame::kFramesInFlight.get() + 1U;
 constexpr std::uint32_t kDirectionalCoarseBackboneClipCount = 3U;
 constexpr std::uint32_t kCoarseBackboneGuardPages = 1U;
+constexpr std::uint32_t kAcceptedFeedbackCurrentFrameReinforcementClipCount = 3U;
+constexpr std::uint32_t kAcceptedFeedbackCurrentFrameGuardPages = 1U;
+constexpr std::uint32_t kAcceptedFeedbackCurrentFrameMaxDeltaPagesPerClip = 128U;
 
 [[nodiscard]] auto MapDistributionExponentToPracticalLambda(
   const float distribution_exponent) -> float
@@ -203,17 +206,30 @@ constexpr std::uint32_t kCoarseBackboneGuardPages = 1U;
     BuildDirectionalAddressSpaceComparableLightView(light_view);
 }
 
+[[nodiscard]] auto BuildContentComparableLightView(glm::mat4 light_view)
+  -> glm::mat4
+{
+  // Directional page contents remain reusable across page-aligned XY lattice
+  // motion, but a change in the light-space Z basis changes the normalized
+  // depth values stored in the page and must force rerasterization.
+  light_view[3][0] = 0.0F;
+  light_view[3][1] = 0.0F;
+  return light_view;
+}
+
 [[nodiscard]] auto BuildContentComparableClipMetadata(
   oxygen::engine::DirectionalVirtualClipMetadata clip)
   -> oxygen::engine::DirectionalVirtualClipMetadata
 {
   // Clip origins are allowed to move in page-sized increments without forcing
   // a reraster of pages that still map to the same absolute lattice key.
-  // Depth bias tracks light-space Z placement and can vary without changing the
-  // normalized depth values stored in the page.
+  // Keep the depth mapping terms intact: they define the normalized depth
+  // values stored in the page and must participate in content reuse.
   clip.origin_page_scale.x = 0.0F;
   clip.origin_page_scale.y = 0.0F;
-  clip.bias_reserved = glm::vec4(0.0F);
+  clip.bias_reserved.y = 0.0F;
+  clip.bias_reserved.z = 0.0F;
+  clip.bias_reserved.w = 0.0F;
   return clip;
 }
 
@@ -259,9 +275,9 @@ constexpr std::uint32_t kCoarseBackboneGuardPages = 1U;
   }
 
   const auto previous_content_view
-    = BuildAddressSpaceComparableLightView(previous.light_view);
+    = BuildContentComparableLightView(previous.light_view);
   const auto current_content_view
-    = BuildAddressSpaceComparableLightView(current.light_view);
+    = BuildContentComparableLightView(current.light_view);
   if (!oxygen::renderer::internal::shadow_detail::DirectionalCacheMat4Equal(
         previous_content_view, current_content_view)) {
     return false;
@@ -275,7 +291,9 @@ constexpr std::uint32_t kCoarseBackboneGuardPages = 1U;
              previous_clip.origin_page_scale.z,
              current_clip.origin_page_scale.z)
     && oxygen::renderer::internal::shadow_detail::DirectionalCacheFloatEqual(
-      previous_clip.origin_page_scale.w, current_clip.origin_page_scale.w);
+      previous_clip.origin_page_scale.w, current_clip.origin_page_scale.w)
+    && oxygen::renderer::internal::shadow_detail::DirectionalCacheFloatEqual(
+      previous_clip.bias_reserved.x, current_clip.bias_reserved.x);
 }
 
 auto AppendDirtyResidentKeysForBound(const glm::vec4& bound,
@@ -453,6 +471,8 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
     state.pending_raster_jobs.clear();
   }
 
+  RefreshAtlasTileDebugStates(state);
+
   state.frame_publication.shadow_instance_metadata_srv
     = PublishShadowInstances(state.shadow_instances);
   state.frame_publication.virtual_directional_shadow_metadata_srv
@@ -521,9 +541,14 @@ auto VirtualShadowMapBackend::SetPublishedViewFrameBindingsSlot(
 auto VirtualShadowMapBackend::SubmitRequestFeedback(
   const ViewId view_id, VirtualShadowRequestFeedback feedback) -> void
 {
+  std::vector<AbsoluteClipPageRegion> source_absolute_frustum_regions {};
+  if (const auto view_it = view_cache_.find(view_id); view_it != view_cache_.end()) {
+    source_absolute_frustum_regions = view_it->second.absolute_frustum_regions;
+  }
   request_feedback_.insert_or_assign(view_id,
     PendingRequestFeedback {
       .feedback = std::move(feedback),
+      .source_absolute_frustum_regions = std::move(source_absolute_frustum_regions),
     });
 }
 
@@ -597,6 +622,10 @@ auto VirtualShadowMapBackend::RefreshViewExports(ViewCacheEntry& state) const
     = state.directional_virtual_metadata;
   state.introspection.virtual_raster_jobs = state.raster_jobs;
   state.introspection.page_table_entries = state.page_table_entries;
+  state.introspection.atlas_tile_debug_states = state.atlas_tile_debug_states;
+  state.introspection.used_request_feedback
+    = state.publish_diagnostics.feedback_decision
+    == ViewCacheEntry::RequestFeedbackDecision::kAccepted;
   state.introspection.mapped_page_count
     = static_cast<std::uint32_t>(std::count_if(state.page_table_entries.begin(),
       state.page_table_entries.end(),
@@ -606,6 +635,26 @@ auto VirtualShadowMapBackend::RefreshViewExports(ViewCacheEntry& state) const
   state.introspection.clean_page_count = 0U;
   state.introspection.dirty_page_count = 0U;
   state.introspection.pending_page_count = 0U;
+  state.introspection.selected_page_count
+    = state.publish_diagnostics.selected_page_count;
+  state.introspection.coarse_backbone_page_count
+    = state.publish_diagnostics.coarse_backbone_pages;
+  state.introspection.feedback_requested_page_count
+    = state.publish_diagnostics.feedback_requested_pages;
+  state.introspection.feedback_refinement_page_count
+    = state.publish_diagnostics.feedback_refinement_pages;
+  state.introspection.receiver_bootstrap_page_count
+    = state.publish_diagnostics.receiver_bootstrap_pages;
+  state.introspection.current_frame_reinforcement_page_count
+    = state.publish_diagnostics.current_frame_reinforcement_pages;
+  state.introspection.current_frame_reinforcement_reference_frame
+    = state.publish_diagnostics.current_frame_reinforcement_reference_frame;
+  state.introspection.allocated_page_count
+    = state.publish_diagnostics.allocated_pages;
+  state.introspection.evicted_page_count
+    = state.publish_diagnostics.evicted_pages;
+  state.introspection.rerasterized_page_count
+    = state.publish_diagnostics.rerasterized_pages;
   for (const auto& [_, resident_page] : state.resident_pages) {
     switch (resident_page.state) {
     case renderer::VirtualPageResidencyState::kResidentClean:
@@ -620,6 +669,56 @@ auto VirtualShadowMapBackend::RefreshViewExports(ViewCacheEntry& state) const
     case renderer::VirtualPageResidencyState::kUnmapped:
       break;
     }
+  }
+}
+
+auto VirtualShadowMapBackend::RefreshAtlasTileDebugStates(ViewCacheEntry& state) const
+  -> void
+{
+  const auto tiles_per_axis = physical_pool_config_.atlas_tiles_per_axis;
+  const auto tile_count = tiles_per_axis * tiles_per_axis;
+  state.atlas_tile_debug_states.assign(tile_count,
+    static_cast<std::uint32_t>(
+      renderer::VirtualShadowAtlasTileDebugState::kCleared));
+
+  if (tiles_per_axis == 0U) {
+    return;
+  }
+
+  const auto tile_index_for = [tiles_per_axis](const PhysicalTileAddress tile)
+    -> std::optional<std::uint32_t> {
+    if (tile.tile_x >= tiles_per_axis || tile.tile_y >= tiles_per_axis) {
+      return std::nullopt;
+    }
+    return static_cast<std::uint32_t>(tile.tile_y) * tiles_per_axis
+      + static_cast<std::uint32_t>(tile.tile_x);
+  };
+
+  for (const auto& [_, resident_page] : state.resident_pages) {
+    const auto tile_index = tile_index_for(resident_page.tile);
+    if (!tile_index.has_value()) {
+      continue;
+    }
+
+    const bool requested_this_frame
+      = resident_page.last_requested_frame == frame_sequence_;
+    const auto tile_state = requested_this_frame
+      ? (resident_page.state == renderer::VirtualPageResidencyState::kPendingRender
+            ? renderer::VirtualShadowAtlasTileDebugState::kRewritten
+            : renderer::VirtualShadowAtlasTileDebugState::kReused)
+      : renderer::VirtualShadowAtlasTileDebugState::kCached;
+    state.atlas_tile_debug_states[*tile_index] = static_cast<std::uint32_t>(
+      tile_state);
+  }
+
+  for (const auto& job : state.pending_raster_jobs) {
+    const auto tile_index = tile_index_for(
+      PhysicalTileAddress { .tile_x = job.atlas_tile_x, .tile_y = job.atlas_tile_y });
+    if (!tile_index.has_value()) {
+      continue;
+    }
+    state.atlas_tile_debug_states[*tile_index] = static_cast<std::uint32_t>(
+      renderer::VirtualShadowAtlasTileDebugState::kRewritten);
   }
 }
 
@@ -949,6 +1048,30 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   far_depth /= static_cast<float>(view_far_corners.size());
   far_depth = std::max(far_depth, near_depth + kMinClipSpan);
 
+  float effective_near_depth = near_depth;
+  float effective_far_depth = far_depth;
+  if (!visible_receiver_bounds.empty()) {
+    float receiver_near_depth = std::numeric_limits<float>::max();
+    float receiver_far_depth = 0.0F;
+    for (const auto& receiver_bound : visible_receiver_bounds) {
+      const glm::vec3 receiver_vs
+        = glm::vec3(view_matrix * glm::vec4(glm::vec3(receiver_bound), 1.0F));
+      const float receiver_radius = std::max(0.0F, receiver_bound.w);
+      const float receiver_center_depth = std::max(0.0F, -receiver_vs.z);
+      receiver_near_depth = std::min(receiver_near_depth,
+        std::max(near_depth, receiver_center_depth - receiver_radius));
+      receiver_far_depth = std::max(receiver_far_depth,
+        std::min(far_depth, receiver_center_depth + receiver_radius));
+    }
+
+    if (receiver_far_depth > 0.0F) {
+      effective_near_depth = std::min(receiver_near_depth, receiver_far_depth);
+      effective_far_depth = std::max(receiver_far_depth,
+        effective_near_depth + kMinClipSpan);
+      effective_far_depth = std::min(effective_far_depth, far_depth);
+    }
+  }
+
   const std::uint32_t clip_level_count = physical_pool_config_.clip_level_count;
   const std::uint32_t pages_per_axis
     = physical_pool_config_.virtual_pages_per_clip_axis;
@@ -1161,11 +1284,214 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
     }
     return added;
   };
+  const auto mark_absolute_region_limited
+    = [&](const std::uint32_t clip_index,
+        const AbsoluteClipPageRegion& absolute_region,
+        std::uint32_t remaining_budget) {
+        if (!absolute_region.valid || remaining_budget == 0U
+          || clip_index >= clip_level_count) {
+          return 0U;
+        }
+
+        const auto local_min_x = std::max(
+          0, absolute_region.min_x - clip_grid_origin_x[clip_index]);
+        const auto local_max_x = std::min(
+          static_cast<std::int32_t>(pages_per_axis - 1U),
+          absolute_region.max_x - clip_grid_origin_x[clip_index]);
+        const auto local_min_y = std::max(
+          0, absolute_region.min_y - clip_grid_origin_y[clip_index]);
+        const auto local_max_y = std::min(
+          static_cast<std::int32_t>(pages_per_axis - 1U),
+          absolute_region.max_y - clip_grid_origin_y[clip_index]);
+        if (local_min_x > local_max_x || local_min_y > local_max_y) {
+          return 0U;
+        }
+
+        std::uint32_t added = 0U;
+        for (std::int32_t page_y = local_min_y; page_y <= local_max_y;
+          ++page_y) {
+          for (std::int32_t page_x = local_min_x; page_x <= local_max_x;
+            ++page_x) {
+            if (mark_selected_page(clip_index, static_cast<std::uint32_t>(page_x),
+                  static_cast<std::uint32_t>(page_y))) {
+              ++added;
+              if (added >= remaining_budget) {
+                return added;
+              }
+            }
+          }
+        }
+        return added;
+      };
+  const auto expand_absolute_region
+    = [&](const AbsoluteClipPageRegion& region,
+        const std::uint32_t guard_pages) -> AbsoluteClipPageRegion {
+        if (!region.valid) {
+          return region;
+        }
+
+        const auto guard = static_cast<std::int32_t>(guard_pages);
+        return AbsoluteClipPageRegion {
+          .valid = true,
+          .min_x = region.min_x - guard,
+          .max_x = region.max_x + guard,
+          .min_y = region.min_y - guard,
+          .max_y = region.max_y + guard,
+        };
+      };
+  const auto intersect_absolute_region
+    = [](const AbsoluteClipPageRegion& lhs,
+        const AbsoluteClipPageRegion& rhs) -> AbsoluteClipPageRegion {
+        if (!lhs.valid || !rhs.valid) {
+          return {};
+        }
+
+        const auto min_x = std::max(lhs.min_x, rhs.min_x);
+        const auto max_x = std::min(lhs.max_x, rhs.max_x);
+        const auto min_y = std::max(lhs.min_y, rhs.min_y);
+        const auto max_y = std::min(lhs.max_y, rhs.max_y);
+        if (min_x > max_x || min_y > max_y) {
+          return {};
+        }
+
+        return AbsoluteClipPageRegion {
+          .valid = true,
+          .min_x = min_x,
+          .max_x = max_x,
+          .min_y = min_y,
+          .max_y = max_y,
+        };
+      };
+  const auto mark_absolute_border_band
+    = [&](const std::uint32_t clip_index,
+        const AbsoluteClipPageRegion& absolute_region,
+        std::uint32_t remaining_budget) {
+        if (!absolute_region.valid || remaining_budget == 0U) {
+          return 0U;
+        }
+
+        const auto band
+          = std::max(1, static_cast<std::int32_t>(
+                           kAcceptedFeedbackCurrentFrameGuardPages));
+        std::uint32_t added = 0U;
+        auto add_strip = [&](const AbsoluteClipPageRegion& strip) {
+          if (added >= remaining_budget) {
+            return;
+          }
+          added += mark_absolute_region_limited(
+            clip_index, strip, remaining_budget - added);
+        };
+
+        add_strip(AbsoluteClipPageRegion {
+          .valid = true,
+          .min_x = absolute_region.min_x,
+          .max_x = absolute_region.max_x,
+          .min_y = absolute_region.min_y,
+          .max_y = std::min(absolute_region.max_y, absolute_region.min_y + band - 1),
+        });
+        add_strip(AbsoluteClipPageRegion {
+          .valid = true,
+          .min_x = absolute_region.min_x,
+          .max_x = absolute_region.max_x,
+          .min_y = std::max(absolute_region.min_y, absolute_region.max_y - band + 1),
+          .max_y = absolute_region.max_y,
+        });
+        add_strip(AbsoluteClipPageRegion {
+          .valid = true,
+          .min_x = absolute_region.min_x,
+          .max_x = std::min(absolute_region.max_x, absolute_region.min_x + band - 1),
+          .min_y = absolute_region.min_y,
+          .max_y = absolute_region.max_y,
+        });
+        add_strip(AbsoluteClipPageRegion {
+          .valid = true,
+          .min_x = std::max(absolute_region.min_x, absolute_region.max_x - band + 1),
+          .max_x = absolute_region.max_x,
+          .min_y = absolute_region.min_y,
+          .max_y = absolute_region.max_y,
+        });
+        return added;
+      };
+  const auto mark_absolute_delta_band
+    = [&](const std::uint32_t clip_index,
+        const AbsoluteClipPageRegion& current_region,
+        const AbsoluteClipPageRegion& previous_region) {
+        if (!current_region.valid) {
+          return 0U;
+        }
+
+        const auto expanded_current = expand_absolute_region(
+          current_region, kAcceptedFeedbackCurrentFrameGuardPages);
+        constexpr auto kBudget
+          = kAcceptedFeedbackCurrentFrameMaxDeltaPagesPerClip;
+        auto overlap
+          = intersect_absolute_region(expanded_current, previous_region);
+        if (!overlap.valid) {
+          return mark_absolute_border_band(clip_index, expanded_current, kBudget);
+        }
+
+        std::uint32_t added = 0U;
+        auto add_strip = [&](const AbsoluteClipPageRegion& strip) {
+          if (!strip.valid || added >= kBudget) {
+            return;
+          }
+          added += mark_absolute_region_limited(
+            clip_index, strip, kBudget - added);
+        };
+
+        if (expanded_current.min_x < overlap.min_x) {
+          add_strip(AbsoluteClipPageRegion {
+            .valid = true,
+            .min_x = expanded_current.min_x,
+            .max_x = overlap.min_x - 1,
+            .min_y = expanded_current.min_y,
+            .max_y = expanded_current.max_y,
+          });
+        }
+        if (expanded_current.max_x > overlap.max_x) {
+          add_strip(AbsoluteClipPageRegion {
+            .valid = true,
+            .min_x = overlap.max_x + 1,
+            .max_x = expanded_current.max_x,
+            .min_y = expanded_current.min_y,
+            .max_y = expanded_current.max_y,
+          });
+        }
+
+        const auto interior_min_x = std::max(expanded_current.min_x, overlap.min_x);
+        const auto interior_max_x = std::min(expanded_current.max_x, overlap.max_x);
+        if (interior_min_x <= interior_max_x
+          && expanded_current.min_y < overlap.min_y) {
+          add_strip(AbsoluteClipPageRegion {
+            .valid = true,
+            .min_x = interior_min_x,
+            .max_x = interior_max_x,
+            .min_y = expanded_current.min_y,
+            .max_y = overlap.min_y - 1,
+          });
+        }
+        if (interior_min_x <= interior_max_x
+          && expanded_current.max_y > overlap.max_y) {
+          add_strip(AbsoluteClipPageRegion {
+            .valid = true,
+            .min_x = interior_min_x,
+            .max_x = interior_max_x,
+            .min_y = overlap.max_y + 1,
+            .max_y = expanded_current.max_y,
+          });
+        }
+        return added;
+      };
 
   std::array<glm::vec3, 8> frustum_light_space_points {};
   for (std::size_t i = 0U; i < clip_corners.size(); ++i) {
-    const auto near_world = TransformPoint(inv_view, view_near_corners[i]);
-    const auto far_world = TransformPoint(inv_view, view_far_corners[i]);
+    const float far_corner_depth = std::max(1.0e-4F, -view_far_corners[i].z);
+    const glm::vec3 view_ray
+      = view_far_corners[i] / far_corner_depth;
+    const glm::vec3 clamped_near_vs = view_ray * effective_near_depth;
+    const glm::vec3 clamped_far_vs = view_ray * effective_far_depth;
+    const auto near_world = TransformPoint(inv_view, clamped_near_vs);
+    const auto far_world = TransformPoint(inv_view, clamped_far_vs);
     frustum_light_space_points[i]
       = glm::vec3(light_view * glm::vec4(near_world, 1.0F));
     frustum_light_space_points[i + clip_corners.size()]
@@ -1209,6 +1535,27 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
     region.max_y = static_cast<std::uint32_t>(
       std::min(static_cast<float>(pages_per_axis - 1U),
         std::max(0.0F, std::ceil(max_page_y) - 1.0F)));
+  }
+  state.absolute_frustum_regions.resize(clip_level_count);
+  for (std::uint32_t clip_index = 0U; clip_index < clip_level_count;
+    ++clip_index) {
+    const auto& region = frustum_regions[clip_index];
+    if (!region.valid) {
+      state.absolute_frustum_regions[clip_index] = {};
+      continue;
+    }
+
+    state.absolute_frustum_regions[clip_index] = AbsoluteClipPageRegion {
+      .valid = true,
+      .min_x = clip_grid_origin_x[clip_index]
+        + static_cast<std::int32_t>(region.min_x),
+      .max_x = clip_grid_origin_x[clip_index]
+        + static_cast<std::int32_t>(region.max_x),
+      .min_y = clip_grid_origin_y[clip_index]
+        + static_cast<std::int32_t>(region.min_y),
+      .max_y = clip_grid_origin_y[clip_index]
+        + static_cast<std::int32_t>(region.max_y),
+    };
   }
 
   const std::uint32_t coarse_backbone_begin
@@ -1255,6 +1602,8 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   std::uint32_t feedback_requested_pages = 0U;
   std::uint32_t feedback_refinement_pages = 0U;
   std::uint32_t receiver_bootstrap_pages = 0U;
+  std::uint32_t current_frame_reinforcement_pages = 0U;
+  std::uint64_t current_frame_reinforcement_reference_frame = 0U;
 
   for (std::uint32_t clip_index = coarse_backbone_begin;
     clip_index < clip_level_count; ++clip_index) {
@@ -1286,12 +1635,21 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
 
   feedback_requested_pages = 0U;
   feedback_refinement_pages = 0U;
-  if (use_request_feedback || !visible_receiver_bounds.empty()) {
+  const bool use_receiver_bootstrap
+    = !use_request_feedback && !visible_receiver_bounds.empty();
+  const bool use_current_frame_reinforcement
+    = use_request_feedback && !visible_receiver_bounds.empty()
+    && coarse_backbone_begin > 0U;
+  if (use_request_feedback || use_receiver_bootstrap
+    || use_current_frame_reinforcement) {
     const auto mark_receiver_refinement = [&](const glm::vec3 receiver_center_ls,
                                            const float receiver_radius,
-                                           const std::uint32_t guard_radius) {
+                                           const std::uint32_t guard_radius,
+                                           const std::uint32_t end_clip) {
       std::uint32_t added = 0U;
-      for (std::uint32_t clip_index = 0U; clip_index < coarse_backbone_begin;
+      const auto clipped_end
+        = std::min(coarse_backbone_begin, end_clip);
+      for (std::uint32_t clip_index = 0U; clip_index < clipped_end;
         ++clip_index) {
         const float min_page_x = (receiver_center_ls.x - receiver_radius
                                    - clip_origin_x[clip_index])
@@ -1394,14 +1752,35 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
       }
     }
 
-    if (!visible_receiver_bounds.empty()) {
+    // Once fine-page feedback is available, trust that sparse signal instead of
+    // reseeding the fine clips every frame from coarse object bounds. The
+    // coarse backbone still covers the current view, while repeated receiver
+    // bootstrap was driving allocator churn and page thrash under camera motion.
+    if (use_receiver_bootstrap) {
       const auto refinement_guard_radius = static_cast<std::uint32_t>(1U);
       for (const auto& receiver_bound : visible_receiver_bounds) {
         const glm::vec3 receiver_center_ls
           = glm::vec3(light_view * glm::vec4(glm::vec3(receiver_bound), 1.0F));
         const float receiver_radius = std::max(0.0F, receiver_bound.w);
         receiver_bootstrap_pages += mark_receiver_refinement(
-          receiver_center_ls, receiver_radius, refinement_guard_radius);
+          receiver_center_ls, receiver_radius, refinement_guard_radius,
+          coarse_backbone_begin);
+      }
+    }
+
+    if (use_current_frame_reinforcement) {
+      const auto reinforcement_end_clip = std::min(coarse_backbone_begin,
+        kAcceptedFeedbackCurrentFrameReinforcementClipCount);
+      current_frame_reinforcement_reference_frame
+        = feedback_it->second.feedback.source_frame_sequence.get();
+      for (std::uint32_t clip_index = 0U; clip_index < reinforcement_end_clip;
+        ++clip_index) {
+        const auto source_region = clip_index
+            < feedback_it->second.source_absolute_frustum_regions.size()
+          ? feedback_it->second.source_absolute_frustum_regions[clip_index]
+          : AbsoluteClipPageRegion {};
+        current_frame_reinforcement_pages += mark_absolute_delta_band(
+          clip_index, state.absolute_frustum_regions[clip_index], source_region);
       }
     }
   }
@@ -1624,6 +2003,10 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   state.publish_diagnostics.feedback_refinement_pages
     = feedback_refinement_pages;
   state.publish_diagnostics.receiver_bootstrap_pages = receiver_bootstrap_pages;
+  state.publish_diagnostics.current_frame_reinforcement_pages
+    = current_frame_reinforcement_pages;
+  state.publish_diagnostics.current_frame_reinforcement_reference_frame
+    = current_frame_reinforcement_reference_frame;
   state.publish_diagnostics.previous_resident_pages
     = previous_state != nullptr
       ? static_cast<std::uint32_t>(previous_state->resident_pages.size())
@@ -1759,9 +2142,9 @@ auto VirtualShadowMapBackend::LogPublishTransition(
     "VirtualShadowMapBackend: frame={} view={} request={} feedback_keys={} "
     "feedback_age={} casters={} receivers={} clips={} coarse_begin={} "
     "selected={} coarse={} feedback_seed={} "
-    "feedback_refine={} receiver_bootstrap={} pending_jobs={} raster_jobs={} "
-    "reused={} allocated={} evicted={} alloc_failures={} rerasterized={} "
-    "resident_reuse_gate={}",
+    "feedback_refine={} receiver_bootstrap={} current_reinforce={} "
+    "pending_jobs={} raster_jobs={} reused={} allocated={} evicted={} "
+    "alloc_failures={} rerasterized={} resident_reuse_gate={}",
     frame_sequence_.get(), view_id.get(), feedback_reason,
     diagnostics.feedback_key_count, diagnostics.feedback_age_frames,
     diagnostics.shadow_caster_bound_count,
@@ -1769,10 +2152,12 @@ auto VirtualShadowMapBackend::LogPublishTransition(
     diagnostics.coarse_backbone_begin, selected_page_count,
     diagnostics.coarse_backbone_pages, diagnostics.feedback_requested_pages,
     diagnostics.feedback_refinement_pages,
-    diagnostics.receiver_bootstrap_pages, pending_job_count, raster_job_count,
-    diagnostics.reused_requested_pages, diagnostics.allocated_pages,
-    diagnostics.evicted_pages, diagnostics.allocation_failures,
-    diagnostics.rerasterized_pages, diagnostics.resident_reuse_gate_open);
+    diagnostics.receiver_bootstrap_pages,
+    diagnostics.current_frame_reinforcement_pages, pending_job_count,
+    raster_job_count, diagnostics.reused_requested_pages,
+    diagnostics.allocated_pages, diagnostics.evicted_pages,
+    diagnostics.allocation_failures, diagnostics.rerasterized_pages,
+    diagnostics.resident_reuse_gate_open);
   LOG_F(INFO,
     "VirtualShadowMapBackend: frame={} view={} address_space_compatible={} "
     "global_dirty={} previous_resident={} carried_resident={} released={} "

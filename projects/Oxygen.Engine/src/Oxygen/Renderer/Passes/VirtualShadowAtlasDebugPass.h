@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <string>
 
 #include <Oxygen/Base/Macros.h>
@@ -63,6 +64,9 @@ private:
   auto EnsurePassConstantsBuffer() -> void;
   auto EnsureSourceTextureSrv(const graphics::Texture& source_texture)
     -> bindless::ShaderVisibleIndex;
+  auto EnsureTileStateBuffer(std::uint32_t tile_count) -> void;
+  auto UploadTileStates(std::span<const std::uint32_t> tile_states)
+    -> bindless::ShaderVisibleIndex;
   auto EnsureOutputTexture(std::uint32_t width, std::uint32_t height) -> void;
   auto EnsureOutputTextureUav() -> bindless::ShaderVisibleIndex;
   static auto ResolveSourceSrvFormat(Format format) -> Format;
@@ -84,6 +88,15 @@ private:
   bindless::ShaderVisibleIndex source_texture_srv_index_ {
     kInvalidShaderVisibleIndex
   };
+
+  std::shared_ptr<graphics::Buffer> tile_state_buffer_;
+  graphics::DescriptorHandle tile_state_srv_handle_ {};
+  graphics::NativeView tile_state_srv_view_ {};
+  bindless::ShaderVisibleIndex tile_state_srv_index_ {
+    kInvalidShaderVisibleIndex
+  };
+  void* tile_state_mapped_ptr_ { nullptr };
+  std::uint32_t tile_state_capacity_ { 0U };
 
   std::shared_ptr<graphics::Texture> output_texture_;
   graphics::DescriptorHandle output_texture_uav_handle_ {};

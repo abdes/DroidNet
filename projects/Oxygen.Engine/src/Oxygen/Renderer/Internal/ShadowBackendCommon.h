@@ -134,9 +134,12 @@ template <typename T>
 [[nodiscard]] inline auto BuildDirectionalAddressSpaceComparableLightView(
   glm::mat4 light_view) -> glm::mat4
 {
-  // Directional page identity depends on the XY lattice orientation and
-  // translation. Light-space Z translation can move without changing which
-  // virtual pages cover the same world-space XY regions.
+  // Directional page identity is defined by the clip lattice orientation and
+  // page scale. The per-clip origins already capture where the snapped lattice
+  // sits in light-space XY, so including light-view translation here makes
+  // camera motion look like an address-space change and wipes the cache.
+  light_view[3][0] = 0.0F;
+  light_view[3][1] = 0.0F;
   light_view[3][2] = 0.0F;
   return light_view;
 }
