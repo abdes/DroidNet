@@ -208,22 +208,6 @@ constexpr std::uint32_t kAcceptedFeedbackCurrentFrameMaxDeltaPagesPerClip
     | kPageTableRequestedThisFrameBit;
 }
 
-[[nodiscard]] auto BuildResolvedRasterPage(
-  const oxygen::renderer::VirtualShadowRasterJob& job)
-  -> oxygen::renderer::VirtualShadowResolvedRasterPage
-{
-  return oxygen::renderer::VirtualShadowResolvedRasterPage {
-    .shadow_instance_index = job.shadow_instance_index,
-    .payload_index = job.payload_index,
-    .clip_level = job.clip_level,
-    .page_index = job.page_index,
-    .resident_key = job.resident_key,
-    .atlas_tile_x = job.atlas_tile_x,
-    .atlas_tile_y = job.atlas_tile_y,
-    .view_constants = job.view_constants,
-  };
-}
-
 [[nodiscard]] auto BuildAddressSpaceComparableLightView(glm::mat4 light_view)
   -> glm::mat4
 {
@@ -503,7 +487,6 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
     visible_receiver_bounds,
     previous_it != view_cache_.end() ? &previous_it->second : nullptr, state);
   state.resolved_raster_pages.clear();
-  state.resolved_raster_pages_dirty = true;
   state.publish_diagnostics.resident_reuse_gate_open = false;
 
   const auto resolved_schedule_it = resolved_raster_schedules_.find(view_id);
@@ -528,7 +511,7 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
       && frame_sequence_ > schedule.source_frame_sequence
       && schedule_age_frames <= kMaxResolvedRasterScheduleAgeFrames;
 
-    if (schedule_compatible && !state.pending_raster_jobs.empty()) {
+    if (schedule_compatible) {
       // The current resolve bridge only compacts requested pages that already
       // map to valid current-frame page-table entries. Until resolve becomes
       // the sole author of current-frame allocation and raster scheduling, that
@@ -579,18 +562,16 @@ auto VirtualShadowMapBackend::MarkRendered(const ViewId view_id) -> void
   const auto pages_per_level = physical_pool_config_.virtual_pages_per_clip_axis
     * physical_pool_config_.virtual_pages_per_clip_axis;
   (void)pages_per_level;
-  for (const auto& job : it->second.pending_raster_jobs) {
+  for (const auto& page : it->second.resolved_raster_pages) {
     if (const auto resident_it
-      = it->second.resident_pages.find(job.resident_key);
+      = it->second.resident_pages.find(page.resident_key);
       resident_it != it->second.resident_pages.end()) {
       resident_it->second.state
         = renderer::VirtualPageResidencyState::kResidentClean;
       resident_it->second.last_touched_frame = frame_sequence_;
     }
   }
-  it->second.pending_raster_jobs.clear();
   it->second.resolved_raster_pages.clear();
-  it->second.resolved_raster_pages_dirty = false;
   RebuildResolveStateSnapshot(it->second);
   StageResolveStateUpload(view_id, it->second);
   RefreshViewExports(view_id, it->second);
@@ -599,7 +580,6 @@ auto VirtualShadowMapBackend::MarkRendered(const ViewId view_id) -> void
 auto VirtualShadowMapBackend::ResolveCurrentFrame(const ViewId view_id) -> void
 {
   ResolvePendingPageResidency(view_id);
-  PrepareResolvedRasterPages(view_id);
 }
 
 auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
@@ -616,10 +596,7 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
     return;
   }
 
-  state.raster_jobs.clear();
-  state.pending_raster_jobs.clear();
   state.resolved_raster_pages.clear();
-  state.resolved_raster_pages_dirty = true;
   std::fill(
     state.page_table_entries.begin(), state.page_table_entries.end(), 0U);
 
@@ -749,16 +726,17 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
 
           if (needs_raster) {
             ++rerasterized_pages;
-            state.raster_jobs.push_back(VirtualShadowRasterJob {
-              .shadow_instance_index = 0U,
-              .payload_index = 0U,
-              .clip_level = clip_index,
-              .page_index = local_page_index,
-              .resident_key = resident_key,
-              .atlas_tile_x = resident_page.tile.tile_x,
-              .atlas_tile_y = resident_page.tile.tile_y,
-              .view_constants = page_view_constants.GetSnapshot(),
-            });
+            state.resolved_raster_pages.push_back(
+              renderer::VirtualShadowResolvedRasterPage {
+                .shadow_instance_index = 0U,
+                .payload_index = 0U,
+                .clip_level = clip_index,
+                .page_index = local_page_index,
+                .resident_key = resident_key,
+                .atlas_tile_x = resident_page.tile.tile_x,
+                .atlas_tile_y = resident_page.tile.tile_y,
+                .view_constants = page_view_constants.GetSnapshot(),
+              });
           }
         }
       }
@@ -775,13 +753,12 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
   process_clip_range_desc(0U, coarse_backbone_begin);
   process_clip_range_desc(coarse_backbone_begin, pending.clip_level_count);
 
-  state.pending_raster_jobs = state.raster_jobs;
   state.publish_diagnostics.resident_reuse_gate_open = false;
   if (pending.resident_reuse_snapshot.valid
-    && pending.resident_reuse_snapshot.previous_pending_raster_jobs_empty
+    && pending.resident_reuse_snapshot.previous_pending_resolved_pages_empty
     && CanReuseResidentPages(pending.resident_reuse_snapshot, state)) {
     state.publish_diagnostics.resident_reuse_gate_open = true;
-    state.pending_raster_jobs.clear();
+    state.resolved_raster_pages.clear();
   }
 
   state.publish_diagnostics.carried_resident_pages
@@ -816,27 +793,6 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
   RefreshAtlasTileDebugStates(state);
   RefreshViewExports(view_id, state);
   LogPublishTransition(view_id, state);
-}
-
-auto VirtualShadowMapBackend::PrepareResolvedRasterPages(const ViewId view_id)
-  -> void
-{
-  const auto it = view_cache_.find(view_id);
-  if (it == view_cache_.end()) {
-    return;
-  }
-
-  auto& state = it->second;
-  if (!state.resolved_raster_pages_dirty) {
-    return;
-  }
-
-  state.resolved_raster_pages.clear();
-  state.resolved_raster_pages.reserve(state.pending_raster_jobs.size());
-  std::ranges::transform(state.pending_raster_jobs,
-    std::back_inserter(state.resolved_raster_pages), BuildResolvedRasterPage);
-  state.resolved_raster_pages_dirty = false;
-  RefreshViewExports(view_id, state);
 }
 
 auto VirtualShadowMapBackend::PreparePageTableResources(
@@ -966,17 +922,13 @@ auto VirtualShadowMapBackend::SetPublishedViewFrameBindingsSlot(
     return;
   }
 
-  for (auto& job : it->second.raster_jobs) {
-    job.view_constants.view_frame_bindings_bslot = slot;
-  }
-  for (auto& job : it->second.pending_raster_jobs) {
-    job.view_constants.view_frame_bindings_bslot = slot;
+  for (auto& page : it->second.resolved_raster_pages) {
+    page.view_constants.view_frame_bindings_bslot = slot;
   }
   if (it->second.pending_residency_resolve.valid) {
     it->second.pending_residency_resolve.view_constants
       .SetBindlessViewFrameBindingsSlot(slot, engine::ViewConstants::kRenderer);
   }
-  it->second.resolved_raster_pages_dirty = true;
   RefreshViewExports(view_id, it->second);
 }
 
@@ -1130,7 +1082,7 @@ auto VirtualShadowMapBackend::RebuildResolveStateSnapshot(
       state.page_table_entries.end(),
       [](const std::uint32_t entry) { return entry != 0U; }));
   state.resolve_stats.pending_raster_page_count
-    = static_cast<std::uint32_t>(state.pending_raster_jobs.size());
+    = static_cast<std::uint32_t>(state.resolved_raster_pages.size());
   state.resolve_stats.selected_page_count
     = state.publish_diagnostics.selected_page_count;
   state.resolve_stats.allocated_page_count
@@ -1147,20 +1099,17 @@ auto VirtualShadowMapBackend::RefreshViewExports(
   const ViewId view_id, ViewCacheEntry& state) const -> void
 {
   state.render_plan.depth_texture = physical_pool_texture_.get();
-  const auto resolved_pages = state.resolved_raster_pages_dirty
-    ? std::span<const renderer::VirtualShadowResolvedRasterPage> {}
-    : std::span<const renderer::VirtualShadowResolvedRasterPage> {
+  state.render_plan.resolved_pages
+    = std::span<const renderer::VirtualShadowResolvedRasterPage> {
         state.resolved_raster_pages
       };
-  state.render_plan.resolved_pages = resolved_pages;
-  state.render_plan.jobs = resolved_pages;
   state.render_plan.page_size_texels = physical_pool_config_.page_size_texels;
   state.render_plan.atlas_tiles_per_axis
     = physical_pool_config_.atlas_tiles_per_axis;
 
   state.introspection.directional_virtual_metadata
     = state.directional_virtual_metadata;
-  state.introspection.virtual_raster_jobs = state.raster_jobs;
+  state.introspection.resolved_raster_pages = state.resolved_raster_pages;
   state.introspection.resolve_resident_page_entries
     = state.resolve_resident_page_entries;
   state.introspection.page_table_entries = state.page_table_entries;
@@ -1190,7 +1139,7 @@ auto VirtualShadowMapBackend::RefreshViewExports(
   state.introspection.dirty_page_count = state.resolve_stats.dirty_page_count;
   state.introspection.pending_page_count
     = state.resolve_stats.pending_page_count;
-  state.introspection.pending_raster_job_count
+  state.introspection.pending_raster_page_count
     = state.resolve_stats.pending_raster_page_count;
   state.introspection.resolved_schedule_page_count
     = state.publish_diagnostics.resolved_schedule_pages;
@@ -1262,9 +1211,9 @@ auto VirtualShadowMapBackend::RefreshAtlasTileDebugStates(
       = static_cast<std::uint32_t>(tile_state);
   }
 
-  for (const auto& job : state.pending_raster_jobs) {
+  for (const auto& page : state.resolved_raster_pages) {
     const auto tile_index = tile_index_for(PhysicalTileAddress {
-      .tile_x = job.atlas_tile_x, .tile_y = job.atlas_tile_y });
+      .tile_x = page.atlas_tile_x, .tile_y = page.atlas_tile_y });
     if (!tile_index.has_value()) {
       continue;
     }
@@ -1858,7 +1807,7 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   state.page_table_entries.resize(static_cast<std::size_t>(clip_level_count)
       * static_cast<std::size_t>(pages_per_level),
     0U);
-  state.raster_jobs.reserve(state.page_table_entries.size());
+  state.resolved_raster_pages.reserve(state.page_table_entries.size());
 
   for (std::uint32_t clip_index = 0U; clip_index < clip_level_count;
     ++clip_index) {
@@ -2520,8 +2469,8 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   const auto* previous_page_table_entries
     = previous_state != nullptr ? &previous_state->page_table_entries : nullptr;
   const engine::DirectionalVirtualShadowMetadata* previous_metadata = nullptr;
-  bool previous_pending_raster_jobs_empty
-    = previous_state == nullptr || previous_state->pending_raster_jobs.empty();
+  bool previous_pending_resolved_pages_empty = previous_state == nullptr
+    || previous_state->resolved_raster_pages.empty();
   if (previous_state != nullptr
     && previous_state->pending_residency_resolve.valid
     && !previous_state->pending_residency_resolve.previous_resident_pages
@@ -2535,9 +2484,9 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
     previous_key = &previous_pending.resident_reuse_snapshot.key;
     previous_page_table_entries
       = &previous_pending.resident_reuse_snapshot.page_table_entries;
-    previous_pending_raster_jobs_empty
+    previous_pending_resolved_pages_empty
       = previous_pending.resident_reuse_snapshot
-          .previous_pending_raster_jobs_empty;
+          .previous_pending_resolved_pages_empty;
     if (previous_pending.resident_reuse_snapshot.directional_virtual_metadata
           .size()
       == 1U) {
@@ -2634,8 +2583,9 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   pending_resolve.dirty_resident_pages = std::move(dirty_resident_pages);
   pending_resolve.resident_reuse_snapshot.valid = previous_key != nullptr;
   if (previous_key != nullptr) {
-    pending_resolve.resident_reuse_snapshot.previous_pending_raster_jobs_empty
-      = previous_pending_raster_jobs_empty;
+    pending_resolve.resident_reuse_snapshot
+      .previous_pending_resolved_pages_empty
+      = previous_pending_resolved_pages_empty;
     pending_resolve.resident_reuse_snapshot.key = *previous_key;
     if (previous_metadata != nullptr) {
       pending_resolve.resident_reuse_snapshot.directional_virtual_metadata
@@ -2646,8 +2596,7 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
         = *previous_page_table_entries;
     }
   }
-  state.raster_jobs.clear();
-  state.pending_raster_jobs.clear();
+  state.resolved_raster_pages.clear();
 
   state.publish_diagnostics.feedback_decision = feedback_decision;
   state.publish_diagnostics.feedback_key_count = feedback_key_count;
@@ -3144,10 +3093,8 @@ auto VirtualShadowMapBackend::LogPublishTransition(
   const bool used_request_feedback = diagnostics.feedback_decision
     == ViewCacheEntry::RequestFeedbackDecision::kAccepted;
   const auto selected_page_count = diagnostics.selected_page_count;
-  const auto pending_job_count
-    = static_cast<std::uint32_t>(state.pending_raster_jobs.size());
-  const auto raster_job_count
-    = static_cast<std::uint32_t>(state.raster_jobs.size());
+  const auto pending_raster_page_count
+    = static_cast<std::uint32_t>(state.resolved_raster_pages.size());
 
   LOG_F(INFO,
     "VirtualShadowMapBackend: frame={} view={} request={} feedback_keys={} "
@@ -3155,7 +3102,7 @@ auto VirtualShadowMapBackend::LogPublishTransition(
     "selected={} coarse={} feedback_seed={} "
     "feedback_refine={} receiver_bootstrap={} current_reinforce={} "
     "resolve_pages={} resolve_age={} resolve_pruned={} resolve_used={} "
-    "pending_jobs={} raster_jobs={} reused={} allocated={} evicted={} "
+    "pending_raster_pages={} reused={} allocated={} evicted={} "
     "alloc_failures={} rerasterized={} resident_reuse_gate={}",
     frame_sequence_.get(), view_id.get(), feedback_reason,
     diagnostics.feedback_key_count, diagnostics.feedback_age_frames,
@@ -3168,11 +3115,10 @@ auto VirtualShadowMapBackend::LogPublishTransition(
     diagnostics.resolved_schedule_pages,
     diagnostics.resolved_schedule_age_frames,
     diagnostics.resolved_schedule_pruned_jobs,
-    diagnostics.used_resolved_raster_schedule, pending_job_count,
-    raster_job_count, diagnostics.reused_requested_pages,
-    diagnostics.allocated_pages, diagnostics.evicted_pages,
-    diagnostics.allocation_failures, diagnostics.rerasterized_pages,
-    diagnostics.resident_reuse_gate_open);
+    diagnostics.used_resolved_raster_schedule, pending_raster_page_count,
+    diagnostics.reused_requested_pages, diagnostics.allocated_pages,
+    diagnostics.evicted_pages, diagnostics.allocation_failures,
+    diagnostics.rerasterized_pages, diagnostics.resident_reuse_gate_open);
   LOG_F(INFO,
     "VirtualShadowMapBackend: frame={} view={} address_space_compatible={} "
     "global_dirty={} previous_resident={} carried_resident={} released={} "
@@ -3185,8 +3131,7 @@ auto VirtualShadowMapBackend::LogPublishTransition(
     state.introspection.resident_page_count);
 
   log_state.last_selected_page_count = selected_page_count;
-  log_state.last_pending_job_count = pending_job_count;
-  log_state.last_raster_job_count = raster_job_count;
+  log_state.last_pending_raster_page_count = pending_raster_page_count;
   log_state.last_used_feedback = used_request_feedback;
   log_state.initialized = true;
 }
