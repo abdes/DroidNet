@@ -135,8 +135,7 @@ auto VirtualShadowRequestPass::DoPrepareResources(
     co_return;
   }
 
-  auto& depth_texture
-    = const_cast<graphics::Texture&>(depth_pass->GetDepthTexture());
+  const auto& depth_texture = depth_pass->GetDepthTexture();
   EnsureRequestBuffers();
   EnsurePassConstantsBuffer();
   EnsureReadbackBuffer(Context().frame_slot);
@@ -196,8 +195,8 @@ auto VirtualShadowRequestPass::DoPrepareResources(
   active_clip_level_count_ = metadata.clip_level_count;
   active_directional_address_space_hash
     = HashDirectionalVirtualFeedbackAddressSpace(metadata);
-  const auto active_clip_count = std::min(metadata.clip_level_count,
-    kMaxSupportedClipLevels);
+  const auto active_clip_count
+    = std::min(metadata.clip_level_count, kMaxSupportedClipLevels);
   for (std::uint32_t clip_index = 0U; clip_index < active_clip_count;
     ++clip_index) {
     active_clip_grid_origin_x_[clip_index]
@@ -212,8 +211,8 @@ auto VirtualShadowRequestPass::DoPrepareResources(
     Context().frame_sequence.get(), Context().frame_slot.get(),
     Context().current_view.view_id.get(), active_request_word_count_,
     active_pages_per_axis_, active_clip_level_count_,
-    active_directional_address_space_hash,
-    pass_constants.screen_dimensions.x, pass_constants.screen_dimensions.y);
+    active_directional_address_space_hash, pass_constants.screen_dimensions.x,
+    pass_constants.screen_dimensions.y);
 
   co_return;
 }
@@ -551,7 +550,8 @@ auto VirtualShadowRequestPass::ProcessCompletedFeedback(const frame::Slot slot)
   feedback.clip_level_count = readback.clip_level_count;
   feedback.directional_address_space_hash
     = readback.directional_address_space_hash;
-  const auto pages_per_level = readback.pages_per_axis * readback.pages_per_axis;
+  const auto pages_per_level
+    = readback.pages_per_axis * readback.pages_per_axis;
 
   const auto max_words = std::min<std::uint32_t>(readback.request_word_count,
     static_cast<std::uint32_t>(kMaxRequestWordCount));
