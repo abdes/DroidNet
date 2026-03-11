@@ -978,7 +978,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(virtual_plan, nullptr);
   ASSERT_NE(virtual_introspection, nullptr);
   EXPECT_EQ(published.sun_shadow_index, 0U);
-  EXPECT_FALSE(virtual_plan->jobs.empty());
+  EXPECT_FALSE(virtual_plan->resolved_pages.empty());
   ASSERT_FALSE(virtual_introspection->directional_virtual_metadata.empty());
   EXPECT_NE(virtual_introspection->directional_virtual_metadata.front().flags
       & static_cast<std::uint32_t>(
@@ -1045,9 +1045,9 @@ NOLINT_TEST_F(LightManagerTest,
     published.virtual_shadow_physical_pool_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(virtual_plan, nullptr);
   ASSERT_NE(virtual_introspection, nullptr);
-  EXPECT_FALSE(virtual_plan->jobs.empty());
-  EXPECT_EQ(virtual_introspection->virtual_raster_jobs.size(),
-    virtual_plan->jobs.size());
+  EXPECT_FALSE(virtual_plan->resolved_pages.empty());
+  EXPECT_EQ(virtual_introspection->resolved_raster_pages.size(),
+    virtual_plan->resolved_pages.size());
 }
 
 //! Explicit per-view request feedback becomes eligible on the next compatible
@@ -1970,21 +1970,21 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(first_virtual_plan, nullptr);
   ASSERT_NE(first_virtual_introspection, nullptr);
-  ASSERT_FALSE(first_virtual_plan->jobs.empty());
-  ASSERT_EQ(first_virtual_introspection->virtual_raster_jobs.size(),
-    first_virtual_plan->jobs.size());
+  ASSERT_FALSE(first_virtual_plan->resolved_pages.empty());
+  ASSERT_EQ(first_virtual_introspection->resolved_raster_pages.size(),
+    first_virtual_plan->resolved_pages.size());
   ASSERT_FALSE(first_virtual_introspection->atlas_tile_debug_states.empty());
   EXPECT_EQ(first_virtual_introspection->resident_page_count,
-    first_virtual_plan->jobs.size());
+    first_virtual_plan->resolved_pages.size());
   EXPECT_EQ(first_virtual_introspection->mapped_page_count,
-    first_virtual_plan->jobs.size());
+    first_virtual_plan->resolved_pages.size());
   EXPECT_EQ(first_virtual_introspection->pending_page_count,
-    first_virtual_plan->jobs.size());
+    first_virtual_plan->resolved_pages.size());
   EXPECT_EQ(first_virtual_introspection->clean_page_count, 0U);
   EXPECT_EQ(CountAtlasTileDebugState(
               first_virtual_introspection->atlas_tile_debug_states,
               VirtualShadowAtlasTileDebugState::kRewritten),
-    first_virtual_plan->jobs.size());
+    first_virtual_plan->resolved_pages.size());
   EXPECT_EQ(CountAtlasTileDebugState(
               first_virtual_introspection->atlas_tile_debug_states,
               VirtualShadowAtlasTileDebugState::kReused),
@@ -2007,8 +2007,8 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(second.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(second_virtual_plan, nullptr);
   ASSERT_NE(second_virtual_introspection, nullptr);
-  EXPECT_EQ(second_virtual_plan->jobs.size(), 0U);
-  EXPECT_EQ(second_virtual_introspection->virtual_raster_jobs.size(), 0U);
+  EXPECT_EQ(second_virtual_plan->resolved_pages.size(), 0U);
+  EXPECT_EQ(second_virtual_introspection->resolved_raster_pages.size(), 0U);
   EXPECT_EQ(second_virtual_introspection->resident_page_count,
     first_virtual_introspection->resident_page_count);
   EXPECT_EQ(second_virtual_introspection->mapped_page_count,
@@ -2198,7 +2198,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(second.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(second_virtual_plan, nullptr);
   ASSERT_NE(second_virtual_introspection, nullptr);
-  EXPECT_EQ(second_virtual_plan->jobs.size(), 0U);
+  EXPECT_EQ(second_virtual_plan->resolved_pages.size(), 0U);
   EXPECT_EQ(second_virtual_introspection->pending_page_count, 0U);
   EXPECT_EQ(second_virtual_introspection->clean_page_count,
     first_virtual_introspection->resident_page_count);
@@ -2340,7 +2340,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(first_virtual_plan, nullptr);
   ASSERT_NE(first_virtual_introspection, nullptr);
-  ASSERT_FALSE(first_virtual_plan->jobs.empty());
+  ASSERT_FALSE(first_virtual_plan->resolved_pages.empty());
   ASSERT_FALSE(
     first_virtual_introspection->directional_virtual_metadata.empty());
 
@@ -2381,9 +2381,9 @@ NOLINT_TEST_F(LightManagerTest,
     = second_virtual_introspection->directional_virtual_metadata.front();
   EXPECT_NE(first_metadata.clip_metadata[0].origin_page_scale.x,
     second_metadata.clip_metadata[0].origin_page_scale.x);
-  EXPECT_LT(second_virtual_introspection->virtual_raster_jobs.size(),
+  EXPECT_LT(second_virtual_introspection->resolved_raster_pages.size(),
     second_virtual_introspection->mapped_page_count);
-  EXPECT_LT(second_virtual_plan->jobs.size(),
+  EXPECT_LT(second_virtual_plan->resolved_pages.size(),
     first_virtual_introspection->resident_page_count);
   EXPECT_GT(second_virtual_introspection->clean_page_count, 0U);
 }
@@ -3283,8 +3283,8 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(second.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(second_virtual_plan, nullptr);
   ASSERT_NE(second_virtual_introspection, nullptr);
-  EXPECT_GT(second_virtual_plan->jobs.size(), 0U);
-  EXPECT_LT(second_virtual_plan->jobs.size(),
+  EXPECT_GT(second_virtual_plan->resolved_pages.size(), 0U);
+  EXPECT_LT(second_virtual_plan->resolved_pages.size(),
     first_virtual_introspection->resident_page_count);
   EXPECT_GT(second_virtual_introspection->clean_page_count, 0U);
 }
@@ -3363,7 +3363,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(first_virtual_plan, nullptr);
   ASSERT_NE(first_virtual_introspection, nullptr);
-  ASSERT_FALSE(first_virtual_plan->jobs.empty());
+  ASSERT_FALSE(first_virtual_plan->resolved_pages.empty());
   shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 24 });
 
   std::vector<std::uint32_t> shifted_requested_pages(request_count);
@@ -3390,7 +3390,7 @@ NOLINT_TEST_F(LightManagerTest,
   EXPECT_EQ(second_virtual_introspection->mapped_page_count,
     first_virtual_introspection->mapped_page_count);
   EXPECT_GT(second_virtual_introspection->mapped_page_count, 0U);
-  EXPECT_LE(second_virtual_plan->jobs.size(), 4U);
+  EXPECT_LE(second_virtual_plan->resolved_pages.size(), 4U);
 }
 
 //! Under pressure, invalid resident pages should be evicted before unrelated
@@ -3441,9 +3441,9 @@ NOLINT_TEST_F(LightManagerTest,
   const std::array<glm::vec4, 1> probe_shadow_casters {
     glm::vec4(0.0F, 0.0F, 0.5F, 1.0F),
   };
-  const auto probe = probe_shadow_manager->PublishForView(oxygen::ViewId { 901 },
-    view_constants, manager, probe_shadow_casters, {}, &synthetic_sun,
-    std::chrono::milliseconds(16));
+  const auto probe = probe_shadow_manager->PublishForView(
+    oxygen::ViewId { 901 }, view_constants, manager, probe_shadow_casters, {},
+    &synthetic_sun, std::chrono::milliseconds(16));
   ASSERT_NE(probe.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   const auto* probe_introspection = ResolveVirtualViewIntrospection(
     *probe_shadow_manager, oxygen::ViewId { 901 });
@@ -3464,17 +3464,18 @@ NOLINT_TEST_F(LightManagerTest,
   const auto initial_pressure_page_y = layout.pages_per_axis - 3U;
   const auto moved_pressure_page_x = layout.pages_per_axis / 2U;
   const auto moved_pressure_page_y = layout.pages_per_axis - 3U;
-  const float clip0_page_world = probe_metadata.clip_metadata[0].origin_page_scale.z;
+  const float clip0_page_world
+    = probe_metadata.clip_metadata[0].origin_page_scale.z;
   const float tracked_caster_radius = clip0_page_world * 0.35F;
   const float pressure_caster_radius = clip0_page_world * 10.0F;
   const glm::vec3 tracked_world = DirectionalVirtualPageWorldCenter(
     probe_metadata, kTrackedClipIndex, kTrackedPageX, kTrackedPageY);
-  const glm::vec3 initial_pressure_world = DirectionalVirtualPageWorldCenter(
-    probe_metadata, kTrackedClipIndex, initial_pressure_page_x,
-    initial_pressure_page_y);
-  const glm::vec3 moved_pressure_world = DirectionalVirtualPageWorldCenter(
-    probe_metadata, kTrackedClipIndex, moved_pressure_page_x,
-    moved_pressure_page_y);
+  const glm::vec3 initial_pressure_world
+    = DirectionalVirtualPageWorldCenter(probe_metadata, kTrackedClipIndex,
+      initial_pressure_page_x, initial_pressure_page_y);
+  const glm::vec3 moved_pressure_world
+    = DirectionalVirtualPageWorldCenter(probe_metadata, kTrackedClipIndex,
+      moved_pressure_page_x, moved_pressure_page_y);
   const auto tracked_page = GlobalPageIndexForWorldPoint(
     probe_metadata, kTrackedClipIndex, tracked_world);
   ASSERT_TRUE(tracked_page.has_value());
@@ -3531,8 +3532,8 @@ NOLINT_TEST_F(LightManagerTest,
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 241 },
     MakeVirtualRequestFeedback(layout, SequenceNumber { 2 },
-      std::span<const std::uint32_t>(pressured_requested_pages.data(),
-        pressured_requested_pages.size())));
+      std::span<const std::uint32_t>(
+        pressured_requested_pages.data(), pressured_requested_pages.size())));
 
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 3 }, Slot { 2 });
@@ -3548,7 +3549,8 @@ NOLINT_TEST_F(LightManagerTest,
   shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 241 });
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 241 },
-    MakeVirtualRequestFeedback(layout, SequenceNumber { 3 }, { *tracked_page }));
+    MakeVirtualRequestFeedback(
+      layout, SequenceNumber { 3 }, { *tracked_page }));
 
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 4 }, Slot { 0 });
@@ -3565,8 +3567,8 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_LT(*tracked_page, third_introspection->page_table_entries.size());
   EXPECT_NE(third_introspection->page_table_entries[*tracked_page], 0U);
   const auto tracked_local_page = *tracked_page % layout.pages_per_level;
-  const auto tracked_page_rerasterized = std::any_of(third_plan->jobs.begin(),
-    third_plan->jobs.end(),
+  const auto tracked_page_rerasterized = std::any_of(
+    third_plan->resolved_pages.begin(), third_plan->resolved_pages.end(),
     [tracked_local_page](
       const oxygen::renderer::VirtualShadowResolvedRasterPage& job) {
       return job.clip_level == kTrackedClipIndex
@@ -3625,12 +3627,12 @@ NOLINT_TEST_F(LightManagerTest,
 
   ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(first_virtual_plan, nullptr);
-  ASSERT_FALSE(first_virtual_plan->jobs.empty());
+  ASSERT_FALSE(first_virtual_plan->resolved_pages.empty());
   const auto* first_virtual_introspection
     = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 13 });
   ASSERT_NE(first_virtual_introspection, nullptr);
   EXPECT_EQ(first_virtual_introspection->pending_page_count,
-    first_virtual_plan->jobs.size());
+    first_virtual_plan->resolved_pages.size());
 
   const auto second = shadow_manager->PublishForView(oxygen::ViewId { 13 },
     view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
@@ -3643,13 +3645,14 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(second.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(second_virtual_plan, nullptr);
   ASSERT_NE(second_virtual_introspection, nullptr);
-  EXPECT_EQ(second_virtual_plan->jobs.size(), first_virtual_plan->jobs.size());
+  EXPECT_EQ(second_virtual_plan->resolved_pages.size(),
+    first_virtual_plan->resolved_pages.size());
   EXPECT_EQ(second_virtual_introspection->pending_page_count,
-    first_virtual_plan->jobs.size());
+    first_virtual_plan->resolved_pages.size());
 }
 
-//! Patching the published view-frame slot must update the jobs the virtual
-//! raster pass will actually consume, not only the cached source job list.
+//! Patching the published view-frame slot must update the resolved pages the
+//! virtual raster pass will actually consume.
 NOLINT_TEST_F(LightManagerTest,
   ShadowManagerPublishForView_VirtualPlanPatchesPendingJobsWithViewFrameSlot)
 {
@@ -3704,8 +3707,8 @@ NOLINT_TEST_F(LightManagerTest,
   const auto* virtual_plan
     = ResolveVirtualRenderPlan(*shadow_manager, oxygen::ViewId { 15 });
   ASSERT_NE(virtual_plan, nullptr);
-  ASSERT_FALSE(virtual_plan->jobs.empty());
-  for (const auto& job : virtual_plan->jobs) {
+  ASSERT_FALSE(virtual_plan->resolved_pages.empty());
+  for (const auto& job : virtual_plan->resolved_pages) {
     EXPECT_EQ(job.view_constants.view_frame_bindings_bslot, kExpectedSlot);
   }
 }
@@ -3763,7 +3766,7 @@ NOLINT_TEST_F(LightManagerTest,
 
   ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(first_virtual_plan, nullptr);
-  ASSERT_FALSE(first_virtual_plan->jobs.empty());
+  ASSERT_FALSE(first_virtual_plan->resolved_pages.empty());
 
   const auto second = shadow_manager->PublishForView(oxygen::ViewId { 12 },
     view_constants, manager, updated_shadow_casters, visible_receivers,
@@ -3776,11 +3779,12 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(second.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(second_virtual_plan, nullptr);
   ASSERT_NE(second_virtual_introspection, nullptr);
-  EXPECT_EQ(second_virtual_plan->jobs.size(), first_virtual_plan->jobs.size());
-  EXPECT_EQ(second_virtual_introspection->virtual_raster_jobs.size(),
-    first_virtual_plan->jobs.size());
+  EXPECT_EQ(second_virtual_plan->resolved_pages.size(),
+    first_virtual_plan->resolved_pages.size());
+  EXPECT_EQ(second_virtual_introspection->resolved_raster_pages.size(),
+    first_virtual_plan->resolved_pages.size());
   EXPECT_EQ(second_virtual_introspection->pending_page_count,
-    first_virtual_plan->jobs.size());
+    first_virtual_plan->resolved_pages.size());
   EXPECT_EQ(second.virtual_shadow_physical_pool_srv,
     first.virtual_shadow_physical_pool_srv);
 }
@@ -3842,7 +3846,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(
     second.virtual_shadow_physical_pool_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(second_virtual_plan, nullptr);
-  EXPECT_FALSE(second_virtual_plan->jobs.empty());
+  EXPECT_FALSE(second_virtual_plan->resolved_pages.empty());
 }
 
 //! Shadow publication is reused for identical inputs and invalidated when
@@ -3946,13 +3950,13 @@ NOLINT_TEST_F(LightManagerTest,
     = ResolveVirtualRenderPlan(*shadow_manager, oxygen::ViewId { 19 });
   ASSERT_NE(first.virtual_shadow_page_table_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(first_plan, nullptr);
-  ASSERT_FALSE(first_plan->jobs.empty());
+  ASSERT_FALSE(first_plan->resolved_pages.empty());
 
   shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 19 });
   const auto* executed_plan
     = ResolveVirtualRenderPlan(*shadow_manager, oxygen::ViewId { 19 });
   ASSERT_NE(executed_plan, nullptr);
-  EXPECT_TRUE(executed_plan->jobs.empty());
+  EXPECT_TRUE(executed_plan->resolved_pages.empty());
 
   const auto second = shadow_manager->PublishForView(oxygen::ViewId { 19 },
     view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
@@ -3961,13 +3965,11 @@ NOLINT_TEST_F(LightManagerTest,
     = ResolveVirtualRenderPlan(*shadow_manager, oxygen::ViewId { 19 });
   ASSERT_NE(second.virtual_shadow_page_table_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(second_plan, nullptr);
-  EXPECT_FALSE(second_plan->jobs.empty());
+  EXPECT_FALSE(second_plan->resolved_pages.empty());
 }
 
 //! The explicit current-frame resolve stage now materializes the authoritative
-//! resolved-page contract from backend-private pending jobs. The provisional
-//! `jobs` field remains only as a compatibility alias to the same resolved-page
-//! payload while callers migrate.
+//! resolved-page contract from backend-private pending state.
 NOLINT_TEST_F(LightManagerTest,
   ShadowManagerPublishForView_VirtualResolveStagePublishesResolvedPageContract)
 {
@@ -4020,31 +4022,17 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(
     published.virtual_shadow_page_table_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(introspection, nullptr);
-  ASSERT_GT(introspection->pending_raster_job_count, 0U);
+  ASSERT_GT(introspection->pending_raster_page_count, 0U);
   ASSERT_NE(render_plan, nullptr);
   ASSERT_FALSE(render_plan->resolved_pages.empty());
   ASSERT_EQ(render_plan->resolved_pages.size(),
-    introspection->pending_raster_job_count);
-  ASSERT_EQ(render_plan->resolved_pages.size(), render_plan->jobs.size());
-  for (std::size_t i = 0; i < render_plan->resolved_pages.size(); ++i) {
-    EXPECT_EQ(render_plan->resolved_pages[i].resident_key,
-      render_plan->jobs[i].resident_key);
-    EXPECT_EQ(render_plan->resolved_pages[i].clip_level,
-      render_plan->jobs[i].clip_level);
-    EXPECT_EQ(render_plan->resolved_pages[i].page_index,
-      render_plan->jobs[i].page_index);
-    EXPECT_EQ(render_plan->resolved_pages[i].atlas_tile_x,
-      render_plan->jobs[i].atlas_tile_x);
-    EXPECT_EQ(render_plan->resolved_pages[i].atlas_tile_y,
-      render_plan->jobs[i].atlas_tile_y);
-  }
+    introspection->pending_raster_page_count);
 
   shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 232 });
   const auto* executed_plan
     = ResolveVirtualRenderPlan(*shadow_manager, oxygen::ViewId { 232 });
   ASSERT_NE(executed_plan, nullptr);
   EXPECT_TRUE(executed_plan->resolved_pages.empty());
-  EXPECT_TRUE(executed_plan->jobs.empty());
 }
 
 //! Virtual VSM getters are now observation-only. They must not implicitly run
@@ -4104,9 +4092,8 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(pre_resolve_plan, nullptr);
   ASSERT_NE(pre_resolve_introspection, nullptr);
   EXPECT_TRUE(pre_resolve_plan->resolved_pages.empty());
-  EXPECT_TRUE(pre_resolve_plan->jobs.empty());
   EXPECT_EQ(pre_resolve_introspection->mapped_page_count, 0U);
-  EXPECT_EQ(pre_resolve_introspection->pending_raster_job_count, 0U);
+  EXPECT_EQ(pre_resolve_introspection->pending_raster_page_count, 0U);
 
   const auto* resolved_plan
     = ResolveVirtualRenderPlan(*shadow_manager, oxygen::ViewId { 235 });
@@ -4116,7 +4103,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(resolved_introspection, nullptr);
   EXPECT_FALSE(resolved_plan->resolved_pages.empty());
   EXPECT_GT(resolved_introspection->mapped_page_count, 0U);
-  EXPECT_GT(resolved_introspection->pending_raster_job_count, 0U);
+  EXPECT_GT(resolved_introspection->pending_raster_page_count, 0U);
 }
 
 //! Persistent GPU residency bridge resources are now created by the explicit
@@ -4244,9 +4231,8 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(pre_mark_plan, nullptr);
   ASSERT_NE(pre_mark_introspection, nullptr);
   EXPECT_TRUE(pre_mark_plan->resolved_pages.empty());
-  EXPECT_TRUE(pre_mark_plan->jobs.empty());
   EXPECT_EQ(pre_mark_introspection->mapped_page_count, 0U);
-  EXPECT_EQ(pre_mark_introspection->pending_raster_job_count, 0U);
+  EXPECT_EQ(pre_mark_introspection->pending_raster_page_count, 0U);
 
   shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 233 });
 
@@ -4257,9 +4243,8 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(post_mark_plan, nullptr);
   ASSERT_NE(post_mark_introspection, nullptr);
   EXPECT_TRUE(post_mark_plan->resolved_pages.empty());
-  EXPECT_TRUE(post_mark_plan->jobs.empty());
   EXPECT_EQ(post_mark_introspection->mapped_page_count, 0U);
-  EXPECT_EQ(post_mark_introspection->pending_raster_job_count, 0U);
+  EXPECT_EQ(post_mark_introspection->pending_raster_page_count, 0U);
   EXPECT_EQ(post_mark_introspection->resident_page_count, 0U);
 
   const auto* introspection
@@ -4270,11 +4255,10 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(render_plan, nullptr);
   EXPECT_GT(introspection->resident_page_count, 0U);
   EXPECT_GT(introspection->mapped_page_count, 0U);
-  EXPECT_GT(introspection->pending_raster_job_count, 0U);
+  EXPECT_GT(introspection->pending_raster_page_count, 0U);
   EXPECT_GT(introspection->pending_page_count, 0U);
   EXPECT_EQ(introspection->clean_page_count, 0U);
   EXPECT_FALSE(render_plan->resolved_pages.empty());
-  EXPECT_FALSE(render_plan->jobs.empty());
 }
 
 //! Republishing the same view before resolve must not let publish-time view
@@ -4349,7 +4333,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(second_pre_resolve, nullptr);
   EXPECT_EQ(second_pre_resolve->resident_page_count, 0U);
   EXPECT_EQ(second_pre_resolve->mapped_page_count, 0U);
-  EXPECT_EQ(second_pre_resolve->pending_raster_job_count, 0U);
+  EXPECT_EQ(second_pre_resolve->pending_raster_page_count, 0U);
 
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 3 }, Slot { 2 });
@@ -4365,11 +4349,10 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(third_resolved, nullptr);
   ASSERT_NE(third_plan, nullptr);
   EXPECT_EQ(third_resolved->allocated_page_count, 0U);
-  EXPECT_EQ(third_resolved->pending_raster_job_count, 0U);
+  EXPECT_EQ(third_resolved->pending_raster_page_count, 0U);
   EXPECT_EQ(third_resolved->resident_page_count, first_resident_page_count);
   EXPECT_EQ(third_resolved->clean_page_count, first_resident_page_count);
   EXPECT_TRUE(third_plan->resolved_pages.empty());
-  EXPECT_TRUE(third_plan->jobs.empty());
   EXPECT_TRUE(std::ranges::equal(
     third_resolved->page_table_entries, first_page_table_entries));
 }
@@ -4679,7 +4662,7 @@ NOLINT_TEST_F(LightManagerTest,
   EXPECT_EQ(first_introspection->resolve_stats.resident_entry_count,
     first_introspection->resident_page_count);
   EXPECT_EQ(first_introspection->resolve_stats.pending_raster_page_count,
-    first_introspection->pending_raster_job_count);
+    first_introspection->pending_raster_page_count);
 
   std::uint32_t entry_clean_count = 0U;
   std::uint32_t entry_dirty_count = 0U;
@@ -4716,7 +4699,7 @@ NOLINT_TEST_F(LightManagerTest,
   const auto* executed_introspection
     = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 228 });
   ASSERT_NE(executed_introspection, nullptr);
-  EXPECT_EQ(executed_introspection->pending_raster_job_count, 0U);
+  EXPECT_EQ(executed_introspection->pending_raster_page_count, 0U);
   EXPECT_EQ(
     executed_introspection->resolve_stats.pending_raster_page_count, 0U);
   EXPECT_EQ(executed_introspection->pending_page_count, 0U);
@@ -4959,8 +4942,8 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(first_introspection, nullptr);
   ASSERT_NE(first_plan, nullptr);
   ASSERT_FALSE(first_introspection->directional_virtual_metadata.empty());
-  ASSERT_FALSE(first_introspection->virtual_raster_jobs.empty());
-  ASSERT_FALSE(first_plan->jobs.empty());
+  ASSERT_FALSE(first_introspection->resolved_raster_pages.empty());
+  ASSERT_FALSE(first_plan->resolved_pages.empty());
 
   const auto layout = BuildVirtualFeedbackLayout(
     first_introspection->directional_virtual_metadata.front());
@@ -4970,7 +4953,7 @@ NOLINT_TEST_F(LightManagerTest,
   std::optional<std::uint64_t> requested_fine_resident_key {};
   std::optional<std::uint64_t> omitted_fine_resident_key {};
   std::optional<std::uint64_t> coarse_resident_key {};
-  for (const auto& job : first_introspection->virtual_raster_jobs) {
+  for (const auto& job : first_introspection->resolved_raster_pages) {
     if (job.clip_level < coarse_backbone_begin) {
       if (!requested_fine_resident_key.has_value()) {
         requested_fine_resident_key = job.resident_key;
@@ -5011,7 +4994,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(second.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(second_introspection, nullptr);
   ASSERT_NE(second_plan, nullptr);
-  ASSERT_FALSE(second_introspection->virtual_raster_jobs.empty());
+  ASSERT_FALSE(second_introspection->resolved_raster_pages.empty());
   ASSERT_FALSE(second_introspection->directional_virtual_metadata.empty());
 
   const auto second_layout = BuildVirtualFeedbackLayout(
@@ -5030,8 +5013,8 @@ NOLINT_TEST_F(LightManagerTest,
   EXPECT_EQ(second_introspection->resolved_schedule_page_count, 1U);
   EXPECT_EQ(second_introspection->resolved_schedule_age_frames, 1U);
   EXPECT_EQ(second_introspection->resolved_schedule_pruned_job_count, 0U);
-  ASSERT_EQ(
-    second_plan->jobs.size(), second_introspection->virtual_raster_jobs.size());
+  ASSERT_EQ(second_plan->resolved_pages.size(),
+    second_introspection->resolved_raster_pages.size());
 
   const auto contains_resident_key
     = [](const auto jobs, const std::uint64_t resident_key) {
@@ -5041,11 +5024,12 @@ NOLINT_TEST_F(LightManagerTest,
           });
       };
 
+  EXPECT_TRUE(contains_resident_key(
+    second_plan->resolved_pages, *requested_fine_resident_key));
   EXPECT_TRUE(
-    contains_resident_key(second_plan->jobs, *requested_fine_resident_key));
-  EXPECT_TRUE(contains_resident_key(second_plan->jobs, *coarse_resident_key));
-  EXPECT_TRUE(
-    contains_resident_key(second_plan->jobs, *omitted_fine_resident_key));
+    contains_resident_key(second_plan->resolved_pages, *coarse_resident_key));
+  EXPECT_TRUE(contains_resident_key(
+    second_plan->resolved_pages, *omitted_fine_resident_key));
   EXPECT_NE(
     second_introspection->page_table_entries[*second_requested_fine_page_index],
     0U);
@@ -5110,12 +5094,12 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(first_introspection, nullptr);
   ASSERT_FALSE(first_introspection->directional_virtual_metadata.empty());
-  ASSERT_FALSE(first_introspection->virtual_raster_jobs.empty());
+  ASSERT_FALSE(first_introspection->resolved_raster_pages.empty());
 
   const auto layout = BuildVirtualFeedbackLayout(
     first_introspection->directional_virtual_metadata.front());
   std::optional<std::uint32_t> requested_page_index {};
-  for (const auto& job : first_introspection->virtual_raster_jobs) {
+  for (const auto& job : first_introspection->resolved_raster_pages) {
     if (job.clip_level
       < (layout.clip_level_count > 3U ? layout.clip_level_count - 3U : 0U)) {
       requested_page_index
@@ -5150,8 +5134,8 @@ NOLINT_TEST_F(LightManagerTest,
 
   EXPECT_FALSE(second_introspection->used_resolved_raster_schedule);
   EXPECT_EQ(second_introspection->resolved_schedule_pruned_job_count, 0U);
-  EXPECT_EQ(
-    second_plan->jobs.size(), second_introspection->virtual_raster_jobs.size());
+  EXPECT_EQ(second_plan->resolved_pages.size(),
+    second_introspection->resolved_raster_pages.size());
 }
 
 } // namespace

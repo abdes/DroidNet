@@ -808,19 +808,13 @@ Execution note, March 9, 2026:
     valid fallback coverage exists by construction when physical tile capacity
     is exhausted
 - The first slice is still not default-safe for heavy scenes like Sponza.
-  Requests are now bounded and cross-frame reusable, but the remaining work is
-  broader than one final GPU residency pass. The live path still authors page
-  selection and page-local view constants on the CPU, then bridges them into
-  the resolved-page raster contract, so the final sparse-residency stage must:
-  - add the GPU resolve / allocation / page-table update pass that consumes
-    the already-persistent request / residency bridge state
-  - replace provisional CPU raster-job authoring with a resolve-owned page
-    schedule and page-local view-constant upload path
-  - make virtual page raster consume that resolved schedule without a second
-    CPU-side replan
-  - then harden dirty-page tracking, eviction, and large-scene behavior
-  Until that contract convergence lands, demo/runtime validation must keep VSM
-  opt-in rather than the default directional path. Budgeted VSM page/update
+  Requests are now bounded and cross-frame reusable, and the contract
+  convergence work for the current directional slice is landed: the runtime now
+  publishes one authoritative resolved-page raster contract and virtual raster
+  consumes only that contract. No parallel legacy raster-job path remains. The
+  remaining gate for this slice is live validation in `RenderScene` and Sponza;
+  current-frame resolve/update ownership is still CPU-authored inside the
+  explicit resolve stage. Budgeted VSM page/update
   policy is deferred until after correctness and quality are closed.
 - Validation evidence for the first slice:
   - `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:6 /p:Configuration=Debug /nologo`
@@ -885,17 +879,19 @@ Execution note, March 9, 2026:
     only snapshots the authoritative prior resident state, and the explicit
     resolve stage owns current-frame carry, dirty marking, tile release,
     allocation, eviction, and page-table mutation as one CPU-authored stage
-  - final GPU allocation/update ownership and the end-to-end raster contract
-    are still not complete
+  - current-frame resolve/update ownership is still CPU-authored inside the
+    explicit resolve stage, but the legacy provisional raster-job contract is
+    removed and `VirtualShadowResolvedRasterPage` is now the only live raster
+    payload exported to runtime consumers
   - frozen execution order for the remaining directional VSM work (steps 1-5
     landed; 6 remains):
     6. validate `virtual-only` stability and quality in `RenderScene` and
-       Sponza, then close the directional production-candidate gate
+       Sponza
   - do not reorder these steps unless new evidence forces a documented scope
     correction under the repository guardrails
 - [x] Harden directional virtual invalidation and focused regression coverage
-- [ ] Replace provisional CPU `VirtualShadowRasterJob` scheduling with the
-      final resolve-owned raster-page contract
+- [x] Remove the provisional legacy raster-job scheduling path so the
+      resolve-owned raster-page contract is the only live raster contract
 
 Directional VSM Milestone: `Directional VSM Production Candidate`
 
@@ -1587,6 +1583,26 @@ Continuous improvements, not milestones:
   Status remains `in_progress`: allocation / eviction / page-table ownership
   are still CPU-authored and the final resolve-owned raster path is still not
   complete.
+- **March 12, 2026**: Removed the remaining legacy directional VSM raster
+  contract. `VirtualShadowRenderPlan` now exports only `resolved_pages`,
+  `VirtualShadowViewIntrospection` now exports only `resolved_raster_pages`,
+  and the provisional alias path is gone from code and focused tests. The
+  explicit resolve stage remains CPU-authored, but raster consumers now read
+  one authoritative page schedule only. Validation evidence:
+  `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`,
+  `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*:*ShadowManagerPrepareVirtualPageTableResources_UploadsResolvedEntries`,
+  `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:1 /p:Configuration=Debug /nologo`,
+  and
+  `out/build-vs/bin/Debug/Oxygen.Examples.RenderScene.exe --frames 8 --fps 100 --directional-shadows virtual-only`
+  all completed successfully. Status remains `in_progress`: live interactive
+  `RenderScene` / Sponza validation was still pending at this point.
+- **March 12, 2026**: User-reported manual step-6 validation confirms
+  directional `virtual-only` is functionally stable in `RenderScene` and
+  Sponza. This closes the frozen execution-plan validation step. Status
+  remains `in_progress` for the `Directional VSM Production Candidate`
+  milestone until edge-quality parity with the conventional directional path is
+  explicitly signed off, but the frozen six-step execution plan is now fully
+  landed.
 - **March 12, 2026**: Completed frozen task 5 for directional VSM hardening.
   The allocator now prefers evicting invalid resident pages before unrelated
   clean cached pages when the low-tier physical pool is under pressure. Added
@@ -1671,8 +1687,8 @@ Continuous improvements, not milestones:
 - **March 11, 2026**: Corrected the remaining directional VSM scope. The
   previous wording that framed the next item as only the "final GPU request
   dedup / residency resolve / allocation pass" was incomplete because live
-  rasterization still depends on CPU-authored `VirtualShadowRasterJob`s and
-  CPU-built per-page view constants. The remaining work is now explicitly
+  rasterization still depended on a provisional CPU-authored raster-job list
+  and CPU-built per-page view constants. The remaining work is now explicitly
   staged as GPU request/residency state, GPU resolve/page-table update,
   resolve-owned raster scheduling, raster-pass contract convergence, then the
   remaining invalidation/eviction/large-scene hardening. Status remains

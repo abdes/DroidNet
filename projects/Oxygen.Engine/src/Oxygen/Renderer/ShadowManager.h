@@ -91,7 +91,6 @@ public:
     std::uint64_t shadow_caster_content_hash = 0U) -> ShadowFramePublication;
   OXGN_RNDR_API auto ResolveVirtualCurrentFrame(ViewId view_id) -> void;
   OXGN_RNDR_API auto MarkVirtualRenderPlanExecuted(ViewId view_id) -> void;
-  OXGN_RNDR_API auto PrepareVirtualResolvedRasterPages(ViewId view_id) -> void;
   OXGN_RNDR_API auto PrepareVirtualPageTableResources(
     ViewId view_id, graphics::CommandRecorder& recorder) -> void;
   OXGN_RNDR_API auto SetPublishedViewFrameBindingsSlot(

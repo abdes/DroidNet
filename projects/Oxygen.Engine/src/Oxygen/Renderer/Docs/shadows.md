@@ -1114,8 +1114,13 @@ Implementation status, March 9, 2026:
     invalid resident pages before unrelated clean cached pages, and focused
     coverage proves that a still-visible caster's excluded clean page survives
     moved-caster pressure without reraster; this closes the frozen step-5
-    invalidation/regression gate while overall directional VSM stays
-    `in_progress` pending step-6 live validation
+    invalidation/regression gate
+  - March 12 contract-cleanup slice: the legacy provisional raster-job path is
+    removed; `VirtualShadowResolvedRasterPage` is now the only raster payload
+    exported through the virtual render plan and VSM introspection
+  - March 12 manual live validation update: user-reported `RenderScene` and
+    Sponza checks found directional `virtual-only` functionally stable; the
+    frozen execution-plan validation step is now closed
   - focused automated coverage now exists for the snap-boundary regression:
     - directional feedback address-space identity changes on snapped XY
       light-view translation but ignores pure Z pull-back padding
@@ -1137,11 +1142,11 @@ Implementation status, March 9, 2026:
   - design correction on March 12, 2026: that bridge schedule is currently
     observational only because it enumerates already-mapped requested pages
     from the current page table; it does not yet own current-frame fine-page
-    allocation/raster scheduling and therefore must not prune CPU-authored
-    pending jobs
+    allocation/raster scheduling and therefore must not prune current-frame
+    pending resolved pages
   - focused automated coverage now exists for the resolve-to-raster bridge:
     - compatible resolved schedules are accepted as bridge telemetry without
-      suppressing CPU-authored pending raster jobs
+      suppressing current-frame pending resolved pages
     - incompatible resolved schedules are rejected instead of influencing
       raster scheduling against stale address-space identity
 - Validation evidence:
@@ -1163,8 +1168,9 @@ Implementation status, March 9, 2026:
   - the 40-frame `RenderScene` capture exited cleanly and showed the live
     resolve pass producing compact schedules (`scheduled_pages=91`) once
     request feedback stabilized; later manual camera-motion testing showed that
-    using that bridge payload to prune fine CPU jobs was not safe yet, so the
-    prune path remains disabled until resolve owns raster scheduling
+    using that bridge payload to prune fine current-frame resolved pages was
+    not safe yet, so the prune path remains disabled until resolve owns that
+    scheduling end to end
   - the short 8-frame `RenderScene` recheck after the explicit resolve-stage
     ownership slice exited with code `0` and showed the resolve pass preparing
     / dispatching before virtual page raster consumed resolved pages
@@ -1190,6 +1196,11 @@ Implementation status, March 9, 2026:
     - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=LightManagerTest.ShadowManagerPublishForView_VirtualBudgetPressureEvictsDirtyPagesBeforeCleanCachedPages`
     - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*:*ShadowManagerPrepareVirtualPageTableResources_UploadsResolvedEntries`
     - `out/build-vs/bin/Debug/Oxygen.Examples.RenderScene.exe --frames 8 --fps 100 --directional-shadows virtual-only`
+  - March 12 contract-cleanup slice evidence:
+    - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+    - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*:*ShadowManagerPrepareVirtualPageTableResources_UploadsResolvedEntries`
+    - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:1 /p:Configuration=Debug /nologo`
+    - `out/build-vs/bin/Debug/Oxygen.Examples.RenderScene.exe --frames 8 --fps 100 --directional-shadows virtual-only`
   - the focused virtual LightManager slice is now green at `44/44`
   - resolve now owns pass-time page-table upload preparation for every virtual
     frame, and the virtual raster / atlas-debug passes now consume published
@@ -1199,17 +1210,10 @@ Implementation status, March 9, 2026:
     pages while prepared draw metadata was empty; the first live resolve
     dispatch now begins once `draw_bytes` and `partitions` are populated
 - Remaining gap to exit this first slice:
-  - visual validation in `RenderScene`
-  - a GPU resolve/update pass after the depth/feedback-driven request
-    producer; the explicit resolve stage now owns current-frame CPU carry /
-    allocate / evict / page-table mutation, but the allocator still runs on
-    the CPU
-  - a single authoritative resolve-to-raster contract; the live resolve pass
-    now materializes the current-frame resolved-page raster contract from
-    backend-private pending jobs before raster, while the readback bridge
-    schedule remains telemetry only and the final GPU-owned resolve/update
-    path is still missing
-  - broader request/update deduplication and deterministic eviction hardening
+  - the authoritative resolved-page raster contract is now the only live
+    raster contract, but current-frame resolve/update ownership is still
+    CPU-authored and the readback bridge schedule remains telemetry only
+  - explicit quality-parity sign-off against the conventional directional path
   - broader directional virtual invalidation/debug tooling
   - large-scene viability in `virtual-only`, which remains intentionally harsh
     until sparse residency exists

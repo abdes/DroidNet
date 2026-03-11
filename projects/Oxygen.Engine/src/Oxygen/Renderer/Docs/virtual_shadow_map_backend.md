@@ -326,9 +326,9 @@ After the first visual-validation slice:
 - a virtual page-request pass scans visible receivers from the main depth
 - a GPU resolve/update pass consumes that request signal directly, deduplicates
   requests, and applies reuse / allocation / eviction decisions
-- that same resolve stage emits the compact page-raster schedule, because the
-  current CPU `VirtualShadowRasterJob` path cannot remain authoritative once
-  residency decisions move off the CPU
+- that same resolve stage emits the compact page-raster schedule so raster
+  consumes one authoritative resolved-page contract rather than a parallel
+  legacy CPU job list
 - dirty/newly allocated pages are rasterized from that resolved schedule
   instead of the whole fixed working set
 
@@ -802,20 +802,19 @@ Required automated coverage:
 
 ## 13. Implementation Sequence
 
-The corrected remaining implementation order from the current codebase is:
+The frozen implementation order for the current directional slice is:
 
-1. keep the existing `VirtualShadowMapBackend` ownership, metadata
-   publication, request generation, and virtual page raster consumption of the
-   resolved-page contract
+1. publish and consume one authoritative resolved-page raster contract
+   (`landed`)
 2. keep the persistent backend-private GPU request / residency state buffers
-   and the resolve-stage handoff into that contract
-3. add a GPU residency resolve / allocation / page-table update pass
-4. replace backend-private CPU pending-job authoring with a resolve-owned
-   current-frame page schedule and page-local view-constant upload path
-5. keep `VirtualShadowPageRasterPass` consuming that resolved-page schedule as
-   its only authoritative source
-6. expand debug and automated validation around request, residency, and
-   raster-schedule coherence
+   and explicit resolve-stage handoff into that contract (`landed`)
+3. centralize current-frame resolve/update ownership in the explicit resolve
+   stage (`landed`, still CPU-authored)
+4. remove the parallel legacy raster-job path so raster consumers read only the
+   resolved-page contract (`landed`)
+5. expand debug and automated validation around request, residency, and
+   raster-schedule coherence (`landed`)
+6. finish live interactive validation in `RenderScene` and Sponza (`remaining`)
 
 Only after the above is stable:
 
@@ -845,16 +844,18 @@ This milestone is complete only when:
 This is the correct next bar before any expansion to local-light virtual
 shadows.
 
-Implementation status, March 11, 2026 scope correction:
+Implementation status, March 12, 2026 contract cleanup:
 
-- the previously documented "final GPU request dedup / residency resolve /
-  allocation pass" was too narrow
-- live code still builds raster work on the CPU through
-  `VirtualShadowRasterJob` and CPU-authored per-page view constants
-- the remaining implementation therefore has to converge the resolve-to-raster
-  contract, not only move allocation decisions to the GPU
-- status remains `in_progress` until that broader contract change is
-  implemented and validated
+- the earlier scope correction was valid: resolve-to-raster contract
+  convergence was required, not just another allocation pass
+- live code now publishes only `VirtualShadowResolvedRasterPage` to virtual
+  raster consumers; the parallel legacy raster-job export path is removed
+- current-frame resolve/update ownership remains CPU-authored inside the
+  explicit resolve stage
+- user-reported manual step-6 validation later confirmed functional stability
+  in `RenderScene` and Sponza
+- status remains `in_progress` until the conventional-parity quality bar is
+  explicitly signed off
 
 Implementation update, March 12, 2026 bridge slice:
 
@@ -884,8 +885,9 @@ Implementation update, March 12, 2026 bridge slice:
     - `*ShadowManagerPublishForView_Virtual*:*ShadowManagerPrepareVirtualPageTableResources_UploadsResolvedEntries`
     - `Oxygen.Examples.RenderScene.exe --frames 8 --fps 100 --directional-shadows virtual-only`
     all passed
-  - step 5 is closed, but overall status remains `in_progress` until step 6
-    finishes live interactive `RenderScene` / Sponza validation
+  - step 5 is closed; the later user-reported step-6 live validation closed
+    the frozen execution-plan gate, but overall status remains `in_progress`
+    until conventional-parity quality is explicitly signed off
 
 Implementation status, March 10, 2026:
 

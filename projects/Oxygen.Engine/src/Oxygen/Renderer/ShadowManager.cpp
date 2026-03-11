@@ -238,14 +238,6 @@ auto ShadowManager::ResolveVirtualCurrentFrame(const ViewId view_id) -> void
   }
 }
 
-auto ShadowManager::PrepareVirtualResolvedRasterPages(const ViewId view_id)
-  -> void
-{
-  if (virtual_backend_) {
-    virtual_backend_->PrepareResolvedRasterPages(view_id);
-  }
-}
-
 auto ShadowManager::PrepareVirtualPageTableResources(
   const ViewId view_id, graphics::CommandRecorder& recorder) -> void
 {

@@ -71,7 +71,6 @@ public:
     std::uint64_t shadow_caster_content_hash = 0U) -> ShadowFramePublication;
   OXGN_RNDR_API auto ResolveCurrentFrame(ViewId view_id) -> void;
   OXGN_RNDR_API auto MarkRendered(ViewId view_id) -> void;
-  OXGN_RNDR_API auto PrepareResolvedRasterPages(ViewId view_id) -> void;
   OXGN_RNDR_API auto PreparePageTableResources(
     ViewId view_id, graphics::CommandRecorder& recorder) -> void;
   OXGN_RNDR_API auto SetPublishedViewFrameBindingsSlot(
@@ -146,7 +145,7 @@ private:
   struct ViewCacheEntry {
     struct PendingResidentReuseGateSnapshot {
       bool valid { false };
-      bool previous_pending_raster_jobs_empty { false };
+      bool previous_pending_resolved_pages_empty { false };
       PublicationKey key {};
       std::vector<engine::DirectionalVirtualShadowMetadata>
         directional_virtual_metadata {};
@@ -244,10 +243,7 @@ private:
       resolve_resident_page_entries;
     std::vector<renderer::VirtualShadowResolvedRasterPage>
       resolved_raster_pages;
-    bool resolved_raster_pages_dirty { true };
     PendingResidencyResolve pending_residency_resolve {};
-    std::vector<VirtualShadowRasterJob> raster_jobs;
-    std::vector<VirtualShadowRasterJob> pending_raster_jobs;
     std::unordered_map<std::uint64_t, ResidentVirtualPage> resident_pages;
     renderer::VirtualShadowResolveStats resolve_stats {};
     std::uint32_t page_table_upload_entry_count { 0U };
@@ -320,8 +316,7 @@ private:
 
   struct ViewPublishLogState {
     std::uint32_t last_selected_page_count { 0U };
-    std::uint32_t last_pending_job_count { 0U };
-    std::uint32_t last_raster_job_count { 0U };
+    std::uint32_t last_pending_raster_page_count { 0U };
     bool last_used_feedback { false };
     bool initialized { false };
   };
@@ -373,9 +368,10 @@ private:
   OXGN_RNDR_API auto PublishDirectionalVirtualMetadata(
     std::span<const engine::DirectionalVirtualShadowMetadata> metadata)
     -> ShaderVisibleIndex;
-  // Bridge hook until the dedicated resolve pass lands: keep persistent GPU
-  // page-table and backend-private resolve-state resources synchronized at the
-  // point where virtual raster still consumes CPU-authored jobs.
+  // Bridge hook until the dedicated GPU allocation/update path lands: keep
+  // persistent GPU page-table and backend-private resolve-state resources
+  // synchronized while virtual raster consumes the authoritative resolved-page
+  // contract.
   OXGN_RNDR_API auto EnsureViewPageTableResources(ViewId view_id,
     std::uint32_t required_entry_count) -> ViewPageTableResources*;
   OXGN_RNDR_API auto StagePageTableUpload(ViewId view_id,
