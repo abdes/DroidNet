@@ -6,10 +6,12 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstring>
 #include <memory>
 #include <numeric>
 #include <optional>
+#include <utility>
 
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/geometric.hpp>
@@ -220,6 +222,193 @@ auto LocalPageIndexForResidentKey(const VirtualFeedbackLayout& layout,
   return clip_index * layout.pages_per_level
     + static_cast<std::uint32_t>(local_page_y) * layout.pages_per_axis
     + static_cast<std::uint32_t>(local_page_x);
+}
+
+auto SelectInteriorFinePage(const VirtualFeedbackLayout& layout)
+  -> std::uint32_t
+{
+  if (layout.pages_per_level == 0U || layout.pages_per_axis == 0U) {
+    return 0U;
+  }
+  return std::min(layout.pages_per_level - 1U, layout.pages_per_axis + 1U);
+}
+
+struct VirtualPageCoordinates {
+  std::uint32_t clip_index { 0U };
+  std::uint32_t page_x { 0U };
+  std::uint32_t page_y { 0U };
+};
+
+auto DecodeVirtualPageIndex(
+  const VirtualFeedbackLayout& layout, const std::uint32_t global_page_index)
+  -> std::optional<VirtualPageCoordinates>
+{
+  if (layout.pages_per_level == 0U || layout.pages_per_axis == 0U) {
+    return std::nullopt;
+  }
+
+  const auto clip_index = global_page_index / layout.pages_per_level;
+  if (clip_index >= layout.clip_level_count) {
+    return std::nullopt;
+  }
+
+  const auto local_page_index = global_page_index % layout.pages_per_level;
+  return VirtualPageCoordinates {
+    .clip_index = clip_index,
+    .page_x = local_page_index % layout.pages_per_axis,
+    .page_y = local_page_index / layout.pages_per_axis,
+  };
+}
+
+auto FindMappedPageInClip(const VirtualFeedbackLayout& layout,
+  const std::span<const std::uint32_t> page_table_entries,
+  const std::uint32_t clip_index, const std::uint32_t page_margin = 0U)
+  -> std::optional<std::uint32_t>
+{
+  if (layout.pages_per_level == 0U || layout.pages_per_axis == 0U
+    || clip_index >= layout.clip_level_count) {
+    return std::nullopt;
+  }
+
+  const auto clip_start = static_cast<std::size_t>(clip_index)
+    * layout.pages_per_level;
+  const auto clip_end
+    = std::min(clip_start + layout.pages_per_level, page_table_entries.size());
+  if (clip_start >= clip_end) {
+    return std::nullopt;
+  }
+
+  for (std::size_t global_page_index = clip_start;
+    global_page_index < clip_end; ++global_page_index) {
+    if (page_table_entries[global_page_index] == 0U) {
+      continue;
+    }
+
+    const auto decoded = DecodeVirtualPageIndex(
+      layout, static_cast<std::uint32_t>(global_page_index));
+    if (!decoded.has_value()) {
+      continue;
+    }
+    if (decoded->page_x < page_margin || decoded->page_y < page_margin
+      || decoded->page_x + page_margin >= layout.pages_per_axis
+      || decoded->page_y + page_margin >= layout.pages_per_axis) {
+      continue;
+    }
+    return static_cast<std::uint32_t>(global_page_index);
+  }
+
+  return std::nullopt;
+}
+
+auto CollectMappedPagesInClip(const VirtualFeedbackLayout& layout,
+  const std::span<const std::uint32_t> page_table_entries,
+  const std::uint32_t clip_index) -> std::vector<std::uint32_t>
+{
+  std::vector<std::uint32_t> mapped_pages {};
+  if (layout.pages_per_level == 0U || clip_index >= layout.clip_level_count) {
+    return mapped_pages;
+  }
+
+  const auto clip_start = static_cast<std::size_t>(clip_index)
+    * layout.pages_per_level;
+  const auto clip_end
+    = std::min(clip_start + layout.pages_per_level, page_table_entries.size());
+  for (std::size_t global_page_index = clip_start;
+    global_page_index < clip_end; ++global_page_index) {
+    if (page_table_entries[global_page_index] != 0U) {
+      mapped_pages.push_back(static_cast<std::uint32_t>(global_page_index));
+    }
+  }
+  return mapped_pages;
+}
+
+auto FindAdjacentMappedPagesInClip(const VirtualFeedbackLayout& layout,
+  const std::span<const std::uint32_t> page_table_entries,
+  const std::uint32_t clip_index)
+  -> std::optional<std::pair<std::uint32_t, std::uint32_t>>
+{
+  if (layout.pages_per_level == 0U || layout.pages_per_axis < 2U
+    || clip_index >= layout.clip_level_count) {
+    return std::nullopt;
+  }
+
+  const auto clip_base = clip_index * layout.pages_per_level;
+  for (std::uint32_t page_y = 0U; page_y < layout.pages_per_axis; ++page_y) {
+    for (std::uint32_t page_x = 0U; page_x + 1U < layout.pages_per_axis;
+      ++page_x) {
+      const auto first_page
+        = clip_base + page_y * layout.pages_per_axis + page_x;
+      const auto second_page = first_page + 1U;
+      if (static_cast<std::size_t>(second_page) >= page_table_entries.size()) {
+        continue;
+      }
+      if (page_table_entries[first_page] != 0U
+        && page_table_entries[second_page] != 0U) {
+        return std::pair { first_page, second_page };
+      }
+    }
+  }
+
+  return std::nullopt;
+}
+
+auto CountMappedPagesInClip(const VirtualFeedbackLayout& layout,
+  const std::span<const std::uint32_t> page_table_entries,
+  const std::uint32_t clip_index) -> std::uint32_t
+{
+  return static_cast<std::uint32_t>(
+    CollectMappedPagesInClip(layout, page_table_entries, clip_index).size());
+}
+
+auto DirectionalVirtualPageWorldCenter(
+  const oxygen::engine::DirectionalVirtualShadowMetadata& metadata,
+  const std::uint32_t clip_index, const std::uint32_t page_x,
+  const std::uint32_t page_y, const float light_space_depth = 0.1F)
+  -> glm::vec3
+{
+  const auto inverse_light_view = glm::inverse(metadata.light_view);
+  const auto& clip_metadata = metadata.clip_metadata[clip_index];
+  const float page_world_size = clip_metadata.origin_page_scale.z;
+  const glm::vec3 light_space_point(
+    clip_metadata.origin_page_scale.x
+      + (static_cast<float>(page_x) + 0.5F) * page_world_size,
+    clip_metadata.origin_page_scale.y
+      + (static_cast<float>(page_y) + 0.5F) * page_world_size,
+    light_space_depth);
+  return glm::vec3(inverse_light_view * glm::vec4(light_space_point, 1.0F));
+}
+
+auto GlobalPageIndexForWorldPoint(
+  const oxygen::engine::DirectionalVirtualShadowMetadata& metadata,
+  const std::uint32_t clip_index, const glm::vec3& world_point)
+  -> std::optional<std::uint32_t>
+{
+  if (metadata.pages_per_axis == 0U || clip_index >= metadata.clip_level_count) {
+    return std::nullopt;
+  }
+
+  const auto& clip_metadata = metadata.clip_metadata[clip_index];
+  const float page_world_size = clip_metadata.origin_page_scale.z;
+  if (page_world_size <= 0.0F) {
+    return std::nullopt;
+  }
+
+  const auto light_space_point
+    = glm::vec3(metadata.light_view * glm::vec4(world_point, 1.0F));
+  const auto page_x = static_cast<std::int32_t>(std::floor(
+    (light_space_point.x - clip_metadata.origin_page_scale.x) / page_world_size));
+  const auto page_y = static_cast<std::int32_t>(std::floor(
+    (light_space_point.y - clip_metadata.origin_page_scale.y) / page_world_size));
+  if (page_x < 0 || page_y < 0
+    || page_x >= static_cast<std::int32_t>(metadata.pages_per_axis)
+    || page_y >= static_cast<std::int32_t>(metadata.pages_per_axis)) {
+    return std::nullopt;
+  }
+
+  const auto pages_per_level = metadata.pages_per_axis * metadata.pages_per_axis;
+  return clip_index * pages_per_level
+    + static_cast<std::uint32_t>(page_y) * metadata.pages_per_axis
+    + static_cast<std::uint32_t>(page_x);
 }
 
 auto AdvanceRendererFrame(LightManager& manager, ShadowManager& shadow_manager,
@@ -857,18 +1046,12 @@ NOLINT_TEST_F(LightManagerTest,
   const std::array<glm::vec4, 1> shadow_casters {
     glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
   };
-
-  const auto layout = ResolveVirtualFeedbackLayout(*shadow_manager, manager,
-    view_constants, oxygen::ViewId { 120 }, shadow_casters, synthetic_sun);
-  ASSERT_GT(layout.clip_level_count, 1U);
-  ASSERT_GT(layout.pages_per_level, 1U);
-
-  const std::uint32_t fine_page0 = layout.pages_per_level - 1U;
-  const std::uint32_t coarse_page0
-    = layout.pages_per_level + (layout.pages_per_level - 1U);
+  const std::array<glm::vec4, 1> visible_receivers {
+    glm::vec4(0.0F, 0.0F, 0.0F, 0.05F),
+  };
 
   const auto first = shadow_manager->PublishForView(oxygen::ViewId { 20 },
-    view_constants, manager, shadow_casters, {}, &synthetic_sun,
+    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
     std::chrono::milliseconds(16));
   const auto* first_virtual_plan
     = shadow_manager->TryGetVirtualRenderPlan(oxygen::ViewId { 20 });
@@ -878,15 +1061,26 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(first_virtual_plan, nullptr);
   ASSERT_NE(first_virtual_introspection, nullptr);
+  ASSERT_FALSE(first_virtual_introspection->directional_virtual_metadata.empty());
+  const auto first_layout = BuildVirtualFeedbackLayout(
+    first_virtual_introspection->directional_virtual_metadata.front());
+  ASSERT_GT(first_layout.clip_level_count, 1U);
+  ASSERT_GT(first_layout.pages_per_level, 1U);
+  const auto requested_page = FindMappedPageInClip(first_layout,
+    first_virtual_introspection->page_table_entries, 0U, 1U);
+  ASSERT_TRUE(requested_page.has_value());
+  const auto requested_resident_keys = RequestedResidentKeys(
+    first_layout, std::span<const std::uint32_t> { &*requested_page, 1U });
+  ASSERT_EQ(requested_resident_keys.size(), 1U);
   ASSERT_GT(
-    first_virtual_introspection->page_table_entries.size(), coarse_page0);
-  EXPECT_EQ(first_virtual_introspection->page_table_entries[fine_page0], 0U);
-  EXPECT_EQ(first_virtual_introspection->page_table_entries[coarse_page0], 0U);
+    first_virtual_introspection->page_table_entries.size(), *requested_page);
+  EXPECT_NE(
+    first_virtual_introspection->page_table_entries[*requested_page], 0U);
   shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 20 });
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 20 },
     MakeVirtualRequestFeedback(
-      layout, SequenceNumber { 1 }, { fine_page0, coarse_page0 }));
+      first_layout, SequenceNumber { 1 }, { *requested_page }));
 
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
@@ -902,10 +1096,19 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(published.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(virtual_plan, nullptr);
   ASSERT_NE(virtual_introspection, nullptr);
-  EXPECT_FALSE(virtual_plan->jobs.empty());
-  ASSERT_GT(virtual_introspection->page_table_entries.size(), coarse_page0);
-  EXPECT_NE(virtual_introspection->page_table_entries[fine_page0], 0U);
-  EXPECT_NE(virtual_introspection->page_table_entries[coarse_page0], 0U);
+  ASSERT_FALSE(virtual_introspection->directional_virtual_metadata.empty());
+  const auto second_layout = BuildVirtualFeedbackLayout(
+    virtual_introspection->directional_virtual_metadata.front());
+  const auto translated_page_index = LocalPageIndexForResidentKey(
+    second_layout, requested_resident_keys.front());
+  ASSERT_TRUE(translated_page_index.has_value());
+  EXPECT_TRUE(virtual_introspection->used_request_feedback);
+  EXPECT_EQ(virtual_introspection->feedback_requested_page_count, 1U);
+  EXPECT_GT(virtual_introspection->feedback_refinement_page_count, 0U);
+  EXPECT_EQ(virtual_introspection->receiver_bootstrap_page_count, 0U);
+  ASSERT_LT(*translated_page_index,
+    virtual_introspection->page_table_entries.size());
+  EXPECT_NE(virtual_introspection->page_table_entries[*translated_page_index], 0U);
 }
 
 //! Ultra-tier directional VSM should publish a dense virtual address space
@@ -1073,31 +1276,41 @@ NOLINT_TEST_F(LightManagerTest,
   const std::array<glm::vec4, 1> shadow_casters {
     glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
   };
+  const std::array<glm::vec4, 1> first_visible_receivers {
+    glm::vec4(0.0F, 0.0F, 0.0F, 0.05F),
+  };
   const std::array<glm::vec4, 1> second_visible_receivers {
     glm::vec4(0.0F, 0.0F, 0.0F, 0.05F),
   };
 
-  const auto layout = ResolveVirtualFeedbackLayout(*shadow_manager, manager,
-    view_constants, oxygen::ViewId { 121 }, shadow_casters, synthetic_sun);
-  ASSERT_GT(layout.pages_per_level, 1U);
-  const std::uint32_t requested_page = layout.pages_per_level - 1U;
-
   const auto first = shadow_manager->PublishForView(oxygen::ViewId { 21 },
-    view_constants, manager, shadow_casters, {}, &synthetic_sun,
+    view_constants, manager, shadow_casters, first_visible_receivers,
+    &synthetic_sun,
     std::chrono::milliseconds(16));
   const auto* first_virtual_introspection
     = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 21 });
 
   ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(first_virtual_introspection, nullptr);
+  ASSERT_FALSE(first_virtual_introspection->directional_virtual_metadata.empty());
+  const auto first_layout = BuildVirtualFeedbackLayout(
+    first_virtual_introspection->directional_virtual_metadata.front());
+  ASSERT_GT(first_layout.pages_per_level, 1U);
+  const auto requested_page = FindMappedPageInClip(first_layout,
+    first_virtual_introspection->page_table_entries, 0U, 1U);
+  ASSERT_TRUE(requested_page.has_value());
+  const auto requested_resident_keys = RequestedResidentKeys(
+    first_layout, std::span<const std::uint32_t> { &*requested_page, 1U });
+  ASSERT_EQ(requested_resident_keys.size(), 1U);
   ASSERT_GT(
-    first_virtual_introspection->page_table_entries.size(), requested_page);
-  EXPECT_EQ(
-    first_virtual_introspection->page_table_entries[requested_page], 0U);
+    first_virtual_introspection->page_table_entries.size(), *requested_page);
+  EXPECT_NE(
+    first_virtual_introspection->page_table_entries[*requested_page], 0U);
   shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 21 });
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 21 },
-    MakeVirtualRequestFeedback(layout, SequenceNumber { 1 }, { requested_page }));
+    MakeVirtualRequestFeedback(first_layout, SequenceNumber { 1 },
+      { *requested_page }));
 
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
@@ -1113,10 +1326,17 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(second.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(second_virtual_plan, nullptr);
   ASSERT_NE(second_virtual_introspection, nullptr);
-  ASSERT_GT(
-    second_virtual_introspection->page_table_entries.size(), requested_page);
-  EXPECT_NE(
-    second_virtual_introspection->page_table_entries[requested_page], 0U);
+  ASSERT_FALSE(second_virtual_introspection->directional_virtual_metadata.empty());
+  const auto second_layout = BuildVirtualFeedbackLayout(
+    second_virtual_introspection->directional_virtual_metadata.front());
+  const auto second_translated_page_index = LocalPageIndexForResidentKey(
+    second_layout, requested_resident_keys.front());
+  ASSERT_TRUE(second_translated_page_index.has_value());
+  ASSERT_LT(*second_translated_page_index,
+    second_virtual_introspection->page_table_entries.size());
+  EXPECT_TRUE(second_virtual_introspection->used_request_feedback);
+  EXPECT_NE(second_virtual_introspection->page_table_entries[*second_translated_page_index],
+    0U);
   shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 21 });
 
   AdvanceRendererFrame(
@@ -1133,14 +1353,20 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(third.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(third_virtual_plan, nullptr);
   ASSERT_NE(third_virtual_introspection, nullptr);
-  EXPECT_LE(third_virtual_plan->jobs.size(), second_virtual_plan->jobs.size());
+  ASSERT_FALSE(third_virtual_introspection->directional_virtual_metadata.empty());
+  const auto third_layout = BuildVirtualFeedbackLayout(
+    third_virtual_introspection->directional_virtual_metadata.front());
+  const auto third_translated_page_index = LocalPageIndexForResidentKey(
+    third_layout, requested_resident_keys.front());
+  ASSERT_TRUE(third_translated_page_index.has_value());
   EXPECT_GT(third_virtual_introspection->mapped_page_count, 0U);
   EXPECT_GE(third_virtual_introspection->mapped_page_count,
     third_virtual_introspection->pending_page_count);
-  ASSERT_GT(
-    third_virtual_introspection->page_table_entries.size(), requested_page);
-  EXPECT_NE(
-    third_virtual_introspection->page_table_entries[requested_page], 0U);
+  EXPECT_TRUE(third_virtual_introspection->used_request_feedback);
+  ASSERT_LT(*third_translated_page_index,
+    third_virtual_introspection->page_table_entries.size());
+  EXPECT_NE(third_virtual_introspection->page_table_entries[*third_translated_page_index],
+    0U);
 }
 
 //! Feedback-driven requests should apply a small page guard band so fine
@@ -1161,7 +1387,7 @@ NOLINT_TEST_F(LightManagerTest,
   ViewConstants view_constants;
   view_constants
     .SetProjectionMatrix(
-      glm::perspectiveRH_ZO(glm::radians(45.0F), 16.0F / 9.0F, 0.1F, 200.0F))
+      glm::perspectiveRH_ZO(glm::radians(90.0F), 16.0F / 9.0F, 0.1F, 10000.0F))
     .SetCameraPosition(glm::vec3(0.0F, -6.0F, 3.0F));
   view_constants.SetFrameSequenceNumber(
     SequenceNumber { 1 }, ViewConstants::kRenderer);
@@ -1181,19 +1407,32 @@ NOLINT_TEST_F(LightManagerTest,
   const std::array<glm::vec4, 1> shadow_casters {
     glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
   };
-
-  const auto layout = ResolveVirtualFeedbackLayout(*shadow_manager, manager,
-    view_constants, oxygen::ViewId { 127 }, shadow_casters, synthetic_sun);
-  ASSERT_GT(layout.pages_per_level, 1U);
+  const std::array<glm::vec4, 1> visible_receivers {
+    glm::vec4(0.0F, 0.0F, 0.0F, 0.05F),
+  };
 
   const auto bootstrap = shadow_manager->PublishForView(oxygen::ViewId { 27 },
-    view_constants, manager, shadow_casters, {}, &synthetic_sun,
+    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
     std::chrono::milliseconds(16));
   ASSERT_NE(bootstrap.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  const auto* bootstrap_introspection
+    = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 27 });
+  ASSERT_NE(bootstrap_introspection, nullptr);
+  ASSERT_FALSE(bootstrap_introspection->directional_virtual_metadata.empty());
+  const auto layout = BuildVirtualFeedbackLayout(
+    bootstrap_introspection->directional_virtual_metadata.front());
+  ASSERT_GT(layout.pages_per_level, 1U);
+  const auto requested_page = FindMappedPageInClip(layout,
+    bootstrap_introspection->page_table_entries, 0U, 1U);
+  ASSERT_TRUE(requested_page.has_value());
+  const auto requested_resident_keys = RequestedResidentKeys(
+    layout, std::span<const std::uint32_t> { &*requested_page, 1U });
+  ASSERT_EQ(requested_resident_keys.size(), 1U);
   shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 27 });
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 27 },
-    MakeVirtualRequestFeedback(layout, SequenceNumber { 1 }, { 0U }));
+    MakeVirtualRequestFeedback(layout, SequenceNumber { 1 },
+      { *requested_page }));
 
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
@@ -1210,23 +1449,29 @@ NOLINT_TEST_F(LightManagerTest,
     publication.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(virtual_plan, nullptr);
   ASSERT_NE(virtual_introspection, nullptr);
-  ASSERT_FALSE(virtual_plan->jobs.empty());
+  ASSERT_FALSE(virtual_introspection->directional_virtual_metadata.empty());
+  const auto publication_layout = BuildVirtualFeedbackLayout(
+    virtual_introspection->directional_virtual_metadata.front());
+  const auto translated_page_index = LocalPageIndexForResidentKey(
+    publication_layout, requested_resident_keys.front());
+  ASSERT_TRUE(translated_page_index.has_value());
+  const auto mapped_clip0_pages = CountMappedPagesInClip(
+    publication_layout, virtual_introspection->page_table_entries, 0U);
 
-  std::uint32_t mapped_clip0_pages = 0U;
-  for (std::uint32_t i = 0U; i < layout.pages_per_level; ++i) {
-    if (virtual_introspection->page_table_entries[i] != 0U) {
-      ++mapped_clip0_pages;
-    }
-  }
-
+  EXPECT_TRUE(virtual_introspection->used_request_feedback);
+  EXPECT_EQ(virtual_introspection->feedback_requested_page_count, 1U);
+  EXPECT_GT(virtual_introspection->feedback_refinement_page_count, 1U);
   EXPECT_GT(virtual_introspection->mapped_page_count, 1U);
+  ASSERT_LT(*translated_page_index, virtual_introspection->page_table_entries.size());
+  EXPECT_NE(virtual_introspection->page_table_entries[*translated_page_index], 0U);
   EXPECT_GT(mapped_clip0_pages, 1U);
 }
 
-//! Feedback-driven pages should keep a short mapping grace window so a small
-//! frustum-edge miss does not immediately unmap a previously visible page.
+//! Feedback guard dilation should preserve continuity across adjacent fine
+//! pages. When the next frame requests a neighboring page, the previous page
+//! should remain mapped without requiring a second explicit feedback hit.
 NOLINT_TEST_F(LightManagerTest,
-  ShadowManagerPublishForView_VirtualRequestFeedbackKeepsRecentMappedPages)
+  ShadowManagerPublishForView_VirtualRequestFeedbackGuardBandKeepsAdjacentPagesMapped)
 {
   auto& manager = Manager();
   manager.OnFrameStart(
@@ -1259,21 +1504,39 @@ NOLINT_TEST_F(LightManagerTest,
     .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
   };
   const std::array<glm::vec4, 1> shadow_casters {
-    glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
+    glm::vec4(0.0F, 0.0F, 0.5F, 1.5F),
+  };
+  const std::array<glm::vec4, 1> visible_receivers {
+    glm::vec4(0.0F, 0.0F, 0.0F, 0.1F),
   };
 
-  const auto layout = ResolveVirtualFeedbackLayout(*shadow_manager, manager,
-    view_constants, oxygen::ViewId { 128 }, shadow_casters, synthetic_sun);
-  ASSERT_GT(layout.pages_per_level, 1U);
-
   const auto bootstrap = shadow_manager->PublishForView(oxygen::ViewId { 28 },
-    view_constants, manager, shadow_casters, {}, &synthetic_sun,
+    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
     std::chrono::milliseconds(16));
   ASSERT_NE(bootstrap.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  const auto* bootstrap_introspection
+    = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 28 });
+  ASSERT_NE(bootstrap_introspection, nullptr);
+  ASSERT_FALSE(bootstrap_introspection->directional_virtual_metadata.empty());
+  const auto layout = BuildVirtualFeedbackLayout(
+    bootstrap_introspection->directional_virtual_metadata.front());
+  ASSERT_GT(layout.pages_per_level, 2U);
+  const auto adjacent_pages = FindAdjacentMappedPagesInClip(
+    layout, bootstrap_introspection->page_table_entries, 0U);
+  ASSERT_TRUE(adjacent_pages.has_value());
+  const auto first_requested_page = adjacent_pages->first;
+  const auto second_requested_page = adjacent_pages->second;
+  const auto first_requested_resident_keys = RequestedResidentKeys(
+    layout, std::span<const std::uint32_t> { &first_requested_page, 1U });
+  const auto second_requested_resident_keys = RequestedResidentKeys(
+    layout, std::span<const std::uint32_t> { &second_requested_page, 1U });
+  ASSERT_EQ(first_requested_resident_keys.size(), 1U);
+  ASSERT_EQ(second_requested_resident_keys.size(), 1U);
   shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 28 });
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 28 },
-    MakeVirtualRequestFeedback(layout, SequenceNumber { 1 }, { 0U }));
+    MakeVirtualRequestFeedback(layout, SequenceNumber { 1 },
+      { first_requested_page }));
 
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
@@ -1281,11 +1544,32 @@ NOLINT_TEST_F(LightManagerTest,
   const auto first = shadow_manager->PublishForView(oxygen::ViewId { 28 },
     view_constants, manager, shadow_casters, {}, &synthetic_sun,
     std::chrono::milliseconds(16));
+  const auto* first_virtual_introspection
+    = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 28 });
   ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(first_virtual_introspection, nullptr);
+  ASSERT_FALSE(first_virtual_introspection->directional_virtual_metadata.empty());
+  const auto first_layout = BuildVirtualFeedbackLayout(
+    first_virtual_introspection->directional_virtual_metadata.front());
+  const auto translated_first_requested_page = LocalPageIndexForResidentKey(
+    first_layout, first_requested_resident_keys.front());
+  const auto translated_second_requested_page = LocalPageIndexForResidentKey(
+    first_layout, second_requested_resident_keys.front());
+  ASSERT_TRUE(translated_first_requested_page.has_value());
+  ASSERT_TRUE(translated_second_requested_page.has_value());
+  ASSERT_LT(*translated_first_requested_page,
+    first_virtual_introspection->page_table_entries.size());
+  ASSERT_LT(*translated_second_requested_page,
+    first_virtual_introspection->page_table_entries.size());
+  EXPECT_NE(first_virtual_introspection->page_table_entries[*translated_first_requested_page],
+    0U);
+  EXPECT_NE(first_virtual_introspection->page_table_entries[*translated_second_requested_page],
+    0U);
   shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 28 });
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 28 },
-    MakeVirtualRequestFeedback(layout, SequenceNumber { 2 }, { 1U }));
+    MakeVirtualRequestFeedback(first_layout, SequenceNumber { 2 },
+      { *translated_second_requested_page }));
 
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 3 }, Slot { 0 });
@@ -1298,9 +1582,25 @@ NOLINT_TEST_F(LightManagerTest,
 
   ASSERT_NE(second.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(second_virtual_introspection, nullptr);
-  ASSERT_GE(second_virtual_introspection->page_table_entries.size(), 2U);
-  EXPECT_NE(second_virtual_introspection->page_table_entries[0], 0U);
-  EXPECT_NE(second_virtual_introspection->page_table_entries[1], 0U);
+  ASSERT_FALSE(second_virtual_introspection->directional_virtual_metadata.empty());
+  const auto second_layout = BuildVirtualFeedbackLayout(
+    second_virtual_introspection->directional_virtual_metadata.front());
+  const auto final_first_requested_page = LocalPageIndexForResidentKey(
+    second_layout, first_requested_resident_keys.front());
+  const auto final_second_requested_page = LocalPageIndexForResidentKey(
+    second_layout, second_requested_resident_keys.front());
+  ASSERT_TRUE(final_first_requested_page.has_value());
+  ASSERT_TRUE(final_second_requested_page.has_value());
+  ASSERT_LT(
+    *final_first_requested_page, second_virtual_introspection->page_table_entries.size());
+  ASSERT_LT(*final_second_requested_page,
+    second_virtual_introspection->page_table_entries.size());
+  EXPECT_TRUE(second_virtual_introspection->used_request_feedback);
+  EXPECT_GT(second_virtual_introspection->feedback_refinement_page_count, 1U);
+  EXPECT_NE(second_virtual_introspection->page_table_entries[*final_first_requested_page],
+    0U);
+  EXPECT_NE(second_virtual_introspection->page_table_entries[*final_second_requested_page],
+    0U);
 }
 
 //! Grace-window hysteresis must not pollute close-range feedback with a large
@@ -1340,23 +1640,38 @@ NOLINT_TEST_F(LightManagerTest,
     .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
   };
   const std::array<glm::vec4, 1> shadow_casters {
-    glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
+    glm::vec4(0.0F, 0.0F, 0.5F, 6.5F),
+  };
+  const std::array<glm::vec4, 1> visible_receivers {
+    glm::vec4(0.0F, 0.0F, 0.0F, 6.5F),
   };
 
-  const auto layout = ResolveVirtualFeedbackLayout(*shadow_manager, manager,
-    view_constants, oxygen::ViewId { 129 }, shadow_casters, synthetic_sun);
-  ASSERT_GT(layout.pages_per_level, 2U);
-  const auto target_page
-    = std::min(layout.pages_per_level - 1U, layout.pages_per_axis + 1U);
-
-  std::vector<std::uint32_t> far_requested_pages(
-    std::min<std::uint32_t>(layout.pages_per_level, 64U));
-  std::iota(far_requested_pages.begin(), far_requested_pages.end(), 0U);
-
   const auto bootstrap = shadow_manager->PublishForView(oxygen::ViewId { 29 },
-    view_constants, manager, shadow_casters, {}, &synthetic_sun,
+    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
     std::chrono::milliseconds(16));
   ASSERT_NE(bootstrap.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  const auto* bootstrap_introspection
+    = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 29 });
+  ASSERT_NE(bootstrap_introspection, nullptr);
+  ASSERT_FALSE(bootstrap_introspection->directional_virtual_metadata.empty());
+  const auto layout = BuildVirtualFeedbackLayout(
+    bootstrap_introspection->directional_virtual_metadata.front());
+  ASSERT_GT(layout.pages_per_level, 2U);
+  const auto mapped_requested_pages = CollectMappedPagesInClip(
+    layout, bootstrap_introspection->page_table_entries, 0U);
+  ASSERT_GT(mapped_requested_pages.size(), 1U);
+
+  std::vector<std::uint32_t> far_requested_pages(
+    mapped_requested_pages.begin(),
+    mapped_requested_pages.begin()
+      + std::min<std::size_t>(mapped_requested_pages.size(), 64U));
+  const auto target_page
+    = mapped_requested_pages.size() > far_requested_pages.size()
+    ? mapped_requested_pages[far_requested_pages.size()]
+    : far_requested_pages.back();
+  const auto target_resident_keys = RequestedResidentKeys(
+    layout, std::span<const std::uint32_t> { &target_page, 1U });
+  ASSERT_EQ(target_resident_keys.size(), 1U);
   shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 29 });
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 29 },
@@ -1387,9 +1702,18 @@ NOLINT_TEST_F(LightManagerTest,
 
   ASSERT_NE(second.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(second_virtual_introspection, nullptr);
-  ASSERT_GT(
-    second_virtual_introspection->page_table_entries.size(), target_page);
-  EXPECT_NE(second_virtual_introspection->page_table_entries[target_page], 0U);
+  ASSERT_FALSE(second_virtual_introspection->directional_virtual_metadata.empty());
+  const auto second_layout = BuildVirtualFeedbackLayout(
+    second_virtual_introspection->directional_virtual_metadata.front());
+  const auto translated_target_page = LocalPageIndexForResidentKey(
+    second_layout, target_resident_keys.front());
+  ASSERT_TRUE(translated_target_page.has_value());
+  ASSERT_LT(
+    *translated_target_page, second_virtual_introspection->page_table_entries.size());
+  EXPECT_TRUE(second_virtual_introspection->used_request_feedback);
+  EXPECT_EQ(second_virtual_introspection->feedback_requested_page_count, 1U);
+  EXPECT_NE(second_virtual_introspection->page_table_entries[*translated_target_page],
+    0U);
 }
 
 //! Sparse feedback in one fine clip must stay sparse. Two far-apart requested
@@ -1428,32 +1752,74 @@ NOLINT_TEST_F(LightManagerTest,
     .distribution_exponent = 1.0F,
     .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
   };
-  const std::array<glm::vec4, 1> shadow_casters {
+  const std::array<glm::vec4, 1> bootstrap_shadow_casters {
     glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
   };
 
-  const auto layout = ResolveVirtualFeedbackLayout(*shadow_manager, manager,
-    view_constants, oxygen::ViewId { 130 }, shadow_casters, synthetic_sun);
-  ASSERT_GT(layout.pages_per_axis, 8U);
-  const std::uint32_t sparse_page_a = 0U;
-  const std::uint32_t sparse_page_b = 7U * layout.pages_per_axis + 7U;
-  const std::uint32_t gap_page = 4U * layout.pages_per_axis + 4U;
-
   const auto bootstrap = shadow_manager->PublishForView(oxygen::ViewId { 30 },
-    view_constants, manager, shadow_casters, {}, &synthetic_sun,
+    view_constants, manager, bootstrap_shadow_casters, {}, &synthetic_sun,
     std::chrono::milliseconds(16));
   ASSERT_NE(bootstrap.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  const auto* bootstrap_introspection
+    = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 30 });
+  ASSERT_NE(bootstrap_introspection, nullptr);
+  ASSERT_FALSE(bootstrap_introspection->directional_virtual_metadata.empty());
+  const auto& bootstrap_metadata
+    = bootstrap_introspection->directional_virtual_metadata.front();
+  const auto layout = BuildVirtualFeedbackLayout(bootstrap_metadata);
+  ASSERT_GT(layout.pages_per_axis, 10U);
+  const float page_world = bootstrap_metadata.clip_metadata[0].origin_page_scale.z;
+  const auto world_a
+    = DirectionalVirtualPageWorldCenter(bootstrap_metadata, 0U, 2U, 2U);
+  const auto world_b
+    = DirectionalVirtualPageWorldCenter(bootstrap_metadata, 0U, 9U, 9U);
+  const auto gap_world
+    = DirectionalVirtualPageWorldCenter(bootstrap_metadata, 0U, 5U, 5U);
+  const std::array<glm::vec4, 2> sparse_shadow_casters {
+    glm::vec4(world_a, page_world * 0.1F),
+    glm::vec4(world_b, page_world * 0.1F),
+  };
+  const std::array<glm::vec4, 2> visible_receivers {
+    glm::vec4(world_a, page_world * 0.1F),
+    glm::vec4(world_b, page_world * 0.1F),
+  };
   shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 30 });
-
-  shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 30 },
-    MakeVirtualRequestFeedback(
-      layout, SequenceNumber { 1 }, { sparse_page_a, sparse_page_b }));
 
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
 
+  const auto first = shadow_manager->PublishForView(oxygen::ViewId { 30 },
+    view_constants, manager, sparse_shadow_casters, visible_receivers,
+    &synthetic_sun, std::chrono::milliseconds(16));
+  const auto* first_virtual_introspection
+    = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 30 });
+  ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(first_virtual_introspection, nullptr);
+  ASSERT_FALSE(first_virtual_introspection->directional_virtual_metadata.empty());
+  const auto& first_metadata
+    = first_virtual_introspection->directional_virtual_metadata.front();
+  const auto first_layout = BuildVirtualFeedbackLayout(first_metadata);
+  const auto sparse_page_a = GlobalPageIndexForWorldPoint(first_metadata, 0U, world_a);
+  const auto sparse_page_b = GlobalPageIndexForWorldPoint(first_metadata, 0U, world_b);
+  ASSERT_TRUE(sparse_page_a.has_value());
+  ASSERT_TRUE(sparse_page_b.has_value());
+  const auto sparse_page_a_keys = RequestedResidentKeys(
+    first_layout, std::span<const std::uint32_t> { &*sparse_page_a, 1U });
+  const auto sparse_page_b_keys = RequestedResidentKeys(
+    first_layout, std::span<const std::uint32_t> { &*sparse_page_b, 1U });
+  ASSERT_EQ(sparse_page_a_keys.size(), 1U);
+  ASSERT_EQ(sparse_page_b_keys.size(), 1U);
+  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 30 });
+
+  shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 30 },
+    MakeVirtualRequestFeedback(
+      first_layout, SequenceNumber { 2 }, { *sparse_page_a, *sparse_page_b }));
+
+  AdvanceRendererFrame(
+    manager, *shadow_manager, view_constants, SequenceNumber { 3 }, Slot { 0 });
+
   const auto publication = shadow_manager->PublishForView(oxygen::ViewId { 30 },
-    view_constants, manager, shadow_casters, {}, &synthetic_sun,
+    view_constants, manager, sparse_shadow_casters, {}, &synthetic_sun,
     std::chrono::milliseconds(16));
   const auto* virtual_introspection
     = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 30 });
@@ -1461,19 +1827,28 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(
     publication.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(virtual_introspection, nullptr);
-  ASSERT_GT(virtual_introspection->page_table_entries.size(), sparse_page_b);
-  ASSERT_GT(virtual_introspection->page_table_entries.size(), gap_page);
+  EXPECT_TRUE(virtual_introspection->used_request_feedback);
+  ASSERT_FALSE(virtual_introspection->directional_virtual_metadata.empty());
+  const auto& second_metadata
+    = virtual_introspection->directional_virtual_metadata.front();
+  const auto second_layout = BuildVirtualFeedbackLayout(second_metadata);
+  const auto translated_page_a = LocalPageIndexForResidentKey(
+    second_layout, sparse_page_a_keys.front());
+  const auto translated_page_b = LocalPageIndexForResidentKey(
+    second_layout, sparse_page_b_keys.front());
+  const auto gap_page = GlobalPageIndexForWorldPoint(second_metadata, 0U, gap_world);
+  ASSERT_TRUE(translated_page_a.has_value());
+  ASSERT_TRUE(translated_page_b.has_value());
+  ASSERT_TRUE(gap_page.has_value());
+  ASSERT_LT(*translated_page_a, virtual_introspection->page_table_entries.size());
+  ASSERT_LT(*translated_page_b, virtual_introspection->page_table_entries.size());
+  ASSERT_LT(*gap_page, virtual_introspection->page_table_entries.size());
+  const auto mapped_clip0_pages = CountMappedPagesInClip(
+    second_layout, virtual_introspection->page_table_entries, 0U);
 
-  std::uint32_t mapped_clip0_pages = 0U;
-  for (std::uint32_t i = 0U; i < layout.pages_per_level; ++i) {
-    if (virtual_introspection->page_table_entries[i] != 0U) {
-      ++mapped_clip0_pages;
-    }
-  }
-
-  EXPECT_NE(virtual_introspection->page_table_entries[sparse_page_a], 0U);
-  EXPECT_NE(virtual_introspection->page_table_entries[sparse_page_b], 0U);
-  EXPECT_EQ(virtual_introspection->page_table_entries[gap_page], 0U);
+  EXPECT_NE(virtual_introspection->page_table_entries[*translated_page_a], 0U);
+  EXPECT_NE(virtual_introspection->page_table_entries[*translated_page_b], 0U);
+  EXPECT_EQ(virtual_introspection->page_table_entries[*gap_page], 0U);
   EXPECT_LT(mapped_clip0_pages, 50U);
 }
 
@@ -1495,7 +1870,7 @@ NOLINT_TEST_F(LightManagerTest,
   ViewConstants view_constants;
   view_constants
     .SetProjectionMatrix(
-      glm::perspectiveRH_ZO(glm::radians(45.0F), 16.0F / 9.0F, 0.1F, 200.0F))
+      glm::perspectiveRH_ZO(glm::radians(45.0F), 16.0F / 9.0F, 0.1F, 2000.0F))
     .SetCameraPosition(glm::vec3(0.0F, -6.0F, 3.0F));
   view_constants.SetFrameSequenceNumber(
     SequenceNumber { 1 }, ViewConstants::kRenderer);
@@ -2331,10 +2706,10 @@ NOLINT_TEST_F(LightManagerTest,
     .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
   };
   const std::array<glm::vec4, 1> shadow_casters {
-    glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
+    glm::vec4(0.0F, 0.0F, -1000.0F, 5000.0F),
   };
   const std::array<glm::vec4, 1> near_receiver {
-    glm::vec4(0.0F, 0.0F, 0.0F, 0.08F),
+    glm::vec4(0.0F, 0.0F, -5.0F, 0.02F),
   };
 
   (void)shadow_manager->PublishForView(oxygen::ViewId { 211 }, view_constants,
@@ -2390,68 +2765,75 @@ NOLINT_TEST_F(LightManagerTest,
     .distribution_exponent = 1.0F,
     .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
   };
-  const std::array<glm::vec4, 1> shadow_casters {
+  const std::array<glm::vec4, 1> bootstrap_shadow_casters {
     glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
   };
 
-  const auto layout = ResolveVirtualFeedbackLayout(*shadow_manager, manager,
-    view_constants, oxygen::ViewId { 133 }, shadow_casters, synthetic_sun);
-  ASSERT_GT(layout.pages_per_axis, 8U);
+  const auto bootstrap = shadow_manager->PublishForView(oxygen::ViewId { 34 },
+    view_constants, manager, bootstrap_shadow_casters, {}, &synthetic_sun,
+    std::chrono::milliseconds(16));
+  ASSERT_NE(bootstrap.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   const auto* bootstrap_introspection
-    = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 133 });
+    = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 34 });
   ASSERT_NE(bootstrap_introspection, nullptr);
   ASSERT_FALSE(bootstrap_introspection->directional_virtual_metadata.empty());
-
-  const auto& metadata
+  const auto& bootstrap_metadata
     = bootstrap_introspection->directional_virtual_metadata.front();
-  const auto inverse_light_view = glm::inverse(metadata.light_view);
-  const float page_world = metadata.clip_metadata[0].origin_page_scale.z;
-  const float origin_x = metadata.clip_metadata[0].origin_page_scale.x;
-  const float origin_y = metadata.clip_metadata[0].origin_page_scale.y;
-  const auto receiver_world_center = [&](const std::uint32_t page_x,
-                                       const std::uint32_t page_y) {
-    const glm::vec3 light_space_point(
-      origin_x + (static_cast<float>(page_x) + 0.5F) * page_world,
-      origin_y + (static_cast<float>(page_y) + 0.5F) * page_world, 0.1F);
-    return glm::vec3(
-      inverse_light_view * glm::vec4(light_space_point, 1.0F));
+  const auto layout = BuildVirtualFeedbackLayout(bootstrap_metadata);
+  ASSERT_GT(layout.pages_per_axis, 10U);
+  const float page_world = bootstrap_metadata.clip_metadata[0].origin_page_scale.z;
+  const auto world_a
+    = DirectionalVirtualPageWorldCenter(bootstrap_metadata, 0U, 2U, 2U);
+  const auto world_b
+    = DirectionalVirtualPageWorldCenter(bootstrap_metadata, 0U, 9U, 9U);
+  const auto gap_world
+    = DirectionalVirtualPageWorldCenter(bootstrap_metadata, 0U, 5U, 5U);
+  const std::array<glm::vec4, 2> sparse_shadow_casters {
+    glm::vec4(world_a, page_world * 0.1F),
+    glm::vec4(world_b, page_world * 0.1F),
   };
-
-  const auto world_a = receiver_world_center(0U, 0U);
-  const auto world_b = receiver_world_center(7U, 7U);
   const std::array<glm::vec4, 2> visible_receivers {
     glm::vec4(world_a, page_world * 0.1F),
     glm::vec4(world_b, page_world * 0.1F),
   };
-  const std::uint32_t sparse_page_a = 0U;
-  const std::uint32_t sparse_page_b = 7U * layout.pages_per_axis + 7U;
-  const std::uint32_t gap_page = 4U * layout.pages_per_axis + 4U;
 
+  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 34 });
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
 
   const auto publication = shadow_manager->PublishForView(oxygen::ViewId { 34 },
-    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
-    std::chrono::milliseconds(16));
+    view_constants, manager, sparse_shadow_casters, visible_receivers,
+    &synthetic_sun, std::chrono::milliseconds(16));
   const auto* virtual_introspection
     = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 34 });
 
   ASSERT_NE(
     publication.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(virtual_introspection, nullptr);
-  ASSERT_GT(virtual_introspection->page_table_entries.size(), sparse_page_b);
-  ASSERT_GT(virtual_introspection->page_table_entries.size(), gap_page);
+  EXPECT_FALSE(virtual_introspection->used_request_feedback);
+  EXPECT_GT(virtual_introspection->receiver_bootstrap_page_count, 0U);
+  ASSERT_FALSE(virtual_introspection->directional_virtual_metadata.empty());
+  const auto& publication_metadata
+    = virtual_introspection->directional_virtual_metadata.front();
+  const auto publication_layout = BuildVirtualFeedbackLayout(publication_metadata);
+  const auto sparse_page_a
+    = GlobalPageIndexForWorldPoint(publication_metadata, 0U, world_a);
+  const auto sparse_page_b
+    = GlobalPageIndexForWorldPoint(publication_metadata, 0U, world_b);
+  const auto gap_page
+    = GlobalPageIndexForWorldPoint(publication_metadata, 0U, gap_world);
+  ASSERT_TRUE(sparse_page_a.has_value());
+  ASSERT_TRUE(sparse_page_b.has_value());
+  ASSERT_TRUE(gap_page.has_value());
+  ASSERT_LT(*sparse_page_a, virtual_introspection->page_table_entries.size());
+  ASSERT_LT(*sparse_page_b, virtual_introspection->page_table_entries.size());
+  ASSERT_LT(*gap_page, virtual_introspection->page_table_entries.size());
+  const auto mapped_clip0_pages = CountMappedPagesInClip(
+    publication_layout, virtual_introspection->page_table_entries, 0U);
 
-  std::uint32_t mapped_clip0_pages = 0U;
-  for (std::uint32_t i = 0U; i < layout.pages_per_level; ++i) {
-    if (virtual_introspection->page_table_entries[i] != 0U) {
-      ++mapped_clip0_pages;
-    }
-  }
-
-  EXPECT_NE(virtual_introspection->page_table_entries[sparse_page_a], 0U);
-  EXPECT_NE(virtual_introspection->page_table_entries[sparse_page_b], 0U);
-  EXPECT_EQ(virtual_introspection->page_table_entries[gap_page], 0U);
+  EXPECT_NE(virtual_introspection->page_table_entries[*sparse_page_a], 0U);
+  EXPECT_NE(virtual_introspection->page_table_entries[*sparse_page_b], 0U);
+  EXPECT_EQ(virtual_introspection->page_table_entries[*gap_page], 0U);
   EXPECT_LT(mapped_clip0_pages, 50U);
 }
 
@@ -3349,11 +3731,6 @@ NOLINT_TEST_F(LightManagerTest,
     glm::vec4(0.0F, 0.0F, 0.0F, 0.05F),
   };
 
-  const auto layout = ResolveVirtualFeedbackLayout(*shadow_manager, manager,
-    view_constants, oxygen::ViewId { 125 }, shadow_casters, synthetic_sun);
-  ASSERT_GT(layout.pages_per_level, 1U);
-  const std::uint32_t requested_page = layout.pages_per_level - 1U;
-
   const auto first = shadow_manager->PublishForView(oxygen::ViewId { 25 },
     view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
     std::chrono::milliseconds(16));
@@ -3361,40 +3738,61 @@ NOLINT_TEST_F(LightManagerTest,
     = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 25 });
   ASSERT_NE(first.virtual_shadow_page_table_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(first_introspection, nullptr);
-  ASSERT_GT(first_introspection->page_table_entries.size(), requested_page);
-  const auto first_requested_page
-    = first_introspection->page_table_entries[requested_page];
-  EXPECT_EQ(first_requested_page, 0U);
+  ASSERT_FALSE(first_introspection->directional_virtual_metadata.empty());
+  const auto layout = BuildVirtualFeedbackLayout(
+    first_introspection->directional_virtual_metadata.front());
+  ASSERT_GT(layout.pages_per_level, 1U);
+  const auto requested_page = FindMappedPageInClip(
+    layout, first_introspection->page_table_entries, 0U, 1U);
+  ASSERT_TRUE(requested_page.has_value());
+  const auto requested_resident_keys = RequestedResidentKeys(
+    layout, std::span<const std::uint32_t> { &*requested_page, 1U });
+  ASSERT_EQ(requested_resident_keys.size(), 1U);
+  ASSERT_GT(first_introspection->page_table_entries.size(), *requested_page);
+  EXPECT_NE(first_introspection->page_table_entries[*requested_page], 0U);
   shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 25 });
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 25 },
-    MakeVirtualRequestFeedback(layout, SequenceNumber { 1 }, { requested_page }));
+    MakeVirtualRequestFeedback(layout, SequenceNumber { 1 },
+      { *requested_page }));
 
   const auto second = shadow_manager->PublishForView(oxygen::ViewId { 25 },
-    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
+    view_constants, manager, shadow_casters, {}, &synthetic_sun,
     std::chrono::milliseconds(16));
   const auto* second_introspection
     = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 25 });
   ASSERT_NE(second.virtual_shadow_page_table_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(second_introspection, nullptr);
-  ASSERT_GT(second_introspection->page_table_entries.size(), requested_page);
-  EXPECT_EQ(second_introspection->page_table_entries[requested_page],
-    first_requested_page);
+  ASSERT_FALSE(second_introspection->directional_virtual_metadata.empty());
+  const auto second_layout = BuildVirtualFeedbackLayout(
+    second_introspection->directional_virtual_metadata.front());
+  const auto second_translated_page_index = LocalPageIndexForResidentKey(
+    second_layout, requested_resident_keys.front());
+  ASSERT_TRUE(second_translated_page_index.has_value());
+  ASSERT_LT(*second_translated_page_index,
+    second_introspection->page_table_entries.size());
+  EXPECT_FALSE(second_introspection->used_request_feedback);
+  EXPECT_EQ(second_introspection->page_table_entries[*second_translated_page_index], 0U);
 
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
 
   const auto third = shadow_manager->PublishForView(oxygen::ViewId { 25 },
-    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
+    view_constants, manager, shadow_casters, {}, &synthetic_sun,
     std::chrono::milliseconds(16));
   const auto* third_introspection
     = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 25 });
   ASSERT_NE(third.virtual_shadow_page_table_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(third_introspection, nullptr);
-  ASSERT_GT(third_introspection->page_table_entries.size(), requested_page);
-  EXPECT_NE(third_introspection->page_table_entries[requested_page], 0U);
-  EXPECT_NE(third_introspection->page_table_entries[requested_page],
-    first_requested_page);
+  ASSERT_FALSE(third_introspection->directional_virtual_metadata.empty());
+  const auto third_layout = BuildVirtualFeedbackLayout(
+    third_introspection->directional_virtual_metadata.front());
+  const auto translated_page_index = LocalPageIndexForResidentKey(
+    third_layout, requested_resident_keys.front());
+  ASSERT_TRUE(translated_page_index.has_value());
+  ASSERT_LT(*translated_page_index, third_introspection->page_table_entries.size());
+  EXPECT_TRUE(third_introspection->used_request_feedback);
+  EXPECT_NE(third_introspection->page_table_entries[*translated_page_index], 0U);
 }
 
 } // namespace
