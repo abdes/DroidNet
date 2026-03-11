@@ -20,21 +20,30 @@ cbuffer RootConstants : register(b2, space0)
 struct VirtualShadowAtlasDebugPassConstants
 {
     uint source_texture_index;
+    uint tile_state_buffer_index;
     uint output_texture_uav_index;
+    uint padding0;
     uint2 atlas_dimensions;
+    uint atlas_tiles_per_axis;
     uint page_size_texels;
-    uint _pad0;
 };
 
 static float3 ResolveAtlasDebugColor(
     uint2 pixel_xy,
+    uint atlas_tiles_per_axis,
     uint page_size_texels,
+    uint tile_state,
     float depth)
 {
+    const uint2 local_xy = page_size_texels > 0u
+        ? uint2(pixel_xy.x % page_size_texels, pixel_xy.y % page_size_texels)
+        : 0u.xx;
     const bool page_border =
         page_size_texels > 0u
-        && ((pixel_xy.x % page_size_texels) == 0u
-            || (pixel_xy.y % page_size_texels) == 0u);
+        && (local_xy.x <= 1u
+            || local_xy.y <= 1u
+            || local_xy.x + 2u >= page_size_texels
+            || local_xy.y + 2u >= page_size_texels);
     const bool cleared = depth >= 0.99999;
     const float checker = (((pixel_xy.x >> 4u) + (pixel_xy.y >> 4u)) & 1u) != 0u
         ? 1.0
@@ -50,9 +59,15 @@ static float3 ResolveAtlasDebugColor(
     }
 
     if (page_border) {
-        color = cleared
-            ? float3(0.18, 0.24, 0.18)
-            : float3(0.10, 0.95, 0.15);
+        if (tile_state == 3u) {
+            color = float3(1.00, 1.00, 0.00);
+        } else if (tile_state == 2u) {
+            color = float3(0.10, 0.95, 0.15);
+        } else if (tile_state == 1u) {
+            color = float3(0.52, 0.52, 0.58);
+        } else if (atlas_tiles_per_axis > 0u) {
+            color = float3(0.08, 0.32, 1.00);
+        }
     }
 
     return color;
@@ -70,6 +85,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     ConstantBuffer<VirtualShadowAtlasDebugPassConstants> pass_constants =
         ResourceDescriptorHeap[g_PassConstantsIndex];
     if (!BX_IN_GLOBAL_SRV(pass_constants.source_texture_index)
+        || !BX_IN_GLOBAL_SRV(pass_constants.tile_state_buffer_index)
         || !BX_IsValidSlot(pass_constants.output_texture_uav_index)) {
         return;
     }
@@ -81,13 +97,26 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
     Texture2D<float> source_texture =
         ResourceDescriptorHeap[pass_constants.source_texture_index];
+    StructuredBuffer<uint> tile_states =
+        ResourceDescriptorHeap[pass_constants.tile_state_buffer_index];
     RWTexture2D<float4> output_texture =
         ResourceDescriptorHeap[pass_constants.output_texture_uav_index];
 
     const float depth = source_texture.Load(int3(dispatch_thread_id.xy, 0));
+    const uint page_size_texels = max(pass_constants.page_size_texels, 1u);
+    const uint2 tile_xy = dispatch_thread_id.xy / page_size_texels;
+    uint tile_state = 0u;
+    if (tile_xy.x < pass_constants.atlas_tiles_per_axis
+        && tile_xy.y < pass_constants.atlas_tiles_per_axis) {
+        const uint tile_index
+            = tile_xy.y * pass_constants.atlas_tiles_per_axis + tile_xy.x;
+        tile_state = tile_states[tile_index];
+    }
     const float3 color = ResolveAtlasDebugColor(
         dispatch_thread_id.xy,
-        max(pass_constants.page_size_texels, 1u),
+        pass_constants.atlas_tiles_per_axis,
+        page_size_texels,
+        tile_state,
         depth);
     output_texture[dispatch_thread_id.xy] = float4(color, 1.0);
 }

@@ -1390,6 +1390,185 @@ Continuous improvements, not milestones:
 
 ## Revision History
 
+- **March 11, 2026**: Implemented the first runtime realignment for the
+  directional VSM churn diagnosed from low-fps `RenderScene` logs. The
+  directional address-space comparator now ignores all light-view translation,
+  which stops camera-driven XY snapping from being treated as a brand-new
+  address space, and the coarse fallback backbone now clamps its frustum depth
+  span to the visible receiver depth range when receiver bounds are available.
+  Validation evidence:
+  `Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*`
+  passed `29/29`, the full `Oxygen.Renderer.LightManager.Tests.exe` run passed
+  `41/41`, `oxygen-examples-renderscene.vcxproj` rebuilt successfully, and
+  `Oxygen.Examples.RenderScene.exe --frames 12 --fps 3 --directional-shadows virtual-only`
+  produced a short `INFO` log capture showing steady-state directional demand
+  drop from the prior `selected=2275 coarse=1788` baseline to `selected=601
+  coarse=48`. Status remains `in_progress` until live camera-motion captures
+  confirm the atlas no longer full-wipes during translation/rotation.
+- **March 11, 2026**: Corrected the active VSM troubleshooting scope after
+  low-fps `RenderScene` log analysis. The atlas-inspector state split was
+  necessary, but not sufficient: runtime evidence showed two deeper faults in
+  the directional VSM cache/request path. First, the directional
+  address-space/feedback comparator still included XY light-view translation, so
+  camera motion could flip `address_space_compatible=false` and release all
+  resident pages even when the absolute page lattice remained valid. Second, the
+  coarse fallback backbone was derived from the full camera frustum out to the
+  projection far plane, which caused a tiny scene to request thousands of
+  coarse pages and keep every resident tile marked as used. Status remains
+  `in_progress` until the comparator and coarse-selection fixes are implemented
+  and validated with focused VSM tests plus another short low-fps `RenderScene`
+  log run.
+- **March 11, 2026**: Reworked the `RenderScene` VSM atlas inspector to use
+  actual backend-exported physical-tile state instead of depth-only inference.
+  `VirtualShadowMapBackend` now exports one atlas-tile state per physical page
+  (`cleared`, `reused`, `rewritten`), `VirtualShadowAtlasDebugPass` uploads that
+  state into a structured SRV, and `VirtualShadowAtlasDebug.hlsl` colors page
+  borders from the real frame classification. Validation evidence:
+  `oxygen-graphics-direct3d12_shaders.vcxproj` built, `26/26` VSM-focused
+  LightManager tests passed, `38/38` LightManager tests passed,
+  `oxygen-examples-renderscene.vcxproj` rebuilt successfully with
+  `/p:UseMultiToolTask=false /p:CL_MPCount=1`, and
+  `Oxygen.Examples.RenderScene.exe --frames 4 --fps 3 --directional-shadows virtual-only`
+  exited cleanly. Status remains `in_progress` until live atlas captures confirm
+  whether motion is dominated by `rewritten` borders or true reuse.
+- **March 11, 2026**: Fixed a `VirtualShadowAtlasDebugPass` constant-buffer
+  packing bug that collapsed the atlas inspector vertically. The pass constants
+  now include explicit padding between the three bindless indices and
+  `atlas_dimensions`, with compile-time offset assertions in
+  `VirtualShadowAtlasDebugPass.cpp`, and the HLSL constant buffer matches that
+  layout. Validation evidence: the shader target rebuilt successfully and
+  `Oxygen.Examples.RenderScene.exe --frames 4 --fps 3 --directional-shadows virtual-only`
+  exited cleanly after the change. Status remains `in_progress` until the live
+  inspector image is visually confirmed.
+- **March 11, 2026**: Adjusted the atlas-inspector legend colors to improve
+  state readability during camera motion. `rewritten` borders are now pure
+  yellow, `reused` stays green, and `cleared` borders use a stronger blue so
+  they are distinguishable from both occupied depth fill and rewritten tiles.
+  Validation evidence: the shader target rebuilt successfully and
+  `Oxygen.Examples.RenderScene.exe --frames 4 --fps 3 --directional-shadows virtual-only`
+  exited cleanly after the change. Status remains `in_progress` until live
+  captures confirm the legend is readable in motion.
+- **March 11, 2026**: Corrected the atlas-inspector semantics so stable green
+  no longer means "resident anywhere in the cache". The backend now separates
+  `cleared`, `cached-but-unrequested`, `requested-and-reused`, and `rewritten`
+  physical tiles. This makes stable frames show only actually requested reused
+  pages in green, while stale carried cache lines are shown separately.
+  Validation evidence: renderer tests and a short `RenderScene` smoke run are
+  required after the implementation change. Status remains `in_progress` until
+  that evidence is recorded.
+- **March 11, 2026**: Runtime validation expanded again after the low-fps
+  `RenderScene` two-cube capture showed that reduced atlas churn did not imply
+  stable shadows under camera motion. The current accepted-feedback path drops
+  current-frame fine receiver seeding to zero as soon as delayed request
+  feedback becomes available, which is too aggressive for motion: the cache
+  reuse improves, but fine-page demand becomes temporally stale and visible
+  shading can pop or degrade while moving. The corrected scope is now:
+  accepted feedback must remain the primary sparse signal, but the backend
+  also needs a bounded current-frame fine reinforcement path that does not
+  explode back into the old dense receiver bootstrap. Validation evidence so
+  far: `out/build-vs/vsm-two-cubes-runtime-20260311.txt` confirms the simple
+  scene settles to sparse accepted feedback (`selected=601`, `receiver_bootstrap=0`)
+  after warm-up, so the remaining gap is motion stability rather than total
+  cold-frame churn. Status remains `in_progress` until that hybrid path is
+  implemented and revalidated.
+- **March 11, 2026**: Implemented the first runtime-stability correction for
+  accepted feedback. `VirtualShadowMapBackend` no longer treats
+  `feedback accepted` as `current-frame fine receivers = zero`. Instead it keeps
+  feedback as the primary sparse signal and adds a tightly clamped
+  current-frame reinforcement band on the nearest fine clips. New diagnostics
+  separate `receiver_bootstrap_pages` from
+  `current_frame_reinforcement_pages`, and the focused regression now verifies that a
+  translated clip shift under accepted feedback keeps bootstrap at zero while
+  still adding bounded current-frame reinforcement. Validation evidence:
+  `Oxygen.Renderer.LightManager.Tests.vcxproj` rebuilt,
+  `Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*`
+  passed `29/29`,
+  `Oxygen.Renderer.LightManager.Tests.exe` passed `41/41`,
+  `oxygen-examples-renderscene.vcxproj` rebuilt, and
+  `out/build-vs/vsm-two-cubes-runtime-20260311-hybrid.txt` now shows steady
+  accepted-feedback frames with `receiver_bootstrap=0`,
+  `receiver_reinforce=51`, `selected=652`, and `rerasterized=0`. Status
+  remains `in_progress` until live camera-motion validation confirms this
+  removes the visible instability instead of only improving the static settle
+  state.
+- **March 11, 2026**: Motion validation uncovered a flaw in that first
+  reinforcement pass: reinforcing around receiver-bound centers is not a good
+  approximation for large receivers like the floor. It can preserve pages on
+  visible caster surfaces while still missing the actual current-frame floor
+  shadow footprint, which matches the reported "partial" shadows and shadows
+  appearing on top faces. The corrected scope is narrower and more rendering-
+  faithful: accepted feedback should be complemented by a bounded current-frame
+  frustum reinforcement on the nearest fine clips, not by object-center
+  reinforcement. Status remains `in_progress` until that correction is
+  implemented and revalidated.
+- **March 11, 2026**: Low-fps `RenderScene` validation showed that the
+  frustum-reinforcement correction was itself too aggressive. In the two-cube
+  static scene, accepted-feedback frames expanded to `selected=9770` and
+  `current_reinforce=9122`, causing allocator pressure (`allocated=1531`,
+  `evicted=1531`, `alloc_failures=8234`) even though only two small casters and
+  a tiny receiver area were on screen. That means reinforcing whole fine-frustum
+  regions is not viable. The corrected scope is now: keep accepted feedback as
+  the primary sparse signal and reinforce only the newly exposed fine-page
+  delta bands between the previous and current view regions. Status remains
+  `in_progress` until that narrower delta-band path is implemented and
+  revalidated with focused tests plus another low-fps runtime capture.
+- **March 11, 2026**: Replaced the accepted-feedback whole-frustum
+  reinforcement with absolute frustum-delta reinforcement. `VirtualShadowMapBackend`
+  now stores per-clip frustum regions in absolute resident-page space and, when
+  delayed request feedback is accepted, reinforces only the newly exposed
+  fine-page delta bands between the previous and current view regions. The
+  delta path is capped per clip so a bad comparison cannot silently explode
+  back into whole-frustum fine selection. Validation evidence:
+  `Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*`
+  passed `29/29`,
+  `Oxygen.Renderer.LightManager.Tests.exe` passed `41/41`, and
+  `out/build-vs/vsm-two-cubes-runtime-20260311-delta.txt` shows accepted-feedback
+  frames at `selected=778`, `current_reinforce=169`, `alloc_failures=0`, and
+  steady reuse (`reused=778`, `rerasterized=0`) after warm-up instead of the
+  previous `selected=9770/current_reinforce=9122` regression. Status remains
+  `in_progress` until live camera-motion validation confirms the visible
+  shadow instability is gone as well as the allocator churn.
+- **March 11, 2026**: Live motion feedback uncovered a deeper flaw in that
+  frustum-delta reinforcement: it was comparing the current view region
+  against the immediately previous frame, while the accepted page seed was
+  still coming from an older request-feedback source frame. Under motion, that
+  means the patch band can cover only the last frame's movement even though
+  the reused page set is several frames older. The corrected scope is to store
+  the feedback source-frame frustum regions alongside the accepted feedback and
+  compute the current reinforcement band against that source region, not the
+  previous publication. Status remains `in_progress` until that baseline fix is
+  implemented and revalidated.
+- **March 11, 2026**: Runtime troubleshooting still shows partially rendered
+  or misplaced directional shadows after the cache/request optimization even
+  when allocator churn is reduced. The newly identified scope gap is cached
+  page-content validity: the directional reuse gate currently ignores the
+  depth-normalization terms (`bias_reserved.x` / effective light-space depth
+  basis) when deciding whether an old page can stay clean. That can preserve
+  the page cache while reusing depth contents generated under a different
+  light-space depth mapping, which directly matches the remaining symptoms
+  (partial shadows, detached shadows, and self-shadowing on top faces). The
+  corrected next step is to tighten content reuse so that address-space reuse
+  remains broad, but clean page reuse is invalidated whenever the directional
+  depth mapping changes. Status remains `in_progress` until that fix is
+  implemented and validated with focused integration coverage plus runtime
+  evidence.
+- **March 11, 2026**: Tightened directional clean-page reuse so cached page
+  contents are no longer treated as valid when the light-space depth basis
+  changes. `VirtualShadowMapBackend` now distinguishes directional address-space
+  compatibility from directional content compatibility: address-space reuse
+  still ignores page-aligned XY lattice motion, but content reuse preserves the
+  light-view Z translation and the depth-mapping terms needed by shader-side
+  VSM comparisons. Validation evidence:
+  `ShadowManagerPublishForView_VirtualInvalidatesCleanPagesWhenDepthMappingChanges`
+  passed, the full focused VSM slice passed `31/31`, the full
+  `Oxygen.Renderer.LightManager.Tests.exe` run passed `43/43`, and a low-fps
+  runtime smoke run completed successfully via
+  `out/build-vs/bin/Debug/Oxygen.Examples.RenderScene.exe --frames 12 --fps 3 --directional-shadows virtual-only`
+  with log capture in
+  `out/build-vs/vsm-runtime-20260311-depth-reuse-gate.txt`. Overall status
+  remains `in_progress` because interactive visual validation of the reported
+  motion artifacts still has to be confirmed in the live demo.
+
 - **March 9, 2026**: Completed the multi-technique shadow remediation for the
   working conventional raster path: split shading publication from raster
   planning, introduced `ConventionalShadowBackend`, replaced the

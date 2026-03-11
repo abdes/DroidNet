@@ -22,6 +22,13 @@ enum class VirtualPageResidencyState : std::uint8_t {
   kPendingRender = 3U,
 };
 
+enum class VirtualShadowAtlasTileDebugState : std::uint32_t {
+  kCleared = 0U,
+  kCached = 1U,
+  kReused = 2U,
+  kRewritten = 3U,
+};
+
 struct VirtualShadowRasterJob {
   std::uint32_t shadow_instance_index { 0xFFFFFFFFU };
   std::uint32_t payload_index { 0xFFFFFFFFU };
@@ -45,11 +52,23 @@ struct VirtualShadowViewIntrospection {
     directional_virtual_metadata {};
   std::span<const VirtualShadowRasterJob> virtual_raster_jobs {};
   std::span<const std::uint32_t> page_table_entries {};
+  std::span<const std::uint32_t> atlas_tile_debug_states {};
+  bool used_request_feedback { false };
   std::uint32_t mapped_page_count { 0U };
   std::uint32_t resident_page_count { 0U };
   std::uint32_t clean_page_count { 0U };
   std::uint32_t dirty_page_count { 0U };
   std::uint32_t pending_page_count { 0U };
+  std::uint32_t selected_page_count { 0U };
+  std::uint32_t coarse_backbone_page_count { 0U };
+  std::uint32_t feedback_requested_page_count { 0U };
+  std::uint32_t feedback_refinement_page_count { 0U };
+  std::uint32_t receiver_bootstrap_page_count { 0U };
+  std::uint32_t current_frame_reinforcement_page_count { 0U };
+  std::uint64_t current_frame_reinforcement_reference_frame { 0U };
+  std::uint32_t allocated_page_count { 0U };
+  std::uint32_t evicted_page_count { 0U };
+  std::uint32_t rerasterized_page_count { 0U };
 };
 
 } // namespace oxygen::renderer
