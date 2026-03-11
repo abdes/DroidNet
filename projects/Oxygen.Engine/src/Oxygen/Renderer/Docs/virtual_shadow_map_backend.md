@@ -139,8 +139,10 @@ Current runtime note:
 - request generation is footprint-driven:
   - the request producer chooses the coarsest containing clip whose logical
     texel size still matches the receiver footprint
-  - it requests that clip, optionally one finer clip near the threshold, and
-    all containing coarser clips for guaranteed fallback
+  - it requests that clip plus an optional finer prefetch clip near the
+    threshold
+  - guaranteed coarser fallback comes from the backend-owned coarse clip
+    backbone, not from redundantly emitting every coarser clip into feedback
 - shading is not footprint-driven:
   - shading samples the finest available containing clip first
   - if that page is invalid, it falls back coherently to coarser clips
@@ -417,9 +419,11 @@ For each sampled receiver location:
 1. reconstruct world position
 2. test whether the active directional virtual product is relevant
 3. transform to the product's light space
-4. choose the finest clip level covering the point
+4. choose the footprint-selected clip level: the coarsest containing clip whose
+   logical texel size still matches the receiver footprint
 5. compute `(page_x, page_y)` for that level
-6. mark or append a request
+6. mark that clip and optionally one finer prefetch clip; the C++ backend keeps
+   the mandatory coarse fallback backbone resident separately
 
 The sparse request pass may be full-resolution or downsampled; the first
 shipping sparse path should start with a downsampled compute pass to bound
@@ -451,6 +455,9 @@ Current live note:
   coverage does not disappear exactly at the camera frustum edge
 - feedback-driven requests now build stable per-clip requested regions instead
   of feeding sparse per-page hits directly into selection
+- feedback now carries only the footprint-selected clip and optional finer
+  prefetch clip; the mandatory coarse clip backbone remains backend-owned so
+  feedback does not bloat the key set with redundant coarse pages
 - the planner must combine those regions with a mandatory coarse clip backbone
   so oversubscription cannot leave fine pages without valid coarser fallback
 - virtual pages-per-axis stays fixed per quality tier; correctness is preserved
@@ -893,9 +900,13 @@ Implementation status, March 10, 2026:
 - Cache/invalidation realignment, March 10, 2026:
   - canonical resident-page keys now drive request selection, `MarkRendered`,
     eviction, and raster-job tracking
-  - content reuse now tolerates page-aligned clip-origin motion, light-space Z
-    drift, and depth-bias-only changes while preserving correct rerasterization
-    on depth-scale or XY lattice changes
+  - address-space compatibility ignores only light-space Z pull-back padding;
+    snapped XY light-view translation participates so a clip-lattice jump
+    invalidates stale feedback/resident mappings instead of silently reusing
+    them
+  - content reuse still tolerates page-aligned XY clip-origin motion, but it
+    rerasterizes when the light-space Z basis or effective depth-bias mapping
+    changes
   - directional feedback compatibility now tracks the clipmap lattice instead
     of only frame age and page-table layout
   - invalidation now dirties overlapping resident pages from changed caster
@@ -1123,18 +1134,23 @@ Update, March 11, 2026 runtime churn diagnosis:
 - low-fps `RenderScene` logs showed that the atlas-inspector semantics were not
   the only issue
 - the current runtime churn has two upstream causes:
-  - directional address-space comparison still included XY light-view
-    translation, so camera motion could force `address_space_compatible=false`
-    and release all resident pages even when the absolute virtual page keys
-    stayed valid
+  - directional address-space comparison was still zeroing XY light-view
+    translation, so a snapped light  -   Feedback age thresholding prevents stale pages from accumulating.
+  -   Current frame request overlap uses heuristics instead of full raycasts to ensure responsiveness under rapid motion.
+  -   **Caster Culling:** Pages requested by viewport receivers are bounds-tested against known 2D shadow caster footprints in light space. Any requested page that does not intersect a caster is discarded prior to allocation. The unmapped page gracefully defaults to fully lit upon sampling, drastically reducing GPU page/bandwidth churn for empty regions.
+
+-   **Caching Matrix:** The overall decision matrix takes into account the `frame_sequence`, `address_space_hash` (grid orientation and scale), `candidate_hash` (directional light matrix changes), and `caster_hash`/`content_hash` (dynamic object motion).eep
+    `address_space_compatible=true` even after the absolute virtual page
+    lattice had shifted
   - the coarse fallback backbone was still seeded from the full camera frustum
     depth span, which made a tiny two-cube scene request thousands of coarse
     pages simply because the camera far plane was large
 - the consequence is exactly the observed pattern:
   - stable frames show the atlas fully green because the resident set is being
     re-requested by an oversized coarse backbone
-  - motion frames can transiently rewrite the whole atlas when the comparator
-    decides the address space changed
+  - motion frames can transiently accept stale feedback keys against the new
+    `clip_grid_origin`, reject them as out-of-bounds, and skip both fine-page
+    selection and the fallback `receiver_bootstrap` path
 - status remains `in_progress` until both runtime causes are corrected and
   revalidated with VSM tests plus another short `RenderScene` log capture
 
@@ -1282,9 +1298,10 @@ Update, March 11, 2026 directional content-reuse validity:
   normalized depth values are no longer valid for current shading
 - this directly matches the observed artifact pattern: pages are reused, but
   the resulting shadows are partial, displaced, or appear on caster top faces
-- the corrected next step is to keep address-space compatibility broad for page
-  selection while tightening clean-page reuse so pages rerasterize whenever the
-  directional depth mapping changes
+- the corrected next step is to separate the two reuse decisions cleanly:
+  address-space compatibility must invalidate on snapped XY lattice shifts but
+  can ignore pure Z pull-back changes, while clean-page reuse must rerasterize
+  whenever the directional depth mapping changes
 - status remains `in_progress` until that correction is implemented and
   validated
 
@@ -1292,10 +1309,14 @@ Update, March 11, 2026 directional depth-basis reuse fix:
 
 - the backend now treats directional page-address reuse and directional
   page-content reuse as two different questions
-- address-space compatibility still ignores page-aligned XY lattice motion so
-  resident keys and feedback keys survive stable clipmap shifts
+- address-space compatibility now preserves XY light-view translation so a
+  snapped clip-lattice shift invalidates stale feedback/resident mappings on
+  the snap frame; it still zeroes Z pull-back padding so reuse is allowed for
+  pure along-light pull-back changes
 - clean-page reuse is now stricter:
-  - the comparable light-view keeps the Z translation component
+  - the comparable light-view keeps the Z translation component but zeros XY so
+    page contents remain reusable across page-aligned XY relayout when the
+    stored depth basis is still valid
   - the comparable clip metadata keeps the shader-visible depth-mapping terms
     used during VSM sampling
 - this prevents a cached page from staying clean when the current directional
@@ -1312,3 +1333,28 @@ Update, March 11, 2026 directional depth-basis reuse fix:
     `out/build-vs/vsm-runtime-20260311-depth-reuse-gate.txt`
 - overall status remains `in_progress` until the live interactive motion
   artifacts are rechecked in the demo scene
+
+Update, March 11, 2026 directional snap-boundary dropout fix:
+
+- the missing-shadow regression at directional grid snap boundaries was caused
+  by the address-space comparable light view incorrectly zeroing XY
+  translation
+- when the light eye snapped, the clip lattice moved in absolute page space,
+  but the compatibility gate falsely treated the old and new address spaces as
+  identical
+- that let delayed feedback survive into the wrong lattice:
+  - stale resident-page keys were decoded against the new `clip_grid_origin`
+  - the keys were rejected as out-of-bounds
+  - both sparse fine selection and the fallback `receiver_bootstrap` seed were
+    skipped for that frame
+- the comparable address-space light view now preserves XY translation and
+  zeros only Z pull-back padding, so snapped XY lattice shifts invalidate the
+  cache exactly on the snap frame while still allowing reuse when only the
+  along-light pull-back changes
+- spatial dirty-page invalidation now projects previous caster bounds through
+  the previous frame `light_view`, so resident keys generated for the old
+  bound line up with the lattice that actually owns those pages
+- overall status remains `in_progress` in this document:
+  - the code change is present in the last commit
+  - validation evidence for this exact regression has not yet been recorded
+    here

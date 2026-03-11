@@ -147,12 +147,12 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
   const auto psf = Context().current_view.prepared_frame;
   if (!psf || !psf->IsValid() || psf->draw_metadata_bytes.empty()
     || psf->partitions.empty()) {
-    LOG_F(INFO,
-      "VirtualShadowPageRasterPass: skipped for view {} "
-      "(prepared={} valid={} draw_bytes={} partitions={})",
+    LOG_F(ERROR, // VSM GLITCH TRACKING
+      "VSM_GLITCH: VirtualShadowPageRasterPass: skipped for view {} "
+      "(prepared={} valid={} draw_bytes={} partitions={}) while having {} pending jobs!",
       Context().current_view.view_id.get(), psf != nullptr,
       psf ? psf->IsValid() : false, psf ? psf->draw_metadata_bytes.size() : 0U,
-      psf ? psf->partitions.size() : 0U);
+      psf ? psf->partitions.size() : 0U, render_plan->jobs.size());
     Context().RegisterPass(this);
     co_return;
   }
@@ -221,8 +221,8 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
       log_state.saw_zero_draw_live_frame = true;
       log_state.saw_nonzero_draw_live_frame = false;
     }
-    LOG_F(WARNING,
-      "VirtualShadowPageRasterPass: view {} produced no shadow-caster draws "
+    LOG_F(ERROR, // VSM GLITCH TRACKING
+      "VSM_GLITCH: VirtualShadowPageRasterPass: view {} produced no shadow-caster draws "
       "(jobs={} skipped_invalid={} errors={})",
       Context().current_view.view_id.get(), render_plan->jobs.size(),
       skipped_invalid, draw_errors);
