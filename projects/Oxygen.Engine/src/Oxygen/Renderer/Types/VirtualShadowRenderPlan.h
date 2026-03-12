@@ -91,6 +91,8 @@ struct VirtualShadowViewIntrospection {
     resolve_resident_page_entries {};
   std::span<const std::uint32_t> page_table_entries {};
   std::span<const std::uint32_t> published_page_table_entries {};
+  std::span<const std::uint32_t> page_flags_entries {};
+  std::span<const std::uint32_t> published_page_flags_entries {};
   std::span<const std::uint32_t> atlas_tile_debug_states {};
   bool used_request_feedback { false };
   bool used_resolved_raster_schedule { false };

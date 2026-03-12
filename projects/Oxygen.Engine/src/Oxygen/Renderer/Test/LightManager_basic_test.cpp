@@ -31,6 +31,8 @@
 #include <Oxygen/Renderer/ShadowManager.h>
 #include <Oxygen/Renderer/Test/Fakes/Graphics.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
+#include <Oxygen/Renderer/Types/VirtualShadowPageFlags.h>
+#include <Oxygen/Renderer/Types/VirtualShadowPageTableEntry.h>
 #include <Oxygen/Renderer/Types/VirtualShadowRequestFeedback.h>
 #include <Oxygen/Renderer/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
@@ -5126,17 +5128,18 @@ NOLINT_TEST_F(LightManagerTest,
     = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 27 });
   ASSERT_NE(introspection, nullptr);
   ASSERT_GT(introspection->mapped_page_count, 0U);
-  constexpr std::uint32_t kValidBit = (1U << 28U);
-  constexpr std::uint32_t kRequestedBit = (1U << 29U);
   bool saw_mapped_page = false;
   for (const auto packed_entry : introspection->page_table_entries) {
-    if ((packed_entry & kValidBit) == 0U) {
-      EXPECT_EQ(packed_entry & kRequestedBit, 0U);
+    const auto decoded
+      = oxygen::renderer::DecodeVirtualShadowPageTableEntry(packed_entry);
+    if (!decoded.current_lod_valid) {
+      EXPECT_FALSE(decoded.requested_this_frame);
       continue;
     }
 
     saw_mapped_page = true;
-    EXPECT_NE(packed_entry & kRequestedBit, 0U);
+    EXPECT_TRUE(decoded.any_lod_valid);
+    EXPECT_TRUE(decoded.requested_this_frame);
   }
   EXPECT_TRUE(saw_mapped_page);
 }
@@ -5255,6 +5258,120 @@ NOLINT_TEST_F(LightManagerTest,
     saw_nonzero_upload = saw_nonzero_upload || upload_words[i] != 0U;
   }
   EXPECT_TRUE(saw_nonzero_upload);
+}
+
+NOLINT_TEST_F(LightManagerTest,
+  ShadowManagerPrepareVirtualPageTableResources_UploadsResolvedPageFlags)
+{
+  auto& manager = Manager();
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  auto shadow_manager = CreateShadowManager(
+    oxygen::DirectionalShadowImplementationPolicy::kVirtualOnly);
+  ASSERT_NE(shadow_manager, nullptr);
+  shadow_manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  ViewConstants view_constants;
+  view_constants
+    .SetProjectionMatrix(
+      glm::perspectiveRH_ZO(glm::radians(45.0F), 16.0F / 9.0F, 0.1F, 200.0F))
+    .SetCameraPosition(glm::vec3(0.0F, -6.0F, 3.0F));
+  view_constants.SetFrameSequenceNumber(
+    SequenceNumber { 1 }, ViewConstants::kRenderer);
+  view_constants.SetFrameSlot(Slot { 0 }, ViewConstants::kRenderer);
+
+  const ShadowManager::SyntheticSunShadowInput synthetic_sun {
+    .enabled = true,
+    .direction_ws = glm::normalize(glm::vec3(0.35F, -0.45F, -1.0F)),
+    .bias = 0.0F,
+    .normal_bias = 0.0F,
+    .resolution_hint
+    = static_cast<std::uint32_t>(oxygen::scene::ShadowResolutionHint::kMedium),
+    .cascade_count = 4U,
+    .distribution_exponent = 1.0F,
+    .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
+  };
+  const std::array<glm::vec4, 2> shadow_casters {
+    glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
+    glm::vec4(0.0F, 2.0F, 0.5F, 0.5F),
+  };
+  const std::array<glm::vec4, 1> visible_receivers {
+    glm::vec4(0.0F, 0.0F, 0.0F, 0.05F),
+  };
+
+  const auto published = shadow_manager->PublishForView(oxygen::ViewId { 235 },
+    view_constants, manager, shadow_casters, visible_receivers,
+    &synthetic_sun, std::chrono::milliseconds(16));
+  ASSERT_NE(published.virtual_shadow_page_flags_srv, kInvalidShaderVisibleIndex);
+
+  shadow_manager->ResolveVirtualCurrentFrame(oxygen::ViewId { 235 });
+  const auto* introspection
+    = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 235 });
+  ASSERT_NE(introspection, nullptr);
+  ASSERT_FALSE(introspection->page_flags_entries.empty());
+  ASSERT_EQ(introspection->page_flags_entries.size(),
+    introspection->page_table_entries.size());
+
+  GfxPtr()->buffer_log_ = {};
+  auto recorder = GfxPtr()->AcquireCommandRecorder(
+    SingleQueueStrategy().KeyFor(oxygen::graphics::QueueRole::kGraphics),
+    "VirtualPageFlagsUploadAfterResolve", false);
+  ASSERT_NE(recorder, nullptr);
+
+  shadow_manager->PrepareVirtualPageTableResources(
+    oxygen::ViewId { 235 }, *recorder);
+
+  const auto& copy_log = GfxPtr()->buffer_log_;
+  ASSERT_TRUE(copy_log.copy_called);
+
+  auto matches_expected_upload =
+    [](const oxygen::renderer::testing::BufferCommandLog::CopyEvent& copy,
+      const std::span<const std::uint32_t> expected_words) -> bool {
+    if (copy.src == nullptr
+      || copy.size != expected_words.size() * sizeof(std::uint32_t)) {
+      return false;
+    }
+
+    auto* upload_buffer = const_cast<oxygen::graphics::Buffer*>(copy.src);
+    upload_buffer->UnMap();
+    auto* upload_words = static_cast<std::uint32_t*>(upload_buffer->Map());
+    if (upload_words == nullptr) {
+      return false;
+    }
+
+    return std::equal(upload_words, upload_words + expected_words.size(),
+      expected_words.begin(), expected_words.end());
+  };
+
+  const auto page_flags_copy_it
+    = std::find_if(copy_log.copies.begin(), copy_log.copies.end(),
+      [&](const oxygen::renderer::testing::BufferCommandLog::CopyEvent& copy) {
+        return matches_expected_upload(copy, introspection->page_flags_entries);
+      });
+  ASSERT_NE(page_flags_copy_it, copy_log.copies.end());
+
+  bool saw_detail_page = false;
+  bool saw_used_page = false;
+  for (std::size_t i = 0U; i < introspection->page_flags_entries.size(); ++i) {
+    if (introspection->page_table_entries[i] == 0U) {
+      EXPECT_EQ(introspection->page_flags_entries[i], 0U);
+      continue;
+    }
+
+    const auto page_flags = introspection->page_flags_entries[i];
+    EXPECT_TRUE(oxygen::renderer::HasVirtualShadowPageFlag(
+      page_flags, oxygen::renderer::VirtualShadowPageFlag::kAllocated));
+    EXPECT_TRUE(oxygen::renderer::HasVirtualShadowPageFlag(
+      page_flags, oxygen::renderer::VirtualShadowPageFlag::kUsedThisFrame));
+    saw_detail_page = saw_detail_page
+      || oxygen::renderer::HasVirtualShadowPageFlag(page_flags,
+        oxygen::renderer::VirtualShadowPageFlag::kDetailGeometry);
+    saw_used_page = true;
+  }
+  EXPECT_TRUE(saw_detail_page);
+  EXPECT_TRUE(saw_used_page);
 }
 
 //! The bridge resolve snapshot must mirror resident pages deterministically so

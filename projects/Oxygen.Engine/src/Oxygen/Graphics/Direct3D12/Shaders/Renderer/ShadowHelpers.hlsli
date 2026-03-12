@@ -11,6 +11,7 @@
 #include "Renderer/DirectionalVirtualShadowMetadata.hlsli"
 #include "Renderer/ShadowFrameBindings.hlsli"
 #include "Renderer/ShadowInstanceMetadata.hlsli"
+#include "Renderer/VirtualShadowPageAccess.hlsli"
 #include "Renderer/ViewConstants.hlsli"
 #include "Renderer/ViewFrameBindings.hlsli"
 
@@ -278,8 +279,9 @@ static inline bool ResolveDirectionalVirtualPageResidency(
         return false;
     }
 
-    const uint packed_entry = page_table[page_table_index];
-    return (packed_entry & (1u << 28u)) != 0u;
+    const VirtualShadowPageTableEntry entry =
+        DecodeVirtualShadowPageTableEntry(page_table[page_table_index]);
+    return VirtualShadowPageTableEntryHasCurrentLod(entry);
 }
 
 static inline bool ResolveDirectionalVirtualAtlasUv(
@@ -319,13 +321,14 @@ static inline bool ResolveDirectionalVirtualAtlasUv(
         return false;
     }
 
-    const uint packed_entry = page_table[page_table_index];
-    if ((packed_entry & (1u << 28u)) == 0u) {
+    const VirtualShadowPageTableEntry entry =
+        DecodeVirtualShadowPageTableEntry(page_table[page_table_index]);
+    if (!VirtualShadowPageTableEntryHasCurrentLod(entry)) {
         return false;
     }
 
-    const uint tile_x = packed_entry & 0x0FFFu;
-    const uint tile_y = (packed_entry >> 12u) & 0x0FFFu;
+    const uint tile_x = entry.tile_x;
+    const uint tile_y = entry.tile_y;
     const uint filter_radius_texels =
         SelectDirectionalVirtualFilterRadiusTexels(metadata, clip_index);
     const float guard_texels =
@@ -881,8 +884,9 @@ static inline float SampleDirectionalVirtualShadowClipVisibility(
         return 1.0;
     }
 
-    const uint packed_entry = page_table[page_table_index];
-    if ((packed_entry & (1u << 28u)) == 0u) {
+    const VirtualShadowPageTableEntry entry =
+        DecodeVirtualShadowPageTableEntry(page_table[page_table_index]);
+    if (!VirtualShadowPageTableEntryHasCurrentLod(entry)) {
         return 1.0;
     }
 
@@ -895,8 +899,8 @@ static inline float SampleDirectionalVirtualShadowClipVisibility(
 
     const float logical_texel_world =
         ComputeDirectionalVirtualLogicalTexelWorld(metadata, clip_index, filter_radius_texels);
-    const uint tile_x = packed_entry & 0x0FFFu;
-    const uint tile_y = (packed_entry >> 12u) & 0x0FFFu;
+    const uint tile_x = entry.tile_x;
+    const uint tile_y = entry.tile_y;
     const float2 atlas_uv = ResolveDirectionalVirtualAtlasUvInResolvedPage(
         metadata,
         tile_x,

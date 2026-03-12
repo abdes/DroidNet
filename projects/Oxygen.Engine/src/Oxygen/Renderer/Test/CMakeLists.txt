@@ -148,6 +148,13 @@ m_gtest_program(
     "Resources/DrawMetadataEmitter_test.cpp"
 )
 
+# VirtualShadow contract tests
+m_gtest_program(
+  VirtualShadowContracts
+  SOURCES
+    "VirtualShadowContracts_test.cpp"
+)
+
 # LightManager unit tests
 m_gtest_program(
   LightManager
