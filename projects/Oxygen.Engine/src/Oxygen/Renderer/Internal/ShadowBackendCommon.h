@@ -30,6 +30,7 @@ namespace oxygen::renderer::internal::shadow_detail {
 inline constexpr std::uint64_t kFnvOffsetBasis = 1469598103934665603ULL;
 inline constexpr std::uint64_t kFnvPrime = 1099511628211ULL;
 inline constexpr float kDirectionalCacheFloatTolerance = 1.0e-5F;
+inline constexpr std::uint32_t kDirectionalVirtualClipReuseGuardbandPages = 1U;
 inline constexpr std::uint32_t kVirtualResidentPageCoordBits = 28U;
 inline constexpr std::uint64_t kVirtualResidentPageCoordMask
   = (1ULL << kVirtualResidentPageCoordBits) - 1ULL;
@@ -172,6 +173,51 @@ template <typename T>
   const auto& clip = metadata.clip_metadata[clip_index];
   return ResolveDirectionalVirtualClipGridCoord(
     clip.origin_page_scale.y, clip.origin_page_scale.z);
+}
+
+struct DirectionalVirtualClipmapPageOffset {
+  bool valid { false };
+  std::int32_t delta_x { 0 };
+  std::int32_t delta_y { 0 };
+};
+
+[[nodiscard]] inline auto ResolveDirectionalVirtualClipmapPageOffset(
+  const oxygen::engine::DirectionalVirtualShadowMetadata& previous,
+  const oxygen::engine::DirectionalVirtualShadowMetadata& current,
+  const std::uint32_t clip_index) -> DirectionalVirtualClipmapPageOffset
+{
+  DirectionalVirtualClipmapPageOffset result {};
+  if (clip_index >= previous.clip_level_count
+    || clip_index >= current.clip_level_count) {
+    return result;
+  }
+
+  const auto& previous_clip = previous.clip_metadata[clip_index];
+  const auto& current_clip = current.clip_metadata[clip_index];
+  if (!DirectionalCacheFloatEqual(
+        previous_clip.origin_page_scale.z, current_clip.origin_page_scale.z)) {
+    return result;
+  }
+
+  result.valid = true;
+  result.delta_x = ResolveDirectionalVirtualClipGridOriginX(current, clip_index)
+    - ResolveDirectionalVirtualClipGridOriginX(previous, clip_index);
+  result.delta_y = ResolveDirectionalVirtualClipGridOriginY(current, clip_index)
+    - ResolveDirectionalVirtualClipGridOriginY(previous, clip_index);
+  return result;
+}
+
+[[nodiscard]] inline auto IsDirectionalVirtualClipReuseGuardbandValid(
+  const DirectionalVirtualClipmapPageOffset& offset,
+  const std::uint32_t guardband_pages) -> bool
+{
+  if (!offset.valid) {
+    return false;
+  }
+
+  const auto guardband = static_cast<std::int32_t>(guardband_pages);
+  return std::abs(offset.delta_x) <= guardband
+    && std::abs(offset.delta_y) <= guardband;
 }
 
 [[nodiscard]] inline auto HashDirectionalVirtualFeedbackAddressSpace(

@@ -145,6 +145,50 @@ private:
     std::int32_t max_y { 0 };
   };
 
+  struct ClipSelectedRegion {
+    bool valid { false };
+    std::uint32_t min_x { 0U };
+    std::uint32_t max_x { 0U };
+    std::uint32_t min_y { 0U };
+    std::uint32_t max_y { 0U };
+  };
+
+  struct DirectionalVirtualClipmapSetup {
+    bool valid { false };
+    std::uint32_t clip_level_count { 0U };
+    std::uint32_t pages_per_axis { 0U };
+    std::uint32_t pages_per_level { 0U };
+    engine::ShadowInstanceMetadata shadow_instance {};
+    engine::DirectionalVirtualShadowMetadata metadata {};
+    glm::mat4 light_view { 1.0F };
+    glm::vec3 light_eye { 0.0F, 0.0F, 0.0F };
+    float near_plane { 0.0F };
+    float far_plane { 0.0F };
+    std::array<float, engine::kMaxVirtualDirectionalClipLevels>
+      clip_page_world {};
+    std::array<float, engine::kMaxVirtualDirectionalClipLevels>
+      clip_origin_x {};
+    std::array<float, engine::kMaxVirtualDirectionalClipLevels>
+      clip_origin_y {};
+    std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
+      clip_grid_origin_x {};
+    std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
+      clip_grid_origin_y {};
+    std::array<ClipSelectedRegion, engine::kMaxVirtualDirectionalClipLevels>
+      frustum_regions {};
+    std::vector<AbsoluteClipPageRegion> absolute_frustum_regions {};
+    std::uint32_t coarse_safety_clip_index { 0U };
+    std::uint32_t coarse_safety_budget_pages { 0U };
+    glm::vec2 coarse_safety_priority_center_ls { 0.0F, 0.0F };
+    bool coarse_safety_priority_valid { false };
+    std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
+      previous_clip_page_offset_x {};
+    std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
+      previous_clip_page_offset_y {};
+    std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
+      previous_clip_reuse_guardband_valid {};
+  };
+
   struct ViewCacheEntry {
     struct PendingResidentReuseGateSnapshot {
       bool valid { false };
@@ -176,6 +220,12 @@ private:
         clip_grid_origin_x {};
       std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
         clip_grid_origin_y {};
+      std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
+        previous_clip_page_offset_x {};
+      std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
+        previous_clip_page_offset_y {};
+      std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
+        previous_clip_reuse_guardband_valid {};
       std::uint32_t coarse_backbone_begin { 0U };
       std::uint32_t coarse_safety_clip_index { 0U };
       std::uint32_t coarse_safety_max_page_count { 0U };
@@ -254,6 +304,12 @@ private:
     std::vector<std::uint32_t> page_table_entries;
     std::vector<std::uint32_t> page_flags_entries;
     std::vector<std::uint32_t> atlas_tile_debug_states;
+    std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
+      clipmap_page_offset_x {};
+    std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
+      clipmap_page_offset_y {};
+    std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
+      clipmap_reuse_guardband_valid {};
     std::vector<engine::ShadowInstanceMetadata> last_coherent_shadow_instances;
     std::vector<engine::DirectionalVirtualShadowMetadata>
       last_coherent_directional_virtual_metadata;
@@ -390,6 +446,13 @@ private:
     std::uint32_t pages_per_level, std::uint32_t& evicted_page_count)
     -> std::optional<PhysicalTileAddress>;
   OXGN_RNDR_API auto ReleasePhysicalTile(PhysicalTileAddress tile) -> void;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto PrepareDirectionalVirtualClipmapSetup(
+    const engine::ViewConstants& view_constants,
+    const engine::DirectionalShadowCandidate& candidate,
+    std::span<const glm::vec4> shadow_caster_bounds,
+    std::span<const glm::vec4> visible_receiver_bounds,
+    const ViewCacheEntry* previous_state) const
+    -> std::optional<DirectionalVirtualClipmapSetup>;
   OXGN_RNDR_API auto BuildDirectionalVirtualViewState(ViewId view_id,
     const engine::ViewConstants& view_constants,
     const engine::DirectionalShadowCandidate& candidate,

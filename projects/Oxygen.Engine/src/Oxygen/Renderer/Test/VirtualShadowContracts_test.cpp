@@ -6,18 +6,83 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <glm/vec4.hpp>
+
+#include <Oxygen/Renderer/Internal/ShadowBackendCommon.h>
+#include <Oxygen/Renderer/Types/DirectionalVirtualShadowMetadata.h>
 #include <Oxygen/Renderer/Types/VirtualShadowPageFlags.h>
-#include <Oxygen/Renderer/Types/VirtualShadowPageTableEntry.h>
 #include <Oxygen/Renderer/Types/VirtualShadowPhysicalPageMetadata.h>
+#include <Oxygen/Renderer/Types/VirtualShadowPageTableEntry.h>
 
 namespace {
 
+using oxygen::engine::DirectionalVirtualShadowMetadata;
 using oxygen::renderer::DecodeVirtualShadowPageTableEntry;
 using oxygen::renderer::HasVirtualShadowPageFlag;
 using oxygen::renderer::MakeVirtualShadowPageFlags;
 using oxygen::renderer::PackVirtualShadowPageTableEntry;
 using oxygen::renderer::ResolveVirtualShadowFallbackClipIndex;
 using oxygen::renderer::VirtualShadowPageFlag;
+using oxygen::renderer::internal::shadow_detail::
+  IsDirectionalVirtualClipReuseGuardbandValid;
+using oxygen::renderer::internal::shadow_detail::
+  ResolveDirectionalVirtualClipmapPageOffset;
+using oxygen::renderer::internal::shadow_detail::
+  kDirectionalVirtualClipReuseGuardbandPages;
+
+auto MakeDirectionalVirtualMetadata(const std::int32_t clip0_grid_x,
+  const std::int32_t clip0_grid_y, const float clip0_page_world,
+  const std::int32_t clip1_grid_x, const std::int32_t clip1_grid_y,
+  const float clip1_page_world) -> DirectionalVirtualShadowMetadata
+{
+  DirectionalVirtualShadowMetadata metadata {};
+  metadata.clip_level_count = 2U;
+  metadata.pages_per_axis = 16U;
+  metadata.page_size_texels = 128U;
+  metadata.clip_metadata[0].origin_page_scale
+    = glm::vec4(static_cast<float>(clip0_grid_x) * clip0_page_world,
+      static_cast<float>(clip0_grid_y) * clip0_page_world, clip0_page_world,
+      0.0F);
+  metadata.clip_metadata[1].origin_page_scale
+    = glm::vec4(static_cast<float>(clip1_grid_x) * clip1_page_world,
+      static_cast<float>(clip1_grid_y) * clip1_page_world, clip1_page_world,
+      0.0F);
+  return metadata;
+}
+
+TEST(VirtualShadowContractsTest, ClipmapPageOffsetTracksSnappedGridMotion)
+{
+  const auto previous = MakeDirectionalVirtualMetadata(10, -4, 2.0F, 3, 1, 4.0F);
+  const auto current = MakeDirectionalVirtualMetadata(12, -7, 2.0F, 2, 3, 4.0F);
+
+  const auto clip0_offset
+    = ResolveDirectionalVirtualClipmapPageOffset(previous, current, 0U);
+  const auto clip1_offset
+    = ResolveDirectionalVirtualClipmapPageOffset(previous, current, 1U);
+
+  ASSERT_TRUE(clip0_offset.valid);
+  EXPECT_EQ(clip0_offset.delta_x, 2);
+  EXPECT_EQ(clip0_offset.delta_y, -3);
+  ASSERT_TRUE(clip1_offset.valid);
+  EXPECT_EQ(clip1_offset.delta_x, -1);
+  EXPECT_EQ(clip1_offset.delta_y, 2);
+}
+
+TEST(VirtualShadowContractsTest, ClipmapGuardbandRejectsOffsetsBeyondReuseWindow)
+{
+  const auto previous = MakeDirectionalVirtualMetadata(0, 0, 2.0F, 0, 0, 4.0F);
+  const auto current = MakeDirectionalVirtualMetadata(2, 0, 2.0F, 0, 1, 4.0F);
+
+  const auto clip0_offset
+    = ResolveDirectionalVirtualClipmapPageOffset(previous, current, 0U);
+  const auto clip1_offset
+    = ResolveDirectionalVirtualClipmapPageOffset(previous, current, 1U);
+
+  EXPECT_FALSE(IsDirectionalVirtualClipReuseGuardbandValid(
+    clip0_offset, kDirectionalVirtualClipReuseGuardbandPages));
+  EXPECT_TRUE(IsDirectionalVirtualClipReuseGuardbandValid(
+    clip1_offset, kDirectionalVirtualClipReuseGuardbandPages));
+}
 
 TEST(VirtualShadowContractsTest, PageTableEntryRoundTripsPhysicalAddressAndBits)
 {

@@ -151,6 +151,7 @@ function Get-BenchmarkSettledStats {
     $scheduled = New-Object System.Collections.Generic.List[object]
     $raster = New-Object System.Collections.Generic.List[object]
 
+    $pendingRaster = $null
     foreach ($line in (Get-Content -LiteralPath $LogPath)) {
         if ($line -match 'source_frame=(\d+) requested_pages=(\d+)') {
             $requested.Add([pscustomobject]@{
@@ -172,6 +173,23 @@ function Get-BenchmarkSettledStats {
                 resolved_pages = [int]$matches[2]
                 rastered_pages = [int]$matches[3]
             })
+            $pendingRaster = $null
+            continue
+        }
+        if ($line -match '(\d+) shadow-caster draw\(s\) for (\d+) resolved virtual page\(s\)') {
+            $pendingRaster = [pscustomobject]@{
+                shadow_draws = [int]$matches[1]
+                resolved_pages = [int]$matches[2]
+            }
+            continue
+        }
+        if ($pendingRaster -ne $null -and $line -match '\(rastered_pages=(\d+)') {
+            $raster.Add([pscustomobject]@{
+                shadow_draws = $pendingRaster.shadow_draws
+                resolved_pages = $pendingRaster.resolved_pages
+                rastered_pages = [int]$matches[1]
+            })
+            $pendingRaster = $null
         }
     }
 
@@ -184,21 +202,31 @@ function Get-BenchmarkSettledStats {
     $tailCount = $settledRequested.Count
     $settledRaster = @($raster | Select-Object -Last $tailCount)
 
-    $requestedAverage = ($settledRequested | Measure-Object -Property value -Average).Average
-    $scheduledAverage = ($settledScheduled | Measure-Object -Property value -Average).Average
-    $shadowDrawAverage = ($settledRaster | Measure-Object -Property shadow_draws -Average).Average
-    $resolvedPagesAverage = ($settledRaster | Measure-Object -Property resolved_pages -Average).Average
-    $rasteredPagesAverage = ($settledRaster | Measure-Object -Property rastered_pages -Average).Average
+    $requestedAverage = if ($settledRequested.Count -gt 0) {
+        ($settledRequested | Measure-Object -Property value -Average).Average
+    } else { $null }
+    $scheduledAverage = if ($settledScheduled.Count -gt 0) {
+        ($settledScheduled | Measure-Object -Property value -Average).Average
+    } else { $null }
+    $shadowDrawAverage = if ($settledRaster.Count -gt 0) {
+        ($settledRaster | Measure-Object -Property shadow_draws -Average).Average
+    } else { $null }
+    $resolvedPagesAverage = if ($settledRaster.Count -gt 0) {
+        ($settledRaster | Measure-Object -Property resolved_pages -Average).Average
+    } else { $null }
+    $rasteredPagesAverage = if ($settledRaster.Count -gt 0) {
+        ($settledRaster | Measure-Object -Property rastered_pages -Average).Average
+    } else { $null }
 
     return [ordered]@{
         settled_source_frame_start = 101
         settled_source_frame_end = 120
         settled_source_frames_present = @($settledRequested | ForEach-Object { $_.source_frame })
-        requested_pages_avg = [math]::Round($requestedAverage, 2)
-        scheduled_pages_avg = [math]::Round($scheduledAverage, 2)
-        shadow_draws_avg = [math]::Round($shadowDrawAverage, 2)
-        resolved_pages_avg = [math]::Round($resolvedPagesAverage, 2)
-        rastered_pages_avg = [math]::Round($rasteredPagesAverage, 2)
+        requested_pages_avg = if ($null -ne $requestedAverage) { [math]::Round($requestedAverage, 2) } else { $null }
+        scheduled_pages_avg = if ($null -ne $scheduledAverage) { [math]::Round($scheduledAverage, 2) } else { $null }
+        shadow_draws_avg = if ($null -ne $shadowDrawAverage) { [math]::Round($shadowDrawAverage, 2) } else { $null }
+        resolved_pages_avg = if ($null -ne $resolvedPagesAverage) { [math]::Round($resolvedPagesAverage, 2) } else { $null }
+        rastered_pages_avg = if ($null -ne $rasteredPagesAverage) { [math]::Round($rasteredPagesAverage, 2) } else { $null }
         raster_sample_count = $settledRaster.Count
     }
 }
