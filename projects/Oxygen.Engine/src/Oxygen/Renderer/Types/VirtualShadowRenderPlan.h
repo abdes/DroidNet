@@ -84,13 +84,18 @@ struct VirtualShadowRenderPlan {
 struct VirtualShadowViewIntrospection {
   std::span<const engine::DirectionalVirtualShadowMetadata>
     directional_virtual_metadata {};
+  std::span<const engine::DirectionalVirtualShadowMetadata>
+    published_directional_virtual_metadata {};
   std::span<const VirtualShadowResolvedRasterPage> resolved_raster_pages {};
   std::span<const VirtualShadowResolveResidentPageEntry>
     resolve_resident_page_entries {};
   std::span<const std::uint32_t> page_table_entries {};
+  std::span<const std::uint32_t> published_page_table_entries {};
   std::span<const std::uint32_t> atlas_tile_debug_states {};
   bool used_request_feedback { false };
   bool used_resolved_raster_schedule { false };
+  bool used_last_coherent_publish_fallback { false };
+  bool last_coherent_publish_compatible { false };
   bool has_persistent_gpu_residency_state { false };
   ShaderVisibleIndex resolve_resident_pages_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex resolve_stats_srv { kInvalidShaderVisibleIndex };
@@ -104,12 +109,17 @@ struct VirtualShadowViewIntrospection {
   std::uint32_t resolved_schedule_pruned_job_count { 0U };
   std::uint32_t selected_page_count { 0U };
   std::uint32_t coarse_backbone_page_count { 0U };
+  std::uint32_t coarse_safety_selected_page_count { 0U };
+  std::uint32_t coarse_safety_budget_page_count { 0U };
+  bool coarse_safety_capacity_fit { false };
   std::uint32_t feedback_requested_page_count { 0U };
   std::uint32_t feedback_refinement_page_count { 0U };
   std::uint32_t receiver_bootstrap_page_count { 0U };
   std::uint32_t current_frame_reinforcement_page_count { 0U };
   std::uint64_t current_frame_reinforcement_reference_frame { 0U };
   std::uint64_t resolved_schedule_age_frames { 0U };
+  std::uint64_t last_coherent_publish_age_frames { 0U };
+  std::uint32_t incoherent_publish_frame_count { 0U };
   std::uint32_t allocated_page_count { 0U };
   std::uint32_t evicted_page_count { 0U };
   std::uint32_t rerasterized_page_count { 0U };

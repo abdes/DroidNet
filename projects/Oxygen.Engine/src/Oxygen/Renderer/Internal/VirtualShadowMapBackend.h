@@ -17,6 +17,7 @@
 #include <vector>
 
 #include <glm/mat4x4.hpp>
+#include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
@@ -173,6 +174,10 @@ private:
         clip_grid_origin_x {};
       std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
         clip_grid_origin_y {};
+      std::uint32_t coarse_safety_clip_index { 0U };
+      std::uint32_t coarse_safety_max_page_count { 0U };
+      glm::vec2 coarse_safety_priority_center_ls { 0.0F, 0.0F };
+      bool coarse_safety_priority_valid { false };
       std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
         reusable_clip_contents {};
       bool address_space_compatible { false };
@@ -209,6 +214,10 @@ private:
       std::uint32_t coarse_backbone_begin { 0U };
       std::uint32_t selected_page_count { 0U };
       std::uint32_t coarse_backbone_pages { 0U };
+      std::uint32_t coarse_safety_selected_pages { 0U };
+      std::uint32_t coarse_safety_budget_pages { 0U };
+      bool coarse_safety_capacity_fit { false };
+      bool predicted_coherent_publication { false };
       std::uint32_t feedback_requested_pages { 0U };
       std::uint32_t feedback_refinement_pages { 0U };
       std::uint32_t receiver_bootstrap_pages { 0U };
@@ -229,6 +238,8 @@ private:
       std::uint32_t allocation_failures { 0U };
       std::uint32_t rerasterized_pages { 0U };
       bool resident_reuse_gate_open { false };
+      bool last_coherent_publish_compatible { false };
+      std::uint64_t last_coherent_publish_age_frames { 0U };
     };
 
     PublicationKey key {};
@@ -239,6 +250,16 @@ private:
     std::vector<glm::vec4> shadow_caster_bounds;
     std::vector<std::uint32_t> page_table_entries;
     std::vector<std::uint32_t> atlas_tile_debug_states;
+    std::vector<engine::ShadowInstanceMetadata> last_coherent_shadow_instances;
+    std::vector<engine::DirectionalVirtualShadowMetadata>
+      last_coherent_directional_virtual_metadata;
+    std::vector<std::uint32_t> last_coherent_page_table_entries;
+    std::vector<AbsoluteClipPageRegion> last_coherent_absolute_frustum_regions;
+    AbsoluteClipPageRegion coarse_safety_publish_region {};
+    AbsoluteClipPageRegion last_coherent_coarse_safety_publish_region {};
+    std::vector<engine::DirectionalVirtualShadowMetadata>
+      published_directional_virtual_metadata_snapshot;
+    std::vector<std::uint32_t> published_page_table_entries_snapshot;
     std::vector<renderer::VirtualShadowResolveResidentPageEntry>
       resolve_resident_page_entries;
     std::vector<renderer::VirtualShadowResolvedRasterPage>
@@ -246,6 +267,11 @@ private:
     PendingResidencyResolve pending_residency_resolve {};
     std::unordered_map<std::uint64_t, ResidentVirtualPage> resident_pages;
     renderer::VirtualShadowResolveStats resolve_stats {};
+    bool last_coherent_publication_valid { false };
+    frame::SequenceNumber last_coherent_frame_sequence { 0U };
+    std::uint32_t last_coherent_coarse_safety_clip_index { 0U };
+    bool use_last_coherent_publish_fallback { false };
+    std::uint32_t incoherent_publish_frame_count { 0U };
     std::uint32_t page_table_upload_entry_count { 0U };
     bool page_table_upload_pending { false };
     PublishDiagnostics publish_diagnostics {};
