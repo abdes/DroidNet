@@ -1217,6 +1217,10 @@ Implementation status, March 9, 2026:
   - broader directional virtual invalidation/debug tooling
   - large-scene viability in `virtual-only`, which remains intentionally harsh
     until sparse residency exists
+  - March 12, 2026 scope correction: functional directional VSM validation is
+    now closed, but medium/large scene performance is still unacceptable and
+    requires a separate performance-recovery plan before the milestone can be
+    treated as production-ready
 
 ### 15.5 Phase 5: Directional virtual shadow maps
 
@@ -1235,7 +1239,27 @@ Next real milestone:
   - deterministic content-safe residency / invalidation / eviction
   - stable `virtual-only` behavior in validation scenes
   - edge quality no longer materially below conventional directional shadows
+  - medium/large scene performance no longer collapses under directional VSM;
+    page production, raster submission count, and readback overhead are kept
+    within an explicitly validated budget
   - required VSM debug/validation surfaces in place
+
+Performance recovery plan, March 12, 2026:
+
+- authoritative document:
+  - `src/Oxygen/Renderer/Docs/directional_vsm_performance_plan.md`
+- summary:
+  - dominant costs are brute-force virtual page raster replay, backend page
+    overproduction, and request/resolve full-buffer overhead
+  - Step 1 baseline capture is complete for the current staged `RenderScene`
+    scene
+  - Step 2 page-local raster culling is complete with measured reductions in
+    steady-state rastered pages (`740.95 -> 420.75`) and shadow draw
+    submissions (`6668.55 -> 1465.80`)
+  - Step 3 page-production tightening / budgeting is next
+  - frozen order remains baseline capture, page-local raster culling, page
+    production tightening, readback reduction, dynamic cache specialization,
+    and before/after validation
 
 ### 15.6 Phase 6: Spot-light shadows on shared contracts
 

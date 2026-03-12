@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <glm/glm.hpp>
+#include <glm/ext/matrix_clip_space.hpp>
 
 #include <Oxygen/Testing/GTest.h>
 
@@ -19,6 +20,7 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Renderer/Internal/VirtualShadowRasterCulling.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Resources/DrawMetadataEmitter.h>
 #include <Oxygen/Renderer/Resources/GeometryUploader.h>
@@ -369,6 +371,139 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
   EXPECT_TRUE(partitions[0].pass_mask.IsSet(PassMaskBit::kShadowCaster));
   EXPECT_TRUE(partitions[1].pass_mask.IsSet(PassMaskBit::kMainViewVisible));
   EXPECT_TRUE(partitions[1].pass_mask.IsSet(PassMaskBit::kShadowCaster));
+}
+
+NOLINT_TEST_F(DrawMetadataEmitterTest,
+  SortAndPartition_ReordersBoundingSpheresWithShadowCasterDrawOrder)
+{
+  const auto geometry
+    = MakeSimpleGeometryRef("DrawMetadataEmitter.BoundingSphereOrdering");
+
+  BeginFrame(SequenceNumber { 1U }, Slot { 0U });
+  const auto geo_handle = GeoUploader().GetOrAllocate(geometry);
+  GeoUploader().EnsureFrameResources();
+
+  BeginFrame(SequenceNumber { 2U }, Slot { 1U });
+  const auto indices = GeoUploader().GetShaderVisibleIndices(geo_handle);
+  ASSERT_NE(indices.vertex_srv_index, oxygen::kInvalidShaderVisibleIndex);
+  ASSERT_NE(indices.index_srv_index, oxygen::kInvalidShaderVisibleIndex);
+
+  oxygen::engine::sceneprep::RenderItemData main_view_item {};
+  main_view_item.geometry = geometry;
+  main_view_item.submesh_index = 0U;
+  main_view_item.transform_handle = oxygen::engine::sceneprep::TransformHandle {
+    oxygen::engine::sceneprep::TransformHandle::Index { 31U },
+    oxygen::engine::sceneprep::TransformHandle::Generation { 1U },
+  };
+  main_view_item.cast_shadows = true;
+  main_view_item.main_view_visible = true;
+  main_view_item.world_bounding_sphere = glm::vec4(10.0F, 0.0F, 0.0F, 1.0F);
+
+  oxygen::engine::sceneprep::RenderItemData shadow_only_item = main_view_item;
+  shadow_only_item.transform_handle
+    = oxygen::engine::sceneprep::TransformHandle {
+        oxygen::engine::sceneprep::TransformHandle::Index { 32U },
+        oxygen::engine::sceneprep::TransformHandle::Generation { 1U },
+      };
+  shadow_only_item.main_view_visible = false;
+  shadow_only_item.world_bounding_sphere
+    = glm::vec4(-20.0F, 1.0F, 0.0F, 2.0F);
+
+  Emitter().EmitDrawMetadata(main_view_item);
+  Emitter().EmitDrawMetadata(shadow_only_item);
+  Emitter().SortAndPartition();
+
+  const auto bytes = Emitter().GetDrawMetadataBytes();
+  ASSERT_EQ(bytes.size(), 2U * sizeof(oxygen::engine::DrawMetadata));
+  const auto* draws
+    = reinterpret_cast<const oxygen::engine::DrawMetadata*>(bytes.data());
+  ASSERT_NE(draws, nullptr);
+
+  const auto draw_bounds = Emitter().GetDrawBoundingSpheres();
+  ASSERT_EQ(draw_bounds.size(), 2U);
+
+  EXPECT_EQ(draws[0].transform_index, 32U);
+  EXPECT_EQ(draws[1].transform_index, 31U);
+  EXPECT_EQ(draw_bounds[0], shadow_only_item.world_bounding_sphere);
+  EXPECT_EQ(draw_bounds[1], main_view_item.world_bounding_sphere);
+}
+
+NOLINT_TEST_F(DrawMetadataEmitterTest,
+  ApplyInstancingBatches_MergesBoundingSpheresConservatively)
+{
+  const auto geometry
+    = MakeSimpleGeometryRef("DrawMetadataEmitter.BatchedBoundingSphere");
+
+  BeginFrame(SequenceNumber { 1U }, Slot { 0U });
+  const auto geo_handle = GeoUploader().GetOrAllocate(geometry);
+  GeoUploader().EnsureFrameResources();
+
+  BeginFrame(SequenceNumber { 2U }, Slot { 1U });
+  const auto indices = GeoUploader().GetShaderVisibleIndices(geo_handle);
+  ASSERT_NE(indices.vertex_srv_index, oxygen::kInvalidShaderVisibleIndex);
+  ASSERT_NE(indices.index_srv_index, oxygen::kInvalidShaderVisibleIndex);
+
+  oxygen::engine::sceneprep::RenderItemData item_a {};
+  item_a.geometry = geometry;
+  item_a.submesh_index = 0U;
+  item_a.transform_handle = oxygen::engine::sceneprep::TransformHandle {
+    oxygen::engine::sceneprep::TransformHandle::Index { 41U },
+    oxygen::engine::sceneprep::TransformHandle::Generation { 1U },
+  };
+  item_a.cast_shadows = true;
+  item_a.world_bounding_sphere = glm::vec4(-5.0F, 0.0F, 0.0F, 1.0F);
+
+  oxygen::engine::sceneprep::RenderItemData item_b = item_a;
+  item_b.transform_handle = oxygen::engine::sceneprep::TransformHandle {
+    oxygen::engine::sceneprep::TransformHandle::Index { 42U },
+    oxygen::engine::sceneprep::TransformHandle::Generation { 1U },
+  };
+  item_b.world_bounding_sphere = glm::vec4(7.0F, 0.0F, 0.0F, 2.0F);
+
+  Emitter().EmitDrawMetadata(item_a);
+  Emitter().EmitDrawMetadata(item_b);
+  Emitter().SortAndPartition();
+
+  const auto bytes = Emitter().GetDrawMetadataBytes();
+  ASSERT_EQ(bytes.size(), sizeof(oxygen::engine::DrawMetadata));
+  const auto* draw
+    = reinterpret_cast<const oxygen::engine::DrawMetadata*>(bytes.data());
+  ASSERT_NE(draw, nullptr);
+  EXPECT_EQ(draw[0].instance_count, 2U);
+
+  const auto draw_bounds = Emitter().GetDrawBoundingSpheres();
+  ASSERT_EQ(draw_bounds.size(), 1U);
+
+  const auto& merged = draw_bounds[0];
+  EXPECT_GT(merged.w, 0.0F);
+  for (const auto source :
+    { item_a.world_bounding_sphere, item_b.world_bounding_sphere }) {
+    const auto center_delta = glm::distance(glm::vec3(merged), glm::vec3(source));
+    EXPECT_LE(center_delta + source.w, merged.w + 1.0e-4F);
+  }
+}
+
+NOLINT_TEST(DrawMetadataEmitterStandaloneTest,
+  VirtualShadowRasterCulling_ConservativelyKeepsTouchingCasterBounds)
+{
+  oxygen::renderer::VirtualShadowResolvedRasterPage page {};
+  page.view_constants.view_matrix = glm::mat4(1.0F);
+  page.view_constants.projection_matrix
+    = glm::orthoRH_ZO(-1.0F, 1.0F, -1.0F, 1.0F, 0.1F, 10.0F);
+
+  const glm::vec4 inside_sphere(0.0F, 0.0F, -1.0F, 0.25F);
+  const glm::vec4 touching_sphere(1.2F, 0.0F, -1.0F, 0.25F);
+  const glm::vec4 outside_sphere(2.0F, 0.0F, -1.0F, 0.25F);
+  const glm::vec4 invalid_sphere(0.0F, 0.0F, 0.0F, 0.0F);
+
+  EXPECT_TRUE(oxygen::renderer::internal::shadow_detail::
+      ResolvedVirtualPageOverlapsBoundingSphere(page, inside_sphere));
+  EXPECT_TRUE(oxygen::renderer::internal::shadow_detail::
+      ResolvedVirtualPageOverlapsBoundingSphere(page, touching_sphere));
+  EXPECT_FALSE(oxygen::renderer::internal::shadow_detail::
+      ResolvedVirtualPageOverlapsBoundingSphere(page, outside_sphere));
+  EXPECT_TRUE(oxygen::renderer::internal::shadow_detail::
+      ResolvedVirtualPageOverlapsBoundingSphere(page, invalid_sphere));
 }
 
 } // namespace

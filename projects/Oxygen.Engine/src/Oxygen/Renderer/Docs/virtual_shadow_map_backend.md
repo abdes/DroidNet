@@ -1078,9 +1078,28 @@ Implementation status, March 10, 2026:
     mobility content
   - conservative global invalidation fallback when caster bound count/order
     changes and pages cannot be paired spatially
-  - default-scene viability for large content; until the final sparse
-    residency path exists, the current validation slice must remain opt-in in
-    demos and runtime policy
+- default-scene viability for large content; until the final sparse
+  residency path exists, the current validation slice must remain opt-in in
+  demos and runtime policy
+
+Update, March 12, 2026 directional VSM performance review and recovery plan:
+
+- functional validation is no longer the blocker; performance is
+- authoritative performance plan:
+  `src/Oxygen/Renderer/Docs/directional_vsm_performance_plan.md`
+- summary:
+  - dominant cost is still brute-force virtual page raster replay
+  - supporting costs are backend page overproduction and full-buffer
+    request/resolve overhead
+  - Step 1 baseline capture is complete for the current staged `RenderScene`
+    scene
+  - Step 2 page-local raster culling is complete with measured reductions in
+    steady-state rastered pages (`740.95 -> 420.75`) and shadow draw
+    submissions (`6668.55 -> 1465.80`)
+  - Step 3 page-production tightening / budgeting is next
+  - frozen recovery order remains baseline capture, page-local raster culling,
+    page production tightening, readback reduction, dynamic cache
+    specialization, and before/after validation
 
 ## 14. References
 

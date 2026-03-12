@@ -909,6 +909,10 @@ It is reached only when all of the following are true:
 - edge quality is brought to parity-targeting territory with the current
   conventional directional path, rather than remaining a visibly inferior
   baseline
+- performance is production-acceptable in medium/large scenes; directional
+  VSM must no longer collapse the renderer into single-digit FPS through page
+  overproduction, brute-force raster replay, or per-frame full-buffer
+  readback cost
 - the required debug surfaces exist for:
   - requested pages
   - mapped/resident pages
@@ -927,6 +931,30 @@ Until that milestone is reached:
 - conventional directional CSM remains the default-safe directional path
 - `prefer-virtual` may still fall back
 - `virtual-only` remains a validation mode, not a final shipping default
+
+#### Directional VSM Performance Recovery Plan (March 12, 2026)
+
+The detailed performance plan now lives in
+`src/Oxygen/Renderer/Docs/directional_vsm_performance_plan.md`.
+
+Summary:
+
+- the next blocker is performance, not correctness
+- the dominant current costs are brute-force page raster replay, backend page
+  overproduction, and full-buffer request/resolve readback overhead
+- Step 1 baseline capture is now completed for the current staged
+  `RenderScene` scene; see
+  `src/Oxygen/Renderer/Docs/directional_vsm_performance_plan.md`
+- Step 2 page-local raster culling is now completed with measured reductions
+  in steady-state rastered pages (`740.95 -> 420.75`) and shadow draw
+  submissions (`6668.55 -> 1465.80`) in the staged `RenderScene` baseline
+- the frozen execution order is:
+  1. baseline capture (`completed`)
+  2. page-local raster culling (`completed`)
+  3. page-production tightening/budgeting (`next`)
+  4. readback-path reduction
+  5. dynamic-pressure cache specialization
+  6. before/after validation gate
 
 #### Directional Cache Realignment Plan (March 10, 2026)
 

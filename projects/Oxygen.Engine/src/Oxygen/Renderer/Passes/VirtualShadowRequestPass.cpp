@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
@@ -39,6 +40,17 @@ namespace oxygen::engine {
 using namespace oxygen::renderer::internal::shadow_detail;
 
 namespace {
+
+  using SteadyClock = std::chrono::steady_clock;
+
+  auto ElapsedMicroseconds(const SteadyClock::time_point start)
+    -> std::uint64_t
+  {
+    return static_cast<std::uint64_t>(
+      std::chrono::duration_cast<std::chrono::microseconds>(
+        SteadyClock::now() - start)
+        .count());
+  }
 
   struct alignas(packing::kShaderDataFieldAlignment)
     VirtualShadowRequestPassConstants {
@@ -89,6 +101,7 @@ VirtualShadowRequestPass::~VirtualShadowRequestPass()
 auto VirtualShadowRequestPass::DoPrepareResources(
   graphics::CommandRecorder& recorder) -> co::Co<>
 {
+  const auto prepare_begin = SteadyClock::now();
   active_dispatch_ = false;
   active_request_word_count_ = 0U;
   active_pages_per_axis_ = 0U;
@@ -212,12 +225,13 @@ auto VirtualShadowRequestPass::DoPrepareResources(
 
   LOG_F(INFO,
     "VirtualShadowRequestPass: frame={} slot={} view={} prepared dispatch "
-    "(words={} pages_per_axis={} clips={} address_hash=0x{:x} depth={}x{})",
+    "(words={} pages_per_axis={} clips={} address_hash=0x{:x} depth={}x{} "
+    "cpu_prepare_us={})",
     Context().frame_sequence.get(), Context().frame_slot.get(),
     Context().current_view.view_id.get(), active_request_word_count_,
     active_pages_per_axis_, active_clip_level_count_,
     active_directional_address_space_hash, pass_constants.screen_dimensions.x,
-    pass_constants.screen_dimensions.y);
+    pass_constants.screen_dimensions.y, ElapsedMicroseconds(prepare_begin));
 
   co_return;
 }
