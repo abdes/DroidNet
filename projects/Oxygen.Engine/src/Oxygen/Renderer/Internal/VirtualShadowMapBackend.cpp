@@ -40,7 +40,7 @@ constexpr std::uint32_t kPageTableRequestedThisFrameBit = (1U << 29U);
 constexpr std::uint32_t kMaxPersistentPageTableEntries
   = 64U * 64U * oxygen::engine::kMaxVirtualDirectionalClipLevels;
 constexpr std::uint32_t kVirtualShadowMaxFilterGuardTexels = 2U;
-constexpr std::int32_t kFeedbackRequestGuardRadius = 2;
+constexpr std::int32_t kFeedbackRequestGuardRadius = 1;
 constexpr std::uint64_t kMaxRequestFeedbackAgeFrames
   = oxygen::frame::kFramesInFlight.get() + 1U;
 constexpr std::uint64_t kMaxResolvedRasterScheduleAgeFrames

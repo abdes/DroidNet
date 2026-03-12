@@ -91,6 +91,39 @@ new instrumentation.
 - Reuse existing prepared-scene and pass infrastructure where possible.
 - Do not claim performance completion without before/after evidence.
 
+## 3.1 Frozen Benchmark Contract
+
+All future directional VSM performance measurements must use the same staged
+scene state and the same runtime command.
+
+Frozen state:
+
+- active settings file:
+  `Examples/RenderScene/demo_settings.json`
+- saved benchmark baseline:
+  `Examples/RenderScene/demo_settings.directional_vsm_benchmark_baseline.json`
+- scene captured in that baseline:
+  `/.cooked/Scenes/physics_domains.oscene`
+
+Required benchmark runner:
+
+- `powershell -ExecutionPolicy Bypass -File Examples\\RenderScene\\benchmark_directional_vsm.ps1`
+
+That runner is now the only accepted local benchmark entrypoint for this plan.
+It always:
+
+- restores `demo_settings.json` from the saved benchmark baseline before launch
+  and again after the benchmark exits
+- runs the exact same RenderScene command:
+  `out/build-vs/bin/Debug/Oxygen.Examples.RenderScene.exe -v 0 --frames 120 --fps 100 --vsync false --directional-shadows virtual-only`
+- writes the latest log to:
+  `out/build-vs/directional-vsm-benchmark-latest.log`
+- archives timestamped runs under:
+  `out/build-vs/benchmarks/directional-vsm/`
+
+No later step may swap scene state, camera state, or command-line flags without
+first updating this document and explicitly replacing the benchmark contract.
+
 ## 4. Performance Exit Gate
 
 Directional VSM performance is not considered recovered until all of the
@@ -152,14 +185,24 @@ Why this comes first:
 
 Step 1 status, March 12, 2026: `completed`
 
-Evidence for the current staged `RenderScene` scene:
+Canonical baseline evidence, March 12, 2026:
 
-- scene: `/.cooked/Scenes/physics_domains.oscene` from
-  `Examples/RenderScene/demo_settings.json`
-- command:
-  `out/build-vs/bin/Debug/Oxygen.Examples.RenderScene.exe --frames 120 --fps 100 --vsync false --directional-shadows virtual-only`
-- log:
-  `out/build-vs/directional-vsm-step1-baseline-redo-20260312.log`
+- scene: `/.cooked/Scenes/physics_domains.oscene` from the frozen benchmark
+  snapshot `Examples/RenderScene/demo_settings.directional_vsm_benchmark_baseline.json`
+- benchmark runner:
+  `powershell -ExecutionPolicy Bypass -File Examples\\RenderScene\\benchmark_directional_vsm.ps1`
+- exact app command:
+  `out/build-vs/bin/Debug/Oxygen.Examples.RenderScene.exe -v 0 --frames 120 --fps 100 --vsync false --directional-shadows virtual-only`
+- archived log:
+  `out/build-vs/benchmarks/directional-vsm/directional-vsm-benchmark-20260312-153644.log`
+- latest log:
+  `out/build-vs/directional-vsm-benchmark-latest.log`
+- settings integrity after the run:
+  - baseline SHA-256:
+    `E561BC0CE62AE9C6ADE92ACA8D425989DEB6C5856AE18B9326A1026365788E38`
+  - live `demo_settings.json` SHA-256 after the benchmark:
+    `E561BC0CE62AE9C6ADE92ACA8D425989DEB6C5856AE18B9326A1026365788E38`
+  - result: the runner restored the staged settings successfully
 - capture conditions:
   - current staged `RenderScene` scene only
   - `virtual-only`
@@ -168,38 +211,29 @@ Evidence for the current staged `RenderScene` scene:
 - settled window:
   - frames `101-120`
   - one stable directional address-space hash:
-    `0x4aa2f0adc785a7d0`
-  - requested pages: `436-441`, average `438.30`
-  - scheduled pages: `436-441`, average `438.30`
-  - resolved/rastered pages: `740-743`, average `740.95`
-  - page clears: `740-743`, average `740.95`
-  - shadow-caster draw submissions: `6660-6687`, average `6668.55`
-  - request prepare CPU time: `124-152 us`, average `132.05 us`
-  - resolve prepare CPU time: `2361-3277 us`, average `2595.20 us`
-  - raster prepare CPU time: `41-162 us`, average `51.35 us`
-- worst spikes in the same run:
-  - frame `6`: `1536` rastered pages, `1536` page clears, `13824` shadow
-    draws
-  - frame `72`: `1467` rastered pages, `1467` page clears, `13203` shadow
-    draws
-  - resolve prepare spikes reached `1,234,936-1,258,161 us` on frames `6-9`
-- scene-level renderer timings from the same run:
-  - average `view_render_ms=117.727`
-  - average `render_graph_ms=104.639`
-  - last-frame `view_render_ms=44.017`
-  - last-frame `render_graph_ms=37.757`
-  - inference: the run-average `view_render_ms` is roughly `8.5 FPS`
+    `0xb4d59576312cea87`
+  - requested pages: `645-648`, average `646.10`
+  - scheduled pages: `639-641`, average `640.10`
+  - resolved/rastered pages: `676-687`, average `679.60`
+  - page clears: `676-687`, average `679.60`
+  - shadow-caster draw submissions: `1778-1804`, average `1791.00`
+  - request prepare CPU time: `138-151 us`, average `144.40 us`
+  - resolve prepare CPU time: `14895-16025 us`, average `15287.35 us`
+  - raster prepare CPU time: `41-48 us`, average `43.80 us`
+- wall-clock timing from the runner:
+  - `22661 ms` for `120` frames
+  - rough whole-run rate: `5.3 FPS`
 
 What the baseline proves:
 
-- the expensive path is not request generation; request and schedule counts
-  stay in the mid-`400`s once the scene settles
-- resolved/rastered pages remain much higher than requested/scheduled pages in
-  steady-state
-- the raster pass is still replaying far too many shadow-caster draws per
-  settled page set
-- large transient spikes still exist before the scene settles, so both the
-  raster replay cost and the page-overproduction path remain active problems
+- the canonical benchmark setup is now frozen, so later before/after claims can
+  be compared without scene-state drift
+- the current directional VSM path is still materially overproducing pages
+  before raster, with requested/scheduled counts already in the mid-`600`s
+- Step 2 page-local raster culling still helps shadow-draw count, but it does
+  not solve the upstream page-production bottleneck
+- the current whole-run benchmark remains far below the acceptable performance
+  target and is a valid baseline for the remaining recovery steps
 
 ### Step 2. Remove the Dominant Raster Replay Cost
 
@@ -311,6 +345,62 @@ Exit evidence:
 - requested, scheduled, and rastered page counts must converge substantially
   compared to the baseline
 
+Step 3 status, March 12, 2026: `in_progress`
+
+First completed slice:
+
+- tighten accepted-feedback dilation by reducing the backend feedback request
+  guard radius from `2` pages to `1` page
+
+Validation for this slice:
+
+- focused test build:
+  `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+- focused tests:
+  `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*`
+- runtime build:
+  `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:1 /p:Configuration=Debug /nologo`
+- canonical benchmark runner:
+  `powershell -ExecutionPolicy Bypass -File Examples\\RenderScene\\benchmark_directional_vsm.ps1`
+- archived log:
+  `out/build-vs/benchmarks/directional-vsm/directional-vsm-benchmark-20260312-154221.log`
+- benchmark contract:
+  - restored `Examples/RenderScene/demo_settings.json` from the frozen
+    baseline before and after the run
+  - used the unchanged canonical app command:
+    `out/build-vs/bin/Debug/Oxygen.Examples.RenderScene.exe -v 0 --frames 120 --fps 100 --vsync false --directional-shadows virtual-only`
+
+Measured gain versus the frozen Step 1 baseline over settled frames `101-120`:
+
+- requested pages: unchanged at `646.10`
+- scheduled pages: `640.10 -> 646.10` (`+0.94%`)
+- resolved/rastered pages: `679.60 -> 580.05` (`-14.65%`)
+- shadow-caster draw submissions: `1791.00 -> 1644.50` (`-8.18%`)
+- request prepare CPU time: `144.40 us -> 143.20 us`
+- resolve prepare CPU time: `15287.35 us -> 2322.55 us` (`-84.81%`)
+- raster prepare CPU time: `43.80 us -> 39.40 us` (`-10.05%`)
+- runner wall time: `22661 ms -> 20096 ms` (`-11.32%`)
+
+What changed in backend state over the same settled window:
+
+- selected pages: `1677.25 -> 1261.85`
+- feedback seed pages: unchanged at `640.05`
+- feedback refine pages: `1473.25 -> 1057.85`
+- current-frame reinforcement pages: unchanged at `192.00`
+- pending raster pages: `679.60 -> 580.05`
+- mapped resident pages: `1536.00 -> 1261.85`
+- allocation failures: `141.25 -> 0.00`
+
+What this means:
+
+- tightening feedback dilation is a legitimate Step 3 win on the frozen
+  benchmark; it materially reduced backend page overproduction without
+  breaking the focused VSM regressions
+- the improvement came from shrinking the accepted-feedback refinement set, not
+  from any change to coarse backbone or motion reinforcement
+- Step 3 is not complete yet because the coarse backbone policy, motion-time
+  reinforcement policy, and broader page-budgeting work are still untouched
+
 ### Step 4. Remove Full-Buffer Readback from the Steady-State Path
 
 Goal:
@@ -404,7 +494,9 @@ Current status:
   scene
 - Step 2 page-local raster culling is complete with measured reductions in
   rastered pages and shadow draw submissions
-- Step 3 page-production tightening / budgeting is the next implementation
-  task
+- Step 3 page-production tightening / budgeting is now `in_progress`; the
+  first guard-band tightening slice is landed with a measured `-11.32%`
+  benchmark wall-time reduction, but coarse backbone and motion reinforcement
+  are still open
 - this plan is the active authoritative performance plan for the next
   directional VSM work
