@@ -38,6 +38,7 @@
 #include <Oxygen/Renderer/Passes/ToneMapPass.h>
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowAtlasDebugPass.h>
+#include <Oxygen/Renderer/Passes/VirtualShadowCoarseMarkPass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowPageRasterPass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowRequestPass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowResolvePass.h>
@@ -200,6 +201,8 @@ private:
     virtual_shadow_resolve_pass_config;
   std::shared_ptr<engine::VirtualShadowRequestPass::Config>
     virtual_shadow_request_pass_config;
+  std::shared_ptr<engine::VirtualShadowCoarseMarkPass::Config>
+    virtual_shadow_coarse_mark_pass_config;
   std::shared_ptr<engine::ShaderPassConfig> shader_pass_config;
   std::shared_ptr<engine::WireframePassConfig> wireframe_pass_config;
   std::shared_ptr<engine::SkyPassConfig> sky_pass_config;
@@ -218,6 +221,8 @@ private:
     virtual_shadow_atlas_debug_pass;
   std::shared_ptr<engine::VirtualShadowResolvePass> virtual_shadow_resolve_pass;
   std::shared_ptr<engine::VirtualShadowRequestPass> virtual_shadow_request_pass;
+  std::shared_ptr<engine::VirtualShadowCoarseMarkPass>
+    virtual_shadow_coarse_mark_pass;
   std::shared_ptr<engine::ShaderPass> shader_pass;
   std::shared_ptr<engine::WireframePass> wireframe_pass;
   std::shared_ptr<engine::SkyPass> sky_pass;
@@ -527,6 +532,13 @@ auto ForwardPipeline::Impl::RunScenePasses(
       co_await virtual_shadow_request_pass->Execute(rc, rec);
       rc.RegisterPass<engine::VirtualShadowRequestPass>(
         virtual_shadow_request_pass.get());
+    }
+
+    if (virtual_shadow_coarse_mark_pass) {
+      co_await virtual_shadow_coarse_mark_pass->PrepareResources(rc, rec);
+      co_await virtual_shadow_coarse_mark_pass->Execute(rc, rec);
+      rc.RegisterPass<engine::VirtualShadowCoarseMarkPass>(
+        virtual_shadow_coarse_mark_pass.get());
     }
 
     if (virtual_shadow_resolve_pass) {
@@ -873,6 +885,8 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
     = std::make_shared<p::VirtualShadowResolvePass::Config>();
   virtual_shadow_request_pass_config
     = std::make_shared<p::VirtualShadowRequestPass::Config>();
+  virtual_shadow_coarse_mark_pass_config
+    = std::make_shared<p::VirtualShadowCoarseMarkPass::Config>();
   shader_pass_config = std::make_shared<p::ShaderPassConfig>();
   wireframe_pass_config = std::make_shared<p::WireframePassConfig>();
   sky_pass_config = std::make_shared<p::SkyPassConfig>();
@@ -902,6 +916,9 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
     gfx_ptr, virtual_shadow_resolve_pass_config);
   virtual_shadow_request_pass = std::make_shared<p::VirtualShadowRequestPass>(
     gfx_ptr, virtual_shadow_request_pass_config);
+  virtual_shadow_coarse_mark_pass
+    = std::make_shared<p::VirtualShadowCoarseMarkPass>(
+      gfx_ptr, virtual_shadow_coarse_mark_pass_config);
   light_culling_pass
     = std::make_shared<p::LightCullingPass>(gfx_ptr, light_culling_pass_config);
   tone_map_pass = std::make_shared<p::ToneMapPass>(tone_map_pass_config);

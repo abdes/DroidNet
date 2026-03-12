@@ -30,6 +30,22 @@ enum class VirtualShadowAtlasTileDebugState : std::uint32_t {
   kRewritten = 3U,
 };
 
+enum class DirectionalVirtualClipCacheStatus : std::uint8_t {
+  kNoPreviousFrame = 0U,
+  kNeverRendered = 1U,
+  kForceInvalidated = 2U,
+  kLayoutInvalid = 3U,
+  kDepthGuardbandInvalid = 4U,
+  kPanningDisabled = 5U,
+  kReuseGuardbandInvalid = 6U,
+  kValid = 7U,
+};
+
+struct DirectionalVirtualCacheControls {
+  bool clipmap_panning_enabled { true };
+  bool force_invalidate { false };
+};
+
 // Bridge payload for the current resolve-to-raster transition. These entries
 // mirror the backend-private residency snapshot uploaded into persistent GPU
 // buffers until the dedicated resolve pass becomes the only author of page
@@ -96,11 +112,13 @@ struct VirtualShadowViewIntrospection {
   std::span<const std::int32_t> clipmap_page_offset_x {};
   std::span<const std::int32_t> clipmap_page_offset_y {};
   std::span<const bool> clipmap_reuse_guardband_valid {};
+  std::span<const bool> clipmap_cache_valid {};
+  std::span<const DirectionalVirtualClipCacheStatus> clipmap_cache_status {};
   std::span<const std::uint32_t> atlas_tile_debug_states {};
   bool used_request_feedback { false };
   bool used_resolved_raster_schedule { false };
-  bool used_last_coherent_publish_fallback { false };
-  bool last_coherent_publish_compatible { false };
+  bool cache_layout_compatible { false };
+  bool depth_guardband_valid { false };
   bool has_persistent_gpu_residency_state { false };
   ShaderVisibleIndex resolve_resident_pages_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex resolve_stats_srv { kInvalidShaderVisibleIndex };
@@ -123,8 +141,6 @@ struct VirtualShadowViewIntrospection {
   std::uint32_t current_frame_reinforcement_page_count { 0U };
   std::uint64_t current_frame_reinforcement_reference_frame { 0U };
   std::uint64_t resolved_schedule_age_frames { 0U };
-  std::uint64_t last_coherent_publish_age_frames { 0U };
-  std::uint32_t incoherent_publish_frame_count { 0U };
   std::uint32_t allocated_page_count { 0U };
   std::uint32_t evicted_page_count { 0U };
   std::uint32_t rerasterized_page_count { 0U };

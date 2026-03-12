@@ -28,6 +28,28 @@ Rules:
 
 This rule exists to stop losing time on parallel plan maintenance.
 
+## 1.1 Scope Correction
+
+Date: March 12, 2026
+Status: `active`
+
+The remaining directional VSM refactor is explicitly re-scoped around the UE5
+directional clipmap cache model:
+
+- cache validity is decided per directional light and per clipmap level
+- clipmap XY motion is handled by snapped page-space panning
+- clipmap Z continuity is handled by stable guard-banded depth ranges
+- continuity comes from persistent physical-page remapping
+- redraw is limited to dirty or newly requested uncached pages
+
+The following idea is now rejected as the target architecture:
+
+- whole-publication continuity through stale `last_coherent_*` snapshot
+  republish
+
+If temporary compatibility code remains in the tree during the transition, it
+is stopgap only and must not shape the remaining design phases.
+
 ## 2. Refactor Objective
 
 Replace the current publication-led directional VSM architecture with a
@@ -97,20 +119,32 @@ first.
 3. Clipmap motion is a page-space remap problem.
    - not a stale metadata republish problem
 
-4. Coarse/detail policy must be simple.
+4. Cache validity must be explicit and bounded.
+   - directional cache reuse is allowed only when the light/clipmap setup is
+     equivalent enough to remap safely
+   - Z continuity must come from guard bands, not from reusing drifting depth
+     bases
+
+5. Coarse/detail policy must be simple.
    - binary and explicit, not a boiling stack of overlapping quality regimes
 
-5. Passes own one concern.
+6. Page marking is not the continuity mechanism.
+   - page marking identifies needed pages for this frame
+   - it does not decide whether old physical pages remain valid
+
+7. Passes own one concern.
    - clipmap setup
+   - cache validity
+   - page remap/reuse
    - page marking
    - invalidation
-   - page reuse/allocation
+   - allocation
    - page-flag propagation
    - per-page draw-command build
    - raster
    - projection
 
-6. Verification gates are mandatory.
+8. Verification gates are mandatory.
    - no phase is complete without targeted evidence
 
 ## 6. Legacy Kill List
@@ -134,16 +168,17 @@ refactor:
 The final directional VSM runtime should be organized as:
 
 1. `DirectionalVirtualClipmapSetupPass`
-2. `DirectionalVirtualPageMarkPass`
-3. `DirectionalVirtualCoarseMarkPass`
-4. `DirectionalVirtualInvalidationPass`
-5. `DirectionalVirtualPageReusePass`
-6. `DirectionalVirtualPageAllocatePass`
-7. `DirectionalVirtualPageFlagPropagatePass`
-8. `DirectionalVirtualBuildPerPageDrawCommandsPass`
-9. `DirectionalVirtualPageRasterPass`
-10. `DirectionalVirtualProjectionPass`
-11. optional `DirectionalVirtualPageHzbPass`
+2. `DirectionalVirtualCacheValidityPass`
+3. `DirectionalVirtualPageRemapPass`
+4. `DirectionalVirtualPageMarkPass`
+5. `DirectionalVirtualCoarseMarkPass`
+6. `DirectionalVirtualInvalidationPass`
+7. `DirectionalVirtualPageAllocatePass`
+8. `DirectionalVirtualPageFlagPropagatePass`
+9. `DirectionalVirtualBuildPerPageDrawCommandsPass`
+10. `DirectionalVirtualPageRasterPass`
+11. `DirectionalVirtualProjectionPass`
+12. optional `DirectionalVirtualPageHzbPass`
 
 These names are directional targets for ownership. Exact final class names may
 change, but the split of responsibilities may not collapse back into the old
@@ -303,20 +338,179 @@ Completion evidence:
   - focused tests cover snapped motion offsets and guardband rejection
   - the 120-frame benchmark scene run completed with the locked runner and scene contract
 
-### Phase 3. Replace CPU Bootstrap With GPU Page Marking
+### Phase 3. Build Explicit Directional Cache Validity
+
+Status: `completed`
+
+Goal:
+
+- make directional clipmap cache validity explicit and correct before doing more
+  page-demand work
+
+Implementation:
+
+- decide top-level directional cache validity from:
+  - light direction
+  - clipmap first level / clip layout configuration
+  - explicit force-invalidate controls
+- decide per-clip validity from:
+  - snapped page-space origin deltas
+  - clipmap panning enable/disable
+  - stable Z guard-band tests against the previous cached depth basis
+  - first-render / never-rendered state
+  - level-radius / view-radius equality
+- store enough next-frame mapping data to support persistent remap instead of
+  snapshot publish fallback
+
+Must remove or demote:
+
+- `last_coherent_*` snapshot republish as an authoritative continuity strategy
+- ad hoc "publish compatibility" heuristics as the main motion-stability tool
+
+Verification:
+
+- focused tests for:
+  - light-direction invalidation
+  - clipmap first-level invalidation
+  - panning-preserving XY shifts
+  - panning-disabled XY invalidation
+  - Z guard-band preservation and rejection
+  - never-rendered level invalidation
+- runtime evidence that motion-time continuity decisions are no longer being
+  made by stale whole-publication fallback
+
+Completion gate:
+
+- every directional level either:
+  - remains valid and carries a precise page-space remap offset, or
+  - is explicitly invalidated for a concrete reason
+- stale whole-publication fallback is no longer needed for compatible-motion
+  continuity
+
+Scope correction:
+
+- the older broad virtual regression
+  `ShadowManagerPublishForView_VirtualBudgetPressureEvictsDirtyPagesBeforeCleanCachedPages`
+  is not a Phase 3 exit gate
+- it exercises eviction under pressure after reuse/allocation decisions, which
+  belongs to the remap/page-management phases
+- earlier work in this phase drifted toward that test; that was the wrong
+  target and is now explicitly corrected here
+
+Completion evidence:
+
+- implemented explicit cache-validity ownership in:
+  - `src/Oxygen/Renderer/Internal/VirtualShadowMapBackend.h`
+  - `src/Oxygen/Renderer/Internal/VirtualShadowMapBackend.cpp`
+  - `src/Oxygen/Renderer/ShadowManager.h`
+  - `src/Oxygen/Renderer/ShadowManager.cpp`
+  - `src/Oxygen/Renderer/Types/VirtualShadowRenderPlan.h`
+- added and corrected focused validation in:
+  - `src/Oxygen/Renderer/Test/LightManager_basic_test.cpp`
+- Phase 3 now explicitly covers:
+  - top-level directional cache invalidation for light/layout/force-invalidate
+  - per-clip validity reasons for panning-disabled motion, depth guardband
+    failure, reuse-guardband failure, and never-rendered history
+  - authoritative preference for previously rendered cache state over stale
+    unresolved pending snapshots when choosing the previous frame basis
+  - next-frame mapping data through explicit clip page offsets, reuse guardband
+    validity, and per-clip cache-status export
+- validation run on March 13, 2026 in `out/build-vs`:
+  - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ClipmapSetup*:*VirtualCacheValidityRejectsLightDirectionChanges:*VirtualCacheValidityRejectsClipmapLayoutChanges:*VirtualPanningDisabledInvalidatesXYClipReuse:*VirtualNeverRenderedPreviousFrameInvalidatesCache:*VirtualForceInvalidateRejectsPreviousCache:*VirtualInvalidatesCleanPagesWhenDepthMappingChanges:*VirtualFeedbackDropsPagesOutsideCurrentClipAfterClipmapShift:*VirtualShiftedFeedbackDoesNotUseLegacyDeltaReinforcement`
+    - result: `9/9` passed
+  - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.VirtualShadowContracts.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.VirtualShadowContracts.Tests.exe`
+    - result: `9/9` passed
+  - broader diagnostic run:
+    - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*:*ShadowManagerPrepareVirtualPageTableResources_UploadsResolvedEntries`
+    - result: `54/55` passed
+    - remaining red test:
+      `ShadowManagerPublishForView_VirtualBudgetPressureEvictsDirtyPagesBeforeCleanCachedPages`
+  - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - `powershell -ExecutionPolicy Bypass -File Examples\RenderScene\benchmark_directional_vsm.ps1`
+    - result: exit code `0`
+    - benchmark scene: `/.cooked/Scenes/physics_domains_vsm_benchmark.oscene`
+    - wall time: `14587 ms` for `120` frames
+    - settled source frames present: `101-120`
+    - settled averages:
+      `requested_pages=659.26`, `scheduled_pages=663.35`,
+      `rastered_pages=329.15`, `shadow_draws=1084.62`
+    - restored `demo_settings.json` SHA-256 matched the frozen benchmark
+      baseline
+- gate assessment:
+  - stale whole-publication fallback is no longer the target continuity
+    mechanism and is not the live authority being advanced here
+  - compatible directional motion now produces explicit cache-validity reasons
+    and next-frame mapping inputs instead of relying on ad hoc publish
+    compatibility
+  - the locked benchmark regressed versus the earlier Phase 2 baseline because
+    Phase 3 now invalidates explicitly without a remap pass
+  - that performance regression is the expected Phase 4 debt: persistent page
+    remap and reuse must land next to recover motion cost without reintroducing
+    wrong-page continuity hacks
+
+### Phase 4. Implement Persistent Page Remap And Reuse
 
 Status: `pending`
 
 Goal:
 
-- make visible-sample page marking authoritative
+- make compatible-motion continuity come from remapping valid physical pages
+  into the new clipmap address space
+
+Implementation:
+
+- add a dedicated physical-page remap/update stage
+- consume the Phase 3 next-data mapping for each prior virtual page
+- remap old page addresses by page-space offset
+- if the remapped page stays in bounds, rewrite the current page table so it
+  points at the same physical page
+- keep physical metadata alive in place for valid remapped pages
+- encode whether the page is valid at this LOD or only at a coarser fallback
+  LOD in the page-table contract
+- mark only remapped-but-invalid / remapped-but-dirty pages as uncached
+
+Must remove or demote:
+
+- whole-publication snapshot reuse as the primary continuity tool
+- any path that republishes stale page tables/metadata instead of remapping
+  pages
+
+Verification:
+
+- focused tests for clipmap panning reuse
+- focused tests for page-address offset remap
+- focused tests that reused physical pages keep the same physical slot after
+  compatible motion
+- focused tests for invalidation by moved/dirty content
+- focused tests that compatible motion preserves valid pages without any stale
+  whole-publication reuse
+- focused tests for LOD-offset / any-LOD-valid decode after remap
+
+Completion gate:
+
+- page-table continuity is page-remap driven
+- a compatible motion frame can preserve existing valid pages without redraw
+- stale whole-publication fallback is no longer authoritative for continuity
+
+### Phase 5. Replace CPU Bootstrap With GPU Page Marking
+
+Status: `pending`
+
+Goal:
+
+- make visible-sample page marking authoritative for missing or dirty pages
+  only
 
 Implementation:
 
 - add a GPU visible page-marking pass driven by main depth / visible receivers
 - add a separate GPU coarse-marking pass
-- use small local dilation only
-- define the binary coarse/detail content policy through page flags
+- use only small local dilation
+- define binary coarse/detail policy through page flags
+- consume page marking only to request pages that are currently unmapped or
+  uncached after the remap/reuse stage
 
 Must remove or demote:
 
@@ -333,76 +527,47 @@ Verification:
 
 Completion gate:
 
-- page demand is primarily GPU marked
+- page demand is primarily GPU marked for missing/dirty pages
 - the old bootstrap/reinforcement path is no longer authoritative
+- motion no longer depends on near-camera heuristic reseeding
 
-### Phase 4. Build Dedicated Invalidation And Page Reuse
+### Phase 6. Build Invalidation And Page Management
 
 Status: `pending`
 
 Goal:
 
-- make motion continuity come from page-space reuse and invalidation, not stale
-  publication fallback
+- make invalidation, allocation, and fallback page-centric on top of the remap
+  contract
 
 Implementation:
 
 - add a dedicated invalidation stage
-- add a dedicated physical-page reuse/update stage
-- remap previous pages by page-space offset
-- preserve valid pages in place
-- record dirty/invalidated content through page flags / physical metadata
+- add new-page allocation backed by explicit physical page lists
+- preserve requested pages and evict from the correct lists only
+- propagate fallback visibility / mapped hierarchy through page-table entries
+  and page flags
+- guarantee one sample-usable coarse path through the page-management contract
 
 Must remove or demote:
 
-- snapshot-level `last_coherent_*` as the primary continuity tool
-
-Verification:
-
-- focused tests for clipmap panning reuse
-- focused tests for invalidation by moved/dirty content
-- focused tests that previous valid pages survive compatible motion without
-  stale whole-publication reuse
-
-Completion gate:
-
-- page reuse/invalidation is authoritative
-- continuity under compatible motion no longer depends on stale snapshot
-  publish logic
-
-### Phase 5. Move Allocation And Fallback Into Page Management
-
-Status: `pending`
-
-Goal:
-
-- make allocation and fallback page-centric
-
-Implementation:
-
-- add a dedicated new-page allocation stage
-- add page-list management for available/LRU/requested pages
-- propagate fallback visibility / mapped hierarchy through page-table or page
-  flags
-- guarantee one sample-usable coarse path through the new contract
-
-Must remove or demote:
-
-- coarse safety as a backend-only planning policy
-- allocator behavior coupled to the old monolithic resolve stage
+- coarse safety as a backend-only budgeting concept
+- allocator behavior coupled to monolithic backend resolve logic
 
 Verification:
 
 - focused tests for requested-page protection
 - focused tests for allocation under pressure
+- focused tests for invalidation by moved/dirty content
 - focused tests for fallback LOD decode at the sample contract
 
 Completion gate:
 
-- fallback is represented in the page-management contract
-- coarse fallback is no longer only a backend budgeting concept
+- invalidation/allocation/fallback are page-management responsibilities
+- coarse/detail fallback is encoded in the sampling contract, not carried by
+  stale publication state
 
-### Phase 6. Replace CPU Raster Scheduling With Per-Page Draw Commands
+### Phase 7. Replace CPU Raster Scheduling With Per-Page Draw Commands
 
 Status: `pending`
 
@@ -434,7 +599,7 @@ Completion gate:
 
 - raster consumes only the new authoritative per-page draw command source
 
-### Phase 7. Replace Projection / Shading Contract
+### Phase 8. Replace Projection / Shading Contract
 
 Status: `pending`
 
@@ -445,13 +610,11 @@ Goal:
 Implementation:
 
 - rewrite directional VSM sampling around page-table decode helpers
-- sample the best available mapped LOD through the new fallback fields
+- select the best available mapped level through the page-table fallback fields
 - keep clipmap selection and fallback entirely inside the new contract
-
-Must remove or demote:
-
-- stale full-publication republish as a shading continuity tool
-- "return lit because nothing valid is published" as the expected recovery path
+- remove stale whole-publication republish from the authoritative runtime
+- remove the "return lit because nothing valid is published" path as the normal
+  recovery behavior
 
 Verification:
 
@@ -464,7 +627,7 @@ Completion gate:
 - `last_coherent_*` fallback path is gone from the authoritative runtime
 - motion-time shading correctness is proven on the new sample contract
 
-### Phase 8. Delete The Legacy Monolith
+### Phase 9. Delete The Legacy Monolith
 
 Status: `pending`
 
@@ -488,7 +651,7 @@ Completion gate:
 
 - no parallel legacy authority remains
 
-### Phase 9. Performance Recovery On The New Architecture
+### Phase 10. Performance Recovery On The New Architecture
 
 Status: `pending`
 
@@ -499,9 +662,10 @@ Goal:
 Implementation:
 
 - benchmark the new architecture against the locked moving-camera baseline
-- optimize page marking, invalidation, per-page draw-command build, and raster
-  cost on the new path only
-- do not revive old planner heuristics as quick fixes
+- optimize cache-validity, remap/reuse, invalidation, page marking,
+  per-page draw-command build, and raster cost on the new path only
+- do not revive old planner heuristics or stale-publication shortcuts as quick
+  fixes
 
 Verification:
 
@@ -537,25 +701,26 @@ Accepted runtime evidence:
 
 ## 10. Phase Status Ledger
 
-- Phase 1: `pending`
-- Phase 2: `pending`
-- Phase 3: `pending`
+- Phase 1: `completed`
+- Phase 2: `completed`
+- Phase 3: `in_progress`
 - Phase 4: `pending`
 - Phase 5: `pending`
 - Phase 6: `pending`
 - Phase 7: `pending`
 - Phase 8: `pending`
 - Phase 9: `pending`
+- Phase 10: `pending`
 
 ## 11. Validation
 
 Validation for this plan document:
 
-- document created
+- document scope-corrected around the UE-style directional cache/remap model
 - no legacy docs were updated for active task tracking
 - `git diff --check` must stay clean aside from existing CRLF warnings
 - no builds or tests are required for the document itself
 
 Remaining gap:
 
-- implementation has not started against this plan
+- corrected Phase 3 implementation and validation are still outstanding

@@ -75,6 +75,7 @@ class ConventionalShadowRasterPass;
 class VirtualShadowPageRasterPass;
 class VirtualShadowResolvePass;
 class VirtualShadowRequestPass;
+class VirtualShadowCoarseMarkPass;
 class LightCullingPass;
 class ShaderPass;
 class SkyPass;
@@ -95,7 +96,8 @@ using KnownPassTypes = PassTypeList<DepthPrePass, LightCullingPass, ShaderPass,
   SkyPass, SkyCapturePass, TransparentPass, WireframePass, AutoExposurePass,
   GpuDebugClearPass, GpuDebugDrawPass, GroundGridPass,
   ConventionalShadowRasterPass, VirtualShadowPageRasterPass,
-  VirtualShadowResolvePass, VirtualShadowRequestPass>;
+  VirtualShadowResolvePass, VirtualShadowRequestPass,
+  VirtualShadowCoarseMarkPass>;
 
 //! The number of known pass types, used for static array sizing and sanity
 //! checks.

@@ -34,45 +34,20 @@ class Graphics;
 
 namespace oxygen::engine {
 
-struct VirtualShadowRequestPassConfig {
-  std::string debug_name { "VirtualShadowRequestPass" };
+struct VirtualShadowCoarseMarkPassConfig {
+  std::string debug_name { "VirtualShadowCoarseMarkPass" };
 };
 
-class VirtualShadowRequestPass : public ComputeRenderPass {
+class VirtualShadowCoarseMarkPass : public ComputeRenderPass {
 public:
-  using Config = VirtualShadowRequestPassConfig;
+  using Config = VirtualShadowCoarseMarkPassConfig;
 
-  OXGN_RNDR_API VirtualShadowRequestPass(
+  OXGN_RNDR_API VirtualShadowCoarseMarkPass(
     observer_ptr<Graphics> gfx, std::shared_ptr<Config> config);
-  OXGN_RNDR_API ~VirtualShadowRequestPass() override;
+  OXGN_RNDR_API ~VirtualShadowCoarseMarkPass() override;
 
-  OXYGEN_MAKE_NON_COPYABLE(VirtualShadowRequestPass)
-  OXYGEN_DEFAULT_MOVABLE(VirtualShadowRequestPass)
-
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetRequestWordsBuffer() const noexcept
-    -> const std::shared_ptr<graphics::Buffer>&
-  {
-    return request_words_buffer_;
-  }
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetRequestWordsSrv() const noexcept
-    -> ShaderVisibleIndex
-  {
-    return request_words_srv_;
-  }
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetRequestWordsUav() const noexcept
-    -> ShaderVisibleIndex
-  {
-    return request_words_uav_;
-  }
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetActiveRequestWordCount() const noexcept
-    -> std::uint32_t
-  {
-    return active_request_word_count_;
-  }
-  [[nodiscard]] OXGN_RNDR_NDAPI auto HasActiveDispatch() const noexcept -> bool
-  {
-    return active_dispatch_;
-  }
+  OXYGEN_MAKE_NON_COPYABLE(VirtualShadowCoarseMarkPass)
+  OXYGEN_DEFAULT_MOVABLE(VirtualShadowCoarseMarkPass)
 
 protected:
   auto DoPrepareResources(graphics::CommandRecorder& recorder)
@@ -109,12 +84,6 @@ private:
   observer_ptr<Graphics> gfx_;
   std::shared_ptr<Config> config_;
 
-  std::shared_ptr<graphics::Buffer> request_words_buffer_;
-  ShaderVisibleIndex request_words_srv_ { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex request_words_uav_ { kInvalidShaderVisibleIndex };
-  std::shared_ptr<graphics::Buffer> clear_upload_buffer_;
-  void* clear_upload_mapped_ptr_ { nullptr };
-
   std::shared_ptr<graphics::Buffer> pass_constants_buffer_;
   graphics::NativeView pass_constants_cbv_ {};
   ShaderVisibleIndex pass_constants_index_ { kInvalidShaderVisibleIndex };
@@ -131,7 +100,8 @@ private:
   std::uint32_t active_request_word_count_ { 0U };
   std::uint32_t active_pages_per_axis_ { 0U };
   std::uint32_t active_clip_level_count_ { 0U };
-  std::uint64_t active_directional_address_space_hash { 0U };
+  std::uint32_t active_coarse_backbone_begin_ { 0U };
+  std::uint64_t active_directional_address_space_hash_ { 0U };
   std::array<std::int32_t, kMaxSupportedClipLevels>
     active_clip_grid_origin_x_ {};
   std::array<std::int32_t, kMaxSupportedClipLevels>
@@ -144,7 +114,6 @@ private:
   };
   std::unordered_map<std::uint64_t, FeedbackLogState> feedback_log_states_;
 
-  OXGN_RNDR_API auto EnsureRequestBuffers() -> void;
   OXGN_RNDR_API auto EnsurePassConstantsBuffer() -> void;
   OXGN_RNDR_API auto EnsureReadbackBuffer(frame::Slot slot) -> void;
   OXGN_RNDR_API auto EnsureDepthTextureSrv(const graphics::Texture& depth_tex)
