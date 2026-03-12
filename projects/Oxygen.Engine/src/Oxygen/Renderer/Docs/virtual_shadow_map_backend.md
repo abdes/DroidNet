@@ -1125,6 +1125,19 @@ Update, March 12, 2026 directional VSM performance review and recovery plan:
     page production tightening, readback reduction, dynamic cache
     specialization, and before/after validation
 
+Update, March 12, 2026 architecture review:
+
+- the current directional VSM backend is frozen for redesign analysis
+- authoritative review:
+  `src/Oxygen/Renderer/Docs/directional_vsm_architecture_review.md`
+- replacement redesign plan:
+  `src/Oxygen/Renderer/Docs/directional_vsm_redesign_plan.md`
+- the review concludes that the remaining motion-time failures come from the
+  authoritative contract itself:
+  - continuity is publication-snapshot driven instead of page-table / clipmap
+    cache driven
+  - coarse fallback is backend-policy driven instead of sample-contract driven
+
 ## 14. References
 
 - Microsoft, *Cascaded Shadow Maps*:

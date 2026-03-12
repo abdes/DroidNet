@@ -982,6 +982,18 @@ Summary:
   5. dynamic-pressure cache specialization
   6. before/after validation gate
 
+Correction, March 12, 2026:
+
+- the current directional VSM work is now frozen for redesign analysis
+- authoritative review:
+  `src/Oxygen/Renderer/Docs/directional_vsm_architecture_review.md`
+- replacement redesign plan:
+  `src/Oxygen/Renderer/Docs/directional_vsm_redesign_plan.md`
+- the review concludes that the remaining motion-time wrong-page / no-shadow
+  issue is architectural, not just an unresolved Step 3 heuristic
+- the performance-recovery plan therefore remains historical evidence, not the
+  active completion path, until a redesign plan replaces it
+
 #### Directional Cache Realignment Plan (March 10, 2026)
 
 Review correction: the current directional VSM slice is still functional, but

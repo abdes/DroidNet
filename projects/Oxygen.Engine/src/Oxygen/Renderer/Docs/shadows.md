@@ -1280,6 +1280,17 @@ Performance recovery plan, March 12, 2026:
   zoom/aggressive-motion wrong-page flashing fix. Step 3 remains open for both
   the remaining accepted-feedback refinement / current-frame reinforcement
   budgeting on publishable frames and that final visual revalidation;
+
+Architecture review, March 12, 2026:
+
+- the current directional VSM implementation is frozen pending redesign
+- authoritative review:
+  `src/Oxygen/Renderer/Docs/directional_vsm_architecture_review.md`
+- replacement redesign plan:
+  `src/Oxygen/Renderer/Docs/directional_vsm_redesign_plan.md`
+- the review concludes that the remaining motion-time wrong-page / no-shadow
+  failures come from the publication/fallback contract itself, not just from
+  one last planning heuristic
   see
   `src/Oxygen/Renderer/Docs/directional_vsm_performance_plan.md`
   - frozen order remains baseline capture, page-local raster culling, page

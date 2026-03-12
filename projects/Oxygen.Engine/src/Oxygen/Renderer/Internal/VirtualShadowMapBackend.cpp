@@ -35,8 +35,6 @@ namespace {
 constexpr float kMinClipSpan = 1.0F;
 constexpr float kLightPullbackPadding = 64.0F;
 constexpr float kMinShadowDepthPadding = 16.0F;
-constexpr std::uint32_t kPageTableValidBit = (1U << 28U);
-constexpr std::uint32_t kPageTableRequestedThisFrameBit = (1U << 29U);
 constexpr std::uint32_t kMaxPersistentPageTableEntries
   = 64U * 64U * oxygen::engine::kMaxVirtualDirectionalClipLevels;
 constexpr std::uint32_t kVirtualShadowMaxFilterGuardTexels = 2U;
@@ -218,8 +216,8 @@ constexpr float kMinLastCoherentPublishReceiverOverlapRatio = 0.95F;
 [[nodiscard]] auto PackPageTableEntry(
   const std::uint32_t tile_x, const std::uint32_t tile_y) -> std::uint32_t
 {
-  return (tile_x & 0x0FFFU) | ((tile_y & 0x0FFFU) << 12U) | kPageTableValidBit
-    | kPageTableRequestedThisFrameBit;
+  return oxygen::renderer::PackVirtualShadowPageTableEntry(tile_x, tile_y, 0U,
+    true, true, true);
 }
 
 [[nodiscard]] auto CountMappedPagesInClip(
@@ -485,6 +483,12 @@ VirtualShadowMapBackend::~VirtualShadowMapBackend()
       resources.mapped_upload = nullptr;
     }
   }
+  for (auto& [_, resources] : view_page_flags_resources_) {
+    if (resources.upload_buffer && resources.mapped_upload != nullptr) {
+      resources.upload_buffer->UnMap();
+      resources.mapped_upload = nullptr;
+    }
+  }
   for (auto& [_, resources] : view_resolve_resources_) {
     if (resources.resident_pages_upload_buffer
       && resources.mapped_resident_pages_upload != nullptr) {
@@ -561,6 +565,8 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
       = previous_it->second.last_coherent_directional_virtual_metadata;
     state.last_coherent_page_table_entries
       = previous_it->second.last_coherent_page_table_entries;
+    state.last_coherent_page_flags_entries
+      = previous_it->second.last_coherent_page_flags_entries;
     state.last_coherent_absolute_frustum_regions
       = previous_it->second.last_coherent_absolute_frustum_regions;
     state.coarse_safety_publish_region
@@ -644,11 +650,17 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
     = state.use_last_coherent_publish_fallback
     ? std::span<const std::uint32_t> { state.last_coherent_page_table_entries }
     : std::span<const std::uint32_t> { state.page_table_entries };
+  const auto published_page_flags_entries
+    = state.use_last_coherent_publish_fallback
+    ? std::span<const std::uint32_t> { state.last_coherent_page_flags_entries }
+    : std::span<const std::uint32_t> { state.page_flags_entries };
   state.published_directional_virtual_metadata_snapshot.assign(
     published_directional_virtual_metadata.begin(),
     published_directional_virtual_metadata.end());
   state.published_page_table_entries_snapshot.assign(
     published_page_table_entries.begin(), published_page_table_entries.end());
+  state.published_page_flags_entries_snapshot.assign(
+    published_page_flags_entries.begin(), published_page_flags_entries.end());
 
   state.frame_publication.shadow_instance_metadata_srv
     = PublishShadowInstances(published_shadow_instances);
@@ -657,9 +669,15 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
   state.frame_publication.virtual_shadow_page_table_srv
     = EnsurePageTablePublication(
       view_id, static_cast<std::uint32_t>(published_page_table_entries.size()));
+  state.frame_publication.virtual_shadow_page_flags_srv
+    = EnsurePageFlagsPublication(
+      view_id, static_cast<std::uint32_t>(published_page_flags_entries.size()));
   state.page_table_upload_entry_count
     = static_cast<std::uint32_t>(published_page_table_entries.size());
   state.page_table_upload_pending = false;
+  state.page_flags_upload_entry_count
+    = static_cast<std::uint32_t>(published_page_flags_entries.size());
+  state.page_flags_upload_pending = false;
   if (state.use_last_coherent_publish_fallback
     && !published_page_table_entries.empty()) {
     const auto page_table_srv
@@ -668,6 +686,15 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
       state.frame_publication.virtual_shadow_page_table_srv = page_table_srv;
     }
     state.page_table_upload_pending = page_table_srv.IsValid();
+  }
+  if (state.use_last_coherent_publish_fallback
+    && !published_page_flags_entries.empty()) {
+    const auto page_flags_srv
+      = StagePageFlagsUpload(view_id, published_page_flags_entries);
+    if (!state.frame_publication.virtual_shadow_page_flags_srv.IsValid()) {
+      state.frame_publication.virtual_shadow_page_flags_srv = page_flags_srv;
+    }
+    state.page_flags_upload_pending = page_flags_srv.IsValid();
   }
   state.frame_publication.virtual_shadow_physical_pool_srv = physical_pool_srv_;
   if (!published_shadow_instances.empty()) {
@@ -737,6 +764,8 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
   state.resolved_raster_pages.clear();
   std::fill(
     state.page_table_entries.begin(), state.page_table_entries.end(), 0U);
+  std::fill(
+    state.page_flags_entries.begin(), state.page_flags_entries.end(), 0U);
 
   std::uint32_t reused_requested_pages = 0U;
   std::uint32_t allocated_pages = 0U;
@@ -840,6 +869,9 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
         state.resident_pages.insert_or_assign(resident_key, resident_page);
         state.page_table_entries[global_page_index] = PackPageTableEntry(
           resident_page.tile.tile_x, resident_page.tile.tile_y);
+        state.page_flags_entries[global_page_index]
+          = renderer::MakeVirtualShadowPageFlags(true, needs_raster, false,
+            clip_index < pending.coarse_backbone_begin, true);
 
         const float logical_left
           = origin_x + static_cast<float>(page_x) * page_world_size;
@@ -947,10 +979,7 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
     }
   };
 
-  const std::uint32_t coarse_backbone_begin
-    = pending.clip_level_count > kDirectionalCoarseBackboneClipCount
-    ? pending.clip_level_count - kDirectionalCoarseBackboneClipCount
-    : 0U;
+  const std::uint32_t coarse_backbone_begin = pending.coarse_backbone_begin;
   // Under cold starts, incompatible publishes, or globally dirty content, the
   // player-visible failure mode is a blank frame rather than a temporarily
   // blurrier shadow. Reserve the current coarse safety net first in those
@@ -999,6 +1028,7 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
     state.last_coherent_directional_virtual_metadata
       = state.directional_virtual_metadata;
     state.last_coherent_page_table_entries = state.page_table_entries;
+    state.last_coherent_page_flags_entries = state.page_flags_entries;
     state.last_coherent_absolute_frustum_regions = state.absolute_frustum_regions;
     state.last_coherent_coarse_safety_publish_region
       = state.coarse_safety_publish_region;
@@ -1011,6 +1041,8 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
   if (!state.use_last_coherent_publish_fallback) {
     state.page_table_upload_entry_count
       = static_cast<std::uint32_t>(state.page_table_entries.size());
+    state.page_flags_upload_entry_count
+      = static_cast<std::uint32_t>(state.page_flags_entries.size());
     if (state.page_table_upload_entry_count > 0U) {
       const auto page_table_srv
         = StagePageTableUpload(view_id, state.page_table_entries);
@@ -1020,6 +1052,16 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
       state.page_table_upload_pending = page_table_srv.IsValid();
     } else {
       state.page_table_upload_pending = false;
+    }
+    if (state.page_flags_upload_entry_count > 0U) {
+      const auto page_flags_srv
+        = StagePageFlagsUpload(view_id, state.page_flags_entries);
+      if (!state.frame_publication.virtual_shadow_page_flags_srv.IsValid()) {
+        state.frame_publication.virtual_shadow_page_flags_srv = page_flags_srv;
+      }
+      state.page_flags_upload_pending = page_flags_srv.IsValid();
+    } else {
+      state.page_flags_upload_pending = false;
     }
   }
 
@@ -1042,46 +1084,94 @@ auto VirtualShadowMapBackend::PreparePageTableResources(
     return;
   }
 
-  const auto resources_it = view_page_table_resources_.find(view_id);
-  if (resources_it == view_page_table_resources_.end()
-    || !resources_it->second.gpu_buffer) {
+  const auto page_table_resources_it = view_page_table_resources_.find(view_id);
+  const auto page_flags_resources_it = view_page_flags_resources_.find(view_id);
+  const bool has_page_table_resources
+    = page_table_resources_it != view_page_table_resources_.end()
+    && page_table_resources_it->second.gpu_buffer;
+  const bool has_page_flags_resources
+    = page_flags_resources_it != view_page_flags_resources_.end()
+    && page_flags_resources_it->second.gpu_buffer;
+  if (!has_page_table_resources && !has_page_flags_resources) {
     return;
   }
 
   auto& state = state_it->second;
-  auto& resources = resources_it->second;
   const auto page_table_upload_entries = state.use_last_coherent_publish_fallback
     ? std::span<const std::uint32_t> {
         state.published_page_table_entries_snapshot
       }
     : std::span<const std::uint32_t> { state.page_table_entries };
-  if (!recorder.IsResourceTracked(*resources.gpu_buffer)) {
-    recorder.BeginTrackingResourceState(
-      *resources.gpu_buffer, graphics::ResourceStates::kCommon, true);
-  }
+  const auto page_flags_upload_entries = state.use_last_coherent_publish_fallback
+    ? std::span<const std::uint32_t> {
+        state.published_page_flags_entries_snapshot
+      }
+    : std::span<const std::uint32_t> { state.page_flags_entries };
+  if (has_page_table_resources) {
+    auto& page_table_resources = page_table_resources_it->second;
+    if (!recorder.IsResourceTracked(*page_table_resources.gpu_buffer)) {
+      recorder.BeginTrackingResourceState(*page_table_resources.gpu_buffer,
+        graphics::ResourceStates::kCommon, true);
+    }
 
-  if (state.page_table_upload_pending && resources.upload_buffer) {
-    if (resources.mapped_upload != nullptr
-      && state.page_table_upload_entry_count > 0U) {
-      std::memcpy(resources.mapped_upload, page_table_upload_entries.data(),
+    if (state.page_table_upload_pending && page_table_resources.upload_buffer) {
+      if (page_table_resources.mapped_upload != nullptr
+        && state.page_table_upload_entry_count > 0U) {
+        std::memcpy(page_table_resources.mapped_upload,
+          page_table_upload_entries.data(),
+          static_cast<std::size_t>(state.page_table_upload_entry_count)
+            * sizeof(std::uint32_t));
+      }
+      if (!recorder.IsResourceTracked(*page_table_resources.upload_buffer)) {
+        recorder.BeginTrackingResourceState(
+          *page_table_resources.upload_buffer,
+          graphics::ResourceStates::kCopySource, false);
+      }
+      recorder.RequireResourceState(*page_table_resources.gpu_buffer,
+        graphics::ResourceStates::kCopyDest);
+      recorder.FlushBarriers();
+      recorder.CopyBuffer(*page_table_resources.gpu_buffer, 0U,
+        *page_table_resources.upload_buffer, 0U,
         static_cast<std::size_t>(state.page_table_upload_entry_count)
           * sizeof(std::uint32_t));
+      state.page_table_upload_pending = false;
     }
-    if (!recorder.IsResourceTracked(*resources.upload_buffer)) {
-      recorder.BeginTrackingResourceState(
-        *resources.upload_buffer, graphics::ResourceStates::kCopySource, false);
-    }
-    recorder.RequireResourceState(
-      *resources.gpu_buffer, graphics::ResourceStates::kCopyDest);
-    recorder.FlushBarriers();
-    recorder.CopyBuffer(*resources.gpu_buffer, 0U, *resources.upload_buffer, 0U,
-      static_cast<std::size_t>(state.page_table_upload_entry_count)
-        * sizeof(std::uint32_t));
-    state.page_table_upload_pending = false;
-  }
 
-  recorder.RequireResourceState(
-    *resources.gpu_buffer, graphics::ResourceStates::kShaderResource);
+    recorder.RequireResourceState(*page_table_resources.gpu_buffer,
+      graphics::ResourceStates::kShaderResource);
+  }
+  if (has_page_flags_resources) {
+    auto& page_flags_resources = page_flags_resources_it->second;
+    if (!recorder.IsResourceTracked(*page_flags_resources.gpu_buffer)) {
+      recorder.BeginTrackingResourceState(*page_flags_resources.gpu_buffer,
+        graphics::ResourceStates::kCommon, true);
+    }
+
+    if (state.page_flags_upload_pending && page_flags_resources.upload_buffer) {
+      if (page_flags_resources.mapped_upload != nullptr
+        && state.page_flags_upload_entry_count > 0U) {
+        std::memcpy(page_flags_resources.mapped_upload,
+          page_flags_upload_entries.data(),
+          static_cast<std::size_t>(state.page_flags_upload_entry_count)
+            * sizeof(std::uint32_t));
+      }
+      if (!recorder.IsResourceTracked(*page_flags_resources.upload_buffer)) {
+        recorder.BeginTrackingResourceState(*page_flags_resources.upload_buffer,
+          graphics::ResourceStates::kCopySource, false);
+      }
+      recorder.RequireResourceState(*page_flags_resources.gpu_buffer,
+        graphics::ResourceStates::kCopyDest);
+      recorder.FlushBarriers();
+      recorder.CopyBuffer(*page_flags_resources.gpu_buffer, 0U,
+        *page_flags_resources.upload_buffer, 0U,
+        static_cast<std::size_t>(state.page_flags_upload_entry_count)
+          * sizeof(std::uint32_t));
+      state.page_flags_upload_pending = false;
+    }
+
+    recorder.RequireResourceState(*page_flags_resources.gpu_buffer,
+      graphics::ResourceStates::kShaderResource);
+  }
   const auto resolve_resources_it = view_resolve_resources_.find(view_id);
   if (resolve_resources_it != view_resolve_resources_.end()) {
     auto& resolve_resources = resolve_resources_it->second;
@@ -1371,6 +1461,13 @@ auto VirtualShadowMapBackend::RefreshViewExports(
         state.published_page_table_entries_snapshot
       }
     : std::span<const std::uint32_t> { state.page_table_entries };
+  state.introspection.page_flags_entries = state.page_flags_entries;
+  state.introspection.published_page_flags_entries
+    = state.use_last_coherent_publish_fallback
+    ? std::span<const std::uint32_t> {
+        state.published_page_flags_entries_snapshot
+      }
+    : std::span<const std::uint32_t> { state.page_flags_entries };
   state.introspection.atlas_tile_debug_states = state.atlas_tile_debug_states;
   state.introspection.used_request_feedback
     = state.publish_diagnostics.feedback_decision
@@ -2147,6 +2244,7 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   state.page_table_entries.resize(static_cast<std::size_t>(clip_level_count)
       * static_cast<std::size_t>(pages_per_level),
     0U);
+  state.page_flags_entries.resize(state.page_table_entries.size(), 0U);
   state.resolved_raster_pages.reserve(state.page_table_entries.size());
 
   for (std::uint32_t clip_index = 0U; clip_index < clip_level_count;
@@ -3237,6 +3335,7 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   pending_resolve.clip_origin_y = clip_origin_y;
   pending_resolve.clip_grid_origin_x = clip_grid_origin_x;
   pending_resolve.clip_grid_origin_y = clip_grid_origin_y;
+  pending_resolve.coarse_backbone_begin = coarse_backbone_begin;
   pending_resolve.coarse_safety_clip_index = coarse_safety_clip_index;
   pending_resolve.coarse_safety_max_page_count = coarse_safety_budget_pages;
   pending_resolve.coarse_safety_priority_center_ls
@@ -3377,7 +3476,7 @@ auto VirtualShadowMapBackend::PublishDirectionalVirtualMetadata(
 }
 
 auto VirtualShadowMapBackend::EnsureViewPageTableResources(const ViewId view_id,
-  const std::uint32_t required_entry_count) -> ViewPageTableResources*
+  const std::uint32_t required_entry_count) -> ViewStructuredWordBufferResources*
 {
   if (required_entry_count == 0U) {
     return nullptr;
@@ -3516,6 +3615,149 @@ auto VirtualShadowMapBackend::EnsurePageTablePublication(const ViewId view_id,
   }
 
   auto* resources = EnsureViewPageTableResources(view_id, required_entry_count);
+  return resources != nullptr ? resources->srv : kInvalidShaderVisibleIndex;
+}
+
+auto VirtualShadowMapBackend::EnsureViewPageFlagResources(const ViewId view_id,
+  const std::uint32_t required_entry_count) -> ViewStructuredWordBufferResources*
+{
+  if (required_entry_count == 0U) {
+    return nullptr;
+  }
+
+  auto [it, _] = view_page_flags_resources_.try_emplace(view_id);
+  auto& resources = it->second;
+  if (resources.gpu_buffer && resources.upload_buffer
+    && resources.mapped_upload != nullptr
+    && required_entry_count <= resources.entry_capacity) {
+    return &resources;
+  }
+
+  if (required_entry_count > kMaxPersistentPageTableEntries) {
+    LOG_F(ERROR,
+      "VirtualShadowMapBackend: view {} requested {} page-flag entries but "
+      "the persistent capacity is only {}",
+      view_id.get(), required_entry_count, kMaxPersistentPageTableEntries);
+    return nullptr;
+  }
+
+  if (resources.upload_buffer && resources.mapped_upload != nullptr) {
+    resources.upload_buffer->UnMap();
+    resources.mapped_upload = nullptr;
+  }
+
+  auto& registry = gfx_->GetResourceRegistry();
+  auto& allocator = gfx_->GetDescriptorAllocator();
+  const auto size_bytes
+    = static_cast<std::uint64_t>(kMaxPersistentPageTableEntries)
+    * sizeof(std::uint32_t);
+
+  const graphics::BufferDesc gpu_desc {
+    .size_bytes = size_bytes,
+    .usage = graphics::BufferUsage::kStorage,
+    .memory = graphics::BufferMemory::kDeviceLocal,
+    .debug_name = "VirtualShadowMapBackend.PersistentPageFlags",
+  };
+  resources.gpu_buffer = gfx_->CreateBuffer(gpu_desc);
+  if (!resources.gpu_buffer) {
+    LOG_F(ERROR,
+      "VirtualShadowMapBackend: failed to create persistent page flags "
+      "buffer for view {}",
+      view_id.get());
+    return nullptr;
+  }
+  registry.Register(resources.gpu_buffer);
+
+  auto srv_handle
+    = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_SRV,
+      graphics::DescriptorVisibility::kShaderVisible);
+  if (!srv_handle.IsValid()) {
+    LOG_F(ERROR,
+      "VirtualShadowMapBackend: failed to allocate page-flags SRV for view {}",
+      view_id.get());
+    return nullptr;
+  }
+  resources.srv = allocator.GetShaderVisibleIndex(srv_handle);
+
+  graphics::BufferViewDescription srv_desc;
+  srv_desc.view_type = graphics::ResourceViewType::kStructuredBuffer_SRV;
+  srv_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
+  srv_desc.range = { 0U, size_bytes };
+  srv_desc.stride = sizeof(std::uint32_t);
+  registry.RegisterView(*resources.gpu_buffer, std::move(srv_handle), srv_desc);
+
+  auto uav_handle
+    = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_UAV,
+      graphics::DescriptorVisibility::kShaderVisible);
+  if (!uav_handle.IsValid()) {
+    LOG_F(ERROR,
+      "VirtualShadowMapBackend: failed to allocate page-flags UAV for view {}",
+      view_id.get());
+    return nullptr;
+  }
+  resources.uav = allocator.GetShaderVisibleIndex(uav_handle);
+
+  graphics::BufferViewDescription uav_desc;
+  uav_desc.view_type = graphics::ResourceViewType::kStructuredBuffer_UAV;
+  uav_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
+  uav_desc.range = { 0U, size_bytes };
+  uav_desc.stride = sizeof(std::uint32_t);
+  registry.RegisterView(*resources.gpu_buffer, std::move(uav_handle), uav_desc);
+
+  const graphics::BufferDesc upload_desc {
+    .size_bytes = size_bytes,
+    .usage = graphics::BufferUsage::kNone,
+    .memory = graphics::BufferMemory::kUpload,
+    .debug_name = "VirtualShadowMapBackend.PersistentPageFlagsUpload",
+  };
+  resources.upload_buffer = gfx_->CreateBuffer(upload_desc);
+  if (!resources.upload_buffer) {
+    LOG_F(ERROR,
+      "VirtualShadowMapBackend: failed to create page-flags upload buffer "
+      "for view {}",
+      view_id.get());
+    return nullptr;
+  }
+
+  resources.mapped_upload
+    = static_cast<std::uint32_t*>(resources.upload_buffer->Map(0U, size_bytes));
+  if (resources.mapped_upload == nullptr) {
+    LOG_F(ERROR,
+      "VirtualShadowMapBackend: failed to map page-flags upload buffer for "
+      "view {}",
+      view_id.get());
+    resources.upload_buffer.reset();
+    return nullptr;
+  }
+  std::memset(resources.mapped_upload, 0, static_cast<std::size_t>(size_bytes));
+  resources.entry_capacity = kMaxPersistentPageTableEntries;
+  return &resources;
+}
+
+auto VirtualShadowMapBackend::StagePageFlagsUpload(const ViewId view_id,
+  const std::span<const std::uint32_t> entries) -> ShaderVisibleIndex
+{
+  if (entries.empty()) {
+    return kInvalidShaderVisibleIndex;
+  }
+
+  auto* resources = EnsureViewPageFlagResources(
+    view_id, static_cast<std::uint32_t>(entries.size()));
+  if (resources == nullptr || resources->mapped_upload == nullptr) {
+    return kInvalidShaderVisibleIndex;
+  }
+
+  return resources->srv;
+}
+
+auto VirtualShadowMapBackend::EnsurePageFlagsPublication(const ViewId view_id,
+  const std::uint32_t required_entry_count) -> ShaderVisibleIndex
+{
+  if (required_entry_count == 0U) {
+    return kInvalidShaderVisibleIndex;
+  }
+
+  auto* resources = EnsureViewPageFlagResources(view_id, required_entry_count);
   return resources != nullptr ? resources->srv : kInvalidShaderVisibleIndex;
 }
 

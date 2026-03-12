@@ -1,7 +1,7 @@
 # Directional VSM Performance Recovery Plan
 
 Date: March 12, 2026
-Status: `in_progress`
+Status: `frozen`
 Scope: directional virtual shadow maps only
 
 ## 1. Purpose
@@ -15,6 +15,17 @@ paths.
 This plan replaces ad-hoc performance notes spread across the milestone docs.
 Those docs should summarize status and link here; detailed performance work
 should be tracked here.
+
+Update, March 12, 2026:
+
+- this plan is now frozen pending redesign
+- authoritative review:
+  `src/Oxygen/Renderer/Docs/directional_vsm_architecture_review.md`
+- replacement redesign plan:
+  `src/Oxygen/Renderer/Docs/directional_vsm_redesign_plan.md`
+- reason: the remaining motion-time wrong-page / no-shadow issue is now judged
+  architectural, so further optimization on the current contract is not the
+  correct active path
 
 ## 2. Review Summary
 

@@ -2025,8 +2025,13 @@ auto Renderer::RepublishCurrentViewBindings(
       auto shadow_instance_metadata_slot = kInvalidShaderVisibleIndex;
       auto directional_shadow_metadata_slot = kInvalidShaderVisibleIndex;
       auto virtual_shadow_page_table_slot = kInvalidShaderVisibleIndex;
+      auto virtual_shadow_page_flags_slot = kInvalidShaderVisibleIndex;
       auto virtual_shadow_physical_pool_slot = kInvalidShaderVisibleIndex;
       auto virtual_directional_shadow_metadata_slot
+        = kInvalidShaderVisibleIndex;
+      auto virtual_shadow_physical_page_metadata_slot
+        = kInvalidShaderVisibleIndex;
+      auto virtual_shadow_physical_page_lists_slot
         = kInvalidShaderVisibleIndex;
       auto sun_shadow_index = 0xFFFFFFFFU;
       if (const auto light_manager = scene_prep_state_->GetLightManager()) {
@@ -2055,10 +2060,16 @@ auto Renderer::RepublishCurrentViewBindings(
           = shadow_view.directional_shadow_texture_srv;
         virtual_shadow_page_table_slot
           = shadow_view.virtual_shadow_page_table_srv;
+        virtual_shadow_page_flags_slot
+          = shadow_view.virtual_shadow_page_flags_srv;
         virtual_shadow_physical_pool_slot
           = shadow_view.virtual_shadow_physical_pool_srv;
         virtual_directional_shadow_metadata_slot
           = shadow_view.virtual_directional_shadow_metadata_srv;
+        virtual_shadow_physical_page_metadata_slot
+          = shadow_view.virtual_shadow_physical_page_metadata_srv;
+        virtual_shadow_physical_page_lists_slot
+          = shadow_view.virtual_shadow_physical_page_lists_srv;
         sun_shadow_index = shadow_view.sun_shadow_index;
 
         const ShadowFrameBindings shadow_bindings {
@@ -2066,10 +2077,15 @@ auto Renderer::RepublishCurrentViewBindings(
           .directional_shadow_metadata_slot = directional_shadow_metadata_slot,
           .directional_shadow_texture_slot = directional_shadow_texture_slot,
           .virtual_shadow_page_table_slot = virtual_shadow_page_table_slot,
+          .virtual_shadow_page_flags_slot = virtual_shadow_page_flags_slot,
           .virtual_shadow_physical_pool_slot
           = virtual_shadow_physical_pool_slot,
           .virtual_directional_shadow_metadata_slot
           = virtual_directional_shadow_metadata_slot,
+          .virtual_shadow_physical_page_metadata_slot
+          = virtual_shadow_physical_page_metadata_slot,
+          .virtual_shadow_physical_page_lists_slot
+          = virtual_shadow_physical_page_lists_slot,
           .sun_shadow_index = sun_shadow_index,
         };
         view_bindings.shadow_frame_slot

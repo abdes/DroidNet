@@ -32,6 +32,8 @@
 #include <Oxygen/Renderer/Types/ShadowFramePublication.h>
 #include <Oxygen/Renderer/Types/ShadowInstanceMetadata.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
+#include <Oxygen/Renderer/Types/VirtualShadowPageFlags.h>
+#include <Oxygen/Renderer/Types/VirtualShadowPageTableEntry.h>
 #include <Oxygen/Renderer/Types/VirtualShadowRenderPlan.h>
 #include <Oxygen/Renderer/Types/VirtualShadowRequestFeedback.h>
 #include <Oxygen/Renderer/Types/VirtualShadowResolvedRasterSchedule.h>
@@ -174,6 +176,7 @@ private:
         clip_grid_origin_x {};
       std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
         clip_grid_origin_y {};
+      std::uint32_t coarse_backbone_begin { 0U };
       std::uint32_t coarse_safety_clip_index { 0U };
       std::uint32_t coarse_safety_max_page_count { 0U };
       glm::vec2 coarse_safety_priority_center_ls { 0.0F, 0.0F };
@@ -249,17 +252,20 @@ private:
     std::vector<AbsoluteClipPageRegion> absolute_frustum_regions;
     std::vector<glm::vec4> shadow_caster_bounds;
     std::vector<std::uint32_t> page_table_entries;
+    std::vector<std::uint32_t> page_flags_entries;
     std::vector<std::uint32_t> atlas_tile_debug_states;
     std::vector<engine::ShadowInstanceMetadata> last_coherent_shadow_instances;
     std::vector<engine::DirectionalVirtualShadowMetadata>
       last_coherent_directional_virtual_metadata;
     std::vector<std::uint32_t> last_coherent_page_table_entries;
+    std::vector<std::uint32_t> last_coherent_page_flags_entries;
     std::vector<AbsoluteClipPageRegion> last_coherent_absolute_frustum_regions;
     AbsoluteClipPageRegion coarse_safety_publish_region {};
     AbsoluteClipPageRegion last_coherent_coarse_safety_publish_region {};
     std::vector<engine::DirectionalVirtualShadowMetadata>
       published_directional_virtual_metadata_snapshot;
     std::vector<std::uint32_t> published_page_table_entries_snapshot;
+    std::vector<std::uint32_t> published_page_flags_entries_snapshot;
     std::vector<renderer::VirtualShadowResolveResidentPageEntry>
       resolve_resident_page_entries;
     std::vector<renderer::VirtualShadowResolvedRasterPage>
@@ -274,6 +280,8 @@ private:
     std::uint32_t incoherent_publish_frame_count { 0U };
     std::uint32_t page_table_upload_entry_count { 0U };
     bool page_table_upload_pending { false };
+    std::uint32_t page_flags_upload_entry_count { 0U };
+    bool page_flags_upload_pending { false };
     PublishDiagnostics publish_diagnostics {};
     ShadowFramePublication frame_publication {};
     VirtualShadowRenderPlan render_plan {};
@@ -299,7 +307,7 @@ private:
   BufferT shadow_instance_buffer_;
   BufferT directional_virtual_metadata_buffer_;
 
-  struct ViewPageTableResources {
+  struct ViewStructuredWordBufferResources {
     std::shared_ptr<graphics::Buffer> gpu_buffer;
     std::shared_ptr<graphics::Buffer> upload_buffer;
     std::uint32_t* mapped_upload { nullptr };
@@ -334,7 +342,10 @@ private:
   std::vector<PhysicalTileAddress> free_physical_tiles_;
 
   std::unordered_map<ViewId, ViewCacheEntry> view_cache_;
-  std::unordered_map<ViewId, ViewPageTableResources> view_page_table_resources_;
+  std::unordered_map<ViewId, ViewStructuredWordBufferResources>
+    view_page_table_resources_;
+  std::unordered_map<ViewId, ViewStructuredWordBufferResources>
+    view_page_flags_resources_;
   std::unordered_map<ViewId, ViewResolveResources> view_resolve_resources_;
   std::unordered_map<ViewId, PendingRequestFeedback> request_feedback_;
   std::unordered_map<ViewId, VirtualShadowResolvedRasterSchedule>
@@ -399,10 +410,16 @@ private:
   // synchronized while virtual raster consumes the authoritative resolved-page
   // contract.
   OXGN_RNDR_API auto EnsureViewPageTableResources(ViewId view_id,
-    std::uint32_t required_entry_count) -> ViewPageTableResources*;
+    std::uint32_t required_entry_count) -> ViewStructuredWordBufferResources*;
   OXGN_RNDR_API auto StagePageTableUpload(ViewId view_id,
     std::span<const std::uint32_t> entries) -> ShaderVisibleIndex;
   OXGN_RNDR_API auto EnsurePageTablePublication(
+    ViewId view_id, std::uint32_t required_entry_count) -> ShaderVisibleIndex;
+  OXGN_RNDR_API auto EnsureViewPageFlagResources(ViewId view_id,
+    std::uint32_t required_entry_count) -> ViewStructuredWordBufferResources*;
+  OXGN_RNDR_API auto StagePageFlagsUpload(ViewId view_id,
+    std::span<const std::uint32_t> entries) -> ShaderVisibleIndex;
+  OXGN_RNDR_API auto EnsurePageFlagsPublication(
     ViewId view_id, std::uint32_t required_entry_count) -> ShaderVisibleIndex;
   OXGN_RNDR_API auto EnsureViewResolveResources(ViewId view_id,
     std::uint32_t required_entry_count) -> ViewResolveResources*;
