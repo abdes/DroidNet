@@ -235,7 +235,7 @@ Completion evidence:
 
 ### Phase 2. Split Clipmap Setup From Backend Planning
 
-Status: `pending`
+Status: `completed`
 
 Goal:
 
@@ -267,6 +267,41 @@ Completion gate:
 
 - clipmap setup is explicit and isolated
 - page selection no longer depends on the old clipmap-building monolith
+
+Completion evidence:
+
+- extracted directional clipmap setup into an explicit backend-owned stage:
+  - `src/Oxygen/Renderer/Internal/VirtualShadowMapBackend.h`
+  - `src/Oxygen/Renderer/Internal/VirtualShadowMapBackend.cpp`
+- added reusable clipmap offset / guardband helpers:
+  - `src/Oxygen/Renderer/Internal/ShadowBackendCommon.h`
+- exported clipmap setup results through introspection:
+  - `src/Oxygen/Renderer/Types/VirtualShadowRenderPlan.h`
+- added focused validation:
+  - `src/Oxygen/Renderer/Test/VirtualShadowContracts_test.cpp`
+  - `src/Oxygen/Renderer/Test/LightManager_basic_test.cpp`
+- hardened the locked benchmark runner to parse the current multiline raster log:
+  - `Examples/RenderScene/benchmark_directional_vsm.ps1`
+- validation run on March 12, 2026 in `out/build-vs`:
+  - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.VirtualShadowContracts.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.VirtualShadowContracts.Tests.exe`
+    - result: `6/6` passed
+  - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ClipmapSetup*:*ShadowManagerPublishForView_Virtual*`
+    - result: `49/49` passed
+  - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - `powershell -ExecutionPolicy Bypass -File Examples\RenderScene\benchmark_directional_vsm.ps1`
+    - result: exit code `0`
+    - benchmark scene: `/.cooked/Scenes/physics_domains_vsm_benchmark.oscene`
+    - wall time: `11166 ms` for `120` frames
+    - settled frames present: `101-117`
+    - settled averages: `requested_pages=655.18`, `scheduled_pages=233.29`, `rastered_pages=295.12`, `shadow_draws=504.82`
+    - restored `demo_settings.json` SHA-256 matched the frozen benchmark baseline
+- gate assessment:
+  - snapped clipmap transforms, page-space offsets, reuse guardband validity, and clipmap metadata now come from `PrepareDirectionalVirtualClipmapSetup()`
+  - `BuildDirectionalVirtualViewState()` consumes the setup output instead of rebuilding clipmap state inline
+  - focused tests cover snapped motion offsets and guardband rejection
+  - the 120-frame benchmark scene run completed with the locked runner and scene contract
 
 ### Phase 3. Replace CPU Bootstrap With GPU Page Marking
 

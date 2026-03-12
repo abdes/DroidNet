@@ -93,6 +93,9 @@ struct VirtualShadowViewIntrospection {
   std::span<const std::uint32_t> published_page_table_entries {};
   std::span<const std::uint32_t> page_flags_entries {};
   std::span<const std::uint32_t> published_page_flags_entries {};
+  std::span<const std::int32_t> clipmap_page_offset_x {};
+  std::span<const std::int32_t> clipmap_page_offset_y {};
+  std::span<const bool> clipmap_reuse_guardband_valid {};
   std::span<const std::uint32_t> atlas_tile_debug_states {};
   bool used_request_feedback { false };
   bool used_resolved_raster_schedule { false };

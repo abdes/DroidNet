@@ -2390,6 +2390,141 @@ NOLINT_TEST_F(LightManagerTest,
   EXPECT_GT(second_virtual_introspection->clean_page_count, 0U);
 }
 
+//! The explicit clipmap setup stage must publish per-clip page-space offsets and
+//! guardband validity derived from the previous snapped clipmap state.
+NOLINT_TEST_F(LightManagerTest,
+  ShadowManagerPublishForView_VirtualClipmapSetupPublishesOffsetsAndGuardbandReuse)
+{
+  auto& manager = Manager();
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  auto shadow_manager = CreateShadowManager(
+    oxygen::DirectionalShadowImplementationPolicy::kVirtualOnly);
+  ASSERT_NE(shadow_manager, nullptr);
+  shadow_manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  ViewConstants view_constants;
+  view_constants
+    .SetProjectionMatrix(
+      glm::perspectiveRH_ZO(glm::radians(45.0F), 16.0F / 9.0F, 0.1F, 200.0F))
+    .SetCameraPosition(glm::vec3(0.0F, -6.0F, 3.0F));
+  view_constants.SetFrameSequenceNumber(
+    SequenceNumber { 1 }, ViewConstants::kRenderer);
+  view_constants.SetFrameSlot(Slot { 0 }, ViewConstants::kRenderer);
+
+  const ShadowManager::SyntheticSunShadowInput synthetic_sun {
+    .enabled = true,
+    .direction_ws = glm::normalize(glm::vec3(0.35F, -0.45F, -1.0F)),
+    .bias = 0.0F,
+    .normal_bias = 0.0F,
+    .resolution_hint
+    = static_cast<std::uint32_t>(oxygen::scene::ShadowResolutionHint::kMedium),
+    .cascade_count = 4U,
+    .distribution_exponent = 1.0F,
+    .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
+  };
+  const std::array<glm::vec4, 1> shadow_casters {
+    glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
+  };
+  const std::array<glm::vec4, 1> visible_receivers {
+    glm::vec4(0.0F, 0.0F, 0.0F, 0.05F),
+  };
+
+  const auto first = shadow_manager->PublishForView(oxygen::ViewId { 230 },
+    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
+    std::chrono::milliseconds(16));
+  const auto* first_introspection
+    = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 230 });
+
+  ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(first_introspection, nullptr);
+  ASSERT_FALSE(first_introspection->directional_virtual_metadata.empty());
+  const auto first_metadata
+    = first_introspection->directional_virtual_metadata.front();
+  ASSERT_EQ(first_introspection->clipmap_page_offset_x.size(),
+    first_metadata.clip_level_count);
+  ASSERT_EQ(first_introspection->clipmap_page_offset_y.size(),
+    first_metadata.clip_level_count);
+  ASSERT_EQ(first_introspection->clipmap_reuse_guardband_valid.size(),
+    first_metadata.clip_level_count);
+
+  const auto inverse_light_view = glm::inverse(first_metadata.light_view);
+  const float fine_page_world = first_metadata.clip_metadata[0].origin_page_scale.z;
+  const glm::vec3 world_origin
+    = glm::vec3(inverse_light_view * glm::vec4(0.0F, 0.0F, 0.0F, 1.0F));
+  const glm::vec3 world_shift_x
+    = glm::vec3(
+        inverse_light_view * glm::vec4(fine_page_world, 0.0F, 0.0F, 1.0F))
+    - world_origin;
+
+  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 230 });
+
+  view_constants.SetCameraPosition(
+    view_constants.GetCameraPosition() + world_shift_x);
+  AdvanceRendererFrame(
+    manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
+
+  const auto second = shadow_manager->PublishForView(oxygen::ViewId { 230 },
+    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
+    std::chrono::milliseconds(16));
+  const auto* second_introspection
+    = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 230 });
+
+  ASSERT_NE(second.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(second_introspection, nullptr);
+  ASSERT_FALSE(second_introspection->directional_virtual_metadata.empty());
+  const auto second_metadata
+    = second_introspection->directional_virtual_metadata.front();
+
+  for (std::uint32_t clip_index = 0U;
+    clip_index < second_metadata.clip_level_count; ++clip_index) {
+    const auto expected_offset
+      = oxygen::renderer::internal::shadow_detail::
+          ResolveDirectionalVirtualClipmapPageOffset(
+            first_metadata, second_metadata, clip_index);
+    EXPECT_EQ(second_introspection->clipmap_page_offset_x[clip_index],
+      expected_offset.delta_x);
+    EXPECT_EQ(second_introspection->clipmap_page_offset_y[clip_index],
+      expected_offset.delta_y);
+    EXPECT_EQ(second_introspection->clipmap_reuse_guardband_valid[clip_index],
+      oxygen::renderer::internal::shadow_detail::
+        IsDirectionalVirtualClipReuseGuardbandValid(expected_offset,
+          oxygen::renderer::internal::shadow_detail::
+            kDirectionalVirtualClipReuseGuardbandPages));
+  }
+  EXPECT_TRUE(second_introspection->clipmap_reuse_guardband_valid[0]);
+
+  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 230 });
+
+  view_constants.SetCameraPosition(
+    view_constants.GetCameraPosition() + (world_shift_x * 2.0F));
+  AdvanceRendererFrame(
+    manager, *shadow_manager, view_constants, SequenceNumber { 3 }, Slot { 2 });
+
+  const auto third = shadow_manager->PublishForView(oxygen::ViewId { 230 },
+    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
+    std::chrono::milliseconds(16));
+  const auto* third_introspection
+    = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 230 });
+
+  ASSERT_NE(third.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(third_introspection, nullptr);
+  ASSERT_FALSE(third_introspection->directional_virtual_metadata.empty());
+  const auto third_metadata
+    = third_introspection->directional_virtual_metadata.front();
+  const auto clip0_large_offset
+    = oxygen::renderer::internal::shadow_detail::
+        ResolveDirectionalVirtualClipmapPageOffset(
+          second_metadata, third_metadata, 0U);
+  EXPECT_EQ(third_introspection->clipmap_page_offset_x[0],
+    clip0_large_offset.delta_x);
+  EXPECT_EQ(third_introspection->clipmap_page_offset_y[0],
+    clip0_large_offset.delta_y);
+  EXPECT_FALSE(third_introspection->clipmap_reuse_guardband_valid[0]);
+}
+
 //! Feedback pages that move outside the current fine-clip window after a
 //! clipmap shift must not be remapped into unrelated local pages.
 NOLINT_TEST_F(LightManagerTest,
