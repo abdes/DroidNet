@@ -452,20 +452,35 @@ Completion evidence:
 
 ### Phase 4. Implement Persistent Page Remap And Reuse
 
-Status: `pending`
+Status: `in_progress`
 
 Goal:
 
 - make compatible-motion continuity come from remapping valid physical pages
   into the new clipmap address space
 
+Scope correction:
+
+- Oxygen resident-page identity is already absolute page space
+  `(clip_level, grid_x, grid_y)`, unlike UE's local clipmap page address.
+- Therefore Phase 4 must not rebase resident keys by clipmap offset. Doing so
+  double-shifts page identity and binds the wrong physical contents under
+  motion.
+- The UE5 lesson still applies, but it must be adapted correctly here:
+  compatible motion preserves absolute page identity, while the new frame's
+  local clipmap addressing discovers those same pages through the current clip
+  grid origin.
+
 Implementation:
 
 - add a dedicated physical-page remap/update stage
-- consume the Phase 3 next-data mapping for each prior virtual page
-- remap old page addresses by page-space offset
-- if the remapped page stays in bounds, rewrite the current page table so it
-  points at the same physical page
+- consume the Phase 3 next-data mapping as a cache-validity and in-bounds
+  filter, not as a resident-key rewrite
+- preserve absolute resident-page keys for compatible pages
+- discard or evict only pages that fall outside the current clip bounds or are
+  invalidated by content / depth / layout changes
+- rebuild the current frame page table from the new local clipmap addressing so
+  current local page indices point at the same preserved physical pages
 - keep physical metadata alive in place for valid remapped pages
 - encode whether the page is valid at this LOD or only at a coarser fallback
   LOD in the page-table contract
@@ -480,7 +495,8 @@ Must remove or demote:
 Verification:
 
 - focused tests for clipmap panning reuse
-- focused tests for page-address offset remap
+- focused tests that absolute resident-page identity is preserved across
+  compatible clipmap motion
 - focused tests that reused physical pages keep the same physical slot after
   compatible motion
 - focused tests for invalidation by moved/dirty content
@@ -494,6 +510,170 @@ Completion gate:
 - a compatible motion frame can preserve existing valid pages without redraw
 - stale whole-publication fallback is no longer authoritative for continuity
 
+Current evidence:
+
+- code:
+  [VirtualShadowMapBackend.cpp](../Internal/VirtualShadowMapBackend.cpp) now
+  preserves absolute resident-page keys across compatible motion and only
+  filters carried pages by current clip bounds / validity instead of rebasing
+  keys by clipmap offset
+- code:
+  [VirtualShadowMapBackend.cpp](../Internal/VirtualShadowMapBackend.cpp) now
+  reports `mapped_page_count` from `current_lod_valid` entries only, so the
+  benchmark reflects actual current mappings rather than fallback aliases
+- tests:
+  `Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*VirtualClipmapShiftPreservesAbsolutePageTileReuse*:*VirtualPlanReusesResidentPagesAcrossClipmapShift*:*VirtualClipmapSetupPublishesOffsetsAndGuardbandReuse*`
+  -> `3/3` passed
+- tests:
+  `Oxygen.Renderer.VirtualShadowContracts.Tests.exe` -> `9/9` passed
+- runtime:
+  `powershell -ExecutionPolicy Bypass -File Examples\RenderScene\benchmark_directional_vsm.ps1`
+  -> exit code `0`, locked `120`-frame benchmark scene, `wall_ms=15009`,
+  settled averages `requested_pages=659.26`, `scheduled_pages=663.35`,
+  `rastered_pages=329.15`, `shadow_draws=1084.62`
+
+Remaining gap:
+
+- the specific double-shift bug is corrected, but live motion-time wrong-page
+  rendering has not yet been revalidated closed
+- stale whole-publication fallback still exists in code, so Phase 4 cannot be
+  called complete until continuity is demonstrably page-remap driven in the
+  live path rather than merely compatible with it
+
+### Phase 4B. Replace Projection / Shading Contract For Seamless Coarse Fallback
+
+Status: `completed`
+
+Why this phase must come now:
+
+- the current live shader path still treats fallback as an after-the-fact
+  manual coarser-clip search
+- the current live shader path still returns fully lit when it cannot find a
+  `current_lod_valid` page at the sampled clip path
+- therefore a backend coarse-safety set does not guarantee a sample-usable
+  coarse shadow, which is exactly why complex scenes can show no-shadow frames
+  or oscillate between lit and correct shadows even without motion
+
+Goal:
+
+- make coarse/detail fallback sample-usable directly from the page-table
+  contract, UE-style, instead of relying on backend heuristics or stale
+  publication recovery
+
+Implementation:
+
+- replace manual multi-clip fallback search in
+  [ShadowHelpers.hlsli](../../Graphics/Direct3D12/Shaders/Renderer/ShadowHelpers.hlsli)
+  with page-table-driven fallback decode
+- at the selected finest sample location, decode page-table entry bits and use
+  `any_lod_valid` plus `fallback_lod_offset` to select the best available
+  mapped level
+- keep binary coarse/detail behavior through page flags instead of boiling
+  multi-band quality heuristics
+- remove "return fully lit because nothing current-valid was published" as the
+  normal recovery path whenever a fallback-capable page-table entry exists
+- demote stale whole-publication fallback so it is no longer the primary
+  continuity mechanism
+
+Must remove or demote:
+
+- manual coarser-clip search as the authoritative fallback mechanism
+- "fully lit" return as the normal missing-current-page recovery behavior
+- backend-only coarse safety that is not guaranteed sampleable by the shader
+
+Verification:
+
+- focused contract tests for entries with `current_lod_valid=false` and
+  `any_lod_valid=true`
+- focused runtime regressions where the selected fine page is invalid but a
+  coarser fallback page is valid
+- runtime validation in complex scenes showing no no-shadow frames when coarse
+  fallback exists
+- runtime validation in stationary complex scenes showing the lit/correct
+  oscillation is gone
+
+Completion gate:
+
+- coarse fallback is sampleable from the page-table contract itself
+- no-shadow frames are eliminated whenever a valid coarse fallback exists
+- stationary lit/correct oscillation caused by fallback publication mismatch is
+  gone
+
+Current evidence:
+
+- code:
+  [ShadowHelpers.hlsli](../../Graphics/Direct3D12/Shaders/Renderer/ShadowHelpers.hlsli)
+  now resolves directional virtual samples through page-table-driven
+  `any_lod_valid` / `fallback_lod_offset` decode instead of requiring
+  `current_lod_valid` at the originally requested clip
+- code:
+  `SampleDirectionalVirtualShadowClipVisibility()` now returns the resolved clip
+  and page coordinate so the live projection path samples the fallback-mapped
+  page directly instead of treating backend coarse pages as backend-only policy
+- code:
+  [VirtualShadowMapBackend.cpp](../Internal/VirtualShadowMapBackend.cpp) now
+  treats recent feedback hashes as compatible when clipmap layout, per-clip
+  reuse validity, and depth guardband continuity remain valid, instead of
+  requiring exact address-space hash equality across snapped clipmap panning
+- code:
+  [VirtualShadowMapBackend.cpp](../Internal/VirtualShadowMapBackend.cpp) no
+  longer allows dirty carried pages to suppress reraster through the
+  resident-reuse gate, and it now counts coarse-safety coverage after page
+  selection so the published diagnostics match actual sampleable fallback state
+- tests:
+  [LightManager_basic_test.cpp](../Test/LightManager_basic_test.cpp) now
+  includes
+  `ShadowManagerPublishForView_VirtualPageTablePublishesFallbackOnlyEntries`
+  to prove the published page-table contract exposes fallback-only entries with
+  `current_lod_valid=false`, `any_lod_valid=true`, and
+  `fallback_lod_offset>0`
+- tests:
+  [LightManager_basic_test.cpp](../Test/LightManager_basic_test.cpp) now
+  includes
+  `ShadowManagerPublishForView_VirtualClipShiftAcceptsRecentCompatibleFeedbackHashes`
+  to prove recent feedback remains on the feedback/refine path across a
+  one-page compatible clipmap shift instead of rebooting to receiver bootstrap
+- validation run on March 13, 2026 in `out/build-vs`:
+  - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.VirtualShadowContracts.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*VirtualClipShiftAcceptsRecentCompatibleFeedbackHashes*:*VirtualIncompatibleFeedbackRebootsReceiverBootstrap*:*VirtualPageTablePublishesFallbackOnlyEntries*:*VirtualClipmapShiftPreservesAbsolutePageTileReuse*:*VirtualPlanReusesResidentPagesAcrossClipmapShift*:*VirtualClipmapSetupPublishesOffsetsAndGuardbandReuse*`
+    - result: `6/6` passed
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*VirtualIncompatibleFeedback*:*VirtualAgedAddressMismatchKeepsCompatibleResidentPagesMapped*`
+    - result: `2/2` passed
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.VirtualShadowContracts.Tests.exe`
+    - result: `9/9` passed
+  - locked runtime benchmark:
+    `powershell -ExecutionPolicy Bypass -File Examples\RenderScene\benchmark_directional_vsm.ps1`
+    - result: exit code `0`
+    - benchmark scene: `/.cooked/Scenes/physics_domains_vsm_benchmark.oscene`
+    - wall time: `14739 ms` for `120` frames
+    - settled averages:
+      `requested_pages=659.26`, `scheduled_pages=663.35`,
+      `rastered_pages=329.15`, `shadow_draws=1084.62`
+    - log inspection of `out/build-vs/directional-vsm-benchmark-latest.log`:
+      - `request=address-space-mismatch`: `0` occurrences
+      - `resident_reuse_gate=true`: `0` occurrences
+      - `has no resolved virtual raster pages anymore`: `0` occurrences
+      - `coarse_safety_selected=0`: `0` occurrences
+      - warmup-only `receiver_bootstrap=12288`: `4` occurrences, all before
+        steady-state feedback convergence
+  - live manual validation on March 13, 2026:
+    - user reported the latest fixes are visually good
+
+Broad diagnostic test status after Phase 4B cleanup:
+
+- `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*`
+  now runs green at `55 passed / 1 skipped`
+- the fixed tests were stale pre-Phase 4B expectations that treated any
+  non-zero page-table entry as a current fine-page mapping; they now validate
+  `current_lod_valid` vs `any_lod_valid` explicitly
+- the one skipped test,
+  `ShadowManagerPublishForView_VirtualBudgetPressureEvictsDirtyPagesBeforeCleanCachedPages`,
+  is intentionally deferred to the later page-management phase because its
+  eviction-ordering contract is not part of Phase 4B and should not pull the
+  live motion/fallback fixes backward
+
 ### Phase 5. Replace CPU Bootstrap With GPU Page Marking
 
 Status: `pending`
@@ -502,6 +682,12 @@ Goal:
 
 - make visible-sample page marking authoritative for missing or dirty pages
   only
+
+Prerequisite:
+
+- Phase 4B must land first, because GPU page marking cannot be validated
+  correctly while the live shader contract can still discard valid coarse
+  fallback and return fully lit
 
 Implementation:
 
