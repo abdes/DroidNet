@@ -1096,7 +1096,10 @@ Update, March 12, 2026 directional VSM performance review and recovery plan:
   - Step 2 page-local raster culling is complete with measured reductions in
     steady-state rastered pages (`740.95 -> 420.75`) and shadow draw
     submissions (`6668.55 -> 1465.80`)
-  - Step 3 page-production tightening / budgeting is next
+  - Step 3 page-production tightening / budgeting is now `in_progress`; the
+    first guard-band tightening slice reduced the frozen benchmark wall time
+    `22661 ms -> 20096 ms`, resolved/rastered pages `679.60 -> 580.05`, and
+    resolve prepare CPU `15287.35 us -> 2322.55 us`
   - frozen recovery order remains baseline capture, page-local raster culling,
     page production tightening, readback reduction, dynamic cache
     specialization, and before/after validation

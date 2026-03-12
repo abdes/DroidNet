@@ -948,10 +948,14 @@ Summary:
 - Step 2 page-local raster culling is now completed with measured reductions
   in steady-state rastered pages (`740.95 -> 420.75`) and shadow draw
   submissions (`6668.55 -> 1465.80`) in the staged `RenderScene` baseline
+- Step 3 page-production tightening / budgeting is now `in_progress`; the
+  first guard-band tightening slice reduced frozen-benchmark wall time
+  `22661 ms -> 20096 ms`, resolved/rastered pages `679.60 -> 580.05`, and
+  resolve prepare CPU `15287.35 us -> 2322.55 us`
 - the frozen execution order is:
   1. baseline capture (`completed`)
   2. page-local raster culling (`completed`)
-  3. page-production tightening/budgeting (`next`)
+  3. page-production tightening/budgeting (`in_progress`)
   4. readback-path reduction
   5. dynamic-pressure cache specialization
   6. before/after validation gate
