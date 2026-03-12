@@ -31,6 +31,8 @@ inline constexpr std::uint64_t kFnvOffsetBasis = 1469598103934665603ULL;
 inline constexpr std::uint64_t kFnvPrime = 1099511628211ULL;
 inline constexpr float kDirectionalCacheFloatTolerance = 1.0e-5F;
 inline constexpr std::uint32_t kDirectionalVirtualClipReuseGuardbandPages = 1U;
+inline constexpr float kDirectionalVirtualDepthGuardbandSafety = 0.9F;
+inline constexpr bool kDirectionalVirtualClipmapPanningEnabled = true;
 inline constexpr std::uint32_t kVirtualResidentPageCoordBits = 28U;
 inline constexpr std::uint64_t kVirtualResidentPageCoordMask
   = (1ULL << kVirtualResidentPageCoordBits) - 1ULL;
@@ -147,6 +149,15 @@ template <typename T>
   return light_view;
 }
 
+[[nodiscard]] inline auto BuildDirectionalCacheComparableLightView(
+  glm::mat4 light_view) -> glm::mat4
+{
+  light_view[3][0] = 0.0F;
+  light_view[3][1] = 0.0F;
+  light_view[3][2] = 0.0F;
+  return light_view;
+}
+
 [[nodiscard]] inline auto ResolveDirectionalVirtualClipGridCoord(
   const float clip_origin, const float page_world_size) -> std::int32_t
 {
@@ -179,6 +190,16 @@ struct DirectionalVirtualClipmapPageOffset {
   bool valid { false };
   std::int32_t delta_x { 0 };
   std::int32_t delta_y { 0 };
+};
+
+struct DirectionalVirtualDepthRange {
+  bool valid { false };
+  float near_plane { 0.0F };
+  float far_plane { 0.0F };
+  float min_depth { 0.0F };
+  float max_depth { 0.0F };
+  float center_depth { 0.0F };
+  float half_extent { 0.0F };
 };
 
 [[nodiscard]] inline auto ResolveDirectionalVirtualClipmapPageOffset(
@@ -218,6 +239,93 @@ struct DirectionalVirtualClipmapPageOffset {
   const auto guardband = static_cast<std::int32_t>(guardband_pages);
   return std::abs(offset.delta_x) <= guardband
     && std::abs(offset.delta_y) <= guardband;
+}
+
+[[nodiscard]] inline auto IsDirectionalVirtualClipmapPanningCompatible(
+  const DirectionalVirtualClipmapPageOffset& offset,
+  const bool panning_enabled) -> bool
+{
+  if (!offset.valid) {
+    return false;
+  }
+
+  if (panning_enabled) {
+    return true;
+  }
+
+  return offset.delta_x == 0 && offset.delta_y == 0;
+}
+
+[[nodiscard]] inline auto RecoverDirectionalVirtualDepthRange(
+  const oxygen::engine::DirectionalVirtualShadowMetadata& metadata)
+  -> DirectionalVirtualDepthRange
+{
+  DirectionalVirtualDepthRange range {};
+  if (metadata.clip_level_count == 0U) {
+    return range;
+  }
+
+  const auto& clip = metadata.clip_metadata[0];
+  const float depth_scale = clip.origin_page_scale.w;
+  const float depth_bias = clip.bias_reserved.x;
+  if (std::abs(depth_scale) <= 1.0e-8F) {
+    return range;
+  }
+
+  range.valid = true;
+  range.near_plane = depth_bias / depth_scale;
+  range.far_plane = (depth_bias - 1.0F) / depth_scale;
+  range.min_depth = -range.far_plane;
+  range.max_depth = -range.near_plane;
+  range.center_depth = 0.5F * (range.min_depth + range.max_depth);
+  range.half_extent = 0.5F * (range.max_depth - range.min_depth);
+  return range;
+}
+
+[[nodiscard]] inline auto IsDirectionalVirtualDepthGuardbandValid(
+  const oxygen::engine::DirectionalVirtualShadowMetadata& previous,
+  const float current_required_min_depth,
+  const float current_required_max_depth,
+  const float safety_ratio = kDirectionalVirtualDepthGuardbandSafety) -> bool
+{
+  const auto cached_range = RecoverDirectionalVirtualDepthRange(previous);
+  if (!cached_range.valid) {
+    return false;
+  }
+
+  const float guarded_half_extent = cached_range.half_extent * safety_ratio;
+  const float guarded_min = cached_range.center_depth - guarded_half_extent;
+  const float guarded_max = cached_range.center_depth + guarded_half_extent;
+  return current_required_min_depth >= guarded_min
+    && current_required_max_depth <= guarded_max;
+}
+
+[[nodiscard]] inline auto IsDirectionalVirtualCacheLayoutCompatible(
+  const oxygen::engine::DirectionalVirtualShadowMetadata& previous,
+  const oxygen::engine::DirectionalVirtualShadowMetadata& current) -> bool
+{
+  if (previous.clip_level_count != current.clip_level_count
+    || previous.pages_per_axis != current.pages_per_axis
+    || previous.page_size_texels != current.page_size_texels) {
+    return false;
+  }
+
+  if (!DirectionalCacheMat4Equal(
+        BuildDirectionalCacheComparableLightView(previous.light_view),
+        BuildDirectionalCacheComparableLightView(current.light_view))) {
+    return false;
+  }
+
+  for (std::uint32_t clip_index = 0U; clip_index < current.clip_level_count;
+    ++clip_index) {
+    if (!DirectionalCacheFloatEqual(
+          previous.clip_metadata[clip_index].origin_page_scale.z,
+          current.clip_metadata[clip_index].origin_page_scale.z)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 [[nodiscard]] inline auto HashDirectionalVirtualFeedbackAddressSpace(

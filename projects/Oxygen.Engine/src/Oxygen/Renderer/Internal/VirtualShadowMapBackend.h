@@ -84,6 +84,10 @@ public:
   OXGN_RNDR_API auto SubmitResolvedRasterSchedule(
     ViewId view_id, VirtualShadowResolvedRasterSchedule schedule) -> void;
   OXGN_RNDR_API auto ClearResolvedRasterSchedule(ViewId view_id) -> void;
+  OXGN_RNDR_API auto SetDirectionalCacheControls(
+    renderer::DirectionalVirtualCacheControls controls) -> void;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetDirectionalCacheControls() const noexcept
+    -> renderer::DirectionalVirtualCacheControls;
 
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetFramePublication(
     ViewId view_id) const noexcept -> const ShadowFramePublication*;
@@ -155,6 +159,8 @@ private:
 
   struct DirectionalVirtualClipmapSetup {
     bool valid { false };
+    bool cache_layout_compatible { false };
+    bool depth_guardband_valid { false };
     std::uint32_t clip_level_count { 0U };
     std::uint32_t pages_per_axis { 0U };
     std::uint32_t pages_per_level { 0U };
@@ -187,6 +193,11 @@ private:
       previous_clip_page_offset_y {};
     std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
       previous_clip_reuse_guardband_valid {};
+    std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
+      previous_clip_cache_valid {};
+    std::array<renderer::DirectionalVirtualClipCacheStatus,
+      engine::kMaxVirtualDirectionalClipLevels>
+      previous_clip_cache_status {};
   };
 
   struct ViewCacheEntry {
@@ -226,6 +237,13 @@ private:
         previous_clip_page_offset_y {};
       std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
         previous_clip_reuse_guardband_valid {};
+      std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
+        previous_clip_cache_valid {};
+      std::array<renderer::DirectionalVirtualClipCacheStatus,
+        engine::kMaxVirtualDirectionalClipLevels>
+        previous_clip_cache_status {};
+      bool cache_layout_compatible { false };
+      bool depth_guardband_valid { false };
       std::uint32_t coarse_backbone_begin { 0U };
       std::uint32_t coarse_safety_clip_index { 0U };
       std::uint32_t coarse_safety_max_page_count { 0U };
@@ -260,6 +278,8 @@ private:
       std::uint32_t feedback_key_count { 0U };
       std::uint64_t feedback_age_frames { 0U };
       bool address_space_compatible { false };
+      bool cache_layout_compatible { false };
+      bool depth_guardband_valid { false };
       bool global_dirty_resident_contents { false };
       std::uint32_t shadow_caster_bound_count { 0U };
       std::uint32_t visible_receiver_bound_count { 0U };
@@ -291,8 +311,6 @@ private:
       std::uint32_t allocation_failures { 0U };
       std::uint32_t rerasterized_pages { 0U };
       bool resident_reuse_gate_open { false };
-      bool last_coherent_publish_compatible { false };
-      std::uint64_t last_coherent_publish_age_frames { 0U };
     };
 
     PublicationKey key {};
@@ -310,30 +328,19 @@ private:
       clipmap_page_offset_y {};
     std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
       clipmap_reuse_guardband_valid {};
-    std::vector<engine::ShadowInstanceMetadata> last_coherent_shadow_instances;
-    std::vector<engine::DirectionalVirtualShadowMetadata>
-      last_coherent_directional_virtual_metadata;
-    std::vector<std::uint32_t> last_coherent_page_table_entries;
-    std::vector<std::uint32_t> last_coherent_page_flags_entries;
-    std::vector<AbsoluteClipPageRegion> last_coherent_absolute_frustum_regions;
-    AbsoluteClipPageRegion coarse_safety_publish_region {};
-    AbsoluteClipPageRegion last_coherent_coarse_safety_publish_region {};
-    std::vector<engine::DirectionalVirtualShadowMetadata>
-      published_directional_virtual_metadata_snapshot;
-    std::vector<std::uint32_t> published_page_table_entries_snapshot;
-    std::vector<std::uint32_t> published_page_flags_entries_snapshot;
+    std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
+      clipmap_cache_valid {};
+    std::array<renderer::DirectionalVirtualClipCacheStatus,
+      engine::kMaxVirtualDirectionalClipLevels>
+      clipmap_cache_status {};
     std::vector<renderer::VirtualShadowResolveResidentPageEntry>
       resolve_resident_page_entries;
     std::vector<renderer::VirtualShadowResolvedRasterPage>
       resolved_raster_pages;
+    bool has_rendered_cache_history { false };
     PendingResidencyResolve pending_residency_resolve {};
     std::unordered_map<std::uint64_t, ResidentVirtualPage> resident_pages;
     renderer::VirtualShadowResolveStats resolve_stats {};
-    bool last_coherent_publication_valid { false };
-    frame::SequenceNumber last_coherent_frame_sequence { 0U };
-    std::uint32_t last_coherent_coarse_safety_clip_index { 0U };
-    bool use_last_coherent_publish_fallback { false };
-    std::uint32_t incoherent_publish_frame_count { 0U };
     std::uint32_t page_table_upload_entry_count { 0U };
     bool page_table_upload_pending { false };
     std::uint32_t page_flags_upload_entry_count { 0U };
@@ -396,6 +403,7 @@ private:
   ShaderVisibleIndex physical_pool_srv_ { kInvalidShaderVisibleIndex };
   PhysicalPoolConfig physical_pool_config_ {};
   std::vector<PhysicalTileAddress> free_physical_tiles_;
+  renderer::DirectionalVirtualCacheControls directional_cache_controls_ {};
 
   std::unordered_map<ViewId, ViewCacheEntry> view_cache_;
   std::unordered_map<ViewId, ViewStructuredWordBufferResources>

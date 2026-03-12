@@ -101,6 +101,8 @@ public:
   OXGN_RNDR_API auto SubmitVirtualResolvedRasterSchedule(
     ViewId view_id, VirtualShadowResolvedRasterSchedule schedule) -> void;
   OXGN_RNDR_API auto ClearVirtualResolvedRasterSchedule(ViewId view_id) -> void;
+  OXGN_RNDR_API auto SetVirtualDirectionalCacheControls(
+    DirectionalVirtualCacheControls controls) -> void;
 
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetFramePublication(
     ViewId view_id) const noexcept -> const ShadowFramePublication*;

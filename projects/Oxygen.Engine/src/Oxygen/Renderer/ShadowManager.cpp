@@ -289,6 +289,14 @@ auto ShadowManager::ClearVirtualResolvedRasterSchedule(const ViewId view_id)
   }
 }
 
+auto ShadowManager::SetVirtualDirectionalCacheControls(
+  const DirectionalVirtualCacheControls controls) -> void
+{
+  if (virtual_backend_) {
+    virtual_backend_->SetDirectionalCacheControls(controls);
+  }
+}
+
 auto ShadowManager::TryGetFramePublication(const ViewId view_id) const noexcept
   -> const ShadowFramePublication*
 {
