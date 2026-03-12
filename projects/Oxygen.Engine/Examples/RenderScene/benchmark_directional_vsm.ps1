@@ -7,7 +7,13 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $baselineSettingsPath = Join-Path $PSScriptRoot 'demo_settings.directional_vsm_benchmark_baseline.json'
 $liveSettingsPath = Join-Path $PSScriptRoot 'demo_settings.json'
+$importToolExe = Join-Path $repoRoot 'out\build-vs\bin\Debug\Oxygen.Cooker.ImportTool.exe'
+$inspectorExe = Join-Path $repoRoot 'out\build-vs\bin\Debug\Oxygen.Cooker.Inspector.exe'
 $renderSceneExe = Join-Path $repoRoot 'out\build-vs\bin\Debug\Oxygen.Examples.RenderScene.exe'
+$physicsDomainsManifestPath = Join-Path $repoRoot 'Examples\Content\scenes\physics_domains\import-manifest.json'
+$contentCookedRoot = Join-Path $repoRoot 'Examples\Content\.cooked'
+$contentIndexPath = Join-Path $contentCookedRoot 'container.index.bin'
+$benchmarkSceneVirtualPath = '/.cooked/Scenes/physics_domains_vsm_benchmark.oscene'
 $archiveDir = Join-Path $repoRoot 'out\build-vs\benchmarks\directional-vsm'
 $latestLogPath = Join-Path $repoRoot 'out\build-vs\directional-vsm-benchmark-latest.log'
 $latestJsonPath = Join-Path $repoRoot 'out\build-vs\directional-vsm-benchmark-latest.json'
@@ -15,14 +21,24 @@ $latestJsonPath = Join-Path $repoRoot 'out\build-vs\directional-vsm-benchmark-la
 if (-not (Test-Path -LiteralPath $baselineSettingsPath)) {
     throw "Missing benchmark baseline settings file: $baselineSettingsPath"
 }
+if (-not (Test-Path -LiteralPath $importToolExe)) {
+    throw "Missing ImportTool executable: $importToolExe"
+}
+if (-not (Test-Path -LiteralPath $inspectorExe)) {
+    throw "Missing Inspector executable: $inspectorExe"
+}
 if (-not (Test-Path -LiteralPath $renderSceneExe)) {
     throw "Missing RenderScene executable: $renderSceneExe"
+}
+if (-not (Test-Path -LiteralPath $physicsDomainsManifestPath)) {
+    throw "Missing benchmark scene manifest: $physicsDomainsManifestPath"
 }
 
 New-Item -ItemType Directory -Force -Path $archiveDir | Out-Null
 Copy-Item -LiteralPath $baselineSettingsPath -Destination $liveSettingsPath -Force
 
 $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+$archivedCookLogPath = Join-Path $archiveDir "directional-vsm-benchmark-$timestamp.cook.log"
 $archivedLogPath = Join-Path $archiveDir "directional-vsm-benchmark-$timestamp.log"
 $args = @(
     '-v', '0',
@@ -32,8 +48,6 @@ $args = @(
     '--directional-shadows', 'virtual-only'
 )
 
-$stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-$exitCode = -1
 $previousNativeCommandPreference = $null
 $hasNativeCommandPreference = $null -ne (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue)
 if ($hasNativeCommandPreference) {
@@ -41,10 +55,182 @@ if ($hasNativeCommandPreference) {
     $PSNativeCommandUseErrorActionPreference = $false
 }
 $previousErrorActionPreference = $ErrorActionPreference
-try {
+$stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+$exitCode = -1
+$cookExitCode = -1
+$benchmarkSceneKey = $null
+
+function Invoke-NativeCommand {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+
+        [Parameter()]
+        [string[]]$ArgumentList = @(),
+
+        [Parameter()]
+        [string]$OutputPath
+    )
+
     $ErrorActionPreference = 'Continue'
-    & $renderSceneExe @args *> $archivedLogPath
+    if ([string]::IsNullOrWhiteSpace($OutputPath)) {
+        & $FilePath @ArgumentList
+    } else {
+        & $FilePath @ArgumentList *> $OutputPath
+    }
+    return $LASTEXITCODE
+}
+
+function Get-BenchmarkSceneKey {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$InspectorPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$CookedRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$SceneVirtualPath
+    )
+
+    $ErrorActionPreference = 'Continue'
+    $output = & $InspectorPath index $CookedRoot --assets
     $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        throw "Inspector failed while resolving benchmark scene key (exit code $exitCode)"
+    }
+
+    foreach ($line in $output) {
+        if ($line -notlike "*vpath='$SceneVirtualPath'*") {
+            continue
+        }
+        if ($line -match "key='([^']+)'.*vpath='([^']+)'") {
+            if ($matches[2] -eq $SceneVirtualPath) {
+                return $matches[1]
+            }
+        }
+    }
+
+    throw "Benchmark scene '$SceneVirtualPath' was not found in cooked root '$CookedRoot'"
+}
+
+function Set-BenchmarkActiveSceneSelection {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SettingsPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$SceneKey,
+
+        [Parameter(Mandatory = $true)]
+        [string]$SceneVirtualPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$IndexPath
+    )
+
+    $settings = Get-Content -LiteralPath $SettingsPath -Raw | ConvertFrom-Json
+    $settings.content.active_scene.key = $SceneKey
+    $settings.content.active_scene.name = $SceneVirtualPath
+    $settings.content.active_scene.source_is_pak = $false
+    $settings.content.active_scene.source_path = $IndexPath
+    $settings | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $SettingsPath -Encoding utf8
+}
+
+function Get-BenchmarkSettledStats {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$LogPath
+    )
+
+    if (-not (Test-Path -LiteralPath $LogPath)) {
+        return $null
+    }
+
+    $requested = New-Object System.Collections.Generic.List[object]
+    $scheduled = New-Object System.Collections.Generic.List[object]
+    $raster = New-Object System.Collections.Generic.List[object]
+
+    foreach ($line in (Get-Content -LiteralPath $LogPath)) {
+        if ($line -match 'source_frame=(\d+) requested_pages=(\d+)') {
+            $requested.Add([pscustomobject]@{
+                source_frame = [int]$matches[1]
+                value = [int]$matches[2]
+            })
+            continue
+        }
+        if ($line -match 'source_frame=(\d+) scheduled_pages=(\d+)') {
+            $scheduled.Add([pscustomobject]@{
+                source_frame = [int]$matches[1]
+                value = [int]$matches[2]
+            })
+            continue
+        }
+        if ($line -match '(\d+) shadow-caster draw\(s\) for (\d+) resolved virtual page\(s\).*\(rastered_pages=(\d+)') {
+            $raster.Add([pscustomobject]@{
+                shadow_draws = [int]$matches[1]
+                resolved_pages = [int]$matches[2]
+                rastered_pages = [int]$matches[3]
+            })
+        }
+    }
+
+    $settledRequested = @($requested | Where-Object { $_.source_frame -ge 101 -and $_.source_frame -le 120 })
+    $settledScheduled = @($scheduled | Where-Object { $_.source_frame -ge 101 -and $_.source_frame -le 120 })
+    if ($settledRequested.Count -eq 0) {
+        return $null
+    }
+
+    $tailCount = $settledRequested.Count
+    $settledRaster = @($raster | Select-Object -Last $tailCount)
+
+    $requestedAverage = ($settledRequested | Measure-Object -Property value -Average).Average
+    $scheduledAverage = ($settledScheduled | Measure-Object -Property value -Average).Average
+    $shadowDrawAverage = ($settledRaster | Measure-Object -Property shadow_draws -Average).Average
+    $resolvedPagesAverage = ($settledRaster | Measure-Object -Property resolved_pages -Average).Average
+    $rasteredPagesAverage = ($settledRaster | Measure-Object -Property rastered_pages -Average).Average
+
+    return [ordered]@{
+        settled_source_frame_start = 101
+        settled_source_frame_end = 120
+        settled_source_frames_present = @($settledRequested | ForEach-Object { $_.source_frame })
+        requested_pages_avg = [math]::Round($requestedAverage, 2)
+        scheduled_pages_avg = [math]::Round($scheduledAverage, 2)
+        shadow_draws_avg = [math]::Round($shadowDrawAverage, 2)
+        resolved_pages_avg = [math]::Round($resolvedPagesAverage, 2)
+        rastered_pages_avg = [math]::Round($rasteredPagesAverage, 2)
+        raster_sample_count = $settledRaster.Count
+    }
+}
+
+try {
+    $cookExitCode = Invoke-NativeCommand -FilePath $importToolExe -ArgumentList @(
+        'batch',
+        '--manifest',
+        $physicsDomainsManifestPath,
+        '--no-tui',
+        '--max-in-flight-jobs',
+        '1'
+    ) -OutputPath $archivedCookLogPath
+    if ($cookExitCode -ne 0) {
+        throw "Benchmark scene cook failed with exit code $cookExitCode"
+    }
+
+    if (-not (Test-Path -LiteralPath $contentIndexPath)) {
+        throw "Cooked content index not found after benchmark scene cook: $contentIndexPath"
+    }
+
+    $benchmarkSceneKey = Get-BenchmarkSceneKey -InspectorPath $inspectorExe `
+        -CookedRoot $contentCookedRoot `
+        -SceneVirtualPath $benchmarkSceneVirtualPath
+
+    Set-BenchmarkActiveSceneSelection -SettingsPath $liveSettingsPath `
+        -SceneKey $benchmarkSceneKey `
+        -SceneVirtualPath $benchmarkSceneVirtualPath `
+        -IndexPath $contentIndexPath
+
+    $stopwatch.Restart()
+    $exitCode = Invoke-NativeCommand -FilePath $renderSceneExe -ArgumentList $args -OutputPath $archivedLogPath
 } finally {
     $ErrorActionPreference = $previousErrorActionPreference
     if ($hasNativeCommandPreference) {
@@ -56,14 +242,28 @@ try {
 
 Copy-Item -LiteralPath $archivedLogPath -Destination $latestLogPath -Force
 
+$settledStats = Get-BenchmarkSettledStats -LogPath $archivedLogPath
+$baselineSettingsHash = (Get-FileHash -LiteralPath $baselineSettingsPath -Algorithm SHA256).Hash
+$restoredSettingsHash = (Get-FileHash -LiteralPath $liveSettingsPath -Algorithm SHA256).Hash
+
 $result = [ordered]@{
     benchmark_command = "$renderSceneExe $($args -join ' ')"
     restored_settings_from = $baselineSettingsPath
     active_settings = $liveSettingsPath
+    baseline_settings_sha256 = $baselineSettingsHash
+    restored_settings_sha256 = $restoredSettingsHash
+    cooked_manifest = $physicsDomainsManifestPath
+    cooked_root = $contentCookedRoot
+    benchmark_scene_virtual_path = $benchmarkSceneVirtualPath
+    benchmark_scene_key = $benchmarkSceneKey
+    cook_log = $archivedCookLogPath
+    cook_exit_code = $cookExitCode
     archived_log = $archivedLogPath
     latest_log = $latestLogPath
     exit_code = $exitCode
     wall_ms = [math]::Round($stopwatch.Elapsed.TotalMilliseconds, 0)
+    approx_fps = [math]::Round((120.0 * 1000.0) / [math]::Max(1.0, $stopwatch.Elapsed.TotalMilliseconds), 2)
+    settled_stats = $settledStats
 }
 
 $result | ConvertTo-Json | Set-Content -LiteralPath $latestJsonPath -Encoding utf8
