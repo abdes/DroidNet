@@ -2575,10 +2575,18 @@ auto Renderer::PublishPreparedFrameSpans(
 
     prepared_frame.partitions = std::span<const PR>(
       storage.partition_storage.data(), storage.partition_storage.size());
+
+    const auto draw_bounds = emitter->GetDrawBoundingSpheres();
+    storage.draw_bounding_sphere_storage.assign(
+      draw_bounds.begin(), draw_bounds.end());
+    prepared_frame.draw_bounding_spheres = std::span<const glm::vec4>(
+      storage.draw_bounding_sphere_storage.data(),
+      storage.draw_bounding_sphere_storage.size());
   } else {
     // No emitter -> empty spans
     prepared_frame.draw_metadata_bytes = {};
     prepared_frame.partitions = {};
+    prepared_frame.draw_bounding_spheres = {};
   }
 
   storage.shadow_caster_bounds_storage.clear();

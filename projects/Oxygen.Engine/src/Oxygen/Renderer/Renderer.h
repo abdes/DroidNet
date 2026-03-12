@@ -572,6 +572,7 @@ private:
   struct PerViewStorage {
     std::vector<std::byte> draw_metadata_storage;
     std::vector<PreparedSceneFrame::PartitionRange> partition_storage;
+    std::vector<glm::vec4> draw_bounding_sphere_storage;
     std::vector<glm::vec4> shadow_caster_bounds_storage;
     std::vector<glm::vec4> visible_receiver_bounds_storage;
     std::vector<float> world_matrix_storage;

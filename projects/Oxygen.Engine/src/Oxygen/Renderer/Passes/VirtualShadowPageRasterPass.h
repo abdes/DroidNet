@@ -11,6 +11,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include <glm/vec4.hpp>
+
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Types/VirtualShadowRenderPlan.h>
@@ -47,6 +49,12 @@ private:
   auto SetResolvedPageViewportAndScissors(graphics::CommandRecorder& recorder,
     const renderer::VirtualShadowRenderPlan& render_plan,
     const renderer::VirtualShadowResolvedRasterPage& page) const -> void;
+  auto EmitResolvedPageCulledDrawRange(graphics::CommandRecorder& recorder,
+    const DrawMetadata* records, std::span<const glm::vec4> draw_bounds,
+    const renderer::VirtualShadowResolvedRasterPage& page, std::uint32_t begin,
+    std::uint32_t end, std::uint32_t& emitted_count,
+    std::uint32_t& page_local_culled_count, std::uint32_t& skipped_invalid,
+    std::uint32_t& draw_errors) const noexcept -> void;
 
   mutable graphics::NativeView full_atlas_dsv_ {};
   std::shared_ptr<graphics::Buffer> shadow_view_constants_buffer_;

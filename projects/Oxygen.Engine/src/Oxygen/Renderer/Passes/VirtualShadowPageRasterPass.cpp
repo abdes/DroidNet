@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <chrono>
 #include <cstddef>
 #include <cstring>
 #include <stdexcept>
@@ -19,6 +20,7 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Renderer/Internal/VirtualShadowRasterCulling.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowPageRasterPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
@@ -28,6 +30,17 @@
 namespace oxygen::engine {
 
 namespace {
+
+  using SteadyClock = std::chrono::steady_clock;
+
+  auto ElapsedMicroseconds(const SteadyClock::time_point start)
+    -> std::uint64_t
+  {
+    return static_cast<std::uint64_t>(
+      std::chrono::duration_cast<std::chrono::microseconds>(
+        SteadyClock::now() - start)
+        .count());
+  }
 
   constexpr float kVirtualShadowRasterDepthBias = 1200.0F;
   // Virtual pages are small and heavily PCF-filtered, so leaving raster slope
@@ -58,6 +71,7 @@ VirtualShadowPageRasterPass::~VirtualShadowPageRasterPass()
 auto VirtualShadowPageRasterPass::DoPrepareResources(
   graphics::CommandRecorder& recorder) -> co::Co<>
 {
+  const auto prepare_begin = SteadyClock::now();
   auto& depth_texture = GetDepthTexture();
   if (!recorder.IsResourceTracked(depth_texture)) {
     recorder.BeginTrackingResourceState(
@@ -80,6 +94,12 @@ auto VirtualShadowPageRasterPass::DoPrepareResources(
   EnsureShadowViewConstantsCapacity(
     static_cast<std::uint32_t>(render_plan->resolved_pages.size()));
   UploadResolvedPageViewConstants(render_plan->resolved_pages);
+
+  LOG_F(INFO,
+    "VirtualShadowPageRasterPass: frame={} view={} prepared {} resolved "
+    "virtual page view-constant upload(s) (cpu_prepare_us={})",
+    Context().frame_sequence.get(), Context().current_view.view_id.get(),
+    render_plan->resolved_pages.size(), ElapsedMicroseconds(prepare_begin));
 
   co_return;
 }
@@ -174,9 +194,28 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
 
   const auto* records
     = reinterpret_cast<const DrawMetadata*>(psf->draw_metadata_bytes.data());
+  const auto draw_count = static_cast<std::uint32_t>(
+    psf->draw_metadata_bytes.size() / sizeof(DrawMetadata));
+  const bool has_aligned_draw_bounds
+    = psf->draw_bounding_spheres.size() == draw_count;
+  const auto draw_bounds = has_aligned_draw_bounds
+    ? psf->draw_bounding_spheres
+    : std::span<const glm::vec4> {};
+  const auto rastered_page_count
+    = static_cast<std::uint32_t>(render_plan->resolved_pages.size());
   std::uint32_t emitted_count = 0U;
+  std::uint32_t cleared_page_count = 0U;
+  std::uint32_t page_local_culled_count = 0U;
   std::uint32_t skipped_invalid = 0U;
   std::uint32_t draw_errors = 0U;
+
+  if (!has_aligned_draw_bounds) {
+    LOG_F(WARNING,
+      "VirtualShadowPageRasterPass: view {} has no aligned per-draw bounds "
+      "(draw_count={} bounds={}); page-local culling disabled for this frame",
+      Context().current_view.view_id.get(), draw_count,
+      psf->draw_bounding_spheres.size());
+  }
 
   for (std::uint32_t page_index = 0U;
     page_index < render_plan->resolved_pages.size(); ++page_index) {
@@ -196,6 +235,7 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
     };
     recorder.ClearDepthStencilView(depth_texture, dsv,
       graphics::ClearFlags::kDepth, 1.0F, 0, { &clear_rect, 1 });
+    ++cleared_page_count;
 
     for (const auto& pr : psf->partitions) {
       if (!pr.pass_mask.IsSet(PassMaskBit::kShadowCaster)) {
@@ -209,7 +249,8 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
       recorder.SetPipelineState(SelectPipelineStateForPartition(pr.pass_mask));
       RebindCommonRootParameters(recorder);
       BindResolvedPageViewConstants(recorder, page_index);
-      EmitDrawRange(recorder, records, pr.begin, pr.end, emitted_count,
+      EmitResolvedPageCulledDrawRange(recorder, records, draw_bounds, page,
+        pr.begin, pr.end, emitted_count, page_local_culled_count,
         skipped_invalid, draw_errors);
     }
   }
@@ -225,8 +266,10 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
     }
     LOG_F(ERROR,
       "VirtualShadowPageRasterPass: view {} produced no shadow-caster draws "
-      "(resolved_pages={} skipped_invalid={} errors={})",
+      "(resolved_pages={} rastered_pages={} page_clears={} shadow_draws=0 "
+      "page_local_culled={} skipped_invalid={} errors={})",
       Context().current_view.view_id.get(), render_plan->resolved_pages.size(),
+      rastered_page_count, cleared_page_count, page_local_culled_count,
       skipped_invalid, draw_errors);
   } else {
     if (!log_state.saw_nonzero_draw_live_frame) {
@@ -236,9 +279,11 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
     LOG_F(INFO,
       "VirtualShadowPageRasterPass: frame={} view={} emitted {} "
       "shadow-caster draw(s) for {} resolved virtual page(s) "
-      "(skipped_invalid={} errors={})",
+      "(rastered_pages={} page_clears={} page_local_culled={} "
+      "skipped_invalid={} errors={})",
       Context().frame_sequence.get(), Context().current_view.view_id.get(),
-      emitted_count, render_plan->resolved_pages.size(), skipped_invalid,
+      emitted_count, render_plan->resolved_pages.size(), rastered_page_count,
+      cleared_page_count, page_local_culled_count, skipped_invalid,
       draw_errors);
     shadow_manager->MarkVirtualRenderPlanExecuted(
       Context().current_view.view_id);
@@ -246,6 +291,51 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
 
   Context().RegisterPass(this);
   co_return;
+}
+
+auto VirtualShadowPageRasterPass::EmitResolvedPageCulledDrawRange(
+  graphics::CommandRecorder& recorder, const DrawMetadata* records,
+  const std::span<const glm::vec4> draw_bounds,
+  const renderer::VirtualShadowResolvedRasterPage& page,
+  const std::uint32_t begin, const std::uint32_t end,
+  std::uint32_t& emitted_count, std::uint32_t& page_local_culled_count,
+  std::uint32_t& skipped_invalid, std::uint32_t& draw_errors) const noexcept
+  -> void
+{
+  for (std::uint32_t draw_index = begin; draw_index < end; ++draw_index) {
+    const auto& md = records[draw_index];
+    if ((md.is_indexed && md.index_count == 0U)
+      || (!md.is_indexed && md.vertex_count == 0U)) {
+      ++skipped_invalid;
+      continue;
+    }
+    if (!draw_bounds.empty()
+      && !renderer::internal::shadow_detail::
+        ResolvedVirtualPageOverlapsBoundingSphere(
+          page, draw_bounds[draw_index])) {
+      ++page_local_culled_count;
+      continue;
+    }
+
+    try {
+      BindDrawIndexConstant(recorder, DrawIndex { draw_index });
+      recorder.Draw(md.is_indexed ? md.index_count : md.vertex_count,
+        md.instance_count, 0, 0);
+      ++emitted_count;
+    } catch (const std::exception& ex) {
+      ++draw_errors;
+      LOG_F(ERROR,
+        "VirtualShadowPageRasterPass '{}' draw_index={} failed: {}. "
+        "Draw dropped.",
+        GetName(), draw_index, ex.what());
+    } catch (...) {
+      ++draw_errors;
+      LOG_F(ERROR,
+        "VirtualShadowPageRasterPass '{}' draw_index={} failed: unknown "
+        "error. Draw dropped.",
+        GetName(), draw_index);
+    }
+  }
 }
 
 auto VirtualShadowPageRasterPass::PrepareFullAtlasDepthStencilView(

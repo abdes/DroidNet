@@ -11,6 +11,8 @@
 #include <span>
 #include <vector>
 
+#include <glm/vec4.hpp>
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
@@ -119,6 +121,10 @@ public:
   OXGN_RNDR_NDAPI auto GetPartitions() const noexcept
     -> std::span<const oxygen::engine::PreparedSceneFrame::PartitionRange>;
 
+  //! Returns one world-space bounding sphere per draw metadata record.
+  OXGN_RNDR_NDAPI auto GetDrawBoundingSpheres() const noexcept
+    -> std::span<const glm::vec4>;
+
   //! Shader-visible SRV index for the instance data buffer.
   /*!
    Returns the bindless SRV index for the per-instance transform index buffer.
@@ -201,6 +207,7 @@ private:
   // Sorting & partitions
   std::vector<SortingKey> keys_;
   std::vector<oxygen::engine::PreparedSceneFrame::PartitionRange> partitions_;
+  std::vector<glm::vec4> draw_bounding_spheres_;
 
   // GPU instancing: per-instance transform indices
   std::vector<std::uint32_t> instance_transform_indices_;

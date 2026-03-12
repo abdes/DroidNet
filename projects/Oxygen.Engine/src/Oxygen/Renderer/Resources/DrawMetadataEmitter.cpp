@@ -195,6 +195,7 @@ auto DrawMetadataEmitter::OnFrameStart(renderer::RendererTag /*tag*/,
   Cpu().clear();
   keys_.clear();
   partitions_.clear();
+  draw_bounding_spheres_.clear();
   instance_transform_indices_.clear();
   draw_metadata_buffer_.OnFrameStart(sequence, slot);
   instance_data_buffer_.OnFrameStart(sequence, slot);
@@ -293,6 +294,7 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
     if (index >= Cpu().size()) {
       Cpu().resize(static_cast<size_t>(index) + 1U);
       keys_.resize(static_cast<size_t>(index) + 1U);
+      draw_bounding_spheres_.resize(static_cast<size_t>(index) + 1U);
     }
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     Cpu()[index] = dm;
@@ -305,6 +307,8 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
       .vb_srv = dm.vertex_buffer_index,
       .ib_srv = dm.index_buffer_index,
     };
+    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+    draw_bounding_spheres_[index] = item.world_bounding_sphere;
     ++frame_write_count_;
   }
 }
@@ -380,12 +384,16 @@ auto DrawMetadataEmitter::BuildSortingAndPartitions() -> void
   reordered.reserve(n);
   std::vector<SortingKey> reordered_keys;
   reordered_keys.reserve(n);
+  std::vector<glm::vec4> reordered_bounds;
+  reordered_bounds.reserve(n);
   for (auto idx : perm) {
     reordered.push_back(Cpu()[idx]);
     reordered_keys.push_back(keys_[idx]);
+    reordered_bounds.push_back(draw_bounding_spheres_[idx]);
   }
   Cpu().swap(reordered);
   keys_.swap(reordered_keys);
+  draw_bounding_spheres_.swap(reordered_bounds);
 
   last_order_hash_
     = oxygen::ComputeFNV1a64(keys_.data(), keys_.size() * sizeof(SortingKey));
@@ -494,6 +502,12 @@ auto DrawMetadataEmitter::GetPartitions() const noexcept
   return { partitions_.data(), partitions_.size() };
 }
 
+auto DrawMetadataEmitter::GetDrawBoundingSpheres() const noexcept
+  -> std::span<const glm::vec4>
+{
+  return { draw_bounding_spheres_.data(), draw_bounding_spheres_.size() };
+}
+
 auto DrawMetadataEmitter::GetInstanceDataSrvIndex() const noexcept
   -> ShaderVisibleIndex
 {
@@ -574,8 +588,10 @@ auto DrawMetadataEmitter::ApplyInstancingBatches() -> void
   // Rebuild cpu_ with batched draws and populate instance data
   std::vector<oxygen::engine::DrawMetadata> batched_cpu;
   std::vector<SortingKey> batched_keys;
+  std::vector<glm::vec4> batched_bounds;
   batched_cpu.reserve(initial_draw_count);
   batched_keys.reserve(initial_draw_count);
+  batched_bounds.reserve(initial_draw_count);
   instance_transform_indices_.clear();
   instance_transform_indices_.reserve(Cpu().size());
 
@@ -622,10 +638,53 @@ auto DrawMetadataEmitter::ApplyInstancingBatches() -> void
       .vb_srv = dm.vertex_buffer_index,
       .ib_srv = dm.index_buffer_index,
     });
+
+    glm::vec4 merged_bound { 0.0F, 0.0F, 0.0F, 0.0F };
+    if (!indices.empty() && indices[0] < draw_bounding_spheres_.size()) {
+      glm::vec3 bounds_min { (std::numeric_limits<float>::max)() };
+      glm::vec3 bounds_max { (std::numeric_limits<float>::lowest)() };
+      bool have_valid_bound = false;
+      for (const auto draw_idx : indices) {
+        if (draw_idx >= draw_bounding_spheres_.size()) {
+          continue;
+        }
+        const auto& sphere = draw_bounding_spheres_[draw_idx];
+        if (sphere.w <= 0.0F) {
+          continue;
+        }
+        const glm::vec3 center { sphere.x, sphere.y, sphere.z };
+        const glm::vec3 radius_vec { sphere.w, sphere.w, sphere.w };
+        bounds_min = glm::min(bounds_min, center - radius_vec);
+        bounds_max = glm::max(bounds_max, center + radius_vec);
+        have_valid_bound = true;
+      }
+      if (have_valid_bound) {
+        const glm::vec3 merged_center = 0.5F * (bounds_min + bounds_max);
+        float merged_radius = 0.0F;
+        for (const auto draw_idx : indices) {
+          if (draw_idx >= draw_bounding_spheres_.size()) {
+            continue;
+          }
+          const auto& sphere = draw_bounding_spheres_[draw_idx];
+          if (sphere.w <= 0.0F) {
+            continue;
+          }
+          merged_radius = (std::max)(merged_radius,
+            glm::distance(merged_center, glm::vec3(sphere)) + sphere.w);
+        }
+        merged_bound
+          = glm::vec4(merged_center.x, merged_center.y, merged_center.z,
+            merged_radius);
+      } else {
+        merged_bound = draw_bounding_spheres_[indices[0]];
+      }
+    }
+    batched_bounds.push_back(merged_bound);
   }
 
   Cpu().swap(batched_cpu);
   keys_.swap(batched_keys);
+  draw_bounding_spheres_.swap(batched_bounds);
 
   DLOG_F(1, "Batched {} draws into {} batches, {} instance indices",
     initial_draw_count, Cpu().size(), instance_transform_indices_.size());
