@@ -1251,15 +1251,37 @@ Performance recovery plan, March 12, 2026:
 - summary:
   - dominant costs are brute-force virtual page raster replay, backend page
     overproduction, and request/resolve full-buffer overhead
-  - Step 1 baseline capture is complete for the current staged `RenderScene`
-    scene
+  - Step 1 baseline capture is complete for the active scripted
+    moving-camera `RenderScene` benchmark scene
   - Step 2 page-local raster culling is complete with measured reductions in
     steady-state rastered pages (`740.95 -> 420.75`) and shadow draw
-    submissions (`6668.55 -> 1465.80`)
-  - Step 3 page-production tightening / budgeting is now `in_progress`; the
-    first guard-band tightening slice reduced the frozen benchmark from
-    `22661 ms` to `20096 ms` and cut resolved/rastered pages
-    `679.60 -> 580.05`
+    submissions (`6668.55 -> 1465.80`) on the superseded static-camera
+    benchmark
+- Step 3 page-production tightening / budgeting is now `in_progress`; the
+  active moving-camera benchmark now has one measured runtime win from
+  capping cold/mismatch bootstrap to the nearest fine clips
+  (`120144 ms -> 64755 ms` wall time); the latest coarse-first stress-path
+  slice keeps current coarse fallback ahead of fine pages under incompatible
+  pressure at near-neutral benchmark cost (`64755 ms -> 62911 ms`); the later
+  capacity-fit coarse safety clip and persistent last-coherent publish
+  fallback work improved the motion-time fallback path, and the newest
+  fallback-recovery slice now suppresses dense unpublished fine bootstrap
+  while `publish_fallback` is active. On the locked moving-camera benchmark
+  that reduced wall time `66602 ms -> 15773 ms`, scheduled pages
+  `510.35 -> 233.29`, resolved pages `1427.18 -> 295.12`, and shadow draws
+  `2086.53 -> 504.82`, while hot fallback frames dropped from
+  `selected=12300, receiver_bootstrap=12288` to
+  `selected=12, receiver_bootstrap=0`. The newest publish-compatible
+  stale-fallback gate now uses the actual previously published coarse coverage
+  with bounded continuous receiver overrun instead of the rejected full-page
+  overshoot relaxation; focused VSM tests are green at `48/48`, and the locked
+  moving-camera benchmark stayed effectively flat (`15773 ms -> 16156 ms`).
+  However, user live validation is still the remaining exit delta for the
+  zoom/aggressive-motion wrong-page flashing fix. Step 3 remains open for both
+  the remaining accepted-feedback refinement / current-frame reinforcement
+  budgeting on publishable frames and that final visual revalidation;
+  see
+  `src/Oxygen/Renderer/Docs/directional_vsm_performance_plan.md`
   - frozen order remains baseline capture, page-local raster culling, page
     production tightening, readback reduction, dynamic cache specialization,
     and before/after validation
