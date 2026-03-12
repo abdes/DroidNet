@@ -333,6 +333,7 @@ private:
     std::array<renderer::DirectionalVirtualClipCacheStatus,
       engine::kMaxVirtualDirectionalClipLevels>
       clipmap_cache_status {};
+    std::vector<std::uint64_t> compatible_feedback_address_space_hashes {};
     std::vector<renderer::VirtualShadowResolveResidentPageEntry>
       resolve_resident_page_entries;
     std::vector<renderer::VirtualShadowResolvedRasterPage>
@@ -431,6 +432,13 @@ private:
   OXGN_RNDR_API auto RebuildResolveStateSnapshot(ViewCacheEntry& state) const
     -> void;
   OXGN_RNDR_API auto ResolvePendingPageResidency(ViewId view_id) -> void;
+  OXGN_RNDR_API auto CarryForwardCompatibleDirectionalResidentPages(
+    ViewCacheEntry& state, const ViewCacheEntry::PendingResidencyResolve& pending,
+    std::uint32_t& released_page_count,
+    std::uint32_t& marked_dirty_page_count) -> void;
+  OXGN_RNDR_API auto PopulateDirectionalFallbackPageTableEntries(
+    ViewCacheEntry& state, const ViewCacheEntry::PendingResidencyResolve& pending)
+    -> void;
   OXGN_RNDR_API auto RefreshViewExports(
     ViewId view_id, ViewCacheEntry& state) const -> void;
   OXGN_RNDR_API auto RefreshAtlasTileDebugStates(ViewCacheEntry& state) const
