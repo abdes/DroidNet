@@ -171,10 +171,37 @@
             ]
         },
         {
+            "id": "scene.physics_domains_vsm_benchmark",
+            "type": "scene-descriptor",
+            "source": "./physics_domains_vsm_benchmark.scene.json",
+            "name": "physics_domains_vsm_benchmark",
+            "depends_on": [
+                "floor.geometry",
+                "cube.geometry",
+                "sphere.geometry",
+                "chassis_box.geometry",
+                "cylinder_wheel.geometry",
+                "ramp.geometry",
+                "character_capsule.geometry",
+                "softbody_sphere.geometry",
+                "softbody_cube.geometry",
+                "stack_cube.geometry"
+            ]
+        },
+        {
             "id": "script.physics_domains_controller",
             "type": "script",
             "source": "./physics_domains_controller.lua",
             "name": "physics_domains_controller",
+            "compile": false,
+            "script_storage": "external",
+            "content_hashing": true
+        },
+        {
+            "id": "script.physics_domains_benchmark_camera",
+            "type": "script",
+            "source": "./physics_domains_benchmark_camera.lua",
+            "name": "physics_domains_benchmark_camera",
             "compile": false,
             "script_storage": "external",
             "content_hashing": true
@@ -200,6 +227,84 @@
                     "slot_id": "physics_domains_controller",
                     "script_virtual_path": "/.cooked/Scripts/physics_domains_controller.oscript",
                     "execution_order": 0
+                }
+            ]
+        },
+        {
+            "id": "script.sidecar.physics_domains_vsm_benchmark",
+            "type": "script-sidecar",
+            "name": "physics_domains_vsm_benchmark_sidecar",
+            "target_scene_virtual_path": "/.cooked/Scenes/physics_domains_vsm_benchmark.oscene",
+            "depends_on": [
+                "scene.physics_domains_vsm_benchmark",
+                "script.physics_domains_controller",
+                "script.physics_domains_benchmark_camera",
+                "input.physics_domains"
+            ],
+            "bindings": [
+                {
+                    "node_index": 12,
+                    "slot_id": "physics_domains_controller",
+                    "script_virtual_path": "/.cooked/Scripts/physics_domains_controller.oscript",
+                    "execution_order": 0
+                },
+                {
+                    "node_index": 21,
+                    "slot_id": "physics_domains_benchmark_camera",
+                    "script_virtual_path": "/.cooked/Scripts/physics_domains_benchmark_camera.oscript",
+                    "execution_order": 1,
+                    "params": [
+                        {
+                            "key": "enabled",
+                            "type": "bool",
+                            "value": true
+                        },
+                        {
+                            "key": "fixed_dt_seconds",
+                            "type": "float",
+                            "value": 0.016666667
+                        },
+                        {
+                            "key": "warmup_frames",
+                            "type": "int32",
+                            "value": 6
+                        },
+                        {
+                            "key": "sweep_speed_radians",
+                            "type": "float",
+                            "value": 1.05
+                        },
+                        {
+                            "key": "vertical_speed_ratio",
+                            "type": "float",
+                            "value": 0.55
+                        },
+                        {
+                            "key": "vertical_phase_radians",
+                            "type": "float",
+                            "value": 0.52359879
+                        },
+                        {
+                            "key": "start_angle_radians",
+                            "type": "float",
+                            "value": 0.0
+                        },
+                        {
+                            "key": "lateral_amplitude",
+                            "type": "float",
+                            "value": 4.5
+                        },
+                        {
+                            "key": "depth_amplitude",
+                            "type": "float",
+                            "value": 6.0
+                        },
+                        {
+                            "key": "height_amplitude",
+                            "type": "float",
+                            "value": 1.35
+                        }
+                    ]
                 }
             ]
         },
@@ -310,6 +415,28 @@
             "target_scene_virtual_path": "/.cooked/Scenes/physics_domains.oscene",
             "depends_on": [
                 "scene.physics_domains",
+                "physics.shape.floor",
+                "physics.shape.actor",
+                "physics.shape.chassis",
+                "physics.shape.wheel",
+                "physics.shape.ramp",
+                "physics.shape.stack_cube",
+                "physics.shape.trigger_zone",
+                "physics.shape.sphere_bouncy",
+                "physics.shape.cube_unit_dynamic",
+                "physics.material.ground",
+                "physics.material.dynamic",
+                "physics.material.bouncy"
+            ]
+        },
+        {
+            "id": "physics.sidecar.park_vsm_benchmark",
+            "type": "physics-sidecar",
+            "source": "./physics_domains.physics-sidecar.json",
+            "name": "physics_domains_vsm_benchmark_sidecar",
+            "target_scene_virtual_path": "/.cooked/Scenes/physics_domains_vsm_benchmark.oscene",
+            "depends_on": [
+                "scene.physics_domains_vsm_benchmark",
                 "physics.shape.floor",
                 "physics.shape.actor",
                 "physics.shape.chassis",

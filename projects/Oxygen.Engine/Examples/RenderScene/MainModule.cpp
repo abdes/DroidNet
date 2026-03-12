@@ -993,6 +993,22 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
     co_return;
   }
 
+  auto imgui_module_ref = app_.engine->GetModule<engine::imgui::ImGuiModule>();
+  if (!imgui_module_ref) {
+    co_return;
+  }
+
+  auto& imgui_module = imgui_module_ref->get();
+  if (!imgui_module.IsWitinFrameScope()) {
+    co_return;
+  }
+
+  auto* imgui_context = imgui_module.GetImGuiContext();
+  if (imgui_context == nullptr) {
+    co_return;
+  }
+  ImGui::SetCurrentContext(imgui_context);
+
   auto& shell = GetShell();
   shell.Draw(context);
 
@@ -1008,9 +1024,8 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
         = forward_pipeline->GetVirtualShadowAtlasDebugTexture();
       if (!atlas_debug_texture) {
         ImGui::TextUnformatted("Atlas debug texture unavailable.");
-      } else if (auto imgui_module_ref
-        = app_.engine->GetModule<engine::imgui::ImGuiModule>()) {
-        const auto texture_id = imgui_module_ref->get().RegisterTexture(
+      } else {
+        const auto texture_id = imgui_module.RegisterTexture(
           "render-scene.vsm-atlas-debug", atlas_debug_texture);
         const auto& atlas_desc = atlas_debug_texture->GetDescriptor();
         ImGui::Text("Physical Atlas Resolution: %ux%u", atlas_desc.width,
@@ -1025,8 +1040,6 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
             ImVec4(1.0F, 1.0F, 1.0F, 1.0F),
             ImVec4(0.10F, 0.95F, 0.15F, 1.0F));
         }
-      } else {
-        ImGui::TextUnformatted("ImGui module unavailable.");
       }
     }
     ImGui::End();
