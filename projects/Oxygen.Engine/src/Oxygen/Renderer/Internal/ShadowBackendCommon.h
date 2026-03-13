@@ -110,6 +110,29 @@ template <typename T>
   return DecodeVirtualResidentPageCoord(key);
 }
 
+[[nodiscard]] inline auto CompareVirtualResidentEvictionPriority(
+  const std::uint64_t lhs_key, const bool lhs_contents_valid,
+  const std::uint64_t lhs_last_touched_frame, const std::uint64_t rhs_key,
+  const bool rhs_contents_valid, const std::uint64_t rhs_last_touched_frame)
+  -> bool
+{
+  if (lhs_contents_valid != rhs_contents_valid) {
+    return !lhs_contents_valid && rhs_contents_valid;
+  }
+
+  const auto lhs_clip_level = VirtualResidentPageKeyClipLevel(lhs_key);
+  const auto rhs_clip_level = VirtualResidentPageKeyClipLevel(rhs_key);
+  if (lhs_clip_level != rhs_clip_level) {
+    return lhs_clip_level > rhs_clip_level;
+  }
+
+  if (lhs_last_touched_frame != rhs_last_touched_frame) {
+    return lhs_last_touched_frame < rhs_last_touched_frame;
+  }
+
+  return lhs_key < rhs_key;
+}
+
 [[nodiscard]] inline auto DirectionalCacheFloatEqual(
   const float lhs, const float rhs) -> bool
 {

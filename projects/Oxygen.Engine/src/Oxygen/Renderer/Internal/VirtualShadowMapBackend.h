@@ -31,14 +31,15 @@
 #include <Oxygen/Renderer/Types/DirectionalShadowCandidate.h>
 #include <Oxygen/Renderer/Types/ShadowFramePublication.h>
 #include <Oxygen/Renderer/Types/ShadowInstanceMetadata.h>
-#include <Oxygen/Renderer/Types/VirtualShadowPhysicalPageMetadata.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/Types/VirtualShadowPageFlags.h>
 #include <Oxygen/Renderer/Types/VirtualShadowPageTableEntry.h>
+#include <Oxygen/Renderer/Types/VirtualShadowPhysicalPageMetadata.h>
 #include <Oxygen/Renderer/Types/VirtualShadowRenderPlan.h>
 #include <Oxygen/Renderer/Types/VirtualShadowRequestFeedback.h>
 #include <Oxygen/Renderer/Types/VirtualShadowResolvedRasterSchedule.h>
 #include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
+
 
 namespace oxygen::engine::upload {
 class InlineTransfersCoordinator;
@@ -93,7 +94,8 @@ public:
   OXGN_RNDR_API auto ClearResolvedRasterSchedule(ViewId view_id) -> void;
   OXGN_RNDR_API auto SetDirectionalCacheControls(
     renderer::DirectionalVirtualCacheControls controls) -> void;
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetDirectionalCacheControls() const noexcept
+  [[nodiscard]] OXGN_RNDR_NDAPI auto
+  GetDirectionalCacheControls() const noexcept
     -> renderer::DirectionalVirtualCacheControls;
 
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetFramePublication(
@@ -103,7 +105,8 @@ public:
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetViewIntrospection(
     ViewId view_id) const noexcept -> const VirtualShadowViewIntrospection*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetPageManagementBindings(
-    ViewId view_id) const noexcept -> const renderer::VirtualShadowPageManagementBindings*;
+    ViewId view_id) const noexcept
+    -> const renderer::VirtualShadowPageManagementBindings*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetDirectionalVirtualMetadata(
     ViewId view_id) const noexcept
     -> const engine::DirectionalVirtualShadowMetadata*;
@@ -387,6 +390,7 @@ private:
     ::oxygen::ShadowQualityTier::kHigh
   };
   frame::SequenceNumber frame_sequence_ { 0U };
+  frame::Slot frame_slot_ { frame::kInvalidSlot };
 
   using BufferT = engine::upload::TransientStructuredBuffer;
   BufferT shadow_instance_buffer_;
@@ -423,7 +427,9 @@ private:
     std::shared_ptr<graphics::Buffer> physical_page_metadata_upload_buffer;
     renderer::VirtualShadowPhysicalPageMetadata*
       mapped_physical_page_metadata_upload { nullptr };
-    ShaderVisibleIndex physical_page_metadata_srv { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex physical_page_metadata_srv {
+      kInvalidShaderVisibleIndex
+    };
     std::uint32_t physical_page_metadata_capacity { 0U };
     std::uint32_t physical_page_metadata_upload_count { 0U };
     bool physical_page_metadata_upload_pending { false };
@@ -450,6 +456,10 @@ private:
     view_page_table_resources_;
   std::unordered_map<ViewId, ViewStructuredWordBufferResources>
     view_page_flags_resources_;
+  std::unordered_map<ViewId, ViewStructuredWordBufferResources>
+    view_page_management_page_table_resources_;
+  std::unordered_map<ViewId, ViewStructuredWordBufferResources>
+    view_page_management_page_flags_resources_;
   std::unordered_map<ViewId, ViewResolveResources> view_resolve_resources_;
   std::unordered_map<ViewId, PendingRequestFeedback> request_feedback_;
   std::unordered_map<ViewId, VirtualShadowResolvedRasterSchedule>
@@ -463,6 +473,22 @@ private:
   };
   std::unordered_map<ViewId, ViewPublishLogState> publish_log_states_;
 
+  struct CoherenceReadbackSlot {
+    std::shared_ptr<graphics::Buffer> page_table_readback;
+    std::shared_ptr<graphics::Buffer> page_flags_readback;
+    const std::uint32_t* mapped_page_table { nullptr };
+    const std::uint32_t* mapped_page_flags { nullptr };
+    std::vector<std::uint32_t> cpu_page_table_snapshot;
+    std::vector<std::uint32_t> cpu_page_flags_snapshot;
+    frame::SequenceNumber source_frame { 0U };
+    ViewId view_id {};
+    std::uint32_t entry_count { 0U };
+    bool live_authority { false };
+    bool pending { false };
+  };
+  std::array<CoherenceReadbackSlot, frame::kFramesInFlight.get()>
+    coherence_readbacks_ {};
+
   OXGN_RNDR_API auto BuildPublicationKey(
     const engine::ViewConstants& view_constants,
     std::span<const engine::DirectionalShadowCandidate> directional_candidates,
@@ -471,11 +497,11 @@ private:
   OXGN_RNDR_API auto RebuildResolveStateSnapshot(ViewCacheEntry& state) const
     -> void;
   OXGN_RNDR_API auto PropagateDirectionalHierarchicalPageFlags(
-    ViewCacheEntry& state, const ViewCacheEntry::PendingResidencyResolve& pending)
-    const -> void;
+    ViewCacheEntry& state,
+    const ViewCacheEntry::PendingResidencyResolve& pending) const -> void;
   OXGN_RNDR_API auto RebuildPhysicalPageManagementSnapshot(
-    ViewCacheEntry& state, const ViewCacheEntry::PendingResidencyResolve& pending)
-    const -> void;
+    ViewCacheEntry& state,
+    const ViewCacheEntry::PendingResidencyResolve& pending) const -> void;
   [[nodiscard]] OXGN_RNDR_NDAPI auto BuildRequestedResidentKeySet(
     const ViewCacheEntry::PendingResidencyResolve& pending) const
     -> std::unordered_set<std::uint64_t>;
@@ -485,12 +511,13 @@ private:
     -> std::vector<std::uint64_t>;
   OXGN_RNDR_API auto ResolvePendingPageResidency(ViewId view_id) -> void;
   OXGN_RNDR_API auto CarryForwardCompatibleDirectionalResidentPages(
-    ViewCacheEntry& state, const ViewCacheEntry::PendingResidencyResolve& pending,
-    std::uint32_t& released_page_count,
-    std::uint32_t& marked_dirty_page_count) -> void;
-  OXGN_RNDR_API auto PopulateDirectionalFallbackPageTableEntries(
-    ViewCacheEntry& state, const ViewCacheEntry::PendingResidencyResolve& pending)
+    ViewCacheEntry& state,
+    const ViewCacheEntry::PendingResidencyResolve& pending,
+    std::uint32_t& released_page_count, std::uint32_t& marked_dirty_page_count)
     -> void;
+  OXGN_RNDR_API auto PopulateDirectionalFallbackPageTableEntries(
+    ViewCacheEntry& state,
+    const ViewCacheEntry::PendingResidencyResolve& pending) -> void;
   OXGN_RNDR_API auto RefreshViewExports(
     ViewId view_id, ViewCacheEntry& state) const -> void;
   OXGN_RNDR_API auto RefreshAtlasTileDebugStates(ViewCacheEntry& state) const
@@ -513,8 +540,7 @@ private:
   OXGN_RNDR_API auto AcquirePhysicalTile(ViewCacheEntry& state,
     std::vector<std::uint64_t>& eviction_candidates,
     std::size_t& next_eviction_candidate_index,
-    std::uint32_t& evicted_page_count)
-    -> std::optional<PhysicalTileAddress>;
+    std::uint32_t& evicted_page_count) -> std::optional<PhysicalTileAddress>;
   OXGN_RNDR_API auto ReleasePhysicalTile(PhysicalTileAddress tile) -> void;
   [[nodiscard]] OXGN_RNDR_NDAPI auto PrepareDirectionalVirtualClipmapSetup(
     const engine::ViewConstants& view_constants,
@@ -550,6 +576,13 @@ private:
     std::uint32_t required_entry_count) -> ViewStructuredWordBufferResources*;
   OXGN_RNDR_API auto EnsurePageFlagsPublication(
     ViewId view_id, std::uint32_t required_entry_count) -> ShaderVisibleIndex;
+  OXGN_RNDR_API auto EnsureViewPageManagementPageTableResources(ViewId view_id,
+    std::uint32_t required_entry_count) -> ViewStructuredWordBufferResources*;
+  OXGN_RNDR_API auto EnsureViewPageManagementPageFlagResources(ViewId view_id,
+    std::uint32_t required_entry_count) -> ViewStructuredWordBufferResources*;
+  auto EnsureCoherenceReadbackBuffers(
+    CoherenceReadbackSlot& slot, std::uint64_t size_bytes) -> bool;
+  auto CheckCoherenceReadback(CoherenceReadbackSlot& slot) -> void;
   OXGN_RNDR_API auto EnsureViewResolveResources(ViewId view_id,
     std::uint32_t required_entry_count) -> ViewResolveResources*;
   OXGN_RNDR_API auto StageResolveStateUpload(

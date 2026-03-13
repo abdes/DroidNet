@@ -39,6 +39,7 @@ struct VirtualShadowResolvePassConstants
     uint clean_page_list_count;
     uint total_page_management_list_count;
     uint phase;
+    uint target_clip_index;
     int4 clip_grid_origin_x_packed[3];
     int4 clip_grid_origin_y_packed[3];
     float4 clip_origin_x_packed[3];
@@ -83,15 +84,8 @@ struct VirtualShadowResolveStats
 static const uint kResolvePhaseClear = 0u;
 static const uint kResolvePhasePopulateCurrent = 1u;
 static const uint kResolvePhasePopulateFallback = 2u;
-static const uint kResolvePhaseSchedule = 3u;
-
-static const uint kPageManagementHierarchyVisibilityMask
-    = OXYGEN_VSM_PAGE_FLAG_ALLOCATED
-    | OXYGEN_VSM_PAGE_FLAG_USED_THIS_FRAME
-    | OXYGEN_VSM_PAGE_FLAG_DETAIL_GEOMETRY
-    | OXYGEN_VSM_PAGE_FLAG_HIERARCHY_ALLOCATED_DESCENDANT
-    | OXYGEN_VSM_PAGE_FLAG_HIERARCHY_USED_THIS_FRAME_DESCENDANT
-    | OXYGEN_VSM_PAGE_FLAG_HIERARCHY_DETAIL_DESCENDANT;
+static const uint kResolvePhasePropagateHierarchy = 3u;
+static const uint kResolvePhaseSchedule = 4u;
 
 static const uint kVirtualResidentPageCoordBits = 28u;
 static const uint64_t kVirtualResidentPageCoordMask = (1ull << kVirtualResidentPageCoordBits) - 1ull;
@@ -198,10 +192,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     }
 
     if (pass_constants.phase == kResolvePhasePopulateCurrent) {
-        const uint current_page_list_count =
-            pass_constants.requested_page_list_count
-            + pass_constants.dirty_page_list_count
-            + pass_constants.clean_page_list_count;
+        const uint current_page_list_count = pass_constants.requested_page_list_count;
         if (thread_index >= current_page_list_count) {
             return;
         }
@@ -234,40 +225,40 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         if (global_page_index >= pass_constants.total_page_count) {
             return;
         }
-
-        const bool requested_this_frame =
-            thread_index < pass_constants.requested_page_list_count;
         page_table[global_page_index] = PackVirtualShadowPageTableEntry(
             DecodePackedTileX(metadata.packed_atlas_tile_coords),
             DecodePackedTileY(metadata.packed_atlas_tile_coords),
             0u,
             true,
             true,
-            requested_this_frame);
-        page_flags[global_page_index] = list_entry.page_flags;
+            true);
+        page_flags[global_page_index] = list_entry.page_flags & OXYGEN_VSM_PAGE_FLAG_BASE_MASK;
         return;
     }
 
     if (pass_constants.phase == kResolvePhasePopulateFallback) {
-        if (thread_index >= pass_constants.total_page_count) {
+        if (thread_index >= pass_constants.pages_per_level
+            || pass_constants.pages_per_level == 0u
+            || pass_constants.pages_per_axis == 0u) {
             return;
         }
 
-        const uint current_packed_entry = page_table[thread_index];
-        if (VirtualShadowPageTableEntryHasCurrentLod(DecodeVirtualShadowPageTableEntry(current_packed_entry))) {
-            return;
-        }
-
-        if (pass_constants.pages_per_level == 0u || pass_constants.pages_per_axis == 0u) {
-            return;
-        }
-
-        const uint clip_index = thread_index / pass_constants.pages_per_level;
+        const uint clip_index = pass_constants.target_clip_index;
         if (clip_index + 1u >= pass_constants.clip_level_count) {
             return;
         }
 
-        const uint local_page_index = thread_index % pass_constants.pages_per_level;
+        const uint global_page_index = clip_index * pass_constants.pages_per_level + thread_index;
+        if (global_page_index >= pass_constants.total_page_count) {
+            return;
+        }
+
+        const uint current_packed_entry = page_table[global_page_index];
+        if (VirtualShadowPageTableEntryHasCurrentLod(DecodeVirtualShadowPageTableEntry(current_packed_entry))) {
+            return;
+        }
+
+        const uint local_page_index = thread_index;
         const uint page_x = local_page_index % pass_constants.pages_per_axis;
         const uint page_y = local_page_index / pass_constants.pages_per_axis;
 
@@ -316,7 +307,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             }
 
             const uint candidate_flags = page_flags[candidate_global_page_index];
-            if ((candidate_flags & kPageManagementHierarchyVisibilityMask) == 0u) {
+            if (!HasVirtualShadowHierarchyVisibility(candidate_flags)) {
                 continue;
             }
 
@@ -327,7 +318,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
                 continue;
             }
 
-            page_table[thread_index] = PackVirtualShadowPageTableEntry(
+            page_table[global_page_index] = PackVirtualShadowPageTableEntry(
                 candidate_entry.tile_x,
                 candidate_entry.tile_y,
                 resolved_fallback_clip - clip_index,
@@ -336,6 +327,66 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
                 false);
             return;
         }
+        return;
+    }
+
+    if (pass_constants.phase == kResolvePhasePropagateHierarchy) {
+        if (thread_index >= pass_constants.pages_per_level
+            || pass_constants.pages_per_level == 0u
+            || pass_constants.pages_per_axis == 0u) {
+            return;
+        }
+
+        const uint fine_clip = pass_constants.target_clip_index;
+        if (fine_clip + 1u >= pass_constants.clip_level_count) {
+            return;
+        }
+
+        const uint fine_local_page_index = thread_index;
+        const uint fine_page_x = fine_local_page_index % pass_constants.pages_per_axis;
+        const uint fine_page_y = fine_local_page_index / pass_constants.pages_per_axis;
+        const uint fine_global_page_index =
+            fine_clip * pass_constants.pages_per_level + fine_local_page_index;
+        if (fine_global_page_index >= pass_constants.total_page_count) {
+            return;
+        }
+
+        const uint fine_flags = page_flags[fine_global_page_index];
+        if (fine_flags == 0u) {
+            return;
+        }
+
+        const uint parent_clip = fine_clip + 1u;
+        const float fine_page_world = LoadPackedFloat(pass_constants.clip_page_world_packed, fine_clip);
+        const float fine_origin_x = LoadPackedFloat(pass_constants.clip_origin_x_packed, fine_clip);
+        const float fine_origin_y = LoadPackedFloat(pass_constants.clip_origin_y_packed, fine_clip);
+        const float parent_page_world = LoadPackedFloat(pass_constants.clip_page_world_packed, parent_clip);
+        const float parent_origin_x = LoadPackedFloat(pass_constants.clip_origin_x_packed, parent_clip);
+        const float parent_origin_y = LoadPackedFloat(pass_constants.clip_origin_y_packed, parent_clip);
+
+        const float page_center_x = fine_origin_x + (float(fine_page_x) + 0.5f) * fine_page_world;
+        const float page_center_y = fine_origin_y + (float(fine_page_y) + 0.5f) * fine_page_world;
+        const float parent_page_x_f = (page_center_x - parent_origin_x) / parent_page_world;
+        const float parent_page_y_f = (page_center_y - parent_origin_y) / parent_page_world;
+        if (parent_page_x_f < 0.0f || parent_page_y_f < 0.0f
+            || parent_page_x_f >= float(pass_constants.pages_per_axis)
+            || parent_page_y_f >= float(pass_constants.pages_per_axis)) {
+            return;
+        }
+
+        const uint parent_page_x = uint(floor(parent_page_x_f));
+        const uint parent_page_y = uint(floor(parent_page_y_f));
+        const uint parent_global_page_index =
+            parent_clip * pass_constants.pages_per_level
+            + parent_page_y * pass_constants.pages_per_axis
+            + parent_page_x;
+        if (parent_global_page_index >= pass_constants.total_page_count) {
+            return;
+        }
+
+        InterlockedOr(
+            page_flags[parent_global_page_index],
+            MakeVirtualShadowHierarchyFlags(fine_flags));
         return;
     }
 

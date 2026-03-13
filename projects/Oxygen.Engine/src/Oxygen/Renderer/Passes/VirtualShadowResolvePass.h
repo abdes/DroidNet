@@ -61,6 +61,10 @@ private:
   static constexpr std::uint32_t kDispatchGroupSize = 64U;
   static constexpr std::uint32_t kMaxSupportedPagesPerAxis = 64U;
   static constexpr std::uint32_t kMaxSupportedClipLevels = 12U;
+  static constexpr std::uint32_t kPassConstantsSlotsPerFrame
+    = (2U * kMaxSupportedClipLevels) + 2U;
+  static constexpr std::uint32_t kPassConstantsSlotCount
+    = kPassConstantsSlotsPerFrame * frame::kFramesInFlight.get();
   static constexpr std::uint32_t kMaxSupportedPageCount
     = kMaxSupportedPagesPerAxis * kMaxSupportedPagesPerAxis
     * kMaxSupportedClipLevels;
@@ -116,8 +120,10 @@ private:
   std::shared_ptr<Config> config_;
 
   std::shared_ptr<graphics::Buffer> pass_constants_buffer_;
-  graphics::NativeView pass_constants_cbv_ {};
-  ShaderVisibleIndex pass_constants_index_ { kInvalidShaderVisibleIndex };
+  std::array<graphics::NativeView, kPassConstantsSlotCount>
+    pass_constants_cbvs_ {};
+  std::array<ShaderVisibleIndex, kPassConstantsSlotCount>
+    pass_constants_indices_ {};
   void* pass_constants_mapped_ptr_ { nullptr };
 
   std::shared_ptr<graphics::Buffer> clear_count_upload_buffer_;
@@ -128,6 +134,7 @@ private:
     slot_readbacks_ {};
 
   ViewId active_view_id_ {};
+  ShaderVisibleIndex active_request_words_srv_ { kInvalidShaderVisibleIndex };
   std::uint32_t active_request_word_count_ { 0U };
   std::uint32_t active_dispatch_group_count_ { 0U };
   std::uint32_t active_pages_per_axis_ { 0U };
