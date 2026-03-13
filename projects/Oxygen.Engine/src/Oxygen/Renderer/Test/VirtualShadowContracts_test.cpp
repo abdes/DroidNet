@@ -20,6 +20,8 @@ using oxygen::engine::DirectionalVirtualShadowMetadata;
 using oxygen::renderer::DecodeVirtualShadowPageTableEntry;
 using oxygen::renderer::HasVirtualShadowPageFlag;
 using oxygen::renderer::MakeVirtualShadowPageFlags;
+using oxygen::renderer::MakeVirtualShadowHierarchyFlags;
+using oxygen::renderer::MergeVirtualShadowHierarchyFlags;
 using oxygen::renderer::PackVirtualShadowPageTableEntry;
 using oxygen::renderer::ResolveVirtualShadowFallbackClipIndex;
 using oxygen::renderer::VirtualShadowPageFlag;
@@ -241,6 +243,29 @@ TEST(VirtualShadowContractsTest, PageFlagsHelpersExposeBinaryCoarseDetailPolicy)
     flags, VirtualShadowPageFlag::kDetailGeometry));
   EXPECT_TRUE(HasVirtualShadowPageFlag(
     flags, VirtualShadowPageFlag::kUsedThisFrame));
+}
+
+TEST(VirtualShadowContractsTest, HierarchicalPageFlagsPropagateDescendantUsage)
+{
+  constexpr auto child_flags
+    = MakeVirtualShadowPageFlags(true, true, false, true, true);
+  constexpr auto propagated_hierarchy
+    = MakeVirtualShadowHierarchyFlags(child_flags);
+  constexpr auto parent_flags
+    = MergeVirtualShadowHierarchyFlags(0U, child_flags);
+
+  EXPECT_TRUE(HasVirtualShadowPageFlag(propagated_hierarchy,
+    VirtualShadowPageFlag::kHierarchyAllocatedDescendant));
+  EXPECT_TRUE(HasVirtualShadowPageFlag(propagated_hierarchy,
+    VirtualShadowPageFlag::kHierarchyDynamicUncachedDescendant));
+  EXPECT_FALSE(HasVirtualShadowPageFlag(propagated_hierarchy,
+    VirtualShadowPageFlag::kHierarchyStaticUncachedDescendant));
+  EXPECT_TRUE(HasVirtualShadowPageFlag(propagated_hierarchy,
+    VirtualShadowPageFlag::kHierarchyDetailDescendant));
+  EXPECT_TRUE(HasVirtualShadowPageFlag(propagated_hierarchy,
+    VirtualShadowPageFlag::kHierarchyUsedThisFrameDescendant));
+
+  EXPECT_EQ(parent_flags, propagated_hierarchy);
 }
 
 TEST(VirtualShadowContractsTest, PhysicalPageContractsRemainGpuFriendly)

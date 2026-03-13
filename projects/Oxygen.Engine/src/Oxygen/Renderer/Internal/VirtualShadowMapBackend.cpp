@@ -521,6 +521,16 @@ VirtualShadowMapBackend::~VirtualShadowMapBackend()
       resources.stats_upload_buffer->UnMap();
       resources.mapped_stats_upload = nullptr;
     }
+    if (resources.physical_page_metadata_upload_buffer
+      && resources.mapped_physical_page_metadata_upload != nullptr) {
+      resources.physical_page_metadata_upload_buffer->UnMap();
+      resources.mapped_physical_page_metadata_upload = nullptr;
+    }
+    if (resources.physical_page_lists_upload_buffer
+      && resources.mapped_physical_page_lists_upload != nullptr) {
+      resources.physical_page_lists_upload_buffer->UnMap();
+      resources.mapped_physical_page_lists_upload = nullptr;
+    }
   }
   ReleasePhysicalPool();
 }
@@ -633,16 +643,28 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
   state.frame_publication.virtual_shadow_page_flags_srv
     = EnsurePageFlagsPublication(
       view_id, static_cast<std::uint32_t>(published_page_flags_entries.size()));
-  state.page_table_upload_entry_count
-    = static_cast<std::uint32_t>(published_page_table_entries.size());
-  state.page_table_upload_pending = false;
-  state.page_flags_upload_entry_count
-    = static_cast<std::uint32_t>(published_page_flags_entries.size());
-  state.page_flags_upload_pending = false;
   state.frame_publication.virtual_shadow_physical_pool_srv = physical_pool_srv_;
   if (!published_shadow_instances.empty()) {
     const auto flags = static_cast<engine::ShadowProductFlags>(
       published_shadow_instances.front().flags);
+    LOG_F(INFO,
+      "VirtualShadowMapBackend: frame={} view={} publish shadow_instance "
+      "domain={} impl={} flags=0x{:x} payload={} light={} clips={} pages={} "
+      "mapped_pages={} pending_raster_pages={}",
+      frame_sequence_.get(), view_id.get(),
+      published_shadow_instances.front().domain,
+      published_shadow_instances.front().implementation_kind,
+      published_shadow_instances.front().flags,
+      published_shadow_instances.front().payload_index,
+      published_shadow_instances.front().light_index,
+      !published_directional_virtual_metadata.empty()
+        ? published_directional_virtual_metadata.front().clip_level_count
+        : 0U,
+      !published_directional_virtual_metadata.empty()
+        ? published_directional_virtual_metadata.front().pages_per_axis
+        : 0U,
+      state.resolve_stats.mapped_page_count,
+      state.resolve_stats.pending_raster_page_count);
     if ((flags & engine::ShadowProductFlags::kSunLight)
       != engine::ShadowProductFlags::kNone) {
       state.frame_publication.sun_shadow_index = 0U;
@@ -653,6 +675,8 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
   DCHECK_F(inserted || it != view_cache_.end(),
     "VirtualShadowMapBackend failed to publish view state");
   RebuildResolveStateSnapshot(it->second);
+  RebuildPhysicalPageManagementSnapshot(
+    it->second, it->second.pending_residency_resolve);
   RefreshViewExports(view_id, it->second);
   return it->second.frame_publication;
 }
@@ -685,6 +709,8 @@ auto VirtualShadowMapBackend::MarkRendered(const ViewId view_id) -> void
     });
   it->second.resolved_raster_pages.clear();
   RebuildResolveStateSnapshot(it->second);
+  RebuildPhysicalPageManagementSnapshot(
+    it->second, it->second.pending_residency_resolve);
   StageResolveStateUpload(view_id, it->second);
   RefreshViewExports(view_id, it->second);
 }
@@ -713,6 +739,8 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
     state.page_table_entries.begin(), state.page_table_entries.end(), 0U);
   std::fill(
     state.page_flags_entries.begin(), state.page_flags_entries.end(), 0U);
+  state.physical_page_metadata_entries.clear();
+  state.physical_page_list_entries.clear();
 
   std::uint32_t reused_requested_pages = 0U;
   std::uint32_t allocated_pages = 0U;
@@ -726,6 +754,10 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
   state.has_rendered_cache_history = false;
   CarryForwardCompatibleDirectionalResidentPages(
     state, pending, released_resident_pages, marked_dirty_pages);
+  auto requested_resident_keys = BuildRequestedResidentKeySet(pending);
+  auto eviction_candidates
+    = BuildEvictionCandidateList(state, requested_resident_keys);
+  std::size_t next_eviction_candidate_index = 0U;
 
   const auto process_clip_range_desc = [&](const std::uint32_t begin_clip,
                                          const std::uint32_t end_clip) {
@@ -767,8 +799,8 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
             || !pending.reusable_clip_contents[clip_index];
           ++reused_requested_pages;
         } else {
-          const auto allocated_tile
-            = AcquirePhysicalTile(state, pending.pages_per_level, evicted_pages);
+          const auto allocated_tile = AcquirePhysicalTile(state,
+            eviction_candidates, next_eviction_candidate_index, evicted_pages);
           if (!allocated_tile.has_value()) {
             ++allocation_failures;
             return;
@@ -826,68 +858,6 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
         }
       };
 
-      const bool prioritize_coarse_safety_clip
-        = clip_index == pending.coarse_safety_clip_index
-        && pending.coarse_safety_priority_valid;
-      if (prioritize_coarse_safety_clip) {
-        std::vector<std::uint32_t> prioritized_pages {};
-        prioritized_pages.reserve(pending.pages_per_level);
-        for (std::uint32_t page_y = 0U; page_y < pending.pages_per_axis;
-          ++page_y) {
-          for (std::uint32_t page_x = 0U; page_x < pending.pages_per_axis;
-            ++page_x) {
-            const auto local_page_index
-              = page_y * pending.pages_per_axis + page_x;
-            const auto global_page_index
-              = clip_index * pending.pages_per_level + local_page_index;
-            if (pending.selected_pages[global_page_index] != 0U) {
-              prioritized_pages.push_back(local_page_index);
-            }
-          }
-        }
-
-        std::ranges::sort(prioritized_pages,
-          [&](const std::uint32_t lhs, const std::uint32_t rhs) {
-            const auto lhs_x = lhs % pending.pages_per_axis;
-            const auto lhs_y = lhs / pending.pages_per_axis;
-            const auto rhs_x = rhs % pending.pages_per_axis;
-            const auto rhs_y = rhs / pending.pages_per_axis;
-            const auto lhs_center_x
-              = origin_x + (static_cast<float>(lhs_x) + 0.5F) * page_world_size;
-            const auto lhs_center_y
-              = origin_y + (static_cast<float>(lhs_y) + 0.5F) * page_world_size;
-            const auto rhs_center_x
-              = origin_x + (static_cast<float>(rhs_x) + 0.5F) * page_world_size;
-            const auto rhs_center_y
-              = origin_y + (static_cast<float>(rhs_y) + 0.5F) * page_world_size;
-            const auto lhs_dx
-              = lhs_center_x - pending.coarse_safety_priority_center_ls.x;
-            const auto lhs_dy
-              = lhs_center_y - pending.coarse_safety_priority_center_ls.y;
-            const auto rhs_dx
-              = rhs_center_x - pending.coarse_safety_priority_center_ls.x;
-            const auto rhs_dy
-              = rhs_center_y - pending.coarse_safety_priority_center_ls.y;
-            const auto lhs_dist_sq = lhs_dx * lhs_dx + lhs_dy * lhs_dy;
-            const auto rhs_dist_sq = rhs_dx * rhs_dx + rhs_dy * rhs_dy;
-            if (lhs_dist_sq != rhs_dist_sq) {
-              return lhs_dist_sq < rhs_dist_sq;
-            }
-            return lhs < rhs;
-          });
-
-        std::uint32_t processed_pages = 0U;
-        for (const auto local_page_index : prioritized_pages) {
-          if (processed_pages >= pending.coarse_safety_max_page_count) {
-            break;
-          }
-          process_selected_page(local_page_index % pending.pages_per_axis,
-            local_page_index / pending.pages_per_axis);
-          ++processed_pages;
-        }
-        continue;
-      }
-
       for (std::uint32_t page_y = 0U; page_y < pending.pages_per_axis;
         ++page_y) {
         for (std::uint32_t page_x = 0U; page_x < pending.pages_per_axis;
@@ -899,25 +869,14 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
   };
 
   const std::uint32_t coarse_backbone_begin = pending.coarse_backbone_begin;
-  // Under cold starts, incompatible publishes, or globally dirty content, the
-  // player-visible failure mode is a blank frame rather than a temporarily
-  // blurrier shadow. Reserve the current coarse safety net first in those
-  // cases, then let fine pages consume the remaining atlas budget.
-  const bool prioritize_current_coarse_safety_net
-    = pending.previous_resident_pages.empty() || !pending.address_space_compatible
-    || pending.global_dirty_resident_contents;
-  if (prioritize_current_coarse_safety_net) {
-    process_clip_range_desc(coarse_backbone_begin, pending.clip_level_count);
-    process_clip_range_desc(0U, coarse_backbone_begin);
-  } else {
-    // In the stable compatible path, current fine pages still win over coarse
-    // backbone coverage to preserve detail without reintroducing the old
-    // motion-time page explosion.
-    process_clip_range_desc(0U, coarse_backbone_begin);
-    process_clip_range_desc(coarse_backbone_begin, pending.clip_level_count);
-  }
+  // Phase 6 moves fallback usability onto page-table aliasing plus coarse mark
+  // coverage. Coarse safety remains diagnostic metadata, but it no longer gets
+  // a special backend-only allocation budget or ordering shortcut.
+  process_clip_range_desc(0U, coarse_backbone_begin);
+  process_clip_range_desc(coarse_backbone_begin, pending.clip_level_count);
 
   PopulateDirectionalFallbackPageTableEntries(state, pending);
+  PropagateDirectionalHierarchicalPageFlags(state, pending);
 
   // Reuse gating is diagnostic-only unless the current frame has already
   // proven it needs no raster work. Dirty carried pages must never suppress
@@ -944,36 +903,12 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
       return entry.second.ContentsValid();
     });
 
-  state.page_table_upload_entry_count
-    = static_cast<std::uint32_t>(state.page_table_entries.size());
-  state.page_flags_upload_entry_count
-    = static_cast<std::uint32_t>(state.page_flags_entries.size());
-  if (state.page_table_upload_entry_count > 0U) {
-    const auto page_table_srv
-      = StagePageTableUpload(view_id, state.page_table_entries);
-    if (!state.frame_publication.virtual_shadow_page_table_srv.IsValid()) {
-      state.frame_publication.virtual_shadow_page_table_srv = page_table_srv;
-    }
-    state.page_table_upload_pending = page_table_srv.IsValid();
-  } else {
-    state.page_table_upload_pending = false;
-  }
-  if (state.page_flags_upload_entry_count > 0U) {
-    const auto page_flags_srv
-      = StagePageFlagsUpload(view_id, state.page_flags_entries);
-    if (!state.frame_publication.virtual_shadow_page_flags_srv.IsValid()) {
-      state.frame_publication.virtual_shadow_page_flags_srv = page_flags_srv;
-    }
-    state.page_flags_upload_pending = page_flags_srv.IsValid();
-  } else {
-    state.page_flags_upload_pending = false;
-  }
-
   pending.previous_resident_pages.clear();
   pending.previous_shadow_caster_bounds.clear();
   pending.dirty_resident_pages.clear();
   pending.dirty = false;
   RebuildResolveStateSnapshot(state);
+  RebuildPhysicalPageManagementSnapshot(state, pending);
   StageResolveStateUpload(view_id, state);
   RefreshAtlasTileDebugStates(state);
   RefreshViewExports(view_id, state);
@@ -1157,40 +1092,12 @@ auto VirtualShadowMapBackend::PreparePageTableResources(
   }
 
   auto& state = state_it->second;
-  const auto page_table_upload_entries
-    = std::span<const std::uint32_t> { state.page_table_entries };
-  const auto page_flags_upload_entries
-    = std::span<const std::uint32_t> { state.page_flags_entries };
   if (has_page_table_resources) {
     auto& page_table_resources = page_table_resources_it->second;
     if (!recorder.IsResourceTracked(*page_table_resources.gpu_buffer)) {
       recorder.BeginTrackingResourceState(*page_table_resources.gpu_buffer,
         graphics::ResourceStates::kCommon, true);
     }
-
-    if (state.page_table_upload_pending && page_table_resources.upload_buffer) {
-      if (page_table_resources.mapped_upload != nullptr
-        && state.page_table_upload_entry_count > 0U) {
-        std::memcpy(page_table_resources.mapped_upload,
-          page_table_upload_entries.data(),
-          static_cast<std::size_t>(state.page_table_upload_entry_count)
-            * sizeof(std::uint32_t));
-      }
-      if (!recorder.IsResourceTracked(*page_table_resources.upload_buffer)) {
-        recorder.BeginTrackingResourceState(
-          *page_table_resources.upload_buffer,
-          graphics::ResourceStates::kCopySource, false);
-      }
-      recorder.RequireResourceState(*page_table_resources.gpu_buffer,
-        graphics::ResourceStates::kCopyDest);
-      recorder.FlushBarriers();
-      recorder.CopyBuffer(*page_table_resources.gpu_buffer, 0U,
-        *page_table_resources.upload_buffer, 0U,
-        static_cast<std::size_t>(state.page_table_upload_entry_count)
-          * sizeof(std::uint32_t));
-      state.page_table_upload_pending = false;
-    }
-
     recorder.RequireResourceState(*page_table_resources.gpu_buffer,
       graphics::ResourceStates::kShaderResource);
   }
@@ -1200,29 +1107,6 @@ auto VirtualShadowMapBackend::PreparePageTableResources(
       recorder.BeginTrackingResourceState(*page_flags_resources.gpu_buffer,
         graphics::ResourceStates::kCommon, true);
     }
-
-    if (state.page_flags_upload_pending && page_flags_resources.upload_buffer) {
-      if (page_flags_resources.mapped_upload != nullptr
-        && state.page_flags_upload_entry_count > 0U) {
-        std::memcpy(page_flags_resources.mapped_upload,
-          page_flags_upload_entries.data(),
-          static_cast<std::size_t>(state.page_flags_upload_entry_count)
-            * sizeof(std::uint32_t));
-      }
-      if (!recorder.IsResourceTracked(*page_flags_resources.upload_buffer)) {
-        recorder.BeginTrackingResourceState(*page_flags_resources.upload_buffer,
-          graphics::ResourceStates::kCopySource, false);
-      }
-      recorder.RequireResourceState(*page_flags_resources.gpu_buffer,
-        graphics::ResourceStates::kCopyDest);
-      recorder.FlushBarriers();
-      recorder.CopyBuffer(*page_flags_resources.gpu_buffer, 0U,
-        *page_flags_resources.upload_buffer, 0U,
-        static_cast<std::size_t>(state.page_flags_upload_entry_count)
-          * sizeof(std::uint32_t));
-      state.page_flags_upload_pending = false;
-    }
-
     recorder.RequireResourceState(*page_flags_resources.gpu_buffer,
       graphics::ResourceStates::kShaderResource);
   }
@@ -1269,6 +1153,86 @@ auto VirtualShadowMapBackend::PreparePageTableResources(
         *resolve_resources.resident_pages_gpu_buffer,
         graphics::ResourceStates::kShaderResource);
     }
+    if (resolve_resources.physical_page_metadata_gpu_buffer) {
+      if (!recorder.IsResourceTracked(
+            *resolve_resources.physical_page_metadata_gpu_buffer)) {
+        recorder.BeginTrackingResourceState(
+          *resolve_resources.physical_page_metadata_gpu_buffer,
+          graphics::ResourceStates::kCommon, true);
+      }
+      if (resolve_resources.physical_page_metadata_upload_pending
+        && resolve_resources.physical_page_metadata_upload_buffer) {
+        if (resolve_resources.mapped_physical_page_metadata_upload != nullptr
+          && resolve_resources.physical_page_metadata_upload_count > 0U) {
+          std::memcpy(resolve_resources.mapped_physical_page_metadata_upload,
+            state.physical_page_metadata_entries.data(),
+            static_cast<std::size_t>(
+              resolve_resources.physical_page_metadata_upload_count)
+              * sizeof(renderer::VirtualShadowPhysicalPageMetadata));
+        }
+        if (!recorder.IsResourceTracked(
+              *resolve_resources.physical_page_metadata_upload_buffer)) {
+          recorder.BeginTrackingResourceState(
+            *resolve_resources.physical_page_metadata_upload_buffer,
+            graphics::ResourceStates::kCopySource, false);
+        }
+        if (resolve_resources.physical_page_metadata_upload_count > 0U) {
+          recorder.RequireResourceState(
+            *resolve_resources.physical_page_metadata_gpu_buffer,
+            graphics::ResourceStates::kCopyDest);
+          recorder.FlushBarriers();
+          recorder.CopyBuffer(*resolve_resources.physical_page_metadata_gpu_buffer,
+            0U, *resolve_resources.physical_page_metadata_upload_buffer, 0U,
+            static_cast<std::size_t>(
+              resolve_resources.physical_page_metadata_upload_count)
+              * sizeof(renderer::VirtualShadowPhysicalPageMetadata));
+        }
+        resolve_resources.physical_page_metadata_upload_pending = false;
+      }
+      recorder.RequireResourceState(
+        *resolve_resources.physical_page_metadata_gpu_buffer,
+        graphics::ResourceStates::kShaderResource);
+    }
+    if (resolve_resources.physical_page_lists_gpu_buffer) {
+      if (!recorder.IsResourceTracked(
+            *resolve_resources.physical_page_lists_gpu_buffer)) {
+        recorder.BeginTrackingResourceState(
+          *resolve_resources.physical_page_lists_gpu_buffer,
+          graphics::ResourceStates::kCommon, true);
+      }
+      if (resolve_resources.physical_page_lists_upload_pending
+        && resolve_resources.physical_page_lists_upload_buffer) {
+        if (resolve_resources.mapped_physical_page_lists_upload != nullptr
+          && resolve_resources.physical_page_lists_upload_count > 0U) {
+          std::memcpy(resolve_resources.mapped_physical_page_lists_upload,
+            state.physical_page_list_entries.data(),
+            static_cast<std::size_t>(
+              resolve_resources.physical_page_lists_upload_count)
+              * sizeof(renderer::VirtualShadowPhysicalPageListEntry));
+        }
+        if (!recorder.IsResourceTracked(
+              *resolve_resources.physical_page_lists_upload_buffer)) {
+          recorder.BeginTrackingResourceState(
+            *resolve_resources.physical_page_lists_upload_buffer,
+            graphics::ResourceStates::kCopySource, false);
+        }
+        if (resolve_resources.physical_page_lists_upload_count > 0U) {
+          recorder.RequireResourceState(
+            *resolve_resources.physical_page_lists_gpu_buffer,
+            graphics::ResourceStates::kCopyDest);
+          recorder.FlushBarriers();
+          recorder.CopyBuffer(*resolve_resources.physical_page_lists_gpu_buffer,
+            0U, *resolve_resources.physical_page_lists_upload_buffer, 0U,
+            static_cast<std::size_t>(
+              resolve_resources.physical_page_lists_upload_count)
+              * sizeof(renderer::VirtualShadowPhysicalPageListEntry));
+        }
+        resolve_resources.physical_page_lists_upload_pending = false;
+      }
+      recorder.RequireResourceState(
+        *resolve_resources.physical_page_lists_gpu_buffer,
+        graphics::ResourceStates::kShaderResource);
+    }
     if (resolve_resources.stats_gpu_buffer) {
       if (!recorder.IsResourceTracked(*resolve_resources.stats_gpu_buffer)) {
         recorder.BeginTrackingResourceState(*resolve_resources.stats_gpu_buffer,
@@ -1298,6 +1262,102 @@ auto VirtualShadowMapBackend::PreparePageTableResources(
         graphics::ResourceStates::kShaderResource);
     }
   }
+  recorder.FlushBarriers();
+}
+
+auto VirtualShadowMapBackend::PreparePageManagementOutputsForGpuWrite(
+  const ViewId view_id, graphics::CommandRecorder& recorder) -> void
+{
+  const auto page_table_resources_it = view_page_table_resources_.find(view_id);
+  const auto page_flags_resources_it = view_page_flags_resources_.find(view_id);
+  if (page_table_resources_it == view_page_table_resources_.end()
+    || page_flags_resources_it == view_page_flags_resources_.end()
+    || !page_table_resources_it->second.gpu_buffer
+    || !page_flags_resources_it->second.gpu_buffer) {
+    return;
+  }
+
+  auto& page_table_resources = page_table_resources_it->second;
+  auto& page_flags_resources = page_flags_resources_it->second;
+
+  if (!recorder.IsResourceTracked(*page_table_resources.gpu_buffer)) {
+    recorder.BeginTrackingResourceState(
+      *page_table_resources.gpu_buffer, graphics::ResourceStates::kCommon, true);
+  }
+  if (!recorder.IsResourceTracked(*page_flags_resources.gpu_buffer)) {
+    recorder.BeginTrackingResourceState(
+      *page_flags_resources.gpu_buffer, graphics::ResourceStates::kCommon, true);
+  }
+
+  recorder.EnableAutoMemoryBarriers(*page_table_resources.gpu_buffer);
+  recorder.EnableAutoMemoryBarriers(*page_flags_resources.gpu_buffer);
+  recorder.RequireResourceState(
+    *page_table_resources.gpu_buffer, graphics::ResourceStates::kUnorderedAccess);
+  recorder.RequireResourceState(
+    *page_flags_resources.gpu_buffer, graphics::ResourceStates::kUnorderedAccess);
+  recorder.FlushBarriers();
+}
+
+auto VirtualShadowMapBackend::FinalizePageManagementOutputs(
+  const ViewId view_id, graphics::CommandRecorder& recorder) -> void
+{
+  const auto state_it = view_cache_.find(view_id);
+  const auto page_table_resources_it = view_page_table_resources_.find(view_id);
+  const auto page_flags_resources_it = view_page_flags_resources_.find(view_id);
+  if (state_it == view_cache_.end()
+    || page_table_resources_it == view_page_table_resources_.end()
+    || page_flags_resources_it == view_page_flags_resources_.end()
+    || !page_table_resources_it->second.gpu_buffer
+    || !page_flags_resources_it->second.gpu_buffer) {
+    return;
+  }
+
+  auto& state = state_it->second;
+  auto& page_table_resources = page_table_resources_it->second;
+  auto& page_flags_resources = page_flags_resources_it->second;
+
+  // Phase 6 is still in progress: raster and residency are still authored from
+  // the CPU-resolved state, so the published page table/page flags used by
+  // lighting must stay coherent with that authoritative state until GPU page
+  // management owns the contract end-to-end.
+  const auto page_table_bytes = static_cast<std::size_t>(
+    state.page_table_entries.size()) * sizeof(std::uint32_t);
+  if (page_table_resources.upload_buffer && page_table_resources.mapped_upload
+    && page_table_bytes > 0U) {
+    std::memcpy(page_table_resources.mapped_upload, state.page_table_entries.data(),
+      page_table_bytes);
+    if (!recorder.IsResourceTracked(*page_table_resources.upload_buffer)) {
+      recorder.BeginTrackingResourceState(*page_table_resources.upload_buffer,
+        graphics::ResourceStates::kCopySource, false);
+    }
+    recorder.RequireResourceState(*page_table_resources.gpu_buffer,
+      graphics::ResourceStates::kCopyDest);
+    recorder.FlushBarriers();
+    recorder.CopyBuffer(*page_table_resources.gpu_buffer, 0U,
+      *page_table_resources.upload_buffer, 0U, page_table_bytes);
+  }
+
+  const auto page_flags_bytes = static_cast<std::size_t>(
+    state.page_flags_entries.size()) * sizeof(std::uint32_t);
+  if (page_flags_resources.upload_buffer && page_flags_resources.mapped_upload
+    && page_flags_bytes > 0U) {
+    std::memcpy(page_flags_resources.mapped_upload, state.page_flags_entries.data(),
+      page_flags_bytes);
+    if (!recorder.IsResourceTracked(*page_flags_resources.upload_buffer)) {
+      recorder.BeginTrackingResourceState(*page_flags_resources.upload_buffer,
+        graphics::ResourceStates::kCopySource, false);
+    }
+    recorder.RequireResourceState(*page_flags_resources.gpu_buffer,
+      graphics::ResourceStates::kCopyDest);
+    recorder.FlushBarriers();
+    recorder.CopyBuffer(*page_flags_resources.gpu_buffer, 0U,
+      *page_flags_resources.upload_buffer, 0U, page_flags_bytes);
+  }
+
+  recorder.RequireResourceState(*page_table_resources.gpu_buffer,
+    graphics::ResourceStates::kShaderResource);
+  recorder.RequireResourceState(*page_flags_resources.gpu_buffer,
+    graphics::ResourceStates::kShaderResource);
   recorder.FlushBarriers();
 }
 
@@ -1397,6 +1457,15 @@ auto VirtualShadowMapBackend::TryGetViewIntrospection(
 {
   const auto it = view_cache_.find(view_id);
   return it != view_cache_.end() ? &it->second.introspection : nullptr;
+}
+
+auto VirtualShadowMapBackend::TryGetPageManagementBindings(
+  const ViewId view_id) const noexcept
+  -> const renderer::VirtualShadowPageManagementBindings*
+{
+  const auto it = view_cache_.find(view_id);
+  return it != view_cache_.end() ? &it->second.page_management_bindings
+                                 : nullptr;
 }
 
 auto VirtualShadowMapBackend::TryGetDirectionalVirtualMetadata(
@@ -1509,6 +1578,275 @@ auto VirtualShadowMapBackend::RebuildResolveStateSnapshot(
     = state.publish_diagnostics.rerasterized_pages;
   state.resolve_stats.reused_requested_page_count
     = state.publish_diagnostics.reused_requested_pages;
+  state.resolve_stats.requested_page_list_count = 0U;
+  state.resolve_stats.dirty_page_list_count = 0U;
+  state.resolve_stats.clean_page_list_count = 0U;
+  state.resolve_stats.available_page_list_count = 0U;
+}
+
+auto VirtualShadowMapBackend::BuildRequestedResidentKeySet(
+  const ViewCacheEntry::PendingResidencyResolve& pending) const
+  -> std::unordered_set<std::uint64_t>
+{
+  std::unordered_set<std::uint64_t> requested_resident_keys {};
+  requested_resident_keys.reserve(pending.selected_pages.size() / 8U);
+
+  for (std::uint32_t clip_index = 0U; clip_index < pending.clip_level_count;
+    ++clip_index) {
+    const auto grid_offset_x = pending.clip_grid_origin_x[clip_index];
+    const auto grid_offset_y = pending.clip_grid_origin_y[clip_index];
+    for (std::uint32_t page_y = 0U; page_y < pending.pages_per_axis; ++page_y) {
+      for (std::uint32_t page_x = 0U; page_x < pending.pages_per_axis;
+        ++page_x) {
+        const auto local_page_index
+          = page_y * pending.pages_per_axis + page_x;
+        const auto global_page_index
+          = clip_index * pending.pages_per_level + local_page_index;
+        if (global_page_index >= pending.selected_pages.size()
+          || pending.selected_pages[global_page_index] == 0U) {
+          continue;
+        }
+
+        requested_resident_keys.insert(
+          shadow_detail::PackVirtualResidentPageKey(
+            clip_index, grid_offset_x + static_cast<std::int32_t>(page_x),
+            grid_offset_y + static_cast<std::int32_t>(page_y)));
+      }
+    }
+  }
+
+  return requested_resident_keys;
+}
+
+auto VirtualShadowMapBackend::BuildEvictionCandidateList(
+  const ViewCacheEntry& state,
+  const std::unordered_set<std::uint64_t>& protected_resident_keys) const
+  -> std::vector<std::uint64_t>
+{
+  std::vector<std::uint64_t> eviction_candidates {};
+  eviction_candidates.reserve(state.resident_pages.size());
+
+  for (const auto& [resident_key, resident_page] : state.resident_pages) {
+    if (resident_page.last_requested_frame == frame_sequence_
+      || protected_resident_keys.contains(resident_key)) {
+      continue;
+    }
+    eviction_candidates.push_back(resident_key);
+  }
+
+  std::ranges::sort(eviction_candidates,
+    [&](const std::uint64_t lhs, const std::uint64_t rhs) {
+      const auto lhs_it = state.resident_pages.find(lhs);
+      const auto rhs_it = state.resident_pages.find(rhs);
+      DCHECK_F(lhs_it != state.resident_pages.end(),
+        "Missing lhs resident page while sorting eviction candidates");
+      DCHECK_F(rhs_it != state.resident_pages.end(),
+        "Missing rhs resident page while sorting eviction candidates");
+
+      const bool lhs_contents_invalid = !lhs_it->second.ContentsValid();
+      const bool rhs_contents_invalid = !rhs_it->second.ContentsValid();
+      if (lhs_contents_invalid != rhs_contents_invalid) {
+        return lhs_contents_invalid && !rhs_contents_invalid;
+      }
+
+      const auto lhs_clip_level
+        = shadow_detail::VirtualResidentPageKeyClipLevel(lhs);
+      const auto rhs_clip_level
+        = shadow_detail::VirtualResidentPageKeyClipLevel(rhs);
+      if (lhs_clip_level != rhs_clip_level) {
+        return lhs_clip_level > rhs_clip_level;
+      }
+
+      if (lhs_it->second.last_touched_frame != rhs_it->second.last_touched_frame) {
+        return lhs_it->second.last_touched_frame
+          < rhs_it->second.last_touched_frame;
+      }
+
+      return lhs < rhs;
+    });
+
+  return eviction_candidates;
+}
+
+auto VirtualShadowMapBackend::PropagateDirectionalHierarchicalPageFlags(
+  ViewCacheEntry& state, const ViewCacheEntry::PendingResidencyResolve& pending)
+  const -> void
+{
+  if (pending.clip_level_count < 2U || pending.pages_per_axis == 0U
+    || pending.pages_per_level == 0U) {
+    return;
+  }
+
+  for (std::uint32_t fine_clip = 0U; fine_clip + 1U < pending.clip_level_count;
+    ++fine_clip) {
+    const auto parent_clip = fine_clip + 1U;
+    const auto fine_page_world = pending.clip_page_world[fine_clip];
+    const auto fine_origin_x = pending.clip_origin_x[fine_clip];
+    const auto fine_origin_y = pending.clip_origin_y[fine_clip];
+    const auto parent_page_world = pending.clip_page_world[parent_clip];
+    const auto parent_origin_x = pending.clip_origin_x[parent_clip];
+    const auto parent_origin_y = pending.clip_origin_y[parent_clip];
+
+    for (std::uint32_t page_y = 0U; page_y < pending.pages_per_axis; ++page_y) {
+      for (std::uint32_t page_x = 0U; page_x < pending.pages_per_axis;
+        ++page_x) {
+        const auto local_page_index
+          = page_y * pending.pages_per_axis + page_x;
+        const auto global_page_index
+          = fine_clip * pending.pages_per_level + local_page_index;
+        if (global_page_index >= state.page_flags_entries.size()) {
+          continue;
+        }
+
+        const auto fine_flags = state.page_flags_entries[global_page_index];
+        if (fine_flags == 0U) {
+          continue;
+        }
+
+        const auto page_center_x
+          = fine_origin_x + (static_cast<float>(page_x) + 0.5F) * fine_page_world;
+        const auto page_center_y
+          = fine_origin_y + (static_cast<float>(page_y) + 0.5F) * fine_page_world;
+        const auto parent_page_x_f
+          = (page_center_x - parent_origin_x) / parent_page_world;
+        const auto parent_page_y_f
+          = (page_center_y - parent_origin_y) / parent_page_world;
+        if (parent_page_x_f < 0.0F || parent_page_y_f < 0.0F
+          || parent_page_x_f >= static_cast<float>(pending.pages_per_axis)
+          || parent_page_y_f >= static_cast<float>(pending.pages_per_axis)) {
+          continue;
+        }
+
+        const auto parent_page_x
+          = static_cast<std::uint32_t>(std::floor(parent_page_x_f));
+        const auto parent_page_y
+          = static_cast<std::uint32_t>(std::floor(parent_page_y_f));
+        const auto parent_local_page_index
+          = parent_page_y * pending.pages_per_axis + parent_page_x;
+        const auto parent_global_page_index
+          = parent_clip * pending.pages_per_level + parent_local_page_index;
+        if (parent_global_page_index >= state.page_flags_entries.size()) {
+          continue;
+        }
+
+        state.page_flags_entries[parent_global_page_index]
+          = renderer::MergeVirtualShadowHierarchyFlags(
+            state.page_flags_entries[parent_global_page_index], fine_flags);
+      }
+    }
+  }
+}
+
+auto VirtualShadowMapBackend::RebuildPhysicalPageManagementSnapshot(
+  ViewCacheEntry& state, const ViewCacheEntry::PendingResidencyResolve& pending)
+  const -> void
+{
+  const auto tile_capacity = physical_pool_config_.physical_tile_capacity;
+  state.physical_page_metadata_entries.assign(tile_capacity, {});
+  state.physical_page_list_entries.clear();
+  state.physical_page_list_entries.reserve(
+    state.resident_pages.size() + free_physical_tiles_.size());
+
+  std::vector<renderer::VirtualShadowPhysicalPageListEntry> requested_entries {};
+  std::vector<renderer::VirtualShadowPhysicalPageListEntry> dirty_entries {};
+  std::vector<renderer::VirtualShadowPhysicalPageListEntry> clean_entries {};
+  std::vector<renderer::VirtualShadowPhysicalPageListEntry> available_entries {};
+  requested_entries.reserve(state.resident_pages.size());
+  dirty_entries.reserve(state.resident_pages.size());
+  clean_entries.reserve(state.resident_pages.size());
+  available_entries.reserve(free_physical_tiles_.size());
+
+  const auto classify_page_flags =
+    [&](const std::uint64_t resident_key) -> std::uint32_t {
+      const auto clip_index
+        = shadow_detail::VirtualResidentPageKeyClipLevel(resident_key);
+      if (clip_index >= pending.clip_level_count) {
+        return 0U;
+      }
+      const auto absolute_grid_x
+        = shadow_detail::VirtualResidentPageKeyGridX(resident_key);
+      const auto absolute_grid_y
+        = shadow_detail::VirtualResidentPageKeyGridY(resident_key);
+      const auto local_x = absolute_grid_x - pending.clip_grid_origin_x[clip_index];
+      const auto local_y = absolute_grid_y - pending.clip_grid_origin_y[clip_index];
+      if (local_x < 0 || local_y < 0
+        || local_x >= static_cast<std::int32_t>(pending.pages_per_axis)
+        || local_y >= static_cast<std::int32_t>(pending.pages_per_axis)) {
+        return 0U;
+      }
+      const auto local_page_index = static_cast<std::uint32_t>(local_y)
+          * pending.pages_per_axis
+        + static_cast<std::uint32_t>(local_x);
+      const auto global_page_index
+        = clip_index * pending.pages_per_level + local_page_index;
+      if (global_page_index >= state.page_flags_entries.size()) {
+        return 0U;
+      }
+      return state.page_flags_entries[global_page_index];
+    };
+
+  for (const auto& [resident_key, resident_page] : state.resident_pages) {
+    const auto physical_page_index = static_cast<std::uint32_t>(
+      resident_page.tile.tile_y * physical_pool_config_.atlas_tiles_per_axis
+      + resident_page.tile.tile_x);
+    if (physical_page_index < state.physical_page_metadata_entries.size()) {
+      state.physical_page_metadata_entries[physical_page_index]
+        = renderer::VirtualShadowPhysicalPageMetadata {
+            .resident_key = resident_key,
+            .page_flags = classify_page_flags(resident_key),
+            .packed_atlas_tile_coords
+            = renderer::VirtualShadowPhysicalPageMetadata::PackAtlasTileCoords(
+              resident_page.tile.tile_x, resident_page.tile.tile_y),
+          };
+    }
+
+    const renderer::VirtualShadowPhysicalPageListEntry entry {
+      .resident_key = resident_key,
+      .physical_page_index = physical_page_index,
+      .page_flags = classify_page_flags(resident_key),
+    };
+    if (resident_page.last_requested_frame == frame_sequence_) {
+      requested_entries.push_back(entry);
+    } else if (resident_page.state
+      == renderer::VirtualPageResidencyState::kResidentDirty
+      || resident_page.state
+        == renderer::VirtualPageResidencyState::kPendingRender) {
+      dirty_entries.push_back(entry);
+    } else {
+      clean_entries.push_back(entry);
+    }
+  }
+
+  for (const auto& tile : free_physical_tiles_) {
+    available_entries.push_back(renderer::VirtualShadowPhysicalPageListEntry {
+      .resident_key = 0U,
+      .physical_page_index = static_cast<std::uint32_t>(
+        tile.tile_y * physical_pool_config_.atlas_tiles_per_axis + tile.tile_x),
+      .page_flags = 0U,
+    });
+  }
+
+  state.resolve_stats.requested_page_list_count
+    = static_cast<std::uint32_t>(requested_entries.size());
+  state.resolve_stats.dirty_page_list_count
+    = static_cast<std::uint32_t>(dirty_entries.size());
+  state.resolve_stats.clean_page_list_count
+    = static_cast<std::uint32_t>(clean_entries.size());
+  state.resolve_stats.available_page_list_count
+    = static_cast<std::uint32_t>(available_entries.size());
+
+  state.physical_page_list_entries.insert(
+    state.physical_page_list_entries.end(), requested_entries.begin(),
+    requested_entries.end());
+  state.physical_page_list_entries.insert(
+    state.physical_page_list_entries.end(), dirty_entries.begin(),
+    dirty_entries.end());
+  state.physical_page_list_entries.insert(
+    state.physical_page_list_entries.end(), clean_entries.begin(),
+    clean_entries.end());
+  state.physical_page_list_entries.insert(
+    state.physical_page_list_entries.end(), available_entries.begin(),
+    available_entries.end());
 }
 
 auto VirtualShadowMapBackend::RefreshViewExports(
@@ -1534,6 +1872,9 @@ auto VirtualShadowMapBackend::RefreshViewExports(
   state.introspection.published_page_table_entries = state.page_table_entries;
   state.introspection.page_flags_entries = state.page_flags_entries;
   state.introspection.published_page_flags_entries = state.page_flags_entries;
+  state.introspection.physical_page_metadata_entries
+    = state.physical_page_metadata_entries;
+  state.introspection.physical_page_list_entries = state.physical_page_list_entries;
   const auto clip_count = state.directional_virtual_metadata.empty()
     ? 0U
     : std::min(state.directional_virtual_metadata.front().clip_level_count,
@@ -1564,6 +1905,8 @@ auto VirtualShadowMapBackend::RefreshViewExports(
     = state.publish_diagnostics.cache_layout_compatible;
   state.introspection.depth_guardband_valid
     = state.publish_diagnostics.depth_guardband_valid;
+  const auto page_table_resources_it = view_page_table_resources_.find(view_id);
+  const auto page_flags_resources_it = view_page_flags_resources_.find(view_id);
   const auto resolve_resources_it = view_resolve_resources_.find(view_id);
   state.introspection.has_persistent_gpu_residency_state
     = resolve_resources_it != view_resolve_resources_.end()
@@ -1576,6 +1919,14 @@ auto VirtualShadowMapBackend::RefreshViewExports(
   state.introspection.resolve_stats_srv
     = resolve_resources_it != view_resolve_resources_.end()
     ? resolve_resources_it->second.stats_srv
+    : kInvalidShaderVisibleIndex;
+  state.introspection.physical_page_metadata_srv
+    = resolve_resources_it != view_resolve_resources_.end()
+    ? resolve_resources_it->second.physical_page_metadata_srv
+    : kInvalidShaderVisibleIndex;
+  state.introspection.physical_page_lists_srv
+    = resolve_resources_it != view_resolve_resources_.end()
+    ? resolve_resources_it->second.physical_page_lists_srv
     : kInvalidShaderVisibleIndex;
   state.introspection.mapped_page_count = state.resolve_stats.mapped_page_count;
   state.introspection.resident_page_count
@@ -1618,7 +1969,49 @@ auto VirtualShadowMapBackend::RefreshViewExports(
     = state.publish_diagnostics.evicted_pages;
   state.introspection.rerasterized_page_count
     = state.publish_diagnostics.rerasterized_pages;
+  state.introspection.requested_page_list_count
+    = state.resolve_stats.requested_page_list_count;
+  state.introspection.dirty_page_list_count
+    = state.resolve_stats.dirty_page_list_count;
+  state.introspection.clean_page_list_count
+    = state.resolve_stats.clean_page_list_count;
+  state.introspection.available_page_list_count
+    = state.resolve_stats.available_page_list_count;
   state.introspection.resolve_stats = state.resolve_stats;
+
+  state.page_management_bindings.page_table_srv
+    = state.frame_publication.virtual_shadow_page_table_srv;
+  state.page_management_bindings.page_table_uav
+    = page_table_resources_it != view_page_table_resources_.end()
+    ? page_table_resources_it->second.uav
+    : kInvalidShaderVisibleIndex;
+  state.page_management_bindings.page_flags_srv
+    = state.frame_publication.virtual_shadow_page_flags_srv;
+  state.page_management_bindings.page_flags_uav
+    = page_flags_resources_it != view_page_flags_resources_.end()
+    ? page_flags_resources_it->second.uav
+    : kInvalidShaderVisibleIndex;
+  state.page_management_bindings.physical_page_metadata_srv
+    = resolve_resources_it != view_resolve_resources_.end()
+    ? resolve_resources_it->second.physical_page_metadata_srv
+    : kInvalidShaderVisibleIndex;
+  state.page_management_bindings.physical_page_lists_srv
+    = resolve_resources_it != view_resolve_resources_.end()
+    ? resolve_resources_it->second.physical_page_lists_srv
+    : kInvalidShaderVisibleIndex;
+  state.page_management_bindings.resolve_stats_srv
+    = resolve_resources_it != view_resolve_resources_.end()
+    ? resolve_resources_it->second.stats_srv
+    : kInvalidShaderVisibleIndex;
+
+  state.frame_publication.virtual_shadow_physical_page_metadata_srv
+    = resolve_resources_it != view_resolve_resources_.end()
+    ? resolve_resources_it->second.physical_page_metadata_srv
+    : kInvalidShaderVisibleIndex;
+  state.frame_publication.virtual_shadow_physical_page_lists_srv
+    = resolve_resources_it != view_resolve_resources_.end()
+    ? resolve_resources_it->second.physical_page_lists_srv
+    : kInvalidShaderVisibleIndex;
 }
 
 auto VirtualShadowMapBackend::RefreshAtlasTileDebugStates(
@@ -1997,74 +2390,30 @@ auto VirtualShadowMapBackend::AllocatePhysicalTile()
 }
 
 auto VirtualShadowMapBackend::AcquirePhysicalTile(ViewCacheEntry& state,
-  const std::uint32_t pages_per_level, std::uint32_t& evicted_page_count)
+  std::vector<std::uint64_t>& eviction_candidates,
+  std::size_t& next_eviction_candidate_index, std::uint32_t& evicted_page_count)
   -> std::optional<PhysicalTileAddress>
 {
-  (void)pages_per_level;
   if (const auto free_tile = AllocatePhysicalTile(); free_tile.has_value()) {
     return free_tile;
   }
 
-  auto eviction_it = state.resident_pages.end();
-  std::uint64_t eviction_key = 0U;
-  for (auto it = state.resident_pages.begin(); it != state.resident_pages.end();
-    ++it) {
-    if (it->second.last_requested_frame == frame_sequence_) {
+  while (next_eviction_candidate_index < eviction_candidates.size()) {
+    const auto eviction_key
+      = eviction_candidates[next_eviction_candidate_index++];
+    const auto eviction_it = state.resident_pages.find(eviction_key);
+    if (eviction_it == state.resident_pages.end()
+      || eviction_it->second.last_requested_frame == frame_sequence_) {
       continue;
     }
 
-    if (eviction_it == state.resident_pages.end()) {
-      eviction_it = it;
-      eviction_key = it->first;
-      continue;
-    }
-
-    const bool current_contents_invalid = !it->second.ContentsValid();
-    const bool best_contents_invalid = !eviction_it->second.ContentsValid();
-    if (current_contents_invalid != best_contents_invalid) {
-      if (current_contents_invalid) {
-        eviction_it = it;
-        eviction_key = it->first;
-      }
-      continue;
-    }
-
-    const auto current_clip_level
-      = shadow_detail::VirtualResidentPageKeyClipLevel(it->first);
-    const auto best_clip_level
-      = shadow_detail::VirtualResidentPageKeyClipLevel(eviction_key);
-    if (current_clip_level != best_clip_level) {
-      if (current_clip_level > best_clip_level) {
-        eviction_it = it;
-        eviction_key = it->first;
-      }
-      continue;
-    }
-
-    if (it->second.last_touched_frame
-      != eviction_it->second.last_touched_frame) {
-      if (it->second.last_touched_frame
-        < eviction_it->second.last_touched_frame) {
-        eviction_it = it;
-        eviction_key = it->first;
-      }
-      continue;
-    }
-
-    if (it->first < eviction_key) {
-      eviction_it = it;
-      eviction_key = it->first;
-    }
+    const auto tile = eviction_it->second.tile;
+    state.resident_pages.erase(eviction_it);
+    ++evicted_page_count;
+    return tile;
   }
 
-  if (eviction_it == state.resident_pages.end()) {
-    return std::nullopt;
-  }
-
-  const auto tile = eviction_it->second.tile;
-  state.resident_pages.erase(eviction_it);
-  ++evicted_page_count;
-  return tile;
+  return std::nullopt;
 }
 
 auto VirtualShadowMapBackend::ReleasePhysicalTile(
@@ -3656,22 +4005,6 @@ auto VirtualShadowMapBackend::EnsureViewPageTableResources(const ViewId view_id,
   return &resources;
 }
 
-auto VirtualShadowMapBackend::StagePageTableUpload(const ViewId view_id,
-  const std::span<const std::uint32_t> entries) -> ShaderVisibleIndex
-{
-  if (entries.empty()) {
-    return kInvalidShaderVisibleIndex;
-  }
-
-  auto* resources = EnsureViewPageTableResources(
-    view_id, static_cast<std::uint32_t>(entries.size()));
-  if (resources == nullptr || resources->mapped_upload == nullptr) {
-    return kInvalidShaderVisibleIndex;
-  }
-
-  return resources->srv;
-}
-
 auto VirtualShadowMapBackend::EnsurePageTablePublication(const ViewId view_id,
   const std::uint32_t required_entry_count) -> ShaderVisibleIndex
 {
@@ -3799,22 +4132,6 @@ auto VirtualShadowMapBackend::EnsureViewPageFlagResources(const ViewId view_id,
   return &resources;
 }
 
-auto VirtualShadowMapBackend::StagePageFlagsUpload(const ViewId view_id,
-  const std::span<const std::uint32_t> entries) -> ShaderVisibleIndex
-{
-  if (entries.empty()) {
-    return kInvalidShaderVisibleIndex;
-  }
-
-  auto* resources = EnsureViewPageFlagResources(
-    view_id, static_cast<std::uint32_t>(entries.size()));
-  if (resources == nullptr || resources->mapped_upload == nullptr) {
-    return kInvalidShaderVisibleIndex;
-  }
-
-  return resources->srv;
-}
-
 auto VirtualShadowMapBackend::EnsurePageFlagsPublication(const ViewId view_id,
   const std::uint32_t required_entry_count) -> ShaderVisibleIndex
 {
@@ -3831,6 +4148,8 @@ auto VirtualShadowMapBackend::EnsureViewResolveResources(const ViewId view_id,
 {
   const auto required_capacity = std::max(std::max(required_entry_count, 1U),
     physical_pool_config_.physical_tile_capacity);
+  const auto required_physical_list_capacity
+    = required_capacity + physical_pool_config_.physical_tile_capacity;
 
   auto [it, _] = view_resolve_resources_.try_emplace(view_id);
   auto& resources = it->second;
@@ -3839,7 +4158,16 @@ auto VirtualShadowMapBackend::EnsureViewResolveResources(const ViewId view_id,
     && resources.mapped_resident_pages_upload != nullptr
     && resources.stats_gpu_buffer && resources.stats_upload_buffer
     && resources.mapped_stats_upload != nullptr
-    && required_capacity <= resources.resident_page_capacity) {
+    && resources.physical_page_metadata_gpu_buffer
+    && resources.physical_page_metadata_upload_buffer
+    && resources.mapped_physical_page_metadata_upload != nullptr
+    && resources.physical_page_lists_gpu_buffer
+    && resources.physical_page_lists_upload_buffer
+    && resources.mapped_physical_page_lists_upload != nullptr
+    && required_capacity <= resources.resident_page_capacity
+    && physical_pool_config_.physical_tile_capacity
+      <= resources.physical_page_metadata_capacity
+    && required_physical_list_capacity <= resources.physical_page_lists_capacity) {
     return &resources;
   }
 
@@ -3852,6 +4180,16 @@ auto VirtualShadowMapBackend::EnsureViewResolveResources(const ViewId view_id,
     && resources.mapped_stats_upload != nullptr) {
     resources.stats_upload_buffer->UnMap();
     resources.mapped_stats_upload = nullptr;
+  }
+  if (resources.physical_page_metadata_upload_buffer
+    && resources.mapped_physical_page_metadata_upload != nullptr) {
+    resources.physical_page_metadata_upload_buffer->UnMap();
+    resources.mapped_physical_page_metadata_upload = nullptr;
+  }
+  if (resources.physical_page_lists_upload_buffer
+    && resources.mapped_physical_page_lists_upload != nullptr) {
+    resources.physical_page_lists_upload_buffer->UnMap();
+    resources.mapped_physical_page_lists_upload = nullptr;
   }
 
   auto& registry = gfx_->GetResourceRegistry();
@@ -4037,7 +4375,160 @@ auto VirtualShadowMapBackend::EnsureViewResolveResources(const ViewId view_id,
   std::memset(resources.mapped_stats_upload, 0,
     sizeof(renderer::VirtualShadowResolveStats));
 
+  const auto physical_page_metadata_bytes
+    = static_cast<std::uint64_t>(physical_pool_config_.physical_tile_capacity)
+    * sizeof(renderer::VirtualShadowPhysicalPageMetadata);
+  const graphics::BufferDesc physical_page_metadata_gpu_desc {
+    .size_bytes = physical_page_metadata_bytes,
+    .usage = graphics::BufferUsage::kStorage,
+    .memory = graphics::BufferMemory::kDeviceLocal,
+    .debug_name = "VirtualShadowMapBackend.PhysicalPageMetadata",
+  };
+  resources.physical_page_metadata_gpu_buffer
+    = gfx_->CreateBuffer(physical_page_metadata_gpu_desc);
+  if (!resources.physical_page_metadata_gpu_buffer) {
+    LOG_F(ERROR,
+      "VirtualShadowMapBackend: failed to create physical-page metadata "
+      "buffer for view {}",
+      view_id.get());
+    return nullptr;
+  }
+  registry.Register(resources.physical_page_metadata_gpu_buffer);
+
+  auto physical_page_metadata_srv_handle = allocator.Allocate(
+    graphics::ResourceViewType::kStructuredBuffer_SRV,
+    graphics::DescriptorVisibility::kShaderVisible);
+  if (!physical_page_metadata_srv_handle.IsValid()) {
+    LOG_F(ERROR,
+      "VirtualShadowMapBackend: failed to allocate physical-page metadata "
+      "SRV for view {}",
+      view_id.get());
+    return nullptr;
+  }
+  resources.physical_page_metadata_srv
+    = allocator.GetShaderVisibleIndex(physical_page_metadata_srv_handle);
+
+  graphics::BufferViewDescription physical_page_metadata_srv_desc;
+  physical_page_metadata_srv_desc.view_type
+    = graphics::ResourceViewType::kStructuredBuffer_SRV;
+  physical_page_metadata_srv_desc.visibility
+    = graphics::DescriptorVisibility::kShaderVisible;
+  physical_page_metadata_srv_desc.range = { 0U, physical_page_metadata_bytes };
+  physical_page_metadata_srv_desc.stride
+    = sizeof(renderer::VirtualShadowPhysicalPageMetadata);
+  registry.RegisterView(*resources.physical_page_metadata_gpu_buffer,
+    std::move(physical_page_metadata_srv_handle),
+    physical_page_metadata_srv_desc);
+
+  const graphics::BufferDesc physical_page_metadata_upload_desc {
+    .size_bytes = physical_page_metadata_bytes,
+    .usage = graphics::BufferUsage::kNone,
+    .memory = graphics::BufferMemory::kUpload,
+    .debug_name = "VirtualShadowMapBackend.PhysicalPageMetadataUpload",
+  };
+  resources.physical_page_metadata_upload_buffer
+    = gfx_->CreateBuffer(physical_page_metadata_upload_desc);
+  if (!resources.physical_page_metadata_upload_buffer) {
+    LOG_F(ERROR,
+      "VirtualShadowMapBackend: failed to create physical-page metadata "
+      "upload buffer for view {}",
+      view_id.get());
+    return nullptr;
+  }
+  resources.mapped_physical_page_metadata_upload
+    = static_cast<renderer::VirtualShadowPhysicalPageMetadata*>(
+      resources.physical_page_metadata_upload_buffer->Map(
+        0U, physical_page_metadata_bytes));
+  if (resources.mapped_physical_page_metadata_upload == nullptr) {
+    LOG_F(ERROR,
+      "VirtualShadowMapBackend: failed to map physical-page metadata "
+      "upload buffer for view {}",
+      view_id.get());
+    resources.physical_page_metadata_upload_buffer.reset();
+    return nullptr;
+  }
+  std::memset(resources.mapped_physical_page_metadata_upload, 0,
+    static_cast<std::size_t>(physical_page_metadata_bytes));
+
+  const auto physical_page_lists_capacity = required_physical_list_capacity;
+  const auto physical_page_lists_bytes
+    = static_cast<std::uint64_t>(physical_page_lists_capacity)
+    * sizeof(renderer::VirtualShadowPhysicalPageListEntry);
+  const graphics::BufferDesc physical_page_lists_gpu_desc {
+    .size_bytes = physical_page_lists_bytes,
+    .usage = graphics::BufferUsage::kStorage,
+    .memory = graphics::BufferMemory::kDeviceLocal,
+    .debug_name = "VirtualShadowMapBackend.PhysicalPageLists",
+  };
+  resources.physical_page_lists_gpu_buffer
+    = gfx_->CreateBuffer(physical_page_lists_gpu_desc);
+  if (!resources.physical_page_lists_gpu_buffer) {
+    LOG_F(ERROR,
+      "VirtualShadowMapBackend: failed to create physical-page lists "
+      "buffer for view {}",
+      view_id.get());
+    return nullptr;
+  }
+  registry.Register(resources.physical_page_lists_gpu_buffer);
+
+  auto physical_page_lists_srv_handle = allocator.Allocate(
+    graphics::ResourceViewType::kStructuredBuffer_SRV,
+    graphics::DescriptorVisibility::kShaderVisible);
+  if (!physical_page_lists_srv_handle.IsValid()) {
+    LOG_F(ERROR,
+      "VirtualShadowMapBackend: failed to allocate physical-page lists "
+      "SRV for view {}",
+      view_id.get());
+    return nullptr;
+  }
+  resources.physical_page_lists_srv
+    = allocator.GetShaderVisibleIndex(physical_page_lists_srv_handle);
+
+  graphics::BufferViewDescription physical_page_lists_srv_desc;
+  physical_page_lists_srv_desc.view_type
+    = graphics::ResourceViewType::kStructuredBuffer_SRV;
+  physical_page_lists_srv_desc.visibility
+    = graphics::DescriptorVisibility::kShaderVisible;
+  physical_page_lists_srv_desc.range = { 0U, physical_page_lists_bytes };
+  physical_page_lists_srv_desc.stride
+    = sizeof(renderer::VirtualShadowPhysicalPageListEntry);
+  registry.RegisterView(*resources.physical_page_lists_gpu_buffer,
+    std::move(physical_page_lists_srv_handle), physical_page_lists_srv_desc);
+
+  const graphics::BufferDesc physical_page_lists_upload_desc {
+    .size_bytes = physical_page_lists_bytes,
+    .usage = graphics::BufferUsage::kNone,
+    .memory = graphics::BufferMemory::kUpload,
+    .debug_name = "VirtualShadowMapBackend.PhysicalPageListsUpload",
+  };
+  resources.physical_page_lists_upload_buffer
+    = gfx_->CreateBuffer(physical_page_lists_upload_desc);
+  if (!resources.physical_page_lists_upload_buffer) {
+    LOG_F(ERROR,
+      "VirtualShadowMapBackend: failed to create physical-page lists "
+      "upload buffer for view {}",
+      view_id.get());
+    return nullptr;
+  }
+  resources.mapped_physical_page_lists_upload
+    = static_cast<renderer::VirtualShadowPhysicalPageListEntry*>(
+      resources.physical_page_lists_upload_buffer->Map(
+        0U, physical_page_lists_bytes));
+  if (resources.mapped_physical_page_lists_upload == nullptr) {
+    LOG_F(ERROR,
+      "VirtualShadowMapBackend: failed to map physical-page lists "
+      "upload buffer for view {}",
+      view_id.get());
+    resources.physical_page_lists_upload_buffer.reset();
+    return nullptr;
+  }
+  std::memset(resources.mapped_physical_page_lists_upload, 0,
+    static_cast<std::size_t>(physical_page_lists_bytes));
+
   resources.resident_page_capacity = required_capacity;
+  resources.physical_page_metadata_capacity
+    = physical_pool_config_.physical_tile_capacity;
+  resources.physical_page_lists_capacity = physical_page_lists_capacity;
   return &resources;
 }
 
@@ -4053,6 +4544,12 @@ auto VirtualShadowMapBackend::StageResolveStateUpload(
   resources->resident_page_upload_count
     = state.resolve_stats.resident_entry_count;
   resources->resident_page_upload_pending = true;
+  resources->physical_page_metadata_upload_count
+    = static_cast<std::uint32_t>(state.physical_page_metadata_entries.size());
+  resources->physical_page_metadata_upload_pending = true;
+  resources->physical_page_lists_upload_count
+    = static_cast<std::uint32_t>(state.physical_page_list_entries.size());
+  resources->physical_page_lists_upload_pending = true;
 
   resources->stats_upload_pending = resources->mapped_stats_upload != nullptr;
 }

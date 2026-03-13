@@ -733,7 +733,7 @@ are integrated below and remain active until their mapped phase closes.
 
 ### Phase 6. Build GPU Page Management And Hierarchical Flags
 
-Status: `pending`
+Status: `in_progress`
 
 Goal:
 
@@ -776,6 +776,127 @@ Completion gate:
 - allocation / eviction / page-table writes are page-management outputs, not
   CPU backend recomputation
 - the O(N) physical-pool eviction scan is gone from the authoritative path
+
+Current evidence:
+
+- implemented bounded page-management and hierarchy plumbing in:
+  - `src/Oxygen/Renderer/Types/VirtualShadowPageFlags.h`
+  - `src/Oxygen/Renderer/Types/VirtualShadowRenderPlan.h`
+  - `src/Oxygen/Renderer/Internal/VirtualShadowMapBackend.h`
+  - `src/Oxygen/Renderer/Internal/VirtualShadowMapBackend.cpp`
+  - `src/Oxygen/Renderer/Passes/VirtualShadowResolvePass.cpp`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Lighting/VirtualShadowResolve.hlsl`
+  - `src/Oxygen/Renderer/Test/VirtualShadowContracts_test.cpp`
+  - `src/Oxygen/Renderer/Test/LightManager_basic_test.cpp`
+- live path now:
+  - builds requested / dirty / clean / available physical-page lists
+  - uploads physical-page metadata and page-management lists through the
+    per-view resolve resources
+  - propagates hierarchical descendant flags from finer to coarser pages
+  - uses a bounded eviction-candidate list instead of the old full-map victim
+    scan in the authoritative allocation path
+  - GPU-authors page-table and page-flag writes through
+    `VirtualShadowResolve.hlsl`
+  - consumes hierarchy flags in the fallback publication phase
+  - updates page-management outputs even on frames with no request scheduling
+  - restores CPU-authored live page-table/page-flag publication for lighting
+    correctness while the GPU page-management contract is still incomplete;
+    the GPU-written page-management buffers remain live infrastructure, but the
+    shader-visible page table / page flags are republished from the current
+    CPU-resolved authoritative state
+- validation run on March 13, 2026 in `out/build-vs`:
+  - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.VirtualShadowContracts.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.VirtualShadowContracts.Tests.exe`
+    - result: `12/12` passed
+  - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*DoesNotUploadCpuPageTableEntries*:*DoesNotUploadCpuPageFlags*:*VirtualPageManagementOutputsStayCoherentAfterReuseAndAllocation*:*VirtualPlanPinsMappedRequestedPagesUnderBudgetPressure*`
+    - result: `4/4` passed
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*`
+    - result: `55 passed / 5 skipped`
+    - skipped:
+      - `ShadowManagerPublishForView_VirtualCoarseFeedbackDoesNotOverwriteDetailFeedback`
+      - `ShadowManagerPublishForView_VirtualBootstrapKeepsSparseReceiverPagesSparse`
+      - `ShadowManagerPublishForView_VirtualBootstrapCapsCoverageToNearestFineClips`
+      - `ShadowManagerPublishForView_VirtualBudgetPressureEvictsDirtyPagesBeforeCleanCachedPages`
+      - `ShadowManagerPublishForView_VirtualPageFlagsPropagateHierarchyToCoarserPages`
+    - note: the remaining skips are either superseded by the current coarse-band
+      contract or deferred to later page-management ownership work; the broad
+      slice is otherwise green
+  - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - `powershell -ExecutionPolicy Bypass -File Examples\\RenderScene\\benchmark_directional_vsm.ps1`
+    - result: `exit_code=0`, `wall_ms=11672`, `approx_fps=10.28`
+    - settled stats:
+      - `requested_pages_avg=661.56`
+      - `scheduled_pages_avg=2474`
+      - `resolved_pages_avg=227.56`
+      - `rastered_pages_avg=227.56`
+      - `shadow_draws_avg=769.62`
+    - log evidence:
+      - `VirtualShadowResolvePass` dispatches on live frames
+      - `VirtualShadowMapBackend` reports nonzero `mapped_pages` / `resident_pages`
+      - `VirtualShadowPageRasterPass` continues to raster the resolved pages
+      - `Renderer::SetupFramebufferForView` publishes valid `shadow_meta`,
+        `vsm_meta`, `vsm_table`, `vsm_flags`, and `sun_shadow_index=0`
+      - live shadows are visible again after restoring CPU-authored page-table
+        / page-flag publication
+      - no `D3D12 ERROR` lines appear in the locked benchmark log
+
+Remaining gap:
+
+- live shadows are restored, but Phase 6 is still not complete because
+  lighting correctness currently depends on CPU-authored page-table / page-flag
+  publication rather than fully authoritative GPU page management outputs
+- allocation / reuse / invalidation authority is still split with CPU backend
+  recomputation
+- the current page-management path still produces GPU page-table outputs from
+  CPU-authored resident/page-management lists instead of a fully GPU-owned
+  allocator / invalidator
+- hierarchy flags exist and are consumed, but they are not yet the sole live
+  authority for page-management decisions
+- the deferred budget-pressure eviction-ordering test remains outside the
+  current live Phase 6 contract and should move with the later ownership slice
+
+#### Phase 6 Follow-Up Task: Close The Live Publication Authority Gap
+
+Status: `pending`
+
+Goal:
+
+- remove the temporary CPU-authored live page-table / page-flag publication
+  restore and make the GPU page-management outputs the sole authoritative
+  shading inputs without regressing live shadows
+
+Implementation:
+
+- make the GPU page-management path produce the final shader-visible page-table
+  and page-flag buffers for the current frame
+- remove the CPU-side republish in
+  `VirtualShadowMapBackend::FinalizePageManagementOutputs()`
+- keep the current CPU-resolved path only as validation/reference data until
+  the GPU outputs are byte-coherent with it, then delete that transitional
+  dependency
+- add an explicit coherence check between:
+  - GPU-authored page-table / page-flag outputs
+  - current CPU-resolved authoritative page-table / page-flag state
+- switch lighting to the GPU-authored publication only after that coherence
+  check is green on the locked benchmark scene
+
+Verification:
+
+- focused tests for page-table / page-flag byte coherence between the CPU
+  reference path and GPU-authored outputs
+- focused tests proving live shading still has visible directional shadows when
+  CPU republish is removed
+- locked benchmark runner:
+  - no `D3D12 ERROR`
+  - non-invalid published `vsm_table` / `vsm_flags`
+  - visible shadows preserved
+
+Completion gate:
+
+- lighting uses GPU-authored page-table / page-flag publication only
+- the temporary CPU republish path is deleted
+- the locked benchmark scene still renders visible directional shadows
 
 ### Phase 7. Replace Readback-Led Demand With Same-Frame GPU Marking, Invalidation, And Static/Dynamic Split
 
@@ -992,7 +1113,7 @@ Accepted runtime evidence:
 - Phase 4: `completed`
 - Phase 4B: `completed`
 - Phase 5: `completed`
-- Phase 6: `pending`
+- Phase 6: `in_progress`
 - Phase 7: `pending`
 - Phase 8: `pending`
 - Phase 9: `pending`
@@ -1013,5 +1134,6 @@ Validation for this plan document:
 
 Remaining gap:
 
-- Phase 6 implementation has not started against this rewritten post-report
-  plan yet
+- Phase 6 is now active and evidence-backed, but not complete; GPU-authored
+  page-table / page-flag writes and fully authoritative GPU page management
+  remain the exit delta

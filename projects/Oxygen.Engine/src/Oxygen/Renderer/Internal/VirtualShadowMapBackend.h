@@ -31,6 +31,7 @@
 #include <Oxygen/Renderer/Types/DirectionalShadowCandidate.h>
 #include <Oxygen/Renderer/Types/ShadowFramePublication.h>
 #include <Oxygen/Renderer/Types/ShadowInstanceMetadata.h>
+#include <Oxygen/Renderer/Types/VirtualShadowPhysicalPageMetadata.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/Types/VirtualShadowPageFlags.h>
 #include <Oxygen/Renderer/Types/VirtualShadowPageTableEntry.h>
@@ -76,6 +77,10 @@ public:
   OXGN_RNDR_API auto MarkRendered(ViewId view_id) -> void;
   OXGN_RNDR_API auto PreparePageTableResources(
     ViewId view_id, graphics::CommandRecorder& recorder) -> void;
+  OXGN_RNDR_API auto PreparePageManagementOutputsForGpuWrite(
+    ViewId view_id, graphics::CommandRecorder& recorder) -> void;
+  OXGN_RNDR_API auto FinalizePageManagementOutputs(
+    ViewId view_id, graphics::CommandRecorder& recorder) -> void;
   OXGN_RNDR_API auto SetPublishedViewFrameBindingsSlot(
     ViewId view_id, engine::BindlessViewFrameBindingsSlot slot) -> void;
   OXGN_RNDR_API auto SubmitRequestFeedback(
@@ -97,6 +102,8 @@ public:
     ViewId view_id) const noexcept -> const VirtualShadowRenderPlan*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetViewIntrospection(
     ViewId view_id) const noexcept -> const VirtualShadowViewIntrospection*;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetPageManagementBindings(
+    ViewId view_id) const noexcept -> const renderer::VirtualShadowPageManagementBindings*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetDirectionalVirtualMetadata(
     ViewId view_id) const noexcept
     -> const engine::DirectionalVirtualShadowMetadata*;
@@ -338,18 +345,19 @@ private:
     std::vector<std::uint64_t> compatible_feedback_address_space_hashes {};
     std::vector<renderer::VirtualShadowResolveResidentPageEntry>
       resolve_resident_page_entries;
+    std::vector<renderer::VirtualShadowPhysicalPageMetadata>
+      physical_page_metadata_entries;
+    std::vector<renderer::VirtualShadowPhysicalPageListEntry>
+      physical_page_list_entries;
     std::vector<renderer::VirtualShadowResolvedRasterPage>
       resolved_raster_pages;
     bool has_rendered_cache_history { false };
     PendingResidencyResolve pending_residency_resolve {};
     std::unordered_map<std::uint64_t, ResidentVirtualPage> resident_pages;
     renderer::VirtualShadowResolveStats resolve_stats {};
-    std::uint32_t page_table_upload_entry_count { 0U };
-    bool page_table_upload_pending { false };
-    std::uint32_t page_flags_upload_entry_count { 0U };
-    bool page_flags_upload_pending { false };
     PublishDiagnostics publish_diagnostics {};
     ShadowFramePublication frame_publication {};
+    renderer::VirtualShadowPageManagementBindings page_management_bindings {};
     VirtualShadowRenderPlan render_plan {};
     VirtualShadowViewIntrospection introspection {};
   };
@@ -410,6 +418,24 @@ private:
     ShaderVisibleIndex stats_srv { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex stats_uav { kInvalidShaderVisibleIndex };
     bool stats_upload_pending { false };
+
+    std::shared_ptr<graphics::Buffer> physical_page_metadata_gpu_buffer;
+    std::shared_ptr<graphics::Buffer> physical_page_metadata_upload_buffer;
+    renderer::VirtualShadowPhysicalPageMetadata*
+      mapped_physical_page_metadata_upload { nullptr };
+    ShaderVisibleIndex physical_page_metadata_srv { kInvalidShaderVisibleIndex };
+    std::uint32_t physical_page_metadata_capacity { 0U };
+    std::uint32_t physical_page_metadata_upload_count { 0U };
+    bool physical_page_metadata_upload_pending { false };
+
+    std::shared_ptr<graphics::Buffer> physical_page_lists_gpu_buffer;
+    std::shared_ptr<graphics::Buffer> physical_page_lists_upload_buffer;
+    renderer::VirtualShadowPhysicalPageListEntry*
+      mapped_physical_page_lists_upload { nullptr };
+    ShaderVisibleIndex physical_page_lists_srv { kInvalidShaderVisibleIndex };
+    std::uint32_t physical_page_lists_capacity { 0U };
+    std::uint32_t physical_page_lists_upload_count { 0U };
+    bool physical_page_lists_upload_pending { false };
   };
 
   std::shared_ptr<graphics::Texture> physical_pool_texture_;
@@ -444,6 +470,19 @@ private:
     std::uint64_t shadow_caster_content_hash) const -> PublicationKey;
   OXGN_RNDR_API auto RebuildResolveStateSnapshot(ViewCacheEntry& state) const
     -> void;
+  OXGN_RNDR_API auto PropagateDirectionalHierarchicalPageFlags(
+    ViewCacheEntry& state, const ViewCacheEntry::PendingResidencyResolve& pending)
+    const -> void;
+  OXGN_RNDR_API auto RebuildPhysicalPageManagementSnapshot(
+    ViewCacheEntry& state, const ViewCacheEntry::PendingResidencyResolve& pending)
+    const -> void;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto BuildRequestedResidentKeySet(
+    const ViewCacheEntry::PendingResidencyResolve& pending) const
+    -> std::unordered_set<std::uint64_t>;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto BuildEvictionCandidateList(
+    const ViewCacheEntry& state,
+    const std::unordered_set<std::uint64_t>& protected_resident_keys) const
+    -> std::vector<std::uint64_t>;
   OXGN_RNDR_API auto ResolvePendingPageResidency(ViewId view_id) -> void;
   OXGN_RNDR_API auto CarryForwardCompatibleDirectionalResidentPages(
     ViewCacheEntry& state, const ViewCacheEntry::PendingResidencyResolve& pending,
@@ -472,7 +511,9 @@ private:
   OXGN_RNDR_API auto AllocatePhysicalTile()
     -> std::optional<PhysicalTileAddress>;
   OXGN_RNDR_API auto AcquirePhysicalTile(ViewCacheEntry& state,
-    std::uint32_t pages_per_level, std::uint32_t& evicted_page_count)
+    std::vector<std::uint64_t>& eviction_candidates,
+    std::size_t& next_eviction_candidate_index,
+    std::uint32_t& evicted_page_count)
     -> std::optional<PhysicalTileAddress>;
   OXGN_RNDR_API auto ReleasePhysicalTile(PhysicalTileAddress tile) -> void;
   [[nodiscard]] OXGN_RNDR_NDAPI auto PrepareDirectionalVirtualClipmapSetup(
@@ -503,14 +544,10 @@ private:
   // contract.
   OXGN_RNDR_API auto EnsureViewPageTableResources(ViewId view_id,
     std::uint32_t required_entry_count) -> ViewStructuredWordBufferResources*;
-  OXGN_RNDR_API auto StagePageTableUpload(ViewId view_id,
-    std::span<const std::uint32_t> entries) -> ShaderVisibleIndex;
   OXGN_RNDR_API auto EnsurePageTablePublication(
     ViewId view_id, std::uint32_t required_entry_count) -> ShaderVisibleIndex;
   OXGN_RNDR_API auto EnsureViewPageFlagResources(ViewId view_id,
     std::uint32_t required_entry_count) -> ViewStructuredWordBufferResources*;
-  OXGN_RNDR_API auto StagePageFlagsUpload(ViewId view_id,
-    std::span<const std::uint32_t> entries) -> ShaderVisibleIndex;
   OXGN_RNDR_API auto EnsurePageFlagsPublication(
     ViewId view_id, std::uint32_t required_entry_count) -> ShaderVisibleIndex;
   OXGN_RNDR_API auto EnsureViewResolveResources(ViewId view_id,

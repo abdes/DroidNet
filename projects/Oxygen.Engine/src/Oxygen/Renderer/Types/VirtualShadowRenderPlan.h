@@ -12,6 +12,7 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Renderer/Types/DirectionalVirtualShadowMetadata.h>
+#include <Oxygen/Renderer/Types/VirtualShadowPhysicalPageMetadata.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
 
 namespace oxygen::renderer {
@@ -74,8 +75,22 @@ struct alignas(16) VirtualShadowResolveStats {
   std::uint32_t evicted_page_count { 0U };
   std::uint32_t rerasterized_page_count { 0U };
   std::uint32_t reused_requested_page_count { 0U };
+  std::uint32_t requested_page_list_count { 0U };
+  std::uint32_t dirty_page_list_count { 0U };
+  std::uint32_t clean_page_list_count { 0U };
+  std::uint32_t available_page_list_count { 0U };
 };
 static_assert(sizeof(VirtualShadowResolveStats) % 16U == 0U);
+
+struct VirtualShadowPageManagementBindings {
+  ShaderVisibleIndex page_table_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex page_table_uav { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex page_flags_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex page_flags_uav { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex physical_page_metadata_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex physical_page_lists_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex resolve_stats_srv { kInvalidShaderVisibleIndex };
+};
 
 // Authoritative page-raster contract consumed by the virtual page raster pass.
 // The explicit resolve stage is the only author of this payload.
@@ -109,6 +124,10 @@ struct VirtualShadowViewIntrospection {
   std::span<const std::uint32_t> published_page_table_entries {};
   std::span<const std::uint32_t> page_flags_entries {};
   std::span<const std::uint32_t> published_page_flags_entries {};
+  std::span<const VirtualShadowPhysicalPageMetadata>
+    physical_page_metadata_entries {};
+  std::span<const VirtualShadowPhysicalPageListEntry>
+    physical_page_list_entries {};
   std::span<const std::int32_t> clipmap_page_offset_x {};
   std::span<const std::int32_t> clipmap_page_offset_y {};
   std::span<const bool> clipmap_reuse_guardband_valid {};
@@ -122,6 +141,8 @@ struct VirtualShadowViewIntrospection {
   bool has_persistent_gpu_residency_state { false };
   ShaderVisibleIndex resolve_resident_pages_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex resolve_stats_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex physical_page_metadata_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex physical_page_lists_srv { kInvalidShaderVisibleIndex };
   std::uint32_t mapped_page_count { 0U };
   std::uint32_t resident_page_count { 0U };
   std::uint32_t clean_page_count { 0U };
@@ -144,6 +165,10 @@ struct VirtualShadowViewIntrospection {
   std::uint32_t allocated_page_count { 0U };
   std::uint32_t evicted_page_count { 0U };
   std::uint32_t rerasterized_page_count { 0U };
+  std::uint32_t requested_page_list_count { 0U };
+  std::uint32_t dirty_page_list_count { 0U };
+  std::uint32_t clean_page_list_count { 0U };
+  std::uint32_t available_page_list_count { 0U };
   VirtualShadowResolveStats resolve_stats {};
 };
 

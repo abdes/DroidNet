@@ -246,6 +246,23 @@ auto ShadowManager::PrepareVirtualPageTableResources(
   }
 }
 
+auto ShadowManager::PrepareVirtualPageManagementOutputsForGpuWrite(
+  const ViewId view_id, graphics::CommandRecorder& recorder) -> void
+{
+  if (virtual_backend_) {
+    virtual_backend_->PreparePageManagementOutputsForGpuWrite(
+      view_id, recorder);
+  }
+}
+
+auto ShadowManager::FinalizeVirtualPageManagementOutputs(
+  const ViewId view_id, graphics::CommandRecorder& recorder) -> void
+{
+  if (virtual_backend_) {
+    virtual_backend_->FinalizePageManagementOutputs(view_id, recorder);
+  }
+}
+
 auto ShadowManager::SetPublishedViewFrameBindingsSlot(const ViewId view_id,
   const engine::BindlessViewFrameBindingsSlot slot) -> void
 {
@@ -341,6 +358,15 @@ auto ShadowManager::TryGetVirtualViewIntrospection(
 {
   return virtual_backend_ ? virtual_backend_->TryGetViewIntrospection(view_id)
                           : nullptr;
+}
+
+auto ShadowManager::TryGetVirtualPageManagementBindings(
+  const ViewId view_id) const noexcept
+  -> const VirtualShadowPageManagementBindings*
+{
+  return virtual_backend_
+    ? virtual_backend_->TryGetPageManagementBindings(view_id)
+    : nullptr;
 }
 
 auto ShadowManager::TryGetVirtualDirectionalMetadata(
