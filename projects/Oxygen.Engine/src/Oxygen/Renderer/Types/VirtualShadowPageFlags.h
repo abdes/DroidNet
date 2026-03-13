@@ -98,4 +98,20 @@ enum class VirtualShadowPageFlag : std::uint32_t {
   return base_flags | MakeVirtualShadowHierarchyFlags(child_page_flags);
 }
 
+[[nodiscard]] constexpr auto HasVirtualShadowHierarchyVisibility(
+  const std::uint32_t page_flags) -> bool
+{
+  return HasVirtualShadowPageFlag(page_flags, VirtualShadowPageFlag::kAllocated)
+    || HasVirtualShadowPageFlag(
+      page_flags, VirtualShadowPageFlag::kUsedThisFrame)
+    || HasVirtualShadowPageFlag(
+      page_flags, VirtualShadowPageFlag::kDetailGeometry)
+    || HasVirtualShadowPageFlag(
+      page_flags, VirtualShadowPageFlag::kHierarchyAllocatedDescendant)
+    || HasVirtualShadowPageFlag(
+      page_flags, VirtualShadowPageFlag::kHierarchyUsedThisFrameDescendant)
+    || HasVirtualShadowPageFlag(
+      page_flags, VirtualShadowPageFlag::kHierarchyDetailDescendant);
+}
+
 } // namespace oxygen::renderer

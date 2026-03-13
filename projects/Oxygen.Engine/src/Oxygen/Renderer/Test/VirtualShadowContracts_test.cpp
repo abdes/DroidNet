@@ -19,6 +19,7 @@ namespace {
 using oxygen::engine::DirectionalVirtualShadowMetadata;
 using oxygen::renderer::DecodeVirtualShadowPageTableEntry;
 using oxygen::renderer::HasVirtualShadowPageFlag;
+using oxygen::renderer::HasVirtualShadowHierarchyVisibility;
 using oxygen::renderer::MakeVirtualShadowPageFlags;
 using oxygen::renderer::MakeVirtualShadowHierarchyFlags;
 using oxygen::renderer::MergeVirtualShadowHierarchyFlags;
@@ -48,7 +49,10 @@ using oxygen::renderer::internal::shadow_detail::
 using oxygen::renderer::internal::shadow_detail::
   BuildDirectionalVirtualClipRelativeTransform;
 using oxygen::renderer::internal::shadow_detail::
+  CompareVirtualResidentEvictionPriority;
+using oxygen::renderer::internal::shadow_detail::
   kDirectionalVirtualClipReuseGuardbandPages;
+using oxygen::renderer::internal::shadow_detail::PackVirtualResidentPageKey;
 
 auto MakeDirectionalVirtualMetadata(const std::int32_t clip0_grid_x,
   const std::int32_t clip0_grid_y, const float clip0_page_world,
@@ -274,6 +278,40 @@ TEST(VirtualShadowContractsTest, PhysicalPageContractsRemainGpuFriendly)
     0U);
   EXPECT_EQ(
     sizeof(oxygen::renderer::VirtualShadowPhysicalPageListEntry) % 16U, 0U);
+}
+
+TEST(VirtualShadowContractsTest,
+  PageFlagsHierarchyVisibilityMatchesFallbackPolicy)
+{
+  EXPECT_FALSE(HasVirtualShadowHierarchyVisibility(0U));
+  EXPECT_TRUE(HasVirtualShadowHierarchyVisibility(
+    MakeVirtualShadowPageFlags(true, false, false, false, false)));
+  EXPECT_TRUE(HasVirtualShadowHierarchyVisibility(
+    MakeVirtualShadowPageFlags(false, false, false, true, false)));
+  EXPECT_TRUE(HasVirtualShadowHierarchyVisibility(MergeVirtualShadowHierarchyFlags(
+    0U, MakeVirtualShadowPageFlags(true, false, false, true, false))));
+  EXPECT_FALSE(HasVirtualShadowHierarchyVisibility(
+    MakeVirtualShadowPageFlags(false, false, true, false, false)));
+}
+
+TEST(VirtualShadowContractsTest,
+  EvictionPriorityOrdersInvalidThenCoarserThenLruThenKey)
+{
+  const auto fine_old = PackVirtualResidentPageKey(1U, 10, 10);
+  const auto fine_new = PackVirtualResidentPageKey(1U, 11, 10);
+  const auto coarse_old = PackVirtualResidentPageKey(3U, 4, 4);
+  const auto coarse_invalid = PackVirtualResidentPageKey(3U, 5, 4);
+
+  EXPECT_TRUE(CompareVirtualResidentEvictionPriority(coarse_invalid, false, 9U,
+    coarse_old, true, 1U));
+  EXPECT_TRUE(CompareVirtualResidentEvictionPriority(
+    coarse_old, true, 1U, fine_old, true, 1U));
+  EXPECT_TRUE(CompareVirtualResidentEvictionPriority(
+    fine_old, true, 1U, fine_new, true, 2U));
+  EXPECT_TRUE(CompareVirtualResidentEvictionPriority(
+    fine_old, true, 1U, fine_new, true, 1U));
+  EXPECT_FALSE(CompareVirtualResidentEvictionPriority(
+    fine_new, true, 1U, fine_old, true, 1U));
 }
 
 } // namespace

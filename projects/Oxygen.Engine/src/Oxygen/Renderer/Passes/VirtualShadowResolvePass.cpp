@@ -84,6 +84,7 @@ namespace {
     std::uint32_t clean_page_list_count { 0U };
     std::uint32_t total_page_management_list_count { 0U };
     std::uint32_t phase { 0U };
+    std::uint32_t target_clip_index { 0U };
     std::array<ResolvePackedInt4, 3U> clip_grid_origin_x_packed {};
     std::array<ResolvePackedInt4, 3U> clip_grid_origin_y_packed {};
     std::array<ResolvePackedFloat4, 3U> clip_origin_x_packed {};
@@ -93,6 +94,11 @@ namespace {
   static_assert(sizeof(VirtualShadowResolvePassConstants)
       % packing::kShaderDataFieldAlignment
     == 0U);
+  constexpr std::uint32_t kResolvePassConstantsStride
+    = ((sizeof(VirtualShadowResolvePassConstants)
+           + oxygen::packing::kConstantBufferAlignment - 1U)
+        / oxygen::packing::kConstantBufferAlignment)
+    * oxygen::packing::kConstantBufferAlignment;
 
 } // namespace
 
@@ -102,6 +108,7 @@ VirtualShadowResolvePass::VirtualShadowResolvePass(
   , gfx_(gfx)
   , config_(std::move(config))
 {
+  pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
 }
 
 VirtualShadowResolvePass::~VirtualShadowResolvePass()
@@ -129,6 +136,7 @@ auto VirtualShadowResolvePass::DoPrepareResources(
   const auto prepare_begin = SteadyClock::now();
   active_dispatch_ = false;
   active_view_id_ = {};
+  active_request_words_srv_ = kInvalidShaderVisibleIndex;
   active_request_word_count_ = 0U;
   active_dispatch_group_count_ = 0U;
   active_pages_per_axis_ = 0U;
@@ -186,7 +194,8 @@ auto VirtualShadowResolvePass::DoPrepareResources(
       Context().current_view.view_id);
   if (metadata == nullptr || virtual_view == nullptr || publication == nullptr
     || page_management_bindings == nullptr
-    || !publication->virtual_shadow_page_table_srv.IsValid()
+    || !page_management_bindings->page_table_srv.IsValid()
+    || !page_management_bindings->page_flags_srv.IsValid()
     || !page_management_bindings->page_table_uav.IsValid()
     || !page_management_bindings->page_flags_uav.IsValid()
     || !page_management_bindings->physical_page_metadata_srv.IsValid()
@@ -219,6 +228,9 @@ auto VirtualShadowResolvePass::DoPrepareResources(
   active_view_id_ = Context().current_view.view_id;
   active_request_word_count_
     = has_request_dispatch ? request_pass->GetActiveRequestWordCount() : 0U;
+  active_request_words_srv_
+    = has_request_dispatch ? request_pass->GetRequestWordsSrv()
+                           : kInvalidShaderVisibleIndex;
   active_pages_per_axis_ = metadata->pages_per_axis;
   active_clip_level_count_ = metadata->clip_level_count;
   active_pages_per_level_ = metadata->pages_per_axis * metadata->pages_per_axis;
@@ -330,39 +342,14 @@ auto VirtualShadowResolvePass::DoPrepareResources(
       return packed;
     };
 
-  const VirtualShadowResolvePassConstants pass_constants {
-    .request_words_srv_index
-    = has_request_dispatch ? request_pass->GetRequestWordsSrv()
-                           : kInvalidShaderVisibleIndex,
-    .schedule_uav_index = resources->schedule_uav,
-    .schedule_count_uav_index = resources->count_uav,
-    .page_table_srv_index = publication->virtual_shadow_page_table_srv,
-    .page_table_uav_index = active_page_management_bindings_.page_table_uav,
-    .page_flags_uav_index = active_page_management_bindings_.page_flags_uav,
-    .physical_page_metadata_srv_index
-    = active_page_management_bindings_.physical_page_metadata_srv,
-    .physical_page_lists_srv_index
-    = active_page_management_bindings_.physical_page_lists_srv,
-    .resolve_stats_srv_index = active_page_management_bindings_.resolve_stats_srv,
-    .request_word_count = active_request_word_count_,
-    .total_page_count = total_page_count,
-    .schedule_capacity = resources->entry_capacity,
-    .pages_per_axis = active_pages_per_axis_,
-    .clip_level_count = active_clip_level_count_,
-    .pages_per_level = active_pages_per_level_,
-    .requested_page_list_count = active_requested_page_list_count_,
-    .dirty_page_list_count = active_dirty_page_list_count_,
-    .clean_page_list_count = active_clean_page_list_count_,
-    .total_page_management_list_count = active_total_page_management_list_count_,
-    .phase = 0U,
-    .clip_grid_origin_x_packed = pack_int4(active_clip_grid_origin_x_),
-    .clip_grid_origin_y_packed = pack_int4(active_clip_grid_origin_y_),
-    .clip_origin_x_packed = pack_float4(active_clip_origin_x_),
-    .clip_origin_y_packed = pack_float4(active_clip_origin_y_),
-    .clip_page_world_packed = pack_float4(active_clip_page_world_),
-  };
-  std::memcpy(pass_constants_mapped_ptr_, &pass_constants, sizeof(pass_constants));
-  SetPassConstantsIndex(pass_constants_index_);
+  const auto pass_constants_slot
+    = static_cast<std::size_t>(Context().frame_slot.get())
+    * kPassConstantsSlotsPerFrame;
+  DCHECK_LT_F(pass_constants_slot, pass_constants_indices_.size());
+  DCHECK_F(pass_constants_indices_[pass_constants_slot].IsValid(),
+    "VirtualShadowResolvePass: invalid pass-constants slot {} for frame slot {}",
+    pass_constants_slot, Context().frame_slot.get());
+  SetPassConstantsIndex(pass_constants_indices_[pass_constants_slot]);
 
   LOG_F(INFO,
     "VirtualShadowResolvePass: frame={} slot={} view={} prepared dispatch "
@@ -374,7 +361,7 @@ auto VirtualShadowResolvePass::DoPrepareResources(
     Context().current_view.view_id.get(), active_request_word_count_,
     active_pages_per_axis_, active_clip_level_count_,
     active_directional_address_space_hash_, active_schedule_capacity_,
-    publication->virtual_shadow_page_table_srv.get(),
+    active_page_management_bindings_.page_table_srv.get(),
     active_page_management_bindings_.page_table_uav.get(),
     active_page_management_bindings_.page_flags_uav.get(),
     active_page_management_bindings_.physical_page_metadata_srv.get(),
@@ -400,25 +387,145 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
   }
 
   auto* pass_constants
-    = static_cast<VirtualShadowResolvePassConstants*>(pass_constants_mapped_ptr_);
+    = static_cast<std::byte*>(pass_constants_mapped_ptr_);
   DCHECK_NOTNULL_F(pass_constants);
 
+  std::uint32_t dispatch_slot = 0U;
+  const auto base_slot = static_cast<std::uint32_t>(Context().frame_slot.get())
+    * kPassConstantsSlotsPerFrame;
+  const auto total_page_count
+    = std::max(1U, active_pages_per_level_ * active_clip_level_count_);
+
   const auto dispatch_phase = [&](const std::uint32_t phase,
-                                 const std::uint32_t thread_count) {
+                                 const std::uint32_t thread_count,
+                                 const std::uint32_t target_clip_index = 0U) {
     if (thread_count == 0U) {
       return;
     }
-    pass_constants->phase = phase;
+    CHECK_LT_F(dispatch_slot, kPassConstantsSlotsPerFrame,
+      "VirtualShadowResolvePass: exhausted {} pass-constants slots for frame "
+      "slot {}",
+      kPassConstantsSlotsPerFrame, Context().frame_slot.get());
+
+    const auto slot = base_slot + dispatch_slot;
+    CHECK_LT_F(slot, pass_constants_indices_.size(),
+      "VirtualShadowResolvePass: invalid pass-constants slot {}", slot);
+    const auto pass_constants_index = pass_constants_indices_[slot];
+    CHECK_F(pass_constants_index.IsValid(),
+      "VirtualShadowResolvePass: invalid pass-constants index for slot {}",
+      slot);
+
+    const auto pack_int4 =
+      [](const std::array<std::int32_t, kMaxSupportedClipLevels>& values) {
+        std::array<ResolvePackedInt4, 3U> packed {};
+        for (std::uint32_t i = 0U; i < kMaxSupportedClipLevels; ++i) {
+          auto& lane = packed[i / 4U];
+          switch (i % 4U) {
+          case 0U:
+            lane.x = values[i];
+            break;
+          case 1U:
+            lane.y = values[i];
+            break;
+          case 2U:
+            lane.z = values[i];
+            break;
+          default:
+            lane.w = values[i];
+            break;
+          }
+        }
+        return packed;
+      };
+    const auto pack_float4 =
+      [](const std::array<float, kMaxSupportedClipLevels>& values) {
+        std::array<ResolvePackedFloat4, 3U> packed {};
+        for (std::uint32_t i = 0U; i < kMaxSupportedClipLevels; ++i) {
+          auto& lane = packed[i / 4U];
+          switch (i % 4U) {
+          case 0U:
+            lane.x = values[i];
+            break;
+          case 1U:
+            lane.y = values[i];
+            break;
+          case 2U:
+            lane.z = values[i];
+            break;
+          default:
+            lane.w = values[i];
+            break;
+          }
+        }
+        return packed;
+      };
+
+    const auto constants = VirtualShadowResolvePassConstants {
+      .request_words_srv_index
+      = active_request_word_count_ > 0U ? active_request_words_srv_
+                                        : kInvalidShaderVisibleIndex,
+      .schedule_uav_index = view_schedule_resources_.at(active_view_id_).schedule_uav,
+      .schedule_count_uav_index
+      = view_schedule_resources_.at(active_view_id_).count_uav,
+      .page_table_srv_index = active_page_management_bindings_.page_table_srv,
+      .page_table_uav_index = active_page_management_bindings_.page_table_uav,
+      .page_flags_uav_index = active_page_management_bindings_.page_flags_uav,
+      .physical_page_metadata_srv_index
+      = active_page_management_bindings_.physical_page_metadata_srv,
+      .physical_page_lists_srv_index
+      = active_page_management_bindings_.physical_page_lists_srv,
+      .resolve_stats_srv_index
+      = active_page_management_bindings_.resolve_stats_srv,
+      .request_word_count = active_request_word_count_,
+      .total_page_count = total_page_count,
+      .schedule_capacity = active_schedule_capacity_,
+      .pages_per_axis = active_pages_per_axis_,
+      .clip_level_count = active_clip_level_count_,
+      .pages_per_level = active_pages_per_level_,
+      .requested_page_list_count = active_requested_page_list_count_,
+      .dirty_page_list_count = active_dirty_page_list_count_,
+      .clean_page_list_count = active_clean_page_list_count_,
+      .total_page_management_list_count
+      = active_total_page_management_list_count_,
+      .phase = phase,
+      .target_clip_index = target_clip_index,
+      .clip_grid_origin_x_packed = pack_int4(active_clip_grid_origin_x_),
+      .clip_grid_origin_y_packed = pack_int4(active_clip_grid_origin_y_),
+      .clip_origin_x_packed = pack_float4(active_clip_origin_x_),
+      .clip_origin_y_packed = pack_float4(active_clip_origin_y_),
+      .clip_page_world_packed = pack_float4(active_clip_page_world_),
+    };
+    auto* slot_ptr = pass_constants
+      + static_cast<std::ptrdiff_t>(
+        slot * kResolvePassConstantsStride);
+    std::memcpy(slot_ptr, &constants, sizeof(constants));
+
+    SetPassConstantsIndex(pass_constants_index);
+    recorder.SetComputeRoot32BitConstant(
+      static_cast<uint32_t>(binding::RootParam::kRootConstants),
+      pass_constants_index.get(), 1);
     shadow_manager->PrepareVirtualPageManagementOutputsForGpuWrite(
       active_view_id_, recorder);
     recorder.Dispatch((thread_count + kDispatchGroupSize - 1U) / kDispatchGroupSize,
       1U, 1U);
+    ++dispatch_slot;
   };
 
-  dispatch_phase(0U, std::max(1U, active_pages_per_level_ * active_clip_level_count_));
-  dispatch_phase(1U, active_total_page_management_list_count_);
-  dispatch_phase(2U, std::max(1U, active_pages_per_level_ * active_clip_level_count_));
-  dispatch_phase(3U, active_request_word_count_);
+  dispatch_phase(0U, total_page_count);
+  dispatch_phase(1U, active_requested_page_list_count_);
+  if (active_clip_level_count_ > 1U) {
+    for (std::uint32_t clip_index = active_clip_level_count_ - 1U;
+      clip_index-- > 0U;) {
+      dispatch_phase(2U, active_pages_per_level_, clip_index);
+    }
+  }
+  if (active_clip_level_count_ > 1U) {
+    for (std::uint32_t fine_clip = 0U; fine_clip + 1U < active_clip_level_count_;
+      ++fine_clip) {
+      dispatch_phase(3U, active_pages_per_level_, fine_clip);
+    }
+  }
+  dispatch_phase(4U, active_request_word_count_);
 
   shadow_manager->FinalizeVirtualPageManagementOutputs(active_view_id_, recorder);
 
@@ -514,20 +621,14 @@ auto VirtualShadowResolvePass::NeedRebuildPipelineState() const -> bool
 auto VirtualShadowResolvePass::EnsurePassConstantsBuffer() -> void
 {
   if (pass_constants_buffer_ && pass_constants_mapped_ptr_ != nullptr
-    && pass_constants_index_.IsValid()) {
+    && pass_constants_indices_[0].IsValid()) {
     return;
   }
 
   auto& allocator = gfx_->GetDescriptorAllocator();
   auto& registry = gfx_->GetResourceRegistry();
-  const auto aligned_size_bytes
-    = ((sizeof(VirtualShadowResolvePassConstants)
-           + oxygen::packing::kConstantBufferAlignment - 1U)
-        / oxygen::packing::kConstantBufferAlignment)
-    * oxygen::packing::kConstantBufferAlignment;
-
   const graphics::BufferDesc desc {
-    .size_bytes = aligned_size_bytes,
+    .size_bytes = kResolvePassConstantsStride * kPassConstantsSlotCount,
     .usage = graphics::BufferUsage::kConstant,
     .memory = graphics::BufferMemory::kUpload,
     .debug_name = "VirtualShadowResolvePass.Constants",
@@ -545,21 +646,28 @@ auto VirtualShadowResolvePass::EnsurePassConstantsBuffer() -> void
       "VirtualShadowResolvePass: failed to map constants buffer");
   }
 
-  auto cbv_handle
-    = allocator.Allocate(graphics::ResourceViewType::kConstantBuffer,
-      graphics::DescriptorVisibility::kShaderVisible);
-  if (!cbv_handle.IsValid()) {
-    throw std::runtime_error(
-      "VirtualShadowResolvePass: failed to allocate constants CBV");
-  }
-  pass_constants_index_ = allocator.GetShaderVisibleIndex(cbv_handle);
+  pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
+  for (std::size_t slot = 0U; slot < kPassConstantsSlotCount; ++slot) {
+    auto cbv_handle
+      = allocator.Allocate(graphics::ResourceViewType::kConstantBuffer,
+        graphics::DescriptorVisibility::kShaderVisible);
+    if (!cbv_handle.IsValid()) {
+      throw std::runtime_error(
+        "VirtualShadowResolvePass: failed to allocate constants CBV");
+    }
+    pass_constants_indices_[slot]
+      = allocator.GetShaderVisibleIndex(cbv_handle);
 
-  graphics::BufferViewDescription cbv_desc;
-  cbv_desc.view_type = graphics::ResourceViewType::kConstantBuffer;
-  cbv_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
-  cbv_desc.range = { 0U, desc.size_bytes };
-  pass_constants_cbv_ = registry.RegisterView(
-    *pass_constants_buffer_, std::move(cbv_handle), cbv_desc);
+    graphics::BufferViewDescription cbv_desc;
+    cbv_desc.view_type = graphics::ResourceViewType::kConstantBuffer;
+    cbv_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
+    cbv_desc.range = {
+      static_cast<std::uint32_t>(slot * kResolvePassConstantsStride),
+      kResolvePassConstantsStride,
+    };
+    pass_constants_cbvs_[slot] = registry.RegisterView(
+      *pass_constants_buffer_, std::move(cbv_handle), cbv_desc);
+  }
 }
 
 auto VirtualShadowResolvePass::EnsureClearCountUploadBuffer() -> void
