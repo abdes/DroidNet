@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <span>
@@ -14,6 +15,8 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
@@ -60,6 +63,7 @@ protected:
 
 private:
   static constexpr std::uint32_t kDispatchGroupSize = 8U;
+  static constexpr std::uint32_t kStatsWordCount = 5U;
 
   auto EnsurePassConstantsBuffer() -> void;
   auto EnsureSourceTextureSrv(const graphics::Texture& source_texture)
@@ -67,6 +71,10 @@ private:
   auto EnsureTileStateBuffer(std::uint32_t tile_count) -> void;
   auto UploadTileStates(std::span<const std::uint32_t> tile_states)
     -> bindless::ShaderVisibleIndex;
+  auto EnsureStatsBuffer() -> void;
+  auto EnsureStatsClearUploadBuffer() -> void;
+  auto EnsureStatsReadbackBuffer(frame::Slot slot) -> void;
+  auto ProcessCompletedStats(frame::Slot slot) -> void;
   auto EnsureOutputTexture(std::uint32_t width, std::uint32_t height) -> void;
   auto EnsureOutputTextureUav() -> bindless::ShaderVisibleIndex;
   static auto ResolveSourceSrvFormat(Format format) -> Format;
@@ -97,6 +105,25 @@ private:
   };
   void* tile_state_mapped_ptr_ { nullptr };
   std::uint32_t tile_state_capacity_ { 0U };
+
+  std::shared_ptr<graphics::Buffer> stats_buffer_;
+  graphics::DescriptorHandle stats_uav_handle_ {};
+  graphics::NativeView stats_uav_view_ {};
+  bindless::ShaderVisibleIndex stats_uav_index_ { kInvalidShaderVisibleIndex };
+  std::shared_ptr<graphics::Buffer> stats_clear_upload_buffer_;
+  void* stats_clear_upload_mapped_ptr_ { nullptr };
+
+  struct StatsReadbackState {
+    std::shared_ptr<graphics::Buffer> buffer;
+    std::uint32_t* mapped_words { nullptr };
+    frame::SequenceNumber source_frame { 0U };
+    ViewId view_id {};
+    std::uint32_t atlas_width { 0U };
+    std::uint32_t atlas_height { 0U };
+    bool pending { false };
+  };
+  std::array<StatsReadbackState, frame::kFramesInFlight.get()>
+    stats_readbacks_ {};
 
   std::shared_ptr<graphics::Texture> output_texture_;
   graphics::DescriptorHandle output_texture_uav_handle_ {};

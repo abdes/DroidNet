@@ -55,19 +55,39 @@ namespace {
   struct alignas(packing::kShaderDataFieldAlignment)
     VirtualShadowCoarseMarkPassConstants {
     ShaderVisibleIndex depth_texture_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex virtual_directional_shadow_metadata_index {
+      kInvalidShaderVisibleIndex
+    };
     ShaderVisibleIndex request_words_uav_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex page_mark_flags_uav_index { kInvalidShaderVisibleIndex };
     std::uint32_t request_word_count { 0U };
     std::uint32_t coarse_backbone_begin { 0U };
     std::uint32_t coarse_clip_mask { 0U };
+    std::uint32_t _pad0 { 0U };
 
     glm::uvec2 screen_dimensions { 0U, 0U };
     std::uint32_t _pad1 { 0U };
+    std::uint32_t _pad2 { 0U };
 
     glm::mat4 inv_view_projection_matrix { 1.0F };
   };
   static_assert(sizeof(VirtualShadowCoarseMarkPassConstants)
       % packing::kShaderDataFieldAlignment
     == 0U);
+  static_assert(offsetof(VirtualShadowCoarseMarkPassConstants, depth_texture_index)
+      == 0U);
+  static_assert(offsetof(
+                    VirtualShadowCoarseMarkPassConstants,
+                    request_word_count)
+      == 16U);
+  static_assert(offsetof(
+                    VirtualShadowCoarseMarkPassConstants,
+                    screen_dimensions)
+      == 32U);
+  static_assert(offsetof(
+                    VirtualShadowCoarseMarkPassConstants,
+                    inv_view_projection_matrix)
+      == 48U);
 
 } // namespace
 
@@ -129,14 +149,26 @@ auto VirtualShadowCoarseMarkPass::DoPrepareResources(
     || !request_pass->HasActiveDispatch()
     || !request_pass->GetRequestWordsBuffer()
     || !request_pass->GetRequestWordsUav().IsValid()
+    || !request_pass->GetPageMarkFlagsBuffer()
+    || !request_pass->GetPageMarkFlagsUav().IsValid()
     || Context().current_view.resolved_view == nullptr) {
     co_return;
   }
 
   const auto* metadata = shadow_manager->TryGetVirtualDirectionalMetadata(
     Context().current_view.view_id);
+  const auto* publication = shadow_manager->TryGetFramePublication(
+    Context().current_view.view_id);
   if (metadata == nullptr || metadata->clip_level_count == 0U
     || metadata->pages_per_axis == 0U) {
+    co_return;
+  }
+  if (publication == nullptr
+    || !publication->virtual_directional_shadow_metadata_srv.IsValid()) {
+    LOG_F(ERROR,
+      "VirtualShadowCoarseMarkPass: missing current virtual directional "
+      "metadata publication for view {}",
+      Context().current_view.view_id.get());
     co_return;
   }
 
@@ -158,7 +190,10 @@ auto VirtualShadowCoarseMarkPass::DoPrepareResources(
     = BuildDirectionalCoarseClipMask(metadata->clip_level_count);
   const VirtualShadowCoarseMarkPassConstants pass_constants {
     .depth_texture_index = depth_texture_srv,
+    .virtual_directional_shadow_metadata_index
+    = publication->virtual_directional_shadow_metadata_srv,
     .request_words_uav_index = request_pass->GetRequestWordsUav(),
+    .page_mark_flags_uav_index = request_pass->GetPageMarkFlagsUav(),
     .request_word_count = request_pass->GetActiveRequestWordCount(),
     .coarse_backbone_begin = coarse_backbone_begin,
     .coarse_clip_mask = coarse_clip_mask,
@@ -175,6 +210,10 @@ auto VirtualShadowCoarseMarkPass::DoPrepareResources(
     recorder.BeginTrackingResourceState(*request_pass->GetRequestWordsBuffer(),
       graphics::ResourceStates::kCommon, true);
   }
+  if (!recorder.IsResourceTracked(*request_pass->GetPageMarkFlagsBuffer())) {
+    recorder.BeginTrackingResourceState(*request_pass->GetPageMarkFlagsBuffer(),
+      graphics::ResourceStates::kCommon, true);
+  }
 
   auto& readback = slot_readbacks_[Context().frame_slot.get()];
   if (!recorder.IsResourceTracked(*readback.buffer)) {
@@ -185,6 +224,8 @@ auto VirtualShadowCoarseMarkPass::DoPrepareResources(
   recorder.RequireResourceState(
     depth_texture, graphics::ResourceStates::kShaderResource);
   recorder.RequireResourceState(*request_pass->GetRequestWordsBuffer(),
+    graphics::ResourceStates::kUnorderedAccess);
+  recorder.RequireResourceState(*request_pass->GetPageMarkFlagsBuffer(),
     graphics::ResourceStates::kUnorderedAccess);
   recorder.FlushBarriers();
 

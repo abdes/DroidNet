@@ -20,6 +20,7 @@ cbuffer RootConstants : register(b2, space0)
 struct VirtualShadowResolvePassConstants
 {
     uint request_words_srv_index;
+    uint page_mark_flags_srv_index;
     uint schedule_uav_index;
     uint schedule_count_uav_index;
     uint page_table_srv_index;
@@ -180,6 +181,8 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         ResourceDescriptorHeap[pass_constants.schedule_uav_index];
     RWStructuredBuffer<uint> schedule_count =
         ResourceDescriptorHeap[pass_constants.schedule_count_uav_index];
+    const bool has_page_mark_flags =
+        BX_IN_GLOBAL_SRV(pass_constants.page_mark_flags_srv_index);
 
     const uint thread_index = dispatch_thread_id.x;
 
@@ -192,8 +195,11 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     }
 
     if (pass_constants.phase == kResolvePhasePopulateCurrent) {
-        const uint current_page_list_count = pass_constants.requested_page_list_count;
-        if (thread_index >= current_page_list_count) {
+        // Phase 7 current publication must republish every resident page that
+        // still lies inside the current clipmap layout. Same-frame GPU
+        // marking supplies USED/DETAIL semantics; the page-management list
+        // supplies residency/invalidation base bits.
+        if (thread_index >= pass_constants.total_page_management_list_count) {
             return;
         }
 
@@ -225,6 +231,20 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         if (global_page_index >= pass_constants.total_page_count) {
             return;
         }
+        uint mark_flags = 0u;
+        if (has_page_mark_flags) {
+            StructuredBuffer<uint> page_mark_flags =
+                ResourceDescriptorHeap[pass_constants.page_mark_flags_srv_index];
+            mark_flags = page_mark_flags[global_page_index];
+        }
+        const bool dynamic_uncached =
+            VirtualShadowPageHasFlag(list_entry.page_flags, OXYGEN_VSM_PAGE_FLAG_DYNAMIC_UNCACHED);
+        const bool static_uncached =
+            VirtualShadowPageHasFlag(list_entry.page_flags, OXYGEN_VSM_PAGE_FLAG_STATIC_UNCACHED);
+        const bool detail_geometry =
+            VirtualShadowPageHasFlag(mark_flags, OXYGEN_VSM_PAGE_FLAG_DETAIL_GEOMETRY);
+        const bool used_this_frame =
+            VirtualShadowPageHasFlag(mark_flags, OXYGEN_VSM_PAGE_FLAG_USED_THIS_FRAME);
         page_table[global_page_index] = PackVirtualShadowPageTableEntry(
             DecodePackedTileX(metadata.packed_atlas_tile_coords),
             DecodePackedTileY(metadata.packed_atlas_tile_coords),
@@ -232,7 +252,11 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             true,
             true,
             true);
-        page_flags[global_page_index] = list_entry.page_flags & OXYGEN_VSM_PAGE_FLAG_BASE_MASK;
+        page_flags[global_page_index] = (list_entry.page_flags & OXYGEN_VSM_PAGE_FLAG_ALLOCATED)
+            | (dynamic_uncached ? OXYGEN_VSM_PAGE_FLAG_DYNAMIC_UNCACHED : 0u)
+            | (static_uncached ? OXYGEN_VSM_PAGE_FLAG_STATIC_UNCACHED : 0u)
+            | (detail_geometry ? OXYGEN_VSM_PAGE_FLAG_DETAIL_GEOMETRY : 0u)
+            | (used_this_frame ? OXYGEN_VSM_PAGE_FLAG_USED_THIS_FRAME : 0u);
         return;
     }
 
@@ -384,6 +408,12 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             return;
         }
 
+        const VirtualShadowPageTableEntry parent_entry =
+            DecodeVirtualShadowPageTableEntry(page_table[parent_global_page_index]);
+        if (!VirtualShadowPageTableEntryHasCurrentLod(parent_entry)) {
+            return;
+        }
+
         InterlockedOr(
             page_flags[parent_global_page_index],
             MakeVirtualShadowHierarchyFlags(fine_flags));
@@ -391,36 +421,25 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     }
 
     if (pass_constants.phase == kResolvePhaseSchedule) {
-        if (!BX_IN_GLOBAL_SRV(pass_constants.request_words_srv_index)) {
+        if (thread_index >= pass_constants.total_page_count) {
             return;
         }
 
-        if (thread_index >= pass_constants.request_word_count) {
-            return;
-        }
-
-        StructuredBuffer<uint> request_words =
-            ResourceDescriptorHeap[pass_constants.request_words_srv_index];
-        uint request_word = request_words[thread_index];
-        while (request_word != 0u) {
-            const uint bit_index = firstbitlow(request_word);
-            const uint page_index = thread_index * 32u + bit_index;
-            if (page_index < pass_constants.total_page_count) {
-                const uint packed_entry = page_table[page_index];
-                if ((packed_entry & OXYGEN_VSM_PAGE_TABLE_CURRENT_LOD_VALID_BIT) != 0u) {
-                    uint output_index = 0u;
-                    InterlockedAdd(schedule_count[0], 1u, output_index);
-                    if (output_index < pass_constants.schedule_capacity) {
-                        const uint tile_x = packed_entry & OXYGEN_VSM_PAGE_TABLE_TILE_COORD_MASK;
-                        const uint tile_y =
-                            (packed_entry >> OXYGEN_VSM_PAGE_TABLE_TILE_Y_SHIFT)
-                            & OXYGEN_VSM_PAGE_TABLE_TILE_COORD_MASK;
-                        schedule[output_index] = uint4(page_index, packed_entry, tile_x, tile_y);
-                    }
-                }
+        const uint packed_entry = page_table[thread_index];
+        const uint published_flags = page_flags[thread_index];
+        const uint uncached_flags =
+            OXYGEN_VSM_PAGE_FLAG_DYNAMIC_UNCACHED | OXYGEN_VSM_PAGE_FLAG_STATIC_UNCACHED;
+        if ((packed_entry & OXYGEN_VSM_PAGE_TABLE_CURRENT_LOD_VALID_BIT) != 0u
+            && (published_flags & uncached_flags) != 0u) {
+            uint output_index = 0u;
+            InterlockedAdd(schedule_count[0], 1u, output_index);
+            if (output_index < pass_constants.schedule_capacity) {
+                const uint tile_x = packed_entry & OXYGEN_VSM_PAGE_TABLE_TILE_COORD_MASK;
+                const uint tile_y =
+                    (packed_entry >> OXYGEN_VSM_PAGE_TABLE_TILE_Y_SHIFT)
+                    & OXYGEN_VSM_PAGE_TABLE_TILE_COORD_MASK;
+                schedule[output_index] = uint4(thread_index, packed_entry, tile_x, tile_y);
             }
-
-            request_word &= (request_word - 1u);
         }
     }
 }

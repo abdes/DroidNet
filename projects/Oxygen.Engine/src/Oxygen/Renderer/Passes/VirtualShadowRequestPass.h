@@ -64,6 +64,21 @@ public:
   {
     return request_words_uav_;
   }
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetPageMarkFlagsBuffer() const noexcept
+    -> const std::shared_ptr<graphics::Buffer>&
+  {
+    return page_mark_flags_buffer_;
+  }
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetPageMarkFlagsSrv() const noexcept
+    -> ShaderVisibleIndex
+  {
+    return page_mark_flags_srv_;
+  }
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetPageMarkFlagsUav() const noexcept
+    -> ShaderVisibleIndex
+  {
+    return page_mark_flags_uav_;
+  }
   [[nodiscard]] OXGN_RNDR_NDAPI auto GetActiveRequestWordCount() const noexcept
     -> std::uint32_t
   {
@@ -91,14 +106,19 @@ private:
     * kMaxSupportedClipLevels;
   static constexpr std::uint32_t kMaxRequestWordCount
     = (kMaxSupportedPageCount + 31U) / 32U;
+  static constexpr std::uint32_t kStatsWordCount
+    = 4U + 2U * kMaxSupportedClipLevels;
 
   struct SlotReadbackState {
     std::shared_ptr<graphics::Buffer> buffer;
     std::uint32_t* mapped_words { nullptr };
+    std::uint32_t* mapped_page_mark_flags { nullptr };
+    std::uint32_t* mapped_stats { nullptr };
     frame::SequenceNumber source_frame_sequence { 0U };
     ViewId view_id {};
     std::uint32_t pages_per_axis { 0U };
     std::uint32_t clip_level_count { 0U };
+    std::uint32_t total_page_count { 0U };
     std::uint64_t directional_address_space_hash { 0U };
     std::array<std::int32_t, kMaxSupportedClipLevels> clip_grid_origin_x {};
     std::array<std::int32_t, kMaxSupportedClipLevels> clip_grid_origin_y {};
@@ -112,8 +132,17 @@ private:
   std::shared_ptr<graphics::Buffer> request_words_buffer_;
   ShaderVisibleIndex request_words_srv_ { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex request_words_uav_ { kInvalidShaderVisibleIndex };
+  std::shared_ptr<graphics::Buffer> page_mark_flags_buffer_;
+  ShaderVisibleIndex page_mark_flags_srv_ { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex page_mark_flags_uav_ { kInvalidShaderVisibleIndex };
+  std::shared_ptr<graphics::Buffer> stats_buffer_;
+  ShaderVisibleIndex stats_uav_ { kInvalidShaderVisibleIndex };
   std::shared_ptr<graphics::Buffer> clear_upload_buffer_;
   void* clear_upload_mapped_ptr_ { nullptr };
+  std::shared_ptr<graphics::Buffer> page_mark_flags_clear_upload_buffer_;
+  void* page_mark_flags_clear_upload_mapped_ptr_ { nullptr };
+  std::shared_ptr<graphics::Buffer> stats_clear_upload_buffer_;
+  void* stats_clear_upload_mapped_ptr_ { nullptr };
 
   std::shared_ptr<graphics::Buffer> pass_constants_buffer_;
   graphics::NativeView pass_constants_cbv_ {};

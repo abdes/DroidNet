@@ -22,6 +22,7 @@
 #include <Oxygen/Renderer/ScenePrep/RenderItemProto.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepContext.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
+#include <Oxygen/Scene/Types/Flags.h>
 
 namespace oxygen::engine::sceneprep {
 
@@ -382,6 +383,8 @@ inline auto EmitPerVisibleSubmesh(const ScenePrepContext& ctx,
       .cast_shadows = item.CastsShadows(),
       .receive_shadows = item.ReceivesShadows(),
       .main_view_visible = main_view_visible,
+      .static_shadow_caster
+      = item.Flags().GetEffectiveValue(scene::SceneNodeFlags::kStatic),
     });
   };
 

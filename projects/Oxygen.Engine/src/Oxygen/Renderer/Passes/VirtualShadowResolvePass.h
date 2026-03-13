@@ -135,6 +135,7 @@ private:
 
   ViewId active_view_id_ {};
   ShaderVisibleIndex active_request_words_srv_ { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex active_page_mark_flags_srv_ { kInvalidShaderVisibleIndex };
   std::uint32_t active_request_word_count_ { 0U };
   std::uint32_t active_dispatch_group_count_ { 0U };
   std::uint32_t active_pages_per_axis_ { 0U };

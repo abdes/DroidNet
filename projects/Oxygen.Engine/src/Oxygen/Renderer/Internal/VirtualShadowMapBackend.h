@@ -73,7 +73,9 @@ public:
     std::span<const glm::vec4> shadow_caster_bounds,
     std::span<const glm::vec4> visible_receiver_bounds,
     std::chrono::milliseconds gpu_budget, bool allow_budget_fallback = true,
-    std::uint64_t shadow_caster_content_hash = 0U) -> ShadowFramePublication;
+    std::uint64_t shadow_caster_content_hash = 0U,
+    std::span<const std::uint8_t> shadow_caster_static_flags = {})
+    -> ShadowFramePublication;
   OXGN_RNDR_API auto ResolveCurrentFrame(ViewId view_id) -> void;
   OXGN_RNDR_API auto MarkRendered(ViewId view_id) -> void;
   OXGN_RNDR_API auto PreparePageTableResources(
@@ -269,7 +271,10 @@ private:
       std::unordered_map<std::uint64_t, ResidentVirtualPage>
         previous_resident_pages {};
       std::vector<glm::vec4> previous_shadow_caster_bounds {};
+      std::vector<std::uint8_t> previous_shadow_caster_static_flags {};
       std::unordered_set<std::uint64_t> dirty_resident_pages {};
+      std::unordered_set<std::uint64_t> dirty_static_resident_pages {};
+      std::unordered_set<std::uint64_t> dirty_dynamic_resident_pages {};
       PendingResidentReuseGateSnapshot resident_reuse_snapshot {};
     };
 
@@ -280,6 +285,7 @@ private:
       kAddressSpaceMismatch,
       kSameFrame,
       kStale,
+      kTelemetryOnly,
       kAccepted,
     };
 
@@ -303,6 +309,7 @@ private:
       std::uint32_t coarse_safety_budget_pages { 0U };
       bool coarse_safety_capacity_fit { false };
       bool predicted_coherent_publication { false };
+      std::uint32_t same_frame_detail_pages { 0U };
       std::uint32_t feedback_requested_pages { 0U };
       std::uint32_t feedback_refinement_pages { 0U };
       std::uint32_t receiver_bootstrap_pages { 0U };
@@ -331,6 +338,7 @@ private:
       directional_virtual_metadata;
     std::vector<AbsoluteClipPageRegion> absolute_frustum_regions;
     std::vector<glm::vec4> shadow_caster_bounds;
+    std::vector<std::uint8_t> shadow_caster_static_flags;
     std::vector<std::uint32_t> page_table_entries;
     std::vector<std::uint32_t> page_flags_entries;
     std::vector<std::uint32_t> atlas_tile_debug_states;
@@ -510,6 +518,12 @@ private:
     const std::unordered_set<std::uint64_t>& protected_resident_keys) const
     -> std::vector<std::uint64_t>;
   OXGN_RNDR_API auto ResolvePendingPageResidency(ViewId view_id) -> void;
+  OXGN_RNDR_API auto RebuildResolvedRasterPagesFromPublishedCurrentPages(
+    ViewCacheEntry& state,
+    const ViewCacheEntry::PendingResidencyResolve& pending) const -> void;
+  OXGN_RNDR_API auto RebuildPublishedCurrentPagesFromPageManagementSnapshot(
+    ViewCacheEntry& state,
+    const ViewCacheEntry::PendingResidencyResolve& pending) const -> void;
   OXGN_RNDR_API auto CarryForwardCompatibleDirectionalResidentPages(
     ViewCacheEntry& state,
     const ViewCacheEntry::PendingResidencyResolve& pending,
@@ -553,6 +567,7 @@ private:
     const engine::ViewConstants& view_constants,
     const engine::DirectionalShadowCandidate& candidate,
     std::span<const glm::vec4> shadow_caster_bounds,
+    std::span<const std::uint8_t> shadow_caster_static_flags,
     std::span<const glm::vec4> visible_receiver_bounds,
     const ViewCacheEntry* previous_state, ViewCacheEntry& state) -> void;
   OXGN_RNDR_API auto LogPublishTransition(
