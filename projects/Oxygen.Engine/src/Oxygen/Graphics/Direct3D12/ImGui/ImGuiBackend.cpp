@@ -15,6 +15,7 @@
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/Texture.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/imgui_impl_dx12.h>
 
 #include <imgui.h>
@@ -288,13 +289,6 @@ auto D3D12ImGuiGraphicsBackend::RegisterOrUpdateTexture(
     return 0U;
   }
 
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
-  auto* d3d_gfx = static_cast<Graphics*>(gfx.get());
-  auto& allocator_base = const_cast<graphics::DescriptorAllocator&>(
-    d3d_gfx->GetDescriptorAllocator());
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
-  auto& allocator = static_cast<DescriptorAllocator&>(allocator_base);
-
   auto& entry = registered_textures_[std::string(key)];
   if (!entry.texture) {
     const auto slot = AllocatePersistentDescriptorSlot();
@@ -312,30 +306,18 @@ auto D3D12ImGuiGraphicsBackend::RegisterOrUpdateTexture(
   }
 
   if (entry.texture.get() != texture.get()) {
-    entry.source_srv_handle = {};
-    entry.source_srv_view = {};
-
-    auto source_srv_handle
-      = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
-        graphics::DescriptorVisibility::kShaderVisible);
-    if (!source_srv_handle.IsValid()) {
-      return 0U;
-    }
-
     const auto srv_desc = MakeSrvDescription(*texture);
-    const auto source_srv_view = texture->GetNativeView(source_srv_handle, srv_desc);
-    if (!source_srv_view->IsValid()) {
-      return 0U;
-    }
+    // This backend is only instantiated by D3D12 graphics, so the texture
+    // backend must also be D3D12 here.
+    auto* d3d_texture = static_cast<Texture*>(texture.get());
+
+    auto cpu_handle = entry.imgui_cpu_handle;
+    d3d_texture->CreateShaderResourceView(cpu_handle, srv_desc.format,
+      srv_desc.dimension, srv_desc.sub_resources);
 
     entry.texture = texture;
-    entry.source_srv_handle = std::move(source_srv_handle);
-    entry.source_srv_view = source_srv_view;
   }
 
-  init_info_->Device->CopyDescriptorsSimple(1, entry.imgui_cpu_handle,
-    allocator.GetCpuHandle(entry.source_srv_handle),
-    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
   return static_cast<std::uintptr_t>(entry.imgui_gpu_handle.ptr);
 }
 

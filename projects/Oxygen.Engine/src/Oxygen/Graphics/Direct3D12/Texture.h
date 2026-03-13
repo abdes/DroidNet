@@ -52,6 +52,11 @@ namespace d3d12 {
       return desc_;
     }
 
+    OXGN_D3D12_API auto CreateShaderResourceView(
+      D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu, Format format,
+      TextureType texture_type, TextureSubResourceSet sub_resources) const
+      -> void;
+
   protected:
     // Abstract method implementations from base class
     OXGN_D3D12_NDAPI auto CreateShaderResourceView(
@@ -74,12 +79,6 @@ namespace d3d12 {
       -> NativeView override;
 
   private:
-    // Abstract method implementations from base class
-    OXGN_D3D12_API auto CreateShaderResourceView(
-      D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu, Format format,
-      TextureType texture_type, TextureSubResourceSet sub_resources) const
-      -> void;
-
     OXGN_D3D12_API auto CreateUnorderedAccessView(
       D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu, Format format,
       TextureType texture_type, TextureSubResourceSet sub_resources) const
