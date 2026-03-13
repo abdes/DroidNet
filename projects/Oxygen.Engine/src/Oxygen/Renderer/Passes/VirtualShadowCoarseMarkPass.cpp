@@ -58,9 +58,9 @@ namespace {
     ShaderVisibleIndex request_words_uav_index { kInvalidShaderVisibleIndex };
     std::uint32_t request_word_count { 0U };
     std::uint32_t coarse_backbone_begin { 0U };
+    std::uint32_t coarse_clip_mask { 0U };
 
     glm::uvec2 screen_dimensions { 0U, 0U };
-    std::uint32_t _pad0 { 0U };
     std::uint32_t _pad1 { 0U };
 
     glm::mat4 inv_view_projection_matrix { 1.0F };
@@ -68,8 +68,6 @@ namespace {
   static_assert(sizeof(VirtualShadowCoarseMarkPassConstants)
       % packing::kShaderDataFieldAlignment
     == 0U);
-
-  constexpr std::uint32_t kDirectionalCoarseBackboneClipCount = 3U;
 
 } // namespace
 
@@ -155,14 +153,15 @@ auto VirtualShadowCoarseMarkPass::DoPrepareResources(
   }
 
   const auto coarse_backbone_begin
-    = metadata->clip_level_count > kDirectionalCoarseBackboneClipCount
-    ? metadata->clip_level_count - kDirectionalCoarseBackboneClipCount
-    : 0U;
+    = ResolveDirectionalCoarseBackboneBegin(metadata->clip_level_count);
+  const auto coarse_clip_mask
+    = BuildDirectionalCoarseClipMask(metadata->clip_level_count);
   const VirtualShadowCoarseMarkPassConstants pass_constants {
     .depth_texture_index = depth_texture_srv,
     .request_words_uav_index = request_pass->GetRequestWordsUav(),
     .request_word_count = request_pass->GetActiveRequestWordCount(),
     .coarse_backbone_begin = coarse_backbone_begin,
+    .coarse_clip_mask = coarse_clip_mask,
     .screen_dimensions = glm::uvec2(depth_texture.GetDescriptor().width,
       depth_texture.GetDescriptor().height),
     .inv_view_projection_matrix
@@ -209,12 +208,13 @@ auto VirtualShadowCoarseMarkPass::DoPrepareResources(
 
   LOG_F(INFO,
     "VirtualShadowCoarseMarkPass: frame={} slot={} view={} prepared dispatch "
-    "(words={} pages_per_axis={} clips={} coarse_begin={} "
+    "(words={} pages_per_axis={} clips={} coarse_begin={} coarse_mask=0x{:x} "
     "address_hash=0x{:x} depth={}x{} cpu_prepare_us={})",
     Context().frame_sequence.get(), Context().frame_slot.get(),
     Context().current_view.view_id.get(), active_request_word_count_,
     active_pages_per_axis_, active_clip_level_count_,
-    active_coarse_backbone_begin_, active_directional_address_space_hash_,
+    active_coarse_backbone_begin_, coarse_clip_mask,
+    active_directional_address_space_hash_,
     pass_constants.screen_dimensions.x, pass_constants.screen_dimensions.y,
     ElapsedMicroseconds(prepare_begin));
 
@@ -468,6 +468,7 @@ auto VirtualShadowCoarseMarkPass::ProcessCompletedFeedback(const frame::Slot slo
   feedback.clip_level_count = readback.clip_level_count;
   feedback.directional_address_space_hash
     = readback.directional_address_space_hash;
+  feedback.kind = renderer::VirtualShadowFeedbackKind::kCoarse;
   const auto pages_per_level
     = readback.pages_per_axis * readback.pages_per_axis;
 
@@ -517,7 +518,8 @@ auto VirtualShadowCoarseMarkPass::ProcessCompletedFeedback(const frame::Slot slo
       readback.directional_address_space_hash);
     log_state.last_feedback_count = 0U;
     log_state.had_pending_feedback = false;
-    shadow_manager->ClearVirtualRequestFeedback(readback.view_id);
+    shadow_manager->ClearVirtualRequestFeedback(
+      readback.view_id, renderer::VirtualShadowFeedbackKind::kCoarse);
   }
   readback.pending_feedback = false;
 }

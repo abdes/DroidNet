@@ -24,9 +24,9 @@ struct VirtualShadowCoarseMarkPassConstants
     uint request_words_uav_index;
     uint request_word_count;
     uint coarse_backbone_begin;
+    uint coarse_clip_mask;
 
     uint2 screen_dimensions;
-    uint _pad0;
     uint _pad1;
 
     float4x4 inv_view_projection_matrix;
@@ -108,6 +108,10 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     for (uint clip_index = pass_constants.coarse_backbone_begin;
          clip_index < metadata.clip_level_count;
          ++clip_index) {
+        if ((pass_constants.coarse_clip_mask & (1u << clip_index)) == 0u) {
+            continue;
+        }
+
         float2 request_page_coord = 0.0.xx;
         if (!ProjectDirectionalVirtualClip(
                 metadata, clip_index, light_view_pos.xy, request_page_coord)) {

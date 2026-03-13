@@ -452,7 +452,7 @@ Completion evidence:
 
 ### Phase 4. Implement Persistent Page Remap And Reuse
 
-Status: `in_progress`
+Status: `completed`
 
 Goal:
 
@@ -532,13 +532,17 @@ Current evidence:
   settled averages `requested_pages=659.26`, `scheduled_pages=663.35`,
   `rastered_pages=329.15`, `shadow_draws=1084.62`
 
-Remaining gap:
+Completion evidence:
 
-- the specific double-shift bug is corrected, but live motion-time wrong-page
-  rendering has not yet been revalidated closed
-- stale whole-publication fallback still exists in code, so Phase 4 cannot be
-  called complete until continuity is demonstrably page-remap driven in the
-  live path rather than merely compatible with it
+- the live backend no longer contains `last_coherent_*` publication reuse /
+  fallback code; continuity is page-remap driven instead of stale-snapshot
+  driven
+- user visual validation after the Phase 4B / Phase 5 motion fixes confirmed
+  motion-time correctness on the live path
+- the locked benchmark now shows no settled-frame
+  `request=address-space-mismatch` and no `resident_reuse_gate=true` reuse of
+  unresolved dirty pages in
+  `out/build-vs/directional-vsm-benchmark-latest.log`
 
 ### Phase 4B. Replace Projection / Shading Contract For Seamless Coarse Fallback
 
@@ -676,192 +680,287 @@ Broad diagnostic test status after Phase 4B cleanup:
 
 ### Phase 5. Replace CPU Bootstrap With GPU Page Marking
 
+Status: `completed`
+
+Goal:
+
+- replace CPU-authored synthetic demand with the Phase 5 coarse/detail
+  page-marking contract
+
+Completion evidence:
+
+- live runtime no longer depends on authoritative `receiver_bootstrap`,
+  `feedback_refinement`, or `current_frame_reinforcement`
+- live coarse fallback now uses:
+  - page-table-driven `any_lod_valid` / `fallback_lod_offset`
+  - clip-relative requested-to-resolved remap
+  - LOD-aware bias scaling
+  - grounded single-page fallback comparison instead of the old blurred
+    coarse-only compare
+- user visually validated the latest coarse-shadow grounding result as good
+- validation already recorded for the landed runtime:
+  - `Oxygen.Renderer.VirtualShadowContracts.Tests.exe`
+    - result: `11/11` passed
+  - `Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ShadowManagerPublishForView_Virtual*`
+    - result: `54 passed / 4 skipped`
+  - `powershell -ExecutionPolicy Bypass -File Examples\\RenderScene\\benchmark_directional_vsm.ps1`
+    - result: `exit_code=0`
+    - settled benchmark contract:
+      `requested_pages=661.56`, `scheduled_pages=630.88`,
+      `resolved_pages=227.56`, `rastered_pages=227.56`,
+      `shadow_draws=769.62`
+
+### Phase 6+. Cross-Reference Integration Matrix
+
+All issues from
+`src/Oxygen/Renderer/Docs/vsm_cross_reference_report.md`
+are integrated below and remain active until their mapped phase closes.
+
+| Report issue | Remaining phase |
+|---|---|
+| 1. CPU-authored page table + CPU-driven raster | Phase 8 |
+| 2. Full page-table re-resolution per filter tap | Phase 9 |
+| 3. No hierarchical page flag propagation | Phase 6 |
+| 4. Multi-frame feedback latency | Phase 7 primary, Phase 10 final removal |
+| 5. No static/dynamic page separation | Phase 7 |
+| 6. Coarse mark per-pixel brute force | Phase 7 |
+| 7. Slope bias not scaled by `fallback_lod_offset` | Phase 9 |
+| 8. Guard texel count hardcoded | Phase 9 |
+| 9. O(N) physical pool eviction scan | Phase 6 |
+| 10. Up to 4 clip evaluations per pixel | Phase 9 |
+| 11. Redundant GPU resolve / CPU-GPU-CPU round-trip | Phase 10 |
+| 12. No single-page optimization | Phase 10 |
+
+### Phase 6. Build GPU Page Management And Hierarchical Flags
+
 Status: `pending`
 
 Goal:
 
-- make visible-sample page marking authoritative for missing or dirty pages
-  only
-
-Prerequisite:
-
-- Phase 4B must land first, because GPU page marking cannot be validated
-  correctly while the live shader contract can still discard valid coarse
-  fallback and return fully lit
+- move page management onto the correct UE-style authority: GPU-owned page
+  metadata, hierarchical page flags, and page-table writes
 
 Implementation:
 
-- add a GPU visible page-marking pass driven by main depth / visible receivers
-- add a separate GPU coarse-marking pass
-- use only small local dilation
-- define binary coarse/detail policy through page flags
-- consume page marking only to request pages that are currently unmapped or
-  uncached after the remap/reuse stage
+- add GPU-owned physical page metadata buffers and explicit page-management
+  lists for:
+  - available pages
+  - resident clean pages
+  - resident dirty / uncached pages
+  - requested pages
+- replace CPU free-list / full-map eviction scans with page-management data
+  structures that support bounded victim selection
+- add hierarchical page-flag propagation so coarse pages inherit detail usage /
+  request state from finer pages
+- make page-table and page-flag writes GPU-authored for reused and newly
+  allocated pages
+- make requested-page protection, fallback visibility, and any-LOD validity
+  page-management responsibilities instead of backend heuristics
 
 Must remove or demote:
 
-- `receiver_bootstrap` as an authoritative page source
-- `feedback_refinement` as an authoritative page source
-- `current_frame_reinforcement` as an authoritative page source
+- CPU O(N) eviction scans in the hot allocation path
+- flat page-demand reasoning without hierarchical flags
+- backend-only coarse-safety budgeting as the thing that makes fallback usable
 
 Verification:
 
-- focused tests for visible-sample request generation
-- focused tests for coarse/detail flag assignment
-- runtime debug capture proving motion no longer explodes into heuristic
-  reseeding near the camera
+- focused tests for hierarchical flag propagation from fine to coarse pages
+- focused tests for requested-page pinning under pressure
+- focused tests for allocation / eviction without full-map scans
+- focused tests for page-table / page-flag coherence after reuse and allocation
 
 Completion gate:
 
-- page demand is primarily GPU marked for missing/dirty pages
-- the old bootstrap/reinforcement path is no longer authoritative
-- motion no longer depends on near-camera heuristic reseeding
+- hierarchical page flags exist and are used by live page management
+- allocation / eviction / page-table writes are page-management outputs, not
+  CPU backend recomputation
+- the O(N) physical-pool eviction scan is gone from the authoritative path
 
-### Phase 6. Build Invalidation And Page Management
+### Phase 7. Replace Readback-Led Demand With Same-Frame GPU Marking, Invalidation, And Static/Dynamic Split
 
 Status: `pending`
 
 Goal:
 
-- make invalidation, allocation, and fallback page-centric on top of the remap
-  contract
+- stop using delayed readback-driven demand as the authoritative missing/dirty
+  source, and split stable/static page reuse from dynamic invalidation
 
 Implementation:
 
-- add a dedicated invalidation stage
-- add new-page allocation backed by explicit physical page lists
-- preserve requested pages and evict from the correct lists only
-- propagate fallback visibility / mapped hierarchy through page-table entries
-  and page flags
-- guarantee one sample-usable coarse path through the page-management contract
+- make visible detail marking and coarse marking write directly into GPU page
+  flags for the current frame
+- consume those flags in the same frame for missing/dirty page management
+- split physical-page validity into static and dynamic channels so moving
+  geometry invalidates only overlapping dynamic content
+- replace brute-force coarse mark atomics with groupshared / wave-cooperative
+  marking
+- keep the old feedback path only as transitional telemetry until Phase 10
+  removes it
 
 Must remove or demote:
 
-- coarse safety as a backend-only budgeting concept
-- allocator behavior coupled to monolithic backend resolve logic
+- multi-frame readback as the authoritative demand loop
+- all-or-nothing dirtying when a single caster moves
+- per-pixel brute-force coarse marking as the long-term coarse path
 
 Verification:
 
-- focused tests for requested-page protection
-- focused tests for allocation under pressure
-- focused tests for invalidation by moved/dirty content
-- focused tests for fallback LOD decode at the sample contract
+- focused tests for same-frame marked-page consumption
+- focused tests for static pages surviving unrelated dynamic motion
+- focused tests for dynamic invalidation touching only overlapping pages
+- benchmark evidence that coarse/detail request churn drops under motion
 
 Completion gate:
 
-- invalidation/allocation/fallback are page-management responsibilities
-- coarse/detail fallback is encoded in the sampling contract, not carried by
-  stale publication state
+- same-frame GPU marking is authoritative for missing/dirty pages
+- static/dynamic separation is live in the page flags / invalidation path
+- coarse marking no longer relies on per-pixel brute-force atomics
 
-### Phase 7. Replace CPU Raster Scheduling With Per-Page Draw Commands
+### Phase 8. Replace CPU Page Table / Raster Authority With GPU Per-Page Draw Commands
 
 Status: `pending`
 
 Goal:
 
-- make raster consume compact per-page draw lists instead of CPU-authored page
-  jobs
+- remove the core scalability disaster: CPU-authored page-table/raster
+  scheduling and page-by-page CPU draw submission
 
 Implementation:
 
-- add a GPU per-page draw-command build stage
-- compact visible caster instances per page
-- feed raster from the per-page draw lists only
-- keep dirty-page update hooks integrated with this stage
+- build per-page draw commands on GPU from page-management outputs plus scene
+  draw metadata
+- feed raster from GPU-authored indirect draw lists only
+- remove CPU-authored authoritative `resolved_raster_pages`
+- remove CPU page loops that clear, bind, and draw one mesh list per page
+- keep CPU orchestration limited to pass submission, not page-by-page raster
+  planning
 
 Must remove or demote:
 
-- CPU-authored authoritative `resolved_raster_pages`
-- raster scheduling hidden inside backend resolve
+- CPU-authored authoritative page-table publication
+- CPU-authored authoritative raster-page scheduling
+- per-page CPU draw-call fan-out as the raster execution model
 
 Verification:
 
-- focused tests for per-page draw-list compaction
-- focused tests for page-local caster overlap
-- benchmark evidence that raster submissions scale with page-local overlap, not
-  full scene caster count
+- focused tests for per-page draw-command generation and page-local overlap
+- targeted build validation for the new raster command path
+- locked benchmark evidence that raster submissions scale with page-local work,
+  not page-count times full-scene caster count
 
 Completion gate:
 
-- raster consumes only the new authoritative per-page draw command source
+- raster consumes GPU per-page draw commands as its only authority
+- the CPU no longer authors the live raster schedule or live page-table state
 
-### Phase 8. Replace Projection / Shading Contract
+### Phase 9. Replace The Projection / Shading Cost Model
 
 Status: `pending`
 
 Goal:
 
-- make sampling stable on the new page-table contract
+- eliminate the remaining UE cross-reference shader/per-pixel failures without
+  regressing the now-correct coarse fallback contract
 
 Implementation:
 
-- rewrite directional VSM sampling around page-table decode helpers
-- select the best available mapped level through the page-table fallback fields
-- keep clipmap selection and fallback entirely inside the new contract
-- remove stale whole-publication republish from the authoritative runtime
-- remove the "return lit because nothing valid is published" path as the normal
-  recovery behavior
+- resolve page-table state once per evaluation, not once per filter tap
+- reuse resolved physical page and fallback state across the tent filter kernel
+- collapse multi-clip evaluation so fine/fallback blending shares resolved
+  page-state instead of redoing the full lookup chain
+- scale slope bias directly from `fallback_lod_offset`
+- make guard texel count depend on the effective filter radius instead of the
+  current hardcoded constant
+- keep the current grounded coarse remap contract while replacing the old
+  repeated lookup cost model
+
+Must remove or demote:
+
+- page-table re-resolution for every tent-filter tap
+- hardcoded guard texel count
+- repeated independent clip evaluation in the worst-case pixel path
+- fallback-bias logic that is not derived from actual LOD growth
 
 Verification:
 
-- focused shader tests where possible
-- focused runtime regressions for aggressive zoom / translation / rotation
-- manual motion validation showing no wrong-page flashing
+- focused shader/contract tests for:
+  - per-evaluation single-resolve sampling
+  - fallback LOD bias scaling
+  - guard-texel clamping by filter radius
+- locked benchmark evidence that shading cost falls without harming correctness
 
 Completion gate:
 
-- `last_coherent_*` fallback path is gone from the authoritative runtime
-- motion-time shading correctness is proven on the new sample contract
+- the live shader no longer re-resolves the page table per filter tap
+- fallback slope bias and guard texels are LOD/radius correct
+- worst-case clip evaluation cost is materially reduced
 
-### Phase 9. Delete The Legacy Monolith
+### Phase 10. Remove Transitional Round-Trips And Add The Final Fast Paths
 
 Status: `pending`
 
 Goal:
 
-- remove the old architecture instead of dragging it behind the new one
+- remove the remaining transitional CPU-GPU-CPU authority loops and land the
+  final structural optimizations required by the cross-reference report
 
 Implementation:
 
-- delete or reduce the old backend functions so they are no longer authoritative
-- remove the legacy kill-list items from active code
-- simplify the backend to orchestration of explicit stages only
+- delete the redundant resolve/schedule round-trip once same-frame GPU marking,
+  page management, and GPU raster authority are live
+- remove the remaining transitional CPU feedback integration path
+- add the single-page optimization hook for future spot/point/light cases or
+  tiny virtual spans so the new architecture does not hard-code full clipmap
+  cost for trivially small demand
+- keep runtime ownership clean: one authority per stage, no legacy fallback
+  loops kept alive for convenience
+
+Must remove or demote:
+
+- transitional CPU-GPU-CPU resolve/schedule feedback loops
+- legacy-authority compatibility scaffolding that survived the earlier phases
 
 Verification:
 
 - targeted compile/build passes
-- focused tests still green
-- code search proving legacy authority symbols are gone or dead
+- focused tests for the no-readback same-frame path
+- locked benchmark evidence that the new path runs without the old round-trip
 
 Completion gate:
 
-- no parallel legacy authority remains
+- no redundant CPU-GPU-CPU resolve authority remains in the live path
+- the architecture contains the single-page fast path hook and is ready for
+  future local-light expansion
 
-### Phase 10. Performance Recovery On The New Architecture
+### Phase 11. Performance Recovery On The New Architecture
 
 Status: `pending`
 
 Goal:
 
-- recover performance only after the architecture is correct
+- do the final performance work only after the correct UE-inspired
+  architecture is fully in place
 
 Implementation:
 
-- benchmark the new architecture against the locked moving-camera baseline
-- optimize cache-validity, remap/reuse, invalidation, page marking,
-  per-page draw-command build, and raster cost on the new path only
-- do not revive old planner heuristics or stale-publication shortcuts as quick
-  fixes
+- re-baseline the locked benchmark on the post-Phase-10 runtime
+- optimize cache-validity, remap/reuse, page management, marking, draw-command
+  build, raster, and shading only on that final architecture
+- keep correctness and coarse-detail stability ahead of raw speed
 
 Verification:
 
 - locked benchmark runner only
 - before/after evidence attached to this document
+- targeted manual validation for motion correctness and coarse grounding after
+  major performance changes
 
 Completion gate:
 
 - correctness preserved
 - benchmark materially better than the frozen baseline
+- no old heuristic or stale-publication shortcut was revived to buy speed
 
 ## 9. Verification Matrix
 
@@ -889,24 +988,30 @@ Accepted runtime evidence:
 
 - Phase 1: `completed`
 - Phase 2: `completed`
-- Phase 3: `in_progress`
-- Phase 4: `pending`
-- Phase 5: `pending`
+- Phase 3: `completed`
+- Phase 4: `completed`
+- Phase 4B: `completed`
+- Phase 5: `completed`
 - Phase 6: `pending`
 - Phase 7: `pending`
 - Phase 8: `pending`
 - Phase 9: `pending`
 - Phase 10: `pending`
+- Phase 11: `pending`
 
 ## 11. Validation
 
 Validation for this plan document:
 
-- document scope-corrected around the UE-style directional cache/remap model
+- document updated to integrate all issues from
+  `src/Oxygen/Renderer/Docs/vsm_cross_reference_report.md`
+  starting at Phase 6
+- Phase 5 is now recorded closed per explicit user direction
 - no legacy docs were updated for active task tracking
 - `git diff --check` must stay clean aside from existing CRLF warnings
 - no builds or tests are required for the document itself
 
 Remaining gap:
 
-- corrected Phase 3 implementation and validation are still outstanding
+- Phase 6 implementation has not started against this rewritten post-report
+  plan yet
