@@ -574,6 +574,7 @@ private:
     std::vector<PreparedSceneFrame::PartitionRange> partition_storage;
     std::vector<glm::vec4> draw_bounding_sphere_storage;
     std::vector<glm::vec4> shadow_caster_bounds_storage;
+    std::vector<std::uint8_t> shadow_caster_static_flag_storage;
     std::vector<glm::vec4> visible_receiver_bounds_storage;
     std::vector<float> world_matrix_storage;
     std::vector<float> normal_matrix_storage;

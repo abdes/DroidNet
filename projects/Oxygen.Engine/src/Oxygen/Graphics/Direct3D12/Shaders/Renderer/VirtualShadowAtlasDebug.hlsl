@@ -22,7 +22,7 @@ struct VirtualShadowAtlasDebugPassConstants
     uint source_texture_index;
     uint tile_state_buffer_index;
     uint output_texture_uav_index;
-    uint padding0;
+    uint stats_uav_index;
     uint2 atlas_dimensions;
     uint atlas_tiles_per_axis;
     uint page_size_texels;
@@ -86,7 +86,8 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         ResourceDescriptorHeap[g_PassConstantsIndex];
     if (!BX_IN_GLOBAL_SRV(pass_constants.source_texture_index)
         || !BX_IN_GLOBAL_SRV(pass_constants.tile_state_buffer_index)
-        || !BX_IsValidSlot(pass_constants.output_texture_uav_index)) {
+        || !BX_IsValidSlot(pass_constants.output_texture_uav_index)
+        || !BX_IsValidSlot(pass_constants.stats_uav_index)) {
         return;
     }
 
@@ -101,6 +102,8 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         ResourceDescriptorHeap[pass_constants.tile_state_buffer_index];
     RWTexture2D<float4> output_texture =
         ResourceDescriptorHeap[pass_constants.output_texture_uav_index];
+    RWStructuredBuffer<uint> stats_buffer =
+        ResourceDescriptorHeap[pass_constants.stats_uav_index];
 
     const float depth = source_texture.Load(int3(dispatch_thread_id.xy, 0));
     const uint page_size_texels = max(pass_constants.page_size_texels, 1u);
@@ -118,5 +121,14 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         page_size_texels,
         tile_state,
         depth);
+    InterlockedAdd(stats_buffer[0], 1u);
+    if (depth < 0.99999f) {
+        InterlockedAdd(stats_buffer[1], 1u);
+    }
+    InterlockedMin(stats_buffer[2], asuint(depth));
+    InterlockedMax(stats_buffer[3], asuint(depth));
+    if (tile_state != 0u) {
+        InterlockedAdd(stats_buffer[4], 1u);
+    }
     output_texture[dispatch_thread_id.xy] = float4(color, 1.0);
 }

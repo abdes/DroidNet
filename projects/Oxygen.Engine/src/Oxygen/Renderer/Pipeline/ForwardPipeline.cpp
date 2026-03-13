@@ -42,6 +42,7 @@
 #include <Oxygen/Renderer/Passes/VirtualShadowPageRasterPass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowRequestPass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowResolvePass.h>
+#include <Oxygen/Renderer/Passes/VirtualShadowScreenDebugPass.h>
 #include <Oxygen/Renderer/Passes/WireframePass.h>
 #include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
 #include <Oxygen/Renderer/Pipeline/Internal/CompositionPlanner.h>
@@ -201,6 +202,8 @@ private:
     virtual_shadow_resolve_pass_config;
   std::shared_ptr<engine::VirtualShadowRequestPass::Config>
     virtual_shadow_request_pass_config;
+  std::shared_ptr<engine::VirtualShadowScreenDebugPass::Config>
+    virtual_shadow_screen_debug_pass_config;
   std::shared_ptr<engine::VirtualShadowCoarseMarkPass::Config>
     virtual_shadow_coarse_mark_pass_config;
   std::shared_ptr<engine::ShaderPassConfig> shader_pass_config;
@@ -221,6 +224,8 @@ private:
     virtual_shadow_atlas_debug_pass;
   std::shared_ptr<engine::VirtualShadowResolvePass> virtual_shadow_resolve_pass;
   std::shared_ptr<engine::VirtualShadowRequestPass> virtual_shadow_request_pass;
+  std::shared_ptr<engine::VirtualShadowScreenDebugPass>
+    virtual_shadow_screen_debug_pass;
   std::shared_ptr<engine::VirtualShadowCoarseMarkPass>
     virtual_shadow_coarse_mark_pass;
   std::shared_ptr<engine::ShaderPass> shader_pass;
@@ -567,6 +572,11 @@ auto ForwardPipeline::Impl::RunScenePasses(
       co_await virtual_shadow_atlas_debug_pass->PrepareResources(rc, rec);
       co_await virtual_shadow_atlas_debug_pass->Execute(rc, rec);
     }
+
+    if (virtual_shadow_screen_debug_pass) {
+      co_await virtual_shadow_screen_debug_pass->PrepareResources(rc, rec);
+      co_await virtual_shadow_screen_debug_pass->Execute(rc, rec);
+    }
   }
 
   // Sky must run after DepthPrePass so it can depth-test against the
@@ -885,6 +895,8 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
     = std::make_shared<p::VirtualShadowResolvePass::Config>();
   virtual_shadow_request_pass_config
     = std::make_shared<p::VirtualShadowRequestPass::Config>();
+  virtual_shadow_screen_debug_pass_config
+    = std::make_shared<p::VirtualShadowScreenDebugPass::Config>();
   virtual_shadow_coarse_mark_pass_config
     = std::make_shared<p::VirtualShadowCoarseMarkPass::Config>();
   shader_pass_config = std::make_shared<p::ShaderPassConfig>();
@@ -916,6 +928,9 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
     gfx_ptr, virtual_shadow_resolve_pass_config);
   virtual_shadow_request_pass = std::make_shared<p::VirtualShadowRequestPass>(
     gfx_ptr, virtual_shadow_request_pass_config);
+  virtual_shadow_screen_debug_pass
+    = std::make_shared<p::VirtualShadowScreenDebugPass>(
+      gfx_ptr, virtual_shadow_screen_debug_pass_config);
   virtual_shadow_coarse_mark_pass
     = std::make_shared<p::VirtualShadowCoarseMarkPass>(
       gfx_ptr, virtual_shadow_coarse_mark_pass_config);

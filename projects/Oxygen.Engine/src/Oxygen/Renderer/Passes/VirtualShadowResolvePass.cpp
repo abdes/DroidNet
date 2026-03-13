@@ -61,6 +61,7 @@ namespace {
   struct alignas(packing::kShaderDataFieldAlignment)
     VirtualShadowResolvePassConstants {
     ShaderVisibleIndex request_words_srv_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex page_mark_flags_srv_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex schedule_uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex schedule_count_uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex page_table_srv_index { kInvalidShaderVisibleIndex };
@@ -137,6 +138,7 @@ auto VirtualShadowResolvePass::DoPrepareResources(
   active_dispatch_ = false;
   active_view_id_ = {};
   active_request_words_srv_ = kInvalidShaderVisibleIndex;
+  active_page_mark_flags_srv_ = kInvalidShaderVisibleIndex;
   active_request_word_count_ = 0U;
   active_dispatch_group_count_ = 0U;
   active_pages_per_axis_ = 0U;
@@ -182,6 +184,9 @@ auto VirtualShadowResolvePass::DoPrepareResources(
     && request_pass->HasActiveDispatch()
     && request_pass->GetRequestWordsSrv().IsValid()
     && request_pass->GetRequestWordsBuffer() != nullptr;
+  const bool has_page_mark_flags = request_pass != nullptr
+    && request_pass->GetPageMarkFlagsSrv().IsValid()
+    && request_pass->GetPageMarkFlagsBuffer() != nullptr;
 
   const auto* metadata = shadow_manager->TryGetVirtualDirectionalMetadata(
     Context().current_view.view_id);
@@ -230,7 +235,10 @@ auto VirtualShadowResolvePass::DoPrepareResources(
     = has_request_dispatch ? request_pass->GetActiveRequestWordCount() : 0U;
   active_request_words_srv_
     = has_request_dispatch ? request_pass->GetRequestWordsSrv()
-                           : kInvalidShaderVisibleIndex;
+                           : page_management_bindings->page_table_srv;
+  active_page_mark_flags_srv_
+    = has_page_mark_flags ? request_pass->GetPageMarkFlagsSrv()
+                          : kInvalidShaderVisibleIndex;
   active_pages_per_axis_ = metadata->pages_per_axis;
   active_clip_level_count_ = metadata->clip_level_count;
   active_pages_per_level_ = metadata->pages_per_axis * metadata->pages_per_axis;
@@ -268,6 +276,11 @@ auto VirtualShadowResolvePass::DoPrepareResources(
     recorder.BeginTrackingResourceState(*request_pass->GetRequestWordsBuffer(),
       graphics::ResourceStates::kCommon, true);
   }
+  if (has_page_mark_flags
+    && !recorder.IsResourceTracked(*request_pass->GetPageMarkFlagsBuffer())) {
+    recorder.BeginTrackingResourceState(*request_pass->GetPageMarkFlagsBuffer(),
+      graphics::ResourceStates::kCommon, true);
+  }
   if (!recorder.IsResourceTracked(*resources->schedule_buffer)) {
     recorder.BeginTrackingResourceState(
       *resources->schedule_buffer, graphics::ResourceStates::kCommon, true);
@@ -283,6 +296,10 @@ auto VirtualShadowResolvePass::DoPrepareResources(
 
   if (has_request_dispatch) {
     recorder.RequireResourceState(*request_pass->GetRequestWordsBuffer(),
+      graphics::ResourceStates::kShaderResource);
+  }
+  if (has_page_mark_flags) {
+    recorder.RequireResourceState(*request_pass->GetPageMarkFlagsBuffer(),
       graphics::ResourceStates::kShaderResource);
   }
   recorder.RequireResourceState(
@@ -464,6 +481,7 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
       .request_words_srv_index
       = active_request_word_count_ > 0U ? active_request_words_srv_
                                         : kInvalidShaderVisibleIndex,
+      .page_mark_flags_srv_index = active_page_mark_flags_srv_,
       .schedule_uav_index = view_schedule_resources_.at(active_view_id_).schedule_uav,
       .schedule_count_uav_index
       = view_schedule_resources_.at(active_view_id_).count_uav,
@@ -512,7 +530,7 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
   };
 
   dispatch_phase(0U, total_page_count);
-  dispatch_phase(1U, active_requested_page_list_count_);
+  dispatch_phase(1U, active_total_page_management_list_count_);
   if (active_clip_level_count_ > 1U) {
     for (std::uint32_t clip_index = active_clip_level_count_ - 1U;
       clip_index-- > 0U;) {
@@ -525,12 +543,12 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
       dispatch_phase(3U, active_pages_per_level_, fine_clip);
     }
   }
-  dispatch_phase(4U, active_request_word_count_);
+  dispatch_phase(4U, total_page_count);
 
   shadow_manager->FinalizeVirtualPageManagementOutputs(active_view_id_, recorder);
 
   auto it = view_schedule_resources_.find(active_view_id_);
-  if (it != view_schedule_resources_.end() && active_request_word_count_ > 0U) {
+  if (it != view_schedule_resources_.end() && total_page_count > 0U) {
     auto& readback = slot_readbacks_[Context().frame_slot.get()];
     if (!recorder.IsResourceTracked(*readback.buffer)) {
       recorder.BeginTrackingResourceState(

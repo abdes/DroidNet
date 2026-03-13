@@ -1256,6 +1256,75 @@ Implementation:
   marking
 - keep the old feedback path only as transitional telemetry until Phase 10
   removes it
+- pull forward the minimum same-frame raster bridge needed to make GPU marking
+  truthful:
+  - publish per-draw bounding spheres to shaders for shadow raster culling
+  - expose the GPU scheduled-page buffer/count as live raster inputs
+  - make the live raster path consume the GPU-authored scheduled-page set for
+    current missing pages instead of CPU `resolved_raster_pages`
+  - keep this bridge limited to page-selection authority; Phase 8 still owns
+    the full GPU per-page draw-command build and complete removal of per-draw
+    CPU submission
+
+Scope correction:
+
+- The Phase 7 live publication now republishs all in-layout resident pages as
+  `current_lod_valid`, with residency/invalidation base bits reconstructed from
+  resident state and same-frame GPU marking layered on top for
+  `USED_THIS_FRAME` / `DETAIL_GEOMETRY`.
+- This closes the old `requested_entries`-subset authority bug, but it also
+  exposes the remaining blocker precisely: missing fine pages are still created
+  only by CPU `BuildDirectionalVirtualViewState(...)` through delayed
+  `request_feedback_`, because the current GPU resolve path still has SRV-only
+  access to physical-page metadata/lists and the raster path still consumes
+  CPU-authored `resolved_raster_pages`.
+- Therefore Phase 7 cannot truthfully close on UE-style same-frame
+  missing-page authority until the current page-management pass also owns
+  missing-page allocation/publication for the live page table and the raster
+  consumer stops depending on the delayed CPU feedback-selected set for those
+  newly missing pages.
+- This is not a rollback to legacy behavior. It is the minimum scope correction
+  required by the current evidence:
+  - focused test
+    `ShadowManagerPublishForView_VirtualStaticPagesStayCleanWhenDynamicCasterMovesElsewhere`
+    still collapses static and moved dynamic points to the same coarse current
+    page
+  - benchmark logs still show `request=accepted` and nonzero `feedback_seed`
+    while the Phase 7 structural gate remains green
+  - the readback therefore proves that same-frame GPU marking is currently
+    authoritative only for resident-page publication semantics, not for missing
+    fine-page creation
+- Remaining Phase 7 work must now target that exact gap instead of adding more
+  byte-for-byte CPU/GPU comparisons.
+- Additional scope correction required by the current architecture:
+  same-frame GPU marking cannot become the sole missing/dirty authority while
+  `VirtualShadowPageRasterPass` still depends on CPU-authored
+  `resolved_raster_pages`. Without a same-frame raster bridge, newly missing
+  pages can only be created either by the old delayed CPU selector or by a
+  readback-delayed GPU schedule, neither of which satisfies the UE-style design.
+- Therefore Phase 7 must pull forward the minimum same-frame raster-authority
+  slice from Phase 8:
+  - GPU page management must allocate/publish newly missing current pages from
+    same-frame request/coarse-mark data
+  - the live raster consumer must consume that same-frame GPU-authored missing
+    page set instead of the delayed CPU `request_feedback_` selection path
+  - Phase 8 still owns the full GPU per-page draw-command build and removal of
+    page-by-page CPU draw submission; Phase 7 only pulls forward the minimum
+    same-frame raster bridge needed to make same-frame GPU marking truthful
+- The current CPU page-by-page raster loop cannot satisfy that requirement.
+  A truthful Phase 7 bridge must change the **page-selection authority** of
+  the live raster path, not merely re-tag the old CPU-selected pages.
+- Selected bridge design:
+  1. keep GPU page management as the authority for the current scheduled-page
+     set
+  2. publish per-draw bounds as shader-visible data for shadow raster culling
+  3. make the live shadow depth path consume the GPU scheduled-page list in
+     the same frame
+  4. demote CPU `resolved_raster_pages` to validation / telemetry once the
+     bridge is live
+- This is still Phase 7 work because it is the minimum architectural change
+  required to avoid a blocking readback while making same-frame GPU marking
+  authoritative for newly missing fine pages.
 
 Must remove or demote:
 
@@ -1268,13 +1337,35 @@ Verification:
 - focused tests for same-frame marked-page consumption
 - focused tests for static pages surviving unrelated dynamic motion
 - focused tests for dynamic invalidation touching only overlapping pages
+- focused tests for scheduled-page consumption by the live raster bridge
+- readback validation of the live GPU publication using the Phase 7 structural
+  invariants, not the superseded Phase 6 byte-for-byte CPU flag equality:
+  - fallback-only aliases must keep `page_flags == 0`
+  - every `current_lod_valid` page must carry `ALLOCATED`
+  - `USED_THIS_FRAME` / `DETAIL_GEOMETRY` must come from same-frame GPU marking
+    for pages actually hit by the current frame; reused current pages may stay
+    published without `USED_THIS_FRAME`
+  - live raster scheduling must only consume `current_lod_valid` pages whose
+    page flags mark them uncached (`DYNAMIC_UNCACHED` or `STATIC_UNCACHED`)
+  - exact CPU/GPU page-flag byte equality is no longer the correctness gate
+    once same-frame GPU marking becomes authoritative for `USED/DETAIL`
+    semantics
 - benchmark evidence that coarse/detail request churn drops under motion
+- screen-debug evidence that geometry pixels resolve to nonzero current/fallback
+  pages while the GPU scheduled-page bridge is active
 
 Completion gate:
 
 - same-frame GPU marking is authoritative for missing/dirty pages
 - static/dynamic separation is live in the page flags / invalidation path
 - coarse marking no longer relies on per-pixel brute-force atomics
+- the old CPU `request_feedback_` path is no longer authoritative for creating
+  newly missing fine pages
+- same-frame GPU-authored missing pages reach the live raster consumer without
+  falling back to the delayed CPU selector
+- the live raster consumer no longer uses CPU page selection as the authority
+  for current missing pages
+- the Phase 7 structural readback validator is green on the locked benchmark
 
 Resume anchor:
 

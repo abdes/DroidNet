@@ -7,6 +7,7 @@
 #include <Oxygen/Renderer/Passes/VirtualShadowAtlasDebugPass.h>
 
 #include <algorithm>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -45,7 +46,9 @@ namespace {
     bindless::ShaderVisibleIndex output_texture_uav_index {
       kInvalidShaderVisibleIndex
     };
-    std::uint32_t padding0 { 0U };
+    bindless::ShaderVisibleIndex stats_uav_index {
+      kInvalidShaderVisibleIndex
+    };
     glm::uvec2 atlas_dimensions { 0U, 0U };
     std::uint32_t atlas_tiles_per_axis { 0U };
     std::uint32_t page_size_texels { 0U };
@@ -80,6 +83,16 @@ VirtualShadowAtlasDebugPass::~VirtualShadowAtlasDebugPass()
     tile_state_buffer_->UnMap();
     tile_state_mapped_ptr_ = nullptr;
   }
+  if (stats_clear_upload_buffer_ && stats_clear_upload_mapped_ptr_ != nullptr) {
+    stats_clear_upload_buffer_->UnMap();
+    stats_clear_upload_mapped_ptr_ = nullptr;
+  }
+  for (auto& readback : stats_readbacks_) {
+    if (readback.buffer && readback.mapped_words != nullptr) {
+      readback.buffer->UnMap();
+      readback.mapped_words = nullptr;
+    }
+  }
 }
 
 auto VirtualShadowAtlasDebugPass::GetOutputTexture() const noexcept
@@ -94,16 +107,28 @@ auto VirtualShadowAtlasDebugPass::DoPrepareResources(
   active_dispatch_ = false;
   active_width_ = 0U;
   active_height_ = 0U;
+  if (Context().frame_slot != frame::kInvalidSlot) {
+    ProcessCompletedStats(Context().frame_slot);
+  }
 
   const auto* shadow_raster_pass
     = Context().GetPass<VirtualShadowPageRasterPass>();
   const auto shadow_manager = Context().GetRenderer().GetShadowManager();
   if (shadow_raster_pass == nullptr || shadow_manager == nullptr) {
+    LOG_F(INFO,
+      "VirtualShadowAtlasDebugPass: skipped for view {} "
+      "(raster_pass={} shadow_manager={})",
+      Context().current_view.view_id.get(), shadow_raster_pass != nullptr,
+      shadow_manager != nullptr);
     co_return;
   }
 
   const auto& source_texture = shadow_manager->GetVirtualShadowDepthTexture();
   if (!source_texture) {
+    LOG_F(INFO,
+      "VirtualShadowAtlasDebugPass: skipped for view {} "
+      "(no virtual shadow depth texture)",
+      Context().current_view.view_id.get());
     co_return;
   }
 
@@ -111,23 +136,48 @@ auto VirtualShadowAtlasDebugPass::DoPrepareResources(
     Context().current_view.view_id);
   if (virtual_view == nullptr
     || virtual_view->directional_virtual_metadata.empty()) {
+    LOG_F(INFO,
+      "VirtualShadowAtlasDebugPass: skipped for view {} "
+      "(virtual_view={} metadata_count={})",
+      Context().current_view.view_id.get(), virtual_view != nullptr,
+      virtual_view != nullptr
+        ? virtual_view->directional_virtual_metadata.size()
+        : 0U);
     co_return;
   }
 
   const auto& metadata = virtual_view->directional_virtual_metadata.front();
   if (metadata.page_size_texels == 0U) {
+    LOG_F(INFO,
+      "VirtualShadowAtlasDebugPass: skipped for view {} "
+      "(page_size_texels=0)",
+      Context().current_view.view_id.get());
     co_return;
   }
 
   EnsurePassConstantsBuffer();
+  EnsureStatsBuffer();
+  EnsureStatsClearUploadBuffer();
   EnsureOutputTexture(source_texture->GetDescriptor().width,
     source_texture->GetDescriptor().height);
   const auto source_texture_index = EnsureSourceTextureSrv(*source_texture);
   const auto tile_state_buffer_index
     = UploadTileStates(virtual_view->atlas_tile_debug_states);
   const auto output_texture_uav_index = EnsureOutputTextureUav();
+  if (Context().frame_slot != frame::kInvalidSlot) {
+    EnsureStatsReadbackBuffer(Context().frame_slot);
+  }
   if (!source_texture_index.IsValid() || !tile_state_buffer_index.IsValid()
-    || !output_texture_uav_index.IsValid() || !output_texture_) {
+    || !output_texture_uav_index.IsValid() || !stats_uav_index_.IsValid()
+    || !output_texture_) {
+    LOG_F(INFO,
+      "VirtualShadowAtlasDebugPass: skipped for view {} "
+      "(source_srv={} tile_states={} output_uav={} stats_uav={} "
+      "output_texture={} tile_state_count={})",
+      Context().current_view.view_id.get(), source_texture_index.IsValid(),
+      tile_state_buffer_index.IsValid(), output_texture_uav_index.IsValid(),
+      stats_uav_index_.IsValid(), output_texture_ != nullptr,
+      virtual_view->atlas_tile_debug_states.size());
     co_return;
   }
 
@@ -139,6 +189,15 @@ auto VirtualShadowAtlasDebugPass::DoPrepareResources(
     && !recorder.IsResourceTracked(*tile_state_buffer_)) {
     recorder.BeginTrackingResourceState(
       *tile_state_buffer_, graphics::ResourceStates::kGenericRead, true);
+  }
+  if (stats_buffer_ != nullptr && !recorder.IsResourceTracked(*stats_buffer_)) {
+    recorder.BeginTrackingResourceState(
+      *stats_buffer_, graphics::ResourceStates::kCommon, true);
+  }
+  if (stats_clear_upload_buffer_ != nullptr
+    && !recorder.IsResourceTracked(*stats_clear_upload_buffer_)) {
+    recorder.BeginTrackingResourceState(*stats_clear_upload_buffer_,
+      graphics::ResourceStates::kCopySource, true);
   }
   if (!recorder.IsResourceTracked(*output_texture_)) {
     recorder.BeginTrackingResourceState(
@@ -152,13 +211,23 @@ auto VirtualShadowAtlasDebugPass::DoPrepareResources(
       *tile_state_buffer_, graphics::ResourceStates::kShaderResource);
   }
   recorder.RequireResourceState(
+    *stats_buffer_, graphics::ResourceStates::kCopyDest);
+  recorder.RequireResourceState(
+    *stats_clear_upload_buffer_, graphics::ResourceStates::kCopySource);
+  recorder.RequireResourceState(
     *output_texture_, graphics::ResourceStates::kUnorderedAccess);
+  recorder.FlushBarriers();
+  recorder.CopyBuffer(*stats_buffer_, 0U, *stats_clear_upload_buffer_, 0U,
+    kStatsWordCount * sizeof(std::uint32_t));
+  recorder.RequireResourceState(
+    *stats_buffer_, graphics::ResourceStates::kUnorderedAccess);
   recorder.FlushBarriers();
 
   const VirtualShadowAtlasDebugPassConstants pass_constants {
     .source_texture_index = source_texture_index,
     .tile_state_buffer_index = tile_state_buffer_index,
     .output_texture_uav_index = output_texture_uav_index,
+    .stats_uav_index = stats_uav_index_,
     .atlas_dimensions = glm::uvec2(source_texture->GetDescriptor().width,
       source_texture->GetDescriptor().height),
     .atlas_tiles_per_axis = metadata.page_size_texels > 0U
@@ -191,6 +260,28 @@ auto VirtualShadowAtlasDebugPass::DoExecute(
     = (std::max(1U, active_height_) + kDispatchGroupSize - 1U)
     / kDispatchGroupSize;
   recorder.Dispatch(group_count_x, group_count_y, 1U);
+
+  if (Context().frame_slot != frame::kInvalidSlot) {
+    auto& readback = stats_readbacks_[Context().frame_slot.get()];
+    if (stats_buffer_ != nullptr && readback.buffer != nullptr) {
+      if (!recorder.IsResourceTracked(*readback.buffer)) {
+        recorder.BeginTrackingResourceState(
+          *readback.buffer, graphics::ResourceStates::kCopyDest, false);
+      }
+      recorder.RequireResourceState(
+        *stats_buffer_, graphics::ResourceStates::kCopySource);
+      recorder.RequireResourceState(
+        *readback.buffer, graphics::ResourceStates::kCopyDest);
+      recorder.FlushBarriers();
+      recorder.CopyBuffer(*readback.buffer, 0U, *stats_buffer_, 0U,
+        kStatsWordCount * sizeof(std::uint32_t));
+      readback.source_frame = Context().frame_sequence;
+      readback.view_id = Context().current_view.view_id;
+      readback.atlas_width = active_width_;
+      readback.atlas_height = active_height_;
+      readback.pending = true;
+    }
+  }
 
   recorder.RequireResourceState(
     *output_texture_, graphics::ResourceStates::kShaderResource);
@@ -484,6 +575,157 @@ auto VirtualShadowAtlasDebugPass::EnsureOutputTextureUav()
   output_texture_uav_view_ = uav_view;
   output_texture_uav_handle_ = std::move(uav_handle);
   return output_texture_uav_index_;
+}
+
+auto VirtualShadowAtlasDebugPass::EnsureStatsBuffer() -> void
+{
+  if (stats_buffer_ != nullptr && stats_uav_index_.IsValid()) {
+    return;
+  }
+
+  auto& allocator = gfx_->GetDescriptorAllocator();
+  auto& registry = gfx_->GetResourceRegistry();
+
+  const graphics::BufferDesc desc {
+    .size_bytes = kStatsWordCount * sizeof(std::uint32_t),
+    .usage = graphics::BufferUsage::kStorage,
+    .memory = graphics::BufferMemory::kDeviceLocal,
+    .debug_name = "VirtualShadowAtlasDebugPass.Stats",
+  };
+  stats_buffer_ = gfx_->CreateBuffer(desc);
+  if (!stats_buffer_) {
+    throw std::runtime_error(
+      "VirtualShadowAtlasDebugPass: failed to create stats buffer");
+  }
+  registry.Register(stats_buffer_);
+
+  auto uav_handle
+    = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_UAV,
+      graphics::DescriptorVisibility::kShaderVisible);
+  if (!uav_handle.IsValid()) {
+    throw std::runtime_error(
+      "VirtualShadowAtlasDebugPass: failed to allocate stats UAV");
+  }
+
+  graphics::BufferViewDescription uav_desc {};
+  uav_desc.view_type = graphics::ResourceViewType::kStructuredBuffer_UAV;
+  uav_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
+  uav_desc.range = { 0U, desc.size_bytes };
+  uav_desc.stride = sizeof(std::uint32_t);
+
+  stats_uav_index_ = allocator.GetShaderVisibleIndex(uav_handle);
+  stats_uav_view_
+    = registry.RegisterView(*stats_buffer_, std::move(uav_handle), uav_desc);
+  if (!stats_uav_view_->IsValid()) {
+    throw std::runtime_error(
+      "VirtualShadowAtlasDebugPass: failed to create stats UAV");
+  }
+}
+
+auto VirtualShadowAtlasDebugPass::EnsureStatsClearUploadBuffer() -> void
+{
+  if (stats_clear_upload_buffer_ != nullptr
+    && stats_clear_upload_mapped_ptr_ != nullptr) {
+    return;
+  }
+
+  const graphics::BufferDesc desc {
+    .size_bytes = kStatsWordCount * sizeof(std::uint32_t),
+    .usage = graphics::BufferUsage::kNone,
+    .memory = graphics::BufferMemory::kUpload,
+    .debug_name = "VirtualShadowAtlasDebugPass.StatsClearUpload",
+  };
+  stats_clear_upload_buffer_ = gfx_->CreateBuffer(desc);
+  if (!stats_clear_upload_buffer_) {
+    throw std::runtime_error(
+      "VirtualShadowAtlasDebugPass: failed to create stats clear upload buffer");
+  }
+
+  stats_clear_upload_mapped_ptr_
+    = stats_clear_upload_buffer_->Map(0U, desc.size_bytes);
+  if (stats_clear_upload_mapped_ptr_ == nullptr) {
+    throw std::runtime_error(
+      "VirtualShadowAtlasDebugPass: failed to map stats clear upload buffer");
+  }
+
+  auto* clear_words
+    = static_cast<std::uint32_t*>(stats_clear_upload_mapped_ptr_);
+  clear_words[0] = 0U;
+  clear_words[1] = 0U;
+  clear_words[2] = 0xFFFFFFFFU;
+  clear_words[3] = 0U;
+  clear_words[4] = 0U;
+}
+
+auto VirtualShadowAtlasDebugPass::EnsureStatsReadbackBuffer(
+  const frame::Slot slot) -> void
+{
+  auto& readback = stats_readbacks_[slot.get()];
+  if (readback.buffer != nullptr && readback.mapped_words != nullptr) {
+    return;
+  }
+
+  const graphics::BufferDesc desc {
+    .size_bytes = kStatsWordCount * sizeof(std::uint32_t),
+    .usage = graphics::BufferUsage::kNone,
+    .memory = graphics::BufferMemory::kReadBack,
+    .debug_name = "VirtualShadowAtlasDebugPass.StatsReadback",
+  };
+  readback.buffer = gfx_->CreateBuffer(desc);
+  if (!readback.buffer) {
+    throw std::runtime_error(
+      "VirtualShadowAtlasDebugPass: failed to create stats readback buffer");
+  }
+
+  readback.mapped_words
+    = static_cast<std::uint32_t*>(readback.buffer->Map(0U, desc.size_bytes));
+  if (readback.mapped_words == nullptr) {
+    throw std::runtime_error(
+      "VirtualShadowAtlasDebugPass: failed to map stats readback buffer");
+  }
+  std::memset(readback.mapped_words, 0, desc.size_bytes);
+}
+
+auto VirtualShadowAtlasDebugPass::ProcessCompletedStats(const frame::Slot slot)
+  -> void
+{
+  auto& readback = stats_readbacks_[slot.get()];
+  if (!readback.pending || readback.mapped_words == nullptr) {
+    return;
+  }
+  readback.pending = false;
+
+  const auto written_pixels = readback.mapped_words[0];
+  const auto nonclear_pixels = readback.mapped_words[1];
+  const auto min_depth_bits = readback.mapped_words[2];
+  const auto max_depth_bits = readback.mapped_words[3];
+  const auto nonzero_tile_state_pixels = readback.mapped_words[4];
+  const auto atlas_pixels = readback.atlas_width * readback.atlas_height;
+  const auto min_depth = std::bit_cast<float>(
+    written_pixels > 0U ? min_depth_bits : 0x3F800000U);
+  const auto max_depth = std::bit_cast<float>(max_depth_bits);
+
+  LOG_F(INFO,
+    "VirtualShadowAtlasDebugPass: frame={} view={} atlas_stats "
+    "(pixels={} written={} nonclear={} min_depth={:.6f} max_depth={:.6f} "
+    "nonzero_tile_state_pixels={})",
+    readback.source_frame.get(), readback.view_id.get(), atlas_pixels,
+    written_pixels, nonclear_pixels, min_depth, max_depth,
+    nonzero_tile_state_pixels);
+
+  if (written_pixels != atlas_pixels) {
+    LOG_F(ERROR,
+      "VirtualShadowAtlasDebugPass: frame={} view={} atlas debug dispatch "
+      "did not cover the full texture (written={} pixels={})",
+      readback.source_frame.get(), readback.view_id.get(), written_pixels,
+      atlas_pixels);
+  }
+  if (written_pixels > 0U && nonclear_pixels == 0U) {
+    LOG_F(WARNING,
+      "VirtualShadowAtlasDebugPass: frame={} view={} source atlas contains no "
+      "non-clear depth texels even though the debug pass executed",
+      readback.source_frame.get(), readback.view_id.get());
+  }
 }
 
 auto VirtualShadowAtlasDebugPass::ResolveSourceSrvFormat(const Format format)

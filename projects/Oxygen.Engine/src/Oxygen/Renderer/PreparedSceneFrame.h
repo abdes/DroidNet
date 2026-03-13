@@ -57,6 +57,8 @@ struct PreparedSceneFrame {
     draw_bounding_spheres; // one per draw metadata record
   std::span<const glm::vec4>
     shadow_caster_bounding_spheres; // xyz=center, w=radius
+  std::span<const std::uint8_t>
+    shadow_caster_static_flags; // 1 per shadow caster bound
   std::span<const glm::vec4>
     visible_receiver_bounding_spheres; // xyz=center, w=radius
 
