@@ -2088,6 +2088,20 @@ auto Renderer::RepublishCurrentViewBindings(
           = virtual_shadow_physical_page_lists_slot,
           .sun_shadow_index = sun_shadow_index,
         };
+        LOG_F(INFO,
+          "Renderer: frame={} view={} shadow publication shadow_meta={} "
+          "dir_meta={} dir_tex={} vsm_meta={} vsm_table={} vsm_flags={} "
+          "vsm_pool={} vsm_phys_meta={} vsm_phys_lists={} sun_shadow_index={}",
+          render_context.frame_sequence.get(), view_id.get(),
+          shadow_instance_metadata_slot.get(),
+          directional_shadow_metadata_slot.get(),
+          directional_shadow_texture_slot.get(),
+          virtual_directional_shadow_metadata_slot.get(),
+          virtual_shadow_page_table_slot.get(),
+          virtual_shadow_page_flags_slot.get(),
+          virtual_shadow_physical_pool_slot.get(),
+          virtual_shadow_physical_page_metadata_slot.get(),
+          virtual_shadow_physical_page_lists_slot.get(), sun_shadow_index);
         view_bindings.shadow_frame_slot
           = shadow_frame_bindings_publisher_->Publish(view_id, shadow_bindings);
       } else {

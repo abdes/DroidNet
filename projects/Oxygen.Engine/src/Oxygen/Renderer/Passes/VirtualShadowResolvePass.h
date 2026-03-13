@@ -12,6 +12,7 @@
 #include <string>
 #include <unordered_map>
 
+#include <Oxygen/Renderer/Types/VirtualShadowRenderPlan.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
@@ -71,6 +72,20 @@ private:
     std::uint32_t atlas_tile_y { 0U };
   };
 
+  struct alignas(16) PackedInt4 {
+    std::int32_t x { 0 };
+    std::int32_t y { 0 };
+    std::int32_t z { 0 };
+    std::int32_t w { 0 };
+  };
+
+  struct alignas(16) PackedFloat4 {
+    float x { 0.0F };
+    float y { 0.0F };
+    float z { 0.0F };
+    float w { 0.0F };
+  };
+
   struct ViewScheduleResources {
     std::shared_ptr<graphics::Buffer> schedule_buffer;
     ShaderVisibleIndex schedule_srv { kInvalidShaderVisibleIndex };
@@ -123,6 +138,16 @@ private:
   std::array<std::int32_t, kMaxSupportedClipLevels>
     active_clip_grid_origin_y_ {};
   std::uint32_t active_schedule_capacity_ { 0U };
+  std::uint32_t active_pages_per_level_ { 0U };
+  std::uint32_t active_requested_page_list_count_ { 0U };
+  std::uint32_t active_dirty_page_list_count_ { 0U };
+  std::uint32_t active_clean_page_list_count_ { 0U };
+  std::uint32_t active_total_page_management_list_count_ { 0U };
+  renderer::VirtualShadowPageManagementBindings
+    active_page_management_bindings_ {};
+  std::array<float, kMaxSupportedClipLevels> active_clip_origin_x_ {};
+  std::array<float, kMaxSupportedClipLevels> active_clip_origin_y_ {};
+  std::array<float, kMaxSupportedClipLevels> active_clip_page_world_ {};
   bool active_dispatch_ { false };
 
   OXGN_RNDR_API auto EnsurePassConstantsBuffer() -> void;

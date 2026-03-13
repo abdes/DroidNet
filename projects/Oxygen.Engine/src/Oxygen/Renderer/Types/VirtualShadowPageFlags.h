@@ -16,6 +16,11 @@ enum class VirtualShadowPageFlag : std::uint32_t {
   kStaticUncached = (1U << 2U),
   kDetailGeometry = (1U << 3U),
   kUsedThisFrame = (1U << 4U),
+  kHierarchyAllocatedDescendant = (1U << 5U),
+  kHierarchyDynamicUncachedDescendant = (1U << 6U),
+  kHierarchyStaticUncachedDescendant = (1U << 7U),
+  kHierarchyDetailDescendant = (1U << 8U),
+  kHierarchyUsedThisFrameDescendant = (1U << 9U),
 };
 
 [[nodiscard]] constexpr auto ToMask(const VirtualShadowPageFlag flag)
@@ -40,6 +45,57 @@ enum class VirtualShadowPageFlag : std::uint32_t {
   const std::uint32_t page_flags, const VirtualShadowPageFlag flag) -> bool
 {
   return (page_flags & ToMask(flag)) != 0U;
+}
+
+[[nodiscard]] constexpr auto MakeVirtualShadowHierarchyFlags(
+  const std::uint32_t page_flags) -> std::uint32_t
+{
+  const bool any_allocated
+    = HasVirtualShadowPageFlag(page_flags, VirtualShadowPageFlag::kAllocated)
+    || HasVirtualShadowPageFlag(page_flags,
+      VirtualShadowPageFlag::kHierarchyAllocatedDescendant);
+  const bool any_dynamic_uncached = HasVirtualShadowPageFlag(
+                                      page_flags,
+                                      VirtualShadowPageFlag::kDynamicUncached)
+    || HasVirtualShadowPageFlag(page_flags,
+      VirtualShadowPageFlag::kHierarchyDynamicUncachedDescendant);
+  const bool any_static_uncached = HasVirtualShadowPageFlag(
+                                     page_flags,
+                                     VirtualShadowPageFlag::kStaticUncached)
+    || HasVirtualShadowPageFlag(page_flags,
+      VirtualShadowPageFlag::kHierarchyStaticUncachedDescendant);
+  const bool any_detail = HasVirtualShadowPageFlag(
+                            page_flags, VirtualShadowPageFlag::kDetailGeometry)
+    || HasVirtualShadowPageFlag(
+      page_flags, VirtualShadowPageFlag::kHierarchyDetailDescendant);
+  const bool any_used = HasVirtualShadowPageFlag(
+                          page_flags, VirtualShadowPageFlag::kUsedThisFrame)
+    || HasVirtualShadowPageFlag(
+      page_flags, VirtualShadowPageFlag::kHierarchyUsedThisFrameDescendant);
+
+  return (any_allocated
+            ? ToMask(VirtualShadowPageFlag::kHierarchyAllocatedDescendant)
+            : 0U)
+    | (any_dynamic_uncached
+          ? ToMask(
+            VirtualShadowPageFlag::kHierarchyDynamicUncachedDescendant)
+          : 0U)
+    | (any_static_uncached
+          ? ToMask(VirtualShadowPageFlag::kHierarchyStaticUncachedDescendant)
+          : 0U)
+    | (any_detail
+          ? ToMask(VirtualShadowPageFlag::kHierarchyDetailDescendant)
+          : 0U)
+    | (any_used
+          ? ToMask(VirtualShadowPageFlag::kHierarchyUsedThisFrameDescendant)
+          : 0U);
+}
+
+[[nodiscard]] constexpr auto MergeVirtualShadowHierarchyFlags(
+  const std::uint32_t base_flags, const std::uint32_t child_page_flags)
+  -> std::uint32_t
+{
+  return base_flags | MakeVirtualShadowHierarchyFlags(child_page_flags);
 }
 
 } // namespace oxygen::renderer

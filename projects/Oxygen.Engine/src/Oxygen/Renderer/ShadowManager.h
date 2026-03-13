@@ -93,6 +93,10 @@ public:
   OXGN_RNDR_API auto MarkVirtualRenderPlanExecuted(ViewId view_id) -> void;
   OXGN_RNDR_API auto PrepareVirtualPageTableResources(
     ViewId view_id, graphics::CommandRecorder& recorder) -> void;
+  OXGN_RNDR_API auto PrepareVirtualPageManagementOutputsForGpuWrite(
+    ViewId view_id, graphics::CommandRecorder& recorder) -> void;
+  OXGN_RNDR_API auto FinalizeVirtualPageManagementOutputs(
+    ViewId view_id, graphics::CommandRecorder& recorder) -> void;
   OXGN_RNDR_API auto SetPublishedViewFrameBindingsSlot(
     ViewId view_id, engine::BindlessViewFrameBindingsSlot slot) -> void;
   OXGN_RNDR_API auto SubmitVirtualRequestFeedback(
@@ -116,6 +120,9 @@ public:
     ViewId view_id) const noexcept -> const ShadowViewIntrospection*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetVirtualViewIntrospection(
     ViewId view_id) const noexcept -> const VirtualShadowViewIntrospection*;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetVirtualPageManagementBindings(
+    ViewId view_id) const noexcept
+    -> const VirtualShadowPageManagementBindings*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetVirtualDirectionalMetadata(
     ViewId view_id) const noexcept
     -> const engine::DirectionalVirtualShadowMetadata*;

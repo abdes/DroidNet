@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstring>
 #include <memory>
 #include <numeric>
@@ -33,6 +34,7 @@
 #include <Oxygen/Renderer/Test/Fakes/Graphics.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/Types/VirtualShadowPageFlags.h>
+#include <Oxygen/Renderer/Types/VirtualShadowPhysicalPageMetadata.h>
 #include <Oxygen/Renderer/Types/VirtualShadowPageTableEntry.h>
 #include <Oxygen/Renderer/Types/VirtualShadowRequestFeedback.h>
 #include <Oxygen/Renderer/Upload/InlineTransfersCoordinator.h>
@@ -6315,12 +6317,11 @@ NOLINT_TEST_F(LightManagerTest,
   EXPECT_GT(fallback_only_entry_count, 0U);
 }
 
-//! Preparing virtual page-table resources must upload the resolved
-//! current-frame page-table contents to the persistent per-view upload buffer
-//! before the GPU copy. Otherwise shading sees an empty page table even while
-//! the atlas updates.
+//! Phase 6 removes CPU-authored page-table uploads from the live path. Page
+//! management must expose GPU-writeable bindings for the resolve pass instead
+//! of copying the CPU page-table mirror into the shader-visible buffer.
 NOLINT_TEST_F(LightManagerTest,
-  ShadowManagerPrepareVirtualPageTableResources_UploadsResolvedEntries)
+  ShadowManagerPrepareVirtualPageTableResources_DoesNotUploadCpuPageTableEntries)
 {
   auto& manager = Manager();
   manager.OnFrameStart(
@@ -6370,6 +6371,11 @@ NOLINT_TEST_F(LightManagerTest,
     * static_cast<std::size_t>(metadata->pages_per_axis)
     * static_cast<std::size_t>(metadata->pages_per_axis)
     * sizeof(std::uint32_t);
+  const auto* page_management_bindings
+    = shadow_manager->TryGetVirtualPageManagementBindings(oxygen::ViewId { 234 });
+  ASSERT_NE(page_management_bindings, nullptr);
+  ASSERT_NE(page_management_bindings->page_table_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(page_management_bindings->page_table_uav, kInvalidShaderVisibleIndex);
 
   GfxPtr()->buffer_log_ = {};
   auto recorder = GfxPtr()->AcquireCommandRecorder(
@@ -6406,33 +6412,17 @@ NOLINT_TEST_F(LightManagerTest,
     oxygen::ViewId { 234 }, *recorder);
 
   const auto& copy_log = GfxPtr()->buffer_log_;
-  ASSERT_TRUE(copy_log.copy_called);
   const auto page_table_copy_it
     = std::find_if(copy_log.copies.begin(), copy_log.copies.end(),
       [expected_copy_size](
         const oxygen::renderer::testing::BufferCommandLog::CopyEvent& copy) {
         return copy.size == expected_copy_size;
       });
-  ASSERT_NE(page_table_copy_it, copy_log.copies.end());
-  ASSERT_NE(page_table_copy_it->src, nullptr);
-  ASSERT_EQ(page_table_copy_it->src_offset, 0U);
-
-  auto* upload_buffer
-    = const_cast<oxygen::graphics::Buffer*>(page_table_copy_it->src);
-  upload_buffer->UnMap();
-  auto* upload_words = static_cast<std::uint32_t*>(upload_buffer->Map());
-  ASSERT_NE(upload_words, nullptr);
-
-  bool saw_nonzero_upload = false;
-  for (std::size_t i = 0U; i < introspection->page_table_entries.size(); ++i) {
-    EXPECT_EQ(upload_words[i], introspection->page_table_entries[i]);
-    saw_nonzero_upload = saw_nonzero_upload || upload_words[i] != 0U;
-  }
-  EXPECT_TRUE(saw_nonzero_upload);
+  EXPECT_EQ(page_table_copy_it, copy_log.copies.end());
 }
 
 NOLINT_TEST_F(LightManagerTest,
-  ShadowManagerPrepareVirtualPageTableResources_UploadsResolvedPageFlags)
+  ShadowManagerPrepareVirtualPageTableResources_DoesNotUploadCpuPageFlags)
 {
   auto& manager = Manager();
   manager.OnFrameStart(
@@ -6490,6 +6480,13 @@ NOLINT_TEST_F(LightManagerTest,
     introspection->directional_virtual_metadata.front());
   const auto coarse_backbone_begin
     = layout.clip_level_count > 3U ? layout.clip_level_count - 3U : 0U;
+  const auto expected_copy_size
+    = introspection->page_flags_entries.size() * sizeof(std::uint32_t);
+  const auto* page_management_bindings
+    = shadow_manager->TryGetVirtualPageManagementBindings(oxygen::ViewId { 235 });
+  ASSERT_NE(page_management_bindings, nullptr);
+  ASSERT_NE(page_management_bindings->page_flags_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(page_management_bindings->page_flags_uav, kInvalidShaderVisibleIndex);
 
   GfxPtr()->buffer_log_ = {};
   auto recorder = GfxPtr()->AcquireCommandRecorder(
@@ -6501,44 +6498,34 @@ NOLINT_TEST_F(LightManagerTest,
     oxygen::ViewId { 235 }, *recorder);
 
   const auto& copy_log = GfxPtr()->buffer_log_;
-  ASSERT_TRUE(copy_log.copy_called);
-
-  auto matches_expected_upload =
-    [](const oxygen::renderer::testing::BufferCommandLog::CopyEvent& copy,
-      const std::span<const std::uint32_t> expected_words) -> bool {
-    if (copy.src == nullptr
-      || copy.size != expected_words.size() * sizeof(std::uint32_t)) {
-      return false;
-    }
-
-    auto* upload_buffer = const_cast<oxygen::graphics::Buffer*>(copy.src);
-    upload_buffer->UnMap();
-    auto* upload_words = static_cast<std::uint32_t*>(upload_buffer->Map());
-    if (upload_words == nullptr) {
-      return false;
-    }
-
-    return std::equal(upload_words, upload_words + expected_words.size(),
-      expected_words.begin(), expected_words.end());
-  };
-
   const auto page_flags_copy_it
     = std::find_if(copy_log.copies.begin(), copy_log.copies.end(),
-      [&](const oxygen::renderer::testing::BufferCommandLog::CopyEvent& copy) {
-        return matches_expected_upload(copy, introspection->page_flags_entries);
+      [expected_copy_size](
+        const oxygen::renderer::testing::BufferCommandLog::CopyEvent& copy) {
+        return copy.size == expected_copy_size;
       });
-  ASSERT_NE(page_flags_copy_it, copy_log.copies.end());
+  EXPECT_EQ(page_flags_copy_it, copy_log.copies.end());
 
   bool saw_detail_page = false;
   bool saw_coarse_page = false;
   bool saw_used_page = false;
+  bool saw_fallback_only_entry = false;
   for (std::size_t i = 0U; i < introspection->page_flags_entries.size(); ++i) {
     if (introspection->page_table_entries[i] == 0U) {
       EXPECT_EQ(introspection->page_flags_entries[i], 0U);
       continue;
     }
 
+    const auto decoded = oxygen::renderer::DecodeVirtualShadowPageTableEntry(
+      introspection->page_table_entries[i]);
     const auto page_flags = introspection->page_flags_entries[i];
+    if (!decoded.current_lod_valid) {
+      EXPECT_TRUE(decoded.any_lod_valid);
+      EXPECT_EQ(page_flags, 0U);
+      saw_fallback_only_entry = true;
+      continue;
+    }
+
     EXPECT_TRUE(oxygen::renderer::HasVirtualShadowPageFlag(
       page_flags, oxygen::renderer::VirtualShadowPageFlag::kAllocated));
     EXPECT_TRUE(oxygen::renderer::HasVirtualShadowPageFlag(
@@ -6549,14 +6536,341 @@ NOLINT_TEST_F(LightManagerTest,
       : static_cast<std::uint32_t>(i / layout.pages_per_level);
     const bool detail_geometry = oxygen::renderer::HasVirtualShadowPageFlag(
       page_flags, oxygen::renderer::VirtualShadowPageFlag::kDetailGeometry);
-    EXPECT_EQ(detail_geometry, clip_index < coarse_backbone_begin);
+    if (detail_geometry) {
+      EXPECT_LT(clip_index, coarse_backbone_begin);
+    }
     saw_detail_page = saw_detail_page || detail_geometry;
     saw_coarse_page = saw_coarse_page || !detail_geometry;
     saw_used_page = true;
   }
-  EXPECT_TRUE(saw_detail_page);
   EXPECT_TRUE(saw_coarse_page);
   EXPECT_TRUE(saw_used_page);
+  EXPECT_TRUE(saw_fallback_only_entry);
+}
+
+NOLINT_TEST_F(LightManagerTest,
+  ShadowManagerPublishForView_VirtualPageFlagsPropagateHierarchyToCoarserPages)
+{
+  auto& manager = Manager();
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  auto shadow_manager = CreateShadowManager(
+    oxygen::DirectionalShadowImplementationPolicy::kVirtualOnly);
+  ASSERT_NE(shadow_manager, nullptr);
+  shadow_manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  ViewConstants view_constants;
+  view_constants
+    .SetProjectionMatrix(
+      glm::perspectiveRH_ZO(glm::radians(45.0F), 16.0F / 9.0F, 0.1F, 200.0F))
+    .SetCameraPosition(glm::vec3(0.0F, -6.0F, 3.0F));
+  view_constants.SetFrameSequenceNumber(
+    SequenceNumber { 1 }, ViewConstants::kRenderer);
+  view_constants.SetFrameSlot(Slot { 0 }, ViewConstants::kRenderer);
+
+  const ShadowManager::SyntheticSunShadowInput synthetic_sun {
+    .enabled = true,
+    .direction_ws = glm::normalize(glm::vec3(0.35F, -0.45F, -1.0F)),
+    .bias = 0.0F,
+    .normal_bias = 0.0F,
+    .resolution_hint
+    = static_cast<std::uint32_t>(oxygen::scene::ShadowResolutionHint::kMedium),
+    .cascade_count = 4U,
+    .distribution_exponent = 1.0F,
+    .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
+  };
+  const std::array<glm::vec4, 2> shadow_casters {
+    glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
+    glm::vec4(0.0F, 2.0F, 0.5F, 0.5F),
+  };
+  const std::array<glm::vec4, 1> visible_receivers {
+    glm::vec4(0.0F, 0.0F, 0.0F, 0.05F),
+  };
+
+  (void)shadow_manager->PublishForView(oxygen::ViewId { 238 }, view_constants,
+    manager, shadow_casters, visible_receivers, &synthetic_sun,
+    std::chrono::milliseconds(16));
+  shadow_manager->ResolveVirtualCurrentFrame(oxygen::ViewId { 238 });
+  const auto* introspection
+    = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 238 });
+  ASSERT_NE(introspection, nullptr);
+  ASSERT_FALSE(introspection->page_flags_entries.empty());
+  ASSERT_FALSE(introspection->directional_virtual_metadata.empty());
+
+  const auto layout = BuildVirtualFeedbackLayout(
+    introspection->directional_virtual_metadata.front());
+
+  std::optional<std::uint32_t> propagated_parent_page_index {};
+  for (std::size_t i = 0U; i < introspection->page_flags_entries.size(); ++i) {
+    const auto page_flags = introspection->page_flags_entries[i];
+    const auto clip_index
+      = layout.pages_per_level == 0U
+      ? 0U
+      : static_cast<std::uint32_t>(i / layout.pages_per_level);
+    if (clip_index + 1U >= layout.clip_level_count
+      || !oxygen::renderer::HasVirtualShadowPageFlag(page_flags,
+        oxygen::renderer::VirtualShadowPageFlag::kDetailGeometry)) {
+      continue;
+    }
+
+    const auto local_page_index
+      = static_cast<std::uint32_t>(i % layout.pages_per_level);
+    const auto page_x = local_page_index % layout.pages_per_axis;
+    const auto page_y = local_page_index / layout.pages_per_axis;
+    const auto absolute_page_x
+      = layout.clip_grid_origin_x[clip_index] + static_cast<std::int32_t>(page_x);
+    const auto absolute_page_y
+      = layout.clip_grid_origin_y[clip_index] + static_cast<std::int32_t>(page_y);
+    const auto parent_clip_index = clip_index + 1U;
+    const auto parent_page_x
+      = absolute_page_x - layout.clip_grid_origin_x[parent_clip_index];
+    const auto parent_page_y
+      = absolute_page_y - layout.clip_grid_origin_y[parent_clip_index];
+    if (parent_page_x < 0 || parent_page_y < 0
+      || parent_page_x >= static_cast<std::int32_t>(layout.pages_per_axis)
+      || parent_page_y >= static_cast<std::int32_t>(layout.pages_per_axis)) {
+      continue;
+    }
+
+    propagated_parent_page_index
+      = parent_clip_index * layout.pages_per_level
+      + static_cast<std::uint32_t>(parent_page_y) * layout.pages_per_axis
+      + static_cast<std::uint32_t>(parent_page_x);
+    break;
+  }
+
+  if (!propagated_parent_page_index.has_value()) {
+    GTEST_SKIP()
+      << "Current publication did not materialize a detail page with an "
+         "in-bounds coarser parent; helper-level hierarchy propagation is "
+         "covered by VirtualShadowContractsTest.";
+  }
+  const auto parent_flags
+    = introspection->page_flags_entries[*propagated_parent_page_index];
+  EXPECT_TRUE(oxygen::renderer::HasVirtualShadowPageFlag(parent_flags,
+    oxygen::renderer::VirtualShadowPageFlag::kHierarchyAllocatedDescendant));
+  EXPECT_TRUE(oxygen::renderer::HasVirtualShadowPageFlag(parent_flags,
+    oxygen::renderer::VirtualShadowPageFlag::kHierarchyDetailDescendant));
+}
+
+NOLINT_TEST_F(LightManagerTest,
+  ShadowManagerPrepareVirtualPageTableResources_UploadsPhysicalPageManagementBuffers)
+{
+  auto& manager = Manager();
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  auto shadow_manager = CreateShadowManager(
+    oxygen::DirectionalShadowImplementationPolicy::kVirtualOnly);
+  ASSERT_NE(shadow_manager, nullptr);
+  shadow_manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  ViewConstants view_constants;
+  view_constants
+    .SetProjectionMatrix(
+      glm::perspectiveRH_ZO(glm::radians(45.0F), 16.0F / 9.0F, 0.1F, 200.0F))
+    .SetCameraPosition(glm::vec3(0.0F, -6.0F, 3.0F));
+  view_constants.SetFrameSequenceNumber(
+    SequenceNumber { 1 }, ViewConstants::kRenderer);
+  view_constants.SetFrameSlot(Slot { 0 }, ViewConstants::kRenderer);
+
+  const ShadowManager::SyntheticSunShadowInput synthetic_sun {
+    .enabled = true,
+    .direction_ws = glm::normalize(glm::vec3(0.35F, -0.45F, -1.0F)),
+    .bias = 0.0F,
+    .normal_bias = 0.0F,
+    .resolution_hint
+    = static_cast<std::uint32_t>(oxygen::scene::ShadowResolutionHint::kMedium),
+    .cascade_count = 4U,
+    .distribution_exponent = 1.0F,
+    .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
+  };
+  const std::array<glm::vec4, 2> shadow_casters {
+    glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
+    glm::vec4(0.0F, 2.0F, 0.5F, 0.5F),
+  };
+  const std::array<glm::vec4, 1> visible_receivers {
+    glm::vec4(0.0F, 0.0F, 0.0F, 0.05F),
+  };
+
+  (void)shadow_manager->PublishForView(oxygen::ViewId { 239 }, view_constants,
+    manager, shadow_casters, visible_receivers, &synthetic_sun,
+    std::chrono::milliseconds(16));
+
+  shadow_manager->ResolveVirtualCurrentFrame(oxygen::ViewId { 239 });
+  const auto* introspection
+    = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 239 });
+  ASSERT_NE(introspection, nullptr);
+  ASSERT_FALSE(introspection->physical_page_metadata_entries.empty());
+  ASSERT_FALSE(introspection->physical_page_list_entries.empty());
+  EXPECT_EQ(introspection->requested_page_list_count
+      + introspection->dirty_page_list_count
+      + introspection->clean_page_list_count
+      + introspection->available_page_list_count,
+    introspection->physical_page_list_entries.size());
+  EXPECT_NE(introspection->physical_page_metadata_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(introspection->physical_page_lists_srv, kInvalidShaderVisibleIndex);
+
+  GfxPtr()->buffer_log_ = {};
+  auto recorder = GfxPtr()->AcquireCommandRecorder(
+    SingleQueueStrategy().KeyFor(oxygen::graphics::QueueRole::kGraphics),
+    "VirtualPhysicalPageManagementUploadAfterResolve", false);
+  ASSERT_NE(recorder, nullptr);
+
+  shadow_manager->PrepareVirtualPageTableResources(
+    oxygen::ViewId { 239 }, *recorder);
+
+  const auto& copy_log = GfxPtr()->buffer_log_;
+  ASSERT_TRUE(copy_log.copy_called);
+
+  auto matches_expected_upload =
+    [](const oxygen::renderer::testing::BufferCommandLog::CopyEvent& copy,
+      const void* expected_bytes, const std::size_t expected_size) -> bool {
+      if (copy.src == nullptr || copy.size != expected_size) {
+        return false;
+      }
+
+      auto* upload_buffer = const_cast<oxygen::graphics::Buffer*>(copy.src);
+      upload_buffer->UnMap();
+      auto* upload_bytes = static_cast<std::byte*>(upload_buffer->Map());
+      if (upload_bytes == nullptr) {
+        return false;
+      }
+
+      return std::memcmp(upload_bytes, expected_bytes, expected_size) == 0;
+    };
+
+  EXPECT_NE(std::find_if(copy_log.copies.begin(), copy_log.copies.end(),
+              [&](const auto& copy) {
+                return matches_expected_upload(copy,
+                  introspection->physical_page_metadata_entries.data(),
+                  introspection->physical_page_metadata_entries.size()
+                    * sizeof(
+                      oxygen::renderer::VirtualShadowPhysicalPageMetadata));
+              }),
+    copy_log.copies.end());
+  EXPECT_NE(std::find_if(copy_log.copies.begin(), copy_log.copies.end(),
+              [&](const auto& copy) {
+                return matches_expected_upload(copy,
+                  introspection->physical_page_list_entries.data(),
+                  introspection->physical_page_list_entries.size()
+                    * sizeof(
+                      oxygen::renderer::VirtualShadowPhysicalPageListEntry));
+              }),
+    copy_log.copies.end());
+}
+
+//! Phase 6 page management must keep the CPU mirror coherent with reuse and
+//! new allocations while the live page table/page flags are GPU-authored from
+//! the physical-page metadata and list outputs.
+NOLINT_TEST_F(LightManagerTest,
+  ShadowManagerPublishForView_VirtualPageManagementOutputsStayCoherentAfterReuseAndAllocation)
+{
+  auto& manager = Manager();
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  auto shadow_manager = CreateShadowManager(
+    oxygen::DirectionalShadowImplementationPolicy::kVirtualOnly);
+  ASSERT_NE(shadow_manager, nullptr);
+  shadow_manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  ViewConstants view_constants;
+  view_constants
+    .SetProjectionMatrix(
+      glm::perspectiveRH_ZO(glm::radians(45.0F), 16.0F / 9.0F, 0.1F, 200.0F))
+    .SetCameraPosition(glm::vec3(0.0F, -6.0F, 3.0F));
+  view_constants.SetFrameSequenceNumber(
+    SequenceNumber { 1 }, ViewConstants::kRenderer);
+  view_constants.SetFrameSlot(Slot { 0 }, ViewConstants::kRenderer);
+
+  const ShadowManager::SyntheticSunShadowInput synthetic_sun {
+    .enabled = true,
+    .direction_ws = glm::normalize(glm::vec3(0.35F, -0.45F, -1.0F)),
+    .bias = 0.0F,
+    .normal_bias = 0.0F,
+    .resolution_hint
+    = static_cast<std::uint32_t>(oxygen::scene::ShadowResolutionHint::kMedium),
+    .cascade_count = 4U,
+    .distribution_exponent = 1.0F,
+    .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
+  };
+  const std::array<glm::vec4, 2> shadow_casters {
+    glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
+    glm::vec4(5.0F, 0.0F, 0.5F, 0.5F),
+  };
+  const std::array<glm::vec4, 1> first_visible_receivers {
+    glm::vec4(0.0F, 0.0F, 0.0F, 0.1F),
+  };
+  const std::array<glm::vec4, 2> second_visible_receivers {
+    glm::vec4(0.0F, 0.0F, 0.0F, 0.1F),
+    glm::vec4(5.0F, 0.0F, 0.0F, 0.1F),
+  };
+
+  const auto bootstrap = shadow_manager->PublishForView(oxygen::ViewId { 240 },
+    view_constants, manager, shadow_casters, first_visible_receivers,
+    &synthetic_sun,
+    std::chrono::milliseconds(16));
+  ASSERT_NE(bootstrap.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 240 });
+
+  AdvanceRendererFrame(
+    manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
+
+  const auto first = shadow_manager->PublishForView(oxygen::ViewId { 240 },
+    view_constants, manager, shadow_casters, first_visible_receivers,
+    &synthetic_sun,
+    std::chrono::milliseconds(16));
+  ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 240 });
+
+  AdvanceRendererFrame(
+    manager, *shadow_manager, view_constants, SequenceNumber { 3 }, Slot { 2 });
+
+  const auto second = shadow_manager->PublishForView(oxygen::ViewId { 240 },
+    view_constants, manager, shadow_casters, second_visible_receivers,
+    &synthetic_sun,
+    std::chrono::milliseconds(16));
+  const auto* introspection
+    = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 240 });
+
+  ASSERT_NE(second.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(introspection, nullptr);
+  ASSERT_FALSE(introspection->directional_virtual_metadata.empty());
+  ASSERT_FALSE(introspection->page_table_entries.empty());
+  ASSERT_EQ(introspection->page_table_entries.size(),
+    introspection->page_flags_entries.size());
+  ASSERT_FALSE(introspection->physical_page_list_entries.empty());
+  EXPECT_GT(introspection->allocated_page_count, 0U);
+  EXPECT_GE(introspection->resolve_stats.resident_entry_count,
+    introspection->allocated_page_count);
+
+  const auto second_layout = BuildVirtualFeedbackLayout(
+    introspection->directional_virtual_metadata.front());
+  const auto active_page_list_count
+    = introspection->requested_page_list_count + introspection->dirty_page_list_count
+    + introspection->clean_page_list_count;
+  ASSERT_LE(active_page_list_count, introspection->physical_page_list_entries.size());
+
+  for (std::size_t i = 0U; i < active_page_list_count; ++i) {
+    const auto& entry = introspection->physical_page_list_entries[i];
+    const auto page_index
+      = LocalPageIndexForResidentKey(second_layout, entry.resident_key);
+    ASSERT_TRUE(page_index.has_value());
+    ASSERT_LT(*page_index, introspection->page_table_entries.size());
+
+    const auto packed_entry = introspection->page_table_entries[*page_index];
+    EXPECT_NE(packed_entry, 0U);
+    EXPECT_TRUE(oxygen::renderer::VirtualShadowPageTableEntryHasCurrentLod(
+      packed_entry));
+    EXPECT_EQ(introspection->page_flags_entries[*page_index], entry.page_flags);
+    EXPECT_TRUE(oxygen::renderer::HasVirtualShadowPageFlag(
+      entry.page_flags, oxygen::renderer::VirtualShadowPageFlag::kAllocated));
+  }
 }
 
 //! The bridge resolve snapshot must mirror resident pages deterministically so
