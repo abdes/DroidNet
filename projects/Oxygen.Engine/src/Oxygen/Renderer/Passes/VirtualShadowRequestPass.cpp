@@ -587,6 +587,7 @@ auto VirtualShadowRequestPass::ProcessCompletedFeedback(const frame::Slot slot)
   feedback.clip_level_count = readback.clip_level_count;
   feedback.directional_address_space_hash
     = readback.directional_address_space_hash;
+  feedback.kind = renderer::VirtualShadowFeedbackKind::kDetail;
   const auto pages_per_level
     = readback.pages_per_axis * readback.pages_per_axis;
 
@@ -637,7 +638,8 @@ auto VirtualShadowRequestPass::ProcessCompletedFeedback(const frame::Slot slot)
       readback.directional_address_space_hash);
     log_state.last_feedback_count = 0U;
     log_state.had_pending_feedback = false;
-    shadow_manager->ClearVirtualRequestFeedback(readback.view_id);
+    shadow_manager->ClearVirtualRequestFeedback(
+      readback.view_id, renderer::VirtualShadowFeedbackKind::kDetail);
   }
   readback.pending_feedback = false;
 }

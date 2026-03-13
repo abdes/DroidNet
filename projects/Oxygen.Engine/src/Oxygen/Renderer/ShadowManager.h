@@ -97,7 +97,9 @@ public:
     ViewId view_id, engine::BindlessViewFrameBindingsSlot slot) -> void;
   OXGN_RNDR_API auto SubmitVirtualRequestFeedback(
     ViewId view_id, VirtualShadowRequestFeedback feedback) -> void;
-  OXGN_RNDR_API auto ClearVirtualRequestFeedback(ViewId view_id) -> void;
+  OXGN_RNDR_API auto ClearVirtualRequestFeedback(ViewId view_id,
+    VirtualShadowFeedbackKind kind = VirtualShadowFeedbackKind::kDetail)
+    -> void;
   OXGN_RNDR_API auto SubmitVirtualResolvedRasterSchedule(
     ViewId view_id, VirtualShadowResolvedRasterSchedule schedule) -> void;
   OXGN_RNDR_API auto ClearVirtualResolvedRasterSchedule(ViewId view_id) -> void;

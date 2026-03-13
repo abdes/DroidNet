@@ -13,11 +13,17 @@
 
 namespace oxygen::renderer {
 
+enum class VirtualShadowFeedbackKind : std::uint8_t {
+  kDetail,
+  kCoarse,
+};
+
 struct VirtualShadowRequestFeedback {
   frame::SequenceNumber source_frame_sequence { 0U };
   std::uint32_t pages_per_axis { 0U };
   std::uint32_t clip_level_count { 0U };
   std::uint64_t directional_address_space_hash { 0U };
+  VirtualShadowFeedbackKind kind { VirtualShadowFeedbackKind::kDetail };
   std::vector<std::uint64_t> requested_resident_keys {};
 };
 

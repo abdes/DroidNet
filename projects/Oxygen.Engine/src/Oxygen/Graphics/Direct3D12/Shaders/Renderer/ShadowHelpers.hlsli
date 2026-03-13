@@ -251,10 +251,21 @@ struct DirectionalVirtualResolvedPageLookup
     bool valid;
     uint requested_clip_index;
     uint resolved_clip_index;
+    float2 requested_page_coord;
     uint page_x;
     uint page_y;
     float2 page_coord;
     VirtualShadowPageTableEntry entry;
+};
+
+struct DirectionalVirtualClipRelativeTransform
+{
+    bool valid;
+    float2 page_coord_scale;
+    float2 page_coord_bias;
+    float depth_scale;
+    float depth_bias;
+    float lod_scale;
 };
 
 static inline DirectionalVirtualResolvedPageLookup MakeInvalidDirectionalVirtualResolvedPageLookup()
@@ -263,6 +274,7 @@ static inline DirectionalVirtualResolvedPageLookup MakeInvalidDirectionalVirtual
     lookup.valid = false;
     lookup.requested_clip_index = 0u;
     lookup.resolved_clip_index = 0u;
+    lookup.requested_page_coord = 0.0.xx;
     lookup.page_x = 0u;
     lookup.page_y = 0u;
     lookup.page_coord = 0.0.xx;
@@ -273,6 +285,67 @@ static inline DirectionalVirtualResolvedPageLookup MakeInvalidDirectionalVirtual
     lookup.entry.any_lod_valid = false;
     lookup.entry.requested_this_frame = false;
     return lookup;
+}
+
+static inline DirectionalVirtualClipRelativeTransform
+BuildDirectionalVirtualClipRelativeTransform(
+    DirectionalVirtualShadowMetadata metadata,
+    uint requested_clip_index,
+    uint resolved_clip_index)
+{
+    DirectionalVirtualClipRelativeTransform transform;
+    transform.valid = false;
+    transform.page_coord_scale = 1.0.xx;
+    transform.page_coord_bias = 0.0.xx;
+    transform.depth_scale = 1.0;
+    transform.depth_bias = 0.0;
+    transform.lod_scale = 1.0;
+
+    if (requested_clip_index >= metadata.clip_level_count
+        || resolved_clip_index >= metadata.clip_level_count) {
+        return transform;
+    }
+
+    const DirectionalVirtualClipMetadata requested_clip =
+        metadata.clip_metadata[requested_clip_index];
+    const DirectionalVirtualClipMetadata resolved_clip =
+        metadata.clip_metadata[resolved_clip_index];
+    const float requested_page_world =
+        max(requested_clip.origin_page_scale.z, 1.0e-4);
+    const float resolved_page_world =
+        max(resolved_clip.origin_page_scale.z, 1.0e-4);
+    transform.valid = true;
+    transform.page_coord_scale =
+        (requested_page_world / resolved_page_world).xx;
+    transform.page_coord_bias =
+        (requested_clip.origin_page_scale.xy - resolved_clip.origin_page_scale.xy)
+        / resolved_page_world;
+
+    const float requested_depth_scale = requested_clip.origin_page_scale.w;
+    const float resolved_depth_scale = resolved_clip.origin_page_scale.w;
+    if (abs(requested_depth_scale) > 1.0e-8
+        && abs(resolved_depth_scale) > 1.0e-8) {
+        transform.depth_scale = resolved_depth_scale / requested_depth_scale;
+        transform.depth_bias = resolved_clip.bias_reserved.x
+            - requested_clip.bias_reserved.x * transform.depth_scale;
+    }
+    transform.lod_scale = resolved_page_world / requested_page_world;
+    return transform;
+}
+
+static inline float2 TransformDirectionalRequestedPageCoordToResolvedClip(
+    float2 requested_page_coord,
+    DirectionalVirtualClipRelativeTransform transform)
+{
+    return requested_page_coord * transform.page_coord_scale
+        + transform.page_coord_bias;
+}
+
+static inline float RemapDirectionalRequestedDepthToResolvedClip(
+    float requested_depth,
+    DirectionalVirtualClipRelativeTransform transform)
+{
+    return requested_depth * transform.depth_scale + transform.depth_bias;
 }
 
 static inline bool TryResolveDirectionalVirtualPageLookup(
@@ -328,6 +401,22 @@ static inline bool TryResolveDirectionalVirtualPageLookup(
     lookup.valid = true;
     lookup.requested_clip_index = requested_clip_index;
     lookup.resolved_clip_index = resolved_clip_index;
+    lookup.requested_page_coord = requested_page_coord;
+    const DirectionalVirtualClipRelativeTransform transform =
+        BuildDirectionalVirtualClipRelativeTransform(
+            metadata, requested_clip_index, resolved_clip_index);
+    if (!transform.valid) {
+        return false;
+    }
+
+    resolved_page_coord = TransformDirectionalRequestedPageCoordToResolvedClip(
+        requested_page_coord, transform);
+    if (resolved_page_coord.x < 0.0 || resolved_page_coord.y < 0.0
+        || resolved_page_coord.x >= metadata.pages_per_axis
+        || resolved_page_coord.y >= metadata.pages_per_axis) {
+        return false;
+    }
+
     lookup.page_x = min((uint)resolved_page_coord.x, metadata.pages_per_axis - 1u);
     lookup.page_y = min((uint)resolved_page_coord.y, metadata.pages_per_axis - 1u);
     lookup.page_coord = resolved_page_coord;
@@ -360,6 +449,7 @@ static inline bool ResolveDirectionalVirtualAtlasUv(
     uint clip_index,
     float2 light_space_xy,
     float2 pool_size,
+    uint sampling_filter_radius_texels,
     out float2 atlas_uv)
 {
     atlas_uv = 0.0.xx;
@@ -381,10 +471,8 @@ static inline bool ResolveDirectionalVirtualAtlasUv(
     const uint resolved_clip_index = lookup.resolved_clip_index;
     const uint tile_x = lookup.entry.tile_x;
     const uint tile_y = lookup.entry.tile_y;
-    const uint filter_radius_texels =
-        SelectDirectionalVirtualFilterRadiusTexels(metadata, resolved_clip_index);
     const float guard_texels =
-        min((float)kVirtualShadowMaxFilterGuardTexels, (float)filter_radius_texels);
+        min((float)kVirtualShadowMaxFilterGuardTexels, (float)sampling_filter_radius_texels);
     const float interior_min =
         guard_texels / max((float)metadata.page_size_texels, 1.0);
     const float interior_span = max(1.0 - 2.0 * interior_min, 1.0e-4);
@@ -398,6 +486,35 @@ static inline bool ResolveDirectionalVirtualAtlasUv(
     atlas_uv = atlas_page_origin_uv
         + (interior_min.xx + local_page_uv * interior_span) * page_extent_uv;
     return true;
+}
+
+static inline bool ResolveDirectionalVirtualAtlasUv(
+    DirectionalVirtualShadowMetadata metadata,
+    StructuredBuffer<uint> page_table,
+    uint clip_index,
+    float2 light_space_xy,
+    float2 pool_size,
+    out float2 atlas_uv)
+{
+    DirectionalVirtualResolvedPageLookup lookup =
+        MakeInvalidDirectionalVirtualResolvedPageLookup();
+    if (!TryResolveDirectionalVirtualPageLookup(
+            metadata, page_table, clip_index, light_space_xy, lookup)) {
+        atlas_uv = 0.0.xx;
+        return false;
+    }
+
+    const uint resolved_clip_index = lookup.resolved_clip_index;
+    const uint default_filter_radius_texels =
+        SelectDirectionalVirtualFilterRadiusTexels(metadata, resolved_clip_index);
+    return ResolveDirectionalVirtualAtlasUv(
+        metadata,
+        page_table,
+        clip_index,
+        light_space_xy,
+        pool_size,
+        default_filter_radius_texels,
+        atlas_uv);
 }
 
 static inline float2 ResolveDirectionalVirtualAtlasUvInResolvedPage(
@@ -434,6 +551,43 @@ static inline float2 ResolveDirectionalVirtualAtlasUvInResolvedPage(
         + (interior_min.xx + local_page_uv * interior_span) * page_extent_uv;
 }
 
+static inline float ComputeDirectionalVirtualOptimalSlopeBias(
+    DirectionalVirtualShadowMetadata metadata,
+    DirectionalVirtualResolvedPageLookup lookup,
+    float2 atlas_uv,
+    float2 pool_size,
+    uint sampling_filter_radius_texels,
+    float3 receiver_plane_depth_bias)
+{
+    if (!lookup.valid || pool_size.x <= 0.0 || pool_size.y <= 0.0) {
+        return 0.0;
+    }
+
+    const float guard_texels =
+        min((float)kVirtualShadowMaxFilterGuardTexels, (float)sampling_filter_radius_texels);
+    const float interior_min =
+        guard_texels / max((float)metadata.page_size_texels, 1.0);
+    const float interior_span = max(1.0 - 2.0 * interior_min, 1.0e-4);
+    const float2 page_extent_uv =
+        float2((float)metadata.page_size_texels / pool_size.x,
+               (float)metadata.page_size_texels / pool_size.y);
+    const float2 atlas_page_origin_uv =
+        float2((float)(lookup.entry.tile_x * metadata.page_size_texels) / pool_size.x,
+               (float)(lookup.entry.tile_y * metadata.page_size_texels) / pool_size.y);
+    const float2 local_atlas_uv =
+        saturate((atlas_uv - atlas_page_origin_uv) / max(page_extent_uv, 1.0e-6.xx));
+    const float2 page_local_uv =
+        saturate((local_atlas_uv - interior_min.xx) / interior_span.xx);
+    const float2 texel_address_float =
+        page_local_uv * max((float)metadata.page_size_texels, 1.0);
+    const float2 texel_center =
+        floor(texel_address_float) + 0.5.xx;
+    const float2 texel_center_offset_uv =
+        ((texel_center - texel_address_float) / max((float)metadata.page_size_texels, 1.0))
+        * page_extent_uv;
+    return 2.0 * max(0.0, dot(receiver_plane_depth_bias.xy, texel_center_offset_uv));
+}
+
 static inline float SampleVirtualShadowComparisonTent3x3PageAware(
     DirectionalVirtualShadowMetadata metadata,
     StructuredBuffer<uint> page_table,
@@ -442,6 +596,7 @@ static inline float SampleVirtualShadowComparisonTent3x3PageAware(
     float2 center_atlas_uv,
     float2 receiver_light_space_xy,
     float logical_texel_world,
+    uint sampling_filter_radius_texels,
     float receiver_depth,
     float3 receiver_plane_depth_bias)
 {
@@ -473,6 +628,7 @@ static inline float SampleVirtualShadowComparisonTent3x3PageAware(
                     clip_index,
                     sample_light_space_xy,
                     float2(width, height),
+                    sampling_filter_radius_texels,
                     sample_atlas_uv)) {
                 sample_atlas_uv = center_atlas_uv;
             }
@@ -495,6 +651,7 @@ static inline float SampleVirtualShadowComparisonTent5x5PageAware(
     float2 center_atlas_uv,
     float2 receiver_light_space_xy,
     float logical_texel_world,
+    uint sampling_filter_radius_texels,
     float receiver_depth,
     float3 receiver_plane_depth_bias)
 {
@@ -526,6 +683,7 @@ static inline float SampleVirtualShadowComparisonTent5x5PageAware(
                     clip_index,
                     sample_light_space_xy,
                     float2(width, height),
+                    sampling_filter_radius_texels,
                     sample_atlas_uv)) {
                 sample_atlas_uv = center_atlas_uv;
             }
@@ -538,6 +696,17 @@ static inline float SampleVirtualShadowComparisonTent5x5PageAware(
     }
 
     return visibility / max(total_weight, 1.0);
+}
+
+static inline float SampleVirtualShadowComparisonPoint(
+    Texture2D<float> shadow_texture,
+    float2 atlas_uv,
+    float receiver_depth)
+{
+    SamplerComparisonState shadow_sampler =
+        SamplerDescriptorHeap[kShadowComparisonSamplerIndex];
+    return shadow_texture.SampleCmpLevelZero(
+        shadow_sampler, atlas_uv, receiver_depth);
 }
 
 static inline float SampleDirectionalShadowCascadeVisibility(
@@ -891,42 +1060,40 @@ static inline float SampleDirectionalVirtualShadowClipVisibility(
         return 1.0;
     }
 
-    uint filter_radius_texels =
+    const uint requested_filter_radius_texels =
         SelectDirectionalVirtualFilterRadiusTexels(metadata, clip_index);
-    const float texel_world = max(
-        ComputeDirectionalVirtualLogicalTexelWorld(
-            metadata, clip_index, filter_radius_texels),
-        1.0e-4);
-    const float ndotl = saturate(dot(normal_ws, light_dir_ws));
-    const float slope_factor = 1.0 - ndotl;
-    const float filter_bias_scale = filter_radius_texels <= 1u ? 0.85 : 1.0;
-    const float renderer_normal_bias = texel_world
-        * lerp(0.55, 1.5, slope_factor) * filter_bias_scale;
-    const float renderer_constant_bias = texel_world
-        * lerp(0.03, 0.18, slope_factor) * filter_bias_scale;
-
     const float3 light_view_pos =
         mul(metadata.light_view, float4(world_pos, 1.0)).xyz;
-    const float3 biased_world_pos =
-        world_pos + normal_ws * (metadata.normal_bias + renderer_normal_bias)
-        + light_dir_ws * (metadata.constant_bias + renderer_constant_bias);
-    const float biased_light_view_depth =
-        mul(metadata.light_view, float4(biased_world_pos, 1.0)).z;
-
     DirectionalVirtualResolvedPageLookup lookup =
         MakeInvalidDirectionalVirtualResolvedPageLookup();
     if (!TryResolveDirectionalVirtualPageLookup(
             metadata, page_table, clip_index, light_view_pos.xy, lookup)) {
         return 1.0;
     }
+
+    const DirectionalVirtualClipRelativeTransform clip_relative_transform =
+        BuildDirectionalVirtualClipRelativeTransform(
+            metadata, clip_index, lookup.resolved_clip_index);
+    const bool using_coarse_sampling =
+        !lookup.entry.current_lod_valid
+        || lookup.resolved_clip_index != clip_index
+        || clip_index + 3u >= metadata.clip_level_count;
+    const uint effective_filter_radius_texels =
+        using_coarse_sampling ? 1u : requested_filter_radius_texels;
+    const float logical_texel_world = max(
+        ComputeDirectionalVirtualLogicalTexelWorld(
+            metadata, clip_index, effective_filter_radius_texels),
+        1.0e-4);
+    const float ndotl = saturate(dot(normal_ws, light_dir_ws));
+    const float slope_factor = 1.0 - ndotl;
     // Page ownership and the full in-page filter footprint stay anchored to
     // the unbiased receiver XY. Bias only perturbs the depth comparison, so
     // it cannot translate the sampled shadow laterally off the caster base.
     resolved_clip_index = lookup.resolved_clip_index;
     resolved_page_coord = lookup.page_coord;
+    const DirectionalVirtualClipMetadata requested_clip =
+        metadata.clip_metadata[clip_index];
     const DirectionalVirtualClipMetadata clip = metadata.clip_metadata[resolved_clip_index];
-    filter_radius_texels =
-        SelectDirectionalVirtualFilterRadiusTexels(metadata, resolved_clip_index);
 
     uint pool_width = 0u;
     uint pool_height = 0u;
@@ -935,21 +1102,53 @@ static inline float SampleDirectionalVirtualShadowClipVisibility(
         return 1.0;
     }
 
-    const float logical_texel_world =
-        ComputeDirectionalVirtualLogicalTexelWorld(metadata, resolved_clip_index, filter_radius_texels);
-    const uint tile_x = lookup.entry.tile_x;
-    const uint tile_y = lookup.entry.tile_y;
-    const float2 atlas_uv = ResolveDirectionalVirtualAtlasUvInResolvedPage(
-        metadata,
-        tile_x,
-        tile_y,
-        resolved_clip_index,
-        lookup.page_x,
-        lookup.page_y,
-        light_view_pos.xy,
-        float2(pool_width, pool_height));
-    const float receiver_depth =
-        biased_light_view_depth * clip.origin_page_scale.w + clip.bias_reserved.x;
+    float2 atlas_uv = 0.0.xx;
+    if (!ResolveDirectionalVirtualAtlasUv(
+            metadata,
+            page_table,
+            clip_index,
+            light_view_pos.xy,
+            float2(pool_width, pool_height),
+            effective_filter_radius_texels,
+            atlas_uv)) {
+        return 1.0;
+    }
+    const float requested_receiver_depth =
+        light_view_pos.z * requested_clip.origin_page_scale.w
+        + requested_clip.bias_reserved.x;
+    float receiver_depth =
+        RemapDirectionalRequestedDepthToResolvedClip(
+            requested_receiver_depth, clip_relative_transform);
+    if (using_coarse_sampling) {
+        const float3 fallback_receiver_plane_depth_bias =
+            ComputeReceiverPlaneDepthBias(atlas_uv, receiver_depth);
+        const float fallback_slope_bias =
+            ComputeDirectionalVirtualOptimalSlopeBias(
+                metadata,
+                lookup,
+                atlas_uv,
+                float2(pool_width, pool_height),
+                effective_filter_radius_texels,
+                fallback_receiver_plane_depth_bias);
+        receiver_depth += fallback_slope_bias;
+    } else {
+        const float filter_bias_scale =
+            effective_filter_radius_texels <= 1u ? 0.85 : 1.0;
+        const float renderer_normal_bias = logical_texel_world
+            * lerp(0.55, 1.5, slope_factor) * filter_bias_scale;
+        const float renderer_constant_bias = logical_texel_world
+            * lerp(0.03, 0.18, slope_factor) * filter_bias_scale;
+        const float3 biased_world_pos =
+            world_pos + normal_ws * (metadata.normal_bias + renderer_normal_bias)
+            + light_dir_ws * (metadata.constant_bias + renderer_constant_bias);
+        const float biased_light_view_depth =
+            mul(metadata.light_view, float4(biased_world_pos, 1.0)).z;
+        const float requested_biased_receiver_depth =
+            biased_light_view_depth * requested_clip.origin_page_scale.w
+            + requested_clip.bias_reserved.x;
+        receiver_depth = RemapDirectionalRequestedDepthToResolvedClip(
+            requested_biased_receiver_depth, clip_relative_transform);
+    }
     const float3 receiver_plane_depth_bias =
         ComputeReceiverPlaneDepthBias(atlas_uv, receiver_depth);
 
@@ -957,15 +1156,20 @@ static inline float SampleDirectionalVirtualShadowClipVisibility(
 #if OXYGEN_SHADOW_USE_MANUAL_COMPARE_FALLBACK
     return 1.0;
 #else
-    if (filter_radius_texels <= 1u) {
+    if (using_coarse_sampling) {
+        return SampleVirtualShadowComparisonPoint(
+            physical_pool, atlas_uv, receiver_depth);
+    }
+    if (effective_filter_radius_texels <= 1u) {
         return SampleVirtualShadowComparisonTent3x3PageAware(
             metadata,
             page_table,
             physical_pool,
-            resolved_clip_index,
+            clip_index,
             atlas_uv,
             light_view_pos.xy,
             logical_texel_world,
+            effective_filter_radius_texels,
             receiver_depth,
             receiver_plane_depth_bias);
     }
@@ -973,10 +1177,11 @@ static inline float SampleDirectionalVirtualShadowClipVisibility(
             metadata,
             page_table,
             physical_pool,
-            resolved_clip_index,
+            clip_index,
             atlas_uv,
             light_view_pos.xy,
             logical_texel_world,
+            effective_filter_radius_texels,
             receiver_depth,
             receiver_plane_depth_bias);
 #endif

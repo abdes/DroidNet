@@ -265,10 +265,11 @@ auto ShadowManager::SubmitVirtualRequestFeedback(
   }
 }
 
-auto ShadowManager::ClearVirtualRequestFeedback(const ViewId view_id) -> void
+auto ShadowManager::ClearVirtualRequestFeedback(
+  const ViewId view_id, const VirtualShadowFeedbackKind kind) -> void
 {
   if (virtual_backend_) {
-    virtual_backend_->ClearRequestFeedback(view_id);
+    virtual_backend_->ClearRequestFeedback(view_id, kind);
   }
 }
 

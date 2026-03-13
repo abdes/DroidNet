@@ -15,6 +15,7 @@
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/geometric.hpp>
 #include <glm/mat4x4.hpp>
+#include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
@@ -33,6 +34,8 @@ inline constexpr float kDirectionalCacheFloatTolerance = 1.0e-5F;
 inline constexpr std::uint32_t kDirectionalVirtualClipReuseGuardbandPages = 1U;
 inline constexpr float kDirectionalVirtualDepthGuardbandSafety = 0.9F;
 inline constexpr bool kDirectionalVirtualClipmapPanningEnabled = true;
+inline constexpr std::uint32_t kDirectionalCoarseMarkMinClipCount = 2U;
+inline constexpr std::uint32_t kDirectionalCoarseMarkMaxClipCount = 4U;
 inline constexpr std::uint32_t kVirtualResidentPageCoordBits = 28U;
 inline constexpr std::uint64_t kVirtualResidentPageCoordMask
   = (1ULL << kVirtualResidentPageCoordBits) - 1ULL;
@@ -192,6 +195,15 @@ struct DirectionalVirtualClipmapPageOffset {
   std::int32_t delta_y { 0 };
 };
 
+struct DirectionalVirtualClipRelativeTransform {
+  bool valid { false };
+  glm::vec2 page_coord_scale { 1.0F, 1.0F };
+  glm::vec2 page_coord_bias { 0.0F, 0.0F };
+  float depth_scale { 1.0F };
+  float depth_bias { 0.0F };
+  float lod_scale { 1.0F };
+};
+
 struct DirectionalVirtualDepthRange {
   bool valid { false };
   float near_plane { 0.0F };
@@ -226,6 +238,112 @@ struct DirectionalVirtualDepthRange {
   result.delta_y = ResolveDirectionalVirtualClipGridOriginY(current, clip_index)
     - ResolveDirectionalVirtualClipGridOriginY(previous, clip_index);
   return result;
+}
+
+[[nodiscard]] inline auto ResolveDirectionalCoarseClipCount(
+  const std::uint32_t clip_level_count) -> std::uint32_t
+{
+  if (clip_level_count == 0U) {
+    return 0U;
+  }
+
+  return std::clamp((clip_level_count + 2U) / 3U,
+    std::min(kDirectionalCoarseMarkMinClipCount, clip_level_count),
+    std::min(kDirectionalCoarseMarkMaxClipCount, clip_level_count));
+}
+
+[[nodiscard]] inline auto BuildDirectionalCoarseClipMask(
+  const std::uint32_t clip_level_count) -> std::uint32_t
+{
+  if (clip_level_count == 0U) {
+    return 0U;
+  }
+
+  const auto coarse_clip_count = ResolveDirectionalCoarseClipCount(
+    clip_level_count);
+  const auto coarse_begin = clip_level_count > coarse_clip_count
+    ? clip_level_count - coarse_clip_count
+    : 0U;
+  std::uint32_t mask = 0U;
+  for (std::uint32_t clip_index = coarse_begin; clip_index < clip_level_count;
+    ++clip_index) {
+    mask |= (1U << clip_index);
+  }
+  return mask;
+}
+
+[[nodiscard]] inline auto ResolveDirectionalCoarseBackboneBegin(
+  const std::uint32_t clip_level_count) -> std::uint32_t
+{
+  const auto mask = BuildDirectionalCoarseClipMask(clip_level_count);
+  for (std::uint32_t clip_index = 0U; clip_index < clip_level_count;
+    ++clip_index) {
+    if ((mask & (1U << clip_index)) != 0U) {
+      return clip_index;
+    }
+  }
+  return clip_level_count;
+}
+
+[[nodiscard]] inline auto IsDirectionalCoarseClipSelected(
+  const std::uint32_t clip_mask, const std::uint32_t clip_index) -> bool
+{
+  return clip_index < 32U && (clip_mask & (1U << clip_index)) != 0U;
+}
+
+[[nodiscard]] inline auto BuildDirectionalVirtualClipRelativeTransform(
+  const oxygen::engine::DirectionalVirtualShadowMetadata& metadata,
+  const std::uint32_t requested_clip_index,
+  const std::uint32_t resolved_clip_index)
+  -> DirectionalVirtualClipRelativeTransform
+{
+  DirectionalVirtualClipRelativeTransform transform {};
+  if (requested_clip_index >= metadata.clip_level_count
+    || resolved_clip_index >= metadata.clip_level_count) {
+    return transform;
+  }
+
+  const auto& requested_clip = metadata.clip_metadata[requested_clip_index];
+  const auto& resolved_clip = metadata.clip_metadata[resolved_clip_index];
+  const float requested_page_world
+    = std::max(requested_clip.origin_page_scale.z, 1.0e-4F);
+  const float resolved_page_world
+    = std::max(resolved_clip.origin_page_scale.z, 1.0e-4F);
+  const float requested_depth_scale = requested_clip.origin_page_scale.w;
+  const float resolved_depth_scale = resolved_clip.origin_page_scale.w;
+
+  transform.valid = true;
+  transform.page_coord_scale = glm::vec2(
+    requested_page_world / resolved_page_world);
+  transform.page_coord_bias = (glm::vec2(
+                                 requested_clip.origin_page_scale.x,
+                                 requested_clip.origin_page_scale.y)
+      - glm::vec2(
+        resolved_clip.origin_page_scale.x, resolved_clip.origin_page_scale.y))
+    / resolved_page_world;
+  if (std::abs(requested_depth_scale) > 1.0e-8F
+    && std::abs(resolved_depth_scale) > 1.0e-8F) {
+    transform.depth_scale = resolved_depth_scale / requested_depth_scale;
+    transform.depth_bias = resolved_clip.bias_reserved.x
+      - requested_clip.bias_reserved.x * transform.depth_scale;
+  }
+  transform.lod_scale = resolved_page_world / requested_page_world;
+  return transform;
+}
+
+[[nodiscard]] inline auto TransformDirectionalRequestedPageCoordToResolvedClip(
+  const glm::vec2 requested_page_coord,
+  const DirectionalVirtualClipRelativeTransform& transform) -> glm::vec2
+{
+  return requested_page_coord * transform.page_coord_scale
+    + transform.page_coord_bias;
+}
+
+[[nodiscard]] inline auto RemapDirectionalRequestedDepthToResolvedClip(
+  const float requested_depth,
+  const DirectionalVirtualClipRelativeTransform& transform) -> float
+{
+  return requested_depth * transform.depth_scale + transform.depth_bias;
 }
 
 [[nodiscard]] inline auto IsDirectionalVirtualClipReuseGuardbandValid(

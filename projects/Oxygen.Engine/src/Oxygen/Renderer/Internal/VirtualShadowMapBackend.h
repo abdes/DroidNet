@@ -80,7 +80,9 @@ public:
     ViewId view_id, engine::BindlessViewFrameBindingsSlot slot) -> void;
   OXGN_RNDR_API auto SubmitRequestFeedback(
     ViewId view_id, VirtualShadowRequestFeedback feedback) -> void;
-  OXGN_RNDR_API auto ClearRequestFeedback(ViewId view_id) -> void;
+  OXGN_RNDR_API auto ClearRequestFeedback(ViewId view_id,
+    VirtualShadowFeedbackKind kind = VirtualShadowFeedbackKind::kDetail)
+    -> void;
   OXGN_RNDR_API auto SubmitResolvedRasterSchedule(
     ViewId view_id, VirtualShadowResolvedRasterSchedule schedule) -> void;
   OXGN_RNDR_API auto ClearResolvedRasterSchedule(ViewId view_id) -> void;
@@ -352,9 +354,20 @@ private:
     VirtualShadowViewIntrospection introspection {};
   };
 
-  struct PendingRequestFeedback {
+  struct PendingRequestFeedbackChannel {
     VirtualShadowRequestFeedback feedback {};
     std::vector<AbsoluteClipPageRegion> source_absolute_frustum_regions {};
+    bool valid { false };
+  };
+
+  struct PendingRequestFeedback {
+    PendingRequestFeedbackChannel detail {};
+    PendingRequestFeedbackChannel coarse {};
+
+    [[nodiscard]] auto Empty() const noexcept -> bool
+    {
+      return !detail.valid && !coarse.valid;
+    }
   };
 
   ::oxygen::Graphics* gfx_ { nullptr };

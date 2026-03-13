@@ -34,7 +34,17 @@ using oxygen::renderer::internal::shadow_detail::
 using oxygen::renderer::internal::shadow_detail::
   RecoverDirectionalVirtualDepthRange;
 using oxygen::renderer::internal::shadow_detail::
+  RemapDirectionalRequestedDepthToResolvedClip;
+using oxygen::renderer::internal::shadow_detail::
+  ResolveDirectionalCoarseBackboneBegin;
+using oxygen::renderer::internal::shadow_detail::
+  ResolveDirectionalCoarseClipCount;
+using oxygen::renderer::internal::shadow_detail::
   ResolveDirectionalVirtualClipmapPageOffset;
+using oxygen::renderer::internal::shadow_detail::
+  TransformDirectionalRequestedPageCoordToResolvedClip;
+using oxygen::renderer::internal::shadow_detail::
+  BuildDirectionalVirtualClipRelativeTransform;
 using oxygen::renderer::internal::shadow_detail::
   kDirectionalVirtualClipReuseGuardbandPages;
 
@@ -149,6 +159,48 @@ TEST(VirtualShadowContractsTest, DepthRangeRecoveryAndGuardbandAreStable)
   EXPECT_TRUE(IsDirectionalVirtualDepthGuardbandValid(metadata, -9.0F, -2.0F));
   EXPECT_FALSE(
     IsDirectionalVirtualDepthGuardbandValid(metadata, -10.75F, -2.0F));
+}
+
+TEST(VirtualShadowContractsTest, CoarseClipBandUsesStableExplicitTailRange)
+{
+  EXPECT_EQ(ResolveDirectionalCoarseClipCount(6U), 2U);
+  EXPECT_EQ(ResolveDirectionalCoarseClipCount(8U), 3U);
+  EXPECT_EQ(ResolveDirectionalCoarseClipCount(10U), 4U);
+  EXPECT_EQ(ResolveDirectionalCoarseClipCount(12U), 4U);
+
+  EXPECT_EQ(ResolveDirectionalCoarseBackboneBegin(6U), 4U);
+  EXPECT_EQ(ResolveDirectionalCoarseBackboneBegin(8U), 5U);
+  EXPECT_EQ(ResolveDirectionalCoarseBackboneBegin(10U), 6U);
+  EXPECT_EQ(ResolveDirectionalCoarseBackboneBegin(12U), 8U);
+}
+
+TEST(VirtualShadowContractsTest, FallbackTransformRemapsRequestedClipToResolvedClip)
+{
+  auto metadata = MakeDirectionalVirtualMetadata(10, -4, 2.0F, 3, 1, 4.0F);
+  SetDirectionalDepthRange(metadata, 2.0F, 18.0F);
+
+  const auto transform = BuildDirectionalVirtualClipRelativeTransform(
+    metadata, 0U, 1U);
+  ASSERT_TRUE(transform.valid);
+  EXPECT_NEAR(transform.page_coord_scale.x, 0.5F, 1.0e-5F);
+  EXPECT_NEAR(transform.page_coord_scale.y, 0.5F, 1.0e-5F);
+  EXPECT_NEAR(transform.page_coord_bias.x, 2.0F, 1.0e-5F);
+  EXPECT_NEAR(transform.page_coord_bias.y, -3.0F, 1.0e-5F);
+  EXPECT_NEAR(transform.lod_scale, 2.0F, 1.0e-5F);
+  EXPECT_NEAR(transform.depth_scale, 1.0F, 1.0e-5F);
+  EXPECT_NEAR(transform.depth_bias, 0.0F, 1.0e-5F);
+
+  const glm::vec2 requested_page_coord(3.0F, 5.0F);
+  const glm::vec2 resolved_page_coord
+    = TransformDirectionalRequestedPageCoordToResolvedClip(
+      requested_page_coord, transform);
+  EXPECT_NEAR(resolved_page_coord.x, 3.5F, 1.0e-5F);
+  EXPECT_NEAR(resolved_page_coord.y, -0.5F, 1.0e-5F);
+
+  const float requested_depth = 0.375F;
+  EXPECT_NEAR(
+    RemapDirectionalRequestedDepthToResolvedClip(requested_depth, transform),
+    requested_depth, 1.0e-5F);
 }
 
 TEST(VirtualShadowContractsTest, PageTableEntryRoundTripsPhysicalAddressAndBits)
