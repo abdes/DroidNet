@@ -1432,6 +1432,36 @@ Progress update:
     but not the Phase 7 exit gate, because the live path is still using
     multi-frame accepted feedback to create those fine pages
 
+- March 14, 2026 static-scene cache-settle follow-up:
+  - fixed the directional feedback address-space oscillation that kept static
+    scenes in a full-reraster loop by:
+    - redefining directional feedback address-space identity around the snapped
+      clip lattice contract: orientation plus quantized per-clip page-space XY
+      shifts, instead of raw `light_view` translation terms
+    - making `IsDirectionalVirtualAddressSpaceCompatible(...)` compare the same
+      quantized lattice contract that the feedback hash uses
+    - adding focused regression coverage proving sub-page XY drift stays
+      compatible while page-scale XY movement still invalidates the cache
+  - locked benchmark evidence now shows the cache settling instead of
+    alternating between incompatible address spaces:
+    - only one `address_hash` appears in the archived run:
+      `0x37fb881a7704665e`
+    - `request=telemetry-only` disappears from the log, `request=accepted`
+      remains live, and `address_space_compatible=true` from frame `7` onward
+    - resident pages are carried forward instead of being fully dropped:
+      `released=0` on the warm steady-state path
+    - settled raster work drops to the dirty/new page set:
+      `scheduled_pages_avg=331.00`, `resolved_pages_avg=331.38`,
+      `rastered_pages_avg=331.38`, instead of rerastering all `1536` logical
+      pages every frame
+  - this closes the static-scene never-settling update loop, but not the Phase 7
+    exit gate:
+    - fine-page creation is still driven by delayed accepted feedback
+      (`feedback_age=4`) instead of same-frame GPU missing-page publication
+    - the readback diagnostics still report nonzero `page_flags_mismatches`
+      even though `page_table_mismatches=0`, `phase7_valid=true`, and the
+      settled benchmark path resolves `current=all`, `fallback=0`
+
 Validation update:
 
 - files changed in this slice:
@@ -1462,11 +1492,42 @@ Validation update:
         `current=726151 fallback=2620878`
       - frame 10 and later switched to `request=accepted` with
         `current=all`, `fallback=0`, and `resolved_hist == requested_hist`
+- March 14, 2026 static-scene cache-stability validation:
+  - files changed in this slice:
+    - `src/Oxygen/Renderer/Internal/ShadowBackendCommon.h`
+    - `src/Oxygen/Renderer/Internal/VirtualShadowMapBackend.cpp`
+    - `src/Oxygen/Renderer/Test/LightManager_basic_test.cpp`
+  - validation run on March 14, 2026 in `out/build-vs`:
+    - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+    - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*VirtualFeedbackAddressSpaceTracksPageScaleXYTranslationButIgnoresZPullback:*VirtualRepeatedNearCompatibleDirectionChangesRejectStaleFallback:*VirtualStaticPagesStayCleanWhenDynamicCasterMovesElsewhere`
+      - result: `3/3` passed
+    - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:1 /p:Configuration=Debug /nologo`
+      - result: build succeeded
+    - `powershell -ExecutionPolicy Bypass -File Examples\\RenderScene\\benchmark_directional_vsm.ps1`
+      - result: `exit_code=0`, `wall_ms=15450`, `approx_fps=7.77`
+      - settled stats:
+        - `requested_pages_avg=662.91`
+        - `scheduled_pages_avg=331.00`
+        - `resolved_pages_avg=331.38`
+        - `rastered_pages_avg=331.38`
+        - `shadow_draws_avg=1510.68`
+      - live benchmark evidence:
+        - the archived run contains only one address-space hash:
+          `0x37fb881a7704665e`
+        - `request=telemetry-only` is absent; `request=accepted` appears on the
+          live path throughout the warmed benchmark
+        - `VirtualShadowMapBackend` reports `address_space_compatible=true`
+          during the warmed path, and settled screen-debug frames show
+          `current=all`, `fallback=0`
 - remaining exit gap:
   - the static/dynamic page-separation regression is fixed, but Phase 7 remains
     incomplete because fine-page creation is still driven by delayed accepted
     feedback (`feedback_age=4`) instead of same-frame GPU missing-page
     publication
+  - the static-scene address-space oscillation is fixed, but the later
+    coherence diagnostic still reports nonzero `page_flags_mismatches` on the
+    settled benchmark path even while `page_table_mismatches=0` and
+    `fallback=0`
 
 Resume anchor:
 
@@ -1848,10 +1909,16 @@ Validation for this plan document:
 Remaining gap:
 
 - the March 14, 2026 reordered GPU-only slice is now documented for Phases 7-9
+- the March 14, 2026 static-scene address-space stabilization is now
+  documented with implementation and validation evidence
 - `git diff --check` remains clean aside from existing LF/CRLF warnings
 - Phase 7 remains the live blocker, but it has changed:
-  the old static/dynamic coarse-collapse regression is fixed; the remaining
-  blocker is that accepted feedback with nonzero `feedback_age` is still
-  authoritative for fine-page creation on the live path
+  the old static/dynamic coarse-collapse regression and the static-scene
+  address-space oscillation are fixed; the remaining blocker is that accepted
+  feedback with nonzero `feedback_age` is still authoritative for fine-page
+  creation on the live path
+- the static benchmark now settles with `address_space_compatible=true`,
+  `request=accepted`, and `rastered_pages_avg=331.38`, but the coherence
+  diagnostic still reports nonzero `page_flags_mismatches`
 - Phase 8 and Phase 9 both have concrete progress in code and validation, but
   neither completion gate is yet satisfied

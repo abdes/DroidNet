@@ -3568,7 +3568,7 @@ NOLINT_TEST_F(LightManagerTest,
 //! Directional feedback/address-space identity must track snapped XY light-view
 //! translation, but it should still ignore pure Z pull-back padding changes.
 NOLINT_TEST_F(LightManagerTest,
-  ShadowManagerPublishForView_VirtualFeedbackAddressSpaceTracksSnappedXYTranslationButIgnoresZPullback)
+  ShadowManagerPublishForView_VirtualFeedbackAddressSpaceTracksPageScaleXYTranslationButIgnoresZPullback)
 {
   auto& manager = Manager();
   manager.OnFrameStart(
@@ -3620,30 +3620,49 @@ NOLINT_TEST_F(LightManagerTest,
 
   const auto& first_metadata
     = first_virtual_introspection->directional_virtual_metadata.front();
-  auto xy_translated_metadata = first_metadata;
-  xy_translated_metadata.light_view[3][0] += 17.0F;
-  xy_translated_metadata.light_view[3][1] -= 9.0F;
+  const float finest_page_world = std::max(
+    first_metadata.clip_metadata[0].origin_page_scale.z, 1.0e-4F);
+  auto sub_page_translated_metadata = first_metadata;
+  sub_page_translated_metadata.light_view[3][0] += 0.25F * finest_page_world;
+  sub_page_translated_metadata.light_view[3][1] -= 0.25F * finest_page_world;
+
+  auto page_translated_metadata = first_metadata;
+  page_translated_metadata.light_view[3][0] += 2.0F * finest_page_world;
+  page_translated_metadata.light_view[3][1] -= 1.0F * finest_page_world;
 
   auto z_translated_metadata = first_metadata;
   z_translated_metadata.light_view[3][2] += 5.0F;
 
   const auto first_hash = oxygen::renderer::internal::shadow_detail::
     HashDirectionalVirtualFeedbackAddressSpace(first_metadata);
-  const auto xy_translated_hash = oxygen::renderer::internal::shadow_detail::
-    HashDirectionalVirtualFeedbackAddressSpace(xy_translated_metadata);
+  const auto sub_page_translated_hash
+    = oxygen::renderer::internal::shadow_detail::
+        HashDirectionalVirtualFeedbackAddressSpace(
+          sub_page_translated_metadata);
+  const auto page_translated_hash = oxygen::renderer::internal::shadow_detail::
+    HashDirectionalVirtualFeedbackAddressSpace(page_translated_metadata);
   const auto z_translated_hash = oxygen::renderer::internal::shadow_detail::
     HashDirectionalVirtualFeedbackAddressSpace(z_translated_metadata);
 
-  EXPECT_NE(first_hash, xy_translated_hash);
+  EXPECT_EQ(first_hash, sub_page_translated_hash);
+  EXPECT_NE(first_hash, page_translated_hash);
   EXPECT_EQ(first_hash, z_translated_hash);
-  EXPECT_FALSE(
+  EXPECT_TRUE(
     oxygen::renderer::internal::shadow_detail::DirectionalCacheMat4Equal(
       oxygen::renderer::internal::shadow_detail::
         BuildDirectionalAddressSpaceComparableLightView(
           first_metadata.light_view),
       oxygen::renderer::internal::shadow_detail::
         BuildDirectionalAddressSpaceComparableLightView(
-          xy_translated_metadata.light_view)));
+          sub_page_translated_metadata.light_view)));
+  EXPECT_TRUE(
+    oxygen::renderer::internal::shadow_detail::DirectionalCacheMat4Equal(
+      oxygen::renderer::internal::shadow_detail::
+        BuildDirectionalAddressSpaceComparableLightView(
+          first_metadata.light_view),
+      oxygen::renderer::internal::shadow_detail::
+        BuildDirectionalAddressSpaceComparableLightView(
+          page_translated_metadata.light_view)));
   EXPECT_TRUE(
     oxygen::renderer::internal::shadow_detail::DirectionalCacheMat4Equal(
       oxygen::renderer::internal::shadow_detail::
@@ -3652,6 +3671,34 @@ NOLINT_TEST_F(LightManagerTest,
       oxygen::renderer::internal::shadow_detail::
         BuildDirectionalAddressSpaceComparableLightView(
           z_translated_metadata.light_view)));
+  EXPECT_EQ(
+    oxygen::renderer::internal::shadow_detail::
+      ResolveDirectionalVirtualFeedbackAddressSpacePageShiftX(
+        first_metadata, 0U),
+    oxygen::renderer::internal::shadow_detail::
+      ResolveDirectionalVirtualFeedbackAddressSpacePageShiftX(
+        sub_page_translated_metadata, 0U));
+  EXPECT_NE(
+    oxygen::renderer::internal::shadow_detail::
+      ResolveDirectionalVirtualFeedbackAddressSpacePageShiftX(
+        first_metadata, 0U),
+    oxygen::renderer::internal::shadow_detail::
+      ResolveDirectionalVirtualFeedbackAddressSpacePageShiftX(
+        page_translated_metadata, 0U));
+  EXPECT_EQ(
+    oxygen::renderer::internal::shadow_detail::
+      ResolveDirectionalVirtualFeedbackAddressSpacePageShiftY(
+        first_metadata, 0U),
+    oxygen::renderer::internal::shadow_detail::
+      ResolveDirectionalVirtualFeedbackAddressSpacePageShiftY(
+        sub_page_translated_metadata, 0U));
+  EXPECT_NE(
+    oxygen::renderer::internal::shadow_detail::
+      ResolveDirectionalVirtualFeedbackAddressSpacePageShiftY(
+        first_metadata, 0U),
+    oxygen::renderer::internal::shadow_detail::
+      ResolveDirectionalVirtualFeedbackAddressSpacePageShiftY(
+        page_translated_metadata, 0U));
 }
 
 //! Large movement along the light direction must still reraster touched pages

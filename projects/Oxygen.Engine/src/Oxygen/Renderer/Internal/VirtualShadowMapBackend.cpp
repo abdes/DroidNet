@@ -305,6 +305,20 @@ constexpr std::uint32_t kAcceptedFeedbackCurrentFrameMaxDeltaPagesPerClip
           current.clip_metadata[clip_index].origin_page_scale.z)) {
       return false;
     }
+    if (oxygen::renderer::internal::shadow_detail::
+          ResolveDirectionalVirtualFeedbackAddressSpacePageShiftX(
+            previous, clip_index)
+        != oxygen::renderer::internal::shadow_detail::
+             ResolveDirectionalVirtualFeedbackAddressSpacePageShiftX(
+               current, clip_index)
+      || oxygen::renderer::internal::shadow_detail::
+           ResolveDirectionalVirtualFeedbackAddressSpacePageShiftY(
+             previous, clip_index)
+        != oxygen::renderer::internal::shadow_detail::
+             ResolveDirectionalVirtualFeedbackAddressSpacePageShiftY(
+               current, clip_index)) {
+      return false;
+    }
   }
 
   return true;

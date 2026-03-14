@@ -163,16 +163,56 @@ template <typename T>
 [[nodiscard]] inline auto BuildDirectionalAddressSpaceComparableLightView(
   glm::mat4 light_view) -> glm::mat4
 {
-  // Directional page identity is defined by the clip lattice orientation and
-  // page scale. The grid itself jumps by snap_size when the light eye snaps,
-  // which shifts all absolute logical keys. We MUST preserve XY translation
-  // so this jump correctly invalidates the cache, rather than falsely
-  // accepting severely shifted feedback keys.
-  // Z translation represents the light pull-back padding and changes smoothly;
-  // it does not shift the XY grid, so we can safely zero it to allow reuse
-  // when caster bounds expand/shrink along the light ray.
+  // Directional feedback compatibility is keyed by clip lattice orientation
+  // plus quantized page-space XY translation. Raw floating-point translation
+  // terms can oscillate between equivalent view rebuilds even when the
+  // logical page lattice has not moved, so callers must pair this
+  // orientation-only matrix with page-quantized XY translation.
+  light_view[3][0] = 0.0F;
+  light_view[3][1] = 0.0F;
   light_view[3][2] = 0.0F;
   return light_view;
+}
+
+[[nodiscard]] inline auto QuantizeDirectionalVirtualAddressSpaceTranslationPages(
+  const float light_view_translation, const float page_world_size)
+  -> std::int64_t
+{
+  const auto stabilized_page_world = std::max(
+    static_cast<double>(page_world_size), static_cast<double>(1.0e-4F));
+  const auto normalized_translation
+    = static_cast<double>(light_view_translation) / stabilized_page_world;
+  const auto nearest_page = std::round(normalized_translation);
+  if (std::abs(normalized_translation - nearest_page)
+    <= static_cast<double>(kDirectionalCacheFloatTolerance)) {
+    return static_cast<std::int64_t>(nearest_page);
+  }
+
+  return static_cast<std::int64_t>(std::floor(normalized_translation));
+}
+
+[[nodiscard]] inline auto ResolveDirectionalVirtualFeedbackAddressSpacePageShiftX(
+  const oxygen::engine::DirectionalVirtualShadowMetadata& metadata,
+  const std::uint32_t clip_index) -> std::int64_t
+{
+  if (clip_index >= metadata.clip_level_count) {
+    return 0;
+  }
+
+  return QuantizeDirectionalVirtualAddressSpaceTranslationPages(
+    metadata.light_view[3][0], metadata.clip_metadata[clip_index].origin_page_scale.z);
+}
+
+[[nodiscard]] inline auto ResolveDirectionalVirtualFeedbackAddressSpacePageShiftY(
+  const oxygen::engine::DirectionalVirtualShadowMetadata& metadata,
+  const std::uint32_t clip_index) -> std::int64_t
+{
+  if (clip_index >= metadata.clip_level_count) {
+    return 0;
+  }
+
+  return QuantizeDirectionalVirtualAddressSpaceTranslationPages(
+    metadata.light_view[3][1], metadata.clip_metadata[clip_index].origin_page_scale.z);
 }
 
 [[nodiscard]] inline auto BuildDirectionalCacheComparableLightView(
@@ -492,6 +532,8 @@ struct DirectionalVirtualDepthRange {
     &metadata.clip_level_count, sizeof(metadata.clip_level_count));
   hash = HashBytes(&metadata.pages_per_axis, sizeof(metadata.pages_per_axis),
     hash);
+  hash = HashBytes(
+    &metadata.page_size_texels, sizeof(metadata.page_size_texels), hash);
   const auto lattice_light_view
     = BuildDirectionalAddressSpaceComparableLightView(metadata.light_view);
   for (std::uint32_t column = 0U; column < 4U; ++column) {
@@ -509,7 +551,15 @@ struct DirectionalVirtualDepthRange {
     const auto& clip = metadata.clip_metadata[clip_index];
     const auto page_world_size
       = QuantizeDirectionalCacheFloat(clip.origin_page_scale.z);
+    const auto lattice_shift_x
+      = ResolveDirectionalVirtualFeedbackAddressSpacePageShiftX(
+        metadata, clip_index);
+    const auto lattice_shift_y
+      = ResolveDirectionalVirtualFeedbackAddressSpacePageShiftY(
+        metadata, clip_index);
     hash = HashBytes(&page_world_size, sizeof(page_world_size), hash);
+    hash = HashBytes(&lattice_shift_x, sizeof(lattice_shift_x), hash);
+    hash = HashBytes(&lattice_shift_y, sizeof(lattice_shift_y), hash);
   }
   return hash;
 }
