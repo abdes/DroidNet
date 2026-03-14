@@ -14,8 +14,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include <glm/vec4.hpp>
-
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Types/VirtualShadowRenderPlan.h>
@@ -67,11 +65,8 @@ private:
   auto UploadRasterPassConstants() -> void;
   auto EmitIndirectResolvedPageDrawRange(graphics::CommandRecorder& recorder,
     const graphics::Buffer& draw_args_buffer, const DrawMetadata* records,
-    std::uint32_t draw_count,
-    std::span<const renderer::VirtualShadowResolvedRasterPage>
-      telemetry_resolved_pages,
-    std::span<const glm::vec4> draw_bounding_spheres,
-    std::uint32_t begin, std::uint32_t end, std::uint64_t& emitted_count,
+    std::uint32_t draw_count, std::uint32_t begin, std::uint32_t end,
+    std::uint64_t& indirect_draw_record_count,
     std::uint32_t& cpu_draw_submission_count, std::uint32_t& skipped_invalid,
     std::uint32_t& draw_errors) const noexcept -> void;
 
