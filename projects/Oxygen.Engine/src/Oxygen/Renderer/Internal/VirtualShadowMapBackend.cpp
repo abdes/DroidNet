@@ -2054,7 +2054,7 @@ auto VirtualShadowMapBackend::BuildPublicationKey(
   const auto view_hash_start
     = HashBytes(&shadow_quality_tier_, sizeof(shadow_quality_tier_));
   const auto view_matrix = view_constants.GetViewMatrix();
-  const auto projection_matrix = view_constants.GetProjectionMatrix();
+  const auto projection_matrix = view_constants.GetStableProjectionMatrix();
   const auto camera_position = view_constants.GetCameraPosition();
   key.view_hash = HashBytes(&view_matrix, sizeof(view_matrix), view_hash_start);
   key.view_hash
@@ -3018,7 +3018,8 @@ auto VirtualShadowMapBackend::PrepareDirectionalVirtualClipmapSetup(
   DirectionalVirtualClipmapSetup setup {};
   const auto camera_view_constants = view_constants.GetSnapshot();
   const glm::mat4 view_matrix = camera_view_constants.view_matrix;
-  const glm::mat4 projection_matrix = camera_view_constants.projection_matrix;
+  const glm::mat4 projection_matrix
+    = view_constants.GetStableProjectionMatrix();
   const glm::mat4 inv_view = glm::inverse(view_matrix);
   const glm::mat4 inv_proj = glm::inverse(projection_matrix);
 

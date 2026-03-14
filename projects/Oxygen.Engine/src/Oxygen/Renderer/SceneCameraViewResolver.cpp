@@ -82,6 +82,9 @@ auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node)
     cfg.viewport = camo->get().ActiveViewport();
   }
 
+  const auto stable_proj_m
+    = RemapProjectionDepthRange(proj_m, src_range, NdcDepthRange::ZeroToOne);
+
   // Apply pixel jitter (pixels -> NDC) and produce D3D12-targeted projection
   proj_m = ApplyJitterToProjection(proj_m, cfg.pixel_jitter, cfg.viewport);
   proj_m
@@ -91,6 +94,7 @@ auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node)
   rp.view_config = cfg;
   rp.view_matrix = view_m;
   rp.proj_matrix = proj_m;
+  rp.stable_proj_matrix = stable_proj_m;
   rp.depth_range = NdcDepthRange::ZeroToOne;
   rp.camera_position = cam_pos;
   rp.camera_ev = camera_ev;
