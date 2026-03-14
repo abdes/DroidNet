@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstring>
+#include <deque>
 #include <memory>
 #include <numeric>
 #include <optional>
@@ -94,14 +95,6 @@ auto ResolveVirtualViewIntrospection(
   return shadow_manager.TryGetVirtualViewIntrospection(view_id);
 }
 
-auto ResolveVirtualRenderPlan(
-  ShadowManager& shadow_manager, const oxygen::ViewId view_id)
-  -> const oxygen::renderer::VirtualShadowRenderPlan*
-{
-  shadow_manager.ResolveVirtualCurrentFrame(view_id);
-  return shadow_manager.TryGetVirtualRenderPlan(view_id);
-}
-
 struct VirtualFeedbackLayout {
   std::uint32_t clip_level_count { 0U };
   std::uint32_t pages_per_axis { 0U };
@@ -136,6 +129,132 @@ auto BuildVirtualFeedbackLayout(
         ResolveDirectionalVirtualClipGridOriginY(metadata, clip_index);
   }
   return layout;
+}
+
+struct DerivedResolvedVirtualPage {
+  std::uint32_t shadow_instance_index { 0xFFFFFFFFU };
+  std::uint32_t payload_index { 0xFFFFFFFFU };
+  std::uint32_t clip_level { 0U };
+  std::uint32_t page_index { 0U };
+  std::uint64_t resident_key { 0U };
+  std::uint16_t atlas_tile_x { 0U };
+  std::uint16_t atlas_tile_y { 0U };
+};
+
+struct DerivedVirtualRenderPlan {
+  const oxygen::graphics::Texture* depth_texture { nullptr };
+  std::vector<DerivedResolvedVirtualPage> resolved_pages {};
+  std::uint32_t page_size_texels { 0U };
+  std::uint32_t atlas_tiles_per_axis { 0U };
+};
+
+// Legacy test-only derivation of pending raster pages from published
+// page-table/page-flag state. Runtime no longer mirrors this CPU page list.
+auto DeriveResolvedRasterPages(
+  const oxygen::renderer::VirtualShadowViewIntrospection& introspection)
+  -> std::vector<DerivedResolvedVirtualPage>
+{
+  if (introspection.directional_virtual_metadata.empty()
+    || introspection.page_table_entries.empty()
+    || introspection.page_table_entries.size()
+      != introspection.page_flags_entries.size()) {
+    return {};
+  }
+
+  const auto& metadata = introspection.directional_virtual_metadata.front();
+  const auto layout = BuildVirtualFeedbackLayout(metadata);
+  if (layout.clip_level_count == 0U || layout.pages_per_axis == 0U
+    || layout.pages_per_level == 0U) {
+    return {};
+  }
+
+  std::vector<DerivedResolvedVirtualPage> resolved_pages;
+  resolved_pages.reserve(introspection.pending_raster_page_count);
+
+  for (std::size_t global_page_index = 0U;
+    global_page_index < introspection.page_table_entries.size();
+    ++global_page_index) {
+    const auto decoded_entry = oxygen::renderer::DecodeVirtualShadowPageTableEntry(
+      introspection.page_table_entries[global_page_index]);
+    if (!decoded_entry.current_lod_valid) {
+      continue;
+    }
+
+    const auto page_flags = introspection.page_flags_entries[global_page_index];
+    const bool uncached = oxygen::renderer::HasVirtualShadowPageFlag(
+                            page_flags,
+                            oxygen::renderer::VirtualShadowPageFlag::kDynamicUncached)
+      || oxygen::renderer::HasVirtualShadowPageFlag(
+        page_flags, oxygen::renderer::VirtualShadowPageFlag::kStaticUncached);
+    if (!uncached) {
+      continue;
+    }
+
+    const auto clip_index
+      = static_cast<std::uint32_t>(global_page_index / layout.pages_per_level);
+    if (clip_index >= layout.clip_level_count) {
+      continue;
+    }
+
+    const auto local_page_index
+      = static_cast<std::uint32_t>(global_page_index % layout.pages_per_level);
+    const auto page_y = local_page_index / layout.pages_per_axis;
+    const auto page_x = local_page_index % layout.pages_per_axis;
+
+    resolved_pages.push_back(DerivedResolvedVirtualPage {
+      .shadow_instance_index = metadata.shadow_instance_index,
+      .payload_index = 0U,
+      .clip_level = clip_index,
+      .page_index = local_page_index,
+      .resident_key = oxygen::renderer::internal::shadow_detail::
+        PackVirtualResidentPageKey(
+          clip_index,
+          layout.clip_grid_origin_x[clip_index] + static_cast<std::int32_t>(page_x),
+          layout.clip_grid_origin_y[clip_index]
+            + static_cast<std::int32_t>(page_y)),
+      .atlas_tile_x = static_cast<std::uint16_t>(decoded_entry.tile_x),
+      .atlas_tile_y = static_cast<std::uint16_t>(decoded_entry.tile_y),
+    });
+  }
+
+  return resolved_pages;
+}
+
+auto ContainsResolvedPageResidentKey(
+  const std::span<const DerivedResolvedVirtualPage> pages,
+  const std::uint64_t resident_key) -> bool
+{
+  return std::ranges::any_of(
+    pages, [resident_key](const auto& page) { return page.resident_key == resident_key; });
+}
+
+auto ResolveVirtualRenderPlan(
+  ShadowManager& shadow_manager, const oxygen::ViewId view_id)
+  -> const DerivedVirtualRenderPlan*
+{
+  shadow_manager.ResolveVirtualCurrentFrame(view_id);
+  const auto* introspection = shadow_manager.TryGetVirtualViewIntrospection(view_id);
+  const auto& depth_texture = shadow_manager.GetVirtualShadowDepthTexture();
+  if (!depth_texture && introspection == nullptr) {
+    return nullptr;
+  }
+
+  static thread_local std::deque<DerivedVirtualRenderPlan> derived_plans {};
+  derived_plans.emplace_back();
+  auto& derived = derived_plans.back();
+  derived.depth_texture = depth_texture.get();
+  if (introspection != nullptr) {
+    derived.resolved_pages = DeriveResolvedRasterPages(*introspection);
+    if (!introspection->directional_virtual_metadata.empty()) {
+      const auto& metadata = introspection->directional_virtual_metadata.front();
+      derived.page_size_texels = metadata.page_size_texels;
+      if (depth_texture && metadata.page_size_texels > 0U) {
+        derived.atlas_tiles_per_axis = std::max(1U,
+          depth_texture->GetDescriptor().width / metadata.page_size_texels);
+      }
+    }
+  }
+  return &derived;
 }
 
 auto ResolveVirtualFeedbackLayout(ShadowManager& shadow_manager,
@@ -1220,7 +1339,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(virtual_plan, nullptr);
   ASSERT_NE(virtual_introspection, nullptr);
   EXPECT_FALSE(virtual_plan->resolved_pages.empty());
-  EXPECT_EQ(virtual_introspection->resolved_raster_pages.size(),
+  EXPECT_EQ(virtual_introspection->pending_raster_page_count,
     virtual_plan->resolved_pages.size());
 }
 
@@ -1296,7 +1415,7 @@ NOLINT_TEST_F(LightManagerTest,
   const auto requested_resident_keys = RequestedResidentKeys(
     first_layout, std::span<const std::uint32_t> { &*requested_page, 1U });
   ASSERT_EQ(requested_resident_keys.size(), 1U);
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 20 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 20 });
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 20 },
     MakeVirtualRequestFeedback(
@@ -1529,7 +1648,7 @@ NOLINT_TEST_F(LightManagerTest,
   const auto requested_resident_keys = RequestedResidentKeys(
     first_layout, std::span<const std::uint32_t> { &*requested_page, 1U });
   ASSERT_EQ(requested_resident_keys.size(), 1U);
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 21 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 21 });
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 21 },
     MakeVirtualRequestFeedback(
@@ -1562,7 +1681,7 @@ NOLINT_TEST_F(LightManagerTest,
   EXPECT_TRUE(oxygen::renderer::VirtualShadowPageTableEntryHasAnyLod(
     second_virtual_introspection
       ->page_table_entries[*second_translated_page_index]));
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 21 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 21 });
 
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 3 }, Slot { 0 });
@@ -1661,7 +1780,7 @@ NOLINT_TEST_F(LightManagerTest,
   const auto requested_resident_keys = RequestedResidentKeys(
     layout, std::span<const std::uint32_t> { &*requested_page, 1U });
   ASSERT_EQ(requested_resident_keys.size(), 1U);
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 27 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 27 });
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 27 },
     MakeVirtualRequestFeedback(
@@ -1772,7 +1891,7 @@ NOLINT_TEST_F(LightManagerTest,
     layout, std::span<const std::uint32_t> { &second_requested_page, 1U });
   ASSERT_EQ(first_requested_resident_keys.size(), 1U);
   ASSERT_EQ(second_requested_resident_keys.size(), 1U);
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 28 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 28 });
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 28 },
     MakeVirtualRequestFeedback(
@@ -1808,7 +1927,7 @@ NOLINT_TEST_F(LightManagerTest,
   EXPECT_TRUE(oxygen::renderer::VirtualShadowPageTableEntryHasAnyLod(
     first_virtual_introspection
       ->page_table_entries[*translated_second_requested_page]));
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 28 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 28 });
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 28 },
     MakeVirtualRequestFeedback(first_layout, SequenceNumber { 2 },
@@ -1926,7 +2045,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_EQ(detail_resident_keys.size(), 1U);
   ASSERT_EQ(coarse_resident_keys.size(), 1U);
 
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 242 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 242 });
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 242 },
     MakeVirtualRequestFeedback(first_layout, SequenceNumber { 1 },
       { *detail_page }, oxygen::renderer::VirtualShadowFeedbackKind::kDetail));
@@ -2038,7 +2157,7 @@ NOLINT_TEST_F(LightManagerTest,
     first_layout, std::span<const std::uint32_t> { &*coarse_page, 1U });
   ASSERT_EQ(coarse_resident_keys.size(), 1U);
 
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 243 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 243 });
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 243 },
     MakeVirtualRequestFeedback(first_layout, SequenceNumber { 1 },
       { *coarse_page }, oxygen::renderer::VirtualShadowFeedbackKind::kCoarse));
@@ -2145,7 +2264,7 @@ NOLINT_TEST_F(LightManagerTest,
   const auto target_resident_keys = RequestedResidentKeys(
     layout, std::span<const std::uint32_t> { &target_page, 1U });
   ASSERT_EQ(target_resident_keys.size(), 1U);
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 29 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 29 });
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 29 },
     MakeVirtualRequestFeedback(layout, SequenceNumber { 1 },
@@ -2159,7 +2278,7 @@ NOLINT_TEST_F(LightManagerTest,
     view_constants, manager, shadow_casters, {}, &synthetic_sun,
     std::chrono::milliseconds(16));
   ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 29 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 29 });
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 29 },
     MakeVirtualRequestFeedback(layout, SequenceNumber { 2 }, { target_page }));
@@ -2264,7 +2383,7 @@ NOLINT_TEST_F(LightManagerTest,
     glm::vec4(world_a, page_world * 0.1F),
     glm::vec4(world_b, page_world * 0.1F),
   };
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 30 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 30 });
 
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
@@ -2293,7 +2412,7 @@ NOLINT_TEST_F(LightManagerTest,
     first_layout, std::span<const std::uint32_t> { &*sparse_page_b, 1U });
   ASSERT_EQ(sparse_page_a_keys.size(), 1U);
   ASSERT_EQ(sparse_page_b_keys.size(), 1U);
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 30 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 30 });
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 30 },
     MakeVirtualRequestFeedback(
@@ -2394,7 +2513,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(first_virtual_plan, nullptr);
   ASSERT_NE(first_virtual_introspection, nullptr);
   ASSERT_FALSE(first_virtual_plan->resolved_pages.empty());
-  ASSERT_EQ(first_virtual_introspection->resolved_raster_pages.size(),
+  ASSERT_EQ(first_virtual_introspection->pending_raster_page_count,
     first_virtual_plan->resolved_pages.size());
   ASSERT_FALSE(first_virtual_introspection->atlas_tile_debug_states.empty());
   EXPECT_EQ(first_virtual_introspection->resident_page_count,
@@ -2417,7 +2536,7 @@ NOLINT_TEST_F(LightManagerTest,
               VirtualShadowAtlasTileDebugState::kCached),
     0U);
 
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 11 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 11 });
 
   const auto second = shadow_manager->PublishForView(oxygen::ViewId { 11 },
     view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
@@ -2431,7 +2550,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(second_virtual_plan, nullptr);
   ASSERT_NE(second_virtual_introspection, nullptr);
   EXPECT_EQ(second_virtual_plan->resolved_pages.size(), 0U);
-  EXPECT_EQ(second_virtual_introspection->resolved_raster_pages.size(), 0U);
+  EXPECT_EQ(second_virtual_introspection->pending_raster_page_count, 0U);
   EXPECT_EQ(second_virtual_introspection->resident_page_count,
     first_virtual_introspection->resident_page_count);
   EXPECT_EQ(second_virtual_introspection->mapped_page_count,
@@ -2509,7 +2628,7 @@ NOLINT_TEST_F(LightManagerTest,
     manager, shadow_casters, wide_receivers, &synthetic_sun,
     std::chrono::milliseconds(16));
   shadow_manager->ResolveVirtualCurrentFrame(oxygen::ViewId { 17 });
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 17 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 17 });
 
   manager.OnFrameStart(
     RendererTagFactory::Get(), SequenceNumber { 2 }, Slot { 1 });
@@ -2609,7 +2728,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(first_virtual_introspection, nullptr);
   ASSERT_GT(first_virtual_introspection->resident_page_count, 0U);
 
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 110 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 110 });
 
   const auto second = shadow_manager->PublishForView(oxygen::ViewId { 110 },
     view_constants, manager, shadow_casters_b, visible_receivers,
@@ -2688,7 +2807,7 @@ NOLINT_TEST_F(LightManagerTest,
   const auto* first_virtual_introspection
     = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 18 });
   ASSERT_NE(first_virtual_introspection, nullptr);
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 18 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 18 });
 
   const auto second = shadow_manager->PublishForView(oxygen::ViewId { 18 },
     view_constants, manager, shadow_casters, shifted_receivers, &synthetic_sun,
@@ -2780,7 +2899,7 @@ NOLINT_TEST_F(LightManagerTest,
         inverse_light_view * glm::vec4(fine_page_world, 0.0F, 0.0F, 1.0F))
     - world_origin;
 
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 30 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 30 });
 
   view_constants.SetCameraPosition(
     view_constants.GetCameraPosition() + world_shift_x);
@@ -2805,7 +2924,7 @@ NOLINT_TEST_F(LightManagerTest,
     = second_virtual_introspection->directional_virtual_metadata.front();
   EXPECT_NE(first_metadata.clip_metadata[0].origin_page_scale.x,
     second_metadata.clip_metadata[0].origin_page_scale.x);
-  EXPECT_LT(second_virtual_introspection->resolved_raster_pages.size(),
+  EXPECT_LT(second_virtual_introspection->pending_raster_page_count,
     second_virtual_introspection->mapped_page_count);
   EXPECT_LT(second_virtual_plan->resolved_pages.size(),
     first_virtual_introspection->resident_page_count);
@@ -2901,7 +3020,7 @@ NOLINT_TEST_F(LightManagerTest,
         inverse_light_view * glm::vec4(fine_page_world, 0.0F, 0.0F, 1.0F))
     - world_origin;
 
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 31 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 31 });
 
   view_constants.SetCameraPosition(
     view_constants.GetCameraPosition() + world_shift_x);
@@ -3027,7 +3146,7 @@ NOLINT_TEST_F(LightManagerTest,
         inverse_light_view * glm::vec4(fine_page_world, 0.0F, 0.0F, 1.0F))
     - world_origin;
 
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 230 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 230 });
 
   view_constants.SetCameraPosition(
     view_constants.GetCameraPosition() + world_shift_x);
@@ -3073,7 +3192,7 @@ NOLINT_TEST_F(LightManagerTest,
   EXPECT_TRUE(second_introspection->clipmap_reuse_guardband_valid[0]);
   EXPECT_TRUE(second_introspection->clipmap_cache_valid[0]);
 
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 230 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 230 });
 
   view_constants.SetCameraPosition(
     view_constants.GetCameraPosition() + (world_shift_x * 2.0F));
@@ -3159,7 +3278,7 @@ NOLINT_TEST_F(LightManagerTest,
     = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 231 });
   ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(first_introspection, nullptr);
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 231 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 231 });
 
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
@@ -3246,7 +3365,7 @@ NOLINT_TEST_F(LightManagerTest,
         inverse_light_view * glm::vec4(fine_page_world, 0.0F, 0.0F, 1.0F))
     - world_origin;
 
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 31 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 31 });
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 31 },
     MakeVirtualRequestFeedback(layout, SequenceNumber { 1 }, { 0U }));
 
@@ -3353,7 +3472,7 @@ NOLINT_TEST_F(LightManagerTest,
   }
   ASSERT_TRUE(requested_page.has_value());
 
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 132 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 132 });
   auto incompatible_feedback = MakeVirtualRequestFeedback(
     first_layout, SequenceNumber { 1 }, { *requested_page });
   ++incompatible_feedback.directional_address_space_hash;
@@ -3488,7 +3607,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(shifted_layout.directional_address_space_hash,
     first_layout.directional_address_space_hash);
 
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 232 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 232 });
   for (std::uint64_t frame = 2U; frame <= 4U; ++frame) {
     const auto sequence = SequenceNumber { frame };
     const auto slot = Slot { static_cast<Slot::UnderlyingType>(
@@ -3501,7 +3620,7 @@ NOLINT_TEST_F(LightManagerTest,
       view_constants, manager, shadow_casters, visible_receivers,
       &synthetic_sun, std::chrono::milliseconds(16));
     ASSERT_NE(stable.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
-    shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 232 });
+    shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 232 });
   }
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 232 },
@@ -3782,7 +3901,7 @@ NOLINT_TEST_F(LightManagerTest,
       shadow_casters.front().w),
   };
   const auto first_clip = first_metadata.clip_metadata[0];
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 211 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 211 });
 
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
@@ -3876,7 +3995,7 @@ NOLINT_TEST_F(LightManagerTest,
         .clip_metadata[0]
         .origin_page_scale.z;
 
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 232 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 232 });
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
 
@@ -3967,7 +4086,7 @@ NOLINT_TEST_F(LightManagerTest,
         inverse_light_view * glm::vec4(fine_page_world, 0.0F, 0.0F, 1.0F))
     - world_origin;
 
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 233 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 233 });
   shadow_manager->SetVirtualDirectionalCacheControls(
     { .clipmap_panning_enabled = false, .force_invalidate = false });
 
@@ -4111,7 +4230,7 @@ NOLINT_TEST_F(LightManagerTest,
     = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 235 });
   ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(first_introspection, nullptr);
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 235 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 235 });
   shadow_manager->SetVirtualDirectionalCacheControls(
     { .clipmap_panning_enabled = true, .force_invalidate = true });
 
@@ -4271,7 +4390,7 @@ NOLINT_TEST_F(LightManagerTest,
     glm::vec4(world_b, page_world * 0.1F),
   };
 
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 34 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 34 });
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
 
@@ -4384,7 +4503,7 @@ NOLINT_TEST_F(LightManagerTest,
     glm::vec4(world_a, page_world * 0.1F),
   };
 
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 35 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 35 });
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
 
@@ -4493,7 +4612,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_FALSE(
     first_virtual_introspection->directional_virtual_metadata.empty());
   ASSERT_GT(first_virtual_introspection->mapped_page_count, 0U);
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 138 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 138 });
 
   const auto first_layout = BuildVirtualFeedbackLayout(
     first_virtual_introspection->directional_virtual_metadata.front());
@@ -4639,7 +4758,7 @@ NOLINT_TEST_F(LightManagerTest,
     first_virtual_introspection->directional_virtual_metadata.empty());
   const auto first_layout = BuildVirtualFeedbackLayout(
     first_virtual_introspection->directional_virtual_metadata.front());
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 244 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 244 });
 
   const auto& first_metadata
     = first_virtual_introspection->directional_virtual_metadata.front();
@@ -4672,7 +4791,7 @@ NOLINT_TEST_F(LightManagerTest,
     second_virtual_introspection->directional_virtual_metadata.front());
   ASSERT_EQ(second_layout.directional_address_space_hash,
     first_layout.directional_address_space_hash);
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 244 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 244 });
 
   const auto clip_origin_delta_x
     = second_layout.clip_grid_origin_x[0] - first_layout.clip_grid_origin_x[0];
@@ -4788,7 +4907,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(first_virtual_introspection, nullptr);
   ASSERT_FALSE(
     first_virtual_introspection->directional_virtual_metadata.empty());
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 139 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 139 });
 
   const auto first_layout = BuildVirtualFeedbackLayout(
     first_virtual_introspection->directional_virtual_metadata.front());
@@ -4917,7 +5036,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(first_virtual_introspection, nullptr);
   ASSERT_GT(first_virtual_introspection->resident_page_count, 0U);
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 32 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 32 });
 
   const auto second = shadow_manager->PublishForView(oxygen::ViewId { 32 },
     view_constants, manager, moved_shadow_casters, visible_receivers,
@@ -4987,7 +5106,7 @@ NOLINT_TEST_F(LightManagerTest,
     view_constants, manager, shadow_casters, {}, &synthetic_sun,
     std::chrono::milliseconds(16));
   ASSERT_NE(bootstrap.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 24 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 24 });
 
   std::vector<std::uint32_t> initial_requested_pages(request_count);
   std::iota(initial_requested_pages.begin(), initial_requested_pages.end(), 0U);
@@ -5011,7 +5130,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(first_virtual_plan, nullptr);
   ASSERT_NE(first_virtual_introspection, nullptr);
   ASSERT_FALSE(first_virtual_plan->resolved_pages.empty());
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 24 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 24 });
 
   std::vector<std::uint32_t> shifted_requested_pages(request_count);
   std::iota(shifted_requested_pages.begin(), shifted_requested_pages.end(), 1U);
@@ -5120,7 +5239,7 @@ NOLINT_TEST_F(LightManagerTest,
   const auto first_published_mapped_coarse_pages = CountMappedPagesInClip(
     first_layout, first_page_table_entries, first_coarse_clip_index);
   ASSERT_GT(first_published_mapped_coarse_pages, 0U);
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 242 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 242 });
 
   const ShadowManager::SyntheticSunShadowInput shifted_sun {
     .enabled = true,
@@ -5250,7 +5369,7 @@ NOLINT_TEST_F(LightManagerTest,
   const auto first_published_metadata
     = first_virtual_introspection->published_directional_virtual_metadata
         .front();
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 243 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 243 });
 
   const std::array<ShadowManager::SyntheticSunShadowInput, 3>
     near_compatible_suns {
@@ -5398,7 +5517,7 @@ NOLINT_TEST_F(LightManagerTest,
   const auto first_address_space_hash = oxygen::renderer::internal::
     shadow_detail::HashDirectionalVirtualFeedbackAddressSpace(
       first_introspection->directional_virtual_metadata.front());
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 247 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 247 });
 
   view_constants = make_view_constants(
     jittered_projection_b, stable_projection, SequenceNumber { 2 }, Slot { 1 });
@@ -5533,7 +5652,7 @@ NOLINT_TEST_F(LightManagerTest,
     = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 244 });
   ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(first_virtual_introspection, nullptr);
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 244 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 244 });
 
   view_constants
     = make_view_constants(base_camera, SequenceNumber { 2 }, Slot { 1 });
@@ -5724,7 +5843,7 @@ NOLINT_TEST_F(LightManagerTest,
   (void)shadow_manager->PublishForView(oxygen::ViewId { 241 }, view_constants,
     manager, initial_shadow_casters, {}, &synthetic_sun,
     std::chrono::milliseconds(16));
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 241 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 241 });
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 241 },
     MakeVirtualRequestFeedback(layout, SequenceNumber { 1 },
@@ -5744,7 +5863,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_LT(*tracked_page, first_introspection->page_table_entries.size());
   ASSERT_NE(first_introspection->page_table_entries[*tracked_page], 0U);
   ASSERT_GE(first_introspection->resident_page_count, 200U);
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 241 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 241 });
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 241 },
     MakeVirtualRequestFeedback(layout, SequenceNumber { 2 },
@@ -5762,7 +5881,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(second_introspection, nullptr);
   EXPECT_GT(second_introspection->evicted_page_count, 0U);
   EXPECT_GT(second_introspection->allocated_page_count, 0U);
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 241 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 241 });
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 241 },
     MakeVirtualRequestFeedback(
@@ -5785,8 +5904,7 @@ NOLINT_TEST_F(LightManagerTest,
   const auto tracked_local_page = *tracked_page % layout.pages_per_level;
   const auto tracked_page_rerasterized = std::any_of(
     third_plan->resolved_pages.begin(), third_plan->resolved_pages.end(),
-    [tracked_local_page](
-      const oxygen::renderer::VirtualShadowResolvedRasterPage& job) {
+    [tracked_local_page](const DerivedResolvedVirtualPage& job) {
       return job.clip_level == kTrackedClipIndex
         && job.page_index == tracked_local_page;
     });
@@ -5867,10 +5985,10 @@ NOLINT_TEST_F(LightManagerTest,
     first_virtual_plan->resolved_pages.size());
 }
 
-//! Patching the published view-frame slot must update the resolved pages the
-//! virtual raster pass will actually consume.
+//! Patching the published view-frame slot must leave the explicit resolve
+//! contract intact without relying on a CPU pending-job mirror.
 NOLINT_TEST_F(LightManagerTest,
-  ShadowManagerPublishForView_VirtualPlanPatchesPendingJobsWithViewFrameSlot)
+  ShadowManagerPublishForView_VirtualPlanSurvivesViewFrameSlotPatchWithoutCpuMirror)
 {
   auto& manager = Manager();
   manager.OnFrameStart(
@@ -5922,11 +6040,15 @@ NOLINT_TEST_F(LightManagerTest,
 
   const auto* virtual_plan
     = ResolveVirtualRenderPlan(*shadow_manager, oxygen::ViewId { 15 });
+  const auto* virtual_introspection
+    = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 15 });
   ASSERT_NE(virtual_plan, nullptr);
+  ASSERT_NE(virtual_introspection, nullptr);
   ASSERT_FALSE(virtual_plan->resolved_pages.empty());
-  for (const auto& job : virtual_plan->resolved_pages) {
-    EXPECT_EQ(job.view_constants.view_frame_bindings_bslot, kExpectedSlot);
-  }
+  EXPECT_EQ(virtual_introspection->pending_raster_page_count,
+    virtual_plan->resolved_pages.size());
+  EXPECT_EQ(virtual_plan->depth_texture,
+    shadow_manager->GetVirtualShadowDepthTexture().get());
 }
 
 //! Virtual page reuse must invalidate shadow contents when caster inputs
@@ -5997,7 +6119,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(second_virtual_introspection, nullptr);
   EXPECT_EQ(second_virtual_plan->resolved_pages.size(),
     first_virtual_plan->resolved_pages.size());
-  EXPECT_EQ(second_virtual_introspection->resolved_raster_pages.size(),
+  EXPECT_EQ(second_virtual_introspection->pending_raster_page_count,
     first_virtual_plan->resolved_pages.size());
   EXPECT_EQ(second_virtual_introspection->pending_page_count,
     first_virtual_plan->resolved_pages.size());
@@ -6168,7 +6290,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(first_plan, nullptr);
   ASSERT_FALSE(first_plan->resolved_pages.empty());
 
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 19 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 19 });
   const auto* executed_plan
     = ResolveVirtualRenderPlan(*shadow_manager, oxygen::ViewId { 19 });
   ASSERT_NE(executed_plan, nullptr);
@@ -6243,12 +6365,6 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_FALSE(render_plan->resolved_pages.empty());
   ASSERT_EQ(render_plan->resolved_pages.size(),
     introspection->pending_raster_page_count);
-
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 232 });
-  const auto* executed_plan
-    = ResolveVirtualRenderPlan(*shadow_manager, oxygen::ViewId { 232 });
-  ASSERT_NE(executed_plan, nullptr);
-  EXPECT_TRUE(executed_plan->resolved_pages.empty());
 }
 
 //! Virtual VSM getters are now observation-only. They must not implicitly run
@@ -6301,13 +6417,9 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(
     published.virtual_shadow_page_table_srv, kInvalidShaderVisibleIndex);
 
-  const auto* pre_resolve_plan
-    = shadow_manager->TryGetVirtualRenderPlan(oxygen::ViewId { 235 });
   const auto* pre_resolve_introspection
     = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 235 });
-  ASSERT_NE(pre_resolve_plan, nullptr);
   ASSERT_NE(pre_resolve_introspection, nullptr);
-  EXPECT_TRUE(pre_resolve_plan->resolved_pages.empty());
   EXPECT_EQ(pre_resolve_introspection->mapped_page_count, 0U);
   EXPECT_EQ(pre_resolve_introspection->pending_raster_page_count, 0U);
 
@@ -6440,25 +6552,17 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(
     published.virtual_shadow_page_table_srv, kInvalidShaderVisibleIndex);
 
-  const auto* pre_mark_plan
-    = shadow_manager->TryGetVirtualRenderPlan(oxygen::ViewId { 233 });
   const auto* pre_mark_introspection
     = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 233 });
-  ASSERT_NE(pre_mark_plan, nullptr);
   ASSERT_NE(pre_mark_introspection, nullptr);
-  EXPECT_TRUE(pre_mark_plan->resolved_pages.empty());
   EXPECT_EQ(pre_mark_introspection->mapped_page_count, 0U);
   EXPECT_EQ(pre_mark_introspection->pending_raster_page_count, 0U);
 
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 233 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 233 });
 
-  const auto* post_mark_plan
-    = shadow_manager->TryGetVirtualRenderPlan(oxygen::ViewId { 233 });
   const auto* post_mark_introspection
     = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 233 });
-  ASSERT_NE(post_mark_plan, nullptr);
   ASSERT_NE(post_mark_introspection, nullptr);
-  EXPECT_TRUE(post_mark_plan->resolved_pages.empty());
   EXPECT_EQ(post_mark_introspection->mapped_page_count, 0U);
   EXPECT_EQ(post_mark_introspection->pending_raster_page_count, 0U);
   EXPECT_EQ(post_mark_introspection->resident_page_count, 0U);
@@ -6539,7 +6643,7 @@ NOLINT_TEST_F(LightManagerTest,
       first_resolved->resolve_resident_page_entries.begin(),
       first_resolved->resolve_resident_page_entries.end());
 
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 234 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 234 });
 
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
@@ -7198,9 +7302,9 @@ NOLINT_TEST_F(LightManagerTest,
   }
 
   ASSERT_GT(expected_schedule_count, 0U);
-  EXPECT_EQ(
-    introspection->resolved_raster_pages.size(), expected_schedule_count);
-  for (const auto& page : introspection->resolved_raster_pages) {
+  const auto resolved_pages = DeriveResolvedRasterPages(*introspection);
+  EXPECT_EQ(resolved_pages.size(), expected_schedule_count);
+  for (const auto& page : resolved_pages) {
     const auto global_page_index
       = page.clip_level * layout.pages_per_level + page.page_index;
     ASSERT_LT(global_page_index, introspection->page_table_entries.size());
@@ -7283,7 +7387,7 @@ NOLINT_TEST_F(LightManagerTest,
     bootstrap_metadata, 0U, center_page_x + 6U, center_page_y, 0.5F);
 
   shadow_manager->ResolveVirtualCurrentFrame(oxygen::ViewId { 248 });
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 248 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 248 });
 
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
@@ -7308,7 +7412,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_TRUE(first_page_index.has_value());
   const auto first_layout = BuildVirtualFeedbackLayout(
     first_introspection->directional_virtual_metadata.front());
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 248 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 248 });
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 248 },
     MakeVirtualRequestFeedback(
       first_layout, SequenceNumber { 2 }, { *first_page_index }));
@@ -7406,7 +7510,7 @@ NOLINT_TEST_F(LightManagerTest,
     bootstrap_metadata, 0U, center_page_x - 6U, center_page_y, 0.5F);
 
   shadow_manager->ResolveVirtualCurrentFrame(oxygen::ViewId { 249 });
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 249 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 249 });
 
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
@@ -7431,7 +7535,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_TRUE(page_index.has_value());
   const auto layout = BuildVirtualFeedbackLayout(
     first_introspection->directional_virtual_metadata.front());
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 249 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 249 });
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 249 },
     MakeVirtualRequestFeedback(layout, SequenceNumber { 2 }, { *page_index }));
 
@@ -7519,7 +7623,7 @@ NOLINT_TEST_F(LightManagerTest,
     bootstrap_metadata, 0U, center_page_x - 6U, center_page_y, 0.5F);
 
   shadow_manager->ResolveVirtualCurrentFrame(oxygen::ViewId { 250 });
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 250 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 250 });
 
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
@@ -7692,7 +7796,7 @@ NOLINT_TEST_F(LightManagerTest,
     bootstrap_metadata, 0U, center_page_x + 8U, center_page_y, 0.5F);
 
   shadow_manager->ResolveVirtualCurrentFrame(oxygen::ViewId { 264 });
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 264 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 264 });
 
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
@@ -7809,7 +7913,7 @@ NOLINT_TEST_F(LightManagerTest,
   // the physical page lists and the test stops observing the static/dynamic
   // split it is meant to validate.
   shadow_manager->ResolveVirtualCurrentFrame(oxygen::ViewId { 246 });
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 246 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 246 });
 
   const std::array<glm::vec4, 2> first_shadow_casters {
     glm::vec4(static_world, 0.45F),
@@ -7847,7 +7951,7 @@ NOLINT_TEST_F(LightManagerTest,
     first_introspection->directional_virtual_metadata.front(),
     first_introspection->page_table_entries, static_world);
   ASSERT_TRUE(first_static_page_index.has_value());
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 246 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 246 });
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 3 }, Slot { 2 });
 
@@ -8053,7 +8157,7 @@ NOLINT_TEST_F(LightManagerTest,
     tracked_world);
   ASSERT_TRUE(tracked_page.has_value());
 
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 238 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 238 });
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 238 },
     MakeVirtualRequestFeedback(
       layout, SequenceNumber { 1 }, { *tracked_page }));
@@ -8253,7 +8357,7 @@ NOLINT_TEST_F(LightManagerTest,
     view_constants, manager, shadow_casters, first_visible_receivers,
     &synthetic_sun, std::chrono::milliseconds(16));
   ASSERT_NE(bootstrap.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 240 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 240 });
 
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
@@ -8262,7 +8366,7 @@ NOLINT_TEST_F(LightManagerTest,
     view_constants, manager, shadow_casters, first_visible_receivers,
     &synthetic_sun, std::chrono::milliseconds(16));
   ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 240 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 240 });
 
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 3 }, Slot { 2 });
@@ -8407,14 +8511,14 @@ NOLINT_TEST_F(LightManagerTest,
   EXPECT_EQ(entry_dirty_count, first_introspection->dirty_page_count);
   EXPECT_EQ(entry_pending_count, first_introspection->pending_page_count);
 
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 228 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 228 });
   const auto* executed_introspection
-    = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 228 });
+    = shadow_manager->TryGetVirtualViewIntrospection(oxygen::ViewId { 228 });
   ASSERT_NE(executed_introspection, nullptr);
-  EXPECT_EQ(executed_introspection->pending_raster_page_count, 0U);
-  EXPECT_EQ(
-    executed_introspection->resolve_stats.pending_raster_page_count, 0U);
-  EXPECT_EQ(executed_introspection->pending_page_count, 0U);
+  EXPECT_TRUE(executed_introspection->has_persistent_gpu_residency_state);
+  EXPECT_NE(executed_introspection->resolve_resident_pages_srv,
+    kInvalidShaderVisibleIndex);
+  EXPECT_NE(executed_introspection->resolve_stats_srv, kInvalidShaderVisibleIndex);
 }
 
 //! Bridge resolve resources must stay stable per view across republishes so the
@@ -8553,7 +8657,7 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_EQ(requested_resident_keys.size(), 1U);
   ASSERT_GT(first_introspection->page_table_entries.size(), *requested_page);
   EXPECT_NE(first_introspection->page_table_entries[*requested_page], 0U);
-  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 25 });
+  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 25 });
 
   shadow_manager->SubmitVirtualRequestFeedback(oxygen::ViewId { 25 },
     MakeVirtualRequestFeedback(
@@ -8658,7 +8762,8 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(first_introspection, nullptr);
   ASSERT_NE(first_plan, nullptr);
   ASSERT_FALSE(first_introspection->directional_virtual_metadata.empty());
-  ASSERT_FALSE(first_introspection->resolved_raster_pages.empty());
+  const auto first_resolved_pages = DeriveResolvedRasterPages(*first_introspection);
+  ASSERT_FALSE(first_resolved_pages.empty());
   ASSERT_FALSE(first_plan->resolved_pages.empty());
 
   const auto layout = BuildVirtualFeedbackLayout(
@@ -8669,7 +8774,7 @@ NOLINT_TEST_F(LightManagerTest,
   std::optional<std::uint64_t> requested_fine_resident_key {};
   std::optional<std::uint64_t> omitted_fine_resident_key {};
   std::optional<std::uint64_t> coarse_resident_key {};
-  for (const auto& job : first_introspection->resolved_raster_pages) {
+  for (const auto& job : first_resolved_pages) {
     if (job.clip_level < coarse_backbone_begin) {
       if (!requested_fine_resident_key.has_value()) {
         requested_fine_resident_key = job.resident_key;
@@ -8699,7 +8804,8 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(second.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
   ASSERT_NE(second_introspection, nullptr);
   ASSERT_NE(second_plan, nullptr);
-  ASSERT_FALSE(second_introspection->resolved_raster_pages.empty());
+  const auto second_resolved_pages = DeriveResolvedRasterPages(*second_introspection);
+  ASSERT_FALSE(second_resolved_pages.empty());
   ASSERT_FALSE(second_introspection->directional_virtual_metadata.empty());
 
   const auto second_layout = BuildVirtualFeedbackLayout(
@@ -8714,10 +8820,9 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_TRUE(second_omitted_fine_page_index.has_value());
   ASSERT_TRUE(second_coarse_page_index.has_value());
 
-  ASSERT_EQ(second_plan->resolved_pages.size(),
-    second_introspection->resolved_raster_pages.size());
+  ASSERT_EQ(second_plan->resolved_pages.size(), second_resolved_pages.size());
   EXPECT_EQ(second_introspection->pending_raster_page_count,
-    second_introspection->resolved_raster_pages.size());
+    second_resolved_pages.size());
 
   const auto contains_resident_key
     = [](const auto jobs, const std::uint64_t resident_key) {

@@ -20,7 +20,6 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Graphics/Common/Queues.h>
-#include <Oxygen/Renderer/Internal/VirtualShadowRasterCulling.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Resources/DrawMetadataEmitter.h>
 #include <Oxygen/Renderer/Resources/GeometryUploader.h>
@@ -64,6 +63,39 @@ using oxygen::renderer::resources::DrawMetadataEmitter;
 using oxygen::renderer::resources::GeometryUploader;
 using oxygen::renderer::testing::FakeAssetLoader;
 using oxygen::renderer::testing::FakeGraphics;
+
+struct TestResolvedVirtualPage {
+  glm::mat4 view_matrix { 1.0F };
+  glm::mat4 projection_matrix { 1.0F };
+};
+
+auto ResolvedVirtualPageOverlapsBoundingSphere(
+  const TestResolvedVirtualPage& page,
+  const glm::vec4& world_bounding_sphere) noexcept -> bool
+{
+  if (world_bounding_sphere.w <= 0.0F) {
+    return true;
+  }
+
+  const glm::vec4 center_ws(
+    world_bounding_sphere.x, world_bounding_sphere.y, world_bounding_sphere.z,
+    1.0F);
+  const glm::vec4 center_ls = page.view_matrix * center_ws;
+  const glm::vec4 center_clip = page.projection_matrix * center_ls;
+  const float radius = world_bounding_sphere.w;
+
+  const float clip_radius_x = std::abs(page.projection_matrix[0][0]) * radius;
+  const float clip_radius_y = std::abs(page.projection_matrix[1][1]) * radius;
+  const float clip_radius_z = std::abs(page.projection_matrix[2][2]) * radius;
+  constexpr float kClipPadding = 1.0e-3F;
+
+  return center_clip.x + clip_radius_x >= (-1.0F - kClipPadding)
+    && center_clip.x - clip_radius_x <= (1.0F + kClipPadding)
+    && center_clip.y + clip_radius_y >= (-1.0F - kClipPadding)
+    && center_clip.y - clip_radius_y <= (1.0F + kClipPadding)
+    && center_clip.z + clip_radius_z >= (0.0F - kClipPadding)
+    && center_clip.z - clip_radius_z <= (1.0F + kClipPadding);
+}
 
 [[nodiscard]] auto MakeSimpleGeometryRef(std::string_view mesh_name)
   -> oxygen::engine::sceneprep::GeometryRef
@@ -486,9 +518,9 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
 NOLINT_TEST(DrawMetadataEmitterStandaloneTest,
   VirtualShadowRasterCulling_ConservativelyKeepsTouchingCasterBounds)
 {
-  oxygen::renderer::VirtualShadowResolvedRasterPage page {};
-  page.view_constants.view_matrix = glm::mat4(1.0F);
-  page.view_constants.projection_matrix
+  TestResolvedVirtualPage page {};
+  page.view_matrix = glm::mat4(1.0F);
+  page.projection_matrix
     = glm::orthoRH_ZO(-1.0F, 1.0F, -1.0F, 1.0F, 0.1F, 10.0F);
 
   const glm::vec4 inside_sphere(0.0F, 0.0F, -1.0F, 0.25F);
@@ -496,14 +528,10 @@ NOLINT_TEST(DrawMetadataEmitterStandaloneTest,
   const glm::vec4 outside_sphere(2.0F, 0.0F, -1.0F, 0.25F);
   const glm::vec4 invalid_sphere(0.0F, 0.0F, 0.0F, 0.0F);
 
-  EXPECT_TRUE(oxygen::renderer::internal::shadow_detail::
-      ResolvedVirtualPageOverlapsBoundingSphere(page, inside_sphere));
-  EXPECT_TRUE(oxygen::renderer::internal::shadow_detail::
-      ResolvedVirtualPageOverlapsBoundingSphere(page, touching_sphere));
-  EXPECT_FALSE(oxygen::renderer::internal::shadow_detail::
-      ResolvedVirtualPageOverlapsBoundingSphere(page, outside_sphere));
-  EXPECT_TRUE(oxygen::renderer::internal::shadow_detail::
-      ResolvedVirtualPageOverlapsBoundingSphere(page, invalid_sphere));
+  EXPECT_TRUE(ResolvedVirtualPageOverlapsBoundingSphere(page, inside_sphere));
+  EXPECT_TRUE(ResolvedVirtualPageOverlapsBoundingSphere(page, touching_sphere));
+  EXPECT_FALSE(ResolvedVirtualPageOverlapsBoundingSphere(page, outside_sphere));
+  EXPECT_TRUE(ResolvedVirtualPageOverlapsBoundingSphere(page, invalid_sphere));
 }
 
 } // namespace

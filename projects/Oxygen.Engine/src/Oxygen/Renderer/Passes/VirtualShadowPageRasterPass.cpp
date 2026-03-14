@@ -318,7 +318,8 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
     RebindCommonRootParameters(recorder);
     // Do not reconstruct draw/page overlap on the CPU here. Resolve already
     // authored the exact GPU schedule, and re-deriving a "shadow draw" count
-    // from CPU mirrors only recreates the authority split we are removing.
+    // from CPU-side bookkeeping only recreates the authority split we are
+    // removing.
     EmitIndirectResolvedPageDrawRange(recorder,
       *gpu_inputs->draw_indirect_args_buffer, records, gpu_inputs->draw_count,
       pr.begin, pr.end, indirect_draw_record_count,
@@ -355,7 +356,7 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
       indirect_draw_record_count, cpu_draw_submission_count,
       resolved_page_count, rastered_page_count, rastered_page_count,
       skipped_invalid, draw_errors);
-    shadow_manager->MarkVirtualRenderPlanExecuted(
+    shadow_manager->MarkVirtualRasterExecuted(
       Context().current_view.view_id);
   }
 
