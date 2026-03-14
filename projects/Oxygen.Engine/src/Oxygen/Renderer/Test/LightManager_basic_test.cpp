@@ -7730,13 +7730,12 @@ NOLINT_TEST_F(LightManagerTest,
   EXPECT_TRUE(focused_page_index.has_value());
 }
 
-//! Fine receiver pages that do not contain caster footprint still need current
-//! publication during no-feedback bootstrap. Leaving them unmapped is not
-//! equivalent to "lit": the shader will fall back to a coarse page that may
-//! contain an unrelated occluder, which is exactly the visibly wrong fallback
-//! artifact seen in live scenes.
+//! Cold bootstrap is allowed to remain incomplete. Before accepted fine
+//! feedback exists, receiver-only fine pages must stay unpublished instead of
+//! becoming blank current pages or coarse fallback aliases. That keeps the very
+//! first scene load in no-page rather than showing obviously wrong garbage.
 NOLINT_TEST_F(LightManagerTest,
-  ShadowManagerPublishForView_VirtualNoFeedbackBootstrapPublishesBlankFineReceiverPages)
+  ShadowManagerPublishForView_VirtualNoFeedbackBootstrapLeavesReceiverOnlyFinePageUnpublished)
 {
   auto& manager = Manager();
   manager.OnFrameStart(
@@ -7818,29 +7817,18 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(introspection, nullptr);
   ASSERT_FALSE(introspection->directional_virtual_metadata.empty());
 
-  const auto current_receiver_page_index = CurrentLodGlobalPageIndexForWorldPoint(
-    introspection->directional_virtual_metadata.front(),
-    introspection->page_table_entries, receiver_world);
-  ASSERT_TRUE(current_receiver_page_index.has_value())
-    << DescribeCurrentLodCoverageForWorldPoint(
-         introspection->directional_virtual_metadata.front(),
-         introspection->page_table_entries, receiver_world);
-  const auto pages_per_level
-    = introspection->directional_virtual_metadata.front().pages_per_axis
-    * introspection->directional_virtual_metadata.front().pages_per_axis;
-  const auto current_receiver_clip_index
-    = *current_receiver_page_index / pages_per_level;
-  const auto coarse_backbone_begin = introspection->directional_virtual_metadata
-                                       .front()
-                                       .clip_level_count
-    - 3U;
+  const auto receiver_page_index = GlobalPageIndexForWorldPoint(
+    introspection->directional_virtual_metadata.front(), 0U, receiver_world);
+  ASSERT_TRUE(receiver_page_index.has_value());
+  ASSERT_LT(*receiver_page_index, introspection->page_table_entries.size());
+  const auto receiver_page_entry
+    = oxygen::renderer::DecodeVirtualShadowPageTableEntry(
+      introspection->page_table_entries[*receiver_page_index]);
 
   EXPECT_FALSE(introspection->used_request_feedback);
   EXPECT_GT(introspection->same_frame_detail_page_count, 0U);
-  EXPECT_LT(current_receiver_clip_index, coarse_backbone_begin)
-    << DescribeCurrentLodCoverageForWorldPoint(
-         introspection->directional_virtual_metadata.front(),
-         introspection->page_table_entries, receiver_world);
+  EXPECT_FALSE(receiver_page_entry.current_lod_valid);
+  EXPECT_FALSE(receiver_page_entry.any_lod_valid);
 }
 
 //! Phase 7 static/dynamic separation must keep static pages clean when only an
