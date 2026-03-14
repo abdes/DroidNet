@@ -305,20 +305,6 @@ constexpr std::uint32_t kAcceptedFeedbackCurrentFrameMaxDeltaPagesPerClip
           current.clip_metadata[clip_index].origin_page_scale.z)) {
       return false;
     }
-    if (oxygen::renderer::internal::shadow_detail::
-          ResolveDirectionalVirtualFeedbackAddressSpacePageShiftX(
-            previous, clip_index)
-        != oxygen::renderer::internal::shadow_detail::
-             ResolveDirectionalVirtualFeedbackAddressSpacePageShiftX(
-               current, clip_index)
-      || oxygen::renderer::internal::shadow_detail::
-           ResolveDirectionalVirtualFeedbackAddressSpacePageShiftY(
-             previous, clip_index)
-        != oxygen::renderer::internal::shadow_detail::
-             ResolveDirectionalVirtualFeedbackAddressSpacePageShiftY(
-               current, clip_index)) {
-      return false;
-    }
   }
 
   return true;
@@ -754,19 +740,19 @@ auto VirtualShadowMapBackend::MarkRendered(const ViewId view_id) -> void
   }
 
   // Current-frame allocation / eviction / page-table mutation now belongs to
-  // the explicit resolve stage. MarkRendered only transitions already
-  // resolved-and-rasterized pending pages to clean residency.
-  const auto pages_per_level = physical_pool_config_.virtual_pages_per_clip_axis
-    * physical_pool_config_.virtual_pages_per_clip_axis;
-  (void)pages_per_level;
-  for (const auto& page : it->second.resolved_raster_pages) {
-    if (const auto resident_it
-      = it->second.resident_pages.find(page.resident_key);
-      resident_it != it->second.resident_pages.end()) {
-      resident_it->second.state
-        = renderer::VirtualPageResidencyState::kResidentClean;
-      resident_it->second.last_touched_frame = frame_sequence_;
+  // the explicit resolve stage. Once the live GPU raster pass has executed,
+  // every resident page that remained dirty/pending has been consumed by the
+  // GPU-authored schedule and can transition to clean without consulting the
+  // CPU telemetry mirror.
+  for (auto& [_, resident_page] : it->second.resident_pages) {
+    if (resident_page.state != renderer::VirtualPageResidencyState::kResidentDirty
+      && resident_page.state
+        != renderer::VirtualPageResidencyState::kPendingRender) {
+      continue;
     }
+
+    resident_page.state = renderer::VirtualPageResidencyState::kResidentClean;
+    resident_page.last_touched_frame = frame_sequence_;
   }
   it->second.has_rendered_cache_history
     = std::ranges::any_of(it->second.resident_pages,
@@ -823,9 +809,10 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
     = BuildEvictionCandidateList(state, requested_resident_keys);
   std::size_t next_eviction_candidate_index = 0U;
 
-  const auto process_clip_range_desc = [&](const std::uint32_t begin_clip,
-                                         const std::uint32_t end_clip) {
-    for (std::uint32_t clip_index = end_clip; clip_index-- > begin_clip;) {
+  const auto process_clip_range = [&](const std::uint32_t begin_clip,
+                                    const std::uint32_t end_clip,
+                                    const bool descending) {
+    const auto process_clip = [&](const std::uint32_t clip_index) {
       const float page_world_size = pending.clip_page_world[clip_index];
       const float origin_x = pending.clip_origin_x[clip_index];
       const float origin_y = pending.clip_origin_y[clip_index];
@@ -936,15 +923,40 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
           process_selected_page(page_x, page_y);
         }
       }
+    };
+
+    if (descending) {
+      for (std::uint32_t clip_index = end_clip; clip_index-- > begin_clip;) {
+        process_clip(clip_index);
+      }
+      return;
+    }
+
+    for (std::uint32_t clip_index = begin_clip; clip_index < end_clip;
+      ++clip_index) {
+      process_clip(clip_index);
     }
   };
 
   const std::uint32_t coarse_backbone_begin = pending.coarse_backbone_begin;
-  // Phase 6 moves fallback usability onto page-table aliasing plus coarse mark
-  // coverage. Coarse safety remains diagnostic metadata, but it no longer gets
-  // a special backend-only allocation budget or ordering shortcut.
-  process_clip_range_desc(coarse_backbone_begin, pending.clip_level_count);
-  process_clip_range_desc(0U, coarse_backbone_begin);
+  // Guardrail: do not reorder coarse/detail allocation ahead of the accepted
+  // fine-feedback authority chain. The live path still relies on that chain to
+  // repopulate fine current pages after compatible motion; changing ordering in
+  // isolation can turn the view from coarse fallback into total no-page
+  // publication even while the page-table diagnostics still look coherent.
+  //
+  // Bootstrap is the one exception: when accepted fine feedback is absent or
+  // unusable, spending the whole pool on coarser clips makes the view resolve
+  // almost entirely from visibly wrong fallback pages. In that window, allocate
+  // the finest detail clips first and let the coarse backbone consume only the
+  // remaining capacity.
+  if (pending.bootstrap_prefers_finest_detail_pages) {
+    process_clip_range(0U, coarse_backbone_begin, false);
+    process_clip_range(coarse_backbone_begin, pending.clip_level_count, true);
+  } else {
+    process_clip_range(coarse_backbone_begin, pending.clip_level_count, true);
+    process_clip_range(0U, coarse_backbone_begin, true);
+  }
 
   PopulateDirectionalFallbackPageTableEntries(state, pending);
   PropagateDirectionalHierarchicalPageFlags(state, pending);
@@ -2517,6 +2529,8 @@ auto VirtualShadowMapBackend::RefreshViewExports(
     = state.publish_diagnostics.coarse_safety_budget_pages;
   state.introspection.coarse_safety_capacity_fit
     = state.publish_diagnostics.coarse_safety_capacity_fit;
+  state.introspection.same_frame_detail_page_count
+    = state.publish_diagnostics.same_frame_detail_pages;
   state.introspection.feedback_requested_page_count
     = state.publish_diagnostics.feedback_requested_pages;
   state.introspection.feedback_refinement_page_count
@@ -3514,6 +3528,8 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   std::vector<ClipSelectedRegion> frustum_regions(setup.frustum_regions.begin(),
     setup.frustum_regions.begin()
       + static_cast<std::ptrdiff_t>(clip_level_count));
+  std::vector<ClipSelectedRegion> bootstrap_detail_regions(
+    static_cast<std::size_t>(clip_level_count));
 
   state.shadow_instances.push_back(setup.shadow_instance);
   state.shadow_caster_bounds.assign(
@@ -3555,27 +3571,20 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   }
   std::vector<std::uint8_t> selected_pages(state.page_table_entries.size(), 0U);
   std::uint32_t selected_page_count = 0U;
-  const auto mark_selected_page
-    = [&](const std::uint32_t clip_index, const std::uint32_t page_x,
-        const std::uint32_t page_y) -> bool {
+  const auto page_overlaps_caster =
+    [&](const std::uint32_t clip_index, const std::uint32_t page_x,
+        const std::uint32_t page_y) {
     if (clip_index >= clip_level_count || page_x >= pages_per_axis
       || page_y >= pages_per_axis) {
       return false;
     }
 
-    const auto global_page_index = static_cast<std::size_t>(clip_index)
-        * static_cast<std::size_t>(pages_per_level)
-      + static_cast<std::size_t>(page_y * pages_per_axis + page_x);
-    if (global_page_index >= selected_pages.size()
-      || selected_pages[global_page_index] != 0U) {
-      return false;
-    }
-
-    // Caster culling: If this page does not intersect any caster's 2D
-    // footprint, it will never contain shadow-casting geometry, and thus cannot
-    // cast shadows. By skipping allocation, the sampler naturally falls back to
-    // returning 1.0 (unoccluded), which is perfectly accurate and avoids
-    // immense page churn.
+    // Caster culling is only safe for sparse feedback/coarse selection. During
+    // receiver-driven same-frame fine publication we sometimes need a blank
+    // current page even when no caster projects into it, otherwise sampling
+    // falls through to a much coarser fallback page that may contain an
+    // unrelated occluder. That is the exact "wrong fallback shadow" failure
+    // seen in live scenes.
     bool overlaps_caster = false;
     if (!caster_bounds_ls.empty()) {
       const float page_world_size = clip_page_world[clip_index];
@@ -3599,13 +3608,38 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
       return false;
     }
 
+    return true;
+  };
+  const auto mark_selected_page
+    = [&](const std::uint32_t clip_index, const std::uint32_t page_x,
+        const std::uint32_t page_y,
+        const bool require_caster_overlap = true) -> bool {
+    if (clip_index >= clip_level_count || page_x >= pages_per_axis
+      || page_y >= pages_per_axis) {
+      return false;
+    }
+
+    const auto global_page_index = static_cast<std::size_t>(clip_index)
+        * static_cast<std::size_t>(pages_per_level)
+      + static_cast<std::size_t>(page_y * pages_per_axis + page_x);
+    if (global_page_index >= selected_pages.size()
+      || selected_pages[global_page_index] != 0U) {
+      return false;
+    }
+
+    if (require_caster_overlap
+      && !page_overlaps_caster(clip_index, page_x, page_y)) {
+      return false;
+    }
+
     selected_pages[global_page_index] = 1U;
     ++selected_page_count;
     return true;
   };
 
   const auto mark_region
-    = [&](const std::uint32_t clip_index, const ClipSelectedRegion& region) {
+    = [&](const std::uint32_t clip_index, const ClipSelectedRegion& region,
+        const bool require_caster_overlap = true) {
         if (!region.valid) {
           return 0U;
         }
@@ -3615,7 +3649,8 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
           ++page_y) {
           for (std::uint32_t page_x = region.min_x; page_x <= region.max_x;
             ++page_x) {
-            if (mark_selected_page(clip_index, page_x, page_y)) {
+            if (mark_selected_page(
+                  clip_index, page_x, page_y, require_caster_overlap)) {
               ++added;
             }
           }
@@ -3640,7 +3675,8 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
         ++dilated_page_y) {
         for (std::uint32_t dilated_page_x = min_x; dilated_page_x <= max_x;
           ++dilated_page_x) {
-          if (mark_selected_page(clip_index, dilated_page_x, dilated_page_y)) {
+          if (mark_selected_page(
+                clip_index, dilated_page_x, dilated_page_y, true)) {
             ++added;
           }
         }
@@ -3675,7 +3711,7 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
         for (std::int32_t page_x = local_min_x; page_x <= local_max_x;
           ++page_x) {
           if (mark_selected_page(clip_index, static_cast<std::uint32_t>(page_x),
-                static_cast<std::uint32_t>(page_y))) {
+                static_cast<std::uint32_t>(page_y), true)) {
             ++added;
             if (added >= remaining_budget) {
               return added;
@@ -3952,6 +3988,8 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
         .max_y = clip_grid_origin_y[clip_index]
           + static_cast<std::int32_t>(receiver_region.max_y),
       };
+      bootstrap_detail_regions[clip_index]
+        = union_region(bootstrap_detail_regions[clip_index], receiver_region);
       frustum_regions[clip_index]
         = union_region(frustum_regions[clip_index], receiver_region);
       state.absolute_frustum_regions[clip_index] = union_absolute_region(
@@ -3976,7 +4014,7 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
     = previous_state != nullptr ? &previous_state->page_table_entries : nullptr;
   const engine::DirectionalVirtualShadowMetadata* previous_metadata = nullptr;
   bool previous_pending_resolved_pages_empty = previous_state == nullptr
-    || previous_state->resolved_raster_pages.empty();
+    || previous_state->resolve_stats.pending_raster_page_count == 0U;
   const bool previous_rendered_cache_exists = previous_state != nullptr
     && (previous_state->has_rendered_cache_history
       || previous_state->resolve_stats.clean_page_count > 0U);
@@ -4196,6 +4234,9 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   constexpr std::uint32_t receiver_bootstrap_pages = 0U;
   constexpr std::uint32_t current_frame_reinforcement_pages = 0U;
   constexpr std::uint64_t current_frame_reinforcement_reference_frame = 0U;
+  std::uint32_t detail_feedback_requested_pages = 0U;
+  std::uint32_t coarse_feedback_requested_pages = 0U;
+  bool force_full_same_frame_detail_region = false;
 
   for (std::uint32_t clip_index = coarse_backbone_begin;
     clip_index < clip_level_count; ++clip_index) {
@@ -4218,10 +4259,38 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   const bool transition_publish_risk = previous_resident_pages == nullptr
     || previous_resident_pages->empty() || !address_space_compatible
     || global_dirty_resident_contents;
+  // Guardrail: accepted fine feedback remains authoritative for live fine-page
+  // creation until same-frame GPU publication can prove equivalent coverage.
+  // Demoting it to telemetry-only before that replacement exists collapses the
+  // live view to coarse/no-page results even though the cache still looks
+  // structurally coherent in diagnostics.
   const auto mark_same_frame_detail_region =
-    [&](const std::uint32_t clip_index, const ClipSelectedRegion& region) {
+    [&](const std::uint32_t clip_index, const ClipSelectedRegion& region,
+        const bool allow_delta_seed) {
       if (!region.valid) {
         return 0U;
+      }
+
+      // Guardrail: when fine publication falls back to current-frame bootstrap,
+      // keep that bootstrap tied to the explicit receiver region instead of the
+      // whole fine frustum. Re-expanding back to frustum coverage eagerly burns
+      // the full physical pool on pages the current frame never asked for,
+      // which is what makes fallback dominate the startup/motion image.
+      if (!allow_delta_seed) {
+        // Guardrail: current-frame receiver publication must be allowed to map
+        // blank fine pages. If we cull these pages just because no caster
+        // overlaps them, sampling drops to coarse fallback and produces the
+        // visibly wrong shadows reported in live movement scenes.
+        return mark_region(clip_index, region, false);
+      }
+
+      // Guardrail: if accepted detail feedback translated to zero current-space
+      // pages, do not let the delta-band path starve fine publication. That
+      // state is only telemetry-compatible; the live view still needs full
+      // same-frame fine coverage to avoid collapsing to visibly wrong coarse
+      // fallback.
+      if (force_full_same_frame_detail_region) {
+        return mark_region(clip_index, region);
       }
 
       const bool can_delta_seed = previous_state != nullptr
@@ -4233,13 +4302,6 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
         return mark_region(clip_index, region);
       }
 
-      const bool has_snapped_clip_shift
-        = setup.previous_clip_page_offset_x[clip_index] != 0
-        || setup.previous_clip_page_offset_y[clip_index] != 0;
-      if (!has_snapped_clip_shift) {
-        return mark_region(clip_index, region);
-      }
-
       const auto& current_region = state.absolute_frustum_regions[clip_index];
       const auto& previous_region
         = previous_state->absolute_frustum_regions[clip_index];
@@ -4247,8 +4309,29 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
         return mark_region(clip_index, region);
       }
 
-      return mark_absolute_delta_band(
-        clip_index, current_region, previous_region);
+      // Guardrail: absolute receiver-region delta remains the right Phase 7
+      // live authority even when the snapped clip origin does not move. Falling
+      // back to full-region reselection in the zero-shift case starves the pool
+      // with speculative fine pages, which is what drives the visible collapse
+      // back to bad coarse fallback during motion.
+      const bool identical_absolute_region
+        = current_region.min_x == previous_region.min_x
+        && current_region.max_x == previous_region.max_x
+        && current_region.min_y == previous_region.min_y
+        && current_region.max_y == previous_region.max_y;
+      if (identical_absolute_region) {
+        // Guardrail: zero-shift frames may only skip same-frame fine coverage
+        // once accepted fine feedback is already seeding the live current page
+        // set. When feedback is absent, publishing only the coarse backbone
+        // makes fallback dominate the image, which is the visibly wrong
+        // bootstrap/reset regression the live demos keep hitting.
+        if (!detail_feedback_would_have_been_accepted) {
+          return mark_region(clip_index, region);
+        }
+        return 0U;
+      }
+
+      return mark_absolute_delta_band(clip_index, current_region, previous_region);
     };
   const auto mark_feedback_requested_pages =
     [&](const PendingRequestFeedbackChannel* channel,
@@ -4300,22 +4383,51 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
     coarse_backbone_pages += mark_region(clip_index, region);
   }
   if (detail_feedback_would_have_been_accepted) {
-    feedback_requested_pages += mark_feedback_requested_pages(
+    detail_feedback_requested_pages += mark_feedback_requested_pages(
       detail_feedback_channel, true);
-  } else {
+    if (detail_feedback_requested_pages == 0U) {
+      force_full_same_frame_detail_region = true;
+    }
     for (std::uint32_t clip_index = 0U; clip_index < coarse_backbone_begin;
       ++clip_index) {
-      const auto& region = frustum_regions[clip_index];
+      const bool use_bootstrap_region = force_full_same_frame_detail_region
+        && bootstrap_detail_regions[clip_index].valid;
+      const auto& region = use_bootstrap_region
+        ? bootstrap_detail_regions[clip_index]
+        : frustum_regions[clip_index];
       if (!region.valid) {
         continue;
       }
       same_frame_detail_pages
-        += mark_same_frame_detail_region(clip_index, region);
+        += mark_same_frame_detail_region(
+          clip_index, region, !use_bootstrap_region);
+    }
+  } else {
+    for (std::uint32_t clip_index = 0U; clip_index < coarse_backbone_begin;
+      ++clip_index) {
+      const auto& region = bootstrap_detail_regions[clip_index].valid
+        ? bootstrap_detail_regions[clip_index]
+        : frustum_regions[clip_index];
+      if (!region.valid) {
+        continue;
+      }
+      same_frame_detail_pages
+        += mark_same_frame_detail_region(clip_index, region, false);
     }
   }
   if (coarse_feedback_would_have_been_accepted) {
-    feedback_requested_pages += mark_feedback_requested_pages(
+    coarse_feedback_requested_pages += mark_feedback_requested_pages(
       coarse_feedback_channel, false);
+  }
+  feedback_requested_pages
+    = detail_feedback_requested_pages + coarse_feedback_requested_pages;
+  if (feedback_decision == ViewCacheEntry::RequestFeedbackDecision::kAccepted
+    && detail_feedback_would_have_been_accepted
+    && detail_feedback_requested_pages == 0U) {
+    // Accepted lineage that cannot seed a single current-space fine page is
+    // not live authority. Keep it for telemetry, but make the log/introspection
+    // reflect that same-frame publication carried correctness.
+    feedback_decision = ViewCacheEntry::RequestFeedbackDecision::kTelemetryOnly;
   }
 
   const std::uint32_t coarse_safety_selected_pages
@@ -4415,6 +4527,9 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
     = coarse_safety_priority_center_ls;
   pending_resolve.coarse_safety_priority_valid = coarse_safety_priority_valid;
   pending_resolve.reusable_clip_contents = reusable_clip_contents;
+  pending_resolve.bootstrap_prefers_finest_detail_pages
+    = !detail_feedback_would_have_been_accepted
+    || force_full_same_frame_detail_region;
   pending_resolve.address_space_compatible = address_space_compatible;
   pending_resolve.cache_layout_compatible = cache_layout_compatible;
   pending_resolve.depth_guardband_valid = depth_guardband_valid;
