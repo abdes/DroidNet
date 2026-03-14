@@ -147,6 +147,8 @@ public:
 
   OXGN_RNDR_API auto SetProjectionMatrix(const glm::mat4& m) noexcept
     -> ViewConstants&;
+  OXGN_RNDR_API auto SetStableProjectionMatrix(const glm::mat4& m) noexcept
+    -> ViewConstants&;
 
   OXGN_RNDR_API auto SetCameraPosition(const glm::vec3& p) noexcept
     -> ViewConstants&;
@@ -169,6 +171,10 @@ public:
   [[nodiscard]] auto GetProjectionMatrix() const noexcept
   {
     return projection_matrix_;
+  }
+  [[nodiscard]] auto GetStableProjectionMatrix() const noexcept
+  {
+    return stable_projection_matrix_;
   }
   [[nodiscard]] auto GetCameraPosition() const noexcept
   {
@@ -212,6 +218,7 @@ private:
   // Application-managed fields
   glm::mat4 view_matrix_ { 1.0F };
   glm::mat4 projection_matrix_ { 1.0F };
+  glm::mat4 stable_projection_matrix_ { 1.0F };
   glm::vec3 camera_position_ { 0.0F, 0.0F, 0.0F };
 
   // Renderer-managed fields

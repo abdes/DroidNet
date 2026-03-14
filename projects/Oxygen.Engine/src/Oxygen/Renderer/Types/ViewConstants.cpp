@@ -40,6 +40,14 @@ auto ViewConstants::SetProjectionMatrix(const glm::mat4& m) noexcept
     projection_matrix_ = m;
     version_ = version_.Next();
   }
+  stable_projection_matrix_ = m;
+  return *this;
+}
+
+auto ViewConstants::SetStableProjectionMatrix(const glm::mat4& m) noexcept
+  -> ViewConstants&
+{
+  stable_projection_matrix_ = m;
   return *this;
 }
 

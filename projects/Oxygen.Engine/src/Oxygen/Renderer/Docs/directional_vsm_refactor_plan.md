@@ -1527,24 +1527,72 @@ Validation update:
       - live benchmark evidence:
         - the archived run contains only one address-space hash:
           `0x37fb881a7704665e`
-        - `request=telemetry-only` is absent; `request=accepted` appears on the
+      - `request=telemetry-only` is absent; `request=accepted` appears on the
           live path throughout the warmed benchmark
         - `VirtualShadowMapBackend` reports `address_space_compatible=true`
           during the warmed path, and settled screen-debug frames show
           `current=all`, `fallback=0`
+- March 14, 2026 projection-jitter cache-stability follow-up:
+  - fixed the remaining static-scene address-space oscillation class by
+    separating jittered presentation projection from the stable camera frustum
+    used for directional VSM publication:
+    - `ResolvedView` now carries both the jittered projection used by the main
+      render path and an unjittered stable projection
+    - `ViewConstants` now preserves that stable projection on the CPU side
+      without changing the GPU-facing constant-buffer contract
+    - `VirtualShadowMapBackend::BuildPublicationKey(...)` and
+      `PrepareDirectionalVirtualClipmapSetup(...)` now consume the stable
+      projection instead of the jittered resolved projection when building the
+      directional address space
+    - `Renderer` and `SceneCameraViewResolver` now wire the stable projection
+      through the existing view path rather than reconstructing it ad hoc in
+      the backend
+    - focused regression coverage now proves that alternating projection jitter
+      does not perturb the directional address-space hash when the unjittered
+      camera frustum is unchanged
+  - files changed in this slice:
+    - `src/Oxygen/Core/Types/ResolvedView.h`
+    - `src/Oxygen/Core/Types/ResolvedView.cpp`
+    - `src/Oxygen/Renderer/SceneCameraViewResolver.cpp`
+    - `src/Oxygen/Renderer/Types/ViewConstants.h`
+    - `src/Oxygen/Renderer/Types/ViewConstants.cpp`
+    - `src/Oxygen/Renderer/Renderer.cpp`
+    - `src/Oxygen/Renderer/Internal/VirtualShadowMapBackend.cpp`
+    - `src/Oxygen/Renderer/Test/LightManager_basic_test.cpp`
+  - validation run on March 14, 2026 in `out/build-vs`:
+    - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+      - result: build succeeded
+    - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*VirtualProjectionJitterKeepsDirectionalAddressSpaceStable:*VirtualFeedbackAddressSpaceTracksPageScaleXYTranslationButIgnoresZPullback:*VirtualRepeatedNearCompatibleDirectionChangesRejectStaleFallback:*VirtualStaticPagesStayCleanWhenDynamicCasterMovesElsewhere`
+      - result: `4/4` passed
+    - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:1 /p:Configuration=Debug /nologo`
+      - result: build succeeded
+    - `powershell -ExecutionPolicy Bypass -File Examples\\RenderScene\\benchmark_directional_vsm.ps1`
+      - result: `exit_code=0`, `wall_ms=15347`, `approx_fps=7.82`
+      - settled stats:
+        - `requested_pages_avg=661.56`
+        - `scheduled_pages_avg=331.06`
+        - `resolved_pages_avg=331.06`
+        - `rastered_pages_avg=331.06`
+        - `shadow_draws_avg=1509.94`
+      - settled-frame evidence (`frame=101-120`):
+        - only one address-space hash appears:
+          `0x37fb881a7704665e`
+        - `address_space_compatible=false` does not appear
+        - `request=telemetry-only` does not appear
+        - screen-debug stays `current=all`, `fallback=0`
+  - this closes the projection-jitter-driven address-space oscillation class
+    that was still invalidating the static scene cache after the earlier
+    benchmark-only fix
 - remaining exit gap:
   - the static/dynamic page-separation regression is fixed, but Phase 7 remains
     incomplete because fine-page creation is still driven by delayed accepted
     feedback (`feedback_age=4`) instead of same-frame GPU missing-page
     publication
-  - the earlier benchmark-specific address-space oscillation was fixed, but a
-    second live oscillation class still exists:
-    static scenes can alternate between two directional address hashes and
-    force full resident-page release/reraster even with stable geometry and
-    stable screen-debug histograms
   - the later coherence diagnostic still reports nonzero `page_flags_mismatches`
-    on the settled benchmark path even while `page_table_mismatches=0` and
-    `fallback=0`
+    of `0`, but still reports nonzero
+    `semantic_only_page_flags_mismatches` / `exact_page_flags_mismatches` on
+    the settled benchmark path even while `page_table_mismatches=0`,
+    `structural_coherent=true`, and `fallback=0`
 
 Resume anchor:
 

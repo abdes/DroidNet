@@ -1936,6 +1936,7 @@ auto Renderer::RepublishCurrentViewBindings(
 
   view_constants.SetViewMatrix(resolved.ViewMatrix())
     .SetProjectionMatrix(resolved.ProjectionMatrix())
+    .SetStableProjectionMatrix(resolved.StableProjectionMatrix())
     .SetCameraPosition(resolved.CameraPosition())
     .SetFrameSlot(render_context.frame_slot, ViewConstants::kRenderer)
     .SetFrameSequenceNumber(
@@ -2722,6 +2723,7 @@ auto Renderer::UpdateViewConstantsFromView(const ResolvedView& view) -> void
   // Update ViewConstants from the provided view snapshot.
   view_const_cpu_.SetViewMatrix(view.ViewMatrix())
     .SetProjectionMatrix(view.ProjectionMatrix())
+    .SetStableProjectionMatrix(view.StableProjectionMatrix())
     .SetCameraPosition(view.CameraPosition());
 }
 

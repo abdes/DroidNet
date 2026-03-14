@@ -26,6 +26,7 @@ public:
     View view_config {};
     glm::mat4 view_matrix { 1.0f };
     glm::mat4 proj_matrix { 1.0f };
+    std::optional<glm::mat4> stable_proj_matrix {};
     std::optional<glm::vec3> camera_position {};
     std::optional<float> camera_ev {};
     NdcDepthRange depth_range = NdcDepthRange::ZeroToOne; // default D3D
@@ -43,6 +44,10 @@ public:
   [[nodiscard]] auto ProjectionMatrix() const noexcept -> glm::mat4
   {
     return proj_;
+  }
+  [[nodiscard]] auto StableProjectionMatrix() const noexcept -> glm::mat4
+  {
+    return stable_proj_;
   }
   [[nodiscard]] auto InverseView() const noexcept -> glm::mat4
   {
@@ -93,6 +98,7 @@ private:
   View config_ {};
   glm::mat4 view_ { 1.0f };
   glm::mat4 proj_ { 1.0f };
+  glm::mat4 stable_proj_ { 1.0f };
   glm::mat4 inv_view_ { 1.0f };
   glm::mat4 inv_proj_ { 1.0f };
   glm::mat4 view_proj_ { 1.0f };

@@ -27,6 +27,7 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Renderer/Internal/ShadowBackendCommon.h>
 #include <Oxygen/Renderer/LightManager.h>
@@ -5163,6 +5164,110 @@ NOLINT_TEST_F(LightManagerTest,
       oxygen::renderer::internal::shadow_detail::
         HashDirectionalVirtualFeedbackAddressSpace(published_metadata));
   }
+}
+
+//! Projection jitter must not perturb the directional VSM address space when
+//! the unjittered camera frustum is unchanged.
+NOLINT_TEST_F(LightManagerTest,
+  ShadowManagerPublishForView_VirtualProjectionJitterKeepsDirectionalAddressSpaceStable)
+{
+  auto& manager = Manager();
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  auto shadow_manager = CreateShadowManager(
+    oxygen::DirectionalShadowImplementationPolicy::kVirtualOnly,
+    oxygen::ShadowQualityTier::kLow);
+  ASSERT_NE(shadow_manager, nullptr);
+  shadow_manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  const auto make_view_constants = [](const glm::mat4& projection_matrix,
+                                     const glm::mat4& stable_projection_matrix,
+                                     const SequenceNumber sequence,
+                                     const Slot slot) {
+    ViewConstants view_constants;
+    view_constants.SetProjectionMatrix(projection_matrix)
+      .SetStableProjectionMatrix(stable_projection_matrix)
+      .SetCameraPosition(glm::vec3(0.0F));
+    view_constants.SetFrameSequenceNumber(sequence, ViewConstants::kRenderer);
+    view_constants.SetFrameSlot(slot, ViewConstants::kRenderer);
+    return view_constants;
+  };
+
+  const oxygen::ViewPort viewport {
+    .top_left_x = 0.0F,
+    .top_left_y = 0.0F,
+    .width = 2560.0F,
+    .height = 1400.0F,
+    .min_depth = 0.0F,
+    .max_depth = 1.0F,
+  };
+  const auto stable_projection = glm::perspectiveRH_ZO(
+    glm::radians(45.0F), 16.0F / 9.0F, 0.1F, 200.0F);
+  const auto jittered_projection_a = oxygen::ApplyJitterToProjection(
+    stable_projection, glm::vec2(0.5F, -0.5F), viewport);
+  const auto jittered_projection_b = oxygen::ApplyJitterToProjection(
+    stable_projection, glm::vec2(-0.5F, 0.5F), viewport);
+
+  auto view_constants = make_view_constants(
+    jittered_projection_a, stable_projection, SequenceNumber { 1 }, Slot { 0 });
+
+  const ShadowManager::SyntheticSunShadowInput synthetic_sun {
+    .enabled = true,
+    .direction_ws = glm::normalize(glm::vec3(0.35F, -0.45F, -1.0F)),
+    .bias = 0.0F,
+    .normal_bias = 0.0F,
+    .resolution_hint
+    = static_cast<std::uint32_t>(oxygen::scene::ShadowResolutionHint::kMedium),
+    .cascade_count = 4U,
+    .distribution_exponent = 1.0F,
+    .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
+  };
+  const std::array<glm::vec4, 1> shadow_casters {
+    glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
+  };
+  const std::array<glm::vec4, 1> visible_receivers {
+    glm::vec4(0.0F, 0.0F, 0.0F, 0.08F),
+  };
+
+  const auto first = shadow_manager->PublishForView(oxygen::ViewId { 247 },
+    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
+    std::chrono::milliseconds(16));
+  const auto* first_introspection
+    = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 247 });
+
+  ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(first_introspection, nullptr);
+  ASSERT_FALSE(first_introspection->directional_virtual_metadata.empty());
+
+  const auto first_address_space_hash
+    = oxygen::renderer::internal::shadow_detail::
+      HashDirectionalVirtualFeedbackAddressSpace(
+        first_introspection->directional_virtual_metadata.front());
+  shadow_manager->MarkVirtualRenderPlanExecuted(oxygen::ViewId { 247 });
+
+  view_constants = make_view_constants(jittered_projection_b, stable_projection,
+    SequenceNumber { 2 }, Slot { 1 });
+  AdvanceRendererFrame(
+    manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
+
+  const auto second = shadow_manager->PublishForView(oxygen::ViewId { 247 },
+    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
+    std::chrono::milliseconds(16));
+  const auto* second_introspection
+    = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 247 });
+
+  ASSERT_NE(second.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
+  ASSERT_NE(second_introspection, nullptr);
+  ASSERT_FALSE(second_introspection->directional_virtual_metadata.empty());
+  EXPECT_TRUE(second_introspection->cache_layout_compatible);
+
+  const auto second_address_space_hash
+    = oxygen::renderer::internal::shadow_detail::
+      HashDirectionalVirtualFeedbackAddressSpace(
+        second_introspection->directional_virtual_metadata.front());
+  EXPECT_EQ(first_address_space_hash, second_address_space_hash);
 }
 
 //! A visually incompatible change must not republish the stale camera-fit
