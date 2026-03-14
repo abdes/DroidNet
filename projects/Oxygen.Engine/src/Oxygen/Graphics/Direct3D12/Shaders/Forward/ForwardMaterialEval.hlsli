@@ -10,6 +10,7 @@
 #include "Renderer/DrawHelpers.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
 #include "Renderer/MaterialShadingConstants.hlsli"
+#include "Renderer/PristineGrid.hlsli"
 #include "Renderer/ProceduralGridMaterialConstants.hlsli"
 #include "MaterialFlags.hlsli"
 #include "Forward/ForwardPbr.hlsli"
@@ -27,26 +28,11 @@ struct MaterialSurface
     float3 V;
 };
 
-static inline float GridLineMask(float2 grid_pos, float2 spacing, float thickness)
+static inline float2 MakeStableGridPlane(float2 world_plane, float2 camera_plane, float2 period)
 {
-    spacing = max(spacing, float2(1e-4, 1e-4));
-    const float2 coord = grid_pos / spacing;
-    const float2 dist_to_line = min(frac(coord), 1.0 - frac(coord));
-    const float2 aa = fwidth(coord);
-    float2 thickness_coord = max(thickness, 0.0) / spacing;
-    // Ensure at least one-pixel coverage at grazing angles.
-    thickness_coord = max(thickness_coord, aa);
-    const float2 half_width = thickness_coord * 0.5;
-    const float2 line_mask = 1.0 - smoothstep(half_width, half_width + aa, dist_to_line);
-    return saturate(max(line_mask.x, line_mask.y));
-}
-
-static inline float AxisLineMask(float value, float thickness)
-{
-    const float aa = fwidth(value);
-    const float width = max(thickness, aa);
-    const float half_width = width * 0.5;
-    return saturate(1.0 - smoothstep(half_width, half_width + aa, abs(value)));
+    const float2 safe_period = max(period, float2(1e-4, 1e-4));
+    const float2 snapped_origin = floor(camera_plane / safe_period) * safe_period;
+    return world_plane - snapped_origin;
 }
 
 static inline float4 EvaluateProceduralGrid(
@@ -54,21 +40,27 @@ static inline float4 EvaluateProceduralGrid(
     float3 world_pos,
     float3 world_normal)
 {
-    const float2 spacing = mat.grid_spacing;
+    const float2 spacing = max(mat.grid_spacing, float2(1e-4, 1e-4));
     const float major_every = max(1.0, (float)mat.grid_major_every);
+    const float2 period = spacing * major_every;
 
     const float3 n = abs(SafeNormalize(world_normal));
     const float weight_sum = n.x + n.y + n.z + 1e-5;
     const float3 w = n / weight_sum;
 
-    const float2 grid_xy = world_pos.xy;
-    const float2 grid_xz = float2(world_pos.x, world_pos.z);
-    const float2 grid_yz = float2(world_pos.y, world_pos.z);
+    const float2 grid_xy = MakeStableGridPlane(world_pos.xy, camera_position.xy, period);
+    const float2 grid_xz = MakeStableGridPlane(float2(world_pos.x, world_pos.z), float2(camera_position.x, camera_position.z), period);
+    const float2 grid_yz = MakeStableGridPlane(float2(world_pos.y, world_pos.z), float2(camera_position.y, camera_position.z), period);
 
-    const float minor_xy = GridLineMask(grid_xy, spacing, mat.grid_line_thickness);
-    const float major_xy = GridLineMask(grid_xy, spacing * major_every, mat.grid_major_thickness);
-    const float axis_x_xy = AxisLineMask(grid_xy.x, mat.grid_axis_thickness);
-    const float axis_y_xy = AxisLineMask(grid_xy.y, mat.grid_axis_thickness);
+    const float minor_width_x = mat.grid_line_thickness / spacing.x;
+    const float minor_width_y = mat.grid_line_thickness / spacing.y;
+    const float major_width_x = mat.grid_major_thickness / period.x;
+    const float major_width_y = mat.grid_major_thickness / period.y;
+
+    const float minor_xy = PristineGrid(grid_xy / spacing, float2(minor_width_x, minor_width_y));
+    const float major_xy = PristineGrid(grid_xy / period, float2(major_width_x, major_width_y));
+    const float axis_x_xy = PristineLine(grid_xy.x, mat.grid_axis_thickness);
+    const float axis_y_xy = PristineLine(grid_xy.y, mat.grid_axis_thickness);
     const float origin_xy = axis_x_xy * axis_y_xy;
     float4 color_xy = mat.grid_minor_color * minor_xy;
     color_xy = lerp(color_xy, mat.grid_major_color, major_xy);
@@ -76,10 +68,10 @@ static inline float4 EvaluateProceduralGrid(
     color_xy = lerp(color_xy, mat.grid_axis_color_y, axis_y_xy);
     color_xy = lerp(color_xy, mat.grid_origin_color, origin_xy);
 
-    const float minor_xz = GridLineMask(grid_xz, spacing, mat.grid_line_thickness);
-    const float major_xz = GridLineMask(grid_xz, spacing * major_every, mat.grid_major_thickness);
-    const float axis_x_xz = AxisLineMask(grid_xz.x, mat.grid_axis_thickness);
-    const float axis_z_xz = AxisLineMask(grid_xz.y, mat.grid_axis_thickness);
+    const float minor_xz = PristineGrid(grid_xz / spacing, float2(minor_width_x, minor_width_y));
+    const float major_xz = PristineGrid(grid_xz / period, float2(major_width_x, major_width_y));
+    const float axis_x_xz = PristineLine(grid_xz.x, mat.grid_axis_thickness);
+    const float axis_z_xz = PristineLine(grid_xz.y, mat.grid_axis_thickness);
     const float origin_xz = axis_x_xz * axis_z_xz;
     float4 color_xz = mat.grid_minor_color * minor_xz;
     color_xz = lerp(color_xz, mat.grid_major_color, major_xz);
@@ -87,10 +79,10 @@ static inline float4 EvaluateProceduralGrid(
     color_xz = lerp(color_xz, mat.grid_axis_color_y, axis_z_xz);
     color_xz = lerp(color_xz, mat.grid_origin_color, origin_xz);
 
-    const float minor_yz = GridLineMask(grid_yz, spacing, mat.grid_line_thickness);
-    const float major_yz = GridLineMask(grid_yz, spacing * major_every, mat.grid_major_thickness);
-    const float axis_y_yz = AxisLineMask(grid_yz.x, mat.grid_axis_thickness);
-    const float axis_z_yz = AxisLineMask(grid_yz.y, mat.grid_axis_thickness);
+    const float minor_yz = PristineGrid(grid_yz / spacing, float2(minor_width_x, minor_width_y));
+    const float major_yz = PristineGrid(grid_yz / period, float2(major_width_x, major_width_y));
+    const float axis_y_yz = PristineLine(grid_yz.x, mat.grid_axis_thickness);
+    const float axis_z_yz = PristineLine(grid_yz.y, mat.grid_axis_thickness);
     const float origin_yz = axis_y_yz * axis_z_yz;
     float4 color_yz = mat.grid_minor_color * minor_yz;
     color_yz = lerp(color_yz, mat.grid_major_color, major_yz);

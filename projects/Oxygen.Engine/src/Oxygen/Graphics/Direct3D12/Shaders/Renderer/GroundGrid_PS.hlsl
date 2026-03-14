@@ -7,6 +7,7 @@
 #include "Core/Bindless/Generated.BindlessLayout.hlsl"
 #include "Renderer/ViewConstants.hlsli"
 #include "Renderer/ViewColorHelpers.hlsli"
+#include "Renderer/PristineGrid.hlsli"
 #include "Common/Math.hlsli"
 
 struct GroundGridPSInput
@@ -61,59 +62,6 @@ struct GroundGridPassConstants {
     float4 origin_color;
 };
 
-// Visual constants
-static const float kGridMinPixelWidthMinor = 1.5;
-static const float kGridMinPixelWidthMajor = 2.0;
-static const float kAxisMinPixelWidth = 2.0;
-
-// Fade out based on line density to avoid moire
-// If spacing < derivative, we are aliasing.
-static const float kGridFadeDensityFactor = 3.0;
-
-// Pristine Grid approach-ish: https://bgolus.medium.com/the-best-darn-grid-shader-yet-727f9278b9d8
-// Modified to match our inputs.
-static inline float GridLineMask(float2 uv, float2 spacing, float thickness, float min_pixel_width)
-{
-    float2 derivative = fwidth(uv);
-    // Ensure derivative is not zero to avoid divide by zero
-    derivative = max(derivative, float2(EPSILON, EPSILON));
-
-    float2 width = max(thickness, derivative * min_pixel_width);
-
-    // UV is in world units.
-    // Calculate distance to nearest line center.
-    // Lines are at 0, spacing, 2*spacing...
-    // uv % spacing.
-    // We want distance from nearest multiple of spacing.
-
-    float2 grid_uv = abs(frac(uv / spacing + 0.5) - 0.5) * spacing;
-
-    // Linear falloff for AA
-    float2 draw_width = width;
-    float2 line_aa = derivative;
-
-    // Smoothstep for nice AA
-    float2 grid = 1.0 - smoothstep(draw_width * 0.5 - line_aa, draw_width * 0.5 + line_aa, grid_uv);
-
-    float mask = saturate(max(grid.x, grid.y));
-
-    // Opacity fade:
-    float2 fade_factor = saturate(spacing / (derivative * kGridFadeDensityFactor));
-    mask *= min(fade_factor.x, fade_factor.y);
-
-    return mask;
-}
-
-static inline float AxisLineMask(float value, float thickness, float min_pixel_width)
-{
-    float derivative = fwidth(value);
-    derivative = max(derivative, EPSILON);
-    float width = max(thickness, derivative * min_pixel_width);
-    float dist = abs(value);
-    float aa = derivative;
-    return saturate(1.0 - smoothstep(width * 0.5 - aa, width * 0.5 + aa, dist));
-}
-
 float4 PS(GroundGridPSInput input) : SV_TARGET
 {
     if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX) {
@@ -124,7 +72,7 @@ float4 PS(GroundGridPSInput input) : SV_TARGET
         ResourceDescriptorHeap[g_PassConstantsIndex];
 
     const float plane_height = pass.plane_height;
-    const float spacing = pass.spacing;
+    const float spacing = max(pass.spacing, EPSILON);
     const float major_every = max(pass.major_every, 1.0);
     const float line_thickness = pass.line_thickness;
     const float major_thickness = pass.major_thickness;
@@ -199,18 +147,17 @@ float4 PS(GroundGridPSInput input) : SV_TARGET
     }
 
     // --- Grid Logic (Using Relative Coordinates) ---
-    // UV = RelativePosition.xy + GridOffset (Camera % Spacing)
-    // This keeps coordinate magnitude small -> High Precision!
-    const float2 uv = pos_rel.xy + grid_offset;
+    // Grid coordinates stay camera-relative for precision. Origin shifting is
+    // handled in the CPU-side snapped offset.
+    const float2 grid_pos = pos_rel.xy + grid_offset;
+    const float2 minor_uv = grid_pos / spacing;
+    const float minor_width = line_thickness / spacing;
+    const float major_spacing = max(spacing * major_every, EPSILON);
+    const float2 major_uv = grid_pos / major_spacing;
+    const float major_width = major_thickness / major_spacing;
 
-    // Minor Grid
-    const float minor_mask = GridLineMask(uv, float2(spacing, spacing), line_thickness, kGridMinPixelWidthMinor);
-
-    // Major Grid
-    // Major grid aligns with spacing * major_every.
-    // We need uv relative to that larger spacing.
-    // We can just pass 'uv' but tell the mask the spacing is larger.
-    const float major_mask = GridLineMask(uv, float2(spacing, spacing) * major_every, major_thickness, kGridMinPixelWidthMajor);
+    const float minor_mask = PristineGrid(minor_uv, minor_width.xx);
+    const float major_mask = PristineGrid(major_uv, major_width.xx);
 
     // Axis Lines (Need Absolute X/Y approximately)
     // We use pos_abs_approx for this. Since Axis lines are at 0,0,
@@ -219,8 +166,8 @@ float4 PS(GroundGridPSInput input) : SV_TARGET
     // When far, it's large and imprecise, but Axis lines are invisible or subpixel anyway.
     // X axis runs along +X at Y=0  ->  detect by distance from Y=0  ->  use .y
     // Y axis runs along +Y at X=0  ->  detect by distance from X=0  ->  use .x
-    const float axis_x_mask = AxisLineMask(pos_abs_approx.y - grid_origin.y, axis_thickness, kAxisMinPixelWidth);
-    const float axis_y_mask = AxisLineMask(pos_abs_approx.x - grid_origin.x, axis_thickness, kAxisMinPixelWidth);
+    const float axis_x_mask = PristineLine(pos_abs_approx.y - grid_origin.y, axis_thickness);
+    const float axis_y_mask = PristineLine(pos_abs_approx.x - grid_origin.x, axis_thickness);
     const float origin_mask = axis_x_mask * axis_y_mask;
 
     // Composition

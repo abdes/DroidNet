@@ -435,14 +435,15 @@ auto GroundGridPass::ComputeGridOffset(GroundGridPassConstants& constants)
     static_cast<double>(config_->major_every == 0U ? 1U : config_->major_every),
     1.0);
   const double period = spacing * major_every;
+  const glm::dvec2 origin = glm::dvec2(config_->origin.x, config_->origin.y);
 
   glm::vec2 grid_offset;
-  grid_offset.x = static_cast<float>(std::fmod(effective_cam_pos.x, period));
+  grid_offset.x = static_cast<float>(std::fmod(effective_cam_pos.x - origin.x, period));
   if (grid_offset.x < 0.0F) {
     grid_offset.x += static_cast<float>(period);
   }
 
-  grid_offset.y = static_cast<float>(std::fmod(effective_cam_pos.y, period));
+  grid_offset.y = static_cast<float>(std::fmod(effective_cam_pos.y - origin.y, period));
   if (grid_offset.y < 0.0F) {
     grid_offset.y += static_cast<float>(period);
   }
