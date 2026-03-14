@@ -5,7 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "Renderer/DrawMetadata.hlsli"
+#include "Renderer/DrawHelpers.hlsli"
+#include "Renderer/DirectionalVirtualShadowMetadata.hlsli"
 #include "Renderer/MaterialShadingConstants.hlsli"
+#include "Renderer/ShadowFrameBindings.hlsli"
 #include "Renderer/VirtualShadowPageAccess.hlsli"
 
 #define BX_VERTEX_TYPE uint4
@@ -21,8 +24,14 @@ struct VirtualShadowResolvePassConstants
 {
     uint request_words_srv_index;
     uint page_mark_flags_srv_index;
+    uint draw_bounds_srv_index;
     uint schedule_uav_index;
     uint schedule_count_uav_index;
+    uint clear_args_uav_index;
+    uint draw_args_uav_index;
+    uint draw_page_ranges_uav_index;
+    uint draw_page_indices_uav_index;
+    uint draw_page_counter_uav_index;
     uint page_table_srv_index;
     uint page_table_uav_index;
     uint page_flags_uav_index;
@@ -39,6 +48,8 @@ struct VirtualShadowResolvePassConstants
     uint dirty_page_list_count;
     uint clean_page_list_count;
     uint total_page_management_list_count;
+    uint draw_count;
+    uint draw_page_list_capacity;
     uint phase;
     uint target_clip_index;
     int4 clip_grid_origin_x_packed[3];
@@ -87,10 +98,90 @@ static const uint kResolvePhasePopulateCurrent = 1u;
 static const uint kResolvePhasePopulateFallback = 2u;
 static const uint kResolvePhasePropagateHierarchy = 3u;
 static const uint kResolvePhaseSchedule = 4u;
+static const uint kResolvePhaseBuildClearArgs = 5u;
+static const uint kResolvePhaseBuildDrawArgs = 6u;
 
 static const uint kVirtualResidentPageCoordBits = 28u;
 static const uint64_t kVirtualResidentPageCoordMask = (1ull << kVirtualResidentPageCoordBits) - 1ull;
 static const uint kVirtualResidentPageCoordSignBit = (1u << (kVirtualResidentPageCoordBits - 1u));
+static const uint kPassMaskOpaque = (1u << 2u);
+static const uint kPassMaskMasked = (1u << 3u);
+static const uint kPassMaskShadowCaster = (1u << 9u);
+
+struct DrawIndirectArgs
+{
+    uint vertex_count_per_instance;
+    uint instance_count;
+    uint start_vertex_location;
+    uint start_instance_location;
+};
+
+struct DrawIndirectCommand
+{
+    uint draw_index;
+    DrawIndirectArgs draw_args;
+};
+
+struct DrawPageRange
+{
+    uint offset;
+    uint count;
+    uint _pad0;
+    uint _pad1;
+};
+
+static DrawIndirectArgs MakeZeroDrawIndirectArgs()
+{
+    DrawIndirectArgs args;
+    args.vertex_count_per_instance = 0u;
+    args.instance_count = 0u;
+    args.start_vertex_location = 0u;
+    args.start_instance_location = 0u;
+    return args;
+}
+
+static DrawIndirectArgs MakeDrawIndirectArgs(
+    uint vertex_count_per_instance,
+    uint instance_count)
+{
+    DrawIndirectArgs args;
+    args.vertex_count_per_instance = vertex_count_per_instance;
+    args.instance_count = instance_count;
+    args.start_vertex_location = 0u;
+    args.start_instance_location = 0u;
+    return args;
+}
+
+static DrawIndirectCommand MakeZeroDrawIndirectCommand(uint draw_index)
+{
+    DrawIndirectCommand command;
+    command.draw_index = draw_index;
+    command.draw_args = MakeZeroDrawIndirectArgs();
+    return command;
+}
+
+static DrawIndirectCommand MakeDrawIndirectCommand(
+    uint draw_index,
+    uint vertex_count_per_instance,
+    uint instance_count)
+{
+    DrawIndirectCommand command;
+    command.draw_index = draw_index;
+    command.draw_args = MakeDrawIndirectArgs(
+        vertex_count_per_instance,
+        instance_count);
+    return command;
+}
+
+static DrawPageRange MakeZeroDrawPageRange()
+{
+    DrawPageRange range;
+    range.offset = 0u;
+    range.count = 0u;
+    range._pad0 = 0u;
+    range._pad1 = 0u;
+    return range;
+}
 
 static int LoadPackedInt(int4 packed_values[3], uint index)
 {
@@ -146,6 +237,85 @@ static uint DecodePackedTileY(uint packed_atlas_tile_coords)
     return (packed_atlas_tile_coords >> 16u) & 0xFFFFu;
 }
 
+static uint SelectDirectionalVirtualFilterRadiusTexels(
+    DirectionalVirtualShadowMetadata metadata,
+    uint clip_index)
+{
+    const float base_page_world =
+        max(metadata.clip_metadata[0].origin_page_scale.z, 1.0e-4);
+    const float clip_page_world =
+        max(metadata.clip_metadata[clip_index].origin_page_scale.z, base_page_world);
+    const float texel_ratio = clip_page_world / base_page_world;
+    return texel_ratio > 2.5 ? 2u : 1u;
+}
+
+static uint ResolveDirectionalVirtualGuardTexels(
+    uint page_size_texels,
+    uint filter_radius_texels)
+{
+    const uint max_guard_texels = max(1u, page_size_texels / 4u);
+    return min(max_guard_texels, max(1u, filter_radius_texels));
+}
+
+static bool ScheduledPageOverlapsBoundingSphere(
+    DirectionalVirtualShadowMetadata metadata,
+    uint4 schedule_entry,
+    float4 world_bounding_sphere)
+{
+    if (world_bounding_sphere.w <= 0.0f) {
+        return true;
+    }
+
+    if (metadata.clip_level_count == 0u || metadata.pages_per_axis == 0u) {
+        return false;
+    }
+
+    const uint pages_per_level = metadata.pages_per_axis * metadata.pages_per_axis;
+    if (pages_per_level == 0u) {
+        return false;
+    }
+
+    const uint global_page_index = schedule_entry.x;
+    const uint clip_index = global_page_index / pages_per_level;
+    if (clip_index >= metadata.clip_level_count) {
+        return false;
+    }
+
+    const uint local_page_index = global_page_index % pages_per_level;
+    const uint page_x = local_page_index % metadata.pages_per_axis;
+    const uint page_y = local_page_index / metadata.pages_per_axis;
+    const DirectionalVirtualClipMetadata clip = metadata.clip_metadata[clip_index];
+    const float page_world_size = max(clip.origin_page_scale.z, 1.0e-4);
+    const uint filter_guard_texels = ResolveDirectionalVirtualGuardTexels(
+        metadata.page_size_texels,
+        SelectDirectionalVirtualFilterRadiusTexels(metadata, clip_index));
+    const float interior_texels = max(
+        1.0,
+        float(metadata.page_size_texels) - float(filter_guard_texels * 2u));
+    const float page_guard_world =
+        page_world_size * (float(filter_guard_texels) / interior_texels);
+
+    const float left =
+        clip.origin_page_scale.x + float(page_x) * page_world_size - page_guard_world;
+    const float right = left + page_world_size + 2.0 * page_guard_world;
+    const float bottom =
+        clip.origin_page_scale.y + float(page_y) * page_world_size - page_guard_world;
+    const float top = bottom + page_world_size + 2.0 * page_guard_world;
+
+    const float4 center_ls = mul(metadata.light_view, float4(world_bounding_sphere.xyz, 1.0));
+    const float radius = world_bounding_sphere.w;
+    const float clip_depth = center_ls.z * clip.origin_page_scale.w + clip.bias_reserved.x;
+    const float clip_radius_z = abs(clip.origin_page_scale.w) * radius;
+    const float clip_padding = 1.0e-3;
+
+    return center_ls.x + radius >= (left - clip_padding)
+        && center_ls.x - radius <= (right + clip_padding)
+        && center_ls.y + radius >= (bottom - clip_padding)
+        && center_ls.y - radius <= (top + clip_padding)
+        && clip_depth + clip_radius_z >= (0.0 - clip_padding)
+        && clip_depth - clip_radius_z <= (1.0 + clip_padding);
+}
+
 [shader("compute")]
 [numthreads(64, 1, 1)]
 void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
@@ -165,7 +335,12 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         || !BX_IN_GLOBAL_SRV(pass_constants.page_table_uav_index)
         || !BX_IN_GLOBAL_SRV(pass_constants.page_flags_uav_index)
         || !BX_IN_GLOBAL_SRV(pass_constants.schedule_uav_index)
-        || !BX_IN_GLOBAL_SRV(pass_constants.schedule_count_uav_index)) {
+        || !BX_IN_GLOBAL_SRV(pass_constants.schedule_count_uav_index)
+        || !BX_IN_GLOBAL_SRV(pass_constants.clear_args_uav_index)
+        || !BX_IN_GLOBAL_SRV(pass_constants.draw_args_uav_index)
+        || !BX_IN_GLOBAL_SRV(pass_constants.draw_page_ranges_uav_index)
+        || !BX_IN_GLOBAL_SRV(pass_constants.draw_page_indices_uav_index)
+        || !BX_IN_GLOBAL_SRV(pass_constants.draw_page_counter_uav_index)) {
         return;
     }
 
@@ -181,6 +356,16 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         ResourceDescriptorHeap[pass_constants.schedule_uav_index];
     RWStructuredBuffer<uint> schedule_count =
         ResourceDescriptorHeap[pass_constants.schedule_count_uav_index];
+    RWStructuredBuffer<DrawIndirectArgs> clear_args =
+        ResourceDescriptorHeap[pass_constants.clear_args_uav_index];
+    RWStructuredBuffer<DrawIndirectCommand> draw_args =
+        ResourceDescriptorHeap[pass_constants.draw_args_uav_index];
+    RWStructuredBuffer<DrawPageRange> draw_page_ranges =
+        ResourceDescriptorHeap[pass_constants.draw_page_ranges_uav_index];
+    RWStructuredBuffer<uint> draw_page_indices =
+        ResourceDescriptorHeap[pass_constants.draw_page_indices_uav_index];
+    RWStructuredBuffer<uint> draw_page_counter =
+        ResourceDescriptorHeap[pass_constants.draw_page_counter_uav_index];
     const bool has_page_mark_flags =
         BX_IN_GLOBAL_SRV(pass_constants.page_mark_flags_srv_index);
 
@@ -441,5 +626,126 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
                 schedule[output_index] = uint4(thread_index, packed_entry, tile_x, tile_y);
             }
         }
+        return;
+    }
+
+    if (pass_constants.phase == kResolvePhaseBuildClearArgs) {
+        if (thread_index != 0u) {
+            return;
+        }
+
+        draw_page_counter[0] = 0u;
+        clear_args[0] = MakeDrawIndirectArgs(6u, schedule_count[0]);
+        return;
+    }
+
+    if (pass_constants.phase == kResolvePhaseBuildDrawArgs) {
+        if (thread_index >= pass_constants.draw_count) {
+            return;
+        }
+
+        const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
+        if (!BX_IN_GLOBAL_SRV(draw_bindings.draw_metadata_slot)) {
+            draw_args[thread_index] = MakeZeroDrawIndirectCommand(thread_index);
+            draw_page_ranges[thread_index] = MakeZeroDrawPageRange();
+            return;
+        }
+
+        StructuredBuffer<DrawMetadata> draw_metadata =
+            ResourceDescriptorHeap[draw_bindings.draw_metadata_slot];
+        const DrawMetadata meta = draw_metadata[thread_index];
+        const bool has_draw_bounds = BX_IN_GLOBAL_SRV(pass_constants.draw_bounds_srv_index);
+        float4 draw_bound = float4(0.0, 0.0, 0.0, 0.0);
+        if (has_draw_bounds) {
+            StructuredBuffer<float4> draw_bounds =
+                ResourceDescriptorHeap[pass_constants.draw_bounds_srv_index];
+            draw_bound = draw_bounds[thread_index];
+        }
+        const ViewFrameBindings view_bindings =
+            LoadViewFrameBindings(bindless_view_frame_bindings_slot);
+        const ShadowFrameBindings shadow_bindings =
+            LoadShadowFrameBindings(view_bindings.shadow_frame_slot);
+        if (!BX_IN_GLOBAL_SRV(shadow_bindings.virtual_directional_shadow_metadata_slot)) {
+            draw_args[thread_index] = MakeZeroDrawIndirectCommand(thread_index);
+            draw_page_ranges[thread_index] = MakeZeroDrawPageRange();
+            return;
+        }
+        StructuredBuffer<DirectionalVirtualShadowMetadata> metadata_buffer =
+            ResourceDescriptorHeap[shadow_bindings.virtual_directional_shadow_metadata_slot];
+        const DirectionalVirtualShadowMetadata directional_metadata = metadata_buffer[0];
+        const bool is_shadow_caster = (meta.flags & kPassMaskShadowCaster) != 0u;
+        const bool is_shadow_surface =
+            (meta.flags & (kPassMaskOpaque | kPassMaskMasked)) != 0u;
+        const uint vertex_count = meta.is_indexed != 0u ? meta.index_count : meta.vertex_count;
+        const uint scheduled_page_count = schedule_count[0];
+        const bool invalid_draw = vertex_count == 0u || meta.instance_count == 0u;
+
+        if (!is_shadow_caster || !is_shadow_surface || invalid_draw) {
+            draw_args[thread_index] = MakeZeroDrawIndirectCommand(thread_index);
+            draw_page_ranges[thread_index] = MakeZeroDrawPageRange();
+            return;
+        }
+
+        uint overlapping_page_count = 0u;
+        for (uint scheduled_index = 0u;
+             scheduled_index < scheduled_page_count;
+             ++scheduled_index) {
+            if (ScheduledPageOverlapsBoundingSphere(
+                    directional_metadata,
+                    schedule[scheduled_index],
+                    draw_bound)) {
+                ++overlapping_page_count;
+            }
+        }
+
+        if (overlapping_page_count == 0u) {
+            draw_args[thread_index] = MakeZeroDrawIndirectCommand(thread_index);
+            draw_page_ranges[thread_index] = MakeZeroDrawPageRange();
+            return;
+        }
+
+        uint range_offset = 0u;
+        InterlockedAdd(draw_page_counter[0], overlapping_page_count, range_offset);
+
+        uint writable_count = 0u;
+        if (range_offset < pass_constants.draw_page_list_capacity) {
+            writable_count = min(
+                overlapping_page_count,
+                pass_constants.draw_page_list_capacity - range_offset);
+        }
+
+        uint local_write_index = 0u;
+        for (uint scheduled_index = 0u;
+             scheduled_index < scheduled_page_count && local_write_index < writable_count;
+             ++scheduled_index) {
+            if (ScheduledPageOverlapsBoundingSphere(
+                    directional_metadata,
+                    schedule[scheduled_index],
+                    draw_bound)) {
+                draw_page_indices[range_offset + local_write_index] = scheduled_index;
+                ++local_write_index;
+            }
+        }
+
+        const bool instance_overflow =
+            writable_count != 0u
+            && meta.instance_count > (0xFFFFFFFFu / writable_count);
+        if (instance_overflow || writable_count == 0u) {
+            draw_args[thread_index] = MakeZeroDrawIndirectCommand(thread_index);
+            draw_page_ranges[thread_index] = MakeZeroDrawPageRange();
+            return;
+        }
+
+        DrawPageRange range;
+        range.offset = range_offset;
+        range.count = writable_count;
+        range._pad0 = 0u;
+        range._pad1 = 0u;
+        draw_page_ranges[thread_index] = range;
+        draw_args[thread_index] = MakeDrawIndirectCommand(
+            thread_index,
+            vertex_count,
+            meta.instance_count * writable_count);
+        return;
     }
 }

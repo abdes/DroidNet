@@ -149,6 +149,9 @@ DrawMetadataEmitter::DrawMetadataEmitter(observer_ptr<Graphics> gfx,
   , draw_metadata_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(oxygen::engine::DrawMetadata)),
       inline_transfers_, "DrawMetadataEmitter.Draws")
+  , draw_bounds_buffer_(gfx_, *staging_provider_,
+      static_cast<std::uint32_t>(sizeof(glm::vec4)), inline_transfers_,
+      "DrawMetadataEmitter.DrawBounds")
   , instance_data_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(std::uint32_t)), inline_transfers_,
       "DrawMetadataEmitter.InstanceData")
@@ -198,8 +201,10 @@ auto DrawMetadataEmitter::OnFrameStart(renderer::RendererTag /*tag*/,
   draw_bounding_spheres_.clear();
   instance_transform_indices_.clear();
   draw_metadata_buffer_.OnFrameStart(sequence, slot);
+  draw_bounds_buffer_.OnFrameStart(sequence, slot);
   instance_data_buffer_.OnFrameStart(sequence, slot);
   draw_metadata_srv_index_ = kInvalidShaderVisibleIndex;
+  draw_bounds_srv_index_ = kInvalidShaderVisibleIndex;
   instance_data_srv_index_ = kInvalidShaderVisibleIndex;
   ++frames_started_count_;
 }
@@ -461,6 +466,24 @@ auto DrawMetadataEmitter::EnsureFrameResources() -> void
   // SRV index after Finalize/EnsureFrameResources.
   draw_metadata_srv_index_ = alloc.srv;
 
+  if (!draw_bounding_spheres_.empty()) {
+    const auto bounds_count
+      = static_cast<std::uint32_t>(draw_bounding_spheres_.size());
+    auto bounds_result = draw_bounds_buffer_.Allocate(bounds_count);
+    if (!bounds_result) {
+      LOG_F(ERROR, "Draw bounds allocation failed: {}",
+        bounds_result.error().message());
+      return;
+    }
+    const auto bounds_alloc = *bounds_result;
+    auto* bounds_ptr = bounds_alloc.mapped_ptr;
+    if (bounds_ptr != nullptr) {
+      std::memcpy(bounds_ptr, draw_bounding_spheres_.data(),
+        draw_bounding_spheres_.size() * sizeof(glm::vec4));
+      draw_bounds_srv_index_ = bounds_alloc.srv;
+    }
+  }
+
   // Upload instance data buffer if we have instanced draws
   if (!instance_transform_indices_.empty()) {
     const auto instance_count
@@ -506,6 +529,14 @@ auto DrawMetadataEmitter::GetDrawBoundingSpheres() const noexcept
   -> std::span<const glm::vec4>
 {
   return { draw_bounding_spheres_.data(), draw_bounding_spheres_.size() };
+}
+
+auto DrawMetadataEmitter::GetDrawBoundingSpheresSrvIndex() -> ShaderVisibleIndex
+{
+  if (draw_bounds_srv_index_ == kInvalidShaderVisibleIndex) {
+    EnsureFrameResources();
+  }
+  return draw_bounds_srv_index_;
 }
 
 auto DrawMetadataEmitter::GetInstanceDataSrvIndex() const noexcept

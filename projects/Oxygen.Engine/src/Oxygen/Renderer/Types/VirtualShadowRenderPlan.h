@@ -7,13 +7,19 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <span>
 
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Renderer/Types/DirectionalVirtualShadowMetadata.h>
 #include <Oxygen/Renderer/Types/VirtualShadowPhysicalPageMetadata.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
+
+namespace oxygen::graphics {
+class Buffer;
+}
 
 namespace oxygen::renderer {
 
@@ -110,6 +116,30 @@ struct VirtualShadowRenderPlan {
   std::span<const VirtualShadowResolvedRasterPage> resolved_pages {};
   std::uint32_t page_size_texels { 0U };
   std::uint32_t atlas_tiles_per_axis { 0U };
+};
+
+// Live GPU-authored raster inputs produced by the resolve pass and consumed by
+// the page raster pass in the same frame. CPU `resolved_pages` remains a
+// bookkeeping/readback mirror only once these bindings are present.
+struct VirtualShadowGpuRasterInputs {
+  std::shared_ptr<graphics::Buffer> schedule_buffer {};
+  ShaderVisibleIndex schedule_srv { kInvalidShaderVisibleIndex };
+
+  std::shared_ptr<graphics::Buffer> schedule_count_buffer {};
+  ShaderVisibleIndex schedule_count_srv { kInvalidShaderVisibleIndex };
+
+  std::shared_ptr<graphics::Buffer> draw_page_ranges_buffer {};
+  ShaderVisibleIndex draw_page_ranges_srv { kInvalidShaderVisibleIndex };
+
+  std::shared_ptr<graphics::Buffer> draw_page_indices_buffer {};
+  ShaderVisibleIndex draw_page_indices_srv { kInvalidShaderVisibleIndex };
+
+  std::shared_ptr<graphics::Buffer> clear_indirect_args_buffer {};
+  std::shared_ptr<graphics::Buffer> draw_indirect_args_buffer {};
+
+  frame::SequenceNumber source_frame_sequence { 0U };
+  std::uint32_t draw_count { 0U };
+  std::uint32_t schedule_capacity { 0U };
 };
 
 struct VirtualShadowViewIntrospection {

@@ -49,10 +49,14 @@ using oxygen::renderer::internal::shadow_detail::
 using oxygen::renderer::internal::shadow_detail::
   BuildDirectionalVirtualClipRelativeTransform;
 using oxygen::renderer::internal::shadow_detail::
+  ComputeDirectionalVirtualFallbackSlopeBiasScale;
+using oxygen::renderer::internal::shadow_detail::
   CompareVirtualResidentEvictionPriority;
 using oxygen::renderer::internal::shadow_detail::
   kDirectionalVirtualClipReuseGuardbandPages;
 using oxygen::renderer::internal::shadow_detail::PackVirtualResidentPageKey;
+using oxygen::renderer::internal::shadow_detail::
+  ResolveDirectionalVirtualGuardTexels;
 
 auto MakeDirectionalVirtualMetadata(const std::int32_t clip0_grid_x,
   const std::int32_t clip0_grid_y, const float clip0_page_world,
@@ -207,6 +211,21 @@ TEST(VirtualShadowContractsTest, FallbackTransformRemapsRequestedClipToResolvedC
   EXPECT_NEAR(
     RemapDirectionalRequestedDepthToResolvedClip(requested_depth, transform),
     requested_depth, 1.0e-5F);
+}
+
+TEST(VirtualShadowContractsTest, FilterGuardTexelsTrackEffectiveFilterRadius)
+{
+  EXPECT_EQ(ResolveDirectionalVirtualGuardTexels(128U, 1U), 1U);
+  EXPECT_EQ(ResolveDirectionalVirtualGuardTexels(128U, 2U), 2U);
+  EXPECT_EQ(ResolveDirectionalVirtualGuardTexels(128U, 5U), 5U);
+  EXPECT_EQ(ResolveDirectionalVirtualGuardTexels(8U, 8U), 2U);
+}
+
+TEST(VirtualShadowContractsTest, FallbackSlopeBiasScaleTracksLodGrowth)
+{
+  EXPECT_FLOAT_EQ(ComputeDirectionalVirtualFallbackSlopeBiasScale(0U), 1.0F);
+  EXPECT_FLOAT_EQ(ComputeDirectionalVirtualFallbackSlopeBiasScale(1U), 2.0F);
+  EXPECT_FLOAT_EQ(ComputeDirectionalVirtualFallbackSlopeBiasScale(3U), 4.0F);
 }
 
 TEST(VirtualShadowContractsTest, PageTableEntryRoundTripsPhysicalAddressAndBits)

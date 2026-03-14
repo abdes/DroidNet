@@ -47,6 +47,11 @@ class NativeView;
 
 class CommandRecorder {
 public:
+  enum class IndirectCommandLayout : uint8_t {
+    kDraw,
+    kDrawWithRootConstant,
+  };
+
   //=== Lifecycle ===-------------------------------------------------------//
 
   OXGN_GFX_API CommandRecorder(std::shared_ptr<CommandList> command_list,
@@ -157,7 +162,7 @@ public:
     uint32_t thread_group_count_y, uint32_t thread_group_count_z) -> void
     = 0;
 
-  //! Issues an indirect draw or dispatch command.
+  //! Issues one indirect draw or dispatch command.
   /*!
    In D3D12, this maps to ID3D12GraphicsCommandList::ExecuteIndirect.
    This implementation currently assumes a DrawInstanced command signature.
@@ -165,9 +170,32 @@ public:
    \param argument_buffer The buffer containing the draw or dispatch arguments.
    \param argument_buffer_offset Offset in bytes into the argument buffer.
   */
-  virtual auto ExecuteIndirect(
+  auto ExecuteIndirect(
     const Buffer& argument_buffer, uint64_t argument_buffer_offset) -> void
-    = 0;
+  {
+    ExecuteIndirect(argument_buffer, argument_buffer_offset, 1U,
+      IndirectCommandLayout::kDraw);
+  }
+
+  auto ExecuteIndirect(const Buffer& argument_buffer,
+    uint64_t argument_buffer_offset, uint32_t command_count) -> void
+  {
+    ExecuteIndirect(argument_buffer, argument_buffer_offset, command_count,
+      IndirectCommandLayout::kDraw);
+  }
+
+  //! Issues one or more indirect draw or dispatch commands.
+  /*!
+   In D3D12, this maps to ID3D12GraphicsCommandList::ExecuteIndirect.
+   This implementation currently assumes a DrawInstanced command signature.
+
+   \param argument_buffer The buffer containing the draw or dispatch arguments.
+   \param argument_buffer_offset Offset in bytes into the argument buffer.
+   \param command_count Number of commands to execute from the buffer.
+  */
+  virtual auto ExecuteIndirect(const Buffer& argument_buffer,
+    uint64_t argument_buffer_offset, uint32_t command_count,
+    IndirectCommandLayout layout) -> void = 0;
 
   virtual auto SetVertexBuffers(uint32_t num,
     const std::shared_ptr<Buffer>* vertex_buffers,

@@ -157,11 +157,15 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .permutations=std::array<std::string_view, 3>
       { "DEBUG_METALNESS", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
-  // Depth pre-pass: VS and PS with ALPHA_TEST permutation
+  // Depth pre-pass: VS and PS with alpha-test and virtual-shadow raster permutations
   ShaderFileSpec {
     .path="Depth/DepthPrePass.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" }, EntryPoint { .type=kVertex, .name="VS" } },
-    .permutations=std::array<std::string_view, 1> { "ALPHA_TEST" }
+    .permutations=std::array<std::string_view, 2> { "ALPHA_TEST", "OXYGEN_VIRTUAL_SHADOW_RASTER" }
+  },
+  ShaderFileSpec {
+    .path="Depth/VirtualShadowPageClear.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" }, EntryPoint { .type=kVertex, .name="VS" } }
   },
   // Light culling compute shader (tile-based or clustered mode)
   ShaderFileSpec {
@@ -298,7 +302,7 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ForwardWireframe_PS base: 2 (with/without ALPHA_TEST)
 // - ForwardMesh_PS DEBUG_*: 8 each (debug define x ALPHA_TEST x
 // OXYGEN_HDR_OUTPUT)
-// - DepthPrePass: 4 (2 entries x 2 permutations)
+// - DepthPrePass: 8 (2 entries x 4 permutations)
 // - LightCulling: 2 (1 entry x 2 permutations)
 // - VirtualShadowRequest: 1 entry
 // - VirtualShadowAtlasDebug: 1 entry
@@ -318,6 +322,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ToneMap: 2 entries
 // - AutoExposure_Histogram_CS: 1 entry
 // - AutoExposure_Average_CS: 1 entry
-// Total: 134
+// Total: 138
 
 } // namespace oxygen::graphics::d3d12

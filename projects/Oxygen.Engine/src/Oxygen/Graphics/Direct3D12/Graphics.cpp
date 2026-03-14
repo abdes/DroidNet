@@ -9,6 +9,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
@@ -373,6 +374,43 @@ auto Graphics::GetDrawCommandSignature() const -> ID3D12CommandSignature*
     }
   }
   return draw_command_signature_.Get();
+}
+
+auto Graphics::GetDrawRootConstantCommandSignature(
+  ID3D12RootSignature* root_signature) const -> ID3D12CommandSignature*
+{
+  DCHECK_NOTNULL_F(root_signature);
+
+  if (const auto it = draw_root_constant_command_signatures_.find(root_signature);
+    it != draw_root_constant_command_signatures_.end()) {
+    return it->second.Get();
+  }
+
+  D3D12_INDIRECT_ARGUMENT_DESC args[2] {};
+  args[0].Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT;
+  args[0].Constant.RootParameterIndex
+    = static_cast<UINT>(engine::binding::RootParam::kRootConstants);
+  args[0].Constant.DestOffsetIn32BitValues = 0U;
+  args[0].Constant.Num32BitValuesToSet = 1U;
+  args[1].Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
+
+  D3D12_COMMAND_SIGNATURE_DESC desc {};
+  desc.ByteStride = sizeof(std::uint32_t) + sizeof(D3D12_DRAW_ARGUMENTS);
+  desc.NumArgumentDescs = 2U;
+  desc.pArgumentDescs = args;
+  desc.NodeMask = 0;
+
+  Microsoft::WRL::ComPtr<ID3D12CommandSignature> signature;
+  if (FAILED(GetCurrentDevice()->CreateCommandSignature(
+        &desc, root_signature, IID_PPV_ARGS(&signature)))) {
+    throw std::runtime_error(
+      "Failed to create draw+root-constant command signature");
+  }
+
+  auto* const raw_signature = signature.Get();
+  draw_root_constant_command_signatures_.emplace(root_signature,
+    std::move(signature));
+  return raw_signature;
 }
 
 auto Graphics::CreateSurface(std::weak_ptr<platform::Window> window_weak,

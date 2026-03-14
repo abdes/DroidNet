@@ -407,7 +407,8 @@ auto CommandRecorder::Dispatch(uint32_t thread_group_count_x,
 }
 
 auto CommandRecorder::ExecuteIndirect(const graphics::Buffer& argument_buffer,
-  const uint64_t argument_buffer_offset) -> void
+  const uint64_t argument_buffer_offset, const uint32_t command_count,
+  const IndirectCommandLayout layout) -> void
 {
   auto graphics = graphics_weak_.lock();
   DCHECK_F(graphics != nullptr, "Graphics backend is no longer valid");
@@ -421,11 +422,20 @@ auto CommandRecorder::ExecuteIndirect(const graphics::Buffer& argument_buffer,
   auto* resource = buf.GetResource();
   DCHECK_NOTNULL_F(resource);
 
-  auto* signature = graphics->GetDrawCommandSignature();
+  ID3D12CommandSignature* signature = nullptr;
+  switch (layout) {
+  case IndirectCommandLayout::kDraw:
+    signature = graphics->GetDrawCommandSignature();
+    break;
+  case IndirectCommandLayout::kDrawWithRootConstant:
+    signature = graphics->GetDrawRootConstantCommandSignature(
+      current_graphics_root_signature_);
+    break;
+  }
   DCHECK_NOTNULL_F(signature);
 
   d3d12_command_list->ExecuteIndirect(
-    signature, 1, resource, argument_buffer_offset, nullptr, 0);
+    signature, command_count, resource, argument_buffer_offset, nullptr, 0);
 }
 
 auto CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc) -> void
@@ -456,6 +466,7 @@ auto CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc) -> void
   d3d12_command_list->SetGraphicsRootSignature(root_signature);
   SetupDescriptorTables(
     allocator.GetShaderVisibleHeaps(), /*is_compute=*/false);
+  current_graphics_root_signature_ = root_signature;
 
   d3d12_command_list->IASetPrimitiveTopology(
     ConvertPrimitiveTopology(primitive_topology));
@@ -488,6 +499,7 @@ auto CommandRecorder::SetPipelineState(ComputePipelineDesc desc) -> void
   SetupDescriptorHeaps(allocator.GetShaderVisibleHeaps());
   d3d12_command_list->SetComputeRootSignature(root_signature);
   SetupDescriptorTables(allocator.GetShaderVisibleHeaps(), /*is_compute=*/true);
+  current_graphics_root_signature_ = nullptr;
 
   d3d12_command_list->SetPipelineState(pipeline_state);
 }

@@ -109,6 +109,9 @@ public:
   OXGN_RNDR_API auto SubmitVirtualResolvedRasterSchedule(
     ViewId view_id, VirtualShadowResolvedRasterSchedule schedule) -> void;
   OXGN_RNDR_API auto ClearVirtualResolvedRasterSchedule(ViewId view_id) -> void;
+  OXGN_RNDR_API auto SubmitVirtualGpuRasterInputs(
+    ViewId view_id, renderer::VirtualShadowGpuRasterInputs inputs) -> void;
+  OXGN_RNDR_API auto ClearVirtualGpuRasterInputs(ViewId view_id) -> void;
   OXGN_RNDR_API auto SetVirtualDirectionalCacheControls(
     DirectionalVirtualCacheControls controls) -> void;
 
@@ -118,6 +121,8 @@ public:
     ViewId view_id) const noexcept -> const RasterShadowRenderPlan*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetVirtualRenderPlan(
     ViewId view_id) const noexcept -> const VirtualShadowRenderPlan*;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetVirtualGpuRasterInputs(
+    ViewId view_id) const noexcept -> const renderer::VirtualShadowGpuRasterInputs*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetViewIntrospection(
     ViewId view_id) const noexcept -> const ShadowViewIntrospection*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetVirtualViewIntrospection(
@@ -147,6 +152,8 @@ private:
   };
   std::unordered_map<std::uint64_t, engine::ShadowImplementationKind>
     last_view_directional_implementation_;
+  std::unordered_map<ViewId, renderer::VirtualShadowGpuRasterInputs>
+    virtual_gpu_raster_inputs_;
 
   std::unique_ptr<internal::ConventionalShadowBackend> conventional_backend_;
   std::unique_ptr<internal::VirtualShadowMapBackend> virtual_backend_;

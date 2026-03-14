@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <string_view>
+#include <unordered_map>
 #include <wrl/client.h>
 
 #include <Oxygen/Base/Macros.h>
@@ -97,6 +98,8 @@ public:
 
   OXGN_D3D12_NDAPI auto GetDrawCommandSignature() const
     -> ID3D12CommandSignature*;
+  OXGN_D3D12_NDAPI auto GetDrawRootConstantCommandSignature(
+    ID3D12RootSignature* root_signature) const -> ID3D12CommandSignature*;
 
   //=== Pipeline State Management ===--------------------------------------//
 
@@ -132,6 +135,9 @@ private:
   bool enable_vsync_ { true };
   mutable Microsoft::WRL::ComPtr<ID3D12CommandSignature>
     draw_command_signature_;
+  mutable std::unordered_map<ID3D12RootSignature*,
+    Microsoft::WRL::ComPtr<ID3D12CommandSignature>>
+    draw_root_constant_command_signatures_ {};
 };
 
 }

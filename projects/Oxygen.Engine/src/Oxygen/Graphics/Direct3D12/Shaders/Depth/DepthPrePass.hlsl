@@ -15,13 +15,19 @@
 //   See MainModule.cpp and CommandRecorder.cpp for details.
 
 #include "Renderer/ViewConstants.hlsli"
+#include "Renderer/DirectionalVirtualShadowMetadata.hlsli"
 #include "Renderer/DrawHelpers.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
 #include "Renderer/MaterialShadingConstants.hlsli"
+#include "Renderer/ShadowFrameBindings.hlsli"
 
 #include "Depth/DepthPrePassConstants.hlsli"
 
 #include "MaterialFlags.hlsli"
+
+#ifndef OXYGEN_VIRTUAL_SHADOW_RASTER
+#define OXYGEN_VIRTUAL_SHADOW_RASTER 0
+#endif
 
 struct VertexData
 {
@@ -49,10 +55,43 @@ cbuffer RootConstants : register(b2, space0) {
     uint g_PassConstantsIndex;
 }
 
+#if OXYGEN_VIRTUAL_SHADOW_RASTER
+struct VirtualShadowRasterPassConstants
+{
+    float alpha_cutoff_default;
+    uint schedule_srv_index;
+    uint schedule_count_srv_index;
+    uint atlas_tiles_per_axis;
+    uint draw_page_ranges_srv_index;
+    uint draw_page_indices_srv_index;
+    uint _pad0;
+    uint _pad1;
+};
+
+struct VirtualShadowResolvedScheduleEntry
+{
+    uint global_page_index;
+    uint packed_entry;
+    uint atlas_tile_x;
+    uint atlas_tile_y;
+};
+
+struct VirtualShadowDrawPageRange
+{
+    uint offset;
+    uint count;
+    uint _pad0;
+    uint _pad1;
+};
+#endif
+
 // Output structure for the Vertex Shader
 struct VS_OUTPUT_DEPTH {
     float4 position : SV_POSITION;
     float2 uv : TEXCOORD0;
+#if OXYGEN_VIRTUAL_SHADOW_RASTER
+    float4 page_clip_distance : SV_ClipDistance0;
+#endif
 };
 
 // -----------------------------------------------------------------------------
@@ -73,6 +112,28 @@ struct VS_OUTPUT_DEPTH {
 // Avoid recomputing inverse/transpose in shader to save ALU; rely on CPU cache.
 // Until such features are introduced, no shader changes are required.
 
+#if OXYGEN_VIRTUAL_SHADOW_RASTER
+static uint SelectDirectionalVirtualFilterRadiusTexels(
+    DirectionalVirtualShadowMetadata metadata,
+    uint clip_index)
+{
+    const float base_page_world =
+        max(metadata.clip_metadata[0].origin_page_scale.z, 1.0e-4);
+    const float clip_page_world =
+        max(metadata.clip_metadata[clip_index].origin_page_scale.z, base_page_world);
+    const float texel_ratio = clip_page_world / base_page_world;
+    return texel_ratio > 2.5 ? 2u : 1u;
+}
+
+static uint ResolveDirectionalVirtualGuardTexels(
+    uint page_size_texels,
+    uint filter_radius_texels)
+{
+    const uint max_guard_texels = max(1u, page_size_texels / 4u);
+    return min(max_guard_texels, max(1u, filter_radius_texels));
+}
+#endif
+
 
 // Vertex Shader: transforms vertices to clip space for depth buffer population.
 [shader("vertex")]
@@ -81,6 +142,9 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
     VS_OUTPUT_DEPTH output;
     output.position = float4(0, 0, 0, 1);
     output.uv = float2(0, 0);
+#if OXYGEN_VIRTUAL_SHADOW_RASTER
+    output.page_clip_distance = float4(1.0f, 1.0f, 1.0f, 1.0f);
+#endif
     const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
 
     DrawMetadata meta;
@@ -92,12 +156,137 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
     const VertexData v = BX_LoadVertex(meta.vertex_buffer_index, actual_vertex_index);
     output.uv = v.texcoord;
 
+#if OXYGEN_VIRTUAL_SHADOW_RASTER
+    if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX) {
+        return output;
+    }
+
+    ConstantBuffer<VirtualShadowRasterPassConstants> pass_constants =
+        ResourceDescriptorHeap[g_PassConstantsIndex];
+    if (pass_constants.schedule_srv_index == K_INVALID_BINDLESS_INDEX
+        || pass_constants.schedule_count_srv_index == K_INVALID_BINDLESS_INDEX
+        || pass_constants.atlas_tiles_per_axis == 0u) {
+        return output;
+    }
+
+    const ViewFrameBindings view_bindings =
+        LoadViewFrameBindings(bindless_view_frame_bindings_slot);
+    const ShadowFrameBindings shadow_bindings =
+        LoadShadowFrameBindings(view_bindings.shadow_frame_slot);
+    if (shadow_bindings.virtual_directional_shadow_metadata_slot
+        == K_INVALID_BINDLESS_INDEX) {
+        return output;
+    }
+
+    StructuredBuffer<DirectionalVirtualShadowMetadata> metadata_buffer =
+        ResourceDescriptorHeap[shadow_bindings.virtual_directional_shadow_metadata_slot];
+    const DirectionalVirtualShadowMetadata metadata = metadata_buffer[0];
+    if (metadata.clip_level_count == 0u || metadata.pages_per_axis == 0u) {
+        return output;
+    }
+
+    StructuredBuffer<VirtualShadowResolvedScheduleEntry> schedule =
+        ResourceDescriptorHeap[pass_constants.schedule_srv_index];
+    StructuredBuffer<uint> schedule_count =
+        ResourceDescriptorHeap[pass_constants.schedule_count_srv_index];
+    const uint scheduled_page_count = schedule_count[0];
+
+    const uint geometry_instance_count = max(meta.instance_count, 1u);
+    uint page_instance_index = instanceID / geometry_instance_count;
+    const uint geometry_instance_index = instanceID % geometry_instance_count;
+    if (pass_constants.draw_page_ranges_srv_index != K_INVALID_BINDLESS_INDEX
+        && pass_constants.draw_page_indices_srv_index != K_INVALID_BINDLESS_INDEX) {
+        StructuredBuffer<VirtualShadowDrawPageRange> draw_page_ranges =
+            ResourceDescriptorHeap[pass_constants.draw_page_ranges_srv_index];
+        StructuredBuffer<uint> draw_page_indices =
+            ResourceDescriptorHeap[pass_constants.draw_page_indices_srv_index];
+        const VirtualShadowDrawPageRange draw_page_range = draw_page_ranges[g_DrawIndex];
+        if (page_instance_index >= draw_page_range.count) {
+            return output;
+        }
+        page_instance_index = draw_page_indices[draw_page_range.offset + page_instance_index];
+    } else if (page_instance_index >= scheduled_page_count) {
+        return output;
+    }
+
+    const VirtualShadowResolvedScheduleEntry entry = schedule[page_instance_index];
+    const uint pages_per_level = metadata.pages_per_axis * metadata.pages_per_axis;
+    if (pages_per_level == 0u) {
+        return output;
+    }
+    const uint clip_index = entry.global_page_index / pages_per_level;
+    const uint local_page_index = entry.global_page_index % pages_per_level;
+    if (clip_index >= metadata.clip_level_count) {
+        return output;
+    }
+
+    const uint page_x = local_page_index % metadata.pages_per_axis;
+    const uint page_y = local_page_index / metadata.pages_per_axis;
+    const DirectionalVirtualClipMetadata clip = metadata.clip_metadata[clip_index];
+    const float page_world_size = max(clip.origin_page_scale.z, 1.0e-4);
+    const uint filter_guard_texels = ResolveDirectionalVirtualGuardTexels(
+        metadata.page_size_texels,
+        SelectDirectionalVirtualFilterRadiusTexels(metadata, clip_index));
+    const float interior_texels = max(
+        1.0,
+        float(metadata.page_size_texels) - float(filter_guard_texels * 2u));
+    const float page_guard_world =
+        page_world_size * (float(filter_guard_texels) / interior_texels);
+    const float logical_left = clip.origin_page_scale.x + float(page_x) * page_world_size;
+    const float logical_right = logical_left + page_world_size;
+    const float logical_bottom = clip.origin_page_scale.y + float(page_y) * page_world_size;
+    const float logical_top = logical_bottom + page_world_size;
+    const float left = logical_left - page_guard_world;
+    const float right = logical_right + page_guard_world;
+    const float bottom = logical_bottom - page_guard_world;
+    const float top = logical_top + page_guard_world;
+
+    // Use per-instance transform (handles GPU instancing automatically)
+    const float4x4 world_matrix = BX_LoadInstanceWorldMatrix(
+        draw_bindings.transforms_slot,
+        draw_bindings.instance_data_slot,
+        meta,
+        geometry_instance_index);
+    const float4 world_pos = mul(world_matrix, float4(v.position, 1.0f));
+    const float4 local_view_pos = mul(metadata.light_view, world_pos);
+    const float2 clip_extent = float2(
+        max(right - left, 1.0e-4),
+        max(top - bottom, 1.0e-4));
+    float4 local_clip_pos;
+    local_clip_pos.x = (2.0 * local_view_pos.x - (right + left)) / clip_extent.x;
+    local_clip_pos.y = (2.0 * local_view_pos.y - (top + bottom)) / clip_extent.y;
+    local_clip_pos.z =
+        local_view_pos.z * clip.origin_page_scale.w + clip.bias_reserved.x;
+    local_clip_pos.w = 1.0;
+
+    // Preserve the original page-local clip planes before remapping into the
+    // atlas-wide clip space. Without this, geometry outside the page frustum
+    // can spill into neighboring atlas tiles.
+    output.page_clip_distance = float4(
+        local_clip_pos.x + local_clip_pos.w,
+        local_clip_pos.w - local_clip_pos.x,
+        local_clip_pos.y + local_clip_pos.w,
+        local_clip_pos.w - local_clip_pos.y);
+
+    const float atlas_scale = 1.0 / float(pass_constants.atlas_tiles_per_axis);
+    const float2 atlas_ndc_scale_bias = float2(
+        (float(entry.atlas_tile_x) * 2.0 + 1.0) * atlas_scale - 1.0,
+        1.0 - (float(entry.atlas_tile_y) * 2.0 + 1.0) * atlas_scale);
+    const float2 local_ndc = local_clip_pos.xy;
+    const float2 atlas_ndc =
+        local_ndc * atlas_scale + atlas_ndc_scale_bias;
+    output.position = float4(
+        atlas_ndc,
+        local_clip_pos.z,
+        1.0);
+#else
     // Use per-instance transform (handles GPU instancing automatically)
     const float4x4 world_matrix = BX_LoadInstanceWorldMatrix(
         draw_bindings.transforms_slot, draw_bindings.instance_data_slot, meta, instanceID);
     const float4 world_pos = mul(world_matrix, float4(v.position, 1.0f));
     const float4 view_pos = mul(view_matrix, world_pos);
     output.position = mul(projection_matrix, view_pos);
+#endif
     return output;
 }
 
@@ -142,8 +331,13 @@ void PS(VS_OUTPUT_DEPTH input)
 
     float cutoff = mat.alpha_cutoff;
     if (cutoff <= 0.0f && g_PassConstantsIndex != K_INVALID_BINDLESS_INDEX) {
+#if OXYGEN_VIRTUAL_SHADOW_RASTER
+        ConstantBuffer<VirtualShadowRasterPassConstants> pass_constants =
+            ResourceDescriptorHeap[g_PassConstantsIndex];
+#else
         ConstantBuffer<DepthPrePassConstants> pass_constants =
             ResourceDescriptorHeap[g_PassConstantsIndex];
+#endif
         cutoff = pass_constants.alpha_cutoff_default;
     }
 
