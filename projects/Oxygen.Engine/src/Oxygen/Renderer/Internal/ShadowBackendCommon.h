@@ -174,23 +174,6 @@ template <typename T>
   return light_view;
 }
 
-[[nodiscard]] inline auto QuantizeDirectionalVirtualAddressSpaceTranslationPages(
-  const float light_view_translation, const float page_world_size)
-  -> std::int64_t
-{
-  const auto stabilized_page_world = std::max(
-    static_cast<double>(page_world_size), static_cast<double>(1.0e-4F));
-  const auto normalized_translation
-    = static_cast<double>(light_view_translation) / stabilized_page_world;
-  const auto nearest_page = std::round(normalized_translation);
-  if (std::abs(normalized_translation - nearest_page)
-    <= static_cast<double>(kDirectionalCacheFloatTolerance)) {
-    return static_cast<std::int64_t>(nearest_page);
-  }
-
-  return static_cast<std::int64_t>(std::floor(normalized_translation));
-}
-
 [[nodiscard]] inline auto ResolveDirectionalVirtualFeedbackAddressSpacePageShiftX(
   const oxygen::engine::DirectionalVirtualShadowMetadata& metadata,
   const std::uint32_t clip_index) -> std::int64_t
@@ -199,8 +182,16 @@ template <typename T>
     return 0;
   }
 
-  return QuantizeDirectionalVirtualAddressSpaceTranslationPages(
-    metadata.light_view[3][0], metadata.clip_metadata[clip_index].origin_page_scale.z);
+  const auto& clip = metadata.clip_metadata[clip_index];
+  // Guardrail: keep this as panning diagnostics only. Feedback compatibility
+  // and resident carry-forward must not key off either raw look-at translation
+  // or snapped clip-lattice translation, because absolute resident keys remain
+  // valid across page-aligned panning. Reintroducing translation into address
+  // identity is what makes moving/benchmark scenes thrash back into fallback.
+  const auto stabilized_page_world_size = std::max(
+    static_cast<double>(clip.origin_page_scale.z), static_cast<double>(1.0e-4F));
+  return static_cast<std::int64_t>(std::llround(
+    static_cast<double>(clip.origin_page_scale.x) / stabilized_page_world_size));
 }
 
 [[nodiscard]] inline auto ResolveDirectionalVirtualFeedbackAddressSpacePageShiftY(
@@ -211,8 +202,11 @@ template <typename T>
     return 0;
   }
 
-  return QuantizeDirectionalVirtualAddressSpaceTranslationPages(
-    metadata.light_view[3][1], metadata.clip_metadata[clip_index].origin_page_scale.z);
+  const auto& clip = metadata.clip_metadata[clip_index];
+  const auto stabilized_page_world_size = std::max(
+    static_cast<double>(clip.origin_page_scale.z), static_cast<double>(1.0e-4F));
+  return static_cast<std::int64_t>(std::llround(
+    static_cast<double>(clip.origin_page_scale.y) / stabilized_page_world_size));
 }
 
 [[nodiscard]] inline auto BuildDirectionalCacheComparableLightView(
@@ -551,15 +545,7 @@ struct DirectionalVirtualDepthRange {
     const auto& clip = metadata.clip_metadata[clip_index];
     const auto page_world_size
       = QuantizeDirectionalCacheFloat(clip.origin_page_scale.z);
-    const auto lattice_shift_x
-      = ResolveDirectionalVirtualFeedbackAddressSpacePageShiftX(
-        metadata, clip_index);
-    const auto lattice_shift_y
-      = ResolveDirectionalVirtualFeedbackAddressSpacePageShiftY(
-        metadata, clip_index);
     hash = HashBytes(&page_world_size, sizeof(page_world_size), hash);
-    hash = HashBytes(&lattice_shift_x, sizeof(lattice_shift_x), hash);
-    hash = HashBytes(&lattice_shift_y, sizeof(lattice_shift_y), hash);
   }
   return hash;
 }

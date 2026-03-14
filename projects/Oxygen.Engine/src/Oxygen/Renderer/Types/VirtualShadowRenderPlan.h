@@ -186,6 +186,7 @@ struct VirtualShadowViewIntrospection {
   std::uint32_t coarse_safety_selected_page_count { 0U };
   std::uint32_t coarse_safety_budget_page_count { 0U };
   bool coarse_safety_capacity_fit { false };
+  std::uint32_t same_frame_detail_page_count { 0U };
   std::uint32_t feedback_requested_page_count { 0U };
   std::uint32_t feedback_refinement_page_count { 0U };
   std::uint32_t receiver_bootstrap_page_count { 0U };

@@ -1583,6 +1583,39 @@ Validation update:
   - this closes the projection-jitter-driven address-space oscillation class
     that was still invalidating the static scene cache after the earlier
     benchmark-only fix
+- March 14, 2026 fine-page same-frame delta follow-up:
+  - narrowed the remaining live fine-page authority leak without regressing the
+    locked benchmark:
+    - accepted detail feedback still seeds the sparse fine-page baseline when
+      it is compatible and fresh enough to be accepted
+    - same-frame detail selection now adds only the absolute receiver-region
+      delta when the current frame diverges from the previous compatible region
+    - if the current and previous absolute fine receiver regions are identical,
+      the same-frame delta contribution stays `0` instead of reselecting the
+      whole fine region
+  - focused regression coverage now proves the moved receiver/caster case lands
+    on a current fine page even when the accepted feedback still points at the
+    previous page:
+    `ShadowManagerPublishForView_VirtualAcceptedFineFeedbackDoesNotOverrideCurrentReceiverSelection`
+  - validation run on March 14, 2026 in `out/build-vs`:
+    - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+      - result: build succeeded
+    - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*VirtualAcceptedFineFeedbackDoesNotOverrideCurrentReceiverSelection:*VirtualSameFrameMarkedPagesDriveResolvedRasterSchedule:*VirtualStaticPagesStayCleanWhenDynamicCasterMovesElsewhere:*VirtualShiftedFeedbackDoesNotUseLegacyDeltaReinforcement`
+      - result: `4/4` passed
+    - `powershell -ExecutionPolicy Bypass -File Examples\\RenderScene\\benchmark_directional_vsm.ps1`
+      - result: `exit_code=0`, `wall_ms=17471`, `approx_fps=6.87`
+      - settled stats:
+        - `requested_pages_avg=661.56`
+        - `scheduled_pages_avg=397.41`
+        - `resolved_pages_avg=392.35`
+        - `rastered_pages_avg=392.35`
+        - `shadow_draws_avg=1567.53`
+      - settled-frame evidence in the archived run:
+        - `request=accepted` stays live
+        - `alloc_failures=0`
+        - `same_frame_detail` only appears when the fine receiver region
+          actually changes (`0`, `64`, `128`, `256`, `317` in the warmed path)
+        - screen debug remains `current=all`, `fallback=0`
 - remaining exit gap:
   - the static/dynamic page-separation regression is fixed, but Phase 7 remains
     incomplete because fine-page creation is still driven by delayed accepted

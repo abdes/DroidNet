@@ -265,6 +265,7 @@ private:
       bool coarse_safety_priority_valid { false };
       std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
         reusable_clip_contents {};
+      bool bootstrap_prefers_finest_detail_pages { false };
       bool address_space_compatible { false };
       bool global_dirty_resident_contents { false };
       std::vector<std::uint8_t> selected_pages {};
