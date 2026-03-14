@@ -543,6 +543,7 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   const auto BuildDesc
     = [&](CullMode cull_mode,
         std::vector<ShaderDefine> defines) -> GraphicsPipelineDesc {
+    ExtendShaderDefines(defines);
     return GraphicsPipelineDesc::Builder()
       .SetVertexShader(ShaderRequest {
         .stage = ShaderType::kVertex,
@@ -580,4 +581,9 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   // The base class needs a single descriptor to cache and bind initially.
   // Use the most common variant as the default.
   return *pso_opaque_single_;
+}
+
+auto DepthPrePass::ExtendShaderDefines(
+  std::vector<graphics::ShaderDefine>& /*defines*/) const -> void
+{
 }

@@ -142,6 +142,8 @@ protected:
   virtual auto UsesFramebufferDepthAttachment() const -> bool;
   virtual auto BuildRasterizerStateDesc(graphics::CullMode cull_mode) const
     -> graphics::RasterizerStateDesc;
+  virtual auto ExtendShaderDefines(
+    std::vector<graphics::ShaderDefine>& defines) const -> void;
 
   // Helper methods for Execute()
   virtual auto PrepareDepthStencilView(

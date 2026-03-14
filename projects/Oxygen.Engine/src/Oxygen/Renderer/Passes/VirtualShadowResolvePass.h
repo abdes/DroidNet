@@ -62,7 +62,7 @@ private:
   static constexpr std::uint32_t kMaxSupportedPagesPerAxis = 64U;
   static constexpr std::uint32_t kMaxSupportedClipLevels = 12U;
   static constexpr std::uint32_t kPassConstantsSlotsPerFrame
-    = (2U * kMaxSupportedClipLevels) + 2U;
+    = (2U * kMaxSupportedClipLevels) + 4U;
   static constexpr std::uint32_t kPassConstantsSlotCount
     = kPassConstantsSlotsPerFrame * frame::kFramesInFlight.get();
   static constexpr std::uint32_t kMaxSupportedPageCount
@@ -100,6 +100,25 @@ private:
     ShaderVisibleIndex count_uav { kInvalidShaderVisibleIndex };
 
     std::uint32_t entry_capacity { 0U };
+
+    std::shared_ptr<graphics::Buffer> clear_args_buffer;
+    ShaderVisibleIndex clear_args_uav { kInvalidShaderVisibleIndex };
+
+    std::shared_ptr<graphics::Buffer> draw_args_buffer;
+    ShaderVisibleIndex draw_args_uav { kInvalidShaderVisibleIndex };
+    std::uint32_t draw_arg_capacity { 0U };
+
+    std::shared_ptr<graphics::Buffer> draw_page_ranges_buffer;
+    ShaderVisibleIndex draw_page_ranges_srv { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex draw_page_ranges_uav { kInvalidShaderVisibleIndex };
+
+    std::shared_ptr<graphics::Buffer> draw_page_indices_buffer;
+    ShaderVisibleIndex draw_page_indices_srv { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex draw_page_indices_uav { kInvalidShaderVisibleIndex };
+
+    std::shared_ptr<graphics::Buffer> draw_page_counter_buffer;
+    ShaderVisibleIndex draw_page_counter_uav { kInvalidShaderVisibleIndex };
+    std::uint32_t draw_page_index_capacity { 0U };
   };
 
   struct SlotReadbackState {
@@ -136,6 +155,7 @@ private:
   ViewId active_view_id_ {};
   ShaderVisibleIndex active_request_words_srv_ { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex active_page_mark_flags_srv_ { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex active_draw_bounds_srv_ { kInvalidShaderVisibleIndex };
   std::uint32_t active_request_word_count_ { 0U };
   std::uint32_t active_dispatch_group_count_ { 0U };
   std::uint32_t active_pages_per_axis_ { 0U };
@@ -151,6 +171,8 @@ private:
   std::uint32_t active_dirty_page_list_count_ { 0U };
   std::uint32_t active_clean_page_list_count_ { 0U };
   std::uint32_t active_total_page_management_list_count_ { 0U };
+  std::uint32_t active_draw_count_ { 0U };
+  std::uint32_t active_draw_page_index_capacity_ { 0U };
   renderer::VirtualShadowPageManagementBindings
     active_page_management_bindings_ {};
   std::array<float, kMaxSupportedClipLevels> active_clip_origin_x_ {};
@@ -163,7 +185,8 @@ private:
   OXGN_RNDR_API auto EnsureReadbackBuffer(frame::Slot slot) -> void;
   OXGN_RNDR_API auto ProcessCompletedSchedule(frame::Slot slot) -> void;
   OXGN_RNDR_API auto EnsureViewScheduleResources(ViewId view_id,
-    std::uint32_t required_entry_capacity) -> ViewScheduleResources*;
+    std::uint32_t required_entry_capacity,
+    std::uint32_t required_draw_count) -> ViewScheduleResources*;
 };
 
 } // namespace oxygen::engine

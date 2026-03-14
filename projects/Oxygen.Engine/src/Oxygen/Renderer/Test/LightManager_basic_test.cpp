@@ -12,6 +12,7 @@
 #include <memory>
 #include <numeric>
 #include <optional>
+#include <sstream>
 #include <unordered_set>
 #include <utility>
 
@@ -597,6 +598,56 @@ auto CurrentLodGlobalPageIndexForWorldPoint(
   }
 
   return std::nullopt;
+}
+
+auto DescribeCurrentLodCoverageForWorldPoint(
+  const oxygen::engine::DirectionalVirtualShadowMetadata& metadata,
+  const std::span<const std::uint32_t> page_table_entries,
+  const glm::vec3& world_point) -> std::string
+{
+  std::ostringstream stream;
+  bool emitted_clip = false;
+  for (std::uint32_t clip_index = 0U; clip_index < metadata.clip_level_count;
+    ++clip_index) {
+    const auto page_index
+      = GlobalPageIndexForWorldPoint(metadata, clip_index, world_point);
+    if (!page_index.has_value()) {
+      continue;
+    }
+    if (*page_index >= page_table_entries.size()) {
+      continue;
+    }
+
+    if (emitted_clip) {
+      stream << ' ';
+    }
+    emitted_clip = true;
+
+    const auto packed_entry = page_table_entries[*page_index];
+    const auto decoded_entry
+      = oxygen::renderer::DecodeVirtualShadowPageTableEntry(packed_entry);
+    stream << "c" << clip_index << "=" << *page_index << ":";
+    if (packed_entry == 0U) {
+      stream << "empty";
+      continue;
+    }
+    if (decoded_entry.current_lod_valid) {
+      stream << "current";
+      continue;
+    }
+    if (!decoded_entry.any_lod_valid) {
+      stream << "invalid";
+      continue;
+    }
+    stream << "fallback->"
+           << oxygen::renderer::ResolveVirtualShadowFallbackClipIndex(
+                clip_index, metadata.clip_level_count, packed_entry);
+  }
+
+  if (!emitted_clip) {
+    stream << "out-of-bounds";
+  }
+  return stream.str();
 }
 
 auto AdvanceRendererFrame(LightManager& manager, ShadowManager& shadow_manager,
@@ -3603,8 +3654,10 @@ NOLINT_TEST_F(LightManagerTest,
           z_translated_metadata.light_view)));
 }
 
-//! Large movement along the light direction must exceed the cached Z guard band
-//! and force rerasterization even when the snapped XY lattice is unchanged.
+//! Large movement along the light direction must still reraster touched pages
+//! even when the snapped XY lattice is unchanged. Phase 7 now carries that
+//! through page-local dirty invalidation instead of forcing a whole-cache
+//! depth-guardband reject.
 NOLINT_TEST_F(LightManagerTest,
   ShadowManagerPublishForView_VirtualInvalidatesCleanPagesWhenDepthMappingChanges)
 {
@@ -3697,7 +3750,12 @@ NOLINT_TEST_F(LightManagerTest,
     second_virtual_introspection->directional_virtual_metadata.empty());
   ASSERT_GT(second_virtual_introspection->mapped_page_count, 0U);
   EXPECT_TRUE(second_virtual_introspection->cache_layout_compatible);
-  EXPECT_FALSE(second_virtual_introspection->depth_guardband_valid);
+  EXPECT_TRUE(second_virtual_introspection->depth_guardband_valid);
+  ASSERT_FALSE(second_virtual_introspection->clipmap_cache_valid.empty());
+  ASSERT_FALSE(second_virtual_introspection->clipmap_cache_status.empty());
+  EXPECT_TRUE(second_virtual_introspection->clipmap_cache_valid[0]);
+  EXPECT_EQ(second_virtual_introspection->clipmap_cache_status[0],
+    oxygen::renderer::DirectionalVirtualClipCacheStatus::kValid);
 
   const auto second_clip
     = second_virtual_introspection->directional_virtual_metadata.front();
@@ -3707,11 +3765,6 @@ NOLINT_TEST_F(LightManagerTest,
   EXPECT_NEAR(
     first_clip.origin_page_scale.y,
     second_clip.clip_metadata[0].origin_page_scale.y, 1.0e-4F);
-  EXPECT_TRUE(std::ranges::all_of(second_virtual_introspection->clipmap_cache_status,
-    [](const auto status) {
-      return status
-        == oxygen::renderer::DirectionalVirtualClipCacheStatus::kDepthGuardbandInvalid;
-    }));
   EXPECT_GT(second_virtual_introspection->rerasterized_page_count, 0U);
   EXPECT_EQ(second_virtual_introspection->pending_page_count,
     second_virtual_introspection->rerasterized_page_count);
@@ -6908,6 +6961,10 @@ NOLINT_TEST_F(LightManagerTest,
   (void)shadow_manager->PublishForView(oxygen::ViewId { 246 }, view_constants,
     manager, first_shadow_casters, first_visible_receivers, &synthetic_sun,
     std::chrono::milliseconds(16), 0U, static_flags);
+  shadow_manager->ResolveVirtualCurrentFrame(oxygen::ViewId { 246 });
+  // The live path commits directional virtual pages during the explicit
+  // resolve pass, so establish the static/dynamic baseline from the resolved
+  // publication rather than the pre-resolve publish snapshot.
   const auto* first_introspection
     = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 246 });
   ASSERT_NE(first_introspection, nullptr);
@@ -6940,38 +6997,109 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_EQ(first_address_space_hash, second_address_space_hash);
   const auto& second_metadata
     = introspection->directional_virtual_metadata.front();
-  const auto static_page_index
-    = GlobalPageIndexForWorldPoint(second_metadata, 0U, static_world);
-  ASSERT_TRUE(static_page_index.has_value());
-  const auto moved_dynamic_page_index
-    = GlobalPageIndexForWorldPoint(second_metadata, 0U, second_dynamic_world);
-  ASSERT_TRUE(moved_dynamic_page_index.has_value());
+  const auto static_current_lod_page_index = CurrentLodGlobalPageIndexForWorldPoint(
+    second_metadata, introspection->page_table_entries, static_world);
+  const auto moved_dynamic_current_lod_page_index
+    = CurrentLodGlobalPageIndexForWorldPoint(
+      second_metadata, introspection->page_table_entries, second_dynamic_world);
 
-  ASSERT_LT(*static_page_index, introspection->page_table_entries.size());
-  ASSERT_LT(*moved_dynamic_page_index, introspection->page_table_entries.size());
-  EXPECT_TRUE(oxygen::renderer::VirtualShadowPageTableEntryHasCurrentLod(
-    introspection->page_table_entries[*static_page_index]));
-  EXPECT_TRUE(oxygen::renderer::VirtualShadowPageTableEntryHasCurrentLod(
-    introspection->page_table_entries[*moved_dynamic_page_index]));
+  ASSERT_TRUE(static_current_lod_page_index.has_value());
+  ASSERT_TRUE(moved_dynamic_current_lod_page_index.has_value());
+  ASSERT_LT(
+    *static_current_lod_page_index, introspection->page_table_entries.size());
+  ASSERT_LT(*moved_dynamic_current_lod_page_index,
+    introspection->page_table_entries.size());
+  ASSERT_NE(*static_current_lod_page_index, *moved_dynamic_current_lod_page_index)
+    << "first_static_page_index=" << *first_static_page_index
+    << " static_current_lod_page_index="
+    << *static_current_lod_page_index
+    << " moved_dynamic_current_lod_page_index="
+    << *moved_dynamic_current_lod_page_index
+    << " static_coverage={"
+    << DescribeCurrentLodCoverageForWorldPoint(
+         second_metadata, introspection->page_table_entries, static_world)
+    << "}"
+    << " moved_dynamic_coverage={"
+    << DescribeCurrentLodCoverageForWorldPoint(
+         second_metadata, introspection->page_table_entries, second_dynamic_world)
+    << "}"
+    << " selected_page_count=" << introspection->selected_page_count
+    << " resident_page_count=" << introspection->resident_page_count
+    << " mapped_page_count=" << introspection->resolve_stats.mapped_page_count
+    << " requested_list_count=" << introspection->requested_page_list_count
+    << " dirty_list_count=" << introspection->dirty_page_list_count
+    << " clean_list_count=" << introspection->clean_page_list_count;
 
   const auto static_page_flags
-    = introspection->page_flags_entries[*static_page_index];
+    = introspection->page_flags_entries[*static_current_lod_page_index];
   const auto moved_dynamic_page_flags
-    = introspection->page_flags_entries[*moved_dynamic_page_index];
+    = introspection->page_flags_entries[*moved_dynamic_current_lod_page_index];
+  const auto static_page_debug = DescribeCurrentLodCoverageForWorldPoint(
+    second_metadata, introspection->page_table_entries, static_world);
+  const auto moved_dynamic_page_debug = DescribeCurrentLodCoverageForWorldPoint(
+    second_metadata, introspection->page_table_entries, second_dynamic_world);
 
   EXPECT_TRUE(oxygen::renderer::HasVirtualShadowPageFlag(static_page_flags,
-    oxygen::renderer::VirtualShadowPageFlag::kAllocated));
+    oxygen::renderer::VirtualShadowPageFlag::kAllocated))
+    << "static_current=" << *static_current_lod_page_index
+    << " first_static=" << *first_static_page_index
+    << " static_flags=0x" << std::hex << static_page_flags << std::dec
+    << " static_coverage={" << static_page_debug << "}"
+    << " cache_layout_compatible="
+    << introspection->cache_layout_compatible
+    << " depth_guardband_valid=" << introspection->depth_guardband_valid
+    << " clip0_cache_valid=" << introspection->clipmap_cache_valid[0]
+    << " clip0_cache_status="
+    << static_cast<std::uint32_t>(introspection->clipmap_cache_status[0])
+    << " clean_pages=" << introspection->clean_page_count
+    << " dirty_pages=" << introspection->dirty_page_count
+    << " pending_pages=" << introspection->pending_page_count;
   EXPECT_FALSE(oxygen::renderer::HasVirtualShadowPageFlag(static_page_flags,
-    oxygen::renderer::VirtualShadowPageFlag::kDynamicUncached));
+    oxygen::renderer::VirtualShadowPageFlag::kDynamicUncached))
+    << "static_current=" << *static_current_lod_page_index
+    << " first_static=" << *first_static_page_index
+    << " static_flags=0x" << std::hex << static_page_flags << std::dec
+    << " static_coverage={" << static_page_debug << "}"
+    << " cache_layout_compatible="
+    << introspection->cache_layout_compatible
+    << " depth_guardband_valid=" << introspection->depth_guardband_valid
+    << " clip0_cache_valid=" << introspection->clipmap_cache_valid[0]
+    << " clip0_cache_status="
+    << static_cast<std::uint32_t>(introspection->clipmap_cache_status[0])
+    << " clean_pages=" << introspection->clean_page_count
+    << " dirty_pages=" << introspection->dirty_page_count
+    << " pending_pages=" << introspection->pending_page_count;
   EXPECT_FALSE(oxygen::renderer::HasVirtualShadowPageFlag(static_page_flags,
-    oxygen::renderer::VirtualShadowPageFlag::kStaticUncached));
+    oxygen::renderer::VirtualShadowPageFlag::kStaticUncached))
+    << "static_current=" << *static_current_lod_page_index
+    << " first_static=" << *first_static_page_index
+    << " static_flags=0x" << std::hex << static_page_flags << std::dec
+    << " static_coverage={" << static_page_debug << "}"
+    << " cache_layout_compatible="
+    << introspection->cache_layout_compatible
+    << " depth_guardband_valid=" << introspection->depth_guardband_valid
+    << " clip0_cache_valid=" << introspection->clipmap_cache_valid[0]
+    << " clip0_cache_status="
+    << static_cast<std::uint32_t>(introspection->clipmap_cache_status[0])
+    << " clean_pages=" << introspection->clean_page_count
+    << " dirty_pages=" << introspection->dirty_page_count
+    << " pending_pages=" << introspection->pending_page_count;
 
   EXPECT_TRUE(oxygen::renderer::HasVirtualShadowPageFlag(
-    moved_dynamic_page_flags, oxygen::renderer::VirtualShadowPageFlag::kAllocated));
+    moved_dynamic_page_flags, oxygen::renderer::VirtualShadowPageFlag::kAllocated))
+    << "dynamic_current=" << *moved_dynamic_current_lod_page_index
+    << " dynamic_flags=0x" << std::hex << moved_dynamic_page_flags << std::dec
+    << " dynamic_coverage={" << moved_dynamic_page_debug << "}";
   EXPECT_TRUE(oxygen::renderer::HasVirtualShadowPageFlag(moved_dynamic_page_flags,
-    oxygen::renderer::VirtualShadowPageFlag::kDynamicUncached));
+    oxygen::renderer::VirtualShadowPageFlag::kDynamicUncached))
+    << "dynamic_current=" << *moved_dynamic_current_lod_page_index
+    << " dynamic_flags=0x" << std::hex << moved_dynamic_page_flags << std::dec
+    << " dynamic_coverage={" << moved_dynamic_page_debug << "}";
   EXPECT_FALSE(oxygen::renderer::HasVirtualShadowPageFlag(
-    moved_dynamic_page_flags, oxygen::renderer::VirtualShadowPageFlag::kStaticUncached));
+    moved_dynamic_page_flags, oxygen::renderer::VirtualShadowPageFlag::kStaticUncached))
+    << "dynamic_current=" << *moved_dynamic_current_lod_page_index
+    << " dynamic_flags=0x" << std::hex << moved_dynamic_page_flags << std::dec
+    << " dynamic_coverage={" << moved_dynamic_page_debug << "}";
 }
 
 NOLINT_TEST_F(LightManagerTest,

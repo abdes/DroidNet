@@ -2439,6 +2439,8 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
       if (auto emitter = scene_prep_state_->GetDrawMetadataEmitter()) {
         prepared_frame.bindless_draw_metadata_slot
           = emitter->GetDrawMetadataSrvIndex();
+        prepared_frame.bindless_draw_bounds_slot
+          = emitter->GetDrawBoundingSpheresSrvIndex();
         prepared_frame.bindless_instance_data_slot
           = emitter->GetInstanceDataSrvIndex();
       }

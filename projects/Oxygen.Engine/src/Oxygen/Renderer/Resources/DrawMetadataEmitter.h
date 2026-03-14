@@ -125,6 +125,9 @@ public:
   OXGN_RNDR_NDAPI auto GetDrawBoundingSpheres() const noexcept
     -> std::span<const glm::vec4>;
 
+  //! Shader-visible SRV index for the per-draw bounding-sphere buffer.
+  OXGN_RNDR_NDAPI auto GetDrawBoundingSpheresSrvIndex() -> ShaderVisibleIndex;
+
   //! Shader-visible SRV index for the instance data buffer.
   /*!
    Returns the bindless SRV index for the per-instance transform index buffer.
@@ -208,6 +211,8 @@ private:
   std::vector<SortingKey> keys_;
   std::vector<oxygen::engine::PreparedSceneFrame::PartitionRange> partitions_;
   std::vector<glm::vec4> draw_bounding_spheres_;
+  engine::upload::TransientStructuredBuffer draw_bounds_buffer_;
+  ShaderVisibleIndex draw_bounds_srv_index_ { kInvalidShaderVisibleIndex };
 
   // GPU instancing: per-instance transform indices
   std::vector<std::uint32_t> instance_transform_indices_;

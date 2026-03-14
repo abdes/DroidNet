@@ -8,6 +8,9 @@
 
 #include <cstdint>
 #include <memory>
+#include <array>
+#include <optional>
+#include <span>
 #include <unordered_map>
 #include <vector>
 
@@ -18,6 +21,8 @@
 #include <Oxygen/Renderer/Types/VirtualShadowRenderPlan.h>
 
 namespace oxygen::engine {
+
+struct DrawMetadata;
 
 class VirtualShadowPageRasterPass : public DepthPrePass {
 public:
@@ -37,30 +42,47 @@ protected:
   auto UsesFramebufferDepthAttachment() const -> bool override;
   auto BuildRasterizerStateDesc(graphics::CullMode cull_mode) const
     -> graphics::RasterizerStateDesc override;
+  auto ExtendShaderDefines(
+    std::vector<graphics::ShaderDefine>& defines) const -> void override;
 
 private:
+  struct alignas(16) RasterPassConstants {
+    float alpha_cutoff_default { 0.5F };
+    std::uint32_t schedule_srv_index { 0xFFFFFFFFU };
+    std::uint32_t schedule_count_srv_index { 0xFFFFFFFFU };
+    std::uint32_t atlas_tiles_per_axis { 0U };
+    std::uint32_t draw_page_ranges_srv_index { 0xFFFFFFFFU };
+    std::uint32_t draw_page_indices_srv_index { 0xFFFFFFFFU };
+    std::uint32_t _pad0 { 0U };
+    std::uint32_t _pad1 { 0U };
+  };
+  static_assert(sizeof(RasterPassConstants) % 16U == 0U);
+
   auto PrepareFullAtlasDepthStencilView(graphics::Texture& depth_texture) const
     -> graphics::NativeView;
-  auto EnsureShadowViewConstantsCapacity(std::uint32_t required_pages) -> void;
-  auto UploadResolvedPageViewConstants(
-    std::span<const renderer::VirtualShadowResolvedRasterPage> pages) -> void;
-  auto BindResolvedPageViewConstants(graphics::CommandRecorder& recorder,
-    std::uint32_t page_index) const -> void;
-  auto SetResolvedPageViewportAndScissors(graphics::CommandRecorder& recorder,
-    const renderer::VirtualShadowRenderPlan& render_plan,
-    const renderer::VirtualShadowResolvedRasterPage& page) const -> void;
-  auto EmitResolvedPageCulledDrawRange(graphics::CommandRecorder& recorder,
-    const DrawMetadata* records, std::span<const glm::vec4> draw_bounds,
-    const renderer::VirtualShadowResolvedRasterPage& page, std::uint32_t begin,
-    std::uint32_t end, std::uint32_t& emitted_count,
-    std::uint32_t& page_local_culled_count, std::uint32_t& skipped_invalid,
+  auto EnsureClearPipelineState() -> void;
+  auto EnsurePassConstantsCapacity() -> void;
+  auto HasLiveGpuRasterInputs(
+    const renderer::VirtualShadowGpuRasterInputs& gpu_inputs) const -> bool;
+  auto UploadRasterPassConstants() -> void;
+  auto EmitIndirectResolvedPageDrawRange(graphics::CommandRecorder& recorder,
+    const graphics::Buffer& draw_args_buffer, const DrawMetadata* records,
+    std::uint32_t draw_count,
+    std::span<const renderer::VirtualShadowResolvedRasterPage> resolved_pages,
+    std::span<const glm::vec4> draw_bounding_spheres,
+    std::uint32_t begin, std::uint32_t end, std::uint64_t& emitted_count,
+    std::uint32_t& cpu_draw_submission_count, std::uint32_t& skipped_invalid,
     std::uint32_t& draw_errors) const noexcept -> void;
 
   mutable graphics::NativeView full_atlas_dsv_ {};
-  std::shared_ptr<graphics::Buffer> shadow_view_constants_buffer_;
-  void* shadow_view_constants_mapped_ptr_ { nullptr };
-  std::uint32_t shadow_view_constants_capacity_ { 0U };
-  std::vector<ViewConstants::GpuData> resolved_page_view_constants_upload_;
+
+  std::shared_ptr<graphics::Buffer> pass_constants_buffer_;
+  void* pass_constants_mapped_ptr_ { nullptr };
+  std::array<graphics::NativeView, frame::kFramesInFlight.get()>
+    pass_constants_cbvs_ {};
+  std::array<ShaderVisibleIndex, frame::kFramesInFlight.get()>
+    pass_constants_indices_ {};
+  std::optional<graphics::GraphicsPipelineDesc> clear_pso_ {};
 
   struct ViewLogState {
     bool saw_live_prepared_frame { false };

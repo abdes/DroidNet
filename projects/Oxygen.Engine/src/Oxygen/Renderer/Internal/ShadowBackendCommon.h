@@ -308,6 +308,21 @@ struct DirectionalVirtualDepthRange {
   return clip_level_count;
 }
 
+[[nodiscard]] inline auto ResolveDirectionalVirtualGuardTexels(
+  const std::uint32_t page_size_texels,
+  const std::uint32_t filter_radius_texels) -> std::uint32_t
+{
+  const auto clamped_page_size = std::max(1U, page_size_texels);
+  const auto max_guard = std::max(1U, clamped_page_size / 4U);
+  return std::min(max_guard, std::max(1U, filter_radius_texels));
+}
+
+[[nodiscard]] inline auto ComputeDirectionalVirtualFallbackSlopeBiasScale(
+  const std::uint32_t fallback_lod_offset) -> float
+{
+  return static_cast<float>(std::max(1U, fallback_lod_offset + 1U));
+}
+
 [[nodiscard]] inline auto IsDirectionalCoarseClipSelected(
   const std::uint32_t clip_mask, const std::uint32_t clip_index) -> bool
 {

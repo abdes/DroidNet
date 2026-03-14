@@ -4,14 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -31,24 +34,27 @@ namespace oxygen::engine {
 
 namespace {
 
-  using SteadyClock = std::chrono::steady_clock;
+using SteadyClock = std::chrono::steady_clock;
 
-  auto ElapsedMicroseconds(const SteadyClock::time_point start)
-    -> std::uint64_t
-  {
-    return static_cast<std::uint64_t>(
-      std::chrono::duration_cast<std::chrono::microseconds>(
-        SteadyClock::now() - start)
-        .count());
-  }
+auto ElapsedMicroseconds(const SteadyClock::time_point start) -> std::uint64_t
+{
+  return static_cast<std::uint64_t>(
+    std::chrono::duration_cast<std::chrono::microseconds>(
+      SteadyClock::now() - start)
+      .count());
+}
 
-  constexpr float kVirtualShadowRasterDepthBias = 1200.0F;
-  // Virtual pages are small and heavily PCF-filtered, so leaving raster slope
-  // bias at zero prints regular self-shadow bands on broad receiver planes.
-  // Keep the hardware slope term enabled, but clamp it tightly so this does
-  // not explode into peter-panning on steep geometry.
-  constexpr float kVirtualShadowRasterSlopeBias = 2.0F;
-  constexpr float kVirtualShadowRasterDepthBiasClamp = 0.0025F;
+constexpr float kVirtualShadowRasterDepthBias = 1200.0F;
+// Virtual pages are small and heavily PCF-filtered, so leaving raster slope
+// bias at zero prints regular self-shadow bands on broad receiver planes.
+// Keep the hardware slope term enabled, but clamp it tightly so this does not
+// explode into peter-panning on steep geometry.
+constexpr float kVirtualShadowRasterSlopeBias = 2.0F;
+constexpr float kVirtualShadowRasterDepthBiasClamp = 0.0025F;
+constexpr std::uint32_t kPassConstantsStride
+  = packing::kConstantBufferAlignment;
+constexpr std::uint64_t kIndirectDrawCommandStrideBytes
+  = sizeof(std::uint32_t) * 5ULL;
 
 } // namespace
 
@@ -56,16 +62,15 @@ VirtualShadowPageRasterPass::VirtualShadowPageRasterPass(
   std::shared_ptr<Config> config)
   : DepthPrePass(std::move(config))
 {
+  pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
 }
 
 VirtualShadowPageRasterPass::~VirtualShadowPageRasterPass()
 {
-  if (shadow_view_constants_buffer_ && shadow_view_constants_mapped_ptr_) {
-    shadow_view_constants_buffer_->UnMap();
-    shadow_view_constants_mapped_ptr_ = nullptr;
+  if (pass_constants_buffer_ && pass_constants_mapped_ptr_ != nullptr) {
+    pass_constants_buffer_->UnMap();
+    pass_constants_mapped_ptr_ = nullptr;
   }
-  shadow_view_constants_buffer_.reset();
-  shadow_view_constants_capacity_ = 0U;
 }
 
 auto VirtualShadowPageRasterPass::DoPrepareResources(
@@ -87,19 +92,51 @@ auto VirtualShadowPageRasterPass::DoPrepareResources(
 
   const auto* render_plan
     = shadow_manager->TryGetVirtualRenderPlan(Context().current_view.view_id);
-  if (render_plan == nullptr || render_plan->resolved_pages.empty()) {
+  const auto* gpu_inputs = shadow_manager->TryGetVirtualGpuRasterInputs(
+    Context().current_view.view_id);
+  if (render_plan == nullptr || render_plan->depth_texture == nullptr
+    || gpu_inputs == nullptr || !HasLiveGpuRasterInputs(*gpu_inputs)) {
     co_return;
   }
 
-  EnsureShadowViewConstantsCapacity(
-    static_cast<std::uint32_t>(render_plan->resolved_pages.size()));
-  UploadResolvedPageViewConstants(render_plan->resolved_pages);
+  EnsureClearPipelineState();
+  EnsurePassConstantsCapacity();
+  UploadRasterPassConstants();
+
+  if (!recorder.IsResourceTracked(*gpu_inputs->schedule_buffer)) {
+    recorder.BeginTrackingResourceState(
+      *gpu_inputs->schedule_buffer, graphics::ResourceStates::kCommon, true);
+  }
+  if (!recorder.IsResourceTracked(*gpu_inputs->schedule_count_buffer)) {
+    recorder.BeginTrackingResourceState(
+      *gpu_inputs->schedule_count_buffer, graphics::ResourceStates::kCommon,
+      true);
+  }
+  if (!recorder.IsResourceTracked(*gpu_inputs->draw_page_ranges_buffer)) {
+    recorder.BeginTrackingResourceState(*gpu_inputs->draw_page_ranges_buffer,
+      graphics::ResourceStates::kCommon, true);
+  }
+  if (!recorder.IsResourceTracked(*gpu_inputs->draw_page_indices_buffer)) {
+    recorder.BeginTrackingResourceState(*gpu_inputs->draw_page_indices_buffer,
+      graphics::ResourceStates::kCommon, true);
+  }
+  if (!recorder.IsResourceTracked(*gpu_inputs->clear_indirect_args_buffer)) {
+    recorder.BeginTrackingResourceState(*gpu_inputs->clear_indirect_args_buffer,
+      graphics::ResourceStates::kCommon, true);
+  }
+  if (!recorder.IsResourceTracked(*gpu_inputs->draw_indirect_args_buffer)) {
+    recorder.BeginTrackingResourceState(*gpu_inputs->draw_indirect_args_buffer,
+      graphics::ResourceStates::kCommon, true);
+  }
 
   LOG_F(INFO,
-    "VirtualShadowPageRasterPass: frame={} view={} prepared {} resolved "
-    "virtual page view-constant upload(s) (cpu_prepare_us={})",
+    "VirtualShadowPageRasterPass: frame={} view={} prepared live GPU raster "
+    "inputs (source_frame={} cpu_page_mirror={} draw_count={} "
+    "schedule_capacity={} cpu_prepare_us={})",
     Context().frame_sequence.get(), Context().current_view.view_id.get(),
-    render_plan->resolved_pages.size(), ElapsedMicroseconds(prepare_begin));
+    gpu_inputs->source_frame_sequence.get(), render_plan->resolved_pages.size(),
+    gpu_inputs->draw_count, gpu_inputs->schedule_capacity,
+    ElapsedMicroseconds(prepare_begin));
 
   co_return;
 }
@@ -119,6 +156,12 @@ auto VirtualShadowPageRasterPass::BuildRasterizerStateDesc(
   return desc;
 }
 
+auto VirtualShadowPageRasterPass::ExtendShaderDefines(
+  std::vector<graphics::ShaderDefine>& defines) const -> void
+{
+  defines.push_back({ "OXYGEN_VIRTUAL_SHADOW_RASTER", "1" });
+}
+
 auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
   -> co::Co<>
 {
@@ -133,37 +176,47 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
 
   const auto* render_plan
     = shadow_manager->TryGetVirtualRenderPlan(Context().current_view.view_id);
-  if (render_plan == nullptr || render_plan->resolved_pages.empty()
-    || render_plan->depth_texture == nullptr) {
+  const auto* gpu_inputs = shadow_manager->TryGetVirtualGpuRasterInputs(
+    Context().current_view.view_id);
+  if (render_plan == nullptr || render_plan->depth_texture == nullptr
+    || gpu_inputs == nullptr || !HasLiveGpuRasterInputs(*gpu_inputs)) {
     auto& log_state = view_log_states_[Context().current_view.view_id.get()];
     if (render_plan != nullptr && render_plan->depth_texture != nullptr
       && log_state.saw_live_plan_jobs) {
       log_state.saw_live_plan_jobs = false;
       LOG_F(INFO,
-        "VirtualShadowPageRasterPass: view {} has no resolved virtual raster "
-        "pages anymore",
-        Context().current_view.view_id.get());
+        "VirtualShadowPageRasterPass: view {} has no live GPU raster inputs "
+        "for frame {} anymore",
+        Context().current_view.view_id.get(), Context().frame_sequence.get());
     }
     Context().RegisterPass(this);
     co_return;
+  }
+
+  if (Context().frame_slot == frame::kInvalidSlot) {
+    throw std::runtime_error(
+      "VirtualShadowPageRasterPass: invalid frame slot for raster execution");
   }
 
   auto& log_state = view_log_states_[Context().current_view.view_id.get()];
   if (!log_state.saw_live_plan_jobs) {
     log_state.saw_live_plan_jobs = true;
     LOG_F(INFO,
-      "VirtualShadowPageRasterPass: view {} has {} resolved virtual raster "
-      "page(s)",
-      Context().current_view.view_id.get(), render_plan->resolved_pages.size());
+      "VirtualShadowPageRasterPass: view {} has live GPU raster inputs "
+      "(cpu_page_mirror={} draw_count={} source_frame={})",
+      Context().current_view.view_id.get(), render_plan->resolved_pages.size(),
+      gpu_inputs->draw_count, gpu_inputs->source_frame_sequence.get());
   }
   LOG_F(INFO,
-    "VirtualShadowPageRasterPass: frame={} view={} executing {} resolved "
-    "virtual page(s) "
-    "(page_size={} atlas={}x{})",
+    "VirtualShadowPageRasterPass: frame={} view={} executing live GPU raster "
+    "(cpu_page_mirror={} draw_count={} page_size={} atlas={}x{} "
+    "source_frame={})",
     Context().frame_sequence.get(), Context().current_view.view_id.get(),
-    render_plan->resolved_pages.size(), render_plan->page_size_texels,
+    render_plan->resolved_pages.size(), gpu_inputs->draw_count,
+    render_plan->page_size_texels,
     render_plan->page_size_texels * render_plan->atlas_tiles_per_axis,
-    render_plan->page_size_texels * render_plan->atlas_tiles_per_axis);
+    render_plan->page_size_texels * render_plan->atlas_tiles_per_axis,
+    gpu_inputs->source_frame_sequence.get());
 
   const auto psf = Context().current_view.prepared_frame;
   if (!psf || !psf->IsValid() || psf->draw_metadata_bytes.empty()
@@ -171,7 +224,7 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
     LOG_F(ERROR,
       "VirtualShadowPageRasterPass: skipped for view {} "
       "(prepared={} valid={} draw_bytes={} partitions={}) while having {} "
-      "resolved raster pages!",
+      "live GPU virtual raster page(s)!",
       Context().current_view.view_id.get(), psf != nullptr,
       psf ? psf->IsValid() : false, psf ? psf->draw_metadata_bytes.size() : 0U,
       psf ? psf->partitions.size() : 0U, render_plan->resolved_pages.size());
@@ -189,70 +242,74 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
 
   auto& depth_texture = const_cast<graphics::Texture&>(GetDepthTexture());
   const auto dsv = PrepareFullAtlasDepthStencilView(depth_texture);
+  const auto atlas_resolution
+    = render_plan->page_size_texels * render_plan->atlas_tiles_per_axis;
 
+  recorder.SetViewport(ViewPort {
+    .top_left_x = 0.0F,
+    .top_left_y = 0.0F,
+    .width = static_cast<float>(atlas_resolution),
+    .height = static_cast<float>(atlas_resolution),
+    .min_depth = 0.0F,
+    .max_depth = 1.0F,
+  });
+  recorder.SetScissors(Scissors {
+    .left = 0,
+    .top = 0,
+    .right = static_cast<std::int32_t>(atlas_resolution),
+    .bottom = static_cast<std::int32_t>(atlas_resolution),
+  });
   recorder.SetRenderTargets({}, dsv);
+
+  recorder.RequireResourceState(
+    *gpu_inputs->clear_indirect_args_buffer,
+    graphics::ResourceStates::kIndirectArgument);
+  recorder.RequireResourceState(
+    *gpu_inputs->draw_indirect_args_buffer,
+    graphics::ResourceStates::kIndirectArgument);
+  recorder.RequireResourceState(
+    *gpu_inputs->schedule_buffer, graphics::ResourceStates::kShaderResource);
+  recorder.RequireResourceState(*gpu_inputs->schedule_count_buffer,
+    graphics::ResourceStates::kShaderResource);
+  recorder.RequireResourceState(*gpu_inputs->draw_page_ranges_buffer,
+    graphics::ResourceStates::kShaderResource);
+  recorder.RequireResourceState(*gpu_inputs->draw_page_indices_buffer,
+    graphics::ResourceStates::kShaderResource);
+  recorder.FlushBarriers();
+
+  if (!clear_pso_.has_value()) {
+    throw std::runtime_error(
+      "VirtualShadowPageRasterPass: clear pipeline state was not built");
+  }
+  recorder.SetPipelineState(*clear_pso_);
+  RebindCommonRootParameters(recorder);
+  recorder.ExecuteIndirect(*gpu_inputs->clear_indirect_args_buffer, 0U);
 
   const auto* records
     = reinterpret_cast<const DrawMetadata*>(psf->draw_metadata_bytes.data());
-  const auto draw_count = static_cast<std::uint32_t>(
-    psf->draw_metadata_bytes.size() / sizeof(DrawMetadata));
-  const bool has_aligned_draw_bounds
-    = psf->draw_bounding_spheres.size() == draw_count;
-  const auto draw_bounds = has_aligned_draw_bounds
-    ? psf->draw_bounding_spheres
-    : std::span<const glm::vec4> {};
   const auto rastered_page_count
     = static_cast<std::uint32_t>(render_plan->resolved_pages.size());
-  std::uint32_t emitted_count = 0U;
-  std::uint32_t cleared_page_count = 0U;
-  std::uint32_t page_local_culled_count = 0U;
+  std::uint64_t emitted_count = 0U;
+  std::uint32_t cpu_draw_submission_count = 0U;
   std::uint32_t skipped_invalid = 0U;
   std::uint32_t draw_errors = 0U;
 
-  if (!has_aligned_draw_bounds) {
-    LOG_F(WARNING,
-      "VirtualShadowPageRasterPass: view {} has no aligned per-draw bounds "
-      "(draw_count={} bounds={}); page-local culling disabled for this frame",
-      Context().current_view.view_id.get(), draw_count,
-      psf->draw_bounding_spheres.size());
-  }
-
-  for (std::uint32_t page_index = 0U;
-    page_index < render_plan->resolved_pages.size(); ++page_index) {
-    const auto& page = render_plan->resolved_pages[page_index];
-    SetResolvedPageViewportAndScissors(recorder, *render_plan, page);
-    recorder.SetRenderTargets({}, dsv);
-    const auto left = static_cast<std::int32_t>(
-      page.atlas_tile_x * render_plan->page_size_texels);
-    const auto top = static_cast<std::int32_t>(
-      page.atlas_tile_y * render_plan->page_size_texels);
-    const auto size = static_cast<std::int32_t>(render_plan->page_size_texels);
-    const Scissors clear_rect {
-      .left = left,
-      .top = top,
-      .right = left + size,
-      .bottom = top + size,
-    };
-    recorder.ClearDepthStencilView(depth_texture, dsv,
-      graphics::ClearFlags::kDepth, 1.0F, 0, { &clear_rect, 1 });
-    ++cleared_page_count;
-
-    for (const auto& pr : psf->partitions) {
-      if (!pr.pass_mask.IsSet(PassMaskBit::kShadowCaster)) {
-        continue;
-      }
-      if (!pr.pass_mask.IsSet(PassMaskBit::kOpaque)
-        && !pr.pass_mask.IsSet(PassMaskBit::kMasked)) {
-        continue;
-      }
-
-      recorder.SetPipelineState(SelectPipelineStateForPartition(pr.pass_mask));
-      RebindCommonRootParameters(recorder);
-      BindResolvedPageViewConstants(recorder, page_index);
-      EmitResolvedPageCulledDrawRange(recorder, records, draw_bounds, page,
-        pr.begin, pr.end, emitted_count, page_local_culled_count,
-        skipped_invalid, draw_errors);
+  for (const auto& pr : psf->partitions) {
+    if (!pr.pass_mask.IsSet(PassMaskBit::kShadowCaster)) {
+      continue;
     }
+    if (!pr.pass_mask.IsSet(PassMaskBit::kOpaque)
+      && !pr.pass_mask.IsSet(PassMaskBit::kMasked)) {
+      continue;
+    }
+
+    recorder.SetPipelineState(SelectPipelineStateForPartition(pr.pass_mask));
+    RebindCommonRootParameters(recorder);
+    EmitIndirectResolvedPageDrawRange(recorder,
+      *gpu_inputs->draw_indirect_args_buffer, records, gpu_inputs->draw_count,
+      render_plan->resolved_pages, psf->draw_bounding_spheres, pr.begin, pr.end,
+      emitted_count,
+      cpu_draw_submission_count, skipped_invalid, draw_errors);
   }
 
   recorder.RequireResourceState(
@@ -266,10 +323,10 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
     }
     LOG_F(ERROR,
       "VirtualShadowPageRasterPass: view {} produced no shadow-caster draws "
-      "(resolved_pages={} rastered_pages={} page_clears={} shadow_draws=0 "
-      "page_local_culled={} skipped_invalid={} errors={})",
+      "(cpu_page_mirror={} gpu_schedule=1 rastered_pages={} page_clears={} shadow_draws=0 "
+      "cpu_draw_submissions={} skipped_invalid={} errors={})",
       Context().current_view.view_id.get(), render_plan->resolved_pages.size(),
-      rastered_page_count, cleared_page_count, page_local_culled_count,
+      rastered_page_count, rastered_page_count, cpu_draw_submission_count,
       skipped_invalid, draw_errors);
   } else {
     if (!log_state.saw_nonzero_draw_live_frame) {
@@ -279,11 +336,11 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
     LOG_F(INFO,
       "VirtualShadowPageRasterPass: frame={} view={} emitted {} "
       "shadow-caster draw(s) for {} resolved virtual page(s) "
-      "(rastered_pages={} page_clears={} page_local_culled={} "
+      "[gpu_schedule=1] (rastered_pages={} page_clears={} cpu_draw_submissions={} "
       "skipped_invalid={} errors={})",
       Context().frame_sequence.get(), Context().current_view.view_id.get(),
       emitted_count, render_plan->resolved_pages.size(), rastered_page_count,
-      cleared_page_count, page_local_culled_count, skipped_invalid,
+      rastered_page_count, cpu_draw_submission_count, skipped_invalid,
       draw_errors);
     shadow_manager->MarkVirtualRenderPlanExecuted(
       Context().current_view.view_id);
@@ -293,35 +350,49 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
   co_return;
 }
 
-auto VirtualShadowPageRasterPass::EmitResolvedPageCulledDrawRange(
-  graphics::CommandRecorder& recorder, const DrawMetadata* records,
-  const std::span<const glm::vec4> draw_bounds,
-  const renderer::VirtualShadowResolvedRasterPage& page,
+auto VirtualShadowPageRasterPass::EmitIndirectResolvedPageDrawRange(
+  graphics::CommandRecorder& recorder, const graphics::Buffer& draw_args_buffer,
+  const DrawMetadata* records, const std::uint32_t draw_count,
+  const std::span<const renderer::VirtualShadowResolvedRasterPage> resolved_pages,
+  const std::span<const glm::vec4> draw_bounding_spheres,
   const std::uint32_t begin, const std::uint32_t end,
-  std::uint32_t& emitted_count, std::uint32_t& page_local_culled_count,
-  std::uint32_t& skipped_invalid, std::uint32_t& draw_errors) const noexcept
-  -> void
+  std::uint64_t& emitted_count,
+  std::uint32_t& cpu_draw_submission_count, std::uint32_t& skipped_invalid,
+  std::uint32_t& draw_errors) const noexcept -> void
 {
+  const auto clamped_end = std::min(end, draw_count);
   for (std::uint32_t draw_index = begin; draw_index < end; ++draw_index) {
-    const auto& md = records[draw_index];
-    if ((md.is_indexed && md.index_count == 0U)
-      || (!md.is_indexed && md.vertex_count == 0U)) {
-      ++skipped_invalid;
+    if (draw_index >= draw_count) {
+      ++draw_errors;
+      LOG_F(ERROR,
+        "VirtualShadowPageRasterPass '{}': partition draw_index={} exceeds "
+        "prepared indirect draw count {}; draw dropped.",
+        GetName(), draw_index, draw_count);
       continue;
     }
-    if (!draw_bounds.empty()
-      && !renderer::internal::shadow_detail::
-        ResolvedVirtualPageOverlapsBoundingSphere(
-          page, draw_bounds[draw_index])) {
-      ++page_local_culled_count;
+
+    const auto& md = records[draw_index];
+    if ((md.is_indexed && md.index_count == 0U)
+      || (!md.is_indexed && md.vertex_count == 0U) || md.instance_count == 0U) {
+      ++skipped_invalid;
       continue;
     }
 
     try {
-      BindDrawIndexConstant(recorder, DrawIndex { draw_index });
-      recorder.Draw(md.is_indexed ? md.index_count : md.vertex_count,
-        md.instance_count, 0, 0);
-      ++emitted_count;
+      std::uint32_t overlapping_page_count
+        = static_cast<std::uint32_t>(resolved_pages.size());
+      if (draw_index < draw_bounding_spheres.size()) {
+        overlapping_page_count = 0U;
+        const auto& sphere = draw_bounding_spheres[draw_index];
+        for (const auto& page : resolved_pages) {
+          if (renderer::internal::shadow_detail::
+                ResolvedVirtualPageOverlapsBoundingSphere(page, sphere)) {
+            ++overlapping_page_count;
+          }
+        }
+      }
+      emitted_count += static_cast<std::uint64_t>(md.instance_count)
+        * static_cast<std::uint64_t>(overlapping_page_count);
     } catch (const std::exception& ex) {
       ++draw_errors;
       LOG_F(ERROR,
@@ -335,6 +406,30 @@ auto VirtualShadowPageRasterPass::EmitResolvedPageCulledDrawRange(
         "error. Draw dropped.",
         GetName(), draw_index);
     }
+  }
+
+  if (begin >= clamped_end) {
+    return;
+  }
+
+  try {
+    recorder.ExecuteIndirect(draw_args_buffer,
+      static_cast<std::uint64_t>(begin) * kIndirectDrawCommandStrideBytes,
+      clamped_end - begin,
+      graphics::CommandRecorder::IndirectCommandLayout::kDrawWithRootConstant);
+    ++cpu_draw_submission_count;
+  } catch (const std::exception& ex) {
+    ++draw_errors;
+    LOG_F(ERROR,
+      "VirtualShadowPageRasterPass '{}' range=[{}, {}) failed: {}. "
+      "Draw range dropped.",
+      GetName(), begin, clamped_end, ex.what());
+  } catch (...) {
+    ++draw_errors;
+    LOG_F(ERROR,
+      "VirtualShadowPageRasterPass '{}' range=[{}, {}) failed: unknown "
+      "error. Draw range dropped.",
+      GetName(), begin, clamped_end);
   }
 }
 
@@ -383,133 +478,168 @@ auto VirtualShadowPageRasterPass::PrepareFullAtlasDepthStencilView(
   return full_atlas_dsv_;
 }
 
-auto VirtualShadowPageRasterPass::EnsureShadowViewConstantsCapacity(
-  const std::uint32_t required_pages) -> void
+auto VirtualShadowPageRasterPass::EnsureClearPipelineState() -> void
 {
-  if (required_pages == 0U
-    || required_pages <= shadow_view_constants_capacity_) {
+  if (clear_pso_.has_value()) {
     return;
   }
 
-  if (shadow_view_constants_buffer_ && shadow_view_constants_mapped_ptr_) {
-    shadow_view_constants_buffer_->UnMap();
-    shadow_view_constants_mapped_ptr_ = nullptr;
-  }
-  shadow_view_constants_buffer_.reset();
+  using graphics::CompareOp;
+  using graphics::CullMode;
+  using graphics::DepthStencilStateDesc;
+  using graphics::FramebufferLayoutDesc;
+  using graphics::PrimitiveType;
+  using graphics::ShaderRequest;
 
-  shadow_view_constants_capacity_ = required_pages;
-  const auto total_bytes
-    = static_cast<std::uint64_t>(sizeof(ViewConstants::GpuData))
-    * static_cast<std::uint64_t>(frame::kFramesInFlight.get())
-    * static_cast<std::uint64_t>(shadow_view_constants_capacity_);
-
-  const graphics::BufferDesc desc {
-    .size_bytes = total_bytes,
-    .usage = graphics::BufferUsage::kConstant,
-    .memory = graphics::BufferMemory::kUpload,
-    .debug_name = "VirtualShadowPageRasterPass.ViewConstants",
+  constexpr DepthStencilStateDesc depth_state {
+    .depth_test_enable = true,
+    .depth_write_enable = true,
+    .depth_func = CompareOp::kAlways,
+    .stencil_enable = false,
+    .stencil_read_mask = 0xFF,
+    .stencil_write_mask = 0xFF,
+  };
+  const FramebufferLayoutDesc framebuffer_layout {
+    .color_target_formats = {},
+    .depth_stencil_format = GetDepthTexture().GetDescriptor().format,
+    .sample_count = GetDepthTexture().GetDescriptor().sample_count,
   };
 
-  shadow_view_constants_buffer_ = Context().GetGraphics().CreateBuffer(desc);
-  if (!shadow_view_constants_buffer_) {
-    shadow_view_constants_capacity_ = 0U;
-    throw std::runtime_error(
-      "VirtualShadowPageRasterPass: failed to create shadow view constants "
-      "buffer");
-  }
-
-  shadow_view_constants_buffer_->SetName(desc.debug_name);
-  shadow_view_constants_mapped_ptr_
-    = shadow_view_constants_buffer_->Map(0U, desc.size_bytes);
-  if (shadow_view_constants_mapped_ptr_ == nullptr) {
-    shadow_view_constants_buffer_.reset();
-    shadow_view_constants_capacity_ = 0U;
-    throw std::runtime_error(
-      "VirtualShadowPageRasterPass: failed to map shadow view constants "
-      "buffer");
-  }
+  auto generated_bindings = BuildRootBindings();
+  clear_pso_ = graphics::GraphicsPipelineDesc::Builder()
+    .SetVertexShader(ShaderRequest {
+      .stage = ShaderType::kVertex,
+      .source_path = "Depth/VirtualShadowPageClear.hlsl",
+      .entry_point = "VS",
+    })
+    .SetPixelShader(ShaderRequest {
+      .stage = ShaderType::kPixel,
+      .source_path = "Depth/VirtualShadowPageClear.hlsl",
+      .entry_point = "PS",
+    })
+    .SetPrimitiveTopology(PrimitiveType::kTriangleList)
+    .SetRasterizerState(DepthPrePass::BuildRasterizerStateDesc(CullMode::kNone))
+    .SetDepthStencilState(depth_state)
+    .SetBlendState({})
+    .SetFramebufferLayout(framebuffer_layout)
+    .SetRootBindings(std::span<const graphics::RootBindingItem>(
+      generated_bindings.data(), generated_bindings.size()))
+    .SetDebugName("VirtualShadowPageRasterPass_Clear")
+    .Build();
 }
 
-auto VirtualShadowPageRasterPass::UploadResolvedPageViewConstants(
-  const std::span<const renderer::VirtualShadowResolvedRasterPage> pages)
-  -> void
+auto VirtualShadowPageRasterPass::HasLiveGpuRasterInputs(
+  const renderer::VirtualShadowGpuRasterInputs& gpu_inputs) const -> bool
 {
-  if (pages.empty()) {
+  return gpu_inputs.source_frame_sequence == Context().frame_sequence
+    && gpu_inputs.schedule_buffer != nullptr
+    && gpu_inputs.schedule_count_buffer != nullptr
+    && gpu_inputs.draw_page_ranges_buffer != nullptr
+    && gpu_inputs.draw_page_indices_buffer != nullptr
+    && gpu_inputs.clear_indirect_args_buffer != nullptr
+    && gpu_inputs.draw_indirect_args_buffer != nullptr
+    && gpu_inputs.schedule_srv.IsValid()
+    && gpu_inputs.schedule_count_srv.IsValid()
+    && gpu_inputs.draw_page_ranges_srv.IsValid()
+    && gpu_inputs.draw_page_indices_srv.IsValid();
+}
+
+auto VirtualShadowPageRasterPass::EnsurePassConstantsCapacity() -> void
+{
+  if (pass_constants_buffer_ && pass_constants_mapped_ptr_ != nullptr
+    && pass_constants_indices_[0].IsValid()) {
     return;
   }
-  if (!shadow_view_constants_buffer_
-    || shadow_view_constants_mapped_ptr_ == nullptr) {
-    throw std::runtime_error("VirtualShadowPageRasterPass: shadow view "
-                             "constants buffer is not initialized");
+
+  if (pass_constants_buffer_ && pass_constants_mapped_ptr_ != nullptr) {
+    pass_constants_buffer_->UnMap();
+    pass_constants_mapped_ptr_ = nullptr;
+  }
+  pass_constants_buffer_.reset();
+  pass_constants_cbvs_.fill({});
+  pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
+
+  auto& graphics = Context().GetGraphics();
+  auto& registry = graphics.GetResourceRegistry();
+  auto& allocator = graphics.GetDescriptorAllocator();
+
+  const graphics::BufferDesc desc {
+    .size_bytes = kPassConstantsStride * frame::kFramesInFlight.get(),
+    .usage = graphics::BufferUsage::kConstant,
+    .memory = graphics::BufferMemory::kUpload,
+    .debug_name = "VirtualShadowPageRasterPass.Constants",
+  };
+  pass_constants_buffer_ = graphics.CreateBuffer(desc);
+  if (!pass_constants_buffer_) {
+    throw std::runtime_error(
+      "VirtualShadowPageRasterPass: failed to create pass constants buffer");
+  }
+  registry.Register(pass_constants_buffer_);
+  pass_constants_mapped_ptr_ = pass_constants_buffer_->Map(0U, desc.size_bytes);
+  if (pass_constants_mapped_ptr_ == nullptr) {
+    pass_constants_buffer_.reset();
+    throw std::runtime_error(
+      "VirtualShadowPageRasterPass: failed to map pass constants buffer");
+  }
+
+  for (std::uint32_t slot = 0U; slot < frame::kFramesInFlight.get(); ++slot) {
+    auto cbv_handle = allocator.Allocate(
+      graphics::ResourceViewType::kConstantBuffer,
+      graphics::DescriptorVisibility::kShaderVisible);
+    if (!cbv_handle.IsValid()) {
+      throw std::runtime_error(
+        "VirtualShadowPageRasterPass: failed to allocate pass constants CBV");
+    }
+
+    pass_constants_indices_[slot] = allocator.GetShaderVisibleIndex(cbv_handle);
+    graphics::BufferViewDescription cbv_desc;
+    cbv_desc.view_type = graphics::ResourceViewType::kConstantBuffer;
+    cbv_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
+    cbv_desc.range = { slot * kPassConstantsStride, kPassConstantsStride };
+    pass_constants_cbvs_[slot] = registry.RegisterView(
+      *pass_constants_buffer_, std::move(cbv_handle), cbv_desc);
+  }
+}
+
+auto VirtualShadowPageRasterPass::UploadRasterPassConstants() -> void
+{
+  if (!pass_constants_buffer_ || pass_constants_mapped_ptr_ == nullptr) {
+    throw std::runtime_error(
+      "VirtualShadowPageRasterPass: pass constants buffer is not initialized");
   }
   if (Context().frame_slot == frame::kInvalidSlot) {
-    throw std::runtime_error("VirtualShadowPageRasterPass: invalid frame slot "
-                             "for shadow view constants upload");
+    throw std::runtime_error(
+      "VirtualShadowPageRasterPass: invalid frame slot for pass constants");
   }
 
-  resolved_page_view_constants_upload_.resize(pages.size());
-  for (std::size_t i = 0; i < pages.size(); ++i) {
-    resolved_page_view_constants_upload_[i] = pages[i].view_constants;
+  const auto shadow_manager = Context().GetRenderer().GetShadowManager();
+  if (shadow_manager == nullptr) {
+    throw std::runtime_error(
+      "VirtualShadowPageRasterPass: ShadowManager is unavailable");
+  }
+  const auto* render_plan
+    = shadow_manager->TryGetVirtualRenderPlan(Context().current_view.view_id);
+  const auto* gpu_inputs
+    = shadow_manager->TryGetVirtualGpuRasterInputs(Context().current_view.view_id);
+  if (render_plan == nullptr || gpu_inputs == nullptr
+    || !HasLiveGpuRasterInputs(*gpu_inputs)) {
+    throw std::runtime_error(
+      "VirtualShadowPageRasterPass: live GPU raster inputs are unavailable");
   }
 
-  const auto base_index = static_cast<std::uint64_t>(Context().frame_slot.get())
-    * static_cast<std::uint64_t>(shadow_view_constants_capacity_);
-  auto* dst = static_cast<std::byte*>(shadow_view_constants_mapped_ptr_)
-    + base_index * sizeof(ViewConstants::GpuData);
-  std::memcpy(dst, resolved_page_view_constants_upload_.data(),
-    resolved_page_view_constants_upload_.size()
-      * sizeof(ViewConstants::GpuData));
-}
-
-auto VirtualShadowPageRasterPass::BindResolvedPageViewConstants(
-  graphics::CommandRecorder& recorder, const std::uint32_t page_index) const
-  -> void
-{
-  if (!shadow_view_constants_buffer_
-    || Context().frame_slot == frame::kInvalidSlot) {
-    throw std::runtime_error("VirtualShadowPageRasterPass: shadow view "
-                             "constants buffer is not available");
-  }
-  if (page_index >= shadow_view_constants_capacity_) {
-    throw std::out_of_range("VirtualShadowPageRasterPass: page index exceeds "
-                            "shadow view constants capacity");
-  }
-
-  const auto slot_offset
-    = static_cast<std::uint64_t>(Context().frame_slot.get())
-      * static_cast<std::uint64_t>(shadow_view_constants_capacity_)
-    + page_index;
-  const auto byte_offset = slot_offset * sizeof(ViewConstants::GpuData);
-  recorder.SetGraphicsRootConstantBufferView(
-    static_cast<std::uint32_t>(binding::RootParam::kViewConstants),
-    shadow_view_constants_buffer_->GetGPUVirtualAddress() + byte_offset);
-}
-
-auto VirtualShadowPageRasterPass::SetResolvedPageViewportAndScissors(
-  graphics::CommandRecorder& recorder,
-  const renderer::VirtualShadowRenderPlan& render_plan,
-  const renderer::VirtualShadowResolvedRasterPage& page) const -> void
-{
-  const float left
-    = static_cast<float>(page.atlas_tile_x) * render_plan.page_size_texels;
-  const float top
-    = static_cast<float>(page.atlas_tile_y) * render_plan.page_size_texels;
-  const float size = static_cast<float>(render_plan.page_size_texels);
-
-  recorder.SetViewport(ViewPort {
-    .top_left_x = left,
-    .top_left_y = top,
-    .width = size,
-    .height = size,
-    .min_depth = 0.0F,
-    .max_depth = 1.0F,
-  });
-  recorder.SetScissors(Scissors {
-    .left = static_cast<std::int32_t>(left),
-    .top = static_cast<std::int32_t>(top),
-    .right = static_cast<std::int32_t>(left + size),
-    .bottom = static_cast<std::int32_t>(top + size),
-  });
+  const auto slot = Context().frame_slot.get();
+  const RasterPassConstants constants {
+    .alpha_cutoff_default = 0.5F,
+    .schedule_srv_index = gpu_inputs->schedule_srv.get(),
+    .schedule_count_srv_index = gpu_inputs->schedule_count_srv.get(),
+    .atlas_tiles_per_axis = render_plan->atlas_tiles_per_axis,
+    .draw_page_ranges_srv_index = gpu_inputs->draw_page_ranges_srv.get(),
+    .draw_page_indices_srv_index = gpu_inputs->draw_page_indices_srv.get(),
+  };
+  auto* dst = static_cast<std::byte*>(pass_constants_mapped_ptr_)
+    + static_cast<std::ptrdiff_t>(slot * kPassConstantsStride);
+  std::memcpy(dst, &constants, sizeof(constants));
+  SetPassConstantsIndex(pass_constants_indices_[slot]);
 }
 
 } // namespace oxygen::engine

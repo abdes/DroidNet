@@ -309,6 +309,17 @@ auto ShadowManager::ClearVirtualResolvedRasterSchedule(const ViewId view_id)
   }
 }
 
+auto ShadowManager::SubmitVirtualGpuRasterInputs(const ViewId view_id,
+  renderer::VirtualShadowGpuRasterInputs inputs) -> void
+{
+  virtual_gpu_raster_inputs_.insert_or_assign(view_id, std::move(inputs));
+}
+
+auto ShadowManager::ClearVirtualGpuRasterInputs(const ViewId view_id) -> void
+{
+  virtual_gpu_raster_inputs_.erase(view_id);
+}
+
 auto ShadowManager::SetVirtualDirectionalCacheControls(
   const DirectionalVirtualCacheControls controls) -> void
 {
@@ -345,6 +356,14 @@ auto ShadowManager::TryGetVirtualRenderPlan(const ViewId view_id) const noexcept
 {
   return virtual_backend_ ? virtual_backend_->TryGetRenderPlan(view_id)
                           : nullptr;
+}
+
+auto ShadowManager::TryGetVirtualGpuRasterInputs(
+  const ViewId view_id) const noexcept
+  -> const renderer::VirtualShadowGpuRasterInputs*
+{
+  const auto it = virtual_gpu_raster_inputs_.find(view_id);
+  return it != virtual_gpu_raster_inputs_.end() ? &it->second : nullptr;
 }
 
 auto ShadowManager::TryGetViewIntrospection(const ViewId view_id) const noexcept

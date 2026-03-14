@@ -186,7 +186,18 @@ backend monolith.
 
 ## 8. Phased Execution Plan
 
-Phases are sequential. Only one phase may be `in_progress` at a time.
+Phases still close sequentially, but the remaining GPU-only closure work is now
+allowed to advance as a prerequisite-linked bundle across Phases 7-9.
+
+Execution correction:
+
+- Date: March 14, 2026
+- user direction requires treating the remaining Phase 7 raster-authority work,
+  the Phase 8 raster scalability work, and the Phase 9 shading-cost work as one
+  productivity slice
+- legacy CPU/GPU byte-parity checks are no longer allowed to block this work
+  once the live GPU-only contract being exercised is different
+- completion claims still remain phase-specific and evidence-gated
 
 ### Phase 1. Replace The Core Data Contracts
 
@@ -1238,7 +1249,7 @@ No step may be marked completed without recording:
 
 ### Phase 7. Replace Readback-Led Demand With Same-Frame GPU Marking, Invalidation, And Static/Dynamic Split
 
-Status: `pending`
+Status: `in_progress`
 
 Goal:
 
@@ -1367,6 +1378,96 @@ Completion gate:
   for current missing pages
 - the Phase 7 structural readback validator is green on the locked benchmark
 
+Progress update:
+
+- March 14, 2026 reordered implementation slice:
+  - landed the minimum live raster execution change needed to stop page-by-page
+    CPU draw fanout from blocking the GPU-only path:
+    - `VirtualShadowPageRasterPass` now uploads per-page raster instances into a
+      structured SRV
+    - the depth pass now renders resolved pages via instancing across the full
+      atlas instead of rebinding per-page view CBVs and reissuing page-local CPU
+      draw loops
+    - `DepthPrePass` now supports pass-specific shader defines so the virtual
+      shadow raster path can compile its own permutation cleanly
+  - refreshed the live resolve path so page-management snapshot publication is
+    rebuilt immediately after `ResolveCurrentFrame(...)`, rather than waiting
+    for the later GPU-coherence finalization path
+  - corrected the focused static/dynamic regression to validate the real Phase 7
+    contract:
+    distinct world points must resolve to distinct current pages after the
+    explicit resolve stage, not merely to different clip-0 aliases
+- this is real Phase 7 progress, but not a completion:
+  - the focused static/dynamic regression is now green, and the benchmark no
+    longer collapses fine-detail shading onto clip-5 fallback aliases once
+    accepted GPU feedback is consumed
+  - however the live fine-page authority is still delayed:
+    benchmark logs now show `request=accepted` with `feedback_age=4`, so
+    readback-aged GPU feedback remains authoritative for creating fine current
+    pages on the live path
+  - therefore Phase 7 still cannot close on the UE-style same-frame gate until
+    the same missing fine pages can be created and published without the
+    delayed `request_feedback_` authority loop
+
+- March 14, 2026 follow-up progress:
+  - corrected the remaining Phase 7 authority leak in the focused regression by:
+    - unioning fine-clip visible-receiver coverage into the existing selection
+      regions so moved dynamic and stable static world points no longer collapse
+      to the same coarser current page after resolve
+    - constraining depth-guardband validity to the sampleable receiver region
+      instead of caster-bound tightening so unrelated clean static pages do not
+      get globally invalidated
+    - consuming accepted GPU detail feedback as the live fine-clip seed instead
+      of continuing to publish the broad CPU frustum selection on the benchmark
+      path
+  - locked benchmark evidence now shows the authority change directly:
+    - pre-fix warmup still showed
+      `current=726151 fallback=2620878` with `resolved_hist` collapsed to clip
+      5+
+    - after accepted feedback becomes live, `same_frame_detail=0`,
+      `feedback_seed=1026-1064`, `alloc_failures=0`, and screen debug reports
+      `current=all`, `fallback=0`, with `resolved_hist` matching
+      `requested_hist`
+  - this closes the originally recorded static/dynamic coarse-collapse blocker,
+    but not the Phase 7 exit gate, because the live path is still using
+    multi-frame accepted feedback to create those fine pages
+
+Validation update:
+
+- files changed in this slice:
+  - `src/Oxygen/Renderer/Passes/DepthPrePass.h`
+  - `src/Oxygen/Renderer/Passes/DepthPrePass.cpp`
+  - `src/Oxygen/Renderer/Passes/VirtualShadowPageRasterPass.h`
+  - `src/Oxygen/Renderer/Passes/VirtualShadowPageRasterPass.cpp`
+  - `src/Oxygen/Renderer/Internal/VirtualShadowMapBackend.cpp`
+  - `src/Oxygen/Renderer/Test/LightManager_basic_test.cpp`
+- validation run on March 14, 2026 in `out/build-vs`:
+  - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*VirtualSameFrameMarkedPagesDriveResolvedRasterSchedule:*VirtualStaticPagesStayCleanWhenDynamicCasterMovesElsewhere`
+    - result: `2/2` passed
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*ClipmapSetup*:*VirtualCacheValidityRejectsLightDirectionChanges:*VirtualCacheValidityRejectsClipmapLayoutChanges:*VirtualPanningDisabledInvalidatesXYClipReuse:*VirtualNeverRenderedPreviousFrameInvalidatesCache:*VirtualForceInvalidateRejectsPreviousCache:*VirtualInvalidatesCleanPagesWhenDepthMappingChanges:*VirtualFeedbackDropsPagesOutsideCurrentClipAfterClipmapShift:*VirtualShiftedFeedbackDoesNotUseLegacyDeltaReinforcement`
+    - result: `8 passed / 1 skipped`
+    - skipped:
+      `ShadowManagerPublishForView_VirtualFeedbackDropsPagesOutsideCurrentClipAfterClipmapShift`
+  - `powershell -ExecutionPolicy Bypass -File Examples\\RenderScene\\benchmark_directional_vsm.ps1`
+    - result: `exit_code=0`, `wall_ms=14854`, `approx_fps=8.08`
+    - settled stats:
+      - `requested_pages_avg=661.56`
+      - `scheduled_pages_avg=371.24`
+      - `resolved_pages_avg=369.03`
+      - `rastered_pages_avg=369.03`
+      - `shadow_draws_avg=1606.76`
+    - live benchmark evidence:
+      - frame 6 still exposed the old authority failure shape:
+        `current=726151 fallback=2620878`
+      - frame 10 and later switched to `request=accepted` with
+        `current=all`, `fallback=0`, and `resolved_hist == requested_hist`
+- remaining exit gap:
+  - the static/dynamic page-separation regression is fixed, but Phase 7 remains
+    incomplete because fine-page creation is still driven by delayed accepted
+    feedback (`feedback_age=4`) instead of same-frame GPU missing-page
+    publication
+
 Resume anchor:
 
 - entry precondition: Phase 6 follow-up cutover is complete and stable
@@ -1382,7 +1483,7 @@ Resume anchor:
 
 ### Phase 8. Replace CPU Page Table / Raster Authority With GPU Per-Page Draw Commands
 
-Status: `pending`
+Status: `in_progress`
 
 Goal:
 
@@ -1417,6 +1518,70 @@ Completion gate:
 - raster consumes GPU per-page draw commands as its only authority
 - the CPU no longer authors the live raster schedule or live page-table state
 
+Progress update:
+
+- March 14, 2026 prerequisite slice landed:
+  - the live raster pass no longer executes one CPU submission per
+    `(page, partition, draw)` combination
+  - the pass now clears page rectangles only, binds one atlas-wide viewport, and
+    renders the resolved-page set through instanced depth draws using uploaded
+    per-page matrices and atlas placement data
+  - `EngineShaderCatalog.h` now bakes the
+    `OXYGEN_VIRTUAL_SHADOW_RASTER` depth permutation explicitly so this path is
+    catalog-backed instead of ad hoc
+- this is Phase 8 progress, not completion:
+  - the live raster pass now consumes GPU-authored indirect commands and GPU
+    built per-draw page ranges / page indices, so page-by-page CPU draw fanout
+    is no longer the live execution model
+  - benchmark logs show `cpu_draw_submissions=1` with `errors=0` on the locked
+    demo path, which confirms the indirect raster bridge is live
+  - Phase 8 still remains open because the CPU-side page mirror and render-plan
+    telemetry have not yet been fully removed from the raster path, so the
+    last page-selection scaffolding has not been proven non-authoritative end
+    to end
+
+Validation update:
+
+- files changed in this slice:
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Depth/DepthPrePass.hlsl`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h`
+  - `src/Oxygen/Renderer/Passes/DepthPrePass.h`
+  - `src/Oxygen/Renderer/Passes/DepthPrePass.cpp`
+  - `src/Oxygen/Renderer/Passes/VirtualShadowPageRasterPass.h`
+  - `src/Oxygen/Renderer/Passes/VirtualShadowPageRasterPass.cpp`
+  - `src/Oxygen/Graphics/Common/CommandRecorder.h`
+  - `src/Oxygen/Graphics/Direct3D12/Graphics.cpp`
+  - `src/Oxygen/Graphics/Direct3D12/CommandRecorder.cpp`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Lighting/VirtualShadowResolve.hlsl`
+  - `src/Oxygen/Renderer/Passes/VirtualShadowResolvePass.cpp`
+  - `src/Oxygen/Renderer/Internal/VirtualShadowMapBackend.cpp`
+- validation run on March 14, 2026 in `out/build-vs`:
+  - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:1 /p:Configuration=Debug /nologo`
+    - result: build succeeded
+    - shader catalog bake succeeded with `157` modules after adding the virtual
+      shadow raster depth permutation
+  - `powershell -ExecutionPolicy Bypass -File Examples\\RenderScene\\benchmark_directional_vsm.ps1`
+    - result: `exit_code=0`, `wall_ms=12218`, `approx_fps=9.82`
+    - settled stats:
+      - `requested_pages_avg=661.56`
+      - `scheduled_pages_avg=47.18`
+      - `resolved_pages_avg=45.21`
+      - `rastered_pages_avg=45.21`
+      - `shadow_draws_avg=723.29`
+    - runtime evidence:
+      - the previous `VirtualShadowPageRasterPass.PageInstances` `COM Error:
+        0x-7FF8FFA9` no longer appears
+      - no `PrepareResources failed` or `RenderGraph execution ... failed`
+        lines appear in the archived benchmark log
+      - `VirtualShadowPageRasterPass` now prepares, executes, and emits instanced
+        raster work on the live demo path with `errors=0`
+      - the indirect raster bridge now executes with `cpu_draw_submissions=1`
+        instead of per-page CPU submission fanout
+- remaining exit gap:
+  - the GPU indirect draw-command path is live, but the remaining CPU page-mirror
+    telemetry and render-plan scaffolding still need to be removed or proven
+    non-authoritative before Phase 8 can truthfully close
+
 Resume anchor:
 
 - entry precondition: Phase 7 is complete and same-frame GPU marking is live
@@ -1431,7 +1596,7 @@ Resume anchor:
 
 ### Phase 9. Replace The Projection / Shading Cost Model
 
-Status: `pending`
+Status: `in_progress`
 
 Goal:
 
@@ -1470,6 +1635,65 @@ Completion gate:
 - the live shader no longer re-resolves the page table per filter tap
 - fallback slope bias and guard texels are LOD/radius correct
 - worst-case clip evaluation cost is materially reduced
+
+Progress update:
+
+- March 14, 2026 shading-cost slice landed:
+  - guard texel count now resolves from page size plus effective filter radius
+    instead of the old hardcoded constant
+  - fallback slope bias scaling is now derived from `fallback_lod_offset`
+  - the page-aware tent sampling path now reuses the center resolved page state
+    across taps and only re-resolves when a tap crosses page boundaries
+  - the virtual raster depth permutation now consumes the same guard-texel and
+    fallback-bias helpers used by the CPU-side contracts
+- this is Phase 9 progress, not completion:
+  - locked benchmark evidence now exists that the live demo runs the new
+    shading-cost path without regressing runtime stability
+  - no before/after benchmark delta has been recorded yet to prove the intended
+    shading-cost reduction
+  - the March 14 benchmark authority fix also separated the remaining quality
+    questions cleanly:
+    the earlier “bad fine page” artifact on the benchmark path was still
+    Phase 7 wrong-page authority leakage, not proven Phase 9 filter debt,
+    because the screen-debug path now runs `current=all`, `fallback=0`
+  - any residual grounding offset that survives on stable current pages is now
+    isolated to the existing bias/projection path in
+    `ShadowHelpers.hlsli`, `VirtualShadowPageRasterPass.cpp`, and the metadata
+    authored by `VirtualShadowMapBackend.cpp`
+
+Validation update:
+
+- files changed in this slice:
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/ShadowHelpers.hlsli`
+  - `src/Oxygen/Renderer/Internal/ShadowBackendCommon.h`
+  - `src/Oxygen/Renderer/Test/VirtualShadowContracts_test.cpp`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h`
+- validation run on March 14, 2026 in `out/build-vs`:
+  - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.VirtualShadowContracts.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.VirtualShadowContracts.Tests.exe --gtest_filter=*FilterGuardTexelsTrackEffectiveFilterRadius:*FallbackSlopeBiasScaleTracksLodGrowth`
+    - result: `2/2` passed
+  - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:1 /p:Configuration=Debug /nologo`
+    - result: build succeeded
+  - `powershell -ExecutionPolicy Bypass -File Examples\\RenderScene\\benchmark_directional_vsm.ps1`
+    - result: `exit_code=0`, `wall_ms=12218`, `approx_fps=9.82`
+    - live benchmark evidence:
+      - the updated `ShadowHelpers.hlsli` shader path runs in the locked virtual-only
+        demo without `D3D12 ERROR`, `COM Error`, or pass-preparation failures
+      - settled benchmark raster stats remained coherent:
+        `resolved_pages_avg=45.21`, `rastered_pages_avg=45.21`
+  - follow-up locked benchmark on March 14, 2026 after the Phase 7 authority
+    fix:
+    - `exit_code=0`, `wall_ms=14854`, `approx_fps=8.08`
+    - screen-debug evidence on the same run:
+      - frame 10:
+        `current=3347029 fallback=0`, `resolved_hist == requested_hist`
+      - frame 109:
+        `current=3355969 fallback=0`, `resolved_hist == requested_hist`
+- remaining exit gap:
+  - benchmarked shading-cost recovery relative to the previous shader cost
+    model is still missing
+  - bias / projection tuning on stable current pages is still open if the
+    user-visible grounding offset persists outside the benchmark path
 
 Resume anchor:
 
@@ -1602,10 +1826,10 @@ Accepted runtime evidence:
 - Phase 4: `completed`
 - Phase 4B: `completed`
 - Phase 5: `completed`
-- Phase 6: `in_progress`
-- Phase 7: `pending`
-- Phase 8: `pending`
-- Phase 9: `pending`
+- Phase 6: `completed`
+- Phase 7: `in_progress`
+- Phase 8: `in_progress`
+- Phase 9: `in_progress`
 - Phase 10: `pending`
 - Phase 11: `pending`
 
@@ -1623,6 +1847,11 @@ Validation for this plan document:
 
 Remaining gap:
 
-- Phase 6 is now active and evidence-backed, but not complete; GPU-authored
-  page-table / page-flag writes and fully authoritative GPU page management
-  remain the exit delta
+- the March 14, 2026 reordered GPU-only slice is now documented for Phases 7-9
+- `git diff --check` remains clean aside from existing LF/CRLF warnings
+- Phase 7 remains the live blocker, but it has changed:
+  the old static/dynamic coarse-collapse regression is fixed; the remaining
+  blocker is that accepted feedback with nonzero `feedback_age` is still
+  authoritative for fine-page creation on the live path
+- Phase 8 and Phase 9 both have concrete progress in code and validation, but
+  neither completion gate is yet satisfied
