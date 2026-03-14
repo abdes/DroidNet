@@ -98,6 +98,30 @@ enum class VirtualShadowPageFlag : std::uint32_t {
   return base_flags | MakeVirtualShadowHierarchyFlags(child_page_flags);
 }
 
+[[nodiscard]] constexpr auto
+VirtualShadowPageFlagsStructuralCoherenceMask() -> std::uint32_t
+{
+  return ToMask(VirtualShadowPageFlag::kAllocated)
+    | ToMask(VirtualShadowPageFlag::kDynamicUncached)
+    | ToMask(VirtualShadowPageFlag::kStaticUncached)
+    | ToMask(VirtualShadowPageFlag::kHierarchyAllocatedDescendant)
+    | ToMask(VirtualShadowPageFlag::kHierarchyDynamicUncachedDescendant)
+    | ToMask(VirtualShadowPageFlag::kHierarchyStaticUncachedDescendant);
+}
+
+[[nodiscard]] constexpr auto NormalizeVirtualShadowPageFlagsForStructuralCoherence(
+  const std::uint32_t page_flags) -> std::uint32_t
+{
+  return page_flags & VirtualShadowPageFlagsStructuralCoherenceMask();
+}
+
+[[nodiscard]] constexpr auto VirtualShadowPageFlagsStructurallyEqual(
+  const std::uint32_t lhs, const std::uint32_t rhs) -> bool
+{
+  return NormalizeVirtualShadowPageFlagsForStructuralCoherence(lhs)
+    == NormalizeVirtualShadowPageFlagsForStructuralCoherence(rhs);
+}
+
 [[nodiscard]] constexpr auto HasVirtualShadowHierarchyVisibility(
   const std::uint32_t page_flags) -> bool
 {

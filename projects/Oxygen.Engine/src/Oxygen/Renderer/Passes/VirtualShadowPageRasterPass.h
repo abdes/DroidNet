@@ -68,7 +68,8 @@ private:
   auto EmitIndirectResolvedPageDrawRange(graphics::CommandRecorder& recorder,
     const graphics::Buffer& draw_args_buffer, const DrawMetadata* records,
     std::uint32_t draw_count,
-    std::span<const renderer::VirtualShadowResolvedRasterPage> resolved_pages,
+    std::span<const renderer::VirtualShadowResolvedRasterPage>
+      telemetry_resolved_pages,
     std::span<const glm::vec4> draw_bounding_spheres,
     std::uint32_t begin, std::uint32_t end, std::uint64_t& emitted_count,
     std::uint32_t& cpu_draw_submission_count, std::uint32_t& skipped_invalid,
