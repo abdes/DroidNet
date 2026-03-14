@@ -43,13 +43,15 @@ auto ElapsedMicroseconds(const SteadyClock::time_point start) -> std::uint64_t
       .count());
 }
 
-constexpr float kVirtualShadowRasterDepthBias = 1200.0F;
-// Virtual pages are small and heavily PCF-filtered, so leaving raster slope
-// bias at zero prints regular self-shadow bands on broad receiver planes.
-// Keep the hardware slope term enabled, but clamp it tightly so this does not
-// explode into peter-panning on steep geometry.
+// Guardrail: the stable current-page virtual sample path already applies
+// receiver-space bias in ShadowHelpers.hlsli. A large hardware constant depth
+// bias here pushes stored depths too far away from the light and visibly lifts
+// the shadow off the caster base. Keep the hardware constant term at zero for
+// VSM pages and leave only a tightly clamped slope term for acne control on
+// grazing caster triangles.
+constexpr float kVirtualShadowRasterDepthBias = 0.0F;
 constexpr float kVirtualShadowRasterSlopeBias = 2.0F;
-constexpr float kVirtualShadowRasterDepthBiasClamp = 0.0025F;
+constexpr float kVirtualShadowRasterDepthBiasClamp = 0.0005F;
 constexpr std::uint32_t kPassConstantsStride
   = packing::kConstantBufferAlignment;
 constexpr std::uint64_t kIndirectDrawCommandStrideBytes

@@ -1175,6 +1175,8 @@ static inline float SampleDirectionalVirtualShadowClipVisibility(
     // Page ownership and the full in-page filter footprint stay anchored to
     // the unbiased receiver XY. Bias only perturbs the depth comparison, so
     // it cannot translate the sampled shadow laterally off the caster base.
+    // Guardrail: keep that grounded contact by doing the fine-page offset here
+    // instead of reintroducing a large hardware raster depth bias upstream.
     resolved_clip_index = lookup.resolved_clip_index;
     resolved_page_coord = lookup.page_coord;
     const DirectionalVirtualClipMetadata requested_clip =
