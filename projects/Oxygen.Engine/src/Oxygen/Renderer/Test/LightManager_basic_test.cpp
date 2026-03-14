@@ -220,31 +220,6 @@ auto MakeVirtualRequestFeedback(const VirtualFeedbackLayout& layout,
     kind);
 }
 
-auto MakeVirtualResolvedRasterSchedule(const VirtualFeedbackLayout& layout,
-  const SequenceNumber source_frame_sequence,
-  const std::span<const std::uint32_t> requested_page_indices)
-  -> oxygen::renderer::VirtualShadowResolvedRasterSchedule
-{
-  return oxygen::renderer::VirtualShadowResolvedRasterSchedule {
-    .source_frame_sequence = source_frame_sequence,
-    .pages_per_axis = layout.pages_per_axis,
-    .clip_level_count = layout.clip_level_count,
-    .directional_address_space_hash = layout.directional_address_space_hash,
-    .requested_resident_keys
-    = RequestedResidentKeys(layout, requested_page_indices),
-  };
-}
-
-auto MakeVirtualResolvedRasterSchedule(const VirtualFeedbackLayout& layout,
-  const SequenceNumber source_frame_sequence,
-  const std::initializer_list<std::uint32_t> requested_page_indices)
-  -> oxygen::renderer::VirtualShadowResolvedRasterSchedule
-{
-  return MakeVirtualResolvedRasterSchedule(layout, source_frame_sequence,
-    std::span<const std::uint32_t> {
-      requested_page_indices.begin(), requested_page_indices.size() });
-}
-
 auto LocalPageIndexForResidentKey(const VirtualFeedbackLayout& layout,
   const std::uint64_t resident_key) -> std::optional<std::uint32_t>
 {
@@ -8626,10 +8601,10 @@ NOLINT_TEST_F(LightManagerTest,
     third_introspection->page_table_entries[*translated_page_index]));
 }
 
-//! The current resolve bridge is observational only and must not suppress the
-//! CPU-authored fine pending raster jobs until resolve owns raster scheduling.
+//! After the resolved-schedule bridge is retired, the live resolved page set
+//! must stay authoritative across frames without any auxiliary CPU schedule.
 NOLINT_TEST_F(LightManagerTest,
-  ShadowManagerPublishForView_VirtualResolvedScheduleDoesNotSuppressCpuPendingJobsYet)
+  ShadowManagerPublishForView_VirtualResolvedPagesStayAuthoritativeAcrossFrames)
 {
   auto& manager = Manager();
   manager.OnFrameStart(
@@ -8710,19 +8685,8 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_TRUE(omitted_fine_resident_key.has_value());
   ASSERT_TRUE(coarse_resident_key.has_value());
 
-  const auto requested_fine_page_index
-    = LocalPageIndexForResidentKey(layout, *requested_fine_resident_key);
-  const auto omitted_fine_page_index
-    = LocalPageIndexForResidentKey(layout, *omitted_fine_resident_key);
-  ASSERT_TRUE(requested_fine_page_index.has_value());
-  ASSERT_TRUE(omitted_fine_page_index.has_value());
-
   AdvanceRendererFrame(
     manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
-
-  shadow_manager->SubmitVirtualResolvedRasterSchedule(oxygen::ViewId { 230 },
-    MakeVirtualResolvedRasterSchedule(
-      layout, SequenceNumber { 1 }, { *requested_fine_page_index }));
 
   const auto second = shadow_manager->PublishForView(oxygen::ViewId { 230 },
     view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
@@ -8750,11 +8714,9 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_TRUE(second_omitted_fine_page_index.has_value());
   ASSERT_TRUE(second_coarse_page_index.has_value());
 
-  EXPECT_FALSE(second_introspection->used_resolved_raster_schedule);
-  EXPECT_EQ(second_introspection->resolved_schedule_page_count, 1U);
-  EXPECT_EQ(second_introspection->resolved_schedule_age_frames, 1U);
-  EXPECT_EQ(second_introspection->resolved_schedule_pruned_job_count, 0U);
   ASSERT_EQ(second_plan->resolved_pages.size(),
+    second_introspection->resolved_raster_pages.size());
+  EXPECT_EQ(second_introspection->pending_raster_page_count,
     second_introspection->resolved_raster_pages.size());
 
   const auto contains_resident_key
@@ -8779,104 +8741,6 @@ NOLINT_TEST_F(LightManagerTest,
     0U);
   EXPECT_NE(
     second_introspection->page_table_entries[*second_coarse_page_index], 0U);
-}
-
-//! Resolved raster schedules must be rejected on address-space mismatch so the
-//! backend falls back to the full CPU-authored pending job list.
-NOLINT_TEST_F(LightManagerTest,
-  ShadowManagerPublishForView_VirtualResolvedScheduleRejectsIncompatibleAddressSpace)
-{
-  auto& manager = Manager();
-  manager.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
-
-  auto shadow_manager = CreateShadowManager(
-    oxygen::DirectionalShadowImplementationPolicy::kVirtualOnly);
-  ASSERT_NE(shadow_manager, nullptr);
-  shadow_manager->OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
-
-  ViewConstants view_constants;
-  view_constants
-    .SetProjectionMatrix(
-      glm::perspectiveRH_ZO(glm::radians(45.0F), 16.0F / 9.0F, 0.1F, 200.0F))
-    .SetCameraPosition(glm::vec3(0.0F, -6.0F, 3.0F));
-  view_constants.SetFrameSequenceNumber(
-    SequenceNumber { 1 }, ViewConstants::kRenderer);
-  view_constants.SetFrameSlot(Slot { 0 }, ViewConstants::kRenderer);
-
-  const ShadowManager::SyntheticSunShadowInput synthetic_sun {
-    .enabled = true,
-    .direction_ws = glm::normalize(glm::vec3(0.35F, -0.45F, -1.0F)),
-    .bias = 0.0F,
-    .normal_bias = 0.0F,
-    .resolution_hint
-    = static_cast<std::uint32_t>(oxygen::scene::ShadowResolutionHint::kMedium),
-    .cascade_count = 4U,
-    .distribution_exponent = 1.0F,
-    .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
-  };
-  const std::array<glm::vec4, 3> shadow_casters {
-    glm::vec4(-0.75F, 0.0F, 0.5F, 0.5F),
-    glm::vec4(0.75F, 0.0F, 0.5F, 0.5F),
-    glm::vec4(0.0F, 1.25F, 0.75F, 0.5F),
-  };
-  const std::array<glm::vec4, 2> visible_receivers {
-    glm::vec4(0.0F, 0.0F, 0.0F, 0.12F),
-    glm::vec4(0.6F, 0.4F, 0.0F, 0.10F),
-  };
-
-  const auto first = shadow_manager->PublishForView(oxygen::ViewId { 231 },
-    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
-    std::chrono::milliseconds(16));
-  const auto* first_introspection
-    = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 231 });
-
-  ASSERT_NE(first.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
-  ASSERT_NE(first_introspection, nullptr);
-  ASSERT_FALSE(first_introspection->directional_virtual_metadata.empty());
-  ASSERT_FALSE(first_introspection->resolved_raster_pages.empty());
-
-  const auto layout = BuildVirtualFeedbackLayout(
-    first_introspection->directional_virtual_metadata.front());
-  std::optional<std::uint32_t> requested_page_index {};
-  for (const auto& job : first_introspection->resolved_raster_pages) {
-    if (job.clip_level
-      < (layout.clip_level_count > 3U ? layout.clip_level_count - 3U : 0U)) {
-      requested_page_index
-        = LocalPageIndexForResidentKey(layout, job.resident_key);
-      if (requested_page_index.has_value()) {
-        break;
-      }
-    }
-  }
-  ASSERT_TRUE(requested_page_index.has_value());
-
-  AdvanceRendererFrame(
-    manager, *shadow_manager, view_constants, SequenceNumber { 2 }, Slot { 1 });
-
-  auto incompatible_schedule = MakeVirtualResolvedRasterSchedule(
-    layout, SequenceNumber { 1 }, { *requested_page_index });
-  ++incompatible_schedule.directional_address_space_hash;
-  shadow_manager->SubmitVirtualResolvedRasterSchedule(
-    oxygen::ViewId { 231 }, std::move(incompatible_schedule));
-
-  const auto second = shadow_manager->PublishForView(oxygen::ViewId { 231 },
-    view_constants, manager, shadow_casters, visible_receivers, &synthetic_sun,
-    std::chrono::milliseconds(16));
-  const auto* second_introspection
-    = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 231 });
-  const auto* second_plan
-    = ResolveVirtualRenderPlan(*shadow_manager, oxygen::ViewId { 231 });
-
-  ASSERT_NE(second.shadow_instance_metadata_srv, kInvalidShaderVisibleIndex);
-  ASSERT_NE(second_introspection, nullptr);
-  ASSERT_NE(second_plan, nullptr);
-
-  EXPECT_FALSE(second_introspection->used_resolved_raster_schedule);
-  EXPECT_EQ(second_introspection->resolved_schedule_pruned_job_count, 0U);
-  EXPECT_EQ(second_plan->resolved_pages.size(),
-    second_introspection->resolved_raster_pages.size());
 }
 
 } // namespace

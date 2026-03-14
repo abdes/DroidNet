@@ -631,38 +631,6 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
   state.resolved_raster_pages.clear();
   state.publish_diagnostics.resident_reuse_gate_open = false;
 
-  const auto resolved_schedule_it = resolved_raster_schedules_.find(view_id);
-  if (resolved_schedule_it != resolved_raster_schedules_.end()
-    && !state.directional_virtual_metadata.empty()) {
-    const auto& schedule = resolved_schedule_it->second;
-    const auto& metadata = state.directional_virtual_metadata.front();
-    const auto schedule_age_frames
-      = frame_sequence_ > schedule.source_frame_sequence
-      ? (frame_sequence_ - schedule.source_frame_sequence).get()
-      : 0U;
-    state.publish_diagnostics.resolved_schedule_pages
-      = static_cast<std::uint32_t>(schedule.requested_resident_keys.size());
-    state.publish_diagnostics.resolved_schedule_age_frames
-      = schedule_age_frames;
-
-    const bool schedule_compatible
-      = schedule.pages_per_axis == metadata.pages_per_axis
-      && schedule.clip_level_count == metadata.clip_level_count
-      && schedule.directional_address_space_hash
-        == shadow_detail::HashDirectionalVirtualFeedbackAddressSpace(metadata)
-      && frame_sequence_ > schedule.source_frame_sequence
-      && schedule_age_frames <= kMaxResolvedRasterScheduleAgeFrames;
-
-    if (schedule_compatible) {
-      // The current resolve bridge only compacts requested pages that already
-      // map to valid current-frame page-table entries. Until resolve becomes
-      // the sole author of current-frame allocation and raster scheduling, that
-      // payload is telemetry only and must not suppress CPU-authored fine jobs.
-      state.publish_diagnostics.used_resolved_raster_schedule = false;
-      state.publish_diagnostics.resolved_schedule_pruned_jobs = 0U;
-    }
-  }
-
   const auto published_shadow_instances
     = std::span<const engine::ShadowInstanceMetadata> {
         state.shadow_instances
@@ -1983,18 +1951,6 @@ auto VirtualShadowMapBackend::ClearRequestFeedback(
   }
 }
 
-auto VirtualShadowMapBackend::SubmitResolvedRasterSchedule(
-  const ViewId view_id, VirtualShadowResolvedRasterSchedule schedule) -> void
-{
-  resolved_raster_schedules_.insert_or_assign(view_id, std::move(schedule));
-}
-
-auto VirtualShadowMapBackend::ClearResolvedRasterSchedule(const ViewId view_id)
-  -> void
-{
-  resolved_raster_schedules_.erase(view_id);
-}
-
 auto VirtualShadowMapBackend::SetDirectionalCacheControls(
   const renderer::DirectionalVirtualCacheControls controls) -> void
 {
@@ -2473,8 +2429,6 @@ auto VirtualShadowMapBackend::RefreshViewExports(
   state.introspection.used_request_feedback
     = state.publish_diagnostics.feedback_decision
     == ViewCacheEntry::RequestFeedbackDecision::kAccepted;
-  state.introspection.used_resolved_raster_schedule
-    = state.publish_diagnostics.used_resolved_raster_schedule;
   state.introspection.cache_layout_compatible
     = state.publish_diagnostics.cache_layout_compatible;
   state.introspection.depth_guardband_valid
@@ -2515,10 +2469,6 @@ auto VirtualShadowMapBackend::RefreshViewExports(
     = state.resolve_stats.pending_page_count;
   state.introspection.pending_raster_page_count
     = state.resolve_stats.pending_raster_page_count;
-  state.introspection.resolved_schedule_page_count
-    = state.publish_diagnostics.resolved_schedule_pages;
-  state.introspection.resolved_schedule_pruned_job_count
-    = state.publish_diagnostics.resolved_schedule_pruned_jobs;
   state.introspection.selected_page_count
     = state.publish_diagnostics.selected_page_count;
   state.introspection.coarse_backbone_page_count
@@ -2541,8 +2491,6 @@ auto VirtualShadowMapBackend::RefreshViewExports(
     = state.publish_diagnostics.current_frame_reinforcement_pages;
   state.introspection.current_frame_reinforcement_reference_frame
     = state.publish_diagnostics.current_frame_reinforcement_reference_frame;
-  state.introspection.resolved_schedule_age_frames
-    = state.publish_diagnostics.resolved_schedule_age_frames;
   state.introspection.allocated_page_count
     = state.publish_diagnostics.allocated_pages;
   state.introspection.evicted_page_count
@@ -5586,8 +5534,7 @@ auto VirtualShadowMapBackend::LogPublishTransition(
     "selected={} coarse={} coarse_safety_selected={} coarse_safety_budget={} "
     "coarse_safety_fit={} same_frame_detail={} feedback_seed={} "
     "feedback_refine={} receiver_bootstrap={} current_reinforce={} "
-    "resolve_pages={} resolve_age={} resolve_pruned={} resolve_used={} "
-    "pending_raster_pages={} reused={} allocated={} evicted={} "
+    "gpu_resolved_pages={} pending_raster_pages={} reused={} allocated={} evicted={} "
     "alloc_failures={} rerasterized={} resident_reuse_gate={}",
     frame_sequence_.get(), view_id.get(), feedback_reason,
     diagnostics.feedback_key_count, diagnostics.feedback_age_frames,
@@ -5602,10 +5549,7 @@ auto VirtualShadowMapBackend::LogPublishTransition(
     diagnostics.feedback_requested_pages, diagnostics.feedback_refinement_pages,
     diagnostics.receiver_bootstrap_pages,
     diagnostics.current_frame_reinforcement_pages,
-    diagnostics.resolved_schedule_pages,
-    diagnostics.resolved_schedule_age_frames,
-    diagnostics.resolved_schedule_pruned_jobs,
-    diagnostics.used_resolved_raster_schedule, pending_raster_page_count,
+    pending_raster_page_count, pending_raster_page_count,
     diagnostics.reused_requested_pages, diagnostics.allocated_pages,
     diagnostics.evicted_pages, diagnostics.allocation_failures,
     diagnostics.rerasterized_pages, diagnostics.resident_reuse_gate_open);

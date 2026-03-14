@@ -121,20 +121,6 @@ private:
     std::uint32_t draw_page_index_capacity { 0U };
   };
 
-  struct SlotReadbackState {
-    std::shared_ptr<graphics::Buffer> buffer;
-    std::byte* mapped_bytes { nullptr };
-    frame::SequenceNumber source_frame_sequence { 0U };
-    ViewId view_id {};
-    std::uint32_t pages_per_axis { 0U };
-    std::uint32_t clip_level_count { 0U };
-    std::uint64_t directional_address_space_hash { 0U };
-    std::array<std::int32_t, kMaxSupportedClipLevels> clip_grid_origin_x {};
-    std::array<std::int32_t, kMaxSupportedClipLevels> clip_grid_origin_y {};
-    std::uint32_t schedule_capacity { 0U };
-    bool pending_schedule { false };
-  };
-
   observer_ptr<Graphics> gfx_;
   std::shared_ptr<Config> config_;
 
@@ -149,8 +135,6 @@ private:
   void* clear_count_upload_mapped_ptr_ { nullptr };
 
   std::unordered_map<ViewId, ViewScheduleResources> view_schedule_resources_;
-  std::array<SlotReadbackState, frame::kFramesInFlight.get()>
-    slot_readbacks_ {};
 
   ViewId active_view_id_ {};
   ShaderVisibleIndex active_request_words_srv_ { kInvalidShaderVisibleIndex };
@@ -182,8 +166,6 @@ private:
 
   OXGN_RNDR_API auto EnsurePassConstantsBuffer() -> void;
   OXGN_RNDR_API auto EnsureClearCountUploadBuffer() -> void;
-  OXGN_RNDR_API auto EnsureReadbackBuffer(frame::Slot slot) -> void;
-  OXGN_RNDR_API auto ProcessCompletedSchedule(frame::Slot slot) -> void;
   OXGN_RNDR_API auto EnsureViewScheduleResources(ViewId view_id,
     std::uint32_t required_entry_capacity,
     std::uint32_t required_draw_count) -> ViewScheduleResources*;

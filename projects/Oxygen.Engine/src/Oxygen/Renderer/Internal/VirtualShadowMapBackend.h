@@ -37,7 +37,6 @@
 #include <Oxygen/Renderer/Types/VirtualShadowPhysicalPageMetadata.h>
 #include <Oxygen/Renderer/Types/VirtualShadowRenderPlan.h>
 #include <Oxygen/Renderer/Types/VirtualShadowRequestFeedback.h>
-#include <Oxygen/Renderer/Types/VirtualShadowResolvedRasterSchedule.h>
 #include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 
 
@@ -91,9 +90,6 @@ public:
   OXGN_RNDR_API auto ClearRequestFeedback(ViewId view_id,
     VirtualShadowFeedbackKind kind = VirtualShadowFeedbackKind::kDetail)
     -> void;
-  OXGN_RNDR_API auto SubmitResolvedRasterSchedule(
-    ViewId view_id, VirtualShadowResolvedRasterSchedule schedule) -> void;
-  OXGN_RNDR_API auto ClearResolvedRasterSchedule(ViewId view_id) -> void;
   OXGN_RNDR_API auto SetDirectionalCacheControls(
     renderer::DirectionalVirtualCacheControls controls) -> void;
   [[nodiscard]] OXGN_RNDR_NDAPI auto
@@ -316,10 +312,6 @@ private:
       std::uint32_t receiver_bootstrap_pages { 0U };
       std::uint32_t current_frame_reinforcement_pages { 0U };
       std::uint64_t current_frame_reinforcement_reference_frame { 0U };
-      std::uint32_t resolved_schedule_pages { 0U };
-      std::uint32_t resolved_schedule_pruned_jobs { 0U };
-      std::uint64_t resolved_schedule_age_frames { 0U };
-      bool used_resolved_raster_schedule { false };
       std::uint32_t previous_resident_pages { 0U };
       std::uint32_t carried_resident_pages { 0U };
       std::uint32_t released_resident_pages { 0U };
@@ -471,9 +463,6 @@ private:
     view_page_management_page_flags_resources_;
   std::unordered_map<ViewId, ViewResolveResources> view_resolve_resources_;
   std::unordered_map<ViewId, PendingRequestFeedback> request_feedback_;
-  std::unordered_map<ViewId, VirtualShadowResolvedRasterSchedule>
-    resolved_raster_schedules_;
-
   struct ViewPublishLogState {
     std::uint32_t last_selected_page_count { 0U };
     std::uint32_t last_pending_raster_page_count { 0U };

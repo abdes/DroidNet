@@ -292,23 +292,6 @@ auto ShadowManager::ClearVirtualRequestFeedback(
   }
 }
 
-auto ShadowManager::SubmitVirtualResolvedRasterSchedule(
-  const ViewId view_id, VirtualShadowResolvedRasterSchedule schedule) -> void
-{
-  if (virtual_backend_) {
-    virtual_backend_->SubmitResolvedRasterSchedule(
-      view_id, std::move(schedule));
-  }
-}
-
-auto ShadowManager::ClearVirtualResolvedRasterSchedule(const ViewId view_id)
-  -> void
-{
-  if (virtual_backend_) {
-    virtual_backend_->ClearResolvedRasterSchedule(view_id);
-  }
-}
-
 auto ShadowManager::SubmitVirtualGpuRasterInputs(const ViewId view_id,
   renderer::VirtualShadowGpuRasterInputs inputs) -> void
 {
