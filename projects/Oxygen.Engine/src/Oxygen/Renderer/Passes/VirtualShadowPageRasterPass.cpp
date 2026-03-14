@@ -23,7 +23,6 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
-#include <Oxygen/Renderer/Internal/VirtualShadowRasterCulling.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowPageRasterPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
@@ -103,7 +102,7 @@ auto VirtualShadowPageRasterPass::DoPrepareResources(
     || !virtual_depth_texture) {
     co_return;
   }
-  const auto telemetry_page_count = introspection != nullptr
+  const auto resolved_page_count = introspection != nullptr
     ? introspection->pending_raster_page_count
     : 0U;
 
@@ -139,10 +138,10 @@ auto VirtualShadowPageRasterPass::DoPrepareResources(
 
   LOG_F(INFO,
     "VirtualShadowPageRasterPass: frame={} view={} prepared live GPU raster "
-    "inputs (source_frame={} telemetry_page_mirror={} draw_count={} "
+    "inputs (source_frame={} resolved_pages={} draw_count={} "
     "schedule_capacity={} cpu_prepare_us={})",
     Context().frame_sequence.get(), Context().current_view.view_id.get(),
-    gpu_inputs->source_frame_sequence.get(), telemetry_page_count,
+    gpu_inputs->source_frame_sequence.get(), resolved_page_count,
     gpu_inputs->draw_count, gpu_inputs->schedule_capacity,
     ElapsedMicroseconds(prepare_begin));
 
@@ -210,12 +209,9 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
       "VirtualShadowPageRasterPass: invalid frame slot for raster execution");
   }
 
-  const auto telemetry_resolved_pages = introspection != nullptr
-    ? introspection->resolved_raster_pages
-    : std::span<const renderer::VirtualShadowResolvedRasterPage> {};
-  const auto telemetry_page_count = introspection != nullptr
+  const auto resolved_page_count = introspection != nullptr
     ? introspection->pending_raster_page_count
-    : static_cast<std::uint32_t>(telemetry_resolved_pages.size());
+    : 0U;
   const auto atlas_resolution = virtual_depth_texture->GetDescriptor().width;
 
   auto& log_state = view_log_states_[Context().current_view.view_id.get()];
@@ -223,16 +219,16 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
     log_state.saw_live_plan_jobs = true;
     LOG_F(INFO,
       "VirtualShadowPageRasterPass: view {} has live GPU raster inputs "
-      "(telemetry_page_mirror={} draw_count={} source_frame={})",
-      Context().current_view.view_id.get(), telemetry_page_count,
+      "(resolved_pages={} draw_count={} source_frame={})",
+      Context().current_view.view_id.get(), resolved_page_count,
       gpu_inputs->draw_count, gpu_inputs->source_frame_sequence.get());
   }
   LOG_F(INFO,
     "VirtualShadowPageRasterPass: frame={} view={} executing live GPU raster "
-    "(telemetry_page_mirror={} draw_count={} page_size={} atlas={}x{} "
+    "(resolved_pages={} draw_count={} page_size={} atlas={}x{} "
     "source_frame={})",
     Context().frame_sequence.get(), Context().current_view.view_id.get(),
-    telemetry_page_count, gpu_inputs->draw_count, metadata->page_size_texels,
+    resolved_page_count, gpu_inputs->draw_count, metadata->page_size_texels,
     atlas_resolution, atlas_resolution,
     gpu_inputs->source_frame_sequence.get());
 
@@ -245,7 +241,7 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
       "live GPU virtual raster page(s)!",
       Context().current_view.view_id.get(), psf != nullptr,
       psf ? psf->IsValid() : false, psf ? psf->draw_metadata_bytes.size() : 0U,
-      psf ? psf->partitions.size() : 0U, telemetry_page_count);
+      psf ? psf->partitions.size() : 0U, resolved_page_count);
     Context().RegisterPass(this);
     co_return;
   }
@@ -303,8 +299,8 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
 
   const auto* records
     = reinterpret_cast<const DrawMetadata*>(psf->draw_metadata_bytes.data());
-  const auto rastered_page_count = telemetry_page_count;
-  std::uint64_t emitted_count = 0U;
+  const auto rastered_page_count = resolved_page_count;
+  std::uint64_t indirect_draw_record_count = 0U;
   std::uint32_t cpu_draw_submission_count = 0U;
   std::uint32_t skipped_invalid = 0U;
   std::uint32_t draw_errors = 0U;
@@ -320,10 +316,12 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
 
     recorder.SetPipelineState(SelectPipelineStateForPartition(pr.pass_mask));
     RebindCommonRootParameters(recorder);
+    // Do not reconstruct draw/page overlap on the CPU here. Resolve already
+    // authored the exact GPU schedule, and re-deriving a "shadow draw" count
+    // from CPU mirrors only recreates the authority split we are removing.
     EmitIndirectResolvedPageDrawRange(recorder,
       *gpu_inputs->draw_indirect_args_buffer, records, gpu_inputs->draw_count,
-      telemetry_resolved_pages, psf->draw_bounding_spheres, pr.begin, pr.end,
-      emitted_count,
+      pr.begin, pr.end, indirect_draw_record_count,
       cpu_draw_submission_count, skipped_invalid, draw_errors);
   }
 
@@ -331,16 +329,16 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
     depth_texture, graphics::ResourceStates::kShaderResource);
   recorder.FlushBarriers();
 
-  if (emitted_count == 0U) {
+  if (indirect_draw_record_count == 0U) {
     if (!log_state.saw_zero_draw_live_frame) {
       log_state.saw_zero_draw_live_frame = true;
       log_state.saw_nonzero_draw_live_frame = false;
     }
     LOG_F(ERROR,
-      "VirtualShadowPageRasterPass: view {} produced no shadow-caster draws "
-      "(telemetry_page_mirror={} gpu_schedule=1 rastered_pages={} page_clears={} shadow_draws=0 "
+      "VirtualShadowPageRasterPass: view {} produced no indirect draw records "
+      "(resolved_pages={} gpu_schedule=1 rastered_pages={} page_clears={} indirect_draw_records=0 "
       "cpu_draw_submissions={} skipped_invalid={} errors={})",
-      Context().current_view.view_id.get(), telemetry_page_count,
+      Context().current_view.view_id.get(), resolved_page_count,
       rastered_page_count, rastered_page_count, cpu_draw_submission_count,
       skipped_invalid, draw_errors);
   } else {
@@ -349,14 +347,14 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
       log_state.saw_zero_draw_live_frame = false;
     }
     LOG_F(INFO,
-      "VirtualShadowPageRasterPass: frame={} view={} emitted {} "
-      "shadow-caster draw(s) for {} resolved virtual page(s) "
-      "[gpu_schedule=1] (rastered_pages={} page_clears={} cpu_draw_submissions={} "
-      "skipped_invalid={} errors={})",
+      "VirtualShadowPageRasterPass: frame={} view={} executed {} indirect "
+      "draw record(s) across {} command submission(s) for {} resolved "
+      "virtual page(s) [gpu_schedule=1] "
+      "(rastered_pages={} page_clears={} skipped_invalid={} errors={})",
       Context().frame_sequence.get(), Context().current_view.view_id.get(),
-      emitted_count, telemetry_page_count, rastered_page_count,
-      rastered_page_count, cpu_draw_submission_count, skipped_invalid,
-      draw_errors);
+      indirect_draw_record_count, cpu_draw_submission_count,
+      resolved_page_count, rastered_page_count, rastered_page_count,
+      skipped_invalid, draw_errors);
     shadow_manager->MarkVirtualRenderPlanExecuted(
       Context().current_view.view_id);
   }
@@ -368,11 +366,8 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
 auto VirtualShadowPageRasterPass::EmitIndirectResolvedPageDrawRange(
   graphics::CommandRecorder& recorder, const graphics::Buffer& draw_args_buffer,
   const DrawMetadata* records, const std::uint32_t draw_count,
-  const std::span<const renderer::VirtualShadowResolvedRasterPage>
-    telemetry_resolved_pages,
-  const std::span<const glm::vec4> draw_bounding_spheres,
   const std::uint32_t begin, const std::uint32_t end,
-  std::uint64_t& emitted_count,
+  std::uint64_t& indirect_draw_record_count,
   std::uint32_t& cpu_draw_submission_count, std::uint32_t& skipped_invalid,
   std::uint32_t& draw_errors) const noexcept -> void
 {
@@ -395,20 +390,7 @@ auto VirtualShadowPageRasterPass::EmitIndirectResolvedPageDrawRange(
     }
 
     try {
-      std::uint32_t overlapping_page_count
-        = static_cast<std::uint32_t>(telemetry_resolved_pages.size());
-      if (draw_index < draw_bounding_spheres.size()) {
-        overlapping_page_count = 0U;
-        const auto& sphere = draw_bounding_spheres[draw_index];
-        for (const auto& page : telemetry_resolved_pages) {
-          if (renderer::internal::shadow_detail::
-                ResolvedVirtualPageOverlapsBoundingSphere(page, sphere)) {
-            ++overlapping_page_count;
-          }
-        }
-      }
-      emitted_count += static_cast<std::uint64_t>(md.instance_count)
-        * static_cast<std::uint64_t>(overlapping_page_count);
+      indirect_draw_record_count += static_cast<std::uint64_t>(md.instance_count);
     } catch (const std::exception& ex) {
       ++draw_errors;
       LOG_F(ERROR,

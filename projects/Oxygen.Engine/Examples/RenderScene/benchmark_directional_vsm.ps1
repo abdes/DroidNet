@@ -170,8 +170,20 @@ function Get-BenchmarkSettledStats {
         if ($line -match '(\d+) shadow-caster draw\(s\) for (\d+) resolved virtual page\(s\).*\(rastered_pages=(\d+)') {
             $raster.Add([pscustomobject]@{
                 shadow_draws = [int]$matches[1]
+                indirect_draw_records = $null
                 resolved_pages = [int]$matches[2]
                 rastered_pages = [int]$matches[3]
+            })
+            $pendingRaster = $null
+            continue
+        }
+        if ($line -match 'executed (\d+) indirect draw record\(s\) across (\d+) command submission\(s\) for (\d+) resolved virtual page\(s\).*\(rastered_pages=(\d+)') {
+            $raster.Add([pscustomobject]@{
+                shadow_draws = $null
+                indirect_draw_records = [int]$matches[1]
+                cpu_draw_submissions = [int]$matches[2]
+                resolved_pages = [int]$matches[3]
+                rastered_pages = [int]$matches[4]
             })
             $pendingRaster = $null
             continue
@@ -179,13 +191,24 @@ function Get-BenchmarkSettledStats {
         if ($line -match '(\d+) shadow-caster draw\(s\) for (\d+) resolved virtual page\(s\)') {
             $pendingRaster = [pscustomobject]@{
                 shadow_draws = [int]$matches[1]
+                indirect_draw_records = $null
                 resolved_pages = [int]$matches[2]
+            }
+            continue
+        }
+        if ($line -match 'executed (\d+) indirect draw record\(s\) across (\d+) command submission\(s\) for (\d+) resolved virtual page\(s\)') {
+            $pendingRaster = [pscustomobject]@{
+                shadow_draws = $null
+                indirect_draw_records = [int]$matches[1]
+                cpu_draw_submissions = [int]$matches[2]
+                resolved_pages = [int]$matches[3]
             }
             continue
         }
         if ($pendingRaster -ne $null -and $line -match '\(rastered_pages=(\d+)') {
             $raster.Add([pscustomobject]@{
                 shadow_draws = $pendingRaster.shadow_draws
+                indirect_draw_records = $pendingRaster.indirect_draw_records
                 resolved_pages = $pendingRaster.resolved_pages
                 rastered_pages = [int]$matches[1]
             })
@@ -213,8 +236,13 @@ function Get-BenchmarkSettledStats {
         # The raster pass's resolved page count is the authoritative schedule.
         ($settledRaster | Measure-Object -Property resolved_pages -Average).Average
     } else { $null }
-    $shadowDrawAverage = if ($settledRaster.Count -gt 0) {
-        ($settledRaster | Measure-Object -Property shadow_draws -Average).Average
+    $settledShadowDrawSamples = @($settledRaster | Where-Object { $null -ne $_.shadow_draws })
+    $shadowDrawAverage = if ($settledShadowDrawSamples.Count -gt 0) {
+        ($settledShadowDrawSamples | Measure-Object -Property shadow_draws -Average).Average
+    } else { $null }
+    $settledIndirectDrawSamples = @($settledRaster | Where-Object { $null -ne $_.indirect_draw_records })
+    $indirectDrawRecordAverage = if ($settledIndirectDrawSamples.Count -gt 0) {
+        ($settledIndirectDrawSamples | Measure-Object -Property indirect_draw_records -Average).Average
     } else { $null }
     $resolvedPagesAverage = if ($settledRaster.Count -gt 0) {
         ($settledRaster | Measure-Object -Property resolved_pages -Average).Average
@@ -230,6 +258,7 @@ function Get-BenchmarkSettledStats {
         requested_pages_avg = if ($null -ne $requestedAverage) { [math]::Round($requestedAverage, 2) } else { $null }
         scheduled_pages_avg = if ($null -ne $scheduledAverage) { [math]::Round($scheduledAverage, 2) } else { $null }
         shadow_draws_avg = if ($null -ne $shadowDrawAverage) { [math]::Round($shadowDrawAverage, 2) } else { $null }
+        indirect_draw_records_avg = if ($null -ne $indirectDrawRecordAverage) { [math]::Round($indirectDrawRecordAverage, 2) } else { $null }
         resolved_pages_avg = if ($null -ne $resolvedPagesAverage) { [math]::Round($resolvedPagesAverage, 2) } else { $null }
         rastered_pages_avg = if ($null -ne $rasteredPagesAverage) { [math]::Round($rasteredPagesAverage, 2) } else { $null }
         raster_sample_count = $settledRaster.Count
