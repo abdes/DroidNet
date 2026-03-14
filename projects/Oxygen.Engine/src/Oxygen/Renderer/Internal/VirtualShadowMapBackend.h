@@ -98,8 +98,6 @@ public:
 
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetFramePublication(
     ViewId view_id) const noexcept -> const ShadowFramePublication*;
-  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetRenderPlan(
-    ViewId view_id) const noexcept -> const VirtualShadowRenderPlan*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetViewIntrospection(
     ViewId view_id) const noexcept -> const VirtualShadowViewIntrospection*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetPageManagementBindings(
@@ -353,8 +351,6 @@ private:
       physical_page_metadata_entries;
     std::vector<renderer::VirtualShadowPhysicalPageListEntry>
       physical_page_list_entries;
-    std::vector<renderer::VirtualShadowResolvedRasterPage>
-      resolved_raster_pages;
     bool has_rendered_cache_history { false };
     PendingResidencyResolve pending_residency_resolve {};
     std::unordered_map<std::uint64_t, ResidentVirtualPage> resident_pages;
@@ -362,7 +358,6 @@ private:
     PublishDiagnostics publish_diagnostics {};
     ShadowFramePublication frame_publication {};
     renderer::VirtualShadowPageManagementBindings page_management_bindings {};
-    VirtualShadowRenderPlan render_plan {};
     VirtualShadowViewIntrospection introspection {};
   };
 
@@ -471,6 +466,9 @@ private:
   };
   std::unordered_map<ViewId, ViewPublishLogState> publish_log_states_;
 
+  // Debug-only validation snapshots for GPU/CPU coherence checks. These
+  // readbacks are not part of the production authority chain and should be
+  // removed once the remaining GPU-only VSM validation work is retired.
   struct CoherenceReadbackSlot {
     std::shared_ptr<graphics::Buffer> page_table_readback;
     std::shared_ptr<graphics::Buffer> page_flags_readback;
@@ -508,12 +506,11 @@ private:
     const std::unordered_set<std::uint64_t>& protected_resident_keys) const
     -> std::vector<std::uint64_t>;
   OXGN_RNDR_API auto ResolvePendingPageResidency(ViewId view_id) -> void;
-  OXGN_RNDR_API auto RebuildResolvedRasterPagesFromPublishedCurrentPages(
-    ViewCacheEntry& state,
-    const ViewCacheEntry::PendingResidencyResolve& pending) const -> void;
   OXGN_RNDR_API auto RebuildPublishedCurrentPagesFromPageManagementSnapshot(
     ViewCacheEntry& state,
     const ViewCacheEntry::PendingResidencyResolve& pending) const -> void;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto CountPublishedCurrentPagesNeedingRaster(
+    const ViewCacheEntry& state) const noexcept -> std::uint32_t;
   OXGN_RNDR_API auto CarryForwardCompatibleDirectionalResidentPages(
     ViewCacheEntry& state,
     const ViewCacheEntry::PendingResidencyResolve& pending,

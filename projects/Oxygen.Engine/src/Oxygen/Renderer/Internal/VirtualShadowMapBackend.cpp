@@ -628,7 +628,6 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
     canonical_shadow_caster_static_flags_span,
     visible_receiver_bounds,
     previous_it != view_cache_.end() ? &previous_it->second : nullptr, state);
-  state.resolved_raster_pages.clear();
   state.publish_diagnostics.resident_reuse_gate_open = false;
 
   const auto published_shadow_instances
@@ -710,8 +709,8 @@ auto VirtualShadowMapBackend::MarkRendered(const ViewId view_id) -> void
   // Current-frame allocation / eviction / page-table mutation now belongs to
   // the explicit resolve stage. Once the live GPU raster pass has executed,
   // every resident page that remained dirty/pending has been consumed by the
-  // GPU-authored schedule and can transition to clean without consulting the
-  // CPU telemetry mirror.
+  // GPU-authored schedule and can transition to clean without consulting any
+  // CPU page-list compatibility path.
   for (auto& [_, resident_page] : it->second.resident_pages) {
     if (resident_page.state != renderer::VirtualPageResidencyState::kResidentDirty
       && resident_page.state
@@ -725,7 +724,6 @@ auto VirtualShadowMapBackend::MarkRendered(const ViewId view_id) -> void
   it->second.has_rendered_cache_history
     = std::ranges::any_of(it->second.resident_pages,
       [](const auto& entry) { return entry.second.ContentsValid(); });
-  it->second.resolved_raster_pages.clear();
   RebuildResolveStateSnapshot(it->second);
   RebuildPhysicalPageManagementSnapshot(
     it->second, it->second.pending_residency_resolve);
@@ -752,7 +750,6 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
     return;
   }
 
-  state.resolved_raster_pages.clear();
   std::fill(
     state.page_table_entries.begin(), state.page_table_entries.end(), 0U);
   std::fill(
@@ -870,17 +867,6 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
 
         if (needs_raster) {
           ++rerasterized_pages;
-          state.resolved_raster_pages.push_back(
-            renderer::VirtualShadowResolvedRasterPage {
-              .shadow_instance_index = 0U,
-              .payload_index = 0U,
-              .clip_level = clip_index,
-              .page_index = local_page_index,
-              .resident_key = resident_key,
-              .atlas_tile_x = resident_page.tile.tile_x,
-              .atlas_tile_y = resident_page.tile.tile_y,
-              .view_constants = page_view_constants.GetSnapshot(),
-            });
         }
       };
 
@@ -928,9 +914,7 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
 
   PopulateDirectionalFallbackPageTableEntries(state, pending);
   PropagateDirectionalHierarchicalPageFlags(state, pending);
-  RebuildResolvedRasterPagesFromPublishedCurrentPages(state, pending);
-  rerasterized_pages
-    = static_cast<std::uint32_t>(state.resolved_raster_pages.size());
+  rerasterized_pages = CountPublishedCurrentPagesNeedingRaster(state);
 
   // Reuse gating is diagnostic-only unless the current frame has already
   // proven it needs no raster work. Dirty carried pages must never suppress
@@ -939,7 +923,7 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
   state.publish_diagnostics.resident_reuse_gate_open
     = pending.resident_reuse_snapshot.valid
     && pending.resident_reuse_snapshot.previous_pending_resolved_pages_empty
-    && marked_dirty_pages == 0U && state.resolved_raster_pages.empty()
+    && marked_dirty_pages == 0U && rerasterized_pages == 0U
     && CanReuseResidentPages(pending.resident_reuse_snapshot, state);
 
   state.publish_diagnostics.carried_resident_pages
@@ -966,7 +950,6 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
   RebuildPublishedCurrentPagesFromPageManagementSnapshot(state, pending);
   PopulateDirectionalFallbackPageTableEntries(state, pending);
   PropagateDirectionalHierarchicalPageFlags(state, pending);
-  RebuildResolvedRasterPagesFromPublishedCurrentPages(state, pending);
   state.resolve_stats.mapped_page_count
     = static_cast<std::uint32_t>(std::count_if(state.page_table_entries.begin(),
       state.page_table_entries.end(), [](const std::uint32_t entry) {
@@ -974,108 +957,11 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
           && renderer::VirtualShadowPageTableEntryHasCurrentLod(entry);
       }));
   state.resolve_stats.pending_raster_page_count
-    = static_cast<std::uint32_t>(state.resolved_raster_pages.size());
+    = CountPublishedCurrentPagesNeedingRaster(state);
   StageResolveStateUpload(view_id, state);
   RefreshAtlasTileDebugStates(state);
   RefreshViewExports(view_id, state);
   LogPublishTransition(view_id, state);
-}
-
-auto VirtualShadowMapBackend::RebuildResolvedRasterPagesFromPublishedCurrentPages(
-  ViewCacheEntry& state,
-  const ViewCacheEntry::PendingResidencyResolve& pending) const -> void
-{
-  state.resolved_raster_pages.clear();
-  if (pending.clip_level_count == 0U || pending.pages_per_axis == 0U
-    || pending.pages_per_level == 0U || state.page_table_entries.empty()
-    || state.page_flags_entries.size() != state.page_table_entries.size()) {
-    return;
-  }
-
-  state.resolved_raster_pages.reserve(state.page_table_entries.size());
-
-  for (std::uint32_t clip_index = 0U; clip_index < pending.clip_level_count;
-    ++clip_index) {
-    const float page_world_size = pending.clip_page_world[clip_index];
-    const float origin_x = pending.clip_origin_x[clip_index];
-    const float origin_y = pending.clip_origin_y[clip_index];
-    const std::uint32_t filter_guard_texels
-      = shadow_detail::ResolveDirectionalVirtualGuardTexels(
-        physical_pool_config_.page_size_texels,
-        SelectDirectionalVirtualFilterRadiusTexels(
-          pending.clip_page_world[0], pending.clip_page_world[clip_index]));
-    const float interior_texels = std::max(1.0F,
-      static_cast<float>(physical_pool_config_.page_size_texels)
-        - static_cast<float>(filter_guard_texels * 2U));
-    const float page_guard_world
-      = page_world_size
-      * (static_cast<float>(filter_guard_texels) / interior_texels);
-
-    for (std::uint32_t page_y = 0U; page_y < pending.pages_per_axis; ++page_y) {
-      for (std::uint32_t page_x = 0U; page_x < pending.pages_per_axis;
-        ++page_x) {
-        const auto local_page_index = page_y * pending.pages_per_axis + page_x;
-        const auto global_page_index
-          = clip_index * pending.pages_per_level + local_page_index;
-        if (global_page_index >= state.page_table_entries.size()) {
-          continue;
-        }
-
-        const auto decoded_entry = renderer::DecodeVirtualShadowPageTableEntry(
-          state.page_table_entries[global_page_index]);
-        if (!decoded_entry.current_lod_valid) {
-          continue;
-        }
-
-        const auto page_flags = state.page_flags_entries[global_page_index];
-        const bool uncached = renderer::HasVirtualShadowPageFlag(
-                                page_flags,
-                                renderer::VirtualShadowPageFlag::kDynamicUncached)
-          || renderer::HasVirtualShadowPageFlag(
-            page_flags, renderer::VirtualShadowPageFlag::kStaticUncached);
-        if (!uncached) {
-          continue;
-        }
-
-        const float logical_left
-          = origin_x + static_cast<float>(page_x) * page_world_size;
-        const float logical_right = logical_left + page_world_size;
-        const float bottom
-          = origin_y + static_cast<float>(page_y) * page_world_size;
-        const float top = bottom + page_world_size;
-        const float left = logical_left - page_guard_world;
-        const float right = logical_right + page_guard_world;
-        const float guarded_bottom = bottom - page_guard_world;
-        const float guarded_top = top + page_guard_world;
-        const glm::mat4 light_proj = glm::orthoRH_ZO(left, right,
-          guarded_bottom, guarded_top, pending.near_plane, pending.far_plane);
-
-        engine::ViewConstants page_view_constants = pending.view_constants;
-        page_view_constants.SetViewMatrix(pending.light_view)
-          .SetProjectionMatrix(light_proj)
-          .SetCameraPosition(pending.light_eye);
-
-        const auto resident_key = shadow_detail::PackVirtualResidentPageKey(
-          clip_index,
-          pending.clip_grid_origin_x[clip_index]
-            + static_cast<std::int32_t>(page_x),
-          pending.clip_grid_origin_y[clip_index]
-            + static_cast<std::int32_t>(page_y));
-
-        state.resolved_raster_pages.push_back(
-          renderer::VirtualShadowResolvedRasterPage {
-            .shadow_instance_index = 0U,
-            .payload_index = 0U,
-            .clip_level = clip_index,
-            .page_index = local_page_index,
-            .resident_key = resident_key,
-            .atlas_tile_x = static_cast<std::uint16_t>(decoded_entry.tile_x),
-            .atlas_tile_y = static_cast<std::uint16_t>(decoded_entry.tile_y),
-            .view_constants = page_view_constants.GetSnapshot(),
-          });
-      }
-    }
-  }
 }
 
 auto VirtualShadowMapBackend::RebuildPublishedCurrentPagesFromPageManagementSnapshot(
@@ -1834,17 +1720,17 @@ auto VirtualShadowMapBackend::FinalizePageManagementOutputs(
       state, state.pending_residency_resolve);
     PropagateDirectionalHierarchicalPageFlags(
       state, state.pending_residency_resolve);
-    RebuildResolvedRasterPagesFromPublishedCurrentPages(
-      state, state.pending_residency_resolve);
     state.resolve_stats.pending_raster_page_count
-      = static_cast<std::uint32_t>(state.resolved_raster_pages.size());
+      = CountPublishedCurrentPagesNeedingRaster(state);
     state.introspection.pending_raster_page_count
       = state.resolve_stats.pending_raster_page_count;
     RefreshViewExports(view_id, state);
   }
 
-  // Initiate coherence readback: copy page-management GPU buffers to readback
-  // so the next slot cycle can compare them against the CPU reference.
+  // Debug-only validation readback: copy page-management GPU buffers so the
+  // next slot cycle can compare them against the CPU reference. This is
+  // temporary troubleshooting/validation data and is not part of live VSM
+  // authority.
   const auto entry_count
     = static_cast<std::uint32_t>(state.page_table_entries.size());
   if (frame_slot_ != frame::kInvalidSlot && entry_count > 0U) {
@@ -1876,8 +1762,10 @@ auto VirtualShadowMapBackend::FinalizePageManagementOutputs(
       recorder.CopyBuffer(*readback.page_flags_readback, 0U,
         *page_management_flags_resources.gpu_buffer, 0U, readback_bytes);
 
-      // Snapshot the CPU reference for this slot so the comparison can happen
-      // when this slot is next reused.
+      // Debug-only coherence reference snapshot. This CPU copy exists solely so
+      // a later slot reuse can compare GPU publication against the CPU model
+      // while we finish removing validation-only readback scaffolding from the
+      // backend.
       readback.cpu_page_table_snapshot.assign(
         state.page_table_entries.begin(), state.page_table_entries.end());
       readback.cpu_page_flags_snapshot.assign(
@@ -1906,9 +1794,6 @@ auto VirtualShadowMapBackend::SetPublishedViewFrameBindingsSlot(
     return;
   }
 
-  for (auto& page : it->second.resolved_raster_pages) {
-    page.view_constants.view_frame_bindings_bslot = slot;
-  }
   if (it->second.pending_residency_resolve.valid) {
     it->second.pending_residency_resolve.view_constants
       .SetBindlessViewFrameBindingsSlot(slot, engine::ViewConstants::kRenderer);
@@ -1968,13 +1853,6 @@ auto VirtualShadowMapBackend::TryGetFramePublication(
 {
   const auto it = view_cache_.find(view_id);
   return it != view_cache_.end() ? &it->second.frame_publication : nullptr;
-}
-
-auto VirtualShadowMapBackend::TryGetRenderPlan(
-  const ViewId view_id) const noexcept -> const VirtualShadowRenderPlan*
-{
-  const auto it = view_cache_.find(view_id);
-  return it != view_cache_.end() ? &it->second.render_plan : nullptr;
 }
 
 auto VirtualShadowMapBackend::TryGetViewIntrospection(
@@ -2091,7 +1969,7 @@ auto VirtualShadowMapBackend::RebuildResolveStateSnapshot(
           && renderer::VirtualShadowPageTableEntryHasCurrentLod(entry);
       }));
   state.resolve_stats.pending_raster_page_count
-    = static_cast<std::uint32_t>(state.resolved_raster_pages.size());
+    = CountPublishedCurrentPagesNeedingRaster(state);
   state.resolve_stats.selected_page_count
     = state.publish_diagnostics.selected_page_count;
   state.resolve_stats.allocated_page_count
@@ -2382,20 +2260,10 @@ auto VirtualShadowMapBackend::RebuildPhysicalPageManagementSnapshot(
 auto VirtualShadowMapBackend::RefreshViewExports(
   const ViewId view_id, ViewCacheEntry& state) const -> void
 {
-  state.render_plan.depth_texture = physical_pool_texture_.get();
-  state.render_plan.resolved_pages
-    = std::span<const renderer::VirtualShadowResolvedRasterPage> {
-        state.resolved_raster_pages
-      };
-  state.render_plan.page_size_texels = physical_pool_config_.page_size_texels;
-  state.render_plan.atlas_tiles_per_axis
-    = physical_pool_config_.atlas_tiles_per_axis;
-
   state.introspection.directional_virtual_metadata
     = state.directional_virtual_metadata;
   state.introspection.published_directional_virtual_metadata
     = state.directional_virtual_metadata;
-  state.introspection.resolved_raster_pages = state.resolved_raster_pages;
   state.introspection.resolve_resident_page_entries
     = state.resolve_resident_page_entries;
   state.introspection.page_table_entries = state.page_table_entries;
@@ -2596,15 +2464,31 @@ auto VirtualShadowMapBackend::RefreshAtlasTileDebugStates(
       = static_cast<std::uint32_t>(tile_state);
   }
 
-  for (const auto& page : state.resolved_raster_pages) {
-    const auto tile_index = tile_index_for(PhysicalTileAddress {
-      .tile_x = page.atlas_tile_x, .tile_y = page.atlas_tile_y });
-    if (!tile_index.has_value()) {
-      continue;
-    }
-    state.atlas_tile_debug_states[*tile_index] = static_cast<std::uint32_t>(
-      renderer::VirtualShadowAtlasTileDebugState::kRewritten);
+}
+
+auto VirtualShadowMapBackend::CountPublishedCurrentPagesNeedingRaster(
+  const ViewCacheEntry& state) const noexcept -> std::uint32_t
+{
+  if (state.page_table_entries.empty()
+    || state.page_flags_entries.size() != state.page_table_entries.size()) {
+    return 0U;
   }
+
+  return static_cast<std::uint32_t>(std::count_if(
+    state.page_table_entries.begin(), state.page_table_entries.end(),
+    [&state, page_index = std::size_t { 0U }](const std::uint32_t entry) mutable {
+      const auto current_index = page_index++;
+      if (!renderer::VirtualShadowPageTableEntryHasCurrentLod(entry)
+        || current_index >= state.page_flags_entries.size()) {
+        return false;
+      }
+
+      const auto page_flags = state.page_flags_entries[current_index];
+      return renderer::HasVirtualShadowPageFlag(
+               page_flags, renderer::VirtualShadowPageFlag::kDynamicUncached)
+        || renderer::HasVirtualShadowPageFlag(
+          page_flags, renderer::VirtualShadowPageFlag::kStaticUncached);
+    }));
 }
 
 auto VirtualShadowMapBackend::CanReuseResidentPages(
@@ -3496,7 +3380,6 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
       * static_cast<std::size_t>(pages_per_level),
     0U);
   state.page_flags_entries.resize(state.page_table_entries.size(), 0U);
-  state.resolved_raster_pages.reserve(state.page_table_entries.size());
   struct CasterBoundsLightSpace2D {
     float min_x { 0.0F };
     float max_x { 0.0F };
@@ -4515,8 +4398,6 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
         = *previous_page_table_entries;
     }
   }
-  state.resolved_raster_pages.clear();
-
   state.publish_diagnostics.feedback_decision = feedback_decision;
   state.publish_diagnostics.feedback_key_count = feedback_key_count;
   state.publish_diagnostics.feedback_age_frames = feedback_age_frames;
@@ -5518,8 +5399,7 @@ auto VirtualShadowMapBackend::LogPublishTransition(
   const bool used_request_feedback = diagnostics.feedback_decision
     == ViewCacheEntry::RequestFeedbackDecision::kAccepted;
   const auto selected_page_count = diagnostics.selected_page_count;
-  const auto pending_raster_page_count
-    = static_cast<std::uint32_t>(state.resolved_raster_pages.size());
+  const auto pending_raster_page_count = state.resolve_stats.pending_raster_page_count;
   const auto clip_valid_count
     = static_cast<std::uint32_t>(std::count(state.clipmap_cache_valid.begin(),
       state.clipmap_cache_valid.begin()

@@ -226,7 +226,7 @@ auto ShadowManager::PublishForView(const ViewId view_id,
   return publication;
 }
 
-auto ShadowManager::MarkVirtualRenderPlanExecuted(const ViewId view_id) -> void
+auto ShadowManager::MarkVirtualRasterExecuted(const ViewId view_id) -> void
 {
   if (virtual_backend_) {
     virtual_backend_->MarkRendered(view_id);
@@ -332,13 +332,6 @@ auto ShadowManager::TryGetRasterRenderPlan(const ViewId view_id) const noexcept
   return conventional_backend_
     ? conventional_backend_->TryGetRasterRenderPlan(view_id)
     : nullptr;
-}
-
-auto ShadowManager::TryGetVirtualRenderPlan(const ViewId view_id) const noexcept
-  -> const VirtualShadowRenderPlan*
-{
-  return virtual_backend_ ? virtual_backend_->TryGetRenderPlan(view_id)
-                          : nullptr;
 }
 
 auto ShadowManager::TryGetVirtualGpuRasterInputs(

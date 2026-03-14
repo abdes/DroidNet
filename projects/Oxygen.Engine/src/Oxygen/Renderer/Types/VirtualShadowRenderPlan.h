@@ -15,7 +15,6 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Renderer/Types/DirectionalVirtualShadowMetadata.h>
 #include <Oxygen/Renderer/Types/VirtualShadowPhysicalPageMetadata.h>
-#include <Oxygen/Renderer/Types/ViewConstants.h>
 
 namespace oxygen::graphics {
 class Buffer;
@@ -54,7 +53,7 @@ struct DirectionalVirtualCacheControls {
 };
 
 // Bridge payload for the current resolve-to-raster transition. These entries
-// mirror the backend-private residency snapshot uploaded into persistent GPU
+// capture the backend-private residency snapshot uploaded into persistent GPU
 // buffers until the dedicated resolve pass becomes the only author of page
 // scheduling.
 struct alignas(16) VirtualShadowResolveResidentPageEntry {
@@ -98,29 +97,8 @@ struct VirtualShadowPageManagementBindings {
   ShaderVisibleIndex resolve_stats_srv { kInvalidShaderVisibleIndex };
 };
 
-// Authoritative page-raster contract consumed by the virtual page raster pass.
-// The explicit resolve stage is the only author of this payload.
-struct VirtualShadowResolvedRasterPage {
-  std::uint32_t shadow_instance_index { 0xFFFFFFFFU };
-  std::uint32_t payload_index { 0xFFFFFFFFU };
-  std::uint32_t clip_level { 0U };
-  std::uint32_t page_index { 0U };
-  std::uint64_t resident_key { 0U };
-  std::uint16_t atlas_tile_x { 0U };
-  std::uint16_t atlas_tile_y { 0U };
-  engine::ViewConstants::GpuData view_constants {};
-};
-
-struct VirtualShadowRenderPlan {
-  const graphics::Texture* depth_texture { nullptr };
-  std::span<const VirtualShadowResolvedRasterPage> resolved_pages {};
-  std::uint32_t page_size_texels { 0U };
-  std::uint32_t atlas_tiles_per_axis { 0U };
-};
-
 // Live GPU-authored raster inputs produced by the resolve pass and consumed by
-// the page raster pass in the same frame. CPU `resolved_pages` remains a
-// bookkeeping/readback mirror only once these bindings are present.
+// the page raster pass in the same frame.
 struct VirtualShadowGpuRasterInputs {
   std::shared_ptr<graphics::Buffer> schedule_buffer {};
   ShaderVisibleIndex schedule_srv { kInvalidShaderVisibleIndex };
@@ -147,7 +125,6 @@ struct VirtualShadowViewIntrospection {
     directional_virtual_metadata {};
   std::span<const engine::DirectionalVirtualShadowMetadata>
     published_directional_virtual_metadata {};
-  std::span<const VirtualShadowResolvedRasterPage> resolved_raster_pages {};
   std::span<const VirtualShadowResolveResidentPageEntry>
     resolve_resident_page_entries {};
   std::span<const std::uint32_t> page_table_entries {};

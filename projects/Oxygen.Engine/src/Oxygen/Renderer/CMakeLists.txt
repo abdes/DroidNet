@@ -146,7 +146,6 @@ set(
   "Internal/ConventionalShadowBackend.cpp"
   "Internal/ConventionalShadowBackend.h"
   "Internal/ShadowBackendCommon.h"
-  "Internal/VirtualShadowRasterCulling.h"
   "Internal/EnvironmentStaticDataManager.cpp"
   "Internal/EnvironmentStaticDataManager.h"
   "Internal/GpuDebugManager.cpp"

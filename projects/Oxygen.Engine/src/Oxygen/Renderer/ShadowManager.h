@@ -91,7 +91,7 @@ public:
     std::span<const std::uint8_t> shadow_caster_static_flags = {})
     -> ShadowFramePublication;
   OXGN_RNDR_API auto ResolveVirtualCurrentFrame(ViewId view_id) -> void;
-  OXGN_RNDR_API auto MarkVirtualRenderPlanExecuted(ViewId view_id) -> void;
+  OXGN_RNDR_API auto MarkVirtualRasterExecuted(ViewId view_id) -> void;
   OXGN_RNDR_API auto PrepareVirtualPageTableResources(
     ViewId view_id, graphics::CommandRecorder& recorder) -> void;
   OXGN_RNDR_API auto PrepareVirtualPageManagementOutputsForGpuWrite(
@@ -115,8 +115,6 @@ public:
     ViewId view_id) const noexcept -> const ShadowFramePublication*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetRasterRenderPlan(
     ViewId view_id) const noexcept -> const RasterShadowRenderPlan*;
-  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetVirtualRenderPlan(
-    ViewId view_id) const noexcept -> const VirtualShadowRenderPlan*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetVirtualGpuRasterInputs(
     ViewId view_id) const noexcept -> const renderer::VirtualShadowGpuRasterInputs*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetViewIntrospection(

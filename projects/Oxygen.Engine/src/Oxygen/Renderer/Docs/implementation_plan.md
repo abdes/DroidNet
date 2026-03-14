@@ -1619,7 +1619,7 @@ Continuous improvements, not milestones:
   residency after raster. The cached-vs-reused atlas-debug regression was
   updated to resolve the first frame explicitly before marking it rendered,
   and new focused coverage now asserts that calling
-  `MarkVirtualRenderPlanExecuted` alone does not materialize current-frame VSM
+  `MarkVirtualRasterExecuted` alone does not materialize current-frame VSM
   state. Focused coverage:
   - `LightManagerTest.ShadowManagerPublishForView_VirtualMarkRenderedDoesNotAutoResolveCurrentFrame`
   - `LightManagerTest.ShadowManagerPublishForView_VirtualAtlasDebugSeparatesCachedFromReused`
