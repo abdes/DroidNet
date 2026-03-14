@@ -129,13 +129,6 @@ VirtualShadowResolvePass::VirtualShadowResolvePass(
 
 VirtualShadowResolvePass::~VirtualShadowResolvePass()
 {
-  for (auto& slot : slot_readbacks_) {
-    if (slot.buffer && slot.mapped_bytes != nullptr) {
-      slot.buffer->UnMap();
-      slot.mapped_bytes = nullptr;
-    }
-    slot.buffer.reset();
-  }
   if (clear_count_upload_buffer_ && clear_count_upload_mapped_ptr_ != nullptr) {
     clear_count_upload_buffer_->UnMap();
     clear_count_upload_mapped_ptr_ = nullptr;
@@ -178,8 +171,6 @@ auto VirtualShadowResolvePass::DoPrepareResources(
   if (Context().frame_slot == frame::kInvalidSlot) {
     co_return;
   }
-
-  ProcessCompletedSchedule(Context().frame_slot);
 
   const auto shadow_manager = Context().GetRenderer().GetShadowManager();
   if (shadow_manager == nullptr) {
@@ -242,7 +233,6 @@ auto VirtualShadowResolvePass::DoPrepareResources(
     prepared_frame->draw_metadata_bytes.size() / sizeof(DrawMetadata));
   EnsurePassConstantsBuffer();
   EnsureClearCountUploadBuffer();
-  EnsureReadbackBuffer(Context().frame_slot);
 
   auto* resources = EnsureViewScheduleResources(
     Context().current_view.view_id, total_page_count, active_draw_count_);
@@ -665,36 +655,6 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
 
   auto it = view_schedule_resources_.find(active_view_id_);
   if (it != view_schedule_resources_.end() && total_page_count > 0U) {
-    auto& readback = slot_readbacks_[Context().frame_slot.get()];
-    if (!recorder.IsResourceTracked(*readback.buffer)) {
-      recorder.BeginTrackingResourceState(
-        *readback.buffer, graphics::ResourceStates::kCopyDest, false);
-    }
-    recorder.RequireResourceState(
-      *it->second.count_buffer, graphics::ResourceStates::kCopySource);
-    recorder.RequireResourceState(
-      *it->second.schedule_buffer, graphics::ResourceStates::kCopySource);
-    recorder.RequireResourceState(
-      *readback.buffer, graphics::ResourceStates::kCopyDest);
-    recorder.FlushBarriers();
-    recorder.CopyBuffer(*readback.buffer, 0U, *it->second.count_buffer, 0U,
-      sizeof(std::uint32_t));
-    recorder.CopyBuffer(*readback.buffer, sizeof(std::uint32_t),
-      *it->second.schedule_buffer, 0U,
-      static_cast<std::size_t>(active_schedule_capacity_)
-        * sizeof(ScheduleEntry));
-
-    readback.pending_schedule = true;
-    readback.view_id = active_view_id_;
-    readback.source_frame_sequence = Context().frame_sequence;
-    readback.pages_per_axis = active_pages_per_axis_;
-    readback.clip_level_count = active_clip_level_count_;
-    readback.directional_address_space_hash
-      = active_directional_address_space_hash_;
-    readback.clip_grid_origin_x = active_clip_grid_origin_x_;
-    readback.clip_grid_origin_y = active_clip_grid_origin_y_;
-    readback.schedule_capacity = active_schedule_capacity_;
-
     LOG_F(INFO,
       "VirtualShadowResolvePass: frame={} slot={} view={} dispatched resolve "
       "(groups={} scheduled_capacity={} draws={})",
@@ -854,105 +814,6 @@ auto VirtualShadowResolvePass::EnsureClearCountUploadBuffer() -> void
       "VirtualShadowResolvePass: failed to map count clear upload buffer");
   }
   std::memset(clear_count_upload_mapped_ptr_, 0, desc.size_bytes);
-}
-
-auto VirtualShadowResolvePass::EnsureReadbackBuffer(const frame::Slot slot)
-  -> void
-{
-  auto& readback = slot_readbacks_[slot.get()];
-  if (readback.buffer && readback.mapped_bytes != nullptr) {
-    return;
-  }
-
-  const auto schedule_bytes = sizeof(std::uint32_t)
-    + static_cast<std::uint64_t>(kMaxSupportedPageCount)
-      * sizeof(ScheduleEntry);
-  const graphics::BufferDesc desc {
-    .size_bytes = schedule_bytes,
-    .usage = graphics::BufferUsage::kNone,
-    .memory = graphics::BufferMemory::kReadBack,
-    .debug_name = "VirtualShadowResolvePass.Readback",
-  };
-  readback.buffer = gfx_->CreateBuffer(desc);
-  if (!readback.buffer) {
-    throw std::runtime_error(
-      "VirtualShadowResolvePass: failed to create readback buffer");
-  }
-
-  readback.mapped_bytes
-    = static_cast<std::byte*>(readback.buffer->Map(0U, desc.size_bytes));
-  if (readback.mapped_bytes == nullptr) {
-    throw std::runtime_error(
-      "VirtualShadowResolvePass: failed to map readback buffer");
-  }
-  std::memset(
-    readback.mapped_bytes, 0, static_cast<std::size_t>(desc.size_bytes));
-}
-
-auto VirtualShadowResolvePass::ProcessCompletedSchedule(const frame::Slot slot)
-  -> void
-{
-  auto& readback = slot_readbacks_[slot.get()];
-  if (!readback.pending_schedule || readback.mapped_bytes == nullptr) {
-    return;
-  }
-
-  const auto shadow_manager = Context().GetRenderer().GetShadowManager();
-  if (shadow_manager == nullptr) {
-    readback.pending_schedule = false;
-    return;
-  }
-
-  const auto* schedule_count
-    = reinterpret_cast<const std::uint32_t*>(readback.mapped_bytes);
-  const auto* schedule_entries = reinterpret_cast<const ScheduleEntry*>(
-    readback.mapped_bytes + sizeof(std::uint32_t));
-
-  renderer::VirtualShadowResolvedRasterSchedule schedule {};
-  schedule.source_frame_sequence = readback.source_frame_sequence;
-  schedule.pages_per_axis = readback.pages_per_axis;
-  schedule.clip_level_count = readback.clip_level_count;
-  schedule.directional_address_space_hash
-    = readback.directional_address_space_hash;
-
-  const auto pages_per_level
-    = readback.pages_per_axis * readback.pages_per_axis;
-  const auto scheduled_page_count
-    = std::min(*schedule_count, readback.schedule_capacity);
-  schedule.requested_resident_keys.reserve(scheduled_page_count);
-  for (std::uint32_t i = 0U; i < scheduled_page_count; ++i) {
-    if (pages_per_level == 0U || readback.pages_per_axis == 0U) {
-      break;
-    }
-
-    const auto global_page_index = schedule_entries[i].global_page_index;
-    const auto clip_index = global_page_index / pages_per_level;
-    if (clip_index >= readback.clip_level_count) {
-      continue;
-    }
-
-    const auto local_page_index = global_page_index % pages_per_level;
-    const auto page_y = local_page_index / readback.pages_per_axis;
-    const auto page_x = local_page_index % readback.pages_per_axis;
-    schedule.requested_resident_keys.push_back(
-      renderer::internal::shadow_detail::PackVirtualResidentPageKey(clip_index,
-        readback.clip_grid_origin_x[clip_index]
-          + static_cast<std::int32_t>(page_x),
-        readback.clip_grid_origin_y[clip_index]
-          + static_cast<std::int32_t>(page_y)));
-  }
-
-  LOG_F(INFO,
-    "VirtualShadowResolvePass: frame={} slot={} view={} completed schedule "
-    "(source_frame={} scheduled_pages={} address_hash=0x{:x})",
-    Context().frame_sequence.get(), slot.get(), readback.view_id.get(),
-    schedule.source_frame_sequence.get(),
-    schedule.requested_resident_keys.size(),
-    schedule.directional_address_space_hash);
-
-  shadow_manager->SubmitVirtualResolvedRasterSchedule(
-    readback.view_id, std::move(schedule));
-  readback.pending_schedule = false;
 }
 
 auto VirtualShadowResolvePass::EnsureViewScheduleResources(const ViewId view_id,

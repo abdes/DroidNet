@@ -207,6 +207,11 @@ function Get-BenchmarkSettledStats {
     } else { $null }
     $scheduledAverage = if ($settledScheduled.Count -gt 0) {
         ($settledScheduled | Measure-Object -Property value -Average).Average
+    } elseif ($settledRaster.Count -gt 0) {
+        # Once the CPU-visible resolved-schedule bridge is retired, the live
+        # GPU path no longer emits a separate CPU "scheduled_pages" metric.
+        # The raster pass's resolved page count is the authoritative schedule.
+        ($settledRaster | Measure-Object -Property resolved_pages -Average).Average
     } else { $null }
     $shadowDrawAverage = if ($settledRaster.Count -gt 0) {
         ($settledRaster | Measure-Object -Property shadow_draws -Average).Average

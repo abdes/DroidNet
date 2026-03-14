@@ -165,7 +165,6 @@ struct VirtualShadowViewIntrospection {
   std::span<const DirectionalVirtualClipCacheStatus> clipmap_cache_status {};
   std::span<const std::uint32_t> atlas_tile_debug_states {};
   bool used_request_feedback { false };
-  bool used_resolved_raster_schedule { false };
   bool cache_layout_compatible { false };
   bool depth_guardband_valid { false };
   bool has_persistent_gpu_residency_state { false };
@@ -179,8 +178,6 @@ struct VirtualShadowViewIntrospection {
   std::uint32_t dirty_page_count { 0U };
   std::uint32_t pending_page_count { 0U };
   std::uint32_t pending_raster_page_count { 0U };
-  std::uint32_t resolved_schedule_page_count { 0U };
-  std::uint32_t resolved_schedule_pruned_job_count { 0U };
   std::uint32_t selected_page_count { 0U };
   std::uint32_t coarse_backbone_page_count { 0U };
   std::uint32_t coarse_safety_selected_page_count { 0U };
@@ -192,7 +189,6 @@ struct VirtualShadowViewIntrospection {
   std::uint32_t receiver_bootstrap_page_count { 0U };
   std::uint32_t current_frame_reinforcement_page_count { 0U };
   std::uint64_t current_frame_reinforcement_reference_frame { 0U };
-  std::uint64_t resolved_schedule_age_frames { 0U };
   std::uint32_t allocated_page_count { 0U };
   std::uint32_t evicted_page_count { 0U };
   std::uint32_t rerasterized_page_count { 0U };

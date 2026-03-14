@@ -31,7 +31,6 @@
 #include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/Types/VirtualShadowRenderPlan.h>
 #include <Oxygen/Renderer/Types/VirtualShadowRequestFeedback.h>
-#include <Oxygen/Renderer/Types/VirtualShadowResolvedRasterSchedule.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::engine::upload {
@@ -106,9 +105,6 @@ public:
   OXGN_RNDR_API auto ClearVirtualRequestFeedback(ViewId view_id,
     VirtualShadowFeedbackKind kind = VirtualShadowFeedbackKind::kDetail)
     -> void;
-  OXGN_RNDR_API auto SubmitVirtualResolvedRasterSchedule(
-    ViewId view_id, VirtualShadowResolvedRasterSchedule schedule) -> void;
-  OXGN_RNDR_API auto ClearVirtualResolvedRasterSchedule(ViewId view_id) -> void;
   OXGN_RNDR_API auto SubmitVirtualGpuRasterInputs(
     ViewId view_id, renderer::VirtualShadowGpuRasterInputs inputs) -> void;
   OXGN_RNDR_API auto ClearVirtualGpuRasterInputs(ViewId view_id) -> void;
