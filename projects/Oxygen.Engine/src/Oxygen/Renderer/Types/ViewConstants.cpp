@@ -36,18 +36,31 @@ auto ViewConstants::SetViewMatrix(const glm::mat4& m) noexcept -> ViewConstants&
 auto ViewConstants::SetProjectionMatrix(const glm::mat4& m) noexcept
   -> ViewConstants&
 {
+  bool changed = false;
   if (!Mat4Equal(projection_matrix_, m)) {
     projection_matrix_ = m;
+    changed = true;
+  }
+  if (!stable_projection_explicit_
+    && !Mat4Equal(stable_projection_matrix_, m)) {
+    stable_projection_matrix_ = m;
+    changed = true;
+  }
+  if (changed) {
     version_ = version_.Next();
   }
-  stable_projection_matrix_ = m;
   return *this;
 }
 
 auto ViewConstants::SetStableProjectionMatrix(const glm::mat4& m) noexcept
   -> ViewConstants&
 {
-  stable_projection_matrix_ = m;
+  if (!stable_projection_explicit_
+    || !Mat4Equal(stable_projection_matrix_, m)) {
+    stable_projection_matrix_ = m;
+    stable_projection_explicit_ = true;
+    version_ = version_.Next();
+  }
   return *this;
 }
 

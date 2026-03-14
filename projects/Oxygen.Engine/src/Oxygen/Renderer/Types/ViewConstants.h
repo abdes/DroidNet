@@ -219,6 +219,7 @@ private:
   glm::mat4 view_matrix_ { 1.0F };
   glm::mat4 projection_matrix_ { 1.0F };
   glm::mat4 stable_projection_matrix_ { 1.0F };
+  bool stable_projection_explicit_ { false };
   glm::vec3 camera_position_ { 0.0F, 0.0F, 0.0F };
 
   // Renderer-managed fields
