@@ -140,6 +140,12 @@ private:
     renderer::VirtualPageResidencyState state {
       renderer::VirtualPageResidencyState::kUnmapped
     };
+    // Tracks whether the last valid contents for this resident page were an
+    // intentional blank clear rather than rasterized caster depth. This lets
+    // startup/bootstrap publication force a one-time clear when a reused tile
+    // transitions between real shadow content and a deliberately blank current
+    // page, instead of leaking stale depth as a phantom shadow.
+    bool blank_contents_valid { false };
     frame::SequenceNumber last_touched_frame { 0U };
     frame::SequenceNumber last_requested_frame { 0U };
 
@@ -260,9 +266,15 @@ private:
       std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
         reusable_clip_contents {};
       bool bootstrap_prefers_finest_detail_pages { false };
+      // Guardrail: cold/bootstrap publication may legitimately remain no-page
+      // for a few frames, but it must not manufacture fallback-only aliases
+      // from coarse pages before accepted fine feedback exists. Those aliases
+      // are what produce the obviously wrong first-scene garbage shadows.
+      bool allow_fallback_aliases { false };
       bool address_space_compatible { false };
       bool global_dirty_resident_contents { false };
       std::vector<std::uint8_t> selected_pages {};
+      std::vector<std::uint8_t> selected_blank_pages {};
       std::unordered_map<std::uint64_t, ResidentVirtualPage>
         previous_resident_pages {};
       std::vector<glm::vec4> previous_shadow_caster_bounds {};

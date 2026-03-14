@@ -810,6 +810,9 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
           = pending.dirty_static_resident_pages.contains(resident_key);
         const bool dynamic_dirty
           = pending.dirty_dynamic_resident_pages.contains(resident_key);
+        const bool blank_selected_page
+          = global_page_index < pending.selected_blank_pages.size()
+          && pending.selected_blank_pages[global_page_index] != 0U;
 
         bool needs_raster = true;
         ResidentVirtualPage resident_page {};
@@ -818,6 +821,15 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
           resident_page = resident_it->second;
           needs_raster = !resident_page.ContentsValid()
             || !pending.reusable_clip_contents[clip_index];
+          // Guardrail: receiver-driven blank current pages are allowed to stay
+          // current so sampling does not collapse to wrong coarse fallback, but
+          // they must still clear any previously rasterized depth the first
+          // time a reused resident page switches between blank and non-blank
+          // contents. Otherwise stale tile contents show up as phantom
+          // startup/motion shadows.
+          if (resident_page.blank_contents_valid != blank_selected_page) {
+            needs_raster = true;
+          }
           ++reused_requested_pages;
         } else {
           const auto allocated_tile = AcquirePhysicalTile(state,
@@ -833,6 +845,7 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
           resident_page.last_requested_frame = frame_sequence_;
           ++allocated_pages;
         }
+        resident_page.blank_contents_valid = blank_selected_page;
         resident_page.state = needs_raster
           ? renderer::VirtualPageResidencyState::kPendingRender
           : renderer::VirtualPageResidencyState::kResidentClean;
@@ -912,7 +925,9 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
     process_clip_range(0U, coarse_backbone_begin, true);
   }
 
-  PopulateDirectionalFallbackPageTableEntries(state, pending);
+  if (pending.allow_fallback_aliases) {
+    PopulateDirectionalFallbackPageTableEntries(state, pending);
+  }
   PropagateDirectionalHierarchicalPageFlags(state, pending);
   rerasterized_pages = CountPublishedCurrentPagesNeedingRaster(state);
 
@@ -948,7 +963,9 @@ auto VirtualShadowMapBackend::ResolvePendingPageResidency(const ViewId view_id)
   RebuildResolveStateSnapshot(state);
   RebuildPhysicalPageManagementSnapshot(state, pending);
   RebuildPublishedCurrentPagesFromPageManagementSnapshot(state, pending);
-  PopulateDirectionalFallbackPageTableEntries(state, pending);
+  if (pending.allow_fallback_aliases) {
+    PopulateDirectionalFallbackPageTableEntries(state, pending);
+  }
   PropagateDirectionalHierarchicalPageFlags(state, pending);
   state.resolve_stats.mapped_page_count
     = static_cast<std::uint32_t>(std::count_if(state.page_table_entries.begin(),
@@ -3401,6 +3418,8 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
     });
   }
   std::vector<std::uint8_t> selected_pages(state.page_table_entries.size(), 0U);
+  std::vector<std::uint8_t> selected_blank_pages(
+    state.page_table_entries.size(), 0U);
   std::uint32_t selected_page_count = 0U;
   const auto page_overlaps_caster =
     [&](const std::uint32_t clip_index, const std::uint32_t page_x,
@@ -3458,12 +3477,13 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
       return false;
     }
 
-    if (require_caster_overlap
-      && !page_overlaps_caster(clip_index, page_x, page_y)) {
+    const bool overlaps_caster = page_overlaps_caster(clip_index, page_x, page_y);
+    if (require_caster_overlap && !overlaps_caster) {
       return false;
     }
 
     selected_pages[global_page_index] = 1U;
+    selected_blank_pages[global_page_index] = overlaps_caster ? 0U : 1U;
     ++selected_page_count;
     return true;
   };
@@ -4090,6 +4110,8 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   const bool transition_publish_risk = previous_resident_pages == nullptr
     || previous_resident_pages->empty() || !address_space_compatible
     || global_dirty_resident_contents;
+  const bool allow_blank_same_frame_detail_pages
+    = detail_feedback_would_have_been_accepted;
   // Guardrail: accepted fine feedback remains authoritative for live fine-page
   // creation until same-frame GPU publication can prove equivalent coverage.
   // Demoting it to telemetry-only before that replacement exists collapses the
@@ -4102,17 +4124,26 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
         return 0U;
       }
 
+      const auto mark_full_same_frame_region =
+        [&](const std::uint32_t full_clip_index,
+            const ClipSelectedRegion& full_region) {
+          // Guardrail: cold bootstrap may remain no-page for a few frames, but
+          // it must not manufacture receiver-only blank current pages before
+          // accepted fine feedback exists. That shortcut is what turns the
+          // first real scene into obviously wrong startup garbage. Once
+          // accepted fine feedback is live, blank receiver pages may keep fine
+          // current coverage from collapsing back to coarse fallback.
+          return mark_region(full_clip_index, full_region,
+            !allow_blank_same_frame_detail_pages);
+        };
+
       // Guardrail: when fine publication falls back to current-frame bootstrap,
       // keep that bootstrap tied to the explicit receiver region instead of the
       // whole fine frustum. Re-expanding back to frustum coverage eagerly burns
       // the full physical pool on pages the current frame never asked for,
       // which is what makes fallback dominate the startup/motion image.
       if (!allow_delta_seed) {
-        // Guardrail: current-frame receiver publication must be allowed to map
-        // blank fine pages. If we cull these pages just because no caster
-        // overlaps them, sampling drops to coarse fallback and produces the
-        // visibly wrong shadows reported in live movement scenes.
-        return mark_region(clip_index, region, false);
+        return mark_full_same_frame_region(clip_index, region);
       }
 
       // Guardrail: if accepted detail feedback translated to zero current-space
@@ -4121,7 +4152,7 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
       // same-frame fine coverage to avoid collapsing to visibly wrong coarse
       // fallback.
       if (force_full_same_frame_detail_region) {
-        return mark_region(clip_index, region);
+        return mark_full_same_frame_region(clip_index, region);
       }
 
       const bool can_delta_seed = previous_state != nullptr
@@ -4130,14 +4161,14 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
         && cache_layout_compatible && depth_guardband_valid
         && setup.previous_clip_cache_valid[clip_index];
       if (!can_delta_seed) {
-        return mark_region(clip_index, region);
+        return mark_full_same_frame_region(clip_index, region);
       }
 
       const auto& current_region = state.absolute_frustum_regions[clip_index];
       const auto& previous_region
         = previous_state->absolute_frustum_regions[clip_index];
       if (!current_region.valid || !previous_region.valid) {
-        return mark_region(clip_index, region);
+        return mark_full_same_frame_region(clip_index, region);
       }
 
       // Guardrail: absolute receiver-region delta remains the right Phase 7
@@ -4157,7 +4188,7 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
         // makes fallback dominate the image, which is the visibly wrong
         // bootstrap/reset regression the live demos keep hitting.
         if (!detail_feedback_would_have_been_accepted) {
-          return mark_region(clip_index, region);
+          return mark_full_same_frame_region(clip_index, region);
         }
         return 0U;
       }
@@ -4361,12 +4392,14 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   pending_resolve.bootstrap_prefers_finest_detail_pages
     = !detail_feedback_would_have_been_accepted
     || force_full_same_frame_detail_region;
+  pending_resolve.allow_fallback_aliases = detail_feedback_would_have_been_accepted;
   pending_resolve.address_space_compatible = address_space_compatible;
   pending_resolve.cache_layout_compatible = cache_layout_compatible;
   pending_resolve.depth_guardband_valid = depth_guardband_valid;
   pending_resolve.global_dirty_resident_contents
     = global_dirty_resident_contents;
   pending_resolve.selected_pages = std::move(selected_pages);
+  pending_resolve.selected_blank_pages = std::move(selected_blank_pages);
   if (previous_resident_pages != nullptr) {
     pending_resolve.previous_resident_pages = *previous_resident_pages;
   }
