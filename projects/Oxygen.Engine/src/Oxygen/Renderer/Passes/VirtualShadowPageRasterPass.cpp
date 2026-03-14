@@ -90,14 +90,22 @@ auto VirtualShadowPageRasterPass::DoPrepareResources(
     co_return;
   }
 
-  const auto* render_plan
-    = shadow_manager->TryGetVirtualRenderPlan(Context().current_view.view_id);
   const auto* gpu_inputs = shadow_manager->TryGetVirtualGpuRasterInputs(
     Context().current_view.view_id);
-  if (render_plan == nullptr || render_plan->depth_texture == nullptr
-    || gpu_inputs == nullptr || !HasLiveGpuRasterInputs(*gpu_inputs)) {
+  const auto* metadata = shadow_manager->TryGetVirtualDirectionalMetadata(
+    Context().current_view.view_id);
+  const auto* introspection = shadow_manager->TryGetVirtualViewIntrospection(
+    Context().current_view.view_id);
+  const auto& virtual_depth_texture
+    = shadow_manager->GetVirtualShadowDepthTexture();
+  if (gpu_inputs == nullptr || !HasLiveGpuRasterInputs(*gpu_inputs)
+    || metadata == nullptr || metadata->page_size_texels == 0U
+    || !virtual_depth_texture) {
     co_return;
   }
+  const auto telemetry_page_count = introspection != nullptr
+    ? introspection->pending_raster_page_count
+    : 0U;
 
   EnsureClearPipelineState();
   EnsurePassConstantsCapacity();
@@ -131,10 +139,10 @@ auto VirtualShadowPageRasterPass::DoPrepareResources(
 
   LOG_F(INFO,
     "VirtualShadowPageRasterPass: frame={} view={} prepared live GPU raster "
-    "inputs (source_frame={} cpu_page_mirror={} draw_count={} "
+    "inputs (source_frame={} telemetry_page_mirror={} draw_count={} "
     "schedule_capacity={} cpu_prepare_us={})",
     Context().frame_sequence.get(), Context().current_view.view_id.get(),
-    gpu_inputs->source_frame_sequence.get(), render_plan->resolved_pages.size(),
+    gpu_inputs->source_frame_sequence.get(), telemetry_page_count,
     gpu_inputs->draw_count, gpu_inputs->schedule_capacity,
     ElapsedMicroseconds(prepare_begin));
 
@@ -174,15 +182,19 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
     co_return;
   }
 
-  const auto* render_plan
-    = shadow_manager->TryGetVirtualRenderPlan(Context().current_view.view_id);
   const auto* gpu_inputs = shadow_manager->TryGetVirtualGpuRasterInputs(
     Context().current_view.view_id);
-  if (render_plan == nullptr || render_plan->depth_texture == nullptr
-    || gpu_inputs == nullptr || !HasLiveGpuRasterInputs(*gpu_inputs)) {
+  const auto* metadata = shadow_manager->TryGetVirtualDirectionalMetadata(
+    Context().current_view.view_id);
+  const auto* introspection = shadow_manager->TryGetVirtualViewIntrospection(
+    Context().current_view.view_id);
+  const auto& virtual_depth_texture
+    = shadow_manager->GetVirtualShadowDepthTexture();
+  if (gpu_inputs == nullptr || !HasLiveGpuRasterInputs(*gpu_inputs)
+    || metadata == nullptr || metadata->page_size_texels == 0U
+    || !virtual_depth_texture) {
     auto& log_state = view_log_states_[Context().current_view.view_id.get()];
-    if (render_plan != nullptr && render_plan->depth_texture != nullptr
-      && log_state.saw_live_plan_jobs) {
+    if (log_state.saw_live_plan_jobs) {
       log_state.saw_live_plan_jobs = false;
       LOG_F(INFO,
         "VirtualShadowPageRasterPass: view {} has no live GPU raster inputs "
@@ -198,24 +210,30 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
       "VirtualShadowPageRasterPass: invalid frame slot for raster execution");
   }
 
+  const auto telemetry_resolved_pages = introspection != nullptr
+    ? introspection->resolved_raster_pages
+    : std::span<const renderer::VirtualShadowResolvedRasterPage> {};
+  const auto telemetry_page_count = introspection != nullptr
+    ? introspection->pending_raster_page_count
+    : static_cast<std::uint32_t>(telemetry_resolved_pages.size());
+  const auto atlas_resolution = virtual_depth_texture->GetDescriptor().width;
+
   auto& log_state = view_log_states_[Context().current_view.view_id.get()];
   if (!log_state.saw_live_plan_jobs) {
     log_state.saw_live_plan_jobs = true;
     LOG_F(INFO,
       "VirtualShadowPageRasterPass: view {} has live GPU raster inputs "
-      "(cpu_page_mirror={} draw_count={} source_frame={})",
-      Context().current_view.view_id.get(), render_plan->resolved_pages.size(),
+      "(telemetry_page_mirror={} draw_count={} source_frame={})",
+      Context().current_view.view_id.get(), telemetry_page_count,
       gpu_inputs->draw_count, gpu_inputs->source_frame_sequence.get());
   }
   LOG_F(INFO,
     "VirtualShadowPageRasterPass: frame={} view={} executing live GPU raster "
-    "(cpu_page_mirror={} draw_count={} page_size={} atlas={}x{} "
+    "(telemetry_page_mirror={} draw_count={} page_size={} atlas={}x{} "
     "source_frame={})",
     Context().frame_sequence.get(), Context().current_view.view_id.get(),
-    render_plan->resolved_pages.size(), gpu_inputs->draw_count,
-    render_plan->page_size_texels,
-    render_plan->page_size_texels * render_plan->atlas_tiles_per_axis,
-    render_plan->page_size_texels * render_plan->atlas_tiles_per_axis,
+    telemetry_page_count, gpu_inputs->draw_count, metadata->page_size_texels,
+    atlas_resolution, atlas_resolution,
     gpu_inputs->source_frame_sequence.get());
 
   const auto psf = Context().current_view.prepared_frame;
@@ -227,7 +245,7 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
       "live GPU virtual raster page(s)!",
       Context().current_view.view_id.get(), psf != nullptr,
       psf ? psf->IsValid() : false, psf ? psf->draw_metadata_bytes.size() : 0U,
-      psf ? psf->partitions.size() : 0U, render_plan->resolved_pages.size());
+      psf ? psf->partitions.size() : 0U, telemetry_page_count);
     Context().RegisterPass(this);
     co_return;
   }
@@ -242,8 +260,6 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
 
   auto& depth_texture = const_cast<graphics::Texture&>(GetDepthTexture());
   const auto dsv = PrepareFullAtlasDepthStencilView(depth_texture);
-  const auto atlas_resolution
-    = render_plan->page_size_texels * render_plan->atlas_tiles_per_axis;
 
   recorder.SetViewport(ViewPort {
     .top_left_x = 0.0F,
@@ -287,8 +303,7 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
 
   const auto* records
     = reinterpret_cast<const DrawMetadata*>(psf->draw_metadata_bytes.data());
-  const auto rastered_page_count
-    = static_cast<std::uint32_t>(render_plan->resolved_pages.size());
+  const auto rastered_page_count = telemetry_page_count;
   std::uint64_t emitted_count = 0U;
   std::uint32_t cpu_draw_submission_count = 0U;
   std::uint32_t skipped_invalid = 0U;
@@ -307,7 +322,7 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
     RebindCommonRootParameters(recorder);
     EmitIndirectResolvedPageDrawRange(recorder,
       *gpu_inputs->draw_indirect_args_buffer, records, gpu_inputs->draw_count,
-      render_plan->resolved_pages, psf->draw_bounding_spheres, pr.begin, pr.end,
+      telemetry_resolved_pages, psf->draw_bounding_spheres, pr.begin, pr.end,
       emitted_count,
       cpu_draw_submission_count, skipped_invalid, draw_errors);
   }
@@ -323,9 +338,9 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
     }
     LOG_F(ERROR,
       "VirtualShadowPageRasterPass: view {} produced no shadow-caster draws "
-      "(cpu_page_mirror={} gpu_schedule=1 rastered_pages={} page_clears={} shadow_draws=0 "
+      "(telemetry_page_mirror={} gpu_schedule=1 rastered_pages={} page_clears={} shadow_draws=0 "
       "cpu_draw_submissions={} skipped_invalid={} errors={})",
-      Context().current_view.view_id.get(), render_plan->resolved_pages.size(),
+      Context().current_view.view_id.get(), telemetry_page_count,
       rastered_page_count, rastered_page_count, cpu_draw_submission_count,
       skipped_invalid, draw_errors);
   } else {
@@ -339,7 +354,7 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
       "[gpu_schedule=1] (rastered_pages={} page_clears={} cpu_draw_submissions={} "
       "skipped_invalid={} errors={})",
       Context().frame_sequence.get(), Context().current_view.view_id.get(),
-      emitted_count, render_plan->resolved_pages.size(), rastered_page_count,
+      emitted_count, telemetry_page_count, rastered_page_count,
       rastered_page_count, cpu_draw_submission_count, skipped_invalid,
       draw_errors);
     shadow_manager->MarkVirtualRenderPlanExecuted(
@@ -353,7 +368,8 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
 auto VirtualShadowPageRasterPass::EmitIndirectResolvedPageDrawRange(
   graphics::CommandRecorder& recorder, const graphics::Buffer& draw_args_buffer,
   const DrawMetadata* records, const std::uint32_t draw_count,
-  const std::span<const renderer::VirtualShadowResolvedRasterPage> resolved_pages,
+  const std::span<const renderer::VirtualShadowResolvedRasterPage>
+    telemetry_resolved_pages,
   const std::span<const glm::vec4> draw_bounding_spheres,
   const std::uint32_t begin, const std::uint32_t end,
   std::uint64_t& emitted_count,
@@ -380,11 +396,11 @@ auto VirtualShadowPageRasterPass::EmitIndirectResolvedPageDrawRange(
 
     try {
       std::uint32_t overlapping_page_count
-        = static_cast<std::uint32_t>(resolved_pages.size());
+        = static_cast<std::uint32_t>(telemetry_resolved_pages.size());
       if (draw_index < draw_bounding_spheres.size()) {
         overlapping_page_count = 0U;
         const auto& sphere = draw_bounding_spheres[draw_index];
-        for (const auto& page : resolved_pages) {
+        for (const auto& page : telemetry_resolved_pages) {
           if (renderer::internal::shadow_detail::
                 ResolvedVirtualPageOverlapsBoundingSphere(page, sphere)) {
             ++overlapping_page_count;
@@ -617,22 +633,28 @@ auto VirtualShadowPageRasterPass::UploadRasterPassConstants() -> void
     throw std::runtime_error(
       "VirtualShadowPageRasterPass: ShadowManager is unavailable");
   }
-  const auto* render_plan
-    = shadow_manager->TryGetVirtualRenderPlan(Context().current_view.view_id);
+  const auto* metadata = shadow_manager->TryGetVirtualDirectionalMetadata(
+    Context().current_view.view_id);
   const auto* gpu_inputs
     = shadow_manager->TryGetVirtualGpuRasterInputs(Context().current_view.view_id);
-  if (render_plan == nullptr || gpu_inputs == nullptr
-    || !HasLiveGpuRasterInputs(*gpu_inputs)) {
+  const auto& virtual_depth_texture
+    = shadow_manager->GetVirtualShadowDepthTexture();
+  if (metadata == nullptr || metadata->page_size_texels == 0U
+    || gpu_inputs == nullptr || !HasLiveGpuRasterInputs(*gpu_inputs)
+    || !virtual_depth_texture) {
     throw std::runtime_error(
       "VirtualShadowPageRasterPass: live GPU raster inputs are unavailable");
   }
+  const auto atlas_width = virtual_depth_texture->GetDescriptor().width;
+  const auto atlas_tiles_per_axis
+    = std::max(1U, atlas_width / metadata->page_size_texels);
 
   const auto slot = Context().frame_slot.get();
   const RasterPassConstants constants {
     .alpha_cutoff_default = 0.5F,
     .schedule_srv_index = gpu_inputs->schedule_srv.get(),
     .schedule_count_srv_index = gpu_inputs->schedule_count_srv.get(),
-    .atlas_tiles_per_axis = render_plan->atlas_tiles_per_axis,
+    .atlas_tiles_per_axis = atlas_tiles_per_axis,
     .draw_page_ranges_srv_index = gpu_inputs->draw_page_ranges_srv.get(),
     .draw_page_indices_srv_index = gpu_inputs->draw_page_indices_srv.get(),
   };

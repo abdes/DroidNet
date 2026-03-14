@@ -23,8 +23,10 @@ using oxygen::renderer::HasVirtualShadowHierarchyVisibility;
 using oxygen::renderer::MakeVirtualShadowPageFlags;
 using oxygen::renderer::MakeVirtualShadowHierarchyFlags;
 using oxygen::renderer::MergeVirtualShadowHierarchyFlags;
+using oxygen::renderer::NormalizeVirtualShadowPageFlagsForStructuralCoherence;
 using oxygen::renderer::PackVirtualShadowPageTableEntry;
 using oxygen::renderer::ResolveVirtualShadowFallbackClipIndex;
+using oxygen::renderer::VirtualShadowPageFlagsStructurallyEqual;
 using oxygen::renderer::VirtualShadowPageFlag;
 using oxygen::renderer::internal::shadow_detail::
   IsDirectionalVirtualCacheLayoutCompatible;
@@ -289,6 +291,46 @@ TEST(VirtualShadowContractsTest, HierarchicalPageFlagsPropagateDescendantUsage)
     VirtualShadowPageFlag::kHierarchyUsedThisFrameDescendant));
 
   EXPECT_EQ(parent_flags, propagated_hierarchy);
+}
+
+TEST(VirtualShadowContractsTest,
+  StructuralFlagCoherenceIgnoresGpuOwnedUsedAndDetailBits)
+{
+  constexpr auto cpu_flags
+    = MakeVirtualShadowPageFlags(true, true, false, false, false);
+  constexpr auto gpu_flags
+    = MakeVirtualShadowPageFlags(true, true, false, true, true);
+  constexpr auto cpu_hierarchy
+    = MergeVirtualShadowHierarchyFlags(0U, cpu_flags);
+  constexpr auto gpu_hierarchy
+    = MergeVirtualShadowHierarchyFlags(0U, gpu_flags);
+
+  EXPECT_TRUE(VirtualShadowPageFlagsStructurallyEqual(cpu_flags, gpu_flags));
+  EXPECT_EQ(NormalizeVirtualShadowPageFlagsForStructuralCoherence(cpu_flags),
+    NormalizeVirtualShadowPageFlagsForStructuralCoherence(gpu_flags));
+  EXPECT_TRUE(
+    VirtualShadowPageFlagsStructurallyEqual(cpu_hierarchy, gpu_hierarchy));
+  EXPECT_EQ(
+    NormalizeVirtualShadowPageFlagsForStructuralCoherence(cpu_hierarchy),
+    NormalizeVirtualShadowPageFlagsForStructuralCoherence(gpu_hierarchy));
+}
+
+TEST(VirtualShadowContractsTest,
+  StructuralFlagCoherencePreservesResidencyAndInvalidationBits)
+{
+  constexpr auto allocated_clean
+    = MakeVirtualShadowPageFlags(true, false, false, false, false);
+  constexpr auto dynamic_uncached
+    = MakeVirtualShadowPageFlags(true, true, false, false, false);
+  constexpr auto static_uncached
+    = MakeVirtualShadowPageFlags(true, false, true, false, false);
+
+  EXPECT_FALSE(
+    VirtualShadowPageFlagsStructurallyEqual(allocated_clean, dynamic_uncached));
+  EXPECT_FALSE(
+    VirtualShadowPageFlagsStructurallyEqual(allocated_clean, static_uncached));
+  EXPECT_FALSE(
+    VirtualShadowPageFlagsStructurallyEqual(dynamic_uncached, static_uncached));
 }
 
 TEST(VirtualShadowContractsTest, PhysicalPageContractsRemainGpuFriendly)

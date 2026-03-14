@@ -1651,7 +1651,9 @@ auto VirtualShadowMapBackend::CheckCoherenceReadback(
 
   const auto entry_count = slot.entry_count;
   std::uint32_t table_mismatches = 0U;
-  std::uint32_t flags_mismatches = 0U;
+  std::uint32_t exact_flags_mismatches = 0U;
+  std::uint32_t structural_flags_mismatches = 0U;
+  std::uint32_t semantic_only_flags_mismatches = 0U;
   std::uint32_t table_gpu_zero_cpu_nonzero = 0U;
   std::uint32_t table_gpu_nonzero_cpu_zero = 0U;
   std::uint32_t table_both_nonzero_differ = 0U;
@@ -1677,8 +1679,17 @@ auto VirtualShadowMapBackend::CheckCoherenceReadback(
       }
     }
     const auto gpu_flags = slot.mapped_page_flags[i];
-    if (gpu_flags != slot.cpu_page_flags_snapshot[i]) {
-      ++flags_mismatches;
+    const auto cpu_flags = slot.cpu_page_flags_snapshot[i];
+    if (gpu_flags != cpu_flags) {
+      ++exact_flags_mismatches;
+      if (renderer::VirtualShadowPageFlagsStructurallyEqual(
+            gpu_flags, cpu_flags)) {
+        ++semantic_only_flags_mismatches;
+      }
+    }
+    if (!renderer::VirtualShadowPageFlagsStructurallyEqual(
+          gpu_flags, cpu_flags)) {
+      ++structural_flags_mismatches;
     }
     const bool current_lod_valid
       = renderer::VirtualShadowPageTableEntryHasCurrentLod(gpu_val);
@@ -1723,7 +1734,9 @@ auto VirtualShadowMapBackend::CheckCoherenceReadback(
   }
 
   const bool exact_coherent
-    = (table_mismatches == 0U && flags_mismatches == 0U);
+    = (table_mismatches == 0U && exact_flags_mismatches == 0U);
+  const bool structural_coherent
+    = (table_mismatches == 0U && structural_flags_mismatches == 0U);
   const bool phase7_valid
     = current_without_allocated == 0U && fallback_with_base_flags == 0U
     && fallback_with_hierarchy_flags == 0U;
@@ -1732,14 +1745,18 @@ auto VirtualShadowMapBackend::CheckCoherenceReadback(
   LOG_F(INFO,
     "VirtualShadowMapBackend: coherence check frame={} view={} entries={} "
     "page_table_mismatches={} (gpu0_cpu!0={} gpu!0_cpu0={} both!0={}) "
-    "page_flags_mismatches={} exact_coherent={} phase7_valid={} "
+    "page_flags_mismatches={} semantic_only_page_flags_mismatches={} "
+    "exact_page_flags_mismatches={} exact_coherent={} structural_coherent={} "
+    "phase7_valid={} "
     "has_live_publication={} current_pages={} fallback_aliases={} "
     "current_without_allocated={} "
     "current_without_used={} fallback_with_base_flags={} "
     "fallback_with_hierarchy_flags={}",
     slot.source_frame.get(), slot.view_id.get(), entry_count, table_mismatches,
     table_gpu_zero_cpu_nonzero, table_gpu_nonzero_cpu_zero,
-    table_both_nonzero_differ, flags_mismatches, exact_coherent, phase7_valid,
+    table_both_nonzero_differ, structural_flags_mismatches,
+    semantic_only_flags_mismatches, exact_flags_mismatches, exact_coherent,
+    structural_coherent, phase7_valid,
     has_live_publication, current_page_count, fallback_alias_count,
     current_without_allocated, current_without_used,
     fallback_with_base_flags, fallback_with_hierarchy_flags);
@@ -1784,7 +1801,8 @@ auto VirtualShadowMapBackend::CheckCoherenceReadback(
     "current_without_allocated={} current_without_used={} "
     "fallback_with_base_flags={} fallback_with_hierarchy_flags={})",
     slot.source_frame.get(), slot.view_id.get(), table_mismatches,
-    flags_mismatches, current_without_allocated, current_without_used,
+    structural_flags_mismatches, current_without_allocated,
+    current_without_used,
     fallback_with_base_flags, fallback_with_hierarchy_flags);
   CHECK_F(!slot.live_authority || has_live_publication,
     "VirtualShadowMapBackend: live GPU page-management publication produced "
@@ -1793,7 +1811,8 @@ auto VirtualShadowMapBackend::CheckCoherenceReadback(
     "current_without_allocated={} current_without_used={} "
     "fallback_with_base_flags={} fallback_with_hierarchy_flags={})",
     slot.source_frame.get(), slot.view_id.get(), table_mismatches,
-    flags_mismatches, current_without_allocated, current_without_used,
+    structural_flags_mismatches, current_without_allocated,
+    current_without_used,
     fallback_with_base_flags, fallback_with_hierarchy_flags);
 }
 

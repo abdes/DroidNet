@@ -1434,7 +1434,7 @@ Progress update:
 
 - March 14, 2026 static-scene cache-settle follow-up:
   - fixed the directional feedback address-space oscillation that kept static
-    scenes in a full-reraster loop by:
+    benchmark scenes in a full-reraster loop by:
     - redefining directional feedback address-space identity around the snapped
       clip lattice contract: orientation plus quantized per-clip page-space XY
       shifts, instead of raw `light_view` translation terms
@@ -1454,13 +1454,26 @@ Progress update:
       `scheduled_pages_avg=331.00`, `resolved_pages_avg=331.38`,
       `rastered_pages_avg=331.38`, instead of rerastering all `1536` logical
       pages every frame
-  - this closes the static-scene never-settling update loop, but not the Phase 7
-    exit gate:
+  - this closed one proven address-space oscillation class on the locked
+    benchmark, but it did not close the general static-scene never-settling
+    update bug:
     - fine-page creation is still driven by delayed accepted feedback
       (`feedback_age=4`) instead of same-frame GPU missing-page publication
     - the readback diagnostics still report nonzero `page_flags_mismatches`
       even though `page_table_mismatches=0`, `phase7_valid=true`, and the
       settled benchmark path resolves `current=all`, `fallback=0`
+    - later live evidence outside the locked benchmark shows another oscillation
+      class is still active:
+      the directional metadata itself alternates between two
+      `address_hash` values frame-to-frame while the screen-debug histograms
+      remain stable, which forces `address_space_compatible=false`,
+      `released=1111`, and full reraster of the resident set every frame
+    - the current leading suspect is clipmap setup deriving address-space state
+      from the jittered resolved camera projection:
+      `SceneCameraViewResolver.cpp` applies per-frame pixel jitter to the
+      resolved projection, while `PrepareDirectionalVirtualClipmapSetup(...)`
+      still consumes `ViewConstants::projection_matrix` directly when building
+      the directional clip lattice
 
 Validation update:
 
@@ -1524,9 +1537,13 @@ Validation update:
     incomplete because fine-page creation is still driven by delayed accepted
     feedback (`feedback_age=4`) instead of same-frame GPU missing-page
     publication
-  - the static-scene address-space oscillation is fixed, but the later
-    coherence diagnostic still reports nonzero `page_flags_mismatches` on the
-    settled benchmark path even while `page_table_mismatches=0` and
+  - the earlier benchmark-specific address-space oscillation was fixed, but a
+    second live oscillation class still exists:
+    static scenes can alternate between two directional address hashes and
+    force full resident-page release/reraster even with stable geometry and
+    stable screen-debug histograms
+  - the later coherence diagnostic still reports nonzero `page_flags_mismatches`
+    on the settled benchmark path even while `page_table_mismatches=0` and
     `fallback=0`
 
 Resume anchor:
@@ -1600,6 +1617,29 @@ Progress update:
     telemetry have not yet been fully removed from the raster path, so the
     last page-selection scaffolding has not been proven non-authoritative end
     to end
+- March 14, 2026 live raster authority follow-up:
+  - removed the last live `VirtualShadowPageRasterPass` dependency on
+    `VirtualShadowRenderPlan` for execution/config:
+    - atlas sizing now comes from the live virtual shadow depth texture plus
+      current directional metadata
+    - the pass no longer reads `resolved_pages` to decide whether the GPU
+      raster path is runnable
+    - CPU `resolved_raster_pages` remain available only as telemetry for log
+      reporting and backend bookkeeping after raster execution
+  - locked benchmark evidence stayed stable after this cut:
+    - raster logs now report `telemetry_page_mirror=...` instead of
+      `cpu_page_mirror=...`, making the remaining mirror role explicit
+    - the live path still runs with `gpu_schedule=1`,
+      `cpu_draw_submissions=1`, `errors=0`
+    - settled benchmark averages remained in the same range as the post-cache-
+      stability path:
+      `scheduled_pages_avg=331.06`, `resolved_pages_avg=331.06`,
+      `rastered_pages_avg=331.06`, `shadow_draws_avg=1509.94`
+  - this narrows the real Phase 8 exit gap:
+    the live raster consumer no longer depends on the CPU render plan, but the
+    backend still keeps `resolved_raster_pages` / `VirtualShadowRenderPlan`
+    mirrors for post-raster clean-state bookkeeping and test/introspection
+    coverage, so Phase 8 stays `in_progress`
 
 Validation update:
 
@@ -1640,8 +1680,38 @@ Validation update:
         instead of per-page CPU submission fanout
 - remaining exit gap:
   - the GPU indirect draw-command path is live, but the remaining CPU page-mirror
-    telemetry and render-plan scaffolding still need to be removed or proven
-    non-authoritative before Phase 8 can truthfully close
+    bookkeeping still needs to be removed or proven non-authoritative before
+    Phase 8 can truthfully close
+  - the live raster pass itself no longer depends on `VirtualShadowRenderPlan`;
+    the remaining CPU mirrors are backend-side telemetry / post-render state
+    transitions, not page-selection authority
+
+- March 14, 2026 live raster authority follow-up validation:
+  - files changed in this slice:
+    - `src/Oxygen/Renderer/Passes/VirtualShadowPageRasterPass.h`
+    - `src/Oxygen/Renderer/Passes/VirtualShadowPageRasterPass.cpp`
+  - validation run on March 14, 2026 in `out/build-vs`:
+    - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+      - result: build succeeded
+    - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*VirtualResolveStagePublishesResolvedPageContract:*VirtualResolveMaterializesGpuResidencyResources:*VirtualSameFrameMarkedPagesDriveResolvedRasterSchedule:*VirtualStaticPagesStayCleanWhenDynamicCasterMovesElsewhere:*VirtualPageManagementOutputsStayCoherentAfterReuseAndAllocation`
+      - result: `5/5` passed
+    - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:1 /p:Configuration=Debug /nologo`
+      - result: build succeeded
+    - `powershell -ExecutionPolicy Bypass -File Examples\\RenderScene\\benchmark_directional_vsm.ps1`
+      - result: `exit_code=0`, `wall_ms=16061`, `approx_fps=7.47`
+      - settled stats:
+        - `requested_pages_avg=661.56`
+        - `scheduled_pages_avg=331.06`
+        - `resolved_pages_avg=331.06`
+        - `rastered_pages_avg=331.06`
+        - `shadow_draws_avg=1509.94`
+      - live benchmark evidence:
+        - raster logs now identify the CPU mirror explicitly as telemetry:
+          `telemetry_page_mirror=...`
+        - warmed frames continue to show `request=accepted`,
+          `address_space_compatible=true`, `current=all`, `fallback=0`
+        - no `COM Error`, `PrepareResources failed`, or `RenderGraph execution`
+          failure lines appear in the archived benchmark log
 
 Resume anchor:
 
