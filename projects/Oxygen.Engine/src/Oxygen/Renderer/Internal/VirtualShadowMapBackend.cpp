@@ -504,18 +504,15 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
     = std::span<const glm::vec4>(canonical_shadow_caster_bounds.data(),
       canonical_shadow_caster_bounds.size());
 
-  const auto key = BuildPublicationKey(view_constants, directional_candidates,
-    canonical_shadow_caster_bounds_span, shadow_caster_content_hash);
-
   ViewCacheEntry state {};
-  state.key = key;
+  state.shadow_caster_content_hash = shadow_caster_content_hash;
 
   const auto pool_config
     = BuildPhysicalPoolConfig(directional_candidates.front(), gpu_budget,
       canonical_shadow_caster_bounds_span.size());
   EnsurePhysicalPool(pool_config);
   const auto previous_it = view_cache_.find(view_id);
-  BuildDirectionalVirtualViewState(view_id, view_constants,
+  BuildDirectionalVirtualViewState(view_constants,
     directional_candidates.front(), canonical_shadow_caster_bounds_span,
     visible_receiver_bounds,
     previous_it != view_cache_.end() ? &previous_it->second : nullptr, state);
@@ -894,31 +891,6 @@ auto VirtualShadowMapBackend::GetPhysicalPoolTexture() const noexcept
   return physical_pool_texture_;
 }
 
-auto VirtualShadowMapBackend::BuildPublicationKey(
-  const engine::ViewConstants& view_constants,
-  const std::span<const engine::DirectionalShadowCandidate>
-    directional_candidates,
-  const std::span<const glm::vec4> shadow_caster_bounds,
-  const std::uint64_t shadow_caster_content_hash) const -> PublicationKey
-{
-  using namespace shadow_detail;
-  PublicationKey key {};
-  const auto view_hash_start
-    = HashBytes(&shadow_quality_tier_, sizeof(shadow_quality_tier_));
-  const auto view_matrix = view_constants.GetViewMatrix();
-  const auto projection_matrix = view_constants.GetStableProjectionMatrix();
-  const auto camera_position = view_constants.GetCameraPosition();
-  key.view_hash = HashBytes(&view_matrix, sizeof(view_matrix), view_hash_start);
-  key.view_hash
-    = HashBytes(&projection_matrix, sizeof(projection_matrix), key.view_hash);
-  key.view_hash
-    = HashBytes(&camera_position, sizeof(camera_position), key.view_hash);
-  key.candidate_hash = HashSpan(directional_candidates);
-  key.caster_hash = HashSpan(shadow_caster_bounds);
-  key.shadow_content_hash = shadow_caster_content_hash;
-  return key;
-}
-
 auto VirtualShadowMapBackend::InitializeDirectionalViewStateFromClipmapSetup(
   const DirectionalVirtualClipmapSetup& setup,
   const std::span<const glm::vec4> shadow_caster_bounds,
@@ -941,7 +913,6 @@ auto VirtualShadowMapBackend::BuildDirectionalPreviousStateContext(
     return context;
   }
 
-  context.previous_key = &previous_state->key;
   context.previous_shadow_caster_bounds = &previous_state->shadow_caster_bounds;
   if (previous_state->directional_virtual_metadata.size() == 1U) {
     context.previous_metadata
@@ -1459,98 +1430,61 @@ auto VirtualShadowMapBackend::PrepareDirectionalVirtualClipmapSetup(
   return setup;
 }
 
-auto VirtualShadowMapBackend::BuildDirectionalSelectionResult(
+auto VirtualShadowMapBackend::IsDirectionalViewCacheCompatible(
   const DirectionalVirtualClipmapSetup& setup,
-  const engine::DirectionalVirtualShadowMetadata* previous_metadata,
-  const ViewCacheEntry* previous_state) const
-  -> DirectionalSelectionBuildResult
+  const ViewCacheEntry* previous_state) const -> bool
 {
   using namespace shadow_detail;
 
-  const auto& metadata = setup.metadata;
-  const bool previous_rendered_cache_exists
-    = previous_state != nullptr && previous_state->has_rendered_cache_history;
-  const bool previous_page_management_state_exists
-    = previous_rendered_cache_exists && previous_state != nullptr
-    && previous_state->page_management_bindings.page_table_srv.IsValid()
+  if (previous_state == nullptr || !previous_state->has_rendered_cache_history
+    || previous_state->directional_virtual_metadata.size() != 1U) {
+    return false;
+  }
+
+  const auto& previous_metadata
+    = previous_state->directional_virtual_metadata.front();
+  return previous_state->page_management_bindings.page_table_srv.IsValid()
     && previous_state->page_management_bindings.page_flags_srv.IsValid()
     && previous_state->page_management_bindings.physical_page_metadata_srv
          .IsValid()
-    && previous_state->page_management_bindings.physical_page_lists_srv
-         .IsValid();
-  bool address_space_compatible = false;
-  if (previous_metadata != nullptr) {
-    address_space_compatible = IsDirectionalVirtualAddressSpaceCompatible(
-      *previous_metadata, metadata);
-  }
-  DirectionalSelectionBuildResult selection_result {};
-  selection_result.address_space_compatible = address_space_compatible;
-  selection_result.previous_page_management_state_exists
-    = previous_page_management_state_exists;
-  return selection_result;
-}
-
-auto VirtualShadowMapBackend::BuildDirectionalInvalidationResult(
-  const DirectionalVirtualClipmapSetup& setup,
-  const PublicationKey* previous_key, const PublicationKey& current_key,
-  const engine::DirectionalVirtualShadowMetadata* previous_metadata,
-  const std::vector<glm::vec4>* previous_shadow_caster_bounds,
-  const std::span<const glm::vec4> shadow_caster_bounds,
-  const bool address_space_compatible) const
-  -> DirectionalInvalidationBuildResult
-{
-  (void)setup;
-
-  DirectionalInvalidationBuildResult result {};
-  if (previous_metadata == nullptr || !address_space_compatible) {
-    return result;
-  }
-
-  const bool shadow_content_hash_changed = previous_key != nullptr
-    && previous_key->shadow_content_hash != current_key.shadow_content_hash;
-  const bool caster_bounds_changed = previous_key != nullptr
-    && previous_key->caster_hash != current_key.caster_hash;
-  if (shadow_content_hash_changed && !caster_bounds_changed) {
-    result.global_dirty_resident_contents = true;
-    return result;
-  }
-
-  if (!caster_bounds_changed) {
-    return result;
-  }
-
-  if (previous_shadow_caster_bounds == nullptr
-    || previous_shadow_caster_bounds->size() != shadow_caster_bounds.size()) {
-    result.global_dirty_resident_contents = true;
-    return result;
-  }
-
-  result.compare_shadow_caster_bounds_on_gpu = !shadow_caster_bounds.empty();
-  return result;
+    && previous_state->page_management_bindings.physical_page_lists_srv.IsValid()
+    && IsDirectionalVirtualAddressSpaceCompatible(
+      previous_metadata, setup.metadata);
 }
 
 auto VirtualShadowMapBackend::PopulateDirectionalPendingResolve(
-  ViewCacheEntry& state, DirectionalSelectionBuildResult selection,
-  DirectionalInvalidationBuildResult invalidation,
-  const engine::DirectionalVirtualShadowMetadata* previous_metadata,
-  const std::vector<glm::vec4>* previous_shadow_caster_bounds,
-  const engine::ViewConstants& view_constants) -> void
+  const DirectionalVirtualClipmapSetup& setup,
+  const ViewCacheEntry* previous_state,
+  const DirectionalPreviousStateContext& previous_context,
+  const engine::ViewConstants& view_constants, ViewCacheEntry& state) -> void
 {
   state.pending_residency_resolve = {};
   auto& pending_resolve = state.pending_residency_resolve;
   pending_resolve.valid = true;
   pending_resolve.has_fresh_pending_resolve_inputs = true;
-  pending_resolve.reset_page_management_state
-    = !selection.previous_page_management_state_exists
-    || !selection.address_space_compatible;
+  const bool address_space_compatible
+    = previous_context.previous_metadata != nullptr
+    && IsDirectionalViewCacheCompatible(setup, previous_state);
+  pending_resolve.reset_page_management_state = !address_space_compatible;
   pending_resolve.view_constants = view_constants;
   pending_resolve.previous_light_view = glm::mat4 { 1.0F };
-  pending_resolve.global_dirty_resident_contents
-    = invalidation.global_dirty_resident_contents;
-  if (invalidation.compare_shadow_caster_bounds_on_gpu
-    && previous_shadow_caster_bounds != nullptr
-    && previous_shadow_caster_bounds->size() == state.shadow_caster_bounds.size()
-    && !state.shadow_caster_bounds.empty()) {
+  pending_resolve.global_dirty_resident_contents = false;
+  const bool shadow_content_changed = previous_state != nullptr
+    && previous_state->has_rendered_cache_history
+    && previous_state->shadow_caster_content_hash
+         != state.shadow_caster_content_hash;
+  const bool compare_shadow_caster_bounds_on_gpu
+    = address_space_compatible && !shadow_content_changed
+    && previous_context.previous_shadow_caster_bounds != nullptr
+    && previous_context.previous_shadow_caster_bounds->size()
+         == state.shadow_caster_bounds.size()
+    && !state.shadow_caster_bounds.empty();
+
+  if (address_space_compatible && !compare_shadow_caster_bounds_on_gpu) {
+    pending_resolve.global_dirty_resident_contents = true;
+  }
+
+  if (compare_shadow_caster_bounds_on_gpu) {
     const auto bound_count = static_cast<std::uint32_t>(
       state.shadow_caster_bounds.size());
     auto previous_bounds_allocation
@@ -1561,8 +1495,9 @@ auto VirtualShadowMapBackend::PopulateDirectionalPendingResolve(
       && previous_bounds_allocation->mapped_ptr != nullptr
       && current_bounds_allocation->mapped_ptr != nullptr) {
       std::memcpy(previous_bounds_allocation->mapped_ptr,
-        previous_shadow_caster_bounds->data(),
-        previous_shadow_caster_bounds->size() * sizeof(glm::vec4));
+        previous_context.previous_shadow_caster_bounds->data(),
+        previous_context.previous_shadow_caster_bounds->size()
+          * sizeof(glm::vec4));
       std::memcpy(current_bounds_allocation->mapped_ptr,
         state.shadow_caster_bounds.data(),
         state.shadow_caster_bounds.size() * sizeof(glm::vec4));
@@ -1571,8 +1506,8 @@ auto VirtualShadowMapBackend::PopulateDirectionalPendingResolve(
       pending_resolve.current_shadow_caster_bounds_srv
         = current_bounds_allocation->srv;
       pending_resolve.shadow_caster_bound_count = bound_count;
-      pending_resolve.previous_light_view = previous_metadata != nullptr
-        ? previous_metadata->light_view
+      pending_resolve.previous_light_view = previous_context.previous_metadata != nullptr
+        ? previous_context.previous_metadata->light_view
         : glm::mat4 { 1.0F };
     } else {
       pending_resolve.global_dirty_resident_contents = true;
@@ -1584,29 +1519,8 @@ auto VirtualShadowMapBackend::PopulateDirectionalPendingResolve(
     "be eligible for live binding export");
 }
 
-auto VirtualShadowMapBackend::BuildDirectionalPendingResolveStage(
-  const DirectionalVirtualClipmapSetup& setup,
-  const std::span<const glm::vec4> shadow_caster_bounds,
-  const DirectionalPreviousStateContext& previous_context,
-  const ViewCacheEntry* previous_state,
-  const engine::ViewConstants& view_constants, ViewCacheEntry& state)
-  -> void
-{
-  auto selection_result = BuildDirectionalSelectionResult(
-    setup, previous_context.previous_metadata, previous_state);
-  auto invalidation_result
-    = BuildDirectionalInvalidationResult(setup, previous_context.previous_key,
-      state.key, previous_context.previous_metadata,
-      previous_context.previous_shadow_caster_bounds, shadow_caster_bounds,
-      selection_result.address_space_compatible);
-
-  PopulateDirectionalPendingResolve(state, std::move(selection_result),
-    std::move(invalidation_result), previous_context.previous_metadata,
-    previous_context.previous_shadow_caster_bounds, view_constants);
-}
-
 auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
-  const ViewId view_id, const engine::ViewConstants& view_constants,
+  const engine::ViewConstants& view_constants,
   const engine::DirectionalShadowCandidate& candidate,
   const std::span<const glm::vec4> shadow_caster_bounds,
   const std::span<const glm::vec4> visible_receiver_bounds,
@@ -1624,8 +1538,8 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
     setup, shadow_caster_bounds, state);
   const auto previous_context
     = BuildDirectionalPreviousStateContext(previous_state);
-  BuildDirectionalPendingResolveStage(setup, shadow_caster_bounds,
-    previous_context, previous_state, view_constants, state);
+  PopulateDirectionalPendingResolve(
+    setup, previous_state, previous_context, view_constants, state);
   state.directional_virtual_metadata.push_back(setup.metadata);
 }
 
