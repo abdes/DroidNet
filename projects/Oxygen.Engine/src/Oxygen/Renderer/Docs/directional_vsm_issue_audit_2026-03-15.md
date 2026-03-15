@@ -167,7 +167,7 @@ Task:
 
 ### 3.4 Issue 4: Oxygen turned shadow quality into a boiling multi-band problem
 
-Verdict: `partially fixed`
+Verdict: `fixed`
 
 Evidence:
 
@@ -176,27 +176,24 @@ Evidence:
   stack
 - the backend no longer drives live `receiver_bootstrap`,
   `feedback_refinement`, or `current_frame_reinforcement`
-- the shading path still blends between selected, finer, and coarser results
-  in `ComputeVirtualDirectionalShadowVisibility()`
-- the backend still combines coarse backbone selection, same-frame detail
-  publication, accepted feedback seeding, and coarse feedback channels
+- `ComputeVirtualDirectionalShadowVisibility()` now samples exactly one
+  footprint-selected clip family and relies on page-table fallback from
+  `TryResolveDirectionalVirtualPageLookup()` instead of blending separate
+  selected/finer/coarser results
+- the manual `ComputeDirectionalVirtualFootprintBlendToFinerClip()` and
+  `ComputeDirectionalVirtualClipBlend()` shader transitions were removed
 
-Why this is better:
+Why this is fixed:
 
-- the number of live quality bands is lower than in the reviewed March 12
-  design
-
-What is still incomplete:
-
-- there are still multiple overlapping quality regimes in both shading and
-  backend selection
-- large flat receivers can still be sensitive to selected/finer/coarser blend
-  boundaries plus backend coarse/detail coverage transitions
+- the visible shadow path no longer creates moving selected/finer/coarser
+  blend boundaries on top of page-management output
+- continuity now comes from the page table contract itself rather than from a
+  second shader-side regime mixer
 
 Task:
 
-- reduce directional sampling to a simpler page-table-driven fallback path with
-  less cross-band blending and less backend-authored clip-quality shaping
+- keep this simpler page-table-driven fallback path and do not reintroduce
+  multi-band shader mixing
 
 ### 3.5 Issue 5: Oxygen failed to optimize address space with flags and page-space reuse
 
@@ -738,6 +735,8 @@ Exit condition:
 
 ### 5.8 Stage 8: Simplify the final shader quality contract
 
+Status: `completed`
+
 Only after the authoritative pipeline above is live should the remaining
 quality blending be simplified.
 
@@ -759,6 +758,11 @@ Exit condition:
 
 - large-flat-receiver behavior is no longer dominated by moving quality-band
   boundaries created by mixed backend and shader policies
+
+Validation:
+
+- `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /t:ClCompile /m:1 /p:Configuration=Debug /nologo`
+- `pwsh -File Examples/RenderScene/benchmark_directional_vsm.ps1`
 
 ### 5.9 Stage 9: Remove the remaining bridge mechanisms
 
