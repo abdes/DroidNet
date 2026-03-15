@@ -167,41 +167,41 @@ function Get-BenchmarkSettledStats {
             })
             continue
         }
-        if ($line -match '(\d+) shadow-caster draw\(s\) for (\d+) resolved virtual page\(s\).*\(rastered_pages=(\d+)') {
+        if ($line -match '(\d+) shadow-caster draw\(s\) for (\d+) pending raster virtual page\(s\).*\(rastered_pages=(\d+)') {
             $raster.Add([pscustomobject]@{
                 shadow_draws = [int]$matches[1]
                 indirect_draw_records = $null
-                resolved_pages = [int]$matches[2]
+                pending_raster_pages = [int]$matches[2]
                 rastered_pages = [int]$matches[3]
             })
             $pendingRaster = $null
             continue
         }
-        if ($line -match 'executed (\d+) indirect draw record\(s\) across (\d+) command submission\(s\) for (\d+) resolved virtual page\(s\).*\(rastered_pages=(\d+)') {
+        if ($line -match 'executed (\d+) indirect draw record\(s\) across (\d+) command submission\(s\) for (\d+) pending raster virtual page\(s\).*\(rastered_pages=(\d+)') {
             $raster.Add([pscustomobject]@{
                 shadow_draws = $null
                 indirect_draw_records = [int]$matches[1]
                 cpu_draw_submissions = [int]$matches[2]
-                resolved_pages = [int]$matches[3]
+                pending_raster_pages = [int]$matches[3]
                 rastered_pages = [int]$matches[4]
             })
             $pendingRaster = $null
             continue
         }
-        if ($line -match '(\d+) shadow-caster draw\(s\) for (\d+) resolved virtual page\(s\)') {
+        if ($line -match '(\d+) shadow-caster draw\(s\) for (\d+) pending raster virtual page\(s\)') {
             $pendingRaster = [pscustomobject]@{
                 shadow_draws = [int]$matches[1]
                 indirect_draw_records = $null
-                resolved_pages = [int]$matches[2]
+                pending_raster_pages = [int]$matches[2]
             }
             continue
         }
-        if ($line -match 'executed (\d+) indirect draw record\(s\) across (\d+) command submission\(s\) for (\d+) resolved virtual page\(s\)') {
+        if ($line -match 'executed (\d+) indirect draw record\(s\) across (\d+) command submission\(s\) for (\d+) pending raster virtual page\(s\)') {
             $pendingRaster = [pscustomobject]@{
                 shadow_draws = $null
                 indirect_draw_records = [int]$matches[1]
                 cpu_draw_submissions = [int]$matches[2]
-                resolved_pages = [int]$matches[3]
+                pending_raster_pages = [int]$matches[3]
             }
             continue
         }
@@ -209,7 +209,7 @@ function Get-BenchmarkSettledStats {
             $raster.Add([pscustomobject]@{
                 shadow_draws = $pendingRaster.shadow_draws
                 indirect_draw_records = $pendingRaster.indirect_draw_records
-                resolved_pages = $pendingRaster.resolved_pages
+                pending_raster_pages = $pendingRaster.pending_raster_pages
                 rastered_pages = [int]$matches[1]
             })
             $pendingRaster = $null
@@ -231,10 +231,10 @@ function Get-BenchmarkSettledStats {
     $scheduledAverage = if ($settledScheduled.Count -gt 0) {
         ($settledScheduled | Measure-Object -Property value -Average).Average
     } elseif ($settledRaster.Count -gt 0) {
-        # Once the CPU-visible resolved-schedule bridge is retired, the live
-        # GPU path no longer emits a separate CPU "scheduled_pages" metric.
-        # The raster pass's resolved page count is the authoritative schedule.
-        ($settledRaster | Measure-Object -Property resolved_pages -Average).Average
+        # The live raster pass reports the dirty page queue that actually needs
+        # redraw. When the explicit schedule sample is absent, use that same
+        # pending-raster count as the scheduled work metric.
+        ($settledRaster | Measure-Object -Property pending_raster_pages -Average).Average
     } else { $null }
     $settledShadowDrawSamples = @($settledRaster | Where-Object { $null -ne $_.shadow_draws })
     $shadowDrawAverage = if ($settledShadowDrawSamples.Count -gt 0) {
@@ -244,8 +244,8 @@ function Get-BenchmarkSettledStats {
     $indirectDrawRecordAverage = if ($settledIndirectDrawSamples.Count -gt 0) {
         ($settledIndirectDrawSamples | Measure-Object -Property indirect_draw_records -Average).Average
     } else { $null }
-    $resolvedPagesAverage = if ($settledRaster.Count -gt 0) {
-        ($settledRaster | Measure-Object -Property resolved_pages -Average).Average
+    $pendingRasterPagesAverage = if ($settledRaster.Count -gt 0) {
+        ($settledRaster | Measure-Object -Property pending_raster_pages -Average).Average
     } else { $null }
     $rasteredPagesAverage = if ($settledRaster.Count -gt 0) {
         ($settledRaster | Measure-Object -Property rastered_pages -Average).Average
@@ -259,7 +259,7 @@ function Get-BenchmarkSettledStats {
         scheduled_pages_avg = if ($null -ne $scheduledAverage) { [math]::Round($scheduledAverage, 2) } else { $null }
         shadow_draws_avg = if ($null -ne $shadowDrawAverage) { [math]::Round($shadowDrawAverage, 2) } else { $null }
         indirect_draw_records_avg = if ($null -ne $indirectDrawRecordAverage) { [math]::Round($indirectDrawRecordAverage, 2) } else { $null }
-        resolved_pages_avg = if ($null -ne $resolvedPagesAverage) { [math]::Round($resolvedPagesAverage, 2) } else { $null }
+        pending_raster_pages_avg = if ($null -ne $pendingRasterPagesAverage) { [math]::Round($pendingRasterPagesAverage, 2) } else { $null }
         rastered_pages_avg = if ($null -ne $rasteredPagesAverage) { [math]::Round($rasteredPagesAverage, 2) } else { $null }
         raster_sample_count = $settledRaster.Count
     }

@@ -104,7 +104,7 @@ auto VirtualShadowPageRasterPass::DoPrepareResources(
     || !virtual_depth_texture) {
     co_return;
   }
-  const auto resolved_page_count = introspection != nullptr
+  const auto pending_raster_page_count = introspection != nullptr
     ? introspection->pending_raster_page_count
     : 0U;
 
@@ -140,10 +140,10 @@ auto VirtualShadowPageRasterPass::DoPrepareResources(
 
   LOG_F(INFO,
     "VirtualShadowPageRasterPass: frame={} view={} prepared live GPU raster "
-    "inputs (source_frame={} resolved_pages={} draw_count={} "
+    "inputs (source_frame={} pending_raster_pages={} draw_count={} "
     "schedule_capacity={} cpu_prepare_us={})",
     Context().frame_sequence.get(), Context().current_view.view_id.get(),
-    gpu_inputs->source_frame_sequence.get(), resolved_page_count,
+    gpu_inputs->source_frame_sequence.get(), pending_raster_page_count,
     gpu_inputs->draw_count, gpu_inputs->schedule_capacity,
     ElapsedMicroseconds(prepare_begin));
 
@@ -211,7 +211,7 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
       "VirtualShadowPageRasterPass: invalid frame slot for raster execution");
   }
 
-  const auto resolved_page_count = introspection != nullptr
+  const auto pending_raster_page_count = introspection != nullptr
     ? introspection->pending_raster_page_count
     : 0U;
   const auto atlas_resolution = virtual_depth_texture->GetDescriptor().width;
@@ -221,16 +221,17 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
     log_state.saw_live_plan_jobs = true;
     LOG_F(INFO,
       "VirtualShadowPageRasterPass: view {} has live GPU raster inputs "
-      "(resolved_pages={} draw_count={} source_frame={})",
-      Context().current_view.view_id.get(), resolved_page_count,
+      "(pending_raster_pages={} draw_count={} source_frame={})",
+      Context().current_view.view_id.get(), pending_raster_page_count,
       gpu_inputs->draw_count, gpu_inputs->source_frame_sequence.get());
   }
   LOG_F(INFO,
     "VirtualShadowPageRasterPass: frame={} view={} executing live GPU raster "
-    "(resolved_pages={} draw_count={} page_size={} atlas={}x{} "
+    "(pending_raster_pages={} draw_count={} page_size={} atlas={}x{} "
     "source_frame={})",
     Context().frame_sequence.get(), Context().current_view.view_id.get(),
-    resolved_page_count, gpu_inputs->draw_count, metadata->page_size_texels,
+    pending_raster_page_count, gpu_inputs->draw_count,
+    metadata->page_size_texels,
     atlas_resolution, atlas_resolution,
     gpu_inputs->source_frame_sequence.get());
 
@@ -243,7 +244,7 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
       "live GPU virtual raster page(s)!",
       Context().current_view.view_id.get(), psf != nullptr,
       psf ? psf->IsValid() : false, psf ? psf->draw_metadata_bytes.size() : 0U,
-      psf ? psf->partitions.size() : 0U, resolved_page_count);
+      psf ? psf->partitions.size() : 0U, pending_raster_page_count);
     Context().RegisterPass(this);
     co_return;
   }
@@ -301,7 +302,7 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
 
   const auto* records
     = reinterpret_cast<const DrawMetadata*>(psf->draw_metadata_bytes.data());
-  const auto rastered_page_count = resolved_page_count;
+  const auto rastered_page_count = pending_raster_page_count;
   std::uint64_t indirect_draw_record_count = 0U;
   std::uint32_t cpu_draw_submission_count = 0U;
   std::uint32_t skipped_invalid = 0U;
@@ -332,16 +333,29 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
     depth_texture, graphics::ResourceStates::kShaderResource);
   recorder.FlushBarriers();
 
-  if (indirect_draw_record_count == 0U) {
+  if (pending_raster_page_count == 0U) {
+    LOG_F(INFO,
+      "VirtualShadowPageRasterPass: frame={} view={} had no pending raster "
+      "pages; leaving startup cache history non-authoritative until real page "
+      "work occurs [gpu_schedule=1] "
+      "(pending_raster_pages=0 rastered_pages=0 page_clears=0 "
+      "indirect_draw_records={} cpu_draw_submissions={} skipped_invalid={} "
+      "errors={})",
+      Context().frame_sequence.get(), Context().current_view.view_id.get(),
+      indirect_draw_record_count, cpu_draw_submission_count, skipped_invalid,
+      draw_errors);
+    shadow_manager->MarkVirtualRasterExecuted(
+      Context().current_view.view_id, false);
+  } else if (indirect_draw_record_count == 0U) {
     if (!log_state.saw_zero_draw_live_frame) {
       log_state.saw_zero_draw_live_frame = true;
       log_state.saw_nonzero_draw_live_frame = false;
     }
     LOG_F(ERROR,
       "VirtualShadowPageRasterPass: view {} produced no indirect draw records "
-      "(resolved_pages={} gpu_schedule=1 rastered_pages={} page_clears={} indirect_draw_records=0 "
+      "(pending_raster_pages={} gpu_schedule=1 rastered_pages={} page_clears={} indirect_draw_records=0 "
       "cpu_draw_submissions={} skipped_invalid={} errors={})",
-      Context().current_view.view_id.get(), resolved_page_count,
+      Context().current_view.view_id.get(), pending_raster_page_count,
       rastered_page_count, rastered_page_count, cpu_draw_submission_count,
       skipped_invalid, draw_errors);
   } else {
@@ -351,15 +365,15 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
     }
     LOG_F(INFO,
       "VirtualShadowPageRasterPass: frame={} view={} executed {} indirect "
-      "draw record(s) across {} command submission(s) for {} resolved "
+      "draw record(s) across {} command submission(s) for {} pending raster "
       "virtual page(s) [gpu_schedule=1] "
       "(rastered_pages={} page_clears={} skipped_invalid={} errors={})",
       Context().frame_sequence.get(), Context().current_view.view_id.get(),
       indirect_draw_record_count, cpu_draw_submission_count,
-      resolved_page_count, rastered_page_count, rastered_page_count,
+      pending_raster_page_count, rastered_page_count, rastered_page_count,
       skipped_invalid, draw_errors);
     shadow_manager->MarkVirtualRasterExecuted(
-      Context().current_view.view_id);
+      Context().current_view.view_id, true);
   }
 
   Context().RegisterPass(this);

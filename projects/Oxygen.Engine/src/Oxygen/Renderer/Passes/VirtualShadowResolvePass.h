@@ -151,10 +151,7 @@ private:
     active_clip_grid_origin_y_ {};
   std::uint32_t active_schedule_capacity_ { 0U };
   std::uint32_t active_pages_per_level_ { 0U };
-  std::uint32_t active_requested_page_list_count_ { 0U };
-  std::uint32_t active_dirty_page_list_count_ { 0U };
-  std::uint32_t active_clean_page_list_count_ { 0U };
-  std::uint32_t active_total_page_management_list_count_ { 0U };
+  std::uint32_t active_physical_page_capacity_ { 0U };
   std::uint32_t active_draw_count_ { 0U };
   std::uint32_t active_draw_page_index_capacity_ { 0U };
   renderer::VirtualShadowPageManagementBindings

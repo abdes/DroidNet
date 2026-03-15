@@ -1437,6 +1437,10 @@ static inline float ComputeVirtualDirectionalShadowVisibility(
         return 1.0;
     }
 
+    // Audit Stage 1 bridge note: this selected/finer/coarser shaping is still
+    // a migration quality bridge. The final contract should lean on
+    // page-table-driven fallback continuity with less cross-band blending once
+    // the authoritative page-management pipeline is complete.
     if (selected_valid && finer_valid && blend_to_finer > 0.0) {
         active_visibility = lerp(
             selected_visibility,

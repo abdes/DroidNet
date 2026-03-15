@@ -52,21 +52,6 @@ struct DirectionalVirtualCacheControls {
   bool force_invalidate { false };
 };
 
-// Bridge payload for the current resolve-to-raster transition. These entries
-// capture the backend-private residency snapshot uploaded into persistent GPU
-// buffers until the dedicated resolve pass becomes the only author of page
-// scheduling.
-struct alignas(16) VirtualShadowResolveResidentPageEntry {
-  std::uint64_t resident_key { 0U };
-  std::uint32_t atlas_tile_x { 0U };
-  std::uint32_t atlas_tile_y { 0U };
-  std::uint32_t residency_state { 0U };
-  std::uint32_t _pad0 { 0U };
-  std::uint64_t last_touched_frame { 0U };
-  std::uint64_t last_requested_frame { 0U };
-};
-static_assert(sizeof(VirtualShadowResolveResidentPageEntry) % 16U == 0U);
-
 struct alignas(16) VirtualShadowResolveStats {
   std::uint32_t resident_entry_count { 0U };
   std::uint32_t resident_entry_capacity { 0U };
@@ -87,14 +72,28 @@ struct alignas(16) VirtualShadowResolveStats {
 };
 static_assert(sizeof(VirtualShadowResolveStats) % 16U == 0U);
 
+struct alignas(16) VirtualShadowDirtyResidentPageEntry {
+  std::uint64_t resident_key { 0U };
+  std::uint32_t page_flags { 0U };
+  std::uint32_t _pad0 { 0U };
+};
+static_assert(sizeof(VirtualShadowDirtyResidentPageEntry) % 16U == 0U);
+
 struct VirtualShadowPageManagementBindings {
   ShaderVisibleIndex page_table_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex page_table_uav { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex page_flags_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex page_flags_uav { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex physical_page_metadata_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex physical_page_metadata_uav { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex physical_page_lists_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex physical_page_lists_uav { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex resolve_stats_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex resolve_stats_uav { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex dirty_resident_pages_srv { kInvalidShaderVisibleIndex };
+  std::uint32_t physical_page_capacity { 0U };
+  std::uint32_t dirty_resident_page_count { 0U };
+  bool global_dirty_resident_contents { false };
 };
 
 // Live GPU-authored raster inputs produced by the resolve pass and consumed by
@@ -125,8 +124,6 @@ struct VirtualShadowViewIntrospection {
     directional_virtual_metadata {};
   std::span<const engine::DirectionalVirtualShadowMetadata>
     published_directional_virtual_metadata {};
-  std::span<const VirtualShadowResolveResidentPageEntry>
-    resolve_resident_page_entries {};
   std::span<const std::uint32_t> page_table_entries {};
   std::span<const std::uint32_t> published_page_table_entries {};
   std::span<const std::uint32_t> page_flags_entries {};
@@ -145,7 +142,6 @@ struct VirtualShadowViewIntrospection {
   bool cache_layout_compatible { false };
   bool depth_guardband_valid { false };
   bool has_persistent_gpu_residency_state { false };
-  ShaderVisibleIndex resolve_resident_pages_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex resolve_stats_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex physical_page_metadata_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex physical_page_lists_srv { kInvalidShaderVisibleIndex };

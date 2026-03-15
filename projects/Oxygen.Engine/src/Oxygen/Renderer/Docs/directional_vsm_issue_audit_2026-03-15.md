@@ -131,29 +131,32 @@ Evidence:
 - `feedback_refinement_pages`, `receiver_bootstrap_pages`, and
   `current_frame_reinforcement_pages` are now hard-coded to zero in
   `BuildDirectionalVirtualViewState()`
-- legacy diagnostics remain, but those mechanisms are explicitly no longer live
-  page-demand sources
-- the same function still owns large CPU-side policy decisions for:
-  `feedback_decision`, `same_frame_detail_pages`, `coarse_backbone_pages`,
-  `force_full_same_frame_detail_region`, `bootstrap_prefers_finest_detail_pages`,
-  `allow_fallback_aliases`, and coarse-safety budgeting
+- `BuildDirectionalSelectionResult()` no longer accepts previous-frame request
+  feedback as a live signal; submitted feedback is classified as
+  telemetry-only at most
+- feedback-hash lineage and source-region compatibility tracking were removed
+  from the live backend path
+- the live page-management shader already materializes current pages from
+  same-frame `request_words` in `VirtualShadowResolve.hlsl`
+  (`kResolvePhaseMaterializeRequested`)
+- virtual view introspection no longer reports request feedback as used
 
 Why this is better:
 
-- the worst legacy synthetic-demand mechanisms were removed from live authority
+- previous-frame readback feedback no longer competes with same-frame GPU page
+  marking for live demand authority
 
 What is still incomplete:
 
-- the backend still interprets previous-frame feedback and CPU-authors the
-  selected page set for the next resolve
-- visible-sample demand is still mediated through CPU policy instead of being
-  the authoritative same-frame GPU source
+- `BuildDirectionalSelectionResult()` still CPU-authors the selected page set
+  that seeds pending resolve work
+- same-frame request/coarse marking is not yet the sole live authority for page
+  demand and mutation
 
 Task:
 
-- remove previous-frame feedback acceptance and same-frame detail fallback
-  policy from `BuildDirectionalVirtualViewState()` and move page demand
-  authority fully onto GPU page marking/page management
+- keep this contract stable while issue 4/5 finish the remaining invalidation
+  and page-management ownership cuts
 
 ### 3.4 Issue 4: Oxygen turned shadow quality into a boiling multi-band problem
 
@@ -253,29 +256,34 @@ Task:
 
 ### 3.7 Issue 7: Oxygen left the backend monolithic
 
-Verdict: `still failing`
+Verdict: `partially fixed`
 
 Evidence:
 
-- `ResolvePendingPageResidency()` still owns page-table reset, resident carry,
-  requested-page allocation, eviction, fallback alias population, hierarchy
-  propagation, and snapshot rebuilds
-- `BuildDirectionalVirtualViewState()` still owns clipmap setup consumption,
-  feedback acceptance, selected-page generation, dirty-page derivation,
-  coarse/detail policy, and pending resolve construction
-- while some helpers were extracted, the main control flow remains centered on
-  two very large backend functions
+- `BuildDirectionalVirtualViewState()` now delegates explicit setup,
+  previous-state, pending-resolve, and feedback-lineage stages instead of
+  owning those responsibilities inline
+- `StagePageManagementSeedUpload()` now delegates explicit seed-state rebuild
+  and upload-queue staging helpers instead of owning reset + snapshot rebuild
+  + upload bookkeeping inline
+- CPU feedback acceptance, invalidation, and page-management mutation still
+  exist, but they now sit behind named stage seams instead of a single backend
+  body
 
-Why this is still a problem:
+Why this is better:
 
-- ownership boundaries are still blurred
-- replacing one stage still means touching selection, feedback, fallback, and
-  resolve logic together
+- later work on issues 3, 4, and 5 can replace stage internals without
+  reopening unrelated setup/export logic
+
+What is still incomplete:
+
+- CPU feedback acceptance, CPU invalidation, and CPU page-management mutation
+  are still live behind those stage seams
 
 Task:
 
-- split backend responsibilities into clipmap setup, marking, invalidation,
-  page management, and raster schedule ownership with clear pass boundaries
+- keep replacing the stage internals until page-state authority follows the UE
+  model
 
 ### 3.8 Issue 8: Oxygen never split invalidation / page management / draw-command build
 
@@ -286,10 +294,10 @@ Evidence:
 - there are now dedicated request and coarse-mark passes, and live GPU raster
   inputs are consumed by `VirtualShadowPageRasterPass`
 - page-management bindings exist as a separate exported concept
-- invalidation is still derived inside `BuildDirectionalVirtualViewState()` by
-  CPU construction of dirty resident key sets
-- page reuse, eviction, allocation, and page-table writes still happen in
-  `ResolvePendingPageResidency()` on CPU
+- invalidation is still derived inside the backend selection/invalidation
+  stages by CPU construction of dirty resident key sets
+- page-management seed/reset and resolve-state snapshot rebuild still happen on
+  CPU before GPU resolve consumes those resources
 - there is still no live `VirtualShadowInvalidation.hlsl`,
   `VirtualShadowPageManagement.hlsl`, or
   `VirtualShadowBuildPerPageDrawCommands.hlsl` implementation in the codebase
@@ -398,7 +406,8 @@ bridges rather than acceptable final architecture:
 - CPU feedback acceptance in `BuildDirectionalVirtualViewState()`
 - CPU-authored selected-page construction
 - CPU invalidation key generation
-- CPU resolve/allocation/eviction authority in `ResolvePendingPageResidency()`
+- CPU resolve/allocation/eviction authority in the page-management seed /
+  snapshot rebuild chain
 - CPU fallback alias population in `PopulateDirectionalFallbackPageTableEntries()`
 - remaining selected/finer/coarser quality shaping in the shader path
 
@@ -414,7 +423,40 @@ Exit condition:
 - the redesign target is restated in docs and code comments as the required
   end-state, and the bridge mechanisms are not treated as final fixes
 
+Implementation status:
+
+- Stage 1 status: `completed`
+- remaining live bridges are now explicitly marked in code:
+  - CPU feedback acceptance and CPU selected-page synthesis in
+    `BuildDirectionalVirtualViewState()`
+  - CPU invalidation key generation in
+    `BuildDirectionalVirtualViewState()`
+  - CPU reuse/allocation/eviction/page-table mutation in the
+    page-management seed / snapshot rebuild chain
+  - selected/finer/coarser quality shaping in
+    `ComputeVirtualDirectionalShadowVisibility()`
+- the old CPU fallback alias population bridge is no longer present in live
+  code, so Stage 1 locking applies to the remaining bridge mechanisms above
+- validation:
+  - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*VirtualProjectionJitterKeepsDirectionalAddressSpaceStable:*VirtualStaticPagesStayCleanWhenDynamicCasterMovesElsewhere:*VirtualResolvedPagesStayAuthoritativeAcrossFrames`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*VirtualPageState*:*VirtualMarkRenderedDoesNotAutoResolveCurrentFrame:*VirtualUnresolvedRepublishRetainsAuthoritativeResidentSnapshot:*VirtualResolvedPagesStayAuthoritativeAcrossFrames`
+  - `pwsh -File Examples/RenderScene/benchmark_directional_vsm.ps1`
+- test alignment note:
+  - publish-layer `LightManager_basic_test.cpp` coverage now follows the
+    deferred GPU page-management contract and no longer asserts first-publish
+    residency/materialization without GPU execution
+- recorded benchmark result after the Stage 1 comment/doc patch:
+  - `exit_code=0`
+  - settled `requested_pages_avg=661.56`
+  - settled `scheduled_pages_avg=392.35`
+  - settled `resolved_pages_avg=392.35`
+  - settled `rastered_pages_avg=392.35`
+  - settled frames 101-117: `no_page=0`, `current=all`, `fallback=0`
+
 ### 5.2 Stage 2: Finish backend decomposition first
+
+Status: `in_progress`
 
 Split the remaining monolithic backend authority into explicit stages with
 clean ownership.
@@ -437,18 +479,58 @@ Why this stage is required:
 - every later change will otherwise keep routing through the same backend choke
   points
 
+Implemented so far:
+
+- extracted explicit backend setup/state helpers:
+  `InitializeDirectionalViewStateFromClipmapSetup()`,
+  `BuildDirectionalPreviousStateContext()`,
+  and `BuildDirectionalPendingResolveStage()`
+- extracted explicit page-management seed helpers:
+  `SeedPageManagementState()` and `QueuePageManagementSeedUploads()`
+- `BuildDirectionalVirtualViewState()` now orchestrates named backend stages
+  instead of consuming setup, previous-state derivation, pending-resolve
+  construction, and feedback lineage update inline
+- `StagePageManagementSeedUpload()` now orchestrates named seed-stage helpers
+  instead of owning state reset, snapshot rebuild, and upload queue assembly
+  inline
+
+Validation to date:
+
+- `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+- `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*VirtualMarkRenderedDoesNotAutoResolveCurrentFrame:*VirtualUnresolvedRepublishRetainsAuthoritativeResidentSnapshot:*VirtualResolvedPagesStayAuthoritativeAcrossFrames`
+- `pwsh -File Examples/RenderScene/benchmark_directional_vsm.ps1`
+
 Exit condition:
 
-- `BuildDirectionalVirtualViewState()` no longer owns feedback policy,
-  invalidation, page demand synthesis, and resolve construction together
-- `ResolvePendingPageResidency()` no longer owns reuse, allocation, fallback,
-  and page-table mutation as one CPU stage
+- `BuildDirectionalVirtualViewState()` no longer owns setup consumption,
+  previous-state derivation, pending-resolve construction, and feedback
+  lineage update inline
+- `StagePageManagementSeedUpload()` no longer owns state reset, snapshot
+  rebuild, and upload queue assembly inline
 
 ### 5.3 Stage 3: Replace readback-led demand authority with same-frame GPU marking
+
+Status: `completed`
 
 The request and coarse-mark passes must stop being previous-frame feedback
 feeds into CPU policy and become same-frame authoritative marking inputs for
 page management.
+
+Corrected scope after reference review against Unreal's
+`FVirtualShadowMapArray::BuildPageAllocations()` and
+`VirtualShadowMapPhysicalPageManagement.usf`:
+
+- same-frame GPU marking only becomes authoritative when page management
+  itself retains existing pages and allocates missing pages from those marks in
+  the same frame
+- Oxygen does not currently have that same-frame mutation path; its live page
+  management state is still rebuilt from CPU-authored resident/page-list data
+  before resolve
+- therefore Stage 3 cannot be closed in Oxygen by demoting feedback alone or
+  by adding another CPU-side selection heuristic
+- Stage 3 implementation in Oxygen must land together with the minimum Stage 5
+  page-management mutation path required to let `request_words` /
+  `page_mark_flags` materialize live current pages directly
 
 Required changes:
 
@@ -467,6 +549,30 @@ Exit condition:
 
 - detail/coarse demand no longer depends on previous-frame readback acceptance
   to become live current pages
+
+Implemented:
+
+- `BuildDirectionalSelectionResult()` no longer promotes previous-frame
+  request feedback into accepted live demand
+- feedback-hash lineage and source-region compatibility tracking were removed
+  from the live backend path
+- same-frame page demand continues to flow through GPU request/coarse marking
+  and `VirtualShadowResolve.hlsl` materialization
+- obsolete feedback-authority and superseded skip-based test cases were removed
+  from `LightManager_basic_test.cpp`, and the remaining publish/resolve tests
+  now assert the deferred GPU page-management contract directly
+
+Validation:
+
+- `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+- `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*Feedback*`
+- `pwsh -File Examples/RenderScene/benchmark_directional_vsm.ps1`
+
+Remaining gap:
+
+- request/coarse marks are still not the sole live authority for page demand
+- Stage 3 cannot exit until the minimum Stage 5 same-frame page-management
+  mutation path is in place and validated
 
 ### 5.4 Stage 4: Move invalidation to a dedicated authoritative stage
 
@@ -665,3 +771,6 @@ Remaining gap:
 
 - motion-time correctness and boiling/performance behavior still need runtime
   validation against camera/light stress scenes
+- first-scene-only out-of-scene startup shadow garbage remains unresolved; a
+  one-shot full-atlas clear attempt was reverted because it did not reproduce
+  or close the reported bug
