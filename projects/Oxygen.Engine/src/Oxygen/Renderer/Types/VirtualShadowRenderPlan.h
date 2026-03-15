@@ -84,6 +84,8 @@ struct VirtualShadowPageManagementBindings {
   ShaderVisibleIndex page_table_uav { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex page_flags_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex page_flags_uav { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex dirty_page_flags_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex dirty_page_flags_uav { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex physical_page_metadata_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex physical_page_metadata_uav { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex physical_page_lists_srv { kInvalidShaderVisibleIndex };
@@ -92,6 +94,7 @@ struct VirtualShadowPageManagementBindings {
   ShaderVisibleIndex resolve_stats_uav { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex dirty_resident_pages_srv { kInvalidShaderVisibleIndex };
   std::uint32_t physical_page_capacity { 0U };
+  std::uint32_t atlas_tiles_per_axis { 0U };
   std::uint32_t dirty_resident_page_count { 0U };
   bool global_dirty_resident_contents { false };
 };
@@ -125,9 +128,7 @@ struct VirtualShadowViewIntrospection {
   std::span<const engine::DirectionalVirtualShadowMetadata>
     published_directional_virtual_metadata {};
   std::span<const std::uint32_t> page_table_entries {};
-  std::span<const std::uint32_t> published_page_table_entries {};
   std::span<const std::uint32_t> page_flags_entries {};
-  std::span<const std::uint32_t> published_page_flags_entries {};
   std::span<const VirtualShadowPhysicalPageMetadata>
     physical_page_metadata_entries {};
   std::span<const VirtualShadowPhysicalPageListEntry>

@@ -2044,10 +2044,6 @@ auto Renderer::RepublishCurrentViewBindings(
           = prepared_it != prepared_frames_.end()
           ? prepared_it->second.visible_receiver_bounding_spheres
           : std::span<const glm::vec4> {};
-        const auto shadow_caster_static_flags
-          = prepared_it != prepared_frames_.end()
-          ? prepared_it->second.shadow_caster_static_flags
-          : std::span<const std::uint8_t> {};
         const auto synthetic_sun_shadow
           = BuildSyntheticSunShadowInput(render_context, runtime_state.sun);
         const auto shadow_caster_content_hash
@@ -2056,8 +2052,7 @@ auto Renderer::RepublishCurrentViewBindings(
           = shadow_manager_->PublishForView(view_id, view_constants,
             *light_manager, shadow_caster_bounds, visible_receiver_bounds,
             synthetic_sun_shadow ? &*synthetic_sun_shadow : nullptr,
-            frame_budget_stats_.gpu_budget, shadow_caster_content_hash,
-            shadow_caster_static_flags);
+            frame_budget_stats_.gpu_budget, shadow_caster_content_hash);
         shadow_instance_metadata_slot
           = shadow_view.shadow_instance_metadata_srv;
         directional_shadow_metadata_slot
@@ -2628,7 +2623,6 @@ auto Renderer::PublishPreparedFrameSpans(
   }
 
   storage.shadow_caster_bounds_storage.clear();
-  storage.shadow_caster_static_flag_storage.clear();
   storage.visible_receiver_bounds_storage.clear();
   std::size_t collected_item_count = 0U;
   std::size_t zero_radius_item_count = 0U;
@@ -2639,7 +2633,6 @@ auto Renderer::PublishPreparedFrameSpans(
     const auto items = scene_prep_state_->CollectedItems();
     collected_item_count = items.size();
     storage.shadow_caster_bounds_storage.reserve(items.size());
-    storage.shadow_caster_static_flag_storage.reserve(items.size());
     storage.visible_receiver_bounds_storage.reserve(items.size());
     std::size_t zero_radius_log_count = 0U;
     for (const auto& item : items) {
@@ -2684,8 +2677,6 @@ auto Renderer::PublishPreparedFrameSpans(
       } else {
         storage.shadow_caster_bounds_storage.push_back(
           item.world_bounding_sphere);
-        storage.shadow_caster_static_flag_storage.push_back(
-          item.static_shadow_caster ? 1U : 0U);
       }
       if (!item.main_view_visible || !item.receive_shadows
         || item.world_bounding_sphere.w <= 0.0F) {
@@ -2698,10 +2689,6 @@ auto Renderer::PublishPreparedFrameSpans(
   prepared_frame.shadow_caster_bounding_spheres
     = std::span<const glm::vec4>(storage.shadow_caster_bounds_storage.data(),
       storage.shadow_caster_bounds_storage.size());
-  prepared_frame.shadow_caster_static_flags
-    = std::span<const std::uint8_t>(
-      storage.shadow_caster_static_flag_storage.data(),
-      storage.shadow_caster_static_flag_storage.size());
   prepared_frame.visible_receiver_bounding_spheres
     = std::span<const glm::vec4>(storage.visible_receiver_bounds_storage.data(),
       storage.visible_receiver_bounds_storage.size());

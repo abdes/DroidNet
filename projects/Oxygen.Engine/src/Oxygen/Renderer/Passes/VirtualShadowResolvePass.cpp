@@ -80,6 +80,9 @@ namespace {
     ShaderVisibleIndex page_table_srv_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex page_table_uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex page_flags_uav_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex dirty_page_flags_uav_index {
+      kInvalidShaderVisibleIndex
+    };
     ShaderVisibleIndex physical_page_metadata_srv_index {
       kInvalidShaderVisibleIndex
     };
@@ -104,6 +107,7 @@ namespace {
     std::uint32_t clip_level_count { 0U };
     std::uint32_t pages_per_level { 0U };
     std::uint32_t physical_page_capacity { 0U };
+    std::uint32_t atlas_tiles_per_axis { 0U };
     std::uint32_t dirty_resident_page_count { 0U };
     std::uint32_t global_dirty_resident_contents { 0U };
     std::uint32_t draw_count { 0U };
@@ -220,6 +224,7 @@ auto VirtualShadowResolvePass::DoPrepareResources(
     || !page_management_bindings->page_flags_srv.IsValid()
     || !page_management_bindings->page_table_uav.IsValid()
     || !page_management_bindings->page_flags_uav.IsValid()
+    || !page_management_bindings->dirty_page_flags_uav.IsValid()
     || !page_management_bindings->physical_page_metadata_srv.IsValid()
     || !page_management_bindings->physical_page_metadata_uav.IsValid()
     || !page_management_bindings->physical_page_lists_srv.IsValid()
@@ -494,6 +499,8 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
     * kPassConstantsSlotsPerFrame;
   const auto total_page_count
     = std::max(1U, active_pages_per_level_ * active_clip_level_count_);
+  const auto clear_thread_count = std::max(
+    total_page_count, active_physical_page_capacity_ * 3U);
 
   const auto dispatch_phase = [&](const std::uint32_t phase,
                                  const std::uint32_t thread_count,
@@ -581,6 +588,8 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
       .page_table_srv_index = active_page_management_bindings_.page_table_srv,
       .page_table_uav_index = active_page_management_bindings_.page_table_uav,
       .page_flags_uav_index = active_page_management_bindings_.page_flags_uav,
+      .dirty_page_flags_uav_index
+      = active_page_management_bindings_.dirty_page_flags_uav,
       .physical_page_metadata_srv_index
       = active_page_management_bindings_.physical_page_metadata_srv,
       .physical_page_metadata_uav_index
@@ -602,6 +611,7 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
       .clip_level_count = active_clip_level_count_,
       .pages_per_level = active_pages_per_level_,
       .physical_page_capacity = active_physical_page_capacity_,
+      .atlas_tiles_per_axis = active_page_management_bindings_.atlas_tiles_per_axis,
       .dirty_resident_page_count
       = active_page_management_bindings_.dirty_resident_page_count,
       .global_dirty_resident_contents
@@ -632,22 +642,23 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
     ++dispatch_slot;
   };
 
-  dispatch_phase(0U, total_page_count);
+  dispatch_phase(0U, clear_thread_count);
   dispatch_phase(1U, active_physical_page_capacity_);
-  dispatch_phase(2U, total_page_count);
+  dispatch_phase(2U, active_physical_page_capacity_);
+  dispatch_phase(3U, total_page_count);
   if (active_clip_level_count_ > 1U) {
     for (std::uint32_t clip_index = active_clip_level_count_ - 1U;
       clip_index-- > 0U;) {
-      dispatch_phase(3U, active_pages_per_level_, clip_index);
+      dispatch_phase(4U, active_pages_per_level_, clip_index);
     }
   }
   if (active_clip_level_count_ > 1U) {
     for (std::uint32_t fine_clip = 0U; fine_clip + 1U < active_clip_level_count_;
       ++fine_clip) {
-      dispatch_phase(4U, active_pages_per_level_, fine_clip);
+      dispatch_phase(5U, active_pages_per_level_, fine_clip);
     }
   }
-  dispatch_phase(5U, total_page_count);
+  dispatch_phase(6U, total_page_count);
   recorder.RequireResourceState(
     *view_schedule_resources_.at(active_view_id_).schedule_buffer,
     graphics::ResourceStates::kUnorderedAccess);
@@ -670,8 +681,8 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
     *view_schedule_resources_.at(active_view_id_).draw_page_counter_buffer,
     graphics::ResourceStates::kUnorderedAccess);
   recorder.FlushBarriers();
-  dispatch_phase(6U, 1U);
-  dispatch_phase(7U, active_draw_count_);
+  dispatch_phase(7U, 1U);
+  dispatch_phase(8U, active_draw_count_);
 
   shadow_manager->FinalizeVirtualPageManagementOutputs(active_view_id_, recorder);
 
