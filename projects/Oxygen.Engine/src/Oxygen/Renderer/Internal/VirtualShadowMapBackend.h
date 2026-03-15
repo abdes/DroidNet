@@ -94,17 +94,6 @@ public:
     -> const std::shared_ptr<graphics::Texture>&;
 
 private:
-  struct alignas(16) DirectionalInvalidationRect {
-    std::int32_t min_grid_x { 0 };
-    std::int32_t max_grid_x { 0 };
-    std::int32_t min_grid_y { 0 };
-    std::int32_t max_grid_y { 0 };
-    std::uint32_t clip_index { 0U };
-    std::uint32_t page_flags { 0U };
-    std::uint32_t _pad0 { 0U };
-    std::uint32_t _pad1 { 0U };
-  };
-
   struct PhysicalPoolConfig {
     std::uint32_t page_size_texels { 0U };
     std::uint32_t virtual_pages_per_clip_axis { 0U };
@@ -171,8 +160,15 @@ private:
         clip_grid_origin_x {};
       std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
         clip_grid_origin_y {};
+      glm::mat4 previous_light_view { 1.0F };
       bool global_dirty_resident_contents { false };
-      std::vector<DirectionalInvalidationRect> invalidation_rects {};
+      ShaderVisibleIndex previous_shadow_caster_bounds_srv {
+        kInvalidShaderVisibleIndex
+      };
+      ShaderVisibleIndex current_shadow_caster_bounds_srv {
+        kInvalidShaderVisibleIndex
+      };
+      std::uint32_t shadow_caster_bound_count { 0U };
     };
 
     PublicationKey key {};
@@ -192,8 +188,8 @@ private:
   };
 
   struct DirectionalInvalidationBuildResult {
-    std::vector<DirectionalInvalidationRect> invalidation_rects {};
     bool global_dirty_resident_contents { false };
+    bool compare_shadow_caster_bounds_on_gpu { false };
   };
 
   struct DirectionalPreviousStateContext {
@@ -219,6 +215,7 @@ private:
   using BufferT = engine::upload::TransientStructuredBuffer;
   BufferT shadow_instance_buffer_;
   BufferT directional_virtual_metadata_buffer_;
+  BufferT shadow_caster_bounds_buffer_;
 
   struct ViewStructuredWordBufferResources {
     std::shared_ptr<graphics::Buffer> gpu_buffer;
@@ -236,14 +233,6 @@ private:
     std::shared_ptr<graphics::Buffer> dirty_page_flags_gpu_buffer;
     ShaderVisibleIndex dirty_page_flags_uav { kInvalidShaderVisibleIndex };
     std::uint32_t dirty_page_flags_capacity { 0U };
-
-    std::shared_ptr<graphics::Buffer> invalidation_rects_gpu_buffer;
-    std::shared_ptr<graphics::Buffer> invalidation_rects_upload_buffer;
-    DirectionalInvalidationRect* mapped_invalidation_rects_upload { nullptr };
-    ShaderVisibleIndex invalidation_rects_srv { kInvalidShaderVisibleIndex };
-    std::uint32_t invalidation_rect_capacity { 0U };
-    std::uint32_t invalidation_rect_count { 0U };
-    bool invalidation_rects_upload_pending { false };
 
     std::shared_ptr<graphics::Buffer> physical_page_metadata_gpu_buffer;
     ShaderVisibleIndex physical_page_metadata_srv {
@@ -302,15 +291,17 @@ private:
     const DirectionalVirtualClipmapSetup& setup,
     DirectionalSelectionBuildResult selection,
     DirectionalInvalidationBuildResult invalidation,
+    const engine::DirectionalVirtualShadowMetadata* previous_metadata,
+    const std::vector<glm::vec4>* previous_shadow_caster_bounds,
     const engine::ViewConstants& view_constants,
-    std::uint32_t visible_receiver_bound_count) const -> void;
+    std::uint32_t visible_receiver_bound_count) -> void;
   OXGN_RNDR_API auto BuildDirectionalPendingResolveStage(ViewId view_id,
     const DirectionalVirtualClipmapSetup& setup,
     std::span<const glm::vec4> shadow_caster_bounds,
     std::span<const glm::vec4> visible_receiver_bounds,
     const DirectionalPreviousStateContext& previous_context,
     const ViewCacheEntry* previous_state,
-    const engine::ViewConstants& view_constants, ViewCacheEntry& state) const
+    const engine::ViewConstants& view_constants, ViewCacheEntry& state)
     -> void;
   OXGN_RNDR_API auto RefreshViewExports(
     ViewId view_id, ViewCacheEntry& state) const -> void;
@@ -347,8 +338,6 @@ private:
   OXGN_RNDR_API auto EnsureViewResolveResources(ViewId view_id)
     -> ViewResolveResources*;
   OXGN_RNDR_API auto StagePageManagementSeedUpload(
-    ViewId view_id, ViewCacheEntry& state) -> void;
-  OXGN_RNDR_API auto StageInvalidationUploads(
     ViewId view_id, ViewCacheEntry& state) -> void;
 };
 

@@ -10,18 +10,25 @@ Cross-reference: [directional_vsm_architecture_review.md](directional_vsm_archit
 This document checks the current Oxygen directional VSM codebase against each
 issue called out in the March 12, 2026 architecture review.
 
-This is a code-inspection audit only.
+This audit started as code inspection and now also records runtime validation
+evidence gathered while executing the cleanup work.
 
 Validation performed:
 
 - inspected current backend, shader, request, raster, and test code
 - compared current implementation against the original review issues
-- no build run
-- no test run
+- `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:1 /p:Configuration=Debug /nologo`
+- `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+- `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
+- `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:1 /p:Configuration=Debug /nologo`
+- `pwsh -File Examples/RenderScene/benchmark_directional_vsm.ps1`
 
 Remaining validation gap:
 
-- runtime correctness under motion was not revalidated in this audit
+- the current audit update does not close the full runtime matrix for Stage 4+
+  changes yet
+- first-scene cold-start behavior must keep being rechecked after each larger
+  Stage 4/5 cut
 
 ## 2. Executive Summary
 
@@ -510,7 +517,7 @@ Exit condition:
 
 ### 5.3 Stage 3: Replace readback-led demand authority with same-frame GPU marking
 
-Status: `in_progress`
+Status: `completed`
 
 The request and coarse-mark passes must stop being previous-frame feedback
 feeds into CPU policy and become same-frame authoritative marking inputs for
@@ -523,14 +530,10 @@ Corrected scope after reference review against Unreal's
 - same-frame GPU marking only becomes authoritative when page management
   itself retains existing pages and allocates missing pages from those marks in
   the same frame
-- Oxygen does not currently have that same-frame mutation path; its live page
-  management state is still rebuilt from CPU-authored resident/page-list data
-  before resolve
-- therefore Stage 3 cannot be closed in Oxygen by demoting feedback alone or
-  by adding another CPU-side selection heuristic
-- Stage 3 implementation in Oxygen must land together with the minimum Stage 5
-  page-management mutation path required to let `request_words` /
-  `page_mark_flags` materialize live current pages directly
+- Oxygen now has that same-frame mutation path in `VirtualShadowResolve.hlsl`
+  through `PopulateCurrent` and `MaterializeRequested`
+- Stage 3 therefore closes together with Stage 5 rather than as an isolated
+  feedback-demotion change
 
 Required changes:
 
@@ -552,29 +555,33 @@ Exit condition:
 
 Implemented:
 
-- `BuildDirectionalSelectionResult()` no longer promotes previous-frame
-  request feedback into accepted live demand
-- feedback-hash lineage and source-region compatibility tracking were removed
-  from the live backend path
+- `BuildDirectionalSelectionResult()` now reduces to compatibility and
+  previous-state-existence checks instead of CPU-authoring accepted live page
+  demand
 - same-frame page demand continues to flow through GPU request/coarse marking
   and `VirtualShadowResolve.hlsl` materialization
+- dead resolve input plumbing that implied CPU-owned page-table consumption was
+  removed from the live resolve contract
+- the duplicate resolve-to-raster submission that was overwriting
+  `pending_raster_page_count` back to zero was fixed
 - obsolete feedback-authority and superseded skip-based test cases were removed
   from `LightManager_basic_test.cpp`, and the remaining publish/resolve tests
   now assert the deferred GPU page-management contract directly
 
 Validation:
 
+- `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:1 /p:Configuration=Debug /nologo`
 - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
-- `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe --gtest_filter=*Feedback*`
+- `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
 - `pwsh -File Examples/RenderScene/benchmark_directional_vsm.ps1`
 
 Remaining gap:
 
-- request/coarse marks are still not the sole live authority for page demand
-- Stage 3 cannot exit until the minimum Stage 5 same-frame page-management
-  mutation path is in place and validated
+- none for Stage 3 itself; remaining work moved to later stages
 
 ### 5.4 Stage 4: Move invalidation to a dedicated authoritative stage
+
+Status: `completed`
 
 Dirty-page derivation must stop being synthesized inside backend selection.
 
@@ -597,7 +604,33 @@ Exit condition:
 - invalidation decisions are no longer authored primarily in
   `BuildDirectionalVirtualViewState()`
 
+Implemented:
+
+- page management now owns a dedicated GPU `dirty_page_flags` buffer
+- resolve now runs a dedicated dirty-mark phase before `PopulateCurrent`
+- reset and global-dirty signals are now passed as live resolve inputs instead
+  of being pre-seeded through CPU reset uploads
+- CPU upload/reset buffers for dirty flags and reset-time physical-page state
+  were deleted
+
+Validation:
+
+- `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:1 /p:Configuration=Debug /nologo`
+- `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+- `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
+- `pwsh -File Examples/RenderScene/benchmark_directional_vsm.ps1`
+
+Notes:
+
+- `BuildDirectionalInvalidationResult()` now only chooses between
+  global-dirty fallback and GPU-side caster-bound comparison
+- `StageInvalidationUploads()` and the CPU invalidation-rect upload path were
+  deleted
+- per-page invalidation now happens in `VirtualShadowResolve.hlsl`
+
 ### 5.5 Stage 5: Make page reuse/update/allocation GPU-authoritative
+
+Status: `completed`
 
 Physical residency continuity must become the output of dedicated page
 management instead of CPU resolve ownership.
@@ -621,7 +654,30 @@ Exit condition:
 - CPU resolve is no longer the authoritative owner of allocation/eviction/page
   table mutation for live directional VSM continuity
 
+Implemented:
+
+- reset-time page-management state clearing now happens inside
+  `VirtualShadowResolve.hlsl`
+- global-dirty propagation now happens inside the live resolve/page-management
+  contract instead of through CPU-side reset seeding
+- dead CPU `resolve_stats` mirror and the dead resolve-stats SRV path were
+  removed from the runtime path
+- dead raster handoff fields that did not participate in live authority were
+  removed from the runtime contract
+- page reuse/update/allocation continue to happen in
+  `VirtualShadowResolve.hlsl` through `PopulateCurrent`,
+  `MaterializeRequested`, hierarchy propagation, and scheduling
+
+Validation:
+
+- `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:1 /p:Configuration=Debug /nologo`
+- `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+- `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
+- `pwsh -File Examples/RenderScene/benchmark_directional_vsm.ps1`
+
 ### 5.6 Stage 6: Finish coarse fallback as a guaranteed page-management product
+
+Status: `in_progress`
 
 Coarse fallback must stop depending on backend policy switches such as
 `allow_fallback_aliases` and coarse-safety budgeting as the final safety net.
@@ -731,7 +787,7 @@ Required validation:
 
 Why this stage is required:
 
-- this audit was code inspection only
+- this audit now has partial runtime evidence, but not the full exit matrix
 - the original review was triggered by motion-time behavior, so code structure
   alone is not enough to claim closure
 
@@ -762,15 +818,18 @@ prioritization.
 
 Validation for this audit:
 
-- code inspection only
 - current file evidence taken from backend, shader, pass, and test sources
-- no builds run
-- no tests run
+- `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:1 /p:Configuration=Debug /nologo`
+- `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+- `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
+- `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:1 /p:Configuration=Debug /nologo`
+- `pwsh -File Examples/RenderScene/benchmark_directional_vsm.ps1`
 
 Remaining gap:
 
-- motion-time correctness and boiling/performance behavior still need runtime
-  validation against camera/light stress scenes
-- first-scene-only out-of-scene startup shadow garbage remains unresolved; a
-  one-shot full-atlas clear attempt was reverted because it did not reproduce
-  or close the reported bug
+- Stages 6-10 are still open, so the full runtime matrix is not closed
+- motion-time correctness and boiling/performance behavior still need repeated
+  runtime validation against camera/light stress scenes after the remaining
+  Stage 6-9 cuts
+- first-scene cold-start behavior must keep being checked after each larger
+  cleanup cut to avoid reopening the startup-history bug
