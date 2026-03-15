@@ -1380,37 +1380,6 @@ static inline float ComputeVirtualDirectionalShadowVisibility(
         }
     }
 
-    bool used_coarser_fallback = false;
-    if (!active_valid) {
-        [loop]
-        for (uint candidate_clip = clip_index + 1u;
-             candidate_clip < metadata.clip_level_count;
-             ++candidate_clip) {
-            bool candidate_valid = false;
-            uint candidate_sampled_clip = candidate_clip;
-            float2 candidate_sampled_page_coord = 0.0.xx;
-            const float candidate_visibility = SampleDirectionalVirtualShadowClipVisibility(
-                metadata,
-                page_table,
-                physical_pool,
-                candidate_clip,
-                world_pos,
-                normal_ws,
-                light_dir_ws,
-                candidate_valid,
-                candidate_sampled_clip,
-                candidate_sampled_page_coord);
-            if (candidate_valid) {
-                active_valid = true;
-                active_clip_index = candidate_sampled_clip;
-                active_page_coord = candidate_sampled_page_coord;
-                active_visibility = candidate_visibility;
-                used_coarser_fallback = true;
-                break;
-            }
-        }
-    }
-
     bool coarse_valid = false;
     float coarse_visibility = 1.0;
     const float blend_to_coarser = ComputeDirectionalVirtualClipBlend(
@@ -1452,7 +1421,10 @@ static inline float ComputeVirtualDirectionalShadowVisibility(
         }
     }
 
-    if (!used_coarser_fallback && coarse_valid && blend_to_coarser > 0.0) {
+    // Phase 6 guardrail: fallback availability must now come from the page
+    // table alias emitted by page management. This blend remains only as a
+    // quality transition until Stage 8 removes the remaining cross-band shaping.
+    if (coarse_valid && blend_to_coarser > 0.0) {
         active_visibility = lerp(
             active_visibility,
             coarse_visibility,

@@ -322,34 +322,29 @@ Task:
 
 ### 3.9 Issue 9: Coarse fallback was bolted on too late
 
-Verdict: `partially fixed`
+Verdict: `fixed`
 
 Evidence:
 
-- `PopulateDirectionalFallbackPageTableEntries()` now writes per-entry fallback
-  aliases into the page table using fallback LOD offsets
-- hierarchical page flags are propagated and used as a visibility gate for
-  fallback alias population
-- the backend still computes `coarse_safety_clip_index`,
-  `coarse_safety_budget_pages`, and `coarse_safety_capacity_fit`
-- `allow_fallback_aliases` is still a backend policy decision, not an always-on
-  page-management guarantee
+- `VirtualShadowCoarseMarkPass` marks coarse coverage explicitly into
+  `request_words` and `page_mark_flags`
+- `VirtualShadowResolve.hlsl` now writes fallback LOD offsets only from actual
+  mapped coarser clip pages, which matches the UE clipmap propagation model
+- `ComputeVirtualDirectionalShadowVisibility()` no longer walks coarser clips
+  as a second fallback authority after page-table lookup fails
+- fallback-valid state is now consumed through the live page table contract
+  (`bAnyLODValid` + fallback LOD offset), not a backend recovery policy
 
 Why this is better:
 
-- fallback is now represented in the page table instead of existing only as a
-  budget counter or publication intention
+- fallback is now a direct product of coarse marking plus page management
+- coarse continuity no longer depends on CPU alias policy or shader-side clip
+  search recovery
 
-What is still incomplete:
+Remaining gap:
 
-- coarse fallback is still gated by backend policy and accepted detail lineage
-- the guarantee is not yet produced by a dedicated coarse-mark + page-management
-  pipeline that is authoritative on its own
-
-Task:
-
-- make coarse coverage and fallback validity unconditional outputs of the
-  page-management pipeline rather than a CPU alias-population recovery policy
+- remaining coarser blending in the shading path is now only a quality
+  transition concern under issue 4 / Stage 8, not a fallback-authority issue
 
 ### 3.10 Issue 10: Resolve ownership improved, but the architecture stayed publication-led
 
@@ -391,7 +386,7 @@ Task:
 6. Page-table contract too thin: `fixed`
 7. Backend monolithic: `still failing`
 8. Invalidation / page management / draw-command build not split: `partially fixed`
-9. Coarse fallback bolted on too late: `partially fixed`
+9. Coarse fallback bolted on too late: `fixed`
 10. Resolve ownership cleanup without full redesign: `mostly fixed`
 
 ## 5. Recommended Completion Order
@@ -677,7 +672,7 @@ Validation:
 
 ### 5.6 Stage 6: Finish coarse fallback as a guaranteed page-management product
 
-Status: `in_progress`
+Status: `completed`
 
 Coarse fallback must stop depending on backend policy switches such as
 `allow_fallback_aliases` and coarse-safety budgeting as the final safety net.
@@ -701,6 +696,23 @@ Exit condition:
 
 - coarse fallback remains available without CPU recovery policy deciding whether
   aliases are allowed
+
+Implementation status:
+
+- Stage 6 status: `completed`
+- coarse coverage is marked explicitly in `VirtualShadowCoarseMarkPass`
+- `VirtualShadowResolve.hlsl` fallback propagation now aliases only from actual
+  mapped coarser clip pages
+- `ShadowHelpers.hlsli` no longer performs its own coarser-clip fallback walk
+  after page-table lookup; coarse fallback authority now comes from the
+  page-management-generated page table entry itself
+- validation:
+  - `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
+  - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
+    - result: `9/9` passed
+  - `pwsh -File Examples/RenderScene/benchmark_directional_vsm.ps1`
+    - result: `exit_code=0`, `approx_fps=17.29`
 
 ### 5.7 Stage 7: Replace CPU-authored raster authority with GPU per-page draw-command build
 
