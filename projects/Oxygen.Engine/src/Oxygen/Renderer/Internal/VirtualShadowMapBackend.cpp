@@ -513,7 +513,7 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
     directional_candidates,
   const std::span<const glm::vec4> shadow_caster_bounds,
   const std::span<const glm::vec4> visible_receiver_bounds,
-  const std::chrono::milliseconds gpu_budget, const bool allow_budget_fallback,
+  const std::chrono::milliseconds gpu_budget,
   const std::uint64_t shadow_caster_content_hash) -> ShadowFramePublication
 {
   if (directional_candidates.size() != 1U) {
@@ -528,7 +528,6 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
   }
 
   (void)gpu_budget;
-  (void)allow_budget_fallback;
 
   const auto canonical_shadow_caster_input
     = CanonicalizeShadowCasterInput(shadow_caster_bounds);
@@ -1060,10 +1059,6 @@ auto VirtualShadowMapBackend::RefreshViewExports(
     = resolve_resources_it != view_resolve_resources_.end()
     ? resolve_resources_it->second.physical_page_lists_uav
     : kInvalidShaderVisibleIndex;
-  state.page_management_bindings.resolve_stats_srv
-    = resolve_resources_it != view_resolve_resources_.end()
-    ? resolve_resources_it->second.stats_srv
-    : kInvalidShaderVisibleIndex;
   state.page_management_bindings.resolve_stats_uav
     = resolve_resources_it != view_resolve_resources_.end()
     ? resolve_resources_it->second.stats_uav
@@ -1078,8 +1073,7 @@ auto VirtualShadowMapBackend::RefreshViewExports(
     : 0U;
   state.page_management_bindings.atlas_tiles_per_axis
     = physical_pool_config_.atlas_tiles_per_axis;
-  state.page_management_bindings.pending_raster_page_count
-    = state.resolve_stats.pending_raster_page_count;
+  state.page_management_bindings.pending_raster_page_count = 0U;
   state.page_management_bindings.reset_page_management_state
     = resolve_resources_it != view_resolve_resources_.end()
     && resolve_resources_it->second.physical_page_state_reset_pending;
@@ -1213,25 +1207,6 @@ auto VirtualShadowMapBackend::EnsurePhysicalPool(
   physical_pool_srv_ = allocator.GetShaderVisibleIndex(handle);
   physical_pool_srv_view_ = registry.RegisterView(
     *physical_pool_texture_, std::move(handle), srv_desc);
-  free_physical_tiles_.clear();
-  free_physical_tiles_.reserve(
-    static_cast<std::size_t>(physical_pool_config_.physical_tile_capacity));
-  std::uint32_t allocated_tiles = 0U;
-  for (std::uint32_t tile_y = 0U;
-    tile_y < physical_pool_config_.atlas_tiles_per_axis
-    && allocated_tiles < physical_pool_config_.physical_tile_capacity;
-    ++tile_y) {
-    for (std::uint32_t tile_x = 0U;
-      tile_x < physical_pool_config_.atlas_tiles_per_axis
-      && allocated_tiles < physical_pool_config_.physical_tile_capacity;
-      ++tile_x) {
-      free_physical_tiles_.push_back(PhysicalTileAddress {
-        .tile_x = static_cast<std::uint16_t>(tile_x),
-        .tile_y = static_cast<std::uint16_t>(tile_y),
-      });
-      ++allocated_tiles;
-    }
-  }
   view_cache_.clear();
 
   LOG_F(INFO,
@@ -1266,7 +1241,6 @@ auto VirtualShadowMapBackend::ReleasePhysicalPool() -> void
   physical_pool_srv_view_ = {};
   physical_pool_srv_ = kInvalidShaderVisibleIndex;
   physical_pool_config_ = {};
-  free_physical_tiles_.clear();
   view_cache_.clear();
 }
 
@@ -1545,8 +1519,7 @@ auto VirtualShadowMapBackend::BuildDirectionalSelectionResult(
     && previous_state->page_management_bindings.physical_page_metadata_srv
          .IsValid()
     && previous_state->page_management_bindings.physical_page_lists_srv
-         .IsValid()
-    && previous_state->page_management_bindings.resolve_stats_srv.IsValid();
+         .IsValid();
   bool address_space_compatible = false;
   if (previous_metadata != nullptr) {
     address_space_compatible = IsDirectionalVirtualAddressSpaceCompatible(
@@ -1983,26 +1956,6 @@ auto VirtualShadowMapBackend::EnsureViewResolveResources(const ViewId view_id)
   }
   registry.Register(resources.stats_gpu_buffer);
 
-  auto stats_srv_handle
-    = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_SRV,
-      graphics::DescriptorVisibility::kShaderVisible);
-  if (!stats_srv_handle.IsValid()) {
-    LOG_F(ERROR,
-      "VirtualShadowMapBackend: failed to allocate resolve stats SRV for "
-      "view {}",
-      view_id.get());
-    return nullptr;
-  }
-  resources.stats_srv = allocator.GetShaderVisibleIndex(stats_srv_handle);
-
-  graphics::BufferViewDescription stats_srv_desc;
-  stats_srv_desc.view_type = graphics::ResourceViewType::kStructuredBuffer_SRV;
-  stats_srv_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
-  stats_srv_desc.range = { 0U, sizeof(renderer::VirtualShadowResolveStats) };
-  stats_srv_desc.stride = sizeof(renderer::VirtualShadowResolveStats);
-  registry.RegisterView(
-    *resources.stats_gpu_buffer, std::move(stats_srv_handle), stats_srv_desc);
-
   auto stats_uav_handle
     = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_UAV,
       graphics::DescriptorVisibility::kShaderVisible);
@@ -2303,7 +2256,6 @@ auto VirtualShadowMapBackend::StagePageManagementSeedUpload(
   // state. Do not rebuild or upload a CPU-authored live residency snapshot
   // here.
   resources->physical_page_state_reset_pending = true;
-  state.resolve_stats = {};
   RefreshViewExports(view_id, state);
 }
 

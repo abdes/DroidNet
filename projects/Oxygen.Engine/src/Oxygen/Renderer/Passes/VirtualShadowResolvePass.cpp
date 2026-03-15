@@ -85,7 +85,6 @@ namespace {
     ShaderVisibleIndex physical_page_lists_uav_index {
       kInvalidShaderVisibleIndex
     };
-    ShaderVisibleIndex resolve_stats_srv_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex resolve_stats_uav_index { kInvalidShaderVisibleIndex };
     std::uint32_t invalidation_entry_count { 0U };
     std::uint32_t request_word_count { 0U };
@@ -197,13 +196,10 @@ auto VirtualShadowResolvePass::DoPrepareResources(
 
   const auto* metadata = shadow_manager->TryGetVirtualDirectionalMetadata(
     Context().current_view.view_id);
-  const auto* publication
-    = shadow_manager->TryGetFramePublication(Context().current_view.view_id);
   const auto* page_management_bindings
     = shadow_manager->TryGetVirtualPageManagementBindings(
       Context().current_view.view_id);
-  if (metadata == nullptr || publication == nullptr
-    || page_management_bindings == nullptr
+  if (metadata == nullptr || page_management_bindings == nullptr
     || !page_management_bindings->page_table_srv.IsValid()
     || !page_management_bindings->page_flags_srv.IsValid()
     || !page_management_bindings->page_table_uav.IsValid()
@@ -213,7 +209,6 @@ auto VirtualShadowResolvePass::DoPrepareResources(
     || !page_management_bindings->physical_page_metadata_uav.IsValid()
     || !page_management_bindings->physical_page_lists_srv.IsValid()
     || !page_management_bindings->physical_page_lists_uav.IsValid()
-    || !page_management_bindings->resolve_stats_srv.IsValid()
     || !page_management_bindings->resolve_stats_uav.IsValid()
     || (page_management_bindings->invalidation_entry_count > 0U
       && !page_management_bindings->invalidation_entries_srv.IsValid())) {
@@ -563,8 +558,6 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
       = active_page_management_bindings_.physical_page_lists_srv,
       .physical_page_lists_uav_index
       = active_page_management_bindings_.physical_page_lists_uav,
-      .resolve_stats_srv_index
-      = active_page_management_bindings_.resolve_stats_srv,
       .resolve_stats_uav_index
       = active_page_management_bindings_.resolve_stats_uav,
       .invalidation_entry_count

@@ -68,7 +68,7 @@ public:
     std::span<const engine::DirectionalShadowCandidate> directional_candidates,
     std::span<const glm::vec4> shadow_caster_bounds,
     std::span<const glm::vec4> visible_receiver_bounds,
-    std::chrono::milliseconds gpu_budget, bool allow_budget_fallback = true,
+    std::chrono::milliseconds gpu_budget,
     std::uint64_t shadow_caster_content_hash = 0U) -> ShadowFramePublication;
   OXGN_RNDR_API auto ResolveCurrentFrame(ViewId view_id) -> void;
   OXGN_RNDR_API auto MarkRendered(ViewId view_id, bool rendered_page_work)
@@ -123,11 +123,6 @@ private:
 
     [[nodiscard]] auto operator==(const PublicationKey&) const noexcept -> bool
       = default;
-  };
-
-  struct PhysicalTileAddress {
-    std::uint16_t tile_x { 0U };
-    std::uint16_t tile_y { 0U };
   };
 
   struct DirectionalVirtualClipmapSetup {
@@ -187,7 +182,6 @@ private:
     std::vector<glm::vec4> shadow_caster_bounds;
     bool has_rendered_cache_history { false };
     PendingResidencyResolve pending_residency_resolve {};
-    renderer::VirtualShadowResolveStats resolve_stats {};
     ShadowFramePublication frame_publication {};
     renderer::VirtualShadowPageManagementBindings page_management_bindings {};
   };
@@ -237,7 +231,6 @@ private:
 
   struct ViewResolveResources {
     std::shared_ptr<graphics::Buffer> stats_gpu_buffer;
-    ShaderVisibleIndex stats_srv { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex stats_uav { kInvalidShaderVisibleIndex };
 
     std::shared_ptr<graphics::Buffer> dirty_page_flags_gpu_buffer;
@@ -272,7 +265,6 @@ private:
   graphics::NativeView physical_pool_srv_view_ {};
   ShaderVisibleIndex physical_pool_srv_ { kInvalidShaderVisibleIndex };
   PhysicalPoolConfig physical_pool_config_ {};
-  std::vector<PhysicalTileAddress> free_physical_tiles_;
 
   std::unordered_map<ViewId, ViewCacheEntry> view_cache_;
   std::unordered_map<ViewId, ViewStructuredWordBufferResources>
