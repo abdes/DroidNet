@@ -140,26 +140,12 @@ private:
   struct ViewCacheEntry {
     struct PendingResidencyResolve {
       bool valid { false };
-      bool dirty { false };
+      // This is the freshness latch for the live export path. A pending
+      // resolve packet can exist in cache state without being safe to push
+      // back into the authoritative page-management bindings.
+      bool has_fresh_pending_resolve_inputs { false };
       bool reset_page_management_state { false };
-      std::uint32_t clip_level_count { 0U };
-      std::uint32_t pages_per_axis { 0U };
-      std::uint32_t pages_per_level { 0U };
       engine::ViewConstants view_constants {};
-      glm::mat4 light_view { 1.0F };
-      glm::vec3 light_eye { 0.0F, 0.0F, 0.0F };
-      float near_plane { 0.0F };
-      float far_plane { 0.0F };
-      std::array<float, engine::kMaxVirtualDirectionalClipLevels>
-        clip_page_world {};
-      std::array<float, engine::kMaxVirtualDirectionalClipLevels>
-        clip_origin_x {};
-      std::array<float, engine::kMaxVirtualDirectionalClipLevels>
-        clip_origin_y {};
-      std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
-        clip_grid_origin_x {};
-      std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
-        clip_grid_origin_y {};
       glm::mat4 previous_light_view { 1.0F };
       bool global_dirty_resident_contents { false };
       ShaderVisibleIndex previous_shadow_caster_bounds_srv {
@@ -198,7 +184,6 @@ private:
       nullptr
     };
     const std::vector<glm::vec4>* previous_shadow_caster_bounds { nullptr };
-    bool rendered_cache_history_available { false };
   };
 
   ::oxygen::Graphics* gfx_ { nullptr };
@@ -273,6 +258,8 @@ private:
   [[nodiscard]] OXGN_RNDR_NDAPI auto BuildDirectionalPreviousStateContext(
     const ViewCacheEntry* previous_state) const
     -> DirectionalPreviousStateContext;
+  [[nodiscard]] OXGN_RNDR_NDAPI static auto CanApplyPendingResolveToLiveBindings(
+    const ViewCacheEntry& state) noexcept -> bool;
   [[nodiscard]] OXGN_RNDR_NDAPI auto BuildDirectionalInvalidationResult(
     const DirectionalVirtualClipmapSetup& setup,
     const PublicationKey* previous_key, const PublicationKey& current_key,
@@ -281,24 +268,19 @@ private:
     std::span<const glm::vec4> shadow_caster_bounds,
     bool address_space_compatible) const -> DirectionalInvalidationBuildResult;
   [[nodiscard]] OXGN_RNDR_NDAPI auto BuildDirectionalSelectionResult(
-    ViewId view_id, const DirectionalVirtualClipmapSetup& setup,
-    std::span<const glm::vec4> shadow_caster_bounds,
-    std::span<const glm::vec4> visible_receiver_bounds,
+    const DirectionalVirtualClipmapSetup& setup,
     const engine::DirectionalVirtualShadowMetadata* previous_metadata,
-    const ViewCacheEntry* previous_state, ViewCacheEntry& state) const
+    const ViewCacheEntry* previous_state) const
     -> DirectionalSelectionBuildResult;
   OXGN_RNDR_API auto PopulateDirectionalPendingResolve(ViewCacheEntry& state,
-    const DirectionalVirtualClipmapSetup& setup,
     DirectionalSelectionBuildResult selection,
     DirectionalInvalidationBuildResult invalidation,
     const engine::DirectionalVirtualShadowMetadata* previous_metadata,
     const std::vector<glm::vec4>* previous_shadow_caster_bounds,
-    const engine::ViewConstants& view_constants,
-    std::uint32_t visible_receiver_bound_count) -> void;
-  OXGN_RNDR_API auto BuildDirectionalPendingResolveStage(ViewId view_id,
+    const engine::ViewConstants& view_constants) -> void;
+  OXGN_RNDR_API auto BuildDirectionalPendingResolveStage(
     const DirectionalVirtualClipmapSetup& setup,
     std::span<const glm::vec4> shadow_caster_bounds,
-    std::span<const glm::vec4> visible_receiver_bounds,
     const DirectionalPreviousStateContext& previous_context,
     const ViewCacheEntry* previous_state,
     const engine::ViewConstants& view_constants, ViewCacheEntry& state)
@@ -337,8 +319,6 @@ private:
     std::uint32_t required_entry_count) -> ViewStructuredWordBufferResources*;
   OXGN_RNDR_API auto EnsureViewResolveResources(ViewId view_id)
     -> ViewResolveResources*;
-  OXGN_RNDR_API auto StagePageManagementSeedUpload(
-    ViewId view_id, ViewCacheEntry& state) -> void;
 };
 
 } // namespace oxygen::renderer::internal

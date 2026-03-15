@@ -602,13 +602,21 @@ auto VirtualShadowMapBackend::ResolveCurrentFrame(const ViewId view_id) -> void
   }
 
   auto& state = it->second;
-  if (!state.pending_residency_resolve.valid
-    || !state.pending_residency_resolve.dirty) {
+  if (!CanApplyPendingResolveToLiveBindings(state)) {
     return;
   }
 
+  DCHECK_F(CanApplyPendingResolveToLiveBindings(state),
+    "VirtualShadowMapBackend: ResolveCurrentFrame may only apply fresh "
+    "pending resolve inputs to live bindings");
+
   if (state.pending_residency_resolve.reset_page_management_state) {
-    StagePageManagementSeedUpload(view_id, state);
+    if (auto* resources = EnsureViewResolveResources(view_id);
+      resources != nullptr) {
+      // A reset only zeroes persistent GPU page-management state. Do not
+      // rebuild or upload a CPU-authored residency snapshot here.
+      resources->physical_page_state_reset_pending = true;
+    }
   }
   RefreshViewExports(view_id, state);
 }
@@ -929,9 +937,7 @@ auto VirtualShadowMapBackend::BuildDirectionalPreviousStateContext(
     return context;
   }
 
-  context.rendered_cache_history_available
-    = previous_state->has_rendered_cache_history;
-  if (!context.rendered_cache_history_available) {
+  if (!previous_state->has_rendered_cache_history) {
     return context;
   }
 
@@ -944,6 +950,13 @@ auto VirtualShadowMapBackend::BuildDirectionalPreviousStateContext(
   return context;
 }
 
+auto VirtualShadowMapBackend::CanApplyPendingResolveToLiveBindings(
+  const ViewCacheEntry& state) noexcept -> bool
+{
+  return state.pending_residency_resolve.valid
+    && state.pending_residency_resolve.has_fresh_pending_resolve_inputs;
+}
+
 auto VirtualShadowMapBackend::RefreshViewExports(
   const ViewId view_id, ViewCacheEntry& state) const -> void
 {
@@ -952,6 +965,11 @@ auto VirtualShadowMapBackend::RefreshViewExports(
   const auto page_management_flags_resources_it
     = view_page_management_page_flags_resources_.find(view_id);
   const auto resolve_resources_it = view_resolve_resources_.find(view_id);
+
+  DCHECK_F(!state.pending_residency_resolve.has_fresh_pending_resolve_inputs
+      || state.pending_residency_resolve.valid,
+    "VirtualShadowMapBackend: fresh pending resolve inputs require a valid "
+    "pending resolve packet");
 
   state.page_management_bindings.page_table_srv
     = page_management_table_resources_it
@@ -1442,18 +1460,12 @@ auto VirtualShadowMapBackend::PrepareDirectionalVirtualClipmapSetup(
 }
 
 auto VirtualShadowMapBackend::BuildDirectionalSelectionResult(
-  const ViewId view_id, const DirectionalVirtualClipmapSetup& setup,
-  const std::span<const glm::vec4> shadow_caster_bounds,
-  const std::span<const glm::vec4> visible_receiver_bounds,
+  const DirectionalVirtualClipmapSetup& setup,
   const engine::DirectionalVirtualShadowMetadata* previous_metadata,
-  const ViewCacheEntry* previous_state, ViewCacheEntry& state) const
+  const ViewCacheEntry* previous_state) const
   -> DirectionalSelectionBuildResult
 {
   using namespace shadow_detail;
-  (void)view_id;
-  (void)shadow_caster_bounds;
-  (void)visible_receiver_bounds;
-  (void)state;
 
   const auto& metadata = setup.metadata;
   const bool previous_rendered_cache_exists
@@ -1518,34 +1530,20 @@ auto VirtualShadowMapBackend::BuildDirectionalInvalidationResult(
 }
 
 auto VirtualShadowMapBackend::PopulateDirectionalPendingResolve(
-  ViewCacheEntry& state, const DirectionalVirtualClipmapSetup& setup,
-  DirectionalSelectionBuildResult selection,
+  ViewCacheEntry& state, DirectionalSelectionBuildResult selection,
   DirectionalInvalidationBuildResult invalidation,
   const engine::DirectionalVirtualShadowMetadata* previous_metadata,
   const std::vector<glm::vec4>* previous_shadow_caster_bounds,
-  const engine::ViewConstants& view_constants,
-  const std::uint32_t visible_receiver_bound_count) -> void
+  const engine::ViewConstants& view_constants) -> void
 {
   state.pending_residency_resolve = {};
   auto& pending_resolve = state.pending_residency_resolve;
   pending_resolve.valid = true;
-  pending_resolve.dirty = true;
+  pending_resolve.has_fresh_pending_resolve_inputs = true;
   pending_resolve.reset_page_management_state
     = !selection.previous_page_management_state_exists
     || !selection.address_space_compatible;
-  pending_resolve.clip_level_count = setup.clip_level_count;
-  pending_resolve.pages_per_axis = setup.pages_per_axis;
-  pending_resolve.pages_per_level = setup.pages_per_level;
   pending_resolve.view_constants = view_constants;
-  pending_resolve.light_view = setup.light_view;
-  pending_resolve.light_eye = setup.light_eye;
-  pending_resolve.near_plane = setup.near_plane;
-  pending_resolve.far_plane = setup.far_plane;
-  pending_resolve.clip_page_world = setup.clip_page_world;
-  pending_resolve.clip_origin_x = setup.clip_origin_x;
-  pending_resolve.clip_origin_y = setup.clip_origin_y;
-  pending_resolve.clip_grid_origin_x = setup.clip_grid_origin_x;
-  pending_resolve.clip_grid_origin_y = setup.clip_grid_origin_y;
   pending_resolve.previous_light_view = glm::mat4 { 1.0F };
   pending_resolve.global_dirty_resident_contents
     = invalidation.global_dirty_resident_contents;
@@ -1580,31 +1578,31 @@ auto VirtualShadowMapBackend::PopulateDirectionalPendingResolve(
       pending_resolve.global_dirty_resident_contents = true;
     }
   }
-  (void)visible_receiver_bound_count;
+
+  DCHECK_F(CanApplyPendingResolveToLiveBindings(state),
+    "VirtualShadowMapBackend: freshly populated pending resolve packet must "
+    "be eligible for live binding export");
 }
 
 auto VirtualShadowMapBackend::BuildDirectionalPendingResolveStage(
-  const ViewId view_id, const DirectionalVirtualClipmapSetup& setup,
+  const DirectionalVirtualClipmapSetup& setup,
   const std::span<const glm::vec4> shadow_caster_bounds,
-  const std::span<const glm::vec4> visible_receiver_bounds,
   const DirectionalPreviousStateContext& previous_context,
   const ViewCacheEntry* previous_state,
   const engine::ViewConstants& view_constants, ViewCacheEntry& state)
   -> void
 {
-  auto selection_result = BuildDirectionalSelectionResult(view_id, setup,
-    shadow_caster_bounds, visible_receiver_bounds,
-    previous_context.previous_metadata, previous_state, state);
+  auto selection_result = BuildDirectionalSelectionResult(
+    setup, previous_context.previous_metadata, previous_state);
   auto invalidation_result
     = BuildDirectionalInvalidationResult(setup, previous_context.previous_key,
       state.key, previous_context.previous_metadata,
       previous_context.previous_shadow_caster_bounds, shadow_caster_bounds,
       selection_result.address_space_compatible);
 
-  PopulateDirectionalPendingResolve(state, setup, std::move(selection_result),
+  PopulateDirectionalPendingResolve(state, std::move(selection_result),
     std::move(invalidation_result), previous_context.previous_metadata,
-    previous_context.previous_shadow_caster_bounds, view_constants,
-    static_cast<std::uint32_t>(visible_receiver_bounds.size()));
+    previous_context.previous_shadow_caster_bounds, view_constants);
 }
 
 auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
@@ -1626,9 +1624,8 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
     setup, shadow_caster_bounds, state);
   const auto previous_context
     = BuildDirectionalPreviousStateContext(previous_state);
-  BuildDirectionalPendingResolveStage(view_id, setup, shadow_caster_bounds,
-    visible_receiver_bounds, previous_context, previous_state, view_constants,
-    state);
+  BuildDirectionalPendingResolveStage(setup, shadow_caster_bounds,
+    previous_context, previous_state, view_constants, state);
   state.directional_virtual_metadata.push_back(setup.metadata);
 }
 
@@ -2109,21 +2106,6 @@ auto VirtualShadowMapBackend::EnsureViewResolveResources(const ViewId view_id)
   resources.physical_page_lists_capacity = physical_page_lists_capacity;
   resources.physical_page_state_reset_pending = true;
   return &resources;
-}
-
-auto VirtualShadowMapBackend::StagePageManagementSeedUpload(
-  const ViewId view_id, ViewCacheEntry& state) -> void
-{
-  auto* resources = EnsureViewResolveResources(view_id);
-  if (resources == nullptr) {
-    return;
-  }
-
-  // Stage 5 ownership rule: a reset only zeroes persistent GPU page-management
-  // state. Do not rebuild or upload a CPU-authored live residency snapshot
-  // here.
-  resources->physical_page_state_reset_pending = true;
-  RefreshViewExports(view_id, state);
 }
 
 } // namespace oxygen::renderer::internal
