@@ -1044,26 +1044,6 @@ static inline bool ProjectDirectionalVirtualClip(
         && local_pages.y >= 0.0 && local_pages.y < metadata.pages_per_axis;
 }
 
-static inline float ComputeDirectionalVirtualClipBlend(
-    DirectionalVirtualShadowMetadata metadata,
-    uint clip_index,
-    float2 page_coord)
-{
-    if (clip_index + 1u >= metadata.clip_level_count) {
-        return 0.0;
-    }
-
-    const float pages_per_axis = max((float)metadata.pages_per_axis, 1.0);
-    const float2 local = clamp(page_coord, 0.0.xx, pages_per_axis.xx);
-    const float edge_distance = min(
-        min(local.x, local.y),
-        min(pages_per_axis - local.x, pages_per_axis - local.y));
-    const float transition_width_pages = max(1.0, pages_per_axis * 0.125);
-    return saturate(
-        (transition_width_pages - edge_distance)
-        / max(transition_width_pages, 1.0e-4));
-}
-
 static inline uint SelectDirectionalVirtualFilterRadiusTexels(
     DirectionalVirtualShadowMetadata metadata,
     uint clip_index)
@@ -1121,6 +1101,8 @@ static inline float ComputeDirectionalVirtualFootprintBlendToFinerClip(
         return 0.0;
     }
 
+    // Stage 8 removed shader-side visibility blending, but request generation
+    // still uses this footprint test to optionally prefetch one finer clip.
     return saturate(
         (enter_finer_footprint - desired_world_footprint)
         / max(enter_finer_footprint - exit_finer_footprint, 1.0e-4));
@@ -1328,18 +1310,20 @@ static inline float ComputeVirtualDirectionalShadowVisibility(
             clip_page_coord)) {
         return 1.0;
     }
-    const float blend_to_finer = ComputeDirectionalVirtualFootprintBlendToFinerClip(
-        metadata, clip_index, desired_world_footprint);
 
     StructuredBuffer<uint> page_table =
         ResourceDescriptorHeap[shadow_bindings.virtual_shadow_page_table_slot];
     Texture2D<float> physical_pool =
         ResourceDescriptorHeap[shadow_bindings.virtual_shadow_physical_pool_slot];
 
-    bool selected_valid = false;
-    uint selected_sampled_clip = clip_index;
-    float2 selected_sampled_page_coord = clip_page_coord;
-    const float selected_visibility = SampleDirectionalVirtualShadowClipVisibility(
+    bool active_valid = false;
+    uint active_sampled_clip = clip_index;
+    float2 active_page_coord = clip_page_coord;
+    // Stage 8 contract: sample exactly one footprint-selected clip family and
+    // rely on the page-table entry to resolve any coarser continuity fallback.
+    // The shader no longer performs its own finer/coarser regime blending on
+    // top of page-management output.
+    const float active_visibility = SampleDirectionalVirtualShadowClipVisibility(
         metadata,
         page_table,
         physical_pool,
@@ -1347,88 +1331,12 @@ static inline float ComputeVirtualDirectionalShadowVisibility(
         world_pos,
         normal_ws,
         light_dir_ws,
-        selected_valid,
-        selected_sampled_clip,
-        selected_sampled_page_coord);
-
-    bool active_valid = selected_valid;
-    uint active_clip_index = selected_sampled_clip;
-    float2 active_page_coord = selected_sampled_page_coord;
-    float active_visibility = selected_visibility;
-
-    bool finer_valid = false;
-    uint finer_sampled_clip = clip_index;
-    float2 finer_sampled_page_coord = 0.0.xx;
-    float finer_visibility = 1.0;
-    if (blend_to_finer > 0.0 && clip_index > 0u) {
-        finer_visibility = SampleDirectionalVirtualShadowClipVisibility(
-            metadata,
-            page_table,
-            physical_pool,
-            clip_index - 1u,
-            world_pos,
-            normal_ws,
-            light_dir_ws,
-            finer_valid,
-            finer_sampled_clip,
-            finer_sampled_page_coord);
-        if (!selected_valid && finer_valid) {
-            active_valid = true;
-            active_clip_index = finer_sampled_clip;
-            active_page_coord = finer_sampled_page_coord;
-            active_visibility = finer_visibility;
-        }
-    }
-
-    bool coarse_valid = false;
-    float coarse_visibility = 1.0;
-    const float blend_to_coarser = ComputeDirectionalVirtualClipBlend(
-        metadata, active_clip_index, active_page_coord);
-    if (active_valid
-        && blend_to_coarser > 0.0
-        && active_clip_index + 1u < metadata.clip_level_count) {
-        uint coarse_sampled_clip = active_clip_index + 1u;
-        float2 coarse_sampled_page_coord = 0.0.xx;
-        coarse_visibility = SampleDirectionalVirtualShadowClipVisibility(
-            metadata,
-            page_table,
-            physical_pool,
-            active_clip_index + 1u,
-            world_pos,
-            normal_ws,
-            light_dir_ws,
-            coarse_valid,
-            coarse_sampled_clip,
-            coarse_sampled_page_coord);
-    }
+        active_valid,
+        active_sampled_clip,
+        active_page_coord);
 
     if (!active_valid) {
         return 1.0;
-    }
-
-    // Audit Stage 1 bridge note: this selected/finer/coarser shaping is still
-    // a migration quality bridge. The final contract should lean on
-    // page-table-driven fallback continuity with less cross-band blending once
-    // the authoritative page-management pipeline is complete.
-    if (selected_valid && finer_valid && blend_to_finer > 0.0) {
-        active_visibility = lerp(
-            selected_visibility,
-            finer_visibility,
-            blend_to_finer);
-        if (finer_sampled_clip <= selected_sampled_clip) {
-            active_clip_index = finer_sampled_clip;
-            active_page_coord = finer_sampled_page_coord;
-        }
-    }
-
-    // Phase 6 guardrail: fallback availability must now come from the page
-    // table alias emitted by page management. This blend remains only as a
-    // quality transition until Stage 8 removes the remaining cross-band shaping.
-    if (coarse_valid && blend_to_coarser > 0.0) {
-        active_visibility = lerp(
-            active_visibility,
-            coarse_visibility,
-            blend_to_coarser);
     }
 
     return active_visibility;
