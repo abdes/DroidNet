@@ -25,6 +25,7 @@ struct VirtualShadowResolvePassConstants
     uint request_words_srv_index;
     uint page_mark_flags_srv_index;
     uint draw_bounds_srv_index;
+    uint invalidation_entries_srv_index;
     uint schedule_uav_index;
     uint schedule_count_uav_index;
     uint clear_args_uav_index;
@@ -42,7 +43,7 @@ struct VirtualShadowResolvePassConstants
     uint physical_page_lists_uav_index;
     uint resolve_stats_srv_index;
     uint resolve_stats_uav_index;
-    uint dirty_resident_pages_srv_index;
+    uint invalidation_entry_count;
     uint request_word_count;
     uint total_page_count;
     uint schedule_capacity;
@@ -51,10 +52,10 @@ struct VirtualShadowResolvePassConstants
     uint pages_per_level;
     uint physical_page_capacity;
     uint atlas_tiles_per_axis;
-    uint dirty_resident_page_count;
-    uint global_dirty_resident_contents;
     uint draw_count;
     uint draw_page_list_capacity;
+    uint reset_page_management_state;
+    uint global_dirty_resident_contents;
     uint phase;
     uint target_clip_index;
     int4 clip_grid_origin_x_packed[3];
@@ -78,11 +79,16 @@ struct VirtualShadowPhysicalPageListEntry
     uint page_flags;
 };
 
-struct VirtualShadowDirtyResidentPageEntry
+struct VirtualShadowInvalidationEntry
 {
-    uint64_t resident_key;
+    int min_grid_x;
+    int max_grid_x;
+    int min_grid_y;
+    int max_grid_y;
+    uint clip_index;
     uint page_flags;
     uint _pad0;
+    uint _pad1;
 };
 
 struct VirtualShadowResolveStats
@@ -106,7 +112,7 @@ struct VirtualShadowResolveStats
 };
 
 static const uint kResolvePhaseClear = 0u;
-static const uint kResolvePhaseMarkDirtyPages = 1u;
+static const uint kResolvePhaseMarkDirtyInvalidation = 1u;
 static const uint kResolvePhasePopulateCurrent = 2u;
 static const uint kResolvePhaseMaterializeRequested = 3u;
 static const uint kResolvePhasePopulateFallback = 4u;
@@ -305,27 +311,6 @@ static uint PhysicalPageListStart(
     return list_index * pass_constants.physical_page_capacity;
 }
 
-static bool DirtyResidentPageLookup(
-    StructuredBuffer<VirtualShadowDirtyResidentPageEntry> dirty_resident_pages,
-    uint dirty_resident_page_count,
-    uint64_t resident_key,
-    out uint dirty_page_flags)
-{
-    dirty_page_flags = 0u;
-    [loop]
-    for (uint dirty_index = 0u;
-         dirty_index < dirty_resident_page_count;
-         ++dirty_index) {
-        const VirtualShadowDirtyResidentPageEntry dirty_entry =
-            dirty_resident_pages[dirty_index];
-        if (dirty_entry.resident_key == resident_key) {
-            dirty_page_flags = dirty_entry.page_flags;
-            return true;
-        }
-    }
-    return false;
-}
-
 static VirtualShadowPhysicalPageListEntry MakePhysicalPageListEntry(
     uint64_t resident_key,
     uint physical_page_index,
@@ -463,6 +448,9 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         ResourceDescriptorHeap[pass_constants.physical_page_lists_srv_index];
     RWStructuredBuffer<VirtualShadowPhysicalPageListEntry> physical_page_lists_uav =
         ResourceDescriptorHeap[pass_constants.physical_page_lists_uav_index];
+    const bool has_invalidation_entries =
+        pass_constants.invalidation_entry_count > 0u
+        && BX_IN_GLOBAL_SRV(pass_constants.invalidation_entries_srv_index);
     RWStructuredBuffer<VirtualShadowResolveStats> resolve_stats =
         ResourceDescriptorHeap[pass_constants.resolve_stats_uav_index];
     RWStructuredBuffer<uint4> schedule =
@@ -492,6 +480,15 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         if (thread_index < pass_constants.physical_page_capacity * 3u) {
             dirty_page_flags[thread_index] = 0u;
         }
+        if (pass_constants.reset_page_management_state != 0u
+            && thread_index < pass_constants.physical_page_capacity) {
+            const uint packed_tile_coords =
+                PackAtlasTileCoordsFromPhysicalPageIndex(pass_constants, thread_index);
+            physical_page_metadata_uav[thread_index].resident_key = 0ull;
+            physical_page_metadata_uav[thread_index].page_flags = 0u;
+            physical_page_metadata_uav[thread_index].packed_atlas_tile_coords =
+                packed_tile_coords;
+        }
         if (thread_index == 0u) {
             resolve_stats[0].resident_entry_count = 0u;
             resolve_stats[0].resident_entry_capacity = pass_constants.physical_page_capacity;
@@ -512,16 +509,8 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         return;
     }
 
-    if (pass_constants.phase == kResolvePhaseMarkDirtyPages) {
+    if (pass_constants.phase == kResolvePhaseMarkDirtyInvalidation) {
         if (thread_index >= pass_constants.physical_page_capacity) {
-            return;
-        }
-
-        const VirtualShadowPhysicalPageMetadata metadata =
-            physical_page_metadata[thread_index];
-        const bool allocated =
-            VirtualShadowPageHasFlag(metadata.page_flags, OXYGEN_VSM_PAGE_FLAG_ALLOCATED);
-        if (!allocated) {
             return;
         }
 
@@ -532,34 +521,42 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             return;
         }
 
-        if (pass_constants.dirty_resident_page_count == 0u
-            || !BX_IN_GLOBAL_SRV(pass_constants.dirty_resident_pages_srv_index)) {
+        if (!has_invalidation_entries) {
             return;
         }
 
-        StructuredBuffer<VirtualShadowDirtyResidentPageEntry> dirty_resident_pages =
-            ResourceDescriptorHeap[pass_constants.dirty_resident_pages_srv_index];
-        uint dirty_page_mask = 0u;
-        if (!DirtyResidentPageLookup(
-                dirty_resident_pages,
-                pass_constants.dirty_resident_page_count,
-                metadata.resident_key,
-                dirty_page_mask)) {
+        const VirtualShadowPhysicalPageMetadata metadata =
+            physical_page_metadata[thread_index];
+        if (!VirtualShadowPageHasFlag(
+                metadata.page_flags, OXYGEN_VSM_PAGE_FLAG_ALLOCATED)) {
             return;
         }
 
-        if ((dirty_page_mask
-                & (OXYGEN_VSM_PAGE_FLAG_DYNAMIC_UNCACHED
-                    | OXYGEN_VSM_PAGE_FLAG_STATIC_UNCACHED)) == 0u) {
-            return;
-        }
+        const uint64_t resident_key = metadata.resident_key;
+        const uint clip_index = DecodeVirtualResidentPageKeyClipLevel(resident_key);
+        const int grid_x = DecodeVirtualResidentPageKeyGridX(resident_key);
+        const int grid_y = DecodeVirtualResidentPageKeyGridY(resident_key);
+        StructuredBuffer<VirtualShadowInvalidationEntry> invalidation_entries =
+            ResourceDescriptorHeap[pass_constants.invalidation_entries_srv_index];
 
-        dirty_page_flags[thread_index] = 1u;
-        if ((dirty_page_mask & OXYGEN_VSM_PAGE_FLAG_DYNAMIC_UNCACHED) != 0u) {
-            dirty_page_flags[thread_index + pass_constants.physical_page_capacity] = 1u;
-        }
-        if ((dirty_page_mask & OXYGEN_VSM_PAGE_FLAG_STATIC_UNCACHED) != 0u) {
-            dirty_page_flags[thread_index + 2u * pass_constants.physical_page_capacity] = 1u;
+        for (uint invalidation_index = 0u;
+             invalidation_index < pass_constants.invalidation_entry_count;
+             ++invalidation_index) {
+            const VirtualShadowInvalidationEntry entry =
+                invalidation_entries[invalidation_index];
+            if (entry.clip_index != clip_index
+                || grid_x < entry.min_grid_x || grid_x > entry.max_grid_x
+                || grid_y < entry.min_grid_y || grid_y > entry.max_grid_y) {
+                continue;
+            }
+
+            dirty_page_flags[thread_index] = 1u;
+            if ((entry.page_flags & OXYGEN_VSM_PAGE_FLAG_DYNAMIC_UNCACHED) != 0u) {
+                dirty_page_flags[thread_index + pass_constants.physical_page_capacity] = 1u;
+            }
+            if ((entry.page_flags & OXYGEN_VSM_PAGE_FLAG_STATIC_UNCACHED) != 0u) {
+                dirty_page_flags[thread_index + 2u * pass_constants.physical_page_capacity] = 1u;
+            }
         }
         return;
     }

@@ -116,9 +116,6 @@ public:
   auto UpdateLightCullingPassConfig(
     const engine::LightCullingPassConfig& config) -> void override;
 
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetVirtualShadowAtlasDebugTexture() const
-    noexcept -> const std::shared_ptr<graphics::Texture>&;
-
 private:
   class Impl;
   std::unique_ptr<Impl> impl_;

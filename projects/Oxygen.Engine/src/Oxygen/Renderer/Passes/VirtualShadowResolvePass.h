@@ -144,7 +144,6 @@ private:
   std::uint32_t active_dispatch_group_count_ { 0U };
   std::uint32_t active_pages_per_axis_ { 0U };
   std::uint32_t active_clip_level_count_ { 0U };
-  std::uint64_t active_directional_address_space_hash_ { 0U };
   std::array<std::int32_t, kMaxSupportedClipLevels>
     active_clip_grid_origin_x_ {};
   std::array<std::int32_t, kMaxSupportedClipLevels>

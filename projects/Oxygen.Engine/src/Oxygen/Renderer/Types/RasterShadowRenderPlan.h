@@ -45,15 +45,4 @@ struct RasterShadowRenderPlan {
   std::span<const RasterShadowJob> jobs {};
 };
 
-//! Read-only CPU-side shadow introspection surface.
-/*!
- This is separate from shading publication and render planning so debugging and
- tests do not force grab-all runtime contracts.
-*/
-struct ShadowViewIntrospection {
-  std::span<const engine::ShadowInstanceMetadata> shadow_instances {};
-  std::span<const engine::DirectionalShadowMetadata> directional_metadata {};
-  std::span<const RasterShadowJob> raster_jobs {};
-};
-
 } // namespace oxygen::renderer

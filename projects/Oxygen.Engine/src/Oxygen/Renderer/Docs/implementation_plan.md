@@ -863,10 +863,8 @@ Execution note, March 9, 2026:
     the current-frame CPU residency / allocation / page-table preparation
     ordering before upload and raster consumption, and
     `PreparePageTableResources` no longer recomputes that state on demand
-  - step 4 hardening slice landed: `TryGetVirtualRenderPlan` and
-    `TryGetVirtualViewIntrospection` are now observation-only exports; runtime
-    passes and focused tests explicitly resolve current-frame VSM state before
-    reading them
+  - step 4 hardening slice landed: the temporary observation-only VSM
+    introspection exports were fenced off from runtime ownership
   - step 4 ownership slice landed: `VirtualShadowResolvePass` now prepares the
     current-frame page-table upload for every virtual frame, and the virtual
     raster / atlas-debug passes now consume published exports without calling
@@ -1650,9 +1648,8 @@ Continuous improvements, not milestones:
   are still CPU-authored and the final resolve-owned raster path is still not
   complete.
 - **March 12, 2026**: Removed the remaining legacy directional VSM raster
-  contract. `VirtualShadowRenderPlan` now exports only `resolved_pages`,
-  `VirtualShadowViewIntrospection` now exports only `resolved_raster_pages`,
-  and the provisional alias path is gone from code and focused tests. The
+  contract. `VirtualShadowRenderPlan` now exports only `resolved_pages`, and
+  the provisional alias path is gone from code and focused tests. The
   explicit resolve stage remains CPU-authored, but raster consumers now read
   one authoritative page schedule only. Validation evidence:
   `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`,

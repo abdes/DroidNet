@@ -390,11 +390,10 @@ Current intermediate behavior:
   preparation before later upload and raster consumption, so
   `PreparePageTableResources` no longer recomputes current-frame page-table
   state on demand
-- March 12, 2026 hardening slice: `TryGetVirtualRenderPlan` and
-  `TryGetVirtualViewIntrospection` are now observation-only exports. Runtime
-  passes and focused tests explicitly call `ResolveVirtualCurrentFrame`
-  before reading them, so current-frame allocation/page-table work no longer
-  hides behind getter side effects
+- March 12, 2026 hardening slice: the temporary observation-only VSM
+  introspection exports were fenced off from runtime ownership, so
+  current-frame allocation/page-table work no longer hides behind getter
+  side effects
 - March 12, 2026 ownership slice: `VirtualShadowResolvePass` now prepares the
   current-frame page table resources for every virtual frame before any later
   raster/debug consumer runs, even when no GPU request dispatch is active.
