@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
-#include <limits>
 #include <stdexcept>
 #include <utility>
 
@@ -18,7 +17,6 @@
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
-#include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
@@ -32,19 +30,19 @@ namespace oxygen::engine {
 
 namespace {
 
-// Guardrail: the stable current-page virtual sample path already applies
-// receiver-space bias in ShadowHelpers.hlsli. A large hardware constant depth
-// bias here pushes stored depths too far away from the light and visibly lifts
-// the shadow off the caster base. Keep the hardware constant term at zero for
-// VSM pages and leave only a tightly clamped slope term for acne control on
-// grazing caster triangles.
-constexpr float kVirtualShadowRasterDepthBias = 0.0F;
-constexpr float kVirtualShadowRasterSlopeBias = 2.0F;
-constexpr float kVirtualShadowRasterDepthBiasClamp = 0.0005F;
-constexpr std::uint32_t kPassConstantsStride
-  = packing::kConstantBufferAlignment;
-constexpr std::uint64_t kIndirectDrawCommandStrideBytes
-  = sizeof(std::uint32_t) * 5ULL;
+  // Guardrail: the stable current-page virtual sample path already applies
+  // receiver-space bias in ShadowHelpers.hlsli. A large hardware constant depth
+  // bias here pushes stored depths too far away from the light and visibly
+  // lifts the shadow off the caster base. Keep the hardware constant term at
+  // zero for VSM pages and leave only a tightly clamped slope term for acne
+  // control on grazing caster triangles.
+  constexpr float kVirtualShadowRasterDepthBias = 0.0F;
+  constexpr float kVirtualShadowRasterSlopeBias = 2.0F;
+  constexpr float kVirtualShadowRasterDepthBiasClamp = 0.0005F;
+  constexpr std::uint32_t kPassConstantsStride
+    = packing::kConstantBufferAlignment;
+  constexpr std::uint64_t kIndirectDrawCommandStrideBytes
+    = sizeof(std::uint32_t) * 5ULL;
 
 } // namespace
 
@@ -100,9 +98,8 @@ auto VirtualShadowPageRasterPass::DoPrepareResources(
       *gpu_inputs->schedule_buffer, graphics::ResourceStates::kCommon, true);
   }
   if (!recorder.IsResourceTracked(*gpu_inputs->schedule_count_buffer)) {
-    recorder.BeginTrackingResourceState(
-      *gpu_inputs->schedule_count_buffer, graphics::ResourceStates::kCommon,
-      true);
+    recorder.BeginTrackingResourceState(*gpu_inputs->schedule_count_buffer,
+      graphics::ResourceStates::kCommon, true);
   }
   if (!recorder.IsResourceTracked(*gpu_inputs->draw_page_ranges_buffer)) {
     recorder.BeginTrackingResourceState(*gpu_inputs->draw_page_ranges_buffer,
@@ -206,11 +203,9 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
   });
   recorder.SetRenderTargets({}, dsv);
 
-  recorder.RequireResourceState(
-    *gpu_inputs->clear_indirect_args_buffer,
+  recorder.RequireResourceState(*gpu_inputs->clear_indirect_args_buffer,
     graphics::ResourceStates::kIndirectArgument);
-  recorder.RequireResourceState(
-    *gpu_inputs->draw_indirect_args_buffer,
+  recorder.RequireResourceState(*gpu_inputs->draw_indirect_args_buffer,
     graphics::ResourceStates::kIndirectArgument);
   recorder.RequireResourceState(
     *gpu_inputs->schedule_buffer, graphics::ResourceStates::kShaderResource);
@@ -255,8 +250,8 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
     // removing.
     EmitIndirectResolvedPageDrawRange(recorder,
       *gpu_inputs->draw_indirect_args_buffer, records, gpu_inputs->draw_count,
-      pr.begin, pr.end, indirect_draw_record_count,
-      cpu_draw_submission_count, skipped_invalid, draw_errors);
+      pr.begin, pr.end, indirect_draw_record_count, cpu_draw_submission_count,
+      skipped_invalid, draw_errors);
   }
 
   recorder.RequireResourceState(
@@ -269,12 +264,13 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
   } else if (indirect_draw_record_count == 0U) {
     LOG_F(ERROR,
       "VirtualShadowPageRasterPass: view {} produced no indirect draw records "
-      "(pending_raster_pages={} gpu_schedule=1 rastered_pages={} page_clears={} indirect_draw_records=0 "
+      "(pending_raster_pages={} gpu_schedule=1 rastered_pages={} "
+      "page_clears={} indirect_draw_records=0 "
       "cpu_draw_submissions={} skipped_invalid={} errors={})",
       Context().current_view.view_id.get(),
       gpu_inputs->pending_raster_page_count, rastered_page_count,
-      rastered_page_count, cpu_draw_submission_count,
-      skipped_invalid, draw_errors);
+      rastered_page_count, cpu_draw_submission_count, skipped_invalid,
+      draw_errors);
   } else {
     shadow_manager->MarkVirtualRasterExecuted(
       Context().current_view.view_id, true);
@@ -311,7 +307,8 @@ auto VirtualShadowPageRasterPass::EmitIndirectResolvedPageDrawRange(
     }
 
     try {
-      indirect_draw_record_count += static_cast<std::uint64_t>(md.instance_count);
+      indirect_draw_record_count
+        += static_cast<std::uint64_t>(md.instance_count);
     } catch (const std::exception& ex) {
       ++draw_errors;
       LOG_F(ERROR,
@@ -426,25 +423,26 @@ auto VirtualShadowPageRasterPass::EnsureClearPipelineState() -> void
 
   auto generated_bindings = BuildRootBindings();
   clear_pso_ = graphics::GraphicsPipelineDesc::Builder()
-    .SetVertexShader(ShaderRequest {
-      .stage = ShaderType::kVertex,
-      .source_path = "Depth/VirtualShadowPageClear.hlsl",
-      .entry_point = "VS",
-    })
-    .SetPixelShader(ShaderRequest {
-      .stage = ShaderType::kPixel,
-      .source_path = "Depth/VirtualShadowPageClear.hlsl",
-      .entry_point = "PS",
-    })
-    .SetPrimitiveTopology(PrimitiveType::kTriangleList)
-    .SetRasterizerState(DepthPrePass::BuildRasterizerStateDesc(CullMode::kNone))
-    .SetDepthStencilState(depth_state)
-    .SetBlendState({})
-    .SetFramebufferLayout(framebuffer_layout)
-    .SetRootBindings(std::span<const graphics::RootBindingItem>(
-      generated_bindings.data(), generated_bindings.size()))
-    .SetDebugName("VirtualShadowPageRasterPass_Clear")
-    .Build();
+                 .SetVertexShader(ShaderRequest {
+                   .stage = ShaderType::kVertex,
+                   .source_path = "Depth/VirtualShadowPageClear.hlsl",
+                   .entry_point = "VS",
+                 })
+                 .SetPixelShader(ShaderRequest {
+                   .stage = ShaderType::kPixel,
+                   .source_path = "Depth/VirtualShadowPageClear.hlsl",
+                   .entry_point = "PS",
+                 })
+                 .SetPrimitiveTopology(PrimitiveType::kTriangleList)
+                 .SetRasterizerState(
+                   DepthPrePass::BuildRasterizerStateDesc(CullMode::kNone))
+                 .SetDepthStencilState(depth_state)
+                 .SetBlendState({})
+                 .SetFramebufferLayout(framebuffer_layout)
+                 .SetRootBindings(std::span<const graphics::RootBindingItem>(
+                   generated_bindings.data(), generated_bindings.size()))
+                 .SetDebugName("VirtualShadowPageRasterPass_Clear")
+                 .Build();
 }
 
 auto VirtualShadowPageRasterPass::HasLiveGpuRasterInputs(
@@ -502,9 +500,9 @@ auto VirtualShadowPageRasterPass::EnsurePassConstantsCapacity() -> void
   }
 
   for (std::uint32_t slot = 0U; slot < frame::kFramesInFlight.get(); ++slot) {
-    auto cbv_handle = allocator.Allocate(
-      graphics::ResourceViewType::kConstantBuffer,
-      graphics::DescriptorVisibility::kShaderVisible);
+    auto cbv_handle
+      = allocator.Allocate(graphics::ResourceViewType::kConstantBuffer,
+        graphics::DescriptorVisibility::kShaderVisible);
     if (!cbv_handle.IsValid()) {
       throw std::runtime_error(
         "VirtualShadowPageRasterPass: failed to allocate pass constants CBV");
@@ -538,8 +536,8 @@ auto VirtualShadowPageRasterPass::UploadRasterPassConstants() -> void
   }
   const auto* metadata = shadow_manager->TryGetVirtualDirectionalMetadata(
     Context().current_view.view_id);
-  const auto* gpu_inputs
-    = shadow_manager->TryGetVirtualGpuRasterInputs(Context().current_view.view_id);
+  const auto* gpu_inputs = shadow_manager->TryGetVirtualGpuRasterInputs(
+    Context().current_view.view_id);
   const auto& virtual_depth_texture
     = shadow_manager->GetVirtualShadowDepthTexture();
   if (metadata == nullptr || metadata->page_size_texels == 0U

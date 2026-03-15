@@ -86,8 +86,7 @@ public:
     std::span<const glm::vec4> visible_receiver_bounds = {},
     const SyntheticSunShadowInput* synthetic_sun_shadow = nullptr,
     std::chrono::milliseconds gpu_budget = std::chrono::milliseconds(16),
-    std::uint64_t shadow_caster_content_hash = 0U)
-    -> ShadowFramePublication;
+    std::uint64_t shadow_caster_content_hash = 0U) -> ShadowFramePublication;
   OXGN_RNDR_API auto ResolveVirtualCurrentFrame(ViewId view_id) -> void;
   OXGN_RNDR_API auto MarkVirtualRasterExecuted(
     ViewId view_id, bool rendered_page_work) -> void;
@@ -102,15 +101,14 @@ public:
   OXGN_RNDR_API auto SubmitVirtualGpuRasterInputs(
     ViewId view_id, renderer::VirtualShadowGpuRasterInputs inputs) -> void;
   OXGN_RNDR_API auto ClearVirtualGpuRasterInputs(ViewId view_id) -> void;
-  OXGN_RNDR_API auto SetVirtualDirectionalCacheControls(
-    DirectionalVirtualCacheControls controls) -> void;
 
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetFramePublication(
     ViewId view_id) const noexcept -> const ShadowFramePublication*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetRasterRenderPlan(
     ViewId view_id) const noexcept -> const RasterShadowRenderPlan*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetVirtualGpuRasterInputs(
-    ViewId view_id) const noexcept -> const renderer::VirtualShadowGpuRasterInputs*;
+    ViewId view_id) const noexcept
+    -> const renderer::VirtualShadowGpuRasterInputs*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetVirtualPageManagementBindings(
     ViewId view_id) const noexcept
     -> const VirtualShadowPageManagementBindings*;

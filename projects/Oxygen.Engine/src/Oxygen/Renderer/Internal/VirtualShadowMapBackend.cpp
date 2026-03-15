@@ -237,8 +237,8 @@ constexpr std::uint64_t kMaxResolvedRasterScheduleAgeFrames
 }
 
 [[nodiscard]] auto ResolveVirtualPageEntryCount(
-  const std::span<const oxygen::engine::DirectionalVirtualShadowMetadata> metadata)
-  -> std::uint32_t
+  const std::span<const oxygen::engine::DirectionalVirtualShadowMetadata>
+    metadata) -> std::uint32_t
 {
   if (metadata.empty()) {
     return 0U;
@@ -384,19 +384,18 @@ auto AppendInvalidationRectsForBound(const glm::vec4& bound,
     ++clip_index) {
     const float page_world_size
       = std::max(clip_page_world[clip_index], 1.0e-4F);
-    invalidation_rects.push_back(
-      {
-          .min_grid_x = static_cast<std::int32_t>(
-            std::floor((center_ls.x - radius) / page_world_size)),
-          .max_grid_x = static_cast<std::int32_t>(
-            std::ceil((center_ls.x + radius) / page_world_size) - 1.0F),
-          .min_grid_y = static_cast<std::int32_t>(
-            std::floor((center_ls.y - radius) / page_world_size)),
-          .max_grid_y = static_cast<std::int32_t>(
-            std::ceil((center_ls.y + radius) / page_world_size) - 1.0F),
-          .clip_index = clip_index,
-          .page_flags = page_flags,
-        });
+    invalidation_rects.push_back({
+      .min_grid_x = static_cast<std::int32_t>(
+        std::floor((center_ls.x - radius) / page_world_size)),
+      .max_grid_x = static_cast<std::int32_t>(
+        std::ceil((center_ls.x + radius) / page_world_size) - 1.0F),
+      .min_grid_y = static_cast<std::int32_t>(
+        std::floor((center_ls.y - radius) / page_world_size)),
+      .max_grid_y = static_cast<std::int32_t>(
+        std::ceil((center_ls.y + radius) / page_world_size) - 1.0F),
+      .clip_index = clip_index,
+      .page_flags = page_flags,
+    });
   }
 }
 
@@ -412,42 +411,43 @@ struct CanonicalShadowCasterInput {
 
   std::vector<std::size_t> order(bounds.size());
   std::iota(order.begin(), order.end(), 0U);
-  std::ranges::stable_sort(order, [&](const std::size_t lhs_index,
-                                    const std::size_t rhs_index) {
-    const auto& lhs = bounds[lhs_index];
-    const auto& rhs = bounds[rhs_index];
-    const auto lhs_x = oxygen::renderer::internal::shadow_detail::
-      QuantizeDirectionalCacheFloat(lhs.x);
-    const auto rhs_x = oxygen::renderer::internal::shadow_detail::
-      QuantizeDirectionalCacheFloat(rhs.x);
-    if (lhs_x != rhs_x) {
-      return lhs_x < rhs_x;
-    }
+  std::ranges::stable_sort(
+    order, [&](const std::size_t lhs_index, const std::size_t rhs_index) {
+      const auto& lhs = bounds[lhs_index];
+      const auto& rhs = bounds[rhs_index];
+      const auto lhs_x = oxygen::renderer::internal::shadow_detail::
+        QuantizeDirectionalCacheFloat(lhs.x);
+      const auto rhs_x = oxygen::renderer::internal::shadow_detail::
+        QuantizeDirectionalCacheFloat(rhs.x);
+      if (lhs_x != rhs_x) {
+        return lhs_x < rhs_x;
+      }
 
-    const auto lhs_y = oxygen::renderer::internal::shadow_detail::
-      QuantizeDirectionalCacheFloat(lhs.y);
-    const auto rhs_y = oxygen::renderer::internal::shadow_detail::
-      QuantizeDirectionalCacheFloat(rhs.y);
-    if (lhs_y != rhs_y) {
-      return lhs_y < rhs_y;
-    }
+      const auto lhs_y = oxygen::renderer::internal::shadow_detail::
+        QuantizeDirectionalCacheFloat(lhs.y);
+      const auto rhs_y = oxygen::renderer::internal::shadow_detail::
+        QuantizeDirectionalCacheFloat(rhs.y);
+      if (lhs_y != rhs_y) {
+        return lhs_y < rhs_y;
+      }
 
-    const auto lhs_z = oxygen::renderer::internal::shadow_detail::
-      QuantizeDirectionalCacheFloat(lhs.z);
-    const auto rhs_z = oxygen::renderer::internal::shadow_detail::
-      QuantizeDirectionalCacheFloat(rhs.z);
-    if (lhs_z != rhs_z) {
-      return lhs_z < rhs_z;
-    }
+      const auto lhs_z = oxygen::renderer::internal::shadow_detail::
+        QuantizeDirectionalCacheFloat(lhs.z);
+      const auto rhs_z = oxygen::renderer::internal::shadow_detail::
+        QuantizeDirectionalCacheFloat(rhs.z);
+      if (lhs_z != rhs_z) {
+        return lhs_z < rhs_z;
+      }
 
-    const auto lhs_w = oxygen::renderer::internal::shadow_detail::
-      QuantizeDirectionalCacheFloat(lhs.w);
-    const auto rhs_w = oxygen::renderer::internal::shadow_detail::
-      QuantizeDirectionalCacheFloat(rhs.w);
-    return lhs_w < rhs_w;
-  });
+      const auto lhs_w = oxygen::renderer::internal::shadow_detail::
+        QuantizeDirectionalCacheFloat(lhs.w);
+      const auto rhs_w = oxygen::renderer::internal::shadow_detail::
+        QuantizeDirectionalCacheFloat(rhs.w);
+      return lhs_w < rhs_w;
+    });
 
-  for (std::size_t sorted_index = 0U; sorted_index < order.size(); ++sorted_index) {
+  for (std::size_t sorted_index = 0U; sorted_index < order.size();
+    ++sorted_index) {
     const auto source_index = order[sorted_index];
     result.bounds[sorted_index] = bounds[source_index];
   }
@@ -514,8 +514,7 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
   const std::span<const glm::vec4> shadow_caster_bounds,
   const std::span<const glm::vec4> visible_receiver_bounds,
   const std::chrono::milliseconds gpu_budget, const bool allow_budget_fallback,
-  const std::uint64_t shadow_caster_content_hash)
-  -> ShadowFramePublication
+  const std::uint64_t shadow_caster_content_hash) -> ShadowFramePublication
 {
   if (directional_candidates.size() != 1U) {
     if (!directional_candidates.empty()) {
@@ -632,7 +631,8 @@ auto VirtualShadowMapBackend::ResolveCurrentFrame(const ViewId view_id) -> void
   }
 
   auto& state = it->second;
-  if (!state.pending_residency_resolve.valid || !state.pending_residency_resolve.dirty) {
+  if (!state.pending_residency_resolve.valid
+    || !state.pending_residency_resolve.dirty) {
     return;
   }
 
@@ -672,7 +672,8 @@ auto VirtualShadowMapBackend::PreparePageTableResources(
   if (has_page_management_table_resources) {
     auto& page_management_table_resources
       = page_management_table_resources_it->second;
-    if (!recorder.IsResourceTracked(*page_management_table_resources.gpu_buffer)) {
+    if (!recorder.IsResourceTracked(
+          *page_management_table_resources.gpu_buffer)) {
       recorder.BeginTrackingResourceState(
         *page_management_table_resources.gpu_buffer,
         graphics::ResourceStates::kCommon, true);
@@ -683,7 +684,8 @@ auto VirtualShadowMapBackend::PreparePageTableResources(
   if (has_page_management_flags_resources) {
     auto& page_management_flags_resources
       = page_management_flags_resources_it->second;
-    if (!recorder.IsResourceTracked(*page_management_flags_resources.gpu_buffer)) {
+    if (!recorder.IsResourceTracked(
+          *page_management_flags_resources.gpu_buffer)) {
       recorder.BeginTrackingResourceState(
         *page_management_flags_resources.gpu_buffer,
         graphics::ResourceStates::kCommon, true);
@@ -707,9 +709,9 @@ auto VirtualShadowMapBackend::PreparePageTableResources(
     if (resolve_resources.physical_page_lists_gpu_buffer) {
       if (!recorder.IsResourceTracked(
             *resolve_resources.physical_page_lists_gpu_buffer)) {
-          recorder.BeginTrackingResourceState(
-            *resolve_resources.physical_page_lists_gpu_buffer,
-            graphics::ResourceStates::kCommon, true);
+        recorder.BeginTrackingResourceState(
+          *resolve_resources.physical_page_lists_gpu_buffer,
+          graphics::ResourceStates::kCommon, true);
       }
       recorder.RequireResourceState(
         *resolve_resources.physical_page_lists_gpu_buffer,
@@ -753,8 +755,8 @@ auto VirtualShadowMapBackend::PreparePageTableResources(
           *resolve_resources.invalidation_rects_gpu_buffer,
           graphics::ResourceStates::kCopyDest);
         recorder.FlushBarriers();
-        recorder.CopyBuffer(*resolve_resources.invalidation_rects_gpu_buffer, 0U,
-          *resolve_resources.invalidation_rects_upload_buffer, 0U,
+        recorder.CopyBuffer(*resolve_resources.invalidation_rects_gpu_buffer,
+          0U, *resolve_resources.invalidation_rects_upload_buffer, 0U,
           static_cast<std::size_t>(resolve_resources.invalidation_rect_capacity)
             * sizeof(DirectionalInvalidationRect));
         resolve_resources.invalidation_rects_upload_pending = false;
@@ -909,18 +911,6 @@ auto VirtualShadowMapBackend::SetPublishedViewFrameBindingsSlot(
   RefreshViewExports(view_id, it->second);
 }
 
-auto VirtualShadowMapBackend::SetDirectionalCacheControls(
-  const renderer::DirectionalVirtualCacheControls controls) -> void
-{
-  directional_cache_controls_ = controls;
-}
-
-auto VirtualShadowMapBackend::GetDirectionalCacheControls() const noexcept
-  -> renderer::DirectionalVirtualCacheControls
-{
-  return directional_cache_controls_;
-}
-
 auto VirtualShadowMapBackend::TryGetFramePublication(
   const ViewId view_id) const noexcept -> const ShadowFramePublication*
 {
@@ -1012,7 +1002,6 @@ auto VirtualShadowMapBackend::BuildDirectionalPreviousStateContext(
   return context;
 }
 
-
 auto VirtualShadowMapBackend::RefreshViewExports(
   const ViewId view_id, ViewCacheEntry& state) const -> void
 {
@@ -1076,22 +1065,22 @@ auto VirtualShadowMapBackend::RefreshViewExports(
     : kInvalidShaderVisibleIndex;
   state.page_management_bindings.invalidation_entry_count
     = resolve_resources_it != view_resolve_resources_.end()
-      ? resolve_resources_it->second.invalidation_rect_count
-      : 0U;
+    ? resolve_resources_it->second.invalidation_rect_count
+    : 0U;
   state.page_management_bindings.physical_page_capacity
     = resolve_resources_it != view_resolve_resources_.end()
-      ? resolve_resources_it->second.physical_page_metadata_capacity
-      : 0U;
+    ? resolve_resources_it->second.physical_page_metadata_capacity
+    : 0U;
   state.page_management_bindings.atlas_tiles_per_axis
     = physical_pool_config_.atlas_tiles_per_axis;
   state.page_management_bindings.pending_raster_page_count
     = state.resolve_stats.pending_raster_page_count;
   state.page_management_bindings.reset_page_management_state
     = resolve_resources_it != view_resolve_resources_.end()
-      && resolve_resources_it->second.physical_page_state_reset_pending;
+    && resolve_resources_it->second.physical_page_state_reset_pending;
   state.page_management_bindings.global_dirty_resident_contents
     = state.pending_residency_resolve.valid
-      && state.pending_residency_resolve.global_dirty_resident_contents;
+    && state.pending_residency_resolve.global_dirty_resident_contents;
 
   state.frame_publication.virtual_shadow_page_table_srv
     = state.page_management_bindings.page_table_srv;
@@ -1446,11 +1435,7 @@ auto VirtualShadowMapBackend::PrepareDirectionalVirtualClipmapSetup(
   const bool previous_metadata_exists = previous_metadata != nullptr;
   const bool previous_rendered_cache_exists = previous_metadata_exists
     && previous_state_exists && previous_state->has_rendered_cache_history;
-  const bool force_invalidate_cache
-    = previous_rendered_cache_exists
-    && directional_cache_controls_.force_invalidate;
   auto depth_guardband_candidate = previous_rendered_cache_exists
-    && !force_invalidate_cache
     && EvaluateDirectionalDepthGuardband(*previous_metadata,
       std::span<const glm::vec3> {
         full_frustum_world_points.data(), full_frustum_world_points.size() },
@@ -1553,8 +1538,9 @@ auto VirtualShadowMapBackend::BuildDirectionalSelectionResult(
     && previous_state->page_management_bindings.page_table_srv.IsValid()
     && previous_state->page_management_bindings.page_flags_srv.IsValid()
     && previous_state->page_management_bindings.physical_page_metadata_srv
-      .IsValid()
-    && previous_state->page_management_bindings.physical_page_lists_srv.IsValid()
+         .IsValid()
+    && previous_state->page_management_bindings.physical_page_lists_srv
+         .IsValid()
     && previous_state->page_management_bindings.resolve_stats_srv.IsValid();
   bool address_space_compatible = false;
   if (previous_metadata != nullptr) {
@@ -1574,7 +1560,8 @@ auto VirtualShadowMapBackend::BuildDirectionalInvalidationResult(
   const engine::DirectionalVirtualShadowMetadata* previous_metadata,
   const std::vector<glm::vec4>* previous_shadow_caster_bounds,
   const std::span<const glm::vec4> shadow_caster_bounds,
-  const bool address_space_compatible) const -> DirectionalInvalidationBuildResult
+  const bool address_space_compatible) const
+  -> DirectionalInvalidationBuildResult
 {
   using namespace shadow_detail;
 
@@ -1608,8 +1595,7 @@ auto VirtualShadowMapBackend::BuildDirectionalInvalidationResult(
       found_spatial_delta = true;
       AppendInvalidationRectsForBound(previous_bound,
         previous_metadata->light_view, setup.clip_page_world,
-        setup.clip_level_count, dirty_page_flags,
-        result.invalidation_rects);
+        setup.clip_level_count, dirty_page_flags, result.invalidation_rects);
       AppendInvalidationRectsForBound(current_bound, setup.light_view,
         setup.clip_page_world, setup.clip_level_count, dirty_page_flags,
         result.invalidation_rects);
@@ -1632,8 +1618,7 @@ auto VirtualShadowMapBackend::PopulateDirectionalPendingResolve(
   DirectionalSelectionBuildResult selection,
   DirectionalInvalidationBuildResult invalidation,
   const engine::ViewConstants& view_constants,
-  const std::uint32_t visible_receiver_bound_count) const
-  -> void
+  const std::uint32_t visible_receiver_bound_count) const -> void
 {
   state.pending_residency_resolve = {};
   auto& pending_resolve = state.pending_residency_resolve;
@@ -1657,7 +1642,8 @@ auto VirtualShadowMapBackend::PopulateDirectionalPendingResolve(
   pending_resolve.clip_grid_origin_y = setup.clip_grid_origin_y;
   pending_resolve.global_dirty_resident_contents
     = invalidation.global_dirty_resident_contents;
-  pending_resolve.invalidation_rects = std::move(invalidation.invalidation_rects);
+  pending_resolve.invalidation_rects
+    = std::move(invalidation.invalidation_rects);
   (void)visible_receiver_bound_count;
 }
 
@@ -1673,11 +1659,11 @@ auto VirtualShadowMapBackend::BuildDirectionalPendingResolveStage(
   auto selection_result = BuildDirectionalSelectionResult(view_id, setup,
     shadow_caster_bounds, visible_receiver_bounds,
     previous_context.previous_metadata, previous_state, state);
-  auto invalidation_result = BuildDirectionalInvalidationResult(setup,
-    previous_context.previous_key, state.key,
-    previous_context.previous_metadata, previous_context.previous_shadow_caster_bounds,
-    shadow_caster_bounds,
-    selection_result.address_space_compatible);
+  auto invalidation_result
+    = BuildDirectionalInvalidationResult(setup, previous_context.previous_key,
+      state.key, previous_context.previous_metadata,
+      previous_context.previous_shadow_caster_bounds, shadow_caster_bounds,
+      selection_result.address_space_compatible);
 
   PopulateDirectionalPendingResolve(state, setup, std::move(selection_result),
     std::move(invalidation_result), view_constants,
@@ -1699,12 +1685,12 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   }
 
   const auto& setup = *clipmap_setup;
-  InitializeDirectionalViewStateFromClipmapSetup(setup, shadow_caster_bounds, state);
+  InitializeDirectionalViewStateFromClipmapSetup(
+    setup, shadow_caster_bounds, state);
   const auto previous_context
     = BuildDirectionalPreviousStateContext(previous_state);
-  BuildDirectionalPendingResolveStage(
-    view_id, setup, shadow_caster_bounds, visible_receiver_bounds,
-    previous_context, previous_state, view_constants,
+  BuildDirectionalPendingResolveStage(view_id, setup, shadow_caster_bounds,
+    visible_receiver_bounds, previous_context, previous_state, view_constants,
     state);
   state.directional_virtual_metadata.push_back(setup.metadata);
 }
@@ -1942,8 +1928,7 @@ auto VirtualShadowMapBackend::EnsureViewResolveResources(const ViewId view_id)
   -> ViewResolveResources*
 {
   const auto state_it = view_cache_.find(view_id);
-  const auto required_invalidation_rect_capacity
-    = state_it != view_cache_.end()
+  const auto required_invalidation_rect_capacity = state_it != view_cache_.end()
     ? std::max<std::uint32_t>(1U,
         static_cast<std::uint32_t>(state_it->second.shadow_caster_bounds.size())
           * physical_pool_config_.clip_level_count * 2U)
@@ -1959,7 +1944,8 @@ auto VirtualShadowMapBackend::EnsureViewResolveResources(const ViewId view_id)
     && resources.invalidation_rects_upload_buffer
     && resources.mapped_invalidation_rects_upload != nullptr
     && resources.physical_page_lists_gpu_buffer
-    && required_invalidation_rect_capacity <= resources.invalidation_rect_capacity
+    && required_invalidation_rect_capacity
+      <= resources.invalidation_rect_capacity
     && physical_pool_config_.physical_tile_capacity
       <= resources.physical_page_metadata_capacity
     && required_physical_list_capacity
@@ -2309,7 +2295,8 @@ auto VirtualShadowMapBackend::StagePageManagementSeedUpload(
   }
 
   // Stage 5 ownership rule: a reset only zeroes persistent GPU page-management
-  // state. Do not rebuild or upload a CPU-authored live residency snapshot here.
+  // state. Do not rebuild or upload a CPU-authored live residency snapshot
+  // here.
   resources->physical_page_state_reset_pending = true;
   state.resolve_stats = {};
   RefreshViewExports(view_id, state);
@@ -2320,7 +2307,8 @@ auto VirtualShadowMapBackend::StageInvalidationUploads(
 {
   auto& pending = state.pending_residency_resolve;
   auto* resources = EnsureViewResolveResources(view_id);
-  if (resources == nullptr || resources->mapped_invalidation_rects_upload == nullptr) {
+  if (resources == nullptr
+    || resources->mapped_invalidation_rects_upload == nullptr) {
     return;
   }
 

@@ -4,17 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Renderer/Passes/VirtualShadowCoarseMarkPass.h>
-
 #include <algorithm>
 #include <array>
-#include <bit>
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/ShaderType.h>
@@ -28,6 +24,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Renderer/Internal/ShadowBackendCommon.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
+#include <Oxygen/Renderer/Passes/VirtualShadowCoarseMarkPass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowRequestPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
@@ -61,27 +58,22 @@ namespace {
   static_assert(sizeof(VirtualShadowCoarseMarkPassConstants)
       % packing::kShaderDataFieldAlignment
     == 0U);
-  static_assert(offsetof(VirtualShadowCoarseMarkPassConstants, depth_texture_index)
-      == 0U);
-  static_assert(offsetof(
-                    VirtualShadowCoarseMarkPassConstants,
-                    request_word_count)
-      == 16U);
-  static_assert(offsetof(
-                    VirtualShadowCoarseMarkPassConstants,
-                    screen_dimensions)
-      == 32U);
-  static_assert(offsetof(
-                    VirtualShadowCoarseMarkPassConstants,
-                    inv_view_projection_matrix)
-      == 48U);
+  static_assert(
+    offsetof(VirtualShadowCoarseMarkPassConstants, depth_texture_index) == 0U);
+  static_assert(
+    offsetof(VirtualShadowCoarseMarkPassConstants, request_word_count) == 16U);
+  static_assert(
+    offsetof(VirtualShadowCoarseMarkPassConstants, screen_dimensions) == 32U);
+  static_assert(
+    offsetof(VirtualShadowCoarseMarkPassConstants, inv_view_projection_matrix)
+    == 48U);
 
 } // namespace
 
 VirtualShadowCoarseMarkPass::VirtualShadowCoarseMarkPass(
   const observer_ptr<Graphics> gfx, std::shared_ptr<Config> config)
   : ComputeRenderPass(
-    config ? config->debug_name : "VirtualShadowCoarseMarkPass")
+      config ? config->debug_name : "VirtualShadowCoarseMarkPass")
   , gfx_(gfx)
   , config_(std::move(config))
 {
@@ -121,8 +113,8 @@ auto VirtualShadowCoarseMarkPass::DoPrepareResources(
   const auto* depth_pass = Context().GetPass<DepthPrePass>();
   const auto* request_pass = Context().GetPass<VirtualShadowRequestPass>();
   const auto shadow_manager = Context().GetRenderer().GetShadowManager();
-  if (depth_pass == nullptr || request_pass == nullptr || shadow_manager == nullptr
-    || !request_pass->HasActiveDispatch()
+  if (depth_pass == nullptr || request_pass == nullptr
+    || shadow_manager == nullptr || !request_pass->HasActiveDispatch()
     || !request_pass->GetRequestWordsBuffer()
     || !request_pass->GetRequestWordsUav().IsValid()
     || !request_pass->GetPageMarkFlagsBuffer()
@@ -133,8 +125,8 @@ auto VirtualShadowCoarseMarkPass::DoPrepareResources(
 
   const auto* metadata = shadow_manager->TryGetVirtualDirectionalMetadata(
     Context().current_view.view_id);
-  const auto* publication = shadow_manager->TryGetFramePublication(
-    Context().current_view.view_id);
+  const auto* publication
+    = shadow_manager->TryGetFramePublication(Context().current_view.view_id);
   if (metadata == nullptr || metadata->clip_level_count == 0U
     || metadata->pages_per_axis == 0U) {
     co_return;

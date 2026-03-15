@@ -37,7 +37,6 @@
 #include <Oxygen/Renderer/Types/VirtualShadowRenderPlan.h>
 #include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 
-
 namespace oxygen::engine::upload {
 class InlineTransfersCoordinator;
 class StagingProvider;
@@ -70,11 +69,10 @@ public:
     std::span<const glm::vec4> shadow_caster_bounds,
     std::span<const glm::vec4> visible_receiver_bounds,
     std::chrono::milliseconds gpu_budget, bool allow_budget_fallback = true,
-    std::uint64_t shadow_caster_content_hash = 0U)
-    -> ShadowFramePublication;
+    std::uint64_t shadow_caster_content_hash = 0U) -> ShadowFramePublication;
   OXGN_RNDR_API auto ResolveCurrentFrame(ViewId view_id) -> void;
-  OXGN_RNDR_API auto MarkRendered(
-    ViewId view_id, bool rendered_page_work) -> void;
+  OXGN_RNDR_API auto MarkRendered(ViewId view_id, bool rendered_page_work)
+    -> void;
   OXGN_RNDR_API auto PreparePageTableResources(
     ViewId view_id, graphics::CommandRecorder& recorder) -> void;
   OXGN_RNDR_API auto PreparePageManagementOutputsForGpuWrite(
@@ -83,11 +81,6 @@ public:
     ViewId view_id, graphics::CommandRecorder& recorder) -> void;
   OXGN_RNDR_API auto SetPublishedViewFrameBindingsSlot(
     ViewId view_id, engine::BindlessViewFrameBindingsSlot slot) -> void;
-  OXGN_RNDR_API auto SetDirectionalCacheControls(
-    renderer::DirectionalVirtualCacheControls controls) -> void;
-  [[nodiscard]] OXGN_RNDR_NDAPI auto
-  GetDirectionalCacheControls() const noexcept
-    -> renderer::DirectionalVirtualCacheControls;
 
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetFramePublication(
     ViewId view_id) const noexcept -> const ShadowFramePublication*;
@@ -280,7 +273,6 @@ private:
   ShaderVisibleIndex physical_pool_srv_ { kInvalidShaderVisibleIndex };
   PhysicalPoolConfig physical_pool_config_ {};
   std::vector<PhysicalTileAddress> free_physical_tiles_;
-  renderer::DirectionalVirtualCacheControls directional_cache_controls_ {};
 
   std::unordered_map<ViewId, ViewCacheEntry> view_cache_;
   std::unordered_map<ViewId, ViewStructuredWordBufferResources>
@@ -314,15 +306,14 @@ private:
     const engine::DirectionalVirtualShadowMetadata* previous_metadata,
     const ViewCacheEntry* previous_state, ViewCacheEntry& state) const
     -> DirectionalSelectionBuildResult;
-  OXGN_RNDR_API auto PopulateDirectionalPendingResolve(
-    ViewCacheEntry& state, const DirectionalVirtualClipmapSetup& setup,
+  OXGN_RNDR_API auto PopulateDirectionalPendingResolve(ViewCacheEntry& state,
+    const DirectionalVirtualClipmapSetup& setup,
     DirectionalSelectionBuildResult selection,
     DirectionalInvalidationBuildResult invalidation,
     const engine::ViewConstants& view_constants,
-    std::uint32_t visible_receiver_bound_count)
-    const -> void;
-  OXGN_RNDR_API auto BuildDirectionalPendingResolveStage(
-    ViewId view_id, const DirectionalVirtualClipmapSetup& setup,
+    std::uint32_t visible_receiver_bound_count) const -> void;
+  OXGN_RNDR_API auto BuildDirectionalPendingResolveStage(ViewId view_id,
+    const DirectionalVirtualClipmapSetup& setup,
     std::span<const glm::vec4> shadow_caster_bounds,
     std::span<const glm::vec4> visible_receiver_bounds,
     const DirectionalPreviousStateContext& previous_context,

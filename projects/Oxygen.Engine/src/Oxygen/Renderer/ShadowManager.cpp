@@ -126,8 +126,7 @@ auto ShadowManager::PublishForView(const ViewId view_id,
   const std::span<const glm::vec4> visible_receiver_bounds,
   const SyntheticSunShadowInput* synthetic_sun_shadow,
   const std::chrono::milliseconds gpu_budget,
-  const std::uint64_t shadow_caster_content_hash)
-  -> ShadowFramePublication
+  const std::uint64_t shadow_caster_content_hash) -> ShadowFramePublication
 {
   std::vector<engine::DirectionalShadowCandidate> candidates_storage;
   const auto light_candidates = lights.GetDirectionalShadowCandidates();
@@ -276,8 +275,8 @@ auto ShadowManager::SetPublishedViewFrameBindingsSlot(const ViewId view_id,
   }
 }
 
-auto ShadowManager::SubmitVirtualGpuRasterInputs(const ViewId view_id,
-  renderer::VirtualShadowGpuRasterInputs inputs) -> void
+auto ShadowManager::SubmitVirtualGpuRasterInputs(
+  const ViewId view_id, renderer::VirtualShadowGpuRasterInputs inputs) -> void
 {
   virtual_gpu_raster_inputs_.insert_or_assign(view_id, std::move(inputs));
 }
@@ -285,14 +284,6 @@ auto ShadowManager::SubmitVirtualGpuRasterInputs(const ViewId view_id,
 auto ShadowManager::ClearVirtualGpuRasterInputs(const ViewId view_id) -> void
 {
   virtual_gpu_raster_inputs_.erase(view_id);
-}
-
-auto ShadowManager::SetVirtualDirectionalCacheControls(
-  const DirectionalVirtualCacheControls controls) -> void
-{
-  if (virtual_backend_) {
-    virtual_backend_->SetDirectionalCacheControls(controls);
-  }
 }
 
 auto ShadowManager::TryGetFramePublication(const ViewId view_id) const noexcept

@@ -10,8 +10,8 @@
 #include <memory>
 #include <span>
 
-#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Renderer/Types/DirectionalVirtualShadowMetadata.h>
 
@@ -26,10 +26,6 @@ enum class VirtualPageResidencyState : std::uint8_t {
   kResidentClean = 1U,
   kResidentDirty = 2U,
   kPendingRender = 3U,
-};
-
-struct DirectionalVirtualCacheControls {
-  bool force_invalidate { false };
 };
 
 struct alignas(16) VirtualShadowResolveStats {
