@@ -104,16 +104,6 @@ private:
     std::uint32_t atlas_resolution { 0U };
   };
 
-  struct PublicationKey {
-    std::uint64_t view_hash { 0U };
-    std::uint64_t candidate_hash { 0U };
-    std::uint64_t caster_hash { 0U };
-    std::uint64_t shadow_content_hash { 0U };
-
-    [[nodiscard]] auto operator==(const PublicationKey&) const noexcept -> bool
-      = default;
-  };
-
   struct DirectionalVirtualClipmapSetup {
     bool valid { false };
     std::uint32_t clip_level_count { 0U };
@@ -157,29 +147,18 @@ private:
       std::uint32_t shadow_caster_bound_count { 0U };
     };
 
-    PublicationKey key {};
     std::vector<engine::ShadowInstanceMetadata> shadow_instances;
     std::vector<engine::DirectionalVirtualShadowMetadata>
       directional_virtual_metadata;
     std::vector<glm::vec4> shadow_caster_bounds;
+    std::uint64_t shadow_caster_content_hash { 0U };
     bool has_rendered_cache_history { false };
     PendingResidencyResolve pending_residency_resolve {};
     ShadowFramePublication frame_publication {};
     renderer::VirtualShadowPageManagementBindings page_management_bindings {};
   };
 
-  struct DirectionalSelectionBuildResult {
-    bool address_space_compatible { false };
-    bool previous_page_management_state_exists { false };
-  };
-
-  struct DirectionalInvalidationBuildResult {
-    bool global_dirty_resident_contents { false };
-    bool compare_shadow_caster_bounds_on_gpu { false };
-  };
-
   struct DirectionalPreviousStateContext {
-    const PublicationKey* previous_key { nullptr };
     const engine::DirectionalVirtualShadowMetadata* previous_metadata {
       nullptr
     };
@@ -246,11 +225,6 @@ private:
   std::unordered_map<ViewId, ViewStructuredWordBufferResources>
     view_page_management_page_flags_resources_;
   std::unordered_map<ViewId, ViewResolveResources> view_resolve_resources_;
-  OXGN_RNDR_API auto BuildPublicationKey(
-    const engine::ViewConstants& view_constants,
-    std::span<const engine::DirectionalShadowCandidate> directional_candidates,
-    std::span<const glm::vec4> shadow_caster_bounds,
-    std::uint64_t shadow_caster_content_hash) const -> PublicationKey;
   OXGN_RNDR_API auto InitializeDirectionalViewStateFromClipmapSetup(
     const DirectionalVirtualClipmapSetup& setup,
     std::span<const glm::vec4> shadow_caster_bounds,
@@ -260,31 +234,14 @@ private:
     -> DirectionalPreviousStateContext;
   [[nodiscard]] OXGN_RNDR_NDAPI static auto CanApplyPendingResolveToLiveBindings(
     const ViewCacheEntry& state) noexcept -> bool;
-  [[nodiscard]] OXGN_RNDR_NDAPI auto BuildDirectionalInvalidationResult(
+  [[nodiscard]] OXGN_RNDR_NDAPI auto IsDirectionalViewCacheCompatible(
     const DirectionalVirtualClipmapSetup& setup,
-    const PublicationKey* previous_key, const PublicationKey& current_key,
-    const engine::DirectionalVirtualShadowMetadata* previous_metadata,
-    const std::vector<glm::vec4>* previous_shadow_caster_bounds,
-    std::span<const glm::vec4> shadow_caster_bounds,
-    bool address_space_compatible) const -> DirectionalInvalidationBuildResult;
-  [[nodiscard]] OXGN_RNDR_NDAPI auto BuildDirectionalSelectionResult(
+    const ViewCacheEntry* previous_state) const -> bool;
+  OXGN_RNDR_API auto PopulateDirectionalPendingResolve(
     const DirectionalVirtualClipmapSetup& setup,
-    const engine::DirectionalVirtualShadowMetadata* previous_metadata,
-    const ViewCacheEntry* previous_state) const
-    -> DirectionalSelectionBuildResult;
-  OXGN_RNDR_API auto PopulateDirectionalPendingResolve(ViewCacheEntry& state,
-    DirectionalSelectionBuildResult selection,
-    DirectionalInvalidationBuildResult invalidation,
-    const engine::DirectionalVirtualShadowMetadata* previous_metadata,
-    const std::vector<glm::vec4>* previous_shadow_caster_bounds,
-    const engine::ViewConstants& view_constants) -> void;
-  OXGN_RNDR_API auto BuildDirectionalPendingResolveStage(
-    const DirectionalVirtualClipmapSetup& setup,
-    std::span<const glm::vec4> shadow_caster_bounds,
-    const DirectionalPreviousStateContext& previous_context,
     const ViewCacheEntry* previous_state,
-    const engine::ViewConstants& view_constants, ViewCacheEntry& state)
-    -> void;
+    const DirectionalPreviousStateContext& previous_context,
+    const engine::ViewConstants& view_constants, ViewCacheEntry& state) -> void;
   OXGN_RNDR_API auto RefreshViewExports(
     ViewId view_id, ViewCacheEntry& state) const -> void;
   OXGN_RNDR_API auto BuildPhysicalPoolConfig(
@@ -301,7 +258,7 @@ private:
     std::span<const glm::vec4> visible_receiver_bounds,
     const ViewCacheEntry* previous_state) const
     -> std::optional<DirectionalVirtualClipmapSetup>;
-  OXGN_RNDR_API auto BuildDirectionalVirtualViewState(ViewId view_id,
+  OXGN_RNDR_API auto BuildDirectionalVirtualViewState(
     const engine::ViewConstants& view_constants,
     const engine::DirectionalShadowCandidate& candidate,
     std::span<const glm::vec4> shadow_caster_bounds,

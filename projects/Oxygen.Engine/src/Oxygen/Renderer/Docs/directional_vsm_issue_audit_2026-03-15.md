@@ -131,39 +131,38 @@ Task:
 
 ### 3.3 Issue 3: CPU-side heuristics are compensating for an unstable design
 
-Verdict: `partially fixed`
+Verdict: `fixed`
 
 Evidence:
 
 - `feedback_refinement_pages`, `receiver_bootstrap_pages`, and
   `current_frame_reinforcement_pages` are now hard-coded to zero in
   `BuildDirectionalVirtualViewState()`
-- `BuildDirectionalSelectionResult()` no longer accepts previous-frame request
-  feedback as a live signal; submitted feedback is classified as
-  telemetry-only at most
 - feedback-hash lineage and source-region compatibility tracking were removed
   from the live backend path
 - the live page-management shader already materializes current pages from
   same-frame `request_words` in `VirtualShadowResolve.hlsl`
   (`kResolvePhaseMaterializeRequested`)
+- the old CPU bridge layer is gone from the live backend path:
+  `PublicationKey`, `BuildDirectionalSelectionResult()`,
+  `BuildDirectionalInvalidationResult()`, and
+  `BuildDirectionalPendingResolveStage()` were removed
+- pending resolve now derives directly from page-management compatibility,
+  renderer-provided content dirtiness, and actual previous/current caster-bound
+  availability instead of CPU-authored selection/invalidation result objects
 - virtual view introspection no longer reports request feedback as used
 
-Why this is better:
+Why this is fixed:
 
 - previous-frame readback feedback no longer competes with same-frame GPU page
   marking for live demand authority
-
-What is still incomplete:
-
-- `BuildDirectionalSelectionResult()` still CPU-authors the selected page set
-  that seeds pending resolve work
-- same-frame request/coarse marking is not yet the sole live authority for page
-  demand and mutation
+- the remaining continuity path is now a single pending-resolve contract that
+  feeds the GPU page-management pipeline directly
 
 Task:
 
-- keep this contract stable while issue 4/5 finish the remaining invalidation
-  and page-management ownership cuts
+- keep this direct pending-resolve contract and do not reintroduce CPU result
+  objects or publication-key invalidation bundles
 
 ### 3.4 Issue 4: Oxygen turned shadow quality into a boiling multi-band problem
 
@@ -377,8 +376,8 @@ Task:
 
 1. Wrong authoritative contract: publication snapshots: `mostly fixed`
 2. Shading contract is too weak: `substantially fixed`
-3. CPU-side heuristics compensating: `partially fixed`
-4. Multi-band boiling quality path: `partially fixed`
+3. CPU-side heuristics compensating: `fixed`
+4. Multi-band boiling quality path: `fixed`
 5. Flags and page-space reuse missing: `mostly fixed`
 6. Page-table contract too thin: `fixed`
 7. Backend monolithic: `still failing`
@@ -483,7 +482,7 @@ Implemented so far:
 - extracted explicit backend setup/state helpers:
   `InitializeDirectionalViewStateFromClipmapSetup()`,
   `BuildDirectionalPreviousStateContext()`,
-  and `BuildDirectionalPendingResolveStage()`
+  and the direct pending-resolve population path
 - extracted explicit page-management seed helpers:
   `SeedPageManagementState()` and `QueuePageManagementSeedUploads()`
 - `BuildDirectionalVirtualViewState()` now orchestrates named backend stages
@@ -547,9 +546,8 @@ Exit condition:
 
 Implemented:
 
-- `BuildDirectionalSelectionResult()` now reduces to compatibility and
-  previous-state-existence checks instead of CPU-authoring accepted live page
-  demand
+- the old CPU selected-page bridge layer was removed; pending resolve now only
+  derives compatibility/reset inputs for the GPU-owned page-management path
 - same-frame page demand continues to flow through GPU request/coarse marking
   and `VirtualShadowResolve.hlsl` materialization
 - dead resolve input plumbing that implied CPU-owned page-table consumption was
@@ -614,8 +612,9 @@ Validation:
 
 Notes:
 
-- `BuildDirectionalInvalidationResult()` now only chooses between
-  global-dirty fallback and GPU-side caster-bound comparison
+- the old CPU invalidation-result bridge layer was removed; pending resolve now
+  switches directly between global-dirty fallback and GPU-side caster-bound
+  comparison
 - `StageInvalidationUploads()` and the CPU invalidation-rect upload path were
   deleted
 - per-page invalidation now happens in `VirtualShadowResolve.hlsl`
@@ -766,6 +765,8 @@ Validation:
 
 ### 5.9 Stage 9: Remove the remaining bridge mechanisms
 
+Status: `completed`
+
 Once the authoritative path is complete, remove the migration-only logic.
 
 Required removals:
@@ -786,6 +787,12 @@ Why this stage is required:
 Exit condition:
 
 - there is only one authoritative continuity path in live code
+
+Validation:
+
+- `git diff --check -- src/Oxygen/Renderer/Internal/VirtualShadowMapBackend.h src/Oxygen/Renderer/Internal/VirtualShadowMapBackend.cpp`
+- `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /t:ClCompile /m:1 /p:Configuration=Debug /nologo`
+- `pwsh -File Examples/RenderScene/benchmark_directional_vsm.ps1`
 
 ### 5.10 Stage 10: Re-run the issue matrix and validate against the real exit gate
 
