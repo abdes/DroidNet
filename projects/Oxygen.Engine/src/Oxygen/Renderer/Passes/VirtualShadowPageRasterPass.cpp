@@ -258,6 +258,15 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
     depth_texture, graphics::ResourceStates::kShaderResource);
   recorder.FlushBarriers();
 
+  // Never bootstrap cache history from draw metadata alone. On the first
+  // loaded scene the prepared frame can already contain shadow-caster draws
+  // even though resolve has not authored any current VSM pages yet. Treating
+  // those draws as "rendered history" reuses seed-only state on the next
+  // frame and brings back the garbage shadows outside the real scene bounds.
+  const bool rendered_pending_raster_pages
+    = gpu_inputs->pending_raster_page_count > 0U
+    && indirect_draw_record_count > 0U;
+
   if (gpu_inputs->pending_raster_page_count == 0U) {
     shadow_manager->MarkVirtualRasterExecuted(
       Context().current_view.view_id, false);
@@ -273,7 +282,7 @@ auto VirtualShadowPageRasterPass::DoExecute(graphics::CommandRecorder& recorder)
       draw_errors);
   } else {
     shadow_manager->MarkVirtualRasterExecuted(
-      Context().current_view.view_id, true);
+      Context().current_view.view_id, rendered_pending_raster_pages);
   }
 
   Context().RegisterPass(this);

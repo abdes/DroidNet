@@ -29,22 +29,14 @@ enum class VirtualPageResidencyState : std::uint8_t {
 };
 
 struct alignas(16) VirtualShadowResolveStats {
-  std::uint32_t resident_entry_count { 0U };
-  std::uint32_t resident_entry_capacity { 0U };
-  std::uint32_t clean_page_count { 0U };
-  std::uint32_t dirty_page_count { 0U };
-  std::uint32_t pending_page_count { 0U };
-  std::uint32_t mapped_page_count { 0U };
   std::uint32_t pending_raster_page_count { 0U };
-  std::uint32_t selected_page_count { 0U };
   std::uint32_t allocated_page_count { 0U };
-  std::uint32_t evicted_page_count { 0U };
-  std::uint32_t rerasterized_page_count { 0U };
-  std::uint32_t reused_requested_page_count { 0U };
   std::uint32_t requested_page_list_count { 0U };
   std::uint32_t dirty_page_list_count { 0U };
   std::uint32_t clean_page_list_count { 0U };
   std::uint32_t available_page_list_count { 0U };
+  std::uint32_t reserved0 { 0U };
+  std::uint32_t reserved1 { 0U };
 };
 static_assert(sizeof(VirtualShadowResolveStats) % 16U == 0U);
 
@@ -64,6 +56,9 @@ struct VirtualShadowPageManagementBindings {
   std::uint32_t invalidation_entry_count { 0U };
   std::uint32_t physical_page_capacity { 0U };
   std::uint32_t atlas_tiles_per_axis { 0U };
+  // This is the startup-history gate for directional VSM. Do not replace it
+  // with CPU draw counts or indirect-record counts; those can be nonzero on
+  // the first loaded scene before resolve has authored any current pages.
   std::uint32_t pending_raster_page_count { 0U };
   bool reset_page_management_state { false };
   bool global_dirty_resident_contents { false };
@@ -90,6 +85,8 @@ struct VirtualShadowGpuRasterInputs {
   frame::SequenceNumber source_frame_sequence { 0U };
   std::uint32_t draw_count { 0U };
   std::uint32_t schedule_capacity { 0U };
+  // Propagated to raster only so cache-history bootstrap decisions use the
+  // authoritative resolve schedule instead of CPU-side draw metadata.
   std::uint32_t pending_raster_page_count { 0U };
 };
 
