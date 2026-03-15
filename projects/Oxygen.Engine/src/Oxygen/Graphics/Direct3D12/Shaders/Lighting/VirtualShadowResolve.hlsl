@@ -885,15 +885,17 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
                 continue;
             }
 
-            const uint candidate_flags = page_flags[candidate_global_page_index];
-            if (!HasVirtualShadowHierarchyVisibility(candidate_flags)) {
-                continue;
-            }
-
             const uint resolved_fallback_clip = ResolveVirtualShadowFallbackClipIndex(
                 candidate_clip, pass_constants.clip_level_count, candidate_entry);
             if (resolved_fallback_clip <= clip_index
                 || resolved_fallback_clip >= pass_constants.clip_level_count) {
+                continue;
+            }
+
+            // Phase 6 guardrail: coarse fallback must be emitted from actual
+            // mapped coarse pages in page management, not from later
+            // hierarchy-policy recovery in the sampling path.
+            if (!VirtualShadowPageTableEntryHasCurrentLod(candidate_entry)) {
                 continue;
             }
 
