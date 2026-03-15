@@ -226,10 +226,11 @@ auto ShadowManager::PublishForView(const ViewId view_id,
   return publication;
 }
 
-auto ShadowManager::MarkVirtualRasterExecuted(const ViewId view_id) -> void
+auto ShadowManager::MarkVirtualRasterExecuted(
+  const ViewId view_id, const bool rendered_page_work) -> void
 {
   if (virtual_backend_) {
-    virtual_backend_->MarkRendered(view_id);
+    virtual_backend_->MarkRendered(view_id, rendered_page_work);
   }
 }
 
