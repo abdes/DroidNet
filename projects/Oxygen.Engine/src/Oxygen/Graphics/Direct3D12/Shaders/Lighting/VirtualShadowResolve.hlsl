@@ -35,6 +35,7 @@ struct VirtualShadowResolvePassConstants
     uint page_table_srv_index;
     uint page_table_uav_index;
     uint page_flags_uav_index;
+    uint dirty_page_flags_uav_index;
     uint physical_page_metadata_srv_index;
     uint physical_page_metadata_uav_index;
     uint physical_page_lists_srv_index;
@@ -49,6 +50,7 @@ struct VirtualShadowResolvePassConstants
     uint clip_level_count;
     uint pages_per_level;
     uint physical_page_capacity;
+    uint atlas_tiles_per_axis;
     uint dirty_resident_page_count;
     uint global_dirty_resident_contents;
     uint draw_count;
@@ -104,13 +106,14 @@ struct VirtualShadowResolveStats
 };
 
 static const uint kResolvePhaseClear = 0u;
-static const uint kResolvePhasePopulateCurrent = 1u;
-static const uint kResolvePhaseMaterializeRequested = 2u;
-static const uint kResolvePhasePopulateFallback = 3u;
-static const uint kResolvePhasePropagateHierarchy = 4u;
-static const uint kResolvePhaseSchedule = 5u;
-static const uint kResolvePhaseBuildClearArgs = 6u;
-static const uint kResolvePhaseBuildDrawArgs = 7u;
+static const uint kResolvePhaseMarkDirtyPages = 1u;
+static const uint kResolvePhasePopulateCurrent = 2u;
+static const uint kResolvePhaseMaterializeRequested = 3u;
+static const uint kResolvePhasePopulateFallback = 4u;
+static const uint kResolvePhasePropagateHierarchy = 5u;
+static const uint kResolvePhaseSchedule = 6u;
+static const uint kResolvePhaseBuildClearArgs = 7u;
+static const uint kResolvePhaseBuildDrawArgs = 8u;
 static const uint kPhysicalPageListRequested = 0u;
 static const uint kPhysicalPageListDirty = 1u;
 static const uint kPhysicalPageListClean = 2u;
@@ -249,6 +252,21 @@ static uint DecodePackedTileX(uint packed_atlas_tile_coords)
 static uint DecodePackedTileY(uint packed_atlas_tile_coords)
 {
     return (packed_atlas_tile_coords >> 16u) & 0xFFFFu;
+}
+
+static uint PackAtlasTileCoords(uint tile_x, uint tile_y)
+{
+    return (tile_x & 0xFFFFu) | ((tile_y & 0xFFFFu) << 16u);
+}
+
+static uint PackAtlasTileCoordsFromPhysicalPageIndex(
+    VirtualShadowResolvePassConstants pass_constants,
+    uint physical_page_index)
+{
+    const uint atlas_tiles_per_axis = max(pass_constants.atlas_tiles_per_axis, 1u);
+    const uint tile_x = physical_page_index % atlas_tiles_per_axis;
+    const uint tile_y = physical_page_index / atlas_tiles_per_axis;
+    return PackAtlasTileCoords(tile_x, tile_y);
 }
 
 static uint64_t EncodeVirtualResidentPageCoord(int value)
@@ -412,6 +430,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         ResourceDescriptorHeap[g_PassConstantsIndex];
 
     if (!BX_IN_GLOBAL_SRV(pass_constants.page_table_srv_index)
+        || !BX_IN_GLOBAL_SRV(pass_constants.dirty_page_flags_uav_index)
         || !BX_IN_GLOBAL_SRV(pass_constants.physical_page_metadata_srv_index)
         || !BX_IN_GLOBAL_SRV(pass_constants.physical_page_metadata_uav_index)
         || !BX_IN_GLOBAL_SRV(pass_constants.physical_page_lists_srv_index)
@@ -434,6 +453,8 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         ResourceDescriptorHeap[pass_constants.page_table_uav_index];
     RWStructuredBuffer<uint> page_flags =
         ResourceDescriptorHeap[pass_constants.page_flags_uav_index];
+    RWStructuredBuffer<uint> dirty_page_flags =
+        ResourceDescriptorHeap[pass_constants.dirty_page_flags_uav_index];
     StructuredBuffer<VirtualShadowPhysicalPageMetadata> physical_page_metadata =
         ResourceDescriptorHeap[pass_constants.physical_page_metadata_srv_index];
     RWStructuredBuffer<VirtualShadowPhysicalPageMetadata> physical_page_metadata_uav =
@@ -468,6 +489,9 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             page_table[thread_index] = 0u;
             page_flags[thread_index] = 0u;
         }
+        if (thread_index < pass_constants.physical_page_capacity * 3u) {
+            dirty_page_flags[thread_index] = 0u;
+        }
         if (thread_index == 0u) {
             resolve_stats[0].resident_entry_count = 0u;
             resolve_stats[0].resident_entry_capacity = pass_constants.physical_page_capacity;
@@ -488,6 +512,58 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         return;
     }
 
+    if (pass_constants.phase == kResolvePhaseMarkDirtyPages) {
+        if (thread_index >= pass_constants.physical_page_capacity) {
+            return;
+        }
+
+        const VirtualShadowPhysicalPageMetadata metadata =
+            physical_page_metadata[thread_index];
+        const bool allocated =
+            VirtualShadowPageHasFlag(metadata.page_flags, OXYGEN_VSM_PAGE_FLAG_ALLOCATED);
+        if (!allocated) {
+            return;
+        }
+
+        if (pass_constants.global_dirty_resident_contents != 0u) {
+            dirty_page_flags[thread_index] = 1u;
+            dirty_page_flags[thread_index + pass_constants.physical_page_capacity] = 1u;
+            dirty_page_flags[thread_index + 2u * pass_constants.physical_page_capacity] = 1u;
+            return;
+        }
+
+        if (pass_constants.dirty_resident_page_count == 0u
+            || !BX_IN_GLOBAL_SRV(pass_constants.dirty_resident_pages_srv_index)) {
+            return;
+        }
+
+        StructuredBuffer<VirtualShadowDirtyResidentPageEntry> dirty_resident_pages =
+            ResourceDescriptorHeap[pass_constants.dirty_resident_pages_srv_index];
+        uint dirty_page_mask = 0u;
+        if (!DirtyResidentPageLookup(
+                dirty_resident_pages,
+                pass_constants.dirty_resident_page_count,
+                metadata.resident_key,
+                dirty_page_mask)) {
+            return;
+        }
+
+        if ((dirty_page_mask
+                & (OXYGEN_VSM_PAGE_FLAG_DYNAMIC_UNCACHED
+                    | OXYGEN_VSM_PAGE_FLAG_STATIC_UNCACHED)) == 0u) {
+            return;
+        }
+
+        dirty_page_flags[thread_index] = 1u;
+        if ((dirty_page_mask & OXYGEN_VSM_PAGE_FLAG_DYNAMIC_UNCACHED) != 0u) {
+            dirty_page_flags[thread_index + pass_constants.physical_page_capacity] = 1u;
+        }
+        if ((dirty_page_mask & OXYGEN_VSM_PAGE_FLAG_STATIC_UNCACHED) != 0u) {
+            dirty_page_flags[thread_index + 2u * pass_constants.physical_page_capacity] = 1u;
+        }
+        return;
+    }
+
     if (pass_constants.phase == kResolvePhasePopulateCurrent) {
         if (thread_index >= pass_constants.physical_page_capacity) {
             return;
@@ -503,7 +579,8 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             PhysicalPageListStart(pass_constants, kPhysicalPageListAvailable);
 
         VirtualShadowPhysicalPageMetadata metadata = physical_page_metadata[thread_index];
-        const uint packed_tile_coords = metadata.packed_atlas_tile_coords;
+        const uint packed_tile_coords =
+            PackAtlasTileCoordsFromPhysicalPageIndex(pass_constants, thread_index);
         const bool allocated =
             VirtualShadowPageHasFlag(metadata.page_flags, OXYGEN_VSM_PAGE_FLAG_ALLOCATED);
         if (!allocated) {
@@ -565,25 +642,10 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
                 ResourceDescriptorHeap[pass_constants.page_mark_flags_srv_index];
             mark_flags = page_mark_flags[global_page_index];
         }
-        uint dirty_page_flags = 0u;
-        if (pass_constants.dirty_resident_page_count > 0u
-            && BX_IN_GLOBAL_SRV(pass_constants.dirty_resident_pages_srv_index)) {
-            StructuredBuffer<VirtualShadowDirtyResidentPageEntry> dirty_resident_pages =
-                ResourceDescriptorHeap[pass_constants.dirty_resident_pages_srv_index];
-            DirtyResidentPageLookup(
-                dirty_resident_pages,
-                pass_constants.dirty_resident_page_count,
-                resident_key,
-                dirty_page_flags);
-        }
-        if (pass_constants.global_dirty_resident_contents != 0u) {
-            dirty_page_flags |= OXYGEN_VSM_PAGE_FLAG_DYNAMIC_UNCACHED
-                | OXYGEN_VSM_PAGE_FLAG_STATIC_UNCACHED;
-        }
         const bool dynamic_uncached =
-            (dirty_page_flags & OXYGEN_VSM_PAGE_FLAG_DYNAMIC_UNCACHED) != 0u;
+            dirty_page_flags[thread_index + pass_constants.physical_page_capacity] != 0u;
         const bool static_uncached =
-            (dirty_page_flags & OXYGEN_VSM_PAGE_FLAG_STATIC_UNCACHED) != 0u;
+            dirty_page_flags[thread_index + 2u * pass_constants.physical_page_capacity] != 0u;
         const bool detail_geometry =
             VirtualShadowPageHasFlag(mark_flags, OXYGEN_VSM_PAGE_FLAG_DETAIL_GEOMETRY);
         const bool used_this_frame =
@@ -633,16 +695,34 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     }
 
     if (pass_constants.phase == kResolvePhaseMaterializeRequested) {
-        if (thread_index >= pass_constants.total_page_count
-            || pass_constants.request_word_count == 0u
-            || !BX_IN_GLOBAL_SRV(pass_constants.request_words_srv_index)) {
+        if (thread_index >= pass_constants.total_page_count) {
             return;
         }
 
-        StructuredBuffer<uint> request_words =
-            ResourceDescriptorHeap[pass_constants.request_words_srv_index];
-        if (!IsPageRequestedThisFrame(
-                request_words, pass_constants.request_word_count, thread_index)) {
+        const bool has_request_words =
+            pass_constants.request_word_count > 0u
+            && BX_IN_GLOBAL_SRV(pass_constants.request_words_srv_index);
+        bool requested_this_frame = false;
+        if (has_request_words) {
+            StructuredBuffer<uint> request_words =
+                ResourceDescriptorHeap[pass_constants.request_words_srv_index];
+            requested_this_frame = IsPageRequestedThisFrame(
+                request_words, pass_constants.request_word_count, thread_index);
+        }
+
+        uint mark_flags = 0u;
+        if (has_page_mark_flags) {
+            StructuredBuffer<uint> page_mark_flags =
+                ResourceDescriptorHeap[pass_constants.page_mark_flags_srv_index];
+            mark_flags = page_mark_flags[thread_index];
+            requested_this_frame = requested_this_frame
+                || VirtualShadowPageHasFlag(
+                    mark_flags, OXYGEN_VSM_PAGE_FLAG_USED_THIS_FRAME);
+        }
+
+        // UE-style VSM demand is authored as current-frame per-page request
+        // flags. The request-word bitset is only an auxiliary compact view.
+        if (!requested_this_frame) {
             return;
         }
 
@@ -693,13 +773,6 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             return;
         }
 
-        uint mark_flags = 0u;
-        if (has_page_mark_flags) {
-            StructuredBuffer<uint> page_mark_flags =
-                ResourceDescriptorHeap[pass_constants.page_mark_flags_srv_index];
-            mark_flags = page_mark_flags[thread_index];
-        }
-
         const uint published_flags =
             OXYGEN_VSM_PAGE_FLAG_ALLOCATED
             | OXYGEN_VSM_PAGE_FLAG_DYNAMIC_UNCACHED
@@ -708,18 +781,18 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
                 | OXYGEN_VSM_PAGE_FLAG_USED_THIS_FRAME));
         uint resident_entry_index = 0u;
         InterlockedAdd(resolve_stats[0].resident_entry_count, 1u, resident_entry_index);
-        const VirtualShadowPhysicalPageMetadata previous_metadata =
-            physical_page_metadata[physical_page_index];
+        const uint packed_tile_coords =
+            PackAtlasTileCoordsFromPhysicalPageIndex(pass_constants, physical_page_index);
 
         physical_page_metadata_uav[physical_page_index].resident_key =
             PackVirtualResidentPageKey(clip_index, grid_x, grid_y);
         physical_page_metadata_uav[physical_page_index].page_flags = published_flags;
         physical_page_metadata_uav[physical_page_index].packed_atlas_tile_coords =
-            previous_metadata.packed_atlas_tile_coords;
+            packed_tile_coords;
 
         page_table[thread_index] = PackVirtualShadowPageTableEntry(
-            DecodePackedTileX(previous_metadata.packed_atlas_tile_coords),
-            DecodePackedTileY(previous_metadata.packed_atlas_tile_coords),
+            DecodePackedTileX(packed_tile_coords),
+            DecodePackedTileY(packed_tile_coords),
             0u,
             true,
             true,

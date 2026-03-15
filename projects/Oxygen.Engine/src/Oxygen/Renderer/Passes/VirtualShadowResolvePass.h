@@ -62,7 +62,7 @@ private:
   static constexpr std::uint32_t kMaxSupportedPagesPerAxis = 64U;
   static constexpr std::uint32_t kMaxSupportedClipLevels = 12U;
   static constexpr std::uint32_t kPassConstantsSlotsPerFrame
-    = (2U * kMaxSupportedClipLevels) + 4U;
+    = (2U * kMaxSupportedClipLevels) + 5U;
   static constexpr std::uint32_t kPassConstantsSlotCount
     = kPassConstantsSlotsPerFrame * frame::kFramesInFlight.get();
   static constexpr std::uint32_t kMaxSupportedPageCount

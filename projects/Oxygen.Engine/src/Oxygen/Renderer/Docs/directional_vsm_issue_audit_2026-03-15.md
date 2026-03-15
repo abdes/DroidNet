@@ -456,7 +456,7 @@ Implementation status:
 
 ### 5.2 Stage 2: Finish backend decomposition first
 
-Status: `in_progress`
+Status: `completed`
 
 Split the remaining monolithic backend authority into explicit stages with
 clean ownership.
@@ -510,7 +510,7 @@ Exit condition:
 
 ### 5.3 Stage 3: Replace readback-led demand authority with same-frame GPU marking
 
-Status: `completed`
+Status: `in_progress`
 
 The request and coarse-mark passes must stop being previous-frame feedback
 feeds into CPU policy and become same-frame authoritative marking inputs for

@@ -72,20 +72,12 @@ using oxygen::frame::Slot;
 using oxygen::graphics::SingleQueueStrategy;
 using oxygen::renderer::LightManager;
 using oxygen::renderer::ShadowManager;
-using oxygen::renderer::VirtualShadowAtlasTileDebugState;
 using oxygen::renderer::internal::RendererTagFactory;
 using oxygen::renderer::testing::FakeGraphics;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneFlag;
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeFlags;
-
-auto CountAtlasTileDebugState(const std::span<const std::uint32_t> tile_states,
-  const VirtualShadowAtlasTileDebugState expected_state) -> std::uint32_t
-{
-  return static_cast<std::uint32_t>(std::count(tile_states.begin(),
-    tile_states.end(), static_cast<std::uint32_t>(expected_state)));
-}
 auto ResolveVirtualViewIntrospection(
   ShadowManager& shadow_manager, const oxygen::ViewId view_id)
   -> const oxygen::renderer::VirtualShadowViewIntrospection*
@@ -1540,23 +1532,10 @@ NOLINT_TEST_F(LightManagerTest,
   ASSERT_NE(first_virtual_introspection, nullptr);
   EXPECT_TRUE(first_pending_raster_state->resolved_pages.empty());
   EXPECT_EQ(first_virtual_introspection->pending_raster_page_count, 0U);
-  EXPECT_TRUE(first_virtual_introspection->atlas_tile_debug_states.empty());
   EXPECT_EQ(first_virtual_introspection->resident_page_count, 0U);
   EXPECT_EQ(first_virtual_introspection->mapped_page_count, 0U);
   EXPECT_EQ(first_virtual_introspection->pending_page_count, 0U);
   EXPECT_EQ(first_virtual_introspection->clean_page_count, 0U);
-  EXPECT_EQ(CountAtlasTileDebugState(
-              first_virtual_introspection->atlas_tile_debug_states,
-              VirtualShadowAtlasTileDebugState::kRewritten),
-    0U);
-  EXPECT_EQ(CountAtlasTileDebugState(
-              first_virtual_introspection->atlas_tile_debug_states,
-              VirtualShadowAtlasTileDebugState::kReused),
-    0U);
-  EXPECT_EQ(CountAtlasTileDebugState(
-              first_virtual_introspection->atlas_tile_debug_states,
-              VirtualShadowAtlasTileDebugState::kCached),
-    0U);
 
   shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 11 }, true);
 
@@ -1582,107 +1561,6 @@ NOLINT_TEST_F(LightManagerTest,
     first_virtual_introspection->resident_page_count);
   EXPECT_EQ(second.virtual_shadow_physical_pool_srv,
     first.virtual_shadow_physical_pool_srv);
-  EXPECT_EQ(CountAtlasTileDebugState(
-              second_virtual_introspection->atlas_tile_debug_states,
-              VirtualShadowAtlasTileDebugState::kRewritten),
-    0U);
-  EXPECT_EQ(CountAtlasTileDebugState(
-              second_virtual_introspection->atlas_tile_debug_states,
-              VirtualShadowAtlasTileDebugState::kReused),
-    second_virtual_introspection->resident_page_count);
-  EXPECT_EQ(CountAtlasTileDebugState(
-              second_virtual_introspection->atlas_tile_debug_states,
-              VirtualShadowAtlasTileDebugState::kCached),
-    0U);
-  EXPECT_EQ(CountAtlasTileDebugState(
-              second_virtual_introspection->atlas_tile_debug_states,
-              VirtualShadowAtlasTileDebugState::kCleared),
-    static_cast<std::uint32_t>(
-      second_virtual_introspection->atlas_tile_debug_states.size())
-      - second_virtual_introspection->resident_page_count);
-}
-
-//! Without a real GPU raster pass, the fake unit-test path must not invent
-//! cached or reused atlas tiles during publication.
-NOLINT_TEST_F(LightManagerTest,
-  ShadowManagerPublishForView_VirtualAtlasDebugDoesNotInventReuseWithoutGpuRaster)
-{
-  auto& manager = Manager();
-  manager.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
-
-  auto shadow_manager = CreateShadowManager(
-    oxygen::DirectionalShadowImplementationPolicy::kPreferVirtual);
-  ASSERT_NE(shadow_manager, nullptr);
-  shadow_manager->OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
-
-  ViewConstants view_constants;
-  view_constants
-    .SetProjectionMatrix(
-      glm::perspectiveRH_ZO(glm::radians(45.0F), 16.0F / 9.0F, 0.1F, 200.0F))
-    .SetCameraPosition(glm::vec3(0.0F, -6.0F, 3.0F));
-  view_constants.SetFrameSequenceNumber(
-    SequenceNumber { 1 }, ViewConstants::kRenderer);
-  view_constants.SetFrameSlot(Slot { 0 }, ViewConstants::kRenderer);
-
-  const ShadowManager::SyntheticSunShadowInput synthetic_sun {
-    .enabled = true,
-    .direction_ws = glm::normalize(glm::vec3(0.35F, -0.45F, -1.0F)),
-    .bias = 0.0F,
-    .normal_bias = 0.0F,
-    .resolution_hint
-    = static_cast<std::uint32_t>(oxygen::scene::ShadowResolutionHint::kMedium),
-    .cascade_count = 4U,
-    .distribution_exponent = 1.0F,
-    .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
-  };
-  const std::array<glm::vec4, 1> shadow_casters {
-    glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
-  };
-  const std::array<glm::vec4, 2> wide_receivers {
-    glm::vec4(-1.5F, 0.0F, 0.0F, 0.08F),
-    glm::vec4(1.5F, 0.0F, 0.0F, 0.08F),
-  };
-
-  (void)shadow_manager->PublishForView(oxygen::ViewId { 17 }, view_constants,
-    manager, shadow_casters, wide_receivers, &synthetic_sun,
-    std::chrono::milliseconds(16));
-  shadow_manager->ResolveVirtualCurrentFrame(oxygen::ViewId { 17 });
-  shadow_manager->MarkVirtualRasterExecuted(oxygen::ViewId { 17 }, true);
-
-  manager.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 2 }, Slot { 1 });
-  shadow_manager->OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 2 }, Slot { 1 });
-  view_constants.SetFrameSequenceNumber(
-    SequenceNumber { 2 }, ViewConstants::kRenderer);
-  view_constants.SetFrameSlot(Slot { 1 }, ViewConstants::kRenderer);
-
-  const std::array<glm::vec4, 1> narrow_receivers {
-    glm::vec4(-1.5F, 0.0F, 0.0F, 0.08F),
-  };
-
-  (void)shadow_manager->PublishForView(oxygen::ViewId { 17 }, view_constants,
-    manager, shadow_casters, narrow_receivers, &synthetic_sun,
-    std::chrono::milliseconds(16));
-  const auto* second_virtual_introspection = ResolveAndPublishVirtualViewIntrospection(
-    *shadow_manager, oxygen::ViewId { 17 });
-
-  ASSERT_NE(second_virtual_introspection, nullptr);
-  const auto cached_count = CountAtlasTileDebugState(
-    second_virtual_introspection->atlas_tile_debug_states,
-    VirtualShadowAtlasTileDebugState::kCached);
-  const auto reused_count = CountAtlasTileDebugState(
-    second_virtual_introspection->atlas_tile_debug_states,
-    VirtualShadowAtlasTileDebugState::kReused);
-  EXPECT_EQ(second_virtual_introspection->resident_page_count, 0U);
-  EXPECT_EQ(cached_count, 0U);
-  EXPECT_EQ(reused_count, 0U);
-  EXPECT_EQ(cached_count + reused_count,
-    second_virtual_introspection->resident_page_count)
-    << "resident=" << second_virtual_introspection->resident_page_count
-    << " cached=" << cached_count << " reused=" << reused_count;
 }
 
 //! Reordering the shadow-caster bounds set must not invalidate the directional
@@ -5303,117 +5181,7 @@ NOLINT_TEST_F(LightManagerTest,
 }
 
 
-NOLINT_TEST_F(LightManagerTest,
-  ShadowManagerPrepareVirtualPageTableResources_UploadsPhysicalPageManagementBuffers)
-{
-  auto& manager = Manager();
-  manager.OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
-
-  auto shadow_manager = CreateShadowManager(
-    oxygen::DirectionalShadowImplementationPolicy::kVirtualOnly);
-  ASSERT_NE(shadow_manager, nullptr);
-  shadow_manager->OnFrameStart(
-    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
-
-  ViewConstants view_constants;
-  view_constants
-    .SetProjectionMatrix(
-      glm::perspectiveRH_ZO(glm::radians(45.0F), 16.0F / 9.0F, 0.1F, 200.0F))
-    .SetCameraPosition(glm::vec3(0.0F, -6.0F, 3.0F));
-  view_constants.SetFrameSequenceNumber(
-    SequenceNumber { 1 }, ViewConstants::kRenderer);
-  view_constants.SetFrameSlot(Slot { 0 }, ViewConstants::kRenderer);
-
-  const ShadowManager::SyntheticSunShadowInput synthetic_sun {
-    .enabled = true,
-    .direction_ws = glm::normalize(glm::vec3(0.35F, -0.45F, -1.0F)),
-    .bias = 0.0F,
-    .normal_bias = 0.0F,
-    .resolution_hint
-    = static_cast<std::uint32_t>(oxygen::scene::ShadowResolutionHint::kMedium),
-    .cascade_count = 4U,
-    .distribution_exponent = 1.0F,
-    .cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F },
-  };
-  const std::array<glm::vec4, 2> shadow_casters {
-    glm::vec4(0.0F, 0.0F, 0.5F, 0.5F),
-    glm::vec4(0.0F, 2.0F, 0.5F, 0.5F),
-  };
-  const std::array<glm::vec4, 1> visible_receivers {
-    glm::vec4(0.0F, 0.0F, 0.0F, 0.05F),
-  };
-
-  (void)shadow_manager->PublishForView(oxygen::ViewId { 239 }, view_constants,
-    manager, shadow_casters, visible_receivers, &synthetic_sun,
-    std::chrono::milliseconds(16));
-
-  shadow_manager->ResolveVirtualCurrentFrame(oxygen::ViewId { 239 });
-  const auto* introspection
-    = ResolveVirtualViewIntrospection(*shadow_manager, oxygen::ViewId { 239 });
-  ASSERT_NE(introspection, nullptr);
-  ASSERT_FALSE(introspection->physical_page_metadata_entries.empty());
-  ASSERT_FALSE(introspection->physical_page_list_entries.empty());
-  EXPECT_EQ(introspection->requested_page_list_count
-      + introspection->dirty_page_list_count
-      + introspection->clean_page_list_count
-      + introspection->available_page_list_count,
-    introspection->physical_page_list_entries.size());
-  EXPECT_NE(
-    introspection->physical_page_metadata_srv, kInvalidShaderVisibleIndex);
-  EXPECT_NE(introspection->physical_page_lists_srv, kInvalidShaderVisibleIndex);
-
-  GfxPtr()->buffer_log_ = {};
-  auto recorder = GfxPtr()->AcquireCommandRecorder(
-    SingleQueueStrategy().KeyFor(oxygen::graphics::QueueRole::kGraphics),
-    "VirtualPhysicalPageManagementUploadAfterResolve", false);
-  ASSERT_NE(recorder, nullptr);
-
-  shadow_manager->PrepareVirtualPageTableResources(
-    oxygen::ViewId { 239 }, *recorder);
-
-  const auto& copy_log = GfxPtr()->buffer_log_;
-  ASSERT_TRUE(copy_log.copy_called);
-
-  auto matches_expected_upload
-    = [](const oxygen::renderer::testing::BufferCommandLog::CopyEvent& copy,
-        const void* expected_bytes, const std::size_t expected_size) -> bool {
-    if (copy.src == nullptr || copy.size != expected_size) {
-      return false;
-    }
-
-    auto* upload_buffer = const_cast<oxygen::graphics::Buffer*>(copy.src);
-    upload_buffer->UnMap();
-    auto* upload_bytes = static_cast<std::byte*>(upload_buffer->Map());
-    if (upload_bytes == nullptr) {
-      return false;
-    }
-
-    return std::memcmp(upload_bytes, expected_bytes, expected_size) == 0;
-  };
-
-  EXPECT_NE(
-    std::find_if(copy_log.copies.begin(), copy_log.copies.end(),
-      [&](const auto& copy) {
-        return matches_expected_upload(copy,
-          introspection->physical_page_metadata_entries.data(),
-          introspection->physical_page_metadata_entries.size()
-            * sizeof(oxygen::renderer::VirtualShadowPhysicalPageMetadata));
-      }),
-    copy_log.copies.end());
-  EXPECT_NE(
-    std::find_if(copy_log.copies.begin(), copy_log.copies.end(),
-      [&](const auto& copy) {
-        return matches_expected_upload(copy,
-          introspection->physical_page_list_entries.data(),
-          introspection->physical_page_list_entries.size()
-            * sizeof(oxygen::renderer::VirtualShadowPhysicalPageListEntry));
-      }),
-    copy_log.copies.end());
-}
-
-
-//! The bridge resolve snapshot must mirror resident pages deterministically so
+//! Persistent resolve resources must mirror resident pages deterministically so
 //! the later GPU resolve pass has one stable residency input surface.
 NOLINT_TEST_F(LightManagerTest,
   ShadowManagerPublishForView_VirtualResolveStateSnapshotTracksResidentPagesDeterministically)
@@ -5492,8 +5260,8 @@ NOLINT_TEST_F(LightManagerTest,
   EXPECT_NE(executed_introspection->resolve_stats_srv, kInvalidShaderVisibleIndex);
 }
 
-//! Bridge resolve resources must stay stable per view across republishes so the
-//! later resolve pass can own one persistent residency surface.
+//! Resolve resources must stay stable per view across republishes so the later
+//! resolve pass can own one persistent residency surface.
 NOLINT_TEST_F(LightManagerTest,
   ShadowManagerPublishForView_VirtualResolveStateUsesStablePerViewGpuBuffers)
 {
@@ -5566,8 +5334,8 @@ NOLINT_TEST_F(LightManagerTest,
 }
 
 
-//! After the resolved-schedule bridge is retired, the live resolved page set
-//! must stay authoritative across frames without any auxiliary CPU schedule.
+//! The live resolved page set must stay authoritative across frames without any
+//! auxiliary CPU schedule.
 NOLINT_TEST_F(LightManagerTest,
   ShadowManagerPublishForView_VirtualResolvedPagesStayAuthoritativeAcrossFrames)
 {
