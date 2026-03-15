@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <array>
 #include <bit>
-#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <sstream>
@@ -35,24 +34,12 @@
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/ShadowManager.h>
 #include <Oxygen/Renderer/Types/VirtualShadowPageFlags.h>
-#include <Oxygen/Renderer/Types/VirtualShadowRequestFeedback.h>
 
 namespace oxygen::engine {
 
 using namespace oxygen::renderer::internal::shadow_detail;
 
 namespace {
-
-  using SteadyClock = std::chrono::steady_clock;
-
-  auto ElapsedMicroseconds(const SteadyClock::time_point start)
-    -> std::uint64_t
-  {
-    return static_cast<std::uint64_t>(
-      std::chrono::duration_cast<std::chrono::microseconds>(
-        SteadyClock::now() - start)
-        .count());
-  }
 
   struct alignas(packing::kShaderDataFieldAlignment)
     VirtualShadowRequestPassConstants {
@@ -119,26 +106,15 @@ VirtualShadowRequestPass::~VirtualShadowRequestPass()
     pass_constants_buffer_->UnMap();
     pass_constants_mapped_ptr_ = nullptr;
   }
-  for (auto& slot : slot_readbacks_) {
-    if (slot.buffer && slot.mapped_words != nullptr) {
-      slot.buffer->UnMap();
-      slot.mapped_words = nullptr;
-      slot.mapped_page_mark_flags = nullptr;
-      slot.mapped_stats = nullptr;
-    }
-    slot.buffer.reset();
-  }
 }
 
 auto VirtualShadowRequestPass::DoPrepareResources(
   graphics::CommandRecorder& recorder) -> co::Co<>
 {
-  const auto prepare_begin = SteadyClock::now();
   active_dispatch_ = false;
   active_request_word_count_ = 0U;
   active_pages_per_axis_ = 0U;
   active_clip_level_count_ = 0U;
-  active_directional_address_space_hash = 0U;
   active_clip_grid_origin_x_.fill(0);
   active_clip_grid_origin_y_.fill(0);
   active_view_id_ = {};
@@ -146,8 +122,6 @@ auto VirtualShadowRequestPass::DoPrepareResources(
   if (Context().frame_slot == frame::kInvalidSlot) {
     co_return;
   }
-
-  ProcessCompletedFeedback(Context().frame_slot);
 
   const auto* prepared_frame = Context().current_view.prepared_frame.get();
   if (prepared_frame == nullptr || !prepared_frame->IsValid()
@@ -198,7 +172,6 @@ auto VirtualShadowRequestPass::DoPrepareResources(
   const auto& depth_texture = depth_pass->GetDepthTexture();
   EnsureRequestBuffers();
   EnsurePassConstantsBuffer();
-  EnsureReadbackBuffer(Context().frame_slot);
 
   const auto depth_texture_srv = EnsureDepthTextureSrv(depth_texture);
   if (depth_texture_srv == kInvalidShaderVisibleIndex) {
@@ -247,12 +220,6 @@ auto VirtualShadowRequestPass::DoPrepareResources(
       *stats_clear_upload_buffer_, graphics::ResourceStates::kCopySource, false);
   }
 
-  auto& readback = slot_readbacks_[Context().frame_slot.get()];
-  if (!recorder.IsResourceTracked(*readback.buffer)) {
-    recorder.BeginTrackingResourceState(
-      *readback.buffer, graphics::ResourceStates::kCopyDest, false);
-  }
-
   recorder.RequireResourceState(
     depth_texture, graphics::ResourceStates::kShaderResource);
   recorder.RequireResourceState(
@@ -283,8 +250,6 @@ auto VirtualShadowRequestPass::DoPrepareResources(
   active_request_word_count_ = request_word_count;
   active_pages_per_axis_ = metadata->pages_per_axis;
   active_clip_level_count_ = metadata->clip_level_count;
-  active_directional_address_space_hash
-    = HashDirectionalVirtualFeedbackAddressSpace(*metadata);
   const auto active_clip_count
     = std::min(metadata->clip_level_count, kMaxSupportedClipLevels);
   for (std::uint32_t clip_index = 0U; clip_index < active_clip_count;
@@ -294,16 +259,6 @@ auto VirtualShadowRequestPass::DoPrepareResources(
     active_clip_grid_origin_y_[clip_index]
       = ResolveDirectionalVirtualClipGridOriginY(*metadata, clip_index);
   }
-
-  LOG_F(INFO,
-    "VirtualShadowRequestPass: frame={} slot={} view={} prepared dispatch "
-    "(words={} pages_per_axis={} clips={} address_hash=0x{:x} depth={}x{} "
-    "cpu_prepare_us={})",
-    Context().frame_sequence.get(), Context().frame_slot.get(),
-    Context().current_view.view_id.get(), active_request_word_count_,
-    active_pages_per_axis_, active_clip_level_count_,
-    active_directional_address_space_hash, pass_constants.screen_dimensions.x,
-    pass_constants.screen_dimensions.y, ElapsedMicroseconds(prepare_begin));
 
   co_return;
 }
@@ -328,49 +283,6 @@ auto VirtualShadowRequestPass::DoExecute(graphics::CommandRecorder& recorder)
   const auto group_count_y
     = (height + kDispatchGroupSize - 1U) / kDispatchGroupSize;
   recorder.Dispatch(group_count_x, group_count_y, 1U);
-
-  auto& readback = slot_readbacks_[Context().frame_slot.get()];
-  recorder.RequireResourceState(
-    *request_words_buffer_, graphics::ResourceStates::kCopySource);
-  recorder.RequireResourceState(
-    *page_mark_flags_buffer_, graphics::ResourceStates::kCopySource);
-  recorder.RequireResourceState(
-    *stats_buffer_, graphics::ResourceStates::kCopySource);
-  recorder.RequireResourceState(
-    *readback.buffer, graphics::ResourceStates::kCopyDest);
-  recorder.FlushBarriers();
-  recorder.CopyBuffer(*readback.buffer, 0U, *request_words_buffer_, 0U,
-    static_cast<std::size_t>(kMaxRequestWordCount * sizeof(std::uint32_t)));
-  recorder.CopyBuffer(*readback.buffer,
-    static_cast<std::size_t>(kMaxRequestWordCount * sizeof(std::uint32_t)),
-    *page_mark_flags_buffer_, 0U,
-    static_cast<std::size_t>(kMaxSupportedPageCount * sizeof(std::uint32_t)));
-  recorder.CopyBuffer(*readback.buffer,
-    static_cast<std::size_t>(
-      (kMaxRequestWordCount + kMaxSupportedPageCount)
-      * sizeof(std::uint32_t)),
-    *stats_buffer_, 0U,
-    static_cast<std::size_t>(kStatsWordCount * sizeof(std::uint32_t)));
-
-  readback.pending_feedback = true;
-  readback.view_id = active_view_id_;
-  readback.source_frame_sequence = Context().frame_sequence;
-  readback.pages_per_axis = active_pages_per_axis_;
-  readback.clip_level_count = active_clip_level_count_;
-  readback.directional_address_space_hash
-    = active_directional_address_space_hash;
-  readback.clip_grid_origin_x = active_clip_grid_origin_x_;
-  readback.clip_grid_origin_y = active_clip_grid_origin_y_;
-  readback.request_word_count = active_request_word_count_;
-  readback.total_page_count
-    = active_pages_per_axis_ * active_pages_per_axis_ * active_clip_level_count_;
-
-  LOG_F(INFO,
-    "VirtualShadowRequestPass: frame={} slot={} view={} dispatched request "
-    "pass (groups={}x{} words={})",
-    Context().frame_sequence.get(), Context().frame_slot.get(),
-    active_view_id_.get(), group_count_x, group_count_y,
-    active_request_word_count_);
 
   co_return;
 }
@@ -672,43 +584,6 @@ auto VirtualShadowRequestPass::EnsurePassConstantsBuffer() -> void
     *pass_constants_buffer_, std::move(cbv_handle), cbv_desc);
 }
 
-auto VirtualShadowRequestPass::EnsureReadbackBuffer(const frame::Slot slot)
-  -> void
-{
-  auto& readback = slot_readbacks_[slot.get()];
-  if (readback.buffer && readback.mapped_words != nullptr) {
-    return;
-  }
-
-  constexpr std::uint64_t kReadbackWordCount
-    = static_cast<std::uint64_t>(kMaxRequestWordCount)
-    + static_cast<std::uint64_t>(kMaxSupportedPageCount)
-    + static_cast<std::uint64_t>(kStatsWordCount);
-
-  const graphics::BufferDesc desc {
-    .size_bytes = kReadbackWordCount * sizeof(std::uint32_t),
-    .usage = graphics::BufferUsage::kNone,
-    .memory = graphics::BufferMemory::kReadBack,
-    .debug_name = "VirtualShadowRequestPass.Readback",
-  };
-  readback.buffer = gfx_->CreateBuffer(desc);
-  if (!readback.buffer) {
-    throw std::runtime_error(
-      "VirtualShadowRequestPass: failed to create readback buffer");
-  }
-  readback.mapped_words
-    = static_cast<std::uint32_t*>(readback.buffer->Map(0U, desc.size_bytes));
-  if (readback.mapped_words == nullptr) {
-    throw std::runtime_error(
-      "VirtualShadowRequestPass: failed to map readback buffer");
-  }
-  readback.mapped_page_mark_flags = readback.mapped_words + kMaxRequestWordCount;
-  readback.mapped_stats
-    = readback.mapped_page_mark_flags + kMaxSupportedPageCount;
-  std::memset(
-    readback.mapped_words, 0, static_cast<std::size_t>(desc.size_bytes));
-}
-
 auto VirtualShadowRequestPass::EnsureDepthTextureSrv(
   const graphics::Texture& depth_tex) -> ShaderVisibleIndex
 {
@@ -791,230 +666,6 @@ auto VirtualShadowRequestPass::EnsureDepthTextureSrv(
   depth_texture_owner_ = &depth_tex;
   owns_depth_texture_srv_ = true;
   return depth_texture_srv_;
-}
-
-auto VirtualShadowRequestPass::ProcessCompletedFeedback(const frame::Slot slot)
-  -> void
-{
-  auto& readback = slot_readbacks_[slot.get()];
-  if (!readback.pending_feedback || readback.mapped_words == nullptr) {
-    return;
-  }
-
-  const auto shadow_manager = Context().GetRenderer().GetShadowManager();
-  if (shadow_manager == nullptr) {
-    readback.pending_feedback = false;
-    return;
-  }
-
-  const auto total_pages = readback.pages_per_axis * readback.pages_per_axis
-    * readback.clip_level_count;
-  renderer::VirtualShadowRequestFeedback feedback {};
-  feedback.source_frame_sequence = readback.source_frame_sequence;
-  feedback.pages_per_axis = readback.pages_per_axis;
-  feedback.clip_level_count = readback.clip_level_count;
-  feedback.directional_address_space_hash
-    = readback.directional_address_space_hash;
-  feedback.kind = renderer::VirtualShadowFeedbackKind::kDetail;
-  const auto pages_per_level
-    = readback.pages_per_axis * readback.pages_per_axis;
-
-  const auto max_words = std::min<std::uint32_t>(readback.request_word_count,
-    static_cast<std::uint32_t>(kMaxRequestWordCount));
-  for (std::uint32_t word_index = 0U; word_index < max_words; ++word_index) {
-    auto word = readback.mapped_words[word_index];
-    while (word != 0U) {
-      const auto bit_index = static_cast<std::uint32_t>(std::countr_zero(word));
-      const auto page_index = word_index * 32U + bit_index;
-      if (page_index < total_pages) {
-        const auto clip_index = page_index / pages_per_level;
-        const auto local_page_index = page_index % pages_per_level;
-        const auto page_y = local_page_index / readback.pages_per_axis;
-        const auto page_x = local_page_index % readback.pages_per_axis;
-        const auto resident_key = PackVirtualResidentPageKey(clip_index,
-          readback.clip_grid_origin_x[clip_index]
-            + static_cast<std::int32_t>(page_x),
-          readback.clip_grid_origin_y[clip_index]
-            + static_cast<std::int32_t>(page_y));
-        feedback.requested_resident_keys.push_back(resident_key);
-      }
-      word &= (word - 1U);
-    }
-  }
-
-  std::uint32_t marked_page_count = 0U;
-  std::uint32_t used_marked_page_count = 0U;
-  std::uint32_t detail_marked_page_count = 0U;
-  std::uint32_t used_detail_marked_page_count = 0U;
-  std::array<std::uint32_t, kMaxSupportedClipLevels> requested_pages_per_clip {};
-  std::array<std::uint32_t, kMaxSupportedClipLevels> marked_pages_per_clip {};
-  std::array<std::uint32_t, kMaxSupportedClipLevels> used_marked_pages_per_clip {};
-  std::array<std::uint32_t, kMaxSupportedClipLevels> detail_marked_pages_per_clip {};
-  std::array<std::uint32_t, kMaxSupportedClipLevels>
-    used_detail_marked_pages_per_clip {};
-  std::ostringstream first_requested_pages;
-  std::uint32_t logged_requested_pages = 0U;
-  for (const auto resident_key : feedback.requested_resident_keys) {
-    const auto clip_index
-      = renderer::internal::shadow_detail::VirtualResidentPageKeyClipLevel(
-        resident_key);
-    if (clip_index < requested_pages_per_clip.size()) {
-      ++requested_pages_per_clip[clip_index];
-    }
-    if (logged_requested_pages < 8U) {
-      if (logged_requested_pages > 0U) {
-        first_requested_pages << ",";
-      }
-      first_requested_pages << clip_index << ":("
-                           << renderer::internal::shadow_detail::
-                                VirtualResidentPageKeyGridX(
-                                resident_key)
-                           << ","
-                           << renderer::internal::shadow_detail::
-                                VirtualResidentPageKeyGridY(
-                                resident_key)
-                           << ")";
-      ++logged_requested_pages;
-    }
-  }
-  const auto max_page_count
-    = std::min<std::uint32_t>(readback.total_page_count, kMaxSupportedPageCount);
-  for (std::uint32_t page_index = 0U; page_index < max_page_count; ++page_index) {
-    const auto mark_flags = readback.mapped_page_mark_flags[page_index];
-    if (mark_flags == 0U) {
-      continue;
-    }
-    ++marked_page_count;
-    const auto clip_index
-      = pages_per_level > 0U ? page_index / pages_per_level : 0U;
-    if (clip_index < marked_pages_per_clip.size()) {
-      ++marked_pages_per_clip[clip_index];
-    }
-    const bool used_this_frame
-      = (mark_flags
-          & renderer::ToMask(renderer::VirtualShadowPageFlag::kUsedThisFrame))
-      != 0U;
-    const bool detail_geometry
-      = (mark_flags
-          & renderer::ToMask(renderer::VirtualShadowPageFlag::kDetailGeometry))
-      != 0U;
-    if (used_this_frame) {
-      ++used_marked_page_count;
-      if (clip_index < used_marked_pages_per_clip.size()) {
-        ++used_marked_pages_per_clip[clip_index];
-      }
-    }
-    if (detail_geometry) {
-      ++detail_marked_page_count;
-      if (clip_index < detail_marked_pages_per_clip.size()) {
-        ++detail_marked_pages_per_clip[clip_index];
-      }
-    }
-    if (used_this_frame && detail_geometry) {
-      ++used_detail_marked_page_count;
-      if (clip_index < used_detail_marked_pages_per_clip.size()) {
-        ++used_detail_marked_pages_per_clip[clip_index];
-      }
-    }
-  }
-
-  const auto format_histogram =
-    [](const auto& counts) {
-      std::ostringstream stream;
-      bool first = true;
-      for (std::size_t clip_index = 0U; clip_index < counts.size();
-        ++clip_index) {
-        if (counts[clip_index] == 0U) {
-          continue;
-        }
-        if (!first) {
-          stream << ",";
-        }
-        first = false;
-        stream << clip_index << ":" << counts[clip_index];
-      }
-      return stream.str();
-    };
-
-  std::array<std::uint32_t, kMaxSupportedClipLevels> selected_pixels_per_clip {};
-  std::array<std::uint32_t, kMaxSupportedClipLevels> projected_pixels_per_clip {};
-  std::uint32_t geometry_pixels = 0U;
-  std::uint32_t clip_select_success = 0U;
-  std::uint32_t clip_select_fail = 0U;
-  std::uint32_t request_projection_success = 0U;
-  if (readback.mapped_stats != nullptr) {
-    geometry_pixels = readback.mapped_stats[0];
-    clip_select_success = readback.mapped_stats[1];
-    clip_select_fail = readback.mapped_stats[2];
-    request_projection_success = readback.mapped_stats[3];
-    for (std::uint32_t clip_index = 0U; clip_index < kMaxSupportedClipLevels;
-      ++clip_index) {
-      selected_pixels_per_clip[clip_index] = readback.mapped_stats[4U + clip_index];
-      projected_pixels_per_clip[clip_index]
-        = readback.mapped_stats[4U + kMaxSupportedClipLevels + clip_index];
-    }
-  }
-
-  if (!feedback.requested_resident_keys.empty()) {
-    auto& log_state = feedback_log_states_[readback.view_id.get()];
-    LOG_F(INFO,
-      "VirtualShadowRequestPass: frame={} slot={} view={} completed feedback "
-      "(source_frame={} requested_pages={} marked_pages={} "
-      "used_marked_pages={} detail_marked_pages={} "
-      "used_detail_marked_pages={} address_hash=0x{:x} "
-      "geometry_pixels={} clip_select_success={} clip_select_fail={} "
-      "request_projection_success={} selected_hist=[{}] projected_hist=[{}] "
-      "requested_hist=[{}] marked_hist=[{}] used_hist=[{}] "
-      "detail_hist=[{}] used_detail_hist=[{}] first_pages=[{}])",
-      Context().frame_sequence.get(), slot.get(), readback.view_id.get(),
-      feedback.source_frame_sequence.get(),
-      feedback.requested_resident_keys.size(),
-      marked_page_count, used_marked_page_count, detail_marked_page_count,
-      used_detail_marked_page_count,
-      feedback.directional_address_space_hash,
-      geometry_pixels, clip_select_success, clip_select_fail,
-      request_projection_success, format_histogram(selected_pixels_per_clip),
-      format_histogram(projected_pixels_per_clip),
-      format_histogram(requested_pages_per_clip),
-      format_histogram(marked_pages_per_clip),
-      format_histogram(used_marked_pages_per_clip),
-      format_histogram(detail_marked_pages_per_clip),
-      format_histogram(used_detail_marked_pages_per_clip),
-      first_requested_pages.str());
-    log_state.last_feedback_count
-      = static_cast<std::uint32_t>(feedback.requested_resident_keys.size());
-    log_state.had_pending_feedback = true;
-    shadow_manager->SubmitVirtualRequestFeedback(
-      readback.view_id, std::move(feedback));
-  } else {
-    auto& log_state = feedback_log_states_[readback.view_id.get()];
-    LOG_F(INFO,
-      "VirtualShadowRequestPass: frame={} slot={} view={} completed feedback "
-      "(source_frame={} requested_pages=0 marked_pages={} "
-      "used_marked_pages={} detail_marked_pages={} "
-      "used_detail_marked_pages={} address_hash=0x{:x} "
-      "geometry_pixels={} clip_select_success={} clip_select_fail={} "
-      "request_projection_success={} selected_hist=[{}] projected_hist=[{}] "
-      "marked_hist=[{}] used_hist=[{}] detail_hist=[{}] "
-      "used_detail_hist=[{}])",
-      Context().frame_sequence.get(), slot.get(), readback.view_id.get(),
-      readback.source_frame_sequence.get(),
-      marked_page_count, used_marked_page_count, detail_marked_page_count,
-      used_detail_marked_page_count,
-      readback.directional_address_space_hash,
-      geometry_pixels, clip_select_success, clip_select_fail,
-      request_projection_success, format_histogram(selected_pixels_per_clip),
-      format_histogram(projected_pixels_per_clip),
-      format_histogram(marked_pages_per_clip),
-      format_histogram(used_marked_pages_per_clip),
-      format_histogram(detail_marked_pages_per_clip),
-      format_histogram(used_detail_marked_pages_per_clip));
-    log_state.last_feedback_count = 0U;
-    log_state.had_pending_feedback = false;
-    shadow_manager->ClearVirtualRequestFeedback(
-      readback.view_id, renderer::VirtualShadowFeedbackKind::kDetail);
-  }
-  readback.pending_feedback = false;
 }
 
 } // namespace oxygen::engine

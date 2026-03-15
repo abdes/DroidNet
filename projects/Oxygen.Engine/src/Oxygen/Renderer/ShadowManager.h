@@ -30,7 +30,6 @@
 #include <Oxygen/Renderer/Types/ShadowInstanceMetadata.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/Types/VirtualShadowRenderPlan.h>
-#include <Oxygen/Renderer/Types/VirtualShadowRequestFeedback.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::engine::upload {
@@ -100,11 +99,6 @@ public:
     ViewId view_id, graphics::CommandRecorder& recorder) -> void;
   OXGN_RNDR_API auto SetPublishedViewFrameBindingsSlot(
     ViewId view_id, engine::BindlessViewFrameBindingsSlot slot) -> void;
-  OXGN_RNDR_API auto SubmitVirtualRequestFeedback(
-    ViewId view_id, VirtualShadowRequestFeedback feedback) -> void;
-  OXGN_RNDR_API auto ClearVirtualRequestFeedback(ViewId view_id,
-    VirtualShadowFeedbackKind kind = VirtualShadowFeedbackKind::kDetail)
-    -> void;
   OXGN_RNDR_API auto SubmitVirtualGpuRasterInputs(
     ViewId view_id, renderer::VirtualShadowGpuRasterInputs inputs) -> void;
   OXGN_RNDR_API auto ClearVirtualGpuRasterInputs(ViewId view_id) -> void;
@@ -117,10 +111,6 @@ public:
     ViewId view_id) const noexcept -> const RasterShadowRenderPlan*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetVirtualGpuRasterInputs(
     ViewId view_id) const noexcept -> const renderer::VirtualShadowGpuRasterInputs*;
-  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetViewIntrospection(
-    ViewId view_id) const noexcept -> const ShadowViewIntrospection*;
-  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetVirtualViewIntrospection(
-    ViewId view_id) const noexcept -> const VirtualShadowViewIntrospection*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetVirtualPageManagementBindings(
     ViewId view_id) const noexcept
     -> const VirtualShadowPageManagementBindings*;

@@ -398,13 +398,6 @@ auto ConventionalShadowBackend::TryGetRasterRenderPlan(
   return it != view_cache_.end() ? &it->second.raster_plan : nullptr;
 }
 
-auto ConventionalShadowBackend::TryGetViewIntrospection(
-  const ViewId view_id) const noexcept -> const ShadowViewIntrospection*
-{
-  const auto it = view_cache_.find(view_id);
-  return it != view_cache_.end() ? &it->second.introspection : nullptr;
-}
-
 auto ConventionalShadowBackend::GetDirectionalShadowTexture() const noexcept
   -> const std::shared_ptr<graphics::Texture>&
 {
@@ -441,10 +434,6 @@ auto ConventionalShadowBackend::RefreshViewExports(ViewCacheEntry& state) const
   state.raster_plan.depth_texture
     = observer_ptr { directional_shadow_texture_.get() };
   state.raster_plan.jobs = state.raster_jobs;
-
-  state.introspection.shadow_instances = state.shadow_instances;
-  state.introspection.directional_metadata = state.directional_metadata;
-  state.introspection.raster_jobs = state.raster_jobs;
 }
 
 auto ConventionalShadowBackend::BuildDirectionalResourceConfig(

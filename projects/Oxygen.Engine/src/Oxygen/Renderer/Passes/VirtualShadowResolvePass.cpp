@@ -7,7 +7,6 @@
 #include <Oxygen/Renderer/Passes/VirtualShadowResolvePass.h>
 
 #include <algorithm>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -34,8 +33,6 @@ namespace oxygen::engine {
 
 namespace {
 
-  using SteadyClock = std::chrono::steady_clock;
-
   struct alignas(16) ResolvePackedInt4 {
     std::int32_t x { 0 };
     std::int32_t y { 0 };
@@ -50,20 +47,14 @@ namespace {
     float w { 0.0F };
   };
 
-  auto ElapsedMicroseconds(const SteadyClock::time_point start)
-    -> std::uint64_t
-  {
-    return static_cast<std::uint64_t>(
-      std::chrono::duration_cast<std::chrono::microseconds>(
-        SteadyClock::now() - start)
-        .count());
-  }
-
   struct alignas(packing::kShaderDataFieldAlignment)
     VirtualShadowResolvePassConstants {
     ShaderVisibleIndex request_words_srv_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex page_mark_flags_srv_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex draw_bounds_srv_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex invalidation_entries_srv_index {
+      kInvalidShaderVisibleIndex
+    };
     ShaderVisibleIndex schedule_uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex schedule_count_uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex clear_args_uav_index { kInvalidShaderVisibleIndex };
@@ -97,9 +88,7 @@ namespace {
     };
     ShaderVisibleIndex resolve_stats_srv_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex resolve_stats_uav_index { kInvalidShaderVisibleIndex };
-    ShaderVisibleIndex dirty_resident_pages_srv_index {
-      kInvalidShaderVisibleIndex
-    };
+    std::uint32_t invalidation_entry_count { 0U };
     std::uint32_t request_word_count { 0U };
     std::uint32_t total_page_count { 0U };
     std::uint32_t schedule_capacity { 0U };
@@ -108,10 +97,10 @@ namespace {
     std::uint32_t pages_per_level { 0U };
     std::uint32_t physical_page_capacity { 0U };
     std::uint32_t atlas_tiles_per_axis { 0U };
-    std::uint32_t dirty_resident_page_count { 0U };
-    std::uint32_t global_dirty_resident_contents { 0U };
     std::uint32_t draw_count { 0U };
     std::uint32_t draw_page_list_capacity { 0U };
+    std::uint32_t reset_page_management_state { 0U };
+    std::uint32_t global_dirty_resident_contents { 0U };
     std::uint32_t phase { 0U };
     std::uint32_t target_clip_index { 0U };
     std::array<ResolvePackedInt4, 3U> clip_grid_origin_x_packed {};
@@ -155,7 +144,6 @@ VirtualShadowResolvePass::~VirtualShadowResolvePass()
 auto VirtualShadowResolvePass::DoPrepareResources(
   graphics::CommandRecorder& recorder) -> co::Co<>
 {
-  const auto prepare_begin = SteadyClock::now();
   active_dispatch_ = false;
   active_view_id_ = {};
   active_request_words_srv_ = kInvalidShaderVisibleIndex;
@@ -166,7 +154,6 @@ auto VirtualShadowResolvePass::DoPrepareResources(
   active_pages_per_axis_ = 0U;
   active_clip_level_count_ = 0U;
   active_pages_per_level_ = 0U;
-  active_directional_address_space_hash_ = 0U;
   active_clip_grid_origin_x_.fill(0);
   active_clip_grid_origin_y_.fill(0);
   active_clip_origin_x_.fill(0.0F);
@@ -211,14 +198,12 @@ auto VirtualShadowResolvePass::DoPrepareResources(
 
   const auto* metadata = shadow_manager->TryGetVirtualDirectionalMetadata(
     Context().current_view.view_id);
-  const auto* virtual_view = shadow_manager->TryGetVirtualViewIntrospection(
-    Context().current_view.view_id);
   const auto* publication
     = shadow_manager->TryGetFramePublication(Context().current_view.view_id);
   const auto* page_management_bindings
     = shadow_manager->TryGetVirtualPageManagementBindings(
       Context().current_view.view_id);
-  if (metadata == nullptr || virtual_view == nullptr || publication == nullptr
+  if (metadata == nullptr || publication == nullptr
     || page_management_bindings == nullptr
     || !page_management_bindings->page_table_srv.IsValid()
     || !page_management_bindings->page_flags_srv.IsValid()
@@ -230,7 +215,9 @@ auto VirtualShadowResolvePass::DoPrepareResources(
     || !page_management_bindings->physical_page_lists_srv.IsValid()
     || !page_management_bindings->physical_page_lists_uav.IsValid()
     || !page_management_bindings->resolve_stats_srv.IsValid()
-    || !page_management_bindings->resolve_stats_uav.IsValid()) {
+    || !page_management_bindings->resolve_stats_uav.IsValid()
+    || (page_management_bindings->invalidation_entry_count > 0U
+      && !page_management_bindings->invalidation_entries_srv.IsValid())) {
     co_return;
   }
 
@@ -273,8 +260,6 @@ auto VirtualShadowResolvePass::DoPrepareResources(
   active_pages_per_axis_ = metadata->pages_per_axis;
   active_clip_level_count_ = metadata->clip_level_count;
   active_pages_per_level_ = metadata->pages_per_axis * metadata->pages_per_axis;
-  active_directional_address_space_hash_ = renderer::internal::shadow_detail::
-    HashDirectionalVirtualFeedbackAddressSpace(*metadata);
   // UE-style VSM page management uses the live physical page pool capacity as
   // shader input. CPU introspection size is debug-only and may be empty/stale
   // before readback, so it must never drive resolve-time page management.
@@ -448,32 +433,9 @@ auto VirtualShadowResolvePass::DoPrepareResources(
       .source_frame_sequence = Context().frame_sequence,
       .draw_count = active_draw_count_,
       .schedule_capacity = active_schedule_capacity_,
+      .pending_raster_page_count
+        = page_management_bindings->pending_raster_page_count,
     });
-
-  LOG_F(INFO,
-    "VirtualShadowResolvePass: frame={} slot={} view={} prepared dispatch "
-    "(words={} pages_per_axis={} clips={} address_hash=0x{:x} capacity={} "
-    "page_table_srv={} page_table_uav={} page_flags_uav={} phys_meta_srv={} "
-    "phys_meta_uav={} phys_lists_srv={} phys_lists_uav={} stats_srv={} "
-    "stats_uav={} dirty_keys={} global_dirty={} phys_capacity={} "
-    "draws={} cpu_prepare_us={})",
-    Context().frame_sequence.get(), Context().frame_slot.get(),
-    Context().current_view.view_id.get(), active_request_word_count_,
-    active_pages_per_axis_, active_clip_level_count_,
-    active_directional_address_space_hash_, active_schedule_capacity_,
-    active_page_management_bindings_.page_table_srv.get(),
-    active_page_management_bindings_.page_table_uav.get(),
-    active_page_management_bindings_.page_flags_uav.get(),
-    active_page_management_bindings_.physical_page_metadata_srv.get(),
-    active_page_management_bindings_.physical_page_metadata_uav.get(),
-    active_page_management_bindings_.physical_page_lists_srv.get(),
-    active_page_management_bindings_.physical_page_lists_uav.get(),
-    active_page_management_bindings_.resolve_stats_srv.get(),
-    active_page_management_bindings_.resolve_stats_uav.get(),
-    active_page_management_bindings_.dirty_resident_page_count,
-    active_page_management_bindings_.global_dirty_resident_contents,
-    active_physical_page_capacity_, active_draw_count_,
-    ElapsedMicroseconds(prepare_begin));
 
   co_return;
 }
@@ -572,6 +534,8 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
                                         : kInvalidShaderVisibleIndex,
       .page_mark_flags_srv_index = active_page_mark_flags_srv_,
       .draw_bounds_srv_index = active_draw_bounds_srv_,
+      .invalidation_entries_srv_index
+      = active_page_management_bindings_.invalidation_entries_srv,
       .schedule_uav_index = view_schedule_resources_.at(active_view_id_).schedule_uav,
       .schedule_count_uav_index
       = view_schedule_resources_.at(active_view_id_).count_uav,
@@ -602,8 +566,8 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
       = active_page_management_bindings_.resolve_stats_srv,
       .resolve_stats_uav_index
       = active_page_management_bindings_.resolve_stats_uav,
-      .dirty_resident_pages_srv_index
-      = active_page_management_bindings_.dirty_resident_pages_srv,
+      .invalidation_entry_count
+      = active_page_management_bindings_.invalidation_entry_count,
       .request_word_count = active_request_word_count_,
       .total_page_count = total_page_count,
       .schedule_capacity = active_schedule_capacity_,
@@ -612,12 +576,13 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
       .pages_per_level = active_pages_per_level_,
       .physical_page_capacity = active_physical_page_capacity_,
       .atlas_tiles_per_axis = active_page_management_bindings_.atlas_tiles_per_axis,
-      .dirty_resident_page_count
-      = active_page_management_bindings_.dirty_resident_page_count,
-      .global_dirty_resident_contents
-      = active_page_management_bindings_.global_dirty_resident_contents ? 1U : 0U,
       .draw_count = active_draw_count_,
       .draw_page_list_capacity = active_draw_page_index_capacity_,
+      .reset_page_management_state
+      = active_page_management_bindings_.reset_page_management_state ? 1U : 0U,
+      .global_dirty_resident_contents
+      = active_page_management_bindings_.global_dirty_resident_contents ? 1U
+                                                                        : 0U,
       .phase = phase,
       .target_clip_index = target_clip_index,
       .clip_grid_origin_x_packed = pack_int4(active_clip_grid_origin_x_),
@@ -688,13 +653,6 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
 
   auto it = view_schedule_resources_.find(active_view_id_);
   if (it != view_schedule_resources_.end() && total_page_count > 0U) {
-    LOG_F(INFO,
-      "VirtualShadowResolvePass: frame={} slot={} view={} dispatched resolve "
-      "(groups={} scheduled_capacity={} draws={})",
-      Context().frame_sequence.get(), Context().frame_slot.get(),
-      Context().current_view.view_id.get(), active_dispatch_group_count_,
-      active_schedule_capacity_, active_draw_count_);
-
     recorder.RequireResourceState(
       *it->second.schedule_buffer, graphics::ResourceStates::kShaderResource);
     recorder.RequireResourceState(
@@ -725,12 +683,6 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
         .draw_count = active_draw_count_,
         .schedule_capacity = active_schedule_capacity_,
       });
-  } else if (active_request_word_count_ == 0U) {
-    LOG_F(INFO,
-      "VirtualShadowResolvePass: frame={} slot={} view={} updated page "
-      "management outputs without request scheduling",
-      Context().frame_sequence.get(), Context().frame_slot.get(),
-      Context().current_view.view_id.get());
   }
 
   co_return;

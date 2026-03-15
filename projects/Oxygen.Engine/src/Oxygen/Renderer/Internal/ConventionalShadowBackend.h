@@ -66,8 +66,6 @@ public:
     ViewId view_id) const noexcept -> const ShadowFramePublication*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetRasterRenderPlan(
     ViewId view_id) const noexcept -> const RasterShadowRenderPlan*;
-  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetViewIntrospection(
-    ViewId view_id) const noexcept -> const ShadowViewIntrospection*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto
   GetDirectionalShadowTexture() const noexcept
     -> const std::shared_ptr<graphics::Texture>&;
@@ -95,7 +93,6 @@ private:
     std::vector<RasterShadowJob> raster_jobs;
     ShadowFramePublication frame_publication {};
     RasterShadowRenderPlan raster_plan {};
-    ShadowViewIntrospection introspection {};
   };
 
   observer_ptr<Graphics> gfx_;

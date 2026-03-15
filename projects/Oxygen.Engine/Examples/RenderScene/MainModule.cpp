@@ -1012,38 +1012,6 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
   auto& shell = GetShell();
   shell.Draw(context);
 
-  if (pipeline_) {
-    auto* forward_pipeline
-      = static_cast<renderer::ForwardPipeline*>(pipeline_.get());
-    ImGui::SetNextWindowPos(ImVec2(24.0F, 24.0F), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(420.0F, 480.0F), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowBgAlpha(0.94F);
-
-    if (ImGui::Begin("VSM Atlas Inspector")) {
-      const auto& atlas_debug_texture
-        = forward_pipeline->GetVirtualShadowAtlasDebugTexture();
-      if (!atlas_debug_texture) {
-        ImGui::TextUnformatted("Atlas debug texture unavailable.");
-      } else {
-        const auto texture_id = imgui_module.RegisterTexture(
-          "render-scene.vsm-atlas-debug", atlas_debug_texture);
-        const auto& atlas_desc = atlas_debug_texture->GetDescriptor();
-        ImGui::Text("Physical Atlas Resolution: %ux%u", atlas_desc.width,
-          atlas_desc.height);
-        if (texture_id == 0U) {
-          ImGui::TextUnformatted("ImGui texture registration failed.");
-        } else {
-          const ImVec2 avail = ImGui::GetContentRegionAvail();
-          const float side = std::max(1.0F, (std::min)(avail.x, avail.y));
-          ImGui::Image((ImTextureID)texture_id,
-            ImVec2(side, side), ImVec2(0.0F, 0.0F), ImVec2(1.0F, 1.0F),
-            ImVec4(1.0F, 1.0F, 1.0F, 1.0F),
-            ImVec4(0.10F, 0.95F, 0.15F, 1.0F));
-        }
-      }
-    }
-    ImGui::End();
-  }
   co_return;
 }
 

@@ -10,12 +10,9 @@
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <unordered_map>
-
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
-#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
@@ -67,20 +64,6 @@ private:
   static constexpr std::uint32_t kMaxRequestWordCount
     = (kMaxSupportedPageCount + 31U) / 32U;
 
-  struct SlotReadbackState {
-    std::shared_ptr<graphics::Buffer> buffer;
-    std::uint32_t* mapped_words { nullptr };
-    frame::SequenceNumber source_frame_sequence { 0U };
-    ViewId view_id {};
-    std::uint32_t pages_per_axis { 0U };
-    std::uint32_t clip_level_count { 0U };
-    std::uint64_t directional_address_space_hash { 0U };
-    std::array<std::int32_t, kMaxSupportedClipLevels> clip_grid_origin_x {};
-    std::array<std::int32_t, kMaxSupportedClipLevels> clip_grid_origin_y {};
-    std::uint32_t request_word_count { 0U };
-    bool pending_feedback { false };
-  };
-
   observer_ptr<Graphics> gfx_;
   std::shared_ptr<Config> config_;
 
@@ -93,32 +76,20 @@ private:
   const graphics::Texture* depth_texture_owner_ { nullptr };
   bool owns_depth_texture_srv_ { false };
 
-  std::array<SlotReadbackState, frame::kFramesInFlight.get()>
-    slot_readbacks_ {};
-
   ViewId active_view_id_ {};
   std::uint32_t active_request_word_count_ { 0U };
   std::uint32_t active_pages_per_axis_ { 0U };
   std::uint32_t active_clip_level_count_ { 0U };
   std::uint32_t active_coarse_backbone_begin_ { 0U };
-  std::uint64_t active_directional_address_space_hash_ { 0U };
   std::array<std::int32_t, kMaxSupportedClipLevels>
     active_clip_grid_origin_x_ {};
   std::array<std::int32_t, kMaxSupportedClipLevels>
     active_clip_grid_origin_y_ {};
   bool active_dispatch_ { false };
 
-  struct FeedbackLogState {
-    std::uint32_t last_feedback_count { 0U };
-    bool had_pending_feedback { false };
-  };
-  std::unordered_map<std::uint64_t, FeedbackLogState> feedback_log_states_;
-
   OXGN_RNDR_API auto EnsurePassConstantsBuffer() -> void;
-  OXGN_RNDR_API auto EnsureReadbackBuffer(frame::Slot slot) -> void;
   OXGN_RNDR_API auto EnsureDepthTextureSrv(const graphics::Texture& depth_tex)
     -> ShaderVisibleIndex;
-  OXGN_RNDR_API auto ProcessCompletedFeedback(frame::Slot slot) -> void;
 };
 
 } // namespace oxygen::engine

@@ -276,22 +276,6 @@ auto ShadowManager::SetPublishedViewFrameBindingsSlot(const ViewId view_id,
   }
 }
 
-auto ShadowManager::SubmitVirtualRequestFeedback(
-  const ViewId view_id, VirtualShadowRequestFeedback feedback) -> void
-{
-  if (virtual_backend_) {
-    virtual_backend_->SubmitRequestFeedback(view_id, std::move(feedback));
-  }
-}
-
-auto ShadowManager::ClearVirtualRequestFeedback(
-  const ViewId view_id, const VirtualShadowFeedbackKind kind) -> void
-{
-  if (virtual_backend_) {
-    virtual_backend_->ClearRequestFeedback(view_id, kind);
-  }
-}
-
 auto ShadowManager::SubmitVirtualGpuRasterInputs(const ViewId view_id,
   renderer::VirtualShadowGpuRasterInputs inputs) -> void
 {
@@ -340,21 +324,6 @@ auto ShadowManager::TryGetVirtualGpuRasterInputs(
 {
   const auto it = virtual_gpu_raster_inputs_.find(view_id);
   return it != virtual_gpu_raster_inputs_.end() ? &it->second : nullptr;
-}
-
-auto ShadowManager::TryGetViewIntrospection(const ViewId view_id) const noexcept
-  -> const ShadowViewIntrospection*
-{
-  return conventional_backend_
-    ? conventional_backend_->TryGetViewIntrospection(view_id)
-    : nullptr;
-}
-
-auto ShadowManager::TryGetVirtualViewIntrospection(
-  const ViewId view_id) const noexcept -> const VirtualShadowViewIntrospection*
-{
-  return virtual_backend_ ? virtual_backend_->TryGetViewIntrospection(view_id)
-                          : nullptr;
 }
 
 auto ShadowManager::TryGetVirtualPageManagementBindings(

@@ -11,7 +11,6 @@
 #include <array>
 #include <optional>
 #include <span>
-#include <unordered_map>
 #include <vector>
 
 #include <Oxygen/Graphics/Common/NativeObject.h>
@@ -80,13 +79,6 @@ private:
     pass_constants_indices_ {};
   std::optional<graphics::GraphicsPipelineDesc> clear_pso_ {};
 
-  struct ViewLogState {
-    bool saw_live_prepared_frame { false };
-    bool saw_live_plan_jobs { false };
-    bool saw_zero_draw_live_frame { false };
-    bool saw_nonzero_draw_live_frame { false };
-  };
-  std::unordered_map<std::uint64_t, ViewLogState> view_log_states_;
 };
 
 } // namespace oxygen::engine

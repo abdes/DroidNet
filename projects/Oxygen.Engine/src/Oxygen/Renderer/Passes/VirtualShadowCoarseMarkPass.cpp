@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <array>
 #include <bit>
-#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
@@ -33,24 +32,12 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/ShadowManager.h>
-#include <Oxygen/Renderer/Types/VirtualShadowRequestFeedback.h>
 
 namespace oxygen::engine {
 
 using namespace oxygen::renderer::internal::shadow_detail;
 
 namespace {
-
-  using SteadyClock = std::chrono::steady_clock;
-
-  auto ElapsedMicroseconds(const SteadyClock::time_point start)
-    -> std::uint64_t
-  {
-    return static_cast<std::uint64_t>(
-      std::chrono::duration_cast<std::chrono::microseconds>(
-        SteadyClock::now() - start)
-        .count());
-  }
 
   struct alignas(packing::kShaderDataFieldAlignment)
     VirtualShadowCoarseMarkPassConstants {
@@ -106,25 +93,16 @@ VirtualShadowCoarseMarkPass::~VirtualShadowCoarseMarkPass()
     pass_constants_buffer_->UnMap();
     pass_constants_mapped_ptr_ = nullptr;
   }
-  for (auto& slot : slot_readbacks_) {
-    if (slot.buffer && slot.mapped_words != nullptr) {
-      slot.buffer->UnMap();
-      slot.mapped_words = nullptr;
-    }
-    slot.buffer.reset();
-  }
 }
 
 auto VirtualShadowCoarseMarkPass::DoPrepareResources(
   graphics::CommandRecorder& recorder) -> co::Co<>
 {
-  const auto prepare_begin = SteadyClock::now();
   active_dispatch_ = false;
   active_request_word_count_ = 0U;
   active_pages_per_axis_ = 0U;
   active_clip_level_count_ = 0U;
   active_coarse_backbone_begin_ = 0U;
-  active_directional_address_space_hash_ = 0U;
   active_clip_grid_origin_x_.fill(0);
   active_clip_grid_origin_y_.fill(0);
   active_view_id_ = {};
@@ -132,8 +110,6 @@ auto VirtualShadowCoarseMarkPass::DoPrepareResources(
   if (Context().frame_slot == frame::kInvalidSlot) {
     co_return;
   }
-
-  ProcessCompletedFeedback(Context().frame_slot);
 
   const auto* prepared_frame = Context().current_view.prepared_frame.get();
   if (prepared_frame == nullptr || !prepared_frame->IsValid()
@@ -174,7 +150,6 @@ auto VirtualShadowCoarseMarkPass::DoPrepareResources(
 
   const auto& depth_texture = depth_pass->GetDepthTexture();
   EnsurePassConstantsBuffer();
-  EnsureReadbackBuffer(Context().frame_slot);
 
   const auto depth_texture_srv = EnsureDepthTextureSrv(depth_texture);
   if (depth_texture_srv == kInvalidShaderVisibleIndex) {
@@ -215,12 +190,6 @@ auto VirtualShadowCoarseMarkPass::DoPrepareResources(
       graphics::ResourceStates::kCommon, true);
   }
 
-  auto& readback = slot_readbacks_[Context().frame_slot.get()];
-  if (!recorder.IsResourceTracked(*readback.buffer)) {
-    recorder.BeginTrackingResourceState(
-      *readback.buffer, graphics::ResourceStates::kCopyDest, false);
-  }
-
   recorder.RequireResourceState(
     depth_texture, graphics::ResourceStates::kShaderResource);
   recorder.RequireResourceState(*request_pass->GetRequestWordsBuffer(),
@@ -235,8 +204,6 @@ auto VirtualShadowCoarseMarkPass::DoPrepareResources(
   active_pages_per_axis_ = metadata->pages_per_axis;
   active_clip_level_count_ = metadata->clip_level_count;
   active_coarse_backbone_begin_ = coarse_backbone_begin;
-  active_directional_address_space_hash_
-    = HashDirectionalVirtualFeedbackAddressSpace(*metadata);
   const auto active_clip_count
     = std::min(metadata->clip_level_count, kMaxSupportedClipLevels);
   for (std::uint32_t clip_index = 0U; clip_index < active_clip_count;
@@ -246,18 +213,6 @@ auto VirtualShadowCoarseMarkPass::DoPrepareResources(
     active_clip_grid_origin_y_[clip_index]
       = ResolveDirectionalVirtualClipGridOriginY(*metadata, clip_index);
   }
-
-  LOG_F(INFO,
-    "VirtualShadowCoarseMarkPass: frame={} slot={} view={} prepared dispatch "
-    "(words={} pages_per_axis={} clips={} coarse_begin={} coarse_mask=0x{:x} "
-    "address_hash=0x{:x} depth={}x{} cpu_prepare_us={})",
-    Context().frame_sequence.get(), Context().frame_slot.get(),
-    Context().current_view.view_id.get(), active_request_word_count_,
-    active_pages_per_axis_, active_clip_level_count_,
-    active_coarse_backbone_begin_, coarse_clip_mask,
-    active_directional_address_space_hash_,
-    pass_constants.screen_dimensions.x, pass_constants.screen_dimensions.y,
-    ElapsedMicroseconds(prepare_begin));
 
   co_return;
 }
@@ -284,32 +239,6 @@ auto VirtualShadowCoarseMarkPass::DoExecute(graphics::CommandRecorder& recorder)
   const auto group_count_y
     = (height + kDispatchGroupSize - 1U) / kDispatchGroupSize;
   recorder.Dispatch(group_count_x, group_count_y, 1U);
-
-  auto& readback = slot_readbacks_[Context().frame_slot.get()];
-  recorder.RequireResourceState(*request_pass->GetRequestWordsBuffer(),
-    graphics::ResourceStates::kCopySource);
-  recorder.RequireResourceState(
-    *readback.buffer, graphics::ResourceStates::kCopyDest);
-  recorder.FlushBarriers();
-  recorder.CopyBuffer(*readback.buffer, 0U, *request_pass->GetRequestWordsBuffer(),
-    0U, static_cast<std::size_t>(kMaxRequestWordCount * sizeof(std::uint32_t)));
-
-  readback.pending_feedback = true;
-  readback.view_id = active_view_id_;
-  readback.source_frame_sequence = Context().frame_sequence;
-  readback.pages_per_axis = active_pages_per_axis_;
-  readback.clip_level_count = active_clip_level_count_;
-  readback.directional_address_space_hash = active_directional_address_space_hash_;
-  readback.clip_grid_origin_x = active_clip_grid_origin_x_;
-  readback.clip_grid_origin_y = active_clip_grid_origin_y_;
-  readback.request_word_count = active_request_word_count_;
-
-  LOG_F(INFO,
-    "VirtualShadowCoarseMarkPass: frame={} slot={} view={} dispatched coarse "
-    "mark pass (groups={}x{} words={} coarse_begin={})",
-    Context().frame_sequence.get(), Context().frame_slot.get(),
-    active_view_id_.get(), group_count_x, group_count_y,
-    active_request_word_count_, active_coarse_backbone_begin_);
 
   co_return;
 }
@@ -394,35 +323,6 @@ auto VirtualShadowCoarseMarkPass::EnsurePassConstantsBuffer() -> void
     *pass_constants_buffer_, std::move(cbv_handle), cbv_desc);
 }
 
-auto VirtualShadowCoarseMarkPass::EnsureReadbackBuffer(const frame::Slot slot)
-  -> void
-{
-  auto& readback = slot_readbacks_[slot.get()];
-  if (readback.buffer && readback.mapped_words != nullptr) {
-    return;
-  }
-
-  const graphics::BufferDesc desc {
-    .size_bytes = kMaxRequestWordCount * sizeof(std::uint32_t),
-    .usage = graphics::BufferUsage::kNone,
-    .memory = graphics::BufferMemory::kReadBack,
-    .debug_name = "VirtualShadowCoarseMarkPass.Readback",
-  };
-  readback.buffer = gfx_->CreateBuffer(desc);
-  if (!readback.buffer) {
-    throw std::runtime_error(
-      "VirtualShadowCoarseMarkPass: failed to create readback buffer");
-  }
-  readback.mapped_words
-    = static_cast<std::uint32_t*>(readback.buffer->Map(0U, desc.size_bytes));
-  if (readback.mapped_words == nullptr) {
-    throw std::runtime_error(
-      "VirtualShadowCoarseMarkPass: failed to map readback buffer");
-  }
-  std::memset(
-    readback.mapped_words, 0, static_cast<std::size_t>(desc.size_bytes));
-}
-
 auto VirtualShadowCoarseMarkPass::EnsureDepthTextureSrv(
   const graphics::Texture& depth_tex) -> ShaderVisibleIndex
 {
@@ -485,84 +385,6 @@ auto VirtualShadowCoarseMarkPass::EnsureDepthTextureSrv(
   depth_texture_owner_ = &depth_tex;
   owns_depth_texture_srv_ = true;
   return register_new_srv();
-}
-
-auto VirtualShadowCoarseMarkPass::ProcessCompletedFeedback(const frame::Slot slot)
-  -> void
-{
-  auto& readback = slot_readbacks_[slot.get()];
-  if (!readback.pending_feedback || readback.mapped_words == nullptr) {
-    return;
-  }
-
-  const auto shadow_manager = Context().GetRenderer().GetShadowManager();
-  if (shadow_manager == nullptr) {
-    readback.pending_feedback = false;
-    return;
-  }
-
-  const auto total_pages = readback.pages_per_axis * readback.pages_per_axis
-    * readback.clip_level_count;
-  renderer::VirtualShadowRequestFeedback feedback {};
-  feedback.source_frame_sequence = readback.source_frame_sequence;
-  feedback.pages_per_axis = readback.pages_per_axis;
-  feedback.clip_level_count = readback.clip_level_count;
-  feedback.directional_address_space_hash
-    = readback.directional_address_space_hash;
-  feedback.kind = renderer::VirtualShadowFeedbackKind::kCoarse;
-  const auto pages_per_level
-    = readback.pages_per_axis * readback.pages_per_axis;
-
-  const auto max_words = std::min<std::uint32_t>(readback.request_word_count,
-    static_cast<std::uint32_t>(kMaxRequestWordCount));
-  for (std::uint32_t word_index = 0U; word_index < max_words; ++word_index) {
-    auto word = readback.mapped_words[word_index];
-    while (word != 0U) {
-      const auto bit_index = static_cast<std::uint32_t>(std::countr_zero(word));
-      const auto page_index = word_index * 32U + bit_index;
-      if (page_index < total_pages) {
-        const auto clip_index = page_index / pages_per_level;
-        const auto local_page_index = page_index % pages_per_level;
-        const auto page_y = local_page_index / readback.pages_per_axis;
-        const auto page_x = local_page_index % readback.pages_per_axis;
-        const auto resident_key = PackVirtualResidentPageKey(clip_index,
-          readback.clip_grid_origin_x[clip_index]
-            + static_cast<std::int32_t>(page_x),
-          readback.clip_grid_origin_y[clip_index]
-            + static_cast<std::int32_t>(page_y));
-        feedback.requested_resident_keys.push_back(resident_key);
-      }
-      word &= (word - 1U);
-    }
-  }
-
-  auto& log_state = feedback_log_states_[readback.view_id.get()];
-  if (!feedback.requested_resident_keys.empty()) {
-    LOG_F(INFO,
-      "VirtualShadowCoarseMarkPass: frame={} slot={} view={} completed "
-      "feedback (source_frame={} requested_pages={} address_hash=0x{:x})",
-      Context().frame_sequence.get(), slot.get(), readback.view_id.get(),
-      feedback.source_frame_sequence.get(),
-      feedback.requested_resident_keys.size(),
-      feedback.directional_address_space_hash);
-    log_state.last_feedback_count
-      = static_cast<std::uint32_t>(feedback.requested_resident_keys.size());
-    log_state.had_pending_feedback = true;
-    shadow_manager->SubmitVirtualRequestFeedback(
-      readback.view_id, std::move(feedback));
-  } else {
-    LOG_F(INFO,
-      "VirtualShadowCoarseMarkPass: frame={} slot={} view={} completed "
-      "feedback (source_frame={} requested_pages=0 address_hash=0x{:x})",
-      Context().frame_sequence.get(), slot.get(), readback.view_id.get(),
-      readback.source_frame_sequence.get(),
-      readback.directional_address_space_hash);
-    log_state.last_feedback_count = 0U;
-    log_state.had_pending_feedback = false;
-    shadow_manager->ClearVirtualRequestFeedback(
-      readback.view_id, renderer::VirtualShadowFeedbackKind::kCoarse);
-  }
-  readback.pending_feedback = false;
 }
 
 } // namespace oxygen::engine
