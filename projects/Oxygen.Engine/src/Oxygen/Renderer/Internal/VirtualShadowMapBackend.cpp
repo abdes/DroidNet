@@ -39,7 +39,6 @@ constexpr std::uint32_t kMaxPersistentPageTableEntries
   = 64U * 64U * oxygen::engine::kMaxVirtualDirectionalClipLevels;
 constexpr std::uint64_t kMaxResolvedRasterScheduleAgeFrames
   = oxygen::frame::kFramesInFlight.get() + 1U;
-constexpr std::uint32_t kCoarseBackboneGuardPages = 1U;
 [[nodiscard]] auto HasPageManagementHierarchyVisibility(
   const std::uint32_t page_flags) -> bool
 {
@@ -180,14 +179,6 @@ constexpr std::uint32_t kCoarseBackboneGuardPages = 1U;
   default:
     return 512U;
   }
-}
-
-[[nodiscard]] auto ResolveCoarseSafetyMaxPagesPerAxis(
-  const std::uint32_t physical_tile_capacity) -> std::uint32_t
-{
-  const auto fitted_pages = static_cast<std::uint32_t>(std::floor(
-    std::sqrt(static_cast<float>(std::max(1U, physical_tile_capacity)))));
-  return std::max(1U, fitted_pages);
 }
 
 [[nodiscard]] auto SelectDirectionalVirtualFilterRadiusTexels(
@@ -996,13 +987,6 @@ auto VirtualShadowMapBackend::InitializeDirectionalViewStateFromClipmapSetup(
   state.shadow_instances.push_back(setup.shadow_instance);
   state.shadow_caster_bounds.assign(
     shadow_caster_bounds.begin(), shadow_caster_bounds.end());
-  state.absolute_frustum_regions = setup.absolute_frustum_regions;
-  state.clipmap_page_offset_x = setup.previous_clip_page_offset_x;
-  state.clipmap_page_offset_y = setup.previous_clip_page_offset_y;
-  state.clipmap_reuse_guardband_valid
-    = setup.previous_clip_reuse_guardband_valid;
-  state.clipmap_cache_valid = setup.previous_clip_cache_valid;
-  state.clipmap_cache_status = setup.previous_clip_cache_status;
 }
 
 auto VirtualShadowMapBackend::BuildDirectionalPreviousStateContext(
@@ -1424,49 +1408,6 @@ auto VirtualShadowMapBackend::PrepareDirectionalVirtualClipmapSetup(
     glm::vec3(0.0F), glm::vec3(0.0F) + light_dir_to_surface, world_up);
   const glm::vec3 cam_rot_ls
     = glm::vec3(rot_view * glm::vec4(camera_position, 1.0F));
-  setup.coarse_safety_clip_index
-    = setup.clip_level_count > 0U ? setup.clip_level_count - 1U : 0U;
-  const std::uint32_t coarse_safety_max_pages_per_axis
-    = ResolveCoarseSafetyMaxPagesPerAxis(
-      physical_pool_config_.physical_tile_capacity);
-  const std::uint32_t coarse_safety_guard_pages
-    = coarse_safety_max_pages_per_axis > 2U * kCoarseBackboneGuardPages
-    ? kCoarseBackboneGuardPages
-    : 0U;
-  const std::uint32_t coarse_safety_inner_pages_per_axis = std::max(1U,
-    coarse_safety_max_pages_per_axis > 2U * coarse_safety_guard_pages
-      ? coarse_safety_max_pages_per_axis - 2U * coarse_safety_guard_pages
-      : coarse_safety_max_pages_per_axis);
-  float coarse_safety_min_x = std::numeric_limits<float>::max();
-  float coarse_safety_max_x = std::numeric_limits<float>::lowest();
-  float coarse_safety_min_y = std::numeric_limits<float>::max();
-  float coarse_safety_max_y = std::numeric_limits<float>::lowest();
-  bool coarse_safety_bounds_valid = false;
-  for (const auto& point_ws : full_frustum_world_points) {
-    const glm::vec3 point_rot_ls
-      = glm::vec3(rot_view * glm::vec4(point_ws, 1.0F));
-    coarse_safety_min_x = std::min(coarse_safety_min_x, point_rot_ls.x);
-    coarse_safety_max_x = std::max(coarse_safety_max_x, point_rot_ls.x);
-    coarse_safety_min_y = std::min(coarse_safety_min_y, point_rot_ls.y);
-    coarse_safety_max_y = std::max(coarse_safety_max_y, point_rot_ls.y);
-    coarse_safety_bounds_valid = true;
-  }
-  if (coarse_safety_bounds_valid && setup.clip_level_count > 0U) {
-    const float required_width
-      = std::max(0.0F, coarse_safety_max_x - coarse_safety_min_x);
-    const float required_height
-      = std::max(0.0F, coarse_safety_max_y - coarse_safety_min_y);
-    const float required_page_world
-      = std::max(std::max(required_width, required_height)
-          / std::max(
-            1.0F, static_cast<float>(coarse_safety_inner_pages_per_axis)),
-        setup.clip_page_world[setup.coarse_safety_clip_index]);
-    setup.clip_page_world[setup.coarse_safety_clip_index]
-      = QuantizeUpToPowerOfTwo(required_page_world);
-    largest_half_extent = std::max(largest_half_extent,
-      setup.clip_page_world[setup.coarse_safety_clip_index]
-        * std::max(1.0F, static_cast<float>(setup.pages_per_axis)) * 0.5F);
-  }
 
   const engine::DirectionalVirtualShadowMetadata* previous_metadata = nullptr;
   if (previous_state != nullptr && previous_state->has_rendered_cache_history
@@ -1514,8 +1455,6 @@ auto VirtualShadowMapBackend::PrepareDirectionalVirtualClipmapSetup(
       std::span<const glm::vec3> {
         full_frustum_world_points.data(), full_frustum_world_points.size() },
       shadow_caster_bounds, largest_half_extent, largest_half_extent);
-  setup.cache_layout_compatible = false;
-  setup.depth_guardband_valid = false;
 
   if (depth_guardband_candidate) {
     const auto previous_depth_range
@@ -1584,168 +1523,10 @@ auto VirtualShadowMapBackend::PrepareDirectionalVirtualClipmapSetup(
       = glm::vec4(depth_bias, 0.0F, 0.0F, 0.0F);
   }
 
-  setup.cache_layout_compatible = previous_rendered_cache_exists
-    && !force_invalidate_cache
-    && shadow_detail::IsDirectionalVirtualCacheLayoutCompatible(
-      *previous_metadata, setup.metadata);
-  setup.depth_guardband_valid
-    = setup.cache_layout_compatible && depth_guardband_candidate;
+  (void)frustum_world_points;
+  (void)full_frustum_world_points;
+  (void)visible_receiver_bounds;
 
-  std::array<glm::vec3, 8> frustum_light_space_points {};
-  std::array<glm::vec3, 8> full_frustum_light_space_points {};
-  for (std::size_t i = 0U; i < frustum_world_points.size(); ++i) {
-    frustum_light_space_points[i]
-      = glm::vec3(setup.light_view * glm::vec4(frustum_world_points[i], 1.0F));
-    full_frustum_light_space_points[i] = glm::vec3(
-      setup.light_view * glm::vec4(full_frustum_world_points[i], 1.0F));
-  }
-
-  setup.absolute_frustum_regions.resize(setup.clip_level_count);
-  for (std::uint32_t clip_index = 0U; clip_index < setup.clip_level_count;
-    ++clip_index) {
-    float min_page_x = std::numeric_limits<float>::max();
-    float max_page_x = std::numeric_limits<float>::lowest();
-    float min_page_y = std::numeric_limits<float>::max();
-    float max_page_y = std::numeric_limits<float>::lowest();
-
-    const auto& selected_region_points
-      = clip_index == setup.coarse_safety_clip_index
-      ? full_frustum_light_space_points
-      : frustum_light_space_points;
-    for (const auto& point_ls : selected_region_points) {
-      const float page_x = (point_ls.x - setup.clip_origin_x[clip_index])
-        / setup.clip_page_world[clip_index];
-      const float page_y = (point_ls.y - setup.clip_origin_y[clip_index])
-        / setup.clip_page_world[clip_index];
-      min_page_x = std::min(min_page_x, page_x);
-      max_page_x = std::max(max_page_x, page_x);
-      min_page_y = std::min(min_page_y, page_y);
-      max_page_y = std::max(max_page_y, page_y);
-    }
-
-    if (max_page_x < 0.0F || max_page_y < 0.0F
-      || min_page_x >= static_cast<float>(setup.pages_per_axis)
-      || min_page_y >= static_cast<float>(setup.pages_per_axis)) {
-      setup.absolute_frustum_regions[clip_index] = {};
-      continue;
-    }
-
-    auto& region = setup.frustum_regions[clip_index];
-    region.valid = true;
-    region.min_x
-      = static_cast<std::uint32_t>(std::max(0.0F, std::floor(min_page_x)));
-    region.max_x = static_cast<std::uint32_t>(
-      std::min(static_cast<float>(setup.pages_per_axis - 1U),
-        std::max(0.0F, std::ceil(max_page_x) - 1.0F)));
-    region.min_y
-      = static_cast<std::uint32_t>(std::max(0.0F, std::floor(min_page_y)));
-    region.max_y = static_cast<std::uint32_t>(
-      std::min(static_cast<float>(setup.pages_per_axis - 1U),
-        std::max(0.0F, std::ceil(max_page_y) - 1.0F)));
-
-    setup.absolute_frustum_regions[clip_index] = AbsoluteClipPageRegion {
-      .valid = true,
-      .min_x = setup.clip_grid_origin_x[clip_index]
-        + static_cast<std::int32_t>(region.min_x),
-      .max_x = setup.clip_grid_origin_x[clip_index]
-        + static_cast<std::int32_t>(region.max_x),
-      .min_y = setup.clip_grid_origin_y[clip_index]
-        + static_cast<std::int32_t>(region.min_y),
-      .max_y = setup.clip_grid_origin_y[clip_index]
-        + static_cast<std::int32_t>(region.max_y),
-    };
-  }
-
-  setup.coarse_safety_priority_center_ls = glm::vec2(camera_ls.x, camera_ls.y);
-  if (setup.clip_level_count > 0U && !visible_receiver_bounds.empty()) {
-    float receiver_min_x = std::numeric_limits<float>::max();
-    float receiver_max_x = std::numeric_limits<float>::lowest();
-    float receiver_min_y = std::numeric_limits<float>::max();
-    float receiver_max_y = std::numeric_limits<float>::lowest();
-    for (const auto& receiver_bound : visible_receiver_bounds) {
-      const glm::vec3 receiver_center_ls = glm::vec3(
-        setup.light_view * glm::vec4(glm::vec3(receiver_bound), 1.0F));
-      const float receiver_radius = std::max(0.0F, receiver_bound.w);
-      receiver_min_x
-        = std::min(receiver_min_x, receiver_center_ls.x - receiver_radius);
-      receiver_max_x
-        = std::max(receiver_max_x, receiver_center_ls.x + receiver_radius);
-      receiver_min_y
-        = std::min(receiver_min_y, receiver_center_ls.y - receiver_radius);
-      receiver_max_y
-        = std::max(receiver_max_y, receiver_center_ls.y + receiver_radius);
-      setup.coarse_safety_priority_valid = true;
-    }
-    if (setup.coarse_safety_priority_valid) {
-      setup.coarse_safety_priority_center_ls
-        = glm::vec2(0.5F * (receiver_min_x + receiver_max_x),
-          0.5F * (receiver_min_y + receiver_max_y));
-    }
-  }
-
-  if (!previous_state_exists) {
-    setup.previous_clip_cache_status.fill(
-      renderer::DirectionalVirtualClipCacheStatus::kNoPreviousFrame);
-  } else if (!previous_rendered_cache_exists) {
-    setup.previous_clip_cache_status.fill(
-      renderer::DirectionalVirtualClipCacheStatus::kNeverRendered);
-  } else if (force_invalidate_cache) {
-    setup.previous_clip_cache_status.fill(
-      renderer::DirectionalVirtualClipCacheStatus::kForceInvalidated);
-  } else if (!setup.cache_layout_compatible) {
-    setup.previous_clip_cache_status.fill(
-      renderer::DirectionalVirtualClipCacheStatus::kLayoutInvalid);
-  } else if (!setup.depth_guardband_valid) {
-    setup.previous_clip_cache_status.fill(
-      renderer::DirectionalVirtualClipCacheStatus::kDepthGuardbandInvalid);
-  }
-
-  if (previous_metadata != nullptr) {
-    const auto clip_count = std::min(
-      previous_metadata->clip_level_count, setup.metadata.clip_level_count);
-    for (std::uint32_t clip_index = 0U; clip_index < clip_count; ++clip_index) {
-      const auto offset = ResolveDirectionalVirtualClipmapPageOffset(
-        *previous_metadata, setup.metadata, clip_index);
-      setup.previous_clip_page_offset_x[clip_index] = offset.delta_x;
-      setup.previous_clip_page_offset_y[clip_index] = offset.delta_y;
-      const bool panning_valid = IsDirectionalVirtualClipmapPanningCompatible(
-        offset, directional_cache_controls_.clipmap_panning_enabled);
-      setup.previous_clip_reuse_guardband_valid[clip_index] = panning_valid
-        && IsDirectionalVirtualClipReuseGuardbandValid(
-          offset, kDirectionalVirtualClipReuseGuardbandPages);
-      if (!previous_metadata_exists || !previous_rendered_cache_exists
-        || force_invalidate_cache) {
-        setup.previous_clip_cache_valid[clip_index] = false;
-        continue;
-      }
-      if (!setup.cache_layout_compatible) {
-        setup.previous_clip_cache_valid[clip_index] = false;
-        continue;
-      }
-      if (!setup.depth_guardband_valid) {
-        setup.previous_clip_cache_valid[clip_index] = false;
-        continue;
-      }
-      if (!panning_valid) {
-        setup.previous_clip_cache_status[clip_index]
-          = renderer::DirectionalVirtualClipCacheStatus::kPanningDisabled;
-        setup.previous_clip_cache_valid[clip_index] = false;
-        continue;
-      }
-      if (!setup.previous_clip_reuse_guardband_valid[clip_index]) {
-        setup.previous_clip_cache_status[clip_index]
-          = renderer::DirectionalVirtualClipCacheStatus::kReuseGuardbandInvalid;
-        setup.previous_clip_cache_valid[clip_index] = false;
-        continue;
-      }
-      setup.previous_clip_cache_status[clip_index]
-        = renderer::DirectionalVirtualClipCacheStatus::kValid;
-      setup.previous_clip_cache_valid[clip_index] = true;
-    }
-  }
-
-  setup.coarse_safety_budget_pages = std::min(
-    physical_pool_config_.physical_tile_capacity, setup.pages_per_level);
   setup.valid = true;
   return setup;
 }
@@ -1760,150 +1541,11 @@ auto VirtualShadowMapBackend::BuildDirectionalSelectionResult(
 {
   using namespace shadow_detail;
   (void)view_id;
-
-  const auto clip_level_count = setup.clip_level_count;
-  const auto pages_per_axis = setup.pages_per_axis;
-  const auto& metadata = setup.metadata;
-  const auto& light_view = setup.light_view;
-  const auto& clip_page_world = setup.clip_page_world;
-  const auto& clip_origin_x = setup.clip_origin_x;
-  const auto& clip_origin_y = setup.clip_origin_y;
-  const auto& clip_grid_origin_x = setup.clip_grid_origin_x;
-  const auto& clip_grid_origin_y = setup.clip_grid_origin_y;
-  const auto coarse_safety_clip_index = setup.coarse_safety_clip_index;
-  const auto coarse_safety_budget_pages = setup.coarse_safety_budget_pages;
-  const auto coarse_safety_priority_center_ls
-    = setup.coarse_safety_priority_center_ls;
   (void)shadow_caster_bounds;
-  std::vector<ClipSelectedRegion> frustum_regions(setup.frustum_regions.begin(),
-    setup.frustum_regions.begin()
-      + static_cast<std::ptrdiff_t>(clip_level_count));
-  // Issue 3 cleanup: current-frame fine demand now comes from GPU page
-  // marking/request words, so CPU selection here must stay diagnostic-only.
-  // Keep coarse region counting for publish telemetry, but do not synthesize a
-  // CPU page set that could drift away from live page-management state.
-  const auto count_region_pages =
-    [](const ClipSelectedRegion& region) -> std::uint32_t {
-        if (!region.valid || region.max_x < region.min_x
-          || region.max_y < region.min_y) {
-          return 0U;
-        }
+  (void)visible_receiver_bounds;
+  (void)state;
 
-        return (region.max_x - region.min_x + 1U)
-          * (region.max_y - region.min_y + 1U);
-      };
-  const auto union_region =
-    [](const ClipSelectedRegion& lhs,
-      const ClipSelectedRegion& rhs) -> ClipSelectedRegion {
-      if (!lhs.valid) {
-        return rhs;
-      }
-      if (!rhs.valid) {
-        return lhs;
-      }
-      return ClipSelectedRegion {
-        .valid = true,
-        .min_x = std::min(lhs.min_x, rhs.min_x),
-        .max_x = std::max(lhs.max_x, rhs.max_x),
-        .min_y = std::min(lhs.min_y, rhs.min_y),
-        .max_y = std::max(lhs.max_y, rhs.max_y),
-      };
-    };
-  const auto union_absolute_region =
-    [](const AbsoluteClipPageRegion& lhs,
-      const AbsoluteClipPageRegion& rhs) -> AbsoluteClipPageRegion {
-      if (!lhs.valid) {
-        return rhs;
-      }
-      if (!rhs.valid) {
-        return lhs;
-      }
-      return AbsoluteClipPageRegion {
-        .valid = true,
-        .min_x = std::min(lhs.min_x, rhs.min_x),
-        .max_x = std::max(lhs.max_x, rhs.max_x),
-        .min_y = std::min(lhs.min_y, rhs.min_y),
-        .max_y = std::max(lhs.max_y, rhs.max_y),
-      };
-    };
-
-  std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
-    reusable_clip_contents {};
-  reusable_clip_contents.fill(false);
-  const std::uint32_t coarse_backbone_begin
-    = ResolveDirectionalCoarseBackboneBegin(clip_level_count);
-  if (!visible_receiver_bounds.empty()) {
-    for (std::uint32_t clip_index = 0U; clip_index < coarse_backbone_begin;
-      ++clip_index) {
-      float min_page_x = std::numeric_limits<float>::max();
-      float max_page_x = std::numeric_limits<float>::lowest();
-      float min_page_y = std::numeric_limits<float>::max();
-      float max_page_y = std::numeric_limits<float>::lowest();
-      bool receiver_region_valid = false;
-
-      for (const auto& receiver_bound : visible_receiver_bounds) {
-        const glm::vec3 receiver_center_ls = glm::vec3(
-          light_view * glm::vec4(glm::vec3(receiver_bound), 1.0F));
-        const float receiver_radius = std::max(0.0F, receiver_bound.w);
-        const float receiver_min_page_x
-          = (receiver_center_ls.x - receiver_radius - clip_origin_x[clip_index])
-          / clip_page_world[clip_index];
-        const float receiver_max_page_x
-          = (receiver_center_ls.x + receiver_radius - clip_origin_x[clip_index])
-          / clip_page_world[clip_index];
-        const float receiver_min_page_y
-          = (receiver_center_ls.y - receiver_radius - clip_origin_y[clip_index])
-          / clip_page_world[clip_index];
-        const float receiver_max_page_y
-          = (receiver_center_ls.y + receiver_radius - clip_origin_y[clip_index])
-          / clip_page_world[clip_index];
-        min_page_x = std::min(min_page_x, receiver_min_page_x);
-        max_page_x = std::max(max_page_x, receiver_max_page_x);
-        min_page_y = std::min(min_page_y, receiver_min_page_y);
-        max_page_y = std::max(max_page_y, receiver_max_page_y);
-        receiver_region_valid = true;
-      }
-
-      if (!receiver_region_valid || max_page_x < 0.0F || max_page_y < 0.0F
-        || min_page_x >= static_cast<float>(pages_per_axis)
-        || min_page_y >= static_cast<float>(pages_per_axis)) {
-        continue;
-      }
-
-      const auto receiver_region = ClipSelectedRegion {
-        .valid = true,
-        .min_x = static_cast<std::uint32_t>(
-          std::max(0.0F, std::floor(min_page_x))),
-        .max_x = static_cast<std::uint32_t>(std::min(
-          static_cast<float>(pages_per_axis - 1U),
-          std::max(0.0F, std::ceil(max_page_x) - 1.0F))),
-        .min_y = static_cast<std::uint32_t>(
-          std::max(0.0F, std::floor(min_page_y))),
-        .max_y = static_cast<std::uint32_t>(std::min(
-          static_cast<float>(pages_per_axis - 1U),
-          std::max(0.0F, std::ceil(max_page_y) - 1.0F))),
-      };
-      const auto receiver_absolute_region = AbsoluteClipPageRegion {
-        .valid = true,
-        .min_x = clip_grid_origin_x[clip_index]
-          + static_cast<std::int32_t>(receiver_region.min_x),
-        .max_x = clip_grid_origin_x[clip_index]
-          + static_cast<std::int32_t>(receiver_region.max_x),
-        .min_y = clip_grid_origin_y[clip_index]
-          + static_cast<std::int32_t>(receiver_region.min_y),
-        .max_y = clip_grid_origin_y[clip_index]
-          + static_cast<std::int32_t>(receiver_region.max_y),
-      };
-      frustum_regions[clip_index]
-        = union_region(frustum_regions[clip_index], receiver_region);
-      state.absolute_frustum_regions[clip_index] = union_absolute_region(
-        state.absolute_frustum_regions[clip_index], receiver_absolute_region);
-    }
-  }
-  bool global_dirty_resident_contents = false;
-  // Audit Stage 1 bridge note: dirty resident key generation is still CPU
-  // invalidation authority here. Treat it as temporary until invalidation is
-  // moved into its own dedicated stage.
+  const auto& metadata = setup.metadata;
   const bool previous_rendered_cache_exists
     = previous_state != nullptr && previous_state->has_rendered_cache_history;
   const bool previous_page_management_state_exists
@@ -1914,53 +1556,13 @@ auto VirtualShadowMapBackend::BuildDirectionalSelectionResult(
       .IsValid()
     && previous_state->page_management_bindings.physical_page_lists_srv.IsValid()
     && previous_state->page_management_bindings.resolve_stats_srv.IsValid();
-  const bool cache_layout_compatible = setup.cache_layout_compatible;
-  const bool depth_guardband_valid = setup.depth_guardband_valid;
   bool address_space_compatible = false;
   if (previous_metadata != nullptr) {
     address_space_compatible = IsDirectionalVirtualAddressSpaceCompatible(
       *previous_metadata, metadata);
-    if (cache_layout_compatible) {
-      for (std::uint32_t clip_index = 0U; clip_index < clip_level_count;
-        ++clip_index) {
-        reusable_clip_contents[clip_index]
-          = setup.previous_clip_cache_valid[clip_index]
-          && IsDirectionalVirtualClipContentReusable(
-            *previous_metadata, metadata, clip_index);
-      }
-    }
-  }
-
-  const bool use_previous_resident_mismatch_carry = false;
-  (void)use_previous_resident_mismatch_carry;
-  (void)coarse_safety_clip_index;
-  (void)coarse_safety_budget_pages;
-  (void)count_region_pages;
-  (void)global_dirty_resident_contents;
-
-  for (std::uint32_t clip_index = coarse_backbone_begin;
-    clip_index < clip_level_count; ++clip_index) {
-    auto& region = frustum_regions[clip_index];
-    if (!region.valid) {
-      continue;
-    }
-    region.min_x = region.min_x > kCoarseBackboneGuardPages
-      ? region.min_x - kCoarseBackboneGuardPages
-      : 0U;
-    region.min_y = region.min_y > kCoarseBackboneGuardPages
-      ? region.min_y - kCoarseBackboneGuardPages
-      : 0U;
-    region.max_x
-      = std::min(pages_per_axis - 1U, region.max_x + kCoarseBackboneGuardPages);
-    region.max_y
-      = std::min(pages_per_axis - 1U, region.max_y + kCoarseBackboneGuardPages);
   }
   DirectionalSelectionBuildResult selection_result {};
-  selection_result.reusable_clip_contents = reusable_clip_contents;
-  selection_result.bootstrap_prefers_finest_detail_pages = false;
   selection_result.address_space_compatible = address_space_compatible;
-  selection_result.cache_layout_compatible = cache_layout_compatible;
-  selection_result.depth_guardband_valid = depth_guardband_valid;
   selection_result.previous_page_management_state_exists
     = previous_page_management_state_exists;
   return selection_result;
@@ -2053,27 +1655,6 @@ auto VirtualShadowMapBackend::PopulateDirectionalPendingResolve(
   pending_resolve.clip_origin_y = setup.clip_origin_y;
   pending_resolve.clip_grid_origin_x = setup.clip_grid_origin_x;
   pending_resolve.clip_grid_origin_y = setup.clip_grid_origin_y;
-  pending_resolve.previous_clip_page_offset_x = state.clipmap_page_offset_x;
-  pending_resolve.previous_clip_page_offset_y = state.clipmap_page_offset_y;
-  pending_resolve.previous_clip_reuse_guardband_valid
-    = state.clipmap_reuse_guardband_valid;
-  pending_resolve.previous_clip_cache_valid = state.clipmap_cache_valid;
-  pending_resolve.previous_clip_cache_status = state.clipmap_cache_status;
-  pending_resolve.coarse_backbone_begin
-    = shadow_detail::ResolveDirectionalCoarseBackboneBegin(
-      setup.clip_level_count);
-  pending_resolve.coarse_safety_clip_index = setup.coarse_safety_clip_index;
-  pending_resolve.coarse_safety_max_page_count = setup.coarse_safety_budget_pages;
-  pending_resolve.coarse_safety_priority_center_ls
-    = setup.coarse_safety_priority_center_ls;
-  pending_resolve.coarse_safety_priority_valid
-    = setup.coarse_safety_priority_valid;
-  pending_resolve.reusable_clip_contents = selection.reusable_clip_contents;
-  pending_resolve.bootstrap_prefers_finest_detail_pages
-    = selection.bootstrap_prefers_finest_detail_pages;
-  pending_resolve.address_space_compatible = selection.address_space_compatible;
-  pending_resolve.cache_layout_compatible = selection.cache_layout_compatible;
-  pending_resolve.depth_guardband_valid = selection.depth_guardband_valid;
   pending_resolve.global_dirty_resident_contents
     = invalidation.global_dirty_resident_contents;
   pending_resolve.invalidation_rects = std::move(invalidation.invalidation_rects);

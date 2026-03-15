@@ -137,26 +137,8 @@ private:
     std::uint16_t tile_y { 0U };
   };
 
-  struct AbsoluteClipPageRegion {
-    bool valid { false };
-    std::int32_t min_x { 0 };
-    std::int32_t max_x { 0 };
-    std::int32_t min_y { 0 };
-    std::int32_t max_y { 0 };
-  };
-
-  struct ClipSelectedRegion {
-    bool valid { false };
-    std::uint32_t min_x { 0U };
-    std::uint32_t max_x { 0U };
-    std::uint32_t min_y { 0U };
-    std::uint32_t max_y { 0U };
-  };
-
   struct DirectionalVirtualClipmapSetup {
     bool valid { false };
-    bool cache_layout_compatible { false };
-    bool depth_guardband_valid { false };
     std::uint32_t clip_level_count { 0U };
     std::uint32_t pages_per_axis { 0U };
     std::uint32_t pages_per_level { 0U };
@@ -176,24 +158,6 @@ private:
       clip_grid_origin_x {};
     std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
       clip_grid_origin_y {};
-    std::array<ClipSelectedRegion, engine::kMaxVirtualDirectionalClipLevels>
-      frustum_regions {};
-    std::vector<AbsoluteClipPageRegion> absolute_frustum_regions {};
-    std::uint32_t coarse_safety_clip_index { 0U };
-    std::uint32_t coarse_safety_budget_pages { 0U };
-    glm::vec2 coarse_safety_priority_center_ls { 0.0F, 0.0F };
-    bool coarse_safety_priority_valid { false };
-    std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
-      previous_clip_page_offset_x {};
-    std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
-      previous_clip_page_offset_y {};
-    std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
-      previous_clip_reuse_guardband_valid {};
-    std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
-      previous_clip_cache_valid {};
-    std::array<renderer::DirectionalVirtualClipCacheStatus,
-      engine::kMaxVirtualDirectionalClipLevels>
-      previous_clip_cache_status {};
   };
 
   struct ViewCacheEntry {
@@ -219,28 +183,6 @@ private:
         clip_grid_origin_x {};
       std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
         clip_grid_origin_y {};
-      std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
-        previous_clip_page_offset_x {};
-      std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
-        previous_clip_page_offset_y {};
-      std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
-        previous_clip_reuse_guardband_valid {};
-      std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
-        previous_clip_cache_valid {};
-      std::array<renderer::DirectionalVirtualClipCacheStatus,
-        engine::kMaxVirtualDirectionalClipLevels>
-        previous_clip_cache_status {};
-      bool cache_layout_compatible { false };
-      bool depth_guardband_valid { false };
-      std::uint32_t coarse_backbone_begin { 0U };
-      std::uint32_t coarse_safety_clip_index { 0U };
-      std::uint32_t coarse_safety_max_page_count { 0U };
-      glm::vec2 coarse_safety_priority_center_ls { 0.0F, 0.0F };
-      bool coarse_safety_priority_valid { false };
-      std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
-        reusable_clip_contents {};
-      bool bootstrap_prefers_finest_detail_pages { false };
-      bool address_space_compatible { false };
       bool global_dirty_resident_contents { false };
       std::vector<DirectionalInvalidationRect> invalidation_rects {};
     };
@@ -249,19 +191,7 @@ private:
     std::vector<engine::ShadowInstanceMetadata> shadow_instances;
     std::vector<engine::DirectionalVirtualShadowMetadata>
       directional_virtual_metadata;
-    std::vector<AbsoluteClipPageRegion> absolute_frustum_regions;
     std::vector<glm::vec4> shadow_caster_bounds;
-    std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
-      clipmap_page_offset_x {};
-    std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
-      clipmap_page_offset_y {};
-    std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
-      clipmap_reuse_guardband_valid {};
-    std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
-      clipmap_cache_valid {};
-    std::array<renderer::DirectionalVirtualClipCacheStatus,
-      engine::kMaxVirtualDirectionalClipLevels>
-      clipmap_cache_status {};
     bool has_rendered_cache_history { false };
     PendingResidencyResolve pending_residency_resolve {};
     renderer::VirtualShadowResolveStats resolve_stats {};
@@ -270,12 +200,7 @@ private:
   };
 
   struct DirectionalSelectionBuildResult {
-    std::array<bool, engine::kMaxVirtualDirectionalClipLevels>
-      reusable_clip_contents {};
-    bool bootstrap_prefers_finest_detail_pages { false };
     bool address_space_compatible { false };
-    bool cache_layout_compatible { false };
-    bool depth_guardband_valid { false };
     bool previous_page_management_state_exists { false };
   };
 

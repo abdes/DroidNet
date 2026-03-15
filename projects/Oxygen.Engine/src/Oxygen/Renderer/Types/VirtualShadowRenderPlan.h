@@ -28,19 +28,7 @@ enum class VirtualPageResidencyState : std::uint8_t {
   kPendingRender = 3U,
 };
 
-enum class DirectionalVirtualClipCacheStatus : std::uint8_t {
-  kNoPreviousFrame = 0U,
-  kNeverRendered = 1U,
-  kForceInvalidated = 2U,
-  kLayoutInvalid = 3U,
-  kDepthGuardbandInvalid = 4U,
-  kPanningDisabled = 5U,
-  kReuseGuardbandInvalid = 6U,
-  kValid = 7U,
-};
-
 struct DirectionalVirtualCacheControls {
-  bool clipmap_panning_enabled { true };
   bool force_invalidate { false };
 };
 
