@@ -67,7 +67,6 @@ namespace {
     ShaderVisibleIndex draw_page_counter_uav_index {
       kInvalidShaderVisibleIndex
     };
-    ShaderVisibleIndex page_table_srv_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex page_table_uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex page_flags_uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex dirty_page_flags_uav_index {
@@ -200,8 +199,6 @@ auto VirtualShadowResolvePass::DoPrepareResources(
     = shadow_manager->TryGetVirtualPageManagementBindings(
       Context().current_view.view_id);
   if (metadata == nullptr || page_management_bindings == nullptr
-    || !page_management_bindings->page_table_srv.IsValid()
-    || !page_management_bindings->page_flags_srv.IsValid()
     || !page_management_bindings->page_table_uav.IsValid()
     || !page_management_bindings->page_flags_uav.IsValid()
     || !page_management_bindings->dirty_page_flags_uav.IsValid()
@@ -246,7 +243,7 @@ auto VirtualShadowResolvePass::DoPrepareResources(
     = has_request_dispatch ? request_pass->GetActiveRequestWordCount() : 0U;
   active_request_words_srv_ = has_request_dispatch
     ? request_pass->GetRequestWordsSrv()
-    : page_management_bindings->page_table_srv;
+    : kInvalidShaderVisibleIndex;
   active_page_mark_flags_srv_ = has_page_mark_flags
     ? request_pass->GetPageMarkFlagsSrv()
     : kInvalidShaderVisibleIndex;
@@ -428,7 +425,6 @@ auto VirtualShadowResolvePass::DoPrepareResources(
       .draw_indirect_args_buffer = resources->draw_args_buffer,
       .source_frame_sequence = Context().frame_sequence,
       .draw_count = active_draw_count_,
-      .schedule_capacity = active_schedule_capacity_,
       .pending_raster_page_count
       = page_management_bindings->pending_raster_page_count,
     });
@@ -545,7 +541,6 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
       = view_schedule_resources_.at(active_view_id_).draw_page_indices_uav,
       .draw_page_counter_uav_index
       = view_schedule_resources_.at(active_view_id_).draw_page_counter_uav,
-      .page_table_srv_index = active_page_management_bindings_.page_table_srv,
       .page_table_uav_index = active_page_management_bindings_.page_table_uav,
       .page_flags_uav_index = active_page_management_bindings_.page_flags_uav,
       .dirty_page_flags_uav_index
@@ -676,7 +671,8 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
         .draw_indirect_args_buffer = it->second.draw_args_buffer,
         .source_frame_sequence = Context().frame_sequence,
         .draw_count = active_draw_count_,
-        .schedule_capacity = active_schedule_capacity_,
+        .pending_raster_page_count
+        = active_page_management_bindings_.pending_raster_page_count,
       });
   }
 

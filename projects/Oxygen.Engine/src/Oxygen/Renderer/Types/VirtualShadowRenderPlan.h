@@ -83,7 +83,6 @@ struct VirtualShadowGpuRasterInputs {
 
   frame::SequenceNumber source_frame_sequence { 0U };
   std::uint32_t draw_count { 0U };
-  std::uint32_t schedule_capacity { 0U };
   // Propagated to raster only so cache-history bootstrap decisions use the
   // authoritative resolve schedule instead of CPU-side draw metadata.
   std::uint32_t pending_raster_page_count { 0U };

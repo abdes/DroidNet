@@ -33,7 +33,6 @@ struct VirtualShadowResolvePassConstants
     uint draw_page_ranges_uav_index;
     uint draw_page_indices_uav_index;
     uint draw_page_counter_uav_index;
-    uint page_table_srv_index;
     uint page_table_uav_index;
     uint page_flags_uav_index;
     uint dirty_page_flags_uav_index;
@@ -405,8 +404,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     ConstantBuffer<VirtualShadowResolvePassConstants> pass_constants =
         ResourceDescriptorHeap[g_PassConstantsIndex];
 
-    if (!BX_IN_GLOBAL_SRV(pass_constants.page_table_srv_index)
-        || !BX_IN_GLOBAL_SRV(pass_constants.dirty_page_flags_uav_index)
+    if (!BX_IN_GLOBAL_SRV(pass_constants.dirty_page_flags_uav_index)
         || !BX_IN_GLOBAL_SRV(pass_constants.physical_page_metadata_srv_index)
         || !BX_IN_GLOBAL_SRV(pass_constants.physical_page_metadata_uav_index)
         || !BX_IN_GLOBAL_SRV(pass_constants.physical_page_lists_srv_index)
