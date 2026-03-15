@@ -6,11 +6,10 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
-#include <array>
 #include <optional>
-#include <span>
 #include <vector>
 
 #include <Oxygen/Graphics/Common/NativeObject.h>
@@ -39,8 +38,8 @@ protected:
   auto UsesFramebufferDepthAttachment() const -> bool override;
   auto BuildRasterizerStateDesc(graphics::CullMode cull_mode) const
     -> graphics::RasterizerStateDesc override;
-  auto ExtendShaderDefines(
-    std::vector<graphics::ShaderDefine>& defines) const -> void override;
+  auto ExtendShaderDefines(std::vector<graphics::ShaderDefine>& defines) const
+    -> void override;
 
 private:
   struct alignas(16) RasterPassConstants {
@@ -78,7 +77,6 @@ private:
   std::array<ShaderVisibleIndex, frame::kFramesInFlight.get()>
     pass_constants_indices_ {};
   std::optional<graphics::GraphicsPipelineDesc> clear_pso_ {};
-
 };
 
 } // namespace oxygen::engine

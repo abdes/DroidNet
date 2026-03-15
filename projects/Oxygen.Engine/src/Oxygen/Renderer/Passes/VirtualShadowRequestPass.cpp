@@ -6,16 +6,12 @@
 
 #include <algorithm>
 #include <array>
-#include <bit>
 #include <cstdint>
 #include <cstring>
 #include <sstream>
 #include <stdexcept>
 
-#include <glm/integer.hpp>
-
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/ShaderType.h>
@@ -33,7 +29,6 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/ShadowManager.h>
-#include <Oxygen/Renderer/Types/VirtualShadowPageFlags.h>
 
 namespace oxygen::engine {
 
@@ -62,20 +57,15 @@ namespace {
   static_assert(sizeof(VirtualShadowRequestPassConstants)
       % packing::kShaderDataFieldAlignment
     == 0U);
-  static_assert(offsetof(VirtualShadowRequestPassConstants, depth_texture_index)
-      == 0U);
-  static_assert(offsetof(
-                    VirtualShadowRequestPassConstants,
-                    stats_uav_index)
-      == 16U);
-  static_assert(offsetof(
-                    VirtualShadowRequestPassConstants,
-                    screen_dimensions)
-      == 32U);
-  static_assert(offsetof(
-                    VirtualShadowRequestPassConstants,
-                    inv_view_projection_matrix)
-      == 48U);
+  static_assert(
+    offsetof(VirtualShadowRequestPassConstants, depth_texture_index) == 0U);
+  static_assert(
+    offsetof(VirtualShadowRequestPassConstants, stats_uav_index) == 16U);
+  static_assert(
+    offsetof(VirtualShadowRequestPassConstants, screen_dimensions) == 32U);
+  static_assert(
+    offsetof(VirtualShadowRequestPassConstants, inv_view_projection_matrix)
+    == 48U);
 
 } // namespace
 
@@ -139,8 +129,8 @@ auto VirtualShadowRequestPass::DoPrepareResources(
 
   const auto* metadata = shadow_manager->TryGetVirtualDirectionalMetadata(
     Context().current_view.view_id);
-  const auto* publication = shadow_manager->TryGetFramePublication(
-    Context().current_view.view_id);
+  const auto* publication
+    = shadow_manager->TryGetFramePublication(Context().current_view.view_id);
   if (metadata == nullptr) {
     co_return;
   }
@@ -216,8 +206,8 @@ auto VirtualShadowRequestPass::DoPrepareResources(
       *stats_buffer_, graphics::ResourceStates::kCommon, true);
   }
   if (!recorder.IsResourceTracked(*stats_clear_upload_buffer_)) {
-    recorder.BeginTrackingResourceState(
-      *stats_clear_upload_buffer_, graphics::ResourceStates::kCopySource, false);
+    recorder.BeginTrackingResourceState(*stats_clear_upload_buffer_,
+      graphics::ResourceStates::kCopySource, false);
   }
 
   recorder.RequireResourceState(
@@ -323,14 +313,14 @@ auto VirtualShadowRequestPass::NeedRebuildPipelineState() const -> bool
 
 auto VirtualShadowRequestPass::EnsureRequestBuffers() -> void
 {
-  if (request_words_buffer_ && clear_upload_buffer_
-    && page_mark_flags_buffer_ && page_mark_flags_clear_upload_buffer_
-    && stats_buffer_ && stats_clear_upload_buffer_
-    && clear_upload_mapped_ptr_ != nullptr && request_words_uav_.IsValid()
+  if (request_words_buffer_ && clear_upload_buffer_ && page_mark_flags_buffer_
+    && page_mark_flags_clear_upload_buffer_ && stats_buffer_
+    && stats_clear_upload_buffer_ && clear_upload_mapped_ptr_ != nullptr
+    && request_words_uav_.IsValid()
     && page_mark_flags_clear_upload_mapped_ptr_ != nullptr
-    && stats_clear_upload_mapped_ptr_ != nullptr
-    && request_words_srv_.IsValid() && page_mark_flags_uav_.IsValid()
-    && page_mark_flags_srv_.IsValid() && stats_uav_.IsValid()) {
+    && stats_clear_upload_mapped_ptr_ != nullptr && request_words_srv_.IsValid()
+    && page_mark_flags_uav_.IsValid() && page_mark_flags_srv_.IsValid()
+    && stats_uav_.IsValid()) {
     return;
   }
 
@@ -472,14 +462,14 @@ auto VirtualShadowRequestPass::EnsureRequestBuffers() -> void
     };
     page_mark_flags_clear_upload_buffer_ = gfx_->CreateBuffer(desc);
     if (!page_mark_flags_clear_upload_buffer_) {
-      throw std::runtime_error(
-        "VirtualShadowRequestPass: failed to create page-mark flags clear upload buffer");
+      throw std::runtime_error("VirtualShadowRequestPass: failed to create "
+                               "page-mark flags clear upload buffer");
     }
     page_mark_flags_clear_upload_mapped_ptr_
       = page_mark_flags_clear_upload_buffer_->Map(0U, desc.size_bytes);
     if (page_mark_flags_clear_upload_mapped_ptr_ == nullptr) {
-      throw std::runtime_error(
-        "VirtualShadowRequestPass: failed to map page-mark flags clear upload buffer");
+      throw std::runtime_error("VirtualShadowRequestPass: failed to map "
+                               "page-mark flags clear upload buffer");
     }
     std::memset(page_mark_flags_clear_upload_mapped_ptr_, 0,
       static_cast<std::size_t>(desc.size_bytes));
@@ -528,7 +518,8 @@ auto VirtualShadowRequestPass::EnsureRequestBuffers() -> void
       throw std::runtime_error(
         "VirtualShadowRequestPass: failed to create stats clear upload buffer");
     }
-    stats_clear_upload_mapped_ptr_ = stats_clear_upload_buffer_->Map(0U, desc.size_bytes);
+    stats_clear_upload_mapped_ptr_
+      = stats_clear_upload_buffer_->Map(0U, desc.size_bytes);
     if (stats_clear_upload_mapped_ptr_ == nullptr) {
       throw std::runtime_error(
         "VirtualShadowRequestPass: failed to map stats clear upload buffer");

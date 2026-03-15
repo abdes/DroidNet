@@ -7,12 +7,10 @@
 #pragma once
 
 #include <array>
-#include <cstddef>
 #include <memory>
 #include <string>
 #include <unordered_map>
 
-#include <Oxygen/Renderer/Types/VirtualShadowRenderPlan.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
@@ -22,6 +20,7 @@
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/Passes/ComputeRenderPass.h>
+#include <Oxygen/Renderer/Types/VirtualShadowRenderPlan.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::graphics {
@@ -163,8 +162,8 @@ private:
   OXGN_RNDR_API auto EnsurePassConstantsBuffer() -> void;
   OXGN_RNDR_API auto EnsureClearCountUploadBuffer() -> void;
   OXGN_RNDR_API auto EnsureViewScheduleResources(ViewId view_id,
-    std::uint32_t required_entry_capacity,
-    std::uint32_t required_draw_count) -> ViewScheduleResources*;
+    std::uint32_t required_entry_capacity, std::uint32_t required_draw_count)
+    -> ViewScheduleResources*;
 };
 
 } // namespace oxygen::engine

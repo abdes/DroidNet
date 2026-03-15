@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
