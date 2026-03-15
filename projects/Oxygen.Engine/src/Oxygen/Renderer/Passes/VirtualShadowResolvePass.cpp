@@ -51,7 +51,10 @@ namespace {
     ShaderVisibleIndex request_words_srv_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex page_mark_flags_srv_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex draw_bounds_srv_index { kInvalidShaderVisibleIndex };
-    ShaderVisibleIndex invalidation_entries_srv_index {
+    ShaderVisibleIndex previous_shadow_caster_bounds_srv_index {
+      kInvalidShaderVisibleIndex
+    };
+    ShaderVisibleIndex current_shadow_caster_bounds_srv_index {
       kInvalidShaderVisibleIndex
     };
     ShaderVisibleIndex schedule_uav_index { kInvalidShaderVisibleIndex };
@@ -85,7 +88,9 @@ namespace {
       kInvalidShaderVisibleIndex
     };
     ShaderVisibleIndex resolve_stats_uav_index { kInvalidShaderVisibleIndex };
-    std::uint32_t invalidation_entry_count { 0U };
+    glm::mat4 current_light_view_matrix { 1.0F };
+    glm::mat4 previous_light_view_matrix { 1.0F };
+    std::uint32_t shadow_caster_bound_count { 0U };
     std::uint32_t request_word_count { 0U };
     std::uint32_t total_page_count { 0U };
     std::uint32_t schedule_capacity { 0U };
@@ -160,6 +165,8 @@ auto VirtualShadowResolvePass::DoPrepareResources(
   active_physical_page_capacity_ = 0U;
   active_draw_count_ = 0U;
   active_draw_page_index_capacity_ = 0U;
+  active_current_light_view_ = glm::mat4 { 1.0F };
+  active_previous_light_view_ = glm::mat4 { 1.0F };
   active_page_management_bindings_ = {};
 
   if (Context().frame_slot == frame::kInvalidSlot) {
@@ -207,8 +214,10 @@ auto VirtualShadowResolvePass::DoPrepareResources(
     || !page_management_bindings->physical_page_lists_srv.IsValid()
     || !page_management_bindings->physical_page_lists_uav.IsValid()
     || !page_management_bindings->resolve_stats_uav.IsValid()
-    || (page_management_bindings->invalidation_entry_count > 0U
-      && !page_management_bindings->invalidation_entries_srv.IsValid())) {
+    || (page_management_bindings->shadow_caster_bound_count > 0U
+      && (!page_management_bindings->previous_shadow_caster_bounds_srv.IsValid()
+        || !page_management_bindings->current_shadow_caster_bounds_srv
+              .IsValid()))) {
     co_return;
   }
 
@@ -256,6 +265,8 @@ auto VirtualShadowResolvePass::DoPrepareResources(
   // before readback, so it must never drive resolve-time page management.
   active_physical_page_capacity_
     = std::max(1U, page_management_bindings->physical_page_capacity);
+  active_current_light_view_ = metadata->light_view;
+  active_previous_light_view_ = page_management_bindings->previous_light_view;
   active_page_management_bindings_ = *page_management_bindings;
   const auto active_clip_count
     = std::min(metadata->clip_level_count, kMaxSupportedClipLevels);
@@ -525,8 +536,10 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
         : kInvalidShaderVisibleIndex,
       .page_mark_flags_srv_index = active_page_mark_flags_srv_,
       .draw_bounds_srv_index = active_draw_bounds_srv_,
-      .invalidation_entries_srv_index
-      = active_page_management_bindings_.invalidation_entries_srv,
+      .previous_shadow_caster_bounds_srv_index
+      = active_page_management_bindings_.previous_shadow_caster_bounds_srv,
+      .current_shadow_caster_bounds_srv_index
+      = active_page_management_bindings_.current_shadow_caster_bounds_srv,
       .schedule_uav_index
       = view_schedule_resources_.at(active_view_id_).schedule_uav,
       .schedule_count_uav_index
@@ -555,8 +568,10 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
       = active_page_management_bindings_.physical_page_lists_uav,
       .resolve_stats_uav_index
       = active_page_management_bindings_.resolve_stats_uav,
-      .invalidation_entry_count
-      = active_page_management_bindings_.invalidation_entry_count,
+      .current_light_view_matrix = active_current_light_view_,
+      .previous_light_view_matrix = active_previous_light_view_,
+      .shadow_caster_bound_count
+      = active_page_management_bindings_.shadow_caster_bound_count,
       .request_word_count = active_request_word_count_,
       .total_page_count = total_page_count,
       .schedule_capacity = active_schedule_capacity_,

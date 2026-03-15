@@ -10,6 +10,8 @@
 #include <memory>
 #include <span>
 
+#include <glm/mat4x4.hpp>
+
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Texture.h>
@@ -46,13 +48,19 @@ struct VirtualShadowPageManagementBindings {
   ShaderVisibleIndex page_flags_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex page_flags_uav { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex dirty_page_flags_uav { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex invalidation_entries_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex previous_shadow_caster_bounds_srv {
+    kInvalidShaderVisibleIndex
+  };
+  ShaderVisibleIndex current_shadow_caster_bounds_srv {
+    kInvalidShaderVisibleIndex
+  };
   ShaderVisibleIndex physical_page_metadata_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex physical_page_metadata_uav { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex physical_page_lists_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex physical_page_lists_uav { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex resolve_stats_uav { kInvalidShaderVisibleIndex };
-  std::uint32_t invalidation_entry_count { 0U };
+  glm::mat4 previous_light_view { 1.0F };
+  std::uint32_t shadow_caster_bound_count { 0U };
   std::uint32_t physical_page_capacity { 0U };
   std::uint32_t atlas_tiles_per_axis { 0U };
   // This is the startup-history gate for directional VSM. Do not replace it

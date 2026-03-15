@@ -25,7 +25,8 @@ struct VirtualShadowResolvePassConstants
     uint request_words_srv_index;
     uint page_mark_flags_srv_index;
     uint draw_bounds_srv_index;
-    uint invalidation_entries_srv_index;
+    uint previous_shadow_caster_bounds_srv_index;
+    uint current_shadow_caster_bounds_srv_index;
     uint schedule_uav_index;
     uint schedule_count_uav_index;
     uint clear_args_uav_index;
@@ -41,7 +42,9 @@ struct VirtualShadowResolvePassConstants
     uint physical_page_lists_srv_index;
     uint physical_page_lists_uav_index;
     uint resolve_stats_uav_index;
-    uint invalidation_entry_count;
+    float4x4 current_light_view_matrix;
+    float4x4 previous_light_view_matrix;
+    uint shadow_caster_bound_count;
     uint request_word_count;
     uint total_page_count;
     uint schedule_capacity;
@@ -75,18 +78,6 @@ struct VirtualShadowPhysicalPageListEntry
     uint64_t resident_key;
     uint physical_page_index;
     uint page_flags;
-};
-
-struct VirtualShadowInvalidationEntry
-{
-    int min_grid_x;
-    int max_grid_x;
-    int min_grid_y;
-    int max_grid_y;
-    uint clip_index;
-    uint page_flags;
-    uint _pad0;
-    uint _pad1;
 };
 
 struct VirtualShadowResolveStats
@@ -280,6 +271,32 @@ static uint64_t PackVirtualResidentPageKey(
         | EncodeVirtualResidentPageCoord(grid_y);
 }
 
+static bool ShadowCasterBoundOverlapsResidentPage(
+    VirtualShadowResolvePassConstants pass_constants,
+    float4 bound,
+    float4x4 light_view_matrix,
+    uint clip_index,
+    int resident_grid_x,
+    int resident_grid_y)
+{
+    const float radius = max(0.0f, bound.w);
+    if (radius <= 0.0f || clip_index >= pass_constants.clip_level_count) {
+        return false;
+    }
+
+    const float page_world_size =
+        max(LoadPackedFloat(pass_constants.clip_page_world_packed, clip_index), 1.0e-4f);
+    const float3 center_ls =
+        mul(light_view_matrix, float4(bound.xyz, 1.0f)).xyz;
+    const int min_grid_x = int(floor((center_ls.x - radius) / page_world_size));
+    const int max_grid_x = int(ceil((center_ls.x + radius) / page_world_size) - 1.0f);
+    const int min_grid_y = int(floor((center_ls.y - radius) / page_world_size));
+    const int max_grid_y = int(ceil((center_ls.y + radius) / page_world_size) - 1.0f);
+
+    return resident_grid_x >= min_grid_x && resident_grid_x <= max_grid_x
+        && resident_grid_y >= min_grid_y && resident_grid_y <= max_grid_y;
+}
+
 static bool IsPageRequestedThisFrame(
     StructuredBuffer<uint> request_words,
     uint request_word_count,
@@ -436,9 +453,10 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         ResourceDescriptorHeap[pass_constants.physical_page_lists_srv_index];
     RWStructuredBuffer<VirtualShadowPhysicalPageListEntry> physical_page_lists_uav =
         ResourceDescriptorHeap[pass_constants.physical_page_lists_uav_index];
-    const bool has_invalidation_entries =
-        pass_constants.invalidation_entry_count > 0u
-        && BX_IN_GLOBAL_SRV(pass_constants.invalidation_entries_srv_index);
+    const bool has_shadow_caster_bounds =
+        pass_constants.shadow_caster_bound_count > 0u
+        && BX_IN_GLOBAL_SRV(pass_constants.previous_shadow_caster_bounds_srv_index)
+        && BX_IN_GLOBAL_SRV(pass_constants.current_shadow_caster_bounds_srv_index);
     RWStructuredBuffer<VirtualShadowResolveStats> resolve_stats =
         ResourceDescriptorHeap[pass_constants.resolve_stats_uav_index];
     RWStructuredBuffer<uint4> schedule =
@@ -502,7 +520,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             return;
         }
 
-        if (!has_invalidation_entries) {
+        if (!has_shadow_caster_bounds) {
             return;
         }
 
@@ -517,27 +535,44 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         const uint clip_index = DecodeVirtualResidentPageKeyClipLevel(resident_key);
         const int grid_x = DecodeVirtualResidentPageKeyGridX(resident_key);
         const int grid_y = DecodeVirtualResidentPageKeyGridY(resident_key);
-        StructuredBuffer<VirtualShadowInvalidationEntry> invalidation_entries =
-            ResourceDescriptorHeap[pass_constants.invalidation_entries_srv_index];
+        StructuredBuffer<float4> previous_shadow_caster_bounds =
+            ResourceDescriptorHeap[pass_constants.previous_shadow_caster_bounds_srv_index];
+        StructuredBuffer<float4> current_shadow_caster_bounds =
+            ResourceDescriptorHeap[pass_constants.current_shadow_caster_bounds_srv_index];
 
-        for (uint invalidation_index = 0u;
-             invalidation_index < pass_constants.invalidation_entry_count;
-             ++invalidation_index) {
-            const VirtualShadowInvalidationEntry entry =
-                invalidation_entries[invalidation_index];
-            if (entry.clip_index != clip_index
-                || grid_x < entry.min_grid_x || grid_x > entry.max_grid_x
-                || grid_y < entry.min_grid_y || grid_y > entry.max_grid_y) {
+        for (uint bound_index = 0u;
+             bound_index < pass_constants.shadow_caster_bound_count;
+             ++bound_index) {
+            const float4 previous_bound = previous_shadow_caster_bounds[bound_index];
+            const float4 current_bound = current_shadow_caster_bounds[bound_index];
+            if (all(previous_bound == current_bound)) {
+                continue;
+            }
+
+            const bool overlaps_previous =
+                ShadowCasterBoundOverlapsResidentPage(
+                    pass_constants,
+                    previous_bound,
+                    pass_constants.previous_light_view_matrix,
+                    clip_index,
+                    grid_x,
+                    grid_y);
+            const bool overlaps_current =
+                ShadowCasterBoundOverlapsResidentPage(
+                    pass_constants,
+                    current_bound,
+                    pass_constants.current_light_view_matrix,
+                    clip_index,
+                    grid_x,
+                    grid_y);
+            if (!overlaps_previous && !overlaps_current) {
                 continue;
             }
 
             dirty_page_flags[thread_index] = 1u;
-            if ((entry.page_flags & OXYGEN_VSM_PAGE_FLAG_DYNAMIC_UNCACHED) != 0u) {
-                dirty_page_flags[thread_index + pass_constants.physical_page_capacity] = 1u;
-            }
-            if ((entry.page_flags & OXYGEN_VSM_PAGE_FLAG_STATIC_UNCACHED) != 0u) {
-                dirty_page_flags[thread_index + 2u * pass_constants.physical_page_capacity] = 1u;
-            }
+            dirty_page_flags[thread_index + pass_constants.physical_page_capacity] = 1u;
+            dirty_page_flags[thread_index + 2u * pass_constants.physical_page_capacity] = 1u;
+            break;
         }
         return;
     }

@@ -11,6 +11,8 @@
 #include <string>
 #include <unordered_map>
 
+#include <glm/mat4x4.hpp>
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
@@ -152,6 +154,8 @@ private:
   std::uint32_t active_physical_page_capacity_ { 0U };
   std::uint32_t active_draw_count_ { 0U };
   std::uint32_t active_draw_page_index_capacity_ { 0U };
+  glm::mat4 active_current_light_view_ { 1.0F };
+  glm::mat4 active_previous_light_view_ { 1.0F };
   renderer::VirtualShadowPageManagementBindings
     active_page_management_bindings_ {};
   std::array<float, kMaxSupportedClipLevels> active_clip_origin_x_ {};
