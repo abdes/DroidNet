@@ -93,22 +93,14 @@ struct VirtualShadowInvalidationEntry
 
 struct VirtualShadowResolveStats
 {
-    uint resident_entry_count;
-    uint resident_entry_capacity;
-    uint clean_page_count;
-    uint dirty_page_count;
-    uint pending_page_count;
-    uint mapped_page_count;
     uint pending_raster_page_count;
-    uint selected_page_count;
     uint allocated_page_count;
-    uint evicted_page_count;
-    uint rerasterized_page_count;
-    uint reused_requested_page_count;
     uint requested_page_list_count;
     uint dirty_page_list_count;
     uint clean_page_list_count;
     uint available_page_list_count;
+    uint reserved0;
+    uint reserved1;
 };
 
 static const uint kResolvePhaseClear = 0u;
@@ -490,21 +482,14 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
                 packed_tile_coords;
         }
         if (thread_index == 0u) {
-            resolve_stats[0].resident_entry_count = 0u;
-            resolve_stats[0].resident_entry_capacity = pass_constants.physical_page_capacity;
-            resolve_stats[0].clean_page_count = 0u;
-            resolve_stats[0].dirty_page_count = 0u;
-            resolve_stats[0].pending_page_count = 0u;
-            resolve_stats[0].mapped_page_count = 0u;
             resolve_stats[0].pending_raster_page_count = 0u;
             resolve_stats[0].requested_page_list_count = 0u;
             resolve_stats[0].dirty_page_list_count = 0u;
             resolve_stats[0].clean_page_list_count = 0u;
             resolve_stats[0].available_page_list_count = 0u;
             resolve_stats[0].allocated_page_count = 0u;
-            resolve_stats[0].evicted_page_count = 0u;
-            resolve_stats[0].rerasterized_page_count = 0u;
-            resolve_stats[0].reused_requested_page_count = 0u;
+            resolve_stats[0].reserved0 = 0u;
+            resolve_stats[0].reserved1 = 0u;
         }
         return;
     }
@@ -652,8 +637,6 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             | (static_uncached ? OXYGEN_VSM_PAGE_FLAG_STATIC_UNCACHED : 0u)
             | (detail_geometry ? OXYGEN_VSM_PAGE_FLAG_DETAIL_GEOMETRY : 0u)
             | (used_this_frame ? OXYGEN_VSM_PAGE_FLAG_USED_THIS_FRAME : 0u);
-        uint resident_entry_index = 0u;
-        InterlockedAdd(resolve_stats[0].resident_entry_count, 1u, resident_entry_index);
         page_table[global_page_index] = PackVirtualShadowPageTableEntry(
             DecodePackedTileX(packed_tile_coords),
             DecodePackedTileY(packed_tile_coords),
@@ -671,23 +654,17 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         if (used_this_frame) {
             InterlockedAdd(resolve_stats[0].requested_page_list_count, 1u, list_index);
             list_start = requested_list_start;
-            InterlockedAdd(resolve_stats[0].pending_page_count,
-                (dynamic_uncached || static_uncached) ? 1u : 0u,
-                list_index);
         } else if (dynamic_uncached || static_uncached) {
             InterlockedAdd(resolve_stats[0].dirty_page_list_count, 1u, list_index);
             list_start = dirty_list_start;
-            InterlockedAdd(resolve_stats[0].dirty_page_count, 1u, list_index);
         } else {
             InterlockedAdd(resolve_stats[0].clean_page_list_count, 1u, list_index);
             list_start = clean_list_start;
-            InterlockedAdd(resolve_stats[0].clean_page_count, 1u, list_index);
         }
         if (list_index < pass_constants.physical_page_capacity) {
             physical_page_lists_uav[list_start + list_index] =
                 MakePhysicalPageListEntry(resident_key, thread_index, published_flags);
         }
-        InterlockedAdd(resolve_stats[0].mapped_page_count, 1u, list_index);
         return;
     }
 
@@ -776,8 +753,6 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             | OXYGEN_VSM_PAGE_FLAG_STATIC_UNCACHED
             | (mark_flags & (OXYGEN_VSM_PAGE_FLAG_DETAIL_GEOMETRY
                 | OXYGEN_VSM_PAGE_FLAG_USED_THIS_FRAME));
-        uint resident_entry_index = 0u;
-        InterlockedAdd(resolve_stats[0].resident_entry_count, 1u, resident_entry_index);
         const uint packed_tile_coords =
             PackAtlasTileCoordsFromPhysicalPageIndex(pass_constants, physical_page_index);
 
@@ -806,8 +781,6 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
                     physical_page_index,
                     published_flags);
         }
-        InterlockedAdd(resolve_stats[0].mapped_page_count, 1u, requested_list_index);
-        InterlockedAdd(resolve_stats[0].pending_page_count, 1u, requested_list_index);
         return;
     }
 

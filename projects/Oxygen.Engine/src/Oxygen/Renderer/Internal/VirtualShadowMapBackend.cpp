@@ -611,6 +611,11 @@ auto VirtualShadowMapBackend::MarkRendered(
   // A zero-page frame must not bootstrap cache history. On first-scene startup
   // that would turn seed-only page-management buffers into "reusable" history
   // and expose garbage outside the real scene bounds on the next frame.
+  //
+  // The caller must derive this only from authoritative resolve/raster page
+  // work. CPU draw metadata, partition counts, or indirect-record counts are
+  // not sufficient because they can be nonzero before any current VSM page
+  // mapping exists.
   if (!rendered_page_work && !it->second.has_rendered_cache_history) {
     RefreshViewExports(view_id, it->second);
     return;
