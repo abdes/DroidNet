@@ -51,7 +51,6 @@ struct VirtualShadowPageManagementBindings {
   ShaderVisibleIndex physical_page_metadata_uav { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex physical_page_lists_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex physical_page_lists_uav { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex resolve_stats_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex resolve_stats_uav { kInvalidShaderVisibleIndex };
   std::uint32_t invalidation_entry_count { 0U };
   std::uint32_t physical_page_capacity { 0U };

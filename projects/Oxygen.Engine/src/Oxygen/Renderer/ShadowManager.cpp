@@ -163,10 +163,7 @@ auto ShadowManager::PublishForView(const ViewId view_id,
   if (virtual_eligible) {
     const auto publication = virtual_backend_->PublishView(view_id,
       view_constants, virtual_candidates, shadow_caster_bounds,
-      visible_receiver_bounds, gpu_budget,
-      directional_policy_
-        != oxygen::DirectionalShadowImplementationPolicy::kVirtualOnly,
-      shadow_caster_content_hash);
+      visible_receiver_bounds, gpu_budget, shadow_caster_content_hash);
     if (publication.shadow_instance_metadata_srv
       != kInvalidShaderVisibleIndex) {
       RecordDirectionalImplementation(last_view_directional_implementation_,

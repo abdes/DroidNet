@@ -41,7 +41,6 @@ struct VirtualShadowResolvePassConstants
     uint physical_page_metadata_uav_index;
     uint physical_page_lists_srv_index;
     uint physical_page_lists_uav_index;
-    uint resolve_stats_srv_index;
     uint resolve_stats_uav_index;
     uint invalidation_entry_count;
     uint request_word_count;
@@ -412,7 +411,6 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         || !BX_IN_GLOBAL_SRV(pass_constants.physical_page_metadata_uav_index)
         || !BX_IN_GLOBAL_SRV(pass_constants.physical_page_lists_srv_index)
         || !BX_IN_GLOBAL_SRV(pass_constants.physical_page_lists_uav_index)
-        || !BX_IN_GLOBAL_SRV(pass_constants.resolve_stats_srv_index)
         || !BX_IN_GLOBAL_SRV(pass_constants.resolve_stats_uav_index)
         || !BX_IN_GLOBAL_SRV(pass_constants.page_table_uav_index)
         || !BX_IN_GLOBAL_SRV(pass_constants.page_flags_uav_index)
