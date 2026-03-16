@@ -20,6 +20,7 @@
 #include "Renderer/DrawMetadata.hlsli"
 #include "Renderer/MaterialShadingConstants.hlsli"
 #include "Renderer/ShadowFrameBindings.hlsli"
+#include "Renderer/VirtualShadowPageAccess.hlsli"
 
 #include "Depth/DepthPrePassConstants.hlsli"
 
@@ -194,6 +195,8 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
     const uint geometry_instance_count = max(meta.instance_count, 1u);
     uint page_instance_index = instanceID / geometry_instance_count;
     const uint geometry_instance_index = instanceID % geometry_instance_count;
+    uint global_page_index = 0u;
+    VirtualShadowResolvedScheduleEntry entry;
     if (pass_constants.draw_page_ranges_srv_index != K_INVALID_BINDLESS_INDEX
         && pass_constants.draw_page_indices_srv_index != K_INVALID_BINDLESS_INDEX) {
         StructuredBuffer<VirtualShadowDrawPageRange> draw_page_ranges =
@@ -204,18 +207,42 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
         if (page_instance_index >= draw_page_range.count) {
             return output;
         }
-        page_instance_index = draw_page_indices[draw_page_range.offset + page_instance_index];
+        global_page_index = draw_page_indices[draw_page_range.offset + page_instance_index];
+
+        if (shadow_bindings.virtual_shadow_page_table_slot == K_INVALID_BINDLESS_INDEX) {
+            return output;
+        }
+        StructuredBuffer<uint> page_table =
+            ResourceDescriptorHeap[shadow_bindings.virtual_shadow_page_table_slot];
+        const uint page_table_index = metadata.page_table_offset + global_page_index;
+        uint page_table_count = 0u;
+        uint page_table_stride = 0u;
+        page_table.GetDimensions(page_table_count, page_table_stride);
+        if (page_table_index >= page_table_count) {
+            return output;
+        }
+
+        const VirtualShadowPageTableEntry page_entry =
+            DecodeVirtualShadowPageTableEntry(page_table[page_table_index]);
+        if (!VirtualShadowPageTableEntryHasCurrentLod(page_entry)) {
+            return output;
+        }
+        entry.global_page_index = global_page_index;
+        entry.packed_entry = page_table[page_table_index];
+        entry.atlas_tile_x = page_entry.tile_x;
+        entry.atlas_tile_y = page_entry.tile_y;
     } else if (page_instance_index >= scheduled_page_count) {
         return output;
+    } else {
+        entry = schedule[page_instance_index];
+        global_page_index = entry.global_page_index;
     }
-
-    const VirtualShadowResolvedScheduleEntry entry = schedule[page_instance_index];
     const uint pages_per_level = metadata.pages_per_axis * metadata.pages_per_axis;
     if (pages_per_level == 0u) {
         return output;
     }
-    const uint clip_index = entry.global_page_index / pages_per_level;
-    const uint local_page_index = entry.global_page_index % pages_per_level;
+    const uint clip_index = global_page_index / pages_per_level;
+    const uint local_page_index = global_page_index % pages_per_level;
     if (clip_index >= metadata.clip_level_count) {
         return output;
     }

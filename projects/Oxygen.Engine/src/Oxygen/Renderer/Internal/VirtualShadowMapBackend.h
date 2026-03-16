@@ -153,6 +153,7 @@ private:
     std::vector<glm::vec4> shadow_caster_bounds;
     std::uint64_t shadow_caster_content_hash { 0U };
     bool has_rendered_cache_history { false };
+    bool page_management_outputs_finalized_this_frame { false };
     PendingResidencyResolve pending_residency_resolve {};
     ShadowFramePublication frame_publication {};
     renderer::VirtualShadowPageManagementBindings page_management_bindings {};

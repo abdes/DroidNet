@@ -311,6 +311,25 @@ constexpr std::uint64_t kMaxResolvedRasterScheduleAgeFrames
       previous_clip.bias_reserved.x, current_clip.bias_reserved.x);
 }
 
+[[nodiscard]] auto IsDirectionalVirtualContentReusable(
+  const oxygen::engine::DirectionalVirtualShadowMetadata& previous,
+  const oxygen::engine::DirectionalVirtualShadowMetadata& current) -> bool
+{
+  if (previous.clip_level_count != current.clip_level_count) {
+    return false;
+  }
+
+  for (std::uint32_t clip_index = 0U; clip_index < current.clip_level_count;
+    ++clip_index) {
+    if (!IsDirectionalVirtualClipContentReusable(
+          previous, current, clip_index)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 [[nodiscard]] auto ExtractDirectionalViewForwardWs(const glm::mat4& light_view)
   -> glm::vec3
 {
@@ -370,9 +389,29 @@ struct CanonicalShadowCasterInput {
   std::vector<glm::vec4> bounds;
 };
 
+[[nodiscard]] auto DirectionalCacheBoundEqual(
+  const glm::vec4& lhs, const glm::vec4& rhs) -> bool
+{
+  return oxygen::renderer::internal::shadow_detail::DirectionalCacheFloatEqual(
+           lhs.x, rhs.x)
+    && oxygen::renderer::internal::shadow_detail::DirectionalCacheFloatEqual(
+           lhs.y, rhs.y)
+    && oxygen::renderer::internal::shadow_detail::DirectionalCacheFloatEqual(
+           lhs.z, rhs.z)
+    && oxygen::renderer::internal::shadow_detail::DirectionalCacheFloatEqual(
+           lhs.w, rhs.w);
+}
+
 [[nodiscard]] auto CanonicalizeShadowCasterInput(
   const std::span<const glm::vec4> bounds) -> CanonicalShadowCasterInput
 {
+  const auto dequantize_cache_bound
+    = [](const std::int64_t quantized) noexcept -> float {
+    constexpr double kDirectionalCacheFloatScale = 100000.0;
+    return static_cast<float>(
+      static_cast<double>(quantized) / kDirectionalCacheFloatScale);
+  };
+
   CanonicalShadowCasterInput result {};
   result.bounds.resize(bounds.size());
 
@@ -410,16 +449,72 @@ struct CanonicalShadowCasterInput {
         QuantizeDirectionalCacheFloat(lhs.w);
       const auto rhs_w = oxygen::renderer::internal::shadow_detail::
         QuantizeDirectionalCacheFloat(rhs.w);
-      return lhs_w < rhs_w;
+      if (lhs_w != rhs_w) {
+        return lhs_w < rhs_w;
+      }
+
+      if (lhs.x != rhs.x) {
+        return lhs.x < rhs.x;
+      }
+      if (lhs.y != rhs.y) {
+        return lhs.y < rhs.y;
+      }
+      if (lhs.z != rhs.z) {
+        return lhs.z < rhs.z;
+      }
+      if (lhs.w != rhs.w) {
+        return lhs.w < rhs.w;
+      }
+
+      return lhs_index < rhs_index;
     });
 
   for (std::size_t sorted_index = 0U; sorted_index < order.size();
     ++sorted_index) {
     const auto source_index = order[sorted_index];
-    result.bounds[sorted_index] = bounds[source_index];
+    const auto& source_bound = bounds[source_index];
+    result.bounds[sorted_index] = glm::vec4(
+      dequantize_cache_bound(
+        oxygen::renderer::internal::shadow_detail::QuantizeDirectionalCacheFloat(
+          source_bound.x)),
+      dequantize_cache_bound(
+        oxygen::renderer::internal::shadow_detail::QuantizeDirectionalCacheFloat(
+          source_bound.y)),
+      dequantize_cache_bound(
+        oxygen::renderer::internal::shadow_detail::QuantizeDirectionalCacheFloat(
+          source_bound.z)),
+      dequantize_cache_bound(
+        oxygen::renderer::internal::shadow_detail::QuantizeDirectionalCacheFloat(
+          source_bound.w)));
   }
 
   return result;
+}
+
+auto CollectChangedShadowCasterBounds(
+  const std::span<const glm::vec4> previous_bounds,
+  const std::span<const glm::vec4> current_bounds,
+  std::vector<glm::vec4>& previous_changed_bounds,
+  std::vector<glm::vec4>& current_changed_bounds) -> void
+{
+  DCHECK_EQ_F(previous_bounds.size(), current_bounds.size(),
+    "expected matching previous/current shadow-caster bound counts");
+
+  previous_changed_bounds.clear();
+  current_changed_bounds.clear();
+  previous_changed_bounds.reserve(previous_bounds.size());
+  current_changed_bounds.reserve(current_bounds.size());
+
+  for (std::size_t bound_index = 0U; bound_index < current_bounds.size();
+    ++bound_index) {
+    if (DirectionalCacheBoundEqual(
+          previous_bounds[bound_index], current_bounds[bound_index])) {
+      continue;
+    }
+
+    previous_changed_bounds.push_back(previous_bounds[bound_index]);
+    current_changed_bounds.push_back(current_bounds[bound_index]);
+  }
 }
 
 } // namespace
@@ -571,23 +666,25 @@ auto VirtualShadowMapBackend::MarkRendered(
     return;
   }
 
-  // A zero-page frame must not bootstrap cache history. On first-scene startup
-  // that would turn seed-only page-management buffers into "reusable" history
-  // and expose garbage outside the real scene bounds on the next frame.
-  //
-  // The caller must derive this only from authoritative resolve/raster page
-  // work. CPU draw metadata, partition counts, or indirect-record counts are
-  // not sufficient because they can be nonzero before any current VSM page
-  // mapping exists.
+  // CPU-side draw metadata is not authoritative enough to open cache history:
+  // the prepared frame can contain shadow-caster draws before resolve has
+  // authored any current VSM page-management state. The correct freshness
+  // boundary is the resolve/finalize step that produced the live page
+  // table/page flags/physical metadata for this frame.
   if (!rendered_page_work && !it->second.has_rendered_cache_history) {
+    if (!it->second.page_management_outputs_finalized_this_frame) {
+      RefreshViewExports(view_id, it->second);
+      return;
+    }
     RefreshViewExports(view_id, it->second);
-    return;
   }
 
   // Live residency is GPU-owned now. Once a view has genuinely rasterized at
-  // least one page, later zero-work steady-state frames may preserve that
-  // cache history without forcing another bootstrap/reset.
+  // least one frame of authoritative page-management state, later zero-work
+  // steady-state frames may preserve that cache history without forcing
+  // another bootstrap/reset.
   it->second.has_rendered_cache_history = true;
+  it->second.page_management_outputs_finalized_this_frame = false;
   RefreshViewExports(view_id, it->second);
 }
 
@@ -838,6 +935,7 @@ auto VirtualShadowMapBackend::FinalizePageManagementOutputs(
   if (resolve_resources_it != view_resolve_resources_.end()) {
     resolve_resources_it->second.physical_page_state_reset_pending = false;
   }
+  state.page_management_outputs_finalized_this_frame = true;
   RefreshViewExports(view_id, state);
   recorder.FlushBarriers();
 }
@@ -1473,8 +1571,11 @@ auto VirtualShadowMapBackend::PopulateDirectionalPendingResolve(
     && previous_state->has_rendered_cache_history
     && previous_state->shadow_caster_content_hash
          != state.shadow_caster_content_hash;
+  const bool content_reusable = previous_context.previous_metadata != nullptr
+    && IsDirectionalVirtualContentReusable(
+      *previous_context.previous_metadata, setup.metadata);
   const bool compare_shadow_caster_bounds_on_gpu
-    = address_space_compatible && !shadow_content_changed
+    = address_space_compatible && content_reusable && !shadow_content_changed
     && previous_context.previous_shadow_caster_bounds != nullptr
     && previous_context.previous_shadow_caster_bounds->size()
          == state.shadow_caster_bounds.size()
@@ -1485,8 +1586,38 @@ auto VirtualShadowMapBackend::PopulateDirectionalPendingResolve(
   }
 
   if (compare_shadow_caster_bounds_on_gpu) {
+    const auto previous_bounds
+      = std::span<const glm::vec4>(
+        previous_context.previous_shadow_caster_bounds->data(),
+        previous_context.previous_shadow_caster_bounds->size());
+    const auto current_bounds
+      = std::span<const glm::vec4>(
+        state.shadow_caster_bounds.data(), state.shadow_caster_bounds.size());
+
+    std::vector<glm::vec4> previous_changed_bounds;
+    std::vector<glm::vec4> current_changed_bounds;
+    auto previous_bounds_to_upload = previous_bounds;
+    auto current_bounds_to_upload = current_bounds;
+
+    CollectChangedShadowCasterBounds(previous_bounds, current_bounds,
+      previous_changed_bounds, current_changed_bounds);
+    previous_bounds_to_upload = std::span<const glm::vec4>(
+      previous_changed_bounds.data(), previous_changed_bounds.size());
+    current_bounds_to_upload = std::span<const glm::vec4>(
+      current_changed_bounds.data(), current_changed_bounds.size());
+
     const auto bound_count = static_cast<std::uint32_t>(
-      state.shadow_caster_bounds.size());
+      current_bounds_to_upload.size());
+    if (bound_count == 0U) {
+      pending_resolve.previous_light_view = previous_context.previous_metadata != nullptr
+        ? previous_context.previous_metadata->light_view
+        : glm::mat4 { 1.0F };
+      DCHECK_F(CanApplyPendingResolveToLiveBindings(state),
+        "VirtualShadowMapBackend: freshly populated pending resolve packet must "
+        "be eligible for live binding export");
+      return;
+    }
+
     auto previous_bounds_allocation
       = shadow_caster_bounds_buffer_.Allocate(bound_count);
     auto current_bounds_allocation
@@ -1495,12 +1626,11 @@ auto VirtualShadowMapBackend::PopulateDirectionalPendingResolve(
       && previous_bounds_allocation->mapped_ptr != nullptr
       && current_bounds_allocation->mapped_ptr != nullptr) {
       std::memcpy(previous_bounds_allocation->mapped_ptr,
-        previous_context.previous_shadow_caster_bounds->data(),
-        previous_context.previous_shadow_caster_bounds->size()
-          * sizeof(glm::vec4));
+        previous_bounds_to_upload.data(),
+        previous_bounds_to_upload.size() * sizeof(glm::vec4));
       std::memcpy(current_bounds_allocation->mapped_ptr,
-        state.shadow_caster_bounds.data(),
-        state.shadow_caster_bounds.size() * sizeof(glm::vec4));
+        current_bounds_to_upload.data(),
+        current_bounds_to_upload.size() * sizeof(glm::vec4));
       pending_resolve.previous_shadow_caster_bounds_srv
         = previous_bounds_allocation->srv;
       pending_resolve.current_shadow_caster_bounds_srv
