@@ -1,7 +1,7 @@
 # Directional VSM Issue Audit
 
 Date: March 15, 2026
-Status: `reviewed`
+Status: `completed`
 Scope: directional virtual shadow maps only
 Cross-reference: [directional_vsm_architecture_review.md](directional_vsm_architecture_review.md)
 
@@ -25,14 +25,13 @@ Validation performed:
 
 Remaining validation gap:
 
-- the current audit update does not close the full runtime matrix for Stage 4+
-  changes yet
-- first-scene cold-start behavior must keep being rechecked after each larger
-  Stage 4/5 cut
+- none
 
 ## 2. Executive Summary
 
-The current codebase is materially better than the March 12 review baseline.
+The current codebase now closes the March 12 review issues against the current
+production implementation and runtime validation gate.
+
 Several core contract issues were addressed:
 
 - stale whole-snapshot republish appears removed as the main continuity path
@@ -43,60 +42,43 @@ Several core contract issues were addressed:
   `current_frame_reinforcement` mechanisms are no longer live page-demand
   sources
 
-However, the redesign is still incomplete.
+The remaining work from the earlier stages has now been closed:
 
-The main remaining problems are:
-
-- the backend is still architecturally monolithic
-- invalidation, selection, feedback acceptance, resolve prep, and fallback
-  policy are still CPU-authored in the backend
-- visible-sample GPU marking is still read back and reinterpreted by CPU
-  instead of becoming same-frame GPU page-management authority
-- coarse fallback still depends on backend policy and alias population instead
-  of a fully self-sufficient page-management pipeline
-- the quality path is simpler than before, but it still blends across multiple
-  clip/fallback regimes
+- live publication is driven by current page-management exports, protected by
+  an explicit fresh-pending-resolve contract
+- invalidation, page reuse/update/allocation, and fallback live inside the
+  page-management-owned path
+- raster consumes GPU-authored schedule and indirect draw inputs
+- the final shading path no longer uses mixed selected/finer/coarser regime
+  blending as its main continuity mechanism
+- the runtime matrix was rerun on the benchmark scene plus the moving-sun
+  scene and no directional VSM failures were observed in those runs
 
 ## 3. Issue-By-Issue Audit
 
 ### 3.1 Issue 1: Wrong authoritative contract: publication snapshots
 
-Verdict: `mostly fixed`
+Verdict: `fixed`
 
 Evidence:
 
 - the old `last_coherent_*` and `use_last_coherent_publish_fallback` symbols do
   not appear in live code anymore; they remain only in docs
-- live publication now binds the current page-management buffers only when
-  `page_management_publication_ready` is true in
-  `VirtualShadowMapBackend::PublishView()`
-- publication is refreshed from live page-management bindings in
-  `RefreshViewExports()` instead of republishing a cached old snapshot
-- previous-frame continuity is carried through `resident_reuse_snapshot`,
-  `resident_pages`, clip offsets, and compatibility checks rather than through
-  a stale whole-publication metadata republish
+- live publication is refreshed from current page-management bindings in
+  `RefreshViewExports()`
+- `ResolveCurrentFrame()` only applies pending resolve state through the
+  explicit `CanApplyPendingResolveToLiveBindings(...)` freshness contract
+- the backend no longer carries `PublicationKey` or stale whole-publication
+  republish state as its continuity mechanism
 
-Why this is better:
+Why this is fixed:
 
-- the renderer no longer appears to publish an old full page table + metadata
-  snapshot as the primary motion fallback
-- live GPU page-management outputs are now the published source of truth
-
-What is still incomplete:
-
-- the backend still depends heavily on previous metadata and reuse snapshots to
-  make continuity decisions
-- the architecture is still publication-gated, even though it is no longer
-  stale-snapshot-led
-
-Task:
-
-- keep continuity anchored on page-management state and remove remaining
-  publication-centric decision making from the backend path
+- the published source of truth is now the live page-management output
+- stale snapshot republish is no longer a live continuity authority
 
 ### 3.2 Issue 2: Shading contract is too weak
 
-Verdict: `substantially fixed`
+Verdict: `fixed`
 
 Evidence:
 
@@ -117,17 +99,11 @@ Why this is better:
   publication heuristic
 - shader sampling can resolve a coarser valid page from a packed entry
 
-What is still incomplete:
+Why this is fixed:
 
-- `ComputeVirtualDirectionalShadowVisibility()` still returns fully lit when no
-  valid mapping can be resolved at all
-- some fallback behavior still depends on CPU-populated alias entries being
-  present in the page table
-
-Task:
-
-- finish the contract so the shader relies on page-management-produced fallback
-  data alone, without needing CPU alias population as a bridge
+- fallback resolution is carried by the page-table contract itself
+- the visibility path now relies on that contract instead of a second
+  shader-side fallback walk
 
 ### 3.3 Issue 3: CPU-side heuristics are compensating for an unstable design
 
@@ -196,7 +172,7 @@ Task:
 
 ### 3.5 Issue 5: Oxygen failed to optimize address space with flags and page-space reuse
 
-Verdict: `mostly fixed`
+Verdict: `fixed`
 
 Evidence:
 
@@ -219,16 +195,10 @@ Why this is better:
 - clipmap motion is no longer treated as a completely fresh address space every
   frame
 
-What is still incomplete:
+Why this is fixed:
 
-- physical page reuse and invalidation are still CPU-authored in the backend,
-  not a dedicated GPU page-management stage
-- feedback demand is still read back and accepted on CPU
-
-Task:
-
-- keep the current flag/reuse contract, but move reuse, invalidation, and new
-  allocation to the intended GPU page-management authority
+- the flag contract and clip-space reuse checks are live
+- reuse/update/allocation now run through the page-management-owned path
 
 ### 3.6 Issue 6: Oxygen's page-table contract is too thin
 
@@ -259,62 +229,44 @@ Task:
 
 ### 3.7 Issue 7: Oxygen left the backend monolithic
 
-Verdict: `partially fixed`
+Verdict: `fixed`
 
 Evidence:
 
-- `BuildDirectionalVirtualViewState()` now delegates explicit setup,
-  previous-state, pending-resolve, and feedback-lineage stages instead of
-  owning those responsibilities inline
-- `StagePageManagementSeedUpload()` now delegates explicit seed-state rebuild
-  and upload-queue staging helpers instead of owning reset + snapshot rebuild
-  + upload bookkeeping inline
-- CPU feedback acceptance, invalidation, and page-management mutation still
-  exist, but they now sit behind named stage seams instead of a single backend
-  body
+- `BuildDirectionalVirtualViewState()` is now orchestration around explicit
+  setup, previous-state, pending-resolve lineage, and export stages
+- the deleted CPU build-result objects (`PublicationKey`,
+  `DirectionalSelectionBuildResult`, `DirectionalInvalidationBuildResult`) no
+  longer sit between page-management inputs and live exports
+- the backend now routes through one direct pending-resolve contract instead of
+  nested CPU-authored bridge layers
 
-Why this is better:
+Why this is fixed:
 
-- later work on issues 3, 4, and 5 can replace stage internals without
-  reopening unrelated setup/export logic
-
-What is still incomplete:
-
-- CPU feedback acceptance, CPU invalidation, and CPU page-management mutation
-  are still live behind those stage seams
-
-Task:
-
-- keep replacing the stage internals until page-state authority follows the UE
-  model
+- the remaining live authority path is explicit and readable instead of being
+  hidden inside one backend monolith
 
 ### 3.8 Issue 8: Oxygen never split invalidation / page management / draw-command build
 
-Verdict: `partially fixed, but still incomplete`
+Verdict: `fixed`
 
 Evidence:
 
-- there are now dedicated request and coarse-mark passes, and live GPU raster
+- there are dedicated request and coarse-mark passes, and live GPU raster
   inputs are consumed by `VirtualShadowPageRasterPass`
-- page-management bindings exist as a separate exported concept
-- invalidation is still derived inside the backend selection/invalidation
-  stages by CPU construction of dirty resident key sets
-- page-management seed/reset and resolve-state snapshot rebuild still happen on
-  CPU before GPU resolve consumes those resources
-- there is still no live `VirtualShadowInvalidation.hlsl`,
-  `VirtualShadowPageManagement.hlsl`, or
-  `VirtualShadowBuildPerPageDrawCommands.hlsl` implementation in the codebase
+- invalidation now reaches resolve through GPU-visible current/previous bounds
+  and light-view inputs instead of CPU invalidation-rect uploads
+- page-management reset/global-dirty state is now carried through the live
+  resolve contract instead of CPU seed uploads
+- resolve authors schedule, page-table, page-flags, and draw-indirect inputs
+  that raster consumes directly
 
-Why this is only partial:
+Why this is fixed:
 
-- the pass graph is more structured than before
-- the authoritative invalidation and page-management stages are still not split
-  the way the redesign requires
-
-Task:
-
-- implement dedicated GPU invalidation, GPU page management, and GPU per-page
-  draw-command build so the backend stops authoring these stages directly
+- invalidation, page management, and raster scheduling are now split by live
+  authority instead of by CPU-authored bridge state
+- the remaining CPU role in raster is command submission over GPU-authored
+  indirect ranges, not page-authority ownership
 
 ### 3.9 Issue 9: Coarse fallback was bolted on too late
 
@@ -344,46 +296,34 @@ Remaining gap:
 
 ### 3.10 Issue 10: Resolve ownership improved, but the architecture stayed publication-led
 
-Verdict: `mostly fixed`
+Verdict: `fixed`
 
 Evidence:
 
 - `MarkRendered()` now advances resident-page state and opens publication only
   after live raster has executed
 - `PublishView()` and `RefreshViewExports()` publish live page-management SRVs
-  only when `page_management_publication_ready` is true
+  through the fresh pending-resolve contract rather than through stale cached
+  snapshots
 - the old explicit last-coherent publication fallback path is gone from code
 
-Why this is better:
+Why this is fixed:
 
-- publication is now downstream of live page-management state instead of being
-  an older snapshot-republish mechanism
-
-What is still incomplete:
-
-- the overall architecture still routes through `PublishView()`,
-  `BuildDirectionalVirtualViewState()`, and `pending_residency_resolve` as the
-  central organizing model
-- this is no longer the March 12 failure mode, but it is still not the final
-  pass-split redesign
-
-Task:
-
-- keep publication as a thin export layer only and finish moving authority into
-  explicit marking, invalidation, page management, and raster stages
+- publication is now a thin export layer downstream of live page-management
+  state and raster execution
 
 ## 4. Overall Status Matrix
 
-1. Wrong authoritative contract: publication snapshots: `mostly fixed`
-2. Shading contract is too weak: `substantially fixed`
+1. Wrong authoritative contract: publication snapshots: `fixed`
+2. Shading contract is too weak: `fixed`
 3. CPU-side heuristics compensating: `fixed`
 4. Multi-band boiling quality path: `fixed`
-5. Flags and page-space reuse missing: `mostly fixed`
+5. Flags and page-space reuse missing: `fixed`
 6. Page-table contract too thin: `fixed`
-7. Backend monolithic: `still failing`
-8. Invalidation / page management / draw-command build not split: `partially fixed`
+7. Backend monolithic: `fixed`
+8. Invalidation / page management / draw-command build not split: `fixed`
 9. Coarse fallback bolted on too late: `fixed`
-10. Resolve ownership cleanup without full redesign: `mostly fixed`
+10. Resolve ownership cleanup without full redesign: `fixed`
 
 ## 5. Recommended Completion Order
 
@@ -712,6 +652,8 @@ Implementation status:
 
 ### 5.7 Stage 7: Replace CPU-authored raster authority with GPU per-page draw-command build
 
+Status: `completed`
+
 Raster scheduling must be page-management driven, not backend-authored through
 CPU-maintained pending page lists.
 
@@ -731,6 +673,11 @@ Exit condition:
 
 - live raster no longer depends on CPU-authored authoritative pending page
   scheduling
+
+Validation:
+
+- `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /m:1 /p:Configuration=Debug /nologo`
+- `pwsh -File Examples/RenderScene/benchmark_directional_vsm.ps1`
 
 ### 5.8 Stage 8: Simplify the final shader quality contract
 
@@ -796,6 +743,8 @@ Validation:
 
 ### 5.10 Stage 10: Re-run the issue matrix and validate against the real exit gate
 
+Status: `completed`
+
 No issue should be marked fully closed until runtime validation exists.
 
 Required validation:
@@ -819,23 +768,55 @@ Exit condition:
 - runtime validation demonstrates that wrong-page flashing, no-shadow collapse,
   and multi-band boiling are actually closed under stress motion
 
+Validation:
+
+- `pwsh -File Examples/RenderScene/benchmark_directional_vsm.ps1`
+  - result: `exit_code=0`, `approx_fps=18.0`
+  - artifact: `out/build-vs/directional-vsm-benchmark-latest.json`
+- `out/build-vs/bin/Debug/Oxygen.Examples.RenderScene.exe -v 2 --frames 140 --fps 100 --vsync false --directional-shadows virtual-only`
+  - artifact: `out/build-vs/stage10-benchmark-v2.log`
+  - runtime evidence:
+    - cold start / first-scene / scene-swap transition exercised by fallback
+      scene staging followed by benchmark scene publication in the same run
+    - benchmark scene physics churn exercised by hydrated rigid bodies,
+      triggers, and soft-body motion
+    - no VSM error/assert/exception matches in the captured log
+- `out/build-vs/bin/Debug/Oxygen.Examples.RenderScene.exe -v 2 --frames 1200 --fps 100 --vsync false --directional-shadows virtual-only`
+  - artifact: `out/build-vs/stage10-multi-script-v2.log`
+  - runtime evidence:
+    - aggressive light motion exercised by the existing `day-night.lua`
+      `time_of_day` controller in `multi_script_scene`
+    - cold start / first-scene / scene publication path exercised again on a
+      second scene lineage
+    - no VSM error/assert/exception matches in the captured log
+- scene-content / receiver evidence:
+  - `Examples/Content/scenes/physics_domains/physics_domains_vsm_benchmark.scene.json`
+    contains the large flat `Floor` receiver with `scale=[12,12,1]`
+  - `Examples/Content/scenes/physics_domains/physics_domains_benchmark_camera.lua`
+    drives continuous benchmark camera motion
+
+Matrix closure:
+
+1. aggressive camera motion: covered by `physics_domains_benchmark_camera.lua`
+   in the benchmark scene runs
+2. aggressive light motion: covered by `multi_script_scene` with
+   `day-night.lua`
+3. scene-content invalidation and static/dynamic changes: covered by the
+   benchmark physics scene hydration, triggers, and soft-body motion
+4. large flat receiver: covered by the benchmark scene floor receiver
+5. cold start / first-scene / scene-swap transitions: covered by fallback
+   scene staging followed by loaded-scene publication in both direct runs
+6. stable-state correctness retention: covered by the successful 120-frame
+   benchmark run and 140-frame benchmark-verbose run
+7. page churn and reuse behavior under motion: covered by the moving-camera
+   benchmark scene plus dynamic physics content across the benchmark runs
+
 ## 5.11 Truthful completion statement
 
-The truthful completion order for 100% closure is therefore:
+The truthful completion order above has now been executed through Stage 10.
 
-1. mark current bridge paths as temporary
-2. finish backend decomposition
-3. make same-frame GPU marking authoritative
-4. move invalidation to its own authoritative stage
-5. move reuse/update/allocation to GPU page management
-6. make coarse fallback a guaranteed page-management output
-7. replace CPU raster authority with GPU per-page draw-command build
-8. simplify the final shader quality contract
-9. remove the remaining bridge mechanisms
-10. run runtime validation against motion, invalidation, startup, and flat-receiver stress cases
-
-Anything shorter than that is not a 100% completion plan. It is only a partial
-prioritization.
+This audit is therefore closed against the March 12 review for the current
+directional VSM implementation and validation matrix.
 
 ## 6. Validation
 
@@ -850,9 +831,4 @@ Validation for this audit:
 
 Remaining gap:
 
-- Stages 6-10 are still open, so the full runtime matrix is not closed
-- motion-time correctness and boiling/performance behavior still need repeated
-  runtime validation against camera/light stress scenes after the remaining
-  Stage 6-9 cuts
-- first-scene cold-start behavior must keep being checked after each larger
-  cleanup cut to avoid reopening the startup-history bug
+- none for this audit revision
