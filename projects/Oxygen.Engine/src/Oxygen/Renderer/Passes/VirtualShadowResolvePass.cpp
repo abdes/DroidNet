@@ -454,6 +454,11 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
   if (shadow_manager == nullptr) {
     co_return;
   }
+  if (!pso_stages_.page_management.has_value()
+    || !pso_stages_.clear_args.has_value()
+    || !pso_stages_.draw_args.has_value()) {
+    co_return;
+  }
 
   auto* pass_constants = static_cast<std::byte*>(pass_constants_mapped_ptr_);
   DCHECK_NOTNULL_F(pass_constants);
@@ -611,6 +616,7 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
     ++dispatch_slot;
   };
 
+  recorder.SetPipelineState(*pso_stages_.page_management);
   dispatch_phase(0U, clear_thread_count);
   dispatch_phase(1U, active_physical_page_capacity_);
   dispatch_phase(2U, active_physical_page_capacity_);
@@ -650,7 +656,9 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
     *view_schedule_resources_.at(active_view_id_).draw_page_counter_buffer,
     graphics::ResourceStates::kUnorderedAccess);
   recorder.FlushBarriers();
+  recorder.SetPipelineState(*pso_stages_.clear_args);
   dispatch_phase(7U, 1U);
+  recorder.SetPipelineState(*pso_stages_.draw_args);
   dispatch_phase(8U, active_draw_count_);
 
   shadow_manager->FinalizeVirtualPageManagementOutputs(
@@ -708,24 +716,46 @@ auto VirtualShadowResolvePass::CreatePipelineStateDesc()
   -> graphics::ComputePipelineDesc
 {
   auto generated_bindings = BuildRootBindings();
+  const auto bindings = std::span<const graphics::RootBindingItem>(
+    generated_bindings.data(), generated_bindings.size());
 
-  graphics::ShaderRequest shader_request {
-    .stage = oxygen::ShaderType::kCompute,
-    .source_path = "Lighting/VirtualShadowResolve.hlsl",
-    .entry_point = "CS",
-  };
+  pso_stages_.page_management
+    = graphics::ComputePipelineDesc::Builder()
+        .SetComputeShader({ .stage = oxygen::ShaderType::kCompute,
+          .source_path = "Lighting/VirtualShadowResolve.hlsl",
+          .entry_point = "CS" })
+        .SetRootBindings(bindings)
+        .SetDebugName("VirtualShadowResolvePageManagement_PSO")
+        .Build();
 
-  return graphics::ComputePipelineDesc::Builder()
-    .SetComputeShader(std::move(shader_request))
-    .SetRootBindings(std::span<const graphics::RootBindingItem>(
-      generated_bindings.data(), generated_bindings.size()))
-    .SetDebugName("VirtualShadowResolve_PSO")
-    .Build();
+  pso_stages_.clear_args
+    = graphics::ComputePipelineDesc::Builder()
+        .SetComputeShader({ .stage = oxygen::ShaderType::kCompute,
+          .source_path = "Lighting/VirtualShadowResolveBuildClearArgs.hlsl",
+          .entry_point = "CS" })
+        .SetRootBindings(bindings)
+        .SetDebugName("VirtualShadowResolveBuildClearArgs_PSO")
+        .Build();
+
+  pso_stages_.draw_args
+    = graphics::ComputePipelineDesc::Builder()
+        .SetComputeShader({ .stage = oxygen::ShaderType::kCompute,
+          .source_path = "Lighting/VirtualShadowResolveBuildDrawArgs.hlsl",
+          .entry_point = "CS" })
+        .SetRootBindings(bindings)
+        .SetDebugName("VirtualShadowResolveBuildDrawArgs_PSO")
+        .Build();
+
+  DCHECK_F(pso_stages_.page_management.has_value());
+  return *pso_stages_.page_management;
 }
 
 auto VirtualShadowResolvePass::NeedRebuildPipelineState() const -> bool
 {
-  return !LastBuiltPsoDesc().has_value();
+  return !LastBuiltPsoDesc().has_value()
+    || !pso_stages_.page_management.has_value()
+    || !pso_stages_.clear_args.has_value()
+    || !pso_stages_.draw_args.has_value();
 }
 
 auto VirtualShadowResolvePass::EnsurePassConstantsBuffer() -> void

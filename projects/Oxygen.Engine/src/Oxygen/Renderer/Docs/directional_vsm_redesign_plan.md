@@ -20,6 +20,66 @@ and projection.
 This is not an implementation-complete claim. It is the proposed redesign
 contract that should replace the current frozen publication-led path.
 
+## 1.1 Execution Tasks
+
+Active execution order as of March 18, 2026:
+
+1. `completed` Freeze a no-regression baseline with fresh evidence for:
+   BurgerPiz parity captures, the close-ground clipmap-edge repro captures, and
+   the heavy moving-camera RenderScene benchmark.
+2. `pending` Split the monolithic directional resolve path into phased shaders
+   and passes with no intentional behavior change. Exit gate:
+   output-equivalent captures/logs and no PSO regressions.
+3. `pending` Replace the brute-force draw x scheduled-page expansion with a
+   UE-style per-page draw-command build path. Exit gate:
+   lower resolve/build cost with matching rendered output.
+4. `pending` Replace the current full-screen request pass with UE-style visible
+   page marking and pruning. Exit gate:
+   lower request-pass cost with matching rendered output.
+5. `pending` Remove CPU-assisted dirty-page invalidation and fold dirty-page
+   marking into the GPU per-page build path. Exit gate:
+   lower CPU upload and invalidation cost with matching rendered output.
+6. `pending` Remove temporary compatibility scaffolding and revalidate the
+   full VSM path against the frozen baseline scenes and benchmark.
+
+Task 1 evidence, March 18, 2026:
+
+- fresh build state used for the baseline:
+  - `cmake --build out/build-ninja --config Release --target oxygen-examples-renderscene --parallel 8`
+  - `cmake --build out/build-vs --config Debug --target oxygen-examples-renderscene oxygen-cooker-importtool oxygen-cooker-inspector --parallel 8`
+- fresh full-window `nircmdc.exe savescreenshotwin` captures:
+  - current BurgerPiz camera, virtual:
+    `out/build-ninja/benchmarks/directional-vsm/task1-burgerpiz-current-virtual-only-20260318-004304.bmp`
+  - current BurgerPiz camera, conventional:
+    `out/build-ninja/benchmarks/directional-vsm/task1-burgerpiz-current-conventional-20260318-004304.bmp`
+  - close-ground BurgerPiz repro, virtual:
+    `out/build-ninja/benchmarks/directional-vsm/task1-burgerpiz-close-ground-virtual-only-20260318-004304.bmp`
+  - close-ground BurgerPiz repro, conventional:
+    `out/build-ninja/benchmarks/directional-vsm/task1-burgerpiz-close-ground-conventional-20260318-004304.bmp`
+  - matching runtime logs:
+    `out/build-ninja/benchmarks/directional-vsm/task1-burgerpiz-*-20260318-004304.stderr.log`
+- fresh heavy moving-camera benchmark run:
+  - runner:
+    `powershell -ExecutionPolicy Bypass -File Examples\RenderScene\benchmark_directional_vsm.ps1`
+  - archived log:
+    `out/build-vs/benchmarks/directional-vsm/directional-vsm-benchmark-20260318-004420.log`
+  - latest metadata:
+    `out/build-vs/directional-vsm-benchmark-latest.json`
+  - result:
+    `wall_ms=7473`, `approx_fps=16.06`
+  - renderer averages from the archived log:
+    `sceneprep=0.748 ms`, `view_render=18.310 ms`,
+    `render_graph=17.183 ms`, `env_update=0.518 ms`,
+    `compositing=0.334 ms`
+
+Task 1 measurement note:
+
+- the current frozen benchmark runner no longer surfaces the old
+  request/schedule/raster page counters in its archived log, and this task did
+  not add new instrumentation to recover them
+- task 1 is therefore closed as a fresh screenshot + wall-clock baseline for
+  the current redesign execution, not as a full page-counter telemetry pass
+
 ## 2. Replacement Design Goals
 
 The redesign must satisfy all of the following:
