@@ -879,6 +879,10 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             if (!VirtualShadowPageTableEntryHasAnyLod(candidate_entry)) {
                 continue;
             }
+            const uint candidate_page_flags = page_flags[candidate_global_page_index];
+            if ((candidate_page_flags & OXYGEN_VSM_PAGE_FLAG_USED_THIS_FRAME) == 0u) {
+                continue;
+            }
 
             const uint resolved_fallback_clip = ResolveVirtualShadowFallbackClipIndex(
                 candidate_clip, pass_constants.clip_level_count, candidate_entry);

@@ -1007,7 +1007,11 @@ static inline bool SelectDirectionalVirtualClipForFootprint(
         const float logical_texel_world =
             ComputeDirectionalVirtualLogicalTexelWorld(
                 metadata, i, filter_radius_texels);
-        if (logical_texel_world <= desired_world_footprint) {
+        // Keep one finer clip until the receiver footprint is meaningfully
+        // larger than the current clip's logical texel size. Without this
+        // safety margin, flat receivers step to coarse pages too early and
+        // produce visibly blocky shadow silhouettes.
+        if (logical_texel_world * 1.25 <= desired_world_footprint) {
             selected_clip = i;
             selected_page_coord = local_page_coord;
         } else {
@@ -1144,8 +1148,7 @@ static inline float SampleDirectionalVirtualShadowClipVisibility(
             metadata, clip_index, lookup.resolved_clip_index);
     const bool using_coarse_sampling =
         !lookup.entry.current_lod_valid
-        || lookup.resolved_clip_index != clip_index
-        || clip_index + 3u >= metadata.clip_level_count;
+        || lookup.resolved_clip_index != clip_index;
     const uint effective_filter_radius_texels =
         using_coarse_sampling ? 1u : requested_filter_radius_texels;
     const float logical_texel_world = max(
