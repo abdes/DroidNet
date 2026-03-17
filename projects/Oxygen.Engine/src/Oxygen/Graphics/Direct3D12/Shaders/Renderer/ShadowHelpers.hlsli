@@ -1114,9 +1114,7 @@ static inline float SampleDirectionalVirtualShadowClipVisibility(
     StructuredBuffer<uint> page_table,
     Texture2D<float> physical_pool,
     uint clip_index,
-    float3 world_pos,
-    float3 normal_ws,
-    float3 light_dir_ws,
+    float3 light_view_pos_unbiased,
     float2 light_space_texel_dither,
     out bool valid,
     out uint resolved_clip_index,
@@ -1132,14 +1130,13 @@ static inline float SampleDirectionalVirtualShadowClipVisibility(
 
     const uint requested_filter_radius_texels =
         SelectDirectionalVirtualFilterRadiusTexels(metadata, clip_index);
-    float3 light_view_pos =
-        mul(metadata.light_view, float4(world_pos, 1.0)).xyz;
-    // Texel dither: jitter the sample position in light-space XY by a
+    // Apply texel dither: jitter the sample position in light-space XY by a
     // sub-texel offset.  This is the UE5 technique (see TraceDirectional
     // and SMRTClipmapRayInitialize in VirtualShadowMapProjectionDirectional.ush).
     // The offset hides shadow aliasing at clipmap boundaries and within
     // individual pages.  TAA integrates the jitter over multiple frames,
     // producing perceptually smooth shadow edges without multi-sample cost.
+    float3 light_view_pos = light_view_pos_unbiased;
     light_view_pos.xy += light_space_texel_dither;
     DirectionalVirtualResolvedPageLookup lookup =
         MakeInvalidDirectionalVirtualResolvedPageLookup();
@@ -1368,9 +1365,7 @@ static inline float ComputeVirtualDirectionalShadowVisibility(
         page_table,
         physical_pool,
         clip_index,
-        world_pos,
-        normal_ws,
-        light_dir_ws,
+        unbiassed_light_view_pos,
         light_space_texel_dither,
         active_valid,
         active_sampled_clip,
