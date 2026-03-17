@@ -975,51 +975,87 @@ static inline bool SelectDirectionalVirtualClipForFootprint(
     clip_index = 0u;
     page_coord = 0.0.xx;
 
-    bool found_containing = false;
-    uint finest_containing_clip = 0u;
-    float2 finest_containing_page_coord = 0.0.xx;
-    uint selected_clip = 0u;
-    float2 selected_page_coord = 0.0.xx;
-
-    [unroll]
-    for (uint i = 0u; i < OXYGEN_MAX_VIRTUAL_DIRECTIONAL_CLIP_LEVELS; ++i) {
-        if (i >= metadata.clip_level_count) {
-            break;
-        }
-
-        float2 local_page_coord = 0.0.xx;
-        if (!ProjectDirectionalVirtualClip(metadata, i, light_space_xy, local_page_coord)) {
-            continue;
-        }
-
-        if (!found_containing) {
-            found_containing = true;
-            finest_containing_clip = i;
-            finest_containing_page_coord = local_page_coord;
-            selected_clip = i;
-            selected_page_coord = local_page_coord;
-        }
-
-        const uint filter_radius_texels =
-            SelectDirectionalVirtualFilterRadiusTexels(metadata, i);
-        const float logical_texel_world =
-            ComputeDirectionalVirtualLogicalTexelWorld(
-                metadata, i, filter_radius_texels);
-        if (logical_texel_world <= desired_world_footprint) {
-            selected_clip = i;
-            selected_page_coord = local_page_coord;
-        } else {
-            break;
-        }
-    }
-
-    if (!found_containing) {
+    if (metadata.clip_level_count == 0u) {
         return false;
     }
 
-    clip_index = selected_clip;
-    page_coord = selected_page_coord;
-    return true;
+    // O(1) clip selection via log2, matching UE5's CalcClipmapLevel.
+    //
+    // Clip page sizes double per level: page_world[i] = base_page_world * 2^i.
+    // The coarsest level where logical_texel_world <= desired_footprint is:
+    //   floor(log2(desired_footprint / base_logical_texel_world))
+    // clamped to [0, clip_level_count - 1].
+    //
+    // A correction step handles the filter-radius transition (finer clips use
+    // 1-texel filter, coarser clips use 2-texel): the larger guard band makes
+    // the effective texel size slightly larger than the power-of-two prediction,
+    // which can shift the exact boundary by one level.
+    const uint base_filter_radius =
+        SelectDirectionalVirtualFilterRadiusTexels(metadata, 0u);
+    const float base_logical_texel_world =
+        ComputeDirectionalVirtualLogicalTexelWorld(
+            metadata, 0u, base_filter_radius);
+
+    const float ratio =
+        desired_world_footprint / max(base_logical_texel_world, 1.0e-10);
+    const int raw_level = (ratio >= 1.0) ? (int)floor(log2(ratio)) : 0;
+    uint target_level =
+        (uint)clamp(raw_level, 0, (int)metadata.clip_level_count - 1);
+
+    // Guard-texel correction: verify the actual texel size at the candidate
+    // level still fits the footprint.  Step back one level if it overshoots.
+    if (target_level > 0u) {
+        const uint target_filter =
+            SelectDirectionalVirtualFilterRadiusTexels(metadata, target_level);
+        const float target_texel_world =
+            ComputeDirectionalVirtualLogicalTexelWorld(
+                metadata, target_level, target_filter);
+        if (target_texel_world > desired_world_footprint) {
+            --target_level;
+        }
+    }
+
+    // Fast path (vast majority of pixels): containment at the target level.
+    float2 local_page_coord = 0.0.xx;
+    if (ProjectDirectionalVirtualClip(
+            metadata, target_level, light_space_xy, local_page_coord)) {
+        clip_index = target_level;
+        page_coord = local_page_coord;
+        return true;
+    }
+
+    // Fallback for edge pixels where the target level's grid doesn't cover
+    // this position.  Search finer levels first (they're all fitting by
+    // definition — texel_world < target's), returning the coarsest one that
+    // contains.  Then search coarser levels (finest-containing fallback,
+    // matching the original loop's behavior when no fitting clip contains).
+    if (target_level > 0u) {
+        [loop]
+        for (uint finer = target_level - 1u; ; --finer) {
+            if (ProjectDirectionalVirtualClip(
+                    metadata, finer, light_space_xy, local_page_coord)) {
+                clip_index = finer;
+                page_coord = local_page_coord;
+                return true;
+            }
+            if (finer == 0u) {
+                break;
+            }
+        }
+    }
+
+    [loop]
+    for (uint coarser = target_level + 1u;
+         coarser < metadata.clip_level_count; ++coarser) {
+        if (ProjectDirectionalVirtualClip(
+                metadata, coarser, light_space_xy, local_page_coord)) {
+            clip_index = coarser;
+            page_coord = local_page_coord;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static inline bool ProjectDirectionalVirtualClip(
