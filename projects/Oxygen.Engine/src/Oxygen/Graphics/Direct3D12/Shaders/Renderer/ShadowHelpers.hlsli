@@ -357,7 +357,10 @@ static inline uint ResolveDirectionalVirtualGuardTexels(
 static inline float ResolveDirectionalVirtualFallbackSlopeBiasScale(
     VirtualShadowPageTableEntry entry)
 {
-    return max(1.0, (float)entry.fallback_lod_offset + 1.0);
+    // Exponential scale: clipmap levels double in texel size per level, so
+    // the slope bias must scale by 2^offset, not linearly.  UE5 reference:
+    //   OptimalSlopeBias *= float(1u << (SampledId - RequestedId));
+    return max(1.0, (float)(1u << entry.fallback_lod_offset));
 }
 
 static inline float2 ResolveDirectionalVirtualAtlasUvFromResolvedPageCoord(
