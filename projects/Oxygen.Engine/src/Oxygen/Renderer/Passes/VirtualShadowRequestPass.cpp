@@ -48,6 +48,9 @@ namespace {
     std::uint32_t request_word_count { 0U };
     std::uint32_t total_page_count { 0U };
     std::uint32_t _pad0 { 0U };
+    glm::uvec2 pixel_stride { 1U, 1U };
+    std::uint32_t _pad_stride0 { 0U };
+    std::uint32_t _pad_stride1 { 0U };
     glm::uvec2 screen_dimensions { 0U, 0U };
     std::uint32_t _pad1 { 0U };
     std::uint32_t _pad2 { 0U };
@@ -62,10 +65,12 @@ namespace {
   static_assert(
     offsetof(VirtualShadowRequestPassConstants, stats_uav_index) == 16U);
   static_assert(
-    offsetof(VirtualShadowRequestPassConstants, screen_dimensions) == 32U);
+    offsetof(VirtualShadowRequestPassConstants, pixel_stride) == 32U);
+  static_assert(
+    offsetof(VirtualShadowRequestPassConstants, screen_dimensions) == 48U);
   static_assert(
     offsetof(VirtualShadowRequestPassConstants, inv_view_projection_matrix)
-    == 48U);
+    == 64U);
 
 } // namespace
 
@@ -105,6 +110,7 @@ auto VirtualShadowRequestPass::DoPrepareResources(
   active_request_word_count_ = 0U;
   active_pages_per_axis_ = 0U;
   active_clip_level_count_ = 0U;
+  active_pixel_stride_ = std::max(1U, config_->pixel_stride);
   active_clip_grid_origin_x_.fill(0);
   active_clip_grid_origin_y_.fill(0);
   active_view_id_ = {};
@@ -180,6 +186,7 @@ auto VirtualShadowRequestPass::DoPrepareResources(
     .stats_uav_index = stats_uav_,
     .request_word_count = request_word_count,
     .total_page_count = total_pages,
+    .pixel_stride = glm::uvec2(active_pixel_stride_, active_pixel_stride_),
     .screen_dimensions = glm::uvec2(depth_texture.GetDescriptor().width,
       depth_texture.GetDescriptor().height),
     .inv_view_projection_matrix
@@ -268,10 +275,13 @@ auto VirtualShadowRequestPass::DoExecute(graphics::CommandRecorder& recorder)
   const auto& depth_texture = depth_pass->GetDepthTexture();
   const auto width = std::max(1U, depth_texture.GetDescriptor().width);
   const auto height = std::max(1U, depth_texture.GetDescriptor().height);
+  const auto pixel_stride = std::max(1U, active_pixel_stride_);
   const auto group_count_x
-    = (width + kDispatchGroupSize - 1U) / kDispatchGroupSize;
+    = (width + pixel_stride * kDispatchGroupSize - 1U)
+    / (pixel_stride * kDispatchGroupSize);
   const auto group_count_y
-    = (height + kDispatchGroupSize - 1U) / kDispatchGroupSize;
+    = (height + pixel_stride * kDispatchGroupSize - 1U)
+    / (pixel_stride * kDispatchGroupSize);
   recorder.Dispatch(group_count_x, group_count_y, 1U);
 
   co_return;

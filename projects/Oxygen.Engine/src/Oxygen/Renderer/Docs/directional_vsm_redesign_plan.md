@@ -27,13 +27,13 @@ Active execution order as of March 18, 2026:
 1. `completed` Freeze a no-regression baseline with fresh evidence for:
    BurgerPiz parity captures, the close-ground clipmap-edge repro captures, and
    the heavy moving-camera RenderScene benchmark.
-2. `validation_pending` Split the monolithic directional resolve path into
+2. `completed` Split the monolithic directional resolve path into
    phased shaders and passes with no intentional behavior change. Exit gate:
    output-equivalent captures/logs and no PSO regressions.
-3. `in_progress` Replace the brute-force draw x scheduled-page expansion with a
+3. `completed` Replace the brute-force draw x scheduled-page expansion with a
    UE-style per-page draw-command build path. Exit gate:
    lower resolve/build cost with matching rendered output.
-4. `pending` Replace the current full-screen request pass with UE-style visible
+4. `in_progress` Replace the current full-screen request pass with UE-style visible
    page marking and pruning. Exit gate:
    lower request-pass cost with matching rendered output.
 5. `pending` Remove CPU-assisted dirty-page invalidation and fold dirty-page
@@ -127,13 +127,24 @@ Task 2 evidence, March 18, 2026:
   `COM Error`, `Failed to create compute pipeline state`, or
   `RenderGraph execution for view`
 
-Task 2 remaining validation gap:
+Task 2 validation closeout:
 
-- the exact close-ground BurgerPiz repro pose from task 1 was not recoverable
-  from the persisted settings or runtime logs, so this task did not re-shoot
-  that same close-ground full-window capture after the phased split
-- task 2 therefore remains `validation_pending`; it is implemented and
-  partially runtime-validated, but not yet fully signed off as output-equivalent
+- task 2 has been validated and accepted as complete
+- this document had temporarily drifted out of sync with the validated state
+  before this update
+
+Task 3 validation closeout, March 18, 2026:
+
+- the first per-page draw-command build slice is still the active code path in:
+  `src/Oxygen/Renderer/Passes/VirtualShadowResolvePass.h`
+  `src/Oxygen/Renderer/Passes/VirtualShadowResolvePass.cpp`
+  `src/Oxygen/Graphics/Direct3D12/Shaders/Lighting/VirtualShadowResolveCommon.hlsli`
+- the first task 3 runtime failure was caused by a constant-buffer packing
+  mismatch after adding one more scalar field before the resolve matrices; that
+  packing bug was corrected in both the C++ pass constants and the HLSL
+  constants block
+- task 3 has been validated and accepted as complete after the packing fix
+- task 4 work proceeds from this validated task 3 baseline
 
 ## 2. Replacement Design Goals
 

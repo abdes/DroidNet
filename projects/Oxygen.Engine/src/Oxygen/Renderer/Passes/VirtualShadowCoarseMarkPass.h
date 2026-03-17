@@ -34,6 +34,7 @@ namespace oxygen::engine {
 
 struct VirtualShadowCoarseMarkPassConfig {
   std::string debug_name { "VirtualShadowCoarseMarkPass" };
+  std::uint32_t pixel_stride { 2U };
 };
 
 class VirtualShadowCoarseMarkPass : public ComputeRenderPass {
@@ -82,6 +83,7 @@ private:
   std::uint32_t active_pages_per_axis_ { 0U };
   std::uint32_t active_clip_level_count_ { 0U };
   std::uint32_t active_coarse_backbone_begin_ { 0U };
+  std::uint32_t active_pixel_stride_ { 1U };
   std::array<std::int32_t, kMaxSupportedClipLevels>
     active_clip_grid_origin_x_ {};
   std::array<std::int32_t, kMaxSupportedClipLevels>
