@@ -140,6 +140,7 @@ private:
 
   std::shared_ptr<input::InputMappingContext> orbit_controls_ctx_ {};
   std::shared_ptr<input::InputMappingContext> fly_controls_ctx_ {};
+  std::shared_ptr<input::InputMappingContext> fly_modifier_keys_ctx_ {};
 
   CameraControlMode current_mode_ { CameraControlMode::kFly };
   std::unique_ptr<OrbitCameraController> orbit_controller_ {};
