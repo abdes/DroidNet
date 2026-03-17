@@ -45,7 +45,9 @@
 #include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/Types/Flags.h>
 
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "Physics/MainModule.h"
@@ -147,6 +149,18 @@ auto MakeXRotationQuat(const float radians) -> glm::quat
 auto MakeZRotationQuat(const float radians) -> glm::quat
 {
   return glm::angleAxis(radians, glm::vec3 { 0.0F, 0.0F, 1.0F });
+}
+
+void SetShadowParticipation(oxygen::scene::SceneNode& node,
+  const bool casts_shadows, const bool receives_shadows)
+{
+  if (auto flags_ref = node.GetFlags(); flags_ref.has_value()) {
+    auto& flags = flags_ref->get();
+    flags = flags.SetFlag(oxygen::scene::SceneNodeFlags::kCastsShadows,
+      oxygen::scene::SceneFlag {}.SetEffectiveValueBit(casts_shadows));
+    flags = flags.SetFlag(oxygen::scene::SceneNodeFlags::kReceivesShadows,
+      oxygen::scene::SceneFlag {}.SetEffectiveValueBit(receives_shadows));
+  }
 }
 
 } // namespace
@@ -560,6 +574,7 @@ auto MainModule::SpawnRenderableNode(std::string_view name,
 
   auto node = scene_ptr->CreateNode(std::string(name));
   node.GetRenderable().SetGeometry(geometry);
+  SetShadowParticipation(node, name != "Floor", true);
   auto tf = node.GetTransform();
   tf.SetLocalPosition(position);
   tf.SetLocalRotation(rotation);

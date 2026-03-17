@@ -21,7 +21,6 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -59,7 +58,6 @@
 #include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
 #include <Oxygen/Renderer/Internal/GpuDebugManager.h>
 #include <Oxygen/Renderer/Internal/IblManager.h>
-#include <Oxygen/Renderer/Internal/ShadowBackendCommon.h>
 #include <Oxygen/Renderer/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Internal/SunResolver.h>
@@ -200,11 +198,11 @@ auto HashBytes(const void* data, const std::size_t size,
 }
 
 auto HashPreparedShadowCasterContent(
-  const oxygen::engine::PreparedSceneFrame& prepared_frame,
-  const std::span<const glm::vec4> shadow_caster_bounds) -> std::uint64_t
+  const oxygen::engine::PreparedSceneFrame& prepared_frame) -> std::uint64_t
 {
-  if (prepared_frame.draw_metadata_bytes.empty() || prepared_frame.partitions.empty()
-    || shadow_caster_bounds.empty()) {
+  if (prepared_frame.draw_metadata_bytes.empty()
+    || prepared_frame.partitions.empty()
+    || prepared_frame.world_matrices.empty()) {
     return 0U;
   }
 
@@ -212,14 +210,10 @@ auto HashPreparedShadowCasterContent(
     prepared_frame.draw_metadata_bytes.data());
   const auto draw_count = prepared_frame.draw_metadata_bytes.size()
     / sizeof(oxygen::engine::DrawMetadata);
-  constexpr auto kShadowRasterRelevantFlags
-    = nostd::to_underlying(oxygen::engine::PassMaskBit::kDoubleSided)
-    | nostd::to_underlying(oxygen::engine::PassMaskBit::kOpaque)
-    | nostd::to_underlying(oxygen::engine::PassMaskBit::kMasked)
-    | nostd::to_underlying(oxygen::engine::PassMaskBit::kShadowCaster);
+  const auto matrix_count = prepared_frame.world_matrices.size() / 16U;
 
-  std::unordered_map<std::uint64_t, std::uint64_t> draw_signature_instance_counts {};
-  draw_signature_instance_counts.reserve(draw_count);
+  std::vector<std::uint64_t> draw_hashes {};
+  draw_hashes.reserve(draw_count);
   for (const auto& partition : prepared_frame.partitions) {
     if (!partition.pass_mask.IsSet(
           oxygen::engine::PassMaskBit::kShadowCaster)) {
@@ -231,81 +225,26 @@ auto HashPreparedShadowCasterContent(
       if (!draw.flags.IsSet(oxygen::engine::PassMaskBit::kShadowCaster)) {
         continue;
       }
-
-      auto draw_signature_hash = kFnvOffsetBasis;
-      const auto shadow_flags = draw.flags.get() & kShadowRasterRelevantFlags;
-      const auto vertex_buffer_index = draw.vertex_buffer_index.get();
-      const auto index_buffer_index = draw.index_buffer_index.get();
-      draw_signature_hash = HashBytes(
-        &vertex_buffer_index, sizeof(vertex_buffer_index), draw_signature_hash);
-      draw_signature_hash = HashBytes(
-        &index_buffer_index, sizeof(index_buffer_index), draw_signature_hash);
-      draw_signature_hash = HashBytes(
-        &draw.first_index, sizeof(draw.first_index), draw_signature_hash);
-      draw_signature_hash = HashBytes(
-        &draw.base_vertex, sizeof(draw.base_vertex), draw_signature_hash);
-      draw_signature_hash = HashBytes(
-        &draw.is_indexed, sizeof(draw.is_indexed), draw_signature_hash);
-      draw_signature_hash = HashBytes(
-        &draw.index_count, sizeof(draw.index_count), draw_signature_hash);
-      draw_signature_hash = HashBytes(
-        &draw.vertex_count, sizeof(draw.vertex_count), draw_signature_hash);
-      draw_signature_hash = HashBytes(
-        &draw.material_handle, sizeof(draw.material_handle), draw_signature_hash);
-      draw_signature_hash = HashBytes(
-        &shadow_flags, sizeof(shadow_flags), draw_signature_hash);
-
-      auto& total_instance_count
-        = draw_signature_instance_counts[draw_signature_hash];
-      total_instance_count += static_cast<std::uint64_t>(
-        std::max(draw.instance_count, 1U));
+      auto draw_hash = HashBytes(&draw, sizeof(draw));
+      if (draw.transform_index < matrix_count) {
+        const auto* matrix = prepared_frame.world_matrices.data()
+          + static_cast<std::size_t>(draw.transform_index) * 16U;
+        draw_hash = HashBytes(matrix, sizeof(float) * 16U, draw_hash);
+      }
+      draw_hashes.push_back(draw_hash);
     }
   }
 
-  if (draw_signature_instance_counts.empty()) {
+  if (draw_hashes.empty()) {
     return 0U;
   }
 
+  std::ranges::sort(draw_hashes);
   std::uint64_t hash = kFnvOffsetBasis;
-  std::vector<std::pair<std::uint64_t, std::uint64_t>> ordered_draw_signatures {};
-  ordered_draw_signatures.reserve(draw_signature_instance_counts.size());
-  for (const auto& [signature_hash, total_instance_count] :
-    draw_signature_instance_counts) {
-    ordered_draw_signatures.emplace_back(signature_hash, total_instance_count);
-  }
-  std::ranges::sort(ordered_draw_signatures);
-
-  const auto signature_count
-    = static_cast<std::uint32_t>(ordered_draw_signatures.size());
-  hash = HashBytes(&signature_count, sizeof(signature_count), hash);
-  hash = HashBytes(ordered_draw_signatures.data(),
-    ordered_draw_signatures.size() * sizeof(ordered_draw_signatures.front()),
-    hash);
-
-  std::vector<std::uint64_t> quantized_bound_hashes {};
-  quantized_bound_hashes.reserve(shadow_caster_bounds.size());
-  for (const auto& bound : shadow_caster_bounds) {
-    const std::array<std::int64_t, 4> quantized_bound = {
-      oxygen::renderer::internal::shadow_detail::QuantizeDirectionalCacheFloat(
-        bound.x),
-      oxygen::renderer::internal::shadow_detail::QuantizeDirectionalCacheFloat(
-        bound.y),
-      oxygen::renderer::internal::shadow_detail::QuantizeDirectionalCacheFloat(
-        bound.z),
-      oxygen::renderer::internal::shadow_detail::QuantizeDirectionalCacheFloat(
-        bound.w),
-    };
-    quantized_bound_hashes.push_back(
-      HashBytes(quantized_bound.data(), sizeof(quantized_bound)));
-  }
-  std::ranges::sort(quantized_bound_hashes);
-
-  const auto bound_count
-    = static_cast<std::uint32_t>(quantized_bound_hashes.size());
-  hash = HashBytes(&bound_count, sizeof(bound_count), hash);
-  hash = HashBytes(quantized_bound_hashes.data(),
-    quantized_bound_hashes.size() * sizeof(quantized_bound_hashes.front()),
-    hash);
+  const auto hashed_draws = static_cast<std::uint32_t>(draw_hashes.size());
+  hash = HashBytes(&hashed_draws, sizeof(hashed_draws), hash);
+  hash = HashBytes(
+    draw_hashes.data(), draw_hashes.size() * sizeof(draw_hashes.front()), hash);
   return hash;
 }
 
@@ -2108,7 +2047,7 @@ auto Renderer::RepublishCurrentViewBindings(
         const auto synthetic_sun_shadow
           = BuildSyntheticSunShadowInput(render_context, runtime_state.sun);
         const auto shadow_caster_content_hash
-          = HashPreparedShadowCasterContent(prepared, shadow_caster_bounds);
+          = HashPreparedShadowCasterContent(prepared);
         const auto shadow_view
           = shadow_manager_->PublishForView(view_id, view_constants,
             *light_manager, shadow_caster_bounds, visible_receiver_bounds,

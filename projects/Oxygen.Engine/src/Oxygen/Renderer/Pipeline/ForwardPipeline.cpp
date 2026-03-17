@@ -519,36 +519,21 @@ auto ForwardPipeline::Impl::RunScenePasses(
     co_await depth_pass->Execute(rc, rec);
     rc.RegisterPass<engine::DepthPrePass>(depth_pass.get());
 
-    const auto shadow_manager = rc.GetRenderer().GetShadowManager();
-    const auto* virtual_shadow_metadata = shadow_manager != nullptr
-      ? shadow_manager->TryGetVirtualDirectionalMetadata(
-          rc.current_view.view_id)
-      : nullptr;
-    const auto* virtual_shadow_publication = shadow_manager != nullptr
-      ? shadow_manager->TryGetFramePublication(rc.current_view.view_id)
-      : nullptr;
-    const bool has_virtual_shadow_work = virtual_shadow_metadata != nullptr
-      && virtual_shadow_metadata->clip_level_count != 0U
-      && virtual_shadow_metadata->pages_per_axis != 0U
-      && virtual_shadow_publication != nullptr
-      && virtual_shadow_publication->virtual_directional_shadow_metadata_srv
-           .IsValid();
-
-    if (has_virtual_shadow_work && virtual_shadow_request_pass) {
+    if (virtual_shadow_request_pass) {
       co_await virtual_shadow_request_pass->PrepareResources(rc, rec);
       co_await virtual_shadow_request_pass->Execute(rc, rec);
       rc.RegisterPass<engine::VirtualShadowRequestPass>(
         virtual_shadow_request_pass.get());
     }
 
-    if (has_virtual_shadow_work && virtual_shadow_coarse_mark_pass) {
+    if (virtual_shadow_coarse_mark_pass) {
       co_await virtual_shadow_coarse_mark_pass->PrepareResources(rc, rec);
       co_await virtual_shadow_coarse_mark_pass->Execute(rc, rec);
       rc.RegisterPass<engine::VirtualShadowCoarseMarkPass>(
         virtual_shadow_coarse_mark_pass.get());
     }
 
-    if (has_virtual_shadow_work && virtual_shadow_resolve_pass) {
+    if (virtual_shadow_resolve_pass) {
       co_await virtual_shadow_resolve_pass->PrepareResources(rc, rec);
       co_await virtual_shadow_resolve_pass->Execute(rc, rec);
       rc.RegisterPass<engine::VirtualShadowResolvePass>(
@@ -556,8 +541,7 @@ auto ForwardPipeline::Impl::RunScenePasses(
     }
 
     if (virtual_shadow_raster_pass && virtual_shadow_raster_pass_config) {
-      virtual_shadow_raster_pass_config->depth_texture.reset();
-      if (has_virtual_shadow_work && shadow_manager != nullptr) {
+      if (const auto shadow_manager = rc.GetRenderer().GetShadowManager()) {
         virtual_shadow_raster_pass_config->depth_texture
           = shadow_manager->GetVirtualShadowDepthTexture();
       }
@@ -570,6 +554,7 @@ auto ForwardPipeline::Impl::RunScenePasses(
       rc.RegisterPass<engine::VirtualShadowPageRasterPass>(
         virtual_shadow_raster_pass.get());
     }
+
   }
 
   // Sky must run after DepthPrePass so it can depth-test against the

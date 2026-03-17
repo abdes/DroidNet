@@ -1872,6 +1872,44 @@ Progress update:
     isolated to the existing bias/projection path in
     `ShadowHelpers.hlsli`, `VirtualShadowPageRasterPass.cpp`, and the metadata
     authored by `VirtualShadowMapBackend.cpp`
+- March 17, 2026 BurgerPiz regression correction:
+  - the March 16 Stage 8 cut that removed the selected/finer transition blend
+    from `ComputeVirtualDirectionalShadowVisibility()` was too aggressive
+  - BurgerPiz live validation shows mixed fine/coarse receiver bands on flat
+    outdoor shadows even though the benchmark path still reports
+    `current=all`, `fallback=0`
+  - Stage 8 must therefore be treated as reopened in practice until the
+    bounded finer-family transition is restored and BurgerPiz is visually
+    validated again
+- March 17, 2026 BurgerPiz runtime fix:
+  - the bounded selected/finer transition restore was necessary but not
+    sufficient; BurgerPiz still showed mixed coarse/fine receiver bands while
+    request generation, clip selection, and page lookup were anchored to
+    different receiver positions
+  - fixed the remaining Stage 8 mismatch by plumbing the depth-prepass SRV and
+    inverse view-projection matrix into `ShaderPass`, then aligning
+    `ShadowHelpers.hlsli` so:
+    - forward shading reconstructs the center receiver from the same depth
+      sample used by `VirtualShadowRequest.hlsl`
+    - clip selection uses that reconstructed light-space anchor
+    - page lookup / atlas resolution uses the same reconstructed XY instead of
+      reprojecting interpolated `world_pos`
+  - Release rebuild succeeded:
+    `cmake --build out/build-ninja --config Release --target oxygen-examples-renderscene --parallel 8`
+  - fresh 30 s BurgerPiz captures now show the virtual result visually lining
+    up with the fresh conventional capture, while the old `after7c` archive
+    remains visibly wrong:
+    - `out/build-ninja/benchmarks/directional-vsm/burgerpiz-conventional-now-1.bmp`
+    - `out/build-ninja/benchmarks/directional-vsm/burgerpiz-depthctx31-1.bmp`
+    - `out/build-ninja/benchmarks/directional-vsm/burgerpiz-after7c-1.png`
+  - sampled scene-region luma diff on `x=420..1439`, `y=150..779` improved
+    from `46.5518` (`conventional-now` vs `after7c`) to `33.3135`
+    (`conventional-now` vs `virtual-now`)
+  - archived runtime log:
+    `out/build-ninja/benchmarks/directional-vsm/burgerpiz-depthctx31.stderr.log`
+    shows BurgerPiz loading and virtual directional activation with no
+    `COM Error`, `Failed to create compute pipeline state`, or
+    `RenderGraph execution for view` failures
 
 Validation update:
 
