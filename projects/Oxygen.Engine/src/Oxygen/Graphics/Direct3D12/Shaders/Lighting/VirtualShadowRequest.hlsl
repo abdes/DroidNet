@@ -195,21 +195,13 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         InterlockedAdd(stats[4u + clip_index], 1u);
     }
 
-    const float prefetch_finer =
-        ComputeDirectionalVirtualFootprintBlendToFinerClip(
-            metadata, clip_index, desired_world_footprint);
-
     const uint pages_per_level = metadata.pages_per_axis * metadata.pages_per_axis;
 
-    // Only request the selected clip and optionally one finer prefetch clip.
-    // The coarse backbone clips are already covered by the C++ backend's
-    // frustum-based selection, so requesting them here inflates the feedback
-    // key set and causes eviction cascades in the physical tile pool.
-    uint request_clips[2];
+    // Request only the footprint-selected clip. Page-table fallback handles
+    // coarser continuity transparently; prefetching a finer clip wastes
+    // physical tile budget and caused eviction cascades.
+    uint request_clips[1];
     uint num_request_clips = 0u;
-    if (prefetch_finer > 0.0f && clip_index > 0u) {
-        request_clips[num_request_clips++] = clip_index - 1u;
-    }
     request_clips[num_request_clips++] = clip_index;
 
     [loop]
