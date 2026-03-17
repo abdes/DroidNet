@@ -1217,18 +1217,47 @@ static inline float ComputeVirtualDirectionalShadowVisibility(
 
     const float3 unbiassed_light_view_pos =
         mul(metadata.light_view, float4(world_pos, 1.0)).xyz;
-    const float2 light_view_dx = ddx(unbiassed_light_view_pos.xy);
-    const float2 light_view_dy = ddy(unbiassed_light_view_pos.xy);
+
+    // ---- Distance-based clip selection (RC3) ----
+    //
+    // Clipmap level MUST be chosen by camera distance alone — never by
+    // surface-dependent derivatives (ddx/ddy of light-space position).
+    //
+    // WHY NOT derivatives:
+    //   ddx/ddy of light_view_pos measure the light-space span of one
+    //   screen pixel.  For geometry nearly edge-on to the light (e.g. a
+    //   flat floor lit at a low sun angle) one derivative axis explodes,
+    //   selecting a much coarser clip than the pixel's camera distance
+    //   warrants.  The request shader (VirtualShadowRequest.hlsl) had the
+    //   same bug via neighbor-reconstruction.  The result: wrong shadows
+    //   on flat receivers, clip-level disagreement between shaders, and
+    //   page churn.
+    //
+    // UE5 REFERENCE (CalcClipmapLevel):
+    //   level = floor(log2(distance(world_pos, camera_origin)))
+    //   Pure world-space distance.  No projection, no derivatives.
+    //
+    // HOW THIS WORKS:
+    //   desired_world_footprint = camera_dist * base_texel_world
+    //   where base_texel_world = base_page_world / page_size_texels.
+    //   SelectDirectionalVirtualClipForFootprint iterates clips whose
+    //   logical_texel_world = base_page_world * 2^i / effective_texels
+    //   and picks the coarsest clip where logical_texel_world <= footprint.
+    //   Since footprint scales linearly with distance and clip texel sizes
+    //   double per level, the selection reduces to floor(log2(camera_dist)),
+    //   matching UE5 exactly.  Both this shader and VirtualShadowRequest
+    //   MUST use the identical formula so clip selection agrees.
+    //
+    const float camera_dist = length(world_pos - camera_position);
+    const float base_page_world =
+        max(metadata.clip_metadata[0].origin_page_scale.z, 1.0e-4);
+    const float base_texel_world =
+        base_page_world / max((float)metadata.page_size_texels, 1.0);
     const float desired_world_footprint = max(
-        max(length(light_view_dx), length(light_view_dy)),
-        1.0e-4);
+        camera_dist * base_texel_world, 1.0e-4);
 
     uint clip_index = 0u;
     float2 clip_page_coord = 0.0.xx;
-    // Runtime request generation is footprint-driven, so directional shading
-    // must start from the same clip family. Otherwise the shader chases finer
-    // pages than the cache intentionally requested and quality collapses as the
-    // view basis rotates.
     if (!SelectDirectionalVirtualClipForFootprint(
             metadata,
             unbiassed_light_view_pos.xy,
