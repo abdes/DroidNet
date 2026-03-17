@@ -156,6 +156,15 @@ private:
     PendingResidencyResolve pending_residency_resolve {};
     ShadowFramePublication frame_publication {};
     renderer::VirtualShadowPageManagementBindings page_management_bindings {};
+
+    //! Cached integer grid origins from the last stable snap, per clip level.
+    //! Used for origin-snap hysteresis to prevent page-boundary jitter when
+    //! the camera is stationary or moving sub-page distances.
+    std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
+      cached_clip_grid_origin_x {};
+    std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
+      cached_clip_grid_origin_y {};
+    bool has_cached_clip_grid_origins { false };
   };
 
   struct DirectionalPreviousStateContext {
@@ -232,8 +241,9 @@ private:
   [[nodiscard]] OXGN_RNDR_NDAPI auto BuildDirectionalPreviousStateContext(
     const ViewCacheEntry* previous_state) const
     -> DirectionalPreviousStateContext;
-  [[nodiscard]] OXGN_RNDR_NDAPI static auto CanApplyPendingResolveToLiveBindings(
-    const ViewCacheEntry& state) noexcept -> bool;
+  [[nodiscard]] OXGN_RNDR_NDAPI static auto
+  CanApplyPendingResolveToLiveBindings(const ViewCacheEntry& state) noexcept
+    -> bool;
   [[nodiscard]] OXGN_RNDR_NDAPI auto IsDirectionalViewCacheCompatible(
     const DirectionalVirtualClipmapSetup& setup,
     const ViewCacheEntry* previous_state) const -> bool;
