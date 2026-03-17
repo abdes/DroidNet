@@ -8,6 +8,7 @@
 
 #include <array>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -124,6 +125,11 @@ private:
 
   observer_ptr<Graphics> gfx_;
   std::shared_ptr<Config> config_;
+  struct ResolvePsoStages {
+    std::optional<graphics::ComputePipelineDesc> page_management {};
+    std::optional<graphics::ComputePipelineDesc> clear_args {};
+    std::optional<graphics::ComputePipelineDesc> draw_args {};
+  } pso_stages_;
 
   std::shared_ptr<graphics::Buffer> pass_constants_buffer_;
   std::array<graphics::NativeView, kPassConstantsSlotCount>
