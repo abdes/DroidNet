@@ -201,11 +201,24 @@ auto CameraRigController::Initialize(
     add_bool_mapping(move_up_action_, InputSlots::E);
     add_bool_mapping(move_down_action_, InputSlots::Q);
     add_bool_mapping(fly_plane_lock_action_, InputSlots::Space);
-    add_bool_mapping(fly_boost_action_, InputSlots::LeftShift);
+  }
+
+  // Modifier keys context at higher priority (evaluated first), following
+  // the InputSystem demo pattern for shift detection.
+  fly_modifier_keys_ctx_
+    = std::make_shared<InputMappingContext>("camera fly modifiers");
+  {
+    const auto trigger = std::make_shared<ActionTriggerDown>();
+    trigger->MakeExplicit();
+    const auto mapping = std::make_shared<InputActionMapping>(
+      fly_boost_action_, InputSlots::LeftShift);
+    mapping->AddTrigger(trigger);
+    fly_modifier_keys_ctx_->AddMapping(mapping);
   }
 
   input_system_->AddMappingContext(orbit_controls_ctx_, 10);
   input_system_->AddMappingContext(fly_controls_ctx_, 10);
+  input_system_->AddMappingContext(fly_modifier_keys_ctx_, 1000);
   UpdateActiveCameraInputContext();
   return true;
 }
@@ -678,6 +691,9 @@ auto CameraRigController::UpdateActiveCameraInputContext() -> void
   if (fly_controls_ctx_) {
     input_system_->DeactivateMappingContext(fly_controls_ctx_);
   }
+  if (fly_modifier_keys_ctx_) {
+    input_system_->DeactivateMappingContext(fly_modifier_keys_ctx_);
+  }
 
   if (current_mode_ == CameraControlMode::kOrbit) {
     if (orbit_controls_ctx_) {
@@ -686,6 +702,9 @@ auto CameraRigController::UpdateActiveCameraInputContext() -> void
   } else if (current_mode_ == CameraControlMode::kFly) {
     if (fly_controls_ctx_) {
       input_system_->ActivateMappingContext(fly_controls_ctx_);
+    }
+    if (fly_modifier_keys_ctx_) {
+      input_system_->ActivateMappingContext(fly_modifier_keys_ctx_);
     }
   }
 }
