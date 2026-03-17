@@ -797,9 +797,15 @@ auto PipelineStateCache::GetOrCreateComputePipeline(
   pso_desc.CS = LoadShaderBytecode(gfx_, compute_shader_desc);
   // Create the pipeline state object
   auto* device = gfx_->GetCurrentDevice();
-  ThrowOnFailed(device->CreateComputePipelineState(
-                  &pso_desc, IID_PPV_ARGS(pso.GetAddressOf())),
-    "Failed to create compute pipeline state");
+  const auto hr = device->CreateComputePipelineState(
+    &pso_desc, IID_PPV_ARGS(pso.GetAddressOf()));
+  if (FAILED(hr)) {
+    LOG_F(ERROR,
+      "Failed to create compute pipeline state '{}' (shader='{}' entry='{}')",
+      desc.GetName(), compute_shader_desc.source_path,
+      compute_shader_desc.entry_point);
+    ThrowOnFailed(hr, "Failed to create compute pipeline state");
+  }
 
   Entry entry {
     .pipeline_state = pso.Detach(),
