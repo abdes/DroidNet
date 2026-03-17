@@ -177,6 +177,44 @@ static DrawIndirectCommand MakeDrawIndirectCommand(
     return command;
 }
 
+static bool DrawIndirectInstanceCountOverflows(
+    uint instance_count,
+    uint page_count)
+{
+    if (instance_count == 0u || page_count == 0u) {
+        return false;
+    }
+
+    const uint alo = instance_count & 0xFFFFu;
+    const uint ahi = instance_count >> 16u;
+    const uint blo = page_count & 0xFFFFu;
+    const uint bhi = page_count >> 16u;
+
+    const uint low_product = alo * blo;
+    const uint cross0 = ahi * blo;
+    const uint cross1 = alo * bhi;
+    const uint high_product = ahi * bhi;
+
+    uint middle = cross0;
+    uint carry = 0u;
+
+    middle += cross1;
+    if (middle < cross1) {
+        carry = 1u;
+    }
+
+    const uint low_product_high = low_product >> 16u;
+    const uint middle_before_low = middle;
+    middle += low_product_high;
+    if (middle < middle_before_low) {
+        carry = 1u;
+    }
+
+    return high_product != 0u
+        || carry != 0u
+        || (middle >> 16u) != 0u;
+}
+
 static DrawPageRange MakeZeroDrawPageRange()
 {
     DrawPageRange range;
@@ -350,58 +388,63 @@ static uint ResolveDirectionalVirtualGuardTexels(
     return min(max_guard_texels, max(1u, filter_radius_texels));
 }
 
-static bool ComputeDirectionalVirtualPageRectFromBoundingSphere(
-    VirtualShadowResolvePassConstants pass_constants,
-    float4 world_bounding_sphere,
-    uint clip_index,
-    out uint min_page_x,
-    out uint min_page_y,
-    out uint max_page_x,
-    out uint max_page_y)
+static bool ScheduledPageOverlapsBoundingSphere(
+    DirectionalVirtualShadowMetadata metadata,
+    uint4 schedule_entry,
+    float4 world_bounding_sphere)
 {
-    min_page_x = 0u;
-    min_page_y = 0u;
-    max_page_x = 0u;
-    max_page_y = 0u;
+    if (world_bounding_sphere.w <= 0.0f) {
+        return true;
+    }
 
-    if (world_bounding_sphere.w <= 0.0f
-        || clip_index >= pass_constants.clip_level_count
-        || pass_constants.pages_per_axis == 0u) {
+    if (metadata.clip_level_count == 0u || metadata.pages_per_axis == 0u) {
         return false;
     }
 
-    const float page_world_size =
-        max(LoadPackedFloat(pass_constants.clip_page_world_packed, clip_index), 1.0e-4f);
-    const float page_guard_world = page_world_size * 0.0625f;
+    const uint pages_per_level = metadata.pages_per_axis * metadata.pages_per_axis;
+    if (pages_per_level == 0u) {
+        return false;
+    }
 
-    const float3 center_ls =
-        mul(pass_constants.current_light_view_matrix, float4(world_bounding_sphere.xyz, 1.0f)).xyz;
+    const uint global_page_index = schedule_entry.x;
+    const uint clip_index = global_page_index / pages_per_level;
+    if (clip_index >= metadata.clip_level_count) {
+        return false;
+    }
+
+    const uint local_page_index = global_page_index % pages_per_level;
+    const uint page_x = local_page_index % metadata.pages_per_axis;
+    const uint page_y = local_page_index / metadata.pages_per_axis;
+    const DirectionalVirtualClipMetadata clip = metadata.clip_metadata[clip_index];
+    const float page_world_size = max(clip.origin_page_scale.z, 1.0e-4);
+    const uint filter_guard_texels = ResolveDirectionalVirtualGuardTexels(
+        metadata.page_size_texels,
+        SelectDirectionalVirtualFilterRadiusTexels(metadata, clip_index));
+    const float interior_texels = max(
+        1.0,
+        float(metadata.page_size_texels) - float(filter_guard_texels * 2u));
+    const float page_guard_world =
+        page_world_size * (float(filter_guard_texels) / interior_texels);
+
+    const float left =
+        clip.origin_page_scale.x + float(page_x) * page_world_size - page_guard_world;
+    const float right = left + page_world_size + 2.0 * page_guard_world;
+    const float bottom =
+        clip.origin_page_scale.y + float(page_y) * page_world_size - page_guard_world;
+    const float top = bottom + page_world_size + 2.0 * page_guard_world;
+
+    const float4 center_ls = mul(metadata.light_view, float4(world_bounding_sphere.xyz, 1.0));
     const float radius = world_bounding_sphere.w;
-    const float clip_origin_x =
-        LoadPackedFloat(pass_constants.clip_origin_x_packed, clip_index);
-    const float clip_origin_y =
-        LoadPackedFloat(pass_constants.clip_origin_y_packed, clip_index);
+    const float clip_depth = center_ls.z * clip.origin_page_scale.w + clip.bias_reserved.x;
+    const float clip_radius_z = abs(clip.origin_page_scale.w) * radius;
+    const float clip_padding = 1.0e-3;
 
-    const float min_page_x_f =
-        floor((center_ls.x - radius - page_guard_world - clip_origin_x) / page_world_size);
-    const float max_page_x_f =
-        floor((center_ls.x + radius + page_guard_world - clip_origin_x) / page_world_size);
-    const float min_page_y_f =
-        floor((center_ls.y - radius - page_guard_world - clip_origin_y) / page_world_size);
-    const float max_page_y_f =
-        floor((center_ls.y + radius + page_guard_world - clip_origin_y) / page_world_size);
-
-    if (max_page_x_f < 0.0f || max_page_y_f < 0.0f
-        || min_page_x_f >= float(pass_constants.pages_per_axis)
-        || min_page_y_f >= float(pass_constants.pages_per_axis)) {
-        return false;
-    }
-
-    min_page_x = uint(clamp(min_page_x_f, 0.0f, float(pass_constants.pages_per_axis - 1u)));
-    min_page_y = uint(clamp(min_page_y_f, 0.0f, float(pass_constants.pages_per_axis - 1u)));
-    max_page_x = uint(clamp(max_page_x_f, 0.0f, float(pass_constants.pages_per_axis - 1u)));
-    max_page_y = uint(clamp(max_page_y_f, 0.0f, float(pass_constants.pages_per_axis - 1u)));
-    return max_page_x >= min_page_x && max_page_y >= min_page_y;
+    return center_ls.x + radius >= (left - clip_padding)
+        && center_ls.x - radius <= (right + clip_padding)
+        && center_ls.y + radius >= (bottom - clip_padding)
+        && center_ls.y - radius <= (top + clip_padding)
+        && clip_depth + clip_radius_z >= (0.0 - clip_padding)
+        && clip_depth - clip_radius_z <= (1.0 + clip_padding);
 }
 
 [shader("compute")]
@@ -879,10 +922,6 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             if (!VirtualShadowPageTableEntryHasAnyLod(candidate_entry)) {
                 continue;
             }
-            const uint candidate_page_flags = page_flags[candidate_global_page_index];
-            if ((candidate_page_flags & OXYGEN_VSM_PAGE_FLAG_USED_THIS_FRAME) == 0u) {
-                continue;
-            }
 
             const uint resolved_fallback_clip = ResolveVirtualShadowFallbackClipIndex(
                 candidate_clip, pass_constants.clip_level_count, candidate_entry);
@@ -1012,14 +1051,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     }
 
     if (pass_constants.phase == kResolvePhaseBuildDrawArgs) {
-        const uint scheduled_page_count = schedule_count[0];
         if (thread_index >= pass_constants.draw_count) {
-            return;
-        }
-
-        if (scheduled_page_count == 0u) {
-            draw_args[thread_index] = MakeZeroDrawIndirectCommand(thread_index);
-            draw_page_ranges[thread_index] = MakeZeroDrawPageRange();
             return;
         }
 
@@ -1040,10 +1072,23 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
                 ResourceDescriptorHeap[pass_constants.draw_bounds_srv_index];
             draw_bound = draw_bounds[thread_index];
         }
+        const ViewFrameBindings view_bindings =
+            LoadViewFrameBindings(bindless_view_frame_bindings_slot);
+        const ShadowFrameBindings shadow_bindings =
+            LoadShadowFrameBindings(view_bindings.shadow_frame_slot);
+        if (!BX_IN_GLOBAL_SRV(shadow_bindings.virtual_directional_shadow_metadata_slot)) {
+            draw_args[thread_index] = MakeZeroDrawIndirectCommand(thread_index);
+            draw_page_ranges[thread_index] = MakeZeroDrawPageRange();
+            return;
+        }
+        StructuredBuffer<DirectionalVirtualShadowMetadata> metadata_buffer =
+            ResourceDescriptorHeap[shadow_bindings.virtual_directional_shadow_metadata_slot];
+        const DirectionalVirtualShadowMetadata directional_metadata = metadata_buffer[0];
         const bool is_shadow_caster = (meta.flags & kPassMaskShadowCaster) != 0u;
         const bool is_shadow_surface =
             (meta.flags & (kPassMaskOpaque | kPassMaskMasked)) != 0u;
         const uint vertex_count = meta.is_indexed != 0u ? meta.index_count : meta.vertex_count;
+        const uint scheduled_page_count = schedule_count[0];
         const bool invalid_draw = vertex_count == 0u || meta.instance_count == 0u;
 
         if (!is_shadow_caster || !is_shadow_surface || invalid_draw) {
@@ -1053,44 +1098,14 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         }
 
         uint overlapping_page_count = 0u;
-        const uint uncached_flags =
-            OXYGEN_VSM_PAGE_FLAG_DYNAMIC_UNCACHED | OXYGEN_VSM_PAGE_FLAG_STATIC_UNCACHED;
-        for (uint clip_index = 0u;
-             clip_index < pass_constants.clip_level_count;
-             ++clip_index) {
-            uint min_page_x = 0u;
-            uint min_page_y = 0u;
-            uint max_page_x = 0u;
-            uint max_page_y = 0u;
-            if (!ComputeDirectionalVirtualPageRectFromBoundingSphere(
-                    pass_constants,
-                    draw_bound,
-                    clip_index,
-                    min_page_x,
-                    min_page_y,
-                    max_page_x,
-                    max_page_y)) {
-                continue;
-            }
-
-            for (uint page_y = min_page_y; page_y <= max_page_y; ++page_y) {
-                for (uint page_x = min_page_x; page_x <= max_page_x; ++page_x) {
-                    const uint global_page_index =
-                        clip_index * pass_constants.pages_per_level
-                        + page_y * pass_constants.pages_per_axis
-                        + page_x;
-                    if (global_page_index >= pass_constants.total_page_count) {
-                        continue;
-                    }
-
-                    const VirtualShadowPageTableEntry entry =
-                        DecodeVirtualShadowPageTableEntry(page_table[global_page_index]);
-                    if (!VirtualShadowPageTableEntryHasCurrentLod(entry)
-                        || (page_flags[global_page_index] & uncached_flags) == 0u) {
-                        continue;
-                    }
-                    ++overlapping_page_count;
-                }
+        for (uint scheduled_index = 0u;
+             scheduled_index < scheduled_page_count;
+             ++scheduled_index) {
+            if (ScheduledPageOverlapsBoundingSphere(
+                    directional_metadata,
+                    schedule[scheduled_index],
+                    draw_bound)) {
+                ++overlapping_page_count;
             }
         }
 
@@ -1111,54 +1126,20 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         }
 
         uint local_write_index = 0u;
-        for (uint clip_index = 0u;
-             clip_index < pass_constants.clip_level_count && local_write_index < writable_count;
-             ++clip_index) {
-            uint min_page_x = 0u;
-            uint min_page_y = 0u;
-            uint max_page_x = 0u;
-            uint max_page_y = 0u;
-            if (!ComputeDirectionalVirtualPageRectFromBoundingSphere(
-                    pass_constants,
-                    draw_bound,
-                    clip_index,
-                    min_page_x,
-                    min_page_y,
-                    max_page_x,
-                    max_page_y)) {
-                continue;
-            }
-
-            for (uint page_y = min_page_y;
-                 page_y <= max_page_y && local_write_index < writable_count;
-                 ++page_y) {
-                for (uint page_x = min_page_x;
-                     page_x <= max_page_x && local_write_index < writable_count;
-                     ++page_x) {
-                    const uint global_page_index =
-                        clip_index * pass_constants.pages_per_level
-                        + page_y * pass_constants.pages_per_axis
-                        + page_x;
-                    if (global_page_index >= pass_constants.total_page_count) {
-                        continue;
-                    }
-
-                    const VirtualShadowPageTableEntry entry =
-                        DecodeVirtualShadowPageTableEntry(page_table[global_page_index]);
-                    if (!VirtualShadowPageTableEntryHasCurrentLod(entry)
-                        || (page_flags[global_page_index] & uncached_flags) == 0u) {
-                        continue;
-                    }
-
-                    draw_page_indices[range_offset + local_write_index] = global_page_index;
-                    ++local_write_index;
-                }
+        for (uint scheduled_index = 0u;
+             scheduled_index < scheduled_page_count && local_write_index < writable_count;
+             ++scheduled_index) {
+            if (ScheduledPageOverlapsBoundingSphere(
+                    directional_metadata,
+                    schedule[scheduled_index],
+                    draw_bound)) {
+                draw_page_indices[range_offset + local_write_index] = scheduled_index;
+                ++local_write_index;
             }
         }
 
-        const bool instance_overflow =
-            writable_count != 0u
-            && meta.instance_count > (0xFFFFFFFFu / writable_count);
+        const bool instance_overflow = DrawIndirectInstanceCountOverflows(
+            meta.instance_count, writable_count);
         if (instance_overflow || writable_count == 0u) {
             draw_args[thread_index] = MakeZeroDrawIndirectCommand(thread_index);
             draw_page_ranges[thread_index] = MakeZeroDrawPageRange();

@@ -83,9 +83,6 @@ struct VirtualShadowGpuRasterInputs {
   std::shared_ptr<graphics::Buffer> draw_page_ranges_buffer {};
   ShaderVisibleIndex draw_page_ranges_srv { kInvalidShaderVisibleIndex };
 
-  // One compact list of global virtual page indices per draw. The raster
-  // shader resolves the live page-table entry from these indices directly
-  // instead of scanning the compact schedule again.
   std::shared_ptr<graphics::Buffer> draw_page_indices_buffer {};
   ShaderVisibleIndex draw_page_indices_srv { kInvalidShaderVisibleIndex };
 

@@ -1,7 +1,7 @@
 # Directional VSM Issue Audit
 
 Date: March 15, 2026
-Status: `completed`
+Status: `in_progress`
 Scope: directional virtual shadow maps only
 Cross-reference: [directional_vsm_architecture_review.md](directional_vsm_architecture_review.md)
 
@@ -317,7 +317,7 @@ Why this is fixed:
 1. Wrong authoritative contract: publication snapshots: `fixed`
 2. Shading contract is too weak: `fixed`
 3. CPU-side heuristics compensating: `fixed`
-4. Multi-band boiling quality path: `fixed`
+4. Multi-band boiling quality path: `in_progress`
 5. Flags and page-space reuse missing: `fixed`
 6. Page-table contract too thin: `fixed`
 7. Backend monolithic: `fixed`
@@ -681,7 +681,7 @@ Validation:
 
 ### 5.8 Stage 8: Simplify the final shader quality contract
 
-Status: `completed`
+Status: `in_progress`
 
 Only after the authoritative pipeline above is live should the remaining
 quality blending be simplified.
@@ -709,6 +709,47 @@ Validation:
 
 - `msbuild out/build-vs/src/Oxygen/Renderer/oxygen-renderer.vcxproj /t:ClCompile /m:1 /p:Configuration=Debug /nologo`
 - `pwsh -File Examples/RenderScene/benchmark_directional_vsm.ps1`
+- March 17, 2026 correction:
+  - the March 16 single-family shader cut was benchmark-validated, but not
+    BurgerPiz-validated
+  - live BurgerPiz runtime validation shows mixed fine/coarse receiver bands on
+    flat outdoor shadows after the selected/finer transition blend was removed
+  - Stage 8 therefore remains open until the bounded finer-family transition is
+    restored without reviving shader-side coarse fallback authority and
+    BurgerPiz is visually revalidated
+- March 17, 2026 follow-up validation:
+  - BurgerPiz still exposed one more Stage 8 mismatch after the bounded
+    selected/finer transition was restored:
+    request generation selected pages from a depth-reconstructed receiver, but
+    forward shading still anchored clip/page lookup on interpolated
+    `world_pos`
+  - fixed the remaining mismatch by publishing the depth-prepass SRV and
+    inverse view-projection matrix through `ShaderPass` pass constants, then
+    making `ComputeVirtualDirectionalShadowVisibility()` and
+    `SampleDirectionalVirtualShadowClipVisibility()` use the same
+    depth-reconstructed receiver footprint / light-space XY anchor as
+    `VirtualShadowRequest.hlsl`
+  - `cmake --build out/build-ninja --config Release --target oxygen-examples-renderscene --parallel 8`
+    succeeded
+  - fresh 30 s BurgerPiz captures from the same automation path now show the
+    virtual result visually matching the fresh conventional capture instead of
+    the old mixed coarse/fine `after7c` result:
+    - conventional reference:
+      `out/build-ninja/benchmarks/directional-vsm/burgerpiz-conventional-now-1.bmp`
+    - virtual after fix:
+      `out/build-ninja/benchmarks/directional-vsm/burgerpiz-depthctx31-1.bmp`
+    - archived broken reference:
+      `out/build-ninja/benchmarks/directional-vsm/burgerpiz-after7c-1.png`
+  - sampled scene-region luma diff on `x=420..1439`, `y=150..779`
+    improved from `46.5518` (`conventional-now` vs `after7c`) to `33.3135`
+    (`conventional-now` vs `virtual-now`)
+  - archived runtime evidence:
+    - `out/build-ninja/benchmarks/directional-vsm/burgerpiz-depthctx31.stderr.log`
+      contains BurgerPiz load plus virtual directional activation with no
+      `COM Error`, `Failed to create compute pipeline state`, or
+      `RenderGraph execution for view` failure lines
+  - overall Stage 8 status still remains `in_progress` because the final
+    Phase 9 single-resolve transition model has not landed yet
 
 ### 5.9 Stage 9: Remove the remaining bridge mechanisms
 
