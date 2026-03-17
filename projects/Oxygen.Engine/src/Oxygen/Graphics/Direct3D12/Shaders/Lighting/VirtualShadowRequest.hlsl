@@ -51,26 +51,6 @@ static float3 ReconstructWorldPosition(
     return world_pos_h.xyz / max(abs(world_pos_h.w), 1.0e-6);
 }
 
-static float2 SelectShortestDirectionalFootprintDelta(
-    bool negative_valid,
-    float2 negative_delta,
-    bool positive_valid,
-    float2 positive_delta)
-{
-    if (negative_valid && positive_valid) {
-        return length(negative_delta) <= length(positive_delta)
-            ? negative_delta
-            : positive_delta;
-    }
-    if (negative_valid) {
-        return negative_delta;
-    }
-    if (positive_valid) {
-        return positive_delta;
-    }
-    return 0.0.xx;
-}
-
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
@@ -126,58 +106,28 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     const float3 world_pos =
         ReconstructWorldPosition(pass_constants, dispatch_thread_id.xy, depth);
     const float3 light_view_pos = mul(metadata.light_view, float4(world_pos, 1.0)).xyz;
-    const uint2 left_xy = uint2(dispatch_thread_id.x > 0u
-            ? dispatch_thread_id.x - 1u
-            : dispatch_thread_id.x,
-        dispatch_thread_id.y);
-    const uint2 right_xy = uint2(
-        min(dispatch_thread_id.x + 1u, pass_constants.screen_dimensions.x - 1u),
-        dispatch_thread_id.y);
-    const uint2 up_xy = uint2(
-        dispatch_thread_id.x,
-        dispatch_thread_id.y > 0u
-            ? dispatch_thread_id.y - 1u
-            : dispatch_thread_id.y);
-    const uint2 down_xy = uint2(
-        dispatch_thread_id.x,
-        min(dispatch_thread_id.y + 1u, pass_constants.screen_dimensions.y - 1u));
-    const float left_depth = depth_texture.Load(int3(left_xy, 0));
-    const float right_depth = depth_texture.Load(int3(right_xy, 0));
-    const float up_depth = depth_texture.Load(int3(up_xy, 0));
-    const float down_depth = depth_texture.Load(int3(down_xy, 0));
-    const bool left_valid =
-        left_depth < 1.0f && left_xy.x != dispatch_thread_id.x;
-    const float3 right_world_pos = right_depth < 1.0f
-        ? ReconstructWorldPosition(pass_constants, right_xy, right_depth)
-        : world_pos;
-    const bool right_valid =
-        right_depth < 1.0f && right_xy.x != dispatch_thread_id.x;
-    const float3 left_world_pos = left_valid
-        ? ReconstructWorldPosition(pass_constants, left_xy, left_depth)
-        : world_pos;
-    const bool up_valid =
-        up_depth < 1.0f && up_xy.y != dispatch_thread_id.y;
-    const float3 down_world_pos = down_depth < 1.0f
-        ? ReconstructWorldPosition(pass_constants, down_xy, down_depth)
-        : world_pos;
-    const bool down_valid =
-        down_depth < 1.0f && down_xy.y != dispatch_thread_id.y;
-    const float3 up_world_pos = up_valid
-        ? ReconstructWorldPosition(pass_constants, up_xy, up_depth)
-        : world_pos;
-    const float2 light_view_dx = SelectShortestDirectionalFootprintDelta(
-        left_valid,
-        light_view_pos.xy - mul(metadata.light_view, float4(left_world_pos, 1.0)).xy,
-        right_valid,
-        mul(metadata.light_view, float4(right_world_pos, 1.0)).xy - light_view_pos.xy);
-    const float2 light_view_dy = SelectShortestDirectionalFootprintDelta(
-        up_valid,
-        light_view_pos.xy - mul(metadata.light_view, float4(up_world_pos, 1.0)).xy,
-        down_valid,
-        mul(metadata.light_view, float4(down_world_pos, 1.0)).xy - light_view_pos.xy);
+
+    // ---- Distance-based clip selection (RC3) ----
+    //
+    // Clip level is chosen by camera distance alone.  DO NOT replace this
+    // with ddx/ddy, neighbor-reconstruction, or any derivative-based
+    // footprint — those are surface-angle-dependent and cause wrong clip
+    // selection on flat receivers (floors, walls) lit at grazing angles.
+    //
+    // This formula MUST stay identical to the one in ShadowHelpers.hlsli
+    // ComputeVirtualDirectionalShadowVisibility().  If they disagree,
+    // the visibility shader will chase pages the request shader never
+    // requested, causing page faults and shadow breakup.
+    //
+    // See ShadowHelpers.hlsli for the full derivation and UE5 reference.
+    //
+    const float camera_dist = length(world_pos - camera_position);
+    const float base_page_world =
+        max(metadata.clip_metadata[0].origin_page_scale.z, 1.0e-4);
+    const float base_texel_world =
+        base_page_world / max((float)metadata.page_size_texels, 1.0);
     const float desired_world_footprint = max(
-        max(length(light_view_dx), length(light_view_dy)),
-        1.0e-4);
+        camera_dist * base_texel_world, 1.0e-4);
 
     uint clip_index = 0u;
     float2 page_coord = 0.0.xx;
