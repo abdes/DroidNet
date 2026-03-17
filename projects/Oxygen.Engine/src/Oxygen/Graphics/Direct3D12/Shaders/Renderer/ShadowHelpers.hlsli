@@ -618,6 +618,7 @@ static inline bool TryResolveDirectionalVirtualFilterSampleAtlasUv(
     DirectionalVirtualShadowMetadata metadata,
     StructuredBuffer<uint> page_table,
     DirectionalVirtualResolvedPageLookup center_lookup,
+    DirectionalVirtualClipRelativeTransform center_transform,
     float2 sample_light_space_xy,
     float2 pool_size,
     uint sampling_filter_radius_texels,
@@ -638,16 +639,11 @@ static inline bool TryResolveDirectionalVirtualFilterSampleAtlasUv(
         && sample_requested_page_coord.y >= 0.0
         && sample_requested_page_coord.x < metadata.pages_per_axis
         && sample_requested_page_coord.y < metadata.pages_per_axis) {
-        const DirectionalVirtualClipRelativeTransform transform =
-            BuildDirectionalVirtualClipRelativeTransform(
-                metadata,
-                center_lookup.requested_clip_index,
-                center_lookup.resolved_clip_index);
-        if (transform.valid) {
+        if (center_transform.valid) {
             const float2 sample_resolved_page_coord =
                 TransformDirectionalRequestedPageCoordToResolvedClip(
                     sample_requested_page_coord,
-                    transform);
+                    center_transform);
             if (sample_resolved_page_coord.x >= 0.0
                 && sample_resolved_page_coord.y >= 0.0
                 && sample_resolved_page_coord.x < metadata.pages_per_axis
@@ -681,20 +677,15 @@ static inline float SampleVirtualShadowComparisonTent3x3PageAware(
     StructuredBuffer<uint> page_table,
     Texture2D<float> shadow_texture,
     DirectionalVirtualResolvedPageLookup center_lookup,
+    DirectionalVirtualClipRelativeTransform center_transform,
     float2 center_atlas_uv,
     float2 receiver_light_space_xy,
     float logical_texel_world,
+    float2 pool_size,
     uint sampling_filter_radius_texels,
     float receiver_depth,
     float3 receiver_plane_depth_bias)
 {
-    uint width = 0u;
-    uint height = 0u;
-    shadow_texture.GetDimensions(width, height);
-    if (width == 0u || height == 0u) {
-        return 1.0;
-    }
-
     SamplerComparisonState shadow_sampler =
         SamplerDescriptorHeap[kShadowComparisonSamplerIndex];
     static const float kKernelWeights[3] = { 1.0, 2.0, 1.0 };
@@ -714,8 +705,9 @@ static inline float SampleVirtualShadowComparisonTent3x3PageAware(
                     metadata,
                     page_table,
                     center_lookup,
+                    center_transform,
                     sample_light_space_xy,
-                    float2(width, height),
+                    pool_size,
                     sampling_filter_radius_texels,
                     sample_atlas_uv)) {
                 sample_atlas_uv = center_atlas_uv;
@@ -736,20 +728,15 @@ static inline float SampleVirtualShadowComparisonTent5x5PageAware(
     StructuredBuffer<uint> page_table,
     Texture2D<float> shadow_texture,
     DirectionalVirtualResolvedPageLookup center_lookup,
+    DirectionalVirtualClipRelativeTransform center_transform,
     float2 center_atlas_uv,
     float2 receiver_light_space_xy,
     float logical_texel_world,
+    float2 pool_size,
     uint sampling_filter_radius_texels,
     float receiver_depth,
     float3 receiver_plane_depth_bias)
 {
-    uint width = 0u;
-    uint height = 0u;
-    shadow_texture.GetDimensions(width, height);
-    if (width == 0u || height == 0u) {
-        return 1.0;
-    }
-
     SamplerComparisonState shadow_sampler =
         SamplerDescriptorHeap[kShadowComparisonSamplerIndex];
     static const float kKernelWeights[5] = { 1.0, 4.0, 6.0, 4.0, 1.0 };
@@ -769,8 +756,9 @@ static inline float SampleVirtualShadowComparisonTent5x5PageAware(
                     metadata,
                     page_table,
                     center_lookup,
+                    center_transform,
                     sample_light_space_xy,
-                    float2(width, height),
+                    pool_size,
                     sampling_filter_radius_texels,
                     sample_atlas_uv)) {
                 sample_atlas_uv = center_atlas_uv;
@@ -1201,15 +1189,18 @@ static inline float SampleDirectionalVirtualShadowClipVisibility(
         ComputeDirectionalVirtualLogicalTexelWorld(
             metadata, clip_index, effective_filter_radius_texels),
         1.0e-4);
+    const float2 pool_size = float2(pool_width, pool_height);
     if (effective_filter_radius_texels <= 1u) {
         return SampleVirtualShadowComparisonTent3x3PageAware(
             metadata,
             page_table,
             physical_pool,
             lookup,
+            clip_relative_transform,
             atlas_uv,
             light_view_pos.xy,
             logical_texel_world,
+            pool_size,
             effective_filter_radius_texels,
             receiver_depth,
             receiver_plane_depth_bias);
@@ -1219,9 +1210,11 @@ static inline float SampleDirectionalVirtualShadowClipVisibility(
             page_table,
             physical_pool,
             lookup,
+            clip_relative_transform,
             atlas_uv,
             light_view_pos.xy,
             logical_texel_world,
+            pool_size,
             effective_filter_radius_texels,
             receiver_depth,
             receiver_plane_depth_bias);
