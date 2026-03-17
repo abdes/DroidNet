@@ -23,11 +23,26 @@
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
+#include <Oxygen/Scene/SceneFlags.h>
+#include <Oxygen/Scene/Types/Flags.h>
+
 
 #include "MultiView/SceneBootstrapper.h"
 
 namespace oxygen::examples::multiview {
 namespace {
+  void SetShadowParticipation(scene::SceneNode& node, const bool casts_shadows,
+    const bool receives_shadows)
+  {
+    if (auto flags_ref = node.GetFlags(); flags_ref.has_value()) {
+      auto& flags = flags_ref->get();
+      flags = flags.SetFlag(scene::SceneNodeFlags::kCastsShadows,
+        scene::SceneFlag {}.SetEffectiveValueBit(casts_shadows));
+      flags = flags.SetFlag(scene::SceneNodeFlags::kReceivesShadows,
+        scene::SceneFlag {}.SetEffectiveValueBit(receives_shadows));
+    }
+  }
+
   auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba)
     -> std::shared_ptr<const data::MaterialAsset>
   {
@@ -178,6 +193,7 @@ auto SceneBootstrapper::EnsureSphere(scene::Scene& scene) -> void
 
   sphere_node_ = scene.CreateNode("Sphere");
   sphere_node_.GetRenderable().SetGeometry(std::move(geom_asset));
+  SetShadowParticipation(sphere_node_, true, true);
   sphere_node_.GetTransform().SetLocalPosition({ -2.0F, 1.0F, 0.0F });
 
   LOG_F(INFO,
@@ -239,6 +255,7 @@ auto SceneBootstrapper::EnsureCube(scene::Scene& scene) -> void
 
   cube_node_ = scene.CreateNode("Cube");
   cube_node_.GetRenderable().SetGeometry(std::move(geom_asset));
+  SetShadowParticipation(cube_node_, true, true);
   // Place the cube to the right of the sphere
   cube_node_.GetTransform().SetLocalPosition({ 1.0F, -1.0F, 0.0F });
 
@@ -299,6 +316,7 @@ auto SceneBootstrapper::EnsureCylinder(scene::Scene& scene) -> void
 
   cylinder_node_ = scene.CreateNode("Cylinder");
   cylinder_node_.GetRenderable().SetGeometry(std::move(geom_asset));
+  SetShadowParticipation(cylinder_node_, true, true);
   // Place cylinder centered between cube and sphere
   cylinder_node_.GetTransform().SetLocalPosition({ -0.5F, -0.5F, 0.0F });
 
@@ -368,6 +386,7 @@ auto SceneBootstrapper::EnsureCone(scene::Scene& scene) -> void
 
   cone_node_ = scene.CreateNode("Cone");
   cone_node_.GetRenderable().SetGeometry(std::move(geom_asset));
+  SetShadowParticipation(cone_node_, true, true);
   // Place cone to the left of the cylinder so it doesn't overlap
   cone_node_.GetTransform().SetLocalPosition({ -2.5F, -0.5F, 0.0F });
 
@@ -434,6 +453,7 @@ auto SceneBootstrapper::EnsureGroundPlane(scene::Scene& scene) -> void
 
   ground_plane_node_ = scene.CreateNode("GroundPlane");
   ground_plane_node_.GetRenderable().SetGeometry(std::move(geom_asset));
+  SetShadowParticipation(ground_plane_node_, false, true);
   // Flat scale for ground
   ground_plane_node_.GetTransform().SetLocalScale({ 10.0F, 10.0F, 0.1F });
   // Position it slightly below the objects (which are at Z=0)
