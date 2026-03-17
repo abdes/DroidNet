@@ -183,15 +183,39 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
   ShaderFileSpec {
-    .path="Lighting/VirtualShadowResolve.hlsl",
+    .path="Lighting/VirtualShadowClear.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
   ShaderFileSpec {
-    .path="Lighting/VirtualShadowResolveBuildClearArgs.hlsl",
+    .path="Lighting/VirtualShadowInvalidation.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
   ShaderFileSpec {
-    .path="Lighting/VirtualShadowResolveBuildDrawArgs.hlsl",
+    .path="Lighting/VirtualShadowPageUpdate.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
+    .path="Lighting/VirtualShadowPageAlloc.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
+    .path="Lighting/VirtualShadowFallback.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
+    .path="Lighting/VirtualShadowHierarchy.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
+    .path="Lighting/VirtualShadowSchedule.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
+    .path="Lighting/VirtualShadowBuildClearArgs.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
+    .path="Lighting/VirtualShadowBuildDraws.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
   // Sky atmosphere LUT compute shaders (no permutations)
