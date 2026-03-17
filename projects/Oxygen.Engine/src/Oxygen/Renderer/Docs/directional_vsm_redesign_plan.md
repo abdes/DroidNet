@@ -27,10 +27,10 @@ Active execution order as of March 18, 2026:
 1. `completed` Freeze a no-regression baseline with fresh evidence for:
    BurgerPiz parity captures, the close-ground clipmap-edge repro captures, and
    the heavy moving-camera RenderScene benchmark.
-2. `pending` Split the monolithic directional resolve path into phased shaders
-   and passes with no intentional behavior change. Exit gate:
+2. `validation_pending` Split the monolithic directional resolve path into
+   phased shaders and passes with no intentional behavior change. Exit gate:
    output-equivalent captures/logs and no PSO regressions.
-3. `pending` Replace the brute-force draw x scheduled-page expansion with a
+3. `in_progress` Replace the brute-force draw x scheduled-page expansion with a
    UE-style per-page draw-command build path. Exit gate:
    lower resolve/build cost with matching rendered output.
 4. `pending` Replace the current full-screen request pass with UE-style visible
@@ -79,6 +79,61 @@ Task 1 measurement note:
   not add new instrumentation to recover them
 - task 1 is therefore closed as a fresh screenshot + wall-clock baseline for
   the current redesign execution, not as a full page-counter telemetry pass
+
+Task 2 evidence, March 18, 2026:
+
+- phased resolve split landed in code:
+  - pass wiring:
+    `src/Oxygen/Renderer/Passes/VirtualShadowResolvePass.h`
+    `src/Oxygen/Renderer/Passes/VirtualShadowResolvePass.cpp`
+  - shared/common shader body:
+    `src/Oxygen/Graphics/Direct3D12/Shaders/Lighting/VirtualShadowResolveCommon.hlsli`
+  - phase wrappers:
+    `src/Oxygen/Graphics/Direct3D12/Shaders/Lighting/VirtualShadowResolve.hlsl`
+    `src/Oxygen/Graphics/Direct3D12/Shaders/Lighting/VirtualShadowResolveBuildClearArgs.hlsl`
+    `src/Oxygen/Graphics/Direct3D12/Shaders/Lighting/VirtualShadowResolveBuildDrawArgs.hlsl`
+  - shader catalog registration:
+    `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h`
+- fresh builds after the split:
+  - `cmake --build out/build-ninja --config Release --target oxygen-examples-renderscene --parallel 8`
+  - `cmake --build out/build-vs --config Debug --target oxygen-examples-renderscene --parallel 8`
+- fresh current-camera full-window `nircmdc.exe savescreenshotwin` captures:
+  - virtual:
+    `out/build-ninja/benchmarks/directional-vsm/task2-burgerpiz-current-virtual-only-20260318-010446.bmp`
+  - conventional:
+    `out/build-ninja/benchmarks/directional-vsm/task2-burgerpiz-current-conventional-20260318-010524.bmp`
+  - matching runtime logs:
+    `out/build-ninja/benchmarks/directional-vsm/task2-burgerpiz-current-*-20260318-01*.stderr.log`
+- current-camera capture comparison against the task 1 baseline, sampled over
+  the full window except the top-right FPS overlay:
+  - task 1 virtual vs task 2 virtual:
+    `sampled_mean_abs_rgb=0.3389`
+  - task 1 conventional vs task 2 conventional:
+    `sampled_mean_abs_rgb=0.0005`
+  - task 2 virtual vs task 2 conventional:
+    `sampled_mean_abs_rgb=0.9110`
+  - task 1 virtual vs task 1 conventional:
+    `sampled_mean_abs_rgb=0.9108`
+- fresh heavy moving-camera benchmark rerun:
+  - runner:
+    `powershell -ExecutionPolicy Bypass -File Examples\RenderScene\benchmark_directional_vsm.ps1`
+  - archived log:
+    `out/build-vs/benchmarks/directional-vsm/directional-vsm-benchmark-20260318-010548.log`
+  - latest metadata:
+    `out/build-vs/directional-vsm-benchmark-latest.json`
+  - result:
+    `wall_ms=6174`, `approx_fps=19.44`
+- the fresh task 2 BurgerPiz logs and the benchmark log do not contain:
+  `COM Error`, `Failed to create compute pipeline state`, or
+  `RenderGraph execution for view`
+
+Task 2 remaining validation gap:
+
+- the exact close-ground BurgerPiz repro pose from task 1 was not recoverable
+  from the persisted settings or runtime logs, so this task did not re-shoot
+  that same close-ground full-window capture after the phased split
+- task 2 therefore remains `validation_pending`; it is implemented and
+  partially runtime-validated, but not yet fully signed off as output-equivalent
 
 ## 2. Replacement Design Goals
 
