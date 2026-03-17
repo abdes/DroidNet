@@ -1081,6 +1081,7 @@ static inline float SampleDirectionalVirtualShadowClipVisibility(
     float3 world_pos,
     float3 normal_ws,
     float3 light_dir_ws,
+    float2 light_space_texel_dither,
     out bool valid,
     out uint resolved_clip_index,
     out float2 resolved_page_coord)
@@ -1095,8 +1096,15 @@ static inline float SampleDirectionalVirtualShadowClipVisibility(
 
     const uint requested_filter_radius_texels =
         SelectDirectionalVirtualFilterRadiusTexels(metadata, clip_index);
-    const float3 light_view_pos =
+    float3 light_view_pos =
         mul(metadata.light_view, float4(world_pos, 1.0)).xyz;
+    // Texel dither: jitter the sample position in light-space XY by a
+    // sub-texel offset.  This is the UE5 technique (see TraceDirectional
+    // and SMRTClipmapRayInitialize in VirtualShadowMapProjectionDirectional.ush).
+    // The offset hides shadow aliasing at clipmap boundaries and within
+    // individual pages.  TAA integrates the jitter over multiple frames,
+    // producing perceptually smooth shadow edges without multi-sample cost.
+    light_view_pos.xy += light_space_texel_dither;
     DirectionalVirtualResolvedPageLookup lookup =
         MakeInvalidDirectionalVirtualResolvedPageLookup();
     if (!TryResolveDirectionalVirtualPageLookup(
@@ -1275,6 +1283,43 @@ static inline float ComputeVirtualDirectionalShadowVisibility(
     Texture2D<float> physical_pool =
         ResourceDescriptorHeap[shadow_bindings.virtual_shadow_physical_pool_slot];
 
+    // Texel dither: compute a per-pixel, temporally-varying sub-texel offset
+    // in light space.  This matches UE5's approach in TraceDirectional
+    // (VirtualShadowMapProjectionDirectional.ush):
+    //   DitherScale = (0.5 / level_dims_texels) * TexelDitherScale * dist
+    //                 / exp2(clipmap_level - ResolutionLodBias)
+    //   TexelOffset = (noise.zw - 0.5) * DitherScale   (in shadow UV units)
+    //
+    // Oxygen equivalent in light-space world units:
+    //   texel_world = clip_page_world / page_size_texels  (one texel width)
+    //   offset      = (noise - 0.5) * texel_world * 0.5
+    // The 0.5 factor matches UE5's default TexelDitherScale=1 with the built-in
+    // 0.5/level_dims factor.  Because clip_page_world already doubles per level
+    // and camera_dist roughly doubles per level boundary, the dither magnitude
+    // is naturally distance-proportional without an explicit distance multiply.
+    //
+    // Noise: Interleaved Gradient Noise (Jorge Jimenez) with temporal variation
+    // via frame_seq_num.  IGN is the standard single-sample substitute when a
+    // blue noise texture is not bound.
+    const float clip_page_world =
+        max(metadata.clip_metadata[clip_index].origin_page_scale.z, 1.0e-4);
+    const float texel_world =
+        clip_page_world / max((float)metadata.page_size_texels, 1.0);
+    // Use light_view_pos in texel coords as noise source — gives per-pixel
+    // spatial variation equivalent to screen-space PixelPos.
+    const float2 noise_coord =
+        unbiassed_light_view_pos.xy / texel_world
+        + float2(0.7548776662f, 0.5698402909f)
+          * (float)(frame_seq_num % 64u);
+    const float noise_x =
+        frac(52.9829189 * frac(0.06711056 * noise_coord.x
+                             + 0.00583715 * noise_coord.y));
+    const float noise_y =
+        frac(52.9829189 * frac(0.06711056 * (noise_coord.x + 113.0)
+                             + 0.00583715 * (noise_coord.y + 71.0)));
+    const float2 light_space_texel_dither =
+        (float2(noise_x, noise_y) - 0.5) * texel_world * 0.5;
+
     bool active_valid = false;
     uint active_sampled_clip = clip_index;
     float2 active_page_coord = clip_page_coord;
@@ -1290,6 +1335,7 @@ static inline float ComputeVirtualDirectionalShadowVisibility(
         world_pos,
         normal_ws,
         light_dir_ws,
+        light_space_texel_dither,
         active_valid,
         active_sampled_clip,
         active_page_coord);

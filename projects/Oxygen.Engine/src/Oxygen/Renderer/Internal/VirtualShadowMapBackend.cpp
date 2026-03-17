@@ -448,8 +448,7 @@ VirtualShadowMapBackend::VirtualShadowMapBackend(::oxygen::Graphics* gfx,
         inline_transfers_),
       "VirtualShadowMapBackend.DirectionalVirtualMetadata")
   , shadow_caster_bounds_buffer_(oxygen::observer_ptr<Graphics>(gfx_),
-      *staging_provider_,
-      static_cast<std::uint32_t>(sizeof(glm::vec4)),
+      *staging_provider_, static_cast<std::uint32_t>(sizeof(glm::vec4)),
       oxygen::observer_ptr<engine::upload::InlineTransfersCoordinator>(
         inline_transfers_),
       "VirtualShadowMapBackend.ShadowCasterBounds")
@@ -459,10 +458,7 @@ VirtualShadowMapBackend::VirtualShadowMapBackend(::oxygen::Graphics* gfx,
   DCHECK_NOTNULL_F(inline_transfers_, "expecting valid transfer coordinator");
 }
 
-VirtualShadowMapBackend::~VirtualShadowMapBackend()
-{
-  ReleasePhysicalPool();
-}
+VirtualShadowMapBackend::~VirtualShadowMapBackend() { ReleasePhysicalPool(); }
 
 auto VirtualShadowMapBackend::OnFrameStart(RendererTag /*tag*/,
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
@@ -1401,23 +1397,101 @@ auto VirtualShadowMapBackend::PrepareDirectionalVirtualClipmapSetup(
   setup.metadata.page_table_offset = 0U;
   setup.metadata.light_view = setup.light_view;
 
+  // Origin-snap hysteresis: When a previous stable grid origin exists, only
+  // re-snap when the camera has moved at least one full page cell from the
+  // cached origin center. This prevents floor() from toggling between
+  // adjacent integers when the camera hovers at a page boundary, which
+  // causes per-frame page-mapping instability and visible clipmap-edge
+  // flickering.  UE5 applies equivalent hysteresis in its clipmap update.
+  //
+  // GUARD: The cached grid origins are only valid when the previous frame's
+  // clip basis is structurally compatible with the current one.  If the light
+  // view orientation, clip_level_count, pages_per_axis, page_size_texels, or
+  // per-clip page_world changed, the cached integer coordinates are in a
+  // different coordinate space and MUST be discarded.  This reuses the same
+  // address-space compatibility predicate that
+  // PopulateDirectionalPendingResolve uses to decide whether to reset page
+  // management state.
+  const bool have_previous_grid_origins = [&]() {
+    if (previous_state == nullptr
+      || !previous_state->has_cached_clip_grid_origins
+      || !previous_state->has_rendered_cache_history
+      || previous_state->directional_virtual_metadata.size() != 1U) {
+      return false;
+    }
+    const auto& prev_meta
+      = previous_state->directional_virtual_metadata.front();
+    // Check structural compatibility: level count, pages_per_axis,
+    // page_size_texels, light view XY, and per-clip page_world.
+    // setup.metadata already has these fields populated (lines above).
+    // The per-clip origin_page_scale.z (page_world) is set from
+    // setup.clip_page_world which is computed before this point.
+    // We temporarily fill setup.metadata.clip_metadata[].origin_page_scale.z
+    // just for the compatibility check — the full origin_page_scale will be
+    // overwritten in the loop below.  This is safe because the z component
+    // is independent of the origin xy that the loop computes.
+    for (std::uint32_t ci = 0U; ci < setup.clip_level_count; ++ci) {
+      setup.metadata.clip_metadata[ci].origin_page_scale.z
+        = setup.clip_page_world[ci];
+    }
+    return IsDirectionalVirtualAddressSpaceCompatible(
+      prev_meta, setup.metadata);
+  }();
+
   for (std::uint32_t clip_index = 0U; clip_index < setup.clip_level_count;
     ++clip_index) {
-    const float half_extent = setup.clip_page_world[clip_index]
+    const float page_world = setup.clip_page_world[clip_index];
+    const float half_extent = page_world
       * std::max(1.0F, static_cast<float>(setup.pages_per_axis)) * 0.5F;
-    setup.clip_grid_origin_x[clip_index] = static_cast<std::int32_t>(std::floor(
-      (camera_ls.x - half_extent) / setup.clip_page_world[clip_index]));
-    setup.clip_grid_origin_y[clip_index] = static_cast<std::int32_t>(std::floor(
-      (camera_ls.y - half_extent) / setup.clip_page_world[clip_index]));
+
+    // Compute the candidate grid origin from the current camera position.
+    const auto candidate_grid_x = static_cast<std::int32_t>(
+      std::floor((camera_ls.x - half_extent) / page_world));
+    const auto candidate_grid_y = static_cast<std::int32_t>(
+      std::floor((camera_ls.y - half_extent) / page_world));
+
+    if (have_previous_grid_origins) {
+      // Hysteresis: keep the previous grid origin unless the camera has
+      // moved far enough that the candidate differs by at least 1 cell.
+      // When exactly at a page boundary, floor() can toggle between N and
+      // N-1 due to floating-point rounding; sticking to the cached value
+      // in that regime absorbs the jitter.
+      const auto prev_x = previous_state->cached_clip_grid_origin_x[clip_index];
+      const auto prev_y = previous_state->cached_clip_grid_origin_y[clip_index];
+
+      // Continuous grid coordinate (before floor).  The fractional part
+      // tells us how far the camera is past the snap boundary.
+      const float cont_x = (camera_ls.x - half_extent) / page_world;
+      const float cont_y = (camera_ls.y - half_extent) / page_world;
+
+      // Accept the candidate only when the continuous coordinate is at
+      // least half a page past the boundary implied by the cached origin.
+      // This creates a dead-zone of ~1 page width around the current snap
+      // point, preventing single-ULP jitter from re-triggering a snap.
+      const float dist_x = cont_x - static_cast<float>(prev_x);
+      const float dist_y = cont_y - static_cast<float>(prev_y);
+      constexpr float kHysteresisMargin = 0.5F;
+      const bool update_x
+        = dist_x < -kHysteresisMargin || dist_x > (1.0F + kHysteresisMargin);
+      const bool update_y
+        = dist_y < -kHysteresisMargin || dist_y > (1.0F + kHysteresisMargin);
+
+      setup.clip_grid_origin_x[clip_index]
+        = update_x ? candidate_grid_x : prev_x;
+      setup.clip_grid_origin_y[clip_index]
+        = update_y ? candidate_grid_y : prev_y;
+    } else {
+      setup.clip_grid_origin_x[clip_index] = candidate_grid_x;
+      setup.clip_grid_origin_y[clip_index] = candidate_grid_y;
+    }
+
     setup.clip_origin_x[clip_index]
-      = static_cast<float>(setup.clip_grid_origin_x[clip_index])
-      * setup.clip_page_world[clip_index];
+      = static_cast<float>(setup.clip_grid_origin_x[clip_index]) * page_world;
     setup.clip_origin_y[clip_index]
-      = static_cast<float>(setup.clip_grid_origin_y[clip_index])
-      * setup.clip_page_world[clip_index];
-    setup.metadata.clip_metadata[clip_index].origin_page_scale = glm::vec4(
-      setup.clip_origin_x[clip_index], setup.clip_origin_y[clip_index],
-      setup.clip_page_world[clip_index], depth_scale);
+      = static_cast<float>(setup.clip_grid_origin_y[clip_index]) * page_world;
+    setup.metadata.clip_metadata[clip_index].origin_page_scale
+      = glm::vec4(setup.clip_origin_x[clip_index],
+        setup.clip_origin_y[clip_index], page_world, depth_scale);
     setup.metadata.clip_metadata[clip_index].bias_reserved
       = glm::vec4(depth_bias, 0.0F, 0.0F, 0.0F);
   }
@@ -1447,7 +1521,8 @@ auto VirtualShadowMapBackend::IsDirectionalViewCacheCompatible(
     && previous_state->page_management_bindings.page_flags_srv.IsValid()
     && previous_state->page_management_bindings.physical_page_metadata_srv
          .IsValid()
-    && previous_state->page_management_bindings.physical_page_lists_srv.IsValid()
+    && previous_state->page_management_bindings.physical_page_lists_srv
+         .IsValid()
     && IsDirectionalVirtualAddressSpaceCompatible(
       previous_metadata, setup.metadata);
 }
@@ -1472,12 +1547,12 @@ auto VirtualShadowMapBackend::PopulateDirectionalPendingResolve(
   const bool shadow_content_changed = previous_state != nullptr
     && previous_state->has_rendered_cache_history
     && previous_state->shadow_caster_content_hash
-         != state.shadow_caster_content_hash;
-  const bool compare_shadow_caster_bounds_on_gpu
-    = address_space_compatible && !shadow_content_changed
+      != state.shadow_caster_content_hash;
+  const bool compare_shadow_caster_bounds_on_gpu = address_space_compatible
+    && !shadow_content_changed
     && previous_context.previous_shadow_caster_bounds != nullptr
     && previous_context.previous_shadow_caster_bounds->size()
-         == state.shadow_caster_bounds.size()
+      == state.shadow_caster_bounds.size()
     && !state.shadow_caster_bounds.empty();
 
   if (address_space_compatible && !compare_shadow_caster_bounds_on_gpu) {
@@ -1485,8 +1560,8 @@ auto VirtualShadowMapBackend::PopulateDirectionalPendingResolve(
   }
 
   if (compare_shadow_caster_bounds_on_gpu) {
-    const auto bound_count = static_cast<std::uint32_t>(
-      state.shadow_caster_bounds.size());
+    const auto bound_count
+      = static_cast<std::uint32_t>(state.shadow_caster_bounds.size());
     auto previous_bounds_allocation
       = shadow_caster_bounds_buffer_.Allocate(bound_count);
     auto current_bounds_allocation
@@ -1506,7 +1581,8 @@ auto VirtualShadowMapBackend::PopulateDirectionalPendingResolve(
       pending_resolve.current_shadow_caster_bounds_srv
         = current_bounds_allocation->srv;
       pending_resolve.shadow_caster_bound_count = bound_count;
-      pending_resolve.previous_light_view = previous_context.previous_metadata != nullptr
+      pending_resolve.previous_light_view
+        = previous_context.previous_metadata != nullptr
         ? previous_context.previous_metadata->light_view
         : glm::mat4 { 1.0F };
     } else {
@@ -1541,6 +1617,11 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   PopulateDirectionalPendingResolve(
     setup, previous_state, previous_context, view_constants, state);
   state.directional_virtual_metadata.push_back(setup.metadata);
+
+  // Commit the snapped grid origins so the next frame can apply hysteresis.
+  state.cached_clip_grid_origin_x = setup.clip_grid_origin_x;
+  state.cached_clip_grid_origin_y = setup.clip_grid_origin_y;
+  state.has_cached_clip_grid_origins = true;
 }
 
 auto VirtualShadowMapBackend::PublishShadowInstances(
