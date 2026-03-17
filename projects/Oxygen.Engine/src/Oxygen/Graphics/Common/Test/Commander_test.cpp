@@ -104,7 +104,7 @@ public:
   MOCK_METHOD(void, SetScissors, (const oxygen::Scissors&), (override));
   MOCK_METHOD(void, Draw, (std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t), (override));
   MOCK_METHOD(void, Dispatch, (std::uint32_t, std::uint32_t, std::uint32_t), (override));
-  MOCK_METHOD(void, ExecuteIndirect, (const oxygen::graphics::Buffer&, std::uint64_t), (override));
+  MOCK_METHOD(void, ExecuteIndirect, (const oxygen::graphics::Buffer&, std::uint64_t, std::uint32_t, oxygen::graphics::CommandRecorder::IndirectCommandLayout), (override));
   MOCK_METHOD(void, SetVertexBuffers, (std::uint32_t, const std::shared_ptr<oxygen::graphics::Buffer>*, const std::uint32_t*), (const, override));
   MOCK_METHOD(void, BindIndexBuffer, (const oxygen::graphics::Buffer&, oxygen::Format), (override));
   MOCK_METHOD(void, BindFrameBuffer, (const oxygen::graphics::Framebuffer&), (override));
