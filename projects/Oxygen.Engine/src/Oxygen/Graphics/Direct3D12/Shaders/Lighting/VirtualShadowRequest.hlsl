@@ -28,11 +28,126 @@ struct VirtualShadowRequestPassConstants
     uint request_word_count;
     uint total_page_count;
     uint _pad0;
+    uint2 pixel_stride;
+    uint _pad_stride0;
+    uint _pad_stride1;
     uint2 screen_dimensions;
     uint _pad1;
     uint _pad2;
     float4x4 inv_view_projection_matrix;
 };
+
+static const uint kInvalidRequestedPageIndex = 0xFFFFFFFFu;
+static const uint kMaxRequestsPerLane = 9u;
+static const uint kGroupThreadCount = 64u;
+groupshared uint g_GroupRequestedPageIndices[kGroupThreadCount * kMaxRequestsPerLane];
+
+static void RequestDirectionalVirtualPageByIndex(
+    RWStructuredBuffer<uint> request_words,
+    RWStructuredBuffer<uint> page_mark_flags,
+    uint page_index)
+{
+    const uint word_index = page_index / 32u;
+    const uint bit_mask = 1u << (page_index % 32u);
+    InterlockedOr(request_words[word_index], bit_mask);
+    InterlockedOr(page_mark_flags[page_index],
+        OXYGEN_VSM_PAGE_FLAG_USED_THIS_FRAME
+        | OXYGEN_VSM_PAGE_FLAG_DETAIL_GEOMETRY);
+}
+
+static uint EncodeDirectionalVirtualPageIndex(
+    DirectionalVirtualShadowMetadata metadata,
+    VirtualShadowRequestPassConstants pass_constants,
+    uint clip_index,
+    int2 page_coords)
+{
+    if (page_coords.x < 0 || page_coords.y < 0
+        || page_coords.x >= (int)metadata.pages_per_axis
+        || page_coords.y >= (int)metadata.pages_per_axis) {
+        return kInvalidRequestedPageIndex;
+    }
+
+    const uint pages_per_level = metadata.pages_per_axis * metadata.pages_per_axis;
+    const uint page_index =
+        clip_index * pages_per_level
+        + (uint)page_coords.y * metadata.pages_per_axis
+        + (uint)page_coords.x;
+    if (page_index >= pass_constants.total_page_count) {
+        return kInvalidRequestedPageIndex;
+    }
+
+    const uint word_index = page_index / 32u;
+    return word_index < pass_constants.request_word_count ? page_index : kInvalidRequestedPageIndex;
+}
+
+static uint BuildDirectionalVirtualPageNeighborhood(
+    DirectionalVirtualShadowMetadata metadata,
+    VirtualShadowRequestPassConstants pass_constants,
+    uint clip_index,
+    float2 page_coord,
+    out uint page_indices[9])
+{
+    [unroll]
+    for (uint i = 0u; i < 9u; ++i) {
+        page_indices[i] = kInvalidRequestedPageIndex;
+    }
+
+    const int2 base_page = int2(
+        min((uint)page_coord.x, metadata.pages_per_axis - 1u),
+        min((uint)page_coord.y, metadata.pages_per_axis - 1u));
+    uint count = 0u;
+    page_indices[count++] =
+        EncodeDirectionalVirtualPageIndex(metadata, pass_constants, clip_index, base_page);
+
+    const float border_guard_pages = min(
+        0.49,
+        max((float)pass_constants.pixel_stride.x, (float)pass_constants.pixel_stride.y)
+            / max((float)metadata.page_size_texels, 1.0));
+    if (border_guard_pages <= 0.0) {
+        return count;
+    }
+
+    const float2 page_frac = frac(page_coord);
+    const bool near_left = page_frac.x <= border_guard_pages;
+    const bool near_right = page_frac.x >= (1.0 - border_guard_pages);
+    const bool near_top = page_frac.y <= border_guard_pages;
+    const bool near_bottom = page_frac.y >= (1.0 - border_guard_pages);
+
+    if (near_left) {
+        page_indices[count++] = EncodeDirectionalVirtualPageIndex(
+            metadata, pass_constants, clip_index, base_page + int2(-1, 0));
+    }
+    if (near_right) {
+        page_indices[count++] = EncodeDirectionalVirtualPageIndex(
+            metadata, pass_constants, clip_index, base_page + int2(1, 0));
+    }
+    if (near_top) {
+        page_indices[count++] = EncodeDirectionalVirtualPageIndex(
+            metadata, pass_constants, clip_index, base_page + int2(0, -1));
+    }
+    if (near_bottom) {
+        page_indices[count++] = EncodeDirectionalVirtualPageIndex(
+            metadata, pass_constants, clip_index, base_page + int2(0, 1));
+    }
+    if (near_left && near_top) {
+        page_indices[count++] = EncodeDirectionalVirtualPageIndex(
+            metadata, pass_constants, clip_index, base_page + int2(-1, -1));
+    }
+    if (near_left && near_bottom) {
+        page_indices[count++] = EncodeDirectionalVirtualPageIndex(
+            metadata, pass_constants, clip_index, base_page + int2(-1, 1));
+    }
+    if (near_right && near_top) {
+        page_indices[count++] = EncodeDirectionalVirtualPageIndex(
+            metadata, pass_constants, clip_index, base_page + int2(1, -1));
+    }
+    if (near_right && near_bottom) {
+        page_indices[count++] = EncodeDirectionalVirtualPageIndex(
+            metadata, pass_constants, clip_index, base_page + int2(1, 1));
+    }
+
+    return count;
+}
 
 static float3 ReconstructWorldPosition(
     VirtualShadowRequestPassConstants pass_constants,
@@ -53,11 +168,16 @@ static float3 ReconstructWorldPosition(
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
-void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
+void CS(uint3 dispatch_thread_id : SV_DispatchThreadID, uint group_index : SV_GroupIndex)
 {
     if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX
         || !BX_IN_GLOBAL_SRV(g_PassConstantsIndex)) {
         return;
+    }
+
+    [unroll]
+    for (uint slot = 0u; slot < kMaxRequestsPerLane; ++slot) {
+        g_GroupRequestedPageIndices[group_index * kMaxRequestsPerLane + slot] = 0xFFFFFFFFu;
     }
 
     ConstantBuffer<VirtualShadowRequestPassConstants> pass_constants =
@@ -70,24 +190,23 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         return;
     }
 
-    if (dispatch_thread_id.x >= pass_constants.screen_dimensions.x
-        || dispatch_thread_id.y >= pass_constants.screen_dimensions.y) {
-        return;
+    uint local_page_indices[9];
+    [unroll]
+    for (uint page_slot = 0u; page_slot < kMaxRequestsPerLane; ++page_slot) {
+        local_page_indices[page_slot] = kInvalidRequestedPageIndex;
     }
+
+    const uint2 pixel_xy =
+        dispatch_thread_id.xy * max(pass_constants.pixel_stride, uint2(1u, 1u));
+    const bool pixel_in_bounds =
+        pixel_xy.x < pass_constants.screen_dimensions.x
+        && pixel_xy.y < pass_constants.screen_dimensions.y;
 
     StructuredBuffer<DirectionalVirtualShadowMetadata> metadata_buffer =
         ResourceDescriptorHeap[pass_constants.virtual_directional_shadow_metadata_index];
     uint metadata_count = 0u;
     uint metadata_stride = 0u;
     metadata_buffer.GetDimensions(metadata_count, metadata_stride);
-    if (metadata_count == 0u) {
-        return;
-    }
-
-    const DirectionalVirtualShadowMetadata metadata = metadata_buffer[0];
-    if (metadata.clip_level_count == 0u || metadata.pages_per_axis == 0u) {
-        return;
-    }
 
     Texture2D<float> depth_texture = ResourceDescriptorHeap[pass_constants.depth_texture_index];
     RWStructuredBuffer<uint> request_words =
@@ -96,97 +215,103 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         ResourceDescriptorHeap[pass_constants.page_mark_flags_uav_index];
     RWStructuredBuffer<uint> stats =
         ResourceDescriptorHeap[pass_constants.stats_uav_index];
-    const float depth =
-        depth_texture.Load(int3(dispatch_thread_id.xy, 0));
-    if (depth >= 1.0f) {
-        return;
-    }
-    InterlockedAdd(stats[0], 1u);
-
-    const float3 world_pos =
-        ReconstructWorldPosition(pass_constants, dispatch_thread_id.xy, depth);
-    const float3 light_view_pos = mul(metadata.light_view, float4(world_pos, 1.0)).xyz;
-
-    // ---- Distance-based clip selection (RC3) ----
-    //
-    // Clip level is chosen by camera distance alone.  DO NOT replace this
-    // with ddx/ddy, neighbor-reconstruction, or any derivative-based
-    // footprint — those are surface-angle-dependent and cause wrong clip
-    // selection on flat receivers (floors, walls) lit at grazing angles.
-    //
-    // This formula MUST stay identical to the one in ShadowHelpers.hlsli
-    // ComputeVirtualDirectionalShadowVisibility().  If they disagree,
-    // the visibility shader will chase pages the request shader never
-    // requested, causing page faults and shadow breakup.
-    //
-    // See ShadowHelpers.hlsli for the full derivation and UE5 reference.
-    //
-    const float camera_dist = length(world_pos - camera_position);
-    const float base_page_world =
-        max(metadata.clip_metadata[0].origin_page_scale.z, 1.0e-4);
-    const float base_texel_world =
-        base_page_world / max((float)metadata.page_size_texels, 1.0);
-    const float desired_world_footprint = max(
-        camera_dist * base_texel_world, 1.0e-4);
-
-    uint clip_index = 0u;
-    float2 page_coord = 0.0.xx;
-    if (!SelectDirectionalVirtualClipForFootprint(
-            metadata,
-            light_view_pos.xy,
-            desired_world_footprint,
-            clip_index,
-            page_coord)) {
-        InterlockedAdd(stats[2], 1u);
-        return;
-    }
-    InterlockedAdd(stats[1], 1u);
-    if (clip_index < OXYGEN_MAX_VIRTUAL_DIRECTIONAL_CLIP_LEVELS) {
-        InterlockedAdd(stats[4u + clip_index], 1u);
-    }
-
-    const uint pages_per_level = metadata.pages_per_axis * metadata.pages_per_axis;
-
-    // Request only the footprint-selected clip. Page-table fallback handles
-    // coarser continuity transparently; prefetching a finer clip wastes
-    // physical tile budget and caused eviction cascades.
-    uint request_clips[1];
-    uint num_request_clips = 0u;
-    request_clips[num_request_clips++] = clip_index;
-
-    [loop]
-    for (uint i = 0u; i < num_request_clips; ++i) {
-        const uint request_clip = request_clips[i];
-        float2 request_page_coord = 0.0.xx;
-        if (!ProjectDirectionalVirtualClip(
-                metadata, request_clip, light_view_pos.xy, request_page_coord)) {
-            continue;
-        }
-        InterlockedAdd(stats[3], 1u);
-        if (request_clip < OXYGEN_MAX_VIRTUAL_DIRECTIONAL_CLIP_LEVELS) {
-            InterlockedAdd(
-                stats[4u + OXYGEN_MAX_VIRTUAL_DIRECTIONAL_CLIP_LEVELS + request_clip],
-                1u);
+    if (pixel_in_bounds && metadata_count > 0u) {
+        const DirectionalVirtualShadowMetadata metadata = metadata_buffer[0];
+        if (metadata.clip_level_count == 0u || metadata.pages_per_axis == 0u) {
+            [unroll]
+            for (uint page_slot = 0u; page_slot < kMaxRequestsPerLane; ++page_slot) {
+                g_GroupRequestedPageIndices[group_index * kMaxRequestsPerLane + page_slot]
+                    = local_page_indices[page_slot];
+            }
+            GroupMemoryBarrierWithGroupSync();
+            return;
         }
 
-        const uint page_x =
-            min((uint)request_page_coord.x, metadata.pages_per_axis - 1u);
-        const uint page_y =
-            min((uint)request_page_coord.y, metadata.pages_per_axis - 1u);
-        const uint page_index =
-            request_clip * pages_per_level + page_y * metadata.pages_per_axis + page_x;
-        if (page_index >= pass_constants.total_page_count) {
-            continue;
+        const float depth = depth_texture.Load(int3(pixel_xy, 0));
+        if (depth < 1.0f) {
+            InterlockedAdd(stats[0], 1u);
+
+            const float3 world_pos =
+                ReconstructWorldPosition(pass_constants, pixel_xy, depth);
+            const float3 light_view_pos = mul(metadata.light_view, float4(world_pos, 1.0)).xyz;
+
+            const float camera_dist = length(world_pos - camera_position);
+            const float base_page_world =
+                max(metadata.clip_metadata[0].origin_page_scale.z, 1.0e-4);
+            const float base_texel_world =
+                base_page_world / max((float)metadata.page_size_texels, 1.0);
+            const float desired_world_footprint = max(
+                camera_dist * base_texel_world, 1.0e-4);
+
+            uint clip_index = 0u;
+            float2 page_coord = 0.0.xx;
+            if (SelectDirectionalVirtualClipForFootprint(
+                    metadata,
+                    light_view_pos.xy,
+                    desired_world_footprint,
+                    clip_index,
+                    page_coord)) {
+                InterlockedAdd(stats[1], 1u);
+                if (clip_index < OXYGEN_MAX_VIRTUAL_DIRECTIONAL_CLIP_LEVELS) {
+                    InterlockedAdd(stats[4u + clip_index], 1u);
+                }
+
+                float2 request_page_coord = 0.0.xx;
+                if (ProjectDirectionalVirtualClip(
+                        metadata, clip_index, light_view_pos.xy, request_page_coord)) {
+                    InterlockedAdd(stats[3], 1u);
+                    if (clip_index < OXYGEN_MAX_VIRTUAL_DIRECTIONAL_CLIP_LEVELS) {
+                        InterlockedAdd(
+                            stats[4u + OXYGEN_MAX_VIRTUAL_DIRECTIONAL_CLIP_LEVELS + clip_index],
+                            1u);
+                    }
+
+                    const uint page_count = BuildDirectionalVirtualPageNeighborhood(
+                        metadata,
+                        pass_constants,
+                        clip_index,
+                        request_page_coord,
+                        local_page_indices);
+                    (void)page_count;
+                }
+            } else {
+                InterlockedAdd(stats[2], 1u);
+            }
         }
-        const uint word_index = page_index / 32u;
-        if (word_index >= pass_constants.request_word_count) {
+    }
+
+    [unroll]
+    for (uint page_slot = 0u; page_slot < kMaxRequestsPerLane; ++page_slot) {
+        g_GroupRequestedPageIndices[group_index * kMaxRequestsPerLane + page_slot]
+            = local_page_indices[page_slot];
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    [unroll]
+    for (uint page_slot = 0u; page_slot < kMaxRequestsPerLane; ++page_slot) {
+        const uint candidate_page_index =
+            g_GroupRequestedPageIndices[group_index * kMaxRequestsPerLane + page_slot];
+        if (candidate_page_index == kInvalidRequestedPageIndex) {
             continue;
         }
 
-        const uint bit_mask = 1u << (page_index % 32u);
-        InterlockedOr(request_words[word_index], bit_mask);
-        InterlockedOr(page_mark_flags[page_index],
-            OXYGEN_VSM_PAGE_FLAG_USED_THIS_FRAME
-            | OXYGEN_VSM_PAGE_FLAG_DETAIL_GEOMETRY);
+        bool first_in_group = true;
+        const uint candidate_linear_index = group_index * kMaxRequestsPerLane + page_slot;
+        [loop]
+        for (uint prior_linear_index = 0u;
+             prior_linear_index < candidate_linear_index;
+             ++prior_linear_index) {
+            if (g_GroupRequestedPageIndices[prior_linear_index] == candidate_page_index) {
+                first_in_group = false;
+                break;
+            }
+        }
+        if (!first_in_group) {
+            continue;
+        }
+
+        RequestDirectionalVirtualPageByIndex(
+            request_words, page_mark_flags, candidate_page_index);
     }
 }

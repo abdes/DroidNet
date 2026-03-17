@@ -28,6 +28,9 @@ struct VirtualShadowCoarseMarkPassConstants
     uint coarse_backbone_begin;
     uint coarse_clip_mask;
     uint _pad0;
+    uint2 pixel_stride;
+    uint _pad_stride0;
+    uint _pad_stride1;
 
     uint2 screen_dimensions;
     uint _pad1;
@@ -79,8 +82,10 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID, uint group_index : SV_Gr
         g_GroupPageIndices[clip_index * 64u + group_index] = kInvalidPageIndex;
     }
 
-    if (dispatch_thread_id.x >= pass_constants.screen_dimensions.x
-        || dispatch_thread_id.y >= pass_constants.screen_dimensions.y) {
+    const uint2 pixel_xy =
+        dispatch_thread_id.xy * max(pass_constants.pixel_stride, uint2(1u, 1u));
+    if (pixel_xy.x >= pass_constants.screen_dimensions.x
+        || pixel_xy.y >= pass_constants.screen_dimensions.y) {
         GroupMemoryBarrierWithGroupSync();
         return;
     }
@@ -105,14 +110,14 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID, uint group_index : SV_Gr
         ResourceDescriptorHeap[pass_constants.request_words_uav_index];
     RWStructuredBuffer<uint> page_mark_flags =
         ResourceDescriptorHeap[pass_constants.page_mark_flags_uav_index];
-    const float depth = depth_texture.Load(int3(dispatch_thread_id.xy, 0));
+    const float depth = depth_texture.Load(int3(pixel_xy, 0));
     if (depth >= 1.0f) {
         GroupMemoryBarrierWithGroupSync();
         return;
     }
 
     const float3 world_pos =
-        ReconstructWorldPosition(pass_constants, dispatch_thread_id.xy, depth);
+        ReconstructWorldPosition(pass_constants, pixel_xy, depth);
     const float3 light_view_pos = mul(metadata.light_view, float4(world_pos, 1.0)).xyz;
     const uint pages_per_level = metadata.pages_per_axis * metadata.pages_per_axis;
 
