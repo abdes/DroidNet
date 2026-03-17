@@ -152,7 +152,11 @@ m_gtest_program(
 m_gtest_program(
   VirtualShadowContracts
   SOURCES
-    "VirtualShadowContracts_test.cpp"
+    "VirtualShadow/VirtualShadowTestSupport.h"
+    "VirtualShadow/VirtualShadowClipmapContracts_test.cpp"
+    "VirtualShadow/VirtualShadowFallbackContracts_test.cpp"
+    "VirtualShadow/VirtualShadowFlagsContracts_test.cpp"
+    "VirtualShadow/VirtualShadowResidencyContracts_test.cpp"
 )
 
 # LightManager unit tests
