@@ -96,6 +96,8 @@ private:
     std::shared_ptr<graphics::Buffer> schedule_buffer;
     ShaderVisibleIndex schedule_srv { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex schedule_uav { kInvalidShaderVisibleIndex };
+    std::shared_ptr<graphics::Buffer> schedule_lookup_buffer;
+    ShaderVisibleIndex schedule_lookup_uav { kInvalidShaderVisibleIndex };
 
     std::shared_ptr<graphics::Buffer> count_buffer;
     ShaderVisibleIndex count_srv { kInvalidShaderVisibleIndex };

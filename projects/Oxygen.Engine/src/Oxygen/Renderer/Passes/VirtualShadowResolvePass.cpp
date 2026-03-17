@@ -58,6 +58,9 @@ namespace {
       kInvalidShaderVisibleIndex
     };
     ShaderVisibleIndex schedule_uav_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex schedule_lookup_uav_index {
+      kInvalidShaderVisibleIndex
+    };
     ShaderVisibleIndex schedule_count_uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex clear_args_uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex draw_args_uav_index { kInvalidShaderVisibleIndex };
@@ -88,6 +91,9 @@ namespace {
       kInvalidShaderVisibleIndex
     };
     ShaderVisibleIndex resolve_stats_uav_index { kInvalidShaderVisibleIndex };
+    std::uint32_t _pad0 { 0U };
+    std::uint32_t _pad1 { 0U };
+    std::uint32_t _pad2 { 0U };
     glm::mat4 current_light_view_matrix { 1.0F };
     glm::mat4 previous_light_view_matrix { 1.0F };
     std::uint32_t shadow_caster_bound_count { 0U };
@@ -238,6 +244,7 @@ auto VirtualShadowResolvePass::DoPrepareResources(
   auto* resources = EnsureViewScheduleResources(
     Context().current_view.view_id, total_page_count, active_draw_count_);
   if (resources == nullptr || !resources->schedule_uav.IsValid()
+    || !resources->schedule_lookup_uav.IsValid()
     || !resources->count_uav.IsValid() || !resources->clear_args_uav.IsValid()
     || !resources->draw_args_uav.IsValid()
     || !resources->draw_page_ranges_uav.IsValid()
@@ -304,6 +311,10 @@ auto VirtualShadowResolvePass::DoPrepareResources(
     recorder.BeginTrackingResourceState(
       *resources->schedule_buffer, graphics::ResourceStates::kCommon, true);
   }
+  if (!recorder.IsResourceTracked(*resources->schedule_lookup_buffer)) {
+    recorder.BeginTrackingResourceState(*resources->schedule_lookup_buffer,
+      graphics::ResourceStates::kCommon, true);
+  }
   if (!recorder.IsResourceTracked(*resources->count_buffer)) {
     recorder.BeginTrackingResourceState(
       *resources->count_buffer, graphics::ResourceStates::kCommon, true);
@@ -353,6 +364,8 @@ auto VirtualShadowResolvePass::DoPrepareResources(
 
   recorder.RequireResourceState(
     *resources->schedule_buffer, graphics::ResourceStates::kUnorderedAccess);
+  recorder.RequireResourceState(*resources->schedule_lookup_buffer,
+    graphics::ResourceStates::kUnorderedAccess);
   recorder.RequireResourceState(
     *resources->count_buffer, graphics::ResourceStates::kUnorderedAccess);
   recorder.RequireResourceState(
@@ -547,6 +560,8 @@ auto VirtualShadowResolvePass::DoExecute(graphics::CommandRecorder& recorder)
       = active_page_management_bindings_.current_shadow_caster_bounds_srv,
       .schedule_uav_index
       = view_schedule_resources_.at(active_view_id_).schedule_uav,
+      .schedule_lookup_uav_index
+      = view_schedule_resources_.at(active_view_id_).schedule_lookup_uav,
       .schedule_count_uav_index
       = view_schedule_resources_.at(active_view_id_).count_uav,
       .clear_args_uav_index
@@ -847,6 +862,7 @@ auto VirtualShadowResolvePass::EnsureViewScheduleResources(const ViewId view_id,
   auto [it, _] = view_schedule_resources_.try_emplace(view_id);
   auto& resources = it->second;
   const bool schedule_ready = resources.schedule_buffer
+    && resources.schedule_lookup_buffer
     && resources.count_buffer
     && required_entry_capacity <= resources.entry_capacity;
   const auto draw_arg_capacity = std::max(required_draw_count, 1U);
@@ -922,6 +938,42 @@ auto VirtualShadowResolvePass::EnsureViewScheduleResources(const ViewId view_id,
     schedule_uav_desc.stride = sizeof(std::uint32_t) * 4U;
     registry.RegisterView(*resources.schedule_buffer,
       std::move(schedule_uav_handle), schedule_uav_desc);
+
+    const graphics::BufferDesc schedule_lookup_desc {
+      .size_bytes = static_cast<std::uint64_t>(required_entry_capacity)
+        * sizeof(std::uint32_t),
+      .usage = graphics::BufferUsage::kStorage,
+      .memory = graphics::BufferMemory::kDeviceLocal,
+      .debug_name = "VirtualShadowResolvePass.ScheduleLookup",
+    };
+    resources.schedule_lookup_buffer = gfx_->CreateBuffer(schedule_lookup_desc);
+    if (!resources.schedule_lookup_buffer) {
+      throw std::runtime_error(
+        "VirtualShadowResolvePass: failed to create schedule lookup buffer");
+    }
+    registry.Register(resources.schedule_lookup_buffer);
+
+    auto schedule_lookup_uav_handle
+      = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_UAV,
+        graphics::DescriptorVisibility::kShaderVisible);
+    if (!schedule_lookup_uav_handle.IsValid()) {
+      throw std::runtime_error(
+        "VirtualShadowResolvePass: failed to allocate schedule lookup UAV");
+    }
+    resources.schedule_lookup_uav
+      = allocator.GetShaderVisibleIndex(schedule_lookup_uav_handle);
+
+    graphics::BufferViewDescription schedule_lookup_uav_desc;
+    schedule_lookup_uav_desc.view_type
+      = graphics::ResourceViewType::kStructuredBuffer_UAV;
+    schedule_lookup_uav_desc.visibility
+      = graphics::DescriptorVisibility::kShaderVisible;
+    schedule_lookup_uav_desc.range
+      = { 0U, static_cast<std::uint64_t>(required_entry_capacity)
+          * sizeof(std::uint32_t) };
+    schedule_lookup_uav_desc.stride = sizeof(std::uint32_t);
+    registry.RegisterView(*resources.schedule_lookup_buffer,
+      std::move(schedule_lookup_uav_handle), schedule_lookup_uav_desc);
 
     const graphics::BufferDesc count_desc {
       .size_bytes = sizeof(std::uint32_t),

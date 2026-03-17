@@ -32,6 +32,7 @@ struct VirtualShadowResolvePassConstants
     uint previous_shadow_caster_bounds_srv_index;
     uint current_shadow_caster_bounds_srv_index;
     uint schedule_uav_index;
+    uint schedule_lookup_uav_index;
     uint schedule_count_uav_index;
     uint clear_args_uav_index;
     uint draw_args_uav_index;
@@ -46,6 +47,9 @@ struct VirtualShadowResolvePassConstants
     uint physical_page_lists_srv_index;
     uint physical_page_lists_uav_index;
     uint resolve_stats_uav_index;
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
     float4x4 current_light_view_matrix;
     float4x4 previous_light_view_matrix;
     uint shadow_caster_bound_count;
@@ -451,6 +455,56 @@ static bool ScheduledPageOverlapsBoundingSphere(
         && clip_depth - clip_radius_z <= (1.0 + clip_padding);
 }
 
+static bool DrawBoundingSphereOverlapsClip(
+    DirectionalVirtualShadowMetadata metadata,
+    float4 world_bounding_sphere,
+    uint clip_index,
+    float4 center_ls,
+    out int min_page_x,
+    out int max_page_x,
+    out int min_page_y,
+    out int max_page_y)
+{
+    min_page_x = 0;
+    max_page_x = -1;
+    min_page_y = 0;
+    max_page_y = -1;
+
+    if (world_bounding_sphere.w <= 0.0f
+        || clip_index >= metadata.clip_level_count
+        || metadata.pages_per_axis == 0u) {
+        return false;
+    }
+
+    const DirectionalVirtualClipMetadata clip = metadata.clip_metadata[clip_index];
+    const float radius = world_bounding_sphere.w;
+    const float clip_depth = center_ls.z * clip.origin_page_scale.w + clip.bias_reserved.x;
+    const float clip_radius_z = abs(clip.origin_page_scale.w) * radius;
+    const float clip_padding = 1.0e-3;
+    if (clip_depth + clip_radius_z < (0.0 - clip_padding)
+        || clip_depth - clip_radius_z > (1.0 + clip_padding)) {
+        return false;
+    }
+
+    const float page_world_size = max(clip.origin_page_scale.z, 1.0e-4);
+    const float sphere_min_x = center_ls.x - radius;
+    const float sphere_max_x = center_ls.x + radius;
+    const float sphere_min_y = center_ls.y - radius;
+    const float sphere_max_y = center_ls.y + radius;
+
+    min_page_x = int(floor((sphere_min_x - clip.origin_page_scale.x) / page_world_size)) - 1;
+    max_page_x = int(floor((sphere_max_x - clip.origin_page_scale.x) / page_world_size)) + 1;
+    min_page_y = int(floor((sphere_min_y - clip.origin_page_scale.y) / page_world_size)) - 1;
+    max_page_y = int(floor((sphere_max_y - clip.origin_page_scale.y) / page_world_size)) + 1;
+
+    const int max_page_coord = int(metadata.pages_per_axis) - 1;
+    min_page_x = clamp(min_page_x, 0, max_page_coord);
+    max_page_x = clamp(max_page_x, 0, max_page_coord);
+    min_page_y = clamp(min_page_y, 0, max_page_coord);
+    max_page_y = clamp(max_page_y, 0, max_page_coord);
+    return min_page_x <= max_page_x && min_page_y <= max_page_y;
+}
+
 static void VirtualShadowResolveCSImpl(uint3 dispatch_thread_id)
 {
     if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX
@@ -470,6 +524,7 @@ static void VirtualShadowResolveCSImpl(uint3 dispatch_thread_id)
         || !BX_IN_GLOBAL_SRV(pass_constants.page_table_uav_index)
         || !BX_IN_GLOBAL_SRV(pass_constants.page_flags_uav_index)
         || !BX_IN_GLOBAL_SRV(pass_constants.schedule_uav_index)
+        || !BX_IN_GLOBAL_SRV(pass_constants.schedule_lookup_uav_index)
         || !BX_IN_GLOBAL_SRV(pass_constants.schedule_count_uav_index)
         || !BX_IN_GLOBAL_SRV(pass_constants.clear_args_uav_index)
         || !BX_IN_GLOBAL_SRV(pass_constants.draw_args_uav_index)
@@ -483,6 +538,8 @@ static void VirtualShadowResolveCSImpl(uint3 dispatch_thread_id)
         ResourceDescriptorHeap[pass_constants.page_table_uav_index];
     RWStructuredBuffer<uint> page_flags =
         ResourceDescriptorHeap[pass_constants.page_flags_uav_index];
+    RWStructuredBuffer<uint> schedule_lookup =
+        ResourceDescriptorHeap[pass_constants.schedule_lookup_uav_index];
     RWStructuredBuffer<uint> dirty_page_flags =
         ResourceDescriptorHeap[pass_constants.dirty_page_flags_uav_index];
     StructuredBuffer<VirtualShadowPhysicalPageMetadata> physical_page_metadata =
@@ -1036,6 +1093,8 @@ static void VirtualShadowResolveCSImpl(uint3 dispatch_thread_id)
             return;
         }
 
+        schedule_lookup[thread_index] = 0xFFFFFFFFu;
+
         const uint packed_entry = page_table[thread_index];
         const uint published_flags = page_flags[thread_index];
         const uint uncached_flags =
@@ -1051,6 +1110,7 @@ static void VirtualShadowResolveCSImpl(uint3 dispatch_thread_id)
                     (packed_entry >> OXYGEN_VSM_PAGE_TABLE_TILE_Y_SHIFT)
                     & OXYGEN_VSM_PAGE_TABLE_TILE_COORD_MASK;
                 schedule[output_index] = uint4(thread_index, packed_entry, tile_x, tile_y);
+                schedule_lookup[thread_index] = output_index;
             }
         }
         return;
@@ -1114,14 +1174,58 @@ static void VirtualShadowResolveCSImpl(uint3 dispatch_thread_id)
         }
 
         uint overlapping_page_count = 0u;
-        for (uint scheduled_index = 0u;
-             scheduled_index < scheduled_page_count;
-             ++scheduled_index) {
-            if (ScheduledPageOverlapsBoundingSphere(
-                    directional_metadata,
-                    schedule[scheduled_index],
-                    draw_bound)) {
-                ++overlapping_page_count;
+        if (!has_draw_bounds || draw_bound.w <= 0.0f) {
+            for (uint scheduled_index = 0u;
+                 scheduled_index < scheduled_page_count;
+                 ++scheduled_index) {
+                if (ScheduledPageOverlapsBoundingSphere(
+                        directional_metadata,
+                        schedule[scheduled_index],
+                        draw_bound)) {
+                    ++overlapping_page_count;
+                }
+            }
+        } else {
+            const float4 center_ls =
+                mul(directional_metadata.light_view, float4(draw_bound.xyz, 1.0f));
+            for (uint clip_index = 0u;
+                 clip_index < directional_metadata.clip_level_count;
+                 ++clip_index) {
+                int min_page_x = 0;
+                int max_page_x = -1;
+                int min_page_y = 0;
+                int max_page_y = -1;
+                if (!DrawBoundingSphereOverlapsClip(
+                        directional_metadata,
+                        draw_bound,
+                        clip_index,
+                        center_ls,
+                        min_page_x,
+                        max_page_x,
+                        min_page_y,
+                        max_page_y)) {
+                    continue;
+                }
+
+                for (int page_y = min_page_y; page_y <= max_page_y; ++page_y) {
+                    for (int page_x = min_page_x; page_x <= max_page_x; ++page_x) {
+                        const uint global_page_index =
+                            clip_index * pass_constants.pages_per_level
+                            + uint(page_y) * pass_constants.pages_per_axis
+                            + uint(page_x);
+                        const uint scheduled_index = schedule_lookup[global_page_index];
+                        if (scheduled_index == 0xFFFFFFFFu
+                            || scheduled_index >= scheduled_page_count) {
+                            continue;
+                        }
+                        if (ScheduledPageOverlapsBoundingSphere(
+                                directional_metadata,
+                                schedule[scheduled_index],
+                                draw_bound)) {
+                            ++overlapping_page_count;
+                        }
+                    }
+                }
             }
         }
 
@@ -1142,15 +1246,65 @@ static void VirtualShadowResolveCSImpl(uint3 dispatch_thread_id)
         }
 
         uint local_write_index = 0u;
-        for (uint scheduled_index = 0u;
-             scheduled_index < scheduled_page_count && local_write_index < writable_count;
-             ++scheduled_index) {
-            if (ScheduledPageOverlapsBoundingSphere(
-                    directional_metadata,
-                    schedule[scheduled_index],
-                    draw_bound)) {
-                draw_page_indices[range_offset + local_write_index] = scheduled_index;
-                ++local_write_index;
+        if (!has_draw_bounds || draw_bound.w <= 0.0f) {
+            for (uint scheduled_index = 0u;
+                 scheduled_index < scheduled_page_count && local_write_index < writable_count;
+                 ++scheduled_index) {
+                if (ScheduledPageOverlapsBoundingSphere(
+                        directional_metadata,
+                        schedule[scheduled_index],
+                        draw_bound)) {
+                    draw_page_indices[range_offset + local_write_index] = scheduled_index;
+                    ++local_write_index;
+                }
+            }
+        } else {
+            const float4 center_ls =
+                mul(directional_metadata.light_view, float4(draw_bound.xyz, 1.0f));
+            for (uint clip_index = 0u;
+                 clip_index < directional_metadata.clip_level_count
+                 && local_write_index < writable_count;
+                 ++clip_index) {
+                int min_page_x = 0;
+                int max_page_x = -1;
+                int min_page_y = 0;
+                int max_page_y = -1;
+                if (!DrawBoundingSphereOverlapsClip(
+                        directional_metadata,
+                        draw_bound,
+                        clip_index,
+                        center_ls,
+                        min_page_x,
+                        max_page_x,
+                        min_page_y,
+                        max_page_y)) {
+                    continue;
+                }
+
+                for (int page_y = min_page_y;
+                     page_y <= max_page_y && local_write_index < writable_count;
+                     ++page_y) {
+                    for (int page_x = min_page_x;
+                         page_x <= max_page_x && local_write_index < writable_count;
+                         ++page_x) {
+                        const uint global_page_index =
+                            clip_index * pass_constants.pages_per_level
+                            + uint(page_y) * pass_constants.pages_per_axis
+                            + uint(page_x);
+                        const uint scheduled_index = schedule_lookup[global_page_index];
+                        if (scheduled_index == 0xFFFFFFFFu
+                            || scheduled_index >= scheduled_page_count) {
+                            continue;
+                        }
+                        if (ScheduledPageOverlapsBoundingSphere(
+                                directional_metadata,
+                                schedule[scheduled_index],
+                                draw_bound)) {
+                            draw_page_indices[range_offset + local_write_index] = scheduled_index;
+                            ++local_write_index;
+                        }
+                    }
+                }
             }
         }
 
