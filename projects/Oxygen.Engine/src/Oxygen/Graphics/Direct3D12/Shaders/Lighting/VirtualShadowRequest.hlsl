@@ -53,6 +53,17 @@ static void RequestDirectionalVirtualPageByIndex(
         | OXYGEN_VSM_PAGE_FLAG_DETAIL_GEOMETRY);
 }
 
+static void RequestDirectionalVirtualCoarsePageByIndex(
+    RWStructuredBuffer<uint> request_words,
+    RWStructuredBuffer<uint> page_mark_flags,
+    uint page_index)
+{
+    const uint word_index = page_index / 32u;
+    const uint bit_mask = 1u << (page_index % 32u);
+    InterlockedOr(request_words[word_index], bit_mask);
+    InterlockedOr(page_mark_flags[page_index], OXYGEN_VSM_PAGE_FLAG_USED_THIS_FRAME);
+}
+
 static uint EncodeDirectionalVirtualPageIndex(
     DirectionalVirtualShadowMetadata metadata,
     VirtualShadowRequestPassConstants pass_constants,
@@ -147,6 +158,58 @@ static uint BuildDirectionalVirtualPageNeighborhood(
     return count;
 }
 
+static uint ResolveDirectionalCoarseClipCount(uint clip_level_count)
+{
+    if (clip_level_count == 0u) {
+        return 0u;
+    }
+
+    return min(min(max((clip_level_count + 2u) / 3u, 2u), 4u), clip_level_count);
+}
+
+static void MarkDirectionalVirtualCoarsePages(
+    DirectionalVirtualShadowMetadata metadata,
+    VirtualShadowRequestPassConstants pass_constants,
+    RWStructuredBuffer<uint> request_words,
+    RWStructuredBuffer<uint> page_mark_flags)
+{
+    if (metadata.clip_level_count == 0u || metadata.pages_per_axis == 0u) {
+        return;
+    }
+
+    const uint coarse_clip_count = ResolveDirectionalCoarseClipCount(metadata.clip_level_count);
+    const uint coarse_begin =
+        metadata.clip_level_count > coarse_clip_count
+            ? (metadata.clip_level_count - coarse_clip_count)
+            : 0u;
+
+    const float center_page = 0.5 * (float)metadata.pages_per_axis;
+    const int low_page = int(floor(center_page - 0.5));
+    const int high_page = int(ceil(center_page - 0.5));
+
+    [loop]
+    for (uint clip_index = coarse_begin; clip_index < metadata.clip_level_count; ++clip_index) {
+        const uint coarse_pages[4] = {
+            EncodeDirectionalVirtualPageIndex(
+                metadata, pass_constants, clip_index, int2(low_page, low_page)),
+            EncodeDirectionalVirtualPageIndex(
+                metadata, pass_constants, clip_index, int2(low_page, high_page)),
+            EncodeDirectionalVirtualPageIndex(
+                metadata, pass_constants, clip_index, int2(high_page, low_page)),
+            EncodeDirectionalVirtualPageIndex(
+                metadata, pass_constants, clip_index, int2(high_page, high_page))
+        };
+
+        [unroll]
+        for (uint i = 0u; i < 4u; ++i) {
+            if (coarse_pages[i] != kInvalidRequestedPageIndex) {
+                RequestDirectionalVirtualCoarsePageByIndex(
+                    request_words, page_mark_flags, coarse_pages[i]);
+            }
+        }
+    }
+}
+
 static float3 ReconstructWorldPosition(
     VirtualShadowRequestPassConstants pass_constants,
     uint2 pixel_xy,
@@ -205,6 +268,10 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         ResourceDescriptorHeap[pass_constants.request_words_uav_index];
     RWStructuredBuffer<uint> page_mark_flags =
         ResourceDescriptorHeap[pass_constants.page_mark_flags_uav_index];
+    if (metadata_count > 0u && dispatch_thread_id.x == 0u && dispatch_thread_id.y == 0u) {
+        MarkDirectionalVirtualCoarsePages(
+            metadata_buffer[0], pass_constants, request_words, page_mark_flags);
+    }
     if (pixel_in_bounds && metadata_count > 0u) {
         const DirectionalVirtualShadowMetadata metadata = metadata_buffer[0];
         if (metadata.clip_level_count == 0u || metadata.pages_per_axis == 0u) {
