@@ -5,10 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
 #include <cstdint>
 #include <cstring>
-#include <sstream>
 #include <stdexcept>
 
 #include <Oxygen/Base/Logging.h>
@@ -32,8 +30,6 @@
 
 namespace oxygen::engine {
 
-using namespace oxygen::renderer::internal::shadow_detail;
-
 namespace {
 
   struct alignas(packing::kShaderDataFieldAlignment)
@@ -44,9 +40,9 @@ namespace {
     };
     ShaderVisibleIndex request_words_uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex page_mark_flags_uav_index { kInvalidShaderVisibleIndex };
-    ShaderVisibleIndex stats_uav_index { kInvalidShaderVisibleIndex };
     std::uint32_t request_word_count { 0U };
     std::uint32_t total_page_count { 0U };
+    std::uint32_t border_dilation_texels { 0U };
     std::uint32_t _pad0 { 0U };
     glm::uvec2 pixel_stride { 1U, 1U };
     std::uint32_t _pad_stride0 { 0U };
@@ -63,7 +59,7 @@ namespace {
   static_assert(
     offsetof(VirtualShadowRequestPassConstants, depth_texture_index) == 0U);
   static_assert(
-    offsetof(VirtualShadowRequestPassConstants, stats_uav_index) == 16U);
+    offsetof(VirtualShadowRequestPassConstants, request_word_count) == 16U);
   static_assert(
     offsetof(VirtualShadowRequestPassConstants, pixel_stride) == 32U);
   static_assert(
@@ -93,10 +89,6 @@ VirtualShadowRequestPass::~VirtualShadowRequestPass()
     page_mark_flags_clear_upload_buffer_->UnMap();
     page_mark_flags_clear_upload_mapped_ptr_ = nullptr;
   }
-  if (stats_clear_upload_buffer_ && stats_clear_upload_mapped_ptr_ != nullptr) {
-    stats_clear_upload_buffer_->UnMap();
-    stats_clear_upload_mapped_ptr_ = nullptr;
-  }
   if (pass_constants_buffer_ && pass_constants_mapped_ptr_ != nullptr) {
     pass_constants_buffer_->UnMap();
     pass_constants_mapped_ptr_ = nullptr;
@@ -108,11 +100,8 @@ auto VirtualShadowRequestPass::DoPrepareResources(
 {
   active_dispatch_ = false;
   active_request_word_count_ = 0U;
-  active_pages_per_axis_ = 0U;
-  active_clip_level_count_ = 0U;
   active_pixel_stride_ = std::max(1U, config_->pixel_stride);
-  active_clip_grid_origin_x_.fill(0);
-  active_clip_grid_origin_y_.fill(0);
+  active_border_dilation_texels_ = config_->border_dilation_texels;
   active_view_id_ = {};
 
   if (Context().frame_slot == frame::kInvalidSlot) {
@@ -183,9 +172,9 @@ auto VirtualShadowRequestPass::DoPrepareResources(
     = publication->virtual_directional_shadow_metadata_srv,
     .request_words_uav_index = request_words_uav_,
     .page_mark_flags_uav_index = page_mark_flags_uav_,
-    .stats_uav_index = stats_uav_,
     .request_word_count = request_word_count,
     .total_page_count = total_pages,
+    .border_dilation_texels = active_border_dilation_texels_,
     .pixel_stride = glm::uvec2(active_pixel_stride_, active_pixel_stride_),
     .screen_dimensions = glm::uvec2(depth_texture.GetDescriptor().width,
       depth_texture.GetDescriptor().height),
@@ -208,14 +197,6 @@ auto VirtualShadowRequestPass::DoPrepareResources(
     recorder.BeginTrackingResourceState(
       *page_mark_flags_buffer_, graphics::ResourceStates::kCommon, true);
   }
-  if (!recorder.IsResourceTracked(*stats_buffer_)) {
-    recorder.BeginTrackingResourceState(
-      *stats_buffer_, graphics::ResourceStates::kCommon, true);
-  }
-  if (!recorder.IsResourceTracked(*stats_clear_upload_buffer_)) {
-    recorder.BeginTrackingResourceState(*stats_clear_upload_buffer_,
-      graphics::ResourceStates::kCopySource, false);
-  }
 
   recorder.RequireResourceState(
     depth_texture, graphics::ResourceStates::kShaderResource);
@@ -223,39 +204,22 @@ auto VirtualShadowRequestPass::DoPrepareResources(
     *request_words_buffer_, graphics::ResourceStates::kCopyDest);
   recorder.RequireResourceState(
     *page_mark_flags_buffer_, graphics::ResourceStates::kCopyDest);
-  recorder.RequireResourceState(
-    *stats_buffer_, graphics::ResourceStates::kCopyDest);
   recorder.FlushBarriers();
   recorder.CopyBuffer(*request_words_buffer_, 0U, *clear_upload_buffer_, 0U,
     static_cast<std::size_t>(kMaxRequestWordCount * sizeof(std::uint32_t)));
   recorder.CopyBuffer(*page_mark_flags_buffer_, 0U,
     *page_mark_flags_clear_upload_buffer_, 0U,
     static_cast<std::size_t>(kMaxSupportedPageCount * sizeof(std::uint32_t)));
-  recorder.CopyBuffer(*stats_buffer_, 0U, *stats_clear_upload_buffer_, 0U,
-    static_cast<std::size_t>(kStatsWordCount * sizeof(std::uint32_t)));
 
   recorder.RequireResourceState(
     *request_words_buffer_, graphics::ResourceStates::kUnorderedAccess);
   recorder.RequireResourceState(
     *page_mark_flags_buffer_, graphics::ResourceStates::kUnorderedAccess);
-  recorder.RequireResourceState(
-    *stats_buffer_, graphics::ResourceStates::kUnorderedAccess);
   recorder.FlushBarriers();
 
   active_dispatch_ = true;
   active_view_id_ = Context().current_view.view_id;
   active_request_word_count_ = request_word_count;
-  active_pages_per_axis_ = metadata->pages_per_axis;
-  active_clip_level_count_ = metadata->clip_level_count;
-  const auto active_clip_count
-    = std::min(metadata->clip_level_count, kMaxSupportedClipLevels);
-  for (std::uint32_t clip_index = 0U; clip_index < active_clip_count;
-    ++clip_index) {
-    active_clip_grid_origin_x_[clip_index]
-      = ResolveDirectionalVirtualClipGridOriginX(*metadata, clip_index);
-    active_clip_grid_origin_y_[clip_index]
-      = ResolveDirectionalVirtualClipGridOriginY(*metadata, clip_index);
-  }
 
   co_return;
 }
@@ -324,13 +288,11 @@ auto VirtualShadowRequestPass::NeedRebuildPipelineState() const -> bool
 auto VirtualShadowRequestPass::EnsureRequestBuffers() -> void
 {
   if (request_words_buffer_ && clear_upload_buffer_ && page_mark_flags_buffer_
-    && page_mark_flags_clear_upload_buffer_ && stats_buffer_
-    && stats_clear_upload_buffer_ && clear_upload_mapped_ptr_ != nullptr
-    && request_words_uav_.IsValid()
+    && page_mark_flags_clear_upload_buffer_
+    && clear_upload_mapped_ptr_ != nullptr && request_words_uav_.IsValid()
     && page_mark_flags_clear_upload_mapped_ptr_ != nullptr
-    && stats_clear_upload_mapped_ptr_ != nullptr && request_words_srv_.IsValid()
-    && page_mark_flags_uav_.IsValid() && page_mark_flags_srv_.IsValid()
-    && stats_uav_.IsValid()) {
+    && request_words_srv_.IsValid() && page_mark_flags_uav_.IsValid()
+    && page_mark_flags_srv_.IsValid()) {
     return;
   }
 
@@ -341,8 +303,6 @@ auto VirtualShadowRequestPass::EnsureRequestBuffers() -> void
     = kMaxRequestWordCount * sizeof(std::uint32_t);
   constexpr std::uint64_t kPageMarkFlagsSize
     = kMaxSupportedPageCount * sizeof(std::uint32_t);
-  constexpr std::uint64_t kStatsBufferSize
-    = kStatsWordCount * sizeof(std::uint32_t);
 
   if (!request_words_buffer_) {
     const graphics::BufferDesc desc {
@@ -482,59 +442,6 @@ auto VirtualShadowRequestPass::EnsureRequestBuffers() -> void
                                "page-mark flags clear upload buffer");
     }
     std::memset(page_mark_flags_clear_upload_mapped_ptr_, 0,
-      static_cast<std::size_t>(desc.size_bytes));
-  }
-
-  if (!stats_buffer_) {
-    const graphics::BufferDesc desc {
-      .size_bytes = kStatsBufferSize,
-      .usage = graphics::BufferUsage::kStorage,
-      .memory = graphics::BufferMemory::kDeviceLocal,
-      .debug_name = "VirtualShadowRequestPass.Stats",
-    };
-    stats_buffer_ = gfx_->CreateBuffer(desc);
-    if (!stats_buffer_) {
-      throw std::runtime_error(
-        "VirtualShadowRequestPass: failed to create stats buffer");
-    }
-    registry.Register(stats_buffer_);
-
-    auto uav_handle
-      = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_UAV,
-        graphics::DescriptorVisibility::kShaderVisible);
-    if (!uav_handle.IsValid()) {
-      throw std::runtime_error(
-        "VirtualShadowRequestPass: failed to allocate stats UAV");
-    }
-    stats_uav_ = allocator.GetShaderVisibleIndex(uav_handle);
-
-    graphics::BufferViewDescription uav_desc;
-    uav_desc.view_type = graphics::ResourceViewType::kStructuredBuffer_UAV;
-    uav_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
-    uav_desc.range = { 0U, kStatsBufferSize };
-    uav_desc.stride = sizeof(std::uint32_t);
-    registry.RegisterView(*stats_buffer_, std::move(uav_handle), uav_desc);
-  }
-
-  if (!stats_clear_upload_buffer_) {
-    const graphics::BufferDesc desc {
-      .size_bytes = kStatsBufferSize,
-      .usage = graphics::BufferUsage::kNone,
-      .memory = graphics::BufferMemory::kUpload,
-      .debug_name = "VirtualShadowRequestPass.StatsClearUpload",
-    };
-    stats_clear_upload_buffer_ = gfx_->CreateBuffer(desc);
-    if (!stats_clear_upload_buffer_) {
-      throw std::runtime_error(
-        "VirtualShadowRequestPass: failed to create stats clear upload buffer");
-    }
-    stats_clear_upload_mapped_ptr_
-      = stats_clear_upload_buffer_->Map(0U, desc.size_bytes);
-    if (stats_clear_upload_mapped_ptr_ == nullptr) {
-      throw std::runtime_error(
-        "VirtualShadowRequestPass: failed to map stats clear upload buffer");
-    }
-    std::memset(stats_clear_upload_mapped_ptr_, 0,
       static_cast<std::size_t>(desc.size_bytes));
   }
 }
