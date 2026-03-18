@@ -35,6 +35,7 @@ namespace oxygen::engine {
 struct VirtualShadowRequestPassConfig {
   std::string debug_name { "VirtualShadowRequestPass" };
   std::uint32_t pixel_stride { 2U };
+  std::uint32_t border_dilation_texels { 2U };
 };
 
 class VirtualShadowRequestPass : public ComputeRenderPass {
@@ -105,9 +106,6 @@ private:
     * kMaxSupportedClipLevels;
   static constexpr std::uint32_t kMaxRequestWordCount
     = (kMaxSupportedPageCount + 31U) / 32U;
-  static constexpr std::uint32_t kStatsWordCount
-    = 4U + 2U * kMaxSupportedClipLevels;
-
   observer_ptr<Graphics> gfx_;
   std::shared_ptr<Config> config_;
 
@@ -117,14 +115,10 @@ private:
   std::shared_ptr<graphics::Buffer> page_mark_flags_buffer_;
   ShaderVisibleIndex page_mark_flags_srv_ { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex page_mark_flags_uav_ { kInvalidShaderVisibleIndex };
-  std::shared_ptr<graphics::Buffer> stats_buffer_;
-  ShaderVisibleIndex stats_uav_ { kInvalidShaderVisibleIndex };
   std::shared_ptr<graphics::Buffer> clear_upload_buffer_;
   void* clear_upload_mapped_ptr_ { nullptr };
   std::shared_ptr<graphics::Buffer> page_mark_flags_clear_upload_buffer_;
   void* page_mark_flags_clear_upload_mapped_ptr_ { nullptr };
-  std::shared_ptr<graphics::Buffer> stats_clear_upload_buffer_;
-  void* stats_clear_upload_mapped_ptr_ { nullptr };
 
   std::shared_ptr<graphics::Buffer> pass_constants_buffer_;
   graphics::NativeView pass_constants_cbv_ {};
@@ -137,13 +131,8 @@ private:
 
   ViewId active_view_id_ {};
   std::uint32_t active_request_word_count_ { 0U };
-  std::uint32_t active_pages_per_axis_ { 0U };
-  std::uint32_t active_clip_level_count_ { 0U };
   std::uint32_t active_pixel_stride_ { 1U };
-  std::array<std::int32_t, kMaxSupportedClipLevels>
-    active_clip_grid_origin_x_ {};
-  std::array<std::int32_t, kMaxSupportedClipLevels>
-    active_clip_grid_origin_y_ {};
+  std::uint32_t active_border_dilation_texels_ { 0U };
   bool active_dispatch_ { false };
 
   OXGN_RNDR_API auto EnsureRequestBuffers() -> void;

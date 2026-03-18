@@ -24,9 +24,9 @@ struct VirtualShadowRequestPassConstants
     uint virtual_directional_shadow_metadata_index;
     uint request_words_uav_index;
     uint page_mark_flags_uav_index;
-    uint stats_uav_index;
     uint request_word_count;
     uint total_page_count;
+    uint border_dilation_texels;
     uint _pad0;
     uint2 pixel_stride;
     uint _pad_stride0;
@@ -39,8 +39,6 @@ struct VirtualShadowRequestPassConstants
 
 static const uint kInvalidRequestedPageIndex = 0xFFFFFFFFu;
 static const uint kMaxRequestsPerLane = 9u;
-static const uint kGroupThreadCount = 64u;
-groupshared uint g_GroupRequestedPageIndices[kGroupThreadCount * kMaxRequestsPerLane];
 
 static void RequestDirectionalVirtualPageByIndex(
     RWStructuredBuffer<uint> request_words,
@@ -101,7 +99,7 @@ static uint BuildDirectionalVirtualPageNeighborhood(
 
     const float border_guard_pages = min(
         0.49,
-        max((float)pass_constants.pixel_stride.x, (float)pass_constants.pixel_stride.y)
+        (float)pass_constants.border_dilation_texels
             / max((float)metadata.page_size_texels, 1.0));
     if (border_guard_pages <= 0.0) {
         return count;
@@ -168,16 +166,11 @@ static float3 ReconstructWorldPosition(
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
-void CS(uint3 dispatch_thread_id : SV_DispatchThreadID, uint group_index : SV_GroupIndex)
+void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 {
     if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX
         || !BX_IN_GLOBAL_SRV(g_PassConstantsIndex)) {
         return;
-    }
-
-    [unroll]
-    for (uint slot = 0u; slot < kMaxRequestsPerLane; ++slot) {
-        g_GroupRequestedPageIndices[group_index * kMaxRequestsPerLane + slot] = 0xFFFFFFFFu;
     }
 
     ConstantBuffer<VirtualShadowRequestPassConstants> pass_constants =
@@ -185,8 +178,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID, uint group_index : SV_Gr
     if (!BX_IN_GLOBAL_SRV(pass_constants.depth_texture_index)
         || !BX_IN_GLOBAL_SRV(pass_constants.virtual_directional_shadow_metadata_index)
         || !BX_IN_GLOBAL_SRV(pass_constants.request_words_uav_index)
-        || !BX_IN_GLOBAL_SRV(pass_constants.page_mark_flags_uav_index)
-        || !BX_IN_GLOBAL_SRV(pass_constants.stats_uav_index)) {
+        || !BX_IN_GLOBAL_SRV(pass_constants.page_mark_flags_uav_index)) {
         return;
     }
 
@@ -213,24 +205,14 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID, uint group_index : SV_Gr
         ResourceDescriptorHeap[pass_constants.request_words_uav_index];
     RWStructuredBuffer<uint> page_mark_flags =
         ResourceDescriptorHeap[pass_constants.page_mark_flags_uav_index];
-    RWStructuredBuffer<uint> stats =
-        ResourceDescriptorHeap[pass_constants.stats_uav_index];
     if (pixel_in_bounds && metadata_count > 0u) {
         const DirectionalVirtualShadowMetadata metadata = metadata_buffer[0];
         if (metadata.clip_level_count == 0u || metadata.pages_per_axis == 0u) {
-            [unroll]
-            for (uint page_slot = 0u; page_slot < kMaxRequestsPerLane; ++page_slot) {
-                g_GroupRequestedPageIndices[group_index * kMaxRequestsPerLane + page_slot]
-                    = local_page_indices[page_slot];
-            }
-            GroupMemoryBarrierWithGroupSync();
             return;
         }
 
         const float depth = depth_texture.Load(int3(pixel_xy, 0));
         if (depth < 1.0f) {
-            InterlockedAdd(stats[0], 1u);
-
             const float3 world_pos =
                 ReconstructWorldPosition(pass_constants, pixel_xy, depth);
             const float3 light_view_pos = mul(metadata.light_view, float4(world_pos, 1.0)).xyz;
@@ -251,67 +233,28 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID, uint group_index : SV_Gr
                     desired_world_footprint,
                     clip_index,
                     page_coord)) {
-                InterlockedAdd(stats[1], 1u);
-                if (clip_index < OXYGEN_MAX_VIRTUAL_DIRECTIONAL_CLIP_LEVELS) {
-                    InterlockedAdd(stats[4u + clip_index], 1u);
-                }
-
                 float2 request_page_coord = 0.0.xx;
                 if (ProjectDirectionalVirtualClip(
                         metadata, clip_index, light_view_pos.xy, request_page_coord)) {
-                    InterlockedAdd(stats[3], 1u);
-                    if (clip_index < OXYGEN_MAX_VIRTUAL_DIRECTIONAL_CLIP_LEVELS) {
-                        InterlockedAdd(
-                            stats[4u + OXYGEN_MAX_VIRTUAL_DIRECTIONAL_CLIP_LEVELS + clip_index],
-                            1u);
-                    }
-
                     const uint page_count = BuildDirectionalVirtualPageNeighborhood(
                         metadata,
                         pass_constants,
                         clip_index,
                         request_page_coord,
                         local_page_indices);
-                    (void)page_count;
+                    [unroll]
+                    for (uint page_slot = 0u; page_slot < kMaxRequestsPerLane; ++page_slot) {
+                        if (page_slot >= page_count) {
+                            break;
+                        }
+                        const uint page_index = local_page_indices[page_slot];
+                        if (page_index != kInvalidRequestedPageIndex) {
+                            RequestDirectionalVirtualPageByIndex(
+                                request_words, page_mark_flags, page_index);
+                        }
+                    }
                 }
-            } else {
-                InterlockedAdd(stats[2], 1u);
             }
         }
-    }
-
-    [unroll]
-    for (uint page_slot = 0u; page_slot < kMaxRequestsPerLane; ++page_slot) {
-        g_GroupRequestedPageIndices[group_index * kMaxRequestsPerLane + page_slot]
-            = local_page_indices[page_slot];
-    }
-
-    GroupMemoryBarrierWithGroupSync();
-
-    [unroll]
-    for (uint page_slot = 0u; page_slot < kMaxRequestsPerLane; ++page_slot) {
-        const uint candidate_page_index =
-            g_GroupRequestedPageIndices[group_index * kMaxRequestsPerLane + page_slot];
-        if (candidate_page_index == kInvalidRequestedPageIndex) {
-            continue;
-        }
-
-        bool first_in_group = true;
-        const uint candidate_linear_index = group_index * kMaxRequestsPerLane + page_slot;
-        [loop]
-        for (uint prior_linear_index = 0u;
-             prior_linear_index < candidate_linear_index;
-             ++prior_linear_index) {
-            if (g_GroupRequestedPageIndices[prior_linear_index] == candidate_page_index) {
-                first_in_group = false;
-                break;
-            }
-        }
-        if (!first_in_group) {
-            continue;
-        }
-
-        RequestDirectionalVirtualPageByIndex(
-            request_words, page_mark_flags, candidate_page_index);
     }
 }
