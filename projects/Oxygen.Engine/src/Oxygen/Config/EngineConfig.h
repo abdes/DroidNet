@@ -58,6 +58,14 @@ struct TimingConfig {
   */
   // NOLINTNEXTLINE(*-magic-numbers)
   std::chrono::microseconds pacing_safety_margin { 200 }; // use chrono here
+
+  //! Cooperative sleep used when the frame loop is uncapped
+  /*!
+   Uncapped mode should still relinquish the main thread briefly so worker
+   threads, OS message pumping, and platform services can make forward
+   progress. Keep this small enough to avoid acting like a real frame cap.
+  */
+  std::chrono::milliseconds uncapped_cooperative_sleep { 1 }; // NOLINT
 };
 
 struct EngineConfig {

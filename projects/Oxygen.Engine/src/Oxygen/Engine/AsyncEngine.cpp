@@ -540,7 +540,9 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
     // Measure pacing separately
     const auto pacing_start = GetPhysicalClock().Now();
 
-    // Deadline-based frame pacing for improved accuracy
+    // Deadline-based frame pacing for improved accuracy. Even in uncapped
+    // mode, relinquish the main thread briefly so worker completion and
+    // platform/OS servicing are not starved by a hot loop.
     if (config_.target_fps > 0) {
       const auto period_ns = nanoseconds(
         1'000'000'000ull / static_cast<uint64_t>(config_.target_fps));
@@ -587,6 +589,10 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
         period_ns.count(),
         duration_cast<microseconds>(next_frame_deadline_.get() - now.get())
           .count());
+    } else {
+      next_frame_deadline_ = t::PhysicalTime {};
+      co_await platform_->Async().SleepFor(
+        config_.timing.uncapped_cooperative_sleep);
     }
     const auto pacing_end = GetPhysicalClock().Now();
     const auto pacing_duration
