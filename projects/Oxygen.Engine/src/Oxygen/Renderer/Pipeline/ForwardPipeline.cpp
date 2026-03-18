@@ -37,7 +37,6 @@
 #include <Oxygen/Renderer/Passes/SkyPass.h>
 #include <Oxygen/Renderer/Passes/ToneMapPass.h>
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
-#include <Oxygen/Renderer/Passes/VirtualShadowCoarseMarkPass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowBuildClearArgsPass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowBuildDrawsPass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowClearPass.h>
@@ -201,8 +200,6 @@ private:
     virtual_shadow_raster_pass_config;
   std::shared_ptr<engine::VirtualShadowRequestPass::Config>
     virtual_shadow_request_pass_config;
-  std::shared_ptr<engine::VirtualShadowCoarseMarkPass::Config>
-    virtual_shadow_coarse_mark_pass_config;
   std::shared_ptr<engine::VirtualShadowClearPass::Config>
     virtual_shadow_clear_pass_config;
   std::shared_ptr<engine::VirtualShadowInvalidationPass::Config>
@@ -236,8 +233,6 @@ private:
   std::shared_ptr<engine::VirtualShadowPageRasterPass>
     virtual_shadow_raster_pass;
   std::shared_ptr<engine::VirtualShadowRequestPass> virtual_shadow_request_pass;
-  std::shared_ptr<engine::VirtualShadowCoarseMarkPass>
-    virtual_shadow_coarse_mark_pass;
   std::shared_ptr<engine::VirtualShadowClearPass> virtual_shadow_clear_pass;
   std::shared_ptr<engine::VirtualShadowInvalidationPass>
     virtual_shadow_invalidation_pass;
@@ -564,13 +559,6 @@ auto ForwardPipeline::Impl::RunScenePasses(
       co_await virtual_shadow_request_pass->Execute(rc, rec);
       rc.RegisterPass<engine::VirtualShadowRequestPass>(
         virtual_shadow_request_pass.get());
-    }
-
-    if (virtual_shadow_coarse_mark_pass) {
-      co_await virtual_shadow_coarse_mark_pass->PrepareResources(rc, rec);
-      co_await virtual_shadow_coarse_mark_pass->Execute(rc, rec);
-      rc.RegisterPass<engine::VirtualShadowCoarseMarkPass>(
-        virtual_shadow_coarse_mark_pass.get());
     }
 
     if (virtual_shadow_clear_pass) {
@@ -965,8 +953,6 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
     = std::make_shared<p::VirtualShadowPageRasterPass::Config>();
   virtual_shadow_request_pass_config
     = std::make_shared<p::VirtualShadowRequestPass::Config>();
-  virtual_shadow_coarse_mark_pass_config
-    = std::make_shared<p::VirtualShadowCoarseMarkPass::Config>();
   virtual_shadow_clear_pass_config
     = std::make_shared<p::VirtualShadowClearPass::Config>();
   virtual_shadow_invalidation_pass_config
@@ -1009,9 +995,6 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
   auto gfx_ptr = observer_ptr { gfx.get() };
   virtual_shadow_request_pass = std::make_shared<p::VirtualShadowRequestPass>(
     gfx_ptr, virtual_shadow_request_pass_config);
-  virtual_shadow_coarse_mark_pass
-    = std::make_shared<p::VirtualShadowCoarseMarkPass>(
-      gfx_ptr, virtual_shadow_coarse_mark_pass_config);
   virtual_shadow_clear_pass = std::make_shared<p::VirtualShadowClearPass>(
     gfx_ptr, virtual_shadow_clear_pass_config);
   virtual_shadow_invalidation_pass

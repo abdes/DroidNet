@@ -74,7 +74,6 @@ class DepthPrePass;
 class ConventionalShadowRasterPass;
 class VirtualShadowPageRasterPass;
 class VirtualShadowRequestPass;
-class VirtualShadowCoarseMarkPass;
 class VirtualShadowClearPass;
 class VirtualShadowInvalidationPass;
 class VirtualShadowPageUpdatePass;
@@ -104,7 +103,7 @@ using KnownPassTypes = PassTypeList<DepthPrePass, LightCullingPass, ShaderPass,
   SkyPass, SkyCapturePass, TransparentPass, WireframePass, AutoExposurePass,
   GpuDebugClearPass, GpuDebugDrawPass, GroundGridPass,
   ConventionalShadowRasterPass, VirtualShadowPageRasterPass,
-  VirtualShadowRequestPass, VirtualShadowCoarseMarkPass, VirtualShadowClearPass,
+  VirtualShadowRequestPass, VirtualShadowClearPass,
   VirtualShadowInvalidationPass, VirtualShadowPageUpdatePass,
   VirtualShadowPageAllocPass, VirtualShadowFallbackPass,
   VirtualShadowHierarchyPass, VirtualShadowSchedulePass,
