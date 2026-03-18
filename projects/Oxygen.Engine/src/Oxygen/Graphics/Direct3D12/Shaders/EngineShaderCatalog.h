@@ -195,10 +195,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
   ShaderFileSpec {
-    .path="Lighting/VirtualShadowFallback.hlsl",
-    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
-  },
-  ShaderFileSpec {
     .path="Lighting/VirtualShadowHierarchy.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },

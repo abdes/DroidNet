@@ -36,6 +36,8 @@ Active execution order as of March 18, 2026:
 4. `in_progress` Replace the current full-screen request pass with UE-style visible
    page marking and pruning. Exit gate:
    lower request-pass cost with matching rendered output.
+   - [x] fold directional fallback propagation into page-management/allocation
+     flow and delete the standalone `VirtualShadowFallbackPass`
 5. `pending` Remove CPU-assisted dirty-page invalidation and fold dirty-page
    marking into the GPU per-page build path. Exit gate:
    lower CPU upload and invalidation cost with matching rendered output.

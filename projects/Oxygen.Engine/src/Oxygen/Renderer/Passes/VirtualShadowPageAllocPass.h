@@ -56,7 +56,7 @@ protected:
 
 private:
   static constexpr std::uint32_t kDispatchGroupSize = 64U;
-  static constexpr std::uint32_t kPassConstantsSlotsPerFrame = 1U;
+  static constexpr std::uint32_t kPassConstantsSlotsPerFrame = 2U;
   static constexpr std::uint32_t kPassConstantsSlotCount
     = kPassConstantsSlotsPerFrame * frame::kFramesInFlight.get();
   static constexpr std::uint32_t kMaxSupportedClipLevels = 12U;

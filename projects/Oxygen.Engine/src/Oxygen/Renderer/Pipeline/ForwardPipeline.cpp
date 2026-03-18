@@ -40,7 +40,6 @@
 #include <Oxygen/Renderer/Passes/VirtualShadowBuildClearArgsPass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowBuildDrawsPass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowClearPass.h>
-#include <Oxygen/Renderer/Passes/VirtualShadowFallbackPass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowHierarchyPass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowInvalidationPass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowPageAllocPass.h>
@@ -208,8 +207,6 @@ private:
     virtual_shadow_page_update_pass_config;
   std::shared_ptr<engine::VirtualShadowPageAllocPass::Config>
     virtual_shadow_page_alloc_pass_config;
-  std::shared_ptr<engine::VirtualShadowFallbackPass::Config>
-    virtual_shadow_fallback_pass_config;
   std::shared_ptr<engine::VirtualShadowHierarchyPass::Config>
     virtual_shadow_hierarchy_pass_config;
   std::shared_ptr<engine::VirtualShadowSchedulePass::Config>
@@ -240,8 +237,6 @@ private:
     virtual_shadow_page_update_pass;
   std::shared_ptr<engine::VirtualShadowPageAllocPass>
     virtual_shadow_page_alloc_pass;
-  std::shared_ptr<engine::VirtualShadowFallbackPass>
-    virtual_shadow_fallback_pass;
   std::shared_ptr<engine::VirtualShadowHierarchyPass>
     virtual_shadow_hierarchy_pass;
   std::shared_ptr<engine::VirtualShadowSchedulePass>
@@ -587,13 +582,6 @@ auto ForwardPipeline::Impl::RunScenePasses(
       co_await virtual_shadow_page_alloc_pass->Execute(rc, rec);
       rc.RegisterPass<engine::VirtualShadowPageAllocPass>(
         virtual_shadow_page_alloc_pass.get());
-    }
-
-    if (virtual_shadow_fallback_pass) {
-      co_await virtual_shadow_fallback_pass->PrepareResources(rc, rec);
-      co_await virtual_shadow_fallback_pass->Execute(rc, rec);
-      rc.RegisterPass<engine::VirtualShadowFallbackPass>(
-        virtual_shadow_fallback_pass.get());
     }
 
     if (virtual_shadow_hierarchy_pass) {
@@ -961,8 +949,6 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
     = std::make_shared<p::VirtualShadowPageUpdatePass::Config>();
   virtual_shadow_page_alloc_pass_config
     = std::make_shared<p::VirtualShadowPageAllocPass::Config>();
-  virtual_shadow_fallback_pass_config
-    = std::make_shared<p::VirtualShadowFallbackPass::Config>();
   virtual_shadow_hierarchy_pass_config
     = std::make_shared<p::VirtualShadowHierarchyPass::Config>();
   virtual_shadow_schedule_pass_config
@@ -1006,9 +992,6 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
   virtual_shadow_page_alloc_pass
     = std::make_shared<p::VirtualShadowPageAllocPass>(
       gfx_ptr, virtual_shadow_page_alloc_pass_config);
-  virtual_shadow_fallback_pass
-    = std::make_shared<p::VirtualShadowFallbackPass>(
-      gfx_ptr, virtual_shadow_fallback_pass_config);
   virtual_shadow_hierarchy_pass
     = std::make_shared<p::VirtualShadowHierarchyPass>(
       gfx_ptr, virtual_shadow_hierarchy_pass_config);
