@@ -30,15 +30,12 @@ namespace oxygen::engine {
 
 namespace {
 
-  // Guardrail: the stable current-page virtual sample path already applies
-  // receiver-space bias in ShadowHelpers.hlsli. A large hardware constant depth
-  // bias here pushes stored depths too far away from the light and visibly
-  // lifts the shadow off the caster base. Keep the hardware constant term at
-  // zero for VSM pages and leave only a tightly clamped slope term for acne
-  // control on grazing caster triangles.
+  // Directional VSM pages apply depth bias in the raster shader so the bias is
+  // normalized in the active clip basis. Keep the fixed-function rasterizer
+  // bias terms disabled to avoid reintroducing clip-dependent overbias.
   constexpr float kVirtualShadowRasterDepthBias = 0.0F;
-  constexpr float kVirtualShadowRasterSlopeBias = 2.0F;
-  constexpr float kVirtualShadowRasterDepthBiasClamp = 0.0005F;
+  constexpr float kVirtualShadowRasterSlopeBias = 0.0F;
+  constexpr float kVirtualShadowRasterDepthBiasClamp = 0.0F;
   constexpr std::uint32_t kPassConstantsStride
     = packing::kConstantBufferAlignment;
   constexpr std::uint64_t kIndirectDrawCommandStrideBytes

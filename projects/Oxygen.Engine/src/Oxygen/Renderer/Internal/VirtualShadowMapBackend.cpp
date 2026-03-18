@@ -1395,6 +1395,12 @@ auto VirtualShadowMapBackend::PrepareDirectionalVirtualClipmapSetup(
   setup.metadata.pages_per_axis = setup.pages_per_axis;
   setup.metadata.page_size_texels = physical_pool_config_.page_size_texels;
   setup.metadata.page_table_offset = 0U;
+  setup.metadata.coarse_clip_mask
+    = BuildDirectionalCoarseClipMask(setup.clip_level_count);
+  setup.metadata.clipmap_world_origin_selection = glm::vec4(0.0F, 0.0F, 0.0F,
+    -std::log2(std::max(base_half_extent, 1.0e-4F)) - 0.5F);
+  setup.metadata.clip_grid_origin_x_packed.fill(glm::ivec4(0));
+  setup.metadata.clip_grid_origin_y_packed.fill(glm::ivec4(0));
   setup.metadata.light_view = setup.light_view;
 
   // Origin-snap hysteresis: When a previous stable grid origin exists, only
@@ -1494,6 +1500,48 @@ auto VirtualShadowMapBackend::PrepareDirectionalVirtualClipmapSetup(
         setup.clip_origin_y[clip_index], page_world, depth_scale);
     setup.metadata.clip_metadata[clip_index].bias_reserved
       = glm::vec4(depth_bias, 0.0F, 0.0F, 0.0F);
+    const auto packed_index = clip_index / 4U;
+    const auto packed_lane = clip_index % 4U;
+    switch (packed_lane) {
+      case 0U:
+        setup.metadata.clip_grid_origin_x_packed[packed_index].x
+          = setup.clip_grid_origin_x[clip_index];
+        setup.metadata.clip_grid_origin_y_packed[packed_index].x
+          = setup.clip_grid_origin_y[clip_index];
+        break;
+      case 1U:
+        setup.metadata.clip_grid_origin_x_packed[packed_index].y
+          = setup.clip_grid_origin_x[clip_index];
+        setup.metadata.clip_grid_origin_y_packed[packed_index].y
+          = setup.clip_grid_origin_y[clip_index];
+        break;
+      case 2U:
+        setup.metadata.clip_grid_origin_x_packed[packed_index].z
+          = setup.clip_grid_origin_x[clip_index];
+        setup.metadata.clip_grid_origin_y_packed[packed_index].z
+          = setup.clip_grid_origin_y[clip_index];
+        break;
+      default:
+        setup.metadata.clip_grid_origin_x_packed[packed_index].w
+          = setup.clip_grid_origin_x[clip_index];
+        setup.metadata.clip_grid_origin_y_packed[packed_index].w
+          = setup.clip_grid_origin_y[clip_index];
+        break;
+    }
+  }
+
+  {
+    const float clip0_half_extent = setup.clip_page_world[0]
+      * std::max(1.0F, static_cast<float>(setup.pages_per_axis)) * 0.5F;
+    const glm::vec3 clip0_center_ls(
+      setup.clip_origin_x[0] + clip0_half_extent,
+      setup.clip_origin_y[0] + clip0_half_extent,
+      camera_ls.z);
+    const glm::vec3 clip0_center_ws = glm::vec3(
+      glm::inverse(setup.light_view) * glm::vec4(clip0_center_ls, 1.0F));
+    setup.metadata.clipmap_world_origin_selection.x = clip0_center_ws.x;
+    setup.metadata.clipmap_world_origin_selection.y = clip0_center_ws.y;
+    setup.metadata.clipmap_world_origin_selection.z = clip0_center_ws.z;
   }
 
   (void)frustum_world_points;

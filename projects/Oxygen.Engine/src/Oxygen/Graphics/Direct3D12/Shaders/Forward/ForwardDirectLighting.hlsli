@@ -100,6 +100,7 @@ float3 ComputeSunTransmittance(
 float3 AccumulateDirectionalLights(
     float3 world_pos,
     GpuSkyAtmosphereParams atmo,
+    float3 shadow_normal_ws,
     float3 N,
     float3 V,
     float  NdotV,
@@ -137,7 +138,7 @@ float3 AccumulateDirectionalLights(
             // Compute atmospheric transmittance specifically for the sun
             float3 sun_transmittance = ComputeSunTransmittance(world_pos, atmo, L);
             const float shadow_visibility = ComputeShadowVisibility(
-                sun_shadow_index, world_pos, N, L);
+                sun_shadow_index, world_pos, shadow_normal_ws, L);
 
             const float3 H = SafeNormalize(V + L);
             const float  NdotH = saturate(dot(N, H));
@@ -204,7 +205,7 @@ float3 AccumulateDirectionalLights(
                 transmittance = ComputeSunTransmittance(world_pos, atmo, L);
             }
             const float shadow_visibility = ComputeShadowVisibility(
-                dl.shadow_index, world_pos, N, L);
+                dl.shadow_index, world_pos, shadow_normal_ws, L);
 
             const float3 H = SafeNormalize(V + L);
             const float  NdotH = saturate(dot(N, H));
