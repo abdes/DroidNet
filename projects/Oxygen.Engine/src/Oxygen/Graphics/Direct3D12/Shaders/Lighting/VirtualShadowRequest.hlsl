@@ -158,46 +158,48 @@ static uint BuildDirectionalVirtualPageNeighborhood(
     return count;
 }
 
-static uint ResolveDirectionalCoarseClipCount(uint clip_level_count)
-{
-    if (clip_level_count == 0u) {
-        return 0u;
-    }
-
-    return min(min(max((clip_level_count + 2u) / 3u, 2u), 4u), clip_level_count);
-}
-
 static void MarkDirectionalVirtualCoarsePages(
     DirectionalVirtualShadowMetadata metadata,
     VirtualShadowRequestPassConstants pass_constants,
     RWStructuredBuffer<uint> request_words,
     RWStructuredBuffer<uint> page_mark_flags)
 {
-    if (metadata.clip_level_count == 0u || metadata.pages_per_axis == 0u) {
+    if (metadata.clip_level_count == 0u || metadata.pages_per_axis == 0u
+        || metadata.coarse_clip_mask == 0u) {
         return;
     }
 
-    const uint coarse_clip_count = ResolveDirectionalCoarseClipCount(metadata.clip_level_count);
-    const uint coarse_begin =
-        metadata.clip_level_count > coarse_clip_count
-            ? (metadata.clip_level_count - coarse_clip_count)
-            : 0u;
-
-    const float center_page = 0.5 * (float)metadata.pages_per_axis;
-    const int low_page = int(floor(center_page - 0.5));
-    const int high_page = int(ceil(center_page - 0.5));
+    const float2 clipmap_origin_light_xy =
+        mul(metadata.light_view, float4(metadata.clipmap_world_origin_selection.xyz, 1.0f)).xy;
 
     [loop]
-    for (uint clip_index = coarse_begin; clip_index < metadata.clip_level_count; ++clip_index) {
+    for (uint clip_index = 0u; clip_index < metadata.clip_level_count; ++clip_index) {
+        if (((metadata.coarse_clip_mask >> clip_index) & 1u) == 0u) {
+            continue;
+        }
+
+        float2 center_page_float = 0.0.xx;
+        if (!ProjectDirectionalVirtualClip(
+                metadata,
+                clip_index,
+                clipmap_origin_light_xy,
+                center_page_float)) {
+            continue;
+        }
+
+        const int low_page_x = int(floor(center_page_float.x - 0.5f));
+        const int low_page_y = int(floor(center_page_float.y - 0.5f));
+        const int high_page_x = int(ceil(center_page_float.x - 0.5f));
+        const int high_page_y = int(ceil(center_page_float.y - 0.5f));
         const uint coarse_pages[4] = {
             EncodeDirectionalVirtualPageIndex(
-                metadata, pass_constants, clip_index, int2(low_page, low_page)),
+                metadata, pass_constants, clip_index, int2(low_page_x, low_page_y)),
             EncodeDirectionalVirtualPageIndex(
-                metadata, pass_constants, clip_index, int2(low_page, high_page)),
+                metadata, pass_constants, clip_index, int2(low_page_x, high_page_y)),
             EncodeDirectionalVirtualPageIndex(
-                metadata, pass_constants, clip_index, int2(high_page, low_page)),
+                metadata, pass_constants, clip_index, int2(high_page_x, low_page_y)),
             EncodeDirectionalVirtualPageIndex(
-                metadata, pass_constants, clip_index, int2(high_page, high_page))
+                metadata, pass_constants, clip_index, int2(high_page_x, high_page_y))
         };
 
         [unroll]
@@ -268,10 +270,11 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         ResourceDescriptorHeap[pass_constants.request_words_uav_index];
     RWStructuredBuffer<uint> page_mark_flags =
         ResourceDescriptorHeap[pass_constants.page_mark_flags_uav_index];
-    if (metadata_count > 0u && dispatch_thread_id.x == 0u && dispatch_thread_id.y == 0u) {
+    if (dispatch_thread_id.x == 0u && dispatch_thread_id.y == 0u && metadata_count > 0u) {
         MarkDirectionalVirtualCoarsePages(
             metadata_buffer[0], pass_constants, request_words, page_mark_flags);
     }
+
     if (pixel_in_bounds && metadata_count > 0u) {
         const DirectionalVirtualShadowMetadata metadata = metadata_buffer[0];
         if (metadata.clip_level_count == 0u || metadata.pages_per_axis == 0u) {
@@ -284,20 +287,12 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
                 ReconstructWorldPosition(pass_constants, pixel_xy, depth);
             const float3 light_view_pos = mul(metadata.light_view, float4(world_pos, 1.0)).xyz;
 
-            const float camera_dist = length(world_pos - camera_position);
-            const float base_page_world =
-                max(metadata.clip_metadata[0].origin_page_scale.z, 1.0e-4);
-            const float base_texel_world =
-                base_page_world / max((float)metadata.page_size_texels, 1.0);
-            const float desired_world_footprint = max(
-                camera_dist * base_texel_world, 1.0e-4);
-
             uint clip_index = 0u;
             float2 page_coord = 0.0.xx;
-            if (SelectDirectionalVirtualClipForFootprint(
+            if (SelectDirectionalVirtualClipForDistance(
                     metadata,
+                    world_pos,
                     light_view_pos.xy,
-                    desired_world_footprint,
                     clip_index,
                     page_coord)) {
                 float2 request_page_coord = 0.0.xx;

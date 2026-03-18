@@ -34,7 +34,7 @@ namespace oxygen::engine {
 
 struct VirtualShadowRequestPassConfig {
   std::string debug_name { "VirtualShadowRequestPass" };
-  std::uint32_t pixel_stride { 2U };
+  std::uint32_t pixel_stride { 1U };
   std::uint32_t border_dilation_texels { 2U };
 };
 

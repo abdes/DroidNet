@@ -28,6 +28,13 @@ struct DirectionalVirtualShadowMetadata
     uint pages_per_axis;
     uint page_size_texels;
     uint page_table_offset;
+    uint coarse_clip_mask;
+    uint reserved0;
+    uint reserved1;
+    uint reserved2;
+    float4 clipmap_world_origin_selection; // xyz clipmap origin ws, w lod bias
+    int4 clip_grid_origin_x_packed[3];
+    int4 clip_grid_origin_y_packed[3];
 
     DirectionalVirtualClipMetadata clip_metadata[OXYGEN_MAX_VIRTUAL_DIRECTIONAL_CLIP_LEVELS];
     float4x4 light_view;
