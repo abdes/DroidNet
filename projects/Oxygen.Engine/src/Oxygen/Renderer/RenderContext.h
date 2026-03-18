@@ -78,7 +78,6 @@ class VirtualShadowClearPass;
 class VirtualShadowInvalidationPass;
 class VirtualShadowPageUpdatePass;
 class VirtualShadowPageAllocPass;
-class VirtualShadowFallbackPass;
 class VirtualShadowHierarchyPass;
 class VirtualShadowSchedulePass;
 class VirtualShadowBuildClearArgsPass;
@@ -105,8 +104,8 @@ using KnownPassTypes = PassTypeList<DepthPrePass, LightCullingPass, ShaderPass,
   ConventionalShadowRasterPass, VirtualShadowPageRasterPass,
   VirtualShadowRequestPass, VirtualShadowClearPass,
   VirtualShadowInvalidationPass, VirtualShadowPageUpdatePass,
-  VirtualShadowPageAllocPass, VirtualShadowFallbackPass,
-  VirtualShadowHierarchyPass, VirtualShadowSchedulePass,
+  VirtualShadowPageAllocPass, VirtualShadowHierarchyPass,
+  VirtualShadowSchedulePass,
   VirtualShadowBuildClearArgsPass, VirtualShadowBuildDrawsPass>;
 
 //! The number of known pass types, used for static array sizing and sanity

@@ -92,11 +92,20 @@ auto VirtualShadowPageAllocPass::DoPrepareResources(
 
   const auto clip_count
     = std::min(metadata->clip_level_count, kMaxSupportedClipLevels);
+  std::array<float, kMaxSupportedClipLevels> clip_origin_x {};
+  std::array<float, kMaxSupportedClipLevels> clip_origin_y {};
+  std::array<float, kMaxSupportedClipLevels> clip_page_world {};
   for (std::uint32_t clip_index = 0U; clip_index < clip_count; ++clip_index) {
     active_clip_grid_origin_x_[clip_index]
       = ResolveDirectionalVirtualClipGridOriginX(*metadata, clip_index);
     active_clip_grid_origin_y_[clip_index]
       = ResolveDirectionalVirtualClipGridOriginY(*metadata, clip_index);
+    clip_origin_x[clip_index]
+      = metadata->clip_metadata[clip_index].origin_page_scale.x;
+    clip_origin_y[clip_index]
+      = metadata->clip_metadata[clip_index].origin_page_scale.y;
+    clip_page_world[clip_index]
+      = metadata->clip_metadata[clip_index].origin_page_scale.z;
   }
 
   const auto request_word_count
@@ -111,10 +120,15 @@ auto VirtualShadowPageAllocPass::DoPrepareResources(
   pass_constants_.Ensure(
     *gfx_, "VirtualShadowPageAllocPass.Constants",
     detail::kVirtualShadowPassConstantsStride);
-  const auto slot = static_cast<std::size_t>(Context().frame_slot.get());
-  const auto pass_constants_index = pass_constants_.Index(slot);
+  const auto base_slot = static_cast<std::size_t>(Context().frame_slot.get())
+    * kPassConstantsSlotsPerFrame;
+  const auto packed_clip_origin_x = detail::PackFloat4(clip_origin_x);
+  const auto packed_clip_origin_y = detail::PackFloat4(clip_origin_y);
+  const auto packed_clip_page_world = detail::PackFloat4(clip_page_world);
 
-  const detail::VirtualShadowPassConstants constants {
+  const auto build_constants
+    = [&](const std::uint32_t phase) -> detail::VirtualShadowPassConstants {
+    return detail::VirtualShadowPassConstants {
     .request_words_srv_index = request_words_srv,
     .page_mark_flags_srv_index = page_mark_flags_srv,
     .page_table_uav_index = page_management_bindings->page_table_uav,
@@ -133,14 +147,24 @@ auto VirtualShadowPageAllocPass::DoPrepareResources(
     .pages_per_level = metadata->pages_per_axis * metadata->pages_per_axis,
     .physical_page_capacity = page_management_bindings->physical_page_capacity,
     .atlas_tiles_per_axis = page_management_bindings->atlas_tiles_per_axis,
+    .phase = phase,
     .clip_grid_origin_x_packed = detail::PackInt4(active_clip_grid_origin_x_),
     .clip_grid_origin_y_packed = detail::PackInt4(active_clip_grid_origin_y_),
+    .clip_origin_x_packed = packed_clip_origin_x,
+    .clip_origin_y_packed = packed_clip_origin_y,
+    .clip_page_world_packed = packed_clip_page_world,
+    };
   };
 
-  auto* slot_ptr = static_cast<std::byte*>(pass_constants_.MappedPtr())
-    + static_cast<std::ptrdiff_t>(slot * detail::kVirtualShadowPassConstantsStride);
-  std::memcpy(slot_ptr, &constants, sizeof(constants));
-  SetPassConstantsIndex(pass_constants_index);
+  for (std::uint32_t phase = 0U; phase < kPassConstantsSlotsPerFrame; ++phase) {
+    const auto slot = base_slot + phase;
+    const auto constants = build_constants(phase);
+    auto* slot_ptr = static_cast<std::byte*>(pass_constants_.MappedPtr())
+      + static_cast<std::ptrdiff_t>(
+        slot * detail::kVirtualShadowPassConstantsStride);
+    std::memcpy(slot_ptr, &constants, sizeof(constants));
+  }
+  SetPassConstantsIndex(pass_constants_.Index(base_slot));
 
   active_dispatch_ = true;
   active_view_id_ = Context().current_view.view_id;
@@ -170,6 +194,13 @@ auto VirtualShadowPageAllocPass::DoExecute(graphics::CommandRecorder& recorder)
     co_return;
   }
 
+  const auto base_slot = static_cast<std::size_t>(Context().frame_slot.get())
+    * kPassConstantsSlotsPerFrame;
+  SetPassConstantsIndex(pass_constants_.Index(base_slot));
+  detail::DispatchVirtualPageManagementPass(
+    *shadow_manager, active_view_id_, recorder, active_dispatch_group_count_);
+
+  SetPassConstantsIndex(pass_constants_.Index(base_slot + 1U));
   detail::DispatchVirtualPageManagementPass(
     *shadow_manager, active_view_id_, recorder, active_dispatch_group_count_);
 
