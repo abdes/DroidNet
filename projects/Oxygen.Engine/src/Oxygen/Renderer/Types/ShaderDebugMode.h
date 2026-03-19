@@ -40,6 +40,10 @@ enum class ShaderDebugMode : uint8_t {
   // IBL mapping debug modes
   kIblFaceIndex = 13, //!< Visualize cubemap face selection (no textures)
   kIblNoBrdfLut = 14, //!< Normal shading with BRDF LUT bypassed
+  kVsmCompare = 15, //!< Scene-mapped VSM compare-state overlay
+  kVsmResolve = 16, //!< Scene-mapped VSM requested-vs-resolved clip overlay
+  kVsmStoredDepth = 17, //!< Scene-mapped VSM stored depth overlay
+  kVsmReceiverDepth = 18, //!< Scene-mapped VSM receiver depth overlay
 };
 
 constexpr auto to_string(ShaderDebugMode mode) -> std::string_view
@@ -61,6 +65,10 @@ constexpr auto to_string(ShaderDebugMode mode) -> std::string_view
       case ShaderDebugMode::kMetalness: return "Metalness";
       case ShaderDebugMode::kIblFaceIndex: return "IblFaceIndex";
       case ShaderDebugMode::kIblNoBrdfLut: return "IblNoBrdfLut";
+      case ShaderDebugMode::kVsmCompare: return "VsmCompare";
+      case ShaderDebugMode::kVsmResolve: return "VsmResolve";
+      case ShaderDebugMode::kVsmStoredDepth: return "VsmStoredDepth";
+      case ShaderDebugMode::kVsmReceiverDepth: return "VsmReceiverDepth";
     // clang-format on
   }
 }

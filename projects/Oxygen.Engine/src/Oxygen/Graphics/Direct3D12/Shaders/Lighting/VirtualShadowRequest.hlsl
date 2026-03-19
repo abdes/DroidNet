@@ -26,7 +26,7 @@ struct VirtualShadowRequestPassConstants
     uint page_mark_flags_uav_index;
     uint request_word_count;
     uint total_page_count;
-    uint border_dilation_texels;
+    float border_dilation_page_fraction;
     uint _pad0;
     uint2 pixel_stride;
     uint _pad_stride0;
@@ -89,11 +89,39 @@ static uint EncodeDirectionalVirtualPageIndex(
     return word_index < pass_constants.request_word_count ? page_index : kInvalidRequestedPageIndex;
 }
 
+static bool AppendDirectionalVirtualPageIndex(
+    uint page_index,
+    inout uint count,
+    inout uint page_indices[9])
+{
+    if (page_index == kInvalidRequestedPageIndex) {
+        return false;
+    }
+
+    [unroll]
+    for (uint i = 0u; i < kMaxRequestsPerLane; ++i) {
+        if (i >= count) {
+            break;
+        }
+        if (page_indices[i] == page_index) {
+            return false;
+        }
+    }
+
+    if (count >= kMaxRequestsPerLane) {
+        return false;
+    }
+
+    page_indices[count++] = page_index;
+    return true;
+}
+
 static uint BuildDirectionalVirtualPageNeighborhood(
     DirectionalVirtualShadowMetadata metadata,
     VirtualShadowRequestPassConstants pass_constants,
     uint clip_index,
     float2 page_coord,
+    float2 page_dilation_offset,
     out uint page_indices[9])
 {
     [unroll]
@@ -105,55 +133,39 @@ static uint BuildDirectionalVirtualPageNeighborhood(
         min((uint)page_coord.x, metadata.pages_per_axis - 1u),
         min((uint)page_coord.y, metadata.pages_per_axis - 1u));
     uint count = 0u;
-    page_indices[count++] =
-        EncodeDirectionalVirtualPageIndex(metadata, pass_constants, clip_index, base_page);
 
-    const float border_guard_pages = min(
-        0.49,
-        (float)pass_constants.border_dilation_texels
-            / max((float)metadata.page_size_texels, 1.0));
-    if (border_guard_pages <= 0.0) {
+    AppendDirectionalVirtualPageIndex(
+        EncodeDirectionalVirtualPageIndex(
+            metadata, pass_constants, clip_index, base_page),
+        count,
+        page_indices);
+
+    if (pass_constants.border_dilation_page_fraction <= 0.0f) {
         return count;
     }
 
-    const float2 page_frac = frac(page_coord);
-    const bool near_left = page_frac.x <= border_guard_pages;
-    const bool near_right = page_frac.x >= (1.0 - border_guard_pages);
-    const bool near_top = page_frac.y <= border_guard_pages;
-    const bool near_bottom = page_frac.y >= (1.0 - border_guard_pages);
-
-    if (near_left) {
-        page_indices[count++] = EncodeDirectionalVirtualPageIndex(
-            metadata, pass_constants, clip_index, base_page + int2(-1, 0));
-    }
-    if (near_right) {
-        page_indices[count++] = EncodeDirectionalVirtualPageIndex(
-            metadata, pass_constants, clip_index, base_page + int2(1, 0));
-    }
-    if (near_top) {
-        page_indices[count++] = EncodeDirectionalVirtualPageIndex(
-            metadata, pass_constants, clip_index, base_page + int2(0, -1));
-    }
-    if (near_bottom) {
-        page_indices[count++] = EncodeDirectionalVirtualPageIndex(
-            metadata, pass_constants, clip_index, base_page + int2(0, 1));
-    }
-    if (near_left && near_top) {
-        page_indices[count++] = EncodeDirectionalVirtualPageIndex(
-            metadata, pass_constants, clip_index, base_page + int2(-1, -1));
-    }
-    if (near_left && near_bottom) {
-        page_indices[count++] = EncodeDirectionalVirtualPageIndex(
-            metadata, pass_constants, clip_index, base_page + int2(-1, 1));
-    }
-    if (near_right && near_top) {
-        page_indices[count++] = EncodeDirectionalVirtualPageIndex(
-            metadata, pass_constants, clip_index, base_page + int2(1, -1));
-    }
-    if (near_right && near_bottom) {
-        page_indices[count++] = EncodeDirectionalVirtualPageIndex(
-            metadata, pass_constants, clip_index, base_page + int2(1, 1));
-    }
+    AppendDirectionalVirtualPageIndex(
+        EncodeDirectionalVirtualPageIndex(
+            metadata,
+            pass_constants,
+            clip_index,
+            int2(clamp(
+                page_coord + page_dilation_offset,
+                0.0.xx,
+                float2(metadata.pages_per_axis - 1u, metadata.pages_per_axis - 1u)))),
+        count,
+        page_indices);
+    AppendDirectionalVirtualPageIndex(
+        EncodeDirectionalVirtualPageIndex(
+            metadata,
+            pass_constants,
+            clip_index,
+            int2(clamp(
+                page_coord - page_dilation_offset,
+                0.0.xx,
+                float2(metadata.pages_per_axis - 1u, metadata.pages_per_axis - 1u)))),
+        count,
+        page_indices);
 
     return count;
 }
@@ -169,15 +181,14 @@ static void MarkDirectionalVirtualCoarsePages(
         return;
     }
 
-    const float2 clipmap_origin_light_xy =
-        mul(metadata.light_view, float4(metadata.clipmap_world_origin_selection.xyz, 1.0f)).xy;
-
     [loop]
     for (uint clip_index = 0u; clip_index < metadata.clip_level_count; ++clip_index) {
         if (((metadata.coarse_clip_mask >> clip_index) & 1u) == 0u) {
             continue;
         }
 
+        const float2 clipmap_origin_light_xy =
+            mul(metadata.light_view, float4(metadata.clipmap_world_origin_selection.xyz, 1.0f)).xy;
         float2 center_page_float = 0.0.xx;
         if (!ProjectDirectionalVirtualClip(
                 metadata,
@@ -231,7 +242,9 @@ static float3 ReconstructWorldPosition(
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
-void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
+void CS(
+    uint3 dispatch_thread_id : SV_DispatchThreadID,
+    uint group_index : SV_GroupIndex)
 {
     if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX
         || !BX_IN_GLOBAL_SRV(g_PassConstantsIndex)) {
@@ -298,11 +311,18 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
                 float2 request_page_coord = 0.0.xx;
                 if (ProjectDirectionalVirtualClip(
                         metadata, clip_index, light_view_pos.xy, request_page_coord)) {
+                    const float2 page_dilation_dither = float2(
+                        (group_index & 1u) != 0u ? 1.0f : -1.0f,
+                        (group_index & 2u) != 0u ? 1.0f : -1.0f);
+                    const float2 page_dilation_offset =
+                        pass_constants.border_dilation_page_fraction
+                            * page_dilation_dither;
                     const uint page_count = BuildDirectionalVirtualPageNeighborhood(
                         metadata,
                         pass_constants,
                         clip_index,
                         request_page_coord,
+                        page_dilation_offset,
                         local_page_indices);
                     [unroll]
                     for (uint page_slot = 0u; page_slot < kMaxRequestsPerLane; ++page_slot) {

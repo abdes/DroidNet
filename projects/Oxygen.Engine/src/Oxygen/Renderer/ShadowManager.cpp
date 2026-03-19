@@ -105,9 +105,23 @@ ShadowManager::ShadowManager(const observer_ptr<Graphics> gfx,
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   DCHECK_NOTNULL_F(staging_provider_, "expecting valid staging provider");
   DCHECK_NOTNULL_F(inline_transfers_, "expecting valid transfer coordinator");
+  if (virtual_backend_) {
+    virtual_backend_->SetDirectionalBiasSettings(
+      directional_virtual_bias_settings_);
+  }
 }
 
 ShadowManager::~ShadowManager() = default;
+
+auto ShadowManager::SetDirectionalVirtualBiasSettings(
+  const DirectionalVirtualBiasSettings& settings) noexcept -> void
+{
+  directional_virtual_bias_settings_ = settings;
+  if (virtual_backend_) {
+    virtual_backend_->SetDirectionalBiasSettings(
+      directional_virtual_bias_settings_);
+  }
+}
 
 auto ShadowManager::OnFrameStart(RendererTag tag,
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
@@ -135,6 +149,17 @@ auto ShadowManager::PublishForView(const ViewId view_id,
   std::optional<engine::DirectionalShadowCandidate> synthetic_sun_candidate;
   if (synthetic_sun_shadow != nullptr && synthetic_sun_shadow->enabled) {
     synthetic_sun_candidate = BuildSyntheticSunCandidate(*synthetic_sun_shadow);
+    static bool logged_synthetic_sun_candidate = false;
+    if (!logged_synthetic_sun_candidate) {
+      LOG_F(INFO,
+        "ShadowManager synthetic sun candidate: bias={} normal_bias={} direction=({}, {}, {})",
+        synthetic_sun_candidate->bias,
+        synthetic_sun_candidate->normal_bias,
+        synthetic_sun_candidate->direction_ws.x,
+        synthetic_sun_candidate->direction_ws.y,
+        synthetic_sun_candidate->direction_ws.z);
+      logged_synthetic_sun_candidate = true;
+    }
     candidates_storage.push_back(*synthetic_sun_candidate);
   }
 

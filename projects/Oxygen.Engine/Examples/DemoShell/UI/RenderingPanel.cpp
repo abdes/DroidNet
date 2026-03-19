@@ -113,6 +113,10 @@ void RenderingPanel::DrawDebugModes()
     || current_mode == ShaderDebugMode::kIblIrradiance
     || current_mode == ShaderDebugMode::kIblFaceIndex
     || current_mode == ShaderDebugMode::kIblNoBrdfLut
+    || current_mode == ShaderDebugMode::kVsmCompare
+    || current_mode == ShaderDebugMode::kVsmResolve
+    || current_mode == ShaderDebugMode::kVsmStoredDepth
+    || current_mode == ShaderDebugMode::kVsmReceiverDepth
     || current_mode == ShaderDebugMode::kWorldNormals
     || current_mode == ShaderDebugMode::kRoughness
     || current_mode == ShaderDebugMode::kMetalness;
@@ -176,6 +180,26 @@ void RenderingPanel::DrawDebugModes()
   if (ImGui::RadioButton(
         "IBL No BRDF LUT", current_mode == ShaderDebugMode::kIblNoBrdfLut)) {
     vm_->SetDebugMode(ShaderDebugMode::kIblNoBrdfLut);
+  }
+
+  if (ImGui::RadioButton(
+        "VSM Compare", current_mode == ShaderDebugMode::kVsmCompare)) {
+    vm_->SetDebugMode(ShaderDebugMode::kVsmCompare);
+  }
+
+  if (ImGui::RadioButton(
+        "VSM Resolve", current_mode == ShaderDebugMode::kVsmResolve)) {
+    vm_->SetDebugMode(ShaderDebugMode::kVsmResolve);
+  }
+
+  if (ImGui::RadioButton(
+        "VSM Stored Depth", current_mode == ShaderDebugMode::kVsmStoredDepth)) {
+    vm_->SetDebugMode(ShaderDebugMode::kVsmStoredDepth);
+  }
+
+  if (ImGui::RadioButton("VSM Receiver Depth",
+        current_mode == ShaderDebugMode::kVsmReceiverDepth)) {
+    vm_->SetDebugMode(ShaderDebugMode::kVsmReceiverDepth);
   }
 
   if (disable_debug_modes) {

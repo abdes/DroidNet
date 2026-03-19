@@ -28,6 +28,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Types/DirectionalShadowCandidate.h>
+#include <Oxygen/Renderer/Types/DirectionalVirtualBiasSettings.h>
 #include <Oxygen/Renderer/Types/ShadowFramePublication.h>
 #include <Oxygen/Renderer/Types/ShadowInstanceMetadata.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
@@ -81,6 +82,8 @@ public:
     ViewId view_id, graphics::CommandRecorder& recorder) -> void;
   OXGN_RNDR_API auto SetPublishedViewFrameBindingsSlot(
     ViewId view_id, engine::BindlessViewFrameBindingsSlot slot) -> void;
+  OXGN_RNDR_API auto SetDirectionalBiasSettings(
+    const renderer::DirectionalVirtualBiasSettings& settings) noexcept -> void;
 
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetFramePublication(
     ViewId view_id) const noexcept -> const ShadowFramePublication*;
@@ -182,6 +185,7 @@ private:
   ::oxygen::ShadowQualityTier shadow_quality_tier_ {
     ::oxygen::ShadowQualityTier::kHigh
   };
+  renderer::DirectionalVirtualBiasSettings directional_bias_settings_ {};
   frame::SequenceNumber frame_sequence_ { 0U };
   frame::Slot frame_slot_ { frame::kInvalidSlot };
 

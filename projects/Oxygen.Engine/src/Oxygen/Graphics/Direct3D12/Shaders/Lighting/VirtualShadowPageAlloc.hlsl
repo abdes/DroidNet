@@ -9,6 +9,7 @@
 static bool TryPropagateDirectionalFallbackPage(
     VirtualShadowPassConstants pass_constants,
     RWStructuredBuffer<uint> page_table,
+    RWStructuredBuffer<uint> page_flags,
     uint global_page_index,
     uint clip_index,
     uint page_x,
@@ -70,7 +71,6 @@ static bool TryPropagateDirectionalFallbackPage(
         if (!VirtualShadowPageTableEntryHasCurrentLod(candidate_entry)) {
             continue;
         }
-
         page_table[global_page_index] = PackVirtualShadowPageTableEntry(
             candidate_entry.tile_x,
             candidate_entry.tile_y,
@@ -173,6 +173,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         TryPropagateDirectionalFallbackPage(
             pass_constants,
             page_table,
+            page_flags,
             thread_index,
             clip_index,
             page_x,
@@ -195,6 +196,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         TryPropagateDirectionalFallbackPage(
             pass_constants,
             page_table,
+            page_flags,
             thread_index,
             clip_index,
             page_x,
@@ -217,6 +219,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         TryPropagateDirectionalFallbackPage(
             pass_constants,
             page_table,
+            page_flags,
             thread_index,
             clip_index,
             page_x,

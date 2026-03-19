@@ -287,6 +287,10 @@ namespace {
       case kWorldNormals:
       case kRoughness:
       case kMetalness:
+      case kVsmCompare:
+      case kVsmResolve:
+      case kVsmStoredDepth:
+      case kVsmReceiverDepth:
         return true;
       case kIblSpecular:
       case kIblRawSky:

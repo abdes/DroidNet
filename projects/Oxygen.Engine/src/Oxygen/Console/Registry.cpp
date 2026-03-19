@@ -184,6 +184,7 @@ auto Registry::RegisterCVar(CVarDefinition definition) -> CVarHandle
   if (!inserted) {
     return CVarHandle {};
   }
+  (void)ApplyCachedArchiveOverride(it->second);
   return CVarHandle { it->second.id };
 }
 
@@ -435,6 +436,8 @@ auto Registry::LoadArchiveCVars(const oxygen::PathFinder& path_finder,
     };
   }
 
+  archived_cvar_text_values_.clear();
+  archived_cvar_context_ = context;
   size_t applied = 0;
   const auto& entries = payload[std::string(kArchiveJsonEntriesKey)];
   for (const auto& entry : entries) {
@@ -451,21 +454,15 @@ auto Registry::LoadArchiveCVars(const oxygen::PathFinder& path_finder,
 
     const auto name
       = entry[std::string(kArchiveJsonNameKey)].get<std::string>();
+    const auto& value_entry = entry[std::string(kArchiveJsonValueKey)];
+    archived_cvar_text_values_[name]
+      = value_entry.is_string() ? value_entry.get<std::string>() : value_entry.dump();
+
     const auto cvar_it = cvars_.find(name);
     if (cvar_it == cvars_.end()) {
       continue;
     }
-    auto& snapshot = cvar_it->second.snapshot;
-    CVarValue loaded_value;
-    if (!DeserializeCVarValue(CVarTypeOf(snapshot.current_value),
-          entry[std::string(kArchiveJsonValueKey)], loaded_value)) {
-      continue;
-    }
-
-    const auto text_value = ValueToString(loaded_value);
-    const auto result
-      = SetCVarFromText({ .name = name, .text = text_value }, context);
-    if (result.status == ExecutionStatus::kOk) {
+    if (ApplyCachedArchiveOverride(cvar_it->second)) {
       ++applied;
     }
   }
@@ -479,6 +476,24 @@ auto Registry::LoadArchiveCVars(const oxygen::PathFinder& path_finder,
       + archive_path.generic_string(),
     .error = {},
   };
+}
+
+auto Registry::ApplyCachedArchiveOverride(CVarEntry& cvar) -> bool
+{
+  if (!HasFlag(cvar.snapshot.definition.flags, CVarFlags::kArchive)
+    || !archived_cvar_context_.has_value()) {
+    return false;
+  }
+
+  const auto it = archived_cvar_text_values_.find(cvar.snapshot.definition.name);
+  if (it == archived_cvar_text_values_.end()) {
+    return false;
+  }
+
+  const auto result = SetCVarFromText(
+    { .name = cvar.snapshot.definition.name, .text = it->second },
+    *archived_cvar_context_);
+  return result.status == ExecutionStatus::kOk;
 }
 
 auto Registry::SaveHistory(const oxygen::PathFinder& path_finder) const

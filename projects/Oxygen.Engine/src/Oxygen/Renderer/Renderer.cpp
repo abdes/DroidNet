@@ -111,16 +111,38 @@ constexpr std::string_view kCVarRendererTextureDumpTopN
   = "rndr.texture_dump_top_n";
 constexpr std::string_view kCVarRendererLastFrameStats
   = "rndr.last_frame_stats";
+constexpr std::string_view kCVarRendererSyntheticDirectionalBias
+  = "rndr.directional_shadow.synthetic_bias";
+constexpr std::string_view kCVarRendererSyntheticDirectionalNormalBias
+  = "rndr.directional_shadow.synthetic_normal_bias";
+constexpr std::string_view kCVarRendererVsmDirectionalReceiverNormalBiasScale
+  = "rndr.vsm.directional_receiver_normal_bias_scale";
+constexpr std::string_view kCVarRendererVsmDirectionalReceiverConstantBiasScale
+  = "rndr.vsm.directional_receiver_constant_bias_scale";
+constexpr std::string_view kCVarRendererVsmDirectionalReceiverSlopeBiasScale
+  = "rndr.vsm.directional_receiver_slope_bias_scale";
+constexpr std::string_view kCVarRendererVsmDirectionalRasterConstantBiasScale
+  = "rndr.vsm.directional_raster_constant_bias_scale";
+constexpr std::string_view kCVarRendererVsmDirectionalRasterSlopeBiasScale
+  = "rndr.vsm.directional_raster_slope_bias_scale";
 constexpr std::string_view kCommandRendererDumpTextureMemory
   = "rndr.dump_texture_memory";
 constexpr std::string_view kCommandRendererDumpStats = "rndr.dump_stats";
 constexpr int64_t kDefaultTextureDumpTopN = 20;
 constexpr int64_t kMinTextureDumpTopN = 1;
 constexpr int64_t kMaxTextureDumpTopN = 500;
+constexpr float kDefaultSyntheticDirectionalBias = 0.0F;
+constexpr float kDefaultSyntheticDirectionalNormalBias = 0.02F;
+constexpr float kDefaultVsmDirectionalReceiverNormalBiasScale = 1.0F;
+constexpr float kDefaultVsmDirectionalReceiverConstantBiasScale = 0.0F;
+constexpr float kDefaultVsmDirectionalReceiverSlopeBiasScale = 0.5F;
+constexpr float kDefaultVsmDirectionalRasterConstantBiasScale = 0.1F;
+constexpr float kDefaultVsmDirectionalRasterSlopeBiasScale = 0.35F;
 
 auto BuildSyntheticSunShadowInput(
   const oxygen::engine::RenderContext& render_context,
-  const oxygen::engine::SyntheticSunData& resolved_sun)
+  const oxygen::engine::SyntheticSunData& resolved_sun,
+  const float synthetic_constant_bias, const float synthetic_normal_bias)
   -> std::optional<oxygen::renderer::ShadowManager::SyntheticSunShadowInput>
 {
   const auto scene = render_context.GetScene();
@@ -146,8 +168,8 @@ auto BuildSyntheticSunShadowInput(
   return oxygen::renderer::ShadowManager::SyntheticSunShadowInput {
     .enabled = true,
     .direction_ws = -resolved_sun.GetDirection(),
-    .bias = oxygen::scene::CommonLightProperties {}.shadow.bias,
-    .normal_bias = oxygen::scene::CommonLightProperties {}.shadow.normal_bias,
+    .bias = synthetic_constant_bias,
+    .normal_bias = synthetic_normal_bias,
     .resolution_hint = static_cast<std::uint32_t>(
       oxygen::scene::CommonLightProperties {}.shadow.resolution_hint),
     .cascade_count = shadow_cascades.cascade_count,
@@ -634,6 +656,8 @@ auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
         observer_ptr { inline_staging_provider_.get() },
         observer_ptr { inline_transfers_.get() }, config_.shadow_quality_tier,
         config_.directional_shadow_policy);
+    shadow_manager_->SetDirectionalVirtualBiasSettings(
+      directional_shadow_bias_state_.virtual_directional);
 
     // Initialize the ViewConstants manager for per-view, per-slot upload-heap
     // storage.
@@ -742,6 +766,95 @@ auto Renderer::RegisterConsoleBindings(
     .max_value = std::nullopt,
   });
 
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarRendererSyntheticDirectionalBias),
+    .help = "Synthetic sun directional constant bias",
+    .default_value = static_cast<double>(kDefaultSyntheticDirectionalBias),
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 0.0,
+    .max_value = 0.01,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarRendererSyntheticDirectionalNormalBias),
+    .help = "Synthetic sun directional normal bias",
+    .default_value
+    = static_cast<double>(kDefaultSyntheticDirectionalNormalBias),
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 0.0,
+    .max_value = 8.0,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarRendererVsmDirectionalReceiverNormalBiasScale),
+    .help = "Directional VSM receiver normal-bias scale",
+    .default_value
+    = static_cast<double>(kDefaultVsmDirectionalReceiverNormalBiasScale),
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 0.0,
+    .max_value = 8.0,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarRendererVsmDirectionalReceiverConstantBiasScale),
+    .help = "Directional VSM receiver constant-bias scale",
+    .default_value
+    = static_cast<double>(kDefaultVsmDirectionalReceiverConstantBiasScale),
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 0.0,
+    .max_value = 8.0,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarRendererVsmDirectionalReceiverSlopeBiasScale),
+    .help = "Directional VSM receiver slope-bias scale",
+    .default_value
+    = static_cast<double>(kDefaultVsmDirectionalReceiverSlopeBiasScale),
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 0.0,
+    .max_value = 8.0,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarRendererVsmDirectionalRasterConstantBiasScale),
+    .help = "Directional VSM raster constant-bias scale",
+    .default_value
+    = static_cast<double>(kDefaultVsmDirectionalRasterConstantBiasScale),
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 0.0,
+    .max_value = 8.0,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarRendererVsmDirectionalRasterSlopeBiasScale),
+    .help = "Directional VSM raster slope-bias scale",
+    .default_value
+    = static_cast<double>(kDefaultVsmDirectionalRasterSlopeBiasScale),
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 0.0,
+    .max_value = 8.0,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarRendererVsmDirectionalRasterConstantBiasScale),
+    .help = "Directional VSM raster constant-bias scale",
+    .default_value
+    = static_cast<double>(kDefaultVsmDirectionalRasterConstantBiasScale),
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 0.0,
+    .max_value = 8.0,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarRendererVsmDirectionalRasterSlopeBiasScale),
+    .help = "Directional VSM raster slope-bias scale",
+    .default_value
+    = static_cast<double>(kDefaultVsmDirectionalRasterSlopeBiasScale),
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 0.0,
+    .max_value = 8.0,
+  });
+
   (void)console->RegisterCommand(console::CommandDefinition {
     .name = std::string(kCommandRendererDumpTextureMemory),
     .help = "Dump renderer texture memory usage [top_n]",
@@ -819,7 +932,101 @@ auto Renderer::RegisterConsoleBindings(
 auto Renderer::ApplyConsoleCVars(
   const observer_ptr<const console::Console> console) noexcept -> void
 {
-  (void)console;
+  if (console == nullptr) {
+    return;
+  }
+
+  double synthetic_constant_bias
+    = directional_shadow_bias_state_.synthetic_constant_bias;
+  if (console->TryGetCVarValue<double>(
+        kCVarRendererSyntheticDirectionalBias, synthetic_constant_bias)) {
+    directional_shadow_bias_state_.synthetic_constant_bias
+      = static_cast<float>(synthetic_constant_bias);
+  }
+
+  double synthetic_normal_bias
+    = directional_shadow_bias_state_.synthetic_normal_bias;
+  if (console->TryGetCVarValue<double>(
+        kCVarRendererSyntheticDirectionalNormalBias, synthetic_normal_bias)) {
+    directional_shadow_bias_state_.synthetic_normal_bias
+      = static_cast<float>(synthetic_normal_bias);
+  }
+
+  double receiver_normal_bias_scale
+    = directional_shadow_bias_state_.virtual_directional
+        .receiver_normal_bias_scale;
+  if (console->TryGetCVarValue<double>(
+        kCVarRendererVsmDirectionalReceiverNormalBiasScale,
+        receiver_normal_bias_scale)) {
+    directional_shadow_bias_state_.virtual_directional
+      .receiver_normal_bias_scale
+      = static_cast<float>(receiver_normal_bias_scale);
+  }
+
+  double receiver_constant_bias_scale
+    = directional_shadow_bias_state_.virtual_directional
+        .receiver_constant_bias_scale;
+  if (console->TryGetCVarValue<double>(
+        kCVarRendererVsmDirectionalReceiverConstantBiasScale,
+        receiver_constant_bias_scale)) {
+    directional_shadow_bias_state_.virtual_directional
+      .receiver_constant_bias_scale
+      = static_cast<float>(receiver_constant_bias_scale);
+  }
+
+  double receiver_slope_bias_scale
+    = directional_shadow_bias_state_.virtual_directional
+        .receiver_slope_bias_scale;
+  if (console->TryGetCVarValue<double>(
+        kCVarRendererVsmDirectionalReceiverSlopeBiasScale,
+        receiver_slope_bias_scale)) {
+    directional_shadow_bias_state_.virtual_directional
+      .receiver_slope_bias_scale
+      = static_cast<float>(receiver_slope_bias_scale);
+  }
+
+  double raster_constant_bias_scale
+    = directional_shadow_bias_state_.virtual_directional
+        .raster_constant_bias_scale;
+  if (console->TryGetCVarValue<double>(
+        kCVarRendererVsmDirectionalRasterConstantBiasScale,
+        raster_constant_bias_scale)) {
+    directional_shadow_bias_state_.virtual_directional
+      .raster_constant_bias_scale
+      = static_cast<float>(raster_constant_bias_scale);
+  }
+
+  double raster_slope_bias_scale
+    = directional_shadow_bias_state_.virtual_directional
+        .raster_slope_bias_scale;
+  if (console->TryGetCVarValue<double>(
+        kCVarRendererVsmDirectionalRasterSlopeBiasScale,
+        raster_slope_bias_scale)) {
+    directional_shadow_bias_state_.virtual_directional
+      .raster_slope_bias_scale
+      = static_cast<float>(raster_slope_bias_scale);
+  }
+
+  static bool logged_renderer_bias_cvars = false;
+  if (!logged_renderer_bias_cvars) {
+    LOG_F(INFO,
+      "Renderer bias CVars: synthetic_constant_bias={} synthetic_normal_bias={} "
+      "receiver_normal_scale={} receiver_constant_scale={} receiver_slope_scale={} "
+      "raster_constant_scale={} raster_slope_scale={}",
+      directional_shadow_bias_state_.synthetic_constant_bias,
+      directional_shadow_bias_state_.synthetic_normal_bias,
+      directional_shadow_bias_state_.virtual_directional.receiver_normal_bias_scale,
+      directional_shadow_bias_state_.virtual_directional.receiver_constant_bias_scale,
+      directional_shadow_bias_state_.virtual_directional.receiver_slope_bias_scale,
+      directional_shadow_bias_state_.virtual_directional.raster_constant_bias_scale,
+      directional_shadow_bias_state_.virtual_directional.raster_slope_bias_scale);
+    logged_renderer_bias_cvars = true;
+  }
+
+  if (shadow_manager_) {
+    shadow_manager_->SetDirectionalVirtualBiasSettings(
+      directional_shadow_bias_state_.virtual_directional);
+  }
 }
 
 auto Renderer::OnShutdown() noexcept -> void
@@ -2044,8 +2251,10 @@ auto Renderer::RepublishCurrentViewBindings(
           = prepared_it != prepared_frames_.end()
           ? prepared_it->second.visible_receiver_bounding_spheres
           : std::span<const glm::vec4> {};
-        const auto synthetic_sun_shadow
-          = BuildSyntheticSunShadowInput(render_context, runtime_state.sun);
+        const auto synthetic_sun_shadow = BuildSyntheticSunShadowInput(
+          render_context, runtime_state.sun,
+          directional_shadow_bias_state_.synthetic_constant_bias,
+          directional_shadow_bias_state_.synthetic_normal_bias);
         const auto shadow_caster_content_hash
           = HashPreparedShadowCasterContent(prepared);
         const auto shadow_view

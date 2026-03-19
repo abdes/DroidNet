@@ -179,8 +179,14 @@ static float ComputeDirectionalVirtualShaderDepthBias(
                 : max_slope,
             0.0f,
             max_slope);
-    const float constant_bias = max(metadata.constant_bias, 0.0f);
-    const float slope_bias = max(metadata.normal_bias, 0.0f);
+    const float texel_world =
+        max(ComputeDirectionalVirtualLogicalTexelWorld(metadata, clip_index), 1.0e-4f);
+    const float renderer_constant_bias =
+        texel_world * metadata.raster_constant_bias_scale;
+    const float renderer_slope_bias =
+        texel_world * metadata.raster_slope_bias_scale;
+    const float constant_bias = max(metadata.constant_bias + renderer_constant_bias, 0.0f);
+    const float slope_bias = max(metadata.normal_bias + renderer_slope_bias, 0.0f);
     return abs(clip.origin_page_scale.w) * (constant_bias + slope_bias * slope);
 }
 #endif

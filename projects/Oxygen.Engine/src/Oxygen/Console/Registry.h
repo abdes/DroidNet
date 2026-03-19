@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -154,6 +155,7 @@ private:
     -> void;
   [[nodiscard]] static auto ValueToString(const CVarValue& value)
     -> std::string;
+  auto ApplyCachedArchiveOverride(CVarEntry& cvar) -> bool;
   void RecordCompletionUsage(std::string_view token);
 
   History history_;
@@ -186,6 +188,8 @@ private:
   };
 
   std::unordered_map<std::string, CVarEntry> cvars_;
+  std::unordered_map<std::string, std::string> archived_cvar_text_values_;
+  std::optional<CommandContext> archived_cvar_context_;
   std::unordered_map<std::string, CommandDefinition> commands_;
   size_t execution_record_capacity_ { kDefaultExecutionRecordCapacity };
   std::vector<ExecutionRecord> execution_records_;
