@@ -136,6 +136,7 @@ auto ShadowManager::OnFrameStart(RendererTag tag,
 
 auto ShadowManager::PublishForView(const ViewId view_id,
   const engine::ViewConstants& view_constants, const LightManager& lights,
+  const float camera_viewport_width,
   const std::span<const glm::vec4> shadow_caster_bounds,
   const std::span<const glm::vec4> visible_receiver_bounds,
   const SyntheticSunShadowInput* synthetic_sun_shadow,
@@ -187,7 +188,7 @@ auto ShadowManager::PublishForView(const ViewId view_id,
 
   if (virtual_eligible) {
     const auto publication = virtual_backend_->PublishView(view_id,
-      view_constants, virtual_candidates, shadow_caster_bounds,
+      view_constants, camera_viewport_width, virtual_candidates, shadow_caster_bounds,
       visible_receiver_bounds, gpu_budget, shadow_caster_content_hash);
     if (publication.shadow_instance_metadata_srv
       != kInvalidShaderVisibleIndex) {

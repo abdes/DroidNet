@@ -44,6 +44,10 @@ enum class ShaderDebugMode : uint8_t {
   kVsmResolve = 16, //!< Scene-mapped VSM requested-vs-resolved clip overlay
   kVsmStoredDepth = 17, //!< Scene-mapped VSM stored depth overlay
   kVsmReceiverDepth = 18, //!< Scene-mapped VSM receiver depth overlay
+  kVsmRequestedClip = 19, //!< Scene-mapped VSM requested clip-family overlay
+  kVsmResolvedClip = 20, //!< Scene-mapped VSM resolved clip-family overlay
+  kVsmClipDelta = 21, //!< Scene-mapped VSM resolved-requested clip delta
+  kVsmDepthDelta = 22, //!< Scene-mapped VSM remapped receiver-vs-stored depth delta
 };
 
 constexpr auto to_string(ShaderDebugMode mode) -> std::string_view
@@ -69,6 +73,10 @@ constexpr auto to_string(ShaderDebugMode mode) -> std::string_view
       case ShaderDebugMode::kVsmResolve: return "VsmResolve";
       case ShaderDebugMode::kVsmStoredDepth: return "VsmStoredDepth";
       case ShaderDebugMode::kVsmReceiverDepth: return "VsmReceiverDepth";
+      case ShaderDebugMode::kVsmRequestedClip: return "VsmRequestedClip";
+      case ShaderDebugMode::kVsmResolvedClip: return "VsmResolvedClip";
+      case ShaderDebugMode::kVsmClipDelta: return "VsmClipDelta";
+      case ShaderDebugMode::kVsmDepthDelta: return "VsmDepthDelta";
     // clang-format on
   }
 }

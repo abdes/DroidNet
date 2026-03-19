@@ -148,11 +148,11 @@ static float ComputeDirectionalVirtualContinuousClipLevel(
     }
 
     const float distance_to_clipmap_origin =
-        length(world_pos - metadata.clipmap_world_origin_selection.xyz);
+        length(world_pos - metadata.clipmap_receiver_origin_lod_bias.xyz);
     const float continuous_level =
         (distance_to_clipmap_origin > 1.0e-6f)
             ? log2(max(distance_to_clipmap_origin, 1.0e-6f))
-                + metadata.clipmap_world_origin_selection.w
+                + metadata.clipmap_receiver_origin_lod_bias.w
             : 0.0f;
     return max(continuous_level, 0.0f);
 }

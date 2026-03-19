@@ -66,6 +66,7 @@ public:
 
   OXGN_RNDR_API auto PublishView(ViewId view_id,
     const engine::ViewConstants& view_constants,
+    float camera_viewport_width,
     std::span<const engine::DirectionalShadowCandidate> directional_candidates,
     std::span<const glm::vec4> shadow_caster_bounds,
     std::span<const glm::vec4> visible_receiver_bounds,
@@ -267,6 +268,7 @@ private:
   OXGN_RNDR_API auto ReleasePhysicalPool() -> void;
   [[nodiscard]] OXGN_RNDR_NDAPI auto PrepareDirectionalVirtualClipmapSetup(
     const engine::ViewConstants& view_constants,
+    float camera_viewport_width,
     const engine::DirectionalShadowCandidate& candidate,
     std::span<const glm::vec4> shadow_caster_bounds,
     std::span<const glm::vec4> visible_receiver_bounds,
@@ -274,6 +276,7 @@ private:
     -> std::optional<DirectionalVirtualClipmapSetup>;
   OXGN_RNDR_API auto BuildDirectionalVirtualViewState(
     const engine::ViewConstants& view_constants,
+    float camera_viewport_width,
     const engine::DirectionalShadowCandidate& candidate,
     std::span<const glm::vec4> shadow_caster_bounds,
     std::span<const glm::vec4> visible_receiver_bounds,

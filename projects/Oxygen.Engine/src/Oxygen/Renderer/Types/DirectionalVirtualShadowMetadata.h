@@ -21,9 +21,11 @@ struct alignas(16) DirectionalVirtualClipMetadata {
     1.0F }; // xy origin_ls, z page_world_size, w depth_scale
   glm::vec4 bias_reserved { 0.0F, 0.0F, 0.0F,
     0.0F }; // x depth_bias, yzw reserved
+  glm::ivec4 clipmap_level_data { 0, 0, 0,
+    0 }; // x clipmap level, y remaining levels, zw reserved
 };
 
-static_assert(sizeof(DirectionalVirtualClipMetadata) == 32U,
+static_assert(sizeof(DirectionalVirtualClipMetadata) == 48U,
   "DirectionalVirtualClipMetadata size must match HLSL packing");
 
 struct alignas(16) DirectionalVirtualShadowMetadata {
@@ -44,8 +46,10 @@ struct alignas(16) DirectionalVirtualShadowMetadata {
   float raster_slope_bias_scale { 0.0F };
   std::uint32_t reserved0 { 0U };
   std::uint32_t reserved1 { 0U };
-  glm::vec4 clipmap_world_origin_selection { 0.0F, 0.0F, 0.0F,
-    0.0F }; // xyz clipmap origin ws, w lod bias
+  glm::vec4 clipmap_selection_world_origin_lod_bias { 0.0F, 0.0F, 0.0F,
+    0.0F }; // xyz clipmap selection origin ws, w selection lod bias
+  glm::vec4 clipmap_receiver_origin_lod_bias { 0.0F, 0.0F, 0.0F,
+    0.0F }; // xyz receiver-bias origin ws, w receiver clip bias
   std::array<glm::ivec4, 3> clip_grid_origin_x_packed {};
   std::array<glm::ivec4, 3> clip_grid_origin_y_packed {};
 
@@ -54,7 +58,7 @@ struct alignas(16) DirectionalVirtualShadowMetadata {
   glm::mat4 light_view { 1.0F };
 };
 
-static_assert(sizeof(DirectionalVirtualShadowMetadata) == 624U,
+static_assert(sizeof(DirectionalVirtualShadowMetadata) == 832U,
   "DirectionalVirtualShadowMetadata size must match HLSL packing");
 static_assert(sizeof(DirectionalVirtualShadowMetadata) % 16U == 0U,
   "DirectionalVirtualShadowMetadata size must be 16-byte aligned");

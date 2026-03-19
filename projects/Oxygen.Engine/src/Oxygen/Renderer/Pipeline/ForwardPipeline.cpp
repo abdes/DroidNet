@@ -291,6 +291,10 @@ namespace {
       case kVsmResolve:
       case kVsmStoredDepth:
       case kVsmReceiverDepth:
+      case kVsmRequestedClip:
+      case kVsmResolvedClip:
+      case kVsmClipDelta:
+      case kVsmDepthDelta:
         return true;
       case kIblSpecular:
       case kIblRawSky:

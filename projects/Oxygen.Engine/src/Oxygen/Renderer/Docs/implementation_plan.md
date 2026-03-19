@@ -580,6 +580,133 @@ Execution note, March 9, 2026:
   atlas-UV helper no longer accepts a hardcoded `1u` radius argument, and the
   temporary unused-parameter shims in the touched shaders were removed so the
   code reflects the fixed one-footprint hard-shadow contract directly.
+- March 19, 2026 UE5-parity execution plan for directional VSMs:
+  the current live-scene fixes removed the visible clip-family and fallback
+  instability bugs, but Oxygen still diverges from UE5's directional contract
+  in several structural places. The remaining work must be implemented in this
+  order and validated after each step on the untouched current live scene:
+  1. Publish UE-style directional projection metadata.
+     Oxygen currently encodes clip selection through
+     `clipmap_world_origin_resolution_lod_bias` plus per-clip page/depth fields in
+     `DirectionalVirtualShadowMetadata`, while UE publishes explicit per-clip
+     projection data (`ClipmapWorldOrigin`, `ResolutionLodBias`,
+     `ClipmapCornerRelativeOffset`, `ClipmapLevel`,
+     `ClipmapLevelCountRemaining`, and projection matrices) in
+     `VirtualShadowMapProjectionStructs.ush`. We need matching published data
+     in `DirectionalVirtualShadowMetadata.{h,hlsli}` and
+     `VirtualShadowMapBackend.cpp` so shader selection/remap no longer depends
+     on Oxygen-only encodings.
+  2. Replace nearest-clip search with exact requested-clip selection.
+     `SelectDirectionalVirtualClipForDistance` in `ShadowHelpers.hlsli`
+     currently computes a continuous level and then searches neighboring clips
+     until one projects. UE's `CalcAbsoluteClipmapLevel` / `CalcClipmapLevel`
+     choose the requested clip directly from the unbiased receiver. Oxygen must
+     switch to that exact contract and stop using neighbor search as part of
+     ordinary selection.
+  3. Refactor fallback lookup to UE-style requested-basis remap.
+     `TryResolveDirectionalVirtualPageLookup` and
+     `BuildDirectionalVirtualClipRelativeTransform` already remap resolved
+     pages/depth back to requested basis, but they still reconstruct the
+     coarser page through float projection. UE's `SampleVirtualShadowMapClipmap`
+     uses page-table-driven coarser fallback plus integer page remap
+     (`CalcClipmapOffsetLevelPage`) and relative clip transforms
+     (`CalcClipmapRelativeTransform`). Oxygen must move to the same requested-
+     basis integer remap contract.
+  4. Split direct compare from filtered paths.
+     Oxygen's main directional path still runs through
+     `SampleVirtualShadowComparisonTent3x3PageAware`, while UE's direct path is
+     a single compare sample and keeps softening in a separate SMRT path.
+     Oxygen must make direct compare the authoritative baseline and treat any
+     filtered/soft shadow path as an explicit separate mode.
+  5. Align CPU/test helpers with shader behavior.
+     The shader slope-bias scale already matches UE's exponential clip offset,
+     but `ComputeDirectionalVirtualFallbackSlopeBiasScale` in
+     `ShadowBackendCommon.h` still returns `fallback_lod_offset + 1`. That
+     helper and its focused tests must be corrected or removed so CPU/test
+     expectations match the live shader contract.
+  6. Add parity debug views and capture gates.
+     Existing `kVsmResolve`, stored-depth, receiver-depth, and compare captures
+     stay in the loop. Add additional directional VSM debug outputs for:
+     requested clip id, sampled clip id, fallback clip delta, requested depth,
+     remapped stored depth, and post-remap depth delta. Each parity step keeps
+     status `in_progress` until the new debug views show requested-vs-sampled
+     agreement consistent with UE's contract on the current live scene.
+  7. Validate every step through build plus live-scene captures.
+     Required evidence after each slice:
+     `cmake --build out/build-ninja --config Release --target oxygen-examples-renderscene`
+     plus the current live-scene capture scripts for no-debug, `kVsmResolve`,
+     compare, stored-depth, receiver-depth, and any new parity debug views
+     added in step 6.
+- March 19, 2026 UE5-parity step 1/2 follow-up: Oxygen now publishes explicit
+  directional clip-level projection metadata instead of relying only on the
+  old `clipmap_world_origin_selection` encoding. The published directional VSM
+  metadata now carries UE-style naming for the clipmap world origin plus
+  resolution-lod-bias field and per-clip level/count data in
+  `DirectionalVirtualShadowMetadata.{h,hlsli}` and
+  `VirtualShadowMapBackend.cpp`. The selection path in `ShadowHelpers.hlsli`
+  no longer searches finer/coarser neighboring clips after picking a target
+  level; it resolves one requested clip index directly from the unbiased
+  receiver and either projects in that clip or fails. Initial validation for
+  this slice used build plus the untouched live-scene captures
+  `current-live-virtual-ueclipsel-20260319.bmp` and
+  `current-live-vsmresolve-ueclipsel-20260319.bmp`, and that validation
+  regressed badly: the resolve view became majority magenta and the normal live
+  frame showed visibly wrong shadows. That proves exact requested-clip
+  selection is not production-correct yet without the next fallback-remap
+  parity slice. Status for metadata publication is `completed`, but exact
+  requested-clip selection remains `in_progress` until the UE-style requested-
+  basis fallback remap is implemented and revalidated.
+- March 19, 2026 UE5-parity step 3/4/5/6 follow-up: the requested-basis
+  fallback remap is now in code in `ShadowHelpers.hlsli`, using integer
+  requested-page remap plus per-clip origin metadata instead of the earlier
+  float-only fallback lookup. The baseline directional virtual hard-shadow path
+  now resolves through a single compare sample instead of the previous 3x3
+  page-aware tent path, and the stale CPU/test fallback slope-bias helper in
+  `ShadowBackendCommon.h` now matches the shader's power-of-two sampled-vs-
+  requested clip scaling. Focused validation for the helper was executed with
+  `Oxygen.Renderer.VirtualShadowContracts.Tests.exe --gtest_filter=*VirtualShadowFallbackContracts*`
+  and passed `7/7` tests. The renderer also now carries explicit live-scene
+  debug views for requested clip, resolved clip, clip delta, and post-remap
+  depth delta. Live-scene captures `current-live-virtual-remap-20260319.bmp`,
+  `current-live-vsmresolve-remap-20260319.bmp`,
+  `current-live-vsmrequestedclip-raw-20260319.bmp`,
+  `current-live-vsmresolvedclip-20260319.bmp`,
+  `current-live-vsmclipdelta-20260319.bmp`, and
+  `current-live-vsmdepthdelta-20260319.bmp` showed that the large clip/fallback
+  failure was gone, resolve was overwhelmingly green again, and the remaining
+  mismatch had collapsed to foliage and other thin geometry.
+- March 19, 2026 UE5 exact-requested retry follow-up: after the requested-basis
+  remap landed, I retried the literal distance-derived requested clip contract
+  in both `ShadowHelpers.hlsli` and `Lighting/VirtualShadowRequest.hlsl`. That
+  retry was invalid. The untouched live-scene captures
+  `current-live-virtual-ueexact-20260319.bmp` and
+  `current-live-vsmresolve-ueexact-20260319.bmp` showed the same bad regression
+  again, with resolve becoming majority magenta. I reverted that slice and
+  revalidated the live scene with `current-live-virtual-postrevert-20260319.bmp`
+  and `current-live-vsmresolve-postrevert-20260319.bmp`, which restored the
+  previous stable state. Current production code therefore still uses the
+  smallest-containing projected clip for live sampling and requests, while the
+  exact UE `CalcClipmapLevel`-style requested-clip contract remains
+  `in_progress`.
+- March 19, 2026 UE5 exact-requested completion follow-up: the failed retry
+  above was caused by Oxygen still publishing a mixed clip-selection/bias
+  metadata contract. The backend now publishes separate selection inputs and
+  receiver-bias inputs in `DirectionalVirtualShadowMetadata.{h,hlsli}`:
+  a camera-origin, viewport/projection-derived selection lod bias, plus
+  absolute per-clip levels for the requested-clip estimator, while preserving
+  the existing receiver-bias continuous clip field for raster/resolve bias
+  scaling. With that split in place, the exact requested-clip path was retried
+  in `ShadowHelpers.hlsli` and `Lighting/VirtualShadowRequest.hlsl` and
+  revalidated on the unchanged live scene. The live captures
+  `current-live-vsmresolve-ueexact2-20260319.bmp`,
+  `current-live-virtual-ueexact2-20260319.bmp`, and
+  `current-live-vsmcompare-ueexact2-20260319.bmp` stayed on the stable path:
+  resolve remained overwhelmingly green and the normal frame did not regress.
+  Focused contract coverage also still passed via
+  `Oxygen.Renderer.VirtualShadowContracts.Tests.exe --gtest_filter=*VirtualShadowFallbackContracts*:*VirtualShadowClipmapContracts*`
+  with `16/16` tests passing. Status for exact requested-clip selection is now
+  `completed`; the remaining directional VSM parity gap is concentrated on
+  thin/masked geometry mismatch rather than clip-family selection.
 - The fifth hardening slice is now in code: conventional directional shadows
   use a dedicated bindless comparison sampler as the normal path, with the old
   manual depth-tap PCF retained only as an explicit shader fallback.

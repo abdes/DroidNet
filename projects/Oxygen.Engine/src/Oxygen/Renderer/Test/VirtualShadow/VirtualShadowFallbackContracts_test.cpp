@@ -114,7 +114,7 @@ TEST(VirtualShadowFallbackContractsTest,
 {
   EXPECT_FLOAT_EQ(ComputeDirectionalVirtualFallbackSlopeBiasScale(0U), 1.0F);
   EXPECT_FLOAT_EQ(ComputeDirectionalVirtualFallbackSlopeBiasScale(1U), 2.0F);
-  EXPECT_FLOAT_EQ(ComputeDirectionalVirtualFallbackSlopeBiasScale(3U), 4.0F);
+  EXPECT_FLOAT_EQ(ComputeDirectionalVirtualFallbackSlopeBiasScale(3U), 8.0F);
 }
 
 TEST(VirtualShadowFallbackContractsTest, PageTableEntryRoundTripsPhysicalAddressAndBits)

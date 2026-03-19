@@ -470,6 +470,7 @@ auto VirtualShadowMapBackend::OnFrameStart(RendererTag /*tag*/,
 
 auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
   const engine::ViewConstants& view_constants,
+  const float camera_viewport_width,
   const std::span<const engine::DirectionalShadowCandidate>
     directional_candidates,
   const std::span<const glm::vec4> shadow_caster_bounds,
@@ -506,7 +507,7 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
       canonical_shadow_caster_bounds_span.size());
   EnsurePhysicalPool(pool_config);
   const auto previous_it = view_cache_.find(view_id);
-  BuildDirectionalVirtualViewState(view_constants,
+  BuildDirectionalVirtualViewState(view_constants, camera_viewport_width,
     directional_candidates.front(), canonical_shadow_caster_bounds_span,
     visible_receiver_bounds,
     previous_it != view_cache_.end() ? &previous_it->second : nullptr, state);
@@ -1175,6 +1176,7 @@ auto VirtualShadowMapBackend::ReleasePhysicalPool() -> void
 
 auto VirtualShadowMapBackend::PrepareDirectionalVirtualClipmapSetup(
   const engine::ViewConstants& view_constants,
+  const float camera_viewport_width,
   const engine::DirectionalShadowCandidate& candidate,
   const std::span<const glm::vec4> shadow_caster_bounds,
   const std::span<const glm::vec4> visible_receiver_bounds,
@@ -1422,8 +1424,26 @@ auto VirtualShadowMapBackend::PrepareDirectionalVirtualClipmapSetup(
       setup.metadata.raster_slope_bias_scale);
     logged_directional_bias_settings = true;
   }
-  setup.metadata.clipmap_world_origin_selection = glm::vec4(0.0F, 0.0F, 0.0F,
-    -std::log2(std::max(base_half_extent, 1.0e-4F)) - 0.5F);
+  const float clip0_radius = std::max(
+    base_page_world * std::max(1.0F, static_cast<float>(setup.pages_per_axis))
+      * 0.25F,
+    1.0e-4F);
+  const auto first_clipmap_level = static_cast<std::int32_t>(
+    std::llround(std::log2(clip0_radius)));
+  const float projection_scale_x
+    = std::max(std::abs(projection_matrix[0][0]), 1.0e-6F);
+  const float virtual_max_resolution_xy = std::max(1.0F,
+    static_cast<float>(setup.pages_per_axis * physical_pool_config_.page_size_texels));
+  const float viewport_width = std::max(camera_viewport_width, 1.0F);
+  const float lod_scale
+    = (0.5F / projection_scale_x) * (virtual_max_resolution_xy / viewport_width);
+  const float selection_lod_bias
+    = lod_scale > 1.0e-6F ? std::max(0.0F, std::log2(lod_scale)) : 0.0F;
+  setup.metadata.clipmap_selection_world_origin_lod_bias
+    = glm::vec4(camera_view_constants.camera_position, selection_lod_bias);
+  setup.metadata.clipmap_receiver_origin_lod_bias
+    = glm::vec4(0.0F, 0.0F, 0.0F,
+      -std::log2(std::max(base_half_extent, 1.0e-4F)) - 0.5F);
   setup.metadata.clip_grid_origin_x_packed.fill(glm::ivec4(0));
   setup.metadata.clip_grid_origin_y_packed.fill(glm::ivec4(0));
   setup.metadata.light_view = setup.light_view;
@@ -1525,6 +1545,11 @@ auto VirtualShadowMapBackend::PrepareDirectionalVirtualClipmapSetup(
         setup.clip_origin_y[clip_index], page_world, depth_scale);
     setup.metadata.clip_metadata[clip_index].bias_reserved
       = glm::vec4(depth_bias, 0.0F, 0.0F, 0.0F);
+    setup.metadata.clip_metadata[clip_index].clipmap_level_data = glm::ivec4(
+      first_clipmap_level + static_cast<std::int32_t>(clip_index),
+      static_cast<std::int32_t>(setup.clip_level_count - clip_index),
+      0,
+      0);
     const auto packed_index = clip_index / 4U;
     const auto packed_lane = clip_index % 4U;
     switch (packed_lane) {
@@ -1564,9 +1589,12 @@ auto VirtualShadowMapBackend::PrepareDirectionalVirtualClipmapSetup(
       camera_ls.z);
     const glm::vec3 clip0_center_ws = glm::vec3(
       glm::inverse(setup.light_view) * glm::vec4(clip0_center_ls, 1.0F));
-    setup.metadata.clipmap_world_origin_selection.x = clip0_center_ws.x;
-    setup.metadata.clipmap_world_origin_selection.y = clip0_center_ws.y;
-    setup.metadata.clipmap_world_origin_selection.z = clip0_center_ws.z;
+    setup.metadata.clipmap_receiver_origin_lod_bias.x
+      = clip0_center_ws.x;
+    setup.metadata.clipmap_receiver_origin_lod_bias.y
+      = clip0_center_ws.y;
+    setup.metadata.clipmap_receiver_origin_lod_bias.z
+      = clip0_center_ws.z;
   }
 
   (void)frustum_world_points;
@@ -1670,13 +1698,14 @@ auto VirtualShadowMapBackend::PopulateDirectionalPendingResolve(
 
 auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   const engine::ViewConstants& view_constants,
+  const float camera_viewport_width,
   const engine::DirectionalShadowCandidate& candidate,
   const std::span<const glm::vec4> shadow_caster_bounds,
   const std::span<const glm::vec4> visible_receiver_bounds,
   const ViewCacheEntry* previous_state, ViewCacheEntry& state) -> void
 {
   const auto clipmap_setup
-    = PrepareDirectionalVirtualClipmapSetup(view_constants, candidate,
+    = PrepareDirectionalVirtualClipmapSetup(view_constants, camera_viewport_width, candidate,
       shadow_caster_bounds, visible_receiver_bounds, previous_state);
   if (!clipmap_setup.has_value() || !clipmap_setup->valid) {
     return;

@@ -432,6 +432,14 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
       return "DEBUG_VSM_STORED_DEPTH";
     case ShaderDebugMode::kVsmReceiverDepth:
       return "DEBUG_VSM_RECEIVER_DEPTH";
+    case ShaderDebugMode::kVsmRequestedClip:
+      return "DEBUG_VSM_REQUESTED_CLIP";
+    case ShaderDebugMode::kVsmResolvedClip:
+      return "DEBUG_VSM_RESOLVED_CLIP";
+    case ShaderDebugMode::kVsmClipDelta:
+      return "DEBUG_VSM_CLIP_DELTA";
+    case ShaderDebugMode::kVsmDepthDelta:
+      return "DEBUG_VSM_DEPTH_DELTA";
     default:
       return nullptr;
     }
