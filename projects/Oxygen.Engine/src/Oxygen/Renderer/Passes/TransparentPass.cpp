@@ -264,6 +264,14 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
       return "DEBUG_ROUGHNESS";
     case ShaderDebugMode::kMetalness:
       return "DEBUG_METALNESS";
+    case ShaderDebugMode::kVsmCompare:
+      return "DEBUG_VSM_COMPARE";
+    case ShaderDebugMode::kVsmResolve:
+      return "DEBUG_VSM_RESOLVE";
+    case ShaderDebugMode::kVsmStoredDepth:
+      return "DEBUG_VSM_STORED_DEPTH";
+    case ShaderDebugMode::kVsmReceiverDepth:
+      return "DEBUG_VSM_RECEIVER_DEPTH";
     default:
       return nullptr;
     }

@@ -4,7 +4,7 @@
   },
   "camera_rig": {
     "CameraRig": {
-      "mode": "orbit",
+      "mode": "fly",
       "orbit": {
         "distance": 50.599998474121094,
         "mode": "turntable",
@@ -35,7 +35,7 @@
           "near": 0.10000000149011612
         }
       },
-      "mode": "orbit",
+      "mode": "fly",
       "orbit": {
         "distance": 16.320507049560547,
         "mode": "turntable",
@@ -167,7 +167,7 @@
     }
   },
   "demo_shell": {
-    "active_panel": "Camera Controls",
+    "active_panel": "",
     "console": {
       "window": {
         "height": 420.0,
@@ -313,7 +313,7 @@
     }
   },
   "ground_grid": {
-    "enabled": true,
+    "enabled": false,
     "smooth_motion": true,
     "smooth_time": 0.050999999046325684
   },

@@ -35,7 +35,7 @@ namespace oxygen::engine {
 struct VirtualShadowRequestPassConfig {
   std::string debug_name { "VirtualShadowRequestPass" };
   std::uint32_t pixel_stride { 1U };
-  std::uint32_t border_dilation_texels { 2U };
+  float border_dilation_page_fraction { 0.35F };
 };
 
 class VirtualShadowRequestPass : public ComputeRenderPass {
@@ -132,7 +132,7 @@ private:
   ViewId active_view_id_ {};
   std::uint32_t active_request_word_count_ { 0U };
   std::uint32_t active_pixel_stride_ { 1U };
-  std::uint32_t active_border_dilation_texels_ { 0U };
+  float active_border_dilation_page_fraction_ { 0.0F };
   bool active_dispatch_ { false };
 
   OXGN_RNDR_API auto EnsureRequestBuffers() -> void;

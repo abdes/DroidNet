@@ -24,6 +24,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/RendererTag.h>
+#include <Oxygen/Renderer/Types/DirectionalVirtualBiasSettings.h>
 #include <Oxygen/Renderer/Types/DirectionalVirtualShadowMetadata.h>
 #include <Oxygen/Renderer/Types/RasterShadowRenderPlan.h>
 #include <Oxygen/Renderer/Types/ShadowFramePublication.h>
@@ -98,6 +99,8 @@ public:
     ViewId view_id, graphics::CommandRecorder& recorder) -> void;
   OXGN_RNDR_API auto SetPublishedViewFrameBindingsSlot(
     ViewId view_id, engine::BindlessViewFrameBindingsSlot slot) -> void;
+  OXGN_RNDR_API auto SetDirectionalVirtualBiasSettings(
+    const DirectionalVirtualBiasSettings& settings) noexcept -> void;
   OXGN_RNDR_API auto SubmitVirtualGpuRasterInputs(
     ViewId view_id, renderer::VirtualShadowGpuRasterInputs inputs) -> void;
   OXGN_RNDR_API auto ClearVirtualGpuRasterInputs(ViewId view_id) -> void;
@@ -132,6 +135,7 @@ private:
   oxygen::DirectionalShadowImplementationPolicy directional_policy_ {
     oxygen::DirectionalShadowImplementationPolicy::kConventionalOnly
   };
+  DirectionalVirtualBiasSettings directional_virtual_bias_settings_ {};
   std::unordered_map<std::uint64_t, engine::ShadowImplementationKind>
     last_view_directional_implementation_;
   std::unordered_map<ViewId, renderer::VirtualShadowGpuRasterInputs>

@@ -503,6 +503,43 @@ Execution note, March 9, 2026:
   derives a renderer-controlled receiver bias from that footprint so default
   directional/synthetic-sun shadows are not forced to rely on zero authored
   bias values.
+- March 19, 2026 follow-up: directional VSM receiver bias is now being moved
+  onto explicit renderer CVars and named virtual metadata fields instead of
+  zero-default synthetic-sun publication plus opaque shader constants. Status
+  remains `in_progress` until static `physics_domains` captures prove proper
+  shadow coverage without scene-wide acne.
+- March 19, 2026 close-camera follow-up: the virtual receiver path no longer
+  lets receiver bias reselect a different directional clip family. Clip
+  selection now stays anchored to the unbiased receiver and the bias only
+  affects the within-family compare sample. This removed the large concentric
+  floor rings seen in the live `physics_domains` close-camera compare capture,
+  but residual underside/contact mismatch remains, so directional VSM bias
+  hardening stays `in_progress`.
+- March 19, 2026 live-scene permanence follow-up: the directional VSM resolve
+  path no longer widens its hard-shadow filter footprint per requested clip and
+  no longer scales receiver bias in discrete clip-family steps. Resolve now
+  keeps a single hard-shadow comparison footprint, relies on page-table-driven
+  coarser fallback remap only, and derives receiver bias from the continuous
+  clip level instead of the requested clip index. The temporary clip-ID
+  coloring that was added to `kVsmResolve` for diagnosis was removed so the
+  mode again reports actual requested-vs-resolved health. Validation on the
+  untouched live scene used:
+  `current-live-vsmresolve-final-20260319.bmp`,
+  `current-live-vsmstored-fixed-20260319.bmp`,
+  `current-live-vsmreceiver-fixed-20260319.bmp`,
+  `current-live-vsmcompare-fixed-20260319.bmp`, and
+  `current-live-virtual-fixed-20260319.bmp`.
+  Those captures show a full-green resolve view, smooth stored/receiver depth
+  gradients, and no visible right-half clip-shaped lighting wedge in the live
+  virtual frame. Status remains `in_progress` for broader UE5 parity until the
+  renderer has automated neighboring-clip equivalence coverage instead of only
+  build-plus-capture evidence.
+- March 19, 2026 default-value follow-up: the code-path defaults for synthetic
+  directional bias and virtual directional bias scales were aligned with the
+  tuned archived CVar values so a cold start without `bin/Oxygen/cvars.json`
+  still boots into the proven bias configuration. The no-archive defaults now
+  match `receiver_normal=1.0`, `receiver_constant=0.0`,
+  `receiver_slope=0.5`, `raster_constant=0.1`, and `raster_slope=0.35`.
 - The fifth hardening slice is now in code: conventional directional shadows
   use a dedicated bindless comparison sampler as the normal path, with the old
   manual depth-tap PCF retained only as an explicit shader fallback.

@@ -15,6 +15,7 @@
 #include "Renderer/DrawMetadata.hlsli"
 #include "Renderer/MaterialShadingConstants.hlsli"
 #include "Renderer/DebugHelpers.hlsli"
+#include "Renderer/ShadowHelpers.hlsli"
 #include "Renderer/Vertex.hlsli"
 
 #include "MaterialFlags.hlsli"
@@ -39,6 +40,27 @@ struct VSOutput {
     float3 world_bitangent : BINORMAL;
     bool is_front_face : SV_IsFrontFace;
 };
+
+static inline float3 ComputeSceneDebugUnderlay(VSOutput input)
+{
+    MaterialSurface s = EvaluateMaterialSurface(
+        input.world_pos,
+        input.world_normal,
+        input.world_tangent,
+        input.world_bitangent,
+        input.uv,
+        g_DrawIndex,
+        input.is_front_face);
+
+    const float3 N = SafeNormalize(s.N);
+    const float3 V = SafeNormalize(camera_position - input.world_pos);
+    const float3 L = SafeNormalize(float3(0.45f, -0.35f, 0.82f));
+    const float ndotl = saturate(dot(N, L));
+    const float rim = pow(1.0f - saturate(dot(N, V)), 2.0f);
+    const float luminance = saturate(dot(s.base_rgb, float3(0.299f, 0.587f, 0.114f)));
+    const float shade = saturate(0.16f + luminance * (0.24f + 0.60f * ndotl) + 0.10f * rim);
+    return shade.xxx;
+}
 
 static inline float3 GetIblFaceColor(uint face_index)
 {
@@ -157,8 +179,39 @@ float4 PS(VSOutput input) : SV_Target0 {
 
     float3 debug_out = 0.0f;
     bool debug_handled = false;
+    bool vsm_debug_mode = false;
 
-#if defined(DEBUG_UV0)
+#if defined(DEBUG_VSM_COMPARE)
+    debug_out = ComputeVirtualDirectionalShadowDebugColor(
+        input.world_pos,
+        input.world_normal,
+        SafeNormalize(GetSunDirectionWS()));
+    debug_handled = true;
+    vsm_debug_mode = true;
+#elif defined(DEBUG_VSM_RESOLVE)
+    debug_out = ComputeVirtualDirectionalShadowResolveDebugColor(
+        input.world_pos,
+        input.world_normal,
+        SafeNormalize(GetSunDirectionWS()));
+    debug_handled = true;
+    vsm_debug_mode = true;
+#elif defined(DEBUG_VSM_STORED_DEPTH)
+    debug_out = ComputeVirtualDirectionalShadowDepthDebugColor(
+        input.world_pos,
+        input.world_normal,
+        SafeNormalize(GetSunDirectionWS()),
+        false);
+    debug_handled = true;
+    vsm_debug_mode = true;
+#elif defined(DEBUG_VSM_RECEIVER_DEPTH)
+    debug_out = ComputeVirtualDirectionalShadowDepthDebugColor(
+        input.world_pos,
+        input.world_normal,
+        SafeNormalize(GetSunDirectionWS()),
+        true);
+    debug_handled = true;
+    vsm_debug_mode = true;
+#elif defined(DEBUG_UV0)
     debug_out = float3(frac(input.uv), 0.0f); debug_handled = true;
 #elif defined(DEBUG_BASE_COLOR) || defined(DEBUG_OPACITY) || defined(DEBUG_WORLD_NORMALS) || defined(DEBUG_ROUGHNESS) || defined(DEBUG_METALNESS)
     MaterialSurface s = EvaluateMaterialSurface(input.world_pos, input.world_normal, input.world_tangent, input.world_bitangent, input.uv, g_DrawIndex, input.is_front_face);
@@ -241,6 +294,13 @@ float4 PS(VSOutput input) : SV_Target0 {
             #endif
         }
     }
+
+#if !defined(DEBUG_VSM_RESOLVE)
+    if (debug_handled && vsm_debug_mode) {
+        const float3 underlay = ComputeSceneDebugUnderlay(input);
+        debug_out = lerp(underlay, debug_out, 0.78f);
+    }
+#endif
 
 #if defined(DEBUG_IBL_RAW_SKY)
     debug_out *= GetExposure();

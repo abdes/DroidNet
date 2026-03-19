@@ -42,7 +42,7 @@ namespace {
     ShaderVisibleIndex page_mark_flags_uav_index { kInvalidShaderVisibleIndex };
     std::uint32_t request_word_count { 0U };
     std::uint32_t total_page_count { 0U };
-    std::uint32_t border_dilation_texels { 0U };
+    float border_dilation_page_fraction { 0.0F };
     std::uint32_t _pad0 { 0U };
     glm::uvec2 pixel_stride { 1U, 1U };
     std::uint32_t _pad_stride0 { 0U };
@@ -101,7 +101,8 @@ auto VirtualShadowRequestPass::DoPrepareResources(
   active_dispatch_ = false;
   active_request_word_count_ = 0U;
   active_pixel_stride_ = std::max(1U, config_->pixel_stride);
-  active_border_dilation_texels_ = config_->border_dilation_texels;
+  active_border_dilation_page_fraction_
+    = std::max(0.0F, config_->border_dilation_page_fraction);
   active_view_id_ = {};
 
   if (Context().frame_slot == frame::kInvalidSlot) {
@@ -174,7 +175,7 @@ auto VirtualShadowRequestPass::DoPrepareResources(
     .page_mark_flags_uav_index = page_mark_flags_uav_,
     .request_word_count = request_word_count,
     .total_page_count = total_pages,
-    .border_dilation_texels = active_border_dilation_texels_,
+    .border_dilation_page_fraction = active_border_dilation_page_fraction_,
     .pixel_stride = glm::uvec2(active_pixel_stride_, active_pixel_stride_),
     .screen_dimensions = glm::uvec2(depth_texture.GetDescriptor().width,
       depth_texture.GetDescriptor().height),

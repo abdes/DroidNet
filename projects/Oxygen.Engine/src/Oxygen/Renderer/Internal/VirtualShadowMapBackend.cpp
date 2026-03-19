@@ -175,7 +175,7 @@ constexpr std::uint64_t kMaxResolvedRasterScheduleAgeFrames
   case oxygen::ShadowQualityTier::kHigh:
     return 1024U;
   case oxygen::ShadowQualityTier::kUltra:
-    return 1536U;
+    return 6144U;
   default:
     return 512U;
   }
@@ -459,6 +459,12 @@ VirtualShadowMapBackend::VirtualShadowMapBackend(::oxygen::Graphics* gfx,
 }
 
 VirtualShadowMapBackend::~VirtualShadowMapBackend() { ReleasePhysicalPool(); }
+
+auto VirtualShadowMapBackend::SetDirectionalBiasSettings(
+  const renderer::DirectionalVirtualBiasSettings& settings) noexcept -> void
+{
+  directional_bias_settings_ = settings;
+}
 
 auto VirtualShadowMapBackend::OnFrameStart(RendererTag /*tag*/,
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
@@ -1397,6 +1403,33 @@ auto VirtualShadowMapBackend::PrepareDirectionalVirtualClipmapSetup(
   setup.metadata.page_table_offset = 0U;
   setup.metadata.coarse_clip_mask
     = BuildDirectionalCoarseClipMask(setup.clip_level_count);
+  setup.metadata.receiver_normal_bias_scale
+    = directional_bias_settings_.receiver_normal_bias_scale;
+  setup.metadata.receiver_constant_bias_scale
+    = directional_bias_settings_.receiver_constant_bias_scale;
+  setup.metadata.receiver_slope_bias_scale
+    = directional_bias_settings_.receiver_slope_bias_scale;
+  setup.metadata.raster_constant_bias_scale
+    = directional_bias_settings_.raster_constant_bias_scale;
+  setup.metadata.raster_slope_bias_scale
+    = directional_bias_settings_.raster_slope_bias_scale;
+  setup.metadata.reserved0 = 0U;
+  setup.metadata.reserved1 = 0U;
+  static bool logged_directional_bias_settings = false;
+  if (!logged_directional_bias_settings) {
+    LOG_F(INFO,
+      "Directional VSM bias settings: constant_bias={} normal_bias={} receiver_normal_scale={} "
+      "receiver_constant_scale={} receiver_slope_scale={} raster_constant_scale={} "
+      "raster_slope_scale={}",
+      setup.metadata.constant_bias,
+      setup.metadata.normal_bias,
+      setup.metadata.receiver_normal_bias_scale,
+      setup.metadata.receiver_constant_bias_scale,
+      setup.metadata.receiver_slope_bias_scale,
+      setup.metadata.raster_constant_bias_scale,
+      setup.metadata.raster_slope_bias_scale);
+    logged_directional_bias_settings = true;
+  }
   setup.metadata.clipmap_world_origin_selection = glm::vec4(0.0F, 0.0F, 0.0F,
     -std::log2(std::max(base_half_extent, 1.0e-4F)) - 0.5F);
   setup.metadata.clip_grid_origin_x_packed.fill(glm::ivec4(0));
