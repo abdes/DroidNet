@@ -113,18 +113,6 @@ struct VS_OUTPUT_DEPTH {
 // Until such features are introduced, no shader changes are required.
 
 #if OXYGEN_VIRTUAL_SHADOW_RASTER
-static uint SelectDirectionalVirtualFilterRadiusTexels(
-    DirectionalVirtualShadowMetadata metadata,
-    uint clip_index)
-{
-    const float base_page_world =
-        max(metadata.clip_metadata[0].origin_page_scale.z, 1.0e-4);
-    const float clip_page_world =
-        max(metadata.clip_metadata[clip_index].origin_page_scale.z, base_page_world);
-    const float texel_ratio = clip_page_world / base_page_world;
-    return texel_ratio > 2.5 ? 2u : 1u;
-}
-
 static uint ResolveDirectionalVirtualGuardTexels(
     uint page_size_texels,
     uint filter_radius_texels)
@@ -142,20 +130,37 @@ static float ComputeDirectionalVirtualLogicalTexelWorld(
     }
 
     const DirectionalVirtualClipMetadata clip = metadata.clip_metadata[clip_index];
-    const uint filter_radius_texels =
-        SelectDirectionalVirtualFilterRadiusTexels(metadata, clip_index);
     const float guard_texels =
         (float)ResolveDirectionalVirtualGuardTexels(
             metadata.page_size_texels,
-            filter_radius_texels);
+            1u);
     const float logical_texel_count =
         max((float)metadata.page_size_texels - 2.0f * guard_texels, 1.0f);
     return max(clip.origin_page_scale.z, 1.0e-4f) / logical_texel_count;
 }
 
+static float ComputeDirectionalVirtualContinuousClipLevel(
+    DirectionalVirtualShadowMetadata metadata,
+    float3 world_pos)
+{
+    if (metadata.clip_level_count == 0u) {
+        return 0.0f;
+    }
+
+    const float distance_to_clipmap_origin =
+        length(world_pos - metadata.clipmap_world_origin_selection.xyz);
+    const float continuous_level =
+        (distance_to_clipmap_origin > 1.0e-6f)
+            ? log2(max(distance_to_clipmap_origin, 1.0e-6f))
+                + metadata.clipmap_world_origin_selection.w
+            : 0.0f;
+    return max(continuous_level, 0.0f);
+}
+
 static float ComputeDirectionalVirtualShaderDepthBias(
     DirectionalVirtualShadowMetadata metadata,
     uint clip_index,
+    float3 world_pos,
     float3 world_normal)
 {
     if (clip_index >= metadata.clip_level_count) {
@@ -179,8 +184,10 @@ static float ComputeDirectionalVirtualShaderDepthBias(
                 : max_slope,
             0.0f,
             max_slope);
-    const float texel_world =
-        max(ComputeDirectionalVirtualLogicalTexelWorld(metadata, clip_index), 1.0e-4f);
+    const float base_texel_world =
+        max(ComputeDirectionalVirtualLogicalTexelWorld(metadata, 0u), 1.0e-4f);
+    const float texel_world = base_texel_world
+        * exp2(ComputeDirectionalVirtualContinuousClipLevel(metadata, world_pos));
     const float renderer_constant_bias =
         texel_world * metadata.raster_constant_bias_scale;
     const float renderer_slope_bias =
@@ -281,9 +288,8 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
     const uint page_y = local_page_index / metadata.pages_per_axis;
     const DirectionalVirtualClipMetadata clip = metadata.clip_metadata[clip_index];
     const float page_world_size = max(clip.origin_page_scale.z, 1.0e-4);
-    const uint filter_guard_texels = ResolveDirectionalVirtualGuardTexels(
-        metadata.page_size_texels,
-        SelectDirectionalVirtualFilterRadiusTexels(metadata, clip_index));
+    const uint filter_guard_texels =
+        ResolveDirectionalVirtualGuardTexels(metadata.page_size_texels, 1u);
     const float interior_texels = max(
         1.0,
         float(metadata.page_size_texels) - float(filter_guard_texels * 2u));
@@ -344,6 +350,7 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
     local_clip_pos.z += ComputeDirectionalVirtualShaderDepthBias(
         metadata,
         clip_index,
+        world_pos.xyz,
         world_normal);
     local_clip_pos.w = 1.0;
 
@@ -382,7 +389,13 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
 // When ALPHA_TEST is defined, performs alpha-test clip for masked materials.
 // When ALPHA_TEST is not defined, this is a no-op (opaque depth path).
 [shader("pixel")]
-void PS(VS_OUTPUT_DEPTH input)
+void PS(
+#ifdef ALPHA_TEST
+    VS_OUTPUT_DEPTH input
+#else
+    VS_OUTPUT_DEPTH
+#endif
+)
 {
 #ifdef ALPHA_TEST
     const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
@@ -430,7 +443,5 @@ void PS(VS_OUTPUT_DEPTH input)
     }
 
     clip(alpha - cutoff);
-#else
-    (void)input;
 #endif
 }

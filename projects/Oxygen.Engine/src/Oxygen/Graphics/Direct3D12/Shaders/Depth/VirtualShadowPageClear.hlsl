@@ -85,7 +85,4 @@ VS_OUTPUT VS(uint vertex_id : SV_VertexID, uint instance_id : SV_InstanceID)
 }
 
 [shader("pixel")]
-void PS(VS_OUTPUT input)
-{
-    (void)input;
-}
+void PS(VS_OUTPUT) {}
