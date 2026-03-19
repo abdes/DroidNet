@@ -185,6 +185,34 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .permutations=std::array<std::string_view, 3>
       { "DEBUG_VSM_RECEIVER_DEPTH", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
+  // Forward pass pixel shader: DEBUG_VSM_REQUESTED_CLIP with ALPHA_TEST permutation
+  ShaderFileSpec {
+    .path="Forward/ForwardDebug_PS.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
+    .permutations=std::array<std::string_view, 3>
+      { "DEBUG_VSM_REQUESTED_CLIP", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+  },
+  // Forward pass pixel shader: DEBUG_VSM_RESOLVED_CLIP with ALPHA_TEST permutation
+  ShaderFileSpec {
+    .path="Forward/ForwardDebug_PS.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
+    .permutations=std::array<std::string_view, 3>
+      { "DEBUG_VSM_RESOLVED_CLIP", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+  },
+  // Forward pass pixel shader: DEBUG_VSM_CLIP_DELTA with ALPHA_TEST permutation
+  ShaderFileSpec {
+    .path="Forward/ForwardDebug_PS.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
+    .permutations=std::array<std::string_view, 3>
+      { "DEBUG_VSM_CLIP_DELTA", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+  },
+  // Forward pass pixel shader: DEBUG_VSM_DEPTH_DELTA with ALPHA_TEST permutation
+  ShaderFileSpec {
+    .path="Forward/ForwardDebug_PS.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
+    .permutations=std::array<std::string_view, 3>
+      { "DEBUG_VSM_DEPTH_DELTA", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+  },
   // Depth pre-pass: VS and PS with alpha-test and virtual-shadow raster permutations
   ShaderFileSpec {
     .path="Depth/DepthPrePass.hlsl",

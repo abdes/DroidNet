@@ -83,6 +83,7 @@ public:
 
   OXGN_RNDR_API auto PublishForView(ViewId view_id,
     const engine::ViewConstants& view_constants, const LightManager& lights,
+    float camera_viewport_width,
     std::span<const glm::vec4> shadow_caster_bounds = {},
     std::span<const glm::vec4> visible_receiver_bounds = {},
     const SyntheticSunShadowInput* synthetic_sun_shadow = nullptr,

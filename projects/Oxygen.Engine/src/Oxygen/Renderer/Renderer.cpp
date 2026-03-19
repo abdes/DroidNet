@@ -2259,7 +2259,8 @@ auto Renderer::RepublishCurrentViewBindings(
           = HashPreparedShadowCasterContent(prepared);
         const auto shadow_view
           = shadow_manager_->PublishForView(view_id, view_constants,
-            *light_manager, shadow_caster_bounds, visible_receiver_bounds,
+            *light_manager, std::max(1.0F, resolved.Viewport().width),
+            shadow_caster_bounds, visible_receiver_bounds,
             synthetic_sun_shadow ? &*synthetic_sun_shadow : nullptr,
             frame_budget_stats_.gpu_budget, shadow_caster_content_hash);
         shadow_instance_metadata_slot

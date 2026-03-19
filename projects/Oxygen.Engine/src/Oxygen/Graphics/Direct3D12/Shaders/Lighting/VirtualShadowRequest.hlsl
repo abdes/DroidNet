@@ -188,7 +188,9 @@ static void MarkDirectionalVirtualCoarsePages(
         }
 
         const float2 clipmap_origin_light_xy =
-            mul(metadata.light_view, float4(metadata.clipmap_world_origin_selection.xyz, 1.0f)).xy;
+            mul(
+                metadata.light_view,
+                float4(metadata.clipmap_selection_world_origin_lod_bias.xyz, 1.0f)).xy;
         float2 center_page_float = 0.0.xx;
         if (!ProjectDirectionalVirtualClip(
                 metadata,
@@ -302,7 +304,7 @@ void CS(
 
             uint clip_index = 0u;
             float2 page_coord = 0.0.xx;
-            if (SelectDirectionalVirtualClipForDistance(
+            if (SelectDirectionalVirtualRequestedClip(
                     metadata,
                     world_pos,
                     light_view_pos.xy,

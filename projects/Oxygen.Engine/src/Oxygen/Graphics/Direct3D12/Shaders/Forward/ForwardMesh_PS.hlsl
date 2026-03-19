@@ -82,19 +82,8 @@ float4 PS(VSOutput input) : SV_Target0 {
     MaterialSurface surf = EvaluateMaterialSurface(input.world_pos, input.world_normal, input.world_tangent, input.world_bitangent, input.uv, g_DrawIndex, input.is_front_face);
     const float3 base_rgb = surf.base_rgb * input.color;
     const float3 N = surf.N;
-    const float3 fallback_shadow_N = SafeNormalize(
-        input.is_front_face ? input.world_normal : -input.world_normal);
-    const float3 world_pos_ddx = ddx_fine(input.world_pos);
-    const float3 world_pos_ddy = ddy_fine(input.world_pos);
-    float3 shadow_N = cross(world_pos_ddx, world_pos_ddy);
-    const float shadow_N_len_sq = dot(shadow_N, shadow_N);
-    shadow_N = shadow_N_len_sq > 1.0e-8 ? normalize(shadow_N) : float3(0.0, 0.0, 0.0);
-    if (dot(shadow_N, fallback_shadow_N) < 0.0) {
-        shadow_N = -shadow_N;
-    }
-    if (dot(fallback_shadow_N, shadow_N) < 0.25) {
-        shadow_N = fallback_shadow_N;
-    }
+    const float3 shadow_N = ComputeShadowSurfaceNormal(
+        input.world_pos, input.world_normal, input.is_front_face);
     const float3 V = surf.V;
     const float NdotV = saturate(dot(N, V));
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), base_rgb, surf.metalness);

@@ -15,6 +15,7 @@ struct DirectionalVirtualClipMetadata
 {
     float4 origin_page_scale; // xy origin_ls, z page_world_size, w depth_scale
     float4 bias_reserved;     // x depth_bias, yzw reserved
+    int4 clipmap_level_data;  // x clipmap level, y remaining levels, zw reserved
 };
 
 struct DirectionalVirtualShadowMetadata
@@ -36,7 +37,8 @@ struct DirectionalVirtualShadowMetadata
     float raster_slope_bias_scale;
     uint reserved0;
     uint reserved1;
-    float4 clipmap_world_origin_selection; // xyz clipmap origin ws, w lod bias
+    float4 clipmap_selection_world_origin_lod_bias; // xyz clipmap selection origin ws, w selection lod bias
+    float4 clipmap_receiver_origin_lod_bias; // xyz receiver-bias origin ws, w receiver clip bias
     int4 clip_grid_origin_x_packed[3];
     int4 clip_grid_origin_y_packed[3];
 

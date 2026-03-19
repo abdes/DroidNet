@@ -354,7 +354,7 @@ struct DirectionalVirtualDepthRange {
 [[nodiscard]] inline auto ComputeDirectionalVirtualFallbackSlopeBiasScale(
   const std::uint32_t fallback_lod_offset) -> float
 {
-  return static_cast<float>(std::max(1U, fallback_lod_offset + 1U));
+  return static_cast<float>(1U << std::min(fallback_lod_offset, 30U));
 }
 
 [[nodiscard]] inline auto IsDirectionalCoarseClipSelected(

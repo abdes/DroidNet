@@ -117,6 +117,10 @@ void RenderingPanel::DrawDebugModes()
     || current_mode == ShaderDebugMode::kVsmResolve
     || current_mode == ShaderDebugMode::kVsmStoredDepth
     || current_mode == ShaderDebugMode::kVsmReceiverDepth
+    || current_mode == ShaderDebugMode::kVsmRequestedClip
+    || current_mode == ShaderDebugMode::kVsmResolvedClip
+    || current_mode == ShaderDebugMode::kVsmClipDelta
+    || current_mode == ShaderDebugMode::kVsmDepthDelta
     || current_mode == ShaderDebugMode::kWorldNormals
     || current_mode == ShaderDebugMode::kRoughness
     || current_mode == ShaderDebugMode::kMetalness;
@@ -200,6 +204,26 @@ void RenderingPanel::DrawDebugModes()
   if (ImGui::RadioButton("VSM Receiver Depth",
         current_mode == ShaderDebugMode::kVsmReceiverDepth)) {
     vm_->SetDebugMode(ShaderDebugMode::kVsmReceiverDepth);
+  }
+
+  if (ImGui::RadioButton("VSM Requested Clip",
+        current_mode == ShaderDebugMode::kVsmRequestedClip)) {
+    vm_->SetDebugMode(ShaderDebugMode::kVsmRequestedClip);
+  }
+
+  if (ImGui::RadioButton("VSM Resolved Clip",
+        current_mode == ShaderDebugMode::kVsmResolvedClip)) {
+    vm_->SetDebugMode(ShaderDebugMode::kVsmResolvedClip);
+  }
+
+  if (ImGui::RadioButton(
+        "VSM Clip Delta", current_mode == ShaderDebugMode::kVsmClipDelta)) {
+    vm_->SetDebugMode(ShaderDebugMode::kVsmClipDelta);
+  }
+
+  if (ImGui::RadioButton(
+        "VSM Depth Delta", current_mode == ShaderDebugMode::kVsmDepthDelta)) {
+    vm_->SetDebugMode(ShaderDebugMode::kVsmDepthDelta);
   }
 
   if (disable_debug_modes) {
