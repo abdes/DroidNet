@@ -175,21 +175,13 @@ constexpr std::uint64_t kMaxResolvedRasterScheduleAgeFrames
   case oxygen::ShadowQualityTier::kHigh:
     return 1024U;
   case oxygen::ShadowQualityTier::kUltra:
-    return 6144U;
+    // 8192 tiles still fits inside the existing ultra atlas ceiling once the
+    // page size is clamped to 128, while materially reducing fallback pressure
+    // on large live scenes.
+    return 8192U;
   default:
     return 512U;
   }
-}
-
-[[nodiscard]] auto SelectDirectionalVirtualFilterRadiusTexels(
-  const float base_page_world, const float clip_page_world) -> std::uint32_t
-{
-  const float stabilized_base_page_world = std::max(base_page_world, 1.0e-4F);
-  const float stabilized_clip_page_world
-    = std::max(clip_page_world, stabilized_base_page_world);
-  const float texel_ratio
-    = stabilized_clip_page_world / stabilized_base_page_world;
-  return texel_ratio > 2.5F ? 2U : 1U;
 }
 
 [[nodiscard]] auto PackPageTableEntry(const std::uint32_t tile_x,

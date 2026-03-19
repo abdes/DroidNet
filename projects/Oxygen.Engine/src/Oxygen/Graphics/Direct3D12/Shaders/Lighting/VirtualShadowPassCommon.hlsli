@@ -136,18 +136,6 @@ static bool IsPageRequestedThisFrame(
     return (request_words[word_index] & bit_mask) != 0u;
 }
 
-static uint SelectDirectionalVirtualFilterRadiusTexels(
-    DirectionalVirtualShadowMetadata metadata,
-    uint clip_index)
-{
-    const float base_page_world =
-        max(metadata.clip_metadata[0].origin_page_scale.z, 1.0e-4);
-    const float clip_page_world =
-        max(metadata.clip_metadata[clip_index].origin_page_scale.z, base_page_world);
-    const float texel_ratio = clip_page_world / base_page_world;
-    return texel_ratio > 2.5 ? 2u : 1u;
-}
-
 static uint ResolveDirectionalVirtualGuardTexels(
     uint page_size_texels,
     uint filter_radius_texels)
@@ -185,9 +173,8 @@ static bool ScheduledPageOverlapsBoundingSphere(
     const uint page_y = local_page_index / metadata.pages_per_axis;
     const DirectionalVirtualClipMetadata clip = metadata.clip_metadata[clip_index];
     const float page_world_size = max(clip.origin_page_scale.z, 1.0e-4);
-    const uint filter_guard_texels = ResolveDirectionalVirtualGuardTexels(
-        metadata.page_size_texels,
-        SelectDirectionalVirtualFilterRadiusTexels(metadata, clip_index));
+    const uint filter_guard_texels =
+        ResolveDirectionalVirtualGuardTexels(metadata.page_size_texels, 1u);
     const float interior_texels = max(
         1.0,
         float(metadata.page_size_texels) - float(filter_guard_texels * 2u));

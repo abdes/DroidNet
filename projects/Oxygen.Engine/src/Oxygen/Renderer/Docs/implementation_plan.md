@@ -540,6 +540,46 @@ Execution note, March 9, 2026:
   still boots into the proven bias configuration. The no-archive defaults now
   match `receiver_normal=1.0`, `receiver_constant=0.0`,
   `receiver_slope=0.5`, `raster_constant=0.1`, and `raster_slope=0.35`.
+- March 19, 2026 fallback-stability follow-up: live-scene `kVsmResolve`
+  captures later showed that the remaining yellow areas were real coarser-page
+  fallback, not the earlier clip-family debug coloring. The unresolved bug was
+  that virtual page rasterization still authored a different stored-depth
+  solution for coarser pages because `DepthPrePass.hlsl` scaled raster bias and
+  guard footprint directly from the discrete clip index. That path now matches
+  the resolve-side permanence fix: raster hard-shadow authoring keeps a
+  one-texel footprint, derives raster bias from the continuous clip level of
+  the unbiased receiver, and no longer bakes a different answer just because a
+  coarser fallback page was used. The untouched live-scene validation first
+  used `current-live-vsmresolve-check-20260319.bmp` plus
+  `current-live-virtual-hypothesis-20260319.bmp`, which correlated broad
+  fallback with visibly wrong unstable striping. After the raster-bias fix the
+  normal frame improved (`current-live-virtual-rasterfix2-20260319.bmp`) but
+  resolve still showed too much fallback
+  (`current-live-vsmresolve-rasterfix2-20260319.bmp`), so the slice remained
+  `in_progress`.
+- March 19, 2026 ultra-capacity follow-up: the same live-scene logs showed the
+  renderer was already at the `Ultra` directional VSM budget with
+  `pages_per_clip_axis=64`, `clip_levels=12`, and only `physical_tiles=6144`,
+  so some camera angles were legitimately over capacity. `ResolvePhysicalTileCapacity`
+  now raises `ShadowQualityTier::kUltra` to `8192` tiles, which published a
+  `11648x11648` physical page pool in the new live captures. Sequential
+  validation on the untouched live scene used
+  `current-live-vsmresolve-capfix-20260319.bmp`,
+  `current-live-virtual-capfix-20260319.bmp`, and
+  `current-live-vsmcompare-capfix-20260319.bmp`. Those captures removed the
+  broad yellow fallback bands from resolve, removed the corresponding unstable
+  striping from the normal render, and left only localized residual mismatch
+  around thin geometry/foliage in compare. Status for this fallback-stability
+  slice is `completed` for the current live-scene repro, while broader UE5
+  parity remains `in_progress` until automated neighboring-clip equivalence and
+  residency-pressure coverage exist.
+- March 19, 2026 cleanup follow-up: the permanence work no longer carries the
+  dead directional clip-radius selector plumbing. The no-op
+  `SelectDirectionalVirtualFilterRadiusTexels` helpers were removed from the
+  resolve shader, raster shader, lighting common include, and backend, the
+  atlas-UV helper no longer accepts a hardcoded `1u` radius argument, and the
+  temporary unused-parameter shims in the touched shaders were removed so the
+  code reflects the fixed one-footprint hard-shadow contract directly.
 - The fifth hardening slice is now in code: conventional directional shadows
   use a dedicated bindless comparison sampler as the normal path, with the old
   manual depth-tap PCF retained only as an explicit shader fallback.

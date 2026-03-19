@@ -33,10 +33,6 @@ static inline bool ProjectDirectionalVirtualClip(
     float2 light_space_xy,
     out float2 page_coord);
 
-static inline uint SelectDirectionalVirtualFilterRadiusTexels(
-    DirectionalVirtualShadowMetadata metadata,
-    uint clip_index);
-
 static inline float2 ComputeDirectionalVirtualTexelCenterOffsetUv(
     DirectionalVirtualShadowMetadata metadata,
     float2 clip_uv,
@@ -337,12 +333,10 @@ struct DirectionalVirtualResolvedPageLookup
 
 static inline float3 ComputeDirectionalVirtualBiasedWorldPosition(
     DirectionalVirtualShadowMetadata metadata,
-    uint clip_index,
     float3 world_pos,
     float3 normal_ws,
     float3 light_dir_ws)
 {
-    (void)clip_index;
     const float3 safe_normal_ws =
         normal_ws * rsqrt(max(dot(normal_ws, normal_ws), 1.0e-8f));
     const float base_texel_world = max(
@@ -622,13 +616,10 @@ static inline float2 ResolveDirectionalVirtualAtlasUvFromResolvedPageCoord(
     uint tile_x,
     uint tile_y,
     float2 resolved_page_coord,
-    float2 pool_size,
-    uint sampling_filter_radius_texels)
+    float2 pool_size)
 {
     const float guard_texels =
-        (float)ResolveDirectionalVirtualGuardTexels(
-            metadata.page_size_texels,
-            sampling_filter_radius_texels);
+        (float)ResolveDirectionalVirtualGuardTexels(metadata.page_size_texels, 1u);
     const float interior_min =
         guard_texels / max((float)metadata.page_size_texels, 1.0);
     const float interior_span = max(1.0 - 2.0 * interior_min, 1.0e-4);
@@ -745,7 +736,6 @@ static inline bool ResolveDirectionalVirtualAtlasUv(
     uint clip_index,
     float2 light_space_xy,
     float2 pool_size,
-    uint sampling_filter_radius_texels,
     out float2 atlas_uv)
 {
     atlas_uv = 0.0.xx;
@@ -769,38 +759,8 @@ static inline bool ResolveDirectionalVirtualAtlasUv(
         lookup.entry.tile_x,
         lookup.entry.tile_y,
         lookup.page_coord,
-        pool_size,
-        sampling_filter_radius_texels);
+        pool_size);
     return true;
-}
-
-static inline bool ResolveDirectionalVirtualAtlasUv(
-    DirectionalVirtualShadowMetadata metadata,
-    StructuredBuffer<uint> page_table,
-    uint clip_index,
-    float2 light_space_xy,
-    float2 pool_size,
-    out float2 atlas_uv)
-{
-    DirectionalVirtualResolvedPageLookup lookup =
-        MakeInvalidDirectionalVirtualResolvedPageLookup();
-    if (!TryResolveDirectionalVirtualPageLookup(
-            metadata, page_table, clip_index, light_space_xy, lookup)) {
-        atlas_uv = 0.0.xx;
-        return false;
-    }
-
-    const uint resolved_clip_index = lookup.resolved_clip_index;
-    const uint default_filter_radius_texels =
-        SelectDirectionalVirtualFilterRadiusTexels(metadata, resolved_clip_index);
-    return ResolveDirectionalVirtualAtlasUv(
-        metadata,
-        page_table,
-        clip_index,
-        light_space_xy,
-        pool_size,
-        default_filter_radius_texels,
-        atlas_uv);
 }
 
 static inline float2 ResolveDirectionalVirtualAtlasUvInResolvedPage(
@@ -824,8 +784,7 @@ static inline float2 ResolveDirectionalVirtualAtlasUvInResolvedPage(
         tile_x,
         tile_y,
         float2((float)page_x, (float)page_y) + resolved_page_coord,
-        pool_size,
-        SelectDirectionalVirtualFilterRadiusTexels(metadata, clip_index));
+        pool_size);
 }
 
 static inline float2 ComputeDirectionalVirtualTexelCenterOffsetUv(
@@ -899,8 +858,7 @@ static inline bool TryResolveDirectionalVirtualFilterSample(
                     center_lookup.entry.tile_x,
                     center_lookup.entry.tile_y,
                     sample_resolved_page_coord,
-                    pool_size,
-                    sampling_filter_radius_texels);
+                    pool_size);
                 adjusted_receiver_depth = RemapDirectionalRequestedDepthToResolvedClip(
                     sample_requested_depth,
                     center_transform);
@@ -942,8 +900,7 @@ static inline bool TryResolveDirectionalVirtualFilterSample(
         sample_lookup.entry.tile_x,
         sample_lookup.entry.tile_y,
         sample_lookup.page_coord,
-        pool_size,
-        sampling_filter_radius_texels);
+        pool_size);
     adjusted_receiver_depth = RemapDirectionalRequestedDepthToResolvedClip(
         sample_requested_depth,
         sample_transform);
@@ -1297,10 +1254,6 @@ static inline bool SelectDirectionalVirtualClip(
     return false;
 }
 
-static inline uint SelectDirectionalVirtualFilterRadiusTexels(
-    DirectionalVirtualShadowMetadata metadata,
-    uint clip_index);
-
 static inline float ComputeDirectionalVirtualLogicalTexelWorld(
     DirectionalVirtualShadowMetadata metadata,
     uint clip_index,
@@ -1399,18 +1352,6 @@ static inline bool ProjectDirectionalVirtualClip(
         && local_pages.y >= 0.0 && local_pages.y < metadata.pages_per_axis;
 }
 
-static inline uint SelectDirectionalVirtualFilterRadiusTexels(
-    DirectionalVirtualShadowMetadata metadata,
-    uint clip_index)
-{
-    (void)metadata;
-    (void)clip_index;
-    // Directional clip families must not change the hard-shadow solution.
-    // Keep a single comparison footprint and rely on page-table-driven coarser
-    // fallback remap instead of clip-dependent tent-kernel widening.
-    return 1u;
-}
-
 static inline float ComputeDirectionalVirtualLogicalTexelWorld(
     DirectionalVirtualShadowMetadata metadata,
     uint clip_index,
@@ -1451,7 +1392,7 @@ static inline float SampleDirectionalVirtualShadowClipVisibility(
     }
 
     const float3 biased_world_pos = ComputeDirectionalVirtualBiasedWorldPosition(
-        metadata, clip_index, world_pos, normal_ws, light_dir_ws);
+        metadata, world_pos, normal_ws, light_dir_ws);
     const float3 light_view_pos =
         mul(metadata.light_view, float4(biased_world_pos, 1.0f)).xyz;
     DirectionalVirtualResolvedPageLookup lookup =
@@ -1461,8 +1402,6 @@ static inline float SampleDirectionalVirtualShadowClipVisibility(
         return 1.0;
     }
 
-    const uint requested_filter_radius_texels =
-        SelectDirectionalVirtualFilterRadiusTexels(metadata, clip_index);
     const DirectionalVirtualClipRelativeTransform clip_relative_transform =
         BuildDirectionalVirtualClipRelativeTransform(
             metadata, clip_index, lookup.resolved_clip_index);
@@ -1478,7 +1417,6 @@ static inline float SampleDirectionalVirtualShadowClipVisibility(
         return 1.0;
     }
 
-    const uint direct_sample_filter_radius_texels = 1u;
     float2 atlas_uv = 0.0.xx;
     if (!ResolveDirectionalVirtualAtlasUv(
             metadata,
@@ -1486,7 +1424,6 @@ static inline float SampleDirectionalVirtualShadowClipVisibility(
             clip_index,
             light_view_pos.xy,
             float2(pool_width, pool_height),
-            direct_sample_filter_radius_texels,
             atlas_uv)) {
         return 1.0;
     }
@@ -1504,10 +1441,9 @@ static inline float SampleDirectionalVirtualShadowClipVisibility(
             lookup.entry.fallback_lod_offset,
             normal_ws,
             MakeDirectionalVirtualClipUv(metadata, lookup.page_coord),
-            requested_filter_radius_texels);
+            1u);
     const float logical_texel_world = max(
-        ComputeDirectionalVirtualLogicalTexelWorld(
-            metadata, clip_index, requested_filter_radius_texels),
+        ComputeDirectionalVirtualLogicalTexelWorld(metadata, clip_index, 1u),
         1.0e-4);
     const float2 pool_size = float2(pool_width, pool_height);
     const float2 center_requested_clip_uv =
@@ -1523,40 +1459,22 @@ static inline float SampleDirectionalVirtualShadowClipVisibility(
     const float resolved_stored_depth = physical_pool.Load(int3(pool_texel, 0));
     return center_adjusted_receiver_depth <= resolved_stored_depth ? 1.0 : 0.0;
 #else
-    if (requested_filter_radius_texels <= 1u) {
-        return SampleVirtualShadowComparisonTent3x3PageAware(
-            metadata,
-            page_table,
-            physical_pool,
-            lookup,
-            clip_relative_transform,
-            atlas_uv,
-            light_view_pos.xy,
-            logical_texel_world,
-            pool_size,
-            requested_filter_radius_texels,
-            center_adjusted_receiver_depth,
-            normal_ws,
-            center_requested_clip_uv,
-            requested_receiver_depth,
-            requested_depth_slope_uv);
-    }
-    return SampleVirtualShadowComparisonTent5x5PageAware(
-            metadata,
-            page_table,
-            physical_pool,
-            lookup,
-            clip_relative_transform,
-            atlas_uv,
-            light_view_pos.xy,
-            logical_texel_world,
-            pool_size,
-            requested_filter_radius_texels,
-            center_adjusted_receiver_depth,
-            normal_ws,
-            center_requested_clip_uv,
-            requested_receiver_depth,
-            requested_depth_slope_uv);
+    return SampleVirtualShadowComparisonTent3x3PageAware(
+        metadata,
+        page_table,
+        physical_pool,
+        lookup,
+        clip_relative_transform,
+        atlas_uv,
+        light_view_pos.xy,
+        logical_texel_world,
+        pool_size,
+        1u,
+        center_adjusted_receiver_depth,
+        normal_ws,
+        center_requested_clip_uv,
+        requested_receiver_depth,
+        requested_depth_slope_uv);
 #endif
 }
 
@@ -1689,7 +1607,7 @@ ComputeVirtualDirectionalShadowDebugResult(
     result.resolved_clip_index = requested_clip_index;
 
     const float3 biased_world_pos = ComputeDirectionalVirtualBiasedWorldPosition(
-        metadata, requested_clip_index, world_pos, normal_ws, light_dir_ws);
+        metadata, world_pos, normal_ws, light_dir_ws);
     const float3 light_view_pos =
         mul(metadata.light_view, float4(biased_world_pos, 1.0f)).xyz;
     const uint sample_clip_index = requested_clip_index;
@@ -1747,7 +1665,6 @@ ComputeVirtualDirectionalShadowDebugResult(
             sample_clip_index,
             light_view_pos.xy,
             float2(pool_width, pool_height),
-            1u,
             atlas_uv)) {
         result.active = true;
         return result;
