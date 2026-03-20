@@ -325,7 +325,7 @@ float4 PS(VSOutput input) : SV_Target0 {
         }
     }
 
-#if !defined(DEBUG_VSM_RESOLVE)
+#if !defined(DEBUG_VSM_RESOLVE) && !defined(DEBUG_VSM_COMPARE)
     if (debug_handled && vsm_debug_mode) {
         const float3 underlay = ComputeSceneDebugUnderlay(input);
         debug_out = lerp(underlay, debug_out, 0.78f);

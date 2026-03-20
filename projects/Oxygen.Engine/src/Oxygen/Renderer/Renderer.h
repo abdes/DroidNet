@@ -64,6 +64,7 @@ namespace oxygen::graphics {
 class Buffer;
 class CommandRecorder;
 class Surface;
+class Texture;
 } // namespace oxygen::graphics
 
 namespace oxygen::content {
@@ -401,6 +402,9 @@ private:
     SyntheticSunData sun { kNoSun };
     EnvironmentViewData environment_view {};
     ViewFrameBindings published_view_bindings {};
+    ShaderVisibleIndex scene_depth_srv { kInvalidShaderVisibleIndex };
+    const graphics::Texture* scene_depth_texture_owner { nullptr };
+    bool owns_scene_depth_srv { false };
     bool has_published_view_bindings { false };
   };
 
@@ -408,11 +412,11 @@ private:
     float synthetic_constant_bias { 0.0F };
     float synthetic_normal_bias { 0.02F };
     renderer::DirectionalVirtualBiasSettings virtual_directional {
-      .receiver_normal_bias_scale = 1.0F,
+      .receiver_normal_bias_scale = 0.5F,
       .receiver_constant_bias_scale = 0.0F,
-      .receiver_slope_bias_scale = 0.5F,
-      .raster_constant_bias_scale = 0.1F,
-      .raster_slope_bias_scale = 0.35F,
+      .receiver_slope_bias_scale = 1.0F,
+      .raster_constant_bias_scale = 0.0F,
+      .raster_slope_bias_scale = 0.0F,
     };
   };
 
@@ -455,6 +459,8 @@ private:
     const FrameContext& frame_context, RenderContext& render_context) -> bool;
   auto RepublishCurrentViewBindings(const RenderContext& render_context,
     ViewBindingRepublishMode mode = ViewBindingRepublishMode::kFull) -> bool;
+  auto EnsureSceneDepthTextureSrv(PerViewRuntimeState& runtime_state,
+    const graphics::Texture& depth_texture) -> ShaderVisibleIndex;
 
   //! Resolves exposure for the view (manual and auto).
   auto UpdateViewExposure(ViewId view_id, const scene::Scene& scene,
