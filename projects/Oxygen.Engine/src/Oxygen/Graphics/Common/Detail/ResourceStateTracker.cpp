@@ -236,15 +236,23 @@ auto ResourceStateTracker::OnCommandListClosed() -> void
           // the pending barriers
           using T = std::decay_t<TDescriptor>;
           if constexpr (std::is_same_v<T, BufferTrackingInfo>) {
-            pending_barriers_.emplace_back(CreateBufferBarrierDesc(
-              native_object, info.current_state, info.initial_state));
+            if (!TryMergeWithExistingTransition<BufferBarrierDesc>(
+                  native_object, info.current_state, info.initial_state)) {
+              pending_barriers_.emplace_back(CreateBufferBarrierDesc(
+                native_object, info.current_state, info.initial_state));
+            }
           } else if constexpr (std::is_same_v<T, TextureTrackingInfo>) {
-            pending_barriers_.emplace_back(CreateTextureBarrierDesc(
-              native_object, info.current_state, info.initial_state));
+            if (!TryMergeWithExistingTransition<TextureBarrierDesc>(
+                  native_object, info.current_state, info.initial_state)) {
+              pending_barriers_.emplace_back(CreateTextureBarrierDesc(
+                native_object, info.current_state, info.initial_state));
+            }
           } else {
             static_assert(always_false_v<T>, "Unsupported barrier type");
           }
-          // Reset the current state to the initial state
+          // Reset the current state to the initial state. When the restore
+          // transition merged with an existing pending barrier, the helper
+          // above already updated info.current_state.
           info.current_state = info.initial_state;
         }
       },
