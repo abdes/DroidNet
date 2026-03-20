@@ -120,62 +120,6 @@ static uint ResolveDirectionalVirtualGuardTexels(
     const uint max_guard_texels = max(1u, page_size_texels / 4u);
     return min(max_guard_texels, max(1u, filter_radius_texels));
 }
-
-static float ComputeDirectionalVirtualLogicalTexelWorld(
-    DirectionalVirtualShadowMetadata metadata,
-    uint clip_index)
-{
-    if (clip_index >= metadata.clip_level_count) {
-        return 1.0e-4f;
-    }
-
-    const DirectionalVirtualClipMetadata clip = metadata.clip_metadata[clip_index];
-    const float guard_texels =
-        (float)ResolveDirectionalVirtualGuardTexels(
-            metadata.page_size_texels,
-            1u);
-    const float logical_texel_count =
-        max((float)metadata.page_size_texels - 2.0f * guard_texels, 1.0f);
-    return max(clip.origin_page_scale.z, 1.0e-4f) / logical_texel_count;
-}
-
-static float ComputeDirectionalVirtualShaderDepthBias(
-    DirectionalVirtualShadowMetadata metadata,
-    uint clip_index,
-    float3 world_pos,
-    float3 world_normal)
-{
-    if (clip_index >= metadata.clip_level_count) {
-        return 0.0f;
-    }
-
-    const DirectionalVirtualClipMetadata clip = metadata.clip_metadata[clip_index];
-    float3 normal_ls = mul(metadata.light_view, float4(world_normal, 0.0f)).xyz;
-    const float normal_ls_len_sq = dot(normal_ls, normal_ls);
-    if (normal_ls_len_sq <= 1.0e-8f) {
-        return 0.0f;
-    }
-    normal_ls *= rsqrt(normal_ls_len_sq);
-
-    const float no_l = saturate(abs(normal_ls.z));
-    const float max_slope = 16.0f;
-    const float slope =
-        clamp(
-            no_l > 1.0e-4f
-                ? sqrt(saturate(1.0f - no_l * no_l)) / no_l
-                : max_slope,
-            0.0f,
-            max_slope);
-    const float texel_world =
-        max(ComputeDirectionalVirtualLogicalTexelWorld(metadata, clip_index), 1.0e-4f);
-    const float renderer_constant_bias =
-        texel_world * metadata.raster_constant_bias_scale;
-    const float renderer_slope_bias =
-        texel_world * metadata.raster_slope_bias_scale;
-    const float constant_bias = max(metadata.constant_bias + renderer_constant_bias, 0.0f);
-    const float slope_bias = max(metadata.normal_bias + renderer_slope_bias, 0.0f);
-    return abs(clip.origin_page_scale.w) * (constant_bias + slope_bias * slope);
-}
 #endif
 
 
@@ -327,11 +271,6 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
     local_clip_pos.y = (2.0 * local_view_pos.y - (top + bottom)) / clip_extent.y;
     local_clip_pos.z =
         local_view_pos.z * clip.origin_page_scale.w + clip.bias_reserved.x;
-    local_clip_pos.z += ComputeDirectionalVirtualShaderDepthBias(
-        metadata,
-        clip_index,
-        world_pos.xyz,
-        world_normal);
     local_clip_pos.w = 1.0;
 
     // Preserve the original page-local clip planes before remapping into the

@@ -45,12 +45,16 @@
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/GpuEventScope.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/OxCo/Co.h>
@@ -147,11 +151,11 @@ constexpr int64_t kMinGpuTimestampMaxScopes = 1;
 constexpr int64_t kMaxGpuTimestampMaxScopes = 65536;
 constexpr float kDefaultSyntheticDirectionalBias = 0.0F;
 constexpr float kDefaultSyntheticDirectionalNormalBias = 0.02F;
-constexpr float kDefaultVsmDirectionalReceiverNormalBiasScale = 1.0F;
+constexpr float kDefaultVsmDirectionalReceiverNormalBiasScale = 0.5F;
 constexpr float kDefaultVsmDirectionalReceiverConstantBiasScale = 0.0F;
-constexpr float kDefaultVsmDirectionalReceiverSlopeBiasScale = 0.5F;
-constexpr float kDefaultVsmDirectionalRasterConstantBiasScale = 0.1F;
-constexpr float kDefaultVsmDirectionalRasterSlopeBiasScale = 0.35F;
+constexpr float kDefaultVsmDirectionalReceiverSlopeBiasScale = 1.0F;
+constexpr float kDefaultVsmDirectionalRasterConstantBiasScale = 0.0F;
+constexpr float kDefaultVsmDirectionalRasterSlopeBiasScale = 0.0F;
 
 auto BuildSyntheticSunShadowInput(
   const oxygen::engine::RenderContext& render_context,
@@ -886,7 +890,7 @@ auto Renderer::RegisterConsoleBindings(
 
   (void)console->RegisterCVar(console::CVarDefinition {
     .name = std::string(kCVarRendererVsmDirectionalReceiverNormalBiasScale),
-    .help = "Directional VSM receiver normal-bias scale",
+    .help = "Directional VSM receiver normal bias",
     .default_value
     = static_cast<double>(kDefaultVsmDirectionalReceiverNormalBiasScale),
     .flags = console::CVarFlags::kArchive,
@@ -2378,6 +2382,18 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
       ? runtime_state.published_view_bindings
       : ViewFrameBindings {};
 
+    if (const auto* pass_target = render_context.pass_target.get();
+      pass_target != nullptr
+      && pass_target->GetDescriptor().depth_attachment.texture != nullptr) {
+      view_bindings.scene_depth_slot = EnsureSceneDepthTextureSrv(
+        runtime_state, *pass_target->GetDescriptor().depth_attachment.texture);
+    } else {
+      runtime_state.scene_depth_srv = kInvalidShaderVisibleIndex;
+      runtime_state.scene_depth_texture_owner = nullptr;
+      runtime_state.owns_scene_depth_srv = false;
+      view_bindings.scene_depth_slot = kInvalidShaderVisibleIndex;
+    }
+
     if (!can_reuse_cached_view_bindings && draw_frame_bindings_publisher_) {
       DLOG_F(3, "   worlds: {}", prepared.bindless_worlds_slot);
       DLOG_F(3, "  normals: {}", prepared.bindless_normals_slot);
@@ -2601,6 +2617,100 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
   // scene-constants buffer remains a renderer-owned operation.
   WireContext(const_cast<RenderContext&>(render_context), buffer_info.buffer);
   return true;
+}
+
+auto Renderer::EnsureSceneDepthTextureSrv(PerViewRuntimeState& runtime_state,
+  const graphics::Texture& depth_texture) -> ShaderVisibleIndex
+{
+  const auto graphics_ptr = gfx_weak_.lock();
+  if (!graphics_ptr) {
+    return kInvalidShaderVisibleIndex;
+  }
+
+  auto& allocator = graphics_ptr->GetDescriptorAllocator();
+  auto& registry = graphics_ptr->GetResourceRegistry();
+
+  const auto depth_format = depth_texture.GetDescriptor().format;
+  Format srv_format = Format::kR32Float;
+  switch (depth_format) {
+  case Format::kDepth32:
+  case Format::kDepth32Stencil8:
+  case Format::kDepth24Stencil8:
+    srv_format = Format::kR32Float;
+    break;
+  case Format::kDepth16:
+    srv_format = Format::kR16UNorm;
+    break;
+  default:
+    srv_format = depth_format;
+    break;
+  }
+
+  graphics::TextureViewDescription srv_desc {
+    .view_type = graphics::ResourceViewType::kTexture_SRV,
+    .visibility = graphics::DescriptorVisibility::kShaderVisible,
+    .format = srv_format,
+    .dimension = depth_texture.GetDescriptor().texture_type,
+    .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
+    .is_read_only_dsv = false,
+  };
+
+  if (const auto existing_index
+    = registry.FindShaderVisibleIndex(depth_texture, srv_desc);
+    existing_index.has_value()) {
+    runtime_state.scene_depth_srv = *existing_index;
+    runtime_state.scene_depth_texture_owner = &depth_texture;
+    runtime_state.owns_scene_depth_srv = false;
+    return runtime_state.scene_depth_srv;
+  }
+
+  if (runtime_state.scene_depth_srv.IsValid()
+    && runtime_state.scene_depth_texture_owner == &depth_texture
+    && runtime_state.owns_scene_depth_srv
+    && registry.Contains(depth_texture, srv_desc)) {
+    return runtime_state.scene_depth_srv;
+  }
+
+  auto register_new_srv = [&]() -> ShaderVisibleIndex {
+    auto srv_handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
+      graphics::DescriptorVisibility::kShaderVisible);
+    if (!srv_handle.IsValid()) {
+      return kInvalidShaderVisibleIndex;
+    }
+    runtime_state.scene_depth_srv
+      = allocator.GetShaderVisibleIndex(srv_handle);
+    auto native_view = registry.RegisterView(
+      const_cast<graphics::Texture&>(depth_texture), std::move(srv_handle),
+      srv_desc);
+    if (!native_view->IsValid()) {
+      runtime_state.scene_depth_srv = kInvalidShaderVisibleIndex;
+      runtime_state.scene_depth_texture_owner = nullptr;
+      runtime_state.owns_scene_depth_srv = false;
+      return kInvalidShaderVisibleIndex;
+    }
+    runtime_state.scene_depth_texture_owner = &depth_texture;
+    runtime_state.owns_scene_depth_srv = true;
+    return runtime_state.scene_depth_srv;
+  };
+
+  if (!runtime_state.scene_depth_srv.IsValid()
+    || !runtime_state.owns_scene_depth_srv) {
+    return register_new_srv();
+  }
+
+  const auto updated = registry.UpdateView(
+    const_cast<graphics::Texture&>(depth_texture),
+    bindless::HeapIndex { runtime_state.scene_depth_srv.get() }, srv_desc);
+  if (!updated) {
+    runtime_state.scene_depth_srv = kInvalidShaderVisibleIndex;
+    runtime_state.scene_depth_texture_owner = nullptr;
+    runtime_state.owns_scene_depth_srv = false;
+    return register_new_srv();
+  }
+
+  runtime_state.scene_depth_texture_owner = &depth_texture;
+  runtime_state.owns_scene_depth_srv = true;
+  return runtime_state.scene_depth_srv;
 }
 
 auto Renderer::UpdateCurrentViewLightCullingConfig(

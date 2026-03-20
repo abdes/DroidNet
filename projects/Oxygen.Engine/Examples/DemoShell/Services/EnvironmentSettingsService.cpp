@@ -15,6 +15,7 @@
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -89,7 +90,12 @@ namespace {
 
   auto RotationFromDirection(const glm::vec3& direction_ws) -> glm::quat
   {
-    constexpr glm::vec3 from_dir(0.0F, -1.0F, 0.0F);
+    if (glm::dot(direction_ws, direction_ws)
+      <= math::EpsilonDirection * math::EpsilonDirection) {
+      return glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
+    }
+
+    constexpr glm::vec3 from_dir = space::move::Forward;
     const glm::vec3 to_dir = glm::normalize(direction_ws);
 
     const float cos_theta = std::clamp(glm::dot(from_dir, to_dir), -1.0F, 1.0F);
@@ -106,6 +112,33 @@ namespace {
     }
 
     return rotation;
+  }
+
+  auto ComputeLocalRotationForWorldDirection(
+    scene::SceneNode& node, const glm::vec3& direction_ws) -> glm::quat
+  {
+    const glm::quat desired_world_rotation = RotationFromDirection(direction_ws);
+    const auto parent_opt = node.GetParent();
+    if (!parent_opt.has_value()) {
+      return desired_world_rotation;
+    }
+
+    const auto parent_world_rotation
+      = parent_opt->GetTransform().GetWorldRotation();
+    if (!parent_world_rotation.has_value()) {
+      return desired_world_rotation;
+    }
+
+    return glm::normalize(
+      glm::inverse(*parent_world_rotation) * desired_world_rotation);
+  }
+
+  auto ApplyLightDirectionWorldSpace(
+    scene::SceneNode& node, const glm::vec3& direction_ws) -> void
+  {
+    auto transform = node.GetTransform();
+    transform.SetLocalRotation(
+      ComputeLocalRotationForWorldDirection(node, direction_ws));
   }
 
   template <typename Record>
@@ -1604,8 +1637,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
           const auto sun_dir = DirectionFromAzimuthElevation(
             sun_azimuth_deg_, sun_elevation_deg_);
           const glm::vec3 light_dir = -sun_dir;
-          auto transform = sun_light_node_.GetTransform();
-          transform.SetLocalRotation(RotationFromDirection(light_dir));
+          ApplyLightDirectionWorldSpace(sun_light_node_, light_dir);
         }
 
         sun->SetLightReference(sun_light_node_);
@@ -1639,8 +1671,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
           const auto sun_dir = DirectionFromAzimuthElevation(
             sun_azimuth_deg_, sun_elevation_deg_);
           const glm::vec3 light_dir = -sun_dir;
-          auto transform = synthetic_sun_light_node_.GetTransform();
-          transform.SetLocalRotation(RotationFromDirection(light_dir));
+          ApplyLightDirectionWorldSpace(synthetic_sun_light_node_, light_dir);
         }
 
         sun->SetLightReference(synthetic_sun_light_node_);

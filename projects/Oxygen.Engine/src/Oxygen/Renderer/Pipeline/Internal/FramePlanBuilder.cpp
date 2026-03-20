@@ -18,6 +18,7 @@ namespace {
 
   struct FramePlanDebugModeIntent {
     bool is_non_ibl { false };
+    bool requires_neutral_tonemap { false };
   };
 
   auto EvaluateFramePlanDebugModeIntent(engine::ShaderDebugMode mode)
@@ -45,7 +46,13 @@ namespace {
       }
     }();
 
-    return FramePlanDebugModeIntent { .is_non_ibl = is_non_ibl };
+    const bool requires_neutral_tonemap
+      = mode != engine::ShaderDebugMode::kDisabled;
+
+    return FramePlanDebugModeIntent {
+      .is_non_ibl = is_non_ibl,
+      .requires_neutral_tonemap = requires_neutral_tonemap,
+    };
   }
 
 } // namespace
@@ -132,9 +139,12 @@ auto FramePlanBuilder::EvaluateViewRenderPlan(const CompositionViewImpl& view,
       view.GetDescriptor().name);
   }
 
+  const auto debug_intent
+    = EvaluateFramePlanDebugModeIntent(frame_shader_debug_mode_);
   plan_spec.tone_map_policy
     = (is_scene_view
-        && plan_spec.effective_render_mode == RenderMode::kWireframe)
+        && (plan_spec.effective_render_mode == RenderMode::kWireframe
+          || debug_intent.requires_neutral_tonemap))
     ? ToneMapPolicy::kNeutral
     : ToneMapPolicy::kConfigured;
 
@@ -142,8 +152,6 @@ auto FramePlanBuilder::EvaluateViewRenderPlan(const CompositionViewImpl& view,
     && (inputs.frame_settings.render_mode == RenderMode::kOverlayWireframe)
     && (plan_spec.effective_render_mode != RenderMode::kWireframe);
 
-  const auto debug_intent
-    = EvaluateFramePlanDebugModeIntent(frame_shader_debug_mode_);
   const bool run_scene_passes
     = (plan_spec.intent == ViewRenderIntent::kSceneAndComposite)
     && (plan_spec.effective_render_mode != RenderMode::kWireframe);
