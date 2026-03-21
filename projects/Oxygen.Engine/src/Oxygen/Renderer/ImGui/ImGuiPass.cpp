@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/GpuEventScope.h>
 #include <Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h>
 #include <Oxygen/Renderer/ImGui/ImGuiPass.h>
 
@@ -22,6 +23,11 @@ auto ImGuiPass::Render(graphics::CommandRecorder& recorder) const -> co::Co<>
   if (disabled_) {
     co_return;
   }
+
+  const graphics::GpuEventScopeOptions scope_options {
+    .timestamp_enabled = recorder.GetProfileScopeHandler() != nullptr,
+  };
+  graphics::GpuEventScope scope(recorder, "ImGuiPass", scope_options);
 
   backend_->Render(recorder);
   co_return;

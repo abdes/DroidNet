@@ -54,6 +54,8 @@
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Renderer/ImGui/GpuTimelinePanel.h>
+#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Internal/BrdfLutManager.h>
 #include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
 #include <Oxygen/Renderer/Internal/GpuDebugManager.h>
@@ -63,8 +65,6 @@
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Internal/SunResolver.h>
 #include <Oxygen/Renderer/Internal/ViewConstantsManager.h>
-#include <Oxygen/Renderer/ImGui/GpuTimelinePanel.h>
-#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/CompositingPass.h>
 #include <Oxygen/Renderer/Passes/IblComputePass.h>
@@ -109,13 +109,13 @@
 #include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Scene/Scene.h>
 
+
 namespace {
 constexpr std::string_view kCVarRendererTextureDumpTopN
   = "rndr.texture_dump_top_n";
 constexpr std::string_view kCVarRendererLastFrameStats
   = "rndr.last_frame_stats";
-constexpr std::string_view kCVarRendererGpuTimestamps
-  = "rndr.gpu_timestamps";
+constexpr std::string_view kCVarRendererGpuTimestamps = "rndr.gpu_timestamps";
 constexpr std::string_view kCVarRendererGpuTimestampMaxScopes
   = "rndr.gpu_timestamps.max_scopes";
 constexpr std::string_view kCVarRendererGpuTimestampExportNextFrame
@@ -293,6 +293,36 @@ auto FormatRendererLastFrameStats(
     last_frame.sceneprep_ms, last_frame.view_render_ms,
     last_frame.render_graph_ms, last_frame.env_update_ms,
     last_frame.compositing_ms, last_frame.views, last_frame.scene_views);
+}
+
+auto FormatCompositingTaskScopeLabel(
+  const oxygen::engine::CompositingTask& task) -> std::string
+{
+  using oxygen::engine::CompositingTaskType;
+
+  switch (task.type) {
+  case CompositingTaskType::kCopy:
+    return fmt::format(
+      "Composite Copy View {}", task.copy.source_view_id.get());
+  case CompositingTaskType::kBlend:
+    return fmt::format("Composite Blend View {} (alpha {:.2f})",
+      task.blend.source_view_id.get(), task.blend.alpha);
+  case CompositingTaskType::kBlendTexture:
+    if (task.texture_blend.source_texture) {
+      const auto& name
+        = task.texture_blend.source_texture->GetDescriptor().debug_name;
+      if (!name.empty()) {
+        return fmt::format("Composite Blend Texture {} (alpha {:.2f})", name,
+          task.texture_blend.alpha);
+      }
+    }
+    return fmt::format(
+      "Composite Blend Texture (alpha {:.2f})", task.texture_blend.alpha);
+  case CompositingTaskType::kTaa:
+    return fmt::format("Composite TAA (jitter {:.2f})", task.taa.jitter_scale);
+  }
+
+  return "Composite Task";
 }
 
 auto LogRendererPerformanceStats(
@@ -1087,8 +1117,7 @@ auto Renderer::ApplyConsoleCVars(
   if (console->TryGetCVarValue<double>(
         kCVarRendererVsmDirectionalReceiverSlopeBiasScale,
         receiver_slope_bias_scale)) {
-    directional_shadow_bias_state_.virtual_directional
-      .receiver_slope_bias_scale
+    directional_shadow_bias_state_.virtual_directional.receiver_slope_bias_scale
       = static_cast<float>(receiver_slope_bias_scale);
   }
 
@@ -1109,24 +1138,30 @@ auto Renderer::ApplyConsoleCVars(
   if (console->TryGetCVarValue<double>(
         kCVarRendererVsmDirectionalRasterSlopeBiasScale,
         raster_slope_bias_scale)) {
-    directional_shadow_bias_state_.virtual_directional
-      .raster_slope_bias_scale
+    directional_shadow_bias_state_.virtual_directional.raster_slope_bias_scale
       = static_cast<float>(raster_slope_bias_scale);
   }
 
   static bool logged_renderer_bias_cvars = false;
   if (!logged_renderer_bias_cvars) {
     LOG_F(INFO,
-      "Renderer bias CVars: synthetic_constant_bias={} synthetic_normal_bias={} "
-      "receiver_normal_scale={} receiver_constant_scale={} receiver_slope_scale={} "
+      "Renderer bias CVars: synthetic_constant_bias={} "
+      "synthetic_normal_bias={} "
+      "receiver_normal_scale={} receiver_constant_scale={} "
+      "receiver_slope_scale={} "
       "raster_constant_scale={} raster_slope_scale={}",
       directional_shadow_bias_state_.synthetic_constant_bias,
       directional_shadow_bias_state_.synthetic_normal_bias,
-      directional_shadow_bias_state_.virtual_directional.receiver_normal_bias_scale,
-      directional_shadow_bias_state_.virtual_directional.receiver_constant_bias_scale,
-      directional_shadow_bias_state_.virtual_directional.receiver_slope_bias_scale,
-      directional_shadow_bias_state_.virtual_directional.raster_constant_bias_scale,
-      directional_shadow_bias_state_.virtual_directional.raster_slope_bias_scale);
+      directional_shadow_bias_state_.virtual_directional
+        .receiver_normal_bias_scale,
+      directional_shadow_bias_state_.virtual_directional
+        .receiver_constant_bias_scale,
+      directional_shadow_bias_state_.virtual_directional
+        .receiver_slope_bias_scale,
+      directional_shadow_bias_state_.virtual_directional
+        .raster_constant_bias_scale,
+      directional_shadow_bias_state_.virtual_directional
+        .raster_slope_bias_scale);
     logged_renderer_bias_cvars = true;
   }
 
@@ -1229,12 +1264,12 @@ auto Renderer::AttachGpuTimelinePanelDrawer(
     return;
   }
 
-  gpu_timeline_panel_drawer_token_ = imgui_module.RegisterOverlayDrawer(
-    "Renderer.GpuTimeline", [this] {
-      if (gpu_timeline_panel_) {
-        gpu_timeline_panel_->Draw();
-      }
-    });
+  gpu_timeline_panel_drawer_token_
+    = imgui_module.RegisterOverlayDrawer("Renderer.GpuTimeline", [this] {
+        if (gpu_timeline_panel_) {
+          gpu_timeline_panel_->Draw();
+        }
+      });
 }
 
 auto Renderer::DetachGpuTimelinePanelDrawer() -> void
@@ -1245,7 +1280,8 @@ auto Renderer::DetachGpuTimelinePanelDrawer() -> void
   }
 
   if (auto imgui_module = engine_->GetModule<engine::imgui::ImGuiModule>()) {
-    imgui_module->get().UnregisterOverlayDrawer(gpu_timeline_panel_drawer_token_);
+    imgui_module->get().UnregisterOverlayDrawer(
+      gpu_timeline_panel_drawer_token_);
   }
   gpu_timeline_panel_drawer_token_ = 0U;
 }
@@ -1671,9 +1707,12 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
       }
       auto recorder = recorder_ptr.get();
       const auto scope_options = MakeGpuEventScopeOptions();
+      const auto view_scope_name = view_ctx.metadata.name.empty()
+        ? fmt::format("View {}", view_id.get())
+        : fmt::format("View: {}", view_ctx.metadata.name);
 
       graphics::GpuEventScope view_scope(
-        *recorder, fmt::format("View {}", view_id.get()), scope_options);
+        *recorder, view_scope_name, scope_options);
 
       auto update_view_state = [&](ViewId view_id, bool success) -> void {
         std::unique_lock state_lock(view_state_mutex_);
@@ -1952,6 +1991,11 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
     }
 
     for (const auto& task : payload.tasks) {
+      const auto scope_options = MakeGpuEventScopeOptions();
+      const auto task_scope_label = FormatCompositingTaskScopeLabel(task);
+      graphics::GpuEventScope task_scope(
+        recorder, task_scope_label, scope_options);
+
       switch (task.type) {
       case CompositingTaskType::kCopy: {
         if (!IsViewReady(task.copy.source_view_id)) {
@@ -2173,7 +2217,8 @@ auto Renderer::AcquireRecorderForView(ViewId view_id, Graphics& gfx)
       observer_ptr<graphics::IGpuProfileScopeHandler>(
         gpu_timeline_profiler_.get()));
   }
-  return std::shared_ptr<oxygen::graphics::CommandRecorder>(std::move(recorder));
+  return std::shared_ptr<oxygen::graphics::CommandRecorder>(
+    std::move(recorder));
 }
 
 auto Renderer::SetupFramebufferForView(const FrameContext& frame_context,
@@ -2279,9 +2324,8 @@ auto Renderer::PrepareAndWireViewConstantsForView(ViewId view_id,
     render_context, ViewBindingRepublishMode::kFull);
 }
 
-auto Renderer::RepublishCurrentViewBindings(
-  const RenderContext& render_context, const ViewBindingRepublishMode mode)
-  -> bool
+auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
+  const ViewBindingRepublishMode mode) -> bool
 {
   const auto view_id = render_context.current_view.view_id;
   if (view_id == ViewId {}) {
@@ -2415,8 +2459,7 @@ auto Renderer::RepublishCurrentViewBindings(
         = kInvalidShaderVisibleIndex;
       auto virtual_shadow_physical_page_metadata_slot
         = kInvalidShaderVisibleIndex;
-      auto virtual_shadow_physical_page_lists_slot
-        = kInvalidShaderVisibleIndex;
+      auto virtual_shadow_physical_page_lists_slot = kInvalidShaderVisibleIndex;
       auto sun_shadow_index = 0xFFFFFFFFU;
       if (const auto light_manager = scene_prep_state_->GetLightManager()) {
         const auto prepared_it = prepared_frames_.find(view_id);
@@ -2427,10 +2470,10 @@ auto Renderer::RepublishCurrentViewBindings(
           = prepared_it != prepared_frames_.end()
           ? prepared_it->second.visible_receiver_bounding_spheres
           : std::span<const glm::vec4> {};
-        const auto synthetic_sun_shadow = BuildSyntheticSunShadowInput(
-          render_context, runtime_state.sun,
-          directional_shadow_bias_state_.synthetic_constant_bias,
-          directional_shadow_bias_state_.synthetic_normal_bias);
+        const auto synthetic_sun_shadow
+          = BuildSyntheticSunShadowInput(render_context, runtime_state.sun,
+            directional_shadow_bias_state_.synthetic_constant_bias,
+            directional_shadow_bias_state_.synthetic_normal_bias);
         const auto shadow_caster_content_hash
           = HashPreparedShadowCasterContent(prepared);
         const auto shadow_view
@@ -2502,7 +2545,8 @@ auto Renderer::RepublishCurrentViewBindings(
       }
     }
 
-    if (!can_reuse_cached_view_bindings && environment_frame_bindings_publisher_) {
+    if (!can_reuse_cached_view_bindings
+      && environment_frame_bindings_publisher_) {
       auto environment_view_slot = kInvalidShaderVisibleIndex;
       if (environment_view_data_publisher_) {
         environment_view_slot = environment_view_data_publisher_->Publish(
@@ -2530,9 +2574,8 @@ auto Renderer::RepublishCurrentViewBindings(
       "Renderer: frame={} view={} republish mode={} cached_view_bindings={} "
       "view_frame_slot={} shadow_frame_slot={} lighting_frame_slot={}",
       render_context.frame_sequence.get(), view_id.get(),
-      lighting_only ? "lighting-only" : "full",
-      can_reuse_cached_view_bindings, view_bindings_slot,
-      view_bindings.shadow_frame_slot.get(),
+      lighting_only ? "lighting-only" : "full", can_reuse_cached_view_bindings,
+      view_bindings_slot, view_bindings.shadow_frame_slot.get(),
       view_bindings.lighting_frame_slot.get());
     view_constants.SetBindlessViewFrameBindingsSlot(
       BindlessViewFrameBindingsSlot(view_bindings_slot),
@@ -2998,9 +3041,9 @@ auto Renderer::PublishPreparedFrameSpans(
     const auto draw_bounds = emitter->GetDrawBoundingSpheres();
     storage.draw_bounding_sphere_storage.assign(
       draw_bounds.begin(), draw_bounds.end());
-    prepared_frame.draw_bounding_spheres = std::span<const glm::vec4>(
-      storage.draw_bounding_sphere_storage.data(),
-      storage.draw_bounding_sphere_storage.size());
+    prepared_frame.draw_bounding_spheres
+      = std::span<const glm::vec4>(storage.draw_bounding_sphere_storage.data(),
+        storage.draw_bounding_sphere_storage.size());
   } else {
     // No emitter -> empty spans
     prepared_frame.draw_metadata_bytes = {};

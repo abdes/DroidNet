@@ -16,46 +16,62 @@ namespace oxygen::engine::imgui {
 
 namespace {
 
-auto DrawTimelineBar(float start_ms, float duration_ms, float frame_span_ms)
-  -> void
-{
-  const ImVec2 origin = ImGui::GetCursorScreenPos();
-  const float width = std::max(160.0F, ImGui::GetContentRegionAvail().x - 8.0F);
-  const float height = ImGui::GetTextLineHeight();
-  const ImVec2 size(width, height);
-  ImGui::InvisibleButton("##gpu_timeline_bar", size);
+  auto DrawTimelineBar(float start_ms, float duration_ms, float frame_span_ms)
+    -> void
+  {
+    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    const float width
+      = std::max(160.0F, ImGui::GetContentRegionAvail().x - 8.0F);
+    const float height = ImGui::GetTextLineHeight();
+    const ImVec2 size(width, height);
+    ImGui::InvisibleButton("##gpu_timeline_bar", size);
 
-  auto* draw_list = ImGui::GetWindowDrawList();
-  constexpr ImU32 kBackgroundColor = IM_COL32(36, 40, 48, 255);
-  constexpr ImU32 kBorderColor = IM_COL32(72, 78, 92, 255);
-  constexpr ImU32 kBarColor = IM_COL32(78, 166, 255, 255);
-  const ImVec2 bottom_right(origin.x + size.x, origin.y + size.y);
+    auto* draw_list = ImGui::GetWindowDrawList();
+    constexpr ImU32 kBackgroundColor = IM_COL32(36, 40, 48, 255);
+    constexpr ImU32 kBorderColor = IM_COL32(72, 78, 92, 255);
+    constexpr ImU32 kBarColor = IM_COL32(78, 166, 255, 255);
+    const ImVec2 bottom_right(origin.x + size.x, origin.y + size.y);
 
-  draw_list->AddRectFilled(origin, bottom_right, kBackgroundColor, 4.0F);
-  draw_list->AddRect(origin, bottom_right, kBorderColor, 4.0F);
+    draw_list->AddRectFilled(origin, bottom_right, kBackgroundColor, 4.0F);
+    draw_list->AddRect(origin, bottom_right, kBorderColor, 4.0F);
 
-  if (frame_span_ms <= 0.0F || duration_ms <= 0.0F) {
-    return;
+    if (frame_span_ms <= 0.0F || duration_ms <= 0.0F) {
+      return;
+    }
+
+    const float normalized_start
+      = std::clamp(start_ms / frame_span_ms, 0.0F, 1.0F);
+    const float normalized_end = std::clamp(
+      (start_ms + duration_ms) / frame_span_ms, normalized_start, 1.0F);
+    const float left = origin.x + (size.x * normalized_start);
+    const float right = origin.x + (size.x * normalized_end);
+
+    draw_list->AddRectFilled(ImVec2(left, origin.y + 2.0F),
+      ImVec2(std::max(left + 1.0F, right), origin.y + size.y - 2.0F), kBarColor,
+      3.0F);
   }
 
-  const float normalized_start = std::clamp(start_ms / frame_span_ms, 0.0F, 1.0F);
-  const float normalized_end = std::clamp(
-    (start_ms + duration_ms) / frame_span_ms, normalized_start, 1.0F);
-  const float left = origin.x + (size.x * normalized_start);
-  const float right = origin.x + (size.x * normalized_end);
+  auto ShouldSkipCollapsedPassChild(const GpuTimelinePresentationRow& row,
+    const std::optional<uint16_t> collapsed_pass_depth) -> bool
+  {
+    return collapsed_pass_depth.has_value()
+      && row.depth > *collapsed_pass_depth;
+  }
 
-  draw_list->AddRectFilled(
-    ImVec2(left, origin.y + 2.0F),
-    ImVec2(std::max(left + 1.0F, right), origin.y + size.y - 2.0F),
-    kBarColor, 3.0F);
-}
+  auto DrawIndentedScopeLabel(const GpuTimelinePresentationRow& row) -> void
+  {
+    const float indent = static_cast<float>(row.depth) * 14.0F;
+    if (indent > 0.0F) {
+      ImGui::Dummy(ImVec2(indent, 0.0F));
+      ImGui::SameLine(0.0F, 0.0F);
+    }
 
-auto ShouldSkipCollapsedPassChild(
-  const GpuTimelinePresentationRow& row,
-  const std::optional<uint16_t> collapsed_pass_depth) -> bool
-{
-  return collapsed_pass_depth.has_value() && row.depth > *collapsed_pass_depth;
-}
+    if (row.valid) {
+      ImGui::TextUnformatted(row.display_name.c_str());
+    } else {
+      ImGui::TextDisabled("%s", row.display_name.c_str());
+    }
+  }
 
 } // namespace
 
@@ -70,10 +86,7 @@ auto GpuTimelinePanel::SetVisible(const bool visible) -> void
   visible_ = visible;
 }
 
-auto GpuTimelinePanel::IsVisible() const noexcept -> bool
-{
-  return visible_;
-}
+auto GpuTimelinePanel::IsVisible() const noexcept -> bool { return visible_; }
 
 auto GpuTimelinePanel::Draw() -> void
 {
@@ -106,8 +119,8 @@ auto GpuTimelinePanel::Draw() -> void
     static_cast<unsigned long long>(timeline.frame_sequence),
     static_cast<unsigned long long>(timeline.timestamp_frequency_hz),
     static_cast<unsigned>(timeline.scopes.size()), timeline.used_query_slots);
-  ImGui::TextDisabled(
-    "Presentation smoothing and pass-phase grouping are display-only. Raw frame timings are shown on hover.");
+  ImGui::TextDisabled("Presentation smoothing and pass-phase grouping are "
+                      "display-only. Raw frame timings are shown on hover.");
   ImGui::Checkbox("Show pass phase details", &show_pass_phase_details_);
   if (timeline.overflowed) {
     ImGui::SameLine();
@@ -134,7 +147,8 @@ auto GpuTimelinePanel::Draw() -> void
     std::optional<uint16_t> collapsed_pass_depth {};
     for (std::size_t i = 0; i < presentation.rows.size(); ++i) {
       const auto& row = presentation.rows[i];
-      if (collapsed_pass_depth.has_value() && row.depth <= *collapsed_pass_depth) {
+      if (collapsed_pass_depth.has_value()
+        && row.depth <= *collapsed_pass_depth) {
         collapsed_pass_depth.reset();
       }
       if (ShouldSkipCollapsedPassChild(row, collapsed_pass_depth)) {
@@ -143,13 +157,7 @@ auto GpuTimelinePanel::Draw() -> void
       ImGui::TableNextRow();
 
       ImGui::TableSetColumnIndex(0);
-      ImGui::Indent(static_cast<float>(row.depth) * 14.0F);
-      if (row.valid) {
-        ImGui::TextUnformatted(row.display_name.c_str());
-      } else {
-        ImGui::TextDisabled("%s", row.display_name.c_str());
-      }
-      ImGui::Unindent(static_cast<float>(row.depth) * 14.0F);
+      DrawIndentedScopeLabel(row);
 
       ImGui::TableSetColumnIndex(1);
       if (row.valid) {
@@ -173,8 +181,8 @@ auto GpuTimelinePanel::Draw() -> void
         if (ImGui::IsItemHovered()) {
           ImGui::BeginTooltip();
           if (row.is_grouped_pass) {
-            ImGui::Text("Grouped pass row from %u phase scope(s)",
-              row.grouped_scope_count);
+            ImGui::Text(
+              "Grouped pass row from %u pass(es)", row.grouped_scope_count);
             ImGui::Separator();
           }
           ImGui::Text("Raw start: %.3f ms", row.raw_start_ms);
