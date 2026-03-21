@@ -20,13 +20,27 @@ namespace oxygen::engine {
 
 struct DrawMetadata;
 
+//! Virtual shadow-map page raster pass.
+/*!
+ This pass derives from `DepthPrePass` intentionally because it still performs
+ depth-only geometry rasterization with the same partition/material handling
+ used by the engine's other depth raster passes. It reuses the shared
+ depth-only raster foundation from `DepthPrePass`: depth PSO construction,
+ opaque/masked partition selection, common root-parameter rebinding, and the
+ prepared-draw submission contract.
+
+ What makes it different is the execution model around that shared base:
+ raster work is driven by virtual-shadow page-management outputs and indirect
+ draw arguments, and the pass targets the virtual shadow depth atlas rather
+ than the main-view depth buffer.
+*/
 class VirtualShadowPageRasterPass : public DepthPrePass {
 public:
   using Config = DepthPrePassConfig;
 
   OXGN_RNDR_API explicit VirtualShadowPageRasterPass(
     std::shared_ptr<Config> config);
-  ~VirtualShadowPageRasterPass() override;
+  OXGN_RNDR_API ~VirtualShadowPageRasterPass() override;
 
   OXYGEN_DEFAULT_COPYABLE(VirtualShadowPageRasterPass)
   OXYGEN_DEFAULT_MOVABLE(VirtualShadowPageRasterPass)

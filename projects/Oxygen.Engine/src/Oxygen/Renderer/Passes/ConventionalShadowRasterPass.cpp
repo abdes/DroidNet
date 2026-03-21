@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstring>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
@@ -41,6 +42,8 @@ ConventionalShadowRasterPass::ConventionalShadowRasterPass(
   std::shared_ptr<Config> config)
   : DepthPrePass(std::move(config))
 {
+  constexpr std::string_view kPassName = "ConventionalShadowRasterPass";
+  SetName(kPassName);
 }
 
 ConventionalShadowRasterPass::~ConventionalShadowRasterPass()

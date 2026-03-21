@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstring>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
@@ -47,6 +48,8 @@ VirtualShadowPageRasterPass::VirtualShadowPageRasterPass(
   std::shared_ptr<Config> config)
   : DepthPrePass(std::move(config))
 {
+  constexpr std::string_view kPassName = "VirtualShadowPageRasterPass";
+  SetName(kPassName);
   pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
 }
 
