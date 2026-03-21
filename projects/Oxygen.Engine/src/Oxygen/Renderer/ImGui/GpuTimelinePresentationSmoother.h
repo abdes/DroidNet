@@ -59,6 +59,7 @@ struct GpuTimelinePresentationFrame {
 class GpuTimelinePresentationSmoother final {
 public:
   static constexpr float kDefaultBlendFactor = 0.2F;
+  static constexpr float kDefaultJitterDeadbandMs = 0.5F;
 
   OXGN_RNDR_API auto Apply(const internal::GpuTimelineFrame& frame)
     -> GpuTimelinePresentationFrame;

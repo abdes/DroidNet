@@ -15,57 +15,65 @@ namespace oxygen::engine::imgui {
 
 namespace {
 
-constexpr uint32_t kInvalidScopeId = 0xFFFFFFFFU;
+  constexpr uint32_t kInvalidScopeId = 0xFFFFFFFFU;
 
-auto BlendValue(const float previous, const float current, const float alpha)
-  -> float
-{
-  return previous + ((current - previous) * alpha);
-}
+  auto BlendValue(const float previous, const float current, const float alpha)
+    -> float
+  {
+    return previous + ((current - previous) * alpha);
+  }
 
-auto HashCombine(const uint64_t seed, const uint64_t value) -> uint64_t
-{
-  return seed ^ (value + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U));
-}
+  auto BlendWithDeadband(const float previous, const float current,
+    const float alpha, const float deadband) -> float
+  {
+    if (std::abs(current - previous) <= deadband) {
+      return previous;
+    }
+    return BlendValue(previous, current, alpha);
+  }
 
-auto MakeBaseScopeKey(const uint64_t parent_key,
-  const internal::GpuTimelineScope& scope) -> uint64_t
-{
-  auto key = HashCombine(parent_key, scope.name_hash);
-  key = HashCombine(key, scope.depth);
-  key = HashCombine(key, scope.stream_id);
-  return key;
-}
+  auto HashCombine(const uint64_t seed, const uint64_t value) -> uint64_t
+  {
+    return seed ^ (value + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U));
+  }
 
-auto MakeStableScopeKey(
-  const uint64_t base_key, const uint32_t sibling_ordinal) -> uint64_t
-{
-  return HashCombine(base_key, sibling_ordinal);
-}
+  auto MakeBaseScopeKey(const uint64_t parent_key,
+    const internal::GpuTimelineScope& scope) -> uint64_t
+  {
+    auto key = HashCombine(parent_key, scope.name_hash);
+    key = HashCombine(key, scope.depth);
+    key = HashCombine(key, scope.stream_id);
+    return key;
+  }
 
-auto IsRenderPassPhaseName(const std::string_view name) -> bool
-{
-  return name == "PrepareResources" || name == "Execute";
-}
+  auto MakeStableScopeKey(
+    const uint64_t base_key, const uint32_t sibling_ordinal) -> uint64_t
+  {
+    return HashCombine(base_key, sibling_ordinal);
+  }
 
-auto MakePresentationRow(
-  const GpuTimelinePresentationScope& scope, const uint16_t depth)
-  -> GpuTimelinePresentationRow
-{
-  return GpuTimelinePresentationRow {
-    .display_name = scope.display_name,
-    .depth = depth,
-    .grouped_scope_count = 1U,
-    .valid = scope.valid,
-    .is_grouped_pass = false,
-    .raw_start_ms = scope.raw_start_ms,
-    .raw_duration_ms = scope.raw_duration_ms,
-    .raw_end_ms = scope.raw_end_ms,
-    .display_start_ms = scope.display_start_ms,
-    .display_duration_ms = scope.display_duration_ms,
-    .display_end_ms = scope.display_end_ms,
-  };
-}
+  auto IsRenderPassPhaseName(const std::string_view name) -> bool
+  {
+    return name == "PrepareResources" || name == "Execute";
+  }
+
+  auto MakePresentationRow(const GpuTimelinePresentationScope& scope,
+    const uint16_t depth) -> GpuTimelinePresentationRow
+  {
+    return GpuTimelinePresentationRow {
+      .display_name = scope.display_name,
+      .depth = depth,
+      .grouped_scope_count = 1U,
+      .valid = scope.valid,
+      .is_grouped_pass = false,
+      .raw_start_ms = scope.raw_start_ms,
+      .raw_duration_ms = scope.raw_duration_ms,
+      .raw_end_ms = scope.raw_end_ms,
+      .display_start_ms = scope.display_start_ms,
+      .display_duration_ms = scope.display_duration_ms,
+      .display_end_ms = scope.display_end_ms,
+    };
+  }
 
 } // namespace
 
@@ -86,8 +94,7 @@ auto GpuTimelinePresentationSmoother::Apply(
   float raw_frame_span_ms = 0.0F;
   for (std::size_t i = 0; i < frame.scopes.size(); ++i) {
     const auto& scope = frame.scopes[i];
-    const auto parent_key
-      = scope.parent_scope_id < stable_scope_keys.size()
+    const auto parent_key = scope.parent_scope_id < stable_scope_keys.size()
       ? stable_scope_keys[scope.parent_scope_id]
       : 0U;
     const auto base_key = MakeBaseScopeKey(parent_key, scope);
@@ -115,10 +122,11 @@ auto GpuTimelinePresentationSmoother::Apply(
           .duration_ms = scope.duration_ms,
         });
       if (!inserted) {
-        state_it->second.start_ms = BlendValue(
-          state_it->second.start_ms, scope.start_ms, kDefaultBlendFactor);
-        state_it->second.duration_ms = BlendValue(state_it->second.duration_ms,
-          scope.duration_ms, kDefaultBlendFactor);
+        state_it->second.start_ms = BlendWithDeadband(state_it->second.start_ms,
+          scope.start_ms, kDefaultBlendFactor, kDefaultJitterDeadbandMs);
+        state_it->second.duration_ms
+          = BlendWithDeadband(state_it->second.duration_ms, scope.duration_ms,
+            kDefaultBlendFactor, kDefaultJitterDeadbandMs);
       }
 
       entry.display_start_ms = std::max(0.0F, state_it->second.start_ms);
@@ -133,14 +141,14 @@ auto GpuTimelinePresentationSmoother::Apply(
 
   presentation.raw_frame_span_ms = raw_frame_span_ms;
   if (has_smoothed_frame_span_) {
-    smoothed_frame_span_ms_ = BlendValue(
-      smoothed_frame_span_ms_, raw_frame_span_ms, kDefaultBlendFactor);
+    smoothed_frame_span_ms_ = BlendWithDeadband(smoothed_frame_span_ms_,
+      raw_frame_span_ms, kDefaultBlendFactor, kDefaultJitterDeadbandMs);
   } else {
     smoothed_frame_span_ms_ = raw_frame_span_ms;
     has_smoothed_frame_span_ = true;
   }
-  presentation.display_frame_span_ms = std::max(
-    presentation.raw_frame_span_ms, smoothed_frame_span_ms_);
+  presentation.display_frame_span_ms
+    = std::max(presentation.raw_frame_span_ms, smoothed_frame_span_ms_);
 
   for (auto it = scope_state_.begin(); it != scope_state_.end();) {
     if (!seen_scope_keys.contains(it->first)) {
@@ -156,14 +164,16 @@ auto GpuTimelinePresentationSmoother::Apply(
     return presentation;
   }
 
-  std::unordered_map<uint32_t, std::vector<std::size_t>> child_indices_by_parent {};
+  std::unordered_map<uint32_t, std::vector<std::size_t>>
+    child_indices_by_parent {};
   child_indices_by_parent.reserve(presentation.scopes.size());
   for (std::size_t i = 0; i < presentation.scopes.size(); ++i) {
-    child_indices_by_parent[presentation.scopes[i].parent_scope_id].push_back(i);
+    child_indices_by_parent[presentation.scopes[i].parent_scope_id].push_back(
+      i);
   }
 
-  const auto is_groupable_pass_scope =
-    [&](const std::size_t scope_index) -> bool {
+  const auto is_groupable_pass_scope
+    = [&](const std::size_t scope_index) -> bool {
     const auto& scope = presentation.scopes[scope_index];
     const auto children_it = child_indices_by_parent.find(scope.scope_id);
     if (children_it == child_indices_by_parent.end()
@@ -171,15 +181,15 @@ auto GpuTimelinePresentationSmoother::Apply(
       return false;
     }
 
-    const auto& phase_scope
-      = presentation.scopes[children_it->second.front()];
+    const auto& phase_scope = presentation.scopes[children_it->second.front()];
     return IsRenderPassPhaseName(phase_scope.display_name);
   };
 
-  const auto make_grouped_pass_row =
-    [&](const std::vector<std::size_t>& grouped_scope_indices,
+  const auto make_grouped_pass_row
+    = [&](const std::vector<std::size_t>& grouped_scope_indices,
         const uint16_t depth) -> GpuTimelinePresentationRow {
-    const auto& first_scope = presentation.scopes[grouped_scope_indices.front()];
+    const auto& first_scope
+      = presentation.scopes[grouped_scope_indices.front()];
     bool all_valid = true;
     float raw_start_ms = std::numeric_limits<float>::max();
     float raw_end_ms = 0.0F;
@@ -202,7 +212,8 @@ auto GpuTimelinePresentationSmoother::Apply(
     return GpuTimelinePresentationRow {
       .display_name = first_scope.display_name,
       .depth = depth,
-      .grouped_scope_count = static_cast<uint32_t>(grouped_scope_indices.size()),
+      .grouped_scope_count
+      = static_cast<uint32_t>(grouped_scope_indices.size()),
       .valid = all_valid,
       .is_grouped_pass = true,
       .raw_start_ms = all_valid ? raw_start_ms : 0.0F,
@@ -210,13 +221,13 @@ auto GpuTimelinePresentationSmoother::Apply(
       .raw_end_ms = all_valid ? raw_end_ms : 0.0F,
       .display_start_ms = all_valid ? display_start_ms : 0.0F,
       .display_duration_ms
-        = all_valid ? (display_end_ms - display_start_ms) : 0.0F,
+      = all_valid ? (display_end_ms - display_start_ms) : 0.0F,
       .display_end_ms = all_valid ? display_end_ms : 0.0F,
     };
   };
 
-  const auto try_collect_grouped_pass_run =
-    [&](const std::vector<std::size_t>& sibling_scope_indices,
+  const auto try_collect_grouped_pass_run
+    = [&](const std::vector<std::size_t>& sibling_scope_indices,
         const std::size_t start_index) -> std::vector<std::size_t> {
     std::vector<std::size_t> grouped_scope_indices {};
     const auto first_scope_index = sibling_scope_indices[start_index];
@@ -252,9 +263,9 @@ auto GpuTimelinePresentationSmoother::Apply(
     return grouped_scope_indices;
   };
 
-  const auto emit_scope_subtree =
-    [&](const auto& self, const std::size_t scope_index, const uint16_t depth)
-    -> void {
+  const auto emit_scope_subtree
+    = [&](const auto& self_subtree, const auto& self_siblings,
+        const std::size_t scope_index, const uint16_t depth) -> void {
     const auto& scope = presentation.scopes[scope_index];
     presentation.rows.push_back(MakePresentationRow(scope, depth));
 
@@ -263,35 +274,42 @@ auto GpuTimelinePresentationSmoother::Apply(
       return;
     }
 
-    const auto& sibling_scope_indices = children_it->second;
+    self_siblings(self_siblings, self_subtree, children_it->second, depth + 1U);
+  };
+
+  const auto emit_scope_siblings
+    = [&](const auto& self_siblings, const auto& self_subtree,
+        const std::vector<std::size_t>& sibling_scope_indices,
+        const uint16_t depth) -> void {
     for (std::size_t i = 0; i < sibling_scope_indices.size();) {
       const auto grouped_scope_indices
         = try_collect_grouped_pass_run(sibling_scope_indices, i);
       if (!grouped_scope_indices.empty()) {
         presentation.rows.push_back(
-          make_grouped_pass_row(grouped_scope_indices, depth + 1U));
+          make_grouped_pass_row(grouped_scope_indices, depth));
         for (const auto grouped_scope_index : grouped_scope_indices) {
           const auto& grouped_scope = presentation.scopes[grouped_scope_index];
           const auto& phase_scope_indices
             = child_indices_by_parent[grouped_scope.scope_id];
           for (const auto phase_scope_index : phase_scope_indices) {
-            self(self, phase_scope_index, depth + 2U);
+            self_subtree(
+              self_subtree, self_siblings, phase_scope_index, depth + 1U);
           }
         }
         i += grouped_scope_indices.size();
         continue;
       }
 
-      self(self, sibling_scope_indices[i], depth + 1U);
+      self_subtree(
+        self_subtree, self_siblings, sibling_scope_indices[i], depth);
       ++i;
     }
   };
 
   const auto root_scopes_it = child_indices_by_parent.find(kInvalidScopeId);
   if (root_scopes_it != child_indices_by_parent.end()) {
-    for (const auto root_scope_index : root_scopes_it->second) {
-      emit_scope_subtree(emit_scope_subtree, root_scope_index, 0U);
-    }
+    emit_scope_siblings(
+      emit_scope_siblings, emit_scope_subtree, root_scopes_it->second, 0U);
   }
 
   return presentation;

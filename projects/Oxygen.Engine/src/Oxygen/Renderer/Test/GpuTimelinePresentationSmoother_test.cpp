@@ -36,8 +36,8 @@ auto MakeFrame(const uint64_t frame_sequence, const float start_ms,
   GpuTimelineFrame frame {};
   frame.frame_sequence = frame_sequence;
 
-  frame.scopes.push_back(
-    MakeScope(0U, 0xFFFFFFFFU, 0xA5A5U, "Main Pass", 0U, start_ms, duration_ms));
+  frame.scopes.push_back(MakeScope(
+    0U, 0xFFFFFFFFU, 0xA5A5U, "Main Pass", 0U, start_ms, duration_ms));
   return frame;
 }
 
@@ -52,7 +52,8 @@ NOLINT_TEST(GpuTimelinePresentationSmootherTest, FirstFrameUsesRawValues)
   EXPECT_FLOAT_EQ(presentation.display_frame_span_ms, 5.0F);
 }
 
-NOLINT_TEST(GpuTimelinePresentationSmootherTest, SubsequentFramesBlendTowardNewValues)
+NOLINT_TEST(
+  GpuTimelinePresentationSmootherTest, SubsequentFramesBlendTowardNewValues)
 {
   GpuTimelinePresentationSmoother smoother;
   static_cast<void>(smoother.Apply(MakeFrame(1U, 1.0F, 4.0F)));
@@ -68,7 +69,34 @@ NOLINT_TEST(GpuTimelinePresentationSmootherTest, SubsequentFramesBlendTowardNewV
   EXPECT_FLOAT_EQ(presentation.scopes[0].raw_duration_ms, 6.0F);
 }
 
-NOLINT_TEST(GpuTimelinePresentationSmootherTest, RepeatedSiblingNamesGetDistinctStableTracks)
+NOLINT_TEST(GpuTimelinePresentationSmootherTest, SubDeadbandChangesRemainStable)
+{
+  GpuTimelinePresentationSmoother smoother;
+  static_cast<void>(smoother.Apply(MakeFrame(1U, 1.0F, 4.0F)));
+
+  const auto presentation = smoother.Apply(MakeFrame(2U, 1.4F, 4.3F));
+
+  ASSERT_EQ(presentation.scopes.size(), 1U);
+  EXPECT_FLOAT_EQ(presentation.scopes[0].display_start_ms, 1.0F);
+  EXPECT_FLOAT_EQ(presentation.scopes[0].display_duration_ms, 4.0F);
+}
+
+NOLINT_TEST(GpuTimelinePresentationSmootherTest, OverDeadbandChangesBlend)
+{
+  GpuTimelinePresentationSmoother smoother;
+  static_cast<void>(smoother.Apply(MakeFrame(1U, 1.0F, 4.0F)));
+
+  const auto presentation = smoother.Apply(MakeFrame(2U, 1.6F, 4.7F));
+
+  ASSERT_EQ(presentation.scopes.size(), 1U);
+  EXPECT_GT(presentation.scopes[0].display_start_ms, 1.0F);
+  EXPECT_LT(presentation.scopes[0].display_start_ms, 1.6F);
+  EXPECT_GT(presentation.scopes[0].display_duration_ms, 4.0F);
+  EXPECT_LT(presentation.scopes[0].display_duration_ms, 4.7F);
+}
+
+NOLINT_TEST(GpuTimelinePresentationSmootherTest,
+  RepeatedSiblingNamesGetDistinctStableTracks)
 {
   GpuTimelinePresentationSmoother smoother;
 
@@ -150,6 +178,37 @@ NOLINT_TEST(GpuTimelinePresentationSmootherTest,
   EXPECT_EQ(presentation.rows[3].display_name, "Execute");
   EXPECT_EQ(presentation.rows[3].depth, 2U);
   EXPECT_FALSE(presentation.rows[3].is_grouped_pass);
+}
+
+NOLINT_TEST(GpuTimelinePresentationSmootherTest,
+  RepeatedRootPassScopesAreGroupedIntoOneDisplayRowWithPhaseChildren)
+{
+  GpuTimelinePresentationSmoother smoother;
+
+  GpuTimelineFrame frame {};
+  frame.frame_sequence = 1U;
+  frame.scopes = {
+    MakeScope(0U, 0xFFFFFFFFU, 300U, "CompositingPass", 0U, 0.0F, 0.3F),
+    MakeScope(1U, 0U, 301U, "PrepareResources", 1U, 0.0F, 0.3F),
+    MakeScope(2U, 0xFFFFFFFFU, 300U, "CompositingPass", 0U, 0.3F, 0.7F),
+    MakeScope(3U, 2U, 302U, "Execute", 1U, 0.3F, 0.7F),
+  };
+
+  const auto presentation = smoother.Apply(frame);
+
+  ASSERT_EQ(presentation.rows.size(), 3U);
+  EXPECT_EQ(presentation.rows[0].display_name, "CompositingPass");
+  EXPECT_EQ(presentation.rows[0].depth, 0U);
+  EXPECT_TRUE(presentation.rows[0].is_grouped_pass);
+  EXPECT_EQ(presentation.rows[0].grouped_scope_count, 2U);
+
+  EXPECT_EQ(presentation.rows[1].display_name, "PrepareResources");
+  EXPECT_EQ(presentation.rows[1].depth, 1U);
+  EXPECT_FALSE(presentation.rows[1].is_grouped_pass);
+
+  EXPECT_EQ(presentation.rows[2].display_name, "Execute");
+  EXPECT_EQ(presentation.rows[2].depth, 1U);
+  EXPECT_FALSE(presentation.rows[2].is_grouped_pass);
 }
 
 } // namespace
