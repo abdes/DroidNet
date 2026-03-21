@@ -57,11 +57,14 @@
 #include <Oxygen/Renderer/Internal/BrdfLutManager.h>
 #include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
 #include <Oxygen/Renderer/Internal/GpuDebugManager.h>
+#include <Oxygen/Renderer/Internal/GpuTimelineProfiler.h>
 #include <Oxygen/Renderer/Internal/IblManager.h>
 #include <Oxygen/Renderer/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Internal/SunResolver.h>
 #include <Oxygen/Renderer/Internal/ViewConstantsManager.h>
+#include <Oxygen/Renderer/ImGui/GpuTimelinePanel.h>
+#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/CompositingPass.h>
 #include <Oxygen/Renderer/Passes/IblComputePass.h>
@@ -111,6 +114,14 @@ constexpr std::string_view kCVarRendererTextureDumpTopN
   = "rndr.texture_dump_top_n";
 constexpr std::string_view kCVarRendererLastFrameStats
   = "rndr.last_frame_stats";
+constexpr std::string_view kCVarRendererGpuTimestamps
+  = "rndr.gpu_timestamps";
+constexpr std::string_view kCVarRendererGpuTimestampMaxScopes
+  = "rndr.gpu_timestamps.max_scopes";
+constexpr std::string_view kCVarRendererGpuTimestampExportNextFrame
+  = "rndr.gpu_timestamps.export_next_frame";
+constexpr std::string_view kCVarRendererGpuTimestampViewer
+  = "rndr.gpu_timestamps.viewer";
 constexpr std::string_view kCVarRendererSyntheticDirectionalBias
   = "rndr.directional_shadow.synthetic_bias";
 constexpr std::string_view kCVarRendererSyntheticDirectionalNormalBias
@@ -131,6 +142,9 @@ constexpr std::string_view kCommandRendererDumpStats = "rndr.dump_stats";
 constexpr int64_t kDefaultTextureDumpTopN = 20;
 constexpr int64_t kMinTextureDumpTopN = 1;
 constexpr int64_t kMaxTextureDumpTopN = 500;
+constexpr int64_t kDefaultGpuTimestampMaxScopes = 4096;
+constexpr int64_t kMinGpuTimestampMaxScopes = 1;
+constexpr int64_t kMaxGpuTimestampMaxScopes = 65536;
 constexpr float kDefaultSyntheticDirectionalBias = 0.0F;
 constexpr float kDefaultSyntheticDirectionalNormalBias = 0.02F;
 constexpr float kDefaultVsmDirectionalReceiverNormalBiasScale = 1.0F;
@@ -600,6 +614,7 @@ auto Renderer::ResetStats() noexcept -> void
 auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
 {
   DCHECK_NOTNULL_F(engine);
+  engine_ = engine;
 
   asset_loader_ = engine->GetAssetLoader();
   if (!asset_loader_) {
@@ -736,7 +751,25 @@ auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
     // Initialize GPU debug manager.
     gpu_debug_manager_
       = std::make_unique<internal::GpuDebugManager>(observer_ptr { gfx.get() });
+    gpu_timeline_profiler_ = std::make_unique<internal::GpuTimelineProfiler>(
+      observer_ptr { gfx.get() });
   }
+
+  if (!gpu_timeline_panel_ && gpu_timeline_profiler_) {
+    gpu_timeline_panel_ = std::make_unique<engine::imgui::GpuTimelinePanel>(
+      observer_ptr { gpu_timeline_profiler_.get() });
+  }
+
+  imgui_module_subscription_ = engine_->SubscribeModuleAttached(
+    [this](const engine::ModuleEvent& event) {
+      if (event.type_id == engine::imgui::ImGuiModule::ClassTypeId()
+        && event.module != nullptr) {
+        AttachGpuTimelinePanelDrawer(
+          static_cast<engine::imgui::ImGuiModule&>(*event.module));
+      }
+    },
+    true);
+
   return true;
 }
 
@@ -762,6 +795,42 @@ auto Renderer::RegisterConsoleBindings(
     .help = "Renderer last-frame timing summary",
     .default_value = FormatRendererLastFrameStats(GetStats().last_frame),
     .flags = console::CVarFlags::kDevOnly,
+    .min_value = std::nullopt,
+    .max_value = std::nullopt,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarRendererGpuTimestamps),
+    .help = "Enable GPU timestamp profiling",
+    .default_value = false,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = std::nullopt,
+    .max_value = std::nullopt,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarRendererGpuTimestampMaxScopes),
+    .help = "Maximum GPU timestamp scopes recorded per frame",
+    .default_value = kDefaultGpuTimestampMaxScopes,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = static_cast<double>(kMinGpuTimestampMaxScopes),
+    .max_value = static_cast<double>(kMaxGpuTimestampMaxScopes),
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarRendererGpuTimestampExportNextFrame),
+    .help = "One-shot GPU timestamp export path (.json or .csv)",
+    .default_value = std::string {},
+    .flags = console::CVarFlags::kDevOnly,
+    .min_value = std::nullopt,
+    .max_value = std::nullopt,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarRendererGpuTimestampViewer),
+    .help = "Show the GPU timestamp viewer in ImGui",
+    .default_value = false,
+    .flags = console::CVarFlags::kArchive,
     .min_value = std::nullopt,
     .max_value = std::nullopt,
   });
@@ -936,6 +1005,44 @@ auto Renderer::ApplyConsoleCVars(
     return;
   }
 
+  bool gpu_timestamps_enabled = false;
+  if (console->TryGetCVarValue<bool>(
+        kCVarRendererGpuTimestamps, gpu_timestamps_enabled)
+    && gpu_timeline_profiler_) {
+    gpu_timeline_profiler_->SetEnabled(gpu_timestamps_enabled);
+  }
+
+  int64_t gpu_timestamp_max_scopes = kDefaultGpuTimestampMaxScopes;
+  if (console->TryGetCVarValue<int64_t>(
+        kCVarRendererGpuTimestampMaxScopes, gpu_timestamp_max_scopes)
+    && gpu_timeline_profiler_) {
+    gpu_timeline_profiler_->SetMaxScopesPerFrame(
+      static_cast<uint32_t>(gpu_timestamp_max_scopes));
+  }
+
+  std::string gpu_timestamp_export_path;
+  if (console->TryGetCVarValue<std::string>(
+        kCVarRendererGpuTimestampExportNextFrame, gpu_timestamp_export_path)
+    && !gpu_timestamp_export_path.empty() && gpu_timeline_profiler_) {
+    gpu_timeline_profiler_->RequestOneShotExport(gpu_timestamp_export_path);
+    if (console_ != nullptr) {
+      (void)console_->SetCVarFromText(
+        { .name = std::string(kCVarRendererGpuTimestampExportNextFrame),
+          .text = {} },
+        { .source = console::CommandSource::kAutomation,
+          .shipping_build = false,
+          .record_history = false });
+    }
+  }
+
+  bool gpu_timestamp_viewer_enabled = false;
+  if (console->TryGetCVarValue<bool>(
+        kCVarRendererGpuTimestampViewer, gpu_timestamp_viewer_enabled)
+    && gpu_timeline_profiler_ && gpu_timeline_panel_) {
+    gpu_timeline_panel_->SetVisible(gpu_timestamp_viewer_enabled);
+    gpu_timeline_profiler_->SetRetainLatestFrame(gpu_timestamp_viewer_enabled);
+  }
+
   double synthetic_constant_bias
     = directional_shadow_bias_state_.synthetic_constant_bias;
   if (console->TryGetCVarValue<double>(
@@ -1031,6 +1138,9 @@ auto Renderer::ApplyConsoleCVars(
 
 auto Renderer::OnShutdown() noexcept -> void
 {
+  DetachGpuTimelinePanelDrawer();
+  imgui_module_subscription_.Cancel();
+
   if (uploader_) {
     if (const auto shutdown_result = uploader_->Shutdown();
       !shutdown_result.has_value()) {
@@ -1042,6 +1152,8 @@ auto Renderer::OnShutdown() noexcept -> void
   console_ = nullptr;
   asset_loader_ = nullptr;
   render_context_ = nullptr;
+  gpu_timeline_panel_.reset();
+  engine_ = nullptr;
 
   {
     std::unique_lock registration_lock(view_registration_mutex_);
@@ -1082,6 +1194,7 @@ auto Renderer::OnShutdown() noexcept -> void
 
   texture_binder_.reset();
   gpu_debug_manager_.reset();
+  gpu_timeline_profiler_.reset();
   scene_prep_state_.reset();
   env_static_manager_.reset();
   ibl_manager_.reset();
@@ -1107,6 +1220,34 @@ auto Renderer::OnShutdown() noexcept -> void
   if (auto gfx = gfx_weak_.lock()) {
     gfx->GetDeferredReclaimer().OnRendererShutdown();
   }
+}
+
+auto Renderer::AttachGpuTimelinePanelDrawer(
+  engine::imgui::ImGuiModule& imgui_module) -> void
+{
+  if (!gpu_timeline_panel_ || gpu_timeline_panel_drawer_token_ != 0U) {
+    return;
+  }
+
+  gpu_timeline_panel_drawer_token_ = imgui_module.RegisterOverlayDrawer(
+    "Renderer.GpuTimeline", [this] {
+      if (gpu_timeline_panel_) {
+        gpu_timeline_panel_->Draw();
+      }
+    });
+}
+
+auto Renderer::DetachGpuTimelinePanelDrawer() -> void
+{
+  if (gpu_timeline_panel_drawer_token_ == 0U || engine_ == nullptr) {
+    gpu_timeline_panel_drawer_token_ = 0U;
+    return;
+  }
+
+  if (auto imgui_module = engine_->GetModule<engine::imgui::ImGuiModule>()) {
+    imgui_module->get().UnregisterOverlayDrawer(gpu_timeline_panel_drawer_token_);
+  }
+  gpu_timeline_panel_drawer_token_ = 0U;
 }
 
 auto Renderer::GetGraphics() -> std::shared_ptr<Graphics>
@@ -1186,6 +1327,15 @@ auto Renderer::DumpEstimatedTextureMemory(const std::size_t top_n) const -> void
   }
 
   texture_binder_->DumpEstimatedTextureMemory(top_n);
+}
+
+auto Renderer::MakeGpuEventScopeOptions() const
+  -> graphics::GpuEventScopeOptions
+{
+  if (!gpu_timeline_profiler_) {
+    return {};
+  }
+  return gpu_timeline_profiler_->MakeScopeOptions();
 }
 
 //=== Debug Overrides ===-----------------------------------------------------//
@@ -1520,9 +1670,10 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
         continue;
       }
       auto recorder = recorder_ptr.get();
+      const auto scope_options = MakeGpuEventScopeOptions();
 
       graphics::GpuEventScope view_scope(
-        *recorder, fmt::format("View {}", view_id.get()));
+        *recorder, fmt::format("View {}", view_id.get()), scope_options);
 
       auto update_view_state = [&](ViewId view_id, bool success) -> void {
         std::unique_lock state_lock(view_state_mutex_);
@@ -1567,7 +1718,7 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
           || !atmo_lut_manager->HasBeenGenerated()) {
           try {
             graphics::GpuEventScope lut_scope(
-              *recorder, "Atmosphere LUT Compute");
+              *recorder, "Atmosphere LUT Compute", scope_options);
             co_await sky_atmo_lut_compute_pass_->PrepareResources(
               *render_context_, *recorder);
             co_await sky_atmo_lut_compute_pass_->Execute(
@@ -1618,7 +1769,8 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
             sky_capture_pass_->MarkDirty(view_id);
           }
           try {
-            graphics::GpuEventScope capture_scope(*recorder, "Sky Capture");
+            graphics::GpuEventScope capture_scope(
+              *recorder, "Sky Capture", scope_options);
             co_await sky_capture_pass_->PrepareResources(
               *render_context_, *recorder);
             co_await sky_capture_pass_->Execute(*render_context_, *recorder);
@@ -1648,7 +1800,8 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
           env_static->MarkIblRegenerationClean(view_id);
         }
         try {
-          graphics::GpuEventScope ibl_scope(*recorder, "IBL Compute");
+          graphics::GpuEventScope ibl_scope(
+            *recorder, "IBL Compute", scope_options);
           co_await ibl_compute_pass_->PrepareResources(
             *render_context_, *recorder);
           co_await ibl_compute_pass_->Execute(*render_context_, *recorder);
@@ -1674,7 +1827,8 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
 
       // --- STEP 4: Execute RenderGraph ---
       const auto render_graph_begin = std::chrono::steady_clock::now();
-      graphics::GpuEventScope graph_scope(*recorder, "RenderGraph");
+      graphics::GpuEventScope graph_scope(
+        *recorder, "RenderGraph", scope_options);
       const bool rv = co_await ExecuteRenderGraphForView(
         view_id, factory, *render_context_, *recorder);
       const auto render_graph_end = std::chrono::steady_clock::now();
@@ -1722,12 +1876,18 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
 auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
 {
   const auto compositing_begin = std::chrono::steady_clock::now();
+  auto finalize_gpu_timestamps = [this]() -> void {
+    if (gpu_timeline_profiler_) {
+      gpu_timeline_profiler_->OnFrameRecordTailResolve();
+    }
+  };
   std::optional<CompositionSubmission> submission;
   std::shared_ptr<graphics::Surface> target_surface;
   {
     std::lock_guard lock(composition_mutex_);
     if (!composition_submission_) {
       compositing_last_frame_ns_ = 0;
+      finalize_gpu_timestamps();
       co_return;
     }
     submission = std::move(composition_submission_);
@@ -1740,6 +1900,7 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
   auto& payload = *submission;
   if (payload.tasks.empty()) {
     compositing_last_frame_ns_ = 0;
+    finalize_gpu_timestamps();
     co_return;
   }
 
@@ -1750,149 +1911,157 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
   CHECK_F(static_cast<bool>(gfx), "Graphics required for compositing");
 
   const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder_ptr
-    = gfx->AcquireCommandRecorder(queue_key, "Renderer Compositing");
-  CHECK_F(
-    static_cast<bool>(recorder_ptr), "Compositing recorder acquisition failed");
-  auto& recorder = *recorder_ptr;
-  auto& target_fb = *payload.composite_target;
-  TrackCompositionFramebuffer(recorder, target_fb);
+  {
+    auto recorder_ptr
+      = gfx->AcquireCommandRecorder(queue_key, "Renderer Compositing");
+    CHECK_F(static_cast<bool>(recorder_ptr),
+      "Compositing recorder acquisition failed");
+    if (gpu_timeline_profiler_) {
+      recorder_ptr->SetProfileScopeHandler(
+        observer_ptr<graphics::IGpuProfileScopeHandler>(
+          gpu_timeline_profiler_.get()));
+    }
+    auto& recorder = *recorder_ptr;
+    auto& target_fb = *payload.composite_target;
+    TrackCompositionFramebuffer(recorder, target_fb);
 
-  const auto& fb_desc = target_fb.GetDescriptor();
-  CHECK_F(!fb_desc.color_attachments.empty(),
-    "Compositing requires a color attachment");
-  CHECK_F(static_cast<bool>(fb_desc.color_attachments[0].texture),
-    "Compositing target missing color texture");
-  auto& backbuffer = *fb_desc.color_attachments[0].texture;
-  DLOG_F(1,
-    "Log compositing target ptr={} size={}x{} fmt={} samples={} name={}",
-    fmt::ptr(&backbuffer), backbuffer.GetDescriptor().width,
-    backbuffer.GetDescriptor().height, backbuffer.GetDescriptor().format,
-    backbuffer.GetDescriptor().sample_count,
-    backbuffer.GetDescriptor().debug_name);
+    const auto& fb_desc = target_fb.GetDescriptor();
+    CHECK_F(!fb_desc.color_attachments.empty(),
+      "Compositing requires a color attachment");
+    CHECK_F(static_cast<bool>(fb_desc.color_attachments[0].texture),
+      "Compositing target missing color texture");
+    auto& backbuffer = *fb_desc.color_attachments[0].texture;
+    DLOG_F(1,
+      "Log compositing target ptr={} size={}x{} fmt={} samples={} name={}",
+      fmt::ptr(&backbuffer), backbuffer.GetDescriptor().width,
+      backbuffer.GetDescriptor().height, backbuffer.GetDescriptor().format,
+      backbuffer.GetDescriptor().sample_count,
+      backbuffer.GetDescriptor().debug_name);
 
-  RenderContext comp_context {};
-  comp_context.SetRenderer(this, gfx.get());
-  comp_context.pass_target = observer_ptr { payload.composite_target.get() };
-  comp_context.frame_slot = frame_slot_;
-  comp_context.frame_sequence = frame_seq_num;
+    RenderContext comp_context {};
+    comp_context.SetRenderer(this, gfx.get());
+    comp_context.pass_target = observer_ptr { payload.composite_target.get() };
+    comp_context.frame_slot = frame_slot_;
+    comp_context.frame_sequence = frame_seq_num;
 
-  if (!compositing_pass_) {
-    compositing_pass_config_ = std::make_shared<CompositingPassConfig>();
-    compositing_pass_config_->debug_name = "CompositingPass";
-    compositing_pass_
-      = std::make_shared<CompositingPass>(compositing_pass_config_);
-  }
+    if (!compositing_pass_) {
+      compositing_pass_config_ = std::make_shared<CompositingPassConfig>();
+      compositing_pass_config_->debug_name = "CompositingPass";
+      compositing_pass_
+        = std::make_shared<CompositingPass>(compositing_pass_config_);
+    }
 
-  for (const auto& task : payload.tasks) {
-    switch (task.type) {
-    case CompositingTaskType::kCopy: {
-      if (!IsViewReady(task.copy.source_view_id)) {
-        DLOG_F(
-          1, "Skip copy: view {} not ready", task.copy.source_view_id.get());
-        continue;
+    for (const auto& task : payload.tasks) {
+      switch (task.type) {
+      case CompositingTaskType::kCopy: {
+        if (!IsViewReady(task.copy.source_view_id)) {
+          DLOG_F(
+            1, "Skip copy: view {} not ready", task.copy.source_view_id.get());
+          continue;
+        }
+        auto source
+          = ResolveViewOutputTexture(*context, task.copy.source_view_id);
+        if (!source) {
+          DLOG_F(1, "Skip copy: missing source texture for view {}",
+            task.copy.source_view_id.get());
+          continue;
+        }
+        DLOG_F(2, "Log copy: view={} ptr={} size={}x{} fmt={} samples={}",
+          task.copy.source_view_id.get(), fmt::ptr(source.get()),
+          source->GetDescriptor().width, source->GetDescriptor().height,
+          source->GetDescriptor().format, source->GetDescriptor().sample_count);
+        DLOG_F(2, "Log copy viewport: ({}, {}) {}x{}",
+          task.copy.viewport.top_left_x, task.copy.viewport.top_left_y,
+          task.copy.viewport.width, task.copy.viewport.height);
+        if (source->GetDescriptor().format
+          != backbuffer.GetDescriptor().format) {
+          DLOG_F(1, "Fallback to blend: format mismatch for view {}",
+            task.copy.source_view_id.get());
+          CHECK_NOTNULL_F(
+            compositing_pass_config_.get(), "CompositingPass config missing");
+          compositing_pass_config_->source_texture = source;
+          compositing_pass_config_->viewport = task.copy.viewport;
+          compositing_pass_config_->alpha = 1.0F;
+
+          co_await compositing_pass_->PrepareResources(comp_context, recorder);
+          co_await compositing_pass_->Execute(comp_context, recorder);
+          break;
+        }
+        CopyTextureToRegion(recorder, *source, backbuffer, task.copy.viewport);
+        break;
       }
-      auto source
-        = ResolveViewOutputTexture(*context, task.copy.source_view_id);
-      if (!source) {
-        DLOG_F(1, "Skip copy: missing source texture for view {}",
-          task.copy.source_view_id.get());
-        continue;
-      }
-      DLOG_F(2, "Log copy: view={} ptr={} size={}x{} fmt={} samples={}",
-        task.copy.source_view_id.get(), fmt::ptr(source.get()),
-        source->GetDescriptor().width, source->GetDescriptor().height,
-        source->GetDescriptor().format, source->GetDescriptor().sample_count);
-      DLOG_F(2, "Log copy viewport: ({}, {}) {}x{}",
-        task.copy.viewport.top_left_x, task.copy.viewport.top_left_y,
-        task.copy.viewport.width, task.copy.viewport.height);
-      if (source->GetDescriptor().format != backbuffer.GetDescriptor().format) {
-        DLOG_F(1, "Fallback to blend: format mismatch for view {}",
-          task.copy.source_view_id.get());
+      case CompositingTaskType::kBlend: {
+        if (!IsViewReady(task.blend.source_view_id)) {
+          DLOG_F(1, "Skip blend: view {} not ready",
+            task.blend.source_view_id.get());
+          continue;
+        }
+        auto source
+          = ResolveViewOutputTexture(*context, task.blend.source_view_id);
+        if (!source) {
+          DLOG_F(1, "Skip blend: missing source texture for view {}",
+            task.blend.source_view_id.get());
+          continue;
+        }
+        DLOG_F(2, "Blend view={} ptr={} size={}x{} fmt={} samples={}",
+          task.blend.source_view_id.get(), fmt::ptr(source.get()),
+          source->GetDescriptor().width, source->GetDescriptor().height,
+          source->GetDescriptor().format, source->GetDescriptor().sample_count);
+        DLOG_F(2, "Blend viewport=({}, {}) {}x{} alpha={}",
+          task.blend.viewport.top_left_x, task.blend.viewport.top_left_y,
+          task.blend.viewport.width, task.blend.viewport.height,
+          task.blend.alpha);
+
         CHECK_NOTNULL_F(
           compositing_pass_config_.get(), "CompositingPass config missing");
         compositing_pass_config_->source_texture = source;
-        compositing_pass_config_->viewport = task.copy.viewport;
-        compositing_pass_config_->alpha = 1.0F;
+        compositing_pass_config_->viewport = task.blend.viewport;
+        compositing_pass_config_->alpha = task.blend.alpha;
 
         co_await compositing_pass_->PrepareResources(comp_context, recorder);
         co_await compositing_pass_->Execute(comp_context, recorder);
         break;
       }
-      CopyTextureToRegion(recorder, *source, backbuffer, task.copy.viewport);
-      break;
-    }
-    case CompositingTaskType::kBlend: {
-      if (!IsViewReady(task.blend.source_view_id)) {
-        DLOG_F(
-          1, "Skip blend: view {} not ready", task.blend.source_view_id.get());
-        continue;
+      case CompositingTaskType::kBlendTexture: {
+        if (!task.texture_blend.source_texture) {
+          DLOG_F(1, "Skip blend texture: missing source texture");
+          continue;
+        }
+        DLOG_F(2, "Blend texture ptr={} size={}x{} fmt={} samples={} name={}",
+          fmt::ptr(task.texture_blend.source_texture.get()),
+          task.texture_blend.source_texture->GetDescriptor().width,
+          task.texture_blend.source_texture->GetDescriptor().height,
+          task.texture_blend.source_texture->GetDescriptor().format,
+          task.texture_blend.source_texture->GetDescriptor().sample_count,
+          task.texture_blend.source_texture->GetDescriptor().debug_name);
+        DLOG_F(2, "Blend texture viewport=({}, {}) {}x{} alpha={}",
+          task.texture_blend.viewport.top_left_x,
+          task.texture_blend.viewport.top_left_y,
+          task.texture_blend.viewport.width, task.texture_blend.viewport.height,
+          task.texture_blend.alpha);
+
+        CHECK_NOTNULL_F(
+          compositing_pass_config_.get(), "CompositingPass config missing");
+        compositing_pass_config_->source_texture
+          = task.texture_blend.source_texture;
+        compositing_pass_config_->viewport = task.texture_blend.viewport;
+        compositing_pass_config_->alpha = task.texture_blend.alpha;
+
+        co_await compositing_pass_->PrepareResources(comp_context, recorder);
+        co_await compositing_pass_->Execute(comp_context, recorder);
+        break;
       }
-      auto source
-        = ResolveViewOutputTexture(*context, task.blend.source_view_id);
-      if (!source) {
-        DLOG_F(1, "Skip blend: missing source texture for view {}",
-          task.blend.source_view_id.get());
-        continue;
+      case CompositingTaskType::kTaa:
+      default:
+        DLOG_F(1, "Skip compositing: task type not implemented");
+        break;
       }
-      DLOG_F(2, "Blend view={} ptr={} size={}x{} fmt={} samples={}",
-        task.blend.source_view_id.get(), fmt::ptr(source.get()),
-        source->GetDescriptor().width, source->GetDescriptor().height,
-        source->GetDescriptor().format, source->GetDescriptor().sample_count);
-      DLOG_F(2, "Blend viewport=({}, {}) {}x{} alpha={}",
-        task.blend.viewport.top_left_x, task.blend.viewport.top_left_y,
-        task.blend.viewport.width, task.blend.viewport.height,
-        task.blend.alpha);
-
-      CHECK_NOTNULL_F(
-        compositing_pass_config_.get(), "CompositingPass config missing");
-      compositing_pass_config_->source_texture = source;
-      compositing_pass_config_->viewport = task.blend.viewport;
-      compositing_pass_config_->alpha = task.blend.alpha;
-
-      co_await compositing_pass_->PrepareResources(comp_context, recorder);
-      co_await compositing_pass_->Execute(comp_context, recorder);
-      break;
     }
-    case CompositingTaskType::kBlendTexture: {
-      if (!task.texture_blend.source_texture) {
-        DLOG_F(1, "Skip blend texture: missing source texture");
-        continue;
-      }
-      DLOG_F(2, "Blend texture ptr={} size={}x{} fmt={} samples={} name={}",
-        fmt::ptr(task.texture_blend.source_texture.get()),
-        task.texture_blend.source_texture->GetDescriptor().width,
-        task.texture_blend.source_texture->GetDescriptor().height,
-        task.texture_blend.source_texture->GetDescriptor().format,
-        task.texture_blend.source_texture->GetDescriptor().sample_count,
-        task.texture_blend.source_texture->GetDescriptor().debug_name);
-      DLOG_F(2, "Blend texture viewport=({}, {}) {}x{} alpha={}",
-        task.texture_blend.viewport.top_left_x,
-        task.texture_blend.viewport.top_left_y,
-        task.texture_blend.viewport.width, task.texture_blend.viewport.height,
-        task.texture_blend.alpha);
 
-      CHECK_NOTNULL_F(
-        compositing_pass_config_.get(), "CompositingPass config missing");
-      compositing_pass_config_->source_texture
-        = task.texture_blend.source_texture;
-      compositing_pass_config_->viewport = task.texture_blend.viewport;
-      compositing_pass_config_->alpha = task.texture_blend.alpha;
-
-      co_await compositing_pass_->PrepareResources(comp_context, recorder);
-      co_await compositing_pass_->Execute(comp_context, recorder);
-      break;
-    }
-    case CompositingTaskType::kTaa:
-    default:
-      DLOG_F(1, "Skip compositing: task type not implemented");
-      break;
-    }
+    recorder.RequireResourceStateFinal(
+      backbuffer, graphics::ResourceStates::kPresent);
+    recorder.FlushBarriers();
   }
-
-  recorder.RequireResourceStateFinal(
-    backbuffer, graphics::ResourceStates::kPresent);
-  recorder.FlushBarriers();
 
   if (target_surface) {
     const auto surfaces = context->GetSurfaces();
@@ -1913,6 +2082,7 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
   compositing_profile_total_ns_ += compositing_ns;
   compositing_last_frame_ns_ = compositing_ns;
 
+  finalize_gpu_timestamps();
   co_return;
 }
 
@@ -1996,8 +2166,14 @@ auto Renderer::AcquireRecorderForView(ViewId view_id, Graphics& gfx)
 
   const auto queue_key
     = gfx.QueueKeyFor(oxygen::graphics::QueueRole::kGraphics);
-  return gfx.AcquireCommandRecorder(
+  auto recorder = gfx.AcquireCommandRecorder(
     queue_key, std::string("View_") + std::to_string(view_id.get()));
+  if (recorder && gpu_timeline_profiler_) {
+    recorder->SetProfileScopeHandler(
+      observer_ptr<graphics::IGpuProfileScopeHandler>(
+        gpu_timeline_profiler_.get()));
+  }
+  return std::shared_ptr<oxygen::graphics::CommandRecorder>(std::move(recorder));
 }
 
 auto Renderer::SetupFramebufferForView(const FrameContext& frame_context,
@@ -2957,6 +3133,10 @@ auto Renderer::OnFrameStart(observer_ptr<FrameContext> context) -> void
   // Store frame lifecycle state for RenderContext propagation
   frame_slot_ = frame_slot;
   frame_seq_num = frame_sequence;
+
+  if (gpu_timeline_profiler_) {
+    gpu_timeline_profiler_->OnFrameStart(frame_sequence);
+  }
 
   // Initialize Upload Coordinator and its staging providers for the new frame
   // slot BEFORE any uploaders start allocating from them.

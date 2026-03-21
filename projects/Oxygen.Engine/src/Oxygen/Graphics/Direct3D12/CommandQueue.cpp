@@ -216,6 +216,20 @@ auto CommandQueue::GetCompletedValue() const -> uint64_t
   return fence_->GetCompletedValue();
 }
 
+auto CommandQueue::TryGetTimestampFrequency(uint64_t& out_hz) const -> bool
+{
+  DCHECK_NOTNULL_F(command_queue_, "command queue must be valid");
+
+  UINT64 frequency_hz = 0U;
+  if (FAILED(command_queue_->GetTimestampFrequency(&frequency_hz))
+    || frequency_hz == 0U) {
+    return false;
+  }
+
+  out_hz = frequency_hz;
+  return true;
+}
+
 void CommandQueue::Submit(std::shared_ptr<graphics::CommandList> command_list)
 {
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)

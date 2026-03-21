@@ -23,6 +23,7 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Graphics/Common/ProfileScope.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
@@ -90,6 +91,26 @@ public:
 
   //! Emits an instantaneous GPU debug marker into the command stream.
   OXGN_GFX_API virtual auto SetMarker(std::string_view name) -> void;
+
+  //=== Unified Profile Scopes ===-----------------------------------------//
+
+  OXGN_GFX_API virtual auto BeginProfileScope(std::string_view name,
+    const GpuEventScopeOptions& options) -> GpuEventScopeToken;
+
+  OXGN_GFX_API virtual auto EndProfileScope(const GpuEventScopeToken& token)
+    -> void;
+
+  auto SetProfileScopeHandler(observer_ptr<IGpuProfileScopeHandler> handler)
+    -> void
+  {
+    profile_scope_handler_ = handler;
+  }
+
+  [[nodiscard]] auto GetProfileScopeHandler() const
+    -> observer_ptr<IGpuProfileScopeHandler>
+  {
+    return profile_scope_handler_;
+  }
 
   //=== Pipeline State and Bindless Setup ===-------------------------------//
 
@@ -480,6 +501,7 @@ private:
 
   std::shared_ptr<CommandList> command_list_;
   observer_ptr<CommandQueue> target_queue_;
+  observer_ptr<IGpuProfileScopeHandler> profile_scope_handler_ { nullptr };
 
   std::unique_ptr<detail::ResourceStateTracker> resource_state_tracker_;
 };

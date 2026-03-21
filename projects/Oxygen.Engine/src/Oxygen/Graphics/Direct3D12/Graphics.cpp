@@ -26,6 +26,7 @@
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
+#include <Oxygen/Graphics/Direct3D12/TimestampQueryBackend.h>
 #include <Oxygen/Graphics/Direct3D12/Texture.h>
 
 //===----------------------------------------------------------------------===//
@@ -231,6 +232,13 @@ auto Graphics::GetDescriptorAllocator() const
   return GetComponent<DescriptorAllocatorComponent>().GetAllocator();
 }
 
+auto Graphics::GetTimestampQueryProvider() const
+  -> observer_ptr<graphics::TimestampQueryProvider>
+{
+  return observer_ptr<graphics::TimestampQueryProvider>(
+    timestamp_query_backend_.get());
+}
+
 auto Graphics::GetCurrentDevice() const -> dx::IDevice*
 {
   auto* device = GetComponent<DeviceManager>().Device();
@@ -299,6 +307,7 @@ Graphics::Graphics(const SerializedBackendConfig& config,
   AddComponent<EngineShaders>(std::move(parsed_path_finder_config));
   AddComponent<DescriptorAllocatorComponent>();
   AddComponent<detail::PipelineStateCache>(this);
+  timestamp_query_backend_ = std::make_unique<TimestampQueryBackend>(*this);
 }
 
 auto Graphics::SetVSyncEnabled(const bool enabled) -> void

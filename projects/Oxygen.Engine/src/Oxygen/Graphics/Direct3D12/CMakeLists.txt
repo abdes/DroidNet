@@ -67,6 +67,7 @@ set(
   "GraphicResource.h"
   "Graphics.h"
   "Texture.h"
+  "TimestampQueryBackend.h"
   "ImGui/ImGuiBackend.h"
 )
 set(
@@ -106,6 +107,7 @@ set(
   "Shaders/EngineShaders.h"
   "Shaders/EngineShaderCatalog.h"
   "Shaders/ShaderCatalogBuilder.h"
+  "TimestampQueryBackend.cpp"
   "Texture.cpp"
   "ImGui/ImGuiBackend.cpp"
 )

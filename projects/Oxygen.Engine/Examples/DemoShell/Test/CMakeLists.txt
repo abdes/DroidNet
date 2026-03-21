@@ -11,3 +11,9 @@ m_gtest_program(
   SOURCES
     "SceneLoaderService_phase4_test.cpp"
 )
+
+m_gtest_program(
+  ConsoleDefaults
+  SOURCES
+    "DemoShellConsoleDefaults_test.cpp"
+)

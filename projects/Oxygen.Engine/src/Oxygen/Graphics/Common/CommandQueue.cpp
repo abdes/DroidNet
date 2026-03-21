@@ -57,6 +57,11 @@ auto CommandQueue::GetName() const noexcept -> std::string_view
   return GetComponent<ObjectMetadata>().GetName();
 }
 
+auto CommandQueue::TryGetTimestampFrequency(uint64_t& /*out_hz*/) const -> bool
+{
+  return false;
+}
+
 void CommandQueue::SetName(const std::string_view name) noexcept
 {
   GetComponent<ObjectMetadata>().SetName(name);

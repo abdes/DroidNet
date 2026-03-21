@@ -39,6 +39,9 @@ public:
     return current_value_;
   }
 
+  OXGN_D3D12_API auto TryGetTimestampFrequency(uint64_t& out_hz) const
+    -> bool override;
+
   OXGN_D3D12_API auto Submit(
     std::shared_ptr<graphics::CommandList> command_list) -> void override;
   OXGN_D3D12_API auto Submit(

@@ -17,6 +17,7 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
+#include <Oxygen/Graphics/Direct3D12/TimestampQueryBackend.h>
 
 // Forward declarations for pipeline management
 namespace oxygen::graphics {
@@ -49,6 +50,9 @@ public:
 
   OXGN_D3D12_NDAPI auto GetDescriptorAllocator() const
     -> const graphics::DescriptorAllocator& override;
+
+  [[nodiscard]] OXGN_D3D12_NDAPI auto GetTimestampQueryProvider() const
+    -> observer_ptr<graphics::TimestampQueryProvider> override;
 
   //! Get the V-Sync setting.
   [[nodiscard]] auto IsVSyncEnabled() const noexcept -> bool
@@ -138,6 +142,7 @@ private:
   mutable std::unordered_map<ID3D12RootSignature*,
     Microsoft::WRL::ComPtr<ID3D12CommandSignature>>
     draw_root_constant_command_signatures_ {};
+  std::unique_ptr<TimestampQueryBackend> timestamp_query_backend_ {};
 };
 
 }
