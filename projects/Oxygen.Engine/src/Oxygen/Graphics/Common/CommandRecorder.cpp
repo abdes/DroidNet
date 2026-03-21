@@ -134,6 +134,28 @@ auto CommandRecorder::EndEvent() -> void { }
 */
 auto CommandRecorder::SetMarker(std::string_view /*name*/) -> void { }
 
+auto CommandRecorder::BeginProfileScope(const std::string_view name,
+  const GpuEventScopeOptions& options) -> GpuEventScopeToken
+{
+  BeginEvent(name);
+
+  if (profile_scope_handler_ != nullptr && options.timestamp_enabled) {
+    return profile_scope_handler_->BeginScope(*this, name, options);
+  }
+
+  return {};
+}
+
+auto CommandRecorder::EndProfileScope(const GpuEventScopeToken& token) -> void
+{
+  if (profile_scope_handler_ != nullptr
+    && (token.flags & kGpuScopeTokenFlagTimestampEnabled) != 0U) {
+    profile_scope_handler_->EndScope(*this, token);
+  }
+
+  EndEvent();
+}
+
 // -- Private non-template dispatch method implementations for Buffer
 
 // ReSharper disable once CppMemberFunctionMayBeConst

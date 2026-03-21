@@ -45,6 +45,7 @@ namespace graphics {
   class QueuesStrategy;
   class ResourceRegistry;
   class Surface;
+  class TimestampQueryProvider;
   struct TextureDesc;
   class Texture;
 
@@ -203,6 +204,9 @@ public:
 
   OXGN_GFX_NDAPI auto GetDeferredReclaimer()
     -> graphics::detail::DeferredReclaimer&;
+
+  [[nodiscard]] OXGN_GFX_API virtual auto GetTimestampQueryProvider() const
+    -> observer_ptr<graphics::TimestampQueryProvider>;
 
   //! Register a surface for deferred release so the final release occurs
   //! inside the engine's render/frame timeline via DeferredReclaimer.

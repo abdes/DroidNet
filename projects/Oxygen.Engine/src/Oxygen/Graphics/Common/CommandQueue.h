@@ -77,6 +77,11 @@ public:
   //! \return  The last value signaled by the CPU.
   [[nodiscard]] virtual auto GetCurrentValue() const -> uint64_t = 0;
 
+  //! Query the queue timestamp frequency when the backend supports timestamp
+  //! queries on this queue.
+  OXGN_GFX_API virtual auto TryGetTimestampFrequency(uint64_t& out_hz) const
+    -> bool;
+
   virtual auto Submit(std::shared_ptr<CommandList> command_list) -> void = 0;
   virtual auto Submit(std::span<std::shared_ptr<CommandList>> command_lists)
     -> void

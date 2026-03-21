@@ -76,6 +76,7 @@ set(
   "NativeObject.h"
   "ObjectRelease.h"
   "PipelineState.h"
+  "ProfileScope.h"
   "Queues.h"
   "ResourceRegistry.h"
   "Sampler.h"
@@ -84,6 +85,7 @@ set(
   "ShaderManager.h"
   "Shaders.h"
   "Surface.h"
+  "TimestampQueryProvider.h"
   "Texture.h"
   "Types/ClearFlags.h"
   "Types/Color.h"
@@ -121,11 +123,13 @@ set(
   "Internal/QueueManager.h"
   "Internal/ToStringConverters.cpp"
   "PipelineState.cpp"
+  "ProfileScope.cpp"
   "ResourceRegistry.cpp"
   "ShaderManager.cpp"
   "Shaders.cpp"
   "Surface.cpp"
   "Texture.cpp"
+  "TimestampQueryProvider.cpp"
 )
 
 target_sources(

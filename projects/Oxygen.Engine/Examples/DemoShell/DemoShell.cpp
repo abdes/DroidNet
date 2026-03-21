@@ -13,6 +13,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
@@ -24,6 +25,7 @@
 #include <Oxygen/Renderer/Renderer.h>
 
 #include "DemoShell/DemoShell.h"
+#include "DemoShell/Internal/DemoShellConsoleDefaults.h"
 #include "DemoShell/Internal/SceneControlBlock.h"
 #include "DemoShell/PanelRegistry.h"
 #include "DemoShell/Services/CameraSettingsService.h"
@@ -200,6 +202,8 @@ auto DemoShell::CompleteInitialization() -> bool
     observer_ptr { impl_->camera_rig.get() });
   impl_->post_process_settings_service.BindCameraSettings(
     observer_ptr { &impl_->camera_settings_service });
+
+  internal::ApplyDemoShellConsoleDefaults(impl_->config.engine->GetConsole());
 
   // Create DemoShellUi with all services
   impl_->demo_shell_ui.emplace(impl_->config.engine,

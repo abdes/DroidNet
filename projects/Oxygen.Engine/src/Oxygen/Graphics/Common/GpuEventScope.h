@@ -16,16 +16,17 @@ namespace oxygen::graphics {
 //! RAII helper for a GPU debug event scope.
 class GpuEventScope {
 public:
-  explicit GpuEventScope(CommandRecorder& recorder, std::string_view name)
+  explicit GpuEventScope(CommandRecorder& recorder, std::string_view name,
+    const GpuEventScopeOptions& options = {})
     : recorder_(&recorder)
+    , token_(recorder_->BeginProfileScope(name, options))
   {
-    recorder_->BeginEvent(name);
   }
 
   ~GpuEventScope()
   {
     if (recorder_ != nullptr) {
-      recorder_->EndEvent();
+      recorder_->EndProfileScope(token_);
     }
   }
 
@@ -34,6 +35,7 @@ public:
 
 private:
   CommandRecorder* recorder_;
+  GpuEventScopeToken token_ {};
 };
 
 } // namespace oxygen::graphics

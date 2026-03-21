@@ -27,9 +27,11 @@
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Graphics/Common/ProfileScope.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
@@ -75,6 +77,10 @@ class MaterialAsset;
 
 namespace oxygen::engine {
 class RenderContextPool;
+namespace imgui {
+  class GpuTimelinePanel;
+  class ImGuiModule;
+}
 class IblComputePass;
 class SkyCapturePass;
 struct SkyCapturePassConfig;
@@ -88,6 +94,7 @@ namespace internal {
   class BrdfLutManager;
   class SkyAtmosphereLutManager;
   class GpuDebugManager;
+  class GpuTimelineProfiler;
 } // namespace internal
 namespace upload {
   class UploadCoordinator;
@@ -275,6 +282,9 @@ public:
   OXGN_RNDR_API auto DumpEstimatedTextureMemory(std::size_t top_n) const
     -> void;
 
+  [[nodiscard]] OXGN_RNDR_API auto MakeGpuEventScopeOptions() const
+    -> graphics::GpuEventScopeOptions;
+
   //=== Upload Services ===---------------------------------------------------//
 
   //! Returns the staging provider for transient GPU buffer allocation.
@@ -461,6 +471,7 @@ private:
     const std::unordered_set<ViewId>& active_views) -> void;
 
   std::weak_ptr<Graphics> gfx_weak_; // New AsyncEngine path
+  observer_ptr<IAsyncEngine> engine_ { nullptr };
   RendererConfig config_ {};
 
   // Managed draw item container removed (AoS path deprecated).
@@ -519,6 +530,10 @@ private:
 
   // Manages GPU debug resources (line buffer and counters).
   std::unique_ptr<internal::GpuDebugManager> gpu_debug_manager_;
+  std::unique_ptr<internal::GpuTimelineProfiler> gpu_timeline_profiler_;
+  std::unique_ptr<imgui::GpuTimelinePanel> gpu_timeline_panel_;
+  IAsyncEngine::ModuleSubscription imgui_module_subscription_ {};
+  std::uint64_t gpu_timeline_panel_drawer_token_ { 0U };
 
   // Frame sequence number from FrameContext
   frame::SequenceNumber frame_seq_num { 0ULL };
@@ -576,6 +591,8 @@ private:
   observer_ptr<console::Console> console_ { nullptr };
 
   auto DrainPendingViewCleanup(std::string_view reason) -> void;
+  auto AttachGpuTimelinePanelDrawer(imgui::ImGuiModule& imgui_module) -> void;
+  auto DetachGpuTimelinePanelDrawer() -> void;
 
   // Per-view stable backing storage for the non-owning spans exposed by
   // PreparedSceneFrame. Each view gets a collection of vectors that hold the

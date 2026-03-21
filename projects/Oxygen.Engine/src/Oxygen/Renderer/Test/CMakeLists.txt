@@ -34,6 +34,14 @@ include(GTestHelpers)
 
 m_gtest_program(Frustum SOURCES "Frustum_test.cpp")
 
+m_gtest_program(GpuTimelineProfiler SOURCES "GpuTimelineProfiler_test.cpp")
+
+m_gtest_program(
+  GpuTimelinePresentationSmoother
+  SOURCES
+    "GpuTimelinePresentationSmoother_test.cpp"
+)
+
 # MaterialPermutations unit tests (no backend dependency)
 m_gtest_program(MaterialPermutations SOURCES "MaterialPermutations_test.cpp")
 

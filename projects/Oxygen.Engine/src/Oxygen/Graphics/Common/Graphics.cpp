@@ -293,6 +293,12 @@ auto Graphics::RegisterDeferredRelease(
   reclaimer.RegisterDeferredRelease(std::move(surface));
 }
 
+auto Graphics::GetTimestampQueryProvider() const
+  -> observer_ptr<graphics::TimestampQueryProvider>
+{
+  return {};
+}
+
 auto Graphics::CreateFramebuffer(const graphics::FramebufferDesc& desc)
   -> std::shared_ptr<graphics::Framebuffer>
 {

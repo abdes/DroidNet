@@ -187,6 +187,11 @@ auto ImGuiModule::OnFrameStart(
       && io.DisplayFramebufferScale.x > 0.0F
       && io.DisplayFramebufferScale.y > 0.0F) {
       graphics_backend_->NewFrame();
+      for (const auto& [_, drawer] : overlay_drawers_) {
+        if (drawer) {
+          drawer();
+        }
+      }
       // Mark that we actually started an ImGui frame so we can EndFrame later
       frame_started_ = true;
     } else {
@@ -310,6 +315,26 @@ auto ImGuiModule::RegisterTexture(std::string_view key,
     return 0U;
   }
   return graphics_backend_->RegisterOrUpdateTexture(key, texture);
+}
+
+auto ImGuiModule::RegisterOverlayDrawer(
+  std::string_view /*debug_name*/, OverlayDrawer drawer) -> std::uint64_t
+{
+  if (!drawer) {
+    return 0U;
+  }
+
+  const auto token = next_overlay_drawer_token_++;
+  overlay_drawers_.emplace(token, std::move(drawer));
+  return token;
+}
+
+auto ImGuiModule::UnregisterOverlayDrawer(const std::uint64_t token) -> void
+{
+  if (token == 0U) {
+    return;
+  }
+  overlay_drawers_.erase(token);
 }
 
 auto ImGuiModule::OnFrameEnd(observer_ptr<engine::FrameContext> /*context*/)

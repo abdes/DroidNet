@@ -7,8 +7,10 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string_view>
+#include <unordered_map>
 
 #include <imgui.h>
 
@@ -108,6 +110,12 @@ public:
   [[nodiscard]] OXGN_RNDR_API auto RegisterTexture(std::string_view key,
     const std::shared_ptr<graphics::Texture>& texture) const -> std::uintptr_t;
 
+  using OverlayDrawer = std::function<void()>;
+
+  OXGN_RNDR_API auto RegisterOverlayDrawer(
+    std::string_view debug_name, OverlayDrawer drawer) -> std::uint64_t;
+  OXGN_RNDR_API auto UnregisterOverlayDrawer(std::uint64_t token) -> void;
+
   auto IsWitinFrameScope() const noexcept { return frame_started_; }
 
 private:
@@ -129,6 +137,8 @@ private:
   // Track whether we successfully started an ImGui frame (ImGui::NewFrame)
   // so we can EndFrame if a render path was skipped.
   bool frame_started_ { false };
+  std::uint64_t next_overlay_drawer_token_ { 1U };
+  std::unordered_map<std::uint64_t, OverlayDrawer> overlay_drawers_ {};
 };
 
 } // namespace oxygen::engine::imgui

@@ -13,6 +13,7 @@
 #include <Oxygen/Renderer/Passes/RenderPass.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RenderContext.h>
+#include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
 
 using oxygen::engine::RenderPass;
@@ -103,8 +104,10 @@ auto RenderPass::PrepareResources(
 {
   detail::RenderScope ctx_scope(context_, context);
 
-  graphics::GpuEventScope phase_scope(recorder, "PrepareResources");
-  graphics::GpuEventScope pass_scope(recorder, GetName());
+  const auto scope_options = Context().GetRenderer().MakeGpuEventScopeOptions();
+  graphics::GpuEventScope pass_scope(recorder, GetName(), scope_options);
+  graphics::GpuEventScope phase_scope(
+    recorder, "PrepareResources", scope_options);
 
   DLOG_SCOPE_F(2, "RenderPass PrepareResources");
   DLOG_F(2, "pass: {}", GetName());
@@ -129,8 +132,9 @@ auto RenderPass::Execute(
 {
   detail::RenderScope ctx_scope(context_, context);
 
-  graphics::GpuEventScope phase_scope(recorder, "Execute");
-  graphics::GpuEventScope pass_scope(recorder, GetName());
+  const auto scope_options = Context().GetRenderer().MakeGpuEventScopeOptions();
+  graphics::GpuEventScope pass_scope(recorder, GetName(), scope_options);
+  graphics::GpuEventScope phase_scope(recorder, "Execute", scope_options);
 
   DLOG_SCOPE_F(2, "RenderPass Execute");
   DLOG_F(2, "pass: {}", GetName());
