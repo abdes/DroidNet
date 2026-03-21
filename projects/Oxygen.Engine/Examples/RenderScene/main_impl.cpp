@@ -219,6 +219,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
   bool verify_hashes = false;
   bool hot_reload = true;
   std::string directional_shadows = "conventional";
+  std::string cvars_archive_path;
   oxygen::examples::DemoAppContext app {};
   app.headless = false;
 
@@ -286,6 +287,13 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
         .UserFriendlyName("policy")
         .StoreTo(&directional_shadows)
         .Build());
+    default_command.WithOption(Option::WithKey("cvars-archive")
+        .About("Override the persisted CVar archive path for this run")
+        .Long("cvars-archive")
+        .WithValue<std::string>()
+        .UserFriendlyName("path")
+        .StoreTo(&cvars_archive_path)
+        .Build());
 
     auto cli = CliBuilder()
                  .ProgramName("render-scene")
@@ -311,6 +319,9 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     LOG_F(INFO, "Parsed vsync option = {}", enable_vsync);
     LOG_F(INFO, "Parsed verify-hashes option = {}", verify_hashes);
     LOG_F(INFO, "Parsed directional-shadows option = {}", directional_shadows);
+    if (!cvars_archive_path.empty()) {
+      LOG_F(INFO, "Parsed cvars-archive option = {}", cvars_archive_path);
+    }
     LOG_F(INFO, "Starting async engine engine for {} frames (target {} fps)",
       frames, target_fps);
     app.directional_shadow_policy
@@ -333,11 +344,15 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
           .parent_path();
 
     // Load the graphics backend
-    const auto path_finder_config
-      = PathFinderConfig::Create()
-          .WithWorkspaceRoot(workspace_root)
-          .WithScriptSourceRoots({ demo_root.parent_path() / "Content" })
-          .Build();
+    auto path_finder_builder = PathFinderConfig::Create()
+                                 .WithWorkspaceRoot(workspace_root)
+                                 .WithScriptSourceRoots(
+                                   { demo_root.parent_path() / "Content" });
+    if (!cvars_archive_path.empty()) {
+      path_finder_builder = std::move(path_finder_builder).WithCVarsArchivePath(
+        std::filesystem::path(cvars_archive_path));
+    }
+    const auto path_finder_config = std::move(path_finder_builder).Build();
     const GraphicsConfig gfx_config {
       .enable_debug = true,
       .enable_validation = false,
