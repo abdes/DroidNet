@@ -19,9 +19,16 @@ namespace oxygen::engine {
 
 //! Conventional raster shadow-map rendering pass.
 /*!
- Reuses the existing depth-only draw path and partition-aware depth PSOs, but
- consumes a generic raster shadow render plan instead of directional-only pass
- data.
+ This pass derives from `DepthPrePass` intentionally because it is still a
+ depth-only geometry raster pass over the same prepared draw metadata contract.
+ It reuses the shared depth-only raster infrastructure already implemented by
+ `DepthPrePass`: partition-aware opaque/masked PSO selection, depth-target
+ preparation and clear, viewport/scissor setup, and robust draw submission.
+
+ What this class changes is not the core raster model, but the shadow-specific
+ execution contract: it consumes a generic raster shadow render plan, binds
+ per-job shadow view constants, and targets shadow-map slices rather than the
+ main-view depth buffer.
 */
 class ConventionalShadowRasterPass : public DepthPrePass {
 public:
@@ -29,7 +36,7 @@ public:
 
   OXGN_RNDR_API explicit ConventionalShadowRasterPass(
     std::shared_ptr<Config> config);
-  ~ConventionalShadowRasterPass() override;
+  OXGN_RNDR_API ~ConventionalShadowRasterPass() override;
 
   OXYGEN_DEFAULT_COPYABLE(ConventionalShadowRasterPass)
   OXYGEN_DEFAULT_MOVABLE(ConventionalShadowRasterPass)

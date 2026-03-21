@@ -57,10 +57,21 @@ struct DepthPrePassConfig {
   std::string debug_name { "DepthPrePass" };
 };
 
-//! Generic implementation for a depth pre-pass. Can be extended if needed with
-//! custom behavior and backend-specific logic.
+//! Generic implementation for a depth-only raster pass. Can be extended if
+//! needed with custom behavior and backend-specific logic.
 /*!
- This class defines the interface for a depth pre-pass, and the default
+ This class defines the interface for the engine's canonical depth-only raster
+ path, and the default main-view pre-pass implementation.
+
+ In addition to the main-view pre-pass role, this class is also used as the
+ shared base for shadow raster passes that need the same depth-only graphics
+ machinery: partition-aware opaque/masked PSO selection, depth-target setup
+ and clear, viewport/scissor setup, and shared draw submission over
+ `PreparedSceneFrame` metadata. In practice, the class name reflects the
+ original main-view use case, but the reusable behavior is intentionally
+ broader than that one pass.
+
+ The default implementation
  implementation. In traditional rendering, this pass populates the depth buffer
  efficiently before main shading passes to leverage early depth testing,
  improving performance by avoiding redundant shading of occluded pixels.
