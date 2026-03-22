@@ -34,23 +34,45 @@ namespace {
 
   struct alignas(packing::kShaderDataFieldAlignment)
     VirtualShadowRequestPassConstants {
+    // Shader-visible SRV for the main depth texture sampled by the request
+    // pass.
     ShaderVisibleIndex depth_texture_index { kInvalidShaderVisibleIndex };
+    // Shader-visible SRV for the current directional virtual shadow metadata
+    // buffer.
     ShaderVisibleIndex virtual_directional_shadow_metadata_index {
       kInvalidShaderVisibleIndex
     };
+    // Shader-visible UAV for the packed per-page request bitmask buffer.
     ShaderVisibleIndex request_words_uav_index { kInvalidShaderVisibleIndex };
+    // Shader-visible UAV for the per-page mark flags written during request
+    // generation.
     ShaderVisibleIndex page_mark_flags_uav_index { kInvalidShaderVisibleIndex };
+    // Number of valid 32-bit words in the request bitmask buffer.
     std::uint32_t request_word_count { 0U };
+    // Total number of virtual pages addressable by the current metadata
+    // payload.
     std::uint32_t total_page_count { 0U };
+    // Default local border-dilation amount, expressed in virtual page units.
     float border_dilation_page_fraction { 0.0F };
+    // Padding to keep the constant-buffer layout aligned with the shader
+    // contract.
     std::uint32_t _pad0 { 0U };
+    // Screen-space sampling stride applied before reconstructing receiver
+    // requests.
     glm::uvec2 pixel_stride { 1U, 1U };
+    // Padding to preserve std140-style alignment for the next field block.
     std::uint32_t _pad_stride0 { 0U };
+    // Padding to preserve std140-style alignment for the next field block.
     std::uint32_t _pad_stride1 { 0U };
+    // Depth texture dimensions used for bounds checks and NDC reconstruction.
     glm::uvec2 screen_dimensions { 0U, 0U };
+    // Padding to keep the matrix field 16-byte aligned in the constant buffer.
     std::uint32_t _pad1 { 0U };
+    // Padding to keep the matrix field 16-byte aligned in the constant buffer.
     std::uint32_t _pad2 { 0U };
 
+    // Inverse view-projection matrix used to reconstruct receiver world
+    // positions.
     glm::mat4 inv_view_projection_matrix { 1.0F };
   };
   static_assert(sizeof(VirtualShadowRequestPassConstants)
@@ -241,11 +263,9 @@ auto VirtualShadowRequestPass::DoExecute(graphics::CommandRecorder& recorder)
   const auto width = std::max(1U, depth_texture.GetDescriptor().width);
   const auto height = std::max(1U, depth_texture.GetDescriptor().height);
   const auto pixel_stride = std::max(1U, active_pixel_stride_);
-  const auto group_count_x
-    = (width + pixel_stride * kDispatchGroupSize - 1U)
+  const auto group_count_x = (width + pixel_stride * kDispatchGroupSize - 1U)
     / (pixel_stride * kDispatchGroupSize);
-  const auto group_count_y
-    = (height + pixel_stride * kDispatchGroupSize - 1U)
+  const auto group_count_y = (height + pixel_stride * kDispatchGroupSize - 1U)
     / (pixel_stride * kDispatchGroupSize);
   recorder.Dispatch(group_count_x, group_count_y, 1U);
 
