@@ -1027,11 +1027,11 @@ Execution note, March 9, 2026:
   - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:6 /p:Configuration=Debug /nologo`
   - `out/build-vs/bin/Debug/Oxygen.Renderer.LightManager.Tests.exe`
 - current focused coverage includes:
-    - depth-feedback-driven virtual page selection
-    - compatible request feedback reuse within a bounded freshness window
-    - bounded bootstrap behavior before the first compatible feedback arrives
-    - resident-page reuse for identical virtual plans
-    - rerasterization when caster inputs change under identical snapped plans
+  - depth-feedback-driven virtual page selection
+  - compatible request feedback reuse within a bounded freshness window
+  - bounded bootstrap behavior before the first compatible feedback arrives
+  - resident-page reuse for identical virtual plans
+  - rerasterization when caster inputs change under identical snapped plans
   - the first parallel validation attempt hit the known MSBuild shared-PDB
     race in dependent projects; sequential reruns passed with no source
     changes
@@ -1271,6 +1271,7 @@ instability in scene, and treating them as the mainstream debug path was a
 scope mistake. The active debug direction is now a floating `RenderScene` ImGui
 window that displays a compute-generated `RGBA8` visualization of the physical
 VSM atlas itself. The work must:
+
 - dispatch a dedicated atlas-debug compute shader after virtual shadow raster
   has produced the current physical pool contents
 - expose the resulting debug texture through the existing ImGui D3D12 backend
@@ -1282,6 +1283,7 @@ Update, March 10, 2026 line-debug removal follow-up: the shader-side page-line
 debug path is now fully removed from the active directional VSM shaders, the
 floating `RenderScene` atlas-inspector path builds again, and current
 automation remains green in `build-vs`. Validation evidence:
+
 - `msbuild out/build-vs/src/Oxygen/Graphics/Direct3D12/Shaders/oxygen-graphics-direct3d12_shaders.vcxproj /m:6 /p:Configuration=Debug /nologo`
 - `msbuild out/build-vs/src/Oxygen/Renderer/Test/Oxygen.Renderer.LightManager.Tests.vcxproj /m:1 /p:Configuration=Debug /nologo`
 - `msbuild out/build-vs/Examples/RenderScene/oxygen-examples-renderscene.vcxproj /m:1 /p:Configuration=Debug /nologo`
@@ -1295,6 +1297,7 @@ automation remains green in `build-vs`. Validation evidence:
 Update, March 10, 2026 cache-churn correction: the atlas-inspector runtime
 showed that static-scene camera motion was still blowing the directional VSM
 cache. Two order-sensitive invalidation sources were identified and corrected:
+
 - the VSM backend now canonicalizes the shadow-caster bounds set before
   hashing, storing, and pairwise dirty-page comparison, so visibility-driven
   item reorder no longer looks like a different caster set
@@ -1323,6 +1326,7 @@ receiver bounds into one dense rectangle per fine clip, which can saturate the
 atlas and evict useful clean pages during motion. The request-feedback/cache
 scope is therefore still `in_progress` until the following are corrected in
 code and validated in `build-vs`:
+
 - request feedback must carry absolute resident-page identity instead of local
   page indices tied to clip origin
 - feedback compatibility must be keyed to directional address space
@@ -1335,6 +1339,7 @@ code and validated in `build-vs`:
 Update, March 10, 2026 resident-key feedback and sparse bootstrap correction:
 the request-feedback/cache correction is now implemented in code and validated
 in `build-vs`.
+
 - `VirtualShadowRequestPass` now translates GPU request bits into absolute
   resident-page keys using the clip-grid origins from the metadata snapshot
   that produced the request mask
@@ -1366,6 +1371,7 @@ current-view binding block and re-entered `ShadowManager::PublishForView()` afte
 virtual shadow binding set with a fresh publication immediately before
 `ShaderPass`, even though no new virtual pages had been rasterized for that
 second publication. The corrected scope is:
+
 - keep the current shadow binding publication stable for the rest of the frame
   once the VSM raster phase has run
 - allow mid-frame light-culling updates to republish only the lighting routing
@@ -1461,7 +1467,7 @@ second publication. The corrected scope is:
    - exit gate: camera rotation at fixed translation no longer causes
      angle-dependent stripe artifacts or runaway fine-page demand
 
-8. [ ] Replace rectangular feedback inflation with sparse fine-page refinement
+9. [ ] Replace rectangular feedback inflation with sparse fine-page refinement
    - stop collapsing all feedback pages in a clip into one bounding region
    - retain sparse page demand, then apply only a bounded local guard/dilation
      around requested pages
@@ -2175,6 +2181,41 @@ Continuous improvements, not milestones:
   `out/build-vs/vsm-runtime-20260311-depth-reuse-gate.txt`. Overall status
   remains `in_progress` because interactive visual validation of the reported
   motion artifacts still has to be confirmed in the live demo.
+- **March 19, 2026**: Completed the next directional VSM parity slice on the
+  live scene request path. `VirtualShadowRequest.hlsl` now reconstructs a
+  conservative screen-space geometric normal from the depth buffer and skips
+  clearly backfacing directional pixels during page marking, matching UE's
+  page-marking design intent more closely than the previous "request every
+  visible depth pixel" behavior. Validation on the unchanged live scene:
+  `current-live-vsmresolve-requestcull-20260319.bmp` stayed overwhelmingly
+  green at the then-current `8192`-tile pool, and the same live camera also
+  stayed stable after reducing Ultra physical tile capacity back down to UE-size
+  parity territory:
+  `current-live-vsmresolve-requestcull-6144-20260319.bmp`,
+  `current-live-vsmresolve-requestcull-4096-20260319.bmp`, and
+  `current-live-vsmresolve-requestcull-2048-20260319.bmp` all remained green,
+  while `current-live-virtual-requestcull-2048-20260319.bmp` and
+  `current-live-vsmcompare-requestcull-2048-20260319.bmp` remained visually
+  stable on the same unchanged live scene. The `2048`-tile run logged
+  `physical_tiles=2048` in
+  `current-live-vsmresolve-requestcull-2048-20260319.stderr.log`. Status
+  remains `in_progress` because this slice is validated on the current live
+  camera only, and the page-marking cull is still conservative rather than
+  using UE's exact directional source-radius threshold.
+
+- **March 22, 2026**: Corrected the directional VSM request-cull scope after
+  the March 19 implementation regressed page-resolution stability under close
+  camera motion. Root cause: the screen-space geometric-normal test was allowed
+  to skip the selected base page entirely, so view-dependent depth-neighborhood
+  noise at silhouettes and disocclusions could suppress the authoritative
+  request bit and make valid pages appear unresolved. The fix keeps the base
+  page request authoritative and uses the reconstructed normal only to suppress
+  optional local border dilation on high-confidence neighborhoods with four
+  valid centered neighbors and bounded span disparity. Ultra physical tile
+  capacity remains capped at `2048`, and follow-up live validation confirmed
+  that the request-cull fix restores stable close-camera page resolution at
+  that budget. Status remains `in_progress` until page-demand reduction versus
+  the uncapped `8192` pool is quantified on the target heavy scenes.
 
 - **March 9, 2026**: Completed the multi-technique shadow remediation for the
   working conventional raster path: split shading publication from raster
