@@ -324,6 +324,16 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       }
     );
 
+    if (context.ovm.HasOption("vsync")) {
+      (void)app.engine->GetConsole().SetCVarFromText({
+        .name = "gfx.vsync",
+        .text = enable_vsync ? "true" : "false",
+      });
+      if (const auto gfx = app.gfx_weak.lock()) {
+        gfx->SetVSyncEnabled(enable_vsync);
+      }
+    }
+
     const auto rc = co::Run(app, AsyncMain(app, frames, compositing_mode));
 
     app.platform->Stop();
