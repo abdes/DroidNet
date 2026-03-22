@@ -344,13 +344,14 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
           .parent_path();
 
     // Load the graphics backend
-    auto path_finder_builder = PathFinderConfig::Create()
-                                 .WithWorkspaceRoot(workspace_root)
-                                 .WithScriptSourceRoots(
-                                   { demo_root.parent_path() / "Content" });
+    auto path_finder_builder
+      = PathFinderConfig::Create()
+          .WithWorkspaceRoot(workspace_root)
+          .WithScriptSourceRoots({ demo_root.parent_path() / "Content" });
     if (!cvars_archive_path.empty()) {
-      path_finder_builder = std::move(path_finder_builder).WithCVarsArchivePath(
-        std::filesystem::path(cvars_archive_path));
+      path_finder_builder
+        = std::move(path_finder_builder)
+            .WithCVarsArchivePath(std::filesystem::path(cvars_archive_path));
     }
     const auto path_finder_config = std::move(path_finder_builder).Build();
     const GraphicsConfig gfx_config {
@@ -400,6 +401,15 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
         .name = "ngin.scripting.hot_reload",
         .text = hot_reload ? "true" : "false",
       });
+    }
+    if (context.ovm.HasOption("vsync")) {
+      (void)app.engine->GetConsole().SetCVarFromText({
+        .name = "gfx.vsync",
+        .text = enable_vsync ? "true" : "false",
+      });
+      if (const auto gfx = app.gfx_weak.lock()) {
+        gfx->SetVSyncEnabled(enable_vsync);
+      }
     }
 
     const auto rc = co::Run(app, AsyncMain(app, frames));
