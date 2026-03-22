@@ -44,6 +44,10 @@ static inline float2 ComputeDepthSlopeDirectionalUV(
     float3 estimated_geo_world_normal,
     bool clamp_slope = true);
 
+static inline uint ResolveDirectionalVirtualEstimatedClipIndex(
+    DirectionalVirtualShadowMetadata metadata,
+    float3 world_pos);
+
 static inline ShadowFrameBindings LoadResolvedShadowFrameBindings()
 {
     const ViewFrameBindings view_bindings =
@@ -387,28 +391,16 @@ static inline float3 ComputeDirectionalVirtualBiasedWorldPosition(
 {
     const float3 safe_normal_ws =
         normal_ws * rsqrt(max(dot(normal_ws, normal_ws), 1.0e-8f));
-    const float base_page_texels = max((float)metadata.page_size_texels, 1.0f);
-    const float base_guard_texels =
-        min(max(1.0f, base_page_texels * 0.25f), 1.0f);
-    const float base_logical_texel_count =
-        max(base_page_texels - 2.0 * base_guard_texels, 1.0f);
-    const float base_texel_world = max(
-        max(metadata.clip_metadata[0].origin_page_scale.z, 1.0e-4f)
-            / base_logical_texel_count,
+    const uint clip_index = ResolveDirectionalVirtualEstimatedClipIndex(
+        metadata, world_pos);
+    const float page_texels = max((float)metadata.page_size_texels, 1.0f);
+    const float guard_texels = min(max(1.0f, page_texels * 0.25f), 1.0f);
+    const float logical_texel_count =
+        max(page_texels - 2.0 * guard_texels, 1.0f);
+    const float texel_world = max(
+        max(metadata.clip_metadata[clip_index].origin_page_scale.z, 1.0e-4f)
+            / logical_texel_count,
         1.0e-4f);
-    const float distance_to_clipmap_origin =
-        length(world_pos - metadata.clipmap_receiver_origin_lod_bias.xyz);
-    const float continuous_level =
-        (distance_to_clipmap_origin > 1.0e-6f)
-            ? max(
-                log2(max(distance_to_clipmap_origin, 1.0e-6f))
-                    + metadata.clipmap_receiver_origin_lod_bias.w,
-                0.0f)
-            : 0.0f;
-    // UE keeps clip selection and fallback independent from receiver bias.  The
-    // resolve bias therefore has to vary smoothly in world space rather than
-    // stepping per requested clip family.
-    const float texel_world = base_texel_world * exp2(continuous_level);
     const float3 safe_light_dir_ws =
         light_dir_ws * rsqrt(max(dot(light_dir_ws, light_dir_ws), 1.0e-8f));
     const float ndotl = saturate(dot(safe_normal_ws, safe_light_dir_ws));
