@@ -139,24 +139,6 @@ static float ComputeDirectionalVirtualLogicalTexelWorld(
     return max(clip.origin_page_scale.z, 1.0e-4f) / logical_texel_count;
 }
 
-static float ComputeDirectionalVirtualContinuousClipLevel(
-    DirectionalVirtualShadowMetadata metadata,
-    float3 world_pos)
-{
-    if (metadata.clip_level_count == 0u) {
-        return 0.0f;
-    }
-
-    const float distance_to_clipmap_origin =
-        length(world_pos - metadata.clipmap_receiver_origin_lod_bias.xyz);
-    const float continuous_level =
-        (distance_to_clipmap_origin > 1.0e-6f)
-            ? log2(max(distance_to_clipmap_origin, 1.0e-6f))
-                + metadata.clipmap_receiver_origin_lod_bias.w
-            : 0.0f;
-    return max(continuous_level, 0.0f);
-}
-
 static float ComputeDirectionalVirtualShaderDepthBias(
     DirectionalVirtualShadowMetadata metadata,
     uint clip_index,
@@ -184,10 +166,8 @@ static float ComputeDirectionalVirtualShaderDepthBias(
                 : max_slope,
             0.0f,
             max_slope);
-    const float base_texel_world =
-        max(ComputeDirectionalVirtualLogicalTexelWorld(metadata, 0u), 1.0e-4f);
-    const float texel_world = base_texel_world
-        * exp2(ComputeDirectionalVirtualContinuousClipLevel(metadata, world_pos));
+    const float texel_world =
+        max(ComputeDirectionalVirtualLogicalTexelWorld(metadata, clip_index), 1.0e-4f);
     const float renderer_constant_bias =
         texel_world * metadata.raster_constant_bias_scale;
     const float renderer_slope_bias =
