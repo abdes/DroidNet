@@ -82,6 +82,12 @@ m_gtest_program(
     ${D3D12_TEST_FIXTURES}
 )
 m_gtest_program(
+  BlockingReadback
+  SOURCES
+    "BlockingReadback_test.cpp"
+    ${D3D12_TEST_FIXTURES}
+)
+m_gtest_program(
   SubmitOrderedQueueActions
   SOURCES
     "SubmitOrderedQueueActions_test.cpp"
