@@ -130,16 +130,6 @@ constexpr std::string_view kCVarRendererSyntheticDirectionalBias
   = "rndr.directional_shadow.synthetic_bias";
 constexpr std::string_view kCVarRendererSyntheticDirectionalNormalBias
   = "rndr.directional_shadow.synthetic_normal_bias";
-constexpr std::string_view kCVarRendererVsmDirectionalReceiverNormalBiasScale
-  = "rndr.vsm.directional_receiver_normal_bias_scale";
-constexpr std::string_view kCVarRendererVsmDirectionalReceiverConstantBiasScale
-  = "rndr.vsm.directional_receiver_constant_bias_scale";
-constexpr std::string_view kCVarRendererVsmDirectionalReceiverSlopeBiasScale
-  = "rndr.vsm.directional_receiver_slope_bias_scale";
-constexpr std::string_view kCVarRendererVsmDirectionalRasterConstantBiasScale
-  = "rndr.vsm.directional_raster_constant_bias_scale";
-constexpr std::string_view kCVarRendererVsmDirectionalRasterSlopeBiasScale
-  = "rndr.vsm.directional_raster_slope_bias_scale";
 constexpr std::string_view kCommandRendererDumpTextureMemory
   = "rndr.dump_texture_memory";
 constexpr std::string_view kCommandRendererDumpStats = "rndr.dump_stats";
@@ -151,11 +141,6 @@ constexpr int64_t kMinGpuTimestampMaxScopes = 1;
 constexpr int64_t kMaxGpuTimestampMaxScopes = 65536;
 constexpr float kDefaultSyntheticDirectionalBias = 0.0F;
 constexpr float kDefaultSyntheticDirectionalNormalBias = 0.02F;
-constexpr float kDefaultVsmDirectionalReceiverNormalBiasScale = 0.5F;
-constexpr float kDefaultVsmDirectionalReceiverConstantBiasScale = 0.0F;
-constexpr float kDefaultVsmDirectionalReceiverSlopeBiasScale = 1.0F;
-constexpr float kDefaultVsmDirectionalRasterConstantBiasScale = 0.0F;
-constexpr float kDefaultVsmDirectionalRasterSlopeBiasScale = 0.0F;
 
 auto BuildSyntheticSunShadowInput(
   const oxygen::engine::RenderContext& render_context,
@@ -787,8 +772,6 @@ auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
         observer_ptr { inline_staging_provider_.get() },
         observer_ptr { inline_transfers_.get() }, config_.shadow_quality_tier,
         config_.directional_shadow_policy);
-    shadow_manager_->SetDirectionalVirtualBiasSettings(
-      directional_shadow_bias_state_.virtual_directional);
 
     // Initialize the ViewConstants manager for per-view, per-slot upload-heap
     // storage.
@@ -970,76 +953,6 @@ auto Renderer::RegisterConsoleBindings(
     .max_value = 8.0,
   });
 
-  (void)console->RegisterCVar(console::CVarDefinition {
-    .name = std::string(kCVarRendererVsmDirectionalReceiverNormalBiasScale),
-    .help = "Directional VSM receiver normal bias",
-    .default_value
-    = static_cast<double>(kDefaultVsmDirectionalReceiverNormalBiasScale),
-    .flags = console::CVarFlags::kArchive,
-    .min_value = 0.0,
-    .max_value = 8.0,
-  });
-
-  (void)console->RegisterCVar(console::CVarDefinition {
-    .name = std::string(kCVarRendererVsmDirectionalReceiverConstantBiasScale),
-    .help = "Directional VSM receiver constant-bias scale",
-    .default_value
-    = static_cast<double>(kDefaultVsmDirectionalReceiverConstantBiasScale),
-    .flags = console::CVarFlags::kArchive,
-    .min_value = 0.0,
-    .max_value = 8.0,
-  });
-
-  (void)console->RegisterCVar(console::CVarDefinition {
-    .name = std::string(kCVarRendererVsmDirectionalReceiverSlopeBiasScale),
-    .help = "Directional VSM receiver slope-bias scale",
-    .default_value
-    = static_cast<double>(kDefaultVsmDirectionalReceiverSlopeBiasScale),
-    .flags = console::CVarFlags::kArchive,
-    .min_value = 0.0,
-    .max_value = 8.0,
-  });
-
-  (void)console->RegisterCVar(console::CVarDefinition {
-    .name = std::string(kCVarRendererVsmDirectionalRasterConstantBiasScale),
-    .help = "Directional VSM raster constant-bias scale",
-    .default_value
-    = static_cast<double>(kDefaultVsmDirectionalRasterConstantBiasScale),
-    .flags = console::CVarFlags::kArchive,
-    .min_value = 0.0,
-    .max_value = 8.0,
-  });
-
-  (void)console->RegisterCVar(console::CVarDefinition {
-    .name = std::string(kCVarRendererVsmDirectionalRasterSlopeBiasScale),
-    .help = "Directional VSM raster slope-bias scale",
-    .default_value
-    = static_cast<double>(kDefaultVsmDirectionalRasterSlopeBiasScale),
-    .flags = console::CVarFlags::kArchive,
-    .min_value = 0.0,
-    .max_value = 8.0,
-  });
-
-  (void)console->RegisterCVar(console::CVarDefinition {
-    .name = std::string(kCVarRendererVsmDirectionalRasterConstantBiasScale),
-    .help = "Directional VSM raster constant-bias scale",
-    .default_value
-    = static_cast<double>(kDefaultVsmDirectionalRasterConstantBiasScale),
-    .flags = console::CVarFlags::kArchive,
-    .min_value = 0.0,
-    .max_value = 8.0,
-  });
-
-  (void)console->RegisterCVar(console::CVarDefinition {
-    .name = std::string(kCVarRendererVsmDirectionalRasterSlopeBiasScale),
-    .help = "Directional VSM raster slope-bias scale",
-    .default_value
-    = static_cast<double>(kDefaultVsmDirectionalRasterSlopeBiasScale),
-    .flags = console::CVarFlags::kArchive,
-    .min_value = 0.0,
-    .max_value = 8.0,
-  });
-
   (void)console->RegisterCommand(console::CommandDefinition {
     .name = std::string(kCommandRendererDumpTextureMemory),
     .help = "Dump renderer texture memory usage [top_n]",
@@ -1175,85 +1088,14 @@ auto Renderer::ApplyConsoleCVars(
       = static_cast<float>(synthetic_normal_bias);
   }
 
-  double receiver_normal_bias_scale
-    = directional_shadow_bias_state_.virtual_directional
-        .receiver_normal_bias_scale;
-  if (console->TryGetCVarValue<double>(
-        kCVarRendererVsmDirectionalReceiverNormalBiasScale,
-        receiver_normal_bias_scale)) {
-    directional_shadow_bias_state_.virtual_directional
-      .receiver_normal_bias_scale
-      = static_cast<float>(receiver_normal_bias_scale);
-  }
-
-  double receiver_constant_bias_scale
-    = directional_shadow_bias_state_.virtual_directional
-        .receiver_constant_bias_scale;
-  if (console->TryGetCVarValue<double>(
-        kCVarRendererVsmDirectionalReceiverConstantBiasScale,
-        receiver_constant_bias_scale)) {
-    directional_shadow_bias_state_.virtual_directional
-      .receiver_constant_bias_scale
-      = static_cast<float>(receiver_constant_bias_scale);
-  }
-
-  double receiver_slope_bias_scale
-    = directional_shadow_bias_state_.virtual_directional
-        .receiver_slope_bias_scale;
-  if (console->TryGetCVarValue<double>(
-        kCVarRendererVsmDirectionalReceiverSlopeBiasScale,
-        receiver_slope_bias_scale)) {
-    directional_shadow_bias_state_.virtual_directional.receiver_slope_bias_scale
-      = static_cast<float>(receiver_slope_bias_scale);
-  }
-
-  double raster_constant_bias_scale
-    = directional_shadow_bias_state_.virtual_directional
-        .raster_constant_bias_scale;
-  if (console->TryGetCVarValue<double>(
-        kCVarRendererVsmDirectionalRasterConstantBiasScale,
-        raster_constant_bias_scale)) {
-    directional_shadow_bias_state_.virtual_directional
-      .raster_constant_bias_scale
-      = static_cast<float>(raster_constant_bias_scale);
-  }
-
-  double raster_slope_bias_scale
-    = directional_shadow_bias_state_.virtual_directional
-        .raster_slope_bias_scale;
-  if (console->TryGetCVarValue<double>(
-        kCVarRendererVsmDirectionalRasterSlopeBiasScale,
-        raster_slope_bias_scale)) {
-    directional_shadow_bias_state_.virtual_directional.raster_slope_bias_scale
-      = static_cast<float>(raster_slope_bias_scale);
-  }
-
   static bool logged_renderer_bias_cvars = false;
   if (!logged_renderer_bias_cvars) {
     LOG_F(INFO,
       "Renderer bias CVars: synthetic_constant_bias={} "
-      "synthetic_normal_bias={} "
-      "receiver_normal_scale={} receiver_constant_scale={} "
-      "receiver_slope_scale={} "
-      "raster_constant_scale={} raster_slope_scale={}",
+      "synthetic_normal_bias={}",
       directional_shadow_bias_state_.synthetic_constant_bias,
-      directional_shadow_bias_state_.synthetic_normal_bias,
-      directional_shadow_bias_state_.virtual_directional
-        .receiver_normal_bias_scale,
-      directional_shadow_bias_state_.virtual_directional
-        .receiver_constant_bias_scale,
-      directional_shadow_bias_state_.virtual_directional
-        .receiver_slope_bias_scale,
-      directional_shadow_bias_state_.virtual_directional
-        .raster_constant_bias_scale,
-      directional_shadow_bias_state_.virtual_directional
-        .raster_slope_bias_scale);
+      directional_shadow_bias_state_.synthetic_normal_bias);
     logged_renderer_bias_cvars = true;
-  }
-
-  if (shadow_manager_) {
-    shadow_manager_->SetDirectionalVirtualBiasSettings(
-      directional_shadow_bias_state_.virtual_directional);
   }
 }
 
@@ -1548,10 +1390,6 @@ auto Renderer::UnregisterViewRenderGraph(ViewId view_id) -> void
 
   DLOG_F(
     1, "UnregisterViewRenderGraph: pending_cleanup_count={}", pending_size);
-
-  if (shadow_manager_) {
-    shadow_manager_->RetireView(view_id);
-  }
 
   {
     std::unique_lock state_lock(view_state_mutex_);
@@ -2549,12 +2387,13 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
         = lighting_frame_bindings_publisher_->Publish(
           view_id, lighting_bindings);
       LOG_F(INFO,
-        "Renderer: frame={} view={} lighting publication dir_slot={} pos_slot={} "
+        "Renderer: frame={} view={} lighting publication dir_slot={} "
+        "pos_slot={} "
         "lighting_frame_slot={} sun_enabled={} sun_illuminance={:.3f} "
         "sun_dir=({:.6f}, {:.6f}, {:.6f})",
-        render_context.frame_sequence.get(), nostd::to_string(view_id), directional_lights_slot,
-        positional_lights_slot, view_bindings.lighting_frame_slot,
-        lighting_bindings.sun.enabled,
+        render_context.frame_sequence.get(), nostd::to_string(view_id),
+        directional_lights_slot, positional_lights_slot,
+        view_bindings.lighting_frame_slot, lighting_bindings.sun.enabled,
         lighting_bindings.sun.direction_ws_illuminance.w,
         lighting_bindings.sun.direction_ws_illuminance.x,
         lighting_bindings.sun.direction_ws_illuminance.y,
@@ -2565,14 +2404,6 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
       && shadow_manager_) {
       auto shadow_instance_metadata_slot = kInvalidShaderVisibleIndex;
       auto directional_shadow_metadata_slot = kInvalidShaderVisibleIndex;
-      auto virtual_shadow_page_table_slot = kInvalidShaderVisibleIndex;
-      auto virtual_shadow_page_flags_slot = kInvalidShaderVisibleIndex;
-      auto virtual_shadow_physical_pool_slot = kInvalidShaderVisibleIndex;
-      auto virtual_directional_shadow_metadata_slot
-        = kInvalidShaderVisibleIndex;
-      auto virtual_shadow_physical_page_metadata_slot
-        = kInvalidShaderVisibleIndex;
-      auto virtual_shadow_physical_page_lists_slot = kInvalidShaderVisibleIndex;
       auto sun_shadow_index = 0xFFFFFFFFU;
       if (const auto light_manager = scene_prep_state_->GetLightManager()) {
         const auto prepared_it = prepared_frames_.find(view_id);
@@ -2620,97 +2451,25 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
           = shadow_view.directional_shadow_metadata_srv;
         const auto directional_shadow_texture_slot
           = shadow_view.directional_shadow_texture_srv;
-        virtual_shadow_page_table_slot
-          = shadow_view.virtual_shadow_page_table_srv;
-        virtual_shadow_page_flags_slot
-          = shadow_view.virtual_shadow_page_flags_srv;
-        virtual_shadow_physical_pool_slot
-          = shadow_view.virtual_shadow_physical_pool_srv;
-        virtual_directional_shadow_metadata_slot
-          = shadow_view.virtual_directional_shadow_metadata_srv;
-        virtual_shadow_physical_page_metadata_slot
-          = shadow_view.virtual_shadow_physical_page_metadata_srv;
-        virtual_shadow_physical_page_lists_slot
-          = shadow_view.virtual_shadow_physical_page_lists_srv;
         sun_shadow_index = shadow_view.sun_shadow_index;
 
         const auto* shadow_instance = shadow_manager_ != nullptr
           ? shadow_manager_->TryGetShadowInstanceMetadata(view_id)
           : nullptr;
-        const bool virtual_shadow_impl_active = shadow_instance != nullptr
-          && shadow_instance->domain
-            == static_cast<std::uint32_t>(engine::ShadowDomain::kDirectional)
-          && shadow_instance->implementation_kind
-            == static_cast<std::uint32_t>(
-              engine::ShadowImplementationKind::kVirtual);
-        const bool live_virtual_shadow_bindings
-          = virtual_shadow_page_table_slot.IsValid()
-          && virtual_shadow_page_flags_slot.IsValid()
-          && virtual_shadow_physical_pool_slot.IsValid()
-          && virtual_shadow_physical_page_metadata_slot.IsValid()
-          && virtual_shadow_physical_page_lists_slot.IsValid();
-
-        if (virtual_shadow_impl_active && !live_virtual_shadow_bindings) {
-          LOG_F(INFO,
-            "Renderer: frame={} view={} suppressing virtual shadow consume "
-            "while bindings are non-live shadow_meta_srv={} sun_shadow_index={} "
-            "vsm_table={} vsm_flags={} vsm_pool={} vsm_phys_meta={} "
-            "vsm_phys_lists={}",
-            render_context.frame_sequence.get(), view_id.get(),
-            shadow_instance_metadata_slot.get(), sun_shadow_index,
-            virtual_shadow_page_table_slot.get(),
-            virtual_shadow_page_flags_slot.get(),
-            virtual_shadow_physical_pool_slot.get(),
-            virtual_shadow_physical_page_metadata_slot.get(),
-            virtual_shadow_physical_page_lists_slot.get());
-          shadow_instance_metadata_slot = kInvalidShaderVisibleIndex;
-          sun_shadow_index = 0xFFFFFFFFU;
-        }
-
-        CHECK_F(!virtual_shadow_impl_active || live_virtual_shadow_bindings
-            || (shadow_instance_metadata_slot == kInvalidShaderVisibleIndex
-              && sun_shadow_index == 0xFFFFFFFFU),
-          "Renderer: illegal virtual shadow consume publication frame={} "
-          "view={} shadow_meta_srv={} sun_shadow_index={} vsm_table={} "
-          "vsm_flags={} vsm_pool={} vsm_phys_meta={} vsm_phys_lists={}",
-          render_context.frame_sequence.get(), view_id.get(),
-          shadow_instance_metadata_slot.get(), sun_shadow_index,
-          virtual_shadow_page_table_slot.get(),
-          virtual_shadow_page_flags_slot.get(),
-          virtual_shadow_physical_pool_slot.get(),
-          virtual_shadow_physical_page_metadata_slot.get(),
-          virtual_shadow_physical_page_lists_slot.get());
 
         const ShadowFrameBindings shadow_bindings {
           .shadow_instance_metadata_slot = shadow_instance_metadata_slot,
           .directional_shadow_metadata_slot = directional_shadow_metadata_slot,
           .directional_shadow_texture_slot = directional_shadow_texture_slot,
-          .virtual_shadow_page_table_slot = virtual_shadow_page_table_slot,
-          .virtual_shadow_page_flags_slot = virtual_shadow_page_flags_slot,
-          .virtual_shadow_physical_pool_slot
-          = virtual_shadow_physical_pool_slot,
-          .virtual_directional_shadow_metadata_slot
-          = virtual_directional_shadow_metadata_slot,
-          .virtual_shadow_physical_page_metadata_slot
-          = virtual_shadow_physical_page_metadata_slot,
-          .virtual_shadow_physical_page_lists_slot
-          = virtual_shadow_physical_page_lists_slot,
           .sun_shadow_index = sun_shadow_index,
         };
         LOG_F(INFO,
           "Renderer: frame={} view={} shadow publication shadow_meta={} "
-          "dir_meta={} dir_tex={} vsm_meta={} vsm_table={} vsm_flags={} "
-          "vsm_pool={} vsm_phys_meta={} vsm_phys_lists={} sun_shadow_index={}",
+          "dir_meta={} dir_tex={} sun_shadow_index={}",
           render_context.frame_sequence.get(), view_id.get(),
           shadow_instance_metadata_slot.get(),
           directional_shadow_metadata_slot.get(),
-          directional_shadow_texture_slot.get(),
-          virtual_directional_shadow_metadata_slot.get(),
-          virtual_shadow_page_table_slot.get(),
-          virtual_shadow_page_flags_slot.get(),
-          virtual_shadow_physical_pool_slot.get(),
-          virtual_shadow_physical_page_metadata_slot.get(),
-          virtual_shadow_physical_page_lists_slot.get(), sun_shadow_index);
+          directional_shadow_texture_slot.get(), sun_shadow_index);
         if (shadow_manager_ != nullptr) {
           if (shadow_instance != nullptr) {
             LOG_F(INFO,
@@ -2728,60 +2487,6 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
               "shadow_meta_srv={} sun_shadow_index={}",
               render_context.frame_sequence.get(), view_id.get(),
               shadow_instance_metadata_slot.get(), sun_shadow_index);
-          }
-        }
-        if (shadow_manager_ != nullptr
-          && virtual_directional_shadow_metadata_slot.IsValid()) {
-          const auto* vsm_packet
-            = shadow_manager_->TryGetVirtualFramePacket(view_id);
-          if (const auto* vsm_metadata
-              = shadow_manager_->TryGetVirtualDirectionalMetadata(view_id);
-            vsm_metadata != nullptr) {
-            const auto page_state
-              = shadow_manager_->TryGetVirtualPageManagementStateSnapshot(
-                view_id);
-            LOG_F(INFO,
-              "Renderer: frame={} view={} vsm publication detail "
-              "packet_source_frame={} cache_epoch={} view_generation={} "
-              "packet_meta_srv={} packet_schedule_srv={} "
-              "shadow_instance={} clip_levels={} pages_per_axis={} "
-              "page_size={} page_table_offset={} coarse_clip_mask={} "
-              "clip0_origin=({}, {}) clip0_page_world={} "
-              "selection_origin=({}, {}, {}) receiver_origin=({}, {}, {}) "
-              "light_view_t=({}, {}, {}) reset_page_management={} "
-              "global_dirty={}",
-              render_context.frame_sequence.get(), view_id.get(),
-              vsm_packet != nullptr ? vsm_packet->source_frame_sequence.get()
-                                    : 0U,
-              vsm_packet != nullptr ? vsm_packet->cache_epoch : 0U,
-              vsm_packet != nullptr ? vsm_packet->view_generation : 0U,
-              vsm_packet != nullptr
-                ? vsm_packet->virtual_directional_shadow_metadata_srv.get()
-                : kInvalidShaderVisibleIndex.get(),
-              vsm_packet != nullptr && vsm_packet->has_gpu_raster_inputs
-                ? vsm_packet->gpu_raster_inputs.schedule_srv.get()
-                : kInvalidShaderVisibleIndex.get(),
-              vsm_metadata->shadow_instance_index,
-              vsm_metadata->clip_level_count, vsm_metadata->pages_per_axis,
-              vsm_metadata->page_size_texels, vsm_metadata->page_table_offset,
-              vsm_metadata->coarse_clip_mask,
-              vsm_metadata->clip_metadata[0].origin_page_scale.x,
-              vsm_metadata->clip_metadata[0].origin_page_scale.y,
-              vsm_metadata->clip_metadata[0].origin_page_scale.z,
-              vsm_metadata->clipmap_selection_world_origin_lod_bias.x,
-              vsm_metadata->clipmap_selection_world_origin_lod_bias.y,
-              vsm_metadata->clipmap_selection_world_origin_lod_bias.z,
-              vsm_metadata->clipmap_receiver_origin_lod_bias.x,
-              vsm_metadata->clipmap_receiver_origin_lod_bias.y,
-              vsm_metadata->clipmap_receiver_origin_lod_bias.z,
-              vsm_metadata->light_view[3][0], vsm_metadata->light_view[3][1],
-              vsm_metadata->light_view[3][2],
-              page_state.has_value()
-                ? page_state->reset_page_management_state
-                : 0U,
-              page_state.has_value()
-                ? page_state->global_dirty_resident_contents
-                : 0U);
           }
         }
         view_bindings.shadow_frame_slot
@@ -3284,14 +2989,12 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
           shadowed_sun_count, first_dir_shadow_index, first_dir_flags);
 
         if (const auto sun_tagged_light
-              = internal::FindSunTaggedDirectionalLight(dir_lights);
+          = internal::FindSunTaggedDirectionalLight(dir_lights);
           runtime_state.sun.enabled != 0U && sun_tagged_light.has_value()) {
-          const float light_dir_len_sq
-            = glm::dot(sun_tagged_light->direction_ws,
-              sun_tagged_light->direction_ws);
+          const float light_dir_len_sq = glm::dot(
+            sun_tagged_light->direction_ws, sun_tagged_light->direction_ws);
           const glm::vec3 resolved_direction = runtime_state.sun.GetDirection();
-          const glm::vec3 expected_direction_to_sun
-            = light_dir_len_sq > 0.0F
+          const glm::vec3 expected_direction_to_sun = light_dir_len_sq > 0.0F
             ? -glm::normalize(sun_tagged_light->direction_ws)
             : glm::vec3(0.0F);
           const float resolved_illuminance = runtime_state.sun.GetIlluminance();
@@ -3333,9 +3036,8 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
 
       prepared_frame.exposure
         = UpdateViewExposure(view_id, scene, runtime_state.sun);
-      LOG_F(INFO,
-        "Renderer: frame={} view={} exposure={:.6f}",
-        frame_seq, nostd::to_string(view_id), prepared_frame.exposure);
+      LOG_F(INFO, "Renderer: frame={} view={} exposure={:.6f}", frame_seq,
+        nostd::to_string(view_id), prepared_frame.exposure);
 
       // Populate SkyAtmosphere per-view context. Defaults stay conservative
       // until LUT precompute is wired; analytic fallback stays enabled.

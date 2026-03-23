@@ -158,30 +158,12 @@ m_gtest_program(
     "Resources/DrawMetadataEmitter_test.cpp"
 )
 
-# VirtualShadow contract tests
-m_gtest_program(
-  VirtualShadowContracts
-  SOURCES
-    "VirtualShadow/VirtualShadowTestSupport.h"
-    "VirtualShadow/VirtualShadowClipmapContracts_test.cpp"
-    "VirtualShadow/VirtualShadowFallbackContracts_test.cpp"
-    "VirtualShadow/VirtualShadowFlagsContracts_test.cpp"
-    "VirtualShadow/VirtualShadowResidencyContracts_test.cpp"
-)
-
 # LightManager unit tests
 m_gtest_program(
   LightManager
   SOURCES
     "Fakes/Graphics.h"
     "LightManager_basic_test.cpp"
-)
-
-m_gtest_program(
-  ShadowManager
-  SOURCES
-    "Fakes/Graphics.h"
-    "ShadowManager_virtual_cache_history_test.cpp"
 )
 
 # GeometryUploader unit tests

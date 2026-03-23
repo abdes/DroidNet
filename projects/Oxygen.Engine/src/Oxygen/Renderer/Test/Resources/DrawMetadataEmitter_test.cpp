@@ -617,7 +617,7 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
 }
 
 NOLINT_TEST(DrawMetadataEmitterStandaloneTest,
-  VirtualShadowRasterCulling_ConservativelyKeepsTouchingCasterBounds)
+  ShadowRasterCulling_ConservativelyKeepsTouchingCasterBounds)
 {
   TestResolvedVirtualPage page {};
   page.view_matrix = glm::mat4(1.0F);

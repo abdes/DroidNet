@@ -179,69 +179,10 @@ float4 PS(VSOutput input) : SV_Target0 {
 
     float3 debug_out = 0.0f;
     bool debug_handled = false;
-    bool vsm_debug_mode = false;
     const float3 shadow_normal = ComputeShadowSurfaceNormal(
         input.world_pos, input.world_normal, input.is_front_face);
 
-#if defined(DEBUG_VSM_COMPARE)
-    debug_out = ComputeVirtualDirectionalShadowDebugColor(
-        input.world_pos,
-        shadow_normal,
-        SafeNormalize(GetSunDirectionWS()));
-    debug_handled = true;
-    vsm_debug_mode = true;
-#elif defined(DEBUG_VSM_RESOLVE)
-    debug_out = ComputeVirtualDirectionalShadowResolveDebugColor(
-        input.world_pos,
-        shadow_normal,
-        SafeNormalize(GetSunDirectionWS()));
-    debug_handled = true;
-    vsm_debug_mode = true;
-#elif defined(DEBUG_VSM_STORED_DEPTH)
-    debug_out = ComputeVirtualDirectionalShadowDepthDebugColor(
-        input.world_pos,
-        shadow_normal,
-        SafeNormalize(GetSunDirectionWS()),
-        false);
-    debug_handled = true;
-    vsm_debug_mode = true;
-#elif defined(DEBUG_VSM_RECEIVER_DEPTH)
-    debug_out = ComputeVirtualDirectionalShadowDepthDebugColor(
-        input.world_pos,
-        shadow_normal,
-        SafeNormalize(GetSunDirectionWS()),
-        true);
-    debug_handled = true;
-    vsm_debug_mode = true;
-#elif defined(DEBUG_VSM_REQUESTED_CLIP)
-    debug_out = ComputeVirtualDirectionalShadowRequestedClipDebugColor(
-        input.world_pos,
-        shadow_normal,
-        SafeNormalize(GetSunDirectionWS()));
-    debug_handled = true;
-    vsm_debug_mode = true;
-#elif defined(DEBUG_VSM_RESOLVED_CLIP)
-    debug_out = ComputeVirtualDirectionalShadowResolvedClipDebugColor(
-        input.world_pos,
-        shadow_normal,
-        SafeNormalize(GetSunDirectionWS()));
-    debug_handled = true;
-    vsm_debug_mode = true;
-#elif defined(DEBUG_VSM_CLIP_DELTA)
-    debug_out = ComputeVirtualDirectionalShadowClipDeltaDebugColor(
-        input.world_pos,
-        shadow_normal,
-        SafeNormalize(GetSunDirectionWS()));
-    debug_handled = true;
-    vsm_debug_mode = true;
-#elif defined(DEBUG_VSM_DEPTH_DELTA)
-    debug_out = ComputeVirtualDirectionalShadowDepthDeltaDebugColor(
-        input.world_pos,
-        shadow_normal,
-        SafeNormalize(GetSunDirectionWS()));
-    debug_handled = true;
-    vsm_debug_mode = true;
-#elif defined(DEBUG_UV0)
+#if defined(DEBUG_UV0)
     debug_out = float3(frac(input.uv), 0.0f); debug_handled = true;
 #elif defined(DEBUG_BASE_COLOR) || defined(DEBUG_OPACITY) || defined(DEBUG_WORLD_NORMALS) || defined(DEBUG_ROUGHNESS) || defined(DEBUG_METALNESS)
     MaterialSurface s = EvaluateMaterialSurface(input.world_pos, input.world_normal, input.world_tangent, input.world_bitangent, input.uv, g_DrawIndex, input.is_front_face);
@@ -324,13 +265,6 @@ float4 PS(VSOutput input) : SV_Target0 {
             #endif
         }
     }
-
-#if !defined(DEBUG_VSM_RESOLVE) && !defined(DEBUG_VSM_COMPARE)
-    if (debug_handled && vsm_debug_mode) {
-        const float3 underlay = ComputeSceneDebugUnderlay(input);
-        debug_out = lerp(underlay, debug_out, 0.78f);
-    }
-#endif
 
 #if defined(DEBUG_IBL_RAW_SKY)
     debug_out *= GetExposure();
