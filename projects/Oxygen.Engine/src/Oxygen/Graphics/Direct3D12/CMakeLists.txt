@@ -88,6 +88,8 @@ set(
   "Detail/CompositionSwapChain.h"
   "Detail/Converters.cpp"
   "Detail/Converters.h"
+  "Detail/TextureReadback.cpp"
+  "Detail/TextureReadback.h"
   "Detail/dx12_utils.h"
   "Detail/FormatUtils.cpp"
   "Detail/FormatUtils.h"
@@ -121,7 +123,8 @@ file(GLOB_RECURSE HLSLI_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.hlsli")
 
 # Ensure shader sources appear in IDE project trees (Visual Studio filters)
 # without becoming standalone compilation units.
-set(OXYGEN_D3D12_SHADER_SOURCE_FILES
+set(
+  OXYGEN_D3D12_SHADER_SOURCE_FILES
   ${HLSL_FILES}
   ${HLSLI_FILES}
 )
@@ -133,12 +136,15 @@ target_sources(
 set_source_files_properties(
   ${OXYGEN_D3D12_SHADER_SOURCE_FILES}
   PROPERTIES
-    HEADER_FILE_ONLY TRUE
-    VS_SETTINGS "ExcludedFromBuild=true"
+    HEADER_FILE_ONLY
+      TRUE
+    VS_SETTINGS
+      "ExcludedFromBuild=true"
 )
 source_group(
   TREE "${CMAKE_CURRENT_SOURCE_DIR}"
-  FILES ${OXYGEN_D3D12_SHADER_SOURCE_FILES}
+  FILES
+    ${OXYGEN_D3D12_SHADER_SOURCE_FILES}
 )
 
 target_sources(
@@ -148,8 +154,10 @@ target_sources(
     ${OXYGEN_GFX_D3D12_HEADERS}
   PUBLIC
     FILE_SET HEADERS
-    BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES ${OXYGEN_GFX_D3D12_HEADERS}
+      BASE_DIRS
+        "${OXYGEN_SOURCE_DIR}"
+      FILES
+        ${OXYGEN_GFX_D3D12_HEADERS}
 )
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})
@@ -197,46 +205,67 @@ if(WIN32 AND USE_PIX)
   set(_oxygen_winpixeventruntime_hint_paths)
 
   if(OXYGEN_WINPIXEVENTRUNTIME_DIR)
-    list(APPEND _oxygen_winpixeventruntime_hint_paths
+    list(
+      APPEND _oxygen_winpixeventruntime_hint_paths
       "${OXYGEN_WINPIXEVENTRUNTIME_DIR}"
     )
   endif()
 
   # Repo-local package layout (downloaded by GetWinPixEvent.ps1).
   if(DEFINED OXYGEN_SOURCE_DIR)
-    list(APPEND _oxygen_winpixeventruntime_hint_paths
+    list(
+      APPEND _oxygen_winpixeventruntime_hint_paths
       "${OXYGEN_SOURCE_DIR}/packages/WinPixEventRuntime"
     )
   endif()
-  list(APPEND _oxygen_winpixeventruntime_hint_paths
+  list(
+    APPEND _oxygen_winpixeventruntime_hint_paths
     "${CMAKE_CURRENT_LIST_DIR}/../../../../packages/WinPixEventRuntime"
   )
 
   find_path(
     OXYGEN_WINPIXEVENTRUNTIME_INCLUDE_DIR
-    NAMES pix3.h
-    PATHS ${_oxygen_winpixeventruntime_hint_paths}
-    PATH_SUFFIXES Include include
+    NAMES
+      pix3.h
+    PATHS
+      ${_oxygen_winpixeventruntime_hint_paths}
+    PATH_SUFFIXES
+      Include
+      include
   )
 
   find_library(
     OXYGEN_WINPIXEVENTRUNTIME_LIBRARY
-    NAMES WinPixEventRuntime
-    PATHS ${_oxygen_winpixeventruntime_hint_paths}
-    PATH_SUFFIXES Lib/x64 lib/x64 Lib lib
+    NAMES
+      WinPixEventRuntime
+    PATHS
+      ${_oxygen_winpixeventruntime_hint_paths}
+    PATH_SUFFIXES
+      Lib/x64
+      lib/x64
+      Lib
+      lib
   )
 
   find_file(
     OXYGEN_WINPIXEVENTRUNTIME_DLL
-    NAMES WinPixEventRuntime.dll
-    PATHS ${_oxygen_winpixeventruntime_hint_paths}
-    PATH_SUFFIXES Bin/x64 bin/x64 Bin bin
+    NAMES
+      WinPixEventRuntime.dll
+    PATHS
+      ${_oxygen_winpixeventruntime_hint_paths}
+    PATH_SUFFIXES
+      Bin/x64
+      bin/x64
+      Bin
+      bin
   )
 
   if(
     OXYGEN_WINPIXEVENTRUNTIME_INCLUDE_DIR
-    AND OXYGEN_WINPIXEVENTRUNTIME_LIBRARY
-    AND OXYGEN_WINPIXEVENTRUNTIME_DLL
+    AND
+      OXYGEN_WINPIXEVENTRUNTIME_LIBRARY
+    AND
+      OXYGEN_WINPIXEVENTRUNTIME_DLL
   )
     target_include_directories(
       ${META_MODULE_TARGET}
@@ -255,27 +284,29 @@ if(WIN32 AND USE_PIX)
       TARGET ${META_MODULE_TARGET}
       POST_BUILD
       COMMAND
-        ${CMAKE_COMMAND} -E copy_if_different
-          "${OXYGEN_WINPIXEVENTRUNTIME_DLL}"
-          "$<TARGET_FILE_DIR:${META_MODULE_TARGET}>"
+        ${CMAKE_COMMAND} -E copy_if_different "${OXYGEN_WINPIXEVENTRUNTIME_DLL}"
+        "$<TARGET_FILE_DIR:${META_MODULE_TARGET}>"
       VERBATIM
     )
 
     # Install the runtime DLL alongside executables.
     if(DEFINED OXYGEN_INSTALL_BIN)
       install(
-        FILES "${OXYGEN_WINPIXEVENTRUNTIME_DLL}"
+        FILES
+          "${OXYGEN_WINPIXEVENTRUNTIME_DLL}"
         DESTINATION ${OXYGEN_INSTALL_BIN}
         COMPONENT "${META_MODULE_NAME}_runtime"
       )
     endif()
 
-    message(STATUS
+    message(
+      STATUS
       "WinPixEventRuntime enabled for ${META_MODULE_NAME}: "
       "${OXYGEN_WINPIXEVENTRUNTIME_INCLUDE_DIR}"
     )
   else()
-    message(WARNING
+    message(
+      WARNING
       "USE_PIX is ON but WinPixEventRuntime was not found. "
       "\n  - Recommended: run GetWinPixEvent.bat from the repo root "
       "(it installs to packages/WinPixEventRuntime by default)."

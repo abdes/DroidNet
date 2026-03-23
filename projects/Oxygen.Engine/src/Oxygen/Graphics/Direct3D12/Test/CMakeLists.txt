@@ -43,6 +43,12 @@ add_test(
 
 include(GTestHelpers)
 
+set(
+  D3D12_TEST_FIXTURES
+  "Fixtures/OffscreenTestFixture.h"
+  "Fixtures/ReadbackTestFixture.h"
+)
+
 m_gtest_program(
   D3D12HeapAllocationStrategy
   SOURCES
@@ -51,3 +57,15 @@ m_gtest_program(
 )
 m_gtest_program(DescriptorSegment SOURCES "DescriptorSegment_test.cpp")
 m_gtest_program(PipelineStateCache SOURCES "PipelineStateCache_test.cpp")
+m_gtest_program(
+  TextureReadbackLayout
+  SOURCES
+    "TextureReadbackLayout_test.cpp"
+    ${D3D12_TEST_FIXTURES}
+)
+m_gtest_program(
+  TextureReadbackIntegration
+  SOURCES
+    "TextureReadbackIntegration_test.cpp"
+    ${D3D12_TEST_FIXTURES}
+)

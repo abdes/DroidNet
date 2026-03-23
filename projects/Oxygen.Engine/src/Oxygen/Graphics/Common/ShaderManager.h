@@ -54,12 +54,12 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(ShaderManager);
   OXYGEN_DEFAULT_MOVABLE(ShaderManager);
 
-  //! Loads shader bytecode and metadata from the archive file.
+  //! Loads shader bytecode and metadata from the archive file when present.
   /*!
-   This is a strict operation: any failure to read, parse, or validate the
-   shader library aborts loading and throws an exception.
+   Missing shader libraries are tolerated and leave the shader cache empty.
+   Invalid or unreadable shader libraries still abort loading.
 
-   @throw std::runtime_error if the shader library is missing or invalid.
+   @throw std::runtime_error if the shader library exists but is invalid.
   */
   OXGN_GFX_API auto Load() -> void;
 
@@ -82,7 +82,7 @@ public:
   }
 
 private:
-  //! Initialize the shader manager by loading the archive file.
+  //! Initialize the shader manager by attempting to load the archive file.
   OXGN_GFX_API auto Initialize() -> void;
 
   Config config_ {};
