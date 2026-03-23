@@ -24,6 +24,7 @@
 #include <Oxygen/Graphics/Headless/Commands/QueueSignalCommand.h>
 #include <Oxygen/Graphics/Headless/Commands/QueueWaitCommand.h>
 #include <Oxygen/Graphics/Headless/Commands/ResourceBarrierCommand.h>
+#include <Oxygen/Graphics/Headless/Commands/TextureToBufferCommand.h>
 #include <Oxygen/Graphics/Headless/api_export.h>
 
 namespace oxygen::graphics::headless {
@@ -106,14 +107,7 @@ auto CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
 auto CommandRecorder::CopyTextureToBuffer(graphics::Buffer& dst,
   const graphics::Texture& src, const TextureBufferCopyRegion& region) -> void
 {
-  LOG_F(ERROR,
-    "CopyTextureToBuffer is not implemented for Headless yet; T05 owns the "
-    "backend copy behavior");
-  static_cast<void>(dst);
-  static_cast<void>(src);
-  static_cast<void>(region);
-  throw std::runtime_error(
-    "Headless CommandRecorder::CopyTextureToBuffer is not implemented yet");
+  QueueCommand(std::make_shared<TextureToBufferCommand>(&dst, &src, region));
 }
 
 auto CommandRecorder::CopyTexture(const Texture& src,
@@ -122,6 +116,12 @@ auto CommandRecorder::CopyTexture(const Texture& src,
   const TextureSubResourceSet& dst_subresources) -> void
 {
   // Headless backend stub - no actual copy performed
+  static_cast<void>(src);
+  static_cast<void>(src_slice);
+  static_cast<void>(src_subresources);
+  static_cast<void>(dst);
+  static_cast<void>(dst_slice);
+  static_cast<void>(dst_subresources);
 }
 
 auto CommandRecorder::PerformCopy(graphics::Buffer& dst, size_t dst_offset,
