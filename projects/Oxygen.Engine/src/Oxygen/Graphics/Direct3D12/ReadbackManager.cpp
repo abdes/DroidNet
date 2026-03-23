@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <memory>
 #include <string>
 
@@ -36,6 +37,7 @@ using oxygen::graphics::GpuTextureReadback;
 using oxygen::graphics::MappedBufferReadback;
 using oxygen::graphics::MappedTextureReadback;
 using oxygen::graphics::MsaaReadbackMode;
+using oxygen::graphics::OwnedTextureReadbackData;
 using oxygen::graphics::QueueRole;
 using oxygen::graphics::ReadbackError;
 using oxygen::graphics::ReadbackResult;
@@ -185,6 +187,61 @@ namespace {
       && lhs.is_render_target == rhs.is_render_target
       && lhs.is_uav == rhs.is_uav && lhs.is_typeless == rhs.is_typeless
       && lhs.initial_state == rhs.initial_state;
+  }
+
+  auto ComputeMappedTextureByteCount(const TextureReadbackLayout& layout)
+    -> SizeBytes
+  {
+    return SizeBytes { layout.slice_pitch.get()
+      * static_cast<uint64_t>((std::max)(layout.depth, 1U)) };
+  }
+
+  auto CopyMappedTextureBytes(const MappedTextureReadback& mapped)
+    -> OwnedTextureReadbackData
+  {
+    const auto& layout = mapped.Layout();
+    const auto byte_count = ComputeMappedTextureByteCount(layout);
+
+    OwnedTextureReadbackData result {};
+    result.bytes.resize(static_cast<size_t>(byte_count.get()));
+    std::memcpy(result.bytes.data(), mapped.Data(), result.bytes.size());
+    result.layout = layout;
+    result.tightly_packed = false;
+    return result;
+  }
+
+  auto TightPackMappedTextureBytes(const MappedTextureReadback& mapped)
+    -> OwnedTextureReadbackData
+  {
+    const auto& layout = mapped.Layout();
+    const auto tight = ComputeLinearTextureCopyFootprint(
+      layout.format, { layout.width, layout.height, layout.depth });
+
+    OwnedTextureReadbackData result {};
+    result.bytes.resize(static_cast<size_t>(tight.total_bytes.get()));
+    result.layout = layout;
+    result.layout.row_pitch = tight.row_pitch;
+    result.layout.slice_pitch = tight.slice_pitch;
+    result.tightly_packed = true;
+
+    const auto* src = mapped.Data();
+    auto* dst = result.bytes.data();
+    const auto row_bytes = static_cast<size_t>(tight.row_pitch.get());
+    for (uint32_t slice_index = 0; slice_index < tight.slice_count;
+      ++slice_index) {
+      const auto* src_slice
+        = src + (layout.slice_pitch.get() * static_cast<size_t>(slice_index));
+      auto* dst_slice
+        = dst + (tight.slice_pitch.get() * static_cast<size_t>(slice_index));
+      for (uint32_t row_index = 0; row_index < tight.row_count; ++row_index) {
+        std::memcpy(
+          dst_slice + (tight.row_pitch.get() * static_cast<size_t>(row_index)),
+          src_slice + (layout.row_pitch.get() * static_cast<size_t>(row_index)),
+          row_bytes);
+      }
+    }
+
+    return result;
   }
 
 } // namespace
@@ -1030,18 +1087,94 @@ auto D3D12ReadbackManager::Cancel(const ReadbackTicket ticket)
   return *cancelled;
 }
 
-auto D3D12ReadbackManager::ReadBufferNow(const Buffer& /*source*/,
-  BufferRange /*range*/) -> std::expected<std::vector<std::byte>, ReadbackError>
+auto D3D12ReadbackManager::ReadBufferNow(const Buffer& source,
+  BufferRange range) -> std::expected<std::vector<std::byte>, ReadbackError>
 {
-  return std::unexpected(ReadbackError::kUnsupportedResource);
+  LOG_SCOPE_F(1, "ReadBufferNow `{}`", source.GetName());
+
+  auto readback = CreateBufferReadback("ReadBufferNow");
+  CHECK_NOTNULL_F(readback.get());
+
+  QueueRole queue_role = QueueRole::kGraphics;
+  {
+    std::lock_guard lock(mutex_);
+    if (tracked_queue_ != nullptr) {
+      queue_role = tracked_queue_->GetQueueRole();
+    }
+  }
+  DLOG_F(2, "ReadBufferNow queue role: {}", queue_role);
+
+  {
+    auto recorder = graphics_.AcquireCommandRecorder(
+      graphics_.QueueKeyFor(queue_role), "ReadBufferNow");
+    CHECK_NOTNULL_F(recorder.get());
+    recorder->BeginTrackingResourceState(source, ResourceStates::kCommon, true);
+
+    const auto ticket = readback->EnqueueCopy(*recorder, source, range);
+    if (!ticket.has_value()) {
+      LOG_F(ERROR, "ReadBufferNow enqueue failed for `{}`: {}",
+        source.GetName(), ticket.error());
+      return std::unexpected(ticket.error());
+    }
+  }
+
+  const auto mapped = readback->MapNow();
+  if (!mapped.has_value()) {
+    LOG_F(ERROR, "ReadBufferNow map failed for `{}`: {}", source.GetName(),
+      mapped.error());
+    return std::unexpected(mapped.error());
+  }
+
+  const auto bytes = mapped->Bytes();
+  return std::vector<std::byte>(bytes.begin(), bytes.end());
 }
 
 auto D3D12ReadbackManager::ReadTextureNow(
-  const oxygen::graphics::Texture& /*source*/,
-  TextureReadbackRequest /*request*/, const bool /*tightly_pack*/)
+  const oxygen::graphics::Texture& source, TextureReadbackRequest request,
+  const bool tightly_pack)
   -> std::expected<OwnedTextureReadbackData, ReadbackError>
 {
-  return std::unexpected(ReadbackError::kUnsupportedResource);
+  LOG_SCOPE_F(1, "ReadTextureNow `{}`", source.GetName());
+
+  auto readback = CreateTextureReadback("ReadTextureNow");
+  CHECK_NOTNULL_F(readback.get());
+
+  QueueRole queue_role = QueueRole::kGraphics;
+  {
+    std::lock_guard lock(mutex_);
+    if (tracked_queue_ != nullptr) {
+      queue_role = tracked_queue_->GetQueueRole();
+    }
+  }
+  DLOG_F(2, "ReadTextureNow queue role: {}, tightly_pack={}", queue_role,
+    tightly_pack);
+
+  {
+    auto recorder = graphics_.AcquireCommandRecorder(
+      graphics_.QueueKeyFor(queue_role), "ReadTextureNow");
+    CHECK_NOTNULL_F(recorder.get());
+    recorder->BeginTrackingResourceState(
+      source, source.GetDescriptor().initial_state, true);
+
+    const auto ticket = readback->EnqueueCopy(*recorder, source, request);
+    if (!ticket.has_value()) {
+      LOG_F(ERROR, "ReadTextureNow enqueue failed for `{}`: {}",
+        source.GetName(), ticket.error());
+      return std::unexpected(ticket.error());
+    }
+  }
+
+  const auto mapped = readback->MapNow();
+  if (!mapped.has_value()) {
+    LOG_F(ERROR, "ReadTextureNow map failed for `{}`: {}", source.GetName(),
+      mapped.error());
+    return std::unexpected(mapped.error());
+  }
+
+  if (tightly_pack) {
+    return TightPackMappedTextureBytes(*mapped);
+  }
+  return CopyMappedTextureBytes(*mapped);
 }
 
 auto D3D12ReadbackManager::CreateReadbackTextureSurface(
