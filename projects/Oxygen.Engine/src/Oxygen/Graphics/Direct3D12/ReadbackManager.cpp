@@ -15,6 +15,7 @@
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/FormatUtils.h>
@@ -42,7 +43,9 @@ using oxygen::graphics::QueueRole;
 using oxygen::graphics::ReadbackError;
 using oxygen::graphics::ReadbackResult;
 using oxygen::graphics::ReadbackState;
+using oxygen::graphics::ReadbackSurfaceMapping;
 using oxygen::graphics::ReadbackTicket;
+using oxygen::graphics::ResourceAccessMode;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::TextureBufferCopyRegion;
 using oxygen::graphics::TextureDesc;
@@ -168,6 +171,7 @@ namespace {
   auto ResolveTextureReadbackRegion(const TextureDesc& desc,
     const TextureSlice& slice) -> TextureBufferCopyRegion
   {
+    static_cast<void>(desc);
     TextureBufferCopyRegion region {};
     region.buffer_offset = OffsetBytes { 0 };
     region.texture_slice = slice;
@@ -187,6 +191,80 @@ namespace {
       && lhs.is_render_target == rhs.is_render_target
       && lhs.is_uav == rhs.is_uav && lhs.is_typeless == rhs.is_typeless
       && lhs.initial_state == rhs.initial_state;
+  }
+
+  auto BuildReadbackSurfaceTextureDesc(TextureDesc desc)
+    -> std::expected<TextureDesc, ReadbackError>
+  {
+    if (desc.format == oxygen::Format::kUnknown || desc.is_typeless) {
+      return std::unexpected(ReadbackError::kUnsupportedFormat);
+    }
+
+    const auto& format_info = GetFormatInfo(desc.format);
+    if (format_info.has_depth || format_info.has_stencil) {
+      return std::unexpected(ReadbackError::kUnsupportedResource);
+    }
+
+    desc.cpu_access = ResourceAccessMode::kReadBack;
+    desc.sample_count = 1;
+    desc.sample_quality = 0;
+    desc.texture_type = ResolveTextureTypeForReadback(desc);
+    desc.is_shader_resource = false;
+    desc.is_render_target = false;
+    desc.is_uav = false;
+    desc.initial_state = ResourceStates::kCopyDest;
+    return desc;
+  }
+
+  auto ValidateResolvedSlice(const TextureDesc& desc, const TextureSlice& slice)
+    -> void
+  {
+    const auto mip_width = (std::max)(1u, desc.width >> slice.mip_level);
+    const auto mip_height = (std::max)(1u, desc.height >> slice.mip_level);
+    const auto mip_depth = desc.texture_type == TextureType::kTexture3D
+      ? (std::max)(1u, desc.depth >> slice.mip_level)
+      : 1u;
+
+    CHECK_LE_F(static_cast<uint64_t>(slice.x) + slice.width,
+      static_cast<uint64_t>(mip_width),
+      "Texture readback surface width exceeds mip bounds: x={} width={} "
+      "mip_width={}",
+      slice.x, slice.width, mip_width);
+    CHECK_LE_F(static_cast<uint64_t>(slice.y) + slice.height,
+      static_cast<uint64_t>(mip_height),
+      "Texture readback surface height exceeds mip bounds: y={} height={} "
+      "mip_height={}",
+      slice.y, slice.height, mip_height);
+    CHECK_LE_F(static_cast<uint64_t>(slice.z) + slice.depth,
+      static_cast<uint64_t>(mip_depth),
+      "Texture readback surface depth exceeds mip bounds: z={} depth={} "
+      "mip_depth={}",
+      slice.z, slice.depth, mip_depth);
+  }
+
+  auto ComputeReadbackSurfaceByteOffset(const TextureDesc& desc,
+    const TextureSlice& slice,
+    const detail::ReadbackSubresourceLayout& subresource_layout)
+    -> std::expected<uint64_t, ReadbackError>
+  {
+    const auto& format_info = GetFormatInfo(desc.format);
+    const auto block_size
+      = (std::max)(1u, static_cast<uint32_t>(format_info.block_size));
+
+    if ((slice.x % block_size) != 0u || (slice.y % block_size) != 0u) {
+      return std::unexpected(ReadbackError::kInvalidArgument);
+    }
+
+    const auto row_pitch = static_cast<uint64_t>(
+      subresource_layout.placed_footprint.Footprint.RowPitch);
+    const auto slice_pitch
+      = row_pitch * static_cast<uint64_t>(subresource_layout.row_count);
+    const auto block_x = static_cast<uint64_t>(slice.x / block_size);
+    const auto block_y = static_cast<uint64_t>(slice.y / block_size);
+
+    return subresource_layout.placed_footprint.Offset
+      + (slice_pitch * static_cast<uint64_t>(slice.z)) + (row_pitch * block_y)
+      + (block_x * static_cast<uint64_t>(format_info.bytes_per_block));
   }
 
   auto ComputeMappedTextureByteCount(const TextureReadbackLayout& layout)
@@ -1177,23 +1255,149 @@ auto D3D12ReadbackManager::ReadTextureNow(
   return CopyMappedTextureBytes(*mapped);
 }
 
-auto D3D12ReadbackManager::CreateReadbackTextureSurface(
-  const TextureDesc& /*desc*/)
+auto D3D12ReadbackManager::CreateReadbackTextureSurface(const TextureDesc& desc)
   -> std::expected<std::shared_ptr<oxygen::graphics::Texture>, ReadbackError>
 {
-  return std::unexpected(ReadbackError::kUnsupportedResource);
+  LOG_SCOPE_F(1, "CreateReadbackTextureSurface `{}`", desc.debug_name.c_str());
+
+  const auto readback_desc = BuildReadbackSurfaceTextureDesc(desc);
+  if (!readback_desc.has_value()) {
+    LOG_F(ERROR, "CreateReadbackTextureSurface rejected `{}`: {}",
+      desc.debug_name.c_str(), readback_desc.error());
+    return std::unexpected(readback_desc.error());
+  }
+
+  auto surface = graphics_.CreateTexture(*readback_desc);
+  if (surface == nullptr) {
+    LOG_F(ERROR, "CreateReadbackTextureSurface failed for `{}`",
+      desc.debug_name.c_str());
+    return std::unexpected(ReadbackError::kBackendFailure);
+  }
+
+  CHECK_EQ_F(surface->GetTypeId(), Texture::ClassTypeId(),
+    "D3D12 readback surface creation returned unexpected texture type: {}",
+    surface->GetTypeId());
+  const auto* d3d12_surface = static_cast<const Texture*>(surface.get());
+  CHECK_F(d3d12_surface->IsReadbackSurface(),
+    "D3D12 readback surface creation must return a readback surface");
+  return surface;
 }
 
 auto D3D12ReadbackManager::MapReadbackTextureSurface(
-  oxygen::graphics::Texture& /*surface*/, TextureSlice /*slice*/)
+  oxygen::graphics::Texture& surface, TextureSlice slice)
   -> std::expected<ReadbackSurfaceMapping, ReadbackError>
 {
-  return std::unexpected(ReadbackError::kUnsupportedResource);
+  LOG_SCOPE_F(1, "MapReadbackTextureSurface `{}`", surface.GetName());
+
+  if (surface.GetTypeId() != Texture::ClassTypeId()) {
+    LOG_F(ERROR,
+      "MapReadbackTextureSurface rejected unexpected texture type `{}` ({})",
+      surface.GetName(), surface.GetTypeId());
+    return std::unexpected(ReadbackError::kUnsupportedResource);
+  }
+  auto* d3d12_surface = static_cast<Texture*>(&surface);
+  if (!d3d12_surface->IsReadbackSurface()) {
+    LOG_F(ERROR, "MapReadbackTextureSurface rejected non-readback texture `{}`",
+      surface.GetName());
+    return std::unexpected(ReadbackError::kUnsupportedResource);
+  }
+  if (d3d12_surface->IsReadbackSurfaceMapped()) {
+    return std::unexpected(ReadbackError::kAlreadyMapped);
+  }
+  if (d3d12_surface->GetPlaneCount() != 1) {
+    return std::unexpected(ReadbackError::kUnsupportedResource);
+  }
+
+  const auto& desc = d3d12_surface->GetDescriptor();
+  const auto& format_info = GetFormatInfo(desc.format);
+  if (format_info.has_depth || format_info.has_stencil) {
+    return std::unexpected(ReadbackError::kUnsupportedResource);
+  }
+
+  const auto resolved_slice = slice.Resolve(desc);
+  ValidateResolvedSlice(desc, resolved_slice);
+  const auto subresource_index = ComputeSubresourceIndex(desc, resolved_slice);
+  const auto& surface_layout = d3d12_surface->GetReadbackSurfaceLayout();
+  CHECK_LT_F(subresource_index, surface_layout.subresources.size(),
+    "Resolved readback surface subresource index {} out of bounds ({})",
+    subresource_index, surface_layout.subresources.size());
+  const auto& subresource_layout
+    = surface_layout.subresources[subresource_index];
+
+  const auto mapped_offset = ComputeReadbackSurfaceByteOffset(
+    desc, resolved_slice, subresource_layout);
+  if (!mapped_offset.has_value()) {
+    return std::unexpected(mapped_offset.error());
+  }
+
+  auto* resource
+    = d3d12_surface->GetNativeResource()->AsPointer<ID3D12Resource>();
+  CHECK_NOTNULL_F(
+    resource, "D3D12 readback surface must expose a valid native resource");
+
+  const auto row_pitch
+    = SizeBytes { subresource_layout.placed_footprint.Footprint.RowPitch };
+  const auto slice_pitch
+    = SizeBytes { static_cast<uint64_t>(
+                    subresource_layout.placed_footprint.Footprint.RowPitch)
+        * static_cast<uint64_t>(subresource_layout.row_count) };
+
+  void* mapped_base = nullptr;
+  const HRESULT hr = resource->Map(0, nullptr, &mapped_base);
+  if (FAILED(hr)) {
+    LOG_F(ERROR, "MapReadbackTextureSurface failed for `{}` with {:#010X}",
+      surface.GetName(), hr);
+    return std::unexpected(ReadbackError::kBackendFailure);
+  }
+
+  d3d12_surface->SetReadbackSurfaceMapped(true);
+  auto* data
+    = static_cast<const std::byte*>(mapped_base) + mapped_offset.value();
+  return ReadbackSurfaceMapping {
+    .data = data,
+    .layout = TextureReadbackLayout {
+      .format = desc.format,
+      .texture_type = desc.texture_type,
+      .width = resolved_slice.width,
+      .height = resolved_slice.height,
+      .depth = resolved_slice.depth,
+      .row_pitch = row_pitch,
+      .slice_pitch = slice_pitch,
+      .mip_level = resolved_slice.mip_level,
+      .array_slice = resolved_slice.array_slice,
+      .aspects = ClearFlags::kColor,
+    },
+  };
 }
 
 auto D3D12ReadbackManager::UnmapReadbackTextureSurface(
-  oxygen::graphics::Texture& /*surface*/) -> void
+  oxygen::graphics::Texture& surface) -> void
 {
+  if (surface.GetTypeId() != Texture::ClassTypeId()) {
+    LOG_F(ERROR,
+      "UnmapReadbackTextureSurface rejected unexpected texture type `{}` ({})",
+      surface.GetName(), surface.GetTypeId());
+    return;
+  }
+  auto* d3d12_surface = static_cast<Texture*>(&surface);
+  if (!d3d12_surface->IsReadbackSurface()) {
+    LOG_F(ERROR,
+      "UnmapReadbackTextureSurface rejected non-readback texture `{}`",
+      surface.GetName());
+    return;
+  }
+  if (!d3d12_surface->IsReadbackSurfaceMapped()) {
+    DLOG_F(2, "UnmapReadbackTextureSurface ignored unmapped surface `{}`",
+      surface.GetName());
+    return;
+  }
+
+  auto* resource
+    = d3d12_surface->GetNativeResource()->AsPointer<ID3D12Resource>();
+  CHECK_NOTNULL_F(
+    resource, "D3D12 readback surface must expose a valid native resource");
+  resource->Unmap(0, nullptr);
+  d3d12_surface->SetReadbackSurfaceMapped(false);
 }
 
 auto D3D12ReadbackManager::OnFrameStart(const frame::Slot slot) -> void
