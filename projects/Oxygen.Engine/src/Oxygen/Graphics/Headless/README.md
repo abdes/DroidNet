@@ -150,7 +150,7 @@ implementation priority for making headless useful for testing and replay.
 | 1 | ✅ | ResourceBarrierCommand / PipelineBarrier | ResourceBarrier / vkCmdPipelineBarrier | Explicit resource transitions / memory barriers; executor enforces recorded barriers (implemented). |
 | 1 | ⬜️ | PresentCommand / Present emulation | Present (swapchain) / vkQueuePresentKHR | Surface acquire/present semantics; expose last-presented image for tests. |
 | 1 | ✅ | BufferToTextureCommand | CopyBufferRegion+subresource / vkCmdCopyBufferToImage | Buffer->texture uploads (implemented, supports block formats). |
-| 1 | ✅ | QueueSignalCommand / QueueWaitCommand | Signal/Wait (fences/timeline) / vkCmdSetEvent/wait or timeline semaphores | Queue-side signal/wait implemented via `QueueSignalCommand`/`QueueWaitCommand` calling `CommandQueue` wait/signal. |
+| 1 | ✅ | Submit-ordered queue actions | Signal/Wait (fences/timeline) / vkCmdSetEvent/wait or timeline semaphores | Submit-ordered wait/signal actions are attached to the common `CommandList` and executed by the queue around each submitted list. |
 | 2 | ⬜️ | CopyTextureToTexture | CopySubresourceRegion / vkCmdCopyImage | Image-to-image copy, mip/array-aware. |
 | 2 | ⬜️ | DispatchCommand | Dispatch / vkCmdDispatch | Compute dispatch path; validate bindings and optionally perform simple emulation. |
 | 2 | ⬜️ | CopyTextureRegion variants (row/align) | vkCmdCopyImage / CopyTextureRegion | Variants for pitched copies and block layouts. |
@@ -350,9 +350,11 @@ Proposed `CommandContext` (lean, reuse existing common types):
     `GetResourceRegistry()`, `GetShader()` and queue factories. Use only for
     short-lived queries during command execution; do not assume ownership.
 - `oxygen::graphics::CommandQueue* queue` (observer pointer)
-  - The queue executing this submission. Use `QueueSignalCommand`/`QueueWaitCommand`
-    or `Signal()/Wait()` helpers on the queue. The executor must ensure the
-    queue outlives the execution window.
+  - The queue executing this submission. Use
+    `CommandRecorder::RecordQueueSignal` / `CommandRecorder::RecordQueueWait`
+    for submit-ordered actions, or `Signal()/Wait()` on the queue for
+    immediate CPU-side operations. The executor must ensure the queue outlives
+    the execution window.
 - `uint64_t submission_id` (monotonic per-submission id)
   - Deterministic id used for logging, correlating timestamps/queries and
     test assertions.

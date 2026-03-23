@@ -64,8 +64,6 @@ public:
   MOCK_METHOD(std::uint64_t, Signal, (), (const, override));
   MOCK_METHOD(void, Wait, (std::uint64_t, std::chrono::milliseconds), (const, override));
   MOCK_METHOD(void, Wait, (std::uint64_t), (const, override));
-  MOCK_METHOD(void, QueueSignalCommand, (std::uint64_t), (override));
-  MOCK_METHOD(void, QueueWaitCommand, (std::uint64_t), (const, override));
   MOCK_METHOD(std::uint64_t, GetCompletedValue, (), (const, override));
   MOCK_METHOD(std::uint64_t, GetCurrentValue, (), (const, override));
   MOCK_METHOD(void, Submit, (CommandListPtr), (override));
@@ -73,6 +71,12 @@ public:
   MOCK_METHOD(oxygen::graphics::QueueRole, GetQueueRole, (), (const, override));
   // clang-format on
   // NOLINTEND
+
+protected:
+  auto SignalImmediate(std::uint64_t value) const -> void override
+  {
+    Signal(value);
+  }
 };
 
 // Mock CommandRecorder that can simulate End() failures

@@ -10,6 +10,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Windows/ComError.h>
+#include <Oxygen/Base/Windows/Exceptions.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
@@ -20,6 +21,11 @@
 
 using oxygen::graphics::d3d12::CommandQueue;
 using oxygen::windows::ThrowOnFailed;
+
+namespace {
+
+using oxygen::graphics::d3d12::CommandList;
+} // namespace
 
 CommandQueue::CommandQueue(
   std::string_view name, QueueRole role, const Graphics* gfx)
@@ -115,6 +121,7 @@ void CommandQueue::CreateFence(
   DCHECK_EQ_F(fence_, nullptr);
 
   current_value_ = initial_value;
+  last_signaled_value_ = initial_value;
   dx::IFence* raw_fence = nullptr;
   ThrowOnFailed(CurrentDevice()->CreateFence(initial_value,
                   D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&raw_fence)),
@@ -149,23 +156,48 @@ void CommandQueue::Signal(const uint64_t value) const
     throw std::invalid_argument(
       "New value must be greater than the current value");
   }
-  DCHECK_NOTNULL_F(fence_, "fence must be initialized");
-  DCHECK_NOTNULL_F(command_queue_, "command queue must be valid");
-
-  DCHECK_GT_F(value, GetCurrentValue(),
-    "New value must be greater than the current value");
-  DLOG_F(1, "CommandQueue[{}]::Signal({} / current={} completed={})", GetName(),
-    value, GetCurrentValue(), GetCompletedValue());
-  ThrowOnFailed((command_queue_->Signal(fence_, value)),
-    fmt::format("Signal({}) on fence failed", value));
   current_value_ = value;
 }
 
 auto CommandQueue::Signal() const -> uint64_t
 {
-  Signal(current_value_ + 1);
-  // Incremented only if the signal was successful
+  ++current_value_;
   return current_value_;
+}
+
+void CommandQueue::SignalImmediate(const uint64_t value) const
+{
+  DCHECK_NOTNULL_F(fence_, "fence must be initialized");
+  DCHECK_NOTNULL_F(command_queue_, "command queue must be valid");
+  if (value <= last_signaled_value_) {
+    DLOG_F(WARNING,
+      "Immediate signal value {} must be greater than the last signaled value "
+      "{}",
+      value, last_signaled_value_);
+    throw std::invalid_argument(
+      "Immediate signal value must be greater than the last signaled value");
+  }
+  if (value > current_value_) {
+    current_value_ = value;
+  }
+
+  DLOG_F(1,
+    "CommandQueue[{}]::SignalImmediate({} / current={} completed={} "
+    "last_signaled={})",
+    GetName(), value, GetCurrentValue(), GetCompletedValue(),
+    last_signaled_value_);
+  ThrowOnFailed((command_queue_->Signal(fence_, value)),
+    fmt::format("SignalImmediate({}) on fence failed", value));
+  last_signaled_value_ = value;
+}
+
+void CommandQueue::QueueWaitImmediate(const uint64_t value) const
+{
+  DCHECK_NOTNULL_F(fence_, "fence must be initialized");
+  DCHECK_NOTNULL_F(command_queue_, "command queue must be valid");
+  DLOG_F(1, "CommandQueue[{}]::QueueWaitImmediate({})", GetName(), value);
+  ThrowOnFailed(command_queue_->Wait(fence_, value),
+    fmt::format("QueueWaitImmediate({}) on fence failed", value));
 }
 
 void CommandQueue::Wait(
@@ -173,13 +205,27 @@ void CommandQueue::Wait(
 {
   DCHECK_F(timeout.count() <= (std::numeric_limits<DWORD>::max)(),
     "timeout value must fit in a DWORD");
-  const auto completed_value = fence_->GetCompletedValue();
+  auto completed_value = fence_->GetCompletedValue();
   DLOG_F(2, "CommandQueue[{}]::Wait({} / current={})", GetName(), value,
     GetCurrentValue());
   if (completed_value < value) {
     ThrowOnFailed(fence_->SetEventOnCompletion(value, fence_event_),
       fmt::format("Wait({}) on fence failed", value));
-    WaitForSingleObject(fence_event_, static_cast<DWORD>(timeout.count()));
+    const auto wait_result
+      = WaitForSingleObject(fence_event_, static_cast<DWORD>(timeout.count()));
+    switch (wait_result) {
+    case WAIT_OBJECT_0:
+      completed_value = fence_->GetCompletedValue();
+      break;
+    case WAIT_TIMEOUT:
+      throw std::runtime_error(
+        fmt::format("Wait({}) timed out after {} ms", value, timeout.count()));
+    case WAIT_FAILED:
+      windows::WindowsException::ThrowFromLastError();
+    default:
+      throw std::runtime_error(fmt::format(
+        "Wait({}) returned unexpected result {}", value, wait_result));
+    }
     DLOG_F(2, "CommandQueue[{}] reached {}", GetName(), value);
   }
   DLOG_F(2, "CommandQueue[{}] at completed value: {} (current={})", GetName(),
@@ -189,26 +235,6 @@ void CommandQueue::Wait(
 void CommandQueue::Wait(const uint64_t value) const
 {
   Wait(value, std::chrono::milliseconds((std::numeric_limits<DWORD>::max)()));
-}
-
-void CommandQueue::QueueWaitCommand(const uint64_t value) const
-{
-  DCHECK_NOTNULL_F(command_queue_, "command queue must be valid");
-  DCHECK_NOTNULL_F(fence_, "fence must be initialized");
-  DLOG_F(1, "CommandQueue[{}]::QueueWaitCommand({}) completed={} current={}",
-    GetName(), value, GetCompletedValue(), GetCurrentValue());
-  ThrowOnFailed(command_queue_->Wait(fence_, value),
-    fmt::format("QueueWaitCommand({}) on fence failed", value));
-}
-
-void CommandQueue::QueueSignalCommand(const uint64_t value)
-{
-  DCHECK_NOTNULL_F(command_queue_, "command queue must be valid");
-  DCHECK_NOTNULL_F(fence_, "fence must be initialized");
-  DLOG_F(1, "CommandQueue[{}]::QueueSignalCommand({}) completed={} current={}",
-    GetName(), value, GetCompletedValue(), GetCurrentValue());
-  ThrowOnFailed(command_queue_->Signal(fence_, value),
-    fmt::format("QueueSignalCommand({}) on fence failed", value));
 }
 
 auto CommandQueue::GetCompletedValue() const -> uint64_t
@@ -233,10 +259,22 @@ auto CommandQueue::TryGetTimestampFrequency(uint64_t& out_hz) const -> bool
 void CommandQueue::Submit(std::shared_ptr<graphics::CommandList> command_list)
 {
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-  const auto* d3d12_command_list
-    = static_cast<CommandList*>(command_list.get());
-  ID3D12CommandList* command_lists[] = { d3d12_command_list->GetCommandList() };
-  command_queue_->ExecuteCommandLists(_countof(command_lists), command_lists);
+  auto* d3d12_command_list = static_cast<CommandList*>(command_list.get());
+  const auto submit_actions = d3d12_command_list->TakeSubmitQueueActions();
+  for (const auto& action : submit_actions) {
+    if (action.kind == graphics::CommandList::SubmitQueueActionKind::kWait) {
+      QueueWaitImmediate(action.value);
+    }
+  }
+
+  ID3D12CommandList* d3d12_lists[] = { d3d12_command_list->GetCommandList() };
+  command_queue_->ExecuteCommandLists(_countof(d3d12_lists), d3d12_lists);
+
+  for (const auto& action : submit_actions) {
+    if (action.kind == graphics::CommandList::SubmitQueueActionKind::kSignal) {
+      SignalImmediate(action.value);
+    }
+  }
 }
 
 void CommandQueue::Submit(
@@ -246,7 +284,33 @@ void CommandQueue::Submit(
   d3d12_lists.reserve(command_lists.size());
   for (const auto& cl : command_lists) {
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-    const auto* d3d12_command_list = static_cast<CommandList*>(cl.get());
+    auto* d3d12_command_list = static_cast<CommandList*>(cl.get());
+    if (d3d12_command_list->HasSubmitQueueActions()) {
+      if (!d3d12_lists.empty()) {
+        command_queue_->ExecuteCommandLists(
+          static_cast<UINT>(d3d12_lists.size()), d3d12_lists.data());
+        d3d12_lists.clear();
+      }
+      const auto submit_actions = d3d12_command_list->TakeSubmitQueueActions();
+      for (const auto& action : submit_actions) {
+        if (action.kind
+          == graphics::CommandList::SubmitQueueActionKind::kWait) {
+          QueueWaitImmediate(action.value);
+        }
+      }
+
+      ID3D12CommandList* d3d12_list[]
+        = { d3d12_command_list->GetCommandList() };
+      command_queue_->ExecuteCommandLists(_countof(d3d12_list), d3d12_list);
+
+      for (const auto& action : submit_actions) {
+        if (action.kind
+          == graphics::CommandList::SubmitQueueActionKind::kSignal) {
+          SignalImmediate(action.value);
+        }
+      }
+      continue;
+    }
     d3d12_lists.push_back(d3d12_command_list->GetCommandList());
   }
   if (!d3d12_lists.empty()) {

@@ -11,6 +11,7 @@
 #include <memory>
 #include <vector>
 
+#include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Headless/CommandContext.h>
 #include <Oxygen/Graphics/Headless/Internal/SerialExecutor.h>
 #include <Oxygen/Graphics/Headless/api_export.h>
@@ -21,6 +22,11 @@ class Command;
 }
 
 namespace oxygen::graphics::headless::internal {
+
+struct SubmissionChunk {
+  std::vector<graphics::CommandList::SubmitQueueAction> submit_actions;
+  std::deque<std::shared_ptr<Command>> commands;
+};
 
 class CommandExecutor {
 public:
@@ -40,7 +46,7 @@ public:
   // and call Signal() on the queue when finished. The executor will assign
   // and return a submission id.
   OXGN_HDLS_NDAPI auto ExecuteAsync(CommandQueue* queue,
-    std::deque<std::shared_ptr<Command>> stolen_commands) -> uint64_t;
+    std::vector<SubmissionChunk> submission_chunks) -> uint64_t;
 
 private:
   SerialExecutor executor_;

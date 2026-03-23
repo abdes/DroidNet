@@ -6,7 +6,9 @@
 
 #pragma once
 
+#include <cstdint>
 #include <string_view>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
@@ -18,6 +20,16 @@ namespace oxygen::graphics {
 
 class CommandList : public Composition, public Named {
 public:
+  enum class SubmitQueueActionKind : uint8_t {
+    kWait,
+    kSignal,
+  };
+
+  struct SubmitQueueAction {
+    SubmitQueueActionKind kind;
+    uint64_t value;
+  };
+
   OXGN_GFX_API CommandList(std::string_view name, QueueRole type);
 
   //! Destroys the command list after releasing all graphics resources it was
@@ -56,6 +68,11 @@ public:
   OXGN_GFX_API virtual auto OnSubmitted() -> void;
   OXGN_GFX_API virtual auto OnExecuted() -> void;
   OXGN_GFX_API virtual auto OnFailed() noexcept -> void;
+  OXGN_GFX_API auto QueueSubmitSignal(uint64_t value) -> void;
+  OXGN_GFX_API auto QueueSubmitWait(uint64_t value) -> void;
+  [[nodiscard]] OXGN_GFX_API auto HasSubmitQueueActions() const noexcept
+    -> bool;
+  OXGN_GFX_API auto TakeSubmitQueueActions() -> std::vector<SubmitQueueAction>;
 
   enum class State : int8_t {
     kInvalid = -1, //<! Invalid state
@@ -70,6 +87,7 @@ public:
 private:
   QueueRole type_;
   State state_ { State::kInvalid };
+  std::vector<SubmitQueueAction> submit_queue_actions_ {};
 };
 
 } // namespace oxygen::graphics

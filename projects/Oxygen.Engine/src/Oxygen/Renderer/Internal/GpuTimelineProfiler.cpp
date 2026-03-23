@@ -87,8 +87,8 @@ public:
     }
   }
 
-  auto ConsumeFrame(
-    const oxygen::engine::internal::GpuTimelineFrame& frame) -> bool override
+  auto ConsumeFrame(const oxygen::engine::internal::GpuTimelineFrame& frame)
+    -> bool override
   {
     {
       std::lock_guard lock(mutex_);
@@ -130,16 +130,18 @@ private:
     }
   }
 
-  auto WriteCsv(const oxygen::engine::internal::GpuTimelineFrame& frame)
-    const -> void
+  auto WriteCsv(const oxygen::engine::internal::GpuTimelineFrame& frame) const
+    -> void
   {
     std::ofstream out(output_path_, std::ios::binary | std::ios::trunc);
-    out << fmt::format("# timestamp_freq_hz={}\n", frame.timestamp_frequency_hz);
+    out << fmt::format(
+      "# timestamp_freq_hz={}\n", frame.timestamp_frequency_hz);
     out << "frame_seq,scope_id,parent_scope_id,depth,stream_id,name_hash,name,"
            "start_ms,end_ms,duration_ms,valid,flags\n";
 
     for (const auto& scope : frame.scopes) {
-      out << fmt::format("{},{},{},{},{},{},\"{}\",{:.6f},{:.6f},{:.6f},{},{}\n",
+      out << fmt::format(
+        "{},{},{},{},{},{},\"{}\",{:.6f},{:.6f},{:.6f},{},{}\n",
         frame.frame_sequence, scope.scope_id, scope.parent_scope_id,
         scope.depth, scope.stream_id, scope.name_hash,
         EscapeJson(scope.display_name), scope.start_ms, scope.end_ms,
@@ -147,15 +149,15 @@ private:
     }
   }
 
-  auto WriteJson(const oxygen::engine::internal::GpuTimelineFrame& frame)
-    const -> void
+  auto WriteJson(const oxygen::engine::internal::GpuTimelineFrame& frame) const
+    -> void
   {
     std::ofstream out(output_path_, std::ios::binary | std::ios::trunc);
     out << "{\n";
     out << fmt::format("  \"version\": 1,\n");
     out << fmt::format("  \"frame_seq\": {},\n", frame.frame_sequence);
-    out << fmt::format("  \"timestamp_freq_hz\": {},\n",
-      frame.timestamp_frequency_hz);
+    out << fmt::format(
+      "  \"timestamp_freq_hz\": {},\n", frame.timestamp_frequency_hz);
     out << fmt::format("  \"profiling_enabled\": {},\n",
       frame.profiling_enabled ? "true" : "false");
     out << fmt::format(
@@ -179,8 +181,7 @@ private:
         "      \"end_query_slot\": {},\n", scope.end_query_slot);
       out << fmt::format("      \"start_ms\": {:.6f},\n", scope.start_ms);
       out << fmt::format("      \"end_ms\": {:.6f},\n", scope.end_ms);
-      out << fmt::format(
-        "      \"duration_ms\": {:.6f},\n", scope.duration_ms);
+      out << fmt::format("      \"duration_ms\": {:.6f},\n", scope.duration_ms);
       out << fmt::format(
         "      \"valid\": {},\n", scope.valid ? "true" : "false");
       out << fmt::format("      \"flags\": {}\n", scope.flags);
@@ -270,7 +271,8 @@ auto GpuTimelineProfiler::OnFrameRecordTailResolve() -> void
 
   CloseIncompleteScopes();
 
-  if (!frame_capture_.profiling_enabled || frame_capture_.used_query_slots == 0U) {
+  if (!frame_capture_.profiling_enabled
+    || frame_capture_.used_query_slots == 0U) {
     return;
   }
 
@@ -300,9 +302,11 @@ auto GpuTimelineProfiler::OnFrameRecordTailResolve() -> void
       frame_capture_.profiling_enabled = false;
       return;
     }
+
+    frame_capture_.resolve_fence_value = queue->Signal();
+    recorder->RecordQueueSignal(frame_capture_.resolve_fence_value);
   }
 
-  frame_capture_.resolve_fence_value = queue->Signal();
   frame_capture_.resolve_submitted = true;
 }
 
@@ -438,7 +442,8 @@ auto GpuTimelineProfiler::GetLastPublishedFrame() const
 
 auto GpuTimelineProfiler::ConsumePreviousFrame() -> void
 {
-  if (!frame_capture_.profiling_enabled || frame_capture_.used_query_slots == 0U) {
+  if (!frame_capture_.profiling_enabled
+    || frame_capture_.used_query_slots == 0U) {
     return;
   }
 
@@ -449,8 +454,8 @@ auto GpuTimelineProfiler::ConsumePreviousFrame() -> void
   }
 
   const auto completed = queue->GetCompletedValue();
-  const auto fence_complete
-    = completed >= frame_capture_.resolve_fence_value && frame_capture_.resolve_submitted;
+  const auto fence_complete = completed >= frame_capture_.resolve_fence_value
+    && frame_capture_.resolve_submitted;
   if (!fence_complete) {
     AddDiagnostic("gpu.timestamp.fence_miss",
       fmt::format("resolve fence {} not completed (completed={})",
@@ -532,7 +537,8 @@ auto GpuTimelineProfiler::CloseIncompleteScopes() -> void
   }
 
   AddDiagnostic("gpu.timestamp.incomplete_scope",
-    fmt::format("{} scope(s) remained open at frame tail", scope_stack_.size()));
+    fmt::format(
+      "{} scope(s) remained open at frame tail", scope_stack_.size()));
   scope_stack_.clear();
 }
 
@@ -555,7 +561,8 @@ auto GpuTimelineProfiler::BuildTimelineFrame(
       || record.end_query_slot >= ticks.size()) {
       continue;
     }
-    frame_origin_tick = std::min(frame_origin_tick, ticks[record.begin_query_slot]);
+    frame_origin_tick
+      = std::min(frame_origin_tick, ticks[record.begin_query_slot]);
   }
   if (frame_origin_tick == std::numeric_limits<uint64_t>::max()) {
     frame_origin_tick = 0U;
@@ -565,27 +572,29 @@ auto GpuTimelineProfiler::BuildTimelineFrame(
     if (timestamp_frequency_hz_ == 0U) {
       return 0.0F;
     }
-    return static_cast<float>(
-      (static_cast<double>(tick_delta) * 1000.0)
+    return static_cast<float>((static_cast<double>(tick_delta) * 1000.0)
       / static_cast<double>(timestamp_frequency_hz_));
   };
 
-  for (uint32_t scope_id = 0U; scope_id < frame_capture_.scopes.size(); ++scope_id) {
+  for (uint32_t scope_id = 0U; scope_id < frame_capture_.scopes.size();
+    ++scope_id) {
     const auto& record = frame_capture_.scopes[scope_id];
     const bool complete = (record.flags & kGpuScopeFlagComplete) != 0U;
-    const uint64_t begin_tick
-      = record.begin_query_slot < ticks.size() ? ticks[record.begin_query_slot] : 0U;
-    const uint64_t end_tick
-      = record.end_query_slot < ticks.size() ? ticks[record.end_query_slot] : 0U;
-    const bool valid
-      = complete && record.begin_query_slot < ticks.size()
+    const uint64_t begin_tick = record.begin_query_slot < ticks.size()
+      ? ticks[record.begin_query_slot]
+      : 0U;
+    const uint64_t end_tick = record.end_query_slot < ticks.size()
+      ? ticks[record.end_query_slot]
+      : 0U;
+    const bool valid = complete && record.begin_query_slot < ticks.size()
       && record.end_query_slot < ticks.size() && end_tick >= begin_tick;
 
     GpuTimelineScope scope {};
     scope.scope_id = scope_id;
     scope.parent_scope_id = record.parent_scope_id;
     scope.name_hash = record.scope_name_hash;
-    scope.display_name = record.display_name != nullptr ? record.display_name : "";
+    scope.display_name
+      = record.display_name != nullptr ? record.display_name : "";
     scope.begin_query_slot = record.begin_query_slot;
     scope.end_query_slot = record.end_query_slot;
     scope.depth = record.depth;
@@ -608,7 +617,8 @@ auto GpuTimelineProfiler::BuildTimelineFrame(
   for (auto& scope : frame.scopes) {
     if (scope.parent_scope_id != kInvalidScopeId
       && scope.parent_scope_id < frame.scopes.size()) {
-      frame.scopes[scope.parent_scope_id].child_scope_ids.push_back(scope.scope_id);
+      frame.scopes[scope.parent_scope_id].child_scope_ids.push_back(
+        scope.scope_id);
     }
   }
 
@@ -650,8 +660,8 @@ auto GpuTimelineProfiler::ResolveTimestampProvider() const
   return graphics_->GetTimestampQueryProvider();
 }
 
-auto GpuTimelineProfiler::AddDiagnostic(
-  std::string code, std::string message) -> void
+auto GpuTimelineProfiler::AddDiagnostic(std::string code, std::string message)
+  -> void
 {
   frame_capture_.diagnostics.push_back(GpuTimelineDiagnostic {
     .code = std::move(code),

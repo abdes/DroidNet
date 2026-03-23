@@ -60,8 +60,6 @@ public:
   auto Signal() const -> uint64_t override { return 0; }
   auto Wait(uint64_t, std::chrono::milliseconds) const -> void override { }
   auto Wait(uint64_t) const -> void override { }
-  auto QueueSignalCommand(uint64_t) -> void override { }
-  auto QueueWaitCommand(uint64_t) const -> void override { }
   [[nodiscard]] auto GetCompletedValue() const -> uint64_t override
   {
     return 0;
@@ -79,6 +77,8 @@ public:
   }
 
 private:
+  auto SignalImmediate(uint64_t) const -> void override { }
+
   QueueRole role_;
 };
 
