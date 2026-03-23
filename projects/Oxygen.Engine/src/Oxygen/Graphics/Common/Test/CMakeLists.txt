@@ -53,6 +53,7 @@ m_gtest_program(
 m_gtest_program(ShaderRequest SOURCES "ShaderRequest_test.cpp")
 m_gtest_program(ShaderByteCode SOURCES "ShaderByteCode_test.cpp")
 m_gtest_program(ReadbackTypes SOURCES "ReadbackTypes_test.cpp")
+m_gtest_program(TextureCopyFootprint SOURCES "TextureCopyFootprint_test.cpp")
 m_gtest_program(ReadbackTracker SOURCES "ReadbackTracker_test.cpp")
 m_gtest_program(ObjectRelease SOURCES "ObjectRelease_test.cpp")
 m_gtest_program(NativeObject SOURCES "NativeObject_test.cpp")

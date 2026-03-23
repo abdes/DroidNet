@@ -880,6 +880,19 @@ auto CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
   }
 }
 
+auto CommandRecorder::CopyTextureToBuffer(graphics::Buffer& dst,
+  const graphics::Texture& src, const TextureBufferCopyRegion& region) -> void
+{
+  LOG_F(ERROR,
+    "CopyTextureToBuffer is not implemented for Direct3D12 yet; T06 owns the "
+    "backend encoding work");
+  static_cast<void>(dst);
+  static_cast<void>(src);
+  static_cast<void>(region);
+  throw std::runtime_error(
+    "Direct3D12 CommandRecorder::CopyTextureToBuffer is not implemented yet");
+}
+
 auto CommandRecorder::CopyTexture(const graphics::Texture& src,
   const TextureSlice& src_slice, const TextureSubResourceSet& src_subresources,
   graphics::Texture& dst, const TextureSlice& dst_slice,

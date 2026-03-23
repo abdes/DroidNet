@@ -25,18 +25,19 @@
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Surface.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/TimestampQueryProvider.h>
 #include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
-#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Renderer/Internal/GpuTimelineProfiler.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
 
 using oxygen::Graphics;
+using oxygen::observer_ptr;
 using oxygen::engine::internal::GpuTimelineFrame;
 using oxygen::engine::internal::GpuTimelineProfiler;
 using oxygen::engine::internal::GpuTimelineSink;
@@ -52,7 +53,6 @@ using oxygen::graphics::QueueRole;
 using oxygen::graphics::Surface;
 using oxygen::graphics::Texture;
 using oxygen::graphics::TimestampQueryProvider;
-using oxygen::observer_ptr;
 
 class NullDescriptorAllocator final : public DescriptorAllocator {
 public:
@@ -151,7 +151,10 @@ public:
 
   auto Wait(uint64_t, std::chrono::milliseconds) const -> void override { }
   auto Wait(uint64_t) const -> void override { }
-  auto QueueSignalCommand(uint64_t value) -> void override { completed_ = value; }
+  auto QueueSignalCommand(uint64_t value) -> void override
+  {
+    completed_ = value;
+  }
   auto QueueWaitCommand(uint64_t) const -> void override { }
   [[nodiscard]] auto GetCompletedValue() const -> uint64_t override
   {
@@ -207,7 +210,8 @@ public:
     return true;
   }
 
-  auto RecordResolve(CommandRecorder&, uint32_t used_query_slots) -> bool override
+  auto RecordResolve(CommandRecorder&, uint32_t used_query_slots)
+    -> bool override
   {
     ++resolve_count_;
     last_resolved_query_count_ = used_query_slots;
@@ -237,8 +241,8 @@ private:
 
 class TestRecorder final : public CommandRecorder {
 public:
-  TestRecorder(std::shared_ptr<CommandList> command_list,
-    observer_ptr<CommandQueue> queue)
+  TestRecorder(
+    std::shared_ptr<CommandList> command_list, observer_ptr<CommandQueue> queue)
     : CommandRecorder(std::move(command_list), queue)
   {
   }
@@ -249,12 +253,9 @@ public:
   auto SetPipelineState(oxygen::graphics::ComputePipelineDesc) -> void override
   {
   }
-  auto SetGraphicsRootConstantBufferView(uint32_t, uint64_t) -> void override
-  {
+  auto SetGraphicsRootConstantBufferView(uint32_t, uint64_t) -> void override {
   }
-  auto SetComputeRootConstantBufferView(uint32_t, uint64_t) -> void override
-  {
-  }
+  auto SetComputeRootConstantBufferView(uint32_t, uint64_t) -> void override { }
   auto SetGraphicsRoot32BitConstant(uint32_t, uint32_t, uint32_t)
     -> void override
   {
@@ -271,20 +272,18 @@ public:
   auto SetScissors(const oxygen::Scissors&) -> void override { }
   auto Draw(uint32_t, uint32_t, uint32_t, uint32_t) -> void override { }
   auto Dispatch(uint32_t, uint32_t, uint32_t) -> void override { }
-  auto ExecuteIndirect(const Buffer&, uint64_t, uint32_t,
-    IndirectCommandLayout) -> void override
+  auto ExecuteIndirect(const Buffer&, uint64_t, uint32_t, IndirectCommandLayout)
+    -> void override
   {
   }
-  auto SetVertexBuffers(
-    uint32_t, const std::shared_ptr<Buffer>*, const uint32_t*) const
-    -> void override
+  auto SetVertexBuffers(uint32_t, const std::shared_ptr<Buffer>*,
+    const uint32_t*) const -> void override
   {
   }
   auto BindIndexBuffer(const Buffer&, oxygen::Format) -> void override { }
   auto BindFrameBuffer(const Framebuffer&) -> void override { }
-  auto ClearDepthStencilView(
-    const Texture&, const NativeView&, oxygen::graphics::ClearFlags, float,
-    uint8_t) -> void override
+  auto ClearDepthStencilView(const Texture&, const NativeView&,
+    oxygen::graphics::ClearFlags, float, uint8_t) -> void override
   {
   }
   auto ClearDepthStencilView(const Texture&, const NativeView&,
@@ -301,14 +300,17 @@ public:
     -> void override
   {
   }
-  auto CopyBufferToTexture(
-    const Buffer&, const oxygen::graphics::TextureUploadRegion&, Texture&)
-    -> void override
+  auto CopyBufferToTexture(const Buffer&,
+    const oxygen::graphics::TextureUploadRegion&, Texture&) -> void override
   {
   }
   auto CopyBufferToTexture(const Buffer&,
     std::span<const oxygen::graphics::TextureUploadRegion>, Texture&)
     -> void override
+  {
+  }
+  auto CopyTextureToBuffer(Buffer&, const Texture&,
+    const oxygen::graphics::TextureBufferCopyRegion&) -> void override
   {
   }
   auto CopyTexture(const Texture&, const oxygen::graphics::TextureSlice&,
@@ -351,7 +353,8 @@ public:
     return QueueKey { std::string("gfx") };
   }
 
-  auto GetCommandQueue(const QueueKey&) const -> observer_ptr<CommandQueue> override
+  auto GetCommandQueue(const QueueKey&) const
+    -> observer_ptr<CommandQueue> override
   {
     return observer_ptr<CommandQueue>(queue_.get());
   }
@@ -361,19 +364,19 @@ public:
     return observer_ptr<CommandQueue>(queue_.get());
   }
 
-  auto AcquireCommandRecorder(const QueueKey&, std::string_view name,
-    bool) -> std::unique_ptr<CommandRecorder, std::function<void(CommandRecorder*)>>
-    override
+  auto AcquireCommandRecorder(const QueueKey&, std::string_view name, bool)
+    -> std::unique_ptr<CommandRecorder,
+      std::function<void(CommandRecorder*)>> override
   {
-    auto* recorder = new TestRecorder(
-      std::make_shared<TestCommandList>(name), observer_ptr<CommandQueue>(queue_.get()));
+    auto* recorder = new TestRecorder(std::make_shared<TestCommandList>(name),
+      observer_ptr<CommandQueue>(queue_.get()));
     recorder->Begin();
     return { recorder, [](CommandRecorder* r) {
-      if (r != nullptr) {
-        static_cast<void>(r->End());
-        delete r;
-      }
-    } };
+              if (r != nullptr) {
+                static_cast<void>(r->End());
+                delete r;
+              }
+            } };
   }
 
   [[nodiscard]] auto Provider() const -> const TestTimestampProvider&
@@ -381,10 +384,7 @@ public:
     return provider_;
   }
 
-  [[nodiscard]] auto Provider() -> TestTimestampProvider&
-  {
-    return provider_;
-  }
+  [[nodiscard]] auto Provider() -> TestTimestampProvider& { return provider_; }
 
 private:
   [[nodiscard]] auto CreateSurface(std::weak_ptr<oxygen::platform::Window>,
@@ -392,8 +392,8 @@ private:
   {
     return {};
   }
-  [[nodiscard]] auto CreateSurfaceFromNative(
-    void*, observer_ptr<CommandQueue>) const -> std::shared_ptr<Surface> override
+  [[nodiscard]] auto CreateSurfaceFromNative(void*,
+    observer_ptr<CommandQueue>) const -> std::shared_ptr<Surface> override
   {
     return {};
   }
@@ -408,7 +408,8 @@ private:
     return {};
   }
   [[nodiscard]] auto CreateTextureFromNativeObject(
-    const oxygen::graphics::TextureDesc&, const oxygen::graphics::NativeResource&) const
+    const oxygen::graphics::TextureDesc&,
+    const oxygen::graphics::NativeResource&) const
     -> std::shared_ptr<Texture> override
   {
     return {};
@@ -469,9 +470,8 @@ NOLINT_TEST(GpuTimelineProfilerTest, DisabledFastPathProducesNoWritesOrResolve)
   profiler.SetEnabled(false);
   profiler.OnFrameStart(oxygen::frame::SequenceNumber { 1U });
 
-  auto recorder
-    = graphics.AcquireCommandRecorder(graphics.QueueKeyFor(QueueRole::kGraphics),
-      "DisabledFrame", true);
+  auto recorder = graphics.AcquireCommandRecorder(
+    graphics.QueueKeyFor(QueueRole::kGraphics), "DisabledFrame", true);
   recorder->SetProfileScopeHandler(
     observer_ptr<oxygen::graphics::IGpuProfileScopeHandler>(&profiler));
 
@@ -497,9 +497,8 @@ NOLINT_TEST(GpuTimelineProfilerTest, PublishesNestedTimelineOnNextFrame)
   profiler.AddSink(sink);
   profiler.OnFrameStart(oxygen::frame::SequenceNumber { 1U });
 
-  auto recorder
-    = graphics.AcquireCommandRecorder(graphics.QueueKeyFor(QueueRole::kGraphics),
-      "FrameOne", true);
+  auto recorder = graphics.AcquireCommandRecorder(
+    graphics.QueueKeyFor(QueueRole::kGraphics), "FrameOne", true);
   recorder->SetProfileScopeHandler(
     observer_ptr<oxygen::graphics::IGpuProfileScopeHandler>(&profiler));
 
@@ -531,7 +530,8 @@ NOLINT_TEST(GpuTimelineProfilerTest, PublishesNestedTimelineOnNextFrame)
   EXPECT_EQ(graphics.Provider().LastResolvedQueryCount(), 4U);
 }
 
-NOLINT_TEST(GpuTimelineProfilerTest, RetainedLatestFramePublishesWithoutExternalSink)
+NOLINT_TEST(
+  GpuTimelineProfilerTest, RetainedLatestFramePublishesWithoutExternalSink)
 {
   TestGraphics graphics;
   GpuTimelineProfiler profiler(observer_ptr<Graphics> { &graphics });
@@ -540,9 +540,8 @@ NOLINT_TEST(GpuTimelineProfilerTest, RetainedLatestFramePublishesWithoutExternal
   profiler.SetRetainLatestFrame(true);
   profiler.OnFrameStart(oxygen::frame::SequenceNumber { 31U });
 
-  auto recorder
-    = graphics.AcquireCommandRecorder(graphics.QueueKeyFor(QueueRole::kGraphics),
-      "RetainedFrame", true);
+  auto recorder = graphics.AcquireCommandRecorder(
+    graphics.QueueKeyFor(QueueRole::kGraphics), "RetainedFrame", true);
   recorder->SetProfileScopeHandler(
     observer_ptr<oxygen::graphics::IGpuProfileScopeHandler>(&profiler));
 
@@ -562,7 +561,8 @@ NOLINT_TEST(GpuTimelineProfilerTest, RetainedLatestFramePublishesWithoutExternal
   EXPECT_TRUE(frame->scopes.front().valid);
 }
 
-NOLINT_TEST(GpuTimelineProfilerTest, LargeAbsoluteTicksStillProduceNonZeroDurations)
+NOLINT_TEST(
+  GpuTimelineProfilerTest, LargeAbsoluteTicksStillProduceNonZeroDurations)
 {
   TestGraphics graphics;
   GpuTimelineProfiler profiler(observer_ptr<Graphics> { &graphics });
@@ -574,9 +574,8 @@ NOLINT_TEST(GpuTimelineProfilerTest, LargeAbsoluteTicksStillProduceNonZeroDurati
   profiler.AddSink(sink);
   profiler.OnFrameStart(oxygen::frame::SequenceNumber { 41U });
 
-  auto recorder
-    = graphics.AcquireCommandRecorder(graphics.QueueKeyFor(QueueRole::kGraphics),
-      "LargeAbsoluteTicks", true);
+  auto recorder = graphics.AcquireCommandRecorder(
+    graphics.QueueKeyFor(QueueRole::kGraphics), "LargeAbsoluteTicks", true);
   recorder->SetProfileScopeHandler(
     observer_ptr<oxygen::graphics::IGpuProfileScopeHandler>(&profiler));
 
@@ -613,9 +612,8 @@ NOLINT_TEST(GpuTimelineProfilerTest, DeeplyNestedScopesPreserveParentChain)
   profiler.AddSink(sink);
   profiler.OnFrameStart(oxygen::frame::SequenceNumber { 41U });
 
-  auto recorder
-    = graphics.AcquireCommandRecorder(graphics.QueueKeyFor(QueueRole::kGraphics),
-      "NestedFrame", true);
+  auto recorder = graphics.AcquireCommandRecorder(
+    graphics.QueueKeyFor(QueueRole::kGraphics), "NestedFrame", true);
   recorder->SetProfileScopeHandler(
     observer_ptr<oxygen::graphics::IGpuProfileScopeHandler>(&profiler));
 
@@ -645,7 +643,8 @@ NOLINT_TEST(GpuTimelineProfilerTest, DeeplyNestedScopesPreserveParentChain)
   EXPECT_EQ(graphics.Provider().LastResolvedQueryCount(), 16U);
 }
 
-NOLINT_TEST(GpuTimelineProfilerTest, OverflowStopsFurtherScopesAndPublishesDiagnostic)
+NOLINT_TEST(
+  GpuTimelineProfilerTest, OverflowStopsFurtherScopesAndPublishesDiagnostic)
 {
   TestGraphics graphics;
   GpuTimelineProfiler profiler(observer_ptr<Graphics> { &graphics });
@@ -656,9 +655,8 @@ NOLINT_TEST(GpuTimelineProfilerTest, OverflowStopsFurtherScopesAndPublishesDiagn
   profiler.AddSink(sink);
   profiler.OnFrameStart(oxygen::frame::SequenceNumber { 7U });
 
-  auto recorder
-    = graphics.AcquireCommandRecorder(graphics.QueueKeyFor(QueueRole::kGraphics),
-      "OverflowFrame", true);
+  auto recorder = graphics.AcquireCommandRecorder(
+    graphics.QueueKeyFor(QueueRole::kGraphics), "OverflowFrame", true);
   recorder->SetProfileScopeHandler(
     observer_ptr<oxygen::graphics::IGpuProfileScopeHandler>(&profiler));
 
@@ -679,9 +677,9 @@ NOLINT_TEST(GpuTimelineProfilerTest, OverflowStopsFurtherScopesAndPublishesDiagn
   EXPECT_TRUE(frame.overflowed);
   ASSERT_EQ(frame.scopes.size(), 1U);
   EXPECT_THAT(frame.diagnostics,
-    testing::Contains(testing::Field(
-      &oxygen::engine::internal::GpuTimelineDiagnostic::code,
-      "gpu.timestamp.overflow")));
+    testing::Contains(
+      testing::Field(&oxygen::engine::internal::GpuTimelineDiagnostic::code,
+        "gpu.timestamp.overflow")));
 }
 
 NOLINT_TEST(GpuTimelineProfilerTest, IncompleteScopeIsMarkedInvalid)
@@ -694,15 +692,15 @@ NOLINT_TEST(GpuTimelineProfilerTest, IncompleteScopeIsMarkedInvalid)
   profiler.AddSink(sink);
   profiler.OnFrameStart(oxygen::frame::SequenceNumber { 12U });
 
-  auto recorder
-    = graphics.AcquireCommandRecorder(graphics.QueueKeyFor(QueueRole::kGraphics),
-      "IncompleteFrame", true);
+  auto recorder = graphics.AcquireCommandRecorder(
+    graphics.QueueKeyFor(QueueRole::kGraphics), "IncompleteFrame", true);
   recorder->SetProfileScopeHandler(
     observer_ptr<oxygen::graphics::IGpuProfileScopeHandler>(&profiler));
 
-  const auto token = profiler.BeginScope(
-    *recorder, "Leaked", profiler.MakeScopeOptions());
-  EXPECT_NE(token.flags & oxygen::graphics::kGpuScopeTokenFlagTimestampEnabled, 0U);
+  const auto token
+    = profiler.BeginScope(*recorder, "Leaked", profiler.MakeScopeOptions());
+  EXPECT_NE(
+    token.flags & oxygen::graphics::kGpuScopeTokenFlagTimestampEnabled, 0U);
 
   profiler.OnFrameRecordTailResolve();
   profiler.OnFrameStart(oxygen::frame::SequenceNumber { 13U });
@@ -712,25 +710,24 @@ NOLINT_TEST(GpuTimelineProfilerTest, IncompleteScopeIsMarkedInvalid)
   ASSERT_EQ(frame.scopes.size(), 1U);
   EXPECT_FALSE(frame.scopes.front().valid);
   EXPECT_THAT(frame.diagnostics,
-    testing::Contains(testing::Field(
-      &oxygen::engine::internal::GpuTimelineDiagnostic::code,
-      "gpu.timestamp.incomplete_scope")));
+    testing::Contains(
+      testing::Field(&oxygen::engine::internal::GpuTimelineDiagnostic::code,
+        "gpu.timestamp.incomplete_scope")));
 }
 
 NOLINT_TEST(GpuTimelineProfilerTest, OneShotExportWritesJsonFrame)
 {
   TestGraphics graphics;
   GpuTimelineProfiler profiler(observer_ptr<Graphics> { &graphics });
-  const auto export_path = std::filesystem::temp_directory_path()
-    / "oxygen_gpu_timeline_test.json";
+  const auto export_path
+    = std::filesystem::temp_directory_path() / "oxygen_gpu_timeline_test.json";
   std::filesystem::remove(export_path);
 
   profiler.SetEnabled(true);
   profiler.OnFrameStart(oxygen::frame::SequenceNumber { 21U });
 
-  auto recorder
-    = graphics.AcquireCommandRecorder(graphics.QueueKeyFor(QueueRole::kGraphics),
-      "ExportFrame", true);
+  auto recorder = graphics.AcquireCommandRecorder(
+    graphics.QueueKeyFor(QueueRole::kGraphics), "ExportFrame", true);
   recorder->SetProfileScopeHandler(
     observer_ptr<oxygen::graphics::IGpuProfileScopeHandler>(&profiler));
 
