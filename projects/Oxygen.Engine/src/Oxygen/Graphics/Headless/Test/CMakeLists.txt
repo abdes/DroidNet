@@ -28,4 +28,9 @@ m_gtest_program(
     "Headless_Buffer_test.cpp"
     "Headless_Texture_test.cpp"
 )
-m_gtest_program(Execution SOURCES "CommandExecution_test.cpp")
+m_gtest_program(
+  Execution
+  SOURCES
+    "CommandExecution_test.cpp"
+    "CopyTextureToBufferExecution_test.cpp"
+)

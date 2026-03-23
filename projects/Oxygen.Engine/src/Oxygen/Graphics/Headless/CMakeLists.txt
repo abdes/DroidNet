@@ -82,6 +82,8 @@ set(
   "Commands/QueueWaitCommand.h"
   "Commands/ResourceBarrierCommand.cpp"
   "Commands/ResourceBarrierCommand.h"
+  "Commands/TextureToBufferCommand.cpp"
+  "Commands/TextureToBufferCommand.h"
   "Graphics.cpp"
   "Internal/CommandExecutor.cpp"
   "Internal/CommandExecutor.h"
